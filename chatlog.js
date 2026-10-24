@@ -168,6 +168,10 @@ const MAIN_DDL = [
     tz TEXT, lang TEXT, cut_next INTEGER)`,                     // CL10 fix-up: tz / lang / cut_next (chatlogexport adds them to an older table)
   "CREATE INDEX IF NOT EXISTS chatlog_exports_user ON chatlog_exports (user_id, created)",
   "CREATE TABLE IF NOT EXISTS chatlog_meta (key TEXT PRIMARY KEY, value TEXT)",
+  // S1 V4 fix-up: the lines an account deletion's "Also remove my public messages" met under a legal hold or a report (chatlogmod
+  // removeAccountLines): taken down, their words deleted by the nightly pass once nothing holds them (ADR 0007 D10's report bounds);
+  // `at` = when the removal met them (a report filed after it doesn't hold the line). A line id and a time - nothing else.
+  "CREATE TABLE IF NOT EXISTS chatlog_erase_wait (c INTEGER PRIMARY KEY, at INTEGER NOT NULL)",
   // CL6 fix-up: the reports' and the audit's own lookups (a line's open reports, a reporter's limits, the queue, the nightly prunes)
   "CREATE INDEX IF NOT EXISTS chatlog_reports_c ON chatlog_reports (c, state)",
   "CREATE INDEX IF NOT EXISTS chatlog_reports_reporter ON chatlog_reports (reporter, created)",
@@ -207,7 +211,8 @@ const TRIGGERS = [
 ];
 // every table this module owns (keep-staging-tables keeps them all; padrekey binds all but pad_chat_cfg to the room)
 const TABLES = Object.freeze(["chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
-  "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views", "chatlog_exports", "chatlog_meta"]);
+  "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views", "chatlog_exports", "chatlog_meta",
+  "chatlog_erase_wait"]);
 
 // ── state ──
 let ATTACHED = false;                      // the archive tables are in the attached schema "chatlog"

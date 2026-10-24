@@ -115,10 +115,18 @@ function register(app, { addUser }) {
                       url: (res.locals.ogBase || "") + path };
     // CL2: from the moment the chat archive's notice switch is on, /privacy states it (chatlog.policy: null while it's off) -
     // its date becomes the page's "Last updated" when it is the newer one; additive, so VERSION (re-acceptance) doesn't move
-    let chatlog = null;
-    if (view === "privacy") { try { chatlog = await require("./chatlog").policy(); } catch (e) { chatlog = null; } }
-    const upd = chatlog && chatlog.notice_at > Date.parse(updated + " 23:59:59 UTC") ? chatlog.notice_day : updated;
-    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog }); } catch (e) { next(e); }
+    // S1 V4: likewise the paragraph on chat lines and account deletion (the chat hub + that archive) from the moment the hub's
+    // erasure switch is on (accountdelete.privacyCopy: null while it's off); "Last updated" = the newest of the dates
+    let chatlog = null, hubErasure = null;
+    if (view === "privacy") {
+      try { chatlog = await require("./chatlog").policy(); } catch (e) { chatlog = null; }
+      try { hubErasure = await require("./accountdelete").privacyCopy(); } catch (e) { hubErasure = null; }
+    }
+    let upd = updated, updAt = Date.parse(updated + " 23:59:59 UTC");
+    for (const [at, day] of [[chatlog && chatlog.notice_at, chatlog && chatlog.notice_day], [hubErasure && hubErasure.on_at, hubErasure && hubErasure.on_day]]) {
+      if (at && day && at > updAt) { upd = day; updAt = at; }
+    }
+    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));
   app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy", PRIVACY_UPDATED));

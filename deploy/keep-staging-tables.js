@@ -37,7 +37,8 @@ const path = require("path");
 // CL2: chatlog.js TABLES (kept in step by test/refresh-staging-keep.test.js)
 const CHATLOG = ["chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
                  "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views",
-                 "chatlog_exports", "chatlog_meta"];
+                 "chatlog_exports", "chatlog_meta",
+                 "chatlog_erase_wait"];                  // S1 V4 fix-up: its line ids are staging's own archive's
 const CHATLOG_TRIGGERS = ["chat_log_ai", "chat_log_ad", "chat_log_au"];
 const INDEXABLE = "text IS NOT NULL AND k IN ('msg','tx','topic') AND rm_at IS NULL AND purged IS NULL";     // chatlog.INDEXABLE
 // CL2 fix-up: the pad chat's live feed (bridge.js) - the archive's seed reads bridge_feed, and its cursors must stay staging's own

@@ -2,7 +2,7 @@
 //
 // The flow:
 //   1. GET /settings/account/delete       what deletion does, what still has to be closed first (blockers()), the form
-//   2. POST /api/account/delete           {password?, confirm, hide_lines?}: re-authentication (the password, or a FRESH sign-in - any method,
+//   2. POST /api/account/delete           {password?, confirm, hide_lines?, remove_public?}: re-authentication (the password, or a FRESH sign-in - any method,
 //                                         the chat link included - within sessions.FRESH_MS) + the username typed exactly. Refused
 //                                         for admins / staff / moderators (another admin schedules it: POST /api/admin/users/:id/delete)
 //                                         and while anything blocks. Schedules the deletion GRACE_MS (14 days) ahead, signs every
@@ -15,13 +15,23 @@
 //                                         released, Pepe asked to forget the login (website action "privacy.forget").
 //                                         CL6: with hide_lines ("Also hide my past public chat lines", unticked by default) the
 //                                         login and the account key join the pad chat archive's sticky hidden set (src delete).
+//                                         S1 V4: with remove_public ("Also remove my public messages", unticked; offered only
+//                                         while the chat hub's `erasure` switch is on, and at most once a day) the hub's
+//                                         privacy/account-deleted row carries remove_public: true (the hub hard-deletes the
+//                                         account's public lines there) and, once the deletion has committed, the account's web
+//                                         lines in the pad chat archive are purged too (chatlogmod.removeAccountLines), the same
+//                                         exceptions kept (a legal hold, an open report): ADR 0007 OQ-20, one checkbox for both.
 //
 // PAT never vanishes: the wallet debit ("account-deleted") and its legs (pools when the site owns them, the House as jackpot rakes,
 // else a negative Reserve claim Pepe's funding tick credits) are one transaction, keyed (account_deletion_routes, key
 // acctdel-<userId>-<n>); a deleted account that is credited later (a late refund) is swept the same way by the tick.
 //
 //   account_deletions        id, user_id, state scheduled|held|cancelled|done, requested_at, execute_at, requested_by, reauth,
-//                            reason, cancelled_at, cancel_via, held_reason, held_at, done_at, pseudonym, report (JSON counts)
+//                            reason, cancelled_at, cancel_via, held_reason, held_at, done_at, pseudonym, report (JSON counts),
+//                            hide_lines (CL6), remove_public (S1 V4: the choice), public_done_at (S1 V4: when the archive's
+//                            part of it ran; NULL with remove_public = 1 on a done row -> the tick runs it again),
+//                            public_login (S1 V4 fix-up: the released Camfrog login, ONLY between the deletion's commit and
+//                            the archive's part - its web lines are under it; NULLed when that part has run)
 //   account_deletion_routes  key PK, user_id, amount, legs (JSON), txid, at
 "use strict";
 const crypto = require("crypto");
@@ -35,6 +45,7 @@ const FLOW = "account_deleted";              // the PAT Routing row
 const FORGET_KIND = "privacy.forget";         // Pepe's website action (pepe_webact): forget this Camfrog login
 const FORGET_TRIES = 10;
 const FORGET_RETRY_MS = 6 * 3600000;
+const REMOVE_EVERY_MS = DAY;                  // S1 V4: "Also remove my public messages" at most once a day (CA §9.4)
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -59,6 +70,10 @@ function init() {
       // CL6 (decision 14): the member ticked "Also hide my past public chat lines"
       const c = (await getQuery("SELECT name FROM pragma_table_info('account_deletions')")).map((r) => r.name);
       if (!c.includes("hide_lines")) await runQuery("ALTER TABLE account_deletions ADD COLUMN hide_lines INTEGER");
+      // S1 V4: the member ticked "Also remove my public messages"; when the pad chat archive's part of it ran
+      if (!c.includes("remove_public")) await runQuery("ALTER TABLE account_deletions ADD COLUMN remove_public INTEGER");
+      if (!c.includes("public_done_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN public_done_at INTEGER");
+      if (!c.includes("public_login")) await runQuery("ALTER TABLE account_deletions ADD COLUMN public_login TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -195,11 +210,42 @@ async function verifyPassword(userId, password) {
   try { return await require("bcrypt").compare(password, r.password); } catch (e) { return false; }
 }
 
+// ── S1 V4: "Also remove my public messages" (ADR 0007 D16 / OQ-20; CHAT-ARCHITECTURE §9.4) ──
+/** The choice is offered (the page's checkbox, its copy, the privacy page's paragraph) only while the chat hub's `erasure`
+ *  switch is on (huboutbox; off by default - nothing a member sees changes before S1's turn-on, Q7). */
+function removeOffered() {
+  try { return require("./huboutbox").on("erasure"); } catch (e) { return false; }
+}
+/** At most once a day: when this account may ask again (ms), or null when it may now. Every request that carried the choice
+ *  counts - a cancelled one too (a sign-in cancels; asking again the same day doesn't get a second removal). */
+async function removeWaitUntil(userId) {
+  await init();
+  const r = (await getQuery("SELECT MAX(requested_at) AS at FROM account_deletions WHERE user_id = ? AND remove_public = 1", [String(userId)]))[0];
+  const next = r && r.at != null ? Number(r.at) + REMOVE_EVERY_MS : 0;
+  return next > now() ? next : null;
+}
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+/** views/privacy.ejs (terms.js): null while the choice isn't offered; else {on_at, on_day, export} - when the `erasure` switch
+ *  was last turned on (its hubseam_settings row: the date the paragraph about chat and deletion appeared), and whether the
+ *  `export` switch puts the hub's part in "Download my data" too. Never throws. */
+async function privacyCopy() {
+  if (!removeOffered()) return null;
+  let exp = false;
+  try { exp = require("./huboutbox").on("export"); } catch (e) { exp = false; }
+  try {
+    const r = (await getQuery("SELECT updated FROM hubseam_settings WHERE key = 'erasure' AND value = 'true'"))[0];
+    const at = r && Number(r.updated) > 0 ? Number(r.updated) : null;
+    return { on_at: at, on_day: at ? dayText(at) : null, export: exp };
+  } catch (e) { return { on_at: null, on_day: null, export: exp }; }
+}
+
 /**
  * The member's own request. -> {ok, execute_at}. Throws Refuse (status, message, code) - E_ELEVATED, E_BLOCKED (with .block),
- * E_REAUTH, E_CONFIRM, E_PENDING.
+ * E_REAUTH, E_CONFIRM, E_PENDING; S1 V4: E_REMOVE_OFF (removePublic while the choice isn't offered), E_REMOVE_DAILY (with
+ * .retry_at: a request with it in the last 24 hours).
  */
-async function request(req, { password, confirm, hideLines = false } = {}) {
+async function request(req, { password, confirm, hideLines = false, removePublic = false } = {}) {
   await init();
   const uid = String(req.user.userId);
   const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [uid]))[0];
@@ -207,21 +253,39 @@ async function request(req, { password, confirm, hideLines = false } = {}) {
   if (await elevated(u)) throw new Refuse(403, "Admin, staff and moderator accounts can't delete themselves. Ask another admin to do it.", "E_ELEVATED");
   if (await pendingOf(uid)) throw new Refuse(409, "Your account is already scheduled for deletion.", "E_PENDING");
   if (String(confirm == null ? "" : confirm).trim() !== u.username) throw new Refuse(400, "Type your username exactly to confirm.", "E_CONFIRM");
+  if (removePublic) {
+    if (!removeOffered()) throw new Refuse(409, "Removing your public messages isn't offered right now - reload the page.", "E_REMOVE_OFF");
+    const wait = await removeWaitUntil(uid);
+    if (wait) throw dailyRefusal(wait);
+  }
   let reauth = null;
   if (password) { if (await verifyPassword(uid, password)) reauth = "password"; else throw new Refuse(403, "That password isn't right.", "E_REAUTH"); }
   else if (await require("./sessions").isFresh(req)) reauth = "fresh-sign-in";
   if (!reauth) throw new Refuse(403, "Confirm it's you: enter your password, or sign out and sign back in (any way you like - Google, Apple, Plex, Telegram, Twitch, Discord or a !signin chat link) and delete within 10 minutes.", "E_REAUTH");
   const b = await blockers(uid);
   if (b.block.length) throw new Refuse(409, "Some things have to be closed first.", "E_BLOCKED", { block: b.block });
-  return schedule(u, { by: "self", reauth, hideLines });
+  return schedule(u, { by: "self", reauth, hideLines, removePublic });
 }
 
-async function schedule(u, { by = "self", reauth = null, reason = null, hideLines = false } = {}) {
+const dailyRefusal = (wait) => new Refuse(429, "You can ask to remove your public messages once a day. Untick it, or try again after " +
+  new Date(wait).toISOString().slice(0, 16).replace("T", " ") + " UTC.", "E_REMOVE_DAILY", { retry_at: wait });
+
+async function schedule(u, { by = "self", reauth = null, reason = null, hideLines = false, removePublic = false } = {}) {
   await init();
   const t = now();
   const at = t + GRACE_MS;
-  await runQuery(`INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth, reason, hide_lines) VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?)`,
-                 [String(u.userId), t, at, String(by).slice(0, 80), reauth, reason ? String(reason).slice(0, 200) : null, hideLines ? 1 : null]);
+  // S1 V4 fix-up (review): the pending and once-a-day checks again INSIDE the insert's transaction (dbUtils.tx runs one at a
+  // time), so two requests at once can't both be scheduled, nor both carry "Also remove my public messages"
+  await tx(async () => {
+    if (await pendingOf(u.userId)) throw new Refuse(409, "Your account is already scheduled for deletion.", "E_PENDING");
+    if (removePublic) {
+      const wait = await removeWaitUntil(u.userId);
+      if (wait) throw dailyRefusal(wait);
+    }
+    await runQuery(`INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth, reason, hide_lines, remove_public)
+                    VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?, ?)`,
+                   [String(u.userId), t, at, String(by).slice(0, 80), reauth, reason ? String(reason).slice(0, 200) : null, hideLines ? 1 : null, removePublic ? 1 : null]);
+  });
   await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
   await require("./inbox").addSafe(u.userId, { kind: "system", title: "Your account is scheduled for deletion",
     body: `Your PATV account will be deleted on ${new Date(at).toISOString().slice(0, 10)}. Every device was signed out. Changed your mind? Just sign in again before then - that cancels it.`,
@@ -552,15 +616,28 @@ async function execute(userId, { force = false } = {}) {
     }
     // 10. 1.99acm: the chat hub's erasure (huboutbox topic privacy/account-deleted, switch hubseam.erasure - the R-12 privacy
     //     seam): committed with the deletion or not at all; the hub pseudonymises the account's chat lines as a "former member"
-    //     under this pseudonym, revokes its chat credentials and journals the erasure. remove_public stays false until the
-    //     "also remove my public messages" choice exists (S1, seam plan D-23).
+    //     under this pseudonym, revokes its chat credentials and journals the erasure. S1 V4: remove_public is the member's
+    //     "Also remove my public messages" (seam plan D-23): the hub then hard-deletes their public lines' text instead, the
+    //     held ones (an open report) once their hold ends.
     //     The payload names the account only - never the released chat login, nor a hash of it (an unkeyed hash of a short
     //     public username is reversible, and the hub's deletion journal is write-once; identity-scoped erasure is S2's).
-    await runQuery("UPDATE account_deletions SET state = 'done', done_at = ?, pseudonym = ?, report = ?, held_reason = NULL WHERE id = ?",
-                   [t, pseudo, JSON.stringify(report).slice(0, 20000), reqRow.id]);
+    //     (S1 V4 fix-up: with the choice, the released login waits on the row - public_login - until the archive's part below has
+    //     run: a linked member's web lines are archived under it. NULLed by removePublicNow.)
+    const rp = Number(reqRow.remove_public) === 1;
+    await runQuery("UPDATE account_deletions SET state = 'done', done_at = ?, pseudonym = ?, report = ?, held_reason = NULL, public_login = ? WHERE id = ?",
+                   [t, pseudo, JSON.stringify(report).slice(0, 20000), rp && login ? login : null, reqRow.id]);
     await require("./huboutbox").emit("privacy/account-deleted", "acct:" + uid,
-      hubRow({ id: reqRow.id, user_id: uid, pseudonym: pseudo, done_at: t }), { dedupe: "acctdel:" + reqRow.id });
+      hubRow({ id: reqRow.id, user_id: uid, pseudonym: pseudo, done_at: t, remove_public: reqRow.remove_public }), { dedupe: "acctdel:" + reqRow.id });
   });
+  // 11. S1 V4: "Also remove my public messages" - the pad chat archive's part (ADR 0007 OQ-20: the same choice hard-deletes the
+  //     account's web lines there, with the hub's exceptions; a linked member's web lines are under the login read above, up to
+  //     now - the login is someone else's to link from here on). After the commit, so nothing is purged for a deletion that rolls
+  //     back (or that a sign-in then cancels); public_done_at records it, and the tick runs it again until it has (a restart
+  //     between the commit and here, a failure).
+  if (Number(reqRow.remove_public) === 1) {
+    try { report.public_removed = await removePublicNow(uid, reqRow.id, { login, upto: t }); }
+    catch (e) { console.error("[acctdel] remove public lines:", e.message); }
+  }
   try { await require("./accountexport").removeAll(uid); } catch (e) { /* none */ }
   try { require("./sessions")._clearCache(); } catch (e) { /* none */ }
   // adultgate site: the 18+ gate forgets the account (and, when it was them, the switch card's "last changed by" reloads pseudonymised)
@@ -581,8 +658,37 @@ async function execute(userId, { force = false } = {}) {
 /** 1.99acm: a done account_deletions row -> the chat hub's privacy/account-deleted payload (the feed row and the snapshot's).
  *  acct is the hub's account_id (the ticket's sub), v1_user the raw id, request the deletion's id (the hub's origin ref). */
 function hubRow(r) {
-  return { acct: require("./huboutbox").accountOf(r.user_id), v1_user: String(r.user_id), pseudonym: r.pseudonym || null, remove_public: false,
+  return { acct: require("./huboutbox").accountOf(r.user_id), v1_user: String(r.user_id), pseudonym: r.pseudonym || null,
+           remove_public: Number(r.remove_public) === 1,           // S1 V4: the member's choice (the row's remove_public)
            request: Number(r.id), at: Number(r.done_at) || null };
+}
+
+/** S1 V4: the pad chat archive's part of "Also remove my public messages" for a done deletion (chatlogmod.removeAccountLines:
+ *  the account's web lines purged - with `login`, its web lines under the released Camfrog login said up to `upto` (the
+ *  deletion's time) too -, a legal hold's or a report's taken down until they end), then public_done_at and the counts on the
+ *  request's report, and the row forgets the login. -> {lines, held} */
+async function removePublicNow(userId, reqId, { login = null, upto = null } = {}) {
+  const r = await require("./chatlogmod").removeAccountLines(String(userId), { login, upto });
+  const counts = { lines: r.purged, held: r.held + r.reported };
+  const row = (await getQuery("SELECT report FROM account_deletions WHERE id = ?", [reqId]))[0];
+  let rep = {};
+  try { rep = JSON.parse((row && row.report) || "{}") || {}; } catch (e) { rep = {}; }
+  rep.public_removed = counts;
+  await runQuery("UPDATE account_deletions SET public_done_at = ?, report = ?, public_login = NULL WHERE id = ? AND public_done_at IS NULL",
+                 [now(), JSON.stringify(rep).slice(0, 20000), reqId]);
+  return counts;
+}
+/** S1 V4: a DONE deletion whose archive part didn't run (a restart between its commit and the purge, a failure): run it now,
+ *  with the login the row kept for it. Never a scheduled, held or cancelled request (a sign-in in the grace undoes those). */
+async function retryRemovePublic() {
+  await init();
+  let n = 0;
+  for (const d of await getQuery(`SELECT id, user_id, public_login, done_at FROM account_deletions
+                                  WHERE state = 'done' AND remove_public = 1 AND public_done_at IS NULL ORDER BY id LIMIT 20`)) {
+    try { await removePublicNow(d.user_id, d.id, { login: d.public_login || null, upto: Number(d.done_at) || null }); n++; }
+    catch (e) { console.error("[acctdel] remove public lines (retry):", e.message); }
+  }
+  return n;
 }
 
 /** A deleted account credited later (a late refund, a payout already in flight): route it the same way. */
@@ -631,6 +737,7 @@ async function tick() {
     for (const d of due) { try { await execute(d.user_id); } catch (e) { console.error(`[acctdel] execute ${d.user_id}:`, e.message); } }
     try { await sweepTombstones(); } catch (e) { console.error("[acctdel] sweep:", e.message); }
     try { await retryForget(); } catch (e) { console.error("[acctdel] forget retry:", e.message); }
+    try { await retryRemovePublic(); } catch (e) { console.error("[acctdel] remove public retry:", e.message); }
   })().finally(() => { ticking = null; });
   return ticking;
 }
@@ -645,7 +752,7 @@ function register(app, { addUser }) {
   }
   const sameOrigin = (req) => { const s = req.get("origin") || req.get("referer"); try { return !!s && new URL(s).host === req.get("host"); } catch (e) { return false; } };
   const fail = (res, e) => {
-    if (e instanceof Refuse) return res.status(e.status).json({ ok: false, error: e.message, code: e.code, block: e.block || undefined });
+    if (e instanceof Refuse) return res.status(e.status).json({ ok: false, error: e.message, code: e.code, block: e.block || undefined, retry_at: e.retry_at || undefined });
     console.error("[acctdel]", e.message);
     return res.status(500).json({ ok: false, error: "Something went wrong." });
   };
@@ -658,9 +765,11 @@ function register(app, { addUser }) {
         getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId])))[0];
       if (!u) return res.redirect("/login");
       const b = await blockers(u.userId);
+      // S1 V4: "Also remove my public messages" only while the hub's erasure switch is on; wait = asked in the last 24 hours
+      const removePublic = removeOffered() ? { wait: await removeWaitUntil(u.userId) } : null;
       res.render("accountDelete", { user: u.username, username: u.username, block: b.block, settle: b.settle, elevated: await elevated(u),
         hasPassword: u.password_set === undefined || u.password_set === null || Number(u.password_set) !== 0,
-        fresh: await require("./sessions").isFresh(req), graceDays: GRACE_MS / DAY, pending: await pendingOf(u.userId) });
+        fresh: await require("./sessions").isFresh(req), graceDays: GRACE_MS / DAY, pending: await pendingOf(u.userId), removePublic });
     } catch (e) { next(e); }
   });
   app.get("/api/account/delete", addUser, async (req, res) => {
@@ -674,7 +783,8 @@ function register(app, { addUser }) {
     if (req.get("X-Requested-With") !== "fetch" || !sameOrigin(req)) return res.status(403).json({ ok: false, error: "cross-site" });
     try {
       const b = req.body || {};
-      const r = await request(req, { password: typeof b.password === "string" ? b.password : "", confirm: b.confirm, hideLines: b.hide_lines === true });
+      const r = await request(req, { password: typeof b.password === "string" ? b.password : "", confirm: b.confirm, hideLines: b.hide_lines === true,
+                                     removePublic: b.remove_public === true });
       require("./middleware/loginCookie").clearLogin(res);
       res.json(r);
     } catch (e) { fail(res, e); }
@@ -734,4 +844,5 @@ function register(app, { addUser }) {
 
 module.exports = { hubRow, init, register, blockers, request, schedule, cancelOnSignIn, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
                    pendingOf, isDeleted, elevated, Refuse, FLOW, FORGET_KIND, GRACE_MS, NAME_COLUMNS, DELETE_ROWS,
+                   removeOffered, removeWaitUntil, privacyCopy, retryRemovePublic, REMOVE_EVERY_MS,      // S1 V4
                    _setClock: (f) => { clock = f || (() => Date.now()); } };

@@ -581,7 +581,8 @@ test("chat_backend's writer (padhub.setBackend): hub on site pads only, hub_read
   assert.deepEqual([r.chat_backend, r.changed, r.hub_pad_id], ["hub", true, PAD.frogpond]);
   assert.equal(await PH.backendOf("patv:frogpond"), "hub");
   const ev = (await getQuery("SELECT what, actor, detail FROM room_events WHERE room_id = 'patv:frogpond' AND what = 'chat-backend' ORDER BY ts DESC LIMIT 1"))[0];
-  assert.deepEqual(ev, { what: "chat-backend", actor: "owner", detail: "v1 -> hub" });
+  // the pad's owner reads room_events (/p/:slug/settings): staff show as PATV staff (V1's setBackend), never the admin
+  assert.deepEqual(ev, { what: "chat-backend", actor: "PATV staff", detail: "v1 -> hub" });
   assert.equal((await getQuery("SELECT updated_by FROM pad_hub WHERE room_id = 'patv:frogpond'"))[0].updated_by, "owner");
   await PH.setBackend("patv:frogpond", "v1", { username: "owner" });
   assert.equal(await PH.backendOf("patv:nope"), "v1");
