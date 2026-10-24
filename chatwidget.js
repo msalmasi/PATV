@@ -173,7 +173,8 @@ function padMainRoomId(hubPadId) {
 }
 /** S1 allows the hub only on SITE pads (ADR 0007 D3) - an allow-list, so everything else fails closed: a Camfrog pad (its chat
  *  is the bridge), a profile pad, a Twitch or Discord pad (padconnect's connect turns a site pad into one and keeps its id, so
- *  its pad_hub row - 'hub' included - follows it), an unknown value. */
+ *  its pad_hub row follows it; release L1's pad_hub_site_only trigger, padhub.js, moves a row at 'hub' back to 'v1' then, and
+ *  this check still holds for one left at 'hub' some other way), an unknown value. */
 function platformOk(platform) { return platform === "site"; }
 function platformOf(roomId) {
   try { return require("./rooms").platformOf(roomId); } catch (e) { return "camfrog"; }

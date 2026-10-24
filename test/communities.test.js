@@ -1,7 +1,7 @@
 // Offline tests for 1.99ci: communities only + crossposts + the community bar + "Hot on PATV".
 //   - the All query (was "Everywhere"): room-only posts show; per-room removals / owner hides / pending / bans;
 //     one row per post; NSFW; report-hidden
-//   - the communities_v1 migration: main-feed-only posts move to the Camfrog Lounge, counted, run once
+//   - the communities_v1 migration: main-feed-only posts move to the Lounge (the PATV Lounge since S1 Q4), counted, run once
 //   - creating a post needs exactly one community; the composer's picker honours who-can-post
 //   - crossposts: the target's rules (who can post, approval, bans, rate limits), duplicates, a crosspost of a
 //     crosspost, separate votes / comments, "crossposted to N", "original removed", the target owner's removal,
@@ -131,10 +131,10 @@ const allIds = async (viewer, extra = {}) => (await store.list({ sort: "new", vi
 const slug = (id) => rooms.getCached(id).slug;
 
 // ───────────────────────────── migration ─────────────────────────────
-test("communities_v1: main-feed-only posts move to the Camfrog Lounge (counted), others stay; runs once, idempotent", async () => {
+test("communities_v1: main-feed-only posts move to the PATV Lounge (counted), others stay; runs once, idempotent", async () => {
   const R = await rooms.get(LOUNGE);
   assert.ok(R && R.house && R.community, "the Lounge is a house-run, site-only community");
-  assert.equal(R.slug, "camfrog-lounge");
+  assert.equal(R.slug, "patv-lounge");
   const done = JSON.parse(await store.kvGet("communities_v1"));
   assert.deepEqual([done.moved, done.live, done.deleted, done.room], [3, 2, 1, LOUNGE]);
   const inLounge = async (id) => !!(await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND room_id = ? AND removed_at IS NULL", [id, LOUNGE]))[0];
@@ -235,6 +235,32 @@ test("posting: exactly one community, by id or slug; the composer's picker = the
   const F = await web.roomFeed(ROOM_C, U.alice, {});
   assert.equal(F.composer.room, ROOM_C);
   await mod(U.ownerB, slug(ROOM_B), { op: "settings", settings: { who: "everyone" } });
+});
+
+test("S1 Q4 (review): an unlisted pad's own page offers it in the composer and the story form; the pickers and the pad bar don't list it", async () => {
+  await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, listed, created, updated) VALUES ('patv:hush', 'hush', 'Hush', 'house', 'site', 0, 1, 1)");
+  await rooms.loadCache();
+  try {
+    const me = await store.account(U.alice.userId);
+    assert.ok(!(await store.communities(me)).some((c) => c.id === "patv:hush"), "not listed");
+    assert.ok((await store.communities(me, { include: "patv:hush" })).some((c) => c.id === "patv:hush"), "named: offered");
+    assert.ok(!(await web.composerFor(me, null)).rooms.some((x) => x.id === "patv:hush"), "the /feed composer's picker");
+    const C = await web.composerFor(me, "patv:hush");
+    assert.ok(C.rooms.some((x) => x.id === "patv:hush"), "on its own page the composer has it");
+    assert.equal(C.room, "patv:hush", "...picked");
+    const html = (await page("/p/hush", U.alice)).text;
+    assert.match(html, /value="patv:hush"[^>]*checked/, "the pad page's composer posts into it");
+    assert.ok(!(await page("/feed", U.alice)).text.includes('value="patv:hush"'), "the /feed composer doesn't offer it");
+    const ST = require(path.join(repo, "userstories"));
+    assert.ok(!(await ST.targets(me)).pads.some((p) => p.id === "patv:hush"), "the story form opened elsewhere");
+    assert.ok((await ST.targets(me, { include: "patv:hush" })).pads.some((p) => p.id === "patv:hush"), "the story form opened on it");
+    const prof = await rooms.ensureProfile(U.alice.userId);           // a real profile pad (unlisted by its own rule)
+    assert.ok(prof && rooms.getCached(prof.id), "the profile pad exists");
+    assert.ok(!(await store.communities(me, { include: prof.id })).some((c) => c.id === prof.id), "never a profile pad");
+  } finally {
+    await runQuery("DELETE FROM rooms_registry WHERE room_id = 'patv:hush'");
+    await rooms.loadCache();
+  }
 });
 
 // ───────────────────────────── crossposts ─────────────────────────────
@@ -379,7 +405,7 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   assert.ok(!all.includes("Everywhere"));
   assert.match(all, /<span class="cb-k">Pad<\/span>[\s\S]*?<b>All<\/b>/);
   assert.match(all, /class="cb-chip on" href="\/feed" aria-current="page"><span class="ds-ic" aria-hidden="true">🌐<\/span>All/);
-  assert.ok(all.includes('href="/feed/following"') && all.includes('href="/p/camfrog-lounge"') && all.includes('href="/p/plant-based-chatting"'));
+  assert.ok(all.includes('href="/feed/following"') && all.includes('href="/p/patv-lounge"') && all.includes('href="/p/plant-based-chatting"'));
   assert.match(all, /p\/plant-based-chatting · \d+ followers? · \d+ posts?/);
   assert.ok(!/communit/i.test(all.replace(/name="community"|data-comm[\w-]*|fc-comm[\w-]*|\/api\/feed\/communities/g, "")), "no 'community' copy left on /feed");
   // a pad page: its header (name, p/<slug>, description, follow, owner) and that pad's feed, sorted by ?sort=
@@ -397,17 +423,17 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   assert.ok(pb.includes("📡 Camfrog room") && pb.includes("legacyRoom04"));
   assert.ok(pb.includes("🐸 Camfrog Pad"), "1.99x: a Camfrog-backed pad wears the Camfrog badge");
   assert.ok(pb.includes('href="/p">Pads</a>'));
-  // the Camfrog Lounge (1.99x; a SITE pad): no Camfrog room - no live / Camfrog sections
-  const lounge = (await page("/p/camfrog-lounge", U.bob)).text;
-  assert.ok(lounge.includes("Camfrog Lounge") && lounge.includes("🌐 Site Pad") && !lounge.includes("Site-only pad"));
+  // the PATV Lounge (a SITE pad; S1 Q4's name again): no Camfrog room - no live / Camfrog sections
+  const lounge = (await page("/p/patv-lounge", U.bob)).text;
+  assert.ok(lounge.includes("PATV Lounge") && lounge.includes("🌐 Site Pad") && !lounge.includes("Site-only pad"));
   // 1.99x: the Pads list - every card wears its platform badge; ?platform= filters (All / Camfrog / Site)
   const padsAll = (await page("/p", U.bob)).text;
   assert.ok(padsAll.includes('aria-label="Filter pads by platform"') && padsAll.includes('href="/p?platform=site"') && padsAll.includes('href="/p?platform=camfrog"'));
-  assert.ok(padsAll.includes("Camfrog Lounge") && padsAll.includes("Houseplants") && padsAll.includes("🌐 Site Pad") && padsAll.includes("🐸 Camfrog Pad"));
+  assert.ok(padsAll.includes("PATV Lounge") && padsAll.includes("Houseplants") && padsAll.includes("🌐 Site Pad") && padsAll.includes("🐸 Camfrog Pad"));
   const padsSite = (await page("/p?platform=site", U.bob)).text;
-  assert.ok(padsSite.includes("Camfrog Lounge") && !padsSite.includes(">Houseplants<"), "site filter: only site pads");
+  assert.ok(padsSite.includes("PATV Lounge") && !padsSite.includes(">Houseplants<"), "site filter: only site pads");
   const padsCf = (await page("/p?platform=camfrog", U.bob)).text;
-  assert.ok(padsCf.includes(">Houseplants<") && !padsCf.includes(">Camfrog Lounge<"), "camfrog filter: only Camfrog pads");
+  assert.ok(padsCf.includes(">Houseplants<") && !padsCf.includes(">PATV Lounge<"), "camfrog filter: only Camfrog pads");
   assert.ok(!lounge.includes("Camfrog room —") && !lounge.includes("isn't bridging") && !lounge.includes('id="rmFeed"'));
   // sort links on /feed keep the view; a pad in the bar opens its pad page; Following has its own path
   assert.ok(all.includes('href="/feed?sort=top&amp;t=week"'));
@@ -449,7 +475,7 @@ test("redirects (1.99ck): every old room / community address 301s to its /p/ add
     assert.equal(r.location, to, from);
   }
   // signed out too, and the old post permalink /feed/p/<id> is NOT a pad address (1.99dv: it 301s to the post's address)
-  assert.equal((await page("/rooms/patv-lounge", null)).location, "/p/camfrog-lounge", "1.99x: a retired slug goes straight to the current one");
+  assert.equal((await page("/rooms/camfrog-lounge", null)).location, "/p/patv-lounge", "S1 Q4 (1.99x's address): a retired slug goes straight to the current one");
   const id = await mkPost(U.alice, { body: "permalink", community: LOUNGE });
   assert.equal((await postPage(id, U.bob)).status, 200);
 });
@@ -462,16 +488,16 @@ test("p/<slug> autolinks (1.99ck): known pads in post and comment text link to /
   assert.equal(pads.padRefs("(P/Houseplants)", known), '(<a class="pad-ref" href="/p/houseplants">p/houseplants</a>)');
   assert.equal(pads.padRefs("x.com/p/houseplants or ap/houseplants or p/houseplants/x", known), "x.com/p/houseplants or ap/houseplants or p/houseplants/x");
   // through the real renderer: escaping first, URLs untouched, the registry decides what's a pad
-  const out = web.fx.body('hi p/plant-based-chatting & <b>p/patv-lounge</b> https://e.x/p/patv-lounge p/not-a-pad');
-  assert.ok(out.includes('<a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a> &amp; &lt;b&gt;<a class="pad-ref" href="/p/camfrog-lounge">p/patv-lounge</a>&lt;/b&gt;'), out);
+  const out = web.fx.body('hi p/plant-based-chatting & <b>p/camfrog-lounge</b> https://e.x/p/patv-lounge p/not-a-pad');
+  assert.ok(out.includes('<a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a> &amp; &lt;b&gt;<a class="pad-ref" href="/p/patv-lounge">p/camfrog-lounge</a>&lt;/b&gt;'), out);
   assert.ok(out.includes('<a href="https://e.x/p/patv-lounge" rel="nofollow noopener noreferrer ugc" target="_blank">https://e.x/p/patv-lounge</a>'), out);
   assert.ok(out.endsWith(" p/not-a-pad"), out);
   // on a page: a post body and a comment body
   const id = await mkPost(U.alice, { body: "cross-pad shoutout to p/plant-based-chatting", community: LOUNGE });
-  assert.equal((await post(`/api/feed/posts/${id}/comments`, U.bob, { body: "agreed, p/patv-lounge rules" })).status, 200);
+  assert.equal((await post(`/api/feed/posts/${id}/comments`, U.bob, { body: "agreed, p/camfrog-lounge rules" })).status, 200);
   const html = (await postPage(id, U.bob)).text;
   assert.ok(html.includes('shoutout to <a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a>'));
-  assert.ok(html.includes('agreed, <a class="pad-ref" href="/p/camfrog-lounge">p/patv-lounge</a> rules'));
+  assert.ok(html.includes('agreed, <a class="pad-ref" href="/p/patv-lounge">p/camfrog-lounge</a> rules'));
 });
 
 // ───────────────────────────── homepage mini feed ─────────────────────────────
@@ -489,7 +515,7 @@ test("Hot on PATV: the top 5 hot posts across All; signed-out visitors never see
   const html = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: out, fx: web.fx });
   assert.ok(html.includes("🔥 Hot on PATV") && html.includes('href="/feed">View all'));
   assert.equal((html.match(/class="hh-it"/g) || []).length, 5);
-  assert.match(html, /p\/camfrog-lounge|p\/plant-based-chatting/);
+  assert.match(html, /p\/patv-lounge|p\/plant-based-chatting/);
   assert.match(html, /class="pad-plat pp-(site|camfrog) sm"/, "1.99x: each hot post shows its pad's platform badge");
   assert.ok(!html.includes("hot 5") && html.includes("hot 4"));
   const empty = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: { posts: [], signed: false }, fx: web.fx });
@@ -530,7 +556,7 @@ test("multi-pad crosspost: one crosspost per pad (own votes + comments), the new
   // one notice for the whole action, naming every pad
   const N = (await xnotices(U.alice)).slice(before);
   assert.equal(N.length, 1, "one combined notice, not one per pad");
-  assert.equal(N[0].title, `bob crossposted your post to p/${slug(ROOM_C)}, p/camfrog-lounge, p/${slug(X1)}`);
+  assert.equal(N[0].title, `bob crossposted your post to p/${slug(ROOM_C)}, p/patv-lounge, p/${slug(X1)}`);
   // the dialog's list knows the cap and where it now is
   const cl = await call("GET", `/api/feed/communities?post=${orig}`, U.carol);
   assert.equal(cl.d.crosspostMax, 5);
@@ -566,7 +592,7 @@ test("multi-pad crosspost: each pad's rules on their own (approval, who-can-post
   assert.ok((await store.roomPending(ROOM_C, U.ownerC)).some((p) => p.id === by[ROOM_C].id));
   const N = (await xnotices(U.alice)).slice(before);
   assert.equal(N.length, 1);
-  assert.match(N[0].title, new RegExp(`to p/${slug(ROOM_C)}, p/camfrog-lounge$`), "the notice names only the pads it went to");
+  assert.match(N[0].title, new RegExp(`to p/${slug(ROOM_C)}, p/patv-lounge$`), "the notice names only the pads it went to");
   // duplicates: where the original is, where it's already crossposted (by anyone, pending too), and the same pad twice in one list
   r = await xpost(U.carol, orig, { pads: [ROOM_B, LOUNGE, ROOM_C, X1, "p/" + slug(X1)] });
   assert.equal(r.status, 200);

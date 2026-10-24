@@ -640,7 +640,7 @@ async function findThreads(autoScopes, t = NOW()) {
 /** Every scope with something switched on (+ All always), with its settings and usage. */
 async function scopesState(U) {
   const ids = [""];
-  for (const r of await rooms.list()) ids.push(r.id);
+  for (const r of await rooms.listAll()) ids.push(r.id);          // S1 Q4: unlisted pads have settings too (an admin page)
   const out = {};
   for (const id of ids) {
     const e = await scopeEntry(id, U);

@@ -195,15 +195,35 @@ async function of(roomId, userId) { return (await forUsers(roomId, [userId])).ge
 /** The pad's user-flair definitions as pads/changed carries them (Q4 puts them in the pad payload): [{id: "f<id>", name,
  *  color: "#rrggbb" (cleanColor's, as v1 draws it), emoji | null, self_assign}] in the pad's order, at most MAX_FLAIRS_PLUS.
  *  The hub derives the ink. */
+const hubDef = (r) => {
+  const f = shape(r);
+  return { id: "f" + f.id, name: f.name, color: f.color, emoji: f.emoji || null, self_assign: !!f.self };
+};
 async function hubDefs(roomId) {
   await init();
   if (!flairable(roomId)) return [];
   const rows = await getQuery("SELECT * FROM pad_flairs WHERE room_id = ? AND COALESCE(kind, 'user') = 'user' ORDER BY sort, id LIMIT ?",
                               [String(roomId), MAX_FLAIRS_PLUS]);
-  return rows.map((r) => {
-    const f = shape(r);
-    return { id: "f" + f.id, name: f.name, color: f.color, emoji: f.emoji || null, self_assign: !!f.self };
-  });
+  return rows.map(hubDef);
+}
+/** S1 Q4 (review): hubDefs for many pads in one query per 400 ids (the pads/changed builder runs inside the poster's and the
+ *  snapshot's transaction: one query per pad would hold the write gate for hundreds). -> Map(room_id -> defs); a pad with none
+ *  (or a profile pad) maps to []. */
+async function hubDefsMany(roomIds) {
+  await init();
+  const ids = [...new Set([...(roomIds || [])].filter(Boolean).map(String))];
+  const out = new Map(ids.map((id) => [id, []]));
+  const want = ids.filter(flairable);
+  for (let i = 0; i < want.length; i += 400) {
+    const part = want.slice(i, i + 400);
+    const rows = await getQuery(`SELECT * FROM pad_flairs WHERE room_id IN (${part.map(() => "?").join(",")}) AND COALESCE(kind, 'user') = 'user'
+                                 ORDER BY room_id, sort, id`, part);
+    for (const r of rows) {
+      const list = out.get(String(r.room_id));
+      if (list && list.length < MAX_FLAIRS_PLUS) list.push(hubDef(r));
+    }
+  }
+  return out;
 }
 /** Each account's user flair per pad, for the looks' flairs {hub_pad_id: "f<id>"}: rows {user_id, room_id, flair_id} of
  *  assignments whose flair still exists as a user flair of that pad (profile pads have none). */
@@ -568,5 +588,5 @@ function register(app, { addUser }) {
 module.exports = { postFlairs, postRules, findPostFlair, checkPostFlair, setPostFlair, postFlairsFor, filterSql, setRequired, postHtml, mayModFlair, maxPostFlairs,
                    MAX_POST_FLAIRS, MAX_POST_FLAIRS_PLUS,
                    init, register, list, forUsers, byUsername, of, html, plain, dropAll, plexFlair, save, remove, assign, pick, mine, manageView, cleanName, cleanEmoji, cleanColor,
-                   hubDefs, hubAssignments,
+                   hubDefs, hubDefsMany, hubAssignments,
                    Refuse, MAX_FLAIRS, MAX_FLAIRS_PLUS, maxFlairs, plusFlair, NAME_MAX, _drop: drop, _clear: () => cache.clear(), _setClock: (fn) => { NOW = fn || (() => Date.now()); } };

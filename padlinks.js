@@ -25,7 +25,7 @@ function lookup(word) {
   const byId = rooms.getCached(s);
   if (byId) return byId;
   const low = s.toLowerCase();
-  const all = rooms.listCached();
+  const all = rooms.listAllCached();                  // S1 Q4: an id lookup, not a listing (unlisted pads resolve)
   const ci = all.filter((p) => String(p.id).toLowerCase() === low);
   if (ci.length === 1) return ci[0];
   const bySlug = rooms.bySlugCached(low) || rooms.bySlugCached(rooms.slugify(s));
@@ -37,7 +37,7 @@ function lookup(word) {
 function byTitle(word) {
   const low = str(word).toLowerCase();
   if (!low) return null;
-  const hits = rooms.listCached().filter((p) => String(p.title || "").toLowerCase() === low);
+  const hits = rooms.listAllCached().filter((p) => String(p.title || "").toLowerCase() === low);
   return hits.length === 1 ? hits[0] : null;
 }
 

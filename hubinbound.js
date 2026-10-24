@@ -3,6 +3,8 @@
 //
 //   GET  /internal/v1/snapshot/<topic>?cursor=     one page of the topic's current state (huboutbox.snapshot) - the hub's
 //                                                  bootstrap and 10-minute repair pull. 404 while the topic's switch is off.
+//                                                  (S1: identity/changed, looks/changed - 1.99ads; pads/changed,
+//                                                  roles/changed, bans/changed, switches/changed - S1 Q4, release L1)
 //   POST /internal/v1/outbox/rewind {topic, after_id}   kept hub_outbox rows of the topic above after_id are posted again
 //                                                  (huboutbox.rewind) - the promotion runbook (§15.4)
 //   POST /internal/v1/looks {ids, card?}           1.99ads (S1 Q5b, seam plan §12.7): the structured looks of up to 450 hub
