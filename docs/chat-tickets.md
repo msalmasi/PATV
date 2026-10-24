@@ -369,7 +369,7 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
 S1 plan §2.5 V4 (ADR 0007 D16; OQ-20, answered 2026-10-19: the choice also hard-deletes the account's web lines in the pad
 chat archive, with the same exceptions, under one checkbox wording; CHAT-ARCHITECTURE rev 5.1 §9.4, seam plan D-23). Release
 L4 is V2 + V4; V4 reached v1 staging first, on its own, as **1.99ady** (2026-10-21; the staging merge carries the letter,
-ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape change, so `huboutbox.VERSION` stays 1.99ads.
+ADR 0007 D19), and V2 followed as **1.99aeb** (2026-10-24). No seam shape change, so `huboutbox.VERSION` stays 1.99ads.
 
 - **Behind the `erasure` switch** (`accountdelete.removeOffered()` = `huboutbox.on("erasure")`; off by default, so nothing a
   member sees changes until `erasure` goes on): while it is off the delete page has no box and no PATV chat copy, the privacy
@@ -638,13 +638,15 @@ the Chat group holding `/admin/chat` only until V2, 500-row lists with the pilot
   nothing refuses or resets it. The fix belongs to Q4 (`chat_backend`'s writers and the displaced-row emit) or to
   `padconnect`: refuse to connect a pad at `hub`, or reset it to `v1` in the re-key.
 
-## S1: the widget host and the mod-screen hosts (release L4, `chatwidget.js`)
+## S1: the widget host and the mod-screen hosts (release L4's V2 part, 1.99aeb, `chatwidget.js`)
 
 S1 plan §2.5 V2 (ADR 0007 D3, D5, D14, D15; the host contract is the platform repo's `apps/chat-widget/README.md`). Nothing
 here shows until four things are true at once: the widget is vendored (`public/js/patv-chat/manifest.json`), the hub's
 public origins are set (`HUB_RT_WS`, `HUB_RT_API`), the pad is at `pad_hub.chat_backend = 'hub'` and `CHAT_HUB` is on.
 Release L1's V1 (1.99adz) brought the `chat_switches` table and `/admin/chat`; until Q7's turn-on none of the four holds,
-so every page is as before. V2 takes the next free letter when it reaches staging (ADR 0007 D19).
+so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; the staging merge carries the letter, ADR
+0007 D19), after V4 (1.99ady, its fix-up 1.99aea), so release L4 is complete. No seam shape change, so
+`huboutbox.VERSION` stays 1.99ads.
 
 - **Files:** the platform repo's `pnpm --filter @patv/chat-widget export --to <this checkout>/public/js/patv-chat` vendors a
   built version (a v1 commit "chat widget X.Y.Z" per version; the export keeps the previous two, so a page rendered before a
