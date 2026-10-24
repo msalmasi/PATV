@@ -18,7 +18,7 @@
 var RANK = Object.create(null); RANK.assistant = 1; RANK.staff = 2; RANK.admin = 3;
 var MIN_CLASSES = ["admin", "staff", "assistant"];
 var CLASS_RANK = { Assistant: 1, Staff: 2, Admin: 3 };
-var GROUPS = ["admin", "accounts", "economy", "games", "pads", "feed", "messages", "creators", "media", "stage", "sound", "pepe", "site"];
+var GROUPS = ["admin", "accounts", "economy", "games", "pads", "feed", "messages", "chat", "creators", "media", "stage", "sound", "pepe", "site"];
 // Lock reasons (i18n siteperm.lock.<reason>)
 var LOCKS = ["escalation", "credentials", "points", "privacy", "consent", "ops", "safety", "padlock", "exposure"];
 
@@ -102,6 +102,12 @@ var CAPS = [
   // ── messages ──
   ["dm.limits_exempt", "messages", "staff", null],
   ["dm.report_review", "messages", "admin", "privacy"],
+  // ── chat: the chat hub (S1 V1, ADR 0007 D15; adminchat.js, the admin nav's Chat group) ──
+  ["chat.breakglass", "chat", "admin", "ops"],                  // /admin/chat: see it and turn the chat hub / a pad's hub chat OFF;
+                                                                //   turning either ON is a Pepe owner's too (staffroles.ownerHolds)
+  ["chat.mod_queue", "chat", "assistant", null],                // the hub's moderation screens (reports, held, mod log, bans; V2's
+                                                                //   hosts) - the hub's own permissions decide what renders
+  ["chat.audit", "chat", "admin", null],                        // the hub's audit and switches screens (V2's hosts)
   // ── creators, banner, shop ──
   ["creators.admin", "creators", "staff", "points"],             // refunds / clawbacks
   ["creators.config_explicit", "creators", "admin", null],

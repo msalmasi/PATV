@@ -152,7 +152,7 @@ forgetting them. That cache is in memory - a fast path: 1.99acm, the inbound rou
 | `privacy/changed` | `incognito.sync()` (Pepe's report), linked and unlinked logins; 1.99acm: also every key Pepe's full list (`full`) turns ON or OFF, in one transaction with that heal | same | `{flag:"incognito", value, phase:"confirmed", via, subject, at}` |
 | `privacy/changed` | 1.99acm: trigger on `profile_layout` (any write) | `pa:<userId>` | read at post time: `{flag:"private_activity", value, subject:{acct, v1_user}, at}` - the Analytics section or its Rooms panel hidden (`stories.privateLogins`' rule; an unreadable layout counts as private) |
 | `privacy/changed` | 1.99acm: trigger on `hub_hidden_h` (`hubhidden.js`: Pepe's `hidden_h` from each bridge sync, only the difference written; 1.99add: sticky - a row goes only on an explicit un-hide, never because a list lacks it; incognito ON reports and website ON requests add at once; refix 4: also a change of its `scope`) | `hh:<h>` | read at post time: `{flag:"hidden_h", h, value, at}` + `scope: "incognito"` when only incognito hides it (shown as "someone"; absent = left out) (20-hex hashes only, never a login) |
-| `privacy/account-deleted` | 1.99acm: `accountdelete.execute()`, in the deletion's transaction | `acct:<userId>` | `{acct, v1_user, pseudonym, remove_public:false, request:<account_deletions.id>, at}` |
+| `privacy/account-deleted` | 1.99acm: `accountdelete.execute()`, in the deletion's transaction | `acct:<userId>` | `{acct, v1_user, pseudonym, remove_public, request:<account_deletions.id>, at}` (S1 V4: `remove_public` = the row's choice) |
 | `privacy/forget` | 1.99acm: `pepeforget.request()` / `fromBot()` (linked accounts only), in the request's transaction | `forget:<pepe_forget_log.id>` | `{subject_kind:"acct", acct, v1_user, scope:"bot", ref, at}` |
 | `econ/committed` | `idemBegin` `done()` for a key starting `ix:` | the key | `{key, tx, outcome:{status, ok, code}, endpoint, at}` (refusals with a stored status included). The hub has no intake for it before R-4 (404; the topic backs off on its own). |
 
@@ -174,7 +174,8 @@ heartbeat's `at`.
 An account deletion names the account only - 1.99acm: never the released chat login nor a hash of it (an unkeyed hash of a
 short public username is reversible by dictionary, and the hub's deletion journal is write-once under Object Lock; the
 hub's erasure works on the account's lines, and an identity-scoped erasure is S2's, with its own design).
-`remove_public` stays `false` until the "also remove my public messages" choice exists (S1). "Make Pepe forget me" is scope `bot` (DMs with Pepe and his memory, never public lines); a login with no linked
+`remove_public` is the member's "Also remove my public messages" (S1 V4, below; `false` without it, and on every deletion
+before it). "Make Pepe forget me" is scope `bot` (DMs with Pepe and his memory, never public lines); a login with no linked
 account sends nothing (identity-scoped requests are S2's `privacy/idn-request`).
 
 ### Heartbeat
@@ -363,6 +364,204 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
 - **i18n:** new keys only - `textstyle.*` (the palette's and the fonts' `label_key`s from the registry, the card's copy),
   `sethub.e/d.textstyle`, `sethub.st.ts*`, `js.textstyle.*`; the sync translates them after the staging push.
 
+## S1: the privacy UI - "Also remove my public messages" (release L4's V4 part, 1.99ady)
+
+S1 plan §2.5 V4 (ADR 0007 D16; OQ-20, answered 2026-10-19: the choice also hard-deletes the account's web lines in the pad
+chat archive, with the same exceptions, under one checkbox wording; CHAT-ARCHITECTURE rev 5.1 §9.4, seam plan D-23). Release
+L4 is V2 + V4; V4 reached v1 staging first, on its own, as **1.99ady** (2026-10-21; the staging merge carries the letter,
+ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape change, so `huboutbox.VERSION` stays 1.99ads.
+
+- **Behind the `erasure` switch** (`accountdelete.removeOffered()` = `huboutbox.on("erasure")`; off by default, so nothing a
+  member sees changes until `erasure` goes on): while it is off the delete page has no box and no PATV chat copy, the privacy
+  page has no paragraph, and `POST /api/account/delete {remove_public: true}` is refused 409 `E_REMOVE_OFF` (nothing
+  scheduled). A request scheduled while it was on keeps its choice if the switch goes off before the deletion runs (the
+  switch gates the offer, not what a member already asked for). **When members see it:** on prod, `erasure` goes on at
+  E-2 step 2 (the privacy seam's dark launch: `privacy` → `erasure`, `export`), before `CHAT_HUB` reaches anyone (step 3,
+  canaries first) - ADR 0007 D16's "prod before users". From that moment every member sees the checkbox, its PATV chat copy
+  and the privacy page's paragraph naming PATV chat (such as the PATV Lounge), while PATV chat itself is still dark; the
+  copy stays true then (a member with no PATV chat messages has nothing there to keep or remove).
+- **One checkbox, one wording, both stores:** "Also remove my public messages" on `/settings/account/delete`, unticked, under
+  CL6's "Also hide my past public chat lines" (independent of it; both can be ticked). Its hint names both stores (PATV chat
+  and pads' chat history), the exceptions, the once-a-day rule and what can't be reached (copies already sent to Camfrog or
+  downloaded, a linked member's Camfrog and incognito lines). "What deleting does" gains one item for PATV chat
+  (`acctdel.what.hub`). Admin-scheduled deletions (`POST /api/admin/users/:id/delete`) never carry it: it is the member's
+  own choice.
+- **At most once a day** (CA §9.4): a request carrying the choice is refused 429 `E_REMOVE_DAILY` (`retry_at`, ms) while
+  another request of the account carried it in the last 24 hours (`account_deletions.requested_at`) - one a sign-in
+  cancelled counts too. The page shows the box disabled with the time it opens again; the deletion itself can still be
+  asked for without it. Review fix: `schedule()` checks "already scheduled" and the day again inside the insert's own
+  `dbUtils.tx` (one at a time), so two requests sent at once can't both be scheduled or both carry the choice.
+- **Stored with the request:** `account_deletions.remove_public` (1 / NULL), `public_done_at` and `public_login` (columns
+  added by `init()`). Signing in during the grace cancels the request and its choice together. `public_login` is the
+  released Camfrog login, written only on a done row with the choice and only until the archive's part has run (its web
+  lines are under it, below); `removePublicNow` NULLs it. Nothing reads it but the retry, and the hub row never names it.
+- **The hub's part:** the `privacy/account-deleted` row (and its snapshot row: `huboutbox`'s reader selects the column)
+  carries `remove_public: true`; the hub then forgets the text of the account's public lines (`_erase_account`), a line
+  under a report kept as a former member's until its hold ends (D10) and forgotten then (`erasure_deferred`). The payload's
+  shape is unchanged (the field has existed since S0, seam plan D-23), so `huboutbox.VERSION` stays `1.99ads` and the shared
+  golden rows are unchanged.
+- **The pad chat archive's part** (`chatlogmod.removeAccountLines(userId, {login, upto})`, run by `execute()` **after** the
+  deletion's commit, so a deletion that rolls back - or that a sign-in then cancels - purges nothing). Purged at once by
+  `purgeRows` as their author (`rm_by` `self`: text, name and key - only the one-way hash stays -, the search index,
+  `bridge_feed`, quotes, mention notices and alerts):
+  - the account's own web lines: `u:<id>`, and the lines it said while incognito, archived as `h:<hash of u:<id>>`;
+  - review fix: **a linked member's web lines**, which the bridge archives under the Camfrog **login** with `d.u.web`
+    (`bridge.js` `jobSender`), not under `u:<id>`: `execute()` reads the login before it releases it and passes it with
+    `upto` = the deletion's time (a released login is someone else's to link afterwards, and their web lines aren't this
+    member's). Like Remove my line (CL6 `isAuthor`: every line under a login is its current holder's), an earlier holder's
+    web lines under the same login go too.
+  - Not reached: the login's Camfrog lines (the login's, not the account's - "Also hide my past public chat lines" leaves
+    them out), and a linked member's lines said **while incognito** (`h:<hash of the login>`: Pepe sends an anonymised line
+    with no web mark, so the archive can't tell the ones sent from the website from the Camfrog ones; they name nobody, and
+    "Also hide my past public chat lines" leaves them out too). The checkbox hint and the privacy paragraph say so.
+- **The same exceptions as the hub, with D10's bounds** (review fix; ADR 0007 OQ-20 "yes, same exceptions", OQ-21 / D10;
+  the hub's `rooms._report_hold_until`): a line a legal hold covers (its room, or its speaker) or a report holds is taken down
+  at once instead (`rm_by` `self`, like Remove my line: out of every view, its copies with it, the live feed too) and listed in
+  `chatlog_erase_wait (c, at)`. A report holds a line until 30 days after its decision, or 90 days after it was filed while
+  nobody has decided it (a decision after those 90 days doesn't hold it again; the report stays open, its line's words gone -
+  the hub's "snapshot expired"); a report filed after the removal doesn't hold it (the hub's rule for a deferred erasure). The
+  nightly pass (`nightly()` → `eraseWaitPass`) deletes a listed line's words once no legal hold and no such report holds it,
+  and CL6's 30-day pass leaves listed lines to it (so a decision can't be cut short of its 30 days, nor an undecided report
+  keep the words past 90). v1 has no bounty evidence on chat lines. The hub's 14-day escalation is the hub's `/admin` card;
+  v1's report queue lists the open report as before.
+- **A kept line that was already down** (review fix): a line a "minor" report, a moderator or staff had hidden before the
+  deletion is re-marked as its author's removal (`rm_by` `self`, `rm_why` NULL, `rm_at` kept): `unhide` refuses a `self`
+  line and `reportDecide`'s dismiss / false lifts only `report:minor`, so neither can bring the deleted member's words back.
+- Pepe's `!log` / `!search` skip every line of the account key up to then (`removed_who`, as "Delete every line"); the
+  login's lines aren't the account's to hide from him (each purged one is in his per-line removed list).
+  `public_done_at` and the counts (`report.public_removed = {lines, held}`, no words or names) record it; a **done** row with
+  the choice and no `public_done_at` (a restart between the commit and the purge, an error) is run again by the tick
+  (`retryRemovePublic`, with the row's `public_login`); never a scheduled, held or cancelled one. Logs carry counts only.
+- **Where the two stores still differ** (V4's call, for the owner's review; default: as built): a held or reported line is
+  out of view in v1's archive at once (taken down as the author's, its words kept for the hold), while on the hub it stays
+  visible as a former member's line until its hold ends (`erasure_deferred`). What is kept, and for how long, is the same.
+- **The privacy page** (`views/privacy.ejs`, `terms.js` passes `accountdelete.privacyCopy()`): one paragraph,
+  "Your chat lines when you delete your account" (`#delete-chat`, section 10, in the contents), covering PATV chat and the
+  pad chat archive together, only while `erasure` is on; with the `export` switch also on, one sentence says "Download my
+  data" includes what PATV chat keeps. It names what stays without the tick (a former member's lines - or, for a linked
+  member's web lines, the Camfrog name), what the tick deletes, D10's bounds, and what it can't reach. Dated by the switch's
+  own row (`hubseam_settings.updated`): a dated note in "Changes", and "Last updated" when it is the newest change. Review
+  fix: `huboutbox.setSettings` now moves a switch's `updated` / `actor` only when its value changes (the `/admin/keys#seam`
+  form posts every switch on each save, which moved the date before); every save is still in the admin audit. **Owner
+  action O-20** ("one privacy paragraph", S1 plan) is this paragraph's wording: it is put to the owner (default: as
+  written).
+- **Tests:** `test/account-delete-remove-public.test.js` (the offer and its refusal while off, the stored choice, once a day
+  with a cancelled request counting, two requests at once, the flag in the feed and snapshot rows, the cross-store rule -
+  purged lines, a linked member's web lines under the login, held and reported ones kept and taken down with their copies
+  and the live feed, other people's lines and the login's Camfrog, incognito and later lines untouched, `removed_who`, the
+  nightly pass once the hold and the report end - D10's bounds (decided, undecided, decided late, a report filed after the
+  removal), kept lines already down (a dismissed "minor" report), a person hold (`who:`), no purge on a rolled-back deletion,
+  the tick's retry with the kept login and never for a scheduled or cancelled request - the routes (GET's box, POST's strict
+  `true`, 409 / 429), the delete page and the privacy page with the switches off and on and a save of every switch);
+  `test/chatlog-attach.test.js` (an archive in the attached `chatlog.db`: `removeAccountLines` finds `chat_log` there);
+  `test/hubseam-driver-v4.test.js` (the driver's commands, an unlinked and a linked account). The hub half of the
+  cross-store test is the contract suite's scenario **5b** (the hub repo,
+  `services/rooms/test/seam-contract.integration.test.ts`): one deletion with the choice, through the real seam, checked in
+  both stores (an unlinked and a linked account's web lines in v1's archive).
+- **Driver:** `deleteAccount {user, remove_public?}`, `chatLines {user, lines, hold_rooms?}` (a linked account's web lines
+  under its login, as the bridge archives them; `camfrog: true` for a Camfrog line), `chatLog {cs}`.
+- **i18n:** new keys only - `acctdel.what.hub`, `acctdel.remove_public`, `acctdel.remove_public_meta`,
+  `acctdel.remove_public_wait`; the sync translates them after the staging push. The privacy page is English, like the rest
+  of it.
+- **Turn-on (Q7):** nothing of its own - it appears with `erasure` (and its export sentence with `export`).
+
+## S1: `/admin/chat`, the chat hub's break-glass (release L1's V1 part, 1.99adz)
+
+S1 plan §2.5 V1; ADR 0007 D3 and D15, OQ-19; CHAT-ARCHITECTURE §8.5 (R-15, CF F4). Built beside Q4 (the rest of L1: the
+pads / roles / bans / switches topics, `listed`, the staff and canary pads) and in parallel with it; V1 changes no seam wire,
+so `huboutbox.VERSION` stays as it is. L1 is split, as L4 was: V1 reaches v1 staging on its own as 1.99adz, ahead of Q4,
+which takes the next free letter when it lands (see "Without Q4" below).
+
+- **What it sets** - the two v1-owned controls of ADR 0007 D3, set only here:
+  - `CHAT_HUB` in `chat_switches(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER, updated_by TEXT)`
+    (`chatswitches.js`: `on` | `off`, no row = `off`; `updated_by` is the admin's username, an audit label that
+    `accountMerge.js` classifies `deny`). `chatswitches.set(key, value, actor, {reason})` checks the key, the value and the
+    interlock in its transaction and writes the `chat.switch` audit row `{key, from, to}` **in the same transaction**: a row
+    that can't be written rolls the change back and `set()` rejects (an actor-less call - a script - writes no row).
+    `dm_backend` is S5's key and is refused (`bad_key`) until then. `chatHubOn()` reads a per-process cache that `set()`,
+    `load()` and `init()` refresh, so it misses an out-of-band write (a script, the sqlite3 CLI) until one of them runs (a
+    view of `/admin/chat` reloads it); **V2's widget mount reads `chatHubOnNow()`** (one row) or calls `load()` on a short
+    timer.
+  - a pad's `pad_hub.chat_backend` (S1-D1's table): `padhub.setBackend(room_id, backend, actor)` - `v1` | `hub`; `hub_read`
+    is refused (409 `hub_read_s2`), `hub` only for a **site** pad (409 `site_pads_only`: Camfrog, Twitch, Discord and profile
+    pads keep their v1 chat in S1); any pad can always go back to `v1`, a `pad_hub` row whose registry row is gone (a
+    staging refresh, a hand edit) included. `updated_by` gets the admin's username; the pad's `room_events` row
+    `chat-backend` names **`PATV staff`** (`padhub.STAFF_ACTOR`, as `chatlogmod.js` does), never the admin, since the pad's
+    owner reads `room_events` on `/p/:slug/settings`. `/admin/chat` runs it and its `chat.pad_backend` audit row
+    `{room_id, slug, hub_pad_id, from, to}` in one `dbUtils.tx`.
+  - `chatswitches.js` and `padhub.setBackend` are shared with Q4, which builds the same table, API and refusals and adds the
+    rest: the `switches/changed` topic on this table (triggers, payload `{key, value, updated_at}`, the every-key snapshot),
+    the `pads/changed` trigger that carries `chat_backend`, `huboutbox.setSettings`' half of the interlock and
+    `chat_switches` in the staging `KEEP`. **When the two branches meet (release L1), keep Q4's two files with V1's
+    `set()` and `setBackend()`** (V1's review fixes above: the audit row inside the transaction; `v1` for a row whose pad is
+    gone; `PATV staff`, plus the `STAFF_ACTOR` constant and its export; Q4's `rooms.cleanPlatform` for the platform), and
+    change Q4's `huboutbox-s1-l1` assertion on the `chat-backend` event's actor from `owner` to `PATV staff`.
+    `test/adminchat.test.js` fails on a merge that keeps Q4's unchanged functions. Q4's land merges v1 staging (with V1)
+    into its branch, so it meets these two conflicts there.
+  - **Without Q4** (1.99adz until Q4 lands) `chat_switches` isn't in the staging `KEEP` and the interlock's other half
+    (stated on the page) isn't there, and neither matters yet: `CHAT_HUB` can't go on, because Q4's four switches (`pads`,
+    `roles`, `bans`, `switches`) aren't in `huboutbox.SWITCHES`, so `setSettings` can't turn them on and `set()` refuses
+    with `chat_hub_needs`; a staging refresh that drops `chat_switches` leaves `CHAT_HUB` at its default, `off`; and nothing
+    reads `pad_hub.chat_backend` before V2 (a pad an owner moves to `hub` keeps its v1 chat; the hub learns the value
+    once Q4's `pads/changed` carries it).
+- **The page** (`adminchat.js`, `views/admin/chat.ejs`, `public/js/admin-chat.js`): `GET /admin/chat` and
+  `GET /api/admin/chat` (same data, both `no-store`): `CHAT_HUB` (re-read from the database on every view) with when and by
+  whom it last changed, the pads not on `v1` (read from `pad_hub`, the registry joined when it still has the pad; each with
+  a one-click "Back to v1 chat"; a value the form doesn't know is shown as written, a row whose pad is gone is marked so),
+  for owners the site pads still on `v1` (filtered in SQL; the pilot pads `patv:staff`, `patv:canary`, `patv:lounge`
+  first), each list at most 500 rows with a line saying when there are more, the interlock (the twelve seam switches,
+  on / off, linking to `/admin/keys#seam`), the seam poster's status (this site's queue, the `switches/changed` and
+  `pads/changed` queues once Q4 adds those topics, the last post and heartbeat - `huboutbox.status()`, local state only) and
+  the change log (the newest 20 `chat.*` audit rows, newest first). **It makes no call to the chat hub**, so it works while
+  the hub is down (the test runs it with every connection, request and `fetch` stubbed to throw). Turning `CHAT_HUB` off
+  needs only `chat_switches` and `admin_audit` (`adminchat.initCore`), never `padhub` or the registry; when the pads can't
+  be read the page says so and shows the rest.
+- **Who:** seeing the page and turning **off** (`CHAT_HUB` off, a pad back to `v1`) need `chat.breakglass` (siteperms,
+  locked at Admin, lock reason `ops`): any admin, one click, never refused. Turning **on** (`CHAT_HUB` on, a pad to `hub`) is
+  a Pepe owner's: `staffroles.ownerHolds(me, "chat.breakglass")` (the Admin class and Pepe's owner role on the linked chat
+  login, read fresh), 403 `owner_only` otherwise.
+- **The confirm step** (server-enforced): an owner's on-post without `confirm: true` answers 409 `confirm` with what would
+  happen (`preview`: the pads on the hub for `CHAT_HUB`; the pad's title and whether `CHAT_HUB` is on for a pad) and writes
+  nothing; the page asks with that text and only a yes posts again with `confirm: true`. The step is decided on the state
+  read **inside the writing transaction** (`CHAT_HUB`; the pad, its platform and its backend), so a stale page or a retry
+  can't undo, unconfirmed, an admin's off that landed in between (`dbUtils.tx` runs one transaction at a time).
+- **Every change:** `POST /api/admin/chat/hub {on, reason, confirm?}` and `POST /api/admin/chat/pad {room_id, backend,
+  reason, confirm?}` are same-origin fetches (ADR 0007 D15's `sameOriginStrict`, as `adminkeys.js`: `X-Requested-With:
+  fetch` and an Origin, else a Referer, whose host **is** this request's Host - no `www.` folding, stricter than
+  `authGuard.sameOriginFetch`; else 403 `cross_site`), answer `Cache-Control: no-store`, need a reason (400
+  `reason_required`: format characters - zero-width, bidi controls, BOM - and lone surrogates out; control characters, NEL
+  and line / paragraph separators to a space; spaces folded; at least one letter or digit; at most 200 UTF-16 units, cut
+  between characters) and write one `admin_audit` row with it, in the change's own transaction. A post that changes nothing
+  (the value already there) answers `changed: false` and writes no row. A change whose row can't be written answers 500
+  "nothing changed" - off included: D15's every-change-is-audited rule wins over "never refused" when the site's own
+  database refuses the row (the database that would hold the switch). The page shows refusals from `js.admchat.e.<code>`
+  (the server's text for a code it doesn't know).
+- **When the page itself can't be used** (the site is up but `/admin/chat` fails): an owner on the VM sets the row with the
+  sqlite3 CLI (`UPDATE chat_switches SET value = 'off', updated = <ms>, updated_by = '<name>' WHERE key = 'CHAT_HUB'`) and
+  records why in `admin_audit` by hand; the seam's trigger carries it to the hub, and readers that use `chatHubOnNow()` see
+  it at once (the cache: the next `/admin/chat` view or a restart).
+- **The interlock** (S1-D7, seam plan §12.10): `CHAT_HUB` on is refused (409 `chat_hub_needs`, `missing` names the
+  switches) unless `tickets`, `sessions`, `heartbeat`, `privacy`, `erasure`, `export`, `pads`, `roles`, `bans`, `identity`,
+  `looks` and `switches` are all on - read from `hubseam_settings` inside the writing transaction; a switch huboutbox doesn't
+  have yet (Q4's four) reads as off. Turning `CHAT_HUB` off is never refused. The other half (no seam switch it needs goes
+  off while it is on, 409 `chat_hub_on`) is Q4's, in `huboutbox.setSettings`.
+- **The admin nav's Chat group** (`views/partials/admin-nav.ejs`): "💬 Chat hub" → `/admin/chat` with its sections, shown to
+  `chat.breakglass` holders. The siteperms group `chat` also has `chat.mod_queue` (Assistant) and `chat.audit` (Admin) for
+  V2's moderation screens (`adminchat.MOD_VIEWS`: `/admin/chat/{reports,held,modlog,bans}` and `{audit,switches}`), which
+  V2 (release L4) hosts and adds to the group; until then nothing opens with them.
+- **Logs:** `[adminchat] <what>: <error>` and `[chatswitches] reload: <error>` only - never a reason, pad, account or value.
+- **Tests:** `test/adminchat.test.js` (no hub call; who sees it and the nav; cross-site, header-less, `www.`-folded and
+  signed-out posts refused; a reason on every change, the stricter cleaning; the interlock; an admin turns off but not on;
+  the owner turns on after the confirm step; one audit row per change and none for no change; a failing audit insert rolls
+  the switch and the pad back; the two races (a stale on-post during an admin's off, for `CHAT_HUB` and for a pad); Camfrog
+  and profile pads can't pick `hub`, `hub_read` refused, unknown pads 404, a hand-edited value and a row whose pad is gone
+  put back; `PATV staff` in `room_events`; `padhub` down; the 500-row bounds; the JSON `no-store`, the switch read fresh,
+  the log newest first; escaped titles and reasons), `test/admin-chat-js.test.js` (the page script in a vm: no `confirm` on
+  a first on-post, the question from the server's preview, a no posts nothing more, off is one post, the reason prompt, the
+  refusal texts), `test/siteperms.test.js` (the three capabilities' classes and locks).
+- **i18n:** new keys only - `admchat.*`, `js.admchat.*` (`js.admchat.e.*` the refusals), `siteperm.g.chat`,
+  `siteperm.k.chat.*`.
+
 ## S1: the widget host and the mod-screen hosts (release L4, `chatwidget.js`)
 
 S1 plan §2.5 V2 (ADR 0007 D3, D5, D14, D15; the host contract is the platform repo's `apps/chat-widget/README.md`). Nothing
@@ -473,7 +672,8 @@ and `looks` (the S1 topics above; `looks` also gates the hub's looks call) - all
 `privacy` → (S1) `erasure`, `export`. `/admin/keys#seam` also shows the seam environment and any outbound refusal, the
 per-topic queues, the hub's last snapshot and rewind calls and refusals, and exports waiting for the hub.
 
-When the privacy switches go on in S1, the privacy page names the chat hub in deletion and export.
+When the privacy switches go on in S1, the privacy page names the chat hub in deletion and export (S1 V4, above: the
+paragraph appears with `erasure`, its export sentence with `export`).
 
 ## Bridge spans (`bridgespans.js`)
 

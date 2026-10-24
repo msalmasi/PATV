@@ -55,6 +55,8 @@ const GOLDEN = {
   "feed.admin_lock": ["admin", true], "feed.abuse_details": ["admin", true], "feed.automod_csam_reverse": ["staff", true],
   "takedown.handle": ["staff", true], "imagesafety.admin": ["admin", true],
   "dm.limits_exempt": ["staff", false], "dm.report_review": ["admin", true],
+  // S1 V1 (ADR 0007 D15): the chat hub - the break-glass is locked at Admin ("ops"); the moderation queue opens to Assistants
+  "chat.breakglass": ["admin", true], "chat.mod_queue": ["assistant", false], "chat.audit": ["admin", false],
   "creators.admin": ["staff", true], "creators.config_explicit": ["admin", false], "creators.pad_flags_any": ["staff", false],
   "banner.review": ["assistant", false], "banner.config": ["admin", true], "shop.admin": ["staff", true],
   "shopart.view": ["staff", false], "shopart.admin": ["admin", false], "badges.manage": ["staff", false],

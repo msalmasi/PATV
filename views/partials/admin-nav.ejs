@@ -35,6 +35,10 @@
     ['backends', '/admin/backends', '🔌', 'Backends', [['#handovers', 'Hand-overs'], ['#status', 'Cutovers (status)']], ['econ.backend_cutover']],   // owner answers 2026-10-20: backends.js (Pepe's panel card is read-only)
     ['roles', '/admin/roles', '🎖️', 'Roles & permissions', [['#holders', 'Role holders'], ['#commands', 'Command permissions'], ['#targets', 'Moderation targets'], ['#notes', 'Notes'], ['#website', 'Website permissions'], ['#chat', 'Change from chat']], ['roles.assign']],   // 1.99acj: adminroles.js / pepeperms.js
     ['keys', '/admin/keys', '🔑', 'Bot keys & chat seam', [['#keys', 'Keys'], ['#scopes', 'Scopes'], ['#families', 'Route families'], ['#legacy', 'Legacy token use'], ['#routes', 'Route log'], ['#events', '/events'], ['#seam', 'Chat tickets & hub seam']], ['keys.view']],   // 1.99acf: adminkeys.js
+    // S1 V1 (ADR 0007 D15): the Chat group - the chat hub's break-glass form (adminchat.js). V2 (release L4) adds the hub's
+    // moderation screens here as /admin/chat/{reports,held,modlog,bans,audit,switches} (adminchat.MOD_VIEWS: chat.mod_queue /
+    // chat.audit) and opens the group to those capabilities too.
+    ['chat', '/admin/chat', '💬', 'Chat hub', [['#hub', 'Chat hub switch'], ['#pads', 'Pads on the hub'], ['#interlock', 'Interlock'], ['#seam', 'Seam poster'], ['#log', 'Change log']], ['chat.breakglass']],
     ['help', '/admin/help', '📖', 'Help questions', [['#misses', 'Unanswered']], ['help.admin']],
     ['translations', '/admin/translations', '🌐', 'Translations', [['#pending', 'Suggestions'], ['#overrides', 'Live overrides'], ['#export', 'Export']], ['i18n.admin']],
     ['games', '/admin/games', '🎰', 'Games', [['#wheel', 'Wheel spin'], ['#jackpot', 'Jackpot'], ['#casino', 'Casino bans'], ['#heistmarket', 'Heist market', 'games.config']], [AREA]],

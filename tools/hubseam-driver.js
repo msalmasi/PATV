@@ -43,6 +43,17 @@
 //   cosmetic {action: grant | equip | unequip, user, item}  -> {inv_id}   cosmetics.grant / cosmetics.equip
 //   textStyle {user, color?, font?} (null clears)   -> {style}   textstyle.set (W1 palette colours, the six fonts)
 //   looks {ids, card?}          -> {status, body}   the looks call's answer (hublooks.call - what POST /internal/v1/looks serves)
+// S1 V4 (the privacy UI: "Also remove my public messages", ADR 0007 OQ-20 - the cross-store scenario of the contract suite):
+//   deleteAccount {user, remove_public?}   (above) remove_public: the member ticked "Also remove my public messages" - the hub's
+//                               row carries it and the pad chat archive's web lines of the account are purged after the commit
+//   chatLines {user, lines: [{text, room?, report?, incognito?, camfrog?}], hold_rooms?}   -> {cs}   the account's lines in the
+//                               pad chat archive (chatlog.rowOf), as the bridge archives them: a web line under the account key
+//                               "u:<id>" - or, for an account with a linked Camfrog login, under that login with d.u.web (review
+//                               fix: the bridge's jobSender); incognito: the "h:<hash>" form of that key; camfrog: a line said in
+//                               Camfrog under the linked login (no web mark); report: an open report on the line; hold_rooms: a
+//                               legal hold on each of those rooms
+//   chatLog {cs}                -> {lines: [{c, text, purged, down, rm_by, who, display}]}   those lines now (who: "account" for
+//                               the u:<id> key, "hash" for an h:<hash>, "login"; display: the name on the row, or null)
 "use strict";
 const crypto = require("crypto");
 const fs = require("fs");
@@ -248,15 +259,69 @@ const CMDS = {
   async pepeSync({ items }) { await boot(); return M.incognito.sync({ items: items || [] }); },
   async privateActivity({ user, on }) { await boot(); await M.pl.save(String(user), { hidden: on ? ["analytics"] : [] }); return {}; },
   async hiddenH({ list, bridge, incog, events, session, sent, explicit }) { await boot(); return M.hidden.noteSync({ list, bridge, incog, events, session, sent, explicit }); },
-  async deleteAccount({ user }) {
+  async deleteAccount({ user, remove_public }) {
     await boot();
     const u = (await M.db.getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(user)]))[0];
     if (!u) throw new Error("no such user");
-    await M.del.schedule(u, { by: "hubseam-driver" });
+    await M.del.schedule(u, { by: "hubseam-driver", removePublic: remove_public === true });     // S1 V4: the member's choice
     const r = await M.del.execute(String(user), { force: true });
     if (!r.ok) throw new Error("deletion " + r.state);
     const d = (await M.db.getQuery("SELECT id FROM account_deletions WHERE user_id = ? AND state = 'done' ORDER BY id DESC LIMIT 1", [String(user)]))[0];
     return { request: String(d.id) };
+  },
+  // ── S1 V4: the pad chat archive's side of "Also remove my public messages" ──
+  async chatLines({ user, lines, hold_rooms }) {
+    await boot();
+    const CL = require(path.join(repo, "chatlog")), CLM = require(path.join(repo, "chatlogmod"));
+    await CL.init();
+    await CLM.init();
+    const u = (await M.db.getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [String(user)]))[0];
+    if (!u) throw new Error("no such user");
+    // (bridge.js jobSender: a linked member's web line is THEIR LOGIN's line, marked web; an unlinked account's is its u:<id>)
+    const login = u.camfrogUsername ? String(u.camfrogUsername).trim().toLowerCase() : null;
+    const key = login || "u:" + String(u.userId).toLowerCase();
+    const rkOf = async (room) => {
+      const roomId = "Drv." + String(room || "room");
+      await M.db.runQuery("INSERT INTO chatlog_rooms (room_id, owner_since, created) VALUES (?, 0, ?) ON CONFLICT(room_id) DO NOTHING", [roomId, Date.now()]);
+      return Number((await M.db.getQuery("SELECT rk FROM chatlog_rooms WHERE room_id = ?", [roomId]))[0].rk);
+    };
+    const cs = [];
+    await M.db.tx(async () => {
+      for (const l of lines || []) {
+        const rk = await rkOf(l.room);
+        const c = Number((await M.db.getQuery("SELECT COALESCE(MAX(c), 0) + 1 AS c FROM chat_log"))[0].c);
+        const it = { c, ts: Date.now(), k: "msg", text: String(l.text || "") };
+        if (l.camfrog && !login) throw new Error("a Camfrog line needs a linked login");
+        if (l.incognito) Object.assign(it, { u: { display: "someone", anon: true }, ah: CL.hash(key) });
+        else if (l.camfrog) it.u = { login, display: u.camfrogUsername };
+        else it.u = { login: key, display: login ? u.camfrogUsername : u.displayname || u.username, web: true };
+        const r = CL.rowOf({ it }, rk, "p");
+        await M.db.runQuery("INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [r.c, r.rk, r.ts, r.k, r.who, r.text, r.rt, r.aud, r.d]);
+        if (l.report) {
+          await M.db.runQuery("INSERT INTO chatlog_reports (c, rk, reporter, reason, note, state, created) VALUES (?, ?, NULL, 'harassment', NULL, 'open', ?)", [c, rk, Date.now()]);
+        }
+        cs.push(c);
+      }
+      for (const room of hold_rooms || []) {
+        await M.db.runQuery("INSERT INTO chatlog_holds (key, by_user, why, at) VALUES (?, 'hubseam-driver', 'contract', ?) ON CONFLICT(key) DO NOTHING", ["room:" + (await rkOf(room)), Date.now()]);
+      }
+    });
+    await CLM.loadHolds();
+    return { cs };
+  },
+  async chatLog({ cs }) {
+    await boot();
+    const list = (cs || []).map(Number);
+    if (!list.length) return { lines: [] };
+    const rows = await M.db.getQuery(`SELECT c, text, purged, rm_at, rm_by, who, d FROM chat_log WHERE c IN (${list.map(() => "?").join(",")}) ORDER BY c`, list);
+    return { lines: rows.map((r) => {
+      let d = {};
+      try { d = JSON.parse(r.d) || {}; } catch (e) { d = {}; }
+      const who = String(r.who || "");
+      return { c: Number(r.c), text: r.text == null ? null : r.text, purged: Number(r.purged) === 1, down: r.rm_at != null, rm_by: r.rm_by || null,
+               who: who.startsWith("u:") ? "account" : who.startsWith("h:") ? "hash" : who ? "login" : null,
+               display: d.u && typeof d.u.display === "string" && d.u.display ? d.u.display : null };
+    }) };
   },
   async forget({ user }) { await boot(); const r = await M.forget.request(String(user)); return { ref: String(r.ref) }; },
   async exportAccount({ user }) {
