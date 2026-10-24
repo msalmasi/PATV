@@ -92,14 +92,18 @@ on; at most once a day - a request a sign-in cancelled counts; stored as `accoun
 both stores: the hub row carries `remove_public: true`, and after the deletion commits the account's web lines in the pad
 chat archive are purged at once (`chatlogmod.removeAccountLines`: words, name, search index, live feed, quotes, mention
 notices) - `u:<id>`, its incognito `h:<hash>` lines and, for a linked member, the web lines the bridge archived under their
-Camfrog login (`d.u.web`, said up to the deletion) - with the hub's exceptions: a line under a legal hold or a report is taken
+Camfrog logins (`d.u.web`; review 2: every login linked to the account, each inside the span it was theirs -
+`loginWindowsOf`: the login now up to the deletion, each earlier one up to when they let it go, from the login history; another
+account's web lines under the same login stay) - with the hub's exceptions: a line under a legal hold or a report is taken
 down at once as the author's (also when it was already down - a dismissed report or an un-hide can't bring it back), listed
 in `chatlog_erase_wait`, and its words deleted by the nightly pass once the hold ends and ADR 0007 D10's report bounds are up
 (30 days after the decision, 90 days undecided). The login's Camfrog lines, and a linked member's incognito lines (no web
-mark: they can't be told from the Camfrog ones), aren't reached (that is "Also hide my past public chat lines").
-`public_done_at` records the archive part; the job runs it again (done rows only, with the released login the row keeps in
-`public_login` until then) if a restart came between the commit and the purge. Details: docs/chat-tickets.md "S1: the
-privacy UI".
+mark: they can't be told from the Camfrog ones), aren't reached (that is "Also hide my past public chat lines"), nor a login
+let go before the login history began (12 October 2026).
+`public_done_at` records the archive part; the job runs it again (done rows only, with the logins and spans the row keeps in
+`public_windows` until then) if a restart came between the commit and the purge, or (review 2) the archive couldn't be
+reached - that fails the part instead of counting as "nothing to remove". Each batch is decided inside the transaction that
+writes it (review 2). Details: docs/chat-tickets.md "S1: the privacy UI".
 
 **Kept, pseudonymised** (needed for the ledger, legal, fraud or safety reasons). The rows keep pointing at the tombstone's
 id; usernames / Camfrog logins written in them as text are replaced by the pseudonym:
@@ -129,8 +133,10 @@ name the Camfrog login as Pepe keeps it, and Pepe's own data is his to forget (t
 - `account_deletions`: id, user_id, state `scheduled | held | cancelled | done`, requested_at, execute_at, requested_by
   (`self` / `admin:<id>`), reauth (`password` / `fresh-sign-in` / `admin`), reason, cancelled_at, cancel_via, held_reason,
   held_at, done_at, pseudonym, report (JSON counts - no personal data), hide_lines (CL6), remove_public and public_done_at
-  (S1 V4: "Also remove my public messages", and when the pad chat archive's part of it ran), public_login (S1 V4: the
-  released Camfrog login, only between the deletion's commit and that part - NULL after it).
+  (S1 V4: "Also remove my public messages", and when the pad chat archive's part of it ran), public_windows (S1 V4 review
+  2: JSON `[{login, from, to}]`, every Camfrog login linked to the account with the span it was theirs, only between the
+  deletion's commit and that part - NULL after it), public_login (S1 V4 before review 2: the released login; read only on
+  an older row).
 - `account_deletion_routes`: key PK, user_id, amount, legs, txid, at.
 
 Both are classified for account merges (`keep`). The prod tables are created on boot (idempotent); nothing to migrate.

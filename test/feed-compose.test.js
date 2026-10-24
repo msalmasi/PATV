@@ -160,6 +160,16 @@ test("badge: when the Feed opens by default (quiet room) the new posts are still
   assert.equal(P.els.padFeedDot.hidden, true);
 });
 
+test("S1 V2: ?line= opens Live in the browser when the Live tab holds the chat hub's widget (init's lineLive), over a remembered Feed", () => {
+  const recentFeed = { "patvPadTab:h": "feed@" + Date.now() };
+  const P = fakePage({ search: "?line=42", storage: { ...recentFeed } });
+  assert.equal(loadTabs(P.win).init({ slug: "h", platform: "site", active: false, posts: [], more: false, lineLive: true }).current(), "live");
+  const P2 = fakePage({ search: "?line=42", storage: { ...recentFeed } });
+  assert.equal(loadTabs(P2.win).init({ slug: "h", platform: "site", active: false, posts: [], more: false }).current(), "feed", "without lineLive: as before");
+  const P3 = fakePage({ search: "?line=42", hash: "#about" });
+  assert.equal(loadTabs(P3.win).init({ slug: "h", platform: "site", active: false, posts: [], more: false, lineLive: true }).current(), "about", "#hash wins");
+});
+
 test("#rules opens About (the rules live there now)", () => {
   const P = fakePage({ hash: "#rules" });
   const tabs = loadTabs(P.win).init({ slug: "r", platform: "camfrog", active: true, posts: [], more: false });
@@ -182,7 +192,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   assert.match(about, /<details class="rf-rules" id="rules" open>/, "the #rules anchor is in About");
   assert.equal((html.match(/id="rules"/g) || []).length, 1, "one #rules anchor");
   assert.match(html, /<span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden><\/span>Feed <span class="pnew" id="padFeedNew" hidden><\/span>/);
-  assert.match(html, /pad-tabs\.js\?v=7/);
+  assert.match(html, /pad-tabs\.js\?v=8/);
   // the composer: folded into its bar, the pad named
   assert.match(feedPanel, /id="fcBar"/);
   assert.match(feedPanel, new RegExp("Post something to p/" + s + "…"));

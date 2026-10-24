@@ -230,7 +230,9 @@ test("every view that uses t() starts with the shared prelude (right relative pa
 
 test("client strings: every __t / _t('js.x', 'default') default equals en.json (English pages ship no catalog)", () => {
   const files = [];
-  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.(ejs|js)$/.test(e.name)) files.push(p); } };
+  // S1 V2: not public/js/patv-chat/ - the chat widget's vendored build, whose UI strings are the platform repo's own catalogs
+  const vendored = path.join(repo, "public", "js", "patv-chat");
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (p !== vendored) walk(p); } else if (/\.(ejs|js)$/.test(e.name)) files.push(p); } };
   walk(path.join(repo, "views")); walk(path.join(repo, "public", "js"));
   let n = 0;
   for (const f of files) {
