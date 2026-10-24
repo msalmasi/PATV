@@ -92,6 +92,12 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS hub_outbox_pending ON hub_outbox (posted_at, id)");
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS hub_outbox_dedupe ON hub_outbox (dedupe_key) WHERE dedupe_key IS NOT NULL");
       await runQuery("CREATE TABLE IF NOT EXISTS hubseam_settings (key TEXT PRIMARY KEY, value TEXT, updated INTEGER, actor TEXT)");
+      // S1 V4 review 2: first_on = when the switch was FIRST turned on (set once; the privacy page dates its erasure paragraph by
+      // it - a break-glass off / on doesn't re-date a published policy). A switch on before the column: its last change.
+      if (!(await getQuery("SELECT name FROM pragma_table_info('hubseam_settings')")).some((c) => c.name === "first_on")) {
+        await runQuery("ALTER TABLE hubseam_settings ADD COLUMN first_on INTEGER");
+      }
+      await runQuery("UPDATE hubseam_settings SET first_on = updated WHERE first_on IS NULL AND value = 'true' AND updated IS NOT NULL");
       const ms = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
       const gate = (sw) => `(SELECT value FROM hubseam_settings WHERE key = '${sw}') = 'true'`;
       // sessions/revoked: every revocation, whoever writes it (the site, an admin script), while the `sessions` switch is on
@@ -168,12 +174,14 @@ async function setSettings(patch, actor) {
     for (const [k, v] of Object.entries(next)) {
       // S1 V4 fix-up (review): `updated` / `actor` = when and by whom the VALUE last changed - /admin/keys#seam posts every switch
       // on each save, and the privacy page dates its erasure paragraph by this row (accountdelete.privacyCopy); every save is in
-      // the admin audit
-      await runQuery(`INSERT INTO hubseam_settings (key, value, updated, actor) VALUES (?, ?, ?, ?)
+      // the admin audit. Review 2: first_on - the first time it went on, kept for good
+      await runQuery(`INSERT INTO hubseam_settings (key, value, updated, actor, first_on) VALUES (?, ?, ?, ?, ?)
                       ON CONFLICT(key) DO UPDATE SET value = excluded.value,
                         updated = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.updated ELSE excluded.updated END,
-                        actor = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.actor ELSE excluded.actor END`,
-                     [k, v ? "true" : "false", now(), actor && actor.username ? String(actor.username).slice(0, 80) : null]);
+                        actor = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.actor ELSE excluded.actor END,
+                        first_on = COALESCE(hubseam_settings.first_on,
+                                            CASE WHEN excluded.value = 'true' THEN COALESCE(CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.updated END, excluded.updated) END)`,
+                     [k, v ? "true" : "false", now(), actor && actor.username ? String(actor.username).slice(0, 80) : null, v ? now() : null]);
     }
     if (actor && actor.userId) await require("./adminaudit").record(actor, "hubseam.settings", null, next, null);
     // 1.99acm: Pepe's hidden_h set is kept only while the privacy feed is on (hubhidden.js); with the switch already 'false'

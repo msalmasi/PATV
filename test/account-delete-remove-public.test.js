@@ -41,18 +41,21 @@ const built = (async () => {
   await run(schemaSql());
   for (const [, v] of scanSource(repo)) for (const sql of v.creates) await run(sql).catch(() => {});
   for (const c of ["archived_at INTEGER", "password_set INTEGER", "twitchLogin TEXT", "auto_source TEXT", "displayname_auto INTEGER", "age_confirmed_at INTEGER", "age_confirmed_v TEXT", "text_style TEXT"]) await run(`ALTER TABLE users ADD COLUMN ${c}`).catch(() => {});
+  // review 2: switch rows from before hubseam_settings.first_on (huboutbox.init adds the column; an ON row is dated by its last
+  // change, an OFF row has none) - keys no switch reads
+  await run("INSERT INTO hubseam_settings (key, value, updated) VALUES ('rp_legacy_on', 'true', 1234), ('rp_legacy_off', 'false', 5678)");
   await new Promise((r) => db.close(r));
 })();
 
 const DAY = 86400000;
 let clockAt = Date.UTC(2026, 9, 21, 12);
 const bcrypt = require("bcrypt");
-let D, S, HO, CL, CLM, runQuery, getQuery;
+let D, S, HO, CL, CLM, runQuery, getQuery, tx;
 
 let setupP = null;
 const setup = () => setupP || (setupP = (async () => {
   await built;
-  ({ runQuery, getQuery } = require(path.join(repo, "dbUtils")));
+  ({ runQuery, getQuery, tx } = require(path.join(repo, "dbUtils")));
   D = require(path.join(repo, "accountdelete"));
   S = require(path.join(repo, "sessions"));
   HO = require(path.join(repo, "huboutbox"));
@@ -237,9 +240,10 @@ test("one checkbox, both stores, the same exceptions: the hub row carries it; th
     assert.equal((await row(cfLine)).rm_at, null);
     for (const c of [cfIncog, later]) { const x = await row(c); assert.ok(x.text && x.rm_at == null && x.purged == null, "the login's: " + c); }
     // the record: counts only, done; the released login no longer on the row
-    const d = (await getQuery("SELECT report, public_done_at, public_login FROM account_deletions WHERE user_id = 'rpx'"))[0];
+    const d = (await getQuery("SELECT report, public_done_at, public_login, public_windows FROM account_deletions WHERE user_id = 'rpx'"))[0];
     assert.equal(d.public_done_at, clockAt);
     assert.equal(d.public_login, null);
+    assert.equal(d.public_windows, null, "review 2: the logins' spans leave the row with it");
     assert.deepEqual(JSON.parse(d.report).public_removed, { lines: 4, held: 2 });
     assert.deepEqual(r.report.public_removed, { lines: 4, held: 2 });
     assert.ok(!d.report.includes("plain") && !d.report.includes("Cross"), "no words, no name in the record");
@@ -318,18 +322,20 @@ test("a legal hold on the person (who:) keeps their lines too; nothing is purged
     try { assert.equal((await D.execute("rpr", { force: true })).state, "done"); } finally { CLM.removeAccountLines = real; console.error = ce; }
     assert.ok(errs.some((e) => e.startsWith("[acctdel] remove public lines:")), "logged (no ids, no words)");
     assert.ok(errs.every((e) => !e.includes("rolled back line")));
-    const waiting = (await getQuery("SELECT public_done_at, public_login FROM account_deletions WHERE user_id = 'rpr' AND state = 'done'"))[0];
+    const waiting = (await getQuery("SELECT public_done_at, public_login, public_windows, done_at FROM account_deletions WHERE user_id = 'rpr' AND state = 'done'"))[0];
     assert.equal(waiting.public_done_at, null);
-    assert.equal(waiting.public_login, "rollcf", "the released login waits on the row for the retry (its web lines are under it)");
+    assert.deepEqual(JSON.parse(waiting.public_windows), [{ login: "rollcf", from: 0, to: Number(waiting.done_at) }],
+                     "the released login waits on the row for the retry (its web lines are under it), with its span (review 2: no history - from the start)");
+    assert.equal(waiting.public_login, null, "(review 2: public_windows instead)");
     assert.equal((await row(r1)).text, "rolled back line");
     assert.equal((await hubRows("rpr"))[0].remove_public, true, "the hub has its part already");
     assert.ok(!JSON.stringify((await hubRows("rpr"))[0]).includes("rollcf"), "the hub row never names the login");
     await D.tick();
     assert.equal((await row(r1)).text, null, "the tick ran it");
     assert.equal((await row(r2)).text, null, "with the login the row kept");
-    const done = (await getQuery("SELECT public_done_at, public_login FROM account_deletions WHERE user_id = 'rpr' AND state = 'done'"))[0];
+    const done = (await getQuery("SELECT public_done_at, public_login, public_windows FROM account_deletions WHERE user_id = 'rpr' AND state = 'done'"))[0];
     assert.ok(done.public_done_at > 0);
-    assert.equal(done.public_login, null, "and then the row forgets it");
+    assert.deepEqual([done.public_login, done.public_windows], [null, null], "and then the row forgets it");
     assert.equal(await D.retryRemovePublic(), 0, "and only once");
     assert.equal((await row(q1)).text, "a scheduled member's line", "the tick left the scheduled request's lines alone");
     await D.cancelOnSignIn("rpq", "password");
@@ -550,8 +556,9 @@ test("the privacy page: one section for PATV chat and the pad chat archive, only
   await HO.setSettings({ erasure: true, export: false });
   try {
     const copy = await D.privacyCopy();
-    const sw = (await getQuery("SELECT updated FROM hubseam_settings WHERE key = 'erasure'"))[0];
-    assert.equal(copy.on_at, Number(sw.updated), "dated by the switch's own row");
+    const sw = (await getQuery("SELECT updated, first_on FROM hubseam_settings WHERE key = 'erasure'"))[0];
+    assert.equal(copy.on_at, Number(sw.first_on), "dated by the switch's own row: the FIRST time it went on (review 2)");
+    assert.ok(Number(sw.first_on) > 0 && Number(sw.first_on) <= Number(sw.updated), "the earlier tests turned it on and off before");
     assert.match(copy.on_day, /^\d{1,2} [A-Z][a-z]+ \d{4}$/);
     assert.equal(copy.export, false);
     const on = await render(copy);
@@ -562,13 +569,14 @@ test("the privacy page: one section for PATV chat and the pad chat archive, only
     assert.match(on, /in PATV chat and in pads' chat history alike/, "both stores, one choice");
     assert.match(on, /a message under a report is kept until 30 days after the report is decided \(90 days at most while it isn't\), and one under a legal hold until the hold ends/, "D10's bounds");
     assert.match(on, /or, if you had a linked Camfrog name, under that name/, "a linked member's web lines without the tick");
-    assert.match(on, /also those under your linked Camfrog name/, "and with it");
+    assert.match(on, /also those under a Camfrog name while it was linked to you, earlier ones included/, "and with it (review 2: earlier linked names, only their own spans)");
     assert.match(on, /while incognito with a linked Camfrog name/, "what it can't reach");
     // O-20's revision: how long each store keeps the lines (the hub's purge is report-only in S1), and the download
     assert.match(on, /pads' chat history for the time in <a href="#retention">section 9<\/a>/, "the archive's time is section 9's");
     assert.match(on, /PATV chat doesn't delete old messages automatically yet/, "PATV chat's: no automatic deletion yet");
     assert.match(on, /Download my data<\/a> includes your lines in pads' chat history\./, "the archive's lines are in the download whatever the export switch");
     assert.doesNotMatch(on, /what PATV chat keeps about you/, "no PATV chat clause while export is off");
+    assert.match(on, /lines under a Camfrog name you unlinked before 12 October 2026 \(we have no record of it\)/, "review 2: nor a name let go before the login history");
     assert.ok(on.includes("<b>" + copy.on_day + ":</b> added <a href=\"#delete-chat\">"), "the dated change note");
     // review fix: the date is when erasure went ON - the /admin/keys#seam form posts EVERY switch on each save (admin-keys.js),
     // and a later save (another switch turned on, or nothing changed) must not move the paragraph's date or "Last updated"
@@ -584,6 +592,20 @@ test("the privacy page: one section for PATV chat and the pad chat archive, only
     assert.match(await render(later), /Download my data<\/a> includes your lines in pads' chat history, and what PATV chat keeps about you/);
     const exp = (await getQuery("SELECT updated FROM hubseam_settings WHERE key = 'export'"))[0];
     assert.equal(Number(exp.updated), onAt + 15 * DAY, "a switch that did change is dated by its change");
+    // review 2: a break-glass - erasure off, and on again weeks later - doesn't re-date the published paragraph, its "Changes"
+    // entry or "Last updated" (first_on is set once)
+    HO._setClock(() => onAt + 20 * DAY);
+    try { await HO.setSettings({ erasure: false }); } finally { HO._setClock(null); }
+    assert.equal(await D.privacyCopy(), null, "off: no paragraph");
+    HO._setClock(() => onAt + 40 * DAY);
+    try { await HO.setSettings({ erasure: true }); } finally { HO._setClock(null); }
+    const again = await D.privacyCopy();
+    assert.equal(again.on_at, onAt, "on again: still the day it was first published");
+    const row2 = (await getQuery("SELECT updated, first_on FROM hubseam_settings WHERE key = 'erasure'"))[0];
+    assert.deepEqual([Number(row2.updated), Number(row2.first_on)], [onAt + 40 * DAY, onAt], "updated is the last change; first_on stays");
+    // rows from before the column: an ON one dated by its last change (huboutbox.init's backfill), an OFF one not dated
+    const legacy = Object.fromEntries((await getQuery("SELECT key, first_on FROM hubseam_settings WHERE key LIKE 'rp_legacy_%'")).map((r) => [r.key, r.first_on]));
+    assert.deepEqual(legacy, { rp_legacy_on: 1234, rp_legacy_off: null });
   } finally {
     await HO.setSettings({ erasure: false, export: false });
   }
@@ -591,4 +613,243 @@ test("the privacy page: one section for PATV chat and the pad chat archive, only
   // terms.js passes it and dates the page by the newest change
   const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
   assert.match(src, /hubErasure = await require\("\.\/accountdelete"\)\.privacyCopy\(\)/);
+});
+
+// ── S1 V4 review 2 ──
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const lc = (userId, oldL, newL, at, via = "camfrog:relink") => runQuery(
+  "INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  [userId, oldL, newL, oldL || "u:" + userId, newL || "u:" + userId, at, via]);
+const uh = (userId, oldL, newL, at, via = "camfrog:relink") => runQuery(
+  "INSERT INTO username_history (userId, old_username, new_username, at, via, kind) VALUES (?, ?, ?, ?, ?, 'camfrog')", [userId, oldL, newL, at, via]);
+
+test("review 2: an archive that can't be reached fails the removal - nothing is recorded done, the logins stay on the row, the tick runs it once the archive is back", async () => {
+  await setup();
+  await erasure(true);
+  try {
+    await user("rparc", { username: "rparcade", cf: "ArcCF" });
+    const w1 = await line("Rp.Room", "my web line while the archive is down", { key: "u:rparc" });
+    const w2 = await line("Rp.Room", "my linked web line while the archive is down", { key: "arccf", display: "ArcCF", web: true });
+    await D.schedule({ userId: "rparc", username: "rparcade" }, { removePublic: true });
+    await user("rparc2", { username: "rparcade2" });
+    const w3 = await line("Rp.Room", "another member's web line while the archive is down", { key: "u:rparc2" });
+    await D.schedule({ userId: "rparc2", username: "rparcade2" }, { removePublic: true });
+    // a CHATLOG_DB that didn't open: chatlog.init() resolved with archiveError set (chat_log absent, or empty tables in myapp.db)
+    const realErr = CL.archiveError;
+    const errs = [];
+    const ce = console.error;
+    console.error = (...a) => errs.push(a.join(" "));
+    let r;
+    CL.archiveError = () => "CHATLOG_DB can't be opened (SQLITE_CANTOPEN)";
+    try {
+      r = await D.execute("rparc", { force: true });
+      assert.equal(r.state, "done", "the deletion itself is done");
+      assert.equal(r.report.public_removed, undefined);
+      assert.equal((await D.execute("rparc2", { force: true })).state, "done");
+      // the tick while it's still down: nothing, ONE line for the round (two requests wait)
+      assert.equal(await D.retryRemovePublic(), 0);
+    } finally { CL.archiveError = realErr; console.error = ce; }
+    const lines = errs.filter((e) => e.startsWith("[acctdel] remove public lines"));
+    assert.equal(lines.length, 3, "each execute's step + one for the tick's round: " + JSON.stringify(lines));
+    assert.ok(lines.every((e) => /the pad chat archive can't be reached/.test(e) && !/rparc|arccf|archive is down|SQLITE/i.test(e)), "no ids, no login, no words, no path");
+    let d = (await getQuery("SELECT public_done_at, public_windows, done_at FROM account_deletions WHERE user_id = 'rparc' AND state = 'done'"))[0];
+    assert.equal(d.public_done_at, null, "not recorded done");
+    assert.deepEqual(JSON.parse(d.public_windows), [{ login: "arccf", from: 0, to: Number(d.done_at) }], "the login (and its span) stays for the retry");
+    for (const c of [w1, w2, w3]) assert.ok((await row(c)).text && (await row(c)).rm_at == null, "untouched: " + c);
+    // the archive's tables missing (a myapp.db without them): the same - it throws, never "nothing to remove"
+    await runQuery("ALTER TABLE chat_log RENAME TO chat_log_away");
+    try {
+      await assert.rejects(CLM.removeAccountLines("rparc", { windows: [{ login: "arccf", from: 0, to: Number(d.done_at) }] }), (e) => e.code === "archive_db");
+    } finally { await runQuery("ALTER TABLE chat_log_away RENAME TO chat_log"); }
+    // the archive back: the tick runs it with the row's spans, then the row forgets them
+    await D.tick();
+    for (const c of [w1, w2, w3]) assert.deepEqual([(await row(c)).text, (await row(c)).purged], [null, 1], "purged: " + c);
+    d = (await getQuery("SELECT public_done_at, public_windows, report FROM account_deletions WHERE user_id = 'rparc' AND state = 'done'"))[0];
+    assert.ok(d.public_done_at > 0);
+    assert.equal(d.public_windows, null);
+    assert.deepEqual(JSON.parse(d.report).public_removed, { lines: 2, held: 0 });
+  } finally {
+    await erasure(false);
+  }
+});
+
+test("review 2: the decision is made inside the writing transaction - a moderator's un-hide or hide, a legal hold or a report landing meanwhile is seen, never undone", async () => {
+  await setup();
+  const me = { key: "u:rprace" };
+  await user("rprace", { username: "rprace" });
+  const a = await line("Rp.Race", "hidden by a moderator, shown again meanwhile", me);
+  await runQuery("UPDATE chat_log SET rm_at = ?, rm_by = 'mod:m1', rm_why = 'spam' WHERE c = ?", [clockAt - 60e3, a]);
+  await report(a);
+  const b = await line("Rp.Race", "shown, hidden by a moderator meanwhile", me);
+  await report(b);
+  const c = await line("Rp.RaceHeld", "a legal hold arrives meanwhile", me);
+  const d = await line("Rp.Race", "a report arrives meanwhile", me);
+  const e = await line("Rp.Race", "nothing arrives", me);
+  const heldRk = await rk("Rp.RaceHeld");
+  const B = require(path.join(repo, "bridge"));
+  const takeDown = B.takeDown, drops = [];
+  B.takeDown = async (roomId, cs) => { drops.push(...[].concat(cs).map(Number)); return 0; };
+  let release;
+  const blocker = tx(() => new Promise((r) => { release = r; }));          // an open transaction: everything below queues behind it
+  try {
+    // the moderators' transactions and a staff hold (an outside write: it waits at the write gate), all queued first...
+    const unhideA = tx(() => runQuery("UPDATE chat_log SET rm_at = NULL, rm_by = NULL, rm_why = NULL WHERE c = ? AND rm_at IS NOT NULL AND purged IS NULL", [a]));
+    const hideB = tx(() => runQuery("UPDATE chat_log SET rm_at = ?, rm_by = 'mod:m2', rm_why = 'rude' WHERE c = ? AND rm_at IS NULL AND purged IS NULL", [clockAt - 1000, b]));
+    const repD = tx(() => runQuery("INSERT INTO chatlog_reports (c, rk, reporter, reason, note, state, created) VALUES (?, (SELECT rk FROM chat_log WHERE c = ?), NULL, 'harassment', NULL, 'open', ?)", [d, d, clockAt]));
+    const holdC = runQuery("INSERT INTO chatlog_holds (key, by_user, why, at) VALUES (?, 'staff', 'a court order', ?)", ["room:" + heldRk, clockAt]);
+    // ...then the removal, whose reads outside a transaction (before review 2: the lines themselves) all run now, while those wait
+    const R = CLM.removeAccountLines("rprace");
+    await sleep(150);
+    release();
+    await Promise.all([blocker, unhideA, hideB, repD, holdC]);
+    const out = await R;
+    assert.deepEqual(out, { purged: 1, held: 1, reported: 3 });
+  } finally { B.takeDown = takeDown; if (release) release(); }
+  // (a) shown again before the removal's transaction: taken down by it (not "self" on a SHOWN line)
+  let x = await row(a);
+  assert.ok(x.text && x.rm_at != null, "down");
+  assert.equal(x.rm_by, "self");
+  assert.ok(drops.includes(a), "and out of the live feed");
+  // (b) hidden by the moderator first: the author's removal now (an un-hide can't bring it back), still down since the hide
+  x = await row(b);
+  assert.deepEqual([x.rm_by, x.rm_why, Number(x.rm_at)], ["self", null, clockAt - 1000]);
+  // (c) the hold and (d) the report that arrived first keep their lines (taken down, waiting); (e) purged
+  for (const k of [c, d]) { x = await row(k); assert.ok(x.text && x.rm_at != null && x.rm_by === "self" && x.purged == null, "kept: " + k); }
+  assert.equal((await row(e)).purged, 1);
+  assert.equal((await getQuery(`SELECT COUNT(*) AS n FROM chatlog_erase_wait WHERE c IN (?, ?, ?, ?)`, [a, b, c, d]))[0].n, 4);
+  // the nightly pass decides inside its transaction too: the hold still on keeps (c); a hold placed while it waits is seen
+  const holdD = "room:" + (await rk("Rp.Race"));
+  // the reports decided long ago (they hold nothing at the pass's time) - only the holds decide
+  await runQuery("UPDATE chatlog_reports SET state = 'dismissed', decided_at = ? WHERE c IN (?, ?, ?)", [clockAt + DAY, a, b, d]);
+  let release2;
+  const blocker2 = tx(() => new Promise((r) => { release2 = r; }));
+  const late = runQuery("INSERT INTO chatlog_holds (key, by_user, why, at) VALUES (?, 'staff', 'another order', ?)", [holdD, clockAt]);
+  let n;
+  try {
+    const N = CLM.nightly({ t: clockAt + 100 * DAY });
+    await sleep(150);
+    release2();
+    await Promise.all([blocker2, late]);
+    n = await N;
+  } finally { release2(); }
+  for (const k of [a, b, c, d]) assert.ok((await row(k)).text, "held (a room hold each) - kept: " + k);
+  assert.ok(n.erase_waiting >= 4);
+  await runQuery("DELETE FROM chatlog_holds WHERE key IN (?, ?)", ["room:" + heldRk, holdD]);
+  await CLM.loadHolds();
+  await CLM.nightly({ t: clockAt + 100 * DAY });
+  for (const k of [a, b, c, d]) assert.equal((await row(k)).text, null, "once the holds ended: " + k);
+});
+
+test("review 2: earlier Camfrog logins are reached inside the span each was the member's - another account's web lines under the same login (before or after) stay; a login let go before the history isn't reached", async () => {
+  await setup();
+  await erasure(true);
+  try {
+    const t = clockAt;
+    const T0 = t - 50 * DAY, T1 = t - 40 * DAY, T2 = t - 30 * DAY, T3 = t - 20 * DAY, T4 = t - 10 * DAY;
+    await user("rpe", { username: "rpearlier", cf: "NewCF" });
+    await user("rpq0", { username: "rpq0" });                              // held newcf before the member
+    await user("rpp", { username: "rppnext", cf: "OldCF" });              // holds oldcf now (after the member let it go)
+    await user("rpu", { username: "rpunlinked" });                         // unlinked before deleting
+    await user("rps", { username: "rpseen" });                             // only a backfill trace of a login
+    // the history: rpq0 links newcf (T0) and unlinks it (T2); the member links oldcf (T1), relinks oldcf -> newcf (T3: both
+    // records of it, usernames.recordLogin first); rpp links oldcf (T4)
+    await lc("rpq0", null, "newcf", T0);
+    await lc("rpq0", "newcf", null, T2, "camfrog:unlink");
+    await uh("rpq0", "newcf", null, T2, "camfrog:unlink");
+    await lc("rpe", null, "oldcf", T1);
+    await uh("rpe", "oldcf", "newcf", T3 - 5, "camfrog:relink");
+    await lc("rpe", "oldcf", "newcf", T3);
+    await lc("rpp", null, "oldcf", T4);
+    await lc("rpu", null, "unlcf", T1);
+    await uh("rpu", "unlcf", null, T2, "camfrog:unlink");
+    await lc("rpu", "unlcf", null, T2, "camfrog:unlink");
+    await uh("rps", "seencf", null, T1, "seen");
+    const web = (login, text, ts) => line("Rp.Logins", text, { key: login, display: login, web: true }, { ts });
+    const q0Line = await web("newcf", "rpq0's web line under newcf", T0 + DAY);
+    const oldMine = await web("oldcf", "my web line under my earlier login", T1 + DAY);
+    const oldCam = await line("Rp.Logins", "my Camfrog line under my earlier login", { key: "oldcf", display: "OldCF" }, { ts: T1 + 2 * DAY });
+    const newMine = await web("newcf", "my web line under my login now", T3 + DAY);
+    const nextLine = await web("oldcf", "rpp's web line under oldcf", T4 + DAY);
+    const unlMine = await web("unlcf", "my web line before I unlinked", T1 + DAY);
+    const seenLine = await web("seencf", "a web line under a login known only from a trace", T1 + DAY);
+    // the spans
+    assert.deepEqual(await D.loginWindowsOf("rpe", "newcf", t), [
+      { login: "newcf", from: T3, to: t },                 // from the member's relink (rpq0's link and unlink before it bound nothing more)
+      { login: "oldcf", from: T3 - 5, to: T3 },            // the relink's two records (usernames.recordLogin, then loginrekey) ...
+      { login: "oldcf", from: T1, to: T3 - 5 },            // ... and from the member's link of oldcf up to the first: together T1..T3
+    ], "newcf from the relink to the deletion; oldcf from its link to the relink (rpp's link at T4 is after)");
+    assert.deepEqual(await D.loginWindowsOf("rpu", null, t), [{ login: "unlcf", from: T1, to: T2 }], "a login unlinked before the deletion: its span");
+    assert.deepEqual(await D.loginWindowsOf("rps", null, t), [], "a trace ('seen') ends nothing");
+    // the deletions
+    for (const [id, name] of [["rpe", "rpearlier"], ["rpu", "rpunlinked"], ["rps", "rpseen"]]) {
+      await D.schedule({ userId: id, username: name }, { removePublic: true });
+      assert.equal((await D.execute(id, { force: true })).state, "done");
+    }
+    for (const c of [oldMine, newMine, unlMine]) assert.deepEqual([(await row(c)).text, (await row(c)).purged], [null, 1], "the member's: " + c);
+    for (const c of [q0Line, nextLine, oldCam, seenLine]) assert.ok((await row(c)).text && (await row(c)).rm_at == null, "not the member's (or not reached): " + c);
+  } finally {
+    await erasure(false);
+  }
+});
+
+test("review 2: a retry hours after a crash keeps to the deletion's spans - the next holder's web lines under the released login stay; one run at a time; the first run to finish writes the counts", async () => {
+  await setup();
+  await erasure(true);
+  try {
+    await user("rpc", { username: "rpcrash", cf: "CrashCF" });
+    await user("rpn2", { username: "rpnext2" });
+    const mine = await line("Rp.Room", "my linked web line before the crash", { key: "crashcf", display: "CrashCF", web: true });
+    await D.schedule({ userId: "rpc", username: "rpcrash" }, { removePublic: true });
+    const real = CLM.removeAccountLines;
+    const ce = console.error;
+    console.error = () => {};
+    CLM.removeAccountLines = async () => { throw new Error("the process stopped"); };
+    try { assert.equal((await D.execute("rpc", { force: true })).state, "done"); } finally { CLM.removeAccountLines = real; console.error = ce; }
+    const t0 = clockAt;
+    // six hours later: someone else linked the released login and sent a web line under it; then the tick's retry
+    clockAt = t0 + 6 * 3600e3;
+    try {
+      await runQuery("UPDATE users SET camfrogUsername = 'crashcf' WHERE userId = 'rpn2'");
+      await lc("rpn2", null, "crashcf", t0 + 3600e3);
+      const theirs = await line("Rp.Room", "the next holder's web line", { key: "crashcf", display: "CrashCF", web: true }, { ts: t0 + 2 * 3600e3 });
+      assert.equal(await D.retryRemovePublic(), 1);
+      assert.equal((await row(mine)).text, null, "the member's line: purged");
+      assert.equal((await row(theirs)).text, "the next holder's web line", "the next holder's: kept (the span ends at the deletion, not at the retry)");
+    } finally { clockAt = t0; }
+
+    // one run per request: the step after the commit and the tick's retry at the same time share it
+    await user("rpo2", { username: "rpone" });
+    const one = await line("Rp.Room", "a line for the shared run", { key: "u:rpo2" });
+    await D.schedule({ userId: "rpo2", username: "rpone" }, { removePublic: true });
+    let calls = 0, retried = null;
+    CLM.removeAccountLines = async (...a) => {
+      calls++;
+      if (!retried) retried = D.retryRemovePublic();                      // the tick, while this run is in progress
+      await sleep(50);
+      return real(...a);
+    };
+    let r;
+    try { r = await D.execute("rpo2", { force: true }); await retried; } finally { CLM.removeAccountLines = real; }
+    assert.equal(calls, 1, "one run");
+    assert.deepEqual(r.report.public_removed, { lines: 1, held: 0 });
+    assert.equal((await row(one)).text, null);
+
+    // the first run to finish writes the counts: a later one (another process) doesn't overwrite them
+    await user("rpw2", { username: "rpwrite" });
+    await line("Rp.Room", "a line for the counts", { key: "u:rpw2" });
+    await D.schedule({ userId: "rpw2", username: "rpwrite" }, { removePublic: true });
+    CLM.removeAccountLines = async (...a) => {
+      const out = await real(...a);
+      // another runner finished first and recorded its counts
+      await runQuery(`UPDATE account_deletions SET public_done_at = ?, report = json_set(COALESCE(report, '{}'), '$.public_removed', json('{"lines":7,"held":0}'))
+                      WHERE user_id = 'rpw2' AND state = 'done'`, [clockAt - 1]);
+      return out;
+    };
+    try { await D.execute("rpw2", { force: true }); } finally { CLM.removeAccountLines = real; }
+    const w = (await getQuery("SELECT public_done_at, report FROM account_deletions WHERE user_id = 'rpw2' AND state = 'done'"))[0];
+    assert.equal(w.public_done_at, clockAt - 1);
+    assert.deepEqual(JSON.parse(w.report).public_removed, { lines: 7, held: 0 }, "the first writer's counts stay");
+  } finally {
+    await erasure(false);
+  }
 });

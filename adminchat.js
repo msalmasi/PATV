@@ -22,7 +22,7 @@
 // whose host is this request's Host - sameOriginStrict below), a required reason (cleanReason), an admin_audit row in the
 // change's own transaction ("chat.switch" through chatswitches.set; "chat.pad_backend" {room_id, slug, hub_pad_id, from, to}
 // here) - a row that can't be written rolls the change back - and Cache-Control: no-store. A change to the value already there
-// writes nothing. CHAT_HUB on also needs the interlock (409 chat_hub_needs, `missing`); a pad moves to hub only when it is a
+// writes nothing (CHAT_HUB's default with no row included: chatswitches.set). CHAT_HUB on also needs the interlock (409 chat_hub_needs, `missing`); a pad moves to hub only when it is a
 // site pad (409 site_pads_only - Camfrog pads keep their v1 chat in S1; hub_read is S2's: 409 hub_read_s2).
 // Turning CHAT_HUB off needs only chat_switches and admin_audit (initCore): never the pads (padhub, rooms); the page shows
 // what it can read when the pads can't be read.
@@ -47,7 +47,9 @@ const AUDIT = ["chat.switch", "chat.pad_backend"];
 
 const safe = async (fn, d) => { try { return await fn(); } catch (e) { return d; } };
 const refuse = (status, code, message, extra) => Object.assign(new Error(message), { status, code, refuse: true }, extra || {});
-let readHook = null;                    // tests only: called after the read a confirm step rests on, inside its transaction
+// tests only: wraps setPad's read of the pad - f(read) -> the pad - so a test can race an admin's move against that very
+// read (CHAT_HUB's read is CS.chatHubOnNow, which a test stubs): moving either read out of the transaction fails the race tests
+let padRead = null;
 
 async function meOf(req) {
   if (!req.user || !req.user.userId) return null;
@@ -216,8 +218,7 @@ async function setHub(b, me) {
     // the read the confirm step rests on, the interlock pre-check, the change and its audit row: one transaction
     return await tx(async () => {
       if (b.on) {
-        const was = await CS.chatHubOnNow();
-        if (readHook) await readHook("hub", was);
+        const was = await CS.chatHubOnNow();                // the row, never the per-process cache (a CLI write misses it)
         if (!was) {
           const missing = await CS.needsNow();
           if (missing.length) {
@@ -249,8 +250,7 @@ async function setPad(b, me) {
   // the pad as stored, its platform and the confirm step are read and decided in the change's own transaction, with its
   // audit row (padhub.setBackend runs inside it): a stale page can't undo an admin's move back to v1, unconfirmed
   return tx(async () => {
-    const before = await pad(b.room_id);
-    if (readHook) await readHook("pad", before);
+    const before = await (padRead ? padRead(() => pad(b.room_id)) : pad(b.room_id));
     if (backend === "hub") {
       if (!before || before.gone) throw refuse(404, "no_pad", "No such pad.");
       if (before.platform !== "site") throw refuse(409, "site_pads_only", "Only a site pad can move its chat to the hub in S1 (a Camfrog pad's chat is its Camfrog room's).");
@@ -322,4 +322,4 @@ function register(app, { addUser }) {
 
 module.exports = { register, init, initCore, view, setHub, setPad, hubPads, sitePadChoices, interlock, recentChanges, cleanReason, isOwner,
                    sameOriginStrict, CAP, MOD_VIEWS, PILOT_PADS, REASON_MAX, PAD_LIST_MAX,
-                   _setReadHook: (f) => { readHook = typeof f === "function" ? f : null; } };
+                   _setPadRead: (f) => { padRead = typeof f === "function" ? f : null; } };
