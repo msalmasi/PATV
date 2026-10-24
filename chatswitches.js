@@ -89,6 +89,8 @@ async function chatHubOnNow() {
  * (err.needs: the interlock's missing switches). -> {key, value, changed, updated}
  * A change and its "chat.switch" admin_audit row commit together (ADR 0007 D15: every change writes admin_audit): when the
  * row can't be written the change is rolled back and set() rejects. Inside the caller's dbUtils.tx it is a savepoint of it.
+ * changed is "the row was written": false (nothing written) for the value already there and for the default when there is
+ * no row; true for a real change and for rewriting a stored value set() doesn't know (audited, from = the stored value).
  */
 async function set(key, value, actor = null, { reason = null } = {}) {
   await init();
@@ -103,20 +105,24 @@ async function set(key, value, actor = null, { reason = null } = {}) {
   const by = actor && (actor.username || actor.userId) ? String(actor.username || actor.userId).slice(0, 80) : null;
   const res = await tx(async () => {
     const cur = (await getQuery("SELECT value FROM chat_switches WHERE key = ?", [key]))[0];
-    const was = cur && k.values.includes(cur.value) ? cur.value : k.def;
+    const known = !!cur && k.values.includes(cur.value);
+    const was = known ? cur.value : k.def;
     if (key === "CHAT_HUB" && v === "on" && was !== "on") {
       const missing = await needsNow();
       if (missing.length) {
         throw new Refuse(409, "chat_hub_needs", `CHAT_HUB needs these seam switches on first: ${missing.join(", ")}.`, { needs: missing });
       }
     }
-    if (cur && cur.value === v) return { key, value: v, changed: false, updated: t, was };
+    // Nothing to change - the value already there, or no row and the default asked for (no row IS the default): no write,
+    // so no updated / updated_by without an audit row to match, and no switches/changed row for nothing (V1's 2nd review).
+    if (was === v && (known || !cur)) return { key, value: v, changed: false, updated: t, was };
     await runQuery(`INSERT INTO chat_switches (key, value, updated, updated_by) VALUES (?, ?, ?, ?)
                     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated, updated_by = excluded.updated_by`, [key, v, t, by]);
-    const changed = was !== v;
-    // in the same transaction as the change: a failed row (it throws) rolls the change back
-    if (audited && changed) await AA.record({ userId: actor.userId, username: actor.username }, "chat.switch", null, { key, from: was, to: v }, reason);
-    return { key, value: v, changed, updated: t, was };
+    // every write is a change with its audit row - a stored value set() doesn't know (a hand edit: "ON") rewritten too, its
+    // `from` what was stored - in the same transaction as the change: a failed row (it throws) rolls the change back
+    const from = cur ? String(cur.value).slice(0, 40) : was;
+    if (audited) await AA.record({ userId: actor.userId, username: actor.username }, "chat.switch", null, { key, from, to: v }, reason);
+    return { key, value: v, changed: true, updated: t, was };
   });
   // the cache follows the commit; a failed re-read is logged and never reported as the change not made (the next load(),
   // /admin/chat's page view included, catches up)
