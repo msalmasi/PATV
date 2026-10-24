@@ -250,12 +250,13 @@ first), the member keeps seeing it as being prepared, and after 24 h a console e
 account without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset) exports without it, and the README says
 so.
 
-## S1: pads, roles, bans, switches (release L1's Q4 part, 1.99aea - tentative until it reaches staging)
+## S1: pads, roles, bans, switches (release L1's Q4 part, 1.99aec)
 
 S1 plan §2.4 Q4; the hub repo's `docs/seam-plan.md` §12 is the spec (§12.14 "Q4" records what this release settled, and
-its review fixes). L1 is split: V1's `/admin/chat` (below) reached v1 staging first as 1.99adz; Q4 merges it and takes the
-next free letter, **1.99aea**, when it lands (ADR 0007 D19: `huboutbox.VERSION` names the release that changed the seam -
-neither V4's 1.99ady nor V1's 1.99adz did). Built on Q5b's `pad_hub` (`padhub.js`). Every switch is off: with them off
+its review fixes). L1 is split: V1's `/admin/chat` (below) reached v1 staging first as 1.99adz; Q4 merges it and reached
+v1 staging as **1.99aec** (2026-10-24; the next free letter after V4's fix-up 1.99aea and V2's 1.99aeb), so release L1
+is complete (ADR 0007 D19: `huboutbox.VERSION` names the release that changed the seam - none of V4's 1.99ady / 1.99aea,
+V1's 1.99adz or V2's 1.99aeb did). Built on Q5b's `pad_hub` (`padhub.js`). Every switch is off: with them off
 nothing posts and nothing a member sees changes, except the two seeded pads and the Lounge's name (below).
 
 | Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
@@ -344,9 +345,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   (OQ-1: slug `patv-lounge`, the description "The general PATV pad: …"; `rooms_kv lounge_patv_v1`, once, each field only
   while it still holds a seeded value - an admin's edit stays); its 1.99x address `camfrog-lounge` is the pad's alias (301)
   and in `pads.OLD_SLUGS`.
-- **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99aea`
-  (tentative: the next free letter after V1's 1.99adz - the operator assigns the real one when the release reaches staging;
-  the shared golden keeps its test letter).
+- **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99aec`
+  (the letter the release reached staging with; the shared golden keeps its test letter).
 - **Driver:** `pad`, `padMember`, `padLook`, `padChat`, `ownerGrant`, `premiumComp`, `stripeRenew`, `flair`, `role`,
   `pepeRoles`, `signup`, `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
   (`test/hubseam-driver-s1.test.js`).

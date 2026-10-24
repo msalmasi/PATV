@@ -56,10 +56,10 @@ const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 // 1.99ads (S1 Q5b, release L3 - ADR 0007 D19: the letter of the release that changed the seam): the identity/changed and
 // looks/changed topics (hubidentity.js, hublooks.js + userlook.buildLooks), their switches, snapshots and batch readers, and
 // the hub's POST /internal/v1/looks (hubinbound.js).
-// 1.99aea (S1 Q4, release L1's second part; the next free letter after V1's 1.99adz - tentative until the release reaches
-// staging, D19's merge-to-staging rule): the pads/changed, roles/changed, bans/changed and switches/changed topics the same
-// way, and the CHAT_HUB interlock. (1.99ady is V4's and 1.99adz V1's: neither changed the seam, so neither was ever VERSION.)
-const VERSION = "1.99aea";
+// 1.99aec (S1 Q4, release L1's second part; the next free letter when it reached staging, D19's merge-to-staging rule):
+// the pads/changed, roles/changed, bans/changed and switches/changed topics the same way, and the CHAT_HUB interlock.
+// (1.99ady and 1.99aea are V4's, 1.99adz V1's, 1.99aeb V2's: none changed the seam, so none was ever VERSION.)
+const VERSION = "1.99aec";
 const DAY = 86400000;
 const BATCH = 300;
 const POLL_MS = 1000;

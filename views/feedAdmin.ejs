@@ -178,7 +178,7 @@
       </fieldset>
       <% if (pepeOk) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
     </form>
-    <h3 class="pf-h">All (site-wide: Pepe's own pads and the Camfrog Lounge follow these unless they have their own)</h3>
+    <h3 class="pf-h">All (site-wide: Pepe's own pads and the PATV Lounge follow these unless they have their own)</h3>
     <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'All', url: '/api/feed/admin/pepe', wrap: 'main', admin: pepeOk, roomScope: false }) %>
     <h3 class="pf-h">Pads where he's on</h3>
     <% if (!pepe.rooms.length) { %><p class="mut">None yet - pad owners switch him on in their pad's settings (⚙ Pad settings › Pepe); admins can too, from any pad's settings, and can lock it.</p><% } else { %>
