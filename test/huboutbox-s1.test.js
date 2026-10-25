@@ -351,9 +351,9 @@ test("snapshots: the identity and looks pages are the golden pages; null (404) w
 
 // ── the looks call over the wire (hubinbound) ──
 let base, server;
-const signedCall = async (body, { raw = null } = {}) => {
+const signedCall = async (body, { raw = null, keyId = "hub-test-1", key = V.keys["hub-test-1"] } = {}) => {
   const b = raw != null ? raw : JSON.stringify(body);
-  const h = hubsign.sign({ method: "POST", path: "/internal/v1/looks", body: b, keyId: "hub-test-1", key: V.keys["hub-test-1"] });
+  const h = hubsign.sign({ method: "POST", path: "/internal/v1/looks", body: b, keyId, key });
   const r = await fetch(base + "/internal/v1/looks", { method: "POST", headers: { ...h, "content-type": "application/json" }, body: b });
   let j = null;
   try { j = await r.json(); } catch (e) { j = null; }
@@ -377,6 +377,31 @@ test("the looks call: the golden answer; 404 while looks is off; 400 / 413; card
     assert.equal(ok.status, 200);
     assert.equal(ok.cache, "no-store");
     assert.deepEqual(ok.j, g.answer, "the golden answer: items in request order, the unknown id missing");
+    // S1 H9-15-edge-key: the edges' looks-only key gets the same answer (v1's half of F9; refused off this route:
+    // hubinbound.test.js)
+    process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-looks1";
+    process.env.HUB_V1_IN_LOOKS_KEY = "hub-test-looks-only-key-0123456789-not-real";
+    try {
+      const byLooks = await signedCall(g.request, { keyId: "hub-test-looks1", key: process.env.HUB_V1_IN_LOOKS_KEY });
+      assert.equal(byLooks.status, 200);
+      assert.deepEqual(byLooks.j, g.answer, "the looks-only key: the golden answer too");
+      assert.equal((await signedCall(g.request, { keyId: "hub-test-looks1", key: "a-wrong-secret-0123456789-0123456789" })).status, 401);
+      // ...but never without the full key: the looks switch on, the looks key alone is still a 404 before anything is
+      // verified, and takes no nonce
+      delete process.env.HUB_V1_IN_KEY_ID;
+      const cached = hubsign._size();
+      const lb = JSON.stringify(g.request);
+      const hn = hubsign.sign({ method: "POST", path: "/internal/v1/looks", body: lb, keyId: "hub-test-looks1", key: process.env.HUB_V1_IN_LOOKS_KEY });
+      const r = await fetch(base + "/internal/v1/looks", { method: "POST", headers: { ...hn, "content-type": "application/json" }, body: lb });
+      assert.deepEqual([r.status, await r.json()], [404, { ok: false, error: "not_found" }], "the looks key alone: no route");
+      assert.equal(hubsign._size(), cached, "nothing verified");
+      assert.equal((await getQuery("SELECT COUNT(*) AS n FROM hub_inbound_nonces WHERE nonce = ?", [hn["X-PATV-Nonce"]]))[0].n, 0, "no nonce taken");
+    } finally {
+      process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
+      delete process.env.HUB_V1_IN_LOOKS_KEY_ID; delete process.env.HUB_V1_IN_LOOKS_KEY;
+    }
+    assert.equal((await signedCall(g.request, { keyId: "hub-test-looks1", key: "hub-test-looks-only-key-0123456789-not-real" })).status, 401,
+                 "unset again: no key at all");
     const dup = await signedCall({ ids: [ACCT[1005], ACCT[1005], ACCT[1007], ACCT[1009], ACCT[1004]] });
     assert.deepEqual(dup.j.items.map((x) => x.acct), [ACCT[1005]], "duplicates ignored");
     assert.deepEqual(dup.j.missing, [ACCT[1007], ACCT[1009], ACCT[1004]], "purged, merged away, a done deletion: missing");
@@ -458,7 +483,7 @@ test("the heartbeat carries the S1 switches (additive); the golden S1 heartbeat 
   assert.equal(b.switches.identity, true);
   assert.equal(b.switches.looks, false);
   assert.deepEqual(b.topics["identity/changed"], { head: 0, pending: 0, oldest_pending_at: null }, "a switched-on S1 topic is listed");
-  assert.equal(b.version, "1.99aec", "S1 Q4 (release L1) changed the seam last (ADR 0007 D19)");
+  assert.equal(b.version, "1.99aei", "S1 F9 (the edges' looks-only key) changed the seam last (ADR 0007 D19)");
   assert.equal(b.version, HO.VERSION);
   const g = S1.heartbeat;
   for (const k of Object.keys(b.switches)) assert.ok(k in g.switches, "the golden S1 heartbeat has " + k);

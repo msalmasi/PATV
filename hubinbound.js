@@ -12,7 +12,16 @@
 //                                                  switch is off, 400 a malformed body or id, 413 over 450 ids
 //
 // Every request is HMAC-signed by the hub (hubsign.verifyFrom): key ids "hub-<env>-<n>" only (this site's env, HUB_V1_ENV),
-// the current key HUB_V1_IN_KEY_ID / HUB_V1_IN_KEY and, during a rotation, HUB_V1_IN_PREV_KEY_ID / HUB_V1_IN_PREV_KEY. The
+// the current key HUB_V1_IN_KEY_ID / HUB_V1_IN_KEY and, during a rotation, HUB_V1_IN_PREV_KEY_ID / HUB_V1_IN_PREV_KEY.
+// S1 (the owner's answer to H9-15-edge-key, 2026-10-24, option 1): a LOOKS-ONLY key HUB_V1_IN_LOOKS_KEY_ID / HUB_V1_IN_LOOKS_KEY
+// (and HUB_V1_IN_LOOKS_PREV_KEY_ID / _KEY during its rotation), also "hub-<env>-<n>" with its own secret, is accepted on
+// POST /internal/v1/looks only - the hub's internet-facing edges sign their cache-miss looks call with it, so a compromised edge
+// can't pull v1's snapshots or rewind its outbox; on any other route, or by another method, it is refused 403 wrong_caller (the
+// hub's own code for a valid key on a route its caller may not call, seam plan §2.1), before the durable nonce is taken (no
+// hub_inbound_nonces row; hubsign's in-memory replay cache has already recorded it, so a replay of the refused request is 409
+// replay). It never stands in for the full key: without HUB_V1_IN_KEY the routes stay 404 (no nonce, nothing verified), and
+// an id or secret it shares with a full key, current or previous, makes it no key at all (/admin/keys#seam says which
+// looks pair is ignored and why: looks_ignored, codes only). The
 // signature covers the key id, the raw request target (req.originalUrl, path + query exactly as sent - seam plan D-16) and
 // the raw body (parsed here, never by the site's JSON parser: index.js leaves /internal/ alone). Without a valid inbound key
 // the routes don't exist (404). Refusals: missing / unknown_key / wrong_env / stale / bad_sig 401, replay 409, busy 503 +
@@ -86,6 +95,34 @@ function keys() {
   }
   return out;
 }
+/**
+ * The looks-only inbound keys (H9-15-edge-key): {keys: {id: key}, ignored: [{pair, why}]}. Accepted: direction hub, this
+ * env, an id and a secret no full key (current or previous) has - a looks key that shared either with a full key would
+ * widen or blur the scope. A pair that is set but not accepted is listed under `ignored` by its variable name and a code
+ * (incomplete: the id or the secret missing; env: not a hub key id of this site's env; shared: an id or a secret of a
+ * full key) - never its id or secret - so /admin/keys#seam can say why O-11's v1-first check shows no looks key.
+ */
+function looksScan() {
+  const S = require("./hubsign");
+  const e = env();
+  const full = keys();
+  const fullSecrets = new Set(Object.values(full));
+  const out = {}, ignored = [];
+  for (const [idVar, keyVar] of [["HUB_V1_IN_LOOKS_KEY_ID", "HUB_V1_IN_LOOKS_KEY"], ["HUB_V1_IN_LOOKS_PREV_KEY_ID", "HUB_V1_IN_LOOKS_PREV_KEY"]]) {
+    const id = String(process.env[idVar] || "").trim(), key = String(process.env[keyVar] || "");
+    if (!id && !key) continue;                                       // not set: nothing to say
+    const why = !id || !key ? "incomplete" : !e || !S.keyIdOk(id, "hub", e) ? "env"
+      : Object.prototype.hasOwnProperty.call(full, id) || fullSecrets.has(key) ? "shared" : null;
+    if (why) ignored.push({ pair: keyVar, why });
+    else out[id] = key;
+  }
+  return { keys: out, ignored };
+}
+/** The looks-only inbound keys in force {id: key} (looksScan). */
+const looksKeys = () => looksScan().keys;
+/** The routes a looks-only key may call. */
+const LOOKS_ONLY_ROUTES = new Set(["looks"]);
+
 /** Is the current inbound key configured and of the right shape? */
 function configured() {
   const id = String(process.env.HUB_V1_IN_KEY_ID || "").trim();
@@ -123,8 +160,9 @@ function handler() {
         return res.status(err.type === "entity.too.large" ? 413 : 400).json({ ok: false, error: code });
       }
       const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      const looksOnly = looksKeys();
       const v = require("./hubsign").verifyFrom({ dir: "hub", env: env(), method: req.method, path: req.originalUrl, body,
-                                                  headers: (n) => req.get(n), keys: keys(), now: now() });
+                                                  headers: (n) => req.get(n), keys: { ...looksOnly, ...keys() }, now: now() });
       let u;
       try { u = new URL(req.originalUrl, "http://v1.invalid"); } catch (e) { u = null; }
       const route = u && u.pathname.startsWith("/internal/v1/snapshot/") ? "snapshot" : u && u.pathname === "/internal/v1/outbox/rewind" ? "rewind"
@@ -135,6 +173,14 @@ function handler() {
         if (status === 503) res.set("Retry-After", "2");
         warn(v.error, `[hubinbound] ${req.method} ${route || "other"} refused: ${v.error} (at most one line per code per minute)`);
         return res.status(status).json({ ok: false, error: v.error });
+      }
+      // a looks-only key signs the looks call and nothing else (H9-15-edge-key): checked before the durable nonce is taken
+      // (verifyFrom has already put it in hubsign's in-memory cache: a replay of this request is 409 replay), with the hub's
+      // code for a key on a route its caller may not call (wrong_caller, seam plan §2.1)
+      if (Object.prototype.hasOwnProperty.call(looksOnly, v.keyId) && !(route && LOOKS_ONLY_ROUTES.has(route) && req.method === "POST")) {
+        note(route, 403, "wrong_caller");
+        warn("wrong_caller", `[hubinbound] ${req.method} ${route || "other"} refused: wrong_caller (a looks-only key; at most one line per code per minute)`);
+        return res.status(403).json({ ok: false, error: "wrong_caller" });
       }
       const claim = { keyId: v.keyId, nonce: req.get("X-PATV-Nonce"), ts: req.get("X-PATV-Ts") };
       serve(route, req, res, u, body, claim).catch((e) => {
@@ -197,11 +243,15 @@ function register(app) {
 function status() {
   const id = String(process.env.HUB_V1_IN_KEY_ID || "").trim();
   const e = env();
+  const lk = looksScan();
   return { configured: configured(), key_id: id || null, env: e, env_ok: !id || (!!e && require("./hubsign").keyIdOk(id, "hub", e)),
            prev: !!String(process.env.HUB_V1_IN_PREV_KEY_ID || "").trim(), last: { ...last }, refused: { ...refused },
-           public_hits: refused.public || 0 };
+           public_hits: refused.public || 0,
+           // H9-15-edge-key: the looks-only key ids in force (none = the edges use the full key, as staging does), and the
+           // looks pairs set but ignored ({pair: variable name, why: code} - never an id or a secret)
+           looks_keys: Object.keys(lk.keys), looks_ignored: lk.ignored };
 }
 
-module.exports = { register, status, keys, configured, init, takeNonce, cleanup, NONCE_KEEP_MS,
+module.exports = { register, status, keys, looksKeys, configured, init, takeNonce, cleanup, NONCE_KEEP_MS,
   _setClock: (f) => { clock = f || (() => Date.now()); },
   _reset: () => { for (const k of Object.keys(last)) delete last[k]; for (const k of Object.keys(refused)) delete refused[k]; warned.clear(); } };
