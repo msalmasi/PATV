@@ -25,6 +25,9 @@
 // S1 V2: a pad whose Live tab holds the chat hub's widget (init's o.lineLive; bridge.js padTabsFor's) opens Live for a ?line=
 // link without a ?tab= (lineRequested) - the widget's copy-link and mentions links are /p/<slug>?line=<seq>, the line it opens
 // is on Live (v1's own line links say ?tab=live&line=). On every other pad a ?line= changes nothing.
+// 1.99aej (the owner found no chat on staging's staff pad, 2026-10-25): on such a pad Live is also the smart default - the
+// chat is the pad's live room, so it opens like an active Camfrog room's (a Feed picked in the last FEED_STICKY_MS still
+// wins, ?tab= / #hash still win) - and room.ejs labels that tab "Live", not "Stage". Every other site pad: as before.
 // The pure helpers (pickTab, defaultTab, requestedTab, lineRequested, newCount) are exported for node tests.
 (function (root) {
   'use strict';
@@ -38,10 +41,12 @@
 
   function has(tabs, t) { return !!t && tabs.indexOf(t) >= 0; }
 
-  /** The smart default: Live when the room is active, else Feed; non-Camfrog pads always Feed. */
+  /** The smart default: Live when the room is active, else Feed; non-Camfrog pads Feed - except a pad whose Live tab holds
+   *  the chat hub's widget (o.lineLive, 1.99aej): Live, its chat. */
   function defaultTab(o) {
     var tabs = o.tabs || [];
     var feedOr = has(tabs, 'feed') ? 'feed' : tabs[0] || null;
+    if (o.lineLive && has(tabs, 'live')) return 'live';
     if (o.platform !== 'camfrog') return feedOr;
     return o.active && has(tabs, 'live') ? 'live' : feedOr;
   }
@@ -272,7 +277,7 @@
     var po = ownerPanelFor(root.location.hash, doc);
     if (po) { root.location.replace(po); return null; }
     var requested = requestedTab(root.location.search, root.location.hash) || (o.lineLive && lineRequested(root.location.search) ? 'live' : null);
-    show(pickTab({ tabs: tabs, platform: o.platform, active: o.active, requested: requested, stored: store(keyTab) }), {});
+    show(pickTab({ tabs: tabs, platform: o.platform, active: o.active, requested: requested, stored: store(keyTab), lineLive: !!o.lineLive }), {});
     if (/^#(?:rules|vault(?:-donate)?)$/i.test(root.location.hash)) { var r = doc.getElementById(root.location.hash.slice(1)); if (r) { if (r.tagName === 'DETAILS') r.open = true; try { r.scrollIntoView({ block: 'start' }); } catch (x) { /* */ } } }
     return { show: show, current: function () { return current; } };
   }

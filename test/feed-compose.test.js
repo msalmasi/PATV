@@ -168,6 +168,10 @@ test("S1 V2: ?line= opens Live in the browser when the Live tab holds the chat h
   assert.equal(loadTabs(P2.win).init({ slug: "h", platform: "site", active: false, posts: [], more: false }).current(), "feed", "without lineLive: as before");
   const P3 = fakePage({ search: "?line=42", hash: "#about" });
   assert.equal(loadTabs(P3.win).init({ slug: "h", platform: "site", active: false, posts: [], more: false, lineLive: true }).current(), "about", "#hash wins");
+  // 1.99aej: no ?line= at all - the hub's chat is the default tab (a Feed picked in the last 30 min still wins)
+  assert.equal(loadTabs(fakePage().win).init({ slug: "h", platform: "site", active: false, posts: [], more: false, lineLive: true }).current(), "live", "1.99aej: Live by default");
+  assert.equal(loadTabs(fakePage({ storage: { ...recentFeed } }).win).init({ slug: "h", platform: "site", active: false, posts: [], more: false, lineLive: true }).current(), "feed", "a recent Feed pick wins");
+  assert.equal(loadTabs(fakePage().win).init({ slug: "h", platform: "site", active: false, posts: [], more: false }).current(), "feed", "without lineLive: Feed, as before");
 });
 
 test("#rules opens About (the rules live there now)", () => {
@@ -192,7 +196,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   assert.match(about, /<details class="rf-rules" id="rules" open>/, "the #rules anchor is in About");
   assert.equal((html.match(/id="rules"/g) || []).length, 1, "one #rules anchor");
   assert.match(html, /<span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden><\/span>Feed <span class="pnew" id="padFeedNew" hidden><\/span>/);
-  assert.match(html, /pad-tabs\.js\?v=8/);
+  assert.match(html, /pad-tabs\.js\?v=9/);
   // the composer: folded into its bar, the pad named
   assert.match(feedPanel, /id="fcBar"/);
   assert.match(feedPanel, new RegExp("Post something to p/" + s + "…"));

@@ -17,3 +17,7 @@ chat-text-styles.json text eol=lf
 
 # CL10: the chat-log download golden files ("PATV chat log v1": compared byte for byte - LF line ends, whatever the checkout)
 test/fixtures/chatlog/golden-* text eol=lf
+
+# 1.99aej: the chat hub's vendored widget (the platform repo's export; chatwidget.js checks the tab entry against its SRI and
+# the browser checks every file it loads): the build's exact bytes in every checkout, never line-end converted
+public/js/patv-chat/** -text
