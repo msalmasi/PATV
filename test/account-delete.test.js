@@ -2,7 +2,7 @@
 // a list; admins can't delete themselves; re-authentication (password or a fresh sign-in) + the typed username; a 14-day grace
 // that signs every device out and that a sign-in cancels; the job routes the balance by the PAT Routing row (supply exact, keyed,
 // a later credit swept too), anonymises replied-to posts / deletes the rest, deletes sent DMs and personal rows, pseudonymises
-// kept records, releases the Camfrog login and asks Pepe to forget it.
+// kept records, releases the Camfrog login and asks Pepe to forget it. S1 F13: the request's response sets the chat sweep's marker.
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -523,4 +523,38 @@ test("CL13 fix-up: deletion replaces the person's own Camfrog logins (current + 
   assert.equal(logs.length, 1);
   assert.deepEqual((await getQuery("SELECT body FROM messages WHERE conversation_id = ? ORDER BY id", [logs[0].id])).map((m) => m.body), ["to nowcf", "to oldcf", "to lcold"]);
   for (const l of ["nowcf", "oldcf", "lcold"]) assert.deepEqual(await M.cfLoginSummary(l), { copies_to: 0, copies_from: 0, threads: 0 }, l);
+});
+
+test("S1 F13: POST /api/account/delete signs this browser out with the chat sweep's marker (always 1); a refused request clears nothing", async () => {
+  await setup();
+  const express = require("express");
+  const app = express();
+  app.use(express.json());
+  app.use(require(path.join(repo, "chatsweep")).locals);   // index.js: right after sessions.gate
+  const addUser = (req, res, next) => { const id = req.get("x-test-user"); if (id) req.user = { userId: id }; next(); };
+  D.register(app, { addUser });
+  const srv = app.listen(0, "127.0.0.1");
+  await new Promise((r) => srv.once("listening", r));
+  const base = "http://127.0.0.1:" + srv.address().port;
+  const post = (body) => fetch(base + "/api/account/delete", { method: "POST", redirect: "manual", body: JSON.stringify(body),
+    headers: { "x-test-user": "f13del", origin: base, "content-type": "application/json", "x-requested-with": "fetch" } });
+  const cookies = (r) => (typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [r.headers.get("set-cookie") || ""]);
+  try {
+    await user("f13del", { username: "sweepdel", password: await bcrypt.hash("pw-12345678", 4) });
+    const no = await post({ password: "pw-12345678", confirm: "SweepDel" });
+    assert.equal(no.status, 400, await no.text());
+    assert.deepEqual(cookies(no).filter((c) => /^(jwt|patv_chat_sweep)=/.test(c)), [], "refused: still signed in, no marker");
+    const r = await post({ password: "pw-12345678", confirm: "sweepdel" });
+    assert.equal(r.status, 200, await r.text());
+    const set = cookies(r);
+    assert.ok(set.some((c) => /^jwt=;/.test(c)), "the login cookie is cleared");
+    const m = set.find((c) => /^patv_chat_sweep=/.test(c));
+    assert.ok(m, "the marker: the page goes to a signed-out page, which deletes the chat databases");
+    assert.match(m, /^patv_chat_sweep=1;/, "nothing about the account in it");
+    assert.match(m, /;\s*Path=\//i);
+    assert.match(m, /;\s*Secure/i);
+    assert.doesNotMatch(m, /HttpOnly/i);
+  } finally {
+    await new Promise((res) => srv.close(res));
+  }
 });

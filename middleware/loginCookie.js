@@ -63,7 +63,7 @@ async function refreshLogin(res, decoded, getQuery) {
   const rows = await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [decoded.userId]);
   const cur = rows && rows[0];
   if (!cur) {
-    clearLogin(res, decoded.userId);
+    clearLogin(res);
     return null;
   }
   if (cur.username !== decoded.username || cur.class !== decoded.class) {
@@ -74,13 +74,12 @@ async function refreshLogin(res, decoded, getQuery) {
   return decoded;
 }
 
-// `userId` (optional): the account being signed out, when the request carries no live session for it (sessions.gate and
-// refreshLogin pass the cookie's); otherwise the request's own session / user is used.
-function clearLogin(res, userId) {
+function clearLogin(res) {
   // Same path as when it was set (the default "/"), or the browser keeps it.
   res.clearCookie("jwt", { httpOnly: true, secure: true, sameSite: "Lax" });
-  // S1 F13 (chatsweep.js): the next signed-out page deletes the chat widget's per-account databases in this browser
-  require("../chatsweep").mark(res, userId);
+  // S1 F13 (chatsweep.js): the next signed-out page deletes the chat widget's per-account databases in this browser (the
+  // marker says only "1", nothing about the account)
+  require("../chatsweep").mark(res);
 }
 
 module.exports = { issueLogin, renewLogin, refreshLogin, clearLogin, LOGIN_DAYS };

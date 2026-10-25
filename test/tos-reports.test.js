@@ -387,7 +387,10 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(p.text, /13 October 2026:<\/b> added <a href="#incognito">/, "a dated change note");
   // S1 F13 (chatsweep.js): the sign-out marker cookie in section 8 - additive: the date moves, VERSION doesn't
   assert.match(p.text, /<code>patv_chat_sweep<\/code> \(cookie\)<\/td><td>Set when you sign out/);
-  assert.equal(terms.PRIVACY_UPDATED, "25 October 2026");     // F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
+  assert.match(p.text, /It holds nothing about you or your account: its value is always 1<\/td>/, "review 1: no account id in it");
+  assert.doesNotMatch(p.text, /chat id\b/, "the first draft's 'that account's chat id' is gone");
+  assert.match(p.text, /25 October 2026:<\/b> added the <code>patv_chat_sweep<\/code> cookie to <a href="#cookies">section 8<\/a>/, "a dated change note for F13");
+  assert.equal(terms.PRIVACY_UPDATED, "25 October 2026");    // F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#pepe-photos">/, "a dated change note for photos sent to Pepe");
   assert.match(p.text, /id="pepe-photos"/);
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#messages-camfrog">/, "a dated change note for CL11");

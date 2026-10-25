@@ -1,38 +1,32 @@
 <%# S1 F13 (chatsweep.js, docs/chat-tickets.md): on the first signed-out page after a sign-out (the patv_chat_sweep marker),
     delete the chat widget's per-account IndexedDB databases - exactly `patv-chat:<lower-case uuid>` (the platform's
-    account.ts rule; never patv-device) - then the marker. No databases() (Firefox before 126): the one database the marker
-    names. A failed or unfinished delete keeps the marker, so the next signed-out page tries again. Static: nothing from the
-    request is printed here; the script reads the marker itself and uses it only when it is a uuid. ES5, no widget. %>
+    account.ts rule; never patv-device) - then the marker. A failed or unfinished delete (or a refused databases()) keeps the
+    marker, so the next signed-out page tries again; a blocked delete counts only once it succeeds. No databases() (Firefox
+    before 126): nothing to list, the marker goes. The marker's value is never read (it is always "1"). Static: nothing
+    from the request is printed here. ES5, no widget. %>
 <script>(function () {
   try {
-    var m = /(?:^|;\s*)patv_chat_sweep=([^;]*)/.exec(document.cookie || '');
-    if (!m) return;
-    var U = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-    var ACCT = new RegExp('^patv-chat:' + U + '$');
-    var named = new RegExp('^' + U + '$').test(m[1]) ? 'patv-chat:' + m[1] : null;
+    if (!/(?:^|;\s*)patv_chat_sweep=[^;]/.test(document.cookie || '')) return;
+    var ACCT = /^patv-chat:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
     var idb = window.indexedDB;
     var done = function () { document.cookie = 'patv_chat_sweep=; Max-Age=0; Path=/; Secure; SameSite=Lax'; };
-    var del = function (names) {
-      var left = names.length, ok = true;
-      if (!left) return done();
-      var one = function () { left--; if (!left && ok) done(); };
-      for (var i = 0; i < names.length; i++) {
-        try {
-          var r = idb.deleteDatabase(names[i]);
-          r.onsuccess = one;
-          r.onerror = function () { ok = false; one(); };
-        } catch (e) { ok = false; one(); }
-      }
-    };
-    if (!idb) return done();
-    if (typeof idb.databases !== 'function') return del(named ? [named] : []);
+    if (!idb || typeof idb.databases !== 'function') return done();
     idb.databases().then(function (list) {
       var names = [];
       for (var i = 0; i < (list || []).length; i++) {
         var n = list[i] && list[i].name;
         if (typeof n === 'string' && ACCT.test(n)) names.push(n);
       }
-      del(names);
-    }, function () { if (named) del([named]); });
+      var left = names.length, ok = true;
+      if (!left) return done();
+      var one = function () { left--; if (!left && ok) done(); };
+      for (var j = 0; j < names.length; j++) {
+        try {
+          var r = idb.deleteDatabase(names[j]);
+          r.onsuccess = one;
+          r.onerror = function () { ok = false; one(); };
+        } catch (e) { ok = false; one(); }
+      }
+    }, function () {});
   } catch (e) {}
 })();</script>

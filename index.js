@@ -112,7 +112,8 @@ app.use(cookieParser(process.env.APP_SESSION_SECRET));
 const loginSessions = require("./sessions");
 app.use(loginSessions.gate);
 // S1 F13 (chatsweep.js): after a sign-out (the patv_chat_sweep marker), the next signed-out page deletes the chat widget's
-// per-account IndexedDB databases (layout.ejs, views/partials/chat-sweep.ejs)
+// per-account IndexedDB databases (layout.ejs, views/partials/chat-sweep.ejs); after the gate, so a request with a live
+// login never gets it
 app.use(require("./chatsweep").locals);
 // Sign in with Apple (applesso.js): the two routes Apple calls CROSS-SITE - the form_post callback and the server-to-server
 // notifications - go here, before the session middleware: that POST carries no SameSite=Lax cookie, so a session made for it
