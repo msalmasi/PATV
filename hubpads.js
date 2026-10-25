@@ -11,8 +11,10 @@
 //         history: {window_s, search, downloads, mods_all} (pad_chat_cfg; NULL / no row = the defaults null, true, null, false),
 //         flairs: [{id:"f<id>", name, color, emoji|null, self_assign}] (padflair.hubDefs: the user flairs in sort order, <= 50),
 //         fx: {frame, glow} ({fx, perk} of the equipped pad_frame / pad_glow item, or null), badges: [{id, perk}] (the
-//         equipped pad_badge items in equip order), badge_max: {free, prime} (padcosmetics.MAX_BADGES, + premium's
-//         prime_extra_badges), created_at}
+//         equipped pad_badge items in equip order; A12: all that pad_looks keeps, up to padcosmetics.badgeStoreMax() = 7 -
+//         a lapsed tier or a lowered config keeps the extra ones equipped; the hub draws the live ones cut to badge_max, as
+//         padcosmetics.shownBadges does), badge_max: {free, prime} (padcosmetics.badgeMax: MAX_BADGES, + premium's
+//         prime_extra_badges, <= 7), created_at}
 //        -> {kind:"pad", pad_id, gone:true} when the id has no pad_hub row with a registry row (deleted, displaced)
 //   pm   {kind:"pm", pad_id, account, v1_user, status: approved|pending|denied|removed} (pad_members; only approved grants)
 //        -> {kind:"pm", pad_id, account, v1_user, gone:true} when the row (or the pad) is gone
@@ -236,10 +238,8 @@ async function build(entities, t = Date.now()) {
       `SELECT * FROM premium_subs WHERE tier IN ('prime_time', 'prime_plus') AND target IN (${inList(part.length)})`, part).catch(noTable))) {
       subs.set(s.tier + ":" + s.target, s);
     }
-    const P = require("./premium");
-    const PC = require("./padcosmetics");
-    const free = PC.MAX_BADGES;
-    const extra = Math.max(0, Math.floor(Number((P.config() || {}).prime_extra_badges) || 0));
+    // A12: the caps v1 itself enforces and draws by (padcosmetics.maxBadges / shownBadges) - one source
+    const badgeMax = require("./padcosmetics").badgeMax();
     const PF = require("./padflair");
     const flairDefs = await PF.hubDefsMany(live);         // one query per 400 pads, not one per pad (we run inside the poster's tx)
     const R = require("./rooms");
@@ -268,7 +268,7 @@ async function build(entities, t = Date.now()) {
         owner, owner_since: since, owner_grant: grant,
         chat_backend: require("./padhub").BACKENDS.includes(h.chat_backend) ? h.chat_backend : "v1",
         history: historyOf(cfg.get(id)),
-        flairs, fx: cos.fx, badges: cos.badges, badge_max: { free, prime: free + extra },
+        flairs, fx: cos.fx, badges: cos.badges, badge_max: { free: badgeMax.free, prime: badgeMax.prime },
         created_at: num(r.created),
       });
     }

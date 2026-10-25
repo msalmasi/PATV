@@ -116,7 +116,7 @@ const DEFAULTS = Object.freeze({
   grace_days: 3,
   comp_admins: true,               // site admins' accounts + pads get both tiers free
   prime_extra_slots: 2,            // stage slots a Prime Time pad may add on top of the site cap
-  prime_extra_badges: 2,           // pad badges on top of the normal 3
+  prime_extra_badges: 2,           // pad badges on top of the normal 3 (0..PRIME_EXTRA_BADGES_MAX)
   sp_upload_mult: 2,               // Season Pass: feed upload size / daily / quota multiplier
   sp_sticker_packs: 1,             // Season Pass: free sticker packs per period
   sticker_price: 250000,           // PAT per sticker pack (stickers.js; a pack's own price wins)
@@ -124,6 +124,12 @@ const DEFAULTS = Object.freeze({
             creators: [["fortknox", 50], ["room", 50]], quotes: [["fortknox", 50], ["room", 50]],
             soundboard_pack: [["fortknox", 100]], soundboard_legend: [["fortknox", 100]], voice_unlock: [["fortknox", 100]] },
 });
+/**
+ * A12 fix-up (S1 call 12): the most pad badge slots Prime Time can add - 3 + 4 = 7, the hub's PAD_BADGE_CAP (seam plan
+ * §12.4 clamps badge_max.prime to 7), so v1 never draws a badge the hub can't. It was 5 (a cap of 8) while v1 kept 3 badges
+ * anyway. padcosmetics.badgeStoreMax() is MAX_BADGES + this: what pad_looks.cosmetics keeps whatever the config says.
+ */
+const PRIME_EXTRA_BADGES_MAX = 4;
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -174,7 +180,7 @@ function cleanConfig(c) {
     grace_days: int(c.grace_days, 0, 30, DEFAULTS.grace_days),
     comp_admins: on(c.comp_admins, DEFAULTS.comp_admins),
     prime_extra_slots: int(c.prime_extra_slots, 0, 8, DEFAULTS.prime_extra_slots),
-    prime_extra_badges: int(c.prime_extra_badges, 0, 5, DEFAULTS.prime_extra_badges),
+    prime_extra_badges: int(c.prime_extra_badges, 0, PRIME_EXTRA_BADGES_MAX, DEFAULTS.prime_extra_badges),   // A12 fix-up: was 0..5
     sp_upload_mult: int(c.sp_upload_mult, 1, 10, DEFAULTS.sp_upload_mult),
     sp_sticker_packs: int(c.sp_sticker_packs, 0, 20, DEFAULTS.sp_sticker_packs),
     sticker_price: int(c.sticker_price, 1, 1e12, DEFAULTS.sticker_price),
@@ -467,6 +473,9 @@ async function passCamfrogs(t = now()) {
   }
   return [...out].sort();
 }
+/** A12 (S1 call 12): the badge slots Prime Time adds (the config's prime_extra_badges, 0..PRIME_EXTRA_BADGES_MAX) - padcosmetics.badgeMax's input,
+ *  read without config()'s copy (padlook.parseCosmetics asks on every read of a pad's cosmetics). */
+const primeExtraBadges = () => CONFIG.prime_extra_badges;
 /** The perks a pad / an account gets right now (other modules ask this, never the tables). */
 function padPerks(roomId) {
   const on = isPrime(roomId), plus = isPrimePlus(roomId);
@@ -1243,7 +1252,7 @@ module.exports = {
   retention, noteRetention, cleanRetention, RETENTION_DEFAULTS,         // 1.99tc: Pepe's retention windows (the perk lists)
   retentionAt,                                                           // CL7: when his last report came (the archive purge's fail-safe)
   RETENTION_TIER_KEYS,                                                   // CL7 fix-up: the windows a fresh report must name, valid
-  isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
+  isPrime, isPrimePlus, padTier, primeExtraBadges, PRIME_EXTRA_BADGES_MAX, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   subsFor,             // S1 Q5b: the chat hub's looks (Season Pass perk ends, Plus pads)
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

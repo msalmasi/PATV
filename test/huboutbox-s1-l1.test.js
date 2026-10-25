@@ -182,6 +182,45 @@ test("pads: tier from the database rows (premium.endsAt): a Stripe renewal (stri
   assert.deepEqual(await tierAt(AT), ["plus", AT + 20 * DAY]);
 });
 
+test("A12 (S1 call 12): a Plus pad's equipped badges reach the seam - all v1 keeps (up to 7), in equip order; badge_max follows the config, clamped to the hub's 7", async () => {
+  const id = "pad:" + PAD.frogpond;
+  const PL = require(path.join(repo, "padlook"));
+  const PR = require(path.join(repo, "premium"));
+  // the hub's drawing (seam plan §12.4, the hub's seam-s1-fixtures drawPad): the live badges in equip order, cut to
+  // badge_max.prime (clamped to 7) on Prime / Plus and to badge_max.free otherwise
+  const hubDraw = (p) => {
+    const shows = (perk) => perk === null || (perk === "prime_plus" ? p.tier === "plus" : p.tier === "prime" || p.tier === "plus");
+    const prime = Math.min(p.badge_max.prime, 7);
+    return p.badges.filter((b) => shows(b.perk)).slice(0, p.tier === "free" ? Math.min(p.badge_max.free, prime) : prime).map((b) => b.id);
+  };
+  const seven = ["pp_headliner", "pb_est2026", "pt_onair", "pb_community", "pp_redcarpet", "pb_talk", "pt_premiere"];
+  await PL.setCosmetics("patv:frogpond", { pad_frame: "pp_frame", pad_glow: "pg_gold", pad_badge: [...seven, "pb_est2026", "pt_onair"] }, "alice");
+  try {
+    const p = (await HP.build([id], AT)).get(id);
+    assert.deepEqual(p.badge_max, { free: 3, prime: 5 });
+    const perk = { pp_headliner: "prime_plus", pp_redcarpet: "prime_plus", pt_onair: "prime_time", pt_premiere: "prime_time" };
+    assert.deepEqual(p.badges, seven.map((b) => ({ id: b, perk: perk[b] || null })),
+                     "all seven (v1 kept 3 before), equip order, the repeats dropped - more than badge_max.prime: the hub cuts");
+    assert.deepEqual([p.tier, hubDraw(p)], ["plus", seven.slice(0, 5)], "the hub draws badge_max.prime (5) of them");
+    const later = (await HP.build([id], AT + 21 * DAY)).get(id);
+    assert.deepEqual([later.tier, later.badges.length, later.badge_max], ["free", 7, { free: 3, prime: 5 }],
+                     "the comp ends: v1 writes nothing and still sends all seven");
+    assert.deepEqual(hubDraw(later), ["pb_est2026", "pb_community", "pb_talk"], "the hub draws the first 3 free ones (padcosmetics.shownBadges' rule)");
+    // badge_max is premium's prime_extra_badges (padcosmetics.badgeMax - one source with what equip allows), clamped to 4
+    // so v1's prime cap never passes the hub's PAD_BADGE_CAP (7)
+    await PR.setConfig({ prime_extra_badges: 3 }, "test");
+    try {
+      assert.deepEqual((await HP.build([id], AT)).get(id).badge_max, { free: 3, prime: 6 });
+      await PR.setConfig({ prime_extra_badges: 9 }, "test");
+      assert.deepEqual((await HP.build([id], AT)).get(id).badge_max, { free: 3, prime: 7 }, "clamped: 3 + 4");
+    } finally { await PR.setConfig({ prime_extra_badges: 2 }, "test"); }
+  } finally {
+    const F = golden("pads: a user-owned Prime Time Plus pad with chat settings, flairs, fx and badges").input;
+    await PL.setCosmetics("patv:frogpond", { pad_frame: F.equip.pad_frame, pad_glow: F.equip.pad_glow, pad_badge: F.equip.pad_badge }, "alice");
+  }
+  assert.deepEqual((await HP.build([id], AT)).get(id), goldenRow("pads/changed", id).row.payload, "back to the golden row");
+});
+
 test("roles: the builder produces every golden roles row (staffroles.globalRolesOf: the linked login's Pepe role)", async () => {
   const want = S1.rows.filter((r) => r.row.topic === "roles/changed");
   assert.equal(want.length, 4);

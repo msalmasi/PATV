@@ -472,7 +472,7 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   assert.match(html, /\/public\/js\/pad-chipfit\.js/);
   assert.match(html, /role="menuitem" data-pad-gift="[^"]+">🎁 Gift a cosmetic<\/button>/, "⋯ menu for a non-owner");
   assert.match(html, /<section class="card ab-gift" id="gift"[\s\S]*?never refunded[\s\S]*?data-pad-gift=/, "About tab entry + the no-refund rule");
-  assert.match(html, /\/public\/js\/pad-cosmetics\.js\?v=4/);
+  assert.match(html, /\/public\/js\/pad-cosmetics\.js\?v=5/);
   html = await page("plantowner");
   assert.doesNotMatch(html, /data-pad-gift/, "the owner buys from settings, not by gifting");
   assert.match(html, /settings#cosmetics">✨ Cosmetics in your pad's settings/);
@@ -494,9 +494,13 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   const look = ps.slice(ps.indexOf('<h3>🎨 Look</h3>'), ps.indexOf('id="royalties"'));
   assert.match(look, /<div class="pc" id="cosmetics" data-mode="manage" data-url="\/api\/rooms\/<%= encodeURIComponent\(slug\) %>\/cosmetics"/);
   assert.match(look, /<h4 class="pc-h">✨ Cosmetics<\/h4>/);
-  assert.match(ps, /pad-cosmetics\.js\?v=4/);
+  assert.match(ps, /pad-cosmetics\.js\?v=5/);
+  assert.match(rd("views/room.ejs"), /pad-cosmetics\.js\?v=5/);
   const js = rd("public/js/pad-cosmetics.js");
   assert.match(js, /Where the PAT goes/); assert.match(js, /no refund/i); assert.match(js, /newRef\(\)/);
+  // A12 fix-up: equipped badges the pad doesn't draw (state.shown_badges) are marked, and a lapsed perk item can be taken off
+  assert.match(js, /S\.shown_badges/); assert.match(js, /not shown until /); assert.match(js, /not shown: more than /);
+  assert.match(js, /if \(on\) acts \+= '<button type="button" class="btn ghost" data-pc-eq="' \+ esc\(it\.id\) \+ '" data-on="0">Take off<\/button>'/);
   // /cosmetics: a Pad group
   const cos = rd("views/cosmetics.ejs");
   assert.match(cos, /data-ftype="group:Pad">🛋️ Pad<\/button>/);

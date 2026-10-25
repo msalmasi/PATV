@@ -299,7 +299,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   `padflair.hubDefsMany` (the user flairs: one query per 400 pads, since the builder runs inside the poster's and the
   snapshot's transaction), `pad_looks.cosmetics` through `padlook.parseCosmetics` and the `padcosmetics` catalog
   (`fx {frame, glow}` and `badges`, each `{.., perk}`: the hub draws them by `padcosmetics.fx()`'s rule) and
-  `badge_max {free: 3, prime: 3 + prime_extra_badges}`. A tier lapsing or a config change needs no row (the payload carries
+  `badge_max {free: 3, prime: 3 + prime_extra_badges}` (`padcosmetics.badgeMax()`; since A12, below, `parseCosmetics` keeps
+  up to 7 badges, so a Prime Time pad's 4th and 5th reach the hub). A tier lapsing or a config change needs no row (the payload carries
   `tier_until`; the 10-minute snapshot carries the rest). A member status v1 doesn't know posts `removed` (it grants nothing).
 - **Triggers** (all gated by the topic's switch, `(topic, entity)` only, an UPDATE only for its listed columns and only when
   one changed): pads - `rooms_registry` (insert; update of `room_id, slug, title, platform, owner_kind, owner_user_id,
@@ -393,6 +394,29 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
 - **Turn-on (Q7, staging):** hub → v1 direction wired → `JOURNAL_ENABLED` → `privacy` → `erasure`, `export` → `pads` →
   `roles` → `bans` → `identity` → `looks` → `switches`, each once its hub topic is live and has bootstrapped; then
   `CHAT_HUB` on at `/admin/chat` with only the staging canary / staff pads at `hub`.
+- **A12 - pad badges up to `badge_max` (the owner's call 12, 2026-10-25; 1.99aeg on v1 staging 2026-10-25, ADR 0007 D19;
+  the platform's docs: patv-platform PR #110):** Q4's review found v1 kept at most 3 pad badges (`padlook.parseCosmetics` cut the list on every read and
+  write) though Prime Time pays for `prime_extra_badges` (2) more, so equip allowed a 4th and 5th that the write then
+  dropped, and the hub's `badge_max.prime` (5) was never reached. Now `parseCosmetics` keeps up to
+  `padcosmetics.badgeStoreMax()` (7: `MAX_BADGES` + `premium.PRIME_EXTRA_BADGES_MAX`, the largest cap any config allows)
+  for every pad, and `pads/changed` sends all of them. The caps themselves are `padcosmetics.badgeMax()` (`MAX_BADGES` +
+  `premium.primeExtraBadges()`, the same source `pads/changed`'s `badge_max` reads). Equip still holds each pad to its own
+  cap (`maxBadges`: 3, or 5 while it has Prime Time); the drawing (`padcosmetics.shownBadges`: `fx` and the settings
+  sheet; the hub by seam plan §12.4's rule) takes the live badges in equip order and cuts them to the tier's cap, so a pad
+  whose tier lapses - or whose `prime_extra_badges` is lowered for a while - keeps its extra badges equipped and undrawn,
+  and they draw again when the tier (or the config) comes back. No change to the seam's shape (`badges` was already ≤ 8
+  and `badge_max` already sent), so `huboutbox.VERSION` stays 1.99aec.
+  The review's fix-ups: `premium.cleanConfig` clamps `prime_extra_badges` to 0..4 (was 0..5), so v1's prime cap is at
+  most 7, the hub's `PAD_BADGE_CAP` (it would draw an 8th badge the hub can't); a pad with more on than its cap, or with
+  some on that don't draw, is told how many to take off ("5 are on (2 not shown), so take 3 off first"); the ✨ Cosmetics sheet (`state.shown_badges`) marks
+  equipped badges it doesn't draw - "not shown until 📺 Prime Time is back" (with a Take off button: a lapsed perk item
+  had none) or "not shown: more than 3 are on" - and the badge heading says "5 on, 3 shown"; equip runs one at a time per
+  pad (two at once each reported success and only one was stored). Tests: `test/premium.test.js` (five stored / drawn /
+  mirrored, a 6th refused, the cap follows the config and a lowered one hides without unequipping, a lapse with five free
+  badges draws the same 3 as the hub's §12.4 rule, the refusals, the sheet's shown list, concurrent equips, a Plus-only
+  badge on a Prime Time pad without Plus drawn by neither side),
+  `test/huboutbox-s1-l1.test.js` (the badges reach `pads/changed` in equip order; a lapse still sends them; `badge_max`
+  follows the config; the clamp).
 
 ## S1: identity, looks, the looks call, text style (release L3, 1.99ads)
 
@@ -634,7 +658,13 @@ change, so `huboutbox.VERSION` stays 1.99ads.
   fix: `huboutbox.setSettings` now moves a switch's `updated` / `actor` only when its value changes (the `/admin/keys#seam`
   form posts every switch on each save, which moved the date before); every save is still in the admin audit. **Owner
   action O-20** ("one privacy paragraph", S1 plan) is this paragraph's wording: it is put to the owner (default: as
-  written).
+  written). **Owner, 2026-10-24:** V4 drafts it and the owner approves the exact text in its pull request. The
+  revision on branch `s1-o20-privacy-paragraph` turns the paragraph into one section (a lead paragraph, four points
+  and the backups line) and adds two things the first draft left out: how long each store keeps the lines (pads'
+  chat history for section 9's time; PATV chat until a message is deleted, since the hub's purge is report-only in
+  S1, so that sentence changes when the hub's purge is switched on) and what "Download my data" includes (the
+  archive's lines always - `accountexport.js` puts `pad_chat_lines` in every download - and PATV chat's part with
+  `export` on). The "Changes" note follows. It reaches staging only once the owner approves it.
 - **Tests:** `test/account-delete-remove-public.test.js` (the offer and its refusal while off, the stored choice, once a day
   with a cancelled request counting, two requests at once, the flag in the feed and snapshot rows, the cross-store rule -
   purged lines, a linked member's web lines under the login, held and reported ones kept and taken down with their copies

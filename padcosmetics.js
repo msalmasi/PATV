@@ -8,7 +8,7 @@
 //   * anyone else signed in GIFTS one to a pad         -> state "gift": the owner is notified (inbox) and can equip it
 //     (that accepts it) or decline it. Declined = gone from the pad, NO REFUND (said before the purchase).
 //   A pad holds one copy of each item (a declined gift can be bought again). Equipping is the owner's or a site
-//   admin's (rooms.canManage): one frame, one glow, one animated avatar, up to 3 badges.
+//   admin's (rooms.canManage): one frame, one glow, one animated avatar, up to 3 badges (more with Prime Time: maxBadges).
 //
 // WHERE THE PAT GOES - exactly the boosts mechanism (boosts.routeInTx, economy v2 "room flow"):
 //   * the buyer is debited in ONE transaction with a transactions row; the client's ref makes it idempotent (a
@@ -32,7 +32,9 @@
 //
 // 1.99iv PRIME TIME (premium.js): items with "perk": "prime_time" are never sold - a pad has them while it has 📺 Prime
 // Time (equip like any other; they stop rendering when it lapses and come back with it). A Prime Time pad also gets
-// the automatic "📺 Prime Time" badge (not counted) and premium padPerks().extraBadges more badge slots.
+// the automatic "📺 Prime Time" badge (not counted) and premium padPerks().extraBadges more badge slots (A12: they are
+// stored - padlook.parseCosmetics keeps up to badgeStoreMax(), 7, whatever the tier or the config - and stay equipped,
+// undrawn, while the tier is lapsed or the config is lower; the sheet marks them "not shown" and can take them off).
 // 1.99qp 💎 PRIME TIME PLUS: "perk": "prime_plus" items come with Plus only; a Plus pad also has every Prime Time perk item
 // and its automatic badge reads "💎 Prime Time Plus" instead.
 "use strict";
@@ -110,6 +112,28 @@ const onSale = (item, t = now()) => !!item && !item.perk && !item.retired && ite
 // 1.99iv: Prime Time (premium.js) - perk items + extra badge slots while the pad has it
 const isPrime = (roomId) => { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } };
 const maxBadges = (roomId) => { try { return MAX_BADGES + require("./premium").padPerks(roomId).extraBadges; } catch (e) { return MAX_BADGES; } };
+/**
+ * A12 (S1 call 12, owner 2026-10-25): the pad badge caps {free, prime} - MAX_BADGES, and MAX_BADGES + premium's
+ * prime_extra_badges (5 by default). The hub's badge_max (hubpads) is this; equip holds a pad to its own (maxBadges: prime
+ * while it has Prime Time); the drawing cuts the live badges to the tier's cap (shownBadges: fx, the sheet; the hub by seam
+ * plan §12.4's rule), so a pad whose Prime Time lapses keeps its 4th and 5th badges equipped, undrawn, until it comes back.
+ */
+function badgeMax() {
+  let extra = 0;
+  try { extra = Math.max(0, Math.floor(Number(require("./premium").primeExtraBadges()) || 0)); } catch (e) { extra = 0; }
+  return { free: MAX_BADGES, prime: MAX_BADGES + extra };
+}
+/**
+ * A12 fix-up: the most pad badges pad_looks.cosmetics keeps (padlook.parseCosmetics) - the largest cap any config allows
+ * (MAX_BADGES + premium.PRIME_EXTRA_BADGES_MAX = 7, the hub's PAD_BADGE_CAP), not the current one, so a config lowered for a
+ * while hides badges instead of unequipping them for good on the next unrelated write (as a lapse does). The seam sends all
+ * of them (pads/changed badges <= 8); the hub, like fx, draws the live ones cut to badge_max.
+ */
+function badgeStoreMax() {
+  let extra = 4;
+  try { extra = require("./premium").PRIME_EXTRA_BADGES_MAX; } catch (e) { extra = 4; }
+  return MAX_BADGES + extra;
+}
 const isPlus = (roomId) => { try { return require("./premium").isPrimePlus(roomId); } catch (e) { return false; } };
 const perkOk = (item, roomId) => !item.perk || (item.perk === "prime_time" && isPrime(roomId)) || (item.perk === "prime_plus" && isPlus(roomId));
 
@@ -237,6 +261,18 @@ async function giftNotice(R, item, from, invId) {
 // ── equipping (owner / site admin) ──
 async function canManage(user, roomId) { return require("./rooms").canManage(user, roomId); }
 
+// A12 fix-up: one equip at a time per pad. equip reads pad_looks.cosmetics (padlook's cache), changes it and writes it back;
+// two at once each returned their own set and only the later write was kept. One process (padlook's cache is in-process).
+const EQUIP_Q = new Map();
+function onePerPad(roomId, fn) {
+  const k = String(roomId || "");
+  const run = (EQUIP_Q.get(k) || Promise.resolve()).then(fn);
+  const tail = run.then(() => {}, () => {});
+  EQUIP_Q.set(k, tail);
+  tail.then(() => { if (EQUIP_Q.get(k) === tail) EQUIP_Q.delete(k); });
+  return run;
+}
+
 /** Equip (on) or take off (!on) an item the pad has. Equipping a gift accepts it. -> the equipped set */
 async function equip(user, roomId, itemId, on = true) {
   await init();
@@ -244,6 +280,9 @@ async function equip(user, roomId, itemId, on = true) {
   if (!(await canManage(user, roomId))) throw new Refuse(403, "Only this pad's owner (or a site admin) can change its cosmetics.");
   const item = CAT.byId[String(itemId || "")];
   if (!item) throw new Refuse(404, "No such pad cosmetic.");
+  return onePerPad(roomId, () => equipNow(user, roomId, item, on));
+}
+async function equipNow(user, roomId, item, on) {
   const PL = require("./padlook");
   const cur = PL.cosmeticsOf(roomId);
   const actor = user.username || "?";
@@ -263,8 +302,14 @@ async function equip(user, roomId, itemId, on = true) {
   }
   if (item.kind === "pad_badge") {
     if (!cur.pad_badge.includes(item.id)) {
-      const mb = maxBadges(roomId);
-      if (cur.pad_badge.length >= mb) throw new Refuse(409, `Up to ${mb} badges at a time - take one off first.`, "E_BAD_ARGS");
+      const mb = maxBadges(roomId), n = cur.pad_badge.length;
+      // A12 fix-up: a pad can have more on than its cap, or some on that don't draw (a lapsed tier, a lowered config) - say
+      // how many to take off, and that some of what's on isn't shown (the sheet marks which)
+      if (n >= mb) {
+        const hidden = n - shownBadges(roomId, cur).length;
+        throw new Refuse(409, n === mb && !hidden ? `Up to ${mb} badges at a time - take one off first.`
+          : `Up to ${mb} badges at a time - ${n} are on (${hidden} not shown), so take ${n - mb + 1} off first.`, "E_BAD_ARGS");
+      }
       cur.pad_badge.push(item.id);
     }
   } else cur[item.kind] = item.id;                                // one per slot: it replaces what was there
@@ -302,6 +347,18 @@ function badgeHtml(item, mini) {
   return `<span class="pfx-b${pt}">${ic}${esc(item.style.text)}</span>`;
 }
 /**
+ * The badge items a pad draws, in equip order (not the automatic tier badge): the equipped ones whose perk tier the pad
+ * has (1.99qp: Plus items only with Plus), cut to the tier's cap (maxBadges with Prime Time, else MAX_BADGES) - seam plan
+ * §12.4's rule, which the hub runs on pads/changed's badges. A12 fix-up: one place for fx and the sheet (state's
+ * shown_badges). c: padlook.cosmeticsOf(roomId), read when omitted.
+ */
+function shownBadges(roomId, c) {
+  if (!c) { try { c = require("./padlook").cosmeticsOf(roomId); } catch (e) { return []; } }
+  const prime = isPrime(roomId), plus = prime && isPlus(roomId);
+  const live = (id) => { const it = id && CAT.byId[id]; return it && it.kind === "pad_badge" && (!it.perk || (it.perk === "prime_plus" ? plus : prime)) ? it : null; };
+  return c.pad_badge.map(live).filter(Boolean).slice(0, prime ? maxBadges(roomId) : MAX_BADGES);
+}
+/**
  * What a view needs to draw a pad's equipped cosmetics, sync (padlook's cache):
  *   cls    classes for the framed box ("pfx pfx-f-embers is-anim") - the box also needs `layer` as its first child
  *   layer  the effect layer html (absolute, behind the content, aria-hidden)
@@ -322,7 +379,7 @@ function fx(roomId) {
     out.layer = '<span class="pfx-l" aria-hidden="true"></span>';
   }
   if (gl && gl.kind === "pad_glow") out.glow = `pfx-g pfx-g-${gl.style.fx}`;
-  const bs = c.pad_badge.map(live).filter((i) => i && i.kind === "pad_badge").slice(0, prime ? maxBadges(roomId) : MAX_BADGES);
+  const bs = shownBadges(roomId, c);
   if (prime) bs.unshift(plus ? PLUS_BADGE : PRIME_BADGE);
   if (bs.length) {
     out.badges = `<span class="pfx-bs">${bs.map((b) => badgeHtml(b, false)).join("")}</span>`;
@@ -365,6 +422,8 @@ async function state(R, viewer) {
     // who gave what is for the people who run the pad
     items: manage ? items.map((i) => ({ id: i.id, item_id: i.item_id, kind: i.kind, state: i.state, from: i.owner_self || Number(i.anon) ? null : i.buyer_name, anon: !!Number(i.anon), created: i.created })) : [],
     equipped: PL.cosmeticsOf(R.id),
+    // A12 fix-up: the equipped badges the pad draws right now (shownBadges) - the sheet marks the rest "not shown"
+    shown_badges: shownBadges(R.id).map((i) => i.id),
     anim: manage ? { uploaded: !!L.hasAnim, url: L.avatarAnim, max_frames: PL.ANIM_MAX_FRAMES, max_out: PL.ANIM_MAX_OUT } : null,
     pad: { id: R.id, slug: R.slug || R.id, title: R.title, accent: L.accent, avatar: L.avatar, owner: R.owner ? (R.owner.display || R.owner.username) : null },
     viewer: { signed, owner, manage, balance },
@@ -447,7 +506,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, buy, equip, decline, padItems, hasItem, fx, badgeHtml, catalog, state, onSale, seasonState, buildCatalog, loadCatalog, setPay, errBody,
-  giftNotice, Refuse, ROUTING, SLOT_KINDS, MAX_BADGES, FX,
+  giftNotice, Refuse, ROUTING, SLOT_KINDS, MAX_BADGES, badgeMax, badgeStoreMax, shownBadges, FX,
   get CAT() { return CAT; },
   _setCatalog: (c) => { CAT = c || loadCatalog(); },
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
