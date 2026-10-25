@@ -2,17 +2,16 @@
 <%- include('layout', { title: t('chatfmt.title'), user: user, ogPath: '/help/formatting' }) %>
 <%#
   views/chatFormatting.ejs - /help/formatting (1.99aem, chatformat.js): the member guide to formatting messages in PATV
-  Chat. Every row comes from chatformat.FORMS (what to type, how PATV shows it, what a bridged chat shows), so the page and
-  the table can't drift apart. The previews are drawn here from a fixed set of tags, never from the typed marks. Linked
-  from the composer's formatting bar (its ? button) and from /help.
+  Chat. Every row comes from chatformat.FORMS (what to type, how PATV shows it, what a bridged chat will show), so the page
+  and the table can't drift apart. The previews are drawn here from a fixed set of tags, never from the typed marks. The
+  spoiler's preview is a disclosure (details/summary): its hint is what a screen reader hears first, the words once it is
+  opened, and a tap opens it everywhere. Linked from the composer's formatting bar (its ? button) and from /help.
 %>
 <%
   const e = t.esc;
   // a catalog string (HTML-safe text) inside a double-quoted attribute
   const attr = (s) => String(s).replace(/"/g, '&#34;');
   const mark = (s) => '<code class="cf-mark">' + e(s) + '</code>';
-  const timeAt = new Date(SAMPLE_TIME * 1000);
-  const fmtTime = (o) => { try { return new Intl.DateTimeFormat(t.lang === 'en' ? 'en-US' : t.lang, Object.assign({ timeZone: 'UTC' }, o)).format(timeAt); } catch (x) { return timeAt.toISOString(); } };
   // how PATV shows a form: fixed tags around the sample's words (escaped)
   const view = (f) => {
     const w = e(word(f, t));
@@ -22,14 +21,13 @@
       case 'bi': return '<strong><em>' + w + '</em></strong>';
       case 'u': return '<u>' + w + '</u>';
       case 's': return '<s>' + w + '</s>';
-      case 'spoiler': return '<span class="cf-spoiler" tabindex="0" title="' + attr(t('chatfmt.spoiler_hint')) + '" aria-label="' + attr(t('chatfmt.spoiler_hint')) + '"><span>' + w + '</span></span>';
+      case 'spoiler': return '<details class="cf-spoiler"><summary>' + t('chatfmt.spoiler_hint') + '</summary><span>' + w + '</span></details>';
       case 'code': return '<code>' + w + '</code>';
       case 'pre': return '<pre class="cf-pre"><code>' + w + '</code></pre>';
       case 'quote': return '<blockquote class="cf-quote">' + w + '</blockquote>';
       case 'link': return '<a href="' + w + '" rel="noopener">' + w + '</a>';
       case 'mention': return '<span class="cf-mention">@' + w + '</span>';
       case 'emoji': return '<span class="cf-emoji">' + w + '</span>';
-      case 'time': return '<time datetime="' + timeAt.toISOString() + '">' + e(fmtTime({ dateStyle: 'long', timeStyle: 'short' })) + '</time> <span class="cf-utc">UTC</span>';
       case 'literal': return '*' + w + '*';
       default: return w;
     }
@@ -49,11 +47,11 @@
   .cf .cf-pre code { background: none; border: 0; padding: 0; }
   .cf .cf-quote { margin: 0; padding-inline-start: 8px; border-inline-start: 3px solid var(--ds-line-strong); color: var(--ds-text-2); }
   .cf .cf-mention { padding: 0 3px; border-radius: 4px; background: var(--ds-ac-bg); color: var(--ds-green-2); font-weight: 600; }
-  .cf .cf-utc { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
-  .cf .cf-spoiler { border-radius: 4px; background: #333; cursor: pointer; }
-  .cf .cf-spoiler > span { visibility: hidden; }
-  .cf .cf-spoiler:hover, .cf .cf-spoiler:focus { background: rgba(255, 255, 255, .06); }
-  .cf .cf-spoiler:hover > span, .cf .cf-spoiler:focus > span { visibility: visible; }
+  .cf .cf-spoiler { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .cf .cf-spoiler > summary { display: inline-block; list-style: none; min-height: 24px; padding: 2px 10px; border-radius: 4px; background: #333; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); cursor: pointer; }
+  .cf .cf-spoiler > summary::-webkit-details-marker { display: none; }
+  .cf .cf-spoiler > summary:focus-visible { outline: 2px solid var(--ds-green); outline-offset: 2px; }
+  .cf .cf-spoiler[open] > summary { background: rgba(255, 255, 255, .06); }
   .cf .cf-note { display: block; margin-top: 4px; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.45; }
   .cf .ds-tbl td { vertical-align: top; overflow-wrap: anywhere; }
   .cf .ds-tbl th:first-child, .cf .ds-tbl td:first-child { min-width: 9em; }
@@ -61,11 +59,6 @@
   .cf .ds-tbl td:first-child b { color: var(--ds-text-strong); }
   .cf tr:target td { background: color-mix(in srgb, var(--ds-green) 10%, transparent); }
   .cf .cf-list { margin: 0; padding-inline-start: 1.2em; display: grid; gap: var(--ds-sp-1h); color: var(--ds-text-2); }
-  .cf .cf-times { margin: 0; display: grid; gap: 0; }
-  .cf .cf-times > div { display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: var(--ds-sp-3); padding-block: var(--ds-sp-2); border-block-end: 1px solid var(--ds-line-soft); }
-  .cf .cf-times > div:last-child { border-block-end: 0; }
-  .cf .cf-times dd { margin: 0; color: var(--ds-text-2); }
-  .cf .cf-times dd b { color: var(--ds-text-strong); font-weight: 600; }
   @media (max-width: 700px) {
     .cf .ds-tbl { border: 0; background: none; overflow: visible; }
     .cf .ds-tbl table, .cf .ds-tbl tbody, .cf .ds-tbl tr, .cf .ds-tbl td { display: block; width: auto; }
@@ -85,7 +78,6 @@
   <nav class="ds-subnav" aria-label="<%- t('chatfmt.nav') %>"><div class="ds-tabs">
     <a class="ds-tab" href="#forms"><%- t('chatfmt.nav_ref') %></a>
     <a class="ds-tab" href="#bar"><%- t('chatfmt.nav_bar') %></a>
-    <a class="ds-tab" href="#times"><%- t('chatfmt.nav_time') %></a>
     <a class="ds-tab" href="#bridges"><%- t('chatfmt.nav_bridges') %></a>
     <a class="ds-tab" href="#not"><%- t('chatfmt.nav_not') %></a>
   </div></nav>
@@ -120,21 +112,11 @@
     <p><%- t('chatfmt.bar_lead', { aa: '<span class="cf-aa">Aa</span>', help: '<span class="cf-aa">?</span>' }) %></p>
     <ul class="cf-list">
       <li><%- t('chatfmt.bar.select') %></li>
-      <li><%- t('chatfmt.bar.keys') %></li>
+      <li><%- t('chatfmt.bar.keys', { aa: '<span class="cf-aa">Aa</span>' }) %></li>
       <li><%- t('chatfmt.bar.newline') %></li>
-      <li><%- t('chatfmt.bar.link') %></li>
+      <li><%- t('chatfmt.bar.links') %></li>
       <li><%- t('chatfmt.bar.edit') %></li>
     </ul>
-  </section>
-
-  <section class="cf-sec" id="times" aria-labelledby="cfTimeH">
-    <h2 class="ds-h2" id="cfTimeH"><span class="dot"></span><%- t('chatfmt.time_h') %></h2>
-    <p class="ds-lead"><%- t('chatfmt.time_lead', { code: mark('<t:' + SAMPLE_TIME + ':f>') }) %></p>
-    <dl class="ds-card cf-times">
-      <% TIME_STYLES.forEach((s) => { %>
-      <div><dt><%- mark(':' + s.s) %></dt><dd><b><%- t('chatfmt.time.' + s.key) %></b> · <%= s.opts ? fmtTime(s.opts) : '' %><%- s.opts ? '' : t('chatfmt.time.relative_eg') %></dd></div><% }) %>
-    </dl>
-    <p class="ds-meta"><%- t('chatfmt.time.how') %></p>
   </section>
 
   <section class="cf-sec" id="bridges" aria-labelledby="cfBridgeH">
@@ -154,6 +136,7 @@
       <li><%- t('chatfmt.not.lists') %></li>
       <li><%- t('chatfmt.not.tables') %></li>
       <li><%- t('chatfmt.not.masked') %></li>
+      <li><%- t('chatfmt.not.times') %></li>
     </ul>
     <p class="ds-meta"><a href="/help">← <%- t('chatfmt.back') %></a></p>
   </section>

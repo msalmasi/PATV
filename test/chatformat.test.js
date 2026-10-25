@@ -3,7 +3,10 @@
 //   * /help/formatting is public and renders every form of chatformat.FORMS as a row (#fmt-<id>), with what to type,
 //     how PATV shows it and what a bridged chat shows; no raw i18n keys
 //   * the previews are drawn from fixed tags: a sample's words are escaped, a typed mark never becomes HTML
-//   * the forms the chat platform supports are all here (the composer's markdown-lite, ADR 0004 "Formatting as built")
+//   * the forms the chat platform supports are all here (the composer's markdown-lite, ADR 0004 "Formatting as built"),
+//     and none it doesn't (no time form: the chat has no <t:...> syntax since the W-format review)
+//   * the bridged column says what a bridge WILL show (no PATV Chat pad is bridged yet), no link previews are promised,
+//     and the spoiler's preview is a disclosure a screen reader and a tap can open (details/summary)
 //   * every string the page uses is in en.json; /help links to the guide (its intro and its footer)
 //   NODE_PATH=G:/PATV/node_modules node --test test/chatformat.test.js
 "use strict";
@@ -42,11 +45,20 @@ test("the guide is public, renders every form as a row with its example, preview
     assert.ok(en["chatfmt.bridge." + f.bridge], "bridge text " + f.id);
     if (f.w == null) assert.ok(en["chatfmt.w." + f.id], "sample word " + f.id);
   }
-  for (const id of ['id="forms"', 'id="bar"', 'id="times"', 'id="bridges"', 'id="not"', 'href="/help"']) assert.ok(r.text.includes(id), id);
+  for (const id of ['id="forms"', 'id="bar"', 'id="bridges"', 'id="not"', 'href="/help"']) assert.ok(r.text.includes(id), id);
+  assert.ok(!r.text.includes('id="times"') && !r.text.includes('id="fmt-time"'), "no time form");
   const body = r.text.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
   assert.ok(!/\b(chatfmt|help)\.[a-z_]+(\.[a-z0-9_]+)*\b/i.test(body.replace(/<[^>]+>/g, " ")), "no raw keys");
-  // the bridge column names Camfrog as one bridge among others, never as the only one
-  assert.match(body, /Camfrog today/);
+  // the bridged column is about later (no PATV Chat pad is bridged yet) and names Camfrog as one network among others
+  assert.match(body, /Bridged chats will show/);
+  assert.match(body, /Camfrog first, more networks/);
+  assert.ok(!/Camfrog today/.test(body), "no pad is bridged today");
+  // no preview is promised (PATV Chat shows none yet), and there is no Link button
+  assert.ok(!/with a preview of the page/.test(body));
+  assert.match(body, /There is no Link button/);
+  assert.ok(!/Quote and Link/.test(body));
+  // the keyboard line names Aa (its placeholder filled)
+  assert.ok(!body.includes("{!aa}"), "every placeholder filled");
 });
 
 test("the previews are fixed tags around escaped words; a typed mark is shown, never run", async () => {
@@ -60,26 +72,27 @@ test("the previews are fixed tags around escaped words; a typed mark is shown, n
   assert.match(row("bold"), /<strong>bold<\/strong>/);
   assert.match(row("italic"), /\*italic\*<\/code><span class="cf-or">or<\/span><code class="cf-mark">_italic_<\/code>/);
   assert.match(row("underline"), /<u>underlined<\/u>/);
-  assert.match(row("spoiler"), /class="cf-spoiler" tabindex="0"/);
+  // a disclosure: the hint is the summary (what a screen reader hears first), the words its content
+  assert.match(row("spoiler"), /<details class="cf-spoiler"><summary>Spoiler: tap or click to show<\/summary><span>the ending<\/span><\/details>/);
   assert.match(row("spoiler"), /\[spoiler\]/);
   assert.match(row("quote"), /<code class="cf-mark">&gt; best stream all week<\/code>/);
   assert.match(row("quote"), /<blockquote class="cf-quote">best stream all week<\/blockquote>/);
   assert.match(row("codeblock"), /```js\nconsole\.log\(&#34;gg&#34;\);\n```/);
   assert.match(row("nopreview"), /&lt;https:\/\/publicaccess\.tv&gt;/);
-  assert.match(row("time"), /&lt;t:1767225600:f&gt;/);
-  assert.match(row("time"), /<time datetime="2026-01-01T00:00:00.000Z">/);
   assert.match(row("escape"), /\\\*not italic\\\*/);
+  assert.match(row("escape"), /2\\\*3\\\*4/, "the sums example");
+  assert.match(row("italic"), /2\*3\*4 shows the 3 in italics/);
   // nothing a member could type turns into markup on the page
   assert.ok(!/<t:/.test(r.text) && !/<https:/.test(r.text), "the angle-bracket forms are escaped");
 });
 
-test("the guide lists every form the chat's markdown-lite supports, and each time style", () => {
+test("the guide lists every form the chat's markdown-lite supports, and no other", () => {
   const ids = CF.FORMS.map((f) => f.id);
-  for (const id of ["bold", "italic", "bolditalic", "underline", "strike", "spoiler", "code", "codeblock", "quote", "quoteall", "link", "nopreview", "mention", "everyone", "emoji", "time", "escape"]) {
+  for (const id of ["bold", "italic", "bolditalic", "underline", "strike", "spoiler", "code", "codeblock", "quote", "quoteall", "link", "nopreview", "mention", "everyone", "emoji", "escape"]) {
     assert.ok(ids.includes(id), id);
   }
-  assert.deepEqual(CF.TIME_STYLES.map((s) => s.s), ["t", "T", "d", "D", "f", "F", "R"]);
-  for (const s of CF.TIME_STYLES) assert.ok(en["chatfmt.time." + s.key], "time style " + s.s);
+  assert.ok(!ids.includes("time") && CF.TIME_STYLES === undefined, "no time form");
+  assert.ok(!Object.keys(en).some((k) => k.startsWith("chatfmt.time")), "no time strings left");
   assert.deepEqual(CF.typed(CF.FORMS.find((f) => f.id === "quote"), (k) => en[k]), ["> best stream all week"]);
 });
 

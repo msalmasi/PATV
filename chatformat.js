@@ -2,14 +2,19 @@
 // pad's Live tab shows (the S1 widget). The formatting itself is the chat platform's (patv-platform chat-core's
 // markdown-lite, ADR 0004 "Formatting as built"): Discord's marks, a block quote with "> ", and the composer's Aa
 // button that writes them. This page lists every form with an example, what it looks like, and what a BRIDGED chat
-// shows for it (Camfrog today; other networks later get the same plain text), so a member knows what the people on
-// the other side will see.
+// will show for it once a pad is bridged to another network (not yet: the bridged chats come later, Camfrog first,
+// other networks after, all with the same plain text), so a member knows what the people on the other side will see.
 //
 // The page is rendered FROM this table (views/chatFormatting.ejs), so a form can't be described without its row. Each
 // row: id (the anchor #fmt-<id>, strings chatfmt.f.<id> name and chatfmt.n.<id> note), what to type (`{w}` is the
 // row's sample word: `w` when it must not be translated, else chatfmt.w.<id>), how the page draws the result (`view`),
-// and what a bridge shows (chatfmt.bridge.<bridge>). Linked from the composer's formatting bar (its ? button) and from
-// /help.
+// and what a bridge will show (chatfmt.bridge.<bridge>). Linked from the composer's formatting bar (its ? button) and
+// from /help.
+//
+// The W-format review (2026-10-25): no time form (the chat dropped its <t:...> syntax for the widget's size budget),
+// no link previews promised (PATV Chat shows none yet), the bridged column worded for later, the spoiler preview a
+// disclosure (details/summary: a screen reader hears the hint, then the words once it is opened; a tap opens it on
+// iOS too), and the backslash's use for maths and names with underscores.
 "use strict";
 
 const PATH = "/help/formatting";
@@ -30,23 +35,8 @@ const FORMS = Object.freeze([
   { id: "mention", type: ["@{w}"], view: "mention", bridge: "mention", w: "PepeFrog" },
   { id: "everyone", type: ["@here", "@everyone"], view: "mention", bridge: "mention", w: "here" },
   { id: "emoji", type: [":frog:"], view: "emoji", bridge: "emoji", w: "🐸" },
-  { id: "time", type: ["<t:{w}:f>"], view: "time", bridge: "time", w: "1767225600" },
   { id: "escape", type: ["\\*{w}\\*"], view: "literal", bridge: "literal" },
 ]);
-
-/** The time styles of <t:SECONDS:STYLE> (Discord's letters; strings chatfmt.time.<key>), each drawn in UTC on the page. */
-const TIME_STYLES = Object.freeze([
-  { s: "t", key: "short_time", opts: { timeStyle: "short" } },
-  { s: "T", key: "long_time", opts: { timeStyle: "medium" } },
-  { s: "d", key: "short_date", opts: { dateStyle: "short" } },
-  { s: "D", key: "long_date", opts: { dateStyle: "long" } },
-  { s: "f", key: "date_time", opts: { dateStyle: "long", timeStyle: "short" } },
-  { s: "F", key: "full", opts: { dateStyle: "full", timeStyle: "short" } },
-  { s: "R", key: "relative", opts: null },
-]);
-
-/** The example time: 1767225600 = 2026-01-01T00:00:00Z. */
-const SAMPLE_TIME = 1767225600;
 
 /** The sample's words, as typed: the row's own (`w`) or the translated one. */
 function word(form, t) {
@@ -66,8 +56,6 @@ function register(app, { addUser }) {
       res.render("chatFormatting", {
         user: req.user ? req.user.username : null,
         FORMS,
-        TIME_STYLES,
-        SAMPLE_TIME,
         typed,
         word,
       });
@@ -78,4 +66,4 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { register, FORMS, TIME_STYLES, SAMPLE_TIME, PATH, typed, word };
+module.exports = { register, FORMS, PATH, typed, word };
