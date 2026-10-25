@@ -274,7 +274,24 @@ test("S1 H9-15-edge-key: the seam's inbound row names the looks-only key ids in 
     Object.assign(process.env, { HUB_V1_IN_LOOKS_KEY_ID: "hub-test-looks1", HUB_V1_IN_LOOKS_KEY: LOOKS });
     const html = await (await get("/admin/keys", "adm")).text();
     assert.match(html, /looks-only key hub-test-looks1/);
+    assert.doesNotMatch(html, /HUB_V1_IN_LOOKS_KEY ignored/, "a looks key in force: nothing ignored");
     assert.ok(!html.includes(LOOKS) && !html.includes(FULL), "never a secret on the page");
+    // without the full key the routes are off: no looks key is listed as in force
+    delete process.env.HUB_V1_IN_KEY_ID;
+    const off = await (await get("/admin/keys", "adm")).text();
+    assert.doesNotMatch(off, /looks-only key hub-test-looks1/, "the full key missing: no looks key in force");
+    process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
+    // a looks key that is set but ignored says so - which pair and why, never its id or secret
+    process.env.HUB_V1_IN_LOOKS_KEY = FULL;
+    const shared = await (await get("/admin/keys", "adm")).text();
+    assert.doesNotMatch(shared, /looks-only key hub-test-looks1/);
+    assert.match(shared, /HUB_V1_IN_LOOKS_KEY ignored: it shares an id or a secret with the full key/);
+    assert.ok(!shared.includes(FULL), "never a secret on the page");
+    process.env.HUB_V1_IN_LOOKS_KEY = LOOKS;
+    process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-staging-looks1";
+    const env = await (await get("/admin/keys", "adm")).text();
+    assert.match(env, /HUB_V1_IN_LOOKS_KEY ignored: its id isn(&#39;|')t a hub key id of this site(&#39;|')s environment/);
+    assert.ok(!env.includes("hub-staging-looks1") && !env.includes(LOOKS), "neither the ignored id nor its secret");
   } finally {
     for (const [k, v] of Object.entries(saved)) { if (v == null) delete process.env[k]; else process.env[k] = v; }
   }

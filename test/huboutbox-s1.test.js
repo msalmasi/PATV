@@ -386,7 +386,18 @@ test("the looks call: the golden answer; 404 while looks is off; 400 / 413; card
       assert.equal(byLooks.status, 200);
       assert.deepEqual(byLooks.j, g.answer, "the looks-only key: the golden answer too");
       assert.equal((await signedCall(g.request, { keyId: "hub-test-looks1", key: "a-wrong-secret-0123456789-0123456789" })).status, 401);
+      // ...but never without the full key: the looks switch on, the looks key alone is still a 404 before anything is
+      // verified, and takes no nonce
+      delete process.env.HUB_V1_IN_KEY_ID;
+      const cached = hubsign._size();
+      const lb = JSON.stringify(g.request);
+      const hn = hubsign.sign({ method: "POST", path: "/internal/v1/looks", body: lb, keyId: "hub-test-looks1", key: process.env.HUB_V1_IN_LOOKS_KEY });
+      const r = await fetch(base + "/internal/v1/looks", { method: "POST", headers: { ...hn, "content-type": "application/json" }, body: lb });
+      assert.deepEqual([r.status, await r.json()], [404, { ok: false, error: "not_found" }], "the looks key alone: no route");
+      assert.equal(hubsign._size(), cached, "nothing verified");
+      assert.equal((await getQuery("SELECT COUNT(*) AS n FROM hub_inbound_nonces WHERE nonce = ?", [hn["X-PATV-Nonce"]]))[0].n, 0, "no nonce taken");
     } finally {
+      process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
       delete process.env.HUB_V1_IN_LOOKS_KEY_ID; delete process.env.HUB_V1_IN_LOOKS_KEY;
     }
     assert.equal((await signedCall(g.request, { keyId: "hub-test-looks1", key: "hub-test-looks-only-key-0123456789-not-real" })).status, 401,

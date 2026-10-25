@@ -208,15 +208,21 @@ fetch the looks of accounts they hold none for (the looks call below) and so hol
 pull every snapshot and rewind the outbox. `HUB_V1_IN_LOOKS_KEY_ID` / `HUB_V1_IN_LOOKS_KEY` (and `HUB_V1_IN_LOOKS_PREV_KEY_ID`
 / `HUB_V1_IN_LOOKS_PREV_KEY` during its rotation) is a second `hub-<env>-<n>` key with its own secret that v1 accepts on
 `POST /internal/v1/looks` only: on any other route, or by another method, it is `wrong_caller` → 403 (the hub's own
-code for a valid key on a route its caller may not call, seam plan §2.1), before any nonce is taken. It never stands in
-for the full key (without `HUB_V1_IN_KEY` every route stays 404), and a looks key whose id or secret is also a full key's
-is ignored. The hub's edges sign with it when their `SEAM_OUT_V1_LOOKS_KEY_ID` / `_KEY` are set (and then hold no full
-key: rooms refuses both on an edge); the worker keeps the full key. Staging runs without it (every hub unit holds the
-full key); prod gets it with O-11's keys, before E-2. `hubinbound.status().looks_keys` lists the looks key ids in force,
-and `/admin/keys#seam`'s inbound row shows them ("looks-only key …").
+code for a valid key on a route its caller may not call, seam plan §2.1), before the durable nonce is taken (no
+`hub_inbound_nonces` row; `hubsign`'s in-memory replay cache has already recorded the nonce, as for every verified
+request, so a replay of the refused request is 409 `replay`). It never stands in for the full key (without
+`HUB_V1_IN_KEY` every route stays 404, before anything is verified), and a looks key whose id or secret is also a full
+key's, current or previous, is ignored. The hub's edges sign with it when their `SEAM_OUT_V1_LOOKS_KEY_ID` / `_KEY` are
+set (and then hold no full key: rooms refuses both on an edge); the worker keeps the full key. Staging runs without it
+(every hub unit holds the full key); prod gets it with O-11's keys, before E-2. `hubinbound.status().looks_keys` lists
+the looks key ids in force, and `/admin/keys#seam`'s inbound row shows them ("looks-only key …") while the full key is
+set. A looks pair that is set but ignored is `status().looks_ignored` (`{pair, why}`: the variable's name and
+`incomplete` - its id or secret missing -, `env` - not a `hub-<env>-<n>` id of this site's env - or `shared` - an id or
+secret of a full key; never the id or the secret), shown on the same row as a red "… ignored: …" pill. A refused
+request's warning line carries the method, the route and the code only, at most one per minute.
 
 **Order, v1 first** (O-11 and every rotation): the looks key goes into this site's `.env` (backup first), `pm2 restart`,
-and `/admin/keys#seam` shows it as a looks-only key - only then do the hub's edges get it in their drop-in. The other way
+and `/admin/keys#seam` shows it as a looks-only key (not as "… ignored: …") - only then do the hub's edges get it in their drop-in. The other way
 round every cache-miss looks call from the edges is refused 401 `unknown_key`, and a new account's mention stores
 "@someone" without an alarm. A rotation: the new pair as `HUB_V1_IN_LOOKS_KEY_*`, the old one moved to
 `HUB_V1_IN_LOOKS_PREV_KEY_*`, restart; then the edges; then the previous pair dropped.
