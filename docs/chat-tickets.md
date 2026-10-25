@@ -368,8 +368,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
 - **Turn-on (Q7, staging):** hub → v1 direction wired → `JOURNAL_ENABLED` → `privacy` → `erasure`, `export` → `pads` →
   `roles` → `bans` → `identity` → `looks` → `switches`, each once its hub topic is live and has bootstrapped; then
   `CHAT_HUB` on at `/admin/chat` with only the staging canary / staff pads at `hub`.
-- **A12 - pad badges up to `badge_max` (the owner's call 12, 2026-10-25; 1.99aeg, tentative until it reaches staging,
-  ADR 0007 D19):** Q4's review found v1 kept at most 3 pad badges (`padlook.parseCosmetics` cut the list on every read and
+- **A12 - pad badges up to `badge_max` (the owner's call 12, 2026-10-25; 1.99aeg on v1 staging 2026-10-25, ADR 0007 D19;
+  the platform's docs: patv-platform PR #110):** Q4's review found v1 kept at most 3 pad badges (`padlook.parseCosmetics` cut the list on every read and
   write) though Prime Time pays for `prime_extra_badges` (2) more, so equip allowed a 4th and 5th that the write then
   dropped, and the hub's `badge_max.prime` (5) was never reached. Now `parseCosmetics` keeps up to
   `padcosmetics.badgeStoreMax()` (7: `MAX_BADGES` + `premium.PRIME_EXTRA_BADGES_MAX`, the largest cap any config allows)
@@ -387,7 +387,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   had none) or "not shown: more than 3 are on" - and the badge heading says "5 on, 3 shown"; equip runs one at a time per
   pad (two at once each reported success and only one was stored). Tests: `test/premium.test.js` (five stored / drawn /
   mirrored, a 6th refused, the cap follows the config and a lowered one hides without unequipping, a lapse with five free
-  badges draws the same 3 as the hub's §12.4 rule, the refusals, the sheet's shown list, concurrent equips),
+  badges draws the same 3 as the hub's §12.4 rule, the refusals, the sheet's shown list, concurrent equips, a Plus-only
+  badge on a Prime Time pad without Plus drawn by neither side),
   `test/huboutbox-s1-l1.test.js` (the badges reach `pads/changed` in equip order; a lapse still sends them; `badge_max`
   follows the config; the clamp).
 
