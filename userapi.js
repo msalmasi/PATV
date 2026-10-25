@@ -13,12 +13,15 @@
 "use strict";
 const { getQuery } = require("./dbUtils");
 const SP = require("./siteperms");
+const UL = require("./userlook");
 
 function register(app, { addUser, isBotToken }) {
   app.get("/api/u/:username/profile", async (req, res) => {
     try {
       const rows = await getQuery("SELECT username, class, displayname, avatar FROM users WHERE username = ?", [req.params.username]);
-      if (rows.length > 0) return res.json(rows[0]);
+      // 1.99aek: the picture as a page may print it (userlook.avatarSrc): the old "avatar.png" default was relative - the nav
+      // set it as-is, and every page of a fresh account asked for <page dir>/avatar.png (a 404)
+      if (rows.length > 0) return res.json({ ...rows[0], avatar: UL.avatarSrc(rows[0].avatar) });
       res.status(404).send("User not found.");
     } catch (error) {
       console.error("Failed to retrieve user data:", error);
