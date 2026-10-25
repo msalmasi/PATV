@@ -45,7 +45,7 @@ test("every badge icon the chat widget draws is a PNG at /public/img/<icon>.png"
 test.describe("signed in as a test member", () => {
   test.skip(!JWT, "E2E_MEMBER_JWT not set (a throwaway test member's session cookie)");
 
-  test("the pad's Live chat, its mod page, the member's profile and the home page load nothing that 404s", async ({ page, context, baseURL }) => {
+  test("the pad's Live chat, its mod page, the member's profile, the home page and the rankings load nothing that 404s", async ({ page, context, baseURL }) => {
     await signIn(context, baseURL);
     const bad = watchFailures(page, baseURL);
     const failedLoads = [];
@@ -61,7 +61,7 @@ test.describe("signed in as a test member", () => {
     const me = await page.locator(".navbar .avatar a").getAttribute("href");
     expect(me, "signed in: the nav links the member's profile").toMatch(/^\/u\/[^/]+$/);
 
-    for (const p of ["/p/" + encodeURIComponent(PAD) + "/mod", me, "/"]) {
+    for (const p of ["/p/" + encodeURIComponent(PAD) + "/mod", me, "/", "/rankings"]) {
       const r = await page.goto(p);
       expect(r.status(), p).toBeLessThan(400);
       await page.waitForTimeout(2500);

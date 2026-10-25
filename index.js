@@ -1510,6 +1510,8 @@ app.get("/rankings", addUser, async (req, res) => {
     const byLevel = await getQuery(levelSql);
     let byBadges = [];
     try { byBadges = await getQuery(badgeSql); } catch (e) { console.error("rankings badges:", e.message); }
+    // 1.99aek: never the relative "avatar.png" default (leaderboard.ejs printed it: a /avatar.png 404 per default picture)
+    for (const r of [...users, ...byLevel, ...byBadges]) r.avatar = require("./userlook").avatarSrc(r.avatar);
     const jackpots = await getQuery(jackpotSql);
     // Current jackpot pot total
     const potRow = await getQuery(`SELECT SUM(amount) AS pot FROM jackpot_rakes`);

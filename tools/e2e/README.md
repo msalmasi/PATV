@@ -24,4 +24,4 @@ they would hold the session cookie. A failure keeps its screenshot under `test-r
 
 | Spec | Checks |
 |---|---|
-| `specs/widget-assets.spec.js` | 1.99aek: the chat widget's badge icons exist (`/public/img/badges/supporter-*.png`, `badges/bot.png`, `/public/img/ach/<id>.png`); a signed-in member's hub pad (Live chat), its `/mod` page, their profile and the home page request nothing that fails; the nav picture is never the relative `avatar.png` |
+| `specs/widget-assets.spec.js` | 1.99aek: the chat widget's badge icons exist (`/public/img/badges/supporter-*.png`, `badges/bot.png`, `/public/img/ach/<id>.png`); a signed-in member's hub pad (Live chat), its `/mod` page, their profile, the home page and `/rankings` request nothing that fails; the nav picture is never the relative `avatar.png` |
