@@ -608,7 +608,13 @@ change, so `huboutbox.VERSION` stays 1.99ads.
   fix: `huboutbox.setSettings` now moves a switch's `updated` / `actor` only when its value changes (the `/admin/keys#seam`
   form posts every switch on each save, which moved the date before); every save is still in the admin audit. **Owner
   action O-20** ("one privacy paragraph", S1 plan) is this paragraph's wording: it is put to the owner (default: as
-  written).
+  written). **Owner, 2026-10-24:** V4 drafts it and the owner approves the exact text in its pull request. The
+  revision on branch `s1-o20-privacy-paragraph` turns the paragraph into one section (a lead paragraph, four points
+  and the backups line) and adds two things the first draft left out: how long each store keeps the lines (pads'
+  chat history for section 9's time; PATV chat until a message is deleted, since the hub's purge is report-only in
+  S1, so that sentence changes when the hub's purge is switched on) and what "Download my data" includes (the
+  archive's lines always - `accountexport.js` puts `pad_chat_lines` in every download - and PATV chat's part with
+  `export` on). The "Changes" note follows. It reaches staging only once the owner approves it.
 - **Tests:** `test/account-delete-remove-public.test.js` (the offer and its refusal while off, the stored choice, once a day
   with a cancelled request counting, two requests at once, the flag in the feed and snapshot rows, the cross-store rule -
   purged lines, a linked member's web lines under the login, held and reported ones kept and taken down with their copies
