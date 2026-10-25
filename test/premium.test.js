@@ -431,6 +431,14 @@ test("A12 fix-ups: a lapse with five free badges draws the same 3 as the hub's Â
     const back = PC.shownBadges(PLANT).map((i) => i.id);
     assert.deepEqual(back, ["pb_est2026", "pb_talk", "pb_six", "pb_x4"]);
     assert.deepEqual(hubDraw(HP.cosmeticsOf(JSON.stringify({ pad_badge: await stored() })).badges, "prime", PC.badgeMax()), back);
+    // 1.99qp: a Plus-only badge never draws on a Prime Time pad without Plus (put there by hand - equip refuses it), on both sides
+    assert.equal(PR.isPrimePlus(PLANT), false);
+    await PL.setCosmetics(PLANT, { pad_badge: ["pp_headliner", "pb_est2026", "pt_onair"] }, "test");
+    assert.deepEqual(PC.shownBadges(PLANT).map((i) => i.id), ["pb_est2026", "pt_onair"]);
+    assert.deepEqual(pills(PC.fx(PLANT).badges), ["Prime Time", "Est. 2026", "On Air"], "no Headliner without Plus");
+    const sentPP = HP.cosmeticsOf(JSON.stringify({ pad_badge: await stored() })).badges;
+    assert.deepEqual(sentPP.map((x) => [x.id, x.perk]), [["pp_headliner", "prime_plus"], ["pb_est2026", null], ["pt_onair", "prime_time"]]);
+    assert.deepEqual(hubDraw(sentPP, "prime", PC.badgeMax()), ["pb_est2026", "pt_onair"]);
   } finally {
     PC._setCatalog(real);
     await PL.setCosmetics(PLANT, { pad_badge: A12_FIVE }, "test");
