@@ -211,8 +211,14 @@ test("econ.* website actions reach Pepe with the site-computed is_owner (never t
   assert.equal(by[idC].site_admin, true, "other kinds keep site_admin (escrow.override) as before");
   assert.equal(by[idC].is_owner, false);
   // an owner whose link changed since the action was queued: not the login Pepe would act as -> not an owner's action
+  // (D11-site-roles: a relink is a link change plus staffroles.reconcile of the new login, as verifyCamfrogLink does - the
+  // Admin class the old login gave goes with it, staffroles' unlink trigger, and the new login's class comes back)
+  const relink = async (login) => {
+    await runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", [login, U.owner]);
+    await SR.reconcile([login]);
+  };
   const idD = await A.queue(U.owner, { kind: "econ.cmd", args: ["status"], tag: "econ-admin", label: "relinked" });
-  await runQuery("UPDATE users SET camfrogUsername = 'someone_else' WHERE userId = ?", [U.owner]);
+  await relink("someone_else");
   try {
     const g2 = await fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) })
       .then((r) => r.json());
@@ -220,13 +226,13 @@ test("econ.* website actions reach Pepe with the site-computed is_owner (never t
     assert.equal(d.is_owner, false);
     assert.equal(d.site_admin, false);
   } finally {
-    await runQuery("UPDATE users SET camfrogUsername = 'Owner_CF' WHERE userId = ?", [U.owner]);
+    await relink("Owner_CF");
   }
   // the review of PO-0b: relinked from one OWNER login to ANOTHER owner login - still an owner's account, but not the login the
   // action was queued as (Pepe would act as owner_cf): not an owner's action
   await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('owner2_cf', 'owner', 1)");
   const idE = await A.queue(U.owner, { kind: "econ.cmd", args: ["status"], tag: "econ-admin", label: "relinked to another owner" });
-  await runQuery("UPDATE users SET camfrogUsername = 'owner2_cf' WHERE userId = ?", [U.owner]);
+  await relink("owner2_cf");
   try {
     assert.equal((await SR.ownerOf({ userId: U.owner }, "econ.pepe_econ_cmds")).userId, U.owner, "the account is still an owner (by its new login)");
     const g3 = await fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) })
@@ -237,9 +243,10 @@ test("econ.* website actions reach Pepe with the site-computed is_owner (never t
     assert.equal(e.is_owner, false, "the login it was queued as isn't the account's login any more");
     assert.equal(e.site_admin, false);
   } finally {
-    await runQuery("UPDATE users SET camfrogUsername = 'Owner_CF' WHERE userId = ?", [U.owner]);
+    await relink("Owner_CF");
     await runQuery("DELETE FROM pepe_roles WHERE login = 'owner2_cf'");
   }
+  assert.equal((await getQuery("SELECT class FROM users WHERE userId = ?", [U.owner]))[0].class, "Admin", "the owner's class is back with the login");
 });
 
 test("the PAT grant and the House adjust: an Admin who isn't a Pepe owner gets 403 before anything moves; an owner passes", async () => {

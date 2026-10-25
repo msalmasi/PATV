@@ -1,8 +1,9 @@
 // hubroles.js — S1 Q4 (release L1): the roles/changed topic of the v1 seam (seam plan §12.2-§12.6; ADR 0007 D9, D11): an
 // account's GLOBAL role, by ACCOUNT - the higher of its site class's role (Admin / Staff / Assistant: no Camfrog link needed,
 // D11-site-roles, the owner's change of 2026-10-25) and the Pepe role of its linked Camfrog login, if any (owner and trusted
-// come only from there) - staffroles.globalRolesOf. Entity acct:<userId>; switch hubseam.roles; huboutbox.js registers the
-// topic, the batch reader and the snapshot.
+// come only from there) - staffroles.globalRolesOf; the site's Banned and Bot classes hold none at all (the review of
+// D11-site-roles: the site's label decides). Entity acct:<userId>; switch hubseam.roles; huboutbox.js registers the topic,
+// the batch reader and the snapshot.
 //
 //   {account, v1_user, role: owner|admin|staff|assistant|trusted|null, cls|null, role_at: ms|null}   (role_at = pepe_roles.ts
 //   when that row decides the role - a removal is Pepe's tombstone row, with its own ts - else null) -> {account, v1_user,
@@ -15,8 +16,8 @@
 //               account created as Staff, a script) / update of camfrogUsername, class WHEN changed (any account: a class
 //               change is a role change, linked or not) / delete WHEN the row had a login or a role-giving class (any other
 //               row held no role: its unlink or demotion posted already)
-// Snapshot (§12.6): the accounts that hold a role - a role-giving class, or a linked login with a Pepe role - acct:<userId> in
-// byte order.
+// Snapshot (§12.6): the accounts that hold a role - a role-giving class, or a linked login with a Pepe role on an account
+// whose class isn't Banned / Bot - acct:<userId> in byte order.
 "use strict";
 const { getQuery } = require("./dbUtils");
 
@@ -81,17 +82,20 @@ async function build(entities) {
 }
 
 /** The snapshot: accounts that hold a role - a role-giving class (D11-site-roles: no login needed) or a linked login with a
- *  Pepe role (pepe_roles.role not null) - after `bound` in userId byte order, each once. */
+ *  Pepe role (pepe_roles.role not null) on an account whose class isn't Banned / Bot (staffroles.NO_ROLE_CLASSES) - after
+ *  `bound` in userId byte order, each once. */
 async function snapshotSource(bound, limit) {
   if (bound == null) return [];
-  const roles = require("./staffroles").ROLES;
+  const { ROLES: roles, NO_ROLE_CLASSES } = require("./staffroles");
+  const none = [...NO_ROLE_CLASSES];
   const ids = (await getQuery(`SELECT id FROM (
                                  SELECT u.userId AS id FROM users u JOIN pepe_roles r ON r.login = lower(trim(u.camfrogUsername)) AND ${LINKED}
                                   WHERE r.role IN (${roles.map(() => "?").join(",")}) AND u.userId > ?
+                                    AND (u."class" IS NULL OR u."class" NOT IN (${none.map(() => "?").join(",")}))
                                  UNION
                                  SELECT u.userId AS id FROM users u WHERE ${CLASS_HAS_ROLE("u")} AND u.userId > ?)
                                ORDER BY id LIMIT ?`,
-                              [...roles, bound, bound, limit])).map((r) => String(r.id));
+                              [...roles, bound, ...none, bound, limit])).map((r) => String(r.id));
   const built = await build(ids.map((id) => "acct:" + id));
   return ids.map((id) => ({ entity: "acct:" + id, payload: built.get("acct:" + id) }));
 }

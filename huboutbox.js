@@ -63,7 +63,12 @@ const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 // 1.99aei (S1 F9, H9-15-edge-key; the next free letter when it reached staging, D19's merge-to-staging rule - O-20 took
 // 1.99aee first and F13's branch holds 1.99aef): hubinbound.js accepts a looks-only key (HUB_V1_IN_LOOKS_KEY_*) on
 // POST /internal/v1/looks and refuses it 403 wrong_caller on every other route; dormant until O-11 sets it.
-const VERSION = "1.99aei";
+// 1.99ael (S1 D11-site-roles, the owner's change of 2026-10-25; the next free letter when it was built - 1.99aej / 1.99aek
+// were the widget export and its polish, neither a seam change): roles/changed keeps its shape but changes meaning - the
+// role is the site's, by account (a class-only Admin / Staff / Assistant holds one with no linked login; Banned / Bot
+// hold none), the users triggers and the snapshot list class-only holders, and an unlink drops the class a login gave.
+// D19 counts a change of meaning with the same shape as a seam change (as F9's was), so the hub's beat shows it.
+const VERSION = "1.99ael";
 const DAY = 86400000;
 const BATCH = 300;
 const POLL_MS = 1000;

@@ -110,11 +110,25 @@ test("the S1 L1 pad / role / ban / switch driver commands", { timeout: 180000 },
     await d.call("signup", { user: "u3", login: "Tres" });
     const roles = await rows("roles/changed");
     assert.deepEqual(roles.filter((e) => e === "acct:u1").length >= 2 && roles.includes("acct:u3"), true, JSON.stringify(roles));
-    // D11-site-roles: a site class on an account with no Camfrog login is its role (siteClass)
+    // D11-site-roles: a site class on an account with no Camfrog login is its role (siteClass: the class picker, as the
+    // driver's owner-Admin - the direct path on the site's ladder)
+    await assert.rejects(d.call("siteClass", { user: "nobody", cls: "Staff" }), /no such account/);
     assert.deepEqual(await d.call("siteClass", { user: "u2", cls: "Admin" }), { role: "admin" });
     assert.ok((await rows("roles/changed")).includes("acct:u2"), "the class change posts the account");
+    assert.deepEqual(await d.call("siteClass", { user: "u2", cls: "Staff" }), { role: "staff" }, "the owner demotes an unlinked Admin");
     assert.deepEqual(await d.call("siteClass", { user: "u2", cls: "pleb" }), { role: null });
-    await assert.rejects(d.call("siteClass", { user: "nobody", cls: "Staff" }), /no such account/);
+    await assert.rejects(d.call("siteClass", { user: "u2", cls: "Bot" }), /^Error: siteClass: That class isn't on the list/);
+    // a linked Staff member (Pepe's role, the class following it) who unlinks keeps nothing (staffroles' unlink trigger)
+    await d.call("account", { user: "u4", login: "Cuatro" });
+    await d.call("role", { login: "cuatro", role: "staff" });
+    assert.deepEqual(await d.call("siteClass", { user: "u4", cls: "Staff" }), { role: "staff" }, "a linked account: Pepe's roles, unchanged");
+    const clsOf = (id) => new Promise((resolve, reject) => {
+      const db = new sqlite3.Database(path.join(d.dir, "myapp.db"), sqlite3.OPEN_READONLY);
+      db.get("SELECT class FROM users WHERE userId = ?", [id], (e, r) => { db.close(); if (e) reject(e); else resolve(r && r.class); });
+    });
+    assert.equal(await clsOf("u4"), "Staff");
+    await d.call("unlink", { user: "u4", platform: "camfrog" });
+    assert.equal(await clsOf("u4"), "pleb", "the class went with the login");
     // bans: a pad ban, its unban, a site-wide one, the sweep
     await d.call("feedBan", { user: "u2", room: "patv:dpad", days: 1 });
     await d.call("feedUnban", { user: "u2", room: "patv:dpad" });
