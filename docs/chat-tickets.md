@@ -202,8 +202,9 @@ and with no log line: a target that isn't exactly the lowercase `/internal/v1/` 
 case-insensitive), or a request carrying Cloudflare's `cf-ray` / `cf-connecting-ip` headers, is a bare 404 (counted as
 "reached through the public site" on `/admin/keys#seam`).
 
-**The looks-only key** (S1 F9, **1.99aee** - the next free letter after 1.99aed, tentative until the release reaches
-staging (ADR 0007 D19); the owner's answer to H9-15-edge-key, 2026-10-24, option 1): the hub's internet-facing edges
+**The looks-only key** (S1 F9, **1.99aei** on v1 staging 2026-10-25 - the next free letter when it reached staging, ADR
+0007 D19: O-20 took 1.99aee first and F13's branch holds 1.99aef; the platform's docs: patv-platform PR #111; the
+owner's answer to H9-15-edge-key, 2026-10-24, option 1): the hub's internet-facing edges
 fetch the looks of accounts they hold none for (the looks call below) and so hold a key; with the full key they could also
 pull every snapshot and rewind the outbox. `HUB_V1_IN_LOOKS_KEY_ID` / `HUB_V1_IN_LOOKS_KEY` (and `HUB_V1_IN_LOOKS_PREV_KEY_ID`
 / `HUB_V1_IN_LOOKS_PREV_KEY` during its rotation) is a second `hub-<env>-<n>` key with its own secret that v1 accepts on
@@ -372,7 +373,7 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   while it still holds a seeded value - an admin's edit stays); its 1.99x address `camfrog-lounge` is the pad's alias (301)
   and in `pads.OLD_SLUGS`.
 - **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99aec`
-  (the letter the release reached staging with; the shared golden keeps its test letter) - `1.99aee` from S1 F9 on,
+  (the letter the release reached staging with; the shared golden keeps its test letter) - `1.99aei` from S1 F9 on,
   which changes the seam's inbound side (the looks-only key, "Calls into v1" above).
 - **Driver:** `pad`, `padMember`, `padLook`, `padChat`, `ownerGrant`, `premiumComp`, `stripeRenew`, `flair`, `role`,
   `pepeRoles`, `signup`, `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
@@ -975,7 +976,7 @@ It only records and never affects the sync.
 `CHAT_TICKET_KEY`, `CHAT_TICKET_KID`, `CHAT_TICKET_PREV_PUB`, `CHAT_TICKET_PREV_KID`, `CHAT_GENESIS_NS`, `HUB_V1_URL`,
 `HUB_V1_KEY_ID`, `HUB_V1_KEY`, `HUB_V1_PROXY`, 1.99acm: `HUB_V1_ENV`, `HUB_V1_IN_KEY_ID`, `HUB_V1_IN_KEY`,
 `HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY`, S1 V2: `HUB_RT_WS`, `HUB_RT_API` (the hub's public origins, not secrets),
-S1 F9 (1.99aee): `HUB_V1_IN_LOOKS_KEY_ID`, `HUB_V1_IN_LOOKS_KEY`, `HUB_V1_IN_LOOKS_PREV_KEY_ID`, `HUB_V1_IN_LOOKS_PREV_KEY`
+S1 F9 (1.99aei): `HUB_V1_IN_LOOKS_KEY_ID`, `HUB_V1_IN_LOOKS_KEY`, `HUB_V1_IN_LOOKS_PREV_KEY_ID`, `HUB_V1_IN_LOOKS_PREV_KEY`
 (names in `.env.example`, no values). Keys are per direction and per
 environment (four in all: v1 → hub and hub → v1, prod and staging; S1 adds a fifth at O-11, prod's looks-only key for
 the hub's edges), each generated separately (never one secret for two

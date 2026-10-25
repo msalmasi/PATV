@@ -58,11 +58,12 @@ const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 // the hub's POST /internal/v1/looks (hubinbound.js).
 // 1.99aec (S1 Q4, release L1's second part; the next free letter when it reached staging, D19's merge-to-staging rule):
 // the pads/changed, roles/changed, bans/changed and switches/changed topics the same way, and the CHAT_HUB interlock.
-// (1.99ady and 1.99aea are V4's, 1.99adz V1's, 1.99aeb V2's, 1.99aed V4's docs: none changed the seam, so none was ever VERSION.)
-// 1.99aee (S1 F9, H9-15-edge-key; the next free letter after 1.99aed - tentative until the release reaches staging, D19's
-// merge-to-staging rule): hubinbound.js accepts a looks-only key (HUB_V1_IN_LOOKS_KEY_*) on POST /internal/v1/looks and
-// refuses it 403 wrong_caller on every other route; dormant until O-11 sets it.
-const VERSION = "1.99aee";
+// (1.99ady and 1.99aea are V4's, 1.99adz V1's, 1.99aeb V2's, 1.99aed V4's docs, 1.99aee O-20's, 1.99aeh F11's, 1.99aeg
+// A12's: none changed the seam, so none was ever VERSION.)
+// 1.99aei (S1 F9, H9-15-edge-key; the next free letter when it reached staging, D19's merge-to-staging rule - O-20 took
+// 1.99aee first and F13's branch holds 1.99aef): hubinbound.js accepts a looks-only key (HUB_V1_IN_LOOKS_KEY_*) on
+// POST /internal/v1/looks and refuses it 403 wrong_caller on every other route; dormant until O-11 sets it.
+const VERSION = "1.99aei";
 const DAY = 86400000;
 const BATCH = 300;
 const POLL_MS = 1000;

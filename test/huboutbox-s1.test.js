@@ -483,7 +483,7 @@ test("the heartbeat carries the S1 switches (additive); the golden S1 heartbeat 
   assert.equal(b.switches.identity, true);
   assert.equal(b.switches.looks, false);
   assert.deepEqual(b.topics["identity/changed"], { head: 0, pending: 0, oldest_pending_at: null }, "a switched-on S1 topic is listed");
-  assert.equal(b.version, "1.99aee", "S1 F9 (the edges' looks-only key) changed the seam last (ADR 0007 D19)");
+  assert.equal(b.version, "1.99aei", "S1 F9 (the edges' looks-only key) changed the seam last (ADR 0007 D19)");
   assert.equal(b.version, HO.VERSION);
   const g = S1.heartbeat;
   for (const k of Object.keys(b.switches)) assert.ok(k in g.switches, "the golden S1 heartbeat has " + k);
