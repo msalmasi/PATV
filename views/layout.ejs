@@ -436,8 +436,13 @@
         fetch('/api/u/<%= user %>/profile')
             .then(response => response.json())
             .then(data => {
-                if (data.avatar) {
-                    document.getElementById('userAvatar').src = data.avatar;
+                // 1.99aek: only a picture the page can load as given - https, or a path on this site. A relative one (the
+                // old "avatar.png" default) asked for <this page's dir>/avatar.png: a 404 on every page; the API now sends
+                // the default as /public/img/avatar.png, and anything else keeps the placeholder
+                var a = data && typeof data.avatar === 'string' ? data.avatar : '';
+                var img = document.getElementById('userAvatar');
+                if (img && (/^https:\/\/[^\s"'<>]+$/.test(a) || /^\/(?![\/\\])[^\s"'<>]*$/.test(a))) {
+                    img.src = a;
                 }
             })
             .catch(error => console.error('Failed to fetch user data:', error));

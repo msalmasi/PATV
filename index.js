@@ -274,6 +274,8 @@ let clients = []; // Keep track of connected clients for SSE
 // S1 V2 (release L4): the chat hub's vendored widget (public/js/patv-chat/, chatwidget.js) - its content-hashed files
 // `immutable`, manifest.json / releases.json revalidated, nosniff; mounted before the general /public so its headers win
 app.use("/public/js/patv-chat", require("./chatwidget").staticFiles());
+// 1.99aek: the widget's badge icons - /public/img/ach/<id>.png is the achievement art under public/img/badges/ach/ (badgeicons.js)
+require("./badgeicons").register(app);
 // Serve static files from the public directory
 app.use("/public", express.static("public"));
 // 1.99hl: the site icon - the pixel Pepe (public/favicon.ico 16/32/48 + PNGs). Browsers ask for /favicon.ico and
@@ -951,7 +953,9 @@ app.get("/auth/discord/callback", async (req, res) => {
             displayname: displaynames.usable(discordUser.global_name) || displaynames.usable(discordUser.username) || newUserUsername,
             email: discordEmail, // Discord email (verified only)
             password: hashedPassword,
-            avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
+            // 1.99aek: a Discord account with no picture has avatar null - ".../null.png" was a 404 on every page; the default then
+            avatar: discordUser.avatar && /^[A-Za-z0-9_]+$/.test(String(discordUser.avatar))
+              ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png` : require("./userlook").DEFAULT_AVATAR,
             discordId: discordUser.id,
             discordUsername: discordUser.username,
             points_balance: 0,          // 1.99bg: the welcome bonus vests instead (welcome.js)
@@ -1643,7 +1647,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         classh: user.class,
         level: user.level,
         xp: Math.round(user.xp),
-        avatar: user.avatar,
+        avatar: require("./userlook").avatarSrc(user.avatar),   // 1.99aek: never the relative "avatar.png" default
         email: user.email,
         points_balance: user.points_balance,
         badges: badges,
@@ -1891,7 +1895,7 @@ app.get("/u/:username/tip", addUser, async (req, res) => {
       displayname: r.displayname,
       classh: r.class,
       level: r.level || 0,
-      avatar: r.avatar,
+      avatar: require("./userlook").avatarSrc(r.avatar),          // 1.99aek: never the relative "avatar.png" default
       camfrog: r.camfrogUsername || null,
       badgeCount,
       profileCosmetics: pc,
@@ -1944,6 +1948,7 @@ async function tipJarPage(userId, kind, offset) {
       WHERE t.userId = ? AND t.type = ?
       ORDER BY t.timestamp DESC, t.rowid DESC LIMIT ? OFFSET ?`,
     [userId, type, TIPJAR_PAGE + 1, Math.max(0, offset | 0)]);
+  for (const r of rows) r.avatar = require("./userlook").avatarSrc(r.avatar);   // 1.99aek: never the relative "avatar.png" default
   return { items: rows.slice(0, TIPJAR_PAGE), more: rows.length > TIPJAR_PAGE };
 }
 async function tipJarData(userId) {
@@ -1965,6 +1970,7 @@ async function tipJarData(userId) {
        FROM transactions t ${TIP_PARTNER_JOIN} JOIN users u ON u.userId = ${TIP_CP}
       WHERE t.userId = ? AND t.type = 'tip received'
       GROUP BY u.userId ORDER BY total DESC LIMIT 5`, [userId]);
+  for (const t of top) t.avatar = require("./userlook").avatarSrc(t.avatar);     // 1.99aek: never the relative "avatar.png" default
   // GTF pixel avatars for the top tippers (server-rendered like the rankings podium)
   const avatars = {};
   for (const t of top) {
@@ -2267,9 +2273,11 @@ app.get("/api/u/:username/avatar", addUser, async (req, res) => {
   const userId = req.user ? req.user.userId : null; // Fallback to null if no user in session
   const sql = "SELECT avatar FROM users WHERE userId = ?";
   try {
-    const user = await getQuery(sql, [userId]);
-    if (user) {
-      res.json({ avatar: user[0].avatar });
+    // 1.99aek: the picture as a page may print it (userlook.avatarSrc - never the relative "avatar.png" default); signed out
+    // (no row) is the 404 it always meant to be, not a TypeError's 500
+    const rows = userId ? await getQuery(sql, [userId]) : [];
+    if (rows.length) {
+      res.json({ avatar: require("./userlook").avatarSrc(rows[0].avatar) });
     } else {
       res.status(404).json({ error: "User not found" });
     }
@@ -2311,7 +2319,7 @@ app.get(
             username: user.username,
             displayname: user.displayname,
             camfrogUsername: user.camfrogUsername,
-            avatar: user.avatar,
+            avatar: require("./userlook").avatarSrc(user.avatar),   // 1.99aek: never the relative "avatar.png" default
             points_balance: user.points_balance,
             level: user.level,
             classh: user.class,

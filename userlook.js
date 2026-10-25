@@ -15,6 +15,10 @@
 const { getQuery } = require("./dbUtils");
 
 const PEPE_ID = "pepe-bot";
+// 1.99aek: THE default picture, as a site path. The users table's old column default is the RELATIVE "avatar.png" (dbUtils.js
+// before 1.99aek; every live database keeps it - SQLite can't change a column default in place), and a page that printed it
+// as-is asked for /p/avatar.png, /p/<slug>/avatar.png, /u/avatar.png ... (404s on every page of a fresh account's session).
+const DEFAULT_AVATAR = "/public/img/avatar.png";
 const DEFAULTS = new Set(["", "avatar.png", "/public/img/avatar.png", "/img/avatar.png"]);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -22,9 +26,12 @@ function avatarOf(raw) {
   const u = String(raw == null ? "" : raw).trim();
   if (DEFAULTS.has(u)) return null;
   if (/^https:\/\/[^\s"'<>()\\]+$/.test(u) && u.length <= 600) return u;
-  if (/^\/[A-Za-z0-9/_.\-]+$/.test(u) && !u.includes("..")) return u;
+  if (/^\/(?!\/)[A-Za-z0-9/_.\-]+$/.test(u) && !u.includes("..")) return u;   // 1.99aek: never "//host/..." (another site)
   return null;
 }
+/** 1.99aek: users.avatar -> what an <img src> may print: the photo (avatarOf's rules), else the default as a site path - never
+ *  a relative path (the old "avatar.png" default), an unsafe value or nothing. */
+function avatarSrc(raw) { return avatarOf(raw) || DEFAULT_AVATAR; }
 
 /** A stable hue (0-359) - the same as feedweb's hue() and public/js/messages.js. */
 function hue(s) {
@@ -360,5 +367,5 @@ async function buildLooks(userIds, { card = true, t = Date.now() } = {}) {
   return out;
 }
 
-module.exports = { looks, apply, nameStyles, avatarOf, avHtml, nameHtml, hue, initial, stats, _setQuery: (q) => { query = q || getQuery; },
+module.exports = { looks, apply, nameStyles, avatarOf, avatarSrc, DEFAULT_AVATAR, avHtml, nameHtml, hue, initial, stats, _setQuery: (q) => { query = q || getQuery; },
                    buildLooks, lookHash, canonicalJson, isDefaultLook, avatarUrl, siteOrigin, PEPE_ID, BOT_BADGE };

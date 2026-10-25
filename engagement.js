@@ -338,8 +338,8 @@ async function seed(b) {
   for (const u of (Array.isArray(b.users) ? b.users : []).slice(0, 200)) {
     const id = String(u.id || "").slice(0, 40);
     if (!/^rh[-_][A-Za-z0-9_-]{1,36}$/.test(id)) continue;          // rehearsal accounts only
-    await runQuery(`INSERT INTO users (userId, username, password, points_balance, camfrogUsername, level, created_at, isEmailVerified)
-                    VALUES (?, ?, 'x', 0, ?, ?, ?, ?) ON CONFLICT(userId) DO UPDATE SET level = excluded.level, created_at = excluded.created_at,
+    await runQuery(`INSERT INTO users (userId, username, password, points_balance, camfrogUsername, level, created_at, isEmailVerified, avatar)
+                    VALUES (?, ?, 'x', 0, ?, ?, ?, ?, '/public/img/avatar.png') ON CONFLICT(userId) DO UPDATE SET level = excluded.level, created_at = excluded.created_at,
                     camfrogUsername = excluded.camfrogUsername, isEmailVerified = excluded.isEmailVerified`,
                    [id, id, u.camfrog || null, u.level != null ? Number(u.level) : 3, iso(t - (u.age_days != null ? Number(u.age_days) : 30) * DAY_MS), u.verified === false ? 0 : 1]);
     out.users++;
