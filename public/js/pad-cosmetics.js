@@ -88,15 +88,21 @@
     }
     function isEq(it) { var e = S.equipped || {}; return it.kind === 'pad_badge' ? (e.pad_badge || []).indexOf(it.id) >= 0 : e[it.kind] === it.id; }
     function card(it) {
-      var own = ownedRow(it.id), eq = own && isEq(it);
-      var stateTxt = !own ? (it.perk ? (it.perk === 'prime_plus' ? '💎' : '📺') + ' Comes with <a href="' + esc((S.prime && S.prime.link) || '/premium') + (it.perk === 'prime_plus' ? '#plus' : '') + '">' + (it.perk === 'prime_plus' ? 'Prime Time Plus' : 'Prime Time') + '</a>' : it.sale ? fmt(it.price) + ' PAT' : 'Not on sale') : eq ? '✅ Equipped' : own.state === 'gift' ? (own.anon ? '🎁 An anonymous gift' : '🎁 Gift from ' + esc(own.from || 'someone')) : 'Owned';
+      var own = ownedRow(it.id), on = isEq(it), eq = own && on;
+      // A12 fix-up: equipped but not drawn - a perk item while its tier is off (the pad doesn't "have" it: no own row; it
+      // stays equipped and comes back with the tier), or a badge past the tier's cap (S.shown_badges: what the pad draws)
+      var tierOff = on && !own;
+      var unshown = eq && it.kind === 'pad_badge' && S.shown_badges && S.shown_badges.indexOf(it.id) < 0;
+      var stateTxt = tierOff ? '✅ Equipped · <small>not shown until ' + (it.perk === 'prime_plus' ? '💎 Prime Time Plus' : '📺 Prime Time') + ' is back</small>'
+        : !own ? (it.perk ? (it.perk === 'prime_plus' ? '💎' : '📺') + ' Comes with <a href="' + esc((S.prime && S.prime.link) || '/premium') + (it.perk === 'prime_plus' ? '#plus' : '') + '">' + (it.perk === 'prime_plus' ? 'Prime Time Plus' : 'Prime Time') + '</a>' : it.sale ? fmt(it.price) + ' PAT' : 'Not on sale')
+        : eq ? '✅ Equipped' + (unshown ? ' · <small>not shown: more than ' + ((S.slots.pad_badge && S.slots.pad_badge.max) || 3) + ' are on</small>' : '')
+        : own.state === 'gift' ? (own.anon ? '🎁 An anonymous gift' : '🎁 Gift from ' + esc(own.from || 'someone')) : 'Owned';
       var acts = '';
-      if (own) {
-        acts += eq ? '<button type="button" class="btn ghost" data-pc-eq="' + esc(it.id) + '" data-on="0">Take off</button>'
-          : '<button type="button" class="btn" data-pc-eq="' + esc(it.id) + '" data-on="1">' + (own.state === 'gift' ? 'Accept &amp; equip' : 'Equip') + '</button>';
-        if (own.state === 'gift') acts += '<button type="button" class="btn ghost" data-pc-decline="' + own.id + '">Decline</button>';
-      } else if (it.sale && S.pay) acts += '<button type="button" class="btn primary" data-pc-buy="' + esc(it.id) + '">Buy · ' + fmt(it.price) + '</button>';
-      return '<div class="pc-card' + (eq ? ' eq' : '') + (own && own.state === 'gift' ? ' gift' : '') + '" data-id="' + esc(it.id) + '">' + preview(it, S) +
+      if (on) acts += '<button type="button" class="btn ghost" data-pc-eq="' + esc(it.id) + '" data-on="0">Take off</button>';
+      else if (own) acts += '<button type="button" class="btn" data-pc-eq="' + esc(it.id) + '" data-on="1">' + (own.state === 'gift' ? 'Accept &amp; equip' : 'Equip') + '</button>';
+      if (own && own.state === 'gift') acts += '<button type="button" class="btn ghost" data-pc-decline="' + own.id + '">Decline</button>';
+      else if (!own && !on && it.sale && S.pay) acts += '<button type="button" class="btn primary" data-pc-buy="' + esc(it.id) + '">Buy · ' + fmt(it.price) + '</button>';
+      return '<div class="pc-card' + (on ? ' eq' : '') + (own && own.state === 'gift' ? ' gift' : '') + '" data-id="' + esc(it.id) + '">' + preview(it, S) +
         '<div class="pc-t"><b>' + esc(it.name) + '</b>' + rarityChip(it, S) + '</div><p class="pc-d">' + esc(it.desc) + '</p>' +
         '<div class="pc-st">' + stateTxt + '</div><div class="pc-btns">' + acts + '</div><div class="pc-slot"></div></div>';
     }
@@ -120,7 +126,10 @@
         var list = S.catalog.filter(function (it) { return it.kind === k && (it.sale || it.perk || ownedRow(it.id)); });
         if (!list.length) return;
         var sl = S.slots[k] || {};
-        h += '<h5 class="pc-sh">' + esc(sl.emoji || '') + ' ' + esc(sl.label || k) + (k === 'pad_badge' ? ' <small>up to ' + (sl.max || 3) + '</small>' : '') + '</h5>';
+        // A12 fix-up: a pad can have more badges on than it shows (a lapsed tier, a lowered limit) - say so
+        var bOn = ((S.equipped || {}).pad_badge || []).length, bShown = (S.shown_badges || []).length;
+        h += '<h5 class="pc-sh">' + esc(sl.emoji || '') + ' ' + esc(sl.label || k) + (k === 'pad_badge' ? ' <small>up to ' + (sl.max || 3) +
+          (S.shown_badges && bOn > bShown ? ' · ' + bOn + ' on, ' + bShown + ' shown' : '') + '</small>' : '') + '</h5>';
         h += '<div class="pc-grid">' + list.map(card).join('') + '</div>';
         if (k === 'pad_avatar') h += animBox();
       });

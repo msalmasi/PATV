@@ -3,7 +3,7 @@
   "slots": {
     "pad_frame": { "label": "Banner frame", "emoji": "🖼️", "max": 1, "where": "Around the pad's header, its /p card and its Top Pads row" },
     "pad_glow": { "label": "Name glow", "emoji": "✨", "max": 1, "where": "On the pad's name: header, /p card, Top Pads" },
-    "pad_badge": { "label": "Pad badge", "emoji": "🏷️", "max": 3, "where": "Small pills next to the pad's name (up to 3)" },
+    "pad_badge": { "label": "Pad badge", "emoji": "🏷️", "max": 3, "where": "Small pills next to the pad's name (up to 3, more with 📺 Prime Time)" },
     "pad_avatar": { "label": "Animated avatar", "emoji": "🎞️", "max": 1, "where": "Unlocks an animated avatar upload (WebP or GIF, 256 px)" }
   },
   "items": [
