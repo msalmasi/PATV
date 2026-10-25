@@ -288,7 +288,7 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
 | Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
 |---|---|---|---|
 | `pads/changed` (`hubpads.js`) | `pads` | `pad:<hub_pad_id>`, `pm:<hub_pad_id>/<userId>` | the pad: `{kind:"pad", pad_id, v1_room_id, slug, title, platform, visibility, nsfw, listed, tier, tier_until, owner, owner_since, owner_grant, chat_backend, history, flairs, fx, badges, badge_max, created_at}` or `{kind, pad_id, gone}`; a member: `{kind:"pm", pad_id, account, v1_user, status}` or `gone` |
-| `roles/changed` (`hubroles.js`) | `roles` | `acct:<userId>` | `{account, v1_user, role, cls, role_at}` (`staffroles.globalRolesOf`: the Pepe role of the linked Camfrog login) or `gone` |
+| `roles/changed` (`hubroles.js`) | `roles` | `acct:<userId>` | `{account, v1_user, role, cls, role_at}` (`staffroles.globalRolesOf`: the site's role by account - the higher of the site class, Admin / Staff / Assistant, and the Pepe role of the linked Camfrog login; no link needed since D11-site-roles, 1.99ael; a Banned or Bot class holds no role at all) or `gone` |
 | `bans/changed` (`hubbans.js`) | `bans` | `fb:<userId>/<room_id>` (`*` = site-wide) | `{kind:"feed_ban", scope, pad_id, v1_room_id, account, v1_user, feature, until, banned_at, active:true}` or `active:false` (no reason, no actor) |
 | `switches/changed` (`chatswitches.js`) | `switches` | `sw:<key>` | `{key, value, updated_at}` - `CHAT_HUB` only in S1 |
 
@@ -312,8 +312,9 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   `pad_hub` for OLD and NEW. Roles - `pepe_roles` (insert / delete / a change of `login` or `role` - the WHEN matters:
   `staffroles.botSync`'s upsert sets `role` on every write, so Pepe's per-minute sync of the same role posts nothing; one row
   per account whose `lower(trim(camfrogUsername))` is the login, found through `accountMerge.js`'s unique
-  `users_camfrog_login`) and `users` (a sign-up with a linked login, a change of `camfrogUsername` / `class`, the deletion
-  of a linked account; never points / xp / level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -,
+  `users_camfrog_login`) and `users` (a sign-up with a linked login or a role-giving class, a change of `camfrogUsername` /
+  `class` of any account, the deletion of a linked account or of one with a role-giving class - D11-site-roles, 1.99ael;
+  never points / xp / level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -,
   delete - unbans and v1's sweep -, update of `user_id, room_id, until`: OLD and NEW) and `pad_hub`'s insert (the room's pad
   bans: a pad re-created under a room id whose feed bans outlived the old pad, a bridged room banned in before it was
   registered - v1 enforces feed bans by room id, whatever the pad). Switches - `chat_switches` (insert, delete, update of
@@ -323,7 +324,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   trigger) is deleted first, so `pad_hub`'s DELETE trigger posts `pad:<displaced id>` in the re-key's transaction; after the
   move, the members and pad feed bans left at the new id (now the moved pad's) get a row each. The moving pad keeps its id.
 - **Snapshots:** `pads/changed` lists every registry row (`pad:`, by `hub_pad_id`) then every approved member (`pm:`);
-  `roles/changed` the accounts whose linked login has a role; `bans/changed` the live feed bans the hub can hold - site-wide
+  `roles/changed` the accounts with a role - a role-giving class (Admin, Staff, Assistant; D11-site-roles) or a linked
+  login with a Pepe role on an account that isn't Banned / Bot, each once; `bans/changed` the live feed bans the hub can hold - site-wide
   ones and pad ones whose room has a pad (`pad_hub`) - entities ordered in SQL (the entity's byte order isn't
   `(user_id, room_id)`'s); `switches/changed` every key (a key without a row is its default). A live pad ban on a room
   without a pad (a deleted pad's - `padcreate.removePad` leaves `feed_bans` - or a room the registry never knew) is left out:
@@ -374,10 +376,22 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   and in `pads.OLD_SLUGS`.
 - **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99aec`
   (the letter the release reached staging with; the shared golden keeps its test letter) - `1.99aei` from S1 F9 on,
-  which changes the seam's inbound side (the looks-only key, "Calls into v1" above).
+  which changes the seam's inbound side (the looks-only key, "Calls into v1" above), and `1.99ael` from D11-site-roles on
+  (roles/changed keeps its shape but carries the site's role by account; ADR 0007 D19 counts a change of meaning).
 - **Driver:** `pad`, `padMember`, `padLook`, `padChat`, `ownerGrant`, `premiumComp`, `stripeRenew`, `flair`, `role`,
-  `pepeRoles`, `signup`, `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
+  `pepeRoles`, `signup`, `siteClass` (D11-site-roles: the class picker, `staffroles.classUpdate`, as the driver's
+  owner-Admin), `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
   (`test/hubseam-driver-s1.test.js`).
+- **Site classes and roles (D11-site-roles, 1.99ael):** the class picker (Admin → Users → Assign a class) sets Admin /
+  Staff / Assistant directly on an account with no linked chat login, on the site's ladder: only a Pepe owner gives or
+  takes Admin, Admins give or take Staff and Assistant (`staffroles.classDirect`, audited as `class_direct`); a linked
+  account still goes through Pepe's roles. A class a linked login's role gave goes with the login: the trigger
+  `staffroles_unlink_class_v1` drops it to `pleb` when `camfrogUsername` changes away from a login `pepe_roles` has (an
+  unlink, a `!verify` that moves the login to another account, a relink, a merge), and `!verify` reconciles the new login
+  at once. A class given directly that a later link to a login with no role-list row keeps is still only an owner's to
+  take away (the linked path asks for `ownerHolds` when the login's role is below admin); a link to a login with a lower
+  role (trusted, a lower step, a tombstone) makes the class that login's at the same reconcile. The site's `Banned` and
+  `Bot` classes hold no global role, whatever the linked login's role.
 - **Tests:** `test/huboutbox-s1-l1.test.js` (every golden pads / roles / bans / switches row from its input, each trigger
   only with its switch on and only for its listed columns, OLD and NEW keys, the backfill, the displaced-row emit, the four
   golden snapshot pages and their paging, the poster, the heartbeat, the interlock both ways, `setBackend`; the review
@@ -957,6 +971,112 @@ so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; th
   registry webfont the layout doesn't load; `lineRequested` and `lineOf` agree (Express's query parser); the walkers that
   scan `public/js` skip the vendored directory. `test/pad-tabs.test.js` / `test/feed-compose.test.js`: `lineRequested`, the
   server's and the browser's `lineLive`.
+
+## S1: the sign-out sweep (F13, 1.99aef, `chatsweep.js`)
+
+S1 plan §2.1 F13 (C8-v1-signout-sweep, the owner's answer of 2026-10-25; ADR 0007 D14, CF §5.7). The widget keeps one
+IndexedDB database per account on this origin, `patv-chat:<hub account id>` (the platform repo's
+`packages/chat-core/src/storage/account.ts`: cached rooms and lines, the looks cache, the outbox, the sent journal). The widget
+deletes it itself when it hears the sign-out (a chat tab open: the hub closes 4003), and a later widget page deletes every
+other account's database once it signs in; but v1's signed-out pages load no widget, so a shared computer kept a signed-out
+account's lines for as long as nobody opened a widget page. Now v1 deletes them itself, on the same origin, without the
+widget. **1.99aef** on v1 staging 2026-10-25 (ADR 0007 D19: the branch held 1.99aef while O-20 1.99aee, A12 1.99aeg, F11
+1.99aeh, F9 1.99aei, the vendored widget 1.99aej and its polish 1.99aek reached staging, and nothing in v1 or the bot
+claims it, so F13 keeps it and lands after 1.99aek); review 1's fixes (2026-10-25) are part of the same letter. No seam shape change, so
+`huboutbox.VERSION` doesn't move and the hub's contract pin stays. The platform's docs: patv-platform PR #121 (the
+chat-core README says these database names are a contract with v1); the `patv-prefs` residual below is patv-platform
+issue #120.
+
+- **The marker:** every response that ends this browser's login goes through `loginCookie.clearLogin`, which now also sets
+  `patv_chat_sweep` (`chatsweep.mark`): Sign out (`POST /logout`, then `/`), Your devices' "Sign out" on this device and
+  "Sign out everywhere" (JSON, then the page goes to `/login`), a password reset, a password change that signs this device
+  out, a rename, an account deletion, `refreshLogin` finding the account gone, and `sessions.gate` seeing a revoked, expired
+  or unknown session. A sign-in never sets or clears it. Not HttpOnly (the page's script deletes it), `Secure`,
+  `SameSite=Lax`, path `/`, 90 days (as long as a login lasts). **Its value is always `1`** (review 1): the first draft put
+  the signed-out account's hub account id there for a fallback, but v1's ids are uuidv4, so that was the site account id,
+  in a cookie that isn't HttpOnly and outlives the sign-out wherever the sweep doesn't run (JavaScript off, a tab holding
+  the database, a delete that errors). On a shared computer the next person could read it. Now the cookie says nothing
+  about anyone. It is sent only to this site and never logged.
+- **Who gets the sweep:** `chatsweep.locals` (mounted right after `sessions.gate`) gives a request carrying the marker
+  `res.locals.chatSweep` **only when it has no live login** (review 1: the check no longer fails open): no
+  `req.loginSession` (the gate sets it only for a live session) and no login cookie a reader would accept (it verifies the
+  `jwt` cookie as `addUser` does, which covers the gate's own check failing on a database error). `clearLogin` also sets
+  it for the response it is on (that response ends the login). `layout.ejs` keeps its own check as the second one: only a
+  page rendered without a `user`. So a marker that outlived a sweep, followed by a sign-in, stays quiet for the whole
+  signed-in session, also on a layout page that forgets to pass `user` (none does today: every GET render route goes
+  through `addUser`). The script runs at the next sign-out.
+- **The sweep:** `views/partials/chat-sweep.ejs`, first in the head of such a **signed-out** page (the landing pages `/` and
+  `/login` included), is a static ES5 script. Nothing from the request is printed, and the marker's value is never read.
+  It deletes every database named exactly `patv-chat:<lower-case uuid>` from `indexedDB.databases()` (the widget's own
+  sweep rule; never `patv-device`, the device database that survives every wipe, never `patv-prefs`, and never another name
+  under the prefix), then deletes the marker. A delete that fails, throws or never finishes keeps the marker, so the next
+  signed-out page tries again, and so does a refused `databases()`. A blocked delete counts only once it succeeds
+  (`onblocked` is not "done"). Another tab's widget holding the database closes it on `versionchange`, so that delete
+  finishes. A signed-in page never carries the script (it would take the signed-in account's database too). A cached
+  signed-out page replayed later does nothing once the marker is gone.
+- **No `indexedDB.databases()`** (Firefox before 126, May 2024): the script can't list the databases, so the marker goes
+  and only the widget's own wipes reach them. The first draft deleted the one database the marker named; review 1 dropped
+  that fallback together with the account id in the cookie.
+- **Not Clear-Site-Data:** it can't name databases. `"storage"` would also clear local storage (drafts and preferences), the
+  device database and the notifications service worker.
+- **Not covered here:**
+  - An account switch without a sign-out (signing in as B over A) is the widget's job: its sign-in sweeps every other
+    account's database.
+  - With JavaScript off the sweep can't run. The marker (`1`) stays until a signed-out page runs it.
+  - A widget tab still open in another window can re-create `patv-chat:<acct>` after the sweep deleted it and removed the
+    marker. Its worker closes on `versionchange`, but `openAccountDb` / `withDb` reopen (and so create) the database on its
+    next operation (an incoming line, the `rc` write) before the hub's 4003 or the ticket's 401 makes the widget wipe it.
+    If that tab is closed in between, the database stays with no marker. The window is narrow, and the widget's next
+    sign-in sweep covers it.
+  - **The widget's `patv-prefs` database** (residual; review 1): it keeps per-room announce modes (store `kv`, key `prefs`,
+    field `announce`), which name rooms the account visited (ADR 0007 D14 as built). The widget forgets them
+    (`DevicePrefs.forgetRooms`) on every wipe it hears, sign-out included. A sign-out with no chat tab open leaves them,
+    and the next account's widget inherits them: a fresh worker has no previous account to report an `account_switch`
+    for. F13's text ("`patv-chat:*`") doesn't cover them, and v1 doesn't write into another app's store layout from an
+    inline script. **Platform follow-up:** keep the announce modes with the account (in `patv-chat:<acct>`, so the wipe
+    rule and this sweep cover them), or record the account in `patv-prefs` and `forgetRooms` when a different account
+    (or none) starts. Filed as patv-platform issue #120.
+- **No switch:** the script finds nothing to delete where the widget never ran (prod before `CHAT_HUB`), and a switch left off
+  would keep exactly the data this is for, after a `CHAT_HUB` rollback too.
+- **The privacy page** lists the cookie in section 8 ("It holds nothing about you or your account: its value is always 1"),
+  with a dated "25 October 2026" note in section 14 (additive: `terms.PRIVACY_UPDATED` moves, `VERSION` doesn't).
+- **Tests:**
+  - `test/chatsweep.test.js`:
+    - `clearLogin` sets the marker with its attributes, always `1` whatever the request knows; it never throws, and its log
+      line names no account.
+    - The locals guard: a live session, a login cookie the readers accept without a session, versus a tampered or expired
+      one, one with no account in it, and no `SECRET_KEY`.
+    - At route level, through the real `sessions.gate`, Your devices' routes and `refreshLogin`: Sign out, this device,
+      everywhere, a session revoked elsewhere, a replayed revoked cookie, and a deleted account. Signing out another device,
+      or signing in, sets nothing. A marker left over during a signed-in session puts no script on a layout page that
+      passes no `user`.
+    - `layout.ejs` and `login.ejs` print the partial in the head only when signed out with `chatSweep`.
+    - The script in a vm against a fake IndexedDB: only the account databases, whatever the marker's value. The marker is
+      kept on any failure. The harness fires `onblocked` before a blocked delete's success, and the marker is kept until
+      every blocked delete has succeeded. Also: no `databases()`, a refused `databases()`, empty markers, no IndexedDB, and
+      an unreadable cookie jar.
+    - The same rule as the platform's `account.ts` (`PATV_HUB_DIR=<platform checkout>` compares the source, and that
+      `patv-device` and `patv-prefs` keep their names).
+    - The land (1.99aef): since 1.99aej the widget is vendored here, so on every run (no `PATV_HUB_DIR` needed) every
+      bundle `public/js/patv-chat/manifest.json` lists must name the account databases `patv-chat:` with the same
+      lower-case uuid rule (the worker among them), and keep `patv-device` and `patv-prefs`: a widget release that
+      renames them fails this suite in the release that vendors it. Five deliberate breaks to the vendored bundles each
+      made it fail.
+    - The wiring: the order in `index.js`, `/logout`, and `clearLogin` as the only place the login cookie is cleared.
+  - Per route: `test/account-delete.test.js` (`POST /api/account/delete`: the marker on success, nothing on a refusal) and
+    `test/username-limit.test.js` (the rename; a password change that signs this device out, and one that doesn't).
+  - `test/tos-reports.test.js`: the privacy row, its change note and the date.
+  - Review 1's mutation check: 25 deliberate breaks to the script, `chatsweep.js`, `clearLogin`, the deletion, rename,
+    password-change and Your devices routes, `layout.ejs` and the privacy page, run against these suites. Every one made a
+    test fail.
+  - Checked by hand in Chromium, Firefox and WebKit over HTTPS with the real `clearLogin`, `chatsweep.locals` and
+    `login.ejs` (Playwright 1.64; first draft, and again after review 1's fixes):
+    - the sign-out sets `patv_chat_sweep=1` (seen in Chromium and Firefox; WebKit's API doesn't show a redirect's
+      `Set-Cookie`);
+    - the account databases gone within the landing page, and `patv-device`, `patv-prefs` and other names kept;
+    - a holder tab that closes on `versionchange` (as the widget does) closed, and the database was deleted;
+    - a holder tab that doesn't close kept the marker until it went away (Chromium, Firefox; WebKit deleted it anyway);
+    - a signed-in page deleted nothing.
 
 ## Fixtures and the contract suite
 

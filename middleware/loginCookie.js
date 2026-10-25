@@ -77,6 +77,9 @@ async function refreshLogin(res, decoded, getQuery) {
 function clearLogin(res) {
   // Same path as when it was set (the default "/"), or the browser keeps it.
   res.clearCookie("jwt", { httpOnly: true, secure: true, sameSite: "Lax" });
+  // S1 F13 (chatsweep.js): the next signed-out page deletes the chat widget's per-account databases in this browser (the
+  // marker says only "1", nothing about the account)
+  require("../chatsweep").mark(res);
 }
 
 module.exports = { issueLogin, renewLogin, refreshLogin, clearLogin, LOGIN_DAYS };

@@ -7,6 +7,7 @@
 //   * u/<name> refs, profile scopes (Hop, the gallery, the feed's seen state)
 //   * suggest returns the 46-character name; a mention of it notifies
 //   * sign-up and the Edit-profile rename refuse 49 characters and accept 48; the client copies of the limit agree
+//   * S1 F13 (chatsweep.js): the rename, and a password change that signs this device out, set the chat sweep's marker
 //   NODE_PATH=G:/PATV/node_modules node --test test/username-limit.test.js      (uses a temp DB)
 "use strict";
 const test = require("node:test");
@@ -132,9 +133,13 @@ function fakeReq(body, ip, user) {
   return req;
 }
 function fakeRes() {
-  const res = { redirected: null, cookie: () => {}, clearCookie: () => {}, redirect: (u) => { res.redirected = u; }, status: () => res, send: () => {} };
+  const res = { redirected: null, cookies: [], cleared: [], locals: {}, redirect: (u) => { res.redirected = u; }, status: () => res, send: () => {} };
+  res.cookie = (n, v, o) => { res.cookies.push({ n, v, o }); };
+  res.clearCookie = (n) => { res.cleared.push(n); };
   return res;
 }
+// S1 F13 (chatsweep.js): a route that signs this browser out also sets the chat sweep's marker (always "1")
+const sweepMarker = (res) => res.cookies.filter((c) => c.n === "patv_chat_sweep").map((c) => c.v);
 
 test("sign-up refuses 49 characters and accepts 48", async () => {
   const { registerUser } = require(path.join(repo, "user.controller"));
@@ -160,6 +165,7 @@ test("rename (Edit profile) refuses 49 characters and accepts 48", async () => {
   await updateUsername(req, res);
   assert.ok(req.flashes.some(([k, v]) => k === "error" && /3-48 characters/.test(v)), JSON.stringify(req.flashes));
   assert.equal((await getQuery("SELECT username FROM users WHERE userId = 'u_ren'"))[0].username, "renameme");
+  assert.deepEqual(sweepMarker(res), [], "a refused rename signs nobody out");
   const n48 = "R" + "e".repeat(47);
   req = fakeReq({ username: n48 }, "192.0.2.12", me);
   res = fakeRes();
@@ -167,6 +173,29 @@ test("rename (Edit profile) refuses 49 characters and accepts 48", async () => {
   for (let i = 0; i < 50 && !res.redirected; i++) await new Promise((r) => setTimeout(r, 20));   // its db.get callback
   assert.equal(res.redirected, "/login", JSON.stringify(req.flashes));
   assert.equal((await getQuery("SELECT username FROM users WHERE userId = 'u_ren'"))[0].username, n48);
+  // the rename signs this device out (it signs in again with the new name): the login goes, the chat sweep's marker is set
+  assert.deepEqual(res.cleared, ["jwt"]);
+  assert.deepEqual(sweepMarker(res), ["1"], "S1 F13: /login sweeps the chat databases");
+});
+
+test("S1 F13: a password change that signs this device out sets the chat sweep's marker; one that keeps it signed in doesn't", async () => {
+  const { updatePassword } = require(path.join(repo, "user.controller"));
+  await mkUser("u_pw", "pwchanger");
+  const me = { userId: "u_pw", username: "pwchanger", class: "pleb" };
+  // no server-side session on this device (an old cookie) + "Sign out my other devices": this device is signed out too
+  let req = fakeReq({ password: "a-new-long-password-1" }, "192.0.2.13", me);
+  let res = fakeRes();
+  await updatePassword(req, res);
+  assert.equal(res.redirected, "/login");
+  assert.deepEqual(res.cleared, ["jwt"]);
+  assert.deepEqual(sweepMarker(res), ["1"]);
+  // this device's session stays: nothing is cleared, no marker
+  req = Object.assign(fakeReq({ password: "a-newer-long-password-2" }, "192.0.2.13", me), { loginSession: { id: "s-here", userId: "u_pw" } });
+  res = fakeRes();
+  await updatePassword(req, res);
+  assert.notEqual(res.redirected, "/login");
+  assert.deepEqual(res.cleared, []);
+  assert.deepEqual(sweepMarker(res), []);
 });
 
 test("derived names (Twitch / Discord / Plex / SSO) are cut to 48; Pepe's rename and CF accounts use the same rule", () => {

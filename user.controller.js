@@ -730,6 +730,9 @@ async function verifyCamfrogLink(req, res) {
 
     // Complete the link with merge logic
     const result = await completeCamfrogLink(entry.userId, entry.camfrogUsername);
+    // D11-site-roles: the site class follows this login's role now (staffroles.reconcile - not 5 minutes later): a relink
+    // from a login with a role dropped the class it gave (staffroles' unlink trigger), and this one gives its own back
+    await require('./staffroles').reconcile([entry.camfrogUsername]).catch((e) => console.error('[CF-VERIFY] roles:', e.message));
 
     // Clear the pending entry
     await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code.toUpperCase()]);
