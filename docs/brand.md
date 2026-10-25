@@ -220,11 +220,12 @@ Gold always means PAT and prizes, so don't use it as an accent on a page that al
 
 ### Illustration style
 
-There are three families, and they share one house style: **chunky pixel art, crisp edges, a dark 1px outline, a limited bright palette, transparent background, readable at 32px.**
+There are four families, and they share one house style: **chunky pixel art, crisp edges, a dark 1px outline, a limited bright palette, transparent background, readable at 32px.**
 
 1. **Achievement badges** (`public/img/badges/ach/`). Painterly pixel art of a single object or scene (a vault spilling gold, a mic, a card hand), generated with Gemini using existing badges as style references, then cut out to a transparent background. One subject per badge, centred, no border.
 2. **Sticker packs** (`tools/gen-stickers.py`, `public/stickers/<pack>/`). Hand-coded SVG pixel art on a 24×24 grid (32×24 for text stickers), drawn as `<rect>` runs with `shape-rendering="crispEdges"`, deterministic so a re-run gives the same art. Palette: Pepe green #3fb950, outline #1f6f2e, highlight #7ee08a, plus kawaii pink, gold, blue and purple. Packs so far: Pixel Pepe, Kawaii Pond, PATV Reacts, Mic Life, High Roller, Movie Night.
 3. **Shop art** (`tools/gen-shop-art.py`). The same pixel family on a 48×36 grid, with a spotlight in the shelf colour and a corner chip ("1 MO", "LIFE").
+4. **Chat badge icons** (`tools/gen-badge-art.py`, `public/img/badges/supporter-*.png`, `bot.png`). 32×32 sprites drawn 4× as PNG (the chat widget loads `.png`): the 💚 Supporter medal in its tier colour (bronze, silver, gold) with a green heart, and Pepe's bot badge as a green robot head.
 
 **The rules for all art, generated or drawn:**
 - **No real brands, logos or trademarks.** Memberships are generic member cards, consoles and games are generic, and platform logos appear only as the official icons in UI chrome, never in art.

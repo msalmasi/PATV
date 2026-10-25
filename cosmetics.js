@@ -769,7 +769,7 @@ async function pageData(req) {
     if (me) {
       await syncUnlocks(me.userId).catch((e) => console.error("[cosmetics] sync:", e.message));
       d.me = { userId: me.userId, username: me.username, display: me.displayname || me.username, camfrog: me.camfrogUsername || null,
-               balance: Number(me.points_balance) || 0, level: Number(me.level) || 0, avatar: me.avatar || "/public/img/avatar.png" };
+               balance: Number(me.points_balance) || 0, level: Number(me.level) || 0, avatar: require("./userlook").avatarSrc(me.avatar) };   // 1.99aek: never the relative "avatar.png" default
       const inv = await inventory(me.userId);
       const groups = {};
       for (const i of inv.items) (groups[i.kind] = groups[i.kind] || []).push({ ...i, item: BY_ID[i.item_id], r: render(BY_ID[i.item_id]) });

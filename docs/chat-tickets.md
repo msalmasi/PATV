@@ -931,6 +931,12 @@ so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; th
   layout's own link already has Press Start 2P; D14 puts fonts in the page's head and the widget ships none, so until this the
   rounded and comic styles fell back to system faces). A link of its own, so a family Google refuses can't take the site's
   fonts down with it.
+- **Badge icons** (1.99aek, `badgeicons.js`): the widget draws a look's badge as `<assets><icon>.png`. The icons
+  `userlook.buildLooks` sends all exist: `badges/supporter-{bronze,silver,gold}` and `badges/bot`
+  (`public/img/badges/*.png`, drawn by `tools/gen-badge-art.py`) and `ach/<id>` (`/public/img/ach/` serves the achievement
+  art under `public/img/badges/ach/`, so the seam's key is unchanged). Before 1.99aek a supporter's, Pepe's or a showcased
+  achievement's badge was a 404. `test/badge-avatar-assets.test.js` checks every key against its file;
+  `tools/e2e/specs/widget-assets.spec.js` checks a signed-in member's widget pages in a real browser (desktop + iPhone).
 - **Owner decisions** (V2's calls, accepted by the owner 2026-10-24 - "I agree with all open design calls"; ADR 0007
   "Owner answers during the build"): signed out, a hub pad shows the sign-in card, not a read-only widget; `/p/<slug>/mod`
   asks v1 only for a sign-in and padaccess's view of the pad (the hub's `can()` decides the rest); the admin views use

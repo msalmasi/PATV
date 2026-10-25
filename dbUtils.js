@@ -20,7 +20,7 @@ function createTables() {
     db.run(`CREATE TABLE IF NOT EXISTS users (
         userId TEXT PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
-        avatar TEXT NOT NULL DEFAULT "avatar.png",
+        avatar TEXT NOT NULL DEFAULT "/public/img/avatar.png",
         class TEXT NOT NULL DEFAULT "pleb",
         displayname TEXT,
         email TEXT UNIQUE,
