@@ -875,10 +875,24 @@ so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; th
 - **`?line=` opens the Live tab** on a pad whose Live tab holds the hub's chat (any of the states above): the widget's own
   links - its copy-link sheet and the mentions drawer - are `/p/<slug>?line=<seq>` with no `?tab=` (v1's own line links say
   `?tab=live&line=`), and a site pad otherwise opens on its Feed, where the line can't be seen. `bridge.padTabsFor`'s
-  `lineLive` on the server and `PATVPadTabs.init`'s `lineLive` in the browser (`pad-tabs.js` `lineRequested`, `?v=8`): a
+  `lineLive` on the server and `PATVPadTabs.init`'s `lineLive` in the browser (`pad-tabs.js` `lineRequested`, `?v=9`): a
   `?tab=` or `#hash` still wins, and on every other pad - every pad before the switches - a `?line=` changes nothing (the
   page's init carries no `lineLive` then). `lineRequested` takes the line as the mount does (`chatwidget.lineOf`): one
-  `line` parameter, decoded, a positive safe integer - so Live opens only for a line the widget is handed.
+  `line` parameter, decoded, a positive safe integer - so only a line the widget is handed reaches its `line=`.
+- **The hub's chat is the pad's first tab, called Live (1.99aej).** The owner opened staging's `/p/staff` on a phone on
+  2026-10-25 and found no chat: the widget had never been vendored (below), and even with it the chat sat on a tab labelled
+  "Stage" behind the Feed, which a site pad opened on. On a pad whose Live tab holds the hub's chat (`lineLive`, any state
+  above) `pad-tabs.js` `defaultTab` now picks Live - as for an active Camfrog room: a Feed picked in the last 30 minutes,
+  `?tab=` and `#hash` still win - and `room.ejs` labels that tab Live (`pad.tab.live`) instead of Stage. Every other site
+  pad keeps "Stage" and opens on its Feed.
+- **The first vendored widget (1.99aej): `chat widget 0.1.0`** - the platform release `chat-widget/v0.1.0` (tag on
+  platform main 3b4af79; `release.yml` built and verified `patv-chat-0.1.0.tgz`), exported with
+  `pnpm --filter @patv/chat-widget export --from patv-chat-0.1.0.tgz --to <this checkout>/public/js/patv-chat`.
+  `.gitattributes` keeps `public/js/patv-chat/**` byte-exact (`-text`): the tab entry is checked against its SRI, and a
+  checkout with `core.autocrlf` would otherwise rewrite every file's line ends. On staging the hub's origins are
+  `HUB_RT_WS=wss://rt-staging.publicaccess.tv` and `HUB_RT_API=https://rt-staging.publicaccess.tv` in the site's `.env`
+  (the rt-staging edge allows the `https://staging.publicaccess.tv` origin for the socket and CORS); production sets
+  `wss://rt.publicaccess.tv` / `https://rt.publicaccess.tv` when the pilot reaches it.
 - **`<patv-modtools>`** (`chatwidget.toolsFor`) mounts **whatever `CHAT_HUB` says** (D3: mods keep working reports after a
   rollback), with a manifest, the origins and a signed-in hub account:
   - `/p/<slug>/mod` of a pad at `chat_backend = 'hub'` (`chatwidget.padModPage` in `pads.js`): Reports, Held, Mod log, Bans,
