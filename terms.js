@@ -23,7 +23,7 @@ const VERSION = "2026-10-11";   // 1.99nt: the user asked everyone to accept the
 // 1.99nn: the "Last updated" date is per page and moves without VERSION: an additive change (the §10 premium,
 // donations and prizes section) updates the date but asks nobody to accept again. Bump VERSION too to re-ask.
 const UPDATED = "11 October 2026";                 // /terms
-const PRIVACY_UPDATED = "20 October 2026";         // /privacy (photos sent to Pepe in DMs - additive, VERSION unchanged; the owner's rule of 2026-10-19 (1.99add refix 4 + the chat-history owner change): incognito hides who, not what - "someone"; !bridge hide left out - additive, VERSION unchanged; CL11 + CL13: messages from Camfrog, the admin's own Camfrog log - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
+const PRIVACY_UPDATED = "25 October 2026";         // /privacy (S1 F13: the patv_chat_sweep sign-out cookie in section 8 - additive, VERSION unchanged; photos sent to Pepe in DMs - additive, VERSION unchanged; the owner's rule of 2026-10-19 (1.99add refix 4 + the chat-history owner change): incognito hides who, not what - "someone"; !bridge hide left out - additive, VERSION unchanged; CL11 + CL13: messages from Camfrog, the admin's own Camfrog log - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
 
 let ready = null;
 function init() {
