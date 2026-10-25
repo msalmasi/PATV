@@ -274,7 +274,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   `padflair.hubDefsMany` (the user flairs: one query per 400 pads, since the builder runs inside the poster's and the
   snapshot's transaction), `pad_looks.cosmetics` through `padlook.parseCosmetics` and the `padcosmetics` catalog
   (`fx {frame, glow}` and `badges`, each `{.., perk}`: the hub draws them by `padcosmetics.fx()`'s rule) and
-  `badge_max {free: 3, prime: 3 + prime_extra_badges}`. A tier lapsing or a config change needs no row (the payload carries
+  `badge_max {free: 3, prime: 3 + prime_extra_badges}` (`padcosmetics.badgeMax()`; since A12, below, `parseCosmetics` keeps
+  up to `badge_max.prime` badges, so a Prime Time pad's 4th and 5th reach the hub). A tier lapsing or a config change needs no row (the payload carries
   `tier_until`; the 10-minute snapshot carries the rest). A member status v1 doesn't know posts `removed` (it grants nothing).
 - **Triggers** (all gated by the topic's switch, `(topic, entity)` only, an UPDATE only for its listed columns and only when
   one changed): pads - `rooms_registry` (insert; update of `room_id, slug, title, platform, owner_kind, owner_user_id,
@@ -367,6 +368,18 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
 - **Turn-on (Q7, staging):** hub → v1 direction wired → `JOURNAL_ENABLED` → `privacy` → `erasure`, `export` → `pads` →
   `roles` → `bans` → `identity` → `looks` → `switches`, each once its hub topic is live and has bootstrapped; then
   `CHAT_HUB` on at `/admin/chat` with only the staging canary / staff pads at `hub`.
+- **A12 - pad badges up to `badge_max` (the owner's call 12, 2026-10-25; 1.99aeg, tentative until it reaches staging,
+  ADR 0007 D19):** Q4's review found v1 kept at most 3 pad badges (`padlook.parseCosmetics` cut the list on every read and
+  write) though Prime Time pays for `prime_extra_badges` (2) more, so equip allowed a 4th and 5th that the write then
+  dropped, and the hub's `badge_max.prime` (5) was never reached. Now `parseCosmetics` keeps up to `badge_max.prime`
+  (`padcosmetics.badgeMax()`: `MAX_BADGES` + `premium.primeExtraBadges()`, the same source `pads/changed`'s `badge_max`
+  reads) for every pad. Equip still holds each pad to its own cap (`maxBadges`: 3, or 5 while it has Prime Time); the
+  drawing cuts to the tier's cap (`padcosmetics.fx`, and the hub by seam plan §12.4's rule), so a pad whose tier lapses keeps its
+  extra badges equipped and undrawn, and they draw again when the tier comes back. If the config lowers
+  `prime_extra_badges`, the reads cut to the new cap, and the next write keeps only that many. No change to the seam's shape
+  (`badges` was already ≤ 8 and `badge_max` already sent), so `huboutbox.VERSION` stays 1.99aec. Tests:
+  `test/premium.test.js` (five stored / drawn / mirrored, a 6th refused, the cap follows the config, a lapse keeps them),
+  `test/huboutbox-s1-l1.test.js` (the five reach `pads/changed` in equip order; a lapse still sends them).
 
 ## S1: identity, looks, the looks call, text style (release L3, 1.99ads)
 

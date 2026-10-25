@@ -32,7 +32,8 @@
 //
 // 1.99iv PRIME TIME (premium.js): items with "perk": "prime_time" are never sold - a pad has them while it has 📺 Prime
 // Time (equip like any other; they stop rendering when it lapses and come back with it). A Prime Time pad also gets
-// the automatic "📺 Prime Time" badge (not counted) and premium padPerks().extraBadges more badge slots.
+// the automatic "📺 Prime Time" badge (not counted) and premium padPerks().extraBadges more badge slots (A12: they are
+// stored - padlook.parseCosmetics keeps up to badgeMax().prime - and stay equipped, undrawn, while the tier is lapsed).
 // 1.99qp 💎 PRIME TIME PLUS: "perk": "prime_plus" items come with Plus only; a Plus pad also has every Prime Time perk item
 // and its automatic badge reads "💎 Prime Time Plus" instead.
 "use strict";
@@ -110,6 +111,17 @@ const onSale = (item, t = now()) => !!item && !item.perk && !item.retired && ite
 // 1.99iv: Prime Time (premium.js) - perk items + extra badge slots while the pad has it
 const isPrime = (roomId) => { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } };
 const maxBadges = (roomId) => { try { return MAX_BADGES + require("./premium").padPerks(roomId).extraBadges; } catch (e) { return MAX_BADGES; } };
+/**
+ * A12 (S1 call 12, owner 2026-10-25): the pad badge caps {free, prime} - MAX_BADGES, and MAX_BADGES + premium's
+ * prime_extra_badges (5 by default). The hub's badge_max (hubpads) is this; equip holds a pad to its own (maxBadges: prime
+ * while it has Prime Time); pad_looks.cosmetics keeps up to `prime` for every pad (padlook.parseCosmetics), so a pad whose
+ * Prime Time lapses keeps its 4th and 5th badges equipped, undrawn (fx cuts to the tier's cap), until the tier comes back.
+ */
+function badgeMax() {
+  let extra = 0;
+  try { extra = Math.max(0, Math.floor(Number(require("./premium").primeExtraBadges()) || 0)); } catch (e) { extra = 0; }
+  return { free: MAX_BADGES, prime: MAX_BADGES + extra };
+}
 const isPlus = (roomId) => { try { return require("./premium").isPrimePlus(roomId); } catch (e) { return false; } };
 const perkOk = (item, roomId) => !item.perk || (item.perk === "prime_time" && isPrime(roomId)) || (item.perk === "prime_plus" && isPlus(roomId));
 
@@ -447,7 +459,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, buy, equip, decline, padItems, hasItem, fx, badgeHtml, catalog, state, onSale, seasonState, buildCatalog, loadCatalog, setPay, errBody,
-  giftNotice, Refuse, ROUTING, SLOT_KINDS, MAX_BADGES, FX,
+  giftNotice, Refuse, ROUTING, SLOT_KINDS, MAX_BADGES, badgeMax, FX,
   get CAT() { return CAT; },
   _setCatalog: (c) => { CAT = c || loadCatalog(); },
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

@@ -287,6 +287,56 @@ test("Prime Time perks on the pad: its items equip only while it's on, +2 badge 
   assert.ok(st.has.includes("pt_frame"));
 });
 
+test("A12 (S1 call 12): a Prime Time pad keeps badge_max.prime (5) pad badges - stored, drawn, mirrored; a 6th is refused; a lapse hides the extra ones and keeps them", async () => {
+  const PL = require(path.join(repo, "padlook"));
+  const HP = require(path.join(repo, "hubpads"));
+  // the drawn pills' texts, in order (padcosmetics.badgeHtml)
+  const pills = (html) => [...String(html).matchAll(/<span class="pfx-b(?: pfx-b-p[tp])?">(?:<span aria-hidden="true">[^<]*<\/span>)?([^<]*)<\/span>/g)].map((m) => m[1]);
+  const stored = async () => JSON.parse((await getQuery("SELECT cosmetics FROM pad_looks WHERE room_id = ?", [PLANT]))[0].cosmetics).pad_badge;
+  assert.deepEqual(PC.badgeMax(), { free: 3, prime: 5 }, "the hub's badge_max: 3, and 3 + prime_extra_badges");
+  assert.equal(PR.isPrime(PLANT), true);
+  for (const b of ["pb_est2026", "pb_community", "pb_talk"]) await PC.buy(owner, PLANT, b, { ref: ref() });
+  const five = ["pb_est2026", "pt_onair", "pb_community", "pt_premiere", "pb_talk"];
+  let c;
+  for (const b of five) c = await PC.equip(owner, PLANT, b, true);
+  assert.deepEqual(c.pad_badge, five, "all five come back from the write (it used to keep 3)");
+  assert.deepEqual(await stored(), five, "pad_looks.cosmetics holds all five");
+  assert.deepEqual(PL.cosmeticsOf(PLANT).pad_badge, five, "and they read back");
+  assert.deepEqual(pills(PC.fx(PLANT).badges), ["Prime Time", "Est. 2026", "On Air", "Community", "Premiere", "Talk"], "drawn: the automatic badge + five");
+  // the seam payload follows (hubpads reads pad_looks.cosmetics through padlook.parseCosmetics)
+  assert.deepEqual(HP.cosmeticsOf(JSON.stringify({ pad_badge: five })).badges.map((b) => b.id), five);
+  // a 6th: refused at the pad's cap; raw input past badge_max.prime is never kept
+  const real = PC.CAT;
+  PC._setCatalog(PC.buildCatalog({ items: [...real.items, { id: "pb_six", kind: "pad_badge", name: "Six", rarity: "common", price: 25000, style: { text: "Six" } }] }, real.rarities));
+  try {
+    await PC.buy(owner, PLANT, "pb_six", { ref: ref() });
+    await assert.rejects(PC.equip(owner, PLANT, "pb_six", true), (e) => e.status === 409 && /Up to 5 badges/.test(e.message));
+    assert.deepEqual(PL.parseCosmetics(JSON.stringify({ pad_badge: [...five, "pb_six", "pb_est2026"] })).pad_badge, five, "deduped, cut at 5");
+    // the cap follows premium's prime_extra_badges (one source with the seam's badge_max)
+    await PR.setConfig({ prime_extra_badges: 3 }, "test");
+    try {
+      assert.deepEqual(PC.badgeMax(), { free: 3, prime: 6 });
+      c = await PC.equip(owner, PLANT, "pb_six", true);
+      assert.deepEqual(c.pad_badge, [...five, "pb_six"]);
+      c = await PC.equip(owner, PLANT, "pb_six", false);
+    } finally { await PR.setConfig({ prime_extra_badges: 2 }, "test"); }
+    assert.deepEqual(c.pad_badge, five);
+    // the tier lapses: the two Prime Time badges stop drawing and the free cap (3) applies; all five stay equipped
+    t = T0 + 400 * DAY;
+    try {
+      assert.equal(PR.isPrime(PLANT), false);
+      assert.deepEqual(pills(PC.fx(PLANT).badges), ["Est. 2026", "Community", "Talk"]);
+      await assert.rejects(PC.equip(owner, PLANT, "pb_six", true), (e) => e.status === 409 && /Up to 3 badges/.test(e.message));
+      c = await PC.equip(owner, PLANT, "pb_talk", true);          // a write while lapsed (already on) keeps the other four
+      assert.deepEqual(c.pad_badge, five);
+      assert.deepEqual(await stored(), five);
+      const st = await PC.state(rooms.getCached(PLANT), owner);
+      assert.deepEqual([st.slots.pad_badge.max, st.equipped.pad_badge], [3, five], "the sheet: the free cap, all five on (take some off)");
+    } finally { t = T0; }
+    assert.deepEqual(pills(PC.fx(PLANT).badges), ["Prime Time", "Est. 2026", "On Air", "Community", "Premiere", "Talk"], "back with the tier");
+  } finally { PC._setCatalog(real); }
+});
+
 test("HTTP: buy + state + renew toggle, same-site JSON only; admin view is staff-only", async () => {
   const s0 = await req("GET", "/api/premium/state?pad=" + PLANT, { user: "fan" });
   assert.equal(s0.status, 200);

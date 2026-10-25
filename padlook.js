@@ -26,7 +26,8 @@
 // near-black / white reads better (>= 4.5:1 too).
 //
 // 1.99ew premium pad cosmetics (padcosmetics.js): pad_looks.cosmetics holds what's EQUIPPED ({pad_frame, pad_glow,
-// pad_avatar: item id, pad_badge: [up to 3 ids]}; what a pad owns is padcosmetics' pad_cosmetic_items). The ANIMATED
+// pad_avatar: item id, pad_badge: [up to padcosmetics.badgeMax().prime ids - 5 by default; A12]}; what a pad owns is
+// padcosmetics' pad_cosmetic_items). The ANIMATED
 // AVATAR (item pa_animated, kind pad_avatar) is one more upload kind, "avatar_anim", through this same pipeline (chunks,
 // magic-byte sniff, the same safety hook): animated GIF / WebP only, re-encoded by sharp to a 256 px square ANIMATED
 // webp (metadata stripped, at most ANIM_MAX_FRAMES frames, the output capped at ANIM_MAX_OUT - quality steps down,
@@ -152,6 +153,15 @@ function cosmeticsOf(roomId) {
   const r = CACHE.get(String(roomId || ""));
   return parseCosmetics(r && r.cosmetics);
 }
+/**
+ * A12 (S1 call 12, owner 2026-10-25): how many pad badges pad_looks.cosmetics keeps - the hub's badge_max.prime
+ * (padcosmetics.badgeMax: 3 + premium's prime_extra_badges, 5 by default), for every pad. It was 3, so a Prime Time pad's
+ * 4th and 5th badge were cut on the write after equip allowed them. Equip still holds each pad to its own cap (3, or 5 while
+ * it has Prime Time), and the drawing (padcosmetics.fx, the hub) cuts to the tier's cap. 3 when padcosmetics can't load.
+ */
+function badgeCap() {
+  try { return require("./padcosmetics").badgeMax().prime; } catch (e) { return 3; }
+}
 function parseCosmetics(raw) {
   let c = null;
   try { c = raw ? JSON.parse(raw) : null; } catch (e) { c = null; }
@@ -159,7 +169,7 @@ function parseCosmetics(raw) {
   const o = { pad_frame: null, pad_glow: null, pad_avatar: null, pad_badge: [] };
   if (c && typeof c === "object") {
     o.pad_frame = id(c.pad_frame); o.pad_glow = id(c.pad_glow); o.pad_avatar = id(c.pad_avatar);
-    o.pad_badge = Array.isArray(c.pad_badge) ? [...new Set(c.pad_badge.map(id).filter(Boolean))].slice(0, 3) : [];
+    o.pad_badge = Array.isArray(c.pad_badge) ? [...new Set(c.pad_badge.map(id).filter(Boolean))].slice(0, badgeCap()) : [];
   }
   return o;
 }

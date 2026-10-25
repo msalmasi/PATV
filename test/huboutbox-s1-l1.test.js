@@ -182,6 +182,27 @@ test("pads: tier from the database rows (premium.endsAt): a Stripe renewal (stri
   assert.deepEqual(await tierAt(AT), ["plus", AT + 20 * DAY]);
 });
 
+test("A12 (S1 call 12): a Plus pad's five equipped badges reach the seam - badge_max.prime of them, in equip order; a lapse sends them all", async () => {
+  const id = "pad:" + PAD.frogpond;
+  const PL = require(path.join(repo, "padlook"));
+  const five = ["pp_headliner", "pb_est2026", "pt_onair", "pb_community", "pp_redcarpet"];
+  await PL.setCosmetics("patv:frogpond", { pad_frame: "pp_frame", pad_glow: "pg_gold", pad_badge: [...five, "pb_talk"] }, "alice");
+  try {
+    const p = (await HP.build([id], AT)).get(id);
+    assert.deepEqual(p.badge_max, { free: 3, prime: 5 });
+    assert.deepEqual(p.badges, [{ id: "pp_headliner", perk: "prime_plus" }, { id: "pb_est2026", perk: null }, { id: "pt_onair", perk: "prime_time" },
+                                { id: "pb_community", perk: null }, { id: "pp_redcarpet", perk: "prime_plus" }],
+                     "five (v1 kept 3 before), equip order; the sixth, past badge_max.prime, was never stored");
+    const later = (await HP.build([id], AT + 21 * DAY)).get(id);
+    assert.deepEqual([later.tier, later.badges.length, later.badge_max], ["free", 5, { free: 3, prime: 5 }],
+                     "the comp ends: v1 writes nothing and still sends all five - the hub draws badge_max.free of the live ones");
+  } finally {
+    const F = golden("pads: a user-owned Prime Time Plus pad with chat settings, flairs, fx and badges").input;
+    await PL.setCosmetics("patv:frogpond", { pad_frame: F.equip.pad_frame, pad_glow: F.equip.pad_glow, pad_badge: F.equip.pad_badge }, "alice");
+  }
+  assert.deepEqual((await HP.build([id], AT)).get(id), goldenRow("pads/changed", id).row.payload, "back to the golden row");
+});
+
 test("roles: the builder produces every golden roles row (staffroles.globalRolesOf: the linked login's Pepe role)", async () => {
   const want = S1.rows.filter((r) => r.row.topic === "roles/changed");
   assert.equal(want.length, 4);

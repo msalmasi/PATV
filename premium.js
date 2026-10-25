@@ -467,6 +467,9 @@ async function passCamfrogs(t = now()) {
   }
   return [...out].sort();
 }
+/** A12 (S1 call 12): the badge slots Prime Time adds (the config's prime_extra_badges, 0..5) - padcosmetics.badgeMax's input,
+ *  read without config()'s copy (padlook.parseCosmetics asks on every read of a pad's cosmetics). */
+const primeExtraBadges = () => CONFIG.prime_extra_badges;
 /** The perks a pad / an account gets right now (other modules ask this, never the tables). */
 function padPerks(roomId) {
   const on = isPrime(roomId), plus = isPrimePlus(roomId);
@@ -1243,7 +1246,7 @@ module.exports = {
   retention, noteRetention, cleanRetention, RETENTION_DEFAULTS,         // 1.99tc: Pepe's retention windows (the perk lists)
   retentionAt,                                                           // CL7: when his last report came (the archive purge's fail-safe)
   RETENTION_TIER_KEYS,                                                   // CL7 fix-up: the windows a fresh report must name, valid
-  isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
+  isPrime, isPrimePlus, padTier, primeExtraBadges, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   subsFor,             // S1 Q5b: the chat hub's looks (Season Pass perk ends, Plus pads)
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
