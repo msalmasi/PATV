@@ -180,12 +180,15 @@ async function pinGate(roomId, login, t = now()) {
   if (noUntil(roomId, login, t)) return "declined";
   return (await pending(roomId, login, "pin", t)) ? "waiting" : "ask";
 }
-/** Level off: ask `login` whether room `roomId` may put their cam up (`actor` asked). -> the ask | null (they can't be asked) */
-async function askPin({ roomId, login, actor, display }, t = now()) {
+/** Level off: ask `login` whether room `roomId` may put their cam up (`actor` asked). -> the ask | null (they can't be asked)
+ *  mfix: target "mic" = a 📌 pin on the pad's mic stage (micfollow.pinPut) - noted as slot_id "mic", so an Allow pins it there. */
+const MIC_TARGET = "mic";
+async function askPin({ roomId, login, actor, display, target = null }, t = now()) {
   await init();
   const r = await reach(login);
   if (!r.userId) return null;                   // "off" is set on the website: no linked account left = nobody to ask
-  const a = await newAsk({ kind: "pin", roomId, login, userId: r.userId, actorId: actor && actor.userId, actorName: actor && (actor.username || actor.userId), ms: ASK_MS }, t);
+  const a = await newAsk({ kind: "pin", roomId, login, userId: r.userId, actorId: actor && actor.userId, actorName: actor && (actor.username || actor.userId), ms: ASK_MS,
+                           slotId: target === MIC_TARGET ? MIC_TARGET : null }, t);
   const P = padInfo(roomId);
   await tell(a, { userId: r.userId, title: `${P.title} wants to put your cam on its Stage on PATV`,
                   body: `Allow or No within ${Math.round(ASK_MS / 60000)} minutes in Settings → Privacy - nothing goes up without your OK.` + chatHint() });
@@ -284,8 +287,10 @@ async function answer(id, ans, who = {}, via = "web", t = now()) {
     try {
       const actor = a.actor_id ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [a.actor_id]))[0] : null;
       if (actor && (await require("./rooms").canManage(actor, a.room_id))) {
-        const r = await MS().camOpen(actor, { room: a.room_id, login: a.login });
-        out.put = !!(r && r.slot);
+        // mfix: an ask for a 📌 pin on the mic stage pins it there (micfollow.pinPut - the mic stage's own rules on top)
+        const r = a.slot_id === MIC_TARGET ? await require("./micfollow").pinPut(actor, a.room_id, a.login, t, { fromAsk: true })
+          : await MS().camOpen(actor, { room: a.room_id, login: a.login });
+        out.put = !!(r && (r.slot || r.pinned));
       }
     } catch (e) { out.put = false; out.put_error = e && e.refuse ? e.message : null; if (!(e && e.refuse)) console.error("[stagepin] put:", e.message); }
   }

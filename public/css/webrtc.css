@@ -58,8 +58,8 @@
                          border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.6); color: #fff; font: bold 15px var(--ds-font); }
 .player .mf-stage[data-layout=pip] .mf-grid { display: block; }
 .player .mf-stage[data-layout=pip] .mf-tile { position: absolute; inset: 0; }
-.player .mf-stage[data-layout=pip] .mf-tile:not(.newest) { inset: auto 8px 8px auto; width: 30%; height: 30%; z-index: 3; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; }
-.player .mf-stage[data-layout=pip] .mf-tile.newest { z-index: 1; }
+.player .mf-stage[data-layout=pip] .mf-tile:not(.main) { inset: auto 8px 8px auto; width: 30%; height: 30%; z-index: 3; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; }
+.player .mf-stage[data-layout=pip] .mf-tile.main { z-index: 1; }
 .player .mf-stage .mf-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 86%; text-align: center; z-index: 5;
                              background: rgba(0,0,0,.75); padding: 8px 12px; border-radius: 10px; font-size: 14px; }
 .player .mf-stage .mf-note:empty, .player .mf-stage .mf-note[hidden] { display: none; }
@@ -103,7 +103,7 @@
 /* narrow boxes: no new rows (the stage height never changes); grid9 names shorten (the full name stays in the label for
    screen readers); the PiP inset grows; on grid4 / grid9 the per-tile ✕ moves into ⋯ Manage */
 .player .mf-stage.narrow .mf-tile .mf-label { left: 3px; bottom: 3px; padding: 1px 6px; font-size: 11.5px; }
-.player .mf-stage.narrow[data-layout=pip] .mf-tile:not(.newest) { width: 38%; height: 38%; }
+.player .mf-stage.narrow[data-layout=pip] .mf-tile:not(.main) { width: 38%; height: 38%; }
 .player .mf-stage.narrow[data-layout=grid9] .mf-tile .mf-x { display: none; }
 .player .mf-stage[data-layout=grid9] .mf-tile .mf-av { width: 28px; height: 28px; font-size: 12px; }
 .player .mf-stage[data-layout=grid9] .mf-tile .mf-why { font-size: 11.5px; line-height: 1.2; }
@@ -117,5 +117,23 @@
 /* narrow grids under the bar: rows are shorter still - the avatar goes, the reason stays */
 .player .mf-stage.barred.narrow[data-layout=grid4] .mf-tile .mf-av { display: none; }
 .player .mf-stage.narrow[data-layout=grid4] .mf-tile .mf-x { display: none; }       /* ✕ is in ⋯ Manage, ⚑ in the bar there (as on grid9) */
+/* mfix: tiles kept up while someone nobody can show (or Pepe) talks - dimmed, nobody ringed, a strip says who speaks */
+.player .mf-stage.mf-dim .mf-tile .rtc-video, .player .mf-stage.mf-dim .mf-tile .mf-still, .player .mf-stage.mf-dim .mf-tile .mf-card { opacity: .3; }
+.player .mf-stage .mf-strip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; max-width: 86%; padding: 8px 14px;
+                              border-radius: 999px; background: rgba(0,0,0,.82); color: #fff; font: bold 15px var(--ds-font); text-align: center; pointer-events: none; }
+.player .mf-stage .mf-strip[hidden] { display: none; }
+/* mfix: 📌 a pinned cam (fixed place), the owner's 📌 pin button beside ✕, the person's own 🙈 Take me off (never hidden on
+   narrow grids - it isn't .mf-x), the 📌 Pin a cam list in ⋯ Manage */
+.player .mf-tile .mf-pin { font-size: 12px; }
+.player .mf-stage .mf-tile .mf-pn { right: 54px; }
+.player .mf-stage .mf-tile .mf-off { position: absolute; right: 4px; bottom: 34px; z-index: 4; min-height: 44px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+                                     border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.7); color: #fff; font: bold 13px var(--ds-font); }
+.player .mf-stage .mf-tile .mf-off[hidden] { display: none; }
+.player .mf-stage .mf-tile .mf-off:focus-visible { outline: 2px solid var(--ds-green-2, #7bd88f); outline-offset: 2px; }
+.player .mf-stage .mf-pins { display: grid; gap: 4px; }
+.player .mf-stage .mf-pins[hidden] { display: none; }
+.player .mf-stage .mf-pins li { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.player .mf-stage .mf-pn-name { font-weight: bold; }
+.player .mf-stage .mf-pn-state { color: #bbb; font-size: 12px; }
 @media (prefers-reduced-motion: no-preference) { .player .mf-tile.newest::after { transition: opacity .2s ease; } }
 @media (prefers-reduced-motion: reduce) { .player .mf-stage *, .player .mf-stage { transition: none !important; animation: none !important; } }

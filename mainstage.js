@@ -2168,7 +2168,7 @@ module.exports = {
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf, playUrlOf, whipRelayed, RTMP_PLAY, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
-  camOpen, camBeat, camCandidates, slotsFor,
+  camOpen, camBeat, camCandidates, slotsFor, camNotify,      // mfix: camNotify - a 📌 pin on the mic stage tells the person the same way
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

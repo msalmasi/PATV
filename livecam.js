@@ -67,6 +67,11 @@
 // (opts.ok -> "gone"); its release (stageDrop) ends a relay nobody else holds or watches at once (no linger); a ▶ Live
 // start that finds max_live full asks micfollow.yieldRelay first. Hooks: onEnd(fn(S, why)) after a session ends,
 // onOptout(fn(login, off)) after an opt-out change (a throwing hook is logged and ignored).
+// mfix: each session has an id of its own (S.sid) that rides want[] to Pepe and comes back on his refused[] lines - a
+// refusal Pepe keeps re-sending for a while (30 s) never ends a NEWER session of the same cam (a manual ▶ Live / cam slot
+// started right after a failed mic-stage open). A refusal of an EXACT open (refused[].x - the mic stage asked for it) of a
+// relay that a cam slot / a ▶ Live viewer / a pin also uses lets only the mic stage go (micfollow.onExactRefused): the relay
+// lives on for the others and Pepe opens it his ordinary way again.
 //
 // Path names share the room-audio family on MediaMTX (deploy/webrtc/mediamtx.yml "~^(room|stgr)-[0-9a-f]{16}$"), so no
 // MediaMTX change is needed: prod "room-<16 hex>", staging "stgr-<16 hex>", an HMAC of "live-cam-path:<room>|<login>"
@@ -88,6 +93,7 @@ const BOT_FRESH_MS = 20 * 1000;         // Pepe's poll within this long = he can
 const START_MS = 40 * 1000;             // a wanted cam Pepe hasn't reported live within this long -> "Pepe couldn't open it"
 const END_COOLDOWN_MS = 10 * 60 * 1000; // after an owner / mod / admin ends a relay
 const SYNC_FRESH_MS = 15 * 1000;
+const EXACT_REFUSAL_SLACK_MS = 3 * 1000;   // mfix review: refused[].age is measured when Pepe sends it (his poll's round trip)
 const AUDIT = "livecam_cfg";
 
 const FIELDS = Object.freeze({
@@ -303,7 +309,8 @@ function newSess(R, login, m, t) {
   const p = pathFor(R.id, login);
   const S = { key: keyOf(R.id, login), roomId: R.id, login, display: (m && m.display) || login, path: p, viewers: new Map(), createdAt: t,
               wantUntil: t + cfg().linger_s * 1000, liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null,
-              ended: 0, endWhy: null, holds: new Set(), lastHolds: null, mf: false, stageViewers: new Map() };
+              ended: 0, endWhy: null, holds: new Set(), lastHolds: null, mf: false, stageViewers: new Map(),
+              sid: crypto.randomBytes(6).toString("hex") };   // mfix: this session's id (want[].sid -> refused[] / live[])
   SESS.set(S.key, S);
   BY_PATH.set(p, S.key);
   return S;
@@ -798,7 +805,7 @@ async function stageHold(R, login, holderId, t = now(), opts = {}) {
   if (!S.holds) S.holds = new Set();
   const had = S.holds.has(H);
   S.holds.add(H);
-  if (opts.mf === true || isMfHolder(H)) { S.mf = true; S.mfEver = true; }
+  if (opts.mf === true || isMfHolder(H)) { S.mf = true; S.mfEver = true; if (!had) S.mfHeldAt = t; }   // mfix review: an exact refusal from before this hold is ignored
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
   if (!had) console.log(`[livecam] stage hold room=${R.id} target=${isMfHolder(H) ? "-" : login} holder=${isMfHolder(H) ? "mf" : H}`);
   return { display: m.display || login };
@@ -868,6 +875,10 @@ function mfState(roomId, login, t = now()) {
   const holds = S.holds ? [...S.holds] : [];
   return { state: stateOf(S, t), why: S.botWhy || null, exact, held: holds.includes(MF_PREFIX + roomId),
            mfOnly: holds.length > 0 && holds.every(isMfHolder) && !freshViewers(S, t).length, viewers: shownCount(freshStage(S, t)) };
+}
+/** mfix: does anything besides the mic stage use this relay - a cam slot / pin holder, or a fresh ▶ Live viewer? */
+function sharedBeyondMf(S, t = now()) {
+  return !!(S && ((S.holds && [...S.holds].some((h) => !isMfHolder(h))) || freshViewers(S, t).length > 0));
 }
 /** micfollow: relays held only by the mic stage (none of them for a slot or a ▶ Live viewer), site-wide. */
 function mfOnlyCount(t = now()) {
@@ -976,8 +987,24 @@ async function forBot(body, t = now()) {
   }
   for (const x of (Array.isArray(body.refused) ? body.refused.slice(0, 50) : [])) {
     const S = x && SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
-    if (!S || S.ended || seen.has(S.key)) continue;
+    if (!S || S.ended) continue;
+    // mfix: Pepe says which session it was about (he re-sends a refusal for 30 s): an older one's never ends this one
+    if (x.sid != null && str(x.sid, 24) !== S.sid) continue;
     const why = str(x.why, 30);
+    if (x.x === true && why !== "opted_out") {
+      // mfix review: an exact refusal from before the mic stage's latest hold of this cam is about an earlier hold (Pepe
+      // re-sends one for 30 s; the mic stage may re-hold after soft_retry_s) - never a second soft failure of the new hold
+      const age = Number(x.age);
+      if (Number.isFinite(age) && age >= 0 && S.mfHeldAt && t - age * 1000 < S.mfHeldAt - EXACT_REFUSAL_SLACK_MS) continue;
+      // mfix: an EXACT open failed (the mic stage asked for it) but a cam slot / ▶ Live viewer / pin uses the relay too - or
+      // (mfix review) the relay is live anyway (Pepe put a shared relay back the ordinary way after a failed exact re-open):
+      // only the mic stage lets go - the relay lives on for the others (opted_out ends it for all)
+      if (seen.has(S.key) || (TERMINAL.has(why) && sharedBeyondMf(S, t))) {
+        if (S.mf) { try { require("./micfollow").onExactRefused(S, why); } catch (e) { console.error("[livecam] micfollow:", e && e.message); } }
+        continue;
+      }
+    }
+    if (seen.has(S.key)) continue;
     S.botWhy = why;
     if (why === "opted_out") ownerClosed(S, why, t);
     else if (TERMINAL.has(why)) endSession(S, why, t);
@@ -993,9 +1020,11 @@ async function forBot(body, t = now()) {
       if (!key) continue;
       // 1.99aaf: ghosts aren't counted; ghost_only = nobody but staff in ghost mode watches -> Pepe says nothing in the room
       const fv = freshViewers(S, t), shown = shownCount(fv);
-      want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: key, path: S.path, viewers: Math.max(1, shown),
+      want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: key, path: S.path, viewers: Math.max(1, shown), sid: S.sid,
                   ...(fv.length && !shown && !held(S) ? { ghost_only: true } : {}),
                   ...(S.mf ? { mf: true } : {}),                                     // micfollow: open it by its exact name, never fuzzy
+                  // mfix review: a ▶ Live viewer / cam slot / pin uses it too - a failed exact re-open is put back the ordinary way
+                  ...(S.mf && sharedBeyondMf(S, t) ? { shared: true } : {}),
                   ...(optedOut(S.login) ? { bypass: true } : {}) });     // 1.99aak: Pepe publishes it for the ghost despite !livecam off
     }
   }
@@ -1292,6 +1321,7 @@ module.exports = {
   stageOkOk, bannedSet, subjectBanned,                                                                       // stagefix site (final round)
   mfState, mfOnlyCount, stageUnwatch, stageYield, stageDrop, cooling, liveCount, fitsBudget, onEnd, onOptout, keyOf, held, botOk, MF_PREFIX,   // micfollow
   dmBlockedSet,                                                                                              // train2 merge (micfollow's eligOf)
+  sharedBeyondMf,                                                                                            // mfix
   botMf: () => (BOT && BOT.mf) || 0, botPool: () => (BOT && BOT.pool) || null, enabled: () => cfg().enabled === true, cfg,
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,

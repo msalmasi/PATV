@@ -226,7 +226,8 @@ test("13. pictures: a live tile stays live; the newest gets a freed place; the p
   const liveOnes = w.S.tiles.filter((x) => x.video === "live").map((x) => x.login);
   assert.equal(liveOnes.length, 2);
   assert.equal(w.S.tiles.filter((x) => x.video === "still").length, 1, "one still left site-wide");
-  assert.equal(w.S.tiles.filter((x) => x.video === "card" && x.why === "full").length, 1);
+  // mfix: the card says WHY - here the pad's max_live (2 live places) is used up
+  assert.equal(w.S.tiles.filter((x) => x.video === "card" && x.why === "pad_cap").length, 1);
   // a newer speaker doesn't take a live picture away (stability)
   w.grab("e"); w.at(20); w.at(22);
   for (const l of liveOnes) assert.equal(v(l), "live", l + " keeps live");
@@ -239,22 +240,24 @@ test("13. pictures: a live tile stays live; the newest gets a freed place; the p
   assert.ok(acts.some((a) => a.a === "hold" && a.login === newestNoPic[0].login), "the freed place goes to the newest");
   // exact !== true (a ▶ Live relay from Pepe's older, fuzzy name match) is never SHOWN: held so Pepe checks it, "starting"
   // meanwhile, given up after EXACT_WAIT_MS (a card, no new hold during the backoff); cold opens need budget
-  const x = world({ site: { coldLeft: 0, stillsLeft: 0 } });
+  // (mfix: soft_fails_max 1 = the full backoff at the first give-up; test 32 has the soft retries)
+  const x = world({ site: { coldLeft: 0, stillsLeft: 0 }, C: { soft_fails_max: 1 } });
   x.grab("q"); x.live.set("q", "live"); x.exactNo.add("q"); x.at(0); x.at(2);
   assert.equal(x.S.tiles[0].video, "starting", "held for Pepe's exact check, never live");
-  x.run(3, 46);
+  x.run(3, 61);
   assert.equal(x.S.tiles[0].video, "starting");
-  const gaveUp = x.at(48);
+  const gaveUp = x.at(64);
   assert.ok(gaveUp.some((a) => a.a === "release" && a.login === "q"), "given up after the wait");
   assert.deepEqual([x.S.tiles[0].video, x.S.tiles[0].why], ["card", "failed"]);
   const n = x.actions.filter((a) => a.a === "hold").length;
-  x.run(49, 120);
+  x.run(65, 140);
   assert.equal(x.actions.filter((a) => a.a === "hold").length, n, "no new hold during the backoff");
   assert.ok(!x.S.tiles[0].pictured, "never had a picture");
   // cold_open off: no stills either (a still opens the cam too)
-  const y = world({ C: { cold_open: false }, site: { coldLeft: 0 } });
+  const y = world({ C: { cold_open: false }, site: { coldLeft: 0, coldWhy: "cold_off" } });
   y.grab("q"); y.at(0); y.at(2);
   assert.equal(y.S.tiles[0].video, "card");
+  assert.equal(y.S.tiles[0].why, "cold_off", "mfix: the card says live video for the mic stage is off, not 'full'");
   // off cam -> a name card
   const z = world(); z.offcam.add("q"); z.grab("q"); z.at(0); z.at(2);
   assert.deepEqual([z.S.tiles[0].video, z.S.tiles[0].why], ["card", "off_cam"]);
@@ -267,6 +270,7 @@ test("14. active: true once someone has a picture, stays true while anyone is on
   assert.equal(w.S.active, false, "only a name card: not active (OD-4)");
   w.offcam.delete("a"); w.live.set("a", "live"); w.at(3);
   assert.equal(w.S.tiles[0].video, "starting");
+  assert.equal(w.S.active, true, "mfix review: a cam that is opening (starting) already makes the stage the default ('First')");
   w.at(4); assert.equal(w.S.tiles[0].video, "live");
   assert.equal(w.S.active, true);
   w.offcam.add("a"); w.at(5);
@@ -356,7 +360,7 @@ test("16. RUN false clears everything; a stale sync is ridden out for stale_hold
 
 test("pad settings + site knobs normalize like the other settings (ranges, choices, the live-cam cap)", () => {
   const p = M.normalizePad({ on: "on", layout: "GRID", default_view: "tab", max_people: 12, max_live: 3 }, { maxLive: 2 });
-  assert.deepEqual(p.cfg, { on: true, layout: "grid", default_view: "tab", max_people: 9, max_live: 2 });
+  assert.deepEqual(p.cfg, { on: true, layout: "grid", default_view: "tab", max_people: 9, max_live: 2, keep_recent: 2 });
   assert.ok(p.errors.max_people && p.errors.max_live);
   assert.equal(M.normalizePad({ layout: "huge" }).errors.layout, "one of auto, single, split, grid, pip");
   const c = M.normalize({ min_hold_s: "3", cold_open: "off", max_changes_per_min: 50 });
@@ -365,13 +369,22 @@ test("pad settings + site knobs normalize like the other settings (ranges, choic
   assert.equal(c.cfg.max_changes_per_min, 20);
   assert.ok(c.errors.max_changes_per_min);
   assert.equal(M.DEFAULTS.enabled, false, "ships dark on prod");
+  // mfix (owner 2026-10-25): more live cams for the mic stage; mfix review: cold opens stay off on prod (staging: on) until staff
+  // switch them on at /stage/admin (the owner's OK / the spec's V-2, V-3, V-5)
   assert.equal(M.DEFAULTS.cold_open, false);
+  assert.deepEqual([M.DEFAULTS.relays_max, M.DEFAULTS.cold_opens_per_min, M.DEFAULTS.cold_opens_per_pad, M.DEFAULTS.max_live], [6, 10, 6, 6]);
+  assert.equal(M.PAD_FIELDS.max_live.max, 6);
+  // keep_recent: 0 / 1 / 2 / 5 minutes only
+  assert.equal(M.normalizePad({ keep_recent: "5" }).cfg.keep_recent, 5);
+  assert.equal(M.normalizePad({ keep_recent: 3 }).errors.keep_recent, "one of 0, 1, 2, 5");
+  assert.equal(M.normalizePad({ keep_recent: 3 }, { lenient: true }).cfg.keep_recent, 2);
+  assert.equal(M.normalizePad({ keep_recent: 0 }).cfg.keep_recent, 0);
   // a quiet voice-only room gets Pepe's snapshot only every 30 s (BRIDGE_SNAPSHOT_EVERY): fresh must cover that
   assert.ok(M.DEFAULTS.sync_fresh_s >= 45, "sync_fresh_s " + M.DEFAULTS.sync_fresh_s);
 });
 
 test("17. exact: a held relay that STOPS being exact comes off live at once (released, no live picture during the backoff)", () => {
-  const w = world({ site: { coldLeft: 9, stillsLeft: 0 } });
+  const w = world({ site: { coldLeft: 9, stillsLeft: 0 }, C: { soft_fails_max: 1 } });
   w.grab("a"); w.live.set("a", "live"); w.at(0); w.at(2);       // warm (someone's ▶ Live), Pepe verified it: exact
   w.at(3);
   assert.equal(w.S.tiles[0].video, "live");
@@ -440,7 +453,7 @@ test("20. Pepe's cam pool: cold opens and stills share poolLeft; a shed stops st
   w.at(0); w.at(2);
   const opened = w.S.tiles.filter((x) => x.video === "starting" || x.video === "still").length;
   assert.equal(opened, 2, "one cold open + one still = the pool share");
-  assert.equal(w.S.tiles.filter((x) => x.video === "card" && x.why === "full").length, 2);
+  assert.equal(w.S.tiles.filter((x) => x.video === "card" && (x.why === "pad_cap" || x.why === "pool")).length, 2, "mfix: the cards say why");
   // shed: Pepe refused a manual cam as full -> stills stop, no new cold opens or stills
   const s = world({ pad: { max_live: 1 }, site: { coldLeft: 9, stillsLeft: 9 } });
   s.grab("a"); s.grab("b"); s.at(0); s.at(2);
@@ -514,7 +527,7 @@ test("23. rule 10: a failed-open backoff (and an inexact block) ends when the pe
   w.grab("a"); w.at(0);
   w.t = S0 + 2000;
   M.step(w.S, w.input(), w.C, w.t);
-  M.holdDone(w.S, "a", false, "start_timeout", w.C, w.t);
+  M.holdDone(w.S, "a", false, "open_failed", w.C, w.t);          // (mfix: a hard failure - start_timeout is soft now)
   assert.deepEqual([w.S.tiles[0].video, w.S.tiles[0].why], ["card", "failed"]);
   w.held.delete("a"); w.live.delete("a");
   w.run(3, 20);
@@ -525,13 +538,13 @@ test("23. rule 10: a failed-open backoff (and an inexact block) ends when the pe
   const acts = w.at(22);
   assert.ok(acts.some((x) => x.a === "hold" && x.login === "a"), "cam off and on again: the backoff is over");
   // the same for "Pepe couldn't confirm it's exactly theirs"
-  const x = world({ site: { coldLeft: 0, stillsLeft: 0 } });
+  const x = world({ site: { coldLeft: 0, stillsLeft: 0 }, C: { soft_fails_max: 1 } });
   x.grab("q"); x.live.set("q", "live"); x.exactNo.add("q"); x.at(0); x.at(2);
-  x.run(3, 48);
+  x.run(3, 64);
   assert.equal(x.S.tiles[0].why, "failed");
   x.exactNo.delete("q");
-  x.offcam.add("q"); x.at(50); x.offcam.delete("q");
-  assert.ok(x.at(51).some((a) => a.a === "hold" && a.login === "q"), "inexact block over after off -> on");
+  x.offcam.add("q"); x.at(66); x.offcam.delete("q");
+  assert.ok(x.at(67).some((a) => a.a === "hold" && a.login === "q"), "inexact block over after off -> on");
 });
 
 test("24. a hold the mic stage itself withdrew after its awaits ('gone'): no backoff, no card reason - the next step decides", () => {
@@ -626,8 +639,29 @@ test("28. grab-spam (DF-37): 4 separate holds shorter than 5 s within 2 min -> o
   assert.ok(!v.actions.some((x) => x.a === "spam"), "merged re-grabs aren't separate holds");
 });
 
-test("29. speech nobody can show (DF-30): an unproven holder takes over -> the last speaker's tile gives way (no hand-over / idle hold), a neutral card", () => {
-  const w = world();
+test("29. speech nobody can show (DF-30), mfix: the tiles STAY, dimmed (S.speaking 'someone', nobody highlighted); unattributed_clear = the old give-way + neutral card", () => {
+  // mfix default: the last speaker's tile is NOT cleared while an unproven holder talks - the page dims it with "Someone else is
+  // speaking" and nobody is the newest speaker; it leaves on its own schedule (hand-over / idle hold)
+  const d = world();
+  d.grab("a"); d.at(0); d.at(2);
+  d.drop("a"); d.at(15);
+  const dI = () => Object.assign(d.input(), { others: [{ key: "x:ghost", since: S0 + 16000 }] });
+  const dstep = (sec) => { d.t = S0 + sec * 1000; const r = M.step(d.S, dI(), d.C, d.t); d.actions.push(...r.actions); return r.actions; };
+  dstep(16); dstep(18.5);
+  assert.deepEqual(d.logins(), ["a"], "kept on the stage");
+  assert.equal(d.S.speaking, "someone", "dimmed on the page");
+  assert.equal(M.newest(d.S), null, "nobody highlighted as the speaker");
+  assert.equal(d.S.neutral, null, "no neutral card while tiles are up");
+  dstep(30);
+  assert.deepEqual(d.logins(), ["a"], "the idle hold (20 s after the drop at 15) still runs");
+  dstep(36);
+  assert.deepEqual(d.logins(), [], "then it leaves on its own schedule");
+  assert.equal(d.S.neutral, "someone", "it left while the unproven holder spoke: the neutral card takes over");
+  d.t = S0 + 40000; M.step(d.S, d.input(), d.C, d.t);
+  assert.equal(d.S.neutral, null);
+  assert.equal(d.S.speaking, null);
+  // the old behaviour behind the site knob unattributed_clear
+  const w = world({ C: { unattributed_clear: true } });
   w.grab("a"); w.at(0); w.at(2);
   assert.deepEqual(w.logins(), ["a"]);
   w.drop("a"); w.at(15);                        // a dropped: the idle hold would keep a 20 s
@@ -645,11 +679,12 @@ test("29. speech nobody can show (DF-30): an unproven holder takes over -> the l
   w.t = S0 + 30000; M.step(w.S, w.input(), w.C, w.t);      // they let go
   assert.equal(w.S.neutral, null);
   // an idle stage never shows it (it replaces tiles, it isn't a new thing to look at)
-  const v = world();
+  const v = world({ C: { unattributed_clear: true } });
   v.t = S0; M.step(v.S, Object.assign(v.input(), { others: [{ key: "anon:someone", since: S0 - 60e3 }] }), v.C, v.t);
   assert.equal(v.S.neutral, null);
+  assert.equal(v.S.speaking, null, "and nothing to dim");
   // min on stage still applies: a tile added 3 s ago stays until min_on_stage_s
-  const m = world();
+  const m = world({ C: { unattributed_clear: true } });
   m.grab("a"); m.at(0); m.at(2); m.drop("a"); m.at(3);
   const mI = () => Object.assign(m.input(), { others: [{ key: "x:ghost", since: S0 }] });
   m.t = S0 + 5000; M.step(m.S, mI(), m.C, m.t);
@@ -657,25 +692,38 @@ test("29. speech nobody can show (DF-30): an unproven holder takes over -> the l
   m.t = S0 + 12000; M.step(m.S, mI(), m.C, m.t);
   assert.deepEqual(m.logins(), [], "then it gives way");
   // a proven holder who can't be shown (opted out / not noticed yet) speaking is the same as an unproven one
-  const p = world();
+  const p = world({ C: { unattributed_clear: true } });
   p.grab("a"); p.at(0); p.at(2); p.drop("a"); p.at(12);
   p.cuts.set("b", "notice"); p.grab("b"); p.at(13); p.at(15.5);
   assert.deepEqual(p.logins(), [], "b isn't shown yet - a's face doesn't stay up while b talks");
   assert.equal(p.S.neutral, "someone");
+  // ...and by default it dims instead
+  const q = world();
+  q.grab("a"); q.at(0); q.at(2); q.drop("a"); q.at(12);
+  q.cuts.set("b", "notice"); q.grab("b"); q.at(13); q.at(15.5);
+  assert.deepEqual(q.logins(), ["a"]);
+  assert.equal(q.S.speaking, "someone");
 });
 
-test("30. Pepe alone on the mic (DF-12): tiles give way to Pepe's card; a person grabbing it back ends it", () => {
-  const w = world();
-  w.grab("a"); w.at(0); w.at(2); w.drop("a"); w.at(14);
-  const I = (extra) => Object.assign(w.input(), { pepe: S0 + 15000 }, extra || {});
-  const step = (sec, extra) => { w.t = S0 + sec * 1000; return M.step(w.S, I(extra), w.C, w.t).actions; };
-  step(15); step(17.5);
-  assert.deepEqual(w.logins(), []);
-  assert.equal(w.S.neutral, "pepe");
-  assert.equal(M.hot(w.S, w.t), true, "the 1 s timer keeps stepping it");
-  w.grab("c"); step(30); step(33);
-  assert.deepEqual(w.logins(), ["c"]);
-  assert.equal(w.S.neutral, null, "a person on the stage: no card");
+test("30. Pepe alone on the mic (DF-12), mfix: his own mic-ups never clear the stage (S.speaking 'pepe', even with unattributed_clear); his card only once the tiles left", () => {
+  for (const C of [{}, { unattributed_clear: true }]) {
+    const w = world({ C });
+    w.grab("a"); w.at(0); w.at(2); w.drop("a"); w.at(14);
+    const I = (extra) => Object.assign(w.input(), { pepe: S0 + 15000 }, extra || {});
+    const step = (sec, extra) => { w.t = S0 + sec * 1000; return M.step(w.S, I(extra), w.C, w.t).actions; };
+    step(15); step(17.5);
+    assert.deepEqual(w.logins(), ["a"], "a stays while Pepe talks");
+    assert.equal(w.S.speaking, "pepe");
+    assert.equal(w.S.neutral, null);
+    assert.equal(M.hot(w.S, w.t), true, "the 1 s timer keeps stepping it");
+    step(35);
+    assert.deepEqual(w.logins(), [], "the idle hold ran out");
+    assert.equal(w.S.neutral, "pepe", "Pepe's card once nobody is left");
+    w.grab("c"); step(40); step(43);
+    assert.deepEqual(w.logins(), ["c"]);
+    assert.equal(w.S.neutral, null, "a person on the stage: no card");
+    assert.equal(w.S.speaking, null, "a proven holder speaks: nothing dimmed");
+  }
 });
 
 test("31. clearStage: everyone off now (relays released, spans closed 'cleared'), frozen; the cut cooldown applies after", () => {
@@ -689,4 +737,143 @@ test("31. clearStage: everyone off now (relays released, spans closed 'cleared')
   w.run(4, 60);
   assert.deepEqual(w.logins(), [], "frozen: nobody new");
   assert.ok(M.CUT.includes("blocked_owner"), "a person who blocked the pad owner is a CUT");
+});
+
+// ── mfix (owner 2026-10-25) ──
+test("32. mfix soft failures: busy / a stray window / a slow open retry after soft_retry_s (soft_fails_max times), then the full backoff; ambiguous never retries soon", () => {
+  const w = world({ site: { coldLeft: 9, stillsLeft: 0 } });
+  w.grab("a"); w.at(0);
+  w.t = S0 + 2000; M.step(w.S, w.input(), w.C, w.t);
+  M.holdDone(w.S, "a", false, "not_that_cam", w.C, w.t);
+  assert.deepEqual([w.S.tiles[0].video, w.S.tiles[0].why], ["card", "retry"], "a stray window in the way: 'trying again'");
+  w.held.delete("a"); w.live.delete("a");
+  const n0 = w.actions.filter((x) => x.a === "hold").length;
+  w.run(3, 21);
+  assert.equal(w.actions.filter((x) => x.a === "hold").length, n0, "not before soft_retry_s (20 s)");
+  w.at(23);
+  assert.equal(w.actions.filter((x) => x.a === "hold").length, n0 + 1, "tried again after 20 s - not 10 minutes");
+  M.holdDone(w.S, "a", false, "busy", w.C, w.t);
+  assert.equal(w.S.tiles[0].why, "retry", "the second soft failure");
+  w.held.delete("a"); w.run(24, 44);
+  M.holdDone(w.S, "a", false, "busy", w.C, w.t);
+  assert.equal(w.S.tiles[0].why, "failed", "the third in open_fail_backoff_min: the full backoff");
+  w.held.delete("a");
+  const n1 = w.actions.filter((x) => x.a === "hold").length;
+  w.run(45, 200);
+  assert.equal(w.actions.filter((x) => x.a === "hold").length, n1, "no retry storm");
+  // two people go by that name: never soft
+  const v = world();
+  v.grab("b"); v.at(0); v.t = S0 + 2000; M.step(v.S, v.input(), v.C, v.t);
+  M.holdDone(v.S, "b", false, "ambiguous", v.C, v.t);
+  assert.equal(v.S.tiles[0].why, "failed");
+  // a relay Pepe refused with a soft reason (sessionEnded) retries the same way; slots_busy is "full" for FULL_RETRY_MS
+  const u = world();
+  u.grab("c"); u.at(0); u.at(2);
+  M.sessionEnded(u.S, "c", "start_timeout", u.C, S0 + 2500);
+  assert.equal(u.S.tiles[0].why, "retry");
+  const z = world();
+  z.grab("d"); z.at(0); z.at(2);
+  M.sessionEnded(z.S, "d", "slots_busy", z.C, S0 + 2500);
+  assert.equal(z.S.tiles[0].why, "full");
+  assert.ok(M.SOFT_WHYS.has("noswitch") && !M.SOFT_WHYS.has("ambiguous"));
+});
+
+test("33. mfix recent speakers (keep_recent): a back-and-forth on ONE mic shows side by side; the one off the mic longest is displaced first; a re-grab is no change; they leave after keep_recent", () => {
+  // one mic slot in the room (one holder at a time), the pad side by side, keep 2 minutes
+  const w = world({ pad: { layout: "split", keep_recent: 2 } });
+  w.grab("a"); w.at(0); w.at(2);
+  assert.deepEqual(w.logins(), ["a"]);
+  w.drop("a"); w.grab("b"); w.at(15); w.at(17);
+  assert.deepEqual(w.logins(), ["a", "b"], "a stays up (recent) and b joins: side by side");
+  assert.equal(w.shape(), "split");
+  assert.equal(M.newest(w.S).login, "b", "only the one holding the mic is the newest");
+  // a grabs again: no change (a just holds again), b becomes the recent one
+  const changes0 = w.actions.filter((x) => x.a === "touch" && x.why === "change").length;
+  w.drop("b"); w.grab("a"); w.at(30); w.at(33);
+  assert.deepEqual(w.logins(), ["a", "b"]);
+  assert.equal(w.actions.filter((x) => x.a === "touch" && x.why === "change").length, changes0, "a re-grab by a recent speaker is no change");
+  assert.equal(M.newest(w.S).login, "a");
+  // c grabs: no room in split - the one off the mic longest (b, since 30) goes, a (holding until 40) stays
+  w.drop("a"); w.at(40);
+  w.grab("c"); w.at(50); w.at(53);
+  assert.deepEqual(w.logins().sort(), ["a", "c"], "b (off the mic longest) was displaced, not a");
+  assert.ok(w.actions.some((x) => x.a === "span_close" && x.login === "b" && x.reason === "displaced"));
+  const relA = w.actions.filter((x) => x.a === "release" && x.login === "a").length;
+  // nobody new: a (off since 40) stays up keep_recent (2 min), then leaves; c keeps holding
+  w.run(54, 158);
+  assert.ok(w.logins().includes("a"), "still up before 2 minutes");
+  assert.equal(w.actions.filter((x) => x.a === "release" && x.login === "a").length, relA, "its relay stays held while it's a recent tile");
+  w.run(159, 166);
+  assert.deepEqual(w.logins(), ["c"], "a left after keep_recent");
+  // without keep_recent: the plain hand-over (8 s)
+  const v = world({ pad: { layout: "split", keep_recent: 0 } });
+  v.grab("a"); v.at(0); v.at(2); v.drop("a"); v.grab("b"); v.at(15); v.at(17);
+  v.run(18, 26);
+  assert.deepEqual(v.logins(), ["b"], "a left after the hand-over");
+});
+
+test("34. mfix recent speakers: a recent tile whose cam goes off leaves after the plain hand-over; a consent cut takes it off at once; the single layout keeps the last speaker until displaced", () => {
+  const w = world({ pad: { layout: "split", keep_recent: 2 } });
+  w.grab("a"); w.at(0); w.at(2); w.drop("a"); w.grab("b"); w.at(15); w.at(17);
+  w.offcam.add("a"); w.run(18, 22);
+  assert.ok(w.logins().includes("a"), "the hand-over (8 s after 15) first");
+  w.run(23, 26);
+  assert.deepEqual(w.logins(), ["b"], "a 'cam off' recent tile isn't kept");
+  // an opt-out of a recent speaker: off at once
+  const c = world({ pad: { layout: "split", keep_recent: 5 } });
+  c.grab("a"); c.at(0); c.at(2); c.drop("a"); c.at(20);
+  c.cuts.set("a", "mf_opted_out"); c.at(21);
+  assert.deepEqual(c.logins(), [], "persisted speakers never include someone who opted out");
+  // single: the last speaker stays (keep_recent) until the next speaker displaces them
+  const s = world({ pad: { layout: "single", keep_recent: 2 } });
+  s.grab("a"); s.at(0); s.at(2); s.drop("a"); s.run(3, 100);
+  assert.deepEqual(s.logins(), ["a"], "kept up between mic-ups");
+  s.grab("b"); s.at(101); s.at(104);
+  assert.deepEqual(s.logins(), ["b"], "displaced by the next speaker");
+});
+
+test("35. mfix pins: pinned people are never mic tiles, take places first (max_people), never candidates; single + a pin = picture in picture; maxPins leaves a mic place", () => {
+  const w = world({ pad: { layout: "split" } });
+  const step = (sec, pins) => { w.t = S0 + sec * 1000; const r = M.step(w.S, Object.assign(w.input(), { pins }), w.C, w.t); w.actions.push(...r.actions); return r.actions; };
+  w.grab("a"); step(0, []); step(2, []);
+  assert.deepEqual(w.logins(), ["a"]);
+  // a gets pinned: their mic tile comes off (no duplicate), the release lets the mic stage's relay go
+  const acts = step(3, ["a"]);
+  assert.deepEqual(w.logins(), []);
+  assert.ok(acts.some((x) => x.a === "span_close" && x.login === "a" && x.reason === "pinned"));
+  assert.ok(!w.S.leftAt.has("a"), "no cooldown for a pinned person");
+  // a holds the mic but is pinned: not a candidate; b grabs and takes the one mic place left (split = 2, one pinned)
+  w.grab("b"); step(4, ["a"]); step(7, ["a"]);
+  assert.deepEqual(w.logins(), ["b"]);
+  assert.equal(M.shapeOf(w.S, w.pad), "split", "1 pin + 1 mic tile side by side");
+  w.grab("c"); step(20, ["a"]); step(23, ["a"]); step(40, ["a"]);
+  assert.equal(w.logins().length, 1, "only one mic place beside the pin");
+  // a pinned holder is attributed speech (no dimming while they talk)
+  w.drop("b"); w.drop("c"); step(60, ["a"]);
+  assert.equal(w.S.speaking, null);
+  // single + a pin: picture in picture
+  assert.equal(M.shapeFor("single", 1, 1), "pip");
+  assert.equal(M.shapeFor("single", 0, 1), "single");
+  assert.equal(M.shapeFor("auto", 2, 2), "grid4");
+  assert.equal(M.maxPins("single", 4, 2), 1);
+  assert.equal(M.maxPins("split", 4, 2), 1, "split: one pin, one mic place");
+  assert.equal(M.maxPins("auto", 4, 2), 2);
+  assert.equal(M.maxPins("auto", 2, 2), 1, "max_people 2: one pin");
+  assert.equal(M.maxPins("auto", 1, 2), 0, "max_people 1: no pin (the mic place stays)");
+  // unpinned: back to the mic rules (a holds the mic -> a candidate again)
+  step(70, []); step(73, []);
+  assert.ok(w.logins().includes("a"), "back as a mic tile");
+});
+
+test("36. mfix card reasons: cold opens off / the rate limit / the site's relays / Pepe's pool / the pad's live places", () => {
+  for (const [site, why] of [[{ coldLeft: 0, coldWhy: "cold_off" }, "cold_off"], [{ coldLeft: 0, coldWhy: "rate" }, "rate"],
+                             [{ coldLeft: 0, coldWhy: "relays" }, "relays"], [{ coldLeft: 9, poolLeft: 0 }, "pool"], [{ coldLeft: 9, shed: true }, "pool"]]) {
+    const w = world({ site: { stillsLeft: 0, ...site } });
+    w.grab("a"); w.at(0); w.at(2);
+    assert.deepEqual([w.S.tiles[0].video, w.S.tiles[0].why], ["card", why], JSON.stringify(site));
+  }
+  const p = world({ pad: { max_live: 1 }, site: { stillsLeft: 0 } });
+  p.grab("a"); p.grab("b"); p.at(0); p.at(2);
+  assert.ok(p.S.tiles.some((x) => x.why === "pad_cap"));
+  for (const k of ["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap"]) assert.ok(M.CARD_WHYS.includes(k));
 });

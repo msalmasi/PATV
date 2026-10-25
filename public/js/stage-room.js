@@ -35,10 +35,15 @@
 // (when someone on it has a picture, the pad shows it first, Pepe's stream isn't featured for an event) > an
 // auto-featured stream > Pepe's stream; the pad's default_view can put streams first or keep the mic stage a tab. A
 // viewer who picked a tab keeps it until it ends. No snaps / clips / watch-minutes of it (selection: capture false).
+// mfix (owner 2026-10-25: "the mic stage drops between mic-ups"): a mic view that goes idle (nobody on the mic stage) stays up
+// MIC_GRACE_MS with "Nobody is on the mic right now" before the page goes back to its default - a short gap between two mic-ups
+// no longer flips viewers to Pepe's stream and back. A viewer who picked the 🎙 tab gets it back by itself when the mic stage
+// comes back (until they pick another tab).
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
+  var CAM_REWATCH_MAX = 4, CAM_REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a cam slot's re-watches after a dropped connection
   var YT_ID = /^[A-Za-z0-9_-]{11}$/, YT_CH = /^UC[A-Za-z0-9_-]{22}$/, TW_LOGIN = /^[A-Za-z0-9_]{3,25}$/, TW_VOD = /^[0-9]{5,12}$/;
   function embedUrl(e) {
     if (!e) return null;
@@ -75,12 +80,24 @@
     // ── micfollow: 🎙 the mic stage ──
     var mic = null, micCtl = null;
     var micSig = '', micTabSig = '';              // what setMic / renderTabs last drew (see setMic)
-    function micTabKey() { return micOn() ? (mic.signin ? 'in' : mic.count ? 'n' + mic.count : 's') : ''; }
+    // mfix: the grace after the mic stage goes idle, and "this viewer picked the 🎙 tab"
+    var MIC_GRACE_MS = 45000, micIdleAt = 0, micGraceTimer = null, micWanted = false;
+    function micGrace() { return !!(window.PATVStageMic && mic && micIdleAt && Date.now() - micIdleAt < MIC_GRACE_MS); }
+    function micShown() { return micOn() || (view === 'mic' && micGrace()); }
+    function idleProgram() { var p = {}; for (var k in mic) p[k] = mic[k]; p.count = 0; p.pins_n = 0; p.src = []; p.speaking = null; p.idle = true; return p; }
+    function micTabKey() { return micOn() ? (mic.signin ? 'in' : mic.count || pinsN() ? 'n' + mic.count + 'p' + pinsN() : 's') : micShown() ? 'g' : ''; }
+    // mfix review: mic.count = the people ON THE MIC; mic.pins_n = the 📌 pinned cams (they keep the stage up with nobody on the mic)
+    function pinsN() { return mic ? Math.max(0, Number(mic.pins_n) || 0) : 0; }
+    function micLabel() {
+      var n = mic ? Math.max(0, Number(mic.count) || 0) : 0, p = pinsN();
+      var base = n ? _t('js.stage.mf.tab', '🎙 On the mic ({n})', { n: n }) : _t('js.stage.mf.tab_speaking', '🎙 On the mic');
+      return p ? base + ' · ' + _t('js.stage.mf.tab_pins', '📌 {n}', { n: p }) : base;
+    }
     var padSlug = o.slug || (function () { var m = /[?&]room=([^&]+)/.exec(o.api || ''); try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; } })();
     function micStop() { if (micCtl) { micCtl.stop(); micCtl = null; } }
     // (a program whose tiles gave way to the neutral "Someone is speaking" / Pepe card keeps its tab, but never as the
     // default view - mic.active is false then: a stage of only cards is never the default, DF-15)
-    function micOn() { return !!(window.PATVStageMic && mic && (mic.count > 0 || mic.speaking === 'someone' || mic.speaking === 'pepe')); }
+    function micOn() { return !!(window.PATVStageMic && mic && (mic.count > 0 || pinsN() > 0 || mic.speaking === 'someone' || mic.speaking === 'pepe')); }
     function micDefault() {
       return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !(pepeSrc && pepeSrc.featured);
     }
@@ -129,14 +146,31 @@
             if (k && (k.ok === false || k.state === 'ended')) done(why(k.why || k.code, k.error));
           }).catch(function () { /* a blip: the next beat */ });
         }, 15000);
-        return PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return g !== my.gen; } }).then(function (ss) {
-          if (g !== my.gen) { ss.close(); return; }
-          my.sess = ss;
-          if (o.reconnect) o.reconnect.classList.add('hide');
-          if (ss.blocked) tap.classList.remove('hide');
-          ss.onfail = function () { if (g === my.gen) done(why('gone')); };
-        });
+        return PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return g !== my.gen; } }).then(playing);
       }).catch(function (e) { if (g === my.gen && !(e && e.cancelled)) done(why('failed')); });
+      function playing(ss) {
+        if (g !== my.gen) { ss.close(); return; }
+        my.sess = ss;
+        if (o.reconnect) o.reconnect.classList.add('hide');
+        if (ss.blocked) tap.classList.remove('hide');
+        ss.onfail = function () { if (g === my.gen) rewatch(); };
+      }
+      // mfix review: the connection dropped after it played (Pepe re-opened the relay - e.g. by the exact name for the pad's mic
+      // stage - or its publisher restarted): while the slot still says the cam is connecting / live, watch again with a fresh
+      // ticket - at most CAM_REWATCH_MAX times in CAM_REWATCH_WIN_MS, then "the live cam stopped"
+      function rewatch() {
+        var t0 = Date.now();
+        my.rew = (my.rew || []).filter(function (x) { return t0 - x < CAM_REWATCH_WIN_MS; });
+        if (my.rew.length >= CAM_REWATCH_MAX) return done(why('gone'));
+        my.rew.push(t0);
+        if (my.sess) { try { my.sess.close(); } catch (e) {} my.sess = null; }
+        if (o.reconnect) o.reconnect.classList.remove('hide');
+        camPost(s.id, {}).then(function (d2) {
+          if (g !== my.gen) return null;
+          if (!d2 || !d2.ok || !d2.whep) return done(d2 && d2.state === 'ended' ? why(d2.why) : why(d2 && d2.code, d2 && d2.error));
+          return PATVRtc.watch(d2.whep, video, { timeout: 40000, cancelled: function () { return g !== my.gen; } }).then(playing);
+        }).catch(function (e) { if (g === my.gen && !(e && e.cancelled)) done(why('gone')); });
+      }
     }
     function featured() { for (var i = 0; i < slots.length; i++) if (slots[i].featured) return slots[i]; return null; }
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
@@ -164,16 +198,17 @@
     // 1.99fv: the embed an admin put on Pepe's stage (null = his own stream). Re-checked like a slot's.
     function pepeEmbed() { return !ownPepe && pepeSrc && pepeSrc.mode === 'embed' && embedUrl(pepeSrc.embed) ? pepeSrc.embed : null; }
     function show() {
-      if (view === 'mic' && !micOn()) pickDefault();
+      if (view === 'mic' && !micShown()) pickDefault();
       var s = cur();
       if (view !== 'mic') micStop();
       if (!(s && s.cam)) camStop();
       if (view === 'mic') {                                     // micfollow: 🎙 On the mic (stage-mic.js)
         player.stop(); setEmbed(null);
-        if (micCtl) micCtl.update(mic);
-        else micCtl = PATVStageMic.render(o.wrap, mic, { slug: padSlug, onChange: function () { /* the long-poll brings the new program */ } });
+        var prog = micOn() ? mic : idleProgram();               // mfix: idle during the grace - "nobody is on the mic right now"
+        if (micCtl) micCtl.update(prog);
+        else micCtl = PATVStageMic.render(o.wrap, prog, { slug: padSlug, onChange: function () { /* the long-poll brings the new program */ } });
         if (o.unmute) o.unmute.classList.add('hide');
-        o.onAir && o.onAir(true, '🎙 ' + (mic.count || ''));
+        o.onAir && o.onAir(true, '🎙 ' + (prog.count || '') + (prog.pins_n ? ' 📌' + prog.pins_n : ''));
       } else if (s && s.cam) {
         player.stop(); setEmbed(null); camShow(s);
         o.onAir && o.onAir(true, s.title || null);
@@ -207,7 +242,7 @@
     // 1.99cr: what's on screen, for the Snap / Clip bar (stage-capture.js). Pepe's stream is captured from
     // his HLS on the server even while the page shows an admin-chosen embed, so it counts while HLS is on air.
     function selection() {
-      if (view === 'mic' && micOn()) return micCtl ? micCtl.selection() : { stream: 'mic', label: '🎙', embed: true, capture: false, nsfw: false };   // micfollow: never captured
+      if (view === 'mic' && micShown()) return micCtl ? micCtl.selection() : { stream: 'mic', label: '🎙', embed: true, capture: false, nsfw: false };   // micfollow: never captured
       var s = cur();
       if (s && s.cam) return { stream: s.id, label: s.display, embed: true, capture: false, nsfw: !!s.nsfw };   // 1.99zc: no snaps / clips / watch-minutes of a cam
       if (s) return { stream: s.id, label: s.display, embed: !!s.embed, capture: !s.embed && s.capture !== false, nsfw: !!s.nsfw };
@@ -233,7 +268,7 @@
       var box = o.tabs;
       micTabSig = micTabKey();
       if (!box) return;
-      if (!slots.length && !micOn()) { box.innerHTML = pepeExtras(); return; }
+      if (!slots.length && !micShown()) { box.innerHTML = pepeExtras(); return; }
       var h = '';
       slots.forEach(function (s) {
         h += '<button type="button" class="stab' + (s.featured ? ' feat' : '') + '" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
@@ -244,9 +279,9 @@
              (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') +
              (s.cam ? '<span class="src">' + esc(_t('js.pad.strip.cam_src', '📷 cam')) + '</span>' : '') + '</button>';
       });
-      if (micOn()) {                                        // micfollow: 🎙 On the mic, before Pepe's tab
+      if (micShown()) {                                     // micfollow: 🎙 On the mic, before Pepe's tab (mfix: kept during the grace)
         var ml = mic.signin ? _t('js.stage.mf.tab_signin', '🎙 On the mic: sign in to watch')
-          : mic.count ? _t('js.stage.mf.tab', '🎙 On the mic ({n})', { n: mic.count }) : _t('js.stage.mf.tab_speaking', '🎙 On the mic');
+          : micOn() ? micLabel() : _t('js.stage.mf.tab_speaking', '🎙 On the mic');
         h += '<button type="button" class="stab mf-tab" role="tab" data-v="mic" aria-selected="' + (view === 'mic') + '"><span class="dot" aria-hidden="true"></span>' + esc(ml) + '</button>';
       }
       var pOn = pepeOn;                                     // 1.99fv: his own stream only - Twitch never counts
@@ -271,7 +306,7 @@
       o.tabs.addEventListener('click', function (e) {
         var b = e.target.closest('button');
         if (!b) return;
-        if (b.hasAttribute('data-v')) { view = b.getAttribute('data-v'); chosen = true; show(); return; }
+        if (b.hasAttribute('data-v')) { view = b.getAttribute('data-v'); chosen = true; micWanted = view === 'mic'; show(); return; }
         if (b.hasAttribute('data-pepe-src')) { ownPepe = b.getAttribute('data-pepe-src') === 'own'; show(); return; }
         var act = b.getAttribute('data-act');
         if (!act) return;
@@ -356,9 +391,9 @@
     function sigOf(p) {
       if (!p) return '';
       var m = p.manage || null;
-      return JSON.stringify([p.v, p.count, p.signin, p.blocked, p.active, p.default, p.layout, p.frozen_until, p.speaking || null, !!p.report,
-        (Array.isArray(p.src) ? p.src : []).map(function (s) { return s ? [s.id, s.name, s.video, s.why, s.watch, s.newest, s.pos] : null; }),
-        m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override] : null]);
+      return JSON.stringify([p.v, p.count, p.pins_n || 0, p.signin, p.blocked, p.active, p.default, p.layout, p.frozen_until, p.speaking || null, !!p.report,
+        (Array.isArray(p.src) ? p.src : []).map(function (s) { return s ? [s.id, s.name, s.video, s.why, s.watch, s.newest, s.pos, !!s.pin, !!s.recent, !!s.mine] : null; }),
+        m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override, m.pins_room] : null]);
     }
     function setMic(p) {
       if (!window.PATVStageMic) return;                     // WebRTC off: no mic stage on this page
@@ -367,13 +402,31 @@
       var sig = sigOf(mic);
       if (sig === micSig) return;                           // nothing moved (null -> null, the same program)
       micSig = sig;
-      if (view === 'mic' && !micOn()) { pickDefault(); show(); return; }               // it went idle: back to the default
+      if (micOn()) { micIdleAt = 0; if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; } }
+      if (view === 'mic' && !micOn()) {
+        // mfix: it went idle - keep the view MIC_GRACE_MS ("nobody is on the mic right now"), then back to the default; mic
+        // follows switched off on the pad (null) goes at once
+        if (mic && !micIdleAt) {
+          micIdleAt = Date.now();
+          micGraceTimer = setTimeout(function () {
+            micGraceTimer = null;
+            if (view === 'mic' && !micOn()) { micIdleAt = 0; pickDefault(); show(); }
+          }, MIC_GRACE_MS + 50);
+        }
+        if (!micGrace()) { micIdleAt = 0; pickDefault(); show(); return; }
+        if (micCtl) micCtl.update(idleProgram());
+        o.onAir && o.onAir(true, '🎙');
+        if (micTabKey() !== micTabSig) { renderTabs(); if (o.onShow) o.onShow(selection()); }
+        return;
+      }
+      // mfix: the viewer picked the 🎙 tab and it came back after the grace: theirs again
+      if (micWanted && micOn() && view !== 'mic') { view = 'mic'; show(); return; }
       if (!chosen && micDefault() !== wasDef) {
         var before = view;
         pickDefault();
         if (before !== view) { show(); return; }
       }
-      if (view === 'mic' && micCtl) { micCtl.update(mic); o.onAir && o.onAir(true, '🎙 ' + (mic.count || '')); }
+      if (view === 'mic' && micCtl) { micCtl.update(mic); o.onAir && o.onAir(true, '🎙 ' + (mic.count || '') + (pinsN() ? ' 📌' + pinsN() : '')); }
       if (micTabKey() !== micTabSig) {                       // (renderTabs notes what it drew)
         renderTabs();
         if (o.onShow) o.onShow(selection());

@@ -146,7 +146,10 @@ test("webrtc.css: the layouts, 44 px targets, contain (never cropped), reduced m
   assert.match(css, /\.mf-mbtn \{[^}]*min-height: 44px/);
   assert.match(css, /\.mf-tapall \{[^}]*min-height: 44px/);
   assert.match(css, /prefers-reduced-motion: reduce\) \{ \.player \.mf-stage/);
-  assert.match(css, /\.narrow\[data-layout=pip\] \.mf-tile:not\(\.newest\) \{ width: 38%/);
+  // mfix: the tile that fills a PiP is .main (the newest speaker, else the latest mic tile - a pin sits in the corner)
+  assert.match(css, /\.narrow\[data-layout=pip\] \.mf-tile:not\(\.main\) \{ width: 38%/);
+  assert.match(css, /\.mf-stage\.mf-dim \.mf-tile \.rtc-video/, "mfix: dimmed tiles while someone nobody can show talks");
+  assert.match(css, /\.mf-off \{[^}]*min-height: 44px/, "mfix: 🙈 Take me off is a 44 px target");
 });
 
 test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the switcher is kept as PATVPadStage", () => {
@@ -163,8 +166,11 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
 function switcher(opts, withMic = true) {
   const js = read("public", "js", "stage-room.js");
   const dom = fakeDom();
-  const rendered = [];
-  const ctx = { document: { readyState: "complete", createElement: dom.mk }, console, setInterval: () => 0, clearInterval() {}, setTimeout, location: { hostname: "x" },
+  const rendered = [], timers = [];
+  // (mfix: the mic view's grace timer is collected, so a test can run it as if 45 s had passed)
+  const ctx = { document: { readyState: "complete", createElement: dom.mk }, console, setInterval: () => 0, clearInterval() {},
+    setTimeout: (fn, ms) => { if (ms >= 40000) { timers.push(fn); return 1000 + timers.length; } return setTimeout(fn, ms); },
+    clearTimeout: (h) => { if (h > 1000) timers[h - 1001] = null; else clearTimeout(h); }, location: { hostname: "x" },
     fetch: () => Promise.resolve({ json: () => Promise.resolve({}) }), confirm: () => false, alert() {} };
   ctx.window = ctx; ctx.window.addEventListener = () => {};
   ctx.PATVStage = { player: () => ({ stop() {}, setSrc() {}, start() {}, running: () => false }) };
@@ -174,7 +180,7 @@ function switcher(opts, withMic = true) {
   let html = "";
   Object.defineProperty(tabs, "innerHTML", { set(v) { html = v; }, get() { return html; } });
   const sw = ctx.PATVStage.switcher(Object.assign({ tabs, wrap: dom.mk("div"), api: "/api/stage?room=pad", slots: [], pepeOn: true, pepeHere: true, slug: "pad", watch: false }, opts));
-  return { sw, rendered, tabs: () => html };
+  return { sw, rendered, tabs: () => html, grace: () => { const fns = timers.splice(0); for (const f of fns) if (f) f(); }, click: (ev) => tabs.listeners.click[0](ev) };
 }
 const MIC = (extra) => Object.assign({ v: 1, active: true, count: 2, default: "first", layout: "split", src: [{ id: "a" }, { id: "b" }] }, extra || {});
 
@@ -208,12 +214,24 @@ test("stage-room.js: the default view - a chosen feature > the mic stage > an au
   x.sw.setMic(MIC({ signin: true, src: [] }));
   assert.equal(x.sw.view(), "pepe");
   assert.match(x.tabs(), /sign in to watch/);
-  // it goes idle: back to the default
+  // it goes idle: mfix - the view stays a while ("nobody is on the mic right now"), then back to the default
   x = switcher({});
   x.sw.setMic(MIC());
   x.sw.setMic(MIC({ count: 0, src: [], active: false }));
-  assert.equal(x.sw.view(), "pepe");
+  assert.equal(x.sw.view(), "mic", "kept through the grace - a short gap between mic-ups doesn't flip viewers to Pepe");
+  assert.match(x.tabs(), /data-v="mic"/);
+  assert.equal(x.rendered[x.rendered.length - 1].idle, true, "the mic stage says nobody is on the mic right now");
+  x.sw.setMic(MIC({ count: 1, src: [{ id: "a" }] }));
+  assert.equal(x.sw.view(), "mic", "back within the grace: still the mic stage");
+  x.sw.setMic(MIC({ count: 0, src: [], active: false }));
+  x.grace();
+  assert.equal(x.sw.view(), "pepe", "after the grace: the default");
   assert.doesNotMatch(x.tabs(), /data-v="mic"/);
+  // mic follows switched off on the pad (null): at once
+  x = switcher({});
+  x.sw.setMic(MIC());
+  x.sw.setMic(null);
+  assert.equal(x.sw.view(), "pepe");
   // without stage-mic.js (WebRTC off) setMic does nothing
   x = switcher({}, false);
   x.sw.setMic(MIC());
@@ -261,7 +279,7 @@ test("the pad settings card and the privacy switch render; every new string is i
   assert.match(pv, /id="pvMfSw"/);
   assert.doesNotMatch(pv, /id="pvMfSw" checked/);
   assert.match(pv, /Pad &lt;b&gt;/);
-  assert.match(pv, /privacy-livecam\.js\?v=5/);
+  assert.match(pv, /privacy-livecam\.js\?v=6/);
   // every t('...') key in the new / changed views exists
   for (const f of [["views", "partials", "pad-micfollow.ejs"], ["views", "privacy-settings.ejs"]]) {
     for (const m of read(...f).matchAll(/\bt\('([a-z0-9_.]+)'/g)) if (!m[1].endsWith(".")) assert.ok(m[1] in EN, f.join("/") + ": " + m[1]);
@@ -531,4 +549,255 @@ test("r4 the privacy card counts mic-stage viewers, never names them; the pad se
   assert.match(html, /You(&#39;|')re responsible for what your Stage shows; Clear the stage is on the bar\./);
   assert.match(html, /marked 18\+/, "an 18+ pad says why it can't run");
   assert.match(html, /name="max_people" min="1" max="9"/, "the site's default cap leaves the 3 x 3 grid reachable");
+});
+
+// ── mfix (owner 2026-10-25) ──
+function micBox(fetchImpl) {
+  const js = read("public", "js", "stage-mic.js");
+  const dom = fakeDom();
+  const posts = [];
+  const ctx = { document: { createElement: dom.mk, hidden: false, addEventListener() {}, removeEventListener() {} }, console, setTimeout, clearTimeout,
+    setInterval: () => 0, clearInterval() {},
+    fetch: (u, o) => {
+      posts.push([u, o && o.body ? JSON.parse(o.body) : null, o && o.method]);
+      return Promise.resolve({ json: () => Promise.resolve(fetchImpl ? fetchImpl(u, o) : { ok: true, whep: "https://x/whep?pt=1" }) });
+    },
+    PATVRtc: { watch: () => new Promise(() => {}) }, RTCPeerConnection: function () {}, Date, confirm: () => true };
+  ctx.window = ctx; ctx.window.addEventListener = () => {}; ctx.window.removeEventListener = () => {};
+  vm.runInNewContext(js, ctx);
+  const host = dom.mk("div");
+  return { ctx, dom, posts, host };
+}
+const mfS = (id, pos, video, extra) => Object.assign({ kind: "cam", id, name: id.toUpperCase(), pos, newest: false, video, why: video === "card" ? "full" : null, watch: "ok" }, extra || {});
+const allText = (n) => n.textContent;
+const findBy = (root, cls) => { const out = []; const walk = (n) => { for (const c of n.children || []) { if ((" " + c.className + " ").includes(" " + cls + " ")) out.push(c); walk(c); } }; walk(root); return out; };
+
+test("mfix stage-mic.js: 📌 pinned tiles first with their tag, a pin's ticket through its pin, owners unpin with 📌✕ and pin with 📌; recent tiles carry no ring", async () => {
+  const { ctx, posts, host } = micBox();
+  const prog = { v: 1, layout: "split", count: 2, still_s: 20, manage: { excluded_n: 0, pins_room: 2 },
+                 src: [mfS("p", 0, "live", { pin: true }), mfS("a", 1, "live", { recent: true })] };
+  const ctl = ctx.PATVStageMic.render(host, prog, { slug: "pad" });
+  const stage = host.children[0];
+  const grid = stage.children[0];
+  const ids = grid.children.filter((c) => /mf-tile/.test(c.className)).map((c) => c.getAttribute("data-id"));
+  assert.deepEqual(ids, ["p", "a"], "the pin takes the first place");
+  const p = grid.children.find((c) => c.getAttribute && c.getAttribute("data-id") === "p");
+  assert.ok(p.classList.contains("pinned"));
+  assert.equal(findBy(p, "mf-pin")[0].hidden, false, "📌 on its label");
+  const a = grid.children.find((c) => c.getAttribute && c.getAttribute("data-id") === "a");
+  assert.ok(a.classList.contains("recent") && !a.classList.contains("newest"), "a recent speaker: no ring");
+  await new Promise((r) => setTimeout(r, 10));
+  const watch = posts.filter((x) => /\/micfollow\/watch$/.test(x[0])).map((x) => x[1]);
+  assert.ok(watch.some((w) => w.login === "p" && w.pin === true), "the pinned cam's ticket comes through its pin");
+  assert.ok(watch.some((w) => w.login === "a" && w.pin === undefined));
+  // owners: ✕ on a pin unpins it; 📌 on a mic tile pins that person
+  const px = findBy(p, "mf-x").find((b) => !/mf-rp|mf-pn/.test(b.className));
+  assert.equal(px.textContent, "📌✕");
+  px.listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(posts.some((x) => /\/micfollow\/pin$/.test(x[0]) && x[1].login === "p" && x[1].remove === true));
+  const apn = findBy(a, "mf-pn")[0];
+  assert.equal(apn.hidden, false, "room for another pin: 📌 on the mic tile");
+  apn.listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(posts.some((x) => /\/micfollow\/pin$/.test(x[0]) && x[1].login === "a" && !x[1].remove));
+  // no room left: no 📌; viewers (no manage) never see either
+  ctl.update(Object.assign({}, prog, { v: 2, manage: { excluded_n: 0, pins_room: 1 } }));
+  assert.equal(findBy(a, "mf-pn")[0].hidden, true);
+  ctl.update(Object.assign({}, prog, { v: 3, manage: null, report: true }));
+  assert.equal(findBy(p, "mf-pn")[0].hidden, true);
+  ctl.stop();
+});
+
+test("mfix stage-mic.js: tiles kept up while someone nobody can show talks are DIMMED with a strip (no ring); Pepe's own strip; the idle card; the new card reasons", () => {
+  const { ctx, host } = micBox();
+  const ctl = ctx.PATVStageMic.render(host, { v: 1, layout: "single", count: 1, still_s: 20, speaking: "someone", src: [mfS("a", 0, "card", { why: "retry" })] }, { slug: "pad" });
+  const stage = host.children[0];
+  const strip = stage.children.find((c) => c.className === "mf-strip");
+  const neutral = stage.children.find((c) => c.className === "mf-neutral");
+  assert.ok(stage.classList.contains("mf-dim"), "dimmed");
+  assert.equal(strip.hidden, false);
+  assert.equal(strip.textContent, "Someone else is speaking");
+  assert.equal(neutral.hidden, true, "the tiles stay - no neutral card over them");
+  assert.match(allText(stage.children[0]), /trying their cam again/, "a soft failure says it'll try again");
+  ctl.update({ v: 2, layout: "single", count: 1, still_s: 20, speaking: "pepe", src: [mfS("a", 0, "card", { why: "cold_off" })] });
+  assert.equal(strip.textContent, "🐸 Pepe is on the mic");
+  assert.match(allText(stage.children[0]), /only cams already live/);
+  for (const [why, re] of [["rate", /opened just now/], ["pool", /Pepe's cams are all busy/], ["pad_cap", /live cams are all in use/], ["full", /full right now/]]) {
+    ctl.update({ v: 3 + why.length, layout: "single", count: 1, still_s: 20, src: [mfS("a", 0, "card", { why })] });
+    assert.match(allText(stage.children[0]), re, why);
+  }
+  assert.ok(!stage.classList.contains("mf-dim"), "a proven speaker: nothing dimmed");
+  assert.equal(strip.hidden, true);
+  // the page's grace: an idle program says nobody is on the mic
+  ctl.update({ v: 9, layout: "single", count: 0, still_s: 20, src: [], idle: true });
+  assert.equal(neutral.hidden, false);
+  assert.match(neutral.textContent, /Nobody is on the mic right now/);
+  assert.equal(stage.getAttribute("aria-label"), "Nobody is on the mic right now");
+  ctl.stop();
+});
+
+test("mfix stage-mic.js: the viewer's OWN cam has 🙈 Take me off (POST /api/stage/leave with the pad); ⋯ Manage → 📌 Pin a cam lists who's on cam", async () => {
+  const { ctx, posts, host } = micBox((u) => (/\/pins$/.test(u) ? { ok: true, room: 2, pins: [{ login: "p" }], cams: [
+    { login: "p", display: "P", pinned: true }, { login: "q", display: "Q" }, { login: "r", display: "R", blocked: "unavailable" }, { login: "s", display: "S", ask: true },
+    { login: "w", display: "W", blocked: "limited" }] } : { ok: true }));
+  const ctl = ctx.PATVStageMic.render(host, { v: 1, layout: "split", count: 1, still_s: 20, src: [mfS("me", 0, "live", { mine: true })], report: true }, { slug: "my-pad" });
+  const stage = host.children[0];
+  const tileMe = stage.children[0].children.find((c) => c.getAttribute && c.getAttribute("data-id") === "me");
+  const off = findBy(tileMe, "mf-off")[0];
+  assert.equal(off.hidden, false);
+  off.listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  const lv = posts.find((x) => x[0] === "/api/stage/leave");
+  assert.ok(lv, "posted the take-off");
+  assert.deepEqual(lv[1], { room: "my-pad" });
+  // owners: ⋯ Manage -> 📌 Pin a cam…
+  ctl.update({ v: 2, layout: "split", count: 1, still_s: 20, src: [mfS("x", 0, "live")], manage: { excluded_n: 0, pins_room: 2 } });
+  const bar = stage.children.find((c) => c.className === "mf-bar");
+  bar.children.find((c) => c.className === "mf-mbtn").listeners.click[0]();
+  const panel = stage.children.find((c) => c.className === "mf-panel");
+  const pinBtn = panel.children.find((c) => /Pin a cam/.test(c.textContent || ""));
+  assert.ok(pinBtn && !pinBtn.hidden, "📌 Pin a cam… in ⋯ Manage");
+  pinBtn.listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 20));
+  const list = findBy(panel, "mf-pins")[0];
+  const txt = list.textContent;
+  for (const re of [/P.*pinned.*Unpin/, /Q.*📌 Pin/, /R.*isn't available/, /S.*asks them first.*Ask to pin/, /W.*cam only for some viewers/]) assert.match(txt, re);
+  assert.ok(posts.some((x) => /\/micfollow\/pins$/.test(x[0]) && !x[2]), "GET the list");
+  ctl.stop();
+});
+
+test("mfix stage-room.js: a viewer who picked the 🎙 tab gets it back by itself when the mic stage returns after the grace (until they pick another tab)", () => {
+  const x = switcher({ slots: [] });
+  x.sw.setMic(MIC({ default: "tab" }));
+  assert.equal(x.sw.view(), "pepe", "only a tab by default");
+  // the viewer clicks 🎙 (the tab bar's own click handler)
+  const btn = { hasAttribute: (k) => k === "data-v", getAttribute: () => "mic" };
+  x.click({ target: { closest: () => btn } });
+  assert.equal(x.sw.view(), "mic");
+  x.sw.setMic(MIC({ default: "tab", count: 0, src: [], active: false }));
+  assert.equal(x.sw.view(), "mic", "the grace");
+  x.grace();
+  assert.equal(x.sw.view(), "pepe", "after the grace: the default");
+  x.sw.setMic(MIC({ default: "tab" }));
+  assert.equal(x.sw.view(), "mic", "it came back: the viewer's pick again");
+  // they pick Pepe's tab: no more auto-return
+  const pb = { hasAttribute: (k) => k === "data-v", getAttribute: () => "pepe" };
+  x.click({ target: { closest: () => pb } });
+  x.sw.setMic(MIC({ default: "tab", count: 0, src: [], active: false }));
+  x.sw.setMic(MIC({ default: "tab", count: 3, src: [{ id: "a" }, { id: "b" }, { id: "c" }] }));
+  assert.equal(x.sw.view(), "pepe");
+});
+
+test("mfix: the pad settings card has the recent-speakers choice; every new string is in locales/en.json", async () => {
+  const ejs = require("ejs");
+  const mf = { settings: { on: true, layout: "split", default_view: "first", max_people: 4, max_live: 3, keep_recent: 5 }, on: true, running: true, why_off: null, can_run: true,
+               run_why: null, tiles: 1, unproven_n: 0, excluded: [], max_live_cap: 6, site_on: true, keep_recent: [0, 1, 2, 5],
+               layouts: ["auto", "single", "split", "grid", "pip"], default_views: ["first", "after_streams", "tab"], room_name: "Room" };
+  const html = await ejs.renderFile(path.join(repo, "views", "partials", "pad-micfollow.ejs"), { slug: "pad", room: { title: "Pad" }, mf });
+  assert.match(html, /<select name="keep_recent">/);
+  assert.match(html, /<option value="5" selected>5 min<\/option>/);
+  assert.match(html, /<option value="0">No - only whoever holds the mic<\/option>/);
+  assert.match(html, /name="max_live" min="1" max="6"/, "up to 6 live cams on a pad");
+  assert.match(read("public", "js", "pad-micfollow.js"), /body\.keep_recent = Number\(f\.keep_recent\.value\)/);
+  for (const k of ["pad.settings.mf.keep_recent", "pad.settings.mf.keep_recent.off", "pad.settings.mf.keep_recent.min", "js.stage.mf.pin_open", "js.stage.mf.someone_strip",
+                   "js.stage.mf.idle", "js.stage.mf.retry", "js.stage.mf.cold_off"]) assert.ok(k in EN, k);
+});
+
+// ── mfix review (2026-10-25): a relay Pepe re-opens (an exact re-open for a pad's mic stage, a publisher restart) never kills
+// the viewers' pictures - every live-cam player watches again while the site still says the cam is connecting / live ──
+const tick = () => new Promise((r) => setTimeout(r, 10));
+function liveCamBox(beatFn) {
+  const js = read("public", "js", "pad-livecam.js");
+  const dom = fakeDom();
+  const posts = [], sessions = [];
+  const ctx = { document: { createElement: dom.mk }, console, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {},
+    fetch: (u, o) => {
+      const body = o && o.body ? JSON.parse(o.body) : null;
+      posts.push([u, body]);
+      const d = /\/beat$/.test(u) ? beatFn() : /\/stop$/.test(u) ? { ok: true } : { ok: true, whep: "https://x/whep?pt=" + posts.length, slots: { used: 1, max: 4 } };
+      return Promise.resolve({ json: () => Promise.resolve(d) });
+    },
+    PATVRtc: { watch: (url) => { const ss = { url, closed: false, onfail: null, close() { ss.closed = true; } }; sessions.push(ss); return Promise.resolve(ss); } },
+    RTCPeerConnection: function () {}, Date, confirm: () => true };
+  ctx.window = ctx; ctx.window.addEventListener = () => {};
+  vm.runInNewContext(js, ctx);
+  const box = dom.mk("div");
+  ctx.PATVLiveCam.row(box, "pad", { login: "ann", display: "Ann" }, { slots: { used: 0, max: 4 } }, {});
+  const live = dom.all.find((e) => e.tagName === "BUTTON" && e.className === "live");
+  return { ctx, dom, posts, sessions, box, live };
+}
+
+test("mfix review pad-livecam.js: a ▶ Live picture whose connection drops is watched again (a fresh ticket, the same slot) while the site says connecting / live - a few times, then 'the live cam stopped'", async () => {
+  let beat = { ok: true, state: "connecting" };
+  const { posts, sessions, box, live } = liveCamBox(() => beat);
+  live.listeners.click[0]();
+  await tick();
+  assert.equal(sessions.length, 1, "playing");
+  posts.length = 0;
+  sessions[0].onfail();                                     // Pepe re-opened the relay: MediaMTX closed the reader
+  await tick();
+  assert.equal(sessions.length, 2, "watched again");
+  assert.ok(sessions[0].closed);
+  assert.deepEqual(posts.map((p) => p[0].replace(/^.*\/livecam/, "")), ["/beat", ""], "asks the site first, then a fresh ticket");
+  assert.notEqual(sessions[1].url, sessions[0].url, "a new ticket");
+  assert.ok(!posts.some((p) => /\/stop$/.test(p[0])), "the slot is kept (no /stop)");
+  assert.doesNotMatch(box.textContent, /stopped/);
+  // the site says it ended: no more re-watching - the reason
+  beat = { ok: true, state: "ended", why: "gone" };
+  sessions[1].onfail();
+  await tick();
+  assert.equal(sessions.length, 2, "not watched again");
+  assert.match(box.textContent, /The live cam stopped/);
+});
+
+test("mfix review pad-livecam.js: re-watching is bounded (REWATCH_MAX in REWATCH_WIN_MS)", async () => {
+  const { sessions, box, live } = liveCamBox(() => ({ ok: true, state: "live" }));
+  live.listeners.click[0]();
+  await tick();
+  for (let i = 0; i < 4; i++) { sessions[sessions.length - 1].onfail(); await tick(); }
+  assert.equal(sessions.length, 5, "four drops: four re-watches");
+  sessions[sessions.length - 1].onfail();
+  await tick();
+  assert.equal(sessions.length, 5, "the fifth in a row: given up");
+  assert.match(box.textContent, /The live cam stopped/);
+});
+
+test("mfix review stage-mic.js: a live mic tile whose connection drops re-watches at once ('reconnecting…', not 'couldn't open'), a few times", async () => {
+  const sessions = [];
+  const { ctx, posts, host } = micBox();
+  ctx.PATVRtc.watch = (url) => { const ss = { url, onfail: null, close() { ss.closed = true; } }; sessions.push(ss); return Promise.resolve(ss); };
+  const prog = { v: 1, layout: "single", count: 1, still_s: 20, manage: null, src: [mfS("a", 0, "live")] };
+  const ctl = ctx.PATVStageMic.render(host, prog, { slug: "pad" });
+  await tick();
+  assert.equal(sessions.length, 1);
+  const before = posts.filter((p) => /\/micfollow\/watch$/.test(p[0]) && !p[1].beat && !p[1].stop).length;
+  ctx.PATVRtc.watch = (url) => { const ss = { url, onfail: null, close() { ss.closed = true; } }; sessions.push(ss); return new Promise(() => {}); };
+  sessions[0].onfail();
+  await tick();
+  const tileA = findBy(host, "mf-tile")[0];
+  assert.match(tileA.textContent, /reconnecting/, "says it's reconnecting");
+  assert.doesNotMatch(tileA.textContent, /couldn't open/);
+  assert.equal(posts.filter((p) => /\/micfollow\/watch$/.test(p[0]) && !p[1].beat && !p[1].stop).length, before + 1, "a fresh ticket at once");
+  assert.ok(!posts.some((p) => /\/micfollow\/watch$/.test(p[0]) && p[1].stop), "its viewer slot isn't given up");
+  ctl.stop();
+});
+
+test("mfix review: the strip (pad-camstrip.js) and a cam slot on the stage (stage-room.js) re-watch a dropped connection too - bounded, the slot kept", () => {
+  const strip = read("public", "js", "pad-camstrip.js");
+  assert.match(strip, /ss\.onfail = function \(\) \{ if \(my === t\.gen\) rewatch\(my\); \};/);
+  assert.match(strip, /REWATCH_MAX = 4, REWATCH_WIN_MS = 3 \* 60 \* 1000/);
+  assert.match(strip, /function rewatch\(my\) \{[^]*?post\(base \+ '\/beat'[^]*?post\(base, \{ login: t\.login \}\)[^]*?PATVRtc\.watch\(/);
+  const room = read("public", "js", "stage-room.js");
+  assert.match(room, /ss\.onfail = function \(\) \{ if \(g === my\.gen\) rewatch\(\); \};/);
+  assert.match(room, /CAM_REWATCH_MAX = 4/);
+  assert.match(room, /function rewatch\(\) \{[^]*?camPost\(s\.id, \{\}\)[^]*?PATVRtc\.watch\(d2\.whep/);
+  for (const k of ["js.pad.live.reconnecting", "js.stage.mf.reconnecting", "js.stage.mf.tab_pins", "js.stage.mf.group_aria_pins"]) assert.ok(EN[k], k + " in en.json");
+});
+
+test("mfix review stage-room.js: the 🎙 tab counts the people ON THE MIC; pinned cams show as 📌 n and keep the stage up with nobody on the mic", () => {
+  const js = read("public", "js", "stage-room.js");
+  assert.match(js, /function micOn\(\) \{ return !!\(window\.PATVStageMic && mic && \(mic\.count > 0 \|\| pinsN\(\) > 0/);
+  assert.match(js, /_t\('js\.stage\.mf\.tab_pins', '📌 \{n\}'/);
+  assert.match(js, /p\.pins_n \|\| 0/, "a pin count change redraws the tab");
 });
