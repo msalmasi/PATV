@@ -5,7 +5,7 @@
 // you right now (a pad asking to put your cam up: Allow / No; "keep going?" after 10 minutes on a Stage: Keep going / Keep going
 // and don't ask again on this pad / Take me off - 2 minutes to answer), and the pads you said yes to (Remove).
 //   GET  /api/privacy/stage         {linked, on, off, level, yes: [{pad, title, slug, at}], asks: [{id, kind, pad, title, slug, by, expires}]}
-//   POST /api/stage/leave           {slot}
+//   POST /api/stage/leave           {slot} | {room} (mfix: a pin on a pad's mic stage)
 //   POST /api/privacy/stage/level   {level}
 //   POST /api/privacy/stage/pad     {room, yes: false}
 //   POST /api/stage/ask/<id>        {answer}
@@ -104,7 +104,7 @@
   function leave(p, b) {
     busy(true, b);
     say(_t('js.sl.working', 'Taking you off…'), 'wait');
-    post('/api/stage/leave', { slot: p.slot })
+    post('/api/stage/leave', p.slot ? { slot: p.slot } : { room: p.slug || p.pad })      // mfix: a mic-stage pin goes by its pad
       .then(function (d) { done(d, b, d && d.ok ? _t('js.sl.done', "You're off {pad}'s Stage until {when}.", { pad: p.title || p.pad, when: when(d.until) }) : ''); })
       .catch(function () { busy(false, b); say(_t('js.sl.failed', "That didn't work - try again."), 'bad'); });
   }

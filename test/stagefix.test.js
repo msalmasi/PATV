@@ -548,7 +548,7 @@ test("Settings → Privacy shows the 🎬 card: the lists for a linked Camfrog n
   const mine = await get("/settings/privacy", U.alice);
   assert.equal(mine.status, 200);
   assert.match(mine.text, /id="stage"[^]*Your cam on pads(&#39;|')? Stages[^]*id="pvSl"[^]*id="pvSlOn"[^]*id="pvSlOff"/);
-  assert.match(mine.text, /privacy-stage\.js\?v=2/);
+  assert.match(mine.text, /privacy-stage\.js\?v=3/);
   const unlinked = await get("/settings/privacy", U.plain);
   assert.equal(unlinked.status, 200);
   const card = unlinked.text.slice(unlinked.text.indexOf('id="stage"'));
@@ -816,7 +816,7 @@ test("fix: client - the owner's list words 'unavailable' and 'limited', /stage w
   assert.match(sb, /function reasonOf\(r\)/);
   assert.match(sb, /why: reasonOf\(last\.end_reason\)/);
   assert.match(fs.readFileSync(path.join(repo, "views", "stageBook.ejs"), "utf8"), /stage-book\.js\?v=12/);
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-room\.js\?v=14/, v);   // train2: + micfollow's 12
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-room\.js\?v=15/, v);   // train2: + micfollow's 12; mfix: 15
   assert.match(fs.readFileSync(path.join(repo, "views", "stageAdmin.ejs"), "utf8"), /only cams shown to everyone are excused/);
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const k of ["js.stage.r_cam", "js.stage.r_cam_left_cam", "js.stage.r_cam_opted_out", "sl.chat_livecam"]) assert.ok(en[k], k);
@@ -1101,7 +1101,7 @@ test("final: client - the level, the asks and the per-pad yes on the card; Ask t
   assert.doesNotMatch(ps, /innerHTML/, "all text via textContent");
   const view = fs.readFileSync(path.join(repo, "views", "privacy-settings.ejs"), "utf8");
   for (const id of ["pvSlLevel", "pvSlAskList", "pvSlYes"]) assert.match(view, new RegExp('id="' + id + '"'));
-  assert.match(view, /privacy-stage\.js\?v=2/);
+  assert.match(view, /privacy-stage\.js\?v=3/);
   const rm = fs.readFileSync(path.join(repo, "public", "js", "room-manage.js"), "utf8");
   assert.match(rm, /Ask to put on stage/);
   assert.match(rm, /waiting for their OK/);

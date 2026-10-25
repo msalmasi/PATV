@@ -30,6 +30,22 @@
 // yet ...) - or by Pepe alone - tiles kept only by the hand-over / idle hold give way at once (min on stage still applies)
 // and the program shows a NEUTRAL card ("Someone is speaking" / Pepe's card, S.neutral) instead of the last speaker's face;
 // clearStage = the owner's "Clear the stage" (everyone off, frozen).
+// mfix (owner 2026-10-25):
+//   recent speakers  a pad's keep_recent (minutes; 0 = off): a tile whose person let go of the mic stays on the stage that
+//                    long (its relay stays live) - a back-and-forth on a one-mic room still shows side by side. A new
+//                    speaker who needs the room displaces the one off the mic LONGEST first; a recent speaker who grabs
+//                    again just holds again (no change). A recent tile whose cam goes off leaves after the plain hand-over.
+//                    Every consent rule re-runs on recent tiles each step like on any tile (cuts, opt-outs, cam access).
+//   pins             I.pins = the pad's pinned cams (micfollow.js holds them, with the cam-slot consent rules): they take
+//                    fixed places first, count toward max_people, and their people are never mic tiles (a tile of someone
+//                    just pinned comes off - no duplicate). A single layout with a pin shows picture in picture.
+//   speech nobody can show / Pepe's own mic-ups no longer clear the stage: the tiles stay (S.speaking = "someone" | "pepe"
+//                    dims them and says so on the page, nobody is highlighted as the newest); the old give-way is the site
+//                    knob unattributed_clear. The neutral card still shows when the last tiles leave while it runs.
+//   soft failures    an open that failed for a passing reason (Pepe busy, a stray window, a slow open...) is tried again
+//                    after soft_retry_s - soft_fails_max of them in open_fail_backoff_min, then the full backoff.
+//   card reasons     a card says WHY there's no picture: cold_off / rate / relays / pool / pad_cap / retry / failed / full.
+//   layoutOverride   the owner's stage-bar layout is never reset by the engine (micfollow.js keeps it until the owner does).
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
 // notice_first / spam / touch / deferred.
 "use strict";
@@ -46,11 +62,16 @@ const FIELDS = Object.freeze({
   cooldown_s:            { def: 20, min: 0, max: 300 },
   max_changes_per_min:   { def: 6, min: 2, max: 20 },
   min_gap_s:             { def: 5, min: 2, max: 30 },
-  relays_max:            { def: 2, min: 0, max: 24 },
-  cold_open:             { def: STAGING, bool: true },          // prod waits for V-2 / V-3
-  cold_opens_per_min:    { def: 4, min: 0, max: 30 },           // site-wide
-  cold_opens_per_pad:    { def: 2, min: 0, max: 30 },           // a minute, per pad
+  // mfix: the live-cam limits for the mic stage (owner 2026-10-25: "increase the limit of live cams for mic follows") -
+  // relays only the mic stage holds site-wide, and the cold opens a minute (site-wide / per pad). Pepe's VM measured ~3.4% of
+  // one core per re-encoded relay; livecam's own max_live (all rooms) still caps them all.
+  relays_max:            { def: 6, min: 0, max: 24 },
+  cold_open:             { def: true, bool: true },             // mfix: on (▶ Live does the same opens on prod)
+  cold_opens_per_min:    { def: 10, min: 0, max: 30 },          // site-wide
+  cold_opens_per_pad:    { def: 6, min: 0, max: 30 },           // a minute, per pad
   open_fail_backoff_min: { def: 10, min: 1, max: 120 },
+  soft_retry_s:          { def: 20, min: 5, max: 120 },         // mfix: a soft failed open (busy, a stray window...) is retried after this
+  soft_fails_max:        { def: 3, min: 1, max: 10 },           //   ... this many in open_fail_backoff_min -> the full backoff
   stills:                { def: true, bool: true },
   stills_max:            { def: 4, min: 0, max: 12 },
   still_refresh_s:       { def: 20, min: 10, max: 120 },
@@ -64,8 +85,13 @@ const FIELDS = Object.freeze({
   // the site's CAPS on every pad's own max_people / max_live (a pad owner may only narrow them; a pad's own default is 4
   // people). 9 = the 3 x 3 "Brady Bunch" grid stays reachable unless an admin narrows it site-wide.
   max_people:            { def: 9, min: 1, max: 9 },
-  max_live:              { def: 4, min: 1, max: 4 },
+  max_live:              { def: 6, min: 1, max: 6 },             // mfix: 4 -> 6 (recent speakers keep their relays)
   notice_lead_s:         { def: 120, min: 120, max: 3600 },     // DF-11: the pad's first notice this long before the first pick
+  // mfix: DF-30 as it was - speech nobody can show makes the tiles give way to the neutral card at once. Off (the default):
+  // the tiles stay, dimmed, with "Someone else is speaking" on them and nobody highlighted as the speaker
+  unattributed_clear:    { def: false, bool: true },
+  pins_max:              { def: 2, min: 0, max: 4 },             // mfix: 📌 pinned cams per pad (always leaving a mic place)
+  pin_max_min:           { def: 180, min: 10, max: 720 },        //   ... a pin ends by itself after this long
   spam_holds:            { def: 4, min: 2, max: 20 },           // DF-37 grab-spam: this many separate short holds ...
   spam_short_s:          { def: 5, min: 2, max: 30 },           //   ... each shorter than this ...
   spam_window_s:         { def: 120, min: 30, max: 600 },       //   ... within this long ...
@@ -79,12 +105,15 @@ const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k
 const LAYOUTS = Object.freeze(["auto", "single", "split", "grid", "pip"]);
 const SHAPES = Object.freeze(["single", "split", "grid4", "grid9", "pip"]);
 const DEFAULT_VIEWS = Object.freeze(["first", "after_streams", "tab"]);
+const KEEP_RECENT = Object.freeze([0, 1, 2, 5]);
 const PAD_FIELDS = Object.freeze({
   on:           { def: false, bool: true },
   layout:       { def: "auto", choices: LAYOUTS },
   default_view: { def: "first", choices: DEFAULT_VIEWS },
   max_people:   { def: 4, min: 1, max: 9 },
-  max_live:     { def: 4, min: 1, max: 4 },
+  max_live:     { def: 4, min: 1, max: 6 },
+  // mfix: minutes a speaker who let go of the mic stays on the stage (0 = off) - until a new speaker needs the room
+  keep_recent:  { def: 2, min: 0, max: 5, allowed: KEEP_RECENT },
 });
 const PAD_DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(PAD_FIELDS).map(([k, f]) => [k, f.def])));
 
@@ -98,10 +127,18 @@ const isCut = (e) => CUT_SET.has(e);
 // a session that ended for one of these: a card ("failed") and no new open for that person until the backoff passes
 const FAIL_WHYS = new Set(["open_failed", "not_that_cam", "ambiguous", "noswitch", "busy", "start_timeout", "slots_busy", "spawn_failed", "failed",
   "nopepe", "not_open", "no_pic"]);
+/** mfix: failures that say nothing about the person or their cam (Pepe's cam lock was busy, a window titled with their name
+ *  that no exact open made was in the way, the room window wasn't on screen, a slow open, a warm relay Pepe couldn't confirm
+ *  yet): another try after soft_retry_s, soft_fails_max times, before the full backoff. "ambiguous" (two people go by that
+ *  name) is never soft. */
+const SOFT_WHYS = new Set(["busy", "noswitch", "not_that_cam", "start_timeout", "no_pic", "not_open", "nopepe", "inexact"]);
 const OFFCAM_WHYS = new Set(["not_on_cam", "cam_closed", "left_cam"]);
 /** A held relay Pepe hasn't opened / verified by the exact name (sess.exact !== true) is never shown; after this long the
- *  mic stage gives it up (Pepe re-checks a running cam at most every 20 s: two tries and a poll). */
-const EXACT_WAIT_MS = 45 * 1000;
+ *  mic stage gives it up (Pepe re-checks a running cam at most every 20 s; mfix: one he can't confirm he re-opens by the exact
+ *  name - closing the window his older name match made - which takes a few seconds more). */
+const EXACT_WAIT_MS = 60 * 1000;
+/** mfix: the reasons a tile shows a card instead of a picture (the page words each). */
+const CARD_WHYS = Object.freeze(["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap"]);
 /** The site's live relays were full at the moment of a hold (a race, not a failed open): "full", another try after this. */
 const FULL_RETRY_MS = 15 * 1000;
 /** A relay that ended because the cam closed ("cam off"): no new open / still of that person until Pepe's roster shows
@@ -132,6 +169,12 @@ function normalizeWith(FLD, input, { base = null, lenient = false } = {}) {
     if (!Number.isFinite(n)) { cfg[k] = f.def; if (!lenient) errors[k] = "a number"; continue; }
     if (n < f.min || n > f.max) { if (!lenient) errors[k] = `${f.min}–${f.max}`; cfg[k] = Math.max(f.min, Math.min(f.max, n)); } else cfg[k] = n;
     cfg[k] = Math.round(cfg[k]);
+    // mfix: a field with a short list of values (keep_recent: 0 / 1 / 2 / 5 minutes) - anything else is the nearest one below
+    if (f.allowed && !f.allowed.includes(cfg[k])) {
+      if (!lenient && has) errors[k] = `one of ${f.allowed.join(", ")}`;
+      const below = f.allowed.filter((x) => x <= cfg[k]);
+      cfg[k] = below.length ? below[below.length - 1] : f.def;
+    }
   }
   return { cfg, errors };
 }
@@ -167,6 +210,18 @@ function layoutFor(layout, n) {
   if (layout === "grid") return n <= 1 ? "single" : n <= 4 ? "grid4" : "grid9";
   return n <= 1 ? "single" : n === 2 ? "split" : n <= 4 ? "grid4" : "grid9";   // auto
 }
+/** mfix: the shape with `pins` pinned cams besides `tiles` mic tiles - a single layout with a pin is picture in picture. */
+function shapeFor(layout, tiles, pins) {
+  const n = Math.max(0, tiles | 0) + Math.max(0, pins | 0);
+  if ((layout || "auto") === "single" && pins > 0 && n > 1) return "pip";
+  return layoutFor(layout || "auto", n);
+}
+/** mfix: how many cams a pad may pin: pins_max, always leaving a mic place (a single layout: one pin, shown in a corner). */
+function maxPins(layout, maxPeople, pinsMax) {
+  const lay = layout || "auto";
+  const cap = Math.max(1, Math.min(maxPeople | 0 || 1, layoutCap(lay)));
+  return Math.max(0, Math.min(pinsMax | 0, lay === "single" ? 1 : cap - 1));
+}
 
 // ── state ──
 function newState() {
@@ -185,6 +240,10 @@ function newState() {
     cutAt: new Map(),          // login -> when a consent cut took them off (the cooldown applies even to an empty stage)
     offcam: new Map(),         // login -> when their relay ended "cam off" (no new open / still until OFFCAM_RETRY_MS or off -> on)
     sawOff: new Set(),         // logins whose tile showed "cam off" while backed off / blocked: back on cam = the block ends (§3.4 rule 10)
+    soft: new Map(),           // mfix: login -> [when a soft open failure happened] (soft_fails_max of them -> the full backoff)
+    blockWhy: new Map(),       // mfix: login -> why liveBlock holds them ("retry" | "full")
+    pinned: new Set(),         // mfix: the pad's pinned cams' logins (I.pins, last step)
+    speaking: null,            // mfix: null | "someone" | "pepe" - speech nobody can show / Pepe while tiles stay (dimmed on the page)
     changes: [],               // times of the last minute's changes
     lastChangeAt: -Infinity,
     v: 0, active: false, running: false, staleSince: 0, whyOff: null,
@@ -200,9 +259,12 @@ function compact(S) {
   S.tiles.sort(newer);
   S.tiles.forEach((x, i) => { x.pos = i; });
 }
+/** The newest speaker on the stage - mfix: only someone who HOLDS the mic now (a recent speaker who let go is never
+ *  highlighted as the one speaking), and nobody while speech nobody can show runs. */
 function newest(S) {
+  if (S.speaking) return null;
   let n = null;
-  for (const x of S.tiles) if (!n || newer(x, n) > 0) n = x;
+  for (const x of S.tiles) if (x.relAt == null && (!n || newer(x, n) > 0)) n = x;
   return n;
 }
 /** A consent cut happened (it is never deferred): it counts in the change budget, and that person gets the cooldown
@@ -217,12 +279,33 @@ function noteCut(S, logins, t) {
 /** Expired per-person timers go (the maps stay small however many people pass through a busy room). */
 function pruneMaps(S, t) {
   for (const m of [S.backoff, S.liveBlock, S.inexact, S.spamUntil]) if (m.size > 200) for (const [l, until] of [...m]) if (until <= t) m.delete(l);
+  if (S.blockWhy.size > 200) for (const l of [...S.blockWhy.keys()]) if (!((S.liveBlock.get(l) || 0) > t)) S.blockWhy.delete(l);
+  if (S.soft.size > 200) for (const [l, list] of [...S.soft]) if (!list.length || t - list[list.length - 1] > 3600e3) S.soft.delete(l);
   if (S.offcam.size > 200) for (const [l, at] of [...S.offcam]) if (t - at >= OFFCAM_RETRY_MS) S.offcam.delete(l);
   if (S.leftAt.size > 500) for (const [l, at] of [...S.leftAt]) if (t - at > 3600e3) S.leftAt.delete(l);
   if (S.sawOff.size > 200) S.sawOff.clear();
 }
-/** The layout shape the mic stage shows now. */
-function shapeOf(S, pad) { return layoutFor(S.layoutOverride || (pad && pad.layout) || "auto", S.tiles.length); }
+/** The layout shape the mic stage shows now (mfix: with its pinned cams). */
+function shapeOf(S, pad) { return shapeFor(S.layoutOverride || (pad && pad.layout) || "auto", S.tiles.length, S.pinned ? S.pinned.size : 0); }
+/** mfix: a live picture didn't work out for `login` for `why`. A soft reason: another try after soft_retry_s (soft_fails_max
+ *  times in open_fail_backoff_min) -> "retry"; else the full backoff -> "failed". inexact: Pepe couldn't confirm a warm relay -
+ *  its full backoff is S.inexact (stills - exact jobs of their own - may still run). */
+function failOpen(S, login, why, C, t) {
+  if (SOFT_WHYS.has(why)) {
+    const win = C.open_fail_backoff_min * 60 * 1000;
+    const list = (S.soft.get(login) || []).filter((x) => t - x < win);
+    list.push(t);
+    if (list.length < C.soft_fails_max) {
+      S.soft.set(login, list);
+      S.liveBlock.set(login, t + C.soft_retry_s * 1000);
+      S.blockWhy.set(login, "retry");
+      return "retry";
+    }
+    S.soft.delete(login);
+  }
+  (why === "inexact" ? S.inexact : S.backoff).set(login, t + C.open_fail_backoff_min * 60 * 1000);
+  return "failed";
+}
 
 /** Take a tile off: let go of its relay / still, close its span. */
 function removeTile(S, x, reason, t, A) {
@@ -247,11 +330,10 @@ function clearAll(S, reason, t, A) {
   for (const x of S.tiles.slice()) removeTile(S, x, reason, t, A);
   S.tiles = [];
   S.active = false;
-  S.layoutOverride = null;
   S.seen.clear();
   S.oseen.clear(); S.pepeSince = 0;
   const neutral = !!S.neutral;
-  S.neutral = null;
+  S.neutral = null; S.speaking = null;
   if (had || neutral) { S.v++; A.push({ a: "touch", why: "clear:" + reason }); }
   return had;
 }
@@ -271,7 +353,7 @@ function consentCuts(S, I, t, A) {
     compact(S);
     S.v++;
     A.push({ a: "touch", why: "cut", cut: n });
-    if (!S.tiles.length) { S.active = false; S.layoutOverride = null; }
+    if (!S.tiles.length) S.active = false;
   }
   return n;
 }
@@ -346,6 +428,7 @@ function speaking(S, I, C, t) {
   const minHold = C.min_hold_s * 1000;
   let attributed = false, other = false;
   for (const h of I.holders || []) {
+    if (S.pinned && S.pinned.has(h.login)) { attributed = true; continue; }   // mfix: a pinned cam's person: shown, named
     const e = I.elig.get(h.login);
     if ((e === "ok" || e === "off_cam") && !spamming(S, h.login, t)) { attributed = true; continue; }
     if (e === "pending" || e == null) continue;              // a fact fetch on its way (a moment): neither
@@ -394,7 +477,8 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
         if (!x.unverifiedAt) x.unverifiedAt = t;
         if (x.video === "live" || t - x.unverifiedAt >= EXACT_WAIT_MS) {
           A.push({ a: "release", login: x.login });
-          S.inexact.set(x.login, t + C.open_fail_backoff_min * 60 * 1000);
+          // mfix: a soft failure first (Pepe may still be re-opening it by the exact name) - the full block after a few
+          failOpen(S, x.login, "inexact", C, t);
           x.unverifiedAt = 0;
           setVideo(x, null, null, t);                         // (b) gives it a still (an exact job) or a card
           changed = true;
@@ -428,11 +512,15 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
     }
     const backed = (S.backoff.get(x.login) || 0) > t;
     const inexact = (S.inexact.get(x.login) || 0) > t;
-    const blocked = backed || inexact || (S.liveBlock.get(x.login) || 0) > t;
+    const lblock = (S.liveBlock.get(x.login) || 0) > t;
+    const blocked = backed || inexact || lblock;
+    let why0 = null;                                          // mfix: why no live picture (the card says so)
+    if (fresh && e !== "pending" && e !== "notice" && !blocked && used >= padMaxLive) why0 = "pad_cap";
     if (fresh && e !== "pending" && e !== "notice" && used < padMaxLive && !blocked) {
       // warm: a relay that runs already (a ▶ Live viewer's / a cam slot's) - held, it's shown once Pepe says it's exact (a)
       const warm = ss.state === "connecting" || ss.state === "live";
       const isCold = ss.state === "none" || ss.state === "ended";
+      if (!warm) why0 = shed || pool <= 0 ? "pool" : cold <= 0 ? (I.site.coldWhy || "full") : null;
       if (warm || (isCold && cold > 0 && pool > 0 && !shed)) {
         if (x.video === "still") A.push({ a: "still_stop", login: x.login });
         if (isCold) { cold--; pool--; }
@@ -459,7 +547,9 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
       changed = true;
       continue;
     }
-    const why = backed || inexact ? "failed" : "full";
+    // (the stale hold opens nothing: a card keeps the reason it had)
+    const kept = !fresh && x.video === "card" && x.why && x.why !== "off_cam" ? x.why : null;
+    const why = backed || inexact ? "failed" : lblock ? (S.blockWhy.get(x.login) || "full") : (why0 || kept || "full");
     if (x.video !== "card" || x.why !== why) { setVideo(x, "card", why, t); changed = true; }
   }
   for (const x of S.tiles) {
@@ -478,8 +568,10 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
  *   others: [{key, since}]  holders nobody can show (unproven, anonymous, account keys, bots),  pepe: since | true | null,
  *   elig: Map(login -> "ok" | "off_cam" | "pending" | "notice" (not noticed notice_lead_s ago) | CUT code)  holders + tiles,
  *   sess: Map(login -> {state, why, exact, held, mfOnly, viewers})     livecam.mfState,
- *   pad: {layout, max_people, max_live, default_view},  room: {cams},
- *   site: {maxLive, coldLeft, stillsLeft, poolLeft (Pepe's cam pool share: cold opens + stills), shed (make room for a manual cam)} }
+ *   pad: {layout, max_people, max_live, default_view, keep_recent (minutes)},  room: {cams},
+ *   site: {maxLive, coldLeft, coldWhy (why coldLeft is 0: cold_off | rate | relays | full), stillsLeft, poolLeft (Pepe's cam pool
+ *          share: cold opens + stills), shed (make room for a manual cam)},
+ *   pins: [login | {login}]  the pad's pinned cams (mfix) }
  * -> {state, actions}
  */
 function step(S, I, C, t) {
@@ -508,6 +600,14 @@ function step(S, I, C, t) {
   S.running = true; S.staleSince = 0; S.whyOff = null;
   // 1
   consentCuts(S, I, t, A);
+  // mfix: the pad's pinned cams - their people are never mic tiles (a tile of someone just pinned comes off: no duplicate,
+  // and no cooldown when the pin ends - they were on the stage all along)
+  const pins = new Set((I.pins || []).map((p) => (p && typeof p === "object" ? p.login : p)).filter(Boolean));
+  const pinsMoved = pins.size !== S.pinned.size || [...pins].some((l) => !S.pinned.has(l));
+  S.pinned = pins;
+  const pinnedOff = S.tiles.filter((x) => pins.has(x.login));
+  for (const x of pinnedOff) { removeTile(S, x, "pinned", t, A); S.leftAt.delete(x.login); }
+  if (pinnedOff.length || pinsMoved) { compact(S); S.v++; A.push({ a: "touch", why: "pins" }); }
   // 2
   const HS = track(S, I.holders || [], C, t);
   trackOthers(S, I, t);
@@ -521,18 +621,21 @@ function step(S, I, C, t) {
     compact(S);
     S.v++;
     A.push({ a: "touch", why: "cut", cut: spamOff.length });
-    if (!S.tiles.length) { S.active = false; S.layoutOverride = null; }
+    if (!S.tiles.length) S.active = false;
   }
   if (caught.length) A.push({ a: "spam", n: caught.length });
   // the pad's first notice (DF-11): at the first qualifying grab, before anyone can be picked - frozen or not
   for (const h of I.holders || []) {
+    if (pins.has(h.login)) continue;                         // mfix: pinned - on the stage by the pin's own consent, not the mic's
     const s = S.seen.get(h.login);
     if (s && s.held && t - s.since >= C.min_hold_s * 1000 && I.elig.get(h.login) === "notice" && !spamming(S, h.login, t)) A.push({ a: "notice_first", login: h.login });
   }
-  // speech nobody can show (DF-30) / Pepe alone (DF-12): the hand-over and idle holds don't apply
+  // speech nobody can show (DF-30) / Pepe alone (DF-12). mfix: the tiles stay, dimmed on the page (S.speaking); only the
+  // site knob unattributed_clear brings back the old give-way (no hand-over / idle hold) - and never for Pepe's own mic-ups
   const speak = speaking(S, I, C, t);
+  const clearing = speak === "someone" && C.unattributed_clear === true;
   // 4 (computed before 3: the last-on lock needs "is a qualified holder waiting")
-  const onStage = new Set(S.tiles.map((x) => x.login));
+  const onStage = new Set([...S.tiles.map((x) => x.login), ...pins]);
   const frozen = S.frozenUntil > t;
   const qualified = [];
   if (!frozen) {
@@ -546,18 +649,24 @@ function step(S, I, C, t) {
       qualified.push({ login: h.login, since: s.since });
     }
   }
-  // 3 due removals (+ the last-on lock; neither hold applies while speech nobody can show runs)
+  // 3 due removals (+ the last-on lock; with unattributed_clear neither hold applies while speech nobody can show runs).
+  // mfix: a recent speaker stays keep_recent minutes after letting go (until a new speaker needs the room - 5); one whose
+  // cam went off leaves after the plain hand-over (a "cam off" card isn't worth keeping)
   const minOn = C.min_on_stage_s * 1000;
+  const keepMs = Math.max(0, Number(I.pad.keep_recent) || 0) * 60 * 1000;
+  const offCam = (x) => I.elig.get(x.login) === "off_cam";
+  const holdOf = (x) => (clearing ? 0 : offCam(x) ? C.handover_s * 1000 : Math.max(C.handover_s * 1000, keepMs));
   const dueAt = (x, hold) => Math.max(x.relAt + hold, x.addedAt + minOn);
-  let due = S.tiles.filter((x) => x.relAt != null && t >= dueAt(x, speak ? 0 : C.handover_s * 1000));
-  if (!speak && S.tiles.length && due.length === S.tiles.length && !qualified.length) {
-    due = S.tiles.filter((x) => x.relAt != null && t >= dueAt(x, C.idle_hold_s * 1000));
+  let due = S.tiles.filter((x) => x.relAt != null && t >= dueAt(x, holdOf(x)));
+  if (!clearing && S.tiles.length && due.length === S.tiles.length && !qualified.length) {
+    due = S.tiles.filter((x) => x.relAt != null && t >= dueAt(x, offCam(x) ? holdOf(x) : Math.max(C.idle_hold_s * 1000, holdOf(x))));
   }
   const dueSet = new Set(due);
   let remaining = S.tiles.filter((x) => !dueSet.has(x));
-  // the layout's cap went down (the owner narrowed it): the oldest extras go, once they've been on min_on_stage_s
+  // the layout's cap went down (the owner narrowed it): the oldest extras go, once they've been on min_on_stage_s.
+  // mfix: pinned cams take their places first (they count toward max_people); at least one place stays the mic's
   const layout = S.layoutOverride || I.pad.layout || "auto";
-  const cap = Math.max(1, Math.min(I.pad.max_people, layoutCap(layout)));
+  const cap = Math.max(1, Math.min(I.pad.max_people, layoutCap(layout)) - pins.size);
   const trim = [];
   if (remaining.length > cap) {
     for (const x of remaining.slice().sort((a, b) => a.addedAt - b.addedAt)) {
@@ -577,8 +686,9 @@ function step(S, I, C, t) {
   const holderSince = (x) => { const s = S.seen.get(x.login); return x.relAt != null || !s || !s.held ? -Infinity : s.since; };
   for (const c of cands) {
     if (free > 0) { adds.push(c); free--; continue; }
+    // released tiles first - mfix: the one off the mic LONGEST - then the one added longest ago
     const pool = remaining.filter((x) => !displaced.includes(x) && t - x.addedAt >= minOn && holderSince(x) < c.since)
-      .sort((a, b) => (a.relAt != null ? 0 : 1) - (b.relAt != null ? 0 : 1) || a.addedAt - b.addedAt);
+      .sort((a, b) => (a.relAt != null ? 0 : 1) - (b.relAt != null ? 0 : 1) || (a.relAt || 0) - (b.relAt || 0) || a.addedAt - b.addedAt);
     if (!pool.length) continue;
     displaced.push(pool[0]);
     adds.push(c);
@@ -610,13 +720,16 @@ function step(S, I, C, t) {
       S.changes.push(t);
       S.v++;
       A.push({ a: "touch", why: "change", add: adds.length, rem: due.length + trim.length + displaced.length });
-      if (!S.tiles.length) S.layoutOverride = null;
       gaveWay = !!speak && due.length > 0;
     }
   } else S.deferring = false;
-  // the neutral card: it replaces tiles that gave way to speech nobody can show (never a stage that was idle anyway)
-  const neutral = speak && !S.tiles.length && (gaveWay || S.neutral) ? speak : null;
+  // the neutral card: it replaces tiles that left while speech nobody can show ran (never a stage that was idle anyway;
+  // mfix: nor one with pinned cams - they stay up, dimmed like tiles)
+  const neutral = speak && !S.tiles.length && !pins.size && (gaveWay || S.neutral) ? speak : null;
   if (neutral !== S.neutral) { S.neutral = neutral; S.v++; A.push({ a: "touch", why: "neutral" }); }
+  // mfix: tiles (or pins) kept up while speech nobody can show / Pepe runs: the page dims them and says who speaks
+  const speakingNow = speak && (S.tiles.length || pins.size) ? speak : null;
+  if (speakingNow !== S.speaking) { S.speaking = speakingNow; S.v++; A.push({ a: "touch", why: "speaking" }); }
   pruneMaps(S, t);
   // 8 pictures
   if (pictures(S, I, C, t, A)) { S.v++; A.push({ a: "touch", why: "picture" }); }
@@ -640,7 +753,7 @@ function holdDone(S, login, ok, code, C, t) {
     removeTile(S, x, "cut:" + code, t, A);
     noteCut(S, [login], t);
     compact(S);
-    if (!S.tiles.length) { S.active = false; S.layoutOverride = null; }
+    if (!S.tiles.length) S.active = false;
     S.v++;
     A.push({ a: "touch", why: "cut", cut: 1 });
     return A;
@@ -657,11 +770,9 @@ function holdDone(S, login, ok, code, C, t) {
     // the site's live relays were full at that moment (a race - e.g. a manual cam slot took the freed one): "full" and
     // another try soon; never the 10-minute failure backoff (that would block its still too)
     S.liveBlock.set(login, t + FULL_RETRY_MS);
+    S.blockWhy.set(login, "full");
     setVideo(x, "card", "full", t);
-  } else {
-    S.backoff.set(login, t + C.open_fail_backoff_min * 60 * 1000);
-    setVideo(x, "card", "failed", t);
-  }
+  } else setVideo(x, "card", failOpen(S, login, code, C, t), t);   // mfix: a soft reason is tried again soon
   S.v++;
   A.push({ a: "touch", why: "hold_failed" });
   return A;
@@ -678,7 +789,7 @@ function sessionEnded(S, login, why, C, t) {
     removeTile(S, x, "cut:" + code, t, A);
     noteCut(S, [login], t);
     compact(S);
-    if (!S.tiles.length) { S.active = false; S.layoutOverride = null; }
+    if (!S.tiles.length) S.active = false;
     S.v++;
     A.push({ a: "touch", why: "cut", cut: 1 });
     return { cut: code, actions: A };
@@ -686,10 +797,12 @@ function sessionEnded(S, login, why, C, t) {
   if (!liveish(x) && !x.pend) return { cut: null, actions: A };
   x.pend = false;
   if (OFFCAM_WHYS.has(why)) { S.offcam.set(login, t); setVideo(x, "card", "off_cam", t); }
-  else if (FAIL_WHYS.has(why)) {
-    S.backoff.set(login, t + C.open_fail_backoff_min * 60 * 1000);
-    setVideo(x, "card", "failed", t);
-  } else setVideo(x, null, null, t);                      // anything else: the next step finds it a picture again
+  else if (why === "slots_busy") {                        // mfix: Pepe's live cams were full - a race, another try soon
+    S.liveBlock.set(login, t + FULL_RETRY_MS);
+    S.blockWhy.set(login, "full");
+    setVideo(x, "card", "full", t);
+  } else if (FAIL_WHYS.has(why)) setVideo(x, "card", failOpen(S, login, why, C, t), t);   // mfix: soft reasons retry soon
+  else setVideo(x, null, null, t);                        // anything else: the next step finds it a picture again
   S.v++;
   A.push({ a: "touch", why: "session_end" });
   return { cut: null, actions: A };
@@ -714,6 +827,7 @@ function yieldTile(S, login, t, blockMs = 60 * 1000) {
   if (!x) return false;
   x.pend = false;
   S.liveBlock.set(login, t + blockMs);
+  S.blockWhy.set(login, "full");
   setVideo(x, null, null, t);
   S.v++;
   return true;
@@ -727,7 +841,7 @@ function cutNow(S, login, code, t) {
   removeTile(S, x, "cut:" + code, t, A);
   noteCut(S, [login], t);
   compact(S);
-  if (!S.tiles.length) { S.active = false; S.layoutOverride = null; }
+  if (!S.tiles.length) S.active = false;
   S.v++;
   A.push({ a: "touch", why: "cut", cut: 1 });
   return A;
@@ -741,7 +855,7 @@ function clearStage(S, t, freezeMs) {
   for (const x of S.tiles.slice()) removeTile(S, x, "cleared", t, A);
   S.tiles = [];
   if (out.length) noteCut(S, out, t);
-  S.active = false; S.layoutOverride = null; S.neutral = null;
+  S.active = false; S.neutral = null; S.speaking = null;
   S.frozenUntil = Math.max(S.frozenUntil || 0, t + Math.max(0, freezeMs || 0));
   S.v++;
   A.push({ a: "touch", why: "cleared", cut: out.length });
@@ -750,13 +864,14 @@ function clearStage(S, t, freezeMs) {
 
 /** Is anything in this pad's program waiting on the clock? (the 1 s timer only steps these) */
 function hot(S, t) {
-  if (S.tiles.length || S.staleSince || S.neutral || S.oseen.size || S.pepeSince) return true;
+  if (S.tiles.length || S.staleSince || S.neutral || S.speaking || S.oseen.size || S.pepeSince) return true;
   for (const s of S.seen.values()) if (s.held) return true;
   return false;
 }
 
 module.exports = {
-  FIELDS, DEFAULTS, PAD_FIELDS, PAD_DEFAULTS, LAYOUTS, SHAPES, DEFAULT_VIEWS, CUT, isCut, FAIL_WHYS, OFFCAM_WHYS, EXACT_WAIT_MS, FULL_RETRY_MS, OFFCAM_RETRY_MS,
-  normalize, normalizePad, layoutCap, layoutFor, newState, step, holdDone, sessionEnded, stillFailed, yieldTile, cutNow, clearStage, hot, speaking,
-  shapeOf, newest, tileOf, hasPicture, liveish,
+  FIELDS, DEFAULTS, PAD_FIELDS, PAD_DEFAULTS, LAYOUTS, SHAPES, DEFAULT_VIEWS, CUT, isCut, FAIL_WHYS, SOFT_WHYS, OFFCAM_WHYS, EXACT_WAIT_MS, FULL_RETRY_MS, OFFCAM_RETRY_MS,
+  CARD_WHYS, KEEP_RECENT,
+  normalize, normalizePad, layoutCap, layoutFor, shapeFor, maxPins, newState, step, holdDone, sessionEnded, stillFailed, yieldTile, cutNow, clearStage, hot, speaking,
+  shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
 };

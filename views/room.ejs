@@ -628,11 +628,11 @@
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
   <script src="/public/js/stage-player.js?v=9"></script>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
-  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=5">
+  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=6">
   <script src="/public/js/webrtc-client.js?v=5"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <script src="/public/js/stage-mic.js?v=2"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
-  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=14"></script>
+  <script src="/public/js/stage-mic.js?v=3"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
+  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=15"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=2"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">

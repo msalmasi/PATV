@@ -1,5 +1,5 @@
 // pad-micfollow.js — Pad settings → Stage → 🎙 Mic follows (micfollow.js): the pad's switch, layout, when it shows, how many
-// people / live cams, and the people kept off the mic stage (add by Camfrog or PATV name - the owner says which - for 1 h / 24 h / always; ✕
+// people / live cams, how long recent speakers stay up (mfix), and the people kept off the mic stage (add by Camfrog or PATV name - the owner says which - for 1 h / 24 h / always; ✕
 // removes). JSON + X-Requested-With (the routes are fetch-only, same site). All text via textContent.
 (function () {
   'use strict';
@@ -43,6 +43,7 @@
     ev.preventDefault();
     var f = form.elements;
     var body = { on: !!f.on.checked, layout: f.layout.value, default_view: f.default_view.value, max_people: Number(f.max_people.value), max_live: Number(f.max_live.value) };
+    if (f.keep_recent) body.keep_recent = Number(f.keep_recent.value);   // mfix: recent speakers (minutes, 0 = off)
     msg.textContent = '…';
     post(form.getAttribute('data-url'), body).then(function (d) {
       msg.textContent = d && d.ok ? _t('js.padset.mf.saved', 'Saved.') : (d && d.error) || _t('js.padset.mf.failed', 'Not saved - try again.');

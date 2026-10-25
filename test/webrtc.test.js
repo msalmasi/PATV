@@ -572,9 +572,9 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(off, RTC, name + ": no WebRTC while off");
     const html = await render(on);
     assert.match(html, /webrtc-client\.js\?v=5/, name);   // 1.99il: listen() for the room audio; 1.99yh: watch() for live cams
-    assert.match(html, /webrtc\.css\?v=5/, name);   // micfollow: + the 🎙 mic stage layouts
+    assert.match(html, /webrtc\.css\?v=6/, name);   // micfollow: + the 🎙 mic stage layouts
   }
-  assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=14/);   // train2: 14 = stagefix's 13 + micfollow's 12 merged
+  assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=15/);   // train2: 14 = stagefix's 13 + micfollow's 12 merged
   assert.match(await renderRoom(on), /stage-lowlat\.js\?v=2/);
   const book = await renderBook(on);
   assert.match(book, /id="tabRtc"[^>]*>⚡ Browser · ultra-low latency/);

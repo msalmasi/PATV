@@ -15,6 +15,11 @@
 // bar above them): a reason, and the tile hides for them at once (program.report). While the mic is held only by people
 // nobody can show - or Pepe alone - the stage shows a neutral card (program.speaking: "Someone is speaking" / Pepe's card),
 // never the last speaker's face. All text via textContent.
+// mfix (owner 2026-10-25): a speaker who let go of the mic stays up a while (a recent tile - no ring); 📌 pinned cams take the
+// first places (owners / staff pin them from ⋯ Manage → 📌 Pin a cam, unpin with 📌✕ on the tile); while someone nobody can show
+// - or Pepe - talks with tiles still up, the tiles dim and a strip says so (program.speaking with src); a tile showing the
+// viewer's OWN cam has 🙈 Take me off (POST /api/stage/leave); an empty program (the page keeps the view a moment) says nobody
+// is on the mic; every card says why there's no picture (cold opens off, the rate limit, Pepe's cams busy, ...).
 //
 //   var ctl = PATVStageMic.render(host, program, {slug, onChange})    host = the stage's player box (#rmVideo)
 //   ctl.update(program) · ctl.stop() · ctl.selection()
@@ -42,7 +47,7 @@
   function cleanProgram(p) {
     if (!p || typeof p !== 'object') return null;
     var src = Array.isArray(p.src) ? p.src.filter(function (s) { return s && typeof s.id === 'string' && /^[\w.\-]{1,40}$/.test(s.id); }).slice(0, 9) : [];
-    return { v: p.v, layout: LAYOUTS.indexOf(p.layout) >= 0 ? p.layout : 'single', count: Math.max(0, Number(p.count) || 0), signin: p.signin === true,
+    return { v: p.v, layout: LAYOUTS.indexOf(p.layout) >= 0 ? p.layout : 'single', count: Math.max(0, Number(p.count) || 0), signin: p.signin === true, idle: p.idle === true,
              blocked: p.blocked === true, src: src, manage: p.manage && typeof p.manage === 'object' ? p.manage : null, frozen_until: Number(p.frozen_until) || 0,
              still_s: Math.max(10, Math.min(120, Number(p.still_s) || 20)), fixed: p.fixed === true, report: p.report === true,
              speaking: p.speaking === 'someone' || p.speaking === 'pepe' ? p.speaking : null };
@@ -61,6 +66,12 @@
     if (s.video === 'starting') return _t('js.stage.mf.starting', 'cam starting…');
     if (s.why === 'off_cam') return _t('js.stage.mf.cam_off', 'cam off');
     if (s.why === 'failed' || s.why === 'pepe') return _t('js.stage.mf.failed', 'Pepe couldn\'t open their cam');
+    // mfix: why there's no picture - not always "full"
+    if (s.why === 'retry') return _t('js.stage.mf.retry', 'trying their cam again in a moment…');
+    if (s.why === 'cold_off') return _t('js.stage.mf.cold_off', 'only cams already live show here right now');
+    if (s.why === 'rate') return _t('js.stage.mf.rate', 'a lot of cams opened just now - this one is next');
+    if (s.why === 'pool') return _t('js.stage.mf.pool', 'Pepe\'s cams are all busy right now');
+    if (s.why === 'pad_cap') return _t('js.stage.mf.pad_cap', 'this stage\'s live cams are all in use');
     return _t('js.stage.mf.full', 'live cams are full right now');
   }
 
@@ -79,7 +90,9 @@
     var neutral = el('div', 'mf-neutral'); neutral.hidden = true; neutral.setAttribute('role', 'status');
     var nIcon = el('span', 'mf-av', '🎙'), nText = el('span', 'mf-why');
     nIcon.setAttribute('aria-hidden', 'true'); neutral.appendChild(nIcon); neutral.appendChild(nText);
-    box.appendChild(grid); box.appendChild(neutral); box.appendChild(note); box.appendChild(tapAll); box.appendChild(say);
+    // mfix: tiles kept up while someone nobody can show (or Pepe) talks - dimmed, and this strip says who speaks
+    var strip = el('div', 'mf-strip'); strip.hidden = true; strip.setAttribute('role', 'status');
+    box.appendChild(grid); box.appendChild(strip); box.appendChild(neutral); box.appendChild(note); box.appendChild(tapAll); box.appendChild(say);
     // the bar ABOVE the tiles: ⋯ Manage + 🧹 Clear the stage (owners / staff); ⚑ Report (viewers, on narrow grids)
     var bar = el('div', 'mf-bar');
     var mBtn = btn('mf-mbtn', '⋯', _t('js.stage.mf.manage', 'Manage the mic stage'));
@@ -102,7 +115,16 @@
       var op = el('option', null, o[1]); op.value = o[0]; layoutSel.appendChild(op);
     });
     ask.hidden = true; pmsg.setAttribute('role', 'status');
-    panel.appendChild(freeze); panel.appendChild(layoutSel); panel.appendChild(people); panel.appendChild(ask); panel.appendChild(pmsg);
+    // mfix: 📌 Pin a cam - who's on cam in the room, and a Pin / Unpin for each (the server says who can't be pinned, never why)
+    var pinBtn = btn('mf-pbtn', _t('js.stage.mf.pin_open', '📌 Pin a cam…')); pinBtn.setAttribute('aria-expanded', 'false');
+    var pinPanel = el('div', 'mf-pins'); pinPanel.hidden = true;
+    var pinList = el('ul', 'mf-people'); pinPanel.appendChild(pinList);
+    pinBtn.addEventListener('click', function () {
+      pinPanel.hidden = !pinPanel.hidden;
+      pinBtn.setAttribute('aria-expanded', pinPanel.hidden ? 'false' : 'true');
+      if (!pinPanel.hidden) loadPins();
+    });
+    panel.appendChild(freeze); panel.appendChild(layoutSel); panel.appendChild(pinBtn); panel.appendChild(pinPanel); panel.appendChild(people); panel.appendChild(ask); panel.appendChild(pmsg);
     box.appendChild(bar); box.appendChild(panel); box.appendChild(rpanel);
     host.appendChild(box);
 
@@ -129,18 +151,27 @@
       avImg.alt = ''; avImg.hidden = true; av.appendChild(avImg); av.appendChild(avTxt); card.appendChild(av); card.appendChild(reason);
       var label = el('div', 'mf-label'), name = el('span', 'mf-name'), mic = el('span', 'mf-mic', '🎙'), tag = el('span', 'mf-tag'), sr = el('span', 'mf-sr-only');
       mic.setAttribute('aria-hidden', 'true');
-      label.appendChild(mic); label.appendChild(name); label.appendChild(tag); label.appendChild(sr);
+      // mfix: 📌 on a pinned cam's label (its place is fixed: hand-overs and new speakers never move it)
+      var pinTag = el('span', 'mf-pin', '📌'); pinTag.hidden = true; pinTag.setAttribute('title', _t('js.stage.mf.pinned_tag', 'pinned'));
+      var pinSr = el('span', 'mf-sr-only');
+      label.appendChild(mic); label.appendChild(pinTag); label.appendChild(name); label.appendChild(tag); label.appendChild(pinSr); label.appendChild(sr);
       var x = btn('mf-x', '✕');
       var rp = btn('mf-x mf-rp', _t('js.stage.mf.report', '⚑'));            // ⚑ viewers (owners have ✕)
-      e.appendChild(v); e.appendChild(img); e.appendChild(card); e.appendChild(label); e.appendChild(x); e.appendChild(rp);
+      var pn = btn('mf-x mf-pn', '📌'); pn.hidden = true;                      // mfix: owners - pin this person here
+      var off = btn('mf-off', _t('js.stage.mf.take_off', '🙈 Take me off')); off.hidden = true;   // mfix: the viewer's OWN cam
+      e.appendChild(v); e.appendChild(img); e.appendChild(card); e.appendChild(label); e.appendChild(x); e.appendChild(rp); e.appendChild(pn); e.appendChild(off);
       t.el = e; t.video = v;
-      x.addEventListener('click', function () { askExclude(t.s); });
+      x.addEventListener('click', function () { if (t.s && t.s.pin) pinPost(t.s.id, true); else askExclude(t.s); });
       rp.addEventListener('click', function () { askReport(t.s, rp); });
+      pn.addEventListener('click', function () { pn.disabled = true; pinPost(t.s.id, false).then(function () { pn.disabled = false; }); });
+      off.addEventListener('click', function () { takeOff(off); });
+      /** the watch route's body: a pinned cam's ticket comes through its pin */
+      function wb(extra) { var b = { login: t.id }; if (t.s && t.s.pin) b.pin = true; for (var k in extra) b[k] = extra[k]; return b; }
       function stopLive(tell) {
         t.gen++; clearInterval(t.beat); t.beat = null;
         if (t.sess) { try { t.sess.close(); } catch (er) { /* gone */ } t.sess = null; }
         try { v.srcObject = null; } catch (er) { /* gone */ }
-        if (tell) post(base + '/watch', { login: t.id, stop: true }, true).catch(function () {});
+        if (tell) post(base + '/watch', wb({ stop: true }), true).catch(function () {});
       }
       function stopStill() { clearInterval(t.still); t.still = null; img.hidden = true; img.removeAttribute('src'); }
       function showCard(text) {
@@ -159,7 +190,7 @@
         var my = ++t.gen;
         showCard(_t('js.stage.mf.starting', 'cam starting…'));
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { failed(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), true); return; }
-        post(base + '/watch', { login: t.id }).then(function (d) {
+        post(base + '/watch', wb({})).then(function (d) {
           if (my !== t.gen) return;
           if (!d || !d.ok || !d.whep) {
             failed(d && d.code === 'budget' ? _t('js.stage.mf.full', 'live cams are full right now') : d && d.code === 'members_only' ? _t('js.stage.mf.members_only', 'only for members')
@@ -169,7 +200,7 @@
             return;
           }
           t.beat = setInterval(function () {
-            post(base + '/watch', { login: t.id, beat: true }).then(function (k) {
+            post(base + '/watch', wb({ beat: true })).then(function (k) {
               if (my !== t.gen) return;
               if (k && (k.ok === false || k.state === 'ended')) { stopLive(false); failed(cardText(t.s)); }
             }).catch(function () { /* a blip: the next beat */ });
@@ -220,11 +251,21 @@
         name.style.cssText = s.nameCss || '';
         e.setAttribute('aria-label', s.name);
         e.classList.toggle('newest', !!s.newest);
+        // mfix: pinned / recent (let go of the mic a moment ago - no ring) / the viewer's own cam
+        e.classList.toggle('pinned', !!s.pin);
+        e.classList.toggle('recent', !!s.recent);
+        pinTag.hidden = !s.pin;
+        pinSr.textContent = s.pin ? ', ' + _t('js.stage.mf.pinned_tag', 'pinned') : '';
+        pn.hidden = !P.manage || !!s.pin || !pinsFree();
+        pn.setAttribute('aria-label', _t('js.stage.mf.pin_q', 'Pin {name} on the mic stage', { name: s.name }));
+        off.hidden = s.mine !== true;
+        off.setAttribute('aria-label', _t('js.stage.mf.take_off_aria', 'Take my cam off this pad\'s stage'));
         if (s.newest) { e.setAttribute('aria-current', 'true'); sr.textContent = ', ' + _t('js.stage.mf.newest', 'newest speaker'); }
         else { e.removeAttribute('aria-current'); sr.textContent = ''; }
         avTxt.textContent = initials(s.name);
         if (s.avatar && /^(https:\/\/|\/)[^\s"'<>]+$/.test(s.avatar)) { avImg.src = s.avatar; avImg.hidden = false; avTxt.hidden = true; } else { avImg.hidden = true; avTxt.hidden = false; }
-        x.setAttribute('aria-label', _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
+        x.textContent = s.pin ? '📌✕' : '✕';
+        x.setAttribute('aria-label', s.pin ? _t('js.stage.mf.unpin_q', 'Unpin {name}', { name: s.name }) : _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
         x.hidden = !P.manage;
         rp.setAttribute('aria-label', _t('js.stage.mf.report_aria', 'Report {name}', { name: s.name }));
         rp.hidden = !P.report || !!P.manage || s.watch === 'hidden';
@@ -254,6 +295,69 @@
       return t;
     }
 
+    // ── mfix: 📌 pins (owners / staff) and 🙈 Take me off (the person shown) ──
+    function pinCount() { var n = 0; P.src.forEach(function (s) { if (s && s.pin) n++; }); return n; }
+    function pinsFree() { return !!(P.manage && Number(P.manage.pins_room) > pinCount()); }
+    function pinPost(login, remove) {
+      return post(base + '/pin', remove ? { login: login, remove: true } : { login: login }).then(function (d) {
+        var m = d && d.ok ? (d.asked ? _t('js.stage.mf.pin_asked', 'Asked them - it goes up once they say OK.') : remove ? _t('js.stage.mf.unpinned', 'Unpinned.') : _t('js.stage.mf.pinned', 'Pinned.'))
+          : (d && d.error) || _t('js.stage.mf.e_do', 'Couldn\'t do that.');
+        bmsg.textContent = m; pmsg.textContent = m;
+        if (!pinPanel.hidden) loadPins();
+        if (ctx.onChange) { try { ctx.onChange(); } catch (er) { /* page's own */ } }
+        return d;
+      }).catch(function () { bmsg.textContent = _t('js.stage.mf.e_do', 'Couldn\'t do that.'); return null; });
+    }
+    function takeOff(b) {
+      var ok = typeof window.confirm === 'function' ? window.confirm(_t('js.stage.room.q_leave', 'Take your cam off this pad\'s Stage? This pad can\'t put it back for an hour.')) : true;
+      if (!ok) return;
+      b.disabled = true;
+      fetch('/api/stage/leave', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ room: slug }) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (j) {
+          b.disabled = false;
+          bmsg.textContent = j && j.ok ? _t('js.stage.mf.took_off', 'You\'re off this pad\'s stage for now.') : (j && j.error) || _t('js.stage.mf.e_do', 'Couldn\'t do that.');
+          if (ctx.onChange) { try { ctx.onChange(); } catch (er) { /* page's own */ } }
+        })
+        .catch(function () { b.disabled = false; bmsg.textContent = _t('js.stage.mf.e_do', 'Couldn\'t do that.'); });
+    }
+    function pinState(c) {
+      if (c.pinned) return _t('js.stage.mf.pin_s_pinned', 'pinned');
+      if (c.blocked === 'opted_out') return _t('js.stage.mf.pin_s_opted_out', 'live video off');
+      if (c.blocked === 'limited') return _t('js.stage.mf.pin_s_limited', 'cam only for some viewers');
+      if (c.blocked) return _t('js.stage.mf.unavailable', 'isn\'t available');
+      if (c.waiting) return _t('js.stage.mf.pin_s_waiting', 'waiting for their OK');
+      if (c.ask) return _t('js.stage.mf.pin_s_ask', 'asks them first');
+      return '';
+    }
+    function loadPins() {
+      pinList.textContent = '';
+      pinList.appendChild(el('li', 'mf-pmsg', '…'));
+      getJson(base + '/pins').then(function (d) {
+        pinList.textContent = '';
+        if (!d || !d.ok) { pinList.appendChild(el('li', 'mf-pmsg', (d && d.error) || _t('js.stage.mf.e_do', 'Couldn\'t do that.'))); return; }
+        var cams = Array.isArray(d.cams) ? d.cams : [];
+        if (!cams.length) { pinList.appendChild(el('li', 'mf-pmsg', _t('js.stage.mf.pin_none', 'Nobody is on cam in the room right now.'))); return; }
+        var full = (Array.isArray(d.pins) ? d.pins.length : 0) >= (Number(d.room) || 0);
+        cams.forEach(function (c) {
+          if (!c || typeof c.login !== 'string') return;
+          var li = el('li', null), nm = el('span', 'mf-pn-name', String(c.display || c.login)), st = el('span', 'mf-pn-state', pinState(c));
+          li.appendChild(nm); li.appendChild(st);
+          if (c.pinned) {
+            var u = btn('mf-pbtn', _t('js.stage.mf.unpin', 'Unpin'), _t('js.stage.mf.unpin_q', 'Unpin {name}', { name: String(c.display || c.login) }));
+            u.addEventListener('click', function () { u.disabled = true; pinPost(c.login, true); });
+            li.appendChild(u);
+          } else if (!c.blocked && !c.waiting && !full) {
+            var b = btn('mf-pbtn', c.ask ? _t('js.stage.mf.pin_ask', 'Ask to pin') : _t('js.stage.mf.pin', '📌 Pin'), _t('js.stage.mf.pin_q', 'Pin {name} on the mic stage', { name: String(c.display || c.login) }));
+            b.addEventListener('click', function () { b.disabled = true; pinPost(c.login, false); });
+            li.appendChild(b);
+          }
+          pinList.appendChild(li);
+        });
+        if (full) pinList.appendChild(el('li', 'mf-pmsg', _t('js.stage.mf.pin_full', 'No room for another pin - unpin one first.')));
+      }).catch(function () { pinList.textContent = ''; pinList.appendChild(el('li', 'mf-pmsg', _t('js.stage.mf.e_do', 'Couldn\'t do that.'))); });
+    }
     function askExclude(s) {
       if (!P.manage || !s) return;
       openPanel(true);
@@ -365,8 +469,11 @@
       freeze.textContent = frozen ? _t('js.stage.mf.unfreeze', '▶ Unfreeze') : _t('js.stage.mf.freeze', '❄ Freeze (nobody new for {n} min)', { n: freezeMin() });
       freeze.setAttribute('aria-pressed', frozen ? 'true' : 'false');
       layoutSel.value = m.layout_override || '';
+      pinBtn.hidden = !(Number(m.pins_room) > 0);
+      if (pinBtn.hidden) pinPanel.hidden = true;
       people.textContent = '';
       P.src.forEach(function (s) {
+        if (s.pin) return;                                        // (a pin's own 📌✕ unpins it)
         var li = el('li', null), b = btn('mf-pbtn', '✕ ' + s.name, _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
         b.addEventListener('click', function () { askExclude(s); });
         li.appendChild(b); people.appendChild(li);
@@ -422,12 +529,19 @@
       narrow();
       box.setAttribute('data-layout', P.layout);
       var neutralText = P.speaking === 'pepe' ? _t('js.stage.mf.pepe', 'Pepe is on the mic') : P.speaking ? _t('js.stage.mf.someone', 'Someone is speaking') : '';
-      box.setAttribute('aria-label', !P.count && neutralText ? neutralText : P.count === 1 ? _t('js.stage.mf.group_aria_one', 'On the mic: 1 person', { n: 1 })
+      // mfix: the page keeps this view a moment after the stage empties (stage-room.js): nobody is on the mic right now
+      var idleText = !P.src.length && !neutralText && P.idle ? _t('js.stage.mf.idle', 'Nobody is on the mic right now') : '';
+      box.setAttribute('aria-label', !P.count && (neutralText || idleText) ? neutralText || idleText : P.count === 1 ? _t('js.stage.mf.group_aria_one', 'On the mic: 1 person', { n: 1 })
         : _t('js.stage.mf.group_aria', 'On the mic: {n} people', { n: P.count }));
       // the neutral card: only while nobody is on the stage (the tiles gave way to it)
-      neutral.hidden = !(neutralText && !P.src.length && !P.signin && !P.blocked);
-      nText.textContent = neutralText;
+      neutral.hidden = !((neutralText || idleText) && !P.src.length && !P.signin && !P.blocked);
+      nText.textContent = neutralText || idleText;
       nIcon.textContent = P.speaking === 'pepe' ? '🐸' : '🎙';
+      // mfix: tiles kept up while someone nobody can show - or Pepe - talks: dimmed, nobody ringed, a strip says who speaks
+      var dim = !!P.speaking && P.src.length > 0 && !P.signin && !P.blocked;
+      box.classList.toggle('mf-dim', dim);
+      strip.hidden = !dim;
+      strip.textContent = dim ? (P.speaking === 'pepe' ? _t('js.stage.mf.pepe_strip', '🐸 Pepe is on the mic') : _t('js.stage.mf.someone_strip', 'Someone else is speaking')) : '';
       mBtn.hidden = !P.manage;
       clearBtn.hidden = !P.manage;
       barState();
@@ -454,6 +568,13 @@
         if (t.el.parentNode) t.el.parentNode.removeChild(t.el);
         delete tiles[id];
       });
+      // mfix: the tile that fills the stage in picture in picture (the others are the corner inset): the newest speaker, else
+      // the latest mic tile (a pin sits in the corner while someone else is up), else the first
+      var order = P.src.slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); }), main = null;
+      for (var j = 0; j < order.length; j++) if (order[j].newest) main = order[j];
+      if (!main) for (var q = order.length - 1; q >= 0 && !main; q--) if (!order[q].pin) main = order[q];
+      if (!main) main = order[0] || null;
+      Object.keys(tiles).forEach(function (id) { tiles[id].el.classList.toggle('main', !!main && main.id === id); });
       // grid9 keeps its 3 x 3 cells (empty ones stay black)
       var cells = P.layout === 'grid9' ? 9 : P.layout === 'grid4' ? 4 : 0, have = grid.querySelectorAll('.mf-tile').length;
       var fillers = grid.querySelectorAll('.mf-empty');

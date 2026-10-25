@@ -419,6 +419,8 @@ const DELETE_ROWS = [
   // (their "no" to the mic stage itself is kept as an unlinked suppression record - see execute(), like livecam_optout)
   ["micfollow_spans", "login", "login"], ["micfollow_excl", "login", "login"], ["micfollow_excl", "user_id", "uid"],
   ["micfollow_notices", "login", "login"], ["micfollow_reports", "login", "login"], ["micfollow_reports", "reporter_id", "uid"],
+  // mfix: 📌 pins of their cam on a pad's mic stage, and the pins they made (micfollow's pin check ends a pin whose row is gone)
+  ["micfollow_pins", "login", "login"], ["micfollow_pins", "by_id", "uid"],
 ];
 
 /** Settlements that run before the main transaction (each one idempotent). */

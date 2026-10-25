@@ -115,6 +115,9 @@ const RULES = {
   // ⚑ reports on mic-stage tiles: the reporter's reports move with the account (rate limits + the 24 h void follow it)
   "micfollow_reports.reporter_id": M(),
   "micfollow_reports.resolved_by": { deny: "micfollow: the staff username who reviewed a mic-stage report (an audit label; admin_audit has the id)" },
+  // mfix 📌 a cam pinned on a pad's mic stage: the pinner's pins move with their account; by_name is the label it was made under
+  "micfollow_pins.by_id": M(),
+  "micfollow_pins.by_name": { deny: "mfix: the pinner's username when the pin was made (a label; by_id has the id)" },
   // 1.99aat 🧠 make Pepe forget me (pepeforget.js): the request log moves with the account
   "pepe_forget_log.user_id": M(),
   "pepe_forget_log.login": { deny: NAME },

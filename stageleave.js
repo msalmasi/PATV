@@ -177,6 +177,9 @@ async function mine(userId, t = now()) {
   let open = [];
   try { open = (await require("./mainstage").openSlots()).filter((s) => s.source === "cam" && low(s.cam_login) === login); } catch (e) { open = []; }
   const on = open.map((s) => ({ slot: s.id, ...padInfo(s.room_id), since: s.went_live || s.created || null, live: !!s.publishing }));
+  // mfix: 📌 a pin on a pad's mic stage is a Stage too (its "Take me off" goes by the pad)
+  try { for (const p of require("./micfollow").pinsFor(login)) on.push({ slot: null, pin: true, ...padInfo(p.roomId), since: p.at || null, live: !!p.wentLive }); }
+  catch (e) { /* no mic follows */ }
   const off = (await getQuery("SELECT room_id, until FROM stage_leave WHERE login = ? AND until > ? ORDER BY until DESC LIMIT 50", [login, t]))
     .map((r) => ({ ...padInfo(r.room_id), until: Number(r.until) }));
   // stagefix final round: their level, the pads they said yes to and the asks out to them now (stagepin.js)

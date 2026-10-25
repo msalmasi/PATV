@@ -23,6 +23,10 @@
       <label><%- t('pad.settings.mf.default') %><select name="default_view">
         <% mf.default_views.forEach((d_) => { %><option value="<%= d_ %>"<%= mf.settings.default_view === d_ ? ' selected' : '' %>><%- t('pad.settings.mf.default.' + d_) %></option><% }) %>
       </select></label>
+      <%# mfix: recent speakers - how long someone who let go of the mic stays up (a back-and-forth on one mic shows side by side) %>
+      <% const mfKeep_ = Array.isArray(mf.keep_recent) ? mf.keep_recent : [0, 1, 2, 5]; %><label><%- t('pad.settings.mf.keep_recent') %><select name="keep_recent">
+        <% mfKeep_.forEach((k_) => { %><option value="<%= k_ %>"<%= Number(mf.settings.keep_recent) === k_ ? ' selected' : '' %>><%- k_ === 0 ? t('pad.settings.mf.keep_recent.off') : t('pad.settings.mf.keep_recent.min', { n: k_ }) %></option><% }) %>
+      </select></label>
       <% const mfMaxP_ = mf.max_people_cap || 9; %><label><%- t('pad.settings.mf.max_people', { max: mfMaxP_ }) %><input type="number" name="max_people" min="1" max="<%= mfMaxP_ %>" value="<%= Math.min(mf.settings.max_people, mfMaxP_) %>"></label>
       <label><%- t('pad.settings.mf.max_live', { max: mf.max_live_cap }) %><input type="number" name="max_live" min="1" max="<%= mf.max_live_cap %>" value="<%= Math.min(mf.settings.max_live, mf.max_live_cap) %>"></label>
       <div class="row"><button type="submit" class="btn primary"><%- t('pad.settings.mf.save') %></button><span class="msg" id="mfMsg" role="status" aria-live="polite"></span></div>
@@ -42,5 +46,5 @@
   <p class="msg" id="mfExMsg" role="status" aria-live="polite"></p>
   <p class="muted"><%- t('pad.settings.mf.hint') %></p>
 </div>
-<script src="/public/js/pad-micfollow.js?v=3" defer></script>
+<script src="/public/js/pad-micfollow.js?v=4" defer></script>
 <% } %>

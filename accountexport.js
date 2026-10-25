@@ -271,7 +271,10 @@ async function collect(userId, { at = now() } = {}) {
     await put("chat", "mic_stage_kept_off", rows("micfollow_excl", "login = ? OR user_id = ?", [login, uid], { omit: ["by"] }));
     await put("chat", "mic_stage_notices", rows("micfollow_notices", "login = ?", [login]));
     await put("chat", "mic_stage_reports_on_you", rows("micfollow_reports", "login = ?", [login], { omit: ["reporter_id", "resolved_by"], order: "at" }));
+    // mfix: 📌 your cam pinned on a pad's mic stage now (not who pinned it)
+    await put("chat", "mic_stage_pins_of_you", rows("micfollow_pins", "login = ?", [login], { omit: ["by_id", "by_name"], order: "at" }));
   }
+  await put("chat", "mic_stage_pins_you_made", rows("micfollow_pins", "by_id = ?", [uid], { omit: ["by_name"], order: "at" }));   // mfix
   await put("chat", "mic_stage_reports_you_made", rows("micfollow_reports", "reporter_id = ?", [uid], { omit: ["resolved_by"], order: "at" }));
   // CL2: the pad chat archive (chatlog.js) - your own lines there (your linked Camfrog login or your account's web lines; Approved
   // pads too), your chat-log downloads (metadata) and the reports you filed on chat lines
