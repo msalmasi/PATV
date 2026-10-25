@@ -958,7 +958,7 @@ so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; th
   scan `public/js` skip the vendored directory. `test/pad-tabs.test.js` / `test/feed-compose.test.js`: `lineRequested`, the
   server's and the browser's `lineLive`.
 
-## S1: the sign-out sweep (F13, the next L-release, 1.99aef, `chatsweep.js`)
+## S1: the sign-out sweep (F13, 1.99aef, `chatsweep.js`)
 
 S1 plan §2.1 F13 (C8-v1-signout-sweep, the owner's answer of 2026-10-25; ADR 0007 D14, CF §5.7). The widget keeps one
 IndexedDB database per account on this origin, `patv-chat:<hub account id>` (the platform repo's
@@ -966,8 +966,12 @@ IndexedDB database per account on this origin, `patv-chat:<hub account id>` (the
 deletes it itself when it hears the sign-out (a chat tab open: the hub closes 4003), and a later widget page deletes every
 other account's database once it signs in; but v1's signed-out pages load no widget, so a shared computer kept a signed-out
 account's lines for as long as nobody opened a widget page. Now v1 deletes them itself, on the same origin, without the
-widget. 1.99aef is tentative until the branch reaches staging (ADR 0007 D19); no seam shape change, so `huboutbox.VERSION`
-doesn't move. Review 1's fixes (2026-10-25) are part of the same letter.
+widget. **1.99aef** on v1 staging 2026-10-25 (ADR 0007 D19: the branch held 1.99aef while O-20 1.99aee, A12 1.99aeg, F11
+1.99aeh, F9 1.99aei, the vendored widget 1.99aej and its polish 1.99aek reached staging, and nothing in v1 or the bot
+claims it, so F13 keeps it and lands after 1.99aek); review 1's fixes (2026-10-25) are part of the same letter. No seam shape change, so
+`huboutbox.VERSION` doesn't move and the hub's contract pin stays. The platform's docs: patv-platform PR #121 (the
+chat-core README says these database names are a contract with v1); the `patv-prefs` residual below is patv-platform
+issue #120.
 
 - **The marker:** every response that ends this browser's login goes through `loginCookie.clearLogin`, which now also sets
   `patv_chat_sweep` (`chatsweep.mark`): Sign out (`POST /logout`, then `/`), Your devices' "Sign out" on this device and
@@ -1017,7 +1021,7 @@ doesn't move. Review 1's fixes (2026-10-25) are part of the same letter.
     for. F13's text ("`patv-chat:*`") doesn't cover them, and v1 doesn't write into another app's store layout from an
     inline script. **Platform follow-up:** keep the announce modes with the account (in `patv-chat:<acct>`, so the wipe
     rule and this sweep cover them), or record the account in `patv-prefs` and `forgetRooms` when a different account
-    (or none) starts.
+    (or none) starts. Filed as patv-platform issue #120.
 - **No switch:** the script finds nothing to delete where the widget never ran (prod before `CHAT_HUB`), and a switch left off
   would keep exactly the data this is for, after a `CHAT_HUB` rollback too.
 - **The privacy page** lists the cookie in section 8 ("It holds nothing about you or your account: its value is always 1"),
@@ -1039,6 +1043,11 @@ doesn't move. Review 1's fixes (2026-10-25) are part of the same letter.
       an unreadable cookie jar.
     - The same rule as the platform's `account.ts` (`PATV_HUB_DIR=<platform checkout>` compares the source, and that
       `patv-device` and `patv-prefs` keep their names).
+    - The land (1.99aef): since 1.99aej the widget is vendored here, so on every run (no `PATV_HUB_DIR` needed) every
+      bundle `public/js/patv-chat/manifest.json` lists must name the account databases `patv-chat:` with the same
+      lower-case uuid rule (the worker among them), and keep `patv-device` and `patv-prefs`: a widget release that
+      renames them fails this suite in the release that vendors it. Five deliberate breaks to the vendored bundles each
+      made it fail.
     - The wiring: the order in `index.js`, `/logout`, and `clearLogin` as the only place the login cookie is cleared.
   - Per route: `test/account-delete.test.js` (`POST /api/account/delete`: the marker on success, nothing on a refusal) and
     `test/username-limit.test.js` (the rename; a password change that signs this device out, and one that doesn't).

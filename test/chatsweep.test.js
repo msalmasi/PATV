@@ -11,7 +11,8 @@
 //   * the script (run here in a vm against a fake IndexedDB) deletes exactly the platform's account databases
 //     `patv-chat:<lower-case uuid>` - never patv-device or any other name - then the marker; a failed / blocked-and-unfinished
 //     delete keeps the marker (onblocked is not "done"); no databases(): the marker goes; nothing escapes;
-//   * the contract: the same rule as the platform's account.ts (PATV_HUB_DIR=<platform checkout> also compares the source).
+//   * the contract: the same rule as the platform's account.ts (PATV_HUB_DIR=<platform checkout> also compares the source)
+//     and, on every run, as the vendored widget's bundles (public/js/patv-chat, since 1.99aej).
 //   node --test test/chatsweep.test.js
 "use strict";
 const test = require("node:test");
@@ -418,6 +419,33 @@ test("the rule is the platform's (account.ts): the same regex here and in the sc
     const prefs = fs.readFileSync(path.join(hub, "packages", "chat-core", "src", "client", "prefs.ts"), "utf8");
     assert.match(prefs, /export const PREFS_DB = 'patv-prefs';/, "the prefs database the rule leaves alone (docs: a residual)");
   }
+});
+
+// Land (1.99aef): since 1.99aej the widget is vendored here (public/js/patv-chat, chat widget 0.1.0), so the rule is also
+// checked against the code v1's browsers actually run, on every run - a widget release that renames its account
+// databases fails here, in the same release that vendors it.
+test("the vendored widget (public/js/patv-chat): its account databases are patv-chat:<lower-case uuid>; patv-device and patv-prefs keep their names", () => {
+  const dir = path.join(repo, "public", "js", "patv-chat");
+  const man = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
+  const files = [...new Set([...Object.values(man.entries || {}), ...Object.values(man.lazy || {})])].filter((f) => typeof f === "string" && f.endsWith(".js"));
+  assert.ok(files.length > 0 && man.entries && man.entries.worker, "the manifest lists the widget's scripts");
+  const uuidLit = "/^" + CS.UUID_SRC + "$/";
+  const named = [];
+  let device = 0, prefs = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(dir, f), "utf8");
+    // every string literal that looks like an account-database prefix ("patv-chat...:") is exactly the sweep's
+    for (const lit of src.match(/["'`]patv-chat[^"'`\s]*:["'`]/g) || []) assert.equal(lit.slice(1, -1), CS.ACCOUNT_DB_PREFIX, f + ": the account database prefix");
+    if (src.includes('"' + CS.ACCOUNT_DB_PREFIX + '"')) {
+      named.push(f);
+      assert.ok(src.includes(uuidLit), f + ": the account id is the same lower-case uuid");
+    }
+    if (src.includes('"patv-device"')) device++;
+    if (src.includes('"patv-prefs"')) prefs++;
+  }
+  assert.ok(named.includes(man.entries.worker), "the worker names the account databases " + CS.ACCOUNT_DB_PREFIX + "<id>");
+  assert.ok(device > 0, "patv-device (left alone by the sweep) keeps its name");
+  assert.ok(prefs > 0, "patv-prefs (left alone by the sweep; docs: a residual) keeps its name");
 });
 
 test("the wiring: index.js mounts chatsweep.locals right after sessions.gate; /logout clears through clearLogin; clearLogin is the only jwt clear", () => {
