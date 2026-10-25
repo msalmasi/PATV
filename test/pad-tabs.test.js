@@ -181,11 +181,33 @@ test("S1 V2: ?line=<seq> opens Live only on a pad whose Live tab holds the chat 
   t = bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=42", lineLive: true }));
   assert.equal(t.initial, "live", "the hub's widget on Live: the line's tab");
   assert.equal(t.requested, "live"); assert.equal(t.lineLive, true);
-  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x", lineLive: true })).initial, "feed", "no ?line=: the smart default");
+  // 1.99aej: Live is that pad's smart default, so a ?line= the widget isn't handed lands on Live anyway (its requested stays null)
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x", lineLive: true })).initial, "live", "no ?line=: the smart default, Live (1.99aej)");
   assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=42&tab=about", lineLive: true })).initial, "about", "?tab= wins");
-  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=nope", lineLive: true })).initial, "feed");
-  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=9007199254740993", lineLive: true })).initial, "feed", "a line the widget isn't handed: as before");
-  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=4&line=5", lineLive: true })).initial, "feed");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=42&tab=feed", lineLive: true })).initial, "feed", "?tab=feed wins");
+  for (const q of ["/p/x?line=nope", "/p/x?line=9007199254740993", "/p/x?line=4&line=5"]) {
+    const r = bridge.padTabsFor(Object.assign({}, site, { query: q, lineLive: true }));
+    assert.equal(r.requested, null, "a line the widget isn't handed asks for nothing: " + q);
+    assert.equal(r.initial, "live", "...and the smart default opens: " + q);
+  }
+});
+
+test("1.99aej: a pad whose Live tab holds the chat hub's widget opens on Live (its chat); a recent Feed pick, ?tab= and #hash still win", () => {
+  const tabs = ["live", "feed", "about"], now = Date.now();
+  assert.equal(T.defaultTab({ tabs, platform: "site", active: false, lineLive: true }), "live", "a site pad with the hub's chat");
+  assert.equal(T.defaultTab({ tabs, platform: "site", active: false }), "feed", "every other site pad: Feed, as before");
+  assert.equal(T.defaultTab({ tabs, platform: "profile", active: false, lineLive: false }), "feed");
+  assert.equal(T.defaultTab({ tabs: ["feed", "about"], platform: "site", active: false, lineLive: true }), "feed", "no Live tab: not invented");
+  const open = (o) => T.pickTab(Object.assign({ tabs, platform: "site", active: false, lineLive: true, requested: null, stored: null, now }, o));
+  assert.equal(open({}), "live");
+  assert.equal(open({ stored: "feed@" + (now - 60e3) }), "feed", "a Feed picked a minute ago still wins (FEED_STICKY_MS)");
+  assert.equal(open({ stored: "feed@" + (now - T.FEED_STICKY_MS - 1) }), "live", "an old Feed pick doesn't");
+  assert.equal(open({ stored: "about" }), "live", "About is never remembered");
+  assert.equal(open({ requested: T.requestedTab("?tab=feed", "") }), "feed");
+  assert.equal(open({ requested: T.requestedTab("", "#about") }), "about");
+  const site = { platform: "site", live: false, feed: true, pepeHere: false, pepeOn: false, slots: [], members: [] };
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x", lineLive: true })).initial, "live", "the server agrees");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x" })).initial, "feed", "...and without the widget: Feed");
 });
 
 test("the Feed badge counts posts newer than the last look (first visit: the last 3 days)", () => {
@@ -239,6 +261,10 @@ test("page: site pads label the first tab Stage; the story strip (end of Live, 1
   const site = await renderRoom({ room: { name: "Lounge", slug: "lounge", count: 0, live: false, topic: "", platform: "site", siteOnly: true, bridged: false },
     padTabs: { tabs: ["live", "about"], initial: "about", active: false, camfrog: false, posts: [] } });
   assert.match(site, /id="padTab-live"[^>]*>\s*<span class="pdot" aria-hidden="true" hidden><\/span>Stage<\/button>/);
+  // 1.99aej: a site pad whose Live tab holds the chat hub's widget calls it Live
+  const hub = await renderRoom({ room: { name: "Staff", slug: "staff", count: 0, live: false, topic: "", platform: "site", siteOnly: true, bridged: false },
+    padTabs: { tabs: ["live", "about"], initial: "live", active: false, camfrog: false, posts: [], lineLive: true } });
+  assert.match(hub, /id="padTab-live"[^>]*>\s*<span class="pdot" aria-hidden="true" hidden><\/span>Live<\/button>/);
   assert.doesNotMatch(site, /class="card rm-story"/, "no captures: no strip");
   assert.doesNotMatch(site, /Join the Camfrog room/);
 });

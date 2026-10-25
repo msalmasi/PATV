@@ -225,3 +225,133 @@ test("index.js: the JSON parser skips /internal/ (the form parser reads form bod
   assert.match(src, /req\.path\.startsWith\("\/internal\/"\) \? next\(\) : express\.json\(\)\(req, res, next\)/);
   assert.match(src, /require\("\.\/hubinbound"\)\.register\(app\);/);
 });
+
+test("S1 H9-15-edge-key: a looks-only key signs POST /internal/v1/looks and nothing else (403 wrong_caller); it never stands in for the full key", async () => {
+  process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
+  process.env.HUB_V1_IN_KEY = V.keys["hub-test-1"];
+  const LK = "hub-test-looks-only-key-0123456789-not-real";
+  const PREV = "hub-test-previous-key-0123456789-not-real";
+  process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-looks1";
+  process.env.HUB_V1_IN_LOOKS_KEY = LK;
+  const asLooks = { keyId: "hub-test-looks1", key: LK };
+  const nonceRows = async (h) => (await getQuery("SELECT COUNT(*) AS n FROM hub_inbound_nonces WHERE nonce = ?", [h["X-PATV-Nonce"]]))[0].n;
+  IN._reset();
+  const warns = [];
+  const w = console.warn;
+  console.warn = (...a) => warns.push(a.join(" "));
+  try {
+    await HO.setSettings({ sessions: true });
+    assert.deepEqual(Object.keys(IN.looksKeys()), ["hub-test-looks1"]);
+    assert.deepEqual(IN.status().looks_keys, ["hub-test-looks1"], "/admin/keys#seam can say which looks keys are in force");
+    assert.deepEqual(IN.status().looks_ignored, [], "...and none is ignored");
+    // the snapshot pull and the rewind: refused before the durable nonce is taken, with the hub's code for a key on a route
+    // its caller may not call (seam plan §2.1), the code only
+    const hs = signed("GET", "/internal/v1/snapshot/sessions/revoked", "", asLooks.keyId, asLooks.key);
+    const snap = await call("GET", "/internal/v1/snapshot/sessions/revoked", { headers: hs });
+    assert.equal(snap.status, 403);
+    assert.deepEqual(snap.j, { ok: false, error: "wrong_caller" });
+    assert.equal(snap.cache, "no-store");
+    assert.equal(await nonceRows(hs), 0, "a refused looks-only request takes no durable nonce");
+    const ls = IN.status().last.snapshot;
+    assert.deepEqual([ls.status, ls.code], [403, "wrong_caller"], "/admin/keys#seam's last snapshot call: the 403");
+    // hubsign's in-memory replay cache has seen its nonce (verifyFrom runs before the gate): a replay is 409 replay, still no row
+    const again = await call("GET", "/internal/v1/snapshot/sessions/revoked", { headers: hs });
+    assert.deepEqual([again.status, again.j], [409, { ok: false, error: "replay" }]);
+    assert.equal(await nonceRows(hs), 0);
+    const rwBody = JSON.stringify({ topic: "sessions/revoked", after_id: 0 });
+    const hr = signed("POST", "/internal/v1/outbox/rewind", rwBody, asLooks.keyId, asLooks.key);
+    assert.equal((await call("POST", "/internal/v1/outbox/rewind", { headers: hr, body: rwBody })).status, 403);
+    assert.equal(await nonceRows(hr), 0);
+    // the looks route by POST only: any other method is 403 too, never a 404 past the gate
+    assert.equal((await call("GET", "/internal/v1/looks", asLooks)).status, 403, "the looks route by POST only");
+    for (const m of ["PUT", "PATCH", "DELETE"]) {
+      const r = await call(m, "/internal/v1/looks", { ...asLooks, body: "{}" });
+      assert.deepEqual([r.status, r.j], [403, { ok: false, error: "wrong_caller" }], m);
+    }
+    assert.equal((await call("POST", "/internal/v1/nowhere", { ...asLooks, body: "{}" })).status, 403);
+    assert.equal(IN.status().refused.wrong_caller, 7);
+    assert.equal(IN.status().refused.replay, 1);
+    assert.equal(IN.status().refused.scope, undefined);
+    // one warning line for all seven (one per code per minute): the method, the route and the code - never the key id, a
+    // secret, the nonce, the topic or the body
+    assert.deepEqual(warns.filter((x) => x.includes("wrong_caller")),
+                     ["[hubinbound] GET snapshot refused: wrong_caller (a looks-only key; at most one line per code per minute)"]);
+    for (const x of warns) {
+      for (const s of ["hub-test-looks1", LK, hs["X-PATV-Nonce"], hr["X-PATV-Nonce"], "sessions/revoked", "after_id"]) assert.ok(!x.includes(s), x);
+    }
+    // the full key still reaches everything
+    assert.equal((await call("GET", "/internal/v1/snapshot/sessions/revoked")).status, 200);
+    // the looks call: past the gate exactly as the full key (here the looks switch is off: 404 not_found for both), its
+    // nonce taken under the looks key's id (the 200 answer: huboutbox-s1.test.js, the golden call)
+    const lb = JSON.stringify({ ids: [] });
+    const hl = signed("POST", "/internal/v1/looks", lb, asLooks.keyId, asLooks.key);
+    const byLooks = await call("POST", "/internal/v1/looks", { headers: hl, body: lb });
+    const byFull = await call("POST", "/internal/v1/looks", { body: lb });
+    assert.deepEqual([byLooks.status, byLooks.j], [byFull.status, byFull.j]);
+    assert.deepEqual(byLooks.j, { ok: false, error: "not_found" });
+    assert.deepEqual(await getQuery("SELECT key_id FROM hub_inbound_nonces WHERE nonce = ?", [hl["X-PATV-Nonce"]]), [{ key_id: "hub-test-looks1" }]);
+    // a looks key that shares the full key's secret or id, or names another env or direction, is no key at all - and
+    // /admin/keys#seam says which pair is ignored and why (the variable's name and a code, never the id or the secret)
+    process.env.HUB_V1_IN_LOOKS_KEY = V.keys["hub-test-1"];
+    assert.deepEqual(IN.looksKeys(), {});
+    assert.deepEqual(IN.status().looks_ignored, [{ pair: "HUB_V1_IN_LOOKS_KEY", why: "shared" }]);
+    process.env.HUB_V1_IN_LOOKS_KEY = LK;
+    for (const [id, why] of [["hub-test-1", "shared"], ["hub-staging-looks1", "env"], ["v1-test-looks1", "env"]]) {
+      process.env.HUB_V1_IN_LOOKS_KEY_ID = id;
+      assert.deepEqual(IN.looksKeys(), {}, id);
+      assert.deepEqual(IN.status().looks_ignored, [{ pair: "HUB_V1_IN_LOOKS_KEY", why }], id);
+    }
+    // ...nor one that shares the PREVIOUS full key's secret or id (during a rotation of the full key)
+    process.env.HUB_V1_IN_PREV_KEY_ID = "hub-test-0";
+    process.env.HUB_V1_IN_PREV_KEY = PREV;
+    process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-looks1";
+    process.env.HUB_V1_IN_LOOKS_KEY = PREV;
+    assert.deepEqual(IN.looksKeys(), {}, "the previous full key's secret");
+    assert.deepEqual(IN.status().looks_ignored, [{ pair: "HUB_V1_IN_LOOKS_KEY", why: "shared" }]);
+    const lp = await call("POST", "/internal/v1/looks", { keyId: "hub-test-looks1", key: PREV, body: lb });
+    assert.deepEqual([lp.status, lp.j], [401, { ok: false, error: "unknown_key" }], "...so the looks id signed with it is no key");
+    process.env.HUB_V1_IN_LOOKS_KEY = LK;
+    process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-0";
+    assert.deepEqual(IN.looksKeys(), {}, "the previous full key's id");
+    assert.deepEqual(IN.status().looks_ignored, [{ pair: "HUB_V1_IN_LOOKS_KEY", why: "shared" }]);
+    // ...so the worker's previous-key snapshot and rewind calls still reach their routes (never 403 wrong_caller)
+    assert.equal((await call("GET", "/internal/v1/snapshot/sessions/revoked", { keyId: "hub-test-0", key: PREV })).status, 200);
+    assert.equal((await call("POST", "/internal/v1/outbox/rewind", { keyId: "hub-test-0", key: PREV, body: rwBody })).status, 200);
+    delete process.env.HUB_V1_IN_PREV_KEY_ID; delete process.env.HUB_V1_IN_PREV_KEY;
+    // half a pair is ignored too (incomplete)
+    process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-looks1";
+    delete process.env.HUB_V1_IN_LOOKS_KEY;
+    assert.deepEqual(IN.status().looks_ignored, [{ pair: "HUB_V1_IN_LOOKS_KEY", why: "incomplete" }]);
+    process.env.HUB_V1_IN_LOOKS_KEY = LK;
+    // its rotation pair works like the full key's
+    process.env.HUB_V1_IN_LOOKS_PREV_KEY_ID = "hub-test-looks0";
+    process.env.HUB_V1_IN_LOOKS_PREV_KEY = "hub-test-looks-only-previous-0123456789-x";
+    assert.deepEqual(Object.keys(IN.looksKeys()).sort(), ["hub-test-looks0", "hub-test-looks1"]);
+    assert.deepEqual(IN.status().looks_ignored, []);
+    const prev = await call("GET", "/internal/v1/snapshot/sessions/revoked", { keyId: "hub-test-looks0", key: process.env.HUB_V1_IN_LOOKS_PREV_KEY });
+    assert.equal(prev.status, 403);
+    // without the full key the routes don't exist, for the looks key too: a 404 before anything is verified (hubsign's cache
+    // untouched), no nonce taken, and the snapshot pull 404 rather than 403 (the looks switch on: huboutbox-s1.test.js)
+    delete process.env.HUB_V1_IN_KEY_ID; delete process.env.HUB_V1_IN_KEY;
+    assert.equal(IN.configured(), false, "a looks key alone is not the full key");
+    assert.equal(IN.status().configured, false);
+    const cached = S._size();
+    const hn = signed("POST", "/internal/v1/looks", lb, asLooks.keyId, asLooks.key);
+    const noFull = await call("POST", "/internal/v1/looks", { headers: hn, body: lb });
+    assert.deepEqual([noFull.status, noFull.j], [404, { ok: false, error: "not_found" }]);
+    assert.equal(await nonceRows(hn), 0, "no durable nonce");
+    const hns = signed("GET", "/internal/v1/snapshot/sessions/revoked", "", asLooks.keyId, asLooks.key);
+    const noFullSnap = await call("GET", "/internal/v1/snapshot/sessions/revoked", { headers: hns });
+    assert.deepEqual([noFullSnap.status, noFullSnap.j], [404, { ok: false, error: "not_found" }], "404, not 403 wrong_caller");
+    assert.equal(await nonceRows(hns), 0);
+    assert.equal(S._size(), cached, "nothing verified: hubsign's in-memory cache took neither nonce");
+    assert.equal(IN.status().refused.wrong_caller, 8, "the one 403 above (the previous looks key's snapshot), none since");
+  } finally {
+    console.warn = w;
+    process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
+    process.env.HUB_V1_IN_KEY = V.keys["hub-test-1"];
+    for (const k of ["HUB_V1_IN_LOOKS_KEY_ID", "HUB_V1_IN_LOOKS_KEY", "HUB_V1_IN_LOOKS_PREV_KEY_ID", "HUB_V1_IN_LOOKS_PREV_KEY",
+                     "HUB_V1_IN_PREV_KEY_ID", "HUB_V1_IN_PREV_KEY"]) delete process.env[k];
+    await HO.setSettings({ sessions: false });
+  }
+});

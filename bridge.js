@@ -1822,7 +1822,8 @@ async function padLatest(roomId, user, feed) {
 /** Which tabs a pad page has and which opens first (before the browser's own choice: its remembered tab,
  *  #hash). The Live tab is "Stage" on pads without a Camfrog room; the room is "active" when people are in
  *  it (not counting Pepe) or its stage is on air. S1 V2: o.lineLive (the Live tab holds the chat hub's widget) - a ?line=
- *  without a ?tab= asks for Live (pad-tabs.js lineRequested; the browser does the same with init's lineLive). */
+ *  without a ?tab= asks for Live (pad-tabs.js lineRequested; the browser does the same with init's lineLive); 1.99aej: and
+ *  Live is that pad's smart default (pad-tabs.js defaultTab - its chat opens first) and room.ejs labels it Live. */
 function padTabsFor(o) {
   const T = require("./public/js/pad-tabs");
   const camfrog = o.platform === "camfrog";
@@ -1833,7 +1834,7 @@ function padTabsFor(o) {
   const active = !!((camfrog && o.live && people > 0) || stageOn);
   const qs = String(o.query || "").includes("?") ? String(o.query).slice(String(o.query).indexOf("?")) : "";
   const requested = T.requestedTab(qs, "") || (o.lineLive && T.lineRequested(qs) ? "live" : null);
-  return { tabs, camfrog, active, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null }),
+  return { tabs, camfrog, active, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null, lineLive: !!o.lineLive }),
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })), lineLive: !!o.lineLive };
 }
 

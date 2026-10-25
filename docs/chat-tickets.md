@@ -202,6 +202,32 @@ and with no log line: a target that isn't exactly the lowercase `/internal/v1/` 
 case-insensitive), or a request carrying Cloudflare's `cf-ray` / `cf-connecting-ip` headers, is a bare 404 (counted as
 "reached through the public site" on `/admin/keys#seam`).
 
+**The looks-only key** (S1 F9, **1.99aei** on v1 staging 2026-10-25 - the next free letter when it reached staging, ADR
+0007 D19: O-20 took 1.99aee first and F13's branch holds 1.99aef; the platform's docs: patv-platform PR #111; the
+owner's answer to H9-15-edge-key, 2026-10-24, option 1): the hub's internet-facing edges
+fetch the looks of accounts they hold none for (the looks call below) and so hold a key; with the full key they could also
+pull every snapshot and rewind the outbox. `HUB_V1_IN_LOOKS_KEY_ID` / `HUB_V1_IN_LOOKS_KEY` (and `HUB_V1_IN_LOOKS_PREV_KEY_ID`
+/ `HUB_V1_IN_LOOKS_PREV_KEY` during its rotation) is a second `hub-<env>-<n>` key with its own secret that v1 accepts on
+`POST /internal/v1/looks` only: on any other route, or by another method, it is `wrong_caller` → 403 (the hub's own
+code for a valid key on a route its caller may not call, seam plan §2.1), before the durable nonce is taken (no
+`hub_inbound_nonces` row; `hubsign`'s in-memory replay cache has already recorded the nonce, as for every verified
+request, so a replay of the refused request is 409 `replay`). It never stands in for the full key (without
+`HUB_V1_IN_KEY` every route stays 404, before anything is verified), and a looks key whose id or secret is also a full
+key's, current or previous, is ignored. The hub's edges sign with it when their `SEAM_OUT_V1_LOOKS_KEY_ID` / `_KEY` are
+set (and then hold no full key: rooms refuses both on an edge); the worker keeps the full key. Staging runs without it
+(every hub unit holds the full key); prod gets it with O-11's keys, before E-2. `hubinbound.status().looks_keys` lists
+the looks key ids in force, and `/admin/keys#seam`'s inbound row shows them ("looks-only key …") while the full key is
+set. A looks pair that is set but ignored is `status().looks_ignored` (`{pair, why}`: the variable's name and
+`incomplete` - its id or secret missing -, `env` - not a `hub-<env>-<n>` id of this site's env - or `shared` - an id or
+secret of a full key; never the id or the secret), shown on the same row as a red "… ignored: …" pill. A refused
+request's warning line carries the method, the route and the code only, at most one per minute.
+
+**Order, v1 first** (O-11 and every rotation): the looks key goes into this site's `.env` (backup first), `pm2 restart`,
+and `/admin/keys#seam` shows it as a looks-only key (not as "… ignored: …") - only then do the hub's edges get it in their drop-in. The other way
+round every cache-miss looks call from the edges is refused 401 `unknown_key`, and a new account's mention stores
+"@someone" without an alarm. A rotation: the new pair as `HUB_V1_IN_LOOKS_KEY_*`, the old one moved to
+`HUB_V1_IN_LOOKS_PREV_KEY_*`, restart; then the edges; then the previous pair dropped.
+
 **Replays** (§16): besides `hubsign`'s in-memory cache, every verified request's nonce is taken durably, INSERT-first, in
 `hub_inbound_nonces(key_id, nonce, until)` - kept until the later of now and its timestamp, plus 10 minutes (the hub's
 rule) - before a snapshot page is served and inside the rewind's own transaction (a rewind that fails leaves no nonce).
@@ -274,7 +300,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   `padflair.hubDefsMany` (the user flairs: one query per 400 pads, since the builder runs inside the poster's and the
   snapshot's transaction), `pad_looks.cosmetics` through `padlook.parseCosmetics` and the `padcosmetics` catalog
   (`fx {frame, glow}` and `badges`, each `{.., perk}`: the hub draws them by `padcosmetics.fx()`'s rule) and
-  `badge_max {free: 3, prime: 3 + prime_extra_badges}`. A tier lapsing or a config change needs no row (the payload carries
+  `badge_max {free: 3, prime: 3 + prime_extra_badges}` (`padcosmetics.badgeMax()`; since A12, below, `parseCosmetics` keeps
+  up to 7 badges, so a Prime Time pad's 4th and 5th reach the hub). A tier lapsing or a config change needs no row (the payload carries
   `tier_until`; the 10-minute snapshot carries the rest). A member status v1 doesn't know posts `removed` (it grants nothing).
 - **Triggers** (all gated by the topic's switch, `(topic, entity)` only, an UPDATE only for its listed columns and only when
   one changed): pads - `rooms_registry` (insert; update of `room_id, slug, title, platform, owner_kind, owner_user_id,
@@ -346,7 +373,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   while it still holds a seeded value - an admin's edit stays); its 1.99x address `camfrog-lounge` is the pad's alias (301)
   and in `pads.OLD_SLUGS`.
 - **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99aec`
-  (the letter the release reached staging with; the shared golden keeps its test letter).
+  (the letter the release reached staging with; the shared golden keeps its test letter) - `1.99aei` from S1 F9 on,
+  which changes the seam's inbound side (the looks-only key, "Calls into v1" above).
 - **Driver:** `pad`, `padMember`, `padLook`, `padChat`, `ownerGrant`, `premiumComp`, `stripeRenew`, `flair`, `role`,
   `pepeRoles`, `signup`, `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
   (`test/hubseam-driver-s1.test.js`).
@@ -367,6 +395,29 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
 - **Turn-on (Q7, staging):** hub → v1 direction wired → `JOURNAL_ENABLED` → `privacy` → `erasure`, `export` → `pads` →
   `roles` → `bans` → `identity` → `looks` → `switches`, each once its hub topic is live and has bootstrapped; then
   `CHAT_HUB` on at `/admin/chat` with only the staging canary / staff pads at `hub`.
+- **A12 - pad badges up to `badge_max` (the owner's call 12, 2026-10-25; 1.99aeg on v1 staging 2026-10-25, ADR 0007 D19;
+  the platform's docs: patv-platform PR #110):** Q4's review found v1 kept at most 3 pad badges (`padlook.parseCosmetics` cut the list on every read and
+  write) though Prime Time pays for `prime_extra_badges` (2) more, so equip allowed a 4th and 5th that the write then
+  dropped, and the hub's `badge_max.prime` (5) was never reached. Now `parseCosmetics` keeps up to
+  `padcosmetics.badgeStoreMax()` (7: `MAX_BADGES` + `premium.PRIME_EXTRA_BADGES_MAX`, the largest cap any config allows)
+  for every pad, and `pads/changed` sends all of them. The caps themselves are `padcosmetics.badgeMax()` (`MAX_BADGES` +
+  `premium.primeExtraBadges()`, the same source `pads/changed`'s `badge_max` reads). Equip still holds each pad to its own
+  cap (`maxBadges`: 3, or 5 while it has Prime Time); the drawing (`padcosmetics.shownBadges`: `fx` and the settings
+  sheet; the hub by seam plan §12.4's rule) takes the live badges in equip order and cuts them to the tier's cap, so a pad
+  whose tier lapses - or whose `prime_extra_badges` is lowered for a while - keeps its extra badges equipped and undrawn,
+  and they draw again when the tier (or the config) comes back. No change to the seam's shape (`badges` was already ≤ 8
+  and `badge_max` already sent), so `huboutbox.VERSION` stays 1.99aec.
+  The review's fix-ups: `premium.cleanConfig` clamps `prime_extra_badges` to 0..4 (was 0..5), so v1's prime cap is at
+  most 7, the hub's `PAD_BADGE_CAP` (it would draw an 8th badge the hub can't); a pad with more on than its cap, or with
+  some on that don't draw, is told how many to take off ("5 are on (2 not shown), so take 3 off first"); the ✨ Cosmetics sheet (`state.shown_badges`) marks
+  equipped badges it doesn't draw - "not shown until 📺 Prime Time is back" (with a Take off button: a lapsed perk item
+  had none) or "not shown: more than 3 are on" - and the badge heading says "5 on, 3 shown"; equip runs one at a time per
+  pad (two at once each reported success and only one was stored). Tests: `test/premium.test.js` (five stored / drawn /
+  mirrored, a 6th refused, the cap follows the config and a lowered one hides without unequipping, a lapse with five free
+  badges draws the same 3 as the hub's §12.4 rule, the refusals, the sheet's shown list, concurrent equips, a Plus-only
+  badge on a Prime Time pad without Plus drawn by neither side),
+  `test/huboutbox-s1-l1.test.js` (the badges reach `pads/changed` in equip order; a lapse still sends them; `badge_max`
+  follows the config; the clamp).
 
 ## S1: identity, looks, the looks call, text style (release L3, 1.99ads)
 
@@ -608,7 +659,13 @@ change, so `huboutbox.VERSION` stays 1.99ads.
   fix: `huboutbox.setSettings` now moves a switch's `updated` / `actor` only when its value changes (the `/admin/keys#seam`
   form posts every switch on each save, which moved the date before); every save is still in the admin audit. **Owner
   action O-20** ("one privacy paragraph", S1 plan) is this paragraph's wording: it is put to the owner (default: as
-  written).
+  written). **Owner, 2026-10-24:** V4 drafts it and the owner approves the exact text in its pull request. The
+  revision on branch `s1-o20-privacy-paragraph` turns the paragraph into one section (a lead paragraph, four points
+  and the backups line) and adds two things the first draft left out: how long each store keeps the lines (pads'
+  chat history for section 9's time; PATV chat until a message is deleted, since the hub's purge is report-only in
+  S1, so that sentence changes when the hub's purge is switched on) and what "Download my data" includes (the
+  archive's lines always - `accountexport.js` puts `pad_chat_lines` in every download - and PATV chat's part with
+  `export` on). The "Changes" note follows. It reaches staging only once the owner approves it.
 - **Tests:** `test/account-delete-remove-public.test.js` (the offer and its refusal while off, the stored choice, once a day
   with a cancelled request counting, two requests at once, the flag in the feed and snapshot rows, the cross-store rule -
   purged lines, a linked member's web lines under the login, held and reported ones kept and taken down with their copies
@@ -818,10 +875,24 @@ so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; th
 - **`?line=` opens the Live tab** on a pad whose Live tab holds the hub's chat (any of the states above): the widget's own
   links - its copy-link sheet and the mentions drawer - are `/p/<slug>?line=<seq>` with no `?tab=` (v1's own line links say
   `?tab=live&line=`), and a site pad otherwise opens on its Feed, where the line can't be seen. `bridge.padTabsFor`'s
-  `lineLive` on the server and `PATVPadTabs.init`'s `lineLive` in the browser (`pad-tabs.js` `lineRequested`, `?v=8`): a
+  `lineLive` on the server and `PATVPadTabs.init`'s `lineLive` in the browser (`pad-tabs.js` `lineRequested`, `?v=9`): a
   `?tab=` or `#hash` still wins, and on every other pad - every pad before the switches - a `?line=` changes nothing (the
   page's init carries no `lineLive` then). `lineRequested` takes the line as the mount does (`chatwidget.lineOf`): one
-  `line` parameter, decoded, a positive safe integer - so Live opens only for a line the widget is handed.
+  `line` parameter, decoded, a positive safe integer - so only a line the widget is handed reaches its `line=`.
+- **The hub's chat is the pad's first tab, called Live (1.99aej).** The owner opened staging's `/p/staff` on a phone on
+  2026-10-25 and found no chat: the widget had never been vendored (below), and even with it the chat sat on a tab labelled
+  "Stage" behind the Feed, which a site pad opened on. On a pad whose Live tab holds the hub's chat (`lineLive`, any state
+  above) `pad-tabs.js` `defaultTab` now picks Live - as for an active Camfrog room: a Feed picked in the last 30 minutes,
+  `?tab=` and `#hash` still win - and `room.ejs` labels that tab Live (`pad.tab.live`) instead of Stage. Every other site
+  pad keeps "Stage" and opens on its Feed.
+- **The first vendored widget (1.99aej): `chat widget 0.1.0`** - the platform release `chat-widget/v0.1.0` (tag on
+  platform main 3b4af79; `release.yml` built and verified `patv-chat-0.1.0.tgz`), exported with
+  `pnpm --filter @patv/chat-widget export --from patv-chat-0.1.0.tgz --to <this checkout>/public/js/patv-chat`.
+  `.gitattributes` keeps `public/js/patv-chat/**` byte-exact (`-text`): the tab entry is checked against its SRI, and a
+  checkout with `core.autocrlf` would otherwise rewrite every file's line ends. On staging the hub's origins are
+  `HUB_RT_WS=wss://rt-staging.publicaccess.tv` and `HUB_RT_API=https://rt-staging.publicaccess.tv` in the site's `.env`
+  (the rt-staging edge allows the `https://staging.publicaccess.tv` origin for the socket and CORS); production sets
+  `wss://rt.publicaccess.tv` / `https://rt.publicaccess.tv` when the pilot reaches it.
 - **`<patv-modtools>`** (`chatwidget.toolsFor`) mounts **whatever `CHAT_HUB` says** (D3: mods keep working reports after a
   rollback), with a manifest, the origins and a signed-in hub account:
   - `/p/<slug>/mod` of a pad at `chat_backend = 'hub'` (`chatwidget.padModPage` in `pads.js`): Reports, Held, Mod log, Bans,
@@ -1015,9 +1086,11 @@ It only records and never affects the sync.
 
 `CHAT_TICKET_KEY`, `CHAT_TICKET_KID`, `CHAT_TICKET_PREV_PUB`, `CHAT_TICKET_PREV_KID`, `CHAT_GENESIS_NS`, `HUB_V1_URL`,
 `HUB_V1_KEY_ID`, `HUB_V1_KEY`, `HUB_V1_PROXY`, 1.99acm: `HUB_V1_ENV`, `HUB_V1_IN_KEY_ID`, `HUB_V1_IN_KEY`,
-`HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY`, S1 V2: `HUB_RT_WS`, `HUB_RT_API` (the hub's public origins, not secrets)
+`HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY`, S1 V2: `HUB_RT_WS`, `HUB_RT_API` (the hub's public origins, not secrets),
+S1 F9 (1.99aei): `HUB_V1_IN_LOOKS_KEY_ID`, `HUB_V1_IN_LOOKS_KEY`, `HUB_V1_IN_LOOKS_PREV_KEY_ID`, `HUB_V1_IN_LOOKS_PREV_KEY`
 (names in `.env.example`, no values). Keys are per direction and per
-environment (four in all: v1 → hub and hub → v1, prod and staging), each generated separately (never one secret for two
+environment (four in all: v1 → hub and hub → v1, prod and staging; S1 adds a fifth at O-11, prod's looks-only key for
+the hub's edges), each generated separately (never one secret for two
 key ids: `key_reuse`), at least 32 random characters, and never printed: the operator copies them from the hub's SOPS
 file into the site's `.env` (0600).
 

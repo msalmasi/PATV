@@ -617,16 +617,19 @@ test("/p/<slug> of a hub pad: <patv-chat> on the Live tab; a ?line= link opens L
   assert.equal(r.status, 200);
   assert.match(r.text, new RegExp(`<patv-chat pad="${HUB_PAD}" room="${HUB_ROOM}" slug="hub-pad" mode="full"`));
   assert.ok(r.text.indexOf("<patv-chat ") > r.text.indexOf('id="padPanel-live"') && r.text.indexOf("<patv-chat ") < r.text.indexOf('id="padPanel-about"'), "in the Live panel");
-  assert.match(r.text, /id="padTab-feed"/, "the pad has a Feed tab - a site pad opens on it by default");
-  assert.match(livePanel(r.text), / hidden>$/, "no ?line=: the Feed opens, as before");
+  assert.match(r.text, /id="padTab-feed"/, "the pad has a Feed tab - every other site pad opens on it by default");
+  // 1.99aej (the owner found no chat on staging's staff pad): the hub's chat opens first, on a tab called Live (not Stage)
+  assert.doesNotMatch(livePanel(r.text), / hidden>$/, "no ?line=: Live opens - the chat (1.99aej)");
+  assert.match(r.text, /id="padTab-live"[^>]*aria-selected="true"[^>]*>\s*<span class="pdot"[^>]*><\/span>Live<\/button>/, "labelled Live, selected");
+  assert.match(livePanel(await get("/p/hub-pad?tab=feed", U.fan).then((x) => x.text)), / hidden>$/, "?tab=feed still opens the Feed");
   assert.equal(tabsInit(r.text).lineLive, true, "the browser gets lineLive too (pad-tabs.js)");
-  assert.match(r.text, /pad-tabs\.js\?v=8/, "cache-busted");
+  assert.match(r.text, /pad-tabs\.js\?v=9/, "cache-busted");
   const deep = await get("/p/hub-pad?line=42", U.fan);
   assert.match(deep.text, /<patv-chat [^>]*line="42"/);
   assert.doesNotMatch(livePanel(deep.text), / hidden>$/, "?line= opens Live, where the line is");
   assert.match(deep.text, /id="padTab-live"[^>]*aria-selected="true"/);
   assert.match(livePanel(await get("/p/hub-pad?line=42&tab=about", U.fan).then((x) => x.text)), / hidden>$/, "an explicit ?tab= still wins");
-  assert.match(livePanel(await get("/p/hub-pad?line=abc", U.fan).then((x) => x.text)), / hidden>$/, "not a line: as before");
+  assert.doesNotMatch(await get("/p/hub-pad?line=abc", U.fan).then((x) => x.text), /<patv-chat [^>]*line=/, "not a line: never handed to the widget (Live opens as the default, 1.99aej)");
   const out = await get("/p/hub-pad?line=42");
   assert.doesNotMatch(livePanel(out.text), / hidden>$/, "signed out: Live, with the sign-in card");
   assert.match(out.text, /data-hub-chat="signin"[\s\S]*href="\/login\?next=%2Fp%2Fhub-pad%3Fline%3D42"/, "...whose way back keeps the line");

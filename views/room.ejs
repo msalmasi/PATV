@@ -29,7 +29,8 @@
    const adultNext_ = typeof adultNext !== 'undefined' && adultNext ? adultNext : '/p/' + encodeURIComponent(room.slug);
    const access_ = typeof access !== 'undefined' && access ? access : { level: 'members' };
    const tabOn_ = (t) => PT_.initial === t;
-   const liveLabel_ = PT_.camfrog ? t('pad.tab.live') : t('pad.tab.stage'); %>
+   // 1.99aej: a site pad whose Live tab holds the chat hub's widget (PT_.lineLive) calls it Live - it is the pad's chat, not only its stage
+   const liveLabel_ = PT_.camfrog || PT_.lineLive ? t('pad.tab.live') : t('pad.tab.stage'); %>
 <%# 1.99x: the platform badge (pads.js padBadge via fx or app.locals; a plain fallback when rendered bare) %>
 <% const padBadge_ = typeof fx !== 'undefined' && fx && fx.padBadge ? fx.padBadge : typeof padBadge === 'function' ? padBadge
      : (p) => '<span class="pad-plat pp-' + p + '">' + (p === 'site' ? '🌐 Site Pad' : '🐸 Camfrog Pad') + '</span>'; %>
@@ -1608,8 +1609,8 @@
     </section>
     <% } %>
   </section>
-  <script src="/public/js/pad-tabs.js?v=8"></script>
-  <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=4" defer></script><% } %>
+  <script src="/public/js/pad-tabs.js?v=9"></script>
+  <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=5" defer></script><% } %>
   <% if (typeof roomVault !== 'undefined' && roomVault) { %><script src="/public/js/pad-vault.js?v=2" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>
   <% if (!siteOnly_ && adultGate_ === 'ok') { %><script src="/public/js/pad-challenges.js?v=1" defer></script><% } %>

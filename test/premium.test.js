@@ -287,6 +287,164 @@ test("Prime Time perks on the pad: its items equip only while it's on, +2 badge 
   assert.ok(st.has.includes("pt_frame"));
 });
 
+// A12's helpers: the drawn pills' texts, in order (padcosmetics.badgeHtml); PLANT's stored pad badges; the hub's drawing of
+// a pads/changed payload's badges (seam plan §12.4 - the hub's seam-s1-fixtures drawPad): the live ones in equip order,
+// cut to badge_max.prime (clamped to 7) on Prime / Plus and to badge_max.free otherwise
+const pills = (html) => [...String(html).matchAll(/<span class="pfx-b(?: pfx-b-p[tp])?">(?:<span aria-hidden="true">[^<]*<\/span>)?([^<]*)<\/span>/g)].map((m) => m[1]);
+const storedBadges = async (room) => JSON.parse((await getQuery("SELECT cosmetics FROM pad_looks WHERE room_id = ?", [room]))[0].cosmetics).pad_badge;
+function hubDraw(badges, tier, bm) {
+  const shows = (perk) => perk === null || (perk === "prime_plus" ? tier === "plus" : tier === "prime" || tier === "plus");
+  const prime = Math.min(bm.prime, 7);
+  const cap = tier === "free" ? Math.min(bm.free, prime) : prime;
+  return badges.filter((b) => shows(b.perk)).slice(0, cap).map((b) => b.id);
+}
+const A12_FIVE = ["pb_est2026", "pt_onair", "pb_community", "pt_premiere", "pb_talk"];
+const A12_DRAWN = ["Prime Time", "Est. 2026", "On Air", "Community", "Premiere", "Talk"];
+/** The catalog plus free badges for the tests ("pb_six", "pb_x4", ...: common, 25,000 PAT, text only). */
+const withBadges = (real, ids) => PC.buildCatalog({ items: [...real.items, ...ids.map((id) => ({ id, kind: "pad_badge", name: id, rarity: "common", price: 25000,
+  style: { text: id === "pb_six" ? "Six" : id.slice(3).toUpperCase() } }))] }, real.rarities);
+
+test("A12 (S1 call 12): a Prime Time pad keeps badge_max.prime (5) pad badges - stored, drawn, mirrored; a 6th is refused; a lapse or a lowered config hides the extra ones and keeps them", async () => {
+  const PL = require(path.join(repo, "padlook"));
+  const HP = require(path.join(repo, "hubpads"));
+  const stored = () => storedBadges(PLANT);
+  const five = A12_FIVE;
+  assert.deepEqual(PC.badgeMax(), { free: 3, prime: 5 }, "the hub's badge_max: 3, and 3 + prime_extra_badges");
+  assert.equal(PC.badgeStoreMax(), 7, "pad_looks keeps up to 3 + premium.PRIME_EXTRA_BADGES_MAX, whatever the config");
+  assert.equal(PR.isPrime(PLANT), true);
+  for (const b of ["pb_est2026", "pb_community", "pb_talk"]) await PC.buy(owner, PLANT, b, { ref: ref() });
+  let c;
+  for (const b of five) c = await PC.equip(owner, PLANT, b, true);
+  assert.deepEqual(c.pad_badge, five, "all five come back from the write (it used to keep 3)");
+  assert.deepEqual(await stored(), five, "pad_looks.cosmetics holds all five");
+  assert.deepEqual(PL.cosmeticsOf(PLANT).pad_badge, five, "and they read back");
+  assert.deepEqual(pills(PC.fx(PLANT).badges), A12_DRAWN, "drawn: the automatic badge + five");
+  // the seam payload follows (hubpads reads pad_looks.cosmetics through padlook.parseCosmetics)
+  assert.deepEqual(HP.cosmeticsOf(JSON.stringify({ pad_badge: five })).badges.map((b) => b.id), five);
+  // a 6th: refused at the pad's cap
+  const real = PC.CAT;
+  PC._setCatalog(withBadges(real, ["pb_six"]));
+  try {
+    await PC.buy(owner, PLANT, "pb_six", { ref: ref() });
+    await assert.rejects(PC.equip(owner, PLANT, "pb_six", true), (e) => e.status === 409 && e.message === "Up to 5 badges at a time - take one off first.");
+    // parseCosmetics: deduped (the copy is inside the first five), cut at badgeStoreMax (7) - not at the current cap
+    assert.deepEqual(PL.parseCosmetics(JSON.stringify({ pad_badge: ["pb_est2026", "pb_est2026", "pt_onair", "pb_community", "pt_premiere", "pb_talk"] })).pad_badge, five, "deduped");
+    const nine = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"];
+    assert.deepEqual(PL.parseCosmetics(JSON.stringify({ pad_badge: nine })).pad_badge, nine.slice(0, 7), "cut at 7");
+    // the cap follows premium's prime_extra_badges (one source with the seam's badge_max - test/huboutbox-s1-l1.test.js)
+    await PR.setConfig({ prime_extra_badges: 3 }, "test");
+    try {
+      assert.deepEqual(PC.badgeMax(), { free: 3, prime: 6 });
+      c = await PC.equip(owner, PLANT, "pb_six", true);
+      assert.deepEqual(c.pad_badge, [...five, "pb_six"]);
+      assert.deepEqual(pills(PC.fx(PLANT).badges), [...A12_DRAWN, "Six"]);
+    } finally { await PR.setConfig({ prime_extra_badges: 2 }, "test"); }
+    // lowered again: the 6th stops drawing but stays equipped - through an unrelated write too - and draws again with the config
+    assert.deepEqual(pills(PC.fx(PLANT).badges), A12_DRAWN);
+    c = await PC.equip(owner, PLANT, "pb_est2026", true);       // a write (it's already on)
+    assert.deepEqual([c.pad_badge, await stored()], [[...five, "pb_six"], [...five, "pb_six"]], "the write keeps the hidden 6th");
+    let st = await PC.state(rooms.getCached(PLANT), owner);
+    assert.deepEqual([st.slots.pad_badge.max, st.equipped.pad_badge, st.shown_badges], [5, [...five, "pb_six"], five], "the sheet: 6 on, 5 shown");
+    await PR.setConfig({ prime_extra_badges: 3 }, "test");
+    try { assert.deepEqual(pills(PC.fx(PLANT).badges), [...A12_DRAWN, "Six"], "back with the config"); }
+    finally { await PR.setConfig({ prime_extra_badges: 2 }, "test"); }
+    c = await PC.equip(owner, PLANT, "pb_six", false);
+    assert.deepEqual(c.pad_badge, five);
+    // the clamp: v1's prime cap never passes the hub's PAD_BADGE_CAP (7, seam plan §12.4)
+    assert.equal(PR.PRIME_EXTRA_BADGES_MAX, 4);
+    assert.equal(PR.cleanConfig({ prime_extra_badges: 5 }).prime_extra_badges, 4, "was allowed up to 5 (a cap of 8)");
+    // the tier lapses: the two Prime Time badges stop drawing and the free cap (3) applies; all five stay equipped
+    t = T0 + 400 * DAY;
+    try {
+      assert.equal(PR.isPrime(PLANT), false);
+      assert.deepEqual(pills(PC.fx(PLANT).badges), ["Est. 2026", "Community", "Talk"]);
+      await assert.rejects(PC.equip(owner, PLANT, "pb_six", true),
+        (e) => e.status === 409 && e.message === "Up to 3 badges at a time - 5 are on (2 not shown), so take 3 off first.");
+      c = await PC.equip(owner, PLANT, "pb_talk", true);          // a write while lapsed (already on) keeps the other four
+      assert.deepEqual(c.pad_badge, five);
+      assert.deepEqual(await stored(), five);
+      st = await PC.state(rooms.getCached(PLANT), owner);
+      assert.deepEqual([st.slots.pad_badge.max, st.equipped.pad_badge, st.shown_badges], [3, five, ["pb_est2026", "pb_community", "pb_talk"]],
+                       "the sheet: the free cap, all five on, the three it draws (the rest are marked 'not shown')");
+      assert.equal(st.has.includes("pt_onair"), false, "the perk item isn't the pad's while lapsed (the sheet's own Take off button)");
+      // a perk badge the tier no longer covers can still be taken off (the sheet's Take off), and then it counts no more
+      c = await PC.equip(owner, PLANT, "pt_onair", false);
+      assert.deepEqual(c.pad_badge, ["pb_est2026", "pb_community", "pt_premiere", "pb_talk"]);
+      await assert.rejects(PC.equip(owner, PLANT, "pb_six", true), (e) => e.status === 409 && /4 are on \(1 not shown\), so take 2 off first\.$/.test(e.message));
+      c = await PC.equip(owner, PLANT, "pt_premiere", false);
+      await assert.rejects(PC.equip(owner, PLANT, "pb_six", true), (e) => e.status === 409 && e.message === "Up to 3 badges at a time - take one off first.");
+      assert.deepEqual(pills(PC.fx(PLANT).badges), ["Est. 2026", "Community", "Talk"]);
+      // at the cap with two of the three hidden (perk badges while lapsed): the refusal says so - one shows, "up to 3"
+      await PL.setCosmetics(PLANT, { pad_badge: ["pt_onair", "pt_premiere", "pb_est2026"] }, "test");
+      assert.deepEqual(pills(PC.fx(PLANT).badges), ["Est. 2026"]);
+      await assert.rejects(PC.equip(owner, PLANT, "pb_six", true),
+        (e) => e.status === 409 && e.message === "Up to 3 badges at a time - 3 are on (2 not shown), so take 1 off first.");
+    } finally { t = T0; }
+    await PL.setCosmetics(PLANT, { pad_badge: five }, "test");
+    assert.deepEqual(pills(PC.fx(PLANT).badges), A12_DRAWN, "back with the tier");
+  } finally { PC._setCatalog(real); }
+});
+
+test("A12 fix-ups: a lapse with five free badges draws the same 3 as the hub's §12.4 rule, in order; one equip at a time per pad", async () => {
+  const PL = require(path.join(repo, "padlook"));
+  const HP = require(path.join(repo, "hubpads"));
+  const stored = () => storedBadges(PLANT);
+  const real = PC.CAT;
+  PC._setCatalog(withBadges(real, ["pb_six", "pb_x4", "pb_x5"]));
+  try {
+    for (const b of ["pb_x4", "pb_x5"]) await PC.buy(owner, PLANT, b, { ref: ref() });     // pb_six: the test above
+    assert.equal(PR.isPrime(PLANT), true);
+    // two at once on a pad with 3 on (cap 5): both land - each used to write over the other, both reporting success
+    await PL.setCosmetics(PLANT, { pad_badge: ["pb_est2026", "pb_community", "pb_talk"] }, "test");
+    const [a, b] = await Promise.all([PC.equip(owner, PLANT, "pb_six", true), PC.equip(owner, PLANT, "pb_x4", true)]);
+    const freeFive = ["pb_est2026", "pb_community", "pb_talk", "pb_six", "pb_x4"];
+    assert.deepEqual([a.pad_badge, b.pad_badge], [freeFive.slice(0, 4), freeFive]);
+    assert.deepEqual(await stored(), freeFive);
+    // three at once with 4 on: the first lands, the other two are refused (the cap holds and nobody is told a lie)
+    await PC.equip(owner, PLANT, "pb_x4", false);
+    const r = await Promise.allSettled(["pb_x4", "pb_x5", "pt_onair"].map((x) => PC.equip(owner, PLANT, x, true)));
+    assert.deepEqual(r.map((x) => x.status), ["fulfilled", "rejected", "rejected"]);
+    assert.ok(r.slice(1).every((x) => x.reason.status === 409 && x.reason.message === "Up to 5 badges at a time - take one off first."));
+    assert.deepEqual(await stored(), freeFive);
+    // the tier lapses: v1 draws the first 3, and the hub's rule on the seam's badges picks the same 3 in the same order
+    const pills5 = ["Prime Time", "Est. 2026", "Community", "Talk", "Six", "X4"];
+    assert.deepEqual(pills(PC.fx(PLANT).badges), pills5);
+    t = T0 + 400 * DAY;
+    try {
+      assert.equal(PR.isPrime(PLANT), false);
+      const drawn = PC.shownBadges(PLANT).map((i) => i.id);
+      assert.deepEqual(drawn, ["pb_est2026", "pb_community", "pb_talk"]);
+      assert.deepEqual(pills(PC.fx(PLANT).badges), ["Est. 2026", "Community", "Talk"], "3, the free cap - not the 5 stored");
+      const sent = HP.cosmeticsOf(JSON.stringify({ pad_badge: await stored() })).badges;
+      assert.deepEqual(sent.map((x) => x.id), freeFive, "the seam sends all five");
+      assert.deepEqual(hubDraw(sent, "free", PC.badgeMax()), drawn, "the hub draws the same 3, in the same order");
+      const st = await PC.state(rooms.getCached(PLANT), owner);
+      assert.deepEqual([st.slots.pad_badge.max, st.equipped.pad_badge, st.shown_badges], [3, freeFive, drawn], "the sheet: 5 on, 3 shown");
+      await assert.rejects(PC.equip(owner, PLANT, "pb_x5", true),
+        (e) => e.status === 409 && e.message === "Up to 3 badges at a time - 5 are on (2 not shown), so take 3 off first.");
+      // one off: the next in equip order shows, on both sides
+      const c = await PC.equip(owner, PLANT, "pb_community", false);
+      assert.deepEqual(pills(PC.fx(PLANT).badges), ["Est. 2026", "Talk", "Six"]);
+      assert.deepEqual(hubDraw(HP.cosmeticsOf(JSON.stringify(c)).badges, "free", PC.badgeMax()), ["pb_est2026", "pb_talk", "pb_six"]);
+    } finally { t = T0; }
+    // back with the tier: all four live ones, on both sides
+    const back = PC.shownBadges(PLANT).map((i) => i.id);
+    assert.deepEqual(back, ["pb_est2026", "pb_talk", "pb_six", "pb_x4"]);
+    assert.deepEqual(hubDraw(HP.cosmeticsOf(JSON.stringify({ pad_badge: await stored() })).badges, "prime", PC.badgeMax()), back);
+    // 1.99qp: a Plus-only badge never draws on a Prime Time pad without Plus (put there by hand - equip refuses it), on both sides
+    assert.equal(PR.isPrimePlus(PLANT), false);
+    await PL.setCosmetics(PLANT, { pad_badge: ["pp_headliner", "pb_est2026", "pt_onair"] }, "test");
+    assert.deepEqual(PC.shownBadges(PLANT).map((i) => i.id), ["pb_est2026", "pt_onair"]);
+    assert.deepEqual(pills(PC.fx(PLANT).badges), ["Prime Time", "Est. 2026", "On Air"], "no Headliner without Plus");
+    const sentPP = HP.cosmeticsOf(JSON.stringify({ pad_badge: await stored() })).badges;
+    assert.deepEqual(sentPP.map((x) => [x.id, x.perk]), [["pp_headliner", "prime_plus"], ["pb_est2026", null], ["pt_onair", "prime_time"]]);
+    assert.deepEqual(hubDraw(sentPP, "prime", PC.badgeMax()), ["pb_est2026", "pt_onair"]);
+  } finally {
+    PC._setCatalog(real);
+    await PL.setCosmetics(PLANT, { pad_badge: A12_FIVE }, "test");
+  }
+});
+
 test("HTTP: buy + state + renew toggle, same-site JSON only; admin view is staff-only", async () => {
   const s0 = await req("GET", "/api/premium/state?pad=" + PLANT, { user: "fan" });
   assert.equal(s0.status, 200);
