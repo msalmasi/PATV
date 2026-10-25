@@ -66,8 +66,11 @@ function init() {
  * ("camfrog:taken"), a relink to another name, a merge or the stale-account cleanup freeing it - the account drops to
  * "pleb" in the same statement. A trigger, so every writer of camfrogUsername is covered, not only the ones that call in
  * here. A class given directly to an unlinked account (classUpdate) that later linked a login this list never had is not
- * that login's, so it stays; Bot / Banned are never touched (not managed). A relink to a login with a role gets its class
- * back from reconcile (verifyCamfrogLink runs it at once; the 5-minute timer otherwise).
+ * that login's, so it stays (and only an owner takes such an Admin class: classUpdate's linked path); Bot / Banned are never
+ * touched (not managed). A relink to a login with a role gets its class back from reconcile (verifyCamfrogLink runs it at
+ * once; the 5-minute timer otherwise). The other way round, a link decides the class: a class given directly whose account
+ * then links a login with a LOWER role (trusted, a lower step, a removed role's tombstone) becomes that login's class at
+ * the same reconcile (an owner gives it back through the login's role).
  */
 const UNLINK_TRIGGER = "staffroles_unlink_class_v1";
 const unlinkTriggerSql = () => `CREATE TRIGGER IF NOT EXISTS ${UNLINK_TRIGGER} AFTER UPDATE OF camfrogUsername ON users
@@ -360,9 +363,15 @@ async function classUpdate(actor, username, cls) {
     if (!String(t.camfrogUsername || "").trim()) return classDirect(actor, t, cls);   // D11-site-roles: no linked login - the class is the role
     const tl = low(t.camfrogUsername);
     if (!tl) throw new RoleError(409, "That account's linked chat login isn't valid - unlink it first.");
-    const me = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [actor.userId]))[0];
+    const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [actor.userId]))[0];
     const cur = await roleOf(tl);
     const role = MANAGED.has(cls) ? ROLE_OF_CLASS[cls] : null;
+    // D11-site-roles review 3: an Admin class its login's role doesn't back (below admin: no role-list row, e.g. a class
+    // given directly before the link) is outside Pepe's !role rules - setRole sees a login with no role and lets any Pepe
+    // admin through, or is skipped outright for pleb - so the site's ladder decides, as classDirect: only an owner takes it.
+    if (t.class === "Admin" && cls !== "Admin" && levelOf(cur) < LEVEL.admin && !(await ownerHolds(me, "roles.assign"))) {
+      throw new RoleError(403, "Only an owner gives or takes the Admin class - Admins give and take Staff and Assistant.");
+    }
     if (!(cls === "Admin" && (cur === "owner" || cur === "admin")) && cur !== role) {
       // owner answers 2026-10-20 (3): taking the owner role away needs the password step-up, which lives on /admin/roles -
       // an owner can't do it from the class picker. (Anyone else is refused by setRole's rules, as before.)

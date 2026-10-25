@@ -388,7 +388,10 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   account still goes through Pepe's roles. A class a linked login's role gave goes with the login: the trigger
   `staffroles_unlink_class_v1` drops it to `pleb` when `camfrogUsername` changes away from a login `pepe_roles` has (an
   unlink, a `!verify` that moves the login to another account, a relink, a merge), and `!verify` reconciles the new login
-  at once. The site's `Banned` and `Bot` classes hold no global role, whatever the linked login's role.
+  at once. A class given directly that a later link to a login with no role-list row keeps is still only an owner's to
+  take away (the linked path asks for `ownerHolds` when the login's role is below admin); a link to a login with a lower
+  role (trusted, a lower step, a tombstone) makes the class that login's at the same reconcile. The site's `Banned` and
+  `Bot` classes hold no global role, whatever the linked login's role.
 - **Tests:** `test/huboutbox-s1-l1.test.js` (every golden pads / roles / bans / switches row from its input, each trigger
   only with its switch on and only for its listed columns, OLD and NEW keys, the backfill, the displaced-row emit, the four
   golden snapshot pages and their paging, the poster, the heartbeat, the interlock both ways, `setBackend`; the review

@@ -271,10 +271,35 @@ test("the class picker on an account with no linked login: the site's ladder, no
     await SR.classUpdate(boss, "lnk", "Staff");
     assert.equal(await SR.roleOf("lnk_cf"), "staff");
     assert.equal(await clsOf("2113"), "Staff");
+
+    // review 3: an Admin given directly, who then links a login the role list never had, keeps the class (the unlink
+    // trigger leaves it) - and still only an owner takes it away: not a Pepe admin (setRole would see a login with no role),
+    // not a site Admin (pleb skipped setRole outright and wrote the class)
+    await addUser("2114", "dla", "pleb", null);
+    await SR.classUpdate(boss, "dla", "Admin");
+    await runQuery("UPDATE users SET camfrogUsername = 'dla_cf' WHERE userId = '2114'");
+    assert.equal(await clsOf("2114"), "Admin");
+    assert.equal(await roleNow("2114"), "admin");
+    for (const [who, actor] of [["a Pepe admin", padm], ["a site Admin", adm]]) {
+      for (const to of ["pleb", "Staff", "Assistant"]) {
+        await assert.rejects(SR.classUpdate(actor, "dla", to), refusedWith(403, /Only an owner gives or takes the Admin class/), `${who} -> ${to}`);
+      }
+    }
+    assert.equal(await clsOf("2114"), "Admin");
+    assert.equal(await SR.roleOf("dla_cf"), null, "no role-list row was written by a refused change");
+    await SR.classUpdate(boss, "dla", "Staff");                       // the owner can: a role-list row, the class follows
+    assert.equal(await SR.roleOf("dla_cf"), "staff");
+    assert.equal(await clsOf("2114"), "Staff");
+    // ...and a Pepe admin keeps their !role rules below Admin on that linked account
+    await SR.classUpdate(padm, "dla", "Assistant");
+    assert.equal(await clsOf("2114"), "Assistant");
+    // an Admin class the login's role backs is setRole's to guard, as before: a Pepe admin can't lower a Pepe admin
+    await assert.rejects(SR.classUpdate(padm, "padm", "Staff"), (e) => e.status === 403);
+    assert.equal(await clsOf("2103"), "Admin");
   } finally {
     await runQuery("UPDATE users SET class = 'Admin' WHERE userId = '2001'");
-    await runQuery("DELETE FROM users WHERE userId IN ('2101', '2102', '2103', '2104', '2110', '2111', '2112', '2113')");
-    await runQuery("DELETE FROM pepe_roles WHERE login IN ('boss_cf', 'padm_cf', 'lnk_cf')");
+    await runQuery("DELETE FROM users WHERE userId IN ('2101', '2102', '2103', '2104', '2110', '2111', '2112', '2113', '2114')");
+    await runQuery("DELETE FROM pepe_roles WHERE login IN ('boss_cf', 'padm_cf', 'lnk_cf', 'dla_cf')");
     await clearOutbox();
   }
 });
