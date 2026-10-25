@@ -416,7 +416,9 @@ function refusal() {
   if (!env) return "bad_env";
   if (!require("./hubsign").keyIdOk(k.id, "v1", env)) return "key_env";       // never sign with a key of another env / direction
   // 1.99acm: one secret for both directions would let either side's signature pass as the other's - never sign with it
-  if ([process.env.HUB_V1_IN_KEY, process.env.HUB_V1_IN_PREV_KEY].some((x) => x && String(x) === k.key)) return "key_reuse";
+  // S1 (H9-15-edge-key): the looks-only inbound key and its previous one count as inbound keys here too
+  if ([process.env.HUB_V1_IN_KEY, process.env.HUB_V1_IN_PREV_KEY, process.env.HUB_V1_IN_LOOKS_KEY, process.env.HUB_V1_IN_LOOKS_PREV_KEY]
+        .some((x) => x && String(x) === k.key)) return "key_reuse";
   if (urlHasPath(url)) return "url_path";
   if (insecureUrl(url)) return "insecure_url";      // session ids / accounts never go in cleartext
   return null;

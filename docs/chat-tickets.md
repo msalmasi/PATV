@@ -202,6 +202,24 @@ and with no log line: a target that isn't exactly the lowercase `/internal/v1/` 
 case-insensitive), or a request carrying Cloudflare's `cf-ray` / `cf-connecting-ip` headers, is a bare 404 (counted as
 "reached through the public site" on `/admin/keys#seam`).
 
+**The looks-only key** (S1, the owner's answer to H9-15-edge-key, 2026-10-24, option 1): the hub's internet-facing edges
+fetch the looks of accounts they hold none for (the looks call below) and so hold a key; with the full key they could also
+pull every snapshot and rewind the outbox. `HUB_V1_IN_LOOKS_KEY_ID` / `HUB_V1_IN_LOOKS_KEY` (and `HUB_V1_IN_LOOKS_PREV_KEY_ID`
+/ `HUB_V1_IN_LOOKS_PREV_KEY` during its rotation) is a second `hub-<env>-<n>` key with its own secret that v1 accepts on
+`POST /internal/v1/looks` only: on any other route, or by another method, it is `wrong_caller` → 403 (the hub's own
+code for a valid key on a route its caller may not call, seam plan §2.1), before any nonce is taken. It never stands in
+for the full key (without `HUB_V1_IN_KEY` every route stays 404), and a looks key whose id or secret is also a full key's
+is ignored. The hub's edges sign with it when their `SEAM_OUT_V1_LOOKS_KEY_ID` / `_KEY` are set (and then hold no full
+key: rooms refuses both on an edge); the worker keeps the full key. Staging runs without it (every hub unit holds the
+full key); prod gets it with O-11's keys, before E-2. `hubinbound.status().looks_keys` lists the looks key ids in force,
+and `/admin/keys#seam`'s inbound row shows them ("looks-only key …").
+
+**Order, v1 first** (O-11 and every rotation): the looks key goes into this site's `.env` (backup first), `pm2 restart`,
+and `/admin/keys#seam` shows it as a looks-only key - only then do the hub's edges get it in their drop-in. The other way
+round every cache-miss looks call from the edges is refused 401 `unknown_key`, and a new account's mention stores
+"@someone" without an alarm. A rotation: the new pair as `HUB_V1_IN_LOOKS_KEY_*`, the old one moved to
+`HUB_V1_IN_LOOKS_PREV_KEY_*`, restart; then the edges; then the previous pair dropped.
+
 **Replays** (§16): besides `hubsign`'s in-memory cache, every verified request's nonce is taken durably, INSERT-first, in
 `hub_inbound_nonces(key_id, nonce, until)` - kept until the later of now and its timestamp, plus 10 minutes (the hub's
 rule) - before a snapshot page is served and inside the rewind's own transaction (a rewind that fails leaves no nonce).
@@ -918,9 +936,11 @@ It only records and never affects the sync.
 
 `CHAT_TICKET_KEY`, `CHAT_TICKET_KID`, `CHAT_TICKET_PREV_PUB`, `CHAT_TICKET_PREV_KID`, `CHAT_GENESIS_NS`, `HUB_V1_URL`,
 `HUB_V1_KEY_ID`, `HUB_V1_KEY`, `HUB_V1_PROXY`, 1.99acm: `HUB_V1_ENV`, `HUB_V1_IN_KEY_ID`, `HUB_V1_IN_KEY`,
-`HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY`, S1 V2: `HUB_RT_WS`, `HUB_RT_API` (the hub's public origins, not secrets)
+`HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY`, S1 V2: `HUB_RT_WS`, `HUB_RT_API` (the hub's public origins, not secrets),
+S1: `HUB_V1_IN_LOOKS_KEY_ID`, `HUB_V1_IN_LOOKS_KEY`, `HUB_V1_IN_LOOKS_PREV_KEY_ID`, `HUB_V1_IN_LOOKS_PREV_KEY`
 (names in `.env.example`, no values). Keys are per direction and per
-environment (four in all: v1 → hub and hub → v1, prod and staging), each generated separately (never one secret for two
+environment (four in all: v1 → hub and hub → v1, prod and staging; S1 adds a fifth at O-11, prod's looks-only key for
+the hub's edges), each generated separately (never one secret for two
 key ids: `key_reuse`), at least 32 random characters, and never printed: the operator copies them from the hub's SOPS
 file into the site's `.env` (0600).
 

@@ -264,3 +264,18 @@ test("the nav entry and the page's own script", () => {
   assert.ok(view.includes('id="akCheck"') && js.includes("post('/api/admin/hubseam/check', body)") && view.includes("'admkeys.seam.held_order'"),
             "1.99add refix 3: the Check button, and the out-of-order kind");
 });
+
+test("S1 H9-15-edge-key: the seam's inbound row names the looks-only key ids in force (never a secret), for O-11's v1-first check", async () => {
+  const saved = Object.fromEntries(["HUB_V1_ENV", "HUB_V1_IN_KEY_ID", "HUB_V1_IN_KEY", "HUB_V1_IN_LOOKS_KEY_ID", "HUB_V1_IN_LOOKS_KEY"].map((k) => [k, process.env[k]]));
+  const FULL = "hub-test-full-key-0123456789-0123456789-x", LOOKS = "hub-test-looks-only-key-0123456789-not-real";
+  try {
+    Object.assign(process.env, { HUB_V1_ENV: "test", HUB_V1_IN_KEY_ID: "hub-test-1", HUB_V1_IN_KEY: FULL });
+    assert.doesNotMatch(await (await get("/admin/keys", "adm")).text(), /looks-only key/, "none set: nothing said");
+    Object.assign(process.env, { HUB_V1_IN_LOOKS_KEY_ID: "hub-test-looks1", HUB_V1_IN_LOOKS_KEY: LOOKS });
+    const html = await (await get("/admin/keys", "adm")).text();
+    assert.match(html, /looks-only key hub-test-looks1/);
+    assert.ok(!html.includes(LOOKS) && !html.includes(FULL), "never a secret on the page");
+  } finally {
+    for (const [k, v] of Object.entries(saved)) { if (v == null) delete process.env[k]; else process.env[k] = v; }
+  }
+});
