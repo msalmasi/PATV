@@ -816,7 +816,7 @@ test("fix: client - the owner's list words 'unavailable' and 'limited', /stage w
   assert.match(sb, /function reasonOf\(r\)/);
   assert.match(sb, /why: reasonOf\(last\.end_reason\)/);
   assert.match(fs.readFileSync(path.join(repo, "views", "stageBook.ejs"), "utf8"), /stage-book\.js\?v=12/);
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-room\.js\?v=15/, v);   // train2: + micfollow's 12; mfix: 15
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-room\.js\?v=16/, v);   // train2: + micfollow's 12; mfix: 15; mfix review: 16
   assert.match(fs.readFileSync(path.join(repo, "views", "stageAdmin.ejs"), "utf8"), /only cams shown to everyone are excused/);
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const k of ["js.stage.r_cam", "js.stage.r_cam_left_cam", "js.stage.r_cam_opted_out", "sl.chat_livecam"]) assert.ok(en[k], k);
@@ -1108,7 +1108,7 @@ test("final: client - the level, the asks and the per-pad yes on the card; Ask t
   assert.match(rm, /j\.asked/);
   const pl = fs.readFileSync(path.join(repo, "public", "js", "pad-livecam.js"), "utf8");
   assert.match(pl, /d\.asked/);
-  assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /pad-livecam\.js\?v=5/);
+  assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /pad-livecam\.js\?v=6/);
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const k of ["sl.level", "sl.level_on", "sl.level_off", "sl.level_never", "sl.what_check", "sl.asks_h", "sl.yes_h", "sl.chat_ok",
                    "js.sl.keep", "js.sl.keep_always", "js.sl.allow", "js.pad.strip.stage_asked"]) assert.ok(en[k], k);

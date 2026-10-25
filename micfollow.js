@@ -112,13 +112,17 @@ const RELAYS_GRACE_MS = 5 * 1000;   // relays only the mic stage holds above rel
 let relaysOverSince = 0;
 // mfix: 📌 pins
 const PINS = new Map();        // room id -> Map(login -> {id, roomId, login, holder, byId, byName, at, wentLive})
+const PIN_LEFT = new Map();    // "room|login" -> when their pin ended (mfix review: still reportable REPORT_RECENT_MS after)
 const PIN_PREFIX = "pin:";
 const PIN_TICK_MS = 2000;
 const PIN_STALE_MS = 2 * 60 * 1000;   // a pin rides out this long without a fresh sync from Pepe (a site restart, an outage)
 let pinBusy = false, lastPinTick = 0;
 // mfix: the saved site knobs' revision - a row below it still carries the old defaults for the knobs CFG_MOVES lists
 const CFG_REV = 2;
-const CFG_MOVES = Object.freeze({ cold_open: [false, true], relays_max: [2, 6], cold_opens_per_min: [4, 10], cold_opens_per_pad: [2, 6], max_live: [4, 6] });
+const CFG_MOVES = Object.freeze({ relays_max: [2, 6], cold_opens_per_min: [4, 10], cold_opens_per_pad: [2, 6], max_live: [4, 6] });
+// mfix review: cold opens move to on by themselves on STAGING only - prod keeps its saved value until staff switch them on at
+// /stage/admin (the owner's OK, or the spec's V-2 / V-3 / V-5 checks first); read at call time (tests flip STAGING)
+const cfgMoves = () => (process.env.STAGING ? { cold_open: [false, true], ...CFG_MOVES } : { ...CFG_MOVES });
 const SYSTEM = Object.freeze({ userId: "system", username: "system" });
 
 let ready = null;
@@ -609,7 +613,11 @@ async function sendNotice(P, R, login, t, kind) {
   }
   const site = process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
   const by = pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT;   // like camNotify; a house pad: Pepe's own
-  await require("./actions").queue(by, { kind: "notify", args: [login, `${title} - ${body} ${site}${link}`.slice(0, 300), "stage"],
+  // mfix review: a Camfrog PM is cut at 300 characters - its own short text (when it starts, recent speakers, how to stop it)
+  // comes first, the link last (the inbox above keeps the full title + body)
+  const pm = kind === "first" ? T("mf.notice.pm_first", { room: roomName.slice(0, 40), pad: padTitle.slice(0, 40), n: mins })
+    : T("mf.notice.pm", { room: roomName.slice(0, 40), pad: padTitle.slice(0, 40) });
+  await require("./actions").queue(by, { kind: "notify", args: [login, `${pm} ${site}${link}`.slice(0, 300), "stage"],
                                          tag: "stage-notify", label: "🎙 mic stage notice" });
   bump(by === PEPE_ACCOUNT ? "notices_pm_house" : "notices_pm", 1, t, P);
   return true;
@@ -678,11 +686,15 @@ function onSessionEnd(S, why) {
   // Pepe refused a relay that WASN'T the mic stage's (a manual cam slot, a viewer's ▶ Live) because his cams are full:
   // a manual action wins - mic follows stops its stills, opens nothing new for a minute and gives one relay back
   if (why === "slots_busy" && !(S.lastHolds && [...S.lastHolds].some((h) => String(h).startsWith("mf:")))) shed(now());
-  // mfix: a pinned cam's relay ended (cam closed, they opted out, someone ended it...): the pin ends with it
+  // mfix: a pinned cam's relay ended (cam closed, they opted out, someone ended it...): the pin ends with it. mfix review: a
+  // passing reason (Pepe busy, a slow open, his cams full...) doesn't - pinTick holds it again after a short wait, up to
+  // PIN_RETRIES times in a row before the pin ends
   if (S.lastHolds) {
     for (const h of S.lastHolds) {
       const pin = String(h).startsWith(PIN_PREFIX) ? pinByHolder(String(h)) : null;
-      if (pin) unpin(pin.roomId, pin.login, "cam_" + String(why || "ended").slice(0, 24), "system").catch((e) => console.error("[micfollow] unpin:", e.message));
+      if (!pin) continue;
+      if (pinRetry(pin, why, now())) continue;
+      unpin(pin.roomId, pin.login, "cam_" + String(why || "ended").slice(0, 24), "system").catch((e) => console.error("[micfollow] unpin:", e.message));
     }
   }
   const P = PADS.get(String(S.roomId));
@@ -819,6 +831,9 @@ async function excludeFor(roomId, login, minutes, reason, by, { always = false, 
   m.set(l, row);
   const P = PADS.get(String(roomId));
   if (P) { apply(P, roomOf(P.roomId), core.cutNow(P.state, l, "excluded", t), t); stepPad(P.roomId, t); }
+  // mfix review: two reports (staff review) or an ended-by cooldown stop a 📌 pin too - at once, not at the next pin check
+  // (the owner's own exclusion doesn't: they pinned this person themselves - pinRule)
+  if ((row.reason === "reported" || row.reason === "ended_by") && pinOf(roomId, l)) await unpin(roomId, l, row.reason, "system");
   return row;
 }
 /**
@@ -976,6 +991,8 @@ async function unpin(roomId, login, reason, by) {
   if (!pin) return false;
   m.delete(pin.login);
   if (!m.size) PINS.delete(String(roomId));
+  PIN_LEFT.set(pin.roomId + "|" + pin.login, now());
+  if (PIN_LEFT.size > 2000) PIN_LEFT.delete(PIN_LEFT.keys().next().value);
   // let go like a cam slot's end (a ▶ Live viewer of the same relay keeps it; the mic stage may pick them up again if they
   // hold the mic - by its own rules)
   try { LC().stageRelease(pin.holder); } catch (e) { /* no live cams */ }
@@ -1022,17 +1039,38 @@ async function pinWhy(pin, t = now()) {
     if (sw) return sw;
   } catch (e) { console.error("[micfollow] stagepin:", e.message); }
   let st = LC().stageState(pin.holder, t);
-  if (st.state === "ended") return st.why || "ended";
-  if (st.state === "none" && R && !soft) {                         // the site restarted (sessions live in memory): hold again
+  // mfix review: its relay ended for a passing reason (onSessionEnd -> pinRetry): held again once the wait is over
+  if (st.state === "ended" && !pin.retryAt) return st.why || "ended";
+  if ((st.state === "ended" || st.state === "none") && pin.retryAt && t < pin.retryAt) return null;
+  if ((st.state === "ended" || st.state === "none") && R && !soft) {   // a retry, or the site restarted (sessions live in memory)
     try { await LC().stageHold(R, pin.login, pin.holder, t, { actor: { userId: pin.byId } }); }
-    catch (e) { return e && e.refuse && e.code ? String(e.code) : "failed"; }
+    catch (e) {
+      const code = e && e.refuse && e.code ? String(e.code) : "failed";
+      return pinRetry(pin, code, t) ? null : code;
+    }
+    pin.retryAt = 0;
     st = LC().stageState(pin.holder, t);
   }
-  if (st.state === "live" && !pin.wentLive) {
-    pin.wentLive = t;
-    runQuery("UPDATE micfollow_pins SET went_live = ? WHERE id = ?", [t, pin.id]).catch((e) => console.error("[micfollow] pin:", e.message));
+  if (st.state === "live") {
+    pin.fails = 0;                                                   // a picture again: a later passing failure starts over
+    if (!pin.wentLive) {
+      pin.wentLive = t;
+      runQuery("UPDATE micfollow_pins SET went_live = ? WHERE id = ?", [t, pin.id]).catch((e) => console.error("[micfollow] pin:", e.message));
+    }
   }
   return null;
+}
+/** mfix review: a pin's relay ended (or its re-hold was refused) for a PASSING reason - Pepe busy, a slow open, his cams full: wait
+ *  PIN_RETRY_MS x the try, then hold it again (pinWhy); after PIN_RETRIES in a row the pin ends. -> true = it waits. */
+const PIN_SOFT = new Set(["busy", "start_timeout", "slots_busy", "noswitch", "open_failed", "spawn_failed", "failed", "not_that_cam", "nopepe", "budget"]);
+const PIN_RETRIES = 3, PIN_RETRY_MS = 15 * 1000;
+function pinRetry(pin, why, t = now()) {
+  if (!pin || !PIN_SOFT.has(String(why || "")) || (pin.fails || 0) >= PIN_RETRIES) return false;
+  pin.fails = (pin.fails || 0) + 1;
+  pin.retryAt = t + PIN_RETRY_MS * pin.fails;
+  const P = PADS.get(String(pin.roomId));
+  bump("pin_retry:" + String(why).slice(0, 20), 1, t, P);
+  return true;
 }
 async function pinTick(t = now()) {
   if (pinBusy || !PINS.size) return 0;
@@ -1075,12 +1113,14 @@ async function pinCandidates(roomId, actor) {
 }
 
 // ── 🧹 Clear the stage + ⚑ reports (addendum 14.1.2 #3; DF-31's thresholds) ──
-/** The owner's 🧹 Clear the stage: everyone off now, the program idles and freezes (❄, the same length). -> frozen_until */
-function clearStage(roomId, t = now()) {
+/** The owner's 🧹 Clear the stage: everyone off now - mfix review: 📌 pinned cams included (they let go of their relays like an
+ *  unpin) - the program idles and freezes (❄, the same length). -> frozen_until */
+async function clearStage(roomId, t = now()) {
   const P = padOf(roomId, true);
   const mins = Math.min(30, cfg().freeze_max_min);
   const A = core.clearStage(P.state, t, mins * 60 * 1000);
   apply(P, roomOf(P.roomId), A, t);
+  await dropPins(P.roomId, "cleared");
   bump("cleared", 1, t, P);
   return P.state.frozenUntil || null;
 }
@@ -1105,7 +1145,12 @@ async function report(roomId, login, user, reason, t = now()) {
   const l = low(login);
   if (!LOGIN_RE.test(l)) throw new Refuse(400, "Who?", "bad");
   const left = P ? P.state.leftAt.get(l) : null;
-  if (!P || !P.settings.on || !(core.tileOf(P.state, l) || (left && t - left < REPORT_RECENT_MS))) throw new Refuse(404, "They aren't on the mic stage any more.", "gone");
+  // mfix review: a 📌 pinned cam is on the mic stage too (never a mic tile - its own place), and one unpinned a moment ago
+  const pin = P ? pinOf(P.roomId, l) : null;
+  const unpinned = P ? PIN_LEFT.get(P.roomId + "|" + l) : null;
+  if (!P || !P.settings.on || !(core.tileOf(P.state, l) || pin || (left && t - left < REPORT_RECENT_MS) || (unpinned && t - unpinned < REPORT_RECENT_MS))) {
+    throw new Refuse(404, "They aren't on the mic stage any more.", "gone");
+  }
   const uid = String(user.userId);
   if (user.camfrogUsername && low(user.camfrogUsername) === l) throw new Refuse(400, "That's you.", "self");
   const why = REPORT_REASONS.includes(String(reason)) ? String(reason) : "other";
@@ -1115,6 +1160,7 @@ async function report(roomId, login, user, reason, t = now()) {
   HIDE.set(hk, hm);
   if (HIDE.size > 20000) HIDE.delete(HIDE.keys().next().value);
   try { LC().stageUnwatch(uid, P.roomId, l, MFH(P.roomId)); } catch (e) { /* no live cams */ }   // their live view of it ends now
+  if (pin) { try { LC().stageUnwatch(uid, P.roomId, l, pin.holder); } catch (e) { /* no live cams */ } }   // mfix review: ...through its pin too
   try { BR().touch(P.roomId); } catch (e) { /* no bridge */ }
   const c = cfg(), win = c.report_window_s * 1000;
   const mine = (await getQuery("SELECT COUNT(*) AS n FROM micfollow_reports WHERE reporter_id = ? AND room_id = ? AND at > ?", [uid, P.roomId, t - 3600e3]))[0].n;
@@ -1138,6 +1184,7 @@ async function report(roomId, login, user, reason, t = now()) {
   for (const id of ids) if (!distinct.some((d) => alts.has(d + "|" + id))) distinct.push(id);
   if (distinct.length < 2) return { hidden: true, counted: true, qualified: true, cut: false };
   await excludeFor(P.roomId, l, c.report_out_h * 60, "reported", "reports");
+  if (pinOf(P.roomId, l)) await unpin(P.roomId, l, "reported", "system");   // mfix review: a pinned cam comes off too (even past an owner's exclusion)
   await runQuery("UPDATE micfollow_reports SET state = 'cut' WHERE room_id = ? AND login = ? AND state = 'open'", [P.roomId, l]);
   bump("report_cuts", 1, t, P);
   try { ROOMS().event(P.roomId, "micfollow", null, `two reports: someone was taken off the mic stage for ${c.report_out_h} h (staff review)`); } catch (e) { /* none */ }
@@ -1264,7 +1311,7 @@ function snapshot(roomId, t = now()) {
                  ...S.tiles.map((x) => ({ login: x.login, pos: pins.length + x.pos, newest: x === nw, since: x.addedAt, video: x.video || "card", why: x.why || null,
                                           recent: x.relAt != null }))];
   return { roomId: P.roomId, v: S.v, running: S.running && !S.whyOff, whyOff: S.whyOff || null,
-           active: !!S.active || pins.some((p) => p.video === "live"), default_view: P.settings.default_view,
+           active: !!S.active || pins.some((p) => p.video === "live" || p.video === "starting"), default_view: P.settings.default_view,
            layout: core.shapeFor(lay, S.tiles.length, pins.length), fixed: lay !== "auto", frozen_until: S.frozenUntil > t ? S.frozenUntil : null,
            override: S.layoutOverride, padLayout: P.settings.layout, unproven: S.unproven,
            // the neutral card (no tiles) - or, mfix, tiles kept up while speech nobody can show / Pepe runs (dimmed on the page)
@@ -1281,7 +1328,9 @@ async function viewFor(snap, R, userId, nameOf, t = now()) {
   // speaking: the neutral card that replaced the tiles while the mic is held only by people nobody can show ("someone", no
   // name, no avatar) or by Pepe alone ("pepe") - DF-30 / DF-12
   const base = { v: snap.v, by: "rule", rule: "mic_follows", on: snap.running, active: snap.active, default: snap.default_view, layout: snap.layout,
-                 fixed: snap.fixed, frozen_until: snap.frozen_until, count: snap.tiles.length, still_s: cfg().still_refresh_s, manage: null,
+                 fixed: snap.fixed, frozen_until: snap.frozen_until,
+                 // mfix review: count = the people ON THE MIC (the 🎙 tab says "On the mic (n)"); pins_n = the 📌 pinned cams
+                 count: snap.tiles.filter((x) => !x.pin).length, pins_n: snap.tiles.filter((x) => x.pin).length, still_s: cfg().still_refresh_s, manage: null,
                  speaking: snap.neutral || null };
   const manage = userId ? await canManageId(userId, snap.roomId, t) : false;
   if (manage) {
@@ -1349,7 +1398,8 @@ function padCaps() {
   const c = cfg();
   let lcMax = 4;
   try { lcMax = LC().cfg().max_live; } catch (e) { lcMax = 4; }
-  return { maxLive: Math.max(1, Math.min(4, lcMax, c.max_live)), maxPeople: Math.max(1, Math.min(9, c.max_people)) };
+  // mfix review: a pad's own max_live goes up to its field's max (6 - more live cams for recent speakers), no longer a fixed 4
+  return { maxLive: Math.max(1, Math.min(core.PAD_FIELDS.max_live.max, lcMax, c.max_live)), maxPeople: Math.max(1, Math.min(core.PAD_FIELDS.max_people.max, c.max_people)) };
 }
 /** The pad settings card's status line (the same words views/partials/pad-micfollow.ejs prints) - t = the request's t(). */
 function statusText(t, mf) {
@@ -1428,11 +1478,11 @@ async function setOptout(login, off, userId = null, t = now()) {
 // ── site settings (admins) + the kill switch (staff) ──
 function diff(a, b) { const out = {}; for (const k of Object.keys(core.FIELDS)) if (a[k] !== b[k]) out[k] = [a[k], b[k]]; return out; }
 /** mfix: a saved micfollow_cfg row from before CFG_REV - the knobs CFG_MOVES lists that still hold their OLD default move to the
- *  new one (cold opens on, more live cams for the mic stage; a knob an admin set to anything else stays). Once, audited as
- *  "system"; staff can set any of them back at /stage/admin. */
+ *  new one (more live cams for the mic stage; cold opens on - on staging only, mfix review; a knob an admin set to anything else
+ *  stays). Once, audited as "system"; staff can set any of them back at /stage/admin. */
 async function migrateCfg(d) {
   const next = { ...CFG.cfg }, changed = {};
-  for (const [k, [from, to]] of Object.entries(CFG_MOVES)) {
+  for (const [k, [from, to]] of Object.entries(cfgMoves())) {
     const has = Object.prototype.hasOwnProperty.call(d || {}, k) && d[k] != null && d[k] !== "";
     if ((!has || CFG.cfg[k] === from) && next[k] !== to) { changed[k] = [next[k], to]; next[k] = to; }
   }
@@ -1721,7 +1771,7 @@ function register(app, { addUser, bySlug, isLive }) {
     if (!fetchOnly(req, res)) return;
     try {
       const { u, R } = await owner(req);
-      const until = clearStage(R.id);
+      const until = await clearStage(R.id);
       ROOMS().event(R.id, "micfollow", u.username || null, "cleared the mic stage");
       res.json({ ok: true, frozen_until: until });
     } catch (e) { fail(res, e); }
@@ -1885,6 +1935,6 @@ module.exports = {
   _setBoot: (t) => { bootAt = t; },
   _reset: () => { PADS.clear(); MFOPT = new Set(); EXCL.clear(); FACTS.clear(); BANS.clear(); INFLIGHT.clear(); HOLDING.clear(); GATE.clear(); BLK.clear(); MANAGE.clear(); NOTES.clear(); HIDE.clear();
                    COLD.length = 0; pendingCold = 0; yieldUntil = 0; shedUntil = 0; caRetryAt = 0; relaysOverSince = 0; MET.clear(); PER_MIN.clear(); LAT.warm = []; LAT.cold = []; PEAK = 0;
-                   PINS.clear(); pinBusy = false; lastPinTick = 0; OWN.clear();
+                   PINS.clear(); PIN_LEFT.clear(); pinBusy = false; lastPinTick = 0; OWN.clear();
                    CFG = { v: 0, cfg: { ...core.DEFAULTS }, at: null, by: null }; ready = null; loaded = false; },
 };

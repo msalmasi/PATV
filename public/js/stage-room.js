@@ -43,6 +43,7 @@
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
+  var CAM_REWATCH_MAX = 4, CAM_REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a cam slot's re-watches after a dropped connection
   var YT_ID = /^[A-Za-z0-9_-]{11}$/, YT_CH = /^UC[A-Za-z0-9_-]{22}$/, TW_LOGIN = /^[A-Za-z0-9_]{3,25}$/, TW_VOD = /^[0-9]{5,12}$/;
   function embedUrl(e) {
     if (!e) return null;
@@ -83,13 +84,20 @@
     var MIC_GRACE_MS = 45000, micIdleAt = 0, micGraceTimer = null, micWanted = false;
     function micGrace() { return !!(window.PATVStageMic && mic && micIdleAt && Date.now() - micIdleAt < MIC_GRACE_MS); }
     function micShown() { return micOn() || (view === 'mic' && micGrace()); }
-    function idleProgram() { var p = {}; for (var k in mic) p[k] = mic[k]; p.count = 0; p.src = []; p.speaking = null; p.idle = true; return p; }
-    function micTabKey() { return micOn() ? (mic.signin ? 'in' : mic.count ? 'n' + mic.count : 's') : micShown() ? 'g' : ''; }
+    function idleProgram() { var p = {}; for (var k in mic) p[k] = mic[k]; p.count = 0; p.pins_n = 0; p.src = []; p.speaking = null; p.idle = true; return p; }
+    function micTabKey() { return micOn() ? (mic.signin ? 'in' : mic.count || pinsN() ? 'n' + mic.count + 'p' + pinsN() : 's') : micShown() ? 'g' : ''; }
+    // mfix review: mic.count = the people ON THE MIC; mic.pins_n = the 📌 pinned cams (they keep the stage up with nobody on the mic)
+    function pinsN() { return mic ? Math.max(0, Number(mic.pins_n) || 0) : 0; }
+    function micLabel() {
+      var n = mic ? Math.max(0, Number(mic.count) || 0) : 0, p = pinsN();
+      var base = n ? _t('js.stage.mf.tab', '🎙 On the mic ({n})', { n: n }) : _t('js.stage.mf.tab_speaking', '🎙 On the mic');
+      return p ? base + ' · ' + _t('js.stage.mf.tab_pins', '📌 {n}', { n: p }) : base;
+    }
     var padSlug = o.slug || (function () { var m = /[?&]room=([^&]+)/.exec(o.api || ''); try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; } })();
     function micStop() { if (micCtl) { micCtl.stop(); micCtl = null; } }
     // (a program whose tiles gave way to the neutral "Someone is speaking" / Pepe card keeps its tab, but never as the
     // default view - mic.active is false then: a stage of only cards is never the default, DF-15)
-    function micOn() { return !!(window.PATVStageMic && mic && (mic.count > 0 || mic.speaking === 'someone' || mic.speaking === 'pepe')); }
+    function micOn() { return !!(window.PATVStageMic && mic && (mic.count > 0 || pinsN() > 0 || mic.speaking === 'someone' || mic.speaking === 'pepe')); }
     function micDefault() {
       return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !(pepeSrc && pepeSrc.featured);
     }
@@ -138,14 +146,31 @@
             if (k && (k.ok === false || k.state === 'ended')) done(why(k.why || k.code, k.error));
           }).catch(function () { /* a blip: the next beat */ });
         }, 15000);
-        return PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return g !== my.gen; } }).then(function (ss) {
-          if (g !== my.gen) { ss.close(); return; }
-          my.sess = ss;
-          if (o.reconnect) o.reconnect.classList.add('hide');
-          if (ss.blocked) tap.classList.remove('hide');
-          ss.onfail = function () { if (g === my.gen) done(why('gone')); };
-        });
+        return PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return g !== my.gen; } }).then(playing);
       }).catch(function (e) { if (g === my.gen && !(e && e.cancelled)) done(why('failed')); });
+      function playing(ss) {
+        if (g !== my.gen) { ss.close(); return; }
+        my.sess = ss;
+        if (o.reconnect) o.reconnect.classList.add('hide');
+        if (ss.blocked) tap.classList.remove('hide');
+        ss.onfail = function () { if (g === my.gen) rewatch(); };
+      }
+      // mfix review: the connection dropped after it played (Pepe re-opened the relay - e.g. by the exact name for the pad's mic
+      // stage - or its publisher restarted): while the slot still says the cam is connecting / live, watch again with a fresh
+      // ticket - at most CAM_REWATCH_MAX times in CAM_REWATCH_WIN_MS, then "the live cam stopped"
+      function rewatch() {
+        var t0 = Date.now();
+        my.rew = (my.rew || []).filter(function (x) { return t0 - x < CAM_REWATCH_WIN_MS; });
+        if (my.rew.length >= CAM_REWATCH_MAX) return done(why('gone'));
+        my.rew.push(t0);
+        if (my.sess) { try { my.sess.close(); } catch (e) {} my.sess = null; }
+        if (o.reconnect) o.reconnect.classList.remove('hide');
+        camPost(s.id, {}).then(function (d2) {
+          if (g !== my.gen) return null;
+          if (!d2 || !d2.ok || !d2.whep) return done(d2 && d2.state === 'ended' ? why(d2.why) : why(d2 && d2.code, d2 && d2.error));
+          return PATVRtc.watch(d2.whep, video, { timeout: 40000, cancelled: function () { return g !== my.gen; } }).then(playing);
+        }).catch(function (e) { if (g === my.gen && !(e && e.cancelled)) done(why('gone')); });
+      }
     }
     function featured() { for (var i = 0; i < slots.length; i++) if (slots[i].featured) return slots[i]; return null; }
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
@@ -183,7 +208,7 @@
         if (micCtl) micCtl.update(prog);
         else micCtl = PATVStageMic.render(o.wrap, prog, { slug: padSlug, onChange: function () { /* the long-poll brings the new program */ } });
         if (o.unmute) o.unmute.classList.add('hide');
-        o.onAir && o.onAir(true, '🎙 ' + (prog.count || ''));
+        o.onAir && o.onAir(true, '🎙 ' + (prog.count || '') + (prog.pins_n ? ' 📌' + prog.pins_n : ''));
       } else if (s && s.cam) {
         player.stop(); setEmbed(null); camShow(s);
         o.onAir && o.onAir(true, s.title || null);
@@ -256,7 +281,7 @@
       });
       if (micShown()) {                                     // micfollow: 🎙 On the mic, before Pepe's tab (mfix: kept during the grace)
         var ml = mic.signin ? _t('js.stage.mf.tab_signin', '🎙 On the mic: sign in to watch')
-          : micOn() && mic.count ? _t('js.stage.mf.tab', '🎙 On the mic ({n})', { n: mic.count }) : _t('js.stage.mf.tab_speaking', '🎙 On the mic');
+          : micOn() ? micLabel() : _t('js.stage.mf.tab_speaking', '🎙 On the mic');
         h += '<button type="button" class="stab mf-tab" role="tab" data-v="mic" aria-selected="' + (view === 'mic') + '"><span class="dot" aria-hidden="true"></span>' + esc(ml) + '</button>';
       }
       var pOn = pepeOn;                                     // 1.99fv: his own stream only - Twitch never counts
@@ -366,7 +391,7 @@
     function sigOf(p) {
       if (!p) return '';
       var m = p.manage || null;
-      return JSON.stringify([p.v, p.count, p.signin, p.blocked, p.active, p.default, p.layout, p.frozen_until, p.speaking || null, !!p.report,
+      return JSON.stringify([p.v, p.count, p.pins_n || 0, p.signin, p.blocked, p.active, p.default, p.layout, p.frozen_until, p.speaking || null, !!p.report,
         (Array.isArray(p.src) ? p.src : []).map(function (s) { return s ? [s.id, s.name, s.video, s.why, s.watch, s.newest, s.pos, !!s.pin, !!s.recent, !!s.mine] : null; }),
         m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override, m.pins_room] : null]);
     }
@@ -401,7 +426,7 @@
         pickDefault();
         if (before !== view) { show(); return; }
       }
-      if (view === 'mic' && micCtl) { micCtl.update(mic); o.onAir && o.onAir(true, '🎙 ' + (mic.count || '')); }
+      if (view === 'mic' && micCtl) { micCtl.update(mic); o.onAir && o.onAir(true, '🎙 ' + (mic.count || '') + (pinsN() ? ' 📌' + pinsN() : '')); }
       if (micTabKey() !== micTabSig) {                       // (renderTabs notes what it drew)
         renderTabs();
         if (o.onShow) o.onShow(selection());

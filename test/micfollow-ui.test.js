@@ -279,7 +279,7 @@ test("the pad settings card and the privacy switch render; every new string is i
   assert.match(pv, /id="pvMfSw"/);
   assert.doesNotMatch(pv, /id="pvMfSw" checked/);
   assert.match(pv, /Pad &lt;b&gt;/);
-  assert.match(pv, /privacy-livecam\.js\?v=5/);
+  assert.match(pv, /privacy-livecam\.js\?v=6/);
   // every t('...') key in the new / changed views exists
   for (const f of [["views", "partials", "pad-micfollow.ejs"], ["views", "privacy-settings.ejs"]]) {
     for (const m of read(...f).matchAll(/\bt\('([a-z0-9_.]+)'/g)) if (!m[1].endsWith(".")) assert.ok(m[1] in EN, f.join("/") + ": " + m[1]);
@@ -702,4 +702,102 @@ test("mfix: the pad settings card has the recent-speakers choice; every new stri
   assert.match(read("public", "js", "pad-micfollow.js"), /body\.keep_recent = Number\(f\.keep_recent\.value\)/);
   for (const k of ["pad.settings.mf.keep_recent", "pad.settings.mf.keep_recent.off", "pad.settings.mf.keep_recent.min", "js.stage.mf.pin_open", "js.stage.mf.someone_strip",
                    "js.stage.mf.idle", "js.stage.mf.retry", "js.stage.mf.cold_off"]) assert.ok(k in EN, k);
+});
+
+// ── mfix review (2026-10-25): a relay Pepe re-opens (an exact re-open for a pad's mic stage, a publisher restart) never kills
+// the viewers' pictures - every live-cam player watches again while the site still says the cam is connecting / live ──
+const tick = () => new Promise((r) => setTimeout(r, 10));
+function liveCamBox(beatFn) {
+  const js = read("public", "js", "pad-livecam.js");
+  const dom = fakeDom();
+  const posts = [], sessions = [];
+  const ctx = { document: { createElement: dom.mk }, console, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {},
+    fetch: (u, o) => {
+      const body = o && o.body ? JSON.parse(o.body) : null;
+      posts.push([u, body]);
+      const d = /\/beat$/.test(u) ? beatFn() : /\/stop$/.test(u) ? { ok: true } : { ok: true, whep: "https://x/whep?pt=" + posts.length, slots: { used: 1, max: 4 } };
+      return Promise.resolve({ json: () => Promise.resolve(d) });
+    },
+    PATVRtc: { watch: (url) => { const ss = { url, closed: false, onfail: null, close() { ss.closed = true; } }; sessions.push(ss); return Promise.resolve(ss); } },
+    RTCPeerConnection: function () {}, Date, confirm: () => true };
+  ctx.window = ctx; ctx.window.addEventListener = () => {};
+  vm.runInNewContext(js, ctx);
+  const box = dom.mk("div");
+  ctx.PATVLiveCam.row(box, "pad", { login: "ann", display: "Ann" }, { slots: { used: 0, max: 4 } }, {});
+  const live = dom.all.find((e) => e.tagName === "BUTTON" && e.className === "live");
+  return { ctx, dom, posts, sessions, box, live };
+}
+
+test("mfix review pad-livecam.js: a ▶ Live picture whose connection drops is watched again (a fresh ticket, the same slot) while the site says connecting / live - a few times, then 'the live cam stopped'", async () => {
+  let beat = { ok: true, state: "connecting" };
+  const { posts, sessions, box, live } = liveCamBox(() => beat);
+  live.listeners.click[0]();
+  await tick();
+  assert.equal(sessions.length, 1, "playing");
+  posts.length = 0;
+  sessions[0].onfail();                                     // Pepe re-opened the relay: MediaMTX closed the reader
+  await tick();
+  assert.equal(sessions.length, 2, "watched again");
+  assert.ok(sessions[0].closed);
+  assert.deepEqual(posts.map((p) => p[0].replace(/^.*\/livecam/, "")), ["/beat", ""], "asks the site first, then a fresh ticket");
+  assert.notEqual(sessions[1].url, sessions[0].url, "a new ticket");
+  assert.ok(!posts.some((p) => /\/stop$/.test(p[0])), "the slot is kept (no /stop)");
+  assert.doesNotMatch(box.textContent, /stopped/);
+  // the site says it ended: no more re-watching - the reason
+  beat = { ok: true, state: "ended", why: "gone" };
+  sessions[1].onfail();
+  await tick();
+  assert.equal(sessions.length, 2, "not watched again");
+  assert.match(box.textContent, /The live cam stopped/);
+});
+
+test("mfix review pad-livecam.js: re-watching is bounded (REWATCH_MAX in REWATCH_WIN_MS)", async () => {
+  const { sessions, box, live } = liveCamBox(() => ({ ok: true, state: "live" }));
+  live.listeners.click[0]();
+  await tick();
+  for (let i = 0; i < 4; i++) { sessions[sessions.length - 1].onfail(); await tick(); }
+  assert.equal(sessions.length, 5, "four drops: four re-watches");
+  sessions[sessions.length - 1].onfail();
+  await tick();
+  assert.equal(sessions.length, 5, "the fifth in a row: given up");
+  assert.match(box.textContent, /The live cam stopped/);
+});
+
+test("mfix review stage-mic.js: a live mic tile whose connection drops re-watches at once ('reconnecting…', not 'couldn't open'), a few times", async () => {
+  const sessions = [];
+  const { ctx, posts, host } = micBox();
+  ctx.PATVRtc.watch = (url) => { const ss = { url, onfail: null, close() { ss.closed = true; } }; sessions.push(ss); return Promise.resolve(ss); };
+  const prog = { v: 1, layout: "single", count: 1, still_s: 20, manage: null, src: [mfS("a", 0, "live")] };
+  const ctl = ctx.PATVStageMic.render(host, prog, { slug: "pad" });
+  await tick();
+  assert.equal(sessions.length, 1);
+  const before = posts.filter((p) => /\/micfollow\/watch$/.test(p[0]) && !p[1].beat && !p[1].stop).length;
+  ctx.PATVRtc.watch = (url) => { const ss = { url, onfail: null, close() { ss.closed = true; } }; sessions.push(ss); return new Promise(() => {}); };
+  sessions[0].onfail();
+  await tick();
+  const tileA = findBy(host, "mf-tile")[0];
+  assert.match(tileA.textContent, /reconnecting/, "says it's reconnecting");
+  assert.doesNotMatch(tileA.textContent, /couldn't open/);
+  assert.equal(posts.filter((p) => /\/micfollow\/watch$/.test(p[0]) && !p[1].beat && !p[1].stop).length, before + 1, "a fresh ticket at once");
+  assert.ok(!posts.some((p) => /\/micfollow\/watch$/.test(p[0]) && p[1].stop), "its viewer slot isn't given up");
+  ctl.stop();
+});
+
+test("mfix review: the strip (pad-camstrip.js) and a cam slot on the stage (stage-room.js) re-watch a dropped connection too - bounded, the slot kept", () => {
+  const strip = read("public", "js", "pad-camstrip.js");
+  assert.match(strip, /ss\.onfail = function \(\) \{ if \(my === t\.gen\) rewatch\(my\); \};/);
+  assert.match(strip, /REWATCH_MAX = 4, REWATCH_WIN_MS = 3 \* 60 \* 1000/);
+  assert.match(strip, /function rewatch\(my\) \{[^]*?post\(base \+ '\/beat'[^]*?post\(base, \{ login: t\.login \}\)[^]*?PATVRtc\.watch\(/);
+  const room = read("public", "js", "stage-room.js");
+  assert.match(room, /ss\.onfail = function \(\) \{ if \(g === my\.gen\) rewatch\(\); \};/);
+  assert.match(room, /CAM_REWATCH_MAX = 4/);
+  assert.match(room, /function rewatch\(\) \{[^]*?camPost\(s\.id, \{\}\)[^]*?PATVRtc\.watch\(d2\.whep/);
+  for (const k of ["js.pad.live.reconnecting", "js.stage.mf.reconnecting", "js.stage.mf.tab_pins", "js.stage.mf.group_aria_pins"]) assert.ok(EN[k], k + " in en.json");
+});
+
+test("mfix review stage-room.js: the 🎙 tab counts the people ON THE MIC; pinned cams show as 📌 n and keep the stage up with nobody on the mic", () => {
+  const js = read("public", "js", "stage-room.js");
+  assert.match(js, /function micOn\(\) \{ return !!\(window\.PATVStageMic && mic && \(mic\.count > 0 \|\| pinsN\(\) > 0/);
+  assert.match(js, /_t\('js\.stage\.mf\.tab_pins', '📌 \{n\}'/);
+  assert.match(js, /p\.pins_n \|\| 0/, "a pin count change redraws the tab");
 });

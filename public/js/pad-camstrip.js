@@ -11,10 +11,13 @@
 //   strip.add(who) / strip.adopt(who, {sess, stream})    pin a cam (adopt = the popover hands over a cam already playing)
 //   strip.has(login) / strip.full() / strip.focus(login)
 // The page beats every 15 s per tile (the server drops a slot without beats after 45 s). All text via textContent.
+// mfix review: a tile whose connection drops after it played is watched again while the site still says the cam is connecting /
+// live ("reconnecting…") - a few times, then "the live cam stopped" with ↻ Retry.
 (function () {
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000, KEEP = 8;
+  var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: re-watches after a dropped connection (rewatch)
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function post(url, body, keep) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: !!keep, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
@@ -110,11 +113,36 @@
         t.sess = ss; t.state = 'live';
         badge.textContent = _t('js.pad.live.badge', '⚡ LIVE'); badge.classList.add('on');
         tap.hidden = !ss.blocked; say('', false); over.hidden = tap.hidden;
-        ss.onfail = function () { if (my === t.gen) t.ended('gone'); };
+        ss.onfail = function () { if (my === t.gen) rewatch(my); };
         paint();
+      }
+      // mfix review: the connection dropped after it played (Pepe re-opened the relay, its publisher restarted): while the site
+      // still says the cam is connecting / live, watch again with a fresh ticket (the same slot) - at most REWATCH_MAX times in
+      // REWATCH_WIN_MS, then the tile's "the live cam stopped" with ↻ Retry
+      function rewatch(my) {
+        var t0 = Date.now();
+        t.rew = (t.rew || []).filter(function (x) { return t0 - x < REWATCH_WIN_MS; });
+        if (t.rew.length >= REWATCH_MAX) return t.ended('gone');
+        t.rew.push(t0);
+        if (t.sess) { try { t.sess.close(); } catch (e) { /* gone */ } t.sess = null; }
+        t.state = 'connecting'; badge.textContent = _t('js.pad.live.reconnecting', 'reconnecting…'); badge.classList.remove('on'); paint();
+        post(base + '/beat', { login: t.login }).then(function (k) {
+          if (my !== t.gen) return null;
+          if (!k || k.ok === false) return t.ended(k && k.code, k && k.error);
+          if (k.state === 'ended') return t.ended(k.why);
+          return post(base, { login: t.login }).then(function (d) {
+            if (my !== t.gen) return null;
+            if (!d || !d.ok || !d.whep) return t.ended(d && d.code, d && d.error);
+            return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) {
+              if (my !== t.gen) { ss.close(); return; }
+              playing(ss, my);
+            }, function (e) { if (my === t.gen && !(e && e.cancelled)) t.ended('gone'); });
+          });
+        }).catch(function () { if (my === t.gen) t.ended('gone'); });
       }
       t.start = function () {
         var my = ++t.gen;
+        t.rew = [];
         t.state = 'asking'; badge.textContent = _t('js.pad.live.connecting', 'connecting…'); badge.classList.remove('on'); tap.hidden = true; say('', false);
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) return t.ended('browser', _t('js.pad.live.err_browser', 'This browser can\'t play live cams.'));
         post(base, { login: t.login }).then(function (d) {

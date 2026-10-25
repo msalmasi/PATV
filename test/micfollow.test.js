@@ -1021,8 +1021,11 @@ test("40. notice first (DF-11): the pad's first notice goes out at the first qua
   assert.equal(pm[0].user_id, "u_owner", "queued under the pad owner");
   const [to, text] = JSON.parse(pm[0].args);
   assert.equal(to, "carl");
-  assert.match(text, /may show your cam while you hold the mic/);
+  assert.match(text, /shows whoever holds the mic in Mic Room on its stage/);
+  assert.match(text, /recent speakers a few minutes after/, "mfix review: it says recent speakers stay up a while");
   assert.match(text, /in about 2 minutes/);
+  assert.match(text, /To stop it: !livecam off\. https:\/\/publicaccess\.tv\/p\//, "mfix review: the way to stop it (and the link) fit the 300 characters");
+  assert.ok(text.length <= 300);
   const n = MF._notes.get(ROOM.id + "|carl");
   assert.ok(n && n.first, "noted");
   const row = (await getQuery("SELECT first_at FROM micfollow_notices WHERE room_id = ? AND login = 'carl'", [ROOM.id]))[0];
@@ -1041,7 +1044,7 @@ test("40. notice first (DF-11): the pad's first notice goes out at the first qua
   assert.equal(tileOn("carl"), true, "no 120 s wait the second time");
   const again = await getQuery("SELECT args FROM pepe_actions WHERE kind = 'notify'");
   assert.equal(again.length, 1);
-  assert.match(JSON.parse(again[0].args)[1], /Your cam is on .*stage while you hold the mic/);
+  assert.match(JSON.parse(again[0].args)[1], /Your cam is on .*stage on PATV while you hold the mic in Mic Room, and for a few minutes after\. To stop it: !livecam off\./);
 });
 
 test("41. blocks (14.1.2 #2): DM blocks either way -> 'isn't available', no ticket; a person who blocked the pad owner is never on that owner's stage", async () => {
@@ -1445,7 +1448,8 @@ test("52. mfix 📌 pins: the pad's owner pins a cam (held by its pin - a manual
   assert.equal(snap.active, true, "a pinned live picture: the mic stage can be the default ('First') with nobody on the mic");
   const v = await MF.viewFor(snap, R, "u_v1", null);
   assert.equal(v.src[0].pin, true);
-  assert.equal(v.count, 1);
+  assert.equal(v.count, 0, "mfix review: nobody is on the mic - the 🎙 tab's count never counts a pinned cam");
+  assert.equal(v.pins_n, 1, "...the pins have their own count");
   const w = await post(`/api/rooms/${slug()}/micfollow/watch`, { login: "carl", pin: true }, "u_v1");
   assert.ok(w.d.whep, JSON.stringify(w.d));
   // the pinned person grabs the mic: no second (mic) tile, and their pin is the newest speaker
@@ -1614,16 +1618,175 @@ test("57. mfix cfg rev 2: a saved row still holding the old defaults moves to th
                  [JSON.stringify({ ...core.DEFAULTS, enabled: true, cold_open: false, relays_max: 2, cold_opens_per_min: 7, cold_opens_per_pad: 2, max_live: 4 })]);
   MF._reset(); await MF._ready();
   const c = MF.cfg();
-  assert.deepEqual([c.cold_open, c.relays_max, c.cold_opens_per_min, c.cold_opens_per_pad, c.max_live], [true, 6, 7, 6, 6], "7 a minute was set on purpose: kept");
+  // mfix review: prod - cold opens stay as saved (staff switch them on at /stage/admin: the owner's OK / V-2, V-3, V-5)
+  assert.deepEqual([c.cold_open, c.relays_max, c.cold_opens_per_min, c.cold_opens_per_pad, c.max_live], [false, 6, 7, 6, 6], "7 a minute was set on purpose: kept");
   const row = (await getQuery("SELECT data, updated_by FROM micfollow_cfg WHERE id = 1"))[0];
   assert.equal(JSON.parse(row.data)._rev, MF.CFG_REV);
   assert.equal(row.updated_by, "system");
   const au = (await getQuery("SELECT admin_id, detail FROM admin_audit WHERE action = 'micfollow_cfg' ORDER BY id DESC LIMIT 1"))[0];
   assert.equal(au.admin_id, "system");
   assert.equal(JSON.parse(au.detail).action, "migrate");
+  // ...staging: cold opens move to on by themselves too
+  await runQuery("UPDATE micfollow_cfg SET data = ? WHERE id = 1",
+                 [JSON.stringify({ ...core.DEFAULTS, enabled: true, cold_open: false, relays_max: 2, cold_opens_per_min: 4, cold_opens_per_pad: 2, max_live: 4 })]);
+  process.env.STAGING = "1";
+  try { MF._reset(); await MF._ready(); } finally { delete process.env.STAGING; }
+  const cs = MF.cfg();
+  assert.deepEqual([cs.cold_open, cs.relays_max, cs.cold_opens_per_min, cs.cold_opens_per_pad, cs.max_live], [true, 6, 10, 6, 6], "staging: every old default moves");
   await MF.setCfg(ADMIN, { cold_open: false, reason: "test" });
   MF._reset(); await MF._ready();
   assert.equal(MF.cfg().cold_open, false, "an admin's choice after the move sticks across a restart");
   await MF.setCfg(ADMIN, { cold_open: true, reason: "test" });
   for (const l of ["alice", "bob", "carl", "dana", "erin", "fay"]) await MF._noticed(ROOM.id, l, 1);
+});
+
+// ── mfix review (2026-10-25) ──
+const pinBy = (login) => MF.pinPut({ userId: "u_owner", username: "padowner" }, ROOM.id, login, T).then((r) => ({ d: { ok: true, ...r } }), (e) => ({ d: { ok: false, code: e.code, error: e.message } }));
+
+test("58. mfix review: ⚑ a viewer reports a 📌 pinned cam - hidden for them (no ticket through the pin), two qualified reporters unpin it at once; one unpinned a moment ago can still be reported", async () => {
+  await reset(); await plainPad();
+  await runQuery("DELETE FROM micfollow_reports");
+  await bot(); room([]);
+  let r = await post(`/api/rooms/${slug()}/micfollow/pin`, { login: "carl" }, "u_owner");
+  assert.equal(r.d.pinned, true, JSON.stringify(r.d));
+  up("carl"); await bot();
+  const pin = MF.pinOf(ROOM.id, "carl");
+  const S = LC._sessions.get(LC.keyOf(ROOM.id, "carl"));
+  let w = await post(`/api/rooms/${slug()}/micfollow/watch`, { login: "carl", pin: true }, "u_v1");
+  assert.ok(w.d.whep, JSON.stringify(w.d));
+  assert.ok(S.stageViewers.has("u_v1"));
+  r = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "carl", reason: "sexual" }, "u_v1");
+  assert.equal(r.status, 200, "a pinned cam is on the mic stage - it can be reported " + JSON.stringify(r.d));
+  assert.deepEqual([r.d.hidden, r.d.qualified, r.d.cut], [true, true, false]);
+  assert.ok(!S.stageViewers.has("u_v1"), "their live view through the pin ends now");
+  const v = await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v1", null);
+  assert.equal(v.src.find((s) => s.id === "carl").watch, "hidden", "hidden for the reporter");
+  w = await post(`/api/rooms/${slug()}/micfollow/watch`, { login: "carl", pin: true }, "u_v1");
+  assert.equal(w.d.code, "hidden", "no ticket through the pin for a cam you reported");
+  assert.equal((await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v3", null)).src.find((s) => s.id === "carl").watch, "ok", "everyone else still sees it");
+  // a second distinct qualified reporter: cut - the pin comes off at once (not at the next pin check) and can't go back up
+  r = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "carl", reason: "sexual" }, "u_v3");
+  assert.deepEqual([r.d.qualified, r.d.cut], [true, true], JSON.stringify(r.d));
+  assert.equal(MF.pinOf(ROOM.id, "carl"), null, "unpinned at once");
+  assert.ok(!S.holds.has(pin.holder), "the pin let go of the relay");
+  assert.equal((await pinBy("carl")).d.code, "unavailable", "held out (staff review): no pin");
+  await MF.unexclude(ROOM.id, "carl");
+  // a cam unpinned a moment ago can still be reported (REPORT_RECENT_MS), not after
+  room([]);
+  assert.equal((await pinBy("dana")).d.pinned, true);
+  await MF.unpin(ROOM.id, "dana", "unpinned", "padowner");
+  r = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "dana", reason: "abuse" }, "u_v2");
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  T += 3 * 60 * 1000;
+  r = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "dana", reason: "abuse" }, "u_v2");
+  assert.equal(r.d.code, "gone");
+});
+
+test("59. mfix review: 🧹 Clear the stage takes 📌 pinned cams off too (their relays let go) - everyone off, frozen", async () => {
+  await reset(); await plainPad();
+  await bot(); room([]);
+  assert.equal((await pinBy("dana")).d.pinned, true);
+  const pin = MF.pinOf(ROOM.id, "dana");
+  await onStage(["alice"]);
+  up("dana"); await bot();
+  assert.deepEqual(MF.snapshot(ROOM.id).tiles.map((x) => x.login), ["dana", "alice"]);
+  const r = await post(`/api/rooms/${slug()}/micfollow/clear`, {}, "u_owner");
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(MF.pinOf(ROOM.id, "dana"), null, "the pin is off");
+  const S = LC._sessions.get(LC.keyOf(ROOM.id, "dana"));
+  assert.ok(!S || S.ended || !S.holds.has(pin.holder), "its relay let go");
+  assert.deepEqual(MF.snapshot(ROOM.id).tiles, [], "nobody on the stage");
+  await post(`/api/rooms/${slug()}/micfollow/freeze`, { minutes: 0 }, "u_owner");
+});
+
+test("60. mfix review: a pin's relay ending for a PASSING reason (Pepe busy, a slow open, his cams full) is held again after a short wait - up to 3 times in a row; a cam that went away ends it", async () => {
+  await reset(); await plainPad();
+  await bot(); room([]);
+  assert.equal((await pinBy("fay")).d.pinned, true);
+  const pin = MF.pinOf(ROOM.id, "fay");
+  const key = LC.keyOf(ROOM.id, "fay");
+  const S = LC._sessions.get(key);
+  await bot({ live: [], refused: [{ room: ROOM.id, login: "fay", why: "busy", sid: S.sid }] });
+  assert.ok(S.ended && S.endWhy === "busy");
+  assert.ok(MF.pinOf(ROOM.id, "fay"), "a passing reason never ends the pin");
+  const t0 = MF.snapshot(ROOM.id).tiles[0];
+  assert.deepEqual([t0.login, t0.video, t0.why], ["fay", "card", "retry"], "its tile says it's trying again");
+  room([]); await MF.pinTick(T);
+  assert.equal(LC._sessions.get(key), S, "not before the wait is over");
+  T += 16 * 1000; await bot(); room([]);
+  await MF.pinTick(T);
+  const S2 = LC._sessions.get(key);
+  assert.ok(S2 && S2 !== S && !S2.ended && S2.holds.has(pin.holder), "held again after the wait");
+  up("fay"); await bot(); room([]); await MF.pinTick(T);
+  assert.equal(pin.fails, 0, "a picture again: a later passing failure starts over");
+  // three passing failures in a row, then the fourth ends it
+  let cur = S2;
+  const passing = ["open_failed", "spawn_failed", "busy"];       // (start_timeout is the site's own sweep - the same path)
+  for (let i = 1; i <= 3; i++) {
+    await bot({ live: [], refused: [{ room: ROOM.id, login: "fay", why: passing[i - 1], sid: cur.sid }] });
+    assert.ok(MF.pinOf(ROOM.id, "fay"), "try " + i + ": still pinned");
+    T += (i * 15 + 1) * 1000; await bot({ live: [] }); room([]);
+    await MF.pinTick(T);
+    cur = LC._sessions.get(key);
+    assert.ok(cur && !cur.ended && cur.holds.has(pin.holder), "try " + i + ": held again");
+  }
+  await bot({ live: [], refused: [{ room: ROOM.id, login: "fay", why: "busy", sid: cur.sid }] });
+  assert.equal(MF.pinOf(ROOM.id, "fay"), null, "the fourth in a row: the pin ends");
+  // a cam that went away (not a passing reason) ends it at once
+  room([]);
+  assert.equal((await pinBy("fay")).d.pinned, true);
+  const S3 = LC._sessions.get(key);
+  await bot({ live: [], refused: [{ room: ROOM.id, login: "fay", why: "not_on_cam", sid: S3.sid }] });
+  assert.equal(MF.pinOf(ROOM.id, "fay"), null, "off cam: the pin ends");
+});
+
+test("61. mfix review: an exact refusal of a relay that's LIVE for a ▶ Live viewer (Pepe put it back the ordinary way) lets only the mic stage go; one from before the mic stage's latest hold is ignored; want[].shared", async () => {
+  await reset(); await plainPad();
+  await LC.start({ userId: "u_v1", username: "viewer1" }, room([]), "dana", T);
+  up("dana"); EXACT.delete("dana");
+  const liveDana = [{ room: ROOM.id, login: "dana", state: "live", exact: false }];
+  await bot({ live: liveDana });
+  await step(["dana"]); await at(3, ["dana"]);
+  const S = LC._sessions.get(LC.keyOf(ROOM.id, "dana"));
+  assert.ok(S.holds.has("mf:" + ROOM.id) && S.mfHeldAt, "the mic stage holds the warm relay");
+  LC.beat("u_v1", ROOM.id, "dana", T);
+  let ans = await bot({ live: liveDana });
+  assert.equal(ans.want.find((x) => x.login === "dana").shared, true, "want[].shared: a ▶ Live viewer uses it too");
+  // Pepe re-sends a refusal for 30 s: one from before this hold is about an earlier hold - ignored
+  const ago = (T - S.mfHeldAt) / 1000;
+  await bot({ live: liveDana, refused: [{ room: ROOM.id, login: "dana", why: "noswitch", x: true, sid: S.sid, age: ago + 10 }] });
+  assert.ok(S.holds.has("mf:" + ROOM.id), "an exact refusal older than the mic stage's hold changes nothing");
+  // a fresh one while the relay is live (put back the ordinary way): only the mic stage lets go
+  T += 2000; LC.beat("u_v1", ROOM.id, "dana", T);
+  await bot({ live: liveDana, refused: [{ room: ROOM.id, login: "dana", why: "noswitch", x: true, sid: S.sid, age: 0.5 }] });
+  assert.ok(!S.ended, "the ▶ Live viewer keeps the relay");
+  assert.ok(!S.holds.has("mf:" + ROOM.id), "the mic stage let go");
+  assert.equal(tile("dana").why, "retry", "a soft failure: another try soon");
+  ans = await bot({ live: liveDana });
+  const wd = ans.want.find((x) => x.login === "dana");
+  assert.ok(wd && !wd.mf && !wd.shared, "no longer asked for exactly");
+  // an ordinary (not exact) refusal of a live session is still ignored, as before
+  await bot({ live: liveDana, refused: [{ room: ROOM.id, login: "dana", why: "open_failed", sid: S.sid }] });
+  assert.ok(!S.ended, "a live relay outlives an ordinary refusal");
+});
+
+test("62. mfix review: 'First' - a new speaker's tile whose cam is opening (starting) makes the mic stage the default at once; a stage of only reason cards still doesn't; a pad's own max_live goes up to 6", async () => {
+  await reset(); await plainPad();
+  await step(["alice"]); await at(3, ["alice"]);
+  assert.equal(tile("alice").video, "starting", "a cold open on its way");
+  assert.equal(MF.snapshot(ROOM.id).active, true, "the stage is the default while the cam opens (no Pepe's stream first)");
+  await MF.setCfg(ADMIN, { cold_open: false, reason: "test" });
+  try {
+    await reset(); await plainPad();
+    await step(["fay"]); await at(3, ["fay"]);
+    assert.equal(tile("fay").why, "cold_off");
+    assert.equal(MF.snapshot(ROOM.id).active, false, "only a reason card: never the default (DF-15)");
+  } finally { await MF.setCfg(ADMIN, { cold_open: true, reason: "test" }); }
+  const was = LC.cfg().max_live;
+  await LC.save(ADMIN, { cfg: { max_live: 12 } });
+  try {
+    assert.equal((await MF.ownerState(ROOM.id)).max_live_cap, 6, "a pad owner may raise max_live to 6 (no fixed 4)");
+    const s = await MF.setPad(ROOM.id, { max_live: 6 }, "test");
+    assert.equal(s.max_live, 6);
+  } finally { await plainPad(); await LC.save(ADMIN, { cfg: { max_live: was } }); }
 });

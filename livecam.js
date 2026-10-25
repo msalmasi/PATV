@@ -93,6 +93,7 @@ const BOT_FRESH_MS = 20 * 1000;         // Pepe's poll within this long = he can
 const START_MS = 40 * 1000;             // a wanted cam Pepe hasn't reported live within this long -> "Pepe couldn't open it"
 const END_COOLDOWN_MS = 10 * 60 * 1000; // after an owner / mod / admin ends a relay
 const SYNC_FRESH_MS = 15 * 1000;
+const EXACT_REFUSAL_SLACK_MS = 3 * 1000;   // mfix review: refused[].age is measured when Pepe sends it (his poll's round trip)
 const AUDIT = "livecam_cfg";
 
 const FIELDS = Object.freeze({
@@ -804,7 +805,7 @@ async function stageHold(R, login, holderId, t = now(), opts = {}) {
   if (!S.holds) S.holds = new Set();
   const had = S.holds.has(H);
   S.holds.add(H);
-  if (opts.mf === true || isMfHolder(H)) { S.mf = true; S.mfEver = true; }
+  if (opts.mf === true || isMfHolder(H)) { S.mf = true; S.mfEver = true; if (!had) S.mfHeldAt = t; }   // mfix review: an exact refusal from before this hold is ignored
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
   if (!had) console.log(`[livecam] stage hold room=${R.id} target=${isMfHolder(H) ? "-" : login} holder=${isMfHolder(H) ? "mf" : H}`);
   return { display: m.display || login };
@@ -986,16 +987,24 @@ async function forBot(body, t = now()) {
   }
   for (const x of (Array.isArray(body.refused) ? body.refused.slice(0, 50) : [])) {
     const S = x && SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
-    if (!S || S.ended || seen.has(S.key)) continue;
+    if (!S || S.ended) continue;
     // mfix: Pepe says which session it was about (he re-sends a refusal for 30 s): an older one's never ends this one
     if (x.sid != null && str(x.sid, 24) !== S.sid) continue;
     const why = str(x.why, 30);
-    // mfix: an EXACT open failed (the mic stage asked for it) but a cam slot / ▶ Live viewer / pin uses the relay too: only the
-    // mic stage lets go - the relay lives on and Pepe opens it his ordinary way for the others (opted_out ends it for all)
-    if (x.x === true && why !== "opted_out" && TERMINAL.has(why) && sharedBeyondMf(S, t)) {
-      try { require("./micfollow").onExactRefused(S, why); } catch (e) { console.error("[livecam] micfollow:", e && e.message); }
-      continue;
+    if (x.x === true && why !== "opted_out") {
+      // mfix review: an exact refusal from before the mic stage's latest hold of this cam is about an earlier hold (Pepe
+      // re-sends one for 30 s; the mic stage may re-hold after soft_retry_s) - never a second soft failure of the new hold
+      const age = Number(x.age);
+      if (Number.isFinite(age) && age >= 0 && S.mfHeldAt && t - age * 1000 < S.mfHeldAt - EXACT_REFUSAL_SLACK_MS) continue;
+      // mfix: an EXACT open failed (the mic stage asked for it) but a cam slot / ▶ Live viewer / pin uses the relay too - or
+      // (mfix review) the relay is live anyway (Pepe put a shared relay back the ordinary way after a failed exact re-open):
+      // only the mic stage lets go - the relay lives on for the others (opted_out ends it for all)
+      if (seen.has(S.key) || (TERMINAL.has(why) && sharedBeyondMf(S, t))) {
+        if (S.mf) { try { require("./micfollow").onExactRefused(S, why); } catch (e) { console.error("[livecam] micfollow:", e && e.message); } }
+        continue;
+      }
     }
+    if (seen.has(S.key)) continue;
     S.botWhy = why;
     if (why === "opted_out") ownerClosed(S, why, t);
     else if (TERMINAL.has(why)) endSession(S, why, t);
@@ -1014,6 +1023,8 @@ async function forBot(body, t = now()) {
       want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: key, path: S.path, viewers: Math.max(1, shown), sid: S.sid,
                   ...(fv.length && !shown && !held(S) ? { ghost_only: true } : {}),
                   ...(S.mf ? { mf: true } : {}),                                     // micfollow: open it by its exact name, never fuzzy
+                  // mfix review: a ▶ Live viewer / cam slot / pin uses it too - a failed exact re-open is put back the ordinary way
+                  ...(S.mf && sharedBeyondMf(S, t) ? { shared: true } : {}),
                   ...(optedOut(S.login) ? { bypass: true } : {}) });     // 1.99aak: Pepe publishes it for the ghost despite !livecam off
     }
   }

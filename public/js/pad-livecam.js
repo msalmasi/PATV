@@ -10,10 +10,13 @@
 //   stage = {slug} for the pad's owner / staff: "🎬 Put on stage" makes the cam a stage slot (mainstage camOpen).
 // PATVLiveCam.why(code, fallback) = the reason text (the strip and the stage use it too).
 // The page beats every 15 s while watching (the server drops a slot without beats after 45 s). All text via textContent.
+// mfix review: a connection that drops after it played (Pepe re-opened the relay, its publisher restarted) is watched again
+// while the site still says the cam is connecting / live ("reconnecting…") - a few times, then "the live cam stopped".
 (function () {
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000;
+  var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: re-watches after a dropped connection (see rewatch)
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function post(url, body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
@@ -75,7 +78,7 @@
     acts.appendChild(hint);
     stageBtn(acts);
     box.appendChild(acts); box.appendChild(stage); box.appendChild(res);
-    var sess = null, beatT = null, gen = 0, video = null;
+    var sess = null, beatT = null, gen = 0, video = null, rew = [];
     function say(text, cls) { res.className = 'res' + (cls ? ' ' + cls : ''); res.textContent = text || ''; }
     // 1.99zc: 🎬 the pad's owner / staff put this cam on the pad's stage (a cam slot - same consent rules as ▶ Live)
     function stageBtn(into) {
@@ -120,6 +123,7 @@
       // 1.99zc: no WebRTC here (iOS Lockdown Mode, an old / embedded browser) - say so before taking a slot
       if (!window.RTCPeerConnection) return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad');
       var my = ++gen;
+      rew = [];
       b.disabled = true; say(_t('js.pad.live.asking', 'Asking Pepe to go live…'));
       post(base, { login: who.login }).then(function (d) {
         if (my !== gen) return;
@@ -151,11 +155,38 @@
             if (k && k.state === 'ended') return ended(k.why);
           }).catch(function () { /* a blip: the next beat */ });
         }, BEAT_MS);
-        PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return my !== gen; } }).then(function (ss) {
-          if (my !== gen) { ss.close(); return; }
+        function playing(ss) {
           sess = ss;
           badge.textContent = _t('js.pad.live.badge', '⚡ LIVE'); badge.classList.add('on');
-          ss.onfail = function () { if (my === gen) ended('gone'); };
+          ss.onfail = function () { if (my === gen) rewatch(); };
+        }
+        // mfix review: the connection dropped after it played (Pepe re-opened the relay - e.g. by the exact name for a pad's mic
+        // stage - or its publisher restarted): while the site still says the cam is connecting / live, watch again with a fresh
+        // ticket (the same slot) - at most REWATCH_MAX times in REWATCH_WIN_MS, then "the live cam stopped"
+        function rewatch() {
+          var t0 = Date.now();
+          rew = rew.filter(function (x) { return t0 - x < REWATCH_WIN_MS; });
+          if (rew.length >= REWATCH_MAX) return ended('gone');
+          rew.push(t0);
+          if (sess) { try { sess.close(); } catch (e) { /* gone */ } sess = null; }
+          badge.textContent = _t('js.pad.live.reconnecting', 'reconnecting…'); badge.classList.remove('on');
+          post(base + '/beat', { login: who.login }).then(function (k) {
+            if (my !== gen) return null;
+            if (!k || k.ok === false) return ended(k && k.code, k && k.error);
+            if (k.state === 'ended') return ended(k.why);
+            return post(base, { login: who.login }).then(function (d2) {
+              if (my !== gen) return null;
+              if (!d2 || !d2.ok || !d2.whep) return ended(d2 && d2.code, d2 && d2.error);
+              return PATVRtc.watch(d2.whep, video, { timeout: 40000, cancelled: function () { return my !== gen; } }).then(function (ss) {
+                if (my !== gen) { ss.close(); return; }
+                playing(ss);
+              }, function (e) { if (my === gen && !(e && e.cancelled)) ended('gone'); });
+            });
+          }).catch(function () { if (my === gen) ended('gone'); });
+        }
+        PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return my !== gen; } }).then(function (ss) {
+          if (my !== gen) { ss.close(); return; }
+          playing(ss);
         }, function (e) {
           if (my !== gen || (e && e.cancelled)) return;
           post(base + '/beat', { login: who.login }).then(function (k) { if (my === gen) ended(k && k.state === 'ended' ? k.why : 'failed'); },

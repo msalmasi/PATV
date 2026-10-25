@@ -66,7 +66,9 @@ const FIELDS = Object.freeze({
   // relays only the mic stage holds site-wide, and the cold opens a minute (site-wide / per pad). Pepe's VM measured ~3.4% of
   // one core per re-encoded relay; livecam's own max_live (all rooms) still caps them all.
   relays_max:            { def: 6, min: 0, max: 24 },
-  cold_open:             { def: true, bool: true },             // mfix: on (▶ Live does the same opens on prod)
+  // mfix review: cold opens - on for staging; prod stays off (the spec's V-2 / V-3 / V-5 checks) until staff switch it on at
+  // /stage/admin (the owner's call - a Camfrog-locked cam may pop a viewing request at its owner on every mic turn)
+  cold_open:             { def: STAGING, bool: true },
   cold_opens_per_min:    { def: 10, min: 0, max: 30 },          // site-wide
   cold_opens_per_pad:    { def: 6, min: 0, max: 30 },           // a minute, per pad
   open_fail_backoff_min: { def: 10, min: 1, max: 120 },
@@ -253,6 +255,10 @@ function newState() {
 const tileOf = (S, login) => S.tiles.find((x) => x.login === login) || null;
 const hasPicture = (x) => x.video === "live" || x.video === "still";
 const liveish = (x) => x.video === "live" || x.video === "starting";
+// mfix review: the stage may be the default view once a tile has a picture OR its cam is opening (a "starting" tile) - a pad
+// whose owner put the mic stage first no longer shows Pepe's stream while a new speaker's cam opens (up to EXACT_WAIT_MS);
+// a stage of only reason cards (cold opens off, full, failed) still never is (DF-15)
+const showsSoon = (x) => hasPicture(x) || x.video === "starting";
 // ties (several added in one change) go by when they grabbed the mic: the later grab is the newer speaker
 const newer = (a, b) => a.addedAt - b.addedAt || (a.since || 0) - (b.since || 0) || a.pos - b.pos;
 function compact(S) {
@@ -589,7 +595,7 @@ function step(S, I, C, t) {
         // ended one a card - but nothing new is opened on a stale roster
         if (pictures(S, I, C, t, A, { fresh: false })) { S.v++; A.push({ a: "touch", why: "picture" }); }
         if (!S.tiles.length) S.active = false;
-        else if (S.tiles.some(hasPicture)) S.active = true;
+        else if (S.tiles.some(showsSoon)) S.active = true;
         return { state: S, actions: A };
       }
     }
@@ -735,7 +741,7 @@ function step(S, I, C, t) {
   if (pictures(S, I, C, t, A)) { S.v++; A.push({ a: "touch", why: "picture" }); }
   // 9 active
   if (!S.tiles.length) S.active = false;
-  else if (S.tiles.some(hasPicture)) S.active = true;
+  else if (S.tiles.some(showsSoon)) S.active = true;
   return { state: S, actions: A };
 }
 

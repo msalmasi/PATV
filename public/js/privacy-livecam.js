@@ -35,7 +35,7 @@
   function say(text, kind) { st.textContent = text || ''; st.className = 'pv-st' + (kind ? ' ' + kind : ''); }
   function paint(auto) {
     box.checked = !!auto;
-    say(auto ? _t('js.privacy.mf.st_on', 'On - while you hold the mic, a pad that uses mic follows may show your cam on its stage.')
+    say(auto ? _t('js.privacy.mf.st_on', 'On - while you hold the mic, and for a few minutes after you let go, a pad that uses mic follows may show your cam on its stage.')
              : _t('js.privacy.mf.st_off', 'Off - pads never put your cam on their stage by themselves.'));
   }
   paint(box.checked);

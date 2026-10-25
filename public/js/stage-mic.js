@@ -27,6 +27,7 @@
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000, HIDDEN_MS = 30000, SAY_GAP = 5000, RETRY_MS = 10000;
+  var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a live tile's re-watches after a dropped connection
   var LAYOUTS = ['single', 'split', 'grid4', 'grid9', 'pip'];
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function btn(cls, text, label) { var b = el('button', cls, text); b.type = 'button'; if (label) b.setAttribute('aria-label', label); return b; }
@@ -47,7 +48,7 @@
   function cleanProgram(p) {
     if (!p || typeof p !== 'object') return null;
     var src = Array.isArray(p.src) ? p.src.filter(function (s) { return s && typeof s.id === 'string' && /^[\w.\-]{1,40}$/.test(s.id); }).slice(0, 9) : [];
-    return { v: p.v, layout: LAYOUTS.indexOf(p.layout) >= 0 ? p.layout : 'single', count: Math.max(0, Number(p.count) || 0), signin: p.signin === true, idle: p.idle === true,
+    return { v: p.v, layout: LAYOUTS.indexOf(p.layout) >= 0 ? p.layout : 'single', count: Math.max(0, Number(p.count) || 0), pins_n: Math.max(0, Number(p.pins_n) || 0), signin: p.signin === true, idle: p.idle === true,
              blocked: p.blocked === true, src: src, manage: p.manage && typeof p.manage === 'object' ? p.manage : null, frozen_until: Number(p.frozen_until) || 0,
              still_s: Math.max(10, Math.min(120, Number(p.still_s) || 20)), fixed: p.fixed === true, report: p.report === true,
              speaking: p.speaking === 'someone' || p.speaking === 'pepe' ? p.speaking : null };
@@ -205,15 +206,34 @@
               if (k && (k.ok === false || k.state === 'ended')) { stopLive(false); failed(cardText(t.s)); }
             }).catch(function () { /* a blip: the next beat */ });
           }, BEAT_MS);
-          return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) {
-            if (my !== t.gen) { ss.close(); return; }
-            t.sess = ss; t.failedAt = 0;
-            card.hidden = true; v.hidden = false;
-            v.setAttribute('aria-label', _t('js.pad.live.aria', '{name}\'s cam, live', { name: t.s.name }));
-            if (ss.blocked) tapAll.hidden = false;
-            ss.onfail = function () { if (my === t.gen) { stopLive(true); failed(_t('js.stage.mf.failed', 'Pepe couldn\'t open their cam')); } };
-          });
+          return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); });
         }).catch(function (er) { if (my === t.gen && !(er && er.cancelled)) { stopLive(true); failed(_t('js.stage.mf.failed', 'Pepe couldn\'t open their cam')); } });
+      }
+      function playing(ss, my) {
+        if (my !== t.gen) { ss.close(); return; }
+        t.sess = ss; t.failedAt = 0;
+        card.hidden = true; v.hidden = false;
+        v.setAttribute('aria-label', _t('js.pad.live.aria', '{name}\'s cam, live', { name: t.s.name }));
+        if (ss.blocked) tapAll.hidden = false;
+        ss.onfail = function () { if (my === t.gen) rewatch(my); };
+      }
+      // mfix review: the connection dropped after it played (Pepe re-opened the relay, its publisher restarted): watch again at once
+      // with a fresh ticket while the tile is still live (the route says no otherwise) - no "couldn't open" card for a short
+      // reconnect; at most REWATCH_MAX times in REWATCH_WIN_MS, then the card and the usual retry
+      function rewatch(my) {
+        var t0 = Date.now();
+        t.rew = (t.rew || []).filter(function (x) { return t0 - x < REWATCH_WIN_MS; });
+        var give = function () { if (my === t.gen) { stopLive(true); failed(_t('js.stage.mf.failed', 'Pepe couldn\'t open their cam')); } };
+        if (t.rew.length >= REWATCH_MAX) return give();
+        t.rew.push(t0);
+        if (t.sess) { try { t.sess.close(); } catch (er) { /* gone */ } t.sess = null; }
+        showCard(_t('js.stage.mf.reconnecting', 'reconnecting…'));
+        post(base + '/watch', wb({})).then(function (d) {
+          if (my !== t.gen) return null;
+          if (!d || !d.ok || !d.whep) { stopLive(true); failed(cardText(t.s)); return null; }
+          return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); },
+            function (er) { if (!(er && er.cancelled)) give(); });
+        }).catch(give);
       }
       function startStill() {
         stopStill();
@@ -531,7 +551,9 @@
       var neutralText = P.speaking === 'pepe' ? _t('js.stage.mf.pepe', 'Pepe is on the mic') : P.speaking ? _t('js.stage.mf.someone', 'Someone is speaking') : '';
       // mfix: the page keeps this view a moment after the stage empties (stage-room.js): nobody is on the mic right now
       var idleText = !P.src.length && !neutralText && P.idle ? _t('js.stage.mf.idle', 'Nobody is on the mic right now') : '';
-      box.setAttribute('aria-label', !P.count && (neutralText || idleText) ? neutralText || idleText : P.count === 1 ? _t('js.stage.mf.group_aria_one', 'On the mic: 1 person', { n: 1 })
+      box.setAttribute('aria-label', !P.count && (neutralText || idleText) ? neutralText || idleText
+        : !P.count && P.pins_n ? _t('js.stage.mf.group_aria_pins', 'Pinned on the stage: {n}', { n: P.pins_n })      // mfix review: pins aren't "on the mic"
+        : P.count === 1 ? _t('js.stage.mf.group_aria_one', 'On the mic: 1 person', { n: 1 })
         : _t('js.stage.mf.group_aria', 'On the mic: {n} people', { n: P.count }));
       // the neutral card: only while nobody is on the stage (the tiles gave way to it)
       neutral.hidden = !((neutralText || idleText) && !P.src.length && !P.signin && !P.blocked);

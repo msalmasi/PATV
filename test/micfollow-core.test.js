@@ -270,6 +270,7 @@ test("14. active: true once someone has a picture, stays true while anyone is on
   assert.equal(w.S.active, false, "only a name card: not active (OD-4)");
   w.offcam.delete("a"); w.live.set("a", "live"); w.at(3);
   assert.equal(w.S.tiles[0].video, "starting");
+  assert.equal(w.S.active, true, "mfix review: a cam that is opening (starting) already makes the stage the default ('First')");
   w.at(4); assert.equal(w.S.tiles[0].video, "live");
   assert.equal(w.S.active, true);
   w.offcam.add("a"); w.at(5);
@@ -368,8 +369,9 @@ test("pad settings + site knobs normalize like the other settings (ranges, choic
   assert.equal(c.cfg.max_changes_per_min, 20);
   assert.ok(c.errors.max_changes_per_min);
   assert.equal(M.DEFAULTS.enabled, false, "ships dark on prod");
-  // mfix (owner 2026-10-25): cold opens on, more live cams for the mic stage
-  assert.equal(M.DEFAULTS.cold_open, true);
+  // mfix (owner 2026-10-25): more live cams for the mic stage; mfix review: cold opens stay off on prod (staging: on) until staff
+  // switch them on at /stage/admin (the owner's OK / the spec's V-2, V-3, V-5)
+  assert.equal(M.DEFAULTS.cold_open, false);
   assert.deepEqual([M.DEFAULTS.relays_max, M.DEFAULTS.cold_opens_per_min, M.DEFAULTS.cold_opens_per_pad, M.DEFAULTS.max_live], [6, 10, 6, 6]);
   assert.equal(M.PAD_FIELDS.max_live.max, 6);
   // keep_recent: 0 / 1 / 2 / 5 minutes only
