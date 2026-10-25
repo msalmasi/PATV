@@ -288,7 +288,7 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
 | Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
 |---|---|---|---|
 | `pads/changed` (`hubpads.js`) | `pads` | `pad:<hub_pad_id>`, `pm:<hub_pad_id>/<userId>` | the pad: `{kind:"pad", pad_id, v1_room_id, slug, title, platform, visibility, nsfw, listed, tier, tier_until, owner, owner_since, owner_grant, chat_backend, history, flairs, fx, badges, badge_max, created_at}` or `{kind, pad_id, gone}`; a member: `{kind:"pm", pad_id, account, v1_user, status}` or `gone` |
-| `roles/changed` (`hubroles.js`) | `roles` | `acct:<userId>` | `{account, v1_user, role, cls, role_at}` (`staffroles.globalRolesOf`: the Pepe role of the linked Camfrog login) or `gone` |
+| `roles/changed` (`hubroles.js`) | `roles` | `acct:<userId>` | `{account, v1_user, role, cls, role_at}` (`staffroles.globalRolesOf`: the site's role by account - the higher of the site class, Admin / Staff / Assistant, and the Pepe role of the linked Camfrog login; no link needed since D11-site-roles, 1.99ael) or `gone` |
 | `bans/changed` (`hubbans.js`) | `bans` | `fb:<userId>/<room_id>` (`*` = site-wide) | `{kind:"feed_ban", scope, pad_id, v1_room_id, account, v1_user, feature, until, banned_at, active:true}` or `active:false` (no reason, no actor) |
 | `switches/changed` (`chatswitches.js`) | `switches` | `sw:<key>` | `{key, value, updated_at}` - `CHAT_HUB` only in S1 |
 
@@ -312,8 +312,9 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   `pad_hub` for OLD and NEW. Roles - `pepe_roles` (insert / delete / a change of `login` or `role` - the WHEN matters:
   `staffroles.botSync`'s upsert sets `role` on every write, so Pepe's per-minute sync of the same role posts nothing; one row
   per account whose `lower(trim(camfrogUsername))` is the login, found through `accountMerge.js`'s unique
-  `users_camfrog_login`) and `users` (a sign-up with a linked login, a change of `camfrogUsername` / `class`, the deletion
-  of a linked account; never points / xp / level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -,
+  `users_camfrog_login`) and `users` (a sign-up with a linked login or a role-giving class, a change of `camfrogUsername` /
+  `class` of any account, the deletion of a linked account or of one with a role-giving class - D11-site-roles, 1.99ael;
+  never points / xp / level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -,
   delete - unbans and v1's sweep -, update of `user_id, room_id, until`: OLD and NEW) and `pad_hub`'s insert (the room's pad
   bans: a pad re-created under a room id whose feed bans outlived the old pad, a bridged room banned in before it was
   registered - v1 enforces feed bans by room id, whatever the pad). Switches - `chat_switches` (insert, delete, update of
@@ -323,7 +324,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   trigger) is deleted first, so `pad_hub`'s DELETE trigger posts `pad:<displaced id>` in the re-key's transaction; after the
   move, the members and pad feed bans left at the new id (now the moved pad's) get a row each. The moving pad keeps its id.
 - **Snapshots:** `pads/changed` lists every registry row (`pad:`, by `hub_pad_id`) then every approved member (`pm:`);
-  `roles/changed` the accounts whose linked login has a role; `bans/changed` the live feed bans the hub can hold - site-wide
+  `roles/changed` the accounts with a role - a role-giving class (Admin, Staff, Assistant; D11-site-roles) or a linked
+  login with a Pepe role, each once; `bans/changed` the live feed bans the hub can hold - site-wide
   ones and pad ones whose room has a pad (`pad_hub`) - entities ordered in SQL (the entity's byte order isn't
   `(user_id, room_id)`'s); `switches/changed` every key (a key without a row is its default). A live pad ban on a room
   without a pad (a deleted pad's - `padcreate.removePad` leaves `feed_bans` - or a room the registry never knew) is left out:

@@ -110,6 +110,11 @@ test("the S1 L1 pad / role / ban / switch driver commands", { timeout: 180000 },
     await d.call("signup", { user: "u3", login: "Tres" });
     const roles = await rows("roles/changed");
     assert.deepEqual(roles.filter((e) => e === "acct:u1").length >= 2 && roles.includes("acct:u3"), true, JSON.stringify(roles));
+    // D11-site-roles: a site class on an account with no Camfrog login is its role (siteClass)
+    assert.deepEqual(await d.call("siteClass", { user: "u2", cls: "Admin" }), { role: "admin" });
+    assert.ok((await rows("roles/changed")).includes("acct:u2"), "the class change posts the account");
+    assert.deepEqual(await d.call("siteClass", { user: "u2", cls: "pleb" }), { role: null });
+    await assert.rejects(d.call("siteClass", { user: "nobody", cls: "Staff" }), /no such account/);
     // bans: a pad ban, its unban, a site-wide one, the sweep
     await d.call("feedBan", { user: "u2", room: "patv:dpad", days: 1 });
     await d.call("feedUnban", { user: "u2", room: "patv:dpad" });

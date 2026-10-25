@@ -223,14 +223,31 @@ async function setRole(actorLogin, targetLogin, role, by) {
   return { login: t, role };
 }
 
-// ── S1 Q4 (seam plan §12.4 roles/changed; ADR 0007 D11: "the global role is the Pepe role of the account's linked Camfrog
-// login; users.class is display only"): readers only - no membership hook (the hub mirrors roles through the seam) ──
+// ── S1 Q4 (seam plan §12.4 roles/changed; ADR 0007 D11, as the owner changed it on 2026-10-25 - D11-site-roles: the global
+// role is the site's, by account - its class (Admin / Staff / Assistant) or the Pepe role of its linked Camfrog login, the
+// higher; a Camfrog link is never needed): readers only - no membership hook (the hub mirrors roles through the seam) ──
 /**
- * The global role of these accounts: the pepe_roles row of each account's linked Camfrog login, keyed the way the seam keys
- * it - SQLite's lower(trim(users.camfrogUsername)) (pepe_roles logins are ASCII, so JavaScript's low() agrees). -> Map(userId ->
- * {login, role, role_at, cls}) for every account that has a users row (role: owner | admin | staff | assistant | trusted |
- * null; role_at: the pepe_roles row's ts - a removal is a tombstone with its own ts - or null without a row; cls: users.class).
- * An id without a users row is left out (the account is gone).
+ * D11-site-roles (the owner's answer of 2026-10-25: "the chat server should accept the site's Admin/Staff label - there should
+ * be no Camfrog dependency"): the role a site class gives by itself, by ACCOUNT - the site's own ladder (siteperms-core.js
+ * CLASS_RANK: Assistant < Staff < Admin; exact class names only, as siteperms reads them): Admin -> admin, Staff -> staff,
+ * Assistant -> assistant; null for every other class (pleb, Bot, Banned, a class an Admin added). No class gives "owner": the
+ * site's owners are its pinned owner list (PO-0b), which pepe_roles holds.
+ */
+function roleOfClass(cls) {
+  return cls != null && Object.prototype.hasOwnProperty.call(ROLE_OF_CLASS, cls) ? ROLE_OF_CLASS[cls] : null;
+}
+
+/**
+ * The global role of these accounts, as the seam's roles/changed carries it (hubroles.js): the HIGHER on the ladder (LEVEL) of
+ *   * the account's site class (roleOfClass: Admin / Staff / Assistant) - no linked Camfrog login needed (D11-site-roles), and
+ *   * the pepe_roles row of the account's linked Camfrog login, if it has one (the site's role list: owner and trusted have no
+ *     class), keyed the way the seam keys it - SQLite's lower(trim(users.camfrogUsername)) (pepe_roles logins are ASCII, so
+ *     JavaScript's low() agrees).
+ * Neither can take away what the other gives, so an account that never linked Camfrog, or unlinked it, keeps its class's role,
+ * and a linked one whose class lags behind Pepe's sync (reconcile runs every 5 minutes) keeps its Pepe role.
+ * -> Map(userId -> {login, role, role_at, cls}) for every account that has a users row (role: owner | admin | staff | assistant |
+ * trusted | null; role_at: the pepe_roles row's ts when that row decides the answer - a removal is a tombstone with its own ts -
+ * null when the class does or there is no row; cls: users.class). An id without a users row is left out (the account is gone).
  */
 async function globalRolesOf(userIds) {
   await init();
@@ -249,8 +266,12 @@ async function globalRolesOf(userIds) {
   }
   for (const u of users) {
     const r = u.login ? roles.get(u.login) : null;
-    out.set(String(u.userId), { login: u.login || null, role: r && ROLES.includes(r.role) ? r.role : null, role_at: r ? Number(r.ts) || null : null,
-                                cls: u.class == null || u.class === "" ? null : String(u.class) });
+    const cls = u.class == null || u.class === "" ? null : String(u.class);
+    const pepe = r && ROLES.includes(r.role) ? r.role : null;
+    const byClass = roleOfClass(cls);
+    const fromClass = levelOf(byClass) > levelOf(pepe);           // a tie is the same role: the row's (and its ts) answer
+    out.set(String(u.userId), { login: u.login || null, role: fromClass ? byClass : pepe,
+                                role_at: !fromClass && r ? Number(r.ts) || null : null, cls });
   }
   return out;
 }
@@ -354,6 +375,6 @@ function register(app, { isBotToken, noTimers } = {}) {
 }
 
 module.exports = { init, map, roleOf, ownerHolds, ownerOf, OWNER_ONLY, botSync, setRole, reconcile, register, classUpdate, classesEdit, pendingList, confirmPending,
-  globalRoleOf, globalRolesOf,                       // S1 Q4: the seam's roles/changed reader
+  globalRoleOf, globalRolesOf, roleOfClass,          // S1 Q4: the seam's roles/changed reader (D11-site-roles: + the class's role)
   RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; } };

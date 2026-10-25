@@ -62,6 +62,9 @@
 //   role {login, role}          a role set on the website (staffroles.setRole by the driver's own owner login; null removes)
 //   pepeRoles {map}             Pepe's sync (staffroles.botSync {roles: {login: [role | null, ts]}})
 //   signup {user, login?}       -> {acct}   a users row inserted with its Camfrog login (the roles trigger's sign-up path)
+//   siteClass {user, cls}       -> {role}   D11-site-roles (ADR 0007 D11 as the owner changed it on 2026-10-25): the account's
+//                               site class (users.class) set on the account itself - no Camfrog login involved - as a script
+//                               or the class picker's direct path writes it; role = staffroles.globalRoleOf's answer after it
 //   feedBan {user, room?, days?} | feedUnban {user, room?} | feedSweep    feedstore.ban / unban (as a site admin), the sweep's
 //                               DELETE of expired rows
 //   chatSwitch {key, value}     -> {ok, value} | {ok: false, code, needs}   chatswitches.set, the interlock included (V1's
@@ -424,6 +427,14 @@ const CMDS = {
     await M.db.runQuery("INSERT INTO users (userId, username, displayname, password, class, camfrogUsername, points_balance) VALUES (?, ?, ?, 'x', 'pleb', ?, 0)",
                         [String(user), String(user), String(user), login || null]);
     return { acct: M.ct.subjectOf(String(user)) };
+  },
+  async siteClass({ user, cls }) {
+    await boot();
+    if (typeof cls !== "string" || !cls || cls.length > 40) throw new Error("siteClass: cls, a class name");
+    const r = await M.db.runQuery("UPDATE users SET class = ? WHERE userId = ?", [cls, String(user)]);
+    if (!r || !r.changes) throw new Error("siteClass: no such account " + user);
+    const g = await mod("staffroles").globalRoleOf(String(user));
+    return { role: g ? g.role : null };
   },
   async feedBan({ user, room, days }) {
     await boot();
