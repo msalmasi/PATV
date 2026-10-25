@@ -10447,8 +10447,6 @@
   "chatfmt.not.headings": "Überschriften (# am Zeilenanfang)",
   "chatfmt.not.lists": "Listen (- oder 1. am Zeilenanfang): sie werden so, wie sie getippt sind, gut gelesen",
   "chatfmt.not.tables": "Tabellen, Farben und Schriftarten",
-  "chatfmt.not.masked": "Links mit anderen Wörtern darauf ([Text](Adresse)): Ein Link zeigt immer seine eigene Adresse, damit niemand verschleiern kann, wohin er führt",
-  "chatfmt.not.times": "Zeiten, die in der Zeitzone jedes Lesers angezeigt werden (Discords &lt;t:…&gt;): sie werden so angezeigt, wie sie eingegeben wurden",
   "chatfmt.back": "Zurück zu Pepes Befehlen",
   "owner.grp_topic": "Raumthema",
   "owner.grp_topic_why": "Die Themenzeile des Chatraums deines Pads: Stell sie selbst ein oder lass Pepe sie mit dem Auto-Thema frisch halten.",

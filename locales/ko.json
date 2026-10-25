@@ -10316,8 +10316,6 @@
   "chatfmt.not.headings": "제목(줄 맨 앞의 #)",
   "chatfmt.not.lists": "목록(줄 맨 앞의 - 또는 1.): 입력한 그대로도 잘 보여요",
   "chatfmt.not.tables": "표, 색상, 글꼴",
-  "chatfmt.not.masked": "다른 글자로 표시한 링크([text](address)): 링크는 항상 자기 주소를 보여 주므로 어디로 가는지 숨길 수 없어요",
-  "chatfmt.not.times": "각 읽는 사람의 시간대로 보이는 시간(Discord의 &lt;t:…&gt;): 입력한 그대로 보여요",
   "chatfmt.back": "Pepe's 명령어로 돌아가기",
   "owner.grp_topic": "방 주제",
   "owner.grp_topic_why": "패드 채팅방의 주제 줄이에요. 직접 설정하거나, 자동 주제 기능으로 Pepe가 계속 새롭게 유지하도록 할 수 있어요.",

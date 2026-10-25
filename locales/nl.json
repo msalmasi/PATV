@@ -10447,8 +10447,6 @@
   "chatfmt.not.headings": "Koppen (# aan het begin van een regel)",
   "chatfmt.not.lists": "Lijsten (- of 1. aan het begin van een regel): die lezen prima zoals ze getypt zijn",
   "chatfmt.not.tables": "Tabellen, kleuren en lettertypen",
-  "chatfmt.not.masked": "Links met andere woorden erop ([tekst](adres)): een link toont altijd zijn eigen adres, zodat niemand kan verbergen waar hij naartoe gaat",
-  "chatfmt.not.times": "Tijden die in de tijdzone van elke lezer worden getoond (Discords &lt;t:…&gt;): die tonen zoals ze getypt zijn",
   "chatfmt.back": "Terug naar Pepe's commando's",
   "owner.grp_topic": "Onderwerp van de kamer",
   "owner.grp_topic_why": "De onderwerpregel van de chatkamer van je pad: stel hem zelf in, of laat Pepe hem actueel houden met het automatische onderwerp.",

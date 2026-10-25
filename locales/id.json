@@ -10318,8 +10318,6 @@
   "chatfmt.not.headings": "Judul (# di awal baris)",
   "chatfmt.not.lists": "Daftar (- atau 1. di awal baris): tetap terbaca baik seperti diketik",
   "chatfmt.not.tables": "Tabel, warna, dan font",
-  "chatfmt.not.masked": "Tautan dengan kata lain di atasnya ([teks](alamat)): tautan selalu menampilkan alamatnya sendiri, jadi tidak ada yang bisa menyamarkan tujuannya",
-  "chatfmt.not.times": "Waktu yang tampil sesuai zona waktu tiap pembaca (&lt;t:…&gt; milik Discord): tampil seperti diketik",
   "chatfmt.back": "Kembali ke perintah Pepe",
   "owner.grp_topic": "Topik ruangan",
   "owner.grp_topic_why": "Baris topik di ruang chat pad-mu: atur sendiri, atau biarkan Pepe menjaganya tetap segar dengan topik otomatis.",
