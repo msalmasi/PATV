@@ -1,0 +1,162 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('chatfmt.title'), user: user, ogPath: '/help/formatting' }) %>
+<%#
+  views/chatFormatting.ejs - /help/formatting (1.99aem, chatformat.js): the member guide to formatting messages in PATV
+  Chat. Every row comes from chatformat.FORMS (what to type, how PATV shows it, what a bridged chat shows), so the page and
+  the table can't drift apart. The previews are drawn here from a fixed set of tags, never from the typed marks. Linked
+  from the composer's formatting bar (its ? button) and from /help.
+%>
+<%
+  const e = t.esc;
+  // a catalog string (HTML-safe text) inside a double-quoted attribute
+  const attr = (s) => String(s).replace(/"/g, '&#34;');
+  const mark = (s) => '<code class="cf-mark">' + e(s) + '</code>';
+  const timeAt = new Date(SAMPLE_TIME * 1000);
+  const fmtTime = (o) => { try { return new Intl.DateTimeFormat(t.lang === 'en' ? 'en-US' : t.lang, Object.assign({ timeZone: 'UTC' }, o)).format(timeAt); } catch (x) { return timeAt.toISOString(); } };
+  // how PATV shows a form: fixed tags around the sample's words (escaped)
+  const view = (f) => {
+    const w = e(word(f, t));
+    switch (f.view) {
+      case 'b': return '<strong>' + w + '</strong>';
+      case 'i': return '<em>' + w + '</em>';
+      case 'bi': return '<strong><em>' + w + '</em></strong>';
+      case 'u': return '<u>' + w + '</u>';
+      case 's': return '<s>' + w + '</s>';
+      case 'spoiler': return '<span class="cf-spoiler" tabindex="0" title="' + attr(t('chatfmt.spoiler_hint')) + '" aria-label="' + attr(t('chatfmt.spoiler_hint')) + '"><span>' + w + '</span></span>';
+      case 'code': return '<code>' + w + '</code>';
+      case 'pre': return '<pre class="cf-pre"><code>' + w + '</code></pre>';
+      case 'quote': return '<blockquote class="cf-quote">' + w + '</blockquote>';
+      case 'link': return '<a href="' + w + '" rel="noopener">' + w + '</a>';
+      case 'mention': return '<span class="cf-mention">@' + w + '</span>';
+      case 'emoji': return '<span class="cf-emoji">' + w + '</span>';
+      case 'time': return '<time datetime="' + timeAt.toISOString() + '">' + e(fmtTime({ dateStyle: 'long', timeStyle: 'short' })) + '</time> <span class="cf-utc">UTC</span>';
+      case 'literal': return '*' + w + '*';
+      default: return w;
+    }
+  };
+%>
+<style>
+  /* /help/formatting (1.99aem): the reference table becomes stacked cards on a phone (each cell labelled by data-label) */
+  .cf { --ds-ac: var(--ds-green); }
+  .cf section[id], .cf tr[id] { scroll-margin-top: 72px; }
+  .cf .cf-sec { display: grid; gap: var(--ds-sp-3); min-width: 0; }
+  .cf .cf-sec > .ds-h2, .cf .cf-sec > .ds-lead, .cf .cf-sec > p { margin: 0; }
+  .cf .cf-aa { display: inline-block; padding: 0 7px; border: 1px solid var(--ds-line-strong); border-radius: 8px; font: 700 13px/1.6 var(--ds-font); color: var(--ds-text-strong); }
+  .cf code { font-family: var(--ds-font-mono); font-size: .92em; background: #1c1c1c; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xs); padding: 1px 6px; color: #e8f5e9; }
+  .cf .cf-mark { white-space: pre-wrap; overflow-wrap: anywhere; display: inline-block; }
+  .cf .cf-or { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); margin-inline: 6px; }
+  .cf .cf-pre { margin: 0; padding: 6px 8px; background: #0c0c0c; border: 1px solid var(--ds-line); border-radius: 6px; overflow-x: auto; }
+  .cf .cf-pre code { background: none; border: 0; padding: 0; }
+  .cf .cf-quote { margin: 0; padding-inline-start: 8px; border-inline-start: 3px solid var(--ds-line-strong); color: var(--ds-text-2); }
+  .cf .cf-mention { padding: 0 3px; border-radius: 4px; background: var(--ds-ac-bg); color: var(--ds-green-2); font-weight: 600; }
+  .cf .cf-utc { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .cf .cf-spoiler { border-radius: 4px; background: #333; cursor: pointer; }
+  .cf .cf-spoiler > span { visibility: hidden; }
+  .cf .cf-spoiler:hover, .cf .cf-spoiler:focus { background: rgba(255, 255, 255, .06); }
+  .cf .cf-spoiler:hover > span, .cf .cf-spoiler:focus > span { visibility: visible; }
+  .cf .cf-note { display: block; margin-top: 4px; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.45; }
+  .cf .ds-tbl td { vertical-align: top; overflow-wrap: anywhere; }
+  .cf .ds-tbl th:first-child, .cf .ds-tbl td:first-child { min-width: 9em; }
+  .cf .ds-tbl td:nth-child(2) { min-width: 13em; }
+  .cf .ds-tbl td:first-child b { color: var(--ds-text-strong); }
+  .cf tr:target td { background: color-mix(in srgb, var(--ds-green) 10%, transparent); }
+  .cf .cf-list { margin: 0; padding-inline-start: 1.2em; display: grid; gap: var(--ds-sp-1h); color: var(--ds-text-2); }
+  .cf .cf-times { margin: 0; display: grid; gap: 0; }
+  .cf .cf-times > div { display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: var(--ds-sp-3); padding-block: var(--ds-sp-2); border-block-end: 1px solid var(--ds-line-soft); }
+  .cf .cf-times > div:last-child { border-block-end: 0; }
+  .cf .cf-times dd { margin: 0; color: var(--ds-text-2); }
+  .cf .cf-times dd b { color: var(--ds-text-strong); font-weight: 600; }
+  @media (max-width: 700px) {
+    .cf .ds-tbl { border: 0; background: none; overflow: visible; }
+    .cf .ds-tbl table, .cf .ds-tbl tbody, .cf .ds-tbl tr, .cf .ds-tbl td { display: block; width: auto; }
+    .cf .ds-tbl thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .cf .ds-tbl tr { margin-block-end: var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: var(--ds-surface); padding: var(--ds-sp-2) 0; }
+    .cf .ds-tbl td { border: 0; padding: 6px 14px; }
+    .cf .ds-tbl td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--ds-text-muted); font-size: 11px; font-weight: 700; letter-spacing: var(--ds-ls-label); text-transform: uppercase; }
+  }
+</style>
+<main class="ds-page cf" id="cf">
+  <section class="ds-hero" aria-labelledby="cfH">
+    <p class="ds-eyebrow"><%- t('chatfmt.eyebrow') %></p>
+    <h1 id="cfH"><%- t('chatfmt.h1') %></h1>
+    <p class="ds-lead"><%- t('chatfmt.lead', { aa: '<span class="cf-aa">Aa</span>' }) %></p>
+  </section>
+
+  <nav class="ds-subnav" aria-label="<%- t('chatfmt.nav') %>"><div class="ds-tabs">
+    <a class="ds-tab" href="#forms"><%- t('chatfmt.nav_ref') %></a>
+    <a class="ds-tab" href="#bar"><%- t('chatfmt.nav_bar') %></a>
+    <a class="ds-tab" href="#times"><%- t('chatfmt.nav_time') %></a>
+    <a class="ds-tab" href="#bridges"><%- t('chatfmt.nav_bridges') %></a>
+    <a class="ds-tab" href="#not"><%- t('chatfmt.nav_not') %></a>
+  </div></nav>
+
+  <section class="cf-sec" id="forms" aria-labelledby="cfFormsH">
+    <h2 class="ds-h2" id="cfFormsH"><span class="dot"></span><%- t('chatfmt.ref_h') %></h2>
+    <p class="ds-lead"><%- t('chatfmt.ref_lead') %></p>
+    <div class="ds-tbl">
+      <table>
+        <thead><tr>
+          <th scope="col"><%- t('chatfmt.col_form') %></th>
+          <th scope="col"><%- t('chatfmt.col_type') %></th>
+          <th scope="col"><%- t('chatfmt.col_see') %></th>
+          <th scope="col"><%- t('chatfmt.col_bridge') %></th>
+        </tr></thead>
+        <tbody>
+        <% FORMS.forEach((f) => { %>
+          <tr id="fmt-<%= f.id %>">
+            <td><b><%- t('chatfmt.f.' + f.id) %></b><% if (t.has('chatfmt.n.' + f.id)) { %><span class="cf-note"><%- t('chatfmt.n.' + f.id) %></span><% } %></td>
+            <td data-label="<%- attr(t('chatfmt.col_type')) %>"><%- typed(f, t).map(mark).join('<span class="cf-or">' + t('chatfmt.or') + '</span>') %></td>
+            <td data-label="<%- attr(t('chatfmt.col_see')) %>"><%- view(f) %></td>
+            <td data-label="<%- attr(t('chatfmt.col_bridge')) %>"><%- t('chatfmt.bridge.' + f.bridge) %></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="ds-card lg cf-sec" id="bar" aria-labelledby="cfBarH">
+    <h2 class="ds-h2" id="cfBarH"><%- t('chatfmt.bar_h') %></h2>
+    <p><%- t('chatfmt.bar_lead', { aa: '<span class="cf-aa">Aa</span>', help: '<span class="cf-aa">?</span>' }) %></p>
+    <ul class="cf-list">
+      <li><%- t('chatfmt.bar.select') %></li>
+      <li><%- t('chatfmt.bar.keys') %></li>
+      <li><%- t('chatfmt.bar.newline') %></li>
+      <li><%- t('chatfmt.bar.link') %></li>
+      <li><%- t('chatfmt.bar.edit') %></li>
+    </ul>
+  </section>
+
+  <section class="cf-sec" id="times" aria-labelledby="cfTimeH">
+    <h2 class="ds-h2" id="cfTimeH"><span class="dot"></span><%- t('chatfmt.time_h') %></h2>
+    <p class="ds-lead"><%- t('chatfmt.time_lead', { code: mark('<t:' + SAMPLE_TIME + ':f>') }) %></p>
+    <dl class="ds-card cf-times">
+      <% TIME_STYLES.forEach((s) => { %>
+      <div><dt><%- mark(':' + s.s) %></dt><dd><b><%- t('chatfmt.time.' + s.key) %></b> · <%= s.opts ? fmtTime(s.opts) : '' %><%- s.opts ? '' : t('chatfmt.time.relative_eg') %></dd></div><% }) %>
+    </dl>
+    <p class="ds-meta"><%- t('chatfmt.time.how') %></p>
+  </section>
+
+  <section class="cf-sec" id="bridges" aria-labelledby="cfBridgeH">
+    <h2 class="ds-h2" id="cfBridgeH"><span class="dot"></span><%- t('chatfmt.bridges_h') %></h2>
+    <p class="ds-lead"><%- t('chatfmt.bridges_lead') %></p>
+    <ul class="cf-list">
+      <li><%- t('chatfmt.bridges.in') %></li>
+      <li><%- t('chatfmt.bridges.spoiler') %></li>
+    </ul>
+  </section>
+
+  <section class="cf-sec" id="not" aria-labelledby="cfNotH">
+    <h2 class="ds-h2" id="cfNotH"><span class="dot"></span><%- t('chatfmt.not_h') %></h2>
+    <p><%- t('chatfmt.not_lead') %></p>
+    <ul class="cf-list">
+      <li><%- t('chatfmt.not.headings') %></li>
+      <li><%- t('chatfmt.not.lists') %></li>
+      <li><%- t('chatfmt.not.tables') %></li>
+      <li><%- t('chatfmt.not.masked') %></li>
+    </ul>
+    <p class="ds-meta"><a href="/help">← <%- t('chatfmt.back') %></a></p>
+  </section>
+</main>
+</body>
+</html>

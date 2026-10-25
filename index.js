@@ -1240,6 +1240,7 @@ require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules
 require("./padsettings").register(app, { addUser });   // 1.99dc: the pad settings hub /p/:slug/settings (was /manage + /mod)
 require("./padaddress").register(app, { addUser });   // 1.99iy: change a pad's address (/api/rooms/:slug/address; old slugs 301 - pads.js)
 require("./padguide").register(app, { addUser });     // 1.99uj: /pads/owners - the pad owners guide (the reference stays /pads/owner-guide)
+require("./chatformat").register(app, { addUser });   // 1.99aem: /help/formatting - the member guide to formatting messages in PATV Chat
 require("./padcreate").register(app, { addUser });    // 1.99iz: members create pads (/pads/new, /api/pads/create) + the empty-pad reclaim sweep (off by default)
 require("./padconnect").register(app, { addUser, isBotToken });   // 1.99ja: connect a pad to Camfrog (verified) / Twitch; Pepe's /api/pads/verify
 require("./imagesafety").register(app, { isBotToken, addUser });   // 1.99fc: image safety checks via Pepe's vision (OFF by default; /admin/imagesafety)
