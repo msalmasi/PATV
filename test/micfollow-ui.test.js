@@ -801,3 +801,45 @@ test("mfix review stage-room.js: the 🎙 tab counts the people ON THE MIC; pinn
   assert.match(js, /_t\('js\.stage\.mf\.tab_pins', '📌 \{n\}'/);
   assert.match(js, /p\.pins_n \|\| 0/, "a pin count change redraws the tab");
 });
+
+// ── mfix staging proof (2026-10-25): on staging an admin couldn't reach 📌 Pin a cam with nobody on the mic - the 🎙 tab (and so
+// ⋯ Manage) only showed while someone was on it. The pad's owner / staff now get the tab on a RUNNING idle mic stage. ──
+test("mfix staging proof stage-room.js: owners / staff get the 🎙 tab on an idle running mic stage (⋯ Manage → 📌 Pin a cam); viewers don't; never the default", () => {
+  const IDLE = (extra) => Object.assign({ v: 1, on: true, active: false, count: 0, pins_n: 0, default: "first", layout: "split", src: [] }, extra || {});
+  const M = { pins_room: 1, excluded_n: 0 };
+  // a viewer: nothing to watch, no tab
+  const v = switcher({ slots: [] });
+  v.sw.setMic(IDLE());
+  assert.equal(v.sw.view(), "pepe");
+  assert.doesNotMatch(v.tabs(), /data-v="mic"/);
+  // the owner: the tab, but Pepe's stream stays the default view
+  const o = switcher({ slots: [] });
+  o.sw.setMic(IDLE({ manage: M }));
+  assert.equal(o.sw.view(), "pepe", "never the default view");
+  assert.match(o.tabs(), /data-v="mic"/);
+  // paused (why_off) or not running: no tab - a pin is refused there anyway
+  const p = switcher({ slots: [] });
+  p.sw.setMic(IDLE({ manage: M, why_off: "pepe_gone" }));
+  assert.doesNotMatch(p.tabs(), /data-v="mic"/);
+  const q = switcher({ slots: [] });
+  q.sw.setMic(IDLE({ manage: M, on: false }));
+  assert.doesNotMatch(q.tabs(), /data-v="mic"/);
+  // the owner opens it: the idle program WITH ⋯ Manage, and it stays (no grace, no jump back to Pepe's stream)
+  o.click({ target: { closest: () => ({ hasAttribute: (k) => k === "data-v", getAttribute: () => "mic" }) } });
+  assert.equal(o.sw.view(), "mic");
+  const last = o.rendered[o.rendered.length - 1];
+  assert.equal(last.idle, true, "the idle card");
+  assert.ok(last.manage && last.manage.pins_room === 1, "⋯ Manage (📌 Pin a cam) is there");
+  o.sw.setMic(IDLE({ v: 2, manage: M }));
+  o.grace();
+  assert.equal(o.sw.view(), "mic", "the owner stays on the idle mic stage");
+  // someone took the mic and let go: still the owner's view
+  o.sw.setMic(MIC({ manage: M, on: true }));
+  o.sw.setMic(IDLE({ v: 3, manage: M }));
+  o.grace();
+  assert.equal(o.sw.view(), "mic");
+  // mic follows paused while they're on it: the usual grace, then the default
+  o.sw.setMic(IDLE({ v: 4, manage: M, why_off: "pepe_gone" }));
+  o.grace();
+  assert.equal(o.sw.view(), "pepe");
+});

@@ -231,7 +231,7 @@ test("pages + stage-room.js: Pepe's stream gets the ⚡ URL from the first rende
     const src = fs.readFileSync(path.join(repo, "views", v), "utf8");
     assert.ok(src.includes("pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\\\u003c') %>"), v + " passes st.whep (escaped)");
     assert.match(src, /stage-player\.js\?v=9/, v + " cache-buster");
-    assert.match(src, /stage-room\.js\?v=16/, v + " cache-buster");     // train2: 14 = stagefix's 13 (Take me off this Stage) + micfollow's 12 merged
+    assert.match(src, /stage-room\.js\?v=17/, v + " cache-buster");     // train2: 14 = stagefix's 13 (Take me off this Stage) + micfollow's 12 merged
   }
   const src = fs.readFileSync(path.join(repo, "public", "js", "stage-room.js"), "utf8");
   const sets = [];

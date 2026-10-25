@@ -83,7 +83,7 @@
     // mfix: the grace after the mic stage goes idle, and "this viewer picked the 🎙 tab"
     var MIC_GRACE_MS = 45000, micIdleAt = 0, micGraceTimer = null, micWanted = false;
     function micGrace() { return !!(window.PATVStageMic && mic && micIdleAt && Date.now() - micIdleAt < MIC_GRACE_MS); }
-    function micShown() { return micOn() || (view === 'mic' && micGrace()); }
+    function micShown() { return micOn() || micManage() || (view === 'mic' && micGrace()); }
     function idleProgram() { var p = {}; for (var k in mic) p[k] = mic[k]; p.count = 0; p.pins_n = 0; p.src = []; p.speaking = null; p.idle = true; return p; }
     function micTabKey() { return micOn() ? (mic.signin ? 'in' : mic.count || pinsN() ? 'n' + mic.count + 'p' + pinsN() : 's') : micShown() ? 'g' : ''; }
     // mfix review: mic.count = the people ON THE MIC; mic.pins_n = the 📌 pinned cams (they keep the stage up with nobody on the mic)
@@ -98,6 +98,10 @@
     // (a program whose tiles gave way to the neutral "Someone is speaking" / Pepe card keeps its tab, but never as the
     // default view - mic.active is false then: a stage of only cards is never the default, DF-15)
     function micOn() { return !!(window.PATVStageMic && mic && (mic.count > 0 || pinsN() > 0 || mic.speaking === 'someone' || mic.speaking === 'pepe')); }
+    // mfix staging proof: the pad's owner / site staff (mic.manage) get the 🎙 tab while the mic stage RUNS with nobody on it - the
+    // only way to ⋯ Manage → 📌 Pin a cam before anyone takes the mic. Viewers don't (nothing to watch), and it's never the
+    // default view (micDefault still needs a picture); paused (why_off) or off: no tab.
+    function micManage() { return !!(window.PATVStageMic && mic && mic.manage && mic.on === true && !mic.why_off && !mic.signin && !mic.blocked); }
     function micDefault() {
       return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !(pepeSrc && pepeSrc.featured);
     }
@@ -403,6 +407,15 @@
       if (sig === micSig) return;                           // nothing moved (null -> null, the same program)
       micSig = sig;
       if (micOn()) { micIdleAt = 0; if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; } }
+      if (view === 'mic' && !micOn() && micManage()) {
+        // mfix staging proof: the owner / staff on the idle mic stage stay there (⋯ Manage, 📌 Pin a cam) - no grace, no jump away
+        micIdleAt = 0;
+        if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; }
+        if (micCtl) micCtl.update(idleProgram());
+        o.onAir && o.onAir(true, '🎙');
+        if (micTabKey() !== micTabSig) { renderTabs(); if (o.onShow) o.onShow(selection()); }
+        return;
+      }
       if (view === 'mic' && !micOn()) {
         // mfix: it went idle - keep the view MIC_GRACE_MS ("nobody is on the mic right now"), then back to the default; mic
         // follows switched off on the pad (null) goes at once
@@ -410,7 +423,7 @@
           micIdleAt = Date.now();
           micGraceTimer = setTimeout(function () {
             micGraceTimer = null;
-            if (view === 'mic' && !micOn()) { micIdleAt = 0; pickDefault(); show(); }
+            if (view === 'mic' && !micOn() && !micManage()) { micIdleAt = 0; pickDefault(); show(); }
           }, MIC_GRACE_MS + 50);
         }
         if (!micGrace()) { micIdleAt = 0; pickDefault(); show(); return; }
