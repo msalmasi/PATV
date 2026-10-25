@@ -5,6 +5,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <%# S1 F13 (chatsweep.js): the first signed-out page after a sign-out deletes the chat widget's per-account databases; never
+        on a signed-in page (it would take the signed-in account's too) %>
+    <% if (locals.chatSweep && !(typeof user !== 'undefined' && user)) { %><%- include('partials/chat-sweep') %><% } %>
     <link rel="icon" href="/favicon.ico" sizes="48x48">
     <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
     <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">

@@ -881,6 +881,57 @@ so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; th
   scan `public/js` skip the vendored directory. `test/pad-tabs.test.js` / `test/feed-compose.test.js`: `lineRequested`, the
   server's and the browser's `lineLive`.
 
+## S1: the sign-out sweep (F13, the next L-release, 1.99aef, `chatsweep.js`)
+
+S1 plan §2.1 F13 (C8-v1-signout-sweep, the owner's answer of 2026-10-25; ADR 0007 D14, CF §5.7). The widget keeps one
+IndexedDB database per account on this origin, `patv-chat:<hub account id>` (the platform repo's
+`packages/chat-core/src/storage/account.ts`: cached rooms and lines, the looks cache, the outbox, the sent journal). The widget
+deletes it itself when it hears the sign-out (a chat tab open: the hub closes 4003), and a later widget page deletes every
+other account's database once it signs in; but v1's signed-out pages load no widget, so a shared computer kept a signed-out
+account's lines for as long as nobody opened a widget page. Now v1 deletes them itself, on the same origin, without the
+widget. 1.99aef is tentative until the branch reaches staging (ADR 0007 D19); no seam shape change, so `huboutbox.VERSION`
+doesn't move.
+
+- **The marker:** every response that ends this browser's login goes through `loginCookie.clearLogin`, which now also sets
+  `patv_chat_sweep` (`chatsweep.mark`): Sign out (`POST /logout`, then `/`), Your devices' "Sign out" on this device and
+  "Sign out everywhere" (JSON, then the page goes to `/login`), a password reset, a password change that signs this device
+  out, a rename, an account deletion, `refreshLogin` finding the account gone, and `sessions.gate` seeing a revoked, expired
+  or unknown session (it passes the cookie's account, as `refreshLogin` does). A sign-in never sets or clears it. Not
+  HttpOnly (the page's script deletes it), `Secure`, `SameSite=Lax`, path `/`, 90 days (as long as a login lasts). Its value
+  is the signed-out account's hub account id (`chatticket.subjectOf`: the name the database already carries in this browser)
+  or `1` when there is none; no secret, sent only to this site, never logged.
+- **The sweep:** `chatsweep.locals` (mounted right after `sessions.gate`) gives a request carrying the marker
+  `res.locals.chatSweep`, and so does `clearLogin` for the response it is on. `layout.ejs` then puts
+  `views/partials/chat-sweep.ejs` first in the head of a **signed-out** page (the landing pages `/` and `/login` included):
+  a static ES5 script (nothing from the request is printed) that reads the marker, deletes every database named exactly
+  `patv-chat:<lower-case uuid>` from `indexedDB.databases()` (the widget's own sweep rule; never `patv-device`, the device
+  database that survives every wipe, and never another name under the prefix), then deletes the marker. A browser without
+  `databases()` (Firefox before 126) deletes the one database the marker names; a marker that isn't a uuid names none. A
+  delete that fails, throws or never finishes (another tab's widget holding the database closes it on `versionchange`, so
+  that one finishes) keeps the marker, so the next signed-out page tries again. A signed-in page never carries the script
+  (it would take the signed-in account's database too); a cached signed-out page replayed later does nothing once the marker
+  is gone.
+- **Not Clear-Site-Data:** it can't name databases. `"storage"` would also clear local storage (drafts and preferences), the
+  device database and the notifications service worker.
+- **Not covered here:** an account switch without a sign-out (signing in as B over A) is the widget's: its sign-in sweeps
+  every other account's database. With JavaScript off the sweep can't run: the marker stays until a signed-out page runs it.
+- **No switch:** the script finds nothing to delete where the widget never ran (prod before `CHAT_HUB`), and a switch left off
+  would keep exactly the data this is for, after a `CHAT_HUB` rollback too.
+- **The privacy page** lists the cookie in section 8 (additive: `terms.PRIVACY_UPDATED` moves, `VERSION` doesn't).
+- **Tests:** `test/chatsweep.test.js` - `clearLogin` sets the marker with its attributes and value (the caller's account,
+  then the session, then `req.user`; `1` without a hub account id; never throws, and its log line names no account); the
+  real `sessions.gate`, Your devices' routes and `refreshLogin` at route level (Sign out, this device, everywhere, a
+  session revoked elsewhere, a deleted account; signing out another device or signing in sets nothing); `layout.ejs` and
+  `login.ejs` print the partial in the head only signed out with `chatSweep`; the script in a vm against a fake IndexedDB
+  (only the account databases, the marker kept on any failure, a blocked delete clearing after, the fallback, garbage
+  markers, no IndexedDB, an unreadable cookie jar); the same rule as the platform's `account.ts` (`PATV_HUB_DIR=<platform
+  checkout>` compares the source); the wiring (`index.js` order, `/logout`, `clearLogin` the only place the login cookie is
+  cleared). `test/tos-reports.test.js`: the privacy row and its date. Checked once by hand in Chromium, Firefox and WebKit
+  over HTTPS with the real `clearLogin`, `chatsweep.locals` and `login.ejs`: the account databases gone within the landing
+  page, `patv-device` and other names kept, a holder tab that closes on `versionchange` (as the widget does) closed and the
+  database deleted, one that doesn't keeping the marker until it went away (Chromium, Firefox; WebKit deleted it anyway), a
+  signed-in page deleting nothing.
+
 ## Fixtures and the contract suite
 
 - `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo

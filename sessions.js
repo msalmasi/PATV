@@ -373,7 +373,7 @@ async function gate(req, res, next) {
       req.loginSession = { id: r.id, userId: String(decoded.userId) };
       if (r.token) req.cookies.jwt = r.token;
     } else {
-      require("./middleware/loginCookie").clearLogin(res);
+      require("./middleware/loginCookie").clearLogin(res, decoded.userId);   // S1 F13: and the chat sweep's marker (chatsweep.js)
       delete req.cookies.jwt;
     }
   } catch (e) {
