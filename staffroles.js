@@ -5,7 +5,12 @@
 //     the newer change wins. A change made here (Admin → Users → Assign a class) reaches Pepe on his next sync.
 //   * site classes follow the roles for accounts linked to that Camfrog login: owner / admin -> Admin, staff -> Staff,
 //     assistant -> Assistant; a linked account whose role went away drops from those classes to "pleb". Accounts
-//     without a linked login, or logins this list never had, are never touched (no surprise demotions).
+//     without a linked login, or logins this list never had, are never touched by the sync (no surprise demotions).
+//   * D11-site-roles (the owner's 2026-10-25 "there should be no Camfrog dependency"): an account with NO linked login
+//     holds Admin / Staff / Assistant by its class alone - the class picker sets it directly, on the site's ladder (only a
+//     Pepe owner gives or takes Admin; Admins give or take Staff and Assistant). A class that a linked login's role gave
+//     goes with that login: when the account unlinks it, or the login moves to another account (!verify), the class drops
+//     to "pleb" (a trigger on users, so every writer of camfrogUsername is covered) - unlinking never keeps staff powers.
 //   * who may change what (the same as Pepe's !role): owners anything; admins hand out staff / assistant / trusted to
 //     people below admin. Pepe always keeps an owner.
 //   * PO-0b (economy policy plan T23, D-5): the OWNER list is pinned on the site. Pepe's sync (bot token) can no longer
@@ -21,6 +26,9 @@ const ROLES = Object.keys(LEVEL);
 const CLASS_OF = { owner: "Admin", admin: "Admin", staff: "Staff", assistant: "Assistant" };
 const MANAGED = new Set(["Admin", "Staff", "Assistant"]);
 const ROLE_OF_CLASS = { Admin: "admin", Staff: "staff", Assistant: "assistant" };
+// D11-site-roles review: the classes the site decides by itself and that reconcile never overrides - the site gives them no
+// capability (siteperms classRank 0) - so they hold no global role at all, whatever a linked login's role says
+const NO_ROLE_CLASSES = new Set(["Banned", "Bot"]);
 const LOGIN_RE = /^[\w.\-$]{1,40}$/;
 
 let clock = () => Date.now();
@@ -45,9 +53,42 @@ function init() {
           if (!have.length) await runQuery("INSERT INTO classes (classId, class) VALUES (?, ?)", [require("crypto").randomUUID(), c]);
         }
       } catch (e) { /* no classes table (tests) */ }
+      await installUnlinkTrigger().catch((e) => console.error("[staffroles] unlink trigger:", e.message));
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
+}
+
+/**
+ * D11-site-roles review (an unlink must not keep staff powers): a managed class (Admin / Staff / Assistant) on an account
+ * linked to a login this list has came from that login's role (reconcile keeps them in step), so it goes with the login.
+ * When users.camfrogUsername changes away from such a login - the member unlinks it, !verify moves it to another account
+ * ("camfrog:taken"), a relink to another name, a merge or the stale-account cleanup freeing it - the account drops to
+ * "pleb" in the same statement. A trigger, so every writer of camfrogUsername is covered, not only the ones that call in
+ * here. A class given directly to an unlinked account (classUpdate) that later linked a login this list never had is not
+ * that login's, so it stays (and only an owner takes such an Admin class: classUpdate's linked path); Bot / Banned are never
+ * touched (not managed). A relink to a login with a role gets its class back from reconcile (verifyCamfrogLink runs it at
+ * once; the 5-minute timer otherwise). The other way round, a link decides the class: a class given directly whose account
+ * then links a login with a LOWER role (trusted, a lower step, a removed role's tombstone) becomes that login's class at
+ * the same reconcile (an owner gives it back through the login's role).
+ */
+const UNLINK_TRIGGER = "staffroles_unlink_class_v1";
+const unlinkTriggerSql = () => `CREATE TRIGGER IF NOT EXISTS ${UNLINK_TRIGGER} AFTER UPDATE OF camfrogUsername ON users
+  WHEN OLD.camfrogUsername IS NOT NULL AND trim(OLD.camfrogUsername) != ''
+   AND lower(trim(OLD.camfrogUsername)) IS NOT lower(trim(COALESCE(NEW.camfrogUsername, '')))
+   AND NEW."class" IN (${[...MANAGED].map((c) => `'${c}'`).join(", ")})
+   AND EXISTS (SELECT 1 FROM pepe_roles WHERE login = lower(trim(OLD.camfrogUsername)))
+  BEGIN UPDATE users SET "class" = 'pleb' WHERE userId = NEW.userId; END`;
+let trigReady = false;
+/** Installs the trigger once the users table has its columns (a fresh database may make users after this module's init:
+ *  it is tried again from reconcile until it is in). */
+async function installUnlinkTrigger() {
+  if (trigReady) return true;
+  const cols = new Set((await getQuery("SELECT name FROM pragma_table_info('users')").catch(() => [])).map((r) => r.name));
+  if (!cols.has("camfrogUsername") || !cols.has("class")) return false;
+  await runQuery(unlinkTriggerSql());
+  trigReady = true;
+  return true;
 }
 
 const low = (s) => String(s || "").trim().replace(/^@/, "").toLowerCase();
@@ -223,14 +264,33 @@ async function setRole(actorLogin, targetLogin, role, by) {
   return { login: t, role };
 }
 
-// ── S1 Q4 (seam plan §12.4 roles/changed; ADR 0007 D11: "the global role is the Pepe role of the account's linked Camfrog
-// login; users.class is display only"): readers only - no membership hook (the hub mirrors roles through the seam) ──
+// ── S1 Q4 (seam plan §12.4 roles/changed; ADR 0007 D11, as the owner changed it on 2026-10-25 - D11-site-roles: the global
+// role is the site's, by account - its class (Admin / Staff / Assistant) or the Pepe role of its linked Camfrog login, the
+// higher; a Camfrog link is never needed): readers only - no membership hook (the hub mirrors roles through the seam) ──
 /**
- * The global role of these accounts: the pepe_roles row of each account's linked Camfrog login, keyed the way the seam keys
- * it - SQLite's lower(trim(users.camfrogUsername)) (pepe_roles logins are ASCII, so JavaScript's low() agrees). -> Map(userId ->
- * {login, role, role_at, cls}) for every account that has a users row (role: owner | admin | staff | assistant | trusted |
- * null; role_at: the pepe_roles row's ts - a removal is a tombstone with its own ts - or null without a row; cls: users.class).
- * An id without a users row is left out (the account is gone).
+ * D11-site-roles (the owner's answer of 2026-10-25: "the chat server should accept the site's Admin/Staff label - there should
+ * be no Camfrog dependency"): the role a site class gives by itself, by ACCOUNT - the site's own ladder (siteperms-core.js
+ * CLASS_RANK: Assistant < Staff < Admin; exact class names only, as siteperms reads them): Admin -> admin, Staff -> staff,
+ * Assistant -> assistant; null for every other class (pleb, Bot, Banned, a class an Admin added). No class gives "owner": the
+ * site's owners are its pinned owner list (PO-0b), which pepe_roles holds.
+ */
+function roleOfClass(cls) {
+  return cls != null && Object.prototype.hasOwnProperty.call(ROLE_OF_CLASS, cls) ? ROLE_OF_CLASS[cls] : null;
+}
+
+/**
+ * The global role of these accounts, as the seam's roles/changed carries it (hubroles.js): the HIGHER on the ladder (LEVEL) of
+ *   * the account's site class (roleOfClass: Admin / Staff / Assistant) - no linked Camfrog login needed (D11-site-roles), and
+ *   * the pepe_roles row of the account's linked Camfrog login, if it has one (the site's role list: owner and trusted have no
+ *     class), keyed the way the seam keys it - SQLite's lower(trim(users.camfrogUsername)) (pepe_roles logins are ASCII, so
+ *     JavaScript's low() agrees).
+ * Neither can take away what the other gives, so an account that never linked Camfrog keeps its class's role, and a linked one
+ * whose class lags behind Pepe's sync keeps its Pepe role. An account that unlinks a login with a role loses the class that
+ * login gave (the unlink trigger above), so it keeps nothing of it. The site's Banned and Bot classes hold no role at all
+ * (NO_ROLE_CLASSES: the site gives them no capability), whatever the linked login's role.
+ * -> Map(userId -> {login, role, role_at, cls}) for every account that has a users row (role: owner | admin | staff | assistant |
+ * trusted | null; role_at: the pepe_roles row's ts when that row decides the answer - a removal is a tombstone with its own ts -
+ * null when the class does or there is no row; cls: users.class). An id without a users row is left out (the account is gone).
  */
 async function globalRolesOf(userIds) {
   await init();
@@ -249,8 +309,16 @@ async function globalRolesOf(userIds) {
   }
   for (const u of users) {
     const r = u.login ? roles.get(u.login) : null;
-    out.set(String(u.userId), { login: u.login || null, role: r && ROLES.includes(r.role) ? r.role : null, role_at: r ? Number(r.ts) || null : null,
-                                cls: u.class == null || u.class === "" ? null : String(u.class) });
+    const cls = u.class == null || u.class === "" ? null : String(u.class);
+    if (cls !== null && NO_ROLE_CLASSES.has(cls)) {                 // Banned / Bot: the site's label wins - no role at all
+      out.set(String(u.userId), { login: u.login || null, role: null, role_at: null, cls });
+      continue;
+    }
+    const pepe = r && ROLES.includes(r.role) ? r.role : null;
+    const byClass = roleOfClass(cls);
+    const fromClass = levelOf(byClass) > levelOf(pepe);           // a tie is the same role: the row's (and its ts) answer
+    out.set(String(u.userId), { login: u.login || null, role: fromClass ? byClass : pepe,
+                                role_at: !fromClass && r ? Number(r.ts) || null : null, cls });
   }
   return out;
 }
@@ -260,6 +328,7 @@ async function globalRoleOf(userId) { return (await globalRolesOf([userId])).get
 /** Site classes for linked accounts of these logins (all known logins when omitted). */
 async function reconcile(logins) {
   await init();
+  await installUnlinkTrigger().catch((e) => console.error("[staffroles] unlink trigger:", e.message));
   const m = await map();
   const list = (logins || Object.keys(m)).map(low).filter((l) => m[l]);
   let n = 0;
@@ -276,8 +345,10 @@ async function reconcile(logins) {
   return n;
 }
 
-/** Admin → Users → Assign a class (Admins only - 1.99abn: Staff could set anyone's class, Admin included). Admin / Staff /
- *  Assistant go through Pepe's roles (setRole: his hierarchy, and the class follows); other classes are set directly. */
+/** Admin → Users → Assign a class (Admins only - 1.99abn: Staff could set anyone's class, Admin included). On an account
+ *  linked to a chat login, Admin / Staff / Assistant go through Pepe's roles (setRole: his hierarchy, and the class
+ *  follows); on an account with no linked login they are set directly on the site's ladder (classDirect, D11-site-roles);
+ *  other classes are set directly. */
 async function classUpdate(actor, username, cls) {
   await init();
   if (!SP.can(actor, "roles.assign")) throw new RoleError(403, "Only Admins change classes.");   // 1.99ack: roles.assign (locked: Admins)
@@ -289,11 +360,18 @@ async function classUpdate(actor, username, cls) {
   if (!t) throw new RoleError(404, "No account by that username.");
   if (t.class === "Bot") throw new RoleError(409, "That's Pepe's own account.");
   if (MANAGED.has(cls) || MANAGED.has(t.class)) {
+    if (!String(t.camfrogUsername || "").trim()) return classDirect(actor, t, cls);   // D11-site-roles: no linked login - the class is the role
     const tl = low(t.camfrogUsername);
-    if (!tl) throw new RoleError(409, "Link their Camfrog name first - Admin / Staff / Assistant follow Pepe's roles (owner / admin = Admin).");
-    const me = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [actor.userId]))[0];
+    if (!tl) throw new RoleError(409, "That account's linked chat login isn't valid - unlink it first.");
+    const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [actor.userId]))[0];
     const cur = await roleOf(tl);
     const role = MANAGED.has(cls) ? ROLE_OF_CLASS[cls] : null;
+    // D11-site-roles review 3: an Admin class its login's role doesn't back (below admin: no role-list row, e.g. a class
+    // given directly before the link) is outside Pepe's !role rules - setRole sees a login with no role and lets any Pepe
+    // admin through, or is skipped outright for pleb - so the site's ladder decides, as classDirect: only an owner takes it.
+    if (t.class === "Admin" && cls !== "Admin" && levelOf(cur) < LEVEL.admin && !(await ownerHolds(me, "roles.assign"))) {
+      throw new RoleError(403, "Only an owner gives or takes the Admin class - Admins give and take Staff and Assistant.");
+    }
     if (!(cls === "Admin" && (cur === "owner" || cur === "admin")) && cur !== role) {
       // owner answers 2026-10-20 (3): taking the owner role away needs the password step-up, which lives on /admin/roles -
       // an owner can't do it from the class picker. (Anyone else is refused by setRole's rules, as before.)
@@ -308,6 +386,31 @@ async function classUpdate(actor, username, cls) {
   }
   await runQuery("UPDATE users SET class = ? WHERE userId = ?", [cls, t.userId]);
   return { message: "User class updated successfully." };
+}
+/**
+ * D11-site-roles (the owner's 2026-10-25 "there should be no Camfrog dependency"; the review of the first build: the picker
+ * still asked for a Camfrog link, so a class-only role could neither be given nor taken away on the site): the class picker
+ * on an account with NO linked login sets or takes Admin / Staff / Assistant directly - its class is its role
+ * (globalRolesOf). The site's ladder: only a Pepe owner (ownerHolds: the Admin class and the site's pinned owner list) gives
+ * or takes Admin; an Admin gives or takes Staff and Assistant, so only on accounts below Admin. The actor is read fresh
+ * (a session's class can be stale). The write holds only while the row is still unlinked with the class read here (a
+ * !verify or another Admin in between: 409, nothing changed). Recorded in admin_audit as "class_direct".
+ */
+async function classDirect(actor, t, cls) {
+  const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [actor && actor.userId]))[0];
+  if (!me || !SP.can(me, "roles.assign")) throw new RoleError(403, "Only Admins change classes.");
+  const done = { message: "User class updated successfully.", login: null, role: roleOfClass(cls) };
+  if (t.class === cls) return done;
+  if ((cls === "Admin" || t.class === "Admin") && !(await ownerHolds(me, "roles.assign"))) {
+    throw new RoleError(403, "Only an owner gives or takes the Admin class - Admins give and take Staff and Assistant.");
+  }
+  const r = await runQuery("UPDATE users SET class = ? WHERE userId = ? AND class IS ? AND (camfrogUsername IS NULL OR trim(camfrogUsername) = '')",
+                           [cls, t.userId, t.class == null ? null : t.class]);
+  if (!r || !r.changes) throw new RoleError(409, "That account changed meanwhile - reload and try again.");
+  await require("./adminaudit").record({ userId: me.userId, username: me.username }, "class_direct", { userId: t.userId, username: t.username },
+                                       { from: t.class == null ? null : t.class, to: cls })
+    .catch((e) => console.error("[staffroles] audit:", e && e.message));
+  return done;
 }
 /** Manage classes: Admins only; the classes Pepe's roles use (and pleb / Bot) can't be removed. */
 async function classesEdit(actor, action, className) {
@@ -354,6 +457,6 @@ function register(app, { isBotToken, noTimers } = {}) {
 }
 
 module.exports = { init, map, roleOf, ownerHolds, ownerOf, OWNER_ONLY, botSync, setRole, reconcile, register, classUpdate, classesEdit, pendingList, confirmPending,
-  globalRoleOf, globalRolesOf,                       // S1 Q4: the seam's roles/changed reader
-  RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS,
-  _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; } };
+  globalRoleOf, globalRolesOf, roleOfClass,          // S1 Q4: the seam's roles/changed reader (D11-site-roles: + the class's role)
+  RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS, NO_ROLE_CLASSES, UNLINK_TRIGGER, installUnlinkTrigger,
+  _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; trigReady = false; } };

@@ -288,7 +288,7 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
 | Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
 |---|---|---|---|
 | `pads/changed` (`hubpads.js`) | `pads` | `pad:<hub_pad_id>`, `pm:<hub_pad_id>/<userId>` | the pad: `{kind:"pad", pad_id, v1_room_id, slug, title, platform, visibility, nsfw, listed, tier, tier_until, owner, owner_since, owner_grant, chat_backend, history, flairs, fx, badges, badge_max, created_at}` or `{kind, pad_id, gone}`; a member: `{kind:"pm", pad_id, account, v1_user, status}` or `gone` |
-| `roles/changed` (`hubroles.js`) | `roles` | `acct:<userId>` | `{account, v1_user, role, cls, role_at}` (`staffroles.globalRolesOf`: the Pepe role of the linked Camfrog login) or `gone` |
+| `roles/changed` (`hubroles.js`) | `roles` | `acct:<userId>` | `{account, v1_user, role, cls, role_at}` (`staffroles.globalRolesOf`: the site's role by account - the higher of the site class, Admin / Staff / Assistant, and the Pepe role of the linked Camfrog login; no link needed since D11-site-roles, 1.99ael; a Banned or Bot class holds no role at all) or `gone` |
 | `bans/changed` (`hubbans.js`) | `bans` | `fb:<userId>/<room_id>` (`*` = site-wide) | `{kind:"feed_ban", scope, pad_id, v1_room_id, account, v1_user, feature, until, banned_at, active:true}` or `active:false` (no reason, no actor) |
 | `switches/changed` (`chatswitches.js`) | `switches` | `sw:<key>` | `{key, value, updated_at}` - `CHAT_HUB` only in S1 |
 
@@ -312,8 +312,9 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   `pad_hub` for OLD and NEW. Roles - `pepe_roles` (insert / delete / a change of `login` or `role` - the WHEN matters:
   `staffroles.botSync`'s upsert sets `role` on every write, so Pepe's per-minute sync of the same role posts nothing; one row
   per account whose `lower(trim(camfrogUsername))` is the login, found through `accountMerge.js`'s unique
-  `users_camfrog_login`) and `users` (a sign-up with a linked login, a change of `camfrogUsername` / `class`, the deletion
-  of a linked account; never points / xp / level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -,
+  `users_camfrog_login`) and `users` (a sign-up with a linked login or a role-giving class, a change of `camfrogUsername` /
+  `class` of any account, the deletion of a linked account or of one with a role-giving class - D11-site-roles, 1.99ael;
+  never points / xp / level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -,
   delete - unbans and v1's sweep -, update of `user_id, room_id, until`: OLD and NEW) and `pad_hub`'s insert (the room's pad
   bans: a pad re-created under a room id whose feed bans outlived the old pad, a bridged room banned in before it was
   registered - v1 enforces feed bans by room id, whatever the pad). Switches - `chat_switches` (insert, delete, update of
@@ -323,7 +324,8 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   trigger) is deleted first, so `pad_hub`'s DELETE trigger posts `pad:<displaced id>` in the re-key's transaction; after the
   move, the members and pad feed bans left at the new id (now the moved pad's) get a row each. The moving pad keeps its id.
 - **Snapshots:** `pads/changed` lists every registry row (`pad:`, by `hub_pad_id`) then every approved member (`pm:`);
-  `roles/changed` the accounts whose linked login has a role; `bans/changed` the live feed bans the hub can hold - site-wide
+  `roles/changed` the accounts with a role - a role-giving class (Admin, Staff, Assistant; D11-site-roles) or a linked
+  login with a Pepe role on an account that isn't Banned / Bot, each once; `bans/changed` the live feed bans the hub can hold - site-wide
   ones and pad ones whose room has a pad (`pad_hub`) - entities ordered in SQL (the entity's byte order isn't
   `(user_id, room_id)`'s); `switches/changed` every key (a key without a row is its default). A live pad ban on a room
   without a pad (a deleted pad's - `padcreate.removePad` leaves `feed_bans` - or a room the registry never knew) is left out:
@@ -374,10 +376,22 @@ nothing posts and nothing a member sees changes, except the two seeded pads and 
   and in `pads.OLD_SLUGS`.
 - **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99aec`
   (the letter the release reached staging with; the shared golden keeps its test letter) - `1.99aei` from S1 F9 on,
-  which changes the seam's inbound side (the looks-only key, "Calls into v1" above).
+  which changes the seam's inbound side (the looks-only key, "Calls into v1" above), and `1.99ael` from D11-site-roles on
+  (roles/changed keeps its shape but carries the site's role by account; ADR 0007 D19 counts a change of meaning).
 - **Driver:** `pad`, `padMember`, `padLook`, `padChat`, `ownerGrant`, `premiumComp`, `stripeRenew`, `flair`, `role`,
-  `pepeRoles`, `signup`, `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
+  `pepeRoles`, `signup`, `siteClass` (D11-site-roles: the class picker, `staffroles.classUpdate`, as the driver's
+  owner-Admin), `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
   (`test/hubseam-driver-s1.test.js`).
+- **Site classes and roles (D11-site-roles, 1.99ael):** the class picker (Admin → Users → Assign a class) sets Admin /
+  Staff / Assistant directly on an account with no linked chat login, on the site's ladder: only a Pepe owner gives or
+  takes Admin, Admins give or take Staff and Assistant (`staffroles.classDirect`, audited as `class_direct`); a linked
+  account still goes through Pepe's roles. A class a linked login's role gave goes with the login: the trigger
+  `staffroles_unlink_class_v1` drops it to `pleb` when `camfrogUsername` changes away from a login `pepe_roles` has (an
+  unlink, a `!verify` that moves the login to another account, a relink, a merge), and `!verify` reconciles the new login
+  at once. A class given directly that a later link to a login with no role-list row keeps is still only an owner's to
+  take away (the linked path asks for `ownerHolds` when the login's role is below admin); a link to a login with a lower
+  role (trusted, a lower step, a tombstone) makes the class that login's at the same reconcile. The site's `Banned` and
+  `Bot` classes hold no global role, whatever the linked login's role.
 - **Tests:** `test/huboutbox-s1-l1.test.js` (every golden pads / roles / bans / switches row from its input, each trigger
   only with its switch on and only for its listed columns, OLD and NEW keys, the backfill, the displaced-row emit, the four
   golden snapshot pages and their paging, the poster, the heartbeat, the interlock both ways, `setBackend`; the review

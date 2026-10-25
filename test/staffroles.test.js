@@ -58,7 +58,12 @@ test("the class editor: Admins only, linked accounts for Pepe's classes, Pepe's 
   const admin = { userId: "u1", username: "pb", class: "Admin" };
   const staff = { userId: "u4", username: "carol", class: "Staff" };
   await assert.rejects(R.classUpdate(staff, "dave", "Admin"), (e) => e.status === 403, "Staff can't change classes any more");
-  await assert.rejects(R.classUpdate(admin, "bob", "Staff"), (e) => e.status === 409 && /Link their Camfrog/.test(e.message));
+  // D11-site-roles (the owner's "no Camfrog dependency"): an account with no linked login takes Staff directly (the site's
+  // ladder - pb is an owner), and loses it the same way; no Camfrog link is asked for
+  assert.equal((await R.classUpdate(admin, "bob", "Staff")).role, "staff");
+  assert.equal(await cls("bob"), "Staff");
+  await R.classUpdate(admin, "bob", "pleb");
+  assert.equal(await cls("bob"), "pleb");
   await assert.rejects(R.classUpdate(admin, "dave", "Wizard"), (e) => e.status === 400);
   await assert.rejects(R.classUpdate(admin, "pepe", "pleb"), (e) => e.status === 400 || e.status === 409);
   T += 1000;

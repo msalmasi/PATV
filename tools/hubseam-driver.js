@@ -62,6 +62,13 @@
 //   role {login, role}          a role set on the website (staffroles.setRole by the driver's own owner login; null removes)
 //   pepeRoles {map}             Pepe's sync (staffroles.botSync {roles: {login: [role | null, ts]}})
 //   signup {user, login?}       -> {acct}   a users row inserted with its Camfrog login (the roles trigger's sign-up path)
+//   siteClass {user, cls}       -> {role}   D11-site-roles (ADR 0007 D11 as the owner changed it on 2026-10-25): the class
+//                               picker (staffroles.classUpdate - Admin -> Users -> Assign a class) acting as the driver's
+//                               owner-Admin (a users row "hubseam-driver-owner", class Admin, linked to the driver's owner
+//                               login; made on first use): an account with no linked login takes the class directly on the
+//                               site's ladder, a linked one goes through Pepe's roles; role = staffroles.globalRoleOf's
+//                               answer after it. An unknown account is refused before anything is made; a refusal of the
+//                               picker is "siteClass: <its words>"
 //   feedBan {user, room?, days?} | feedUnban {user, room?} | feedSweep    feedstore.ban / unban (as a site admin), the sweep's
 //                               DELETE of expired rows
 //   chatSwitch {key, value}     -> {ok, value} | {ok: false, code, needs}   chatswitches.set, the interlock included (V1's
@@ -182,6 +189,17 @@ async function exportWait(id) {
 const mod = (n) => require(path.join(repo, n));
 // the site admin the driver acts as (feed bans, chat switches): never a users row - only its class is read (siteperms)
 const DRIVER_ADMIN = Object.freeze({ userId: "hubseam-driver", username: "hubseam-driver", class: "Admin" });
+// D11-site-roles: the class picker reads its actor fresh (and an Admin grant needs a Pepe owner: the Admin class and a linked
+// login with the owner role), so siteClass acts as a real users row linked to the driver's owner login
+const DRIVER_OWNER = Object.freeze({ userId: "hubseam-driver-owner", username: "hubseam-driver-owner", login: "hubseam_driver" });
+/** The driver's owner login in Pepe's role list (seeded by Pepe's sync while the list has no owner). -> staffroles */
+async function driverOwnerLogin() {
+  const SR = mod("staffroles");
+  const m = await SR.map();
+  if (!Object.values(m).some((x) => x.role === "owner")) await SR.botSync({ roles: { [DRIVER_OWNER.login]: ["owner", Date.now()] } });
+  else if (!m[DRIVER_OWNER.login] || m[DRIVER_OWNER.login].role !== "owner") throw new Error("the driver's owner login is missing");
+  return SR;
+}
 let beatTimer = null;
 async function padCmd({ action, pad, title, slug, owner, level, on, backend, room }) {
   const rooms = mod("rooms");
@@ -412,11 +430,8 @@ const CMDS = {
   },
   async role({ login, role }) {
     await boot();
-    const SR = mod("staffroles");
-    const m = await SR.map();
-    if (!Object.values(m).some((x) => x.role === "owner")) await SR.botSync({ roles: { hubseam_driver: ["owner", Date.now()] } });
-    else if (!m.hubseam_driver || m.hubseam_driver.role !== "owner") throw new Error("the driver's owner login is missing");
-    return SR.setRole("hubseam_driver", String(login), role == null ? null : String(role), "driver");
+    const SR = await driverOwnerLogin();
+    return SR.setRole(DRIVER_OWNER.login, String(login), role == null ? null : String(role), "driver");
   },
   async pepeRoles({ map }) { await boot(); return mod("staffroles").botSync({ roles: map || {} }); },
   async signup({ user, login }) {
@@ -424,6 +439,23 @@ const CMDS = {
     await M.db.runQuery("INSERT INTO users (userId, username, displayname, password, class, camfrogUsername, points_balance) VALUES (?, ?, ?, 'x', 'pleb', ?, 0)",
                         [String(user), String(user), String(user), login || null]);
     return { acct: M.ct.subjectOf(String(user)) };
+  },
+  async siteClass({ user, cls }) {
+    await boot();
+    if (typeof cls !== "string" || !cls || cls.length > 40) throw new Error("siteClass: cls, a class name");
+    const t = (await M.db.getQuery("SELECT username FROM users WHERE userId = ?", [String(user)]))[0];
+    if (!t) throw new Error("siteClass: no such account " + user);
+    const SR = await driverOwnerLogin();
+    await M.db.runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, password, class, camfrogUsername, points_balance) VALUES (?, ?, ?, 'x', 'Admin', ?, 0)",
+                        [DRIVER_OWNER.userId, DRIVER_OWNER.username, DRIVER_OWNER.username, DRIVER_OWNER.login]);
+    try {
+      await SR.classUpdate({ userId: DRIVER_OWNER.userId, username: DRIVER_OWNER.username, class: "Admin" }, t.username, cls);
+    } catch (e) {
+      if (e && e.refuse) throw new Error("siteClass: " + e.message);
+      throw e;
+    }
+    const g = await SR.globalRoleOf(String(user));
+    return { role: g ? g.role : null };
   },
   async feedBan({ user, room, days }) {
     await boot();
