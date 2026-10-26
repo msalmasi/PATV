@@ -10316,8 +10316,6 @@
   "chatfmt.not.headings": "見出し（行頭の #）",
   "chatfmt.not.lists": "リスト（行頭の - や 1.）: 入力どおりでも読みやすいです",
   "chatfmt.not.tables": "表、色、フォント",
-  "chatfmt.not.masked": "別の文字列が付いたリンク（[text](address)）: リンクは常に自分のアドレスを表示するため、どこへ行くのかを偽装できません",
-  "chatfmt.not.times": "読者のタイムゾーンで表示される時刻（Discordの &lt;t:…&gt;）: 入力どおりに表示されます",
   "chatfmt.back": "Pepeのコマンドに戻る",
   "owner.grp_topic": "ルームのトピック",
   "owner.grp_topic_why": "パッドのチャットルームのトピック行です。ご自身で設定するか、自動トピックを使って Pepe に常に新しく保ってもらうこともできます。",

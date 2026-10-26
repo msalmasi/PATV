@@ -10533,8 +10533,6 @@
   "chatfmt.not.headings": "Titoli (# all'inizio di una riga)",
   "chatfmt.not.lists": "Elenchi (- o 1. all'inizio di una riga): si leggono bene così come sono scritti",
   "chatfmt.not.tables": "Tabelle, colori e font",
-  "chatfmt.not.masked": "Link con parole diverse ([testo](indirizzo)): un link mostra sempre il proprio indirizzo, così nessuno può mascherare dove porta",
-  "chatfmt.not.times": "Orari che si mostrano nel fuso orario di ciascun lettore (&lt;t:…&gt; di Discord): appaiono come scritti",
   "chatfmt.back": "Torna ai comandi di Pepe",
   "owner.grp_topic": "Argomento della stanza",
   "owner.grp_topic_why": "La riga dell'argomento della chat room del tuo pad: impostala tu, oppure lascia che Pepe la tenga aggiornata con l'argomento automatico.",

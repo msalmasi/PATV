@@ -10709,8 +10709,6 @@
   "chatfmt.not.headings": "Nagłówki (# na początku linii)",
   "chatfmt.not.lists": "Listy (- lub 1. na początku linii): czytają się dobrze tak, jak wpisane",
   "chatfmt.not.tables": "Tabele, kolory i czcionki",
-  "chatfmt.not.masked": "Linki z innymi słowami ([tekst](adres)): link zawsze pokazuje swój własny adres, więc nikt nie może ukryć, dokąd prowadzi",
-  "chatfmt.not.times": "Godziny wyświetlane w strefie czasowej każdego czytelnika (Discord &lt;t:…&gt;): pokazują się tak, jak wpisane",
   "chatfmt.back": "Wróć do komend Pepe’a",
   "owner.grp_topic": "Temat pokoju",
   "owner.grp_topic_why": "Temat czatu w pokoju twojego pada: ustaw go sam albo pozwól Pepe odświeżać go automatycznie.",

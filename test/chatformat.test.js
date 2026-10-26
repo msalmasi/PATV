@@ -4,7 +4,8 @@
 //     how PATV shows it and what a bridged chat shows; no raw i18n keys
 //   * the previews are drawn from fixed tags: a sample's words are escaped, a typed mark never becomes HTML
 //   * the forms the chat platform supports are all here (the composer's markdown-lite, ADR 0004 "Formatting as built"),
-//     and none it doesn't (no time form: the chat has no <t:...> syntax since the W-format review)
+//     with chat widget 0.2.0's: times (<t:SECONDS:STYLE>, each style), words with a link ("words (address)", never a
+//     masked link) and the formatting bar's Link button
 //   * the bridged column says what a bridge WILL show (no PATV Chat pad is bridged yet), no link previews are promised,
 //     and the spoiler's preview is a disclosure a screen reader and a tap can open (details/summary)
 //   * every string the page uses is in en.json; /help links to the guide (its intro and its footer)
@@ -45,18 +46,21 @@ test("the guide is public, renders every form as a row with its example, preview
     assert.ok(en["chatfmt.bridge." + f.bridge], "bridge text " + f.id);
     if (f.w == null) assert.ok(en["chatfmt.w." + f.id], "sample word " + f.id);
   }
-  for (const id of ['id="forms"', 'id="bar"', 'id="bridges"', 'id="not"', 'href="/help"']) assert.ok(r.text.includes(id), id);
-  assert.ok(!r.text.includes('id="times"') && !r.text.includes('id="fmt-time"'), "no time form");
+  for (const id of ['id="forms"', 'id="bar"', 'id="times"', 'href="#times"', 'id="bridges"', 'id="not"', 'href="/help"']) assert.ok(r.text.includes(id), id);
   const body = r.text.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "");
   assert.ok(!/\b(chatfmt|help)\.[a-z_]+(\.[a-z0-9_]+)*\b/i.test(body.replace(/<[^>]+>/g, " ")), "no raw keys");
   // the bridged column is about later (no PATV Chat pad is bridged yet) and names Camfrog as one network among others
   assert.match(body, /Bridged chats will show/);
   assert.match(body, /Camfrog first, more networks/);
   assert.ok(!/Camfrog today/.test(body), "no pad is bridged today");
-  // no preview is promised (PATV Chat shows none yet), and there is no Link button
+  // no preview is promised (PATV Chat shows none yet); the bar has a Link button again (widget 0.2.0)
   assert.ok(!/with a preview of the page/.test(body));
-  assert.match(body, /There is no Link button/);
-  assert.ok(!/Quote and Link/.test(body));
+  assert.ok(!/There is no Link button/.test(body));
+  assert.match(body, /Quote and Link/);
+  assert.match(body, /Link asks for an address/);
+  // times and words with a link are supported now: neither is listed as unsupported
+  const not = /<section class="cf-sec" id="not"[\s\S]*?<\/section>/.exec(body)[0];
+  assert.ok(!/&lt;t:|\[text\]\(address\)/.test(not), "not listed as unsupported");
   // the keyboard line names Aa (its placeholder filled)
   assert.ok(!body.includes("{!aa}"), "every placeholder filled");
 });
@@ -79,6 +83,12 @@ test("the previews are fixed tags around escaped words; a typed mark is shown, n
   assert.match(row("quote"), /<blockquote class="cf-quote">best stream all week<\/blockquote>/);
   assert.match(row("codeblock"), /```js\nconsole\.log\(&#34;gg&#34;\);\n```/);
   assert.match(row("nopreview"), /&lt;https:\/\/publicaccess\.tv&gt;/);
+  assert.match(row("time"), /&lt;t:1767225600:f&gt;/);
+  assert.match(row("time"), /<time datetime="2026-01-01T00:00:00.000Z">January 1, 2026[^<]*12:00[^<]*<\/time> <span class="cf-utc">UTC<\/span>/);
+  // words with a link: typed as [words](address), shown as the words, then the address (a link) in brackets
+  assert.match(row("wordslink"), /<code class="cf-mark">\[our site\]\(https:\/\/publicaccess\.tv\)<\/code>/);
+  assert.match(row("wordslink"), /our site \(<a href="https:\/\/publicaccess\.tv" rel="noopener">https:\/\/publicaccess\.tv<\/a>\)/);
+  assert.match(row("wordslink"), /The words, then the address in brackets/);
   assert.match(row("escape"), /\\\*not italic\\\*/);
   assert.match(row("escape"), /2\\\*3\\\*4/, "the sums example");
   assert.match(row("italic"), /2\*3\*4 shows the 3 in italics/);
@@ -86,13 +96,22 @@ test("the previews are fixed tags around escaped words; a typed mark is shown, n
   assert.ok(!/<t:/.test(r.text) && !/<https:/.test(r.text), "the angle-bracket forms are escaped");
 });
 
-test("the guide lists every form the chat's markdown-lite supports, and no other", () => {
+test("the guide lists every form the chat's markdown-lite supports, and each time style", async () => {
   const ids = CF.FORMS.map((f) => f.id);
-  for (const id of ["bold", "italic", "bolditalic", "underline", "strike", "spoiler", "code", "codeblock", "quote", "quoteall", "link", "nopreview", "mention", "everyone", "emoji", "escape"]) {
+  for (const id of ["bold", "italic", "bolditalic", "underline", "strike", "spoiler", "code", "codeblock", "quote", "quoteall", "link", "wordslink", "nopreview", "mention", "everyone", "emoji", "time", "escape"]) {
     assert.ok(ids.includes(id), id);
   }
-  assert.ok(!ids.includes("time") && CF.TIME_STYLES === undefined, "no time form");
-  assert.ok(!Object.keys(en).some((k) => k.startsWith("chatfmt.time")), "no time strings left");
+  assert.equal(ids.length, 18, "one row per form");
+  // chat-core's <t:SECONDS:F>, F one of t T d D f F R (Discord's letters); none is the f style
+  assert.deepEqual(CF.TIME_STYLES.map((s) => s.s), ["t", "T", "d", "D", "f", "F", "R"]);
+  for (const s of CF.TIME_STYLES) assert.ok(en["chatfmt.time." + s.key], "time style " + s.s);
+  assert.equal(new Date(CF.SAMPLE_TIME * 1000).toISOString(), "2026-01-01T00:00:00.000Z");
+  const r = await page("/help/formatting");
+  const times = /<section class="cf-sec" id="times"[\s\S]*?<\/section>/.exec(r.text)[0];
+  for (const s of CF.TIME_STYLES) assert.ok(times.includes(`<code class="cf-mark">:${s.s}</code>`), "style row " + s.s);
+  assert.match(times, /&lt;t:1767225600:f&gt;/);
+  assert.match(times, /in 2 months/);
+  assert.ok(!Object.keys(en).some((k) => k === "chatfmt.not.times" || k === "chatfmt.not.masked"), "no 'not supported' line for them");
   assert.deepEqual(CF.typed(CF.FORMS.find((f) => f.id === "quote"), (k) => en[k]), ["> best stream all week"]);
 });
 

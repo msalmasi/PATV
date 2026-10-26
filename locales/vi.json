@@ -10316,8 +10316,6 @@
   "chatfmt.not.headings": "Tiêu đề (# ở đầu dòng)",
   "chatfmt.not.lists": "Danh sách (- hoặc 1. ở đầu dòng): đọc vẫn ổn như đã gõ",
   "chatfmt.not.tables": "Bảng, màu sắc và phông chữ",
-  "chatfmt.not.masked": "Liên kết với chữ khác trên đó ([văn bản](địa chỉ)): liên kết luôn hiện địa chỉ của chính nó, để không ai che giấu đích đến",
-  "chatfmt.not.times": "Thời gian hiển thị theo múi giờ của từng người đọc (&lt;t:…&gt; của Discord): chúng hiện như đã gõ",
   "chatfmt.back": "Quay lại lệnh của Pepe",
   "owner.grp_topic": "Chủ đề phòng",
   "owner.grp_topic_why": "Dòng chủ đề trong phòng chat của pad: bạn tự đặt, hoặc để Pepe giữ nó luôn mới với chủ đề tự động.",

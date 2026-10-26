@@ -10449,8 +10449,6 @@
   "chatfmt.not.headings": "Başlıklar (satır başında #)",
   "chatfmt.not.lists": "Listeler (satır başında - ya da 1.): yazıldığı gibi düzgün okunur",
   "chatfmt.not.tables": "Tablolar, renkler ve yazı tipleri",
-  "chatfmt.not.masked": "Üzerinde farklı kelimeler olan bağlantılar ([metin](adres)): bağlantı her zaman kendi adresini gösterir, böylece kimse nereye gittiğini gizleyemez",
-  "chatfmt.not.times": "Her okuyucunun saat dilimine göre görünen saatler (Discord’un &lt;t:…&gt; ifadesi): yazıldığı gibi görünür",
   "chatfmt.back": "Pepe’nin komutlarına dön",
   "owner.grp_topic": "Oda konusu",
   "owner.grp_topic_why": "Pad'inin sohbet odasının konu satırı: bunu kendin ayarla ya da otomatik konu ile Pepe'nin güncel tutmasına izin ver.",

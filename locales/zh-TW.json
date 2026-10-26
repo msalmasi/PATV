@@ -10316,8 +10316,6 @@
   "chatfmt.not.headings": "標題（行首的 #）",
   "chatfmt.not.lists": "清單（行首的 - 或 1.）：照原樣輸入也能正常閱讀",
   "chatfmt.not.tables": "表格、顏色和字型",
-  "chatfmt.not.masked": "文字不同的連結（[文字](網址)）：連結一律顯示自己的網址，讓人無法偽裝連結的去處",
-  "chatfmt.not.times": "依各人時區顯示的時間（Discord 的 &lt;t:…&gt;）：會照原樣顯示",
   "chatfmt.back": "返回 Pepe 的指令",
   "owner.grp_topic": "聊天室主題",
   "owner.grp_topic_why": "小站聊天室的主題列：你可以自己設定，或讓 Pepe 用自動主題保持內容新鮮。",

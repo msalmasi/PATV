@@ -10533,8 +10533,6 @@
   "chatfmt.not.headings": "Títulos (# no início da linha)",
   "chatfmt.not.lists": "Listas (- ou 1. no início da linha): ficam bem do jeito que foram digitadas",
   "chatfmt.not.tables": "Tabelas, cores e fontes",
-  "chatfmt.not.masked": "Links com outras palavras ([texto](endereço)): um link sempre mostra o próprio endereço, para ninguém disfarçar para onde ele leva",
-  "chatfmt.not.times": "Horários que aparecem no fuso horário de cada leitor (o &lt;t:…&gt; do Discord): aparecem do jeito que foram digitados",
   "chatfmt.back": "Voltar aos comandos do Pepe",
   "owner.grp_topic": "Tópico da sala",
   "owner.grp_topic_why": "A linha de tópico da sala de chat do seu pad: defina você mesmo ou deixe o Pepe mantê-la atualizada com o tópico automático.",
