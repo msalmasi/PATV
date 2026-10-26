@@ -33,7 +33,8 @@
 // A comparison is CLEAN (policy_sims.ok = 1, D-15) only when the engine diff is empty AND there is a boundary snapshot AND
 // nothing differs - in the plan (boundary plan vs Pepe's), in the INPUTS, or in the site's own DECISIONS taken at the boundary
 // (the monetary guarantee flag, boundary_meta) - but the documented WHITELIST below (post-move fields and data no enabled rule
-// reads, each under its condition and with a test). Diffs are capped at DIFF_CAP entries (a truncated comparison is never clean).
+// reads, each under its condition and with a test). Diffs are capped at DIFF_CAP entries (a truncated comparison is never clean -
+// 1.99afg: but for the monetary day's participation inputs, diffed apart and excused whole while no enabled rule reads them).
 // PO-1, THE PAUSE (T3): an owner (/admin/economy, password step-up) or the VPS shell (tools/policy-backend.js pause|resume)
 // pauses an engine: the scheduler runs nothing for it (a live engine's due periods are recorded missed "paused", nothing is
 // handed back, the mode is unchanged); a cutover of a paused engine is refused. Resume: only the CURRENT period may still run
@@ -153,7 +154,7 @@ const WHITELIST = [
     why: "the Monday monetary day with this week's record on the site but not yet the share / release_per_day Pepe's epoch set (site null): post-move; its budgets / spent still count",
     test: "test/policy-boundary.test.js: whitelist: the Monday's week record is this week's but not filled yet - only its share / release_per_day are post-move" },
   { on: "inputs", engine: "monetary", kind: "monetary", field: "rows / days / skip", match: /^(rows|days|skip)(\[|\.|$)/, when: participationUnread,
-    why: "participation (the E-0 sync) lags Pepe's own counters; tolerated only while no enabled rule reads it - no activity reward paid and issuance not activity-scaled (D-15)",
+    why: "participation (the E-0 sync) lags Pepe's own counters, and his rows also hold active-minute-only rows the site's gather drops; tolerated only while no enabled rule reads it - no activity reward paid and issuance not activity-scaled (D-15). Under that condition it is diffed apart and excused whole (inputDiff: its cut at DIFF_CAP doesn't block)",
     test: "test/policy-boundary.test.js: participation input diffs are tolerated only while no enabled rule reads them; any other input diff blocks" },
   { on: "decision", engine: "monetary", kind: "monetary", field: "guarantee", match: "guarantee", mode: "shadow", monday: true,
     when: (ctx) => /^guarantee: site waits for the epoch \/ pepe true$/.test(ctx.d),
@@ -675,10 +676,31 @@ async function gatherFor(kind, nowS, period, guarantee) {
   throw new Error("unknown kind");
 }
 const INPUT_SKIP = new Set(["now", "kind"]);
-function inputDiff(site, pepe) {
-  const a = {}, b = {};
-  for (const k of Object.keys(pepe || {})) if (!INPUT_SKIP.has(k)) { a[k] = (site || {})[k]; b[k] = pepe[k]; }
-  return diffCapped(a, b);
+/** The monetary day's participation inputs: the E-0 rows, their local days, the skipped logins (WHITELIST "rows / days / skip"). */
+const PART_KEYS = new Set(["rows", "days", "skip"]);
+/**
+ * The inputs diff: {list, n, truncated, cutBlocks, part}. `truncated` = the recorded list is cut (DIFF_CAP); `cutBlocks` = the cut
+ * keeps the period unclean (SC28: entries past the cap are never checked against the whitelist).
+ * 1.99afg (review): with `partUnread` (the monetary day while participationUnread holds - the condition of the WHITELIST's
+ * "rows / days / skip" entry) the participation inputs are diffed APART from the others. Pepe's rows also carry his
+ * active-minute-only rows (lines 0, mic 0), which the site's gather drops, and the E-0 sync lags his counters; compared by
+ * position, one gap shifts every later row - prod's monetary days 10-15..10-26 ran to 523-805 participation entries, past
+ * DIFF_CAP: truncated, never clean, though that entry excuses every one of them. Under that condition every entry of the subtree
+ * is excused, listed or not, so its cut doesn't block; the other inputs keep their own cap, and THEIR cut still blocks. The
+ * subtree's entries are listed after the others', in what is left of the cap (`part` counts them all).
+ */
+function inputDiff(site, pepe, partUnread = false) {
+  const a = {}, b = {}, pa = {}, pb = {};
+  for (const k of Object.keys(pepe || {})) {
+    if (INPUT_SKIP.has(k)) continue;
+    const part = partUnread && PART_KEYS.has(k);
+    (part ? pa : a)[k] = (site || {})[k];
+    (part ? pb : b)[k] = pepe[k];
+  }
+  const d = diffCapped(a, b);
+  if (!partUnread) return Object.assign(d, { cutBlocks: d.truncated, part: 0 });
+  const p = diffCapped(pa, pb, DIFF_CAP - d.list.length);
+  return { list: d.list.concat(p.list), n: d.n + p.n, truncated: d.truncated || p.truncated, cutBlocks: d.truncated, part: p.n };
 }
 /** D-15: split one part's differences (`on`: "plan" = the total diff, "inputs", "decision") into the entries the WHITELIST
  *  excuses (this engine / kind / mode / day, and the entry's condition on ctx) and the rest - the ones that block "clean". */
@@ -782,7 +804,7 @@ async function report(b) {
   const meta = hasBoundary ? C.parse(row.boundary_meta, {}) : null;
   // the basis: the site's snapshot at the boundary (before Pepe's legs); without one (a Pepe before PO-0c, or his handshake
   // timed out) the site's view now - which may already show his legs, so such a period is never clean
-  let siteInputs = null, sitePlan = null, inDiff = { list: [], n: 0, truncated: false }, totDiff = { list: [], n: 0, truncated: false };
+  let siteInputs = null, sitePlan = null, inDiff = { list: [], n: 0, truncated: false, cutBlocks: false, part: 0 }, totDiff = { list: [], n: 0, truncated: false };
   try {
     if (hasBoundary) {
       siteInputs = C.parse(row.site_boundary_inputs, null);
@@ -791,9 +813,12 @@ async function report(b) {
       siteInputs = await gatherFor(inputs.kind, Number(inputs.now), period, inputs.guarantee);
       sitePlan = planOf(engine, siteInputs);
     }
-    inDiff = inputDiff(siteInputs, inputs);
+    // 1.99afg (review): the monetary day's participation is diffed apart while no enabled rule reads it (inputDiff) - the same
+    // condition, on the same inputs and plans, as the WHITELIST's "rows / days / skip" entry below (ctx)
+    const partUnread = engine === "monetary" && inputs.kind === "monetary" && participationUnread({ site: siteInputs, pepe: inputs, sitePlan, pepePlan: plan });
+    inDiff = inputDiff(siteInputs, inputs, partUnread);
     totDiff = diffCapped(sitePlan, plan);
-  } catch (e) { inDiff = { list: [`site gather failed: ${e.message}`], n: 1, truncated: false }; }
+  } catch (e) { inDiff = { list: [`site gather failed: ${e.message}`], n: 1, truncated: false, cutBlocks: false, part: 0 }; }
   const eng = (await C.engines())[engine];
   const nowP = Number(inputs.now);
   const ctx = { engine, kind: inputs.kind, mode: eng.mode, monday: Number.isFinite(nowP) && E.dayStart(nowP, hour) === E.weekStart(nowP, hour),
@@ -804,9 +829,10 @@ async function report(b) {
   const iw = applyWhitelist(inDiff.list, ctx, "inputs");
   const dec = hasBoundary ? decisionDiff(meta, inputs) : [];
   const dw = applyWhitelist(dec, ctx, "decision");
+  // `truncated` (the record): a list is cut. A cut is never clean - but the unread participation's (inputDiff: excused whole)
   const truncated = engineDiff.truncated || inDiff.truncated || totDiff.truncated;
   const clean = !engineDiff.list.length && hasBoundary && !pw.blocking.length && !iw.blocking.length && !dw.blocking.length
-                && !totDiff.truncated && !inDiff.truncated;
+                && !totDiff.truncated && !inDiff.cutBlocks;
   const whitelisted = { plan: pw.excused, inputs: iw.excused, decision: dw.excused };
   const blocking = { plan: pw.blocking, inputs: iw.blocking, decision: dw.blocking };
   const t = Date.now();
@@ -824,14 +850,16 @@ async function report(b) {
                   JSON.stringify(engineDiff.list), JSON.stringify(inDiff.list), JSON.stringify(totDiff.list), clean ? 1 : 0, truncated ? 1 : 0,
                   JSON.stringify(whitelisted), JSON.stringify(blocking), pepeCfg, t, t]);
   const nW = pw.excused.length + iw.excused.length + dw.excused.length;
-  const msg = `shadow ${engine} ${period}: engine diff ${engineDiff.n}, inputs diff ${inDiff.n}, total diff ${totDiff.n}${dec.length ? `, decisions ${dec.length}` : ""}` +
+  const msg = `shadow ${engine} ${period}: engine diff ${engineDiff.n}, inputs diff ${inDiff.n}${inDiff.part ? ` (${inDiff.part} of them unread participation)` : ""}, ` +
+              `total diff ${totDiff.n}${dec.length ? `, decisions ${dec.length}` : ""}` +
               `${nW ? ` (${nW} whitelisted)` : ""}, ${hasBoundary ? "vs the boundary snapshot" : "NO boundary snapshot"} - ${clean ? "clean" : "not clean"}`;
   const bad = [...engineDiff.list, ...pw.blocking, ...iw.blocking.map((x) => `inputs ${x}`), ...dw.blocking.map((x) => `decision ${x}`)];
   if (bad.length) console.warn(`[policy] ${msg}: ${[...new Set(bad)].slice(0, 6).join(" | ")}`); else log(msg);
   return { ok: true, clean, basis: hasBoundary ? "boundary" : "report", engine_diff: engineDiff.list, input_diff: inDiff.list, total_diff: totDiff.list,
            decision_diff: dec, blocking: pw.blocking, whitelisted: pw.excused, input_blocking: iw.blocking, input_whitelisted: iw.excused,
            decision_blocking: dw.blocking, decision_whitelisted: dw.excused,
-           truncated: { engine: engineDiff.truncated, input: inDiff.truncated, total: totDiff.truncated } };
+           truncated: { engine: engineDiff.truncated, input: inDiff.truncated, input_blocks: !!inDiff.cutBlocks, total: totDiff.truncated },
+           input_participation: inDiff.part };
 }
 
 // ── the cutover handshake (Pepe calls it after he stopped running the engines locally) ──
@@ -1134,6 +1162,6 @@ function register(app, { isBotToken, addUser }) {
 
 module.exports = { register, pass, loop, boundary, report, cutover, rollback, setPause, view, botState, diff, diffCapped, applyWhitelist, decisionDiff, planOf, kindOf,
                    clockInfo, cutoffPending, cutoffWait, monetaryGuarantee, burnWindow, WHITELIST, DIFF_CAP, LATE_GRACE_S, OVERDUE_ALERT_S, BURN_SETTLE_S, BURN_BACKFILL_DAYS,
-                   MISSED_DAYS, MISSED_WEEKS, prevEpochId,
+                   MISSED_DAYS, MISSED_WEEKS, prevEpochId, inputDiff,
                    // tests: forget what THIS process remembers (the waits logged, the sweeps done, the seen marks written) - a "restart"
                    _resetPassClock: () => { waitLogged.clear(); overdueSeen.clear(); swept.clear(); seenDone.clear(); } };

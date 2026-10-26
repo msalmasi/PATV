@@ -417,6 +417,108 @@ test("whitelist: the Monday's week record is this week's but not filled yet - on
                                                       bank_lent: [], days: {} } } });
 });
 
+// 1.99afg (review): the PARTICIPATION shape of the real monetary rows (prod policy_sims, read with sqlite3 -readonly: row counts,
+// the positions of Pepe's active-minute-only rows, how many of his counters ran ahead - no login, no one's counts). Pepe's
+// _econ_part_rows (BOT_PIN ab2b2ef) sends a row per room with only active minutes too (lines 0, mic 0), which the site's partRows
+// drops, in his own order (room by room); the E-0 sync lags his counters. Compared by position, one gap shifts every later row:
+// prod's monetary days 10-15..10-26 ran to 523-805 participation entries, past DIFF_CAP - truncated, so never clean - on every
+// day, the Mondays included, though every entry is excused while no rule reads participation.
+const REAL_PART = [   // [row, the site's rows, the positions of Pepe's rows with lines 0 and mic 0, his counters ahead]
+  ["prod shadow:monetary:D2026-10-19", 214, [9, 12, 13, 16, 25, 34, 92, 95, 137, 138], 0],
+  ["prod shadow:monetary:D2026-10-26", 187, [0, 4, 19, 46, 77, 89, 148], 11],
+];
+/** Synthetic rows in that shape: the site's as its gather reads them (rowid order, two rooms interleaved) and Pepe's of the same
+ *  day - room by room, his counters on the first `ahead` rows one line ahead, his active-minute-only rows at `zeros`. */
+function partShape(day, n, zeros, ahead) {
+  const site = [];
+  for (let i = 0; i < n; i++) site.push([day, `u${String(i).padStart(3, "0")}_cf`, 1 + ((i * 7) % 23), (i % 5) * 1.5]);
+  const his = [0, 1].flatMap((r) => site.filter((_, i) => i % 2 === r)).map((x, i) => (i < ahead ? [x[0], x[1], x[2] + 1, x[3]] : x.slice()));
+  zeros.forEach((at, k) => his.splice(at, 0, [day, `z${String(k).padStart(2, "0")}_cf`, 0, 0]));
+  return { site, pepe: his };
+}
+
+test("the monetary day's participation is diffed apart while no rule reads it: the real rows' shape reads clean; any other cut still blocks", async () => {
+  const unreadPlan = { activity: { amount: 0 } };
+  for (const [name, n, zeros, ahead] of REAL_PART) {
+    const { site, pepe } = partShape("2026-10-25", n, zeros, ahead);
+    assert.equal(pepe.length, n + zeros.length, name);
+    assert.deepEqual(pepe.map((r, i) => (r[2] || r[3] ? -1 : i)).filter((i) => i >= 0), zeros, `${name}: his zero rows where the real row had them`);
+    const sIn = { kind: "monetary", now: 1, local_day: "2026-10-25", days: ["2026-10-25"], rows: site, skip: [] };
+    const pIn = Object.assign({}, sIn, { rows: pepe });
+    // f3ed1574 (one capped diff): hundreds of entries, cut at DIFF_CAP - the cut blocks
+    const one = SCH.inputDiff(sIn, pIn);
+    assert.ok(one.n > SCH.DIFF_CAP, `${name}: ${one.n} entries`);
+    assert.deepEqual([one.truncated, one.cutBlocks, one.part], [true, true, 0], name);
+    // 1.99afg: diffed apart - the same entries, counted, listed up to the cap; the cut doesn't block; every listed one is excused
+    const split = SCH.inputDiff(sIn, pIn, true);
+    assert.deepEqual([split.n, split.part, split.list.length, split.truncated, split.cutBlocks], [one.n, one.n, SCH.DIFF_CAP, true, false], name);
+    assert.deepEqual(split.list, one.list, `${name}: the same entries listed`);
+    const ctx = { engine: "monetary", kind: "monetary", mode: "shadow", monday: true, eid: "W2026-10-26", site: sIn, pepe: pIn, sitePlan: unreadPlan, pepePlan: unreadPlan };
+    assert.deepEqual(SCH.applyWhitelist(split.list, ctx, "inputs").blocking, [], `${name}: unread - every entry excused`);
+    // ...and once a rule reads the rows, each of them blocks (report() then doesn't diff them apart: the cut blocks too)
+    assert.equal(SCH.applyWhitelist(split.list, Object.assign({}, ctx, { pepePlan: { activity: { amount: 5000 } } }), "inputs").blocking.length, SCH.DIFF_CAP, name);
+    // the other inputs are listed first, under their own cap (only their cut blocks)
+    const wk = SCH.inputDiff(Object.assign({}, sIn, { week: { id: "W2026-10-26", share: null } }), Object.assign({}, pIn, { week: { id: "W2026-10-26", share: 5 } }), true);
+    assert.deepEqual([wk.list[0], wk.n, wk.part, wk.cutBlocks], ["week.share: site null / pepe 5", one.n + 1, one.n, false], name);
+  }
+  assert.deepEqual(SCH.inputDiff({ rows: [] }, { rows: [] }, true), { list: [], n: 0, truncated: false, cutBlocks: false, part: 0 });
+  // with the participation diffed apart, a cut of the OTHER inputs still blocks (SC28) - here the Monday's stale week record with
+  // 410 more budget groups on Pepe's (each entry post-move, the list cut): the participation gets none of the cap
+  const g410 = Object.fromEntries(Array.from({ length: 410 }, (_, i) => [`g${String(i).padStart(3, "0")}`, 1]));
+  const cut = SCH.inputDiff({ week: { id: "W2026-10-19", budgets: {} }, rows: [] }, { week: { id: "W2026-10-26", budgets: g410 }, rows: [["2026-10-25", "z00_cf", 0, 0]] }, true);
+  assert.deepEqual([cut.list.length, cut.n, cut.part, cut.truncated, cut.cutBlocks], [SCH.DIFF_CAP, 412, 1, true, true]);
+  assert.ok(cut.list.every((x) => /^week\./.test(x)), "the other inputs' entries fill the cap");
+
+  // END TO END (prod's D2026-10-26 shape): the Monday monetary day, the site's week record this week's but not filled yet, the
+  // site's 187 participation rows vs Pepe's 194 - clean, recorded truncated (the list is cut), ok = 1; preflight reads it clean
+  const MON2 = MON + 7 * 86400, P2 = "D2026-10-26-p";
+  const [, eid, budgets, share, rpd] = REAL_MONDAYS[1];
+  await ES.putDocs({ econ_treasury: { rev: 7, doc: { week: unfilled(eid, budgets), bank_lent: [], days: {} } } });
+  const day = (await G.monetary(MON2 + 120, P2, true)).local_day;
+  const [, n, zeros, ahead] = REAL_PART[1];
+  const shape = partShape(day, n, zeros, ahead);
+  for (const [i, r] of shape.site.entries()) {
+    await runQuery("INSERT INTO econ_participation (room_id, day, login, lines, mic_min) VALUES (?, ?, ?, ?, ?)", [`r${1 + (i % 2)}`, r[0], r[1], r[2], r[3]]);
+  }
+  try {
+    assert.equal((await post("/api/policy/bot/boundary", { engine: "monetary", period: P2, now: MON2 + 120, guarantee: true })).body.ok, true);
+    const siteIn = JSON.parse((await row(`shadow:monetary:${P2}`)).site_boundary_inputs);
+    assert.deepEqual(siteIn.rows, shape.site, "the site's rows: its gather's order");
+    const mIn = Object.assign({}, await G.monetary(MON2 + 120, P2, true), { week: filled(eid, budgets, share, rpd), rows: shape.pepe });
+    const mPlan = SCH.planOf("monetary", mIn);
+    assert.equal(mPlan.activity.amount, 0, "no activity reward paid (and issuance off): participation unread");
+    const one = SCH.inputDiff(siteIn, mIn);
+    assert.ok(one.cutBlocks && one.n > SCH.DIFF_CAP, `f3ed1574 would read it unclean (${one.n} entries)`);
+    const rep = await post("/api/policy/bot/report", { engine: "monetary", period: P2, inputs: mIn, plan: mPlan });
+    assert.deepEqual([rep.body.engine_diff, rep.body.total_diff], [[], []]);
+    assert.deepEqual(rep.body.input_diff.slice(0, 2), [`week.share: site null / pepe ${share}`, `week.release_per_day: site null / pepe ${rpd}`], "the other inputs first");
+    assert.equal(rep.body.input_diff.length, SCH.DIFF_CAP);
+    assert.equal(rep.body.input_participation, one.n - 2);
+    assert.deepEqual(rep.body.truncated, { engine: false, input: true, input_blocks: false, total: false });
+    assert.deepEqual(rep.body.input_whitelisted, rep.body.input_diff);
+    assert.deepEqual([rep.body.blocking, rep.body.input_blocking, rep.body.decision_blocking], [[], [], []]);
+    assert.equal(rep.body.clean, true);
+    const r = await row(`shadow:monetary:${P2}`);
+    assert.deepEqual([r.ok, r.truncated], [1, 1], "clean - and the record says its list is cut");
+    const PB = require(path.join(repo, "tools", "policy-backend.js"));
+    const mine = (await PB.gather()).shadow14.filter((x) => x.period === P2);
+    assert.deepEqual(mine.map((x) => [x.key, Number(x.ok), Number(x.reported)]), [[`shadow:monetary:${P2}`, 1, 1]]);
+    const chk = PB.preflight(Object.assign({}, await PB.gather(), { shadow14: mine })).find((x) => x.check === "shadow periods clean (14 days, D-15)");
+    assert.deepEqual([chk.level, chk.detail], ["PASS", "1 compared, all clean"]);
+    // ...while a real difference beside it still blocks: Pepe's spent differs too
+    const sIn2 = Object.assign({}, mIn, { week: Object.assign(filled(eid, budgets, share, rpd), { spent: Object.assign({}, ZERO_SPENT, { levelup: 50000 }) }) });
+    const bad = await post("/api/policy/bot/report", { engine: "monetary", period: P2, inputs: sIn2, plan: SCH.planOf("monetary", sIn2) });
+    assert.deepEqual(bad.body.input_blocking, ["week.spent.levelup: site 0 / pepe 50000"]);
+    assert.equal(bad.body.clean, false);
+    assert.equal((await row(`shadow:monetary:${P2}`)).ok, 0);
+    assert.equal((await post("/api/policy/bot/report", { engine: "monetary", period: P2, inputs: mIn, plan: mPlan })).body.clean, true, "his real report: clean again");
+  } finally {
+    await runQuery("DELETE FROM econ_participation WHERE day = ?", [day]);
+    await ES.putDocs({ econ_treasury: { rev: 8, doc: { week: { id: EID, budgets: {}, spent: {}, share: pepePlan.totals.incentives, release_per_day: pepePlan.release_per_day },
+                                                        bank_lent: [], days: {} } } });
+  }
+});
+
 test("participation input diffs are tolerated only while no enabled rule reads them; any other input diff blocks", async () => {
   // Wednesday's monetary day (no guarantee): participation lags on the site (his counters have a row the E-0 sync hasn't sent)
   const WED = MON + 2 * 86400, did = "D2026-10-21";
@@ -465,9 +567,32 @@ test("the handshake only while the site compares: off and live answer skipped (n
   assert.equal(noTok.status, 403);
 });
 
-test("review of the owner answers (SC28): a truncated INPUTS diff is never clean - even when every listed difference is tolerated", async () => {
-  // Thursday's monetary day: 410 logins took part on the site; Pepe's counters differ for every one of them (unread data: the
-  // participation rule tolerates each listed difference) - the diff stops at 400, so the comparison can't be clean
+test("review of the owner answers (SC28): a truncated INPUTS diff is never clean - even when every listed difference is tolerated (1.99afg: but the unread participation, excused whole)", async () => {
+  // SC28: the entries past the cap are never checked against the whitelist - so a cut inputs diff can't be clean. The Monday
+  // treasury daily with the site still holding LAST week's record (staleWeek: every week.* entry is post-move) and Pepe's week
+  // record carrying 410 more budget groups: each listed entry is excused, the list is cut - not clean
+  const MON2 = MON + 7 * 86400, dc = "D2026-10-26-c";
+  await ES.putDocs({ econ_treasury: { rev: 9, doc: { week: { id: EID, budgets: {}, spent: {}, share: 9, release_per_day: 1 }, bank_lent: [], days: {} } } });
+  try {
+    assert.equal((await post("/api/policy/bot/boundary", { engine: "treasury", period: dc, now: MON2 + 60 })).body.ok, true);
+    const [, eid, budgets, share, rpd] = REAL_MONDAYS[1];
+    const big = filled(eid, Object.assign({}, budgets, Object.fromEntries(Array.from({ length: 410 }, (_, i) => [`g${String(i).padStart(3, "0")}`, 1]))), share, rpd);
+    const dIn = Object.assign({}, await G.daily(MON2 + 60, dc), { week: big });
+    const cut = await post("/api/policy/bot/report", { engine: "treasury", period: dc, inputs: dIn, plan: E.planDaily(dIn) });
+    assert.deepEqual([cut.body.engine_diff, cut.body.total_diff], [[], [`release: site null / pepe ${rpd}`]]);
+    assert.deepEqual([cut.body.blocking, cut.body.input_blocking], [[], []], "every listed difference is tolerated (the stale week)");
+    assert.equal(cut.body.input_diff.length, 400);
+    assert.deepEqual(cut.body.truncated, { engine: false, input: true, input_blocks: true, total: false });
+    assert.equal(cut.body.input_participation, 0);
+    assert.equal(cut.body.clean, false, "...but a truncated comparison is never clean");
+    assert.deepEqual([(await row(`shadow:treasury:${dc}`)).ok, (await row(`shadow:treasury:${dc}`)).truncated], [0, 1]);
+  } finally {
+    await ES.putDocs({ econ_treasury: { rev: 10, doc: { week: { id: EID, budgets: {}, spent: {}, share: pepePlan.totals.incentives, release_per_day: pepePlan.release_per_day },
+                                                         bank_lent: [], days: {} } } });
+  }
+  // 1.99afg: the monetary day's PARTICIPATION while no rule reads it is diffed apart and excused whole (every entry of it is
+  // excused by the same condition, listed or not - prod's real days ran to 523-805 such entries): Thursday's monetary day, 410
+  // logins took part on the site, Pepe's counters differ for every one of them - clean, the record says the list is cut
   const THU = MON + 3 * 86400, did = "D2026-10-22";
   const day0 = (await G.monetary(THU + 120, did, false)).local_day;
   for (let i = 0; i < 410; i++) {
@@ -479,9 +604,18 @@ test("review of the owner answers (SC28): a truncated INPUTS diff is never clean
   const pIn = Object.assign({}, site, { rows: site.rows.map((r) => [r[0], r[1], Number(r[2]) + 1].concat(r.slice(3))) });
   const pPlan = SCH.planOf("monetary", pIn);
   const rep = await post("/api/policy/bot/report", { engine: "monetary", period: did, inputs: pIn, plan: pPlan });
-  assert.equal(rep.body.truncated.input, true, JSON.stringify(rep.body.truncated));
+  assert.deepEqual(rep.body.truncated, { engine: false, input: true, input_blocks: false, total: false }, JSON.stringify(rep.body.truncated));
   assert.equal(rep.body.input_diff.length, 400);
+  assert.equal(rep.body.input_participation, 410);
   assert.deepEqual(rep.body.input_blocking || [], [], "every listed difference is tolerated");
   assert.deepEqual(rep.body.total_diff, []);
-  assert.equal(rep.body.clean, false, "...but a truncated comparison is never clean");
+  assert.equal(rep.body.clean, true, "unread participation: excused whole");
+  assert.deepEqual([(await row(`shadow:monetary:${did}`)).ok, (await row(`shadow:monetary:${did}`)).truncated], [1, 1]);
+  // ...but once a rule reads it (Pepe's issuance scaled by activity) it is diffed with the rest: each entry blocks, the cut blocks
+  const read = Object.assign({}, pIn, { cfg: Object.assign({}, pIn.cfg, { issuance_mode: "fixed", issuance_activity_scaling: true }) });
+  const rr = await post("/api/policy/bot/report", { engine: "monetary", period: did, inputs: read, plan: SCH.planOf("monetary", read) });
+  assert.deepEqual([rr.body.truncated.input, rr.body.truncated.input_blocks, rr.body.input_participation], [true, true, 0]);
+  assert.ok(rr.body.input_blocking.some((x) => /^rows\[/.test(x)), "the rows block");
+  assert.equal(rr.body.clean, false);
+  assert.equal((await post("/api/policy/bot/report", { engine: "monetary", period: did, inputs: pIn, plan: pPlan })).body.clean, true, "his real report: clean again");
 });

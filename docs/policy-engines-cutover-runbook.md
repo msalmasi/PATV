@@ -247,7 +247,17 @@ The economy-policy-to-site plan (2026-10-20, slice PO-1) hardened the scheduler 
   participation rows (`rows` / `days` / `skip`) only while no rule reads them (no activity reward paid, issuance not scaled by
   activity). Anything else - any other input, a decided guarantee mismatch, a site gather failure - keeps the period unclean.
   `policy_sims.whitelisted` / `blocking` = `{plan, inputs, decision}`. A report without a snapshot (a Pepe before PO-0c, a
-  timed-out handshake) is never clean. Diffs list at most 400 entries (`truncated = 1` when there were more: never clean).
+  timed-out handshake) is never clean. Diffs list at most 400 entries (`truncated = 1` when there were more: never clean) -
+  1.99afg: except the monetary day's participation while no rule reads it. Pepe's rows also hold active-minute-only rows
+  (lines 0, mic 0) the site's gather drops, in his own order, and the E-0 sync lags his counters: compared by position, prod's
+  monetary days 10-15..10-26 ran to 523-805 participation entries, so every one of them read truncated. Under that condition the
+  participation is diffed apart and excused whole: the row can read `ok = 1` with `truncated = 1` (its list is cut, the admin
+  page says so); every other input keeps its own 400 cap, and that cut still blocks. If a rule ever reads participation
+  (activity rewards on, issuance scaled by activity) it is compared with the rest again, entry by entry.
+  *Staging rehearsals (1.99afg):* the Monday's stale-week excuse is now EXACTLY last week's record (`prevEpochId`). A Monday
+  whose site record is 2+ weeks older than the period's week (a test clock jumped 2+ weeks past the real week record, or a site
+  that missed a whole week of Pepe's pushes) or that has no week record at all reads unclean (1.99aff excused it): push the
+  week's `econ_treasury` doc first, or expect those Mondays' rows to be `ok = 0`.
 - **Burn.** Pepe's daily `burn` report (`inputs.kind = "burn"`: the closed policy day `[04:00, 04:00)` UTC - `from`, `to`, `mode`,
   `burned`, `burns`) is planned by `engines.planBurn`; the scheduler records a day summary `<mode>:burn:D<date>` of every closed
   day, even at zero (from the pool history: the `burn` moves out of the burn reserve) - it is also that day's boundary snapshot.
