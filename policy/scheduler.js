@@ -97,9 +97,28 @@ const realNowS = () => Date.now() / 1000;
  *             sitePlan, pepePlan, meta (the boundary's decisions)}
  */
 const weekOf = (inp) => ((inp && inp.week) || {}).id || null;
+/** The epoch id one week before `eid` ("W2026-10-26" -> "W2026-10-19"); null for anything that isn't an epoch id. */
+function prevEpochId(eid) {
+  const m = /^W(\d{4})-(\d{2})-(\d{2})$/.exec(String(eid || ""));
+  if (!m) return null;
+  return "W" + new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) - 7 * 86400e3).toISOString().slice(0, 10);
+}
 /** The site's week record is LAST week's (Pepe's epoch just opened this one; his econ_treasury push hasn't landed): resolveWeek
- *  discards a record whose id isn't the current epoch's, so nothing reads the site's stale one - and Pepe's is this week's. */
-const staleWeek = (ctx) => weekOf(ctx.site) !== ctx.eid && weekOf(ctx.pepe) === ctx.eid;
+ *  discards a record whose id isn't the current epoch's, so nothing reads the site's stale one - and Pepe's is this week's.
+ *  1.99afg: exactly last week's - a site record from the future, from 2+ weeks back or with no id is no boundary lag (it blocks). */
+const staleWeek = (ctx) => !!ctx.eid && weekOf(ctx.pepe) === ctx.eid && weekOf(ctx.site) === prevEpochId(ctx.eid);
+const isAmount = (v) => Number.isSafeInteger(v) && v >= 0;
+/** 1.99afg (the prod Mondays D2026-10-19 and D2026-10-26): the site's week record is ALREADY this week's but not filled yet -
+ *  Pepe's econ_treasury push opened the week (id, budgets, spent) before the share his epoch set a moment earlier landed. So:
+ *  both records are this week's (ctx.eid), the site's share AND release_per_day are exactly null, Pepe's are both set. The
+ *  week's budgets / spent are read by the grant budgets and are NOT excused by this (only share / release_per_day: the epoch's). */
+function unfilledWeek(ctx) {
+  const s = (ctx.site || {}).week, p = (ctx.pepe || {}).week;
+  if (!ctx.eid || !s || !p || typeof s !== "object" || typeof p !== "object") return false;
+  return s.id === ctx.eid && p.id === ctx.eid && s.share === null && s.release_per_day === null && isAmount(p.share) && isAmount(p.release_per_day);
+}
+/** ...and the difference is exactly an unfilled field's: "week.<share|release_per_day>: site null / pepe <Pepe's value>". */
+const unfilledField = (ctx) => unfilledWeek(ctx) && ["share", "release_per_day"].some((f) => ctx.d === `week.${f}: site null / pepe ${ctx.pepe.week[f]}`);
 /** No enabled rule reads the participation rows: no activity reward is paid (amount 0 on both sides) and issuance isn't scaled
  *  by activity (engines.issuancePlan reads the rows only then) - on both sides' config. */
 function participationUnread(ctx) {
@@ -115,12 +134,24 @@ const WHITELIST = [
     when: (ctx) => staleWeek(ctx) && /^release: site null \//.test(ctx.d),
     why: "the Monday daily's release is the week's release_per_day, which Pepe's epoch set a moment earlier: the site sees it only when his econ_treasury doc push lands (excused only while the site still holds last week's record, i.e. 'site null')",
     test: "test/policy-boundary.test.js: whitelist: the Monday daily's release is post-move - excused only on the epoch's day, in shadow; anything else blocks" },
+  { on: "plan", engine: "treasury", kind: "daily", field: "release (week not filled yet)", match: "release", mode: "shadow", monday: true,
+    when: (ctx) => unfilledWeek(ctx) && ctx.d === `release: site null / pepe ${ctx.pepe.week.release_per_day}`,
+    why: "the same post-move release when the site already holds THIS week's record but not yet its share: Pepe's push opened the week before his epoch's share / release_per_day landed (site null, Pepe's release = his week's release_per_day)",
+    test: "test/policy-boundary.test.js: whitelist: the Monday's week record is this week's but not filled yet - only its share / release_per_day are post-move" },
   { on: "inputs", engine: "treasury", kind: "daily", field: "week.*", match: /^week(\.|$)/, mode: "shadow", monday: true, when: staleWeek,
     why: "the same post-move week record: the site still holds last week's (resolveWeek discards it - nothing reads it), Pepe's epoch opened this one a moment earlier",
     test: "test/policy-boundary.test.js: whitelist: the Monday daily's release is post-move - excused only on the epoch's day, in shadow; anything else blocks" },
+  { on: "inputs", engine: "treasury", kind: "daily", field: "week.share / week.release_per_day (week not filled yet)", match: /^week\.(share|release_per_day)$/,
+    mode: "shadow", monday: true, when: unfilledField,
+    why: "this week's record on the site without the share / release_per_day Pepe's epoch set a moment earlier (site null): post-move; its budgets / spent still count",
+    test: "test/policy-boundary.test.js: whitelist: the Monday's week record is this week's but not filled yet - only its share / release_per_day are post-move" },
   { on: "inputs", engine: "monetary", kind: "monetary", field: "week.*", match: /^week(\.|$)/, mode: "shadow", monday: true, when: staleWeek,
     why: "the Monday monetary day reads the week Pepe's epoch just opened; the site still holds last week's record, which resolveWeek discards (nothing reads it)",
     test: "test/policy-boundary.test.js: the Monday monetary day: the guarantee decision and the week record are post-move; a mismatched decision blocks" },
+  { on: "inputs", engine: "monetary", kind: "monetary", field: "week.share / week.release_per_day (week not filled yet)", match: /^week\.(share|release_per_day)$/,
+    mode: "shadow", monday: true, when: unfilledField,
+    why: "the Monday monetary day with this week's record on the site but not yet the share / release_per_day Pepe's epoch set (site null): post-move; its budgets / spent still count",
+    test: "test/policy-boundary.test.js: whitelist: the Monday's week record is this week's but not filled yet - only its share / release_per_day are post-move" },
   { on: "inputs", engine: "monetary", kind: "monetary", field: "rows / days / skip", match: /^(rows|days|skip)(\[|\.|$)/, when: participationUnread,
     why: "participation (the E-0 sync) lags Pepe's own counters; tolerated only while no enabled rule reads it - no activity reward paid and issuance not activity-scaled (D-15)",
     test: "test/policy-boundary.test.js: participation input diffs are tolerated only while no enabled rule reads them; any other input diff blocks" },
@@ -1103,6 +1134,6 @@ function register(app, { isBotToken, addUser }) {
 
 module.exports = { register, pass, loop, boundary, report, cutover, rollback, setPause, view, botState, diff, diffCapped, applyWhitelist, decisionDiff, planOf, kindOf,
                    clockInfo, cutoffPending, cutoffWait, monetaryGuarantee, burnWindow, WHITELIST, DIFF_CAP, LATE_GRACE_S, OVERDUE_ALERT_S, BURN_SETTLE_S, BURN_BACKFILL_DAYS,
-                   MISSED_DAYS, MISSED_WEEKS,
+                   MISSED_DAYS, MISSED_WEEKS, prevEpochId,
                    // tests: forget what THIS process remembers (the waits logged, the sweeps done, the seen marks written) - a "restart"
                    _resetPassClock: () => { waitLogged.clear(); overdueSeen.clear(); swept.clear(); seenDone.clear(); } };

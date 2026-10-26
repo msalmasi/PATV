@@ -238,7 +238,11 @@ The economy-policy-to-site plan (2026-10-20, slice PO-1) hardened the scheduler 
 - **Clean (D-15).** `policy_sims.ok = 1` only when the engine diff is empty, a boundary snapshot exists and nothing differs - in
   the PLAN (boundary plan vs Pepe's), in the INPUTS, or in the site's own DECISIONS (the guarantee flag) - outside the whitelist
   (`policy/scheduler.js WHITELIST`, each entry with a condition and a test in `test/policy-boundary.test.js`): the Monday daily's
-  `release` and the `week.*` inputs of the Monday daily / monetary day while the site still holds LAST week's record (post-move);
+  `release` and the `week.*` inputs of the Monday daily / monetary day while the site still holds LAST week's record - exactly
+  last week's: a site record from the future or from 2+ weeks back blocks (post-move); 1.99afg: the Monday daily's `release` and
+  the `week.share` / `week.release_per_day` inputs of the Monday daily / monetary day while the site already holds THIS week's
+  record but not filled yet (both exactly null on the site, both set on Pepe's record of the same week - his push opened the
+  week before his epoch's share landed, as on prod's D2026-10-19 / D2026-10-26), the week's `budgets` / `spent` still count;
   the Monday guarantee decision "site waits for the epoch / pepe true" (post-move: his epoch ran a moment earlier); the
   participation rows (`rows` / `days` / `skip`) only while no rule reads them (no activity reward paid, issuance not scaled by
   activity). Anything else - any other input, a decided guarantee mismatch, a site gather failure - keeps the period unclean.

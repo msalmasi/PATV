@@ -523,7 +523,9 @@ test("PO-1 pause: a paused live engine runs nothing (its due periods missed 'pau
   const v = await SCH.view();
   assert.ok(v.missed.some((x) => x.key === "treasury:D2026-10-31"));
   assert.deepEqual(v.whitelist.map((w) => `${w.on} ${w.engine} ${w.field}`),
-                   ["plan treasury release", "inputs treasury week.*", "inputs monetary week.*", "inputs monetary rows / days / skip", "decision monetary guarantee"]);
+                   ["plan treasury release", "plan treasury release (week not filled yet)", "inputs treasury week.*",
+                    "inputs treasury week.share / week.release_per_day (week not filled yet)", "inputs monetary week.*",
+                    "inputs monetary week.share / week.release_per_day (week not filled yet)", "inputs monetary rows / days / skip", "decision monetary guarantee"]);
   assert.ok(v.whitelist.every((w) => /^test\/policy-boundary\.test\.js: /.test(w.test)), "each entry names its proving test");
   assert.equal(v.engines.find((e) => e.engine === "treasury").paused, false);
 });

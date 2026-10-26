@@ -209,11 +209,20 @@ test("whitelist: the Monday daily's release is post-move - excused only on the e
   assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { kind: "epoch" })).excused, [], "the daily only");
   assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { monday: false })).excused, [], "the epoch's day only");
   // PO-1 review (tightened): only the post-move shape - the site still holding LAST week's record ("site null"); a site that
-  // already has this week's record, or a different release on both sides, is a real difference
+  // already has this week's record, or a different release on both sides, is a real difference (1.99afg: this week's record
+  // NOT FILLED yet - share / release_per_day exactly null - is the next test's post-move shape)
   assert.deepEqual(SCH.applyWhitelist(["release: site 4 / pepe 5"], ctx).excused, [], "site X / pepe Y blocks");
   assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { site: { week: { id: EID } } })).excused, [], "the site's week is current: blocks");
+  assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { site: { week: { id: EID, share: 7, release_per_day: 1 } } })).excused, [],
+                   "the site's week is current and filled: blocks");
   assert.deepEqual(SCH.applyWhitelist(["week.id: x"], ctx, "inputs").excused, ["week.id: x"], "the stale week's inputs");
   assert.deepEqual(SCH.applyWhitelist(["week.id: x"], Object.assign({}, ctx, { pepe: { week: { id: "W2026-10-12" } } }), "inputs").excused, [], "not post-move");
+  // 1.99afg: LAST week's exactly - a site record from 2+ weeks back, from the future or with no id is no boundary lag
+  for (const [site, why] of [[{ week: { id: "W2026-10-05" } }, "2 weeks back"], [{ week: { id: "W2026-10-26" } }, "the future"], [{ week: null }, "no record"], [{}, "no week"]]) {
+    const c = Object.assign({}, ctx, { site });
+    assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], c).excused, [], `release: ${why}`);
+    assert.deepEqual(SCH.applyWhitelist(["week.id: x"], c, "inputs").excused, [], `week.*: ${why}`);
+  }
   assert.deepEqual(SCH.applyWhitelist(["fed_loans[0].outstanding: site 1 / pepe 0"], ctx, "inputs").blocking.length, 1, "any other input blocks");
   // the whitelist's inventory: every entry names its proving test, and that test is in this file
   const src = fs.readFileSync(__filename, "utf8");
@@ -223,7 +232,9 @@ test("whitelist: the Monday daily's release is post-move - excused only on the e
     assert.ok(w.when, `${w.on} ${w.engine} ${w.field}: has a condition`);
   }
   assert.deepEqual(SCH.WHITELIST.map((w) => `${w.on}:${w.engine}:${w.kind}:${w.field}`),
-                   ["plan:treasury:daily:release", "inputs:treasury:daily:week.*", "inputs:monetary:monetary:week.*", "inputs:monetary:monetary:rows / days / skip",
+                   ["plan:treasury:daily:release", "plan:treasury:daily:release (week not filled yet)", "inputs:treasury:daily:week.*",
+                    "inputs:treasury:daily:week.share / week.release_per_day (week not filled yet)", "inputs:monetary:monetary:week.*",
+                    "inputs:monetary:monetary:week.share / week.release_per_day (week not filled yet)", "inputs:monetary:monetary:rows / days / skip",
                     "decision:monetary:monetary:guarantee"], "a new entry needs its own test (D-15)");
 });
 
@@ -277,6 +288,133 @@ test("the Monday monetary day: the guarantee decision and the week record are po
   assert.equal(wrong.body.ok, false);
   assert.equal(await row("shadow:monetary:D2026-10-21"), null);
   await ES.putDocs({ econ_treasury: { rev: 4, doc: { week: pepeWeek, bank_lent: [], days: {} } } });
+});
+
+// 1.99afg: the week records of the real Monday rows (policy_sims site_inputs.week / pepe_inputs.week - economy totals only, no
+// user data): on BOTH prod Mondays and on staging's D2026-10-26 the site already held THIS week's record - Pepe's econ_treasury
+// push had opened the week - but without the share / release_per_day his epoch set a moment earlier. 1.99aff excused only LAST
+// week's record, so staging's shadow:treasury:D2026-10-26 read ok = 0 (preflight's WARN); prod's old code checked the engine diff
+// only. The monetary rows have the same shape (staging's was clean only because Pepe's push landed first).
+const ZERO_SPENT = { welcome: 0, levelup: 0, achievements: 0, misc: 0, royalties: 0, roomgames: 0, turf: 0, season: 0, launchpad: 0, activity: 0 };
+const STG_BUDGETS = { welcome: 1500000, levelup: 1400000, achievements: 2100000, misc: 350000, royalties: 300000, roomgames: 3500000, turf: 500000,
+                      season: 2000000, launchpad: 1000000, activity: 12350000 };
+const PROD_BUDGETS = Object.assign({}, STG_BUDGETS, { levelup: -1, achievements: -1, season: 3000000 });
+const REAL_MONDAYS = [   // [row, eid, budgets, Pepe's share, Pepe's release_per_day]
+  ["staging shadow:treasury:D2026-10-26", "W2026-10-26", STG_BUDGETS, 397770, 56824],
+  ["prod shadow:treasury:D2026-10-26 + monetary", "W2026-10-26", PROD_BUDGETS, 473015, 67573],
+  ["prod shadow:treasury:D2026-10-19 + monetary", "W2026-10-19", PROD_BUDGETS, 5183298, 740471],
+];
+const unfilled = (eid, budgets) => ({ id: eid, budgets, spent: Object.assign({}, ZERO_SPENT), share: null, release_per_day: null });
+const filled = (eid, budgets, share, rpd) => Object.assign(unfilled(eid, budgets), { share, release_per_day: rpd });
+
+test("whitelist: the Monday's week record is this week's but not filled yet - only its share / release_per_day are post-move", async () => {
+  assert.equal(SCH.prevEpochId("W2026-10-26"), "W2026-10-19");
+  assert.equal(SCH.prevEpochId("W2027-01-04"), "W2026-12-28", "across the year");
+  for (const x of ["D2026-10-26", "W2026-10-26-r1", "", null, undefined]) assert.equal(SCH.prevEpochId(x), null, String(x));
+  // the real rows' shapes: the diffs are exactly the rows' (input_diff / total_diff), and every one of them is post-move
+  for (const [name, eid, budgets, share, rpd] of REAL_MONDAYS) {
+    const site = { week: unfilled(eid, budgets) }, pepe = { week: filled(eid, budgets, share, rpd) };
+    const inDiff = SCH.diff(site, pepe);
+    assert.deepEqual(inDiff, [`week.share: site null / pepe ${share}`, `week.release_per_day: site null / pepe ${rpd}`], name);
+    const tctx = { engine: "treasury", kind: "daily", mode: "shadow", monday: true, eid, site, pepe };
+    assert.deepEqual(SCH.applyWhitelist(inDiff, tctx, "inputs"), { excused: inDiff, blocking: [] }, `${name}: the daily's inputs`);
+    assert.deepEqual(SCH.applyWhitelist([`release: site null / pepe ${rpd}`], tctx).blocking, [], `${name}: the daily's release`);
+    const mctx = Object.assign({}, tctx, { engine: "monetary", kind: "monetary" });
+    assert.deepEqual(SCH.applyWhitelist(inDiff, mctx, "inputs"), { excused: inDiff, blocking: [] }, `${name}: the monetary day's inputs`);
+    // ...only on the Monday, in shadow, on those engines' kinds
+    for (const [c, why] of [[{ monday: false }, "not the epoch's day"], [{ mode: "dry" }, "dry"], [{ kind: "epoch" }, "the epoch"]]) {
+      assert.equal(SCH.applyWhitelist(inDiff, Object.assign({}, tctx, c), "inputs").blocking.length, 2, `${name}: ${why}`);
+      assert.equal(SCH.applyWhitelist([`release: site null / pepe ${rpd}`], Object.assign({}, tctx, c)).blocking.length, 1, `${name}: ${why}`);
+    }
+  }
+  // NOTHING broader (the staging row's numbers): each of these is a real difference
+  const [, eid, budgets, share, rpd] = REAL_MONDAYS[0];
+  const ctxOf = (site, pepe, more) => Object.assign({ engine: "treasury", kind: "daily", mode: "shadow", monday: true, eid, site: { week: site }, pepe: { week: pepe } }, more);
+  const blocks = (list, c, on = "plan") => assert.deepEqual(SCH.applyWhitelist(list, c, on).excused, [], `${JSON.stringify(list)} / ${JSON.stringify([c.site.week, c.pepe.week])}`);
+  const pw = filled(eid, budgets, share, rpd);
+  // the same week, BOTH filled, different values
+  const sf = filled(eid, budgets, share + 7, rpd + 1);
+  assert.deepEqual(SCH.diff({ week: sf }, { week: pw }), [`week.share: site ${share + 7} / pepe ${share}`, `week.release_per_day: site ${rpd + 1} / pepe ${rpd}`]);
+  blocks(SCH.diff({ week: sf }, { week: pw }), ctxOf(sf, pw), "inputs");
+  blocks([`release: site ${rpd + 1} / pepe ${rpd}`], ctxOf(sf, pw));
+  // ...and both filled with the same values: nothing differs at all
+  assert.deepEqual(SCH.diff({ week: pw }, { week: pw }), []);
+  // the reverse: the site filled, Pepe's not (or only half filled)
+  blocks([`week.share: site ${share} / pepe null`], ctxOf(pw, unfilled(eid, budgets)), "inputs");
+  const half = Object.assign(filled(eid, budgets, share, rpd), { release_per_day: null });
+  blocks([`week.share: site null / pepe ${share}`], ctxOf(unfilled(eid, budgets), half), "inputs");
+  blocks([`release: site null / pepe ${rpd}`], ctxOf(unfilled(eid, budgets), half));
+  // the release in Pepe's plan isn't his week's release_per_day; a diff that only looks like one
+  blocks([`release: site null / pepe ${rpd + 1}`], ctxOf(unfilled(eid, budgets), pw));
+  blocks([`week.share: site null / pepe ${share + 1}`, `week.share: site 0 / pepe ${share}`], ctxOf(unfilled(eid, budgets), pw), "inputs");
+  // the site's record isn't exactly unfilled (undefined is not the gathered null)
+  blocks([`release: site null / pepe ${rpd}`], ctxOf({ id: eid, budgets, spent: ZERO_SPENT }, pw));
+  // the week's budgets / spent are READ (the grant budgets): never excused by this
+  const spent = Object.assign(filled(eid, budgets, share, rpd), { spent: Object.assign({}, ZERO_SPENT, { levelup: 50000 }) });
+  assert.deepEqual(SCH.diff({ week: unfilled(eid, budgets) }, { week: spent }),
+                   ["week.spent.levelup: site 0 / pepe 50000", `week.share: site null / pepe ${share}`, `week.release_per_day: site null / pepe ${rpd}`]);
+  assert.deepEqual(SCH.applyWhitelist(SCH.diff({ week: unfilled(eid, budgets) }, { week: spent }), ctxOf(unfilled(eid, budgets), spent), "inputs").blocking,
+                   ["week.spent.levelup: site 0 / pepe 50000"], "the spent difference blocks (the share / release_per_day stay post-move)");
+  blocks(["week.budgets.levelup: site 1400000 / pepe -1"], ctxOf(unfilled(eid, budgets), pw), "inputs");
+  // a site record from the FUTURE or from 2+ weeks back, unfilled or not; Pepe's from another week than the period's
+  for (const [s, p, why] of [[unfilled("W2026-11-02", budgets), pw, "the site's from the future"],
+                             [unfilled("W2026-10-12", budgets), pw, "the site's 2 weeks back"],
+                             [unfilled(eid, budgets), filled("W2026-11-02", budgets, share, rpd), "Pepe's from the future"],
+                             [unfilled("W2026-11-02", budgets), filled("W2026-11-02", budgets, share, rpd), "both from the future"]]) {
+    blocks([`release: site null / pepe ${rpd}`], ctxOf(s, p), "plan");
+    blocks(SCH.diff({ week: s }, { week: p }), ctxOf(s, p), "inputs");
+    blocks(SCH.diff({ week: s }, { week: p }), ctxOf(s, p, { engine: "monetary", kind: "monetary" }), "inputs");
+  }
+  // last week's record (the 1.99aff case) is still post-move - and only last week's
+  const lastWeek = { id: "W2026-10-19", budgets, spent: ZERO_SPENT, share: 9, release_per_day: 1 };
+  assert.deepEqual(SCH.applyWhitelist(SCH.diff({ week: lastWeek }, { week: pw }), ctxOf(lastWeek, pw), "inputs").blocking, [], "last week's: post-move");
+
+  // END TO END on the test site (the staging row's shape): Monday 2026-10-26, the site's econ_treasury doc already holds this
+  // week's record, not filled; Pepe's epoch filled his
+  const MON2 = MON + 7 * 86400, DID2 = "D2026-10-26";
+  assert.equal(E.epochId(MON2), eid);
+  await ES.putDocs({ econ_treasury: { rev: 5, doc: { week: unfilled(eid, budgets), bank_lent: [], days: {} } } });
+  const pepeWeek = filled(eid, budgets, share, rpd);
+  assert.equal((await post("/api/policy/bot/boundary", { engine: "treasury", period: DID2, now: MON2 + 60 })).body.ok, true);
+  const dIn = Object.assign({}, await G.daily(MON2 + 60, DID2), { week: pepeWeek });
+  const rep = await post("/api/policy/bot/report", { engine: "treasury", period: DID2, inputs: dIn, plan: E.planDaily(dIn) });
+  assert.deepEqual(rep.body.engine_diff, []);
+  assert.deepEqual(rep.body.total_diff, [`release: site null / pepe ${rpd}`], "the staging row's total_diff");
+  assert.deepEqual(rep.body.input_diff, [`week.share: site null / pepe ${share}`, `week.release_per_day: site null / pepe ${rpd}`], "the staging row's input_diff");
+  assert.deepEqual([rep.body.whitelisted, rep.body.input_whitelisted], [rep.body.total_diff, rep.body.input_diff]);
+  assert.deepEqual([rep.body.blocking, rep.body.input_blocking], [[], []]);
+  assert.equal(rep.body.clean, true, "the Monday daily is clean (1.99aff: ok = 0)");
+  assert.equal((await row(`shadow:treasury:${DID2}`)).ok, 1);
+  assert.equal(JSON.parse((await row(`shadow:treasury:${DID2}`)).site_boundary_inputs).week.share, null, "compared against the unfilled snapshot");
+  // the monetary day of the same Monday (the prod rows' shape: week.share / release_per_day differ, the plans don't)
+  assert.equal((await post("/api/policy/bot/boundary", { engine: "monetary", period: DID2, now: MON2 + 120, guarantee: true })).body.ok, true);
+  const mIn = Object.assign({}, await G.monetary(MON2 + 120, DID2, true), { week: pepeWeek });
+  const mRep = await post("/api/policy/bot/report", { engine: "monetary", period: DID2, inputs: mIn, plan: SCH.planOf("monetary", mIn) });
+  assert.deepEqual([mRep.body.engine_diff, mRep.body.total_diff], [[], []]);
+  assert.deepEqual(mRep.body.input_diff, [`week.share: site null / pepe ${share}`, `week.release_per_day: site null / pepe ${rpd}`]);
+  assert.deepEqual(mRep.body.input_whitelisted, mRep.body.input_diff);
+  assert.deepEqual([mRep.body.input_blocking, mRep.body.decision_blocking], [[], []]);
+  assert.equal(mRep.body.clean, true);
+  // ...while a REAL difference in the same shape still blocks: a re-report whose week also differs in what was spent
+  const sIn = Object.assign({}, dIn, { week: spent });
+  const sRep = await post("/api/policy/bot/report", { engine: "treasury", period: DID2, inputs: sIn, plan: E.planDaily(sIn) });
+  assert.deepEqual(sRep.body.input_blocking, ["week.spent.levelup: site 0 / pepe 50000"]);
+  assert.equal(sRep.body.clean, false);
+  assert.equal((await row(`shadow:treasury:${DID2}`)).ok, 0);
+  assert.equal((await post("/api/policy/bot/report", { engine: "treasury", period: DID2, inputs: dIn, plan: E.planDaily(dIn) })).body.clean, true, "his real report: clean again");
+  // PREFLIGHT (tools/policy-backend.js, read-only on this database): the excused Monday reads clean - no WARN for it
+  const PB = require(path.join(repo, "tools", "policy-backend.js"));
+  const st = await PB.gather();
+  const mine = st.shadow14.filter((x) => x.period === DID2);
+  assert.deepEqual(mine.map((x) => [x.key, Number(x.ok), Number(x.reported)]).sort(),
+                   [[`shadow:monetary:${DID2}`, 1, 1], [`shadow:treasury:${DID2}`, 1, 1]]);
+  const chk = (s) => PB.preflight(s).find((r) => r.check === "shadow periods clean (14 days, D-15)");
+  assert.ok(!chk(st).detail.includes(DID2), chk(st).detail);
+  assert.deepEqual([chk(Object.assign({}, st, { shadow14: mine })).level, chk(Object.assign({}, st, { shadow14: mine })).detail], ["PASS", "2 compared, all clean"]);
+  // (and an unclean one still WARNs: the same rows as 1.99aff recorded them)
+  assert.equal(chk(Object.assign({}, st, { shadow14: mine.map((x) => Object.assign({}, x, { ok: x.key.startsWith("shadow:treasury") ? 0 : 1 })) })).level, "WARN");
+  await ES.putDocs({ econ_treasury: { rev: 6, doc: { week: { id: EID, budgets: {}, spent: {}, share: pepePlan.totals.incentives, release_per_day: pepePlan.release_per_day },
+                                                      bank_lent: [], days: {} } } });
 });
 
 test("participation input diffs are tolerated only while no enabled rule reads them; any other input diff blocks", async () => {
