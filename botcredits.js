@@ -18,6 +18,15 @@
 //        are still paid on the site out of the platform_rewards flow (funding.js). Debits (negative) are as before:
 //        only what the balance covers. A free reward (the type is on autoescrow's kinds list) for a Camfrog AUTO account
 //        is held in auto_escrow instead while that switch is on: 200 with escrowed:true, expires_at (docs/auto-account-escrow.md).
+//        1.99afh (owner, 2026-10-26):
+//        * platform_rewards is paid by the INCENTIVE BUDGET only: when Pepe's last sync routes it anywhere else, or never
+//          routed it (vaultFor would read that as the Reserve), a discord-* / twitch-* credit is refused 409 "no_route" -
+//          never a Reserve claim. (Connect bonuses and redemption codes have their own flows and aren't touched.)
+//        * type "twitch-channelpoints" {userId, twitch_user_id, reward_id, reward_title, ref} pays the ALLOW-LISTED reward's
+//          amount (twitchcp.js) - never the caller's `amount`, never a number from a title: a ref is required ("twitch-cp:"
+//          + the redemption id, so a repeated EventSub delivery is a duplicate), an unlisted reward is refused 409
+//          "not_allowlisted", one above the site's cap 409 "over_cap", and the account must be the one linked to that
+//          Twitch user id (404 "no_user"). The answer carries `amount` (what was paid).
 //   POST /api/g/heist/jackpot-adjust {password, amount, userId?, source, ref}   source (<= 64) and ref (<= 80) required.
 //   POST /api/users/merge-balance {password, fromUserId, toUserId, ref}  the WHOLE balance of fromUserId moves to
 //        toUserId atomically, two "account merge" transactions rows (out / in, each naming the other account), idempotent
@@ -99,45 +108,122 @@ async function logged(entry, effect) {
   }
 }
 
+// ── 1.99afh: Twitch channel-point redemptions (twitchcp.js) ──
+const CHANNEL_POINTS = "twitch-channelpoints";
+const isChannelPoints = (type) => String(type == null ? "" : type).trim().toLowerCase() === CHANNEL_POINTS;
+const PLATFORM_FLOW = "platform_rewards";
+
+/** The redeemed reward a channel-point call names: {id, title} (both as Twitch sent them, bounded). */
+function cpReward(b) {
+  const id = typeof b.reward_id === "string" && b.reward_id.trim() ? b.reward_id.trim().slice(0, 64) : null;
+  const title = typeof b.reward_title === "string" ? b.reward_title.slice(0, 120) : null;
+  return { id, title };
+}
+/** bot_credit_log's source for a redemption: which reward it was (the reward's id, else its title). */
+const cpSource = (reward) => ("twitch-reward:" + (reward.id || reward.title || "?")).slice(0, 64);
+
+/**
+ * Before anything moves: the ref, the allowlist, the cap and the account linked to the Twitch user id.
+ * -> {amount, reward} to pay, or {answer} (a duplicate's 200 or a refusal, already logged).
+ */
+async function channelPointsPrep(b) {
+  const T = require("./twitchcp");
+  const reward = cpReward(b);
+  const rf = optStr(b.ref, 80);
+  const entry = { endpoint: "chatwinner", userId: b.userId || null, type: CHANNEL_POINTS, amount: null, source: cpSource(reward), ref: rf.ok ? rf.value : null };
+  const refuse = async (status, error, extra) => {
+    await note(entry, error);
+    await T.noteSeen(reward, error);
+    console.warn(`[bonus] ${CHANNEL_POINTS} "${String(reward.title || "").slice(0, 60)}" (reward ${reward.id || "-"}) for ${b.userId || "-"} refused: ${error}`);
+    return { answer: { status, json: Object.assign({ success: false, error }, extra || {}) } };
+  };
+  // the redemption's id makes it idempotent: a repeated EventSub delivery must not pay twice
+  if (!rf.ok || !rf.value) return refuse(400, "unsourced");
+  await init();
+  const prev = (await getQuery("SELECT outcome, amount FROM bot_credit_log WHERE ref = ?", [rf.value]))[0];
+  if (prev && prev.outcome === "ok") {
+    return { answer: { status: 200, json: { duplicate: true, message: "Bonus winner logged and points awarded successfully", amount: Number(prev.amount) || 0 } } };
+  }
+  const cfg = await T.get();
+  const hit = T.resolve(reward, cfg);
+  if (!hit) return refuse(409, "not_allowlisted");
+  entry.amount = hit.amount;
+  if (hit.amount > cfg.cap) return refuse(409, "over_cap", { cap: cfg.cap });
+  // credited by the Twitch USER ID (never a display name): the account must be the one linked to it
+  const tw = typeof b.twitch_user_id === "string" || typeof b.twitch_user_id === "number" ? String(b.twitch_user_id).trim() : "";
+  if (!/^\d{1,20}$/.test(tw) || !b.userId) return refuse(400, "bad_twitch_user");
+  let linked = null;
+  try { linked = (await getQuery("SELECT userId FROM users WHERE userId = ? AND twitchId = ?", [String(b.userId), tw]))[0] || null; } catch (e) { linked = null; }
+  if (!linked) return refuse(404, "no_user", { code: ledger.E_TARGET_NOT_FOUND });
+  return { amount: hit.amount, reward };
+}
+
 // ── POST /api/bonus/chatwinner ──
 async function chatwinner(body, deps = {}) {
-  const { userId, type, amount } = body || {};
+  const b = body || {};
+  const { userId, type } = b;
+  let { amount } = b;
+  // 1.99afh: a channel-point redemption pays the allow-listed reward's amount, never the caller's
+  const cp = isChannelPoints(type);
+  let reward = null;
+  if (cp) {
+    const prep = await channelPointsPrep(b);
+    if (prep.answer) return prep.answer;
+    amount = prep.amount;
+    reward = prep.reward;
+  }
   if (!userId || !amount || !type) return { status: 400, text: "Missing required fields" };
   const amt = Number(amount);
   if (!Number.isFinite(amt) || Math.trunc(amt) === 0) return { status: 400, text: "Missing required fields" };
-  const src = optStr(body.source, 64), rf = optStr(body.ref, 80);
-  const entry = { endpoint: "chatwinner", userId, type: String(type), amount: Math.trunc(amt), source: src.ok ? src.value : null, ref: rf.ok ? rf.value : null };
+  const src = cp ? { ok: true, value: cpSource(reward) } : optStr(b.source, 64), rf = optStr(b.ref, 80);
+  const entry = { endpoint: "chatwinner", userId, type: cp ? CHANNEL_POINTS : String(type), amount: Math.trunc(amt), source: src.ok ? src.value : null, ref: rf.ok ? rf.value : null };
+  const out = await chatwinnerPay(b, deps, { userId, type: entry.type, amt, src, rf, entry, cp });
+  if (cp) await require("./twitchcp").noteSeen(reward, out.outcome);
+  delete out.outcome;
+  return out;
+}
+
+/** The credit itself (after the channel-point checks). -> {status, json | text, outcome} - outcome is what was logged. */
+async function chatwinnerPay(body, deps, { userId, type, amt, src, rf, entry, cp: isCp }) {
+  const amount = Math.trunc(amt);
   if (!src.ok || !rf.ok) {
     await note(entry, "bad_source");
-    return { status: 400, json: { success: false, error: !src.ok ? "bad_source" : "bad_ref" } };
+    return { status: 400, json: { success: false, error: !src.ok ? "bad_source" : "bad_ref" }, outcome: "bad_source" };
   }
   const platform = PLATFORM.test(String(type));
   // 1.99jw: a credit that isn't a platform reward must say which pool paid it, and be idempotent
   if (amt > 0 && !platform && (!src.value || !rf.value)) {
     await note(entry, "unsourced");
-    console.warn(`[bonus] ${type} +${Math.trunc(amt)} for ${userId} refused: no source/ref (unsourced)`);
-    return { status: 400, json: { success: false, error: "unsourced" } };
+    console.warn(`[bonus] ${type} +${amount} for ${userId} refused: no source/ref (unsourced)`);
+    return { status: 400, json: { success: false, error: "unsourced" }, outcome: "unsourced" };
   }
   // 1.99ga: an account that doesn't exist is refused BEFORE any vault is touched
   if (!(await ledger.userExists(userId))) {
     await note(entry, "no_user");
     console.warn(`[bonus] ${type} ${amount} for missing account ${userId} - refused (${ledger.E_TARGET_NOT_FOUND})`);
-    return { status: 404, json: { success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND } };
+    return { status: 404, json: { success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND }, outcome: "no_user" };
   }
   const cp = deps.resolveCounterparty ? await deps.resolveCounterparty(body.counterparty) : null;
-  const okBody = { message: "Bonus winner logged and points awarded successfully" };
+  const okBody = Object.assign({ message: "Bonus winner logged and points awarded successfully" }, isCp ? { amount } : {});
   let out;
   try {
     out = await logged(entry, async () => {
       // 1.63: Discord/Twitch rewards are paid OUT of a vault ("platform_rewards"), never minted
       if (amt > 0 && platform) {
-        const take = await funding.takeFundsRef("platform_rewards", Math.trunc(amt), userId, String(type));
-        if (!take.ok) throw new Refusal(409, { success: false, skipped: true, message: "the bank can't cover it" }, "unfunded");
+        // 1.99afh (owner, 2026-10-26): ... and that vault is the incentive budget - routed elsewhere, or not routed by any
+        // sync yet (vaultFor's default would make it a Reserve claim), the credit is refused, never paid by the Reserve
+        const route = funding.routeOf(PLATFORM_FLOW);
+        if (route !== "incentives") {
+          console.warn(`[bonus] ${type} +${amount} for ${userId} refused: ${PLATFORM_FLOW} is routed to ${route || "nothing yet"}, not the incentive budget (no_route)`);
+          throw new Refusal(409, { success: false, skipped: true, error: "no_route", message: "platform rewards are paid by the incentive budget only" }, "no_route");
+        }
+        const take = await funding.takeFundsRef(PLATFORM_FLOW, amount, userId, String(type));
+        if (!take.ok) throw new Refusal(409, { success: false, skipped: true, error: "unfunded", message: "the bank can't cover it" }, "unfunded");
       }
       // Credit, or debit only what the balance covers: a deduction can never take anyone below zero.
       const transactionId = require("uuid").v4();
       // auto-account escrow (autoescrow.js): a free reward for a Camfrog auto account is held instead (platform rewards never)
-      const posted = await require("./autoescrow").credit(userId, Math.trunc(amt), "bonus win", { requireCover: true, counterparty: cp, transactionId,
+      const posted = await require("./autoescrow").credit(userId, amount, "bonus win", { requireCover: true, counterparty: cp, transactionId,
                                                                            source: `bonus ${type}${src.value ? " from " + src.value : ""}`,
                                                                            kind: platform ? null : String(type) });
       if (!posted.ok) {
@@ -145,17 +231,21 @@ async function chatwinner(body, deps = {}) {
         throw new Refusal(404, { success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND }, "no_user");
       }
       await runQuery("INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
-                     [require("uuid").v4(), type, posted.userId, transactionId, Math.trunc(amt)]);
+                     [require("uuid").v4(), type, posted.userId, transactionId, amount]);
       return { userId: posted.userId, escrowed: !!posted.escrowed, expires_at: posted.expires_at || null };
     });
   } catch (e) {
-    if (e instanceof Refusal) return { status: e.status, json: e.body };
+    if (e instanceof Refusal) return { status: e.status, json: e.body, outcome: e.outcome };
     throw e;
   }
-  if (out.duplicate) return { status: 200, json: Object.assign({ duplicate: true }, okBody) };
+  if (out.duplicate) {
+    const dup = Object.assign({ duplicate: true }, okBody);
+    if (isCp) dup.amount = Number(out.row.amount) || 0;
+    return { status: 200, json: dup, outcome: "duplicate" };
+  }
   // escrowed: Pepe tells the person it's waiting for them (pepe_autoescrow.py) - it isn't in their wallet
-  if (out.result && out.result.escrowed) return { status: 200, json: Object.assign({}, okBody, { escrowed: true, expires_at: out.result.expires_at }) };
-  return { status: 200, json: okBody };
+  if (out.result && out.result.escrowed) return { status: 200, json: Object.assign({}, okBody, { escrowed: true, expires_at: out.result.expires_at }), outcome: "ok" };
+  return { status: 200, json: okBody, outcome: "ok" };
 }
 
 // ── POST /api/g/heist/jackpot-adjust ──
@@ -292,4 +382,4 @@ function register(app, { isBotToken, idemBegin, resolveCounterparty }) {
   });
 }
 
-module.exports = { register, init, chatwinner, jackpotAdjust, mergeBalance, staleReclaimed, note };
+module.exports = { register, init, chatwinner, jackpotAdjust, mergeBalance, staleReclaimed, note, CHANNEL_POINTS };

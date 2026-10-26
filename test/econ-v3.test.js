@@ -239,17 +239,27 @@ test("A7: debits need no source (only what the balance covers) and are logged; a
 });
 
 test("A7: discord-/twitch- credits keep the platform_rewards funded path (no source needed), refused when unfunded", async () => {
-  F.sync({ reserve: 0, flows: {} });
+  // 1.99afh: the incentive budget only - never the Reserve (owner, 2026-10-26); test/twitchcp.test.js has the rest
+  const INC = { balance: 100000, week: "W", remaining: { misc: 100000 }, budgets: { misc: 100000 }, groups: { platform_rewards: "misc" } };
+  F.sync({ reserve: 0, flows: { platform_rewards: "incentives" } });
   const b0 = await bal("u3");
   const no = await BC.chatwinner({ userId: "u3", type: "discord-raffle", amount: 500, ref: "d:1" });
   assert.equal(no.status, 409);
   assert.equal((await log("d:1")).outcome, "unfunded");
+  delete F.state.flows.platform_rewards;   // a site no sync has routed it on yet (a sync only adds / changes rows)
   F.sync({ reserve: 10000, flows: {} });
-  const ok = await BC.chatwinner({ userId: "u3", type: "twitch-channelpoints", amount: 500 });
+  const nr = await BC.chatwinner({ userId: "u3", type: "twitch-raffle", amount: 500, ref: "t:0" });
+  assert.deepEqual([nr.status, nr.json.error], [409, "no_route"], "not routed yet: never the Reserve's default");
+  assert.equal((await log("t:0")).outcome, "no_route");
+  F.sync({ reserve: 10000, flows: { platform_rewards: "incentives" }, incentives: INC });
+  const ok = await BC.chatwinner({ userId: "u3", type: "twitch-raffle", amount: 500 });
   assert.equal(ok.status, 200);
   assert.equal(await bal("u3"), b0 + 500);
-  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow = 'platform_rewards' AND settled = 0"))[0].n, 1);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow = 'incentives:platform_rewards' AND settled = 0"))[0].n, 1);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow = 'platform_rewards'"))[0].n, 0, "nothing on the Reserve");
   await F.settle((await F.claims()).map((c) => c.claimId));
+  delete F.state.flows.platform_rewards;
+  F.sync({ reserve: 10000, flows: {} });
 });
 
 // ── A8: jackpot-adjust ──

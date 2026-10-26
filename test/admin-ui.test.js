@@ -179,7 +179,8 @@ test("control inventory: every control of the old /admin/panel is on its section
                      "xpTransferForm", "xpUsername", "xpAmount", "xpStatus", "welcome-admin", "welcome-config", "welcome-stats", "welcome-recent",
                      "stale-admin", "stale-dates", "stale-counts", "stale-vias"],
     "/admin/economy": ["pointsTransferForm", "pointsUsername", "pointsAmount", "transferStatus", "redemption-codes", "code", "points", "uses_allowed", "expiration_date",
-                       "codeStatus", "redemptionCodesList"],
+                       "codeStatus", "redemptionCodesList",
+                       "twitchcp", "tcpForm", "tcpRows", "tcpCap", "tcpSeen"],     // 1.99afh: the Twitch channel-point allowlist (twitchcp.js)
     "/admin/games": ["manualSpinForm", "spinUsername", "spin", "spinStatus", "jackpotForm", "jackpotAmount", "jackpotStatus",
                      "pvp", "pvpForm", "pvpQuiet", "pvpMax", "pvpWin",     // 1.99yc: the duel / brawl knobs (pvpcfg.js)
                      "pvpStake", "pvpDays", "pvpLevel", "pvpSheet", "pvpGap"],     // 1.99aco: the win-streak anti-farming knobs

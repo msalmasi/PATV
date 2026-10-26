@@ -137,6 +137,7 @@ const RULES = {
   "pepe_roles.by": { deny: "1.99abn: who changed a Pepe role (web:<username> / pepe) - an actor label; the row is keyed by Camfrog login" },
   "pepe_perms.by": { deny: "1.99acj: who changed one of Pepe's per-command permissions (web:<username> / pepe:<login>) - an actor label; the row is keyed by command" },
   "site_perms.by": { deny: "1.99ack: who changed one of the website's permissions (web:<username>) - an actor label; the row is keyed by capability" },
+  "twitchcp_cfg.by": { deny: "1.99afh: who last saved the Twitch channel-point allowlist (an admin's username) - an actor label; the row is keyed by 'cfg' (admin_audit has the id)" },
   "site_perms.by_level": { deny: "1.99ack: the editor's Pepe role level when they changed it (100 owner / 80 admin) - not an account id" },
   "onair_queue.by": { deny: "1.99abj: who queued an on-air link (web:<username> / pepe:<login>) - an actor label like onair_log.by" },
   "onair_media.by": { deny: "1.99acw: who fetched / uploaded an on-air picture (web:<username> / pepe:<login>) - an actor label like onair_log.by" },

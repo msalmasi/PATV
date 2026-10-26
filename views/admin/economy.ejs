@@ -300,6 +300,9 @@
   </section>
 </div>
 
+<%# 1.99afh: which Twitch channel-point rewards pay PAT (twitchcp.js) - an allow-listed reward is PAT viewers claim, like a code %>
+<%- include('../partials/admin-twitchcp', { isAdmin: _can('econ.codes_view'), econOwner: locals.econOwner }) %>
+
 <section class="adm-card" id="royalties" aria-labelledby="royT">
   <h2 id="royT">Pad owner royalties</h2>
   <p class="adm-help">What pad owners earn on spending in their pads. Rates and payout rules are set on <a href="/pads/admin#royalties">Pads › Owner royalties</a>.</p>

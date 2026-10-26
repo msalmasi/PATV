@@ -1281,6 +1281,7 @@ require("./feedgallery").register(app, { addUser });   // 1.99fn: the feeds' Gal
 require("./media").register(app, { isBotToken, addUser });
 require("./pvpcfg").register(app, { isBotToken, addUser });    // 1.99yc: duels / brawls accept + replacement knobs (/admin/games#pvp, Pepe reads POST /api/pvp/cfg)
 require("./spincfg").register(app, { addUser });                 // 1.99yz: chat !spin private by default (/admin/games#chatspin; sent with each chat spin)
+require("./twitchcp").register(app, { addUser });                // 1.99afh: which Twitch channel-point rewards pay PAT (/admin/economy#twitchcp; botcredits reads it)
 require("./mktcfg").register(app, { isBotToken, addUser });    // 1.99ur: market close bounds (admins) - before /markets/:id
 require("./markets").register(app, { isBotToken, addUser });
 require("./automkt").register(app, { isBotToken, addUser });   // 1.99th: Pepe's auto markets - status/requests from Pepe, the feed post, /admin/markets

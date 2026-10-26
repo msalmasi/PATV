@@ -155,6 +155,13 @@ function vaultFor(flow) {
   if (v === "incentives") return "incentives";
   return v === "jackpot" ? "jackpot" : "reserve";
 }
+// 1.99afh: the vault Pepe's last sync routed `flow` to ("reserve" | "jackpot" | "incentives"), or null when no sync has
+// named it - unlike vaultFor, which reads "not routed" as the Reserve. botcredits.js pays platform rewards only when this
+// says "incentives" (owner, 2026-10-26: Discord/Twitch rewards never fall back to the Reserve).
+function routeOf(flow) {
+  const v = Object.prototype.hasOwnProperty.call(state.flows, flow) ? state.flows[flow] : null;
+  return v === "incentives" || v === "jackpot" || v === "reserve" ? v : null;
+}
 
 // PAT the website has paid out of the incentive budget that Pepe hasn't settled yet (all groups / one group)
 async function unsettledIncentives(group) {
@@ -679,7 +686,7 @@ async function settle(ids) {
 }
 
 module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive, roomVaultsLive,
-                   treasuryLive, treasuryOn, vaultFor, queueClaim, drainQueue, queueSummary, groupOf, fundable, unsettledIncentives,
+                   treasuryLive, treasuryOn, vaultFor, routeOf, queueClaim, drainQueue, queueSummary, groupOf, fundable, unsettledIncentives,
                    houseBacked, wheelDraw, wheelReseed, reserveAvailable, takeReserveRef,
                    // 1.99jw
                    init: () => ready, cleanMonetary, takeIncentivesRef, houseFlashPlan, houseFlashCover, unsettledFlash, unsettledReserve,

@@ -14,6 +14,9 @@ const axios = require("axios");
 const patvAuth = require("./patvAuth");
 patvAuth.install(axios);
 const { patvSse, siteHeaders } = patvAuth;
+// 1.99afh: a failed request is logged as its status + answer only (errInfo) - an AxiosError's config carries the bot token
+// (body password, X-Bot-Token) and X-PATV-Key, and console.error(error) printed all of it into server-error.log.
+const { errInfo } = require("./channelpoints");
 const bcrypt = require("bcrypt");
 const EventSource = require("eventsource");
 const {
@@ -314,7 +317,7 @@ async function handleSpinCommand(channel, twitchId, displayName, profileImage) {
       }
     })
     .catch((error) => {
-      console.error("Error making the POST request:", error);
+      console.error("Error making the POST request:", errInfo(error));
       client.say(channel, `@${displayName}, spin is currently in progress....`);
       // document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
       // document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
@@ -360,7 +363,7 @@ async function setupResultsListener(spinId, channel, twitchId, displayName) {
   };
 
   eventSource.onerror = function (event) {
-    console.error("EventSource failed:", event);
+    console.error("EventSource failed:", event && (event.status || event.message || event.type));
     eventSource.close();
   };
 }
@@ -387,7 +390,7 @@ async function setupWagerListener(spinId, channel, twitchId, displayName) {
   };
 
   eventSource.onerror = function (event) {
-    console.error("EventSource failed:", event);
+    console.error("EventSource failed:", event && (event.status || event.message || event.type));
     eventSource.close();
   };
 }
@@ -487,7 +490,7 @@ async function handleTipCommand(
         // Handle other errors
         console.error(
           `Error fetching recipient ${cleanRecipientDisplayName}:`,
-          error
+          errInfo(error)
         );
         return client.say(
           channel,
@@ -552,7 +555,7 @@ async function handleTipCommand(
       } else {
         console.error(
           `Error sending tip from ${senderDisplayName} to ${recipientDisplayName}:`,
-          error
+          errInfo(error)
         );
         client.say(
           channel,
@@ -563,7 +566,7 @@ async function handleTipCommand(
   } catch (error) {
     console.error(
       `Error processing tip from ${senderDisplayName} to ${recipientDisplayName}:`,
-      error
+      errInfo(error)
     );
     client.say(
       channel,
@@ -621,50 +624,19 @@ async function onChatMessage(twitchUser) {
   }
 }
 
-async function exchangeChannelPoints(points, twitchDisplayname) {
-     // Step 3: Check if the recipient exists using the endpoint
-     let recipient;
-     const channel = 'publicaccess_ttv'
-     try {
-       const recipientResponse = await axios.get(
-         process.env.BACKEND_BASE_URL+`/api/users/twitch/displayname/${encodeURIComponent(twitchDisplayname)}`
-       );
-       recipient = recipientResponse.data.user;
-     } catch (error) {
-       if (error.response && error.response.status === 404) {
-         // Handle recipient not found
-         return client.say(
-           channel,
-           `@${twitchDisplayname}, your PATV account was not found.`
-         );
-       } else {
-         // Handle other errors
-         console.error(
-           `Error fetching recipient ${twitchDisplayname}:`,
-           error
-         );
-         return client.say(
-           channel,
-           `@${twitchDisplayname}, there was an error retrieving your information.`
-         );
-       }
-     }
-     // Send the result to the backend
-  try {
-    await axios.post(process.env.BACKEND_BASE_URL+`/api/bonus/chatwinner`, {
-      userId: recipient.userId,
-      type: "twitch-channelpoints",
-      amount: points,
-      password: process.env.TWITCH_BOT_TOKEN,
-    });
-    console.log("Raffle winner logged in backend.");
-    client.say(
-      channel,
-      `@${twitchDisplayname} exchanged channel points for PAT ${points}!`
-    );
-  } catch (error) {
-    console.error("Failed to log channel point redemption.", error);
-  }
+// 1.99afh: a channel-point redemption (server.js, EventSub). The site decides what it pays (allow-listed rewards only, by
+// reward id / exact title - never a number from the title), the account is the one linked to the redeemer's Twitch USER
+// ID, and the redemption id is the ref that makes a repeated delivery a duplicate (channelpoints.js).
+const channelPoints = require("./channelpoints");
+const recentRedemptions = new channelPoints.Recent(2000);
+function redeemChannelPoints(event) {
+  return channelPoints.handleRedemption(event, {
+    http: axios,
+    base: process.env.BACKEND_BASE_URL,
+    token: process.env.TWITCH_BOT_TOKEN,
+    say: (text) => client.say("publicaccess_ttv", text),
+    recent: recentRedemptions,
+  });
 }
 
 // Function to end the raffle and select a winner
@@ -715,7 +687,7 @@ async function endRaffle(channel, raffleDurationMinutes) {
       `@${displayName} (PAT ${winnerBalance}) won the random chat raffle with a prize of PAT ${randomPrize}!`
     );
   } catch (error) {
-    console.error("Failed to log raffle winner:", error);
+    console.error("Failed to log raffle winner:", errInfo(error));
   }
 
   // Start a new raffle
@@ -731,5 +703,5 @@ function initializeBot() {
 initializeBot();
 
 module.exports = {
-  exchangeChannelPoints
+  redeemChannelPoints,
 }

@@ -1,0 +1,28 @@
+<%# 1.99afh: which Twitch channel-point rewards pay PAT (twitchcp.js). The Twitch bot sends each redemption's reward id and
+    title; the site pays only a reward on this list, the list's amount (never a number from a title), at most the cap, to the
+    PATV account linked to the redeemer's Twitch id, once per redemption. public/js/admin-twitchcp.js loads + saves it
+    (GET / POST /api/admin/twitch-cp). Viewing: econ.codes_view; changing: econ.codes_manage + a Pepe owner (like codes). %>
+<section class="adm-card" id="twitchcp" aria-labelledby="twitchcpT">
+  <h2 id="twitchcpT"><span class="ds-ic" aria-hidden="true">🟣</span> Twitch channel points <span class="adm-pill admin">admins</span> <span class="adm-msg" id="tcpMsg" role="status" aria-live="polite"></span></h2>
+  <% if (!locals.isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <p class="adm-help">Viewers on <code>publicaccess_ttv</code> redeem channel-point rewards; only the rewards listed here pay PAT, and they pay
+    the amount listed here, out of the incentive budget (the <code>platform_rewards</code> flow - never the Reserve). Any other reward pays
+    nothing: one that says PAT in its title gets a line in chat, the streamer's other rewards are left alone. A row with a
+    <b>reward id</b> matches that reward only (renaming it on Twitch keeps it); a row without one matches the <b>exact title</b>. Pin the
+    ids from "Rewards seen" below once the bot has seen them. No redemption pays more than the <b>cap</b> (at most
+    <span id="tcpHard">25,000</span>; 0 pauses them all). Twitch keeps refused redemptions in the reward queue - refund them there.</p>
+  <% if (!locals.econOwner) { %><p class="adm-help">Changing the list is a Pepe owner's: your account needs a linked Camfrog login with Pepe's owner role.</p><% } %>
+  <form id="tcpForm" class="adm-form one" autocomplete="off" novalidate>
+    <div id="tcpRows" role="list" aria-label="Rewards that pay PAT"></div>
+    <div class="adm-actions"><button type="button" class="ds-btn sm ghost" id="tcpAdd">Add a reward</button></div>
+    <label for="tcpCap">Cap per redemption (PAT)<input type="number" id="tcpCap" name="cap" min="0" max="25000" step="1" required></label>
+    <div class="adm-actions"><button class="ds-btn sm" type="submit" id="tcpSave">Save</button></div>
+  </form>
+  <h3>Rewards seen</h3>
+  <div class="adm-tbl"><table aria-label="Channel-point rewards the bot has seen">
+    <thead><tr><th>Title</th><th>Reward id</th><th class="num">Times</th><th>Last answer</th><th>Last seen</th><th></th></tr></thead>
+    <tbody id="tcpSeen"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <script src="/public/js/admin-twitchcp.js?v=1" defer></script>
+  <% } %>
+</section>

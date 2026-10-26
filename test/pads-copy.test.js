@@ -35,6 +35,7 @@ const ALLOW = [
   /spin the channel Wheel/gi,
   /T === 'channel'|o\.channel = /g,   // 1.99aag: onair-player.js - the YouTube / Twitch embed players' own parameter names
   /community pot/g,   // 1.99mn: the incentive budget's public name (banner + /support), the people's pot - not a pad
+  /\bchannel[- ]points?\b/gi,   // 1.99afh: Twitch's own name for its viewer reward points (/admin/economy#twitchcp) - not a pad
   /PATV is a community|is a community hangout|The community|community website|community site|community token|community perks|Public Access community|from the community|private streaming video platform and community/g,
 ];
 const WORD = /\b(channels?|communit(y|ies))\b/i;
