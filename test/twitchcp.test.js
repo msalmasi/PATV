@@ -37,9 +37,12 @@ const unrouted = (sync) => { for (const k of Object.keys(F.state.flows)) delete 
 const bal = async (id) => (await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [id]))[0].b;
 const log = (ref) => getQuery("SELECT * FROM bot_credit_log WHERE ref = ?", [ref]).then((r) => r[0]);
 const reserveClaims = async () => (await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow NOT LIKE 'incentives:%'"))[0].n;
-const cp = (o) => BC.chatwinner(Object.assign({ type: "twitch-channelpoints", userId: "u1", twitch_user_id: TW.ann }, o));
+// (reward_cost 25,000: both default rewards' minimum cost - the 1.99afh review's under_cost cases set their own)
+const cp = (o) => BC.chatwinner(Object.assign({ type: "twitch-channelpoints", userId: "u1", twitch_user_id: TW.ann, reward_cost: 25000 }, o));
 async function reset(cfg) {
   await runQuery("DELETE FROM twitchcp_cfg");
+  // (the daily limit counts the last 24 h of paid redemptions - each test starts with none)
+  await runQuery("DELETE FROM bot_credit_log WHERE type = 'twitch-channelpoints'");
   T._reset();
   if (cfg) assert.equal((await T.set(cfg, "test")).ok, true);
   await F.settle((await F.claims()).map((c) => c.claimId));
@@ -75,10 +78,11 @@ test.before(async () => {
 test.after(() => server && server.close());
 
 // ── twitchcp.js: the allowlist ──
-test("defaults: 'Buy 5000 PAT' = 5,000 and 'Buy 25000 PAT' = 25,000 by exact title, cap 25,000", async () => {
+test("defaults: 'Buy 5000 PAT' = 5,000 and 'Buy 25000 PAT' = 25,000 by exact title (min cost = the PAT), cap 25,000, daily 50,000", async () => {
   await reset();
   const c = await T.get();
-  assert.deepEqual(c, { rewards: [{ id: null, title: "Buy 5000 PAT", amount: 5000 }, { id: null, title: "Buy 25000 PAT", amount: 25000 }], cap: 25000 });
+  assert.deepEqual(c, { rewards: [{ id: null, title: "Buy 5000 PAT", amount: 5000, min_cost: 5000 }, { id: null, title: "Buy 25000 PAT", amount: 25000, min_cost: 25000 }],
+                        cap: 25000, daily: 50000 });
   assert.equal(T.HARD_CAP, 25000);
   assert.equal(T.resolve({ id: "x", title: "Buy 5000 PAT" }, c).amount, 5000);
   assert.equal(T.resolve({ id: "x", title: "Buy 25000 PAT" }, c).amount, 25000);
@@ -93,6 +97,13 @@ test("an entry with a reward id matches that id only (a renamed reward still pay
   assert.equal(T.resolve({ id: "bbbb-2222", title: "Buy 5000 PAT" }, c), null, "same title, another reward");
   assert.equal(T.resolve({ id: "bbbb-2222", title: "Buy 25000 PAT" }, c).amount, 25000, "title-only rows still match by title");
   assert.equal(T.resolve({ id: "aaaa-1111", title: "Buy 25000 PAT" }, c).by, "id", "the id wins");
+  // review: once a reward is pinned under a title, a title-only row for that title pays nothing (renamed original + a
+  // cheap copy given its title)
+  const pinned = { rewards: [{ id: "aaaa-1111", title: "Buy 25000 PAT", amount: 25000 }, { id: null, title: "Buy 25000 PAT", amount: 25000 }], cap: 25000 };
+  assert.equal(T.validate(pinned).ok, true);
+  assert.equal(T.resolve({ id: "cccc-3333", title: "Buy 25000 PAT" }, T.validate(pinned).cfg), null, "the copy under the pinned title");
+  assert.equal(T.resolve({ id: "aaaa-1111", title: "Renamed" }, T.validate(pinned).cfg).by, "id");
+  assert.equal(T.resolve({ id: "aaaa-1111", title: "x" }, T.validate(pinned).cfg).min_cost, 25000, "min_cost defaults to the amount");
 });
 
 test("validate: cap 0..25,000, amounts 1..25,000, an id or a title, no duplicates, at most 20 rows", () => {
@@ -114,7 +125,26 @@ test("validate: cap 0..25,000, amounts 1..25,000, an id or a title, no duplicate
   assert.equal(ok({ rewards: [{ id: "a1", amount: 1 }, { id: "a1", amount: 2 }], cap: 25000 }), false, "duplicate id");
   assert.equal(ok({ rewards: Array.from({ length: 21 }, (_, i) => ({ title: "t" + i, amount: 1 })), cap: 25000 }), false);
   assert.deepEqual(T.validate({ rewards: [{ id: " a1 ", title: " Buy 5000 PAT ", amount: "5000" }], cap: 100 }).cfg,
-                   { rewards: [{ id: "a1", title: "Buy 5000 PAT", amount: 5000 }], cap: 100 }, "trimmed when saved");
+                   { rewards: [{ id: "a1", title: "Buy 5000 PAT", amount: 5000, min_cost: 5000 }], cap: 100, daily: 50000 }, "trimmed when saved");
+  // review: min_cost (channel points; blank = the amount, 0 = not checked) and daily (1..1,000,000 PAT; null / blank = none)
+  const one = (r, extra) => T.validate(Object.assign({ rewards: [Object.assign({ title: "Buy 5000 PAT", amount: 5000 }, r)], cap: 25000 }, extra || {}));
+  assert.equal(one({ min_cost: 0 }).cfg.rewards[0].min_cost, 0);
+  assert.equal(one({ min_cost: "2500" }).cfg.rewards[0].min_cost, 2500);
+  assert.equal(one({ min_cost: "" }).cfg.rewards[0].min_cost, 5000);
+  assert.equal(one({ min_cost: null }).cfg.rewards[0].min_cost, 5000);
+  for (const bad of [-1, 1.5, "x", 1000000001, true]) assert.equal(one({ min_cost: bad }).ok, false, `min_cost ${JSON.stringify(bad)}`);
+  assert.equal(one({}, { daily: null }).cfg.daily, null, "no per-viewer limit");
+  assert.equal(one({}, { daily: "" }).cfg.daily, null);
+  assert.equal(one({}, { daily: "75000" }).cfg.daily, 75000);
+  for (const bad of [0, -5, 2.5, 1000001, "lots"]) assert.equal(one({}, { daily: bad }).ok, false, `daily ${JSON.stringify(bad)}`);
+});
+
+test("a list saved before the review (no min_cost / daily) reads as min cost = the PAT and the default daily limit", async () => {
+  await runQuery("INSERT INTO twitchcp_cfg (key, value) VALUES ('cfg', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                 [JSON.stringify({ rewards: [{ id: "6b1f0c1e-2a1b", title: "Buy 5000 PAT", amount: 5000 }], cap: 25000 })]);
+  T._reset();
+  assert.deepEqual(await T.get(), { rewards: [{ id: "6b1f0c1e-2a1b", title: "Buy 5000 PAT", amount: 5000, min_cost: 5000 }], cap: 25000, daily: 50000 });
+  await reset();
 });
 
 test("an unreadable saved list falls back to the defaults (never to 'pay anything')", async () => {
@@ -249,7 +279,7 @@ test("platform rewards: not routed / routed to the Reserve / to the House -> no_
     const b0 = await bal("u1");
     const tag = JSON.stringify(flows);
     for (const [type, extra] of [["discord-raffle", {}], ["twitch-raffle", {}], ["discord-levelup", {}],
-                                 ["twitch-channelpoints", { twitch_user_id: TW.ann, reward_title: "Buy 5000 PAT" }]]) {
+                                 ["twitch-channelpoints", { twitch_user_id: TW.ann, reward_title: "Buy 5000 PAT", reward_cost: 5000 }]]) {
       const ref = `nr:${type}:${tag}`;
       const r = await BC.chatwinner(Object.assign({ userId: "u1", type, amount: 5000, ref }, extra));
       assert.deepEqual([r.status, r.json.error], [409, "no_route"], `${type} ${tag}`);
@@ -278,6 +308,118 @@ test("connect bonuses and redemption codes keep their own flows (the rule is pla
   assert.equal(F.vaultFor("platform_rewards"), "reserve", "vaultFor's default (why botcredits asks routeOf)");
   F.sync({ reserve: 0, flows: { platform_rewards: "incentives" } });
   assert.equal(F.routeOf("platform_rewards"), "incentives");
+  F.sync({ reserve: 0, flows: {} });
+});
+
+// ── 1.99afh review: the reward's channel-point cost, the per-viewer daily limit ──
+test("under_cost: an allow-listed reward priced below its min cost on Twitch (or with no cost sent) pays nothing; min cost 0 = not checked", async () => {
+  await reset();
+  await runQuery("DELETE FROM twitchcp_seen");
+  live();
+  const b0 = await bal("u1");
+  // "Buy 25000 PAT" repriced to 1 point (or a cheap reward renamed to that exact title): refused, nothing claimed
+  const cheap = await cp({ reward_id: "rw-25k", reward_title: "Buy 25000 PAT", reward_cost: 1, ref: "twitch-cp:uc1" });
+  assert.deepEqual([cheap.status, cheap.json.error, cheap.json.min_cost], [409, "under_cost", 25000]);
+  assert.equal((await log("twitch-cp:uc1")).outcome, "under_cost");
+  for (const [cost, ref] of [[undefined, "uc2"], [null, "uc3"], [24999, "uc4"], ["24999", "uc5"], [-5, "uc6"], [2.5e4 + 0.5, "uc7"], ["lots", "uc8"]]) {
+    const r = await cp({ reward_title: "Buy 25000 PAT", reward_cost: cost, ref: "twitch-cp:" + ref });
+    assert.equal(r.json.error, "under_cost", `cost ${JSON.stringify(cost)}`);
+  }
+  assert.equal(await bal("u1"), b0);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE settled = 0"))[0].n, 0, "nothing claimed from any vault");
+  // at (or above) the minimum it pays
+  assert.equal((await cp({ reward_title: "Buy 25000 PAT", reward_cost: 25000, ref: "twitch-cp:uc9" })).status, 200);
+  assert.equal((await cp({ reward_title: "Buy 5000 PAT", reward_cost: "5000", ref: "twitch-cp:uc10" })).status, 200, "a numeric string is read as its number");
+  assert.equal(await bal("u1"), b0 + 30000);
+  // the card shows what Twitch said the reward cost
+  const seen = Object.fromEntries((await T.seen()).map((s) => [s.reward_id || s.title, s]));
+  assert.deepEqual([seen["rw-25k"].last_cost, seen["rw-25k"].last_outcome], [1, "under_cost"]);
+  // min cost 0: not checked (an owner's explicit choice)
+  await reset({ rewards: [{ title: "Buy 5000 PAT", amount: 5000, min_cost: 0 }], cap: 25000 });
+  live();
+  assert.equal((await cp({ reward_title: "Buy 5000 PAT", reward_cost: undefined, ref: "twitch-cp:uc11" })).status, 200);
+  await reset();
+});
+
+test("over_daily: one account gets at most `daily` PAT from channel points in 24 hours; refusals don't count; null = no limit", async () => {
+  await reset({ rewards: [{ title: "Buy 25000 PAT", amount: 25000 }, { title: "Buy 5000 PAT", amount: 5000 }], cap: 25000, daily: 50000 });
+  live();
+  const b1 = await bal("u1"), b2 = await bal("u2");
+  assert.equal((await cp({ reward_title: "Buy 25000 PAT", ref: "twitch-cp:d1" })).status, 200);
+  assert.equal((await cp({ reward_title: "Buy 5000 PAT", reward_cost: 4, ref: "twitch-cp:d-refused" })).json.error, "under_cost", "a refusal ...");
+  assert.equal((await cp({ reward_title: "Buy 25000 PAT", ref: "twitch-cp:d2" })).status, 200, "... doesn't count against the limit");
+  const over = await cp({ reward_title: "Buy 5000 PAT", ref: "twitch-cp:d3" });
+  assert.deepEqual([over.status, over.json.error, over.json.daily, over.json.used], [409, "over_daily", 50000, 50000]);
+  assert.equal((await log("twitch-cp:d3")).outcome, "over_daily");
+  assert.equal(await bal("u1"), b1 + 50000);
+  // another viewer has their own limit
+  assert.equal((await cp({ userId: "u2", twitch_user_id: TW.bob, reward_title: "Buy 25000 PAT", ref: "twitch-cp:d4" })).status, 200);
+  assert.equal(await bal("u2"), b2 + 25000);
+  // 24 hours later the earlier ones no longer count (and the refused ref may be retried)
+  await runQuery("UPDATE bot_credit_log SET ts = ts - ? WHERE ref IN ('twitch-cp:d1', 'twitch-cp:d2')", [24 * 60 * 60 * 1000 + 1000]);
+  assert.equal((await cp({ reward_title: "Buy 5000 PAT", ref: "twitch-cp:d3" })).status, 200);
+  assert.equal(await bal("u1"), b1 + 55000);
+  // two at once can't both slip under it (checked inside the payment's transaction)
+  await reset({ rewards: [{ title: "Buy 25000 PAT", amount: 25000 }], cap: 25000, daily: 30000 });
+  live();
+  const b1b = await bal("u1");
+  const both = await Promise.all([cp({ reward_title: "Buy 25000 PAT", ref: "twitch-cp:race1" }), cp({ reward_title: "Buy 25000 PAT", ref: "twitch-cp:race2" })]);
+  assert.deepEqual(both.map((r) => r.status).sort(), [200, 409]);
+  assert.equal(both.find((r) => r.status === 409).json.error, "over_daily");
+  assert.equal(await bal("u1"), b1b + 25000);
+  // no limit
+  await reset({ rewards: [{ title: "Buy 25000 PAT", amount: 25000 }], cap: 25000, daily: null });
+  live();
+  for (const ref of ["n1", "n2", "n3"]) assert.equal((await cp({ reward_title: "Buy 25000 PAT", ref: "twitch-cp:" + ref })).status, 200);
+  await reset();
+});
+
+// ── 1.99afh review: platform_rewards is the incentive budget's or nobody's, whoever asks funding.js ──
+test("funding: platform_rewards unrouted / routed to the Reserve / the House -> canFund, takeFundsRef, fundable and fundPayout refuse it", async () => {
+  await reset();
+  for (const flows of [{}, { platform_rewards: "reserve" }, { platform_rewards: "jackpot" }]) {
+    unrouted({ reserve: 76900000, flows, incentives: INC() });
+    await runQuery("DELETE FROM jackpot_rakes");
+    await runQuery("INSERT INTO jackpot_rakes (jackpotId, amount) VALUES ('seed', 10000000)");
+    const tag = JSON.stringify(flows), b0 = await bal("u3"), claims0 = await reserveClaims();
+    assert.equal(await F.canFund("platform_rewards", 100), false, tag);
+    assert.equal((await F.takeFundsRef("platform_rewards", 100, "u3", "discord-whatever")).ok, false, tag);
+    assert.equal(await F.takeFunds("platform_rewards", 100, "u3", "x"), false, tag);
+    assert.equal(await F.fundable("platform_rewards"), 0, tag);
+    assert.deepEqual(await F.fundPayoutEx("u3", 100, "platform_rewards", "x"), { ok: false, queued: false }, tag);
+    assert.equal(await bal("u3"), b0, tag);
+    assert.equal(await reserveClaims(), claims0, tag + ": no Reserve claim");
+    assert.equal((await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes"))[0].t, 10000000, tag + ": the House untouched");
+    // the other flows still go where Pepe routes them
+    if (flows.platform_rewards) {
+      F.state.flows.connect_bonus = flows.platform_rewards;
+      const c = await F.takeFundsRef("connect_bonus", 100, "u3", "connect bonus");
+      assert.equal(c.ok, true, tag + ": connect_bonus still pays from where Pepe routes it");
+      await c.undo();
+      delete F.state.flows.connect_bonus;
+    }
+  }
+  // routed to the incentive budget: paid by it ("incentives:platform_rewards"), never the Reserve
+  live();
+  assert.equal(await F.canFund("platform_rewards", 100), true);
+  assert.equal(await F.fundable("platform_rewards") > 0, true);
+  const t = await F.takeFundsRef("platform_rewards", 100, "u3", "discord-whatever");
+  assert.equal(t.ok, true);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow = 'incentives:platform_rewards' AND settled = 0 AND amount = 100"))[0].n, 1);
+  await t.undo();
+  assert.equal([...F.INCENTIVES_ONLY].join(","), "platform_rewards", "the rule is platform_rewards' only");
+  F.sync({ reserve: 0, flows: {} });
+});
+
+test("funding: user.controller awardBonus (any non-connect type -> platform_rewards) can't make a Reserve claim either", async () => {
+  await reset();
+  const uc = require(path.join(repo, "user.controller"));
+  unrouted({ reserve: 76900000, flows: {}, incentives: INC() });
+  const b0 = await bal("u3"), claims0 = await reserveClaims();
+  const r = await uc.awardBonus("u3", "twitch-something", 5000);
+  assert.ok(!r || r.success !== true, "not paid");
+  assert.equal(await bal("u3"), b0);
+  assert.equal(await reserveClaims(), claims0, "no Reserve claim");
   F.sync({ reserve: 0, flows: {} });
 });
 
@@ -310,9 +452,21 @@ test("admin API: Admins see it; only a Pepe owner changes it (same-site fetch, v
   assert.equal(own.body.can_edit, true);
   const ok = await api("POST", "uo", next, F_);
   assert.equal(ok.status, 200);
-  assert.deepEqual(ok.body.cfg.rewards[0], { id: "6b1f0c1e-2a1b", title: "Buy 5000 PAT", amount: 5000 });
+  assert.deepEqual(ok.body.cfg.rewards[0], { id: "6b1f0c1e-2a1b", title: "Buy 5000 PAT", amount: 5000, min_cost: 5000 });
+  assert.equal(ok.body.cfg.daily, 50000, "a POST without daily (an older card) gets the default limit back");
   T._reset();
   assert.deepEqual((await T.get()).rewards[0].id, "6b1f0c1e-2a1b", "saved");
+  // review: the min cost and the daily limit round-trip; a bad one is refused
+  const withCost = { rewards: [{ id: "6b1f0c1e-2a1b", title: "Buy 5000 PAT", amount: 5000, min_cost: 2500 }, { title: "Buy 25000 PAT", amount: 25000, min_cost: null }],
+                     cap: 25000, daily: null };
+  const saved = await api("POST", "uo", withCost, F_);
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body.cfg.rewards.map((r) => r.min_cost), [2500, 25000]);
+  assert.equal(saved.body.cfg.daily, null);
+  assert.equal((await api("POST", "uo", Object.assign({}, withCost, { daily: 0 }), F_)).status, 400);
+  assert.equal((await api("POST", "uo", { rewards: [{ title: "x", amount: 5, min_cost: -1 }], cap: 25000 }, F_)).status, 400);
+  const view = await api("GET", "uo");
+  assert.deepEqual([view.body.max_cost, view.body.max_daily, view.body.defaults.daily], [T.MAX_COST, T.MAX_DAILY, 50000]);
   const audit = (await getQuery("SELECT admin_id, action, detail FROM admin_audit WHERE action = 'twitch-cp' ORDER BY at DESC LIMIT 1"))[0];
   assert.equal(audit.admin_id, "uo");
   assert.equal(JSON.parse(audit.detail).after.rewards.length, 2);
@@ -331,8 +485,8 @@ test("bot path: a redemption is looked up by Twitch user id, paid by the list, a
   const said = [], logs = [];
   const deps = { http, base, token: BOT, say: (t) => { said.push(t); return Promise.resolve(); }, recent: new CPB.Recent(),
                  log: (...a) => logs.push(a.join(" ")), warn: (...a) => logs.push(a.join(" ")) };
-  const ev = (id, user_id, title, rid) => ({ id, user_id, user_login: "x", user_name: "Viewer" + user_id, broadcaster_user_id: "1",
-                                             reward: { id: rid || "rid-" + title.replace(/\W/g, ""), title, cost: 1000 } });
+  const ev = (id, user_id, title, rid, cost) => ({ id, user_id, user_login: "x", user_name: "Viewer" + user_id, broadcaster_user_id: "1",
+                                                   reward: { id: rid || "rid-" + title.replace(/\W/g, ""), title, cost: cost === undefined ? 25000 : cost } });
   try {
     const b1 = await bal("u1");
     assert.deepEqual(await CPB.handleRedemption(ev("e-1", TW.ann, "Buy 25000 PAT"), deps), { outcome: "ok", amount: 25000 });
@@ -355,6 +509,10 @@ test("bot path: a redemption is looked up by Twitch user id, paid by the list, a
     assert.match(said.pop(), /no PATV account is linked to your Twitch/);
     assert.deepEqual(await CPB.handleRedemption(ev("e-5", "4242", "Go to the dog park"), deps), { outcome: "no_user" });
     assert.equal(said.length, 0, "not about PAT: no line");
+    // review: "Buy 25000 PAT" repriced to 1 channel point on Twitch -> under_cost, explained, nothing paid
+    assert.deepEqual(await CPB.handleRedemption(ev("e-cheap", TW.ann, "Buy 25000 PAT", null, 1), deps), { outcome: "under_cost" });
+    assert.match(said.pop(), /costs fewer channel points than its PAT needs/);
+    assert.equal(await bal("u1"), b1 + 25000);
     // budget used up
     live(10);
     assert.deepEqual(await CPB.handleRedemption(ev("e-6", TW.ann, "Buy 5000 PAT"), deps), { outcome: "unfunded" });

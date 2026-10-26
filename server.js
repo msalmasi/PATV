@@ -6,59 +6,26 @@ const axios = require('axios'); // Ensure axios is imported
 // too): the site pays allow-listed rewards only (never a number from the title), by the redeemer's Twitch user id, once
 // per redemption id. Requests to Twitch / the site are logged as status + answer only (errInfo) - never their config,
 // which carries tokens.
-const { redeemChannelPoints } = require("./twitchbot/twitch");
 const CP = require("./twitchbot/channelpoints");
+// 1.99afh review: before the chat bot starts (twitch.js connects on require) - an unhandled rejection (a !spin / raffle /
+// chat line while the site or Twitch is down) is logged as status + answer and this process keeps running. Node 22 would
+// exit and print the whole AxiosError (X-Bot-Token, X-PATV-Key) - and a crash inside the prod updater's stability check
+// rolls the deploy back. An uncaught exception still exits (pm2 restarts it), logged the same way.
+CP.guardProcess(process);
+const { redeemChannelPoints } = require("./twitchbot/twitch");
 
-const app = express();
 const PORT = process.env.PORT || 3001;
-const REDEMPTION_ADD = 'channel.channel_points_custom_reward_redemption.add';
+const REDEMPTION_ADD = CP.REDEMPTION_ADD;
 
-// keep the raw body: Twitch signs the exact bytes it sent (a re-serialised JSON.stringify(req.body) can differ)
-app.use(bodyParser.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
-
-const recentMessages = new CP.Recent(2000);
-
-async function handleEvent(notification) {
-    const redemption = notification && notification.event;
-    if (!redemption || !redemption.reward) return;
-    // only our channel's redemptions (the subscription is for TWITCH_BROADCASTER_ID)
-    if (process.env.TWITCH_BROADCASTER_ID && String(redemption.broadcaster_user_id) !== String(process.env.TWITCH_BROADCASTER_ID)) {
-      console.log(`Channel Point Redemption for another channel (${redemption.broadcaster_user_id}) - ignored`);
-      return;
-    }
-    console.log(`Channel Point Redemption by ${redemption.user_name}: ${redemption.reward.title} (reward ${redemption.reward.id})`);
-    await redeemChannelPoints(redemption);
-  }
-
-// Endpoint to receive webhook notifications
-app.post('/webhooks/callback', (req, res) => {
-  const headers = req.headers;
-  const raw = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-  if (!CP.verifySignature(process.env.TWITCH_EVENTSUB_SECRET, headers, raw)) {
-    console.error('Could not verify message signature');
-    return res.status(403).send('Forbidden');
-  }
-  const notification = req.body || {};
-  const type = headers['twitch-eventsub-message-type'];
-  if (type === 'webhook_callback_verification') {
-    // Respond to the challenge during subscription verification (the raw string only)
-    return res.status(200).type('text/plain').send(String(notification.challenge || ''));
-  }
-  if (type === 'revocation') {
-    console.log(`Subscription revoked: ${notification.subscription && notification.subscription.status}`);
-    return res.status(200).end();
-  }
-  if (type !== 'notification') return res.status(200).end();
-  // 2xx straight away (Twitch re-sends what isn't answered within a few seconds), then handle it once:
-  // an old (replayed) or already-seen message is acknowledged and dropped
-  res.status(200).end();
-  if (!CP.fresh(headers['twitch-eventsub-message-timestamp'])) {
-    console.warn(`EventSub message ${headers['twitch-eventsub-message-id']} is older than 10 minutes - ignored`);
-    return;
-  }
-  if (!recentMessages.add(headers['twitch-eventsub-message-id'])) return;
-  if (!notification.subscription || notification.subscription.type !== REDEMPTION_ADD) return;
-  handleEvent(notification).catch((e) => console.error('Channel point redemption failed:', CP.errInfo(e)));
+// The EventSub endpoint (POST /webhooks/callback): raw body kept for the signature, 403 on a bad one, the challenge as
+// text/plain, 200 at once for a notification, then replays (> 10 min), repeated message ids, other subscription types and
+// other channels (TWITCH_BROADCASTER_ID) dropped - channelpoints.webhookApp, which test/twitch-channelpoints.test.js drives.
+const app = CP.webhookApp({
+  express,
+  bodyParser,
+  secret: () => process.env.TWITCH_EVENTSUB_SECRET,
+  broadcasterId: process.env.TWITCH_BROADCASTER_ID,
+  onRedemption: redeemChannelPoints,
 });
 
   async function createEventSubSubscription() {
@@ -98,14 +65,18 @@ app.post('/webhooks/callback', (req, res) => {
   // At the end of server.js
 // 1.99cf: loopback only - Twitch reaches it through nginx (https://publicaccess.tv/webhooks/callback)
 require('./listen').listen(app, PORT, 'webhooks', async () => {
+  try {
     console.log(`Webhook listener is running on ${require('./listen').bindHost()}:${PORT}`);
 
-// Delete all existing subscriptions
-  await deleteAllSubscriptions();
+    // Delete all existing subscriptions
+    await deleteAllSubscriptions();
 
-  // Create a new subscription
-  await createEventSubSubscription();
-  });
+    // Create a new subscription
+    await createEventSubSubscription();
+  } catch (error) {
+    console.error('EventSub subscription setup failed:', CP.errInfo(error));
+  }
+});
 
 // Function to list all current EventSub subscriptions
 async function listSubscriptions() {
@@ -117,7 +88,7 @@ async function listSubscriptions() {
         },
       });
 
-      return response.data.data; // Return the list of subscriptions
+      return response.data && Array.isArray(response.data.data) ? response.data.data : []; // Return the list of subscriptions
     } catch (error) {
       console.error('Error listing subscriptions:', CP.errInfo(error));
       return [];

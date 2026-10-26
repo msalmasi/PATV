@@ -22,11 +22,13 @@
 //        * platform_rewards is paid by the INCENTIVE BUDGET only: when Pepe's last sync routes it anywhere else, or never
 //          routed it (vaultFor would read that as the Reserve), a discord-* / twitch-* credit is refused 409 "no_route" -
 //          never a Reserve claim. (Connect bonuses and redemption codes have their own flows and aren't touched.)
-//        * type "twitch-channelpoints" {userId, twitch_user_id, reward_id, reward_title, ref} pays the ALLOW-LISTED reward's
-//          amount (twitchcp.js) - never the caller's `amount`, never a number from a title: a ref is required ("twitch-cp:"
-//          + the redemption id, so a repeated EventSub delivery is a duplicate), an unlisted reward is refused 409
-//          "not_allowlisted", one above the site's cap 409 "over_cap", and the account must be the one linked to that
-//          Twitch user id (404 "no_user"). The answer carries `amount` (what was paid).
+//        * type "twitch-channelpoints" {userId, twitch_user_id, reward_id, reward_title, reward_cost, ref} pays the
+//          ALLOW-LISTED reward's amount (twitchcp.js) - never the caller's `amount`, never a number from a title: a ref is
+//          required ("twitch-cp:" + the redemption id, so a repeated EventSub delivery is a duplicate), an unlisted reward is
+//          refused 409 "not_allowlisted", one above the site's cap 409 "over_cap", one whose channel-point cost is below the
+//          entry's min_cost (or not sent) 409 "under_cost", one that would take the account past the daily limit in 24 h
+//          409 "over_daily" (checked inside the transaction), and the account must be the one linked to that Twitch user
+//          id (404 "no_user"). The answer carries `amount` (what was paid).
 //   POST /api/g/heist/jackpot-adjust {password, amount, userId?, source, ref}   source (<= 64) and ref (<= 80) required.
 //   POST /api/users/merge-balance {password, fromUserId, toUserId, ref}  the WHOLE balance of fromUserId moves to
 //        toUserId atomically, two "account merge" transactions rows (out / in, each naming the other account), idempotent
@@ -113,18 +115,23 @@ const CHANNEL_POINTS = "twitch-channelpoints";
 const isChannelPoints = (type) => String(type == null ? "" : type).trim().toLowerCase() === CHANNEL_POINTS;
 const PLATFORM_FLOW = "platform_rewards";
 
-/** The redeemed reward a channel-point call names: {id, title} (both as Twitch sent them, bounded). */
+/** The redeemed reward a channel-point call names: {id, title, cost} (as Twitch sent them, bounded; cost null = not sent). */
 function cpReward(b) {
   const id = typeof b.reward_id === "string" && b.reward_id.trim() ? b.reward_id.trim().slice(0, 64) : null;
   const title = typeof b.reward_title === "string" ? b.reward_title.slice(0, 120) : null;
-  return { id, title };
+  const c = b.reward_cost;
+  const cost = (typeof c === "number" && Number.isSafeInteger(c) && c >= 0) ? c
+             : (typeof c === "string" && /^\d{1,15}$/.test(c.trim()) ? Number(c.trim()) : null);
+  return { id, title, cost };
 }
+const DAY_MS = 24 * 60 * 60 * 1000;
 /** bot_credit_log's source for a redemption: which reward it was (the reward's id, else its title). */
 const cpSource = (reward) => ("twitch-reward:" + (reward.id || reward.title || "?")).slice(0, 64);
 
 /**
- * Before anything moves: the ref, the allowlist, the cap and the account linked to the Twitch user id.
- * -> {amount, reward} to pay, or {answer} (a duplicate's 200 or a refusal, already logged).
+ * Before anything moves: the ref, the allowlist, the cap, the reward's channel-point cost (the entry's min_cost) and the
+ * account linked to the Twitch user id. (The per-viewer daily limit is checked inside the payment's transaction.)
+ * -> {amount, reward, daily} to pay, or {answer} (a duplicate's 200 or a refusal, already logged).
  */
 async function channelPointsPrep(b) {
   const T = require("./twitchcp");
@@ -149,13 +156,16 @@ async function channelPointsPrep(b) {
   if (!hit) return refuse(409, "not_allowlisted");
   entry.amount = hit.amount;
   if (hit.amount > cfg.cap) return refuse(409, "over_cap", { cap: cfg.cap });
+  // 1.99afh review: whoever can edit the channel's rewards could price an allow-listed one at 1 point (or give a cheap reward
+  // its exact title) and let viewers farm the incentive budget - the reward must cost at least the entry's min_cost
+  if (hit.min_cost > 0 && (reward.cost === null || reward.cost < hit.min_cost)) return refuse(409, "under_cost", { min_cost: hit.min_cost });
   // credited by the Twitch USER ID (never a display name): the account must be the one linked to it
   const tw = typeof b.twitch_user_id === "string" || typeof b.twitch_user_id === "number" ? String(b.twitch_user_id).trim() : "";
   if (!/^\d{1,20}$/.test(tw) || !b.userId) return refuse(400, "bad_twitch_user");
   let linked = null;
   try { linked = (await getQuery("SELECT userId FROM users WHERE userId = ? AND twitchId = ?", [String(b.userId), tw]))[0] || null; } catch (e) { linked = null; }
   if (!linked) return refuse(404, "no_user", { code: ledger.E_TARGET_NOT_FOUND });
-  return { amount: hit.amount, reward };
+  return { amount: hit.amount, reward, daily: cfg.daily === undefined ? T.DEFAULT_DAILY : cfg.daily };
 }
 
 // ── POST /api/bonus/chatwinner ──
@@ -165,26 +175,27 @@ async function chatwinner(body, deps = {}) {
   let { amount } = b;
   // 1.99afh: a channel-point redemption pays the allow-listed reward's amount, never the caller's
   const cp = isChannelPoints(type);
-  let reward = null;
+  let reward = null, daily = null;
   if (cp) {
     const prep = await channelPointsPrep(b);
     if (prep.answer) return prep.answer;
     amount = prep.amount;
     reward = prep.reward;
+    daily = prep.daily;
   }
   if (!userId || !amount || !type) return { status: 400, text: "Missing required fields" };
   const amt = Number(amount);
   if (!Number.isFinite(amt) || Math.trunc(amt) === 0) return { status: 400, text: "Missing required fields" };
   const src = cp ? { ok: true, value: cpSource(reward) } : optStr(b.source, 64), rf = optStr(b.ref, 80);
   const entry = { endpoint: "chatwinner", userId, type: cp ? CHANNEL_POINTS : String(type), amount: Math.trunc(amt), source: src.ok ? src.value : null, ref: rf.ok ? rf.value : null };
-  const out = await chatwinnerPay(b, deps, { userId, type: entry.type, amt, src, rf, entry, cp });
+  const out = await chatwinnerPay(b, deps, { userId, type: entry.type, amt, src, rf, entry, cp, daily });
   if (cp) await require("./twitchcp").noteSeen(reward, out.outcome);
   delete out.outcome;
   return out;
 }
 
 /** The credit itself (after the channel-point checks). -> {status, json | text, outcome} - outcome is what was logged. */
-async function chatwinnerPay(body, deps, { userId, type, amt, src, rf, entry, cp: isCp }) {
+async function chatwinnerPay(body, deps, { userId, type, amt, src, rf, entry, cp: isCp, daily }) {
   const amount = Math.trunc(amt);
   if (!src.ok || !rf.ok) {
     await note(entry, "bad_source");
@@ -208,6 +219,17 @@ async function chatwinnerPay(body, deps, { userId, type, amt, src, rf, entry, cp
   let out;
   try {
     out = await logged(entry, async () => {
+      // 1.99afh review: a channel-point redemption stays within the viewer's daily limit (twitchcp.js `daily`) - summed
+      // inside this serialized transaction, so two redemptions at once can't both slip under it
+      if (isCp && amt > 0 && Number.isInteger(daily)) {
+        const r = await getQuery(`SELECT COALESCE(SUM(amount), 0) AS t FROM bot_credit_log
+                                  WHERE type = ? AND outcome = 'ok' AND userId = ? AND ts >= ?`, [CHANNEL_POINTS, String(userId), Date.now() - DAY_MS]);
+        const used = Number(r[0] && r[0].t) || 0;
+        if (used + amount > daily) {
+          console.warn(`[bonus] ${CHANNEL_POINTS} +${amount} for ${userId} refused: ${used} of the ${daily} daily limit used (over_daily)`);
+          throw new Refusal(409, { success: false, error: "over_daily", daily, used }, "over_daily");
+        }
+      }
       // 1.63: Discord/Twitch rewards are paid OUT of a vault ("platform_rewards"), never minted
       if (amt > 0 && platform) {
         // 1.99afh (owner, 2026-10-26): ... and that vault is the incentive budget - routed elsewhere, or not routed by any

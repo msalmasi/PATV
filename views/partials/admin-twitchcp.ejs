@@ -8,21 +8,25 @@
   <p class="adm-help">Viewers on <code>publicaccess_ttv</code> redeem channel-point rewards; only the rewards listed here pay PAT, and they pay
     the amount listed here, out of the incentive budget (the <code>platform_rewards</code> flow - never the Reserve). Any other reward pays
     nothing: one that says PAT in its title gets a line in chat, the streamer's other rewards are left alone. A row with a
-    <b>reward id</b> matches that reward only (renaming it on Twitch keeps it); a row without one matches the <b>exact title</b>. Pin the
-    ids from "Rewards seen" below once the bot has seen them. No redemption pays more than the <b>cap</b> (at most
-    <span id="tcpHard">25,000</span>; 0 pauses them all). Twitch keeps refused redemptions in the reward queue - refund them there.</p>
+    <b>reward id</b> matches that reward only (renaming it on Twitch keeps it); a row without one matches the <b>exact title</b> - until a
+    row with an id has that title. Pin the ids from "Rewards seen" below once the bot has seen them. A reward must cost at least its
+    <b>min cost</b> in channel points on Twitch (blank = 1 point per PAT; 0 = not checked), so a reward repriced to a few points pays
+    nothing - "Rewards seen" shows what each one cost. No redemption pays more than the <b>cap</b> (at most
+    <span id="tcpHard">25,000</span>; 0 pauses them all), and no viewer gets more than the <b>daily limit</b> in 24 hours (blank = no
+    limit). Twitch keeps refused redemptions in the reward queue - refund them there.</p>
   <% if (!locals.econOwner) { %><p class="adm-help">Changing the list is a Pepe owner's: your account needs a linked Camfrog login with Pepe's owner role.</p><% } %>
   <form id="tcpForm" class="adm-form one" autocomplete="off" novalidate>
     <div id="tcpRows" role="list" aria-label="Rewards that pay PAT"></div>
     <div class="adm-actions"><button type="button" class="ds-btn sm ghost" id="tcpAdd">Add a reward</button></div>
     <label for="tcpCap">Cap per redemption (PAT)<input type="number" id="tcpCap" name="cap" min="0" max="25000" step="1" required></label>
+    <label for="tcpDaily">Daily limit per viewer (PAT, 24 hours; blank = none)<input type="number" id="tcpDaily" name="daily" min="1" max="1000000" step="1" inputmode="numeric"></label>
     <div class="adm-actions"><button class="ds-btn sm" type="submit" id="tcpSave">Save</button></div>
   </form>
   <h3>Rewards seen</h3>
   <div class="adm-tbl"><table aria-label="Channel-point rewards the bot has seen">
-    <thead><tr><th>Title</th><th>Reward id</th><th class="num">Times</th><th>Last answer</th><th>Last seen</th><th></th></tr></thead>
-    <tbody id="tcpSeen"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    <thead><tr><th>Title</th><th>Reward id</th><th class="num">Cost</th><th class="num">Times</th><th>Last answer</th><th>Last seen</th><th></th></tr></thead>
+    <tbody id="tcpSeen"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
   </table></div>
-  <script src="/public/js/admin-twitchcp.js?v=1" defer></script>
+  <script src="/public/js/admin-twitchcp.js?v=2" defer></script>
   <% } %>
 </section>

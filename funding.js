@@ -162,6 +162,12 @@ function routeOf(flow) {
   const v = Object.prototype.hasOwnProperty.call(state.flows, flow) ? state.flows[flow] : null;
   return v === "incentives" || v === "jackpot" || v === "reserve" ? v : null;
 }
+// 1.99afh review: flows that are paid by the incentive budget OR NOT AT ALL, whoever asks (botcredits.js's chatwinner, and
+// user.controller.js awardBonus, which sends every non-connect type to platform_rewards): canFund / takeFunds(Ref) /
+// fundable refuse them unless Pepe's last sync routed them to "incentives" - never vaultFor's Reserve default, never a
+// Reserve / House route (owner, 2026-10-26: Discord/Twitch rewards never fall back to the Reserve).
+const INCENTIVES_ONLY = new Set(["platform_rewards"]);
+const offRoute = (flow) => INCENTIVES_ONLY.has(flow) && routeOf(flow) !== "incentives";
 
 // PAT the website has paid out of the incentive budget that Pepe hasn't settled yet (all groups / one group)
 async function unsettledIncentives(group) {
@@ -219,6 +225,7 @@ async function jackpotPot() {
 // 1.99gq: how much `flow` could be paid right now (incentive flows: what its group and the budget can cover,
 // 0 while the group has a queue; the House: its balance; the Reserve: its balance net of unsettled claims)
 async function fundable(flow) {
+  if (offRoute(flow)) return 0;
   const v = vaultFor(flow);
   if (v === "jackpot") return Math.max(0, await jackpotPot());
   if (v === "incentives") {
@@ -336,6 +343,7 @@ async function wheelReseed(spinId, userId, floor) {
 async function canFund(flow, amount) {
   amount = Math.floor(Number(amount) || 0);
   if (amount <= 0) return true;
+  if (offRoute(flow)) return false;                  // 1.99afh review: the incentive budget or nothing
   if (vaultFor(flow) === "jackpot") return (await jackpotPot()) >= amount;
   if (vaultFor(flow) === "incentives") return canFundIncentives(flow, amount, false);
   const rv = await reserveNow();
@@ -354,7 +362,8 @@ async function takeFundsRef(flow, amount, userId, type) {
   amount = Math.floor(Number(amount) || 0);
   if (amount <= 0) return { ok: true, undo: async () => {} };
   if (!(await canFund(flow, amount))) {
-    console.log(`[funding] ${flow}: ${vaultFor(flow)} can't cover ${amount} for ${userId} - skipped`);
+    if (offRoute(flow)) console.log(`[funding] ${flow}: routed to ${routeOf(flow) || "nothing yet"}, not the incentive budget - ${amount} for ${userId} refused (never the Reserve)`);
+    else console.log(`[funding] ${flow}: ${vaultFor(flow)} can't cover ${amount} for ${userId} - skipped`);
     return { ok: false, undo: async () => {} };
   }
   const id = uuidv4();
@@ -686,7 +695,7 @@ async function settle(ids) {
 }
 
 module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive, roomVaultsLive,
-                   treasuryLive, treasuryOn, vaultFor, routeOf, queueClaim, drainQueue, queueSummary, groupOf, fundable, unsettledIncentives,
+                   treasuryLive, treasuryOn, vaultFor, routeOf, INCENTIVES_ONLY, queueClaim, drainQueue, queueSummary, groupOf, fundable, unsettledIncentives,
                    houseBacked, wheelDraw, wheelReseed, reserveAvailable, takeReserveRef,
                    // 1.99jw
                    init: () => ready, cleanMonetary, takeIncentivesRef, houseFlashPlan, houseFlashCover, unsettledFlash, unsettledReserve,

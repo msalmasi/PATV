@@ -46,7 +46,15 @@ const client = new tmi.Client({
   channels: ["publicaccess_ttv"],
 });
 
-client.connect();
+// (tmi reconnects by itself; a failed first connect is logged, not an unhandled rejection - 1.99afh review)
+Promise.resolve(client.connect()).catch((e) => console.error("[tmi] connect:", errInfo(e)));
+
+// 1.99afh review: a chat line whose failure (tmi reconnecting: "Not connected to server.") is logged as errInfo instead of
+// being left as an unhandled rejection
+function sayLogged(channel, text) {
+  try { return Promise.resolve(client.say(channel, text)).catch((e) => console.error("[tmi] say:", errInfo(e))); }
+  catch (e) { console.error("[tmi] say:", errInfo(e)); return Promise.resolve(); }
+}
 
 // thisArg - context in which to call the function; 'this' in the function's body
 // fn - function to execute on a cooldown
@@ -273,13 +281,26 @@ async function findUserBalance(twitchId) {
 // COMMANDS LOGIC
 
 // !spin
+// 1.99afh review: never rejects - the 'message' handler calls it without a catch, and an unhandled rejection used to crash
+// pm2 'server' and print the whole AxiosError (the bot token) when the site was down (a 5xx / ECONNREFUSED on the lookup).
 async function handleSpinCommand(channel, twitchId, displayName, profileImage) {
   // Logic to trigger the spin based on the user info
-  const user = await findOrCreateTwitchUser(
-    twitchId,
-    displayName,
-    profileImage
-  );
+  let user;
+  try {
+    user = await findOrCreateTwitchUser(
+      twitchId,
+      displayName,
+      profileImage
+    );
+  } catch (error) {
+    console.error(`!spin: looking up ${displayName} failed:`, errInfo(error));
+    sayLogged(channel, `@${displayName}, the wheel can't find your PATV account right now - try again in a minute.`);
+    return;
+  }
+  if (!user || !user.username) {
+    console.error(`!spin: no account for ${displayName}`);
+    return;
+  }
   console.log(`Spinning the wheel for ${user.username}`);
   const url = process.env.BACKEND_BASE_URL+`/api/g/wheel/chatspin`;
 
@@ -333,33 +354,40 @@ async function setupResultsListener(spinId, channel, twitchId, displayName) {
   const resultsUrl = process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${encodeURIComponent(spinId)}`;
   const eventSource = new EventSource(resultsUrl, patvSse(resultsUrl));   // 1.99acf: + X-PATV-Key when set
 
+  // 1.99afh review: a failing balance lookup (findUserBalance rethrows) / bad JSON is logged, never an unhandled rejection
   eventSource.onmessage = async function (event) {
-    const result = JSON.parse(event.data);
-    const spinnerBalance = await findUserBalance(twitchId);
-    console.log("Spin result received:", result);
-    if (result.jackpot) {
-      if (result.grand) {
-        for (let i = 0; i < 8; i++) {
-          client.say(channel, `PAT ${result.result} GRAND JACKPOT @${displayName}!!!!!!!!`);
+    try {
+      const result = JSON.parse(event.data);
+      const spinnerBalance = await findUserBalance(twitchId);
+      console.log("Spin result received:", result);
+      if (result.jackpot) {
+        if (result.grand) {
+          for (let i = 0; i < 8; i++) {
+            client.say(channel, `PAT ${result.result} GRAND JACKPOT @${displayName}!!!!!!!!`);
+          }
+          // (was clientSayPrize, which was never defined: a ReferenceError on every grand jackpot)
+          client.say(
+            channel,
+            `YOU WON THE ENTIRE PAT ${result.result} JACKPOT AND GAINED ${result.xp} XP @${displayName} (PAT ${spinnerBalance})!!!!!!!! YOU ARE AMAZING AND SO COOL!`
+          );
+        } else {
+          client.say(
+            channel,
+            `🏆 JACKPOT @${displayName}! You won ${result.jackpotPct}% of the pot: PAT ${result.result} (+${result.xp} XP). (PAT ${spinnerBalance})`
+          );
         }
-        clientSayPrize(
-          channel,
-          `YOU WON THE ENTIRE PAT ${result.result} JACKPOT AND GAINED ${result.xp} XP @${displayName} (PAT ${spinnerBalance})!!!!!!!! YOU ARE AMAZING AND SO COOL!`
-        );
       } else {
         client.say(
           channel,
-          `🏆 JACKPOT @${displayName}! You won ${result.jackpotPct}% of the pot: PAT ${result.result} (+${result.xp} XP). (PAT ${spinnerBalance})`
+          `You won PAT ${result.result} and gained ${result.xp} XP, @${displayName} (PAT ${spinnerBalance}).`
         );
       }
-    } else {
-      client.say(
-        channel,
-        `You won PAT ${result.result} and gained ${result.xp} XP, @${displayName} (PAT ${spinnerBalance}).`
-      );
+      // fetchUserBalance(user);
+    } catch (error) {
+      console.error("Spin result failed:", errInfo(error));
+    } finally {
+      eventSource.close();
     }
-    // fetchUserBalance(user);
-    eventSource.close();
   };
 
   eventSource.onerror = function (event) {
@@ -372,21 +400,27 @@ async function setupWagerListener(spinId, channel, twitchId, displayName) {
   const spinUrl = process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${encodeURIComponent(spinId)}`;
   const eventSource = new EventSource(spinUrl, patvSse(spinUrl));   // 1.99acf: + X-PATV-Key when set
 
+  // 1.99afh review: a failing balance lookup (findUserBalance rethrows) / bad JSON is logged, never an unhandled rejection
   eventSource.onmessage = async function (event) {
-    const data = JSON.parse(event.data);
-    const spinnerBalance = await findUserBalance(twitchId);
-    console.log(spinnerBalance);
-    console.log("Spin command received:", data);
-    if (data.message.includes("public spinid") && data.spinId) {
+    try {
+      const data = JSON.parse(event.data);
+      const spinnerBalance = await findUserBalance(twitchId);
+      console.log(spinnerBalance);
       console.log("Spin command received:", data);
-      wager = 5000;
-      client.say(
-        channel,
-        `yes yes @${displayName} (PAT ${spinnerBalance}). Spinning the wheel for PAT ${wager}, good luck!`
-      );
+      if (data.message.includes("public spinid") && data.spinId) {
+        console.log("Spin command received:", data);
+        wager = 5000;
+        client.say(
+          channel,
+          `yes yes @${displayName} (PAT ${spinnerBalance}). Spinning the wheel for PAT ${wager}, good luck!`
+        );
+      }
+      // Update UI based on the result
+    } catch (error) {
+      console.error("Spin wager failed:", errInfo(error));
+    } finally {
+      eventSource.close();
     }
-    // Update UI based on the result
-    eventSource.close();
   };
 
   eventSource.onerror = function (event) {
@@ -640,10 +674,23 @@ function redeemChannelPoints(event) {
 }
 
 // Function to end the raffle and select a winner
+// 1.99afh review: it runs from a setTimeout, so nothing may reject out of it - a failing winner lookup (findUserBalance
+// rethrows; the axios.get below) used to be an unhandled rejection that crashed pm2 'server' and printed the whole
+// AxiosError (the bot token). Every failure is logged as errInfo, and the next raffle starts whatever happened to this one.
 async function endRaffle(channel, raffleDurationMinutes) {
+  try {
+    await drawRaffle(channel, raffleDurationMinutes);
+  } catch (error) {
+    console.error("Raffle draw failed:", errInfo(error));
+  } finally {
+    // Start a new raffle
+    startRaffle(channel);
+  }
+}
+
+async function drawRaffle(channel, raffleDurationMinutes) {
   if (currentRaffleParticipants.size === 0) {
     console.log("No participants in the raffle.");
-    startRaffle(channel); // Start a new raffle
     return;
   }
 
@@ -653,6 +700,7 @@ async function endRaffle(channel, raffleDurationMinutes) {
   const winnerId = participantsArray[randomIndex];
   const winnerBalance = await findUserBalance(winnerId);
   let displayName = "";
+  let userId = null;          // (was an implicit global: a lookup without a user re-paid the PREVIOUS raffle's winner)
 
   // Find the displayname of for the winnerId
   const userResponse = await axios.get(
@@ -663,6 +711,10 @@ async function endRaffle(channel, raffleDurationMinutes) {
     // User found, return the existing user data
     displayName = userResponse.data.user.twitchDisplayname;
     userId = userResponse.data.user.userId;
+  }
+  if (!userId) {
+    console.log(`Raffle winner ${winnerId} has no PATV account - no prize this time.`);
+    return;
   }
 
   // Determine a random prize between 100 and 500 multiplied by the raffle duration
@@ -682,16 +734,13 @@ async function endRaffle(channel, raffleDurationMinutes) {
       password: process.env.TWITCH_BOT_TOKEN,
     });
     console.log("Raffle winner logged in backend.");
-    client.say(
+    sayLogged(
       channel,
       `@${displayName} (PAT ${winnerBalance}) won the random chat raffle with a prize of PAT ${randomPrize}!`
     );
   } catch (error) {
     console.error("Failed to log raffle winner:", errInfo(error));
   }
-
-  // Start a new raffle
-  startRaffle(channel);
 }
 
 // Initialization when the bot starts
@@ -704,4 +753,12 @@ initializeBot();
 
 module.exports = {
   redeemChannelPoints,
-}
+  // test/twitch-bot-errors.test.js (1.99afh review): the failure paths, without waiting 15-60 minutes for a raffle
+  _test: {
+    client,
+    participants: currentRaffleParticipants,
+    endRaffle,
+    handleSpinCommand,
+    stopRaffle: () => clearTimeout(raffleTimeout),
+  },
+};

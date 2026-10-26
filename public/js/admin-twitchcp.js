@@ -1,5 +1,6 @@
 // admin-twitchcp.js - 1.99afh: the Twitch channel points card on /admin/economy#twitchcp (views/partials/admin-twitchcp.ejs;
-// twitchcp.js). Rows of {reward id, exact title, PAT} + the cap; "Rewards seen" pins a seen reward's id onto its row.
+// twitchcp.js). Rows of {reward id, exact title, PAT, min cost} + the cap + the daily limit per viewer; "Rewards seen" pins a
+// seen reward's id (and, while the row has none, the cost Twitch last sent as its min cost) onto its row.
 (function () {
   'use strict';
   var f = document.getElementById('tcpForm'), rows = document.getElementById('tcpRows'), seenT = document.getElementById('tcpSeen');
@@ -28,6 +29,8 @@
     d.appendChild(field('Reward id (optional)', 'id', r.id, { type: 'text', maxlength: '64', placeholder: 'Twitch reward UUID', spellcheck: 'false' }));
     d.appendChild(field('Exact title', 'title', r.title, { type: 'text', maxlength: '45', placeholder: 'Buy 5000 PAT' }));
     d.appendChild(field('PAT', 'amount', r.amount, { type: 'number', min: '1', max: '25000', step: '1', inputmode: 'numeric' }));
+    d.appendChild(field('Min cost (channel points)', 'min_cost', r.min_cost, { type: 'number', min: '0', max: '1000000000', step: '1', inputmode: 'numeric',
+                                                                               placeholder: '= PAT' }));
     var x = el('button', { type: 'button', class: 'ds-btn sm ghost' }, 'Remove');
     x.disabled = !canEdit;
     x.addEventListener('click', function () { d.remove(); });
@@ -40,6 +43,7 @@
     rows.textContent = '';
     (cfg.rewards || []).forEach(addRow);
     f.cap.value = String(cfg.cap);
+    f.daily.value = cfg.daily == null ? '' : String(cfg.daily);
   }
   function when(ts) { try { return ts ? new Date(ts).toLocaleString() : ''; } catch (e) { return ''; } }
   function pin(s) {
@@ -48,15 +52,18 @@
     for (var i = 0; i < all.length; i++) if (val(all[i], 'title') === (s.title || '') && !val(all[i], 'id')) { hit = all[i]; break; }
     if (!hit) hit = addRow({ id: '', title: s.title || '', amount: '' });
     hit.querySelector('[data-k="id"]').value = s.reward_id;
-    say('Pinned - Save to keep it.');
+    var mc = hit.querySelector('[data-k="min_cost"]');
+    if (mc && !String(mc.value).trim() && s.last_cost != null) mc.value = String(s.last_cost);
+    say('Pinned - check the min cost, then Save to keep it.');
   }
   function showSeen(list) {
     seenT.textContent = '';
-    if (!list || !list.length) { var tr0 = el('tr'); tr0.appendChild(el('td', { colspan: '6', class: 'empty' }, 'None yet.')); seenT.appendChild(tr0); return; }
+    if (!list || !list.length) { var tr0 = el('tr'); tr0.appendChild(el('td', { colspan: '7', class: 'empty' }, 'None yet.')); seenT.appendChild(tr0); return; }
     list.forEach(function (s) {
       var tr = el('tr');
       tr.appendChild(el('td', null, s.title || ''));
       tr.appendChild(el('td', null, s.reward_id || ''));
+      tr.appendChild(el('td', { class: 'num' }, s.last_cost == null ? '' : Number(s.last_cost).toLocaleString()));
       tr.appendChild(el('td', { class: 'num' }, String(s.n || 0)));
       tr.appendChild(el('td', null, s.last_outcome || ''));
       tr.appendChild(el('td', null, when(s.last_ts)));
@@ -78,6 +85,7 @@
         if (addB) addB.disabled = !canEdit;
         if (saveB) saveB.disabled = !canEdit;
         f.cap.disabled = !canEdit;
+        f.daily.disabled = !canEdit;
         show(j.cfg);
         showSeen(j.seen);
       }).catch(function () { say('Could not load.'); });
@@ -88,15 +96,16 @@
     if (!canEdit) return;
     var list = [];
     rows.querySelectorAll('.adm-inline').forEach(function (d) {
-      var id = val(d, 'id'), title = val(d, 'title'), amount = val(d, 'amount');
-      if (!id && !title && !amount) return;   // an empty row is dropped
-      list.push({ id: id || null, title: title || null, amount: amount === '' ? null : Number(amount) });
+      var id = val(d, 'id'), title = val(d, 'title'), amount = val(d, 'amount'), minCost = val(d, 'min_cost');
+      if (!id && !title && !amount && !minCost) return;   // an empty row is dropped
+      list.push({ id: id || null, title: title || null, amount: amount === '' ? null : Number(amount),
+                  min_cost: minCost === '' ? null : Number(minCost) });
     });
-    var cap = String(f.cap.value).trim();
+    var cap = String(f.cap.value).trim(), daily = String(f.daily.value).trim();
     say('Saving…');
     fetch('/api/admin/twitch-cp', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
-      body: JSON.stringify({ rewards: list, cap: cap === '' ? null : Number(cap) }) })
+      body: JSON.stringify({ rewards: list, cap: cap === '' ? null : Number(cap), daily: daily === '' ? null : Number(daily) }) })
       .then(function (r) { return r.json(); })
       .then(function (j) { if (j && j.ok) { show(j.cfg); say('Saved - applies to the next redemption.'); } else say((j && j.error) || 'Not saved.'); })
       .catch(function () { say('Not saved.'); });

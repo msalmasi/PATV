@@ -1042,6 +1042,8 @@ async function awardBonus(userId, type, amount) {
   try {
     // 1.63: bonuses are paid OUT of a vault (connect bonuses: "connect_bonus"; anything else:
     // "platform_rewards") and skipped when it can't cover them - never minted.
+    // 1.99afh review: platform_rewards is the incentive budget's or nobody's - funding.js refuses it while it isn't routed
+    // to "incentives" (never vaultFor's Reserve default), so this path can't make a Reserve claim either.
     const flow = /connect/i.test(String(type)) ? "connect_bonus" : "platform_rewards";
     // 1.99ga: nothing is taken from a vault for an account that isn't there
     if (!(await ledger.userExists(userId))) {
