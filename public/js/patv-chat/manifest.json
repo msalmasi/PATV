@@ -1,15 +1,15 @@
 {
   "schema": 1,
-  "version": "0.2.0",
-  "built_at": "2026-10-26T00:27:03.709Z",
+  "version": "0.2.1",
+  "built_at": "2026-10-26T02:04:46.835Z",
   "entries": {
-    "chat": "patv-chat.lkbPmsSD.js",
-    "worker": "patv-rt-worker.B08T5QQA.js",
-    "css": "patv-chat.re5fx8hi.css",
-    "modtools": "patv-modtools.v2AxVF5u.js",
+    "chat": "patv-chat.CXwvcuOH.js",
+    "worker": "patv-rt-worker.ByCFzoJo.js",
+    "css": "patv-chat.CULIYab8.css",
+    "modtools": "patv-modtools.Ce_Gyaru.js",
     "gtf": null,
     "fonts_css": null,
-    "leader": "patv-leader-host.DA7YzSwS.js"
+    "leader": "patv-leader-host.UHxldbbX.js"
   },
   "preload": {
     "chat": [],
@@ -17,11 +17,11 @@
     "leader": []
   },
   "lazy": {
-    "composer": "patv-chat-composer.CD6R0VdA.js",
-    "en-lazy": "patv-chat-en-lazy.DNIiGSKw.js",
-    "engine": "patv-chat-engine.Dz0Wg5OV.js",
-    "leader": "patv-chat-leader.CTehV7cj.js",
-    "sheets": "patv-chat-sheets.CrJcN43m.js"
+    "composer": "patv-chat-composer.8VB2GSie.js",
+    "en-lazy": "patv-chat-en-lazy.rafxa9qJ.js",
+    "engine": "patv-chat-engine.B737THvF.js",
+    "leader": "patv-chat-leader.BBs1wx_D.js",
+    "sheets": "patv-chat-sheets.tDE-M0pQ.js"
   },
   "i18n": {
     "ar": "i18n/ar.DxEnnICw.json",
@@ -48,16 +48,16 @@
     "zh-TW": "i18n/zh-TW.BcCqpQgP.json"
   },
   "sri": {
-    "patv-chat-composer.CD6R0VdA.js": "sha384-ZV2znrsiqjL0/U5PLB/1TcGJOojaxFRqH+X2Q0Grxo45A7/w9tpyjzbnwBThQEPk",
-    "patv-chat-en-lazy.DNIiGSKw.js": "sha384-D9rqEf1LotevrP3M2E2PRMQm0KmFswA7d2x7zWMorEP22iROziwTkKygCf7hJd28",
-    "patv-chat-engine.Dz0Wg5OV.js": "sha384-1SduGBvjNwAAVk3Vi1JufqWoQMpDJ2Uz12OHH+U7iZDwXO+KmxfF+LKslFpH58VS",
-    "patv-chat-leader.CTehV7cj.js": "sha384-MLQV97xVTCoFMbD9LHtWcMuGXYSnH7M6uw+MmozdAL07aFD8FeXKbDZSp0Kja2kD",
-    "patv-chat-sheets.CrJcN43m.js": "sha384-h13oGw9Mv34aZ5uKGt5oS0y5BNZdxIidictGoWuglBF6VDEmUkJIUSTSmi4HbFYP",
-    "patv-chat.lkbPmsSD.js": "sha384-dAFajQkmhpcxpxwNihs+Z/Y7yOzH9XNciz7W40UV816JCBalC8YJH9w4/Qt1cQB9",
-    "patv-chat.re5fx8hi.css": "sha384-n1USvzNssSTUEgYszkbdcbTNMe5YmeJ/yU7Eox/H45pNjZfltqDxR2imFxOiZMFE",
-    "patv-leader-host.DA7YzSwS.js": "sha384-8+43om/WSENYGxlGPYecIcJQeaYXk/1yhZwiiiXHsJeUN+SdOdyX1OsrQPRySHee",
-    "patv-modtools.v2AxVF5u.js": "sha384-1VGPxjnt7z9AbsAQ7pB2p4pGDH67Xd+2Sdcx0iwZAikXHEIaAVVqH4iYLDEyjLql",
-    "patv-rt-worker.B08T5QQA.js": "sha384-MUhvs7VgzQEbDqwSIthsNUrH3mJ3YsAwa5ApBOALj1vz5vmes0zrFcBw/fBk1IvC"
+    "patv-chat-composer.8VB2GSie.js": "sha384-ku1xfDCdgA2d3lP5z9rT3ZS0AJ3NVI/Zkudg4ZIo3oLIPdDvLxxKroaZgMpmGV7c",
+    "patv-chat-en-lazy.rafxa9qJ.js": "sha384-W4TLrWWTOSnFgxMuDRdjXJ7ZKw68w0OMvX8pKR/VFRZkEfBbr6sYqCHTz5XLQKi7",
+    "patv-chat-engine.B737THvF.js": "sha384-wpLdWe55ubar/hyYJFfkUk6xU31aF57HPlHvxkwXzbivcAixatUVxckV3Gd/6V2N",
+    "patv-chat-leader.BBs1wx_D.js": "sha384-hCgdmJkmpj6aDtZu9X0RsYI/jcp5sOZ8f52w32SQTdyyN0AwFEVOK3K9GdgQlAFY",
+    "patv-chat-sheets.tDE-M0pQ.js": "sha384-lkJ+cLqgGshfanZ+LWq2O6MHhZbgEmUVgZss26q3lBJw5Qr9G+E11fUZ12rUolRl",
+    "patv-chat.CULIYab8.css": "sha384-a9JrxJovHF4iRnEV7BX+z/1oyxnnvEhl5+UXqcx+2Z836baGcdmpzlMtz7oSA7VT",
+    "patv-chat.CXwvcuOH.js": "sha384-pcmfVf1SV165Grt4vm23q8oChX6zaE8paSNrKGxa4zIo01ZFTSyQgogY2xHkdg03",
+    "patv-leader-host.UHxldbbX.js": "sha384-9vWgkorE1k+Q6LgyiNIdTEtifGzDLLbE2CNlWqz2DpdToFxBf2tNQaqTESNmMNxM",
+    "patv-modtools.Ce_Gyaru.js": "sha384-I1XPuUI/etE5DVOUHkf/zWnlAbmWle1nUcpyD3vxRUS1dTcyM2yKbWWe1eTIPQhV",
+    "patv-rt-worker.ByCFzoJo.js": "sha384-559GDa/Z9rT0SMWuDWBQxeOyO6qewVFjhwZTQ31jH7WaFGTRhFP4XebHV2Qfhro6"
   },
   "files": [
     "i18n/ar.DxEnnICw.json",
@@ -82,15 +82,15 @@
     "i18n/vi.Cl4zBySO.json",
     "i18n/zh-CN.DI00ITy6.json",
     "i18n/zh-TW.BcCqpQgP.json",
-    "patv-chat-composer.CD6R0VdA.js",
-    "patv-chat-en-lazy.DNIiGSKw.js",
-    "patv-chat-engine.Dz0Wg5OV.js",
-    "patv-chat-leader.CTehV7cj.js",
-    "patv-chat-sheets.CrJcN43m.js",
-    "patv-chat.lkbPmsSD.js",
-    "patv-chat.re5fx8hi.css",
-    "patv-leader-host.DA7YzSwS.js",
-    "patv-modtools.v2AxVF5u.js",
-    "patv-rt-worker.B08T5QQA.js"
+    "patv-chat-composer.8VB2GSie.js",
+    "patv-chat-en-lazy.rafxa9qJ.js",
+    "patv-chat-engine.B737THvF.js",
+    "patv-chat-leader.BBs1wx_D.js",
+    "patv-chat-sheets.tDE-M0pQ.js",
+    "patv-chat.CULIYab8.css",
+    "patv-chat.CXwvcuOH.js",
+    "patv-leader-host.UHxldbbX.js",
+    "patv-modtools.Ce_Gyaru.js",
+    "patv-rt-worker.ByCFzoJo.js"
   ]
 }

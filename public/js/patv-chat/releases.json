@@ -1,5 +1,43 @@
 [
   {
+    "version": "0.2.1",
+    "built_at": "2026-10-26T02:04:46.835Z",
+    "files": [
+      "i18n/ar.DxEnnICw.json",
+      "i18n/de.Cx60wbQE.json",
+      "i18n/es.CdgHOezx.json",
+      "i18n/fa.BMmohtMv.json",
+      "i18n/fr.CkZtJpe2.json",
+      "i18n/he.DmzaItJ8.json",
+      "i18n/hi.C_BQoUpx.json",
+      "i18n/id.B1MGDED1.json",
+      "i18n/it.B-4t9RY2.json",
+      "i18n/ja.NT_va6X2.json",
+      "i18n/ko.D2eVgtx9.json",
+      "i18n/nl.CGhgJaYr.json",
+      "i18n/pl.GfSRvKIV.json",
+      "i18n/pt-BR.CXIrCxQT.json",
+      "i18n/ru.f1oba_lJ.json",
+      "i18n/th.BZ-wdBrb.json",
+      "i18n/tr.BbaLSpQ3.json",
+      "i18n/uk.D25etFtE.json",
+      "i18n/ur.bD-Fmp3H.json",
+      "i18n/vi.Cl4zBySO.json",
+      "i18n/zh-CN.DI00ITy6.json",
+      "i18n/zh-TW.BcCqpQgP.json",
+      "patv-chat-composer.8VB2GSie.js",
+      "patv-chat-en-lazy.rafxa9qJ.js",
+      "patv-chat-engine.B737THvF.js",
+      "patv-chat-leader.BBs1wx_D.js",
+      "patv-chat-sheets.tDE-M0pQ.js",
+      "patv-chat.CULIYab8.css",
+      "patv-chat.CXwvcuOH.js",
+      "patv-leader-host.UHxldbbX.js",
+      "patv-modtools.Ce_Gyaru.js",
+      "patv-rt-worker.ByCFzoJo.js"
+    ]
+  },
+  {
     "version": "0.2.0",
     "built_at": "2026-10-26T00:27:03.709Z",
     "files": [
