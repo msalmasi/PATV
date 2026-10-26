@@ -216,3 +216,15 @@ test("pad header: the follower count in 1.2k form, the exact number in the toolt
   const c = box.window.__compact;
   assert.deepEqual([0, 999, 1000, 1234, 15320, 125000, 1250000].map(c), ["0", "999", "1k", "1.2k", "15.3k", "125k", "1.3M"]);
 });
+
+test("the sticky pad tab bar is opaque: the chat's lines never show through it (S1 widget 0.2.1, iPhone WebKit)", () => {
+  const src = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
+  const rules = [...src.matchAll(/\.rm \.ptabs \{([^}]*)\}/g)].map((m) => m[1]);
+  assert.ok(rules.length >= 1, "the bar's rules");
+  const sticky = rules.find((r) => /position:\s*sticky/.test(r));
+  assert.ok(sticky, "the bar is sticky");
+  const bg = [...rules.join(";").matchAll(/(?:^|;)\s*background(?:-color)?:\s*([^;]+)/g)].map((m) => m[1].trim());
+  assert.ok(bg.length >= 1, "the bar sets a background");
+  for (const v of bg) assert.match(v, /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i, "a solid colour, never a translucent one: " + v);
+  assert.doesNotMatch(rules.join(";"), /backdrop-filter/, "no blur behind it (nothing shows behind an opaque bar)");
+});
