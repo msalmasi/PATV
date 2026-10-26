@@ -259,8 +259,9 @@
   /* 1.99dx: story strip under the header, the sticky tab bar, the merged Stage card's action row, the latest-posts card */
   .rm .rm-story { padding: 10px 14px; }
   .rm .rm-story .ss { margin: 0; }
-  .rm .ptabs { position: sticky; top: 0; z-index: 30; display: flex; gap: 4px; padding: 6px; margin: 0 -2px; background: rgba(13,13,13,.94);
-               backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid #222; border-radius: 12px; overflow-x: auto; scrollbar-width: none; }
+  /* S1 widget 0.2.1: the bar is OPAQUE - on iPhone (WebKit) the chat's lines showed through the old translucent, blurred one */
+  .rm .ptabs { position: sticky; top: 0; z-index: 30; display: flex; gap: 4px; padding: 6px; margin: 0 -2px; background: #0d0d0d;
+               border: 1px solid #222; border-radius: 12px; overflow-x: auto; scrollbar-width: none; }
   .rm .ptabs::-webkit-scrollbar { display: none; }
   .rm .ptab { appearance: none; flex: 1 1 0; min-width: max-content; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px;
               border-radius: 9px; border: 1px solid transparent; background: none; color: #aab3aa; font: inherit; font-size: 14.5px; font-weight: bold; cursor: pointer; white-space: nowrap; }
