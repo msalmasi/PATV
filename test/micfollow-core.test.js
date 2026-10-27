@@ -901,8 +901,9 @@ test("37. 1.99afl S1: a refused still is soft unless Pepe says it's for good - a
     w.at(2 + w.C.soft_retry_s + 1);
     assert.equal(w.S.tiles[0].video, "still", "tried again after soft_retry_s: " + code);
   }
-  assert.deepEqual([...M.STILL_HARD].sort(), ["ambiguous", "not_on_cam", "not_public"], "the spec's two + the live path's 'ambiguous'");
-  for (const code of ["not_public", "not_on_cam", "ambiguous"]) {
+  assert.deepEqual([...M.STILL_HARD].sort(), ["ambiguous", "not_in_list", "not_on_cam", "not_public"],
+    "the spec's two + the live path's 'ambiguous' + bot 1.99afk's 'not_in_list' (re-review: 'failed' stays soft)");
+  for (const code of ["not_public", "not_on_cam", "ambiguous", "not_in_list"]) {
     const w = world({ site: { coldLeft: 0, stillsLeft: 2 } });
     w.grab("z"); w.at(0); w.at(2);
     M.stillFailed(w.S, "z", w.C, w.t, code);

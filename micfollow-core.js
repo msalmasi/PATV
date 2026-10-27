@@ -160,10 +160,12 @@ const SOFT_WHYS = new Set(["busy", "noswitch", "not_that_cam", "start_timeout", 
 const OFFCAM_WHYS = new Set(["not_on_cam", "cam_closed", "left_cam"]);
 /** 1.99afl (S1): the still refusals Pepe names (his still result's `code`, bot 1.99afk) that start the full backoff - the
  *  spec's two (not_public, not_on_cam) plus "ambiguous", the live path's rule (two people go by that name: a retry can't tell
- *  them apart, and each one pages Camfrog's whole list). Anything else - busy, noswitch, start_timeout, wrong_room, "failed"
- *  (review: bot 1.99afk's catch-all for not_open / an error / not that cam / an unmapped status), a code this build doesn't know,
- *  or no code (an older Pepe) - is soft: retried after soft_retry_s, soft_fails_max times, then the full backoff. */
-const STILL_HARD = new Set(["not_public", "not_on_cam", "ambiguous"]);
+ *  them apart, and each one pages Camfrog's whole list), plus "not_in_list" (re-review, bot 1.99afk's own code for it: a
+ *  COMPLETE list read has no row with exactly that name - a name shown differently doesn't pass in seconds, and each retry
+ *  is another exact page-through). Anything else - busy, noswitch, start_timeout, wrong_room, "failed" (review: bot
+ *  1.99afk's catch-all for not_open / an error / not that cam / an unmapped status), a code this build doesn't know, or no
+ *  code (an older Pepe) - is soft: retried after soft_retry_s, soft_fails_max times, then the full backoff. */
+const STILL_HARD = new Set(["not_public", "not_on_cam", "ambiguous", "not_in_list"]);
 /** 1.99afl review (S2): the Pepe mic-stage level (livecam.botMf, his poll's `mf`) from which he opens a cam his roster can't
  *  classify (on_cam unknown) by its exact name, fast-failing a lurker. Through bot 1.99afk (mf 1) he refuses such a cam at once
  *  as "not_on_cam" (pepe_livecam._lv_why_not) - so the mic stage asks for none: the tile stays "checking their cam…" until a
@@ -958,9 +960,10 @@ function sessionEnded(S, login, why, C, t) {
 }
 
 /** A still frame came back refused. 1.99afl (S1): by Pepe's `code` (bot 1.99afk) - list_unread pauses the ROOM (S1b); a
- *  hard refusal (STILL_HARD: "cam isn't public", not on cam, ambiguous) is a card and the full backoff; anything else (busy,
- *  noswitch, start_timeout, wrong_room, failed, an unknown code, or none at all - an older Pepe) is soft: failOpen's retry
- *  after soft_retry_s (soft_fails_max of them, then the backoff), never the 10 minutes at once. -> actions */
+ *  hard refusal (STILL_HARD: "cam isn't public", not on cam, ambiguous, not in the list) is a card and the full backoff;
+ *  anything else (busy, noswitch, start_timeout, wrong_room, failed, an unknown code, or none at all - an older Pepe) is
+ *  soft: failOpen's retry after soft_retry_s (soft_fails_max of them, then the backoff), never the 10 minutes at once.
+ *  -> actions */
 function stillFailed(S, login, C, t, code = null) {
   const A = [];
   const x = tileOf(S, login);
