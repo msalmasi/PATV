@@ -8206,5 +8206,28 @@
   "!verify",
   "!verifypad"
  ],
- "hash": "79297f761b9a81a8"
+ "site_limits": {
+  "entries": 1500,
+  "title": 200,
+  "summary": 400,
+  "details": 6000,
+  "syntax": 12,
+  "syntaxLine": 200,
+  "examples": 12,
+  "example": 300,
+  "keywords": 30,
+  "keyword": 80,
+  "commands": 20,
+  "command": 41,
+  "gates": 10,
+  "gate": 60,
+  "webLabel": 200,
+  "webUrl": 300,
+  "undocumented": 2000,
+  "undocumentedCmd": 42,
+  "catLabel": 60,
+  "catIcon": 16,
+  "catBlurb": 300
+ },
+ "hash": "5a808853ddbdb78b"
 }

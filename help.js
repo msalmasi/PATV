@@ -4,7 +4,8 @@
 // room-feature gates off the bot's code). Pepe publishes it here with the bot token whenever it changes - with the admin
 // panel's LIVE prices - so each site shows the help of the Pepe deployed on it:
 //   POST /api/pepe/help/sync {hash, version, data}        (bot token) -> stored in help_kv 'data'
-//     (1.99afi: a card over HELP_LIMITS is clipped or left out, not the whole sync refused - see the data section)
+//     (1.99afi: a card over HELP_LIMITS is clipped or left out, not the whole sync refused - see the data section;
+//      1.99afj: the answer also has limitsDiffer when Pepe's build checked other limits than HELP_LIMITS)
 // Before the first sync (a fresh DB) the committed copy data/help-commands.json is used (the build writes it with
 // --site). Pages: GET /help (GET /commands -> 301 /help), the cards grouped in the 10 categories, deep links
 // /help#cmd-<id> (and /help#cmd-<any command or alias>, resolved by the page), ?q= prefills the search.
@@ -91,9 +92,13 @@ async function kvSet(k, v) {
 // ids, categories, roles, command names, links, prices) - with the bot token and the body size (SYNC_BODY_MAX) - and a
 // card over a limit is kept with its text clipped (summary / details) or left out (anything else over): logged, counted
 // in the sync's answer and on /admin/help.
+// 1.99afj: the build stamps the limits it checked into the data (site_limits, the same names), so the two can't drift
+// unnoticed: test/help.test.js compares the bundled copy's stamp with these, and a sync whose stamp differs is logged
+// and answered with limitsDiffer (Pepe logs it). command / webUrl / cat* are the shape's own caps (CMD_RE: "!" + 1..40).
 const HELP_LIMITS = Object.freeze({
   entries: 1500, title: 200, summary: 400, details: 6000, syntax: 12, syntaxLine: 200, examples: 12, example: 300,
-  keywords: 30, keyword: 80, commands: 20, gates: 10, gate: 60, webLabel: 200, undocumented: 2000, undocumentedCmd: 42,
+  keywords: 30, keyword: 80, commands: 20, command: 41, gates: 10, gate: 60, webLabel: 200, webUrl: 300,
+  undocumented: 2000, undocumentedCmd: 42, catLabel: 60, catIcon: 16, catBlurb: 300,
 });
 const SYNC_BODY_MAX = "3mb";       // the whole sync request (express.json limit: over it -> 413)
 const CLIPPABLE = new Set(["summary", "details"]);
@@ -103,13 +108,13 @@ const str = (v, max) => typeof v === "string" && v.length <= max;
 const strList = (v, max, each) => Array.isArray(v) && v.length <= max && v.every((x) => str(x, each));
 const isStrList = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
 const longest = (xs) => xs.reduce((m, x) => Math.max(m, x.length), 0);
-const safeUrl = (u) => typeof u === "string" && u.length <= 300 && (/^\/(?!\/)/.test(u) || /^https:\/\/[^\s"'<>]+$/.test(u));
+const safeUrl = (u) => typeof u === "string" && u.length <= L.webUrl && (/^\/(?!\/)/.test(u) || /^https:\/\/[^\s"'<>]+$/.test(u));
 /** null when the data's SHAPE is usable, else what's wrong - a sync with a bad shape is refused whole. */
 function shapeError(d) {
   if (!d || typeof d !== "object") return "not an object";
   if (d.schema !== 1) return "unknown schema";
   if (!Array.isArray(d.entries) || !d.entries.length || d.entries.length > L.entries) return "entries";
-  if (!Array.isArray(d.categories) || !d.categories.every((c) => c && CAT_IDS.includes(c.id) && str(c.label, 60) && str(c.icon || "", 16) && str(c.blurb || "", 300))) return "categories";
+  if (!Array.isArray(d.categories) || !d.categories.every((c) => c && CAT_IDS.includes(c.id) && str(c.label, L.catLabel) && str(c.icon || "", L.catIcon) && str(c.blurb || "", L.catBlurb))) return "categories";
   const ids = new Set();
   for (const e of d.entries) {
     const w = "entry " + (e && e.id);
@@ -159,16 +164,85 @@ function validateData(d) {
   for (const e of d.entries) { const o = oversize(e)[0]; if (o) return "entry " + e.id + ": " + OVER_WORD[o.field]; }
   return null;
 }
-/** Text cut to `max` JavaScript characters with a "…": never inside a surrogate pair, back to a space when one is near,
- *  and never leaving a `code span open. */
+// ── clip(): the safety net for a card over a limit (Pepe's build refuses those, so this is an old or hand-edited build) ──
+const GRAPHEMES = typeof Intl === "object" && typeof Intl.Segmenter === "function" ? new Intl.Segmenter("en", { granularity: "grapheme" }) : null;
+const isLow = (c) => c >= 0xdc00 && c <= 0xdfff;
+const isRI = (s, i) => s.charCodeAt(i) === 0xd83c && s.charCodeAt(i + 1) >= 0xdde6 && s.charCodeAt(i + 1) <= 0xddff;   // half a flag
+/** The last place at or before n where s can be cut without breaking a character the reader sees as one: a surrogate
+ *  pair, a ZWJ emoji (👨‍👩‍👧), a flag (🇬🇧), a skin tone, an accent. Only the 256 units before n are segmented (moved back
+ *  to the start of a run of flags - they pair up from there); a cluster longer than that is cut between code points. */
+function graphemeFloor(s, n) {
+  const hi = s.charCodeAt(n - 1);
+  const cp = hi >= 0xd800 && hi <= 0xdbff && isLow(s.charCodeAt(n)) ? n - 1 : n;     // never half a surrogate pair
+  if (!GRAPHEMES || n <= 0) return cp;
+  let lo = Math.max(0, n - 256);
+  if (lo > 0 && isLow(s.charCodeAt(lo))) lo--;
+  while (lo >= 2 && isRI(s, lo) && isRI(s, lo - 2)) lo -= 2;
+  let b = lo;                          // the window takes the whole character AT n too: a boundary there depends on it
+  for (const { index } of GRAPHEMES.segment(s.slice(lo, n + 2))) { if (lo + index > n) break; b = lo + index; }
+  return b > lo || lo === 0 ? b : cp;
+}
+const BOLD_RE = /\*\*[^*\n]+\*\*/g;    // md()'s **bold** (see md below)
+/** md()'s [text](url) - the match md() finds, left to right, in a plain part - that the cut at `at` falls inside:
+ *  {index, textEnd} or null. The next "]" and ")" are remembered, so it is linear on any input ("[[[[..." too). */
+function linkCutOpen(part, at) {
+  let j = -1, k = -1;                  // the first "]" / line end after i; the first ")" / space at or after j + 2
+  for (let i = part.indexOf("["); i >= 0 && i < at;) {
+    if (j <= i) { j = i + 1; while (j < part.length && part[j] !== "]" && part[j] !== "\n") j++; }
+    if (part[j] === "]" && j > i + 1 && part[j + 1] === "(") {
+      if (k < j + 2) { k = j + 2; while (k < part.length && part[k] !== ")" && !/\s/.test(part[k])) k++; }
+      if (part[k] === ")" && k > j + 2) {
+        if (k + 1 > at) return { index: i, textEnd: j };
+        i = part.indexOf("[", k + 1);
+        continue;
+      }
+    }
+    i = part.indexOf("[", i + 1);
+  }
+  return null;
+}
+/** s cut at `cut` -> the text kept, with no md() mark broken by the cut. md() pairs a LINE's backticks left to right
+ *  and never runs **bold** or [text](url) across a line or a `code span`, so only the last line kept can be broken:
+ *    - a `code span cut open -> cut back to before it (a backtick with no partner on its line in s is literal there
+ *      too, so it stays - one stray backtick, or a ``` fence, on an earlier line changes nothing);
+ *    - a **bold** or [text](url) cut open -> its words stay, without the marks. */
+function keepMarks(s, cut) {
+  const t = s.slice(0, cut);
+  const ls = t.lastIndexOf("\n") + 1;
+  let le = s.indexOf("\n", cut);
+  if (le < 0) le = s.length;
+  const ticks = [];
+  for (let i = t.indexOf("`", ls); i >= 0; i = t.indexOf("`", i + 1)) ticks.push(i);
+  let ps = ticks.length ? ticks[ticks.length - 1] + 1 : ls;          // where the last plain (not code) part starts
+  if (ticks.length % 2) {
+    const open = ticks[ticks.length - 1], closes = s.indexOf("`", cut);
+    if (closes >= 0 && closes < le) return keepMarks(s, open);         // a code span cut open: back to before it
+    ps = ticks.length > 1 ? ticks[ticks.length - 2] + 1 : ls;         // a stray backtick: plain text, as in s
+  }
+  // that part in s: up to the next code span (a backtick with a partner on the line), else the line's end
+  const nb = s.indexOf("`", cut), nb2 = nb < 0 ? -1 : s.indexOf("`", nb + 1);
+  const pe = Math.min(nb >= 0 && nb < le && nb2 >= 0 && nb2 < le ? nb : le, cut + 700);
+  const part = s.slice(ps, pe), at = cut - ps;
+  let end = at;
+  const drop = [];                                                    // [index in part, length] of a mark to take out
+  let bold = null;
+  for (const m of part.matchAll(BOLD_RE)) { if (m.index >= at) break; if (m.index + m[0].length > at) { bold = m; break; } }
+  if (bold) { drop.push([bold.index, 2]); end = Math.min(end, bold.index + bold[0].length - 2); }   // not half its closing ** either
+  const link = linkCutOpen(part, at);
+  if (link) { drop.push([link.index, 1]); end = Math.min(end, link.textEnd); }                     // its words, never "](url"
+  let k = s.slice(ps, ps + end);
+  for (const [i, n] of drop.sort((a, b) => b[0] - a[0])) if (i < k.length) k = k.slice(0, i) + k.slice(i + n);
+  return s.slice(0, ps) + k;
+}
+/** Text cut to `max` JavaScript characters with a "…" (1.99afj): never inside a character (graphemeFloor), back to a
+ *  space when one is near, and no md() mark left broken (keepMarks). Text within `max` comes back as it is. */
 function clip(s, max) {
-  let t = String(s).slice(0, max - 1);
-  const last = t.charCodeAt(t.length - 1);
-  if (last >= 0xd800 && last <= 0xdbff) t = t.slice(0, -1);          // half an emoji
-  const sp = t.search(/\s\S*$/);
-  if (sp > max * 0.8) t = t.slice(0, sp);
-  if ((t.match(/`/g) || []).length % 2) t = t.slice(0, t.lastIndexOf("`"));
-  return t.replace(/\s+$/, "") + "…";
+  s = String(s);
+  if (s.length <= max) return s;
+  let cut = graphemeFloor(s, max - 1);
+  const sp = s.slice(0, cut).search(/\s\S*$/);
+  if (sp > max * 0.8) cut = sp;
+  return keepMarks(s, cut).replace(/\s+$/, "") + "…";
 }
 /**
  * The data the site keeps: -> {data, error, cards, clipped, skipped, trimmed}. A bad shape -> error (refuse it all).
@@ -200,6 +274,18 @@ function normalizeData(d) {
   return { data, error: null, cards: entries.length, clipped, skipped, trimmed };
 }
 const trimNote = (t) => t.slice(0, 10).map((x) => `${x.id} ${x.field} ${x.len}>${x.max} ${x.action}`).join(", ") + (t.length > 10 ? ", ..." : "");
+/** 1.99afj: the limits Pepe's build checked (data.site_limits, bot 1.99afj on) that aren't this site's HELP_LIMITS ->
+ *  [{key, pepe, site}] (at most 50; [] for a build without the stamp). */
+function limitsDiffer(d) {
+  const p = d && d.site_limits;
+  if (!p || typeof p !== "object" || Array.isArray(p)) return [];
+  const out = [];
+  for (const k of new Set([...Object.keys(L), ...Object.keys(p).slice(0, 50)])) {
+    const pv = Number.isFinite(p[k]) ? p[k] : null, sv = Object.prototype.hasOwnProperty.call(L, k) ? L[k] : null;
+    if (pv !== sv && out.length < 50) out.push({ key: k.slice(0, 40), pepe: pv, site: sv });
+  }
+  return out;
+}
 
 let FALLBACK = null;
 function fallback() {
@@ -235,10 +321,16 @@ async function sync(body = {}) {
   if (n.trimmed.length) {
     console.warn(`[help] sync ${hash} (Pepe ${version || "?"}): ${n.clipped} card(s) clipped, ${n.skipped} left out - over the limits: ${trimNote(n.trimmed)}`);
   }
+  const differ = limitsDiffer(body.data);
+  if (differ.length) {
+    console.warn(`[help] sync ${hash} (Pepe ${version || "?"}): his build checked other limits than this site's (` +
+      differ.slice(0, 10).map((x) => `${x.key} ${x.pepe} vs ${x.site}`).join(", ") + (differ.length > 10 ? ", ..." : "") +
+      ") - keep camfrog-bot tools/build_help.py SITE_LIMITS and help.js HELP_LIMITS in step");
+  }
   const rec = { data: n.data, version, hash, at: NOW(), trimmed: n.trimmed };
   await kvSet("data", rec);
   CUR = { ...rec, source: "pepe" };
-  return { hash, cards: n.cards, clipped: n.clipped, skipped: n.skipped, trimmed: n.trimmed };
+  return { hash, cards: n.cards, clipped: n.clipped, skipped: n.skipped, trimmed: n.trimmed, ...(differ.length ? { limitsDiffer: differ } : {}) };
 }
 
 // ── config (help_kv 'config') ──
@@ -480,6 +572,7 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
 
   // Pepe: publish the data, the prompter's long-poll + his answers
   // 1.99afi: {ok, hash, cards, clipped, skipped, trimmed} - cards over the limits no longer refuse the whole sync
+  // 1.99afj: + limitsDiffer [{key, pepe, site}] when Pepe's build checked other limits (data.site_limits)
   app.post("/api/pepe/help/sync", big, bot, async (req, res) => {
     try { res.json({ ok: true, ...(await sync(req.body || {})) }); } catch (e) { fail(res, e); }
   });
@@ -535,7 +628,7 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
 }
 
 module.exports = {
-  register, validateData, normalizeData, clip, current, sync, search, ask, pull, answer, cleanAnswer, allowedCommands, md, plain, config, setConfig,
+  register, validateData, normalizeData, clip, limitsDiffer, current, sync, search, ask, pull, answer, cleanAnswer, allowedCommands, md, plain, config, setConfig,
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };

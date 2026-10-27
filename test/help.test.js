@@ -8,6 +8,9 @@
 //   * the page: cards with deep-link ids, copy buttons, the ask box, /commands -> /help, safe markdown; nav links
 //   * 1.99afi: a card over the limits is clipped (summary / details) or left out, not the whole sync refused (counted in
 //     the answer, logged, on /admin/help); the shape, the bot token and the body size stay strict
+//   * 1.99afj: clip() per line like md() (a stray backtick / ``` fence elsewhere changes nothing), never half a glyph
+//     (ZWJ emoji, flags, skin tones, accents), no **bold** / [link] left open, linear on hostile text; the limits are
+//     stamped by Pepe's build (site_limits) - the bundled copy must match HELP_LIMITS, a differing sync is reported
 //   NODE_PATH=G:/PATV/node_modules node --test test/help.test.js     (temp DB)
 "use strict";
 const test = require("node:test");
@@ -114,20 +117,45 @@ test("sync: bot token only, refuses bad data, then the page and pull use Pepe's 
 const copyData = () => JSON.parse(JSON.stringify(BUNDLED));
 const isHighSurrogate = (s) => { const c = s.charCodeAt(s.length - 1); return c >= 0xd800 && c <= 0xdbff; };
 
-test("the limits: the bot's build mirrors them (tools/build_help.py SITE_LIMITS)", () => {
+test("the limits: the bot's build mirrors them (tools/build_help.py SITE_LIMITS, stamped into the data as site_limits)", () => {
   assert.equal(HELP.HELP_LIMITS.details, 6000);
   assert.equal(HELP.HELP_LIMITS.summary, 400);
   assert.equal(HELP.HELP_LIMITS.title, 200);
   assert.equal(HELP.SYNC_BODY_MAX, "3mb");
+  // 1.99afj: Pepe's build stamps the limits it checked; the bundled copy (written by the build's --site) carries them, so
+  // changing one repo's numbers without the other fails HERE (on CI too) - rebuild with --site after changing the bot's
+  assert.deepEqual(BUNDLED.site_limits, { ...HELP.HELP_LIMITS }, "data/help-commands.json's site_limits = HELP_LIMITS");
+  assert.deepEqual(HELP.limitsDiffer(BUNDLED), []);
   // the private Pepe repo nested in a dev checkout (not on CI; an older checkout without SITE_LIMITS is skipped)
   const bot = path.join(repo, "camfrog-bot", "tools", "build_help.py");
   const src = fs.existsSync(bot) ? fs.readFileSync(bot, "utf8") : "";
-  if (src.includes("SITE_LIMITS = {")) {
-    for (const [k, v] of [["title", 200], ["summary", 400], ["details", 6000], ["syntax", 12], ["syntax_line", 200], ["examples", 12],
-      ["example", 300], ["keywords", 30], ["keyword", 80], ["commands", 20], ["gates", 10], ["gate", 60], ["web_label", 200]]) {
-      assert.match(src, new RegExp(`"${k}": ${v}\\b`), `SITE_LIMITS ${k} = ${v}`);
-    }
+  if (src.includes("SITE_LIMITS = {") && src.includes('"syntaxLine"')) {
+    for (const [k, v] of Object.entries(HELP.HELP_LIMITS)) assert.match(src, new RegExp(`"${k}": ${v}\\b`), `SITE_LIMITS ${k} = ${v}`);
   }
+});
+
+test("limitsDiffer: Pepe's stamp vs this site's limits (none for a build without the stamp)", () => {
+  assert.deepEqual(HELP.limitsDiffer({ schema: 1 }), []);
+  assert.deepEqual(HELP.limitsDiffer({ site_limits: [1, 2] }), []);
+  assert.deepEqual(HELP.limitsDiffer({ site_limits: "6000" }), []);
+  const p = { ...HELP.HELP_LIMITS, details: 5000, newCap: 9 };
+  delete p.gate;
+  assert.deepEqual(HELP.limitsDiffer({ site_limits: p }), [
+    { key: "details", pepe: 5000, site: 6000 }, { key: "gate", pepe: null, site: 60 }, { key: "newCap", pepe: 9, site: null }]);
+  const many = {};
+  for (let i = 0; i < 5000; i++) many["k" + i] = i;
+  assert.ok(HELP.limitsDiffer({ site_limits: many }).length <= 50, "bounded");
+});
+
+test("the shape's caps are HELP_LIMITS too: command names, link urls, categories", () => {
+  const bad = (f) => { const d = copyData(); f(d); return HELP.validateData(d); };
+  assert.equal(bad((d) => { d.entries[0].commands = ["!" + "a".repeat(HELP.HELP_LIMITS.command - 1)]; }), null);
+  assert.match(bad((d) => { d.entries[0].commands = ["!" + "a".repeat(HELP.HELP_LIMITS.command)]; }), /: commands$/);
+  assert.equal(bad((d) => { d.entries[0].web = { label: "x", url: "/" + "u".repeat(HELP.HELP_LIMITS.webUrl - 1) }; }), null);
+  assert.match(bad((d) => { d.entries[0].web = { label: "x", url: "/" + "u".repeat(HELP.HELP_LIMITS.webUrl) }; }), /: web$/);
+  assert.match(bad((d) => { d.categories[0].label = "l".repeat(HELP.HELP_LIMITS.catLabel + 1); }), /^categories$/);
+  assert.match(bad((d) => { d.categories[0].icon = "i".repeat(HELP.HELP_LIMITS.catIcon + 1); }), /^categories$/);
+  assert.match(bad((d) => { d.categories[0].blurb = "b".repeat(HELP.HELP_LIMITS.catBlurb + 1); }), /^categories$/);
 });
 
 test("validateData (the stored copy's check) still refuses a card over a limit", () => {
@@ -177,6 +205,95 @@ test("clip: never leaves a `code span open", () => {
   assert.equal((c.match(/`/g) || []).length % 2, 0);
   assert.ok(c.endsWith("a…"));
   assert.equal(HELP.clip("short text here", 6), "short…");
+  assert.equal(HELP.clip("run `!econ mint 5` now", 14), "run…", "a code span cut open: back to before it");
+  assert.equal(HELP.clip("fits", 6), "fits", "text within the cap comes back as it is");
+});
+
+// 1.99afj review: the backtick rule counted the WHOLE text, so one stray backtick (or a ``` fence) anywhere cut the card
+// back to its first line ("Use the ` key alone.\n" + 6,250 characters -> "Use the…"). md() pairs backticks per LINE.
+test("clip: a stray backtick or a ``` fence on an earlier line changes nothing; one on the last line stays literal", () => {
+  const words = "word ".repeat(1250);
+  for (const s of ["Use the ` key alone.\n" + words, "```\nconst x = 1;\n```\n" + words, "```js\n" + words, "Use the ` key " + words]) {
+    const c = HELP.clip(s, 6000);
+    assert.ok(c.length <= 6000 && c.length >= 5990, `kept ${c.length} of ${s.length}: ${JSON.stringify(c.slice(0, 30))}`);
+    assert.ok(c.endsWith("word…"));
+    assert.equal(c.slice(0, -1), s.slice(0, c.length - 1), "a prefix of the text");
+  }
+  assert.equal(HELP.clip("the ` key and more words", 12), "the ` key a…", "a backtick with no partner on its line in the text is literal there too");
+  assert.equal(HELP.clip("```js " + "w".repeat(100), 50), "```js " + "w".repeat(43) + "…", "a fence on the last line: as md() shows the text");
+  assert.equal(HELP.clip("a `b` c `d e f g h", 12), "a `b` c `d…", "an odd count from a stray at the end stays");
+  assert.equal(HELP.clip("a `b` c `d e f` g", 12), "a `b` c…", "the pair after the stray-looking one is a real span");
+});
+
+test("clip: **bold** and [text](url) cut open keep their words without the marks", () => {
+  assert.equal(HELP.clip("aaaa **bold words here** tail", 16), "aaaa bold wor…");
+  assert.equal(HELP.clip("**abcdefghij**" + "z".repeat(50), 14), "abcdefghij…", "not half the closing ** either");
+  assert.equal(HELP.clip("**ab** cd **ef** " + "g".repeat(50), 30), "**ab** cd **ef** " + "g".repeat(12) + "…", "whole marks stay");
+  assert.equal(HELP.clip("go to [the wallet page](/wallet) now", 16), "go to the wall…");
+  assert.equal(HELP.clip("go [wallet](/wallet/abcdef) now", 20), "go wallet…", "cut in the url: the text, never \"](url\"");
+  assert.equal(HELP.clip("see [a](/x) and [b](/y) " + "z".repeat(50), 30), "see [a](/x) and [b](/y) " + "z".repeat(5) + "…");
+  assert.equal(HELP.clip("**see [the page](/x) now**" + "z".repeat(40), 18), "see the page…", "nested: both marks out");
+  assert.equal(HELP.clip("`[x](/y)` and **`code`** " + "z".repeat(50), 40), "`[x](/y)` and **`code`** " + "z".repeat(14) + "…");
+});
+
+test("clip: never splits what a reader sees as one character", () => {
+  const fam = "👨‍👩‍👧‍👦";                                                          // 11 UTF-16 units, one glyph
+  assert.equal(HELP.clip("a".repeat(30) + fam + "rest", 36), "a".repeat(30) + "…", "a ZWJ family");
+  assert.equal(HELP.clip("a".repeat(31) + "🇬🇧🇫🇷x", 34), "a".repeat(31) + "…", "half a flag");
+  assert.equal(HELP.clip("a".repeat(29) + "🇬🇧🇫🇷x", 34), "a".repeat(29) + "🇬🇧…", "a whole flag stays");
+  assert.equal(HELP.clip("a".repeat(31) + "👍🏽x", 34), "a".repeat(31) + "…", "a skin tone");
+  assert.equal(HELP.clip("a".repeat(32) + "éxyz", 34), "a".repeat(32) + "…", "an accent");
+  assert.equal(HELP.clip("😀".repeat(3001), 6000), "😀".repeat(2999) + "…", "surrogate pairs");
+  assert.equal(HELP.clip("🇬🇧".repeat(1600), 6000), "🇬🇧".repeat(1499) + "…", "flags pair up from the start of their run (past the window)");
+  assert.equal(HELP.clip("x" + "🇬🇧".repeat(1600), 6000), "x" + "🇬🇧".repeat(1499) + "…");
+  const zalgo = HELP.clip("a" + "́".repeat(400) + "b", 300);              // one 401-unit cluster: code points then
+  assert.ok(zalgo.length <= 300 && !isHighSurrogate(zalgo.slice(0, -1)));
+});
+
+test("clip: well-formed text never comes back with a broken mark or character (random cuts)", () => {
+  const parts = ["word", "more", "**bold text**", "`code x`", "`!econ fed`", "[link text](/wallet)", "[x](https://a.b/c)", "😀", "🇬🇧",
+    "👨‍👩‍👧", "👍🏽", "é", " ", " ", " ", "\n"];
+  let seed = 7;                                                   // mulberry32: the same cases every run
+  const rnd = (n) => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) % n;
+  };
+  const visibleMarks = (h) => /\*\*|`|\]\(|\[[^\]]*$/.test(h.replace(/<[^>]+>/g, ""));
+  const GR = new Intl.Segmenter("en", { granularity: "grapheme" });
+  let cuts = 0;
+  for (let round = 0; round < 400; round++) {
+    let s = "";
+    while (s.length < 200) s += parts[rnd(parts.length)];
+    const max = 20 + rnd(170);
+    const c = HELP.clip(s, max);
+    assert.ok(c.length <= max, `${c.length} > ${max}`);
+    if (s.length <= max) { assert.equal(c, s); continue; }
+    const body = c.slice(0, -1);
+    assert.ok(!visibleMarks(HELP.md(body)), `a broken mark: ${JSON.stringify(s)} @${max} -> ${JSON.stringify(c)}`);
+    assert.ok(!isHighSurrogate(body) && !/‍$/.test(body), `half a character: ${JSON.stringify(c)}`);
+    const flags = (body.match(/(?:\ud83c[\udde6-\uddff])+$/) || [""])[0].length / 2;
+    assert.equal(flags % 2, 0, `half a flag: ${JSON.stringify(c)}`);
+    if (s.startsWith(body)) {                                     // no mark taken out: the cut is a grapheme boundary of s
+      cuts++;
+      assert.ok(new Set(Array.from(GR.segment(s), (x) => x.index)).has(body.length), `half a character: ${JSON.stringify(s)} @${max} -> ${JSON.stringify(c)}`);
+    }
+  }
+  assert.ok(cuts > 100, `prefix cuts checked: ${cuts}`);
+});
+
+test("clip: linear on hostile text (1,500 such cards over the cap normalize in well under a second per kind)", () => {
+  for (const unit of ["[", "[a](", "[a](b", "**a", "`", "a`b", "🇬🇧", "á"]) {
+    const d = copyData();
+    d.entries = Array.from({ length: 1500 }, (_, i) => ({ ...BUNDLED.entries[0], id: "c" + i, details: unit.repeat(Math.ceil(7000 / unit.length)) }));
+    const t0 = Date.now();
+    const n = HELP.normalizeData(d);
+    const ms = Date.now() - t0;
+    assert.equal(n.error, null);
+    assert.equal(n.clipped, 1500);
+    assert.ok(ms < 4000, `${JSON.stringify(unit)}: ${ms} ms`);
+  }
 });
 
 test("normalizeData: the shape stays strict - one bad card still refuses it all", () => {
@@ -262,6 +379,36 @@ test("sync: cards over the limits are clipped or left out, the rest stored - not
     const r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h2", version: "1.99zz", data: mine });
     assert.equal(r.status, 200);
     assert.equal(r.json.clipped + r.json.skipped, 0);
+  }
+});
+
+test("sync: a build that checked other limits (site_limits) is stored, logged and answered with limitsDiffer", async () => {
+  const warns = [];
+  const realWarn = console.warn;
+  console.warn = (...a) => warns.push(a.join(" "));
+  const restore = () => { const m = copyData(); m.entries.find((e) => e.id === "spin").cost = 7500; return m; };
+  try {
+    const mine = restore();
+    mine.site_limits = { ...mine.site_limits, details: 5000 };
+    let r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h5", version: "1.99zz", data: mine });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.hash, "h5");
+    assert.deepEqual(r.json.limitsDiffer, [{ key: "details", pepe: 5000, site: 6000 }]);
+    assert.ok(warns.some((w) => w.includes("[help] sync h5") && w.includes("other limits") && w.includes("details 5000 vs 6000")), warns.join(" | "));
+    assert.equal((await HELP.current()).hash, "h5", "stored all the same");
+    warns.length = 0;
+    r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h2", version: "1.99zz", data: restore() });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.limitsDiffer, undefined, "the same limits: nothing said");
+    const old = restore();
+    delete old.site_limits;                                           // a build from before 1.99afj
+    r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h2", version: "1.99zz", data: old });
+    assert.equal(r.json.limitsDiffer, undefined);
+    assert.ok(!warns.some((w) => w.includes("other limits")));
+  } finally {
+    console.warn = realWarn;
+    const r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h2", version: "1.99zz", data: restore() });
+    assert.equal(r.status, 200);
   }
 });
 
