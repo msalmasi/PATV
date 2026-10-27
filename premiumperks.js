@@ -51,6 +51,11 @@ const perk = (id, icon, title, desc, live = true) => ({ id, icon, title: Array.i
 function table(v = values()) {
   const R = v.retention || {};
   const W = (k) => ({ win: R[k] === undefined ? null : R[k] });      // pre-rendered by the partial (win())
+  // mic retention (owner answers 2026-10-27): once Pepe reports the windows he APPLIES (bot 1.99afq: audio_* = recordings, rec_* =
+  // transcripts) and a tier's transcripts follow its chat (his split rule on), the perk names chat + transcripts together and the
+  // recordings by audio_*. Otherwise the lists read as before: "mic recordings" by rec_* - an older Pepe's one window for both, or
+  // the split off (then audio_* = rec_*)
+  const audioFor = (sfx) => !!R.audio_reported && R["rec" + sfx] === R["chat" + sfx];
   const seasonal = (v.sp_seasonal || []).map((p) => `${p.emoji} ${p.name}` + (p.season && p.season.label ? ` (${p.season.label})` : ""));
   const prime_time = [
     perk("badge", "📺", "premium.pt.badge", "premium.pt.badge_d"),
@@ -58,8 +63,12 @@ function table(v = values()) {
     perk("intro", "🎬", "premium.pt.intro", "premium.pt.intro_d"),
     perk("badge_slots", "🏷️", ["premium.pt.badge_slots", { n: v.prime_extra_badges }], ["premium.pt.badge_slots_d", { n: 3 + v.prime_extra_badges }]),
     perk("stage_slots", "🎤", ["premium.pt.stage_slots", { n: v.prime_extra_slots }], "premium.pt.stage_slots_d"),
-    perk("retention", "🗄️", ["perks.pt.retention", { chat: W("chat_prime"), rec: W("rec_prime") }],
-         ["perks.pt.retention_d", { chat: W("chat_prime"), rec: W("rec_prime"), none: W("chat_days"), none_rec: W("rec_days") }]),
+    audioFor("_prime")
+      // mic retention: chat logs and mic transcripts share the chat window (transcripts follow chat), recordings have the audio one
+      ? perk("retention", "🗄️", ["perks.pt.retention_a", { chat: W("chat_prime"), rec: W("audio_prime") }],
+             ["perks.pt.retention_a_d", { chat: W("chat_prime"), rec: W("audio_prime"), none: W("chat_days"), none_rec: W("audio_days") }])
+      : perk("retention", "🗄️", ["perks.pt.retention", { chat: W("chat_prime"), rec: W("rec_prime") }],
+             ["perks.pt.retention_d", { chat: W("chat_prime"), rec: W("rec_prime"), none: W("chat_days"), none_rec: W("rec_days") }]),
     perk("soundboard", "🔊", ["perks.pt.soundboard", { n: v.sb_slots_prime }], ["perks.pt.soundboard_d", { plus: v.sb_slots_plus }], v.sb_on && v.sb_slots_prime > 0),
     perk("lowlat", "⚡", "premium.pt.lowlat", v.lowlat_live ? "perks.pt.lowlat_live_d" : "premium.pt.lowlat_d", v.lowlat_live),
     perk("longer", "⏱️", "premium.pt.longer", "premium.pt.longer_d", false),
@@ -71,8 +80,13 @@ function table(v = values()) {
     perk("all_pt", "📺", "premium.pp.all_pt", "perks.pp.all_pt_d"),
     perk("intro", "💎", "perks.pp.intro", "perks.pp.intro_d"),
     perk("room", "🌉", ["perks.pp.room", { n: v.ptplus_max_rooms }], "premium.pp.room_d"),
-    perk("retention", "🗄️", ["perks.pp.retention", { chat: W("chat_plus"), rec: W("rec_plus") }],
-         ["perks.pp.retention_d", { chat: W("chat_plus"), rec: W("rec_plus"), none: W("chat_days") }]),
+    audioFor("_plus")
+      // mic retention: one window for all three when Plus keeps them alike (for good), else chat + transcripts and recordings apart
+      ? perk("retention", "🗄️", R.audio_plus === R.chat_plus ? ["perks.pp.retention_a", { chat: W("chat_plus") }]
+                                                             : ["perks.pt.retention_a", { chat: W("chat_plus"), rec: W("audio_plus") }],
+             ["perks.pp.retention_a_d", { chat: W("chat_plus"), rec: W("audio_plus"), none: W("chat_days"), none_rec: W("audio_days") }])
+      : perk("retention", "🗄️", ["perks.pp.retention", { chat: W("chat_plus"), rec: W("rec_plus") }],
+             ["perks.pp.retention_d", { chat: W("chat_plus"), rec: W("rec_plus"), none: W("chat_days") }]),
     perk("soundboard", "🔊", ["premium.pp.soundboard", { n: v.sb_slots_plus }], ["premium.pp.soundboard_d", { pt: v.sb_slots_prime }], v.sb_on && v.sb_slots_plus > 0),
     perk("stickers", "🧸", "premium.pp.stickers", "premium.pp.stickers_d"),
     perk("cosmetics", "✨", "premium.pp.cosmetics", "perks.pp.cosmetics_d"),

@@ -35,11 +35,29 @@
 // FIRST: the account is gathered only once it arrived (or isn't needed), never on every retry of a waiting job. An account with no hub
 // account id (a legacy id while CHAT_GENESIS_NS is unset) exports without it, and the README says so.
 //   account_exports  + hub_wait_since, hub_error
+//
+// Mic retention (owner answers 2026-10-27; the ops plan mic-audio-retention-2026-10-27 §7.2) - the member picks what else goes in
+// (`parts`): chat logs, mic transcripts, what Pepe remembers about them, and (only while the mic-recordings policy switch is on -
+// micrec.js - and with a linked Camfrog login) their mic recordings. Chat logs / transcripts are the site's own archive lines
+// (chat.pad_chat_lines, split by kind) AND Pepe's copies; memories and recordings are Pepe's only. Pepe's part comes
+// ASYNCHRONOUSLY from the bot (1.99afq pepe_mydata): the job asks him (website action "privacy.export" [export id, parts, before?])
+// and waits (state queued, pepe_state 'wait'); he builds ONE zip (at most ~256 MB, newest recordings first, `next_before` for the
+// rest) and sends it in slices to POST /api/privacy/export/bot/chunk, then /finish (bot token); the site joins and checks it (size,
+// sha256, a zip) and the member's download carries it as pepe-data.zip (stored). No answer: asked again every PEPE_RETRY_MS (never
+// while his last ask still waits for him), and PEPE_WAIT_MS after the request the zip is built without his part (the README says
+// so). Pepe's options are offered only while he runs that release (micrec.pepeCan); an older form (no `parts`) gets today's export.
+// Bounded: his zip PEPE_ZIP_MAX, REC_JOBS_MAX exports with recordings in flight, REC_DISK_MAX for them and EXPORT_DISK_MAX for every
+// export on disk (a slice past it: 507), the member's zip below 4 GiB (no ZIP64), text deflated off the event loop.
+//   account_exports  + parts (JSON {chat, transcripts, memories, recordings, rec_before, pepe: [the parts asked of Pepe]}), rec (1 =
+//                    recordings asked), pepe_state (NULL | wait | done | gave_up), pepe_attempt (asks so far), pepe_asked_at,
+//                    pepe_bytes (staged / received), pepe_summary (his /finish: parts, counts, left_out, next_before, truncated,
+//                    before, size), pepe_error (his ok: false)
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const crypto = require("crypto");
+const util = require("util");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const DAY = 86400000;
@@ -47,10 +65,26 @@ const RATE_MS = DAY;
 const EXPORT_TTL_MS = 7 * DAY;
 const MAX_ROWS = 50000;            // per table
 const TICK_MS = 10 * 60000;
+// mic retention: Pepe's part (bot 1.99afq pepe_mydata)
+const MB = 1024 * 1024;
+const PEPE_PARTS = Object.freeze(["chat", "transcripts", "memories", "recordings"]);
+const PEPE_KIND = "privacy.export";
+const PEPE_RETRY_MS = 6 * 3600e3;           // no /finish this long after asking -> ask again
+const PEPE_WAIT_MS = 72 * 3600e3;           // ... and this long after the request the zip is built without his part
+const PEPE_SHOWN_MB = 256;                  // the bot's EXPORT_MAX_MB: one download of his part (newest recordings first)
+const PEPE_ZIP_MAX = Math.max(1, Math.min(2048, Number(process.env.ACCOUNT_EXPORT_PEPE_MAX_MB) || 320)) * MB;   // what the site takes
+const SLICE_MAX = MB;                       // raw bytes of one slice (the bot sends 384 KB: ~512 KB of base64 JSON)
+const REC_JOBS_MAX = 3;                     // exports with recordings in flight at once
+const REC_DISK_MAX = 4096 * MB;             // ready recordings exports + in-flight ones (each counted at PEPE_ZIP_MAX)
+const EXPORT_DISK_MAX = 8192 * MB;          // every ready export + Pepe's slices staged now: a slice past it is refused (507)
+const ID_RE = /^[a-f0-9]{32}$/;
+const LOGIN_RE = /^[\w.\-$]{1,40}$/;
 
 let clock = () => Date.now();
 const now = () => clock();
 const dir = () => process.env.ACCOUNT_EXPORT_DIR || path.join(process.cwd(), "account-exports");
+const pepeDir = (id) => path.join(dir(), `${id}.pepe`);
+const rmPepe = (id) => { try { fs.rmSync(pepeDir(id), { recursive: true, force: true }); } catch (e) { /* gone */ } };
 
 let ready = null;
 function init() {
@@ -63,6 +97,11 @@ function init() {
       const have = (await getQuery("SELECT name FROM pragma_table_info('account_exports')")).map((c) => c.name);   // 1.99acm
       if (!have.includes("hub_wait_since")) await runQuery("ALTER TABLE account_exports ADD COLUMN hub_wait_since INTEGER");
       if (!have.includes("hub_error")) await runQuery("ALTER TABLE account_exports ADD COLUMN hub_error TEXT");
+      // mic retention: the member's choices and Pepe's part
+      for (const [c, type] of [["parts", "TEXT"], ["rec", "INTEGER"], ["pepe_state", "TEXT"], ["pepe_attempt", "INTEGER"], ["pepe_asked_at", "INTEGER"],
+                               ["pepe_bytes", "INTEGER"], ["pepe_summary", "TEXT"], ["pepe_error", "TEXT"]]) {
+        if (!have.includes(c)) await runQuery(`ALTER TABLE account_exports ADD COLUMN ${c} ${type}`);
+      }
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -87,7 +126,7 @@ async function rows(table, where, params, { omit = [], order = null } = {}) {
 
 /** Everything for one account. -> plain object (the JSON in the zip). */
 let collects = 0;                 // tests: how often the whole account was gathered
-async function collect(userId, { at = now() } = {}) {
+async function collect(userId, { at = now(), parts = null } = {}) {
   collects++;
   tableCols.clear();
   const uid = String(userId);
@@ -96,6 +135,8 @@ async function collect(userId, { at = now() } = {}) {
   const login = String(u.camfrogUsername || "").trim().toLowerCase() || null;
   const out = { exported_at: new Date(at).toISOString(), format: "patv-data-1", about: "PAT is points, not money. Ids are PATV's internal ids.",
                 account: {} };
+  // mic retention: what the member chose to include (an older form chose nothing: everything the site keeps, no Pepe part)
+  if (parts) out.included = { chat_logs: !!parts.chat, mic_transcripts: !!parts.transcripts, pepe_memories: !!parts.memories, mic_recordings: !!parts.recordings };
   const put = async (section, name, p) => {
     try {
       const r = await p;
@@ -279,7 +320,9 @@ async function collect(userId, { at = now() } = {}) {
   await put("chat", "mic_stage_reports_you_made", rows("micfollow_reports", "reporter_id = ?", [uid], { omit: ["resolved_by"], order: "at" }));
   // CL2: the pad chat archive (chatlog.js) - your own lines there (your linked Camfrog login or your account's web lines; Approved
   // pads too), your chat-log downloads (metadata) and the reports you filed on chat lines
-  await put("chat", "pad_chat_lines", require("./chatlog").exportLines(uid, login, MAX_ROWS));
+  // mic retention: with the member's choices, the chat lines and the 🎙 transcript lines ("mic") each follow their own checkbox
+  await put("chat", "pad_chat_lines", Promise.resolve(require("./chatlog").exportLines(uid, login, MAX_ROWS))
+    .then((rs) => (!rs || !parts ? rs : rs.filter((l) => (l.kind === "mic" ? parts.transcripts : parts.chat)))));
   await put("chat", "chat_log_downloads", rows("chatlog_exports", "user_id = ?", [uid]));
   await put("chat", "chat_line_reports", rows("chatlog_reports", "reporter = ?", [uid], { omit: ["decided_by"] }));
   await put("chat", "clips_you_made", rows("media", "by_user_id = ?", [uid], { omit: ["file"] }));
@@ -321,6 +364,67 @@ function zip(files, at = new Date()) {
   end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
   end.writeUInt32LE(cenBuf.length, 12); end.writeUInt32LE(offset, 16);
   return Buffer.concat([...parts, cenBuf, end]);
+}
+
+// mic retention: the zip written to a FILE entry by entry (a recordings export is hundreds of MB): each entry is read, checksummed and
+// deflated off the event loop (zlib's thread pool; the checksum in steps) - or STORED (`store`: Opus is compressed already) - and
+// appended; the central directory follows. Below 4 GiB and 65,535 entries (no ZIP64): the caps keep it there, and a bigger one
+// throws. entries: [{name, data} | {name, paths: [file, ...] (concatenated)} | {name, path, store}]
+const deflateRaw = util.promisify(zlib.deflateRaw);
+/** crc32 in 1 MB steps with a yield between them (Node 16 has no native one; a 64 MB entry never holds the event loop for long). */
+async function crcAsync(buf) {
+  let c = -1;
+  const STEP = 1 << 20;
+  for (let o = 0; o < buf.length; o += STEP) {
+    const end = Math.min(buf.length, o + STEP);
+    for (let i = o; i < end; i++) c = CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+    if (end < buf.length) await new Promise((r) => setImmediate(r));
+  }
+  return (c ^ -1) >>> 0;
+}
+async function zipToFile(out, entries, at = new Date()) {
+  if (entries.length > 65535) throw new Error("too many files for a zip");
+  const dosTime = ((at.getUTCHours() << 11) | (at.getUTCMinutes() << 5) | (at.getUTCSeconds() >> 1)) & 0xffff;
+  const dosDate = (((at.getUTCFullYear() - 1980) << 9) | ((at.getUTCMonth() + 1) << 5) | at.getUTCDate()) & 0xffff;
+  const tmp = out + `.tmp-${process.pid}-${crypto.randomBytes(3).toString("hex")}`;
+  const fh = await fs.promises.open(tmp, "w", 0o600);
+  const central = [];
+  let offset = 0;
+  try {
+    for (const e of entries) {
+      const raw = e.data !== undefined ? (Buffer.isBuffer(e.data) ? e.data : Buffer.from(String(e.data), "utf8"))
+        : e.paths ? Buffer.concat(await Promise.all(e.paths.map((p) => fs.promises.readFile(p)))) : await fs.promises.readFile(e.path);
+      const store = !!e.store;
+      const comp = store ? raw : await deflateRaw(raw, { level: 6 });
+      const crc = await crcAsync(raw);
+      const name = Buffer.from(e.name, "utf8");
+      if (offset + 30 + name.length + comp.length > 0xfffffffe) throw new Error("the zip would pass 4 GiB");
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(store ? 10 : 20, 4); local.writeUInt16LE(0x0800, 6); local.writeUInt16LE(store ? 0 : 8, 8);
+      local.writeUInt16LE(dosTime, 10); local.writeUInt16LE(dosDate, 12); local.writeUInt32LE(crc, 14);
+      local.writeUInt32LE(comp.length, 18); local.writeUInt32LE(raw.length, 22); local.writeUInt16LE(name.length, 26); local.writeUInt16LE(0, 28);
+      await fh.write(local); await fh.write(name); await fh.write(comp);
+      const cen = Buffer.alloc(46);
+      cen.writeUInt32LE(0x02014b50, 0); cen.writeUInt16LE(20, 4); cen.writeUInt16LE(store ? 10 : 20, 6); cen.writeUInt16LE(0x0800, 8); cen.writeUInt16LE(store ? 0 : 8, 10);
+      cen.writeUInt16LE(dosTime, 12); cen.writeUInt16LE(dosDate, 14); cen.writeUInt32LE(crc, 16); cen.writeUInt32LE(comp.length, 20);
+      cen.writeUInt32LE(raw.length, 24); cen.writeUInt16LE(name.length, 28); cen.writeUInt32LE(offset, 42);
+      central.push(cen, name);
+      offset += 30 + name.length + comp.length;
+    }
+    const cenBuf = Buffer.concat(central);
+    if (offset + cenBuf.length + 22 > 0xfffffffe) throw new Error("the zip would pass 4 GiB");
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10);
+    end.writeUInt32LE(cenBuf.length, 12); end.writeUInt32LE(offset, 16);
+    await fh.write(cenBuf); await fh.write(end);
+    await fh.close();
+    fs.renameSync(tmp, out);
+    return offset + cenBuf.length + 22;
+  } catch (e) {
+    try { await fh.close(); } catch (x) { /* closed */ }
+    try { fs.unlinkSync(tmp); } catch (x) { /* gone */ }
+    throw e;
+  }
 }
 
 const README = `Your PATV data
@@ -384,18 +488,82 @@ async function hubWaits() {
 }
 const alerted = new Set();
 
+// ── mic retention: the member's choices and Pepe's part ──
+/** The form's `parts` -> {chat, transcripts, memories, recordings, rec_before} | null (an older form: today's export). */
+function cleanParts(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const b = (k, d) => (raw[k] === undefined || raw[k] === null ? d : raw[k] === true);
+  const rb = Number(raw.rec_before);
+  return { chat: b("chat", true), transcripts: b("transcripts", true), memories: b("memories", false), recordings: b("recordings", false),
+           rec_before: Number.isFinite(rb) && rb > Date.UTC(2020, 0, 1) && rb < Date.UTC(2100, 0, 1) ? Math.floor(rb) : null };
+}
+const parseJson = (s, d) => { try { const v = JSON.parse(s || "null"); return v == null ? d : v; } catch (e) { return d; } };
+const linkedLogin = async (userId) => {
+  const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0];
+  const l = String((u && u.camfrogUsername) || "").trim().toLowerCase();
+  return LOGIN_RE.test(l) ? l : null;
+};
+/** What the form may offer this account now: {pepe, recordings, login, rec_max_mb}. pepe = Pepe runs the release that gathers his
+ *  part (micrec.pepeCan: bot 1.99afq); recordings = that, the mic-recordings policy switch (micrec.js) and a linked Camfrog login. */
+async function offer(userId) {
+  let pepe = false, policy = false;
+  try { const M = require("./micrec"); await M.init(); pepe = M.pepeCan(); policy = M.policyOn(); } catch (e) { pepe = false; policy = false; }
+  const login = await linkedLogin(userId);
+  return { pepe, recordings: pepe && policy && !!login, login, rec_max_mb: PEPE_SHOWN_MB };
+}
+/** Room for one more recordings export? -> null | {code, retry_at?} */
+async function recRoom() {
+  const inflight = (await getQuery("SELECT COUNT(*) AS n FROM account_exports WHERE rec = 1 AND state IN ('queued','running')"))[0].n;
+  if (inflight >= REC_JOBS_MAX) return { code: "E_REC_BUSY" };
+  const ready = (await getQuery("SELECT COALESCE(SUM(bytes), 0) AS b, MIN(expires) AS next FROM account_exports WHERE rec = 1 AND state = 'ready'"))[0];
+  if (Number(ready.b) + (inflight + 1) * PEPE_ZIP_MAX > REC_DISK_MAX) return { code: "E_REC_BUSY", retry_at: Number(ready.next) || null };
+  return null;
+}
+
 // ── jobs ──
-/** Ask for an export. -> {ok, id} | {ok:false, code:"E_RATE", retry_at} */
-async function request(userId) {
+/** Ask for an export. opts.parts: the member's choices (cleanParts). -> {ok, id} | {ok:false, code: E_RATE (+ retry_at) | E_REC_OFF |
+ *  E_PEPE_OFF | E_REC_BUSY (+ retry_at)} */
+async function request(userId, opts = {}) {
   await init();
   const uid = String(userId);
   const last = (await getQuery("SELECT created FROM account_exports WHERE user_id = ? AND state != 'failed' ORDER BY created DESC LIMIT 1", [uid]))[0];
   if (last && now() - Number(last.created) < RATE_MS) return { ok: false, code: "E_RATE", retry_at: Number(last.created) + RATE_MS };
+  const parts = cleanParts(opts.parts);
+  if (parts) {
+    const o = await offer(uid);
+    if (parts.recordings && !o.recordings) return { ok: false, code: "E_REC_OFF" };
+    if (parts.memories && !o.pepe) return { ok: false, code: "E_PEPE_OFF" };
+    if (parts.recordings) { const busy = await recRoom(); if (busy) return { ok: false, ...busy }; }
+    // Pepe's copies of the chat logs / transcripts ride along when he can gather them (the site's own lines are in either way)
+    parts.pepe = o.pepe ? PEPE_PARTS.filter((k) => parts[k]) : [];
+  }
   const id = crypto.randomBytes(16).toString("hex");
-  await runQuery("INSERT INTO account_exports (id, user_id, created, state) VALUES (?, ?, ?, 'queued')", [id, uid, now()]);
+  await runQuery("INSERT INTO account_exports (id, user_id, created, state, parts, rec) VALUES (?, ?, ?, 'queued', ?, ?)",
+                 [id, uid, now(), parts ? JSON.stringify(parts) : null, parts && parts.recordings ? 1 : null]);
   setImmediate(() => run(id).catch((e) => console.error("[export] run:", e.message)));
   return { ok: true, id };
 }
+
+/** Ask Pepe for his part (ask n): the website action "privacy.export" [export id, parts (comma list), before (unix s)?] - the bot's
+ *  pepe_mydata builds ONE zip of them and sends it to /api/privacy/export/bot/chunk + /finish under the export id. Pieces of an
+ *  earlier upload go (a new build has another sha256). */
+async function askPepe(job, n) {
+  const parts = parseJson(job.parts, {});
+  const login = await linkedLogin(job.user_id);
+  const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [String(job.user_id)]))[0] || {};
+  const t = now();
+  const ask = (parts.pepe || []).filter((k) => k !== "recordings" || login);
+  const args = [job.id, ask.join(",")].concat(parts.rec_before ? [String(Math.floor(parts.rec_before / 1000))] : []);
+  try { fs.rmSync(pepeDir(job.id), { recursive: true, force: true }); } catch (e) { /* none */ }
+  await runQuery(`INSERT OR IGNORE INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
+                  VALUES (?, ?, ?, 0, ?, ?, 'privacy', 'your data: Pepe''s part', 'pending', ?, ?, ?)`,
+                 [String(job.user_id), u.username || "?", login, PEPE_KIND, JSON.stringify(args), t, t, `export-${job.id}-${n}`]);
+  await runQuery("UPDATE account_exports SET pepe_state = 'wait', pepe_attempt = ?, pepe_asked_at = ?, pepe_bytes = 0, pepe_summary = NULL WHERE id = ?",
+                 [n, t, job.id]);
+}
+/** The pending asks of an export are withdrawn (it finished without Pepe, or it's gone). */
+const withdrawAsks = (id, why) => runQuery("UPDATE pepe_actions SET status = 'failed', message = ?, updated = ? WHERE kind = ? AND idem LIKE ? AND status = 'pending'",
+                                           [why, now(), PEPE_KIND, `export-${id}-%`]).catch(() => {});
 
 const running = new Set();
 async function run(id) {
@@ -405,8 +573,21 @@ async function run(id) {
     await init();
     const claim = await runQuery("UPDATE account_exports SET state = 'running' WHERE id = ? AND state = 'queued'", [id]);
     if (!claim || !claim.changes) return null;
-    const job = (await getQuery("SELECT * FROM account_exports WHERE id = ?", [id]))[0];
+    let job = (await getQuery("SELECT * FROM account_exports WHERE id = ?", [id]))[0];
     try {
+      // mic retention: Pepe's part first - asked once, then the job waits for his /finish (pepeTick re-asks / gives up); the chat hub
+      // and the account are gathered only after it, so a waiting job never gathers them twice
+      const parts = parseJson(job.parts, null);
+      if (parts && (parts.pepe || []).length && job.pepe_state !== "done" && job.pepe_state !== "gave_up") {
+        if (!job.pepe_state) await askPepe(job, 1);
+        if (now() - Number(job.created) <= PEPE_WAIT_MS) {
+          await runQuery("UPDATE account_exports SET state = 'queued' WHERE id = ?", [id]);
+          return { ok: false, waiting: true, error: "pepe" };
+        }
+        await runQuery("UPDATE account_exports SET pepe_state = 'gave_up', pepe_error = COALESCE(pepe_error, 'timeout') WHERE id = ?", [id]);
+        await withdrawAsks(id, "the export was finished without Pepe's part");
+        job = (await getQuery("SELECT * FROM account_exports WHERE id = ?", [id]))[0];
+      }
       // 1.99acm: the chat hub's part FIRST - required while hubseam.export is on (the job waits for the hub, never ships without
       // it) - so a job waiting for the hub doesn't gather the whole account on every tick only to throw it away. (A refusal -
       // no key, key_env, insecure_url - comes back from getSigned without a network call.)
@@ -421,41 +602,110 @@ async function run(id) {
         }
         return { ok: false, waiting: true, error: hub.wait };
       }
-      const data = await collect(job.user_id);
+      const data = await collect(job.user_id, { parts });
       const files = [{ name: "patv-data.json", data: JSON.stringify(data, null, 2) }];
       if (hub.data) files.push({ name: "chat-hub.jsonl", data: hub.data });
-      files.push({ name: "README.txt", data: README + (hub.data ? README_HUB : hub.none ? README_NO_HUB : "") });
-      const buf = zip(files, new Date(now()));
+      const pp = parts && (parts.pepe || []).length ? pepeEntries(job) : null;
+      if (pp) files.push(...pp.entries);
+      files.push({ name: "README.txt", data: README + (hub.data ? README_HUB : hub.none ? README_NO_HUB : "") + (parts ? readmeChoices(parts, pp) : "") });
       fs.mkdirSync(dir(), { recursive: true });
       const file = path.join(dir(), `${id}.zip`);
-      fs.writeFileSync(file, buf, { mode: 0o600 });
+      const bytes = await zipToFile(file, files, new Date(now()));
       const t = now();
-      await runQuery("UPDATE account_exports SET state = 'ready', file = ?, bytes = ?, finished = ?, expires = ?, hub_error = NULL WHERE id = ?",
-                     [path.basename(file), buf.length, t, t + EXPORT_TTL_MS, id]);
+      await runQuery("UPDATE account_exports SET state = 'ready', file = ?, bytes = ?, finished = ?, expires = ?, hub_error = NULL WHERE id = ? AND state = 'running'",
+                     [path.basename(file), bytes, t, t + EXPORT_TTL_MS, id]);
+      rmPepe(id);
       alerted.delete(id);
       await require("./inbox").addSafe(job.user_id, { kind: "system", title: "Your data export is ready",
         body: "The copy of your PATV data you asked for is ready. Download it from Settings → Account → Your data within 7 days, signed in to this account.",
         link: "/settings/account#data", ref: `export:${id}` });
-      return { ok: true, bytes: buf.length };
+      return { ok: true, bytes };
     } catch (e) {
       await runQuery("UPDATE account_exports SET state = 'failed', error = ?, finished = ? WHERE id = ?", [String(e.message).slice(0, 200), now(), id]);
+      rmPepe(id);
       console.error(`[export] ${id} failed:`, e.message);
       return { ok: false, error: e.message };
     }
   } finally { running.delete(id); }
 }
 
+/** Pepe's zip (checked at /finish) as the entry pepe-data.zip - STORED: it is compressed already - and what his finish said about it.
+ *  -> {entries, got, sum, state, error} */
+function pepeEntries(job) {
+  const f = pepeZip(job.id);
+  const got = job.pepe_state === "done" && !job.pepe_error && fs.existsSync(f);
+  return { entries: got ? [{ name: "pepe-data.zip", path: f, store: true }] : [], got, sum: parseJson(job.pepe_summary, {}) || {},
+           state: job.pepe_state, error: job.pepe_error || null };
+}
+
+const README_PARTS = `
+What you chose to include:
+`;
+const PART_WORDS = { chat: "chat logs", transcripts: "mic transcripts", memories: "what Pepe remembers about you", recordings: "mic recordings" };
+/** The README paragraph about the member's choices and Pepe's part (pp = pepeEntries(...), or null: Pepe wasn't asked). */
+function readmeChoices(parts, pp) {
+  const yes = (b) => (b ? "yes" : "no");
+  let s = README_PARTS + `- chat logs: ${yes(parts.chat)}, mic transcripts: ${yes(parts.transcripts)}, what Pepe remembers about you: ${yes(parts.memories)}, ` +
+          `mic recordings: ${yes(parts.recordings)}\n`;
+  s += "- patv-data.json \"chat.pad_chat_lines\" has your lines in pads' chat history (kind \"mic\" = a mic transcript) for what you ticked.\n";
+  const asked = parts.pepe || [];
+  if (!asked.length) {
+    if (parts.chat || parts.transcripts) s += "- Pepe's own copies of room chat and mic transcripts couldn't be added this time (his part can't be gathered right now); ask again later.\n";
+    return s;
+  }
+  const what = asked.map((k) => PART_WORDS[k] || k).join(", ");
+  if (pp && pp.got) {
+    s += `- pepe-data.zip: Pepe's part (${what}) - a zip of its own; its README.txt and manifest.json say what's in it and what was left out.\n`;
+    const nb = Number(pp.sum && pp.sum.next_before);
+    if (asked.includes("recordings") && nb > 0) {
+      s += `  Not every recording fitted: one download holds at most about ${PEPE_SHOWN_MB} MB, newest first. For the older ones, ask again and pick ` +
+           `"Only recordings before" ${new Date(nb * 1000).toISOString().slice(0, 10)}, or write to privacy@publicaccess.tv.\n`;
+    }
+  } else {
+    const why = pp && pp.state === "gave_up" ? "Pepe didn't send it in time" : pp && pp.error ? `Pepe couldn't send it (${String(pp.error).slice(0, 80)})` : "Pepe had nothing to send";
+    s += `- Pepe's part (${what}): not included - ${why}. Ask again later, or write to privacy@publicaccess.tv.\n`;
+  }
+  return s;
+}
+
+/** Jobs waiting for Pepe: asked again when his last ask failed / expired or went quiet for PEPE_RETRY_MS (never while it's still
+ *  waiting for him to take it); built without his part PEPE_WAIT_MS after the request. -> {asked, gave_up} */
+async function pepeTick() {
+  const out = { asked: 0, gave_up: 0 };
+  const t = now();
+  for (const j of await getQuery("SELECT * FROM account_exports WHERE state = 'queued' AND pepe_state = 'wait' ORDER BY created LIMIT 50")) {
+    if (t - Number(j.created) > PEPE_WAIT_MS) { out.gave_up++; await run(j.id); continue; }
+    const act = (await getQuery("SELECT status, updated FROM pepe_actions WHERE kind = ? AND idem = ?", [PEPE_KIND, `export-${j.id}-${j.pepe_attempt}`]))[0];
+    if (act && act.status === "pending") continue;                          // he hasn't taken it yet (down?) - no pile of asks
+    if (t - Number(j.pepe_asked_at || 0) < PEPE_RETRY_MS) continue;         // started (or failed) recently
+    await askPepe(j, (Number(j.pepe_attempt) || 0) + 1);
+    out.asked++;
+  }
+  return out;
+}
+
 /** Interrupted jobs run again; expired files go. */
 async function tick() {
   await init();
   for (const j of await getQuery("SELECT id FROM account_exports WHERE state = 'running' AND created < ?", [now() - 30 * 60000])) {
+    if (running.has(j.id)) continue;                     // mic retention: still being built here (a job that waited for Pepe is older)
     await runQuery("UPDATE account_exports SET state = 'queued' WHERE id = ? AND state = 'running'", [j.id]);
   }
-  // (1.99acm: new jobs before the ones waiting for the chat hub)
-  for (const j of await getQuery("SELECT id FROM account_exports WHERE state = 'queued' ORDER BY (hub_wait_since IS NOT NULL), created LIMIT 5")) await run(j.id);
+  // (1.99acm: new jobs before the ones waiting for the chat hub; mic retention: the ones waiting for Pepe are pepeTick's)
+  for (const j of await getQuery(`SELECT id FROM account_exports WHERE state = 'queued' AND (pepe_state IS NULL OR pepe_state <> 'wait')
+                                  ORDER BY (hub_wait_since IS NOT NULL), created LIMIT 5`)) await run(j.id);
+  try { await pepeTick(); } catch (e) { console.error("[export] pepe tick:", e.message); }
   for (const j of await getQuery("SELECT id, file FROM account_exports WHERE state = 'ready' AND expires <= ?", [now()])) {
     if (j.file) { try { fs.unlinkSync(path.join(dir(), path.basename(j.file))); } catch (e) { /* gone */ } }
     await runQuery("UPDATE account_exports SET state = 'expired', file = NULL WHERE id = ?", [j.id]);
+  }
+  // Pepe's pieces of jobs that aren't waiting any more (a crash between the zip and the cleanup)
+  let left = [];
+  try { left = fs.readdirSync(dir()).filter((n) => /^[a-f0-9]{32}\.pepe$/.test(n)); } catch (e) { left = []; }
+  for (const n of left) {
+    const id = n.slice(0, 32);
+    const j = (await getQuery("SELECT state, pepe_state FROM account_exports WHERE id = ?", [id]))[0];
+    if (!j || !(j.state === "queued" || j.state === "running")) rmPepe(id);
   }
 }
 
@@ -464,37 +714,178 @@ async function removeAll(userId) {
   await init();
   for (const j of await getQuery("SELECT id, file FROM account_exports WHERE user_id = ?", [String(userId)])) {
     if (j.file) { try { fs.unlinkSync(path.join(dir(), path.basename(j.file))); } catch (e) { /* gone */ } }
+    rmPepe(j.id);                                           // mic retention: Pepe's pieces too
+    await withdrawAsks(j.id, "the account was deleted");
   }
   await runQuery("UPDATE account_exports SET state = 'expired', file = NULL WHERE user_id = ? AND state IN ('queued','running','ready')", [String(userId)]);
 }
 
 async function mine(userId) {
   await init();
-  return getQuery("SELECT id, created, state, bytes, finished, expires FROM account_exports WHERE user_id = ? ORDER BY created DESC LIMIT 5", [String(userId)]);
+  const rows = await getQuery(`SELECT id, created, state, bytes, finished, expires, CASE WHEN pepe_state = 'wait' THEN 1 ELSE 0 END AS waiting_pepe, pepe_summary
+                               FROM account_exports WHERE user_id = ? ORDER BY created DESC LIMIT 5`, [String(userId)]);
+  // mic retention: older recordings that didn't fit -> the form offers "Only recordings before" that day (ms)
+  return rows.map((r) => {
+    const nb = Number((parseJson(r.pepe_summary, {}) || {}).next_before);
+    const out = { ...r, next_before: nb > 0 ? nb * 1000 : null };
+    delete out.pepe_summary;
+    return out;
+  });
+}
+
+/** mic retention: the admin card (micrec.adminView) - counts only. */
+async function pepeStatus() {
+  await init();
+  const r = (await getQuery(`SELECT SUM(CASE WHEN state IN ('queued','running') AND pepe_state = 'wait' THEN 1 ELSE 0 END) AS waiting,
+                                    SUM(CASE WHEN rec = 1 AND state IN ('queued','running') THEN 1 ELSE 0 END) AS rec_inflight,
+                                    COALESCE(SUM(CASE WHEN rec = 1 AND state = 'ready' THEN bytes ELSE 0 END), 0) AS rec_ready_bytes,
+                                    SUM(CASE WHEN pepe_state = 'gave_up' AND created > ? THEN 1 ELSE 0 END) AS gave_up_7d
+                             FROM account_exports`, [now() - 7 * DAY]))[0] || {};
+  return { waiting: Number(r.waiting) || 0, rec_inflight: Number(r.rec_inflight) || 0, rec_ready_bytes: Number(r.rec_ready_bytes) || 0,
+           gave_up_7d: Number(r.gave_up_7d) || 0, rec_max: PEPE_ZIP_MAX, rec_jobs_max: REC_JOBS_MAX, rec_disk_max: REC_DISK_MAX };
+}
+
+// ── Pepe's zip (bot token; bot 1.99afq pepe_mydata._md_upload): POST /api/privacy/export/bot/chunk, /finish ──
+class Refuse extends Error { constructor(status, code, message) { super(message || code); this.status = status; this.code = code; } }
+const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
+const SHA_RE = /^[0-9a-f]{64}$/;
+const pepeZip = (id) => path.join(pepeDir(id), "pepe-data.zip");
+const chains = new Map();                                    // export id -> its slices in progress (one at a time per export)
+function serial(id, fn) {
+  const prev = chains.get(id) || Promise.resolve();
+  const p = prev.then(fn, fn);
+  const tail = p.catch(() => {});
+  chains.set(id, tail);
+  tail.then(() => { if (chains.get(id) === tail) chains.delete(id); });
+  return p;
+}
+function dirBytes(d) {
+  let n = 0;
+  try {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const f = path.join(d, e.name);
+      n += e.isDirectory() ? dirBytes(f) : (fs.statSync(f).size || 0);
+    }
+  } catch (e) { /* none */ }
+  return n;
+}
+const int = (v) => (typeof v === "number" && Number.isInteger(v) ? v : typeof v === "string" && /^\d{1,12}$/.test(v) ? Number(v) : NaN);
+/** The job a slice / finish is for - only one waiting for Pepe; else E_GONE (Pepe stops). */
+async function waitingJob(b) {
+  const id = String(b.id || "");
+  if (!ID_RE.test(id)) throw new Refuse(400, "E_BAD", "bad export id");
+  const j = (await getQuery("SELECT * FROM account_exports WHERE id = ?", [id]))[0];
+  if (!j || j.state !== "queued" || j.pepe_state !== "wait") throw new Refuse(409, "E_GONE", "this download isn't waiting for Pepe");
+  return j;
+}
+/** One slice of Pepe's zip {id, seq, total, size, sha256, data}. -> {ok, have, total, dup?} */
+async function putChunk(b) {
+  await init();
+  const j = await waitingJob(b);
+  const seq = int(b.seq), total = int(b.total), size = int(b.size), sha = String(b.sha256 || "").toLowerCase();
+  if (!SHA_RE.test(sha)) throw new Refuse(400, "E_BAD", "sha256 must be 64 hex");
+  if (!(size >= 1 && size <= PEPE_ZIP_MAX)) throw new Refuse(413, "E_CAP", `Pepe's part is at most ${Math.round(PEPE_ZIP_MAX / MB)} MB`);
+  if (!(total >= Math.ceil(size / SLICE_MAX) && total >= 1 && total <= Math.ceil(size / 1024) + 1)) throw new Refuse(400, "E_BAD", "bad slice count");
+  if (!(seq >= 0 && seq < total)) throw new Refuse(400, "E_BAD", "bad slice number");
+  if (typeof b.data !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(b.data)) throw new Refuse(400, "E_BAD", "data must be base64");
+  const buf = Buffer.from(b.data, "base64");
+  if (!buf.length || buf.length > SLICE_MAX) throw new Refuse(400, "E_BAD", `a slice is 1..${SLICE_MAX} bytes`);
+  return serial(j.id, async () => {
+    const d = path.join(pepeDir(j.id), sha);
+    // a different build (another sha256) replaces an earlier one's slices
+    try { for (const e of fs.readdirSync(pepeDir(j.id))) if (e !== sha && SHA_RE.test(e)) fs.rmSync(path.join(pepeDir(j.id), e), { recursive: true, force: true }); } catch (e) { /* none */ }
+    fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+    const metaF = path.join(d, "meta.json");
+    const meta = parseJson(fs.existsSync(metaF) ? fs.readFileSync(metaF, "utf8") : null, null);
+    if (meta && (meta.total !== total || meta.size !== size)) throw new Refuse(409, "E_SEQ", "that upload was started with another size / slice count");
+    const part = path.join(d, "p" + seq);
+    if (fs.existsSync(part)) {
+      if (sha256(fs.readFileSync(part)) !== sha256(buf)) throw new Refuse(409, "E_SEQ", `slice ${seq} was already sent with different data`);
+      return { ok: true, dup: true };
+    }
+    // the disk: every ready export + what's staged now
+    const ready = Number((await getQuery("SELECT COALESCE(SUM(bytes), 0) AS b FROM account_exports WHERE state = 'ready'"))[0].b) || 0;
+    const staged = Number((await getQuery("SELECT COALESCE(SUM(pepe_bytes), 0) AS b FROM account_exports WHERE pepe_state = 'wait' AND state IN ('queued','running')"))[0].b) || 0;
+    if (ready + staged + buf.length > EXPORT_DISK_MAX) throw new Refuse(507, "E_FULL", "no room for more downloads right now");
+    if (!meta) fs.writeFileSync(metaF, JSON.stringify({ total, size }), { mode: 0o600 });
+    fs.writeFileSync(part, buf, { mode: 0o600 });
+    await runQuery("UPDATE account_exports SET pepe_bytes = ? WHERE id = ?", [dirBytes(pepeDir(j.id)), j.id]);
+    return { ok: true };
+  });
+}
+/** Pepe is done: {id, ok: true, size, sha256, name, parts, counts, left_out, next_before, truncated, before} - the slices are joined
+ *  and checked (size, sha256, a zip) into pepe-data.zip - or {id, ok: false, error}: the download is made without his part. Either
+ *  way the job builds the zip now. -> {ok, expires_at} */
+async function finish(b) {
+  await init();
+  const j = await waitingJob(b);
+  return serial(j.id, async () => {
+    const summary = {};
+    for (const k of ["parts", "counts", "left_out", "next_before", "truncated", "before"]) if (b[k] !== undefined) summary[k] = b[k];
+    let err = null;
+    if (b.ok !== true) err = String(b.error || "failed").replace(/[\r\n\t]+/g, " ").slice(0, 200);
+    else {
+      const sha = String(b.sha256 || "").toLowerCase(), size = int(b.size);
+      if (!SHA_RE.test(sha) || !(size >= 1)) throw new Refuse(400, "E_BAD", "size and sha256, please");
+      const d = path.join(pepeDir(j.id), sha);
+      const meta = parseJson(fs.existsSync(path.join(d, "meta.json")) ? fs.readFileSync(path.join(d, "meta.json"), "utf8") : null, null);
+      if (!meta || meta.size !== size) throw new Refuse(409, "E_SEQ", "no upload of that size / sha256");
+      const missing = [];
+      for (let i = 0; i < meta.total; i++) if (!fs.existsSync(path.join(d, "p" + i))) missing.push(i);
+      if (missing.length) throw new Refuse(409, "E_SEQ", `missing slice(s) ${missing.slice(0, 20).join(", ")}`);
+      const out = pepeZip(j.id), tmp = out + ".tmp";
+      const fd = fs.openSync(tmp, "w", 0o600);
+      const h = crypto.createHash("sha256");
+      try {
+        for (let i = 0; i < meta.total; i++) { const p = fs.readFileSync(path.join(d, "p" + i)); h.update(p); fs.writeSync(fd, p); }
+      } finally { fs.closeSync(fd); }
+      const head = Buffer.alloc(4);
+      const fd2 = fs.openSync(tmp, "r");
+      try { fs.readSync(fd2, head, 0, 4, 0); } finally { fs.closeSync(fd2); }
+      if (fs.statSync(tmp).size !== size || h.digest("hex") !== sha || head.readUInt32LE(0) !== 0x04034b50) {
+        fs.rmSync(d, { recursive: true, force: true });
+        try { fs.unlinkSync(tmp); } catch (e) { /* gone */ }
+        throw new Refuse(400, "E_SHA", "the slices don't make that file (size / sha256 / not a zip) - send it again");
+      }
+      fs.renameSync(tmp, out);
+      fs.rmSync(d, { recursive: true, force: true });
+      summary.size = size;
+    }
+    const r = await runQuery("UPDATE account_exports SET pepe_state = 'done', pepe_summary = ?, pepe_error = ?, pepe_bytes = ? WHERE id = ? AND pepe_state = 'wait'",
+                             [JSON.stringify(summary).slice(0, 20000), err, summary.size || 0, j.id]);
+    if (!r || !r.changes) throw new Refuse(409, "E_GONE", "this download isn't waiting for Pepe");
+    await withdrawAsks(j.id, "Pepe's part arrived");
+    setImmediate(() => run(j.id).catch((e) => console.error("[export] run:", e.message)));
+    return { ok: true, expires_at: now() + EXPORT_TTL_MS };
+  });
 }
 
 let timer = null;
-function register(app, { addUser }) {
+function register(app, { addUser, isBotToken }) {
   init().catch((e) => console.error("[export] init:", e.message));
   if (!timer) {
     timer = setInterval(() => tick().catch((e) => console.error("[export] tick:", e.message)), TICK_MS);
     if (timer.unref) timer.unref();
     setTimeout(() => tick().catch(() => {}), 20000).unref();
   }
+  const express = require("express");
   const sameOrigin = (req) => { const s = req.get("origin") || req.get("referer"); try { return !!s && new URL(s).host === req.get("host"); } catch (e) { return false; } };
   app.get("/api/account/export", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
-    try { res.json({ ok: true, exports: await mine(req.user.userId), ttl_days: EXPORT_TTL_MS / DAY }); }
-    catch (e) { res.status(500).json({ ok: false }); }
+    try {
+      const o = await offer(req.user.userId);
+      res.json({ ok: true, exports: await mine(req.user.userId), ttl_days: EXPORT_TTL_MS / DAY,
+                 offer: { pepe: o.pepe, recordings: o.recordings, rec_max_mb: o.rec_max_mb } });
+    } catch (e) { res.status(500).json({ ok: false }); }
   });
   app.post("/api/account/export", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
     if (req.get("X-Requested-With") !== "fetch" || !sameOrigin(req)) return res.status(403).json({ ok: false, error: "cross-site" });
     try {
-      const r = await request(req.user.userId);
-      res.status(r.ok ? 200 : 429).json(r);
+      const r = await request(req.user.userId, { parts: (req.body || {}).parts });
+      res.status(r.ok ? 200 : r.code === "E_RATE" || r.code === "E_REC_BUSY" ? 429 : 409).json(r);
     } catch (e) { console.error("[export] request:", e.message); res.status(500).json({ ok: false }); }
   });
   app.get("/settings/account/export/:id", addUser, async (req, res) => {
@@ -508,7 +899,27 @@ function register(app, { addUser }) {
     if (!fs.existsSync(file)) return res.status(410).send("This export has expired. Ask for a new one in Settings → Account → Your data.");
     res.download(file, `patv-data-${new Date(Number(j.finished || j.created)).toISOString().slice(0, 10)}.zip`);
   });
+  // mic retention: Pepe's zip in slices (index.js keeps its global 100 KB parser off /chunk: a slice is ~512 KB of JSON)
+  const bot = (req, res) => {
+    if (typeof isBotToken !== "function" || !isBotToken((req.body || {}).password)) { res.status(403).json({ ok: false, error: "unauthorized" }); return false; }
+    return true;
+  };
+  const fail = (res, e) => {
+    if (e instanceof Refuse) return res.status(e.status).json({ ok: false, code: e.code, error: e.message });
+    console.error("[export] pepe upload:", e.message);
+    res.status(500).json({ ok: false, error: "Something went wrong." });
+  };
+  app.post("/api/privacy/export/bot/chunk", express.json({ limit: "1mb" }), async (req, res) => {
+    if (!bot(req, res)) return;
+    try { res.json(await putChunk(req.body || {})); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/privacy/export/bot/finish", express.json({ limit: "64kb" }), async (req, res) => {
+    if (!bot(req, res)) return;
+    try { res.json(await finish(req.body || {})); } catch (e) { fail(res, e); }
+  });
 }
 
-module.exports = { init, register, request, run, tick, collect, zip, crc32, removeAll, mine, hubWaits, OMIT, RATE_MS, EXPORT_TTL_MS,
-                   _setClock: (f) => { clock = f || (() => Date.now()); }, _dir: dir, _collects: () => collects };
+module.exports = { init, register, request, run, tick, pepeTick, collect, zip, zipToFile, crc32, removeAll, mine, hubWaits, offer, cleanParts, putChunk, finish,
+                   pepeStatus, OMIT, RATE_MS, EXPORT_TTL_MS, PEPE_KIND, PEPE_PARTS, PEPE_RETRY_MS, PEPE_WAIT_MS, PEPE_ZIP_MAX, PEPE_SHOWN_MB, REC_JOBS_MAX,
+                   REC_DISK_MAX, EXPORT_DISK_MAX, Refuse,
+                   _setClock: (f) => { clock = f || (() => Date.now()); }, _dir: dir, _collects: () => collects, _pepeZip: (id) => pepeZip(id) };

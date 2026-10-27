@@ -139,7 +139,9 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          "bridge_rooms", "bridge_feed",
                                          "pad_hub",
                                          // S1 Q4: staging's own CHAT_HUB
-                                         "chat_switches"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches");
+                                         "chat_switches",
+                                         // mic retention: staging's own mic-recordings policy switch (micrec.js)
+                                         "micrec_meta"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch");
   assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");

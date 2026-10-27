@@ -171,9 +171,15 @@ function register(app, { addUser, isBotToken }) {
       // (CL4) announces the archive with it and bounds !log / !search by it; an older Pepe ignores it
       let ownerRooms = await rooms.ownersForPepe();
       try { ownerRooms = await require("./chatlog").forOwnerSync(ownerRooms); } catch (e) { console.error("[rooms] chat archive block:", e.message); }
+      // mic retention (micrec.keepBlock; the wire: the ops plan mic-audio-retention-2026-10-27 §7.2 B): what Pepe must keep past its
+      // windows - each room's tier lapses inside their own 30-day grace, legal holds, open reports on 🎙 lines - and the policy
+      // switch. Never fails the sync: a part it can't read makes it `complete: false`, and Pepe then deletes no audio; an older Pepe
+      // ignores it
+      let retentionKeep = null;
+      try { retentionKeep = await require("./micrec").keepBlock(); } catch (e) { console.error("[rooms] retention keep:", e.message); }
       // Train 3 review: chatlog_known - this site HAS the chat archive, so rooms without a block mean a failing read (above), and
       // Pepe keeps his last blocks for good instead of dropping them after 7 days (pepe_chatlog BLOCK_HOLD_S)
-      res.json({ ok: true, rooms: ownerRooms, chatlog_known: true, prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify, ...(ownerVoices ? { owner_voices: ownerVoices } : {}) });
+      res.json({ ok: true, rooms: ownerRooms, chatlog_known: true, prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify, ...(ownerVoices ? { owner_voices: ownerVoices } : {}), ...(retentionKeep ? { retention_keep: retentionKeep } : {}) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

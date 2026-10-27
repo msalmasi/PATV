@@ -72,6 +72,12 @@
       <div class="field" style="grid-column:1/-1"><label class="acctdel-ck"><input type="checkbox" id="delRemovePublic" name="remove_public" aria-describedby="delRemovePublicHint"<% if (rpWait) { %> disabled<% } %>> <%- t('acctdel.remove_public') %></label>
         <span class="hint" id="delRemovePublicHint"><%- t('acctdel.remove_public_meta') %><% if (rpWait) { %> <%- t('acctdel.remove_public_wait', { when: t.date(rpWait, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) }) %><% } %></span></div>
       <% } %>
+      <% if (locals.recordings) { %>
+      <%# mic retention (owner answers 2026-10-27; micrec.js): unticked by default; only while the mic-recordings policy switch is on and a
+          Pepe that deletes them was heard from, to an account that has (had) a Camfrog login (accountdelete.js delete_recordings) %>
+      <div class="field" style="grid-column:1/-1"><label class="acctdel-ck"><input type="checkbox" id="delRecordings" name="delete_recordings" aria-describedby="delRecordingsHint"> <%- t('acctdel.recordings') %></label>
+        <span class="hint" id="delRecordingsHint"><%- t('acctdel.recordings_meta') %></span></div>
+      <% } %>
       <div style="grid-column:1/-1"><button class="btn" type="submit" id="delBtn" disabled><%- t('acctdel.button', { days: graceDays }) %></button></div>
     </form>
     <span class="status" id="delStatus" role="status" aria-live="polite"></span>
@@ -84,6 +90,6 @@
   .pe .acctdel-ck { display: flex; gap: 8px; align-items: center; min-height: 44px; cursor: pointer; color: var(--ds-text); }
   .pe .acctdel-ck input { width: auto; min-height: 0; margin: 0; }
 </style>
-<script src="/public/js/account-delete.js?v=3" defer></script>
+<script src="/public/js/account-delete.js?v=4" defer></script>
 </body>
 </html>

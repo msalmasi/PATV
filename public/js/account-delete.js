@@ -1,5 +1,6 @@
 // account-delete.js - /settings/account/delete (accountdelete.js: POST /api/account/delete {password?, confirm, hide_lines?,
-// remove_public?}). 1.99wj; CL6: hide_lines; S1 V4: remove_public (the checkbox exists only while it is offered).
+// remove_public?, delete_recordings?}). 1.99wj; CL6: hide_lines; S1 V4: remove_public (the checkbox exists only while it is offered); mic
+// retention: delete_recordings (likewise).
 (function () {
   'use strict';
   var f = document.getElementById('delForm');
@@ -8,6 +9,7 @@
   var c = document.getElementById('delConfirm'), pw = document.getElementById('delPw'), btn = document.getElementById('delBtn'), st = document.getElementById('delStatus');
   var hl = document.getElementById('delHideLines');
   var rp = document.getElementById('delRemovePublic');
+  var rec = document.getElementById('delRecordings');   // mic retention: only while it's offered
   var want = c ? c.getAttribute('data-want') : '';
   function say(msg, bad) { st.textContent = msg || ''; st.className = 'status ' + (bad ? 'err' : 'ok'); }
   function check() { btn.disabled = !c || c.value.trim() !== want; }
@@ -21,6 +23,7 @@
     say(_t('js.acctdel.working', 'Scheduling…'));
     var body = { confirm: c.value.trim(), password: pw ? pw.value : '', hide_lines: !!(hl && hl.checked) };   // CL6: unticked by default
     if (rp && !rp.disabled) body.remove_public = !!rp.checked;                                                // S1 V4: unticked by default
+    if (rec) body.delete_recordings = !!rec.checked;                                                          // mic retention: unticked by default
     fetch('/api/account/delete', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify(body) })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })

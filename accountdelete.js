@@ -21,6 +21,11 @@
 //                                         account's public lines there) and, once the deletion has committed, the account's web
 //                                         lines in the pad chat archive are purged too (chatlogmod.removeAccountLines), the same
 //                                         exceptions kept (a legal hold, an open report): ADR 0007 OQ-20, one checkbox for both.
+//                                         Mic retention (owner answers 2026-10-27): with delete_recordings ("Also delete my mic
+//                                         recordings", unticked; offered only while the mic-recordings policy switch is on and
+//                                         Pepe runs the release that does it - micrec.js) Pepe is asked to delete the recordings of
+//                                         every Camfrog login the account had, made before it stopped being the account's (website
+//                                         action "privacy.recdelete" [before], micrec.recWindowsOf; re-asked until he takes it).
 //
 // PAT never vanishes: the wallet debit ("account-deleted") and its legs (pools when the site owns them, the House as jackpot rakes,
 // else a negative Reserve claim Pepe's funding tick credits) are one transaction, keyed (account_deletion_routes, key
@@ -34,7 +39,9 @@
 //                            the archive's part - its web lines are under it; NULLed when that part has run; review 2: read
 //                            only on a row written before public_windows), public_windows (S1 V4 review 2: JSON
 //                            [{login, from, to}] - each Camfrog login linked to the account and the span it was the account's,
-//                            loginWindowsOf; the same lifetime: NULLed when the archive's part has run)
+//                            loginWindowsOf; the same lifetime: NULLed when the archive's part has run),
+//                            delete_recordings (mic retention: the choice), rec_windows (JSON [{login, from, to}] for Pepe's
+//                            retries - NULLed once he confirmed every login), rec_done_at, rec_gave_up_at (not confirmed in 30 days)
 //   account_deletion_routes  key PK, user_id, amount, legs (JSON), txid, at
 "use strict";
 const crypto = require("crypto");
@@ -79,6 +86,11 @@ function init() {
       if (!c.includes("public_login")) await runQuery("ALTER TABLE account_deletions ADD COLUMN public_login TEXT");
       // S1 V4 review 2: the spans each Camfrog login was the account's (JSON [{login, from, to}]), kept like public_login was
       if (!c.includes("public_windows")) await runQuery("ALTER TABLE account_deletions ADD COLUMN public_windows TEXT");
+      // mic retention: "Also delete my mic recordings" - the choice, the spans for Pepe's retries, when he confirmed / gave up
+      if (!c.includes("delete_recordings")) await runQuery("ALTER TABLE account_deletions ADD COLUMN delete_recordings INTEGER");
+      if (!c.includes("rec_windows")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_windows TEXT");
+      if (!c.includes("rec_done_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_done_at INTEGER");
+      if (!c.includes("rec_gave_up_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_gave_up_at INTEGER");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -229,6 +241,17 @@ async function removeWaitUntil(userId) {
   const next = r && r.at != null ? Number(r.at) + REMOVE_EVERY_MS : 0;
   return next > now() ? next : null;
 }
+/** Mic retention: "Also delete my mic recordings" is offered only while the mic-recordings policy switch is on (micrec.js: the
+ *  privacy policy says what recordings are kept) AND Pepe runs the release that deletes them (micrec.pepeCan: bot 1.99afq). */
+function recordingsOffered() {
+  try { const M = require("./micrec"); return M.policyOn() && M.pepeCan(); } catch (e) { return false; }
+}
+/** Has the account ever had a Camfrog login (now, or in its login history)? (The checkbox is shown only then.) */
+async function hadLogin(userId, login) {
+  if (login) return true;
+  if ((await q("username_history", ["userId", "kind"], "SELECT 1 FROM username_history WHERE userId = ? AND kind = 'camfrog' LIMIT 1", [String(userId)])).length) return true;
+  return (await q("login_changes", ["userId", "old_login"], "SELECT 1 FROM login_changes WHERE userId = ? AND old_login IS NOT NULL LIMIT 1", [String(userId)])).length > 0;
+}
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 /** views/privacy.ejs (terms.js): null while the choice isn't offered; else {on_at, on_day, export} - when the `erasure` switch
@@ -251,7 +274,7 @@ async function privacyCopy() {
  * E_REAUTH, E_CONFIRM, E_PENDING; S1 V4: E_REMOVE_OFF (removePublic while the choice isn't offered), E_REMOVE_DAILY (with
  * .retry_at: a request with it in the last 24 hours).
  */
-async function request(req, { password, confirm, hideLines = false, removePublic = false } = {}) {
+async function request(req, { password, confirm, hideLines = false, removePublic = false, deleteRecordings = false } = {}) {
   await init();
   const uid = String(req.user.userId);
   const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [uid]))[0];
@@ -264,19 +287,21 @@ async function request(req, { password, confirm, hideLines = false, removePublic
     const wait = await removeWaitUntil(uid);
     if (wait) throw dailyRefusal(wait);
   }
+  // mic retention: only while it's offered (the page shows the checkbox then)
+  if (deleteRecordings && !recordingsOffered()) throw new Refuse(409, "Deleting your mic recordings isn't offered right now - reload the page.", "E_REC_OFF");
   let reauth = null;
   if (password) { if (await verifyPassword(uid, password)) reauth = "password"; else throw new Refuse(403, "That password isn't right.", "E_REAUTH"); }
   else if (await require("./sessions").isFresh(req)) reauth = "fresh-sign-in";
   if (!reauth) throw new Refuse(403, "Confirm it's you: enter your password, or sign out and sign back in (any way you like - Google, Apple, Plex, Telegram, Twitch, Discord or a !signin chat link) and delete within 10 minutes.", "E_REAUTH");
   const b = await blockers(uid);
   if (b.block.length) throw new Refuse(409, "Some things have to be closed first.", "E_BLOCKED", { block: b.block });
-  return schedule(u, { by: "self", reauth, hideLines, removePublic });
+  return schedule(u, { by: "self", reauth, hideLines, removePublic, deleteRecordings });
 }
 
 const dailyRefusal = (wait) => new Refuse(429, "You can ask to remove your public messages once a day. Untick it, or try again after " +
   new Date(wait).toISOString().slice(0, 16).replace("T", " ") + " UTC.", "E_REMOVE_DAILY", { retry_at: wait });
 
-async function schedule(u, { by = "self", reauth = null, reason = null, hideLines = false, removePublic = false } = {}) {
+async function schedule(u, { by = "self", reauth = null, reason = null, hideLines = false, removePublic = false, deleteRecordings = false } = {}) {
   await init();
   const t = now();
   const at = t + GRACE_MS;
@@ -288,9 +313,10 @@ async function schedule(u, { by = "self", reauth = null, reason = null, hideLine
       const wait = await removeWaitUntil(u.userId);
       if (wait) throw dailyRefusal(wait);
     }
-    await runQuery(`INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth, reason, hide_lines, remove_public)
-                    VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?, ?)`,
-                   [String(u.userId), t, at, String(by).slice(0, 80), reauth, reason ? String(reason).slice(0, 200) : null, hideLines ? 1 : null, removePublic ? 1 : null]);
+    await runQuery(`INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth, reason, hide_lines, remove_public, delete_recordings)
+                    VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   [String(u.userId), t, at, String(by).slice(0, 80), reauth, reason ? String(reason).slice(0, 200) : null, hideLines ? 1 : null, removePublic ? 1 : null,
+                    deleteRecordings ? 1 : null]);
   });
   await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
   await require("./inbox").addSafe(u.userId, { kind: "system", title: "Your account is scheduled for deletion",
@@ -545,6 +571,7 @@ async function execute(userId, { force = false } = {}) {
   if (appleSso) await appleSso.init();
   let appleKeys = [];
   let pubWindows = null;                     // S1 V4 review 2: loginWindowsOf, read in the transaction below (step 3)
+  let recWindows = null;                     // mic retention: micrec.recWindowsOf, read in the transaction below (step 3)
   try {
     const M = require("./media");
     const path = require("path"), fs = require("fs");
@@ -596,6 +623,8 @@ async function execute(userId, { force = false } = {}) {
     const cfLogins = await cfLoginsOf(uid, login);
     //    S1 V4 review 2: with "Also remove my public messages", each Camfrog login's span as theirs (read before step 5 too)
     if (Number(reqRow.remove_public) === 1) pubWindows = await loginWindowsOf(uid, login, t);
+    //    mic retention: with "Also delete my mic recordings", each Camfrog login's recordings span (read before step 5 too)
+    if (Number(reqRow.delete_recordings) === 1) recWindows = await require("./micrec").recWindowsOf(uid, login, t);
     // (their DM pictures go with the deleted messages: dmmedia.sweep purges the files after its grace period)
     // 4. clips they made / of them
     n("clips_removed", await run("media", ["by_user_id", "deleted"], "UPDATE media SET deleted = 1 WHERE by_user_id = ? OR (? IS NOT NULL AND lower(subject_login) = ?)", [uid, login, login]));
@@ -649,6 +678,16 @@ async function execute(userId, { force = false } = {}) {
                       VALUES (?, ?, ?, 0, ?, '[]', 'privacy', 'account deleted', 'pending', ?, ?, ?)`, [uid, pseudo, login, FORGET_KIND, t, t, `acctdel-forget-${uid}-1`]);
       report.pepe_forget = "queued";
     }
+    //    mic retention: "Also delete my mic recordings" - one "privacy.recdelete" action per login (the end of its span in the args;
+    //    the login stays on the action and in rec_windows until Pepe takes it - micrec.retryRecDeletes re-asks; counts only in the
+    //    report). A login another account held before is never asked about (Pepe would delete that holder's recordings too): skipped
+    if (recWindows) {
+      const MR = require("./micrec");
+      const all = recWindows;
+      recWindows = MR.askable(all);
+      report.recordings = { logins: all.length, queued: await MR.queueRecDeletes(uid, pseudo, recWindows, t), skipped: all.length - recWindows.length };
+      if (report.recordings.skipped) console.error(`[acctdel] ${pseudo}: ${report.recordings.skipped} Camfrog login(s) another account held before - their recordings were NOT asked to be deleted (by hand, privacy@)`);
+    }
     // 8. the users row: a pseudonymous tombstone (the ledger's rows still point at it; nobody can sign in to it)
     const set = { username: pseudo, displayname: "Deleted user", email: null, password: randomHash, avatar: "/public/img/avatar.png", class: "pleb",
                   discordId: null, discordUsername: null, twitchId: null, twitchDisplayname: null, twitchLogin: null, camfrogUsername: null,
@@ -678,8 +717,11 @@ async function execute(userId, { force = false } = {}) {
     //     account's - public_windows (loginWindowsOf). NULLed by removePublicNow.)
     const rp = Number(reqRow.remove_public) === 1;
     await runQuery(`UPDATE account_deletions SET state = 'done', done_at = ?, pseudonym = ?, report = ?, held_reason = NULL, public_login = NULL,
-                    public_windows = ? WHERE id = ?`,
-                   [t, pseudo, JSON.stringify(report).slice(0, 20000), rp && pubWindows && pubWindows.length ? JSON.stringify(pubWindows) : null, reqRow.id]);
+                    public_windows = ?, rec_windows = ?, rec_done_at = ? WHERE id = ?`,
+                   [t, pseudo, JSON.stringify(report).slice(0, 20000), rp && pubWindows && pubWindows.length ? JSON.stringify(pubWindows) : null,
+                    recWindows && recWindows.length ? JSON.stringify(recWindows) : null,
+                    recWindows && !recWindows.length ? t : null,                    // (no login Pepe can be asked about: done - report.recordings says why)
+                    reqRow.id]);
     await require("./huboutbox").emit("privacy/account-deleted", "acct:" + uid,
       hubRow({ id: reqRow.id, user_id: uid, pseudonym: pseudo, done_at: t, remove_public: reqRow.remove_public }), { dedupe: "acctdel:" + reqRow.id });
   });
@@ -818,6 +860,7 @@ async function tick() {
     try { await sweepTombstones(); } catch (e) { console.error("[acctdel] sweep:", e.message); }
     try { await retryForget(); } catch (e) { console.error("[acctdel] forget retry:", e.message); }
     try { await retryRemovePublic(); } catch (e) { console.error("[acctdel] remove public retry:", e.message); }
+    try { await require("./micrec").retryRecDeletes(); } catch (e) { console.error("[acctdel] recordings retry:", e.message); }
   })().finally(() => { ticking = null; });
   return ticking;
 }
@@ -847,9 +890,12 @@ function register(app, { addUser }) {
       const b = await blockers(u.userId);
       // S1 V4: "Also remove my public messages" only while the hub's erasure switch is on; wait = asked in the last 24 hours
       const removePublic = removeOffered() ? { wait: await removeWaitUntil(u.userId) } : null;
+      // mic retention: "Also delete my mic recordings" - while offered, and only to an account that has (had) a Camfrog login
+      const lg = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [u.userId]).catch(() => []))[0];
+      const recordings = recordingsOffered() && (await hadLogin(u.userId, low(lg && lg.camfrogUsername) || null));
       res.render("accountDelete", { user: u.username, username: u.username, block: b.block, settle: b.settle, elevated: await elevated(u),
         hasPassword: u.password_set === undefined || u.password_set === null || Number(u.password_set) !== 0,
-        fresh: await require("./sessions").isFresh(req), graceDays: GRACE_MS / DAY, pending: await pendingOf(u.userId), removePublic });
+        fresh: await require("./sessions").isFresh(req), graceDays: GRACE_MS / DAY, pending: await pendingOf(u.userId), removePublic, recordings });
     } catch (e) { next(e); }
   });
   app.get("/api/account/delete", addUser, async (req, res) => {
@@ -864,7 +910,7 @@ function register(app, { addUser }) {
     try {
       const b = req.body || {};
       const r = await request(req, { password: typeof b.password === "string" ? b.password : "", confirm: b.confirm, hideLines: b.hide_lines === true,
-                                     removePublic: b.remove_public === true });
+                                     removePublic: b.remove_public === true, deleteRecordings: b.delete_recordings === true });
       require("./middleware/loginCookie").clearLogin(res);
       res.json(r);
     } catch (e) { fail(res, e); }
@@ -926,4 +972,5 @@ module.exports = { hubRow, init, register, blockers, request, schedule, cancelOn
                    pendingOf, isDeleted, elevated, Refuse, FLOW, FORGET_KIND, GRACE_MS, NAME_COLUMNS, DELETE_ROWS,
                    removeOffered, removeWaitUntil, privacyCopy, retryRemovePublic, REMOVE_EVERY_MS,      // S1 V4
                    loginWindowsOf,                                                                        // S1 V4 review 2
+                   recordingsOffered, hadLogin,                                                           // mic retention
                    _setClock: (f) => { clock = f || (() => Date.now()); } };

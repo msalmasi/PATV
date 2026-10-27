@@ -181,6 +181,9 @@ test("the matrix: 15 minutes - members see 15 minutes; the owner everything; mod
 
 test("the matrix: 90 days on a standard pad works as 30; Prime keeps chat for good and mic 365 days; Plus keeps everything", async () => {
   await setup;
+  // (an older Pepe's report: Prime Time mic transcripts 365 days - mic retention, 2026-10-27: the site's own default now follows chat,
+  //  tested below)
+  await P.noteRetention({ chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: 365, rec_plus: null, pm_days: 30, pm_pass: null });
   const a = { id: "Ninety.Room", name: "Ninety Room" };
   await seedRoom(a, "standard");
   await owned(a);
@@ -197,6 +200,12 @@ test("the matrix: 90 days on a standard pad works as 30; Prime keeps chat for go
   fresh();
   assert.deepEqual(await sees(u, U.mem), only("m-40d", "t-400d", "t-40d", "m-10d", "m-2d", "t-2d", "m-2h", "join:bob", "m-10min"));
   assert.deepEqual(CL.effectiveWindows(u.id), { chat: null, tx: null });
+  // mic retention (owner answers 2026-10-27): mic transcripts follow chat on every tier - Pepe's report from then (and the site's
+  // default) keeps Prime Time's transcripts for good too
+  await P.noteRetention({ chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: null, rec_plus: null, pm_days: 30, pm_pass: null,
+                          audio_days: 30, audio_prime: 180, audio_plus: null });
+  assert.equal(P.RETENTION_DEFAULTS.rec_prime, null);
+  assert.deepEqual(CL.effectiveWindows(p.id), { chat: null, tx: null });
 });
 
 test("18+ pads, whole-bridge blocks, feed bans and the 💎 Plus gate take history away (the live tail itself is unchanged)", async () => {

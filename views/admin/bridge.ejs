@@ -121,6 +121,90 @@
   <% } %>
 </section>
 
+<%# mic retention (micrec.js; the ops plan mic-audio-retention-2026-10-27 §7): the mic-recordings policy switch, Pepe's audio windows,
+    the owner sync's keep block, deletions of recordings, exports with Pepe's part %>
+<section class="adm-card" id="micrec" aria-labelledby="mrT">
+  <h2 id="mrT">Mic recordings <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Pepe records every mic-up he hears and deletes the recordings by the pad's tier (each tier a pad loses keeps its windows 30 more days; a legal hold or an open report keeps them longer). The <b>policy switch</b> ships off: while it's off the privacy policy and the account pages read as before. Turn it on only after the owner has approved the policy text and that text is live, and after Pepe's split rule is on (<code>!retention split on confirm</code>: the switch refuses before) - the privacy page then names mic recordings in "How long" (and is dated that day), account deletion offers <i>Also delete my mic recordings</i>, Download my data offers <i>Mic recordings</i>, and Pepe is told. (/premium always shows the windows Pepe reports.) The keep block is what every owner sync sends Pepe: rooms in a tier's grace, legal holds and open reports on 🎙 lines. Pepe deletes no audio while it's missing, incomplete or more than an hour old.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="mrSummary" role="status">Loading…</p>
+  <div class="adm-tbl"><table aria-label="Mic recordings switch">
+    <thead><tr><th>Switch</th><th>State</th><th>Notes</th><th></th></tr></thead>
+    <tbody id="mrSwitch"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <p class="adm-help" id="mrWindows"></p>
+  <p class="adm-help" id="mrKeep"></p>
+  <p class="adm-help" id="mrExports"></p>
+  <h3>Account deletions with "Also delete my mic recordings"</h3>
+  <div class="adm-tbl"><table aria-label="Deletions of mic recordings">
+    <thead><tr><th>Request</th><th>Account</th><th>State</th><th>Deleted (UTC)</th><th>Pepe confirmed (UTC)</th></tr></thead>
+    <tbody id="mrDels"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <div class="adm-actions"><span id="mrMsg" class="adm-msg" role="status"></span></div>
+  <% } %>
+</section>
+<script>
+// mic retention: the Mic recordings card (micrec.js: GET /api/admin/micrec, POST /api/admin/micrec/switch {name: "policy", on})
+(function () {
+  'use strict';
+  var sum = document.getElementById('mrSummary');
+  if (!sum) return;
+  var sw = document.getElementById('mrSwitch'), wins = document.getElementById('mrWindows'), keep = document.getElementById('mrKeep');
+  var exps = document.getElementById('mrExports'), dels = document.getElementById('mrDels'), msg = document.getElementById('mrMsg');
+  function td(t) { var d = document.createElement('td'); d.textContent = t == null ? '' : String(t); return d; }
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') : ''; }
+  function days(v) { return v == null ? 'for good' : v + ' days'; }
+  function size(b) { b = Number(b) || 0; return b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1e3) + ' kB'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(url, data) {
+    return fetch(url, { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function render(d) {
+    var c = d.cfg || {}, w = d.windows || {}, k = d.keep, x = d.exports, dl = d.deletions || {};
+    sum.textContent = 'Policy switch ' + (c.on ? 'ON' : 'off') + ' · Pepe ' + (d.pepe_can ? 'runs the release that deletes / exports recordings' : 'can’t delete / export recordings yet (an older release)') +
+      ' · his split rule (transcripts follow chat, recordings their own windows) is ' + (d.split ? 'ON' : 'off');
+    sw.textContent = '';
+    var tr = document.createElement('tr');
+    [ 'Mic recordings policy (privacy text, account options, Pepe)', c.on ? 'on' : 'off',
+      (c.first_on ? 'first on ' + when(c.first_on) + ' UTC (the privacy page\'s date)' : 'never on') + (c.at ? ' · last change ' + when(c.at) + ' UTC' + (c.by ? ' by ' + c.by : '') : '')
+    ].forEach(function (v) { tr.appendChild(td(v)); });
+    var cell = document.createElement('td'), b = document.createElement('button');
+    b.type = 'button'; b.textContent = c.on ? 'Turn off' : 'Turn on';
+    b.addEventListener('click', function () {
+      if (!c.on && !window.confirm('Only after the owner approved the mic recordings policy text and it is live. The privacy page changes now (dated today if this is the first time), and the account options appear. Turn it on?')) return;
+      if (c.on && !window.confirm('Turn the mic recordings policy off? The privacy page, /premium and the account options go back to the old text.')) return;
+      b.disabled = true;
+      req('/api/admin/micrec/switch', { name: 'policy', on: !c.on }).then(function () { say('Switched ' + (c.on ? 'off' : 'on') + '.', true); load(); })
+        .catch(function (e) { b.disabled = false; say(e.message, false); });
+    });
+    cell.appendChild(b); tr.appendChild(cell); sw.appendChild(tr);
+    wins.textContent = 'Windows the site holds' + (d.reported_at ? ' (Pepe reported ' + when(d.reported_at) + ' UTC)' : ' (no fresh report from Pepe since the site started)') +
+      ': mic recordings - no tier ' + days(w.audio_days) + ', 📺 Prime Time ' + days(w.audio_prime) + ', 💎 Plus ' + days(w.audio_plus) +
+      (d.audio_reported_at ? '' : ' (the site\'s defaults - Pepe doesn\'t report audio windows yet)') +
+      ' · mic transcripts - no tier ' + days(w.rec_days) + ', 📺 ' + days(w.rec_prime) + ', 💎 ' + days(w.rec_plus) +
+      ' · chat - no tier ' + days(w.chat_days) + ', 📺 ' + days(w.chat_prime) + ', 💎 ' + days(w.chat_plus);
+    keep.textContent = k ? 'Keep block (built ' + when(k.at) + ' UTC' + (k.complete ? '' : ', INCOMPLETE: Pepe deletes no audio') + '): ' + k.grace_rooms +
+      ' room(s) in a tier\'s grace, ' + k.held_rooms + ' room(s) and ' + k.held_people + ' person(s) on a legal hold, ' + k.reported_lines + ' reported 🎙 line(s).' : 'Keep block: not built yet.';
+    exps.textContent = x ? 'Download my data: ' + x.waiting + ' waiting for Pepe\'s part, ' + x.rec_inflight + ' of ' + x.rec_jobs_max + ' recordings exports in flight, ' +
+      size(x.rec_ready_bytes) + ' of recordings exports ready (' + size(x.rec_disk_max) + ' budget), ' + x.gave_up_7d + ' finished without Pepe in 7 days.' : '';
+    dels.textContent = '';
+    (dl.rows || []).forEach(function (r) {
+      var row = document.createElement('tr');
+      [r.id, r.pseudonym || '(not deleted yet)', r.state, when(r.done_at),
+       (r.rec_done_at ? when(r.rec_done_at) : r.rec_gave_up_at ? 'NOT CONFIRMED (gave up ' + when(r.rec_gave_up_at) + ')' : r.state === 'done' ? 'waiting' : '') +
+       (r.skipped ? ' · ' + r.skipped + ' of ' + r.logins + ' login(s) NOT asked (another account held them before - by hand)' : '')]
+        .forEach(function (v) { row.appendChild(td(v)); });
+      dels.appendChild(row);
+    });
+    if (!(dl.rows || []).length) { var e = document.createElement('tr'), c2 = td('None yet.'); c2.colSpan = 5; c2.className = 'empty'; e.appendChild(c2); dels.appendChild(e); }
+  }
+  function load() { return req('/api/admin/micrec').then(render).catch(function (e) { sum.textContent = e.message; }); }
+  load();
+})();
+</script>
+
 <%# CL6: takedowns and audit (chatlogmod.js) - the per-login tool, legal holds, the owner's earlier era, the staff audit %>
 <section class="adm-card" id="takedowns" aria-labelledby="tdT">
   <h2 id="tdT">Chat takedowns <span class="adm-pill">staff</span></h2>

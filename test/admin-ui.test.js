@@ -162,6 +162,9 @@ test("overview: tiles by role - admin-only data never reaches Staff", async () =
   // CL7: deletion by tier (the retention purge's report) is on that card
   assert.match((await page("/admin/bridge", U.admin)).html, /id="clPurgeRows"[\s\S]*\/api\/admin\/chatlog\/purge/);
   assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="clPurgeRows"/);
+  // mic retention (micrec.js): the Mic recordings card - its switch for admins (chatlog.admin) only
+  assert.match((await page("/admin/bridge", U.admin)).html, /id="mrSwitch"[\s\S]*\/api\/admin\/micrec\/switch/);
+  assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="mrSwitch"/);
   // CL6: chat takedowns (chatlog.read_all: Staff and up) - the per-login tool, holds, the staff audit; the reported chat lines queue
   for (const who of [U.staff, U.admin]) {
     const b = (await page("/admin/bridge", who)).html;

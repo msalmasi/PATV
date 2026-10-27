@@ -241,8 +241,12 @@ async function loadConfig() {
 // Pepe reports his live windows with every owner sync (POST /api/rooms/owners `retention`); the perk lists
 // (premiumperks.js) read them from here so /premium never promises a window Pepe doesn't keep. null = no time limit.
 // Until the first report: his defaults (the user's numbers, 2026-10-11).
-const RETENTION_DEFAULTS = Object.freeze({ chat_days: 30, chat_prime: null, rec_days: 30, rec_prime: 365, pm_days: 30, pm_pass: null,
-                                           chat_plus: null, rec_plus: null });
+// Mic retention (owner answers 2026-10-27, the ops plan mic-audio-retention-2026-10-27): rec_* are the mic TRANSCRIPT windows and follow
+// chat on every tier (Pepe derives them from chat_*; rec_prime was 365); audio_* are the recorded mic-up AUDIO windows (option C:
+// no tier 30 days, Prime Time 180, Plus for good). audio_* are NOT tier keys of the purge's freshness check (RETENTION_TIER_KEYS):
+// an older Pepe that doesn't report them still counts as fresh.
+const RETENTION_DEFAULTS = Object.freeze({ chat_days: 30, chat_prime: null, rec_days: 30, rec_prime: null, pm_days: 30, pm_pass: null,
+                                           chat_plus: null, rec_plus: null, audio_days: 30, audio_prime: 180, audio_plus: null });
 function cleanRetention(raw) {
   const out = { ...RETENTION_DEFAULTS };
   if (!raw || typeof raw !== "object") return out;
@@ -252,6 +256,14 @@ function cleanRetention(raw) {
     if (v === null) out[k] = null;
     else if (Number.isInteger(v) && v >= 1 && v <= 36500) out[k] = v;
   }
+  // mic retention: audio_reported = Pepe's report carried every audio window (the bot release that keeps them: they are the
+  // windows he enforces now). Without it the audio_* values are the site's defaults - /premium then names recordings by the
+  // transcript windows as before (premiumperks.js) and the mic-recordings policy switch can't be turned on (micrec.setPolicy)
+  out.audio_reported = raw.audio_reported === true ||
+    ["audio_days", "audio_prime", "audio_plus"].every((k) => k in raw && (raw[k] === null || (Number.isInteger(raw[k]) && raw[k] >= 1 && raw[k] <= 36500)));
+  // split = Pepe applies the owner's 2026-10-27 rule (bot 1.99afq `!retention split on`): mic transcripts follow chat, recordings
+  // have their own windows. Off (as the bot ships): both follow rec_* - and he reports audio_* = rec_* then
+  out.split = raw.split === true;
   return out;
 }
 let RETENTION = { ...RETENTION_DEFAULTS };
@@ -265,6 +277,10 @@ const retentionAt = () => RETENTION_AT;
 // cleanRetention keeps as sent (null = no limit, or a whole number of days 1..36500)
 const RETENTION_TIER_KEYS = Object.freeze(["chat_days", "chat_prime", "chat_plus", "rec_days", "rec_prime", "rec_plus"]);
 const retentionValue = (v) => v === null || (Number.isInteger(v) && v >= 1 && v <= 36500);
+// mic retention (owner answers 2026-10-27): the recorded mic-up AUDIO windows - in Pepe's report from the bot release that keeps them
+const RETENTION_AUDIO_KEYS = Object.freeze(["audio_days", "audio_prime", "audio_plus"]);
+let RETENTION_AUDIO_AT = null;
+const retentionAudioAt = () => RETENTION_AUDIO_AT;
 /** Pepe's report -> RETENTION (stored only when it changed). */
 async function noteRetention(raw) {
   if (!raw || typeof raw !== "object") return false;
@@ -272,6 +288,8 @@ async function noteRetention(raw) {
   // purge's fail-safe treats the report as stale at once - CL7 fix-up: an earlier fresh report no longer covers it)
   const whole = RETENTION_TIER_KEYS.every((k) => Object.prototype.hasOwnProperty.call(raw, k) && retentionValue(raw[k]));
   RETENTION_AT = whole ? Date.now() : null;
+  // mic retention: whether this report carries the audio windows (a Pepe from before them doesn't: the site shows its defaults)
+  RETENTION_AUDIO_AT = RETENTION_AUDIO_KEYS.every((k) => Object.prototype.hasOwnProperty.call(raw, k) && retentionValue(raw[k])) ? Date.now() : null;
   const next = cleanRetention(raw);
   if (JSON.stringify(next) === JSON.stringify(RETENTION)) return false;
   RETENTION = next;
@@ -1252,6 +1270,7 @@ module.exports = {
   retention, noteRetention, cleanRetention, RETENTION_DEFAULTS,         // 1.99tc: Pepe's retention windows (the perk lists)
   retentionAt,                                                           // CL7: when his last report came (the archive purge's fail-safe)
   RETENTION_TIER_KEYS,                                                   // CL7 fix-up: the windows a fresh report must name, valid
+  RETENTION_AUDIO_KEYS, retentionAudioAt,                                // mic retention: the audio windows, and when Pepe last reported them
   isPrime, isPrimePlus, padTier, primeExtraBadges, PRIME_EXTRA_BADGES_MAX, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   subsFor,             // S1 Q5b: the chat hub's looks (Season Pass perk ends, Plus pads)
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,

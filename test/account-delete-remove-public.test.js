@@ -523,7 +523,7 @@ test("the routes: GET renders the box only while erasure is on; POST {remove_pub
     await erasure(true);
     page = await call("GET", "/settings/account/delete", "rpw");
     assert.match(page.text, /id="delRemovePublic" name="remove_public" aria-describedby="delRemovePublicHint">/);
-    assert.match(page.text, /account-delete\.js\?v=3/);
+    assert.match(page.text, /account-delete\.js\?v=4/);   // mic retention: + delete_recordings
     // "yes" / 1 are not a choice (a strict true, like hide_lines)
     r = await call("POST", "/api/account/delete", "rpw", { confirm: "rpweb", password: a.pw, remove_public: "yes" });
     assert.equal(r.status, 200, r.text);

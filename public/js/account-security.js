@@ -93,20 +93,50 @@
   function esay(msg, bad) { if (es) { es.textContent = msg || ''; es.className = 'status ' + (bad ? 'err' : 'ok'); } }
   var STATE = { queued: _t('js.acct.exp_queued', 'Being prepared…'), running: _t('js.acct.exp_queued', 'Being prepared…'),
                 ready: _t('js.acct.exp_ready', 'Ready'), failed: _t('js.acct.exp_failed', 'Failed'), expired: _t('js.acct.exp_expired', 'Expired') };
+  // mic retention: what else goes in (accountexport.js parts) - Pepe's part only while the site says he can gather it (`offer`)
+  var xChat = document.getElementById('expChat'), xTx = document.getElementById('expTx'), xMem = document.getElementById('expMem'), xRec = document.getElementById('expRec');
+  var xMemRow = document.getElementById('expMemRow'), xRecRow = document.getElementById('expRecRow'), xRecH = document.getElementById('expRecH');
+  var xBeforeL = document.getElementById('expBeforeL'), xBefore = document.getElementById('expBefore'), xOff = document.getElementById('expPepeOff');
+  var OFFER = null;
+  function showOffer(o) {
+    OFFER = o || { pepe: false, recordings: false };
+    if (xMemRow) xMemRow.hidden = !OFFER.pepe;
+    if (xRecRow) xRecRow.hidden = !OFFER.recordings;
+    if (xOff) xOff.hidden = !!OFFER.pepe;
+    if (xRecH) xRecH.textContent = _t('js.acct.exp_rec_meta', 'The sound of your mic-ups. They can be big: one download holds up to {mb} MB of them, newest first.', { mb: OFFER.rec_max_mb || 512 });
+  }
+  if (xRec && xBeforeL) xRec.addEventListener('change', function () { xBeforeL.hidden = !xRec.checked; });
+  function partsBody() {
+    var p = { chat: !!(xChat && xChat.checked), transcripts: !!(xTx && xTx.checked) };
+    if (OFFER && OFFER.pepe) p.memories = !!(xMem && xMem.checked);
+    if (OFFER && OFFER.recordings) {
+      p.recordings = !!(xRec && xRec.checked);
+      if (p.recordings && xBefore && xBefore.value) { var d = Date.parse(xBefore.value + 'T00:00:00Z'); if (d > 0) p.rec_before = d; }
+    }
+    return { parts: p };
+  }
   function exports_() {
     if (!el) return;
     fetch('/api/account/export', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (OFFER === null || (j && j.offer)) showOffer(j && j.offer);
       el.textContent = '';
       var busy = false;
       ((j && j.exports) || []).forEach(function (x) {
         var li = document.createElement('li');
-        li.appendChild(document.createTextNode(when(x.created) + ' · ' + (STATE[x.state] || x.state)));
+        var st_ = x.state === 'queued' && x.waiting_pepe ? _t('js.acct.exp_waiting_pepe', 'Waiting for Pepe’s part…') : (STATE[x.state] || x.state);
+        li.appendChild(document.createTextNode(when(x.created) + ' · ' + st_));
         if (x.state === 'queued' || x.state === 'running') busy = true;
         if (x.state === 'ready' && x.expires > Date.now()) {
           li.appendChild(document.createTextNode(' · '));
           var a = document.createElement('a'); a.href = '/settings/account/export/' + encodeURIComponent(x.id);
           a.textContent = _t('js.acct.exp_download', 'Download (until {date})', { date: when(x.expires) });
           li.appendChild(a);
+          // mic retention: older recordings that didn't fit - the next request can start where this one stopped
+          if (x.next_before) {
+            var day = new Date(Number(x.next_before)).toISOString().slice(0, 10);
+            li.appendChild(document.createTextNode(' · ' + _t('js.acct.exp_next_before', 'Older recordings didn’t fit - ask again with “Only recordings before” {date}.', { date: day })));
+            if (xBefore && !xBefore.value) xBefore.value = day;
+          }
         }
         el.appendChild(li);
       });
@@ -115,10 +145,13 @@
   }
   if (eb) eb.addEventListener('click', function () {
     eb.disabled = true;
-    post('/api/account/export').then(function (j) {
+    post('/api/account/export', partsBody()).then(function (j) {
       if (j && j.ok) { esay(_t('js.acct.exp_started', "We're preparing your data. You'll get a notice when it's ready.")); exports_(); return; }
       eb.disabled = false;
       if (j && j.code === 'E_RATE') esay(_t('js.acct.exp_rate', 'One export a day - try again after {when}.', { when: when(j.retry_at) }), true);
+      else if (j && j.code === 'E_REC_OFF') { esay(_t('js.acct.exp_rec_off', 'Mic recordings can’t be included right now - untick them or reload the page.'), true); exports_(); }
+      else if (j && j.code === 'E_PEPE_OFF') { esay(_t('js.acct.exp_pepe_off', 'Pepe can’t add his part right now - untick it or try again later.'), true); exports_(); }
+      else if (j && j.code === 'E_REC_BUSY') esay(_t('js.acct.exp_rec_busy', 'Many people are downloading their recordings right now - try again in a few hours, or untick them.'), true);
       else esay(_t('js.acct.failed', "Couldn't do that - try again."), true);
     }).catch(function () { eb.disabled = false; esay(_t('js.acct.failed', "Couldn't do that - try again."), true); });
   });

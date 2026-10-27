@@ -45,7 +45,8 @@ test("the new modules are Node 16-safe (the VPS runs Node 16)", () => {
                  "chatlogexport.js", "tz-core.js",                                                            // CL10: the downloads (+ the zone offset they date by)
                  // CL2 fix-up: every other file CL2 changed runs on the VPS's Node 16 too
                  "bridge.js", "incognito.js", "terms.js", "roomsweb.js", "accountMerge.js", "accountdelete.js", "accountexport.js",
-                 "padrekey.js", "siteperms-core.js", "tools/remove-stray-pad.js", "tools/scrub-consent-feed.js", "deploy/keep-staging-tables.js"];
+                 "padrekey.js", "siteperms-core.js", "tools/remove-stray-pad.js", "tools/scrub-consent-feed.js", "deploy/keep-staging-tables.js",
+                 "micrec.js", "actorcap.js", "premiumperks.js", "botupload.js"];                            // mic retention
   const banned = [/\.findLast(Index)?\(/, /\.toSorted\(/, /\.toReversed\(/, /\.toSpliced\(/, /\bstructuredClone\(/, /\bzlib\.crc32\b/,
                   /\bObject\.hasOwn\(/, /\.at\(-?\d/, /(^|[^.\w])fetch\(/m, /\bAbortSignal\.timeout\(/, /\barray\.group/i];
   for (const f of files) {

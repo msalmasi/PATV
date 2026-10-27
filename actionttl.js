@@ -31,6 +31,8 @@ const TTL_DEFAULTS = Object.freeze({
   "privacy.incognito": 15,            // 1.99wa: Settings → Privacy (incognito.js)
   "privacy.forgetme": 1440,           // 1.99aat: 🧠 Settings → Privacy "Make Pepe forget me" (pepeforget.js)
   "privacy.forget": 7 * 1440,         // 1.99wj: a deleted account's Camfrog login - Pepe forgets it (accountdelete.js retries an expired one)
+  "privacy.recdelete": 7 * 1440,      // mic retention: a deleted account's mic recordings (bot pepe_mydata; micrec.js retries an expired one)
+  "privacy.export": 3 * 1440,         // mic retention: Pepe's part of "Download my data" (accountexport.js asks again every 6 h, 72 h at most)
   "dj": 10, "pepe.look": 10, "room.ctl": 15, "room.visit": 30, "room.bridge": 30, "econ.burn": 30, "econ.routes": 30, "econ.cmd": 30,
   "roomvault.admin": 30,               // 1.99yx: /pads/admin pad vault fines / transfers (padfines.js)
   "aigen": 15,                         // = aigen.js QUEUE_TTL (its job is timed out by aigen's own sweep)
@@ -42,7 +44,7 @@ const TTL_DEFAULTS = Object.freeze({
   "bounty:add": 60, "bounty:claim": 120, "bounty:reject": 120, "bounty:dispute": 240, "bounty:resolve": 240, "bounty:cancel": 240,
   "default": 60,
 });
-const NO_NOTICE = new Set(["notify", "table", "privacy.forget"]);
+const NO_NOTICE = new Set(["notify", "table", "privacy.forget", "privacy.recdelete", "privacy.export"]);   // (the export tells the member itself)
 const NOTICE_KIND = { market: "market", pool: "market", wager: "wager", bounty: "bounty", loan: "loan", lotto: "lotto",
                       cosmetic: "cosmetics", stash: "staking", donate: "system", avatar: "system" };
 const MAX_MIN = 7 * 1440;

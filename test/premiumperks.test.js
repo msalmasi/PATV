@@ -48,7 +48,8 @@ test("the table reads the live config: slots, retention, soundboard, flair, seas
 });
 
 test("retention windows: Pepe's defaults, words, and his report cleaned", () => {
-  const T = PK.table(PK.values());
+  // (an older Pepe's report: no audio windows - "mic recordings" are his transcript windows, as before)
+  const T = PK.table({ ...PK.values(), retention: PR.cleanRetention({ ...PR.RETENTION_DEFAULTS, rec_prime: 365, audio_days: undefined, audio_prime: undefined, audio_plus: undefined }) });
   const pt = T.prime_time.find((p) => p.id === "retention"), pp = T.prime_plus.find((p) => p.id === "retention");
   assert.equal(strip(PK.text(t, pt.title)), "Chat logs kept for good, mic recordings for 1 year");
   assert.match(strip(PK.text(t, pt.desc)), /chat logs for 30 days, recordings for 30 days/);
@@ -61,6 +62,33 @@ test("retention windows: Pepe's defaults, words, and his report cleaned", () => 
   assert.deepEqual([c.chat_days, c.rec_prime, c.pm_days, c.chat_plus, "bogus" in c], [14, null, 30, null, false]);
   const T2 = PK.table({ ...PK.values(), retention: { ...PR.RETENTION_DEFAULTS, rec_prime: 90 } });
   assert.equal(strip(PK.text(t, T2.prime_time.find((p) => p.id === "retention").title)), "Chat logs kept for good, mic recordings for 90 days");
+});
+
+test("mic retention: once Pepe reports the audio windows, the recordings perk names them and mic transcripts follow chat", () => {
+  // the owner's numbers (option C): no tier 30 days, Prime Time 180, Plus for good; transcripts = chat on every tier
+  const R = PR.cleanRetention({ chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: null, rec_plus: null,
+                                audio_days: 30, audio_prime: 180, audio_plus: null, pm_days: 30, pm_pass: null });
+  assert.equal(R.audio_reported, true);
+  assert.deepEqual([PR.RETENTION_DEFAULTS.audio_days, PR.RETENTION_DEFAULTS.audio_prime, PR.RETENTION_DEFAULTS.audio_plus, PR.RETENTION_DEFAULTS.rec_prime],
+                   [30, 180, null, null], "the site's defaults before a report: option C, transcripts follow chat");
+  assert.equal(PR.cleanRetention({ chat_days: 30 }).audio_reported, false, "an older Pepe's report has no audio windows");
+  assert.equal(PR.cleanRetention({ audio_days: 30, audio_prime: 0, audio_plus: null }).audio_reported, false, "an invalid window isn't a report of them");
+  const T = PK.table({ ...PK.values(), retention: R });
+  const pt = T.prime_time.find((p) => p.id === "retention"), pp = T.prime_plus.find((p) => p.id === "retention");
+  assert.equal(strip(PK.text(t, pt.title)), "Chat logs and mic transcripts kept for good, mic recordings for 180 days");
+  assert.match(strip(PK.text(t, pt.desc)), /chat logs and transcripts for 30 days, recordings for 30 days/);
+  assert.equal(strip(PK.text(t, pp.title)), "Chat logs, mic transcripts and mic recordings kept for good");
+  assert.match(strip(PK.text(t, pp.desc)), /while the pad has Prime Time Plus, and 30 days after/);
+  // the bot's split rule off (as 1.99afq ships): transcripts and recordings both follow rec_* (audio_* = rec_*) - the old text, true
+  const OFF = PR.cleanRetention({ chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: 365, rec_plus: null,
+                                  audio_days: 30, audio_prime: 365, audio_plus: null, pm_days: 30, pm_pass: null, split: false });
+  assert.deepEqual([OFF.audio_reported, OFF.split], [true, false]);
+  const TO = PK.table({ ...PK.values(), retention: OFF });
+  assert.equal(strip(PK.text(t, TO.prime_time.find((p) => p.id === "retention").title)), "Chat logs kept for good, mic recordings for 1 year");
+  // Plus keeping recordings shorter than chat: the two windows apart
+  const T2 = PK.table({ ...PK.values(), retention: { ...R, audio_plus: 365 } });
+  assert.equal(strip(PK.text(t, T2.prime_plus.find((p) => p.id === "retention").title)), "Chat logs and mic transcripts kept for good, mic recordings for 1 year");
+  for (const tier of Object.keys(T)) for (const p of T[tier]) for (const [k] of [p.title, p.desc]) assert.ok(k in en, k);
 });
 
 test("status follows the switches: low latency, soundboards off", () => {

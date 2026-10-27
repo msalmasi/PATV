@@ -1403,8 +1403,13 @@ async function policy() {
   const ret = R ? { chat_free: w(R.chat_days), rec_free: w(R.rec_days), chat_prime: w(R.chat_prime), rec_prime: w(R.rec_prime),
                     chat_plus: w(R.chat_plus), rec_plus: w(R.rec_plus) } : null;
   const startAt = c.started_at || c.notice_at + NOTICE_DAYS * DAY;
+  // mic retention (owner answers 2026-10-27): while the mic-recordings policy switch is on (micrec.js), the "How long" line names
+  // each tier's windows with equal ones merged - chat, mic transcripts and mic recordings (micrec.howLong); null while it's off (the
+  // line reads as before)
+  let how = null;
+  try { const MR = require("./micrec"); await MR.init(); if (R && MR.policyOn()) how = MR.howLong(R); } catch (e) { how = null; }
   return { notice_at: c.notice_at, notice_day: dayText(c.notice_at), start_at: startAt, start_day: dayText(startAt), started: !!c.started_at,
-           purge: c.purge, ret, gate };
+           purge: c.purge, ret, gate, how };
 }
 
 // ── the FTS index's health ──
