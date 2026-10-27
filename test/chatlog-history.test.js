@@ -916,7 +916,9 @@ test("the page query keeps its planned shape: chat_log_room with both c bounds, 
     const sql = CH.pageSql(o);
     assert.match(sql, /c >= \? AND c < \?/);
     assert.match(sql, /CASE WHEN k = 'tx' THEN c >= \? WHEN k IN \('join','leave','mic','unmic'\) THEN c >= \? ELSE c >= \? END/);
-    assert.match(sql, /CASE WHEN who IS NULL THEN k NOT IN \('join','leave','mic','unmic'\)/, "Pepe's anonymised presence stand-ins");
+    // 1.99afl (B.1): Pepe's anonymised join / leave stand-ins stay out in SQL; a mic grab / drop without a login is read (the
+    // projection keeps the k3-stamped ones as "someone" and leaves the rest out)
+    assert.match(sql, /CASE WHEN who IS NULL THEN k NOT IN \('join','leave'\)/, "Pepe's anonymised join / leave stand-ins");
     assert.doesNotMatch(sql, /\bOR\b/, "never an OR the planner could split into rowid ranges");
     const nOut = o.nOut || 0, nTx = o.nTx || 0;
     const hp = [...(nOut + nTx ? [...out.slice(0, nOut), ...tx.slice(0, nTx)] : []), ...out.slice(0, nOut)];

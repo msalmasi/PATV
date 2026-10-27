@@ -730,7 +730,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       if (j) { j.state = "done"; j.doneAt = Date.now(); j.result = { ok: !!img && !cancelled, msg: cancelled ? "cancelled" : clean(b.status, 120) }; }
       if (cancelled) return res.json({ ok: true, cancelled: true });
       mfSnaps.set(roomId + "|" + login, { ts: Date.now(), ok: !!img, img });
-      try { require("./micfollow").onStillResult(roomId, login, !!img); } catch (e) { /* no mic follows */ }
+      // 1.99afl (S1): Pepe's structured result code (bot 1.99afk) - soft refusals retry soon, list_unread pauses the room; an
+      // older Pepe sends none (soft). Never the free-text status.
+      const code = typeof b.code === "string" && /^[a-z_]{1,24}$/.test(b.code) ? b.code : null;
+      try { require("./micfollow").onStillResult(roomId, login, !!img, code); } catch (e) { /* no mic follows */ }
       return res.json({ ok: true });
     }
     if (img && j && rule && rule !== "no" && b.viewer_ok) okFor.set(j.userId, cost);

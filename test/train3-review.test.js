@@ -306,7 +306,9 @@ test("Train 3 review fix-up: a left-out person (!bridge hide) is not in the rost
   await bridge.ingest({ rooms: [], events: [pev("privacy.hidden", "rosterout", "bridge"), pev("privacy.hidden", "rosterinc", "incognito")] });
   await CL.noteSync({ list: [] });
   const SOME = { anon: true, display: "someone" };
-  assert.deepEqual(CV.roster([ALICE, OUT, INC, SOME]), [ALICE, SOME, SOME], "left out: gone; incognito: someone; Pepe's stand-in as it is");
+  // (1.99afl S6: a roster entry is BUILT from a whitelist - Pepe's raw ref id isn't on it; bridge.cleanUser never keeps one anyway)
+  assert.deepEqual(CV.roster([ALICE, OUT, INC, SOME]), [{ login: ALICE.login, display: ALICE.display }, SOME, SOME],
+                   "left out: gone; incognito: someone; Pepe's stand-in as it is");
   // the live page: a named entry Pepe sent for someone the site leaves out (a site-only reason, or his list caught up later)
   await bridge.ingest({ rooms: [snap({ members: [ALICE, DAN, OUT, INC], mic: [OUT], count: 4 })], events: [] });
   const r = await live(U.mem);

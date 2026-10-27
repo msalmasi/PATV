@@ -58,6 +58,13 @@
 //                  hidden / private). Re-checked every PIN_TICK_MS (pinTick); a pin ends when the cam goes away, a rule
 //                  says no, mic follows stops, pin_max_min passes or the pinner unpins. Viewers get the same per-viewer
 //                  gates as a mic tile (viewerRefusal). micfollow_pins (restart: re-held by pinTick).
+// 1.99afl (the incognito / mic-stage spec, F.1 S1-S4):
+//   S1 / S1b       Pepe's still result carries a `code` (bot 1.99afk; bridge-relay passes it): soft refusals retry soon, hard
+//                  ones back off, list_unread (Pepe can't read the room's participant list) pauses the ROOM - micfollow-core.
+//   S2             eligOf: on cam / not on cam only from Pepe's roster read; unknown is "cam_unknown" ("checking their cam…").
+//   S3             /stage/admin's pad rows carry the room's list age, freshness, a list pause, the last hour's failed opens /
+//                  stills by code and the cards shown now (health); a pad whose list Pepe hasn't read whole for 10 minutes
+//                  while people hold the mic sends the site's Admins an alert (listAlert, once per pad per 6 h).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -204,7 +211,8 @@ function padOf(roomId, create) {
   const id = String(roomId || "");
   let P = PADS.get(id);
   if (!P && create && id) {
-    P = { roomId: id, settings: { ...core.PAD_DEFAULTS }, state: core.newState(), stills: new Map(), spans: new Map(), cold: [], met: new Map() };
+    P = { roomId: id, settings: { ...core.PAD_DEFAULTS }, state: core.newState(), stills: new Map(), spans: new Map(), cold: [], met: new Map(),
+          fails: [], alertAt: 0 };   // 1.99afl (S3): failed opens / stills of the last hour by code; when its list alert last went
     PADS.set(id, P);
   }
   return P || null;
@@ -243,6 +251,20 @@ function bump(k, n = 1, t = now(), P = null) {
     if (!b) { b = {}; M.set(h, b); for (const x of [...M.keys()]) if (x < h - 24) M.delete(x); }
     b[k] = (b[k] || 0) + n;
   }
+}
+/** 1.99afl (S3): a failed open / still on pad P, by its code - /stage/admin's per-pad health row counts the last hour. */
+const FAILS_KEEP_MS = 3600e3, FAILS_MAX = 500;
+function noteFail(P, code, t = now()) {
+  if (!P) return;
+  if (!Array.isArray(P.fails)) P.fails = [];
+  P.fails.push({ at: t, code: String(code || "failed").slice(0, 32) });
+  while (P.fails.length && (P.fails.length > FAILS_MAX || t - P.fails[0].at > FAILS_KEEP_MS)) P.fails.shift();
+}
+/** The last hour's failed opens / stills on pad P: {code: n}. */
+function failsOf(P, t = now()) {
+  const out = {};
+  for (const f of (P && P.fails) || []) if (t - f.at <= FAILS_KEEP_MS) out[f.code] = (out[f.code] || 0) + 1;
+  return out;
 }
 /** The last 24 h of counts in an hour map. */
 function countsOf(M, t = now()) {
@@ -314,7 +336,10 @@ function eligOf(P, R, login, t, want) {
   if (!f || !b || !n) return "pending";
   // DF-11: the pad's first notice went out at least notice_lead_s ago (sent at the first qualifying grab: notice_first)
   if (!n.first || t - n.first < c.notice_lead_s * 1000) return "notice";
-  return memberOf(R, login).on_cam === true ? "ok" : "off_cam";
+  // 1.99afl (S2): Pepe's roster says on cam / not on cam only after a participant-list read - unknown (no on_cam: the list is
+  // stale, or they joined after the last read) is "cam_unknown" ("checking their cam…"), never "cam off" and never a blind open
+  const on = memberOf(R, login).on_cam;
+  return on === true ? "ok" : on === false ? "off_cam" : "cam_unknown";
 }
 /** stagefix: is `login` keeping their cam off this pad's Stage ("Take me off this Stage")? Synchronous (stageleave.js keeps
  *  them in memory; refresh() makes sure it has loaded). */
@@ -415,7 +440,10 @@ function wantsCam(P, login, kind, t = now()) {
   if (!R) return false;
   const w = whyOff(P, R, t);
   if (w && w !== "stale") return false;
-  return eligOf(P, R, l, t, new Set()) === "ok";
+  // (1.99afl: "cam_unknown" is no consent answer - the engine decides whether such a cam is opened at all: a warm relay, or
+  // one exact open per list-read epoch)
+  const e = eligOf(P, R, l, t, new Set());
+  return e === "ok" || e === "cam_unknown";
 }
 /** bridge-relay: is this mic-stage still job still wanted? */
 const stillWanted = (roomId, login, t = now()) => wantsCam(PADS.get(String(roomId)), login, "still", t);
@@ -500,7 +528,9 @@ function stepPad(roomId, t = now(), R) {
   const input = { why_off: why, holders: why ? [] : holders, unproven_n: unproven, elig, sess, others: why ? [] : others, pepe: why ? null : pepe,
                   pad: { layout: s.layout, max_people: Math.min(s.max_people, c.max_people), max_live: Math.min(s.max_live, c.max_live), default_view: s.default_view,
                          keep_recent: s.keep_recent },
-                  room: { cams: !!(R && R.cams) }, site: siteBudget(P, t),
+                  // 1.99afl: Pepe's last complete participant-list read (S1b: a list pause ends on a newer one; S2: the cam_unknown epoch)
+                  room: { cams: !!(R && R.cams), listAt: R && Number(R.listAt) > 0 ? Number(R.listAt) : null, listFresh: R ? (R.listFresh == null ? null : !!R.listFresh) : null },
+                  site: siteBudget(P, t),
                   pins: why ? [] : [...(PINS.get(P.roomId) || new Map()).keys()] };    // mfix: 📌 the pad's pinned cams
   if (!why) { bump("holders_seen", holders.length + unproven, t, P); bump("proven", holders.length, t, P); bump("unproven", unproven, t, P); }
   const r = core.step(P.state, input, cfg(), t);
@@ -552,7 +582,7 @@ function doHold(P, login, cold, t) {
     if (cold) pendingCold = Math.max(0, pendingCold - 1);
     if (code !== "gone") {
       bump((cold ? "cold_" : "warm_") + (ok ? "ok" : "failed"), 1, now(), P);
-      if (!ok) bump("open_failed:" + code, 1, now(), P);
+      if (!ok) { bump("open_failed:" + code, 1, now(), P); noteFail(P, code, now()); }
     } else bump("hold_withdrawn", 1, now(), P);
     // (a hold that came back for a tile that left meanwhile is released at once: livecam.stageDrop ends a relay nobody else
     // holds or watches, so nothing lingers on in Pepe's want list)
@@ -671,12 +701,20 @@ function stillTick(P, t = now()) {
     try { const r = require("./bridge-relay").mfSnap(P.roomId, login); if (r && r.id) bump("still_jobs", 1, t, P); } catch (e) { /* no relay */ }
   }
 }
-/** bridge-relay: Pepe answered a mic-stage still (img or a refusal). */
-function onStillResult(roomId, login, ok, t = now()) {
+/** bridge-relay: Pepe answered a mic-stage still (img or a refusal). 1.99afl (S1): `code` = his still result's code (bot
+ *  1.99afk: ok / busy / list_unread / noswitch / start_timeout / not_on_cam / not_public / wrong_room / ambiguous / failed);
+ *  null from an older Pepe (soft - core.stillFailed). */
+const STILL_CODE_RE = /^[a-z_]{1,24}$/;
+function onStillResult(roomId, login, ok, code = null, t = now()) {
   const P = PADS.get(String(roomId));
   if (!P) return;
+  const c = typeof code === "string" && STILL_CODE_RE.test(code) ? code : null;
   bump(ok ? "still_frames" : "still_refusals", 1, t, P);
-  if (!ok) apply(P, roomOf(P.roomId), core.stillFailed(P.state, low(login), cfg(), t), t);
+  if (!ok) {
+    if (c) bump("still_refused:" + c, 1, t, P);
+    noteFail(P, "still:" + (c || "nocode"), t);
+    apply(P, roomOf(P.roomId), core.stillFailed(P.state, low(login), cfg(), t, c), t);
+  }
 }
 
 // ── hooks ──
@@ -700,6 +738,7 @@ function onSessionEnd(S, why) {
   const P = PADS.get(String(S.roomId));
   if (!P || !core.tileOf(P.state, S.login)) return;
   const t = now();
+  if (core.FAIL_WHYS.has(String(why || ""))) noteFail(P, why, t);      // 1.99afl (S3): the pad's health row
   const r = core.sessionEnded(P.state, S.login, why, cfg(), t);
   apply(P, roomOf(P.roomId), r.actions, t);
   if (why === "ended_by" || why === "ended_by_admin") {
@@ -712,7 +751,7 @@ function onExactRefused(S, why) {
   if (!S) return;
   const t = now();
   const P = PADS.get(String(S.roomId));
-  if (P && core.tileOf(P.state, S.login)) apply(P, roomOf(P.roomId), core.sessionEnded(P.state, S.login, why, cfg(), t).actions, t);
+  if (P && core.tileOf(P.state, S.login)) { noteFail(P, why, t); apply(P, roomOf(P.roomId), core.sessionEnded(P.state, S.login, why, cfg(), t).actions, t); }
   try { LC().stageDrop(S.roomId, S.login, MFH(S.roomId), t, "mf_refused"); } catch (e) { /* no live cams */ }
   bump("exact_refused_shared:" + String(why || "").slice(0, 20), 1, t, P);
 }
@@ -1531,6 +1570,44 @@ async function setCfg(user, body = {}) {
   if (Object.keys(r.errors).length) { const f = Object.entries(r.errors)[0]; throw new Refuse(400, `${f[0]}: ${f[1]}`, "bad", { fields: r.errors }); }
   return saveCfg(user, r.cfg, body.reason, "save");
 }
+/** 1.99afl (S3/S4): a pad's mic-stage health for /stage/admin - Pepe's participant list (when he last read it whole, whether
+ *  it's fresh, a list pause), the last hour's failed opens / stills by code, and the cards its tiles show now by reason. */
+function health(P, R, t = now()) {
+  const S = P.state;
+  const listAt = R && Number(R.listAt) > 0 ? Number(R.listAt) : null;
+  const cards = {};
+  for (const x of S.tiles) if (x.video === "card" || !x.video) { const w = x.why || "full"; cards[w] = (cards[w] || 0) + 1; }
+  return { list: { at: listAt, age_s: listAt ? Math.max(0, Math.round((t - listAt) / 1000)) : null, fresh: R ? (R.listFresh == null ? null : !!R.listFresh) : null,
+                   paused: S.listPause ? Math.max(0, Math.round((t - S.listPause.since) / 1000)) : null },
+           fails_1h: failsOf(P, t), cards };
+}
+/** 1.99afl (S3): a mic-follows pad whose Camfrog room Pepe hasn't read whole (listFresh false) for more than LIST_ALERT_MS
+ *  while people hold the mic - an alert for the site's Admins (an inbox notice, kind admin: their Telegram alert too when they
+ *  take that kind), at most once per pad per LIST_ALERT_GAP_MS. Counts and the pad only - no login. */
+const LIST_ALERT_MS = 10 * 60 * 1000, LIST_ALERT_GAP_MS = 6 * 3600e3;
+function listAlert(P, R, t = now()) {
+  if (!P || !R || !P.settings.on || !P.state.running || P.state.whyOff) return false;
+  if (R.listFresh !== false) return false;                   // fresh, or a Pepe that doesn't say: never
+  const listAt = Number(R.listAt) > 0 ? Number(R.listAt) : 0;
+  if (listAt && t - listAt <= LIST_ALERT_MS) return false;
+  const holders = ((R.mic || [])).filter((u) => u && !u.self).length;
+  if (!holders) return false;
+  if (P.alertAt && t - P.alertAt < LIST_ALERT_GAP_MS) return false;
+  P.alertAt = t;
+  bump("list_alerts", 1, t, P);
+  let title = P.roomId;
+  try { const p = ROOMS().getCached(P.roomId); if (p && p.title) title = p.title; } catch (e) { /* none */ }
+  const mins = listAt ? Math.round((t - listAt) / 60000) : null;
+  const n = { kind: "admin", title: `🎙 Mic follows: Pepe can't read ${String(title).slice(0, 60)}'s people list`,
+              body: (mins != null ? `No complete read for ${mins} min` : "No complete read yet") + ` while ${holders} hold${holders === 1 ? "s" : ""} the mic - live cams there wait for it. Pad health on the stage admin page.`,
+              link: "/stage/admin", ref: "mf-list:" + P.roomId + ":" + Math.floor(t / LIST_ALERT_GAP_MS) };
+  console.log(`[micfollow] list alert pad=${P.roomId} age=${mins == null ? "none" : mins + "m"} holders=${holders}`);
+  (async () => {
+    const ids = (await getQuery("SELECT userId FROM users WHERE class = 'Admin'").catch(() => [])).map((r) => r.userId);
+    for (const id of ids) await require("./inbox").addSafe(id, n);
+  })().catch((e) => console.error("[micfollow] list alert:", e.message));
+  return true;
+}
 async function adminView(user, t = now()) {
   await init();
   const admin = SP.can(user, "micfollow.admin");
@@ -1543,7 +1620,8 @@ async function adminView(user, t = now()) {
     pads.push({ room: P.roomId, title, slug, on: !!P.settings.on, layout: core.shapeOf(S, P.settings), tiles: S.tiles.length,
                 live: S.tiles.filter(core.liveish).length, stills: S.tiles.filter((x) => x.video === "still").length, why_off: P.settings.on ? whyOff(P, roomOf(P.roomId), t) : "pad_off",
                 unproven_n: S.unproven, frozen_until: S.frozenUntil > t ? S.frozenUntil : null, counts: countsOf(P.met, t),   // §12: per pad too
-                pins: pinsOf(P.roomId).length, keep_recent: P.settings.keep_recent });                                               // mfix
+                pins: pinsOf(P.roomId).length, keep_recent: P.settings.keep_recent,                                                   // mfix
+                ...health(P, roomOf(P.roomId), t) });                                                                                 // 1.99afl (S3)
   }
   let audit = [];
   try { audit = await require("./adminaudit").recent(AUDIT, 15); } catch (e) { audit = []; }
@@ -1591,6 +1669,7 @@ function tick(t = now()) {
     if (!P.settings.on && !P.state.tiles.length) continue;
     if (core.hot(P.state, t)) stepPad(P.roomId, t);
     if (P.stills.size) stillTick(P, t);
+    try { listAlert(P, roomOf(P.roomId), t); } catch (e) { console.error("[micfollow] list alert:", e.message); }   // 1.99afl (S3)
   }
   if (t - lastPrune > 3600e3) prune(t).catch((e) => console.error("[micfollow] prune:", e.message));
 }
@@ -1916,6 +1995,7 @@ module.exports = {
   recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,
   tick, prune, ptag, Refuse,
+  health, listAlert, failsOf, LIST_ALERT_MS, LIST_ALERT_GAP_MS,                                                    // 1.99afl (S3)
   pinPut, unpin, pinTick, pinWhy, pinCandidates, pinsOf, pinsFor, pinOf, setOverride, onExactRefused, CFG_REV,      // mfix
   _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS,
   /** tests: the pad's first notice to `login` went out at `at` (null = never) */

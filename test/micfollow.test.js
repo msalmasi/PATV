@@ -1790,3 +1790,86 @@ test("62. mfix review: 'First' - a new speaker's tile whose cam is opening (star
     assert.equal(s.max_live, 6);
   } finally { await plainPad(); await LC.save(ADMIN, { cfg: { max_live: was } }); }
 });
+
+// ── 1.99afl: the incognito / mic-stage spec, F.1 S1-S3 (wired) ──
+test("63. 1.99afl S2: a holder Pepe's roster can't classify (no on_cam) is 'checking their cam…' - no blind exact open; one after a complete read that began after the grab", async () => {
+  await reset(); await plainPad();
+  await MF._noticed(ROOM.id, "gus", 1);
+  const withGus = (x) => ({ members: [...MEMBERS(), { login: "gus", display: "Gus" }], ...(x || {}) });   // in the room, cam unknown
+  const sess = () => LC._sessions.has(LC.keyOf(ROOM.id, "gus"));
+  await step(["gus"], withGus({ listAt: T - 60 * 1000, listFresh: true }));
+  await at(3, ["gus"], withGus({ listAt: T - 60 * 1000, listFresh: true }));
+  assert.deepEqual([tile("gus").video, tile("gus").why], ["card", "cam_unknown"], "never 'cam off', never a blind open");
+  assert.equal(sess(), false);
+  const v = await MF.viewFor(MF.snapshot(ROOM.id), bridge._rooms.get(ROOM.id), "u_v1", null, T);
+  assert.equal(v.src.find((x) => x.id === "gus").why, "cam_unknown", "the program says why");
+  await at(5, ["gus"], withGus({ listAt: T - 1000, listFresh: false }));
+  assert.equal(sess(), false, "a stale read isn't enough");
+  await at(1, ["gus"], withGus({ listAt: T - 1000, listFresh: true }));
+  assert.equal(sess(), true, "a complete read after the grab that still can't say: one exact open");
+  assert.equal(MF.health(MF._pads.get(ROOM.id), bridge._rooms.get(ROOM.id), T).list.fresh, true);
+});
+
+test("64. 1.99afl S1 / S1b / S3: Pepe's still result code - busy retries soon (no backoff), list_unread pauses the room; /stage/admin's pad health; the 'can't read the list' alert", async () => {
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { relays_max: 0, stills: true, stills_max: 4 });
+  const app = express(); app.use(express.json());
+  relay.register(app, { isBotToken: (t) => t === "bot", addUser: (q, s, n) => n(), bySlug: bridge.bySlug, isLive: () => true });
+  const srv = app.listen(0);
+  try {
+    const answer = (login, code) => {
+      const j = [...relay._jobs.values()].reverse().find((x) => x.kind === "snap" && x.mf === true && x.target === login);
+      return fetch("http://127.0.0.1:" + srv.address().port + "/api/bridge/snap", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: "bot", id: j.id, room: ROOM.id, target: login, ok: false, status: "busy", ...(code ? { code } : {}) }) });
+    };
+    await step(["bob"]); await at(3, ["bob"]);
+    assert.equal(tile("bob").video, "still");
+    await answer("bob", "busy");
+    assert.deepEqual([tile("bob").video, tile("bob").why], ["card", "retry"], "a soft refusal: another try soon");
+    const P = MF._pads.get(ROOM.id);
+    assert.ok(!(P.state.backoff.get("bob") > T), "never the 10-minute backoff for a busy still");
+    await at(1, ["bob"]);
+    assert.notEqual(tile("bob").video, "still", "no still while the soft retry holds");
+    await at(MF.cfg().soft_retry_s + 1, ["bob"]);
+    assert.equal(tile("bob").video, "still", "tried again");
+    // an older Pepe's refusal (no code) is soft too
+    await answer("bob");
+    assert.equal(tile("bob").why, "retry");
+    await at(MF.cfg().soft_retry_s + 1, ["bob"]);
+    assert.equal(tile("bob").video, "still");
+    // Pepe can't read the room's list: the ROOM pauses, nothing counted against bob
+    await answer("bob", "list_unread");
+    assert.ok(P.state.listPause, "paused");
+    assert.deepEqual([tile("bob").video, tile("bob").why], ["card", "list_unread"]);
+    const view = await MF.adminView(STAFF, T);
+    const row = view.pads.find((p) => p.room === ROOM.id);
+    assert.ok(row.list && row.list.paused != null, "the health row shows the pause");
+    assert.equal(row.fails_1h["still:busy"], 1);
+    assert.equal(row.fails_1h["still:nocode"], 1);
+    assert.equal(row.fails_1h["still:list_unread"], 1);
+    assert.equal(row.cards.list_unread, 1);
+    assert.equal(view.metrics.counts["still_refused:list_unread"], 1);
+    // a newer complete read resumes it
+    await at(2, ["bob"], { listAt: T + 2000, listFresh: true });
+    assert.equal(P.state.listPause, null);
+  } finally { srv.close(); await MF.setCfg(ADMIN, { relays_max: 2 }); }
+  // S3: no complete read for > 10 minutes while someone holds the mic -> the site's Admins get one alert (an inbox notice)
+  const notes = async () => (await getQuery("SELECT title FROM inbox WHERE user_id = 'u_admin' AND title LIKE '%people list%'"));
+  const before = (await notes()).length;
+  room(["alice"], { listFresh: false, listAt: T - 11 * 60 * 1000 });
+  const P = MF._pads.get(ROOM.id);
+  P.alertAt = 0;
+  P.state.running = true; P.state.whyOff = null;
+  assert.equal(MF.listAlert(P, bridge._rooms.get(ROOM.id), T), true);
+  await until(async () => (await notes()).length > before);
+  for (let i = 0; i < 20 && (await notes()).length === before; i++) await settle();
+  assert.equal((await notes()).length, before + 1, "one notice to the Admin");
+  assert.equal(MF.listAlert(P, bridge._rooms.get(ROOM.id), T + 60 * 1000), false, "once per pad per 6 h");
+  room(["alice"], { listFresh: false, listAt: T - 5 * 60 * 1000 });
+  P.alertAt = 0;
+  assert.equal(MF.listAlert(P, bridge._rooms.get(ROOM.id), T), false, "a read 5 minutes ago: no alert");
+  room(["alice"], { listFresh: null, listAt: null });
+  assert.equal(MF.listAlert(P, bridge._rooms.get(ROOM.id), T), false, "a Pepe that doesn't say: never");
+  room([], { listFresh: false, listAt: T - 60 * 60 * 1000 });
+  assert.equal(MF.listAlert(P, bridge._rooms.get(ROOM.id), T), false, "nobody on the mic: no alert");
+});

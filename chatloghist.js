@@ -166,15 +166,17 @@ function hiddenLogins() {
 /**
  * The page query (spec §3.2): chat_log_room (rk, c) with both c bounds; the per-class floors as cursors in a CASE; removed lines
  * (keepRemoved false), Approved-era lines (approved false), presence (sys false) left out in SQL too; and (CL8 fix-up) the people
- * the hidden set leaves out - nOut logins for every kind, nTx more for 🎙 lines only - and Pepe's anonymised presence stand-ins
- * (a presence row without a login), as a CASE again (never an OR). Newest first for "before", oldest first for "after".
+ * the hidden set leaves out - nOut logins for every kind, nTx more for 🎙 lines only - and Pepe's anonymised join / leave
+ * stand-ins (a join / leave row without a login), as a CASE again (never an OR). 1.99afl (B.1): a mic grab / drop row without a
+ * login is read - the projection keeps the stamped ones (d.k3: an incognito person's, "someone grabbed the mic") and leaves out
+ * the rest (chatlogview.privacyAt). Newest first for "before", oldest first for "after".
  * Params: [rk, lo, hi, c_tx, c_presence, c_chat, ...out + tx (when nOut + nTx), ...out (when nOut), limit].
  */
 function pageSql({ dir = "before", sys = true, keepRemoved = false, approved = true, nOut = 0, nTx = 0 } = {}) {
   const qs = (n) => new Array(n).fill("?").join(",");
   return "SELECT * FROM chat_log WHERE rk = ? AND c >= ? AND c < ?" +
     " AND (CASE WHEN k = 'tx' THEN c >= ? WHEN k IN ('join','leave','mic','unmic') THEN c >= ? ELSE c >= ? END)" +
-    " AND (CASE WHEN who IS NULL THEN k NOT IN ('join','leave','mic','unmic')" +
+    " AND (CASE WHEN who IS NULL THEN k NOT IN ('join','leave')" +
     (nOut + nTx > 0 ? " WHEN k = 'tx' THEN who NOT IN (" + qs(nOut + nTx) + ")" : "") +
     (nOut > 0 ? " ELSE who NOT IN (" + qs(nOut) + ") END)" : " ELSE 1 END)") +
     (keepRemoved ? "" : " AND rm_at IS NULL AND purged IS NULL") +

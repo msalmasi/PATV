@@ -46,6 +46,22 @@
 //                    after soft_retry_s - soft_fails_max of them in open_fail_backoff_min, then the full backoff.
 //   card reasons     a card says WHY there's no picture: cold_off / rate / relays / pool / pad_cap / retry / failed / full.
 //   layoutOverride   the owner's stage-bar layout is never reset by the engine (micfollow.js keeps it until the owner does).
+// 1.99afl (the incognito / mic-stage spec, F.1 S1 / S1b / S2):
+//   stills       a refused still is soft (busy, noswitch, start_timeout, wrong_room, an unknown code, an older Pepe's
+//                answer with no code) -> another try after soft_retry_s like a soft live open; only not_public /
+//                not_on_cam / ambiguous / failed start the full backoff. No still starts while a soft retry holds the
+//                person (the still is an exact job too: it would be refused the same way and then back off for 10 minutes).
+//   list_unread  Pepe can't read the room's participant list (rows he can't see): a ROOM-WIDE pause (S.listPause), never a
+//                per-person failure - no exact open and no still for the room, never counted in S.soft, no backoff /
+//                liveBlock; every tile without a live relay says so (card "list_unread"); running relays keep running. It
+//                ends when Pepe's snapshot shows a complete read (listFresh) newer than the one the pause began under (or
+//                after LIST_PAUSE_MAX_MS - one try, which pauses again if the list is still unread); the backoffs set
+//                during it are cleared and each tile gets one normal attempt.
+//   cam_unknown  the roster doesn't know whether they're on cam (on_cam null: the list is stale or they joined after the
+//                last read): "checking their cam…" - no blind exact open (each one pages Camfrog's whole list on its UI
+//                thread). At most ONE exact open per person per list-read epoch (the room's listAt with listFresh), and
+//                only in an epoch that began after their grab (the read still couldn't classify them, e.g. a lurker). A
+//                running relay proves the cam is on: cam_unknown never ends a live tile, and a warm relay may be held.
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
 // notice_first / spam / touch / deferred.
 "use strict";
@@ -128,19 +144,27 @@ const CUT_SET = new Set(CUT);
 const isCut = (e) => CUT_SET.has(e);
 // a session that ended for one of these: a card ("failed") and no new open for that person until the backoff passes
 const FAIL_WHYS = new Set(["open_failed", "not_that_cam", "ambiguous", "noswitch", "busy", "start_timeout", "slots_busy", "spawn_failed", "failed",
-  "nopepe", "not_open", "no_pic"]);
+  "nopepe", "not_open", "no_pic", "list_unread"]);
 /** mfix: failures that say nothing about the person or their cam (Pepe's cam lock was busy, a window titled with their name
  *  that no exact open made was in the way, the room window wasn't on screen, a slow open, a warm relay Pepe couldn't confirm
  *  yet): another try after soft_retry_s, soft_fails_max times, before the full backoff. "ambiguous" (two people go by that
- *  name) is never soft. */
-const SOFT_WHYS = new Set(["busy", "noswitch", "not_that_cam", "start_timeout", "no_pic", "not_open", "nopepe", "inexact"]);
+ *  name) is never soft. 1.99afl: "list_unread" is never a person's failure at all - its own branch (the room pauses) runs
+ *  before failOpen; it is listed so it is never mistaken for a hard one. */
+const SOFT_WHYS = new Set(["busy", "noswitch", "not_that_cam", "start_timeout", "no_pic", "not_open", "nopepe", "inexact", "list_unread"]);
 const OFFCAM_WHYS = new Set(["not_on_cam", "cam_closed", "left_cam"]);
+/** 1.99afl (S1): the still refusals Pepe names (his still result's `code`, bot 1.99afk) that start the full backoff. Anything
+ *  else - busy, noswitch, start_timeout, wrong_room, a code this build doesn't know, or no code (an older Pepe) - is soft. */
+const STILL_HARD = new Set(["not_public", "not_on_cam", "ambiguous", "failed"]);
+/** 1.99afl (S1b): a paused room tries once more after this long even if no newer complete list read came (it pauses again at
+ *  once if the list is still unread) - so a pause can never outlive a missed snapshot field. */
+const LIST_PAUSE_MAX_MS = 5 * 60 * 1000;
 /** A held relay Pepe hasn't opened / verified by the exact name (sess.exact !== true) is never shown; after this long the
  *  mic stage gives it up (Pepe re-checks a running cam at most every 20 s; mfix: one he can't confirm he re-opens by the exact
  *  name - closing the window his older name match made - which takes a few seconds more). */
 const EXACT_WAIT_MS = 60 * 1000;
-/** mfix: the reasons a tile shows a card instead of a picture (the page words each). */
-const CARD_WHYS = Object.freeze(["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap"]);
+/** mfix: the reasons a tile shows a card instead of a picture (the page words each). 1.99afl: + list_unread (the room's list
+ *  can't be read - S1b), cam_unknown ("checking their cam…" - S2) and pepe (his cam relay isn't there - S4). */
+const CARD_WHYS = Object.freeze(["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap", "list_unread", "cam_unknown", "pepe"]);
 /** The site's live relays were full at the moment of a hold (a race, not a failed open): "full", another try after this. */
 const FULL_RETRY_MS = 15 * 1000;
 /** A relay that ended because the cam closed ("cam off"): no new open / still of that person until Pepe's roster shows
@@ -246,6 +270,10 @@ function newState() {
     blockWhy: new Map(),       // mfix: login -> why liveBlock holds them ("retry" | "full")
     pinned: new Set(),         // mfix: the pad's pinned cams' logins (I.pins, last step)
     speaking: null,            // mfix: null | "someone" | "pepe" - speech nobody can show / Pepe while tiles stay (dimmed on the page)
+    listPause: null,           // 1.99afl (S1b): {since, listAt} - Pepe can't read the room's list: no exact opens / stills here
+    pauseBlocked: new Set(),   //   ... logins whose backoff / liveBlock was set during the pause (cleared when it ends)
+    listAtSeen: null,          //   ... the room's listAt as the last step saw it (a pause began under that read)
+    unkTried: new Map(),       // 1.99afl (S2): login -> the list-read epoch (listAt) of its one exact open while cam_unknown
     changes: [],               // times of the last minute's changes
     lastChangeAt: -Infinity,
     v: 0, active: false, running: false, staleSince: 0, whyOff: null,
@@ -290,6 +318,25 @@ function pruneMaps(S, t) {
   if (S.offcam.size > 200) for (const [l, at] of [...S.offcam]) if (t - at >= OFFCAM_RETRY_MS) S.offcam.delete(l);
   if (S.leftAt.size > 500) for (const [l, at] of [...S.leftAt]) if (t - at > 3600e3) S.leftAt.delete(l);
   if (S.sawOff.size > 200) S.sawOff.clear();
+  if (S.unkTried.size > 200) { const on = new Set(S.tiles.map((x) => x.login)); for (const l of [...S.unkTried.keys()]) if (!on.has(l)) S.unkTried.delete(l); }
+}
+/** 1.99afl (S1b): the room's list can't be read - pause it (once; the read it began under is kept). */
+function pauseList(S, t) {
+  if (!S.listPause) S.listPause = { since: t, listAt: S.listAtSeen || 0 };
+}
+/** ... a backoff / liveBlock set while the room is paused is remembered, so the pause's end clears it. */
+function notePauseBlock(S, login) { if (S.listPause) S.pauseBlocked.add(login); }
+/** ... a complete list read newer than the one the pause began under (or LIST_PAUSE_MAX_MS): the pause ends, its backoffs go. */
+function endPause(S) {
+  for (const l of S.pauseBlocked) { S.backoff.delete(l); S.liveBlock.delete(l); S.inexact.delete(l); S.blockWhy.delete(l); S.soft.delete(l); }
+  S.pauseBlocked.clear();
+  S.listPause = null;
+}
+/** ... a tile's relay / hold / still came back "list_unread": the room pauses; this tile says so (no count, no backoff). */
+function listUnread(S, x, t) {
+  pauseList(S, t);
+  x.pend = false;
+  setVideo(x, "card", "list_unread", t);
 }
 /** The layout shape the mic stage shows now (mfix: with its pinned cams). */
 function shapeOf(S, pad) { return shapeFor(S.layoutOverride || (pad && pad.layout) || "auto", S.tiles.length, S.pinned ? S.pinned.size : 0); }
@@ -297,6 +344,7 @@ function shapeOf(S, pad) { return shapeFor(S.layoutOverride || (pad && pad.layou
  *  times in open_fail_backoff_min) -> "retry"; else the full backoff -> "failed". inexact: Pepe couldn't confirm a warm relay -
  *  its full backoff is S.inexact (stills - exact jobs of their own - may still run). */
 function failOpen(S, login, why, C, t) {
+  notePauseBlock(S, login);                                 // (1.99afl: set during a list pause -> cleared when it ends)
   if (SOFT_WHYS.has(why)) {
     const win = C.open_fail_backoff_min * 60 * 1000;
     const list = (S.soft.get(login) || []).filter((x) => t - x < win);
@@ -304,8 +352,10 @@ function failOpen(S, login, why, C, t) {
     if (list.length < C.soft_fails_max) {
       S.soft.set(login, list);
       S.liveBlock.set(login, t + C.soft_retry_s * 1000);
-      S.blockWhy.set(login, "retry");
-      return "retry";
+      // 1.99afl (S4): Pepe's cam relay isn't there ("nopepe") says so on the card; any other soft reason is "trying again"
+      const w = why === "nopepe" ? "pepe" : "retry";
+      S.blockWhy.set(login, w);
+      return w;
     }
     S.soft.delete(login);
   }
@@ -340,6 +390,7 @@ function clearAll(S, reason, t, A) {
   S.oseen.clear(); S.pepeSince = 0;
   const neutral = !!S.neutral;
   S.neutral = null; S.speaking = null;
+  if (S.listPause) endPause(S);                             // (1.99afl: a stopped stage starts its next run unpaused)
   if (had || neutral) { S.v++; A.push({ a: "touch", why: "clear:" + reason }); }
   return had;
 }
@@ -436,7 +487,7 @@ function speaking(S, I, C, t) {
   for (const h of I.holders || []) {
     if (S.pinned && S.pinned.has(h.login)) { attributed = true; continue; }   // mfix: a pinned cam's person: shown, named
     const e = I.elig.get(h.login);
-    if ((e === "ok" || e === "off_cam") && !spamming(S, h.login, t)) { attributed = true; continue; }
+    if ((e === "ok" || e === "off_cam" || e === "cam_unknown") && !spamming(S, h.login, t)) { attributed = true; continue; }
     if (e === "pending" || e == null) continue;              // a fact fetch on its way (a moment): neither
     const s = S.seen.get(h.login);
     if (s && s.held && t - s.since >= minHold) other = true;
@@ -516,10 +567,36 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
       if (x.video !== "card" || x.why !== "off_cam") { setVideo(x, "card", "off_cam", t); changed = true; }
       continue;
     }
+    // 1.99afl (S1b): Pepe can't read the room's list - no exact open and no still here until a newer complete read; the tile
+    // says why (a live relay keeps running: it was handled above)
+    if (S.listPause) {
+      if (x.video === "still") A.push({ a: "still_stop", login: x.login });
+      if (x.video !== "card" || x.why !== "list_unread") { setVideo(x, "card", "list_unread", t); changed = true; }
+      continue;
+    }
+    // 1.99afl (S2): the roster can't say whether their cam is on - "checking their cam…", never a blind exact open (or still).
+    // A warm relay runs (so the cam IS on): it may be held. Otherwise one exact open per list-read epoch, and only in an epoch
+    // that began after their grab (that read still couldn't classify them - a lurker, say: Pepe fast-fails it)
+    let unkOpen = false;
+    if (e === "cam_unknown") {
+      if (x.video === "still") { A.push({ a: "still_stop", login: x.login }); setVideo(x, "card", "cam_unknown", t); changed = true; }
+      const warm0 = ss.state === "connecting" || ss.state === "live";
+      const seenAt = S.seen.get(x.login);
+      const grab = seenAt ? seenAt.since : x.since || x.addedAt;
+      const epoch = Number(I.room && I.room.listAt) > 0 ? Number(I.room.listAt) : 0;
+      const epochOk = !!(I.room && I.room.listFresh === true) && epoch > grab && S.unkTried.get(x.login) !== epoch;
+      if (!warm0 && !epochOk) {
+        if (x.video !== "card" || x.why !== "cam_unknown") { setVideo(x, "card", "cam_unknown", t); changed = true; }
+        continue;
+      }
+      unkOpen = !warm0 ? epoch : false;
+    }
     const backed = (S.backoff.get(x.login) || 0) > t;
     const inexact = (S.inexact.get(x.login) || 0) > t;
     const lblock = (S.liveBlock.get(x.login) || 0) > t;
     const blocked = backed || inexact || lblock;
+    // 1.99afl (S1): a soft-retry block holds stills back too (a still is an exact job: it would be refused the same way)
+    const softBlock = lblock && (S.blockWhy.get(x.login) === "retry" || S.blockWhy.get(x.login) === "pepe");
     let why0 = null;                                          // mfix: why no live picture (the card says so)
     if (fresh && e !== "pending" && e !== "notice" && !blocked && used >= padMaxLive) why0 = "pad_cap";
     if (fresh && e !== "pending" && e !== "notice" && used < padMaxLive && !blocked) {
@@ -530,6 +607,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
       if (warm || (isCold && cold > 0 && pool > 0 && !shed)) {
         if (x.video === "still") A.push({ a: "still_stop", login: x.login });
         if (isCold) { cold--; pool--; }
+        if (unkOpen) S.unkTried.set(x.login, unkOpen);       // (1.99afl: this epoch's one exact open of a cam_unknown person)
         used++;
         x.pend = true;
         x.cold = isCold;
@@ -546,7 +624,8 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
       changed = true;
       continue;
     }
-    if (fresh && C.stills && C.cold_open && I.room.cams && !backed && !shed && e !== "pending" && e !== "notice" && stills > 0 && pool > 0) {
+    if (fresh && C.stills && C.cold_open && I.room.cams && !backed && !softBlock && !shed && e !== "pending" && e !== "notice" && e !== "cam_unknown" &&
+        stills > 0 && pool > 0) {
       stills--; pool--;
       setVideo(x, "still", null, t);
       A.push({ a: "still", login: x.login });
@@ -572,9 +651,11 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
  *   why_off: null | "site_off" | "livecams_off" | "webrtc_off" | "room_off" | "prime" | "pepe" | "pepe_old" | "stale" | "pad_off",
  *   holders: [{login, since}]  proven, real holders in grab order,  unproven_n,
  *   others: [{key, since}]  holders nobody can show (unproven, anonymous, account keys, bots),  pepe: since | true | null,
- *   elig: Map(login -> "ok" | "off_cam" | "pending" | "notice" (not noticed notice_lead_s ago) | CUT code)  holders + tiles,
+ *   elig: Map(login -> "ok" | "off_cam" | "cam_unknown" (1.99afl: the roster can't say) | "pending" | "notice" (not noticed
+ *         notice_lead_s ago) | CUT code)  holders + tiles,
  *   sess: Map(login -> {state, why, exact, held, mfOnly, viewers})     livecam.mfState,
- *   pad: {layout, max_people, max_live, default_view, keep_recent (minutes)},  room: {cams},
+ *   pad: {layout, max_people, max_live, default_view, keep_recent (minutes)},
+ *   room: {cams, listAt (ms of Pepe's last complete participant-list read, null = none), listFresh (true / false / null)},
  *   site: {maxLive, coldLeft, coldWhy (why coldLeft is 0: cold_off | rate | relays | full), stillsLeft, poolLeft (Pepe's cam pool
  *          share: cold opens + stills), shed (make room for a manual cam)},
  *   pins: [login | {login}]  the pad's pinned cams (mfix) }
@@ -584,6 +665,15 @@ function step(S, I, C, t) {
   const A = [];
   S.unproven = Math.max(0, I.unproven_n | 0);
   if (S.frozenUntil && S.frozenUntil <= t) S.frozenUntil = 0;
+  // 1.99afl (S1b): a paused room resumes on a complete list read newer than the one it paused under (or LIST_PAUSE_MAX_MS)
+  const room = I.room || {};
+  const listAt = Number(room.listAt) > 0 ? Number(room.listAt) : 0;
+  if (S.listPause && ((room.listFresh === true && listAt > S.listPause.listAt) || t - S.listPause.since >= LIST_PAUSE_MAX_MS)) {
+    endPause(S);
+    S.v++;
+    A.push({ a: "touch", why: "list_back" });
+  }
+  S.listAtSeen = listAt || null;
   // RUN (§3.2): a stale sync is ridden out for stale_hold_s with the program unchanged (consent cuts still apply)
   if (I.why_off) {
     if (I.why_off === "stale" && S.running && S.tiles.length) {
@@ -650,7 +740,9 @@ function step(S, I, C, t) {
       if (!s || !s.held || onStage.has(h.login)) continue;
       if (t - s.since < C.min_hold_s * 1000) continue;
       const e = I.elig.get(h.login);
-      if (e !== "ok" && e !== "off_cam") continue;            // cut, not noticed long enough ago, or not known yet
+      // cut, not noticed long enough ago, or not known yet (1.99afl: a cam the roster can't classify yet still goes up - as a
+      // "checking their cam…" card, like a "cam off" one did before)
+      if (e !== "ok" && e !== "off_cam" && e !== "cam_unknown") continue;
       if (spamming(S, h.login, t)) continue;
       qualified.push({ login: h.login, since: s.since });
     }
@@ -771,12 +863,14 @@ function holdDone(S, login, ok, code, C, t) {
     S.v++;
     return A;
   }
-  if (code === "not_on_cam") { S.offcam.set(login, t); setVideo(x, "card", "off_cam", t); }
+  if (code === "list_unread") listUnread(S, x, t);       // 1.99afl (S1b): the ROOM pauses - never this person's failure
+  else if (code === "not_on_cam") { S.offcam.set(login, t); setVideo(x, "card", "off_cam", t); }
   else if (code === "slots_busy" || code === "budget") {
     // the site's live relays were full at that moment (a race - e.g. a manual cam slot took the freed one): "full" and
     // another try soon; never the 10-minute failure backoff (that would block its still too)
     S.liveBlock.set(login, t + FULL_RETRY_MS);
     S.blockWhy.set(login, "full");
+    notePauseBlock(S, login);
     setVideo(x, "card", "full", t);
   } else setVideo(x, "card", failOpen(S, login, code, C, t), t);   // mfix: a soft reason is tried again soon
   S.v++;
@@ -802,10 +896,12 @@ function sessionEnded(S, login, why, C, t) {
   }
   if (!liveish(x) && !x.pend) return { cut: null, actions: A };
   x.pend = false;
-  if (OFFCAM_WHYS.has(why)) { S.offcam.set(login, t); setVideo(x, "card", "off_cam", t); }
+  if (why === "list_unread") listUnread(S, x, t);        // 1.99afl (S1b): the room pauses (before failOpen: never counted)
+  else if (OFFCAM_WHYS.has(why)) { S.offcam.set(login, t); setVideo(x, "card", "off_cam", t); }
   else if (why === "slots_busy") {                        // mfix: Pepe's live cams were full - a race, another try soon
     S.liveBlock.set(login, t + FULL_RETRY_MS);
     S.blockWhy.set(login, "full");
+    notePauseBlock(S, login);
     setVideo(x, "card", "full", t);
   } else if (FAIL_WHYS.has(why)) setVideo(x, "card", failOpen(S, login, why, C, t), t);   // mfix: soft reasons retry soon
   else setVideo(x, null, null, t);                        // anything else: the next step finds it a picture again
@@ -814,14 +910,22 @@ function sessionEnded(S, login, why, C, t) {
   return { cut: null, actions: A };
 }
 
-/** A still frame came back refused ("cam isn't public", busy, not on cam): a card and the backoff. -> actions */
-function stillFailed(S, login, C, t) {
+/** A still frame came back refused. 1.99afl (S1): by Pepe's `code` (bot 1.99afk) - list_unread pauses the ROOM (S1b); a
+ *  hard refusal ("cam isn't public", not on cam, ambiguous, failed) is a card and the full backoff; anything else (busy,
+ *  noswitch, start_timeout, wrong_room, an unknown code, or none at all - an older Pepe) is soft: failOpen's retry after
+ *  soft_retry_s (soft_fails_max of them, then the backoff), never the 10 minutes at once. -> actions */
+function stillFailed(S, login, C, t, code = null) {
   const A = [];
   const x = tileOf(S, login);
   if (!x || x.video !== "still") return A;
-  S.backoff.set(login, t + C.open_fail_backoff_min * 60 * 1000);
-  setVideo(x, "card", "failed", t);
   A.push({ a: "still_stop", login });
+  const c = typeof code === "string" ? code : "";
+  if (c === "list_unread") listUnread(S, x, t);
+  else if (STILL_HARD.has(c)) {
+    S.backoff.set(login, t + C.open_fail_backoff_min * 60 * 1000);
+    notePauseBlock(S, login);
+    setVideo(x, "card", "failed", t);
+  } else setVideo(x, "card", failOpen(S, login, SOFT_WHYS.has(c) ? c : "busy", C, t), t);
   S.v++;
   A.push({ a: "touch", why: "still_failed" });
   return A;
@@ -870,14 +974,14 @@ function clearStage(S, t, freezeMs) {
 
 /** Is anything in this pad's program waiting on the clock? (the 1 s timer only steps these) */
 function hot(S, t) {
-  if (S.tiles.length || S.staleSince || S.neutral || S.speaking || S.oseen.size || S.pepeSince) return true;
+  if (S.tiles.length || S.staleSince || S.neutral || S.speaking || S.oseen.size || S.pepeSince || S.listPause) return true;
   for (const s of S.seen.values()) if (s.held) return true;
   return false;
 }
 
 module.exports = {
   FIELDS, DEFAULTS, PAD_FIELDS, PAD_DEFAULTS, LAYOUTS, SHAPES, DEFAULT_VIEWS, CUT, isCut, FAIL_WHYS, SOFT_WHYS, OFFCAM_WHYS, EXACT_WAIT_MS, FULL_RETRY_MS, OFFCAM_RETRY_MS,
-  CARD_WHYS, KEEP_RECENT,
+  CARD_WHYS, KEEP_RECENT, STILL_HARD, LIST_PAUSE_MAX_MS,
   normalize, normalizePad, layoutCap, layoutFor, shapeFor, maxPins, newState, step, holdDone, sessionEnded, stillFailed, yieldTile, cutNow, clearStage, hot, speaking,
   shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
 };

@@ -632,7 +632,7 @@
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=6">
   <script src="/public/js/webrtc-client.js?v=5"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <script src="/public/js/stage-mic.js?v=4"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
+  <script src="/public/js/stage-mic.js?v=5"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=17"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=2"></script>
@@ -846,7 +846,7 @@
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=1"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
-  <script src="/public/js/pad-livecam.js?v=6"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) %>
+  <script src="/public/js/pad-livecam.js?v=7"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) %>
   <script src="/public/js/room-mod.js?v=12"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=4" defer></script>

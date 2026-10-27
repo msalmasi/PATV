@@ -742,14 +742,17 @@ function dropStageViewer(S, uid) {
  * stagefix: + the pad's bridge perk, "Take me off this Stage" and blocks with `actor` (who puts them up) or the pad's owner -
  * refused with the neutral "unavailable" (the actor is never told why).
  */
-async function stageConsent(R, login, t = now(), { actor = null } = {}) {
+async function stageConsent(R, login, t = now(), { actor = null, mf = false } = {}) {
   if (!on()) throw refuse("off");
   if (!R || !R.cams) throw refuse("room_off");
   if (R.livecams === false) throw refuse("room_off");
   if (!bridgeOk(R.id)) throw refuse("room_off");
   login = String(login || "").toLowerCase();
   const m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
-  if (!m || !m.on_cam) throw refuse("not_on_cam");
+  // 1.99afl (S2): the mic stage may ask for a cam Pepe's roster can't classify yet (on_cam unknown - its one exact open per
+  // list-read epoch, or a warm relay; micfollow-core decides) - Pepe opens it by its exact name and fast-fails it when it isn't on
+  // cam. A cam the roster says is OFF is never asked for; every other holder still needs it on cam.
+  if (!m || !(m.on_cam || (mf === true && m.on_cam == null))) throw refuse("not_on_cam");
   if (optedOut(login)) throw refuse("opted_out");
   // stagefix fix: private activity, "Take me off this Stage" and a block are all the one neutral "unavailable" - whoever puts
   // them up can't tell which (private used to say "opted_out", i.e. "switched live video off" - not even true)
@@ -939,7 +942,8 @@ const cooling = (roomId, login, t = now()) => (COOL.get(keyOf(roomId, String(log
 // ── Pepe ──
 const str = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n);
 const TERMINAL = new Set(["opted_out", "not_on_cam", "room_off", "slots_busy", "open_failed", "not_that_cam", "noswitch", "busy", "spawn_failed",
-  "failed", "cam_closed", "ambiguous"]);   // micfollow: "ambiguous" = an exact open found two people with that name
+  "failed", "cam_closed", "ambiguous",     // micfollow: "ambiguous" = an exact open found two people with that name
+  "list_unread"]);                         // 1.99afl: Pepe can't read the room's participant list (bot 1.99afk; the mic stage pauses the room)
 /** Pepe's poll: his report in, the wanted cams + settings + opt-outs out. */
 async function forBot(body, t = now()) {
   await init();

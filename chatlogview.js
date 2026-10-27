@@ -25,7 +25,10 @@
 //                            change (2026-10-19, "incognito hides WHO, not WHAT"): an INCOGNITO person's chat and 🎙 lines are
 //                            kept and shown as "someone" - no login, display name, avatar or looks, no 🎙 id (privacyOf: "anon";
 //                            dress anonymises) - their joins / leaves / mic lines stay left out (Pepe's anonymised stand-ins
-//                            can't be told from a !bridge hide one's). Pepe's own anonymised lines (an incognito speaker's, sent
+//                            can't be told from a !bridge hide one's). 1.99afl (B.1): since Train 3 Pepe sends no event at all
+//                            for a !bridge hide person, so a hashless anonymous MIC grab / drop from a sync that carried both
+//                            kinded lists (stamped k3 at ingest) is an incognito person's: "someone grabbed / dropped the mic"
+//                            (privacyAt). Joins / leaves and unstamped ones stay left out. Pepe's own anonymised lines (an incognito speaker's, sent
 //                            with their hash - `ah`, server-only; archived as who "h:<hash>") are "someone" too, and left out
 //                            once that hash is left out (Train 3 review: once ANY hash Pepe sent for the speaker is - `ahs`,
 //                            data.anon.hs). The kind is the STRICTER of the two sticky stores - chatlog.js's and hubhidden.js's
@@ -187,7 +190,11 @@ function privacyAt(it, kindOf, txOf) {
   if (!u) return null;
   // Pepe's anonymised stand-in with no hash (a join / leave / mic of someone on his hidden list - he doesn't say which kind - or an
   // older Pepe's line): left out, never "→ someone joined". (A purged line's blanked author is no stand-in.)
-  if (u.anon) return it.purged ? null : "out";
+  // 1.99afl (B.1): a hashless anonymous MIC grab / drop stamped k3 at ingest - its sync carried both kinded hash lists
+  // (bridge_hidden_h AND incog_hidden_h as arrays), so it came from a Pepe that never sends a !bridge hide person's events
+  // (Train 3, 1.99adm on) with his hide list loaded: it is an INCOGNITO person's, shown as "someone grabbed / dropped the mic".
+  // Joins / leaves, and any unstamped one (stored before 1.99afl, an older Pepe, a lost list), stay left out (fails closed).
+  if (u.anon) return it.purged ? null : it.k3 === 1 && (it.k === "mic" || it.k === "unmic") ? "anon" : "out";
   const login = loginOf(it);
   if (!login) return null;
   const h = hashOf(login);
@@ -847,16 +854,34 @@ function filter(items, ctx) {
 function roster(list) {
   const out = [];
   for (const u of Array.isArray(list) ? list : []) {
-    if (u && !u.anon && u.login) {
-      const k = kindNow(hashOf(u.login));
-      if (k === "out") continue;
-      if (k) { out.push({ anon: true, display: "someone" }); continue; }
-    }
-    out.push(u);
+    if (!u || typeof u !== "object") continue;
+    if (u.anon || !u.login) { out.push(Object.assign({}, SOMEONE)); continue; }
+    const k = kindNow(hashOf(u.login));
+    if (k === "out") continue;
+    if (k) { out.push(Object.assign({}, SOMEONE)); continue; }
+    out.push(pick(u, ROSTER_U));                                // 1.99afl (S6): built from a whitelist, never the entry itself
   }
   return out;
 }
 const SOMEONE = Object.freeze({ anon: true, display: "someone" });
+// 1.99afl (S6 - the incognito spec's rollback floor): the projection BUILDS every object it hands out from the fields its kind may
+// show; it never copies an item (or a roster entry) and deletes the fields it knows about. A field nobody listed here - a server-
+// only hash (ah / ahs), a stamp (k3), a later build's veiled identity or hidden words - can never reach a page, an API answer or a
+// download, whatever the stored item (bridge_feed, chat_log.d) holds. A field a page needs must be added here.
+const OUT_COMMON = Object.freeze(["c", "ts", "k"]);
+const OUT_KIND = Object.freeze({
+  msg: Object.freeze(["text"]), tx: Object.freeze(["text", "id"]), topic: Object.freeze(["text"]),
+  join: Object.freeze([]), leave: Object.freeze([]), mic: Object.freeze([]), unmic: Object.freeze(["ms"]),
+  live: Object.freeze(["who", "pad", "what", "link", "np"]),          // 🎥 bridge.liveNotice
+  note: Object.freeze(["w", "s", "o", "sc"]),                         // 📜 bridge.noteItem
+});
+const OUT_U = Object.freeze(["login", "display", "self", "bot", "web", "acct", "unresolved"]);
+const ROSTER_U = Object.freeze(["login", "display", "self", "bot", "on_cam", "on_mic", "src", "unresolved", "acct", "web"]);
+/** The listed fields of src (own, defined) copied into `into`. */
+function pick(src, keys, into = {}) {
+  for (const k of keys) if (Object.prototype.hasOwnProperty.call(src, k) && src[k] !== undefined) into[k] = src[k];
+  return into;
+}
 /**
  * Stage 2: copies, never the feed's own objects. lookup(u) -> the name cache entry {acc, priv} (bridge.resolveNames) or
  * undefined. Private-activity people are "someone" in presence lines; a web member with no live account is "former member";
@@ -867,23 +892,27 @@ function dress(items, ctx) {
   const lookup = typeof ctx.lookup === "function" ? ctx.lookup : () => undefined;
   const out = [];
   for (const it of items) {
-    const o = Object.assign({}, it);
-    delete o.aud; delete o.rm_by; delete o.rm_at; delete o.rm_why; delete o.purged; delete o.ah; delete o.ahs;
+    // 1.99afl (S6): built from the whitelist (OUT_COMMON + OUT_KIND) - never aud, rm_*, purged, ah, ahs, k3 or anything unlisted
+    const o = pick(it, OUT_COMMON);
+    pick(it, OUT_KIND[it.k] || [], o);
     // the owner's decision-9 change: an incognito person's line is "someone" - no login, display name, avatar, looks or flair, and
     // no 🎙 id (it is a hash of their login and the words: a viewer could test it against a guess). Asked again here, not taken
     // from filter(): whatever the set says now never names them ("out" since filter: still anonymised, the next answer drops it).
     // _sh (never serialised: not enumerable) = their hash, so the viewer's OWN lines still get their 🗑 Remove my line.
     const p = privacyOf(it);
+    const u = it.u && typeof it.u === "object" ? it.u : null;
     if ((p === "anon" || p === "out") && !it.purged) {
       o.u = Object.assign({}, SOMEONE);
       if (o.k === "tx") delete o.id;
       const sh = speakerHash(it);
       if (sh) Object.defineProperty(o, "_sh", { value: sh, enumerable: false });
-    } else if (o.u && typeof o.u === "object" && !o.u.anon) {
-      const e = o.u.login ? lookup(o.u) : undefined;
-      if (/^u:/i.test(String(o.u.login || "")) && e && e.acc === null) o.u = { former: true };
+    } else if (u && u.anon) o.u = Object.assign({}, SOMEONE);
+    else if (u && u.former) o.u = { former: true };
+    else if (u) {
+      const e = u.login ? lookup(u) : undefined;
+      if (/^u:/i.test(String(u.login || "")) && e && e.acc === null) o.u = { former: true };
       else if (PRESENCE.has(o.k) && e && e.acc && e.priv) o.u = { anon: true, display: "someone" };
-      else o.u = Object.assign({}, o.u);
+      else o.u = pick(u, OUT_U);
     }
     if (typeof o.text === "string") o.text = redact(o.text);
     if (o.k === "live") { if (typeof o.who === "string") o.who = redact(o.who); if (typeof o.what === "string") o.what = redact(o.what); }

@@ -140,7 +140,7 @@
     <div class="row"><label class="chk"><input type="checkbox" id="mfKill"<%= mf.cfg.enabled ? ' checked' : '' %>> <b>Mic follows on</b> (site-wide kill switch)</label>
       <input type="text" id="mfKillWhy" placeholder="reason (optional)" aria-label="Reason" maxlength="200"><span class="msg" id="mfKillMsg" role="status"></span></div>
     <h3>Pads using it</h3>
-    <div class="tblwrap"><table><thead><tr><th>Pad</th><th>Layout</th><th class="num">On stage</th><th class="num">Live</th><th class="num">Stills</th><th>Status</th><th></th></tr></thead><tbody id="mfPads"></tbody></table></div>
+    <div class="tblwrap"><table><thead><tr><th>Pad</th><th>Layout</th><th class="num">On stage</th><th class="num">Live</th><th class="num">Stills</th><th>Status</th><th title="Pepe's last complete read of the room's people list, failed opens / stills in the last hour, and the cards shown now">Health</th><th></th></tr></thead><tbody id="mfPads"></tbody></table></div>
     <h3>⚑ Reports to review</h3>
     <p class="muted">Viewers report a tile with ⚑ (it hides for them at once). Two qualified reporters within a couple of minutes take the person off that pad's mic stage for a day, pending your review. <b>Dismiss</b> lifts it (those reporters don't count against that person for 24 h); <b>Uphold</b> keeps it.</p>
     <div class="tblwrap"><table><thead><tr><th>Pad</th><th>Camfrog login</th><th class="num">Reports</th><th class="num">Qualified</th><th>Why</th><th>Last</th><th>Status</th><th></th></tr></thead><tbody id="mfReports"></tbody></table></div>
@@ -157,7 +157,7 @@
     <% } %>
   </section>
   <script id="mfState" type="application/json"><%- JSON.stringify(mf).replace(/</g, '\\u003c') %></script>
-  <script src="/public/js/stage-mf-admin.js?v=1" defer></script>
+  <script src="/public/js/stage-mf-admin.js?v=2" defer></script>
   <% } %>
 
   <section class="sb-card" id="settings" aria-labelledby="setT">

@@ -214,6 +214,45 @@ test("topics over time: each snapshot is labelled with its day and hour, in the 
   assert.deepEqual(labels, ["Oct 7 · 10 AM", "Oct 7 · 4 AM", "Oct 6 · 10 PM", "Oct 6 · 10 AM", "Oct 6 · 4 AM"], "newest first");
 });
 
+test("1.99afl (section K): private people are 'someone' at their REAL rank with their real numbers - Pepe's anon rows, and a stale row naming someone incognito / hidden now; the person sees 'you'", async () => {
+  const crypto = require("crypto");
+  const hash = (l) => crypto.createHash("sha256").update("pepe-hidden:" + l).digest("hex").slice(0, 20);
+  await runQuery(`CREATE TABLE IF NOT EXISTS incognito_state (login TEXT PRIMARY KEY, "on" INTEGER NOT NULL DEFAULT 0, updated INTEGER)`);
+  await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated) VALUES ('carolcf', 1, 1)`);      // went incognito after the sync
+  // dana typed !bridge hide (Pepe's privacy event: the sticky hidden set)
+  await bridge.ingest({ rooms: [], events: [{ op: "event", id: "k-hide-1", ts: new Date().toISOString(), type: "privacy.hidden", data: { h: hash("danacf"), scope: "bridge" } }] });
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('u9', 'eve', 'eve', 'x', 'evecf')");
+  const r = await sync({ rooms: [room("Derty_Dawg.Room", "Derty Dawg", {
+    regulars: [{ login: "alicecf", display: "Alice", m30: 900, s30: 3600, d30: 22, m90: 2000, s90: 9000, d90: 60, last: 1790000000 },
+               { anon: true, h: hash("evecf"), m30: 800, s30: 3000, d30: 21, m90: 1900, s90: 8000, d90: 59, last: 1790000000, login: "evecf", display: "Eve" },
+               { login: "carolcf", display: "Carol Stale", m30: 300, s30: 60, d30: 10, m90: 600, s90: 100, d90: 20, last: 1790000000 }],
+    mic_top: [{ anon: true, h: hash("evecf"), s90: 12000, d90: 50 }, { login: "alicecf", display: "Alice", s90: 9000, d90: 50 },
+              { login: "danacf", display: "Dana Hidden", s90: 5000, d90: 30 }, { anon: true, h: "not a hash", s90: 4000, d90: 20 },
+              { login: "carolcf", display: "Carol Stale", s90: 100, d90: 2 }],
+  })] });
+  assert.equal(r.status, 200);
+  const row = (await roomstats.all()).find((x) => x.room === "Derty_Dawg.Room");
+  assert.deepEqual(row.regulars[1], { anon: true, h: hash("evecf"), m30: 800, s30: 3000, d30: 21, m90: 1900, s90: 8000, d90: 59, last: 1790000000 },
+                   "an anon row keeps its numbers and hash - never a login or a name, even one sent by mistake");
+  assert.deepEqual(row.mic_top[3], { anon: true, m30: 0, s30: 0, d30: 0, m90: 0, s90: 4000, d90: 20, last: 0 }, "a bad hash is dropped, the row kept");
+  for (const viewer of ["u3", "u9"]) {
+    const html = await (await get("/p/derty-dawg/analytics", viewer)).text();
+    for (const leak of ["Carol Stale", "carolcf", "Dana Hidden", "danacf", "evecf", hash("evecf"), hash("danacf"), ">Eve<"]) assert.ok(!html.includes(leak), leak + " leaked to " + viewer);
+    const mic = [...html.matchAll(/<span class="bn">(\d+)\. (.*?)<\/span><span class="bb">/g)].map((m) => [m[1], m[2].replace(/<[^>]+>/g, "")]);
+    const me = viewer === "u9" ? "you" : "someone";
+    assert.deepEqual(mic, [["1", me], ["2", "Alice"], ["3", "someone"], ["4", "someone"], ["5", "someone"]], "real ranks for " + viewer);
+    assert.match(html, /<span class="anon"[^>]*>someone<\/span>/);
+  }
+  const mine = await (await get("/p/derty-dawg/analytics", "u9")).text();
+  assert.match(mine, /<span class="anon" title="Others see &quot;someone&quot; here">you<\/span>/, "the person sees their own row");
+  // the view model itself carries no login, name or hash for a private row
+  const a = await roomstats.forRoom(row, "derty-dawg", { userId: "u3" });
+  const s = JSON.stringify(a.mic) + JSON.stringify(a.regulars);
+  for (const leak of ["carolcf", "danacf", "evecf", "Carol", "Dana", hash("evecf")]) assert.ok(!s.includes(leak), leak);
+  assert.equal(a.mic[0].pct, 100, "the private #1 keeps the bar scale (real numbers)");
+  assert.deepEqual(a.regulars.map((x) => x.name), ["Alice", "someone", "someone"]);
+});
+
 test("unknown rooms 404, removed rooms disappear", async () => {
   assert.equal((await get("/p/nope/analytics", "u3")).status, 404);
   const r = await sync({ rooms: [], remove: ["DRAMA_CENTRAL"] });

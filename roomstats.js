@@ -16,6 +16,12 @@
 //   * a regular / mic leader whose linked PATV account hides Analytics (or its Rooms panel) on their
 //     profile layout is not named here: they're folded into "+N keep their activity private"
 //   * room admins can take a room off the site from Camfrog (`!roominfo site off` -> remove[])
+//   * 1.99afl (the incognito spec, section K): counting never changes - private people keep their real rank and numbers, shown as
+//     "someone" (no name, no link). Pepe 1.99afk sends them as anon rows {anon, h (their hidden-set hash: server-only, never
+//     rendered), numbers}; and at render time any row naming a login that is incognito NOW (incognito_state on / incognito_anon)
+//     or on the sticky hidden set (!incognito / !bridge hide, both stores - chatlogview.isHiddenLogin, fails closed) is "someone"
+//     at its rank too, so a room whose last sync predates someone going private never prints their name. The person themselves
+//     (their linked Camfrog login, or an anon row's h) sees "you".
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const { _render: R } = require("./userstats");
@@ -54,12 +60,16 @@ const dayMap = (o, fn) => {
   return out;
 };
 const strList = (a, n, m) => (Array.isArray(a) ? a : []).slice(0, n).map((x) => str(x, m)).filter(Boolean);
+const HASH_RE = /^[0-9a-f]{20}$/;
+const nums = (p) => ({ m30: int(p.m30), s30: int(p.s30), d30: int(p.d30, 0, 31), m90: int(p.m90), s90: int(p.s90), d90: int(p.d90, 0, 91), last: int(p.last) });
 const person = (p) => {
   if (!p || typeof p !== "object") return null;
+  // 1.99afl (section K): a private person at their real rank - no login, no name; `h` (their hidden-set hash) only so they can
+  // see their own row as "you" (login-equivalent: never rendered, never in a view model)
+  if (p.anon === true) return Object.assign({ anon: true }, typeof p.h === "string" && HASH_RE.test(p.h) ? { h: p.h } : {}, nums(p));
   const login = str(p.login, 40).toLowerCase();
   if (!LOGIN_RE.test(login)) return null;
-  return { login, display: str(String(p.display == null ? "" : p.display).replace(/<[^<>]{0,40}>/g, ""), 40).replace(/[<>]/g, "") || login, m30: int(p.m30), s30: int(p.s30), d30: int(p.d30, 0, 31),
-           m90: int(p.m90), s90: int(p.s90), d90: int(p.d90, 0, 91), last: int(p.last) };
+  return Object.assign({ login, display: str(String(p.display == null ? "" : p.display).replace(/<[^<>]{0,40}>/g, ""), 40).replace(/[<>]/g, "") || login }, nums(p));
 };
 
 function clean(r) {
@@ -177,6 +187,40 @@ async function privateLogins(logins) {
   }
   return out;
 }
+
+/** 1.99afl (section K): the logins among `logins` that are private NOW - incognito (Pepe's list as the site keeps it:
+ *  incognito_state on, incognito_anon - the gtfboards.privateSet rule) or on the sticky hidden set (!incognito / !bridge hide,
+ *  either store: chatlogview.isHiddenLogin - fails closed while it loads). They show as "someone" at their rank. A check that
+ *  can't run counts as private (nobody is named on a guess). */
+async function maskedLogins(logins) {
+  const list = [...new Set(logins)].filter((l) => LOGIN_RE.test(l));
+  const out = new Set();
+  if (!list.length) return out;
+  const want = new Set(list);
+  for (const sql of [`SELECT login FROM incognito_state WHERE "on" = 1`, "SELECT login FROM incognito_anon"]) {
+    try { for (const r of await getQuery(sql)) { const l = String(r.login || "").toLowerCase(); if (want.has(l)) out.add(l); } }
+    catch (e) { if (!/no such table/i.test(String(e && e.message))) for (const l of list) out.add(l); }
+  }
+  let CV = null;
+  try { CV = require("./chatlogview"); await CV.init(); } catch (e) { CV = null; }
+  for (const l of list) {
+    if (out.has(l)) continue;
+    let hid = true;
+    try { hid = !CV || !!CV.isHiddenLogin(l); } catch (e) { hid = true; }
+    if (hid) out.add(l);
+  }
+  return out;
+}
+/** The viewer's own linked Camfrog login (lower case) or null. */
+async function viewerLogin(userId) {
+  if (!userId) return null;
+  try {
+    const r = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0];
+    const l = r && r.camfrogUsername ? String(r.camfrogUsername).trim().toLowerCase() : "";
+    return LOGIN_RE.test(l) ? l : null;
+  } catch (e) { return null; }
+}
+const hiddenHash = (login) => { try { return require("./chatlog").hash(login); } catch (e) { return null; } };
 
 // ── rendering helpers ──
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -325,18 +369,32 @@ function preview(r) {
   return v;
 }
 
-/** The analytics page's view model. */
-async function forRoom(r, slug) {
+/** The analytics page's view model. viewer (1.99afl) = {userId} of the signed-in viewer, or null: their own private row reads
+ *  "you" instead of "someone". */
+async function forRoom(r, slug, viewer = null) {
   const md = await meta().catch(() => ({}));
   const hl = headline(r);
   const axis = hl.axis, d30 = hl.d30, d90 = axis[0];
   const days = r.days || {};
   // people: privacy per linked PATV account
-  const priv = await privateLogins([...r.regulars, ...r.mic_top].map((p) => p.login));
+  const people = [...r.regulars, ...r.mic_top].filter((p) => p && !p.anon && p.login);
+  const priv = await privateLogins(people.map((p) => p.login));
+  // 1.99afl (section K): incognito / hidden people are "someone" at their real rank (Pepe's anon rows, and any row that names a
+  // login private NOW - a stale sync); the viewer's own row says "you"
+  const masked = await maskedLogins(people.map((p) => p.login));
+  const me = viewer && viewer.userId ? await viewerLogin(viewer.userId) : null;
+  const meH = me ? hiddenHash(me) : null;
   const named = (list) => {
     const shown = [];
     let hidden = 0;
     for (const p of list) {
+      if (!p) continue;
+      if (p.anon || masked.has(p.login)) {
+        const you = !!me && (p.anon ? !!meH && p.h === meH : p.login === me);
+        // (the numbers only - never the login, the name or the hash)
+        shown.push(Object.assign(nums(p), { anon: true, you, display: you ? "you" : "someone", href: null }));
+        continue;
+      }
       const a = priv.get(p.login);
       if (a && a.private) { hidden++; continue; }
       shown.push({ ...p, href: a && a.username ? `/u/${encodeURIComponent(a.username)}` : null });
@@ -392,9 +450,10 @@ async function forRoom(r, slug) {
     heatMic: weekHeat(hows, "255,183,77", (v) => R.dur(v)),
     hasHeatMic: hows.some((v) => v > 0),
     regulars: regs.shown.map((p, i) => ({ rank: i + 1, name: p.display, href: p.href, d30: p.d30, m30: R.fmt(p.m30), mic30: p.s30 ? R.dur(p.s30) : "—",
-                                           d90: p.d90, last: R.ago(p.last) })),
+                                           d90: p.d90, last: R.ago(p.last), ...(p.anon ? { anon: true, you: !!p.you } : {}) })),
     regularsHidden: regs.hidden,
-    mic: mics.shown.map((p, i) => ({ rank: i + 1, name: p.display, href: p.href, dur: R.dur(p.s90), days: p.d90, pct: Math.max(3, (p.s90 / micMax) * 100) })),
+    mic: mics.shown.map((p, i) => ({ rank: i + 1, name: p.display, href: p.href, dur: R.dur(p.s90), days: p.d90, pct: Math.max(3, (p.s90 / micMax) * 100),
+                                     ...(p.anon ? { anon: true, you: !!p.you } : {}) })),
     micHidden: mics.hidden,
     cmds: top.map(([c, n, cat]) => ({ cmd: "!" + c, n: R.fmt(n), pct: Math.max(3, (n / cmax) * 100), color: (CAT[cat] || [0, "#90a4ae"])[1], cat: (CAT[cat] || [cat])[0] })),
     cats: cats.map(([c, n]) => ({ label: (CAT[c] || [c])[0], color: (CAT[c] || [0, "#90a4ae"])[1], n: R.fmt(n), pct: (n / catSum) * 100 })),
@@ -483,7 +542,7 @@ function register(app, { isBotToken, addUser }) {
     if (PA.isApproved(padId)) res.set("X-Robots-Tag", "noindex");
     let a = null;
     if (open) {
-      try { a = await forRoom(r, slug); } catch (e) { console.error("[roomstats] view:", e); a = null; }
+      try { a = await forRoom(r, slug, req.user && req.user.userId ? { userId: req.user.userId } : null); } catch (e) { console.error("[roomstats] view:", e); a = null; }
     }
     let bridged = false;
     try { const b = bridgeMod(); bridged = !!(b && b._rooms && [...b._rooms.values()].some((x) => x.id === r.room)); } catch (e) { bridged = false; }
@@ -491,4 +550,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, clean, forRoom, bySlug, listing, all, preview, sentenceTrim, histWhen };
+module.exports = { register, clean, forRoom, bySlug, listing, all, preview, sentenceTrim, histWhen, maskedLogins };

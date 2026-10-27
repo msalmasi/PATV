@@ -49,11 +49,24 @@
       tb.appendChild(tr);
     });
   }
+  /** 1.99afl (S3/S4): a pad's health - Pepe's people list (age of his last complete read, fresh or not, a list pause), the
+   *  last hour's failed opens / stills by code, the cards its tiles show now by reason. */
+  function ago(s) { return s == null ? 'never' : s < 90 ? s + ' s' : s < 5400 ? Math.round(s / 60) + ' min' : (s / 3600).toFixed(1) + ' h'; }
+  function healthText(p) {
+    var parts = [], l = p.list || {};
+    parts.push('list ' + (l.at ? ago(l.age_s) + ' old' : 'not read') + (l.fresh === true ? ' (fresh)' : l.fresh === false ? ' (stale)' : ''));
+    if (l.paused != null) parts.push('⏸ paused ' + ago(l.paused) + ' (list unread)');
+    var f = p.fails_1h || {}, fk = Object.keys(f);
+    parts.push(fk.length ? 'failed 1 h: ' + fk.sort().map(function (k) { return k + ' ' + f[k]; }).join(', ') : 'no failures 1 h');
+    var c = p.cards || {}, ck = Object.keys(c);
+    if (ck.length) parts.push('cards: ' + ck.sort().map(function (k) { return k + ' ' + c[k]; }).join(', '));
+    return parts.join(' · ');
+  }
   function paintPads() {
     var tb = $('mfPads');
     if (!tb) return;
     tb.textContent = '';
-    if (!V.pads || !V.pads.length) { var tr0 = el('tr'), td0 = el('td', 'No pad uses it right now.', 'muted'); td0.colSpan = 7; tr0.appendChild(td0); tb.appendChild(tr0); return; }
+    if (!V.pads || !V.pads.length) { var tr0 = el('tr'), td0 = el('td', 'No pad uses it right now.', 'muted'); td0.colSpan = 8; tr0.appendChild(td0); tb.appendChild(tr0); return; }
     V.pads.forEach(function (p) {
       var tr = el('tr');
       var a = el('a', p.title || p.room); a.href = '/p/' + encodeURIComponent(p.slug || p.room);
@@ -63,6 +76,7 @@
       tr.appendChild(el('td', String(p.live), 'num'));
       tr.appendChild(el('td', String(p.stills), 'num'));
       tr.appendChild(el('td', p.why_off ? (WHY[p.why_off] || p.why_off) : 'running' + (p.unproven_n ? ' · ' + p.unproven_n + ' unconfirmed on the mic' : '') + (p.frozen_until ? ' · ❄ frozen' : '')));
+      tr.appendChild(el('td', healthText(p), 'mf-health'));      // 1.99afl (S3)
       var act = el('td');
       if (p.on) {
         var b = el('button', 'Turn off here'); b.type = 'button'; b.className = 'btn danger';
@@ -94,6 +108,11 @@
     row('Cold opens ok / failed · warm reuses ok', [c.cold_ok || 0, c.cold_failed || 0].join(' / ') + ' · ' + (c.warm_ok || 0));
     row('Yields to a manual slot', c.yields || 0);
     row('Stills: frames / refusals', [c.still_frames || 0, c.still_refusals || 0].join(' / '));
+    // 1.99afl (S1/S3): still refusals by Pepe's code, and the "can't read the people list" alerts sent
+    var srf = Object.keys(c).filter(function (k) { return k.indexOf('still_refused:') === 0; }).map(function (k) { return k.slice(14) + ' ' + c[k]; });
+    row('Still refusals by code · list alerts sent', (srf.length ? srf.join(' · ') : '–') + ' · ' + (c.list_alerts || 0));
+    var of = Object.keys(c).filter(function (k) { return k.indexOf('open_failed:') === 0; }).map(function (k) { return k.slice(12) + ' ' + c[k]; });
+    row('Failed opens by code', of.length ? of.join(' · ') : '–');
     row('Notices: inbox / Camfrog PM / house-pad PM · first notices · failed', [c.notices_inbox || 0, c.notices_pm || 0, c.notices_pm_house || 0].join(' / ') +
         ' · ' + (c.notices_first || 0) + ' · ' + (c.notice_failed || 0));
     row('Reports: all / qualified / cuts · grab-spam hold-outs · stages cleared', [c.reports || 0, c.reports_qualified || 0, c.report_cuts || 0].join(' / ') +

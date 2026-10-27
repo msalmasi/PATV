@@ -20,6 +20,9 @@
 // - or Pepe - talks with tiles still up, the tiles dim and a strip says so (program.speaking with src); a tile showing the
 // viewer's OWN cam has 🙈 Take me off (POST /api/stage/leave); an empty program (the page keeps the view a moment) says nobody
 // is on the mic; every card says why there's no picture (cold opens off, the rate limit, Pepe's cams busy, ...).
+// 1.99afl (S2-S4): "Pepe couldn't open their cam" only for his refusal - his relay offline, the room's people list he can't read,
+// "checking their cam…" (the roster can't say yet), this browser not connecting to the video and a video that kept dropping each
+// say so; every tile carries data-why (the reason code of its card).
 //
 //   var ctl = PATVStageMic.render(host, program, {slug, onChange})    host = the stage's player box (#rmVideo)
 //   ctl.update(program) · ctl.stop() · ctl.selection()
@@ -66,7 +69,12 @@
     if (s.watch === 'blocked') return _t('js.stage.mf.blocked_tile', 'blocked for you here');
     if (s.video === 'starting') return _t('js.stage.mf.starting', 'cam starting…');
     if (s.why === 'off_cam') return _t('js.stage.mf.cam_off', 'cam off');
-    if (s.why === 'failed' || s.why === 'pepe') return _t('js.stage.mf.failed', 'Pepe couldn\'t open their cam');
+    // 1.99afl (S4): "couldn't open" is only Pepe's refusal; his relay being offline, the room's list he can't read (S3) and a
+    // cam the roster can't classify yet (S2) each say so
+    if (s.why === 'failed') return _t('js.stage.mf.failed', 'Pepe couldn\'t open their cam');
+    if (s.why === 'pepe') return _t('js.stage.mf.pepe_off', 'Pepe\'s cam relay is offline');
+    if (s.why === 'list_unread') return _t('js.stage.mf.list_unread', 'Pepe can\'t read this room\'s people list right now');
+    if (s.why === 'cam_unknown') return _t('js.stage.mf.cam_unknown', 'checking their cam…');
     // mfix: why there's no picture - not always "full"
     if (s.why === 'retry') return _t('js.stage.mf.retry', 'trying their cam again in a moment…');
     if (s.why === 'cold_off') return _t('js.stage.mf.cold_off', 'only cams already live show here right now');
@@ -74,6 +82,12 @@
     if (s.why === 'pool') return _t('js.stage.mf.pool', 'Pepe\'s cams are all busy right now');
     if (s.why === 'pad_cap') return _t('js.stage.mf.pad_cap', 'this stage\'s live cams are all in use');
     return _t('js.stage.mf.full', 'live cams are full right now');
+  }
+  /** 1.99afl (S4): the reason code a card shows (the tile's data-why). */
+  function cardWhy(s) {
+    if (s.watch && s.watch !== 'ok') return 'watch_' + s.watch;
+    if (s.video === 'starting') return 'starting';
+    return /^[a-z_]{1,24}$/.test(String(s.why || '')) ? s.why : 'full';
   }
 
   function render(host, program, ctx) {
@@ -175,14 +189,18 @@
         if (tell) post(base + '/watch', wb({ stop: true }), true).catch(function () {});
       }
       function stopStill() { clearInterval(t.still); t.still = null; img.hidden = true; img.removeAttribute('src'); }
+      /** 1.99afl (S4): the tile's data-why - why it shows a card (none while it has a picture). */
+      function setWhy(w) { if (w) e.setAttribute('data-why', String(w)); else e.removeAttribute('data-why'); }
       function showCard(text) {
         card.hidden = false; v.hidden = true; img.hidden = true;
         reason.textContent = text || '';
         tag.textContent = '';
       }
-      /** A live picture didn't work out: a card with the reason, and one more try after RETRY_MS (unless it's for good). */
-      function failed(text, forGood) {
-        t.failedAt = Date.now(); t.failText = text || ''; t.mode = 'card';
+      /** A live picture didn't work out: a card with the reason, and one more try after RETRY_MS (unless it's for good).
+       *  why (1.99afl): its data-why code. */
+      function failed(text, forGood, why) {
+        t.failedAt = Date.now(); t.failText = text || ''; t.failWhy = why || 'failed'; t.mode = 'card';
+        setWhy(t.failWhy);
         showCard(t.failText);
         clearTimeout(t.retry); t.retry = null;
         if (!forGood) t.retry = setTimeout(function () { t.retry = null; if (!stopped && tiles[t.id] === t) apply(t.s); }, RETRY_MS + 50);
@@ -197,21 +215,24 @@
             failed(d && d.code === 'budget' ? _t('js.stage.mf.full', 'live cams are full right now') : d && d.code === 'members_only' ? _t('js.stage.mf.members_only', 'only for members')
               : d && d.code === 'unavailable' ? _t('js.stage.mf.unavailable', 'isn\'t available') : d && d.state === 'ended' ? _t('js.stage.mf.starting', 'cam starting…')
               : window.PATVLiveCam && PATVLiveCam.why ? PATVLiveCam.why(d && d.code, d && d.error) : _t('js.stage.mf.failed', 'Pepe couldn\'t open their cam'),
-              !!(d && (d.code === 'members_only' || d.code === 'unavailable' || d.code === 'blocked' || d.code === 'pad_access' || d.code === 'prime')));
+              !!(d && (d.code === 'members_only' || d.code === 'unavailable' || d.code === 'blocked' || d.code === 'pad_access' || d.code === 'prime')),
+              'watch_' + (d && /^[a-z_]{1,24}$/.test(String(d.code || '')) ? d.code : d && d.state === 'ended' ? 'ended' : 'failed'));
             return;
           }
           t.beat = setInterval(function () {
             post(base + '/watch', wb({ beat: true })).then(function (k) {
               if (my !== t.gen) return;
-              if (k && (k.ok === false || k.state === 'ended')) { stopLive(false); failed(cardText(t.s)); }
+              if (k && (k.ok === false || k.state === 'ended')) { stopLive(false); failed(cardText(t.s), false, cardWhy(t.s)); }
             }).catch(function () { /* a blip: the next beat */ });
           }, BEAT_MS);
           return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); });
-        }).catch(function (er) { if (my === t.gen && !(er && er.cancelled)) { stopLive(true); failed(_t('js.stage.mf.failed', 'Pepe couldn\'t open their cam')); } });
+        // 1.99afl (S4): the server gave a ticket but this browser couldn't connect to the video (WHEP / ICE) - not Pepe's refusal
+        }).catch(function (er) { if (my === t.gen && !(er && er.cancelled)) { stopLive(true); failed(_t('js.stage.mf.connect', 'couldn\'t connect to the live video'), false, 'connect'); } });
       }
       function playing(ss, my) {
         if (my !== t.gen) { ss.close(); return; }
         t.sess = ss; t.failedAt = 0;
+        setWhy(null);
         card.hidden = true; v.hidden = false;
         v.setAttribute('aria-label', _t('js.pad.live.aria', '{name}\'s cam, live', { name: t.s.name }));
         if (ss.blocked) tapAll.hidden = false;
@@ -223,14 +244,15 @@
       function rewatch(my) {
         var t0 = Date.now();
         t.rew = (t.rew || []).filter(function (x) { return t0 - x < REWATCH_WIN_MS; });
-        var give = function () { if (my === t.gen) { stopLive(true); failed(_t('js.stage.mf.failed', 'Pepe couldn\'t open their cam')); } };
+        // 1.99afl (S4): the reconnects are used up - the video kept dropping (not a refused open)
+        var give = function () { if (my === t.gen) { stopLive(true); failed(_t('js.stage.mf.dropping', 'the live video kept dropping'), false, 'dropping'); } };
         if (t.rew.length >= REWATCH_MAX) return give();
         t.rew.push(t0);
         if (t.sess) { try { t.sess.close(); } catch (er) { /* gone */ } t.sess = null; }
         showCard(_t('js.stage.mf.reconnecting', 'reconnecting…'));
         post(base + '/watch', wb({})).then(function (d) {
           if (my !== t.gen) return null;
-          if (!d || !d.ok || !d.whep) { stopLive(true); failed(cardText(t.s)); return null; }
+          if (!d || !d.ok || !d.whep) { stopLive(true); failed(cardText(t.s), false, cardWhy(t.s)); return null; }
           return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); },
             function (er) { if (!(er && er.cancelled)) give(); });
         }).catch(give);
@@ -244,6 +266,7 @@
             if (t.mode !== 'still' || gen !== t.gen) return;
             if (d && d.state === 'ok' && typeof d.img === 'string' && d.img.indexOf('data:image/jpeg;base64,') === 0) {
               waits = 0;
+              setWhy(null);
               img.src = d.img; img.hidden = false; card.hidden = true; v.hidden = true;
               img.alt = _t('js.stage.mf.still_alt', '{name}\'s cam, a still', { name: t.s.name });
               tag.textContent = _t('js.stage.mf.still', '📷 still');
@@ -252,13 +275,14 @@
             // no picture: say why on the card instead of "starting" for ever
             if (d && d.ok === false) {
               var forGood = d.code === 'members_only' || d.code === 'unavailable' || d.code === 'blocked' || d.code === 'pad_access' || d.code === 'prime' || d.code === 'signin';
+              setWhy('still_' + (/^[a-z_]{1,24}$/.test(String(d.code || '')) ? d.code : 'refused'));
               showCard(d.code === 'members_only' ? _t('js.stage.mf.members_only', 'only for members') : d.code === 'blocked' ? _t('js.stage.mf.blocked_tile', 'blocked for you here')
                 : d.code === 'rate' ? _t('js.stage.mf.starting', 'cam starting…') : _t('js.stage.mf.unavailable', 'isn\'t available'));
               if (forGood) { clearInterval(t.still); t.still = null; }
               return;
             }
             if (d && d.state === 'pending' && ++waits < 2) return;          // Pepe is on it (one more round)
-            if (d && (d.state === 'pending' || d.state === 'refused' || d.state === 'none') && img.hidden) showCard(_t('js.stage.mf.unavailable', 'isn\'t available'));
+            if (d && (d.state === 'pending' || d.state === 'refused' || d.state === 'none') && img.hidden) { setWhy('still_' + d.state); showCard(_t('js.stage.mf.unavailable', 'isn\'t available')); }
           }).catch(function () { /* the next round */ });
         };
         load();
@@ -295,12 +319,14 @@
         if (held) want = 'card';
         else if (want !== 'live') t.failedAt = 0;
         var text = held ? t.failText : cardText(s);
+        if (want === 'card') setWhy(held ? t.failWhy : cardWhy(s));          // 1.99afl (S4): data-why
+        else if (want === 'paused') setWhy(null);
         if (want !== t.mode) {
           if (t.mode === 'live') stopLive(true);
           if (t.mode === 'still') stopStill();
           t.mode = want;
-          if (want === 'live') startLive();
-          else if (want === 'still') startStill();
+          if (want === 'live') { setWhy('starting'); startLive(); }
+          else if (want === 'still') { setWhy('starting'); startStill(); }
           else showCard(want === 'paused' ? '' : text);
         } else if (want === 'card') showCard(text);
       }

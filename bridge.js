@@ -31,6 +31,10 @@
 // CL9: the chat card's 🔍 searches the archive (chatlogsearch.js, POST /api/rooms/:slug/search, behind chatlog.search; history.find).
 // CL10: the chat card's ⋯ -> ⬇ Download chat log (chatlogexport.js, POST /api/rooms/:slug/chatlog/export + GET /p/:slug/chatlog/dl/
 // :token, behind chatlog.downloads; history.dl).
+// 1.99afl (the incognito / mic-stage spec): an anonymous mic grab / drop with no hash, from a sync carrying both kinded hash lists,
+// is stamped k3 (an incognito person's: "someone grabbed the mic" - chatlogview.privacyAt, B.1); every page-bound line and roster
+// entry is built from a whitelist (chatlogview.dress / roster, S6); photos go through userlook.avatarOf (S5: the default
+// picture is a letter bubble, never Pepe's face).
 // Pages (signed-in only — a room's chat is semi-private):
 //   GET /p                     the Pads (was /rooms; pads.js 301s the old addresses)
 //   GET /p/:slug               the pad page, with its Camfrog room live when one backs it
@@ -753,6 +757,11 @@ async function ingest(body) {
   const privacyIds = [];                   // ...and their event ids
   const shownNow = new Set();              // review 2 fix-up: hashes this batch's privacy.shown events name (so far in its order)
   const events = (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS);
+  // 1.99afl (B.1): this sync carried BOTH kinded hash lists - only a Train 3 Pepe (1.99adm on: he never sends a !bridge hide
+  // person's events) with both states loaded sends them (each is null while it failed to load). A hashless anonymous mic grab /
+  // drop in such a batch is an incognito person's: stamped k3 (page-safe, kept in bridge_feed and chat_log.d; never sent to a
+  // page - dress is a whitelist), so chatlogview shows it as "someone". Unstamped ones stay left out (fail closed).
+  const kinded = Array.isArray(body.bridge_hidden_h) && Array.isArray(body.incog_hidden_h);
   // CL2: asked BEFORE any cursor is handed out - a transcript already archived (beyond the 200 in memory) and, for 10 minutes
   // after a restart, an event already archived (Pepe re-sends a batch the old process took but never answered) are skipped
   const dup = await CL.dupes({
@@ -791,6 +800,7 @@ async function ingest(body) {
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = feedItem(ev, R.id);
     if (!it) continue;
+    if (kinded && (it.k === "mic" || it.k === "unmic") && it.u && it.u.anon && !it.ah) it.k3 = 1;   // 1.99afl (B.1, above)
     // review 2 fix-up (LOW): a NAMED chat / 🎙 line of someone the site knows is incognito before Pepe does (a website Incognito
     // ON he hasn't confirmed yet - chatlog.siteAnonSince), said after they switched it on, is kept anonymised for good - "someone",
     // its hash server-only (`ah`, archived as who "h:<hash>"), exactly like Pepe's own anonymised lines - so `!incognito off` never
@@ -946,7 +956,7 @@ async function meFor(userId) {
     if (!r) return null;
     const login = r.camfrogUsername ? String(r.camfrogUsername) : "u:" + userId;
     return { login, display: plain(r.displayname, 40) || r.username, web: true,
-             patv: { username: r.username, avatar: safeImg(r.avatar), style: cosmetics.nameStyle(r.username) || "" } };
+             patv: { username: r.username, avatar: avatarOf(r.avatar), style: cosmetics.nameStyle(r.username) || "" } };   // 1.99afl (S5)
   } catch (e) { return null; }
 }
 
@@ -1001,7 +1011,9 @@ async function resolveNames(users) {
   while (nameCache.size > NAME_MAX) nameCache.delete(nameCache.keys().next().value);
   return nameCache;
 }
-const safeImg = (u) => (typeof u === "string" && (/^https:\/\/[^\s"'<>]+$/.test(u) || /^\/[A-Za-z0-9/_.\-]+$/.test(u)) ? u : null);
+/** 1.99afl (S5): a profile photo as the bridge shows it - userlook.avatarOf's rules: https:// or a site path only, and the
+ *  default picture (Pepe's face) is "no photo" (was safeImg here, which passed the default through). */
+const avatarOf = (raw) => require("./userlook").avatarOf(raw);
 
 /** A bridge user as the page shows it: `display` = the PATV display name when the login has a live
  *  account (+ `patv` for the profile link / avatar / name colour), else the Camfrog display name,
@@ -1016,7 +1028,9 @@ function withPatv(u, C, F = null) {
   const hit = C && C.get(nameKey(login));
   const acc = hit && hit.acc;
   if (!acc) return out;
-  out.patv = { username: acc.username, avatar: safeImg(acc.avatar), style: cosmetics.nameStyle(acc.username) || "" };
+  // 1.99afl (S5): userlook.avatarOf - the default picture (/public/img/avatar.png, Pepe's face) is "no photo", so the page draws
+  // the letter bubble: no real speaker's line, roster entry or mic-stage card looks like Pepe any more
+  out.patv = { username: acc.username, avatar: avatarOf(acc.avatar), style: cosmetics.nameStyle(acc.username) || "" };
   // 1.99ir: their flair in this pad (padflair.js; F = the pad's flairs by lowercased username)
   const fl = F && acc.username ? F.get(String(acc.username).toLowerCase()) : null;
   if (fl) out.patv.flair = require("./padflair").plain(fl);

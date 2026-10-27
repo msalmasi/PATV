@@ -18,21 +18,21 @@ const S0 = 1_000_000_000_000;
 function world(opts = {}) {
   const w = { S: M.newState(), t: S0, holders: [], offcam: new Set(), cuts: new Map(), pending: new Set(), live: new Map(), held: new Set(), exactNo: new Set(),
               pad: { ...PAD, ...(opts.pad || {}) }, C: { ...C, ...(opts.C || {}) }, site: { maxLive: 4, coldLeft: 9, stillsLeft: 4, ...(opts.site || {}) },
-              why_off: null, actions: [], cams: true };
+              why_off: null, actions: [], cams: true, unknown: new Set(), listAt: null, listFresh: null };
   w.grab = (login, since) => { if (!w.holders.some((h) => h.login === login)) w.holders.push({ login, since: since == null ? undefined : since }); };
   w.drop = (login) => { w.holders = w.holders.filter((h) => h.login !== login); };
   w.input = () => {
     const logins = new Set([...w.holders.map((h) => h.login), ...w.S.tiles.map((x) => x.login)]);
     const elig = new Map(), sess = new Map();
     for (const l of logins) {
-      elig.set(l, w.cuts.get(l) || (w.pending.has(l) ? "pending" : w.offcam.has(l) ? "off_cam" : "ok"));
+      elig.set(l, w.cuts.get(l) || (w.pending.has(l) ? "pending" : w.offcam.has(l) ? "off_cam" : w.unknown.has(l) ? "cam_unknown" : "ok"));
       const st = w.live.get(l) || "none";
       // Pepe reports a live relay as exact (opened / verified by the exact name) unless the test says he can't (exactNo)
       sess.set(l, { state: st, held: w.held.has(l), exact: w.exactNo.has(l) ? false : st === "live" ? true : null, viewers: 0 });
     }
     // like micfollow.js: what's LEFT site-wide (this pad's current stills already count)
     const site = { ...w.site, stillsLeft: Math.max(0, w.site.stillsLeft - w.S.tiles.filter((x) => x.video === "still").length) };
-    return { why_off: w.why_off, holders: w.holders.slice(), unproven_n: 0, elig, sess, pad: w.pad, room: { cams: w.cams }, site };
+    return { why_off: w.why_off, holders: w.holders.slice(), unproven_n: 0, elig, sess, pad: w.pad, room: { cams: w.cams, listAt: w.listAt, listFresh: w.listFresh }, site };
   };
   w.step = () => {
     const r = M.step(w.S, w.input(), w.C, w.t);
@@ -322,11 +322,13 @@ test("15. relay endings: opted_out / ended_by cut; off cam -> card; failures -> 
     assert.ok(a2.some((a) => a.a === "span_close" && a.reason === "cut:" + code), code);
     assert.ok(!(g.S.backoff.get("y") > g.t), code + ": no failure backoff (it's a cut)");
   }
-  // a refused still -> card + backoff
+  // a refused still -> card + backoff when Pepe says it's for good (1.99afl S1: a hard code); an older Pepe's refusal with no
+  // code is soft (another try soon, never the 10 minutes at once - test 37)
   const s = world({ site: { coldLeft: 0, stillsLeft: 2 } }); s.grab("z"); s.at(0); s.at(2);
   assert.equal(s.S.tiles[0].video, "still");
-  M.stillFailed(s.S, "z", s.C, s.t);
+  M.stillFailed(s.S, "z", s.C, s.t, "not_public");
   assert.deepEqual([s.S.tiles[0].video, s.S.tiles[0].why], ["card", "failed"]);
+  assert.ok(s.S.backoff.get("z") > s.t);
   // yielding to a manual slot: no live picture for a minute, a still is fine
   const y = world({ site: { coldLeft: 9, stillsLeft: 2 } }); y.grab("k"); y.at(0); y.at(2);
   M.yieldTile(y.S, "k", y.t);
@@ -876,4 +878,182 @@ test("36. mfix card reasons: cold opens off / the rate limit / the site's relays
   p.grab("a"); p.grab("b"); p.at(0); p.at(2);
   assert.ok(p.S.tiles.some((x) => x.why === "pad_cap"));
   for (const k of ["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap"]) assert.ok(M.CARD_WHYS.includes(k));
+});
+
+// ── 1.99afl: the incognito / mic-stage spec, F.1 S1 / S1b / S2 / S4 ──
+const vw = (w, l) => { const x = w.S.tiles.find((y) => y.login === l); return x ? [x.video, x.why] : null; };
+
+test("37. 1.99afl S1: a refused still is soft unless Pepe says it's for good - another try after soft_retry_s, no still while that retry holds; hard codes back off", () => {
+  // no code (an older Pepe), Pepe's soft codes and a code this build doesn't know: "trying again", never the 10 minutes at once
+  for (const code of [null, "busy", "noswitch", "start_timeout", "wrong_room", "something_new"]) {
+    const w = world({ site: { coldLeft: 0, stillsLeft: 2 } });
+    w.grab("z"); w.at(0); w.at(2);
+    assert.equal(w.S.tiles[0].video, "still");
+    const acts = M.stillFailed(w.S, "z", w.C, w.t, code);
+    assert.ok(acts.some((a) => a.a === "still_stop"), String(code));
+    assert.deepEqual(vw(w, "z"), ["card", "retry"], String(code));
+    assert.ok(!(w.S.backoff.get("z") > w.t), "no 10-minute backoff: " + code);
+    w.actions = [];
+    w.at(3);
+    assert.ok(!w.actions.some((a) => a.a === "still"), "no still while the soft retry holds the person: " + code);
+    assert.deepEqual(vw(w, "z"), ["card", "retry"]);
+    w.at(2 + w.C.soft_retry_s + 1);
+    assert.equal(w.S.tiles[0].video, "still", "tried again after soft_retry_s: " + code);
+  }
+  for (const code of ["not_public", "not_on_cam", "ambiguous", "failed"]) {
+    const w = world({ site: { coldLeft: 0, stillsLeft: 2 } });
+    w.grab("z"); w.at(0); w.at(2);
+    M.stillFailed(w.S, "z", w.C, w.t, code);
+    assert.deepEqual(vw(w, "z"), ["card", "failed"], code);
+    assert.ok(w.S.backoff.get("z") > w.t + 9 * 60 * 1000, code + ": the full backoff");
+    w.at(60);
+    assert.notEqual(w.S.tiles[0].video, "still", code);
+  }
+  // soft_fails_max soft refusals within open_fail_backoff_min -> then the full backoff
+  const m = world({ site: { coldLeft: 0, stillsLeft: 2 } });
+  m.grab("z"); m.at(0); m.at(2);
+  let s = 2;
+  for (let i = 1; i < m.C.soft_fails_max; i++) {
+    M.stillFailed(m.S, "z", m.C, m.t, "busy");
+    assert.deepEqual(vw(m, "z"), ["card", "retry"], "soft " + i);
+    s += m.C.soft_retry_s + 1; m.at(s);
+    assert.equal(m.S.tiles[0].video, "still");
+  }
+  M.stillFailed(m.S, "z", m.C, m.t, "busy");
+  assert.deepEqual(vw(m, "z"), ["card", "failed"], "soft_fails_max -> the backoff");
+});
+
+test("38. 1.99afl S1: a live open that soft-fails never starts a still in the same breath (the old chain: still refused -> 10 minutes of 'couldn't open')", () => {
+  const w = world({ site: { coldLeft: 9, stillsLeft: 2 } });
+  w.grab("a"); w.at(0);
+  w.t = S0 + 2000;
+  assert.ok(M.step(w.S, w.input(), w.C, w.t).actions.some((a) => a.a === "hold" && a.login === "a"));
+  M.holdDone(w.S, "a", false, "busy", w.C, w.t);
+  assert.deepEqual(vw(w, "a"), ["card", "retry"]);
+  w.actions = [];
+  for (let s = 3; s <= 2 + w.C.soft_retry_s - 1; s++) w.at(s);
+  assert.ok(!w.actions.some((a) => a.a === "still" || a.a === "hold"), "no still, no open while the soft retry holds");
+  assert.ok(!(w.S.backoff.get("a") > w.t), "and no backoff");
+  w.at(2 + w.C.soft_retry_s + 1);
+  assert.ok(w.actions.some((a) => a.a === "hold" && a.login === "a"), "the live open is tried again");
+});
+
+test("39. 1.99afl S1b: list_unread pauses the ROOM - no exact opens or stills, nothing counted, no backoff; a newer complete read resumes it, clears the pause's blocks, one attempt each", () => {
+  const w = world({ site: { coldLeft: 9, stillsLeft: 4 } });
+  w.listAt = S0 - 60 * 1000; w.listFresh = true;
+  for (const l of ["a", "b", "c"]) w.grab(l);
+  w.t = S0; M.step(w.S, w.input(), w.C, w.t);
+  w.t = S0 + 2000;
+  const holds = M.step(w.S, w.input(), w.C, w.t).actions.filter((a) => a.a === "hold").map((a) => a.login).sort();
+  assert.deepEqual(holds, ["a", "b", "c"]);
+  // a's and b's exact opens come back "list unread"; c's relay was opened
+  M.holdDone(w.S, "a", false, "list_unread", w.C, w.t);
+  assert.ok(w.S.listPause, "the room pauses");
+  M.holdDone(w.S, "b", false, "list_unread", w.C, w.t);
+  M.holdDone(w.S, "c", true, null, w.C, w.t);
+  w.held.add("c"); w.live.set("c", "connecting");
+  assert.deepEqual(vw(w, "a"), ["card", "list_unread"]);
+  assert.deepEqual(vw(w, "b"), ["card", "list_unread"]);
+  // c's relay then fails for a hard reason while paused: its backoff is a pause-era one
+  M.sessionEnded(w.S, "c", "open_failed", w.C, w.t);
+  w.held.delete("c"); w.live.set("c", "ended");
+  assert.ok(w.S.backoff.get("c") > w.t);
+  w.actions = [];
+  for (let s = 3; s <= 40; s++) w.at(s);
+  assert.ok(!w.actions.some((a) => a.a === "hold" || a.a === "still"), "no exact open, no still while paused");
+  assert.equal(w.S.soft.size, 0, "never counted as a soft failure");
+  for (const l of ["a", "b"]) { assert.ok(!(w.S.backoff.get(l) > w.t), l + ": no backoff"); assert.ok(!(w.S.liveBlock.get(l) > w.t), l + ": no liveBlock"); }
+  for (const l of ["a", "b", "c"]) assert.deepEqual(vw(w, l), ["card", "list_unread"], l + ": every tile without a live relay says why");
+  // a stale read, or the same complete read again, doesn't end it
+  w.listAt = S0 + 30 * 1000; w.listFresh = false; w.at(41);
+  w.listAt = S0 - 60 * 1000; w.listFresh = true; w.at(42);
+  assert.ok(w.S.listPause, "still paused");
+  // a newer complete read: resumed - the pause's backoff (c) is cleared and each tile gets one attempt
+  w.listAt = S0 + 42 * 1000; w.listFresh = true; w.actions = [];
+  w.at(43);
+  assert.equal(w.S.listPause, null);
+  assert.deepEqual(w.actions.filter((a) => a.a === "hold").map((a) => a.login).sort(), ["a", "b", "c"]);
+  assert.ok(!(w.S.backoff.get("c") > w.t), "the pause-era backoff is gone");
+  // a relay that ends "list unread" and a still refused "list unread" pause too; without a newer read the pause tries once more
+  // after LIST_PAUSE_MAX_MS (and pauses again if the list is still unread)
+  const r = world(); r.grab("y"); r.at(0); r.at(2);
+  M.sessionEnded(r.S, "y", "list_unread", r.C, r.t);
+  assert.ok(r.S.listPause);
+  assert.deepEqual(vw(r, "y"), ["card", "list_unread"]);
+  assert.equal(r.S.soft.size, 0);
+  const s = world({ site: { coldLeft: 0, stillsLeft: 2 } }); s.grab("z"); s.at(0); s.at(2);
+  assert.equal(s.S.tiles[0].video, "still");
+  M.stillFailed(s.S, "z", s.C, s.t, "list_unread");
+  assert.deepEqual(vw(s, "z"), ["card", "list_unread"]);
+  assert.ok(!(s.S.backoff.get("z") > s.t) && !(s.S.liveBlock.get("z") > s.t));
+  s.actions = [];
+  s.at(60);
+  assert.ok(!s.actions.some((a) => a.a === "still"));
+  s.at(2 + M.LIST_PAUSE_MAX_MS / 1000 + 1);
+  assert.equal(s.S.listPause, null);
+  assert.equal(s.S.tiles[0].video, "still", "one more try after LIST_PAUSE_MAX_MS");
+  for (const k of ["list_unread", "cam_unknown", "pepe"]) assert.ok(M.CARD_WHYS.includes(k), k);
+  assert.ok(M.FAIL_WHYS.has("list_unread") && M.SOFT_WHYS.has("list_unread"));
+});
+
+test("40. 1.99afl S2: cam_unknown is 'checking their cam…' - no blind open or still; one exact open per list-read epoch, only after a read that began after the grab; a live relay keeps running", () => {
+  const w = world({ site: { coldLeft: 9, stillsLeft: 4 } });
+  w.unknown.add("u");
+  w.listAt = S0 - 60 * 1000; w.listFresh = true;              // the last complete read was before the grab
+  w.grab("u", S0); w.at(0); w.at(2);
+  assert.deepEqual(vw(w, "u"), ["card", "cam_unknown"], "on the stage, checking");
+  assert.ok(!w.actions.some((a) => a.a === "hold" || a.a === "still"), "no blind open, no still");
+  w.listAt = S0 + 5 * 1000; w.listFresh = false; w.at(6);      // a read after the grab, but not a complete one
+  assert.ok(!w.actions.some((a) => a.a === "hold"));
+  w.listFresh = true;                                          // ... complete, and it still can't say: ONE exact open
+  w.t = S0 + 7000;
+  const acts = M.step(w.S, w.input(), w.C, w.t).actions;
+  assert.equal(acts.filter((a) => a.a === "hold" && a.login === "u").length, 1);
+  M.holdDone(w.S, "u", false, "busy", w.C, w.t);                // (it didn't work out)
+  w.actions = [];
+  for (let s = 8; s <= 8 + w.C.soft_retry_s + 5; s++) w.at(s);
+  assert.ok(!w.actions.some((a) => a.a === "hold" || a.a === "still"), "at most one exact open per epoch");
+  assert.deepEqual(vw(w, "u"), ["card", "cam_unknown"]);
+  w.listAt = S0 + 40 * 1000; w.actions = [];                   // the next complete read: the next epoch's one try
+  w.at(41);
+  assert.equal(w.actions.filter((a) => a.a === "hold" && a.login === "u").length, 1);
+  // speech: a cam_unknown holder is someone the stage can show (never "someone else is speaking")
+  assert.equal(w.S.speaking, null);
+  // cold opens unavailable: never a still instead
+  const n = world({ site: { coldLeft: 0, stillsLeft: 4 } });
+  n.unknown.add("n"); n.listAt = S0 + 5000; n.listFresh = true;
+  n.grab("n", S0); n.at(0); n.at(6); n.at(10);
+  assert.ok(!n.actions.some((a) => a.a === "still"), "no still for a cam the roster can't classify");
+  // a live relay proves the cam is on: cam_unknown never ends it
+  const v = world(); v.grab("x"); v.at(0); v.at(2); v.live.set("x", "live"); v.at(3);
+  assert.equal(v.S.tiles[0].video, "live");
+  v.unknown.add("x"); v.actions = [];
+  for (let s = 4; s <= 30; s++) v.at(s);
+  assert.equal(v.S.tiles[0].video, "live");
+  assert.ok(!v.actions.some((a) => a.a === "release"));
+  // a warm relay (it runs: the cam IS on) may be held while the roster can't say
+  const k = world(); k.unknown.add("k"); k.live.set("k", "live");
+  k.grab("k"); k.at(0); k.at(2);
+  assert.ok(k.actions.some((a) => a.a === "hold" && a.login === "k" && a.cold === false));
+  // a still tile whose cam the roster stops knowing stops its still
+  const t = world({ site: { coldLeft: 0, stillsLeft: 2 } }); t.grab("t"); t.at(0); t.at(2);
+  assert.equal(t.S.tiles[0].video, "still");
+  t.unknown.add("t"); t.actions = []; t.at(3);
+  assert.ok(t.actions.some((a) => a.a === "still_stop"));
+  assert.deepEqual(vw(t, "t"), ["card", "cam_unknown"]);
+});
+
+test("41. 1.99afl S4: Pepe's cam relay not there ('nopepe') says so on the card while it's tried again soon (no still meanwhile)", () => {
+  const h = world({ site: { coldLeft: 9, stillsLeft: 2 } });
+  h.grab("y"); h.at(0);
+  h.t = S0 + 2000;
+  M.step(h.S, h.input(), h.C, h.t);
+  M.holdDone(h.S, "y", false, "nopepe", h.C, h.t);
+  assert.deepEqual(vw(h, "y"), ["card", "pepe"]);
+  h.actions = [];
+  h.at(3); h.at(10);
+  assert.deepEqual(vw(h, "y"), ["card", "pepe"]);
+  assert.ok(!h.actions.some((a) => a.a === "still" || a.a === "hold"));
+  h.at(2 + h.C.soft_retry_s + 1);
+  assert.ok(h.actions.some((a) => a.a === "hold" && a.login === "y"), "tried again");
 });
