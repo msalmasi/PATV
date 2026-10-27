@@ -206,3 +206,70 @@ test("the toggle (owner J-18): on until turned off - every page shows the real n
     assert.ok(rows[1].ended != null);
   } finally { await runQuery("UPDATE users SET class = 'Admin' WHERE userId = 'u_admin'"); }
 });
+
+test("review fix: a Staff member's owner_grant (CL6's 'read the earlier chat era', chatlogmod.ownerGrant) never stands in for the 90 days - an owner of 10 days with it gets 403 and NO log row; owner_since = 0 (the archive's 'first owner seen') with no owner event fails closed", async () => {
+  await runQuery("DELETE FROM seethrough_log");
+  await runQuery("DELETE FROM seethrough_toggle");
+  await runQuery("DELETE FROM room_events");
+  const alias = frogs(await (await get("/p/frog-pad/analytics")).text())[0];
+  try {
+    await runQuery("UPDATE chatlog_rooms SET owner_since = ?, owner_grant = ? WHERE room_id = ?", [Date.now() - 10 * DAY, Date.now() - 5 * DAY, PAD]);
+    assert.equal((await post("/p/frog-pad/analytics/reveal", "u_owner", { row: alias })).status, 403, "owner_grant + 10 days: no (D-15, J-2)");
+    assert.equal((await post("/p/frog-pad/analytics/seethrough", "u_owner", { on: true })).status, 403, "nor the toggle");
+    assert.equal(await roomstats.seeThroughRole({ userId: "u_owner" }, PAD), null);
+    assert.doesNotMatch(await (await get("/p/frog-pad/analytics", "u_owner")).text(), /id="raSee"|class="ra-rv"/, "no controls");
+    // owner_since = 0: only an 'owner' event can date the ownership
+    await runQuery("UPDATE chatlog_rooms SET owner_since = 0, owner_grant = NULL WHERE room_id = ?", [PAD]);
+    assert.equal((await post("/p/frog-pad/analytics/reveal", "u_owner", { row: alias })).status, 403, "owner_since 0, no owner event: no (not 'since 1970')");
+    assert.equal((await logRows()).length, 0, "no row for any of it");
+    await runQuery("INSERT INTO room_events (room_id, ts, what, actor, detail) VALUES (?, ?, 'owner', 'seed', 'u_owner')", [PAD, Date.now() - 95 * DAY]);
+    assert.equal(await roomstats.seeThroughRole({ userId: "u_owner" }, PAD), "owner", "owner_since 0 + an owner event 95 days back: yes");
+    await runQuery("UPDATE room_events SET ts = ? WHERE room_id = ?", [Date.now() - 30 * DAY, PAD]);
+    assert.equal(await roomstats.seeThroughRole({ userId: "u_owner" }, PAD), null, "owner_since 0 + an owner event 30 days back: no");
+    assert.equal(await roomstats.seeThroughRole({ userId: "u_admin" }, PAD), "admin", "admins are untouched");
+  } finally {
+    await runQuery("UPDATE chatlog_rooms SET owner_since = ?, owner_grant = NULL WHERE room_id = ?", [Date.now() - 100 * DAY, PAD]);
+    await runQuery("DELETE FROM room_events");
+  }
+});
+
+test("review fix: 'Hide real names' works from the no-referrer page in any browser - turning the toggle OFF needs neither the origin check nor the right (it only shows less); turning it ON still does", async () => {
+  await runQuery("DELETE FROM seethrough_log");
+  await runQuery("DELETE FROM seethrough_toggle");
+  const raw = (body, hdrs) => fetch(base + "/p/frog-pad/analytics/seethrough", { method: "POST", headers: { "content-type": "application/json", "x-test-user": "u_admin", ...hdrs },
+                                                                                 body: JSON.stringify(body) });
+  assert.equal((await raw({ on: true }, { "x-requested-with": "fetch", origin: "null" })).status, 403, "ON with 'Origin: null': refused");
+  assert.equal((await raw({ on: true }, {})).status, 403, "ON with no fetch headers: refused");
+  assert.equal((await logRows()).length, 0);
+  assert.equal((await post("/p/frog-pad/analytics/seethrough", "u_admin", { on: true })).status, 200);
+  for (const hdrs of [{ "x-requested-with": "fetch", origin: "null" }, { "x-requested-with": "fetch" }]) {
+    const r = await raw({ on: false }, hdrs);
+    assert.equal(r.status, 200, JSON.stringify(hdrs));
+    assert.deepEqual(await r.json(), { ok: true, on: false });
+  }
+  const rows = await logRows();
+  assert.equal(rows.length, 1);
+  assert.ok(rows[0].ended != null && rows[0].ref === "off:viewer", "closed by the viewer");
+  assert.equal(await require(path.join(repo, "seethrough")).toggleOf("u_admin", roomstats.SEE_TOGGLE, PAD), null);
+  for (const n of NEEDLES) assert.ok(!(await (await get("/p/frog-pad/analytics", "u_admin")).text()).includes(n), n + " after off");
+  // signed out: still 401 (nobody's toggle to turn off)
+  assert.equal((await fetch(base + "/p/frog-pad/analytics/seethrough", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on: false }) })).status, 401);
+  // the page's own fetches ask for a same-origin Referer (the page is no-referrer while real names are on)
+  assert.match(fs.readFileSync(path.join(repo, "views", "room-analytics.ejs"), "utf8"), /referrerPolicy: 'same-origin'/);
+});
+
+test("review fix: two 'on' requests at the same moment leave ONE log row (the toggle's), never a second one nothing closes", async () => {
+  await runQuery("DELETE FROM seethrough_log");
+  await runQuery("DELETE FROM seethrough_toggle");
+  const ST = require(path.join(repo, "seethrough"));
+  const args = { userId: "u_admin", role: "admin", scope: roomstats.SEE_TOGGLE, roomId: PAD };
+  const got = await Promise.all([ST.toggleOn(args), ST.toggleOn(args), ST.toggleOn(args)]);
+  const rows = await logRows();
+  assert.equal(rows.length, 1, JSON.stringify(rows));
+  assert.equal(got.filter((g) => g.fresh).length, 1, "one of them turned it on");
+  for (const g of got) assert.equal(g.logId, rows[0].id, "all point at the one row");
+  assert.equal((await ST.toggleOf("u_admin", roomstats.SEE_TOGGLE, PAD)).log_id, rows[0].id);
+  await ST.toggleOff({ userId: "u_admin", scope: roomstats.SEE_TOGGLE, roomId: PAD });
+  assert.ok((await logRows())[0].ended != null, "and off closes it");
+  await assert.rejects(ST.toggleUsed(null, ["x"]), /no log row/, "a toggle without its row never draws unlogged");
+});

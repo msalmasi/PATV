@@ -374,15 +374,19 @@ async function realLogins(rows) {
   for (const p of priv) out.set(p.key, p.login || (p.h && byH.get(p.h)) || null);
   return out;
 }
-/** D-15: has userId owned pad roomId for the whole board? The chat archive's owner era (chatlog_rooms: owner_since, or a staff
- *  owner_grant - chatlogview's window) and the pad's last owner change (room_events) - the later one counts. No row: no. */
+/** D-15: has userId owned pad roomId for the whole board? The chat archive's owner era (chatlog_rooms.owner_since) and the pad's
+ *  last owner change (room_events 'owner') - the LATER one counts, and it must be >= 90 days back. No row: no.
+ *  Review fixes (1.99afn): chatlog_rooms.owner_grant is NOT read - it is CL6's "the owner may read the earlier chat era" grant,
+ *  which any Staff member can set (chatlogmod.ownerGrant), and Staff have no see-through (J-2), so they can't hand it out either.
+ *  owner_since = 0 is the archive's "first owner seen" value (chatlog.rkInTx), not "owner since 1970": with no 'owner' event to
+ *  date the ownership it fails closed (no). */
 async function ownerEraCovers(roomId, userId, t) {
-  const row = (await getQuery("SELECT owner_id, owner_since, owner_grant FROM chatlog_rooms WHERE room_id = ?", [String(roomId)]))[0];
+  const row = (await getQuery("SELECT owner_id, owner_since FROM chatlog_rooms WHERE room_id = ?", [String(roomId)]))[0];
   if (!row || String(row.owner_id || "") !== String(userId)) return false;
-  if (row.owner_grant != null) return true;
-  let since = Number(row.owner_since) || 0;
   const ev = (await getQuery("SELECT MAX(ts) AS ts FROM room_events WHERE room_id = ? AND what = 'owner'", [String(roomId)]))[0];
-  if (ev && ev.ts != null) since = Math.max(since, Number(ev.ts) || 0);
+  const evTs = ev && ev.ts != null ? Number(ev.ts) || 0 : 0;
+  const since = Math.max(Number(row.owner_since) || 0, evTs);
+  if (!(since > 0)) return false;                              // nothing dates the ownership: fail closed
   return since <= t - OWNER_ERA_MS;
 }
 /** Who may reveal frog names on pad padId: "admin" (chatlog.see_through, every pad) | "owner" (their own pad, D-15) | null. A check
@@ -739,10 +743,14 @@ function register(app, { isBotToken, addUser }) {
   // 1.99afn see-through (owner J-18 adapted: a row, or a toggle that stays on until turned off) - fetch-only POSTs from this site;
   // never a GET: a link can't reveal anything or write a log row
   const NOPE = "Only PATV admins - and a pad's owner, on their own pad once they have owned it for the 90 days the boards cover - can see who is behind a frog name.";
+  // needRole = false: turning the toggle OFF. Review fix: that needs neither the right nor the same-origin check - it only ever
+  // shows less, and the page it comes from is served with Referrer-Policy: no-referrer, which some browsers answer with
+  // "Origin: null" on a POST (authGuard.originState): a strict check there could leave real names on with no way to hide them.
+  // (The page's fetches also ask for referrerPolicy "same-origin", so a same-site Referer / Origin goes along where it can.)
   async function seeCtx(req, res, needRole = true) {
     res.set("Cache-Control", "private, no-store");
     res.set("Referrer-Policy", "no-referrer");
-    if (!guard.sameOriginFetch(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return null; }
+    if (needRole && !guard.sameOriginFetch(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return null; }
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
     const ctx = await padFor(req).catch(() => null);
     if (!ctx || ctx.hidden) { res.status(404).json({ ok: false, error: "No analytics for that pad." }); return null; }
@@ -772,7 +780,7 @@ function register(app, { isBotToken, addUser }) {
   app.post("/p/:slug/analytics/seethrough", addUser, async (req, res) => {
     try {
       const on = !!(req.body && (req.body.on === true || req.body.on === "1" || req.body.on === "on"));
-      const ctx = await seeCtx(req, res, on);                       // turning it OFF never needs the right
+      const ctx = await seeCtx(req, res, on);                       // turning it OFF never needs the right (or the origin check)
       if (!ctx) return;
       if (on) await ST.toggleOn({ userId: req.user.userId, role: ctx.role, scope: SEE_TOGGLE, roomId: ctx.padId, reason: req.body && req.body.reason });
       else await ST.toggleOff({ userId: req.user.userId, scope: SEE_TOGGLE, roomId: ctx.padId, why: "viewer" });

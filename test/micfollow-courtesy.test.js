@@ -71,7 +71,8 @@ test("a real account: ONE PM (through Pepe, '!livecam off', the homepage) + ONE 
   assert.equal(pm.length, 1);
   assert.equal(pm[0].by, "pepe-bot", "no pad owner known: Pepe's own account (a house pad)");
   assert.match(pm[0].text, /!livecam off/);
-  assert.match(pm[0].text, /PATV homepage to everyone if the pad is Public/, "owner D-1");
+  assert.match(pm[0].text, /to everyone on the PATV homepage if the pad is Public/, "owner D-1");
+  assert.match(pm[0].text, /Other pads with mic follows do too/, "review fix: the only notice names the other pads");
   const b = await box("u_real");
   assert.equal(b.length, 1, "one silent inbox row (rooms.notify would PM again: inbox.add never does)");
   assert.match(b[0].body, /only notice you'll get/);
@@ -129,9 +130,49 @@ test("the PM fits 300 characters with 40-character names and keeps '!livecam off
       const s = MF.pmText(T, key, room, pad, 2, "https://publicaccess.tv/p/" + slug);
       assert.ok(s.length <= 300, key + " " + s.length);
       assert.match(s, /!livecam off/, key);
-      if (room.length < 20) assert.match(s, /https:\/\/publicaccess\.tv\/p\//, key + ": the link fits with ordinary names");
+      // (review fix: pm_once names the other pads now - its link fits with names up to ~15 characters, pm_home's up to ~19)
+      if (room.length < (key === "mf.notice.pm_once" ? 16 : 20)) assert.match(s, /https:\/\/publicaccess\.tv\/p\//, key + ": the link fits with ordinary names");
     }
   }
+  // review fix: the ONE notice names the other pads too - someone told on pad A and later shown on pad B was told B exists
+  assert.match(MF.pmText(T, "mf.notice.pm_once", "Room", "Pad", 2, "https://publicaccess.tv/p/pad"), /Other pads with mic follows do too/);
+});
+
+test("review fix: every locale that has the PM keys keeps '!livecam off' within 300 characters (60-character names); a translation too long for that, or one that lost the command, is sent in English - never cut at the end", () => {
+  const I18N = require(path.join(repo, "i18n"));
+  const en = I18N.tFor("en");
+  const dir = path.join(repo, "locales");
+  const long = ["R".repeat(60), "P".repeat(60), "https://publicaccess.tv/p/" + "s".repeat(60)];
+  let checked = 0;
+  for (const f of fs.readdirSync(dir).filter((x) => /^[a-z]{2}(-[A-Z]{2})?\.json$/.test(x))) {
+    const cat = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+    const lang = f.replace(/\.json$/, "");
+    for (const key of ["mf.notice.pm_once", "mf.notice.pm_home"]) {
+      if (typeof cat[key] !== "string") continue;
+      checked++;
+      for (const [room, pad, url] of [long, ["Lounge", "Lounge", "https://publicaccess.tv/p/lounge"]]) {
+        const s = MF.pmText(I18N.tFor(lang), key, room, pad, 2, url, en);
+        assert.ok(s.length <= 300, `${lang} ${key}: ${s.length}`);
+        assert.ok(s.includes("!livecam off"), `${lang} ${key}: the opt-out`);
+      }
+    }
+  }
+  assert.ok(checked >= 2, "at least English's two keys");
+  // a translation ~1.4x the English (the opt-out at its end, where the old last resort cut it off) -> the English text, whole
+  const wordy = (key, v) => "Bilgilendirme ".repeat(6) + en(key, v) + " (lütfen dikkat edin)".repeat(3);
+  for (const key of ["mf.notice.pm_once", "mf.notice.pm_home"]) {
+    const s = MF.pmText(wordy, key, long[0], long[1], 2, long[2], en);
+    assert.ok(s.length <= 300 && s.includes("!livecam off"), key);
+    assert.equal(s, MF.pmText(en, key, long[0], long[1], 2, long[2], en), key + ": English, not a cut translation");
+    // a translation that dropped the command -> English
+    const lost = MF.pmText((k, v) => en(k, v).replace("!livecam off", "livecam kapat"), key, "Lounge", "Lounge", 2, "https://x.y/p/l", en);
+    assert.ok(lost.includes("!livecam off"), key + ": English when the translation lost the command");
+  }
+  // the very last resort (no text fits even in English - never the case for the real keys): the middle goes, the opt-out stays
+  const huge = () => "x".repeat(400) + " Stop it: !livecam off.";
+  const s = MF.pmText(huge, "mf.notice.pm_once", "R", "P", 2, "https://x.y", huge);
+  assert.ok(s.length <= 300, String(s.length));
+  assert.ok(s.endsWith("!livecam off."), s.slice(-40));
 });
 
 test("retention: the 180-day purge of the pads' notices never touches the courtesy rows; account deletion removes theirs; the export carries it", async () => {

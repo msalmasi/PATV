@@ -645,13 +645,28 @@ const COURTESY_V = 2;          // the courtesy text's version: 2 = it says the c
 const HOME_NOTICE_V = 2;       // D-3: told with an older text -> one short PM the first time they'd show on the homepage (homeCourtesy)
 const PM_MAX = 300;            // a Camfrog PM is cut at 300 characters
 const siteUrl = () => process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
-/** The PM: its own text, then the link - at most PM_MAX characters. Long room / pad names are shortened first, then the link is
- *  left off: the way to stop it ("!livecam off") is always in it. */
-function pmText(T, key, room, pad, n, url) {
-  const at = (len) => T(key, { room: String(room).slice(0, len), pad: String(pad).slice(0, len), n });
-  for (const len of [40, 24, 14]) { const text = at(len); if ((text + " " + url).length <= PM_MAX) return text + " " + url; }
-  for (const len of [40, 24, 14]) { const text = at(len); if (text.length <= PM_MAX) return text; }
-  return at(14).slice(0, PM_MAX);
+const OPT_OUT = "!livecam off";
+/** The PM: its own text, then the link - at most PM_MAX characters, and ALWAYS with the way to stop it ("!livecam off"): for most
+ *  people this PM is the only notice they ever get. Long room / pad names are shortened first, then the link is left off. Review
+ *  fix: a translation that still doesn't fit (Turkish runs ~1.34x the English) or lost the command is replaced by the English
+ *  text, which always fits (test: every locale with the key); the very last resort cuts the MIDDLE, never the end.
+ *  Ten = English's T (tests). */
+function pmText(T, key, room, pad, n, url, Ten = null) {
+  const fits = (s) => s.length <= PM_MAX && s.includes(OPT_OUT);
+  const tryWith = (t) => {
+    const at = (len) => String(t(key, { room: String(room).slice(0, len), pad: String(pad).slice(0, len), n }));
+    for (const len of [40, 24, 14]) { const s = at(len) + " " + url; if (fits(s)) return s; }
+    for (const len of [40, 24, 14, 8]) { const s = at(len); if (fits(s)) return s; }
+    return null;
+  };
+  const en = Ten || require("./i18n").tFor("en");
+  const got = tryWith(T) || tryWith(en);
+  if (got) return got;
+  let s = String(en(key, { room: String(room).slice(0, 8), pad: String(pad).slice(0, 8), n }));
+  if (!s.includes(OPT_OUT)) s += " " + OPT_OUT;
+  if (s.length <= PM_MAX) return s;
+  const tail = s.slice(s.lastIndexOf(OPT_OUT));
+  return s.slice(0, PM_MAX - tail.length - 2).trimEnd() + "… " + tail;
 }
 /** What `login`, shown on pad P, is sent and how (read before the transaction): the PM (always, unless a real account switched
  *  "stage" PMs off - then the inbox row is the notice, D-8), the silent inbox row (real accounts only: an auto account has nobody

@@ -10,7 +10,7 @@
 // person revealed (spec E.5); admins read them at /admin/bridge#seethrough. The capability is chatlog.see_through
 // (siteperms-core.js: Admin, locked "privacy" - Staff never hold it, owner decision J-2).
 "use strict";
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const KEEP_MS = 180 * 864e5;
 const SCOPE_RE = /^[a-z_]{2,32}$/;
@@ -52,17 +52,28 @@ async function toggleOf(userId, scope, roomId) {
   return (await getQuery("SELECT on_at, log_id FROM seethrough_toggle WHERE user_id = ? AND scope = ? AND room_id = ?",
                          [String(userId), scopeOf(scope), String(roomId)]))[0] || null;
 }
-/** Turn the toggle on (a row in the log). Already on: nothing new. -> {on: true, logId, fresh} */
+/** Turn the toggle on (a row in the log). Already on: nothing new. -> {on: true, logId, fresh}
+ *  Review fix: ONE dbUtils.tx claims the toggle row first and only the claimant writes the log row - two "on" POSTs at the same
+ *  moment no longer leave a second log row that nothing ever closes ("still on" in /admin/bridge until the prune). */
 async function toggleOn({ userId, role, scope, roomId, reason = "" }) {
   const have = await toggleOf(userId, scope, roomId);
   if (have) return { on: true, logId: have.log_id, fresh: false };
-  const t = clock();
-  const r = await runQuery(`INSERT INTO seethrough_log (at, user_id, role, scope, room_id, logins, n, reason, ref, ended) VALUES (?, ?, ?, ?, ?, '[]', 0, ?, 'on', NULL)`,
-                           [t, String(userId), clean(role, 20) || "?", scopeOf(scope), clean(roomId, 64), clean(reason, 200) || null]);
-  const logId = Number(r && r.id) || null;
-  await runQuery(`INSERT INTO seethrough_toggle (user_id, scope, room_id, on_at, log_id) VALUES (?, ?, ?, ?, ?)
-                  ON CONFLICT(user_id, scope, room_id) DO NOTHING`, [String(userId), scope, String(roomId), t, logId]);
-  return { on: true, logId, fresh: true };
+  const sc = scopeOf(scope);
+  const won = await tx(async () => {
+    const t = clock();
+    const claim = await runQuery(`INSERT INTO seethrough_toggle (user_id, scope, room_id, on_at, log_id) VALUES (?, ?, ?, ?, NULL)
+                                  ON CONFLICT(user_id, scope, room_id) DO NOTHING`, [String(userId), sc, String(roomId), t]);
+    if (!(claim && claim.changes)) return null;                // the other request turned it on a moment ago
+    const r = await runQuery(`INSERT INTO seethrough_log (at, user_id, role, scope, room_id, logins, n, reason, ref, ended) VALUES (?, ?, ?, ?, ?, '[]', 0, ?, 'on', NULL)`,
+                             [t, String(userId), clean(role, 20) || "?", sc, clean(roomId, 64), clean(reason, 200) || null]);
+    const logId = Number(r && r.id) || null;
+    if (!logId) throw new Error("see-through: no log row");    // never a toggle without its row (nothing is shown unlogged)
+    await runQuery("UPDATE seethrough_toggle SET log_id = ? WHERE user_id = ? AND scope = ? AND room_id = ?", [logId, String(userId), sc, String(roomId)]);
+    return logId;
+  });
+  if (won) return { on: true, logId: won, fresh: true };
+  const now = await toggleOf(userId, scope, roomId);
+  return { on: !!now, logId: now ? now.log_id : null, fresh: false };
 }
 /** Turn it off (why: "viewer" | "lost_right" | ...): the toggle's log row is closed. -> was it on? */
 async function toggleOff({ userId, scope, roomId, why = "viewer" }) {
@@ -74,10 +85,10 @@ async function toggleOff({ userId, scope, roomId, why = "viewer" }) {
 }
 /** A page drawn while the toggle is on: the running count (+1) and the logins it showed, on the toggle's row. */
 async function toggleUsed(logId, logins) {
-  if (!logId) return;
+  if (!logId) throw new Error("see-through: the toggle has no log row");        // the caller then shows nothing (never unlogged)
   await init();
   const r = (await getQuery("SELECT logins, n FROM seethrough_log WHERE id = ?", [logId]))[0];
-  if (!r) return;
+  if (!r) throw new Error("see-through: the toggle's log row is gone");
   let have = [];
   try { have = JSON.parse(r.logins) || []; } catch (e) { have = []; }
   const all = loginList([...have, ...loginList(logins)]);

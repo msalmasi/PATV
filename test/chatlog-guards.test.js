@@ -192,3 +192,11 @@ test("1.99afn: the privacy commands are on the site's private_args floor, and th
     assert.ok(Array.isArray(d.private_args), "help-data.json has the top-level list");
   }
 });
+
+test("review fix: the privacy policy's never-kept list names every command on the site's private_args floor (it can't trail PRIVATE_ARGS again)", () => {
+  const src = fs.readFileSync(path.join(repo, "views", "privacy.ejs"), "utf8");
+  const m = src.match(/neither are the commands that carry private text or codes \(([\s\S]*?)\.\s/);
+  assert.ok(m, "the sentence is there");
+  const listed = new Set([...m[1].matchAll(/<code>(![a-z0-9_]+)<\/code>/gi)].map((x) => x[1].toLowerCase()));
+  for (const c of CL.PRIVATE_ARGS) assert.ok(listed.has(c), `${c} is in chatlog.PRIVATE_ARGS but not in privacy.ejs's never-kept list`);
+});

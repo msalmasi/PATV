@@ -295,7 +295,9 @@
     var base = '/p/' + encodeURIComponent(box.getAttribute('data-slug')) + '/analytics/';
     var msg = document.getElementById('raSeeMsg'), why = document.getElementById('raSeeWhy');
     function post(path, body) {
-      return fetch(base + path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      // referrerPolicy: the page itself is no-referrer while real names are on - this POST still names its own site
+      return fetch(base + path, { method: 'POST', credentials: 'same-origin', referrerPolicy: 'same-origin',
+                                  headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
                                   body: JSON.stringify(body) }).then(function (r) { return r.json().catch(function () { return { ok: false }; }); });
     }
     function say(t) { if (msg) msg.textContent = t || ''; }

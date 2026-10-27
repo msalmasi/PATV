@@ -456,8 +456,8 @@ test("15. 1.99afn (FU-1): ONE courtesy notice per Camfrog login, ever - a real a
   const [to, text] = JSON.parse(pm[0].args);
   assert.equal(to, "alice");
   assert.equal(pm[0].user_id, "u_owner", "queued under the pad owner");
-  assert.match(text, /^🎙 Once only: .* shows whoever holds the mic in Mic Room, cam included, to signed-in members \(and on the PATV homepage to everyone if the pad is Public\)\./);
-  assert.match(text, /Stop it everywhere: !livecam off\. https:\/\/publicaccess\.tv\/p\//);
+  assert.match(text, /^🎙 Once only: .* shows Mic Room's mic holder, cam too, to signed-in members \(and to everyone on the PATV homepage if the pad is Public\)\. Other pads with mic follows do too\./);
+  assert.match(text, /Stop it everywhere: !livecam off https:\/\/publicaccess\.tv\/p\//);
   assert.ok(text.length <= 300);
   const c = await MF.courtesyOf("alice");
   assert.ok(c && c.v === MF.COURTESY_V && c.v === 2, "her courtesy row (v2: the text names the homepage) - " + JSON.stringify(c));
@@ -1044,9 +1044,10 @@ test("40. notice first (DF-11): the courtesy notice goes out at the first qualif
   assert.equal(pm[0].user_id, "u_owner", "queued under the pad owner");
   const [to, text] = JSON.parse(pm[0].args);
   assert.equal(to, "carl");
-  assert.match(text, /shows whoever holds the mic in Mic Room, cam included/);
+  assert.match(text, /shows Mic Room's mic holder, cam too/);
+  assert.match(text, /Other pads with mic follows do too/);
   assert.match(text, /in ~2 min/);
-  assert.match(text, /Stop it everywhere: !livecam off\. https:\/\/publicaccess\.tv\/p\//, "the way to stop it (and the link) fit the 300 characters");
+  assert.match(text, /Stop it everywhere: !livecam off https:\/\/publicaccess\.tv\/p\//, "the way to stop it (and the link) fit the 300 characters");
   assert.ok(text.length <= 300);
   const n = MF._notes.get(ROOM.id + "|carl");
   assert.ok(n && n.first, "noted");
