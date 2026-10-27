@@ -214,7 +214,7 @@ test("topics over time: each snapshot is labelled with its day and hour, in the 
   assert.deepEqual(labels, ["Oct 7 · 10 AM", "Oct 7 · 4 AM", "Oct 6 · 10 PM", "Oct 6 · 10 AM", "Oct 6 · 4 AM"], "newest first");
 });
 
-test("1.99afl (section K): private people are 'someone' at their REAL rank with their real numbers - Pepe's anon rows, and a stale row naming someone incognito / hidden now; the person sees 'you'", async () => {
+test("1.99afl (section K) / 1.99afn (FU-3): private people are a FROG NAME at their REAL rank with their real numbers - Pepe's anon rows, and a stale row naming someone incognito / hidden now; the person sees '(you)'", async () => {
   const crypto = require("crypto");
   const hash = (l) => crypto.createHash("sha256").update("pepe-hidden:" + l).digest("hex").slice(0, 20);
   await runQuery(`CREATE TABLE IF NOT EXISTS incognito_state (login TEXT PRIMARY KEY, "on" INTEGER NOT NULL DEFAULT 0, updated INTEGER)`);
@@ -235,22 +235,33 @@ test("1.99afl (section K): private people are 'someone' at their REAL rank with 
   assert.deepEqual(row.regulars[1], { anon: true, h: hash("evecf"), m30: 800, s30: 3000, d30: 21, m90: 1900, s90: 8000, d90: 59 },
                    "an anon row keeps its numbers and hash - never a login, a name or (review) a last-seen time, even one sent by mistake");
   assert.deepEqual(row.mic_top[3], { anon: true, m30: 0, s30: 0, d30: 0, m90: 0, s90: 4000, d90: 20 }, "a bad hash is dropped, the row kept");
+  const FROG = /^[A-Z][A-Za-z-]+ [A-Z][a-z]+$/;
+  let names = null;
   for (const viewer of ["u3", "u9"]) {
     const html = await (await get("/p/derty-dawg/analytics", viewer)).text();
-    for (const leak of ["Carol Stale", "carolcf", "Dana Hidden", "danacf", "evecf", hash("evecf"), hash("danacf"), ">Eve<"]) assert.ok(!html.includes(leak), leak + " leaked to " + viewer);
-    const mic = [...html.matchAll(/<span class="bn">(\d+)\. (.*?)<\/span><span class="bb">/g)].map((m) => [m[1], m[2].replace(/<[^>]+>/g, "")]);
-    const me = viewer === "u9" ? "you" : "someone";
-    assert.deepEqual(mic, [["1", me], ["2", "Alice"], ["3", "someone"], ["4", "someone"], ["5", "someone"]], "real ranks for " + viewer);
-    assert.match(html, /<span class="anon"[^>]*>someone<\/span>/);
+    for (const leak of ["Carol Stale", "carolcf", "Dana Hidden", "danacf", "evecf", hash("evecf"), hash("danacf"), ">Eve<", "someone</span>"]) assert.ok(!html.includes(leak), leak + " leaked to " + viewer);
+    const mic = [...html.matchAll(/<span class="bn">(\d+)\. (.*?)<\/span><span class="bb">/g)].map((m) => [m[1], m[2].replace(/<span class="ptag">private<\/span>/g, "").replace(/<[^>]+>/g, "").trim()]);
+    assert.deepEqual(mic.map((x) => x[0]), ["1", "2", "3", "4", "5"], "real ranks for " + viewer);
+    assert.equal(mic[1][1], "Alice");
+    const frog = [0, 2, 3, 4].map((i) => mic[i][1].replace(/ \(you\)$/, ""));
+    for (const n of frog) assert.match(n, FROG, "a frog name: " + n);
+    assert.equal(new Set(frog).size, 4, "four private people, four names");
+    assert.equal(/\(you\)$/.test(mic[0][1]), viewer === "u9", "the person sees '(you)' on their own row only");
+    if (names) assert.deepEqual(frog, names, "the same names for every viewer");
+    names = frog;
+    assert.match(html, /<span class="anon">[A-Z][A-Za-z-]+ [A-Z][a-z]+<\/span><span class="ptag">private<\/span>/);
+    assert.match(html, /show under a frog name at their real rank/, "the footnote");
+    assert.doesNotMatch(html, /class="ra-rv"|id="raSee"/, "no see-through controls for a member");
   }
-  const mine = await (await get("/p/derty-dawg/analytics", "u9")).text();
-  assert.match(mine, /<span class="anon" title="Others see &quot;someone&quot; here">you<\/span>/, "the person sees their own row");
   // the view model itself carries no login, name or hash for a private row
   const a = await roomstats.forRoom(row, "derty-dawg", { userId: "u3" });
   const s = JSON.stringify(a.mic) + JSON.stringify(a.regulars);
   for (const leak of ["carolcf", "danacf", "evecf", "Carol", "Dana", hash("evecf")]) assert.ok(!s.includes(leak), leak);
   assert.equal(a.mic[0].pct, 100, "the private #1 keeps the bar scale (real numbers)");
-  assert.deepEqual(a.regulars.map((x) => x.name), ["Alice", "someone", "someone"]);
+  assert.equal(a.regulars[0].name, "Alice");
+  assert.equal(a.regulars[1].name, a.mic[0].name, "eve has ONE frog name on both boards (her anon rows share the hash)");
+  assert.equal(a.regulars[2].name, a.mic[4].name, "...and so does carol (a stale named row, masked now: keyed by chatlog.hash(login))");
+  for (const x of [...a.regulars, ...a.mic]) if (x.anon) assert.ok(!("real" in x) && !("key" in x) && !("h" in x) && !("login" in x), "no identity in the view model");
   // review: a private row shows no last-seen time - Pepe's anon row has none, and a masked named row's is dropped
   assert.deepEqual(a.regulars.map((x) => x.last === "—"), [false, true, true], JSON.stringify(a.regulars.map((x) => x.last)));
 });

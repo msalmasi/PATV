@@ -336,6 +336,9 @@ const RULES = {
   "auto_escrow_claimlinks.used_by": M(),          // the account that used a !signup claim link
   // chatsignin.js (!signin): links, the owner's switch (off wins) and the account's chat sign-in log follow the account
   "chat_signin_tokens.user_id": M(), "chat_signin_log.user_id": M(), "incognito_log.user_id": M(),   // 1.99wa (incognito.js: incognito_state is keyed by chat login)
+  // 1.99afn (seethrough.js): who revealed a frog name moves with the account (the audit follows the person); an open "Show real names"
+  // toggle too - one per (scope, pad): the target's own wins a collision
+  "seethrough_log.user_id": M(), "seethrough_toggle.user_id": M({ key: ["scope", "room_id"] }),
   "chat_signin_prefs.user_id": M({ key: [], merge: { enabled: "MIN" } }),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)

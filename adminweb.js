@@ -174,8 +174,10 @@ async function systemInfo() {
   const db = await safe(async () => (await getQuery("SELECT 1 AS ok"))[0].ok === 1, false);
   const disk = await safe(async () => diskStatus());
   const feedUsed = await safe(() => require("./feedstore").usedBytes(null), null);
+  // 1.99afn: ALIAS_SECRET (the frog names' key) - "set" | "missing" | "invalid", never the value
+  const aliasSecret = await safe(async () => require("./frognames").secretState(), "unknown");
   return { sha: sha(), env: process.env.STAGING ? "staging" : "production", node: process.version, uptime: Math.round(process.uptime()),
-           db, disk, feedUsed, started: Date.now() - Math.round(process.uptime() * 1000) };
+           db, disk, feedUsed, started: Date.now() - Math.round(process.uptime() * 1000), aliasSecret };
 }
 
 function register(app, { addUser }) {

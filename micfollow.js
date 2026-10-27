@@ -26,9 +26,16 @@
 // Records: micfollow_spans = one row per person-on-stage span (30 days; the person sees theirs on the privacy card, admins
 // on /stage/admin) - the privacy record of "why was my cam shown". Console lines carry no logins or names.
 // Before prod (addendum 14.1.2, owner-accepted 2026-10-19):
-//   notice first   the pad's first notice goes out at the person's first qualifying grab there (inbox, or a Camfrog PM via
-//                  Pepe queued under the pad owner - or, on a house pad, under Pepe's own account); they can be picked only
-//                  notice_lead_s (120 s) later. Re-notices per pad every notice_gap_h never re-gate. micfollow_notices.
+//   notice first   the person's first qualifying grab sends the notice; they can be picked only notice_lead_s (120 s) after
+//                  it went out. 1.99afn (FU-1, owner 2026-10-27 D-7 / D-8 / D-10): ONE courtesy notice per Camfrog login EVER,
+//                  across all pads (micfollow_courtesy - backfilled from micfollow_notices, so the ~70 people told before get
+//                  nothing new): a Camfrog PM through Pepe ("!livecam off" in it; queued under the pad owner, or Pepe's own
+//                  account on a house pad) plus, for a real (not auto) account, one silent inbox row; "stage" PMs switched off
+//                  = the inbox row only. No room line (bot 1.99afm), no re-notices. A pad's micfollow_notices row is still
+//                  written (first_at = when the person was told, on any pad) for the gate. The text says the cam can also
+//                  show on the PATV homepage to everyone while the pad is Public (owner D-1); the people told before that
+//                  (courtesy v1) get one short PM the first time they'd appear there (homeCourtesy, D-3 - fires only once the
+//                  homepage mic stage exists, FU-2).
 //   blocks         a viewer and the person shown who DM-blocked each other (dm_blocks, either way) get "isn't available"
 //                  and no ticket; a person who blocked the pad owner from their cam (cam_blocks) is never put on that
 //                  owner's mic stage (CUT blocked_owner). train2 merge (stagefix): a DM block either way with the pad's
@@ -154,6 +161,13 @@ function init() {
       // the pad's notices to a person (DF-11: the first one gates their first pick there by notice_lead_s)
       await runQuery(`CREATE TABLE IF NOT EXISTS micfollow_notices (room_id TEXT NOT NULL, login TEXT NOT NULL, first_at INTEGER, last_at INTEGER,
                       PRIMARY KEY (room_id, login))`);
+      // 1.99afn (FU-1): the ONE courtesy notice per Camfrog login, ever, any pad. v = the notice's version (COURTESY_V: 2 names the
+      // homepage; the people told before are v1 - homeCourtesy). Never purged with the notices (180 days); account deletion only.
+      await runQuery(`CREATE TABLE IF NOT EXISTS micfollow_courtesy (login TEXT PRIMARY KEY, sent_at INTEGER NOT NULL, room_id TEXT, via TEXT,
+                      v INTEGER NOT NULL DEFAULT 1, home_at INTEGER)`);
+      // everyone a pad already told (any pad) counts as told: no new PM (D-9). Safe to run again (INSERT OR IGNORE).
+      await runQuery(`INSERT OR IGNORE INTO micfollow_courtesy (login, sent_at, room_id, via, v)
+                      SELECT login, MIN(first_at), NULL, 'backfill', 1 FROM micfollow_notices WHERE first_at IS NOT NULL GROUP BY login`);
       // ⚑ reports on mic-stage tiles (DF-31), kept for staff review
       await runQuery(`CREATE TABLE IF NOT EXISTS micfollow_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT NOT NULL, login TEXT NOT NULL,
                       reporter_id TEXT NOT NULL, reason TEXT, at INTEGER NOT NULL, qualified INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT 'open',
@@ -399,11 +413,14 @@ function refresh(login, roomId, { force = false } = {}) {
     if (!b) b = await siteBanned(login, ids, roomId, now());
     const blk = await blkP;
     await slP;
-    // the pad's notices to this person (DF-11); a failed read leaves them "pending" (never picked)
+    // the pad's notices to this person (DF-11); a failed read leaves them "pending" (never picked). 1.99afn (FU-1): told on ANY pad
+    // counts - `first` is the pad's own first notice, else the login's courtesy notice (micfollow_courtesy.sent_at; D-7)
     let note = null;
     try {
       const r = (await getQuery("SELECT first_at, last_at FROM micfollow_notices WHERE room_id = ? AND login = ?", [String(roomId), login]))[0];
-      note = { first: r && r.first_at != null ? Number(r.first_at) : null, last: r && r.last_at != null ? Number(r.last_at) : null };
+      const c = r && r.first_at != null ? null : (await getQuery("SELECT sent_at FROM micfollow_courtesy WHERE login = ?", [login]))[0];
+      const first = r && r.first_at != null ? Number(r.first_at) : c && c.sent_at != null ? Number(c.sent_at) : null;
+      note = { first, last: r && r.last_at != null ? Number(r.last_at) : first };
     } catch (e) { note = null; }
     const t = now();
     const was = FACTS.get(login), wasB = BANS.get(k);
@@ -564,8 +581,7 @@ function apply(P, R, actions, t) {
         if (a.peak > PEAK) PEAK = a.peak; break;
       case "picture":
         if (a.lat != null) { const k = a.warm ? "warm" : "cold"; LAT[k].push({ ms: a.lat, at: t }); if (LAT[k].length > 500) LAT[k].shift(); }
-        renotice(P, R, a.login, t).catch((e) => console.error("[micfollow] notice:", e.message));
-        break;
+        break;                                    // (1.99afn, FU-1: no re-notice at a picture - one courtesy notice, ever)
       // DF-11: the pad's first notice, at the first qualifying grab - the person can be picked notice_lead_s after it
       case "notice_first": firstNotice(P, R, a.login, t).catch((e) => console.error("[micfollow] notice:", e.message)); break;
       case "spam": bump("grab_spam", a.n || 1, t, P); break;
@@ -609,7 +625,7 @@ function doHold(P, login, cold, t) {
 }
 function spanOpen(P, login, t) {
   const n = NOTES.get(P.roomId + "|" + login);
-  const noticed = n && n.last && t - n.last < cfg().notice_gap_h * 3600e3 ? 1 : 0;   // the span is covered by a notice
+  const noticed = n && n.first ? 1 : 0;           // 1.99afn (FU-1): the person was told (their one courtesy notice, any pad)
   const p = runQuery("INSERT INTO micfollow_spans (room_id, login, started, noticed) VALUES (?, ?, ?, ?)", [P.roomId, login, t, noticed])
     .then((r) => (r && r.id ? Number(r.id) : null)).catch((e) => { console.error("[micfollow] span:", e.message); return null; });
   P.spans.set(login, p);
@@ -623,79 +639,126 @@ function spanClose(P, a, t) {
     .catch((e) => console.error("[micfollow] span:", e.message));
 }
 
-// ── the person shown: the pad's FIRST notice before their first pick there (DF-11), then one per pad per notice_gap_h ──
+// ── the person shown: ONE courtesy notice per Camfrog login, ever, before their first pick anywhere (DF-11; 1.99afn FU-1) ──
 const PEPE_ACCOUNT = "pepe-bot";                 // Pepe's own site account (feedstore.PEPE_ID): house pads queue their PMs under it
-/** Deliver the notice. kind "first" = before the first pick ("you can show there in about N minutes"), "again" = a
- *  re-notice while they show. Linked: the inbox (+ a Camfrog PM if their preference allows, rooms.notify). Not linked: a
- *  Camfrog PM via Pepe, queued under the pad owner's account, or Pepe's own on a house pad (D-19: there is no public room
- *  line for the mic stage). -> true when it went out */
-async function sendNotice(P, R, login, t, kind) {
+const COURTESY_V = 2;          // the courtesy text's version: 2 = it says the cam can show on the PATV homepage (owner D-1); backfill = 1
+const HOME_NOTICE_V = 2;       // D-3: told with an older text -> one short PM the first time they'd show on the homepage (homeCourtesy)
+const PM_MAX = 300;            // a Camfrog PM is cut at 300 characters
+const siteUrl = () => process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
+/** The PM: its own text, then the link - at most PM_MAX characters. Long room / pad names are shortened first, then the link is
+ *  left off: the way to stop it ("!livecam off") is always in it. */
+function pmText(T, key, room, pad, n, url) {
+  const at = (len) => T(key, { room: String(room).slice(0, len), pad: String(pad).slice(0, len), n });
+  for (const len of [40, 24, 14]) { const text = at(len); if ((text + " " + url).length <= PM_MAX) return text + " " + url; }
+  for (const len of [40, 24, 14]) { const text = at(len); if (text.length <= PM_MAX) return text; }
+  return at(14).slice(0, PM_MAX);
+}
+/** What `login`, shown on pad P, is sent and how (read before the transaction): the PM (always, unless a real account switched
+ *  "stage" PMs off - then the inbox row is the notice, D-8), the silent inbox row (real accounts only: an auto account has nobody
+ *  to read it), in the person's own language. kind "once" (the courtesy notice) | "home" (D-3). */
+async function courtesyPlan(P, R, login, kind) {
   const pad = (() => { try { return ROOMS().getCached(P.roomId); } catch (e) { return null; } })() || {};
   const padTitle = String(pad.title || (R && R.name) || P.roomId).slice(0, 60), roomName = String((R && R.name) || P.roomId).slice(0, 60);
   const link = "/p/" + encodeURIComponent(pad.slug || P.roomId);
   const u = (await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ? ORDER BY CASE WHEN username LIKE 'CF%' THEN 1 ELSE 0 END LIMIT 1", [login]))[0];
-  // in the person's own language (their saved preference; a Camfrog PM via Pepe stays English, like his other lines)
+  let real = false, pmOk = true;
+  if (u) {
+    // an account the check can't read counts as real: a silent inbox row nobody reads costs nothing, a missing notice would
+    try { real = !(await require("./autoaccount").isAutoAccount(u.userId)); } catch (e) { real = true; }
+    pmOk = await require("./inbox").pmAllowed(u.userId, "stage");
+  }
   const I18N = require("./i18n");
   let lang = "en";
   if (u) { try { lang = I18N.getPref(u.userId) || "en"; } catch (e) { lang = "en"; } }
   const T = I18N.tFor(lang);
   const mins = Math.max(2, Math.round(cfg().notice_lead_s / 60));
-  const title = kind === "first" ? T("mf.notice.first_title", { pad: padTitle }) : T("mf.notice.title", { pad: padTitle });
-  const body = kind === "first" ? T("mf.notice.first_body", { room: roomName, pad: padTitle, n: mins }) : T("mf.notice.body", { room: roomName, pad: padTitle });
-  if (u) {
-    await ROOMS().notify(u.userId, { kind: "stage", title, body, link, ref: "micfollow:" + kind + ":" + P.roomId + ":" + login + ":" + t });
-    bump("notices_inbox", 1, t, P);
-    return true;
-  }
-  const site = process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
-  const by = pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT;   // like camNotify; a house pad: Pepe's own
-  // mfix review: a Camfrog PM is cut at 300 characters - its own short text (when it starts, recent speakers, how to stop it)
-  // comes first, the link last (the inbox above keeps the full title + body)
-  const pm = kind === "first" ? T("mf.notice.pm_first", { room: roomName.slice(0, 40), pad: padTitle.slice(0, 40), n: mins })
-    : T("mf.notice.pm", { room: roomName.slice(0, 40), pad: padTitle.slice(0, 40) });
-  await require("./actions").queue(by, { kind: "notify", args: [login, `${pm} ${site}${link}`.slice(0, 300), "stage"],
-                                         tag: "stage-notify", label: "🎙 mic stage notice" });
-  bump(by === PEPE_ACCOUNT ? "notices_pm_house" : "notices_pm", 1, t, P);
-  return true;
+  const home = kind === "home";
+  return {
+    userId: u ? String(u.userId) : null, real, pm: !(real && !pmOk),
+    by: pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
+    text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once", roomName, padTitle, mins, siteUrl() + link),
+    link, title: T(home ? "mf.notice.home_title" : "mf.notice.once_title", { pad: padTitle }),
+    body: T(home ? "mf.notice.home_body" : "mf.notice.once_body", { room: roomName, pad: padTitle, n: mins }),
+  };
 }
-/** DF-11: the pad's first notice to `login`, at their first qualifying grab. Until it went out (and notice_lead_s after)
- *  they are "notice" in eligOf - never picked. A failed send tries again in a minute (they stay unpicked meanwhile). */
+/** `login`'s courtesy row {sent_at, v, home_at} or null. */
+async function courtesyOf(login) {
+  return (await getQuery("SELECT sent_at, v, home_at FROM micfollow_courtesy WHERE login = ?", [low(login)]))[0] || null;
+}
+/** Send the plan inside the caller's transaction: the PM queued (under the pad owner / Pepe) and the silent inbox row. A throw
+ *  undoes the transaction (the courtesy row too) - the caller retries. */
+async function deliver(plan, login, ref) {
+  if (plan.pm) await require("./actions").queue(plan.by, { kind: "notify", args: [login, plan.text, "stage"], tag: "stage-notify", label: "🎙 mic stage notice" });
+  if (plan.real) await require("./inbox").add(plan.userId, { kind: "stage", title: plan.title, body: plan.body, link: plan.link, ref });
+}
+/**
+ * DF-11 + FU-1: make sure `login` has had their ONE courtesy notice (any pad, ever). -> {ok, sent, at}: sent = this call sent it;
+ * at = when they were told. ONE dbUtils.tx holds the courtesy row, the PM and the inbox row: a failure leaves none of them (the
+ * caller retries in a minute), and two pads in the same tick send one notice (INSERT OR IGNORE - the second changes nothing).
+ */
+async function courtesyOnce(P, R, login, t) {
+  const have = await courtesyOf(login);
+  if (have) return { ok: true, sent: false, at: Number(have.sent_at) };
+  const plan = await courtesyPlan(P, R, login, "once");
+  const at = now();
+  const via = [plan.pm ? "pm" : null, plan.real ? "inbox" : null].filter(Boolean).join("+") || "none";
+  const sent = await tx(async () => {
+    const r = await runQuery("INSERT OR IGNORE INTO micfollow_courtesy (login, sent_at, room_id, via, v) VALUES (?, ?, ?, ?, ?)",
+                             [login, at, P.roomId, via, COURTESY_V]);
+    if (!(r && r.changes)) return false;              // another pad told them a moment ago
+    await deliver(plan, login, "micfollow:courtesy:" + login);
+    return true;
+  });
+  if (!sent) { const c = await courtesyOf(login); return { ok: !!c, sent: false, at: c ? Number(c.sent_at) : null }; }
+  bump("notices_courtesy", 1, t, P);
+  if (!plan.pm) bump("notices_pm_off", 1, t, P);
+  return { ok: true, sent: true, at };
+}
+/** DF-11: the person's first qualifying grab on this pad. Told before (any pad): the pad's notice row from that, nothing sent - they
+ *  can be picked as soon as notice_lead_s has passed since. Never told: the courtesy notice now (picked notice_lead_s later). A
+ *  failure tries again in a minute (they stay unpicked meanwhile). */
 async function firstNotice(P, R, login, t) {
   const k = P.roomId + "|" + login;
   const n = NOTES.get(k);
   if (!n || n.first || n.busy || (n.retryAt && n.retryAt > t)) return false;
   n.busy = true;
   try {
-    const ok = await sendNotice(P, R, login, t, "first").catch((e) => { console.error("[micfollow] notice:", e.message); return false; });
-    if (!ok) { n.retryAt = now() + 60 * 1000; bump("notice_failed", 1, t, P); return false; }
-    const at = now();
+    const c = await courtesyOnce(P, R, login, t).catch((e) => { console.error("[micfollow] notice:", e.message); return { ok: false }; });
+    if (!c.ok || !c.at) { n.retryAt = now() + 60 * 1000; bump("notice_failed", 1, t, P); return false; }
+    if (!c.sent) bump("notices_known", 1, t, P);
     await runQuery(`INSERT INTO micfollow_notices (room_id, login, first_at, last_at) VALUES (?, ?, ?, ?)
                     ON CONFLICT(room_id, login) DO UPDATE SET first_at = COALESCE(micfollow_notices.first_at, excluded.first_at), last_at = excluded.last_at`,
-                   [P.roomId, login, at, at]);
-    n.first = n.first || at; n.last = at;
-    bump("notices_first", 1, t, P);
+                   [P.roomId, login, c.at, c.at]);
+    n.first = n.first || c.at; n.last = Math.max(n.last || 0, c.at);
+    if (!c.sent) Promise.resolve().then(() => stepPad(P.roomId)).catch(() => {});   // told long ago: no reason to wait for the clock
     return true;
   } finally { n.busy = false; }
 }
-/** A re-notice while they show (at a picture), once per pad per notice_gap_h - it never re-gates (DF-11). */
-async function renotice(P, R, login, t) {
-  const k = P.roomId + "|" + login;
-  const n = NOTES.get(k);
-  const gap = cfg().notice_gap_h * 3600e3;
-  if (!n || n.busy || (n.last && t - n.last < gap)) return false;
-  n.busy = true;
-  try {
-    const ok = await sendNotice(P, R, login, t, "again");
-    if (!ok) return false;
-    const at = now();
-    n.last = at;
-    await runQuery(`INSERT INTO micfollow_notices (room_id, login, first_at, last_at) VALUES (?, ?, ?, ?)
-                    ON CONFLICT(room_id, login) DO UPDATE SET last_at = excluded.last_at`, [P.roomId, login, n.first || at, at]);
-    const sp = P.spans.get(login);
-    const id = sp ? await sp : null;
-    if (id) await runQuery("UPDATE micfollow_spans SET noticed = 1 WHERE id = ?", [id]);
+/** FU-2's switch for the homepage mic stage (/admin/stage; not in this build - always off, so homeCourtesy never sends). */
+let homeStageFn = () => cfg().home_stage === true;
+/**
+ * D-3 (owner 2026-10-27): someone told with an older text (courtesy v < HOME_NOTICE_V, before it named the homepage) gets ONE short
+ * PM the first time they would show on the PATV homepage's mic stage; until then (and notice_lead_s after) the homepage shows them
+ * as a name card. FU-2 (wave 2) calls this from the homepage's view; while the homepage mic stage doesn't exist it does nothing.
+ * -> {ok, sent, ready: they may show live on the homepage now}
+ */
+async function homeCourtesy(P, R, login, t = now()) {
+  if (!homeStageFn()) return { ok: false, sent: false, ready: false, why: "home_off" };
+  const l = low(login);
+  const lead = cfg().notice_lead_s * 1000;
+  const c = await courtesyOf(l);
+  if (!c) return { ok: false, sent: false, ready: false, why: "not_told" };    // the courtesy notice (already v2) comes first
+  if (Number(c.v) >= HOME_NOTICE_V) return { ok: true, sent: false, ready: t - Number(c.home_at || c.sent_at) >= lead };
+  const plan = await courtesyPlan(P, R, l, "home");
+  const at = now();
+  const sent = await tx(async () => {
+    const r = await runQuery("UPDATE micfollow_courtesy SET v = ?, home_at = ? WHERE login = ? AND v < ?", [HOME_NOTICE_V, at, l, HOME_NOTICE_V]);
+    if (!(r && r.changes)) return false;
+    await deliver(plan, l, "micfollow:home:" + l);
     return true;
-  } finally { n.busy = false; }
+  });
+  if (sent) bump("notices_home", 1, t, P);
+  return { ok: true, sent, ready: false };
 }
 
 // ── stills (§7.3) ──
@@ -1660,7 +1723,8 @@ async function prune(t = now()) {
   const keep = cfg().spans_keep_days * 24 * 3600e3;
   await runQuery("DELETE FROM micfollow_spans WHERE started < ? AND ended IS NOT NULL", [t - keep]);
   await runQuery("DELETE FROM micfollow_excl WHERE until IS NOT NULL AND until < ?", [t]);
-  // reports: as long as the appearance log; notices: 180 days after the last one (then the next first notice gates again)
+  // reports: as long as the appearance log; notices: 180 days after the last one (the pad's gate row only - 1.99afn: the person's
+  // micfollow_courtesy row is NEVER purged here, so they are never told again; it goes with their account only)
   await runQuery("DELETE FROM micfollow_reports WHERE at < ?", [t - keep]);
   await runQuery("DELETE FROM micfollow_notices WHERE COALESCE(last_at, first_at, 0) < ?", [t - 180 * 24 * 3600e3]);
   for (const m of EXCL.values()) for (const [l, e] of [...m]) if (e.until != null && e.until < t) m.delete(l);
@@ -2002,17 +2066,26 @@ module.exports = {
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,
   tick, prune, ptag, Refuse,
   health, listAlert, failsOf, LIST_ALERT_MS, LIST_ALERT_GAP_MS,                                                    // 1.99afl (S3)
+  courtesyOnce, courtesyOf, homeCourtesy, pmText, COURTESY_V, HOME_NOTICE_V,                                       // 1.99afn (FU-1)
   pinPut, unpin, pinTick, pinWhy, pinCandidates, pinsOf, pinsFor, pinOf, setOverride, onExactRefused, CFG_REV,      // mfix
   _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS,
-  /** tests: the pad's first notice to `login` went out at `at` (null = never) */
+  /** tests: the pad's first notice to `login` went out at `at` (null = never). 1.99afn: also their courtesy row - told at `at`
+   *  (courtesy v1, like the backfill), or (null) never told anywhere */
   _noticed: async (roomId, login, at) => {
     await init();
     const k = String(roomId) + "|" + low(login);
-    if (at == null) { NOTES.delete(k); await runQuery("DELETE FROM micfollow_notices WHERE room_id = ? AND login = ?", [String(roomId), low(login)]); return; }
+    if (at == null) {
+      NOTES.delete(k);
+      await runQuery("DELETE FROM micfollow_notices WHERE room_id = ? AND login = ?", [String(roomId), low(login)]);
+      await runQuery("DELETE FROM micfollow_courtesy WHERE login = ?", [low(login)]);
+      return;
+    }
     NOTES.set(k, { first: at, last: at });
     await runQuery(`INSERT INTO micfollow_notices (room_id, login, first_at, last_at) VALUES (?, ?, ?, ?)
                     ON CONFLICT(room_id, login) DO UPDATE SET first_at = excluded.first_at, last_at = excluded.last_at`, [String(roomId), low(login), at, at]);
+    await runQuery("INSERT OR IGNORE INTO micfollow_courtesy (login, sent_at, room_id, via, v) VALUES (?, ?, ?, 'test', 1)", [low(login), at, String(roomId)]);
   },
+  _setHomeStage: (fn) => { homeStageFn = fn || (() => cfg().home_stage === true); },
   _ready: async () => { await init(); loaded = true; },
   _idle: async () => {
     for (let i = 0; i < 5 && (INFLIGHT.size || HOLDING.size); i++) await Promise.all([...INFLIGHT.values(), ...[...HOLDING].map((p) => p.catch(() => {}))]);

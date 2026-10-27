@@ -1370,6 +1370,7 @@ require("./userstats").register(app, { isBotToken });
 require("./streaks").register(app, { isBotToken, addUser });   // 1.99xi: 🔥 daily activity streaks (Pepe's !streak, /api/streaks/me, the grace rule)
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation
 require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)
+require("./seethrough").register(app, { addUser });              // 1.99afn: the see-through audit log (/api/admin/seethrough) + its 180-day prune
 require("./pepecontrol").register(app, { isBotToken, addUser });
 require("./roomctl").register(app, { isBotToken, addUser });   // 1.99kp: 📡 /admin/pepe/rooms - join / leave / active / mute Pepe's Camfrog rooms
 require("./cmdswitch").register(app, { isBotToken, addUser }); // 1.99vc: 🎛️ /admin/pepe/commands - master switch + global default per command

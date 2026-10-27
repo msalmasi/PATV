@@ -113,8 +113,9 @@
     row('Still refusals by code · list alerts sent', (srf.length ? srf.join(' · ') : '–') + ' · ' + (c.list_alerts || 0));
     var of = Object.keys(c).filter(function (k) { return k.indexOf('open_failed:') === 0; }).map(function (k) { return k.slice(12) + ' ' + c[k]; });
     row('Failed opens by code', of.length ? of.join(' · ') : '–');
-    row('Notices: inbox / Camfrog PM / house-pad PM · first notices · failed', [c.notices_inbox || 0, c.notices_pm || 0, c.notices_pm_house || 0].join(' / ') +
-        ' · ' + (c.notices_first || 0) + ' · ' + (c.notice_failed || 0));
+    // 1.99afn (FU-1): one courtesy notice per Camfrog login, ever - sent / told before (nothing sent) / PMs off (inbox only) · homepage · failed
+    row('Courtesy notices: sent / told before / PMs off · homepage · failed', [c.notices_courtesy || 0, c.notices_known || 0, c.notices_pm_off || 0].join(' / ') +
+        ' · ' + (c.notices_home || 0) + ' · ' + (c.notice_failed || 0));
     row('Reports: all / qualified / cuts · grab-spam hold-outs · stages cleared', [c.reports || 0, c.reports_qualified || 0, c.report_cuts || 0].join(' / ') +
         ' · ' + (c.grab_spam || 0) + ' · ' + (c.cleared || 0));
     row('Peak viewers of one tile', m.peak_viewers || 0);

@@ -4,6 +4,10 @@
   the live room page). Everything here is aggregate or opt-in public: !incognito users are never sent
   by name, people who hide Analytics on their profile are folded into "+N keep their activity private",
   moderation is counts only.
+  1.99afn: private people (!incognito / !bridge hide) are a FROG NAME at their real rank (r.anon: r.name is the frog name, italic,
+  a "private" tag, no link / avatar / tooltip; "(you)" on their own row). a.see = the viewer may see through (admin / this pad's
+  owner after 90 days): a Reveal per row and the on-until-off toggle (fetch POSTs, each logged); r.revealed + r.real only while the
+  viewer's toggle is on.
 %>
 <style>
   .ra { max-width: var(--ds-w-wide); margin: 0 auto; padding: var(--ds-sp-4) var(--ds-gutter) var(--ds-sp-14); font-family: var(--ds-font); color: var(--ds-text); display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
@@ -62,6 +66,19 @@
   .ra .num { text-align: end; white-space: nowrap; }
   .ra .privnote { font-size: 12px; color: #c9a36a; }
   .ra .anon { font-style: italic; color: var(--ds-text-muted); }
+  /* 1.99afn: a private person's frog name, its "private" tag, "(you)", a revealed login and the see-through controls */
+  .ra .ptag { display: inline-block; font-style: normal; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ds-text-muted); border: 1px solid var(--ds-line-strong); border-radius: 999px; padding: 0 6px; margin-left: 4px; line-height: 1.5; vertical-align: 1px; white-space: nowrap; }
+  .ra .you { color: var(--ds-text-muted); white-space: nowrap; }
+  .ra .real { color: var(--ds-gold); white-space: nowrap; }
+  .ra .ra-rv { font: inherit; font-size: 11px; line-height: 1.4; padding: 1px 8px; margin-left: 4px; border-radius: 999px; border: 1px solid var(--ds-line-strong); background: transparent; color: var(--ds-text-2); cursor: pointer; white-space: nowrap; }
+  .ra .ra-rv:hover { border-color: var(--ds-gold); color: var(--ds-text-strong); }
+  .ra .ra-rv:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .ra .brow.priv .bn { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .ra .ra-fnote { margin: 0; }
+  .ra .ra-see { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13px; line-height: 1.5; color: var(--ds-text-2); }
+  .ra .ra-see.on { border-color: var(--ds-gold); }
+  .ra .ra-see > span:first-child { flex: 1 1 260px; min-width: 0; }
+  .ra .ra-see input { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: var(--ds-r-xs); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); color: var(--ds-text); width: 180px; max-width: 100%; }
   .ra .bars { display: grid; gap: 7px; }
   .ra .brow { display: grid; grid-template-columns: minmax(80px, 150px) minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
   .ra .brow .bn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-text); }
@@ -183,12 +200,30 @@
     </div>
   </section>
 
+  <% /* 1.99afn: a private row's name - the frog name, the tag, (you), then the revealed login or the Reveal control (see-through only) */
+     const fnName = (x) => '<span class="anon">' + escFn(x.name) + '</span><span class="ptag">private</span>' + (x.you ? ' <span class="you">(you)</span>' : '') +
+       (x.revealed ? ' <span class="real" title="Only you can see this">· ' + escFn(x.real || '(not known to the site)') + ' 🕶</span>'
+        : a.see ? ' <button type="button" class="ra-rv" data-row="' + escFn(x.name) + '" aria-label="Reveal who is ' + escFn(x.name) + '">Reveal</button>' : '');
+     function escFn(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' })[c]); } %>
+  <% if (a.see) { %>
+  <section class="card ra-see<%= a.see.on ? ' on' : '' %>" id="raSee" aria-label="See who is behind a frog name" data-slug="<%= room.slug %>">
+    <% if (a.see.on) { %>
+    <span>🕶 Real names are on for you on this pad until you hide them again. Only you can see them; every page you open while they're on is logged.</span>
+    <button type="button" class="ds-btn sm" id="raSeeOff">Hide real names</button>
+    <% } else { %>
+    <span>🕶 As <%= a.see.role === 'admin' ? 'a PATV admin' : "this pad's owner" %> you can see who is behind a frog name here - one row (Reveal) or every row until you hide them again. Nothing shows until you ask, and every reveal is logged.</span>
+    <input type="text" id="raSeeWhy" maxlength="120" placeholder="Reason (optional)" aria-label="Reason (optional)" autocomplete="off">
+    <button type="button" class="ds-btn sm" id="raSeeOn">Show real names</button>
+    <% } %>
+    <span id="raSeeMsg" class="muted" role="status"></span>
+  </section>
+  <% } %>
   <div class="two">
     <section class="card" aria-labelledby="raRegs">
       <h2 id="raRegs"><span><span class="ds-ic" aria-hidden="true">👥</span> Regulars</span><small>by days here, chat and mic</small></h2>
       <% if (a.regulars.length) { %>
       <div class="ra-tbl"><table><thead><tr><th></th><th>Who</th><th class="num">Days 30d</th><th class="num">Msgs 30d</th><th class="num hide-sm">Mic 30d</th><th class="num hide-sm">Last seen</th></tr></thead><tbody>
-        <% a.regulars.forEach((r) => { %><tr><td class="n"><%= r.rank %></td><td class="who"><% if (r.anon) { %><span class="anon"<% if (r.you) { %> title="Others see &quot;someone&quot; here"<% } %>><%= r.name %></span><% } else if (r.href) { %><a href="<%= r.href %>"><%= r.name %></a><% } else { %><%= r.name %><% } %></td><td class="num"><%= r.d30 %></td><td class="num"><%= r.m30 %></td><td class="num hide-sm"><%= r.mic30 %></td><td class="num hide-sm"><%= r.last %></td></tr><% }) %>
+        <% a.regulars.forEach((r) => { %><tr><td class="n"><%= r.rank %></td><td class="who"><% if (r.anon) { %><%- fnName(r) %><% } else if (r.href) { %><a href="<%= r.href %>"><%= r.name %></a><% } else { %><%= r.name %><% } %></td><td class="num"><%= r.d30 %></td><td class="num"><%= r.m30 %></td><td class="num hide-sm"><%= r.mic30 %></td><td class="num hide-sm"><%= r.last %></td></tr><% }) %>
       </tbody></table></div>
       <% } else { %><div class="empty">No regulars yet.</div><% } %>
       <% if (a.regularsHidden) { %><div class="privnote">🔒 +<%= a.regularsHidden %> regular<%= a.regularsHidden === 1 ? '' : 's' %> keep their activity private.</div><% } %>
@@ -197,12 +232,13 @@
       <h2 id="raMic"><span><span class="ds-ic" aria-hidden="true">🎙</span> Mic leaderboard</span><small>last 90 days</small></h2>
       <% if (a.mic.length) { %>
       <div class="bars"><% a.mic.forEach((m) => { %>
-        <div class="brow"><span class="bn"><%= m.rank %>. <% if (m.anon) { %><span class="anon"<% if (m.you) { %> title="Others see &quot;someone&quot; here"<% } %>><%= m.name %></span><% } else if (m.href) { %><a href="<%= m.href %>"><%= m.name %></a><% } else { %><%= m.name %><% } %></span><span class="bb"><span style="width:<%= m.pct.toFixed(1) %>%;background:#ffb74d"></span></span><span class="bv"><%= m.dur %></span></div>
+        <div class="brow<%= m.anon ? ' priv' : '' %>"><span class="bn"><%= m.rank %>. <% if (m.anon) { %><%- fnName(m) %><% } else if (m.href) { %><a href="<%= m.href %>"><%= m.name %></a><% } else { %><%= m.name %><% } %></span><span class="bb"><span style="width:<%= m.pct.toFixed(1) %>%;background:#ffb74d"></span></span><span class="bv"><%= m.dur %></span></div>
       <% }) %></div>
       <% } else { %><div class="empty">Nobody on the mic yet.</div><% } %>
       <% if (a.micHidden) { %><div class="privnote">🔒 +<%= a.micHidden %> keep their activity private.</div><% } %>
     </section>
   </div>
+  <% if (a.hasPrivate) { %><p class="muted ra-fnote">🐸 Private people (Camfrog <code>!incognito</code> / <code>!bridge hide</code>) show under a frog name at their real rank, with their real numbers. The names change every day at 10:00 UTC and aren't their chat names; Pepe's notes above call them "someone".</p><% } %>
 
   <div class="two">
     <section class="card" aria-labelledby="raCmd">
@@ -251,5 +287,39 @@
     root.addEventListener('pointerleave', function () { tip.style.display = 'none'; });
     root.querySelectorAll('[data-tip] title').forEach(function (n) { n.remove(); });
     root.querySelectorAll('.ra-cell[title]').forEach(function (n) { n.removeAttribute('title'); });
+  })();
+  // 1.99afn see-through: a row's Reveal and the on-until-off toggle - same-site fetch POSTs (each one a log row on the server)
+  (function () {
+    var box = document.getElementById('raSee');
+    if (!box) return;
+    var base = '/p/' + encodeURIComponent(box.getAttribute('data-slug')) + '/analytics/';
+    var msg = document.getElementById('raSeeMsg'), why = document.getElementById('raSeeWhy');
+    function post(path, body) {
+      return fetch(base + path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+                                  body: JSON.stringify(body) }).then(function (r) { return r.json().catch(function () { return { ok: false }; }); });
+    }
+    function say(t) { if (msg) msg.textContent = t || ''; }
+    function toggle(on) {
+      say('…');
+      post('seethrough', { on: on, reason: why ? why.value : '' }).then(function (d) {
+        if (d && d.ok) location.reload(); else say((d && d.error) || 'Could not change it.');
+      }, function () { say('Could not change it - check your connection.'); });
+    }
+    var onB = document.getElementById('raSeeOn'), offB = document.getElementById('raSeeOff');
+    if (onB) onB.addEventListener('click', function () { toggle(true); });
+    if (offB) offB.addEventListener('click', function () { toggle(false); });
+    document.querySelectorAll('#ra .ra-rv').forEach(function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        post('reveal', { row: b.getAttribute('data-row'), reason: why ? why.value : '' }).then(function (d) {
+          if (!d || !d.ok) { b.disabled = false; say((d && d.error) || 'Could not reveal it.'); return; }
+          var s = document.createElement('span');
+          s.className = 'real';
+          s.title = 'Only you can see this';
+          s.textContent = '· ' + (d.real || '(not known to the site)') + ' 🕶';
+          b.replaceWith(s);
+        }, function () { b.disabled = false; say('Could not reveal it - check your connection.'); });
+      });
+    });
   })();
 </script>

@@ -23,9 +23,21 @@
 //     at its rank too, so a room whose last sync predates someone going private never prints their name. The person themselves
 //     (their linked Camfrog login, or an anon row's h) sees "you". Review: a private row shows no last-seen time, and Pepe's
 //     free text (notes, "changes", topics over time) names nobody private now either (freeTextScrub, fails closed).
+//   * 1.99afn (FU-3, owner 2026-10-27 K-1 / D-12 / D-13): the boards show each private person under a FROG NAME ("Mossy Newt") at
+//     their real rank with their EXACT numbers - frognames.boardAliases: one name per person per room per day (it turns at 10:00
+//     UTC), the same on both boards, keyed by the hidden-set hash (an anon row's h = chatlog.hash(login) of a masked row); never
+//     their chat name, never derivable without ALIAS_SECRET. The view model carries the name only - no login, hash or key. The
+//     free text keeps "someone" (D-17: a frog name in a sentence would tie it to a board row). Their own row: "Mossy Newt (you)".
+//   * 1.99afn see-through (D-14 / D-15, J-18): admins (chatlog.see_through) on every pad, a pad's owner on their own pad once they
+//     have owned it for the whole 90 days the boards cover, can reveal who is behind a frog name - one row (POST .../reveal) or a
+//     toggle that stays on until turned off (POST .../seethrough), each one a seethrough_log row; nothing passive (a GET never
+//     turns anything on), no-store, no-referrer. Staff, members and other pads' owners: 403, no row.
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const { _render: R } = require("./userstats");
+const FN = require("./frognames");
+const ST = require("./seethrough");
+const guard = require("./middleware/authGuard");
 
 const MAX_ROOMS = 30, DAYS = 90, SUMMARY_MAX = 900;
 const ready = (async () => {
@@ -234,8 +246,11 @@ async function incognitoLogins() {
  *   - plus the names private people (maskedLogins: incognito now, or hidden) go by in ANY room's rows here (a regular's / mic
  *     leader's login and display name - "*Mephobia*" from another room's mic board) and every incognito login.
  * Fails closed: when either can't run, the free text is left out ("").
+ * 1.99afn (FU-3a, checked): + the people behind THIS page's anon rows (anonHashes). Pepe sends a row anonymous only for someone
+ * private on his side (!incognito / !bridge hide), so whoever the site can put to such a hash (loginsForHashes, cached) is scrubbed
+ * from the text too - with every name they go by in the stored rows - even when they are on none of the site's own lists.
  */
-async function freeTextScrub() {
+async function freeTextScrub(anonHashes = []) {
   let CV;
   try { CV = require("./chatlogview"); await CV.init(); } catch (e) { return () => ""; }
   let extra = null;
@@ -246,8 +261,12 @@ async function freeTextScrub() {
       for (const p of [...(r.regulars || []), ...(r.mic_top || [])]) if (p && !p.anon && LOGIN_RE.test(String(p.login || ""))) add(p.login, p.display);
     }
     for (const l of await incognitoLogins()) add(l, null);
+    const anonLogins = new Set((await cachedLogins(anonHashes)).values());
+    for (const l of anonLogins) add(l, null);
+    const priv = await maskedLogins([...names.keys()]);
+    for (const l of anonLogins) priv.add(l);
     const terms = new Set();
-    for (const l of await maskedLogins([...names.keys()])) {
+    for (const l of priv) {
       for (const n of names.get(l) || []) {
         const s = String(n).replace(/^@+/, "").trim();
         if (Array.from(s).length >= 3 && !CV.STOP.has(s.toLowerCase())) terms.add(s.toLowerCase());
@@ -264,6 +283,21 @@ async function freeTextScrub() {
     return extra ? o.replace(extra, "someone") : o;
   };
 }
+/** loginsForHashes with a 10-minute memory per hash (found or not) - the page's free-text scrub asks on every render. */
+const H2L = new Map(), H2L_TTL = 10 * 60e3;
+async function cachedLogins(hs) {
+  const t = Date.now(), out = new Map(), miss = [];
+  for (const h of new Set((hs || []).filter((x) => HASH_RE.test(String(x || ""))))) {
+    const c = H2L.get(h);
+    if (c && t - c.at < H2L_TTL) { if (c.l) out.set(h, c.l); } else miss.push(h);
+  }
+  if (miss.length) {
+    const got = await loginsForHashes(miss);
+    for (const h of miss) { const l = got.get(h) || null; H2L.set(h, { l, at: t }); if (l) out.set(h, l); }
+    while (H2L.size > 5000) H2L.delete(H2L.keys().next().value);
+  }
+  return out;
+}
 /** The viewer's own linked Camfrog login (lower case) or null. */
 async function viewerLogin(userId) {
   if (!userId) return null;
@@ -274,6 +308,94 @@ async function viewerLogin(userId) {
   } catch (e) { return null; }
 }
 const hiddenHash = (login) => { try { return require("./chatlog").hash(login); } catch (e) { return null; } };
+
+// ── 1.99afn (FU-3): the boards' private rows - frog names, and see-through on demand ──
+const OWNER_ERA_MS = DAYS * 864e5;        // D-15: a pad's owner reveals only once they have owned it for the whole board (90 days)
+const SEE_LINE = "analytics_line", SEE_TOGGLE = "analytics_toggle";     // seethrough.js scopes
+const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
+/**
+ * The two boards, shaped - SERVER SIDE. A named row as before (+ href); a private row (Pepe's anon row, or a login private now)
+ * {anon, you, key, login (a masked named row's - else null), alias, numbers}: key (its hidden-set hash) and login never leave this
+ * module except through a logged reveal. One frog-name map for both boards (a person has one name on the page). viewer = {userId}.
+ */
+async function boards(r, viewer, t = Date.now()) {
+  const people = [...(r.regulars || []), ...(r.mic_top || [])].filter((p) => p && !p.anon && p.login);
+  const priv = await privateLogins(people.map((p) => p.login));
+  const masked = await maskedLogins(people.map((p) => p.login));
+  const me = viewer && viewer.userId ? await viewerLogin(viewer.userId) : null;
+  const meH = me ? hiddenHash(me) : null;
+  const avoid = [];
+  const mark = (list, board) => {
+    const shown = [];
+    let hidden = 0;
+    (list || []).forEach((p, i) => {
+      if (!p) return;
+      if (p.anon || masked.has(p.login)) {
+        const you = !!me && (p.anon ? !!meH && p.h === meH : p.login === me);
+        // (the numbers only on the page - never the login, the name, the hash or (review) the last-seen time)
+        const key = p.anon ? (p.h || `${board}:${i}`) : (hiddenHash(p.login) || `${board}:${i}`);
+        shown.push(Object.assign(counts3090(p), { anon: true, you, key, h: p.anon && p.h ? p.h : null, login: p.anon ? null : p.login }));
+        return;
+      }
+      avoid.push(p.login, p.display);
+      const a = priv.get(p.login);
+      if (a && a.private) { hidden++; return; }
+      shown.push({ ...p, href: a && a.username ? `/u/${encodeURIComponent(a.username)}` : null });
+    });
+    return { shown, hidden };
+  };
+  const regs = mark(r.regulars, "r"), mics = mark(r.mic_top, "m");
+  const anon = [...regs.shown, ...mics.shown].filter((p) => p.anon);
+  const names = FN.boardAliases(r.room, FN.boardPeriod(t), anon.map((p) => p.key), avoid);
+  for (const p of anon) p.alias = names.get(p.key) || "someone";
+  return { regs, mics };
+}
+/** h -> login, for a logged reveal only: chatlogview's names (the hidden-names job, the who map), everyone incognito now, every
+ *  linked Camfrog login, every login Pepe sent stats for - each checked by hashing it back. -> Map(h -> login) */
+async function loginsForHashes(hs) {
+  const want = new Set((hs || []).filter((h) => HASH_RE.test(String(h || ""))));
+  const out = new Map();
+  const tryLogin = (l) => { const x = low(l); if (!LOGIN_RE.test(x)) return; const h = hiddenHash(x); if (h && want.has(h) && !out.has(h)) out.set(h, x); };
+  if (!want.size) return out;
+  try { const CV = require("./chatlogview"); for (const h of want) { const l = await CV.loginForHash(h); if (l) tryLogin(l); } } catch (e) { /* the tables below */ }
+  const sources = [async () => [...(await incognitoLogins())], async () => (await getQuery("SELECT camfrogUsername AS l FROM users WHERE camfrogUsername IS NOT NULL")).map((x) => x.l),
+                   async () => (await getQuery("SELECT login AS l FROM camfrog_userstats")).map((x) => x.l)];
+  for (const src of sources) {
+    if (out.size >= want.size) break;
+    try { for (const l of await src()) tryLogin(l); } catch (e) { /* a store that isn't there */ }
+  }
+  return out;
+}
+/** The real login behind each private row (null = the site doesn't know it). -> Map(key -> login | null) */
+async function realLogins(rows) {
+  const priv = (rows || []).filter((p) => p && p.anon);
+  const byH = await loginsForHashes(priv.filter((p) => !p.login && p.h).map((p) => p.h));
+  const out = new Map();
+  for (const p of priv) out.set(p.key, p.login || (p.h && byH.get(p.h)) || null);
+  return out;
+}
+/** D-15: has userId owned pad roomId for the whole board? The chat archive's owner era (chatlog_rooms: owner_since, or a staff
+ *  owner_grant - chatlogview's window) and the pad's last owner change (room_events) - the later one counts. No row: no. */
+async function ownerEraCovers(roomId, userId, t) {
+  const row = (await getQuery("SELECT owner_id, owner_since, owner_grant FROM chatlog_rooms WHERE room_id = ?", [String(roomId)]))[0];
+  if (!row || String(row.owner_id || "") !== String(userId)) return false;
+  if (row.owner_grant != null) return true;
+  let since = Number(row.owner_since) || 0;
+  const ev = (await getQuery("SELECT MAX(ts) AS ts FROM room_events WHERE room_id = ? AND what = 'owner'", [String(roomId)]))[0];
+  if (ev && ev.ts != null) since = Math.max(since, Number(ev.ts) || 0);
+  return since <= t - OWNER_ERA_MS;
+}
+/** Who may reveal frog names on pad padId: "admin" (chatlog.see_through, every pad) | "owner" (their own pad, D-15) | null. A check
+ *  that can't run says null. Staff never: the capability is Admin-only and locked. */
+async function seeThroughRole(user, padId, t = Date.now()) {
+  if (!user || !user.userId) return null;
+  try { if (await require("./siteperms").canId(user.userId, "chatlog.see_through")) return "admin"; } catch (e) { return null; }
+  try {
+    const pad = await require("./rooms").get(padId);
+    if (!pad || !pad.owner || String(pad.owner.userId) !== String(user.userId)) return null;
+    return (await ownerEraCovers(padId, user.userId, t)) ? "owner" : null;
+  } catch (e) { return null; }
+}
 
 // ── rendering helpers ──
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -422,40 +544,19 @@ function preview(r) {
   return v;
 }
 
-/** The analytics page's view model. viewer (1.99afl) = {userId} of the signed-in viewer, or null: their own private row reads
- *  "you" instead of "someone". */
-async function forRoom(r, slug, viewer = null) {
+/** The analytics page's view model. viewer (1.99afl) = {userId} of the signed-in viewer, or null: their own private row is marked
+ *  "you". 1.99afn: opts.reveal = the viewer's see-through toggle is on (they may - the route checked): private rows also carry
+ *  their real login (`real`, null when the site doesn't know it); opts.see = {role, on} for the page's see-through controls. */
+async function forRoom(r, slug, viewer = null, opts = {}) {
   const md = await meta().catch(() => ({}));
   const hl = headline(r);
   const axis = hl.axis, d30 = hl.d30, d90 = axis[0];
   const days = r.days || {};
-  // people: privacy per linked PATV account
-  const people = [...r.regulars, ...r.mic_top].filter((p) => p && !p.anon && p.login);
-  const priv = await privateLogins(people.map((p) => p.login));
-  // 1.99afl (section K): incognito / hidden people are "someone" at their real rank (Pepe's anon rows, and any row that names a
-  // login private NOW - a stale sync); the viewer's own row says "you"
-  const masked = await maskedLogins(people.map((p) => p.login));
-  const me = viewer && viewer.userId ? await viewerLogin(viewer.userId) : null;
-  const meH = me ? hiddenHash(me) : null;
-  const named = (list) => {
-    const shown = [];
-    let hidden = 0;
-    for (const p of list) {
-      if (!p) continue;
-      if (p.anon || masked.has(p.login)) {
-        const you = !!me && (p.anon ? !!meH && p.h === meH : p.login === me);
-        // (the numbers only - never the login, the name, the hash or (review) the last-seen time)
-        shown.push(Object.assign(counts3090(p), { anon: true, you, display: you ? "you" : "someone", href: null }));
-        continue;
-      }
-      const a = priv.get(p.login);
-      if (a && a.private) { hidden++; continue; }
-      shown.push({ ...p, href: a && a.username ? `/u/${encodeURIComponent(a.username)}` : null });
-    }
-    return { shown, hidden };
-  };
-  const regs = named(r.regulars);
-  const mics = named(r.mic_top);
+  // people: privacy per linked PATV account; 1.99afl / 1.99afn: incognito / hidden people at their real rank under a frog name
+  const { regs, mics } = await boards(r, viewer);
+  const real = opts.reveal ? await realLogins([...regs.shown, ...mics.shown]) : null;
+  // a private row in the view model: its frog name, "you", and (toggle on) the real login - never its key, hash or login otherwise
+  const privOf = (p) => (p.anon ? { anon: true, you: !!p.you, ...(real ? { revealed: true, real: real.get(p.key) || null } : {}) } : {});
   const micMax = Math.max(1, ...mics.shown.map((p) => p.s90));
   // games per group (30 / 90 days)
   const games = {};
@@ -484,7 +585,7 @@ async function forRoom(r, slug, viewer = null) {
   const how = r.how || [], hows = r.hows || [];
   const k = r.knowledge || {};
   // 1.99afl review (section K): Pepe's free text names nobody private now (freeTextScrub; fails closed: left out)
-  const scrub = await freeTextScrub();
+  const scrub = await freeTextScrub([...regs.shown, ...mics.shown].filter((p) => p.anon && p.h).map((p) => p.h));
   const scrubList = (a) => (Array.isArray(a) ? a : []).map(scrub).filter(Boolean);
   const topics = (k.topics || []).map((t) => ({ t: scrub(t.t), w: t.w })).filter((t) => t.t);
   const wmax = Math.max(1, ...topics.map((t) => t.w));
@@ -507,12 +608,15 @@ async function forRoom(r, slug, viewer = null) {
     heatChat: weekHeat(how, "76,175,80", (v) => `${R.fmt(v)} msgs`),
     heatMic: weekHeat(hows, "255,183,77", (v) => R.dur(v)),
     hasHeatMic: hows.some((v) => v > 0),
-    regulars: regs.shown.map((p, i) => ({ rank: i + 1, name: p.display, href: p.href, d30: p.d30, m30: R.fmt(p.m30), mic30: p.s30 ? R.dur(p.s30) : "—",
-                                           d90: p.d90, last: p.anon ? "—" : R.ago(p.last), ...(p.anon ? { anon: true, you: !!p.you } : {}) })),
+    regulars: regs.shown.map((p, i) => ({ rank: i + 1, name: p.anon ? p.alias : p.display, href: p.anon ? null : p.href, d30: p.d30, m30: R.fmt(p.m30),
+                                           mic30: p.s30 ? R.dur(p.s30) : "—", d90: p.d90, last: p.anon ? "—" : R.ago(p.last), ...privOf(p) })),
     regularsHidden: regs.hidden,
-    mic: mics.shown.map((p, i) => ({ rank: i + 1, name: p.display, href: p.href, dur: R.dur(p.s90), days: p.d90, pct: Math.max(3, (p.s90 / micMax) * 100),
-                                     ...(p.anon ? { anon: true, you: !!p.you } : {}) })),
+    mic: mics.shown.map((p, i) => ({ rank: i + 1, name: p.anon ? p.alias : p.display, href: p.anon ? null : p.href, dur: R.dur(p.s90), days: p.d90,
+                                     pct: Math.max(3, (p.s90 / micMax) * 100), ...privOf(p) })),
     micHidden: mics.hidden,
+    // 1.99afn: any private row on the page (the frog-name footnote, the see-through controls); the controls only for a viewer who may
+    hasPrivate: [...regs.shown, ...mics.shown].some((p) => p.anon),
+    see: opts.see && (opts.see.on || [...regs.shown, ...mics.shown].some((p) => p.anon)) ? { role: opts.see.role, on: !!opts.see.on } : null,
     cmds: top.map(([c, n, cat]) => ({ cmd: "!" + c, n: R.fmt(n), pct: Math.max(3, (n / cmax) * 100), color: (CAT[cat] || [0, "#90a4ae"])[1], cat: (CAT[cat] || [cat])[0] })),
     cats: cats.map(([c, n]) => ({ label: (CAT[c] || [c])[0], color: (CAT[c] || [0, "#90a4ae"])[1], n: R.fmt(n), pct: (n / catSum) * 100 })),
     games: gameRows, mod: modRows, modTotal: R.fmt(Object.values(mod90).reduce((a, b) => a + b, 0)),
@@ -575,37 +679,110 @@ function register(app, { isBotToken, addUser }) {
     next();
   });
 
-  app.get("/p/:slug/analytics", addUser, async (req, res) => {
-    const user = req.user ? req.user.username : null;
-    const signedIn = !!(req.user && req.user.userId);
+  /** The analytics page's room and pad for a request, with the page's own gates (an Approved pad's outsiders: 404; members-tier:
+   *  padaccess.full). -> {r, slug, padId, open, approved} or null (the 404 / "no analytics" answer is the caller's) */
+  async function padFor(req) {
     let r = null;
     try { r = await bySlug(req.params.slug); } catch (e) { r = null; }
-    if (!r) {
-      return res.status(404).render("notFound", { user, heading: "No analytics for that pad",
-        message: "Pepe hasn't sent analytics for that pad's Camfrog room (yet).", title: "Pad not found" });
-    }
+    if (!r) return null;
     const slug = String(req.params.slug).toLowerCase();
-    res.set("Cache-Control", "private, no-store");
-    // 1.99fu: analytics are members-tier (padaccess.full): signed in, or anyone on a Public pad (an Approved pad's
-    // outsiders never get here - padaccess.js's page gate)
     let pad = null;
     try { pad = await require("./roomsweb").resolveRoom(slug); } catch (e) { pad = null; }
     const PA = require("./padaccess");
     await PA.init();
     const padId = pad ? pad.id : r.room;
-    if (PA.isApproved(padId) && !PA.canSee(req.user, padId)) {      // any other address of the same room
+    if (PA.isApproved(padId) && !PA.canSee(req.user, padId)) return { r, slug, padId, hidden: true };
+    return { r, slug, padId, open: PA.full(req.user, padId), approved: PA.isApproved(padId) };
+  }
+
+  app.get("/p/:slug/analytics", addUser, async (req, res) => {
+    const user = req.user ? req.user.username : null;
+    const ctx = await padFor(req).catch(() => null);
+    if (!ctx) {
+      return res.status(404).render("notFound", { user, heading: "No analytics for that pad",
+        message: "Pepe hasn't sent analytics for that pad's Camfrog room (yet).", title: "Pad not found" });
+    }
+    const { r, slug, padId, open } = ctx;
+    res.set("Cache-Control", "private, no-store");
+    // 1.99fu: analytics are members-tier (padaccess.full): signed in, or anyone on a Public pad (an Approved pad's
+    // outsiders never get here - padaccess.js's page gate)
+    if (ctx.hidden) {      // any other address of the same room
       return res.status(404).render("notFound", { user, heading: "No analytics for that pad", message: "There's nothing here.", title: "Pad not found" });
     }
-    const open = PA.full(req.user, padId);
-    if (PA.isApproved(padId)) res.set("X-Robots-Tag", "noindex");
+    if (ctx.approved) res.set("X-Robots-Tag", "noindex");
     let a = null;
     if (open) {
-      try { a = await forRoom(r, slug, req.user && req.user.userId ? { userId: req.user.userId } : null); } catch (e) { console.error("[roomstats] view:", e); a = null; }
+      const viewer = req.user && req.user.userId ? { userId: req.user.userId } : null;
+      // 1.99afn see-through: only a viewer who may (admin / this pad's owner after 90 days) gets the controls; their toggle shows
+      // real names (each page drawn while it is on counts on its log row). Someone who lost the right has their toggle closed.
+      let see = null;
+      if (viewer) {
+        try {
+          const role = await seeThroughRole(req.user, padId);
+          const tg = await ST.toggleOf(viewer.userId, SEE_TOGGLE, padId);
+          if (role) see = { role, on: !!tg, logId: tg ? tg.log_id : null };
+          else if (tg) await ST.toggleOff({ userId: viewer.userId, scope: SEE_TOGGLE, roomId: padId, why: "lost_right" });
+        } catch (e) { console.error("[roomstats] see-through:", e.message); see = null; }
+      }
+      try { a = await forRoom(r, slug, viewer, { reveal: !!(see && see.on), see }); } catch (e) { console.error("[roomstats] view:", e); a = null; }
+      if (a && see && see.on) {
+        res.set("Referrer-Policy", "no-referrer");
+        const shown = [...a.regulars, ...a.mic].filter((x) => x.revealed && x.real).map((x) => x.real);
+        try { await ST.toggleUsed(see.logId, shown); } catch (e) { console.error("[roomstats] see-through log:", e.message); a = null; }   // not logged: not shown
+      }
     }
     let bridged = false;
     try { const b = bridgeMod(); bridged = !!(b && b._rooms && [...b._rooms.values()].some((x) => x.id === r.room)); } catch (e) { bridged = false; }
     res.render("room-analytics", { user, signedIn: open, room: { name: r.name, slug, bridged }, a });
   });
+
+  // 1.99afn see-through (owner J-18 adapted: a row, or a toggle that stays on until turned off) - fetch-only POSTs from this site;
+  // never a GET: a link can't reveal anything or write a log row
+  const NOPE = "Only PATV admins - and a pad's owner, on their own pad once they have owned it for the 90 days the boards cover - can see who is behind a frog name.";
+  async function seeCtx(req, res, needRole = true) {
+    res.set("Cache-Control", "private, no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    if (!guard.sameOriginFetch(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return null; }
+    if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
+    const ctx = await padFor(req).catch(() => null);
+    if (!ctx || ctx.hidden) { res.status(404).json({ ok: false, error: "No analytics for that pad." }); return null; }
+    if (!ctx.open) { res.status(403).json({ ok: false, error: NOPE }); return null; }
+    ctx.role = await seeThroughRole(req.user, ctx.padId);
+    if (needRole && !ctx.role) { res.status(403).json({ ok: false, error: NOPE }); return null; }
+    return ctx;
+  }
+  // one private row: {row: its frog name, reason?} -> {real: the login, or null when the site doesn't know it} - one log row
+  app.post("/p/:slug/analytics/reveal", addUser, async (req, res) => {
+    try {
+      const ctx = await seeCtx(req, res);
+      if (!ctx) return;
+      const want = str(req.body && req.body.row, 40);
+      const { regs, mics } = await boards(ctx.r, { userId: req.user.userId });
+      const row = want ? [...regs.shown, ...mics.shown].find((p) => p.anon && p.alias === want) : null;
+      if (!row) return res.status(409).json({ ok: false, error: "The frog names on this page have changed (they turn over every day at 10:00 UTC) - reload the page." });
+      const real = (await realLogins([row])).get(row.key) || null;
+      await ST.log({ userId: req.user.userId, role: ctx.role, scope: SEE_LINE, roomId: ctx.padId, logins: real ? [real] : [], reason: req.body && req.body.reason, ref: "row" });
+      res.json({ ok: true, row: want, real });
+    } catch (e) {
+      console.error("[roomstats] reveal:", e.message);
+      res.status(500).json({ ok: false, error: "Couldn't reveal it - try again." });
+    }
+  });
+  // the toggle: {on: true, reason?} shows real names on this pad's analytics (for this viewer) until {on: false}
+  app.post("/p/:slug/analytics/seethrough", addUser, async (req, res) => {
+    try {
+      const on = !!(req.body && (req.body.on === true || req.body.on === "1" || req.body.on === "on"));
+      const ctx = await seeCtx(req, res, on);                       // turning it OFF never needs the right
+      if (!ctx) return;
+      if (on) await ST.toggleOn({ userId: req.user.userId, role: ctx.role, scope: SEE_TOGGLE, roomId: ctx.padId, reason: req.body && req.body.reason });
+      else await ST.toggleOff({ userId: req.user.userId, scope: SEE_TOGGLE, roomId: ctx.padId, why: "viewer" });
+      res.json({ ok: true, on });
+    } catch (e) {
+      console.error("[roomstats] see-through:", e.message);
+      res.status(500).json({ ok: false, error: "Couldn't change it - try again." });
+    }
+  });
 }
 
-module.exports = { register, clean, forRoom, bySlug, listing, all, preview, sentenceTrim, histWhen, maskedLogins };
+module.exports = { register, clean, forRoom, bySlug, listing, all, preview, sentenceTrim, histWhen, maskedLogins,
+                   boards, seeThroughRole, loginsForHashes, SEE_LINE, SEE_TOGGLE };

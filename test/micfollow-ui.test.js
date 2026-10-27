@@ -251,7 +251,7 @@ test("/stage/admin: the 🎙 Mic follows card - the kill switch for staff, knobs
   assert.match(staff, /id="mfCard"/);
   assert.match(staff, /id="mfKill" checked/);
   assert.doesNotMatch(staff, /id="mfCfg"|id="mfSpans"/);
-  assert.match(staff, /stage-mf-admin\.js\?v=2/);           // (1.99afl: the Health column)
+  assert.match(staff, /stage-mf-admin\.js\?v=3/);           // (1.99afl: the Health column; 1.99afn: the courtesy-notice counts)
   assert.match(staff, /id="mfReports"/, "⚑ reports to review (staff)");
   const adm = ejs.render(tpl, { user: "a", isAdmin: true, state, mf: mf(true) }, { filename: file });
   assert.match(adm, /id="mfCfg"/);

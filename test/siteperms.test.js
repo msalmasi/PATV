@@ -49,6 +49,7 @@ const GOLDEN = {
   "pads.send_pepe": ["admin", true], "bridge.blocks_global": ["admin", false], "bridge.cmdlog": ["admin", false],
   "chatlog.admin": ["admin", true],                                            // CL2: the chat archive's switches (privacy-locked)
   "chatlog.read_all": ["staff", true],                                         // CL6: full chat history (audited), purge, the queue, holds
+  "chatlog.see_through": ["admin", true],                                      // 1.99afn: reveal who is behind a frog name (logged), Admin only
   "feed.admin_page": ["staff", false], "feed.moderate": ["staff", false], "feed.see_hidden": ["staff", true],
   "feed.tags_remove_any": ["staff", false], "feed.limits_exempt": ["staff", false], "feed.config": ["admin", false],
   "feed.automod_global": ["admin", false], "feed.filter_admin": ["admin", false], "feed.pepe_admin": ["admin", false],

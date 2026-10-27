@@ -1215,6 +1215,19 @@ async function quotable(viewer, roomId, items) {
     return !!V && filter(list, { view: V, jc: null }).items.length === list.length;
   } catch (e) { console.error("[chatlogview] quotable:", e.message); return false; }
 }
+/** 1.99afn (FU-3 see-through): the login behind a hidden-set hash h when the site knows it - the hidden-names job's map, else the
+ *  who map (chat_log + the live feeds) - checked by hashing it back. SERVER-ONLY: for a logged reveal (roomstats), never a page. */
+async function loginForHash(h) {
+  if (!HASH20.test(String(h || ""))) return null;
+  try { await init(); } catch (e) { return null; }
+  try { await whoReady(); } catch (e) { /* the names map alone */ }
+  const r = NAMES.get(h);
+  for (const l of [r && r.login, WHO.get(h)]) {
+    const x = lower(l);
+    if (x && hashOf(x) === h) return x;
+  }
+  return null;
+}
 /** redact() once the hidden people's names are loaded (a page render, the room list) - fails closed: "" when they can't be. */
 async function redactLoaded(s) {
   try { await init(); } catch (e) { return typeof s === "string" ? "" : s; }
@@ -1475,6 +1488,7 @@ module.exports = {
   tierOf, raiseExp, ensurePremium,                    // CL7: the retention purge (chatlogpurge.js)
   graceOf, lapsedOf, noteFirst, retentionFresh,       // CL7 fix-up
   speakerHashes, kindNow, hubChanged,                 // Train 3 review: every hash a "someone" line could be; the stricter of both stores
+  loginForHash,                                       // 1.99afn (FU-3): server-only, a logged reveal's lookup
   GRACE_MS, PRESENCE_MS, MOD_EXTRA_MS, OPEN_DELAY_MS, SIGNED_ONLY, BLOCK_RULES, DOWNGRADE_GRACE_MS, JC_TTL, READ_ALL, AUD, STOP, PRESENCE,
   _caches: CACHE, _rows: ROWS, _tiers: TIERS, _opens: OPENS, _names: NAMES, _who: WHO, _disp: DISP,
   _setClock: (f) => { clock = f || (() => CL.now()); },

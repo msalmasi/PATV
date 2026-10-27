@@ -162,3 +162,33 @@ test("rowOf: what a feed item becomes (the mapper the seed shares)", () => {
   assert.deepEqual(JSON.parse(l.d), { who: "pb", pad: "Pad", what: "x", link: "/p/x", np: 1 });
   assert.equal(l.who, null);
 });
+
+test("1.99afn: the privacy commands are on the site's private_args floor, and the help sync's TOP-LEVEL private_args list is read", async () => {
+  // the backup copy (bot 1.99afk's pepe_privargs.BUILTIN floor): a pad never shows "X: !incognito on" even before a help sync lands
+  for (const c of ["!incognito", "!forgetme", "!bridge", "!transcripts"]) {
+    assert.ok(CL.PRIVATE_ARGS.includes(c), c);
+    assert.equal(CL.isPrivateCmd(c + " on"), true, c);
+    assert.equal(CL.isPrivateCmd(c.toUpperCase() + " status"), true, c + " in any case");
+  }
+  assert.equal(CL.isPrivateCmd("!bridges"), false, "a whole first word only");
+  // Pepe's build (camfrog-bot tools/build_help.py) publishes ONE top-level list and no per-card flag - the site used to read only
+  // the per-card flag, so nothing was ever added
+  const H = require(path.join(repo, "help"));
+  const real = H.current;
+  H.current = async () => ({ data: { schema: 1, categories: [], private_args: ["!newsecret", "!AliasOfIt", "not a command", 7, "!" + "x".repeat(60)],
+                                     entries: [{ id: "a", commands: ["!plain"], aliases: [] }, { id: "b", commands: ["!oldflag"], aliases: ["!oldalias"], private_args: true }] } });
+  try {
+    const n = await CL.privateFromHelp();
+    assert.equal(n, 4, "the list's two good commands + an older build's flagged card (command + alias)");
+    for (const c of ["!newsecret", "!aliasofit", "!oldflag", "!oldalias"]) assert.equal(CL.isPrivateCmd(c + " 1234"), true, c);
+    assert.equal(CL.isPrivateCmd("!plain x"), false, "an unflagged card is not private");
+    assert.equal(CL.isPrivateCmd("not a command"), false);
+    assert.equal(CL.isPrivateCmd("!incognito on"), true, "the floor stays");
+  } finally { H.current = real; }
+  // the real help data Pepe publishes carries the list (bot 1.99afk on): when the bot checkout is next to the site, it is the same shape
+  const botData = path.join(repo, "camfrog-bot", "help", "help-data.json");
+  if (fs.existsSync(botData)) {
+    const d = JSON.parse(fs.readFileSync(botData, "utf8"));
+    assert.ok(Array.isArray(d.private_args), "help-data.json has the top-level list");
+  }
+});

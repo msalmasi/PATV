@@ -19,6 +19,7 @@
     <div><b>Started</b><span><%= S.started ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(S.started, 'long') : '?' %></span></div>
     <div><b>Node</b><span><%= S.node %></span></div>
     <div><b>Database</b><span><%= S.db ? 'answering' : 'NOT answering' %></span></div>
+    <div><b>Frog-name key</b><span><% if (S.aliasSecret === 'set') { %><span class="adm-pill ok">set</span><% } else { %><span class="adm-pill bad"><%= S.aliasSecret || 'unknown' %></span> ALIAS_SECRET isn't set in .env - private people's frog names change at every restart<% } %></span></div>
   </div>
   <p class="adm-help" style="margin-top:10px">The deploy pipeline's own check is <a href="/healthz">/healthz</a>.</p>
 </section>

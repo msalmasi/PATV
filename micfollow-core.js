@@ -99,7 +99,7 @@ const FIELDS = Object.freeze({
   stills:                { def: true, bool: true },
   stills_max:            { def: 4, min: 0, max: 12 },
   still_refresh_s:       { def: 20, min: 10, max: 120 },
-  notice_gap_h:          { def: 3, min: 1, max: 48 },
+  // (1.99afn, FU-1: notice_gap_h retired - one courtesy notice per login, ever, no re-notices; an old saved value is ignored)
   exclude_on_cut_min:    { def: 60, min: 0, max: 1440 },
   freeze_max_min:        { def: 30, min: 5, max: 240 },
   sync_fresh_s:          { def: 45, min: 10, max: 120 },        // > Pepe's 30 s snapshot cadence (BRIDGE_SNAPSHOT_EVERY) in quiet rooms
@@ -110,7 +110,7 @@ const FIELDS = Object.freeze({
   // people). 9 = the 3 x 3 "Brady Bunch" grid stays reachable unless an admin narrows it site-wide.
   max_people:            { def: 9, min: 1, max: 9 },
   max_live:              { def: 6, min: 1, max: 6 },             // mfix: 4 -> 6 (recent speakers keep their relays)
-  notice_lead_s:         { def: 120, min: 120, max: 3600 },     // DF-11: the pad's first notice this long before the first pick
+  notice_lead_s:         { def: 120, min: 120, max: 3600 },     // DF-11: the courtesy notice this long before the first pick
   // mfix: DF-30 as it was - speech nobody can show makes the tiles give way to the neutral card at once. Off (the default):
   // the tiles stay, dimmed, with "Someone else is speaking" on them and nobody highlighted as the speaker
   unattributed_clear:    { def: false, bool: true },

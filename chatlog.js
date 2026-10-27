@@ -126,7 +126,11 @@ const SHOWN_CLEARS = Object.freeze({ bridge: ["bridge", "list_b"], incognito: ["
 const REASON_RE = /^(bridge|incognito|list_b|list_i|web|forget|delete|staff|of:[0-9a-f]{20})$/;
 // the commands whose arguments are private (Pepe's catalog `private_args`, aliases expanded) - never archived, never in the live
 // feed. Pepe's help sync can only ADD to this list (privateFromHelp); keep it in step with camfrog-bot help/catalog.json.
-const PRIVATE_ARGS = Object.freeze(["!msg", "!message", "!patvmsg", "!verify", "!verifypad", "!joinroom", "!padfine", "!padmove", "!relay", "!tell"]);
+// 1.99afn: + the privacy commands (bot 1.99afk's private_args floor, pepe_privargs.BUILTIN): "FrankieFettuccine: !incognito on"
+// on a pad told everyone whose the "someone" lines after it were - this copy is the backup when the help sync hasn't landed
+// (!forgetme is !incognito's alias for the forget-me flow).
+const PRIVATE_ARGS = Object.freeze(["!msg", "!message", "!patvmsg", "!verify", "!verifypad", "!joinroom", "!padfine", "!padmove", "!relay", "!tell",
+                                    "!incognito", "!forgetme", "!bridge", "!transcripts"]);
 const INDEXABLE_KINDS = ["msg", "tx", "topic"];
 const INDEXABLE = "text IS NOT NULL AND k IN ('msg','tx','topic') AND rm_at IS NULL AND purged IS NULL";
 // the feed item -> d: what isn't a column (c, ts, k, text, the tx id, CL3's aud) and, of `u`, only what renders (login is `who`)
@@ -564,14 +568,22 @@ function isPrivateCmd(text) {
   const first = "!" + t.slice(1).split(/\s/)[0].toLowerCase();
   return PRIVATE.has(first);
 }
-/** Pepe's published help can only ADD commands to the list (entries with private_args: true, their commands + aliases). */
+/** Pepe's published help can only ADD commands to the list. 1.99afn: Pepe's build publishes them as ONE top-level list,
+ *  help-data.json `private_args` (camfrog-bot tools/build_help.py: every flagged card's commands with their aliases, lower case) -
+ *  the cards themselves carry no flag, so reading only the per-card `private_args: true` (what this did) never added anything.
+ *  Both are read: the list, and a card flag from an older / hand-made build. */
 async function privateFromHelp() {
   try {
     const cur = await require("./help").current();
     const add = [];
+    const top = cur && cur.data && Array.isArray(cur.data.private_args) ? cur.data.private_args : [];
+    for (const c of top.slice(0, 200)) {
+      const x = String(c == null ? "" : c).trim().toLowerCase();
+      if (CMD_RE.test(x)) add.push(x);
+    }
     for (const e of (cur && cur.data && cur.data.entries) || []) {
       if (!e || e.private_args !== true) continue;
-      for (const c of [...(e.commands || []), ...(e.aliases || [])]) if (CMD_RE.test(String(c))) add.push(String(c));
+      for (const c of [...(e.commands || []), ...(e.aliases || [])]) if (CMD_RE.test(String(c))) add.push(String(c).toLowerCase());
     }
     if (add.length) PRIVATE = new Set([...PRIVATE_ARGS, ...PRIVATE, ...add]);
     return add.length;

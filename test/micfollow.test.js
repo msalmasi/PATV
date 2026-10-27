@@ -439,38 +439,58 @@ test("13-14. a ✂ Cut of a manual cam slot keeps them off the mic stage 60 min;
   await settle(); await settle();
 });
 
-test("15. notices: once per pad per notice_gap_h; unlinked -> a Camfrog PM queued under the pad owner; a house pad -> under Pepe's own account (D-19)", async () => {
+test("15. 1.99afn (FU-1): ONE courtesy notice per Camfrog login, ever - a real account: the PM + one silent inbox row; unlinked: a PM queued under the pad owner; a house pad: under Pepe's own account (D-19); nothing more, ever", async () => {
   await reset();
-  T += 4 * 3600 * 1000;                       // past notice_gap_h since anyone was on in the tests above
-  await bot();
   await runQuery("DELETE FROM inbox").catch(() => {});
   await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
-  await onStage(["alice"]);
+  await MF._noticed(ROOM.id, "alice", null);           // alice has never been told anywhere (she has a real PATV account)
+  await step(["alice"]); await at(3, ["alice"]);
   for (let i = 0; i < 20; i++) await settle();
-  const box = await getQuery("SELECT title FROM inbox WHERE user_id = 'u_alice' AND kind = 'stage'");
-  assert.equal(box.filter((b) => /hold the mic/.test(b.title)).length, 1, JSON.stringify(box));
-  // again within 3 h: nothing new
+  const box = await getQuery("SELECT title, body FROM inbox WHERE user_id = 'u_alice' AND kind = 'stage'");
+  assert.equal(box.length, 1, JSON.stringify(box));
+  assert.match(box[0].title, /may show your cam while you hold the mic/);
+  assert.match(box[0].body, /PATV homepage, to everyone/, "owner D-1: the notice says the homepage shows it to everyone on a Public pad");
+  assert.match(box[0].body, /only notice you'll get/);
+  const pm = await getQuery("SELECT user_id, args FROM pepe_actions WHERE kind = 'notify'");
+  assert.equal(pm.length, 1, "one PM, never a room line (bot 1.99afm) - " + JSON.stringify(pm));
+  const [to, text] = JSON.parse(pm[0].args);
+  assert.equal(to, "alice");
+  assert.equal(pm[0].user_id, "u_owner", "queued under the pad owner");
+  assert.match(text, /^🎙 Once only: .* shows whoever holds the mic in Mic Room, cam included, to signed-in members \(and on the PATV homepage to everyone if the pad is Public\)\./);
+  assert.match(text, /Stop it everywhere: !livecam off\. https:\/\/publicaccess\.tv\/p\//);
+  assert.ok(text.length <= 300);
+  const c = await MF.courtesyOf("alice");
+  assert.ok(c && c.v === MF.COURTESY_V && c.v === 2, "her courtesy row (v2: the text names the homepage) - " + JSON.stringify(c));
+  assert.equal(tileOn("alice"), false, "not picked before notice_lead_s");
+  T = Number(c.sent_at) + 121 * 1000; await bot(); await step(["alice"]); up("alice"); await at(1, ["alice"]);
+  assert.equal(tileOn("alice"), true, "picked 120 s after the notice");
+  // more grabs and pictures over six hours (the old re-notice was every 3 h): nothing more
+  for (let h = 0; h < 6; h++) { await reset(); await onStage(["alice"]); for (let i = 0; i < 5; i++) await settle(); T += 3600e3; }
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'notify'"))[0].n, 1, "no re-notice");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = 'u_alice' AND kind = 'stage'"))[0].n, 1);
+  // dana has no PATV account: a PM via Pepe, queued as the pad owner, and no inbox row anywhere
   await reset();
-  await onStage(["alice"]);
-  for (let i = 0; i < 20; i++) await settle();
-  assert.equal((await getQuery("SELECT title FROM inbox WHERE user_id = 'u_alice' AND kind = 'stage'")).filter((b) => /hold the mic/.test(b.title)).length, 1);
-  // dana has no PATV account: a PM via Pepe, queued as the pad owner
-  await reset();
-  await onStage(["dana"]);
+  await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
+  await MF._noticed(ROOM.id, "dana", null);
+  await step(["dana"]); await at(3, ["dana"]);
   for (let i = 0; i < 20; i++) await settle();
   const acts = await getQuery("SELECT user_id, kind, args FROM pepe_actions WHERE kind = 'notify'");
-  assert.ok(acts.some((a) => a.user_id === "u_owner" && JSON.parse(a.args)[0] === "dana"), JSON.stringify(acts));
-  // a house pad with no owner: a system-queued PM (Pepe's own account) - there is no public room line for the mic stage (D-19)
+  assert.ok(acts.length === 1 && acts[0].user_id === "u_owner" && JSON.parse(acts[0].args)[0] === "dana", JSON.stringify(acts));
+  // a house pad with no owner: a PM queued under Pepe's own account - there is no public room line for the mic stage (D-19)
   await rooms.setOwner(ROOM.id, "house", "test");
   await reset();
   await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
-  await onStage(["carl"]);
+  await MF._noticed(ROOM.id, "carl", null);
+  await step(["carl"]); await at(3, ["carl"]);
   for (let i = 0; i < 20; i++) await settle();
   const house = await getQuery("SELECT user_id, args FROM pepe_actions WHERE kind = 'notify'");
   assert.equal(house.length, 1, JSON.stringify(house));
   assert.equal(house[0].user_id, "pepe-bot");
   assert.equal(JSON.parse(house[0].args)[0], "carl");
   await rooms.setOwner(ROOM.id, "padowner", "test");
+  // a span covered by the courtesy notice is "noticed"
+  const sp = await getQuery("SELECT noticed FROM micfollow_spans WHERE login = 'alice' ORDER BY id DESC LIMIT 1");
+  assert.equal(sp[0] && sp[0].noticed, 1);
 });
 
 test("16. the appearance log: one span per person on stage, closed with its reason; the person's own list; prune", async () => {
@@ -998,9 +1018,12 @@ test("39. the notice to the person shown is in their own language; metrics per p
   const realT = I18N.tFor, langs = [];
   I18N.tFor = (lang) => { langs.push(lang); return realT(lang); };
   I18N._prefs.set("u_alice", "es");
-  try { await onStage(["alice"]); for (let i = 0; i < 20; i++) await settle(); }
+  await MF._noticed(ROOM.id, "alice", null);           // 1.99afn: the one courtesy notice - she hasn't had it yet
+  try { await step(["alice"]); await at(3, ["alice"]); for (let i = 0; i < 20; i++) await settle(); }
   finally { I18N.tFor = realT; I18N._prefs.delete("u_alice"); }
   assert.ok(langs.includes("es"), langs.join(","));
+  T = Number((await MF.courtesyOf("alice")).sent_at) + 121 * 1000; await bot();
+  await onStage(["alice"]);
   const pad = (await MF.adminView(ADMIN)).pads.find((p) => p.room === ROOM.id);
   assert.ok(pad && pad.counts && pad.counts.adds >= 1, JSON.stringify(pad && pad.counts));
 });
@@ -1009,10 +1032,10 @@ test("39. the notice to the person shown is in their own language; metrics per p
 
 const tileOn = (l) => tiles().includes(l);
 
-test("40. notice first (DF-11): the pad's first notice goes out at the first qualifying grab; the person is picked only 120 s later; re-notices never re-gate", async () => {
+test("40. notice first (DF-11): the courtesy notice goes out at the first qualifying grab; the person is picked only 120 s later; someone told before (any pad) is picked at once and sent nothing", async () => {
   await reset(); await plainPad();
   await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
-  await MF._noticed(ROOM.id, "carl", null);          // carl has never been noticed on this pad (he has no PATV account: a PM via Pepe)
+  await MF._noticed(ROOM.id, "carl", null);          // carl has never been told (he has no PATV account: a PM via Pepe)
   await step(["carl"]); await at(3, ["carl"]);
   for (let i = 0; i < 10; i++) await settle();
   assert.equal(tileOn("carl"), false, "not on the stage yet");
@@ -1021,30 +1044,39 @@ test("40. notice first (DF-11): the pad's first notice goes out at the first qua
   assert.equal(pm[0].user_id, "u_owner", "queued under the pad owner");
   const [to, text] = JSON.parse(pm[0].args);
   assert.equal(to, "carl");
-  assert.match(text, /shows whoever holds the mic in Mic Room on its stage/);
-  assert.match(text, /recent speakers a few minutes after/, "mfix review: it says recent speakers stay up a while");
-  assert.match(text, /in about 2 minutes/);
-  assert.match(text, /To stop it: !livecam off\. https:\/\/publicaccess\.tv\/p\//, "mfix review: the way to stop it (and the link) fit the 300 characters");
+  assert.match(text, /shows whoever holds the mic in Mic Room, cam included/);
+  assert.match(text, /in ~2 min/);
+  assert.match(text, /Stop it everywhere: !livecam off\. https:\/\/publicaccess\.tv\/p\//, "the way to stop it (and the link) fit the 300 characters");
   assert.ok(text.length <= 300);
   const n = MF._notes.get(ROOM.id + "|carl");
   assert.ok(n && n.first, "noted");
   const row = (await getQuery("SELECT first_at FROM micfollow_notices WHERE room_id = ? AND login = 'carl'", [ROOM.id]))[0];
   assert.equal(Number(row.first_at), n.first, "kept in micfollow_notices (a restart keeps the gate)");
+  assert.equal(Number((await MF.courtesyOf("carl")).sent_at), n.first, "...and the courtesy row says when he was told");
   await at(60, ["carl"]);
   assert.equal(tileOn("carl"), false, "60 s after the notice: still not");
   T = n.first + 121 * 1000; await bot(); await step(["carl"]);
   assert.equal(tileOn("carl"), true, "120 s after the notice: picked");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'notify'"))[0].n, 1, "one notice, not one per step");
-  // later: the re-notice (every notice_gap_h) goes out at the picture and never re-gates
+  // later: no re-notice at all (1.99afn: the 3-hourly re-notices are gone)
   await reset(); await plainPad();
   T += 4 * 3600 * 1000; await bot();
   await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
   await onStage(["carl"]);
   for (let i = 0; i < 10; i++) await settle();
   assert.equal(tileOn("carl"), true, "no 120 s wait the second time");
-  const again = await getQuery("SELECT args FROM pepe_actions WHERE kind = 'notify'");
-  assert.equal(again.length, 1);
-  assert.match(JSON.parse(again[0].args)[1], /Your cam is on .*stage on PATV while you hold the mic in Mic Room, and for a few minutes after\. To stop it: !livecam off\./);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'notify'"))[0].n, 0, "nothing sent the second time");
+  // told on another pad long ago (the pad's own notices row is gone - its 180-day purge): picked at once, nothing sent
+  await reset(); await plainPad();
+  MF._notes.delete(ROOM.id + "|carl");
+  await runQuery("DELETE FROM micfollow_notices WHERE login = 'carl'");
+  await runQuery("UPDATE micfollow_courtesy SET sent_at = 5, room_id = 'Other.Room' WHERE login = 'carl'");
+  await step(["carl"]); await at(3, ["carl"]);
+  for (let i = 0; i < 10; i++) await settle();
+  up("carl"); await at(1, ["carl"]);
+  assert.equal(tileOn("carl"), true, "told on another pad = told here (D-7)");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'notify'"))[0].n, 0, "and nothing sent");
+  assert.equal(MF._notes.get(ROOM.id + "|carl").first, 5, "the pad's gate reads the courtesy notice's time");
 });
 
 test("41. blocks (14.1.2 #2): DM blocks either way -> 'isn't available', no ticket; a person who blocked the pad owner is never on that owner's stage", async () => {
