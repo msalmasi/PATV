@@ -553,6 +553,11 @@ async function askPepe(job, n) {
   const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [String(job.user_id)]))[0] || {};
   const t = now();
   const ask = (parts.pepe || []).filter((k) => k !== "recordings" || login);
+  if (!ask.length) {
+    // (recordings only, and the Camfrog login was unlinked since: nothing Pepe can be asked - built without his part)
+    await runQuery("UPDATE account_exports SET pepe_state = 'done', pepe_error = 'no linked Camfrog login any more', pepe_attempt = ? WHERE id = ?", [n, job.id]);
+    return;
+  }
   const args = [job.id, ask.join(",")].concat(parts.rec_before ? [String(Math.floor(parts.rec_before / 1000))] : []);
   try { fs.rmSync(pepeDir(job.id), { recursive: true, force: true }); } catch (e) { /* none */ }
   await runQuery(`INSERT OR IGNORE INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
@@ -579,7 +584,12 @@ async function run(id) {
       // and the account are gathered only after it, so a waiting job never gathers them twice
       const parts = parseJson(job.parts, null);
       if (parts && (parts.pepe || []).length && job.pepe_state !== "done" && job.pepe_state !== "gave_up") {
-        if (!job.pepe_state) await askPepe(job, 1);
+        if (!job.pepe_state) {
+          await askPepe(job, 1);
+          job = (await getQuery("SELECT * FROM account_exports WHERE id = ?", [id]))[0];
+        }
+      }
+      if (parts && (parts.pepe || []).length && job.pepe_state === "wait") {
         if (now() - Number(job.created) <= PEPE_WAIT_MS) {
           await runQuery("UPDATE account_exports SET state = 'queued' WHERE id = ?", [id]);
           return { ok: false, waiting: true, error: "pepe" };

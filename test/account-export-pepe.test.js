@@ -102,7 +102,7 @@ const setup = () => setupP || (setupP = (async () => {
   await X.init();
   await P.init();
   await M.init();
-  for (const [id, cf] of [["me", "MeCF"], ["nolink", null], ["u1", "cf1"], ["u2", "cf2"], ["u3", "cf3"], ["u4", "cf4"]]) {
+  for (const [id, cf] of [["me", "MeCF"], ["nolink", null], ["u1", "cf1"], ["u2", "cf2"], ["u3", "cf3"], ["u4", "cf4"], ["u5", "cf5"]]) {
     await runQuery("INSERT INTO users (userId, username, email, password, camfrogUsername) VALUES (?, ?, ?, 'x', ?)", [id, id, `${id}@example.com`, cf]);
   }
   await runQuery("INSERT INTO chatlog_rooms (rk, room_id, created) VALUES (1, 'Lab.Room', 1)");
@@ -306,6 +306,23 @@ test("bounds: at most 3 recordings exports in flight; account deletion removes P
   const st = await X.pepeStatus();
   assert.equal(st.rec_inflight, 2);
   assert.equal(st.rec_jobs_max, 3);
+});
+
+test("recordings only, and the Camfrog login unlinked before Pepe is asked again: nothing to ask him - built without his part", async () => {
+  await setup();
+  const r = await X.request("u5", { parts: { chat: false, transcripts: false, recordings: true } });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  await waitAsked(r.id);
+  await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = 'u5'");
+  await runQuery("UPDATE pepe_actions SET status = 'done' WHERE kind = 'privacy.export' AND idem = ?", [`export-${r.id}-1`]);
+  clockAt += X.PEPE_RETRY_MS + 1;
+  await X.pepeTick();
+  assert.equal((await asks(r.id)).length, 1, "no empty ask is queued");
+  assert.equal((await job(r.id)).pepe_state, "done");
+  await X.tick();
+  const j = await waitState(r.id, "ready");
+  const readme = unzip(fs.readFileSync(path.join(X._dir(), j.file)))["README.txt"].data.toString("utf8");
+  assert.match(readme, /Pepe's part \(mic recordings\): not included - Pepe couldn't send it \(no linked Camfrog login any more\)/);
 });
 
 test("the form: the choices are sent, Pepe's rows shown only when offered, the right messages, where to go on", async () => {
