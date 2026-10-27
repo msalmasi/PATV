@@ -4,6 +4,7 @@
 // room-feature gates off the bot's code). Pepe publishes it here with the bot token whenever it changes - with the admin
 // panel's LIVE prices - so each site shows the help of the Pepe deployed on it:
 //   POST /api/pepe/help/sync {hash, version, data}        (bot token) -> stored in help_kv 'data'
+//     (1.99afi: a card over HELP_LIMITS is clipped or left out, not the whole sync refused - see the data section)
 // Before the first sync (a fresh DB) the committed copy data/help-commands.json is used (the build writes it with
 // --site). Pages: GET /help (GET /commands -> 301 /help), the cards grouped in the 10 categories, deep links
 // /help#cmd-<id> (and /help#cmd-<any command or alias>, resolved by the page), ?q= prefills the search.
@@ -83,43 +84,131 @@ async function kvSet(k, v) {
 }
 
 // ── the data ──
+// 1.99afi: the limits. camfrog-bot tools/build_help.py SITE_LIMITS mirrors these numbers (its build refuses data over
+// them and its CI checks every card) - keep the two in step. Lengths are JavaScript string lengths (UTF-16 units).
+// One card over a limit used to refuse the WHOLE sync (10-27: Pepe 1.99afd's 6,300-character !econ card kept prod's
+// /help on 1.99adr's 338 cards, "[HELP] help sync failed: 400" every 2 min). Now only the SHAPE refuses a sync (types,
+// ids, categories, roles, command names, links, prices) - with the bot token and the body size (SYNC_BODY_MAX) - and a
+// card over a limit is kept with its text clipped (summary / details) or left out (anything else over): logged, counted
+// in the sync's answer and on /admin/help.
+const HELP_LIMITS = Object.freeze({
+  entries: 1500, title: 200, summary: 400, details: 6000, syntax: 12, syntaxLine: 200, examples: 12, example: 300,
+  keywords: 30, keyword: 80, commands: 20, gates: 10, gate: 60, webLabel: 200, undocumented: 2000, undocumentedCmd: 42,
+});
+const SYNC_BODY_MAX = "3mb";       // the whole sync request (express.json limit: over it -> 413)
+const CLIPPABLE = new Set(["summary", "details"]);
+const TRIMMED_MAX = 50;            // the over-the-limit list kept with the data / sent back (the counts are exact)
+const L = HELP_LIMITS;
 const str = (v, max) => typeof v === "string" && v.length <= max;
 const strList = (v, max, each) => Array.isArray(v) && v.length <= max && v.every((x) => str(x, each));
+const isStrList = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
+const longest = (xs) => xs.reduce((m, x) => Math.max(m, x.length), 0);
 const safeUrl = (u) => typeof u === "string" && u.length <= 300 && (/^\/(?!\/)/.test(u) || /^https:\/\/[^\s"'<>]+$/.test(u));
-/** null when the data is usable, else what's wrong (the sync refuses it; the page keeps the copy it has). */
-function validateData(d) {
+/** null when the data's SHAPE is usable, else what's wrong - a sync with a bad shape is refused whole. */
+function shapeError(d) {
   if (!d || typeof d !== "object") return "not an object";
   if (d.schema !== 1) return "unknown schema";
-  if (!Array.isArray(d.entries) || !d.entries.length || d.entries.length > 1500) return "entries";
+  if (!Array.isArray(d.entries) || !d.entries.length || d.entries.length > L.entries) return "entries";
   if (!Array.isArray(d.categories) || !d.categories.every((c) => c && CAT_IDS.includes(c.id) && str(c.label, 60) && str(c.icon || "", 16) && str(c.blurb || "", 300))) return "categories";
   const ids = new Set();
   for (const e of d.entries) {
     const w = "entry " + (e && e.id);
-    if (!e || !ID_RE.test(String(e.id || ""))) return w + ": id";
+    if (!e || typeof e !== "object" || !ID_RE.test(String(e.id || ""))) return w + ": id";
     if (ids.has(e.id)) return w + ": duplicate id";
     ids.add(e.id);
-    if (!str(e.title, 200) || !e.title.trim()) return w + ": title";
+    if (typeof e.title !== "string" || !e.title.trim()) return w + ": title";
     if (!CAT_IDS.includes(e.category)) return w + ": category";
     if (!ROLES.includes(e.role)) return w + ": role";
-    if (!Array.isArray(e.commands) || e.commands.length > 20 || !e.commands.every((c) => CMD_RE.test(c))) return w + ": commands";
+    if (!Array.isArray(e.commands) || !e.commands.every((c) => CMD_RE.test(c))) return w + ": commands";
     if (!Array.isArray(e.aliases || []) || !(e.aliases || []).every((c) => CMD_RE.test(c))) return w + ": aliases";
-    if (!strList(e.syntax, 12, 200) || !e.syntax.length) return w + ": syntax";
-    if (!str(e.summary, 400) || !str(e.details || "", 6000)) return w + ": text";
-    if (!strList(e.examples || [], 12, 300) || !strList(e.keywords || [], 30, 80)) return w + ": examples/keywords";
+    if (!isStrList(e.syntax) || !e.syntax.length) return w + ": syntax";
+    if (typeof e.summary !== "string" || typeof (e.details || "") !== "string") return w + ": text";
+    if (!isStrList(e.examples || []) || !isStrList(e.keywords || [])) return w + ": examples/keywords";
     if (e.cost != null && !(Number.isInteger(e.cost) && e.cost >= 0 && e.cost < 1e12)) return w + ": cost";
-    if (e.gates != null && !strList(e.gates, 10, 60)) return w + ": gates";
-    if (e.web != null && !(e.web && str(e.web.label, 200) && safeUrl(e.web.url))) return w + ": web";
+    if (e.gates != null && !isStrList(e.gates)) return w + ": gates";
+    if (e.web != null && !(e.web && typeof e.web.label === "string" && safeUrl(e.web.url))) return w + ": web";
   }
-  if (d.undocumented != null && !strList(d.undocumented, 2000, 42)) return "undocumented";
+  if (d.undocumented != null && !strList(d.undocumented, L.undocumented, L.undocumentedCmd)) return "undocumented";
   return null;
 }
+// field -> the word validateData has always used for it
+const OVER_WORD = { title: "title", summary: "text", details: "text", syntax: "syntax", "syntax line": "syntax", examples: "examples/keywords",
+  example: "examples/keywords", keywords: "examples/keywords", keyword: "examples/keywords", commands: "commands", gates: "gates", gate: "gates", "web label": "web" };
+/** a card (shape already checked) -> its fields over HELP_LIMITS: [{field, len, max}] */
+function oversize(e) {
+  const out = [];
+  const chk = (field, len, max) => { if (len > max) out.push({ field, len, max }); };
+  chk("title", e.title.length, L.title);
+  chk("summary", e.summary.length, L.summary);
+  chk("details", (e.details || "").length, L.details);
+  chk("syntax", e.syntax.length, L.syntax);
+  chk("syntax line", longest(e.syntax), L.syntaxLine);
+  chk("examples", (e.examples || []).length, L.examples);
+  chk("example", longest(e.examples || []), L.example);
+  chk("keywords", (e.keywords || []).length, L.keywords);
+  chk("keyword", longest(e.keywords || []), L.keyword);
+  chk("commands", e.commands.length, L.commands);
+  if (e.gates != null) { chk("gates", e.gates.length, L.gates); chk("gate", longest(e.gates), L.gate); }
+  if (e.web != null) chk("web label", e.web.label.length, L.webLabel);
+  return out;
+}
+/** null when the data is usable AS IS, else what's wrong (the stored / bundled copy must pass this after normalizeData). */
+function validateData(d) {
+  const err = shapeError(d);
+  if (err) return err;
+  for (const e of d.entries) { const o = oversize(e)[0]; if (o) return "entry " + e.id + ": " + OVER_WORD[o.field]; }
+  return null;
+}
+/** Text cut to `max` JavaScript characters with a "…": never inside a surrogate pair, back to a space when one is near,
+ *  and never leaving a `code span open. */
+function clip(s, max) {
+  let t = String(s).slice(0, max - 1);
+  const last = t.charCodeAt(t.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) t = t.slice(0, -1);          // half an emoji
+  const sp = t.search(/\s\S*$/);
+  if (sp > max * 0.8) t = t.slice(0, sp);
+  if ((t.match(/`/g) || []).length % 2) t = t.slice(0, t.lastIndexOf("`"));
+  return t.replace(/\s+$/, "") + "…";
+}
+/**
+ * The data the site keeps: -> {data, error, cards, clipped, skipped, trimmed}. A bad shape -> error (refuse it all).
+ * A card over a limit: only its summary / details over -> kept, clipped; anything else over -> left out. trimmed lists
+ * them ({id, field, len, max, action}, at most TRIMMED_MAX; clipped / skipped count them all).
+ */
+function normalizeData(d) {
+  const none = { data: null, cards: 0, clipped: 0, skipped: 0, trimmed: [] };
+  const err = shapeError(d);
+  if (err) return { ...none, error: err };
+  const entries = [], trimmed = [];
+  let clipped = 0, skipped = 0;
+  for (const e of d.entries) {
+    const over = oversize(e);
+    if (!over.length) { entries.push(e); continue; }
+    const fits = over.every((o) => CLIPPABLE.has(o.field));
+    if (fits) {
+      const c = { ...e };
+      for (const o of over) c[o.field] = clip(c[o.field], o.max);
+      entries.push(c);
+      clipped++;
+    } else skipped++;
+    for (const o of over) if (trimmed.length < TRIMMED_MAX) trimmed.push({ id: e.id, ...o, action: fits ? "clipped" : "skipped" });
+  }
+  if (!entries.length) return { ...none, error: "entries", skipped, trimmed };
+  const data = clipped || skipped ? { ...d, entries } : d;
+  const left = validateData(data);                                    // what is kept passes the strict check
+  if (left) return { ...none, error: left };
+  return { data, error: null, cards: entries.length, clipped, skipped, trimmed };
+}
+const trimNote = (t) => t.slice(0, 10).map((x) => `${x.id} ${x.field} ${x.len}>${x.max} ${x.action}`).join(", ") + (t.length > 10 ? ", ..." : "");
 
 let FALLBACK = null;
 function fallback() {
   if (!FALLBACK) {
     try {
-      const d = JSON.parse(fs.readFileSync(FALLBACK_FILE, "utf8"));
-      FALLBACK = validateData(d) ? null : { data: d, version: null, hash: null, at: null, source: "bundled" };
+      const n = normalizeData(JSON.parse(fs.readFileSync(FALLBACK_FILE, "utf8")));
+      if (n.error) console.error("[help] fallback: bad help data:", n.error);
+      else if (n.trimmed.length) console.warn(`[help] fallback: the bundled copy has cards over the limits (${n.clipped} clipped, ${n.skipped} left out): ${trimNote(n.trimmed)}`);
+      FALLBACK = n.data ? { data: n.data, version: null, hash: null, at: null, source: "bundled", trimmed: n.trimmed } : null;
     } catch (e) { console.error("[help] fallback:", e.message); }
   }
   return FALLBACK;
@@ -129,19 +218,27 @@ async function current() {
   if (CUR === undefined) {
     try {
       const s = await kvGet("data");
-      CUR = s && !validateData(s.data) ? { data: s.data, version: s.version || null, hash: s.hash || null, at: s.at || null, source: "pepe" } : null;
+      const n = s ? normalizeData(s.data) : null;          // stored normalized; again in case a limit shrank since
+      CUR = n && n.data ? { data: n.data, version: s.version || null, hash: s.hash || null, at: s.at || null, source: "pepe",
+                            trimmed: Array.isArray(s.trimmed) && s.trimmed.length ? s.trimmed : n.trimmed } : null;
     } catch (e) { CUR = null; }
   }
-  return CUR || fallback() || { data: { schema: 1, categories: [], entries: [] }, version: null, hash: null, at: null, source: "none" };
+  return CUR || fallback() || { data: { schema: 1, categories: [], entries: [] }, version: null, hash: null, at: null, source: "none", trimmed: [] };
 }
+/** Pepe's sync -> {hash, cards, clipped, skipped, trimmed}. The hash stays Pepe's (his pull compares it with his own,
+ *  so a clipped copy isn't published again every 2 minutes). */
 async function sync(body = {}) {
-  const err = validateData(body.data);
-  if (err) throw Object.assign(new Error("bad help data: " + err), { status: 400 });
+  const n = normalizeData(body.data);
+  if (n.error) throw Object.assign(new Error("bad help data: " + n.error), { status: 400 });
   const hash = String(body.hash || "").slice(0, 64) || crypto.createHash("sha256").update(JSON.stringify(body.data)).digest("hex").slice(0, 16);
-  const rec = { data: body.data, version: String(body.version || "").slice(0, 20) || null, hash, at: NOW() };
+  const version = String(body.version || "").slice(0, 20) || null;
+  if (n.trimmed.length) {
+    console.warn(`[help] sync ${hash} (Pepe ${version || "?"}): ${n.clipped} card(s) clipped, ${n.skipped} left out - over the limits: ${trimNote(n.trimmed)}`);
+  }
+  const rec = { data: n.data, version, hash, at: NOW(), trimmed: n.trimmed };
   await kvSet("data", rec);
   CUR = { ...rec, source: "pepe" };
-  return hash;
+  return { hash, cards: n.cards, clipped: n.clipped, skipped: n.skipped, trimmed: n.trimmed };
 }
 
 // ── config (help_kv 'config') ──
@@ -338,7 +435,7 @@ const fmt = (n) => Number(n || 0).toLocaleString("en-US");
 function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" }) {
   const express = require("express");
   const small = express.json({ limit: "16kb" });
-  const big = express.json({ limit: "3mb" });
+  const big = express.json({ limit: SYNC_BODY_MAX });
   const fail = (res, e) => {
     const st = e && e.status && e.status < 500 ? e.status : 500;
     if (st === 500) console.error("[help]", e);
@@ -382,8 +479,9 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
   });
 
   // Pepe: publish the data, the prompter's long-poll + his answers
+  // 1.99afi: {ok, hash, cards, clipped, skipped, trimmed} - cards over the limits no longer refuse the whole sync
   app.post("/api/pepe/help/sync", big, bot, async (req, res) => {
-    try { res.json({ ok: true, hash: await sync(req.body || {}) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: true, ...(await sync(req.body || {})) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/pepe/help/pull", small, bot, async (req, res) => {
     try {
@@ -414,7 +512,7 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
       const cur = await current();
       res.render("admin/help", { title: "Help questions", user: a.username, isAdmin: true, C: await config(), rows: await misses({ all }), all,
                                  cur: { version: cur.version, source: cur.source, at: cur.at, hash: cur.hash, count: (cur.data.entries || []).length,
-                                        undocumented: cur.data.undocumented || [] },
+                                        undocumented: cur.data.undocumented || [], trimmed: cur.trimmed || [] },
                                  pepe: { online: online(), lastPull: LAST_PULL || null, queued: JOBS.size } });
     } catch (e) { console.error("[help] admin:", e); res.status(500).send("Something went wrong."); }
   });
@@ -437,7 +535,7 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
 }
 
 module.exports = {
-  register, validateData, current, sync, search, ask, pull, answer, cleanAnswer, allowedCommands, md, plain, config, setConfig,
-  misses, logMiss, online, pageModel, _setClock, _setWait, _reset,
+  register, validateData, normalizeData, clip, current, sync, search, ask, pull, answer, cleanAnswer, allowedCommands, md, plain, config, setConfig,
+  misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };

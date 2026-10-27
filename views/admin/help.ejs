@@ -23,6 +23,7 @@
     <div><b>Help data</b><span><%= cur.count %> cards · <%= cur.source === 'pepe' ? ('published by Pepe ' + (cur.version || '') + ' at ' + when(cur.at)) : (cur.source === 'bundled' ? "the site's bundled copy (Pepe hasn't published yet)" : 'none') %></span></div>
     <div><b>Pepe</b><span><%= pepe.online ? 'online (pulling questions)' : 'offline' %><%= pepe.lastPull ? ' · last pull ' + when(pepe.lastPull) : '' %> · <%= pepe.queued %> waiting</span></div>
     <% if (cur.undocumented.length) { %><div><b>Commands with no card</b><span><%= cur.undocumented.join(' ') %></span></div><% } %>
+    <% if (cur.trimmed.length) { %><div><b>Cards over the limits</b><span><%= cur.trimmed.map(function (t) { return t.id + ' (' + t.field + ' ' + t.len + ' > ' + t.max + ', ' + (t.action === 'clipped' ? 'clipped' : 'left out') + ')'; }).join(' · ') %> - fix the card in camfrog-bot <code>help/catalog.json</code> (split a long one into sub-cards)</span></div><% } %>
   </div>
   <form class="adm-form" id="aiForm">
     <label class="ck"><span>AI answers</span><span><input type="checkbox" name="ai"<%= C.ai ? ' checked' : '' %>> Pepe answers signed-in users' questions with his model (the "help" function on Pepe's admin panel, cheap tier)</span></label>

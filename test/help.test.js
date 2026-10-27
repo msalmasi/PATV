@@ -6,6 +6,8 @@
 //     real bot API (pull / answer) -> source "pepe"; an invented command or no answer in time -> the search results
 //   * the rate limits: per-user burst + day, per-IP across accounts; misses logged for admins; admin page admins only
 //   * the page: cards with deep-link ids, copy buttons, the ask box, /commands -> /help, safe markdown; nav links
+//   * 1.99afi: a card over the limits is clipped (summary / details) or left out, not the whole sync refused (counted in
+//     the answer, logged, on /admin/help); the shape, the bot token and the body size stay strict
 //   NODE_PATH=G:/PATV/node_modules node --test test/help.test.js     (temp DB)
 "use strict";
 const test = require("node:test");
@@ -106,6 +108,161 @@ test("sync: bot token only, refuses bad data, then the page and pull use Pepe's 
   assert.equal(r.json.hash, "h2");
   const row = (await getQuery("SELECT v FROM help_kv WHERE k = 'data'"))[0];
   assert.ok(row && JSON.parse(row.v).hash === "h2", "stored in the DB");
+});
+
+// ── 1.99afi: cards over the limits (10-27: one 6,300-character !econ card refused prod's whole sync, every 2 min) ──
+const copyData = () => JSON.parse(JSON.stringify(BUNDLED));
+const isHighSurrogate = (s) => { const c = s.charCodeAt(s.length - 1); return c >= 0xd800 && c <= 0xdbff; };
+
+test("the limits: the bot's build mirrors them (tools/build_help.py SITE_LIMITS)", () => {
+  assert.equal(HELP.HELP_LIMITS.details, 6000);
+  assert.equal(HELP.HELP_LIMITS.summary, 400);
+  assert.equal(HELP.HELP_LIMITS.title, 200);
+  assert.equal(HELP.SYNC_BODY_MAX, "3mb");
+  // the private Pepe repo nested in a dev checkout (not on CI; an older checkout without SITE_LIMITS is skipped)
+  const bot = path.join(repo, "camfrog-bot", "tools", "build_help.py");
+  const src = fs.existsSync(bot) ? fs.readFileSync(bot, "utf8") : "";
+  if (src.includes("SITE_LIMITS = {")) {
+    for (const [k, v] of [["title", 200], ["summary", 400], ["details", 6000], ["syntax", 12], ["syntax_line", 200], ["examples", 12],
+      ["example", 300], ["keywords", 30], ["keyword", 80], ["commands", 20], ["gates", 10], ["gate", 60], ["web_label", 200]]) {
+      assert.match(src, new RegExp(`"${k}": ${v}\\b`), `SITE_LIMITS ${k} = ${v}`);
+    }
+  }
+});
+
+test("validateData (the stored copy's check) still refuses a card over a limit", () => {
+  const bad = (f) => { const d = copyData(); f(d); return HELP.validateData(d); };
+  assert.match(bad((d) => { d.entries[0].details = "x".repeat(6001); }), /: text$/);
+  assert.match(bad((d) => { d.entries[0].summary = "x".repeat(401); }), /: text$/);
+  assert.match(bad((d) => { d.entries[0].title = "x".repeat(201); }), /: title$/);
+  assert.match(bad((d) => { d.entries[0].syntax = Array(13).fill("!x"); }), /: syntax$/);
+  assert.match(bad((d) => { d.entries[0].keywords = ["k".repeat(81)]; }), /examples\/keywords$/);
+  assert.match(bad((d) => { d.entries[0].commands = Array(21).fill("!x"); }), /: commands$/);
+  assert.equal(bad((d) => { d.entries[0].details = "x".repeat(6000); }), null, "exactly the limit fits");
+});
+
+test("normalizeData: a card over a limit is clipped (summary / details) or left out (anything else), the rest kept", () => {
+  const d = copyData();
+  const [a, b, c, e, f] = d.entries;
+  a.details = "word ".repeat(1300);                                   // 6,500
+  b.summary = "y".repeat(450);                                         // no space to cut back to
+  c.title = "t".repeat(201);
+  e.syntax = Array(13).fill("!x");
+  f.details = "😀".repeat(3001);                                       // 6,002 UTF-16 units
+  const n = HELP.normalizeData(d);
+  assert.equal(n.error, null);
+  assert.equal(n.clipped, 3);
+  assert.equal(n.skipped, 2);
+  assert.equal(n.cards, BUNDLED.entries.length - 2);
+  assert.equal(HELP.validateData(n.data), null, "what is kept passes the strict check");
+  const by = new Map(n.data.entries.map((x) => [x.id, x]));
+  assert.ok(!by.has(c.id) && !by.has(e.id), "the cards with another field over are left out");
+  const ca = by.get(a.id).details;
+  assert.ok(ca.length <= 6000 && ca.endsWith("word…") && ca.startsWith("word word"), "details cut back to a word, with …");
+  assert.equal(by.get(b.id).summary, "y".repeat(399) + "…");
+  const cf = by.get(f.id).details;
+  assert.ok(cf.length <= 6000 && !isHighSurrogate(cf.slice(0, -1)), "never half an emoji");
+  assert.deepEqual(n.trimmed.map((t) => [t.id, t.field, t.action]).sort(), [[a.id, "details", "clipped"], [b.id, "summary", "clipped"],
+    [c.id, "title", "skipped"], [e.id, "syntax", "skipped"], [f.id, "details", "clipped"]].sort());
+  assert.deepEqual(n.trimmed.find((t) => t.id === a.id), { id: a.id, field: "details", len: 6500, max: 6000, action: "clipped" });
+  assert.equal(d.entries[0].details.length, 6500, "the input isn't changed");
+  assert.equal(HELP.normalizeData(BUNDLED).data, BUNDLED, "data within the limits is kept as it is");
+  assert.deepEqual(HELP.normalizeData(BUNDLED).trimmed, []);
+});
+
+test("clip: never leaves a `code span open", () => {
+  const s = "a ".repeat(2990) + "`!econ fedloan " + "b".repeat(100) + "` tail";
+  const c = HELP.clip(s, 6000);
+  assert.ok(c.length <= 6000);
+  assert.equal((c.match(/`/g) || []).length % 2, 0);
+  assert.ok(c.endsWith("a…"));
+  assert.equal(HELP.clip("short text here", 6), "short…");
+});
+
+test("normalizeData: the shape stays strict - one bad card still refuses it all", () => {
+  const bad = (f) => { const d = copyData(); d.entries[0].details = "x".repeat(7000); f(d); return HELP.normalizeData(d); };
+  for (const [f, re] of [
+    [(d) => { d.entries[5].category = "nope"; }, /category/],
+    [(d) => { d.entries[5].id = d.entries[4].id; }, /duplicate/],
+    [(d) => { d.entries[5].commands = ["spin"]; }, /commands/],
+    [(d) => { d.entries[5].web = { label: "x", url: "javascript:alert(1)" }; }, /web/],
+    [(d) => { d.entries[5].details = 5; }, /text/],
+    [(d) => { d.entries[5].syntax = []; }, /syntax/],
+    [(d) => { d.entries[5].cost = -1; }, /cost/],
+    [(d) => { d.schema = 2; }, /schema/],
+    [(d) => { d.entries = Array(1501).fill(d.entries[0]); }, /entries/],
+    [(d) => { d.undocumented = ["!" + "x".repeat(60)]; }, /undocumented/],
+  ]) {
+    const n = bad(f);
+    assert.match(n.error, re);
+    assert.equal(n.data, null);
+  }
+  const d = { schema: 1, categories: BUNDLED.categories, entries: [{ ...BUNDLED.entries[0], title: "t".repeat(300) }] };
+  assert.equal(HELP.normalizeData(d).error, "entries", "nothing left -> refused");
+});
+
+test("sync: cards over the limits are clipped or left out, the rest stored - not a 400 for the whole sync", async () => {
+  const warns = [];
+  const realWarn = console.warn;
+  console.warn = (...a) => warns.push(a.join(" "));
+  try {
+    const mine = copyData();
+    const long = mine.entries.find((e) => e.id === "spin");
+    long.cost = 7500;
+    long.details = "Shows each layer's balance. ".repeat(225);        // 6,300 - like Pepe 1.99afd's !econ card
+    const skip = mine.entries.find((e) => e.id === "boost");
+    skip.syntax = Array(13).fill("!boost");
+    let r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h3", version: "1.99zz", data: mine });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.ok, true);
+    assert.equal(r.json.hash, "h3", "Pepe's hash, so he doesn't publish it again every 2 minutes");
+    assert.equal(r.json.clipped, 1);
+    assert.equal(r.json.skipped, 1);
+    assert.equal(r.json.cards, mine.entries.length - 1);
+    assert.deepEqual(r.json.trimmed, [{ id: "spin", field: "details", len: 6300, max: 6000, action: "clipped" },
+      { id: "boost", field: "syntax", len: 13, max: 12, action: "skipped" }]);
+    assert.ok(warns.some((w) => w.includes("[help] sync h3") && w.includes("spin details 6300>6000 clipped") && w.includes("boost syntax 13>12 skipped")),
+      "logged: " + warns.join(" | "));
+    HELP._reset();                                                    // from the DB, as after a restart
+    const cur = await HELP.current();
+    assert.equal(cur.hash, "h3");
+    assert.equal(cur.data.entries.length, mine.entries.length - 1);
+    assert.ok(cur.data.entries.find((e) => e.id === "spin").details.length <= 6000);
+    assert.ok(!cur.data.entries.find((e) => e.id === "boost"));
+    assert.equal(cur.trimmed.length, 2);
+    r = await req("POST", "/api/pepe/help/pull", { password: "bot", wait: 0 });
+    assert.equal(r.json.hash, "h3");
+    const page = await req("GET", "/help");
+    assert.equal(page.status, 200);
+    assert.ok(page.text.includes('id="cmd-spin"') && !page.text.includes('id="cmd-boost"'));
+    const admin = await mkUser("trimboss", "Admin");
+    const adm = await req("GET", "/admin/help", undefined, admin);
+    assert.equal(adm.status, 200);
+    assert.match(adm.text, /Cards over the limits/);
+    assert.match(adm.text, /spin \(details 6300 &gt; 6000, clipped\) · boost \(syntax 13 &gt; 12, left out\)/);
+
+    // still strict: the token, the shape, the size
+    r = await req("POST", "/api/pepe/help/sync", { password: "nope", hash: "h4", data: mine });
+    assert.equal(r.status, 403);
+    const shape = copyData();
+    shape.entries[3].role = "god";
+    r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h4", data: shape });
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /^bad help data: entry .+: role$/);
+    const huge = copyData();
+    huge.padding = "x".repeat(3 * 1024 * 1024);
+    r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h4", data: huge });
+    assert.equal(r.status, 413, "over the body limit");
+    assert.equal((await HELP.current()).hash, "h3", "nothing refused replaced the stored copy");
+  } finally {
+    console.warn = realWarn;
+    // back to the copy the tests below expect (h2: the live 7,500 price, Pepe 1.99zz, every card)
+    const mine = copyData();
+    mine.entries.find((e) => e.id === "spin").cost = 7500;
+    const r = await req("POST", "/api/pepe/help/sync", { password: "bot", hash: "h2", version: "1.99zz", data: mine });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.clipped + r.json.skipped, 0);
+  }
 });
 
 // ── ranking ──

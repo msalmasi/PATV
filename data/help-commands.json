@@ -144,7 +144,7 @@
     "!intro status"
    ],
    "summary": "Pepe introduces himself to the room: who he is, what PAT is, the website and your privacy options.",
-   "details": "A few short lines in the room: who Pepe is (games, heists, the casino, music, the mic), what PAT is (free points you earn by chatting, being on the mic and playing - not money), how to get a free publicaccess.tv account, and - in rooms linked to the website - that signed-in members can follow the room there, with how to keep yourself off it (`!incognito`, `!livecam off`, `!bridge hide`). Anyone can use it; once per room every 10 minutes (inside that, Pepe answers you by PM instead). Pepe also posts it by himself, at most once every 6 hours per room and only while people are talking. Admins: `!intro auto on|off [-global|-all]` switches the automatic post for this room (or every room), `!intro every <hours>` sets how often, `!intro status` shows when it last went out.",
+   "details": "A few short lines in the room: who Pepe is (games, heists, the casino, music, the mic), what PAT is (free points you earn by chatting, being on the mic and playing - not money), how to get a free publicaccess.tv account, and - in rooms linked to the website - that the pad's viewers can follow the room there and the pad can keep its chat per its tier and settings, with your choices there (`!bridge hide` keeps your lines off it, `!incognito` shows them as \"someone\", `!transcripts off`, `!livecam off`) - and, once the website has announced it, since when and for how long the pad keeps the room's chat. Anyone can use it; once per room every 10 minutes (inside that, Pepe answers you by PM instead). Pepe also posts it by himself, at most once every 6 hours per room and only while people are talking. Admins: `!intro auto on|off [-global|-all]` switches the automatic post for this room (or every room), `!intro every <hours>` sets how often, `!intro status` shows when it last went out.",
    "examples": [
     "!intro"
    ],
@@ -247,7 +247,7 @@
     "!forgetme confirm"
    ],
    "summary": "Your own switch: with incognito on, nothing you say gets remembered at all — in the room or in PMs — and you show as \"someone\" on the website. Also on the website: Settings → Privacy.",
-   "details": "Your own switch: with incognito **on**, nothing you say gets remembered at all — in the room or in PMs — and anything still waiting to be processed is binned. **Off by default.** It stops new memories — it doesn't erase what he already knows (ask an admin if you want that wiped). Works from a PM or the room, and the reply always comes back privately.\n\nWhile it's on you're also private on the website: \"someone\" on the live room view (your lines aren't shown), captures of you are private, nobody can quote you or use your cam in AI pictures, and your top words aren't recorded in your profile analytics.\n\nThe same switch is on the website at [/settings/privacy](/settings/privacy) (Settings → Privacy) for a linked chat account - a change in either place shows in the other. **Make Pepe forget you:** `!forgetme now` says what goes, then `!forgetme confirm` (within 2 minutes) deletes everything he remembers about you (what he learned, your nicknames and links, your mic history) AND your private conversations with him - Camfrog PMs, Message Pepe on the website and the Telegram chat. Public room chat, transcripts and captures stay (the room's record). Same as Settings → Privacy → Make Pepe forget me. He starts learning again if you keep talking to him - incognito stops that.",
+   "details": "Your own switch: with incognito **on**, nothing you say gets remembered at all — in the room or in PMs — and anything still waiting to be processed is binned. **Off by default.** It stops new memories — it doesn't erase what he already knows (ask an admin if you want that wiped). Turning it on works from a PM or the room; turning it **off** works by **PM** only (a room line can't prove who typed it). The reply always comes back privately.\n\nWhile it's on you're also private on the website - incognito hides **who** you are, not what you say: on the live room view your lines show as \"someone\" (no name, avatar or looks), captures of you are private, nobody can quote you by name or use your cam in AI pictures, and your top words aren't recorded in your profile analytics. Bridged rooms' chat can be kept on the pad per its tier and settings; your past lines there show as \"someone\" too. To keep your lines off the website altogether, use `!bridge hide`.\n\nThe same switch is on the website at [/settings/privacy](/settings/privacy) (Settings → Privacy) for a linked chat account - a change in either place shows in the other. **Make Pepe forget you:** `!forgetme now` says what goes, then `!forgetme confirm` (within 2 minutes) deletes everything he remembers about you (what he learned, your nicknames and links, your mic history) AND your private conversations with him - Camfrog PMs, Message Pepe on the website and the Telegram chat. Public room chat, transcripts and captures stay (the room's record). Same as Settings → Privacy → Make Pepe forget me. He starts learning again if you keep talking to him - incognito stops that.",
    "examples": [
     "!forgetme now"
    ],
@@ -443,7 +443,7 @@
     "!verify [code]"
    ],
    "summary": "Verify ownership of a Camfrog username when linking from publicaccess.tv.",
-   "details": "Verify ownership of a Camfrog username when linking from publicaccess.tv. Initiate the link on your profile page, get a code, then type it here to prove the account is yours and merge your bot PAT.",
+   "details": "Verify ownership of a Camfrog username when linking from publicaccess.tv. Initiate the link on your profile page, get a code, then type it here to prove the account is yours and merge your bot PAT. Lines starting with `!verify` never reach a pad's chat on the website (PM the code to Pepe so the room doesn't see it).",
    "examples": [],
    "keywords": [
     "link account",
@@ -556,7 +556,7 @@
     "!verifypad [PATV-code]"
    ],
    "summary": "Prove this chat room (a Camfrog room) belongs to a PATV pad's owner, to connect the pad to the room.",
-   "details": "Connect your PATV pad to its chat room (Camfrog today): in the pad's settings (Address & platform) type the room's name and get a code like `PATV-AB23CD`. The fastest proof is putting that code in the room's **topic** (only the room's owner and operators can) - Pepe spots it within a couple of minutes, no admin needed. Or type `!verifypad PATV-AB23CD` in the room: a site admin then confirms it. Pepe has to be in the room for either. Once connected, the pad gets the room's live chat on the website, what's spent in the room in its pad vault and the owner's `!stage` commands. Pepe only joins your room if you ask for it in the pad's settings and a site admin approves.",
+   "details": "Connect your PATV pad to its chat room (Camfrog today): in the pad's settings (Address & platform) type the room's name and get a code like `PATV-AB23CD`. The fastest proof is putting that code in the room's **topic** (only the room's owner and operators can) - Pepe spots it within a couple of minutes, no admin needed. Or type `!verifypad PATV-AB23CD` in the room: a site admin then confirms it. Pepe has to be in the room for either. Once connected, the pad gets the room's live chat on the website, what's spent in the room in its pad vault and the owner's `!stage` commands. Pepe only joins your room if you ask for it in the pad's settings and a site admin approves. Lines starting with `!verifypad` never reach a pad's chat on the website.",
    "examples": [
     "!verifypad PATV-AB23CD"
    ],
@@ -892,7 +892,7 @@
     "!lastseen [user]"
    ],
    "summary": "When someone was last around in this room.",
-   "details": "When someone was last around **in this room**. If they're here now it says so (and whether they're on cam); otherwise it reports the most recent trace — the last thing they typed, or their last mic-up, whichever came later — with how long ago and what they said. Works on displaynames and aliases, not just logins. **Per room:** ask in the room you care about; each room has its own logs, so someone quiet here may have been talking non-stop next door.",
+   "details": "When someone was last around **in this room**. If they're here now it says so (and whether they're on cam); otherwise it reports the most recent trace — the last thing they typed, or their last mic-up, whichever came later — with how long ago and what they said. Works on displaynames and aliases, not just logins. **Per room:** ask in the room you care about; each room has its own logs, so someone quiet here may have been talking non-stop next door.\n\nIn a room linked to a PATV pad it answers from what the pad shows publicly: nothing while the pad's search is off, nothing older than the pad shows visitors, and never a trace of someone on `!bridge hide`, incognito or taken down on the website.",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -944,7 +944,7 @@
     "!tell"
    ],
    "summary": "Leave someone a message and Pepe hands it over the next time he sees them: when they chat, take the mic, or join a room he's in (in that room).",
-   "details": "Leave someone a message and Pepe hands it over **the next time he sees them**: when they chat, take the mic, or join a room he's in (in that room). `!relay tricon Check out the website updates!` **2,500 PAT** (admins free). `-p` delivers it by PM, `-mic` has Pepe read it out (+10,000 PAT). It has to be someone Pepe has actually seen, so typos don't eat your PAT. Messages wait up to 30 days; 10 waiting at a time. `!relay list` · `!relay cancel <#|all>` (no refund).",
+   "details": "Leave someone a message and Pepe hands it over **the next time he sees them**: when they chat, take the mic, or join a room he's in (in that room). `!relay tricon Check out the website updates!` **2,500 PAT** (admins free). `-p` delivers it by PM, `-mic` has Pepe read it out (+10,000 PAT). It has to be someone Pepe has actually seen, so typos don't eat your PAT. Messages wait up to 30 days; 10 waiting at a time. `!relay list` · `!relay cancel <#|all>` (no refund). Lines starting with `!relay` / `!tell` never reach a pad's chat on the website, and neither does your message: when Pepe hands it over in a room linked to a pad, the pad only shows that they had a message from you.",
    "examples": [
     "!relay tricon Check out the website updates!",
     "!relay list",
@@ -1067,7 +1067,7 @@
     "!bridge [hide|show]"
    ],
    "summary": "Is this room live on its PATV pad?",
-   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to signed-in users on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there. `!bridge hide` makes you \"someone\" on the website (no name, your lines not shown); `!incognito on` does the same. Mic transcripts show in the feed too. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay.",
+   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`). `!bridge hide` leaves you out of the website: \"someone\" in the room view, and your lines aren't shown. `!incognito on` hides who you are, not what you say: your lines show as \"someone\" (no name, avatar or looks). Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; `!bridge hide` also leaves your past lines there out, `!incognito` shows them as \"someone\"; `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`.",
    "examples": [
     "!bridge hide",
     "!incognito on",
@@ -1075,6 +1075,34 @@
     "!bridge transcripts on|off"
    ],
    "keywords": []
+  },
+  {
+   "id": "transcripts",
+   "title": "!transcripts off|on",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!transcripts"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!transcripts off",
+    "!transcripts on",
+    "!transcripts"
+   ],
+   "summary": "Your own switch: !transcripts off keeps your mic transcripts off the website (the 🎙 lines on a bridged room's pad).",
+   "details": "When you're on the mic in a room linked to the website, its pad shows what you said as a 🎙 line (an automatic transcript). `!transcripts off` keeps yours off the website: Pepe stops sending them, a pad's chat history leaves out the ones it kept, and a mic clip of you carries no transcript. **On by default.** Works by **PM** to Pepe only (`!transcripts off`, `!transcripts on`, `!transcripts` for your setting) - a room line can't prove who typed it - and the answer comes back privately. Pepe's own recording and the admins' `!transcript` switch don't change. Your chat lines aren't affected: `!bridge hide` keeps them off the website, `!incognito` shows them as \"someone\".",
+   "examples": [
+    "!transcripts off",
+    "!transcripts on"
+   ],
+   "keywords": [
+    "transcripts",
+    "mic transcript",
+    "speech to text",
+    "privacy",
+    "hide what I said on the mic"
+   ]
   },
   {
    "id": "livecam",
@@ -1091,7 +1119,7 @@
     "!livecam ask on|off"
    ],
    "summary": "Can people on the website see your cam (live, snapshots, clips) - and who?",
-   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; `!livecam on` allows it again. While it's on, choose who: `!livecam members` (verified members: a linked Camfrog name or a verified account - the default), `!livecam everyone` (any signed-in member), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`).",
+   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage). `!livecam on` allows it again. While it's on, choose who: `!livecam members` (verified members: a linked Camfrog name or a verified account - the default), `!livecam everyone` (any signed-in member), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`) - it also lets the room's pad show whoever holds the mic on its stage (a pad setting, off by default).",
    "examples": [
     "!livecam off",
     "!livecam followers",
@@ -1138,24 +1166,26 @@
    "aliases": [],
    "syntax": [
     "!onair me on|off",
-    "!onair off",
+    "!onair off [corner] [block]",
     "!onair",
     "!onair <pad|user|slot id>",
     "!onair <YouTube / Twitch link> rights",
     "!onair cam <login>",
-    "!onair queue <link> rights",
-    "!onair at <time> <link> rights",
-    "!onair in <30m> <link> rights",
+    "!onair queue | at <time> | in <30m> <link> rights",
     "!onair queue · !onair unqueue <id|all>",
-    "!onair setup [irl|embed|audio]",
+    "!onair image <link> [caption] [for 30s] [corner] [direct] rights",
+    "!onair link <link> [live] [with sound] [for 60s] rights",
+    "!onair setup [irl|embed|audio|media]",
     "!onair yes|always|no"
    ],
    "summary": "May admins put your cam on Pepe's main stream?",
-   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). YouTube / Twitch embed slots need `rights` at the end (`!onair <pad|user> rights`) to confirm you may rebroadcast them; `!onair setup embed` adds their browser source once. A slot on an Approved-only pad or a cam without an opt-in waits for its owner's OK: the owner gets an instant request, and a cam owner answers Pepe's PM with `!onair yes` (this time), `!onair always` or `!onair no`. The operator's own IRL feed always wins. Staff (Pepe's staff role) can run it too. A YouTube / Twitch link goes on directly: `!onair <link> rights`. **Later:** `!onair queue <link> rights` plays it after what's on now; `!onair at 9pm <link> rights` (or `21:30`, `9:30pm tomorrow` - New York time) or `!onair in 45m <link> rights` puts it on at that time, replacing whatever is on; `!onair queue` lists them, `!onair unqueue <id|all>` cancels. A link ends with its video, so the next one starts. **Sound in Camfrog:** `!onair setup audio` (once) points OBS's monitoring at Pepe's mic cable; with 🎤 Pick's sound on Pepe's mic on /stage/admin, rooms with `!mic onair on` hear the pick while Pepe holds the mic. Managed on /stage/admin (kill switch, log); staff also have 📺 Play content here (with ⏰ Queue) under Pepe's player.",
+   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). YouTube / Twitch embed slots need `rights` at the end (`!onair <pad|user> rights`) to confirm you may rebroadcast them; `!onair setup embed` adds their browser source once. A slot on an Approved-only pad or a cam without an opt-in waits for its owner's OK: the owner gets an instant request, and a cam owner answers Pepe's PM with `!onair yes` (this time), `!onair always` or `!onair no`. The operator's own IRL feed always wins. Staff (Pepe's staff role) can run it too. A YouTube / Twitch link goes on directly: `!onair <link> rights`. **Later:** `!onair queue <link> rights` plays it after what's on now; `!onair at 9pm <link> rights` (or `21:30`, `9:30pm tomorrow` - New York time) or `!onair in 45m <link> rights` puts it on at that time, replacing whatever is on; `!onair queue` lists them, `!onair unqueue <id|all>` cancels. A link ends with its video, so the next one starts. **Sound in Camfrog:** `!onair setup audio` (once) points OBS's monitoring at Pepe's mic cable; with 🎤 Pick's sound on Pepe's mic on /stage/admin, rooms with `!mic onair on` hear the pick while Pepe holds the mic. Managed on /stage/admin (kill switch, log); staff also have 📺 Play content here (with ⏰ Queue) under Pepe's player. **Pictures and links:** `!onair image <link> rights` puts a picture on Pepe's stream - publicaccess.tv fetches it, checks it and shows it from there (anything not clearly safe is refused, never shown). Add a caption (in quotes if it has option words in it), `for 2m` (up to 10 min; 30 s by default), `corner` (or `tl` `tr` `bl` `br`) to show it in a corner over whatever is on, or `full`. `!onair link <link> rights` shows the page as a card (title, picture, site); `!onair link <link> live rights` shows the page itself (muted unless `with sound`, up to 10 min). `direct` (a picture straight from its site, not safety-checked, up to 2 min) and `live` are for Pepe's staff and up only - the picture's or page's site then sees Pepe's address. They queue like links: `!onair queue image <link> rights`, `!onair at 9pm link <link> rights`. `!onair off corner` clears just the corner, and `!onair off block` (or `!onair off corner block`) also blocks what was shown - its picture is deleted and it can never go on again; `!onair setup media` adds the corner scene and sources to Pepe's OBS once.",
    "examples": [
     "!onair me on",
     "!onair https://youtu.be/dQw4w9WgXcQ rights",
     "!onair at 9pm https://www.twitch.tv/somechannel rights",
+    "!onair image https://i.imgur.com/frog.png Look at this frog for 45s corner rights",
+    "!onair link https://example.com/news rights",
     "!onair off"
    ],
    "keywords": []
@@ -1323,7 +1353,7 @@
     "!replay [user] [n]"
    ],
    "summary": "Show last n mic transcripts.",
-   "details": "Show last n mic transcripts. Filter by user. Use `!next` to paginate.",
+   "details": "Show last n mic transcripts. Filter by user. Use `!next` to paginate.\n\nIn a room linked to a PATV pad it follows the pad's 💬 Chat settings: nothing older than the pad shows visitors, nothing while the pad's search is off (admins and the room's mods get their results by PM then) or, on a pad without the bridge perk, for anyone but its owner and staff (by PM), people with `!bridge hide` or `!transcripts off` left out, and incognito people shown as \"someone\" - never found by their name.",
    "examples": [],
    "keywords": []
   },
@@ -1340,7 +1370,7 @@
     "!search [term] [n]"
    ],
    "summary": "Search mic transcripts.",
-   "details": "Search mic transcripts. Supports \"exact phrases\" and multi-word AND. Use `!next` to paginate.",
+   "details": "Search mic transcripts. Supports \"exact phrases\" and multi-word AND. Use `!next` to paginate.\n\nIn a room linked to a PATV pad it follows the pad's 💬 Chat settings: nothing older than the pad shows visitors, nothing while the pad's search is off (admins and the room's mods get their results by PM then) or, on a pad without the bridge perk, for anyone but its owner and staff (by PM), people with `!bridge hide` or `!transcripts off` left out, and incognito people shown as \"someone\" - their words can be found, never their name.",
    "examples": [],
    "keywords": []
   },
@@ -1782,7 +1812,7 @@
     "!log [search]"
    ],
    "summary": "Search the chat logs.",
-   "details": "Search the chat logs. Supports \"exact phrases\" and multi-word AND. Use `!next` to paginate.",
+   "details": "Search the chat logs. Supports \"exact phrases\" and multi-word AND. Use `!next` to paginate.\n\nIn a room linked to a PATV pad it follows the pad's 💬 Chat settings: nothing older than the pad shows visitors, nothing while the pad's search is off (admins and the room's mods get their results by PM then) or, on a pad without the bridge perk, for anyone but its owner and staff (by PM), people with `!bridge hide` left out, lines the website took down (and people it took down as a whole) left out, Pepe's lines that quote a private `!relay` / `!tell` note left out, and incognito people shown as \"someone\" - their words can be found, never their name.",
    "examples": [],
    "keywords": []
   },
@@ -2647,7 +2677,7 @@
     "!reserve"
    ],
    "summary": "The 🏛️ Federal Reserve — the central bank: the only place new PAT is made, and it only fills the protocol's pools.",
-   "details": "The **🏛️ Federal Reserve** — the central bank and the only place new PAT is made. Anyone can check the balance. It keeps itself between a **floor (50M)** and a **ceiling (150M)**: below the floor a capped daily mint tops it back up, above the ceiling the excess is burned. Every Monday it tops the incentive budget up to the week's target (25M), it lends the House, the Bank and the Market maker the gap when a payout runs them short (flash liquidity), and it collects fines, the bounty fee and the shop fee plus half of the protocol's weekly profit while it's below its ceiling. Every mint is logged and the supply history is public on [publicaccess.tv/economy](https://publicaccess.tv/economy). **Economy v2/v3** (layers on): the Fed is the protocol's backstop - nobody robs it, it pays no rewards and never pays a wallet (`!reserve pay` is off), and it mints only by written policy. `!reserve mint <amount> <reason>` is the admin mint into the Fed (the same as `!econ mint`). It fills the protocol's pools two ways, admins only, dry run + confirm, logged: a **grant** (`!reserve fund <pool> <amount> <reason>` = `!econ fund`, not repayable) or a **loan** (`!econ fedloan <pool> <amount> <reason>`, repaid from that pool's surplus or overflow). The old automint (`!reserve auto` / `!reserve floor`) is off while the layers are on; the v3 floor and ceiling replace it.",
+   "details": "The **🏛️ Federal Reserve** — the central bank and the only place new PAT is made. Anyone can check the balance. It keeps itself between a **floor (50M)** and a **ceiling (150M)**: below the floor a capped daily mint tops it back up, above the ceiling the excess is burned. Every Monday it tops the incentive budget up to the week's target (25M), it lends the House, the Bank and the Market maker the gap when a payout runs them short (flash liquidity), and it collects fines, the bounty fee and the shop fee plus half of the protocol's weekly profit while it's below its ceiling. Every mint is logged and the supply history is public on [publicaccess.tv/economy](https://publicaccess.tv/economy). **Economy v2/v3** (layers on): the Fed is the protocol's backstop - nobody robs it, it pays no rewards and never pays a wallet (`!reserve pay` is off), and it mints only by written policy. `!reserve mint <amount> <reason>` is the admin mint into the Fed (the same as `!econ mint`). It fills the protocol's pools two ways, admins only, dry run + confirm, logged: a **grant** (`!reserve fund <pool> <amount> <reason>` = `!econ fund`, not repayable) or a **loan** (`!econ fedloan <pool> <amount> <reason>`, repaid from that pool's surplus or overflow). The old automint (`!reserve auto` / `!reserve floor`, `!reserve automint <jackpot|reserve> <PAT a day> [target]`) is off while the layers are on; the v3 floor and ceiling replace it. In chat those settings are Pepe's owners' (they make PAT); Pepe's admin panel (its Automint & Reserve card) can change them too until the economy settings move to publicaccess.tv.",
    "examples": [
     "!reserve mint <amount> <reason>",
     "!reserve fund <pool> <amount> <reason>",
@@ -2669,7 +2699,7 @@
     "!burn"
    ],
    "summary": "How much PAT has been burned in total, in the last 7 and 30 days, and what's in the burn reserve.",
-   "details": "Anyone can check the totals. Admins: `!burn <amount|all> [reason]` previews a burn of the burn reserve (only the reserve, never a wallet or pool) and gives a confirm id; `!burn confirm <id>` / `!burn cancel <id>`; `!burn mode accrual|batch`; `!burn log`. Every burn is listed on the [economy page](/economy#burned).",
+   "details": "Anyone can check the totals. Pepe's owners: `!burn <amount|all> [reason]` previews a burn of the burn reserve (only the reserve, never a wallet or pool) and gives a confirm id; `!burn confirm <id>` / `!burn cancel <id>`; `!burn mode accrual|batch`; `!burn set per_burn_max|daily_max|accrual_every_min <n>` (the manual-burn caps and the accrual tick); `!burn log`. Since 2026-10-21 Pepe's admin panel only shows the burn card (an owner burns in chat or on the website's Admin › Economy). Every burn is listed on the [economy page](/economy#burned).",
    "examples": [
     "!burn"
    ],
@@ -2696,13 +2726,9 @@
     "!econ"
    ],
    "summary": "The economy layers at a glance: the Federal Reserve (and its loans to the Treasury vaults), Fort Knox and the incentive budget.",
-   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (pad vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the pad's vault; needs the layers on), `!econ recipe` (the room payout recipe: `cutover` [confirm <id>], `on|off`, `preview [room]`, `run`, `cfg`; `!econ vwm [status [YYYY-MM-DD]]|on|off` pays the streamer slice on verified watch-minutes (E-5); `!econ convoys on|off` puts payouts of 25k+ on hittable convoys (E-7); `!econ challenges on|off|cfg` holds mic-challenge prizes from the pad vault, with prize gates and open-round entry fees (E-8); pad top-ups: `!econ activitypads preview|on|off`, profile vaults: `!econ profilevaults on|off`), `!econ roomvaults migrate` (moves the pads' pad-vault escrow on the website into their pad vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that topped the Federal Reserve up to 25M, done 2026-10-09 - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose PAT is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Treasury loans are repaid first from that vault's weekly surplus. `!econ fedloan fortknox|casino <amount> <reason>` lends to Fort Knox or the Casino vault, up to the pool's cap and inside the same 10M; it is repaid first from that pool's overflow above its cap (the daily release pays the Fed before the incentive budget) or early with `!econ fedloan repay <id> [amount]` (dry run + confirm). The incentive budget, the lotto pot and pad vaults are grant only (`!econ fund`): they have no surplus of their own to repay from. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ get [key]` (the economy v2 floors, targets, caps and weekly budgets - every number on the admin panel's Federal Reserve & floors card - with their defaults; one key shows its value, default and label), `!econ set <key> <value>` (changes one, e.g. `!econ set fortknox_floor 2.5m`; `!econ set <key> default` puts it back; validated - whole PAT, floor at most the target / cap, weekly budgets at most 100M in total - applied at once and logged on the card; keys: house_target, house_hard_floor, bank_target, bank_hard_floor, bank_lent_mult_pct, bank_peak_days, mm_target, mm_hard_floor, fedloan_cap, fortknox_floor, fortknox_cap, casino_floor, casino_cap (above either cap the daily release sends the overflow into the incentive budget), budget_<group> and pace_<group> (days a group's week is spread over, 0 = not paced) for welcome, levelup, achievements, misc, royalties, roomgames, turf, season, launchpad), `!econ monetary` (economy v3: the Federal Reserve's band - it mints back up to its floor (default 25M, 50M on prod), at most 5M a day, and releases what is above its ceiling, 150M, to the burn or the incentive budget - the Monday incentive guarantee, organic issuance and Fed flash liquidity), `!econ mints` (this month's mints per source - issuance, floor, admin, loans, restores, donations, seed - against their monthly caps, and the latest mints), `!econ mint <amount> <reason>` (an admin mint into the Federal Reserve only - never a pool or a wallet; a dry run first, then `!econ mint confirm <id>`; logged, no cap of its own, counted in the monthly total cap), `!econ fund <house|bank|mm|fortknox|casino|incentives|lotto|room:<id>> <amount> <reason>` (a Fed grant: moves PAT the Fed holds into that pool, not repayable, nothing minted - a dry run first, then `!econ fund confirm <id>`; a grant that takes the Fed below its floor is flagged and needs the confirm twice - the next daily tick mints the Fed back up inside the caps; Fort Knox, the Casino vault and pad vaults take at most what fits under their cap; also the admin panel's \"Fill a pool from the Reserve\" form, grant or loan), `!econ fedseed <total> [reason]` (mints the Federal Reserve up to <total>, once per total - a dry run first, then `!econ fedseed confirm <id>`), `!econ flash` (the Fed's flash liquidity: when a player loan, a House payout or a market seed is bigger than the Bank, the House or the Market maker can pay, the Fed lends that vault the gap, inside the Fed loan cap; an admin action that draws on it asks for a second confirm), `!econ set` also takes the v3 keys: fed_floor, fed_ceiling, fed_floor_mint_daily, fed_ceiling_action burn|incentives, incentive_guarantee on|off, issuance_mode off|pct|fixed, issuance_pct_month, issuance_fixed_month, issuance_activity_scaling, mintcap_<issuance|floor|loan|restore|total> (a number or unlimited; the admin mint counts toward mintcap_total), flash_bank / flash_house / flash_mm on|off, grant_weekly_cap, donation_rate, donation_bonus_pct, staker_share_pct, fed_split_pct, room_vault_cap, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their pad vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
+   "details": "Shows each layer's balance and whether the economy v2 layers are on, plus the Fed loans outstanding. Admins run the economy from its sub-commands, each on a card of its own: [the switches and the room payout recipe](/help#cmd-econ-switches) (`!econ layers`, `!econ roomvaults`, `!econ recipe`), [the one-time migrations and the check](/help#cmd-econ-migrate) (`!econ fortknox migrate`, `!econ seed`, `!econ check`), [the Fed's loans and flash liquidity](/help#cmd-econ-fedloan) (`!econ fedloan`, `!econ flash`), [the Fed's band, mints and grants](/help#cmd-econ-fed) (`!econ monetary`, `!econ mints`, `!econ mint`, `!econ fund`), [the economy's numbers](/help#cmd-econ-settings) (`!econ get`, `!econ set`, `!econ sink`) and [the pad launchpad and staking corrections](/help#cmd-econ-launchpad). Where the policy engines, the economy settings and the Fed's books run: [!econ engines](/help#cmd-policyengines), [!econ policy](/help#cmd-policycfg) and [!econ fed backend](/help#cmd-fedbackend).",
    "examples": [
-    "!econ",
-    "!econ mint 5m restock the Fed after the event",
-    "!econ fund incentives 2m weekend event prizes",
-    "!econ fedloan casino 3m casino vault for tonight's job",
-    "!econ fedloan repay FL3"
+    "!econ"
    ],
    "keywords": [
     "fort knox",
@@ -2975,7 +3001,7 @@
     "!vaults"
    ],
    "summary": "Staking = owning a slice of a vault that does a job.",
-   "details": "**Staking = owning a slice of a vault that does a job.** 🏦 **Bank** lends the PAT for Reserve loans and earns their interest (a default is covered by its own profit first, then a Fed loan). 🎰 **House** is the casino bankroll and earns the house edge (it also pays the big wins, so it's the most volatile). 📈 **Market maker** seeds prediction markets and earns their fees. 🤖 **Auto** (the default) spreads you across all three by the admins' rules and tilts toward whatever's paid best. Staking buys shares: revenue raises the share price, losses lower it, and earnings compound in the price. Requests run once a day at the cut-off, at that day's price; a withdrawal waits in line if the vault's PAT is lent out. `!stash stake savings 50k` (Auto) · `!stash stake savings 50k bank` · `!stash unstake savings all bank` · `!vaults` for prices and APR. Live dashboard: [publicaccess.tv/staking](https://publicaccess.tv/staking) · how it all works: [publicaccess.tv/economy](https://publicaccess.tv/economy#protocol).",
+   "details": "**Staking = owning a slice of a vault that does a job.** 🏦 **Bank** lends the PAT for Reserve loans and earns their interest (a default is covered by its own profit first, then a Fed loan). 🎰 **House** is the casino bankroll and earns the house edge (it also pays the big wins, so it's the most volatile). 📈 **Market maker** seeds prediction markets and earns their fees. 🤖 **Auto** (the default) spreads you across all three by the admins' rules and tilts toward whatever's paid best. Staking buys shares: revenue raises the share price, losses lower it - stakers take the vault's swings, a big Monday lotto draw paid by the House included - and earnings compound in the price. Every Monday stakers also get a part of what the protocol's own shares in each vault earned that week (when they earned anything), paid in PAT to the stash's balance and split by how much you staked and for how long - a stake made just before the payout earns from the next week; you get a notice for each payout. Requests run once a day at the cut-off, at that day's price; a withdrawal waits in line if the vault's PAT is lent out. `!stash stake savings 50k` (Auto) · `!stash stake savings 50k bank` · `!stash unstake savings all bank` · `!vaults` for prices and APR. Live dashboard: [publicaccess.tv/staking](https://publicaccess.tv/staking) · how it all works: [publicaccess.tv/economy](https://publicaccess.tv/economy#protocol).",
    "examples": [
     "!stash stake savings 50k",
     "!stash stake savings 50k bank",
@@ -3035,7 +3061,7 @@
     "!padvault recipe"
    ],
    "summary": "This pad's vault: what the pad has earned, what it took in over the last 7 days, and deposits.",
-   "details": "Every pad has a **pad vault**, connected to a chat room or not. Paid commands, songs, voices, heist gear and other spending in a connected room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were active 3 of the last 7 days and the pad was active 3 of them - either place counts: in the connected room, or on the pad itself (posting, commenting, streaming, moderating; days with 3+ qualified members active there); capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old; with activity top-ups on, also members whose posts on the pad got real engagement) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. With convoys on, payouts of 25,000 or more ride a 10-minute convoy (`!hit`); otherwise every payout is paid at once. `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
+   "details": "Every pad has a **pad vault**, connected to a chat room or not. Paid commands, songs, voices, heist gear and other spending in a connected room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split (by default) into owner 15% (when they were active 3 of the last 7 days and the pad was active 3 of them - either place counts: in the connected room, or on the pad itself (posting, commenting, streaming, moderating; days with 3+ qualified members active there); capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old; with activity top-ups on, also members whose posts on the pad got real engagement) and room games 10% (the prize pool for the raffle, top mic and pictionary until the next payout; XP only once it's used). Each slice pays only what was earned. What the owner, gang and streamer slices don't pay out tops up the room-games prize pool (an admin can switch that off); whatever the games don't award, and the regulars' unearned share, stays in the vault. The percentages are set on the website's admin economy page. With convoys on, payouts of 25,000 or more ride a 10-minute convoy (`!hit`); otherwise every payout is paid at once. `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
    "examples": [
     "!padvault",
     "!padvault deposit 5k",
@@ -3066,7 +3092,7 @@
     "!padfine log"
    ],
    "summary": "Admins: fine a pad's vault, or move PAT from one pad vault to another.",
-   "details": "A **fine** takes PAT out of a pad's vault and sends it where the PAT Routing row `fine_pad` says (the Federal Reserve by default, like every fine; a fine can never go to a pad vault or an owner). A **move** takes PAT out of one pad vault and puts it in another (the other vault's cap applies). Both need a reason and a confirm step (`!padfine confirm <code>` within 2 minutes); the whole amount or nothing. The pad is its room id, its address or its title. The pad's owner gets a notice with the reason, every move is in the admin audit log and in both pads' vault history, and the PAT supply doesn't change. `!padfine log` lists the latest ones. Also on the website: Pads admin, \"Pad vault fines & transfers\".",
+   "details": "A **fine** takes PAT out of a pad's vault and sends it where the PAT Routing row `fine_pad` says (the Federal Reserve by default, like every fine; a fine can never go to a pad vault or an owner). A **move** takes PAT out of one pad vault and puts it in another (the other vault's cap applies). Both need a reason and a confirm step (`!padfine confirm <code>` within 2 minutes); the whole amount or nothing. The pad is its room id, its address or its title. The pad's owner gets a notice with the reason, every move is in the admin audit log and in both pads' vault history, and the PAT supply doesn't change. `!padfine log` lists the latest ones. Also on the website: Pads admin, \"Pad vault fines & transfers\". Lines starting with `!padfine` or `!padmove` never reach a pad's chat on the website, nor does the confirm code in Pepe's answer. Pad vault fines and moves are moderation: Pepe's admins (and site Admins on the website, with their password) run them - not only the owners.",
    "examples": [
     "!padfine DRAMA_CENTRAL 500k spamming paid commands to farm the vault",
     "!padmove DRAMA_CENTRAL PepeFrog.Room 10M one-off move approved by the owner"
@@ -3354,7 +3380,7 @@
     "!borrow [amount] [term] (or !loan reserve) — borrow from the Federal Reserve"
    ],
    "summary": "!borrow (same as !loan reserve; also !fed) shows the Reserve's rate (per week, pro rata) and your instant limit, which grows with your level and with every Reserve loan you repay (and…",
-   "details": "`!borrow` (same as `!loan reserve`; also `!fed`) shows the Reserve's rate (per week, pro rata) and **your instant limit**, which grows with your level and with every Reserve loan you repay (and halves if one ever went late). `!borrow 50k 7d` borrows straight away if it's within your limit; anything bigger is sent to the admins as a request — or ask directly with `!loan request 200k 14d what it's for`. Repay with `!loan repay L7`; the principal and the interest go back to the Bank vault that lent it. One Reserve loan at a time, none while you're late on any loan. Unpaid Reserve loans are collected and marked LATE exactly like personal ones. Admins: `!loan requests` · `!loan approve LR3 [amount] [term] [rate%]` · `!loan deny LR3 [why]` · `!loan grant @user 100k 7d`. Your loans are on [publicaccess.tv/wallet](https://publicaccess.tv/wallet).",
+   "details": "`!borrow` (same as `!loan reserve`; also `!fed`) shows the Reserve's rate (per week, pro rata) and **your instant limit**, which grows with your level and with every Reserve loan you repay (and halves if one ever went late). `!borrow 50k 7d` borrows straight away if it's within your limit; anything bigger is sent to the admins as a request — or ask directly with `!loan request 200k 14d what it's for`. Repay with `!loan repay L7`; the principal and the interest go back to the Bank vault that lent it. One Reserve loan at a time, none while you're late on any loan. Unpaid Reserve loans are collected and marked LATE exactly like personal ones. Admins: `!loan requests` · `!loan deny LR3 [why]`. Pepe's owners (they pay out the Bank's cash): `!loan approve LR3 [amount] [term] [rate%]` · `!loan grant @user 100k 7d`. Your loans are on [publicaccess.tv/wallet](https://publicaccess.tv/wallet).",
    "examples": [
     "!borrow",
     "!loan reserve",
@@ -4601,7 +4627,7 @@
   },
   {
    "id": "stream",
-   "title": "!stream start|stop|status · !stream auto on|off",
+   "title": "!stream start|stop|status · !stream auto on|off · !stream via whip|rtmp",
    "category": "stage",
    "role": "admin",
    "commands": [
@@ -4612,10 +4638,11 @@
    ],
    "syntax": [
     "!stream start|stop|status",
-    "!stream auto on|off"
+    "!stream auto on|off",
+    "!stream via [whip|rtmp]"
    ],
    "summary": "Start or stop the live stream, or check it.",
-   "details": "Start or stop the live stream, or check it. `auto on` keeps it live — it comes back by itself if it drops; `!stream stop` holds it off until you start it again or Pepe restarts.",
+   "details": "Start or stop the live stream, or check it. `auto on` keeps it live — it comes back by itself if it drops; `!stream stop` holds it off until you start it again or Pepe restarts. Pepe's stream normally goes out over WHIP (low latency). If WHIP breaks while RTMP still works, he switches to RTMP for now and back to WHIP by himself once WHIP is healthy again (each switch is about 5-10 seconds off air and blinks Pepe's cam, so a game on the stream holds the switch back to WHIP until it ends, and a switch to RTMP for up to 30 minutes). A network outage never makes him switch. If the stream server refuses both paths (or the site gets no picture from either), he gives RTMP a quick try and goes straight back to WHIP, then tries RTMP again after 20 and 40 minutes and every 2 hours after that while it lasts. If WHIP is switched off he moves the stream to RTMP, after a game on it (at most 30 minutes). `!stream via` shows the path, `!stream via rtmp` switches to RTMP and keeps it there, `!stream via whip` goes back to WHIP.",
    "examples": [
     "!stream stop"
    ],
@@ -4995,7 +5022,7 @@
   },
   {
    "id": "spotify",
-   "title": "!spotify · !sp setup|auth",
+   "title": "!spotify · !sp setup|auth|status",
    "category": "music",
    "role": "admin",
    "commands": [
@@ -5005,13 +5032,14 @@
    "aliases": [],
    "syntax": [
     "!spotify",
-    "!sp setup|auth"
+    "!sp setup|auth|status"
    ],
-   "summary": "Connect Pepe to Spotify: !spotify setup <client_id> <client_secret>, then !spotify auth.",
-   "details": "Connect Pepe to Spotify: `!spotify setup <client_id> <client_secret>`, then `!spotify auth`.",
+   "summary": "Connect Pepe to Spotify: !spotify setup <client_id> <client_secret>, then !spotify auth (open the link on the Pepe VM).",
+   "details": "Connect Pepe to Spotify: `!spotify setup <client_id> <client_secret>`, then `!spotify auth`. Open the link it posts in a browser **on the Pepe VM**: Spotify sends you back to Pepe's local admin panel, which finishes the login. `!spotify status` shows how the login is doing. **NEEDS_REAUTH** means Spotify revoked Pepe's login (for example the app was removed from the account, or its password changed). Pepe then stops retrying, the auto-DJ and the now-playing widget pause, and the admins get one notice. Run `!spotify auth` again and everything resumes by itself.",
    "examples": [
     "!spotify setup <client_id> <client_secret>",
-    "!spotify auth"
+    "!spotify auth",
+    "!spotify status"
    ],
    "keywords": []
   },
@@ -5462,28 +5490,22 @@
   },
   {
    "id": "casinobackend",
-   "title": "!casino backend on|off|status · all on|off|status",
+   "title": "!casino backend [status] · all status",
    "category": "moderation",
-   "role": "admin",
+   "role": "everyone",
    "commands": [
     "!casino"
    ],
    "aliases": [],
    "syntax": [
-    "!casino backend on",
-    "!casino backend off",
     "!casino backend status",
-    "!casino backend all on",
-    "!casino backend all off",
-    "!casino backend all status",
-    "!casino backend default on|off"
+    "!casino backend all status"
    ],
-   "summary": "Switch this room's blackjack and Hold'em to the publicaccess.tv casino backend, where web players can sit at the same table.",
-   "details": "Switch **this room's** blackjack and Hold'em between Pepe's own tables and the **publicaccess.tv casino backend**. With the backend on, `!bj` / `!holdem` and their verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!sit`, `!check`, `!call`, `!raise`, `!allin`, `!fold`, `!cards`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players can sit at it too (Pepe posts the table's link when it opens, and each round's shuffle proof when it ends; `!bj fair` / `!holdem fair` repeats it). Hold'em hole cards come by PM. A web table's host can push it into the room, and onto Pepe's stream (one table at a time: first come, then a queue). It refuses to switch while an old table is still open here. **status** says which one the room uses (anyone can ask). **all on** / **all off** switch every room Pepe is in at once (rooms with an old table still open are skipped and keep what they play on) and set the **new rooms default**, so rooms Pepe joins later follow it; **default on|off** changes only that default (the rooms he is in keep what they play on now). **all status** lists every room. On a Pepe with no publicaccess.tv site set up, **on** is refused and every table stays Pepe's own. The same switches are in Pepe's admin panel (Website & Feed → Backends).",
+   "summary": "Where this room's blackjack and Hold'em run: Pepe's own tables or the publicaccess.tv casino backend, where web players can sit at the same table. Switched per room on publicaccess.tv › Admin › Backends (owners).",
+   "details": "Shows whether **this room's** blackjack and Hold'em run on Pepe's own tables or on the **publicaccess.tv casino backend**. With the backend on, `!bj` / `!holdem` and their verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!sit`, `!check`, `!call`, `!raise`, `!allin`, `!fold`, `!cards`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players can sit at it too (Pepe posts the table's link when it opens, and each round's shuffle proof when it ends; `!bj fair` / `!holdem fair` repeats it). Hold'em hole cards come by PM. A web table's host can push it into the room, and onto Pepe's stream (one table at a time: first come, then a queue). **all status** lists every room Pepe is in and the **new rooms** default. Since 2026-10-21 the switch itself (a room, the new-rooms default, or every room) is on publicaccess.tv › Admin › Backends, for Pepe's owners only (the casino holds points); Pepe follows it within a minute, and a room with a table still open on his own engine switches once that table ends. In chat `!casino backend on|off|all on|off|default on|off` only answers with where to switch it - except while publicaccess.tv can't switch it (no Admin › Backends there yet, or Pepe follows nothing from it): then Pepe's owners switch it here as before (`on|off` in the room, `all on|off`, `default on|off`, `!backend all on|off`), and while the site isn't answering Pepe an owner can hand rooms back to Pepe's own tables here (`off` only). On a Pepe with no publicaccess.tv site set up every table stays Pepe's own. Pepe's admin panel shows the same, read-only (Website & Feed → Backends).",
    "examples": [
-    "!casino backend on",
-    "!casino backend all on",
-    "!casino backend status"
+    "!casino backend status",
+    "!casino backend all status"
    ],
    "keywords": []
   },
@@ -5500,14 +5522,13 @@
    "syntax": [
     "!backend status",
     "!backends",
-    "!backend all on",
-    "!backend all off"
+    "!backend all status"
    ],
    "summary": "See where every publicaccess.tv backend switch stands: the casino per room, the lotto, stashes, GTF records, pools, polls, gangs, the escrow and the capital cluster (markets, Reserve loans, vaults).",
-   "details": "**status** (or `!backends`) lists every switch in one line: where each feature runs (Pepe or publicaccess.tv), anything frozen or in conflict, how many rooms play the casino on the site, and whether the site answers (anyone can ask). **all on|off** (admins) switches the per-room switches in every room Pepe is in, which today means the casino (the same as `!casino backend all on|off`). It never moves the one-way hand-overs: the lotto, stashes, GTF records, pools, polls, gangs, the escrow (ledger and games) and the capital cluster (markets, Reserve loans, vaults) each move with their own command (`!lotto backend …`, `!stash backend …`, `!gtf backend …`, `!econ pools backend …`, `!poll backend …`, `!gang backend …`, `!escrow backend …`, `!capital backend …`), one at a time. Pepe's admin panel has the same view (Website & Feed → Backends).",
+   "details": "**status** (or `!backends`) lists every switch in one line: where each feature runs (Pepe or publicaccess.tv), anything frozen or in conflict, how many rooms play the casino on the site, and whether the site answers (anyone can ask). It is read-only: the casino's rooms (a room, the new-rooms default, or every room - owners only, the casino holds points) and the one-way hand-overs - the lotto, stashes, GTF records, polls, the cosmetic drop table and the AI judge (owners only for the lotto and the stashes) - are switched on publicaccess.tv › Admin › Backends, and Pepe follows each switch himself within a minute or two (the hand-overs at a quiet moment: no heist or fight running, the lotto between draws). A switch made there before Pepe followed it is never run by surprise later: switch it again. While publicaccess.tv can't switch the casino (no Admin › Backends there yet) Pepe's owners switch it here with `!backend all on|off` / `!casino backend …`, and while the site isn't answering Pepe an owner can hand every room back to Pepe's own tables with `!backend all off`. The pools, gangs, the escrow (ledger and games) and the capital cluster (markets, Reserve loans, vaults) are cut over live with their runbooks. Owners can also run the hand-overs in chat with their own command (`!lotto backend …`, `!stash backend …`, `!gtf backend …`, `!econ pools backend …`, `!poll backend …`, `!gang backend …`, `!escrow backend …`, `!capital backend …`). `!backend status` lists the site's switches Pepe hasn't reached yet. Pepe's admin panel has the same view, read-only (Website & Feed → Backends).",
    "examples": [
     "!backends",
-    "!backend all on"
+    "!backend status"
    ],
    "keywords": [
     "backend",
@@ -5618,6 +5639,33 @@
    "examples": [
     "!econ engines status",
     "!econ engines export all"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "policycfg",
+   "title": "!econ policy status|freeze|export|cutover|rollback|detach cfg",
+   "category": "moderation",
+   "role": "owner",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ policy status",
+    "!econ policy freeze cfg confirm",
+    "!econ policy unfreeze cfg confirm",
+    "!econ policy export cfg [confirm]",
+    "!econ policy cutover cfg confirm [force <key,key>]",
+    "!econ policy rollback cfg confirm [force <key,key>]",
+    "!econ policy rollback cfg cancel",
+    "!econ policy detach cfg confirm [force]"
+   ],
+   "summary": "Hand the economy's settings (the floors, targets, caps and budgets, the economy sink rates, the burn's settings, the economy switches, PAT Routing) to publicaccess.tv, or bring them back into Pepe. Owners only.",
+   "details": "While Pepe owns the economy settings nothing here changes anything (that is how they ship). The hand-over runs live with the owner: **freeze cfg confirm** pushes Pepe's settings, then stops every edit on both sides (refused while the treasury switch is on with the layers off, or the activity -> pads switch is on without the room payouts: the site keeps each as one live switch, so settle it first); **export cfg confirm** pushes Pepe's settings first, then writes them to a file with its sha256 and uploads it in pieces - the site imports it in one transaction that moves no PAT and checks it equals what its readers use; **cutover cfg confirm** lets the site take them (a difference is named - `force` must list exactly those keys) and Pepe then reads the site's values (refreshed every minute and before each policy run). From then on `!econ set`, `!econ sink`, `!econ layers|treasury|activitypads on|off`, `!burn mode` and `!burn set` change them **on the site** (owners; never from Telegram; a percentage needs its %, e.g. `!econ set vault_ceil_apr 25%`), the admin panel shows them read-only with a link to publicaccess.tv › Admin › Economy, and with the site down Pepe keeps using its last copy and refuses changes. **rollback cfg confirm** brings them back (the engines and the budget first): the site hands its values back, Pepe writes them into his own settings, pushes them and the site confirms; **cancel** keeps them on the site. **detach cfg confirm** only when the site is gone for good (Pepe writes back its last copy; `force` when that copy is more than a day old); if the site comes back still owning them, **cutover cfg confirm** re-attaches Pepe (he reads the site's values again - a value he changed meanwhile is named and needs `force`), and a rollback after that gives them back to Pepe. Refused from 03:40 UTC until that day's policy runs are done. **status** shows who owns them, the site's version of them and how fresh Pepe's copy is, and anything still in flight.",
+   "examples": [
+    "!econ policy status",
+    "!econ policy export cfg"
    ],
    "keywords": []
   },
@@ -6412,7 +6460,7 @@
     "!transcript on/off/status"
    ],
    "summary": "Toggle mic transcription.",
-   "details": "Toggle mic transcription.",
+   "details": "Toggle mic transcription. Everyone's own switch for the website is `!transcripts off|on`.",
    "examples": [],
    "keywords": []
   },
@@ -6739,10 +6787,13 @@
    "aliases": [],
    "syntax": [
     "!role <user> <owner|admin|staff|assistant|trusted|none>",
-    "!roles"
+    "!roles",
+    "!role check <name>",
+    "!role audit",
+    "!role audit fix"
    ],
    "summary": "Roles: owner > admin > staff > trusted > everyone.",
-   "details": "**Roles:** owner > admin > staff > assistant > trusted > everyone. **Owners** run everything and are the only ones who can mint or burn points, change the economy's settings and backend switches, run `!update` / `!reloadbot` / `!recovery` / `!botadmin`, delete data (`!retention`, `!memory prune`, `!gangs reset`) and make admins. **Admins** run every other admin command and hand out staff / assistant / trusted. **Staff** get the commands granted to staff (DJ and casino bans, `!onair`, plus everything assistants have) and moderate through Pepe: `!kick`, `!timeout`, `!mod` and `!friend` on anyone below admin, `!blockmic` / `!unblockmic` on anyone (a stuck mic). **Assistants** help run the show: costumes, personas, scenes, cam pause, the DJ's volume, cancelling duels, ending a stuck game, `!friend` on people below staff and `!unblockmic`. Roles are kept in step with publicaccess.tv: owner / admin = the site's Admin class, staff = Staff, assistant = Assistant (accounts linked to that Camfrog name) - a change in either place reaches the other within a minute. `!roles` lists everyone. Also in the admin panel under **Roles**.",
+   "details": "**Roles:** owner > admin > staff > assistant > trusted > everyone. **Owners** run everything and are the only ones who can mint or burn points, change the economy's settings and backend switches, run `!update` / `!reloadbot` / `!recovery` / `!botadmin`, delete data (`!retention`, `!memory prune`, `!gangs reset`) and make admins. **Admins** run every other admin command and hand out staff / assistant / trusted. **Staff** get the commands granted to staff (DJ and casino bans, `!onair`, plus everything assistants have) and moderate through Pepe: `!kick`, `!timeout`, `!mod` and `!friend` on anyone below admin, `!blockmic` / `!unblockmic` on anyone (a stuck mic). **Assistants** help run the show: costumes, personas, scenes, cam pause, the DJ's volume, cancelling duels, ending a stuck game, `!friend` on people below staff and `!unblockmic`. Roles are kept in step with publicaccess.tv: owner / admin = the site's Admin class, staff = Staff, assistant = Assistant (accounts linked to that Camfrog name) - a change in either place reaches the other within a minute. Except **owner**: giving or removing owner in chat (or in the admin panel) only asks - it waits, not in effect, until an existing owner confirms it on publicaccess.tv (Admin › Roles, with their password); `!roles` shows what is waiting. `!roles` lists everyone. Also in the admin panel under **Roles**. A role belongs to a Camfrog **login**: `!role <login> <role>` - a name that is only someone's display name is refused with the login to use, and `!role <name> <role> login` puts it on a login exactly as typed. In a room, Pepe honours a role (or spends anyone's PAT) only when the account id the server puts on the line proves who typed it - someone he hasn't seen on a room's user list or on mic since his update is asked to PM the command instead, and a PM always works. `!role check <name>` shows who a name is in this room and whether its lines are proven; `!role audit` lists role-list entries that aren't logins (a display name could be registered as a login by anyone); owners' `!role audit fix` removes the ones whose login already has the role (removing an owner key waits for that confirmation too).",
    "examples": [],
    "keywords": []
   },
@@ -6758,13 +6809,15 @@
     "!perms"
    ],
    "syntax": [
-    "!perm <!cmd> use|powers <role|default>"
+    "!perm <!cmd> use|powers <role|default>",
+    "!perm <!cmd> targets <staff|assistant> <nobody|assistant|staff|admin|anyone|default>"
    ],
    "summary": "Per-command permissions.",
-   "details": "Per-command permissions. `!perm !costume powers staff` lets staff use its admin parts; `!perm !video use trusted` makes a command trusted-only; `default` resets it; `!perm !cmd` shows the current setting. Roles: owner, admin, staff, assistant, trusted. The owner-only commands (points, the economy, Pepe's process, deleting data) can't be handed to anyone.",
+   "details": "Per-command permissions. `!perm !costume powers staff` lets staff use its admin parts; `!perm !video use trusted` makes a command trusted-only; `default` resets it; `!perm !cmd` shows the current setting. Roles: owner, admin, staff, assistant, trusted. For the moderation commands (!kick, !timeout, !blockmic, !unblockmic, !friend, !mod), `!perm !kick targets staff admin` lets staff use it on people below admin (`nobody` takes it away; `anyone` is for owners to set). The owner-only commands (points, the economy, Pepe's process, deleting data) can't be handed to anyone, and only owners make a command owner-only or change what an owner set. The same settings are on the website at /admin/roles.",
    "examples": [
     "!perm !costume powers staff",
     "!perm !video use trusted",
+    "!perm !kick targets staff admin",
     "!perm !cmd"
    ],
    "keywords": []
@@ -7265,6 +7318,202 @@
    "keywords": []
   },
   {
+   "id": "econ-switches",
+   "title": "!econ layers · roomvaults · recipe · vwm · convoys · challenges",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ layers on|off",
+    "!econ roomvaults on|off",
+    "!econ recipe cutover [confirm <id>] · on|off · preview [room] · run · cfg",
+    "!econ vwm [status [YYYY-MM-DD]]|on|off",
+    "!econ convoys on|off",
+    "!econ challenges on|off|cfg",
+    "!econ activitypads preview|on|off",
+    "!econ profilevaults on|off"
+   ],
+   "summary": "Switch the economy v2 layers, the pad vaults and the room payout recipe on or off, with the recipe's parts: watch-minute pay, convoys, mic-challenge prizes, pad top-ups and profile vaults.",
+   "details": "`!econ layers on|off` switches the economy v2 layers. `!econ roomvaults on|off`: pad vaults (economy v2 E-3) - room spending goes 50/50 to Fort Knox and the pad's vault; needs the layers on. `!econ recipe` is the room payout recipe: `cutover` [confirm <id>], `on|off`, `preview [room]`, `run`, `cfg` (slice % + games_unpaid: saved on the website).\n\nThe recipe's parts: `!econ vwm [status [YYYY-MM-DD]]|on|off` pays the streamer slice on verified watch-minutes (E-5); `!econ convoys on|off` puts payouts of 25k+ on hittable convoys (E-7); `!econ challenges on|off|cfg` holds mic-challenge prizes from the pad vault, with prize gates and open-round entry fees (E-8); pad top-ups: `!econ activitypads preview|on|off`; profile vaults: `!econ profilevaults on|off`.",
+   "examples": [
+    "!econ layers on",
+    "!econ recipe preview"
+   ],
+   "keywords": [
+    "economy layers",
+    "pad vaults",
+    "room payouts",
+    "payout recipe",
+    "watch minutes",
+    "convoys",
+    "challenge prizes"
+   ]
+  },
+  {
+   "id": "econ-migrate",
+   "title": "!econ roomvaults migrate · fortknox migrate · seed · fedmint · check",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ roomvaults migrate",
+    "!econ roomvaults confirm <id>",
+    "!econ fortknox migrate",
+    "!econ fortknox confirm <id>",
+    "!econ seed",
+    "!econ seed confirm <id>",
+    "!econ fedmint",
+    "!econ check"
+   ],
+   "summary": "The economy's one-time moves (pad escrow into the pad vaults, Fort Knox, the opening seed, the cutover mint), each a dry run and then a confirm, and the check that they add up.",
+   "details": "Each move is a dry run first, then a confirm with the id it gives you. `!econ roomvaults migrate` moves the pads' escrow on the website into their pad vaults (then `!econ roomvaults confirm <id>`). `!econ fortknox migrate` (then `!econ fortknox confirm <id>`). `!econ seed`: the one-time opening balances from the Bank's idle protocol capital, nothing minted (then `!econ seed confirm <id>`). `!econ fedmint`: the one-time cutover mint, done 2026-10-09. `!econ check` lists the pools Pepe holds, the Fed mints, the Fort Knox migrations, the opening seed, the pad vaults and the Fed loans, with a ✓ on each one whose PAT adds up.",
+   "examples": [
+    "!econ fortknox migrate",
+    "!econ check"
+   ],
+   "keywords": [
+    "migration",
+    "migrate",
+    "opening seed",
+    "cutover mint",
+    "conservation check"
+   ]
+  },
+  {
+   "id": "econ-fedloan",
+   "title": "!econ fedloan · !econ flash",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ fedloan",
+    "!econ fedloan <house|bank|mm> <amount> <reason>",
+    "!econ fedloan fortknox|casino <amount> <reason>",
+    "!econ fedloan confirm|cancel <id>",
+    "!econ fedloan repay <id> [amount]",
+    "!econ flash"
+   ],
+   "summary": "The Federal Reserve's liquidity loans to the Treasury vaults, Fort Knox and the Casino vault (10M outstanding at most), how they are repaid, and the Fed's flash liquidity.",
+   "details": "`!econ fedloan` lists the Fed's outstanding liquidity loans. `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose PAT is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Treasury loans are repaid first from that vault's weekly surplus.\n\n`!econ fedloan fortknox|casino <amount> <reason>` lends to Fort Knox or the Casino vault, up to the pool's cap and inside the same 10M; it is repaid first from that pool's overflow above its cap (the daily release pays the Fed before the incentive budget) or early with `!econ fedloan repay <id> [amount]` (dry run + confirm). The incentive budget, the lotto pot and pad vaults are grant only ([Fed grants](/help#cmd-econ-fed), `!econ fund`): they have no surplus of their own to repay from. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default.\n\n`!econ flash`: the Fed's flash liquidity - when a player loan, a House payout or a market seed is bigger than the Bank, the House or the Market maker can pay, the Fed lends that vault the gap, inside the Fed loan cap; an admin action that draws on it asks for a second confirm.",
+   "examples": [
+    "!econ fedloan casino 3m casino vault for tonight's job",
+    "!econ fedloan repay FL3"
+   ],
+   "keywords": [
+    "fed loan",
+    "liquidity loan",
+    "flash liquidity",
+    "treasury loan",
+    "loan repayment"
+   ]
+  },
+  {
+   "id": "econ-fed",
+   "title": "!econ monetary · mints · mint · fund · fedseed",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ monetary",
+    "!econ mints",
+    "!econ mint <amount> <reason>",
+    "!econ mint confirm <id>",
+    "!econ fund <house|bank|mm|fortknox|casino|incentives|lotto|room:<id>> <amount> <reason>",
+    "!econ fund confirm <id>",
+    "!econ fedseed <total> [reason]"
+   ],
+   "summary": "The Federal Reserve's band (economy v3), this month's mints against their caps, an admin mint into the Fed and a Fed grant into a pool.",
+   "details": "`!econ monetary` (economy v3): the Federal Reserve's band - it mints back up to its floor (default 25M, 50M on prod), at most 5M a day, and releases what is above its ceiling, 150M, to the burn or the incentive budget - the Monday incentive guarantee, organic issuance and Fed flash liquidity. `!econ mints`: this month's mints per source - issuance, floor, admin, loans, restores, donations, seed - against their monthly caps, and the latest mints.\n\n`!econ mint <amount> <reason>`: an admin mint into the Federal Reserve only - never a pool or a wallet; dry run, then `!econ mint confirm <id>`; counted in the monthly total cap.\n\n`!econ fund <pool> <amount> <reason>`: a Fed grant - moves PAT the Fed holds into that pool, not repayable, nothing minted; a dry run first, then `!econ fund confirm <id>`. A grant that takes the Fed below its floor is flagged and needs the confirm twice - the next daily tick mints the Fed back up inside the caps. Fort Knox, the Casino vault and pad vaults take at most what fits under their cap. Pepe's owners only - the admin panel no longer fills a pool.\n\n`!econ fedseed <total> [reason]` mints the Fed up to <total>, once per total (dry run + confirm).",
+   "examples": [
+    "!econ mint 5m restock the Fed after the event",
+    "!econ fund incentives 2m weekend event prizes"
+   ],
+   "keywords": [
+    "mint",
+    "fed grant",
+    "fund a pool",
+    "monetary policy",
+    "fed band",
+    "mint caps",
+    "fed floor"
+   ]
+  },
+  {
+   "id": "econ-settings",
+   "title": "!econ get [key] · !econ set <key> <value> · !econ sink",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ get [key]",
+    "!econ set <key> <value>",
+    "!econ set <key> default",
+    "!econ sink [key] [value|default]"
+   ],
+   "summary": "The economy's numbers: floors, targets, caps, weekly budgets, the Fed band and the mint caps (!econ get / !econ set), and the economy sink rates (!econ sink, Pepe's owners).",
+   "details": "`!econ get` lists the economy v2 floors, targets, caps and weekly budgets - every number on the admin panel's Federal Reserve & floors card - with their defaults; `!econ get <key>` shows one key's value, default and label. `!econ set <key> <value>` changes one, e.g. `!econ set fortknox_floor 2.5m`; `!econ set <key> default` puts it back. Validated - whole PAT, floor at most the target / cap, weekly budgets at most 100M in total - applied at once and logged on the card.\n\n**Keys:** house_target, house_hard_floor, bank_target, bank_hard_floor, bank_lent_mult_pct, bank_peak_days, mm_target, mm_hard_floor, fedloan_cap, fortknox_floor, fortknox_cap, casino_floor, casino_cap (above either cap the daily release sends the overflow into the incentive budget), budget_<group> and pace_<group> (days a group's week is spread over, 0 = not paced) for welcome, levelup, achievements, misc, royalties, roomgames, turf, season, launchpad.\n\n**Economy v3 keys:** fed_floor, fed_ceiling, fed_floor_mint_daily, fed_ceiling_action burn|incentives, incentive_guarantee on|off, issuance_mode off|pct|fixed, issuance_pct_month, issuance_fixed_month, issuance_activity_scaling, mintcap_<issuance|floor|loan|restore|total> (a number or unlimited; the admin mint counts toward mintcap_total), flash_bank / flash_house / flash_mm on|off, grant_weekly_cap, donation_rate, donation_bonus_pct, staker_share_pct, fed_split_pct, wf_staker_cap_pct (the stakers' weekly payout cap, % APR, 0 = none), room_vault_cap.\n\n`!econ sink [key] [value|default]` (Pepe's owners): the economy sink rates - the vault ceiling and cushion, the Bank, Reserve loans, fees, the Casino vault (a number like 0.08 or a percentage like 8%). Since 2026-10-21 Pepe's admin panel only shows them, and the panel's Reserve fund and burn are an owner's too (`!econ fund`, `!burn`). Once the economy settings live on the website ([!econ policy](/help#cmd-policycfg)), `!econ set` and `!econ sink` change them there.",
+   "examples": [
+    "!econ set fortknox_floor 2.5m",
+    "!econ get fortknox_floor"
+   ],
+   "keywords": [
+    "economy settings",
+    "floors",
+    "targets",
+    "caps",
+    "weekly budgets",
+    "sink rates",
+    "mint caps"
+   ]
+  },
+  {
+   "id": "econ-launchpad",
+   "title": "!econ launchpad · !econ correction · !econ staking audit",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ launchpad",
+    "!econ launchpad on|off",
+    "!econ launchpad set <key> <value>",
+    "!econ launchpad tier <n> <regulars> <active days> <grant>",
+    "!econ launchpad pads|grants",
+    "!econ correction preview|run <key>",
+    "!econ staking audit"
+   ],
+   "summary": "The pad launchpad (launch grants for new pads that build a crowd of regulars) and the staking tools: a one-off correction from the Fed and an audit of every stake.",
+   "details": "`!econ launchpad`: the pad launchpad - new pads build momentum (regulars who keep coming back) toward launch grants from the incentive budget into their pad vault, plus newcomer welcomes, owner deposit matching and front-page boost credit. `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page.\n\n`!econ correction preview|run <key>` (run: owners, + `confirm`; a gift: `confirm gift`): a one-off staking correction from the Fed. `!econ staking audit` checks every stake.",
+   "examples": [
+    "!econ launchpad pads",
+    "!econ staking audit"
+   ],
+   "keywords": [
+    "launchpad",
+    "launch grant",
+    "new pads",
+    "staking correction",
+    "staking audit"
+   ]
+  },
+  {
    "id": "echo",
    "title": "!echo [text] · !chat",
    "category": "admin",
@@ -7294,12 +7543,49 @@
    ],
    "aliases": [],
    "syntax": [
-    "!msg [user] [text]"
+    "!msg [user] [text]",
+    "!msg -n [user] [text]",
+    "!msg -login [user] [text]"
    ],
    "summary": "Pepe sends them a private message.",
-   "details": "Pepe sends them a private message.",
-   "examples": [],
-   "keywords": []
+   "details": "Pepe sends them a private message. **Who it reaches:** name their exact Camfrog login, or the name a room's user list shows for them right now in a room you're in. If the name could be two people - a login and someone showing it as their display name, two people showing it, someone showing it only in a room you're not in or only earlier, a room you're in whose user list Pepe can't read right now, a login while a room's user list holds someone Pepe couldn't read (they may show it), or PATV didn't answer while someone else goes by it - **nothing is sent**: Pepe tells you privately who it could be, and you use their login, or `!msg -login [user] [text]` for the name exactly as typed as a Camfrog login. A nickname or real name Pepe knows for someone still reaches them, as Pepe's own PM (never signed or copied). **Signed with your login:** with copying on (below), a `!msg` you **PM to Pepe** - or type in a room where Pepe can confirm the line is yours (he then answers you by PM) - to someone Pepe can prove (a login he has seen on a room's user list, a login linked to a real PATV account that nobody else goes by, or a display name exactly one person shows in a room you're in right now) goes out starting \"✉️ from <your login>:\" - even when PATV then refuses or can't take the copy (Pepe's \"not copied\" line says the PM was still signed). `!msg -n [user] [text]`, copying off, a name Pepe can't prove or a `!msg` typed in a room where Pepe can't confirm it's you sends Pepe's own PM, without your name. `!incognito` doesn't change this (a `!msg` goes to the person you chose, and the PATV copy names you anyway). Only Pepe signs: a `!msg` whose text has an envelope emoji followed by \"from\" is refused (Camfrog's envelope emoticon `(e)` counts as one), lookalike letters from other alphabets and text-direction control characters (they can make text display in another order) included. Any other envelope or mailbox emoji in your text, and the `(e)` emoticon (Camfrog draws it as an envelope), goes out (and is copied) as the word \"(envelope)\" - so does every envelope typed into anything Pepe sends by private message (relayed notes, notices, his chat). The only envelopes Pepe puts in a private message himself are his signature on a copied `!msg` and the icon at the start of some of his own replies. PM the command to Pepe so the room doesn't see it; either way a line starting with `!msg` never reaches a pad's chat on the website. **A copy in your PATV messages:** a signed `!msg` is also copied into your PATV messages with that person, under your name and marked \"📨 Relayed from Camfrog\" - when your Camfrog name is linked to PATV (`!verify`) and their PATV account is linked to the login Pepe proved. Their PATV message settings and blocks decide whether a copy is allowed, and Pepe tells you privately only when it wasn't copied. If they're in the room right now the copy is silent (Camfrog already delivered the PM); otherwise it alerts them like any PATV message. Copying is **on for Pepe's owners and off for other admins** (`!msgcopy on|off`, by PM to Pepe); `!msg -n [user] [text]` skips the copy once. A `!msg` typed in a room is copied only when Pepe can confirm the line is yours.",
+   "examples": [
+    "!msg bob the stream starts in 10 minutes",
+    "!msg -n bob please keep it friendly in here"
+   ],
+   "keywords": [
+    "private message",
+    "pm",
+    "relayed from Camfrog",
+    "copy to PATV messages"
+   ]
+  },
+  {
+   "id": "msgcopy",
+   "title": "!msgcopy on|off",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!msgcopy"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!msgcopy on",
+    "!msgcopy off",
+    "!msgcopy"
+   ],
+   "summary": "Your switch for copies of your !msg in your PATV messages.",
+   "details": "Admins: whether a `!msg` you **PM to Pepe** (or type in a room where Pepe can confirm the line is yours) is also copied into your PATV messages with that person (under your name, marked \"📨 Relayed from Camfrog\" - they'll see it was you, not Pepe). Only a `!msg` to someone Pepe can prove is copied (see `!msg`). **With copying on, the Camfrog PM is signed too:** it starts \"✉️ from <your login>:\" as soon as the copy is queued, even if PATV then refuses it (Pepe's \"not copied\" line says so). An envelope emoji in your text - or Camfrog's envelope emoticon `(e)` - goes out, and is copied, as the word \"(envelope)\". With copying off, or with `!msg -n`, your `!msg` comes from Pepe without your name. **On by default for Pepe's owners, off for other admins.** `!msgcopy on`, `!msgcopy off` and `!msgcopy` (your setting) work by **PM to Pepe** only, and the answer is always private. `!msg -n [user] [text]` skips the copy (and the signature) for one message.",
+   "examples": [
+    "!msgcopy on",
+    "!msgcopy off"
+   ],
+   "keywords": [
+    "msg copy",
+    "copy to PATV",
+    "relayed from Camfrog",
+    "direct messages"
+   ]
   },
   {
    "id": "message",
@@ -7315,7 +7601,7 @@
     "!message [PATV user or chat name] [text]"
    ],
    "summary": "Send someone a PATV direct message from chat.",
-   "details": "Send someone a **PATV direct message** without leaving chat. It goes out from your linked PATV account into their website messages, so their blocks and \"who can message me\" settings apply. Name them by chat name or PATV username (`u/name` for the username). Works the same in a PM to Pepe. Your chat name must be linked to PATV first: get a code on your PATV profile, then type `!verify CODE`.",
+   "details": "Send someone a **PATV direct message** without leaving chat. It goes out from your linked PATV account into their website messages, so their blocks and \"who can message me\" settings apply. Name them by chat name or PATV username (`u/name` for the username). Works the same in a PM to Pepe. Your chat name must be linked to PATV first: get a code on your PATV profile, then type `!verify CODE`. Typed in a room, the room sees it - PM it to Pepe to keep it between you; lines starting with `!message` never reach a pad's chat on the website.",
    "examples": [
     "!message bob are you coming to the heist?",
     "!message u/alice thanks for the tip!"
@@ -7382,7 +7668,7 @@
     "!joinroom <room> [-p <password>] [-save]"
    ],
    "summary": "Send Pepe into a room by its name (e.g.",
-   "details": "Send Pepe into a room by its name (e.g. `!joinroom Pepe's Pad`). `-p` gives a password — **PM** it to him so the room doesn't see it. `-save` adds the room to his auto-join list so he rejoins it after a restart or a kick.",
+   "details": "Send Pepe into a room by its name (e.g. `!joinroom Pepe's Pad`). `-p` gives a password — **PM** it to him so the room doesn't see it (a `!joinroom` line never reach a pad's chat on the website). `-save` adds the room to his auto-join list so he rejoins it after a restart or a kick.",
    "examples": [
     "!joinroom Pepe's Pad"
    ],
@@ -7908,5 +8194,17 @@
   }
  ],
  "undocumented": [],
- "hash": "236fe6a18b95ce6c"
+ "private_args": [
+  "!joinroom",
+  "!message",
+  "!msg",
+  "!padfine",
+  "!padmove",
+  "!patvmsg",
+  "!relay",
+  "!tell",
+  "!verify",
+  "!verifypad"
+ ],
+ "hash": "79297f761b9a81a8"
 }
