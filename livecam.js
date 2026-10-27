@@ -749,9 +749,11 @@ async function stageConsent(R, login, t = now(), { actor = null, mf = false } = 
   if (!bridgeOk(R.id)) throw refuse("room_off");
   login = String(login || "").toLowerCase();
   const m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
-  // 1.99afl (S2): the mic stage may ask for a cam Pepe's roster can't classify yet (on_cam unknown - its one exact open per
-  // list-read epoch, or a warm relay; micfollow-core decides) - Pepe opens it by its exact name and fast-fails it when it isn't on
-  // cam. A cam the roster says is OFF is never asked for; every other holder still needs it on cam.
+  // 1.99afl (S2): the mic stage may ask for a cam Pepe's roster can't classify yet (on_cam unknown - a warm relay, or its one
+  // exact open per list-read epoch; micfollow-core decides). Review: a Pepe through 1.99afk opens no such cam - he refuses it at
+  // once as "not_on_cam" (_lv_why_not), which the mic stage reads as "checking their cam…" - so the epoch open waits for a Pepe
+  // that says he opens one by its exact name (micfollow-core.MF_UNK_OPEN). A cam the roster says is OFF is never asked for;
+  // every other holder still needs it on cam.
   if (!m || !(m.on_cam || (mf === true && m.on_cam == null))) throw refuse("not_on_cam");
   if (optedOut(login)) throw refuse("opted_out");
   // stagefix fix: private activity, "Take me off this Stage" and a block are all the one neutral "unavailable" - whoever puts

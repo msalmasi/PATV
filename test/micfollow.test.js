@@ -1805,9 +1805,47 @@ test("63. 1.99afl S2: a holder Pepe's roster can't classify (no on_cam) is 'chec
   assert.equal(v.src.find((x) => x.id === "gus").why, "cam_unknown", "the program says why");
   await at(5, ["gus"], withGus({ listAt: T - 1000, listFresh: false }));
   assert.equal(sess(), false, "a stale read isn't enough");
-  await at(1, ["gus"], withGus({ listAt: T - 1000, listFresh: true }));
-  assert.equal(sess(), true, "a complete read after the grab that still can't say: one exact open");
+  // review: Pepe through 1.99afk (his poll's mf 1) refuses such a cam at once ("not_on_cam", _lv_why_not) - the mic stage asks
+  // for none, however many complete reads come: "checking their cam…" all along, never "cam off"
+  for (let i = 0; i < 4; i++) {
+    await at(20, ["gus"], withGus({ listAt: T - 1000, listFresh: true }));
+    assert.equal(sess(), false, "no exact open with today's Pepe (" + i + ")");
+    assert.deepEqual([tile("gus").video, tile("gus").why], ["card", "cam_unknown"]);
+  }
   assert.equal(MF.health(MF._pads.get(ROOM.id), bridge._rooms.get(ROOM.id), T).list.fresh, true);
+  // a Pepe that opens such a cam by its exact name (mf >= MF_UNK_OPEN): one exact open per complete read after the grab ...
+  const sessOn = () => { const S = LC._sessions.get(LC.keyOf(ROOM.id, "gus")); return !!S && !S.ended; };
+  const bot2 = (x) => LC.forBot(Object.assign({ cap: true, mf: 2, live: [] }, x || {}), T);
+  T += 1000; await bot2();
+  await step(["gus"], withGus({ listAt: T - 500, listFresh: true }));
+  assert.equal(sessOn(), true, "a complete read after the grab that still can't say: one exact open");
+  const S = LC._sessions.get(LC.keyOf(ROOM.id, "gus"));
+  // ... which Pepe refuses "not_on_cam" when the cam isn't on: still "checking their cam…" - not "cam off" - and no other open
+  // before the next complete read
+  T += 2000;
+  await bot2({ refused: [{ room: ROOM.id, login: "gus", why: "not_on_cam", x: true, age: 0.5, sid: S.sid }] });
+  await until(() => !sessOn());
+  assert.equal(sessOn(), false, "Pepe's refusal ended it");
+  await step(["gus"], withGus({ listAt: T - 2500, listFresh: true }));
+  assert.deepEqual([tile("gus").video, tile("gus").why], ["card", "cam_unknown"], "a refusal while the roster can't say isn't 'cam off'");
+  assert.ok(!MF._pads.get(ROOM.id).state.offcam.has("gus"));
+  for (let i = 0; i < 3; i++) { T += 5000; await bot2(); await step(["gus"], withGus({ listAt: T - 2500 - (i + 1) * 5000, listFresh: true })); }
+  assert.equal(sessOn(), false, "one exact open per list-read epoch");
+  assert.equal(tile("gus").why, "cam_unknown");
+  // a RUNNING relay Pepe stops himself "not_on_cam" when his roster's on_cam goes unknown: "checking their cam…" too
+  await reset(); await plainPad(); await bot();
+  await onStage(["dana"]);
+  assert.equal(tile("dana").video, "live");
+  const noCam = (x) => Object.assign({}, x, { members: x.members.map((m) => (m.login === "dana" ? { login: "dana", display: "Dana" } : m)) });
+  await at(1, ["dana"], noCam({ members: MEMBERS(), listAt: T - 500, listFresh: true }));
+  assert.equal(tile("dana").video, "live", "the site never ends a live relay for cam_unknown");
+  EXACT.delete("dana");
+  await bot({ live: [], refused: [{ room: ROOM.id, login: "dana", why: "not_on_cam" }] });
+  const danaOn = () => { const D = LC._sessions.get(LC.keyOf(ROOM.id, "dana")); return !!D && !D.ended; };
+  await until(() => !danaOn());
+  assert.equal(danaOn(), false);
+  await step(["dana"], noCam({ members: MEMBERS(), listAt: T - 500, listFresh: true }));
+  assert.deepEqual([tile("dana").video, tile("dana").why], ["card", "cam_unknown"], "never 'cam off' for a cam the roster can't classify");
 });
 
 test("64. 1.99afl S1 / S1b / S3: Pepe's still result code - busy retries soon (no backoff), list_unread pauses the room; /stage/admin's pad health; the 'can't read the list' alert", async () => {

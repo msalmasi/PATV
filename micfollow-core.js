@@ -47,10 +47,11 @@
 //   card reasons     a card says WHY there's no picture: cold_off / rate / relays / pool / pad_cap / retry / failed / full.
 //   layoutOverride   the owner's stage-bar layout is never reset by the engine (micfollow.js keeps it until the owner does).
 // 1.99afl (the incognito / mic-stage spec, F.1 S1 / S1b / S2):
-//   stills       a refused still is soft (busy, noswitch, start_timeout, wrong_room, an unknown code, an older Pepe's
-//                answer with no code) -> another try after soft_retry_s like a soft live open; only not_public /
-//                not_on_cam / ambiguous / failed start the full backoff. No still starts while a soft retry holds the
-//                person (the still is an exact job too: it would be refused the same way and then back off for 10 minutes).
+//   stills       a refused still is soft (busy, noswitch, start_timeout, wrong_room, failed, an unknown code, an older
+//                Pepe's answer with no code) -> another try after soft_retry_s like a soft live open (soft_fails_max of
+//                them, then the backoff); only not_public / not_on_cam / ambiguous start the full backoff at once. No still
+//                starts while a soft retry holds the person (the still is an exact job too: it would be refused the same
+//                way and then back off for 10 minutes).
 //   list_unread  Pepe can't read the room's participant list (rows he can't see): a ROOM-WIDE pause (S.listPause), never a
 //                per-person failure - no exact open and no still for the room, never counted in S.soft, no backoff /
 //                liveBlock; every tile without a live relay says so (card "list_unread"); running relays keep running. It
@@ -59,9 +60,14 @@
 //                during it are cleared and each tile gets one normal attempt.
 //   cam_unknown  the roster doesn't know whether they're on cam (on_cam null: the list is stale or they joined after the
 //                last read): "checking their cam…" - no blind exact open (each one pages Camfrog's whole list on its UI
-//                thread). At most ONE exact open per person per list-read epoch (the room's listAt with listFresh), and
-//                only in an epoch that began after their grab (the read still couldn't classify them, e.g. a lurker). A
-//                running relay proves the cam is on: cam_unknown never ends a live tile, and a warm relay may be held.
+//                thread). Only with a Pepe that opens such a cam by its exact name (I.site.unkOpen: mf >= MF_UNK_OPEN -
+//                none yet; through 1.99afk he refuses it at once as not_on_cam) at most ONE exact open per person per
+//                list-read epoch (the room's listAt with listFresh), and only in an epoch that began after their grab (the
+//                read still couldn't classify them, e.g. a lurker). A running relay proves the cam is on: the site never
+//                ends a live tile for cam_unknown, and a warm relay may be held (review: Pepe through 1.99afk stops a
+//                running relay himself when his roster's on_cam goes unknown - a not_on_cam end or refusal while the cam
+//                is unknown reads "checking their cam…", never "cam off": camUnknownCard).
+//                A list pause lets a tile hold a warm relay Pepe already verified by the exact name (no list needed).
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
 // notice_first / spam / touch / deferred.
 "use strict";
@@ -152,9 +158,17 @@ const FAIL_WHYS = new Set(["open_failed", "not_that_cam", "ambiguous", "noswitch
  *  before failOpen; it is listed so it is never mistaken for a hard one. */
 const SOFT_WHYS = new Set(["busy", "noswitch", "not_that_cam", "start_timeout", "no_pic", "not_open", "nopepe", "inexact", "list_unread"]);
 const OFFCAM_WHYS = new Set(["not_on_cam", "cam_closed", "left_cam"]);
-/** 1.99afl (S1): the still refusals Pepe names (his still result's `code`, bot 1.99afk) that start the full backoff. Anything
- *  else - busy, noswitch, start_timeout, wrong_room, a code this build doesn't know, or no code (an older Pepe) - is soft. */
-const STILL_HARD = new Set(["not_public", "not_on_cam", "ambiguous", "failed"]);
+/** 1.99afl (S1): the still refusals Pepe names (his still result's `code`, bot 1.99afk) that start the full backoff - the
+ *  spec's two (not_public, not_on_cam) plus "ambiguous", the live path's rule (two people go by that name: a retry can't tell
+ *  them apart, and each one pages Camfrog's whole list). Anything else - busy, noswitch, start_timeout, wrong_room, "failed"
+ *  (review: bot 1.99afk's catch-all for not_open / an error / not that cam / an unmapped status), a code this build doesn't know,
+ *  or no code (an older Pepe) - is soft: retried after soft_retry_s, soft_fails_max times, then the full backoff. */
+const STILL_HARD = new Set(["not_public", "not_on_cam", "ambiguous"]);
+/** 1.99afl review (S2): the Pepe mic-stage level (livecam.botMf, his poll's `mf`) from which he opens a cam his roster can't
+ *  classify (on_cam unknown) by its exact name, fast-failing a lurker. Through bot 1.99afk (mf 1) he refuses such a cam at once
+ *  as "not_on_cam" (pepe_livecam._lv_why_not) - so the mic stage asks for none: the tile stays "checking their cam…" until a
+ *  list read classifies it. */
+const MF_UNK_OPEN = 2;
 /** 1.99afl (S1b): a paused room tries once more after this long even if no newer complete list read came (it pauses again at
  *  once if the list is still unread) - so a pause can never outlive a missed snapshot field. */
 const LIST_PAUSE_MAX_MS = 5 * 60 * 1000;
@@ -274,6 +288,7 @@ function newState() {
     pauseBlocked: new Set(),   //   ... logins whose backoff / liveBlock was set during the pause (cleared when it ends)
     listAtSeen: null,          //   ... the room's listAt as the last step saw it (a pause began under that read)
     unkTried: new Map(),       // 1.99afl (S2): login -> the list-read epoch (listAt) of its one exact open while cam_unknown
+    camUnk: new Set(),         //   ... review: the logins whose cam the roster couldn't classify at the last step
     changes: [],               // times of the last minute's changes
     lastChangeAt: -Infinity,
     v: 0, active: false, running: false, staleSince: 0, whyOff: null,
@@ -337,6 +352,18 @@ function listUnread(S, x, t) {
   pauseList(S, t);
   x.pend = false;
   setVideo(x, "card", "list_unread", t);
+}
+/** 1.99afl review (S2): was this tile's cam unknown to the roster when its relay was refused / ended "not_on_cam" (its epoch's
+ *  one exact open, or the roster at the last step)? Pepe (through 1.99afk) refuses - and stops a running relay - whenever his
+ *  roster's on_cam isn't TRUE, unknown included: that says nothing about the cam being off. */
+const camUnknownNow = (S, x) => !!x.unkHold || !!(S.camUnk && S.camUnk.has(x.login));
+/** ... then the tile says "checking their cam…" - never "cam off" (no S.offcam, no count, no backoff). This list-read epoch's
+ *  exact open counts as tried, so it isn't asked for again before the next complete read. */
+function camUnknownCard(S, x, t) {
+  x.pend = false;
+  x.unkHold = 0;
+  if (S.listAtSeen) S.unkTried.set(x.login, S.listAtSeen);
+  setVideo(x, "card", "cam_unknown", t);
 }
 /** The layout shape the mic stage shows now (mfix: with its pinned cams). */
 function shapeOf(S, pad) { return shapeFor(S.layoutOverride || (pad && pad.layout) || "auto", S.tiles.length, S.pinned ? S.pinned.size : 0); }
@@ -545,6 +572,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
         continue;
       }
       const want = ss.state === "live" ? "live" : "starting";
+      if (want === "live") x.unkHold = 0;                     // (1.99afl review: an epoch's open that worked out)
       if (x.video !== want) { setVideo(x, want, null, t); changed = true; }
     }
   }
@@ -564,12 +592,16 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
     if (S.offcam.has(x.login) && t - S.offcam.get(x.login) >= OFFCAM_RETRY_MS) S.offcam.delete(x.login);
     if (S.offcam.has(x.login)) {                              // the relay ended "cam off": no reopen on an old roster
       if (x.video === "still") A.push({ a: "still_stop", login: x.login });
-      if (x.video !== "card" || x.why !== "off_cam") { setVideo(x, "card", "off_cam", t); changed = true; }
+      // (1.99afl review: a roster that can't say whether the cam is on reads "checking their cam…", never "cam off")
+      const w = e === "cam_unknown" ? "cam_unknown" : "off_cam";
+      if (x.video !== "card" || x.why !== w) { setVideo(x, "card", w, t); changed = true; }
       continue;
     }
     // 1.99afl (S1b): Pepe can't read the room's list - no exact open and no still here until a newer complete read; the tile
-    // says why (a live relay keeps running: it was handled above)
-    if (S.listPause) {
+    // says why (a live relay keeps running: it was handled above). Review: a warm relay Pepe already verified by the exact name
+    // (a ▶ Live viewer's / a cam slot's) needs no list to be held - it goes on to the hold below
+    const warmExact = (ss.state === "connecting" || ss.state === "live") && ss.exact === true;
+    if (S.listPause && !warmExact) {
       if (x.video === "still") A.push({ a: "still_stop", login: x.login });
       if (x.video !== "card" || x.why !== "list_unread") { setVideo(x, "card", "list_unread", t); changed = true; }
       continue;
@@ -584,7 +616,9 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
       const seenAt = S.seen.get(x.login);
       const grab = seenAt ? seenAt.since : x.since || x.addedAt;
       const epoch = Number(I.room && I.room.listAt) > 0 ? Number(I.room.listAt) : 0;
-      const epochOk = !!(I.room && I.room.listFresh === true) && epoch > grab && S.unkTried.get(x.login) !== epoch;
+      // (review: only a Pepe that opens such a cam at all - I.site.unkOpen, MF_UNK_OPEN; through 1.99afk he refuses it at once)
+      const epochOk = !!(I.site && I.site.unkOpen === true) && !!(I.room && I.room.listFresh === true) && epoch > grab &&
+        S.unkTried.get(x.login) !== epoch;
       if (!warm0 && !epochOk) {
         if (x.video !== "card" || x.why !== "cam_unknown") { setVideo(x, "card", "cam_unknown", t); changed = true; }
         continue;
@@ -608,6 +642,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
         if (x.video === "still") A.push({ a: "still_stop", login: x.login });
         if (isCold) { cold--; pool--; }
         if (unkOpen) S.unkTried.set(x.login, unkOpen);       // (1.99afl: this epoch's one exact open of a cam_unknown person)
+        x.unkHold = unkOpen || 0;                            // (review: its "not_on_cam" refusal reads "checking their cam…")
         used++;
         x.pend = true;
         x.cold = isCold;
@@ -624,7 +659,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
       changed = true;
       continue;
     }
-    if (fresh && C.stills && C.cold_open && I.room.cams && !backed && !softBlock && !shed && e !== "pending" && e !== "notice" && e !== "cam_unknown" &&
+    if (fresh && C.stills && C.cold_open && I.room.cams && !backed && !softBlock && !shed && !S.listPause && e !== "pending" && e !== "notice" && e !== "cam_unknown" &&
         stills > 0 && pool > 0) {
       stills--; pool--;
       setVideo(x, "still", null, t);
@@ -657,7 +692,8 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
  *   pad: {layout, max_people, max_live, default_view, keep_recent (minutes)},
  *   room: {cams, listAt (ms of Pepe's last complete participant-list read, null = none), listFresh (true / false / null)},
  *   site: {maxLive, coldLeft, coldWhy (why coldLeft is 0: cold_off | rate | relays | full), stillsLeft, poolLeft (Pepe's cam pool
- *          share: cold opens + stills), shed (make room for a manual cam)},
+ *          share: cold opens + stills), shed (make room for a manual cam), unkOpen (1.99afl review: Pepe opens a cam_unknown
+ *          person's cam by its exact name - MF_UNK_OPEN)},
  *   pins: [login | {login}]  the pad's pinned cams (mfix) }
  * -> {state, actions}
  */
@@ -674,6 +710,9 @@ function step(S, I, C, t) {
     A.push({ a: "touch", why: "list_back" });
   }
   S.listAtSeen = listAt || null;
+  // (1.99afl review: whose cam the roster couldn't classify now - a "not_on_cam" end / refusal for them reads "checking")
+  S.camUnk = new Set();
+  if (I.elig && typeof I.elig.forEach === "function") I.elig.forEach((e, l) => { if (e === "cam_unknown") S.camUnk.add(l); });
   // RUN (§3.2): a stale sync is ridden out for stale_hold_s with the program unchanged (consent cuts still apply)
   if (I.why_off) {
     if (I.why_off === "stale" && S.running && S.tiles.length) {
@@ -844,6 +883,8 @@ function holdDone(S, login, ok, code, C, t) {
   if (!x) { if (ok) A.push({ a: "release", login }); return A; }   // it left meanwhile
   x.pend = false;
   if (ok) return A;
+  const unk = code === "not_on_cam" && camUnknownNow(S, x);
+  x.unkHold = 0;
   if (code === "opted_out" || code === "unavailable" || code === "ended_by") {
     // livecam's own consent check refused it (opted out, private activity, a relay someone ended): a CUT - off now, no
     // card left behind (§4.1). train2 merge: stagefix's stageConsent says "unavailable" - neutral, never which - for private
@@ -864,6 +905,7 @@ function holdDone(S, login, ok, code, C, t) {
     return A;
   }
   if (code === "list_unread") listUnread(S, x, t);       // 1.99afl (S1b): the ROOM pauses - never this person's failure
+  else if (unk) camUnknownCard(S, x, t);                 // (1.99afl review: a cam the roster can't classify isn't "off")
   else if (code === "not_on_cam") { S.offcam.set(login, t); setVideo(x, "card", "off_cam", t); }
   else if (code === "slots_busy" || code === "budget") {
     // the site's live relays were full at that moment (a race - e.g. a manual cam slot took the freed one): "full" and
@@ -896,7 +938,12 @@ function sessionEnded(S, login, why, C, t) {
   }
   if (!liveish(x) && !x.pend) return { cut: null, actions: A };
   x.pend = false;
+  const unk = why === "not_on_cam" && camUnknownNow(S, x);
+  x.unkHold = 0;
   if (why === "list_unread") listUnread(S, x, t);        // 1.99afl (S1b): the room pauses (before failOpen: never counted)
+  // 1.99afl review (S2): Pepe refused - or stopped - the relay "not_on_cam" while the roster couldn't classify the cam (his
+  // epoch open, or his own tick ending a running relay when his on_cam went unknown): "checking their cam…", not "cam off"
+  else if (unk) camUnknownCard(S, x, t);
   else if (OFFCAM_WHYS.has(why)) { S.offcam.set(login, t); setVideo(x, "card", "off_cam", t); }
   else if (why === "slots_busy") {                        // mfix: Pepe's live cams were full - a race, another try soon
     S.liveBlock.set(login, t + FULL_RETRY_MS);
@@ -911,9 +958,9 @@ function sessionEnded(S, login, why, C, t) {
 }
 
 /** A still frame came back refused. 1.99afl (S1): by Pepe's `code` (bot 1.99afk) - list_unread pauses the ROOM (S1b); a
- *  hard refusal ("cam isn't public", not on cam, ambiguous, failed) is a card and the full backoff; anything else (busy,
- *  noswitch, start_timeout, wrong_room, an unknown code, or none at all - an older Pepe) is soft: failOpen's retry after
- *  soft_retry_s (soft_fails_max of them, then the backoff), never the 10 minutes at once. -> actions */
+ *  hard refusal (STILL_HARD: "cam isn't public", not on cam, ambiguous) is a card and the full backoff; anything else (busy,
+ *  noswitch, start_timeout, wrong_room, failed, an unknown code, or none at all - an older Pepe) is soft: failOpen's retry
+ *  after soft_retry_s (soft_fails_max of them, then the backoff), never the 10 minutes at once. -> actions */
 function stillFailed(S, login, C, t, code = null) {
   const A = [];
   const x = tileOf(S, login);
@@ -981,7 +1028,7 @@ function hot(S, t) {
 
 module.exports = {
   FIELDS, DEFAULTS, PAD_FIELDS, PAD_DEFAULTS, LAYOUTS, SHAPES, DEFAULT_VIEWS, CUT, isCut, FAIL_WHYS, SOFT_WHYS, OFFCAM_WHYS, EXACT_WAIT_MS, FULL_RETRY_MS, OFFCAM_RETRY_MS,
-  CARD_WHYS, KEEP_RECENT, STILL_HARD, LIST_PAUSE_MAX_MS,
+  CARD_WHYS, KEEP_RECENT, STILL_HARD, LIST_PAUSE_MAX_MS, MF_UNK_OPEN,
   normalize, normalizePad, layoutCap, layoutFor, shapeFor, maxPins, newState, step, holdDone, sessionEnded, stillFailed, yieldTile, cutNow, clearStage, hot, speaking,
   shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
 };

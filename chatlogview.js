@@ -27,8 +27,10 @@
 //                            dress anonymises) - their joins / leaves / mic lines stay left out (Pepe's anonymised stand-ins
 //                            can't be told from a !bridge hide one's). 1.99afl (B.1): since Train 3 Pepe sends no event at all
 //                            for a !bridge hide person, so a hashless anonymous MIC grab / drop from a sync that carried both
-//                            kinded lists (stamped k3 at ingest) is an incognito person's: "someone grabbed / dropped the mic"
-//                            (privacyAt). Joins / leaves and unstamped ones stay left out. Pepe's own anonymised lines (an incognito speaker's, sent
+//                            kinded lists (stamped k3 at ingest; a drop only when its hold's grab was - Pepe's per-hold ref)
+//                            is an incognito person's: "someone grabbed / dropped the mic" (privacyAt); one Pepe sent with
+//                            the holder's hash (data.anon) is too, until that hash is left out. Joins / leaves and unstamped
+//                            ones stay left out. Pepe's own anonymised lines (an incognito speaker's, sent
 //                            with their hash - `ah`, server-only; archived as who "h:<hash>") are "someone" too, and left out
 //                            once that hash is left out (Train 3 review: once ANY hash Pepe sent for the speaker is - `ahs`,
 //                            data.anon.hs). The kind is the STRICTER of the two sticky stores - chatlog.js's and hubhidden.js's
@@ -185,7 +187,9 @@ function privacyAt(it, kindOf, txOf) {
     // a display name, one of them later on !bridge hide / forget-me / deleted, never leaves their line up as "someone"
     for (const x of speakerHashes(it)) if (kindOf(x) === "out" || (it.k === "tx" && txOf(x))) return "out";
     if (it.purged) return null;
-    return PRESENCE.has(it.k) ? "out" : "anon";
+    // 1.99afl review: a mic grab / drop Pepe sent with its holder's incognito hash (data.anon, like his anonymised chat / 🎙
+    // lines - bridge.anonMic) is "someone grabbed / dropped the mic", and left out once that hash is (above); joins / leaves stay out
+    return it.k === "join" || it.k === "leave" ? "out" : "anon";
   }
   if (!u) return null;
   // Pepe's anonymised stand-in with no hash (a join / leave / mic of someone on his hidden list - he doesn't say which kind - or an
@@ -193,7 +197,9 @@ function privacyAt(it, kindOf, txOf) {
   // 1.99afl (B.1): a hashless anonymous MIC grab / drop stamped k3 at ingest - its sync carried both kinded hash lists
   // (bridge_hidden_h AND incog_hidden_h as arrays), so it came from a Pepe that never sends a !bridge hide person's events
   // (Train 3, 1.99adm on) with his hide list loaded: it is an INCOGNITO person's, shown as "someone grabbed / dropped the mic".
-  // Joins / leaves, and any unstamped one (stored before 1.99afl, an older Pepe, a lost list), stay left out (fails closed).
+  // A drop is stamped only when its hold's grab was (bridge.k3Hold, Pepe's per-hold ref): a hold begun NAMED whose holder went
+  // private mid-hold is released anonymised under a fresh ref - never shown. Joins / leaves, and any unstamped one (stored
+  // before 1.99afl, an older Pepe, a lost list, an unpaired drop), stay left out (fails closed).
   if (u.anon) return it.purged ? null : it.k3 === 1 && (it.k === "mic" || it.k === "unmic") ? "anon" : "out";
   const login = loginOf(it);
   if (!login) return null;

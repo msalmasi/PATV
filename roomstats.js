@@ -21,7 +21,8 @@
 //     rendered), numbers}; and at render time any row naming a login that is incognito NOW (incognito_state on / incognito_anon)
 //     or on the sticky hidden set (!incognito / !bridge hide, both stores - chatlogview.isHiddenLogin, fails closed) is "someone"
 //     at its rank too, so a room whose last sync predates someone going private never prints their name. The person themselves
-//     (their linked Camfrog login, or an anon row's h) sees "you".
+//     (their linked Camfrog login, or an anon row's h) sees "you". Review: a private row shows no last-seen time, and Pepe's
+//     free text (notes, "changes", topics over time) names nobody private now either (freeTextScrub, fails closed).
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const { _render: R } = require("./userstats");
@@ -61,12 +62,15 @@ const dayMap = (o, fn) => {
 };
 const strList = (a, n, m) => (Array.isArray(a) ? a : []).slice(0, n).map((x) => str(x, m)).filter(Boolean);
 const HASH_RE = /^[0-9a-f]{20}$/;
-const nums = (p) => ({ m30: int(p.m30), s30: int(p.s30), d30: int(p.d30, 0, 31), m90: int(p.m90), s90: int(p.s90), d90: int(p.d90, 0, 91), last: int(p.last) });
+/** A row's numbers. 1.99afl review: a private row's never include `last` - their last-seen time would track a person the pad
+ *  otherwise leaves out ("someone · last seen 3 min ago"); bot 1.99afk's anon rows carry none either. */
+const counts3090 = (p) => ({ m30: int(p.m30), s30: int(p.s30), d30: int(p.d30, 0, 31), m90: int(p.m90), s90: int(p.s90), d90: int(p.d90, 0, 91) });
+const nums = (p) => Object.assign(counts3090(p), { last: int(p.last) });
 const person = (p) => {
   if (!p || typeof p !== "object") return null;
-  // 1.99afl (section K): a private person at their real rank - no login, no name; `h` (their hidden-set hash) only so they can
-  // see their own row as "you" (login-equivalent: never rendered, never in a view model)
-  if (p.anon === true) return Object.assign({ anon: true }, typeof p.h === "string" && HASH_RE.test(p.h) ? { h: p.h } : {}, nums(p));
+  // 1.99afl (section K): a private person at their real rank - no login, no name, no last-seen time; `h` (their hidden-set hash)
+  // only so they can see their own row as "you" (login-equivalent: never rendered, never in a view model)
+  if (p.anon === true) return Object.assign({ anon: true }, typeof p.h === "string" && HASH_RE.test(p.h) ? { h: p.h } : {}, counts3090(p));
   const login = str(p.login, 40).toLowerCase();
   if (!LOGIN_RE.test(login)) return null;
   return Object.assign({ login, display: str(String(p.display == null ? "" : p.display).replace(/<[^<>]{0,40}>/g, ""), 40).replace(/[<>]/g, "") || login }, nums(p));
@@ -210,6 +214,55 @@ async function maskedLogins(logins) {
     if (hid) out.add(l);
   }
   return out;
+}
+/** Every login incognito now (incognito_state on, incognito_anon); a store that can't be read throws (no such table: none). */
+async function incognitoLogins() {
+  const out = new Set();
+  for (const sql of [`SELECT login FROM incognito_state WHERE "on" = 1`, "SELECT login FROM incognito_anon"]) {
+    try { for (const r of await getQuery(sql)) { const l = String(r.login || "").trim().toLowerCase(); if (LOGIN_RE.test(l)) out.add(l); } }
+    catch (e) { if (!/no such table/i.test(String(e && e.message))) throw e; }
+  }
+  return out;
+}
+/**
+ * 1.99afl review (section K): Pepe's FREE TEXT on the analytics page - the room notes (summary, vibe, topics, jokes, events,
+ * rules), "changes" ("new regulars: ...", "seen less lately: ...") and the topics over time - can name people who are private
+ * NOW: it is stored as Pepe last sent it, and a room he isn't in is never synced again (DRAMA_CENTRAL's public page printed four
+ * incognito people that way). -> s => s with every private person's names as "someone", at render time:
+ *   - chatlogview.redact: everyone incognito / hidden now in either sticky store - their login and the display names the
+ *     hidden-names job knows (>= 3 characters, its stop-list kept);
+ *   - plus the names private people (maskedLogins: incognito now, or hidden) go by in ANY room's rows here (a regular's / mic
+ *     leader's login and display name - "*Mephobia*" from another room's mic board) and every incognito login.
+ * Fails closed: when either can't run, the free text is left out ("").
+ */
+async function freeTextScrub() {
+  let CV;
+  try { CV = require("./chatlogview"); await CV.init(); } catch (e) { return () => ""; }
+  let extra = null;
+  try {
+    const names = new Map();                          // login -> Set(names it goes by in the stored rows)
+    const add = (l, n) => { if (!names.has(l)) names.set(l, new Set([l])); if (n) names.get(l).add(String(n)); };
+    for (const r of await all()) {
+      for (const p of [...(r.regulars || []), ...(r.mic_top || [])]) if (p && !p.anon && LOGIN_RE.test(String(p.login || ""))) add(p.login, p.display);
+    }
+    for (const l of await incognitoLogins()) add(l, null);
+    const terms = new Set();
+    for (const l of await maskedLogins([...names.keys()])) {
+      for (const n of names.get(l) || []) {
+        const s = String(n).replace(/^@+/, "").trim();
+        if (Array.from(s).length >= 3 && !CV.STOP.has(s.toLowerCase())) terms.add(s.toLowerCase());
+      }
+    }
+    extra = terms.size ? new RegExp("(?<![\\p{L}\\p{N}_])@?(?:" + CV.trieSource([...terms]) + ")(?![\\p{L}\\p{N}_])", "giu") : null;
+  } catch (e) {
+    console.error("[roomstats] private names:", e && e.message);
+    return () => "";
+  }
+  return (s) => {
+    if (typeof s !== "string" || !s) return "";
+    const o = CV.redact(s);
+    return extra ? o.replace(extra, "someone") : o;
+  };
 }
 /** The viewer's own linked Camfrog login (lower case) or null. */
 async function viewerLogin(userId) {
@@ -391,8 +444,8 @@ async function forRoom(r, slug, viewer = null) {
       if (!p) continue;
       if (p.anon || masked.has(p.login)) {
         const you = !!me && (p.anon ? !!meH && p.h === meH : p.login === me);
-        // (the numbers only - never the login, the name or the hash)
-        shown.push(Object.assign(nums(p), { anon: true, you, display: you ? "you" : "someone", href: null }));
+        // (the numbers only - never the login, the name, the hash or (review) the last-seen time)
+        shown.push(Object.assign(counts3090(p), { anon: true, you, display: you ? "you" : "someone", href: null }));
         continue;
       }
       const a = priv.get(p.login);
@@ -430,7 +483,12 @@ async function forRoom(r, slug, viewer = null) {
   const avgVisitors = Math.round(visitorDays30 / 30);
   const how = r.how || [], hows = r.hows || [];
   const k = r.knowledge || {};
-  const wmax = Math.max(1, ...(k.topics || []).map((t) => t.w));
+  // 1.99afl review (section K): Pepe's free text names nobody private now (freeTextScrub; fails closed: left out)
+  const scrub = await freeTextScrub();
+  const scrubList = (a) => (Array.isArray(a) ? a : []).map(scrub).filter(Boolean);
+  const topics = (k.topics || []).map((t) => ({ t: scrub(t.t), w: t.w })).filter((t) => t.t);
+  const wmax = Math.max(1, ...topics.map((t) => t.w));
+  const summary = scrub(sentenceTrim(k.summary));
   return {
     name: r.name, slug, tz: md.tz || "", updated: r.updated ? R.ago(Math.floor(r.updated / 1000)) : null,
     tiles: {
@@ -450,7 +508,7 @@ async function forRoom(r, slug, viewer = null) {
     heatMic: weekHeat(hows, "255,183,77", (v) => R.dur(v)),
     hasHeatMic: hows.some((v) => v > 0),
     regulars: regs.shown.map((p, i) => ({ rank: i + 1, name: p.display, href: p.href, d30: p.d30, m30: R.fmt(p.m30), mic30: p.s30 ? R.dur(p.s30) : "—",
-                                           d90: p.d90, last: R.ago(p.last), ...(p.anon ? { anon: true, you: !!p.you } : {}) })),
+                                           d90: p.d90, last: p.anon ? "—" : R.ago(p.last), ...(p.anon ? { anon: true, you: !!p.you } : {}) })),
     regularsHidden: regs.hidden,
     mic: mics.shown.map((p, i) => ({ rank: i + 1, name: p.display, href: p.href, dur: R.dur(p.s90), days: p.d90, pct: Math.max(3, (p.s90 / micMax) * 100),
                                      ...(p.anon ? { anon: true, you: !!p.you } : {}) })),
@@ -459,13 +517,13 @@ async function forRoom(r, slug, viewer = null) {
     cats: cats.map(([c, n]) => ({ label: (CAT[c] || [c])[0], color: (CAT[c] || [0, "#90a4ae"])[1], n: R.fmt(n), pct: (n / catSum) * 100 })),
     games: gameRows, mod: modRows, modTotal: R.fmt(Object.values(mod90).reduce((a, b) => a + b, 0)),
     know: {
-      has: !!(k.summary || (k.topics || []).length), summary: sentenceTrim(k.summary), vibe: k.vibe || "",
+      has: !!(summary || topics.length), summary, vibe: scrub(k.vibe || ""),
       at: k.at ? R.ago(k.at) : null,
-      topics: (k.topics || []).map((t) => ({ t: t.t, w: t.w, size: (0.85 + 0.45 * (t.w / wmax)).toFixed(2) })),
-      jokes: k.jokes || [], events: k.events || [], rules: k.rules || [],
+      topics: topics.map((t) => ({ t: t.t, w: t.w, size: (0.85 + 0.45 * (t.w / wmax)).toFixed(2) })),
+      jokes: scrubList(k.jokes), events: scrubList(k.events), rules: scrubList(k.rules),
     },
-    changes: r.changes || [],
-    history: (r.history || []).slice(-8).reverse().map((h) => ({ when: histWhen(h.at, md.tz), topics: h.topics })),
+    changes: scrubList(r.changes),
+    history: (r.history || []).slice(-8).reverse().map((h) => ({ when: histWhen(h.at, md.tz), topics: scrubList(h.topics) })),
   };
 }
 

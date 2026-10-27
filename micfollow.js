@@ -62,6 +62,9 @@
 //   S1 / S1b       Pepe's still result carries a `code` (bot 1.99afk; bridge-relay passes it): soft refusals retry soon, hard
 //                  ones back off, list_unread (Pepe can't read the room's participant list) pauses the ROOM - micfollow-core.
 //   S2             eligOf: on cam / not on cam only from Pepe's roster read; unknown is "cam_unknown" ("checking their cam…").
+//                  Review: no exact open of such a cam until Pepe says he opens one (siteBudget.unkOpen: his mf level >=
+//                  core.MF_UNK_OPEN - through 1.99afk he refuses it at once as not_on_cam); a not_on_cam refusal / end while the
+//                  roster can't say reads "checking their cam…", never "cam off".
 //   S3             /stage/admin's pad rows carry the room's list age, freshness, a list pause, the last hour's failed opens /
 //                  stills by code and the cards shown now (health); a pad whose list Pepe hasn't read whole for 10 minutes
 //                  while people hold the mic sends the site's Admins an alert (listAlert, once per pad per 6 h).
@@ -504,7 +507,10 @@ function siteBudget(P, t) {
   let poolCap = Number(lc.pool_max) || 6;
   try { const bp = L.botPool ? L.botPool() : null; if (bp && Number(bp.capacity) > 0) poolCap = Number(bp.capacity); } catch (e) { /* the knob */ }
   const poolLeft = Math.max(0, poolCap - POOL_FREE - L.liveCount() - stills - pendingCold);
-  return { maxLive: lc.max_live, coldLeft, coldWhy, stillsLeft: c.stills ? Math.max(0, c.stills_max - stills) : 0, poolLeft, shed: t < shedUntil };
+  // 1.99afl review (S2): Pepe opens a cam his roster can't classify by its exact name (his mic-stage level; none yet - through
+  // 1.99afk he refuses it at once as not_on_cam, so the mic stage asks for none and the tile stays "checking their cam…")
+  const unkOpen = (Number(L.botMf()) || 0) >= core.MF_UNK_OPEN;
+  return { maxLive: lc.max_live, coldLeft, coldWhy, stillsLeft: c.stills ? Math.max(0, c.stills_max - stills) : 0, poolLeft, shed: t < shedUntil, unkOpen };
 }
 const roomOf = (roomId) => { try { return BR()._rooms.get(String(roomId)) || null; } catch (e) { return null; } };
 

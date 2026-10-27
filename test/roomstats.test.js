@@ -232,9 +232,9 @@ test("1.99afl (section K): private people are 'someone' at their REAL rank with 
   })] });
   assert.equal(r.status, 200);
   const row = (await roomstats.all()).find((x) => x.room === "Derty_Dawg.Room");
-  assert.deepEqual(row.regulars[1], { anon: true, h: hash("evecf"), m30: 800, s30: 3000, d30: 21, m90: 1900, s90: 8000, d90: 59, last: 1790000000 },
-                   "an anon row keeps its numbers and hash - never a login or a name, even one sent by mistake");
-  assert.deepEqual(row.mic_top[3], { anon: true, m30: 0, s30: 0, d30: 0, m90: 0, s90: 4000, d90: 20, last: 0 }, "a bad hash is dropped, the row kept");
+  assert.deepEqual(row.regulars[1], { anon: true, h: hash("evecf"), m30: 800, s30: 3000, d30: 21, m90: 1900, s90: 8000, d90: 59 },
+                   "an anon row keeps its numbers and hash - never a login, a name or (review) a last-seen time, even one sent by mistake");
+  assert.deepEqual(row.mic_top[3], { anon: true, m30: 0, s30: 0, d30: 0, m90: 0, s90: 4000, d90: 20 }, "a bad hash is dropped, the row kept");
   for (const viewer of ["u3", "u9"]) {
     const html = await (await get("/p/derty-dawg/analytics", viewer)).text();
     for (const leak of ["Carol Stale", "carolcf", "Dana Hidden", "danacf", "evecf", hash("evecf"), hash("danacf"), ">Eve<"]) assert.ok(!html.includes(leak), leak + " leaked to " + viewer);
@@ -251,6 +251,61 @@ test("1.99afl (section K): private people are 'someone' at their REAL rank with 
   for (const leak of ["carolcf", "danacf", "evecf", "Carol", "Dana", hash("evecf")]) assert.ok(!s.includes(leak), leak);
   assert.equal(a.mic[0].pct, 100, "the private #1 keeps the bar scale (real numbers)");
   assert.deepEqual(a.regulars.map((x) => x.name), ["Alice", "someone", "someone"]);
+  // review: a private row shows no last-seen time - Pepe's anon row has none, and a masked named row's is dropped
+  assert.deepEqual(a.regulars.map((x) => x.last === "—"), [false, true, true], JSON.stringify(a.regulars.map((x) => x.last)));
+});
+
+test("1.99afl review (K.6 step 11): a PUBLIC pad's analytics, signed out, with STALE free text - Pepe's notes, 'changes' and topics over time never name anyone private now", async () => {
+  const crypto = require("crypto");
+  const hash = (l) => crypto.createHash("sha256").update("pepe-hidden:" + l).digest("hex").slice(0, 20);
+  const PA = require(path.join(repo, "padaccess"));
+  await PA.init();
+  await runQuery("INSERT OR REPLACE INTO pad_access (room_id, level) VALUES ('Stale_Pad', 'public')");
+  await PA.load();
+  await runQuery(`CREATE TABLE IF NOT EXISTS incognito_state (login TEXT PRIMARY KEY, "on" INTEGER NOT NULL DEFAULT 0, updated INTEGER)`);
+  await runQuery(`CREATE TABLE IF NOT EXISTS incognito_anon (login TEXT PRIMARY KEY)`);
+  await runQuery("INSERT OR REPLACE INTO incognito_anon (login) VALUES ('lifesajourney'), ('stinky_violence'), ('mr_dichotomy')");
+  // gina typed !bridge hide (the sticky hidden set)
+  await bridge.ingest({ rooms: [], events: [{ op: "event", id: "k-hide-gina", ts: new Date().toISOString(), type: "privacy.hidden", data: { h: hash("ginacf"), scope: "bridge" } }] });
+  // another room's mic board knows stinky_violence's display name (the DRAMA_CENTRAL case: "*Mephobia*")
+  await sync({ rooms: [room("Derty2.Room", "Derty Two", { mic_top: [{ login: "stinky_violence", display: "*Mephobia*", s90: 900, d90: 9 },
+                                                                    { login: "ginacf", display: "Gina Gee", s90: 800, d90: 8 }] })] });
+  // the stale sync (before they went private): their names all through the free text
+  await sync({ rooms: [room("Stale_Pad", "Stale Pad", {
+    regulars: [{ login: "mr_dichotomy", display: "Mr D", m30: 9, s30: 9, d30: 9, m90: 9, s90: 9, d90: 9, last: 1790000000 },
+               { login: "doracf", display: "Dora", m30: 1, s30: 1, d30: 1, m90: 1, s90: 1, d90: 1, last: 1790000000 }],
+    mic_top: [],
+    knowledge: { summary: "A late room where mr_dichotomy and Mr D roast everyone; Gina Gee runs the jokes.", vibe: "lifesajourney's vibe",
+                 topics: [{ t: "mr_dichotomy's lawn", w: 3 }, { t: "football", w: 2 }], jokes: ["*Mephobia* again"], events: ["ginacf left"],
+                 rules: ["be nice"], at: 1790000000 },
+    changes: ["new regulars: info_returns, plantbaked", "seen less lately: dark_temptation, lifesajourney, cute_and_broke, *Mephobia*"],
+    history: [{ at: 1790000000, topics: ["mr_dichotomy", "football"] }, { at: 1790500000, topics: ["Gina Gee's cam", "football"] }],
+  })] });
+  const res = await get("/p/stale-pad/analytics");                          // signed OUT
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.doesNotMatch(html, /for signed-in members/, "a public pad's analytics are open to signed-out visitors");
+  for (const leak of ["mr_dichotomy", "Mr D", "lifesajourney", "Mephobia", "Gina Gee", "ginacf", "stinky_violence"]) {
+    assert.ok(!html.includes(leak), leak + " printed on the public page");
+  }
+  assert.match(html, /seen less lately: dark_temptation, someone, cute_and_broke, someone/);
+  assert.match(html, /new regulars: info_returns, plantbaked/, "everyone else stays named");
+  assert.match(html, /football/);
+  assert.match(html, />Dora</);
+  assert.match(html, /someone roast everyone/);
+  // fails closed: a private-names check that can't run leaves the free text out
+  const r = (await roomstats.all()).find((x) => x.room === "Stale_Pad");
+  await runQuery("ALTER TABLE incognito_anon RENAME TO incognito_anon_x");
+  await runQuery("CREATE TABLE incognito_anon (nope TEXT)");                // (unreadable: no login column)
+  try {
+    const a = await roomstats.forRoom(r, "stale-pad", null);
+    assert.equal(a.know.summary, "");
+    assert.deepEqual([a.changes, a.know.jokes, a.know.topics], [[], [], []]);
+    assert.ok(a.history.every((h) => !h.topics.length));
+  } finally {
+    await runQuery("DROP TABLE incognito_anon");
+    await runQuery("ALTER TABLE incognito_anon_x RENAME TO incognito_anon");
+  }
 });
 
 test("unknown rooms 404, removed rooms disappear", async () => {

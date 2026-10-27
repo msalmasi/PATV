@@ -2,6 +2,8 @@
 //   * B.1  an incognito person's mic grab / drop (Pepe sends it anonymised with no hash) is shown as "someone grabbed / dropped
 //          the mic" - only when the same sync carried BOTH kinded hash lists (a Train 3 Pepe with his hide list loaded, who never
 //          sends a !bridge hide person's events); joins / leaves and unstamped ones stay left out; the scrollback agrees;
+//          review: a drop only when its hold's grab was stamped (Pepe's per-hold ref) - a hold begun named whose holder went
+//          !bridge hide mid-hold stays out; a mic event with the holder's hash (data.anon) leaves once that hash is left out;
 //   * B.4a the 2026-10-27 replay (Players__Lounge, Pepe console 223824-223909): Frankie's turn shows on its own, so his late
 //          transcript is no longer the only trace of him inside bxdude180's turn;
 //   * S6   the whitelisted projection (the rollback floor): a field nobody listed - a later build's veiled identity, hidden
@@ -117,9 +119,10 @@ const setup = (async () => {
   // the 10-27 replay (Pepe console 223824-223909): Frankie (incognito) holds 29.9 s, BXDUDE180 grabs, Frankie's transcript lands
   // after speech-to-text, BX releases after 22.1 s, BX's own transcript - one sync per console moment, every one kinded
   const t = T0 - 5 * 60e3;
+  const FR = ANON();                       // Pepe's ONE random ref for Frankie's whole hold (pepe_bridge._br_hold_user)
   const batches = [
-    [ev("mic.grab", { user: ANON() }, t)],                                                                      // 223824
-    [ev("mic.release", { user: ANON(), held_ms: 29900 }, t + 29900)],                                           // 223858
+    [ev("mic.grab", { user: FR }, t)],                                                                          // 223824
+    [ev("mic.release", { user: FR, held_ms: 29900 }, t + 29900)],                                               // 223858
     [ev("mic.grab", { user: BX }, t + 30500)],                                                                  // 223869
     [ev("x.pepe.transcript", { id: "tx-00000000000000f1", user: ANON(), text: "Hercules is the funniest", source: "mic",
                                 anon: { kind: "incognito", h: FRANKIE_H } }, t + 33000)],                       // 223872
@@ -186,6 +189,117 @@ test("B.1 scrollback: the stamped anonymous mic lines are 'someone' rows; the un
   assert.ok(lines.includes("unmic:someone:29900"));
   assert.ok(!h.d.items.some((it) => it.k === "join" && it.u && it.u.anon));
   assert.ok(!/k3|"ah"|ahs/.test(JSON.stringify(h.d.items)), "nothing server-only in the history answer");
+});
+
+// review fixes (1.99afl): B.1 stamps per HOLD (Pepe's per-hold ref); a mic event with the holder's incognito hash is an `ah` line
+const liveOf = (slug, user) => call("GET", `/api/rooms/${slug}/live`, user);
+const histOf = (slug, user, q = "limit=100") => call("GET", `/api/rooms/${slug}/history?${q}`, user);
+const evIn = (room, type, data, ts) => Object.assign(ev(type, data, ts), { scope: { platform: "camfrog", room } });
+
+test("review (HIGH): a hold begun NAMED whose holder types !bridge hide mid-hold - Pepe's anonymised release (a fresh ref) pairs with no stamped grab: left out, never 'someone dropped the mic' in place of their vanished grab", async () => {
+  await ready();
+  const ROOM2 = { id: "Orphan_Room", name: "Orphan Room" }, X = { id: "xuser", login: "xuser", display: "X User" };
+  const snap2 = () => ({ room: ROOM2, members: [ALICE, X], mic: [], count: 2, transcripts: true });
+  await rooms.setOwner(ROOM2.id, "own", "test");
+  const t = Date.now() - 60e3;
+  await bridge.ingest({ rooms: [snap2()], hidden_h: [FRANKIE_H], ...KINDED, events: [evIn(ROOM2, "mic.grab", { user: X }, t)] });
+  let r = await liveOf("orphan-room", U.mem);
+  assert.equal(r.status, 200, r.text.slice(0, 200));
+  assert.deepEqual(r.d.feed.map(say).filter((l) => /^(un)?mic:/.test(l)), ["mic:xuser"], "the named grab is up");
+  // X types !bridge hide (private-args: the command never reaches the pad); Pepe's next sync carries the hide list + the privacy
+  // event + the release, anonymised under a FRESH ref (_br_hold_anon: the holder is "out" NOW; the hold began named)
+  await bridge.ingest({ rooms: [snap2()], hidden_h: [FRANKIE_H, hash("xuser")], bridge_hidden_h: [hash("xuser")], incog_hidden_h: [FRANKIE_H], events: [
+    { op: "event", id: "afl-priv-x", ts: new Date(t + 30e3).toISOString(), type: "privacy.hidden", data: { h: hash("xuser"), scope: "bridge" } },
+    evIn(ROOM2, "mic.release", { user: ANON(), held_ms: 30000 }, t + 30e3),
+  ] });
+  await settle(100);
+  CV._clearCaches(); CH._reset();
+  const R2 = bridge._rooms.get(ROOM2.id);
+  const rel = R2.feed.find((it) => it.k === "unmic");
+  assert.ok(rel && rel.u.anon && rel.ar, "the release came in anonymised, its ref kept server-side");
+  assert.equal(rel.k3, undefined, "not stamped: its ref was never a stamped grab's");
+  assert.equal(CV.privacyOf(rel), "out");
+  assert.equal(CV.privacyOf(R2.feed.find((it) => it.k === "mic")), "out", "the named grab leaves (!bridge hide = left out everywhere)");
+  r = await liveOf("orphan-room", U.mem);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.d.feed.map(say).filter((l) => /^(un)?mic:/.test(l)), [], "no grab, and no 'someone dropped the mic' in its place");
+  const h = await histOf("orphan-room", U.mem);
+  assert.equal(h.status, 200, h.text.slice(0, 200));
+  assert.ok(!h.d.items.some((it) => it.k === "mic" || it.k === "unmic"), "scrollback agrees");
+  // a stamped grab pairs with ITS release only; one released after a restart pairs again once the live feed is replayed
+  const A = ANON(), B = ANON();
+  await bridge.ingest({ rooms: [snap2()], hidden_h: [FRANKIE_H], ...KINDED, events: [evIn(ROOM2, "mic.grab", { user: A }, t + 40e3), evIn(ROOM2, "mic.grab", { user: B }, t + 41e3)] });
+  bridge._k3Refs.delete(ROOM2.id);                                              // a restart ...
+  bridge._k3Replay(R2);                                                         // ... rebuilds the open stamped holds from bridge_feed
+  await bridge.ingest({ rooms: [snap2()], hidden_h: [FRANKIE_H], ...KINDED, events: [
+    evIn(ROOM2, "mic.release", { user: A, held_ms: 5000 }, t + 45e3),
+    evIn(ROOM2, "mic.release", { user: A, held_ms: 5000 }, t + 46e3),           // (the same ref again: its hold already ended)
+    evIn(ROOM2, "mic.release", { user: { id: "anon-zzzz", display: "someone", anonymous: true }, held_ms: 5000 }, t + 47e3),   // no valid ref
+  ] });
+  const rels = R2.feed.filter((it) => it.k === "unmic").slice(-3);
+  assert.deepEqual(rels.map((it) => it.k3 || 0), [1, 0, 0], "A's release pairs with A's grab - once; a bad / missing ref never does");
+  assert.ok(bridge._k3Refs.get(ROOM2.id).has(B.id) && !bridge._k3Refs.get(ROOM2.id).has(A.id), "B's hold is still open");
+  // a release in a sync WITHOUT the kinded lists is never stamped, even for a stamped grab
+  await bridge.ingest({ rooms: [snap2()], hidden_h: [FRANKIE_H], events: [evIn(ROOM2, "mic.release", { user: B, held_ms: 9000 }, t + 50e3)] });
+  assert.equal(R2.feed.filter((it) => it.k === "unmic").pop().k3, undefined);
+  // a hold begun while incognito (stamped grab) whose holder types !bridge hide mid-hold: Pepe still releases it under its own ref -
+  // in the very sync that leaves them out, it isn't shown ("someone dropped" appearing as their lines leave would tie them)
+  const C = ANON(), Y = "yuser";
+  await bridge.ingest({ rooms: [snap2()], hidden_h: [FRANKIE_H, hash(Y)], bridge_hidden_h: [], incog_hidden_h: [FRANKIE_H, hash(Y)],
+                        events: [evIn(ROOM2, "mic.grab", { user: C }, t + 51e3)] });
+  await bridge.ingest({ rooms: [snap2()], hidden_h: [FRANKIE_H, hash(Y)], bridge_hidden_h: [hash(Y)], incog_hidden_h: [FRANKIE_H], events: [
+    { op: "event", id: "afl-priv-y", ts: new Date(t + 55e3).toISOString(), type: "privacy.hidden", data: { h: hash(Y), scope: "bridge" } },
+    evIn(ROOM2, "mic.release", { user: C, held_ms: 4000 }, t + 55e3)] });
+  const relC = R2.feed.filter((it) => it.k === "unmic").pop();
+  assert.equal(relC.ar, C.id);
+  assert.equal(relC.k3, undefined, "not stamped in the sync that leaves someone out");
+  assert.ok(!bridge._k3Refs.get(ROOM2.id).has(C.id), "the hold is over either way");
+  r = await liveOf("orphan-room", U.mem);
+  const json = JSON.stringify(r.d.feed);
+  for (const leak of ["\"ar\"", A.id, B.id, "k3"]) assert.ok(!json.includes(leak), leak + " reached the page");
+});
+
+test("review: a mic grab / drop Pepe sends WITH the holder's incognito hash (data.anon) is 'someone grabbed the mic' - and leaves the live tail and scrollback once that hash is left out (!bridge hide, forget-me)", async () => {
+  await ready();
+  const ROOM3 = { id: "Hash_Room", name: "Hash Room" }, GINA_H = hash("ginacf"), G = ANON();
+  const snap3 = () => ({ room: ROOM3, members: [ALICE], mic: [], count: 2, transcripts: true });
+  await rooms.setOwner(ROOM3.id, "own", "test");
+  const t = Date.now() - 60e3;
+  const anon = { kind: "incognito", h: GINA_H };
+  await bridge.ingest({ rooms: [snap3()], hidden_h: [FRANKIE_H, GINA_H], bridge_hidden_h: [], incog_hidden_h: [FRANKIE_H, GINA_H], events: [
+    evIn(ROOM3, "mic.grab", { user: G, anon }, t),
+    evIn(ROOM3, "mic.release", { user: G, held_ms: 12000, anon }, t + 12e3),
+    evIn(ROOM3, "member.join", { user: ANON(), anon }, t + 13e3),               // a join stays out, hash or not
+  ] });
+  await settle(100);
+  CV._clearCaches(); CH._reset();
+  const R3 = bridge._rooms.get(ROOM3.id);
+  const mics = R3.feed.filter((it) => it.k === "mic" || it.k === "unmic");
+  assert.deepEqual(mics.map((it) => [it.ah, it.k3]), [[GINA_H, undefined], [GINA_H, undefined]], "an `ah` line, never stamped");
+  for (const it of mics) assert.equal(CV.privacyOf(it), "anon");
+  let r = await liveOf("hash-room", U.mem);
+  assert.equal(r.status, 200, r.text.slice(0, 200));
+  assert.deepEqual(r.d.feed.map(say).filter((l) => /^(un)?mic:|^join:/.test(l)), ["mic:someone", "unmic:someone:12000"]);
+  for (const leak of [GINA_H, "\"ah\"", "\"ar\"", G.id]) assert.ok(!r.text.includes(leak), leak + " reached the page");
+  const rows = await getQuery("SELECT k, who FROM chat_log WHERE who = ? ORDER BY c", ["h:" + GINA_H]);
+  assert.deepEqual(rows.map((x) => x.k), ["mic", "unmic"], "archived under the hash (forget-me / the left-out rule reach them)");
+  let h = await histOf("hash-room", U.mem);
+  assert.deepEqual(h.d.items.map(say).filter((l) => /^(un)?mic:/.test(l)), ["mic:someone", "unmic:someone:12000"]);
+  // Gina types !bridge hide: her "someone" mic lines leave too - nothing of hers stays up
+  await bridge.ingest({ rooms: [snap3()], hidden_h: [FRANKIE_H, GINA_H], bridge_hidden_h: [GINA_H], incog_hidden_h: [FRANKIE_H], events: [
+    { op: "event", id: "afl-priv-g", ts: new Date().toISOString(), type: "privacy.hidden", data: { h: GINA_H, scope: "bridge" } }] });
+  await settle(100);
+  CV._clearCaches(); CH._reset();
+  for (const it of mics) assert.equal(CV.privacyOf(it), "out");
+  r = await liveOf("hash-room", U.mem);
+  assert.deepEqual(r.d.feed.map(say).filter((l) => /^(un)?mic:/.test(l)), [], "left out of the live tail");
+  h = await histOf("hash-room", U.mem);
+  assert.deepEqual(h.d.items.map(say).filter((l) => /^(un)?mic:/.test(l)), [], "and of scrollback");
+  // more hashes than the line may carry: not kept (fails closed)
+  const many = Array.from({ length: 40 }, (_, i) => hash("p" + i));
+  const n0 = R3.feed.filter((it) => it.k === "mic").length;
+  await bridge.ingest({ rooms: [snap3()], hidden_h: [FRANKIE_H], ...KINDED, events: [evIn(ROOM3, "mic.grab", { user: ANON(), anon: { kind: "incognito", h: FRANKIE_H, hs: many } }, t + 20e3)] });
+  assert.equal(R3.feed.filter((it) => it.k === "mic").length, n0, "a grab with too many hashes isn't kept");
 });
 
 test("S6: dress and roster are WHITELISTS - an unknown field (a later build's identity, hidden words, a hash, a stamp) never reaches any page", async () => {

@@ -884,8 +884,9 @@ test("36. mfix card reasons: cold opens off / the rate limit / the site's relays
 const vw = (w, l) => { const x = w.S.tiles.find((y) => y.login === l); return x ? [x.video, x.why] : null; };
 
 test("37. 1.99afl S1: a refused still is soft unless Pepe says it's for good - another try after soft_retry_s, no still while that retry holds; hard codes back off", () => {
-  // no code (an older Pepe), Pepe's soft codes and a code this build doesn't know: "trying again", never the 10 minutes at once
-  for (const code of [null, "busy", "noswitch", "start_timeout", "wrong_room", "something_new"]) {
+  // no code (an older Pepe), Pepe's soft codes, his catch-all "failed" (review: not_open / an error / not that cam / an unmapped
+  // status in bot 1.99afk) and a code this build doesn't know: "trying again", never the 10 minutes at once
+  for (const code of [null, "busy", "noswitch", "start_timeout", "wrong_room", "failed", "something_new"]) {
     const w = world({ site: { coldLeft: 0, stillsLeft: 2 } });
     w.grab("z"); w.at(0); w.at(2);
     assert.equal(w.S.tiles[0].video, "still");
@@ -900,7 +901,8 @@ test("37. 1.99afl S1: a refused still is soft unless Pepe says it's for good - a
     w.at(2 + w.C.soft_retry_s + 1);
     assert.equal(w.S.tiles[0].video, "still", "tried again after soft_retry_s: " + code);
   }
-  for (const code of ["not_public", "not_on_cam", "ambiguous", "failed"]) {
+  assert.deepEqual([...M.STILL_HARD].sort(), ["ambiguous", "not_on_cam", "not_public"], "the spec's two + the live path's 'ambiguous'");
+  for (const code of ["not_public", "not_on_cam", "ambiguous"]) {
     const w = world({ site: { coldLeft: 0, stillsLeft: 2 } });
     w.grab("z"); w.at(0); w.at(2);
     M.stillFailed(w.S, "z", w.C, w.t, code);
@@ -909,18 +911,21 @@ test("37. 1.99afl S1: a refused still is soft unless Pepe says it's for good - a
     w.at(60);
     assert.notEqual(w.S.tiles[0].video, "still", code);
   }
-  // soft_fails_max soft refusals within open_fail_backoff_min -> then the full backoff
-  const m = world({ site: { coldLeft: 0, stillsLeft: 2 } });
-  m.grab("z"); m.at(0); m.at(2);
-  let s = 2;
-  for (let i = 1; i < m.C.soft_fails_max; i++) {
-    M.stillFailed(m.S, "z", m.C, m.t, "busy");
-    assert.deepEqual(vw(m, "z"), ["card", "retry"], "soft " + i);
-    s += m.C.soft_retry_s + 1; m.at(s);
-    assert.equal(m.S.tiles[0].video, "still");
+  // soft_fails_max soft refusals within open_fail_backoff_min -> then the full backoff ("failed" is bounded the same way)
+  for (const code of ["busy", "failed"]) {
+    const m = world({ site: { coldLeft: 0, stillsLeft: 2 } });
+    m.grab("z"); m.at(0); m.at(2);
+    let s = 2;
+    for (let i = 1; i < m.C.soft_fails_max; i++) {
+      M.stillFailed(m.S, "z", m.C, m.t, code);
+      assert.deepEqual(vw(m, "z"), ["card", "retry"], code + ": soft " + i);
+      s += m.C.soft_retry_s + 1; m.at(s);
+      assert.equal(m.S.tiles[0].video, "still");
+    }
+    M.stillFailed(m.S, "z", m.C, m.t, code);
+    assert.deepEqual(vw(m, "z"), ["card", "failed"], code + ": soft_fails_max -> the backoff");
+    assert.ok(m.S.backoff.get("z") > m.t + 9 * 60 * 1000);
   }
-  M.stillFailed(m.S, "z", m.C, m.t, "busy");
-  assert.deepEqual(vw(m, "z"), ["card", "failed"], "soft_fails_max -> the backoff");
 });
 
 test("38. 1.99afl S1: a live open that soft-fails never starts a still in the same breath (the old chain: still refused -> 10 minutes of 'couldn't open')", () => {
@@ -994,10 +999,47 @@ test("39. 1.99afl S1b: list_unread pauses the ROOM - no exact opens or stills, n
   assert.equal(s.S.tiles[0].video, "still", "one more try after LIST_PAUSE_MAX_MS");
   for (const k of ["list_unread", "cam_unknown", "pepe"]) assert.ok(M.CARD_WHYS.includes(k), k);
   assert.ok(M.FAIL_WHYS.has("list_unread") && M.SOFT_WHYS.has("list_unread"));
+  // review: a LIVE tile keeps running through the whole pause (never released, never a card)
+  const L = world({ site: { coldLeft: 9, stillsLeft: 4 } });
+  L.grab("p"); L.grab("q"); L.at(0); L.at(2);
+  L.live.set("p", "live"); L.at(3);
+  assert.equal(vw(L, "p")[0], "live");
+  M.sessionEnded(L.S, "q", "list_unread", L.C, L.t);                // q's open: Pepe can't read the list
+  L.held.delete("q"); L.live.set("q", "ended");
+  assert.ok(L.S.listPause);
+  L.actions = [];
+  for (let s = 4; s <= 120; s++) L.at(s);
+  assert.ok(L.S.listPause, "still paused (no newer complete read)");
+  assert.equal(vw(L, "p")[0], "live", "the live tile ran through the pause");
+  assert.ok(!L.actions.some((a) => a.a === "release" && a.login === "p"), "never released");
+  assert.deepEqual(vw(L, "q"), ["card", "list_unread"]);
+  // review: a warm relay Pepe already verified by the exact name (a ▶ Live viewer's) needs no list - held during the pause; an
+  // unverified one isn't (Pepe would re-open it by the exact name: a list read)
+  const K = world({ site: { coldLeft: 9, stillsLeft: 4 } });
+  K.grab("y"); K.at(0); K.at(2);
+  M.sessionEnded(K.S, "y", "list_unread", K.C, K.t); K.held.delete("y"); K.live.set("y", "ended");
+  assert.ok(K.S.listPause);
+  K.live.set("k", "live"); K.live.set("m", "live"); K.exactNo.add("m");
+  K.grab("k"); K.grab("m"); K.actions = [];
+  for (let s = 3; s <= 12; s++) K.at(s);
+  assert.ok(K.actions.some((a) => a.a === "hold" && a.login === "k" && a.cold === false), "the verified warm relay is held");
+  assert.ok(!K.actions.some((a) => a.a === "hold" && (a.login === "m" || a.login === "y")), "nothing that needs the list");
+  assert.ok(!K.actions.some((a) => a.a === "still"), "and no still");
+  assert.deepEqual(vw(K, "m"), ["card", "list_unread"]);
+  assert.equal(vw(K, "k")[0], "live");
 });
 
 test("40. 1.99afl S2: cam_unknown is 'checking their cam…' - no blind open or still; one exact open per list-read epoch, only after a read that began after the grab; a live relay keeps running", () => {
-  const w = world({ site: { coldLeft: 9, stillsLeft: 4 } });
+  // review: Pepe through 1.99afk (mf 1) refuses a cam his roster can't classify at once - the mic stage asks for none: the tile
+  // says "checking their cam…" through every list-read epoch, never "cam off", never a hold
+  const o = world({ site: { coldLeft: 9, stillsLeft: 4, unkOpen: false } });
+  o.unknown.add("u"); o.grab("u", S0); o.at(0);
+  for (let s = 1; s <= 120; s++) { if (s % 20 === 0) { o.listAt = S0 + s * 1000; o.listFresh = true; } o.at(s); }
+  assert.ok(!o.actions.some((a) => a.a === "hold" || a.a === "still"), "no open at all with today's Pepe");
+  assert.deepEqual(vw(o, "u"), ["card", "cam_unknown"]);
+  // a Pepe that opens such a cam by its exact name (site.unkOpen: mf >= MF_UNK_OPEN)
+  assert.equal(M.MF_UNK_OPEN, 2);
+  const w = world({ site: { coldLeft: 9, stillsLeft: 4, unkOpen: true } });
   w.unknown.add("u");
   w.listAt = S0 - 60 * 1000; w.listFresh = true;              // the last complete read was before the grab
   w.grab("u", S0); w.at(0); w.at(2);
@@ -1017,8 +1059,40 @@ test("40. 1.99afl S2: cam_unknown is 'checking their cam…' - no blind open or 
   w.listAt = S0 + 40 * 1000; w.actions = [];                   // the next complete read: the next epoch's one try
   w.at(41);
   assert.equal(w.actions.filter((a) => a.a === "hold" && a.login === "u").length, 1);
+  // ... Pepe refuses it "not_on_cam" (his _lv_why_not: on_cam isn't TRUE) - review: that is "checking their cam…", never "cam
+  // off" (no off-cam block, nothing counted); no second open before the next complete read
+  w.held.delete("u"); w.live.set("u", "ended");
+  const soft0 = (w.S.soft.get("u") || []).length;               // (the earlier epoch's "busy" was one)
+  M.sessionEnded(w.S, "u", "not_on_cam", w.C, w.t);
+  assert.deepEqual(vw(w, "u"), ["card", "cam_unknown"]);
+  assert.ok(!w.S.offcam.has("u") && !(w.S.backoff.get("u") > w.t) && (w.S.soft.get("u") || []).length === soft0, "no block, nothing counted");
+  w.actions = [];
+  for (let s = 42; s <= 70; s++) w.at(s);
+  assert.ok(!w.actions.some((a) => a.a === "hold"), "one per epoch");
+  assert.deepEqual(vw(w, "u"), ["card", "cam_unknown"], "never 'cam off' in between");
+  w.listAt = S0 + 70 * 1000; w.actions = []; w.at(71);
+  assert.equal(w.actions.filter((a) => a.a === "hold" && a.login === "u").length, 1, "the next epoch's one try");
+  // the site's own consent refusal for an unknown cam (holdDone "not_on_cam") reads the same
+  M.holdDone(w.S, "u", false, "not_on_cam", w.C, w.t);
+  assert.deepEqual(vw(w, "u"), ["card", "cam_unknown"]);
+  assert.ok(!w.S.offcam.has("u"));
   // speech: a cam_unknown holder is someone the stage can show (never "someone else is speaking")
   assert.equal(w.S.speaking, null);
+  // Pepe's own tick stops a RUNNING relay "not_on_cam" when his roster's on_cam goes unknown: "checking their cam…" - whichever
+  // order the site hears it in (the roster unknown first, or the end first and the unknown roster after)
+  const q = world(); q.grab("x"); q.grab("y"); q.at(0); q.at(2); q.live.set("x", "live"); q.live.set("y", "live"); q.at(3);
+  assert.deepEqual([vw(q, "x")[0], vw(q, "y")[0]], ["live", "live"]);
+  q.unknown.add("x"); q.at(4);
+  q.held.delete("x"); q.live.set("x", "ended");
+  M.sessionEnded(q.S, "x", "not_on_cam", q.C, q.t);
+  assert.deepEqual(vw(q, "x"), ["card", "cam_unknown"]);
+  assert.ok(!q.S.offcam.has("x"));
+  q.held.delete("y"); q.live.set("y", "ended");
+  M.sessionEnded(q.S, "y", "not_on_cam", q.C, q.t);                // the roster still said "on cam" here: a real cam-off end ...
+  assert.deepEqual(vw(q, "y"), ["card", "off_cam"]);
+  q.unknown.add("y"); q.at(5);                                      // ... then the roster can't say: "checking", the reopen block kept
+  assert.deepEqual(vw(q, "y"), ["card", "cam_unknown"]);
+  assert.ok(q.S.offcam.has("y"));
   // cold opens unavailable: never a still instead
   const n = world({ site: { coldLeft: 0, stillsLeft: 4 } });
   n.unknown.add("n"); n.listAt = S0 + 5000; n.listFresh = true;

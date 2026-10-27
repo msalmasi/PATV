@@ -31,8 +31,10 @@
 // CL9: the chat card's 🔍 searches the archive (chatlogsearch.js, POST /api/rooms/:slug/search, behind chatlog.search; history.find).
 // CL10: the chat card's ⋯ -> ⬇ Download chat log (chatlogexport.js, POST /api/rooms/:slug/chatlog/export + GET /p/:slug/chatlog/dl/
 // :token, behind chatlog.downloads; history.dl).
-// 1.99afl (the incognito / mic-stage spec): an anonymous mic grab / drop with no hash, from a sync carrying both kinded hash lists,
-// is stamped k3 (an incognito person's: "someone grabbed the mic" - chatlogview.privacyAt, B.1); every page-bound line and roster
+// 1.99afl (the incognito / mic-stage spec): an anonymous mic grab with no hash, from a sync carrying both kinded hash lists, is
+// stamped k3 (an incognito person's: "someone grabbed the mic" - chatlogview.privacyAt, B.1), and its drop only when that same
+// hold's grab was (review: k3Hold, Pepe's per-hold ref `ar`; a mic event with the holder's incognito hash - data.anon - is an
+// `ah` line like an anonymised chat / 🎙 one); every page-bound line and roster
 // entry is built from a whitelist (chatlogview.dress / roster, S6); photos go through userlook.avatarOf (S5: the default
 // picture is a letter bubble, never Pepe's face).
 // Pages (signed-in only — a room's chat is semi-private):
@@ -183,6 +185,7 @@ function load() {
         // CL3: a line kept from before CL3 carries no aud - it gets the pad's level as it is when it is first seen here
         const a = audNow(R.id);
         for (const it of R.feed) if (!it.aud) it.aud = a;
+        k3Replay(R);                             // 1.99afl review: B.1's open stamped holds (a release pairs with its grab)
         noteWhoAll(R);
         replayActivity(R);
       }
@@ -376,6 +379,7 @@ async function dropRoom(id) {
   try { require("./micfollow").onRoomGone(id); } catch (e) { console.error("[bridge] micfollow:", e.message); }   // its mic stage clears
   wakeRoom(id);                                   // 1.99ye: its waiting pages answer (room gone)
   RA.drop(id);
+  K3_REFS.delete(id);                             // 1.99afl review: its open stamped holds (B.1)
   await runQuery("DELETE FROM bridge_rooms WHERE id = ?", [id]);
   await runQuery("DELETE FROM bridge_feed WHERE room_id = ?", [id]);
 }
@@ -426,6 +430,69 @@ function anonMore(d, h) {
     out.push(x);
   }
   return out.length ? out : null;
+}
+
+/** 1.99afl review (HIGH): Pepe's per-hold ref - his anonymous mic UserRef's id, ONE random "anon-<hex>" for the whole hold
+ *  (pepe_bridge._br_hold_user), so a hold's grab and release pair up and nothing ties it to the holder's other events. */
+const HOLD_REF_RE = /^anon-[0-9a-f]{8,32}$/;
+/** An anonymous mic grab / drop's server-only extras (never on a page: chatlogview.dress is a whitelist; `ar` / `ah` / `ahs` are
+ *  kept in bridge_feed and chat_log.d only):
+ *   ar      the hold's ref - B.1 stamps a release only when its hold's grab was stamped (bridge.ingest, k3Hold);
+ *   ah/ahs  a Pepe that sends the holder's incognito hash (data.anon {kind: "incognito", h, hs}, like his anonymised chat / 🎙
+ *           lines) - then the line is "someone grabbed the mic" until that hash is left out (!bridge hide, forget-me), exactly
+ *           like those lines (chatlogview.privacyAt). More hashes than ANON_HS_MAX: the line isn't kept (fails closed). */
+function anonMic(it, d) {
+  const ref = d.user && typeof d.user === "object" ? String(d.user.id || "") : "";
+  if (HOLD_REF_RE.test(ref)) it.ar = ref;
+  const ah = anonHash(d);
+  if (ah) {
+    const more = anonMore(d, ah);
+    if (more === false) return null;
+    it.ah = ah;
+    if (more) it.ahs = more;
+  }
+  return it;
+}
+
+/**
+ * 1.99afl review (HIGH): B.1's stamp, per HOLD. A hashless anonymous GRAB in a kinded sync is stamped k3 (an incognito person's -
+ * a Train 3 Pepe sends no event for a hold begun under !bridge hide) and its ref remembered for the room; a RELEASE is stamped
+ * only when its ref is one of those. Pepe anonymises a release by its holder's kind NOW (_br_hold_anon): a hold that began
+ * NAMED whose holder then typed !bridge hide (or switched incognito) is released as a hashless anonymous mic.release under a
+ * fresh ref - it pairs with no stamped grab, so it stays left out, never "someone dropped the mic" in place of their vanished
+ * named grab. No ref, an older Pepe, a grab from before a restart that left the live feed: left out too (fails closed).
+ * K3_REFS: room id -> Map(ref -> when its grab came), at most K3_REFS_MAX per room, K3_REF_TTL_MS (a hold's held_ms cap).
+ */
+const K3_REFS = new Map();
+const K3_REFS_MAX = 200, K3_REF_TTL_MS = 864e5;
+function k3Hold(roomId, it, kinded, t = Date.now(), leaving = false) {
+  if (!kinded || !it.ar) return false;
+  let refs = K3_REFS.get(roomId);
+  if (it.k === "mic") {
+    if (!refs) { refs = new Map(); K3_REFS.set(roomId, refs); }
+    refs.delete(it.ar);
+    refs.set(it.ar, t);
+    for (const [r, at] of refs) { if (refs.size <= K3_REFS_MAX && t - at <= K3_REF_TTL_MS) break; refs.delete(r); }
+    it.k3 = 1;
+    return true;
+  }
+  if (it.k !== "unmic" || !refs || !refs.has(it.ar)) return false;
+  refs.delete(it.ar);                         // (the hold ended either way)
+  if (leaving) return false;                  // a sync that leaves someone out: no drop is shown (ingest's `leaving`)
+  it.k3 = 1;
+  return true;
+}
+/** At boot: the rooms' open stamped holds from what the live feed kept (a stamped grab whose release isn't there yet). */
+function k3Replay(R) {
+  const refs = new Map();
+  for (const it of R.feed) {
+    if (!it || !it.ar || !it.u || !it.u.anon) continue;
+    if (it.k === "mic" && it.k3 === 1) refs.set(it.ar, Number(it.ts) || 0);
+    else if (it.k === "unmic") refs.delete(it.ar);
+  }
+  const t = Date.now();
+  for (const [r, at] of refs) if (t - at > K3_REF_TTL_MS) refs.delete(r);
+  if (refs.size) K3_REFS.set(R.id, refs); else K3_REFS.delete(R.id);
 }
 
 /** One PCP event -> a feed item (or null). `roomId` = the room it came from (1.99acb: a relay echo's job must match it). */
@@ -499,13 +566,12 @@ function feedItem(ev, roomId = null) {
       const u = cleanUser(d.user);
       return u ? { k: "leave", ts, u } : null;
     }
-    case "mic.grab": {
-      const u = cleanUser(d.user);
-      return u ? { k: "mic", ts, u } : null;
-    }
+    case "mic.grab":
     case "mic.release": {
       const u = cleanUser(d.user);
-      return u ? { k: "unmic", ts, u, ms: Math.max(0, Math.min(864e5, Number(d.held_ms) || 0)) } : null;
+      if (!u) return null;
+      const it = ev.type === "mic.grab" ? { k: "mic", ts, u } : { k: "unmic", ts, u, ms: Math.max(0, Math.min(864e5, Number(d.held_ms) || 0)) };
+      return u.anon ? anonMic(it, d) : it;
     }
     case TRANSCRIPT: {
       const u = cleanUser(d.user);
@@ -758,10 +824,16 @@ async function ingest(body) {
   const shownNow = new Set();              // review 2 fix-up: hashes this batch's privacy.shown events name (so far in its order)
   const events = (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS);
   // 1.99afl (B.1): this sync carried BOTH kinded hash lists - only a Train 3 Pepe (1.99adm on: he never sends a !bridge hide
-  // person's events) with both states loaded sends them (each is null while it failed to load). A hashless anonymous mic grab /
-  // drop in such a batch is an incognito person's: stamped k3 (page-safe, kept in bridge_feed and chat_log.d; never sent to a
-  // page - dress is a whitelist), so chatlogview shows it as "someone". Unstamped ones stay left out (fail closed).
+  // person's events) with both states loaded sends them (each is null while it failed to load). A hashless anonymous mic GRAB
+  // in such a batch is an incognito person's: stamped k3 (page-safe, kept in bridge_feed and chat_log.d; never sent to a page -
+  // dress is a whitelist), so chatlogview shows it as "someone". Its RELEASE is stamped only when that same hold's grab was
+  // (k3Hold: Pepe's per-hold ref). Unstamped ones stay left out (fail closed).
   const kinded = Array.isArray(body.bridge_hidden_h) && Array.isArray(body.incog_hidden_h);
+  // review: a sync that LEAVES someone out (privacy.hidden of any scope but incognito / tx: !bridge hide, forget-me) stamps no
+  // anonymous release - a hold begun while incognito whose holder typed !bridge hide mid-hold is still released under its own
+  // ref (its privacy frozen at the grab), and "someone dropped the mic" turning up just as that person's "someone" lines leave
+  // would tie the two together. (A later sync's release still pairs: Pepe should skip a release whose holder is out now.)
+  const leaving = events.some((ev) => ev && ev.type === "privacy.hidden" && !(ev.data && (ev.data.scope === "incognito" || ev.data.scope === "tx")));
   // CL2: asked BEFORE any cursor is handed out - a transcript already archived (beyond the 200 in memory) and, for 10 minutes
   // after a restart, an event already archived (Pepe re-sends a batch the old process took but never answered) are skipped
   const dup = await CL.dupes({
@@ -800,7 +872,7 @@ async function ingest(body) {
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = feedItem(ev, R.id);
     if (!it) continue;
-    if (kinded && (it.k === "mic" || it.k === "unmic") && it.u && it.u.anon && !it.ah) it.k3 = 1;   // 1.99afl (B.1, above)
+    if ((it.k === "mic" || it.k === "unmic") && it.u && it.u.anon && !it.ah) k3Hold(R.id, it, kinded, now, leaving);   // 1.99afl (B.1, above)
     // review 2 fix-up (LOW): a NAMED chat / 🎙 line of someone the site knows is incognito before Pepe does (a website Incognito
     // ON he hasn't confirmed yet - chatlog.siteAnonSince), said after they switched it on, is kept anonymised for good - "someone",
     // its hash server-only (`ah`, archived as who "h:<hash>"), exactly like Pepe's own anonymised lines - so `!incognito off` never
@@ -1855,4 +1927,5 @@ function padTabsFor(o) {
 module.exports = { bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
+  _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)
   cursorNow: () => cursor };          // CL8: the newest feed cursor (the history answer's `cursor`)
