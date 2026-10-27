@@ -43,7 +43,8 @@
 //                            delete_recordings (mic retention: the choice), rec_windows (JSON [{login, from, to}] for Pepe's
 //                            retries - NULLed once he ran every login, or given up), rec_done_at, rec_gave_up_at (not run in 30 days),
 //                            rec_skipped (review: JSON [{login, from, to}] NOT asked - another account held the login before; admins
-//                            only, NULLed when handled or 30 days after the deletion), rec_skipped_done_at
+//                            only, NULLed when handled or 30 days after the deletion), rec_skipped_done_at, rec_skipped_alert
+//                            (review 2: the stage the admins were told - 1 appeared, 2 reminded, 3 lapsed), rec_skipped_lapsed_at
 //   account_deletion_routes  key PK, user_id, amount, legs (JSON), txid, at
 "use strict";
 const crypto = require("crypto");
@@ -96,6 +97,9 @@ function init() {
       // review: the spans NOT asked of Pepe (another account held the login before) - admins act on them by hand; bounded (micrec)
       if (!c.includes("rec_skipped")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped TEXT");
       if (!c.includes("rec_skipped_done_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped_done_at INTEGER");
+      // review 2: the admins were told about the skipped spans (1 when they appeared, 2 reminded, 3 lapsed); when they lapsed unhandled
+      if (!c.includes("rec_skipped_alert")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped_alert INTEGER");
+      if (!c.includes("rec_skipped_lapsed_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped_lapsed_at INTEGER");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -505,14 +509,21 @@ async function settle(uid, login, report) {
 async function cfLoginsOf(uid, login) {
   const out = new Set(login ? [low(login)] : []);
   const past = [];
+  // mic retention review 2: an account merged INTO this one is the same holder (micrec.holderIds) - its login history is this one's
+  // (a merge moves username_history; login_changes keeps the merged-away id)
+  const ids = await sameHolder(uid), qs = ids.map(() => "?").join(",");
   for (const r of await q("username_history", ["userId", "old_username", "new_username", "kind"],
-                          "SELECT old_username AS a, new_username AS b FROM username_history WHERE userId = ? AND kind = 'camfrog'", [uid])) past.push(r.a, r.b);
-  for (const r of await q("login_changes", ["userId", "old_login", "new_login"], "SELECT old_login AS a, new_login AS b FROM login_changes WHERE userId = ?", [uid])) past.push(r.a, r.b);
+                          `SELECT old_username AS a, new_username AS b FROM username_history WHERE userId IN (${qs}) AND kind = 'camfrog'`, ids)) past.push(r.a, r.b);
+  for (const r of await q("login_changes", ["userId", "old_login", "new_login"], `SELECT old_login AS a, new_login AS b FROM login_changes WHERE userId IN (${qs})`, ids)) past.push(r.a, r.b);
   for (const l of past.map(low)) {
     if (!l || out.has(l)) continue;
-    if (!(await getQuery("SELECT 1 FROM users WHERE lower(camfrogUsername) = ? AND userId != ? LIMIT 1", [l, uid]))[0]) out.add(l);
+    if (!(await getQuery(`SELECT 1 FROM users WHERE lower(camfrogUsername) = ? AND userId NOT IN (${qs}) LIMIT 1`, [l, ...ids]))[0]) out.add(l);
   }
   return [...out];
+}
+/** mic retention review 2: the ids that ARE this account - itself and the accounts merged into it (micrec.holderIds). -> [id, ...] */
+async function sameHolder(uid) {
+  try { return [...(await require("./micrec").holderIds(uid))]; } catch (e) { return [String(uid)]; }
 }
 
 /**
@@ -529,6 +540,8 @@ async function cfLoginsOf(uid, login) {
  * The backfill's 'seen' rows (the account was seen with a login it no longer has, release time unknown) end nothing - such a
  * login was let go before the history began and isn't reached; another account's 'seen' row still bounds a start. Spans may
  * overlap (two records of one change: removeAccountLines ORs them). -> [{login, from, to}] (ms, from exclusive, to inclusive)
+ * Mic retention review 2: an account merged INTO this one is the same holder (micrec.holderIds) - the logins it let go are this
+ * account's too (a merge moves username_history; login_changes keeps the merged-away id), and its 'seen' traces are its own.
  */
 async function loginWindowsOf(uid, login, upto) {
   const ends = new Map();                                   // login -> [end, ...]
@@ -536,15 +549,16 @@ async function loginWindowsOf(uid, login, upto) {
   if (login) end(login, upto);
   const lc = await has("login_changes", "userId", "old_login", "new_login", "at");
   const uh = await has("username_history", "userId", "old_username", "new_username", "kind", "at", "via");
-  if (lc) for (const r of await getQuery("SELECT old_login, at FROM login_changes WHERE userId = ? AND old_login IS NOT NULL", [uid])) end(r.old_login, r.at);
-  if (uh) for (const r of await getQuery("SELECT old_username, at FROM username_history WHERE userId = ? AND kind = 'camfrog' AND via <> 'seen'", [uid])) end(r.old_username, r.at);
+  const ids = await sameHolder(uid), qs = ids.map(() => "?").join(",");
+  if (lc) for (const r of await getQuery(`SELECT old_login, at FROM login_changes WHERE userId IN (${qs}) AND old_login IS NOT NULL`, ids)) end(r.old_login, r.at);
+  if (uh) for (const r of await getQuery(`SELECT old_username, at FROM username_history WHERE userId IN (${qs}) AND kind = 'camfrog' AND via <> 'seen'`, ids)) end(r.old_username, r.at);
   const out = [];
   for (const [l, list] of ends) {
     const marks = [];                                       // every record about the login, whoever's (but this account's traces)
     if (lc) for (const r of await getQuery("SELECT at FROM login_changes WHERE lower(old_login) = ? OR lower(new_login) = ?", [l, l])) marks.push(Number(r.at) || 0);
     if (uh) {
       for (const r of await getQuery(`SELECT at FROM username_history WHERE kind = 'camfrog' AND (lower(old_username) = ? OR lower(new_username) = ?)
-                                      AND NOT (userId = ? AND via = 'seen')`, [l, l, uid])) marks.push(Number(r.at) || 0);
+                                      AND NOT (userId IN (${qs}) AND via = 'seen')`, [l, l, ...ids])) marks.push(Number(r.at) || 0);
     }
     for (const to of [...new Set(list)]) {
       const from = marks.reduce((m, at) => (at < to && at > m ? at : m), 0);
@@ -647,7 +661,10 @@ async function execute(userId, { force = false } = {}) {
     //    mic retention: with "Also delete my mic recordings", each Camfrog login's recordings span (read before step 5 too)
     if (Number(reqRow.delete_recordings) === 1) recWindows = await require("./micrec").recWindowsOf(uid, login, t);
     //    review: a keyed marker per Camfrog login the account had (no name - micrec.noteLoginsGone), before step 6 pseudonymises
-    //    the login history - a later holder of that name never downloads what Pepe keeps of this account (micrec.earlierHolder)
+    //    the login history - a later holder of that name never downloads what Pepe keeps of this account (micrec.earlierHolder).
+    //    Review 2: NOT behind the mic-recordings switch, on purpose - they protect Download my data's Pepe part, which is offered
+    //    with the switch off too; views/privacy.ejs discloses them (section 10, section 9) without the switch (ops plan 7.3 / 8.5).
+    //    The logins of accounts merged into this one are its own (loginWindowsOf / cfLoginsOf).
     {
       const gone = new Map();
       for (const w of await loginWindowsOf(uid, login, t)) gone.set(w.login, Math.max(gone.get(w.login) || 0, Number(w.to) || t));

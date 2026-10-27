@@ -389,6 +389,9 @@ function register(app, { isBotToken, addUser }) {
     if (((req.body || {}).results || []).length) require("./roomctl").scrubPasswords().catch(() => {});
     // 1.99add: a website Incognito ON he answered settles the sticky hidden set (incognito.actionsSettled; never rejects)
     const acked = ((req.body || {}).results || []).slice(0, 50).map((r) => r && r.id);
+    // mic retention review 2: a late answer on an account deletion's "privacy.recdelete" whose login was scrubbed (done or given
+    // up) keeps only its counts under the pseudonym - his follow-up names the login (micrec.scrubLateAcks; never rejects)
+    if (acked.length) await require("./micrec").scrubLateAcks(acked);
     if (acked.length) await require("./incognito").actionsSettled(acked);
     res.json({ ok: true });
   });

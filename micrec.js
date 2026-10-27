@@ -38,6 +38,18 @@
 //   * Pepe "took it" only when his FOLLOW-UP came (the action's message isn't his first "queued" answer); a deletion given up keeps
 //     no login (rec_windows NULLed, its actions scrubbed); a done one's action messages name the pseudonym, not the login.
 //   micrec_login_gone  h PK (hex, keyed), at (ms: when it was let go);   micrec_login_key  k PK ('key'), v (the HMAC key, random)
+//
+// Review 2 fixes (1.99afr):
+//   * the login markers are NOT behind the switch: they protect Download my data's Pepe part (chat logs, transcripts, memories),
+//     which is offered with the switch off too. They are written at every account deletion and disclosed by the ungated section 10
+//     sentence (and section 9 row) of views/privacy.ejs - the owner approves that text before this branch merges (ops plan 7.3, 8.5).
+//   * a skipped span ("our team deletes yours by hand") can't lapse unnoticed (alertSkipped): the chatlog.admin holders get an inbox
+//     notice when it appears, a reminder REC_SKIP_REMIND_MS before its login goes, and one if it went unhandled (rec_skipped_lapsed_at,
+//     the card says LAPSED). The notices name the deletion (id, pseudonym) and how many names - never a login.
+//   * a late answer from Pepe (after a deletion's logins were scrubbed) can't bring a login back (scrubLateAcks, from
+//     /api/actions/ack): on an action whose login is gone his message keeps only its counts, under the pseudonym.
+//   * ownSince(uid, login): Download my data's own chat / transcript lines under a login another account held before start when
+//     it became this account's (chatlog.exportLines loginSince) - the same rule as Pepe's part.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -327,6 +339,23 @@ async function earlierHolder(uid, login) {
   if ((await othersMarks(uid, l)).length) return true;
   return (await getQuery("SELECT 1 FROM micrec_login_gone WHERE h = ? LIMIT 1", [goneHash(l)])).length > 0;
 }
+/**
+ * review 2: since when the account's lines under `login` (its login now) are its own, for Download my data's own chat / transcript
+ * lines (chatlog.exportLines loginSince). 0 = all of them (no other PATV account held the login). Else the latest of: the start of
+ * its current span (accountdelete.loginWindowsOf - after the latest record about the login by anyone, its own link included),
+ * another account's latest record of it, a deleted holder's marker. One that can't be placed -> t (none under the login).
+ */
+async function ownSince(uid, login, t = now()) {
+  await init();
+  const l = low(login);
+  if (!LOGIN_RE.test(l) || !(await earlierHolder(uid, l))) return 0;
+  let since = 0;
+  for (const w of await require("./accountdelete").loginWindowsOf(uid, l, t)) if (w.login === l && Number(w.to) >= t) since = Math.max(since, Number(w.from) || 0);
+  for (const at of await othersMarks(uid, l)) if (at < t) since = Math.max(since, at);
+  const m = (await getQuery("SELECT at FROM micrec_login_gone WHERE h = ?", [goneHash(l)]))[0];
+  if (m && Number(m.at) < t) since = Math.max(since, Number(m.at) || 0);
+  return since > 0 ? since : t;
+}
 
 // ── account deletion: "Also delete my mic recordings" ──
 /**
@@ -403,8 +432,96 @@ async function scrubRecActions(d, wins, why = null) {
                    [pend && why ? why : msg, pend && why ? "failed" : a.status, now(), a.id]);
   }
 }
+/** review 2: Pepe's answer on an action whose login is gone (scrubbed: the deletion was done or given up) - only its counts, under
+ *  the pseudonym (the action's username). He can answer late: his journal may still hold the job after the site gave up, and his
+ *  follow-up ("deleted N mic recording file(s) of <login>; ...") overwrites the message. */
+function lateMessage(a) {
+  const m = String(a.message || "");
+  const who = String(a.username || "deleted").slice(0, 60);
+  const del = /\bdeleted (\d+) mic recording file\(s\)/i.exec(m);
+  const kept = /\b(\d+) kept under a legal hold or an open report\b/i.exec(m);
+  if (del) return `deleted ${del[1]} mic recording file(s) of ${who}` + (kept ? `; ${kept[1]} kept under a legal hold or an open report - deleted once it's released` : "") + " (a late answer)";
+  if (/^\s*queued\b/i.test(m)) return `queued: ${who}'s mic recordings are being deleted (a late answer)`;
+  return `${a.status === "done" ? "done" : "failed"} - a late answer from Pepe (the Camfrog name isn't kept)`;
+}
+/** /api/actions/ack (actions.js), after it stored his answers: the acked "privacy.recdelete" actions whose login is gone get
+ *  lateMessage. -> how many were rewritten. Never throws. */
+async function scrubLateAcks(ids) {
+  try {
+    const list = [...new Set((ids || []).map((x) => parseInt(x, 10)).filter((x) => x > 0))].slice(0, 50);
+    if (!list.length || !(await tableThere("pepe_actions"))) return 0;
+    let n = 0;
+    for (const a of await getQuery(`SELECT id, username, status, message FROM pepe_actions WHERE kind = ? AND camfrog IS NULL AND id IN (${list.map(() => "?").join(",")})`,
+                                   [REC_KIND, ...list])) {
+      const msg = lateMessage(a);
+      if (msg === a.message) continue;
+      await runQuery("UPDATE pepe_actions SET message = ? WHERE id = ?", [msg, a.id]);
+      n++;
+    }
+    return n;
+  } catch (e) { console.error("[micrec] late answers:", e.message); return 0; }
+}
+
+// ── review 2: skipped spans can't lapse unnoticed ──
+const REC_SKIP_REMIND_MS = 7 * DAY;        // the reminder: this long before a skipped span's login goes (REC_GIVE_UP_MS after the deletion)
+const whenUtc = (ms) => new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+/** The accounts that act on skipped spans: the holders of chatlog.admin (the Mic recordings card's capability). */
+async function skipAdmins() {
+  const SP = require("./siteperms");
+  const rows = await getQuery("SELECT userId, class FROM users WHERE class IN ('Admin', 'Staff', 'Assistant') ORDER BY userId");
+  return rows.filter((u) => { try { return SP.can(u, "chatlog.admin"); } catch (e) { return false; } }).map((u) => String(u.userId));
+}
+const SKIP_NOTE = {
+  1: (d, n, due) => ({ title: `Mic recordings to delete by hand (account deletion #${d.id})`,
+       body: `${d.pseudonym || "A deleted account"} asked for their mic recordings to be deleted, but ${n} of their Camfrog names ${n === 1 ? "was" : "were"} linked to ` +
+             "another PATV account before, so Pepe wasn't asked (he would delete that account's recordings too). The member was told our team deletes " +
+             `theirs by hand. Do it, then press "Mark handled" on the Mic recordings card before ${whenUtc(due)} - after that the names leave the card.` }),
+  2: (d, n, due) => ({ title: `Reminder: mic recordings to delete by hand (account deletion #${d.id})`,
+       body: `${n} Camfrog name${n === 1 ? "" : "s"} of ${d.pseudonym || "a deleted account"} still ${n === 1 ? "isn't" : "aren't"} marked handled. ` +
+             `They leave the Mic recordings card on ${whenUtc(due)}; delete the recordings by hand and press "Mark handled" before then.` }),
+  3: (d, n) => ({ title: `NOT HANDLED: mic recordings by hand (account deletion #${d.id})`,
+       body: `${n} Camfrog name${n === 1 ? "" : "s"} of ${d.pseudonym || "a deleted account"} ${n === 1 ? "was" : "were"} never marked handled in 30 days and ` +
+             "left the Mic recordings card (its row says LAPSED). If those recordings weren't deleted by hand, the promise to the member wasn't kept - " +
+             "tell the owner." }),
+};
+/**
+ * The skipped spans (rec_skipped) of done deletions: an inbox notice to every chatlog.admin holder when one appears (stage 1), a
+ * reminder REC_SKIP_REMIND_MS before its login goes (2), and REC_GIVE_UP_MS after the deletion the logins go - rec_skipped_lapsed_at,
+ * a console error and a last notice (3). rec_skipped_alert = the stage told. -> {skipped_expired, skipped_alerts}
+ */
+async function alertSkipped(t, cols) {
+  const out = { skipped_expired: 0, skipped_alerts: 0 };
+  if (!cols.includes("rec_skipped")) return out;
+  const staged = cols.includes("rec_skipped_alert") && cols.includes("rec_skipped_lapsed_at");
+  const rows = await getQuery(`SELECT id, pseudonym, done_at, rec_skipped${staged ? ", rec_skipped_alert" : ""} FROM account_deletions
+                               WHERE rec_skipped IS NOT NULL AND done_at IS NOT NULL ORDER BY id LIMIT 200`);
+  let admins = null;
+  for (const d of rows) {
+    let n = 0;
+    try { const s = JSON.parse(d.rec_skipped); n = Array.isArray(s) ? s.length : 0; } catch (e) { n = 0; }
+    const due = Number(d.done_at) + REC_GIVE_UP_MS;
+    const lapsed = t > due;
+    if (lapsed) {
+      const r = await runQuery(`UPDATE account_deletions SET rec_skipped = NULL${staged ? ", rec_skipped_lapsed_at = ?" : ""} WHERE id = ? AND rec_skipped IS NOT NULL`,
+                               staged ? [t, d.id] : [d.id]);
+      out.skipped_expired += (r && r.changes) || 0;
+      console.error(`[micrec] account deletion ${d.id}: ${n} Camfrog name(s) to delete recordings of by hand were never marked handled in 30 days - the names are gone (/admin/bridge#micrec)`);
+    }
+    if (!staged || !n) continue;
+    const want = lapsed ? 3 : t >= due - REC_SKIP_REMIND_MS ? 2 : 1;
+    if ((Number(d.rec_skipped_alert) || 0) >= want) continue;
+    if (!admins) { try { admins = await skipAdmins(); } catch (e) { admins = []; } }
+    if (!admins.length) console.error(`[micrec] account deletion ${d.id}: ${n} Camfrog name(s) to delete recordings of by hand - nobody holds chatlog.admin to tell`);
+    const note = SKIP_NOTE[want](d, n, due);
+    for (const id of admins) {
+      if (await require("./inbox").addSafe(id, { kind: "admin", link: "/admin/bridge#micrec", ref: `micrec-skipped-${want}:${d.id}`, ...note })) out.skipped_alerts++;
+    }
+    await runQuery("UPDATE account_deletions SET rec_skipped_alert = ? WHERE id = ?", [want, d.id]);
+  }
+  return out;
+}
 async function retryRecDeletes() {
-  const out = { asked: 0, done: 0, gave_up: 0, skipped_expired: 0 };
+  const out = { asked: 0, done: 0, gave_up: 0, skipped_expired: 0, skipped_alerts: 0 };
   if (!(await tableThere("pepe_actions")) || !(await tableThere("account_deletions"))) return out;
   const cols = (await getQuery("SELECT name FROM pragma_table_info('account_deletions')")).map((r) => r.name);
   if (!cols.includes("rec_windows")) return out;
@@ -441,11 +558,9 @@ async function retryRecDeletes() {
       out.gave_up++;
     }
   }
-  // skipped spans: kept for the admins to act on, never past REC_GIVE_UP_MS after the deletion
-  if (cols.includes("rec_skipped")) {
-    const r = await runQuery("UPDATE account_deletions SET rec_skipped = NULL WHERE rec_skipped IS NOT NULL AND done_at IS NOT NULL AND done_at < ?", [t - REC_GIVE_UP_MS]);
-    out.skipped_expired = (r && r.changes) || 0;
-  }
+  // skipped spans: kept for the admins to act on (review 2: told when they appear, reminded, told when one lapsed), never past
+  // REC_GIVE_UP_MS after the deletion
+  Object.assign(out, await alertSkipped(t, cols));
   return out;
 }
 
@@ -473,7 +588,7 @@ async function adminView() {
                                  FROM account_deletions WHERE delete_recordings = 1`))[0] || {};
       dels = { waiting: Number(c.waiting) || 0, confirmed: Number(c.confirmed) || 0, gave_up: Number(c.gave_up) || 0,
                rows: (await getQuery(`SELECT id, pseudonym, state, execute_at, done_at, rec_done_at, rec_gave_up_at, report
-                                      ${cols.includes("rec_skipped") ? ", rec_skipped, rec_skipped_done_at" : ""} FROM account_deletions
+                                      ${cols.includes("rec_skipped") ? ", rec_skipped, rec_skipped_done_at" : ""}${cols.includes("rec_skipped_lapsed_at") ? ", rec_skipped_lapsed_at" : ""} FROM account_deletions
                                       WHERE delete_recordings = 1 ORDER BY id DESC LIMIT 20`)).map((r) => {
                  let rep = {}, sk = null;
                  try { rep = JSON.parse(r.report || "{}") || {}; } catch (e) { rep = {}; }
@@ -484,7 +599,10 @@ async function adminView() {
                  return { id: r.id, pseudonym: r.pseudonym, state: r.state, execute_at: r.execute_at, done_at: r.done_at, rec_done_at: r.rec_done_at,
                           rec_gave_up_at: r.rec_gave_up_at, logins: Number(rc.logins) || 0, skipped: Number(rc.skipped) || 0,
                           skipped_spans: Array.isArray(sk) ? sk.slice(0, 20).map((w) => ({ login: String(w.login || ""), from: Number(w.from) || 0, to: Number(w.to) || 0 })) : null,
-                          skipped_done_at: r.rec_skipped_done_at || null };
+                          skipped_done_at: r.rec_skipped_done_at || null,
+                          // review 2: by when it must be handled (its login goes then), and one that went unhandled
+                          skipped_due_at: Array.isArray(sk) && sk.length && r.done_at ? Number(r.done_at) + REC_GIVE_UP_MS : null,
+                          skipped_lapsed_at: r.rec_skipped_lapsed_at || null };
                }) };
     }
   } catch (e) { /* no deletions table yet */ }
@@ -542,4 +660,5 @@ function register(app, { addUser }) {
 module.exports = { init, register, policyOn, pepeCan, setPolicy, cfg, privacyCopy, howLong, keepBlock, lapseMap, recWindowsOf, askable, queueRecDeletes, retryRecDeletes,
                    adminView, loadCfg, Refuse, REC_KIND, GRACE_MS, REC_RETRY_MS, REC_GIVE_UP_MS, HELD_WHO_MAX, REPORTED_MAX, KEEP_CACHE_MS,
                    holderIds, earlierHolder, noteLoginsGone, skippedHandled, REC_QUEUED_MS,                     // review
+                   ownSince, scrubLateAcks, alertSkipped, REC_SKIP_REMIND_MS,                                    // review 2
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _resetCache: () => { keepCache = null; keepStats = null; } };

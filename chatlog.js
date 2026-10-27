@@ -1633,16 +1633,22 @@ async function deleteAccount(userId, opts = {}) {
 const KIND = { msg: "chat", tx: "mic", join: "join", leave: "leave", mic: "mic_grab", unmic: "mic_drop", topic: "topic", live: "live", note: "note" };
 /** accountexport: the account's own archived lines (its linked login or u:<id>), oldest first: [{room, ts, kind, text}].
  *  kinds (mic retention review): null = every line; {mic, other} = the 🎙 transcript lines (k 'tx') and / or the rest - picked in
- *  SQL, before the `max` cap. */
-async function exportLines(userId, login, max = 50000, kinds = null) {
+ *  SQL, before the `max` cap. loginSince (mic retention review 2, ms): the login's lines only after then - another PATV account
+ *  held the login before (micrec.ownSince), and lines before then may be theirs; the account's own web lines (u:<id>) all. */
+async function exportLines(userId, login, max = 50000, kinds = null, { loginSince = 0 } = {}) {
   if (!(await tableThere("chat_log")) || !(await tableThere("chatlog_rooms"))) return null;
   if (kinds && !kinds.mic && !kinds.other) return [];
-  const keys = [...new Set(["u:" + String(userId).toLowerCase(), login ? String(login).trim().toLowerCase() : null].filter(Boolean))];
+  const acct = "u:" + String(userId).toLowerCase();
+  const l = login ? String(login).trim().toLowerCase() : null;
+  const keys = [...new Set([acct, l].filter(Boolean))];
   // owner change: the lines they said while incognito (Pepe sent them anonymised: who "h:<hash>") are theirs too - marked so
   const all = [...keys, ...keys.map((k) => "h:" + hash(k))];
   const kindSql = !kinds || (kinds.mic && kinds.other) ? "" : kinds.mic ? " AND l.k = 'tx'" : " AND l.k <> 'tx'";
+  const since = l && l !== acct && Number(loginSince) > 0 ? Math.floor(Number(loginSince)) : 0;
+  const sinceSql = since ? " AND (l.who NOT IN (?, ?) OR l.ts > ?)" : "";
   const rows = await getQuery(`SELECT l.c, l.ts, l.k, l.text, l.d, l.who, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk
-                               WHERE l.who IN (${all.map(() => "?").join(",")}) AND l.purged IS NULL${kindSql} ORDER BY l.c LIMIT ?`, [...all, max]);
+                               WHERE l.who IN (${all.map(() => "?").join(",")}) AND l.purged IS NULL${kindSql}${sinceSql} ORDER BY l.c LIMIT ?`,
+                              [...all, ...(since ? [l, "h:" + hash(l), since] : []), max]);
   return rows.map((r) => {
     let kind = KIND[r.k] || r.k;
     if (r.k === "live") { try { if (JSON.parse(r.d).np) kind = "now_playing"; } catch (e) { /* live */ } }

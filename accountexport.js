@@ -56,6 +56,8 @@
 //   * scope: Pepe keeps his data under a Camfrog LOGIN, from all time - so a login another PATV account held before (its login
 //     history, or a deleted account's marker - micrec.earlierHolder) gets NO Pepe part (his part would carry the earlier holder's
 //     recordings, PMs and notes): the same rule account deletion uses (micrec.askable). Only the current login is ever asked.
+//     Review 2: the site's own lines under such a login (chat.pad_chat_lines) start when it became this account's
+//     (micrec.ownSince -> chatlog.exportLines loginSince; the README says from when) - for every download, the older form's too.
 //   * "Only recordings before" limits recordings ONLY: the bot applies `before` to everything he builds, so a dated ask carries
 //     recordings alone (`parts.pepe_left` = the Pepe parts left for a download without a date; the README says so).
 //   * step-up: a download with Pepe's part needs the deletion flow's re-authentication (a password, or a sign-in in the last 10
@@ -338,7 +340,18 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   // pads too), your chat-log downloads (metadata) and the reports you filed on chat lines
   // mic retention: with the member's choices, the chat lines and the 🎙 transcript lines ("mic") each follow their own checkbox
   // (review: picked in SQL, before the row cap - a heavy chatter who ticks only transcripts still gets them)
-  await put("chat", "pad_chat_lines", require("./chatlog").exportLines(uid, login, MAX_ROWS, parts ? { mic: !!parts.transcripts, other: !!parts.chat } : null));
+  // review 2: a login another PATV account held before (micrec.ownSince - the rule Pepe's part follows): its lines only from when it
+  // became this account's (lines before then may be theirs); the account's own web lines all. Unknown (an error) = none under it.
+  let loginSince = 0;
+  if (login) {
+    try { const M = require("./micrec"); loginSince = await M.ownSince(uid, login, at); }
+    catch (e) { loginSince = at; (out.errors = out.errors || []).push("chat.pad_chat_lines: who held your Camfrog name before couldn't be checked - lines under it were left out"); }
+  }
+  await put("chat", "pad_chat_lines", require("./chatlog").exportLines(uid, login, MAX_ROWS, parts ? { mic: !!parts.transcripts, other: !!parts.chat } : null, { loginSince }));
+  if (loginSince > 0 && out.chat && out.chat.pad_chat_lines) {
+    out.chat.pad_chat_lines_note = `Your lines under your Camfrog name start ${new Date(loginSince).toISOString().slice(0, 10)}: another PATV account had that name ` +
+                                   "before you, and lines under it before then may be theirs.";
+  }
   await put("chat", "chat_log_downloads", rows("chatlog_exports", "user_id = ?", [uid]));
   await put("chat", "chat_line_reports", rows("chatlog_reports", "reporter = ?", [uid], { omit: ["decided_by"] }));
   await put("chat", "clips_you_made", rows("media", "by_user_id = ?", [uid], { omit: ["file"] }));
@@ -741,7 +754,9 @@ async function run(id) {
       if (hub.data) files.push({ name: "chat-hub.jsonl", data: hub.data });
       const pp = parts && (parts.pepe || []).length ? pepeEntries(job) : null;
       if (pp) files.push(...pp.entries);
-      files.push({ name: "README.txt", data: README + (hub.data ? README_HUB : hub.none ? README_NO_HUB : "") + (parts ? readmeChoices(parts, pp) : "") });
+      // review 2: lines under a login another account held before start when it became this account's (collect: pad_chat_lines_note)
+      const linesNote = data.chat && data.chat.pad_chat_lines_note ? `\nchat.pad_chat_lines: ${data.chat.pad_chat_lines_note}\n` : "";
+      files.push({ name: "README.txt", data: README + (hub.data ? README_HUB : hub.none ? README_NO_HUB : "") + (parts ? readmeChoices(parts, pp) : "") + linesNote });
       fs.mkdirSync(dir(), { recursive: true });
       const file = path.join(dir(), `${id}.zip`);
       const bytes = await zipToFile(file, files, new Date(now()));
@@ -784,7 +799,9 @@ What you chose to include:
 `;
 const PART_WORDS = { chat: "chat logs", transcripts: "mic transcripts", memories: "what Pepe remembers about you", recordings: "mic recordings" };
 // review: what Pepe's part covers, and what a recording can hold (one mixed sound per room - the ops plan 8.11)
-const README_SCOPE = "  It covers your Camfrog name now only: Camfrog names you linked before aren't in it (deleting your account reaches them).\n";
+// (review 2: no promise about the names linked before - deleting the account asks Pepe to forget only the name now, and deletes
+// recordings only with "Also delete my mic recordings")
+const README_SCOPE = "  It covers your Camfrog name now only: Camfrog names you linked before aren't in it (write to privacy@publicaccess.tv for them).\n";
 const README_OVERLAP = "  A mic recording is the sound of the room while you held the mic. In a room with more than one mic, people who were on the mic at\n" +
                        "  the same time can be heard in it too, and a mic transcript can hold their words - they're theirs as well, so please don't share them.\n";
 const README_OVERLAP_TX = "  In a room with more than one mic, a mic transcript can hold the words of people who were on the mic at the same time - they're\n" +

@@ -76,6 +76,7 @@ const setup = () => setupP || (setupP = (async () => {
   const addUser = (req, res, next) => { const u = req.get("x-user"); req.user = u ? { userId: u, username: u, class: req.get("x-class") || "pleb" } : null; next(); };
   require(path.join(repo, "roomsweb")).register(app, { addUser, isBotToken: (t) => t === "bot" });
   M.register(app, { addUser });
+  require(path.join(repo, "actions")).register(app, { addUser, isBotToken: (t) => t === "bot" });   // review 2: Pepe's late answers
   server = app.listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
 })());
@@ -317,15 +318,16 @@ test("review: a merged-away account is the same holder; skipped spans kept for t
   await runQuery("INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES ('del4-old', 'prevcf', 'mergecf', 'prevcf', 'mergecf', ?, 'relink')", [t0 - 60 * DAY]);
   await runQuery("INSERT INTO account_merges (old_id, new_id, merged_at, via) VALUES ('del4-old', 'del4', ?, 'test')", [t0 - 30 * DAY]);
   const w = await M.recWindowsOf("del4", "mergecf", t0);
-  assert.deepEqual(w.map((x) => [x.login, x.from]), [["mergecf", 0]]);
-  assert.equal(M.askable(w).length, 1, "asked of Pepe - not skipped");
+  // (review 2: the login the merged-away account let go is del4's own too - accountdelete.loginWindowsOf reads the merged ids)
+  assert.deepEqual(w.map((x) => [x.login, x.from]).sort(), [["mergecf", 0], ["prevcf", 0]]);
+  assert.equal(M.askable(w).length, 2, "asked of Pepe - not skipped");
   // the choice is said back: the answer (the page shows it) and the notice
   const s = await D.schedule({ userId: "del4", username: "del4" }, { by: "self", reauth: "password", deleteRecordings: true });
-  assert.deepEqual([s.delete_recordings, s.recordings], [true, { logins: 1, by_hand: 0 }]);
+  assert.deepEqual([s.delete_recordings, s.recordings], [true, { logins: 2, by_hand: 0 }]);
   const note = (await getQuery("SELECT body FROM inbox WHERE user_id = 'del4' ORDER BY id DESC LIMIT 1"))[0];
   assert.match(note.body, /mic recordings will be deleted with it/);
   const r = await D.execute("del4", { force: true });
-  assert.deepEqual(r.report.recordings, { logins: 1, queued: 1, skipped: 0 });
+  assert.deepEqual(r.report.recordings, { logins: 2, queued: 2, skipped: 0 });
   // the markers: keyed, no name - a later holder of "mergecf" (or "prevcf") is seen as one with an earlier holder
   assert.ok(r.report.login_markers >= 1);
   const marks = await getQuery("SELECT h FROM micrec_login_gone");
@@ -410,6 +412,134 @@ test("review: Pepe ran it only when his FOLLOW-UP came (his first 'queued' answe
   assert.match(en["acctdel.recordings_meta"], /by hand/);
   assert.match(en["acctdel.recordings_meta"], /before 12 October 2026/);
   assert.match(en["acctdel.recordings_meta"], /backup copies are deleted within 7 days/);
+});
+
+test("review 2: the login markers are NOT behind the switch (they guard the ungated download) - written with it off, an account merged in included, and the privacy page says so without it", async () => {
+  await setup();
+  const t0 = clockAt;
+  await M.setPolicy(false, "test");
+  assert.equal(M.policyOn(), false);
+  // an account merged INTO mk1 let "mkprev" go (a merge keeps login_changes under the merged-away id): mk1's own name too
+  await user("mk1", { cf: "MarkOff1" });
+  await runQuery("INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES ('mk1-old', 'mkprev', 'markoff1', 'mkprev', 'markoff1', ?, 'relink')", [t0 - 70 * DAY]);
+  await runQuery("INSERT INTO account_merges (old_id, new_id, merged_at, via) VALUES ('mk1-old', 'mk1', ?, 'test')", [t0 - 60 * DAY]);
+  const wins = await D.loginWindowsOf("mk1", "markoff1", t0);
+  assert.deepEqual(wins.map((w) => [w.login, w.to]).sort(), [["markoff1", t0], ["mkprev", t0 - 70 * DAY]], "the merged-away account's released login is a span of mk1's");
+  const rw = await M.recWindowsOf("mk1", "markoff1", t0);
+  assert.deepEqual(rw.map((w) => [w.login, w.from]).sort(), [["markoff1", 0], ["mkprev", 0]], "...and both are asked of Pepe (nobody else held them)");
+  await D.schedule({ userId: "mk1", username: "mk1" }, { by: "self", reauth: "password" });
+  const r = await D.execute("mk1", { force: true });
+  assert.equal(r.state, "done");
+  assert.equal(r.report.login_markers, 2, "both names marked - with the switch OFF");
+  for (const l of ["markoff1", "mkprev"]) {
+    await user(`next-${l}`, { cf: l });
+    assert.equal(await M.earlierHolder(`next-${l}`, l), true, l);
+  }
+  // the privacy page discloses them without the switch: section 10's sentence and section 9's row, rendered with micrec null
+  const ejs = require("ejs");
+  const html = await ejs.renderFile(path.join(repo, "views", "privacy.ejs"), { user: null, title: "Privacy Policy", VERSION: "v", UPDATED: "27 October 2026",
+                                                                               enforced: true, chatlog: null, hubErasure: null, micrec: null, ogBase: "" });
+  assert.match(html, /PATV keeps a scrambled marker of each Camfrog name a deleted account had \(never the name itself\), so the next person to link that name can't download what Pepe keeps of yours/);
+  assert.match(html, /<td>Markers of the Camfrog names a deleted account had[^<]*<\/td><td>No time limit for now/);
+  assert.match(html, /<b>27 October 2026:<\/b> <a href="#choices">Section 10<\/a>: when an account is deleted, PATV keeps a scrambled marker/);
+  assert.doesNotMatch(html, /mic recordings/i, "nothing about recordings while the switch is off");
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
+});
+
+test("review 2: a skipped span can't lapse unnoticed - the chatlog.admin holders are told when it appears, reminded a week before its login goes, told if it lapsed; no login in any notice", async () => {
+  await setup();
+  const t0 = clockAt;
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
+  await runQuery("INSERT INTO users (userId, username, displayname, email, password, class, points_balance, isEmailVerified) VALUES ('adm1', 'adm1', 'adm1', 'a@example.com', 'x', 'Admin', 0, 1), ('stf1', 'stf1', 'stf1', 's@example.com', 'x', 'Staff', 0, 1)");
+  await user("sk1", { cf: "SkipMe1" });
+  await runQuery("INSERT INTO username_history (userId, old_username, new_username, at, via, kind) VALUES ('someone-else', 'skipme1', NULL, ?, 'unlink', 'camfrog')", [t0 - 20 * DAY]);
+  await D.schedule({ userId: "sk1", username: "sk1" }, { by: "self", reauth: "password", deleteRecordings: true });
+  assert.deepEqual((await D.execute("sk1", { force: true })).report.recordings, { logins: 1, queued: 0, skipped: 1 });
+  const id = (await getQuery("SELECT id FROM account_deletions WHERE user_id = 'sk1'"))[0].id;
+  const notes = async (stage) => getQuery("SELECT user_id, title, body, link FROM inbox WHERE ref = ? ORDER BY user_id", [`micrec-skipped-${stage}:${id}`]);
+  const stageOf = async () => (await getQuery("SELECT rec_skipped_alert AS s FROM account_deletions WHERE id = ?", [id]))[0].s;
+  await M.retryRecDeletes();
+  let n = await notes(1);
+  assert.deepEqual(n.map((x) => x.user_id), ["adm1"], "the chatlog.admin holders (Admin by default) - not Staff, not a member");
+  assert.match(n[0].title, new RegExp(`account deletion #${id}`));
+  assert.match(n[0].body, /1 of their Camfrog names was linked to another PATV account before/);
+  assert.match(n[0].body, /Mark handled/);
+  assert.equal(n[0].link, "/admin/bridge#micrec");
+  assert.equal(await stageOf(), 1);
+  const card = (await M.adminView()).deletions.rows.find((x) => x.id === id);
+  const doneAt = (await getQuery("SELECT done_at FROM account_deletions WHERE id = ?", [id]))[0].done_at;
+  assert.equal(card.skipped_due_at, Number(doneAt) + M.REC_GIVE_UP_MS, "the card says by when");
+  // told once (the stage is kept - an admin deleting the notice doesn't bring it back every tick)
+  await runQuery("DELETE FROM inbox WHERE ref = ?", [`micrec-skipped-1:${id}`]);
+  await M.retryRecDeletes();
+  assert.equal((await notes(1)).length, 0);
+  // a week before its login goes: the reminder
+  clockAt = Number(doneAt) + M.REC_GIVE_UP_MS - M.REC_SKIP_REMIND_MS + 1;
+  await M.retryRecDeletes();
+  n = await notes(2);
+  assert.deepEqual(n.map((x) => x.user_id), ["adm1"]);
+  assert.match(n[0].title, /^Reminder: /);
+  assert.equal(await stageOf(), 2);
+  // never handled: the login goes, the row says LAPSED, a last notice and a console error
+  clockAt = Number(doneAt) + M.REC_GIVE_UP_MS + 1;
+  const err = console.error; const said = []; console.error = (...a) => said.push(a.join(" "));
+  let out;
+  try { out = await M.retryRecDeletes(); } finally { console.error = err; }
+  assert.ok(out.skipped_expired >= 1);
+  assert.ok(said.some((s) => new RegExp(`account deletion ${id}: 1 Camfrog name\\(s\\) to delete recordings of by hand were never marked handled`).test(s)));
+  n = await notes(3);
+  assert.deepEqual(n.map((x) => x.user_id), ["adm1"]);
+  assert.match(n[0].title, /^NOT HANDLED: /);
+  const row = (await getQuery("SELECT rec_skipped, rec_skipped_lapsed_at, rec_skipped_alert FROM account_deletions WHERE id = ?", [id]))[0];
+  assert.deepEqual([row.rec_skipped, row.rec_skipped_lapsed_at, row.rec_skipped_alert], [null, clockAt, 3]);
+  assert.equal((await M.adminView()).deletions.rows.find((x) => x.id === id).skipped_lapsed_at, clockAt);
+  // no login in any notice (they live in inboxes - and Telegram - longer than the card's 30 days)
+  const all = await getQuery("SELECT title, body FROM inbox WHERE ref LIKE ?", [`micrec-skipped-%:${id}`]);
+  assert.ok(all.length >= 2 && all.every((x) => !/skipme1/i.test(x.title + x.body)));
+  // the card: by when, and LAPSED
+  const page = fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8");
+  assert.match(page, /r\.skipped_due_at \? ' - mark handled before '/);
+  assert.match(page, /LAPSED: never marked handled/);
+  clockAt = t0;
+});
+
+test("review 2: a late answer from Pepe can't bring a login back - after the scrub (done or given up) his message keeps only its counts, under the pseudonym", async () => {
+  await setup();
+  await user("lt1", { cf: "LateOne1" });
+  await D.schedule({ userId: "lt1", username: "lt1" }, { by: "self", reauth: "password", deleteRecordings: true });
+  assert.equal((await D.execute("lt1", { force: true })).state, "done");
+  const acts = () => getQuery("SELECT id, camfrog, status, message, username FROM pepe_actions WHERE kind = 'privacy.recdelete' AND user_id = 'lt1' ORDER BY id");
+  const [a] = await acts();
+  // he follows up; the site scrubs the logins (done)
+  await runQuery("UPDATE pepe_actions SET status = 'done', message = 'deleted 2 mic recording file(s) of lateone1', updated = ? WHERE id = ?", [clockAt, a.id]);
+  assert.equal((await M.retryRecDeletes()).done >= 1, true);
+  assert.equal((await acts())[0].camfrog, null);
+  // ...and then a late follow-up from his journal names the login again (POST /api/actions/ack overwrites message and status)
+  const ack = (results) => fetch(`${base}/api/actions/ack`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot", results }) });
+  assert.equal((await ack([{ id: a.id, ok: true, message: "deleted 3 mic recording file(s) of lateone1; 1 kept under a legal hold or an open report - deleted once it's released" }])).status, 200);
+  let [b] = await acts();
+  assert.ok(!/lateone1/i.test(b.message), b.message);
+  assert.equal(b.message, `deleted 3 mic recording file(s) of ${b.username}; 1 kept under a legal hold or an open report - deleted once it's released (a late answer)`);
+  assert.match(b.username, /^deleted-/);
+  // his first answer late, or a message the site doesn't know: no login either
+  await ack([{ id: a.id, ok: true, message: "queued: lateone1's mic recordings are being deleted" }]);
+  [b] = await acts();
+  assert.equal(b.message, `queued: ${b.username}'s mic recordings are being deleted (a late answer)`);
+  await ack([{ id: a.id, ok: false, message: "lateone1: the archive broke" }]);
+  [b] = await acts();
+  assert.ok(!/lateone1/i.test(b.message), b.message);
+  assert.match(b.message, /a late answer from Pepe/);
+  // an action whose login is still there (in flight) is left as he wrote it - the scrub does it when the deletion is done
+  await user("lt2", { cf: "LateTwo2" });
+  await D.schedule({ userId: "lt2", username: "lt2" }, { by: "self", reauth: "password", deleteRecordings: true });
+  await D.execute("lt2", { force: true });
+  const [c] = await getQuery("SELECT id FROM pepe_actions WHERE kind = 'privacy.recdelete' AND user_id = 'lt2'");
+  await ack([{ id: c.id, ok: true, message: "queued: latetwo2's mic recordings are being deleted" }]);
+  assert.equal((await getQuery("SELECT message FROM pepe_actions WHERE id = ?", [c.id]))[0].message, "queued: latetwo2's mic recordings are being deleted");
+  const actionsSrc = fs.readFileSync(path.join(repo, "actions.js"), "utf8");
+  assert.match(actionsSrc, /require\("\.\/micrec"\)\.scrubLateAcks\(acked\)/);
 });
 
 test("the wiring: the bot's action kinds (TTLs, no inbox notice, no PAT), the upload routes' body parser", async () => {

@@ -125,7 +125,7 @@
     the owner sync's keep block, deletions of recordings, exports with Pepe's part %>
 <section class="adm-card" id="micrec" aria-labelledby="mrT">
   <h2 id="mrT">Mic recordings <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Pepe records every mic-up he hears and deletes the recordings by the pad's tier (each tier a pad loses keeps its windows 30 more days; a legal hold or an open report keeps them longer). The <b>policy switch</b> ships off: while it's off the privacy policy and the account pages read as before. Turn it on only after the owner has approved the policy text and that text is live, and after Pepe's split rule is on (<code>!retention split on confirm</code>: the switch refuses before) - the privacy page then names mic recordings in "How long" (and is dated that day), account deletion offers <i>Also delete my mic recordings</i>, Download my data offers <i>Mic recordings</i>, /premium names the recordings windows, and Pepe is told. (While it's off and Pepe's split rule is on, /premium names chat logs and mic transcripts only.) The owner also decides, with the text, what a recordings download holds in rooms with more than one mic (ops plan 8.11). The keep block is what every owner sync sends Pepe: rooms in a tier's grace, legal holds and open reports on 🎙 lines. Pepe deletes no audio while it's missing, incomplete or more than an hour old.</p>
+  <p class="adm-help">Pepe records every mic-up he hears and deletes the recordings by the pad's tier (each tier a pad loses keeps its windows 30 more days; a legal hold or an open report keeps them longer). The <b>policy switch</b> ships off: while it's off the privacy policy and the account pages read as before. Turn it on only after the owner has approved the policy text and that text is live, and after Pepe's split rule is on (<code>!retention split on confirm</code>: the switch refuses before) - the privacy page then names mic recordings in "How long" (and is dated that day), account deletion offers <i>Also delete my mic recordings</i>, Download my data offers <i>Mic recordings</i>, /premium names the recordings windows, and Pepe is told. (While it's off and Pepe's split rule is on, /premium names chat logs and mic transcripts only.) The owner also decides, with the text, what a recordings download holds in rooms with more than one mic (ops plan 8.11). The keep block is what every owner sync sends Pepe: rooms in a tier's grace, legal holds and open reports on 🎙 lines. Pepe deletes no audio while it's missing, incomplete or more than an hour old. A Camfrog name of a deleted account that another PATV account had before isn't asked of Pepe (he'd delete that account's recordings too): it shows under <i>Not asked - by hand</i> with its login until someone deletes its recordings by hand and marks it handled, for 30 days after the deletion - the admins get an inbox notice when one appears, a reminder a week before it goes and one if it lapsed.</p>
   <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
   <p class="adm-help" id="mrSummary" role="status">Loading…</p>
   <div class="adm-tbl"><table aria-label="Mic recordings switch">
@@ -196,10 +196,12 @@
        r.rec_done_at ? when(r.rec_done_at) : r.rec_gave_up_at ? 'NOT RUN (gave up ' + when(r.rec_gave_up_at) + ')' : r.state === 'done' ? 'waiting for his follow-up' : '']
         .forEach(function (v) { row.appendChild(td(v)); });
       // review: a login another account held before isn't asked of Pepe (he'd delete that holder's recordings too) - shown here WITH its
-      // login and span (admins only) until it's marked handled, or 30 days after the deletion
+      // login and span (admins only) until it's marked handled, or 30 days after the deletion (review 2: by when, and LAPSED when nobody did;
+      // the chatlog.admin holders get an inbox notice when it appears, a reminder a week before and one if it lapsed - micrec.alertSkipped)
       var sk = document.createElement('td');
       if (r.skipped_spans && r.skipped_spans.length) {
-        sk.appendChild(document.createTextNode(r.skipped_spans.map(function (w) { return w.login + ' (theirs ' + (w.from ? 'after ' + when(w.from) : 'from the start') + ' to ' + when(w.to) + ' UTC)'; }).join('; ') + ' '));
+        sk.appendChild(document.createTextNode(r.skipped_spans.map(function (w) { return w.login + ' (theirs ' + (w.from ? 'after ' + when(w.from) : 'from the start') + ' to ' + when(w.to) + ' UTC)'; }).join('; ') +
+          (r.skipped_due_at ? ' - mark handled before ' + when(r.skipped_due_at) + ' UTC (the logins go then) ' : ' ')));
         var hb = document.createElement('button'); hb.type = 'button'; hb.textContent = 'Mark handled';
         hb.addEventListener('click', function () {
           if (!window.confirm('Their recordings in those spans were deleted by hand (or there was nothing to delete)? The logins leave this row.')) return;
@@ -207,7 +209,8 @@
           req('/api/admin/micrec/skipped', { id: r.id }).then(function () { say('Marked handled.', true); load(); }).catch(function (e) { hb.disabled = false; say(e.message, false); });
         });
         sk.appendChild(hb);
-      } else if (r.skipped) sk.textContent = r.skipped + ' of ' + r.logins + (r.skipped_done_at ? ' - handled ' + when(r.skipped_done_at) : ' - the logins are gone (30 days)');
+      } else if (r.skipped) sk.textContent = r.skipped + ' of ' + r.logins + (r.skipped_done_at ? ' - handled ' + when(r.skipped_done_at) :
+        r.skipped_lapsed_at ? ' - LAPSED: never marked handled, the logins went ' + when(r.skipped_lapsed_at) + ' UTC' : ' - the logins are gone (30 days)');
       row.appendChild(sk);
       dels.appendChild(row);
     });

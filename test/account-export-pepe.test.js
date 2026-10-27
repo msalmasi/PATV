@@ -392,7 +392,13 @@ test("review: a login another PATV account held before gets no Pepe part (histor
   await settle();
   clockAt += DAY + 1;
   // another account had "shared1" once (an unlink in its login history)
-  await runQuery("INSERT INTO username_history (userId, old_username, new_username, at, via, kind) VALUES ('other', 'shared1', NULL, ?, 'unlink', 'camfrog')", [clockAt - 90 * DAY]);
+  const markAt = clockAt - 90 * DAY;
+  await runQuery("INSERT INTO username_history (userId, old_username, new_username, at, via, kind) VALUES ('other', 'shared1', NULL, ?, 'unlink', 'camfrog')", [markAt]);
+  // review 2: the site's own lines under the login - the earlier holder's (before its unlink; one incognito) and sh1's (after)
+  await runQuery(`INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (31, 1, ?, 'msg', 'shared1', 'THEIR-ROOM-LINE', 'r1', 'a', '{}'),
+                  (32, 1, ?, 'tx', ?, 'THEIR-INCOG-MIC', 'r1', 'm', '{}'), (33, 1, ?, 'msg', 'shared1', 'SH1-ROOM-LINE', 'r1', 'a', '{}'),
+                  (34, 1, ?, 'msg', 'u:sh1', 'SH1-WEB-LINE', 'r1', 'a', '{}')`,
+                 [markAt - DAY, markAt - DAY + 1000, "h:" + CL.hash("shared1"), markAt + DAY, markAt - 2 * DAY]);
   let o = await X.offer("sh1");
   assert.deepEqual([o.pepe, o.recordings, o.login_shared], [false, false, true]);
   assert.equal((await X.request("sh1", { parts: { memories: true } })).code, "E_PEPE_OFF", "his memories of the login would be theirs too");
@@ -403,6 +409,14 @@ test("review: a login another PATV account held before gets no Pepe part (histor
   assert.equal((await asks(r.id)).length, 0, "Pepe isn't asked");
   assert.deepEqual(JSON.parse(j.parts).pepe, []);
   assert.match(readmeOf(j), /Pepe's part \(chat logs, mic transcripts\): not included - your Camfrog name was linked to another PATV account before yours/);
+  // review 2: the site's own lines under that login start when it became sh1's (the rule Pepe's part follows); its web lines all
+  const data = JSON.parse(unzip(fs.readFileSync(path.join(X._dir(), j.file)))["patv-data.json"].data.toString("utf8"));
+  assert.deepEqual(data.chat.pad_chat_lines.map((l) => l.text).sort(), ["SH1-ROOM-LINE", "SH1-WEB-LINE"]);
+  const day = new Date(markAt).toISOString().slice(0, 10);
+  assert.match(data.chat.pad_chat_lines_note, new RegExp(`^Your lines under your Camfrog name start ${day}: another PATV account had that name before you`));
+  assert.ok(readmeOf(j).includes(`chat.pad_chat_lines: Your lines under your Camfrog name start ${day}`));
+  assert.equal(await M.ownSince("me", "mecf"), 0, "a login nobody else held: all its lines");
+  assert.equal((await X.collect("me")).chat.pad_chat_lines_note, undefined);
   const g = await (await fetch(base + "/api/account/export", { headers: { "x-user": "sh1" } })).json();
   assert.equal(g.offer.login_shared, true, "the form says why");
   // an account merged INTO this one is this one: its records of the login don't count
@@ -619,4 +633,11 @@ test("the form: the choices are sent, Pepe's rows shown only when offered, the r
   assert.match(en["settings.data.chat_meta"], /private messages with Pepe, both sides/);
   assert.match(en["settings.data.memories_meta"], /accounts an admin linked to yours/);
   assert.doesNotMatch(en["settings.data.lede"], /recording/, "the lede (not behind the switch) names no recordings");
+  // review 2: no promise that deleting the account reaches the names linked before (it asks Pepe to forget only the name now, and
+  // deletes recordings only with "Also delete my mic recordings", which is behind the switch)
+  const src = fs.readFileSync(path.join(repo, "accountexport.js"), "utf8");
+  for (const s of [en["settings.data.pepe_scope"], /const README_SCOPE = "([^"]*)"/.exec(src)[1]]) {
+    assert.doesNotMatch(s, /deleting your account/i, s);
+    assert.match(s, /privacy@publicaccess\.tv/, s);
+  }
 });
