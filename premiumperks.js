@@ -42,6 +42,8 @@ function values() {
     lc_free: Number.isFinite(Number(lc.viewers_free)) ? Number(lc.viewers_free) : 1,
     lc_sp: Number.isFinite(Number(lc.viewers_sp)) ? Number(lc.viewers_sp) : 4,
     lc_on: lc.enabled !== false,
+    // mic retention review: the mic-recordings policy switch (micrec.js) - the new recordings wording waits for the owner's text
+    micrec_on: safe(() => require("./micrec").policyOn(), false),
   };
 }
 
@@ -55,7 +57,12 @@ function table(v = values()) {
   // transcripts) and a tier's transcripts follow its chat (his split rule on), the perk names chat + transcripts together and the
   // recordings by audio_*. Otherwise the lists read as before: "mic recordings" by rec_* - an older Pepe's one window for both, or
   // the split off (then audio_* = rec_*)
-  const audioFor = (sfx) => !!R.audio_reported && R["rec" + sfx] === R["chat" + sfx];
+  // Review: the NEW recordings wording (the audio windows, Plus's "and 30 days after") is owner-approved text - shown only while the
+  // mic-recordings policy switch is on (v.micrec_on). With Pepe's split ON and the switch off, the old text would name recordings by
+  // the transcript windows (now = chat: "for good" on Prime Time - untrue), so the perk names chat logs and mic transcripts only
+  // ("retention_t": no recordings claim); with the split off the old text stays (true: recordings follow the transcripts then).
+  const audioFor = (sfx) => !!R.audio_reported && !!v.micrec_on && R["rec" + sfx] === R["chat" + sfx];
+  const txOnly = (sfx) => !!R.audio_reported && !v.micrec_on && !!R.split && R["rec" + sfx] === R["chat" + sfx];
   const seasonal = (v.sp_seasonal || []).map((p) => `${p.emoji} ${p.name}` + (p.season && p.season.label ? ` (${p.season.label})` : ""));
   const prime_time = [
     perk("badge", "📺", "premium.pt.badge", "premium.pt.badge_d"),
@@ -67,6 +74,8 @@ function table(v = values()) {
       // mic retention: chat logs and mic transcripts share the chat window (transcripts follow chat), recordings have the audio one
       ? perk("retention", "🗄️", ["perks.pt.retention_a", { chat: W("chat_prime"), rec: W("audio_prime") }],
              ["perks.pt.retention_a_d", { chat: W("chat_prime"), rec: W("audio_prime"), none: W("chat_days"), none_rec: W("audio_days") }])
+      : txOnly("_prime")
+      ? perk("retention", "🗄️", ["perks.pt.retention_t", { chat: W("chat_prime") }], ["perks.pt.retention_t_d", { chat: W("chat_prime"), none: W("chat_days") }])
       : perk("retention", "🗄️", ["perks.pt.retention", { chat: W("chat_prime"), rec: W("rec_prime") }],
              ["perks.pt.retention_d", { chat: W("chat_prime"), rec: W("rec_prime"), none: W("chat_days"), none_rec: W("rec_days") }]),
     perk("soundboard", "🔊", ["perks.pt.soundboard", { n: v.sb_slots_prime }], ["perks.pt.soundboard_d", { plus: v.sb_slots_plus }], v.sb_on && v.sb_slots_prime > 0),
@@ -85,6 +94,8 @@ function table(v = values()) {
       ? perk("retention", "🗄️", R.audio_plus === R.chat_plus ? ["perks.pp.retention_a", { chat: W("chat_plus") }]
                                                              : ["perks.pt.retention_a", { chat: W("chat_plus"), rec: W("audio_plus") }],
              ["perks.pp.retention_a_d", { chat: W("chat_plus"), rec: W("audio_plus"), none: W("chat_days"), none_rec: W("audio_days") }])
+      : txOnly("_plus")
+      ? perk("retention", "🗄️", ["perks.pt.retention_t", { chat: W("chat_plus") }], ["perks.pt.retention_t_d", { chat: W("chat_plus"), none: W("chat_days") }])
       : perk("retention", "🗄️", ["perks.pp.retention", { chat: W("chat_plus"), rec: W("rec_plus") }],
              ["perks.pp.retention_d", { chat: W("chat_plus"), rec: W("rec_plus"), none: W("chat_days") }]),
     perk("soundboard", "🔊", ["premium.pp.soundboard", { n: v.sb_slots_plus }], ["premium.pp.soundboard_d", { pt: v.sb_slots_prime }], v.sb_on && v.sb_slots_plus > 0),

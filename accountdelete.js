@@ -41,7 +41,9 @@
 //                            [{login, from, to}] - each Camfrog login linked to the account and the span it was the account's,
 //                            loginWindowsOf; the same lifetime: NULLed when the archive's part has run),
 //                            delete_recordings (mic retention: the choice), rec_windows (JSON [{login, from, to}] for Pepe's
-//                            retries - NULLed once he confirmed every login), rec_done_at, rec_gave_up_at (not confirmed in 30 days)
+//                            retries - NULLed once he ran every login, or given up), rec_done_at, rec_gave_up_at (not run in 30 days),
+//                            rec_skipped (review: JSON [{login, from, to}] NOT asked - another account held the login before; admins
+//                            only, NULLed when handled or 30 days after the deletion), rec_skipped_done_at
 //   account_deletion_routes  key PK, user_id, amount, legs (JSON), txid, at
 "use strict";
 const crypto = require("crypto");
@@ -91,6 +93,9 @@ function init() {
       if (!c.includes("rec_windows")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_windows TEXT");
       if (!c.includes("rec_done_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_done_at INTEGER");
       if (!c.includes("rec_gave_up_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_gave_up_at INTEGER");
+      // review: the spans NOT asked of Pepe (another account held the login before) - admins act on them by hand; bounded (micrec)
+      if (!c.includes("rec_skipped")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped TEXT");
+      if (!c.includes("rec_skipped_done_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped_done_at INTEGER");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -318,12 +323,26 @@ async function schedule(u, { by = "self", reauth = null, reason = null, hideLine
                    [String(u.userId), t, at, String(by).slice(0, 80), reauth, reason ? String(reason).slice(0, 200) : null, hideLines ? 1 : null, removePublic ? 1 : null,
                     deleteRecordings ? 1 : null]);
   });
+  // review: the irreversible choice is said back (the answer the page shows, and the notice) - with how many Camfrog names it
+  // reaches now and how many the team handles by hand (another PATV account held them before: Pepe can't tell whose is whose)
+  let recordings = null;
+  if (deleteRecordings) {
+    recordings = { logins: 0, by_hand: 0 };
+    try {
+      const MR = require("./micrec");
+      const lg = low(((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(u.userId)]))[0] || {}).camfrogUsername) || null;
+      const w = await MR.recWindowsOf(String(u.userId), lg, t);
+      recordings = { logins: w.length, by_hand: w.length - MR.askable(w).length };
+    } catch (e) { /* the counts are a courtesy */ }
+  }
   await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
   await require("./inbox").addSafe(u.userId, { kind: "system", title: "Your account is scheduled for deletion",
-    body: `Your PATV account will be deleted on ${new Date(at).toISOString().slice(0, 10)}. Every device was signed out. Changed your mind? Just sign in again before then - that cancels it.`,
+    body: `Your PATV account will be deleted on ${new Date(at).toISOString().slice(0, 10)}. Every device was signed out.` +
+          (recordings ? " Your mic recordings will be deleted with it (you ticked Also delete my mic recordings)." : "") +
+          " Changed your mind? Just sign in again before then - that cancels it.",
     link: "/settings/account#delete", ref: `acctdel:req:${t}` });
   console.log(`[acctdel] ${u.username} scheduled for ${new Date(at).toISOString()} (by ${by})`);
-  return { ok: true, execute_at: at };
+  return { ok: true, execute_at: at, ...(recordings ? { delete_recordings: true, recordings } : {}) };
 }
 
 /** A sign-in during the grace period cancels the deletion (sessions.signIn). */
@@ -572,6 +591,8 @@ async function execute(userId, { force = false } = {}) {
   let appleKeys = [];
   let pubWindows = null;                     // S1 V4 review 2: loginWindowsOf, read in the transaction below (step 3)
   let recWindows = null;                     // mic retention: micrec.recWindowsOf, read in the transaction below (step 3)
+  let recSkipped = null;                     // review: the spans not asked of Pepe (another account held the login before)
+  await require("./micrec").init();          // review: the login markers' key, before the transaction
   try {
     const M = require("./media");
     const path = require("path"), fs = require("fs");
@@ -625,6 +646,14 @@ async function execute(userId, { force = false } = {}) {
     if (Number(reqRow.remove_public) === 1) pubWindows = await loginWindowsOf(uid, login, t);
     //    mic retention: with "Also delete my mic recordings", each Camfrog login's recordings span (read before step 5 too)
     if (Number(reqRow.delete_recordings) === 1) recWindows = await require("./micrec").recWindowsOf(uid, login, t);
+    //    review: a keyed marker per Camfrog login the account had (no name - micrec.noteLoginsGone), before step 6 pseudonymises
+    //    the login history - a later holder of that name never downloads what Pepe keeps of this account (micrec.earlierHolder)
+    {
+      const gone = new Map();
+      for (const w of await loginWindowsOf(uid, login, t)) gone.set(w.login, Math.max(gone.get(w.login) || 0, Number(w.to) || t));
+      for (const l of cfLogins) if (!gone.has(l)) gone.set(l, t);
+      n("login_markers", await require("./micrec").noteLoginsGone([...gone].map(([l, at]) => ({ login: l, at }))));
+    }
     // (their DM pictures go with the deleted messages: dmmedia.sweep purges the files after its grace period)
     // 4. clips they made / of them
     n("clips_removed", await run("media", ["by_user_id", "deleted"], "UPDATE media SET deleted = 1 WHERE by_user_id = ? OR (? IS NOT NULL AND lower(subject_login) = ?)", [uid, login, login]));
@@ -686,7 +715,9 @@ async function execute(userId, { force = false } = {}) {
       const all = recWindows;
       recWindows = MR.askable(all);
       report.recordings = { logins: all.length, queued: await MR.queueRecDeletes(uid, pseudo, recWindows, t), skipped: all.length - recWindows.length };
-      if (report.recordings.skipped) console.error(`[acctdel] ${pseudo}: ${report.recordings.skipped} Camfrog login(s) another account held before - their recordings were NOT asked to be deleted (by hand, privacy@)`);
+      // review: the skipped spans are kept (admins only, bounded - micrec.retryRecDeletes / skippedHandled) so someone can act on them
+      recSkipped = all.filter((w) => !recWindows.includes(w)).map((w) => ({ login: w.login, from: w.from, to: w.to }));
+      if (report.recordings.skipped) console.error(`[acctdel] ${pseudo}: ${report.recordings.skipped} Camfrog login(s) another account held before - their recordings were NOT asked to be deleted (by hand: /admin/bridge#micrec)`);
     }
     // 8. the users row: a pseudonymous tombstone (the ledger's rows still point at it; nobody can sign in to it)
     const set = { username: pseudo, displayname: "Deleted user", email: null, password: randomHash, avatar: "/public/img/avatar.png", class: "pleb",
@@ -717,10 +748,11 @@ async function execute(userId, { force = false } = {}) {
     //     account's - public_windows (loginWindowsOf). NULLed by removePublicNow.)
     const rp = Number(reqRow.remove_public) === 1;
     await runQuery(`UPDATE account_deletions SET state = 'done', done_at = ?, pseudonym = ?, report = ?, held_reason = NULL, public_login = NULL,
-                    public_windows = ?, rec_windows = ?, rec_done_at = ? WHERE id = ?`,
+                    public_windows = ?, rec_windows = ?, rec_done_at = ?, rec_skipped = ? WHERE id = ?`,
                    [t, pseudo, JSON.stringify(report).slice(0, 20000), rp && pubWindows && pubWindows.length ? JSON.stringify(pubWindows) : null,
                     recWindows && recWindows.length ? JSON.stringify(recWindows) : null,
                     recWindows && !recWindows.length ? t : null,                    // (no login Pepe can be asked about: done - report.recordings says why)
+                    recSkipped && recSkipped.length ? JSON.stringify(recSkipped) : null,
                     reqRow.id]);
     await require("./huboutbox").emit("privacy/account-deleted", "acct:" + uid,
       hubRow({ id: reqRow.id, user_id: uid, pseudonym: pseudo, done_at: t, remove_public: reqRow.remove_public }), { dedupe: "acctdel:" + reqRow.id });
@@ -973,4 +1005,5 @@ module.exports = { hubRow, init, register, blockers, request, schedule, cancelOn
                    removeOffered, removeWaitUntil, privacyCopy, retryRemovePublic, REMOVE_EVERY_MS,      // S1 V4
                    loginWindowsOf,                                                                        // S1 V4 review 2
                    recordingsOffered, hadLogin,                                                           // mic retention
+                   verifyPassword,                                                                        // review: the export's step-up
                    _setClock: (f) => { clock = f || (() => Date.now()); } };

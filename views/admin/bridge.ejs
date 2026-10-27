@@ -125,7 +125,7 @@
     the owner sync's keep block, deletions of recordings, exports with Pepe's part %>
 <section class="adm-card" id="micrec" aria-labelledby="mrT">
   <h2 id="mrT">Mic recordings <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Pepe records every mic-up he hears and deletes the recordings by the pad's tier (each tier a pad loses keeps its windows 30 more days; a legal hold or an open report keeps them longer). The <b>policy switch</b> ships off: while it's off the privacy policy and the account pages read as before. Turn it on only after the owner has approved the policy text and that text is live, and after Pepe's split rule is on (<code>!retention split on confirm</code>: the switch refuses before) - the privacy page then names mic recordings in "How long" (and is dated that day), account deletion offers <i>Also delete my mic recordings</i>, Download my data offers <i>Mic recordings</i>, and Pepe is told. (/premium always shows the windows Pepe reports.) The keep block is what every owner sync sends Pepe: rooms in a tier's grace, legal holds and open reports on 🎙 lines. Pepe deletes no audio while it's missing, incomplete or more than an hour old.</p>
+  <p class="adm-help">Pepe records every mic-up he hears and deletes the recordings by the pad's tier (each tier a pad loses keeps its windows 30 more days; a legal hold or an open report keeps them longer). The <b>policy switch</b> ships off: while it's off the privacy policy and the account pages read as before. Turn it on only after the owner has approved the policy text and that text is live, and after Pepe's split rule is on (<code>!retention split on confirm</code>: the switch refuses before) - the privacy page then names mic recordings in "How long" (and is dated that day), account deletion offers <i>Also delete my mic recordings</i>, Download my data offers <i>Mic recordings</i>, /premium names the recordings windows, and Pepe is told. (While it's off and Pepe's split rule is on, /premium names chat logs and mic transcripts only.) The owner also decides, with the text, what a recordings download holds in rooms with more than one mic (ops plan 8.11). The keep block is what every owner sync sends Pepe: rooms in a tier's grace, legal holds and open reports on 🎙 lines. Pepe deletes no audio while it's missing, incomplete or more than an hour old.</p>
   <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
   <p class="adm-help" id="mrSummary" role="status">Loading…</p>
   <div class="adm-tbl"><table aria-label="Mic recordings switch">
@@ -137,8 +137,8 @@
   <p class="adm-help" id="mrExports"></p>
   <h3>Account deletions with "Also delete my mic recordings"</h3>
   <div class="adm-tbl"><table aria-label="Deletions of mic recordings">
-    <thead><tr><th>Request</th><th>Account</th><th>State</th><th>Deleted (UTC)</th><th>Pepe confirmed (UTC)</th></tr></thead>
-    <tbody id="mrDels"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    <thead><tr><th>Request</th><th>Account</th><th>State</th><th>Deleted (UTC)</th><th>Pepe ran it (UTC)</th><th>Not asked - by hand</th></tr></thead>
+    <tbody id="mrDels"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
   </table></div>
   <div class="adm-actions"><span id="mrMsg" class="adm-msg" role="status"></span></div>
   <% } %>
@@ -173,8 +173,8 @@
     var cell = document.createElement('td'), b = document.createElement('button');
     b.type = 'button'; b.textContent = c.on ? 'Turn off' : 'Turn on';
     b.addEventListener('click', function () {
-      if (!c.on && !window.confirm('Only after the owner approved the mic recordings policy text and it is live. The privacy page changes now (dated today if this is the first time), and the account options appear. Turn it on?')) return;
-      if (c.on && !window.confirm('Turn the mic recordings policy off? The privacy page, /premium and the account options go back to the old text.')) return;
+      if (!c.on && !window.confirm('Only after the owner approved the mic recordings policy text (with the multi-mic decision, ops plan 8.11) and it is live. The privacy page and /premium change now (the privacy page dated today if this is the first time), and the account options appear. Turn it on?')) return;
+      if (c.on && !window.confirm('Turn the mic recordings policy off? The privacy page and the account options go back to how they read before, and /premium stops naming the recordings windows (chat logs and mic transcripts only, while Pepe\'s split rule is on).')) return;
       b.disabled = true;
       req('/api/admin/micrec/switch', { name: 'policy', on: !c.on }).then(function () { say('Switched ' + (c.on ? 'off' : 'on') + '.', true); load(); })
         .catch(function (e) { b.disabled = false; say(e.message, false); });
@@ -187,18 +187,31 @@
       ' · chat - no tier ' + days(w.chat_days) + ', 📺 ' + days(w.chat_prime) + ', 💎 ' + days(w.chat_plus);
     keep.textContent = k ? 'Keep block (built ' + when(k.at) + ' UTC' + (k.complete ? '' : ', INCOMPLETE: Pepe deletes no audio') + '): ' + k.grace_rooms +
       ' room(s) in a tier\'s grace, ' + k.held_rooms + ' room(s) and ' + k.held_people + ' person(s) on a legal hold, ' + k.reported_lines + ' reported 🎙 line(s).' : 'Keep block: not built yet.';
-    exps.textContent = x ? 'Download my data: ' + x.waiting + ' waiting for Pepe\'s part, ' + x.rec_inflight + ' of ' + x.rec_jobs_max + ' recordings exports in flight, ' +
+    exps.textContent = x ? 'Download my data: ' + x.waiting + ' waiting for Pepe\'s part (at most ' + x.pepe_jobs_max + ' asked at once), ' + (x.held || 0) + ' waiting their turn, ' + x.rec_inflight + ' of ' + x.rec_jobs_max + ' recordings exports in flight, ' +
       size(x.rec_ready_bytes) + ' of recordings exports ready (' + size(x.rec_disk_max) + ' budget), ' + x.gave_up_7d + ' finished without Pepe in 7 days.' : '';
     dels.textContent = '';
     (dl.rows || []).forEach(function (r) {
       var row = document.createElement('tr');
       [r.id, r.pseudonym || '(not deleted yet)', r.state, when(r.done_at),
-       (r.rec_done_at ? when(r.rec_done_at) : r.rec_gave_up_at ? 'NOT CONFIRMED (gave up ' + when(r.rec_gave_up_at) + ')' : r.state === 'done' ? 'waiting' : '') +
-       (r.skipped ? ' · ' + r.skipped + ' of ' + r.logins + ' login(s) NOT asked (another account held them before - by hand)' : '')]
+       r.rec_done_at ? when(r.rec_done_at) : r.rec_gave_up_at ? 'NOT RUN (gave up ' + when(r.rec_gave_up_at) + ')' : r.state === 'done' ? 'waiting for his follow-up' : '']
         .forEach(function (v) { row.appendChild(td(v)); });
+      // review: a login another account held before isn't asked of Pepe (he'd delete that holder's recordings too) - shown here WITH its
+      // login and span (admins only) until it's marked handled, or 30 days after the deletion
+      var sk = document.createElement('td');
+      if (r.skipped_spans && r.skipped_spans.length) {
+        sk.appendChild(document.createTextNode(r.skipped_spans.map(function (w) { return w.login + ' (theirs ' + (w.from ? 'after ' + when(w.from) : 'from the start') + ' to ' + when(w.to) + ' UTC)'; }).join('; ') + ' '));
+        var hb = document.createElement('button'); hb.type = 'button'; hb.textContent = 'Mark handled';
+        hb.addEventListener('click', function () {
+          if (!window.confirm('Their recordings in those spans were deleted by hand (or there was nothing to delete)? The logins leave this row.')) return;
+          hb.disabled = true;
+          req('/api/admin/micrec/skipped', { id: r.id }).then(function () { say('Marked handled.', true); load(); }).catch(function (e) { hb.disabled = false; say(e.message, false); });
+        });
+        sk.appendChild(hb);
+      } else if (r.skipped) sk.textContent = r.skipped + ' of ' + r.logins + (r.skipped_done_at ? ' - handled ' + when(r.skipped_done_at) : ' - the logins are gone (30 days)');
+      row.appendChild(sk);
       dels.appendChild(row);
     });
-    if (!(dl.rows || []).length) { var e = document.createElement('tr'), c2 = td('None yet.'); c2.colSpan = 5; c2.className = 'empty'; e.appendChild(c2); dels.appendChild(e); }
+    if (!(dl.rows || []).length) { var e = document.createElement('tr'), c2 = td('None yet.'); c2.colSpan = 6; c2.className = 'empty'; e.appendChild(c2); dels.appendChild(e); }
   }
   function load() { return req('/api/admin/micrec').then(render).catch(function (e) { sum.textContent = e.message; }); }
   load();

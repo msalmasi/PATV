@@ -1,6 +1,6 @@
 // account-delete.js - /settings/account/delete (accountdelete.js: POST /api/account/delete {password?, confirm, hide_lines?,
 // remove_public?, delete_recordings?}). 1.99wj; CL6: hide_lines; S1 V4: remove_public (the checkbox exists only while it is offered); mic
-// retention: delete_recordings (likewise).
+// retention: delete_recordings (likewise; review: said back in the confirm and the answer).
 (function () {
   'use strict';
   var f = document.getElementById('delForm');
@@ -18,7 +18,9 @@
   f.addEventListener('submit', function (e) {
     e.preventDefault();
     if (btn.disabled) return;
-    if (!window.confirm(_t('js.acctdel.sure', 'Delete your account? Every device is signed out now; signing in again in the next 14 days cancels it.'))) return;
+    if (!window.confirm(_t('js.acctdel.sure', 'Delete your account? Every device is signed out now; signing in again in the next 14 days cancels it.') +
+                        // review: the irreversible choice said back before it's sent
+                        (rec && rec.checked ? ' ' + _t('js.acctdel.sure_rec', 'Your mic recordings will be deleted too - that can’t be undone.') : ''))) return;
     btn.disabled = true;
     say(_t('js.acctdel.working', 'Scheduling…'));
     var body = { confirm: c.value.trim(), password: pw ? pw.value : '', hide_lines: !!(hl && hl.checked) };   // CL6: unticked by default
@@ -31,7 +33,14 @@
         if (j && j.ok) {
           var d = new Date(Number(j.execute_at)).toISOString().slice(0, 10);
           f.remove();
-          say(_t('js.acctdel.done', 'Done. Your account will be deleted on {date}, and every device is signed out. Sign in again before then to cancel.').replace('{date}', d));
+          var msg = _t('js.acctdel.done', 'Done. Your account will be deleted on {date}, and every device is signed out. Sign in again before then to cancel.').replace('{date}', d);
+          // review: what the deletion will do with the mic recordings, said back (the inbox notice can't be read: signing in cancels it)
+          if (j.delete_recordings) {
+            msg += ' ' + _t('js.acctdel.done_rec', 'Your mic recordings will be deleted with it.');
+            var hand = Number(j.recordings && j.recordings.by_hand) || 0;
+            if (hand > 0) msg += ' ' + _t('js.acctdel.done_rec_hand', '{n} of your Camfrog names were linked to another PATV account before you, so our team deletes your recordings under them by hand.').replace('{n}', String(hand));
+          }
+          say(msg);
           return;
         }
         btn.disabled = false;

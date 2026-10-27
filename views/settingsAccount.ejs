@@ -234,8 +234,17 @@
         <label class="exp-ck"><input type="checkbox" id="expRec" aria-describedby="expRecH"> <%- t('settings.data.recordings') %></label>
         <span class="hint" id="expRecH"></span>
         <label class="hint exp-before" id="expBeforeL" hidden><%- t('settings.data.rec_before') %> <input type="date" id="expBefore"></label>
+        <p class="hint" id="expBeforeNote" hidden><%- t('settings.data.rec_before_note') %></p>
       </div>
       <p class="hint" id="expPepeOff" hidden><%- t('settings.data.pepe_off') %></p>
+      <%# review: Pepe's part covers the current Camfrog name only; none when another PATV account held that name before (accountexport
+          loginShared); it needs a password or a sign-in in the last 10 minutes (the deletion flow's re-authentication) %>
+      <p class="hint" id="expScope" hidden><%- t('settings.data.pepe_scope') %></p>
+      <p class="hint" id="expShared" hidden><%- t('settings.data.pepe_shared') %></p>
+      <div id="expPwRow" hidden>
+        <label class="hint exp-before" id="expPwL"><%- t('settings.data.reauth') %> <input type="password" id="expPw" autocomplete="current-password"></label>
+        <p class="hint" id="expReauthSso" hidden><%- t('settings.data.reauth_sso') %></p>
+      </div>
     </fieldset>
     <div class="dev-acts"><button type="button" class="btn primary" id="expBtn"><%- t('settings.data.download') %></button></div>
     <span class="status" id="expStatus" role="status" aria-live="polite"></span>

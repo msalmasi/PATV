@@ -97,15 +97,36 @@
   var xChat = document.getElementById('expChat'), xTx = document.getElementById('expTx'), xMem = document.getElementById('expMem'), xRec = document.getElementById('expRec');
   var xMemRow = document.getElementById('expMemRow'), xRecRow = document.getElementById('expRecRow'), xRecH = document.getElementById('expRecH');
   var xBeforeL = document.getElementById('expBeforeL'), xBefore = document.getElementById('expBefore'), xOff = document.getElementById('expPepeOff');
-  var OFFER = null;
-  function showOffer(o) {
+  // review: his part covers the current Camfrog name only (expScope); none at all when another account held it (expShared); a date
+  // limits HIS part to the older recordings (expBeforeNote); his part needs a password or a sign-in in the last 10 minutes (expPwRow)
+  var xScope = document.getElementById('expScope'), xShared = document.getElementById('expShared'), xBeforeNote = document.getElementById('expBeforeNote');
+  var xPwRow = document.getElementById('expPwRow'), xPw = document.getElementById('expPw'), xPwL = document.getElementById('expPwL'), xSso = document.getElementById('expReauthSso');
+  var OFFER = null, REAUTH = { fresh: true, password: true };
+  function showOffer(o, ra) {
     OFFER = o || { pepe: false, recordings: false };
+    if (ra) REAUTH = ra;
     if (xMemRow) xMemRow.hidden = !OFFER.pepe;
     if (xRecRow) xRecRow.hidden = !OFFER.recordings;
-    if (xOff) xOff.hidden = !!OFFER.pepe;
-    if (xRecH) xRecH.textContent = _t('js.acct.exp_rec_meta', 'The sound of your mic-ups. They can be big: one download holds up to {mb} MB of them, newest first.', { mb: OFFER.rec_max_mb || 512 });
+    if (xOff) xOff.hidden = !!OFFER.pepe || !!OFFER.login_shared;
+    if (xShared) xShared.hidden = !OFFER.login_shared;
+    if (xScope) xScope.hidden = !OFFER.pepe;
+    if (xRecH) xRecH.textContent = _t('js.acct.exp_rec_meta', 'The sound of the room while you held the mic - in a room with more than one mic, people on the mic at the same time can be heard too. They can be big: one download holds up to {mb} MB of them, newest first.', { mb: OFFER.rec_max_mb || 256 });
+    sync();
   }
-  if (xRec && xBeforeL) xRec.addEventListener('change', function () { xBeforeL.hidden = !xRec.checked; });
+  /** Will this download carry Pepe's part (the site asks him)? */
+  function withPepe() {
+    if (!OFFER || !OFFER.pepe) return false;
+    return !!((xChat && xChat.checked) || (xTx && xTx.checked) || (xMem && xMem.checked) || (OFFER.recordings && xRec && xRec.checked));
+  }
+  function sync() {
+    if (xBeforeL && xRec) xBeforeL.hidden = !xRec.checked;
+    if (xBeforeNote) xBeforeNote.hidden = !(xRec && xRec.checked && xBefore && xBefore.value);
+    var need = withPepe() && !REAUTH.fresh;
+    if (xPwRow) xPwRow.hidden = !need;
+    if (xPwL) xPwL.hidden = !REAUTH.password;
+    if (xSso) xSso.hidden = !!REAUTH.password;
+  }
+  [xChat, xTx, xMem, xRec, xBefore].forEach(function (x) { if (x) { x.addEventListener('change', sync); x.addEventListener('input', sync); } });
   function partsBody() {
     var p = { chat: !!(xChat && xChat.checked), transcripts: !!(xTx && xTx.checked) };
     if (OFFER && OFFER.pepe) p.memories = !!(xMem && xMem.checked);
@@ -113,12 +134,15 @@
       p.recordings = !!(xRec && xRec.checked);
       if (p.recordings && xBefore && xBefore.value) { var d = Date.parse(xBefore.value + 'T00:00:00Z'); if (d > 0) p.rec_before = d; }
     }
-    return { parts: p };
+    var b = { parts: p };
+    if (xPw && xPwRow && !xPwRow.hidden && xPw.value) b.password = xPw.value;
+    return b;
   }
+  function dayOf(ms) { try { return new Date(Number(ms)).toISOString().slice(0, 10); } catch (e) { return ''; } }
   function exports_() {
     if (!el) return;
     fetch('/api/account/export', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-      if (OFFER === null || (j && j.offer)) showOffer(j && j.offer);
+      if (OFFER === null || (j && j.offer)) showOffer(j && j.offer, j && j.reauth);
       el.textContent = '';
       var busy = false;
       ((j && j.exports) || []).forEach(function (x) {
@@ -132,10 +156,10 @@
           a.textContent = _t('js.acct.exp_download', 'Download (until {date})', { date: when(x.expires) });
           li.appendChild(a);
           // mic retention: older recordings that didn't fit - the next request can start where this one stopped
-          if (x.next_before) {
-            var day = new Date(Number(x.next_before)).toISOString().slice(0, 10);
+          var day = x.next_before ? dayOf(x.next_before) : '';
+          if (day) {
             li.appendChild(document.createTextNode(' · ' + _t('js.acct.exp_next_before', 'Older recordings didn’t fit - ask again with “Only recordings before” {date}.', { date: day })));
-            if (xBefore && !xBefore.value) xBefore.value = day;
+            if (xBefore && !xBefore.value) { xBefore.value = day; sync(); }
           }
         }
         el.appendChild(li);
@@ -146,8 +170,10 @@
   if (eb) eb.addEventListener('click', function () {
     eb.disabled = true;
     post('/api/account/export', partsBody()).then(function (j) {
-      if (j && j.ok) { esay(_t('js.acct.exp_started', "We're preparing your data. You'll get a notice when it's ready.")); exports_(); return; }
+      if (j && j.ok) { if (xPw) xPw.value = ''; esay(_t('js.acct.exp_started', "We're preparing your data. You'll get a notice when it's ready.")); exports_(); return; }
       eb.disabled = false;
+      if (j && j.code === 'E_REAUTH') { REAUTH.fresh = false; sync(); esay(_t('js.acct.exp_reauth', 'Pepe’s part needs you to confirm it’s you: enter your password, or sign out and back in and ask within 10 minutes.'), true); if (xPw && xPwL && !xPwL.hidden) xPw.focus(); return; }
+      if (j && j.code === 'E_REAUTH_LIMIT') { esay(_t('js.acct.exp_reauth_limit', 'Too many wrong passwords - try again in 15 minutes, or sign out and back in.'), true); return; }
       if (j && j.code === 'E_RATE') esay(_t('js.acct.exp_rate', 'One export a day - try again after {when}.', { when: when(j.retry_at) }), true);
       else if (j && j.code === 'E_REC_OFF') { esay(_t('js.acct.exp_rec_off', 'Mic recordings can’t be included right now - untick them or reload the page.'), true); exports_(); }
       else if (j && j.code === 'E_PEPE_OFF') { esay(_t('js.acct.exp_pepe_off', 'Pepe can’t add his part right now - untick it or try again later.'), true); exports_(); }

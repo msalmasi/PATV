@@ -309,6 +309,109 @@ test("account deletion: never confirmed -> given up after 30 days (the admin car
   assert.match(js, /body\.delete_recordings = !!rec\.checked/);
 });
 
+test("review: a merged-away account is the same holder; skipped spans kept for the admins (login + span) until handled or 30 days; markers; the choice said back", async () => {
+  await setup();
+  const t0 = clockAt;
+  // an account merged INTO del4 had its login first: that's del4's own history, not "another account"
+  await user("del4", { cf: "MergeCf" });
+  await runQuery("INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES ('del4-old', 'prevcf', 'mergecf', 'prevcf', 'mergecf', ?, 'relink')", [t0 - 60 * DAY]);
+  await runQuery("INSERT INTO account_merges (old_id, new_id, merged_at, via) VALUES ('del4-old', 'del4', ?, 'test')", [t0 - 30 * DAY]);
+  const w = await M.recWindowsOf("del4", "mergecf", t0);
+  assert.deepEqual(w.map((x) => [x.login, x.from]), [["mergecf", 0]]);
+  assert.equal(M.askable(w).length, 1, "asked of Pepe - not skipped");
+  // the choice is said back: the answer (the page shows it) and the notice
+  const s = await D.schedule({ userId: "del4", username: "del4" }, { by: "self", reauth: "password", deleteRecordings: true });
+  assert.deepEqual([s.delete_recordings, s.recordings], [true, { logins: 1, by_hand: 0 }]);
+  const note = (await getQuery("SELECT body FROM inbox WHERE user_id = 'del4' ORDER BY id DESC LIMIT 1"))[0];
+  assert.match(note.body, /mic recordings will be deleted with it/);
+  const r = await D.execute("del4", { force: true });
+  assert.deepEqual(r.report.recordings, { logins: 1, queued: 1, skipped: 0 });
+  // the markers: keyed, no name - a later holder of "mergecf" (or "prevcf") is seen as one with an earlier holder
+  assert.ok(r.report.login_markers >= 1);
+  const marks = await getQuery("SELECT h FROM micrec_login_gone");
+  assert.ok(marks.every((m) => /^[0-9a-f]{32}$/.test(m.h)));
+  assert.ok(!JSON.stringify(marks).includes("mergecf"));
+  await user("newholder", { cf: "MergeCf" });
+  assert.equal(await M.earlierHolder("newholder", "mergecf"), true, "the deleted account's marker");
+  await user("freshholder", { cf: "NeverSeen" });
+  assert.equal(await M.earlierHolder("freshholder", "neverseen"), false);
+  // a login another account held before is skipped (Pepe would delete that holder's recordings too): its login and span are kept
+  // for the admins to act on
+  await user("del7", { cf: "SharedMic" });
+  await runQuery("INSERT INTO username_history (userId, old_username, new_username, at, via, kind) VALUES ('someone', 'sharedmic', NULL, ?, 'unlink', 'camfrog')", [t0 - 20 * DAY]);
+  const s7 = await D.schedule({ userId: "del7", username: "del7" }, { by: "self", reauth: "password", deleteRecordings: true });
+  assert.deepEqual(s7.recordings, { logins: 1, by_hand: 1 }, "the member is told one name is handled by hand");
+  assert.deepEqual((await D.execute("del7", { force: true })).report.recordings, { logins: 1, queued: 0, skipped: 1 });
+  const row = (await getQuery("SELECT id, rec_skipped FROM account_deletions WHERE user_id = 'del7'"))[0];
+  assert.deepEqual(JSON.parse(row.rec_skipped).map((x) => [x.login, x.from]), [["sharedmic", t0 - 20 * DAY]]);
+  const card = await (await fetch(`${base}/api/admin/micrec`, { headers: { "x-user": "boss", "x-class": "Admin" } })).json();
+  const mine = card.deletions.rows.find((x) => x.id === row.id);
+  assert.equal(mine.skipped_spans[0].login, "sharedmic", "the card shows it to act on (admins only)");
+  assert.ok(mine.skipped_spans[0].to > 0);
+  assert.equal((await fetch(`${base}/api/admin/micrec`, { headers: { "x-user": "nobody" } })).status, 403);
+  const H2 = { "x-user": "boss", "x-class": "Admin", "content-type": "application/json", origin: base, "x-requested-with": "fetch" };
+  assert.equal((await fetch(`${base}/api/admin/micrec/skipped`, { method: "POST", headers: { ...H2, "x-class": "pleb" }, body: JSON.stringify({ id: row.id }) })).status, 403);
+  assert.equal((await fetch(`${base}/api/admin/micrec/skipped`, { method: "POST", headers: { ...H2, origin: "https://evil.example" }, body: JSON.stringify({ id: row.id }) })).status, 403);
+  const done = await fetch(`${base}/api/admin/micrec/skipped`, { method: "POST", headers: H2, body: JSON.stringify({ id: row.id }) });
+  assert.equal(done.status, 200);
+  const after = (await getQuery("SELECT rec_skipped, rec_skipped_done_at FROM account_deletions WHERE id = ?", [row.id]))[0];
+  assert.deepEqual([after.rec_skipped, after.rec_skipped_done_at], [null, clockAt]);
+  assert.equal((await fetch(`${base}/api/admin/micrec/skipped`, { method: "POST", headers: H2, body: JSON.stringify({ id: row.id }) })).status, 404);
+  assert.ok((await getQuery("SELECT 1 FROM room_events WHERE what = 'micrec.skipped_done'")).length);
+  // ...or 30 days after the deletion, whoever didn't act on it
+  await runQuery("UPDATE account_deletions SET rec_skipped = '[{\"login\":\"x1\",\"from\":5,\"to\":6}]' WHERE user_id = 'del4'");
+  clockAt += M.REC_GIVE_UP_MS + 1;
+  assert.ok((await M.retryRecDeletes()).skipped_expired >= 1);
+  assert.equal((await getQuery("SELECT rec_skipped FROM account_deletions WHERE user_id = 'del4'"))[0].rec_skipped, null);
+  clockAt = t0;
+});
+
+test("review: Pepe ran it only when his FOLLOW-UP came (his first 'queued' answer just journals it); re-asked a day after a lone 'queued'; no login kept after", async () => {
+  await setup();
+  await user("del5", { cf: "FollowUp1" });
+  await D.schedule({ userId: "del5", username: "del5" }, { by: "self", reauth: "password", deleteRecordings: true });
+  assert.equal((await D.execute("del5", { force: true })).state, "done");
+  const acts = () => getQuery("SELECT id, camfrog, args, status, message, idem FROM pepe_actions WHERE kind = 'privacy.recdelete' AND user_id = 'del5' ORDER BY id");
+  // he took it and journaled it: "queued" - not run yet, not asked again within a day
+  await runQuery("UPDATE pepe_actions SET status = 'done', message = 'queued: followup1''s mic recordings are being deleted', updated = ? WHERE user_id = 'del5' AND kind = 'privacy.recdelete'", [clockAt]);
+  let r = await M.retryRecDeletes();
+  assert.deepEqual([r.done, r.asked], [0, 0]);
+  assert.equal((await getQuery("SELECT rec_done_at FROM account_deletions WHERE user_id = 'del5'"))[0].rec_done_at, null);
+  clockAt += M.REC_QUEUED_MS + 1;
+  r = await M.retryRecDeletes();
+  assert.equal(r.asked, 1, "no follow-up in a day: asked again (he merges it into the same job)");
+  // his follow-up: the deletion ran -> done; the logins leave the actions (camfrog, args, his message names the pseudonym)
+  await runQuery("UPDATE pepe_actions SET status = 'done', message = 'deleted 3 mic recording file(s) of followup1', updated = ? WHERE user_id = 'del5' AND kind = 'privacy.recdelete' AND status = 'pending'", [clockAt]);
+  r = await M.retryRecDeletes();
+  assert.equal(r.done, 1);
+  for (const a of await acts()) {
+    assert.equal(a.camfrog, null);
+    assert.ok(!/followup1/i.test(String(a.message || "")), a.message);
+  }
+  assert.match((await acts())[1].message, /^deleted 3 mic recording file\(s\) of deleted-/);
+  // a later failed follow-up of an earlier login would be asked again; a given-up deletion keeps no login either
+  await user("del6", { cf: "GiveUp1" });
+  await D.schedule({ userId: "del6", username: "del6" }, { by: "self", reauth: "password", deleteRecordings: true });
+  await D.execute("del6", { force: true });
+  await runQuery("UPDATE pepe_actions SET status = 'failed', message = 'giveup1: something broke', updated = ? WHERE user_id = 'del6' AND kind = 'privacy.recdelete'", [clockAt]);
+  clockAt += M.REC_GIVE_UP_MS + 1;
+  const err = console.error; console.error = () => {};
+  try { assert.ok((await M.retryRecDeletes()).gave_up >= 1); } finally { console.error = err; }
+  const d6 =(await getQuery("SELECT rec_windows, rec_gave_up_at FROM account_deletions WHERE user_id = 'del6'"))[0];
+  assert.equal(d6.rec_windows, null, "review: given up - the logins don't stay");
+  assert.ok(d6.rec_gave_up_at > 0);
+  const a6 = await getQuery("SELECT camfrog, message FROM pepe_actions WHERE kind = 'privacy.recdelete' AND user_id = 'del6'");
+  assert.ok(a6.every((a) => a.camfrog === null && !/giveup1/i.test(String(a.message || ""))));
+  // the page: what the deletion does, said back before and after
+  const js = fs.readFileSync(path.join(repo, "public", "js", "account-delete.js"), "utf8");
+  assert.match(js, /js\.acctdel\.sure_rec/);
+  assert.match(js, /if \(j\.delete_recordings\)/);
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.match(en["acctdel.recordings_meta"], /by hand/);
+  assert.match(en["acctdel.recordings_meta"], /before 12 October 2026/);
+  assert.match(en["acctdel.recordings_meta"], /backup copies are deleted within 7 days/);
+});
+
 test("the wiring: the bot's action kinds (TTLs, no inbox notice, no PAT), the upload routes' body parser", async () => {
   await setup();
   const TTL = require(path.join(repo, "actionttl"));
