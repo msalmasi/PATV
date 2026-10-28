@@ -94,3 +94,5 @@ html.hop-open, html.hop-open body { overflow: hidden; }
   .hop-sound, .hop-ico, .hop-rb .ic { transition: none; }
   .hop-list, .hop-media.multi { scroll-behavior: auto; }
 }
+
+html.hop-js .hop-fallback { display: none; }

@@ -385,6 +385,8 @@ test("Hop pages and where the feeds surface it: /hop, /p/<pad>/hop, /u/<user>/ho
   assert.equal(r.status, 200);
   assert.match(r.html, /id="hopInit"/); assert.match(r.html, /hop\.js\?v=\d+" data-hop-name="Hop"/);
   const init = JSON.parse(r.html.split('id="hopInit">')[1].split("</script>")[0]);
+  assert.match(r.html, /<ul class="ds-card ds-list hop-fallback">/);
+  assert.match(fs.readFileSync(path.join(repo, "public/css/hop.css"), "utf8"), /html\.hop-js \.hop-fallback/);
   assert.equal(init.scope, "all"); assert.equal(init.base, "/hop"); assert.equal(init.back, "/feed"); assert.ok(init.items.length > 0);
   r = await page("/hop?post=" + hopPosts[5].id + "&sort=new", U.alice);
   assert.equal(JSON.parse(r.html.split('id="hopInit">')[1].split("</script>")[0]).items[0].id, hopPosts[5].id, "a shared link opens that post");

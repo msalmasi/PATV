@@ -19,6 +19,7 @@
   'use strict';
   if (window.__patvHop) return;
   window.__patvHop = true;
+  document.documentElement.classList.add('hop-js');
   var me = document.currentScript;
   var NAME = (me && me.getAttribute('data-hop-name')) || 'Hop';
   var ICON = (me && me.getAttribute('data-hop-icon')) || '🐸';
@@ -375,11 +376,8 @@
     if (!H) return;
     if (H.mode === 'overlay' && H.pushed && user) { history.back(); return; }      // popstate tears it down
     if (H.mode === 'page') {
-      var back = H.back || '/feed';
-      var same = false;
-      try { same = !!document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1; } catch (e) { same = false; }
-      teardown();
-      if (same) history.back(); else location.href = back;
+      // Page navigation is not an entry this viewer pushed; forward history is no proof otherwise.
+      location.replace(H.back || '/feed');
       return;
     }
     if (H.mode === 'list' && H.listUrl) { try { history.replaceState(history.state, '', H.listUrl); } catch (e) { /* none */ } }
@@ -420,6 +418,10 @@
     var d; try { d = JSON.parse(s.textContent); } catch (e) { return; }
     open({ mode: 'page', scope: d.scope, sort: d.sort, t: d.t, items: d.items, next: d.next, start: d.post || null, base: d.base, back: d.back, label: d.label, signed: !!d.signed });
   }
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted || !document.getElementById('hopInit')) return;
+    if (!H || !document.contains(H.root)) boot(); else playCur();
+  });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
   window.patvHop = { open: open, close: function () { close(false); }, _state: function () { return H; }, name: NAME };
