@@ -451,6 +451,9 @@ const DELETE_ROWS = [
   ["telegram_links", "user_id", "uid"], ["telegram_codes", "user_id", "uid"], ["telegram_prefs", "user_id", "uid"], ["telegram_outbox", "user_id", "uid"],
   ["crypto_wallets", "user_id", "uid"], ["crypto_link_nonces", "user_id", "uid"], ["chat_signin_tokens", "user_id", "uid"], ["chat_signin_prefs", "user_id", "uid"],
   ["chat_signin_log", "user_id", "uid"], ["incognito_log", "user_id", "uid"], ["incognito_state", "login", "login"],
+  // wave 3 (design §N.4): 🧠 Pepe's memory switch - the audit and the linked login's state (the account key's row: below; Pepe's
+  // side goes with his privacy.forget action)
+  ["memory_optout_log", "user_id", "uid"], ["memory_optout_state", "login", "login"],
   ["inbox", "user_id", "uid"], ["inbox_prefs", "user_id", "uid"], ["inbox_pending", "camfrog", "login"],
   ["dm_prefs", "user_id", "uid"], ["dm_alerts", "user_id", "uid"], ["dm_blocks", "blocker_id", "uid"], ["dm_blocks", "blocked_id", "uid"], ["pepe_dm_jobs", "user_id", "uid"],
   ["mention_prefs", "user_id", "uid"], ["mention_words", "user_id", "uid"], ["follow_prefs", "user_id", "uid"], ["golive_prefs", "user_id", "uid"],
@@ -698,6 +701,8 @@ async function execute(userId, { force = false } = {}) {
     n("deleted:follows(target)", await run("follows", ["target_id", "target_kind"], "DELETE FROM follows WHERE (target_kind = 'user' AND target_id = ?) OR (target_kind = 'room' AND target_id = ?)", [uid, "user:" + uid]));
     // micfollow: the mic-stage switch - "on" (the default) is just deleted; "off" stays as a suppression record no longer tied
     // to the account, so their cam is still never put on a pad's mic stage by itself (deleting it would undo their "no")
+    //    wave 3: 🧠 Pepe's memory switch of the account key "u:<userId>" (an account without a chat login)
+    n("deleted:memory_optout_state(acct)", await run("memory_optout_state", ["login"], "DELETE FROM memory_optout_state WHERE login = ?", ["u:" + String(uid).toLowerCase()]));
     if (login) {
       n("deleted:micfollow_optout", await run("micfollow_optout", ["login", "off"], "DELETE FROM micfollow_optout WHERE login = ? AND off = 0", [login]));
       n("micfollow_optout_unlinked", await run("micfollow_optout", ["login", "user_id"], "UPDATE micfollow_optout SET user_id = NULL WHERE login = ?", [login]));

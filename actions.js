@@ -69,8 +69,9 @@ async function queue(userId, { kind, args, tag, label, idem, dedupe }) {
   // The "busy" cap is for things a user starts; internal notices (kind "notify", e.g. shop order
   // PMs) neither count towards it nor get dropped by it. 1.99acm: nor is a "Make Pepe forget me"
   // (privacy.forgetme) - a privacy request never depends on Pepe's queue having room (pepeforget.js
-  // rate-limits it to 3 a day); it still counts towards the cap for everything else.
-  if (kind !== "notify" && kind !== "privacy.forgetme") {
+  // rate-limits it to 3 a day); it still counts towards the cap for everything else. Wave 3: nor is 🧠 Pepe's memory
+  // (privacy.memory - memoryoptout.js rate-limits it to 10 an hour; forget-me queues one in its own transaction).
+  if (kind !== "notify" && kind !== "privacy.forgetme" && kind !== "privacy.memory") {
     const open = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE user_id = ? AND status IN ('pending','claimed') AND kind != 'notify'", [userId]);
     if (open[0].n >= 6) throw new Error("busy");
   }

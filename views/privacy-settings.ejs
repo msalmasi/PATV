@@ -24,12 +24,19 @@
   .pv .pv-ca-ask { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--ds-text-2); }
   .pv .pv-ca-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--ds-sp-2); }
   .pv .pv-ca-add input { flex: 1 1 200px; min-width: 0; }
+  .pv .pv-ca-add[hidden] { display: none; }                  /* wave 3: the 🧠 card's FORGET confirm until it's needed */
   .pv .pv-ca .pv-log li { align-items: center; flex-wrap: wrap; }
   .pv .pv-ca .pv-log button { margin-inline-start: 6px; }
 </style>
 <%
   const when = (ms) => ms ? (t.date ? t.date(Number(ms), { dateStyle: 'medium', timeStyle: 'short' }) : new Date(Number(ms)).toISOString()) : '';
-  const stateKey = st.on === null ? 'inc.st_unknown' : st.on ? 'inc.st_on' : 'inc.st_off';
+  // wave 3 (design §N): with a Pepe that has the 🧠 memory switch (memoryoptout.js: mem.capable) incognito is about the website only -
+  // the incognito card says so (the _v2 keys) and the Pepe's memory card shows
+  const memOn = !!(locals.mem && mem.capable);
+  const stateKey = st.on === null ? 'inc.st_unknown' : st.on ? (memOn ? 'inc.st_on_v2' : 'inc.st_on') : 'inc.st_off';
+  const memLog = (r) => r.kind === 'request' ? t(r.on ? 'mem.log_req_off' : 'mem.log_req_on')
+    : r.kind === 'refused' ? t('mem.log_refused')
+    : t((r.on ? 'mem.log_off_' : 'mem.log_on_') + (r.via === 'web' ? 'web' : r.via === 'forget' ? 'forget' : 'chat'));
   const logLine = (r) => r.kind === 'request' ? t(r.on ? 'inc.log_req_on' : 'inc.log_req_off')
     : r.kind === 'refused' ? t('inc.log_refused')
     : t(r.on ? (r.via === 'web' ? 'inc.log_on_web' : 'inc.log_on_chat') : (r.via === 'web' ? 'inc.log_off_web' : 'inc.log_off_chat'));
@@ -44,22 +51,22 @@
 
   <section class="ds-card lg" id="incognito" aria-labelledby="pvIncH"
            data-linked="<%= st.linked ? 1 : 0 %>" data-on="<%= st.on === null ? '' : st.on ? 1 : 0 %>" data-waiting="<%= st.waiting ? st.waiting.id : '' %>"
-           data-want="<%= st.waiting && st.waiting.want !== null ? (st.waiting.want ? 1 : 0) : '' %>">
+           data-want="<%= st.waiting && st.waiting.want !== null ? (st.waiting.want ? 1 : 0) : '' %>" data-mem="<%= memOn ? 1 : 0 %>">
     <h2 class="ds-h2" id="pvIncH"><span class="dot"></span>🕶️ <%- t('inc.h2') %></h2>
-    <p class="pv-why"><%- t('inc.what') %></p>
+    <p class="pv-why"><%- t(memOn ? 'inc.what_v2' : 'inc.what') %></p>
     <ul class="pv-list">
-      <li><%- t('inc.what_memory') %></li>
+      <li><%- t(memOn ? 'inc.what_memory_v2' : 'inc.what_memory') %></li>
       <%# review 2 fix-up: new keys for the owner's decision-9 change (incognito hides WHO, not WHAT) - every other language falls
           back to this English until it is translated, instead of keeping the old promise ("your chat lines aren't shown") -%>
       <li><%- t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
       <li><%- t('inc.what_media_someone') %></li>
       <%# WP-1 (design section H, approved 2026-10-28): true today - not behind any switch %>
       <li><%- t('inc.what_voice') %></li>
-      <li><%- t('inc.what_stats') %></li>
+      <li><%- t(memOn ? 'inc.what_stats_v2' : 'inc.what_stats') %></li>
       <%# mic retention (ops plan 8.8, approved 2026-10-27): only while the /admin/bridge › Mic recordings switch is on (micrec.policyOn) %>
       <% if (locals.micrecOn) { %><li><%- t('inc.what_rec') %></li><% } %>
     </ul>
-    <p class="pv-why"><%- t('inc.what_not') %></p>
+    <p class="pv-why"><%- t(memOn ? 'inc.what_not_v2' : 'inc.what_not') %></p>
 
     <% if (!st.linked) { %>
       <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('inc.unlinked') %></div></div>
@@ -83,6 +90,44 @@
     <% } %>
   </section>
 
+  <% if (memOn) { const M = mem; const mKey = M.on === null ? 'mem.st_unknown' : M.on ? (M.since ? 'mem.st_off_since' : 'mem.st_off') : 'mem.st_on'; %>
+  <%# wave 3 (design §N.3 / §N.8 card text, owner-approved 2026-10-28): 🧠 Pepe's memory (memoryoptout.js) - only while Pepe's latest
+      report has the switch. The switch shows REMEMBERING: checked = Pepe remembers (wire on: false); unchecked = "don't remember me"
+      (memory_optout on). Turning it off with "Also forget what Pepe already knows about me" ticked runs Make Pepe forget me (its FORGET
+      confirm; pepeforget keep_off queues the switch with it). Client: public/js/privacy-memory.js %>
+  <section class="ds-card lg" id="memory" aria-labelledby="pvMemH"
+           data-linked="<%= M.linked ? 1 : 0 %>" data-on="<%= M.on === null ? '' : M.on ? 1 : 0 %>" data-waiting="<%= M.waiting ? M.waiting.id : '' %>"
+           data-want="<%= M.waiting && M.waiting.want !== null ? (M.waiting.want ? 1 : 0) : '' %>">
+    <h2 class="ds-h2" id="pvMemH"><span class="dot"></span>🧠 <%- t('mem.h2') %></h2>
+    <p class="pv-why"><%- t('mem.what') %></p>
+    <% if (!M.linked) { %>
+      <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('mem.unlinked') %></div></div>
+      <div class="ds-ctas"><a class="ds-btn" href="/u/<%= encodeURIComponent(user) %>/edit#camfrogDiv"><%- t('inc.link_btn') %></a></div>
+    <% } else { %>
+      <div class="pv-set<%= M.waiting ? ' pending' : '' %>" id="pvMemRow">
+        <div><b><%- t('mem.switch') %></b><p class="ds-meta"><%- t('mem.where') %> · <%- M.account ? t('inc.identity_account', { name: M.name || '' }) : t('inc.identity', { login: M.login }) %></p></div>
+        <label class="ds-switch"><input type="checkbox" id="pvMem" <%= M.on ? '' : 'checked' %> <%= M.waiting ? 'disabled' : '' %> aria-label="<%- t('mem.switch') %>"><span></span></label>
+      </div>
+      <label class="pv-ca-ask"><input type="checkbox" id="pvMemForget" aria-describedby="pvMemForgetHint"> <%- t('mem.forget') %></label>
+      <p class="ds-meta" id="pvMemForgetHint"><%- t('mem.forget_meta') %></p>
+      <form class="pv-ca-add" id="pvMemPf" hidden>
+        <input type="text" name="confirm" maxlength="10" autocomplete="off" placeholder="<%- t('pf.type') %>" aria-label="<%- t('pf.type') %>">
+        <button type="submit" class="ds-btn danger"><%- t('mem.forget_go') %></button>
+      </form>
+      <p class="pv-st<%= M.waiting ? ' wait' : M.failed ? ' bad' : '' %>" id="pvMemSt" role="status" aria-live="polite"><%- M.waiting ? t('inc.waiting') : M.failed ? t('mem.failed') : t(mKey, { when: when(M.since) }) %></p>
+      <p class="ds-meta" id="pvMemRep"><%- M.reported ? t('inc.reported', { when: when(M.reported) }) : t('inc.not_reported') %></p>
+    <% } %>
+    <p class="ds-meta"><%- t('mem.chat') %></p>
+    <% if (M.log && M.log.length) { %>
+    <details><summary class="ds-meta"><%- t('inc.log_h') %></summary>
+      <ul class="pv-log">
+        <% M.log.forEach((r) => { %><li><span><%- memLog(r) %></span><span><%= when(r.at) %></span></li><% }) %>
+      </ul>
+    </details>
+    <% } %>
+  </section>
+  <% } %>
+
   <%# 1.99aat (pepeforget.js): 🧠 Pepe forgets you + your private conversations with him. Client: privacy-forget.js %>
   <section class="ds-card lg" id="forget" aria-labelledby="pvPfH">
     <h2 class="ds-h2" id="pvPfH"><span class="dot"></span>🧠 <%- t('pf.h2') %></h2>
@@ -94,11 +139,14 @@
       <% if (locals.micrecOn) { %><li><%- t('pf.what_not_rec') %></li><% } %>
       <%# CL13 fix-up: `!msg` copies (an admin's messages, not a conversation with Pepe) stay - spec §3.10 %>
       <li><%- t('pf.what_msg') %></li>
-      <li><%- t('pf.what_again') %></li>
+      <li><%- t(memOn ? 'pf.what_again_mem' : 'pf.what_again') %></li>
     </ul>
     <%# CL6 (decision 14): unticked by default - hides the past pad chat lines too (chatlog.js sticky hidden set, src forget) %>
     <label class="pv-ca-ask"><input type="checkbox" id="pvPfLines" aria-describedby="pvPfLinesHint"> <%- t('pf.hide_lines') %></label>
     <p class="ds-meta" id="pvPfLinesHint"><%- t('pf.hide_lines_meta') %></p>
+    <%# wave 3 (design §N.4): "Keep it that way - don't remember me from now on", ticked by default (keep_off: Pepe's memory switch is queued
+        with the forget) - only while Pepe has the switch and the member has a chat identity %>
+    <% if (memOn && mem.linked) { %><label class="pv-ca-ask"><input type="checkbox" id="pvPfKeep" checked> <%- t('pf.keep_off') %></label><% } %>
     <form class="pv-ca-add" id="pvPf">
       <input type="text" name="confirm" maxlength="10" autocomplete="off" placeholder="<%- t('pf.type') %>" aria-label="<%- t('pf.type') %>">
       <button type="submit" class="ds-btn danger"><%- t('pf.go') %></button>
@@ -270,10 +318,11 @@
     </nav>
   </section>
 </main>
-<script src="/public/js/privacy-settings.js?v=1" defer></script>
+<script src="/public/js/privacy-settings.js?v=2" defer></script>
 <script src="/public/js/privacy-livecam.js?v=6" defer></script>
 <script src="/public/js/privacy-camaccess.js?v=1" defer></script>
-<script src="/public/js/privacy-forget.js?v=2" defer></script>
+<script src="/public/js/privacy-forget.js?v=3" defer></script>
+<script src="/public/js/privacy-memory.js?v=1" defer></script>
 <script src="/public/js/privacy-camviewers.js?v=2" defer></script>
 <script src="/public/js/privacy-stage.js?v=3" defer></script>
 <script src="/public/js/privacy-ghost.js?v=1" defer></script>

@@ -1263,6 +1263,7 @@ require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/adm
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
 require("./likeness").register(app, { addUser, isBotToken });   // 1.99qw: likeness royalties (subject cuts, held + released daily) + opt-outs (/settings/likeness)
 require("./incognito").register(app, { addUser, isBotToken });   // 1.99wa: Settings → Privacy - !incognito from the website (Pepe applies it, reports the state back)
+require("./memoryoptout").register(app, { addUser });   // wave 3 (design §N): 🧠 Pepe's memory - "don't remember me" from the website (Pepe's report rides incognito's sync)
 require("./soundboards").register(app, { addUser, isBotToken });   // 1.99rh: 🔊 soundboards (packs, season board, legendaries, pad boards, the drawer, /soundboards)
 require("./voicestore").register(app, { addUser, isBotToken });   // 1.99rh: 🗣️ the voice store (/voices, /voices/mine) - Pepe is a client
 require("./voiceclone").register(app, { addUser, isBotToken });   // 1.99ri: 🎙️ !clonemyvoice - consent, recording checks, review, revocation (/voices/clone)

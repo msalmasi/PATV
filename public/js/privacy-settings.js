@@ -12,10 +12,12 @@
   var rep = document.getElementById('pvRep');
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var want = null, polls = 0, timer = null;
+  // wave 3 (design §N): with a Pepe that has the 🧠 memory switch, incognito is about the website only (data-mem)
+  var memOn = card.getAttribute('data-mem') === '1';
   function say(text, kind) { st.textContent = text || ''; st.className = 'pv-st' + (kind ? ' ' + kind : ''); }
   function stateText(on) {
     return on === null ? _t('js.inc.st_unknown', 'Pepe hasn\'t reported your incognito yet.')
-      : on ? _t('js.inc.st_on', 'Incognito is ON - Pepe isn\'t remembering what you say.')
+      : on ? (memOn ? _t('js.inc.st_on_v2', 'Incognito is ON - the website hides who you are.') : _t('js.inc.st_on', 'Incognito is ON - Pepe isn\'t remembering what you say.'))
       : _t('js.inc.st_off', 'Incognito is OFF.');
   }
   function busy(on) { box.disabled = !!on; if (row) row.classList.toggle('pending', !!on); }

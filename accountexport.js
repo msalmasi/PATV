@@ -309,6 +309,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("security", "sessions", rows("sessions", "user_id = ?", [uid], { omit: ["id", "device_key", "legacy_key"] }));
   await put("security", "chat_sign_ins", rows("chat_signin_log", "user_id = ?", [uid]));
   await put("security", "incognito_log", rows("incognito_log", "user_id = ?", [uid]));
+  await put("security", "pepe_memory_log", rows("memory_optout_log", "user_id = ?", [uid]));   // wave 3: 🧠 Pepe's memory (memoryoptout.js)
   // chat data keyed to the account or the Camfrog login
   if (login) {
     try {
@@ -318,6 +319,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
     await put("chat", "room_participation", rows("econ_participation", "login = ?", [login]));
     await put("chat", "clips_of_you", rows("media", "lower(subject_login) = ?", [login], { omit: ["file"] }));
     await put("chat", "incognito", rows("incognito_state", "login = ?", [login]));
+    await put("chat", "pepe_memory", rows("memory_optout_state", "login = ?", [login]));     // wave 3: 🧠 the "don't remember me" switch as Pepe reported it
     await put("chat", "stage_leave", rows("stage_leave", "login = ?", [login]));     // stagefix site: the pads keeping your cam off their Stage
     // stagefix final round (stagepin.js): your level for pads' Stages, the pads you said yes / no to, the asks sent to you
     await put("chat", "stage_level", rows("stage_level", "login = ?", [login]));

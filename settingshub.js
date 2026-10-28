@@ -98,8 +98,15 @@ async function hub(user, ctx = {}) {
   // 1.99yh: 📡 live cam - may members watch your cam live (livecam.js; its home is /settings/privacy#livecam)
   const lc = await safe(() => require("./livecam").optoutState(uid));
   const lcSt = !lc ? null : !lc.linked ? st("not_linked") : lc.off ? st("off") : st("on", null, "ok");
+  // wave 3 (design §N): 🧠 Pepe's memory (memoryoptout.js; its home is /settings/privacy#memory) - only while Pepe's latest report has
+  // the switch; then incognito's line says it is about the website only. State: On = Pepe remembers (the default), Off = "don't
+  // remember me"
+  const mem = await safe(() => require("./memoryoptout").stateOf(uid));
+  const memOn = !!(mem && mem.capable);
+  const memSt = !memOn ? null : !mem.linked ? st("not_linked") : mem.waiting ? st("waiting") : mem.on === null ? null : mem.on ? st("off") : st("on", null, "ok");
   const privacy = [
-    E("incognito", "🕶️", "/settings/privacy", incSt),
+    E("incognito", "🕶️", "/settings/privacy", incSt, memOn ? { desc: "sethub.d.incognito_v2" } : null),
+    ...(memOn ? [E("memory", "🧠", "/settings/privacy#memory", memSt)] : []),
     E("livecam", "📡", "/settings/privacy#livecam", lcSt),
     E("likeness", "🪞", "/settings/likeness", lkVals ? st("n_of_on", { count: lkVals.filter(Boolean).length, total: lkVals.length }) : null),
     E("voice", "🗣️", "/voices/mine"),

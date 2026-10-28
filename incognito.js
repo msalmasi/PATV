@@ -1,8 +1,10 @@
 // incognito.js — Pepe's !incognito from the website too (1.99wa): Settings → Privacy (/settings/privacy).
 //
-// !incognito is Pepe's switch (pepe_incognito.py): while it's on for a chat login, Pepe remembers nothing new that person says
-// (room, PMs, DMs) and the website treats them as "someone" (live room view, captures, quotes, AI cam references, profile
-// analytics words). Pepe owns the state; this module only ASKS and SHOWS:
+// !incognito is Pepe's switch (pepe_incognito.py): while it's on for a chat login, the website treats them as "someone" (live room
+// view, captures, quotes, AI cam references) - and, with a Pepe from before wave 3, he also remembers nothing new that person
+// says. Wave 3 (design §N, owner 2026-10-27/28): incognito is about the BRIDGE only; what Pepe remembers is its own switch,
+// 🧠 Pepe's memory (memoryoptout.js), whose report rides this one's sync (kind "memory" items, full_memory, caps). Pepe owns the
+// state; this module only ASKS and SHOWS:
 //
 //   POST /api/privacy/incognito {on}       the signed-in member's request (same-site fetch). Needs a linked chat login (Camfrog
 //                                          today). Queued as a Pepe website action "privacy.incognito" [on|off] (actions.js) -
@@ -13,7 +15,9 @@
 //   POST /api/privacy/incognito/sync       Pepe (bot token): {items: [{login, on, via: chat|web, changed, ts}], full?: [logins on]}.
 //                                          Only LINKED logins are stored. Each reported change files an audit row "applied" and,
 //                                          when it really changed, an inbox notice (ref incog:<login>:<ts>: once). `full` heals the
-//                                          table: listed linked logins on, every other stored one off.
+//                                          table: listed linked logins on, every other stored one off. Wave 3: items with a `kind`
+//                                          other than "incognito" aren't incognito reports - kind "memory" (+ full_memory, caps) is
+//                                          memoryoptout.js's; the answer says caps: ["memory"] (this site understands them).
 //   GET  /settings/privacy                 the page (views/privacy-settings.ejs, public/js/privacy-settings.js)
 //
 // 1.99xa: an account with NO chat login has a chat identity too - the account key "u:<userId>" its web-relay lines are logged
@@ -306,7 +310,11 @@ function emitConfirmed(login, on, via, user, at, dedupe) {
 /** Pepe's report. -> {applied, ignored} */
 async function sync(body) {
   await init();
-  const items = Array.isArray(body && body.items) ? body.items.slice(0, 500) : [];
+  // wave 3 (design §N): 🧠 Pepe's memory rides this report - its kind "memory" items, `full_memory` and the `caps` marker are
+  // memoryoptout.js's (the route hands it the body first). Items of any other kind than incognito (or none - every older Pepe's)
+  // are left out here.
+  const memCaps = Array.isArray(body && body.caps) && body.caps.includes("memory");   // this Pepe has the split (§N.5): new wording
+  const items = Array.isArray(body && body.items) ? body.items.filter((it) => !(it && it.kind != null && it.kind !== "incognito")).slice(0, 500) : [];
   let applied = 0, ignored = 0;
   const t = now();
   for (const it of items) {
@@ -354,12 +362,17 @@ async function sync(body) {
     if (it.changed !== false) {
       const where = via === "web" ? "from Settings → Privacy" : "with !incognito in chat";
       const who = ACCT_RE.test(login) ? "your PATV account (what you say in pad chat rooms from the website)" : `your chat name ${login}`;
+      // wave 3 (§N.5): a Pepe with the memory switch (caps "memory") no longer ties memory to incognito - the notice says so
       await require("./inbox").addSafe(u.userId, {
         kind: "system",
         title: on ? "🕶️ Incognito is on" : "🕶️ Incognito is off",
-        body: on
-          ? `Pepe switched incognito ON for ${who} (${where}). He won't remember anything new you say, and the website shows you as "someone". Not you? Turn it off in Settings → Privacy.`
-          : `Pepe switched incognito OFF for ${who} (${where}). He remembers what you tell him again, and the website shows your name. Not you? Turn it back on in Settings → Privacy.`,
+        body: memCaps
+          ? (on
+            ? `Pepe switched incognito ON for ${who} (${where}). The website shows you as "someone". It doesn't change what Pepe remembers - that's "Pepe's memory" in Settings → Privacy. Not you? Turn it off in Settings → Privacy.`
+            : `Pepe switched incognito OFF for ${who} (${where}). The website shows your name again. Not you? Turn it back on in Settings → Privacy.`)
+          : (on
+            ? `Pepe switched incognito ON for ${who} (${where}). He won't remember anything new you say, and the website shows you as "someone". Not you? Turn it off in Settings → Privacy.`
+            : `Pepe switched incognito OFF for ${who} (${where}). He remembers what you tell him again, and the website shows your name. Not you? Turn it back on in Settings → Privacy.`),
         link: "/settings/privacy", ref: `incog:${login}:${ts}` });
     }
   }
@@ -414,7 +427,13 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/privacy/incognito/sync", async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false });
-    try { res.json({ ok: true, ...(await sync(b)) }); } catch (e) { fail(res, e); }
+    // wave 3 (design §N): 🧠 Pepe's memory (memoryoptout.js) FIRST - its own tables only: if that fails the whole report fails and
+    // Pepe re-sends it, before any incognito change. caps = what this site understands in the report (Pepe sends kind "memory"
+    // items only to a site that says "memory" - an older site would take them as incognito reports)
+    try {
+      const memory = await require("./memoryoptout").sync(b);
+      res.json({ ok: true, ...(await sync(b)), memory, caps: ["memory"] });
+    } catch (e) { fail(res, e); }
   });
   app.get("/api/privacy/incognito", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -454,7 +473,11 @@ function register(app, { addUser, isBotToken }) {
       // only while the /admin/bridge › Mic recordings switch is on
       let micrecOn = false;
       try { micrecOn = require("./micrec").policyOn(); } catch (e) { micrecOn = false; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn });
+      // wave 3 (design §N): 🧠 Pepe's memory (memoryoptout.js) - the card, forget-me's "Keep it that way" and the incognito card's
+      // new wording only while Pepe's latest report has the switch (mem.capable)
+      let mem = null;
+      try { mem = await require("./memoryoptout").stateOf(req.user.userId); } catch (e) { mem = null; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn, mem });
     } catch (e) { next(e); }
   });
 }

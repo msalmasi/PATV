@@ -235,7 +235,9 @@ function register(app, { addUser }) {
     hm: SP.can(me, "games.config") ? await safe(() => require("./heistmarket").adminView(), null) : null })));
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));
   app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge"));
-  app.get("/admin/pepe", addUser, gate, page("pepe", "Admin · Pepe"));
+  // wave 3 (design §N.3): + 🧠 Pepe's memory - how many people opted out (never who), admins only
+  app.get("/admin/pepe", addUser, gate, page("pepe", "Admin · Pepe", async (req, me) => ({
+    mem: SP.can(me, "admin.sensitive_overview") ? await safe(() => require("./memoryoptout").adminSummary(), null) : null })));
   app.get("/admin/system", addUser, gate, page("system", "Admin · System", async () => ({ sys: await systemInfo() })));
 }
 

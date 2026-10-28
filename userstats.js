@@ -10,7 +10,9 @@
 //   * top words (an_words), moderation RECEIVED / "moderated against" (an_modon), the itemised list of
 //     mod actions taken (an_modlist), moderation/admin commands (an_modcmds): Public, Only me & admins,
 //     or Hidden. forProfile() only includes a panel's data when the viewer may see it.
-//   * top words never exist for !incognito users: the bot doesn't store them (pepe_userstats.py)
+//   * top words never exist for !incognito users: the bot doesn't store them (pepe_userstats.py). Wave 3 (design §N.2): a Pepe with
+//     the 🧠 memory switch counts no words for people who told him "don't remember me" (memory_optout) instead - incognito is
+//     about the website only; the latest copy he sends replaces this one, so a wipe of the words reaches it on the next sync
 //
 // The sync also carries heist-sheet avatar seeds ({login: seed}) into cosmetic_avatar_seeds (the
 // table cosmetics.js reads), so every player with a sheet gets their GTF avatar on the profile —

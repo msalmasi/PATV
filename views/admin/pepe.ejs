@@ -34,6 +34,19 @@
   <div class="adm-actions"><a class="adm-btn ghost" href="/admin/pepe/audio#room-audio">Room audio settings ›</a></div>
 </section>
 
+<%# wave 3 (design §N.3): 🧠 Pepe's memory - a count only (who opted out is never shown, not even here); admins only (adminweb.js) %>
+<% if (locals.mem) { const MS = mem; %>
+<section class="adm-card" id="memory" aria-labelledby="pmT">
+  <h2 id="pmT"><span class="ds-ic" aria-hidden="true">🧠</span> Pepe's memory <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">People who told Pepe "don't remember me" (<code>!remember off</code> or Settings → Privacy). Nobody can switch it back for them; an admin can only make Pepe forget someone on a privacy request.</p>
+  <% if (!MS.capable) { %>
+    <p class="adm-help">Pepe's latest privacy report doesn't have the switch yet (an older Pepe) - the setting and its privacy-policy text are hidden until it does.</p>
+  <% } else { %>
+    <p><b><%= MS.all == null ? '-' : MS.all %></b> opted out in Pepe's latest full list<% if (MS.last_full) { %> (<%= new Date(MS.last_full).toISOString().slice(0, 16).replace('T', ' ') %> UTC)<% } %>, <b><%= MS.linked %></b> of them with a PATV account.</p>
+  <% } %>
+</section>
+<% } %>
+
 <section class="adm-card" id="feed" aria-labelledby="pfT">
   <h2 id="pfT">Pepe on the feed</h2>
   <p class="adm-help">His site-wide caps, his All-feed settings, the pads he's switched on in, and every post and comment he made are on the feed admin page.</p>

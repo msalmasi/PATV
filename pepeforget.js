@@ -11,7 +11,10 @@
 //     linked chat login, or the account key "u:<id>" for an account without one); from Camfrog `!forgetme now` +
 //     `!forgetme confirm`, and Pepe calls POST /api/privacy/pepe-forget/bot so the website half happens too.
 // What it is NOT: public room chat, mic transcripts and captures are the room's record (and other people's); this
-// doesn't switch on incognito either - Pepe starts learning again if they keep talking to him (the page says so).
+// doesn't switch on incognito either - Pepe starts learning again if they keep talking to him (the page says so). Wave 3 (design
+// §N.4, owner 2026-10-28): while Pepe has the 🧠 memory switch, the page asks "Keep it that way - don't remember me from now on"
+// (ticked by default) and keep_off queues privacy.memory "on" with the forget (memoryoptout.js) - privacy.forgetme itself never
+// changes the switch.
 // CL6: unless they tick "Also hide my past public chat lines" (decision 14, unticked by default): then their linked login and
 // their account key join the pad chat archive's sticky hidden set for good (hideLines; src forget - Pepe can't un-hide them).
 // CL13 fix-up: nor the copies of Camfrog PMs Pepe's admins sent them with `!msg` (dm_relays, the account-pair DM or the
@@ -84,35 +87,47 @@ async function hideLines(userId, login) {
   return keys.length;
 }
 
-/** The member asks from the website. opts.hideLines: also hide their past public chat lines (CL6). -> {ok, dms, action, lines_hidden?} */
-async function request(userId, { t = now(), hideLines: hide = false } = {}) {
+/** The member asks from the website. opts.hideLines: also hide their past public chat lines (CL6). opts.keepOff (wave 3, §N.4:
+ *  "Keep it that way - don't remember me from now on", ticked by default on the page): Pepe's privacy.memory "on" is queued in the
+ *  same transaction, right after privacy.forgetme - only while Pepe's latest report has the memory switch (memoryoptout.capable)
+ *  and the member has a chat identity (otherwise it is left out: the box isn't shown then). -> {ok, dms, action, lines_hidden?,
+ *  memory_action?} */
+async function request(userId, { t = now(), hideLines: hide = false, keepOff = false, ip = null } = {}) {
   await init();
   const uid = String(userId);
   const recent = (await getQuery("SELECT COUNT(*) AS n FROM pepe_forget_log WHERE user_id = ? AND at > ?", [uid, t - RATE_WINDOW_MS]))[0].n;
   if (recent >= RATE_MAX) throw new Refuse(429, "You've asked a few times today already - try again tomorrow.", "rate");
   const login = await loginOf(uid);
+  // wave 3: who the memory switch is for (the linked login, or the account key) - read before the transaction
+  let memKey = null;
+  if (keepOff) {
+    const MO = require("./memoryoptout");
+    try { if (await MO.capable()) memKey = await MO.keyOf(uid); } catch (e) { memKey = null; }
+  }
   // CL6: first, and never inside the transaction below - hiding is what they asked for even if the rest has to be retried
   if (hide) await hideLines(uid, login);
   await require("./messages").init();                 // (table creation never inside the transaction below)
-  let dms = 0, action = null, ref = null;
+  let dms = 0, action = null, ref = null, memAction = null;
   try {
     // 1.99acm: one transaction - the DM wipe, Pepe's action, the log row and the chat hub's privacy/forget row. The action is
-    // exempt from Pepe's "busy" cap (actions.queue): the request never depends on his queue having room
-    ({ dms, action, ref } = await tx(async () => {
+    // exempt from Pepe's "busy" cap (actions.queue): the request never depends on his queue having room. Wave 3: + "keep it that
+    // way" (privacy.memory "on", exempt too), queued after privacy.forgetme so Pepe forgets first
+    ({ dms, action, ref, memAction } = await tx(async () => {
       const n = await wipeDms(uid, t);
       const a = await require("./actions").queue(uid, { kind: "privacy.forgetme", args: [], tag: "privacy", label: "forget me" });
+      const m = memKey ? await require("./memoryoptout").queueIn(uid, memKey, true, { ip, via: "forget" }) : null;
       const r = await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms, action_id, hide_lines) VALUES (?, ?, ?, 'web', ?, ?, ?)",
                                [uid, login, t, n, a ? String(a) : null, hide ? 1 : null]);
       const id = r && (r.id || r.lastID);
       await emitForget(id, uid, t);
-      return { dms: n, action: a, ref: id };
+      return { dms: n, action: a, ref: id, memAction: m };
     }));
   } catch (e) {
     if (e && e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment, then try again.", "busy");
     throw e;
   }
-  console.log(`[pepeforget] ${uid}${login ? " (" + login + ")" : ""}: ${dms} DM(s) with Pepe deleted, Pepe asked to forget (web)${hide ? ", past chat lines hidden" : ""}`);
-  return { ok: true, dms, action, ref, ...(hide ? { lines_hidden: true } : {}) };
+  console.log(`[pepeforget] ${uid}${login ? " (" + login + ")" : ""}: ${dms} DM(s) with Pepe deleted, Pepe asked to forget (web)${hide ? ", past chat lines hidden" : ""}${memAction ? ", memory kept off" : ""}`);
+  return { ok: true, dms, action, ref, ...(hide ? { lines_hidden: true } : {}), ...(memAction ? { memory_action: memAction } : {}) };
 }
 
 /** 1.99acm: a pepe_forget_log row of an account -> the chat hub's privacy/forget payload (the feed row and the snapshot's). */
@@ -167,7 +182,11 @@ function register(app, { addUser, isBotToken }) {
     if (req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (String((req.body || {}).confirm || "").trim().toLowerCase() !== "forget") return res.status(400).json({ ok: false, error: "Type FORGET to confirm." });
-    try { res.json(await request(req.user.userId, { hideLines: (req.body || {}).hide_lines === true })); } catch (e) { fail(res, e); }
+    // wave 3 (§N.4): keep_off = "Keep it that way - don't remember me from now on" (ticked by default on the page)
+    try {
+      res.json(await request(req.user.userId, { hideLines: (req.body || {}).hide_lines === true, keepOff: (req.body || {}).keep_off === true,
+                                                ip: guard.clientIp(req) }));
+    } catch (e) { fail(res, e); }
   });
   app.post("/api/privacy/pepe-forget/bot", async (req, res) => {
     const b = req.body || {};
