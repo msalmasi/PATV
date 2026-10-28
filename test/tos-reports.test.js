@@ -371,8 +371,10 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.equal(terms.UPDATED, "11 October 2026");
   // 1.99aft (review): WP-1 is dated the day this server first served it (terms.TEXT_DATES) - here, the test's own run
   const wp1 = (await terms.textDates())["wp1-voice"];
-  assert.ok(wp1 && wp1.at > Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC"), "WP-1's first-served day is recorded");
-  assert.match(p.text, new RegExp("Last updated " + wp1.day), "the Privacy Policy keeps its own date: the newest dated text");
+  assert.ok(wp1 && wp1.at > 0 && wp1.day, "WP-1's first-served day is recorded");
+  // rebase onto retention (1.99afr): PRIVACY_UPDATED is 28 October 2026 - on or before that day the hand-set date is the newest
+  const newest = wp1.at > Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC") ? wp1.day : terms.PRIVACY_UPDATED;
+  assert.match(p.text, new RegExp("Last updated " + newest), "the Privacy Policy keeps its own date: the newest dated text");
   // 1.99wh: the Incognito section (§10) - a clarification of a user-controlled setting: the privacy date moves, VERSION doesn't
   const inc = (p.text.match(/<h3 id="incognito">[\s\S]*?<\/section>/) || [""])[0];
   assert.match(inc, /Settings → Privacy/);
