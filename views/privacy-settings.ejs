@@ -36,7 +36,10 @@
   const stateKey = st.on === null ? 'inc.st_unknown' : st.on ? (memOn ? 'inc.st_on_v2' : 'inc.st_on') : 'inc.st_off';
   const memLog = (r) => r.kind === 'request' ? t(r.on ? 'mem.log_req_off' : 'mem.log_req_on')
     : r.kind === 'refused' ? t('mem.log_refused')
-    : t((r.on ? 'mem.log_off_' : 'mem.log_on_') + (r.via === 'web' ? 'web' : r.via === 'forget' ? 'forget' : 'chat'));
+    // 1.99aft (review): Telegram's own label, and a carry-over (a re-key to a new login, or a room-typed switch tied to the login)
+    // is said as one - it can only switch the memory OFF
+    : (r.on && (r.via === 'rekey' || r.via === 'ident')) ? t('mem.log_off_carry')
+    : t((r.on ? 'mem.log_off_' : 'mem.log_on_') + (r.via === 'web' ? 'web' : r.via === 'forget' ? 'forget' : r.via === 'telegram' ? 'telegram' : 'chat'));
   const logLine = (r) => r.kind === 'request' ? t(r.on ? 'inc.log_req_on' : 'inc.log_req_off')
     : r.kind === 'refused' ? t('inc.log_refused')
     : t(r.on ? (r.via === 'web' ? 'inc.log_on_web' : 'inc.log_on_chat') : (r.via === 'web' ? 'inc.log_off_web' : 'inc.log_off_chat'));
@@ -62,7 +65,9 @@
       <li><%- t('inc.what_media_someone') %></li>
       <%# WP-1 (design section H, approved 2026-10-28): true today - not behind any switch %>
       <li><%- t('inc.what_voice') %></li>
-      <li><%- t(memOn ? 'inc.what_stats_v2' : 'inc.what_stats') %></li>
+      <%# 1.99aft (review): Pepe counts no top word said while incognito (pepe_userstats: the memory switch AND incognito, at count
+          time), with or without the memory switch - the same line either way %>
+      <li><%- t('inc.what_stats') %></li>
       <%# mic retention (ops plan 8.8, approved 2026-10-27): only while the /admin/bridge › Mic recordings switch is on (micrec.policyOn) %>
       <% if (locals.micrecOn) { %><li><%- t('inc.what_rec') %></li><% } %>
     </ul>

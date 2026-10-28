@@ -59,6 +59,7 @@ const GRACE_MS = 14 * DAY;
 const TICK_MS = 10 * 60000;
 const FLOW = "account_deleted";              // the PAT Routing row
 const FORGET_KIND = "privacy.forget";         // Pepe's website action (pepe_webact): forget this Camfrog login
+const ACCT_FORGET_ARGS = '["account"]';       // 1.99aft: the same action for an account with no chat login (its "u:<id>" key)
 const FORGET_TRIES = 10;
 const FORGET_RETRY_MS = 6 * 3600000;
 const REMOVE_EVERY_MS = DAY;                  // S1 V4: "Also remove my public messages" at most once a day (CA §9.4)
@@ -735,9 +736,13 @@ async function execute(userId, { force = false } = {}) {
       }
     }
     // 7. Pepe forgets the Camfrog login (website action; queued while the row still knows the login)
-    if (login && (await tableExists("pepe_actions"))) {
+    //    1.99aft (review): an account WITHOUT a chat login gets the action too (no login on it, args ACCT_FORGET_ARGS): Pepe keeps
+    //    its account key "u:<userId>" (what it says in pads from the website) on his memory switch's list - he clears it for the
+    //    action's user_id (pepe_incognito._incog_forget_web; an older Pepe answers "nothing to forget")
+    if (await tableExists("pepe_actions")) {
       await runQuery(`INSERT OR IGNORE INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
-                      VALUES (?, ?, ?, 0, ?, '[]', 'privacy', 'account deleted', 'pending', ?, ?, ?)`, [uid, pseudo, login, FORGET_KIND, t, t, `acctdel-forget-${uid}-1`]);
+                      VALUES (?, ?, ?, 0, ?, ?, 'privacy', 'account deleted', 'pending', ?, ?, ?)`,
+                     [uid, pseudo, login || null, FORGET_KIND, login ? "[]" : ACCT_FORGET_ARGS, t, t, `acctdel-forget-${uid}-1`]);
       report.pepe_forget = "queued";
     }
     //    mic retention: "Also delete my mic recordings" - one "privacy.recdelete" action per login (the end of its span in the args;
@@ -896,19 +901,20 @@ async function retryForget() {
   if (!(await tableExists("pepe_actions"))) return 0;
   let n = 0;
   for (const d of await getQuery("SELECT user_id FROM account_deletions WHERE state = 'done'")) {
-    const acts = await getQuery("SELECT id, camfrog, status, idem, updated FROM pepe_actions WHERE user_id = ? AND kind = ? ORDER BY id", [d.user_id, FORGET_KIND]);
+    const acts = await getQuery("SELECT id, camfrog, args, status, idem, updated FROM pepe_actions WHERE user_id = ? AND kind = ? ORDER BY id", [d.user_id, FORGET_KIND]);
     if (!acts.length || acts.some((a) => ["pending", "claimed", "done", "ok"].includes(a.status))) {
       // done: the login doesn't need to stay on the row any more
       for (const a of acts) if (a.camfrog && ["done", "ok"].includes(a.status)) await runQuery("UPDATE pepe_actions SET camfrog = NULL WHERE id = ?", [a.id]);
       continue;
     }
     const last = acts[acts.length - 1];
-    if (acts.length >= FORGET_TRIES || !last.camfrog) continue;
+    const acctOnly = !last.camfrog && String(last.args || "") === ACCT_FORGET_ARGS;      // 1.99aft: the account key's action
+    if (acts.length >= FORGET_TRIES || (!last.camfrog && !acctOnly)) continue;
     if (now() - Number(last.updated || 0) < FORGET_RETRY_MS) continue;            // spaced out: Pepe may be restarting
     const t = now();
     await runQuery(`INSERT OR IGNORE INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
-                    SELECT user_id, username, camfrog, 0, kind, '[]', 'privacy', 'account deleted', 'pending', ?, ?, ? FROM pepe_actions WHERE id = ?`,
-                   [t, t, `acctdel-forget-${d.user_id}-${acts.length + 1}`, last.id]);
+                    SELECT user_id, username, camfrog, 0, kind, ?, 'privacy', 'account deleted', 'pending', ?, ?, ? FROM pepe_actions WHERE id = ?`,
+                   [acctOnly ? ACCT_FORGET_ARGS : "[]", t, t, `acctdel-forget-${d.user_id}-${acts.length + 1}`, last.id]);
     await runQuery("UPDATE pepe_actions SET camfrog = NULL WHERE id = ?", [last.id]);
     n++;
   }

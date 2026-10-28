@@ -54,8 +54,12 @@ const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const ACCT_RE = /^u:([A-Za-z0-9-]{6,64})$/;
 const isKey = (l) => LOGIN_RE.test(l) || ACCT_RE.test(l);
 // how Pepe says the switch was changed: web (Settings), chat (!remember in a room or PM), telegram (/remember), forget (forget-me's
-// "keep it that way"), full (the full list) - anything else is "chat"
-const VIAS = new Set(["web", "chat", "telegram", "forget", "full"]);
+// "keep it that way"), full (the full list) - anything else is "chat". 1.99aft (review): + Pepe's two carry-overs, which only ever
+// switch it OFF: ident (a switch set from a room line under the name the person showed, tied to their login once Pepe could prove
+// it - pepe_ident) and rekey (a Camfrog login change, or an account key "u:<id>" becoming a linked login - pepe_loginrekey: the
+// same person's earlier choice; no new inbox notice for it)
+const VIAS = new Set(["web", "chat", "telegram", "forget", "full", "ident", "rekey"]);
+const NO_NOTICE_VIAS = new Set(["rekey"]);
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 
@@ -227,7 +231,9 @@ async function request(userId, on, { ip } = {}) {
 }
 
 const WHERE = { web: "from Settings → Privacy", chat: "with !remember in chat", telegram: "with /remember on Telegram",
-                forget: "when you asked him to forget you", full: "" };
+                forget: "when you asked him to forget you", full: "",
+                ident: "carried over from !remember off typed in a room under the name you showed there",
+                rekey: "carried over from your earlier chat name" };
 
 /** Pepe's report (the incognito report's body: its kind "memory" items, full_memory and caps). -> {applied, ignored, capable} */
 async function sync(body) {
@@ -255,6 +261,7 @@ async function sync(body) {
     });
     applied++;
     if (it.changed === false) continue;
+    if (NO_NOTICE_VIAS.has(via) && on) continue;          // 1.99aft: a re-key carries their choice over - audited, no second notice
     const where = WHERE[via] ? ` (${WHERE[via]})` : "";
     const who = ACCT_RE.test(login) ? "your PATV account (what you say in pad chat rooms from the website)" : `your chat name ${login}`;
     await require("./inbox").addSafe(u.userId, {

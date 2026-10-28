@@ -126,7 +126,8 @@ test("a report with caps [\"memory\"]: the card, the policy text (N.8, dated), t
   assert.match(page, /<input type="checkbox" id="pvPfKeep" checked>/, "forget-me's \"Keep it that way\" ticked by default");
   assert.match(page, /data-mem="1"/);
   assert.match(page, /Incognito changes what the website shows about you - not what Pepe remembers/);
-  assert.doesNotMatch(page, /Your most-used words aren&#39;t recorded|Your most-used words aren't recorded/, "the words follow Pepe's memory switch now");
+  // 1.99aft (review): Pepe counts no top word said while incognito, with the switch too - the line stays
+  assert.match(page, /Your most-used words aren&#39;t recorded|Your most-used words aren't recorded/, "words: never counted while incognito");
   assert.match(page, /\/public\/js\/privacy-memory\.js/);
   const p = (await call("GET", "/privacy", null)).text;
   assert.match(p, /<h3 id="memory">Pepe's memory<\/h3>/);
@@ -139,7 +140,12 @@ test("a report with caps [\"memory\"]: the card, the policy text (N.8, dated), t
   assert.match(p, /"Make Pepe forget me"<\/a> wipes it - with your private conversations with him - and keeps the switch off\./);
   assert.match(p, /It also keeps <a href="#memory">Pepe's memory<\/a> switched off from then on/);
   assert.doesNotMatch(p, /It doesn't switch on incognito, so Pepe starts learning again/);
-  assert.doesNotMatch(p, /your most-used words aren't recorded for your profile analytics/);
+  assert.match(p, /your most-used words aren't recorded for your profile analytics/, "1.99aft: true with the switch too (review)");
+  // 1.99aft (review): incognito's "What it doesn't do" no longer says it stops (memory) data; forget-me's no in Camfrog is spelled out
+  assert.match(p, /<b>What it doesn't do:<\/b> it doesn't change what Pepe remembers \(that's <a href="#memory">Pepe's memory<\/a>\)/);
+  assert.doesNotMatch(p, /it only stops <i>new<\/i> data/);
+  assert.match(p, /untick <i>Keep it that way<\/i> on the website, or in Camfrog \(where <code>!forgetme now<\/code> asks\) type <code>!forgetme confirm remember<\/code>\./);
+  assert.doesNotMatch(p, /Pepe asks\)/);
   assert.match(p, new RegExp("<li><b>" + cap.first_day + ":</b> <a href=\"#incognito\">Incognito</a> and <code>!bridge hide</code> now change only what the website shows; they no longer stop Pepe remembering what you say\\."));
   assert.match(p, /<a href="#memory">Pepe's memory<\/a>, <a href="#forget">/, "in the contents");
   // the voice sentence (WP-1) stays either way
@@ -287,6 +293,46 @@ test("a rollback: the next report without caps hides it all again and refuses re
   const first = (await MO.capability()).first_at;
   await report(CAPS);
   assert.equal((await MO.capability()).first_at, first);
+});
+
+test("1.99aft: Pepe's carry-overs and Telegram get their own words; a re-key files no second notice", async () => {
+  await report(CAPS);
+  const t = Date.now() + 120000;
+  const n0 = (await inbox(U.bob.userId)).length;
+  await report({ ...CAPS, items: [{ login: "bobcf", kind: "memory", on: true, via: "rekey", changed: true, ts: t }] });
+  assert.equal((await call("GET", "/api/privacy/memory", U.bob)).d.on, true, "applied");
+  assert.equal((await inbox(U.bob.userId)).length, n0, "a re-key (the same person's earlier choice) files no new notice");
+  const lg = await getQuery("SELECT kind, via FROM memory_optout_log WHERE user_id = ? ORDER BY id DESC LIMIT 1", [U.bob.userId]);
+  assert.deepEqual([lg[0].kind, lg[0].via], ["applied", "rekey"], "audited with its own via (not filed as chat)");
+  await report({ ...CAPS, items: [{ login: "bobcf", kind: "memory", on: false, via: "telegram", changed: true, ts: t + 1 }] });
+  await report({ ...CAPS, items: [{ login: "bobcf", kind: "memory", on: true, via: "ident", changed: true, ts: t + 2 }] });
+  const ib = (await inbox(U.bob.userId)).slice(n0);
+  assert.equal(ib.length, 2);
+  assert.match(ib[0].body, /with \/remember on Telegram/);
+  assert.match(ib[1].body, /carried over from !remember off typed in a room under the name you showed there/);
+  assert.doesNotMatch(ib[1].body, /with !remember in chat/);
+  const page = (await call("GET", "/settings/privacy", U.bob)).text;
+  assert.match(page, /Pepe stopped remembering you \(your earlier choice, carried over to this chat name\)/);
+  assert.match(page, /Pepe remembers you again \(\/remember on Telegram\)/);
+  assert.doesNotMatch(page, /Pepe remembers you again \(!remember in chat\)/, "Telegram isn't labelled as chat");
+});
+
+test("1.99aft: deleting an account with no chat login still asks Pepe to clear its account key's switch", async () => {
+  const AD = require(path.join(repo, "accountdelete"));
+  const src = fs.readFileSync(path.join(repo, "accountdelete.js"), "utf8");
+  assert.match(src, /\[uid, pseudo, login \|\| null, FORGET_KIND, login \? "\[\]" : ACCT_FORGET_ARGS, t, t, `acctdel-forget-\$\{uid\}-1`\]/,
+               "the privacy.forget action is queued with or without a login (no login: args [\"account\"])");
+  assert.doesNotMatch(src, /if \(login && \(await tableExists\("pepe_actions"\)\)\)/);
+  // the retry knows the account-key action (it has no login to carry)
+  await AD.init();
+  const old = Date.now() - 7 * 3600000;
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at) VALUES ('gone1', 'done', ?, ?)", [old, old]);
+  await runQuery(`INSERT INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
+                  VALUES ('gone1', 'deleted-x', NULL, 0, 'privacy.forget', '["account"]', 'privacy', 'account deleted', 'expired', ?, ?, 'acctdel-forget-gone1-1')`, [old, old]);
+  await AD.retryForget();
+  const a = await getQuery("SELECT camfrog, args, status FROM pepe_actions WHERE user_id = 'gone1' ORDER BY id");
+  assert.deepEqual(a.map((x) => [x.camfrog, x.args, x.status]), [[null, '["account"]', "expired"], [null, '["account"]', "pending"]],
+                   "an expired account-key action is asked again, like a login's");
 });
 
 test("account deletion, merge and the data download know the tables; the settings hub row", async () => {
