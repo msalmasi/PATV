@@ -693,3 +693,20 @@ test("navbar + footer + guides point at /help, not Netlify", async () => {
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "views", "economy.ejs"), "utf8"), /pepe\.publicaccess\.tv\/help/);
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "views", "about.ejs"), "utf8"), /href="https:\/\/pepe\.publicaccess\.tv"/);
 });
+
+test("WP-1 (design section H, approved 2026-10-28): the incognito and bridge cards say your voice is still heard - once, not behind a switch", async () => {
+  const cards = [{ id: "incognito", summary: "S", details: "D" }, { id: "bridge", summary: "B", details: "" }, { id: "dj", summary: "x", details: "y" },
+                 { id: "incognito", summary: "S", details: "Neither mutes you: your voice is still heard in the website's room audio." }];
+  const out = HELP.withVoiceNotes(cards);
+  assert.equal(out[0].details, "D\n\n" + HELP.VOICE_NOTE);
+  assert.equal(out[1].details, "B\n\n" + HELP.VOICE_NOTE, "a card with no details gets its summary plus the note");
+  assert.equal(out[2], cards[2], "other cards untouched");
+  assert.equal(out[3], cards[3], "a card that already says it (a later bot catalog) isn't given it twice");
+  assert.match(HELP.VOICE_NOTE, /^Your voice is still heard in the website's room audio unless the pad owner turns audio off\.$/);
+  const m = await HELP.pageModel();
+  const all = m.cats.flatMap((c) => c.entries);
+  for (const id of ["incognito", "bridge"]) {
+    const e = all.find((x) => x.id === id);
+    if (e) assert.match(e.details, /voice is still heard/i, id + " card on the page");
+  }
+});

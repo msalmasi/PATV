@@ -53,6 +53,8 @@
           back to this English until it is translated, instead of keeping the old promise ("your chat lines aren't shown") -%>
       <li><%- t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
       <li><%- t('inc.what_media_someone') %></li>
+      <%# WP-1 (design section H, approved 2026-10-28): true today - not behind any switch %>
+      <li><%- t('inc.what_voice') %></li>
       <li><%- t('inc.what_stats') %></li>
       <%# mic retention (ops plan 8.8, approved 2026-10-27): only while the /admin/bridge › Mic recordings switch is on (micrec.policyOn) %>
       <% if (locals.micrecOn) { %><li><%- t('inc.what_rec') %></li><% } %>

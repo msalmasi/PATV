@@ -10803,6 +10803,7 @@
   "inc.what_media_someone": "Snaps and clips of you are kept private, nobody can quote you by name, and your cam can't be used in AI pictures or mic challenges.",
   "inc.what_stats": "Your most-used words aren't recorded for your profile analytics, and room stats never name you.",
   "inc.what_rec": "Pepe still records your mic-ups like everyone's; incognito is about the website.",
+  "inc.what_voice": "Your voice is still heard in the website's room audio unless the pad owner turns audio off - incognito and !bridge hide change what the website shows, not what it plays.",
   "inc.what_not": "It stops NEW memories - it doesn't erase what Pepe already knows (ask an admin if you want that wiped). Your points, games and commands work as usual.",
   "inc.unlinked": "Incognito applies to your chat identity, and this account doesn't have one linked yet. Link your Camfrog name first (type !verify in a room), then come back here - or just type !incognito on in chat.",
   "inc.link_btn": "Link your chat account",

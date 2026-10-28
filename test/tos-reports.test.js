@@ -390,6 +390,13 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(p.text, /It holds nothing about you or your account: its value is always 1<\/td>/, "review 1: no account id in it");
   assert.doesNotMatch(p.text, /chat id\b/, "the first draft's 'that account's chat id' is gone");
   assert.match(p.text, /27 October 2026:<\/b> added the <code>patv_chat_sweep<\/code> cookie to <a href="#cookies">section 8<\/a>/, "a dated change note for F13");
+  // WP-1 (incognito/mic-stage design section H, owner-approved 2026-10-28): "your voice is still heard" is in the CURRENT text - section 3
+  // and the incognito bullets - not behind any switch; additive: the date moves, VERSION doesn't
+  assert.match(p.text, /<b>the room's audio<\/b> where the pad has it on/);
+  assert.match(p.text, /<b>Neither one mutes you:<\/b> if the pad has room audio on, people listening on the website \(and on Pepe's live stream, when it carries that room\) still hear your voice\./);
+  assert.match(inc, /<b>Your voice is still heard:<\/b> incognito and <code>!bridge hide<\/code> change what the website <i>shows<\/i>, not what it <i>plays<\/i>\./);
+  assert.match(inc, /The pad's owner can switch the audio off\./);
+  assert.match(p.text, /28 October 2026:<\/b> sections 3 and 10 now say that <code>!incognito<\/code> and <code>!bridge hide<\/code> don't mute you/, "a dated change note for WP-1");
   assert.equal(terms.PRIVACY_UPDATED, "28 October 2026");    // mic retention 8.5 A (merged 28 October); F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#pepe-photos">/, "a dated change note for photos sent to Pepe");
   assert.match(p.text, /id="pepe-photos"/);

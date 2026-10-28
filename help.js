@@ -539,10 +539,25 @@ function withMicrecNotes(entries) {
   });
 }
 
+// ── WP-1 (incognito/mic-stage design section H, owner-approved 2026-10-28): "your voice is still heard" ──
+// True today for incognito and !bridge hide people, so the page adds it to Pepe's incognito and bridge cards (not behind any switch)
+// until his own catalog says it; a card that already says it (a later bot letter) isn't given it twice.
+const VOICE_NOTE = "Your voice is still heard in the website's room audio unless the pad owner turns audio off.";
+const VOICE_CARDS = new Set(["incognito", "bridge"]);
+function withVoiceNotes(entries) {
+  return (entries || []).map((e) => {
+    if (!e || !VOICE_CARDS.has(e.id)) return e;
+    const has = (String(e.details || "") + "\n" + String(e.summary || "")).toLowerCase();
+    if (has.includes("voice is still heard")) return e;
+    const base = e.details && String(e.details).trim() ? e.details : e.summary;
+    return { ...e, details: String(base || "") + "\n\n" + VOICE_NOTE };
+  });
+}
+
 // ── the page model ──
 async function pageModel() {
   const cur = await current();
-  const d = { ...cur.data, entries: withMicrecNotes(cur.data.entries || []) };
+  const d = { ...cur.data, entries: withVoiceNotes(withMicrecNotes(cur.data.entries || [])) };
   const cats = (d.categories || []).map((c) => ({ ...c, entries: (d.entries || []).filter((e) => e.category === c.id) })).filter((c) => c.entries.length);
   // the browser's search index: compact, no details (the filter reads each card's text)
   const index = (d.entries || []).map((e) => ({ id: e.id, title: e.title, commands: e.commands, aliases: e.aliases || [], syntax: e.syntax,
@@ -658,5 +673,6 @@ module.exports = {
   register, validateData, normalizeData, clip, limitsDiffer, current, sync, search, ask, pull, answer, cleanAnswer, allowedCommands, md, plain, config, setConfig,
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
+  VOICE_NOTE, withVoiceNotes,                                       // WP-1 (design section H)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };

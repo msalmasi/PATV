@@ -83,6 +83,8 @@ test("before Pepe reports: state unknown; the page renders with the switch", asy
   assert.match(page.text, /<input type="checkbox" id="pvPfLines" aria-describedby="pvPfLinesHint">/);
   assert.match(page.text, /Also hide my past public chat lines/);
   assert.match(page.text, /href="\/settings\/likeness"/);
+  // WP-1 (design section H, approved 2026-10-28): true today - not behind any switch
+  assert.match(page.text, /Your voice is still heard in the website&#39;s room audio unless the pad owner turns audio off|Your voice is still heard in the website's room audio unless the pad owner turns audio off/);
   assert.equal((await call("GET", "/settings/privacy", null)).status, 302, "signed out -> login");
 });
 
