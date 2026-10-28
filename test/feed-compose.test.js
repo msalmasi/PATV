@@ -208,7 +208,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   // the navbar
   assert.match(html, new RegExp('<a href="/p/' + s + '/submit" class="nav-post" title="Create a post in p/' + s + '">'));
   assert.ok(html.indexOf('class="nav-post"') < html.indexOf('class="nav-golive"'), "Post sits before Go live");
-  assert.match(html, /feed\.css\?v=19/); assert.match(html, /feed-composer\.js\?v=16/); assert.match(html, /stories\.js\?v=11/);   // storyreact site: v=11
+  assert.match(html, /feed\.css\?v=20/); assert.match(html, /feed-composer\.js\?v=17/); assert.match(html, /stories\.js\?v=11/);   // storyreact site: v=11
 });
 
 test("pad page signed out: a sign-in bar instead of the composer; About's analytics link is a button", async () => {
@@ -258,7 +258,7 @@ test("/submit: signed out -> login with next=; signed in -> the open composer wi
   assert.match(formTag(r.text), /data-expanded="1"/); assert.doesNotMatch(formTag(r.text), / hidden /);
   assert.match(r.text, /class="fc-comm" data-empty/, "no pad preselected");
   assert.match(r.text, /name="community" value="plant_based_chatting"/, "the pad picker lists the pads");
-  assert.match(r.text, /feed-composer\.js\?v=16/);
+  assert.match(r.text, /feed-composer\.js\?v=17/);
 });
 
 test("/p/<pad>/submit preselects that pad; signed out -> login next=; unknown pad 404; /submit?pad= -> /p/<pad>/submit", async () => {
@@ -320,4 +320,39 @@ test("story viewer: the footer button says what it opens", () => {
   // i18n: one translatable label per noun (English defaults unchanged)
   assert.match(js, /noun === 'story' \? _t\('js\.feed\.sv\.open_story', 'Open story ›'\) : noun === 'clip' \? _t\('js\.feed\.sv\.open_clip', 'Open clip ›'\) : noun === 'snap' \? _t\('js\.feed\.sv\.open_snap', 'Open snap ›'\) : _t\('js\.feed\.sv\.open', 'Open ›'\)/);
   assert.match(js, /'s page to share or download'/);
+});
+
+test("picked, pasted and dropped media share limits, MIME routing and upload path", () => {
+  const src = fs.readFileSync(path.join(repo, "public/js/feed-composer.js"), "utf8");
+  const block = src.slice(src.indexOf("  function addFiles(fileList)"), src.indexOf("  // ── ✨ Generate"));
+  for (const method of ["pick", "paste", "drop"]) {
+    const handlers = {}, input = { files: [], addEventListener: (k, f) => handlers[k] = f };
+    const files = [], uploads = [], errors = [], classes = new Set();
+    const form = { elements: { body: { addEventListener: (k, f) => handlers[k] = f } },
+      querySelectorAll: () => [input], addEventListener: (k, f) => handlers[k] = f,
+      contains: () => false, classList: { add: c => classes.add(c), remove: c => classes.delete(c) } };
+    require("vm").runInNewContext(block, { form, files, maxImages: 2, caps: { image: 1, audio: 2, video: 3 },
+      setErr: s => errors.push(s), _t: (k,d) => d, row() {}, upload: (f, file) => uploads.push([f.kind, file.name]) });
+    let prevented = 0;
+    const send = items => {
+      input.files = items;
+      if (method === "pick") handlers.change();
+      else handlers[method]({ clipboardData: { files: items }, dataTransfer: { files: items }, preventDefault() { prevented++; } });
+    };
+    const file = (type, name, size=1) => ({type,name,size});
+    send([file("image/png","big",2*1024*1024),file("video/mp4","big",4*1024*1024),file("audio/wav","big",3*1024*1024)]);
+    assert.equal(uploads.length,0);
+    send([file("","a.heic"), file("image/jpeg","b"), file("image/png","overflow")]);
+    assert.equal(uploads.length,2); assert.match(errors.at(-1),/At most/);
+    send([file("video/mp4","big",4*1024*1024),file("audio/wav","big",3*1024*1024)]);
+    assert.equal(uploads.length,2); assert.match(errors.at(-1),/over/);
+    send([file("video/mp4","v"),file("audio/wav","a"),file("video/mp4","v2"),file("audio/wav","a2")]);
+    assert.deepEqual(uploads.map(x=>x[0]),["image","image","video","audio"]);
+    send([file("text/plain","no")]); assert.equal(uploads.length,4);
+    const before=prevented;
+    handlers.paste({clipboardData:{files:[]},preventDefault(){prevented++;}});
+    assert.equal(prevented,before,"text-only paste is untouched");
+    handlers.dragover({dataTransfer:{types:["Files"]},preventDefault(){}}); assert.ok(classes.has("drop"));
+    handlers.drop({dataTransfer:{files:[]}}); assert.ok(!classes.has("drop"));
+  }
 });

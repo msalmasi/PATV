@@ -1,7 +1,7 @@
 <%- include('partials/admin-open', { title: 'Feed admin', user: user, section: 'feed', admIsAdmin: isAdmin }) %>
 <%# 1.99ack: each admin-only part asks its own capability (siteperms.js) %><% const _can = locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals);
    const abuseOk = _can('feed.abuse_details'), acctOk = _can('accounts.security'), dmOk = _can('dm.report_review'), pepeOk = _can('feed.pepe_admin'), amOk = _can('feed.automod_global'); -%>
-<link rel="stylesheet" href="/public/css/feed.css?v=19">
+<link rel="stylesheet" href="/public/css/feed.css?v=20">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
   const gb = (b) => (b === Infinity ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB');

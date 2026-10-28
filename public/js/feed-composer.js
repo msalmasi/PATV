@@ -296,21 +296,42 @@
     });
   }
 
-  form.querySelectorAll('input[type=file][data-kind]').forEach(function (inp) {
-    inp.addEventListener('change', function () {
-      setErr('');
-      var kind = inp.getAttribute('data-kind');
-      Array.prototype.slice.call(inp.files || []).forEach(function (file) {
-        var have = files.filter(function (x) { return x.kind === kind && x.state !== 'failed'; }).length;
-        if (kind === 'image' && have >= maxImages) return setErr(_t('js.feed.fc.max_pics', 'At most {n} pictures per post.', { n: maxImages }));
-        if (kind !== 'image' && have >= 1) return setErr(kind === 'audio' ? _t('js.feed.fc.one_audio', 'One audio file per post.') : _t('js.feed.fc.one_video_file', 'One video file per post.'));
-        var capMb = caps[kind] || 10;
-        if (file.size > capMb * 1024 * 1024) return setErr(_t('js.feed.fc.too_big', '{name} is over {n} MB.', { name: file.name, n: capMb }));
-        var f = { kind: kind, name: file.name, state: 'new' };
-        files.push(f); row(f); upload(f, file);
-      });
-      inp.value = '';
+  function addFiles(fileList) {
+    setErr('');
+    Array.prototype.slice.call(fileList || []).forEach(function (file) {
+      var kind = String(file.type || '').split('/')[0];
+      // Some desktop file pickers omit the MIME type (notably HEIC/MKV); match their accepted extensions.
+      if (!file.type || file.type === 'application/octet-stream') {
+        var ext = String(file.name || '').split('.').pop().toLowerCase();
+        kind = /^(jpe?g|png|gif|webp|avif|heic|heif)$/.test(ext) ? 'image' :
+          /^(mp3|m4a|ogg|opus|wav|flac)$/.test(ext) ? 'audio' : /^(mp4|mov|webm|mkv)$/.test(ext) ? 'video' : '';
+      }
+      if (['image', 'audio', 'video'].indexOf(kind) < 0) return setErr(_t('js.feed.fc.unsupported_file', 'Choose a picture, audio file or video.'));
+      var have = files.filter(function (x) { return x.kind === kind && x.state !== 'failed'; }).length;
+      if (kind === 'image' && have >= maxImages) return setErr(_t('js.feed.fc.max_pics', 'At most {n} pictures per post.', { n: maxImages }));
+      if (kind !== 'image' && have >= 1) return setErr(kind === 'audio' ? _t('js.feed.fc.one_audio', 'One audio file per post.') : _t('js.feed.fc.one_video_file', 'One video file per post.'));
+      var capMb = caps[kind] || 10;
+      if (file.size > capMb * 1024 * 1024) return setErr(_t('js.feed.fc.too_big', '{name} is over {n} MB.', { name: file.name, n: capMb }));
+      var f = { kind: kind, name: file.name, state: 'new' };
+      files.push(f); row(f); upload(f, file);
     });
+  }
+  form.querySelectorAll('input[type=file][data-kind]').forEach(function (inp) {
+    inp.addEventListener('change', function () { addFiles(inp.files); inp.value = ''; });
+  });
+  form.elements.body.addEventListener('paste', function (e) {
+    var pasted = e.clipboardData && e.clipboardData.files;
+    if (pasted && pasted.length) { e.preventDefault(); addFiles(pasted); }
+  });
+  form.addEventListener('dragover', function (e) {
+    if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0) {
+      e.preventDefault(); form.classList.add('drop');
+    }
+  });
+  form.addEventListener('dragleave', function (e) { if (!form.contains(e.relatedTarget)) form.classList.remove('drop'); });
+  form.addEventListener('drop', function (e) {
+    form.classList.remove('drop');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); }
   });
 
   // ── ✨ Generate (1.99di, aigen.js): Pepe's !imagine / !video as this account, previewed here, then attached ──

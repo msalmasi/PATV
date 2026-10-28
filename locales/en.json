@@ -2350,6 +2350,7 @@
   "js.feed.fc.converting": "Converting (this can take a minute)…",
   "js.feed.fc.not_processed": "That file couldn't be processed.",
   "js.feed.fc.too_long": "Processing took too long.",
+  "js.feed.fc.unsupported_file": "Choose a picture, audio file or video.",
   "js.feed.fc.max_pics": "At most {n} pictures per post.",
   "js.feed.fc.one_audio": "One audio file per post.",
   "js.feed.fc.one_video_file": "One video file per post.",
