@@ -13,7 +13,9 @@
 // Paying (mediaconf): a request credit if the account has one (bought in the store: "10 Additional Movie Requests"
 // etc. - the shop hook below adds them), else request_price_movie / _tv PAT through shop.chargeService (an official
 // order on their orders page), else free. Overseerr refusing / erroring at once = the credit or PAT goes straight
-// back; a request that's later DECLINED, FAILED or deleted before it became available is refunded once (poll / webhook).
+// back; a request later DECLINED or FAILED before availability is refunded once (poll / webhook). Removal needs JSON
+// 404s at least 30 minutes apart plus a successful title lookup explicitly showing its request id is absent.
+// Non-JSON 404s and inconclusive title lookups never authorize a removal refund.
 //
 // Status comes from Overseerr's API only: polled every request_poll_min minutes, and at once when Overseerr's webhook
 // (POST /api/requests/overseerr-webhook, header Authorization = OVERSEERR_WEBHOOK_SECRET) says something changed -
@@ -34,6 +36,7 @@ class Refuse extends Error {
 const env = (k) => String(process.env[k] || "").trim();
 let clock = () => Date.now();
 const DAY = 86400000;
+const MISSING_GRACE = 30 * 60000;
 
 // Overseerr's numbers
 const REQ = { 1: "pending", 2: "approved", 3: "declined", 4: "failed", 5: "completed" };
@@ -76,6 +79,8 @@ function init() {
         title TEXT, year INTEGER, poster TEXT, seasons TEXT, status TEXT NOT NULL, media_status INTEGER, overseerr_id INTEGER,
         overseerr_user INTEGER, mapped_by TEXT, paid_with TEXT, price INTEGER NOT NULL DEFAULT 0, order_id INTEGER,
         refunded_at INTEGER, notified_at INTEGER, error TEXT, created INTEGER NOT NULL, updated INTEGER NOT NULL, checked INTEGER)`);
+      const columns = await getQuery("PRAGMA table_info(media_requests)");
+      if (!columns.some((c) => c.name === "missing_since")) await runQuery("ALTER TABLE media_requests ADD COLUMN missing_since INTEGER");
       await runQuery("CREATE INDEX IF NOT EXISTS media_requests_user ON media_requests (user_id, id)");
       await runQuery("CREATE INDEX IF NOT EXISTS media_requests_status ON media_requests (status, checked)");
       await runQuery("CREATE INDEX IF NOT EXISTS media_requests_tmdb ON media_requests (media_type, tmdb_id)");
@@ -273,15 +278,42 @@ async function refund(id, reason) {
 
 // ── status sync (poll + webhook) ──
 async function sync(row) {
+  row = (await getQuery("SELECT * FROM media_requests WHERE id = ?", [row.id]))[0] || row;
   if (!row.overseerr_id) return row.status;
   const r = await api("GET", `/request/${row.overseerr_id}`);
   let st;
   let ms = row.media_status;
-  if (r.status === 404) st = row.status === "available" ? "available" : "removed";
-  else if (r.status !== 200 || !r.json) return row.status;
-  else { ms = r.json.media ? r.json.media.status : ms; st = statusOf(r.json.status, ms); }
-  await runQuery("UPDATE media_requests SET status = ?, media_status = ?, updated = CASE WHEN status != ? THEN ? ELSE updated END, checked = ? WHERE id = ?",
-                 [st, ms || null, st, clock(), clock(), row.id]);
+  if (r.status === 404) {
+    await runQuery("UPDATE media_requests SET checked = ? WHERE id = ?", [clock(), row.id]);
+    if (r.json === null) {
+      console.error(`[requests] request #${row.id}: non-JSON upstream 404; keeping status`);
+      return row.status;
+    }
+    if (row.status === "available" || row.status === "removed") return row.status;
+    if (row.missing_since == null) {
+      await runQuery("UPDATE media_requests SET missing_since = COALESCE(missing_since, ?) WHERE id = ?", [clock(), row.id]);
+      return row.status;
+    }
+    if (clock() - row.missing_since < MISSING_GRACE) return row.status;
+    let confirm;
+    try { confirm = await api("GET", `/${row.media_type === "tv" ? "tv" : "movie"}/${row.tmdb_id}`); }
+    catch (e) { return row.status; }
+    const title = confirm.json, requests = title && title.mediaInfo && title.mediaInfo.requests;
+    // Missing/malformed metadata is not evidence of deletion. The documented title response supplies request ids.
+    if (confirm.status !== 200 || !title || Number(title.id) !== Number(row.tmdb_id) || !Array.isArray(requests) ||
+        requests.some((q) => !q || !Number.isInteger(Number(q.id)) || Number(q.id) <= 0 || Number(q.id) === Number(row.overseerr_id))) return row.status;
+    st = "removed";
+  } else if (r.status !== 200 || !r.json) return row.status;
+  else {
+    await runQuery("UPDATE media_requests SET missing_since = NULL WHERE id = ?", [row.id]);
+    ms = r.json.media ? r.json.media.status : ms;
+    st = row.status === "available" ? "available" : statusOf(r.json.status, ms);
+  }
+  // A concurrent successful poll clears the marker; a delayed confirmation must not remove that recovered request.
+  const guard = st === "removed" ? " AND missing_since = ? AND status = ?" : "";
+  const updated = await runQuery("UPDATE media_requests SET status = ?, media_status = ?, updated = CASE WHEN status != ? THEN ? ELSE updated END, checked = ? WHERE id = ?" + guard,
+                 [st, ms || null, st, clock(), clock(), row.id, ...(st === "removed" ? [row.missing_since, row.status] : [])]);
+  if (!updated.changes) return ((await getQuery("SELECT status FROM media_requests WHERE id = ?", [row.id]))[0] || row).status;
   if (["declined", "failed", "removed"].includes(st) && row.status !== st) await refund(row.id, st === "removed" ? "was removed" : `was ${st}`);
   if (st !== row.status) await notifyChange({ ...row, status: st });
   return st;

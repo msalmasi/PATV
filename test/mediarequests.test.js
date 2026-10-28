@@ -252,3 +252,69 @@ test("rate limit per day", async () => {
   await assert.rejects(R.request(u, { type: "tv", tmdb: 1399, seasons: [2] }), (e) => e.status === 429);
   await conf.set({ requests_per_day: 20 }, "test");
 });
+
+test("removal requires spaced JSON 404s and an explicit title confirmation; recovery resets it", async () => {
+  const realFetch = global.fetch;
+  let now = Date.now(), reply = { status: 404, json: async () => { throw new Error("proxy text"); } };
+  let confirmation = { status: 200, json: async () => ({ id: 11, mediaInfo: { requests: [] } }) };
+  const calls = [];
+  let onConfirm = null;
+  global.fetch = async (url) => { calls.push(url); if (url.includes("/request/")) return reply; if (onConfirm) onConfirm(); return confirmation; };
+  R._setClock(() => now);
+  async function seed(type="movie", status="pending") {
+    const u = await mkUser();
+    await runQuery(`INSERT INTO media_requests (user_id,username,media_type,tmdb_id,title,status,overseerr_id,paid_with,created,updated)
+      VALUES (?, ?, ?, ?, 'Guard fixture', ?, 9901, 'credit', ?, ?)`, [u.userId,u.username,type,type === "tv" ? 1399 : 11,status,now,now]);
+    const read = async () => (await getQuery("SELECT * FROM media_requests WHERE user_id = ?",[u.userId]))[0];
+    return {u,read,row:await read()};
+  }
+  try {
+    const x=await seed();
+    assert.ok((await getQuery("PRAGMA table_info(media_requests)")).some(c=>c.name==="missing_since"));
+    await R.sync(x.row);
+    assert.equal((await x.read()).missing_since,null);
+    assert.equal((await x.read()).status,"pending"); assert.equal((await x.read()).refunded_at,null);
+    reply={status:404,json:async()=>({message:"not found"})};
+    await R.sync(x.row);
+    assert.equal((await x.read()).missing_since,now); assert.equal((await x.read()).status,"pending");
+    now+=29*60000; calls.length=0; await R.sync(x.row);
+    assert.equal(calls.length,1,"no confirmation or refund before 30 minutes");
+    now+=2*60000;
+    confirmation={status:200,json:async()=>({id:11,mediaInfo:{requests:[{id:9901}]}})};
+    await R.sync(x.row); assert.equal((await x.read()).status,"pending","still listed");
+    confirmation={status:502,json:async()=>({})}; await R.sync(x.row);
+    assert.equal((await x.read()).refunded_at,null,"failed confirm never refunds");
+    for (const title of [{id:11}, {id:12,mediaInfo:{requests:[]}}, {id:11,mediaInfo:{requests:[{}]}}]) {
+      confirmation={status:200,json:async()=>title}; await R.sync(x.row);
+      assert.equal((await x.read()).status,"pending","incomplete/wrong title is inconclusive");
+    }
+    confirmation={status:200,json:async()=>({id:11,mediaInfo:{requests:[]}})};
+    assert.equal(await R.sync(x.row),"removed");
+    await R.sync(x.row);
+    assert.equal((await R.credits(x.u.userId)).movie,1,"refund exactly once, even with a stale caller row");
+    assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND kind = 'media'",[x.u.userId])).length,1);
+    const y=await seed(); await R.sync(y.row); assert.equal((await y.read()).missing_since,now);
+    reply={status:200,json:async()=>({status:1,media:{status:2}})};
+    await R.sync(y.row); assert.equal((await y.read()).missing_since,null);
+    reply={status:404,json:async()=>({})};
+    const available=await seed("movie","available");
+    await R.sync(available.row); now+=31*60000; await R.sync(available.row);
+    assert.equal((await available.read()).status,"available"); assert.equal((await available.read()).refunded_at,null);
+    const tv=await seed("tv"); await R.webhook({request:{request_id:9901}});
+    assert.equal((await tv.read()).status,"pending");
+    now+=31*60000; confirmation={status:200,json:async()=>({id:1399,mediaInfo:{requests:[]}})};
+    calls.length=0; await R.sync(tv.row);
+    assert.ok(calls.some(u=>u.endsWith("/api/v1/tv/1399"))); assert.equal((await tv.read()).status,"removed");
+    const recovered=await seed(); await R.sync(recovered.row); now+=31*60000;
+    let release;
+    confirmation=new Promise(resolve=>{release=resolve;});
+    const started=new Promise(resolve=>{onConfirm=resolve;});
+    const late=R.sync(recovered.row); await started;
+    reply={status:200,json:async()=>({status:1,media:{status:2}})};
+    await R.sync(recovered.row);
+    release({status:200,json:async()=>({id:11,mediaInfo:{requests:[]}})});
+    assert.equal(await late,"pending","late confirmation cannot remove a recovered request");
+    assert.equal((await recovered.read()).refunded_at,null);
+
+  } finally { global.fetch=realFetch; R._setClock(null); }
+});
