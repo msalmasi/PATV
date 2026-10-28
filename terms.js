@@ -23,7 +23,37 @@ const VERSION = "2026-10-11";   // 1.99nt: the user asked everyone to accept the
 // 1.99nn: the "Last updated" date is per page and moves without VERSION: an additive change (the §10 premium,
 // donations and prizes section) updates the date but asks nobody to accept again. Bump VERSION too to re-ask.
 const UPDATED = "11 October 2026";                 // /terms
-const PRIVACY_UPDATED = "28 October 2026";         // /privacy (mic retention review 2: the deleted accounts' Camfrog-name markers in sections 10 and 9 - additive, VERSION unchanged; the owner approved the text on 2026-10-27 (ops plan mic-audio-retention 8.5 A) and it merged to staging on 28 October 2026 - this date and its changelog entry; 1.99afn: the never-kept commands list matches chatlog.PRIVATE_ARGS - + !patvmsg, !padmove and the privacy commands - additive, VERSION unchanged; date it the day it reaches prod; S1 F13:the patv_chat_sweep sign-out cookie in section 8 - additive, VERSION unchanged; photos sent to Pepe in DMs - additive, VERSION unchanged; the owner's rule of 2026-10-19 (1.99add refix 4 + the chat-history owner change): incognito hides who, not what - "someone"; !bridge hide left out - additive, VERSION unchanged; CL11 + CL13: messages from Camfrog, the admin's own Camfrog log - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
+const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voice is still heard" is dated by TEXT_DATES below - the day this server first served it; mic retention review 2: the deleted accounts' Camfrog-name markers in sections 10 and 9 - additive, VERSION unchanged; the owner approved the text on 2026-10-27 (ops plan mic-audio-retention 8.5 A) and it merged to staging on 28 October 2026 - this date and its changelog entry; 1.99afn: the never-kept commands list matches chatlog.PRIVATE_ARGS - + !patvmsg, !padmove and the privacy commands - additive, VERSION unchanged; date it the day it reaches prod; S1 F13:the patv_chat_sweep sign-out cookie in section 8 - additive, VERSION unchanged; photos sent to Pepe in DMs - additive, VERSION unchanged; the owner's rule of 2026-10-19 (1.99add refix 4 + the chat-history owner change): incognito hides who, not what - "someone"; !bridge hide left out - additive, VERSION unchanged; CL11 + CL13: messages from Camfrog, the admin's own Camfrog log - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
+
+// 1.99aft (review): a privacy-text change dated the day THIS server first served it - policy_text_dates keeps that first moment
+// per text, so staging and prod each date it when it reached them and nobody hand-edits a date at the promote (a hard-coded day
+// was false whenever the promote slipped). /privacy's "Last updated" and the change note use it. WP-1's "your voice is still
+// heard" (incognito/mic-stage design section H, owner-approved 2026-10-28: section 3 and the incognito bullets - additive,
+// VERSION unchanged) is the first. Recorded at boot (register).
+const TEXT_DATES = ["wp1-voice"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+let datesReady = null;
+function initDates() {
+  if (!datesReady) {
+    datesReady = (async () => {
+      await runQuery("CREATE TABLE IF NOT EXISTS policy_text_dates (key TEXT PRIMARY KEY, at INTEGER NOT NULL)");
+      for (const k of TEXT_DATES) await runQuery("INSERT OR IGNORE INTO policy_text_dates (key, at) VALUES (?, ?)", [k, Date.now()]);
+    })().catch((e) => { datesReady = null; throw e; });
+  }
+  return datesReady;
+}
+/** {key: {at, day}}: when this server first served each dated text. Never throws ({} on an error: the note shows undated). */
+async function textDates() {
+  try {
+    await initDates();
+    const out = {};
+    for (const r of await getQuery("SELECT key, at FROM policy_text_dates")) {
+      if (TEXT_DATES.includes(r.key) && Number(r.at) > 0) out[r.key] = { at: Number(r.at), day: dayText(Number(r.at)) };
+    }
+    return out;
+  } catch (e) { return {}; }
+}
 
 let ready = null;
 function init() {
@@ -108,6 +138,7 @@ async function accept(userId) {
 
 function register(app, { addUser }) {
   init().catch(() => {});
+  initDates().catch((e) => console.error("[terms] text dates:", e.message));
   // every page rendered after this: may it say "By posting / signing up you agree to the Terms"?
   app.use((req, res, next) => { res.locals.termsEnforced = enforced(); next(); });
   const page = (view, title, path, updated) => async (req, res, next) => {
@@ -121,19 +152,20 @@ function register(app, { addUser }) {
     // null while it's off) - additive, so VERSION doesn't move; its day becomes "Last updated" when it is the newest
     // wave 3 (design §N.8): the 🧠 "Pepe's memory" text from the moment Pepe's latest report has the memory switch
     // (memoryoptout.privacyCopy: null otherwise - after a rollback too); its day is when a Pepe first reported it
-    let chatlog = null, hubErasure = null, micrec = null, memory = null;
+    let chatlog = null, hubErasure = null, micrec = null, memory = null, policyDates = {};
     if (view === "privacy") {
       try { chatlog = await require("./chatlog").policy(); } catch (e) { chatlog = null; }
       try { hubErasure = await require("./accountdelete").privacyCopy(); } catch (e) { hubErasure = null; }
       try { micrec = await require("./micrec").privacyCopy(); } catch (e) { micrec = null; }
       try { memory = await require("./memoryoptout").privacyCopy(); } catch (e) { memory = null; }
+      policyDates = await textDates();                // 1.99aft: the texts dated the day this server first served them
     }
     let upd = updated, updAt = Date.parse(updated + " 23:59:59 UTC");
     for (const [at, day] of [[chatlog && chatlog.notice_at, chatlog && chatlog.notice_day], [hubErasure && hubErasure.on_at, hubErasure && hubErasure.on_day],
-                             [micrec && micrec.on_at, micrec && micrec.on_day], [memory && memory.on_at, memory && memory.on_day]]) {
+                             [micrec && micrec.on_at, micrec && micrec.on_day], [memory && memory.on_at, memory && memory.on_day], ...Object.values(policyDates).map((d) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
-    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory }); } catch (e) { next(e); }
+    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));
   app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy", PRIVACY_UPDATED));
@@ -155,4 +187,4 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { VERSION, UPDATED, PRIVACY_UPDATED, init, needs, accept, accepted, register, required, enforced, setEnforced, placeholders, _setRequired, _setPlaceholders };
+module.exports = { VERSION, UPDATED, PRIVACY_UPDATED, TEXT_DATES, textDates, init, needs, accept, accepted, register, required, enforced, setEnforced, placeholders, _setRequired, _setPlaceholders };

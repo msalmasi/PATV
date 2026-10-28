@@ -369,7 +369,10 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(t.text, /href="#premium">Premium subscriptions and donations/);
   assert.match(t.text, /<h2>20\. Contact<\/h2>/);
   assert.equal(terms.UPDATED, "11 October 2026");
-  assert.match(p.text, new RegExp("Last updated " + terms.PRIVACY_UPDATED), "the Privacy Policy keeps its own date");
+  // 1.99aft (review): WP-1 is dated the day this server first served it (terms.TEXT_DATES) - here, the test's own run
+  const wp1 = (await terms.textDates())["wp1-voice"];
+  assert.ok(wp1 && wp1.at > Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC"), "WP-1's first-served day is recorded");
+  assert.match(p.text, new RegExp("Last updated " + wp1.day), "the Privacy Policy keeps its own date: the newest dated text");
   // 1.99wh: the Incognito section (§10) - a clarification of a user-controlled setting: the privacy date moves, VERSION doesn't
   const inc = (p.text.match(/<h3 id="incognito">[\s\S]*?<\/section>/) || [""])[0];
   assert.match(inc, /Settings → Privacy/);
@@ -396,8 +399,18 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(p.text, /<b>Neither one mutes you:<\/b> if the pad has room audio on, people listening on the website \(and on Pepe's live stream, when it carries that room\) still hear your voice\./);
   assert.match(inc, /<b>Your voice is still heard:<\/b> incognito and <code>!bridge hide<\/code> change what the website <i>shows<\/i>, not what it <i>plays<\/i>\./);
   assert.match(inc, /The pad's owner can switch the audio off\./);
-  assert.match(p.text, /28 October 2026:<\/b> sections 3 and 10 now say that <code>!incognito<\/code> and <code>!bridge hide<\/code> don't mute you/, "a dated change note for WP-1");
-  assert.equal(terms.PRIVACY_UPDATED, "28 October 2026");    // mic retention 8.5 A (merged 28 October); F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
+  assert.match(p.text, new RegExp(wp1.day + ":</b> sections 3 and 10 now say that <code>!incognito</code> and <code>!bridge hide</code> don't mute you"),
+               "a change note for WP-1, dated the day this server first served it");
+  // the day sticks (a later boot never moves it), and on a server that got it on another day that day is shown (prod's promote day)
+  await terms.textDates();
+  assert.equal((await terms.textDates())["wp1-voice"].at, wp1.at, "the first-served moment never moves");
+  const PROD_DAY = Date.UTC(2026, 10, 3, 12, 0, 0);
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'wp1-voice'", [PROD_DAY]);
+  const p2 = await get("/privacy", null);
+  assert.match(p2.text, /Last updated 3 November 2026/);
+  assert.match(p2.text, /3 November 2026:<\/b> sections 3 and 10 now say that/);
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'wp1-voice'", [wp1.at]);
+  assert.equal(terms.PRIVACY_UPDATED, "28 October 2026");    // mic retention 8.5 A (merged 28 October); WP-1 (your voice is still heard): TEXT_DATES; F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#pepe-photos">/, "a dated change note for photos sent to Pepe");
   assert.match(p.text, /id="pepe-photos"/);
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#messages-camfrog">/, "a dated change note for CL11");
