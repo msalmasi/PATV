@@ -25,12 +25,16 @@
 //    nowPlaying(): "📼 Now playing on <pad>: <title>" in the pad's chat + Pepe's line in its Camfrog room (relay job
 //    "nowplaying"). Same owner switch; NEVER a follower alert (that was the queue's stream start, once).
 //
+// 4) 1.99??: optional Discord starts, public/listed/non-adult pads only, never hidden identities.
+//    Same pad switch and restart rules; durable 10-minute pad gap and hourly cap, including test attempts.
+//    Disabled by default; admin settings and tests at /admin/discord-golive; staging never sends.
+//
 // Routes (signed in; JSON = same site + X-Requested-With: fetch)
 //   POST /api/golive/prefs          {alerts?, pm?}
 //   POST /api/golive/follow         {kind: user|room, id, on}      one follow's go-live alerts
 //   POST /api/rooms/:slug/golive    {announce}                     the pad owner's switch (pad settings -> Stage)
 "use strict";
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const NOTIFY_MAX = 1000;
 const RESTART_MS = 30 * 60 * 1000;        // the same streamer back on the same pad within this = the same show
@@ -51,6 +55,12 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS golive_log (key TEXT PRIMARY KEY, room_id TEXT, user_id TEXT, source TEXT, ts INTEGER NOT NULL,
                       notified INTEGER NOT NULL DEFAULT 0, announced INTEGER NOT NULL DEFAULT 0)`);
       await runQuery("CREATE INDEX IF NOT EXISTS golive_log_room ON golive_log (room_id, ts)");
+      await runQuery(`CREATE TABLE IF NOT EXISTS discord_golive (id INTEGER PRIMARY KEY CHECK(id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0, channel_id TEXT NOT NULL DEFAULT '1206395925191200790',
+        role_id TEXT NOT NULL DEFAULT '', max_per_hour INTEGER NOT NULL DEFAULT 6)`);
+      await runQuery("INSERT OR IGNORE INTO discord_golive (id) VALUES (1)");
+      await runQuery("CREATE TABLE IF NOT EXISTS golive_discord_log (key TEXT PRIMARY KEY, room_id TEXT, ts INTEGER NOT NULL)");
+      await runQuery("CREATE INDEX IF NOT EXISTS golive_discord_time ON golive_discord_log (ts)");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -61,6 +71,95 @@ class Refuse extends Error { constructor(status, msg) { super(msg); this.status 
 const clean = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
 const SITE = () => String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL ||
   (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
+
+// 1.99??: opt-in Discord announcements. Attempts reserve durable per-pad/hourly limits before sending;
+// failures are not retried (an HTTP timeout may already have posted). No Discord work delays a stream start.
+let discordSend = null;
+const discordPending = new Set();
+const discordAdmin = (u) => !!(u && u.userId && String(u.class).toLowerCase() === "admin");
+async function discordSettings() {
+  await init();
+  const r = (await getQuery("SELECT enabled, channel_id, role_id, max_per_hour FROM discord_golive WHERE id = 1"))[0];
+  return { ...r, enabled: !!r.enabled };
+}
+async function saveDiscordSettings(user, b = {}) {
+  if (!discordAdmin(user)) throw new Refuse(403, "admin.discord_golive.forbidden");
+  if (typeof b.enabled !== "boolean" || typeof b.channel_id !== "string" || typeof b.role_id !== "string" ||
+      (b.channel_id !== "" && !/^\d{5,25}$/.test(b.channel_id)) || (b.enabled && !b.channel_id) ||
+      (b.role_id !== "" && !/^\d{5,25}$/.test(b.role_id)) || !Number.isInteger(b.max_per_hour) || b.max_per_hour < 1 || b.max_per_hour > 60) {
+    throw new Refuse(400, "admin.discord_golive.invalid");
+  }
+  await init();
+  const audit = require("./adminaudit");
+  await audit.init();
+  return tx(async () => {
+    const before = await discordSettings();
+    await runQuery("UPDATE discord_golive SET enabled = ?, channel_id = ?, role_id = ?, max_per_hour = ? WHERE id = 1",
+      [b.enabled ? 1 : 0, b.channel_id, b.role_id, b.max_per_hour]);
+    const after = await discordSettings();
+    await audit.record(user, "discord_golive.settings", null, { before, after });
+    return after;
+  });
+}
+async function discordPublic(o) {
+  if (!o.userId || o.discordPrivate) return null;
+  const rooms = require("./rooms"), PA = require("./padaccess");
+  await rooms.get(o.roomId);
+  await PA.init();
+  const r = rooms.getCached(o.roomId);
+  if (!r || !r.slug || !r.listed || r.profile || r.adult || !PA.isPublic(o.roomId) || !(await padAnnounce(o.roomId))) return null;
+  const u = await require("./feedstore").account(o.userId);
+  if (!u || u.archived_at) return null;
+  // Check both identities, including web-only accounts. quotes fails closed while privacy sets load.
+  const hidden = require("./quotes").isHidden;
+  if (hidden("u:" + o.userId) || (u.camfrogUsername && hidden(String(u.camfrogUsername).trim().toLowerCase()))) return null;
+  return r;
+}
+async function discordReserve(key, roomId, cap) {
+  return tx(async () => {
+    const t = NOW();
+    await runQuery("DELETE FROM golive_discord_log WHERE ts <= ?", [t - 3600000]);
+    if ((await getQuery("SELECT COUNT(*) AS n FROM golive_discord_log"))[0].n >= cap) return false;
+    if (roomId && (await getQuery("SELECT 1 FROM golive_discord_log WHERE room_id = ? AND ts > ?", [roomId, t - PAD_GAP_MS])).length) return false;
+    const ins = await runQuery("INSERT OR IGNORE INTO golive_discord_log (key, room_id, ts) VALUES (?, ?, ?)", [key, roomId, t]);
+    return !!ins.changes;
+  });
+}
+function queueDiscord(o) {
+  if (process.env.STAGING || !discordSend) return;
+  const work = (async () => {
+    const cfg = await discordSettings();
+    if (!cfg.enabled || !cfg.channel_id) return;
+    let r = await discordPublic(o);
+    if (!r || !(await discordReserve(o.key, o.roomId, cfg.max_per_hour))) return;
+    // Recheck privacy/settings after waiting for the reservation transaction.
+    const current = await discordSettings();
+    if (process.env.STAGING || !current.enabled || !current.channel_id) return;
+    r = await discordPublic(o);
+    if (!r) return;
+    const result = await discordSend("/stage/golive", { channel_id: current.channel_id, role_id: current.role_id || undefined,
+      pad: { slug: r.slug, title: clean(r.title, 60) }, streamer: clean(o.display, 40),
+      title: clean(o.discordTitle || o.what, 200), kind: clean(o.source, 20), url: SITE() + "/p/" + encodeURIComponent(r.slug) });
+    if (!result || result.error) console.error("[golive] Discord alert failed");
+  })().catch(() => console.error("[golive] Discord alert failed"));
+  discordPending.add(work);
+  work.finally(() => discordPending.delete(work));
+}
+async function testDiscord(user) {
+  if (!discordAdmin(user)) throw new Refuse(403, "admin.discord_golive.forbidden");
+  if (process.env.STAGING || !discordSend) throw new Refuse(409, "admin.discord_golive.unavailable");
+  const cfg = await discordSettings();
+  if (!cfg.channel_id) throw new Refuse(400, "admin.discord_golive.invalid");
+  const key = "test:" + require("crypto").randomUUID();
+  if (!(await discordReserve(key, null, cfg.max_per_hour))) throw new Refuse(429, "admin.discord_golive.limited");
+  await require("./adminaudit").record(user, "discord_golive.test", null, { channel_id: cfg.channel_id });
+  let result;
+  try { result = await discordSend("/stage/golive", { channel_id: cfg.channel_id, test: true,
+    pad: { slug: "patv-lounge", title: "PATV" }, streamer: "PATV", title: "TEST — Discord stage alerts", kind: "test",
+    url: SITE() + "/p/patv-lounge" }); } catch (e) { /* translate bridge failures below */ }
+  if (!result || !result.ok) throw new Refuse(502, "admin.discord_golive.failed");
+  return { ok: true };
+}
 
 // ── preferences ──
 async function prefs(userId) {
@@ -196,6 +295,7 @@ async function onLive(o) {
     if (await padAnnounce(roomId)) {
       const last = (await getQuery("SELECT MAX(ts) AS t FROM golive_log WHERE room_id = ? AND announced = 1", [roomId]))[0];
       if (!(last && last.t && t - last.t < PAD_GAP_MS) && !again) {
+        queueDiscord({ ...o, key, roomId });
         const bridge = require("./bridge");
         const link = SITE() + href;
         const said = await bridge.liveNotice(roomId, { who: display, pad: padName, what, link: href });
@@ -252,7 +352,8 @@ async function onSlot(s) {
   if (!s || !s.id || !s.room_id) return null;
   const camfrog = await camfrogOf(s.userId);
   return onLive({ key: "slot:" + s.id, roomId: s.room_id, userId: s.userId, display: s.displayname || s.username,
-                  what: whatOf(s), source: s.source === "library" ? "plex" : s.mode === "embed" ? "embed" : "stage", camfrog });
+                  what: whatOf(s), discordTitle: s.title, discordPrivate: s.source === "cam" || !!s.nsfw,
+                  source: s.source === "library" ? "plex" : s.mode === "embed" ? "embed" : "stage", camfrog });
 }
 /** Fire and forget (the stage never waits on alerts). */
 function slotLive(s) { setImmediate(() => { onSlot(s).catch(() => {}); }); }
@@ -309,7 +410,7 @@ async function twitchTick() {
     if (!was || was.id !== String(st.id)) {
       started++;
       await onLive({ key: "twitch:" + String(st.id), roomId: p.roomId, userId: p.ownerId || null, display: p.ownerName || st.user_name,
-                     what: clean(st.title, 90) || "Twitch", source: "twitch" });
+                     what: clean(st.title, 90) || "Twitch", discordTitle: st.title, source: "twitch" });
     }
   }
   return started;
@@ -319,13 +420,34 @@ function twitchNow(roomId) { return twitchLive.get(String(roomId || "")) || null
 
 // ── routes ──
 let timer = null;
-function register(app, { addUser, noTimers } = {}) {
+function register(app, { addUser, noTimers, discordBridge } = {}) {
+  discordSend = typeof discordBridge === "function" ? discordBridge : null;
   init().catch((e) => console.error("[golive] init:", e.message));
   if (!noTimers && !timer && process.env.TWITCH_CLIENT_ID && process.env.TWITCH_SECRET_KEY) {
     timer = setInterval(() => twitchTick().catch((e) => console.error("[golive] twitch:", e.message)), TWITCH_POLL_MS);
     timer.unref();
   }
   const guard = require("./middleware/authGuard");
+  const admin = (req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    if (!discordAdmin(req.user)) return res.status(403).json({ ok: false, error: req.t("admin.discord_golive.forbidden") });
+    if (req.method !== "GET" && (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch")) {
+      return res.status(403).json({ ok: false, error: req.t("admin.discord_golive.forbidden") });
+    }
+    next();
+  };
+  const adminFail = (req, res, e) => res.status(e.refuse ? e.status : 500).json({ ok: false,
+    error: req.t(e.refuse ? e.message : "admin.discord_golive.failed") });
+  app.get("/admin/discord-golive", addUser, admin, async (req, res) => {
+    try { res.render("admin/discordGolive", { title: req.t("admin.discord_golive.title"), user: req.user.username,
+      settings: await discordSettings(), staging: !!process.env.STAGING }); } catch (e) { adminFail(req, res, e); }
+  });
+  app.post("/api/admin/discord-golive", addUser, admin, async (req, res) => {
+    try { res.json({ ok: true, settings: await saveDiscordSettings(req.user, req.body) }); } catch (e) { adminFail(req, res, e); }
+  });
+  app.post("/api/admin/discord-golive/test", addUser, admin, async (req, res) => {
+    try { res.json(await testDiscord(req.user)); } catch (e) { adminFail(req, res, e); }
+  });
   const json = (req, res, next) => {
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
@@ -353,4 +475,5 @@ function register(app, { addUser, noTimers } = {}) {
 }
 
 module.exports = { init, register, prefs, setPrefs, setFollow, padAnnounce, setPadAnnounce, resetPadAnnounce, padAnnounceSet, audience, onLive, onSlot, slotLive, whatOf, nowPlaying,
-                   twitchTick, twitchNow, _twitchLive: twitchLive, _setClock, Refuse, RESTART_MS, PAD_GAP_MS };
+                   twitchTick, twitchNow, _twitchLive: twitchLive, _setClock, Refuse, RESTART_MS, PAD_GAP_MS,
+                   discordSettings, saveDiscordSettings, testDiscord, _drainDiscord: () => Promise.all([...discordPending]) };

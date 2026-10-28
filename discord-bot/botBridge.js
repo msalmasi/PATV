@@ -203,6 +203,60 @@ async function handleRoleChange(client, body, res, add) {
   return send(res, 200, add ? { ok: true, granted: true, already: had } : { ok: true, removed: had, had });
 }
 
+
+// 1.99??: public stage starts. Canonical PATV links and explicit role IDs only.
+const PATV_GUILD_ID = '913269267691094026';
+const stageId = (v) => typeof v === 'string' && /^\d{5,25}$/.test(v);
+function stageUrl(v) {
+  if (typeof v !== 'string' || v.length > 2048) return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' && ['publicaccess.tv', 'pa.tv'].includes(u.hostname) && !u.username && !u.password && !u.port;
+  } catch (e) { return false; }
+}
+const stageText = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n) : '';
+async function handleStageGoLive(client, body, res) {
+  if (process.env.STAGING) return send(res, 409, { error: 'staging_disabled' });
+  if (!body || !stageId(body.channel_id) || (body.role_id != null && !stageId(body.role_id))) return send(res, 400, { error: 'bad_channel_or_role' });
+  if (!stageUrl(body.url) || (body.thumb != null && !stageUrl(body.thumb))) return send(res, 400, { error: 'bad_url' });
+  const pad = body.pad, streamer = stageText(body.streamer, 40), title = stageText(body.title, 200);
+  if (!pad || typeof pad.slug !== 'string' || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(pad.slug) ||
+      !stageText(pad.title, 60) || !streamer || typeof body.title !== 'string' ||
+      !['stage', 'embed', 'plex', 'twitch', 'test'].includes(body.kind) ||
+      new URL(body.url).pathname !== '/p/' + pad.slug || (body.test != null && typeof body.test !== 'boolean')) {
+    return send(res, 400, { error: 'bad_alert' });
+  }
+  const channel = await client.channels.fetch(body.channel_id);
+  if (!channel || !channel.guild || channel.guild.id !== PATV_GUILD_ID) return send(res, 403, { error: 'foreign_guild' });
+  if (!channel.isTextBased() || typeof channel.send !== 'function') return send(res, 400, { error: 'not_text_channel' });
+  let roles = [];
+  if (!body.test && (body.role_id || title.includes('@'))) {
+    const available = [...(await channel.guild.roles.fetch()).values()];
+    if (body.role_id) {
+      const r = available.find((r) => r.id === body.role_id && r.id !== PATV_GUILD_ID);
+      if (!r) return send(res, 400, { error: 'bad_role' });
+      roles = [r.id];
+    } else {
+      // Any streamer may tag a mentionable role. Quoted tags support spaces: @"Movie Night".
+      // Exact case-insensitive names; ambiguous names, raw IDs, everyone and here never ping.
+      const tags = [...title.matchAll(/(?:^|\s)@(?:"([^"\r\n]{1,100})"|([\p{L}\p{N}_-]+))(?=$|\s|[.,!?;:])/gu)];
+      for (const tag of tags) {
+        const name = (tag[1] || tag[2]).toLowerCase();
+        if (name === 'everyone' || name === 'here') continue;
+        const matches = available.filter((r) => r.id !== PATV_GUILD_ID && r.name.toLowerCase() === name);
+        if (matches.length === 1 && matches[0].mentionable) roles.push(matches[0].id);
+      }
+      roles = [...new Set(roles)];
+    }
+  }
+  const embed = { title: (body.test ? '🧪 TEST — ' : '🎥 ') + streamer + ' is live on ' + stageText(pad.title, 60),
+    description: title || undefined, url: body.url, footer: { text: 'PATV stages' } };
+  if (body.thumb) embed.thumbnail = { url: body.thumb };
+  const posted = await channel.send({ content: roles.map((id) => '<@&' + id + '>').join(' '), embeds: [embed],
+    allowedMentions: { parse: [], users: [], roles, repliedUser: false } });
+  return send(res, 200, { ok: true, id: posted.id });
+}
+
 function start(client) {
   // BOT_BRIDGE_*; the old POKER_BRIDGE_* names still work.
   const env = (k) => process.env[`BOT_BRIDGE_${k}`] || process.env[`POKER_BRIDGE_${k}`];
@@ -226,6 +280,7 @@ function start(client) {
 
     const path = (req.url || '').split('?')[0];
     try {
+      if (path === '/stage/golive') return await handleStageGoLive(client, body, res);
       if (path === '/poker/chips') return await handleChips(client, body, res);
       if (path === '/poker/newgame') return await handleNewGame(client, body, res);
       if (path === '/store/purchase') return await handleStorePurchase(client, body, res);

@@ -1,0 +1,41 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: true }) %>
+<div class="adm-head"><h1><%- t('admin.discord_golive.title') %></h1><p><%- t('admin.discord_golive.intro') %></p></div>
+<section class="adm-card">
+  <% if (staging) { %><p role="status"><%- t('admin.discord_golive.staging') %></p><% } %>
+  <form id="discordSettings">
+    <p><label><input type="checkbox" id="enabled" <%= settings.enabled ? 'checked' : '' %>> <%- t('admin.discord_golive.enabled') %></label></p>
+    <p><label for="discordChannel"><%- t('admin.discord_golive.channel_id') %></label><br><input id="discordChannel" value="<%= settings.channel_id %>" inputmode="numeric" pattern="[0-9]{5,25}" maxlength="25"></p>
+    <p><label for="role"><%- t('admin.discord_golive.role') %></label><br><input id="role" value="<%= settings.role_id %>" inputmode="numeric" pattern="[0-9]{5,25}" maxlength="25"></p>
+    <p class="adm-help"><%- t('admin.discord_golive.help') %></p>
+    <p><label for="limit"><%- t('admin.discord_golive.limit') %></label><br><input id="limit" type="number" min="1" max="60" step="1" required value="<%= settings.max_per_hour %>"></p>
+    <p class="adm-help"><%- t('admin.discord_golive.rates') %></p>
+    <div class="adm-actions"><button type="submit" id="save"><%- t('admin.discord_golive.save') %></button>
+      <button type="button" id="test" <%= staging ? 'disabled' : '' %>><%- t('admin.discord_golive.test') %></button></div>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+</section>
+<script>
+(function () {
+  'use strict';
+  var form = document.getElementById('discordSettings'), status = document.getElementById('status');
+  var save = document.getElementById('save'), test = document.getElementById('test'), staging = <%= staging ? 'true' : 'false' %>;
+  function send(isTest) {
+    save.disabled = test.disabled = true;
+    status.textContent = '';
+    var body = isTest ? {} : { enabled: document.getElementById('enabled').checked,
+      channel_id: document.getElementById('discordChannel').value.trim(), role_id: document.getElementById('role').value.trim(),
+      max_per_hour: Number(document.getElementById('limit').value) };
+    fetch('/api/admin/discord-golive' + (isTest ? '/test' : ''), { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); }).then(function (r) {
+        if (!r.ok) throw new Error(r.error || __t('js.discord_golive.failed', 'The request failed. Try again.'));
+        status.textContent = isTest ? __t('js.discord_golive.sent', 'Test alert sent.') : __t('js.discord_golive.saved', 'Settings saved.');
+      }).catch(function (e) { status.textContent = e.message || __t('js.discord_golive.failed', 'The request failed. Try again.'); })
+      .then(function () { save.disabled = false; test.disabled = staging; });
+  }
+  form.addEventListener('submit', function (e) { e.preventDefault(); send(false); });
+  test.addEventListener('click', function () { send(true); });
+})();
+</script>
+<%- include('../partials/admin-close') %>

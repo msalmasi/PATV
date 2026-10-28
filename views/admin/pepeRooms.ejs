@@ -1,8 +1,10 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: isAdmin }) %>
 <%# 1.99kp: control the Camfrog rooms Pepe is in (roomctl.js -> website action room.ctl -> camfrog-bot pepe_roomctl.py). Admins only. %>
 <div class="adm-head">
   <h1>Pepe's rooms</h1>
   <p>The Camfrog rooms Pepe is in right now. Join, leave, pick his active room (his mic/cam window and the main stage) and mute a room's sound. The same controls are on his own admin panel on the VM (port 8766, "Rooms Pepe is in").</p>
+<p><a href="/admin/discord-golive"><%- t('admin.discord_golive.title') %></a></p>
 </div>
 
 <section class="adm-card" id="rooms" aria-labelledby="rmT">

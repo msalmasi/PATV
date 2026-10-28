@@ -1270,7 +1270,7 @@ require("./voicestore").register(app, { addUser, isBotToken });   // 1.99rh: �
 require("./voiceclone").register(app, { addUser, isBotToken });   // 1.99ri: 🎙️ !clonemyvoice - consent, recording checks, review, revocation (/voices/clone)
 require("./botupload").register(app, { isBotToken });   // 1.99vk: Pepe's big uploads in <=512 KB chunks (nginx 1m) -> finish hands the body to its route
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
-require("./golive").register(app, { addUser });   // 1.99kp: 🎥 go-live alerts + stream-start announcements
+require("./golive").register(app, { addUser, discordBridge });   // 1.99kp: 🎥 go-live alerts + stream-start announcements
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories
 require("./feedseen").register(app, { addUser });  // 1.99ex: the feed's "N new" seen state per account (GET/POST /api/feed/seen)
