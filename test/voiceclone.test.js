@@ -167,11 +167,42 @@ test("revocation: stops at once, soundboard clips in it removed, buyers 50% back
   const buy = await call("POST", "/api/voices/buy", U.buyer, { voice: "vetcf", ref: "ref0000000001" });
   assert.equal(buy.status, 200, JSON.stringify(buy.d));
   await runQuery(`INSERT INTO sb_clips (id, board, label, kind, voice, text, rarity, status, created) VALUES ('r-vet', 'room:X', 'Vet line', 'tts', 'vetcf', 'hi', 'epic', 'active', 1)`);
-  let r = await call("POST", "/api/voiceclone/revoke", U.vet, {});
+  // 1.99afv: the audio generated in the voice - its ▶ sample (+ an older render kept in .replaced/), a room clip's WAV, a "random"
+  // clip that came out in it - and what isn't (another voice's clip, a real mic clip)
+  const sid = VS.sampleId("vetcf");
+  const sbFile = (n) => path.join(process.env.SB_DIR, n);
+  fs.mkdirSync(sbFile(".replaced"), { recursive: true });
+  for (const n of [sid + ".wav", ".replaced/" + sid + ".deadbeef.wav", "r-vet.wav", "g-roll.wav", "g-rollh.wav", "r-other.wav", "r-mic.wav"]) fs.writeFileSync(sbFile(n), "RIFF");
+  await runQuery(`INSERT INTO sb_clips (id, board, label, kind, voice, text, rarity, status, audio, sha, created) VALUES
+                  (?, 'sample', 'vetcf', 'tts', 'vetcf', 'Hi', 'epic', 'active', ?, 'abc', 1),
+                  ('g-roll', 'global', 'Roll', 'tts', 'random', 'yo', 'common', 'active', 'g-roll.wav', 'abc', 1),
+                  ('g-rollh', 'global', 'Roll h', 'tts', 'random', 'yo', 'common', 'hidden', 'g-rollh.wav', 'abc', 1),
+                  ('r-other', 'room:X', 'Other', 'tts', 'stockvoice', 'yo', 'epic', 'active', 'r-other.wav', 'abc', 1),
+                  ('r-mic', 'room:X', 'Mic', 'audio', 'vetcf', null, 'epic', 'active', 'r-mic.wav', 'abc', 1)`, [sid, sid + ".wav"]);
+  await runQuery("UPDATE sb_clips SET audio = 'r-vet.wav', sha = 'abc' WHERE id = 'r-vet'");
+  await runQuery("UPDATE sb_clips SET note = 'voice: VetCF' WHERE id IN ('g-roll', 'g-rollh')");
+  await runQuery("UPDATE voices SET sample_clip = ? WHERE id = 'vetcf'", [sid]);
+  const logs = [];
+  const log0 = console.log;
+  console.log = (...a) => { logs.push(a.join(" ")); };
+  let r;
+  try { r = await call("POST", "/api/voiceclone/revoke", U.vet, {}); } finally { console.log = log0; }
   assert.equal(r.status, 200, JSON.stringify(r.d));
   assert.equal(r.d.refunds, 1);
   assert.equal((await VS.voice("vetcf")).status, "revoked");
   assert.equal((await getQuery("SELECT status FROM sb_clips WHERE id = 'r-vet'"))[0].status, "removed");
+  for (const n of [sid + ".wav", ".replaced/" + sid + ".deadbeef.wav", "r-vet.wav", "g-roll.wav", "g-rollh.wav"]) assert.ok(!fs.existsSync(sbFile(n)), `${n}: generated in the revoked voice - deleted`);
+  for (const n of ["r-other.wav", "r-mic.wav"]) assert.ok(fs.existsSync(sbFile(n)), `${n}: another voice / a real mic clip - kept`);
+  const rows = Object.fromEntries((await getQuery("SELECT id, status, audio, sha, pending FROM sb_clips WHERE id IN (?, 'r-vet', 'g-roll', 'g-rollh', 'r-other')", [sid])).map((x) => [x.id, x]));
+  assert.deepEqual([rows[sid].status, rows[sid].audio, rows[sid].sha], ["removed", null, null], "the sample's row points at no file");
+  assert.deepEqual([rows["r-vet"].status, rows["r-vet"].audio], ["removed", null]);
+  assert.deepEqual([rows["g-roll"].status, rows["g-roll"].audio], ["render", null], "a random clip that came out in the voice is rendered again");
+  assert.deepEqual([rows["g-rollh"].status, rows["g-rollh"].audio, rows["g-rollh"].pending], ["hidden", null, 1], "...a hidden one stays hidden");
+  assert.deepEqual([rows["r-other"].status, rows["r-other"].audio], ["active", "r-other.wav"]);
+  const line = logs.find((l) => /generated audio file/.test(l));
+  assert.ok(line && line.includes(sid + ".wav") && /deleted 5 generated audio file\(s\)/.test(line), line);
+  assert.ok(!/vetcf/i.test(logs.join("\n")), "counts and file names only - never the voice (the owner's Camfrog name)");
+  assert.deepEqual(await VS.purgeVoiceAudio("vetcf"), { files: [], clips: 0 }, "nothing left to do");
   const refund = await getQuery("SELECT points, type FROM transactions WHERE userId = ? AND type LIKE '%half your unlock back%'", [U.buyer.userId]);
   assert.deepEqual(refund.map((x) => x.points), [100000], "50% of the unlock, from the Reserve");
   r = await call("POST", "/api/voiceclone/revoke", U.vet, {});
@@ -190,4 +221,43 @@ test("revocation: stops at once, soundboard clips in it removed, buyers 50% back
   T += 31 * 86400000;
   assert.ok((await VC.sweep()) >= 1);
   assert.ok(!fs.existsSync(path.join(process.env.VC_DIR, file)), "the recording is deleted 30 days after the revocation");
+});
+
+test("1.99afv: voices revoked BEFORE the revoke deleted their generated audio - removed once at boot (start), idempotent; a revoked voice never gets a sample again", async () => {
+  const sbFile = (n) => path.join(process.env.SB_DIR, n);
+  // today's prod: a revoked clone whose ▶ sample is still on disk (its row already 'removed' by the revoke)
+  await runQuery("INSERT INTO voices (id, display, kind, owner_login, status, listed, created, updated) VALUES ('oldrev', 'OldRev', 'clone', 'oldrev', 'revoked', 0, 1, 1)");
+  const sid = VS.sampleId("oldrev");
+  await runQuery("UPDATE voices SET sample_clip = ? WHERE id = 'oldrev'", [sid]);
+  await runQuery("INSERT INTO sb_clips (id, board, label, kind, voice, text, rarity, status, audio, sha, created) VALUES (?, 'sample', 'OldRev', 'tts', 'oldrev', 'Hi', 'epic', 'removed', ?, 'abc', 1)", [sid, sid + ".wav"]);
+  fs.writeFileSync(sbFile(sid + ".wav"), "RIFF");
+  // an active voice's sample is not touched
+  const live = VS.sampleId("livevoice");
+  await runQuery("INSERT INTO voices (id, display, kind, status, created, updated) VALUES ('livevoice', 'LiveVoice', 'stock', 'active', 1, 1)");
+  await runQuery("INSERT INTO sb_clips (id, board, label, kind, voice, text, rarity, status, audio, sha, created) VALUES (?, 'sample', 'LiveVoice', 'tts', 'livevoice', 'Hi', 'epic', 'active', ?, 'abc', 1)", [live, live + ".wav"]);
+  fs.writeFileSync(sbFile(live + ".wav"), "RIFF");
+  const logs = [];
+  const log0 = console.log;
+  console.log = (...a) => { logs.push(a.join(" ")); };
+  try {
+    VC.start();   // the boot run
+    for (let i = 0; i < 100 && fs.existsSync(sbFile(sid + ".wav")); i++) await new Promise((res) => setTimeout(res, 20));
+    for (let i = 0; i < 50 && !logs.some((l) => /revoked voices/.test(l)); i++) await new Promise((res) => setTimeout(res, 20));
+  } finally { console.log = log0; }
+  assert.ok(!fs.existsSync(sbFile(sid + ".wav")), "the revoked voice's sample is deleted at boot");
+  assert.ok(fs.existsSync(sbFile(live + ".wav")), "an active voice's sample stays");
+  const row = (await getQuery("SELECT status, audio, sha FROM sb_clips WHERE id = ?", [sid]))[0];
+  assert.deepEqual([row.status, row.audio, row.sha], ["removed", null, null]);
+  const line = logs.find((l) => /revoked voices/.test(l));
+  assert.ok(line && line.includes(sid + ".wav"), "logged: counts and file names");
+  assert.ok(!/oldrev/i.test(logs.join("\n")), "never the voice / login");
+  // idempotent: the next boot finds nothing
+  assert.deepEqual(await VS.purgeRevoked(), { voices: 0, files: [], clips: 0 });
+  // Pepe's import names the revoked voice again: no new sample row, no render job for it
+  await VS.importFromPepe({ names: ["OldRev", "NoSampleRev"] });
+  await runQuery("UPDATE voices SET status = 'revoked' WHERE id = 'nosamplerev'");
+  await runQuery("DELETE FROM sb_clips WHERE id = ?", [VS.sampleId("nosamplerev")]);
+  await VS.importFromPepe({ names: ["OldRev", "NoSampleRev"] });
+  assert.equal((await getQuery("SELECT status FROM sb_clips WHERE id = ?", [sid]))[0].status, "removed", "still removed - not a render job again");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sb_clips WHERE id = ?", [VS.sampleId("nosamplerev")]))[0].n, 0, "a revoked voice gets no sample");
 });

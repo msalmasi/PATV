@@ -14,6 +14,7 @@
 //     use, prices within the bands (per use 0-10,000; unlock 0 or 100,000-1,000,000), their royalty (10-50%), pause.
 //     Revoking (S3, voiceclone.js) stops every use at once.
 // Previews: one sample line per voice, rendered once by Pepe through the soundboard render queue (sb_clips board "sample").
+//   1.99afv: a revoked voice's sample (and every TTS clip made in it) is deleted - purgeVoiceAudio, run by the revoke and at boot.
 //
 //   voices         id (lower-case VoiceBox name), display, kind stock|clone|preset, owner_user_id, owner_login, price_use, price_unlock,
 //                  royalty_pct, listed, allow_free_text, allow_soundboard, status active|paused|revoked|pending, consent_id,
@@ -22,6 +23,8 @@
 //   voice_owned_logins   login, voice_id, source, created   (imported unlocks whose Camfrog login has no PATV account yet)
 "use strict";
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
@@ -81,6 +84,8 @@ async function pickable() {
     .map((v) => ({ id: v.id, display: v.display, kind: v.kind }));
 }
 async function ensureSample(v) {
+  // 1.99afv: a revoked voice never gets a sample again (no row, no render job - its generated audio went with the revoke)
+  if (!v || v.status === "revoked") return;
   try {
     await SB().init();
     const id = sampleId(v.id);
@@ -92,6 +97,74 @@ async function ensureSample(v) {
     }
     if (v.sample_clip !== id) await runQuery("UPDATE voices SET sample_clip = ? WHERE id = ?", [id, v.id]);
   } catch (e) { console.error("[voicestore] sample:", e.message); }
+}
+
+// ── 1.99afv: a revoked clone's GENERATED audio goes with it (owner, 2026-10-28) ──
+// The ▶ sample of the voice store (sb_clips board "sample", vs-<sha1(id)[:12]>.wav: a TTS line in the voice) and every other TTS
+// soundboard clip rendered in it (a room board's line) are synthetic audio of the person's voice. The revoke already stops them
+// (status 'removed'); this deletes their WAVs too - with the copies soundboards.saveWav kept in SB_DIR/.replaced/ - and empties the
+// rows (audio / sha NULL), so nothing points at a deleted file and a staff "restore" can't bring the voice back (no audio: it would
+// need a render, which a revoked voice never gets). A clip whose voice was rolled at render time ("random") and came out in this voice
+// (its note "voice: <id>", soundboards.storeAudio) loses that WAV and is rendered again in another voice. The rows stay: ownership,
+// plays and likeness cuts point at their ids. Mic clips (kind "audio": a real recording, not generated) are never touched here.
+// Logs counts and file names only (never the voice: its id is the owner's Camfrog name).
+const AUDIO_FILE_RE = /^[a-z0-9][a-z0-9-]{1,40}\.wav$/;
+function unlinkQuiet(full) {
+  try { fs.unlinkSync(full); return true; } catch (e) { if (e.code !== "ENOENT") console.error(`[voicestore] couldn't delete ${path.basename(full)}: ${e.code || e.message}`); return false; }
+}
+/** -> {files: [deleted names, ".replaced/..." for the kept copies], clips: rows emptied} */
+async function purgeVoiceAudio(voiceId) {
+  await init();
+  const id = low(voiceId);
+  const out = { files: [], clips: 0 };
+  if (!id) return out;
+  const sb = SB();
+  await sb.init();
+  const dir = sb.DIR;
+  let replaced = null;
+  const replacedOf = (clipId) => {
+    if (replaced === null) { try { replaced = fs.readdirSync(path.join(dir, ".replaced")); } catch (e) { replaced = []; } }
+    return replaced.filter((n) => n.startsWith(clipId + ".") && n.endsWith(".wav"));
+  };
+  const t = now();
+  // the voice's own clips: its sample + the TTS clips made in it
+  const v = await voice(id);
+  const own = await getQuery("SELECT id, audio, sha, status FROM sb_clips WHERE id IN (?, ?) OR (kind = 'tts' AND LOWER(voice) = ?)", [sampleId(id), (v && v.sample_clip) || sampleId(id), id]);
+  for (const c of own) {
+    const names = new Set([c.id + ".wav"]);
+    if (c.audio && AUDIO_FILE_RE.test(c.audio)) names.add(c.audio);
+    for (const n of names) if (AUDIO_FILE_RE.test(n) && unlinkQuiet(path.join(dir, n))) out.files.push(n);
+    for (const n of replacedOf(c.id)) if (unlinkQuiet(path.join(dir, ".replaced", n))) out.files.push(".replaced/" + n);
+    if (c.audio || c.sha || c.status !== "removed") {
+      await runQuery("UPDATE sb_clips SET audio = NULL, sha = NULL, status = 'removed', pending = 0, note = 'the voice was deleted by its owner', updated = ? WHERE id = ?", [t, c.id]);
+      out.clips++;
+    }
+  }
+  // a clip rendered in it by chance ("random"): its current WAV goes, and it's rendered again (a hidden one stays hidden)
+  const rolled = await getQuery("SELECT id, audio FROM sb_clips WHERE kind = 'tts' AND LOWER(IFNULL(note, '')) = ? AND audio IS NOT NULL", ["voice: " + id]);
+  for (const c of rolled) {
+    if (AUDIO_FILE_RE.test(c.audio) && unlinkQuiet(path.join(dir, c.audio))) out.files.push(c.audio);
+    await runQuery(`UPDATE sb_clips SET audio = NULL, sha = NULL, tries = 0, note = 'its voice was deleted by its owner - rendered again', updated = ?,
+                    status = CASE WHEN status = 'active' THEN 'render' ELSE status END, pending = CASE WHEN status = 'hidden' THEN 1 ELSE 0 END WHERE id = ?`, [t, c.id]);
+    out.clips++;
+  }
+  return out;
+}
+/** Every revoked voice's generated audio (purgeVoiceAudio). Boot: the voices revoked before 1.99afv (prod: one ▶ sample); idempotent -
+ *  a later boot finds nothing (or a file an earlier delete couldn't remove). -> {voices, files, clips} */
+async function purgeRevoked() {
+  await init();
+  const tot = { voices: 0, files: [], clips: 0 };
+  for (const v of await getQuery("SELECT id FROM voices WHERE status = 'revoked' ORDER BY id")) {
+    const r = await purgeVoiceAudio(v.id);
+    if (r.files.length || r.clips) tot.voices++;
+    tot.files.push(...r.files);
+    tot.clips += r.clips;
+  }
+  if (tot.files.length || tot.clips) {
+    console.log(`[voicestore] revoked voices: ${tot.voices} voice(s) - deleted ${tot.files.length} generated audio file(s)${tot.files.length ? ": " + tot.files.join(", ") : ""}; ${tot.clips} clip(s) emptied`);
+  }
+  return tot;
 }
 
 // ── Pepe's import (idempotent; never overwrites a site edit) ──
@@ -378,5 +451,6 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, voice, all, ownerMap, pickable, roomVoices, importFromPepe, botState, buy, owns, ownerSummary, ownerUpdate, adminUpdate, applyPatch, register, sampleId, BANDS, Refuse,
+  purgeVoiceAudio, purgeRevoked,   // 1.99afv
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

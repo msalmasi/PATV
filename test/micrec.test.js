@@ -693,7 +693,52 @@ test("review 4: a recording whose room Pepe can't tell - the switch needs his 's
   assert.deepEqual(M.pepeGaps(P.cleanRetention({ ...FULL, unknown_room: "longest" })).map((g) => g.code), ["unknown_room"]);
 });
 
-test("review 4 contract: the bot's REAL report and planner (PEPE_BOT_DIR) - an unknown-room recording is deleted at the no-pad window the rendered text states, with a Plus room in the rooms", async (t) => {
+// 1.99afv: the owner's rule for now (2026-10-28, bot 1.99afu): "treat all the previous stuff like Plus tier for now and keep indefinitely"
+const SINCE_S = Date.UTC(2026, 10, 3, 15, 4, 37) / 1000;          // his `!retention split on confirm` (unix s, as he reports it)
+const UNKNOWN_SENTENCE = "For now, a mic recording or transcript whose pad Pepe can't tell is kept for good, like 💎 Prime Time Plus's, if it was made before 3 November 2026, 15:05 UTC, when these windows started.";
+test("1.99afv: 'plus_before_split' - the switch takes it with his split_since; the privacy text adds ONE sentence with that date (and only under that rule)", async () => {
+  await setup();
+  await M.setPolicy(false, "test");
+  // the date is what the sentence needs: without it the switch stays off
+  await P.noteRetention({ ...FULL, unknown_room: "plus_before_split" });
+  assert.equal(P.retention().unknown_room, "plus_before_split");
+  assert.equal(P.retention().split_since, null);
+  assert.deepEqual(M.pepeGaps(P.retention()).map((g) => g.code), ["unknown_room"]);
+  await assert.rejects(M.setPolicy(true, "test"), (e) => e.code === "unknown_room" && /split_since/.test(e.message));
+  // with it (unix s, ms or an ISO time - implausible ones are dropped)
+  assert.equal(P.cleanRetention({ ...FULL, split_since: SINCE_S * 1000 }).split_since, SINCE_S * 1000);
+  assert.equal(P.cleanRetention({ ...FULL, split_since: new Date(SINCE_S * 1000).toISOString() }).split_since, SINCE_S * 1000);
+  for (const bad of [12345, -1, "soon", true, Date.UTC(2026, 0, 1) / 1000, Date.UTC(2101, 0, 1)]) assert.equal(P.cleanRetention({ ...FULL, split_since: bad }).split_since, null, String(bad));
+  await P.noteRetention({ ...FULL, unknown_room: "plus_before_split", split_since: SINCE_S });
+  assert.equal(P.retention().split_since, SINCE_S * 1000);
+  assert.deepEqual(M.pepeGaps(P.retention()), []);
+  await M.setPolicy(true, "test");
+  assert.deepEqual((await M.privacyCopy()).unknown, { since_at: SINCE_S * 1000, since_text: "3 November 2026, 15:05 UTC", for_good: true },
+                   "the minute rounded UP - 'made before' never leaves out one he keeps");
+  const html = await privacyHtml(await M.privacyCopy());
+  assert.equal(html.split(UNKNOWN_SENTENCE).length - 1, 2, "ONE sentence - in the Mic recordings text and in section 9's row");
+  assert.ok(html.includes("on PATV's own storage with an encrypted backup copy. " + UNKNOWN_SENTENCE + " A recording is the sound of the room"), "after the Mic recordings text's first sentence; the rest as approved");
+  assert.ok(html.includes("kept longer only under a legal hold or an open report. " + UNKNOWN_SENTENCE + " Copies in backups are deleted within 7 days after."), "section 9's row: the approved sentences unchanged around it");
+  assert.ok(NO_PAD_RE.test(html), "the no-pad window is still named");
+  // Plus not kept for good (a later window): the sentence names Plus's window, not "for good"
+  assert.equal(M.unknownCopy(P.cleanRetention({ ...FULL, audio_plus: 3650, unknown_room: "plus_before_split", split_since: SINCE_S })).for_good, false);
+  await P.noteRetention({ ...FULL, audio_plus: 3650, unknown_room: "plus_before_split", split_since: SINCE_S });
+  assert.ok((await privacyHtml(await M.privacyCopy())).includes("is kept as long as on a 💎 Prime Time Plus pad, if it was made before 3 November 2026, 15:05 UTC"));
+  // "shortest" (the rule the approved text already holds for): no sentence
+  await P.noteRetention(FULL);
+  assert.equal((await M.privacyCopy()).unknown, null);
+  assert.ok(!(await privacyHtml(await M.privacyCopy())).includes("whose pad Pepe can't tell"));
+  // the card says which rule he reports
+  const card = await M.adminView();
+  assert.deepEqual([card.unknown_room, card.split_since], ["shortest", null]);
+  await P.noteRetention({ ...FULL, unknown_room: "plus_before_split", split_since: SINCE_S });
+  assert.deepEqual([(await M.adminView()).unknown_room, (await M.adminView()).split_since], ["plus_before_split", SINCE_S * 1000]);
+  // after the switch went on, losing the date is a drift gap like any other
+  assert.deepEqual(M.pepeGaps(P.cleanRetention({ ...FULL, unknown_room: "plus_before_split" })).map((g) => g.code), ["unknown_room"]);
+  await P.noteRetention(FULL);
+});
+
+test("review 4 contract: the bot's REAL report and planner (PEPE_BOT_DIR) - an unknown-room recording is deleted at the no-pad window the rendered text states, with a Plus room in the rooms (1.99afv: or, under the owner's rule for now, kept when it was made before the split switch-on the text names)", async (t) => {
   const botDir = process.env.PEPE_BOT_DIR;
   if (!botDir || !fs.existsSync(path.join(botDir, "pepe_retention.py"))) { t.skip("PEPE_BOT_DIR (a camfrog-bot checkout) isn't set"); return; }
   await setup();
@@ -701,30 +746,35 @@ test("review 4 contract: the bot's REAL report and planner (PEPE_BOT_DIR) - an u
   const script = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "micrec-contract-")), "contract.py");
   fs.writeFileSync(script, [
     "import json, os, sys, tempfile",
-    "from datetime import datetime, timedelta",
+    "from datetime import datetime, timedelta, timezone",
     "sys.path.insert(0, sys.argv[1])",
     "import pepe_retention as R",
     "R._log = lambda m: None",
     "tmp = tempfile.mkdtemp(prefix='micrec-contract-')",
     "out = {}",
-    "for split in (True, False):",
+    "# 1.99afv: 'plus' = split on since a known moment (retention.json split_since, unix s - the owner's rule for now, bot 1.99afu):",
+    "# 120 days before its now, so the 119-day-old file is after it and the 121-day-old one before (a day's margin for time zones)",
+    "plus_now = datetime(2027, 3, 1, 12, 0, 0)",
+    "plus_since = int((plus_now - timedelta(days=120)).replace(tzinfo=timezone.utc).timestamp())",
+    "for name, split, since in (('split', True, None), ('nosplit', False, None), ('plus', True, plus_since)):",
     "    cfg = {'chat_days': 30, 'chat_prime': None, 'rec_days': 30, 'rec_prime': 365, 'pm_days': 30, 'pm_pass': None,",
     "           'chat_plus': None, 'rec_plus': None, 'delete': True, 'split': split}",
-    "    d = os.path.join(tmp, 'split' if split else 'nosplit'); tr = os.path.join(d, 'transcripts'); cl = os.path.join(d, 'chatlogs')",
+    "    if since is not None: cfg['split_since'] = since",
+    "    d = os.path.join(tmp, name); tr = os.path.join(d, 'transcripts'); cl = os.path.join(d, 'chatlogs')",
     "    os.makedirs(tr); os.makedirs(cl)",
     "    with open(os.path.join(d, 'retention.json'), 'w', encoding='utf-8') as f: json.dump(cfg, f)",
     "    class Bot(R.RetentionMixin):",
     "        def _rt_cfg_path(self): return os.path.join(d, 'retention.json')",
     "    b = Bot()",
-    "    now = datetime(2026, 11, 20, 12, 0, 0)",
-    "    ages = [1, 29, 30, 31, 32, 179, 180, 181, 400]",
+    "    now = plus_now if since is not None else datetime(2026, 11, 20, 12, 0, 0)",
+    "    ages = [1, 29, 30, 31, 32, 119, 121, 179, 400] if since is not None else [1, 29, 30, 31, 32, 179, 180, 181, 400]",
     "    for n in ages:",
     "        with open(os.path.join(tr, 'ghost_%s_101010.opus' % (now - timedelta(days=n)).strftime('%Y%m%d')), 'wb') as f: f.write(b'o')",
     "    rooms = {'plus.room': 'plus', 'prime.room': True, 'plain.room': False}",
     "    p = R.Retention(d, cl, tr, cfg=b._rt_cfg(), keep=R.Keep()).plan(rooms, set(), True, True, now=now)",
     "    gone = sorted((now.date() - datetime.strptime(os.path.basename(x[0]).split('_')[1], '%Y%m%d').date()).days for x in p['rec_delete'])",
-    "    out['split' if split else 'nosplit'] = {'report': b._rt_report_windows(), 'gone': gone, 'kept': [n for n in ages if n not in gone],",
-    "                                            'unknown': p['unknown_room_recordings']}",
+    "    out[name] = {'report': b._rt_report_windows(), 'gone': gone, 'kept': [n for n in ages if n not in gone],",
+    "                 'unknown': p['unknown_room_recordings'], 'since': since}",
     "print(json.dumps(out))",
   ].join("\n"));
   const res = JSON.parse(execFileSync(process.env.PYTHON || "python", ["-I", script, botDir], { encoding: "utf8" }).trim().split("\n").pop());
@@ -732,26 +782,56 @@ test("review 4 contract: the bot's REAL report and planner (PEPE_BOT_DIR) - an u
   assert.deepEqual(res.nosplit.gone, [], "split off: an unknown room's recordings are never deleted");
   assert.equal(res.nosplit.report.unknown_room, "longest");
   assert.notEqual(M.pepeGaps(P.cleanRetention(res.nosplit.report)).length, 0);
-  // split on: his report says "shortest"; with it the switch's only gap is the room notice (1.99afq: rec_notice false, ops plan 8.8)
+  // split on: his report says "shortest" (1.99afq..afs) or, the owner's rule for now, "plus_before_split" (1.99afu); with either the
+  // switch's only gap is the room notice (1.99afq: rec_notice false, ops plan 8.8) - the second also needs his split_since
   const rep = res.split.report;
-  assert.equal(rep.unknown_room, "shortest");
+  assert.ok(M.UNKNOWN_OK.includes(rep.unknown_room), `split on: ${rep.unknown_room}`);
   assert.equal(rep.delete, true);
   assert.equal(res.split.unknown, 9, "every test recording's room is unknown (no transcript, no manifest stamp)");
   await M.setPolicy(false, "test");
-  await P.noteRetention(rep);
-  assert.deepEqual(M.pepeGaps(P.retention()).map((g) => g.code), rep.rec_notice ? [] : ["notice_missing"]);
-  // the letter with the notice: the switch goes on, and the rendered no-pad window is exactly where his planner starts deleting
-  await P.noteRetention({ ...rep, rec_notice: true });
-  await M.setPolicy(true, "test");
-  const m = NO_PAD_RE.exec(await privacyHtml(await M.privacyCopy()));
-  assert.ok(m, "section 9's no-pad window is rendered");
-  const N = Number(m[1]);
-  assert.ok(res.split.kept.every((n) => n <= N), `nothing older than ${N} days is kept: kept ${res.split.kept}`);
-  assert.deepEqual(res.split.gone, [...res.split.kept, ...res.split.gone].sort((a, b) => a - b).filter((n) => n > N),
-                   "everything past the no-pad window is deleted - although a Plus room (for good) is among his rooms");
-  assert.equal(N, 30);
-  assert.deepEqual(res.split.gone, [31, 32, 179, 180, 181, 400]);
+  if (rep.unknown_room === "shortest") {
+    await P.noteRetention(rep);
+    assert.deepEqual(M.pepeGaps(P.retention()).map((g) => g.code), rep.rec_notice ? [] : ["notice_missing"]);
+    // the letter with the notice: the switch goes on, and the rendered no-pad window is exactly where his planner starts deleting
+    await P.noteRetention({ ...rep, rec_notice: true });
+    await M.setPolicy(true, "test");
+    const m = NO_PAD_RE.exec(await privacyHtml(await M.privacyCopy()));
+    assert.ok(m, "section 9's no-pad window is rendered");
+    const N = Number(m[1]);
+    assert.ok(res.split.kept.every((n) => n <= N), `nothing older than ${N} days is kept: kept ${res.split.kept}`);
+    assert.deepEqual(res.split.gone, [...res.split.kept, ...res.split.gone].sort((a, b) => a - b).filter((n) => n > N),
+                     "everything past the no-pad window is deleted - although a Plus room (for good) is among his rooms");
+    assert.equal(N, 30);
+    assert.deepEqual(res.split.gone, [31, 32, 179, 180, 181, 400]);
+  } else if (!P.cleanRetention(rep).split_since) {
+    // split on with no switch-on moment on file (a split turned on before 1.99afu recorded it): the text can't name the date, so
+    // the switch can't go on with that report
+    assert.ok(M.pepeGaps(P.cleanRetention({ ...rep, rec_notice: true })).some((g) => g.code === "unknown_room"));
+  }
+  // 1.99afv: split on since a known moment - under "plus_before_split" an unknown-room recording made before it is kept (Plus: for
+  // good), one after it is deleted at the no-pad window; the rendered sentence names that moment
+  const pr = res.plus.report;
+  assert.ok(M.UNKNOWN_OK.includes(pr.unknown_room), `split on since a moment: ${pr.unknown_room}`);
+  if (pr.unknown_room === "plus_before_split") {
+    await M.setPolicy(false, "test");
+    await P.noteRetention({ ...pr, rec_notice: true });
+    assert.ok(Math.abs(P.retention().split_since - res.plus.since * 1000) < 1000, `his split_since: ${pr.split_since}`);
+    assert.deepEqual(M.pepeGaps(P.retention()), []);
+    await M.setPolicy(true, "test");
+    const html = await privacyHtml(await M.privacyCopy());
+    const m = NO_PAD_RE.exec(html);
+    assert.ok(m, "section 9's no-pad window is rendered");
+    const N = Number(m[1]);
+    assert.equal(N, 30);
+    assert.ok(html.includes("if it was made before 1 November 2026, 12:00 UTC, when these windows started."), "the sentence names his switch-on");
+    assert.deepEqual(res.plus.gone, [31, 32, 119], "after the switch-on: past the no-pad window; before it: kept like Plus's (for good)");
+    assert.deepEqual(res.plus.kept, [1, 29, 30, 121, 179, 400]);
+  } else {
+    assert.deepEqual(res.plus.gone, [31, 32, 119, 121, 179, 400], "an older bot ignores split_since: the shortest window for all");
+  }
+  await M.setPolicy(false, "test");
   await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
 });
 
 test("review 4: Pepe stops matching the text after the switch went on (split off, deletion off, a rollback) - the chatlog.admin holders are told once per new set of gaps, the card shows them", async () => {

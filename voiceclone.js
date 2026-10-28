@@ -18,7 +18,8 @@
 //      reports it -> a voices row (voicestore.js): kind clone, owned by the person, NOT listed until they list it, others'
 //      free text OFF (D12), soundboards on, 30% cut, per-use 1,000.
 //   6. Revoke any time (web button or `!clonemyvoice delete`; staff can too): the voice stops at once (status revoked: !say,
-//      soundboards, packs, the random pool), soundboard clips in it are removed, Pepe deletes the profile + samples on BOTH
+//      soundboards, packs, the random pool), soundboard clips in it are removed and the audio generated in it is deleted (1.99afv:
+//      the voice store's ▶ sample, its TTS clips - voicestore.purgeVoiceAudio), Pepe deletes the profile + samples on BOTH
 //      VoiceBox hosts (delete jobs until both confirm), unlock buyers get 50% of their price back from the Reserve (D9; the
 //      funding flow voice_refund), the consent audio is deleted 30 days later; the consent row stays (proof of consent and of
 //      revocation). Existing voices cloned before this (D10) are kept as they are.
@@ -311,6 +312,12 @@ async function revoke(userId, by, reason, consentId) {
       try {
         await runQuery("UPDATE sb_clips SET status = 'removed', note = 'the voice was deleted by its owner', updated = ? WHERE LOWER(voice) = ? AND status != 'removed'", [t, c.voice_id]);
       } catch (e) { /* no soundboards */ }
+      // 1.99afv (owner, 2026-10-28): its generated audio goes too - the voice store's ▶ sample and the TTS clips made in it
+      // (voicestore.purgeVoiceAudio; the boot run in start() catches a file this couldn't delete). Counts and file names only.
+      try {
+        const p = await VS().purgeVoiceAudio(c.voice_id);
+        if (p.files.length || p.clips) console.log(`[voiceclone] revoke #${c.id}: deleted ${p.files.length} generated audio file(s)${p.files.length ? ": " + p.files.join(", ") : ""}; ${p.clips} clip(s) emptied`);
+      } catch (e) { console.error(`[voiceclone] revoke #${c.id}: generated audio:`, e.message); }
       refunds += await refundBuyers(c.voice_id, c.id);
     }
   }
@@ -540,6 +547,9 @@ function start() {
   if (timer) return;
   timer = setInterval(() => sweep().catch((e) => console.error("[voiceclone] sweep:", e.message)), 6 * 3600 * 1000);
   if (timer.unref) timer.unref();
+  // 1.99afv: the generated audio of voices revoked BEFORE the revoke deleted it (prod: one ▶ sample) - once at boot; idempotent
+  // (a later boot finds nothing to do). voicestore.purgeRevoked logs counts and file names only.
+  VS().purgeRevoked().catch((e) => console.error("[voiceclone] revoked voices' audio:", e.message));
 }
 
 module.exports = {

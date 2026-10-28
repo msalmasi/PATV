@@ -72,6 +72,11 @@
 //     and again at the give-up, BEFORE the logins go - no promise breaks silently.
 //   * a legal hold on an account ("who:u:<id>") reaches every Camfrog login it (or an account merged into it) ever had and its
 //     account key "u:<id>" (accountHoldHashes) - not only the login linked now.
+//
+// 1.99afv (owner, 2026-10-28, with bot 1.99afu): "treat all the previous stuff like Plus tier for now and keep indefinitely" - Pepe's
+// unknown-room rule "plus_before_split": a recording / transcript whose room he can't tell keeps Plus's window when it was made
+// before his split switch-on (his report's split_since), the shortest one after. The switch takes it like "shortest" (UNKNOWN_OK) when
+// the date is reported, and the privacy text then adds ONE sentence saying so with that date (privacyCopy().unknown).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -143,12 +148,18 @@ function pepeGaps(R) {
   if (!R || !R.audio_reported) return [{ code: "audio_unreported", why: "Pepe doesn't report the mic recording windows yet (his release with them isn't live) - the policy text would state windows he doesn't keep." }];
   if (!R.split) return [{ code: "split_off", why: "Pepe's split rule is off (!retention split on confirm): recordings follow the transcript windows, so the policy text would state windows he doesn't keep." }];
   const out = [];
-  if (R.unknown_room !== "shortest") out.push({ code: "unknown_room", why: "Pepe doesn't report keeping a recording whose room he can't tell for the shortest window (bot 1.99afq review 4) - the policy text promises 30 days without a pad and \"kept longer only under a legal hold or an open report\", but he would keep such recordings for good." });
+  // 1.99afv: "plus_before_split" (the owner's rule for now, bot 1.99afu) is fine too - the privacy text then says it, dated by his
+  // split_since (privacyCopy().unknown) - but only with that date: without it the sentence couldn't say which recordings it means
+  if (R.unknown_room === "plus_before_split" && !R.split_since) out.push({ code: "unknown_room", why: "Pepe reports keeping a recording whose room he can't tell like Prime Time Plus's when it was made before his split switch-on, but not when that was (split_since) - the privacy text names that date." });
+  else if (!UNKNOWN_OK.includes(R.unknown_room)) out.push({ code: "unknown_room", why: "Pepe doesn't report keeping a recording whose room he can't tell for the shortest window (bot 1.99afq review 4), or like Prime Time Plus's only when it was made before his split switch-on (bot 1.99afu, the owner's rule for now) - the policy text promises 30 days without a pad and \"kept longer only under a legal hold or an open report\", but he would keep such recordings for good." });
   if (R.delete !== true) out.push({ code: "delete_off", why: "Pepe's deletion is off (!retention delete on confirm) - the policy text says recordings past their window are deleted each night." });
   if (R.rec_notice !== true) out.push({ code: "notice_missing", why: "Pepe's in-room chat-history notice doesn't name mic recordings yet (ops plan 8.8: the bot letter that builds it) - the rooms wouldn't be told." });
   return out;
 }
 const pepeR = () => { try { return require("./premium").retention(); } catch (e) { return null; } };
+// the unknown-room rules the text holds for (pepeGaps): "shortest" (the no-pad window - 1.99afq review 4) and, the owner's rule for now
+// (2026-10-28, bot 1.99afu), "plus_before_split" - Plus's window for one made before his split switch-on, which the text then says
+const UNKNOWN_OK = Object.freeze(["shortest", "plus_before_split"]);
 
 /** Flip the switch (an admin on /admin/bridge). -> cfg. Audited (room_events "micrec.switch"). */
 async function setPolicy(on, actor = null) {
@@ -211,7 +222,19 @@ async function privacyCopy() {
   try { R = require("./premium").retention(); } catch (e) { R = null; }
   const w = (v) => (v == null ? "kept for good" : `${v} days`);
   return { on_at: at, on_day: at ? dayText(at) : null,
-           ret: R ? { audio_free: w(R.audio_days), audio_prime: w(R.audio_prime), audio_plus: w(R.audio_plus) } : null };
+           ret: R ? { audio_free: w(R.audio_days), audio_prime: w(R.audio_prime), audio_plus: w(R.audio_plus) } : null,
+           unknown: unknownCopy(R) };
+}
+/** 1.99afv: the owner's rule for now (2026-10-28, bot 1.99afu "plus_before_split"): a recording / transcript whose pad Pepe can't
+ *  tell, made before his split switch-on, is kept like Plus's. -> {since_at, since_text ("3 November 2026, 15:04 UTC"), for_good
+ *  (Plus keeps both for good)} for the ONE sentence views/privacy.ejs adds (MICREC_UNKNOWN); null under any other rule. */
+function unknownCopy(R) {
+  if (!R || R.unknown_room !== "plus_before_split" || !(R.split_since > 0)) return null;
+  // the minute is rounded UP: "made before" then never leaves out a recording he keeps (at most a minute more is named)
+  const at = Math.ceil(R.split_since / 60000) * 60000;
+  const d = new Date(at);
+  const hm = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  return { since_at: R.split_since, since_text: `${dayText(at)}, ${hm} UTC`, for_good: R.audio_plus == null && R.rec_plus == null };
 }
 
 /**
@@ -783,6 +806,7 @@ async function adminView() {
            reported_at: at, audio_reported_at: audioAt, pepe_can: pepeCan(), split: !!(R && R.split),
            // review 4: what the text needs from Pepe and his report doesn't give (switch off: why it can't go on; on: drift)
            gaps: pepeGaps(R), delete_on: !!(R && R.delete === true), unknown_room: (R && R.unknown_room) || null, rec_notice: !!(R && R.rec_notice === true),
+           split_since: (R && R.split_since) || null,                                                    // 1.99afv
            keep: keepStats ? { ...keepStats, policy: block.policy } : null, deletions: dels, exports: exports_ };
 }
 
@@ -834,4 +858,5 @@ module.exports = { init, register, policyOn, pepeCan, setPolicy, cfg, privacyCop
                    holderIds, earlierHolder, noteLoginsGone, skippedHandled, REC_QUEUED_MS,                     // review
                    ownSince, scrubLateAcks, alertSkipped, REC_SKIP_REMIND_MS,                                    // review 2
                    pepeGaps, drift, accountHoldHashes, REC_WAIT_WARN_MS,                                         // review 4
+                   unknownCopy, UNKNOWN_OK,                                                                      // 1.99afv
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _resetCache: () => { keepCache = null; keepStats = null; } };

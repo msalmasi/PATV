@@ -247,6 +247,16 @@ async function loadConfig() {
 // an older Pepe that doesn't report them still counts as fresh.
 const RETENTION_DEFAULTS = Object.freeze({ chat_days: 30, chat_prime: null, rec_days: 30, rec_prime: null, pm_days: 30, pm_pass: null,
                                            chat_plus: null, rec_plus: null, audio_days: 30, audio_prime: 180, audio_plus: null });
+const UNKNOWN_ROOM_RULES = Object.freeze(["shortest", "longest", "plus_before_split"]);
+const SPLIT_SINCE_MIN = Date.UTC(2026, 9, 1);         // split came with bot 1.99afq (2026-10-27): nothing earlier is his switch-on
+const SPLIT_SINCE_MAX = Date.UTC(2100, 0, 1);
+function splitSince(v) {
+  let n = typeof v === "string" && v.trim() && !/^\d+(\.\d+)?$/.test(v.trim()) ? Date.parse(v) : Number(v);
+  if (v == null || v === "" || typeof v === "boolean" || !Number.isFinite(n) || n <= 0) return null;
+  if (n < 1e11) n *= 1000;                            // unix seconds (the bot's clock) -> ms
+  n = Math.floor(n);
+  return n >= SPLIT_SINCE_MIN && n < SPLIT_SINCE_MAX ? n : null;
+}
 function cleanRetention(raw) {
   const out = { ...RETENTION_DEFAULTS };
   if (!raw || typeof raw !== "object") return out;
@@ -270,7 +280,12 @@ function cleanRetention(raw) {
   // mic recordings (ops plan 8.8). An older Pepe reports none of them. micrec.setPolicy refuses without them; micrec.drift flags a
   // change after the switch went on.
   out.delete = raw.delete === true;
-  out.unknown_room = raw.unknown_room === "shortest" || raw.unknown_room === "longest" ? raw.unknown_room : null;
+  // 1.99afv (owner, 2026-10-28: "treat all the previous stuff like Plus tier for now and keep indefinitely" - bot 1.99afu):
+  // "plus_before_split" = with split on, a transcript / recording whose room he can't tell gets Plus's window when it was made
+  // before his split switch-on (split_since - "the previous stuff"), the shortest one after it. split_since = when
+  // `!retention split on confirm` ran (his report: unix s; ms kept as ms), null when not reported or implausible
+  out.unknown_room = UNKNOWN_ROOM_RULES.includes(raw.unknown_room) ? raw.unknown_room : null;
+  out.split_since = splitSince(raw.split_since);
   out.rec_notice = raw.rec_notice === true;
   return out;
 }
