@@ -9213,6 +9213,8 @@
   "js.owner.ml_c_bridge": "web bridge",
   "js.owner.ml_c_room": "room",
   "js.owner.ml_c_misc": "other",
+  "js.owner.ml_vs": "Against Pepe",
+  "js.owner.ml_vs_marker": "🐸 against Pepe",
   "js.owner.ml_none": "Nothing in the moderation history yet.",
   "js.owner.ml_page": "Page {n}",
   "js.owner.ml_loading": "Loading…",

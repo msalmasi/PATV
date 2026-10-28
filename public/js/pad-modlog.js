@@ -29,6 +29,7 @@
       var li = el('li');
       li.appendChild(el('span', 'po-ml-when', when(r.ts)));
       li.appendChild(el('span', 'po-ml-cat', CAT[r.cat] || r.cat || ''));
+      if (r.vs_pepe) li.appendChild(el('span', 'po-ml-cat', _t('js.owner.ml_vs_marker', '🐸 against Pepe')));
       li.appendChild(el('b', null, what(r)));
       if (r.details) li.appendChild(el('span', 'po-ml-det', ' - ' + r.details));
       list.appendChild(li);
@@ -39,6 +40,7 @@
   }
   function load() {
     var q = '?page=' + page + '&cat=' + encodeURIComponent(form.elements.cat.value) + '&q=' + encodeURIComponent(form.elements.q.value.trim());
+    if (form.elements.vs.checked) q += '&vs=pepe';
     say(_t('js.owner.ml_loading', 'Loading…'));
     fetch('/api/rooms/' + encodeURIComponent(slug) + '/modlog' + q, { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
@@ -47,6 +49,7 @@
   }
   form.addEventListener('submit', function (e) { e.preventDefault(); page = 0; load(); });
   form.elements.cat.addEventListener('change', function () { page = 0; load(); });
+  form.elements.vs.addEventListener('change', function () { page = 0; load(); });
   newer.addEventListener('click', function () { if (page > 0) { page--; load(); } });
   older.addEventListener('click', function () { page++; load(); });
   load();

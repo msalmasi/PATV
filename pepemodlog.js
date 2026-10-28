@@ -7,14 +7,14 @@
 // from a worker thread - never on the packet path; a one-off backfill sends the last 30 days. Each entry carries a key
 // (a hash of its log line), so a replay or the backfill never doubles a row.
 //
-//   pepe_modlog (id, k UNIQUE, room_id, room_l, ts ms, type, cat, actor, target, details, src 'pepe')
+//   pepe_modlog (id, k UNIQUE, room_id, room_l, ts ms, type, cat, actor, target, details, src 'pepe', vs_pepe)
 //
 // The history also shows the site's own room moderation from room_events (bridge-block = web bridge blocks / unblocks,
 // livecam-end = a mod ending someone's live cam view, and any other livecam-* / snap-* / cam-* room event).
 //
 // Routes:
 //   POST /api/bridge/modlog          Pepe (bot token): {events: [{k, ts, type, actor, target, details, room}]} (<= 500)
-//   GET  /api/rooms/:slug/modlog     the pad's owner, site staff, or a room mod by Pepe's caps: ?cat= &q= &page= &limit=
+//   GET  /api/rooms/:slug/modlog     the pad's owner, site staff, or a room mod by Pepe's caps: ?cat= &q= &vs=pepe &page= &limit=
 //   GET  /api/admin/pepe/modlog      site Admins, every room: ?room= &cat= &q= &page= &limit=
 // Owners only ever see their own room (the query is pinned to the pad's room id); Admins see all.
 "use strict";
@@ -53,6 +53,8 @@ function init() {
     ready = (async () => {
       await runQuery(`CREATE TABLE IF NOT EXISTS pepe_modlog (id INTEGER PRIMARY KEY AUTOINCREMENT, k TEXT NOT NULL UNIQUE, room_id TEXT NOT NULL,
         room_l TEXT NOT NULL, ts INTEGER NOT NULL, type TEXT NOT NULL, cat TEXT NOT NULL, actor TEXT, target TEXT, details TEXT, src TEXT)`);
+      const columns = await getQuery("PRAGMA table_info(pepe_modlog)");
+      if (!columns.some((c) => c.name === "vs_pepe")) await runQuery("ALTER TABLE pepe_modlog ADD COLUMN vs_pepe INTEGER NOT NULL DEFAULT 0");
       await runQuery("CREATE INDEX IF NOT EXISTS pepe_modlog_room ON pepe_modlog (room_l, ts)");
       await runQuery("CREATE INDEX IF NOT EXISTS pepe_modlog_ts ON pepe_modlog (ts)");
     })().catch((e) => { ready = null; throw e; });
@@ -71,9 +73,9 @@ async function ingest(events, t = Date.now()) {
     const room = clean(e && e.room, 128);
     const ts = Math.floor(Number(e && e.ts));
     if (!k || !room || !ALLOW.test(type) || !(ts > 0) || ts > t + 3600 * 1000 || ts < t - KEEP_MS) { skipped++; continue; }
-    const r = await runQuery(`INSERT OR IGNORE INTO pepe_modlog (k, room_id, room_l, ts, type, cat, actor, target, details, src)
-                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pepe')`,
-      [k, room, room.toLowerCase(), ts, type, catOf(type), clean(e.actor, 80) || null, clean(e.target, 80) || null, clean(e.details, 300) || null]);
+    const r = await runQuery(`INSERT OR IGNORE INTO pepe_modlog (k, room_id, room_l, ts, type, cat, actor, target, details, src, vs_pepe)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pepe', ?)`,
+      [k, room, room.toLowerCase(), ts, type, catOf(type), clean(e.actor, 80) || null, clean(e.target, 80) || null, clean(e.details, 300) || null, e.vs === true ? 1 : 0]);
     if (r && r.changes) stored++; else skipped++;
   }
   if (t - lastPrune > 24 * 3600 * 1000) {
@@ -87,13 +89,23 @@ async function ingest(events, t = Date.now()) {
  * The history, newest first: Pepe's entries + the site's room moderation events. room = a room id (null = every room - Admins).
  * -> {rows: [{ts, type, cat, actor, target, details, room, src}], page, more}
  */
-async function history({ room = null, cat = "", q = "", page = 0, limit = 50 } = {}) {
+async function history({ room = null, cat = "", q = "", vs = "", page = 0, limit = 50 } = {}) {
   await init();
   const lim = Math.max(1, Math.min(PAGE_MAX, Math.floor(Number(limit)) || 50));
   const pg = Math.max(0, Math.min(1000, Math.floor(Number(page)) || 0));
   const c = CATS.includes(String(cat)) ? String(cat) : "";
   const needle = clean(q, 40).toLowerCase();
+  // Use the bridge's explicit self identity, never a guessed display name or another room bot.
+  const logins = new Set();
+  for (const R of require("./bridge")._rooms.values()) {
+    for (const u of [...(R.members || []), ...(R.mic || []), ...(R.feed || []).map((x) => x.u)]) {
+      if (u && u.self && u.login) logins.add(String(u.login).toLowerCase());
+    }
+  }
+  const names = [...logins];
+  const against = "vs_pepe = 1" + (names.length ? " OR lower(coalesce(target,'')) IN (" + names.map(() => "?").join(",") + ")" : "");
   const pw = [], pa = [], sw = [], sa = [];
+  if (vs === "pepe") { pw.push("vs = 1"); sw.push("0"); }
   if (room != null) { pw.push("room_l = ?"); pa.push(String(room).toLowerCase()); sw.push("lower(room_id) = ?"); sa.push(String(room).toLowerCase()); }
   sw.push("(" + SITE_WHAT.map(() => "what = ?").concat(SITE_LIKE.map(() => "what LIKE ?")).join(" OR ") + ")");
   sa.push(...SITE_WHAT, ...SITE_LIKE);
@@ -106,24 +118,25 @@ async function history({ room = null, cat = "", q = "", page = 0, limit = 50 } =
   }
   const parts = [], args = [];
   if (!c || c !== "bridge") {
-    parts.push(`SELECT ts, type, cat, actor, target, details, room_id AS room, 'pepe' AS src FROM pepe_modlog
+    parts.push(`SELECT ts, type, cat, actor, target, details, room_id AS room, 'pepe' AS src, vs FROM marked
                 WHERE ${pw.length ? pw.join(" AND ") : "1"} ${c ? "AND cat = ?" : ""}`);
     args.push(...pa); if (c) args.push(c);
   }
   if (!c || c === "bridge") {
-    parts.push(`SELECT ts, what AS type, 'bridge' AS cat, actor, NULL AS target, detail AS details, room_id AS room, 'site' AS src FROM room_events
+    parts.push(`SELECT ts, what AS type, 'bridge' AS cat, actor, NULL AS target, detail AS details, room_id AS room, 'site' AS src, 0 AS vs FROM room_events
                 WHERE ${sw.join(" AND ")}`);
     args.push(...sa);
   }
   if (c === "bridge") {         // Pepe's own bridge-ish rows (none are on his allow-list today, kept for symmetry)
-    parts.push(`SELECT ts, type, cat, actor, target, details, room_id AS room, 'pepe' AS src FROM pepe_modlog
+    parts.push(`SELECT ts, type, cat, actor, target, details, room_id AS room, 'pepe' AS src, vs FROM marked
                 WHERE ${pw.length ? pw.join(" AND ") + " AND" : ""} cat = 'bridge'`);
     args.push(...pa);
   }
-  const rows = await getQuery(`SELECT * FROM (${parts.join(" UNION ALL ")}) ORDER BY ts DESC LIMIT ? OFFSET ?`, [...args, lim + 1, pg * lim]);
+  const rows = await getQuery(`WITH marked AS (SELECT *, CASE WHEN ${against} THEN 1 ELSE 0 END AS vs FROM pepe_modlog)
+    SELECT * FROM (${parts.join(" UNION ALL ")}) ORDER BY ts DESC LIMIT ? OFFSET ?`, [...names, ...args, lim + 1, pg * lim]);
   const more = rows.length > lim;
   return { rows: rows.slice(0, lim).map((r) => ({ ts: Number(r.ts) || 0, type: r.type, cat: r.cat || catOf(r.type), actor: r.actor || "",
-    target: r.target || "", details: r.details || "", room: r.room || "", src: r.src })), page: pg, more, cats: CATS };
+    target: r.target || "", details: r.details || "", room: r.room || "", src: r.src, vs_pepe: r.vs === 1 })), page: pg, more, cats: CATS };
 }
 
 function register(app, { isBotToken, addUser, bySlug }) {
@@ -156,7 +169,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
         } catch (e) { ok = false; }
       }
       if (!ok) return bad(res, 403, "Only this room's mods, the pad's owner and admins can see its moderation history.");
-      res.json({ ok: true, room: R.id, ...(await history({ room: R.id, cat: req.query.cat, q: req.query.q, page: req.query.page, limit: req.query.limit })) });
+      res.json({ ok: true, room: R.id, ...(await history({ room: R.id, cat: req.query.cat, q: req.query.q, vs: req.query.vs, page: req.query.page, limit: req.query.limit })) });
     } catch (e) { fail(res, e); }
   });
 
@@ -167,7 +180,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
       const me = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!SP.can(me, "pepe.modlog")) return bad(res, 403, "Admins only.");
       const room = req.query.room ? clean(req.query.room, 128) : null;
-      res.json({ ok: true, ...(await history({ room, cat: req.query.cat, q: req.query.q, page: req.query.page, limit: req.query.limit })) });
+      res.json({ ok: true, ...(await history({ room, cat: req.query.cat, q: req.query.q, vs: req.query.vs, page: req.query.page, limit: req.query.limit })) });
     } catch (e) { fail(res, e); }
   });
 }

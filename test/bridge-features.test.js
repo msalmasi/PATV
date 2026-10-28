@@ -57,6 +57,8 @@ test.before(async () => {
   SLUG = (await rooms.get(ROOM)).slug || ROOM;
   LR.slug = SLUG;
   await BB.init();
+  await runQuery(`CREATE TABLE pepe_modlog (id INTEGER PRIMARY KEY AUTOINCREMENT, k TEXT NOT NULL UNIQUE, room_id TEXT NOT NULL,
+    room_l TEXT NOT NULL, ts INTEGER NOT NULL, type TEXT NOT NULL, cat TEXT NOT NULL, actor TEXT, target TEXT, details TEXT, src TEXT)`);
   const app = express();
   const addUser = (req, res, next) => { const u = req.get("x-test-user"); req.user = u ? U[u] || null : null; next(); };
   const isBotToken = (t) => t === "bot-token";
@@ -207,4 +209,28 @@ test("weberrors: a crashed room join says nothing about the balance; a money act
   assert.match(room.message, /incident 6408028f\). The room change may not have happened/);
   const loan = W.present({ status: "failed", kind: "cmd", code: "E_INTERNAL", incident: "6408028f", message: msg });
   assert.match(loan.message, /Check your balance/);
+});
+
+test("against Pepe: migration, strict flags, known self login, combined filters and room scope", async () => {
+  assert.ok((await getQuery("PRAGMA table_info(pepe_modlog)")).some(c => c.name === "vs_pepe"));
+  const bridge = require(path.join(repo, "bridge"));
+  bridge._rooms.set("self-test", { members: [{ login: "ActualPepe", self: true }] });
+  try {
+    const events = [true, "true", 1, false, null].map((vs, i) => ({ k: "vs" + i, room: ROOM, ts: T + i,
+      type: "kick", target: "other", actor: "flag-test", vs }));
+    events.push({ k: "vs-old", room: ROOM, ts: T + 10, type: "block", target: "aCtUaLpEpE", actor: "flag-test" },
+      { k: "vs-away", room: "Elsewhere", ts: T + 20, type: "kick", target: "ActualPepe", actor: "flag-test", vs: true });
+    await post("/api/bridge/modlog", null, { password: "bot-token", events });
+    assert.deepEqual((await getQuery("SELECT vs_pepe FROM pepe_modlog WHERE k IN ('vs0','vs1','vs2','vs3','vs4') ORDER BY k")).map(x => x.vs_pepe), [1,0,0,0,0]);
+    let r = await get("/api/rooms/" + SLUG + "/modlog?vs=pepe&q=flag-test", "owner");
+    assert.equal(r.d.rows.length, 2);
+    assert.ok(r.d.rows.every(x => x.vs_pepe && x.room === ROOM));
+    r = await get("/api/rooms/" + SLUG + "/modlog?vs=pepe&cat=mic&q=flag-test", "owner");
+    assert.deepEqual(r.d.rows.map(x => x.type), ["block"]);
+    r = await get("/api/admin/pepe/modlog?vs=pepe&cat=kick&q=flag-test&limit=1", "admin");
+    assert.equal(r.d.rows[0].room, "Elsewhere"); assert.equal(r.d.more, true);
+    r = await get("/api/admin/pepe/modlog?vs=pepe&cat=kick&q=flag-test&limit=1&page=1", "admin");
+    assert.equal(r.d.rows[0].room, ROOM);
+    assert.match(fs.readFileSync(path.join(repo, "views/partials/po-modlog.ejs"), "utf8"), /name="vs"/);
+  } finally { bridge._rooms.delete("self-test"); }
 });

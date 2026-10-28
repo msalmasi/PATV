@@ -20,6 +20,7 @@
     <label><span><%- t('owner.ml_cat') %></span><select name="cat">
       <% ['', 'kick', 'ban', 'timeout', 'mic', 'roles', 'automod', 'bridge', 'room', 'misc'].forEach(function (c) { %><option value="<%= c %>"><%- t('owner.ml_c_' + (c || 'all')) %></option><% }) %>
     </select></label>
+    <label><span><%- t('js.owner.ml_vs') %></span><input type="checkbox" name="vs" value="pepe"></label>
     <label><span><%- t('owner.ml_q') %></span><input type="search" name="q" maxlength="40"></label>
     <button type="submit" class="ds-btn"><%- t('owner.ml_go') %></button>
   </form>
@@ -31,4 +32,4 @@
     <span class="ds-meta" id="poMlPage"></span>
   </div>
 </section>
-<script src="/public/js/pad-modlog.js?v=1" defer></script>
+<script src="/public/js/pad-modlog.js?v=2" defer></script>
