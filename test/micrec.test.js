@@ -439,9 +439,12 @@ test("review 2: the login markers are NOT behind the switch (they guard the unga
   const ejs = require("ejs");
   const html = await ejs.renderFile(path.join(repo, "views", "privacy.ejs"), { user: null, title: "Privacy Policy", VERSION: "v", UPDATED: "27 October 2026",
                                                                                enforced: true, chatlog: null, hubErasure: null, micrec: null, ogBase: "" });
-  assert.match(html, /PATV keeps a scrambled marker of each Camfrog name a deleted account had \(never the name itself\), so the next person to link that name can't download what Pepe keeps of yours/);
-  assert.match(html, /<td>Markers of the Camfrog names a deleted account had[^<]*<\/td><td>No time limit for now/);
-  assert.match(html, /<b>27 October 2026:<\/b> <a href="#choices">Section 10<\/a>: when an account is deleted, PATV keeps a scrambled marker/);
+  // review 3: the owner-approved, corrected 8.5 A - the marker's only effect is on the next holder's OWN data download (a pad's
+  // chat-history view and download follow the pad's rules, where the marker plays no part)
+  assert.match(html, /PATV keeps a scrambled marker of each Camfrog name a deleted account had \(never the name itself\), so the next person to link that name can't get what Pepe keeps of yours, or your lines under that name, in their own data download \(see <a href="#retention">section 9<\/a>\)\./);
+  assert.match(html, /<td>Markers of the Camfrog names a deleted account had[^<]*<\/td><td>No time limit for now: Pepe can keep data under a Camfrog name for good, and the marker is what stops the next person who links that name from getting it in their own data download<\/td>/);
+  assert.match(html, /<b>27 October 2026:<\/b> <a href="#choices">Section 10<\/a>: when an account is deleted, PATV keeps a scrambled marker of each Camfrog name it had \(never the name itself\), so the next person to link that name can't get what Pepe keeps of the deleted account's, or its lines under that name, in their own data download\. New row in <a href="#retention">section 9<\/a>\./);
+  assert.doesNotMatch(html, /can't download what Pepe keeps|in pads' chat history \(see|its lines under that name in pads' chat history/, "the old wording promised more than the code does");
   assert.doesNotMatch(html, /mic recordings/i, "nothing about recordings while the switch is off");
   await P.noteRetention(FULL);
   await M.setPolicy(true, "test");
@@ -538,8 +541,114 @@ test("review 2: a late answer from Pepe can't bring a login back - after the scr
   const [c] = await getQuery("SELECT id FROM pepe_actions WHERE kind = 'privacy.recdelete' AND user_id = 'lt2'");
   await ack([{ id: c.id, ok: true, message: "queued: latetwo2's mic recordings are being deleted" }]);
   assert.equal((await getQuery("SELECT message FROM pepe_actions WHERE id = ?", [c.id]))[0].message, "queued: latetwo2's mic recordings are being deleted");
+  // review 3: a late follow-up after the GIVE-UP is recorded on the deletion's row (the card no longer says only "NOT RUN"), and a
+  // partial run keeps its "couldn't be read" / "couldn't be deleted yet" - it never reads as complete
+  const t0 = clockAt;
+  await user("lt3", { cf: "LateGiveUp3" });
+  await D.schedule({ userId: "lt3", username: "lt3" }, { by: "self", reauth: "password", deleteRecordings: true });
+  await D.execute("lt3", { force: true });
+  const [g] = await getQuery("SELECT id FROM pepe_actions WHERE kind = 'privacy.recdelete' AND user_id = 'lt3'");
+  await runQuery("UPDATE pepe_actions SET status = 'failed', message = 'lategiveup3: the archive is down', updated = ? WHERE id = ?", [clockAt, g.id]);
+  clockAt += M.REC_GIVE_UP_MS + 1;
+  const err = console.error; console.error = () => {};
+  try { assert.ok((await M.retryRecDeletes()).gave_up >= 1); } finally { console.error = err; }
+  const rowOf = async () => (await getQuery("SELECT id, rec_gave_up_at, rec_late_at, rec_late_note FROM account_deletions WHERE user_id = 'lt3'"))[0];
+  assert.equal((await rowOf()).rec_late_at, null);
+  clockAt += 3600e3;
+  await ack([{ id: g.id, ok: true, message: "deleted 4 mic recording file(s) of lategiveup3; part of the recordings storage couldn't be read - Pepe tries again" }]);
+  const [gb] = await getQuery("SELECT status, message, username FROM pepe_actions WHERE id = ?", [g.id]);
+  assert.equal(gb.message, `deleted 4 mic recording file(s) of ${gb.username}; part of the recordings storage couldn't be read - Pepe tries again (a late answer)`);
+  const row3 = await rowOf();
+  assert.ok(row3.rec_gave_up_at > 0, "still given up (the site stopped asking)");
+  assert.deepEqual([row3.rec_late_at, row3.rec_late_note], [clockAt, gb.message]);
+  assert.ok(!/lategiveup3/i.test(row3.rec_late_note));
+  const cardRow = (await M.adminView()).deletions.rows.find((x) => x.id === row3.id);
+  assert.deepEqual([cardRow.rec_late_at, cardRow.rec_late_note], [clockAt, gb.message]);
+  assert.ok(!JSON.stringify(cardRow).includes("lategiveup3"));
+  // "a few couldn't be deleted yet" is kept too; a failed late answer isn't a run
+  await ack([{ id: g.id, ok: true, message: "deleted 1 mic recording file(s) of lategiveup3; a few couldn't be deleted yet - Pepe tries again" }]);
+  assert.match((await rowOf()).rec_late_note, /deleted 1 mic recording file\(s\) of deleted-[^;]*; a few couldn't be deleted yet - Pepe tries again \(a late answer\)$/);
+  const before = (await rowOf()).rec_late_note;
+  clockAt += 1000;
+  await ack([{ id: g.id, ok: false, message: "lategiveup3: broke again" }]);
+  assert.equal((await rowOf()).rec_late_note, before, "a failed answer doesn't count as a run");
+  const card = fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8");
+  assert.match(card, /r\.rec_late_at \? ' - then a late answer from Pepe ' \+ when\(r\.rec_late_at\)/);
+  clockAt = t0;
   const actionsSrc = fs.readFileSync(path.join(repo, "actions.js"), "utf8");
   assert.match(actionsSrc, /require\("\.\/micrec"\)\.scrubLateAcks\(acked\)/);
+});
+
+test("review 3: the owner-approved text (ops plan section 8, 8.11 = A) - on the privacy page, /help and Settings › Privacy only while the switch is on; no inbox notice at switch-on", async () => {
+  await setup();
+  await P.noteRetention(FULL);
+  await M.setPolicy(false, "test");
+  // switching ON sends members nothing (the owner's decision, 2026-10-27): the privacy page's date and its changelog are the notice
+  const inboxN = async () => (await getQuery("SELECT COUNT(*) AS n FROM inbox"))[0].n;
+  const n0 = await inboxN();
+  await M.setPolicy(true, "test");
+  assert.equal(await inboxN(), n0, "no inbox notice at switch-on");
+  assert.doesNotMatch(M.setPolicy.toString(), /inbox|notify|announce/i);
+  const card = fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8");
+  assert.match(card, /Members get <b>no inbox notice<\/b> when it goes on/);
+  assert.match(card, /ops plan 8\.11 A/);
+  // the privacy page: section 8's approved text with the switch on, none of it with the switch off
+  await CL.setSwitch("notice", true, "test");
+  const pol = await CL.policy();
+  const mc = await M.privacyCopy();
+  const ejs = require("ejs");
+  const render = (chatlog, micrec) => ejs.renderFile(path.join(repo, "views", "privacy.ejs"), { user: null, title: "Privacy Policy", VERSION: "v", UPDATED: "28 October 2026",
+                                                                                               enforced: true, chatlog, micrec, hubErasure: null, ogBase: "" });
+  const on = await render(pol, mc), off = await render({ ...pol, how: null }, null), onNoArchive = await render(null, mc);
+  // 8.2 (with 8.11 = A: others on the mic at the same time can be heard)
+  assert.match(on, /<li id="mic-recordings"><b>Mic recordings:<\/b> Pepe also keeps the sound of each mic-up \(compressed audio\) for the times above, on PATV's own storage with an encrypted backup copy\. A recording is the sound of the room while someone held the mic, so in a room with more than one mic, other people on the mic at the same time can be heard in it too\./);
+  assert.match(on, /They're kept as plain audio: we don't make voiceprints from them, don't use them to recognise who's speaking \(Camfrog tells Pepe who's on the mic\) and don't use them to train AI or clone voices\./);
+  assert.match(on, /Being incognito, <code>!bridge hide<\/code> and <code>!transcripts off<\/code> don't change this: they're about what the website shows, not what Pepe keeps\./);
+  assert.match(onNoArchive, /<h3 id="mic-recordings">Mic recordings<\/h3>\s*<p><b>Mic recordings:<\/b> Pepe also keeps the sound of each mic-up \(compressed audio\) for the times in <a href="#retention">section 9<\/a>, on PATV's own storage/,
+               "without the chat archive's notice: its own paragraph, pointing at section 9");
+  // 8.3
+  assert.match(on, /<tr><td>Mic recordings \(the sound of mic-ups in Camfrog rooms Pepe is in\)<\/td><td>By the pad's tier: without a tier \(or without a pad\) 30 days; 📺 Prime Time 180 days; 💎 Prime Time Plus kept for good while the pad has it\. A tier that lapses keeps them 30 more days\. Deleted sooner if you delete your account and tick <i>Also delete my mic recordings<\/i>; kept longer only under a legal hold or an open report\. Copies in backups are deleted within 7 days after\.<\/td><\/tr>/);
+  assert.match(onNoArchive, /<tr><td>Mic recordings \(the sound of mic-ups/);
+  // 8.4
+  assert.match(on, /<li><b>Captures of you are private:<\/b> snaps and clips that show you can't be kept or posted, your cam can't be used as a reference for AI pictures, and your mic audio isn't offered for clips\. Your mic-ups are still recorded and kept like everyone's \(see <a href="#mic-recordings">Mic recordings<\/a>\): incognito is about what the website shows, not what Pepe keeps\.<\/li>/);
+  assert.doesNotMatch(on, /Pepe doesn't keep your mic audio for clips/);
+  assert.match(off, /Pepe doesn't keep your mic audio for clips/);
+  // 8.5 B
+  assert.match(on, /Pepe also forgets your Camfrog name, and if you tick <i>Also delete my mic recordings<\/i>, he deletes the recordings of your mic-ups \(for every Camfrog name you linked, from the time it was yours; if another PATV account had that name before you, our team deletes yours by hand; a name you unlinked before 12 October 2026 isn't reached; one under a legal hold or an open report is kept until that ends; backup copies go within 7 days after\)\. PATV keeps a scrambled marker/);
+  assert.match(off, /Pepe also forgets your Camfrog name\. PATV keeps a scrambled marker/);
+  assert.match(on, /The same box is offered when you delete your account\. It doesn't delete your mic recordings either; deleting your account can\. It doesn't switch on incognito/);
+  // 8.6
+  assert.match(on, /in <a href="\/settings\/account">Settings → Account<\/a>\. You choose what goes in besides your account: your chat logs \(with your private messages with Pepe, both sides\), your mic transcripts, what Pepe remembers about you, and your mic recordings\. Pepe's part covers the Camfrog name linked to your account now, and only if no other PATV account had that name before you/);
+  assert.match(on, /In a room with more than one mic, a recording or transcript can hold other people who were on the mic at the same time\./);
+  assert.match(on, /Recordings can be big, so one download holds up to about 256 MB of Pepe's part, newest recordings first; ask again with an earlier date for the rest \(a download with a date holds only those older recordings\)\. A download with Pepe's part needs your password or a recent sign-in, and we send you a notice when one is asked for\. A deleted account is closed/);
+  // 8.7, dated by the switch's first day
+  assert.match(on, new RegExp(`<li><b>${mc.on_day}:</b> mic transcripts are kept as long as the pad's chat on every tier \\(📺 Prime Time: for good instead of 365 days\\); added <a href="#mic-recordings">Mic recordings</a> \\(sections 3 and 9\\)`));
+  // 8.5 A (not behind the switch) reads the same both ways; nothing else of section 8 with the switch off
+  for (const h of [on, off]) assert.match(h, /so the next person to link that name can't get what Pepe keeps of yours, or your lines under that name, in their own data download/);
+  assert.doesNotMatch(off, /mic recordings|mic-ups|voiceprints|You choose what goes in|id="mic-recordings"/i);
+  // /help: the approved notes on Pepe's cards (ops plan 8.8) only while the switch is on, and never twice
+  const HL = require(path.join(repo, "help"));
+  const cardOf = async (id) => { for (const c of (await HL.pageModel()).cats) for (const e of c.entries) if (e.id === id) return e; return null; };
+  assert.ok((await cardOf("incognito")).details.includes("Pepe still records your mic-ups like everyone's; incognito is about the website."));
+  assert.ok((await cardOf("incognito")).details.includes("`!forgetme now` doesn't delete your mic recordings; deleting your PATV account can (tick Also delete my mic recordings)."));
+  assert.ok((await cardOf("bridge")).details.includes("Pepe still records your mic-ups like everyone's; `!bridge hide` and incognito are about the website."));
+  assert.ok((await cardOf("retention")).details.includes("audio_days / audio_prime / audio_plus (mic recordings)"));
+  const twice = HL.withMicrecNotes([{ id: "bridge", summary: "s", details: "x " + HL.MICREC_NOTES.bridge[0] }]);
+  assert.equal(twice[0].details, "x " + HL.MICREC_NOTES.bridge[0], "a card that already says it isn't given it twice");
+  await M.setPolicy(false, "test");
+  for (const id of ["incognito", "bridge", "retention"]) {
+    const d = (await cardOf(id)).details;
+    assert.ok(HL.MICREC_NOTES[id].every((n) => !d.includes(n)), `${id}: no note with the switch off`);
+  }
+  // Settings › Privacy: incognito doesn't change recordings, forget-me doesn't delete them - only while the switch is on
+  const ps = fs.readFileSync(path.join(repo, "views", "privacy-settings.ejs"), "utf8");
+  assert.match(ps, /<% if \(locals\.micrecOn\) \{ %><li><%- t\('inc\.what_rec'\) %><\/li><% \} %>/);
+  assert.match(ps, /<% if \(locals\.micrecOn\) \{ %><li><%- t\('pf\.what_not_rec'\) %><\/li><% \} %>/);
+  assert.match(fs.readFileSync(path.join(repo, "incognito.js"), "utf8"), /micrecOn = require\("\.\/micrec"\)\.policyOn\(\)/);
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["inc.what_rec"], "Pepe still records your mic-ups like everyone's; incognito is about the website.");
+  assert.equal(en["pf.what_not_rec"], "It doesn't delete your mic recordings; deleting your PATV account can (tick Also delete my mic recordings).");
+  await M.setPolicy(true, "test");
 });
 
 test("the wiring: the bot's action kinds (TTLs, no inbox notice, no PAT), the upload routes' body parser", async () => {

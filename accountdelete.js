@@ -44,7 +44,8 @@
 //                            retries - NULLed once he ran every login, or given up), rec_done_at, rec_gave_up_at (not run in 30 days),
 //                            rec_skipped (review: JSON [{login, from, to}] NOT asked - another account held the login before; admins
 //                            only, NULLed when handled or 30 days after the deletion), rec_skipped_done_at, rec_skipped_alert
-//                            (review 2: the stage the admins were told - 1 appeared, 2 reminded, 3 lapsed), rec_skipped_lapsed_at
+//                            (review 2: the stage the admins were told - 1 appeared, 2 reminded, 3 lapsed), rec_skipped_lapsed_at,
+//                            rec_late_at + rec_late_note (review 3: Pepe's follow-up came after the scrub - micrec.scrubLateAcks)
 //   account_deletion_routes  key PK, user_id, amount, legs (JSON), txid, at
 "use strict";
 const crypto = require("crypto");
@@ -100,6 +101,9 @@ function init() {
       // review 2: the admins were told about the skipped spans (1 when they appeared, 2 reminded, 3 lapsed); when they lapsed unhandled
       if (!c.includes("rec_skipped_alert")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped_alert INTEGER");
       if (!c.includes("rec_skipped_lapsed_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_skipped_lapsed_at INTEGER");
+      // review 3: Pepe's follow-up came after the scrub (done or given up): when, and his rewritten answer (counts, no login)
+      if (!c.includes("rec_late_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_late_at INTEGER");
+      if (!c.includes("rec_late_note")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_late_note TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;

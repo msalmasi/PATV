@@ -342,13 +342,17 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   // (review: picked in SQL, before the row cap - a heavy chatter who ticks only transcripts still gets them)
   // review 2: a login another PATV account held before (micrec.ownSince - the rule Pepe's part follows): its lines only from when it
   // became this account's (lines before then may be theirs); the account's own web lines all. Unknown (an error) = none under it.
-  let loginSince = 0;
+  // review 3: the note says "another PATV account had that name" only when ownSince really said so (on its error path every line
+  // under the login is left out and out.errors says why - the check failed, so that claim may be untrue), and only when the member
+  // asked for lines at all (neither box ticked: exportLines gives [] and there are no lines for a note to be about)
+  let loginSince = 0, sinceKnown = true;
   if (login) {
     try { const M = require("./micrec"); loginSince = await M.ownSince(uid, login, at); }
-    catch (e) { loginSince = at; (out.errors = out.errors || []).push("chat.pad_chat_lines: who held your Camfrog name before couldn't be checked - lines under it were left out"); }
+    catch (e) { loginSince = at; sinceKnown = false; (out.errors = out.errors || []).push("chat.pad_chat_lines: who held your Camfrog name before couldn't be checked - lines under it were left out"); }
   }
+  const wantLines = !parts || !!parts.chat || !!parts.transcripts;
   await put("chat", "pad_chat_lines", require("./chatlog").exportLines(uid, login, MAX_ROWS, parts ? { mic: !!parts.transcripts, other: !!parts.chat } : null, { loginSince }));
-  if (loginSince > 0 && out.chat && out.chat.pad_chat_lines) {
+  if (sinceKnown && wantLines && loginSince > 0 && out.chat && Array.isArray(out.chat.pad_chat_lines)) {
     out.chat.pad_chat_lines_note = `Your lines under your Camfrog name start ${new Date(loginSince).toISOString().slice(0, 10)}: another PATV account had that name ` +
                                    "before you, and lines under it before then may be theirs.";
   }

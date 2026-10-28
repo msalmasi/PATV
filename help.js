@@ -21,6 +21,9 @@
 // Why signed-out visitors get search only: every AI answer is a paid model call, and a per-IP quota is easy to dodge
 // (rotating addresses) and unfair to shared ones (one NAT, many people). The local search answers most "how do I"
 // questions on its own, so signing in is only needed for the extra.
+//
+// MIC RECORDINGS (mic retention, owner-approved 2026-10-27): while the /admin/bridge › Mic recordings switch is on, the page adds
+// the approved notes to Pepe's incognito / bridge / retention cards (withMicrecNotes) - his catalog can't follow the site's switch.
 // Limits (signed in): USER_BURST per 10 min + USER_DAY per day each, IP_HOUR per IP per hour (all accounts on it),
 // QUEUE_MAX waiting questions site-wide. Over a limit -> search results + a note.
 //
@@ -512,10 +515,34 @@ async function ask({ q, user, ip }) {
   return out;
 }
 
+// ── mic retention (micrec.js): the help text the owner approved on 2026-10-27 (ops plan mic-audio-retention 8.8) ──
+// Pepe's catalog can't follow the website's /admin/bridge › Mic recordings switch, so while it is ON the page adds these notes to
+// his cards (never while it's off: the privacy text they go with is behind the same switch). A card that already carries a note
+// (a later bot letter with the same text) isn't given it twice.
+const MICREC_NOTES = Object.freeze({
+  incognito: ["Pepe still records your mic-ups like everyone's; incognito is about the website.",
+              "`!forgetme now` doesn't delete your mic recordings; deleting your PATV account can (tick Also delete my mic recordings)."],
+  bridge: ["Pepe still records your mic-ups like everyone's; `!bridge hide` and incognito are about the website."],
+  retention: ["`!retention set <kind> <days|unlimited>` - kind is chat_days / chat_prime / chat_plus (mic transcripts follow chat), " +
+              "audio_days / audio_prime / audio_plus (mic recordings), pm_days / pm_pass."],
+});
+function withMicrecNotes(entries) {
+  let on = false;
+  try { on = require("./micrec").policyOn(); } catch (e) { on = false; }
+  if (!on) return entries;
+  return entries.map((e) => {
+    const has = String(e.details || "") + "\n" + String(e.summary || "");
+    const add = (MICREC_NOTES[e.id] || []).filter((n) => !has.includes(n));
+    if (!add.length) return e;
+    const base = e.details && String(e.details).trim() ? e.details : e.summary;
+    return { ...e, details: base + "\n\n" + add.join(" ") };
+  });
+}
+
 // ── the page model ──
 async function pageModel() {
   const cur = await current();
-  const d = cur.data;
+  const d = { ...cur.data, entries: withMicrecNotes(cur.data.entries || []) };
   const cats = (d.categories || []).map((c) => ({ ...c, entries: (d.entries || []).filter((e) => e.category === c.id) })).filter((c) => c.entries.length);
   // the browser's search index: compact, no details (the filter reads each card's text)
   const index = (d.entries || []).map((e) => ({ id: e.id, title: e.title, commands: e.commands, aliases: e.aliases || [], syntax: e.syntax,
@@ -630,5 +657,6 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
 module.exports = {
   register, validateData, normalizeData, clip, limitsDiffer, current, sync, search, ask, pull, answer, cleanAnswer, allowedCommands, md, plain, config, setConfig,
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
+  MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };

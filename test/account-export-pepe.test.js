@@ -417,6 +417,17 @@ test("review: a login another PATV account held before gets no Pepe part (histor
   assert.ok(readmeOf(j).includes(`chat.pad_chat_lines: Your lines under your Camfrog name start ${day}`));
   assert.equal(await M.ownSince("me", "mecf"), 0, "a login nobody else held: all its lines");
   assert.equal((await X.collect("me")).chat.pad_chat_lines_note, undefined);
+  // review 3: no note when no lines were asked for (neither box), and none when who held the name couldn't be checked - every line
+  // under the login is left out then and the error says why, but "another PATV account had that name" may be untrue
+  assert.equal((await X.collect("sh1", { parts: { chat: false, transcripts: false, memories: true } })).chat.pad_chat_lines_note, undefined);
+  const ownSince0 = M.ownSince;
+  M.ownSince = async () => { throw new Error("the db is gone"); };
+  try {
+    const e = await X.collect("sh1", { parts: { chat: true, transcripts: true } });
+    assert.equal(e.chat.pad_chat_lines_note, undefined, "the check failed: no claim that another account had the name");
+    assert.deepEqual(e.chat.pad_chat_lines.map((l) => l.text), ["SH1-WEB-LINE"], "the lines under the login are left out");
+    assert.ok(e.errors.some((x) => /who held your Camfrog name before couldn't be checked - lines under it were left out/.test(x)));
+  } finally { M.ownSince = ownSince0; }
   const g = await (await fetch(base + "/api/account/export", { headers: { "x-user": "sh1" } })).json();
   assert.equal(g.offer.login_shared, true, "the form says why");
   // an account merged INTO this one is this one: its records of the login don't count

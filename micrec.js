@@ -50,6 +50,14 @@
 //     /api/actions/ack): on an action whose login is gone his message keeps only its counts, under the pseudonym.
 //   * ownSince(uid, login): Download my data's own chat / transcript lines under a login another account held before start when
 //     it became this account's (chatlog.exportLines loginSince) - the same rule as Pepe's part.
+//
+// Review 3 fixes (1.99afr):
+//   * a late follow-up from Pepe (after the give-up or the done scrub) is recorded on the deletion's row (rec_late_at /
+//     rec_late_note: counts under the pseudonym), so the card no longer says only "NOT RUN" after he ran it; the rewrite keeps his
+//     "part of the storage couldn't be read" / "a few couldn't be deleted yet" (a partial run never reads as complete).
+//   * the owner approved the policy text (ops plan section 8, 2026-10-27) with 8.11 = A: a recordings download holds the room's
+//     sound while you held the mic, people on the mic at the same time included, and every text says so. Switching ON sends no
+//     inbox notice to members (the owner's decision); the privacy page's date and its changelog entry are the notice.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -435,28 +443,49 @@ async function scrubRecActions(d, wins, why = null) {
 /** review 2: Pepe's answer on an action whose login is gone (scrubbed: the deletion was done or given up) - only its counts, under
  *  the pseudonym (the action's username). He can answer late: his journal may still hold the job after the site gave up, and his
  *  follow-up ("deleted N mic recording file(s) of <login>; ...") overwrites the message. */
+// review 3: a partial run says so (bot pepe_mydata: "; part of the recordings storage couldn't be read - Pepe tries again" /
+// "; a few couldn't be deleted yet - Pepe tries again") - the rewrite keeps that, so a partial late run never reads as complete
+const LATE_INCOMPLETE = [[/part of the recordings storage couldn't be read/i, "; part of the recordings storage couldn't be read - Pepe tries again"],
+                         [/a few couldn't be deleted yet/i, "; a few couldn't be deleted yet - Pepe tries again"]];
+const lateRan = (m) => /^deleted \d+ mic recording file\(s\) of /.test(String(m || ""));
 function lateMessage(a) {
   const m = String(a.message || "");
   const who = String(a.username || "deleted").slice(0, 60);
   const del = /\bdeleted (\d+) mic recording file\(s\)/i.exec(m);
   const kept = /\b(\d+) kept under a legal hold or an open report\b/i.exec(m);
-  if (del) return `deleted ${del[1]} mic recording file(s) of ${who}` + (kept ? `; ${kept[1]} kept under a legal hold or an open report - deleted once it's released` : "") + " (a late answer)";
+  if (del) {
+    const part = LATE_INCOMPLETE.find(([re]) => re.test(m));
+    return `deleted ${del[1]} mic recording file(s) of ${who}` + (kept ? `; ${kept[1]} kept under a legal hold or an open report - deleted once it's released` : "") +
+           (part ? part[1] : "") + " (a late answer)";
+  }
   if (/^\s*queued\b/i.test(m)) return `queued: ${who}'s mic recordings are being deleted (a late answer)`;
   return `${a.status === "done" ? "done" : "failed"} - a late answer from Pepe (the Camfrog name isn't kept)`;
 }
 /** /api/actions/ack (actions.js), after it stored his answers: the acked "privacy.recdelete" actions whose login is gone get
- *  lateMessage. -> how many were rewritten. Never throws. */
+ *  lateMessage. Review 3: a late FOLLOW-UP (he ran it: "deleted N ...") is also recorded on its deletion's row (rec_late_at,
+ *  rec_late_note - the rewritten message, no login), so the admin card no longer says only "NOT RUN (gave up ...)" after Pepe
+ *  did run it - and says so when the run was partial. -> how many were rewritten. Never throws. */
 async function scrubLateAcks(ids) {
   try {
     const list = [...new Set((ids || []).map((x) => parseInt(x, 10)).filter((x) => x > 0))].slice(0, 50);
     if (!list.length || !(await tableThere("pepe_actions"))) return 0;
-    let n = 0;
-    for (const a of await getQuery(`SELECT id, username, status, message FROM pepe_actions WHERE kind = ? AND camfrog IS NULL AND id IN (${list.map(() => "?").join(",")})`,
+    let n = 0, late = null;
+    for (const a of await getQuery(`SELECT id, user_id, username, status, message FROM pepe_actions WHERE kind = ? AND camfrog IS NULL AND id IN (${list.map(() => "?").join(",")})`,
                                    [REC_KIND, ...list])) {
       const msg = lateMessage(a);
-      if (msg === a.message) continue;
-      await runQuery("UPDATE pepe_actions SET message = ? WHERE id = ?", [msg, a.id]);
-      n++;
+      if (msg !== a.message) {
+        await runQuery("UPDATE pepe_actions SET message = ? WHERE id = ?", [msg, a.id]);
+        n++;
+      }
+      if (a.status !== "done" || !lateRan(msg)) continue;
+      if (late === null) {
+        const cols = (await getQuery("SELECT name FROM pragma_table_info('account_deletions')")).map((r) => r.name);
+        late = cols.includes("rec_late_at") && cols.includes("rec_late_note");
+      }
+      if (!late) continue;
+      const d = (await getQuery(`SELECT id FROM account_deletions WHERE user_id = ? AND delete_recordings = 1 AND (rec_gave_up_at IS NOT NULL OR rec_done_at IS NOT NULL)
+                                 ORDER BY id DESC LIMIT 1`, [String(a.user_id)]))[0];
+      if (d) await runQuery("UPDATE account_deletions SET rec_late_at = ?, rec_late_note = ? WHERE id = ?", [now(), msg.slice(0, 300), d.id]);
     }
     return n;
   } catch (e) { console.error("[micrec] late answers:", e.message); return 0; }
@@ -588,7 +617,8 @@ async function adminView() {
                                  FROM account_deletions WHERE delete_recordings = 1`))[0] || {};
       dels = { waiting: Number(c.waiting) || 0, confirmed: Number(c.confirmed) || 0, gave_up: Number(c.gave_up) || 0,
                rows: (await getQuery(`SELECT id, pseudonym, state, execute_at, done_at, rec_done_at, rec_gave_up_at, report
-                                      ${cols.includes("rec_skipped") ? ", rec_skipped, rec_skipped_done_at" : ""}${cols.includes("rec_skipped_lapsed_at") ? ", rec_skipped_lapsed_at" : ""} FROM account_deletions
+                                      ${cols.includes("rec_skipped") ? ", rec_skipped, rec_skipped_done_at" : ""}${cols.includes("rec_skipped_lapsed_at") ? ", rec_skipped_lapsed_at" : ""}
+                                      ${cols.includes("rec_late_at") ? ", rec_late_at, rec_late_note" : ""} FROM account_deletions
                                       WHERE delete_recordings = 1 ORDER BY id DESC LIMIT 20`)).map((r) => {
                  let rep = {}, sk = null;
                  try { rep = JSON.parse(r.report || "{}") || {}; } catch (e) { rep = {}; }
@@ -602,7 +632,9 @@ async function adminView() {
                           skipped_done_at: r.rec_skipped_done_at || null,
                           // review 2: by when it must be handled (its login goes then), and one that went unhandled
                           skipped_due_at: Array.isArray(sk) && sk.length && r.done_at ? Number(r.done_at) + REC_GIVE_UP_MS : null,
-                          skipped_lapsed_at: r.rec_skipped_lapsed_at || null };
+                          skipped_lapsed_at: r.rec_skipped_lapsed_at || null,
+                          // review 3: Pepe's follow-up after the scrub (his counts under the pseudonym; a partial run says so)
+                          rec_late_at: r.rec_late_at || null, rec_late_note: r.rec_late_note || null };
                }) };
     }
   } catch (e) { /* no deletions table yet */ }

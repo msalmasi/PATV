@@ -54,6 +54,8 @@
       <li><%- t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
       <li><%- t('inc.what_media_someone') %></li>
       <li><%- t('inc.what_stats') %></li>
+      <%# mic retention (ops plan 8.8, approved 2026-10-27): only while the /admin/bridge › Mic recordings switch is on (micrec.policyOn) %>
+      <% if (locals.micrecOn) { %><li><%- t('inc.what_rec') %></li><% } %>
     </ul>
     <p class="pv-why"><%- t('inc.what_not') %></p>
 
@@ -87,6 +89,7 @@
       <li><%- t('pf.what_mem') %></li>
       <li><%- t('pf.what_pm') %></li>
       <li><%- t('pf.what_not') %></li>
+      <% if (locals.micrecOn) { %><li><%- t('pf.what_not_rec') %></li><% } %>
       <%# CL13 fix-up: `!msg` copies (an admin's messages, not a conversation with Pepe) stay - spec §3.10 %>
       <li><%- t('pf.what_msg') %></li>
       <li><%- t('pf.what_again') %></li>

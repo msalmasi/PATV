@@ -450,7 +450,11 @@ function register(app, { addUser, isBotToken }) {
       // micfollow: 🎙 "Pads may put my cam on their stage while I hold the mic" + the person's own mic stages (micfollow.js)
       let mf = null;
       try { mf = await require("./micfollow").privacyState(req.user.userId); } catch (e) { mf = null; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf });
+      // mic retention (micrec.js): the approved notes on recordings (incognito doesn't change them; forget-me doesn't delete them)
+      // only while the /admin/bridge › Mic recordings switch is on
+      let micrecOn = false;
+      try { micrecOn = require("./micrec").policyOn(); } catch (e) { micrecOn = false; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn });
     } catch (e) { next(e); }
   });
 }
