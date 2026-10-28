@@ -22,6 +22,7 @@ const KIND_FLAIR = Object.freeze({
   question: { names: ["question", "questions", "discussion", "ask", "q&a", "debate", "poll"], emoji: ["❓", "💬", "🤔"] },
   dj: { names: ["music", "dj", "now playing", "tunes", "songs", "playlist"], emoji: ["🎵", "🎶", "🎧"] },
   snaps: { names: ["snaps", "clips", "captures", "stage", "media", "pics"], emoji: ["📸", "🎬", "📷"] },
+  polls: { names: ["polls", "poll", "voting"], emoji: ["📊", "🗳️"] },
   markets: { names: ["markets", "market", "predictions", "prediction markets", "bets", "polls"], emoji: ["🔮", "📈"] },
   golive: { names: ["stage", "live", "streams", "going live"], emoji: ["🎬", "🔴", "📺"] },
 });
@@ -29,6 +30,7 @@ const KIND_FLAIR = Object.freeze({
 const GENERAL = ["pepe says", "pepe", "discussion", "general", "chat", "misc", "other", "announcement", "announcements"];
 const KIND_TAGS = Object.freeze({
   news: ["news", "headlines"], recap: ["recap", "daily-recap", "highlights"], question: ["question", "discussion"],
+  polls: ["polls", "voting"],
   dj: ["music", "dj"], snaps: ["snaps", "clips", "stage"], markets: ["markets", "predictions", "polls"], golive: ["stage", "live"],
 });
 const STOP = new Set("the a an and or of to in on for with at by from is are was were be it this that its as about into over after new just not no".split(" "));

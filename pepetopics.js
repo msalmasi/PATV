@@ -5,7 +5,7 @@
 //   1. DEDUPE over a recent-topics memory (pepe_topics, WINDOW_MS = 48 h): the same story key (the headline normalised, a URL
 //      without its query, a market ref) or a semantically similar one (token overlap: OVERLAP of the smaller set with at least
 //      MIN_SHARED shared words, or Jaccard >= JACCARD) is refused, wherever it went.
-//   2. ROUTE (news / markets): ONE pad - the best-fit pad among the pads where Pepe may post that kind (his posts on there, the
+//   2. ROUTE (news / markets / polls): ONE pad - the best-fit pad among the pads where Pepe may post that kind (his posts on there, the
 //      kind allowed, not a profile / 18+ pad): the story's words against each pad's own words (title, description, its own tags,
 //      its popular tags, its post flair names; a tag hit counts double). A pad needs FIT_MIN points to win; otherwise the
 //      DEFAULT pad - Pepe's Pad (rooms.HOUSE_ROOM; automkt: its configured pad) - when he may post there, else the pad asked for.
@@ -17,8 +17,8 @@
 const { runQuery, getQuery } = require("./dbUtils");
 
 const WINDOW_MS = 48 * 3600e3;
-const ROUTED = new Set(["news", "markets"]);
-const DEDUPED = new Set(["news", "markets", "dj"]);
+const ROUTED = new Set(["news", "markets", "polls"]);
+const DEDUPED = new Set(["news", "markets", "polls", "dj"]);
 const OVERLAP = 0.6, MIN_SHARED = 3, JACCARD = 0.45, FIT_MIN = 2;
 const STOP = new Set(("the a an and or but of to in on for with at by from is are was were be been being it its this that these those as " +
   "about into over after before new just not no yes you your we our they their he she his her them him i me my so than then there here " +
@@ -126,7 +126,7 @@ async function mayPost(roomId, kind) {
   try { const CR = require("./creators"); await CR.init(); if (CR.isR18Room(roomId)) return false; } catch (e) { /* no creators */ }
   const S = await pf.scopeSettings(roomId);
   if (S.enabled === false || !pf.postsOn(S)) return false;
-  const k = kind === "markets" ? "news" : kind;                 // auto-market announcements are news-like for the owner's kinds
+  const k = (kind === "markets" || kind === "polls") ? "news" : kind;                 // auto-market and poll announcements are news-like for the owner's kinds
   return pf.kindsOf(S).includes(k);
 }
 /**

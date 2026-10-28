@@ -8,7 +8,7 @@
 //                                      {kind: "poll", poll_id, ...} -> links /polls/<id>) -> a feed post as Pepe in
 //                                      ONE pad (1.99wq, pepetopics.js: the best fit for the questions, else `pad` - the auto
 //                                      pad Pepe sends - else Pepe's Pad; was always the Camfrog Lounge), never the same batch
-//                                      twice in 48 h, flaired + tagged from that pad's own (pepelabels.js kind "markets"),
+//                                      twice in 48 h, flaired + tagged from that pad's own (pepelabels.js kind "markets" or "polls"),
 //                                      rate-limited here (FEED_GAP_MS, FEED_PER_DAY) whatever Pepe sends
 //   GET  /admin/markets         the admin page (views/admin/markets.ejs + public/js/admin-automkt.js)
 //   GET  /api/admin/automkt     (admins) {state, requests}
@@ -93,25 +93,29 @@ async function announce(body) {
   // 1.99abr: full URLs - the feed only links http(s) (feedweb.linkify), so "/markets/79" showed as plain text
   const SITE = String(process.env.SITE_URL || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
   const when = (s) => new Date(Number(s) * 1000).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET";
-  const title = items.length === 1 ? t("automkt.feed.title_one", { q: String(items[0].question).slice(0, 120) })
-                                   : t("automkt.feed.title_many", { n: items.length });
+  const allPolls = items.every(isPoll), mixed = !allPolls && items.some(isPoll);
+  const kind = allPolls ? "polls" : "markets";
+  const titleKey = allPolls ? (items.length === 1 ? "poll_title_one" : "poll_title_many")
+    : mixed ? "mixed_title" : (items.length === 1 ? "title_one" : "title_many");
+  const title = t("automkt.feed." + titleKey, { q: String(items[0].question).slice(0, 120), n: items.length });
   const lines = items.map((x) => (isPoll(x)
     ? t("automkt.feed.line_poll", { ic: "📊", q: String(x.question).slice(0, 200), opts: (x.options || []).map(String).join(" / ").slice(0, 120),
                                     closes: when(x.closes), link: `${SITE}/polls/${encodeURIComponent(String(x.poll_id))}` })
     : t("automkt.feed.line", { ic: CAT[x.cat] || "🔮", ref: `M${Math.floor(Number(x.id))}`, q: String(x.question).slice(0, 200),
                                opts: (x.options || []).map(String).join(" / ").slice(0, 120), closes: when(x.closes),
                                link: `${SITE}/markets/${Math.floor(Number(x.id))}` })));
-  const text = [t("automkt.feed.intro"), "", ...lines, "", t("automkt.feed.foot")].join("\n");
+  const text = [t("automkt.feed." + (allPolls ? "poll_intro" : "intro")), "", ...lines, "",
+                t("automkt.feed." + (allPolls ? "poll_foot" : mixed ? "mixed_foot" : "foot"))].join("\n");
   // 1.99wq: one story, one pad (pepetopics.js) + his flair / tags there (pepelabels.js)
   const TP = require("./pepetopics");
-  const topic = { kind: "markets", key: "mkt:" + JSON.parse(refs).slice().sort().join(","), story: { headline: items.map((x) => String(x.question)).join(" ").slice(0, 600) }, title };
+  const topic = { kind, key: "mkt:" + JSON.parse(refs).slice().sort().join(","), story: { headline: items.map((x) => String(x.question)).join(" ").slice(0, 600) }, title };
   const dup = await TP.duplicate(topic).catch(() => null);
   if (dup) return skip("already announced (" + dup.why + ")");
   let fallback = rooms.HOUSE_ROOM;
   if (typeof body.pad === "string" && body.pad.trim()) { const R0 = await require("./feedstore").communityOf(body.pad.trim()).catch(() => null); if (R0 && !R0.profile) fallback = R0.id; }
   const to = await TP.route({ ...topic, fallback, force: true }).catch(() => ({ room: fallback }));
   const home = to.room || fallback;
-  const L = await require("./pepelabels").pick({ roomId: home, kind: "markets", title, body: text }).catch(() => ({ flair: null, tags: [] }));
+  const L = await require("./pepelabels").pick({ roomId: home, kind, title, body: text }).catch(() => ({ flair: null, tags: [] }));
   const p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX || 200), body: text.slice(0, 3000), community: home, nsfw: false, announce: [],
                                               tags: L.tags, flair: L.flair ? L.flair.id : "" }, {});
   await TP.remember({ ...topic, room: home, post: p.id }).catch(() => {});

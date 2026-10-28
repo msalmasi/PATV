@@ -218,3 +218,57 @@ test("1.99vc trending + polls: the settings pass through, a poll's feed line lin
   assert.match(pg.text, /Never a market AND a pool or poll on the same topic/);
   assert.deepEqual(leaked(pg.text), []);
 });
+const TP = require(path.join(repo, "pepetopics"));
+const Labels = require(path.join(repo, "pepelabels"));
+test("batch wording and topic kind distinguish polls, mixed batches and markets", async () => {
+  const calls = [];
+  const originals = {};
+  for (const method of ["duplicate", "route", "remember"]) {
+    originals[method] = TP[method];
+    TP[method] = async (o) => {
+      calls.push([method, o.kind]);
+      return method === "duplicate" ? null : method === "route" ? { room: "test-pad" } : undefined;
+    };
+  }
+  const pick = Labels.pick;
+  Labels.pick = async (o) => { calls.push(["labels", o.kind]); return { flair: null, tags: [] }; };
+  const poll = (id) => ({ kind: "poll", poll_id: "poll_" + id, question: "Favourite colour " + id + "?", options: ["Red", "Blue"], closes: now + 86400 });
+  const market = { id: 501, question: "Will it rain tomorrow?", options: ["Yes", "No"], closes: now + 86400 };
+  try {
+    let t = Date.now() + 100 * 86400e3;
+    for (const [items, title, kind] of [
+      [[poll("one")], "📊 New poll: Favourite colour one?", "polls"],
+      [[poll("two"), poll("three")], "📊 2 new polls", "polls"],
+      [[poll("four"), market], "🤖 2 new auto markets and polls", "markets"],
+      [[market], "🤖 New auto market: Will it rain tomorrow?", "markets"],
+    ]) {
+      t += 2 * 86400e3;
+      A._setClock(() => t);
+      calls.length = 0;
+      const result = await A.announce({ items });
+      assert.equal(result.posted, true);
+      const p = POSTS.at(-1);
+      assert.equal(p.title, title);
+      assert.deepEqual(calls, [["duplicate", kind], ["route", kind], ["labels", kind], ["remember", kind]]);
+      if (kind === "polls") {
+        assert.match(p.body, /^Pepe opened these polls himself/);
+        assert.match(p.body, /Vote on \/polls, or with !vote in chat\.$/);
+        assert.doesNotMatch(p.body, /judges|Trade or bet|\/markets/);
+      } else {
+        assert.ok(p.body.startsWith(EN["automkt.feed.intro"]));
+        assert.ok(p.body.endsWith(EN[items.some((x) => x.kind === "poll") ? "automkt.feed.mixed_foot" : "automkt.feed.foot"]));
+      }
+    }
+  } finally {
+    Object.assign(TP, originals);
+    Labels.pick = pick;
+    A._setClock(null);
+  }
+  assert.equal(Labels.kindFlair("polls", [{ id: "poll-flair", name: "Polls" }]).id, "poll-flair");
+  assert.ok(Labels.KIND_TAGS.polls.includes("polls"));
+  // The actual router and topic history must accept the new kind too.
+  const topic = { kind: "polls", key: "poll-test-routing", title: "Choose a colour", room: "test-pad", post: "test-post" };
+  await TP.remember(topic);
+  assert.equal((await TP.duplicate(topic)).kind, "polls");
+  assert.notEqual((await TP.route({ ...topic, force: true })).why, "not routed");
+});
