@@ -4,6 +4,7 @@
 <html lang="<%= t.lang %>"<%- t.dir === 'rtl' ? ' dir="rtl"' : '' %>>
 <head>
     <meta charset="UTF-8">
+    <% if (typeof shareLinkBase === "function" && shareLinkBase()) { %><meta name="patv-share-base" content="<%= shareLinkBase() %>"><% } %>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <%# S1 F13 (chatsweep.js): the first signed-out page after a sign-out deletes the chat widget's per-account databases; never
         on a signed-in page (it would take the signed-in account's too): chatSweep is set only for a request with no live login

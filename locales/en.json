@@ -2310,6 +2310,7 @@
   "js.feed.video_player": "Video player",
   "js.feed.link_copied": "Link copied",
   "js.feed.share": "Share",
+  "js.share.stream": "Share stream",
   "js.feed.copy_link": "Copy the link:",
   "js.feed.updown": "{up} up · {down} down",
   "js.feed.downvote_later": "your downvote counts once your account is level 2 or has a linked chat account",

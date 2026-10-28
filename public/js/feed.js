@@ -73,12 +73,7 @@
       return;
     }
     if (act === 'share') {
-      var url = location.origin + b.getAttribute('data-url');
-      var lbl = b.querySelector('.lbl') || b;
-      if (navigator.share && /Mobi|Android/i.test(navigator.userAgent)) { navigator.share({ url: url }).catch(function () {}); return; }
-      var done = function () { lbl.textContent = _t('js.feed.link_copied', 'Link copied'); b.classList.add('done'); setTimeout(function () { lbl.textContent = _t('js.feed.share', 'Share'); b.classList.remove('done'); }, 2000); };
-      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, function () { window.prompt(_t('js.feed.copy_link', 'Copy the link:'), url); });
-      else window.prompt(_t('js.feed.copy_link', 'Copy the link:'), url);
+      window.PATVShare.share(b, window.PATVShare.url(b.getAttribute('data-url')));
       return;
     }
     if (act === 'vote') {

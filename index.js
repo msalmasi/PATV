@@ -142,6 +142,7 @@ app.use(flash());
 // Set the view engine to ejs
 app.set("view engine", "ejs");
 // 1.99xi: the level tier name ("🐸 Froglet") for any view - levelTier(level, t) (leveltiers.js, data/level-tiers.json)
+app.locals.shareLinkBase = () => require("./sharelinks").activeBase();
 app.locals.levelTier = (level, t) => require("./leveltiers").labelOf(level, t);
 
 // Set the views directory

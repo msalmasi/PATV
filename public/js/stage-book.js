@@ -151,6 +151,8 @@
     var list = d.slots || [];
     var s = list.find ? list.find(function (x) { return x.status === 'waiting' || x.status === 'active'; }) : null;
     show('slotCard', !!s);
+    show('slotShare', false);
+    $('slotShare').removeAttribute('data-share-path');
     var last = d.slot && d.slot.status === 'ended' ? d.slot : null;
     show('doneCard', !s && !!last && last.ended && Date.now() - last.ended < 30 * 60000);
     if (!s && last) {
@@ -181,6 +183,10 @@
     $('slotRoom').textContent = roomTitle(s.room_id);
     var o = roomOpt(s.room_id);
     $('watchLink').href = o ? '/p/' + encodeURIComponent(o.value) : '/';
+    if (s.went_live && o) {
+      $('slotShare').setAttribute('data-share-path', '/p/' + encodeURIComponent(o.value));
+      show('slotShare', true);
+    }
     var embed = s.mode === 'embed', lib = !!s.library;     // 1.99jn: a 📼 library slot - its controls are #plexNow (stage-plex.js)
     show('streamPanes', !embed && !lib); show('embedNote', embed);
     var st = $('slotState');

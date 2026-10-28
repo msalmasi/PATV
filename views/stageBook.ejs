@@ -63,6 +63,7 @@
       <% } %>
       <div class="row">
         <button type="button" class="btn danger" id="endBtn"><%- t('stage.end_now') %></button>
+        <button type="button" class="btn hide" id="slotShare"><%- t('js.share.stream') %></button>
         <a class="btn" id="watchLink" href="/" target="_blank" rel="noopener"><%- t('stage.watch') %></a>
       </div>
       <!-- 1.99cr: viewers' 📸 Snap / 🎬 Clip of this stream (stagecap.js) -->
@@ -273,7 +274,8 @@
   <% } %>
   <p class="muted center"><a href="/p"><%- t('stage.pads_link') %></a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
-<script src="/public/js/stage-book.js?v=12" defer></script>
+<script src="/public/js/share-link.js?v=1" defer></script>
+<script src="/public/js/stage-book.js?v=13" defer></script>
 <% if (me && px && px.show) { %><script src="/public/js/stage-plex.js?v=3" defer></script>
 <script>
   // 1.99kp: /stage?mode=plex (the /plex hub's "Play from Plex") picks the 📼 choice once the page's scripts are up

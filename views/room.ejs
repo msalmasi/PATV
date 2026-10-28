@@ -636,8 +636,10 @@
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=17"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=2"></script>
+  <script src="/public/js/share-link.js?v=1" defer></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
     <h2 id="rmStageH"><span><%- t('pad.stage.title', { name: room.name }) %></span>
+      <button type="button" class="btn" data-share-path="/p/<%= encodeURIComponent(room.slug) %>">🔗 <%- t('js.feed.share') %></button>
       <span class="live<%= live ? '' : ' off' %>" id="rmStPill" style="font-family: var(--ds-font)"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%- live ? t('pad.stage.on_air') : t('pad.stage.off_air') %></span></span></h2>
     <div class="stabs" id="rmTabs" role="tablist" aria-label="<%- t('pad.stage.streams') %>"></div>
     <div class="player">
