@@ -67,7 +67,7 @@ const DEFAULTS = Object.freeze({
   sp_packs: 1, report_hide: 3, pack_voice_pct: 15,
   // Pepe's limits (D: apply to owners and Season Pass too)
   cd_user_gap: 45, cd_user_burst: 6, cd_user_window: 600, cd_clip_room: 180, cd_room_gap: 12, cd_room_burst: 20, cd_room_window: 600,
-  cd_legend_user: 600, cd_legend_room: 300, queue_max: 3, start_within: 60,
+  cd_legend_user: 600, cd_legend_room: 300, queue_max: 3, start_within: 150,
 });
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
 const REF_RE = /^[A-Za-z0-9_-]{8,64}$/;

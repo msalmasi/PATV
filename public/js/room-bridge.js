@@ -576,7 +576,8 @@
     function renderFeed(js) {
       feed.textContent = '';
       var rows = local.concat(js.filter(function (x) { return x.kind === 'cmd'; }).map(function (j) {
-        var st = j.state !== 'done' ? _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') : (j.ok ? (j.replies && j.replies.length ? '' : (j.msg || _t('js.pad.relay.done', 'done'))) : _t('js.pad.relay.not_run', 'not run — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') }));
+        var sb = /^!(?:sb|soundboard)(?:\s|$)/i.test(j.text || '');
+        var st = sb ? clipStatus(j) : j.state !== 'done' ? _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') : (j.ok ? (j.replies && j.replies.length ? '' : (j.msg || _t('js.pad.relay.done', 'done'))) : _t('js.pad.relay.not_run', 'not run — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') }));
         return { at: j.at, text: j.text, st: st, ok: j.state === 'done' ? j.ok : null, replies: j.replies || [] };
       })).sort(function (a, b) { return a.at - b.at; }).slice(-4);
       rows.forEach(function (r) {
@@ -791,6 +792,7 @@
         if (d && d.me) meU = d.me;
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         lastJs = js;
+        if (window.PATVSoundboard) window.PATVSoundboard.update(js);
         if (optimistic) { noteFeed(d && d.feed); syncOutbox(js, (d && d.cursor) || 0); }
         if (k === last) return;
         last = k;

@@ -380,3 +380,51 @@ test("1.99vu: catalogue files go to Pepe as audio jobs and replace a clip's audi
   assert.match(page.text, /different random voice every time/);
   assert.doesNotMatch(page.text, /data-audio=""/, "no empty players");
 });
+
+test("soundboard patience defaults to 150 seconds and saved admin settings win", async () => {
+  assert.equal(SB.config().start_within, 150);
+  await SB.setConfig({ start_within: 210 }, "test");
+  assert.equal(SB.config().start_within, 210);
+  assert.equal(JSON.parse((await getQuery("SELECT value FROM sb_config WHERE key = 'start_within'"))[0].value), 210);
+  await SB.setConfig({ start_within: 150 }, "test");
+});
+
+test("drawer consumes existing relay snapshots for waiting, playback and failure", async () => {
+  const vm = require("node:vm"), nodes = [];
+  const make = (tag) => {
+    const e = { tag, children: [], attrs: {}, listeners: {}, textContent: "", className: "",
+      style: { setProperty() {} }, appendChild(x) { this.children.push(x); },
+      setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; },
+      addEventListener(k, f) { this.listeners[k] = f; }, querySelectorAll() { return []; } };
+    e.classList = { contains(c) { return e.className.split(" ").includes(c); }, toggle(c, on) {
+      e.className = e.className.split(" ").filter(x => x !== c).concat(on ? [c] : []).join(" ");
+    } };
+    nodes.push(e); return e;
+  };
+  const host = make("div"); host.attrs["data-slug"] = "sb-room";
+  const window = {}, calls = [];
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public/js/pad-soundboard.js"), "utf8"), {
+    window, document: { getElementById: () => host, createElement: make, createTextNode: t => ({ textContent: t }) },
+    setTimeout() {}, clearTimeout() {}, fetch: async url => {
+      calls.push(url);
+      return { json: async () => url.endsWith("/say") ? { ok: true, id: "job" } :
+        { ok: true, on: true, tabs: [{ key: "global", name: "Global", emoji: "", clips: [{ id: "clip", label: "Bell", free: true }] }] } };
+    }
+  });
+  nodes.find(x => x.className.includes("sbd-toggle")).listeners.click();
+  await new Promise(setImmediate);
+  nodes.find(x => x.className.startsWith("sbd-b ")).listeners.click();
+  await new Promise(setImmediate);
+  const status = nodes.find(x => x.attrs["role"] === "status");
+  assert.equal(status.textContent, "Queued for playback.");
+  window.PATVSoundboard.update([{ id: "other", state: "playing" }]);
+  assert.equal(status.textContent, "Queued for playback.");
+  window.PATVSoundboard.update([{ id: "job", state: "waiting" }]);
+  assert.equal(status.textContent, "Waiting for the mic…");
+  window.PATVSoundboard.update([{ id: "job", state: "playing" }]);
+  assert.equal(status.textContent, "Playing on the mic now.");
+  window.PATVSoundboard.update([{ id: "job", state: "done", ok: false, msg: "the mic stayed busy" }]);
+  assert.equal(status.textContent, "the mic stayed busy");
+  assert.match(status.className, /bad/);
+  assert.equal(calls.length, 2, "no separate status polling channel");
+});

@@ -83,6 +83,7 @@ const CLIP_TTL = 8 * 60 * 1000;
 // Pepe's progress acks for a clip (1.99bk): state "queued" | "waiting" | "playing" keep the job open;
 // an ack without one is final ("done"). Acks can arrive in one batch or out of order - never step back.
 const PROGRESS = { queued: 1, waiting: 2, playing: 3 };
+const isSoundboard = (j) => j.kind === "cmd" && /^!(?:sb|soundboard)(?:\s|$)/i.test(j.text || "");
 const stateRank = (s) => (s === "done" ? 9 : PROGRESS[s] || 0);
 const SNAP_TTL = 2 * 60 * 1000, SNAP_TARGET_GAP = 20 * 1000, SNAP_VIEWER_GAP = 10 * 1000;
 const FRAME_TTL = 5 * 60 * 1000;                                   // a queued save waits this long for Pepe
@@ -201,7 +202,7 @@ function sweep(now) {
   for (const [id, j] of jobs) {
     const open = j.state !== "done";
     // 1.99ez: a cam clip (camclip.js) records for up to 30 s after Pepe gets to it - kept like a mic clip
-    if (open ? now - j.at > (j.kind === "clip" || j.kind === "camclip" ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) jobs.delete(id);
+    if (open ? now - j.at > (j.kind === "clip" || j.kind === "camclip" || isSoundboard(j) ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) jobs.delete(id);
   }
   for (const [k, s] of snaps) if (now - s.ts > SNAP_TTL) snaps.delete(k);
   for (const [k, s] of mfSnaps) if (now - s.ts > SNAP_TTL) mfSnaps.delete(k);
@@ -374,7 +375,7 @@ function applyAcks(acks) {
       if (j.result) j.result.replies = (j.result.replies || []).concat(replies).slice(-CMD_MAX_REPLIES);
       continue;
     }
-    const st = j.kind === "clip" && PROGRESS[a.state] ? a.state : "done";
+    const st = (j.kind === "clip" || isSoundboard(j)) && PROGRESS[a.state] ? a.state : "done";
     if (stateRank(st) < stateRank(j.state)) continue;          // an older step arriving late
     // 1.99ye: a say already settled by its echo (or failed by a timeout) keeps that answer
     if (j.kind === "say" && j.state === "done" && j.result) {
@@ -398,7 +399,7 @@ function applyAcks(acks) {
     notify(j);
     if (j.kind === "cmd") {
       j.result.replies = replies;
-      cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
+      if (st === "done") cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
       // 1.99pg: a Manage-panel room-role change goes in the pad's event log (settings hub audit list) with Pepe's answer
       if (typeof j.gui === "string" && j.gui.startsWith("role_")) {
         const detail = `${j.text} (as ${j.camfrog || "?"}) -> ${a.ok ? "done" : "refused"}: ${replies[0] || j.result.msg || ""}`;

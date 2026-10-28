@@ -234,3 +234,26 @@ test("against Pepe: migration, strict flags, known self login, combined filters 
     assert.match(fs.readFileSync(path.join(repo, "views/partials/po-modlog.ejs"), "utf8"), /name="vs"/);
   } finally { bridge._rooms.delete("self-test"); }
 });
+
+test("soundboard progress uses the requester's relay job and never regresses", async () => {
+  await BB.unblock({ roomId: ROOM, target: { userId: U.alice.userId, username: "alicep" }, by: { name: "test", via: "web" } });
+  const r = await say("alice", "!sb 12");
+  assert.equal(r.status, 200);
+  const id = r.d.id;
+  const mine = () => relay.mineFor(U.alice.userId, ROOM).find(j => j.id === id);
+  for (const state of ["queued", "waiting", "playing"]) {
+    relay.applyAcks([{ id, ok: true, state, msg: state }]);
+    assert.equal(mine().state, state);
+  }
+  relay.applyAcks([{ id, ok: true, state: "waiting", msg: "late" }]);
+  assert.equal(mine().state, "playing");
+  relay.applyAcks([{ id, ok: true, msg: "played" }]);
+  assert.equal(mine().state, "done"); assert.equal(mine().msg, "played");
+  relay.applyAcks([{ id, ok: true, state: "playing" }]);
+  assert.equal(mine().state, "done");
+  assert.ok(!relay.mineFor(U.bob.userId, ROOM).some(j => j.id === id));
+  assert.ok(!relay.mineFor(U.alice.userId, "Elsewhere").some(j => j.id === id));
+  const bad = await say("owner", "!sb 12");
+  relay.applyAcks([{ id: bad.d.id, ok: true, state: "waiting" }, { id: bad.d.id, ok: false, msg: "mic busy" }]);
+  assert.equal(relay.mineFor(U.owner.userId, ROOM).find(j => j.id === bad.d.id).ok, false);
+});

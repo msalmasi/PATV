@@ -9,7 +9,7 @@
   if (!host) return;
   var slug = host.getAttribute('data-slug');
   var GAP = 45000;
-  var last = 0, data = null, tab = null, timer = null;
+  var last = 0, data = null, tab = null, timer = null, pending = null;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   var toggle = el('button', 'rb-btn sbd-toggle', '🔊 ' + _t('js.sbd.open', 'Soundboard')); toggle.type = 'button';
   toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'sbd-' + slug);
@@ -84,10 +84,22 @@
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (d) {
         if (!d || !d.ok) { last = 0; ring(); say((d && d.error) || _t('js.sbd.failed_play', 'Pepe couldn\'t take that one.'), 'bad'); return; }
-        say(_t('js.sbd.queued', 'Sent - Pepe answers in the chat.'), 'ok');
+        pending = d.id;
+        say(_t('js.sbd.play_queued', 'Queued for playback.'), 'ok');
       })
       .catch(function () { last = 0; ring(); say(_t('js.sbd.failed_play', 'Pepe couldn\'t take that one.'), 'bad'); });
   }
+  window.PATVSoundboard = { update: function (jobs) {
+    var j = jobs.filter(function (x) { return x.id === pending; })[0];
+    if (!j) return;
+    if (j.state === 'waiting') say(_t('js.sbd.waiting', 'Waiting for the mic…'));
+    else if (j.state === 'playing') say(_t('js.sbd.playing', 'Playing on the mic now.'), 'ok');
+    else if (j.state === 'done') {
+      say(j.ok ? (j.msg === 'played' ? _t('js.sbd.played', 'Playback finished.') : (j.msg || _t('js.sbd.queued', 'Sent - Pepe answers in the chat.'))) :
+        (j.msg || _t('js.sbd.failed_play', 'Pepe couldn\'t take that one.')), j.ok ? 'ok' : 'bad');
+      pending = null;
+    }
+  } };
   function report(c) {
     var why = window.prompt(_t('js.sbd.report_q', 'What\'s wrong with “{label}”?', { label: c.label }));
     if (why == null) return;
