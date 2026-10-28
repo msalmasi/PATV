@@ -45,7 +45,9 @@
 //                            rec_skipped (review: JSON [{login, from, to}] NOT asked - another account held the login before; admins
 //                            only, NULLed when handled or 30 days after the deletion), rec_skipped_done_at, rec_skipped_alert
 //                            (review 2: the stage the admins were told - 1 appeared, 2 reminded, 3 lapsed), rec_skipped_lapsed_at,
-//                            rec_late_at + rec_late_note (review 3: Pepe's follow-up came after the scrub - micrec.scrubLateAcks)
+//                            rec_late_at + rec_late_note (review 3: Pepe's follow-up came after the scrub - micrec.scrubLateAcks),
+//                            rec_partial_note + rec_partial_at (review 4: his latest answer was a partial run - not done yet),
+//                            rec_wait_alert (review 4: the admins were told it isn't confirmed - 1 a week before the give-up, 2 at it)
 //   account_deletion_routes  key PK, user_id, amount, legs (JSON), txid, at
 "use strict";
 const crypto = require("crypto");
@@ -104,6 +106,11 @@ function init() {
       // review 3: Pepe's follow-up came after the scrub (done or given up): when, and his rewritten answer (counts, no login)
       if (!c.includes("rec_late_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_late_at INTEGER");
       if (!c.includes("rec_late_note")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_late_note TEXT");
+      // review 4: Pepe's latest answer was partial (storage unreadable / some not deleted yet: the words, no login) and since when;
+      // the admins were told it isn't confirmed (1 a week before the give-up, 2 at the give-up - before the logins go)
+      if (!c.includes("rec_partial_note")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_partial_note TEXT");
+      if (!c.includes("rec_partial_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_partial_at INTEGER");
+      if (!c.includes("rec_wait_alert")) await runQuery("ALTER TABLE account_deletions ADD COLUMN rec_wait_alert INTEGER");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -914,6 +921,8 @@ async function tick() {
     try { await retryForget(); } catch (e) { console.error("[acctdel] forget retry:", e.message); }
     try { await retryRemovePublic(); } catch (e) { console.error("[acctdel] remove public retry:", e.message); }
     try { await require("./micrec").retryRecDeletes(); } catch (e) { console.error("[acctdel] recordings retry:", e.message); }
+    // review 4: the Mic recordings text is on but Pepe's report no longer matches it -> the admins are told (micrec.drift)
+    try { await require("./micrec").drift(); } catch (e) { console.error("[acctdel] recordings drift:", e.message); }
   })().finally(() => { ticking = null; });
   return ticking;
 }

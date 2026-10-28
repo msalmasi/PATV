@@ -47,8 +47,9 @@ const built = (async () => {
 const DAY = 86400000, MB = 1024 * 1024;
 let clockAt = Date.UTC(2026, 9, 28, 12);
 let X, M, P, CL, runQuery, getQuery, server, base;
+// (review 4: + what the switch needs besides the windows - deletion on, unknown rooms the shortest window, his room notice naming recordings)
 const FULL = { chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: null, rec_plus: null, audio_days: 30, audio_prime: 180, audio_plus: null,
-               pm_days: 30, pm_pass: null, split: true };
+               pm_days: 30, pm_pass: null, split: true, delete: true, unknown_room: "shortest", rec_notice: true };
 const OLD = { chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: 365, rec_plus: null, pm_days: 30, pm_pass: null };
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
@@ -626,7 +627,7 @@ test("the form: the choices are sent, Pepe's rows shown only when offered, the r
                    "settings.data.pepe_off", "settings.data.rec_before_note", "settings.data.pepe_scope", "settings.data.pepe_shared", "settings.data.reauth", "settings.data.reauth_sso"]) {
     assert.ok(view.includes(`t('${k}')`), k);
   }
-  assert.match(view, /account-security\.js\?v=4/);
+  assert.match(view, /account-security\.js\?v=5/);
   assert.match(view, /id="expPw" autocomplete="current-password"/);
   const js = fs.readFileSync(path.join(repo, "public", "js", "account-security.js"), "utf8");
   assert.match(js, /post\('\/api\/account\/export', partsBody\(\)\)/);
@@ -651,4 +652,76 @@ test("the form: the choices are sent, Pepe's rows shown only when offered, the r
     assert.doesNotMatch(s, /deleting your account/i, s);
     assert.match(s, /privacy@publicaccess\.tv/, s);
   }
+});
+
+test("review 4: the round trip of 'ask again with an earlier date' - the README and the form quote the first midnight at or after Pepe's next_before, and the form sends next_before itself while that day is picked (no gap between two downloads)", async () => {
+  await setup();
+  await settle();
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "admin");
+  // the day to quote: never the day OF next_before (its first hours would be in neither download)
+  assert.equal(X.nextDay(Date.UTC(2026, 9, 15) / 1000), "2026-10-15", "exactly midnight: that day");
+  assert.equal(X.nextDay(Date.UTC(2026, 9, 15) / 1000 + 1), "2026-10-16");
+  assert.equal(X.nextDay(Date.UTC(2026, 9, 15, 15, 4, 6) / 1000), "2026-10-16");
+  const NB = Date.UTC(2026, 9, 15, 15, 4, 6) / 1000;                     // the first recording left out was at 15:04:05 UTC (+ 1 s)
+  const readme = X._readmeChoices({ recordings: true, pepe: ["recordings"] }, { got: true, sum: { next_before: NB } });
+  const quoted = /pick "Only recordings before" (\d{4}-\d{2}-\d{2})/.exec(readme);
+  assert.ok(quoted, readme);
+  assert.ok(Date.parse(quoted[1] + "T00:00:00Z") >= NB * 1000, "the day typed in by hand (its midnight UTC) reaches the first one left out");
+  assert.match(readme, /the download page fills that in and starts exactly where this one stopped/);
+  // the form, run for real (public/js/account-security.js in a vm against this server): a member whose last download didn't fit
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, email, password, camfrogUsername) VALUES ('rt1', 'rt1', 'rt1@example.com', 'x', 'roundtrip1')");
+  const far = Math.max(Date.now(), clockAt) + 3 * DAY;
+  await runQuery(`INSERT INTO account_exports (id, user_id, created, state, file, bytes, finished, expires, pepe, pepe_state, pepe_summary)
+                  VALUES ('rt-ready-1', 'rt1', ?, 'ready', 'none.zip', 1, ?, ?, 1, 'done', ?)`, [clockAt - 2 * DAY, clockAt - 2 * DAY, far, JSON.stringify({ next_before: NB })]);
+  const g = await (await fetch(base + "/api/account/export", { headers: { "x-user": "rt1" } })).json();
+  const mine = g.exports.find((x) => x.id === "rt-ready-1");
+  assert.deepEqual([mine.next_before, mine.next_day], [NB * 1000, "2026-10-16"]);
+  const vm = require("vm");
+  const els = {};
+  const mk = (id) => {
+    const on = {};
+    const el = { id, value: "", checked: false, hidden: false, disabled: false, textContent: "", className: "", style: {}, children: [], dataset: {},
+                 addEventListener: (ev, f) => { (on[ev] = on[ev] || []).push(f); }, fire: (ev) => (on[ev] || []).forEach((f) => f({})),
+                 appendChild: (c) => { el.children.push(c); return c; }, setAttribute() {}, focus() {} };
+    return el;
+  };
+  const document = { documentElement: { lang: "en" }, getElementById: (id) => els[id] || (els[id] = mk(id)), createElement: (tag) => mk(tag),
+                     createTextNode: (t) => ({ text: String(t) }) };
+  const calls = [];
+  const fakeFetch = (url, o = {}) => {
+    const hs = {};
+    for (const [k, v] of Object.entries({ ...(o.headers || {}), ...member("rt1") })) hs[k.toLowerCase()] = v;   // as a browser sends them
+    const p = fetch(base + url, { ...o, headers: hs });
+    calls.push({ url, o, p, copy: p.then((r) => r.clone()) });          // (cloned before the page reads it)
+    return p;
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "account-security.js"), "utf8"),
+                     { window: { confirm: () => true }, document, fetch: fakeFetch, location: {}, setTimeout: () => 0, console });
+  const settled = async (pred) => { for (let i = 0; i < 200 && !pred(); i++) await new Promise((r) => setTimeout(r, 10)); };
+  await settled(() => els.expBefore && els.expBefore.value);
+  assert.equal(els.expBefore.value, "2026-10-16", "the form fills in the day the README quotes");
+  const shown = els.expList.children.flatMap((li) => li.children.map((c) => c.text || "")).join(" ");
+  assert.match(shown, /ask again with “Only recordings before” 2026-10-16/);
+  // recordings alone, the day left as filled in: Pepe is asked from exactly where the last download stopped
+  els.expChat.checked = false; els.expTx.checked = false; els.expMem.checked = false; els.expRec.checked = true;
+  els.expBtn.fire("click");
+  await settled(() => calls.some((c) => c.o.method === "POST"));
+  const sent = calls.find((c) => c.o.method === "POST");
+  await sent.p;
+  assert.equal(JSON.parse(sent.o.body).parts.rec_before, NB * 1000, "next_before itself - not 2026-10-16's midnight, not 2026-10-15's");
+  const resp = await (await sent.copy).json().catch(() => null);
+  const job1 = (await getQuery("SELECT id FROM account_exports WHERE user_id = 'rt1' AND id != 'rt-ready-1' ORDER BY created DESC LIMIT 1"))[0];
+  assert.ok(job1, "the request was made: " + JSON.stringify(resp));
+  await waitAsked(job1.id);
+  assert.deepEqual(JSON.parse((await asks(job1.id))[0].args), [job1.id, "recordings", String(NB)], "Pepe gets the exact point (bot: recordings before it)");
+  // a day picked by hand is that day's midnight UTC
+  els.expBefore.value = "2026-10-10";
+  els.expBtn.disabled = false;
+  els.expBtn.fire("click");
+  await settled(() => calls.filter((c) => c.o.method === "POST").length > 1);
+  const hand = calls.filter((c) => c.o.method === "POST")[1];
+  await hand.p;
+  assert.equal(JSON.parse(hand.o.body).parts.rec_before, Date.UTC(2026, 9, 10));
+  await settle();
 });

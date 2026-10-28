@@ -102,6 +102,7 @@
   var xScope = document.getElementById('expScope'), xShared = document.getElementById('expShared'), xBeforeNote = document.getElementById('expBeforeNote');
   var xPwRow = document.getElementById('expPwRow'), xPw = document.getElementById('expPw'), xPwL = document.getElementById('expPwL'), xSso = document.getElementById('expReauthSso');
   var OFFER = null, REAUTH = { fresh: true, password: true };
+  var NEXT = null;   // review 4: {day, ms} - the "Only recordings before" day filled in from Pepe's next_before, and that exact point
   function showOffer(o, ra) {
     OFFER = o || { pepe: false, recordings: false };
     if (ra) REAUTH = ra;
@@ -132,7 +133,12 @@
     if (OFFER && OFFER.pepe) p.memories = !!(xMem && xMem.checked);
     if (OFFER && OFFER.recordings) {
       p.recordings = !!(xRec && xRec.checked);
-      if (p.recordings && xBefore && xBefore.value) { var d = Date.parse(xBefore.value + 'T00:00:00Z'); if (d > 0) p.rec_before = d; }
+      if (p.recordings && xBefore && xBefore.value) {
+        // review 4: the day filled in from a download that didn't fit carries Pepe's exact point (next_before) - its midnight would
+        // lose the recordings between that midnight and the point; a day picked by hand is its midnight UTC
+        var d = NEXT && NEXT.day === xBefore.value ? NEXT.ms : Date.parse(xBefore.value + 'T00:00:00Z');
+        if (d > 0) p.rec_before = d;
+      }
     }
     var b = { parts: p };
     if (xPw && xPwRow && !xPwRow.hidden && xPw.value) b.password = xPw.value;
@@ -155,11 +161,12 @@
           var a = document.createElement('a'); a.href = '/settings/account/export/' + encodeURIComponent(x.id);
           a.textContent = _t('js.acct.exp_download', 'Download (until {date})', { date: when(x.expires) });
           li.appendChild(a);
-          // mic retention: older recordings that didn't fit - the next request can start where this one stopped
-          var day = x.next_before ? dayOf(x.next_before) : '';
+          // mic retention: older recordings that didn't fit - the next request starts where this one stopped (review 4: the day shown
+          // is the first midnight UTC at or after Pepe's point, next_day - and while it stays picked, the point itself is sent)
+          var day = x.next_before ? (x.next_day || dayOf(x.next_before + 86400000 - 1)) : '';
           if (day) {
             li.appendChild(document.createTextNode(' · ' + _t('js.acct.exp_next_before', 'Older recordings didn’t fit - ask again with “Only recordings before” {date}.', { date: day })));
-            if (xBefore && !xBefore.value) { xBefore.value = day; sync(); }
+            if (xBefore && !xBefore.value) { xBefore.value = day; NEXT = { day: day, ms: Number(x.next_before) }; sync(); }
           }
         }
         el.appendChild(li);

@@ -572,6 +572,11 @@ function cleanParts(raw) {
 const parseJson = (s, d) => { try { const v = JSON.parse(s || "null"); return v == null ? d : v; } catch (e) { return d; } };
 /** review: a time from Pepe (unix s) - only a plausible one (2015 .. tomorrow), else null (never a throw on a date). */
 const cleanSec = (v, t = now()) => { const n = Number(v); return Number.isInteger(n) && n > 1420070400 && n < t / 1000 + 86400 ? n : null; };
+/** review 4: the day to quote for "Only recordings before" when Pepe's next_before (unix s - the first recording left out, + 1 s) cut
+ *  the download: the UTC day whose midnight is the first at or after it (the form sends a day as its midnight UTC). The day OF
+ *  next_before lost the recordings between its midnight and next_before - in neither download; this one repeats a few at worst.
+ *  (The form carries next_before itself while that day is still picked - account-security.js.) -> "YYYY-MM-DD" */
+const nextDay = (sec) => new Date(Math.ceil((Number(sec) * 1000) / 86400000) * 86400000).toISOString().slice(0, 10);
 const linkedLogin = async (userId) => {
   const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0];
   const l = String((u && u.camfrogUsername) || "").trim().toLowerCase();
@@ -837,8 +842,10 @@ function readmeChoices(parts, pp) {
     else if (asked.includes("transcripts")) s += README_OVERLAP_TX;
     const nb = cleanSec(pp.sum && pp.sum.next_before);
     if (asked.includes("recordings") && nb) {
+      // review 4: the day whose midnight UTC is at or after next_before (nextDay) - never the day OF it, which left out its first hours
       s += `  Not every recording fitted: one download holds at most about ${PEPE_SHOWN_MB} MB, newest first. For the older ones, ask again and pick ` +
-           `"Only recordings before" ${new Date(nb * 1000).toISOString().slice(0, 10)}, or write to privacy@publicaccess.tv.\n`;
+           `"Only recordings before" ${nextDay(nb)} (the download page fills that in and starts exactly where this one stopped; typed in by hand, ` +
+           "a few recordings you already have can come again), or write to privacy@publicaccess.tv.\n";
     }
   } else {
     const e = pp && pp.error ? String(pp.error) : null;
@@ -930,7 +937,8 @@ async function mine(userId) {
   // time only - Pepe's value is never trusted into a date)
   return rows.map((r) => {
     const nb = cleanSec((parseJson(r.pepe_summary, {}) || {}).next_before);
-    const out = { ...r, next_before: nb ? nb * 1000 : null };
+    // review 4: next_day = the day the form shows and the README quotes (nextDay); next_before (ms) = what the form sends while it's picked
+    const out = { ...r, next_before: nb ? nb * 1000 : null, next_day: nb ? nextDay(nb) : null };
     delete out.pepe_summary;
     return out;
   });
@@ -1137,6 +1145,6 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = { init, register, request, run, tick, pepeTick, collect, zip, zipToFile, crc32, removeAll, mine, hubWaits, offer, cleanParts, putChunk, finish,
                    pepeStatus, OMIT, RATE_MS, EXPORT_TTL_MS, PEPE_KIND, PEPE_PARTS, PEPE_RETRY_MS, PEPE_WAIT_MS, PEPE_ZIP_MAX, PEPE_SHOWN_MB, REC_JOBS_MAX,
-                   REC_DISK_MAX, EXPORT_DISK_MAX, Refuse, PEPE_JOBS_MAX, PEPE_SLICE_QUIET_MS, ORPHAN_MS, REAUTH_TRIES, sweepFiles, reauth, cleanSec,
+                   REC_DISK_MAX, EXPORT_DISK_MAX, Refuse, PEPE_JOBS_MAX, PEPE_SLICE_QUIET_MS, ORPHAN_MS, REAUTH_TRIES, sweepFiles, reauth, cleanSec, nextDay,
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _dir: dir, _collects: () => collects, _pepeZip: (id) => pepeZip(id),
-                   _resetReauth: () => reauthFails.clear(), _setBeforeReady: (f) => { beforeReady = f || null; } };
+                   _readmeChoices: (parts, pp) => readmeChoices(parts, pp), _resetReauth: () => reauthFails.clear(), _setBeforeReady: (f) => { beforeReady = f || null; } };

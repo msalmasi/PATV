@@ -264,6 +264,14 @@ function cleanRetention(raw) {
   // split = Pepe applies the owner's 2026-10-27 rule (bot 1.99afq `!retention split on`): mic transcripts follow chat, recordings
   // have their own windows. Off (as the bot ships): both follow rec_* - and he reports audio_* = rec_* then
   out.split = raw.split === true;
+  // review 4 (bot 1.99afq): what the approved privacy text depends on besides the windows - Pepe's `!retention delete` ("deleted each
+  // night" is only true while it's on), the window of a transcript / recording whose room he can't tell ("shortest" = the no-pad window,
+  // his rule with split on; "longest" = Plus's "for good" for every such recording) and whether his in-room chat-history notice names
+  // mic recordings (ops plan 8.8). An older Pepe reports none of them. micrec.setPolicy refuses without them; micrec.drift flags a
+  // change after the switch went on.
+  out.delete = raw.delete === true;
+  out.unknown_room = raw.unknown_room === "shortest" || raw.unknown_room === "longest" ? raw.unknown_room : null;
+  out.rec_notice = raw.rec_notice === true;
   return out;
 }
 let RETENTION = { ...RETENTION_DEFAULTS };

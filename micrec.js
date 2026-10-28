@@ -58,6 +58,20 @@
 //   * the owner approved the policy text (ops plan section 8, 2026-10-27) with 8.11 = A: a recordings download holds the room's
 //     sound while you held the mic, people on the mic at the same time included, and every text says so. Switching ON sends no
 //     inbox notice to members (the owner's decision); the privacy page's date and its changelog entry are the notice.
+//
+// Review 4 fixes (1.99afr, with bot 1.99afq review 4):
+//   * the switch needs everything the approved text depends on in Pepe's report (pepeGaps): the audio windows, split on, AND a
+//     recording whose room he can't tell kept for the shortest window (unknown_room "shortest" - the text promises 30 days without a
+//     pad; with "longest" Plus's "for good" kept every such recording for good), his `!retention delete` on ("deleted each night") and
+//     his in-room notice naming mic recordings (rec_notice - ops plan 8.8, a later bot letter). After it went on, drift() tells the
+//     chatlog.admin holders once per new set of gaps (a `!retention split off`, a rollback) and the card shows them.
+//   * a partial run (his answer "part of the recordings storage couldn't be read" / "a few couldn't be deleted yet") is NOT done: the
+//     deletion stays open (rec_windows kept, rec_partial_note on the card) until a clean answer - he retries it himself and follows up
+//     again when it finishes, and it's asked again a day after his answer; given up after 30 days like any other.
+//   * a deletion Pepe hasn't confirmed: the chatlog.admin holders are told a week before the give-up (the card then shows its logins)
+//     and again at the give-up, BEFORE the logins go - no promise breaks silently.
+//   * a legal hold on an account ("who:u:<id>") reaches every Camfrog login it (or an account merged into it) ever had and its
+//     account key "u:<id>" (accountHoldHashes) - not only the login linked now.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -117,18 +131,35 @@ function pepeCan() {
 }
 const cfg = () => ({ ...CFG });
 
+/**
+ * What the approved text needs from Pepe's report (premium.retention()) and isn't there: [{code, why}] - empty = he keeps what it
+ * says. The audio windows (an older bot doesn't report them) and his split rule (off: recordings follow the transcript windows);
+ * review 4: his rule for a recording whose room he can't tell ("shortest" - the text promises 30 days without a pad and "kept longer
+ * only under a legal hold or an open report"; "longest" would keep every such recording for good), his `!retention delete` ("deleted
+ * each night"), and his in-room chat-history notice naming mic recordings (ops plan 8.8 - a later bot letter). setPolicy refuses on
+ * the first; drift() flags any of them after the switch went on.
+ */
+function pepeGaps(R) {
+  if (!R || !R.audio_reported) return [{ code: "audio_unreported", why: "Pepe doesn't report the mic recording windows yet (his release with them isn't live) - the policy text would state windows he doesn't keep." }];
+  if (!R.split) return [{ code: "split_off", why: "Pepe's split rule is off (!retention split on confirm): recordings follow the transcript windows, so the policy text would state windows he doesn't keep." }];
+  const out = [];
+  if (R.unknown_room !== "shortest") out.push({ code: "unknown_room", why: "Pepe doesn't report keeping a recording whose room he can't tell for the shortest window (bot 1.99afq review 4) - the policy text promises 30 days without a pad and \"kept longer only under a legal hold or an open report\", but he would keep such recordings for good." });
+  if (R.delete !== true) out.push({ code: "delete_off", why: "Pepe's deletion is off (!retention delete on confirm) - the policy text says recordings past their window are deleted each night." });
+  if (R.rec_notice !== true) out.push({ code: "notice_missing", why: "Pepe's in-room chat-history notice doesn't name mic recordings yet (ops plan 8.8: the bot letter that builds it) - the rooms wouldn't be told." });
+  return out;
+}
+const pepeR = () => { try { return require("./premium").retention(); } catch (e) { return null; } };
+
 /** Flip the switch (an admin on /admin/bridge). -> cfg. Audited (room_events "micrec.switch"). */
 async function setPolicy(on, actor = null) {
   await init();
   const want = on === true || on === "true" || on === 1 || on === "1" || on === "on";
   if (CFG.on === want) return { cfg: cfg(), unchanged: true };
-  // never ON while Pepe doesn't apply the owner's windows: an older bot (no audio windows in his report), or his split rule still
-  // off (`!retention split on` - recordings then follow the transcript windows): the text would state windows he doesn't keep
+  // never ON while Pepe doesn't keep what the text says (pepeGaps): an older bot, his split rule off, an unknown room kept for good,
+  // his deletion off, his room notice not naming recordings
   if (want) {
-    let R = null;
-    try { R = require("./premium").retention(); } catch (e) { R = null; }
-    if (!R || !R.audio_reported) throw new Refuse(409, "Pepe doesn't report the mic recording windows yet (his release with them isn't live) - the policy text would state windows he doesn't keep.", "audio_unreported");
-    if (!R.split) throw new Refuse(409, "Pepe's split rule is still off (!retention split on): recordings still follow the transcript windows, so the policy text would state windows he doesn't keep.", "split_off");
+    const gap = pepeGaps(pepeR())[0];
+    if (gap) throw new Refuse(409, gap.why, gap.code);
   }
   const t = now();
   const next = cleanCfg({ on: want, at: t, first_on: CFG.first_on || (want ? t : null), by: actor });
@@ -138,6 +169,34 @@ async function setPolicy(on, actor = null) {
   try { await require("./rooms").event(null, "micrec.switch", actor || null, `policy ${want ? "on" : "off"}`); } catch (e) { /* audit is best effort */ }
   console.log(`[micrec] policy switch ${want ? "ON" : "OFF"} (${actor || "?"})`);
   return { cfg: cfg() };
+}
+
+/**
+ * review 4: the switch is ON but Pepe's report no longer matches the text (`!retention split off`, `!retention delete off`, a rollback
+ * to an older bot ...): the privacy page, its changelog and /help would then say what he doesn't do. Nothing is switched off by
+ * itself (the published text is the owner's call): the chatlog.admin holders get ONE inbox notice per new set of gaps, the card
+ * shows them, and one console error. Run by the account-deletion tick. -> {gaps: [codes], told}
+ */
+async function drift() {
+  await init();
+  const gaps = policyOn() ? pepeGaps(pepeR()) : [];
+  const codes = gaps.map((g) => g.code).join(",");
+  let prev = null;
+  try { prev = JSON.parse(((await getQuery("SELECT value FROM micrec_meta WHERE key = 'drift'"))[0] || {}).value || "null"); } catch (e) { prev = null; }
+  const p = prev && typeof prev === "object" ? prev : { codes: "", n: 0 };
+  if (codes === String(p.codes || "")) return { gaps: gaps.map((g) => g.code), told: 0 };
+  const next = { codes, n: (Number(p.n) || 0) + (codes ? 1 : 0), at: now() };
+  await runQuery("INSERT INTO micrec_meta (key, value) VALUES ('drift', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(next)]);
+  if (!codes) return { gaps: [], told: 0 };
+  console.error(`[micrec] the Mic recordings policy is ON but Pepe doesn't match it: ${codes} (/admin/bridge#micrec)`);
+  let told = 0, admins = [];
+  try { admins = await skipAdmins(); } catch (e) { admins = []; }
+  const note = { kind: "admin", link: "/admin/bridge#micrec", ref: `micrec-drift-${next.n}`,
+                 title: "Mic recordings: the privacy text is on, but Pepe doesn't match it",
+                 body: "The Mic recordings policy switch is on, so the privacy page says what Pepe keeps and deletes - but his latest report no longer matches it: " +
+                       gaps.map((g) => g.why).join(" ") + " Fix Pepe, or turn the switch off on /admin/bridge (the owner decides which)." };
+  for (const id of admins) if (await require("./inbox").addSafe(id, note)) told++;
+  return { gaps: gaps.map((g) => g.code), told };
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -246,9 +305,10 @@ async function keepBlock({ t = now(), fresh = false } = {}) {
         else if (k.startsWith("who:")) {
           const w = low(k.slice(4));
           if (w.startsWith("u:")) {
-            const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [w.slice(2)]).catch(() => []))[0];
-            const l = low(u && u.camfrogUsername);
-            if (LOGIN_RE.test(l)) who.add(hashOf(l));
+            // review 4: a hold on an account reaches ALL its Pepe data - every Camfrog login it (or an account merged into it) ever
+            // had, not only the one linked now, and its account key (Pepe's "u:<id>" lines and PM logs). A login the account let
+            // go is held whole (Pepe can't be asked for one holder's span): too much under a hold is the safe direction.
+            for (const h of await accountHoldHashes(w.slice(2))) who.add(h);
           } else if (w.startsWith("h:")) {
             if (/^h:[0-9a-f]{20}$/.test(w)) who.add(w.slice(2));
           } else if (w) who.add(hashOf(w));
@@ -283,6 +343,30 @@ async function keepBlock({ t = now(), fresh = false } = {}) {
   keepStats = { at: t, complete, grace_rooms: Object.keys(block.tiers).length, held_rooms: block.held_rooms.length,
                 held_people: block.held_who_h.length, reported_lines: Object.values(block.reported_tx).reduce((n, l) => n + l.length, 0) };
   return block;
+}
+
+/** review 4: the hashes a legal hold on account `uid` sends Pepe: its key "u:<id>" (and each merged-in account's), and every Camfrog
+ *  login any of them has or had - users.camfrogUsername, login_changes (old / new), username_history kind 'camfrog'. Throws when a
+ *  table can't be read (the block is then incomplete - Pepe deletes nothing). */
+async function accountHoldHashes(uid) {
+  const ids = [...(await holderIds(String(uid)))];
+  const logins = new Set(), out = new Set();
+  for (const id of ids) {
+    out.add(hashOf("u:" + id));
+    const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [id]))[0];
+    if (u && u.camfrogUsername) logins.add(low(u.camfrogUsername));
+  }
+  const qs = ids.map(() => "?").join(",");
+  if (await tableThere("login_changes")) {
+    for (const r of await getQuery(`SELECT old_login, new_login FROM login_changes WHERE userId IN (${qs})`, ids)) { logins.add(low(r.old_login)); logins.add(low(r.new_login)); }
+  }
+  if (await tableThere("username_history")) {
+    for (const r of await getQuery(`SELECT old_username, new_username FROM username_history WHERE kind = 'camfrog' AND userId IN (${qs})`, ids)) {
+      logins.add(low(r.old_username)); logins.add(low(r.new_username));
+    }
+  }
+  for (const l of logins) if (LOGIN_RE.test(l)) out.add(hashOf(l));
+  return [...out];
 }
 
 // ── who held a login: this account (and accounts merged into it), or another one ──
@@ -429,15 +513,17 @@ async function queueRecDeletes(uid, pseudo, windows, t = now()) {
 const REC_QUEUED_MS = DAY;
 const queuedOnly = (a) => /^\s*queued\b/i.test(String(a.message || ""));
 const gaveUpLogged = new Set();
-/** The deletion's actions keep no login: camfrog NULL, Pepe's messages with the login -> the pseudonym, a pending one withdrawn. */
-async function scrubRecActions(d, wins, why = null) {
+/** The deletion's actions keep no login: camfrog NULL, Pepe's messages with the login -> the pseudonym, a pending one withdrawn
+ *  (`why` its message, `pendStatus` its status - review 4: a done deletion can have a newer ask still pending, when his clean answer
+ *  came on an earlier one: "done", nothing left for him to take). */
+async function scrubRecActions(d, wins, why = null, pendStatus = "failed") {
   const logins = (wins || []).map((w) => low(w && w.login)).filter((l) => LOGIN_RE.test(l));
   for (const a of await getQuery("SELECT id, status, message FROM pepe_actions WHERE user_id = ? AND kind = ?", [String(d.user_id), REC_KIND])) {
     let msg = String(a.message || "");
     for (const l of logins) msg = msg.split(new RegExp(l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")).join(d.pseudonym || "deleted");
     const pend = a.status === "pending" || a.status === "claimed";
     await runQuery("UPDATE pepe_actions SET camfrog = NULL, args = '[]', message = ?, status = ?, updated = ? WHERE id = ?",
-                   [pend && why ? why : msg, pend && why ? "failed" : a.status, now(), a.id]);
+                   [pend && why ? why : msg, pend && why ? pendStatus : a.status, now(), a.id]);
   }
 }
 /** review 2: Pepe's answer on an action whose login is gone (scrubbed: the deletion was done or given up) - only its counts, under
@@ -549,42 +635,85 @@ async function alertSkipped(t, cols) {
   }
   return out;
 }
+// review 4: Pepe's answer that he ran it but not all of it ("part of the recordings storage couldn't be read" / "a few couldn't be
+// deleted yet" - LATE_INCOMPLETE) -> the words to show (no login), else null
+const partialOf = (m) => { const x = LATE_INCOMPLETE.find(([re]) => re.test(String(m || ""))); return x ? x[1].replace(/^;\s*/, "") : null; };
+// review 4: a deletion Pepe hasn't confirmed this long before its give-up (REC_GIVE_UP_MS) - the admins are told and the card shows its
+// logins, so someone can check on Pepe or delete them by hand while they're still known; told again (before the scrub) when it's given up
+const REC_WAIT_WARN_MS = REC_GIVE_UP_MS - 7 * DAY;
+const WAIT_NOTE = {
+  1: (d, n, due, part) => ({ title: `Mic recordings not confirmed deleted (account deletion #${d.id})`,
+       body: `${d.pseudonym || "A deleted account"} asked for their mic recordings to be deleted, and Pepe hasn't confirmed deleting them under ${n} Camfrog name${n === 1 ? "" : "s"} ` +
+             (part ? `- his last answer: ${part}. ` : "- his release may be older, or he may be down. ") +
+             `Check Pepe (!retention, his mydata journal), or delete them by hand: the names are on the Mic recordings card until ${whenUtc(due)}; after that they're gone and nobody can.` }),
+  2: (d, n) => ({ title: `NOT DONE: mic recordings of account deletion #${d.id}`,
+       body: `Pepe never confirmed deleting the mic recordings of ${d.pseudonym || "a deleted account"} (${n} Camfrog name${n === 1 ? "" : "s"}) in 30 days, and PATV no longer keeps ` +
+             "the names. If they weren't deleted by hand, the promise to the member (\"Your mic recordings will be deleted with it\") wasn't kept - tell the owner." }),
+};
+async function waitAlert(d, want, n, due, part, cols) {
+  if (!cols.includes("rec_wait_alert") || (Number(d.rec_wait_alert) || 0) >= want) return 0;
+  let admins = [];
+  try { admins = await skipAdmins(); } catch (e) { admins = []; }
+  if (!admins.length) console.error(`[micrec] account deletion ${d.id}: its mic recordings aren't confirmed deleted - nobody holds chatlog.admin to tell`);
+  let told = 0;
+  const note = WAIT_NOTE[want](d, n, due, part);
+  for (const id of admins) if (await require("./inbox").addSafe(id, { kind: "admin", link: "/admin/bridge#micrec", ref: `micrec-wait-${want}:${d.id}`, ...note })) told++;
+  await runQuery("UPDATE account_deletions SET rec_wait_alert = ? WHERE id = ?", [want, d.id]);
+  return told;
+}
 async function retryRecDeletes() {
-  const out = { asked: 0, done: 0, gave_up: 0, skipped_expired: 0, skipped_alerts: 0 };
+  const out = { asked: 0, done: 0, gave_up: 0, skipped_expired: 0, skipped_alerts: 0, wait_alerts: 0 };
   if (!(await tableThere("pepe_actions")) || !(await tableThere("account_deletions"))) return out;
   const cols = (await getQuery("SELECT name FROM pragma_table_info('account_deletions')")).map((r) => r.name);
   if (!cols.includes("rec_windows")) return out;
   const t = now();
-  for (const d of await getQuery(`SELECT id, user_id, done_at, pseudonym, rec_windows FROM account_deletions WHERE state = 'done' AND delete_recordings = 1
+  const extra = ["rec_wait_alert", "rec_partial_note"].filter((c) => cols.includes(c));
+  for (const d of await getQuery(`SELECT id, user_id, done_at, pseudonym, rec_windows${extra.map((c) => ", " + c).join("")} FROM account_deletions WHERE state = 'done' AND delete_recordings = 1
                                    AND rec_done_at IS NULL AND rec_gave_up_at IS NULL ORDER BY id LIMIT 50`)) {
     let wins = [];
     try { wins = JSON.parse(d.rec_windows || "[]") || []; } catch (e) { wins = []; }
     if (!Array.isArray(wins)) wins = [];
     let confirmed = 0;
+    const parts = new Set();
     for (let i = 0; i < wins.length; i++) {
       const w = wins[i] || {};
       const acts = await getQuery(`SELECT id, status, updated, idem, message FROM pepe_actions WHERE user_id = ? AND kind = ? AND idem LIKE ? ORDER BY id`,
                                   [String(d.user_id), REC_KIND, `acctdel-rec-${d.user_id}-${i}-%`]);
       const last = acts[acts.length - 1];
-      if (last && (last.status === "done" || last.status === "ok") && !queuedOnly(last)) { confirmed++; continue; }   // his follow-up
+      // his follow-up ran it; review 4: only a CLEAN one counts (every ask of a span carries the same `before`, and he only ever
+      // rewrites a partial answer into a clean one) - a partial run stays open: he retries it himself, and asking again a day after
+      // his answer gets a fresh one that says where it stands
+      const ran = acts.filter((a) => (a.status === "done" || a.status === "ok") && !queuedOnly(a));
+      if (ran.some((a) => !partialOf(a.message))) { confirmed++; continue; }
+      const part = ran.length ? partialOf(ran[ran.length - 1].message) : null;
+      if (part) parts.add(part);
       if (acts.some((a) => a.status === "pending" || a.status === "claimed")) continue;          // Pepe has it (or will)
       if (t - Number(d.done_at || 0) > REC_GIVE_UP_MS) continue;
-      if (last && t - Number(last.updated || 0) < (queuedOnly(last) && last.status !== "failed" ? REC_QUEUED_MS : REC_RETRY_MS)) continue;
+      if (last && t - Number(last.updated || 0) < ((queuedOnly(last) || partialOf(last.message)) && last.status !== "failed" ? REC_QUEUED_MS : REC_RETRY_MS)) continue;
       if (!LOGIN_RE.test(String(w.login || ""))) continue;
       await runQuery(`INSERT OR IGNORE INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
                       VALUES (?, ?, ?, 0, ?, ?, 'privacy', 'account deleted: mic recordings', 'pending', ?, ?, ?)`,
                      [String(d.user_id), d.pseudonym || "deleted", w.login, REC_KIND, recArgs(w), t, t, `acctdel-rec-${d.user_id}-${i}-${acts.length + 1}`]);
       out.asked++;
     }
+    const partNote = parts.size ? [...parts].join("; ").slice(0, 300) : null;
+    if (cols.includes("rec_partial_note") && (partNote || null) !== (d.rec_partial_note || null) && confirmed !== wins.length) {
+      await runQuery("UPDATE account_deletions SET rec_partial_note = ?, rec_partial_at = ? WHERE id = ?", [partNote, partNote ? t : null, d.id]);
+    }
+    const due = Number(d.done_at || 0) + REC_GIVE_UP_MS;
     if (confirmed === wins.length) {
-      await runQuery("UPDATE account_deletions SET rec_done_at = ?, rec_windows = NULL WHERE id = ?", [t, d.id]);
-      await scrubRecActions(d, wins);
+      await runQuery(`UPDATE account_deletions SET rec_done_at = ?, rec_windows = NULL${cols.includes("rec_partial_note") ? ", rec_partial_note = NULL, rec_partial_at = NULL" : ""} WHERE id = ?`, [t, d.id]);
+      await scrubRecActions(d, wins, "not needed: Pepe already deleted them", "done");
       out.done++;
-    } else if (t - Number(d.done_at || 0) > REC_GIVE_UP_MS) {
+    } else if (t > due) {
+      // review 4: told BEFORE the scrub (after it nobody can act on the names)
+      out.wait_alerts += await waitAlert(d, 2, wins.length - confirmed, due, partNote, cols);
       await runQuery("UPDATE account_deletions SET rec_gave_up_at = ?, rec_windows = NULL WHERE id = ?", [t, d.id]);
       await scrubRecActions(d, wins, "given up: Pepe didn't delete them in 30 days");
       if (!gaveUpLogged.has(d.id)) { gaveUpLogged.add(d.id); console.error(`[micrec] account deletion ${d.id}: Pepe never confirmed deleting its mic recordings (30 days) - see /admin/bridge#micrec`); }
       out.gave_up++;
+    } else if (t >= Number(d.done_at || 0) + REC_WAIT_WARN_MS) {
+      out.wait_alerts += await waitAlert(d, 1, wins.length - confirmed, due, partNote, cols);
     }
   }
   // skipped spans: kept for the admins to act on (review 2: told when they appear, reminded, told when one lapsed), never past
@@ -616,13 +745,18 @@ async function adminView() {
                                         SUM(CASE WHEN rec_gave_up_at IS NOT NULL THEN 1 ELSE 0 END) AS gave_up
                                  FROM account_deletions WHERE delete_recordings = 1`))[0] || {};
       dels = { waiting: Number(c.waiting) || 0, confirmed: Number(c.confirmed) || 0, gave_up: Number(c.gave_up) || 0,
-               rows: (await getQuery(`SELECT id, pseudonym, state, execute_at, done_at, rec_done_at, rec_gave_up_at, report
+               rows: (await getQuery(`SELECT id, pseudonym, state, execute_at, done_at, rec_done_at, rec_gave_up_at, report, rec_windows
                                       ${cols.includes("rec_skipped") ? ", rec_skipped, rec_skipped_done_at" : ""}${cols.includes("rec_skipped_lapsed_at") ? ", rec_skipped_lapsed_at" : ""}
-                                      ${cols.includes("rec_late_at") ? ", rec_late_at, rec_late_note" : ""} FROM account_deletions
+                                      ${cols.includes("rec_late_at") ? ", rec_late_at, rec_late_note" : ""}
+                                      ${cols.includes("rec_partial_note") ? ", rec_partial_note, rec_partial_at, rec_wait_alert" : ""} FROM account_deletions
                                       WHERE delete_recordings = 1 ORDER BY id DESC LIMIT 20`)).map((r) => {
-                 let rep = {}, sk = null;
+                 let rep = {}, sk = null, pw = null;
                  try { rep = JSON.parse(r.report || "{}") || {}; } catch (e) { rep = {}; }
                  try { sk = r.rec_skipped ? JSON.parse(r.rec_skipped) : null; } catch (e) { sk = null; }
+                 // review 4: a deletion Pepe hasn't confirmed shows its logins (admins only) once the admins were told (a week before
+                 // the give-up) or his last answer was partial - so someone can check on Pepe or delete by hand before they go
+                 const waiting = r.state === "done" && !r.rec_done_at && !r.rec_gave_up_at;
+                 try { pw = waiting && r.rec_windows && (Number(r.rec_wait_alert) > 0 || r.rec_partial_note) ? JSON.parse(r.rec_windows) : null; } catch (e) { pw = null; }
                  const rc = rep.recordings || {};
                  // review: a skipped span is shown WITH its login and span (admins only - chatlog.admin) so someone can act on it;
                  // it leaves the row when handled or REC_GIVE_UP_MS after the deletion
@@ -634,7 +768,11 @@ async function adminView() {
                           skipped_due_at: Array.isArray(sk) && sk.length && r.done_at ? Number(r.done_at) + REC_GIVE_UP_MS : null,
                           skipped_lapsed_at: r.rec_skipped_lapsed_at || null,
                           // review 3: Pepe's follow-up after the scrub (his counts under the pseudonym; a partial run says so)
-                          rec_late_at: r.rec_late_at || null, rec_late_note: r.rec_late_note || null };
+                          rec_late_at: r.rec_late_at || null, rec_late_note: r.rec_late_note || null,
+                          // review 4: not done yet - his latest answer was partial; by when it's given up; the logins to act on
+                          rec_partial_note: r.rec_partial_note || null, rec_partial_at: r.rec_partial_at || null,
+                          rec_due_at: waiting && r.done_at ? Number(r.done_at) + REC_GIVE_UP_MS : null, rec_wait_alert: Number(r.rec_wait_alert) || 0,
+                          pending_spans: Array.isArray(pw) ? pw.slice(0, 20).map((w) => ({ login: String((w && w.login) || ""), to: Number(w && w.to) || 0 })) : null };
                }) };
     }
   } catch (e) { /* no deletions table yet */ }
@@ -643,6 +781,8 @@ async function adminView() {
   return { cfg: cfg(), windows: R ? { audio_days: R.audio_days, audio_prime: R.audio_prime, audio_plus: R.audio_plus, chat_days: R.chat_days,
                                       chat_prime: R.chat_prime, chat_plus: R.chat_plus, rec_days: R.rec_days, rec_prime: R.rec_prime, rec_plus: R.rec_plus } : null,
            reported_at: at, audio_reported_at: audioAt, pepe_can: pepeCan(), split: !!(R && R.split),
+           // review 4: what the text needs from Pepe and his report doesn't give (switch off: why it can't go on; on: drift)
+           gaps: pepeGaps(R), delete_on: !!(R && R.delete === true), unknown_room: (R && R.unknown_room) || null, rec_notice: !!(R && R.rec_notice === true),
            keep: keepStats ? { ...keepStats, policy: block.policy } : null, deletions: dels, exports: exports_ };
 }
 
@@ -693,4 +833,5 @@ module.exports = { init, register, policyOn, pepeCan, setPolicy, cfg, privacyCop
                    adminView, loadCfg, Refuse, REC_KIND, GRACE_MS, REC_RETRY_MS, REC_GIVE_UP_MS, HELD_WHO_MAX, REPORTED_MAX, KEEP_CACHE_MS,
                    holderIds, earlierHolder, noteLoginsGone, skippedHandled, REC_QUEUED_MS,                     // review
                    ownSince, scrubLateAcks, alertSkipped, REC_SKIP_REMIND_MS,                                    // review 2
+                   pepeGaps, drift, accountHoldHashes, REC_WAIT_WARN_MS,                                         // review 4
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _resetCache: () => { keepCache = null; keepStats = null; } };

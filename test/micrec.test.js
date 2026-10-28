@@ -37,9 +37,12 @@ const built = (async () => {
 const DAY = 86400000;
 let clockAt = Date.UTC(2026, 9, 28, 12);
 let M, P, CL, D, runQuery, getQuery, server, base;
-// what the bot 1.99afq reports with its split rule on (the owner's option C) - and with it off (recordings follow the transcripts)
-const FULL = { chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: null, rec_plus: null, audio_days: 30, audio_prime: 180, audio_plus: null,
-               pm_days: 30, pm_pass: null, split: true };
+// what the bot reports with its split rule on (the owner's option C) - and with it off (recordings follow the transcripts).
+// Review 4: + `delete`, the unknown-room rule and rec_notice. 1.99afq reports rec_notice false (its in-room notice doesn't name
+// recordings yet - AFQ); FULL is the bot letter that builds it (ops plan 8.8), the first one the switch can go on with.
+const AFQ = { chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: null, rec_plus: null, audio_days: 30, audio_prime: 180, audio_plus: null,
+              pm_days: 30, pm_pass: null, split: true, delete: true, unknown_room: "shortest", rec_notice: false };
+const FULL = { ...AFQ, rec_notice: true };
 const SPLIT_OFF = { chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: 365, rec_plus: null, audio_days: 30, audio_prime: 365, audio_plus: null,
                     pm_days: 30, pm_pass: null, split: false };
 const OLD = { chat_days: 30, chat_prime: null, chat_plus: null, rec_days: 30, rec_prime: 365, rec_plus: null, pm_days: 30, pm_pass: null };
@@ -93,8 +96,21 @@ test("the switch: ships off; never on while Pepe doesn't apply the owner's windo
   await P.noteRetention(SPLIT_OFF);
   assert.equal(M.pepeCan(), true, "the 1.99afq release");
   await assert.rejects(M.setPolicy(true, "admin1"), (e) => e.code === "split_off", "his split rule still off: recordings follow the transcript windows");
+  // review 4: everything else the text depends on - an unknown room kept for good (a 1.99afq from before review 4: no rule
+  // reported), his deletion off, his in-room notice not naming recordings (1.99afq itself)
+  const { delete: _d, unknown_room: _u, rec_notice: _n, ...PRE4 } = AFQ;
+  await P.noteRetention(PRE4);
+  await assert.rejects(M.setPolicy(true, "admin1"), (e) => e.code === "unknown_room" && /30 days without a pad/.test(e.message), "no unknown-room rule reported");
+  await P.noteRetention({ ...FULL, unknown_room: "longest" });
+  await assert.rejects(M.setPolicy(true, "admin1"), (e) => e.code === "unknown_room", "\"longest\": a recording whose room he lost is kept for good");
+  await P.noteRetention({ ...FULL, delete: false });
+  await assert.rejects(M.setPolicy(true, "admin1"), (e) => e.code === "delete_off", "his deletion off: nothing is deleted each night");
+  await P.noteRetention(AFQ);
+  await assert.rejects(M.setPolicy(true, "admin1"), (e) => e.code === "notice_missing", "1.99afq: his room notice doesn't name recordings yet (ops plan 8.8)");
+  assert.deepEqual(M.pepeGaps(P.retention()).map((g) => g.code), ["notice_missing"]);
   assert.equal(M.policyOn(), false);
   await P.noteRetention(FULL);
+  assert.deepEqual(M.pepeGaps(P.retention()), []);
   assert.equal(P.retention().audio_reported, true);
   assert.equal(P.retention().split, true);
   assert.ok(P.retentionAudioAt() > 0);
@@ -190,14 +206,15 @@ test("the keep block: tier lapses inside their own grace (subscriptions + the ar
   assert.deepEqual(b.tiers["Viewed.Lapse"], { tier: "standard", lapsed: [{ tier: "prime", at: t - 3 * DAY }] }, "each lapse its own grace: the 40-day-old Plus one is over");
   for (const r of ["Old.Lapse", "Comp.Forever", "Renewing"]) assert.equal(b.tiers[r], undefined, r);
   assert.deepEqual(b.held_rooms, ["Held.Room"]);
-  assert.deepEqual([...b.held_who_h].sort(), [H("heldlogin"), H("acctlogin"), "a".repeat(20)].sort());
+  // (review 4: an account hold also sends the account key's hash - Pepe's "u:<id>" lines and PM logs)
+  assert.deepEqual([...b.held_who_h].sort(), [H("heldlogin"), H("acctlogin"), H("u:heldacct"), "a".repeat(20)].sort());
   assert.deepEqual(b.reported_tx, { "Held.Room": [[Math.floor(T2 / 1000), "b".repeat(20)], [Math.floor(T1 / 1000), H("speaker1")]] });
   assert.ok(!JSON.stringify(b).includes("speaker1") && !JSON.stringify(b).includes("heldlogin") && !JSON.stringify(b).includes("said a thing"), "no names, no words");
   // cached for a minute (Pepe syncs every ~30 s)
   await runQuery("DELETE FROM chatlog_holds WHERE key = 'who:heldlogin'");
-  assert.equal((await M.keepBlock()).held_who_h.length, 3);
+  assert.equal((await M.keepBlock()).held_who_h.length, 4);
   clockAt += M.KEEP_CACHE_MS + 1;
-  assert.equal((await M.keepBlock()).held_who_h.length, 2);
+  assert.equal((await M.keepBlock()).held_who_h.length, 3);
   // the owner sync carries it (an older Pepe ignores it)
   const r = await fetch(`${base}/api/rooms/owners`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) });
   const d = await r.json();
@@ -649,6 +666,237 @@ test("review 3: the owner-approved text (ops plan section 8, 8.11 = A) - on the 
   assert.equal(en["inc.what_rec"], "Pepe still records your mic-ups like everyone's; incognito is about the website.");
   assert.equal(en["pf.what_not_rec"], "It doesn't delete your mic recordings; deleting your PATV account can (tick Also delete my mic recordings).");
   await M.setPolicy(true, "test");
+});
+
+// ── review 4 ──
+const privacyHtml = async (micrec) => {
+  const ejs = require("ejs");
+  return ejs.renderFile(path.join(repo, "views", "privacy.ejs"), { user: null, title: "Privacy Policy", VERSION: "v", UPDATED: "28 October 2026", enforced: true,
+                                                                   chatlog: await CL.policy(), micrec, hubErasure: null, ogBase: "" });
+};
+const NO_PAD_RE = /<td>By the pad's tier: without a tier \(or without a pad\) (\d+) days;(?:(?!<\/td>)[\s\S])*?kept longer only under a legal hold or an open report\./;
+
+test("review 4: a recording whose room Pepe can't tell - the switch needs his 'shortest' rule, so the text's no-pad window (and 'kept longer only under a hold or a report') holds for it", async () => {
+  await setup();
+  await M.setPolicy(false, "test");
+  // an older rule (unknown = the longest = Plus's "for good"): the switch stays off, and the page says nothing about recordings
+  await P.noteRetention({ ...FULL, unknown_room: "longest" });
+  await assert.rejects(M.setPolicy(true, "test"), (e) => e.code === "unknown_room");
+  assert.doesNotMatch(await privacyHtml(await M.privacyCopy()), /without a pad/);
+  // his rule: "shortest" = the shortest window of every tier, at most the no-pad one the text names
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
+  const m = NO_PAD_RE.exec(await privacyHtml(await M.privacyCopy()));
+  assert.ok(m, "section 9's row names the no-pad window");
+  assert.equal(Number(m[1]), Math.min(FULL.audio_days, FULL.audio_prime));
+  // ...and if he stops keeping that rule after it went on, the admins hear about it (drift, below)
+  assert.deepEqual(M.pepeGaps(P.cleanRetention({ ...FULL, unknown_room: "longest" })).map((g) => g.code), ["unknown_room"]);
+});
+
+test("review 4 contract: the bot's REAL report and planner (PEPE_BOT_DIR) - an unknown-room recording is deleted at the no-pad window the rendered text states, with a Plus room in the rooms", async (t) => {
+  const botDir = process.env.PEPE_BOT_DIR;
+  if (!botDir || !fs.existsSync(path.join(botDir, "pepe_retention.py"))) { t.skip("PEPE_BOT_DIR (a camfrog-bot checkout) isn't set"); return; }
+  await setup();
+  const { execFileSync } = require("child_process");
+  const script = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "micrec-contract-")), "contract.py");
+  fs.writeFileSync(script, [
+    "import json, os, sys, tempfile",
+    "from datetime import datetime, timedelta",
+    "sys.path.insert(0, sys.argv[1])",
+    "import pepe_retention as R",
+    "R._log = lambda m: None",
+    "tmp = tempfile.mkdtemp(prefix='micrec-contract-')",
+    "out = {}",
+    "for split in (True, False):",
+    "    cfg = {'chat_days': 30, 'chat_prime': None, 'rec_days': 30, 'rec_prime': 365, 'pm_days': 30, 'pm_pass': None,",
+    "           'chat_plus': None, 'rec_plus': None, 'delete': True, 'split': split}",
+    "    d = os.path.join(tmp, 'split' if split else 'nosplit'); tr = os.path.join(d, 'transcripts'); cl = os.path.join(d, 'chatlogs')",
+    "    os.makedirs(tr); os.makedirs(cl)",
+    "    with open(os.path.join(d, 'retention.json'), 'w', encoding='utf-8') as f: json.dump(cfg, f)",
+    "    class Bot(R.RetentionMixin):",
+    "        def _rt_cfg_path(self): return os.path.join(d, 'retention.json')",
+    "    b = Bot()",
+    "    now = datetime(2026, 11, 20, 12, 0, 0)",
+    "    ages = [1, 29, 30, 31, 32, 179, 180, 181, 400]",
+    "    for n in ages:",
+    "        with open(os.path.join(tr, 'ghost_%s_101010.opus' % (now - timedelta(days=n)).strftime('%Y%m%d')), 'wb') as f: f.write(b'o')",
+    "    rooms = {'plus.room': 'plus', 'prime.room': True, 'plain.room': False}",
+    "    p = R.Retention(d, cl, tr, cfg=b._rt_cfg(), keep=R.Keep()).plan(rooms, set(), True, True, now=now)",
+    "    gone = sorted((now.date() - datetime.strptime(os.path.basename(x[0]).split('_')[1], '%Y%m%d').date()).days for x in p['rec_delete'])",
+    "    out['split' if split else 'nosplit'] = {'report': b._rt_report_windows(), 'gone': gone, 'kept': [n for n in ages if n not in gone],",
+    "                                            'unknown': p['unknown_room_recordings']}",
+    "print(json.dumps(out))",
+  ].join("\n"));
+  const res = JSON.parse(execFileSync(process.env.PYTHON || "python", ["-I", script, botDir], { encoding: "utf8" }).trim().split("\n").pop());
+  // split off (as he ships): unknown = the longest (kept for good) - and the switch can't go on with that report
+  assert.deepEqual(res.nosplit.gone, [], "split off: an unknown room's recordings are never deleted");
+  assert.equal(res.nosplit.report.unknown_room, "longest");
+  assert.notEqual(M.pepeGaps(P.cleanRetention(res.nosplit.report)).length, 0);
+  // split on: his report says "shortest"; with it the switch's only gap is the room notice (1.99afq: rec_notice false, ops plan 8.8)
+  const rep = res.split.report;
+  assert.equal(rep.unknown_room, "shortest");
+  assert.equal(rep.delete, true);
+  assert.equal(res.split.unknown, 9, "every test recording's room is unknown (no transcript, no manifest stamp)");
+  await M.setPolicy(false, "test");
+  await P.noteRetention(rep);
+  assert.deepEqual(M.pepeGaps(P.retention()).map((g) => g.code), rep.rec_notice ? [] : ["notice_missing"]);
+  // the letter with the notice: the switch goes on, and the rendered no-pad window is exactly where his planner starts deleting
+  await P.noteRetention({ ...rep, rec_notice: true });
+  await M.setPolicy(true, "test");
+  const m = NO_PAD_RE.exec(await privacyHtml(await M.privacyCopy()));
+  assert.ok(m, "section 9's no-pad window is rendered");
+  const N = Number(m[1]);
+  assert.ok(res.split.kept.every((n) => n <= N), `nothing older than ${N} days is kept: kept ${res.split.kept}`);
+  assert.deepEqual(res.split.gone, [...res.split.kept, ...res.split.gone].sort((a, b) => a - b).filter((n) => n > N),
+                   "everything past the no-pad window is deleted - although a Plus room (for good) is among his rooms");
+  assert.equal(N, 30);
+  assert.deepEqual(res.split.gone, [31, 32, 179, 180, 181, 400]);
+  await P.noteRetention(FULL);
+});
+
+test("review 4: Pepe stops matching the text after the switch went on (split off, deletion off, a rollback) - the chatlog.admin holders are told once per new set of gaps, the card shows them", async () => {
+  await setup();
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, email, password, class, points_balance, isEmailVerified) VALUES ('adm4', 'adm4', 'adm4', 'a4@example.com', 'x', 'Admin', 0, 1)");
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
+  assert.deepEqual(await M.drift(), { gaps: [], told: 0 });
+  const err = console.error; const said = []; console.error = (...a) => said.push(a.join(" "));
+  try {
+    await P.noteRetention({ ...FULL, split: false, audio_prime: 365, rec_prime: 365 });      // `!retention split off`
+    let r = await M.drift();
+    assert.deepEqual(r.gaps, ["split_off"]);
+    assert.ok(r.told >= 1);
+    const n1 = await getQuery("SELECT user_id, title, body, link FROM inbox WHERE ref LIKE 'micrec-drift-%' ORDER BY id");
+    assert.ok(n1.some((x) => x.user_id === "adm4"));
+    assert.match(n1[0].title, /the privacy text is on, but Pepe doesn't match it/);
+    assert.match(n1[0].body, /!retention split on confirm/);
+    assert.equal(n1[0].link, "/admin/bridge#micrec");
+    assert.ok(said.some((s) => /policy is ON but Pepe doesn't match it: split_off/.test(s)));
+    assert.deepEqual(await M.drift(), { gaps: ["split_off"], told: 0 }, "told once per set of gaps");
+    assert.deepEqual((await M.adminView()).gaps.map((g) => g.code), ["split_off"], "the card says what");
+    // fixed: nothing to say; a later, different gap is told again
+    await P.noteRetention(FULL);
+    assert.deepEqual((await M.drift()).gaps, []);
+    await P.noteRetention({ ...FULL, delete: false });                                        // `!retention delete off`
+    r = await M.drift();
+    assert.deepEqual(r.gaps, ["delete_off"]);
+    assert.ok(r.told >= 1);
+    assert.ok((await getQuery("SELECT 1 FROM inbox WHERE ref = 'micrec-drift-2' AND user_id = 'adm4'")).length);
+    // the switch stays on - turning it off is the owner's call
+    assert.equal(M.policyOn(), true);
+  } finally { console.error = err; }
+  // with the switch off nothing is drift (the card still says why it can't go on)
+  await M.setPolicy(false, "test");
+  assert.deepEqual(await M.drift(), { gaps: [], told: 0 });
+  assert.deepEqual((await M.adminView()).gaps.map((g) => g.code), ["delete_off"]);
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
+  // the tick runs it; the card shows it
+  assert.match(fs.readFileSync(path.join(repo, "accountdelete.js"), "utf8"), /require\("\.\/micrec"\)\.drift\(\)/);
+  assert.match(fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8"), /ON, but Pepe no longer matches the text/);
+});
+
+test("review 4: a partial run isn't done (stays open, his answer on the card, asked again a day later) until a clean answer; one not confirmed is told to the admins a week before the give-up and at it, before the logins go", async () => {
+  await setup();
+  const t0 = clockAt;
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, email, password, class, points_balance, isEmailVerified) VALUES ('adm4', 'adm4', 'adm4', 'a4@example.com', 'x', 'Admin', 0, 1)");
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
+  await user("pt1", { cf: "Partial1" });
+  await D.schedule({ userId: "pt1", username: "pt1" }, { by: "self", reauth: "password", deleteRecordings: true });
+  assert.equal((await D.execute("pt1", { force: true })).state, "done");
+  const row = async () => (await getQuery("SELECT id, done_at, rec_done_at, rec_windows, rec_partial_note, rec_partial_at, rec_wait_alert FROM account_deletions WHERE user_id = 'pt1'"))[0];
+  const acts = () => getQuery("SELECT id, camfrog, status, message FROM pepe_actions WHERE kind = 'privacy.recdelete' AND user_id = 'pt1' ORDER BY id");
+  const [a1] = await acts();
+  // his follow-up: ran, but part of the storage couldn't be read -> NOT done
+  await runQuery("UPDATE pepe_actions SET status = 'done', message = ?, updated = ? WHERE id = ?",
+                 ["deleted 2 mic recording file(s) of partial1; part of the recordings storage couldn't be read - Pepe tries again", clockAt, a1.id]);
+  let r = await M.retryRecDeletes();
+  assert.deepEqual([r.done, r.asked], [0, 0]);
+  let d = await row();
+  assert.equal(d.rec_done_at, null, "a partial run is not done");
+  assert.ok(d.rec_windows && d.rec_windows.includes("partial1"), "the login stays for the retries");
+  assert.equal(d.rec_partial_note, "part of the recordings storage couldn't be read - Pepe tries again");
+  let card = (await M.adminView()).deletions.rows.find((x) => x.id === d.id);
+  assert.equal(card.rec_partial_note, d.rec_partial_note);
+  assert.equal(card.rec_due_at, Number(d.done_at) + M.REC_GIVE_UP_MS);
+  assert.deepEqual(card.pending_spans.map((w) => w.login), ["partial1"], "a partial run's logins are on the card (admins only) to act on");
+  // a day after his answer: asked again (he merges it into his job and answers where it stands)
+  clockAt += M.REC_QUEUED_MS + 1;
+  r = await M.retryRecDeletes();
+  assert.equal(r.asked, 1);
+  // he finished: his clean follow-up on the FIRST ask (bot 1.99afq review 4) is enough, the new ask is withdrawn
+  await runQuery("UPDATE pepe_actions SET message = 'deleted 5 mic recording file(s) of partial1', updated = ? WHERE id = ?", [clockAt, a1.id]);
+  r = await M.retryRecDeletes();
+  assert.equal(r.done, 1);
+  d = await row();
+  assert.ok(d.rec_done_at > 0);
+  assert.deepEqual([d.rec_windows, d.rec_partial_note], [null, null]);
+  const after = await acts();
+  assert.ok(after.every((a) => a.camfrog === null && !/partial1/i.test(String(a.message || ""))), JSON.stringify(after));
+  assert.ok(after.every((a) => a.status !== "pending"), "nothing is left for Pepe to take");
+  // "a few couldn't be deleted yet" is partial too
+  await user("pt2", { cf: "Partial2" });
+  await D.schedule({ userId: "pt2", username: "pt2" }, { by: "self", reauth: "password", deleteRecordings: true });
+  await D.execute("pt2", { force: true });
+  await runQuery("UPDATE pepe_actions SET status = 'done', message = 'deleted 1 mic recording file(s) of partial2; a few couldn''t be deleted yet - Pepe tries again', updated = ? WHERE user_id = 'pt2' AND kind = 'privacy.recdelete'", [clockAt]);
+  await M.retryRecDeletes();
+  assert.equal((await getQuery("SELECT rec_done_at FROM account_deletions WHERE user_id = 'pt2'"))[0].rec_done_at, null);
+  // never confirmed: told a week before the give-up (the card then shows the logins), and at it - before the logins go
+  await user("wt1", { cf: "Waiting1" });
+  await D.schedule({ userId: "wt1", username: "wt1" }, { by: "self", reauth: "password", deleteRecordings: true });
+  await D.execute("wt1", { force: true });
+  const w = (await getQuery("SELECT id, done_at FROM account_deletions WHERE user_id = 'wt1'"))[0];
+  await runQuery("UPDATE pepe_actions SET status = 'pending', updated = ? WHERE user_id = 'wt1' AND kind = 'privacy.recdelete'", [clockAt]);   // Pepe never takes it
+  const notes = (stage) => getQuery("SELECT user_id, title, body FROM inbox WHERE ref = ?", [`micrec-wait-${stage}:${w.id}`]);
+  await M.retryRecDeletes();
+  assert.equal((await notes(1)).length, 0, "not yet");
+  assert.equal((await M.adminView()).deletions.rows.find((x) => x.id === w.id).pending_spans, null, "no logins on the card before the warning");
+  clockAt = Number(w.done_at) + M.REC_WAIT_WARN_MS + 1;
+  r = await M.retryRecDeletes();
+  let n = await notes(1);
+  assert.ok(n.some((x) => x.user_id === "adm4") && r.wait_alerts >= 1);
+  assert.match(n[0].title, new RegExp(`Mic recordings not confirmed deleted \\(account deletion #${w.id}\\)`));
+  assert.match(n[0].body, /delete them by hand/);
+  assert.deepEqual((await M.adminView()).deletions.rows.find((x) => x.id === w.id).pending_spans.map((s) => s.login), ["waiting1"]);
+  await M.retryRecDeletes();
+  assert.equal((await notes(1)).filter((x) => x.user_id === "adm4").length, 1, "told once");
+  clockAt = Number(w.done_at) + M.REC_GIVE_UP_MS + 1;
+  const err = console.error; console.error = () => {};
+  try { r = await M.retryRecDeletes(); } finally { console.error = err; }
+  assert.ok(r.gave_up >= 1);
+  n = await notes(2);
+  assert.ok(n.some((x) => x.user_id === "adm4"));
+  assert.match(n[0].title, /^NOT DONE: mic recordings of account deletion #/);
+  assert.match(n[0].body, /wasn't kept - tell the owner/);
+  const g = (await getQuery("SELECT rec_windows, rec_gave_up_at, rec_wait_alert FROM account_deletions WHERE id = ?", [w.id]))[0];
+  assert.deepEqual([g.rec_windows, g.rec_wait_alert], [null, 2]);
+  assert.ok(g.rec_gave_up_at > 0);
+  // no login in any notice
+  const all = await getQuery("SELECT title, body FROM inbox WHERE ref LIKE 'micrec-wait-%'");
+  assert.ok(all.length >= 2 && all.every((x) => !/waiting1|partial\d/i.test(x.title + x.body)));
+  const page = fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8");
+  assert.match(page, /r\.rec_partial_note \? ' - his last answer \('/);
+  assert.match(page, /r\.pending_spans && r\.pending_spans\.length \? ' - names: '/);
+  clockAt = t0;
+});
+
+test("review 4: a legal hold on an account reaches every Camfrog login it (or an account merged into it) had, and its account key - not only the login linked now", async () => {
+  await setup();
+  await user("holdme", { cf: "NowLogin" });
+  await user("holdme-old", { cf: "MergedLogin" });
+  await runQuery("INSERT INTO account_merges (old_id, new_id, merged_at, via) VALUES ('holdme-old', 'holdme', 1, 'test')");
+  await runQuery("INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES ('holdme', 'oldlogin1', 'nowlogin', 'oldlogin1', 'nowlogin', 5, 'relink')");
+  await runQuery("INSERT INTO username_history (userId, old_username, new_username, at, via, kind) VALUES ('holdme', 'oldlogin2', NULL, 3, 'unlink', 'camfrog'), ('holdme', 'notalogin', 'x', 3, 'rename', 'username')");
+  assert.deepEqual((await M.accountHoldHashes("holdme")).sort(),
+                   [H("nowlogin"), H("oldlogin1"), H("oldlogin2"), H("mergedlogin"), H("u:holdme"), H("u:holdme-old")].sort());
+  await runQuery("INSERT INTO chatlog_holds (key, by_user, why, at) VALUES ('who:u:holdme', 'staff', 'court order', 1)");
+  const b = await M.keepBlock({ fresh: true });
+  assert.equal(b.ok, true);
+  for (const h of [H("oldlogin1"), H("oldlogin2"), H("mergedlogin"), H("u:holdme")]) assert.ok(b.held_who_h.includes(h), h);
+  assert.ok(!b.held_who_h.includes(H("notalogin")), "a website username isn't a Camfrog login");
+  await runQuery("DELETE FROM chatlog_holds WHERE key = 'who:u:holdme'");
+  M._resetCache();
 });
 
 test("the wiring: the bot's action kinds (TTLs, no inbox notice, no PAT), the upload routes' body parser", async () => {
