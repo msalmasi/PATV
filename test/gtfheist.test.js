@@ -53,6 +53,11 @@ test("events, scenes, sessions", async () => {
   assert.deepEqual(after.events.map((e) => e.data.action), ["rolls", "timer"]);
   assert.equal(f.heist.lines.length, 1);
   assert.equal(f.heist.summary.crew[1].name, "<b>bob</b>", "kept as text (the page escapes it)");
+  const results = { action: "results", outcome: "cracked", total: 1200, players: [{name: "alice", seed: 12, payout: 1200, xp: 50, items: ["Loaded Dice"]}], secs: 45 };
+  await H.push({ kind: "results", events: [{event: "heist", data: results}, {event: "heist", data: {action: "not-a-real-action"}}] });
+  const final = await H.live(0);
+  assert.deepEqual(final.events.map(e => e.data.action), ["results"], "late viewers get just the results scene; unknown actions are rejected");
+  assert.deepEqual(final.events[0].data, results);
   // a new heist: a fresh log
   await H.push({ kind: "lobby", summary: sum("s2", "lobby", 0), events: [{ event: "lobby", data: { action: "open" } }] });
   f = await H.live(0);
