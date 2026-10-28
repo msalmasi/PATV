@@ -724,10 +724,17 @@ test("1.99afv: 'plus_before_split' - the switch takes it with his split_since; t
   assert.equal(M.unknownCopy(P.cleanRetention({ ...FULL, audio_plus: 3650, unknown_room: "plus_before_split", split_since: SINCE_S })).for_good, false);
   await P.noteRetention({ ...FULL, audio_plus: 3650, unknown_room: "plus_before_split", split_since: SINCE_S });
   assert.ok((await privacyHtml(await M.privacyCopy())).includes("is kept as long as on a 💎 Prime Time Plus pad, if it was made before 3 November 2026, 15:05 UTC"));
-  // "shortest" (the rule the approved text already holds for): no sentence
+  // 1.99afv review: the sentence is what the switch PUBLISHED - his report moving to "shortest" (a rollback) doesn't silently drop
+  // it (drift flags the change, below); switching off and on again publishes "shortest" (the rule the approved text already holds
+  // for): no sentence
   await P.noteRetention(FULL);
+  assert.ok((await privacyHtml(await M.privacyCopy())).includes("whose pad Pepe can't tell"), "a report change never drops the published sentence");
+  assert.deepEqual(M.ruleChanges(P.retention()).map((g) => g.code), ["unknown_room_changed"]);
+  await M.setPolicy(false, "test");
+  await M.setPolicy(true, "test");
   assert.equal((await M.privacyCopy()).unknown, null);
   assert.ok(!(await privacyHtml(await M.privacyCopy())).includes("whose pad Pepe can't tell"));
+  assert.deepEqual(M.ruleChanges(P.retention()), []);
   // the card says which rule he reports
   const card = await M.adminView();
   assert.deepEqual([card.unknown_room, card.split_since], ["shortest", null]);
@@ -874,6 +881,88 @@ test("review 4: Pepe stops matching the text after the switch went on (split off
   // the tick runs it; the card shows it
   assert.match(fs.readFileSync(path.join(repo, "accountdelete.js"), "utf8"), /require\("\.\/micrec"\)\.drift\(\)/);
   assert.match(fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8"), /ON, but Pepe no longer matches the text/);
+});
+
+test("1.99afv review: the switch keeps the unknown-room rule and split_since it published - a rollback below bot 1.99afu, a changed rule or a moved date is flagged (inbox + card), the sentence and its date never move silently, and an off / on publishes a new one dated that day", async () => {
+  await setup();
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, email, password, class, points_balance, isEmailVerified) VALUES ('adm5', 'adm5', 'adm5', 'a5@example.com', 'x', 'Admin', 0, 1)");
+  const PBS = { ...FULL, unknown_room: "plus_before_split", split_since: SINCE_S };
+  const t0 = clockAt;
+  await M.setPolicy(false, "test");
+  await P.noteRetention(PBS);
+  await M.setPolicy(true, "test");
+  const c = M.cfg();
+  assert.deepEqual([c.unknown_room, c.split_since, c.unknown_at], ["plus_before_split", SINCE_S * 1000, t0], "published at switch-on: his rule, his date, when");
+  assert.deepEqual(await M.drift(), { gaps: [], told: 0 });
+  const err = console.error; const said = []; console.error = (...a) => said.push(a.join(" "));
+  try {
+    // a rollback to 1.99afq / afs (or UNKNOWN_ROOM_BEFORE_SPLIT = None): "shortest" - a rule the text could hold, so pepeGaps alone saw
+    // nothing, and he'd delete the legacy unknown-room recordings the published sentence keeps for good
+    await P.noteRetention(FULL);
+    assert.deepEqual(M.pepeGaps(P.retention()), [], "(pepeGaps alone is satisfied - the old miss)");
+    let r = await M.drift();
+    assert.deepEqual(r.gaps, ["unknown_room_changed"]);
+    assert.ok(r.told >= 1);
+    const n = (await getQuery("SELECT title, body FROM inbox WHERE user_id = 'adm5' AND ref LIKE 'micrec-drift-%' ORDER BY id DESC"))[0];
+    assert.match(n.body, /now "shortest" \(the no-pad window\), not "plus_before_split"/);
+    assert.match(n.body, /made before 3 November 2026, 15:05 UTC are kept like Prime Time Plus's, but he now deletes the ones older than his shortest window/);
+    assert.match(n.body, /never below 1\.99afu while split is on - run !retention split off first/);
+    assert.ok(said.some((s) => /doesn't match it: unknown_room_changed/.test(s)));
+    let html = await privacyHtml(await M.privacyCopy());
+    assert.equal(html.split(UNKNOWN_SENTENCE).length - 1, 2, "the published sentence stays as it was (never dropped silently)");
+    assert.deepEqual((await M.adminView()).gaps.map((g) => g.code), ["unknown_room_changed"], "the card says what");
+    assert.equal((await M.adminView()).unknown_published.rule, "plus_before_split");
+    // back: nothing to say
+    await P.noteRetention(PBS);
+    assert.deepEqual((await M.drift()).gaps, []);
+    // split off then on again with a NEW moment (a bot that dropped it, a hand-edited file): flagged; the text keeps its date
+    await P.noteRetention({ ...PBS, split_since: SINCE_S + 86400 });
+    r = await M.drift();
+    assert.deepEqual(r.gaps, ["split_since_changed"]);
+    assert.ok(r.told >= 1);
+    assert.match((await M.adminView()).gaps[0].why, /now 4 November 2026, 15:05 UTC, not 3 November 2026, 15:05 UTC/);
+    html = await privacyHtml(await M.privacyCopy());
+    assert.ok(html.includes("if it was made before 3 November 2026, 15:05 UTC") && !html.includes("4 November 2026, 15:05 UTC"), "the published date doesn't move");
+    // split off: his split_off gap says it (no second code for the rule that only applies with split on)
+    await P.noteRetention({ ...PBS, split: false, unknown_room: "longest", split_since: null, audio_prime: 365, rec_prime: 365 });
+    assert.deepEqual((await M.drift()).gaps, ["split_off"]);
+  } finally { console.error = err; }
+  // the owner decides to publish the new date: off and on again - the sentence names it, and the page is dated that day
+  clockAt = t0 + 2 * DAY;
+  try {
+    await P.noteRetention({ ...PBS, split_since: SINCE_S + 86400 });
+    await M.setPolicy(false, "test");
+    await M.setPolicy(true, "test");
+    const pc = await M.privacyCopy();
+    assert.equal(pc.unknown.since_text, "4 November 2026, 15:05 UTC");
+    const d2 = new Date(t0 + 2 * DAY);
+    assert.deepEqual([pc.rule_at, pc.rule_day], [t0 + 2 * DAY, `${d2.getUTCDate()} ${d2.toLocaleString("en-GB", { month: "long", timeZone: "UTC" })} ${d2.getUTCFullYear()}`],
+                     "the day the published rule changed");
+    assert.notEqual(pc.on_day, pc.rule_day, "the first switch-on day (the changelog's) stays");
+    assert.match(fs.readFileSync(path.join(repo, "terms.js"), "utf8"), /\[micrec && micrec\.rule_at, micrec && micrec\.rule_day\]/, "terms.js: 'Last updated' takes rule_at");
+    assert.deepEqual((await M.drift()).gaps, []);
+    // the same rule and date again (off / on): its day stays
+    clockAt = t0 + 3 * DAY;
+    await M.setPolicy(false, "test");
+    await M.setPolicy(true, "test");
+    assert.equal(M.cfg().unknown_at, t0 + 2 * DAY);
+    // a switch turned on before the site kept what it published (an older site): taken from his report once, while it matches the text
+    const kept = (await getQuery("SELECT value FROM micrec_meta WHERE key = 'policy'"))[0].value;
+    await runQuery("UPDATE micrec_meta SET value = ? WHERE key = 'policy'", [JSON.stringify({ on: true, at: t0, first_on: t0, by: "old" })]);
+    await M._loadCfg();
+    assert.equal(M.cfg().unknown_room, null);
+    await P.noteRetention(PBS);
+    assert.deepEqual((await M.drift()).gaps, []);
+    assert.deepEqual([M.cfg().unknown_room, M.cfg().split_since, M.cfg().unknown_at], ["plus_before_split", SINCE_S * 1000, t0]);
+    await P.noteRetention(FULL);
+    assert.deepEqual((await M.drift()).gaps, ["unknown_room_changed"], "... and a later change is flagged");
+    await runQuery("UPDATE micrec_meta SET value = ? WHERE key = 'policy'", [kept]);
+    await M._loadCfg();
+  } finally { clockAt = t0; }
+  await M.setPolicy(false, "test");
+  await P.noteRetention(FULL);
+  await M.setPolicy(true, "test");
+  assert.deepEqual(await M.drift(), { gaps: [], told: 0 });
 });
 
 test("review 4: a partial run isn't done (stays open, his answer on the card, asked again a day later) until a clean answer; one not confirmed is told to the admins a week before the give-up and at it, before the logins go", async () => {

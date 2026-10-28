@@ -149,7 +149,8 @@ function register(app, { addUser }) {
     // S1 V4: likewise the paragraph on chat lines and account deletion (the chat hub + that archive) from the moment the hub's
     // erasure switch is on (accountdelete.privacyCopy: null while it's off); "Last updated" = the newest of the dates
     // mic retention (micrec.js): the mic-recordings policy text from the moment its switch is first turned on (micrec.privacyCopy:
-    // null while it's off) - additive, so VERSION doesn't move; its day becomes "Last updated" when it is the newest
+    // null while it's off) - additive, so VERSION doesn't move; its day becomes "Last updated" when it is the newest. 1.99afv
+    // review: so does rule_at - the day the published unknown-room rule / date last changed (an off / on that publishes a new one)
     // wave 3 (design §N.8): the 🧠 "Pepe's memory" text from the moment Pepe's latest report has the memory switch
     // (memoryoptout.privacyCopy: null otherwise - after a rollback too); its day is when a Pepe first reported it
     let chatlog = null, hubErasure = null, micrec = null, memory = null, policyDates = {};
@@ -162,7 +163,8 @@ function register(app, { addUser }) {
     }
     let upd = updated, updAt = Date.parse(updated + " 23:59:59 UTC");
     for (const [at, day] of [[chatlog && chatlog.notice_at, chatlog && chatlog.notice_day], [hubErasure && hubErasure.on_at, hubErasure && hubErasure.on_day],
-                             [micrec && micrec.on_at, micrec && micrec.on_day], [memory && memory.on_at, memory && memory.on_day], ...Object.values(policyDates).map((d) => [d.at, d.day])]) {
+                             [micrec && micrec.on_at, micrec && micrec.on_day], [micrec && micrec.rule_at, micrec && micrec.rule_day],   // 1.99afv review
+                             [memory && memory.on_at, memory && memory.on_day], ...Object.values(policyDates).map((d) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, policyDates }); } catch (e) { next(e); }

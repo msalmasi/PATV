@@ -77,6 +77,10 @@
 // unknown-room rule "plus_before_split": a recording / transcript whose room he can't tell keeps Plus's window when it was made
 // before his split switch-on (his report's split_since), the shortest one after. The switch takes it like "shortest" (UNKNOWN_OK) when
 // the date is reported, and the privacy text then adds ONE sentence saying so with that date (privacyCopy().unknown).
+// 1.99afv review: the switch keeps what it PUBLISHED - his rule and split_since at switch-on (cfg unknown_room / split_since /
+// unknown_at); the sentence says that, and drift() flags his report leaving it (ruleChanges: a rollback below bot 1.99afu turns
+// "plus_before_split" into "shortest", which pepeGaps alone accepts, and he'd then delete the legacy recordings the sentence keeps).
+// An off / on publishes what he reports then; the privacy page's date moves with a changed rule (rule_at -> terms.js).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -115,10 +119,16 @@ function init() {
   }
   return ready;
 }
+// 1.99afv review: Pepe's unknown-room rules his report can carry (premium.cleanRetention)
+const UNKNOWN_RULES = Object.freeze(["shortest", "longest", "plus_before_split"]);
 function cleanCfg(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
   const ms = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : null);
-  return { on: c.on === true, at: ms(c.at), first_on: ms(c.first_on), by: c.by ? String(c.by).slice(0, 40) : null };
+  // 1.99afv review: + what the switch PUBLISHED for a recording whose room Pepe can't tell - his rule and split_since as they were
+  // when it went on (unknown_room / split_since), and when that last changed (unknown_at: the privacy page's date moves with it).
+  // drift() flags his report leaving them; privacyCopy() says what was published, never a value that moved silently.
+  return { on: c.on === true, at: ms(c.at), first_on: ms(c.first_on), by: c.by ? String(c.by).slice(0, 40) : null,
+           unknown_room: UNKNOWN_RULES.includes(c.unknown_room) ? c.unknown_room : null, split_since: ms(c.split_since), unknown_at: ms(c.unknown_at) };
 }
 async function loadCfg() {
   let raw = null;
@@ -157,6 +167,31 @@ function pepeGaps(R) {
   return out;
 }
 const pepeR = () => { try { return require("./premium").retention(); } catch (e) { return null; } };
+/**
+ * 1.99afv review: while the switch is ON, Pepe's unknown-room rule and split_since must stay what it published (cfg unknown_room /
+ * split_since, recorded at switch-on). A rollback below bot 1.99afu, UNKNOWN_ROOM_BEFORE_SPLIT changed, or a lost / moved split_since
+ * change what he deletes - "shortest" again deletes the legacy unknown-room recordings older than 30 days that the published sentence
+ * keeps for good - while pepeGaps alone sees nothing wrong ("shortest" is a rule the text can hold). -> [{code, why}] (drift + the card)
+ */
+function ruleChanges(R) {
+  if (!CFG.on || !CFG.unknown_room || !R || !R.audio_reported || !R.split) return [];   // split off: pepeGaps' split_off says it
+  const label = (r) => ({ shortest: "\"shortest\" (the no-pad window)", longest: "\"longest\"",
+                          plus_before_split: "\"plus_before_split\" (Prime Time Plus's window for one made before his split switch-on)" }[r] || "none reported");
+  const day = (t) => unknownCopy({ unknown_room: "plus_before_split", split_since: t }).since_text;   // as the privacy text writes it
+  const fix = "Put Pepe back (docs/OPERATIONS.md \"Rolling back\": never below 1.99afu while split is on - run !retention split off first, unknown rooms then keep the longest window), or, to publish what he does now, turn this switch off and on again (the privacy page's date moves with it).";
+  if (R.unknown_room !== CFG.unknown_room) {
+    const kept = CFG.unknown_room === "plus_before_split" && CFG.split_since
+      ? ` The privacy text still says those made before ${day(CFG.split_since)} are kept like Prime Time Plus's${R.unknown_room === "shortest" ? ", but he now deletes the ones older than his shortest window at his next nightly pass" : ""}.`
+      : "";
+    return [{ code: "unknown_room_changed", why: `Pepe's rule for a recording or transcript whose room he can't tell is now ${label(R.unknown_room)}, not ${label(CFG.unknown_room)} as when the switch went on.${kept} ${fix}` }];
+  }
+  if (CFG.unknown_room === "plus_before_split" && R.split_since > 0 && Math.floor(R.split_since) !== CFG.split_since) {
+    return [{ code: "split_since_changed", why: `Pepe's split switch-on moment is now ${day(R.split_since)}, not ${day(CFG.split_since)} as when the switch went on - the privacy text keeps naming ${day(CFG.split_since)}, so recordings whose room he can't tell made between the two are kept or deleted against what it says (retention.json's split_since was lost or changed). ${fix}` }];
+  }
+  return [];
+}
+/** What the text needs from Pepe's report and isn't there NOW: pepeGaps + (switch on) ruleChanges. */
+const gapsNow = (R) => [...pepeGaps(R), ...ruleChanges(R)];
 // the unknown-room rules the text holds for (pepeGaps): "shortest" (the no-pad window - 1.99afq review 4) and, the owner's rule for now
 // (2026-10-28, bot 1.99afu), "plus_before_split" - Plus's window for one made before his split switch-on, which the text then says
 const UNKNOWN_OK = Object.freeze(["shortest", "plus_before_split"]);
@@ -168,12 +203,22 @@ async function setPolicy(on, actor = null) {
   if (CFG.on === want) return { cfg: cfg(), unchanged: true };
   // never ON while Pepe doesn't keep what the text says (pepeGaps): an older bot, his split rule off, an unknown room kept for good,
   // his deletion off, his room notice not naming recordings
+  const R = pepeR();
   if (want) {
-    const gap = pepeGaps(pepeR())[0];
+    const gap = pepeGaps(R)[0];
     if (gap) throw new Refuse(409, gap.why, gap.code);
   }
   const t = now();
-  const next = cleanCfg({ on: want, at: t, first_on: CFG.first_on || (want ? t : null), by: actor });
+  // 1.99afv review: switching ON publishes Pepe's unknown-room rule and its date as he reports them now; OFF keeps what was
+  // published (a later ON compares: the same rule and date keep their day, a different one is published that day)
+  let pub = { unknown_room: CFG.unknown_room, split_since: CFG.split_since, unknown_at: CFG.unknown_at };
+  if (want) {
+    const rule = R && UNKNOWN_RULES.includes(R.unknown_room) ? R.unknown_room : null;
+    const since = rule === "plus_before_split" && R.split_since > 0 ? Math.floor(R.split_since) : null;
+    const same = rule === CFG.unknown_room && since === CFG.split_since && CFG.unknown_at;
+    pub = { unknown_room: rule, split_since: since, unknown_at: same ? CFG.unknown_at : t };
+  }
+  const next = cleanCfg({ on: want, at: t, first_on: CFG.first_on || (want ? t : null), by: actor, ...pub });
   await runQuery("INSERT INTO micrec_meta (key, value) VALUES ('policy', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(next)]);
   CFG = next;
   keepCache = null;                                   // the next owner sync carries the new `policy`
@@ -190,7 +235,18 @@ async function setPolicy(on, actor = null) {
  */
 async function drift() {
   await init();
-  const gaps = policyOn() ? pepeGaps(pepeR()) : [];
+  // 1.99afv review: a switch turned on before the site recorded what it published (no cfg unknown_room): what Pepe reports now is
+  // taken as published, once, while it matches the text - from then on a change is flagged
+  if (policyOn() && !CFG.unknown_room) {
+    const R0 = pepeR();
+    if (R0 && UNKNOWN_RULES.includes(R0.unknown_room) && !pepeGaps(R0).length) {
+      const next = cleanCfg({ ...CFG, unknown_room: R0.unknown_room, split_since: R0.unknown_room === "plus_before_split" ? R0.split_since : null,
+                              unknown_at: CFG.at || CFG.first_on });
+      await runQuery("INSERT INTO micrec_meta (key, value) VALUES ('policy', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(next)]);
+      CFG = next;
+    }
+  }
+  const gaps = policyOn() ? gapsNow(pepeR()) : [];                  // 1.99afv review: + his unknown-room rule / date changing
   const codes = gaps.map((g) => g.code).join(",");
   let prev = null;
   try { prev = JSON.parse(((await getQuery("SELECT value FROM micrec_meta WHERE key = 'drift'"))[0] || {}).value || "null"); } catch (e) { prev = null; }
@@ -221,9 +277,14 @@ async function privacyCopy() {
   let R = null;
   try { R = require("./premium").retention(); } catch (e) { R = null; }
   const w = (v) => (v == null ? "kept for good" : `${v} days`);
+  // 1.99afv review: the unknown-room sentence says what the switch PUBLISHED (its rule and date as at switch-on), never a value
+  // Pepe's report moved without anyone deciding it (drift() flags that); rule_at = when the published rule last changed - the
+  // page's "Last updated" moves with it (terms.js), the first switch-on day stays the changelog's
+  const pub = CFG.unknown_room ? { ...(R || {}), unknown_room: CFG.unknown_room, split_since: CFG.split_since } : R;
+  const ruleAt = CFG.unknown_at || null;
   return { on_at: at, on_day: at ? dayText(at) : null,
            ret: R ? { audio_free: w(R.audio_days), audio_prime: w(R.audio_prime), audio_plus: w(R.audio_plus) } : null,
-           unknown: unknownCopy(R) };
+           unknown: unknownCopy(pub), rule_at: ruleAt, rule_day: ruleAt ? dayText(ruleAt) : null };
 }
 /** 1.99afv: the owner's rule for now (2026-10-28, bot 1.99afu "plus_before_split"): a recording / transcript whose pad Pepe can't
  *  tell, made before his split switch-on, is kept like Plus's. -> {since_at, since_text ("3 November 2026, 15:04 UTC"), for_good
@@ -805,8 +866,10 @@ async function adminView() {
                                       chat_prime: R.chat_prime, chat_plus: R.chat_plus, rec_days: R.rec_days, rec_prime: R.rec_prime, rec_plus: R.rec_plus } : null,
            reported_at: at, audio_reported_at: audioAt, pepe_can: pepeCan(), split: !!(R && R.split),
            // review 4: what the text needs from Pepe and his report doesn't give (switch off: why it can't go on; on: drift)
-           gaps: pepeGaps(R), delete_on: !!(R && R.delete === true), unknown_room: (R && R.unknown_room) || null, rec_notice: !!(R && R.rec_notice === true),
+           gaps: gapsNow(R), delete_on: !!(R && R.delete === true), unknown_room: (R && R.unknown_room) || null, rec_notice: !!(R && R.rec_notice === true),
            split_since: (R && R.split_since) || null,                                                    // 1.99afv
+           // 1.99afv review: what the switch published for an unknown room (its rule + date at switch-on; null before it ever went on)
+           unknown_published: CFG.unknown_room ? { rule: CFG.unknown_room, split_since: CFG.split_since, at: CFG.unknown_at } : null,
            keep: keepStats ? { ...keepStats, policy: block.policy } : null, deletions: dels, exports: exports_ };
 }
 
@@ -858,5 +921,6 @@ module.exports = { init, register, policyOn, pepeCan, setPolicy, cfg, privacyCop
                    holderIds, earlierHolder, noteLoginsGone, skippedHandled, REC_QUEUED_MS,                     // review
                    ownSince, scrubLateAcks, alertSkipped, REC_SKIP_REMIND_MS,                                    // review 2
                    pepeGaps, drift, accountHoldHashes, REC_WAIT_WARN_MS,                                         // review 4
-                   unknownCopy, UNKNOWN_OK,                                                                      // 1.99afv
-                   _setClock: (f) => { clock = f || (() => Date.now()); }, _resetCache: () => { keepCache = null; keepStats = null; } };
+                   unknownCopy, UNKNOWN_OK, ruleChanges, gapsNow,                                                // 1.99afv (+ review)
+                   _setClock: (f) => { clock = f || (() => Date.now()); }, _resetCache: () => { keepCache = null; keepStats = null; },
+                   _loadCfg: () => loadCfg() };                                                                  // (tests)

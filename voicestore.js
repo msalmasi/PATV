@@ -104,7 +104,9 @@ async function ensureSample(v) {
 // soundboard clip rendered in it (a room board's line) are synthetic audio of the person's voice. The revoke already stops them
 // (status 'removed'); this deletes their WAVs too - with the copies soundboards.saveWav kept in SB_DIR/.replaced/ - and empties the
 // rows (audio / sha NULL), so nothing points at a deleted file and a staff "restore" can't bring the voice back (no audio: it would
-// need a render, which a revoked voice never gets). A clip whose voice was rolled at render time ("random") and came out in this voice
+// need a render, which a revoked voice never gets - 1.99afv review: by code, not only by VoiceBox having deleted the profile:
+// soundboards.js refuses a restore / rerender of a clip in a revoked voice, skips and removes such a render job and refuses its
+// audio; Pepe refuses the job too, bot 1.99afu). A clip whose voice was rolled at render time ("random") and came out in this voice
 // (its note "voice: <id>", soundboards.storeAudio) loses that WAV and is rendered again in another voice. The rows stay: ownership,
 // plays and likeness cuts point at their ids. Mic clips (kind "audio": a real recording, not generated) are never touched here.
 // Logs counts and file names only (never the voice: its id is the owner's Camfrog name).
@@ -140,15 +142,25 @@ async function purgeVoiceAudio(voiceId) {
       out.clips++;
     }
   }
-  // a clip rendered in it by chance ("random"): its current WAV goes, and it's rendered again (a hidden one stays hidden)
+  // a clip rendered in it by chance ("random"): its current WAV goes, and it's rendered again (a hidden one stays hidden).
+  // 1.99afv review: with its SB_DIR/.replaced/ copies too, like the voice's own clips (they may hold earlier renders in other
+  // voices - backups only, "the way back" for a re-render, so dropping them loses nothing anyone plays). A copy of a clip whose
+  // CURRENT render is in another voice can't be told apart and stays (its earlier render may have been in this one - an edge case).
   const rolled = await getQuery("SELECT id, audio FROM sb_clips WHERE kind = 'tts' AND LOWER(IFNULL(note, '')) = ? AND audio IS NOT NULL", ["voice: " + id]);
   for (const c of rolled) {
     if (AUDIO_FILE_RE.test(c.audio) && unlinkQuiet(path.join(dir, c.audio))) out.files.push(c.audio);
+    for (const n of replacedOf(c.id)) if (unlinkQuiet(path.join(dir, ".replaced", n))) out.files.push(".replaced/" + n);
     await runQuery(`UPDATE sb_clips SET audio = NULL, sha = NULL, tries = 0, note = 'its voice was deleted by its owner - rendered again', updated = ?,
                     status = CASE WHEN status = 'active' THEN 'render' ELSE status END, pending = CASE WHEN status = 'hidden' THEN 1 ELSE 0 END WHERE id = ?`, [t, c.id]);
     out.clips++;
   }
   return out;
+}
+/** 1.99afv review: the ids (lower case) of the revoked voices -> Set. soundboards.js refuses a staff restore / rerender of a clip in
+ *  one, skips (and removes) a render job in one and refuses its audio: a revoked voice is never generated again. */
+async function revokedSet() {
+  await init();
+  return new Set((await getQuery("SELECT id FROM voices WHERE status = 'revoked'")).map((v) => low(v.id)));
 }
 /** Every revoked voice's generated audio (purgeVoiceAudio). Boot: the voices revoked before 1.99afv (prod: one ▶ sample); idempotent -
  *  a later boot finds nothing (or a file an earlier delete couldn't remove). -> {voices, files, clips} */
@@ -451,6 +463,6 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, voice, all, ownerMap, pickable, roomVoices, importFromPepe, botState, buy, owns, ownerSummary, ownerUpdate, adminUpdate, applyPatch, register, sampleId, BANDS, Refuse,
-  purgeVoiceAudio, purgeRevoked,   // 1.99afv
+  purgeVoiceAudio, purgeRevoked, revokedSet,   // 1.99afv
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

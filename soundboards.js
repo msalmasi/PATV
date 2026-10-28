@@ -294,6 +294,13 @@ const pub = (c) => ({ id: c.id, board: c.board, label: c.label, emoji: c.emoji, 
                       group: (c.board === "global" && CAT.groupOf[c.id]) || null,
                       audio: c.status === "active" && c.audio ? `/sb/audio/${c.id}.wav?v=${String(c.sha || "").slice(0, 8)}` : null });
 async function clip(id) { await init(); return (await getQuery("SELECT * FROM sb_clips WHERE id = ?", [String(id || "")]))[0] || null; }
+// 1.99afv review (owner 2026-10-28: a revoked voice clone's generated audio is deleted - voicestore.purgeVoiceAudio): a revoked voice
+// is never generated again, by code - a staff restore / rerender of a clip in it is refused, a render job in it is dropped (and the
+// clip removed) and audio uploaded for one is refused. -> Set of revoked voice ids (lower case); empty without a voice store.
+async function revokedVoices() {
+  try { return await require("./voicestore").revokedSet(); } catch (e) { return new Set(); }
+}
+const inRevoked = (c, revoked, voice = null) => c && c.kind === "tts" && [c.voice, voice].some((v) => v && revoked.has(low(v)));
 async function boardClips(board, statuses = ["active"]) {
   await init();
   return getQuery(`SELECT * FROM sb_clips WHERE board = ? AND status IN (${statuses.map(() => "?").join(",")}) ORDER BY sort, created`, [board, ...statuses]);
@@ -419,6 +426,8 @@ function saveWav(id, buf, secsHint, cap) {
 async function storeAudio(id, buf, voice) {
   const c = await clip(id);
   if (!c || c.status === "removed") throw new Refuse(404, "No such clip.");
+  // 1.99afv review: never a WAV in a revoked voice (the clip's own voice, or the one Pepe rolled for a "random" clip)
+  if (inRevoked(c, await revokedVoices(), voice)) throw new Refuse(409, "The voice was deleted by its owner.");
   const r = saveWav(id, buf, 0, capFor(c));
   const t = now();
   if (r.status !== "active") {
@@ -466,9 +475,16 @@ async function botState() {
   try { sp = await P().passCamfrogs(); } catch (e) { sp = []; }
   const optouts = await L().optoutMap().catch(() => ({}));
   const sbOut = Object.keys(optouts).filter((k) => (optouts[k] || []).includes("soundboard"));
-  const render = (await getQuery(`SELECT id, kind, voice, text, src, trim_start, trim_end, board, rarity, live FROM sb_clips
-                                  WHERE (status = 'render' OR (pending = 1 AND status IN ('active','hidden'))) AND live = 0 AND tries < 5
-                                  ORDER BY created LIMIT 6`))
+  // 1.99afv review: a render job in a revoked voice (a clip restored / re-rendered before this, a race with the revoke) is never
+  // handed out - the clip is removed instead, like the revoke does
+  const revoked = await revokedVoices();
+  const jobs = await getQuery(`SELECT id, kind, voice, text, src, trim_start, trim_end, board, rarity, live FROM sb_clips
+                               WHERE (status = 'render' OR (pending = 1 AND status IN ('active','hidden'))) AND live = 0 AND tries < 5
+                               ORDER BY created LIMIT 6`);
+  for (const c of jobs.filter((x) => inRevoked(x, revoked))) {
+    await runQuery("UPDATE sb_clips SET status = 'removed', pending = 0, note = 'the voice was deleted by its owner', updated = ? WHERE id = ?", [now(), c.id]);
+  }
+  const render = jobs.filter((x) => !inRevoked(x, revoked))
     // a catalogue file is an AUDIO job (Pepe fetches + converts it like a mic clip); the version rides on the URL
     .map((c) => ({ id: c.id, kind: String(c.src || "").startsWith("file:") ? "audio" : c.kind, voice: c.voice, text: c.text,
                    src: c.src ? `/api/soundboards/bot/src/${c.id}` + (String(c.src).startsWith("file:") ? `?v=${String(c.src).split("#")[1] || ""}` : "") : null,
@@ -852,6 +868,10 @@ function register(app, { addUser, isBotToken }) {
       if (b.clip && ["hide", "restore", "remove", "rerender"].includes(b.action)) {
         const c = await clip(b.clip);
         if (!c) throw new Refuse(404, "No such clip.");
+        // 1.99afv review: a clip in a revoked voice stays gone - a restore / rerender would make the voice speak again
+        if ((b.action === "restore" || b.action === "rerender") && inRevoked(c, await revokedVoices())) {
+          throw new Refuse(409, "This clip's voice was deleted by its owner - it can't be restored or rendered again.");
+        }
         const st = { hide: "hidden", restore: c.audio ? "active" : "render", remove: "removed", rerender: "render" }[b.action];
         await runQuery("UPDATE sb_clips SET status = ?, note = ?, tries = CASE WHEN ? = 'render' THEN 0 ELSE tries END, updated = ? WHERE id = ?",
                        [st, `${b.action} by ${req.user.username}`, st, now(), c.id]);

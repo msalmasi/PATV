@@ -72,6 +72,7 @@ test.before(async () => {
   app.set("view engine", "ejs");
   VC.register(app, { addUser, isBotToken: (t) => t === "bot" });
   VS.register(app, { addUser, isBotToken: (t) => t === "bot" });
+  SB.register(app, { addUser, isBotToken: (t) => t === "bot" });       // 1.99afv review: the staff restore / Pepe's audio upload
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
 });
@@ -260,4 +261,50 @@ test("1.99afv: voices revoked BEFORE the revoke deleted their generated audio - 
   await VS.importFromPepe({ names: ["OldRev", "NoSampleRev"] });
   assert.equal((await getQuery("SELECT status FROM sb_clips WHERE id = ?", [sid]))[0].status, "removed", "still removed - not a render job again");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sb_clips WHERE id = ?", [VS.sampleId("nosamplerev")]))[0].n, 0, "a revoked voice gets no sample");
+});
+
+test("1.99afv review: a revoked voice is never generated again - a staff restore / rerender of its clip is refused, a render job in it is dropped (the clip removed), audio for it is refused; a random clip's .replaced copies go with its WAV", async () => {
+  const sbFile = (n) => path.join(process.env.SB_DIR, n);
+  const mod = await mkUser("sbmod");
+  mod.class = "Admin";
+  await runQuery("INSERT OR IGNORE INTO voices (id, display, kind, status, created, updated) VALUES ('livevoice', 'LiveVoice', 'stock', 'active', 1, 1)");
+  assert.equal((await VS.voice("vetcf")).status, "revoked", "(revoked by the test above)");
+  assert.ok((await VS.revokedSet()).has("vetcf"));
+  await runQuery(`INSERT INTO sb_clips (id, board, label, kind, voice, text, rarity, status, created) VALUES
+                  ('r-gone1', 'room:X', 'Gone 1', 'tts', 'vetcf', 'hi', 'epic', 'removed', 1),
+                  ('r-gone2', 'room:X', 'Gone 2', 'tts', 'VetCF', 'hi', 'epic', 'render', 1),
+                  ('r-live2', 'room:X', 'Live 2', 'tts', 'livevoice', 'hi', 'epic', 'render', 1)`);
+  // a staff restore / rerender of an emptied clip would send a render job in the revoked voice: refused
+  for (const action of ["restore", "rerender"]) {
+    const r = await call("POST", "/api/soundboards/admin", mod, { clip: "r-gone1", action });
+    assert.equal(r.status, 409, `${action}: ${JSON.stringify(r.d)}`);
+    assert.match(r.d.error, /voice was deleted by its owner/);
+  }
+  assert.equal((await getQuery("SELECT status FROM sb_clips WHERE id = 'r-gone1'"))[0].status, "removed");
+  const hide = await call("POST", "/api/soundboards/admin", mod, { clip: "r-live2", action: "hide" });
+  assert.equal(hide.status, 200, "other actions / voices as before");
+  await runQuery("UPDATE sb_clips SET status = 'render' WHERE id = 'r-live2'");
+  // the render queue: a job in it (a race with the revoke) is never handed to Pepe - the clip is removed instead
+  const st = await SB.botState();
+  assert.ok(!st.render.some((j) => j.id === "r-gone2"), "no job in the revoked voice");
+  assert.ok(st.render.some((j) => j.id === "r-live2"), "another voice's job still goes");
+  assert.deepEqual((await getQuery("SELECT status, note FROM sb_clips WHERE id = 'r-gone2'"))[0], { status: "removed", note: "the voice was deleted by its owner" });
+  // audio for a clip in it - or rolled into it for a "random" clip - is refused, nothing written
+  await runQuery("UPDATE sb_clips SET status = 'render' WHERE id = 'r-gone2'");
+  let r = await bot("/api/soundboards/bot/audio", { id: "r-gone2", data: WAV });
+  assert.equal(r.status, 409, JSON.stringify(r.d));
+  r = await bot("/api/soundboards/bot/audio", { id: "r-live2", data: WAV, voice: "VetCF" });
+  assert.equal(r.status, 409, "a roll into a revoked voice");
+  assert.ok(!fs.existsSync(sbFile("r-gone2.wav")) && !fs.existsSync(sbFile("r-live2.wav")));
+  r = await bot("/api/soundboards/bot/audio", { id: "r-live2", data: WAV, voice: "livevoice" });
+  assert.equal(r.status, 200, "a live voice's audio is taken as before");
+  // a "random" clip that came out in a voice revoked now: its WAV AND its .replaced/ copies go (like the voice's own clips)
+  await runQuery("INSERT INTO voices (id, display, kind, status, created, updated) VALUES ('rollv', 'RollV', 'stock', 'revoked', 1, 1)");
+  await runQuery("INSERT INTO sb_clips (id, board, label, kind, voice, text, rarity, status, audio, sha, note, created) VALUES ('g-r2', 'global', 'R2', 'tts', 'random', 'yo', 'common', 'active', 'g-r2.wav', 'abc', 'voice: RollV', 1)");
+  fs.mkdirSync(sbFile(".replaced"), { recursive: true });
+  for (const n of ["g-r2.wav", ".replaced/g-r2.abcd1234.wav"]) fs.writeFileSync(sbFile(n), "RIFF");
+  const p = await VS.purgeVoiceAudio("rollv");
+  assert.deepEqual(p.files.sort(), [".replaced/g-r2.abcd1234.wav", "g-r2.wav"]);
+  for (const n of ["g-r2.wav", ".replaced/g-r2.abcd1234.wav"]) assert.ok(!fs.existsSync(sbFile(n)), n);
+  assert.equal((await getQuery("SELECT status FROM sb_clips WHERE id = 'g-r2'"))[0].status, "render", "rendered again in another voice");
 });
