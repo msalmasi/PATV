@@ -4,7 +4,9 @@
   views/admin/raffles.ejs - 1.99xq: 🎫 PAT Raffles for admins (raffles.js; was a settings card on the public /raffles page).
   The switch + settings (POST /api/admin/raffles), an official House raffle (the create form with the house flag,
   partials/rf-create), the review queue (disputed / waiting on delivery: release or refund) and every open raffle (take down
-  with full refunds). Forms post JSON through public/js/raffles.js (data-rf-form, X-Requested-With: fetch). Admins only.
+  with full refunds; 1.99afy: Edit opens a dialog form - POST /api/admin/raffles/<id>/edit, only the changed fields,
+  times converted in the browser's own zone; the locked fields are shown disabled with the reason).
+  Forms post JSON through public/js/raffles.js (data-rf-form, X-Requested-With: fetch). Admins only.
   Data: on, escrowLive, cfg, defaults, limits, A = raffles.adminState() {review, open, recent}, shares (raffle_fee routing),
   items, pick, idem.
 %>
@@ -17,7 +19,7 @@
 %>
 <link rel="stylesheet" href="/public/css/bets.css?v=3">
 <script src="/public/js/patamount.js" defer></script>
-<script src="/public/js/raffles.js?v=1" defer></script>
+<script src="/public/js/raffles.js?v=2" defer></script>
 <%- include('../partials/rf-css') %>
 <style>
   .adm-rf .rf-msg { margin: 0 0 var(--ds-sp-3); }
@@ -26,6 +28,14 @@
   .adm-rf td .sub { display: block; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
   .adm-rf tr:target td { background: var(--ds-gold-bg); }
   .adm-rf .rf-create { max-width: 760px; }
+  .adm-rf dialog.rf-edit-dlg { background: var(--ds-surface); color: var(--ds-text); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-xl);
+    padding: var(--ds-sp-5); width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; }
+  .adm-rf dialog.rf-edit-dlg::backdrop { background: rgba(0, 0, 0, .6); }
+  @media (max-width: 560px) { .adm-rf dialog.rf-edit-dlg { padding: var(--ds-sp-4); } }
+  .adm-rf .rf-edit { margin: 0; }
+  .adm-rf .rf-edit h3 { margin: 0 0 var(--ds-sp-2); font-size: var(--ds-fs-md, 1rem); overflow-wrap: anywhere; }
+  .adm-rf .rf-edit .rf-locks { margin: 0; padding-left: 1.2em; }
+  .adm-rf .rf-edit input:disabled { opacity: .6; cursor: not-allowed; }
 </style>
 
 <div class="adm-rf rf">
@@ -86,7 +96,7 @@
   <p class="adm-help"><%- t('rf.adm.open_help') %></p>
   <% if (!A.open.length) { %><p class="adm-help"><%- t('rf.adm.open_none') %></p><% } else { %>
   <div class="adm-tbl"><table>
-    <thead><tr><th><%- t('rf.adm.col_raffle') %></th><th><%- t('rf.adm.col_prize') %></th><th class="num"><%- t('rf.adm.col_sold') %></th><th class="num"><%- t('rf.adm.col_pot') %></th><th><%- t('rf.adm.col_next') %></th><th><%- t('rf.takedown_reason') %></th></tr></thead>
+    <thead><tr><th><%- t('rf.adm.col_raffle') %></th><th><%- t('rf.adm.col_prize') %></th><th class="num"><%- t('rf.adm.col_sold') %></th><th class="num"><%- t('rf.adm.col_pot') %></th><th><%- t('rf.adm.col_next') %></th><th><%- t('rf.adm.col_edit') %></th><th><%- t('rf.takedown_reason') %></th></tr></thead>
     <tbody>
     <% A.open.forEach((r) => { %>
       <tr id="R<%= r.id %>">
@@ -95,6 +105,7 @@
         <td class="num"><%= fmt(r.sold) %><%= r.goal ? ' / ' + fmt(r.goal) : '' %></td>
         <td class="num"><%= fmt(r.pot) %></td>
         <td><%= when(r.next_at) %></td>
+        <td><button class="adm-btn sm ghost" type="button" data-rf-edit="<%= r.id %>" aria-haspopup="dialog" aria-controls="rf-edit-<%= r.id %>">✏️ <%- t('rf.adm.edit.btn') %></button></td>
         <td>
           <form class="adm-inline" data-rf-form="takedown" data-rf-url="/api/raffles/<%= r.id %>/takedown" data-rf-done="reload" data-rf-confirm="<%- t('rf.takedown_q') %>">
             <input type="text" name="reason" maxlength="200" required aria-label="<%- t('rf.takedown_reason') %>">
@@ -105,6 +116,51 @@
     <% }) %>
     </tbody>
   </table></div>
+  <%# 1.99afy: one edit dialog per open raffle (outside the table: a wide table scrolls sideways, the form must not) %>
+  <% A.open.forEach((r) => { const locked = r.sold > 0; const dateT = r.trigger === 'date'; %>
+      <dialog class="rf-edit-dlg" id="rf-edit-<%= r.id %>" aria-labelledby="rf-edit-h-<%= r.id %>">
+          <form class="bx-form rf-edit" data-rf-form="edit" data-rf-url="/api/admin/raffles/<%= r.id %>/edit" data-rf-done="reload" data-rf-dirty autocomplete="off"<% if (locked) { %> data-rf-confirm="<%- t('rf.adm.edit.confirm', { count: r.buyers, n: fmt(r.buyers) }) %>"<% } %>>
+            <h3 id="rf-edit-h-<%= r.id %>">✏️ <%- t('rf.adm.edit.h', { ref: 'R' + r.id }) %> · <%= r.title %></h3>
+            <p class="bx-fine"><%- t('rf.adm.edit.help') %></p>
+            <label class="bx-field"><%- t('rf.f_title') %><input class="bx-in" type="text" name="title" maxlength="90" required value="<%= r.title %>"></label>
+            <label class="bx-field"><%- t('rf.f_desc') %><textarea class="bx-in" name="description" rows="2" maxlength="1500"><%= r.description %></textarea></label>
+            <p class="bx-fine">🔒 <%- t('rf.adm.edit.lock_prize', { prize: prize(r) }) %></p>
+            <fieldset class="rf-fs">
+              <legend><%- t('rf.f_when') %></legend>
+              <div class="bx-chips" role="radiogroup" aria-label="<%- t('rf.f_when') %>">
+                <label class="bx-check"><input type="radio" name="trigger" value="target"<%= dateT ? '' : ' checked' %><%= locked ? ' disabled' : '' %>> <span>🎯 <%- t('rf.f_trig_target') %></span></label>
+                <label class="bx-check"><input type="radio" name="trigger" value="date"<%= dateT ? ' checked' : '' %><%= locked ? ' disabled' : '' %>> <span>📅 <%- t('rf.f_trig_date') %></span></label>
+              </div>
+              <% if (locked) { %><p class="bx-fine">🔒 <%- t('rf.adm.edit.lock_trigger') %></p><% } %>
+              <label class="bx-field" data-rf-show-trig="target"<%= dateT ? ' hidden' : '' %>><%- t('rf.f_target') %><input class="bx-in" type="number" name="target" min="<%= Math.max(1, r.sold + 1) %>" value="<%= dateT ? '' : r.target %>"></label>
+              <label class="bx-field" data-rf-show-trig="date"<%= dateT ? '' : ' hidden' %>><%- t('rf.f_draw_at') %><input class="bx-in" type="datetime-local" name="draw_at" data-rf-ms="<%= r.draw_at || '' %>"></label>
+              <label class="bx-field" data-rf-show-trig="date"<%= dateT ? '' : ' hidden' %>><%- t('rf.f_cap') %><input class="bx-in" type="number" name="max_tickets" min="0" value="<%= dateT && r.max_tickets ? r.max_tickets : '' %>" placeholder="<%- t('rf.f_nolimit') %>"></label>
+              <label class="bx-field"><%- t('rf.adm.edit.expires') %><input class="bx-in" type="datetime-local" name="expires_at" required data-rf-ms="<%= r.expires_at %>"></label>
+              <p class="bx-fine"><%- t('rf.adm.edit.when_note', { lead: cfg.min_lead_min, days: cfg.max_days, grace: cfg.grace_hours }) %> <span data-rf-tzname></span></p>
+            </fieldset>
+            <div class="bx-row2">
+              <label class="bx-field"><%- t('rf.f_price') %><input class="bx-in" type="text" inputmode="decimal" name="price" value="<%= r.price %>"<%= locked ? ' disabled' : '' %>></label>
+              <label class="bx-field"><%- t('rf.f_min') %><input class="bx-in" type="number" name="min_tickets" min="1"<% if (locked) { %> max="<%= r.min_tickets %>"<% } %> value="<%= r.min_tickets %>"></label>
+              <label class="bx-field"><%- t('rf.f_maxper') %><input class="bx-in" type="number" name="max_per_user" min="0" value="<%= r.max_per_user || '' %>" placeholder="<%- t('rf.f_nolimit') %>"></label>
+            </div>
+            <% if (locked) { %>
+            <p class="bx-fine"><%- t('rf.adm.edit.locked_h', { count: r.sold, n: fmt(r.sold) }) %></p>
+            <ul class="bx-fine rf-locks">
+              <li>🔒 <%- t('rf.adm.edit.lock_price', { pat: fmt(r.price) }) %></li>
+              <li>⬇️ <%- t('rf.adm.edit.min_down', { n: fmt(r.min_tickets) }) %></li>
+              <% if (dateT) { %><li>⬆️ <%- r.max_tickets ? t('rf.adm.edit.cap_up', { n: fmt(r.max_tickets) }) : t('rf.adm.edit.cap_none') %></li>
+              <% } else { %><li>🎯 <%- t('rf.adm.edit.target_floor', { n: fmt(r.sold + 1) }) %></li><% } %>
+              <li>⬆️ <%- r.max_per_user ? t('rf.adm.edit.maxper_up', { n: fmt(Math.max(r.max_per_user, r.most_held || 0)) }) : t('rf.adm.edit.maxper_none') %></li>
+            </ul>
+            <% } else { %><p class="bx-fine"><%- t('rf.adm.edit.unlocked') %></p><% } %>
+            <p class="rf-msg" data-rf-msg role="status" aria-live="polite" hidden></p>
+            <div class="bx-row">
+              <button class="adm-btn" type="submit">💾 <%- t('rf.adm.edit.save') %></button>
+              <button class="adm-btn ghost" type="button" data-rf-edit-close><%- t('rf.adm.edit.cancel') %></button>
+            </div>
+          </form>
+      </dialog>
+  <% }) %>
   <% } %>
 </section>
 

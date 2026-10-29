@@ -6,7 +6,10 @@
    - countdowns [data-rf-at] tick once a second; the buy form's total follows the quantity
    - the fairness box re-checks the revealed seed in the browser (sha256 commitment, the tickets digest, the winning number from
      the HMAC-SHA256 word stream - casino/fair.js rules)
-   Pure helpers (left, ticketLine) are exported for node tests. */
+   - 1.99afy /admin/raffles: [data-rf-edit] opens a raffle's edit dialog (its own [data-rf-msg]); a form with data-rf-dirty sends
+     only the fields that differ from what was on the page, its datetime-local fields (prefilled from data-rf-ms in this
+     browser's zone) as ms - converted here, so a date across a daylight-saving change keeps its own offset
+   Pure helpers (left, ticketLine, localValue) are exported for node tests. */
 (function () {
   'use strict';
   function leftParts(ms) {
@@ -17,7 +20,16 @@
     return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
   }
   function ticketLine(t) { return t[0] + '-' + t[1] + ':' + String(t[2] || '').toLowerCase() + '\n'; }
-  var api = { left: leftParts, ticketLine: ticketLine };
+  /** ms -> a datetime-local value ("2026-11-05T20:00") in this runtime's own time zone; '' for none. */
+  function localValue(ms) {
+    var n = Number(ms);
+    if (!(n > 0)) return '';
+    var d = new Date(n);
+    if (isNaN(d.getTime())) return '';
+    var p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  var api = { left: leftParts, ticketLine: ticketLine, localValue: localValue };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   if (typeof document === 'undefined') return;
 
@@ -25,23 +37,39 @@
   var NUM = (function () { try { return new Intl.NumberFormat((window.PATV_I18N && window.PATV_I18N.lang) || undefined); } catch (e) { return null; } })();
   var num = function (n) { n = Math.floor(Number(n) || 0); return NUM ? NUM.format(n) : String(n); };
 
-  function say(text, ok) {
-    var m = document.getElementById('rf-msg');
+  function say(text, ok, form) {
+    var m = (form && form.querySelector('[data-rf-msg]')) || document.getElementById('rf-msg');     // a dialog's form has its own
     if (!m) { if (!ok) alert(text); return; }
     m.textContent = text;
     m.className = 'rf-msg ' + (ok ? 'ok' : 'bad');
     m.hidden = false;
     try { m.scrollIntoView({ block: 'nearest' }); } catch (e) { /* old browsers */ }
   }
+  /** A field that differs from what the page showed (the edit form sends only these). */
+  function changed(el) {
+    if (el.type === 'checkbox' || el.type === 'radio') return el.checked !== el.defaultChecked;
+    if (el.tagName === 'SELECT') {
+      for (var i = 0; i < el.options.length; i++) if (el.options[i].selected !== el.options[i].defaultSelected) return true;
+      return false;
+    }
+    return el.value !== el.defaultValue;
+  }
   function body(form) {
     var out = {};
+    var dirtyOnly = form.hasAttribute('data-rf-dirty');
     Array.prototype.forEach.call(form.elements, function (el) {
       if (!el.name || el.disabled) return;
       if (el.closest && el.closest('[hidden]')) return;
+      if (dirtyOnly && el.type !== 'hidden' && !changed(el)) return;
       var v;
       if (el.type === 'checkbox') v = !!el.checked;
       else if (el.type === 'radio') { if (!el.checked) return; v = el.value; }
       else if (el.type === 'submit' || el.type === 'button') return;
+      else if (dirtyOnly && el.type === 'datetime-local') {
+        // this browser's own zone at THAT date (not today's offset): ms, which the server takes as is
+        var ms = el.value ? new Date(el.value).getTime() : NaN;
+        v = el.value ? (isNaN(ms) ? el.value : ms) : '';
+      }
       else v = el.value;
       var parts = el.name.split('.');
       var o = out;
@@ -53,6 +81,8 @@
   }
   function submit(form, e) {
     e.preventDefault();
+    var data = body(form);
+    if (form.hasAttribute('data-rf-dirty') && !Object.keys(data).length) { say(_t('js.rf.nochange', 'Nothing changed.'), true, form); return; }
     var ask = form.getAttribute('data-rf-confirm');
     if (ask && !confirm(ask)) return;
     var btn = form.querySelector('button[type=submit]');
@@ -60,19 +90,24 @@
     fetch(form.getAttribute('data-rf-url'), {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch', Accept: 'application/json' },
-      body: JSON.stringify(body(form)),
+      body: JSON.stringify(data),
     }).then(function (r) { return r.json().catch(function () { return { ok: false }; }); }).then(function (j) {
       if (!j || !j.ok) {
-        say((j && j.error) || _t('js.rf.failed', "That didn't work - nothing was charged. Try again."), false);
+        say((j && j.error) || _t('js.rf.failed', "That didn't work - nothing was charged. Try again."), false, form);
+        if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+        return;
+      }
+      if (j.noop) {
+        say(_t('js.rf.nochange', 'Nothing changed.'), true, form);
         if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
         return;
       }
       var done = form.getAttribute('data-rf-done');
       if (done === 'go' && j.id) { location.href = '/raffles/' + j.id; return; }
-      say(_t('js.rf.done', 'Done.'), true);
+      say(_t('js.rf.done', 'Done.'), true, form);
       setTimeout(function () { location.reload(); }, 600);
     }).catch(function () {
-      say(_t('js.rf.offline', "The site didn't answer - nothing was charged. Try again."), false);
+      say(_t('js.rf.offline', "The site didn't answer - nothing was charged. Try again."), false, form);
       if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
     });
   }
@@ -139,9 +174,39 @@
   }
 
   function boot() {
+    // 1.99afy: the admin edit form - its times prefilled in this browser's zone (value + defaultValue: unchanged = not sent)
+    var zone = '';
+    try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { zone = ''; }
+    Array.prototype.forEach.call(document.querySelectorAll('input[type=datetime-local][data-rf-ms]'), function (el) {
+      var v = localValue(el.getAttribute('data-rf-ms'));
+      el.defaultValue = v;
+      el.value = v;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rf-tzname]'), function (el) {
+      el.textContent = zone ? _t('js.rf.tz', "(times in this browser's time zone: {zone})", { zone: zone }) : '';
+    });
+    // Edit opens the raffle's dialog; closing it (the button, Esc) puts the form back to what the page showed
+    Array.prototype.forEach.call(document.querySelectorAll('dialog.rf-edit-dlg'), function (d) {
+      var f = d.querySelector('form');
+      var shut = function () {         // (idempotent; the browser puts the focus back on the Edit button itself)
+        if (f) { f.reset(); toggles(f); var m = f.querySelector('[data-rf-msg]'); if (m) m.hidden = true; }
+      };
+      d.addEventListener('cancel', shut);          // Esc (the close event can come late, or not at all in a background tab)
+      d.addEventListener('close', shut);
+      Array.prototype.forEach.call(d.querySelectorAll('[data-rf-edit-close]'), function (c) {
+        c.addEventListener('click', function () { shut(); if (d.close) d.close(); else d.removeAttribute('open'); });
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rf-edit]'), function (b) {
+      b.addEventListener('click', function () {
+        var d = document.getElementById('rf-edit-' + b.getAttribute('data-rf-edit'));
+        if (!d) return;
+        if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+      });
+    });
     Array.prototype.forEach.call(document.querySelectorAll('form[data-rf-form]'), function (f) {
       f.addEventListener('submit', function (e) { submit(f, e); });
-      if (f.getAttribute('data-rf-form') === 'create') {
+      if (f.getAttribute('data-rf-form') === 'create' || f.getAttribute('data-rf-form') === 'edit') {
         f.addEventListener('change', function () { toggles(f); });
         toggles(f);
       }
