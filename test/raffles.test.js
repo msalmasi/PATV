@@ -10,6 +10,8 @@
 //   * house raffles: the pot to the House, a PAT prize paid by the House, announced in every room
 //   * custom prizes: the pot waits for the winner (confirm / the hold window / a dispute -> admin refund)
 //   * takedown refunds everything; rate limits; Pepe's verbs + events; the pages and the embed card render
+//   * 1.99afy admin edits: every field + guard, timing from now and a 2 x max_days lifetime, one coalesced notice per holder
+//     (on the clock), races with buys / the draw; a chat buy only at the price that buyer was shown (Pepe sends none)
 //   NODE_PATH=G:/PATV/node_modules node --test test/raffles.test.js
 "use strict";
 const test = require("node:test");
@@ -626,9 +628,20 @@ test("1.99afy edit before the first ticket: every field (words, price, limits, t
   assert.deepEqual(ev.map((x) => x.kind), ["edited", "edited", "edited", "edited"]);
   assert.deepEqual([ev[3].data.target, ev[3].data.trigger, ev[3].data.price, ev[3].data.title], [20, "target", 2000, "Saturday mega raffle"]);
   assert.deepEqual(ev[3].data.changed.sort(), ["draw_at", "expires_at", "max_tickets", "target", "trigger_kind"]);
-  // no ticket holders: only the creator hears about it (one notice an edit)
-  assert.equal((await creatorNotes(r.id)).length, 4);
+  // no ticket holders: only the creator hears about it - ONE notice for the four edits close together, a few minutes after
+  // the last, from what the raffle was to what it is (the trigger went there and back: not a change)
+  assert.equal((await creatorNotes(r.id)).length, 0, "not at once");
+  T += 4 * 60000;
+  assert.ok((await RF.tick()).noticed >= 1);
+  const cn = await creatorNotes(r.id);
+  assert.equal(cn.length, 1);
+  assert.match(cn[0].title, /^🎫 Your raffle R\d+ was changed by PATV: Saturday mega raffle$/);
+  assert.match(cn[0].body, /Title: "Saturday mega raffle" \(was "Friday mega raffle"\)/);
+  assert.match(cn[0].body, /Ticket price: 2,000 PAT \(was 1,000 PAT\)/);
+  assert.match(cn[0].body, /It draws when 20 tickets are sold \(was 10\)/);
+  assert.doesNotMatch(cn[0].body, /It now draws/, "date and back to target: no trigger change to tell");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE ref LIKE ?", [`raffle-edit:${r.id}:%`]))[0].n, 0);
+  assert.equal((await raffle(r.id)).note_due, null, "sent: nothing waiting");
   await RF.cancel(U.maker.userId, r.id);
   assert.equal(await supply(), SUPPLY0);
 });
@@ -693,7 +706,13 @@ test("1.99afy edit: ONE notice per ticket holder for a buyer-visible change (not
   await RF.buy(U.ann.userId, { id: r.id, qty: 1, idem: "ann-note-0002" });
   await RF.buy(U.bob.userId, { id: r.id, qty: 1, idem: "bob-note-0001" });
   const e = await EDIT(r.id, { draw_at: T + 2 * DAY });
-  assert.equal(e.notified, 3, "ann + bob + the creator");
+  assert.deepEqual([e.holders, e.notify_at], [2, T + 3 * 60000], "told a few minutes after the last change - not in the admin's request");
+  assert.equal((await editNotes(U.ann, r.id)).length, 0);
+  T += 60000;
+  assert.equal((await RF.tick()).noticed, 0, "not before then");
+  T += 2 * 60000;
+  assert.equal((await RF.tick()).noticed, 3, "ann + bob + the creator");
+  assert.equal((await RF.tick()).noticed, 0, "once");
   const ann = await editNotes(U.ann, r.id);
   assert.equal(ann.length, 1, "two purchases, one notice");
   assert.match(ann[0].title, /^🎫 Friday mega raffle: the draw is now .+ \(changed by PATV\)$/);
@@ -703,31 +722,73 @@ test("1.99afy edit: ONE notice per ticket holder for a buyer-visible change (not
   assert.equal((await editNotes(U.bob, r.id)).length, 1);
   assert.equal((await editNotes(U.cat, r.id)).length, 0, "not a holder");
   assert.equal((await creatorNotes(r.id)).length, 1);
-  // the same minute again: a no-op - no notice, no audit, no event
+  // the same minute again: a no-op - no notice, no audit, no event, nothing booked
   const k0 = await kinds(r.id);
-  const nop = await EDIT(r.id, { draw_at: Math.floor((T + 2 * DAY) / 60000) * 60000 + 30000 });
+  const nop = await EDIT(r.id, { draw_at: Math.floor((await raffle(r.id)).draw_at / 60000) * 60000 + 30000 });
   assert.equal(nop.noop, true);
-  assert.equal((await editNotes(U.ann, r.id)).length, 1);
+  assert.equal((await raffle(r.id)).note_due, null);
   assert.deepEqual(await kinds(r.id), k0);
   assert.equal((await audits(r.id)).length, 1);
+  const flush = async () => { T += 4 * 60000; return (await RF.tick()).noticed; };
   // the description isn't something a buyer is told about (the creator is)
-  assert.equal((await EDIT(r.id, { description: "Now with sprinkles" })).notified, 1);
+  await EDIT(r.id, { description: "Now with sprinkles" });
+  assert.equal(await flush(), 1);
   assert.equal((await editNotes(U.ann, r.id)).length, 1);
-  // a second buyer-visible change: a second notice each (its own ref)
-  await EDIT(r.id, { min_tickets: 3, title: "Friday mega raffle II" });
+  assert.equal((await creatorNotes(r.id)).length, 2);
+  // three quick title fixes + the minimum: ONE more notice each, from the title they were told to the last one
+  await EDIT(r.id, { title: "Fryday mega raffle" });
+  T += 60000;
+  await EDIT(r.id, { title: "Friday mega rafle II", min_tickets: 3 });
+  T += 60000;
+  const last = await EDIT(r.id, { title: "Friday mega raffle II" });
+  assert.equal(last.notify_at, T + 3 * 60000, "the quiet time counts from the last change");
+  T += 2 * 60000;
+  assert.equal((await RF.tick()).noticed, 0, "still changing");
+  assert.equal(await flush(), 3);
   const ann2 = await editNotes(U.ann, r.id);
   assert.equal(ann2.length, 2);
+  assert.notEqual(ann2[1].ref, ann2[0].ref, "its own ref");
   assert.match(ann2[1].title, /^🎫 Friday mega raffle II: the raffle was changed by PATV$/);
   assert.match(ann2[1].body, /Title: "Friday mega raffle II" \(was "Friday mega raffle"\)/);
   assert.match(ann2[1].body, /Minimum to draw: 3 tickets \(was 4\)/);
+  assert.doesNotMatch(ann2[1].body, /Fryday|rafle/, "the typos in between aren't news");
   assert.equal((await editNotes(U.bob, r.id)).length, 2);
   assert.equal((await creatorNotes(r.id)).length, 3);
+  assert.equal((await audits(r.id)).length, 5, "every edit is audited all the same");
+  // changed and changed back before anyone was told: nothing to tell
+  await EDIT(r.id, { title: "Oops wrong raffle" });
+  await EDIT(r.id, { title: "Friday mega raffle II" });
+  assert.equal(await flush(), 0);
+  assert.equal((await editNotes(U.ann, r.id)).length, 2);
+  assert.equal((await raffle(r.id)).note_due, null);
+  // an admin who keeps changing it: told at most NOTE_MAX (15 min) after the first change, even while it goes on
+  const t0 = T, exp0 = Math.floor((await raffle(r.id)).expires_at / 60000) * 60000;
+  let sent = 0;
+  for (let i = 1; i <= 9; i++) {
+    await EDIT(r.id, { description: "Take " + i, expires_at: exp0 + i * HOUR });
+    T += 2 * 60000;
+    sent += (await RF.tick()).noticed;
+    if (T < t0 + 15 * 60000) assert.equal(sent, 0, "minute " + (T - t0) / 60000);
+  }
+  assert.equal(sent, 3, "ann + bob + the creator, once, at the 15-minute mark");
+  assert.match((await editNotes(U.ann, r.id))[2].body, /Expires \(every ticket refunded if it hasn't drawn\): .+ \(was .+\)/);
+  await flush();
+  // a draw time close by: the notice goes before it (a minute ahead), not after it
+  const c = await RF.create(U.maker.userId, DATE_RAFFLE({ draw_at: T + 12 * 60000, expires_at: T + DAY, min_tickets: 3 }));
+  await RF.buy(U.ann.userId, { id: c.id, qty: 1, idem: "ann-note-0003" });
+  T += 10 * 60000;                                        // the draw in 2 minutes
+  const moved = await EDIT(c.id, { draw_at: T + 3 * HOUR });
+  assert.equal(moved.notify_at, T + 60000, "a minute before the old draw time");
+  T += 60000;
+  assert.equal((await RF.tick()).noticed, 2, "ann + the creator");
+  assert.match((await editNotes(U.ann, c.id))[0].title, /: the draw is now .+ \(changed by PATV\)$/);
   // a House raffle: holders told, no creator notice
   const h = await RF.create(U.boss.userId, PAT_RAFFLE({ house: true, target: 9, prize_amount: 1000 }));
   await RF.buy(U.dan.userId, { id: h.id, qty: 1, idem: "dan-note-0001" });
-  assert.equal((await EDIT(h.id, { target: 12 })).notified, 1);
+  await EDIT(h.id, { target: 12 });
+  assert.equal(await flush(), 1);
   assert.match((await editNotes(U.dan, h.id))[0].title, /it now draws at 12 tickets \(changed by PATV\)$/);
-  for (const id of [r.id, h.id]) await RF.takedown(U.boss.userId, id, "test cleanup");
+  for (const id of [r.id, c.id, h.id]) await RF.takedown(U.boss.userId, id, "test cleanup");
   assert.equal(await supply(), SUPPLY0);
 });
 
@@ -777,6 +838,11 @@ test("1.99afy edit + the clock: the draw moves to the new time and happens once;
   assert.equal(e.drawn, true);
   assert.equal((await raffle(r3.id)).status, "drawn");
   assert.deepEqual((await kinds(r3.id)).filter((k) => k === "edited" || k === "drawn"), ["edited", "drawn"]);
+  // its edit notice was still waiting: dropped - the draw's own notices tell the holders
+  T += 4 * 60000;
+  await RF.tick();
+  assert.equal((await editNotes(U.ann, r3.id)).length + (await creatorNotes(r3.id)).length, 0);
+  assert.equal((await raffle(r3.id)).note_due, null);
   assert.equal(await supply(), SUPPLY0);
 });
 
@@ -843,7 +909,14 @@ test("1.99afy /admin/raffles: an Edit button + a prefilled form per open raffle,
   assert.match(fs, /2 tickets are sold, so:/);
   assert.match(fs, /the target can be anything from 3 tickets up/);
   assert.match(fs, /The prize \(1,000 PAT\) is locked/);
-  assert.match(fs, /data-rf-confirm="Save the changes\? The 1 ticket holder gets a notice of what changed\."/);
+  assert.match(fs, /data-rf-confirm="Save the changes\? The 1 ticket holder gets one notice of what changed, a few minutes after your last change\." data-rf-confirm-if="title draw_at expires_at target min_tickets max_tickets max_per_user"/,
+               "asked only for a change the holders are told about (not a description-only one)");
+  assert.doesNotMatch(fr, /data-rf-confirm/, "nobody to tell: no question");
+  const until = (await RF.adminState()).open.find((x) => x.id === r.id).edit_until;
+  assert.equal(until, (await raffle(r.id)).created + 60 * DAY);
+  assert.match(fr, new RegExp(`name="expires_at" required data-rf-ms="\\d+" data-rf-max-ms="${until}"`));
+  assert.match(fr, new RegExp(`name="draw_at" data-rf-ms="\\d+" data-rf-max-ms="${until - HOUR}"`));
+  assert.match(fr, /A raffle runs at most 60 days in all, so this one can expire .+ at the latest\./);
   assert.doesNotMatch(adm.text, /rf\.adm\.edit\./, "every key has its English");
   // the browser helper: a datetime-local in this runtime's zone that reads back to the same minute
   const L = require(path.join(repo, "public", "js", "raffles.js")).localValue;
@@ -852,6 +925,91 @@ test("1.99afy /admin/raffles: an Edit button + a prefilled form per open raffle,
     assert.equal(new Date(L(ms)).getTime(), Math.floor(ms / 60000) * 60000);
   }
   assert.equal(L(null), "");
+  // ... and back: a datetime-local value -> ms in this zone AT THAT DATE (the create form too - its old single offset put a date
+  // across a daylight-saving change an hour off)
+  const M = require(path.join(repo, "public", "js", "raffles.js")).localMs;
+  for (const ms of [T, Date.UTC(2026, 10, 5, 1, 0), Date.UTC(2026, 6, 4, 20, 15)]) assert.equal(M(L(ms)), Math.floor(ms / 60000) * 60000);
+  assert.equal(M("2026-11-05T20:00"), new Date(2026, 10, 5, 20, 0).getTime());
+  assert.ok(Number.isNaN(M("tomorrow")) && Number.isNaN(M("")));
   for (const id of [r.id, s.id]) await RF.takedown(U.boss.userId, id, "test cleanup");
+  assert.equal(await supply(), SUPPLY0);
+});
+
+test("1.99afy chat: Pepe sends no price - a chat buy is charged only at the price that buyer was shown (announced, !raffle <id>, or a refusal)", async () => {
+  const chatBuy = (id, qty, key) => bot("/api/raffles/bot/act", { verb: "buy", login: "ann_cf", id, qty, key });
+  // announced at 1,000 a ticket, changed to 1,000,000 before the first ticket: the chat buyer only saw the announcement
+  const r = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 50, prize_amount: 2000, price: 1000 }));
+  assert.equal((await raffle(r.id)).price0, 1000, "the announced price is kept");
+  await EDIT(r.id, { price: "1m" });
+  const ann0 = await bal(U.ann);
+  const no = await chatBuy(r.id, 3, "pepe-price-0001");
+  assert.equal(no.status, 409);
+  assert.equal(no.body.code, "E_PRICE_CHANGED");
+  assert.match(no.body.error, new RegExp(`^R${r.id}'s ticket price was changed by PATV: it's 1,000,000 PAT a ticket now \\(it was 1,000\\) - nothing was charged\\.`));
+  assert.match(no.body.error, /Send the same !raffle buy again to buy 3 for 3,000,000 PAT/);
+  assert.deepEqual([await bal(U.ann), (await raffle(r.id)).sold], [ann0, 0], "nothing charged");
+  // that answer showed the new price: the same command again buys at it
+  const yes = await chatBuy(r.id, 3, "pepe-price-0002");
+  assert.equal(yes.body.ok, true, JSON.stringify(yes.body));
+  assert.equal(yes.body.amount, 3000000);
+  assert.equal(await bal(U.ann), ann0 - 3000000);
+  // !raffle <id> shows the price too: a buyer who looked after the change buys straight away; a change after that look is refused
+  const q = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 50, prize_amount: 2000, price: 1000 }));
+  await EDIT(q.id, { price: 1500 });
+  const shown = await bot("/api/raffles/bot/act", { verb: "show", login: "ann_cf", id: "R" + q.id });
+  assert.equal(shown.body.raffle.price, 1500);
+  await EDIT(q.id, { price: 2000 });
+  assert.equal((await chatBuy(q.id, 1, "pepe-price-0003")).body.code, "E_PRICE_CHANGED", "she saw 1,500");
+  assert.equal((await chatBuy(q.id, 1, "pepe-price-0004")).body.amount, 2000);
+  // never changed, or changed back to the announced price: chat buys as before, nothing noted
+  const z = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 50, prize_amount: 2000, price: 1000 }));
+  await bot("/api/raffles/bot/act", { verb: "show", login: "ann_cf", id: z.id });
+  assert.equal((await chatBuy(z.id, 1, "pepe-price-0005")).body.amount, 1000);
+  const w = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 50, prize_amount: 2000, price: 1000 }));
+  await EDIT(w.id, { price: 3000 });
+  await EDIT(w.id, { price: 1000 });
+  assert.equal((await chatBuy(w.id, 2, "pepe-price-0006")).body.amount, 2000);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM raffle_price_seen WHERE raffle_id IN (?, ?)", [z.id, w.id]))[0].n, 0);
+  // the web sends the price the page showed: unchanged
+  const v = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 50, prize_amount: 2000, price: 1000 }));
+  await EDIT(v.id, { price: 1200 });
+  assert.equal((await web(U.ann, `/api/raffles/${v.id}/buy`, { qty: 1, idem: idem(), expect: 1200 })).body.amount, 1200);
+  for (const id of [r.id, q.id, z.id, w.id, v.id]) await RF.takedown(U.boss.userId, id, "test cleanup");
+  assert.equal(await bal(U.ann), ann0, "every ticket refunded");
+  assert.equal(await supply(), SUPPLY0);
+});
+
+test("1.99afy edit: a raffle runs at most 2 x max_days in all - the expiry can't be moved on for ever; a House PAT raffle's price is an owner's", async () => {
+  const r = await RF.create(U.maker.userId, DATE_RAFFLE({ draw_at: T + DAY, expires_at: T + 3 * DAY, min_tickets: 3 }));
+  await RF.buy(U.ann.userId, { id: r.id, qty: 1, idem: "ann-life-0001" });
+  const made = (await raffle(r.id)).created, end = made + 60 * DAY;
+  assert.deepEqual((await EDIT(r.id, { expires_at: T + 30 * DAY })).changed, ["expires_at"]);
+  T += 25 * DAY;                                          // past its draw date, short of the minimum: it keeps selling
+  assert.deepEqual((await EDIT(r.id, { expires_at: T + 30 * DAY })).changed, ["expires_at"], "55 days after it was made");
+  T += 10 * DAY;
+  await assert.rejects(EDIT(r.id, { expires_at: T + 30 * DAY }), (e) => e.code === "E_EXPIRY" && /at most 60 days in all/.test(e.message) && e.message.includes(new Date(end).toISOString().slice(0, 10)));
+  assert.equal(await codeOf(EDIT(r.id, { expires_at: end + 60000 })), "E_EXPIRY");
+  assert.deepEqual((await EDIT(r.id, { expires_at: end })).changed, ["expires_at"], "up to 60 days after it was made");
+  assert.equal(await codeOf(EDIT(r.id, { draw_at: end - 30 * 60000 })), "E_DRAW_AT", "a draw needs its hour before the end");
+  assert.deepEqual((await EDIT(r.id, { draw_at: end - HOUR })).changed, ["draw_at"]);
+  assert.deepEqual((await EDIT(r.id, { expires_at: T + 2 * DAY, draw_at: T + DAY })).changed.sort(), ["draw_at", "expires_at"], "shorter is fine");
+  assert.equal((await RF.adminState()).open.find((x) => x.id === r.id).edit_until, end);
+  // a lower max_days later: the ceiling is its expiry then - shorter only
+  await RF.setConfig({ max_days: 10 });
+  assert.equal(await codeOf(EDIT(r.id, { expires_at: T + 2 * DAY + HOUR })), "E_EXPIRY");
+  assert.deepEqual((await EDIT(r.id, { expires_at: T + 2 * DAY - HOUR })).changed, ["expires_at"]);
+  await RF.setConfig({ max_days: 30 });
+  await RF.takedown(U.boss.userId, r.id, "test cleanup");
+  // a House raffle with a PAT prize is a Pepe owner's to make - its price too; the rest an Admin's; a custom-prize one all an Admin's
+  const h = await RF.create(U.boss.userId, PAT_RAFFLE({ house: true, target: 9, prize_amount: 1000 }));
+  await assert.rejects(RF.edit(U.boss2.userId, h.id, { price: 2000 }), refused("owner_only"));
+  assert.equal((await raffle(h.id)).price, 1000);
+  assert.deepEqual((await RF.edit(U.boss2.userId, h.id, { title: "House raffle, renamed", target: 12 })).changed.sort(), ["max_tickets", "target", "title"]);
+  assert.deepEqual((await EDIT(h.id, { price: 2000 })).changed, ["price"], "the owner");
+  const hc = await RF.create(U.boss2.userId, PAT_RAFFLE({ house: true, target: 2, prize_kind: "custom", prize_text: "A shout-out on stream" }));
+  assert.deepEqual((await RF.edit(U.boss2.userId, hc.id, { price: 2000 })).changed, ["price"]);
+  for (const id of [h.id, hc.id]) await RF.takedown(U.boss.userId, id, "test cleanup");
+  T += 4 * 60000;
+  await RF.tick();
   assert.equal(await supply(), SUPPLY0);
 });

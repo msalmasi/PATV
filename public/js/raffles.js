@@ -1,6 +1,7 @@
 /* raffles.js - 1.99xk: 🎫 PAT Raffles pages (/raffles, /raffles/<id>; raffles.js on the server).
    - forms [data-rf-form] post JSON to their data-rf-url (X-Requested-With: fetch, same site): checkboxes as true / false,
-     "config.x" names nested, datetime-local values sent with the viewer's time-zone offset (tz, minutes); the answer shows in
+     "config.x" names nested, datetime-local values sent as ms (localMs: this browser's zone AT THAT DATE - 1.99afy; the
+     old single tz offset put a date across a daylight-saving change an hour off; tz still goes along); the answer shows in
      #rf-msg, then data-rf-done = "reload" | "go" (the new raffle's page)
    - the create form shows the fields of the picked prize / trigger only
    - countdowns [data-rf-at] tick once a second; the buy form's total follows the quantity
@@ -8,8 +9,9 @@
      the HMAC-SHA256 word stream - casino/fair.js rules)
    - 1.99afy /admin/raffles: [data-rf-edit] opens a raffle's edit dialog (its own [data-rf-msg]); a form with data-rf-dirty sends
      only the fields that differ from what was on the page, its datetime-local fields (prefilled from data-rf-ms in this
-     browser's zone) as ms - converted here, so a date across a daylight-saving change keeps its own offset
-   Pure helpers (left, ticketLine, localValue) are exported for node tests. */
+     browser's zone; data-rf-max-ms = their max) as ms; data-rf-confirm-if = the fields that make data-rf-confirm ask (the
+     changes ticket holders are told about - a description-only change saves without the question)
+   Pure helpers (left, ticketLine, localValue, localMs) are exported for node tests. */
 (function () {
   'use strict';
   function leftParts(ms) {
@@ -29,7 +31,14 @@
     var p = function (x) { return (x < 10 ? '0' : '') + x; };
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
   }
-  var api = { left: leftParts, ticketLine: ticketLine, localValue: localValue };
+  /** A datetime-local value -> ms in this runtime's own time zone at that date; NaN when it isn't one. */
+  function localMs(v) {
+    var s = String(v == null ? '' : v);
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) return NaN;
+    var p = s.split(/[-T:]/).map(Number);
+    return new Date(p[0], p[1] - 1, p[2], p[3], p[4], p[5] || 0).getTime();
+  }
+  var api = { left: leftParts, ticketLine: ticketLine, localValue: localValue, localMs: localMs };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   if (typeof document === 'undefined') return;
 
@@ -65,9 +74,9 @@
       if (el.type === 'checkbox') v = !!el.checked;
       else if (el.type === 'radio') { if (!el.checked) return; v = el.value; }
       else if (el.type === 'submit' || el.type === 'button') return;
-      else if (dirtyOnly && el.type === 'datetime-local') {
+      else if (el.type === 'datetime-local') {
         // this browser's own zone at THAT date (not today's offset): ms, which the server takes as is
-        var ms = el.value ? new Date(el.value).getTime() : NaN;
+        var ms = el.value ? localMs(el.value) : NaN;
         v = el.value ? (isNaN(ms) ? el.value : ms) : '';
       }
       else v = el.value;
@@ -84,6 +93,11 @@
     var data = body(form);
     if (form.hasAttribute('data-rf-dirty') && !Object.keys(data).length) { say(_t('js.rf.nochange', 'Nothing changed.'), true, form); return; }
     var ask = form.getAttribute('data-rf-confirm');
+    var askIf = form.getAttribute('data-rf-confirm-if');
+    if (ask && askIf) {
+      var ks = askIf.split(/\s+/);
+      if (!Object.keys(data).some(function (k) { return ks.indexOf(k) >= 0; })) ask = null;
+    }
     if (ask && !confirm(ask)) return;
     var btn = form.querySelector('button[type=submit]');
     if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
@@ -181,6 +195,8 @@
       var v = localValue(el.getAttribute('data-rf-ms'));
       el.defaultValue = v;
       el.value = v;
+      var mx = localValue(el.getAttribute('data-rf-max-ms'));
+      if (mx) el.max = mx;
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-rf-tzname]'), function (el) {
       el.textContent = zone ? _t('js.rf.tz', "(times in this browser's time zone: {zone})", { zone: zone }) : '';

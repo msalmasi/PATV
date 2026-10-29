@@ -5,7 +5,8 @@
   The switch + settings (POST /api/admin/raffles), an official House raffle (the create form with the house flag,
   partials/rf-create), the review queue (disputed / waiting on delivery: release or refund) and every open raffle (take down
   with full refunds; 1.99afy: Edit opens a dialog form - POST /api/admin/raffles/<id>/edit, only the changed fields,
-  times converted in the browser's own zone; the locked fields are shown disabled with the reason).
+  times converted in the browser's own zone; the locked fields are shown disabled with the reason; the confirm only when a
+  change reaches the ticket holders - data-rf-confirm-if; never past edit_until, 2 x max_days after it was made).
   Forms post JSON through public/js/raffles.js (data-rf-form, X-Requested-With: fetch). Admins only.
   Data: on, escrowLive, cfg, defaults, limits, A = raffles.adminState() {review, open, recent}, shares (raffle_fee routing),
   items, pick, idem.
@@ -119,7 +120,7 @@
   <%# 1.99afy: one edit dialog per open raffle (outside the table: a wide table scrolls sideways, the form must not) %>
   <% A.open.forEach((r) => { const locked = r.sold > 0; const dateT = r.trigger === 'date'; %>
       <dialog class="rf-edit-dlg" id="rf-edit-<%= r.id %>" aria-labelledby="rf-edit-h-<%= r.id %>">
-          <form class="bx-form rf-edit" data-rf-form="edit" data-rf-url="/api/admin/raffles/<%= r.id %>/edit" data-rf-done="reload" data-rf-dirty autocomplete="off"<% if (locked) { %> data-rf-confirm="<%- t('rf.adm.edit.confirm', { count: r.buyers, n: fmt(r.buyers) }) %>"<% } %>>
+          <form class="bx-form rf-edit" data-rf-form="edit" data-rf-url="/api/admin/raffles/<%= r.id %>/edit" data-rf-done="reload" data-rf-dirty autocomplete="off"<% if (locked) { %> data-rf-confirm="<%- t('rf.adm.edit.confirm', { count: r.buyers, n: fmt(r.buyers) }) %>" data-rf-confirm-if="title draw_at expires_at target min_tickets max_tickets max_per_user"<% } %>>
             <h3 id="rf-edit-h-<%= r.id %>">✏️ <%- t('rf.adm.edit.h', { ref: 'R' + r.id }) %> · <%= r.title %></h3>
             <p class="bx-fine"><%- t('rf.adm.edit.help') %></p>
             <label class="bx-field"><%- t('rf.f_title') %><input class="bx-in" type="text" name="title" maxlength="90" required value="<%= r.title %>"></label>
@@ -133,10 +134,11 @@
               </div>
               <% if (locked) { %><p class="bx-fine">🔒 <%- t('rf.adm.edit.lock_trigger') %></p><% } %>
               <label class="bx-field" data-rf-show-trig="target"<%= dateT ? ' hidden' : '' %>><%- t('rf.f_target') %><input class="bx-in" type="number" name="target" min="<%= Math.max(1, r.sold + 1) %>" value="<%= dateT ? '' : r.target %>"></label>
-              <label class="bx-field" data-rf-show-trig="date"<%= dateT ? '' : ' hidden' %>><%- t('rf.f_draw_at') %><input class="bx-in" type="datetime-local" name="draw_at" data-rf-ms="<%= r.draw_at || '' %>"></label>
+              <label class="bx-field" data-rf-show-trig="date"<%= dateT ? '' : ' hidden' %>><%- t('rf.f_draw_at') %><input class="bx-in" type="datetime-local" name="draw_at" data-rf-ms="<%= r.draw_at || '' %>" data-rf-max-ms="<%= r.edit_until - cfg.grace_hours * 3600000 %>"></label>
               <label class="bx-field" data-rf-show-trig="date"<%= dateT ? '' : ' hidden' %>><%- t('rf.f_cap') %><input class="bx-in" type="number" name="max_tickets" min="0" value="<%= dateT && r.max_tickets ? r.max_tickets : '' %>" placeholder="<%- t('rf.f_nolimit') %>"></label>
-              <label class="bx-field"><%- t('rf.adm.edit.expires') %><input class="bx-in" type="datetime-local" name="expires_at" required data-rf-ms="<%= r.expires_at %>"></label>
+              <label class="bx-field"><%- t('rf.adm.edit.expires') %><input class="bx-in" type="datetime-local" name="expires_at" required data-rf-ms="<%= r.expires_at %>" data-rf-max-ms="<%= r.edit_until %>"></label>
               <p class="bx-fine"><%- t('rf.adm.edit.when_note', { lead: cfg.min_lead_min, days: cfg.max_days, grace: cfg.grace_hours }) %> <span data-rf-tzname></span></p>
+              <p class="bx-fine">⏳ <%- t('rf.adm.edit.until', { at: when(r.edit_until), days: 2 * cfg.max_days }) %></p>
             </fieldset>
             <div class="bx-row2">
               <label class="bx-field"><%- t('rf.f_price') %><input class="bx-in" type="text" inputmode="decimal" name="price" value="<%= r.price %>"<%= locked ? ' disabled' : '' %>></label>

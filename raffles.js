@@ -42,12 +42,16 @@
 //
 // ADMIN EDIT (1.99afy, edit()): an admin changes an OPEN raffle - the draw date, the expiry, the target, the words any time;
 //   price / trigger only before the first ticket; after it the minimum only down, the cap and max per person only up; the
-//   prize never. Audited, an "edited" event, a notice to every ticket holder (see the comment above planEdit).
+//   prize never; never past 2 x max_days after it was made. Audited, an "edited" event, ONE notice per ticket holder a few
+//   minutes after the last change (see the comment above planEdit). A chat buy (Pepe sends no price) is checked against the
+//   price the buyer was last shown - the announced one (price0) or a newer one (raffle_price_seen) - see botAct.
 //
 // Tables (records follow the ACCOUNT - accountMerge.js rules):
 //   raffles        one row per raffle (see init)
 //   raffle_tickets one row per purchase: ticket numbers first_no..last_no, hold_id, key (UNIQUE idempotency), state
-//   raffle_events  what Pepe announces (created / milestone / drawn / expired / removed / released / refunded)
+//   raffle_events  what Pepe announces (created / milestone / drawn / expired / removed / released / refunded; edited = not
+//                  announced, it wakes the pages / the poll)
+//   raffle_price_seen (1.99afy) the changed ticket price a chat buyer was shown (by !raffle <id> or a refused buy)
 //   raffles_meta   enabled (the feature switch: default ON on staging, OFF on prod) / config (admin settings)
 "use strict";
 const crypto = require("crypto");
@@ -137,7 +141,20 @@ function init() {
         fee INTEGER NOT NULL DEFAULT 0, creator_payout INTEGER NOT NULL DEFAULT 0, fee_legs TEXT, order_id INTEGER, release_at INTEGER,
         dispute_by TEXT, dispute_note TEXT, dispute_at INTEGER,
         closed_by TEXT, close_reason TEXT, created INTEGER NOT NULL, updated INTEGER NOT NULL, drawn_at INTEGER, closed_at INTEGER,
+        price0 INTEGER, note_due INTEGER, note_from TEXT,
         CHECK (price > 0))`);
+      // 1.99afy: price0 = the price the raffle was announced at (Pepe's "created" line; a chat buy is checked against it, or
+      // against the price it was last shown - raffle_price_seen); note_due / note_from = the edit notices waiting to go out
+      const cols = (await getQuery("SELECT name FROM pragma_table_info('raffles')")).map((x) => x.name);
+      if (!cols.includes("price0")) {
+        await runQuery("ALTER TABLE raffles ADD COLUMN price0 INTEGER");
+        await runQuery("UPDATE raffles SET price0 = price WHERE price0 IS NULL");     // no price had been edited before 1.99afy
+      }
+      if (!cols.includes("note_due")) await runQuery("ALTER TABLE raffles ADD COLUMN note_due INTEGER");
+      if (!cols.includes("note_from")) await runQuery("ALTER TABLE raffles ADD COLUMN note_from TEXT");
+      await runQuery("CREATE INDEX IF NOT EXISTS raffles_note ON raffles (note_due)");
+      await runQuery(`CREATE TABLE IF NOT EXISTS raffle_price_seen (
+        raffle_id INTEGER NOT NULL, user_id TEXT NOT NULL, price INTEGER NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (raffle_id, user_id))`);
       await runQuery("CREATE INDEX IF NOT EXISTS raffles_status ON raffles (status, house)");
       await runQuery("CREATE INDEX IF NOT EXISTS raffles_creator ON raffles (creator_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS raffles_pad ON raffles (pad, status)");
@@ -605,10 +622,10 @@ async function create(userId, input = {}) {
   const res = await tx(async () => {
     const t = now();
     const ins = await runQuery(`INSERT INTO raffles (key, creator_id, house, pad, title, description, image_url, prize_kind, prize_amount, prize_item, prize_name,
-        prize_cost, prize_text, price, max_per_user, min_tickets, max_tickets, trigger_kind, draw_at, target, expires_at, fee_pct, status, server_seed, commitment,
-        created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
+        prize_cost, prize_text, price, price0, max_per_user, min_tickets, max_tickets, trigger_kind, draw_at, target, expires_at, fee_pct, status, server_seed, commitment,
+        created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
       [key, user.userId, v.house ? 1 : 0, pad, v.title, v.description || null, v.image_url, v.prize_kind, v.prize_amount, v.prize_item, v.prize_name,
-       v.prize_cost, v.prize_text, v.price, v.max_per_user, v.min_tickets, v.max_tickets, v.trigger_kind, v.draw_at, v.target, v.expires_at,
+       v.prize_cost, v.prize_text, v.price, v.price, v.max_per_user, v.min_tickets, v.max_tickets, v.trigger_kind, v.draw_at, v.target, v.expires_at,
        v.house ? 0 : C.fee_pct, seed, commitmentOf(seed), t, t]);
     const id = ins.id;
     if (v.prize_kind === "item") {
@@ -662,10 +679,10 @@ async function buy(userId, { id, qty, idem, expect, via = "web" } = {}) {
   const n = int(qty === undefined || qty === "" ? 1 : qty);
   const C = CONFIG;
   if (!(n >= 1 && n <= C.buy_max)) throw new Refuse(400, `Buy 1-${fmt(C.buy_max)} tickets at a time.`, "E_QTY");
+  if (!canSeePad({ userId: user.userId, username: user.username }, r0.pad)) throw new Refuse(404, "No such raffle.", "E_NOT_FOUND");
   if (expect !== undefined && expect !== null && expect !== "" && int(expect) !== r0.price) {
     throw new Refuse(409, `A ticket costs ${fmt(r0.price)} PAT - check it and try again.`, "E_PRICE_CHANGED");
   }
-  if (!canSeePad({ userId: user.userId, username: user.username }, r0.pad)) throw new Refuse(404, "No such raffle.", "E_NOT_FOUND");
   if (await linked(r0.creator_id, user.userId)) throw new Refuse(403, r0.creator_id === user.userId ? "You can't buy tickets in your own raffle." : "That raffle was made by an account linked to yours - you can't buy tickets in it.", "E_SELF");
   await needEscrow();
   const out = await tx(async () => {
@@ -1024,22 +1041,36 @@ async function takedown(adminId, id, reason) {
 // ── 1.99afy: an admin changes an open raffle (the owner 2026-10-29: "allow admins to change the raffle draw date etc.") ──
 // Only an OPEN raffle that isn't due this moment (drawing / closing). ONE transaction that re-reads the row (a buy or the draw
 // tick before it is seen, never overwritten): the changed fields, the milestones re-based on a new goal, one admin_audit row
-// (raffle_edit: before -> after of each changed field) and one "edited" event (wakes the long-pollers; Pepe ignores the kind).
-// After the commit: ONE notice per ticket holder when something a buyer sees changed (draw date, expiry, target, minimum, cap,
-// max per person, title), one to a community raffle's creator, and the draw at once if the edit made it due (a minimum lowered
-// to what's sold after the draw date). A no-op saves, records and tells nothing. The fairness is untouched: the seed was
+// (raffle_edit: before -> after of each changed field), one "edited" event (wakes the long-pollers; Pepe ignores the kind) and
+// the notices booked (note_due / note_from). After the commit: the draw at once if the edit made it due (a minimum lowered to
+// what's sold after the draw date). A no-op saves, records and tells nothing. The fairness is untouched: the seed was
 // committed at creation and the tickets digest is taken at the draw, whenever that is.
 //   any time            title, description, draw_at, expires_at, target (more than the tickets sold)
 //   timing (from NOW)   draw_at min_lead_min .. max_days away; expires_at at most max_days away and at least grace_hours after
 //                       the draw (or after now + min_lead_min, the later) on a date raffle, an hour away on a target raffle
-//   before a ticket     price, the trigger (date <-> target), minimum / cap / max per person within the creation limits
+//   lifetime            never later than 2 x max_days after the raffle was made (or its expiry, if that's later already): an
+//                       admin can't keep buyers' tickets held for ever by moving the expiry again and again
+//   before a ticket     price, the trigger (date <-> target), minimum / cap / max per person within the creation limits; a
+//                       House raffle's price with a PAT prize: a Pepe owner's, as its creation is
 //   once one is sold    price + trigger LOCKED; the minimum only down; the cap only up (empty = none); max per person only up
 //                       and never below the most one buyer holds
 //   never               the prize (its escrow / the reserved item were taken when the raffle was made)
+// THE NOTICES (flushEditNotices, on the clock): edits close together make ONE notice - sent NOTE_QUIET after the last change
+// (at most NOTE_MAX after the first, and before an old or new draw time that comes sooner), listing the change from what the
+// holders were last told to what it is then. One per ticket holder when something a buyer sees changed (draw date, expiry,
+// target, minimum, cap, max per person, title), one to a community raffle's creator for any change. Nothing when it all
+// changed back, or when the raffle drew / closed in the meantime (those notices say it). Off the request, so a raffle with
+// thousands of holders doesn't hold up the admin's save.
 const EDIT_COLS = ["title", "description", "price", "trigger_kind", "draw_at", "target", "min_tickets", "max_tickets", "max_per_user", "expires_at"];
 const BUYER_COLS = ["title", "draw_at", "expires_at", "target", "min_tickets", "max_tickets", "max_per_user"];
+const NOTE_QUIET = 3 * MIN, NOTE_MAX = 15 * MIN;
 /** Two times in the same minute (a datetime-local field has no seconds) - or both unset. */
 const sameMinute = (a, b) => (a == null || b == null ? a == null && b == null : Math.floor(a / MIN) === Math.floor(b / MIN));
+/** The latest an edit can move a raffle's expiry to: 2 x max_days after it was made (or its expiry, when that's later). */
+const editCeiling = (r) => Math.max(Number(r.created) + 2 * CONFIG.max_days * DAY, Number(r.expires_at) || 0);
+const utc = (ms) => new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+/** The fields an edit compares (the description as text). */
+const editSnap = (r) => Object.fromEntries(EDIT_COLS.map((k) => [k, k === "description" ? (r.description || "") : r[k]]));
 /** An open raffle the tick / a buy would draw or close right now: an edit never runs then (it can't skip or delay a due draw). */
 function dueNow(r, t) {
   if (t >= r.expires_at) return true;
@@ -1173,6 +1204,10 @@ function planEdit(r, b, t, most) {
         if (at < t + C.min_lead_min * MIN || at > t + C.max_days * DAY) {
           throw new Refuse(400, `The draw date must be at least ${C.min_lead_min} minutes and at most ${C.max_days} days from now.`, "E_DRAW_AT");
         }
+        const last = editCeiling(r) - C.grace_hours * HOUR;
+        if (at > last) {
+          throw new Refuse(400, `A raffle runs at most ${2 * C.max_days} days in all, and it expires at least ${C.grace_hours} hour(s) after its draw - the draw date can be ${utc(last)} at the latest.`, "E_DRAW_AT");
+        }
         nx.draw_at = at;
         drawChanged = true;
       }
@@ -1199,6 +1234,9 @@ function planEdit(r, b, t, most) {
     if (expChanged && nx.expires_at > t + C.max_days * DAY) {
       throw new Refuse(400, isDate ? `The expiry must be at least ${C.grace_hours} hour(s) after the draw date and at most ${C.max_days} days from now.` : `The expiry must be 1 hour to ${C.max_days} days from now.`, "E_EXPIRY");
     }
+    if (expChanged && nx.expires_at > editCeiling(r)) {
+      throw new Refuse(400, `A raffle runs at most ${2 * C.max_days} days in all (its tickets stay held until it draws or expires) - this one can expire ${utc(editCeiling(r))} at the latest.`, "E_EXPIRY");
+    }
   }
   // the milestones follow a new goal: the ones already passed are marked (not announced again), the rest can still come
   nx.milestones = r.milestones;
@@ -1216,7 +1254,7 @@ function planEdit(r, b, t, most) {
 /**
  * Admin: change an open raffle. input = any of {title, description, price, trigger, draw_at, expires_at, target, min_tickets,
  * max_tickets, max_per_user, tz} (times as ms / unix seconds / ISO / datetime-local + tz, like create). -> {ok, id, changed: [cols],
- * noop?, notified, drawn?}
+ * noop?, holders (ticket holders now), notify_at (when their notice goes - flushEditNotices), drawn?}
  */
 async function edit(adminId, id, input = {}) {
   await init();
@@ -1227,6 +1265,9 @@ async function edit(adminId, id, input = {}) {
   const b = input && typeof input === "object" ? input : {};
   const AA = require("./adminaudit");
   await AA.init();                 // before the transaction: a memoized init awaited inside one would wait at the write gate
+  // a House raffle with a PAT prize is a Pepe owner's to make (validate) - its price too (read before the transaction)
+  const SR = require("./staffroles");
+  const houseOwner = r0.house && r0.prize_kind === "pat" ? !!(await SR.ownerOf(a, "raffles.house").catch(() => null)) : true;
   const res = await tx(async () => {
     const r = (await getQuery("SELECT * FROM raffles WHERE id = ?", [r0.id]))[0];
     if (!r || r.status !== "open") throw new Refuse(409, `That raffle is ${r ? r.status : "gone"} - only an open raffle can be changed.`, "E_STATE");
@@ -1237,28 +1278,66 @@ async function edit(adminId, id, input = {}) {
     const { nx, changes } = planEdit(r, b, t, most);
     const keys = Object.keys(changes);
     if (!keys.length) return { changed: [] };
-    const u = await runQuery(`UPDATE raffles SET title = ?, description = ?, price = ?, trigger_kind = ?, draw_at = ?, target = ?, min_tickets = ?, max_tickets = ?,
-                              max_per_user = ?, expires_at = ?, milestones = ?, updated = ? WHERE id = ? AND status = 'open' AND sold = ?`,
-                             [nx.title, nx.description || null, nx.price, nx.trigger_kind, nx.draw_at, nx.target, nx.min_tickets, nx.max_tickets,
-                              nx.max_per_user, nx.expires_at, nx.milestones, t, r.id, r.sold]);
+    if (changes.price && !houseOwner) throw new Refuse(403, "The ticket price of a House raffle with a PAT prize: " + SR.OWNER_ONLY, "owner_only");
+    // the notices: what the holders were last told stays the "before" until they're told again; one notice for edits close together
+    let from = null;
+    try { from = r.note_from ? JSON.parse(r.note_from) : null; } catch (e) { from = null; }
+    if (!from || !from.before || !from.since) from = { since: t, before: editSnap(r) };
+    let due = Math.min(from.since + NOTE_MAX, t + NOTE_QUIET);
+    for (const at of [from.before.draw_at, r.draw_at, nx.draw_at]) if (at && at > t) due = Math.min(due, Math.max(t, at - MIN));
+    const u = await runQuery(`UPDATE raffles SET title = ?, description = ?, price = ?, price0 = COALESCE(price0, ?), trigger_kind = ?, draw_at = ?, target = ?,
+                              min_tickets = ?, max_tickets = ?, max_per_user = ?, expires_at = ?, milestones = ?, note_due = ?, note_from = ?, updated = ?
+                              WHERE id = ? AND status = 'open' AND sold = ?`,
+                             [nx.title, nx.description || null, nx.price, r.price, nx.trigger_kind, nx.draw_at, nx.target, nx.min_tickets, nx.max_tickets,
+                              nx.max_per_user, nx.expires_at, nx.milestones, due, JSON.stringify(from), t, r.id, r.sold]);
     if (!u.changes) throw new Refuse(409, "That raffle changed while you were editing it - nothing was saved. Try again.", "E_RACE");
     await AA.record(a, "raffle_edit", null, { raffle: r.id, changes: Object.fromEntries(keys.map((k) => [k, { before: changes[k][0], after: changes[k][1] }])) });
     const r2 = (await getQuery("SELECT * FROM raffles WHERE id = ?", [r.id]))[0];
     const creator = r.house ? null : await userRow(r.creator_id);
-    const evId = await event("edited", r.id, Object.assign(brief(r2, creator && creator.username), { changed: keys, by: "PATV" }));
-    const holders = (await getQuery("SELECT DISTINCT user_id FROM raffle_tickets WHERE raffle_id = ? AND state = 'held' ORDER BY user_id", [r.id])).map((x) => x.user_id);
-    return { changed: keys, changes, r: r2, holders, evId };
+    await event("edited", r.id, Object.assign(brief(r2, creator && creator.username), { changed: keys, by: "PATV" }));
+    const holders = Number((await getQuery("SELECT COUNT(DISTINCT user_id) AS n FROM raffle_tickets WHERE raffle_id = ? AND state = 'held'", [r.id]))[0].n) || 0;
+    return { changed: keys, r: r2, holders, due };
   });
   if (!res.changed.length) return { ok: true, id: r0.id, changed: [], noop: true };
   wake();
-  const notified = await editNotices(res).catch((e) => { console.error("[raffles] edit notices:", e.message); return 0; });
   // the edit may have made it due (a minimum lowered to what's sold after the draw date): draw it now, as a buy would
   let drew = null;
   try { drew = await maybeDraw(res.r.id); } catch (e) { console.error("[raffles] draw after edit:", e.message); }
-  return Object.assign({ ok: true, id: res.r.id, changed: res.changed, notified }, drew && drew.drawn ? { drawn: true } : {});
+  return Object.assign({ ok: true, id: res.r.id, changed: res.changed, holders: res.holders, notify_at: res.due }, drew && drew.drawn ? { drawn: true } : {});
 }
-/** After an edit's commit: one notice per ticket holder (a buyer-visible change), one to a community raffle's creator. -> notices filed */
-async function editNotices({ r, changes, holders, evId }) {
+/**
+ * The clock: the edit notices that are due (note_due). Each raffle's booking is taken in a transaction (an edit after it books
+ * a new one, from what this one tells), then: the change from what the holders were last told (note_from.before) to the row
+ * now - one notice per ticket holder (a buyer-visible change), one to a community raffle's creator. -> notices filed
+ */
+async function flushEditNotices({ limit = 20 } = {}) {
+  await init();
+  const due = await getQuery("SELECT id FROM raffles WHERE note_due IS NOT NULL AND note_due <= ? ORDER BY note_due LIMIT ?", [now(), limit]);
+  let n = 0;
+  for (const { id } of due) {
+    try {
+      const got = await tx(async () => {
+        const r = (await getQuery("SELECT * FROM raffles WHERE id = ?", [id]))[0];
+        if (!r || r.note_due == null || r.note_due > now()) return null;
+        await runQuery("UPDATE raffles SET note_due = NULL, note_from = NULL WHERE id = ?", [id]);
+        const holders = (await getQuery("SELECT DISTINCT user_id FROM raffle_tickets WHERE raffle_id = ? AND state = 'held' ORDER BY user_id", [id])).map((x) => x.user_id);
+        return { r, holders };
+      });
+      if (!got || got.r.status !== "open") continue;           // drawn / closed since: those notices tell the holders
+      let from = null;
+      try { from = JSON.parse(got.r.note_from || "null"); } catch (e) { from = null; }
+      if (!from || !from.before) continue;
+      const nowSnap = editSnap(got.r);
+      const changes = {};
+      for (const k of EDIT_COLS) if (k in from.before && from.before[k] !== nowSnap[k]) changes[k] = [from.before[k], nowSnap[k]];
+      if (!Object.keys(changes).length) continue;              // changed back: nothing to tell
+      n += await editNotices({ r: got.r, changes, holders: got.holders, tag: got.r.note_due });
+    } catch (e) { console.error(`[raffles] edit notices R${id}:`, e.message); }
+  }
+  return n;
+}
+/** One edit notice per ticket holder (a buyer-visible change), one to a community raffle's creator. -> notices filed */
+async function editNotices({ r, changes, holders, tag }) {
   const inbox = require("./inbox");
   let TZ = null;
   try { TZ = require("./tz"); await TZ.ensure(); } catch (e) { TZ = null; }
@@ -1292,12 +1371,12 @@ async function editNotices({ r, changes, holders, evId }) {
         : changes.target ? `🎫 ${r.title}: it now draws at ${tickets(r.target)} (changed by PATV)`
         : `🎫 ${r.title}: the raffle was changed by PATV`;
       const body = [`Raffle R${r.id}:`, ...lines(BUYER_COLS, uid), "Your tickets and their numbers stay as they are."].join("\n");
-      if (await inbox.addSafe(uid, { kind: "raffle", title, body, link: `/raffles/${r.id}`, ref: `raffle-edit:${r.id}:${evId}` })) n++;
+      if (await inbox.addSafe(uid, { kind: "raffle", title, body, link: `/raffles/${r.id}`, ref: `raffle-edit:${r.id}:${tag}` })) n++;
     }
   }
   if (!r.house && r.creator_id) {
     const body = [...lines(EDIT_COLS, r.creator_id), holders.length && BUYER_COLS.some((k) => changes[k]) ? `Everyone holding tickets (${fmt(holders.length)}) was told.` : null].filter(Boolean).join("\n");
-    if (await inbox.addSafe(r.creator_id, { kind: "raffle", title: `🎫 Your raffle R${r.id} was changed by PATV: ${r.title}`, body, link: `/raffles/${r.id}`, ref: `raffle-edit-creator:${r.id}:${evId}` })) n++;
+    if (await inbox.addSafe(r.creator_id, { kind: "raffle", title: `🎫 Your raffle R${r.id} was changed by PATV: ${r.title}`, body, link: `/raffles/${r.id}`, ref: `raffle-edit-creator:${r.id}:${tag}` })) n++;
   }
   return n;
 }
@@ -1324,6 +1403,7 @@ async function adminState({ recent = 30 } = {}) {
   const view = (r) => Object.assign(shape(r, { creatorName: nm.get(r.creator_id) }), {
     dispute_note: r.dispute_note || null, dispute_by: r.dispute_by ? (nm.get(r.dispute_by) || r.dispute_by) : null, dispute_at: r.dispute_at || null,
     closed_by: r.closed_by ? (nm.get(r.closed_by) || r.closed_by) : null, most_held: most.get(r.id) || 0,
+    edit_until: r.status === "open" ? editCeiling(r) : null,      // the latest an edit can move its expiry to
   });
   return { review: review.map(view), open: open.map(view), recent: past.map(view) };
 }
@@ -1345,7 +1425,7 @@ function tick() {
   ticking = (async () => {
     await init();
     const t = now();
-    const out = { drawn: 0, expired: 0, released: 0 };
+    const out = { drawn: 0, expired: 0, released: 0, noticed: 0 };
     const due = await getQuery(`SELECT id FROM raffles WHERE status = 'open' AND (expires_at <= ? OR (trigger_kind = 'date' AND draw_at <= ? AND sold >= min_tickets)
                                 OR (trigger_kind = 'target' AND sold >= target)) ORDER BY id LIMIT 50`, [t, t]);
     for (const { id } of due) {
@@ -1370,6 +1450,8 @@ function tick() {
         }
       } catch (e) { console.error(`[raffles] release R${id}:`, e.message); }
     }
+    // 1.99afy: an admin's edits - one notice per holder once the changes settle (after the draws: a raffle drawn meanwhile says so itself)
+    try { out.noticed = await flushEditNotices(); } catch (e) { console.error("[raffles] edit notices:", e.message); }
     if (out.drawn || out.expired || out.released) wake();
     return out;
   })().finally(() => { ticking = null; });
@@ -1399,7 +1481,10 @@ async function eventsAfter(after, waitMs = 0) {
     });
     ev = await read();
   }
-  if (Math.random() < 0.02) runQuery("DELETE FROM raffle_events WHERE ts < ?", [now() - 14 * DAY]).catch(() => {});
+  if (Math.random() < 0.02) {
+    runQuery("DELETE FROM raffle_events WHERE ts < ?", [now() - 14 * DAY]).catch(() => {});
+    runQuery("DELETE FROM raffle_price_seen WHERE raffle_id IN (SELECT id FROM raffles WHERE status != 'open')").catch(() => {});
+  }
   return { cursor: ev.length ? ev[ev.length - 1].id : a, events: ev };
 }
 /** A short chat view of one raffle. */
@@ -1407,6 +1492,23 @@ function chatView(v) {
   return { id: v.id, title: v.title, house: v.house, prize: v.prize.name, prize_kind: v.prize.kind, price: v.price, sold: v.sold, target: v.target,
            min_tickets: v.min_tickets, max_tickets: v.max_tickets, max_per_user: v.max_per_user, trigger: v.trigger, draw_at: v.draw_at, expires_at: v.expires_at,
            next_at: v.next_at, status: v.status, winner: v.winner, winning_no: v.winning_no, mine: v.mine || 0, url: v.url, creator: v.creator, pad: v.padv ? v.padv.title : null };
+}
+/** 1.99afy: the ticket price a chat buyer was last shown - a newer one they saw (raffle_price_seen), else the announced one. */
+async function chatPrice(r, userId) {
+  const s = (await getQuery("SELECT price FROM raffle_price_seen WHERE raffle_id = ? AND user_id = ?", [r.id, userId]))[0];
+  if (s) return Number(s.price);
+  return r.price0 != null ? Number(r.price0) : undefined;
+}
+/** Note the price a chat buyer was just shown (needed once it isn't the announced one, or a note is there already). */
+async function chatSaw(raffleId, userId, price, force = false) {
+  if (!force) {
+    const r = (await getQuery("SELECT price0 FROM raffles WHERE id = ?", [raffleId]))[0];
+    const has = (await getQuery("SELECT 1 AS x FROM raffle_price_seen WHERE raffle_id = ? AND user_id = ?", [raffleId, userId]))[0];
+    if (!has && (!r || r.price0 == null || Number(r.price0) === Number(price))) return false;
+  }
+  await runQuery(`INSERT INTO raffle_price_seen (raffle_id, user_id, price, ts) VALUES (?, ?, ?, ?)
+                  ON CONFLICT(raffle_id, user_id) DO UPDATE SET price = excluded.price, ts = excluded.ts`, [raffleId, userId, Number(price), now()]);
+  return true;
 }
 /** Pepe's chat verbs. b = {verb, login, id, qty, key, room} -> {ok, ...} | throws Refuse */
 async function botAct(b) {
@@ -1423,13 +1525,29 @@ async function botAct(b) {
   if (verb === "show") {
     const v = await detail(b.id, viewer);
     if (!v) return { ok: false, code: "E_NOT_FOUND", error: "No such raffle." };
+    // 1.99afy: the chat line shows the price - a price an admin changed is now one this buyer has seen
+    if (u && v.status === "open") await chatSaw(v.id, u.userId, v.price).catch((e) => console.error("[raffles] price seen:", e.message));
     return { ok: true, raffle: chatView(v) };
   }
   if (verb === "buy") {
     if (!u) return { ok: false, code: "E_NO_ACCOUNT", error: "link your chat name to a PATV account first (!verify)." };
     const key = String(b.key || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
-    const r = await buy(u.userId, { id: b.id, qty: b.qty, idem: key, via: "chat" });
-    return Object.assign({ ok: true }, r);
+    // 1.99afy: Pepe sends no price, and an admin can change it before the first ticket - the buy goes through only at the price
+    // this buyer was last shown in chat: the one it was announced at, or a newer one (!raffle <id>, or this refusal)
+    const r0 = await raffleRow(b.id);
+    const expect = r0 ? await chatPrice(r0, u.userId) : undefined;
+    try {
+      const r = await buy(u.userId, { id: b.id, qty: b.qty, idem: key, expect, via: "chat" });
+      return Object.assign({ ok: true }, r);
+    } catch (e) {
+      if (!(e && e.code === "E_PRICE_CHANGED" && r0)) throw e;
+      const cur = await raffleRow(r0.id);
+      if (!cur || cur.status !== "open") throw e;
+      await chatSaw(cur.id, u.userId, cur.price, true);
+      const n = Math.max(1, int(b.qty === undefined || b.qty === "" ? 1 : b.qty) || 1);
+      throw new Refuse(409, `R${cur.id}'s ticket price was changed by PATV: it's ${fmt(cur.price)} PAT a ticket now (it was ${fmt(expect)})`
+        + ` - nothing was charged. Send the same !raffle buy again to buy ${fmt(n)} for ${fmt(cur.price * n)} PAT, or buy on the site.`, "E_PRICE_CHANGED");
+    }
   }
   return { ok: false, code: "E_VERB", error: "unknown verb" };
 }
@@ -1597,7 +1715,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
   }
 }
 module.exports = {
-  init, register, enabled, enabledSync, setEnabled, config, setConfig, cleanConfig, create, buy, draw, maybeDraw, expire, cancel, takedown, edit, confirmDelivery,
+  init, register, enabled, enabledSync, setEnabled, config, setConfig, cleanConfig, create, buy, draw, maybeDraw, expire, cancel, takedown, edit, flushEditNotices, confirmDelivery,
   dispute, decide, tick, list, detail, adminState, forPad, cards, botAct, eventsAfter, verify, ticketsDigest, winningNumber, commitmentOf, feeShares, feeLegs, achMetrics,
   Refuse, DEFAULTS, FLOW, KINDS: [KIND_TICKET, KIND_PRIZE, KIND_ITEM], STATUSES,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

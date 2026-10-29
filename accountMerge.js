@@ -323,6 +323,8 @@ const RULES = {
   "raffles.creator_id": M(), "raffles.winner_id": M(), "raffles.dispute_by": M(), "raffles.closed_by": M(),
   "raffles.target": { deny: "a ticket count (the draw target)" }, "raffles.creator_payout": { deny: "a PAT amount" },
   "raffle_tickets.user_id": M(),
+  // 1.99afy: a changed ticket price a chat buyer was shown (raffles.js chatSaw) - the merged account is simply shown it again
+  "raffle_price_seen.user_id": { keep: "a chat buyer's note of a changed raffle ticket price they were shown (asked again after a merge)" },
   "action_ttl_config.actor": { deny: NAME },
   // 1.99acf: botkeys.js / huboutbox.js - who minted / revoked a bot key or flipped a switch (admin usernames, audit labels)
   "bot_keys.created_by": { deny: NAME }, "bot_keys.revoked_by": { deny: NAME }, "bot_key_families.actor": { deny: NAME },
