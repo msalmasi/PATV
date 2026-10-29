@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('partials/admin-open', { title: 'Stage admin', user: user, section: 'stage', admIsAdmin: !!(typeof isAdmin !== 'undefined' && isAdmin) }) %>
 <%# 1.99ack: the admin-only parts ask their own capability (siteperms.js) %><% const _can = locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals);
    const oaCfg = _can('onair.config'), rsMain = _can('restream.main'), mediaOk = _can('media.admin'); -%>
@@ -185,6 +186,7 @@
       <label class="chk" title="Kill switch: off hides 📸 Snap / 🎬 Clip on every stage player, and the site and Pepe refuse saves"><input type="checkbox" name="stagecap_enabled" <%= C.stagecap_enabled !== false ? 'checked' : '' %>> Viewers can snap / clip the stages</label>
       <label class="chk"><input type="checkbox" name="stagecap_snaps" <%= C.stagecap_snaps !== false ? 'checked' : '' %>> &nbsp;↳ stage snaps</label>
       <label class="chk"><input type="checkbox" name="stagecap_clips" <%= C.stagecap_clips !== false ? 'checked' : '' %>> &nbsp;↳ stage clips</label>
+      <label class="chk"><input type="checkbox" name="stagecap_mic" <%= C.stagecap_mic === true ? 'checked' : '' %>> &nbsp;<%- t('stage.admin.capture_mic') %></label>
       <label class="chk" title="1.99et: WHIP ingest (OBS 30+ / browser), ⚡ Low latency (WHEP) players, /api/turn. Needs MediaMTX + coturn (deploy/webrtc). Off = no WebRTC anywhere."><input type="checkbox" name="webrtc_enabled" <%= C.webrtc_enabled === true ? 'checked' : '' %>> ⚡ WebRTC ultra-low latency (WHIP / WHEP)</label>
       <label title="1.99il: the pads' Camfrog room audio over WebRTC (~0.5 s behind the room instead of ~1.5 s). Needs ⚡ WebRTC above and a Pepe that publishes it. Anyone it can't reach (no UDP, TURN full, old browser) gets the normal MP3 relay automatically.">⚡ Room audio over WebRTC<select name="room_rtc">
         <option value="off" <%= C.room_rtc !== 'prime' && C.room_rtc !== 'all' ? 'selected' : '' %>>Off (MP3 relay only)</option>
