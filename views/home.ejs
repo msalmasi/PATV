@@ -65,7 +65,8 @@
 <script src="/public/js/stage-player.js?v=9"></script>
 <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
 <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=6">
-<script src="/public/js/webrtc-client.js?v=5"></script>
+<script src="/public/js/av-sync.js?v=1"></script>
+<script src="/public/js/webrtc-client.js?v=6"></script>
 <script src="/public/js/stage-lowlat.js?v=2"></script>
 <% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=17"></script>
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
@@ -730,6 +731,7 @@
     var initSlots = <%- JSON.stringify(paid).replace(/</g, '\\u003c') %>;
     // 1.99cr: Snap / Clip the stream that's showing (stage-capture.js) - it goes to the FRONT pad's story
     var frontSlug = <%- JSON.stringify(frontInfo ? frontInfo.slug : '').replace(/</g, '\\u003c') %>;
+    if (window.PATVAvSync) window.PATVAvSync.pad(function () { return frontSlug; });
     var stCap = PATVStage.capture({ host: document.getElementById('stCap'), room: function () { return frontSlug; } });
     PATVStage.switcher({
       tabs: document.getElementById('stTabs'), wrap: document.getElementById('videoWrapper'),

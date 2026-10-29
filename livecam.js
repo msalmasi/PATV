@@ -327,6 +327,17 @@ function camForPath(p) {
   const k = BY_PATH.get(p);
   return k ? SESS.get(k) || null : null;
 }
+/** 1.99??: timing only; an optional room binding keeps server-side clips on their own room's relay. */
+function relayHold(path, roomId) {
+  const S = camForPath(path), b = S && S.botInfo;
+  return !S || S.ended || !b || roomId != null && S.roomId !== roomId ? null : { src: b.source, hold_ms: b.hold_ms == null ? null : b.hold_ms };
+}
+/** 1.99??: never reveal whether an unheld cam exists; use the same fresh-slot rule as WHEP auth. */
+function holdOf(path, userId, roomId) {
+  const S = camForPath(path), t = now(), fresh = (v) => !!v && Number.isFinite(v.beat) && t >= v.beat && t - v.beat <= BEAT_MS;
+  if (!S || S.ended || userId == null || !(fresh(S.viewers.get(String(userId))) || held(S) && S.stageViewers && fresh(S.stageViewers.get(String(userId))))) return null;
+  return relayHold(path, roomId);
+}
 const freshViewers = (S, t = now()) => [...S.viewers.entries()].filter(([, v]) => t - v.beat <= BEAT_MS);
 function slotsOf(userId, t = now()) {
   let n = 0;
@@ -978,6 +989,7 @@ async function forBot(body, t = now()) {
     S.botInfo = { grab_fps: Number(x.grab_fps) || null, grab_ms: Number(x.grab_ms) || null, size: Array.isArray(x.size) ? x.size.slice(0, 2) : null,
                   restarts: Number(x.restarts) || 0, up_s: Number(x.up_s) || 0, setup_ms: Number(x.setup_ms) || null,
                   source: x.source === "passthrough" ? "passthrough" : "reencode", fps: Number(x.fps) || null, fallback: str(x.fallback, 60) || null,
+                  hold_ms: typeof x.hold_ms === "number" && Number.isFinite(x.hold_ms) ? Math.round(Math.max(0, Math.min(10000, x.hold_ms))) : null,
                   kbps: Number.isFinite(Number(x.kbps)) && Number(x.kbps) >= 0 ? Math.min(100000, Number(x.kbps)) : null,
                   exact: typeof x.exact === "boolean" ? x.exact : null };   // micfollow: opened / verified by its exact name
     if (S.botState === "live" && !S.liveAt) S.liveAt = t;
@@ -1320,7 +1332,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
 }
 
 module.exports = {
-  register, init, normalize, save, current, viewerCap, pathFor, pubKey, readTicket, checkTicket, camForPath, start, beat, stop, endBy, mayEnd,
+  register, init, normalize, save, current, viewerCap, pathFor, pubKey, readTicket, checkTicket, camForPath, holdOf, relayHold, start, beat, stop, endBy, mayEnd,
   forBot, noteSync, auth, hint, adminView, stageConsent, stageHold, stageRelease, stageState, stageWatch, setOptout, optoutState, optedOut, sweep, dropViewerOf, watchersOf,
   kickReader, recheck,                // adultgate site: roomrtc ends WebRTC room listeners through kickReader too
   stageRecheck, stageViewerWhy, directorBlocked, directorBlockedSet, blockedWith, blockedSet, stageOffMeOk,   // stagefix site

@@ -630,7 +630,8 @@
   <script src="/public/js/stage-player.js?v=9"></script>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=6">
-  <script src="/public/js/webrtc-client.js?v=5"></script>
+  <script src="/public/js/av-sync.js?v=1"></script>
+  <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/stage-mic.js?v=5"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=17"></script>
@@ -858,6 +859,7 @@
     'use strict';
     var _t = typeof __t === 'function' ? __t : function (k, d, v) { if (d && typeof d === 'object') d = v && v.count === 1 ? d.one : d.other; return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
+    if (window.PATVAvSync) window.PATVAvSync.pad(slug);
     var data = JSON.parse(document.getElementById('rmInit').textContent);
     // CL3: the page's signed join cursor (a reconnect under "Off" gets only lines said after this page loaded) + the pad's
     // chat-history settings as this viewer gets them (the 📜 / 🔍 chip; an open page re-filters when they change)
@@ -1468,7 +1470,12 @@
       safe('compose', function () { renderCompose(d); });
       safe('audio', function () { roomAudio.update(d); });
       safe('strip', function () { if (window.PATVPadStrip) PATVPadStrip.update(liveCams); });   // 1.99zc
-      safe('stagemic', function () { if (window.PATVPadStage && PATVPadStage.setMic) PATVPadStage.setMic(d.stage_program || null); });   // micfollow: 🎙 On the mic
+      safe('stagemic', function () {
+        if (!window.PATVPadStage || !PATVPadStage.setMic) return;
+        var showMic = function (p) { PATVPadStage.setMic(p); };
+        if (window.PATVAvSync) window.PATVAvSync.gateProgram(slug, d.stage_program || null, showMic);
+        else showMic(d.stage_program || null);
+      });   // micfollow: 🎙 On the mic; privacy and management still apply immediately
       safe('feed', function () { addFeed(d.feed, first); });
       safe('clip', function () { if (chatClip) chatClip.update(d); });
       cursor = Math.max(cursor, d.cursor);

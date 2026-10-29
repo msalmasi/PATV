@@ -212,7 +212,10 @@
         var pc = new RTCPeerConnection({ iceServers: servers }), resource = null;
         pc.addTransceiver('video', { direction: 'recvonly' });
         var ms = new MediaStream();
-        pc.ontrack = function (e) { ms.addTrack(e.track); if (video.srcObject !== ms) video.srcObject = ms; };
+        pc.ontrack = function (e) {
+          if (window.PATVAvSync) window.PATVAvSync.video(e.receiver, { pc: pc, url: url, pad: o.pad, video: video });
+          ms.addTrack(e.track); if (video.srcObject !== ms) video.srcObject = ms;
+        };
         var go = negotiate(pc, url, null).then(function (loc) { resource = loc; return connected(pc); }).then(function () {
           return started(video);
         });

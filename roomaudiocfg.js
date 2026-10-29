@@ -196,7 +196,7 @@ function cleanState(s) {
       restarts: num(r.rtc.restarts), underruns: num(r.rtc.underruns), trimmed_ms: num(r.rtc.trimmed_ms), opus_kbps: num(r.rtc.opus_kbps),
       up_s: num(r.rtc.up_s) } : null;
     rooms[str(room, 128)] = { streaming: !!r.streaming, mp3_listeners: num(r.mp3_listeners), rtc, mixer_latency_s: num(r.mixer_latency_s),
-      stats: r.stats ? str(r.stats, 600) : null, stats_at: Number(r.stats_at) > 0 ? Math.round(Number(r.stats_at) * 1000) : null };
+      stats: r.stats ? str(r.stats, 600) : null, stats_at: Number(r.stats_at) > 0 ? Math.round(Number(r.stats_at) * 1000) : null, lat: require("./avsync").cleanLat(r.lat) };
   }
   return { v: s.v == null ? null : Number(s.v) || 0, src: str(s.src, 20), cfg: s.cfg && typeof s.cfg === "object" ? normalize(s.cfg, { lenient: true }).cfg : null,
            helper_enabled: s.helper_enabled !== false, net_audio: !!s.net_audio, rooms };

@@ -158,7 +158,11 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.match(blk, /stage-mic\.js\?v=\d+/);
   assert.equal((room.match(/stage-mic\.js/g) || []).length, 1);
   assert.equal((room.match(/PATVPadStage\.setMic\(/g) || []).length, 1);
-  assert.match(room, /safe\('stagemic', function \(\) \{ if \(window\.PATVPadStage && PATVPadStage\.setMic\) PATVPadStage\.setMic\(d\.stage_program \|\| null\); \}\);/);
+  const gate = room.slice(room.indexOf("safe('stagemic'"), room.indexOf("safe('feed'"));
+  assert.match(gate, /var showMic = function \(p\) \{ PATVPadStage\.setMic\(p\); \};/);
+  assert.match(gate, /if \(window\.PATVAvSync\) window\.PATVAvSync\.gateProgram\(slug, d\.stage_program \|\| null, showMic\);/);
+  assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
+  assert.ok(blk.indexOf('av-sync.js?v=1') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
   assert.doesNotMatch(read("views", "home.ejs"), /stage-mic|setMic/, "the homepage never renders the mic stage");
 });

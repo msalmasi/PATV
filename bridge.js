@@ -1532,6 +1532,7 @@ function register(app, { isBotToken, addUser }) {
     // him to publish (url + bearer) or stop (null), rtc_beat: 1 = heartbeat every second while the room could be asked
     if (body.rtc_cap === true) { try { require("./roomrtc").noteCap(R); } catch (e) { /* optional */ } }
     if (typeof body.rtc_state === "string") R.rtcState = str(body.rtc_state, 80);
+    require("./avsync").noteAudio(R.id, body); // 1.99??: timing + hidden-mic mark belong to this chunk, before listeners receive it
     const a = audioHub(R.id);
     const buf = typeof body.data === "string" && body.data ? Buffer.from(body.data, "base64") : null;
     if (buf && buf.length) {

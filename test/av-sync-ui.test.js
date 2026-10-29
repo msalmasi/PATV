@@ -1,0 +1,365 @@
+// A/V sync browser controller: measured timing, receiver lifecycle and privacy-preserving mic merges.
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+const source = fs.readFileSync(path.join(__dirname, "../public/js/av-sync.js"), "utf8");
+const plain = value => JSON.parse(JSON.stringify(value));
+
+function sandbox(options = {}) {
+  let now = 100000, sequence = 0;
+  const timers = new Map(), events = {}, requests = [], storage = new Map();
+  const config = Object.assign({ ok: true, on: true, dbg: false, audio: { rtc_ms: 1000, mp3_ms: 1000, mix_ms: 700, helper_ms: 270, age_s: 0 },
+    cams: { cam1: { src: "passthrough", hold_ms: 200 }, cam2: { src: "reencode", hold_ms: 300 } }, k: { pt: 100, re: -100, ind: 0 },
+    fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
+    apply: { video: true, mic: true, mp3: true }, engines: { chromium: true, firefox: false, safari: false }, ind_path_ms: 300, mods_instant: false }, options.config || {});
+  function element(tag) {
+    const e = { tagName: tag.toUpperCase(), style: {}, attrs: {}, children: [], parentNode: null, hidden: false, textContent: "", events: {},
+      setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
+      addEventListener(k, fn) { (this.events[k] ||= []).push(fn); },
+      appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
+      removeChild(child) { this.children = this.children.filter(v => v !== child); child.parentNode = null; },
+      click() { (this.events.click || []).forEach(fn => fn()); } };
+    Object.defineProperty(e, "isConnected", { get: () => e === document.body || !!(e.parentNode && e.parentNode.isConnected) });
+    Object.defineProperty(e, "innerHTML", { set() { throw new Error("No HTML injection"); } });
+    return e;
+  }
+  const document = { createElement: element, body: null }; document.body = element("body");
+  const setTimeout = (fn, delay = 0) => { const id = ++sequence; timers.set(id, { at: now + delay, fn }); return id; };
+  const clearTimeout = id => timers.delete(id);
+  const ctx = { document, console, Promise, Date: { now: () => now }, setTimeout, clearTimeout,
+    navigator: { userAgent: options.ua || "Chrome/145.0", platform: options.platform || "Win32", maxTouchPoints: options.touch || 0 },
+    location: { search: options.search || "" },
+    localStorage: { getItem(k) { if (options.noStorage) throw new Error("denied"); return storage.get(k) || null; }, setItem(k, v) { if (options.noStorage) throw new Error("denied"); storage.set(k, v); } },
+    addEventListener(k, fn) { (events[k] ||= []).push(fn); },
+    fetch(url, init) { requests.push({ url, init, at: now }); return options.fetch ? options.fetch(url, init, config) : Promise.resolve({ ok: true, json: () => Promise.resolve(plain(config)) }); } };
+  ctx.window = ctx; vm.runInNewContext(source, ctx);
+  async function flush() { for (let i = 0; i < 24; i++) await Promise.resolve(); }
+  async function advance(ms) {
+    const end = now + ms; let turns = 0;
+    await flush();
+    while (true) {
+      let next = null;
+      for (const [id, t] of timers) if (t.at <= end && (!next || t.at < next[1].at || t.at === next[1].at && id < next[0])) next = [id, t];
+      if (!next) break;
+      if (++turns > 10000) throw new Error("Timer loop");
+      now = next[1].at; timers.delete(next[0]); next[1].fn(); await flush();
+    }
+    now = end; await flush();
+  }
+  function receiver(kind = "standard") {
+    const writes = [], rx = { writes };
+    if (kind !== "none") Object.defineProperty(rx, kind === "legacy" ? "playoutDelayHint" : "jitterBufferTarget", { configurable: true, get: () => writes.at(-1), set: v => { if (options.setterThrows) throw new Error("unsupported"); writes.push(v); } });
+    return rx;
+  }
+  function peer(kind = "video", delayMs = 200, rtt = .1) {
+    const pc = { signalingState: "stable", connectionState: "connected", remoteDescription: { sdp: "a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay" }, listeners: {}, fail: false,
+      addEventListener(k, fn) { (this.listeners[k] ||= []).push(fn); }, removeEventListener(k, fn) { this.listeners[k] = (this.listeners[k] || []).filter(x => x !== fn); },
+      close() { this.signalingState = "closed"; },
+      getStats() { if (this.fail) return Promise.reject(new Error("stats failed")); if (this.hang) return new Promise(() => {});
+        const count = 100 + (now - 100000) / 10;
+        return Promise.resolve(new Map([["transport", { id: "transport", type: "transport", selectedCandidatePairId: "selected" }],
+          ["wrong", { id: "wrong", type: "candidate-pair", currentRoundTripTime: 9, nominated: true, state: "succeeded" }],
+          ["selected", { id: "selected", type: "candidate-pair", currentRoundTripTime: rtt }],
+          ["in", { id: kind + "-1", type: "inbound-rtp", kind, jitterBufferDelay: count * delayMs / 1000, jitterBufferEmittedCount: count,
+            jitterBufferTargetDelay: count * .5, jitterBufferMinimumDelay: count * .01, framesDropped: 3, freezeCount: 1, totalFreezesDuration: .2 }]])); }
+    }; return pc;
+  }
+  function media(mode = "mp3", pad = "pad", extra = {}) { const input = { slug: pad, playing: true, mode, pc: mode === "rtc" ? peer("audio", 200, .3) : null, ahead: () => .5, ...extra }; ctx.PATVAvSync.audio(input); return input; }
+  function tile(rx = receiver(), pc = peer(), pad) { ctx.PATVAvSync.video(rx, { pc, url: "https://relay.test/whep/cam1?pt=PRIVATE_TICKET", pad }); return { rx, pc }; }
+  return { api: ctx.PATVAvSync, ctx, config, requests, storage, document, element, receiver, peer, media, tile, advance, flush, now: () => now,
+    event: (name, value) => (events[name] || []).forEach(fn => fn(value)) };
+}
+
+test("pure math: signed formula, caps, whole fallback, jitter deltas and ten-second exponential average", () => {
+  const m = sandbox().api._math;
+  const input = { fresh: true, statsOK: true, pepe: 1500, hold: 200, k: -100, browser: 250, net: 50, cap: 3000, fallback: 500 };
+  assert.equal(m.videoTarget(input), 1500);
+  assert.equal(m.videoTarget({ ...input, cap: 800 }), 800);
+  assert.equal(m.videoTarget({ ...input, hold: 3000 }), null);
+  assert.equal(m.videoTarget({ ...input, cap: 9000, pepe: 9000 }), 4000);
+  assert.equal(m.videoTarget({ ...input, fresh: false }), 500);
+  assert.equal(m.videoTarget({ ...input, statsOK: false }), 500);
+  assert.equal(m.videoTarget({ ...input, hold: null }), 500);
+  assert.equal(m.indicatorTarget({ ...input, path: 300 }), 1350);
+  assert.equal(m.indicatorTarget({ ...input, fresh: false, path: 300 }), 500);
+  assert.equal(m.delta({ ids: "a", count: 100, delay: 20 }, { ids: "a", count: 200, delay: 45 }), 250);
+  assert.equal(m.delta({ ids: "a", count: 100, delay: 20 }, { ids: "a", count: 50, delay: 9 }), null);
+  assert.equal(m.delta({ ids: "a", count: 100, delay: 20 }, { ids: "b", count: 200, delay: 45 }), null);
+  assert.ok(Math.abs(m.average(100, 1100, 10000) - 732.1205588) < .00001);
+  assert.equal(m.pathOf("https://x/whep/cam-123?pt=SECRET"), "cam-123");
+  assert.equal(m.pathOf("https://x/whep/abc%2Fdef?pt=SECRET"), null);
+});
+
+test("MP3 uses measured ahead and calibration, ignores deadband, clears synchronously on pause and pad switch", async () => {
+  const s = sandbox(); s.api.pad("pad"); const a = s.tile();
+  await s.advance(0); assert.equal(a.rx.writes.at(-1), null);
+  s.media(); await s.advance(0); assert.equal(a.rx.writes.at(-1), 1400);
+  assert.equal(s.api.latency("pad", "mp3"), 1500);
+  s.config.k.pt = 120; const before = a.rx.writes.length; await s.advance(5000);
+  assert.equal(a.rx.writes.length, before, "20ms does not move a40ms deadband");
+  s.config.k.pt = 200; await s.advance(5000); assert.equal(a.rx.writes.at(-1), 1500);
+  s.api.audio({ slug: "pad", playing: false, mode: "mp3" }); assert.equal(a.rx.writes.at(-1), null);
+  s.media(); await s.advance(0); assert.equal(a.rx.writes.at(-1), 1500);
+  s.media("mp3", "other"); assert.equal(a.rx.writes.at(-1), null);
+  s.api.audio({ slug: "pad", playing: false, mode: "mp3" });
+  assert.equal(s.api.debug().playing, true, "late old-pad pause does not stopother audio");
+});
+
+test("RTC uses interval jitter and the selected RTT pair; stats failures and old telemetry use whole fallback", async () => {
+  const s = sandbox(); s.api.pad("pad"); const a = s.tile(); s.media("rtc");
+  await s.advance(0); assert.equal(a.rx.writes.at(-1), 500, "first stats have no interval");
+  await s.advance(2000); assert.equal(a.rx.writes.at(-1), 1200, "1000-200+100+200+(0.3-0.1)*500");
+  a.pc.fail = true; await s.advance(2000); assert.equal(a.rx.writes.at(-1), 500);
+  a.pc.fail = false; s.config.audio.age_s = 31; await s.advance(1000); assert.equal(a.rx.writes.at(-1), 500);
+  assert.equal(s.api.latency("pad", "rtc"), null);
+});
+
+test("toggle stays available to re-enable; unsupported and legacy browsers remain safe; engines only gate video", async () => {
+  const s = sandbox({ noStorage: true, ua: "Firefox/145.0" }); s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  const a = s.tile(s.receiver("legacy")); s.media(); await s.advance(0);
+  assert.equal(a.rx.writes.at(-1), null); assert.equal(s.api.debug().indicator_ms, 1200);
+  s.config.engines.firefox = true; await s.advance(5000); assert.equal(a.rx.writes.at(-1), 1.4);
+  const button = box.children[0]; assert.equal(button.style.minHeight, "44px"); assert.equal(button.attrs["aria-pressed"], "true"); assert.equal(button.hidden, false);
+  button.click(); assert.equal(a.rx.writes.at(-1), null); assert.equal(button.hidden, false); assert.equal(button.attrs["aria-pressed"], "false");
+  button.click(); assert.equal(a.rx.writes.at(-1), 1.4);
+  const unsupported = s.tile(s.receiver("none")); await s.advance(0); assert.equal(s.api.debug().tiles.at(-1).supported, false); unsupported.pc.close();
+  await s.advance(2000); assert.equal(s.api.debug().tiles.length, 1, "closewithout event is pruned");
+});
+
+test("standard receiver API takes precedence; current target applied at registration; explicit pad overrides default", async () => {
+  const s = sandbox(); let front = "pad"; s.api.pad(() => front); s.media(); await s.advance(0);
+  const rx = s.receiver(); const legacy = []; Object.defineProperty(rx, "playoutDelayHint", { set: v => legacy.push(v) });
+  const a = s.tile(rx); assert.equal(rx.writes.at(-1), 1400, "synchronous beforefirstframe"); assert.deepEqual(legacy, []);
+  const other = s.tile(s.receiver(), s.peer(), "another"); assert.equal(other.rx.writes.at(-1), null);
+  front = "another"; await s.advance(0); assert.equal(a.rx.writes.at(-1), 1400, "existingregistration keepsitsactualpad");
+  s.config.apply.video = false; await s.advance(5000); assert.equal(rx.writes.at(-1), null);
+  assert.equal(s.api.debug().indicator_ms, 1200);
+});
+
+test("iPad desktop UA remains Safari; missing APIs or throwing setters never affect the audio", async () => {
+  const s = sandbox({ ua: "Mozilla/5.0 Chrome/145.0 Safari/605.1", platform: "MacIntel", touch: 5, setterThrows: true });
+  s.api.pad("pad"); s.tile(); s.media(); await s.advance(0);
+  assert.equal(s.api.debug().engine, "safari"); assert.equal(s.api.debug().playing, true);
+  s.config.engines.safari = true; await s.advance(5000); assert.equal(s.api.debug().tiles[0].supported, false);
+});
+
+test("mode off, MP3 disabled and missing access clear targets; denied or late fetches do not revive them", async () => {
+  let deny = false;
+  const s = sandbox({ fetch: (url, init, config) => Promise.resolve(deny ? { ok: false, status: 403 } : { ok: true, json: async () => plain(config) }) });
+  s.api.pad("pad"); const a = s.tile(); s.media(); await s.advance(0); assert.equal(a.rx.writes.at(-1), 1400);
+  s.config.apply.mp3 = false; await s.advance(5000); assert.equal(a.rx.writes.at(-1), null); assert.equal(s.api.debug().indicator_ms, 0);
+  s.config.apply.mp3 = true; s.config.on = false; await s.advance(5000); assert.equal(a.rx.writes.at(-1), null);
+  s.config.on = true; await s.advance(5000); assert.equal(a.rx.writes.at(-1), 1400);
+  deny = true; await s.advance(5000); assert.equal(a.rx.writes.at(-1), null);
+});
+
+function program(ids, extra = {}) { return { v: 1, src: ids.map((id, i) => ({ id, name: id.toUpperCase(), pos: i, newest: i === ids.length - 1, recent: false, video: "live", watch: "ok" })), count: ids.length, active: !!ids.length, layout: ids.length > 1 ? "split" : "single", manage: { layout_override: null }, fixed: false, ...extra }; }
+async function gated(options) { const s = sandbox(options); s.api.pad("pad"); s.media("mp3", "pad", { ahead: () => 0 }); await s.advance(0); return s; }
+
+test("gateProgram delays additions/ring and keeps current names, permissions, layout overrides and removals", async () => {
+  const s = await gated(); const seen = []; const cb = p => seen.push(plain(p));
+  s.api.gateProgram("pad", program(["a"]), cb); assert.equal(seen.at(-1).src.length, 0); assert.equal(seen.at(-1).active, false);
+  await s.advance(699); assert.equal(seen.at(-1).src.length, 0);
+  await s.advance(1); assert.equal(seen.at(-1).src[0].id, "a"); assert.equal(seen.at(-1).src[0].newest, true);
+  const next = program(["a", "b"]); next.src[0].name = "NEW DISPLAY"; next.src[0].watch = "blocked"; next.manage = { layout_override: "grid9", can: true }; next.layout = "grid9";
+  s.api.gateProgram("pad", next, cb);
+  assert.equal(seen.at(-1).src.length, 1); assert.equal(seen.at(-1).src[0].name, "NEW DISPLAY"); assert.equal(seen.at(-1).src[0].watch, "blocked");
+  assert.equal(seen.at(-1).layout, "grid9"); assert.equal(seen.at(-1).manage.can, true); assert.equal(seen.at(-1).src[0].newest, true);
+  await s.advance(700); assert.equal(seen.at(-1).src.length, 2); assert.equal(seen.at(-1).src[1].newest, true); assert.equal(seen.at(-1).src[0].newest, false);
+  s.api.gateProgram("pad", program(["b"]), cb); assert.deepEqual(seen.at(-1).src.map(x => x.id), ["b"], "privacy removal is immediate");
+  s.api.gateProgram("pad", null, cb); assert.equal(seen.at(-1), null);
+});
+
+test("gateProgram never resurrects removed names, delays neutral someone, and passes Pepe and audio-off immediately", async () => {
+  const s = await gated(); let shown;
+  const cb = p => { shown = plain(p); };
+  s.api.gateProgram("pad", program(["secret"]), cb); await s.advance(700);
+  s.api.gateProgram("pad", program([], { speaking: "someone", count: 1, active: true }), cb);
+  assert.equal(shown.src.length, 0); assert.equal(shown.speaking, null); await s.advance(700); assert.equal(shown.speaking, "someone");
+  s.api.gateProgram("pad", program([], { speaking: "pepe", active: true }), cb); assert.equal(shown.speaking, "pepe");
+  s.api.gateProgram("pad", program([], { speaking: null }), cb); assert.equal(shown.speaking, null, "Pepe clearing is also immediate");
+  s.api.gateProgram("pad", program(["new"]), cb); assert.equal(shown.src.length, 0);
+  s.api.audio({ slug: "pad", playing: false, mode: "mp3" }); assert.equal(shown.src[0].id, "new");
+  const raw = program(["instant"]); const got = s.api.gateProgram("pad", raw, cb); assert.equal(got, raw);
+});
+
+function roster(mic, members = ["a", "b"], extra = {}) { return { room: { topic: "current" }, members: members.map(login => ({ login, display: login.toUpperCase(), on_mic: mic.includes(login), can: "current" })), mic: mic.map(login => ({ login, display: login.toUpperCase(), on_mic: true })), ...extra }; }
+test("C2 micView delays grab/drop and sorting flags, keeps new identity/permission data, removes privacy entries immediately", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  shown = plain(s.api.micView("pad", roster([]), cb)); shown = plain(s.api.micView("pad", roster(["a"]), cb));
+  assert.equal(shown.mic.length, 0); assert.equal(shown.members[0].on_mic, false); await s.advance(700); assert.equal(shown.mic[0].login, "a");
+  const dropped = roster([]); dropped.members[0].display = "CURRENT NAME"; dropped.members[0].can = "changed";
+  shown = plain(s.api.micView("pad", dropped, cb)); assert.equal(shown.mic[0].display, "CURRENT NAME"); assert.equal(shown.mic[0].can, "changed");
+  await s.advance(699); assert.equal(shown.mic.length, 1); await s.advance(1); assert.equal(shown.mic.length, 0);
+  shown = plain(s.api.micView("pad", roster(["a"]), cb)); await s.advance(700); assert.equal(shown.mic[0].login, "a");
+  shown = plain(s.api.micView("pad", roster([], ["b"]), cb)); assert.equal(shown.mic.length, 0); assert.equal(shown.members.length, 1);
+  s.config.mods_instant = true; await s.advance(5000); assert.equal(s.api.modsInstant("pad"), true);
+});
+
+test("C2 brief grabs never flash late, same-key veil replacement drops names, and lines retain their insertion order", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  s.api.micView("pad", roster([]), cb); s.api.micView("pad", roster(["a"]), cb); await s.advance(200);
+  shown = plain(s.api.micView("pad", roster([]), cb)); await s.advance(1000); assert.equal(shown.mic.length, 0, "short canceled grab never appears");
+  s.api.micView("pad", roster(["a"]), cb); await s.advance(700);
+  shown = plain(s.api.micView("pad", { members: [{ login: "a", anon: true, display: "someone", on_mic: true }], mic: [{ anon: true, display: "someone" }] }, cb));
+  assert.equal(shown.mic.length, 0, "anonymous key cannot borrow named history"); assert.equal(shown.members[0].display, "someone");
+  const host = s.element("div"), one = s.element("div"), two = s.element("div"); s.document.body.appendChild(host); host.appendChild(one); host.appendChild(two);
+  one.textContent = "mic line"; two.textContent = "later chat"; one.style.display = "flex";
+  s.api.holdLine("pad", one); assert.equal(one.style.display, "none"); assert.deepEqual(host.children, [one, two]);
+  await s.advance(700); assert.equal(one.style.display, "flex"); assert.deepEqual(host.children, [one, two]);
+  s.api.holdLine("pad", two); s.api.audio({ slug: "pad", mode: "mp3", playing: false }); assert.equal(two.style.display, "");
+});
+
+test("debug never contains pad names, ticket URLs, source objects or old identities; admin overlay uses text only", async () => {
+  const s = sandbox({ search: "?avsync=1", config: { dbg: true } }); s.api.pad("SECRET_PAD"); s.tile(); s.media("mp3", "SECRET_PAD"); await s.advance(0);
+  const dump = JSON.stringify(s.api.debug());
+  for (const word of ["SECRET_PAD", "PRIVATE_TICKET", "relay.test", "cam1"]) assert.ok(!dump.includes(word), word);
+  assert.equal(s.api.debug().tiles[0].playout_delay_extension, true); assert.equal(s.api.debug().tiles[0].stats.freezeCount, 1);
+  assert.equal(s.document.body.children.length, 1); assert.ok(s.document.body.children[0].children[2].textContent.includes("pepe_ms"));
+});
+
+test("silent pc.close is forgotten, hung getStats times out, and every fetched path excludes its ticket", async () => {
+  const s = sandbox(); s.api.pad("pad"); const a = s.tile(); s.media(); await s.advance(0);
+  a.pc.hang = true; await s.advance(4500); assert.equal(a.rx.writes.at(-1), 1500, "timeout uses MP3 wholefallback");
+  a.pc.close(); await s.advance(2000); assert.equal(s.api.debug().tiles.length, 0);
+  assert.ok(s.requests.length); s.requests.forEach(r => { assert.ok(!r.url.includes("PRIVATE_TICKET")); assert.equal(r.init.headers["X-Requested-With"], "fetch"); });
+});
+
+test("paused/off controllers do not poll stats, late stats cannot restore targets, and settings still refresh every five seconds", async () => {
+  const s = sandbox({ config: { on: false, period_s: 10 } }); s.api.pad("pad"); const a = s.tile();
+  let calls = 0; const stats = a.pc.getStats; a.pc.getStats = function () { calls++; return stats.call(this); };
+  s.media(); await s.advance(0); assert.equal(calls, 0, "site mode off does not collect stats");
+  s.config.on = true; await s.advance(5000); assert.equal(s.requests.length, 2, "settings poll is independent of the ten-second controller period");
+  assert.notEqual(a.rx.writes.at(-1), null);
+  let complete;
+  a.pc.getStats = () => new Promise(resolve => { complete = resolve; });
+  await s.advance(5000); assert.equal(typeof complete, "function");
+  s.api.audio({ slug: "pad", mode: "mp3", playing: false }); const requests = s.requests.length;
+  complete(await stats.call(a.pc)); await s.advance(0); assert.equal(a.rx.writes.at(-1), null, "late stats never restore a paused target");
+  await s.advance(30000); assert.equal(s.requests.length, requests, "paused room audio makes no settings requests");
+});
+
+// Real mini-player integration: only browser media events, not a resolved play() promise,
+// prove room audio is currently playing. Keep these fixtures separate from controller maths.
+const bridgeSource = fs.readFileSync(path.join(__dirname, "../public/js/room-bridge.js"), "utf8");
+function bridgeSandbox(options = {}) {
+  const timers = [], intervals = [], publications = [], changes = [], requests = [], storage = new Map();
+  let measured = null;
+  function element(tag) {
+    const cls = new Set(), events = {};
+    const e = { tagName: tag, children: [], attrs: {}, style: {}, paused: true, muted: false, volume: 1, currentTime: 0,
+      buffered: { length: 1, end: () => 1 }, textContent: "", title: "",
+      classList: { add: c => cls.add(c), remove: c => cls.delete(c), contains: c => cls.has(c), toggle(c, v) { const on = v === undefined ? !cls.has(c) : !!v; if (on) cls.add(c); else cls.delete(c); return on; } },
+      get className() { return [...cls].join(" "); }, set className(v) { cls.clear(); String(v).split(/\s+/).filter(Boolean).forEach(c => cls.add(c)); },
+      setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; },
+      appendChild(child) { this.children.push(child); return child; }, addEventListener(k, fn) { (events[k] ||= []).push(fn); },
+      dispatch(k) { if (k === "playing") this.paused = false; if (k === "pause" || k === "ended") this.paused = true; (events[k] || []).forEach(fn => fn({ type: k })); },
+      play() { this.paused = false; return Promise.resolve(); }, pause() { const was = this.paused; this.paused = true; if (!was) this.dispatch("pause"); }, load() {}, querySelector() { return null; } };
+    return e;
+  }
+  const win = { addEventListener() {}, PATVAvSync: {
+    audio: input => publications.push(input), decorate() {}, latency: () => measured, onChange: cb => changes.push(cb)
+  } };
+  win.fetch = async url => { requests.push(url); return { json: async () => options.ticket || { ok: true, whep: "https://relay.test/whep/audio?pt=SECRET", ready: true } }; };
+  if (options.rtc !== false) win.PATVRtc = { listen: (url, el, opts) => options.listen(url, el, opts) };
+  const context = { window: win, document: { createElement: element, addEventListener() {}, hidden: false }, navigator: {}, fetch: win.fetch, console,
+    sessionStorage: { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, String(v)) }, localStorage: { getItem: () => null, setItem() {} },
+    setTimeout: (fn, ms) => { const t = { fn, ms, active: true }; timers.push(t); return t; }, clearTimeout: t => { if (t) t.active = false; },
+    setInterval: (fn, ms) => { const t = { fn, ms, active: true }; intervals.push(t); return t; }, clearInterval: t => { if (t) t.active = false; }, requestAnimationFrame: () => 0, cancelAnimationFrame() {} };
+  win.document = context.document; vm.runInNewContext(bridgeSource, context);
+  const host = element("div"), player = win.PATVRoom.audio(host, "alpha", { showOff: true }); player.update({ room: { audio: true, live: true, rtc: true } });
+  const box = host.children[0], audios = box.children.filter(e => e.tagName === "audio"), mode = box.children.find(e => e.classList.contains("rb-mode"));
+  return { player, box, au: audios[0], rau: audios[1], mode, timers, intervals, publications, requests,
+    measure(ms) { measured = ms; changes.forEach(fn => fn()); }, last: () => publications.at(-1),
+    async settle() { for (let i = 0; i < 24; i++) await Promise.resolve(); },
+    run(ms) { const timer = timers.filter(t => t.active && t.ms === ms).at(-1); assert.ok(timer, `timer ${ms}`); timer.active = false; timer.fn(); } };
+}
+function roomSession() { return { pc: { connectionState: "connected" }, close() { this.closed = true; }, onfail: null }; }
+
+test("room player waits for actual RTC playing and its session, including playing before listen() resolves", async () => {
+  let resolve; const session = roomSession();
+  const s = bridgeSandbox({ listen: async (url, el) => { el.srcObject = {}; el.dispatch("playing"); return new Promise(done => { resolve = done; }); } });
+  s.player.listen("alpha"); await s.settle();
+  assert.ok(s.publications.length); assert.ok(s.publications.every(p => p.playing === false), "request/connecting/early playing without session never publishes true");
+  resolve(session); await s.settle(); assert.equal(s.last().playing, true); assert.equal(s.last().pc, session.pc); assert.equal(s.last().mode, "rtc");
+  for (const event of ["waiting", "pause", "ended"]) { s.rau.dispatch(event); assert.equal(s.last().playing, false, event); s.rau.dispatch("playing"); assert.equal(s.last().playing, true); }
+  s.measure(1789); assert.match(s.mode.title, /1\.8 s/); s.measure(null); assert.match(s.mode.title, /half a second/);
+  s.player.listen("alpha"); assert.equal(s.last().playing, false);
+});
+
+test("room player resolved connection/play promises alone do not enable sync; MP3 stalls clear it", async () => {
+  const rtc = bridgeSandbox({ listen: async (url, el) => { el.srcObject = {}; return roomSession(); } });
+  rtc.player.listen("alpha"); await rtc.settle(); assert.ok(rtc.publications.every(p => !p.playing));
+  rtc.rau.dispatch("playing"); assert.equal(rtc.last().playing, true);
+  const s = bridgeSandbox({ rtc: false }); s.player.listen("alpha"); await s.settle();
+  s.intervals.find(t => t.active && t.ms === 250).fn(); await s.settle();
+  assert.ok(s.publications.every(p => !p.playing), "resolved MP3 play() is not an actual playing event");
+  s.au.dispatch("playing"); assert.equal(s.last().playing, true); assert.equal(s.last().mode, "mp3"); assert.equal(s.last().ahead(), 1);
+  for (const event of ["waiting", "pause", "ended"]) { s.au.dispatch(event); assert.equal(s.last().playing, false, event); s.au.dispatch("playing"); assert.equal(s.last().playing, true); }
+  s.measure(2350); assert.match(s.mode.title, /2\.4 s/); s.measure(null); assert.match(s.mode.title, /1\.5 s/);
+});
+
+test("quiet MP3-to-RTC rejoin keeps audible MP3 during setup and ignores delayed old MP3 pauses", async () => {
+  const first = roomSession(), second = roomSession(); let calls = 0, resolve;
+  const s = bridgeSandbox({ listen: async (url, el) => {
+    calls++; el.srcObject = {}; el.dispatch("playing");
+    return calls === 1 ? first : new Promise(done => { resolve = done; });
+  } });
+  s.player.listen("alpha"); await s.settle(); assert.equal(s.last().mode, "rtc"); assert.equal(s.last().playing, true);
+  first.onfail(); await s.settle(); assert.equal(s.last().playing, false); s.au.dispatch("playing");
+  assert.equal(s.last().mode, "mp3"); assert.equal(s.last().playing, true);
+  const start = s.publications.length; s.run(2500); await s.settle();
+  assert.ok(s.publications.slice(start).every(p => p.playing && p.mode === "mp3"), "quiet setup never clears the active MP3");
+  resolve(second); await s.settle(); assert.equal(s.last().playing, true); assert.equal(s.last().mode, "rtc"); assert.equal(s.last().pc, second.pc);
+  s.au.dispatch("pause"); s.au.dispatch("ended"); assert.equal(s.last().playing, true, "late events belong to the inactive MP3 element");
+});
+
+
+test("C2 keyless anonymous panel counts retain drop timing in a mixed roster without borrowing named positions", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const anon = { anon: true, display: "someone" }, named = { login: "a", display: "A" };
+  shown = s.api.micView("pad", { members: [named, anon], mic: [anon] }, cb); await s.advance(700);
+  assert.deepEqual(shown.mic.map(p => p.display), ["someone"]);
+  shown = s.api.micView("pad", { members: [named, anon], mic: [] }, cb);
+  assert.equal(shown.mic.length, 1, "generic anonymous release stays for D while an anonymous room entry remains");
+  await s.advance(699); assert.equal(shown.mic.length, 1); await s.advance(1); assert.equal(shown.mic.length, 0);
+});
+
+test("C2 anonymous roster flags require their own explicit flag when there is no shared stable ID", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const anon = { anon: true, display: "someone" };
+  shown = s.api.micView("pad", { members: [anon], mic: [anon] }, cb); await s.advance(700);
+  assert.equal(shown.mic.length, 1); assert.equal(shown.members[0].on_mic, false, "a panel slot is not evidence about a specific roster slot");
+  shown = s.api.micView("pad", { members: [{ ...anon, on_mic: true }], mic: [anon] }, cb);
+  assert.equal(shown.members[0].on_mic, false); await s.advance(700); assert.equal(shown.members[0].on_mic, true);
+});
+
+test("C2 retained anonymous panel count shrinks immediately with the newest room's anonymous count", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const anon = { anon: true, display: "someone" }, named = { login: "a", display: "A" };
+  shown = s.api.micView("pad", { members: [anon, named, anon], mic: [anon, anon] }, cb); await s.advance(700); assert.equal(shown.mic.length, 2);
+  shown = s.api.micView("pad", { members: [named, anon], mic: [] }, cb); assert.equal(shown.mic.length, 1);
+  shown = s.api.micView("pad", { members: [named], mic: [] }, cb); assert.equal(shown.mic.length, 0, "removed anonymous entries never reappear from history");
+});
+
+test("C2 stable anonymous IDs share exact timing between reordered mic and roster arrays", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const a = { anon: true, id: "opaque-a", display: "someone" }, b = { anon: true, id: "opaque-b", display: "someone" };
+  shown = s.api.micView("pad", { members: [a, b], mic: [b] }, cb); await s.advance(700);
+  assert.deepEqual(shown.members.map(p => p.on_mic), [false, true]);
+  shown = s.api.micView("pad", { members: [b, a], mic: [] }, cb);
+  assert.equal(shown.mic[0].id, "opaque-b"); assert.deepEqual(plain(shown.members.map(p => p.on_mic)), [true, false]);
+  shown = s.api.micView("pad", { members: [a], mic: [] }, cb); assert.equal(shown.mic.length, 0);
+});
+
+test("C1 follows the delayed newest/recent merge table for a short grab retained as a recent tile", async () => {
+  const s = await gated(); let shown; const cb = p => { shown = plain(p); };
+  s.api.gateProgram("pad", program(["a"]), cb); await s.advance(200);
+  const recent = program(["a"], { count: 0, active: false }); recent.src[0].newest = false; recent.src[0].recent = true;
+  s.api.gateProgram("pad", recent, cb); await s.advance(500);
+  assert.equal(shown.src[0].newest, true); assert.equal(shown.src[0].recent, false);
+  await s.advance(200); assert.equal(shown.src[0].newest, false); assert.equal(shown.src[0].recent, true);
+});

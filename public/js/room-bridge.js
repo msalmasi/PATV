@@ -115,6 +115,18 @@
 
     var playing = false, startedAt = 0, analyser = null, raf = null, available = false;
     var mode = null, rtcSess = null, rtcAnalyser = null, startGen = 0, rtcHint = null;   // 1.99il
+    var mp3Sound = false, rtcSound = false;    // 1.99??: connecting/cushioning is not audible playback
+    function syncAudio() {
+      if (window.PATVAvSync) window.PATVAvSync.audio({ slug: cur, playing: !!(playing && (mode === 'rtc' ? rtcSound && rtcSess : mode === 'mp3' && mp3Sound)), mode: mode, pc: rtcSess && rtcSess.pc, ahead: ahead });
+    }
+    function syncTitle() {
+      var ms = window.PATVAvSync ? window.PATVAvSync.latency(cur, mode) : null;
+      modeEl.title = ms != null && isFinite(ms) ? (mode === 'rtc' ? _t('js.pad.audio.mode_rtc_measured', 'Low latency (WebRTC): about {s} s behind the room', { s: (ms / 1000).toFixed(1) })
+        : mode === 'mp3' ? _t('js.pad.audio.mode_mp3_measured', 'Standard relay: about {s} s behind the room', { s: (ms / 1000).toFixed(1) }) : '')
+        : mode === 'rtc' ? _t('js.pad.audio.mode_rtc_title', 'Low latency (WebRTC): about half a second behind the room')
+        : mode === 'mp3' ? _t('js.pad.audio.mode_mp3_title', 'Standard relay: about 1.5 s behind the room') : '';
+    }
+    if (window.PATVAvSync) { window.PATVAvSync.decorate(box); window.PATVAvSync.onChange(syncTitle); }
     var v0 = Number(store('patvRoomVol')); vol.value = isFinite(v0) && store('patvRoomVol') !== null ? Math.max(0, Math.min(100, v0)) : 80;
     // What the USER set. The only source of truth for volume / mute - see the session notes above.
     var userVol = vol.value / 100, userMuted = store('patvRoomMuted') === '1';
@@ -129,8 +141,7 @@
       modeEl.classList.toggle('hide', !m);
       modeEl.classList.toggle('rtc', m === 'rtc');
       modeEl.textContent = m === 'rtc' ? _t('js.pad.audio.mode_rtc', '⚡ live') : m === 'mp3' ? _t('js.pad.audio.mode_mp3', 'standard') : '';
-      modeEl.title = m === 'rtc' ? _t('js.pad.audio.mode_rtc_title', 'Low latency (WebRTC): about half a second behind the room')
-        : m === 'mp3' ? _t('js.pad.audio.mode_mp3_title', 'Standard relay: about 1.5 s behind the room') : '';
+      syncAudio(); syncTitle();
     }
     applyVolume();
     function paint() {
@@ -239,6 +250,7 @@
     }
     function rtcClose() {
       var s = rtcSess; rtcSess = null; rtcAnalyser = null;
+      rtcSound = false; syncAudio();
       if (s) { try { s.close(); } catch (e) { /* gone */ } }
       try { rau.pause(); rau.srcObject = null; } catch (e) { /* no srcObject */ }
     }
@@ -326,6 +338,7 @@
     }
     function startMp3() {
       clearInterval(waitTimer); startedAt = 0;
+      mp3Sound = false;
       rtcClose(); setMode('mp3');
       au.preload = 'auto';
       var url = '/p/' + encodeURIComponent(cur) + '/audio?t=' + Date.now();
@@ -355,6 +368,7 @@
     function stop(msg) {
       clearTimeout(rejoinTimer);
       playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
+      mp3Sound = false; rtcSound = false; syncAudio();
       startGen++; rtcClose(); setMode(null);
       mseStop();
       au.pause(); au.removeAttribute('src'); au.load();
@@ -371,10 +385,15 @@
       store('patvRoomVol', vol.value); applyVolume(); paint();
     });
     jump.addEventListener('click', function () { stop(); start(); });       // a fresh connection starts at live
-    au.addEventListener('waiting', function () { if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); });
-    au.addEventListener('playing', function () { setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    au.addEventListener('waiting', function () { mp3Sound = false; syncAudio(); if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); });
+    au.addEventListener('playing', function () { mp3Sound = playing && mode === 'mp3'; syncAudio(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
     au.addEventListener('error', function () { if (playing && mode === 'mp3') stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); });
-    rau.addEventListener('playing', function () { if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    rau.addEventListener('playing', function () { rtcSound = !!(playing && rau.srcObject); syncAudio(); if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    ['pause', 'ended'].forEach(function (kind) {
+      au.addEventListener(kind, function () { mp3Sound = false; syncAudio(); });
+      rau.addEventListener(kind, function () { rtcSound = false; syncAudio(); });
+    });
+    rau.addEventListener('waiting', function () { rtcSound = false; syncAudio(); });
     function setRate(r) {
       try {
         if (au.playbackRate === r) return;

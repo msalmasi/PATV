@@ -47,6 +47,23 @@
   </form>
 </section>
 
+<section class="adm-card" id="av-sync" aria-labelledby="avsTitle">
+  <h2 id="avsTitle">A/V sync <span class="adm-pill admin">admins</span> <span class="adm-pill" id="avsVersion"></span></h2>
+  <p class="adm-help">Hold relayed cams and mic signs back while the pad's room audio plays. Audio is unchanged. This ships off; calibrate on staging before allowing viewers in. Firefox and Safari stay off until their stability checks pass.</p>
+  <form class="adm-form" id="avsForm" autocomplete="off" novalidate>
+    <div id="avsFields"></div>
+    <label>Note for the log (optional) <input type="text" name="reason" maxlength="200"></label>
+    <div class="adm-actions"><button type="submit" disabled>Save A/V sync settings</button><button type="button" class="adm-btn ghost" id="avsReset" disabled>Reset A/V sync defaults</button></div>
+    <p class="adm-msg" id="avsMessage" role="status" aria-live="polite">Loading…</p>
+  </form>
+  <h3>Measured audio delay</h3>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Room</th><th>Mix</th><th>Helper</th><th>WebRTC</th><th>MP3</th><th>Report age</th></tr></thead><tbody id="avsRooms"></tbody></table></div>
+  <h3>Live relay hold</h3>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Relay</th><th>Source</th><th>Hold</th></tr></thead><tbody id="avsRelays"></tbody></table></div>
+  <h3>A/V sync changes</h3><ul class="adm-help" id="avsAudit"></ul>
+</section>
+<script src="/public/js/admin-avsync.js?v=1" defer></script>
+
 <section class="adm-card" id="live" aria-labelledby="lvT">
   <h2 id="lvT">What Pepe runs now <span class="adm-pill" id="lvOnline"></span></h2>
   <p class="adm-help" id="lvRuns"></p>
