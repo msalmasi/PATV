@@ -28,8 +28,9 @@
 //   ui_budget_ms. Per room: Pepe's `!bridge livecams on|off` (default on, needs !bridge cams on) -> R.livecams.
 // Ending a relay: the cam owner (their linked login), the room's mods (Pepe's mod caps for their login), the pad owner and
 // site staff can end it (POST /livecam/end): everyone watching is dropped and it can't restart for END_COOLDOWN_MS.
-// Audit: livecam_audit, one row per viewer session (viewer, target, room, start, end, seconds, why it ended). Video is
-// never stored anywhere (MediaMTX records nothing; the HLS remux of these paths is refused by the hook).
+// Audit: livecam_audit, one row per viewer session (viewer, target, room, start, end, seconds, why it ended). MediaMTX
+// records nothing and cam HLS is refused. The one RTSP exception is an authorized mic-stage snap / forward clip:
+// stagemiccap scopes a loopback reader to one running capture and re-checks the viewer's consent and privacy gates.
 //
 // 1.99zc: 🎬 STAGE CAMS (mainstage.js slot source 'cam'): a pad owner / admin puts someone's live cam on the pad's stage.
 // The slot HOLDS the session (S.holds has the slot id): it stays wanted while the slot is open (never ended as "unwatched"), with
@@ -1078,8 +1079,8 @@ function noteSync(items, t = now()) {
   for (const S of SESS.values()) if (!seen.has(S.key)) { S.ready = false; S.readers = 0; S.seenAt = t; }
 }
 const loopbackIp = (a) => /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.test(String(a || ""));
-/** The auth hook for a cam path. publish: WHIP with the path's bearer. read: WHEP only, a good ticket from a viewer who
- *  holds a slot on this cam and may still see the pad's live room. -> HTTP status. */
+/** The auth hook for a cam path. publish: WHIP with the path's bearer. read: a fresh viewer's WHEP ticket, or the
+ *  job-scoped loopback RTSP exception for a mic-stage capture. -> HTTP status. */
 async function auth(b, action, proto) {
   b = b || {};
   const p = String(b.path || "");
@@ -1092,7 +1093,9 @@ async function auth(b, action, proto) {
     return sameSecret(cred, pubKey(p)) ? 200 : 403;
   }
   if (action === "read") {
-    if (proto !== "webrtc") return 403;                      // no HLS / RTSP of a cam, ever
+    // 1.99??: only a running mic-stage capture may authenticate a loopback RTSP reader.
+    if (action === "read" && proto === "rtsp") return require("./stagemiccap").rtspAuth(b, p);
+    if (proto !== "webrtc") return 403;                      // cam HLS and every other protocol remain refused
     let tok = null;
     try { tok = new URLSearchParams(String(b.query || "").replace(/^\?/, "")).get("pt"); } catch (e) { tok = null; }
     const c = checkTicket(tok, p);

@@ -723,6 +723,21 @@ function audioHub(id) {
   if (!a) { a = { listeners: new Set(), recent: [], at: 0 }; audio.set(id, a); }
   return a;
 }
+/** 1.99??: a mic-stage capture counts as this viewer's MP3 listener. Only new chunks, with their synchronous metadata.
+ * Automatic hub closure calls optional fn.end() once; explicit untap only detaches and keeps the caller's recording. */
+function audioTap(roomId, fn, viewer) {
+  const R = rooms.get(roomId);
+  if (!R || !R.audio || typeof fn !== "function") return null;
+  const a = audioHub(roomId);
+  if (a.listeners.size >= AUDIO_MAX_LISTENERS) return null;
+  let active = true;
+  const untap = () => { active = false; a.listeners.delete(listener); };
+  const listener = { agViewer: viewer || null,
+    write(buf) { if (active) { try { fn(buf, require("./avsync").audioMeta(roomId)); } catch (e) { listener.end(); throw e; } } },
+    end() { if (!active) return; untap(); if (typeof fn.end === "function") fn.end(); } };
+  a.listeners.add(listener);
+  return untap;
+}
 /** Keep `buf` (arrived at `now`) as recent audio; drop what is older than AUDIO_PRIME_MS, always keeping the newest. */
 function audioRemember(a, buf, now) {
   a.at = now;
@@ -1446,6 +1461,18 @@ async function stageProgram(prog, R, userId, L, F) {
   try { return await require("./micfollow").viewFor(prog, R, userId || null, (u) => withPatv(u, L, F)); }
   catch (e) { console.error("[bridge] stage program:", e.message); return null; }
 }
+/** 1.99??: the same viewer program as /live, using the bridge roster rather than the pad registry's title-only row. */
+async function stageProgramFor(roomId, userId) {
+  await load();
+  const R = rooms.get(roomId);
+  if (!R) return null;
+  let prog;
+  try { prog = require("./micfollow").snapshot(roomId); } catch (e) { return null; }
+  if (!prog) return null;
+  const L = await resolveNames(prog.tiles.map((tile) => ({ login: tile.login })));
+  const F = await require("./padflair").byUsername(roomId).catch(() => null);
+  return stageProgram(prog, R, userId, L, F);
+}
 
 /** The live view of the busiest live room, for the homepage. CL3: `viewer` = who's looking (the line's own access level,
  *  the 24 h presence cap); never the owner / staff / mod floors here (nonExempt). */
@@ -1925,7 +1952,7 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })), lineLive: !!o.lineLive };
 }
 
-module.exports = { bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)

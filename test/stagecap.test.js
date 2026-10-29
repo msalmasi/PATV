@@ -504,3 +504,414 @@ test("switch messages name the Camfrog room and the chat command a mod types the
     B._rooms.delete(id);
   }
 });
+
+// 1.99??: mic-stage helpers use the real bridge listener path and the same per-viewer program as /live.
+let micAudioPost;
+async function micAudioFixture(id) {
+  const B = require(path.join(repo, "bridge"));
+  if (!micAudioPost) {
+    const app = express();
+    B.register(app, { isBotToken: (t) => t === "tap-test", addUser: (req, res, next) => next() });
+    micAudioPost = app._router.stack.find((x) => x.route && x.route.path === "/api/bridge/audio").route.stack.at(-1).handle;
+  }
+  await B.ingest({ rooms: [{ room: { id, name: "Audio fixture" }, audio: true, members: [], mic: [] }], events: [] });
+  return async (body) => {
+    let result;
+    await micAudioPost({ body: { password: "tap-test", room: id, ...body } }, { json: (v) => { result = v; } });
+    return result;
+  };
+}
+
+test("mic audio tap: new chunks have their own synchronous metadata, count as listeners, and untap silently", async () => {
+  const B = require(path.join(repo, "bridge")), id = "StageCapture.AudioTap", postAudio = await micAudioFixture(id);
+  const chunks = [], untaps = [];
+  let ended = 0;
+  const receive = (buf, meta) => chunks.push({ buf, meta });
+  receive.end = () => { ended++; };
+  try {
+    await postAudio({ data: Buffer.from("before tap").toString("base64"), hm: 1, lat: { mp3_ms: 100 } });
+    const untap = B.audioTap(id, receive, U.linked);
+    untaps.push(untap);
+    assert.equal(typeof untap, "function");
+    assert.equal(chunks.length, 0, "no priming chunk with newer metadata attached to old bytes");
+    const sent = Buffer.from("first captured chunk");
+    assert.equal((await postAudio({ data: sent.toString("base64"), hm: 0, lat: { mp3_ms: 900 } })).listeners, 1);
+    assert.deepEqual(chunks[0].buf, sent);
+    assert.equal(chunks[0].meta.hm, 0);
+    assert.equal(chunks[0].meta.lat.mp3_ms, 900);
+    assert.ok(Math.abs(Date.now() - chunks[0].meta.at) < 1000);
+    await postAudio({ data: "", hm: 1, lat: { mp3_ms: 500 } });
+    assert.equal(chunks.length, 1, "a heartbeat is not recorded as an audio chunk");
+    await postAudio({ data: Buffer.from("older Pepe").toString("base64") });
+    assert.equal(chunks[1].meta.hm, null, "missing hm must not inherit the previous hidden-mic mark");
+    assert.equal(chunks[1].meta.lat.mp3_ms, null);
+    assert.equal(chunks[0].meta.hm, 0, "later posts never mutate retained chunk metadata");
+    untap(); untap();
+    assert.equal((await postAudio({ data: sent.toString("base64"), hm: 0 })).listeners, 0);
+    assert.equal(chunks.length, 2);
+    assert.equal(ended, 0, "explicit stop only detaches");
+    assert.equal(B.audioTap("missing-room", receive, U.linked), null);
+    assert.equal(B.audioTap(id, null, U.linked), null);
+    for (let i = 0; i < 40; i++) untaps.push(B.audioTap(id, () => {}, U.linked));
+    assert.ok(untaps.slice(1).every((fn) => typeof fn === "function"));
+    assert.equal(B.audioTap(id, receive, U.linked), null, "the shared 40-listener cap applies to captures");
+    assert.equal((await postAudio({ data: "" })).listeners, 40);
+  } finally {
+    for (const untap of untaps) if (untap) untap();
+    B._rooms.delete(id);
+  }
+});
+
+test("mic audio tap: an adult-gate refusal or audio closure ends once and preserves already-recorded chunks", async () => {
+  const B = require(path.join(repo, "bridge")), AG = require(path.join(repo, "adultgate"));
+  const id = "StageCapture.AudioEnds", postAudio = await micAudioFixture(id), chunks = [], seen = [];
+  const saved = { applies: AG.applies, gate: AG.gate }, untaps = [];
+  let ended = 0, otherEnded = 0;
+  const receive = (buf) => chunks.push(buf);
+  receive.end = () => { ended++; };
+  const other = () => {};
+  other.end = () => { otherEnded++; };
+  try {
+    untaps.push(B.audioTap(id, receive, U.linked), B.audioTap(id, other, U.other));
+    await postAudio({ data: Buffer.from("kept").toString("base64"), hm: 0 });
+    AG.applies = (roomId) => roomId === id;
+    AG.gate = (viewer, roomId) => { if (roomId === id) seen.push(viewer); return viewer === U.linked ? "confirm" : "ok"; };
+    AG.bump("tick"); AG.bump("tick");
+    assert.ok(seen.includes(U.linked), "the listener carries the actual capturer account for re-checking");
+    assert.equal(ended, 1);
+    assert.equal(otherEnded, 0);
+    assert.equal((await postAudio({ data: Buffer.from("after gate").toString("base64"), hm: 0 })).listeners, 1);
+    assert.equal(Buffer.concat(chunks).toString(), "kept", "end does not discard previously recorded audio");
+    await B.ingest({ rooms: [{ room: { id, name: "Audio fixture" }, audio: false, members: [], mic: [] }], events: [] });
+    assert.equal(otherEnded, 1, "the normal room-audio shutdown closes taps too");
+    assert.equal(B.audioTap(id, receive, U.linked), null, "audio off cannot open a tap");
+    for (const untap of untaps) untap();
+    assert.equal(otherEnded, 1);
+  } finally {
+    Object.assign(AG, saved);
+    for (const untap of untaps) if (untap) untap();
+    B._rooms.delete(id);
+  }
+});
+
+test("mic stage program: bridge roster, linked names and pad flair go through the existing per-viewer builder", async () => {
+  const B = require(path.join(repo, "bridge")), MF = require(path.join(repo, "micfollow")), PF = require(path.join(repo, "padflair"));
+  await B.load();
+  const id = "StageCapture.Program", member = { login: "fixturecam", display: "Camfrog label", on_cam: true };
+  const R = { id, members: [member] }, snapshot = { roomId: id, tiles: [{ login: member.login }] };
+  const saved = { snapshot: MF.snapshot, viewFor: MF.viewFor, byUsername: PF.byUsername };
+  const cacheKey = B.nameKey(member.login), cached = B._nameCache.get(cacheKey);
+  const flair = { name: "Cam crew", color: "#112233", ink: "#ffffff", emoji: "" };
+  B._rooms.set(id, R);
+  B._nameCache.set(cacheKey, { at: Date.now(), acc: { username: "linkedfixture", display: "Linked label", avatar: null }, priv: false });
+  try {
+    MF.snapshot = (roomId) => { assert.equal(roomId, id); return snapshot; };
+    PF.byUsername = async (roomId) => { assert.equal(roomId, id); return new Map([["linkedfixture", flair]]); };
+    const output = { blocked: true, src: [] };
+    MF.viewFor = async (snap, room, userId, nameOf) => {
+      assert.equal(snap, snapshot);
+      assert.equal(room, R, "the bridge room, including its members, not the registry's title-only row");
+      assert.equal(userId, U.linked.userId);
+      const resolved = nameOf(room.members[0]);
+      assert.equal(resolved.display, "Linked label");
+      assert.equal(resolved.patv.username, "linkedfixture");
+      assert.deepEqual(resolved.patv.flair, flair);
+      const anonymous = { anon: true, display: "someone" };
+      assert.equal(nameOf(anonymous), anonymous, "anonymous references retain the builder's suppression");
+      return output;
+    };
+    assert.equal(await B.stageProgramFor(id, U.linked.userId), output, "the per-viewer refusal is passed through intact");
+    assert.equal(await B.stageProgramFor("not-a-room", U.linked.userId), null);
+    MF.snapshot = () => null;
+    assert.equal(await B.stageProgramFor(id, U.linked.userId), null);
+  } finally {
+    MF.snapshot = saved.snapshot; MF.viewFor = saved.viewFor; PF.byUsername = saved.byUsername;
+    if (cached) B._nameCache.set(cacheKey, cached); else B._nameCache.delete(cacheKey);
+    B._rooms.delete(id);
+  }
+});
+
+test("mic capture auth hook: only RTSP reads delegate; fresh WHEP reads, publish and HLS keep their gates", async () => {
+  const vm = require("node:vm"), src = fs.readFileSync(path.join(repo, "livecam.js"), "utf8");
+  const authSource = src.slice(src.indexOf("async function auth(b, action, proto)"), src.indexOf("// ── views ──"));
+  const calls = [], uid = "auth-viewer", session = { ended: 0, login: "fixturecam", roomId: "fixture-room",
+    viewers: new Map([[uid, { beat: 100, noted: true }]]), holds: new Set() };
+  let enabled = true, delegateStatus = 200;
+  const ctx = {
+    URLSearchParams, camForPath: (p) => p === "fixture-path" ? session : null, on: () => enabled,
+    sameSecret: (got, want) => got === want, pubKey: () => "fixture-bearer", checkTicket: (t) => t === "fixture-ticket" ? { uid } : null,
+    loopbackIp: (ip) => ip === "127.0.0.1", now: () => 100, BEAT_MS: 1000, held: () => false,
+    isGhost: () => false, optedOut: () => false, CV: () => ({ blocked: () => false }),
+    require: (name) => name === "./stagemiccap" ? { rtspAuth: (body, p) => { calls.push([body, p]); return delegateStatus; } }
+      : name === "./bridge-relay" ? { padFull: async () => true } : assert.fail("unexpected dependency: " + name),
+  };
+  vm.runInNewContext(authSource + "\nthis.auth = auth;", ctx);
+  const rtsp = { path: "fixture-path", ip: "127.0.0.1" };
+  for (const status of [200, 401, 403]) { delegateStatus = status; assert.equal(await ctx.auth(rtsp, "read", "rtsp"), status); }
+  assert.equal(calls[0][0], rtsp);
+  assert.equal(calls[0][1], rtsp.path);
+  assert.equal(await ctx.auth({ path: rtsp.path, query: "pt=fixture-ticket" }, "read", "webrtc"), 200);
+  assert.equal(await ctx.auth({ path: rtsp.path }, "read", "webrtc"), 401);
+  assert.equal(await ctx.auth(rtsp, "read", "webrtc"), 403, "loopback gets no WHEP challenge");
+  assert.equal(await ctx.auth(rtsp, "read", "hls"), 403);
+  assert.equal(await ctx.auth({ path: rtsp.path, token: "fixture-bearer" }, "publish", "webrtc"), 200);
+  assert.equal(await ctx.auth(rtsp, "publish", "rtsp"), 403);
+  assert.equal(calls.length, 3, "other protocols and publish never reach the capture exception");
+  session.ended = 1;
+  assert.equal(await ctx.auth(rtsp, "read", "rtsp"), 403);
+  session.ended = 0; enabled = false;
+  assert.equal(await ctx.auth(rtsp, "read", "rtsp"), 403);
+  enabled = true;
+  assert.equal(await ctx.auth({ path: "unknown-path" }, "read", "rtsp"), 403);
+  assert.equal(calls.length, 3, "the existing session and switch gates remain ahead of the exception");
+});
+
+// Engine media/timing is tested with real ffmpeg in stagemiccap.test.js. These controllable jobs
+// exercise the actual HTTP routes, SQLite lifecycle and existing charge/publish handshake.
+async function micJobs(t) {
+  const M = require(path.join(repo, "stagemiccap")), saved = { start: M.start, cancel: M.cancel };
+  const jobs = new Map(), revoked = new Set();
+  await MS.setConfig({ stagecap_enabled: true, stagecap_snaps: true, stagecap_clips: true, stagecap_mic: true }, "test");
+  await runQuery("DELETE FROM stage_captures WHERE user_id = ?", [U.staff.userId]);
+  SC._setDeps({ roomById: async id => id === ROOM.id ? ROOM : null });
+  M.configure({ full: async () => true, block: () => null, clipSwitch: () => true,
+    hidden: login => revoked.has(login), camRefusal: async () => null });
+  M.start = async (opts, hooks) => {
+    let resolve, reject;
+    const done = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const j = { opts, hooks, cancelled: false, reject, finish: (info = {}) => {
+      fs.writeFileSync(opts.out, "server-built-fixture");
+      resolve({ bytes: 20, secs: opts.kind === "clip" ? opts.secs : 0, people: ["fixturecam"], audio: null, ...info });
+    } };
+    jobs.set(opts.id, j);
+    if (opts.kind === "snap") j.finish();
+    return { done, ready_by: Date.now() + 20000, cancel: () => { j.cancelled = true; } };
+  };
+  M.cancel = id => { const j = jobs.get(id); if (j) j.cancelled = true; return !!j; };
+  t.after(async () => { Object.assign(M, saved); await MS.setConfig({ stagecap_mic: false }, "test"); });
+  return { jobs, revoked };
+}
+async function waitCap(id, state) {
+  for (let i = 0; i < 100; i++) {
+    const c = (await getQuery("SELECT * FROM stage_captures WHERE id = ?", [id]))[0];
+    if (c && c.state === state) return c;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.fail("capture did not reach " + state);
+}
+
+test("mic admin switch defaults off, normalizes on/off, and home availability is refused", async () => {
+  assert.equal(MS.config().stagecap_mic, false);
+  assert.equal((await get("/api/stage/captures/me?room=" + ROOM.slug, U.staff)).d.mic, null);
+  for (const [raw, want] of [["on", true], ["off", false], [true, true], [false, false]]) {
+    assert.equal((await MS.setConfig({ stagecap_mic: raw }, "test")).stagecap_mic, want);
+  }
+  await MS.setConfig({ stagecap_mic: true }, "test");
+  const m = (await get("/api/stage/captures/me?room=" + ROOM.slug + "&surface=home", U.staff)).d.mic;
+  assert.equal(m.snap, false); assert.equal(m.clip, false); assert.match(m.why, /Open the pad/);
+  await MS.setConfig({ stagecap_mic: false }, "test");
+});
+
+test("mic snap stores depicted people, uses the existing paid-save action, and publishes a generic mic story", async t => {
+  await micJobs(t);
+  const r = await snap(U.staff, "mic", { surface: "pad" });
+  assert.equal(r.status, 200, r.d.error);
+  const c = r.d.capture;
+  assert.equal(c.source, "mic"); assert.equal(c.state, "preview"); assert.equal(c.stream, "🎙 the mic");
+  assert.equal(c.price, 30000);
+  assert.deepEqual(await getQuery("SELECT login FROM stage_capture_people WHERE capture_id = ?", [c.id]), [{ login: "fixturecam" }]);
+  assert.equal((await fetch(base + c.preview, { headers: H(U.staff) })).status, 200);
+  assert.equal((await fetch(base + c.preview, { headers: H(U.other) })).status, 404);
+  const s = await post(`/api/stage/captures/${c.id}/save`, { idem: "mic-save" }, U.staff);
+  assert.equal(s.d.capture.state, "saving", s.d.error);
+  const a = (await getQuery("SELECT * FROM pepe_actions WHERE id = (SELECT action_id FROM stage_captures WHERE id = ?)", [c.id]))[0];
+  assert.equal(a.kind, "stagecap.save");
+  const ck = await post("/api/stage/captures/check", { password: "bot-token", id: c.id, user: U.staff.username });
+  assert.equal(ck.status, 200); assert.equal(ck.d.source, "mic"); assert.equal(ck.d.kind, "snap");
+  const p = await post("/api/stage/captures/publish", { password: "bot-token", id: c.id, user: U.staff.username });
+  assert.equal(p.status, 200, p.d.error);
+  const m = (await getQuery("SELECT * FROM media WHERE id = ?", [p.d.id]))[0];
+  assert.equal(m.source, "stage"); assert.equal(m.stream, "mic"); assert.equal(m.slot_id, null); assert.equal(m.subject, "🎙 the mic");
+  assert.equal((await getQuery("SELECT COUNT(*) n FROM stage_capture_people WHERE capture_id = ?", [c.id]))[0].n, 1);
+  await runQuery("UPDATE media SET deleted = 1 WHERE id = ?", [m.id]);
+  assert.equal((await getQuery("SELECT COUNT(*) n FROM stage_capture_people WHERE capture_id = ?", [c.id]))[0].n, 0, "normal media expiry/deletion clears identities");
+});
+
+test("mic forward clip polls recording → cutting → preview, keeps audio notes and frees discarded jobs", async t => {
+  const f = await micJobs(t);
+  const r = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip", secs: 20, surface: "pad" }, U.staff);
+  assert.equal(r.status, 200, r.d.error);
+  const c = r.d.capture, j = f.jobs.get(c.id);
+  assert.equal(c.state, "recording"); assert.equal(c.preview, null); assert.ok(c.ready_by > Date.now());
+  await j.hooks.cutting();
+  assert.equal((await get(`/api/stage/captures/${c.id}`, U.staff)).d.capture.state, "cutting");
+  j.finish({ audio: { reason: null, muted_s: 2.5 } });
+  await waitCap(c.id, "preview");
+  const got = (await get(`/api/stage/captures/${c.id}`, U.staff)).d.capture;
+  assert.deepEqual(got.audio_note, { kind: "muted", secs: 2.5 });
+  assert.equal(got.secs, 20);
+  assert.equal((await post(`/api/stage/captures/${c.id}/discard`, {}, U.staff)).status, 200);
+  assert.equal((await post(`/api/stage/captures/${c.id}/discard`, {}, U.staff)).status, 200, "lost cancellation response can be retried");
+  assert.equal(j.cancelled, true); assert.equal(fs.existsSync(j.opts.out), false);
+  assert.equal((await getQuery("SELECT COUNT(*) n FROM stage_capture_people WHERE capture_id = ?", [c.id]))[0].n, 0);
+});
+
+test("mic cancellation wins over a late encode completion and does not resurrect a preview", async t => {
+  const f = await micJobs(t);
+  const r = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10 }, U.staff);
+  const c = r.d.capture, j = f.jobs.get(c.id);
+  assert.equal((await post(`/api/stage/captures/${c.id}/discard`, {}, U.staff)).status, 200);
+  await j.hooks.cutting(); j.finish();
+  for (let i = 0; i < 100 && fs.existsSync(j.opts.out); i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal((await get(`/api/stage/captures/${c.id}`, U.staff)).d.capture.state, "discarded");
+  assert.equal(fs.existsSync(j.opts.out), false);
+  assert.equal((await getQuery("SELECT COUNT(*) n FROM stage_capture_people WHERE capture_id = ?", [c.id]))[0].n, 0);
+});
+
+test("mic recording/cutting count toward the shared three-open limit and user cooldown", async t => {
+  const f = await micJobs(t), ids = [];
+  for (let i = 0; i < 3; i++) {
+    SC._hits.clear();
+    const r = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10 }, U.staff);
+    assert.equal(r.status, 200, r.d.error); ids.push(r.d.capture.id);
+    if (!i) {
+      assert.equal((await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip" }, U.staff)).status, 429);
+      await f.jobs.get(r.d.capture.id).hooks.cutting();
+    }
+  }
+  SC._hits.clear();
+  const over = await snap(U.staff, "mic"); assert.equal(over.status, 429); assert.match(over.d.error, /other previews/);
+  const hlsOver = await snap(U.staff, "pepe"); assert.equal(hlsOver.status, 429, "HLS shares the limit with mic jobs");
+  for (const id of ids) { await SC.discard(U.staff, id); f.jobs.get(id).reject(new Error("cancelled")); }
+  await new Promise(resolve => setTimeout(resolve, 30));
+});
+
+test("mic preview, save, bot check and publish all fail closed after a depicted person becomes private", async t => {
+  const f = await micJobs(t);
+  for (const gate of ["preview", "save", "check", "publish"]) {
+    SC._hits.clear(); f.revoked.clear();
+    const r = await snap(U.staff, "mic"), c = r.d.capture;
+    assert.equal(r.status, 200, r.d.error);
+    if (["check", "publish"].includes(gate)) await SC.save(U.staff, c.id, "mic-" + gate);
+    f.revoked.add("fixturecam");
+    const denied = gate === "preview" ? await fetch(base + c.preview, { headers: H(U.staff) })
+      : gate === "save" ? await post(`/api/stage/captures/${c.id}/save`, {}, U.staff)
+      : await post(`/api/stage/captures/${gate}`, { password: "bot-token", id: c.id, user: U.staff.username });
+    assert.equal(denied.status, gate === "check" ? 404 : gate === "publish" ? 410 : 403, gate);
+    assert.equal((await waitCap(c.id, "failed")).message, "Someone in this capture turned off captures of their cam.");
+    assert.equal(fs.existsSync(f.jobs.get(c.id).opts.out), false);
+    assert.equal((await getQuery("SELECT COUNT(*) n FROM stage_capture_people WHERE capture_id = ?", [c.id]))[0].n, 0);
+  }
+});
+
+function raceLatch() {
+  let release;
+  const promise = new Promise(resolve => { release = resolve; });
+  return { promise, release };
+}
+
+test("mic publish rolls back media and both files when privacy changes during the media insert", { timeout: 10000 }, async t => {
+  const f = await micJobs(t), db = require(path.join(repo, "dbUtils")).db;
+  const c = await SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "snap", surface: "pad" });
+  await SC.save(U.staff, c.id, "mic-insert-race");
+  const entered = raceLatch(), resume = raceLatch(), originalRun = db.run;
+  let mediaId, savedFile;
+  db.run = function (sql, params, callback) {
+    if (!mediaId && /^\s*INSERT INTO media\b/.test(sql)) {
+      mediaId = params[0]; savedFile = path.join(media.DIR, params[3]);
+      return originalRun.call(this, sql, params, function (err) {
+        const statement = this;
+        entered.release();
+        resume.promise.then(() => callback.call(statement, err));
+      });
+    }
+    return originalRun.apply(this, arguments);
+  };
+  t.after(() => { db.run = originalRun; resume.release(); });
+  const publishing = SC.publish(c.id, U.staff.username);
+  await entered.promise;
+  assert.equal(fs.existsSync(savedFile), true, "the file has moved when privacy is revoked");
+  f.revoked.add("fixturecam");
+  // Do not await the competing request while the publisher owns the transaction.
+  const checking = SC.status(U.staff, c.id).then(value => ({ value }), error => ({ error }));
+  resume.release();
+  assert.equal(await publishing, null, "Pepe receives a failed publish and can refund");
+  const checked = await checking;
+  assert.ok(checked.error && checked.error.status === 403 || checked.value && checked.value.state === "failed");
+  const failed = await waitCap(c.id, "failed");
+  assert.equal(failed.media_id, null);
+  assert.deepEqual(await getQuery("SELECT id FROM media WHERE id = ?", [mediaId]), []);
+  assert.equal(fs.existsSync(savedFile), false);
+  assert.equal(fs.existsSync(f.jobs.get(c.id).opts.out), false);
+  assert.deepEqual(await getQuery("SELECT login FROM stage_capture_people WHERE capture_id = ?", [c.id]), []);
+  assert.equal(await SC.check(c.id, U.staff.username), null);
+});
+
+test("mic save and concurrent discard cannot leave an orphan action or delete a saving preview", { timeout: 10000 }, async t => {
+  const f = await micJobs(t), actions = require(path.join(repo, "actions"));
+  const c = await SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "snap", surface: "pad" });
+  const entered = raceLatch(), resume = raceLatch(), originalQueue = actions.queue;
+  actions.queue = async function (userId, request) {
+    if (request.args[1] === c.id) { entered.release(); await resume.promise; }
+    return originalQueue.apply(this, arguments);
+  };
+  t.after(() => { actions.queue = originalQueue; resume.release(); });
+  const saving = SC.save(U.staff, c.id, "mic-save-discard-race");
+  await entered.promise;
+  const discarding = SC.discard(U.staff, c.id).then(value => ({ value }), error => ({ error }));
+  // Let discard reach its read/write boundary while the save is paused at the queue.
+  await new Promise(resolve => setTimeout(resolve, 30));
+  resume.release();
+  const saved = await saving, discarded = await discarding;
+  assert.equal(saved.state, "saving");
+  assert.equal(discarded.error && discarded.error.status, 409);
+  assert.equal(fs.existsSync(f.jobs.get(c.id).opts.out), true);
+  const queued = await getQuery("SELECT id FROM pepe_actions WHERE user_id = ? AND idem = ?", [U.staff.userId, "mic-save-discard-race"]);
+  assert.deepEqual(queued, [{ id: saved.action_id }]);
+  assert.equal((await SC.check(c.id, U.staff.username)).state, "saving");
+  await runQuery("UPDATE pepe_actions SET status = 'failed' WHERE id = ?", [saved.action_id]);
+  assert.equal((await SC.status(U.staff, c.id)).state, "preview");
+  assert.equal(await SC.discard(U.staff, c.id), true);
+});
+
+test("mic refused starts release the exact cooldown timestamp even when the clock advances", async t => {
+  await micJobs(t);
+  const M = require(path.join(repo, "stagemiccap"));
+  let clock = Date.now() + T0, starts = 0;
+  SC._setClock(() => ++clock);
+  t.after(() => SC._setClock(() => Date.now() + T0));
+  M.start = async () => { starts++; throw Object.assign(new Error("refused fixture"), { refuse: true, status: 403 }); };
+  for (let i = 0; i < 2; i++) {
+    await assert.rejects(SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10 }),
+      error => error.status === 403 && error.message === "refused fixture");
+    assert.equal(SC._hits.has("u:clip:" + U.staff.userId), false, "a refused start does not consume the user's cooldown");
+  }
+  assert.equal(starts, 2, "an immediate retry reaches the engine instead of a false rate limit");
+  const rows = await getQuery("SELECT state FROM stage_captures WHERE user_id = ?", [U.staff.userId]);
+  assert.deepEqual(rows, [{ state: "failed" }, { state: "failed" }]);
+});
+
+test("an HLS encode in flight reserves the last shared preview slot before another mic capture starts", { timeout: 15000 }, async t => {
+  const f = await micJobs(t), fm = require(path.join(repo, "feedmedia")), ids = [];
+  for (let i = 0; i < 2; i++) {
+    SC._hits.clear();
+    const c = await SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10 });
+    ids.push(c.id);
+  }
+  const entered = raceLatch(), resume = raceLatch(), originalSlot = fm.slot;
+  fm.slot = async function () { entered.release(); await resume.promise; return originalSlot.apply(this, arguments); };
+  t.after(() => { fm.slot = originalSlot; resume.release(); });
+  SC._hits.clear();
+  const encoding = SC.capture(U.staff, null, { room: ROOM.slug, stream: "pepe", kind: "snap" });
+  await entered.promise;
+  SC._hits.clear();
+  await assert.rejects(SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "snap" }),
+    error => error.status === 429 && /other previews/.test(error.message));
+  assert.equal(f.jobs.size, 2, "no fourth reader starts while the HLS preview is being encoded");
+  resume.release();
+  const hls = await encoding;
+  assert.equal(hls.state, "preview");
+  await SC.discard(U.staff, hls.id);
+  for (const id of ids) { await SC.discard(U.staff, id); f.jobs.get(id).reject(new Error("cancelled")); }
+  await new Promise(resolve => setTimeout(resolve, 30));
+});

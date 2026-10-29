@@ -25,3 +25,26 @@ test("the person who took it, the person in it, the pad's managers and staff may
   assert.equal(await C.canDelete(u("u1", "ritchiecuh"), { ...cap, by_login: null, subject_login: null }), false,
     "an older capture Pepe sent without logins: managers / staff only");
 });
+
+test("a depicted mic participant may delete through their current linked login; covers and unrelated names confer no access", async () => {
+  const { runQuery, getQuery } = require(path.join(__dirname, "..", "dbUtils"));
+  await runQuery("CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT, displayname TEXT, class TEXT, camfrogUsername TEXT)");
+  await runQuery("INSERT INTO users (userId, username, class, camfrogUsername) VALUES ('depicted', 'viewer', 'pleb', 'FiXtUrEcAm'), ('other', 'fixturecam', 'pleb', 'elsewhere')");
+  await C.init();
+  const mid = "deadbeef12345678", cid = "c12345678901234567890", now = Date.now();
+  await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, source, stream, slot_id, by_user_id)
+    VALUES (?, 'photo', 'image/webp', 'mic-fixture.webp', 10, 0, '🎙 the mic', 'capturer', 'PepeFrog.Room', ?, ?, 0, 'stage', 'mic', NULL, 'maker')`, [mid, now, now + 3600000]);
+  await runQuery(`INSERT INTO stage_captures (id, user_id, username, room_id, source, stream_label, kind, ct, state, media_id, created)
+    VALUES (?, 'maker', 'capturer', 'PepeFrog.Room', 'mic', '🎙 the mic', 'photo', 'image/webp', 'done', ?, ?)`, [cid, mid, now]);
+  await runQuery("INSERT INTO stage_capture_people (capture_id, login) VALUES (?, 'fixturecam')", [cid]);
+  const m = (await getQuery("SELECT * FROM media WHERE id = ?", [mid]))[0];
+  assert.equal(await C.canDelete(u("depicted", "stale-session-name"), m), true, "current linked account is authoritative, ignoring stale session names");
+  assert.equal(await C.canDelete(u("other", "fixturecam"), m), false, "a display name or forged/stale session name is not a link");
+  assert.equal(await C.canDelete(u("maker", null), m), true);
+  assert.equal(await C.canDelete(u("u-owner", null), m), true);
+  assert.equal(await C.canDelete(u("admin", null, "Admin"), m), true);
+  await assert.rejects(C.remove(u("other", "fixturecam"), mid), e => e.status === 403 && e.i18n === "stagecap.mic.delete_denied");
+  await C.remove(u("depicted", null), mid);
+  assert.equal((await getQuery("SELECT deleted FROM media WHERE id = ?", [mid]))[0].deleted, 1);
+  assert.deepEqual(await getQuery("SELECT * FROM stage_capture_people WHERE capture_id = ?", [cid]), []);
+});

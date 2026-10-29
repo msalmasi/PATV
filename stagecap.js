@@ -1,6 +1,9 @@
 // stagecap.js — viewers snap and clip the STAGES (1.99cr): Pepe's broadcast and the pads' live user
 // slots, the way !snap / !clip capture a Camfrog cam. A saved capture goes into the pad's story
 // (stories.js) next to Pepe's cam captures, labelled "📺 Stage snap/clip of <stream> by <user>".
+// The optional mic stage uses stagemiccap.js: a viewer-specific snap or the NEXT 10/20/30 seconds,
+// never cam HLS or browser pixels. It checks consent during recording and at every preview/save
+// boundary. Only people actually drawn are retained for privacy rechecks and deletion rights.
 //
 // Flow
 //   1. Preview (POST /api/stage/capture {room, stream, kind, secs}). Signed in, with a linked Camfrog
@@ -31,7 +34,8 @@
 // owner, site staff, the capturer, or the slot's streamer.
 //
 // Rate limits (memory): per user one snap / 10 s and one clip / 60 s; per stream one snap / 3 s and
-// one clip / 20 s; at most 3 open previews per user.
+// one clip / 20 s; at most 3 open previews per user (including recording/cutting mic jobs).
+// Mic jobs also have one clip per pad, one snap per pad / 3 s and two jobs of each kind site-wide.
 //
 // Switches (1.99cw), checked at preview, at save, and by Pepe at save time:
 //   * the admin kill switch: stage config (mainstage.js, Stage admin) stagecap_enabled, plus one per
@@ -43,11 +47,13 @@
 //     off. Off -> the buttons show disabled ("Snaps are off in this room"), the API refuses, and Pepe
 //     re-checks at save. Site-only pads (no Camfrog room, e.g. the Camfrog Lounge) have no switch.
 //   * the streamer's per-slot opt-out (capture_off) still applies on top.
+//   * mic captures require stagecap_mic (default OFF), full pad access and the corresponding bridge
+//     block checks; clips require !clip too. Mic media uses source='stage', stream='mic', slot_id=NULL.
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 const media = require("./media");
 const fm = require("./feedmedia");
 
@@ -89,7 +95,29 @@ function init() {
         stream_label TEXT, kind TEXT NOT NULL, ct TEXT NOT NULL, secs REAL, bytes INTEGER, nsfw INTEGER NOT NULL DEFAULT 0,
         state TEXT NOT NULL, action_id INTEGER, media_id TEXT, message TEXT, created INTEGER NOT NULL, updated INTEGER)`);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_captures_user ON stage_captures (user_id, created)");
+      await addColumn("stage_captures", "ready_by", "INTEGER");
+      await addColumn("stage_captures", "audio_note", "TEXT");
+      await runQuery(`CREATE TABLE IF NOT EXISTS stage_capture_people (
+        capture_id TEXT NOT NULL, login TEXT NOT NULL, PRIMARY KEY (capture_id, login))`);
+      await runQuery("CREATE INDEX IF NOT EXISTS stage_capture_people_login ON stage_capture_people (login)");
+      // All media deletion paths (including expiry) retire these identities with their capture.
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_people_media_deleted AFTER UPDATE OF deleted ON media
+        WHEN NEW.deleted != 0 BEGIN DELETE FROM stage_capture_people WHERE capture_id IN
+        (SELECT id FROM stage_captures WHERE media_id = NEW.id); END`);
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_people_media_removed AFTER DELETE ON media BEGIN
+        DELETE FROM stage_capture_people WHERE capture_id IN (SELECT id FROM stage_captures WHERE media_id = OLD.id); END`);
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_people_capture_removed AFTER DELETE ON stage_captures BEGIN
+        DELETE FROM stage_capture_people WHERE capture_id = OLD.id; END`);
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_people_retired AFTER UPDATE OF state ON stage_captures
+        WHEN NEW.state IN ('failed','discarded','expired') BEGIN DELETE FROM stage_capture_people WHERE capture_id = NEW.id; END`);
       fs.mkdirSync(tmpDir(), { recursive: true });
+      const crashed = await getQuery("SELECT * FROM stage_captures WHERE source = 'mic' AND state IN ('recording','cutting')");
+      for (const c of crashed) dropPreview(c);
+      await runQuery("UPDATE stage_captures SET state = 'failed', message = ?, updated = ? WHERE source = 'mic' AND state IN ('recording','cutting')",
+        [MIC_TEXT.interrupted, NOW()]);
+      micEngine().configure({ account, eligibility, killed, roomOff, config: () => deps.config(), now: () => NOW(),
+        resolveRoom: async id => (await deps.resolveRoom(id)) || deps.roomById(id) });
+      await micEngine().init(tmpDir());
     })().catch((e) => { console.error("[stagecap] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -160,8 +188,19 @@ function liveSegments(dir, name, want = 0) {
   return segs;
 }
 
-class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
-const refuse = (s, m) => new Refuse(s, m);
+class Refuse extends Error { constructor(status, msg, i18n) { super(msg); this.status = status; this.refuse = true; this.i18n = i18n; } }
+const refuse = (s, m, i18n) => new Refuse(s, m, i18n);
+const micEngine = () => require("./stagemiccap");
+const MIC_TEXT = {
+  interrupted: "That recording stopped. Nothing was charged.",
+  failed: "Couldn’t capture the mic stage just now — nothing was charged.",
+  revoked: "Someone in this capture turned off captures of their cam.",
+  delete_denied: "Only the pad’s owner, an admin, the person who took it or someone shown on camera can delete this."
+};
+function micText(req, message) {
+  const key = Object.keys(MIC_TEXT).find(k => MIC_TEXT[k] === message);
+  return key && req && req.t ? req.t("stagecap.mic." + key) : message;
+}
 
 /** Snap: the first frame of the newest complete segment -> webp in `out`. -> {w, h, bytes} */
 async function extractSnap(segs, out) {
@@ -215,6 +254,7 @@ async function extractClip(segs, secs, out) {
 // ── dependencies (the live stage; injectable for tests) ──
 let deps = {
   resolveRoom: (slug) => require("./roomsweb").resolveRoom(slug),
+  roomById: (id) => require("./rooms").get(id),
   pepeIn: (roomId) => require("./bridge").pepeIn(roomId),
   roomCmds: (roomId) => { try { const B = require("./bridge")._rooms.get(roomId); return (B && B.cmds) || {}; } catch (e) { return {}; } },
   canManage: (user, roomId) => require("./rooms").canManage(user, roomId),
@@ -302,6 +342,12 @@ async function resolveStream(R, stream) {
 
 // ── rate limits ──
 const hits = new Map();
+const hlsInFlight = new Map();
+async function openCount(userId, at = NOW()) {
+  const n = (await getQuery("SELECT COUNT(*) AS n FROM stage_captures WHERE user_id = ? AND state IN ('recording','cutting','preview','saving') AND created > ?",
+    [userId, at - PREVIEW_TTL]))[0].n;
+  return n + (hlsInFlight.get(userId) || 0);
+}
 function gap(key, ms) {
   const t = NOW(), last = hits.get(key) || 0;
   if (t - last < ms) return Math.ceil((ms - (t - last)) / 1000);
@@ -312,7 +358,7 @@ function gap(key, ms) {
 const auditCtx = new Map();   // capture id -> contentaudit.fromRequest (memory only; used when it's published)
 
 /** Make a preview. -> the capture row. */
-async function capture(user, req, { room, stream, kind, secs } = {}) {
+async function capture(user, req, { room, stream, kind, secs, surface } = {}) {
   await init();
   const u = await account(user && user.userId);
   const why = eligibility(u);
@@ -325,47 +371,131 @@ async function capture(user, req, { room, stream, kind, secs } = {}) {
   if (!R) throw refuse(404, "No such pad.");
   const rOff = roomOff(R.id);
   if (rOff) throw refuse(403, rOff);
+  if (stream === "mic") return captureMic(u, req, R, k, secs, surface);
   const src = await resolveStream(R, stream);
   const want = k === "clip" ? Math.min(CLIP_MAX, Math.max(CLIP_MIN, Math.round(Number(secs) || CLIP_DEFAULT))) : 0;
-  const open = (await getQuery("SELECT COUNT(*) AS n FROM stage_captures WHERE user_id = ? AND state IN ('preview','saving') AND created > ?",
-    [u.userId, NOW() - PREVIEW_TTL]))[0].n;
-  if (open >= LIMITS.openPreviews) throw refuse(429, "Save or discard your other previews first.");
   const segs = liveSegments(src.dir, src.name, want);       // not live -> refused before any rate limit is used
   const streamKey = src.source + ":" + (src.slot ? src.slot.id : R.id);
-  let w = gap(`u:${k}:${u.userId}`, k === "clip" ? LIMITS.userClip : LIMITS.userSnap);
-  if (w) throw refuse(429, `Slow down - one ${k} every ${(k === "clip" ? LIMITS.userClip : LIMITS.userSnap) / 1000} s (try again in ${w} s).`);
-  w = gap(`s:${k}:${streamKey}`, k === "clip" ? LIMITS.streamClip : LIMITS.streamSnap);
-  if (w) { hits.delete(`u:${k}:${u.userId}`); throw refuse(429, `Someone just ${k === "clip" ? "clipped" : "snapped"} this stream - try again in ${w} s.`); }
-  const id = "c" + crypto.randomBytes(10).toString("hex");
-  const cap = { id, kind: k === "clip" ? "clip" : "photo" };
-  const out = previewFile(cap);
-  let info;
+  await tx(async () => {
+    if (await openCount(u.userId) >= LIMITS.openPreviews) throw refuse(429, "Save or discard your other previews first.");
+    let w = gap(`u:${k}:${u.userId}`, k === "clip" ? LIMITS.userClip : LIMITS.userSnap);
+    if (w) throw refuse(429, `Slow down - one ${k} every ${(k === "clip" ? LIMITS.userClip : LIMITS.userSnap) / 1000} s (try again in ${w} s).`);
+    w = gap(`s:${k}:${streamKey}`, k === "clip" ? LIMITS.streamClip : LIMITS.streamSnap);
+    if (w) { hits.delete(`u:${k}:${u.userId}`); throw refuse(429, `Someone just ${k === "clip" ? "clipped" : "snapped"} this stream - try again in ${w} s.`); }
+    // An HLS encode already in flight shares the three-preview cap with a newly queued mic job.
+    hlsInFlight.set(u.userId, (hlsInFlight.get(u.userId) || 0) + 1);
+  });
   try {
-    info = k === "clip" ? await extractClip(segs, want, out) : await extractSnap(segs, out);
-  } catch (e) {
-    try { fs.unlinkSync(out); } catch (_) { /* none */ }
-    if (e.refuse) throw e;
-    console.error("[stagecap] ffmpeg:", e.message, e.stderr || "");
-    throw refuse(502, `Couldn't ${k} that stream just now - nothing was charged.`);
+    const id = "c" + crypto.randomBytes(10).toString("hex");
+    const cap = { id, kind: k === "clip" ? "clip" : "photo" };
+    const out = previewFile(cap);
+    let info;
+    try {
+      info = k === "clip" ? await extractClip(segs, want, out) : await extractSnap(segs, out);
+    } catch (e) {
+      try { fs.unlinkSync(out); } catch (_) { /* none */ }
+      if (e.refuse) throw e;
+      console.error("[stagecap] ffmpeg:", e.message, e.stderr || "");
+      throw refuse(502, `Couldn't ${k} that stream just now - nothing was charged.`);
+    }
+    if (k === "clip" && info.secs < CLIP_MIN - 0.5) { try { fs.unlinkSync(out); } catch (_) { /* none */ } throw refuse(409, "Not enough of that stream yet to clip - try again in a few seconds."); }
+    const t = NOW();
+    await runQuery(`INSERT INTO stage_captures (id, user_id, username, room_id, source, slot_id, stream_label, kind, ct, secs, bytes, nsfw, state, created, updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'preview', ?, ?)`,
+      [id, u.userId, u.username, R.id, src.source, src.slot ? src.slot.id : null, String(src.label).slice(0, 60), cap.kind,
+       cap.kind === "clip" ? "video/mp4" : "image/webp", info.secs || 0, info.bytes, src.nsfw ? 1 : 0, t, t]);
+    if (req) { try { auditCtx.set(id, require("./contentaudit").fromRequest(req)); } catch (e) { /* none */ } }
+    console.log(`[stagecap] preview ${id} ${cap.kind} room=${R.id} stream=${src.source}${src.slot ? ":" + src.slot.id : ""} by=${u.username} bytes=${info.bytes}`);
+    return { ...(await row(id)), price: priceOf(R.id, k) };
+  } finally {
+    const left = (hlsInFlight.get(u.userId) || 1) - 1;
+    if (left) hlsInFlight.set(u.userId, left); else hlsInFlight.delete(u.userId);
   }
-  if (k === "clip" && info.secs < CLIP_MIN - 0.5) { try { fs.unlinkSync(out); } catch (_) { /* none */ } throw refuse(409, "Not enough of that stream yet to clip - try again in a few seconds."); }
-  const t = NOW();
-  await runQuery(`INSERT INTO stage_captures (id, user_id, username, room_id, source, slot_id, stream_label, kind, ct, secs, bytes, nsfw, state, created, updated)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'preview', ?, ?)`,
-    [id, u.userId, u.username, R.id, src.source, src.slot ? src.slot.id : null, String(src.label).slice(0, 60), cap.kind,
-     cap.kind === "clip" ? "video/mp4" : "image/webp", info.secs || 0, info.bytes, src.nsfw ? 1 : 0, t, t]);
-  if (req) { try { auditCtx.set(id, require("./contentaudit").fromRequest(req)); } catch (e) { /* none */ } }
-  console.log(`[stagecap] preview ${id} ${cap.kind} room=${R.id} stream=${src.source}${src.slot ? ":" + src.slot.id : ""} by=${u.username} bytes=${info.bytes}`);
-  return { ...(await row(id)), price: priceOf(R.id, k) };
+}
+
+/** Mic captures reserve an open-preview slot before starting readers. Their forward recording is
+ * free; the existing stagecap.save action remains the only route to charging and publishing. */
+async function captureMic(u, req, R, kind, secs, surface) {
+  const want = kind === "clip" ? ([10, 20, 30].includes(Number(secs)) ? Number(secs) : CLIP_DEFAULT) : 0;
+  const id = "c" + crypto.randomBytes(10).toString("hex"), t = NOW();
+  const cap = { id, source: "mic", kind: kind === "clip" ? "clip" : "photo" };
+  const userKey = `u:${kind}:${u.userId}`;
+  let reservedAt;
+  await tx(async () => {
+    const open = await openCount(u.userId, t);
+    if (open >= LIMITS.openPreviews) throw refuse(429, "Save or discard your other previews first.");
+    const w = gap(userKey, kind === "clip" ? LIMITS.userClip : LIMITS.userSnap);
+    if (w) throw refuse(429, `Slow down - one ${kind} every ${(kind === "clip" ? LIMITS.userClip : LIMITS.userSnap) / 1000} s (try again in ${w} s).`);
+    reservedAt = hits.get(userKey);
+    await runQuery(`INSERT INTO stage_captures (id, user_id, username, room_id, source, slot_id, stream_label, kind, ct, secs, nsfw, state, created, updated)
+      VALUES (?, ?, ?, ?, 'mic', NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, u.userId, u.username, R.id, "🎙 the mic", cap.kind, kind === "clip" ? "video/mp4" : "image/webp", want,
+       R.adult ? 1 : 0, kind === "clip" ? "recording" : "cutting", t, t]);
+  });
+  if (req) { try { auditCtx.set(id, require("./contentaudit").fromRequest(req)); } catch (_) { /* optional audit context */ } }
+  let job;
+  try {
+    job = await micEngine().start({ id, R, user: u, kind, secs: want, surface, out: previewFile(cap), tmpDir: tmpDir() }, {
+      cutting: () => runQuery("UPDATE stage_captures SET state = 'cutting', updated = ? WHERE id = ? AND state = 'recording'", [NOW(), id])
+    });
+  } catch (e) {
+    if (hits.get(userKey) === reservedAt) hits.delete(userKey);
+    await failMic(cap);
+    throw e;
+  }
+  const done = job.done.then(async info => {
+    const note = info.audio && (info.audio.reason === "off" ? { kind: "off" } : info.audio.reason ? { kind: "old-pepe" }
+      : info.audio.muted_s > 0 ? { kind: "muted", secs: info.audio.muted_s } : null);
+    const accepted = await tx(async () => {
+      const result = await runQuery(`UPDATE stage_captures SET state = 'preview', secs = ?, bytes = ?, audio_note = ?, updated = ?
+        WHERE id = ? AND state IN ('recording','cutting')`, [info.secs || 0, info.bytes, note ? JSON.stringify(note) : null, NOW(), id]);
+      if (!result.changes) return false;
+      for (const login of new Set(info.people || [])) await runQuery("INSERT OR IGNORE INTO stage_capture_people (capture_id, login) VALUES (?, ?)",
+        [id, String(login).toLowerCase()]);
+      return true;
+    });
+    if (!accepted) { dropPreview(cap); return row(id); }
+    const c = await row(id);
+    await ensureMic(c);
+    return c;
+  }).catch(async e => {
+    await failMic(cap);
+    // Never log an RTSP URL or ffmpeg arguments containing the job's credentials.
+    if (!e.refuse) console.error("[stagecap] mic capture failed:", micEngine().sanitize(e.message));
+    throw e.refuse ? e : refuse(502, MIC_TEXT.failed, "stagecap.mic.failed");
+  });
+  // Attach immediately: recording finishes asynchronously even if the requesting browser leaves.
+  done.catch(() => {});
+  await runQuery("UPDATE stage_captures SET ready_by = ? WHERE id = ?", [job.ready_by, id]);
+  if (kind === "snap") await done;
+  return { ...(await row(id)), price: priceOf(R.id, kind) };
+}
+
+async function failMic(c, message = MIC_TEXT.failed) {
+  await runQuery("UPDATE stage_captures SET state = 'failed', message = ?, updated = ? WHERE id = ? AND state IN ('recording','cutting','preview','saving')",
+    [message, NOW(), c.id]);
+  micEngine().cancel(c.id);
+  dropPreview(c);
+  auditCtx.delete(c.id);
+}
+async function ensureMic(c) {
+  if (!c || c.source !== "mic" || !["recording", "cutting", "preview", "saving"].includes(c.state)) return;
+  const why = await micEngine().recheck(c);
+  if (!why) return;
+  await failMic(c, MIC_TEXT.revoked);
+  throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
 }
 
 async function row(id) { return (await getQuery("SELECT * FROM stage_captures WHERE id = ?", [String(id || "")]))[0] || null; }
-function view(c, price) {
+function view(c, price, req) {
   if (!c) return null;
   const live = c.state === "preview" || c.state === "saving";
+  let audioNote = null;
+  if (c.source === "mic" && c.audio_note) { try { audioNote = JSON.parse(c.audio_note); } catch (_) { /* old or incomplete row */ } }
   return { id: c.id, kind: c.kind, state: c.state, secs: c.secs || 0, stream: c.stream_label, source: c.source, nsfw: !!c.nsfw,
            preview: live ? "/api/stage/captures/" + c.id + "/preview" : null, url: c.media_id ? "/media/" + c.media_id : null,
-           message: c.message || null, expires: live ? c.created + PREVIEW_TTL : null, price: price == null ? priceOf(c.room_id, c.kind === "clip" ? "clip" : "snap") : price };
+           message: micText(req, c.message) || null, ready_by: c.ready_by || null, audio_note: audioNote,
+           expires: live ? c.created + PREVIEW_TTL : null, price: price == null ? priceOf(c.room_id, c.kind === "clip" ? "clip" : "snap") : price };
 }
 
 /** Save a preview: queue the website action Pepe charges and publishes. */
@@ -373,6 +503,7 @@ async function save(user, id, idem) {
   await init();
   const c = await row(id);
   if (!c || c.user_id !== (user && user.userId)) throw refuse(404, "That isn't a capture you made.");
+  await ensureMic(c);
   if (c.state === "saving" || c.state === "done") return c;
   if (c.state !== "preview" || NOW() - c.created > PREVIEW_TTL || !fs.existsSync(previewFile(c))) throw refuse(410, "That preview expired - take a fresh one.");
   const u = await account(c.user_id);
@@ -380,18 +511,33 @@ async function save(user, id, idem) {
   if (why) throw refuse(403, why);
   const off = killed(c.kind) || roomOff(c.room_id);
   if (off) throw refuse(403, off);
-  const actions = require("./actions");
-  let aid;
-  try {
-    aid = await actions.queue(c.user_id, { kind: "stagecap.save", args: [c.room_id, c.id, c.kind === "clip" ? "clip" : "snap"], tag: "stagecap",
-      label: `📺 stage ${c.kind === "clip" ? "clip" : "snap"} of ${c.stream_label}`, idem });
-  } catch (e) {
-    if (e.message === "duplicate" && e.actionId) aid = e.actionId;
-    else if (e.message === "busy") throw refuse(429, "You already have a few things waiting for Pepe - give him a moment.");
-    else throw e;
+  const queuePreview = async () => {
+    if (c.source === "mic") {
+      const current = await row(c.id);
+      if (current.state === "saving" || current.state === "done") return current;
+      if (current.state !== "preview") throw refuse(410, "That preview expired - take a fresh one.");
+      if (await micEngine().recheck(current)) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
+    }
+    const actions = require("./actions");
+    let aid;
+    try {
+      aid = await actions.queue(c.user_id, { kind: "stagecap.save", args: [c.room_id, c.id, c.kind === "clip" ? "clip" : "snap"], tag: "stagecap",
+        label: `📺 stage ${c.kind === "clip" ? "clip" : "snap"} of ${c.stream_label}`, idem });
+    } catch (e) {
+      if (e.message === "duplicate" && e.actionId) aid = e.actionId;
+      else if (e.message === "busy") throw refuse(429, "You already have a few things waiting for Pepe - give him a moment.");
+      else throw e;
+    }
+    const changed = await runQuery("UPDATE stage_captures SET state = 'saving', action_id = ?, message = NULL, updated = ? WHERE id = ? AND state = 'preview'", [aid, NOW(), c.id]);
+    if (c.source === "mic" && !changed.changes) throw refuse(410, "That preview expired - take a fresh one.");
+    return row(c.id);
+  };
+  if (c.source !== "mic") return queuePreview();
+  // The action and state commit together: discard cannot leave an orphan save in Pepe's queue.
+  try { return await tx(queuePreview); } catch (e) {
+    if (e.i18n === "stagecap.mic.revoked") await failMic(c, MIC_TEXT.revoked);
+    throw e;
   }
-  await runQuery("UPDATE stage_captures SET state = 'saving', action_id = ?, message = NULL, updated = ? WHERE id = ? AND state = 'preview'", [aid, NOW(), c.id]);
-  return row(c.id);
 }
 
 /** The status a page polls. A failed Pepe action puts the capture back to "preview" (retry until it expires). */
@@ -399,6 +545,7 @@ async function status(user, id) {
   await init();
   let c = await row(id);
   if (!c || c.user_id !== (user && user.userId)) throw refuse(404, "That isn't a capture you made.");
+  await ensureMic(c);
   if (c.state === "saving" && c.action_id) {
     const a = (await getQuery("SELECT status, message FROM pepe_actions WHERE id = ?", [c.action_id]))[0];
     if (a && a.status === "failed") {
@@ -418,6 +565,15 @@ async function discard(user, id) {
   await init();
   const c = await row(id);
   if (!c || c.user_id !== (user && user.userId)) throw refuse(404, "That isn't a capture you made.");
+  if (c.source === "mic" && ["discarded", "failed", "expired"].includes(c.state)) return true;
+  if (c.source === "mic" && ["recording", "cutting", "preview"].includes(c.state)) {
+    const r = await runQuery("UPDATE stage_captures SET state = 'discarded', updated = ? WHERE id = ? AND state IN ('recording','cutting','preview')", [NOW(), c.id]);
+    if (!r.changes) throw refuse(409, "That one is already with Pepe.");
+    micEngine().cancel(c.id);
+    dropPreview(c);
+    auditCtx.delete(c.id);
+    return true;
+  }
   if (c.state !== "preview") throw refuse(409, c.state === "saving" ? "That one is already with Pepe." : "Nothing to discard.");
   dropPreview(c);
   await runQuery("UPDATE stage_captures SET state = 'discarded', updated = ? WHERE id = ? AND state = 'preview'", [NOW(), c.id]);
@@ -431,6 +587,7 @@ async function check(id, username) {
   await init();
   const c = await row(id);
   if (!c || !CID_RE.test(c.id) || c.username !== String(username || "") || c.state !== "saving") return null;
+  try { await ensureMic(c); } catch (e) { if (e.refuse) return null; throw e; }
   if (NOW() - c.created > SAVE_TTL || !fs.existsSync(previewFile(c))) return null;
   return c;
 }
@@ -454,17 +611,43 @@ async function publish(id, username, { hours, byAnon, by } = {}) {
   const expires = t + h * 3600e3;
   const u = await account(c.user_id);
   const byName = byAnon ? "someone" : String(by || (u && (u.displayname || u.username)) || c.username || "someone").slice(0, 60);
-  fs.renameSync(previewFile(c), path.join(media.DIR, file));
-  try {
+  let moved = false;
+  const insertMedia = async () => {
+    fs.renameSync(previewFile(c), path.join(media.DIR, file));
+    moved = true;
     await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, source, stream, nsfw, by_user_id, slot_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'stage', ?, ?, ?, ?)`,
       [mid, c.kind, c.ct, file, c.bytes, c.secs || 0, String(c.stream_label || "").slice(0, 60), byName, c.room_id, t, expires,
-       c.source === "pepe" ? "pepe" : "slot:" + c.slot_id, c.nsfw ? 1 : 0, c.user_id, c.slot_id || null]);
+       c.source === "mic" ? "mic" : c.source === "pepe" ? "pepe" : "slot:" + c.slot_id, c.nsfw ? 1 : 0, c.user_id, c.slot_id || null]);
+  };
+  try {
+    if (c.source === "mic") {
+      const result = await tx(async () => {
+        const current = await row(c.id);
+        if (current.state === "done") {
+          const m = (await getQuery("SELECT expires FROM media WHERE id = ?", [current.media_id]))[0];
+          return { media_id: current.media_id, expires: m ? m.expires : null, again: true };
+        }
+        if (current.state !== "saving") return null;
+        if (await micEngine().recheck(current)) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
+        await insertMedia();
+        // Recheck after the asynchronous insert too. A revocation rolls back the new media and
+        // the file move; a competing failed/discarded state can never be overwritten with done.
+        if (await micEngine().recheck(current)) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
+        const changed = await runQuery("UPDATE stage_captures SET state = 'done', media_id = ?, updated = ? WHERE id = ? AND state = 'saving'", [mid, t, c.id]);
+        if (!changed.changes) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
+        return { media_id: mid, expires };
+      });
+      if (!result || result.again) return result;
+    } else {
+      await insertMedia();
+      await runQuery("UPDATE stage_captures SET state = 'done', media_id = ?, updated = ? WHERE id = ?", [mid, t, c.id]);
+    }
   } catch (e) {
-    try { fs.renameSync(path.join(media.DIR, file), previewFile(c)); } catch (_) { /* gone */ }
+    if (moved) { try { fs.renameSync(path.join(media.DIR, file), previewFile(c)); } catch (_) { try { fs.unlinkSync(path.join(media.DIR, file)); } catch (_) { /* gone */ } } }
+    if (e.i18n === "stagecap.mic.revoked") { await failMic(c, MIC_TEXT.revoked); return null; }
     throw e;
   }
-  await runQuery("UPDATE stage_captures SET state = 'done', media_id = ?, updated = ? WHERE id = ?", [mid, t, c.id]);
   try {
     const audit = require("./contentaudit");
     await audit.record(auditCtx.get(c.id) || {}, { kind: "capture", id: mid, event: "create", user: u });
@@ -498,6 +681,13 @@ async function canDelete(user, m) {
   }
   if (m.source !== "stage") return false;
   if (m.by_user_id && m.by_user_id === user.userId) return true;
+  if (m.stream === "mic") {
+    await init();
+    const acct = await account(user.userId);
+    const mine = String(acct && acct.camfrogUsername || "").toLowerCase();
+    if (mine && (await getQuery(`SELECT 1 FROM stage_capture_people p JOIN stage_captures c ON c.id = p.capture_id
+      WHERE c.media_id = ? AND p.login = ? COLLATE NOCASE LIMIT 1`, [m.id, mine])).length) return true;
+  }
   if (m.slot_id) {
     const s = await require("./mainstage").getSlot(m.slot_id);
     if (s && s.userId === user.userId) return true;
@@ -510,6 +700,7 @@ async function remove(user, mediaId) {
   const m = (await getQuery("SELECT * FROM media WHERE id = ? AND deleted = 0", [String(mediaId)]))[0];
   if (!m) throw refuse(404, "No such capture.");
   if (!(await canDelete(user, m))) {
+    if (m.source === "stage" && m.stream === "mic") throw refuse(403, MIC_TEXT.delete_denied, "stagecap.mic.delete_denied");
     throw refuse(403, m.source === "user" ? "Only the person who posted this story, the pad's owner or mods, or an admin can remove it."
       : !m.source ? "Only the person who took it, the person in it, the pad's owner or mods, or an admin can delete this."
       : "Only the pad's owner, an admin, the person who took it or the streamer can delete this.");
@@ -600,7 +791,8 @@ function register(app, { addUser, isBotToken, noTimers }) {
     next();
   };
   const fail = (res, e) => {
-    if (e && e.refuse) return res.status(e.status).json({ ok: false, error: e.message });
+    if (e && e.refuse) return res.status(e.status).json({ ok: false,
+      error: e.i18n && res.req && res.req.t ? res.req.t(e.i18n, e.vars) : e.message });
     console.error("[stagecap]", e);
     res.status(500).json({ ok: false, error: "Something went wrong - nothing was charged." });
   };
@@ -615,10 +807,11 @@ function register(app, { addUser, isBotToken, noTimers }) {
       const R = req.query.room ? await deps.resolveRoom(String(req.query.room).slice(0, 128)) : null;
       const why = eligibility(u);
       const sw = switches();
+      const mic = await micEngine().availability(R, u, req.query.surface === "home" ? "home" : "pad", req.t ? (key, vars) => req.t(key, vars) : undefined);
       res.json({ ok: true, signed: !!u, eligible: !why, why: u ? why : null, clip: { def: CLIP_DEFAULT, max: CLIP_MAX, min: CLIP_MIN },
                  prices: { snap: priceOf(R ? R.id : null, "snap"), clip: priceOf(R ? R.id : null, "clip") },
                  // 1.99cw: the admin's switches (off -> hidden) and the pad's Camfrog room's !snap switch (off -> greyed)
-                 enabled: { snap: sw.snap, clip: sw.clip }, room_off: R ? roomOff(R.id) : null });
+                 enabled: { snap: sw.snap, clip: sw.clip }, room_off: R ? roomOff(R.id) : null, mic });
     } catch (e) { fail(res, e); }
   });
 
@@ -633,8 +826,8 @@ function register(app, { addUser, isBotToken, noTimers }) {
         const R = await deps.resolveRoom(String(b.room).slice(0, 128));
         if (R && !PA.canSee(req.user, R.id)) return res.status(404).json({ ok: false, error: "No such pad." });
       }
-      const c = await capture(req.user, req, { room: b.room, stream: b.stream, kind: b.kind, secs: b.secs });
-      res.json({ ok: true, capture: view(c, c.price) });
+      const c = await capture(req.user, req, { room: b.room, stream: b.stream, kind: b.kind, secs: b.secs, surface: b.surface });
+      res.json({ ok: true, capture: view(c, c.price, req) });
     } catch (e) { fail(res, e); }
   });
   app.get("/api/stage/captures/:id/preview", addUser, async (req, res) => {
@@ -643,22 +836,23 @@ function register(app, { addUser, isBotToken, noTimers }) {
       await init();
       const c = await row(req.params.id);
       if (!req.user || !c || c.user_id !== req.user.userId || !["preview", "saving"].includes(c.state)) return res.status(404).send("Not found.");
+      await ensureMic(c);
       const p = previewFile(c);
       if (!fs.existsSync(p)) return res.status(410).send("Expired.");
       res.set("X-Content-Type-Options", "nosniff");
       res.set("Content-Security-Policy", "default-src 'none'; sandbox");
       res.type(c.ct);
       res.sendFile(p, { acceptRanges: true });
-    } catch (e) { res.status(500).send("Error."); }
+    } catch (e) { fail(res, e); }
   });
   app.get("/api/stage/captures/:id", addUser, async (req, res) => {
     noStore(res);
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
-    try { res.json({ ok: true, capture: view(await status(req.user, req.params.id)) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: true, capture: view(await status(req.user, req.params.id), undefined, req) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/stage/captures/:id/save", addUser, guard, json, async (req, res) => {
     noStore(res);
-    try { res.json({ ok: true, capture: view(await save(req.user, req.params.id, (req.body || {}).idem)) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: true, capture: view(await save(req.user, req.params.id, (req.body || {}).idem), undefined, req) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/stage/captures/:id/discard", addUser, guard, json, async (req, res) => {
     try { await discard(req.user, req.params.id); res.json({ ok: true }); } catch (e) { fail(res, e); }
