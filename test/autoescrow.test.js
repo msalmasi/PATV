@@ -405,6 +405,24 @@ test("the claim link: Pepe issues it to the login, the signed-in account takes t
   assert.ok(await AE.claimInfo(T), "still usable after a failure");
 });
 
+test("the claim link's real link step: user.controller exports completeCamfrogLink and redeemClaim calls it by default", async () => {
+  // 1.99afx: every prod claim failed with "completeCamfrogLink is not a function" - the tests above pass their own `link`
+  const UC = require(path.join(repo, "user.controller"));
+  assert.equal(typeof UC.completeCamfrogLink, "function", "exported (checked before anything is stubbed)");
+  await user("auto13", { username: "CFmmmm1313", cf: "defaultpath" });
+  await AA.markNew("auto13");
+  await user("real13", { username: "defaultpath_real", email: "dp@example.com" });
+  const T = (await AE.claimLink("defaultpath")).url.split("/claim/")[1];
+  const real = UC.completeCamfrogLink;
+  const calls = [];
+  UC.completeCamfrogLink = async (uid, login) => { calls.push([uid, login]); return { merged: false }; };
+  try {
+    const r = await AE.redeemClaim(T, { userId: "real13", username: "defaultpath_real" });
+    assert.equal(r.ok, true);
+    assert.deepEqual(calls, [["real13", "defaultpath"]]);
+  } finally { UC.completeCamfrogLink = real; }
+});
+
 test("admin view and settings", async () => {
   const v = await AE.adminView();
   assert.equal(v.enabled, true);

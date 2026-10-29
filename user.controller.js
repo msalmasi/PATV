@@ -1101,6 +1101,7 @@ module.exports = {
   updateTwitchId,
   updateCamfrogUsername,
   verifyCamfrogLink,
+  completeCamfrogLink,  // 1.99afx: the !signup claim page (autoescrow.redeemClaim) links through it - it was never exported
   awardBadge,
   xpForNextLevel,
   updateLevel,
