@@ -265,6 +265,40 @@ test("real ffmpeg composes two tiles plus sine, honors silence windows and strip
   await fm.run(fm.bin("ffmpeg"), M.composeArgs({ ...opts, out: silent, audio: { reason: "outdated", segments: [] } }), { timeoutMs: 30000 });
   assert.equal((await fm.probe(silent, "mov")).audio, null);
 });
+// review fix: the VPS runs ffmpeg 4.2.7, which has neither adelay's all= (4.3+) nor amix's normalize= (4.4+).
+test("clip audio graph uses only ffmpeg 4.2 options and keeps every segment at full level in its place", async () => {
+  const base = path.join(tmp, "audio42.png"), out = path.join(tmp, "audio42.mp4"), ref = path.join(tmp, "audio42-ref.mp4");
+  await sharp({ create: { width: 1280, height: 720, channels: 3, background: "#10151d" } }).png().toFile(base);
+  const compose = (segments, file) => M.composeArgs({ base, tiles: [], rectangles: [], duration: 4, audioFile: tone, audio: { reason: null, muted: [], segments }, out: file });
+  const args = compose([{ begin: 0, end: 1, at: 0 }, { begin: 2, end: 3, at: 2.5 }], out);
+  const graph = args[args.indexOf("-filter_complex") + 1];
+  assert.doesNotMatch(graph, /normalize=/); assert.doesNotMatch(graph, /:all=/);
+  assert.match(graph, /adelay=2500\|2500,apad,atrim=end=4\.0000\[ad1\]/); assert.match(graph, /amix=inputs=2,volume=2,/);
+  // Set FFMPEG_PATH / FFPROBE_PATH to a 4.x build to prove the same graph there.
+  await fm.run(fm.bin("ffmpeg"), args, { timeoutMs: 30000 });
+  // The reference is the whole tone as one segment through the same AAC/stereo encode: amix's 1/N must be undone.
+  await fm.run(fm.bin("ffmpeg"), compose([{ begin: 0, end: 4, at: 0 }], ref), { timeoutMs: 30000 });
+  const peak = (file, at, len) => {
+    const pcm = ff(["-i", file, "-ss", String(at), "-t", String(len), "-map", "0:a:0", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1"]);
+    let max = 0; for (let i = 0; i < pcm.length - 1; i += 2) max = Math.max(max, Math.abs(pcm.readInt16LE(i))); return max;
+  };
+  const level = peak(ref, 0.3, 0.4);
+  assert.ok(level > 1000, "the reference is audible: " + level);
+  for (const at of [0.3, 2.8]) { const p = peak(out, at, 0.4); assert.ok(p > level * 0.85 && p < level * 1.15, `segment at ${at} s: ${p} vs ${level}`); }
+  for (const at of [1.3, 3.7]) assert.ok(peak(out, at, 0.2) < 12, "outside its segments the mix is silent at " + at);
+  assert.ok(peak(out, 2.1, 0.3) < 12, "the second segment starts at its own delay, not earlier");
+});
+test("capture consent uses the strict private-profile lookup and refuses when it fails", async () => {
+  // review fix: camRefusal swallows a failed lookup as "public"; the fixture's camRefusal lets everyone through.
+  M.configure({ privateLogins: async () => { throw Error("profile read failed"); } });
+  assert.equal((await T.tileFor(cam("alice"), R, U)).mode, "blank");
+  assert.equal(await T.consent("alice", U.userId), false);
+  M.configure({ people: async () => ["alice"] });
+  assert.equal(await M.recheck({ id: id(), room_id: R.id, user_id: U.userId, kind: "photo" }), T.MSG.revoked);
+  M.configure({ privateLogins: async ls => new Set(ls.filter(l => l === "alice")) });
+  assert.equal((await T.tileFor(cam("alice"), R, U)).mode, "blank");
+  assert.equal((await T.tileFor(cam("bob"), R, U)).mode, "live");
+});
 
 // UI sandbox for the actual stage-capture.js. Append this section to stagemiccap.test.js.
 // Block scope keeps its fixtures independent from the server/ffmpeg harness.

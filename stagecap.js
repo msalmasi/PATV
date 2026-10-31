@@ -36,6 +36,7 @@
 // Rate limits (memory): per user one snap / 10 s and one clip / 60 s; per stream one snap / 3 s and
 // one clip / 20 s; at most 3 open previews per user (including recording/cutting mic jobs).
 // Mic jobs also have one clip per pad, one snap per pad / 3 s and two jobs of each kind site-wide.
+// review fix: a mic start the engine refuses still costs that user 3 s (LIMITS.micRetry) per kind; gate refusals cost nothing.
 //
 // Switches (1.99cw), checked at preview, at save, and by Pepe at save time:
 //   * the admin kill switch: stage config (mainstage.js, Stage admin) stagecap_enabled, plus one per
@@ -73,7 +74,8 @@ const MIN_LEVEL = 2;
 const PRICES = { snap: 25000, clip: 50000 };   // Pepe's DEFAULT_PAT_COSTS; he charges the room's real price
 const NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const CID_RE = /^c[a-f0-9]{20}$/;
-const LIMITS = { userSnap: 10e3, userClip: 60e3, streamSnap: 3e3, streamClip: 20e3, openPreviews: 3 };
+// review fix: micRetry = what a mic capture the engine refused still costs the user (per kind), instead of nothing
+const LIMITS = { userSnap: 10e3, userClip: 60e3, streamSnap: 3e3, streamClip: 20e3, openPreviews: 3, micRetry: 3e3 };
 
 let NOW = () => Date.now();
 
@@ -416,6 +418,9 @@ async function capture(user, req, { room, stream, kind, secs, surface } = {}) {
 /** Mic captures reserve an open-preview slot before starting readers. Their forward recording is
  * free; the existing stagecap.save action remains the only route to charging and publishing. */
 async function captureMic(u, req, R, kind, secs, surface) {
+  // review fix: the engine's gates (stagecap_mic, home surface, pad access, bridge permission, !snap / !clip) run before
+  // anything is written - a refusal, and every request while the switch is off, costs no row and no cooldown.
+  await micEngine().gate(R, u, kind, surface);
   const want = kind === "clip" ? ([10, 20, 30].includes(Number(secs)) ? Number(secs) : CLIP_DEFAULT) : 0;
   const id = "c" + crypto.randomBytes(10).toString("hex"), t = NOW();
   const cap = { id, source: "mic", kind: kind === "clip" ? "clip" : "photo" };
@@ -439,7 +444,10 @@ async function captureMic(u, req, R, kind, secs, surface) {
       cutting: () => runQuery("UPDATE stage_captures SET state = 'cutting', updated = ? WHERE id = ? AND state = 'recording'", [NOW(), id])
     });
   } catch (e) {
-    if (hits.get(userKey) === reservedAt) hits.delete(userKey);
+    // review fix: a refused start (nobody on the mic, busy, recording, snap_wait) keeps a short retry floor instead of a
+    // full refund, which left refusals unthrottled; its never-started row goes rather than staying 30 days as 'failed'.
+    if (hits.get(userKey) === reservedAt) hits.set(userKey, NOW() - (kind === "clip" ? LIMITS.userClip : LIMITS.userSnap) + LIMITS.micRetry);
+    await runQuery("DELETE FROM stage_captures WHERE id = ? AND state IN ('recording','cutting')", [id]);
     await failMic(cap);
     throw e;
   }
@@ -593,7 +601,23 @@ async function check(id, username) {
 }
 
 /** After charging: the capture becomes a media row. Idempotent (a retried publish gets the same answer). */
-async function publish(id, username, { hours, byAnon, by } = {}) {
+async function publish(id, username, opts = {}) {
+  // review fix: Pepe refunds every publish that answers null or fails, and a second Save of the same capture replays his
+  // charge key (stagecap-<id>), so no PAT is taken. A mic capture still 'saving' after that is failed here, so status()
+  // can't put it back to 'preview' for a free save.
+  let r;
+  try { r = await publishCapture(id, username, opts); } catch (e) {
+    await failMicPublish(id, username).catch(() => {});
+    throw e;
+  }
+  if (!r) await failMicPublish(id, username);
+  return r;
+}
+async function failMicPublish(id, username) {
+  const c = await row(id);
+  if (c && c.source === "mic" && c.state === "saving" && c.username === String(username || "")) await failMic(c);
+}
+async function publishCapture(id, username, { hours, byAnon, by } = {}) {
   await init();
   const c0 = await row(id);
   if (c0 && c0.state === "done" && c0.username === String(username || "") && c0.media_id) {

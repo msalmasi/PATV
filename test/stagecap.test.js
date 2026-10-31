@@ -874,21 +874,90 @@ test("mic save and concurrent discard cannot leave an orphan action or delete a 
   assert.equal(await SC.discard(U.staff, c.id), true);
 });
 
-test("mic refused starts release the exact cooldown timestamp even when the clock advances", async t => {
+// review fix: a refused start used to refund the whole cooldown and keep a 30-day 'failed' row, so refusals were unthrottled.
+test("mic refused starts keep a short retry floor, even when the clock advances, and leave no row", async t => {
   await micJobs(t);
   const M = require(path.join(repo, "stagemiccap"));
   let clock = Date.now() + T0, starts = 0;
   SC._setClock(() => ++clock);
   t.after(() => SC._setClock(() => Date.now() + T0));
-  M.start = async () => { starts++; throw Object.assign(new Error("refused fixture"), { refuse: true, status: 403 }); };
-  for (let i = 0; i < 2; i++) {
-    await assert.rejects(SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10 }),
-      error => error.status === 403 && error.message === "refused fixture");
-    assert.equal(SC._hits.has("u:clip:" + U.staff.userId), false, "a refused start does not consume the user's cooldown");
+  M.start = async () => { starts++; throw Object.assign(new Error("refused fixture"), { refuse: true, status: 409 }); };
+  const clip = () => SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10 });
+  await assert.rejects(clip(), error => error.status === 409 && error.message === "refused fixture");
+  await assert.rejects(clip(), error => error.status === 429 && /try again in [1-3] s/.test(error.message), "an immediate retry is throttled");
+  assert.equal(starts, 1);
+  clock += SC.LIMITS.micRetry;
+  await assert.rejects(clip(), error => error.status === 409 && error.message === "refused fixture");
+  assert.equal(starts, 2, "after the short floor a retry reaches the engine, without waiting out the clip cooldown");
+  assert.deepEqual(await getQuery("SELECT state FROM stage_captures WHERE user_id = ?", [U.staff.userId]), [], "refused starts leave no 'failed' rows");
+});
+
+// review fix: the gates ran inside the engine after the row insert, so even with stagecap_mic OFF every request wrote a row.
+test("mic gate refusals (switch off, home, pad access, bridge block, !clip off) write no row and spend no cooldown", async t => {
+  await micJobs(t);
+  const M = require(path.join(repo, "stagemiccap")), B = require(path.join(repo, "bridge"));
+  let starts = 0;
+  // Like the real engine, this start refuses through the same gate.
+  M.start = async opts => { starts++; await M.gate(opts.R, opts.user, opts.kind, opts.surface); throw new Error("the gate should have refused"); };
+  const open = { full: async () => true, block: () => null, clipSwitch: () => true, clipOffText: id => B.clipOffText(id) };
+  t.after(() => M.configure(open));
+  const cases = [
+    ["switch off", () => MS.setConfig({ stagecap_mic: false }, "test"), {}, /Mic-stage captures are off/],
+    ["home", null, { surface: "home" }, /Open the pad/],
+    ["pad access", () => M.configure({ full: async () => false }), {}, /not available to this account/],
+    ["bridge block", () => M.configure({ block: () => "Blocked fixture." }), {}, /Blocked fixture/],
+    ["!clip off", () => M.configure({ clipSwitch: () => false, clipOffText: () => "Clips off fixture." }), { kind: "clip", secs: 10 }, /Clips off fixture/],
+  ];
+  for (const [name, setup, extra, error] of cases) {
+    if (setup) await setup();
+    for (let i = 0; i < 3; i++) {
+      const r = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "snap", surface: "pad", ...extra }, U.staff);
+      assert.equal(r.status, 403, name); assert.match(r.d.error, error, name);
+    }
+    M.configure(open); await MS.setConfig({ stagecap_mic: true }, "test");
   }
-  assert.equal(starts, 2, "an immediate retry reaches the engine instead of a false rate limit");
-  const rows = await getQuery("SELECT state FROM stage_captures WHERE user_id = ?", [U.staff.userId]);
-  assert.deepEqual(rows, [{ state: "failed" }, { state: "failed" }]);
+  assert.equal(starts, 0, "no gate refusal reaches the engine");
+  assert.deepEqual(await getQuery("SELECT state FROM stage_captures WHERE user_id = ?", [U.staff.userId]), []);
+  assert.deepEqual([...SC._hits.keys()].filter(k => k.startsWith("u:")), [], "no cooldown spent");
+});
+
+// review fix: Pepe refunds a failed publish, and a second Save replays his charge key (stagecap-<id>) - no PAT taken.
+test("a mic capture whose publish fails or answers gone stays failed, so a refunded capture can't be saved again", async t => {
+  const f = await micJobs(t), db = require(path.join(repo, "dbUtils")).db, M = require(path.join(repo, "stagemiccap"));
+  const originalRun = db.run, recheck = M.recheck;
+  t.after(async () => { db.run = originalRun; M.recheck = recheck; await MS.setConfig({ stagecap_snaps: true }, "test"); });
+  const refunded = async (c, saved) => {
+    assert.equal((await getQuery("SELECT state FROM stage_captures WHERE id = ?", [c.id]))[0].state, "failed");
+    assert.equal(fs.existsSync(f.jobs.get(c.id).opts.out), false);
+    await runQuery("UPDATE pepe_actions SET status = 'failed', message = 'refunded' WHERE id = ?", [saved.action_id]);
+    assert.equal((await SC.status(U.staff, c.id)).state, "failed", "the page's poll can't bring the preview back");
+    await assert.rejects(SC.save(U.staff, c.id, "again-" + c.id), error => error.status === 410);
+  };
+  // a non-refusal error while publishing: Pepe gets a 500
+  let c = await SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "snap", surface: "pad" });
+  let saved = await SC.save(U.staff, c.id, "mic-publish-error");
+  db.run = function (sql, params, callback) {
+    if (/^\s*INSERT INTO media\b/.test(sql)) return process.nextTick(() => callback.call(this, new Error("disk full fixture")));
+    return originalRun.apply(this, arguments);
+  };
+  const p = await post("/api/stage/captures/publish", { password: "bot-token", id: c.id, user: U.staff.username });
+  db.run = originalRun;
+  assert.equal(p.status, 500);
+  await refunded(c, saved);
+  // the switch goes off between Pepe's check and his publish: publish answers gone
+  SC._hits.clear();
+  c = await SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "snap", surface: "pad" });
+  saved = await SC.save(U.staff, c.id, "mic-publish-off");
+  M.recheck = async capture => { const why = await recheck(capture); await MS.setConfig({ stagecap_snaps: false }, "test"); return why; };
+  assert.equal((await post("/api/stage/captures/publish", { password: "bot-token", id: c.id, user: U.staff.username })).status, 410);
+  M.recheck = recheck; await MS.setConfig({ stagecap_snaps: true }, "test");
+  await refunded(c, saved);
+  // a publish naming someone else's capture never fails it
+  SC._hits.clear();
+  c = await SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "snap", surface: "pad" });
+  await SC.save(U.staff, c.id, "mic-publish-other");
+  assert.equal((await post("/api/stage/captures/publish", { password: "bot-token", id: c.id, user: "someoneelse" })).status, 410);
+  assert.equal((await getQuery("SELECT state FROM stage_captures WHERE id = ?", [c.id]))[0].state, "saving");
 });
 
 test("an HLS encode in flight reserves the last shared preview slot before another mic capture starts", { timeout: 15000 }, async t => {

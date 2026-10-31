@@ -139,7 +139,11 @@ function coverArt(entry) {
   return { art, label: String(entry.name || "") + (valid ? " · " + entry.veil : "") };
 }
 async function consent(login, userId) {
-  try { return !(await deps.hidden(login)) && !(await deps.camRefusal(login, userId, { strict: true })); } catch (_) { return false; }
+  // review fix: camRefusal treats a failed private-profile lookup as public. The strict lookup throws instead, which refuses here.
+  try {
+    return !(await deps.hidden(login)) && !(await deps.privateLogins([login])).has(String(login).toLowerCase()) &&
+      !(await deps.camRefusal(login, userId, { strict: true }));
+  } catch (_) { return false; }
 }
 async function tileFor(e, R, user) {
   const t = { id: e.id, mode: "blank", newest: !!e.newest, pin: !!e.pin, name: "", source: e };
@@ -494,8 +498,14 @@ function composeArgs({ base, tiles, rectangles, duration, audioFile, audio, spea
     args.push("-protocol_whitelist", "file", "-f", "mp3", "-i", audioFile);
     const n = audio.segments.length;
     f.push(`[${index}:a]asplit=${n}${audio.segments.map((_, i) => `[as${i}]`).join("")}`);
-    audio.segments.forEach((s, i) => f.push(`[as${i}]atrim=start=${num(s.begin)}:end=${num(s.end)},asetpts=PTS-STARTPTS,adelay=${Math.round(s.at * 1000)}:all=1[ad${i}]`));
-    f.push(audio.segments.map((_, i) => `[ad${i}]`).join("") + `amix=inputs=${n}:normalize=0,apad,atrim=duration=${num(duration)}` +
+    // review fix: the VPS's ffmpeg 4.2 has neither adelay's all= (4.3+) nor amix's normalize= (4.4+). Delay both MP3
+    // channels explicitly and pad every input to the clip's length: amix then scales by a constant 1/N (no input ever
+    // drops out), and volume=N restores the plain sum.
+    audio.segments.forEach((s, i) => {
+      const d = Math.round(s.at * 1000);
+      f.push(`[as${i}]atrim=start=${num(s.begin)}:end=${num(s.end)},asetpts=PTS-STARTPTS,adelay=${d}|${d},apad,atrim=end=${num(duration)}[ad${i}]`);
+    });
+    f.push(audio.segments.map((_, i) => `[ad${i}]`).join("") + `amix=inputs=${n},volume=${n},apad,atrim=duration=${num(duration)}` +
       (audio.muted.length ? `,volume=0:enable='${audio.muted.map(([a, b]) => `between(t,${num(a)},${num(b)})`).join("+")}'` : "") + "[audio]");
   }
   args.push("-filter_complex", f.join(";"), "-map", `[v${v}]`);
@@ -597,6 +607,6 @@ async function start(opts, hooks = {}) {
     .finally(() => { cleanJob(job); clearTimeout(job.endTimer); JOBS.delete(job.id); });
   return { ready_by: job.deadline, done, cancel: () => cancel(job.id) };
 }
-module.exports = { configure, init, start, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
+module.exports = { configure, init, start, gate, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
   _test: { entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
