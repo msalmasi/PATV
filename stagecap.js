@@ -701,7 +701,10 @@ async function depictedOf(userId, login, upto = NOW(), { mediaId = null, wide = 
   const MR = require("./micrec"), ids = await MR.holderIds(userId), out = new Map();
   for (const w of await require("./accountdelete").loginWindowsOf(userId, login, upto)) {
     const others = (await MR.othersMarks(userId, w.login, ids)).reduce((m, at) => (at < w.to && at > m ? at : m), 0);
-    const from = others > 0 && !wide ? Math.max(others, Number(w.from) || 0) : others;   // review fix 2: own link, unless deleting
+    // review fix 2: own link, unless deleting - a deleted earlier holder (its marker; its login history is pseudonymised) counts too
+    const gone = wide ? 0 : await MR.goneAt(w.login);
+    const earlier = Math.max(others, gone > 0 && gone < w.to ? gone : 0);
+    const from = earlier > 0 && !wide ? Math.max(earlier, Number(w.from) || 0) : others;
     const rows = await getQuery(`SELECT p.capture_id, p.login, c.state, c.media_id, c.room_id, c.kind, c.created FROM stage_capture_people p
       JOIN stage_captures c ON c.id = p.capture_id WHERE p.login = ? AND c.created > ? AND c.created <= ?${mediaId ? " AND c.media_id = ?" : ""}`,
       [w.login, from, w.to].concat(mediaId ? [String(mediaId)] : []));

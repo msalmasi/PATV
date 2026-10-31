@@ -515,6 +515,14 @@ async function earlierHolder(uid, login) {
   if ((await othersMarks(uid, l)).length) return true;
   return (await getQuery("SELECT 1 FROM micrec_login_gone WHERE h = ? LIMIT 1", [goneHash(l)])).length > 0;
 }
+/** review fix (handoff 16): when a deleted account let `login` go (its micrec_login_gone marker), ms - 0 if no deleted holder. */
+async function goneAt(login) {
+  await init();
+  const l = low(login);
+  if (!LOGIN_RE.test(l)) return 0;
+  const m = (await getQuery("SELECT at FROM micrec_login_gone WHERE h = ?", [goneHash(l)]))[0];
+  return m ? Number(m.at) || 0 : 0;
+}
 /**
  * review 2: since when the account's lines under `login` (its login now) are its own, for Download my data's own chat / transcript
  * lines (chatlog.exportLines loginSince). 0 = all of them (no other PATV account held the login). Else the latest of: the start of
@@ -919,7 +927,7 @@ function register(app, { addUser }) {
 module.exports = { init, register, policyOn, pepeCan, setPolicy, cfg, privacyCopy, howLong, keepBlock, lapseMap, recWindowsOf, askable, queueRecDeletes, retryRecDeletes,
                    adminView, loadCfg, Refuse, REC_KIND, GRACE_MS, REC_RETRY_MS, REC_GIVE_UP_MS, HELD_WHO_MAX, REPORTED_MAX, KEEP_CACHE_MS,
                    holderIds, earlierHolder, noteLoginsGone, skippedHandled, REC_QUEUED_MS,                     // review
-                   othersMarks,                                                                                  // review fix (handoff 16): stagecap.depictedOf
+                   othersMarks, goneAt,                                                                          // review fix (handoff 16): stagecap.depictedOf
                    ownSince, scrubLateAcks, alertSkipped, REC_SKIP_REMIND_MS,                                    // review 2
                    pepeGaps, drift, accountHoldHashes, REC_WAIT_WARN_MS,                                         // review 4
                    unknownCopy, UNKNOWN_OK, ruleChanges, gapsNow,                                                // 1.99afv (+ review)

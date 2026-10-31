@@ -130,6 +130,27 @@ test("review fix 2: the unlinked gap between two holders is nobody's for the del
   assert.ok((await SC.depictedOf("alice", "alicenew", NOW, { wide: true })).some((r) => r.capture_id === GAP.capZ), "alice's deletion reaches it");
   // (both stay for the deletion test below: alice's deletion removes the "alicenew" one, never the "sharedcf" one)
 });
+test("review fix 2: a DELETED earlier holder's marker counts - the gap before the next holder's link is still nobody's", async () => {
+  await gapSetup();
+  // zed had "gonecf" and deleted his account (his login history pseudonymised, only the micrec_login_gone marker left);
+  // a capture of "gonecf" after that; then erin linked it
+  const zedGone = NOW - 2.5 * H, capAt = NOW - 2.25 * H, erinLinked = NOW - 2 * H;
+  const capG = "c" + "8".repeat(20), midG = "88880000ffff0000";
+  await runQuery(`INSERT INTO users (userId, username, displayname, email, password, class, camfrogUsername, points_balance, isEmailVerified)
+                  VALUES ('erin', 'erin', 'erin', 'erin@example.com', 'x', 'pleb', 'gonecf', 0, 1)`);
+  await runQuery(`INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES ('erin', NULL, 'gonecf', 'u:erin', 'gonecf', ?, 'verify')`, [erinLinked]);
+  await require(path.join(repo, "micrec")).noteLoginsGone([{ login: "gonecf", at: zedGone }]);
+  await cap(capG, "done", capAt, midG, ["gonecf"]);
+  const erin = { userId: "erin", username: "erin", class: "pleb" };
+  const m = (await getQuery("SELECT * FROM media WHERE id = ?", [midG]))[0];
+  assert.equal(await SC.canDelete(erin, m), false, "erin linked 'gonecf' only after this was made (zed, now deleted, had it before)");
+  assert.ok(!(await X.collect("erin")).chat.mic_stage_captures_of_you.some((r) => r.capture === capG), "erin's export: never the gap");
+  assert.ok((await SC.depictedOf("erin", "gonecf", NOW, { wide: true })).some((r) => r.capture_id === capG), "erin's own deletion would still reach it");
+  // tidy up: the account-deletion test below counts every people row left
+  await runQuery("DELETE FROM stage_capture_people WHERE capture_id = ?", [capG]);
+  await runQuery("DELETE FROM stage_captures WHERE id = ?", [capG]);
+  await runQuery("DELETE FROM media WHERE id = ?", [midG]);
+});
 
 test("account deletion: captures drawing the person go (saved copies + posts too), unfinished ones stop; the next holder's capture stays", async () => {
   await gapSetup();                                                       // review fix 2: + the two gap captures
