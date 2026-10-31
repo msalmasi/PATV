@@ -152,8 +152,21 @@ test("mode off, MP3 disabled and missing access clear targets; denied or late fe
   s.api.pad("pad"); const a = s.tile(); s.media(); await s.advance(0); assert.equal(a.rx.writes.at(-1), 1400);
   s.config.apply.mp3 = false; await s.advance(5000); assert.equal(a.rx.writes.at(-1), null); assert.equal(s.api.debug().indicator_ms, 0);
   s.config.apply.mp3 = true; s.config.on = false; await s.advance(5000); assert.equal(a.rx.writes.at(-1), null);
-  s.config.on = true; await s.advance(5000); assert.equal(a.rx.writes.at(-1), 1400);
+  // review fix: after an off answer the settings are asked for once a minute (a page left open after the switch went off)
+  s.config.on = true; const asked = s.requests.length; await s.advance(55000);
+  assert.equal(s.requests.length, asked, "off: no five-second polling"); assert.equal(a.rx.writes.at(-1), null);
+  await s.advance(5000); assert.equal(s.requests.length, asked + 1); assert.equal(a.rx.writes.at(-1), 1400);
   deny = true; await s.advance(5000); assert.equal(a.rx.writes.at(-1), null);
+  // review fix: a pad that refused this viewer (403) is not asked again before a reload
+  const refused = s.requests.length; deny = false; await s.advance(120000);
+  assert.equal(s.requests.length, refused); assert.equal(a.rx.writes.at(-1), null);
+});
+
+test("review fix: a signed-out answer (401) stops every settings request until a reload, and new cams don't restart it", async () => {
+  const s = sandbox({ fetch: () => Promise.resolve({ ok: false, status: 401 }) }); s.api.pad("pad"); const a = s.tile(); s.media(); await s.advance(0);
+  assert.equal(s.requests.length, 1); assert.equal(a.rx.writes.at(-1), null);
+  s.tile(s.receiver(), s.peer()); s.media("mp3", "other"); await s.advance(120000);
+  assert.equal(s.requests.length, 1, "no 401 every five seconds (three tabs used to hit the 30 a minute limit)");
 });
 
 function program(ids, extra = {}) { return { v: 1, src: ids.map((id, i) => ({ id, name: id.toUpperCase(), pos: i, newest: i === ids.length - 1, recent: false, video: "live", watch: "ok" })), count: ids.length, active: !!ids.length, layout: ids.length > 1 ? "split" : "single", manage: { layout_override: null }, fixed: false, ...extra }; }
@@ -186,6 +199,28 @@ test("gateProgram never resurrects removed names, delays neutral someone, and pa
   const raw = program(["instant"]); const got = s.api.gateProgram("pad", raw, cb); assert.equal(got, raw);
 });
 
+test("review fix: a tile already shown stays, with its count, when D rises (RTC fallback -> measured, play start); new tiles wait the new D", async () => {
+  const s = sandbox(); s.api.pad("pad"); s.media("rtc"); await s.advance(0);
+  assert.equal(s.api.debug().indicator_ms, 500, "first RTC stats have no interval: the whole fallback");
+  let shown; const cb = p => { shown = plain(p); }; const ids = () => shown.src.map(t => t.id);
+  s.api.gateProgram("pad", program([]), cb); await s.advance(1200);
+  s.api.gateProgram("pad", program(["a"]), cb); assert.deepEqual(ids(), []);
+  await s.advance(500); assert.deepEqual(ids(), ["a"]); assert.equal(shown.count, 1); assert.equal(shown.active, true);
+  await s.advance(300); assert.equal(s.api.debug().indicator_ms, 900, "measured: 1000 + 200 - 300");
+  assert.deepEqual(ids(), ["a"], "not pulled and re-added (that reconnected its cam)");
+  assert.equal(shown.count, 1, "the stage does not go idle under it"); assert.equal(shown.active, true);
+  s.api.gateProgram("pad", program(["a", "b"]), cb); await s.advance(899); assert.deepEqual(ids(), ["a"], "a new tile waits the whole new D");
+  await s.advance(1); assert.deepEqual(ids(), ["a", "b"]); assert.equal(shown.count, 2);
+  s.api.gateProgram("pad", program(["b"]), cb); assert.deepEqual(ids(), ["b"], "removals stay immediate");
+  // play start: paused audio shows everything at once; starting it again (D 0 -> fallback) pulls none of it
+  s.api.audio({ slug: "pad", playing: false, mode: "rtc" }); s.api.gateProgram("pad", program(["b", "c"]), cb); assert.deepEqual(ids(), ["b", "c"]);
+  await s.advance(100); s.media("rtc"); await s.advance(0); assert.equal(s.api.debug().indicator_ms, 500);
+  assert.deepEqual(ids(), ["b", "c"]); assert.equal(shown.count, 2);
+  s.api.gateProgram("pad", program(["b", "c", "d"]), cb); assert.deepEqual(ids(), ["b", "c"], "the gate still holds new tiles");
+  const veiled = program(["b", "c", "d"]); veiled.src[1].anon = true; veiled.src[1].name = "someone";
+  s.api.gateProgram("pad", veiled, cb); assert.deepEqual(ids(), ["b"], "a veil change is a new key: the named tile goes at once");
+});
+
 function roster(mic, members = ["a", "b"], extra = {}) { return { room: { topic: "current" }, members: members.map(login => ({ login, display: login.toUpperCase(), on_mic: mic.includes(login), can: "current" })), mic: mic.map(login => ({ login, display: login.toUpperCase(), on_mic: true })), ...extra }; }
 test("C2 micView delays grab/drop and sorting flags, keeps new identity/permission data, removes privacy entries immediately", async () => {
   const s = await gated(); let shown; const cb = d => { shown = plain(d); };
@@ -197,6 +232,19 @@ test("C2 micView delays grab/drop and sorting flags, keeps new identity/permissi
   shown = plain(s.api.micView("pad", roster(["a"]), cb)); await s.advance(700); assert.equal(shown.mic[0].login, "a");
   shown = plain(s.api.micView("pad", roster([], ["b"]), cb)); assert.equal(shown.mic.length, 0); assert.equal(shown.members.length, 1);
   s.config.mods_instant = true; await s.advance(5000); assert.equal(s.api.modsInstant("pad"), true);
+});
+
+test("review fix: C2 people already shown stay when D rises; a grab shorter than the delay still never flashes", async () => {
+  const s = sandbox(); s.api.pad("pad"); s.media("rtc"); await s.advance(0);
+  let shown; const cb = d => { shown = plain(d); };
+  s.api.micView("pad", roster([]), cb); await s.advance(1200);
+  shown = plain(s.api.micView("pad", roster(["a"]), cb)); assert.equal(shown.mic.length, 0);
+  await s.advance(500); assert.equal(shown.mic[0].login, "a"); assert.equal(shown.members[0].on_mic, true);
+  await s.advance(300); assert.equal(s.api.debug().indicator_ms, 900);
+  assert.equal(shown.mic.length, 1, "not pulled when D rises"); assert.equal(shown.members[0].on_mic, true);
+  shown = plain(s.api.micView("pad", roster(["a", "b"]), cb)); await s.advance(400);
+  shown = plain(s.api.micView("pad", roster(["a"]), cb)); await s.advance(2000);
+  assert.deepEqual(shown.mic.map(p => p.login), ["a"], "b's 400 ms grab never shows"); assert.equal(shown.members[1].on_mic, false);
 });
 
 test("C2 brief grabs never flash late, same-key veil replacement drops names, and lines retain their insertion order", async () => {
@@ -232,7 +280,10 @@ test("paused/off controllers do not poll stats, late stats cannot restore target
   const s = sandbox({ config: { on: false, period_s: 10 } }); s.api.pad("pad"); const a = s.tile();
   let calls = 0; const stats = a.pc.getStats; a.pc.getStats = function () { calls++; return stats.call(this); };
   s.media(); await s.advance(0); assert.equal(calls, 0, "site mode off does not collect stats");
-  s.config.on = true; await s.advance(5000); assert.equal(s.requests.length, 2, "settings poll is independent of the ten-second controller period");
+  // review fix: an off answer is asked again after a minute (not every five seconds); once on, every five seconds again
+  s.config.on = true; await s.advance(59999); assert.equal(s.requests.length, 1, "off: no five-second polling"); assert.equal(calls, 0);
+  await s.advance(1); assert.equal(s.requests.length, 2);
+  await s.advance(5000); assert.equal(s.requests.length, 3, "settings poll is independent of the ten-second controller period");
   assert.notEqual(a.rx.writes.at(-1), null);
   let complete;
   a.pc.getStats = () => new Promise(resolve => { complete = resolve; });
@@ -285,12 +336,22 @@ test("room player waits for actual RTC playing and its session, including playin
   s.player.listen("alpha"); await s.settle();
   assert.ok(s.publications.length); assert.ok(s.publications.every(p => p.playing === false), "request/connecting/early playing without session never publishes true");
   resolve(session); await s.settle(); assert.equal(s.last().playing, true); assert.equal(s.last().pc, session.pc); assert.equal(s.last().mode, "rtc");
-  for (const event of ["waiting", "pause", "ended"]) { s.rau.dispatch(event); assert.equal(s.last().playing, false, event); s.rau.dispatch("playing"); assert.equal(s.last().playing, true); }
+  // review fix: a brief stall keeps the sync, one past 4 s clears it; pause and ended (even mid-stall) clear at once
+  const stallTimer = () => s.timers.some(t => t.active && t.ms === 4000);
+  s.rau.dispatch("waiting"); assert.equal(s.last().playing, true, "a brief stall keeps the sync");
+  s.rau.dispatch("playing"); assert.equal(s.last().playing, true); assert.equal(stallTimer(), false, "playing again cancels the stall");
+  s.rau.dispatch("waiting"); s.au.dispatch("pause"); assert.equal(s.last().playing, true, "the idle MP3 element's late pause");
+  s.run(4000); assert.equal(s.last().playing, false, "a stall past 4 s clears it (the other element's event never cancels it)");
+  s.rau.dispatch("playing"); assert.equal(s.last().playing, true);
+  for (const event of ["pause", "ended"]) {
+    s.rau.dispatch("waiting"); s.rau.dispatch(event); assert.equal(s.last().playing, false, event); assert.equal(stallTimer(), false);
+    s.rau.dispatch("playing"); assert.equal(s.last().playing, true);
+  }
   s.measure(1789); assert.match(s.mode.title, /1\.8 s/); s.measure(null); assert.match(s.mode.title, /half a second/);
   s.player.listen("alpha"); assert.equal(s.last().playing, false);
 });
 
-test("room player resolved connection/play promises alone do not enable sync; MP3 stalls clear it", async () => {
+test("room player resolved connection/play promises alone do not enable sync; only MP3 stalls past 4 s clear it", async () => {
   const rtc = bridgeSandbox({ listen: async (url, el) => { el.srcObject = {}; return roomSession(); } });
   rtc.player.listen("alpha"); await rtc.settle(); assert.ok(rtc.publications.every(p => !p.playing));
   rtc.rau.dispatch("playing"); assert.equal(rtc.last().playing, true);
@@ -298,8 +359,20 @@ test("room player resolved connection/play promises alone do not enable sync; MP
   s.intervals.find(t => t.active && t.ms === 250).fn(); await s.settle();
   assert.ok(s.publications.every(p => !p.playing), "resolved MP3 play() is not an actual playing event");
   s.au.dispatch("playing"); assert.equal(s.last().playing, true); assert.equal(s.last().mode, "mp3"); assert.equal(s.last().ahead(), 1);
-  for (const event of ["waiting", "pause", "ended"]) { s.au.dispatch(event); assert.equal(s.last().playing, false, event); s.au.dispatch("playing"); assert.equal(s.last().playing, true); }
+  // review fix: a brief stall keeps the sync, one past 4 s clears it; pause, ended, stop and a new start clear at once
+  const stallTimer = () => s.timers.some(t => t.active && t.ms === 4000);
+  s.au.dispatch("waiting"); assert.equal(s.last().playing, true, "a brief stall keeps the sync");
+  s.au.dispatch("playing"); assert.equal(stallTimer(), false, "playing again cancels the stall");
+  s.au.dispatch("waiting"); s.run(4000); assert.equal(s.last().playing, false, "a stall past 4 s clears it");
+  s.au.dispatch("playing"); assert.equal(s.last().playing, true);
+  for (const event of ["pause", "ended"]) {
+    s.au.dispatch("waiting"); s.au.dispatch(event); assert.equal(s.last().playing, false, event); assert.equal(stallTimer(), false);
+    s.au.dispatch("playing"); assert.equal(s.last().playing, true);
+  }
   s.measure(2350); assert.match(s.mode.title, /2\.4 s/); s.measure(null); assert.match(s.mode.title, /1\.5 s/);
+  s.au.dispatch("waiting"); s.player.listen("alpha"); assert.equal(s.last().playing, false, "stop clears at once"); assert.equal(stallTimer(), false, "and drops the stall");
+  s.player.listen("alpha"); s.au.dispatch("playing"); assert.equal(s.last().playing, true);
+  s.au.dispatch("waiting"); s.player.listen("beta"); assert.equal(s.last().playing, false, "a new start clears at once"); assert.equal(stallTimer(), false);
 });
 
 test("quiet MP3-to-RTC rejoin keeps audible MP3 during setup and ignores delayed old MP3 pauses", async () => {

@@ -574,6 +574,15 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.match(html, /webrtc-client\.js\?v=6/, name);   // avsync: register live-cam receivers before attaching the stream
     assert.match(html, /webrtc\.css\?v=6/, name);   // micfollow: + the 🎙 mic stage layouts
   }
+  // review fix: lip sync's controller loads only while its mode applies to the viewer (avsync.viewerOn -> avsyncOn), before
+  // the live-cam receivers; while it's off nothing polls /api/rooms/:slug/avsync
+  for (const [name, render] of [["home", renderHome], ["room", renderRoom]]) {
+    assert.doesNotMatch(await render(on), /av-sync\.js/, name + ": no lip sync controller while off");
+    assert.doesNotMatch(await render({ ...on, avsyncOn: false }), /av-sync\.js/, name);
+    const html = await render({ ...on, avsyncOn: true });
+    assert.match(html, /av-sync\.js\?v=2"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=6"/, name);
+    assert.doesNotMatch(await render({ ...offFn, avsyncOn: true }), /av-sync\.js/, name + ": never without WebRTC");
+  }
   assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=17/);   // train2: 14 = stagefix's 13 + micfollow's 12 merged
   assert.match(await renderRoom(on), /stage-lowlat\.js\?v=2/);
   const book = await renderBook(on);

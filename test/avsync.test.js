@@ -8,7 +8,7 @@ const express = require("express"), db = require(path.join(repo, "dbUtils"));
 const AV = require(path.join(repo, "avsync")), LC = require(path.join(repo, "livecam"));
 const PA = require(path.join(repo, "padaccess")), B = require(path.join(repo, "bridge")), AC = require(path.join(repo, "roomaudiocfg"));
 const W = require(path.join(repo, "webrtc")); W.enabled = () => true;
-let time = Date.now(), base, server, cam, otherCam;
+let time = Date.now(), base, server, cam, otherCam, app;
 const writes = [];
 AV._setClock(() => time); LC._setClock(() => time);
 const ADMIN = { userId: "adm", username: "admin-example", class: "Admin" };
@@ -31,7 +31,7 @@ test.before(async () => {
   for (const id of ["adm", "v1", "v2", "limit"]) await db.runQuery("INSERT OR IGNORE INTO users (userId, username, password, class, camfrogUsername) VALUES (?, ?, 'x', ?, ?)", [id, id, id === "adm" ? "Admin" : "pleb", id + "-frog"]);
   await require(path.join(repo, "mainstage")).init(); await PA.init(); await AV.init(); await AC.init(); await LC.init();
   await LC.save(ADMIN, { cfg: { enabled: true, viewers_free: 4 } });
-  const app = express(); app.use(express.json()); app.set("views", path.join(repo, "views")); app.set("view engine", "ejs");
+  app = express(); app.use(express.json()); app.set("views", path.join(repo, "views")); app.set("view engine", "ejs");
   app.use((req, res, next) => { const id = req.get("x-test-user"); req.user = id ? { userId: id, username: id, class: id === "adm" ? "Admin" : "pleb" } : null; next(); });
   app.use((req, res, next) => {
     if (req.path === "/p/alpha/audio") {
@@ -104,6 +104,28 @@ test("public route requires sign-in/full pad access; mode does not grant access;
   await adminSave({ mode: "everyone" }); assert.equal((await get(publicPath(), "v1")).data.on, true);
   await adminSave({ mode: "off" }); assert.equal((await get(publicPath(), "adm")).data.on, false);
   assert.equal((await get(publicPath(Array(13).fill(cam).join(",")), "v1")).status, 400);
+});
+
+test("review fix: the pad page loads av-sync.js only while the mode applies to the viewer, so a dark rollout never polls", async () => {
+  const mode = AV.current().cfg.mode;
+  app.locals.webrtcCfg = () => ({ base: "https://relay.example.invalid", turn: "/api/turn" });
+  const page = async (user) => {
+    const r = await fetch(base + "/p/alpha", { headers: user ? { "x-test-user": user } : {} });
+    const html = await r.text(); assert.equal(r.status, 200, html.slice(0, 300));
+    assert.match(html, /webrtc-client\.js\?v=6/, "the WebRTC block itself renders");
+    return /av-sync\.js/.test(html);
+  };
+  try {
+    await AV.save(ADMIN, { cfg: { mode: "off" } });
+    for (const u of [null, "v1", "adm"]) { assert.equal(AV.viewerOn(u && { userId: u, class: u === "adm" ? "Admin" : "pleb" }), false); assert.equal(await page(u), false, "off: " + u); }
+    await AV.save(ADMIN, { cfg: { mode: "admins" } });
+    assert.deepEqual([await page(null), await page("v1"), await page("adm")], [false, false, true], "admins: only the capability");
+    await AV.save(ADMIN, { cfg: { mode: "everyone" } });
+    assert.deepEqual([await page(null), await page("v1"), await page("adm")], [false, true, true], "everyone: signed in (its route answers 401 otherwise)");
+    assert.equal(AV.viewerOn({ username: "no-id" }), false);
+    const admin = await (await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } })).text();
+    assert.match(admin, /picks up a change of who gets sync when it loads: reload a pad that is already open/, "the admin card says so");
+  } finally { delete app.locals.webrtcCfg; await AV.save(ADMIN, { cfg: { mode } }); }
 });
 
 test("slot holds reject other viewers, wrong pads, expired beats, removed holds and ended sessions", () => {

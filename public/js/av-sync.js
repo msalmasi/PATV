@@ -9,7 +9,7 @@
   var padSource = '', sound = { slug: '', playing: false, mode: 'rtc', pc: null, ahead: null };
   var soundStats = { browser: null, rtt: null, ok: false }, audioPrevious = null, mp3Average = null, mp3At = 0;
   var enabled = true, epoch = 0, timer = null, pollTimer = null, viewTimer = null, busy = false, again = false, stopped = false, debugBox = null;
-  var storageKey = 'patv.avsync.enabled', HISTORY_MS = 6000;
+  var storageKey = 'patv.avsync.enabled', HISTORY_MS = 6000, OFF_POLL_MS = 60000, signedOut = false;
   try { enabled = W.localStorage.getItem(storageKey) !== '0'; } catch (e) { /* storage is optional */ }
 
   function number(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
@@ -136,17 +136,24 @@
     });
   }
   function fetchConfig(pad) {
-    if (!pad || !W.fetch) return Promise.resolve();
+    if (!pad || !W.fetch || signedOut) return Promise.resolve();
     var entry = configs[pad] || (configs[pad] = { data: null, at: 0, requested: -Infinity, force: true }), now = Date.now();
-    if (entry.pending || !entry.force && now - entry.requested < 5000) return Promise.resolve();
+    // review fix: the page loads this only while the mode applies to the viewer. A page left open after the switch went
+    // off asks once a minute (new cams don't force it), and a pad that refused this viewer is not asked again before a reload.
+    var gap = entry.data && !entry.data.on ? OFF_POLL_MS : entry.force ? 0 : 5000;
+    if (entry.pending || entry.denied || now - entry.requested < gap) return Promise.resolve();
     var paths = [];
     receivers.forEach(function (r) { if (r.pad === pad && r.path && paths.indexOf(r.path) < 0 && paths.length < 12) paths.push(r.path); });
     entry.force = false; entry.requested = now; entry.pending = true;
     return within(W.fetch('/api/rooms/' + encodeURIComponent(pad) + '/avsync?p=' + encodeURIComponent(paths.join(',')),
       { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
-      .then(function (response) { if (!response.ok) { var error = new Error('Unavailable'); error.denied = response.status === 401 || response.status === 403; throw error; } return response.json(); }), 5000)
+      .then(function (response) { if (!response.ok) { var error = new Error('Unavailable'); error.status = response.status; error.denied = response.status === 401 || response.status === 403; throw error; } return response.json(); }), 5000)
       .then(function (data) { entry.data = data && data.ok ? data : null; entry.at = Date.now(); })
-      .catch(function (error) { if (error && error.denied) entry.data = null; /* Other failures cannot keep old settings alive beyond 30 seconds. */ })
+      .catch(function (error) {
+        if (error && error.denied) entry.data = null; /* Other failures cannot keep old settings alive beyond 30 seconds. */
+        if (error && error.status === 401) signedOut = true;      // review fix: signed out - no pad is asked again before a reload
+        if (error && error.status === 403) entry.denied = true;
+      })
       .then(function () { entry.pending = false; });
   }
   function sampleAudio(generation) {
@@ -282,11 +289,20 @@
     for (var i = record.rows.length - 1; i >= 0; i--) if (record.rows[i].at <= target) return record.rows[i];
     return null;
   }
+  // review fix: the moment a view shows never moves back. When D rises (RTC fallback -> measured, audio starting again)
+  // the view holds until now - D catches up, as the cams' growing buffer does, so tiles and people already on screen are
+  // never pulled and re-added (each tile pulled also reconnected its cam). Removals and veil changes stay immediate: the
+  // newest data has no such key any more.
+  function shownAt(record, wait, now) {
+    var at = Math.max(now - wait, record.shownAt == null ? -Infinity : record.shownAt);
+    record.shownAt = at; return at;
+  }
   function mergedProgram(record, wait, now) {
-    var latest = record.latest; if (!latest || !wait) return latest;
-    var out = copy(latest), row = oldRow(record, now - wait), old = row && row.data, oldTiles = Object.create(null);
+    var latest = record.latest; if (!latest) return latest;
+    if (!wait) { record.shownAt = now; return latest; }
+    var at = shownAt(record, wait, now), out = copy(latest), row = oldRow(record, at), old = row && row.data, oldTiles = Object.create(null);
     (old && old.src || []).forEach(function (tile) { oldTiles[tile.key] = tile; });
-    out.src = (latest.src || []).filter(function (tile) { var k = tileKey(tile); return tile.pin || k && record.births[k] <= now - wait; }).map(function (tile) {
+    out.src = (latest.src || []).filter(function (tile) { var k = tileKey(tile); return tile.pin || k && record.births[k] <= at; }).map(function (tile) {
       var t = copy(tile), previous = oldTiles[tileKey(tile)]; t.newest = !!(previous && previous.newest); t.recent = !!(previous && previous.recent); return t;
     });
     out.count = old ? old.count : 0; out.active = old ? old.active : false;
@@ -302,8 +318,11 @@
     return end - row.data.since[key] >= wait;
   }
   function mergedMic(record, wait, now) {
-    var latest = record.latest; if (!latest || !wait) return latest;
-    var out = copy(latest), row = oldRow(record, now - wait), people = Object.create(null);
+    var latest = record.latest; if (!latest) return latest;
+    if (!wait) { record.shownAt = now; return latest; }
+    // review fix: a held view uses its own effective delay, so a grab already shown still meets the minimum hold
+    var at = shownAt(record, wait, now), out = copy(latest), row = oldRow(record, at), people = Object.create(null);
+    wait = now - at;
     visitPeople(latest.members, 'members', function (person, k, keyless, ordinal) {
       if (k) people[k] = person;
       // Today's public anonymous records have no stable ID. Retain only a generic mic count,

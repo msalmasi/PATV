@@ -49,7 +49,7 @@
 
 <section class="adm-card" id="av-sync" aria-labelledby="avsTitle">
   <h2 id="avsTitle">A/V sync <span class="adm-pill admin">admins</span> <span class="adm-pill" id="avsVersion"></span></h2>
-  <p class="adm-help">Hold relayed cams and mic signs back while the pad's room audio plays. Audio is unchanged. This ships off; calibrate on staging before allowing viewers in. Firefox and Safari stay off until their stability checks pass.</p>
+  <p class="adm-help">Hold relayed cams and mic signs back while the pad's room audio plays. Audio is unchanged. This ships off; calibrate on staging before allowing viewers in. Firefox and Safari stay off until their stability checks pass.<%# review fix: pads load the controller only while it applies (avsync.viewerOn) %> A pad page picks up a change of who gets sync when it loads: reload a pad that is already open.</p>
   <form class="adm-form" id="avsForm" autocomplete="off" novalidate>
     <div id="avsFields"></div>
     <label>Note for the log (optional) <input type="text" name="reason" maxlength="200"></label>

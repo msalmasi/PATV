@@ -129,6 +129,11 @@ function serverOffsetMs(roomId, path, mode) {
   if (audio == null) return null;
   return audio - hold.hold_ms + CFG.cfg[hold.src === "passthrough" ? "k_pt_ms" : "k_re_ms"];
 }
+/** review fix: whether the mode applies to this viewer. Pads load av-sync.js only then, so a dark rollout never polls. */
+function viewerOn(user) {
+  const mode = CFG.cfg.mode;
+  return !!(user && user.userId) && (mode === "everyone" || mode === "admins" && SP.can(user, "pepe.rooms_commands_audio"));
+}
 function answer(roomId, paths, user) {
   const c = CFG.cfg, dbg = SP.can(user, "pepe.rooms_commands_audio"), cams = {};
   const LC = require("./livecam");
@@ -136,7 +141,7 @@ function answer(roomId, paths, user) {
     const hold = LC.holdOf(path, user.userId, roomId);
     if (hold) cams[path] = hold;
   }
-  return { ok: true, on: c.mode === "everyone" || c.mode === "admins" && dbg, dbg, audio: roomAudio(roomId), cams,
+  return { ok: true, on: viewerOn(user), dbg, audio: roomAudio(roomId), cams,
     k: { pt: c.k_pt_ms, re: c.k_re_ms, ind: c.k_ind_ms }, fallback: { rtc: c.fallback_rtc_ms, mp3: c.fallback_mp3_ms },
     cap: c.cap_ms, cap_ind: c.cap_ind_ms, deadband: c.deadband_ms, period_s: c.period_s,
     apply: { video: c.apply_video, mic: c.apply_mic, mp3: c.apply_mp3 },
@@ -198,6 +203,6 @@ function register(app, { addUser }) {
     try { const result = await save(req.user, req.body || {}); res.json({ ok: true, ...result, view: await view() }); } catch (e) { fail(res, e); }
   });
 }
-module.exports = { register, init, normalize, current, save, cleanLat, noteAudio, audioMeta, serverOffsetMs, view, FIELDS, DEFAULTS,
+module.exports = { register, init, normalize, current, save, cleanLat, noteAudio, audioMeta, serverOffsetMs, viewerOn, view, FIELDS, DEFAULTS,
   _setClock: (fn) => { NOW = fn || (() => Date.now()); },
   _reset: () => { CFG = { v: 0, cfg: { ...DEFAULTS }, at: null }; AUDIO.clear(); ROOM_CACHE.clear(); ready = null; saving = Promise.resolve(); } };

@@ -308,6 +308,7 @@ function register(app, { addUser, xpForNextLevel }) {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, roomGate, stage, top, tops, boostMark: require("./boostmark").boostMark,
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
         roomOnStage: roomOnStage_, stageAdmin, frontInfo, pepeHere,
+        avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals

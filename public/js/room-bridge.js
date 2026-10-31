@@ -116,6 +116,20 @@
     var playing = false, startedAt = 0, analyser = null, raf = null, available = false;
     var mode = null, rtcSess = null, rtcAnalyser = null, startGen = 0, rtcHint = null;   // 1.99il
     var mp3Sound = false, rtcSound = false;    // 1.99??: connecting/cushioning is not audible playback
+    // review fix: a short mid-stream stall keeps the sync (clearing it drained every cam and re-gated the mic stage); one
+    // longer than STALL_MS clears it. Pause, ended, stop and a new start still clear at once. One timer per element, so a
+    // late event on the other element never cancels it.
+    var STALL_MS = 4000, stallTimers = { mp3: null, rtc: null };
+    function unstall(kind) { clearTimeout(stallTimers[kind]); stallTimers[kind] = null; }
+    function stalled(kind) {
+      unstall(kind);
+      if (!(kind === 'mp3' ? mp3Sound : rtcSound)) return;
+      stallTimers[kind] = setTimeout(function () {
+        stallTimers[kind] = null;
+        if (kind === 'mp3') mp3Sound = false; else rtcSound = false;
+        syncAudio();
+      }, STALL_MS);
+    }
     function syncAudio() {
       if (window.PATVAvSync) window.PATVAvSync.audio({ slug: cur, playing: !!(playing && (mode === 'rtc' ? rtcSound && rtcSess : mode === 'mp3' && mp3Sound)), mode: mode, pc: rtcSess && rtcSess.pc, ahead: ahead });
     }
@@ -250,7 +264,7 @@
     }
     function rtcClose() {
       var s = rtcSess; rtcSess = null; rtcAnalyser = null;
-      rtcSound = false; syncAudio();
+      rtcSound = false; unstall('rtc'); syncAudio();
       if (s) { try { s.close(); } catch (e) { /* gone */ } }
       try { rau.pause(); rau.srcObject = null; } catch (e) { /* no srcObject */ }
     }
@@ -338,7 +352,7 @@
     }
     function startMp3() {
       clearInterval(waitTimer); startedAt = 0;
-      mp3Sound = false;
+      mp3Sound = false; unstall('mp3');
       rtcClose(); setMode('mp3');
       au.preload = 'auto';
       var url = '/p/' + encodeURIComponent(cur) + '/audio?t=' + Date.now();
@@ -368,7 +382,7 @@
     function stop(msg) {
       clearTimeout(rejoinTimer);
       playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
-      mp3Sound = false; rtcSound = false; syncAudio();
+      mp3Sound = false; rtcSound = false; unstall('mp3'); unstall('rtc'); syncAudio();
       startGen++; rtcClose(); setMode(null);
       mseStop();
       au.pause(); au.removeAttribute('src'); au.load();
@@ -385,15 +399,15 @@
       store('patvRoomVol', vol.value); applyVolume(); paint();
     });
     jump.addEventListener('click', function () { stop(); start(); });       // a fresh connection starts at live
-    au.addEventListener('waiting', function () { mp3Sound = false; syncAudio(); if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); });
-    au.addEventListener('playing', function () { mp3Sound = playing && mode === 'mp3'; syncAudio(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    au.addEventListener('waiting', function () { stalled('mp3'); if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); });
+    au.addEventListener('playing', function () { unstall('mp3'); mp3Sound = playing && mode === 'mp3'; syncAudio(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
     au.addEventListener('error', function () { if (playing && mode === 'mp3') stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); });
-    rau.addEventListener('playing', function () { rtcSound = !!(playing && rau.srcObject); syncAudio(); if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    rau.addEventListener('playing', function () { unstall('rtc'); rtcSound = !!(playing && rau.srcObject); syncAudio(); if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
     ['pause', 'ended'].forEach(function (kind) {
-      au.addEventListener(kind, function () { mp3Sound = false; syncAudio(); });
-      rau.addEventListener(kind, function () { rtcSound = false; syncAudio(); });
+      au.addEventListener(kind, function () { unstall('mp3'); mp3Sound = false; syncAudio(); });
+      rau.addEventListener(kind, function () { unstall('rtc'); rtcSound = false; syncAudio(); });
     });
-    rau.addEventListener('waiting', function () { rtcSound = false; syncAudio(); });
+    rau.addEventListener('waiting', function () { stalled('rtc'); });
     function setRate(r) {
       try {
         if (au.playbackRate === r) return;

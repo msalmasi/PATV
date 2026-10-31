@@ -1881,6 +1881,7 @@ function register(app, { isBotToken, addUser }) {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
+      avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       // CL3 fix-up: the topic as /live and #rmInit show it - hidden people's names redacted (it was printed raw into #rmTopic,
       // to every viewer and crawler); "" when the names can't be loaded (fails closed)

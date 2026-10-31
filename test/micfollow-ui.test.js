@@ -154,7 +154,8 @@ test("webrtc.css: the layouts, 44 px targets, contain (never cropped), reduced m
 
 test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the switcher is kept as PATVPadStage", () => {
   const room = read("views", "room.ejs");
-  const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %>", room.indexOf("locals.webrtcCfg()) { %>")));
+  // review fix: the block ends where the onair scripts start (lip sync's own <% if %> sits inside it now)
+  const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
   assert.match(blk, /stage-mic\.js\?v=\d+/);
   assert.equal((room.match(/stage-mic\.js/g) || []).length, 1);
   assert.equal((room.match(/PATVPadStage\.setMic\(/g) || []).length, 1);
@@ -162,7 +163,8 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.match(gate, /var showMic = function \(p\) \{ PATVPadStage\.setMic\(p\); \};/);
   assert.match(gate, /if \(window\.PATVAvSync\) window\.PATVAvSync\.gateProgram\(slug, d\.stage_program \|\| null, showMic\);/);
   assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
-  assert.ok(blk.indexOf('av-sync.js?v=1') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
+  assert.ok(blk.indexOf('av-sync.js?v=2') >= 0 && blk.indexOf('av-sync.js?v=2') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
+  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=2"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
   assert.doesNotMatch(read("views", "home.ejs"), /stage-mic|setMic/, "the homepage never renders the mic stage");
 });

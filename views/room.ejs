@@ -630,7 +630,8 @@
   <script src="/public/js/stage-player.js?v=9"></script>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=6">
-  <script src="/public/js/av-sync.js?v=1"></script>
+  <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
+  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=2"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/stage-mic.js?v=5"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
@@ -839,7 +840,7 @@
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=2"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
-  <script src="/public/js/room-bridge.js?v=18"></script>
+  <script src="/public/js/room-bridge.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
