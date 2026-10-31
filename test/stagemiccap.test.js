@@ -14,13 +14,13 @@ const fm = require("../feedmedia"), sharp = require("sharp");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "stagemiccap-test-"));
 const R = { id: "fixture-pad", slug: "fixture-pad", title: "Fixture pad" }, U = { userId: "fixture-member", level: 3 };
 const cam = (id, extra = {}) => ({ kind: "cam", id, name: id, video: "live", watch: "ok", pos: 0, ...extra });
-let clock = 100000, program, hidden, refused, exact, pinned, cfg, allowed, clipOn, roomOff, liveShown, taps, notices, readers, activeReaders, maxReaders;
+let clock = 100000, program, hidden, refused, exact, pinned, cfg, allowed, clipOn, roomOff, liveShown, perk, taps, notices, readers, activeReaders, maxReaders;
 function reset(extra = {}) {
   clock = 100000; program = { layout: "split", src: [cam("alice"), cam("bob", { pos: 1 })] };
-  hidden = new Set(); refused = new Set(); exact = true; pinned = true; cfg = { stagecap_mic: true }; allowed = true; clipOn = true; roomOff = null; liveShown = true;
+  hidden = new Set(); refused = new Set(); exact = true; pinned = true; cfg = { stagecap_mic: true }; allowed = true; clipOn = true; roomOff = null; liveShown = true; perk = true;
   taps = []; notices = []; readers = []; activeReaders = 0; maxReaders = 0; T.snapAt.clear();
   M.configure({ now: () => clock, config: () => cfg, killed: () => null, roomOff: () => roomOff, eligibility: () => null,
-    full: async () => allowed, block: async () => null, clipSwitch: () => clipOn, clipOffText: () => "Clips are off.", liveShown: () => liveShown,
+    full: async () => allowed, block: async () => null, clipSwitch: () => clipOn, clipOffText: () => "Clips are off.", liveShown: () => liveShown, bridgeOk: () => perk,
     account: async () => U, resolveRoom: async () => R, people: async () => [], program: async () => program,
     hidden: l => hidden.has(l), camRefusal: async (l, u, o) => { assert.equal(o.strict, true); return refused.has(l) ? {} : null; },
     exact: () => exact, pin: () => pinned, camPath: (r, l) => "cam-" + l,
@@ -95,13 +95,20 @@ test("all request gates are fail closed, dark availability is absent and home is
   clipOn = true; roomOff = "Snaps are off."; await assert.rejects(M.start(options()), /Snaps are off/);
   roomOff = null; program = null; await assert.rejects(M.start(options()), /Nobody/);
 });
-test("review fix: the Prime Time Plus bridge gate - a pad whose bridge room isn't live and shown can't be captured, at start or recheck", async () => {
+test("review fix: the Prime Time Plus bridge gate - a pad without the perk can't be captured, at start or recheck; Pepe not live refuses a new capture only", async () => {
+  M.configure({ people: async () => ["alice"] });
+  const preview = () => M.recheck({ id: id(), room_id: R.id, user_id: U.userId, kind: "photo" });
+  perk = false;
+  await assert.rejects(M.start(options()), /unavailable/); await assert.rejects(M.start(options("clip")), /unavailable/);
+  assert.deepEqual([(await M.availability(R, U)).snap, (await M.availability(R, U)).clip], [false, false]);
+  assert.equal(await preview(), T.MSG.revoked, "a preview made before the perk lapsed");
+  perk = true; assert.equal(await preview(), null);
+  // review fix 2: Pepe's room not live (no sync for 90 s - a restart, an update) refuses a new capture, never a pending preview
   liveShown = false;
   await assert.rejects(M.start(options()), /unavailable/); await assert.rejects(M.start(options("clip")), /unavailable/);
   assert.deepEqual([(await M.availability(R, U)).snap, (await M.availability(R, U)).clip], [false, false]);
-  M.configure({ people: async () => ["alice"] });
-  assert.equal(await M.recheck({ id: id(), room_id: R.id, user_id: U.userId, kind: "photo" }), T.MSG.revoked, "a preview made before the perk lapsed");
-  liveShown = true; assert.equal(await M.recheck({ id: id(), room_id: R.id, user_id: U.userId, kind: "photo" }), null);
+  assert.equal(await preview(), null, "a Pepe gap keeps the preview");
+  await assert.rejects(T.gate(R, U, "snap", "pad", { live: true }), /unavailable/); await T.gate(R, U, "snap", "pad");
 });
 test("RTSP auth permits only a running path/job; loopback empty credentials get one challenge", () => {
   const job = { id: id(), kind: "clip", secs: 20, expiry: clock + 35000, reading: true, paths: new Set(["cam-a"]), cancelled: false };

@@ -420,7 +420,7 @@ async function capture(user, req, { room, stream, kind, secs, surface } = {}) {
 async function captureMic(u, req, R, kind, secs, surface) {
   // review fix: the engine's gates (stagecap_mic, home surface, pad access, bridge permission, !snap / !clip) run before
   // anything is written - a refusal, and every request while the switch is off, costs no row and no cooldown.
-  await micEngine().gate(R, u, kind, surface);
+  await micEngine().gate(R, u, kind, surface, { live: true });   // review fix 2: + Pepe live (the engine's start checks it too)
   const want = kind === "clip" ? ([10, 20, 30].includes(Number(secs)) ? Number(secs) : CLIP_DEFAULT) : 0;
   const id = "c" + crypto.randomBytes(10).toString("hex"), t = NOW();
   const cap = { id, source: "mic", kind: kind === "clip" ? "clip" : "photo" };

@@ -921,6 +921,36 @@ test("mic gate refusals (switch off, home, pad access, bridge block, !clip off) 
   assert.deepEqual([...SC._hits.keys()].filter(k => k.startsWith("u:")), [], "no cooldown spent");
 });
 
+// review fix 2: the mic captures' bridge gate was bridge.isLiveShown, which also needs a Pepe sync within 90 s - a Pepe restart then
+// revoked every pending preview on its next status poll. The gate is the Prime Time Plus perk itself; Pepe live only for a new capture.
+test("review fix 2: a mic preview survives a 2-minute Pepe gap; a lapsed Prime Time Plus perk still revokes it", async t => {
+  await micJobs(t);
+  const M = require(path.join(repo, "stagemiccap")), B = require(path.join(repo, "bridge")), PR = require(path.join(repo, "premium"));
+  const had = B._rooms.get(ROOM.id);
+  M.configure({ liveShown: M._test.defaults.liveShown, bridgeOk: M._test.defaults.bridgeOk });   // the real bridge / premium checks
+  t.after(async () => {
+    M.configure({ liveShown: () => true, bridgeOk: M._test.defaults.bridgeOk });
+    if (had) B._rooms.set(ROOM.id, had); else B._rooms.delete(ROOM.id);
+    await PR.setConfig({ plus_bridge_gate: false }, "test");
+  });
+  await PR.setConfig({ plus_bridge_gate: false }, "test");
+  const R = { id: ROOM.id, name: "Room_One", members: [], mic: [], updated: Date.now() };
+  B._rooms.set(ROOM.id, R);
+  const mic = () => SC.capture(U.staff, null, { room: ROOM.slug, stream: "mic", kind: "snap", surface: "pad" });
+  const c = await mic();
+  assert.equal((await waitCap(c.id, "preview")).state, "preview");
+  R.updated = Date.now() - 120e3;                                         // no Pepe sync for 2 minutes (a restart, an update)
+  assert.equal(B.isLiveShown(R), false);
+  assert.equal((await SC.status(U.staff, c.id)).state, "preview", "a Pepe gap keeps the pending preview");
+  assert.equal((await SC.status(U.staff, c.id)).state, "preview", "on every poll");
+  await assert.rejects(mic(), e => e.status === 403 && /unavailable/.test(e.message), "a new capture needs Pepe live");
+  R.updated = Date.now();
+  await PR.setConfig({ plus_bridge_gate: true }, "test");                // the pad has no Prime Time Plus (the perk lapsed)
+  assert.equal(B.bridgeOk(ROOM.id), false);
+  await assert.rejects(SC.status(U.staff, c.id), e => e.status === 403 && /turned off captures/.test(e.message), "a lapsed perk still revokes");
+  assert.equal((await waitCap(c.id, "failed")).state, "failed");
+});
+
 // review fix: Pepe refunds a failed publish, and a second Save replays his charge key (stagecap-<id>) - no PAT taken.
 test("a mic capture whose publish fails or answers gone stays failed, so a refunded capture can't be saved again", async t => {
   const f = await micJobs(t), db = require(path.join(repo, "dbUtils")).db, M = require(path.join(repo, "stagemiccap"));

@@ -38,6 +38,8 @@ let deps = {
   block: (id, u, kind) => require("./bridgeblocks").refusal(id, u, kind),
   clipSwitch: id => require("./bridge").clipSwitch(id), clipOffText: id => require("./bridge").clipOffText(id),
   liveShown: id => { try { const B = require("./bridge"), r = B._rooms.get(id); return !!r && B.isLiveShown(r); } catch (_) { return false; } },
+  // review fix 2: the 💎 Prime Time Plus bridge perk alone (what bridge.bridgeOk asks; failing closed here) - no liveness in it
+  bridgeOk: id => { try { return require("./premium").bridgeAllowed(String(id)) === true; } catch (_) { return false; } },
   program: (id, u) => require("./bridge").stageProgramFor(id, u),
   camRefusal: (l, u, o) => require("./camviewers").camRefusal(l, u, o),
   hidden: l => require("./quotes").isHidden(l),
@@ -53,6 +55,7 @@ let deps = {
   fm: () => require("./feedmedia"), reader: null,
   privacyWaitMs: 1500   // review fix 2: how long a cut waits for a private-profile lookup still in flight (settlePrivacy)
 };
+const DEFAULT_DEPS = Object.freeze({ ...deps });   // review fix 2: (tests) the real checks, to put back after a stub
 function configure(d) { deps = { ...deps, ...d }; }
 // stories.privateLogins intentionally tolerates a missing users table for its feed callers. A
 // recorder cannot interpret that database failure as public consent. Apply its same two profile
@@ -171,14 +174,17 @@ async function tileFor(e, R, user) {
   return t;
 }
 async function tilesFor(p, R, user) { return Promise.all(entries(p).map(e => tileFor(e, R, user))); }
-async function gate(R, user, kind, surface) {
+async function gate(R, user, kind, surface, { live = false } = {}) {
   if (!R || !user || !user.userId) throw refuse("Sign in first.", 401);
   if (deps.config().stagecap_mic !== true) throw refuse("disabled");
   if (surface === "home") throw refuse("home");
   const why = deps.killed(kind) || deps.roomOff(R.id) || deps.eligibility(user);
   if (why) throw refuse(why);
-  // review fix: the 💎 Prime Time Plus bridge gate the cam captures obey (bridge.isLiveShown): no live, shown bridge room, no capture
-  if (!deps.liveShown(R.id)) throw refuse("unavailable");
+  // review fix: the 💎 Prime Time Plus bridge gate the cam captures obey: no shown bridge room, no capture.
+  // review fix 2: the perk itself (bridgeOk, like livecam's cam captures) - bridge.isLiveShown also needs a Pepe sync within 90 s, and
+  // a Pepe restart then revoked every pending preview through recheck. Pepe live (`live`) only where a capture needs him now: start,
+  // each recording sample, availability and stagecap's check before it writes anything.
+  if (!deps.bridgeOk(R.id) || (live && !deps.liveShown(R.id))) throw refuse("unavailable");
   if (!(await deps.full(user, R.id))) throw refuse("denied");
   const block = await deps.block(R.id, user.userId, kind === "clip" ? "clips" : "snapshots");
   if (block) throw refuse(typeof block === "string" ? block : block.error || "unavailable");
@@ -187,7 +193,7 @@ async function gate(R, user, kind, surface) {
 async function availability(R, user, surface, translate) {
   if (deps.config().stagecap_mic !== true) return null;
   const view = { snap: false, clip: false, why: null };
-  for (const k of ["snap", "clip"]) try { await gate(R, user, k, surface); view[k] = true; } catch (e) {
+  for (const k of ["snap", "clip"]) try { await gate(R, user, k, surface, { live: true }); view[k] = true; } catch (e) {   // review fix 2: + live
     const why = e.i18n && translate ? translate(e.i18n, e.vars) : e.message;
     view[k + "_why"] = why; if (!view.why) view.why = why;
   }
@@ -436,7 +442,7 @@ async function sample(job) {
     const at = (deps.now() - job.started) / 1000;
     privateSample(job).catch(() => {});
     const user = await deps.account(job.user.userId);
-    await gate(job.R, user, job.kind, job.surface);
+    await gate(job.R, user, job.kind, job.surface, { live: true });   // review fix 2: a recording needs Pepe live
     const p = await programFor(job.R, user);
     if (!usable(p)) throw refuse("empty", 409);
     const current = new Map((await tilesFor(p, job.R, user)).map(t => [t.id, t]));
@@ -618,7 +624,7 @@ async function clip(job, hooks) {
 }
 async function start(opts, hooks = {}) {
   const { R, user } = opts, kind = opts.kind === "clip" ? "clip" : "snap", secs = [10, 20, 30].includes(Number(opts.secs)) ? Number(opts.secs) : 20;
-  await gate(R, user, kind, opts.surface);
+  await gate(R, user, kind, opts.surface, { live: true });   // review fix 2: a capture starts only while Pepe is live
   const program = await programFor(R, user); if (!usable(program)) throw refuse("empty", 409);
   const tiles = await tilesFor(program, R, user), now = deps.now();
   const offsets = shifts(tiles.filter(t => t.mode === "live").map(t => { try { return deps.offset(R.id, t.path); } catch (_) { return null; } }));
@@ -650,4 +656,4 @@ async function start(opts, hooks = {}) {
 }
 module.exports = { configure, init, start, gate, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
-  _test: { entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
+  _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
