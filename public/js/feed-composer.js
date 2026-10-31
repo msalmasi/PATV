@@ -320,7 +320,10 @@
     inp.addEventListener('change', function () { addFiles(inp.files); inp.value = ''; });
   });
   form.elements.body.addEventListener('paste', function (e) {
-    var pasted = e.clipboardData && e.clipboardData.files;
+    var cd = e.clipboardData, pasted = cd && cd.files;
+    // review fix: Word / Excel / PowerPoint put the TEXT and a picture of it on the clipboard - the text wins
+    // (a screenshot or a copied image carries no plain text, so it still attaches)
+    if (cd && typeof cd.getData === 'function' && String(cd.getData('text/plain') || '').trim()) return;
     if (pasted && pasted.length) { e.preventDefault(); addFiles(pasted); }
   });
   form.addEventListener('dragover', function (e) {

@@ -208,7 +208,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   // the navbar
   assert.match(html, new RegExp('<a href="/p/' + s + '/submit" class="nav-post" title="Create a post in p/' + s + '">'));
   assert.ok(html.indexOf('class="nav-post"') < html.indexOf('class="nav-golive"'), "Post sits before Go live");
-  assert.match(html, /feed\.css\?v=20/); assert.match(html, /feed-composer\.js\?v=17/); assert.match(html, /stories\.js\?v=11/);   // storyreact site: v=11
+  assert.match(html, /feed\.css\?v=20/); assert.match(html, /feed-composer\.js\?v=18/); assert.match(html, /stories\.js\?v=11/);   // storyreact site: v=11
 });
 
 test("pad page signed out: a sign-in bar instead of the composer; About's analytics link is a button", async () => {
@@ -258,7 +258,7 @@ test("/submit: signed out -> login with next=; signed in -> the open composer wi
   assert.match(formTag(r.text), /data-expanded="1"/); assert.doesNotMatch(formTag(r.text), / hidden /);
   assert.match(r.text, /class="fc-comm" data-empty/, "no pad preselected");
   assert.match(r.text, /name="community" value="plant_based_chatting"/, "the pad picker lists the pads");
-  assert.match(r.text, /feed-composer\.js\?v=17/);
+  assert.match(r.text, /feed-composer\.js\?v=18/);
 });
 
 test("/p/<pad>/submit preselects that pad; signed out -> login next=; unknown pad 404; /submit?pad= -> /p/<pad>/submit", async () => {
@@ -352,6 +352,13 @@ test("picked, pasted and dropped media share limits, MIME routing and upload pat
     const before=prevented;
     handlers.paste({clipboardData:{files:[]},preventDefault(){prevented++;}});
     assert.equal(prevented,before,"text-only paste is untouched");
+    if (method === "paste") {                       // review fix: Office copies text AND a picture of it - text wins
+      const n = uploads.length;
+      handlers.paste({clipboardData:{files:[file("image/png","office")],getData:t=>t==="text/plain"?"Quarterly numbers":""},preventDefault(){prevented++;}});
+      assert.equal(prevented,before,"a paste from Word/Excel stays text"); assert.equal(uploads.length,n);
+      handlers.paste({clipboardData:{files:[file("image/png","shot")],getData:()=>""},preventDefault(){prevented++;}});
+      assert.equal(prevented,before+1,"a screenshot (no plain text) still attaches");
+    }
     handlers.dragover({dataTransfer:{types:["Files"]},preventDefault(){}}); assert.ok(classes.has("drop"));
     handlers.drop({dataTransfer:{files:[]}}); assert.ok(!classes.has("drop"));
   }

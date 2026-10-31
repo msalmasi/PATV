@@ -298,7 +298,12 @@ async function sync(row) {
     let confirm;
     try { confirm = await api("GET", `/${row.media_type === "tv" ? "tv" : "movie"}/${row.tmdb_id}`); }
     catch (e) { return row.status; }
-    const title = confirm.json, requests = title && title.mediaInfo && title.mediaInfo.requests;
+    const title = confirm.json;
+    // review fix: a title that answers with NO mediaInfo at all has no media row in Seerr - "Clear Data" deletes it and
+    // cascades its requests, so that request is gone (before, it stayed pending forever and blocked asking again).
+    // A mediaInfo whose requests field is missing or malformed is still inconclusive.
+    const noMedia = !!title && typeof title === "object" && (title.mediaInfo === undefined || title.mediaInfo === null);
+    const requests = noMedia ? [] : title && title.mediaInfo && title.mediaInfo.requests;
     // Missing/malformed metadata is not evidence of deletion. The documented title response supplies request ids.
     if (confirm.status !== 200 || !title || Number(title.id) !== Number(row.tmdb_id) || !Array.isArray(requests) ||
         requests.some((q) => !q || !Number.isInteger(Number(q.id)) || Number(q.id) <= 0 || Number(q.id) === Number(row.overseerr_id))) return row.status;

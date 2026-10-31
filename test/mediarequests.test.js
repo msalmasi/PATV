@@ -284,7 +284,7 @@ test("removal requires spaced JSON 404s and an explicit title confirmation; reco
     await R.sync(x.row); assert.equal((await x.read()).status,"pending","still listed");
     confirmation={status:502,json:async()=>({})}; await R.sync(x.row);
     assert.equal((await x.read()).refunded_at,null,"failed confirm never refunds");
-    for (const title of [{id:11}, {id:12,mediaInfo:{requests:[]}}, {id:11,mediaInfo:{requests:[{}]}}]) {
+    for (const title of [{id:11,mediaInfo:{}}, {id:12,mediaInfo:{requests:[]}}, {id:11,mediaInfo:{requests:[{}]}}]) {
       confirmation={status:200,json:async()=>title}; await R.sync(x.row);
       assert.equal((await x.read()).status,"pending","incomplete/wrong title is inconclusive");
     }
@@ -293,6 +293,14 @@ test("removal requires spaced JSON 404s and an explicit title confirmation; reco
     await R.sync(x.row);
     assert.equal((await R.credits(x.u.userId)).movie,1,"refund exactly once, even with a stale caller row");
     assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND kind = 'media'",[x.u.userId])).length,1);
+    // review fix: Seerr's "Clear Data" deletes the media row - a title with NO mediaInfo at all confirms the removal
+    const z=await seed(); await R.sync(z.row); assert.equal((await z.read()).missing_since,now);
+    now+=31*60000;
+    confirmation={status:200,json:async()=>({id:11})};
+    assert.equal(await R.sync(z.row),"removed");
+    await R.sync(z.row);
+    assert.equal((await R.credits(z.u.userId)).movie,1,"a cleared title refunds once");
+    assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND kind = 'media'",[z.u.userId])).length,1);
     const y=await seed(); await R.sync(y.row); assert.equal((await y.read()).missing_since,now);
     reply={status:200,json:async()=>({status:1,media:{status:2}})};
     await R.sync(y.row); assert.equal((await y.read()).missing_since,null);
