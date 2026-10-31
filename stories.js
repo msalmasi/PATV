@@ -126,8 +126,10 @@ async function captures(roomId, limit = 12, { windowMs = null, noProfiles = fals
     if (noProfiles) where.push("room NOT LIKE 'user:%'");
     // storyreact site: + who's in it / who made it (by_user_id, subject_login, slot_id, by_login) for the block filter and the
     // reactions' author (storyreact.js) - server-side only (clean() never puts them in an item)
+    // review fix: + stream - storyreact.hiddenIds knows a 🎙 mic-stage capture by stream 'mic' (the cams it draws); without it the
+    // strip and the pad thumbnails never hid one from someone a person in it blocked
     const rows = await getQuery(`SELECT id, kind, ct, file, subject, by_user, room, created, expires, secs, ${opt("anon", "0")}, ${opt("source", "NULL")}, ${opt("nsfw", "0")},
-                                 ${opt("by_user_id", "NULL")}, ${opt("subject_login", "NULL")}, ${opt("slot_id", "NULL")}, ${opt("by_login", "NULL")}
+                                 ${opt("by_user_id", "NULL")}, ${opt("subject_login", "NULL")}, ${opt("slot_id", "NULL")}, ${opt("by_login", "NULL")}, ${opt("stream", "NULL")}
                                  FROM media WHERE ${where.join(" AND ")} ORDER BY created DESC LIMIT ?`, [...args, Math.min(MAX_ITEMS, limit)]);
     return await clean(rows);
   } catch (e) {

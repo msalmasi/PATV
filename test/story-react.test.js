@@ -364,21 +364,31 @@ test("review fix (handoff 16) D-3 and mic-stage captures: hidden from someone a 
   await runQuery(`INSERT INTO stage_captures (id, user_id, username, room_id, source, slot_id, stream_label, kind, ct, state, media_id, created)
                   VALUES (?, ?, 'dave', ?, 'mic', NULL, '🎙 the mic', 'photo', 'image/webp', 'done', ?, ?)`, [cid, U.dave.userId, MEM, mic, Date.now()]);
   await runQuery("INSERT INTO stage_capture_people (capture_id, login) VALUES (?, 'alicecf')", [cid]);
-  const sees = async (u) => !!(await SR.storyFor(V(u), mic)) && (await itemsOf(u, MEM)).some((x) => x.id === mic);
+  // review fix 2: every surface on its own - storyFor reads SELECT *, while the pad strip, /feed's strip and the pad thumbnails read
+  // stories.captures' own column list, so one surface hiding it must never stand in for another
+  const sees = async (u) => ({
+    storyFor: !!(await SR.storyFor(V(u), mic)),
+    strip: (await itemsOf(u, MEM)).some((x) => x.id === mic),
+    feed: (await stories.forViewer(V(u), {})).flatMap((r) => r.items || []).some((x) => x.id === mic),
+    thumbs: (await web.captures(MEM, 24, V(u))).some((x) => x.id === mic),
+  });
+  const ALL = { storyFor: true, strip: true, feed: true, thumbs: true }, NONE = { storyFor: false, strip: false, feed: false, thumbs: false };
   try {
-    assert.ok(await sees(U.bob) && await sees(U.carol), "nobody blocked: everyone sees it");
+    assert.deepEqual(await sees(U.bob), ALL, "nobody blocked: bob sees it everywhere");
+    assert.deepEqual(await sees(U.carol), ALL, "nobody blocked: carol sees it everywhere");
     await block(U.alice, U.bob);
-    assert.equal(await sees(U.bob), false, "alice (drawn in it) DM-blocked bob");
-    assert.ok(await sees(U.carol), "carol still sees it");
+    assert.deepEqual(await sees(U.bob), NONE, "alice (drawn in it) DM-blocked bob");
+    assert.deepEqual(await sees(U.carol), ALL, "carol still sees it");
     await block(U.alice, U.bob, false);
     await block(U.bob, U.alice);
-    assert.equal(await sees(U.bob), false, "either way: bob blocked alice");
+    assert.deepEqual(await sees(U.bob), NONE, "either way: bob blocked alice");
+    assert.deepEqual(await sees(U.carol), ALL, "carol still sees it");
     await block(U.bob, U.alice, false);
     await CV.block("alicecf", "bob");
-    assert.equal(await sees(U.bob), false, "alice cam-blocked bob");
-    assert.ok(await sees(U.carol), "carol still sees it");
+    assert.deepEqual(await sees(U.bob), NONE, "alice cam-blocked bob");
+    assert.deepEqual(await sees(U.carol), ALL, "carol still sees it");
     await CV.unblock("alicecf", "bob");
-    assert.ok(await sees(U.bob), "back once unblocked");
+    assert.deepEqual(await sees(U.bob), ALL, "back once unblocked");
   } finally {
     await block(U.alice, U.bob, false); await block(U.bob, U.alice, false); await CV.unblock("alicecf", "bob");
     await runQuery("UPDATE media SET deleted = 1 WHERE id = ?", [mic]);

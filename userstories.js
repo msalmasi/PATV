@@ -159,7 +159,9 @@ async function mcols() {
   if (!MCOLS) MCOLS = new Set((await getQuery("PRAGMA table_info(media)")).map((c) => c.name));
   return MCOLS;
 }
-const SEL = "id, kind, ct, file, subject, by_user, by_user_id, room, created, expires, secs, anon, source, nsfw, slot_id, subject_login";
+// review fix: + stream, the column storyreact.hiddenIds reads to know a 🎙 mic-stage capture (parity with stories.captures: these rows
+// feed hideBlocked too, though a person story never selects a mic capture today)
+const SEL = "id, kind, ct, file, subject, by_user, by_user_id, room, created, expires, secs, anon, source, nsfw, slot_id, subject_login, stream";
 
 /** The raw rows of `uid`'s person story (newest first): own profile uploads + captures of them (prefs, privacy, hides). */
 async function personRows(uid, { prefsOn = null } = {}) {
