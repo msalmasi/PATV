@@ -550,8 +550,11 @@ function composeArgs({ base, tiles, rectangles, duration, audioFile, audio, spea
       const d = Math.round(s.at * 1000);
       f.push(`[as${i}]atrim=start=${num(s.begin)}:end=${num(s.end)},asetpts=PTS-STARTPTS,adelay=${d}|${d},apad,atrim=end=${num(duration)}[ad${i}]`);
     });
+    // review fix 2: volume's enable is tested once per frame, at its start. After the first segment amix passes on apad's
+    // 4096-sample packets, so a mute began up to ~85 ms late (186 ms at 22.05 kHz); 256-sample frames (asetnsamples, 4.2 has
+    // it; p=0: no padding) mute within ~5 ms. It only re-cuts the frames - the levels are unchanged.
     f.push(audio.segments.map((_, i) => `[ad${i}]`).join("") + `amix=inputs=${n},volume=${n},apad,atrim=duration=${num(duration)}` +
-      (audio.muted.length ? `,volume=0:enable='${audio.muted.map(([a, b]) => `between(t,${num(a)},${num(b)})`).join("+")}'` : "") + "[audio]");
+      (audio.muted.length ? `,asetnsamples=n=256:p=0,volume=0:enable='${audio.muted.map(([a, b]) => `between(t,${num(a)},${num(b)})`).join("+")}'` : "") + "[audio]");
   }
   args.push("-filter_complex", f.join(";"), "-map", `[v${v}]`);
   if (hasAudio) args.push("-map", "[audio]", "-c:a", "aac", "-b:a", "128k", "-ac", "2"); else args.push("-an");

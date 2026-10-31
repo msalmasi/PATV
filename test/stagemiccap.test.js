@@ -366,6 +366,35 @@ test("clip audio graph uses only ffmpeg 4.2 options and keeps every segment at f
   for (const at of [1.3, 3.7]) assert.ok(peak(out, at, 0.2) < 12, "outside its segments the mix is silent at " + at);
   assert.ok(peak(out, 2.1, 0.3) < 12, "the second segment starts at its own delay, not earlier");
 });
+// review fix 2: volume's enable is tested once per frame, at its start - after the first segment amix passed on apad's 4096-sample
+// packets, so a mute window inside a later segment began up to ~85 ms late. The frames before the mute stage are 256 samples.
+test("review fix 2: a mute window inside a later segment silences within ~20 ms of its start, at unchanged levels", async () => {
+  const base = path.join(tmp, "mute2.png"), out = path.join(tmp, "mute2.mp4"), ref = path.join(tmp, "mute2-ref.mp4");
+  await sharp({ create: { width: 1280, height: 720, channels: 3, background: "#10151d" } }).png().toFile(base);
+  const muted = [[2.33, 2.6], [3.0, 3.5], [3.71, 4.2]];               // all inside the second segment (1.8 s - 4.8 s), off frame edges
+  const args = M.composeArgs({ base, tiles: [], rectangles: [], duration: 5, audioFile: tone,
+    audio: { reason: null, muted, segments: [{ begin: 0, end: 1, at: 0 }, { begin: 1, end: 4, at: 1.8 }] }, out });
+  const gi = args.indexOf("-filter_complex") + 1, graph = args[gi];
+  assert.match(graph, /adelay=1800\|1800,apad,atrim=end=5\.0000\[ad1\]/);
+  assert.match(graph, /amix=inputs=2,volume=2,apad,atrim=duration=5\.0000,asetnsamples=n=256:p=0,volume=0:enable='between\(t,2\.3300,2\.6000\)\+/);
+  // Set FFMPEG_PATH / FFPROBE_PATH to a 4.x build to prove the same graph there.
+  await fm.run(fm.bin("ffmpeg"), args, { timeoutMs: 30000 });
+  const refArgs = args.slice(); refArgs[gi] = graph.replace(",asetnsamples=n=256:p=0", ""); refArgs[refArgs.length - 1] = ref;
+  await fm.run(fm.bin("ffmpeg"), refArgs, { timeoutMs: 30000 });
+  const SR = 48000, decode = file => ff(["-i", file, "-map", "0:a:0", "-ac", "1", "-ar", String(SR), "-f", "s16le", "pipe:1"]);
+  const pcm = decode(out), pcmRef = decode(ref);
+  const peak = (buf, a, b) => { let m = 0; for (let i = Math.round(a * SR); i < Math.round(b * SR); i++) m = Math.max(m, Math.abs(buf.readInt16LE(i * 2))); return m; };
+  for (const [a, b] of muted) {
+    assert.ok(peak(pcm, a - .06, a - .03) > 1000, "audible just before the window at " + a);
+    let last = null;
+    for (let s = a - .1; s < b - .05; s += .0025) if (peak(pcm, s, s + .0025) > 300) last = s + .0025;
+    assert.ok(last - a <= .02, `silent within 20 ms of ${a} s: audible until +${Math.round((last - a) * 1000)} ms`);
+  }
+  for (const [a, b] of [[1.9, 2.25], [2.7, 2.95]]) {                    // the same levels as without the re-cut
+    const p = peak(pcm, a, b), q = peak(pcmRef, a, b);
+    assert.ok(q > 1000 && Math.abs(p - q) <= q * .02, `level at ${a} s: ${p} vs ${q}`);
+  }
+});
 test("capture consent uses the strict private-profile lookup and refuses when it fails", async () => {
   // review fix: camRefusal swallows a failed lookup as "public"; the fixture's camRefusal lets everyone through.
   M.configure({ privateLogins: async () => { throw Error("profile read failed"); } });
