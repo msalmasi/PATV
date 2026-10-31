@@ -683,6 +683,43 @@ async function publishCapture(id, username, { hours, byAnon, by } = {}) {
   return { media_id: mid, expires };
 }
 
+// ── the people a mic capture draws, per account (review fix, handoff 16) ──
+/**
+ * The stage_capture_people rows that are `userId`'s own: each row's login inside a span in which that Camfrog login was the
+ * account's - accountdelete.loginWindowsOf (its login now up to `upto`, every login it let go up to then; merged accounts
+ * included), each span starting after ANOTHER account's latest record of the login (micrec.othersMarks), else 0: a cam is the
+ * Camfrog account's own, as micrec.recWindowsOf says, but a span is never widened across another holder's. So a recycled
+ * login's later holder is never the person in an earlier capture. Errors throw. `mediaId`: that published capture only.
+ * -> [{capture_id, login, state, media_id, room_id, kind, created}] (never the capturer or the other people in it)
+ */
+async function depictedOf(userId, login, upto = NOW(), { mediaId = null } = {}) {
+  if (!userId || !(await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stage_capture_people'")).length) return [];
+  const MR = require("./micrec"), ids = await MR.holderIds(userId), out = new Map();
+  for (const w of await require("./accountdelete").loginWindowsOf(userId, login, upto)) {
+    const from = (await MR.othersMarks(userId, w.login, ids)).reduce((m, at) => (at < w.to && at > m ? at : m), 0);
+    const rows = await getQuery(`SELECT p.capture_id, p.login, c.state, c.media_id, c.room_id, c.kind, c.created FROM stage_capture_people p
+      JOIN stage_captures c ON c.id = p.capture_id WHERE p.login = ? AND c.created > ? AND c.created <= ?${mediaId ? " AND c.media_id = ?" : ""}`,
+      [w.login, from, w.to].concat(mediaId ? [String(mediaId)] : []));
+    for (const r of rows) out.set(r.capture_id + "|" + r.login, r);
+  }
+  return [...out.values()];
+}
+/** Account deletion, before its transaction (idempotent): the account's own unfinished captures, and the unfinished mic captures
+ *  in `depicted` (depictedOf), fail - the engine's job cancelled, the preview file gone, nothing published or charged. -> n */
+async function stopFor(userId, depicted = []) {
+  const OPEN = ["recording", "cutting", "preview", "saving"];
+  const ids = new Set(depicted.filter((r) => OPEN.includes(r.state)).map((r) => r.capture_id));
+  for (const c of await getQuery("SELECT id FROM stage_captures WHERE user_id = ? AND state IN ('recording','cutting','preview','saving')", [String(userId)])) ids.add(c.id);
+  let n = 0;
+  for (const id of ids) {
+    const c = await row(id);
+    if (!c || !OPEN.includes(c.state)) continue;
+    await failMic(c, c.user_id === String(userId) ? MIC_TEXT.failed : MIC_TEXT.revoked);   // (failMic serves every source)
+    n++;
+  }
+  return n;
+}
+
 // ── deleting a published stage capture ──
 async function canDelete(user, m) {
   if (!user || !user.userId || !m) return false;
@@ -707,10 +744,11 @@ async function canDelete(user, m) {
   if (m.by_user_id && m.by_user_id === user.userId) return true;
   if (m.stream === "mic") {
     await init();
+    // review fix (handoff 16): a person it draws - by the spans their Camfrog logins were theirs (depictedOf), never by today's
+    // holder of the login (a recycled login's next holder isn't in an earlier capture); a lookup that fails grants nothing
     const acct = await account(user.userId);
-    const mine = String(acct && acct.camfrogUsername || "").toLowerCase();
-    if (mine && (await getQuery(`SELECT 1 FROM stage_capture_people p JOIN stage_captures c ON c.id = p.capture_id
-      WHERE c.media_id = ? AND p.login = ? COLLATE NOCASE LIMIT 1`, [m.id, mine])).length) return true;
+    try { if (acct && (await depictedOf(acct.userId, acct.camfrogUsername, NOW(), { mediaId: m.id })).length) return true; }
+    catch (e) { console.error("[stagecap] depicted check:", e.message); }
   }
   if (m.slot_id) {
     const s = await require("./mainstage").getSlot(m.slot_id);
@@ -954,6 +992,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
 
 module.exports = {
   register, init, capture, save, status, discard, check, publish, remove, canDelete, slotSettings, feed, sweep, eligibility, priceOf,
+  depictedOf, stopFor,                                                    // review fix (handoff 16): account deletion / export
   switches, killed, roomOff, ROOM_OFF,
   playlistPath, liveSegments, extractSnap, extractClip, resolveStream, view, PRICES, LIMITS, CLIP_MAX, CLIP_DEFAULT, PREVIEW_TTL, SAVE_TTL, MIN_LEVEL,
   _setDeps, _setDirs, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _hits: hits,

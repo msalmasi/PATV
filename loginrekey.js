@@ -17,6 +17,10 @@
 // requests JSON, Phase 3), GTF records + mirror + open ops (with a rev bump so
 // Pepe's mirror follows), gang members / invites / boss, voice unlocks. PATV usernames inside records (user / username /
 // users / userId fields) are never touched - they name the account, which didn't change.
+// Review fix (handoff 16): stagecap's stage_capture_people is deliberately NOT re-keyed. A row is the login whose cam a mic
+// capture drew, at that time; every reader (the delete right, account deletion, Download my data) attributes it by the spans
+// each login was an account's (stagecap.depictedOf), so the account keeps it after a change and the login's next holder never
+// gets it. A re-keyed row would name a login the person didn't have then - outside every span.
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 

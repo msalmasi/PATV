@@ -26,6 +26,10 @@
 //                                         Pepe runs the release that does it - micrec.js) Pepe is asked to delete the recordings of
 //                                         every Camfrog login the account had, made before it stopped being the account's (website
 //                                         action "privacy.recdelete" [before], micrec.recWindowsOf; re-asked until he takes it).
+//                                         Review fix (handoff 16): the 🎙 mic-stage captures that draw the account's cam
+//                                         (stage_capture_people, by its logins' ownership spans - stagecap.depictedOf) are stopped
+//                                         or deleted, with their saved copies and posts, like the clips of them; so are its own
+//                                         unfinished stage captures.
 //
 // PAT never vanishes: the wallet debit ("account-deleted") and its legs (pools when the site owns them, the House as jackpot rakes,
 // else a negative Reserve claim Pepe's funding tick credits) are one transaction, keyed (account_deletion_routes, key
@@ -613,6 +617,15 @@ async function execute(userId, { force = false } = {}) {
   const t = now();
   // the clip files (outside the transaction: files, then the rows are flagged inside)
   const mediaRows = await q("media", ["by_user_id", "subject_login"], "SELECT id, file FROM media WHERE (by_user_id = ? OR lower(subject_login) = ?) AND COALESCE(deleted,0) = 0", [uid, login || "\u0000"]);
+  // review fix (handoff 16): the 🎙 mic-stage captures that DRAW their cam (stagecap's stage_capture_people), by the spans each Camfrog
+  // login was theirs (stagecap.depictedOf: loginWindowsOf, merged accounts included - read before step 5 deletes the login history),
+  // so a recycled login's later holder is never reached. Their own unfinished captures and the unfinished ones drawing them stop
+  // now (idempotent, like settle); the published ones go with the clip files here and in step 4.
+  const SC = (await tableExists("stage_captures")) ? require("./stagecap") : null;
+  const depicted = SC ? await SC.depictedOf(uid, login, t) : [];
+  if (SC) { const k = await SC.stopFor(uid, depicted); if (k) report.stage_captures_stopped = k; }
+  const depictedMedia = [...new Set(depicted.map((r) => r.media_id).filter(Boolean))];
+  if (depictedMedia.length) mediaRows.push(...(await getQuery(`SELECT id, file FROM media WHERE id IN (${depictedMedia.map(() => "?").join(",")}) AND COALESCE(deleted,0) = 0`, depictedMedia)));
   // Sign in with Apple: the link's Apple token joins applesso's revocation queue INSIDE the transaction that deletes the link (a
   // restart can't lose it) and is sent to Apple right after it (applesso.flushQueued; the queue retries what fails)
   const appleSso = (await getQuery("SELECT name FROM pragma_table_info('sso_links')")).some((c) => c.name === "refresh_token_enc") ? require("./applesso") : null;
@@ -689,6 +702,14 @@ async function execute(userId, { force = false } = {}) {
     // (their DM pictures go with the deleted messages: dmmedia.sweep purges the files after its grace period)
     // 4. clips they made / of them
     n("clips_removed", await run("media", ["by_user_id", "deleted"], "UPDATE media SET deleted = 1 WHERE by_user_id = ? OR (? IS NOT NULL AND lower(subject_login) = ?)", [uid, login, login]));
+    //    review fix (handoff 16): ...and the mic-stage captures that draw their cam (read above): deleted (stagecap's triggers drop
+    //    every people row with the media), every saved copy and post of them with it (storykeep.onCaptureRemoved), and their own
+    //    people rows on whatever capture is left (an unfinished one stopped above)
+    for (const id of depictedMedia) {
+      n("mic_captures_removed", await run("media", ["deleted"], "UPDATE media SET deleted = 1 WHERE id = ? AND COALESCE(deleted,0) = 0", [id]));
+      await require("./storykeep").onCaptureRemoved(id, { reason: "removed" });
+    }
+    for (const r of depicted) n("mic_capture_people_deleted", await run("stage_capture_people", ["login"], "DELETE FROM stage_capture_people WHERE capture_id = ? AND login = ?", [r.capture_id, r.login]));
     // 5. personal rows (Apple's tokens to the revocation queue first, in this transaction)
     if (appleSso) {
       const appleLinks = await getQuery("SELECT subject, refresh_token_enc FROM sso_links WHERE provider = 'apple' AND user_id = ?", [uid]);

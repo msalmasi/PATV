@@ -12,7 +12,8 @@
 // (their side of each conversation they are in; which of them were story replies, as metadata), notices, achievements,
 // cosmetics, purchases and orders, subscriptions, likeness settings and earnings, their sign-in sessions, and the chat
 // data PATV keeps keyed to their account or Camfrog login (chat statistics, room participation, clips they made or that
-// are of them - as records; the clip files themselves are not in the zip; CL2: their own lines in the pad chat archive).
+// are of them - as records; the clip files themselves are not in the zip; CL2: their own lines in the pad chat archive;
+// review fix, handoff 16: references to the mic-stage captures that draw their cam, by their logins' ownership spans).
 //
 // What is never in it: secrets (OMIT: passwords, tokens, hashes, stream / restream keys, signatures, nonces, payment
 // processor customer / subscription ids) and other people's private data - the DMs other people sent, a buyer's
@@ -362,6 +363,14 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("chat", "chat_line_reports", rows("chatlog_reports", "reporter = ?", [uid], { omit: ["decided_by"] }));
   await put("chat", "clips_you_made", rows("media", "by_user_id = ?", [uid], { omit: ["file"] }));
   await put("chat", "stage_captures", rows("stage_captures", "user_id = ?", [uid]));
+  // review fix (handoff 16): the 🎙 mic-stage captures that draw your cam - references only (the capture, the login it was under, the
+  // pad, kind, state, when, its published media id), by the spans each Camfrog login was yours (stagecap.depictedOf, merged accounts
+  // included); never who took it, the other people in it, reader credentials or temporary paths
+  if ((await colsOf("stage_capture_people")).length) {
+    await put("chat", "mic_stage_captures_of_you", require("./stagecap").depictedOf(uid, login, at).then((rs) => rs
+      .sort((a, b) => Number(a.created) - Number(b.created))
+      .map((r) => ({ capture: r.capture_id, login: r.login, pad: r.room_id, kind: r.kind, state: r.state, media_id: r.media_id || null, created: r.created }))));
+  }
   await put("chat", "commands_from_the_website", rows("bridge_cmd_log", "user_id = ?", [uid]));
   // pads they own
   await put("pads", "owned", rows("rooms_registry", "owner_user_id = ?", [uid]));
@@ -512,7 +521,7 @@ patv-data.json is everything PATV keeps about your account, as of the time in "e
   A conversation of kind "cfpm" is your own "Sent in Camfrog to <camfrog_login>" log: !msg copies that couldn't go to
   that person's PATV messages ("kept": true in camfrog_copies).
 - Never included: your password, sign-in tokens, stream keys, payment processor ids, and other people's private data.
-- Clip files are not in the zip; their records are (chat.clips_you_made, chat.clips_of_you).
+- Clip files are not in the zip; their records are (chat.clips_you_made, chat.clips_of_you, chat.mic_stage_captures_of_you).
 
 Questions or a correction: publicaccess.tv/privacy
 `;

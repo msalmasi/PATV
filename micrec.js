@@ -919,6 +919,7 @@ function register(app, { addUser }) {
 module.exports = { init, register, policyOn, pepeCan, setPolicy, cfg, privacyCopy, howLong, keepBlock, lapseMap, recWindowsOf, askable, queueRecDeletes, retryRecDeletes,
                    adminView, loadCfg, Refuse, REC_KIND, GRACE_MS, REC_RETRY_MS, REC_GIVE_UP_MS, HELD_WHO_MAX, REPORTED_MAX, KEEP_CACHE_MS,
                    holderIds, earlierHolder, noteLoginsGone, skippedHandled, REC_QUEUED_MS,                     // review
+                   othersMarks,                                                                                  // review fix (handoff 16): stagecap.depictedOf
                    ownSince, scrubLateAcks, alertSkipped, REC_SKIP_REMIND_MS,                                    // review 2
                    pepeGaps, drift, accountHoldHashes, REC_WAIT_WARN_MS,                                         // review 4
                    unknownCopy, UNKNOWN_OK, ruleChanges, gapsNow,                                                // 1.99afv (+ review)
