@@ -14,13 +14,13 @@ const fm = require("../feedmedia"), sharp = require("sharp");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "stagemiccap-test-"));
 const R = { id: "fixture-pad", slug: "fixture-pad", title: "Fixture pad" }, U = { userId: "fixture-member", level: 3 };
 const cam = (id, extra = {}) => ({ kind: "cam", id, name: id, video: "live", watch: "ok", pos: 0, ...extra });
-let clock = 100000, program, hidden, refused, exact, pinned, cfg, allowed, clipOn, roomOff, taps, notices, readers, activeReaders, maxReaders;
+let clock = 100000, program, hidden, refused, exact, pinned, cfg, allowed, clipOn, roomOff, liveShown, taps, notices, readers, activeReaders, maxReaders;
 function reset(extra = {}) {
   clock = 100000; program = { layout: "split", src: [cam("alice"), cam("bob", { pos: 1 })] };
-  hidden = new Set(); refused = new Set(); exact = true; pinned = true; cfg = { stagecap_mic: true }; allowed = true; clipOn = true; roomOff = null;
+  hidden = new Set(); refused = new Set(); exact = true; pinned = true; cfg = { stagecap_mic: true }; allowed = true; clipOn = true; roomOff = null; liveShown = true;
   taps = []; notices = []; readers = []; activeReaders = 0; maxReaders = 0; T.snapAt.clear();
   M.configure({ now: () => clock, config: () => cfg, killed: () => null, roomOff: () => roomOff, eligibility: () => null,
-    full: async () => allowed, block: async () => null, clipSwitch: () => clipOn, clipOffText: () => "Clips are off.",
+    full: async () => allowed, block: async () => null, clipSwitch: () => clipOn, clipOffText: () => "Clips are off.", liveShown: () => liveShown,
     account: async () => U, resolveRoom: async () => R, people: async () => [], program: async () => program,
     hidden: l => hidden.has(l), camRefusal: async (l, u, o) => { assert.equal(o.strict, true); return refused.has(l) ? {} : null; },
     exact: () => exact, pin: () => pinned, camPath: (r, l) => "cam-" + l,
@@ -94,6 +94,14 @@ test("all request gates are fail closed, dark availability is absent and home is
   clipOn = null; assert.equal((await M.availability(R, U)).clip, false); await assert.rejects(M.start(options("clip")), /Clips are off/);
   clipOn = true; roomOff = "Snaps are off."; await assert.rejects(M.start(options()), /Snaps are off/);
   roomOff = null; program = null; await assert.rejects(M.start(options()), /Nobody/);
+});
+test("review fix: the Prime Time Plus bridge gate - a pad whose bridge room isn't live and shown can't be captured, at start or recheck", async () => {
+  liveShown = false;
+  await assert.rejects(M.start(options()), /unavailable/); await assert.rejects(M.start(options("clip")), /unavailable/);
+  assert.deepEqual([(await M.availability(R, U)).snap, (await M.availability(R, U)).clip], [false, false]);
+  M.configure({ people: async () => ["alice"] });
+  assert.equal(await M.recheck({ id: id(), room_id: R.id, user_id: U.userId, kind: "photo" }), T.MSG.revoked, "a preview made before the perk lapsed");
+  liveShown = true; assert.equal(await M.recheck({ id: id(), room_id: R.id, user_id: U.userId, kind: "photo" }), null);
 });
 test("RTSP auth permits only a running path/job; loopback empty credentials get one challenge", () => {
   const job = { id: id(), kind: "clip", secs: 20, expiry: clock + 35000, reading: true, paths: new Set(["cam-a"]), cancelled: false };
@@ -187,6 +195,34 @@ test("private lookup still pending at encoding is already marked unknown, withou
   const pending = T.privateSample(job); assert.deepEqual(job.privateHistory, [{ at: 0, private: true }]);
   const plan = M.audioPlan([{ offset: 0, bytes: 100, at: .25, hm: 0, lat: { mp3_ms: 0 } }], [{ pos: 0, size: 100, duration_time: .25 }], job.privateHistory, 4);
   assert.ok(plan.muted.length); finish(new Set()); await pending; assert.equal(job.privateHistory[0].private, false);
+});
+test("review fix: a private holder is muted from their hold's since, though the mic list reached the site 1.5 s after the grab", async () => {
+  const run = async (listAt, entry) => {
+    const job = { R, started: clock, privateHistory: [] };
+    let mic = [];
+    M.configure({ mic: () => mic, privateLogins: async ls => new Set(ls.filter(l => l === "alice")) });
+    for (let t = 0; t <= 6; t += .5) {
+      clock = job.started + t * 1000;
+      if (t === listAt) mic = [entry(job)];
+      await T.privateSample(job);
+    }
+    clock = job.started;
+    return job;
+  };
+  // 0.25 s MP3 chunks with 0.5 s of pipeline latency: sound from source time s lands at s + 0.5 s in the clip
+  const chunks = Array.from({ length: 24 }, (_, i) => ({ offset: i * 100, bytes: 100, at: (i + 1) * .25, hm: 0, lat: { mp3_ms: 500 } }));
+  const packets = chunks.map(c => ({ pos: c.offset, size: 100, duration_time: .25 }));
+  const muted = (job, t) => M.audioPlan(chunks, packets, job.privateHistory, 6).muted.some(([a, b]) => a <= t && t <= b);
+  // alice grabs at 2 s; Pepe's mic list carrying her (since = the grab) reaches the site at 3.5 s
+  let job = await run(3.5, j => ({ login: "alice", since: j.started + 2000 }));
+  assert.ok(muted(job, 2.6), "her first sound (source 2 s, in the clip at 2.5 s) is muted");
+  assert.ok(!muted(job, 1.1), "sound from before her grab is not");
+  assert.ok(job.privateHistory.some(h => h.at === 2 && h.private) && job.privateHistory.filter(h => h.at > 2 && h.at < 3.5).every(h => h.private));
+  // a hold that began before the clip is clamped to the clip's start; a holder without since goes MIC_LAG (2 s) back
+  job = await run(1, j => ({ login: "alice", since: j.started - 60000 }));
+  assert.ok(job.privateHistory.every(h => h.private), "held since before the job: private from 0");
+  job = await run(3.5, () => ({ login: "alice" }));
+  assert.ok(job.privateHistory.some(h => h.at === 1.5 && h.private) && !job.privateHistory.find(h => h.at === 1).private);
 });
 test("recording fixes tiles, kills departed readers at the sampled time, and discard cleans up", async () => {
   const o = options("clip"), running = await M.start(o); await tick(); const job = T.jobs.get(o.id); assert.equal(readers.length, 2);

@@ -674,7 +674,7 @@ async function micJobs(t) {
   await MS.setConfig({ stagecap_enabled: true, stagecap_snaps: true, stagecap_clips: true, stagecap_mic: true }, "test");
   await runQuery("DELETE FROM stage_captures WHERE user_id = ?", [U.staff.userId]);
   SC._setDeps({ roomById: async id => id === ROOM.id ? ROOM : null });
-  M.configure({ full: async () => true, block: () => null, clipSwitch: () => true,
+  M.configure({ full: async () => true, block: () => null, clipSwitch: () => true, liveShown: () => true,
     hidden: login => revoked.has(login), camRefusal: async () => null });
   M.start = async (opts, hooks) => {
     let resolve, reject;

@@ -13,6 +13,7 @@ const crypto = require("crypto");
 const net = require("net");
 const { spawn } = require("child_process");
 const W = 1280, H = 720, FOOT = 32, DARK = "#10151d", CLIP_MIN = 3;
+const MIC_LAG = 2;   // review fix: Pepe's mic list reaches the site up to ~2 s after a grab (s)
 const SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
 const JOBS = new Map(), SNAP_AT = new Map();
 const CID = /^c[a-f0-9]{20}$/, LOGIN = /^[a-z0-9_.-]{1,64}$/i;
@@ -36,6 +37,7 @@ let deps = {
   full: async (u, id) => { const p = require("./padaccess"); await p.init(); return p.full(u, id); },
   block: (id, u, kind) => require("./bridgeblocks").refusal(id, u, kind),
   clipSwitch: id => require("./bridge").clipSwitch(id), clipOffText: id => require("./bridge").clipOffText(id),
+  liveShown: id => { try { const B = require("./bridge"), r = B._rooms.get(id); return !!r && B.isLiveShown(r); } catch (_) { return false; } },
   program: (id, u) => require("./bridge").stageProgramFor(id, u),
   camRefusal: (l, u, o) => require("./camviewers").camRefusal(l, u, o),
   hidden: l => require("./quotes").isHidden(l),
@@ -174,6 +176,8 @@ async function gate(R, user, kind, surface) {
   if (surface === "home") throw refuse("home");
   const why = deps.killed(kind) || deps.roomOff(R.id) || deps.eligibility(user);
   if (why) throw refuse(why);
+  // review fix: the 💎 Prime Time Plus bridge gate the cam captures obey (bridge.isLiveShown): no live, shown bridge room, no capture
+  if (!deps.liveShown(R.id)) throw refuse("unavailable");
   if (!(await deps.full(user, R.id))) throw refuse("denied");
   const block = await deps.block(R.id, user.userId, kind === "clip" ? "clips" : "snapshots");
   if (block) throw refuse(typeof block === "string" ? block : block.error || "unavailable");
@@ -362,6 +366,13 @@ function audioPlan(chunks, packets, privateHistory, duration, audioShift = 0) {
   const merged = mergeWindows(muted, duration);
   return { reason: null, muted: merged, segments, muted_s: merged.reduce((n, w) => n + w[1] - w[0], 0) };
 }
+/** review fix: every observation from `from` (job s) on is private, and the sorted history gets that boundary too. */
+function privateSince(history, from) {
+  let i = history.findIndex(h => h.at >= from);
+  if (i < 0) i = history.length;
+  for (let k = i; k < history.length; k++) history[k].private = true;
+  if (!history[i] || history[i].at > from) history.splice(i, 0, { at: from, private: true });
+}
 async function privateSample(job) {
   if (job.privacyPending) return;
   job.privacyPending = true;
@@ -372,15 +383,24 @@ async function privateSample(job) {
   // not extend the last known-public roster over sound we have not checked yet.
   const observation = { at, private: true };
   job.privateHistory.push(observation);
-  let priv = true;
+  let priv = true, from = Math.max(0, at - MIC_LAG);
   try {
     const mic = deps.mic(job.R.id);
     if (Array.isArray(mic)) {
-      const ls = mic.filter(x => x && !x.anon && LOGIN.test(String(x.login || ""))).map(x => String(x.login).toLowerCase());
-      priv = (await deps.privateLogins(ls)).size > 0;
+      const holders = mic.filter(x => x && !x.anon && LOGIN.test(String(x.login || "")));
+      const found = await deps.privateLogins(holders.map(x => String(x.login).toLowerCase()));
+      priv = found.size > 0;
+      // review fix: a private holder's turn starts at their hold's `since` (epoch ms -> job time, never before the job), not
+      // at this sample: Pepe's mic list reaches the site up to MIC_LAG after the grab. Unknown since: MIC_LAG back.
+      const starts = holders.filter(x => found.has(String(x.login).toLowerCase())).map(x => {
+        const s = Number(x.since);
+        return Number.isFinite(s) && s > 0 ? Math.max(0, (s - job.started) / 1000) : Math.max(0, at - MIC_LAG);
+      });
+      if (starts.length) from = Math.min(at, ...starts);
     }
   } catch (_) { /* unavailable mic list is private */ }
   observation.private = priv;
+  if (priv && from < at) privateSince(job.privateHistory, from);
   // The roster was observed before the lookup, not after it. If the lookup consumed more than
   // a polling interval, the unobserved remainder is private until the next successful sample.
   if ((deps.now() - job.started) / 1000 - at > .5) job.privateHistory.push({ at: at + .5, private: true });
