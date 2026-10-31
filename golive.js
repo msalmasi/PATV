@@ -25,7 +25,7 @@
 //    nowPlaying(): "📼 Now playing on <pad>: <title>" in the pad's chat + Pepe's line in its Camfrog room (relay job
 //    "nowplaying"). Same owner switch; NEVER a follower alert (that was the queue's stream start, once).
 //
-// 4) 1.99??: optional Discord starts, public/listed/non-adult pads only, never hidden identities.
+// 4) 1.99agj: optional Discord starts, public/listed/non-adult pads only, never hidden identities.
 //    Same pad switch and restart rules; durable 10-minute pad gap and hourly cap, including test attempts.
 //    Disabled by default; admin settings and tests at /admin/discord-golive; staging never sends.
 //
@@ -72,7 +72,7 @@ const clean = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f
 const SITE = () => String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL ||
   (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
 
-// 1.99??: opt-in Discord announcements. Attempts reserve durable per-pad/hourly limits before sending;
+// 1.99agj: opt-in Discord announcements. Attempts reserve durable per-pad/hourly limits before sending;
 // failures are not retried (an HTTP timeout may already have posted). No Discord work delays a stream start.
 let discordSend = null;
 const discordPending = new Set();

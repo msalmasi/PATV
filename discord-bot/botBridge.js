@@ -204,7 +204,7 @@ async function handleRoleChange(client, body, res, add) {
 }
 
 
-// 1.99??: public stage starts. Canonical PATV links and explicit role IDs only.
+// 1.99agj: public stage starts. Canonical PATV links and explicit role IDs only.
 const PATV_GUILD_ID = '913269267691094026';
 const stageId = (v) => typeof v === 'string' && /^\d{5,25}$/.test(v);
 function stageUrl(v) {
@@ -215,6 +215,9 @@ function stageUrl(v) {
   } catch (e) { return false; }
 }
 const stageText = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n) : '';
+// review fix: shown text is escaped Discord markdown - a title can't post a masked link ([text](url)), a # heading or
+// formatting through the official bot (the role tags are still read from the raw title)
+const stageMd = (s) => s.replace(/[\\`*_~|>\[\]()<#]/g, '\\$&');
 async function handleStageGoLive(client, body, res) {
   if (process.env.STAGING) return send(res, 409, { error: 'staging_disabled' });
   if (!body || !stageId(body.channel_id) || (body.role_id != null && !stageId(body.role_id))) return send(res, 400, { error: 'bad_channel_or_role' });
@@ -249,8 +252,8 @@ async function handleStageGoLive(client, body, res) {
       roles = [...new Set(roles)];
     }
   }
-  const embed = { title: (body.test ? '🧪 TEST — ' : '🎥 ') + streamer + ' is live on ' + stageText(pad.title, 60),
-    description: title || undefined, url: body.url, footer: { text: 'PATV stages' } };
+  const embed = { title: (body.test ? '🧪 TEST — ' : '🎥 ') + stageMd(streamer) + ' is live on ' + stageMd(stageText(pad.title, 60)),
+    description: title ? stageMd(title) : undefined, url: body.url, footer: { text: 'PATV stages' } };
   if (body.thumb) embed.thumbnail = { url: body.thumb };
   const posted = await channel.send({ content: roles.map((id) => '<@&' + id + '>').join(' '), embeds: [embed],
     allowedMentions: { parse: [], users: [], roles, repliedUser: false } });

@@ -48,6 +48,13 @@ test("embed fields, truncation, safe default mentions and supported kinds", asyn
   }
   for (const bad of [null, {}, { ...valid, title: {} }, { ...valid, streamer: "" }, { ...valid, kind: "queue" }]) assert.equal((await post(bad)).status, 400);
 });
+test("titles and names are shown as escaped markdown: no masked links, headings or formatting", async () => {
+  await post({ ...valid, streamer: "Players_Lounge1", title: "# [free PAT](https://evil.invalid) **now** @boxing" });
+  const m = messages[0];
+  assert.equal(m.embeds[0].title, "🎥 Players\\_Lounge1 is live on PATV Lounge");
+  assert.equal(m.embeds[0].description, "\\# \\[free PAT\\]\\(https://evil.invalid\\) \\*\\*now\\*\\* @boxing");
+  assert.equal(m.content, "<@&111111>", "the role tag still works");
+});
 test("any streamer can tag mentionable roles; quoted names, case, deduplication and unknown/ambiguous tags", async () => {
   await post({ ...valid, title: '@BOXING @boxing @"Movie Night" @staff @duplicate @unknown @everyone @here <@123456> <@&333333>' });
   const m = messages[0]; assert.equal(m.content, "<@&111111> <@&222222>");
