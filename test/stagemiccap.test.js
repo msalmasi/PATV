@@ -224,6 +224,41 @@ test("review fix: a private holder is muted from their hold's since, though the 
   job = await run(3.5, () => ({ login: "alice" }));
   assert.ok(job.privateHistory.some(h => h.at === 1.5 && h.private) && !job.privateHistory.find(h => h.at === 1).private);
 });
+test("review fix 2: a clip cut while a sample's private-profile lookup is pending still mutes that holder's first sound", async () => {
+  // a clip whose ffprobe / ffmpeg are fakes: the probe maps each 0.25 s tap chunk to 0.25 s of audio, the "encode" keeps the graph
+  const run = async ({ resolveAfterCut }) => {
+    let mic = [], slow = false, finish = null, graph = null;
+    reset({ mic: () => mic, privacyWaitMs: resolveAfterCut ? 3000 : 60,
+      privateLogins: ls => (slow && ls.includes("alice") ? new Promise(r => { finish = () => r(new Set(["alice"])); }) : Promise.resolve(new Set())),
+      fm: () => ({ ...fm, slot: async () => () => {}, run: async (cmd, args) => {
+        if (cmd === fm.bin("ffprobe")) return { out: JSON.stringify({ packets: Array.from({ length: 24 }, (_, i) => ({ pos: i * 100, size: 100, duration_time: .25 })) }) };
+        graph = args[args.indexOf("-filter_complex") + 1]; fs.writeFileSync(args[args.length - 1], "fixture"); return { out: "" };
+      } }) });
+    const o = options("clip"), running = await M.start(o); await tick();
+    const job = T.jobs.get(o.id); clearInterval(job.timer);                // the samples below run on the fixture clock only
+    for (let i = 0; i < 24; i++) {
+      const t = (i + 1) * .25;
+      clock = job.started + t * 1000;
+      if (t === 5.5) { mic = [{ login: "alice", since: job.started + 4000 }]; slow = true; }   // alice grabbed at 4 s; Pepe's list reaches the site at 5.5 s
+      taps[0].fn(Buffer.alloc(100, 1), { hm: 0, lat: { mp3_ms: 500 } });   // sound from source time s lands at s + 0.5 s
+      if (t % .5 === 0) { const p = T.privateSample(job); if (t < 5.5) await p; }   // 5.5 s: its profile lookup is still pending
+    }
+    slow = false;
+    job.finishEarly(6);                                                    // the clip is cut while that lookup is in flight
+    // ... and answers within the wait, but well after the cut would otherwise have planned the audio
+    if (resolveAfterCut) setTimeout(() => finish(), 500);
+    const info = await running.done;
+    const mute = /volume=0:enable='([^']*)'/.exec(graph || "");
+    const wins = mute ? [...mute[1].matchAll(/between\(t,([\d.]+),([\d.]+)\)/g)].map(m => [Number(m[1]), Number(m[2])]) : [];
+    return { info, muted: x => wins.some(([a, b]) => a <= x && x <= b) };
+  };
+  let r = await run({ resolveAfterCut: true });
+  assert.ok(r.muted(4.6), "her first sound (source 4 s, in the clip at 4.5 s) is muted from her hold's since");
+  assert.ok(!r.muted(3), "sound from before her grab is not");
+  r = await run({ resolveAfterCut: false });
+  assert.ok(r.muted(4.6), "still pending after the wait: private from MIC_LAG before that sample");
+  assert.ok(r.info.audio.muted_s > 0 && !r.muted(2), "never further back than that");
+});
 test("recording fixes tiles, kills departed readers at the sampled time, and discard cleans up", async () => {
   const o = options("clip"), running = await M.start(o); await tick(); const job = T.jobs.get(o.id); assert.equal(readers.length, 2);
   await assert.rejects(M.start(options("clip")), /Someone is clipping/);

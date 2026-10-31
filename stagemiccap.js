@@ -50,7 +50,8 @@ let deps = {
   mic: id => { const r = require("./bridge")._rooms.get(id); return r && r.mic; },
   privateLogins: ls => privateLoginsStrict(ls),
   note: (kind, id, l, u) => require("./camviewers").noteViewers(kind, id, l, [String(u)]),
-  fm: () => require("./feedmedia"), reader: null
+  fm: () => require("./feedmedia"), reader: null,
+  privacyWaitMs: 1500   // review fix 2: how long a cut waits for a private-profile lookup still in flight (settlePrivacy)
 };
 function configure(d) { deps = { ...deps, ...d }; }
 // stories.privateLogins intentionally tolerates a missing users table for its feed callers. A
@@ -373,10 +374,29 @@ function privateSince(history, from) {
   for (let k = i; k < history.length; k++) history[k].private = true;
   if (!history[i] || history[i].at > from) history.splice(i, 0, { at: from, private: true });
 }
-async function privateSample(job) {
-  if (job.privacyPending) return;
-  job.privacyPending = true;
+function privateSample(job) {
+  // review fix 2: the lookup in flight stays on the job (its promise, and the sample's time in privacyAt), so a cut can wait for
+  // the private look-back it carries (settlePrivacy) instead of planning the audio without it
+  if (job.privacyPending) return job.privacyPending;
+  const p = privateSampleNow(job).finally(() => { if (job.privacyPending === p) job.privacyPending = null; });
+  job.privacyPending = p;
+  return p;
+}
+/** review fix 2: before the audio plan, a sample whose profile lookup is still pending - its private holder's look-back (from the
+ *  hold's since) lands only when it resolves. Waited up to deps.privacyWaitMs; still pending, it counts as a private holder from
+ *  MIC_LAG before that sample (privateSample's unknown-since rule). -> true when nothing was left pending */
+async function settlePrivacy(job) {
+  const p = job.privacyPending;
+  if (!p) return true;
+  let timer;
+  const settled = await Promise.race([p.then(() => true, () => true), new Promise(r => { timer = setTimeout(() => r(false), Math.max(0, Number(deps.privacyWaitMs) || 0)); })]);
+  clearTimeout(timer);
+  if (!settled) privateSince(job.privateHistory, Math.max(0, job.privacyAt - MIC_LAG));
+  return settled;
+}
+async function privateSampleNow(job) {
   const at = (deps.now() - job.started) / 1000;
+  job.privacyAt = at;
   const previous = job.privateHistory.at(-1);
   if (previous && at - previous.at > 1) job.privateHistory.push({ at: previous.at + .5, private: true });
   // Unknown until the lookup completes. A cut that starts while this promise is pending must
@@ -404,7 +424,6 @@ async function privateSample(job) {
   // The roster was observed before the lookup, not after it. If the lookup consumed more than
   // a polling interval, the unobserved remainder is private until the next successful sample.
   if ((deps.now() - job.started) / 1000 - at > .5) job.privateHistory.push({ at: at + .5, private: true });
-  job.privacyPending = false;
 }
 function stopTile(job, t, at) {
   if (t.stop != null) return; t.stop = Math.max(0, at); job.paths.delete(t.path);
@@ -563,6 +582,8 @@ async function clip(job, hooks) {
   if (job.cancelled) throw refuse("failed", 409);
   const duration = Math.min(job.secs, elapsed);
   if (duration < CLIP_MIN) throw refuse("short", 409);
+  // review fix 2: no sample starts after finishReaders; the last one's lookup may still be in flight with its private look-back
+  await settlePrivacy(job);
   if (hooks.cutting) await hooks.cutting();
   const release = await fm.slot();
   try {
