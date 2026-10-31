@@ -20,7 +20,8 @@
 //     reports them - padmod.capsFor) or site staff. Save: any signed-in member (stories are members-only).
 //   * Captures whose subject (or capturer) is private can never be posted or saved: media.anon (!incognito /
 //     !bridge hide), an anonymous capturer ("someone"), or a linked account that hides its Analytics / Rooms panel
-//     (stories.privateLogins; stage captures: the streamer's and capturer's accounts, same rule).
+//     (stories.privateLogins; stage captures: the streamer's and capturer's accounts, same rule). Mic-stage captures
+//     (source "stage", stream "mic" - several people's cams) are never posted or saved (review fix, handoff 16).
 //   * Removed or expired captures (deleted, past expires, file gone) can't be posted or saved.
 //   * The person on cam (the subject: their account, or their linked Camfrog login) sees "Remove me" on a post of
 //     themselves: one click soft-deletes it (deleted_by "subject") and tells the poster (and the credited author).
@@ -154,6 +155,10 @@ async function privacyBlocks(rows) {
     // 1.99ez: a member's own story upload (userstories.js) is theirs; 1.99fn: a snap / clip story may be SAVED (never
     // posted - postToPad refuses source "user" on its own), anything else can't be kept
     if (r.source === "user") { if (!userSaveable(r)) out.set(r.id, "This is someone's own story, so it can't be kept."); continue; }
+    // review fix (handoff 16): a mic-stage capture draws several Camfrog cams (stage_capture_people). Nothing here re-checks
+    // their later incognito / !bridge hide / private profile, and it has no single subject for "Remove me", so (until the owner
+    // decides otherwise) it is never kept or posted.
+    if (r.source === "stage" && r.stream === "mic") { out.set(r.id, "This mic-stage capture shows several people, so it can't be kept."); continue; }
     if (Number(r.anon)) out.set(r.id, "The person in this capture is private (incognito or hidden), so it can't be kept.");
     else if (!by || lc(by) === "someone") out.set(r.id, "This capture was taken privately, so it can't be kept.");
     else if (r.source === "stage") {

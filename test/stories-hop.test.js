@@ -54,14 +54,14 @@ const page = async (url, u) => { const r = await fetch(base + url, { headers: u 
 
 let seq = 0;
 async function capture(opts = {}) {
-  const { room = ROOM, subject = "subjcf", by = "capcf", kind = "photo", anon = 0, nsfw = 0, ageMin = 5, hours = 24, source = null, byId = null } = opts;
+  const { room = ROOM, subject = "subjcf", by = "capcf", kind = "photo", anon = 0, nsfw = 0, ageMin = 5, hours = 24, source = null, byId = null, stream = null } = opts;
   const id = "c0ffee" + String(++seq).padStart(6, "0");
   const t = Date.now() - ageMin * 60e3;
   const ext = kind === "photo" ? "jpg" : kind === "clip" ? "mp4" : "m4a";
-  await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, source, nsfw, by_user_id)
-                  VALUES (?, ?, ?, ?, 10, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+  await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, source, nsfw, by_user_id, stream)
+                  VALUES (?, ?, ?, ?, 10, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
                  [id, kind, kind === "photo" ? "image/jpeg" : kind === "clip" ? "video/mp4" : "audio/mp4", id + "." + ext, kind === "photo" ? 0 : 7,
-                  subject, by, room, t, t + hours * 3600e3, anon, source, nsfw, byId]);
+                  subject, by, room, t, t + hours * 3600e3, anon, source, nsfw, byId, stream]);
   fs.writeFileSync(path.join(process.env.MEDIA_DIR, id + "." + ext), kind === "photo" ? jpg : Buffer.from("fake-mp4-bytes"));
   return id;
 }
@@ -204,6 +204,26 @@ test("post to pad / save: private subjects (incognito, bridge hide, hidden analy
   assert.equal(f(shy).can.post, false);
   const S2 = await stories.forViewer(U.stranger, { room: ROOM });
   assert.deepEqual(S2.find((x) => x.id === ROOM).items.find((c) => c.id === live).can, { post: false, save: true }, "anyone signed in may save; only some may post");
+});
+
+test("review fix (handoff 16): a mic-stage capture (several people's cams) is never posted or saved - not even by its capturer or an admin", async () => {
+  const mic = await capture({ source: "stage", by: "Cap Per", byId: U.cap.userId, subject: "🎙 the mic", stream: "mic" });
+  const slot = await capture({ source: "stage", by: "Cap Per", byId: U.cap.userId, subject: "Stream", stream: "pepe" });
+  assert.equal((await keep.privacyBlocks([(await getQuery("SELECT * FROM media WHERE id = ?", [mic]))[0]])).has(mic), true);
+  for (const who of [U.cap, U.admin, U.owner]) {
+    const r = await post(`/api/stories/${mic}/post`, who, {});
+    assert.equal(r.status, 403, who.username + ": post"); assert.match(r.d.error, /mic-stage capture/);
+  }
+  for (const who of [U.cap, U.saver]) assert.equal((await post(`/api/stories/${mic}/save`, who)).status, 403, who.username + ": save");
+  await assert.rejects(keep.postToPad(U.cap, mic), (e) => e.status === 403);
+  await assert.rejects(keep.save(U.saver, mic), (e) => e.status === 403);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_posts WHERE capture_id = ?", [mic]))[0].n, 0);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_keeps WHERE capture_id = ?", [mic]))[0].n, 0);
+  for (const who of [U.cap, U.stranger]) {
+    const items = (await stories.forViewer(who, { room: ROOM })).find((x) => x.id === ROOM).items;
+    assert.deepEqual(items.find((c) => c.id === mic).can, { post: false, save: false }, who.username + ": the viewer's flags");
+    assert.equal(items.find((c) => c.id === slot).can.save, true, who.username + ": another stage capture is still saveable");
+  }
 });
 
 test("Remove me: only the subject (by account or linked Camfrog login), one click soft-deletes, the poster is told, idempotent, no re-post", async () => {

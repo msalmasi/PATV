@@ -6,7 +6,8 @@
 //     min(created + stories.WINDOW_MS, expires) - a stage capture can outlive its story on /media), it's a pad story or a
 //     member's own profile upload, the viewer may see the pad (padaccess.canSee - Approved first - then the 18+ gate), and
 //     (feed config story_block_hide, ON by default) nobody in it is blocked either way: an upload's uploader, a cam capture's
-//     subject (any account linked to subject_login, or their cam_blocks on the viewer), a stage capture's streamer. The
+//     subject (any account linked to subject_login, or their cam_blocks on the viewer), a stage capture's streamer, every cam a
+//     mic-stage capture draws (stage_capture_people, the same two checks per login - review fix, handoff 16). The
 //     strips (stories.forViewer, userstories.people, feedweb's pad thumbnails), the viewer API, the three actions, the DM
 //     card, its thumbnail and "open" all use it. Every failure is the same 404 "This story isn't available any more."
 //     The block rule applies to every capture whose person the server knows (subject_login / the slot), incognito ones
@@ -161,7 +162,7 @@ const exemptDm = (u) => SP.can(u, "dm.limits_exempt");
 /** A per-request context: caches for the lookups below (one query per kind per request). */
 function mkCtx() {
   return { t: NOW(), acct: new Map(), linked: new Map(), priv: new Map(), prefs: new Map(), hides: null, hideIds: new Set(),
-           slots: new Map(), blocks: new Map(), camv: null };
+           slots: new Map(), blocks: new Map(), camv: null, micPeople: new Map() };
 }
 
 async function loadAccounts(ctx, ids) {
@@ -202,6 +203,22 @@ async function loadSlots(ctx, ids) {
   const rows = (await hasTable("stage_slots")) ? await getQuery(`SELECT * FROM stage_slots WHERE id IN (${qs(need.length)})`, need) : [];
   for (const r of rows) ctx.slots.set(String(r.id), r);
   for (const id of need) if (!ctx.slots.has(id)) ctx.slots.set(id, null);
+}
+/** review fix (handoff 16): media id -> the lowercased logins whose cam a mic-stage capture draws (stagecap's
+ *  stage_capture_people). No table yet: nobody; a failing read throws (the block rule fails closed). */
+async function loadMicPeople(ctx, mediaIds) {
+  const need = [...new Set(mediaIds.filter((x) => x && !ctx.micPeople.has(String(x))).map(String))];
+  if (!need.length) return;
+  const rows = [];
+  if (await hasTable("stage_capture_people")) {
+    for (let i = 0; i < need.length; i += 400) {
+      const part = need.slice(i, i + 400);
+      rows.push(...(await getQuery(`SELECT c.media_id AS mid, lower(p.login) AS login FROM stage_capture_people p JOIN stage_captures c ON c.id = p.capture_id
+                                    WHERE c.media_id IN (${qs(part.length)})`, part)));
+    }
+  }
+  for (const id of need) ctx.micPeople.set(id, []);
+  for (const r of rows) ctx.micPeople.get(String(r.mid)).push(r.login);
 }
 /** user id -> {reacts: capture_reacts, mine: captures_of_me} (no row: the defaults - both on). */
 async function loadPrefs(ctx, ids) {
@@ -333,9 +350,10 @@ async function authorOf(row, ctx = mkCtx(), item = null) {
 // ── what a viewer may see ──
 const blockHide = () => cfg().story_block_hide !== false;
 /**
- * Ids of `rows` whose person is blocked either way with `viewer` (uploader / cam subject / streamer; cam_blocks) - D-3 hides
- * them, and a vote cast on one never counts. Every capture whose person is known counts, incognito ones included (a real
- * anon capture has no subject_login - media.js never stores one - so there is nobody to check). Lookups that fail throw.
+ * Ids of `rows` whose person is blocked either way with `viewer` (uploader / cam subject / streamer / any cam a mic-stage capture
+ * draws - review fix, handoff 16; cam_blocks) - D-3 hides them, and a vote cast on one never counts. Every capture whose person
+ * is known counts, incognito ones included (a real anon capture has no subject_login - media.js never stores one - so there is
+ * nobody to check). Lookups that fail throw.
  */
 async function hiddenIds(viewer, rows, ctx = mkCtx()) {
   const out = new Set();
@@ -344,11 +362,17 @@ async function hiddenIds(viewer, rows, ctx = mkCtx()) {
   const B = await blocksOf(ctx, me);
   const cams = rows.filter((r) => r && isCapture(r) && r.source !== "stage" && r.subject_login);
   const stages = rows.filter((r) => r && r.source === "stage" && r.slot_id);
+  // review fix (handoff 16): a mic-stage capture has no slot or subject - its people are the cams it draws (stage_capture_people)
+  const mics = rows.filter((r) => r && r.source === "stage" && r.stream === "mic");
+  await loadMicPeople(ctx, mics.map((r) => r.id));
+  const micLogins = mics.flatMap((r) => ctx.micPeople.get(String(r.id)) || []);
   if (B.size) {
-    await loadLinked(ctx, cams.map((r) => r.subject_login));
+    await loadLinked(ctx, cams.map((r) => r.subject_login).concat(micLogins));
     await loadSlots(ctx, stages.map((r) => r.slot_id));
   }
-  const CV = cams.length ? await camv(ctx) : null;
+  const CV = cams.length || micLogins.length ? await camv(ctx) : null;
+  // a person (by login) blocked either way with the viewer: any account linked to the login, or their cam_blocks on the viewer
+  const hit = (l) => { const L = B.size ? ctx.linked.get(lc(l)) : null; return !!((L && L.ids.some((id) => id !== me && B.has(id))) || (CV && CV.blocked(lc(l), me))); };
   for (const r of rows) {
     if (!r) continue;
     if (r.source === "user") {
@@ -356,11 +380,8 @@ async function hiddenIds(viewer, rows, ctx = mkCtx()) {
     } else if (r.source === "stage") {
       const s = B.size && r.slot_id ? ctx.slots.get(String(r.slot_id)) : null;
       if (s && s.userId && String(s.userId) !== me && B.has(String(s.userId))) out.add(r.id);
-    } else if (r.subject_login) {
-      const l = lc(r.subject_login);
-      const L = B.size ? ctx.linked.get(l) : null;
-      if ((L && L.ids.some((id) => id !== me && B.has(id))) || (CV && CV.blocked(l, me))) out.add(r.id);
-    }
+      else if (r.stream === "mic" && (ctx.micPeople.get(String(r.id)) || []).some(hit)) out.add(r.id);
+    } else if (r.subject_login && hit(r.subject_login)) out.add(r.id);
   }
   return out;
 }

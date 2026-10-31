@@ -351,6 +351,40 @@ test("D-3 and incognito captures: a real anon capture stores no login (nobody to
   } finally { await CV.unblock("carolcf", "eve"); await block(U.carol, U.frank, false); }
 });
 
+test("review fix (handoff 16) D-3 and mic-stage captures: hidden from someone a person it draws has DM-blocked or cam-blocked, visible to everyone else", async () => {
+  // stagecap's two tables as stagecap.init creates them (its later columns aren't needed here)
+  await runQuery(`CREATE TABLE IF NOT EXISTS stage_captures (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, username TEXT, room_id TEXT NOT NULL, source TEXT NOT NULL, slot_id TEXT,
+    stream_label TEXT, kind TEXT NOT NULL, ct TEXT NOT NULL, secs REAL, bytes INTEGER, nsfw INTEGER NOT NULL DEFAULT 0,
+    state TEXT NOT NULL, action_id INTEGER, media_id TEXT, message TEXT, created INTEGER NOT NULL, updated INTEGER)`);
+  await runQuery("CREATE TABLE IF NOT EXISTS stage_capture_people (capture_id TEXT NOT NULL, login TEXT NOT NULL, PRIMARY KEY (capture_id, login))");
+  const mic = await row({ source: "stage", subject: "🎙 the mic", by: "Dave", byId: U.dave.userId, stream: "mic" });
+  BY_PAD[MEM].splice(BY_PAD[MEM].indexOf(mic), 1);                         // (not part of the parity sets above)
+  const cid = "c" + mic.padStart(20, "0");
+  await runQuery(`INSERT INTO stage_captures (id, user_id, username, room_id, source, slot_id, stream_label, kind, ct, state, media_id, created)
+                  VALUES (?, ?, 'dave', ?, 'mic', NULL, '🎙 the mic', 'photo', 'image/webp', 'done', ?, ?)`, [cid, U.dave.userId, MEM, mic, Date.now()]);
+  await runQuery("INSERT INTO stage_capture_people (capture_id, login) VALUES (?, 'alicecf')", [cid]);
+  const sees = async (u) => !!(await SR.storyFor(V(u), mic)) && (await itemsOf(u, MEM)).some((x) => x.id === mic);
+  try {
+    assert.ok(await sees(U.bob) && await sees(U.carol), "nobody blocked: everyone sees it");
+    await block(U.alice, U.bob);
+    assert.equal(await sees(U.bob), false, "alice (drawn in it) DM-blocked bob");
+    assert.ok(await sees(U.carol), "carol still sees it");
+    await block(U.alice, U.bob, false);
+    await block(U.bob, U.alice);
+    assert.equal(await sees(U.bob), false, "either way: bob blocked alice");
+    await block(U.bob, U.alice, false);
+    await CV.block("alicecf", "bob");
+    assert.equal(await sees(U.bob), false, "alice cam-blocked bob");
+    assert.ok(await sees(U.carol), "carol still sees it");
+    await CV.unblock("alicecf", "bob");
+    assert.ok(await sees(U.bob), "back once unblocked");
+  } finally {
+    await block(U.alice, U.bob, false); await block(U.bob, U.alice, false); await CV.unblock("alicecf", "bob");
+    await runQuery("UPDATE media SET deleted = 1 WHERE id = ?", [mic]);
+  }
+});
+
 // ───────────────────────────── 2. who the author is ─────────────────────────────
 test("authorOf: uploader / the person on cam (real account) / the own-stream streamer - nobody for anon, private, hidden, opted out, unlinked, auto, Pepe, library", async () => {
   const A = async (id) => SR.authorOf((await getQuery("SELECT * FROM media WHERE id = ?", [id]))[0], SR.mkCtx());
