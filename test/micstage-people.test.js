@@ -105,8 +105,34 @@ test("Download my data: the account's own mic-capture references only - no captu
   assert.deepEqual((await X.collect("bob")).chat.mic_stage_captures_of_you.map((r) => r.capture), [CAP.B], "bob: only after he linked it");
 });
 
-test("account deletion: captures drawing the person go (saved copies + posts too), unfinished ones stop; the next holder's capture stays", async () => {
+// review fix 2: a capture in the unlinked gap - after one holder let the login go, before the next one linked it
+const GAP = { cap: "c" + "f".repeat(20), mid: "ffff0000ffff0000", at: NOW - 3.5 * H,                       // "sharedcf": alice left, bob not yet in
+              capZ: "c" + "9".repeat(20), midZ: "99990000ffff0000", zedLeft: T.aliceLeft - 0.5 * H, atZ: T.aliceLeft - 0.25 * H };   // "alicenew": zed left, alice not yet in
+let gapP = null;
+const gapSetup = () => gapP || (gapP = (async () => {
   await setup();
+  await cap(GAP.cap, "done", GAP.at, GAP.mid, ["sharedcf"]);
+  // zed had "alicenew" before alice took it (alice linked it at T.aliceLeft): a capture of it between the two
+  await runQuery(`INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES ('zed', 'alicenew', NULL, 'alicenew', 'u:zed', ?, 'unlink')`, [GAP.zedLeft]);
+  await cap(GAP.capZ, "done", GAP.atZ, GAP.midZ, ["alicenew"]);
+})());
+test("review fix 2: the unlinked gap between two holders is nobody's for the delete right and Download my data; account deletion's wider span still reaches it", async () => {
+  await gapSetup();
+  const m = async (id) => (await getQuery("SELECT * FROM media WHERE id = ?", [id]))[0];
+  assert.equal(await SC.canDelete(U.bob, await m(GAP.mid)), false, "bob linked 'sharedcf' only after this was made");
+  assert.equal(await SC.canDelete(U.alice, await m(GAP.mid)), false, "alice had let it go");
+  assert.equal(await SC.canDelete(U.alice, await m(GAP.midZ)), false, "alice hadn't linked 'alicenew' yet (zed had it before)");
+  assert.equal(await SC.canDelete(U.alice, await m(MID.C)), true, "her capture after her own link stays hers");
+  assert.deepEqual((await X.collect("bob")).chat.mic_stage_captures_of_you.map((r) => r.capture), [CAP.B], "bob's export: never the gap");
+  assert.deepEqual((await X.collect("alice")).chat.mic_stage_captures_of_you.map((r) => r.capture), [CAP.A, CAP.A2, CAP.C], "alice's export: neither gap");
+  // account deletion keeps the span from the other holder's last record (reaching too far there only removes content)
+  assert.ok((await SC.depictedOf("bob", "sharedcf", NOW, { wide: true })).some((r) => r.capture_id === GAP.cap), "bob's deletion would reach it");
+  assert.ok((await SC.depictedOf("alice", "alicenew", NOW, { wide: true })).some((r) => r.capture_id === GAP.capZ), "alice's deletion reaches it");
+  // (both stay for the deletion test below: alice's deletion removes the "alicenew" one, never the "sharedcf" one)
+});
+
+test("account deletion: captures drawing the person go (saved copies + posts too), unfinished ones stop; the next holder's capture stays", async () => {
+  await gapSetup();                                                       // review fix 2: + the two gap captures
   // a saved copy and a post of capture A (defence in depth: storykeep refuses new ones for mic captures)
   await require(path.join(repo, "storykeep")).init();
   await runQuery("INSERT INTO story_keeps (capture_id, kind, ct, file, created) VALUES (?, 'image', 'image/webp', 'keepfile.webp', 1)", [MID.A]);
@@ -118,8 +144,11 @@ test("account deletion: captures drawing the person go (saved copies + posts too
   assert.equal(r.state, "done", JSON.stringify(r));
   const del = async (id) => Number((await getQuery("SELECT deleted FROM media WHERE id = ?", [id]))[0].deleted);
   assert.deepEqual([await del(MID.A), await del(MID.C), await del(MID.B)], [1, 1, 0], "alice's two published captures go; bob's stays");
+  // review fix 2: account deletion's wider span - the "alicenew" gap capture (after zed let it go, before alice linked it) goes with
+  // her; the "sharedcf" one (after she let it go) stays
+  assert.deepEqual([await del(GAP.midZ), await del(GAP.mid)], [1, 0], "the wide span reaches her login's gap, never the gap after she let one go");
   assert.ok(!fs.existsSync(path.join(media.DIR, MID.A + ".webp")) && fs.existsSync(path.join(media.DIR, MID.B + ".webp")), "the files too");
-  assert.equal(r.report.mic_captures_removed, 2);
+  assert.equal(r.report.mic_captures_removed, 3);                         // review fix 2: + the "alicenew" gap capture
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_saves WHERE capture_id = ?", [MID.A]))[0].n, 0, "the saved copy goes");
   assert.ok((await getQuery("SELECT purged_at FROM story_keeps WHERE capture_id = ?", [MID.A]))[0].purged_at);
   assert.ok((await getQuery("SELECT deleted_at FROM feed_posts WHERE id = 9901"))[0].deleted_at, "the post made from it is hidden");
@@ -127,5 +156,5 @@ test("account deletion: captures drawing the person go (saved copies + posts too
   assert.equal(a2.state, "failed", "the unfinished preview drawing her is stopped");
   assert.ok(!fs.existsSync(path.join(media.DIR, "stagecap-tmp", CAP.A2 + ".webp")));
   assert.deepEqual((await getQuery("SELECT capture_id, login FROM stage_capture_people ORDER BY capture_id")).map((x) => [x.capture_id, x.login]),
-                   [[CAP.B, "sharedcf"]], "no people row of hers (nor of the captures that went) is left - bob's stays");
+                   [[CAP.B, "sharedcf"], [GAP.cap, "sharedcf"]], "no people row of hers (nor of the captures that went) is left - bob's and the later gap's stay");
 });

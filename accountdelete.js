@@ -622,7 +622,9 @@ async function execute(userId, { force = false } = {}) {
   // so a recycled login's later holder is never reached. Their own unfinished captures and the unfinished ones drawing them stop
   // now (idempotent, like settle); the published ones go with the clip files here and in step 4.
   const SC = (await tableExists("stage_captures")) ? require("./stagecap") : null;
-  const depicted = SC ? await SC.depictedOf(uid, login, t) : [];
+  // review fix 2: `wide` - from another holder's last record, not the account's own link (deleting a capture in the unlinked gap
+  // only removes content; export and the delete right stop at the link)
+  const depicted = SC ? await SC.depictedOf(uid, login, t, { wide: true }) : [];
   if (SC) { const k = await SC.stopFor(uid, depicted); if (k) report.stage_captures_stopped = k; }
   const depictedMedia = [...new Set(depicted.map((r) => r.media_id).filter(Boolean))];
   if (depictedMedia.length) mediaRows.push(...(await getQuery(`SELECT id, file FROM media WHERE id IN (${depictedMedia.map(() => "?").join(",")}) AND COALESCE(deleted,0) = 0`, depictedMedia)));

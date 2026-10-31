@@ -690,13 +690,18 @@ async function publishCapture(id, username, { hours, byAnon, by } = {}) {
  * included), each span starting after ANOTHER account's latest record of the login (micrec.othersMarks), else 0: a cam is the
  * Camfrog account's own, as micrec.recWindowsOf says, but a span is never widened across another holder's. So a recycled
  * login's later holder is never the person in an earlier capture. Errors throw. `mediaId`: that published capture only.
+ * review fix 2: when another account held the login before, a span starts at the account's OWN link (loginWindowsOf's w.from - the
+ * latest record of the login before `to`, its own link included: micrec.ownSince's rule), so the unlinked gap between that holder
+ * letting it go and this account linking it is nobody's - Download my data and the delete right. `wide` (account deletion only)
+ * keeps the span from the other holder's last record: reaching too far there only removes content.
  * -> [{capture_id, login, state, media_id, room_id, kind, created}] (never the capturer or the other people in it)
  */
-async function depictedOf(userId, login, upto = NOW(), { mediaId = null } = {}) {
+async function depictedOf(userId, login, upto = NOW(), { mediaId = null, wide = false } = {}) {
   if (!userId || !(await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stage_capture_people'")).length) return [];
   const MR = require("./micrec"), ids = await MR.holderIds(userId), out = new Map();
   for (const w of await require("./accountdelete").loginWindowsOf(userId, login, upto)) {
-    const from = (await MR.othersMarks(userId, w.login, ids)).reduce((m, at) => (at < w.to && at > m ? at : m), 0);
+    const others = (await MR.othersMarks(userId, w.login, ids)).reduce((m, at) => (at < w.to && at > m ? at : m), 0);
+    const from = others > 0 && !wide ? Math.max(others, Number(w.from) || 0) : others;   // review fix 2: own link, unless deleting
     const rows = await getQuery(`SELECT p.capture_id, p.login, c.state, c.media_id, c.room_id, c.kind, c.created FROM stage_capture_people p
       JOIN stage_captures c ON c.id = p.capture_id WHERE p.login = ? AND c.created > ? AND c.created <= ?${mediaId ? " AND c.media_id = ?" : ""}`,
       [w.login, from, w.to].concat(mediaId ? [String(mediaId)] : []));
