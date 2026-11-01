@@ -22,11 +22,20 @@
       var tr = el('tr');
       // wave2 WP-4: a veiled speaker kept off from their cover tile is listed by a label, never by name (removal by its xid) -
       // the frog name then, else "a veiled speaker" in the page's language (the server stores no copy: review B-privacy-ux-7)
-      var veiled = !!e.xid && !e.login;
+      // (integration review P2 / P3: the xid - its lift handle - comes only to someone who may lift it, an admin or the pad's owner;
+      // site staff see the row with no Remove)
+      var veiled = !e.login;
       tr.appendChild(el('td', veiled ? '🕶 ' + (typeof e.veiled === 'string' && e.veiled ? e.veiled : _t('js.padset.mf.veiled_anon', 'a veiled speaker')) : e.login));
       tr.appendChild(el('td', when(e.until)));
       tr.appendChild(el('td', REASON[e.reason] || e.reason || ''));
       tr.appendChild(el('td', e.by || ''));
+      if (veiled && !e.xid) {
+        var tn = el('td', _t('js.padset.mf.veiled_nolift', 'Only an admin or the pad\'s owner can lift this.'));
+        tn.className = 'muted';
+        tr.appendChild(tn);
+        rows.appendChild(tr);
+        return;
+      }
       var td = el('td'), b = el('button', _t('js.padset.mf.remove', 'Remove'));
       b.type = 'button'; b.className = 'btn';
       b.addEventListener('click', function () {

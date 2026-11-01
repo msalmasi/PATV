@@ -65,7 +65,8 @@ async function hubData(R, viewer, app) {
     st: await stage.ownerState(R.id), C: stage.config(), roy: R.owner ? await royalties.status(R.id, R.owner.userId) : null,
     golive: R.profile ? null : await require("./golive").padAnnounce(R.id),      // 1.99kp: 🎥 announce stream starts in the pad
     // micfollow: 🎙 Mic follows (Camfrog pads) - its switch, layout, exclusions and whether it can run (micfollow.js)
-    mf: camfrog ? await require("./micfollow").ownerState(R.id).then((s) => ({ ...s, room_name: B ? B.name : R.id })).catch((e) => { console.error("[padsettings] micfollow:", e.message); return null; }) : null,
+    // (wave2 integration review P2 / P3: a veiled exclusion's xid - its lift handle - only for a viewer who may lift it, never Staff)
+    mf: camfrog ? await require("./micfollow").ownerState(R.id, undefined, { viewerId: viewer && viewer.userId ? viewer.userId : null }).then((s) => ({ ...s, room_name: B ? B.name : R.id })).catch((e) => { console.error("[padsettings] micfollow:", e.message); return null; }) : null,
     bridge: B ? { live: Date.now() - B.updated < 90000, relay: !!B.relay, mic: !!B.micRelay, cams: !!B.cams, audio: B.audioOn != null ? !!B.audioOn : !!B.audio,   // 1.99ia: the switch, not "streaming now"
               audioLive: !!B.audio, audioWhy: B.audioWhy || "", transcripts: B.transcripts !== false } : null,
     analytics: app ? rooms.hasRoute(app, "/p/:slug/analytics") : false,

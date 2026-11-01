@@ -1315,3 +1315,87 @@ test("wave2: one frog-name session = one hood - the chat bubble (chatlog-core .h
   const art = ["#2b2d31", "#23305c", "#4b2a5e", "#1f4a33", "#5c2228", "#1d4f57", "#6b5418", "#3d4654"];
   for (let n = 0; n < 8; n++) assert.ok(read("public", "img", "anon", `hood-peek-${n}.svg`).includes(`fill="${art[n]}"`), "hood-peek-" + n);
 });
+
+// ── wave2 integration review ──
+test("wave2 integration review (P2 / P3) pad-micfollow.js: a veiled exclusion sent with no xid (the viewer - site staff - may not lift it) shows its label and no Remove, never a login; one with an xid keeps its Remove", async () => {
+  const js = read("public", "js", "pad-micfollow.js");
+  const dom = fakeDom();
+  const els = {};
+  for (const id of ["mfForm", "mfMsg", "mfExRows", "mfExForm", "mfExMsg", "mfStatus"]) els[id] = dom.mk(id === "mfForm" || id === "mfExForm" ? "form" : "p");
+  els.mfForm.setAttribute("data-url", "/api/rooms/pad/micfollow/settings");
+  els.mfExRows.setAttribute("data-url", "/api/rooms/pad/micfollow/exclude");
+  els.mfExRows.setAttribute("data-list", JSON.stringify([{ login: null, veiled: "Soggy Bullfrog", until: null, reason: "owner", by: "admin", at: 3 },
+    { login: null, veiled: null, until: null, reason: "owner", by: "admin", at: 2 }, { login: "bob", until: null, reason: "owner", by: "admin", at: 1 }]));
+  const ctx = { document: { getElementById: (id) => els[id] || null, createElement: dom.mk }, console, setTimeout, Date,
+    __t: (k, d, v) => String(d).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m)),
+    fetch: () => Promise.resolve({ json: () => Promise.resolve({ ok: true, state: { excluded: [] } }) }) };
+  ctx.window = ctx;
+  vm.runInNewContext(js, ctx);
+  const rows = els.mfExRows.children;
+  assert.deepEqual(rows.map((tr) => tr.children[0].textContent), ["🕶 Soggy Bullfrog", "🕶 a veiled speaker", "bob"], "labels - never 'null' or a login");
+  for (const tr of rows.slice(0, 2)) {
+    assert.equal(tr.children[4].textContent, "Only an admin or the pad's owner can lift this.");
+    assert.ok(!tr.children[4].children.some((c) => c.tagName === "BUTTON" || (c.listeners && c.listeners.click)), "no Remove");
+  }
+  assert.equal(rows[2].children[4].children[0].textContent, "Remove", "a by-name row keeps its Remove");
+  assert.equal(EN["js.padset.mf.veiled_nolift"], "Only an admin or the pad's owner can lift this.");
+});
+
+test("wave2 integration review (T-3) pad-reveal.js: the toggle's auto-reveal learns whether this viewer can turn the toggle on - ok or 409 toggle_off = yes, 409 toggle_na = no (a role the toggle's rule refuses); a press says nothing", async () => {
+  const js = read("public", "js", "pad-reveal.js");
+  const mk = (answer) => {
+    const ctx = { console, fetch: () => Promise.resolve({ ok: answer.status < 400, status: answer.status, json: () => Promise.resolve(answer.d) }) };
+    ctx.window = ctx;
+    vm.runInNewContext(js, ctx);
+    return ctx.PATVReveal;
+  };
+  let R = mk({ status: 200, d: { ok: true, login: "erin" } });
+  assert.equal(R.can(), null, "not known yet");
+  await R.tile("pad", "anon-0000000b");
+  assert.equal(R.can(), null, "a press says nothing about the toggle");
+  await R.tile("pad", "anon-0000000b", { toggle: true });
+  assert.equal(R.can(), true, "it answered: the toggle is on");
+  R = mk({ status: 409, d: { ok: false, code: "toggle_off" } });
+  await R.tile("pad", "anon-0000000b", { toggle: true });
+  assert.deepEqual([R.can(), R.state()], [true, false], "off - but theirs to turn on");
+  R = mk({ status: 409, d: { ok: false, code: "toggle_na" } });
+  const r = await R.tile("pad", "anon-0000000b", { toggle: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), { ok: false, off: true });
+  assert.deepEqual([R.can(), R.state()], [false, false], "not theirs to turn on - and no more auto asks");
+  R = mk({ status: 409, d: { ok: false, code: "privwire_off" } });
+  await R.tile("pad", "anon-0000000b", { toggle: true });
+  assert.deepEqual([R.can(), R.state()], [null, null], "the switch off says nothing");
+});
+
+test("wave2 integration review (T-3) stage-mic.js: the pad chat's toggle bar is offered only once the first ask says this viewer can turn it on (PATVReveal.can() true) - never to an owner the toggle's rule refuses (toggle_na); their tile Reveal stays", async () => {
+  const prog = (v, src) => ({ v, layout: "grid4", count: src.length, still_s: 20, src });
+  const run = async (state0, can0, after) => {
+    const R = fakeReveal(state0);
+    let can = can0;
+    R.api.can = () => can;
+    R.api.tile = (slug, id, o) => { R.calls.push([slug, id, !!(o && o.toggle)]); can = after.can; if (after.state !== undefined) R.st = after.state; return Promise.resolve(after.r); };
+    const s = dynSandbox({ v: 1, layout: "single", count: 0, still_s: 20, src: [] });
+    s.ctx.PATVReveal = R.api;
+    s.ctl.update(prog(2, [coverS("anon-0000000b", 0, { rv: 1 })]));
+    await tick();
+    const rv = findCls(tileEl(s.grid, "anon-0000000b"), "mf-rv");
+    s.ctl.stop();
+    return { R, rvShown: !rv.hidden };
+  };
+  // an owner nothing dates: the ask says toggle_na - no bar, the tile's Reveal still there
+  let o = await run(null, null, { can: false, state: false, r: { ok: false, off: true } });
+  assert.deepEqual(o.R.calls, [["pad", "anon-0000000b", true]]);
+  assert.equal(o.R.offers, 0, "never offered the bar it can't turn on");
+  assert.equal(o.rvShown, true, "Reveal on the tile stays");
+  // someone who can: toggle_off -> offered (once)
+  o = await run(null, null, { can: true, state: false, r: { ok: false, off: true } });
+  assert.equal(o.R.offers, 1, "offered");
+  // the toggle on: revealed and offered
+  o = await run(null, null, { can: true, state: true, r: { ok: true, login: "erin" } });
+  assert.equal(o.R.offers, 1);
+  // known already (an earlier ask): offered at once, or never
+  o = await run(false, true, { can: true, r: { ok: false } });
+  assert.deepEqual([o.R.calls.length, o.R.offers], [0, 1], "off but theirs: offered, not asked");
+  o = await run(false, false, { can: false, r: { ok: false } });
+  assert.deepEqual([o.R.calls.length, o.R.offers], [0, 0], "not theirs: neither");
+});

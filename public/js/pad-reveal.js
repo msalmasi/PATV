@@ -8,12 +8,15 @@
 //   PATVReveal.setState(v)   the pad chat's toggle bar (room.ejs) says what it learned or did
 //   PATVReveal.on(fn)        fn(state) on every change; -> an unsubscribe
 //   PATVReveal.offer()       a cover with Reveal is up: the pad chat offers its "Show real names" bar (room.ejs: onOffer(fn))
+//   PATVReveal.can()         may this viewer turn the toggle on: true | false | null (not known yet) - the toggle's auto-reveal
+//                            learns it (ok / 409 toggle_off = yes; 409 toggle_na = no: a role the toggle's rule refuses, e.g. an
+//                            owner whose era nothing dates - integration review T-3). stage-mic.js offers the bar only when true.
 // An answer is shown only on this page (stage-mic.js: a dashed edge + "{login} · only you can see this"); never kept or re-sent.
 (function () {
   'use strict';
   if (window.PATVReveal) return;
   var ID_RE = /^anon-[0-9a-f]{8}$/, LOGIN_RE = /^[\w.\-]{1,40}$/;
-  var state = null, subs = [], offers = [];
+  var state = null, can = null, subs = [], offers = [];
   function each(list, arg) { list.slice().forEach(function (fn) { try { fn(arg); } catch (e) { /* the listener's own */ } }); }
   function setState(v) {
     var s = v === true ? true : v === false ? false : null;
@@ -36,10 +39,12 @@
     if (auto) body.toggle = true;
     return post(body).then(function (r) {
       if (r.ok && typeof r.d.login === 'string' && LOGIN_RE.test(r.d.login)) {
-        if (auto) setState(true);
+        if (auto) { can = true; setState(true); }
         return { ok: true, login: r.d.login, display: typeof r.d.display === 'string' ? r.d.display : null };
       }
       if (auto && r.status === 409) {
+        if (r.d.code === 'toggle_off') can = true;
+        else if (r.d.code === 'toggle_na') can = false;          // (they can't turn it on here: never offered the bar)
         if (r.d.code !== 'privwire_off') setState(false);       // (the toggle is off; a switched-off wire has no rv covers anyway)
         return { ok: false, off: true };
       }
@@ -49,6 +54,7 @@
   window.PATVReveal = {
     tile: tile,
     state: function () { return state; },
+    can: function () { return can; },
     setState: setState,
     on: function (fn) {
       if (typeof fn !== 'function') return function () {};

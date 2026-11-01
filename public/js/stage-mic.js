@@ -477,14 +477,23 @@
         }
       }) || function () {};
     }
+    /** The pad chat's toggle bar, offered once - and (integration review T-3) only to a viewer who can turn it on: PATVReveal.can(),
+     *  what the first ask learned (409 toggle_na = a stage role the toggle's rule refuses - their per-tile Reveal still works). */
+    function offerBar(R) {
+      if (offered || stopped || typeof R.offer !== 'function') return;
+      if (typeof R.can === 'function' && R.can() !== true) return;
+      offered = true;
+      try { R.offer(); } catch (er) { /* the page's own */ }
+    }
     function autoReveal(t, s) {
       var R = revealer();
       if (!R || stopped) return;
       listenReveal(R);
-      if (!offered && typeof R.offer === 'function') { offered = true; try { R.offer(); } catch (er) { /* the page's own */ } }
+      offerBar(R);
       if (t.revealed || t.autoId === s.id || R.state() === false) return;
       var id = t.autoId = s.id;
       Promise.resolve().then(function () { return R.tile(slug, id, { toggle: true }); }).then(function (r) {
+        offerBar(R);
         if (stopped || !t.s || !isCover(t.s) || t.s.id !== id || t.revealed) return;
         if (r && r.ok && typeof r.login === 'string' && /^[\w.\-]{1,40}$/.test(r.login)) { t.revealed = r.login; t.revealedBy = 'toggle'; t.apply(t.s); }
       }, function () { /* it stays a cover */ });

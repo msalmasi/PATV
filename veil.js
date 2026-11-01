@@ -249,6 +249,14 @@ function namedSeen(roomId, login, t) {
 }
 
 // ── snapshots ──
+// wave2 integration review (T-4): a veiled holder's hold start is clamped exactly like a named one's (bridge.cleanMic: no more
+// than 6 h back, 5 s ahead of the sync's own time) - micfollow ranks covers and named tiles on one scale (min_hold, spam_short,
+// "newest", displacement), whatever Pepe's clock says
+const SINCE_PAST_MS = 6 * 3600 * 1000, SINCE_AHEAD_MS = 5 * 1000;
+const clampSince = (sec, now) => {
+  const s = Number(sec);
+  return Number.isFinite(s) && s > 0 ? Math.max(now - SINCE_PAST_MS, Math.min(now + SINCE_AHEAD_MS, Math.round(s * 1000))) : null;
+};
 /**
  * Pepe's v2 snapshot members[] / mic[] -> page-safe entries (veiled: anon + veil + frog name, never on_cam; real identity as _vz),
  * named entries through `clean` (bridge.cleanUser / cleanMic). Sightings: every veiled member is sighted (frognames.sight, quiet),
@@ -257,7 +265,7 @@ function namedSeen(roomId, login, t) {
  * whose UserRef isn't one of its hashes (A-compat-2) is DROPPED - never shown named with its real login and cam (fails closed, as
  * feedItemV2 drops such an event). A holder's began_named rides on its identity (B.2: no frog name in the mic list either).
  */
-async function snapshotEntries(R, list, clean, { mic = false, max = 400 } = {}) {
+async function snapshotEntries(R, list, clean, { mic = false, max = 400, now = Date.now() } = {}) {
   const out = [];
   for (const u of (Array.isArray(list) ? list : []).slice(0, max)) {
     const veiled = hasPriv(u);
@@ -272,7 +280,7 @@ async function snapshotEntries(R, list, clean, { mic = false, max = 400 } = {}) 
       if (u.src === "list" || u.src === "seen") e.src = u.src;
     }
     hide(e, "_vz", { login: real.login, display: real.display, kind: p.kind, h: p.h, hs: p.hs.slice(), sess: null,
-                     ...(mic ? { proven: u.proven === true, since: Number(u.since) > 0 ? Math.round(Number(u.since) * 1000) : null,
+                     ...(mic ? { proven: u.proven === true, since: clampSince(u.since, now),
                                  ...(u.began_named === true ? { beganNamed: true } : {}) } : {}) });
     out.push(e);
   }

@@ -279,6 +279,17 @@ function excluded(roomId, login, t = now(), userIds = null) {
   }
   return false;
 }
+/** wave2 integration review (P1 / T-1): is `login` kept off this pad's mic stage by a VEILED exclusion (a see-through manager's
+ *  logged ✕ on their cover)? The only kind that takes a cover off: a by-name or by-account row never changes how a cover shows
+ *  (a cover opens no cam, so letting a by-name-excluded person show as an anonymous cover leaks nothing) - else anyone who may
+ *  add one (site Staff too, who have no see-through - J-2) could exclude a guessed login and watch which cover drops: an
+ *  identity oracle with no see-through row. */
+function veilExcluded(roomId, login, t = now()) {
+  const m = EXCL.get(String(roomId));
+  if (!m || !login) return false;
+  for (const e of m.values()) if (e && e.vlogin && e.vlogin === login && (e.until == null || e.until > t)) return true;
+  return false;
+}
 
 // ── logs: no logins, no names (a per-person tag that changes every day) ──
 function ptag(login, t = now()) {
@@ -549,8 +560,9 @@ function veiledOf(u, R) {
       const alias = typeof v.alias === "string" && v.alias.trim() ? v.alias.trim().slice(0, 40) : null;
       const hood = Number.isInteger(v.hood) && v.hood >= 0 && v.hood <= 7 ? v.hood : null;
       const login = LOGIN_RE.test(low(v.login)) ? low(v.login) : null;
-      // kept off this pad's mic stage (a veiled ✕, or by name): no cover - the neutral card, like any holder nobody can show
-      if (login && excluded(String(R.id), login, now(), (FACTS.get(login) || {}).userIds || null)) return null;
+      // kept off this pad's mic stage by a veiled ✕: no cover - the neutral card, like any holder nobody can show. Only a veiled
+      // exclusion (integration review P1 / T-1: a by-name / by-account row never touches a cover - no guess-and-watch oracle)
+      if (login && veilExcluded(String(R.id), login)) return null;
       return { key: core.COVER_PREFIX + "s" + String(v.sess), veil: v.veil === "hidden" ? "hidden" : "incognito", alias, hood,
                since: Number.isFinite(v.since) ? v.since : undefined, who: login ? { login, display: String(v.display || login).slice(0, 60) } : null };
     }
@@ -1182,7 +1194,7 @@ function shed(t = now()) {
   for (const P of PADS.values()) if (P.state.tiles.some((x) => x.video === "still")) stepPad(P.roomId, t);
 }
 /** Keep `login` off this pad's mic stage: minutes (null / 0 with reason owner+always = always). wave2 WP-4 (F.4): veiled = true
- *  stores a VEILED exclusion (a ✕ on a cover) - its own row, keyed by its xid, listed by `label` (the frog name then, or null),
+ *  stores a VEILED exclusion (a ✕ on a cover) - its own row, keyed by a random xid, listed by `label` (the frog name then, or null),
  *  never by the login; a by-name exclusion of the same login is another row (review B-privacy-ux-3: neither ever replaces,
  *  removes or shows the other, so guessing a name tells nothing). */
 async function excludeFor(roomId, login, minutes, reason, by, { always = false, userId = null, veiled = false, label = null } = {}) {
@@ -1192,7 +1204,9 @@ async function excludeFor(roomId, login, minutes, reason, by, { always = false, 
   const t = now();
   if (!always && !(Number(minutes) > 0)) return null;
   const until = always ? null : t + Math.round(Number(minutes) * 60 * 1000);
-  const key = veiled ? VEXCL + exclXid(roomId, l) : l;
+  // (a veiled row: a RANDOM handle per ✕ - integration review P2: an HMAC of (pad, login) was the same for every ✕ on one person, so
+  // their frog names could be linked across sessions; several veiled rows of one person may exist - excluded() checks them all)
+  const key = veiled ? VEXCL + crypto.randomBytes(8).toString("hex") : l;
   const m = exclMap(roomId), cur = m.get(key);
   // never shorten a longer exclusion the owner set (a ✂ Cut after "always" keeps "always")
   if (cur && (cur.until == null || (until != null && cur.until > until)) && reason !== "owner") return cur;
@@ -1885,6 +1899,27 @@ async function excludeCover(user, R, tileId, hours) {
   ROOMS().event(P.roomId, "micfollow", user.username || null, hours === 0 ? "kept a veiled speaker off the mic stage (always)" : `kept a veiled speaker off the mic stage (${hours} h)`);
   return { excluded: true };
 }
+/** wave2 integration review (P3): lift the veiled exclusion `xid` of pad R. A veiled exclusion keeps the person's later NAMED cam
+ *  off too (excluded() matches vlogin), so lifting it while they hold the mic named shows their tile again - it says who the
+ *  label was. So the same live see-through rule as its ✕ (seeRole: an Admin with chatlog.see_through, or the pad's owner now -
+ *  never Staff, J-2), and each lift is a see-through row (scope stage_exclude: the login, ref lift:<xid>) written BEFORE it takes
+ *  effect; a write that fails refuses the lift. (Not revealOn(): a row ✕-ed while the privacy wire was on can still be lifted after
+ *  it goes off.) -> {lifted: true} | throws Refuse */
+async function liftVeiled(user, R, xid) {
+  await init();
+  const t = now();
+  const role = await seeRole(user.userId, R.id, t);
+  if (!role) throw new Refuse(403, "That's a veiled speaker - only someone who may see who it is can lift this.", "cover");
+  const x = String(xid == null ? "" : xid);
+  const e = /^[0-9a-f]{16}$/.test(x) ? (EXCL.get(String(R.id)) || new Map()).get(VEXCL + x) : null;
+  if (!e || !e.vlogin) throw new Refuse(404, "That exclusion is gone.", "none");
+  try {
+    await require("./seethrough").log({ userId: user.userId, role, scope: "stage_exclude", roomId: R.id, logins: [e.vlogin], reason: "lifted", ref: "lift:" + x });
+  } catch (er) { throw new Refuse(500, "Couldn't lift it - try again.", "audit"); }
+  if (!(await unexcludeXid(R.id, x))) throw new Refuse(404, "That exclusion is gone.", "none");
+  ROOMS().event(R.id, "micfollow", user.username || null, "removed an exclusion of a veiled speaker");
+  return { lifted: true };
+}
 /** wave2 WP-4 x WP-2 follow-up (un-veil linkability): frog-name session `sess` of pad `roomId` ended (frognames.onEnd - off: incognito
  *  off / un-hidden, a named sighting, the incognito -> hidden switch with named lines on the page (A-privacy-5), forget-me; or its
  *  clock). Its cover comes off NOW - no hand-over, no keep_recent "recent" tile - and its public entry and identity go with it, so
@@ -1903,8 +1938,6 @@ function coverSessionEnded(roomId, sess, t = now()) {
   bump("cover_unveiled", 1, t, P);
   return true;
 }
-/** xid: a veiled exclusion's handle for the pad's list (removal) - never the login. */
-const exclXid = (roomId, login) => crypto.createHmac("sha256", SECRET).update("mf-xid|" + String(roomId) + "|" + low(login)).digest("hex").slice(0, 16);
 /** wave2 WP-4 (F.4): the tile routes (watch, still, exclude, report, pin) refuse a cover's id - an old page posts it like a login. */
 function refuseCover(roomId, id) {
   if (coverKeyOf(roomId, low(id))) throw new Refuse(400, "That's a veiled speaker - there's no cam or name to act on.", "cover");
@@ -1922,8 +1955,9 @@ async function viewerLogin(userId, t = now()) {
   return login;
 }
 
-/** Pad settings -> Stage card. */
-async function ownerState(roomId, t = now()) {
+/** Pad settings -> Stage card. `viewerId` = who it's for: a veiled exclusion's xid (its handle for a lift) goes only to a viewer
+ *  who may lift it (seeRole - integration review P2 / P3: never Staff); none given = nobody (lift: true = a trusted caller). */
+async function ownerState(roomId, t = now(), { viewerId = null, lift = false } = {}) {
   await init();
   const P = padOf(roomId, false);
   const s = P ? P.settings : { ...core.PAD_DEFAULTS };
@@ -1931,10 +1965,11 @@ async function ownerState(roomId, t = now()) {
   const why = P ? whyOff(P, R, t) : "pad_off";
   const runWhy = why === "pad_off" ? whyOff({ roomId: String(roomId), settings: { ...s, on: true } }, R, t) : why;
   const caps = padCaps();
+  const mayLift = lift === true || (viewerId != null && !!(await seeRole(viewerId, roomId, t)));
   // (wave2 WP-4: a veiled exclusion is listed by its label and an opaque xid - never by the login: excluding a cover never
-  // reveals who it was)
+  // reveals who it was. The xid only for a viewer who may lift it; it's random per ✕, so it never ties two frog names together)
   const ex = [...(EXCL.get(String(roomId)) || new Map()).entries()].filter(([, e]) => e.until == null || e.until > t)
-    .map(([key, e]) => (e.vlogin ? { login: null, veiled: e.veiled || null, xid: key.slice(VEXCL.length), until: e.until, reason: e.reason, by: e.by, at: e.at }
+    .map(([key, e]) => (e.vlogin ? { login: null, veiled: e.veiled || null, ...(mayLift ? { xid: key.slice(VEXCL.length) } : {}), until: e.until, reason: e.reason, by: e.by, at: e.at }
       : { login: key, until: e.until, reason: e.reason, by: e.by, at: e.at })).sort((a, b) => b.at - a.at);
   return { settings: { ...s }, on: !!s.on, running: !!(P && P.state.running && s.on), why_off: s.on ? why : null, can_run: !runWhy, run_why: runWhy || null,
            tiles: P ? P.state.tiles.length : 0, unproven_n: P ? P.state.unproven : 0, excluded: ex, max_live_cap: caps.maxLive, max_people_cap: caps.maxPeople,
@@ -2243,8 +2278,8 @@ function register(app, { addUser, bySlug, isLive }) {
     return R;
   };
   /** ownerState + the status line in the request's language (the settings card repaints it after a save). */
-  const ownerStateFor = async (req, roomId) => {
-    const st = await ownerState(roomId);
+  const ownerStateFor = async (req, roomId, u) => {
+    const st = await ownerState(roomId, now(), { viewerId: u && u.userId ? u.userId : null });   // (the xid only for a lifter: review P2 / P3)
     let t = req.t;
     if (typeof t !== "function") { try { t = require("./i18n").tFor("en"); } catch (e) { t = null; } }
     return t ? { ...st, status_text: statusText(t, st) } : st;
@@ -2328,7 +2363,7 @@ function register(app, { addUser, bySlug, isLive }) {
       const { u, R } = await owner(req);
       const s = await setPad(R.id, req.body || {}, u.username);
       ROOMS().event(R.id, "micfollow", u.username || null, `mic follows ${s.on ? "on" : "off"} · ${s.layout} · ${s.default_view} · ${s.max_people}/${s.max_live}`);
-      res.json({ ok: true, settings: s, state: await ownerStateFor(req, R.id) });
+      res.json({ ok: true, settings: s, state: await ownerStateFor(req, R.id, u) });
     } catch (e) { fail(res, e); }
   });
 
@@ -2339,12 +2374,12 @@ function register(app, { addUser, bySlug, isLive }) {
       const { u, R } = await owner(req);
       const b = req.body || {};
       // wave2 WP-4 (F.4, v2): ✕ on a COVER tile ({tile: id}) - a see-through manager keeps a veiled speaker off without seeing who
-      // (the same rule as Reveal: coverFlags' ex); the pad's list shows a label, never the login. Removal by its xid.
-      if (b.tile != null) return res.json({ ok: true, ...(await excludeCover(u, R, String(b.tile), Number(b.hours))), state: await ownerStateFor(req, R.id) });
+      // (the same rule as Reveal: coverFlags' ex); the pad's list shows a label, never the login. Removal by its xid - the same
+      // see-through rule, logged (integration review P3: liftVeiled)
+      if (b.tile != null) return res.json({ ok: true, ...(await excludeCover(u, R, String(b.tile), Number(b.hours))), state: await ownerStateFor(req, R.id, u) });
       if (b.xid != null && b.remove === true) {
-        if (!(await unexcludeXid(R.id, b.xid))) throw new Refuse(404, "That exclusion is gone.", "none");
-        ROOMS().event(R.id, "micfollow", u.username || null, "removed an exclusion of a veiled speaker");
-        return res.json({ ok: true, state: await ownerStateFor(req, R.id) });
+        await liftVeiled(u, R, b.xid);
+        return res.json({ ok: true, state: await ownerStateFor(req, R.id, u) });
       }
       let login = low(b.login), userId = null;
       if (b.login != null) refuseCover(R.id, b.login);   // (wave2 WP-4: a cover's id is no login - its ✕ posts {tile})
@@ -2356,13 +2391,13 @@ function register(app, { addUser, bySlug, isLive }) {
         await unexclude(R.id, login);
         // lifting a hold-out two reports caused = the host vouches for them (logged; the reports stay for staff)
         ROOMS().event(R.id, "micfollow", u.username || null, was && was.reason === "reported" ? "vouched for someone held out by reports" : "removed an exclusion");
-        return res.json({ ok: true, state: await ownerStateFor(req, R.id) });
+        return res.json({ ok: true, state: await ownerStateFor(req, R.id, u) });
       }
       const hours = Number(b.hours);
       if (![0, 1, 24].includes(hours)) throw new Refuse(400, "Pick 1 hour, 24 hours or always.", "bad");
       await excludeFor(R.id, login, hours * 60, "owner", u.username, { always: hours === 0, userId });
       ROOMS().event(R.id, "micfollow", u.username || null, hours === 0 ? "excluded someone (always)" : `excluded someone (${hours} h)`);
-      res.json({ ok: true, state: await ownerStateFor(req, R.id) });
+      res.json({ ok: true, state: await ownerStateFor(req, R.id, u) });
     } catch (e) { fail(res, e); }
   });
 
@@ -2545,7 +2580,7 @@ module.exports = {
   pinPut, unpin, pinTick, pinWhy, pinCandidates, pinsOf, pinsFor, pinOf, setOverride, onExactRefused, CFG_REV,      // mfix
   keptOf, keptList, evictKept,                                                                                     // wave2 WP-4 (F.2)
   setVeilSource, veiledOf, coverKeyOf, holdersOf,                                                                  // wave2 WP-4 (F.4)
-  coverWho, setRevealSource, excludeCover,                                                                         // wave2 WP-4 (the Reveal seam)
+  coverWho, setRevealSource, excludeCover, liftVeiled, veilExcluded,                                               // wave2 WP-4 (the Reveal seam)
   coverSessionEnded,                                                                                               // wave2 WP-4 x WP-2 (veilstage.js)
   _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS, _siteBudget: siteBudget,
   /** tests: the pad's first notice to `login` went out at `at` (null = never). 1.99afn: also their courtesy row - told at `at`

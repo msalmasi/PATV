@@ -4510,6 +4510,7 @@
   "js.padset.mf.always": "always",
   "js.padset.mf.none": "Nobody is excluded.",
   "js.padset.mf.veiled_anon": "a veiled speaker",
+  "js.padset.mf.veiled_nolift": "Only an admin or the pad's owner can lift this.",
   "js.padset.mf.r_owner": "you",
   "js.padset.mf.r_cut": "cut from the stage",
   "js.padset.mf.r_staff": "site staff",

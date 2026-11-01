@@ -83,14 +83,44 @@ async function syncAt(body, v2 = true) {
   try { return await bridge.ingest(Object.assign({ events: [], rooms: [], bridge_hidden_h: [], incog_hidden_h: [] }, body), { v2 }); }
   finally { Date.now = realNow; }
 }
+/** Pepe's live-cam poll and his last sync at the test clock now. */
+async function fresh() {
+  await LC.forBot({ cap: true, mf: 1, live: [] }, T);
+  Object.assign(bridge._rooms.get(ROOM.id), { updated: T, cams: true, livecams: true });
+}
 /** One engine step `sec` seconds on (Pepe's live-cam poll fresh, his last sync just now). */
 async function stepAt(sec) {
   T += sec * 1000;
-  await LC.forBot({ cap: true, mf: 1, live: [] }, T);
-  const R = bridge._rooms.get(ROOM.id);
-  Object.assign(R, { updated: T, cams: true, livecams: true });
+  await fresh();
   MF.stepPad(ROOM.id, T);
   await MF._idle(); await settle(10);
+}
+/** integration review (T-5): the test clock jumps `ms` - with Pepe kept fresh - and the pad steps at it, as micfollow's own 1 s
+ *  timer may do at any moment (a step at a jumped clock with a stale Pepe would cut every cover: whyOff 'pepe'). */
+async function jump(ms) {
+  T += ms;
+  await fresh();
+  MF.stepPad(ROOM.id, T);
+  await MF._idle(); await settle(10);
+}
+/** The covers up now -> {frankie: id, hank: id} (from the pad's own state - no ids carried over from an earlier test); brings them
+ *  up again from a fresh v2 sync when they aren't. */
+async function coverIds() {
+  const read = () => {
+    const out = {};
+    for (const c of pad().covers.values()) {
+      const w = MF.coverWho(ROOM.id, c.id);
+      if (w && w.login === "frankiefettuccine") out.frankie = c.id;
+      if (w && w.login === "hankhidden") out.hank = c.id;
+    }
+    return out;
+  };
+  let ids = read();
+  if (!ids.frankie || !ids.hank) {
+    await syncAt({ rooms: [v2Room()] });
+    for (let i = 0; i < 10 && !((ids = read()).frankie && ids.hank); i++) await stepAt(3);
+  }
+  return ids;
 }
 const pad = () => MF._pads.get(ROOM.id);
 const coverTiles = () => pad().state.tiles.filter((x) => x.cover);
@@ -351,26 +381,62 @@ test("(c) the stage Reveal follows who owns the pad NOW - an owner whose era not
   await runQuery("DELETE FROM room_events WHERE room_id = ? AND what = 'owner'", [ROOM.id]);
   assert.equal(await ST.chatRole(U.own, ROOM.id), null, "(no chat Reveal for this owner)");
   assert.equal(await VS.stageRole(U.own, ROOM.id), "owner");
-  T += 31e3;                                       // (micfollow caches a viewer's role 30 s)
+  await jump(31e3);                                // (micfollow caches a viewer's role 30 s)
   assert.equal(await flag(U.own), 1);
   assert.equal((await reveal(U.own, { tile: covers.frankie })).status, 200);
+  // integration review (T-3): ONE toggle, ONE rule - this owner can't turn "Show real names" on (the chat's rule), so the toggle's
+  // auto-reveal says toggle_na (the page never offers them the bar); someone who could turn it on gets toggle_off
+  const na = await reveal(U.own, { tile: covers.frankie, toggle: true });
+  assert.deepEqual([na.status, na.d.code], [409, "toggle_na"], na.text);
+  assert.deepEqual(leaks(na.text), []);
+  assert.equal((await call("POST", "/api/chatlog/seethrough", { user: U.own, body: { room: SLUG, on: true } })).status, 403, "(and indeed can't)");
+  assert.equal((await reveal(U.adm, { tile: covers.frankie, toggle: true })).d.code, "toggle_off");
   // the pad changes hands: the old owner is refused at once, the new one gets it
   await rooms.setOwner(ROOM.id, "own2", "test");
-  T += 31e3;
+  await jump(31e3);
   assert.equal(await VS.stageRole(U.own, ROOM.id), null);
   assert.equal(await flag(U.own), undefined, "a former owner: no Reveal");
   assert.equal((await reveal(U.own, { tile: covers.frankie })).status, 403);
   assert.equal(await flag(U.own2), 1, "the new owner: Reveal");
   assert.equal((await reveal(U.own2, { tile: covers.frankie })).status, 200);
   await rooms.setOwner(ROOM.id, "own", "test");
-  T += 31e3;
+  await jump(31e3);
+  assert.ok(MF.coverWho(ROOM.id, covers.frankie) && MF.coverWho(ROOM.id, covers.hank), "(T-5) steps at every jump: the same two covers stay up");
+});
+
+test("integration review (P1 / T-1): a by-name exclusion never touches a cover - staff (no see-through) excluding a wrong guess and the right one see the same cover program; nothing in the see-through log", async () => {
+  await setup;
+  const ids = await coverIds();
+  assert.ok(ids.frankie && ids.hank, "two covers up");
+  const prog = async (u) => (await live(u)).d.stage_program.src.filter((s) => s.kind === "cover").map((s) => ({ id: s.id, name: s.name, veil: s.veil, recent: !!s.recent }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const n0 = (await getQuery("SELECT COUNT(*) AS n FROM seethrough_log"))[0].n;
+  const before = { staff: await prog(U.staff), mem: await prog(U.mem) };
+  assert.equal(before.staff.length, 2);
+  const guess = async (body) => {
+    const login = body.login || (body.kind === "patv" ? "frankiefettuccine" : body.name);
+    try {
+      const x = await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.staff, body: Object.assign({ hours: 1 }, body) });
+      assert.equal(x.status, 200, x.text);
+      assert.deepEqual(leaks(x.text).filter((l) => l !== login), [], "(only the name they typed, in their own by-name row)");
+      await stepAt(1); await stepAt(1);
+      return { staff: await prog(U.staff), mem: await prog(U.mem) };
+    } finally {
+      const rm = await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.staff, body: { login, remove: true } });
+      assert.equal(rm.status, 200, rm.text);
+    }
+  };
+  assert.deepEqual(await guess({ login: "bobguess" }), before, "a wrong guess");
+  assert.deepEqual(await guess({ login: "frankiefettuccine" }), before, "the right guess by Camfrog name: the very same program (no 'recent' cover)");
+  assert.deepEqual(await guess({ name: "frankie", kind: "patv" }), before, "the right guess by PATV name: the same");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM seethrough_log"))[0].n, n0, "nothing to log - nothing was seen");
 });
 
 test("follow-up: a ✕ on a cover (a veiled exclusion matches their later named cam - it says who it was) writes a stage_exclude row first", async () => {
   await setup;
-  assert.ok(covers);
   await stepAt(1);                                 // (Pepe's sync fresh again: the clock moved on in the tests above)
-  assert.ok(MF.coverWho(ROOM.id, covers.hank) && MF.coverWho(ROOM.id, covers.frankie), "the same two covers are up");
+  covers = await coverIds();                       // (integration review T-5: this test's own covers, read now - none carried over)
+  assert.ok(covers.hank && covers.frankie, "two covers are up");
   const n0 = (await getQuery("SELECT COUNT(*) AS n FROM seethrough_log WHERE scope = 'stage_exclude'"))[0].n;
   // staff (who may manage the stage but have no see-through) and members can't, and nothing is written
   for (const u of [U.staff, U.mem]) {
@@ -392,7 +458,28 @@ test("follow-up: a ✕ on a cover (a veiled exclusion matches their later named 
   assert.equal(own.status, 200, own.text);
   const last = (await getQuery("SELECT * FROM seethrough_log WHERE scope = 'stage_exclude' ORDER BY id DESC LIMIT 1"))[0];
   assert.deepEqual([last.role, last.user_id, JSON.parse(last.logins), last.reason], ["owner", U.own.userId, ["frankiefettuccine"], "kept off: always"]);
-  for (const e of (await MF.ownerState(ROOM.id)).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);
+  // integration review (P2 / P3): staff's list carries no xid (they can't lift); a lift needs the see-through rule - staff are refused
+  // and nothing is written - and each lift is a stage_exclude row of its own (lifting shows their named cam again: it says who)
+  const stf = await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.staff, body: { login: "nobodycf", hours: 1 } });
+  assert.equal(stf.status, 200, stf.text);
+  const stVeiled = stf.d.state.excluded.filter((e) => e.login == null);
+  assert.equal(stVeiled.length, 2, "staff see the two 🕶 rows");
+  assert.ok(stVeiled.every((e) => !("xid" in e)), "with no xid: " + JSON.stringify(stVeiled));
+  assert.equal((await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.staff, body: { login: "nobodycf", remove: true } })).status, 200);
+  const owned = (await MF.ownerState(ROOM.id, undefined, { viewerId: U.own.userId })).excluded.filter((e) => e.login == null);
+  assert.ok(owned.length === 2 && owned.every((e) => /^[0-9a-f]{16}$/.test(e.xid)), "the owner's list has them");
+  const n2 = (await getQuery("SELECT COUNT(*) AS n FROM seethrough_log WHERE scope = 'stage_exclude'"))[0].n;
+  const sl = await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.staff, body: { xid: owned[0].xid, remove: true } });
+  assert.deepEqual([sl.status, sl.d.code], [403, "cover"], sl.text);
+  assert.deepEqual(leaks(sl.text), []);
+  assert.equal((await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded.filter((e) => e.login == null).length, 2, "still there");
+  const ol = await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.own, body: { xid: owned[0].xid, remove: true } });
+  assert.equal(ol.status, 200, ol.text);
+  assert.deepEqual(leaks(ol.text), []);
+  const lr = await getQuery("SELECT * FROM seethrough_log WHERE scope = 'stage_exclude' ORDER BY id");
+  assert.equal(lr.length, n2 + 1, "one row for the lift");
+  assert.deepEqual([lr[lr.length - 1].role, lr[lr.length - 1].user_id, lr[lr.length - 1].ref], ["owner", U.own.userId, "lift:" + owned[0].xid]);
+  for (const e of (await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);
   covers = null;
 });
 
@@ -436,4 +523,21 @@ test("follow-up (un-veil linkability): a frog-name session that ends takes its c
   assert.equal(MF.coverWho(ROOM.id, h.id), null);
   for (let i = 0; i < 7; i++) await stepAt(5);
   assert.equal(coverTiles().length, 0, "no cover comes back from the stale entries");
+});
+
+test("integration review (T-4): a veiled holder's hold start is clamped exactly like a named one's (bridge.cleanMic) - Pepe's clock 55 s fast puts both at the sync's time + 5 s; 7 h back, both at - 6 h", async () => {
+  await setup;
+  for (const [what, since, want] of [["55 s ahead", T / 1000 + 55, T + 5000], ["7 h back", T / 1000 - 7 * 3600, T - 6 * 3600e3]]) {
+    await syncAt({ rooms: [{ room: ROOM, cams: true, livecams: true, count: 2, transcripts: true,
+                             members: [real("alicecf", "Alice"), Object.assign(FRANKIE(), { src: "list", on_mic: true })],
+                             mic: [Object.assign(real("alicecf", "Alice"), { proven: true, since }), Object.assign(FRANKIE(), { proven: true, since })] }] });
+    const R = bridge._rooms.get(ROOM.id);
+    const named = R.mic.find((u) => u.login === "alicecf"), veiled = R.mic.find((u) => u._vz && u._vz.login === "frankiefettuccine");
+    assert.ok(named && veiled, what);
+    assert.equal(named.since, want, what + ": the named holder (cleanMic)");
+    assert.equal(veiled._vz.since, want, what + ": the veiled holder - the same clamp");
+    const v = VS.veilSource(veiled, R);
+    assert.ok(v, what + ": the veil source sees the hold");
+    assert.equal(v.since, want, what + ": what micfollow ranks the cover by");
+  }
 });

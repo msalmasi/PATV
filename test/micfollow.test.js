@@ -97,7 +97,7 @@ async function reset() {
   T += 10 * 60 * 1000;
   PRIV = new Set();
   for (const l of ["alice", "bob", "carl", "dana", "erin", "fay"]) await MF.unexclude(ROOM.id, l);   // a ✂ Cut in one test doesn't leak into the next
-  for (const e of (await MF.ownerState(ROOM.id)).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);   // (wave2 WP-4: veiled ones too)
+  for (const e of (await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);   // (wave2 WP-4: veiled ones too)
   await bot();
 }
 
@@ -2336,7 +2336,7 @@ test("72. wave2 WP-4 Reveal seam: no rv / ex anywhere until WP-2's reveal source
     assert.ok(!rm.d.state.excluded.some((e) => e.veiled), "removed by its xid");
   } finally {
     MF.setVeilSource(null); MF.setRevealSource(null); await MF.setCfg(ADMIN, { covers: false, reason: "test" }); await MF.unexclude(ROOM.id, "alice");
-    for (const e of (await MF.ownerState(ROOM.id)).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);
+    for (const e of (await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);
   }
 });
 
@@ -2431,9 +2431,10 @@ test("75. wave2 review (B-privacy-ux-3 / -7): a veiled exclusion is a row of its
     await step([ANON(REF1)]); await at(3, [ANON(REF1)]); await at(6, [ANON(REF1)]);
     const id = (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_admin", null)).src.find((s) => s.kind === "cover").id;
     await MF.excludeCover(ADMIN, R, id, 0);
-    const st0 = await MF.ownerState(ROOM.id);
+    const st0 = await MF.ownerState(ROOM.id, undefined, { lift: true });
     assert.equal(st0.excluded.length, 1);
     const vrow = st0.excluded[0];
+    assert.equal((await MF.ownerState(ROOM.id)).excluded[0].xid, undefined, "integration review P2: no viewer named - no xid");
     assert.deepEqual([vrow.login, vrow.veiled, /^[0-9a-f]{16}$/.test(vrow.xid)], [null, null, true], "no frog name: null - no English copy in the DB");
     const db = (await getQuery("SELECT login, veiled, vlogin, user_id FROM micfollow_excl WHERE room_id = ? AND vlogin IS NOT NULL", [ROOM.id]))[0];
     assert.deepEqual([db.login, db.veiled, db.vlogin, db.user_id], ["~v:" + vrow.xid, null, "alice", null], "keyed by its xid; the login server-side only");
@@ -2453,7 +2454,9 @@ test("75. wave2 review (B-privacy-ux-3 / -7): a veiled exclusion is a row of its
     const wrong = await tryName("bob"), right = await tryName("alice");
     assert.deepEqual(right, wrong, "a right guess reads exactly like a wrong one");
     assert.equal(right[0].length, 2, "the 🕶 row + the guessed name's row");
-    assert.deepEqual(right[1], [{ login: null, veiled: null, xid: vrow.xid, always: true, reason: "owner", by: "admin" }], "the 🕶 row is still there, untouched");
+    // (integration review P2 / P3: staff may not lift it, so their list carries no xid)
+    assert.deepEqual(right[1], [{ login: null, veiled: null, xid: null, always: true, reason: "owner", by: "admin" }], "the 🕶 row is still there, untouched");
+    assert.ok((await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded.some((e) => e.xid === vrow.xid), "untouched: the same row");
     // it still keeps alice off: her cover doesn't come back
     await at(1, [ANON(REF1)]); await at(3, [ANON(REF1)]);
     assert.ok(!MF._pads.get(ROOM.id).state.tiles.some((x) => x.cover));
@@ -2553,4 +2556,73 @@ test("79. wave2 review (B-privacy-ux-4): switching `covers` off at /stage/admin 
     const snap = MF.snapshot(ROOM.id);
     assert.ok(!snap || !snap.tiles.some((x) => x.cover));
   } finally { MF.setVeilSource(null); await MF.setCfg(ADMIN, { covers: false, reason: "test" }); }
+});
+
+// ── wave2 integration review ──
+test("80. wave2 integration review (P1 / T-1, P2, P3): only a VEILED exclusion takes a cover off - a by-name or by-account row never does (staff could exclude a guessed login and watch which cover drops); every ✕ gets a random xid, shown only to who may lift it (one person's frog names are never linked across sessions); a lift needs the see-through rule and is logged", async () => {
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { covers: true, reason: "test" });
+  let sess = "s80a";
+  MF.setVeilSource((u) => (u.anon && u.ref === REF1 ? { proven: true, sess, veil: "incognito", alias: sess === "s80a" ? "Damp Toad" : "Mossy Newt", login: "alice", display: "Alice W" } : null));
+  MF.setRevealSource({ available: () => true });
+  const STAFF = { userId: "u_staff", username: "staffer", class: "Staff" }, OWNER = { userId: "u_owner", username: "padowner", class: "pleb" };
+  const covers = async () => (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_staff", null)).src.filter((s) => s.kind === "cover").map((s) => ({ id: s.id, name: s.name, recent: !!s.recent }));
+  const lifts = async () => (await getQuery("SELECT * FROM seethrough_log WHERE scope = 'stage_exclude' ORDER BY id")).length;
+  try {
+    await step([ANON(REF1)]); await at(3, [ANON(REF1)]); await at(6, [ANON(REF1)]);
+    const before = await covers();
+    assert.equal(before.length, 1, "alice's cover is up");
+    // (P1) a wrong guess and a right one - by name, and by PATV account - leave the cover program exactly the same
+    const guess = async (login, opts) => {
+      await MF.excludeFor(ROOM.id, login, 60, "owner", "staffer", opts);
+      await at(1, [ANON(REF1)]); await at(1, [ANON(REF1)]);
+      const out = await covers();
+      await MF.unexclude(ROOM.id, login);
+      return out;
+    };
+    const n0 = await lifts();
+    assert.deepEqual(await guess("bob"), before, "a wrong guess: nothing changes");
+    assert.deepEqual(await guess("alice"), before, "the right guess by name: nothing changes either (the cover stays up, not 'recent')");
+    assert.deepEqual(await guess("alice", { userId: "u_alice" }), before, "nor by her PATV account");
+    assert.equal(await lifts(), n0, "(no see-through row - and nothing to see)");
+    assert.equal(MF.veilExcluded(ROOM.id, "alice"), false);
+    // a veiled ✕ (the see-through manager's, logged) is what takes it off
+    await MF.excludeCover(ADMIN, R, before[0].id, 1);
+    assert.equal(MF.veilExcluded(ROOM.id, "alice"), true);
+    assert.deepEqual(await covers(), [], "the ✕: off at once");
+    // (P2) its xid is random, listed only for a viewer who may lift it - never staff
+    const x1 = (await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded.find((e) => e.veiled === "Damp Toad").xid;
+    assert.match(x1, /^[0-9a-f]{16}$/);
+    assert.deepEqual((await MF.ownerState(ROOM.id, undefined, { viewerId: "u_staff" })).excluded.map((e) => [e.veiled, e.xid]), [["Damp Toad", undefined]], "staff: the 🕶 row, no xid");
+    assert.deepEqual((await MF.ownerState(ROOM.id, undefined, { viewerId: "u_owner" })).excluded.map((e) => [e.veiled, e.xid]), [["Damp Toad", x1]], "the pad's owner: with it");
+    assert.deepEqual((await MF.ownerState(ROOM.id, undefined, { viewerId: "u_admin" })).excluded.map((e) => e.xid), [x1], "an admin (see-through): with it");
+    // (P3) a lift: staff are refused (route and function), nothing is written; the owner may - one stage_exclude row (lift:<xid>)
+    await assert.rejects(MF.liftVeiled(STAFF, R, x1), (e) => e.status === 403 && e.code === "cover");
+    const rs = await post(`/api/rooms/${slug()}/micfollow/exclude`, { xid: x1, remove: true }, "u_staff");
+    assert.equal(rs.status, 403, JSON.stringify(rs.d));
+    assert.ok(!JSON.stringify(rs.d).includes("alice"));
+    assert.equal(MF.veilExcluded(ROOM.id, "alice"), true, "still kept off");
+    const n1 = await lifts();
+    assert.equal(n1, n0 + 1, "only the ✕'s own row so far");
+    await assert.rejects(MF.liftVeiled(OWNER, R, "0".repeat(16)), (e) => e.status === 404, "an unknown xid: gone");
+    assert.deepEqual(await MF.liftVeiled(OWNER, R, x1), { lifted: true });
+    assert.equal(MF.veilExcluded(ROOM.id, "alice"), false);
+    const rows = await getQuery("SELECT * FROM seethrough_log WHERE scope = 'stage_exclude' ORDER BY id");
+    assert.equal(rows.length, n1 + 1);
+    const row = rows[rows.length - 1];
+    assert.deepEqual([row.user_id, row.role, row.room_id, row.ref, JSON.parse(row.logins)], ["u_owner", "owner", ROOM.id, "lift:" + x1, ["alice"]], "logged before it took effect");
+    // the same person, a new frog-name session later, ✕-ed again: another xid (the two frog names can't be tied together)
+    sess = "s80b";
+    await at(3, [ANON(REF1)]); await at(3, [ANON(REF1)]); await at(6, [ANON(REF1)]);
+    const again = await covers();
+    assert.equal(again.length, 1, "a new cover: " + JSON.stringify(again));
+    await MF.excludeCover(ADMIN, R, again[0].id, 1);
+    const x2 = (await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded.find((e) => e.veiled === "Mossy Newt").xid;
+    assert.match(x2, /^[0-9a-f]{16}$/);
+    assert.notEqual(x2, x1, "a new xid per ✕");
+  } finally {
+    MF.setVeilSource(null); MF.setRevealSource(null); await MF.setCfg(ADMIN, { covers: false, reason: "test" });
+    for (const l of ["alice", "bob"]) await MF.unexclude(ROOM.id, l);
+    for (const e of (await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);
+  }
 });

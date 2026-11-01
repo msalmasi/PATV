@@ -920,7 +920,7 @@ async function ingest(body, opts = {}) {
       // never on_cam), the identity non-enumerable (veil.snapshotEntries); count = everyone in the room (hidden people too)
       const V = require("./veil");
       R.members = await V.snapshotEntries(R, s.members, cleanUser, { max: MAX_MEMBERS });
-      R.mic = await V.snapshotEntries(R, s.mic, (u) => cleanMic(u, now), { mic: true, max: 20 });
+      R.mic = await V.snapshotEntries(R, s.mic, (u) => cleanMic(u, now), { mic: true, max: 20, now });   // (now: since clamped like cleanMic's)
       try { await V.nameSnapshot(R, now); } catch (e) { console.error("[bridge] veil snapshot:", e && e.code ? e.code : "error"); }
       // review fix (A-privacy-6): veiled entries after the named ones, in an order that says nothing about who joined when
       R.members = V.veilOrder(R.members, R.id);

@@ -288,7 +288,14 @@ function register(app, { addUser, noTimers = false }) {
     if (!who) return res.status(404).json({ ok: false, code: "gone", error: "That veiled speaker isn't on the mic stage any more." });
     if (req.body.toggle === true) {
       const tg = await toggleOf(req.user.userId, "chat_toggle", R.id);
-      if (!tg) return res.status(409).json({ ok: false, code: "toggle_off", error: "Show real names is off - turn it on first." });
+      if (!tg) {
+        // integration review (T-3): ONE toggle, ONE rule - it's turned on by the chat's rule (chatRole: an Admin, or the owner in a
+        // dated era). A stage role that rule refuses (an owner nothing dates) could never turn it on: toggle_na, so the page never
+        // offers that viewer the bar (pad-reveal.js / stage-mic.js) - their per-tile Reveal still works
+        const can = !!(await chatRole(req.user, R.id));
+        return res.status(409).json(can ? { ok: false, code: "toggle_off", error: "Show real names is off - turn it on first." }
+          : { ok: false, code: "toggle_na", error: "Show real names isn't available to you on this pad - use Reveal on the tile." });
+      }
       await toggleUsed(tg.log_id, [who.login]);
     } else {
       await log({ userId: req.user.userId, role, scope: "stage_line", roomId: R.id, logins: [who.login], reason: req.body.reason, ref: "tile:" + tile });
