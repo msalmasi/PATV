@@ -163,21 +163,25 @@ function register(app, { addUser }) {
     // review: so does rule_at - the day the published unknown-room rule / date last changed (an off / on that publishes a new one)
     // wave 3 (design §N.8): the 🧠 "Pepe's memory" text from the moment Pepe's latest report has the memory switch
     // (memoryoptout.privacyCopy: null otherwise - after a rollback too); its day is when a Pepe first reported it
-    let chatlog = null, hubErasure = null, micrec = null, memory = null, policyDates = {};
+    // wave 2 (design section H): the frog-name / hidden text from the moment the Privacy wire v2 switch is on (privwire.privacyCopy:
+    // null while it's off - the page reads exactly as before); dated by G, its first ON
+    let chatlog = null, hubErasure = null, micrec = null, memory = null, privwire = null, policyDates = {};
     if (view === "privacy") {
       try { chatlog = await require("./chatlog").policy(); } catch (e) { chatlog = null; }
       try { hubErasure = await require("./accountdelete").privacyCopy(); } catch (e) { hubErasure = null; }
       try { micrec = await require("./micrec").privacyCopy(); } catch (e) { micrec = null; }
       try { memory = await require("./memoryoptout").privacyCopy(); } catch (e) { memory = null; }
+      try { await require("./privwire").init(); privwire = require("./privwire").privacyCopy(); } catch (e) { privwire = null; }
       policyDates = await textDates();                // 1.99aft: the texts dated the day this server first served them
     }
     let upd = updated, updAt = Date.parse(updated + " 23:59:59 UTC");
     for (const [at, day] of [[chatlog && chatlog.notice_at, chatlog && chatlog.notice_day], [hubErasure && hubErasure.on_at, hubErasure && hubErasure.on_day],
                              [micrec && micrec.on_at, micrec && micrec.on_day], [micrec && micrec.rule_at, micrec && micrec.rule_day],   // 1.99afv review
-                             [memory && memory.on_at, memory && memory.on_day], ...Object.values(policyDates).map((d) => [d.at, d.day])]) {
+                             [memory && memory.on_at, memory && memory.on_day], [privwire && privwire.g, privwire && privwire.g_day],
+                             ...Object.values(policyDates).map((d) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
-    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, policyDates }); } catch (e) { next(e); }
+    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, privwire, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));
   app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy", PRIVACY_UPDATED));

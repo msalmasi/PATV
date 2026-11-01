@@ -81,8 +81,14 @@ async function setOn(want, user) {
   return state();
 }
 
-/** For views: {on, g} - the policy text behind the switch reads it (privacy.ejs locals.privwire). */
-function privacyCopy() { return isOn() ? { on: true, g: STATE.g_at } : null; }
+/** For views: {on, g, g_day} - the policy text behind the switch reads it (privacy.ejs locals.privwire; terms.js dates the page by
+ *  G, the go-live). null while the switch is off: the policy reads exactly as before. */
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function privacyCopy() {
+  if (!isOn() || !STATE.g_at) return null;
+  const d = new Date(STATE.g_at);
+  return { on: true, g: STATE.g_at, g_day: `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}` };
+}
 
 function register(app, { addUser, noTimers = false }) {
   init().catch((e) => console.error("[privwire] init:", e.message));
