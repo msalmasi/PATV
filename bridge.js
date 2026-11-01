@@ -46,7 +46,7 @@
 // 1.99bi: the website no longer moves it - every room has its own stage (mainstage.js) and the
 // homepage's featured room is a site setting (rooms.js front room), decoupled from !activeroom.
 const express = require("express");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const cosmetics = require("./cosmetics");
 const relay = require("./bridge-relay");   // web -> room: chat relay, mic clips, cam snapshots (staging test)
@@ -70,6 +70,14 @@ const ready = (async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS bridge_feed (
     c INTEGER PRIMARY KEY, room_id TEXT NOT NULL, ts INTEGER, data TEXT NOT NULL)`);
   await runQuery("CREATE INDEX IF NOT EXISTS bridge_feed_room ON bridge_feed (room_id, c)");
+  // wave 2 WP-2 (spec A.4.1 / A.4.2): the privacy wire v2's side tables - the REAL identity (vz) and a hidden speaker's words (vw)
+  // of each veiled live item, keyed by its feed row and deleted with it (the ring trim, a takedown, dropRoom: the trigger), and of
+  // each veiled roster / mic entry of a room's snapshot (rewritten with the snapshot, deleted with the room). Nothing an older build
+  // reads: bridge_feed / bridge_rooms keep only page-safe JSON (veil.js)
+  await runQuery("CREATE TABLE IF NOT EXISTS bridge_veil (c INTEGER PRIMARY KEY, room_id TEXT NOT NULL, vz TEXT NOT NULL, vw TEXT)");
+  await runQuery(`CREATE TRIGGER IF NOT EXISTS bridge_veil_ad AFTER DELETE ON bridge_feed BEGIN
+                    DELETE FROM bridge_veil WHERE c = old.c; END`);
+  await runQuery("CREATE TABLE IF NOT EXISTS bridge_rooms_veil (id TEXT PRIMARY KEY, data TEXT NOT NULL)");
 })().catch((e) => console.error("[bridge] init:", e));
 
 // ── sanitising (Pepe already cleans; this is the second line) ──
@@ -135,6 +143,7 @@ const SEEN_EVENTS = new Map();          // recent PCP event ids (dedupe re-sent 
 const rooms = new Map();                 // room id -> {id, name, slug, topic, members, mic, count, updated, listAt, joinedAt, feed[]}
 let cursor = 0;
 let loaded = null;
+let FN_SWEEP = null;                     // wave 2: frognames.sweep's timer (unref'd)
 
 function roomFor(ref) {
   let R = rooms.get(ref.id);
@@ -188,6 +197,23 @@ function load() {
         k3Replay(R);                             // 1.99afl review: B.1's open stamped holds (a release pairs with its grab)
         noteWhoAll(R);
         replayActivity(R);
+        // wave 2 WP-2: the veiled entries' and items' real identities come back from their side tables (never from the JSON), and
+        // the named sightings of the last 15 minutes go back to frognames (C.2: a restart must not hand someone who switched a veil
+        // on right away a frog name next to their named lines)
+        try {
+          const V = require("./veil");
+          const rv = (await getQuery("SELECT data FROM bridge_rooms_veil WHERE id = ?", [R.id]))[0];
+          if (rv) V.attachRoomVeil(R, rv.data);
+          await V.attachFeedVeil(R);
+          const FN = require("./frognames");
+          const since = Date.now() - FN.NAMED_GAP_MS;
+          for (const it of R.feed) if (it && it.u && !it.u.anon && it.u.login && Number(it.ts) >= since) FN.named(R.id, it.u.login, Number(it.ts));
+        } catch (e) { console.error("[bridge] veil load:", e && e.code ? e.code : "error"); }
+      }
+      // wave 2: frog-name sessions end on their clock (away 1 h+, 12 h + quiet, 24 h) even when nobody is sighted
+      if (!FN_SWEEP) {
+        FN_SWEEP = setInterval(() => { require("./frognames").sweep().catch(() => {}); }, 60e3);
+        if (FN_SWEEP.unref) FN_SWEEP.unref();
       }
       // CL3: someone newly hidden (!incognito, !bridge hide, a website Incognito, !transcripts off) - open pages drop their lines
       try { require("./chatlog").onHidden(markRemoved); } catch (e) { console.error("[bridge] hidden listener:", e.message); }
@@ -226,9 +252,16 @@ async function dropTakenDown() {
 async function persistRoom(R) {
   const snap = { topic: R.topic, members: R.members, mic: R.mic, count: R.count, listAt: R.listAt, joinedAt: R.joinedAt,
                  listFresh: R.listFresh, seenTtl: R.seenTtl, listStaleAfter: R.listStaleAfter };
-  await runQuery(`INSERT INTO bridge_rooms (id, slug, name, snap, updated) VALUES (?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, name = excluded.name, snap = excluded.snap, updated = excluded.updated`,
-    [R.id, R.slug, R.name, JSON.stringify(snap), R.updated]);
+  // wave 2 WP-2: the snapshot JSON holds veiled entries page-safe only (their identities are non-enumerable); the identities go to
+  // bridge_rooms_veil in the SAME transaction (dbUtils.tx), rewritten with each snapshot
+  const veil = require("./veil").roomVeilData(R);
+  await tx(async () => {
+    await runQuery(`INSERT INTO bridge_rooms (id, slug, name, snap, updated) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, name = excluded.name, snap = excluded.snap, updated = excluded.updated`,
+      [R.id, R.slug, R.name, JSON.stringify(snap), R.updated]);
+    if (veil) await runQuery("INSERT INTO bridge_rooms_veil (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data", [R.id, veil]);
+    else await runQuery("DELETE FROM bridge_rooms_veil WHERE id = ?", [R.id]);
+  });
 }
 
 // CL3 fix-up: the hidden-names job's login map (chatlogview.noteWho) learns everyone the room's live feed and rosters hold - at
@@ -381,7 +414,8 @@ async function dropRoom(id) {
   RA.drop(id);
   K3_REFS.delete(id);                             // 1.99afl review: its open stamped holds (B.1)
   await runQuery("DELETE FROM bridge_rooms WHERE id = ?", [id]);
-  await runQuery("DELETE FROM bridge_feed WHERE room_id = ?", [id]);
+  await runQuery("DELETE FROM bridge_rooms_veil WHERE id = ?", [id]);       // wave 2: its veiled entries' identities
+  await runQuery("DELETE FROM bridge_feed WHERE room_id = ?", [id]);         // (bridge_veil rows go with them: the trigger)
 }
 
 /** 1.99acb: a web-relay line's sender as the say job the line names knows them (bridge-relay.echoJob): their linked chat
@@ -772,9 +806,28 @@ function audioRecheck() {
 }
 
 let lastFrontTick = 0;
-async function ingest(body) {
+/** wave 2 WP-2: one event of a privacy-wire-v2 sync -> a feed item. A veiled person's event (a priv block) becomes a page-safe veiled
+ *  item (veil.veiledItem: frog name later, real identity non-enumerable); anything else is today's item (feedItem) plus the page-safe
+ *  v2 extras (hold ids, the 🎙 line's said time). */
+function feedItemV2(ev, roomId) {
+  const V = require("./veil");
+  const d = ev && ev.data && typeof ev.data === "object" ? ev.data : null;
+  if (d && d.priv) {
+    if (!FEED_TYPES.has(ev.type)) return null;
+    const it = V.veiledItem(ev, Date.parse(ev.ts) || Date.now(), { transcript: TRANSCRIPT });
+    if (it && it._job) {
+      const J = relay.echoJob(it._job, roomId);
+      if (J && J.sendFailed) return null;                 // as feedItem: a line Pepe never sent isn't shown
+    }
+    return it;
+  }
+  const it = feedItem(ev, roomId);
+  return it ? V.namedExtras(it, ev) : null;
+}
+async function ingest(body, opts = {}) {
   await load();
   const now = Date.now();
+  const v2 = opts.v2 === true;                       // wave 2: a /api/bridge/sync/v2 body (the switch is on - the route checked)
   if (body.stage && typeof body.stage === "object") {
     const g = body.stage, n = (v) => (Number(v) > 0 ? Number(v) * 1000 : null);
     const rid = (v) => (typeof v === "string" && str(v, 128) ? str(v, 128) : null);   // same shape as cleanRoomRef's id
@@ -797,8 +850,17 @@ async function ingest(body) {
     const R = roomFor(ref);
     if (!R) continue;
     R.topic = str(s.topic, 200);
-    R.members = (Array.isArray(s.members) ? s.members : []).slice(0, MAX_MEMBERS).map(cleanUser).filter(Boolean);
-    R.mic = (Array.isArray(s.mic) ? s.mic : []).slice(0, 20).map((u) => cleanMic(u, now)).filter(Boolean);   // micfollow: + proven / since
+    if (v2) {
+      // wave 2 WP-2: veiled members / holders arrive with their real UserRef + priv -> page-safe entries (anon: true, a frog name,
+      // never on_cam), the identity non-enumerable (veil.snapshotEntries); count = everyone in the room (hidden people too)
+      const V = require("./veil");
+      R.members = await V.snapshotEntries(R, s.members, cleanUser, { max: MAX_MEMBERS });
+      R.mic = await V.snapshotEntries(R, s.mic, (u) => cleanMic(u, now), { mic: true, max: 20 });
+      try { await V.nameSnapshot(R, now); } catch (e) { console.error("[bridge] veil snapshot:", e && e.code ? e.code : "error"); }
+    } else {
+      R.members = (Array.isArray(s.members) ? s.members : []).slice(0, MAX_MEMBERS).map(cleanUser).filter(Boolean);
+      R.mic = (Array.isArray(s.mic) ? s.mic : []).slice(0, 20).map((u) => cleanMic(u, now)).filter(Boolean);   // micfollow: + proven / since
+    }
     R.count = Math.max(R.members.length, Math.min(5000, Number(s.count) || 0));
     R.listAt = Number(s.list_at) ? Number(s.list_at) * 1000 : null;
     // how much the roster can be trusted: a fresh participant-list read, or (stale / never read)
@@ -885,9 +947,16 @@ async function ingest(body) {
       R.ver = (R.ver || 0) + 1; wake.add(R.id);
     }
     if (!FEED_TYPES.has(ev.type)) continue;
-    const it = feedItem(ev, R.id);
+    const it = v2 ? feedItemV2(ev, R.id) : feedItem(ev, R.id);
     if (!it) continue;
     if ((it.k === "mic" || it.k === "unmic") && it.u && it.u.anon && !it.ah) k3Hold(R.id, it, kinded, now, leaving);   // 1.99afl (B.1, above)
+    if (v2) {
+      // wave 2 WP-2 (C): a veiled item gets its frog name (or "someone": C.2 / B.2); a named sighting is noted (C.2) and ends an open
+      // session of that login (their level is back to normal). Serial per room inside frognames; never throws
+      const V = require("./veil");
+      if (it._vz) await V.nameItem(R, it);
+      else if (it.u && !it.u.anon && it.u.login && !it.u.self) V.namedSeen(R.id, it.u.login, Number(it.ts) || now);
+    }
     // review 2 fix-up (LOW): a NAMED chat / 🎙 line of someone the site knows is incognito before Pepe does (a website Incognito
     // ON he hasn't confirmed yet - chatlog.siteAnonSince), said after they switched it on, is kept anonymised for good - "someone",
     // its hash server-only (`ah`, archived as who "h:<hash>"), exactly like Pepe's own anonymised lines - so `!incognito off` never
@@ -901,6 +970,7 @@ async function ingest(body) {
     // never reaches the pad chat - nor the archive. Pepe drops them first (CL1); this is the second net (his posted relay line too)
     // (a web "!" line is a command job, never a say - bridge-relay.js - so no pending web line waits for one of these)
     if (it.k === "msg" && (CL.isPrivateCmd(it.text) || CL.isPrivateCmd(postedWords(it.text)))) continue;
+    if (it.k === "msg" && typeof it._vw === "string" && CL.isPrivateCmd(it._vw)) continue;   // wave 2: a hidden speaker's words too
     // 1.99xu: Pepe's TTS mic-up caption - shown once, as the 🎙 transcript line that follows it (Camfrog's room chat keeps
     // the caption; a pad with transcripts off keeps it here too - there it's the only text of the mic-up)
     if (it.cap === "tts" && R.transcripts !== false) continue;
@@ -924,8 +994,14 @@ async function ingest(body) {
     if (echoOf) relay.noteEcho(echoOf, it.c, R.id);    // 1.99ye: the sender's pending line becomes this one (1.99acb: same room only)
   }
   for (const [rid, it] of newItems) {
-    const { c, ...rest } = it;
-    await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, rid, it.ts, JSON.stringify(rest)]);
+    const { c, ...rest } = it;                      // (own enumerable fields only: a veiled item's _vz / _vw / _v2 never ride)
+    const vr = require("./veil").veilRow(it);
+    if (!vr) { await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, rid, it.ts, JSON.stringify(rest)]); continue; }
+    // wave 2 WP-2 (A.4.1): a veiled item's row and its identity row in ONE transaction (dbUtils.tx)
+    await tx(async () => {
+      await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, rid, it.ts, JSON.stringify(rest)]);
+      await runQuery("INSERT INTO bridge_veil (c, room_id, vz, vw) VALUES (?, ?, ?, ?)", [c, rid, vr.vz, vr.vw]);
+    });
   }
   // CL2: the cursor's high-water mark (archive on or off) - a c is never handed out twice, whatever restarts
   if (newItems.length) { try { await CL.noteCursor(cursor); } catch (e) { console.error("[bridge] cursor mark:", e.message); } }
@@ -938,7 +1014,7 @@ async function ingest(body) {
     console.error("[bridge] hidden set:", e.message);
   });
   // 1.99ii: room mention alerts (mentions.js) - this batch's new chat lines, matched off the sync (queued, never awaited)
-  const said = newItems.filter(([, it]) => it.k === "msg");
+  const said = newItems.filter(([, it]) => it.k === "msg" && typeof it.text === "string");   // (wave 2: a masked line has no words here)
   if (said.length) {
     try {
       require("./mentions").onLines(said.map(([rid, it]) => { const R = rooms.get(rid); return { roomId: rid, slug: R ? R.slug : "", name: R ? titleOf(R) : rid, it }; }));
@@ -1385,11 +1461,17 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const F0 = CV.filter(raw, { view: V, jc: J.ok ? J.c : at.cursor, now: V.now });
   const items = F0.items;
   const redoItems = redoRaw.length ? CV.filter(redoRaw, { view: V, jc: J.ok ? J.c : at.cursor, now: V.now }).items : [];
-  const members = CV.roster(R.members), mic = CV.roster(R.mic);   // ingest replaces these arrays (never edits them): a snapshot too
+  // wave 2 WP-2: the speaker's own veiled lines (self view: their linked login / account key) and, for a viewer who may see through
+  // frog names here (an admin, or the pad's owner for lines said in their era - never on the homepage panel), rv: 1 flags
+  const selfKeys = new Set([userId ? "u:" + String(userId).toLowerCase() : null, login ? String(login).toLowerCase() : null].filter(Boolean));
+  let see = null;
+  if (!opts.nonExempt && viewer && viewer.userId) { try { see = await require("./seethrough").chatRoleCached(viewer, R.id); } catch (e) { see = null; } }
+  const canReveal = see ? (x) => require("./seethrough").mayReveal(see, x && x.ts != null ? Number(x.ts) : Date.now()) : null;
+  const members = CV.roster(R.members, { canReveal }), mic = CV.roster(R.mic, { canReveal });   // ingest replaces these arrays (never edits them): a snapshot too
   const L = await resolveNames([...items.map((it) => it.u), ...redoItems.map((it) => it.u), ...members, ...mic,
                                 ...(prog ? prog.tiles.map((x) => ({ login: x.login })) : [])]);
-  const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)) });
-  const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)) }) : [];
+  const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal });
+  const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal }) : [];
   if (V.audit) {
     const below = dressed.filter((it) => it.ts < CV.pubFloor(V, it.k));     // CL8 fix-up: presence's public 24 h too
     if (below.length) CV.auditRead(V, R.id, "history", below[0].ts, below[below.length - 1].ts).catch(() => {});
@@ -1515,30 +1597,69 @@ function register(app, { isBotToken, addUser }) {
     if (why !== "tick") wakeAll();
     return require("./roomrtc").recheck(why);         // ...and the WebRTC room listeners (livecam re-checks its own viewers)
   });
+  const PW = require("./privwire");
+  PW.init().catch((e) => console.error("[bridge] privacy wire:", e.message));
+  /** One sync's work and answer (v1 and v2 alike). wave 2: the answer says privwire: 2 only while the switch is on (the advert). */
+  async function syncAnswer(body, v2) {
+    relay.applyAcks(body.acks);
+    require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
+    // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
+    // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
+    // privacy.shown events, his incognito OFF reports, an older Pepe's drop within one bridge session (no tx_hidden_h: he sends
+    // no privacy.shown), an owner un-hide or an owner approving a held batch. The set and quotes change before this returns;
+    // the stored copies are written behind it - the sync never waits for that. 1.99add refix 4: a Pepe that knows WHY someone
+    // is hidden also sends bridge_hidden_h (!bridge hide: their lines left out) and incog_hidden_h (incognito: shown as
+    // "someone") - each null when that state failed to load; hidden_h alone (prod Pepe 1.99adc) is "unknown": left out.
+    require("./hubhidden").noteSync({ list: body.hidden_h, bridge: body.bridge_hidden_h, incog: body.incog_hidden_h, events: body.events,
+                                      session: body.session, sent: body.sent, explicit: Array.isArray(body.tx_hidden_h) })
+      .catch((e) => console.error("[bridge] hidden_h:", e.message));
+    const r = await ingest(body, { v2 });
+    const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
+    // 1.99co: the linked logins watching each pad -> Pepe sends their Manage-panel caps (padmod.js)
+    // 1.99xa: Pepe's web-relay block mirror (bridgeblocks.js), only when his copy is older than ours
+    const blocks = await require("./bridgeblocks").forSync(body);
+    const jobs = relay.takeJobs(liveIds);
+    const mfc = relay.mfCancelled();               // micfollow: claimed mic-stage stills Pepe must drop (bridge-relay.mfCancelled)
+    return { success: true, ...r, jobs, viewers: require("./padmod").viewersFor(liveIds), ...blocks, ...(mfc.length ? { mf_cancel: mfc } : {}),
+             ...(PW.isOn() ? { privwire: 2 } : {}) };
+  }
+  // wave 2 WP-2 (spec A.3 handshake): the privacy wire v2 receiver - Pepe's FULL form (real UserRefs + priv, hidden words, hold ids).
+  //  * every call is counted FIRST (the dark proof: while the switch has never been on, the counter stays 0 - Pepe never calls);
+  //  * its own body parser (index.js skips the global one for this path) whose errors log their type and status ONLY - Node's JSON
+  //    errors quote the body, and a body here carries real identities - and nothing on this path ever logs a body or an error object;
+  //  * switch OFF -> 409 {error: "privwire_off"} BEFORE anything happens: no acks applied, no jobs taken, no hidden set, no actor
+  //    caps, nothing ingested (Pepe sends the same batch on v1 at once, so a refused call must have no side effect);
+  //  * switch ON -> the same work as v1 (syncAnswer) with the v2 ingest.
+  const v2json = express.json({ limit: "1mb" });
+  app.post("/api/bridge/sync/v2", (req, res, next) => {
+    PW.note("calls");
+    v2json(req, res, (err) => {
+      if (!err) return next();
+      PW.note("err");
+      const status = Number(err.status) === 413 ? 413 : 400;
+      console.error(`[bridge] sync v2: body refused (${String(err.type || "parse").replace(/[^\w.]/g, "").slice(0, 40)}, ${status})`);
+      return res.status(status).json({ success: false, error: status === 413 ? "too_large" : "bad_body" });
+    });
+  }, async (req, res) => {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
+    try { await PW.init(); } catch (e) { /* not loaded = off (below) */ }
+    if (!PW.isOn()) { PW.note("refused"); return res.status(409).json({ success: false, error: "privwire_off" }); }
+    try {
+      const answer = await syncAnswer(body, true);
+      PW.note("ok");
+      res.json(answer);
+    } catch (e) {
+      PW.note("err");
+      console.error(`[bridge] sync v2 failed (${String((e && (e.code || e.name)) || "error").replace(/[^\w.]/g, "").slice(0, 40)})`);
+      res.status(500).json({ success: false, error: "sync failed" });
+    }
+  });
   app.post("/api/bridge/sync", express.json({ limit: "1mb" }), async (req, res) => {
     const body = req.body || {};
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
-      relay.applyAcks(body.acks);
-      require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
-      // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
-      // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
-      // privacy.shown events, his incognito OFF reports, an older Pepe's drop within one bridge session (no tx_hidden_h: he sends
-      // no privacy.shown), an owner un-hide or an owner approving a held batch. The set and quotes change before this returns;
-      // the stored copies are written behind it - the sync never waits for that. 1.99add refix 4: a Pepe that knows WHY someone
-      // is hidden also sends bridge_hidden_h (!bridge hide: their lines left out) and incog_hidden_h (incognito: shown as
-      // "someone") - each null when that state failed to load; hidden_h alone (prod Pepe 1.99adc) is "unknown": left out.
-      require("./hubhidden").noteSync({ list: body.hidden_h, bridge: body.bridge_hidden_h, incog: body.incog_hidden_h, events: body.events,
-                                        session: body.session, sent: body.sent, explicit: Array.isArray(body.tx_hidden_h) })
-        .catch((e) => console.error("[bridge] hidden_h:", e.message));
-      const r = await ingest(body);
-      const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
-      // 1.99co: the linked logins watching each pad -> Pepe sends their Manage-panel caps (padmod.js)
-      // 1.99xa: Pepe's web-relay block mirror (bridgeblocks.js), only when his copy is older than ours
-      const blocks = await require("./bridgeblocks").forSync(body);
-      const jobs = relay.takeJobs(liveIds);
-      const mfc = relay.mfCancelled();               // micfollow: claimed mic-stage stills Pepe must drop (bridge-relay.mfCancelled)
-      res.json({ success: true, ...r, jobs, viewers: require("./padmod").viewersFor(liveIds), ...blocks, ...(mfc.length ? { mf_cancel: mfc } : {}) });
+      res.json(await syncAnswer(body, false));
     } catch (e) {
       console.error("[bridge] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
@@ -1953,7 +2074,53 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })), lineLive: !!o.lineLive };
 }
 
-module.exports = { bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+/** wave 2 WP-2 (spec E.1): who is behind veiled line c of room roomId, for a reveal (seethrough.js checks role and era) -> {ts, vz, vw}
+ *  | null. The live item's own (non-enumerable) identity first, else the archive's chat_log_veil row - only for a line of THIS room. */
+async function revealLookup(roomId, c) {
+  await load();
+  const R = rooms.get(String(roomId || ""));
+  const it = R ? R.feed.find((x) => Number(x.c) === Number(c)) : null;
+  // (a line left out for members now - forget-me, an account deletion, a staff removal - is never revealed, whatever memory holds)
+  if (it && it._vz) {
+    if (require("./chatlogview").privacyOf(it) === "out" || it.rm_at != null || it.purged) return null;
+    const vr = (await getQuery("SELECT 1 FROM bridge_veil WHERE c = ?", [Number(c)]).catch(() => []))[0];
+    if (!vr) return null;                                   // its identity row is gone (forget-me): nobody can reveal it any more
+    return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null };
+  }
+  try {
+    const r = (await getQuery(`SELECT l.ts, v.login, v.display, v.kind, v.words FROM chat_log l JOIN chat_log_veil v ON v.c = l.c
+                               JOIN chatlog_rooms cr ON cr.rk = l.rk WHERE l.c = ? AND cr.room_id = ? AND l.purged IS NULL`, [Number(c), String(roomId)]))[0];
+    if (!r) return null;
+    return { ts: Number(r.ts), vz: { login: r.login, display: r.display, kind: r.kind }, vw: r.words == null ? null : String(r.words) };
+  } catch (e) { return null; }
+}
+
+/** wave 2 WP-2 (A.4.8): forget-me / account deletion - their veiled live items leave the live feed (R.feed, bridge_feed: their hash is
+ *  left out by the same request, so pages drop them), their identities leave every side table and their frog-name sessions end. */
+async function forgetVeiled(logins) {
+  await load();
+  const list = (Array.isArray(logins) ? logins : [logins]).map((l) => String(l || "").trim().toLowerCase()).filter(Boolean);
+  if (!list.length) return { feed: 0, rooms: 0 };
+  const set = new Set(list);
+  const V = require("./veil");
+  const r = await V.forgetLogins(list);
+  let n = 0;
+  for (const R of rooms.values()) {
+    const cs = R.feed.filter((it) => it && it._vz && set.has(String(it._vz.login).toLowerCase())).map((it) => Number(it.c));
+    if (cs.length) n += await takeDown(R.id, cs);
+    const gone = (e) => !!(e && e._vz && set.has(String(e._vz.login).toLowerCase()));
+    if ((R.members || []).some(gone) || (R.mic || []).some(gone)) {
+      R.members = R.members.filter((e) => !gone(e));         // (new arrays: a page's snapshot never changes under it)
+      R.mic = R.mic.filter((e) => !gone(e));
+      R.ver = (R.ver || 0) + 1;
+      await persistRoom(R).catch(() => {});
+    }
+  }
+  for (const l of list) { try { await require("./frognames").off(l); } catch (e) { /* no sessions */ } }
+  return { feed: n, rooms: r.rooms };
+}
+
+module.exports = { revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)

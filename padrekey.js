@@ -33,6 +33,9 @@ const ROOM_BOUND = new Set([
   "feed_aigen_jobs.room",                                               // the Camfrog room a room generation came from
   // CL2: the pad chat archive stays with the Camfrog room, like bridge_feed (pad_chat_cfg - the PAD's settings - moves)
   "chatlog_rooms", "chat_log", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views", "chatlog_exports",
+  // wave 2: the live feed's veil side tables stay with their feed rows / snapshot; frog-name sessions are keyed by the Camfrog
+  // room (incog_alias.sk = HMAC(room, login) - re-keying room_id alone would orphan every open session)
+  "bridge_veil", "bridge_rooms_veil", "incog_alias",
 ]);
 // feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen)
 const FEED_KV_PREFIXES = ["room:", "rules:", "mention:", "mention_set:", "mention_at:", "automod:scope:", "pepe:scope:", "aigen_room:"];

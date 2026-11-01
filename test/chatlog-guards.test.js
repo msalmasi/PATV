@@ -60,7 +60,8 @@ test("the lists kept in step with chatlog.js", () => {
   assert.deepEqual([...K.CHATLOG].sort(), [...CL.TABLES].sort(), "keep-staging-tables keeps every archive table");
   for (const t of CL.TABLES) assert.ok(K.KEEP.includes(t), t + " is KEEP");
   assert.equal(K.INDEXABLE, CL.INDEXABLE, "the same indexable rule");
-  assert.deepEqual(K.CHATLOG_TRIGGERS, CL.TRIGGERS.map(([n]) => n));
+  // wave 2: + chat_log_veil's own triggers (dropped in the copy too; chatlog.js re-makes them at start)
+  assert.deepEqual(K.CHATLOG_TRIGGERS, [...CL.TRIGGERS, ...CL.VEIL_TRIGGERS].map(([n]) => n));
   const RK = require(path.join(repo, "padrekey"));
   for (const t of ["chatlog_rooms", "chat_log", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views", "chatlog_exports"]) assert.ok(RK.ROOM_BOUND.has(t), t);
   assert.ok(!RK.ROOM_BOUND.has("pad_chat_cfg"), "the pad's settings move with the pad");

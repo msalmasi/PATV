@@ -139,7 +139,9 @@ const INDEXABLE = "text IS NOT NULL AND k IN ('msg','tx','topic') AND rm_at IS N
 // `ahs` - the speaker's other incognito hashes, Pepe's data.anon.hs - is d.ahs, cleaned, only beside a valid `ah`; server-only:
 // chatlogview.itemOf reads it back, dress drops it, no export names it)
 const ITEM_SKIP = new Set(["c", "ts", "k", "text", "id", "u", "cap", "_job", "aud", "ah", "ahs"]);
-const U_KEEP = ["display", "self", "bot", "web", "acct", "unresolved", "anon"];
+// wave 2 WP-2: + a veiled line's page-safe frog name (veil, alias, hood, the session's opaque id) - the same names as the live item,
+// so the projection reads an archived line exactly like a live one (the spec's d.al / d.hd / d.vl, kept under the item's own names)
+const U_KEEP = ["display", "self", "bot", "web", "acct", "unresolved", "anon", "veil", "alias", "hood", "id"];
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -197,6 +199,20 @@ const ARCHIVE_DDL = [
   // CL6 fix-up: the nightly 30-day pass walks only the taken-down rows whose text is still there (a purged row leaves this index;
   // chat_log_rm keeps every taken-down row for the removed list)
   "CREATE INDEX IF NOT EXISTS chat_log_rm_due ON chat_log (rm_at) WHERE rm_at IS NOT NULL AND purged IS NULL",
+  // wave 2 WP-2 (spec A.4.4, owner J-17): the REAL identity behind a veiled line (privacy wire v2) and a hidden speaker's words -
+  // in the same DB file as chat_log (an ATTACHed chatlog.db too), never indexed, read only by the reveal endpoints (seethrough),
+  // the speaker's own self view, forget-me and the account export. It follows its line: deleted with the chat_log row (retention by
+  // the pad's tier - no separate cap, J-17) and when the row is purged (VEIL_TRIGGERS)
+  `CREATE TABLE IF NOT EXISTS chat_log_veil (c INTEGER PRIMARY KEY, login TEXT NOT NULL, display TEXT, kind TEXT NOT NULL, words TEXT,
+    sess INTEGER, at INTEGER)`,
+  "CREATE INDEX IF NOT EXISTS chat_log_veil_login ON chat_log_veil (login)",
+];
+// wave 2: chat_log_veil dies with its line - whatever FTS5 says (TRIGGERS are dropped without it; these never are)
+const VEIL_TRIGGERS = [
+  ["chat_log_veil_ad", `CREATE TRIGGER IF NOT EXISTS chat_log_veil_ad AFTER DELETE ON chat_log BEGIN
+    DELETE FROM chat_log_veil WHERE c = old.c; END`],
+  ["chat_log_veil_purge", `CREATE TRIGGER IF NOT EXISTS chat_log_veil_purge AFTER UPDATE OF purged ON chat_log WHEN new.purged IS NOT NULL BEGIN
+    DELETE FROM chat_log_veil WHERE c = new.c; END`],
 ];
 const FTS_DDL = "CREATE VIRTUAL TABLE IF NOT EXISTS chat_log_fts USING fts5(text, rt, content = 'chat_log', content_rowid = 'c', tokenize = 'unicode61 remove_diacritics 2')";
 const TRIGGERS = [
@@ -217,7 +233,7 @@ const TRIGGERS = [
 // every table this module owns (keep-staging-tables keeps them all; padrekey binds all but pad_chat_cfg to the room)
 const TABLES = Object.freeze(["chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
   "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views", "chatlog_exports", "chatlog_meta",
-  "chatlog_erase_wait"]);
+  "chatlog_erase_wait", "chat_log_veil"]);
 
 // ── state ──
 let ATTACHED = false;                      // the archive tables are in the attached schema "chatlog"
@@ -347,8 +363,10 @@ async function attach(opts = {}) {
         if (!(await getQuery("SELECT 1 FROM main.sqlite_master WHERE type = 'table' AND name = 'chat_log'")).length) return "gone";
         if (!(await mainArchiveEmpty())) return false;                     // a line landed meanwhile (another process): stays
         for (const [name] of TRIGGERS) await runQuery(`DROP TRIGGER IF EXISTS main.${name}`);
+        for (const [name] of VEIL_TRIGGERS) await runQuery(`DROP TRIGGER IF EXISTS main.${name}`);   // wave 2
         await runQuery("DROP TABLE IF EXISTS main.chat_log_fts");
         await runQuery("DROP TABLE IF EXISTS main.chat_log");
+        await runQuery("DROP TABLE IF EXISTS main.chat_log_veil");          // wave 2: empty with chat_log (its rows die with their lines)
         return true;
       });
     } catch (e) {
@@ -378,6 +396,7 @@ function init() {
       try {
         await attach({ move: true });
         for (const s of ARCHIVE_DDL) await runQuery(archiveSql(s));
+        for (const [name, sql] of VEIL_TRIGGERS) { await runQuery(dropTrigger(name)); await runQuery(archiveSql(sql)); }   // wave 2
         ARCHIVE_ERR = null;
       } catch (e) {
         if (!e || e.code !== "archive_db") throw e;
@@ -684,6 +703,17 @@ async function rkInTx(roomId, created) {
   return rk;
 }
 const INSERT = "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d, mid, tx, eid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+/** wave 2 WP-2: inside the archive's transaction - chat_log_veil rows [{c, vz {login, display, kind, sess}, vw, at}]. */
+async function writeVeils(list) {
+  for (const v of list || []) {
+    const vz = v && v.vz && typeof v.vz === "object" ? v.vz : null;
+    const login = vz ? String(vz.login || "").trim().toLowerCase().slice(0, 70) : "";
+    if (!login || !(Number(v.c) > 0)) continue;
+    await runQuery("INSERT OR REPLACE INTO chat_log_veil (c, login, display, kind, words, sess, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   [Number(v.c), login, vz.display ? String(vz.display).slice(0, 80) : null, vz.kind === "hidden" ? "hidden" : "incognito",
+                    typeof v.vw === "string" ? v.vw : null, Number.isFinite(Number(vz.sess)) ? Number(vz.sess) : null, Math.floor(Number(v.at) || 0) || null]);
+  }
+}
 /** Inside a transaction: write rows (already mapped) and their rooms' counters. */
 async function writeRows(rows) {
   const per = new Map();
@@ -751,6 +781,10 @@ async function archiveBatch(entries) {
         dupes = have.size;
       }
       await writeRows(rows);
+      // wave 2 WP-2 (A.4.4): who is behind each veiled line (and a hidden speaker's words) - in THIS transaction, beside its row
+      const wrote = new Set(rows.map((r) => r.c));
+      await writeVeils(take.filter((e) => wrote.has(Number(e.it.c)) && e.it._vz).map((e) => ({ c: Number(e.it.c), vz: e.it._vz, vw: e.it._vw,
+                                                                                               at: Number(e.it.at) || Number(e.it.ts) || now() })));
     });
     STATS.dupesSkipped += dupes;
   } catch (e) { return failed(e); }
@@ -835,6 +869,22 @@ async function seed() {
       rows.push(row);
     }
     await writeRows(rows);
+    // wave 2 WP-2: a seeded veiled line keeps who was behind it (bridge_veil -> chat_log_veil), in the same transaction
+    const cs = rows.map((r) => r.c);
+    const hasVeil = (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bridge_veil'")).length > 0;
+    if (hasVeil && cs.length) {
+      const veils = [];
+      for (let i = 0; i < cs.length; i += 400) {
+        const part = cs.slice(i, i + 400);
+        for (const v of await getQuery(`SELECT c, vz, vw FROM bridge_veil WHERE c IN (${part.map(() => "?").join(",")})`, part)) {
+          let vz = null;
+          try { vz = JSON.parse(v.vz); } catch (e) { vz = null; }
+          const e = entries.find((x) => x.it.c === Number(v.c));
+          if (vz) veils.push({ c: Number(v.c), vz, vw: v.vw, at: e ? Number(e.it.at) || Number(e.it.ts) : 0 });
+        }
+      }
+      await writeVeils(veils);
+    }
     await runQuery("INSERT INTO chatlog_meta (key, value) VALUES ('seed_done', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                    [JSON.stringify({ at: now(), rows: rows.length, rooms: new Set(rows.map((r) => r.rk)).size })]);
   });
@@ -1544,6 +1594,12 @@ async function mergeAccounts(fromId, toId) {
       if (r3 && r3.changes) out.rm_by = (out.rm_by || 0) + r3.changes;
     }
   }
+  // wave 2 WP-2: chat_log_veil is keyed by login - a Camfrog login doesn't move with an account; the loser's ACCOUNT key (a web line
+  // sent while veiled, "u:<id>") does, so reveals / self view / their export keep finding those lines
+  if (await tableThere("chat_log_veil")) {
+    const r4 = await runQuery("UPDATE chat_log_veil SET login = ? WHERE login = ?", [b, a]);
+    if (r4 && r4.changes) out.veil = r4.changes;
+  }
   const t = now();
   // (direct SQL, never serial(): this runs inside the caller's transaction, and a queued hidden-set write would wait for it)
   for (const [table, map] of [["chatlog_hidden", HID], ["chatlog_tx_hidden", TXH]]) {
@@ -1612,6 +1668,16 @@ async function deleteAccount(userId, opts = {}) {
     if (n) out.chat_lines_unnamed = n;
   }
   await run("chatlog_exports", "chatlog_exports", "DELETE FROM chatlog_exports WHERE user_id = ?", [uid]);
+  // wave 2 WP-2 (A.4.8): who was behind their veiled lines, and their hidden words, go - the lines stay as their frog name / bar
+  // until the sticky set (forget / delete) leaves them out; nobody can reveal them any more
+  {
+    const keys = [who, o.login ? String(o.login).trim().toLowerCase() : null].filter(Boolean);
+    if (await tableThere("chat_log_veil")) {
+      let n = 0;
+      for (const k of keys) { const r = await runQuery("DELETE FROM chat_log_veil WHERE login = ?", [k]); n += (r && r.changes) || 0; }
+      if (n) out.chat_log_veil = n;
+    }
+  }
   if (await tableThere("chatlog_views")) {
     const keys = [who, o.login ? String(o.login).trim().toLowerCase() : null].filter(Boolean);
     const pseudo = o.pseudo ? String(o.pseudo).slice(0, 60) : "deleted";
@@ -1630,6 +1696,17 @@ async function deleteAccount(userId, opts = {}) {
   await run("pad_chat_cfg", "pad_chat_cfg", "UPDATE pad_chat_cfg SET by_user = NULL WHERE by_user = ?", [uid]);
   await run("chatlog_open", "chatlog_open", "UPDATE chatlog_open SET by_user = NULL WHERE by_user = ?", [uid]);
   return out;
+}
+/** wave 2 WP-2 (A.4.8): forget-me - who was behind these logins' veiled archive lines (and their hidden words) goes; the lines keep
+ *  their frog name / bar (or leave, when "Also hide my past public chat lines" was ticked) and can't be revealed any more. -> rows */
+async function forgetVeil(logins) {
+  if (!(await tableThere("chat_log_veil"))) return 0;
+  let n = 0;
+  for (const k of [...new Set((Array.isArray(logins) ? logins : [logins]).map((x) => String(x || "").trim().toLowerCase()).filter(Boolean))]) {
+    const r = await runQuery("DELETE FROM chat_log_veil WHERE login = ?", [k]);
+    n += (r && r.changes) || 0;
+  }
+  return n;
 }
 const KIND = { msg: "chat", tx: "mic", join: "join", leave: "leave", mic: "mic_grab", unmic: "mic_drop", topic: "topic", live: "live", note: "note" };
 /** accountexport: the account's own archived lines (its linked login or u:<id>), oldest first: [{room, ts, kind, text}].
@@ -1650,12 +1727,31 @@ async function exportLines(userId, login, max = 50000, kinds = null, { loginSinc
   const rows = await getQuery(`SELECT l.c, l.ts, l.k, l.text, l.d, l.who, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk
                                WHERE l.who IN (${all.map(() => "?").join(",")}) AND l.purged IS NULL${kindSql}${sinceSql} ORDER BY l.c LIMIT ?`,
                               [...all, ...(since ? [l, "h:" + hash(l), since] : []), max]);
-  return rows.map((r) => {
+  // wave 2 WP-2: a veiled line (privacy wire v2) is theirs only when chat_log_veil says so (an "h:" key can't tell two people who
+  // share a display name apart - v2 can): its frog name, and a hidden line's own words. Without a veil row: as before.
+  const veil = new Map();
+  if (rows.length && (await tableThere("chat_log_veil"))) {
+    const cs = rows.filter((r) => String(r.who || "").startsWith("h:")).map((r) => r.c);
+    for (let i = 0; i < cs.length; i += 400) {
+      const part = cs.slice(i, i + 400);
+      for (const v of await getQuery(`SELECT c, login, kind, words FROM chat_log_veil WHERE c IN (${part.map(() => "?").join(",")})`, part)) veil.set(Number(v.c), v);
+    }
+  }
+  const mine = new Set(keys);
+  const out = [];
+  for (const r of rows) {
     let kind = KIND[r.k] || r.k;
     if (r.k === "live") { try { if (JSON.parse(r.d).np) kind = "now_playing"; } catch (e) { /* live */ } }
-    return { room: r.room_id, ts: new Date(Number(r.ts)).toISOString(), kind, text: r.text == null ? null : r.text,
-             ...(String(r.who || "").startsWith("h:") ? { shown_as: "someone" } : {}) };
-  });
+    const v = veil.get(Number(r.c));
+    if (v && !mine.has(String(v.login))) continue;                     // a veiled line of someone else behind the same hash key
+    let alias = null;
+    if (v) { try { const d = JSON.parse(r.d); alias = d && d.u && typeof d.u.alias === "string" ? d.u.alias : null; } catch (e) { alias = null; } }
+    const text = r.text == null ? (v && v.kind === "hidden" && typeof v.words === "string" ? v.words : null) : r.text;
+    out.push({ room: r.room_id, ts: new Date(Number(r.ts)).toISOString(), kind, text,
+               ...(String(r.who || "").startsWith("h:") ? { shown_as: alias || "someone" } : {}),
+               ...(v && v.kind === "hidden" ? { hidden: true } : {}) });
+  }
+  return out;
 }
 
 // ── the admin card ("Chat archive" on /admin/bridge) ──
@@ -1769,7 +1865,7 @@ module.exports = {
   reconcile: (...a) => require("./chatlogview").reconcileNow(...a),
   onHidden, isHiddenHash, isTxHiddenHash, hiddenHashes, setPadCfgRow, padCfgIds,
   // CL2 fix-up: the set is loaded (until then every key counts as hidden); a hash's kind (out | anon | null) and its reasons
-  hiddenReady, hiddenKind, hiddenReasons, archiveError: () => ARCHIVE_ERR,
+  hiddenReady, hiddenKind, hiddenReasons, archiveError: () => ARCHIVE_ERR, forgetVeil, writeVeils, VEIL_TRIGGERS,
   // owner change (decision 9: incognito "someone", !bridge hide left out) - hubhidden.js's reader names; the merge map
   isLeftOutHash, isLeftOutKey, loading, kindsOf, hubRows, txHiddenHashes,
   siteAnonSince,                                     // owner-change fix-up (review 2): named lines after a website ON stay anonymised

@@ -176,17 +176,60 @@ function speakerHashes(it) {
  * line (no author left) is null unless its hash is left out. Fails closed while the set loads (chatlog: everyone left out).
  */
 function privacyOf(it) { return privacyAt(it, kindNow, CL.isTxHiddenHash); }
+// ── wave 2 WP-2 (spec A.5, owner J-3 / J-4): the privacy wire v2's levels ──
+// "mask" = the HIDDEN level: a frog name (or "someone") and a masked bar, never the words. A !bridge hide person used to be left out
+// everywhere; from the go-live time G (privwire.gAt: the switch's first ON, sticky) a line of theirs is masked instead - and only
+// while every reason their hash is left out for is !bridge hide (bridge / list_b): forget-me, an account deletion or a staff removal
+// stay "out" (HARD_OUT). Lines said before G keep the old rules (no new reverse matching).
+const HARD_OUT = new Set(["forget", "delete", "staff"]);
+let PWM = null;
+function gAt() {
+  if (PWM === null) { try { PWM = require("./privwire"); } catch (e) { PWM = false; } }
+  try { return PWM ? PWM.gAt() : null; } catch (e) { return null; }
+}
+/** Is h left out only for !bridge hide (so its post-G lines are masked, not left out)? Fails toward "out" while the set loads. */
+function maskable(h) {
+  try { return CL.hiddenReady() && !CL.hiddenReasons(h).some((r) => HARD_OUT.has(r)); } catch (e) { return false; }
+}
+/** May a line said at `ts` whose hash h is left out be masked instead (G set, said at or after G, only !bridge hide)? */
+function maskOk(it, h) {
+  const g = gAt();
+  return !!g && Number(it && it.ts) >= g && maskable(h);
+}
+/** A v2 item: Pepe stamped who said it as veiled (u.anon + u.veil, the real identity in a side table). */
+const isV2 = (it) => !!(it && it.u && typeof it.u === "object" && it.u.anon === true && (it.u.veil === "incognito" || it.u.veil === "hidden"));
+/** The level of a v2 item: "out" (forget / delete / staff, or !transcripts off for a 🎙 line) | "mask" (hidden when said, or hidden
+ *  now - the stricter level wins) | "anon" (incognito: the frog name and the words). Joins / leaves / mic lines are shown (J-4). */
+function privacyV2(it, kindOf, txOf) {
+  const hs = speakerHashes(it);
+  if (!hs.length) return "out";                               // a v2 line always carries its hash: without one, fail closed
+  if (it.purged) return null;
+  let mask = it.u.veil === "hidden";
+  for (const x of hs) {
+    if (it.k === "tx" && txOf(x)) return "out";
+    if (kindOf(x) === "out") { if (!maskable(x)) return "out"; mask = true; }
+  }
+  return mask ? "mask" : "anon";
+}
 /** privacyOf against a given state of the set: kindOf(h) -> "out" | "anon" | null, txOf(h) -> !transcripts off. The owner-change
  *  fix-up: the live tail asks it with the set as it was BEFORE a change (chatlog's ch.prev) to tell which lines' look moved. */
 function privacyAt(it, kindOf, txOf) {
   if (!it || typeof it !== "object") return null;
   const u = it.u && typeof it.u === "object" ? it.u : null;
+  if (isV2(it)) return privacyV2(it, kindOf, txOf);           // wave 2: Pepe's privacy wire v2 stamped it
   const ah = typeof it.ah === "string" && HASH20.test(it.ah) ? it.ah : null;
   if (ah) {
     // Train 3 review: left out once ANY hash the speaker could be is (Pepe's data.anon.hs - `ahs`): two incognito members sharing
     // a display name, one of them later on !bridge hide / forget-me / deleted, never leaves their line up as "someone"
-    for (const x of speakerHashes(it)) if (kindOf(x) === "out" || (it.k === "tx" && txOf(x))) return "out";
+    let masked = false;
+    for (const x of speakerHashes(it)) {
+      if (it.k === "tx" && txOf(x)) return "out";
+      // wave 2: a "someone" chat / 🎙 line said after G whose speaker is now only !bridge hide -> masked ("someone" + a bar); any hash
+      // left out for another reason (forget / delete / staff), or a line before G, stays out
+      if (kindOf(x) === "out") { if ((it.k === "msg" || it.k === "tx") && maskOk(it, x)) masked = true; else return "out"; }
+    }
     if (it.purged) return null;
+    if (masked) return "mask";
     // 1.99afl review: a mic grab / drop Pepe sent with its holder's incognito hash (data.anon, like his anonymised chat / 🎙
     // lines - bridge.anonMic) is "someone grabbed / dropped the mic", and left out once that hash is (above); joins / leaves stay out
     return it.k === "join" || it.k === "leave" ? "out" : "anon";
@@ -206,13 +249,17 @@ function privacyAt(it, kindOf, txOf) {
   const h = hashOf(login);
   if (it.k === "tx" && txOf(h)) return "out";
   const kind = kindOf(h);
-  if (kind === "out") return "out";
+  // wave 2: a named chat / 🎙 line said after G whose speaker is now only !bridge hide is masked ("someone" with a bar, no frog name:
+  // today's name on an old line would link the sessions - A.1)
+  if (kind === "out") return (it.k === "msg" || it.k === "tx") && maskOk(it, h) ? "mask" : "out";
   if (kind === "anon") return PRESENCE.has(it.k) ? "out" : "anon";
   return null;
 }
-/** How a line LOOKS on a page under a privacy answer: "out" (not there) | "someone" | "named". Pepe's anonymised line (`ah`) and an
- *  archived "h:" row are "someone" whatever their speaker's state - only leaving changes them. */
-const lookOf = (it, p) => (p === "out" ? "out" : p === "anon" || (it && typeof it.ah === "string" && HASH20.test(it.ah)) || (it && it.u && it.u.anon) ? "someone" : "named");
+/** How a line LOOKS on a page under a privacy answer: "out" (not there) | "masked" (wave 2: a bar) | "someone" | "named". Pepe's
+ *  anonymised line (`ah`), an archived "h:" row and a v2 frog-name line are "someone" whatever their speaker's state - only leaving
+ *  (or being masked) changes them. */
+const lookOf = (it, p) => (p === "out" ? "out" : p === "mask" ? "masked"
+  : p === "anon" || (it && typeof it.ah === "string" && HASH20.test(it.ah)) || (it && it.u && it.u.anon) ? "someone" : "named");
 /**
  * The owner-change fix-up (review 2, HIGH): what a change of the hidden set does to a line an open page may hold, from its look
  * before (ch.prev: each touched hash's kind / !transcripts off as it was) to its look now. -> {gone, redo}:
@@ -263,6 +310,10 @@ function lookStep(it, ch, prev, has, now) {
   if (before === now) return { gone: false, redo: false };
   if (now === "out") return { gone: true, redo: false };
   if (before === "named" && now === "someone") return { gone: true, redo: true };
+  // wave 2: named / "someone" -> a bar (the speaker went !bridge hide after G): the words leave every open page (an older page just
+  // drops the line), a newer one draws the bar in place. (A bar never turns back into words live: masked -> "someone" comes with
+  // the next load, like out -> "someone"; masked -> named is redrawn, like out -> named.)
+  if ((before === "named" || before === "someone") && now === "masked") return { gone: true, redo: true };
   if (now === "named") return { gone: false, redo: true };
   return { gone: false, redo: false };                      // out -> "someone": with the next load, never live
 }
@@ -274,7 +325,9 @@ function noteMoved(ch) {
   const t = Date.now();
   const prev = ch && ch.prev instanceof Map ? ch.prev : null;
   for (const h of ch && Array.isArray(ch.added) ? ch.added : []) {
-    if (kindNow(h) !== "anon") continue;                   // (Train 3 review: left out by either store = nothing to draw again)
+    // (Train 3 review: left out by either store = nothing to draw again; wave 2: unless it's only !bridge hide after G - their named
+    // rows said since G are drawn again masked)
+    if (kindNow(h) !== "anon" && !(kindNow(h) === "out" && gAt() && maskable(h))) continue;
     const was = prev && prev.has(h) ? prev.get(h) : null;
     if (was && was.kind != null) continue;                 // (it was hidden before: its lines weren't named)
     NAMED_TO_ANON.delete(h);
@@ -857,10 +910,22 @@ function filter(items, ctx) {
  *  review fix-up: LEFT OUT (!bridge hide, a kind Pepe never said, forget / delete / staff) -> not listed at all (the owner's rule:
  *  "!bridge hide = left out everywhere" - never a "someone" entry that says they are there). Fails closed while the set loads
  *  (everyone counts as left out: nobody named). Pepe's own anonymous stand-ins carry no hash and pass as they are. */
-function roster(list) {
+function roster(list, ctx = {}) {
   const out = [];
   for (const u of Array.isArray(list) ? list : []) {
     if (!u || typeof u !== "object") continue;
+    if (u.anon && (u.veil === "incognito" || u.veil === "hidden")) {
+      // wave 2 (spec A.5.5): a veiled member / holder - their frog name (or "someone"), never on_cam; left out (forget / delete /
+      // staff) -> not listed. rv: 1 for a viewer who may reveal it (a flag only - identities come from the reveal endpoint)
+      const vz = u._vz;
+      if (vz && typeof vz.h === "string" && kindNow(vz.h) === "out" && !maskable(vz.h)) continue;
+      const e = pick(u, VEIL_ROSTER_U);
+      if (vz && vz.h && kindNow(vz.h) === "out") e.veil = "hidden";
+      if (!e.alias) { delete e.hood; delete e.id; }
+      if (vz && typeof ctx.canReveal === "function" && ctx.canReveal(u)) e.rv = 1;
+      out.push(e);
+      continue;
+    }
     if (u.anon || !u.login) { out.push(Object.assign({}, SOMEONE)); continue; }
     const k = kindNow(hashOf(u.login));
     if (k === "out") continue;
@@ -875,14 +940,24 @@ const SOMEONE = Object.freeze({ anon: true, display: "someone" });
 // only hash (ah / ahs), a stamp (k3), a later build's veiled identity or hidden words - can never reach a page, an API answer or a
 // download, whatever the stored item (bridge_feed, chat_log.d) holds. A field a page needs must be added here.
 const OUT_COMMON = Object.freeze(["c", "ts", "k"]);
+// wave 2 WP-2: + mask (a hidden line's bar - never its words), hold (B.3: the mic hold a line belongs to), at (when a 🎙 line was
+// said). dress takes them out again where they would link a "someone" line to a person (see dress)
 const OUT_KIND = Object.freeze({
-  msg: Object.freeze(["text"]), tx: Object.freeze(["text", "id"]), topic: Object.freeze(["text"]),
-  join: Object.freeze([]), leave: Object.freeze([]), mic: Object.freeze([]), unmic: Object.freeze(["ms"]),
+  msg: Object.freeze(["text", "mask"]), tx: Object.freeze(["text", "id", "mask", "hold", "at"]), topic: Object.freeze(["text"]),
+  join: Object.freeze([]), leave: Object.freeze([]), mic: Object.freeze(["hold"]), unmic: Object.freeze(["ms", "hold"]),
   live: Object.freeze(["who", "pad", "what", "link", "np"]),          // 🎥 bridge.liveNotice
   note: Object.freeze(["w", "s", "o", "sc"]),                         // 📜 bridge.noteItem
 });
 const OUT_U = Object.freeze(["login", "display", "self", "bot", "web", "acct", "unresolved"]);
 const ROSTER_U = Object.freeze(["login", "display", "self", "bot", "on_cam", "on_mic", "src", "unresolved", "acct", "web"]);
+// wave 2 WP-2: a veiled user on a page - never a login, never on_cam (WP-4's covers map {veil, hood, alias} to the hooded frog)
+const VEIL_U = Object.freeze(["anon", "display", "veil", "alias", "hood", "id"]);
+const VEIL_ROSTER_U = Object.freeze(["anon", "display", "veil", "alias", "hood", "id", "on_mic", "src"]);
+/** wave 2 (D.2): a bar's length from words (code points of the trimmed text): s <= 24, m 25-100, l > 100. */
+function maskOf(text) {
+  const n = [...String(text == null ? "" : text).trim()].length;
+  return n <= 24 ? "s" : n <= 100 ? "m" : "l";
+}
 /** The listed fields of src (own, defined) copied into `into`. */
 function pick(src, keys, into = {}) {
   for (const k of keys) if (Object.prototype.hasOwnProperty.call(src, k) && src[k] !== undefined) into[k] = src[k];
@@ -907,12 +982,37 @@ function dress(items, ctx) {
     // _sh (never serialised: not enumerable) = their hash, so the viewer's OWN lines still get their 🗑 Remove my line.
     const p = privacyOf(it);
     const u = it.u && typeof it.u === "object" ? it.u : null;
-    if ((p === "anon" || p === "out") && !it.purged) {
-      o.u = Object.assign({}, SOMEONE);
-      if (o.k === "tx") delete o.id;
+    const v2 = isV2(it);
+    if (!it.purged && (p === "mask" || (v2 && p === "anon"))) {
+      // wave 2 WP-2 (A.5.4, C.7, D.1): the frog name (or "someone": C.2 / B.2, and a line masked only by its speaker's state NOW gets no
+      // name - A.1) and, for the hidden level, the bar: `mask`, never the words. THE SAME for every viewer - see-through roles get rv: 1
+      // (a flag; identities only from the reveal endpoint) and the speaker their own words (self view)
+      o.u = v2 ? pick(u, VEIL_U) : { anon: true, display: "someone", veil: "hidden" };
+      if (!o.u.alias) { delete o.u.hood; delete o.u.id; }
+      if (p === "mask") {
+        o.u.veil = "hidden";
+        o.mask = typeof it.mask === "string" && /^[sml]$/.test(it.mask) ? it.mask : maskOf(it.text);
+        delete o.text;
+      }
+      // the 🎙 id only on an incognito frog-name line (owner J-7: anyone may clip it, under the frog name; Pepe salts the id); the hold
+      // only beside a frog name (a "someone" release next to a named grab must not pair up - B.2)
+      if (o.k === "tx" && !(v2 && p === "anon" && u.veil === "incognito" && o.u.alias)) delete o.id;
+      if (!o.u.alias) delete o.hold;
       const sh = speakerHash(it);
       if (sh) Object.defineProperty(o, "_sh", { value: sh, enumerable: false });
-    } else if (u && u.anon) o.u = Object.assign({}, SOMEONE);
+      const vz = it._vz || (ctx.veilOf && ctx.veilOf.get ? ctx.veilOf.get(Number(it.c)) : null);
+      if (vz && ctx.selfKeys && ctx.selfKeys.has(String(vz.login || "").toLowerCase())) {
+        o.self = 1;                                             // A.2: "you, as Soggy Bullfrog" - their own words on their hidden line
+        const w = typeof it._vw === "string" ? it._vw : typeof vz.words === "string" ? vz.words : null;
+        if (p === "mask" && w) o.text = w;
+      } else if (vz && typeof ctx.canReveal === "function" && ctx.canReveal(it)) o.rv = 1;
+    } else if ((p === "anon" || p === "out") && !it.purged) {
+      o.u = Object.assign({}, SOMEONE);
+      if (o.k === "tx") delete o.id;
+      delete o.hold;                                            // (wave 2: never pairs a "someone" line with a named one)
+      const sh = speakerHash(it);
+      if (sh) Object.defineProperty(o, "_sh", { value: sh, enumerable: false });
+    } else if (u && u.anon) { o.u = Object.assign({}, SOMEONE); delete o.hold; }
     else if (u && u.former) o.u = { former: true };
     else if (u) {
       const e = u.login ? lookup(u) : undefined;
@@ -1489,6 +1589,7 @@ module.exports = {
   graceOf, lapsedOf, noteFirst, retentionFresh,       // CL7 fix-up
   speakerHashes, kindNow, hubChanged,                 // Train 3 review: every hash a "someone" line could be; the stricter of both stores
   loginForHash,                                       // 1.99afn (FU-3): server-only, a logged reveal's lookup
+  isV2, maskable, maskOk, maskOf, VEIL_U, VEIL_ROSTER_U, OUT_KIND, OUT_U, // wave 2 WP-2: the privacy wire v2's levels and fields
   GRACE_MS, PRESENCE_MS, MOD_EXTRA_MS, OPEN_DELAY_MS, SIGNED_ONLY, BLOCK_RULES, DOWNGRADE_GRACE_MS, JC_TTL, READ_ALL, AUD, STOP, PRESENCE,
   _caches: CACHE, _rows: ROWS, _tiers: TIERS, _opens: OPENS, _names: NAMES, _who: WHO, _disp: DISP,
   _setClock: (f) => { clock = f || (() => CL.now()); },

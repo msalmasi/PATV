@@ -135,14 +135,18 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          "chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
                                          "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views",
                                          "chatlog_exports", "chatlog_meta", "chatlog_erase_wait",
-                                         // CL2 fix-up: the live feed's tables (the archive's seed reads bridge_feed)
-                                         "bridge_rooms", "bridge_feed",
+                                         // wave 2: who is behind each veiled archive line (chatlog.js TABLES)
+                                         "chat_log_veil",
+                                         // CL2 fix-up: the live feed's tables (the archive's seed reads bridge_feed); wave 2: + its veil side tables
+                                         "bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil",
+                                         // wave 2: frog-name sessions and the see-through audit
+                                         "incog_alias", "seethrough_log", "seethrough_toggle",
                                          "pad_hub",
                                          // S1 Q4: staging's own CHAT_HUB
                                          "chat_switches",
                                          // mic retention: staging's own mic-recordings policy switch (micrec.js)
-                                         "micrec_meta"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch");
-  assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed"]);
+                                         "micrec_meta"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch; wave 2: real identities never cross");
+  assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");
   const stop = sh.indexOf("pm2 stop patv-staging"), keep = sh.indexOf("keep-staging-tables.js"), swap = sh.indexOf('mv "$S/myapp.db.new" "$S/myapp.db"');

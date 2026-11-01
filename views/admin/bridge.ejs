@@ -287,6 +287,50 @@
   <% } %>
 </section>
 
+<%# wave 2 WP-2 (privwire.js; the incognito / mic-stage spec A.3, I.2, I.5): the "Privacy wire v2" switch - ships OFF %>
+<section class="adm-card" id="privwire" aria-labelledby="pwT">
+  <h2 id="pwT">Privacy wire v2 <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">While this is <b>off</b> (the default) nothing changes: Pepe sends the website only redacted lines - an incognito person as "someone", a <code>!bridge hide</code> person not at all - and this site never asks for more. Turn it <b>on</b> and the site's sync answers say <code>privwire: 2</code>: from his next batch Pepe sends the full form to <code>/api/bridge/sync/v2</code> - real names with a privacy block, a hidden person's words - and the website does the masking itself: incognito people under a random <b>frog name</b>, hidden people under a frog name with a <b>blacked-out bar</b>, their joins, leaves and mic lines shown under it. Real names and hidden words are kept only in side tables that the logged reveals read (admins anywhere, a pad's owner in their own pad - see the <a href="#seethrough">see-through log</a>). The first time it goes on is <b>G</b>, the go-live time: lines said before G keep the old rules, and G never moves again. Turning it off sends Pepe back to the redacted form within one batch (one refused call, then 10 minutes on the old wire); lines stored since G keep their frog names and bars. Before go-live: the staff per-login tool restricted (E.7, live), <code>ALIAS_SECRET</code> set (the Frog-name key row on /admin/system), the hooded covers and art live, and the owner's OK on the policy text.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="pwSummary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="pwBtn" disabled>…</button><span id="pwMsg" class="adm-msg" role="status"></span></div>
+  <% } %>
+</section>
+<script>
+// wave 2: the Privacy wire v2 card (privwire.js: GET / POST /api/admin/privwire {on})
+(function () {
+  'use strict';
+  var sum = document.getElementById('pwSummary');
+  if (!sum) return;
+  var btn = document.getElementById('pwBtn'), msg = document.getElementById('pwMsg'), cur = null;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(data) {
+    return fetch('/api/admin/privwire', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function render(d) {
+    var s = d.state || {}, c = d.counts || {};
+    cur = s;
+    sum.textContent = 'Privacy wire v2 is ' + (s.on ? 'ON' : 'off') + ' · G (go-live) ' + when(s.g_at) + (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '') +
+      ' · /api/bridge/sync/v2 calls ' + (c.calls || 0) + ' (accepted ' + (c.ok || 0) + ', refused ' + (c.refused || 0) + ', errors ' + (c.err || 0) + ')' +
+      (c.last_at ? ', last ' + when(c.last_at) : '') + (s.on ? '' : ' - while it has never been on, the call count stays 0');
+    btn.disabled = false;
+    btn.textContent = s.on ? 'Turn off' : 'Turn on';
+  }
+  btn.addEventListener('click', function () {
+    if (!cur) return;
+    var on = !cur.on;
+    if (on && !window.confirm('Turn the privacy wire v2 on? Pepe starts sending real names of incognito and hidden people (and hidden words) to the website, which shows them as frog names and blacked-out bars.' + (cur.g_at ? '' : ' This sets G, the go-live time, for good.') + ' Make sure the go-live checklist on this card is done.')) return;
+    if (!on && !window.confirm('Turn it off? Pepe goes back to the redacted form within one batch. Lines stored since G keep their frog names and bars.')) return;
+    btn.disabled = true;
+    req({ on: on }).then(function (d) { say('Switched ' + (on ? 'on' : 'off') + '.', true); render(d); }).catch(function (e) { btn.disabled = false; say(e.message, false); });
+  });
+  req().then(render).catch(function (e) { sum.textContent = e.message; });
+})();
+</script>
+
 <%# 1.99afn: who saw through a frog name, when and why (seethrough.js; chatlog.see_through = Admins) %>
 <% if (_can('chatlog.see_through')) { %>
 <section class="adm-card" id="seethrough" aria-labelledby="stT">

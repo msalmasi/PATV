@@ -38,17 +38,23 @@ const path = require("path");
 const CHATLOG = ["chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
                  "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views",
                  "chatlog_exports", "chatlog_meta",
-                 "chatlog_erase_wait"];                  // S1 V4 fix-up: its line ids are staging's own archive's
-const CHATLOG_TRIGGERS = ["chat_log_ai", "chat_log_ad", "chat_log_au"];
+                 "chatlog_erase_wait",                   // S1 V4 fix-up: its line ids are staging's own archive's
+                 "chat_log_veil"];                       // wave 2: who is behind each veiled line + hidden words (prod's never land here)
+const CHATLOG_TRIGGERS = ["chat_log_ai", "chat_log_ad", "chat_log_au", "chat_log_veil_ad", "chat_log_veil_purge"];
 const INDEXABLE = "text IS NOT NULL AND k IN ('msg','tx','topic') AND rm_at IS NULL AND purged IS NULL";     // chatlog.INDEXABLE
 // CL2 fix-up: the pad chat's live feed (bridge.js) - the archive's seed reads bridge_feed, and its cursors must stay staging's own
-const LIVE_FEED = ["bridge_rooms", "bridge_feed"];
+// wave 2 WP-2: and its privacy wire v2 side tables (bridge_veil: the real identity / hidden words of each veiled live item;
+// bridge_rooms_veil: of each veiled roster / mic entry) - real identities and hidden words must never be copied into staging
+const LIVE_FEED = ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"];
+// wave 2 WP-2: frog-name sessions (frognames.js, no logins but prod's open sessions' keyed handles) and the see-through audit
+// (seethrough.js: which logins an admin revealed) - staging's own
+const VEIL = ["incog_alias", "seethrough_log", "seethrough_toggle"];
 const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings",          // keys + switches
               "bot_route_log", "legacy_token_use", "legacy_token_daily", "events_auth_log", "bridge_spans",   // logs
               "pad_hub",         // S1-D1: the staging hub knows staging's hub pad ids (padhub.js mints the new pads' after the copy)
               "chat_switches",   // S1 Q4 (ADR 0007 D3): staging's own CHAT_HUB (a prod value would switch the staging pilot on or off)
               "micrec_meta",     // mic retention: staging's own mic-recordings policy switch (micrec.js - staging tries it before prod)
-              ...CHATLOG, ...LIVE_FEED];
+              ...CHATLOG, ...LIVE_FEED, ...VEIL];
 // hub_outbox LAST: the copy carries prod's triggers (huboutbox.init creates them on prod whatever the switches say), and with
 // staging's switches already restored a DELETE of a source table (hub_hidden_h's hh trigger) would write a row of prod's
 // data into the outbox just emptied - so every source table is emptied first, the outbox after them.
