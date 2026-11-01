@@ -333,7 +333,10 @@ test("S6: dress and roster are WHITELISTS - an unknown field (a later build's id
   const ro = CV.roster([{ login: "alicecf", display: "Alice", on_cam: true, on_mic: true, src: "list", proven: true, since: 5, vz: "x", foo: 1 },
                         { anon: true, display: "someone", vz: "frankiefettuccine" }, null, "junk"]);
   assert.deepEqual(ro, [{ login: "alicecf", display: "Alice", on_cam: true, on_mic: true, src: "list" }, { anon: true, display: "someone" }]);
-  // end to end: an item a LATER build stored with a veiled identity (a rollback) - /live and the homepage panel never carry it
+  // end to end: an item a LATER build stored with a veiled identity (a rollback) - /live and the homepage panel never carry it.
+  // A field name is looked for as a quoted JSON string ("vz": the key, or a value that is exactly it) - a bare vz / vw / k3 turns
+  // up by chance inside the answer's random base64url tokens (history.v / pv, the jc cursor; a full run failed on it 2026-11-01)
+  const LEAKS = ["\"vz\"", "\"_vz\"", "\"vw\"", "hidden words", "frankiefettuccine", "\"foo\"", "\"k3\"", "\"priv\""];
   const R = bridge._rooms.get(ROOM.id);
   R.feed.push(Object.assign({ c: 999999990, ts: now, k: "msg", u: { login: "alicecf", display: "Alice" }, text: "rollback line" }, extra));
   R.mic = [{ login: "alicecf", display: "Alice", proven: true, since: now - 5000, vz: "frankiefettuccine" }];
@@ -341,9 +344,9 @@ test("S6: dress and roster are WHITELISTS - an unknown field (a later build's id
     const r = await live(U.mem);
     assert.equal(r.status, 200);
     assert.ok(r.d.feed.some((it) => it.text === "rollback line"));
-    for (const leak of ["vz", "vw", "hidden words", "frankiefettuccine", "\"foo\"", "k3", "\"priv\""]) assert.ok(!r.text.includes(leak), leak + " reached /live");
+    for (const leak of LEAKS) assert.ok(!r.text.includes(leak), leak + " reached /live");
     const home = JSON.stringify(await bridge.liveFor(SLUG, U.mem));
-    for (const leak of ["vz", "hidden words", "frankiefettuccine"]) assert.ok(!home.includes(leak), leak + " reached the homepage panel");
+    for (const leak of LEAKS) assert.ok(!home.includes(leak), leak + " reached the homepage panel");
   } finally {
     R.feed = R.feed.filter((it) => it.c !== 999999990);
     R.mic = [];
