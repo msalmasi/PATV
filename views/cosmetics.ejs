@@ -24,7 +24,8 @@
   const kindSlot = (k) => (kinds[k] && kinds[k].slot) || kindLabel(k);
   const typeText = (k) => kindGroup(k) + ' · ' + kindSlot(k);
   const whereText = (k) => kindGroup(k) === 'GTF avatar' ? 'Worn by your Grand Theft Frogger pixel avatar (heist sheets, stream overlay)' : 'Shows on your PATV profile' + (k === 'name_color' ? ' and the rankings' : '');
-  const seasonEmoji = (label) => /winter/i.test(label) ? '❄️' : /pride/i.test(label) ? '🏳️‍🌈' : /hallowe/i.test(label) ? '🎃' : '📅';
+  const seasonEmoji = (label) => /winter/i.test(label) ? '❄️' : /pride/i.test(label) ? '🏳️‍🌈' : /hallowe/i.test(label) ? '🎃' : /fireside|autumn|november/i.test(label) ? '🍂' : '📅';
+  const seasonClass = (label) => /winter/i.test(label) ? 'winter' : /pride/i.test(label) ? 'pride' : /fireside|autumn|november/i.test(label) ? 'fireside' : '';
   const fmtDay = (ms) => { const d = new Date(ms); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC', ...(d.getUTCFullYear() !== new Date(now).getUTCFullYear() ? { year: 'numeric' } : {}) }); };
   const itemTags = (it) => (it && Array.isArray(it.tags) ? it.tags : []).filter((t) => tags[t]);
   const chips = (it) => {
@@ -217,6 +218,7 @@
   .cxp .season { background: linear-gradient(135deg, #1d1230, var(--ds-surface) 60%); border: 1px solid #3a2a55; border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); margin: var(--ds-sp-4) 0; }
   .cxp .season.winter { background: linear-gradient(135deg, #0f2233, var(--ds-surface) 60%); border-color: #26475f; }
   .cxp .season.pride { background: linear-gradient(135deg, rgba(228, 3, 3, .16), rgba(255, 237, 0, .08) 30%, rgba(0, 77, 255, .1) 60%, var(--ds-surface) 85%); border-color: #5a3a6a; }
+  .cxp .season.fireside { background: linear-gradient(135deg, #2a160c, var(--ds-surface) 60%); border-color: #6b3a1e; }
   .cxp .season-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px var(--ds-sp-3h); align-items: center; margin-block-end: var(--ds-sp-3); }
   .cxp .season-head b { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: var(--ds-fs-h3); color: var(--ds-text-strong); }
   .cxp .season-head b .cxp-muted { font-weight: 400; }
@@ -320,7 +322,7 @@
     <% filterBar() %>
 
     <% seasons.forEach((s) => { %>
-      <section class="season <%= /winter/i.test(s.label) ? 'winter' : /pride/i.test(s.label) ? 'pride' : '' %> cxp-fsec">
+      <section class="season <%= seasonClass(s.label) %> cxp-fsec">
         <div class="season-head">
           <b><span class="ds-ic" aria-hidden="true"><%= seasonEmoji(s.label) %></span><%= s.label %> <span class="cxp-muted">· seasonal set</span></b>
           <% if (s.state === 'active') { %>
@@ -568,7 +570,7 @@
           <% Object.keys(rarities).forEach((r, i) => { %><%= i ? ' · ' : '' %><span style="color:<%= RC(r) %>"><%= r %> <%= fmt(rarities[r].price) %></span><% }) %>.</li>
         <li><b>Drops</b> — heists, the arena, bingo and completed bounties (10,000+ PAT pots) can drop items, mostly Grand Theft Frogger avatar gear. Rarer drops are rarer, and some gear (the Wanted Poster, Lasso Frame and Sheriff Star) only drops from bounties.</li>
         <li><b>Achievements &amp; levels</b> — some items unlock for free when you earn an <a href="/achievements">achievement</a> or reach level 10, 25 or 50. They land in My items automatically.</li>
-        <li><b>Seasonal</b> — limited items sell only during their season (Halloween, winter). After that the only way to get one is from another player.</li>
+        <li><b>Seasonal</b> — <%- t('cos.how_seasonal') %></li>
         <li><b>Gifts</b> — buy a new item for a friend from the shop, or give away a copy you own.</li>
         <li><b>Labels</b> — every card says what it is and where it shows: <b>Profile</b> items (name color, border, banner, effect, avatar decoration) dress up your PATV profile; <b>GTF avatar</b> items (hat, mask, outfit, prop, background, frame) are worn by your Grand Theft Frogger pixel avatar. Seasonal items are labelled with their set and when they leave the shop. Style tags (Pride, Drag &amp; camp, Cute, Kink) let you filter the shop — tick <i>Hide kink items</i> if you'd rather not see those. Pride flags are always in the shop; the Pride set is June only.</li>
       </ul>

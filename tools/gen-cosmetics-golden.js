@@ -13,9 +13,15 @@
 //           is the golden the platform's chat-core reads (C2) once it vendors this file.
 // test/cosmetics-structured.test.js then asserts that today's render() equals `render` for every item and that lookOf
 // still gives `look`. Regenerating with the default ref only changes `look` (a deliberate change of the look mapping).
+//
+// Items ADDED after css_ref (November 2026's 🍂 Fireside 2026 set was the first) never had hand-written CSS: their `render` is
+// what today's cosmetics.js render() draws (required from a temp working directory - the module opens a database where it
+// runs, as in the test), appended after the css_ref items in catalog order. Regenerating keeps every entry as it was unless
+// render() or the look mapping changed - the golden pins each new item's CSS from the day it was added.
 "use strict";
 const { execFileSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const vm = require("vm");
 
@@ -52,13 +58,25 @@ const items = oldCat.items.filter((it) => it && it.id && it.kind).map((it) => {
   if (!byId.has(it.id)) throw new Error(`${it.id}: gone from today's catalog`);
   return { id: it.id, kind: it.kind, render: JSON.parse(JSON.stringify(oldRender(it))), look: CS.lookOf(byId.get(it.id)) };
 });
+// items added since css_ref: today's render() (see the header)
+const had = new Set(items.map((x) => x.id));
+const added = newCat.items.filter((it) => it && it.id && it.kind && !had.has(it.id));
+if (added.length) {
+  const cwd = process.cwd();
+  process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), "gen-cosmetics-golden-")));
+  const C = require(path.join(repo, "cosmetics.js"));
+  for (const it of added) items.push({ id: it.id, kind: it.kind, render: JSON.parse(JSON.stringify(C.render(it))), look: CS.lookOf(it) });
+  process.chdir(cwd);
+}
 let commit = ref;
 try { commit = execFileSync("git", ["-C", repo, "rev-parse", "--short", ref], { encoding: "utf8" }).trim(); } catch (e) { /* keep the ref */ }
 const out = {
   $comment: "S1 Q5a: every cosmetics.json item's render() at css_ref (the hand-written CSS) and its structured look today " +
-            "(cosmeticstyle.lookOf). Regenerate with tools/gen-cosmetics-golden.js; do not edit.",
+            "(cosmeticstyle.lookOf); items added after css_ref (from the Fireside 2026 set on) carry the render() of the day they were added. " +
+            "Regenerate with tools/gen-cosmetics-golden.js; do not edit.",
   source: { repo: "v1 site", css_ref: commit, render: "cosmetics.js render()", look: "cosmeticstyle.js lookOf()" },
   items,
 };
 fs.writeFileSync(OUT, JSON.stringify(out, null, 1) + "\n");
-console.log(`gen-cosmetics-golden: ${items.length} items (render from ${commit}) -> ${path.relative(repo, OUT)}`);
+console.log(`gen-cosmetics-golden: ${items.length} items (render from ${commit}${added.length ? `; ${added.length} added since, from today's render()` : ""}) -> ${path.relative(repo, OUT)}`);
+process.exit(0);         // cosmetics.js (the added items) leaves its database open

@@ -61,3 +61,38 @@ test("hood / alien head hide the seed's random hat; the board only draws legs wi
   const board = f(7, 64, { prop: "skateboard" }), boardSuit = f(7, 64, { prop: "skateboard", outfit: "suit" });
   assert.match(board, /#E4572E/); assert.match(boardSuit, /#E4572E/);
 });
+
+test("🍂 Fireside 2026 (November): the bobble hat, the knit and the sparkler - painted, listed, seasonal, the October slots and prices", () => {
+  const by = Object.fromEntries(CAT.items.map((i) => [i.id, i]));
+  const want = {
+    gh_bobble: ["gtf_hat", "bobble", "uncommon", 75000],
+    go_fireside: ["gtf_outfit", "fireside", "epic", 750000],
+    gp_sparkler: ["gtf_prop", "sparkler", "legendary", 2500000],
+  };
+  const season = { from: "2026-11-01", to: "2026-12-01", label: "Fireside 2026" };
+  for (const [id, [kind, layer, rarity, price]] of Object.entries(want)) {
+    const it = by[id];
+    assert.ok(it, id);
+    assert.deepEqual([it.kind, it.style.layer, it.rarity, it.price], [kind, layer, rarity, price], id);
+    assert.equal(price, CAT.rarities[rarity].price, `${id} costs its rarity's list price`);
+    assert.deepEqual(it.source, ["season"], id);
+    assert.deepEqual(it.season, season, `${id} sells in the Fireside 2026 window`);
+    assert.ok(!it.drop_weight && !it.perk, `${id}: seasonal gear never drops and isn't a perk`);
+    assert.ok(globalThis.pepeAvatarLayers[OPT[kind]].includes(layer), `${id}: avatar.js paints ${layer}`);
+  }
+  // the same slots and prices as October's horns / shroud / scythe
+  assert.deepEqual(["gh_horns", "go_reaper", "gp_scythe"].map((id) => by[id].price), [75000, 750000, 2500000]);
+  const f = globalThis.pepeAvatarSVG;
+  for (const seed of [7, 42, 1234, 99999]) {
+    const bare = f(seed, 64, { bg: "city" });
+    for (const o of [{ hat: "bobble" }, { outfit: "fireside" }, { prop: "sparkler" }, { hat: "bobble", outfit: "fireside", prop: "sparkler" }]) {
+      const svg = f(seed, 64, { bg: "city", ...o });
+      assert.match(svg, /viewBox="0 0 17 17"/);
+      assert.notEqual(svg, bare, JSON.stringify(o) + " draws something");
+    }
+  }
+  assert.match(f(42, 64, { hat: "bobble" }), /#F3E3C3/, "the cream bobble");
+  assert.notEqual(f(42, 64, { hat: "bobble" }), f(42, 64, { hat: "beanie" }), "not the Getaway Beanie");
+  assert.match(f(42, 64, { outfit: "fireside" }), /#C0502E/, "the rust scarf");
+  assert.match(f(42, 64, { prop: "sparkler" }), /#FFD23F/, "gold sparks");
+});

@@ -132,3 +132,39 @@ test("render() of a broken field draws nothing instead of throwing", () => {
   const b = C.render({ id: "y", kind: "profile_banner", style: { banner: "linear-gradient(red, blue)" } });
   assert.equal(b.css, "background: ;");
 });
+
+test("🍂 Fireside 2026: eight seasonal items like October's - one window, list prices, on sale only in November, never dropped; the new leaves effect is drawn", () => {
+  const ids = ["nc_toffeeapple", "pb_flannel", "ad_secondhelping", "bn_fireworks", "fx_fallingleaves", "gh_bobble", "go_fireside", "gp_sparkler"];
+  const set = CAT.items.filter((it) => it.season && it.season.label === "Fireside 2026");
+  assert.deepEqual(set.map((it) => it.id), ids, "the set, in shop order");
+  const RAR = CAT.rarities;
+  for (const it of set) {
+    assert.deepEqual(it.season, { from: "2026-11-01", to: "2026-12-01", label: "Fireside 2026" }, it.id);
+    assert.deepEqual(it.source, ["season"], it.id);
+    assert.equal(it.price, RAR[it.rarity].price, it.id + " costs its rarity's list price");
+    assert.ok(!it.drop_weight && !it.perk, it.id);
+    assert.equal(C.onSale(it, Date.parse("2026-10-31T23:59:59Z")), false, it.id + ": not before November");
+    assert.equal(C.onSale(it, Date.parse("2026-11-15T12:00:00Z")), true, it.id + ": on sale in November");
+    assert.equal(C.onSale(it, Date.parse("2026-12-01T00:00:00Z")), false, it.id + ": gone on Dec 1 (Winter 2026 starts)");
+    assert.equal(C.seasonState(it, Date.parse("2026-12-15T00:00:00Z")), "over");
+  }
+  // the same kinds, rarities and prices as the Halloween 2026 set (the 'Bonfire Night' name stays October's)
+  const hal = CAT.items.filter((it) => it.season && it.season.label === "Halloween 2026");
+  assert.deepEqual(set.map((it) => [it.kind, it.rarity]).sort(), hal.map((it) => [it.kind, it.rarity]).sort());
+  assert.ok(!set.some((it) => /bonfire night/i.test(it.name)));
+  const ring = byId.get("ad_secondhelping");
+  assert.ok(Array.isArray(ring.style.conic) && !ring.style.ring, "a conic ring (the nine hand-written rings stay nine)");
+  // a profile effect needs its enum entry and its CSS, or it draws nothing
+  assert.ok(CS.EFFECTS.includes("leaves"));
+  assert.equal(C.render(byId.get("fx_fallingleaves")).effect, "leaves");
+  const css = fs.readFileSync(path.join(repo, "views", "partials", "cosmetics-css.ejs"), "utf8");
+  for (const e of CS.EFFECTS) assert.ok(css.includes(`.cx-fx-${e} {`), "CSS for every effect: " + e);
+  // the shop's set heading: 🍂 and its own colours (not the 📅 / purple fallback)
+  const view = fs.readFileSync(path.join(repo, "views", "cosmetics.ejs"), "utf8");
+  const helpers = new Function([view.match(/const seasonEmoji = .*;/)[0], view.match(/const seasonClass = .*;/)[0],
+                                "return { seasonEmoji, seasonClass };"].join(";"))();
+  assert.deepEqual([helpers.seasonEmoji("Fireside 2026"), helpers.seasonClass("Fireside 2026")], ["🍂", "fireside"]);
+  assert.deepEqual([helpers.seasonEmoji("Halloween 2026"), helpers.seasonEmoji("Winter 2026"), helpers.seasonClass("Pride 2027")], ["🎃", "❄️", "pride"]);
+  assert.match(view, /\.cxp \.season\.fireside \{/);
+  assert.doesNotMatch(view, /\(Halloween, winter\)/, "the how-it-works copy names no particular season");
+});
