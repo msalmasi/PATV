@@ -338,7 +338,7 @@ test("S6: dress and roster are WHITELISTS - an unknown field (a later build's id
   // up by chance inside the answer's random base64url tokens (history.v / pv, the jc cursor; a full run failed on it 2026-11-01)
   const LEAKS = ["\"vz\"", "\"_vz\"", "\"vw\"", "hidden words", "frankiefettuccine", "\"foo\"", "\"k3\"", "\"priv\""];
   const R = bridge._rooms.get(ROOM.id);
-  R.feed.push(Object.assign({ c: 999999990, ts: now, k: "msg", u: { login: "alicecf", display: "Alice" }, text: "rollback line" }, extra));
+  R.feed.push(Object.assign({ c: 999999990, ts: now, k: "msg", u: { login: "alicecf", display: "Alice", vz: "frankiefettuccine" }, text: "rollback line" }, extra));
   R.mic = [{ login: "alicecf", display: "Alice", proven: true, since: now - 5000, vz: "frankiefettuccine" }];
   try {
     const r = await live(U.mem);
