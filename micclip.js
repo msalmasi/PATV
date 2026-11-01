@@ -106,10 +106,22 @@ function view(c, slug) {
   const live = c.state === "ready" && NOW() - c.done < PREVIEW_TTL;
   const base = "/api/rooms/" + encodeURIComponent(slug) + "/micclip/" + c.id;
   return { ok: true, id: c.id, state: live || c.state !== "ready" ? c.state : "expired", status: c.status || "", secs: c.secs || 0, text: live ? c.text || "" : "",
-           login: c.login, audio: live ? base + "/audio" : null, until: live ? c.done + PREVIEW_TTL : null,
+           // wave 2 (J-7): an incognito turn's clip names its frog name to the page - never the login behind it
+           login: c.alias ? null : c.login, ...(c.alias ? { alias: c.alias } : {}), audio: live ? base + "/audio" : null, until: live ? c.done + PREVIEW_TTL : null,
            save: live && c.viewerOk ? { cost: c.cost, id: c.save || null } : null, ...(c.code ? { code: c.code } : {}) };
 }
 
+/** wave 2 (owner J-7): the frog name an incognito 🎙 line may be clipped under, else null - a privacy-wire-v2 line (u.veil
+ *  "incognito", a frog name, the real identity server-side) that members see with its words right now (privacyOf "anon": not masked,
+ *  not left out), while the switch is on. Hidden lines, "someone" lines and anything older: null (the usual refusal). */
+function vClipAlias(it) {
+  try {
+    if (!it || !it.u || !it.u.anon || it.u.veil !== "incognito" || typeof it.u.alias !== "string" || !it._vz || !it._vz.login) return null;
+    if (!require("./privwire").isOn()) return null;
+    if (require("./chatlogview").privacyOf(it) !== "anon") return null;
+    return LOGIN_RE.test(String(it._vz.login)) ? it.u.alias : null;
+  } catch (e) { return null; }
+}
 /** Is the room's !clip on for this account? -> null when OK, else the refusal. */
 function clipGate(R, u) {
   return deps.clipSwitch(R.id) === true || deps.clipAdmin(R, u) ? null : CLIP_OFF(R.id);
@@ -195,14 +207,21 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       // isn't there, one below the floor, an anonymised or hidden speaker's and a pad they can't read
       const vis = TX_RE.test(tx) ? await require("./chatlogview").quotableFeed(u, R.id, R.feed || []) : [];
       const it = vis.find((x) => x && x.k === "tx" && x.id === tx) || null;
-      if (!it || !it.u || it.u.anon || !LOGIN_RE.test(String(it.u.login || ""))) return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_CLIPPABLE });
-      const login = String(it.u.login).toLowerCase();
+      // wave 2 (owner J-7): a 🎙 line an INCOGNITO speaker said under a frog name (privacy wire v2, the switch on) may be clipped by
+      // anyone - posted under that frog name; who it is stays server-only (the job's target, never on a page or in a log line). A
+      // hidden speaker's turn can't be clipped by members (admin evidence clips are WP-5); a "someone" line (no frog name) neither
+      const alias = vClipAlias(it);
+      if (!alias && (!it || !it.u || it.u.anon || !LOGIN_RE.test(String(it.u.login || "")))) return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_CLIPPABLE });
+      const login = alias ? String(it._vz.login).toLowerCase() : String(it.u.login).toLowerCase();
       // the owner's decision-9 change: an incognito speaker's 🎙 line is shown (as "someone") and in the clipper's view - but a voice
       // says who it is (incognito hides WHO), so anyone hidden by any kind (the sticky set, Pepe's list) can't be clipped: the same
-      // one answer
-      if (require("./chatlogview").isHiddenLogin(login) || require("./quotes").isHidden(login)) return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_CLIPPABLE });
+      // one answer. (wave 2: except under the frog name the line was said with - above)
+      if (!alias && (require("./chatlogview").isHiddenLogin(login) || require("./quotes").isHidden(login))) return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_CLIPPABLE });
       // 1.99md: Pepe's own 🎙 lines (his TTS mic-ups - voice only, never music) are clippable like anyone's
-      if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their voice can't be clipped." });
+      if ((await deps.privateLogins([login])).has(login)) {
+        return res.status(403).json(alias ? { ok: false, code: "not_quotable", error: NOT_CLIPPABLE }      // (says nothing about who)
+          : { ok: false, error: "They keep their activity private, so their voice can't be clipped." });
+      }
       const off = clipGate(R, u);
       if (off) return res.status(403).json({ ok: false, error: off, code: "E_FEATURE_OFF" });
       for (const c of clips.values()) {
@@ -214,16 +233,16 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const open = openFor(u.userId);
       if (open.length >= OPEN_PER_USER) {
         return res.status(429).json({ ok: false, code: "E_CLIPS_OPEN", error: "Post or discard the clips you have first.",
-          open: open.map((c) => ({ id: c.id, room: c.slug || req.params.slug, login: c.login, state: c.state, secs: c.secs || 0,
-                                   until: c.state === "ready" ? c.done + PREVIEW_TTL : c.ts + PENDING_HOLD })) });
+          open: open.map((c) => ({ id: c.id, room: c.slug || req.params.slug, login: c.alias ? null : c.login, ...(c.alias ? { alias: c.alias } : {}),
+                                   state: c.state, secs: c.secs || 0, until: c.state === "ready" ? c.done + PREVIEW_TTL : c.ts + PENDING_HOLD })) });
       }
       const lim = relay.limited("micclip|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
       const j = relay.newJob({ kind: "micclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, target: login, tx,
-                               viewers: new Set([u.userId]) });
+                               viewers: new Set([u.userId]), ...(alias ? { alias } : {}) });
       clips.set(j.id, { id: j.id, roomId: R.id, slug: R.slug || String(req.params.slug), tx, login, userId: u.userId, username: u.username, state: "pending", status: "", ts: NOW(), done: 0,
-                        secs: 0, text: "", viewerOk: false, cost: 0, save: null });
-      console.log(`[micclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} speaker=${login} job=${j.id}`);
+                        secs: 0, text: "", viewerOk: false, cost: 0, save: null, ...(alias ? { alias } : {}) });
+      console.log(`[micclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} speaker=${alias ? "(a frog name)" : login} job=${j.id}`);
       res.json({ ok: true, id: j.id });
     } catch (e) {
       console.error("[micclip] request:", e);
@@ -245,7 +264,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (String(b.state || "") === "ok") {
       let m4a = null;
       try { m4a = Buffer.from(String(b.data || ""), "base64"); } catch (e) { m4a = null; }
-      if (!m4a || m4a.length < 64 || m4a.length > MAX_BYTES || m4a.toString("latin1", 4, 8) !== "ftyp" || String(b.target || "").toLowerCase() !== c.login) {
+      if (!m4a || m4a.length < 64 || m4a.length > MAX_BYTES || m4a.toString("latin1", 4, 8) !== "ftyp" || String(b.target || "").toLowerCase() !== c.login ||
+          (c.alias && String(b.veil || "") !== "incognito")) {      // (wave 2: Pepe's turn must be the incognito one the frog name is for)
         c.state = "failed"; c.status = "Pepe's clip couldn't be read."; c.done = NOW();
       } else {
         fs.mkdirSync(PENDING_DIR, { recursive: true });
@@ -318,10 +338,11 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (end - start < 1000) return res.status(400).json({ ok: false, error: "Keep at least 1 second." });
       const lim = relay.limited("savemic|" + u.userId, SAVE_GAP, SAVE_BURST, SAVE_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
-      const id = await deps.queueAction(u.userId, { kind: "micclip.save", args: [R.id, c.login, c.id, start, end], tag: "clip", label: "🔊 clip " + c.login });
+      // (wave 2: the action's label - the clipper's own queue on the website - says the frog name, never the login behind it)
+      const id = await deps.queueAction(u.userId, { kind: "micclip.save", args: [R.id, c.login, c.id, start, end], tag: "clip", label: "🔊 clip " + (c.alias || c.login) });
       c.save = id;
       c.done = Math.max(c.done, NOW() - PREVIEW_TTL + 5 * 60 * 1000);   // Pepe has at least 5 more minutes to fetch it
-      console.log(`[micclip] save room=${R.id} viewer=${u.username} speaker=${c.login} clip=${c.id} ${start}-${end}ms action=${id}`);
+      console.log(`[micclip] save room=${R.id} viewer=${u.username} speaker=${c.alias ? "(a frog name)" : c.login} clip=${c.id} ${start}-${end}ms action=${id}`);
       res.json({ ok: true, id });
     } catch (e) {
       res.status(e.message === "busy" ? 429 : 500).json({ ok: false, error: e.message === "busy" ? "You already have a few things waiting — give Pepe a moment." : "Something went wrong — nothing was sent." });
@@ -346,7 +367,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const c = clips.get(String(b.id || ""));
     const f = c ? fileOf(c.id) : null;
     if (!c || c.state !== "ready" || !c.save || String(b.user || "") !== c.username || !f || !fs.existsSync(f)) return res.status(404).json({ ok: false });
-    res.json({ ok: true, room: c.roomId, target: c.login, secs: c.secs, text: c.text, data: fs.readFileSync(f).toString("base64") });
+    // wave 2 (J-7): Pepe posts an incognito turn under the frog name it was said with (veil + alias; target stays bot-to-site only)
+    res.json({ ok: true, room: c.roomId, target: c.login, secs: c.secs, text: c.text, data: fs.readFileSync(f).toString("base64"),
+               ...(c.alias ? { veil: "incognito", alias: c.alias } : {}) });
   });
 
   // 6. Pepe: a published audio capture -> a permanent pad post (both paths)

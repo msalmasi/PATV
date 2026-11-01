@@ -354,6 +354,8 @@ function takeJobs(liveRoomIds, via = "sync") {
     // 1.99aaf: 👻 staff in ghost mode - Pepe keeps them out of the room's mod log (the site audits it: cam_views ghost = 1)
     if ((j.kind === "snap" || j.kind === "camclip") && j.ghost) base.ghost = true;
     if (j.kind === "micclip") { base.target = j.target; base.viewer = j.username; base.tx = j.tx; }   // 1.99fp: 🔊 Clip on a 🎙 line
+    // wave 2 (owner J-7): an incognito turn clipped under its frog name - Pepe posts it as the alias, never the speaker's name
+    if (j.kind === "micclip" && j.alias) { base.alias = j.alias; base.veil = "incognito"; }
     // 1.99il: 💸 a tip made from this pad's page - Pepe says it in the room (target = the recipient's login)
     if (j.kind === "tipnote") { base.target = j.target; base.amount = j.amount; if (j.display) base.display = j.display; }
     if (j.kind === "golive" || j.kind === "nowplaying") { base.streamer = j.streamer; base.pad = j.pad; base.what = j.what || ""; base.link = j.link || ""; }   // 1.99kp / 1.99lr
