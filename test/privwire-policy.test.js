@@ -3,7 +3,8 @@
 // (72b12510: 1.99agq + 1.99ago's mic-stage keep text; the track was built on 6ee3c0a1 and moved here at integration) - with and
 // without the memory switch's and the dated texts (wp1-voice, mic-stage-keep), so shipping dark changes nothing a member reads. With it
 // ON the approved paragraphs show (frog names, the hidden bar, who can see through it, the retention rows, the changelog entry dated
-// by G), and nothing promises the WP-5 evidence clips yet.
+// by G), and nothing promises the WP-5 evidence clips while they are off (locals.evidence null). WP-5: with evidence clips on (or kept),
+// the three approved section H insertions show word for word - the capture bullet's sentence, the section 9 row and the changelog clause.
 //   node --test test/privwire-policy.test.js       (needs git; the comparison half is skipped when the old commit isn't in this clone)
 "use strict";
 const test = require("node:test");
@@ -49,7 +50,7 @@ test("/help: Pepe's incognito / bridge / transcripts cards get the v2 notes only
   } finally { PW.isOn = on; }
 });
 
-test("switch on: the approved section H text shows, dated by G; no evidence-clip promise before WP-5", () => {
+test("switch on: the approved section H text shows, dated by G; no evidence-clip promise while evidence clips are off", () => {
   const now = fs.readFileSync(FILE, "utf8");
   const on = render(now, { privwire: { on: true, g: 1793534400000, g_day: "1 November 2026" } });
   const off = render(now, {});
@@ -59,7 +60,7 @@ test("switch on: the approved section H text shows, dated by G; no evidence-clip
     assert.ok(on.includes(s), "on: " + s);
     assert.ok(!off.includes(s), "off: " + s);
   }
-  assert.ok(!/moderation evidence|evidence clip/i.test(on), "no moderation-evidence sentence until WP-5 ships the evidence store");
+  assert.ok(!/moderation evidence|evidence clip/i.test(on), "no moderation-evidence sentence while evidence clips are off (locals.evidence null)");
   assert.ok(!on.includes("you appear as \"someone\";"), "the old section 3 sentence is replaced");
   // 1.99ago's mic-stage keep paragraph (and its change note) stays after section 3's privwire paragraph with the switch on too
   const onKeep = render(now, { privwire: { on: true, g: 1793534400000, g_day: "1 November 2026" }, policyDates: DATES });
@@ -71,4 +72,38 @@ test("switch on: the approved section H text shows, dated by G; no evidence-clip
   let both = null;
   try { both = render(now, { privwire: { on: true, g: 1793534400000, g_day: "1 November 2026" }, micrec: MR }); } catch (e) { both = null; }
   if (both) assert.ok(both.includes("Your mic-ups are also recorded and kept like everyone's"), "the merged capture bullet with mic recordings on");
+});
+
+// wave 2 WP-5: the three insertions, word for word as approved (section H, M addendum 2; the merged bullet M addendum 3) - never reworded
+const EV_SENTENCE = " An administrator or the pad's owner can save your mic audio as moderation evidence after revealing who you are - never posted, kept 30 days, and every evidence clip is logged.";
+const EV_ROW = "<tr><td>Moderation evidence clips of incognito or hidden people</td><td>30 days (longer only under a legal hold)</td></tr>";
+const EV_CHANGE = "for moderation (each reveal logged; kept for the pad's chat window); they can also save an incognito or hidden person's mic audio as moderation evidence (logged, 30 days, never posted). Neither setting mutes";
+test("WP-5: evidence clips on -> the approved capture sentence, section 9 row and changelog clause, exactly; kept clips alone keep the row", () => {
+  const now = fs.readFileSync(FILE, "utf8");
+  const PWON = { on: true, g: 1793534400000, g_day: "1 November 2026" };
+  const EV = { on: true, any: false, on_at: 1793600000000, on_day: "2 November 2026" };
+  const both = render(now, { privwire: PWON, evidence: EV });
+  assert.ok(both.includes("If you're hidden, members can't clip them." + EV_SENTENCE), "the capture sentence, right after the hidden-clip sentence");
+  assert.ok(both.includes(EV_ROW), "the section 9 row");
+  assert.ok(both.includes(EV_CHANGE), "the changelog clause, before the full stop");
+  assert.equal(both.split(/moderation evidence/i).length - 1, 3, "three places, no more");
+  // with mic recordings too: the sentence stays before the recordings sentence (the merged bullet)
+  const withRec = render(now, { privwire: PWON, evidence: EV, micrec: { on_day: "28 October 2026", on_at: 1793100000000, ret: null } });
+  assert.ok(withRec.includes(EV_SENTENCE + " Your mic-ups are also recorded and kept like everyone's"), "before the mic-recordings sentence");
+  // privacy wire v2 on, evidence clips off: none of it
+  const pwOnly = render(now, { privwire: PWON, evidence: null });
+  for (const s of [EV_SENTENCE, EV_ROW, "they can also save an incognito"]) assert.ok(!pwOnly.includes(s), "evidence off: " + s.slice(0, 40));
+  // privacy wire v2 off but clips still kept (switched off later): the retention row stays true until the last one goes
+  const keptOnly = render(now, { evidence: { on: false, any: true, on_at: 1793600000000, on_day: "2 November 2026" } });
+  assert.ok(keptOnly.includes(EV_ROW), "the retention row while clips are kept");
+  assert.ok(!keptOnly.includes(EV_SENTENCE.trim()) && !keptOnly.includes("they can also save an incognito"), "the privwire paragraphs stay off");
+  // and with evidence null (the default) the page is the switch-off page: byte-identical (the first test compares that with 72b12510)
+  assert.equal(render(now, { evidence: null }), render(now, {}));
+});
+
+test("WP-5: terms.js dates /privacy by the evidence switch's first ON too (evidence.privacyCopy) and passes it to the view", () => {
+  const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
+  assert.match(src, /evidence = await require\("\.\/evidence"\)\.privacyCopy\(\)/);
+  assert.match(src, /\[evidence && evidence\.on_at, evidence && evidence\.on_day\]/);
+  assert.match(src, /privwire, evidence, policyDates \}\)/);
 });
