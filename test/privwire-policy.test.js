@@ -14,6 +14,7 @@ const ejs = require("ejs");
 
 const repo = path.resolve(__dirname, "..");
 const FILE = path.join(repo, "views", "privacy.ejs");
+process.chdir(fs.mkdtempSync(path.join(require("os").tmpdir(), "privwire-policy-test-")));   // (help.js opens ./myapp.db: a temp one)
 const lf = (s) => String(s).replace(/\r\n/g, "\n");
 const BASE = { user: null, title: "Privacy Policy", VERSION: "x", UPDATED: "1 November 2026", enforced: false, chatlog: null, hubErasure: null,
                micrec: null, memory: null, policyDates: {} };
@@ -27,6 +28,23 @@ test("switch off: the privacy page is byte for byte the pre-WP-2 one (plain, wit
   for (const extra of [{}, { memory: MEMORY }, { privwire: null }]) {
     assert.equal(render(now, extra), render(old.stdout, extra), "identical with " + JSON.stringify(extra));
   }
+});
+
+test("/help: Pepe's incognito / bridge / transcripts cards get the v2 notes only while the switch is on", async () => {
+  process.env.SECRET_KEY = process.env.SECRET_KEY || "test-secret";
+  const H = require(path.join(repo, "help"));
+  const PW = require(path.join(repo, "privwire"));
+  const cards = [{ id: "incognito", summary: "be someone" }, { id: "bridge", summary: "left out" }, { id: "transcripts", summary: "off" }, { id: "dice", summary: "roll" }];
+  assert.deepEqual(H.withPrivwireNotes(cards), cards, "off (the default): byte-equal - the same objects");
+  const on = PW.isOn;
+  PW.isOn = () => true;
+  try {
+    const out = H.withPrivwireNotes(cards);
+    assert.match(out[0].details, /random frog name/);
+    assert.match(out[1].details, /blacked-out bar/);
+    assert.match(out[2].details, /never reach the website/);
+    assert.equal(out[3], cards[3], "other cards untouched");
+  } finally { PW.isOn = on; }
 });
 
 test("switch on: the approved section H text shows, dated by G; no evidence-clip promise before WP-5", () => {

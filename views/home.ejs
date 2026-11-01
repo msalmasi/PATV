@@ -849,7 +849,8 @@
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     var feed = document.getElementById('lrFeed'), cursor = 0, started = false, timer = null, fails = 0, lastP = '', lastM = '';
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    function label(u) { return !u || u.anon ? _t('js.home.room.someone', 'someone') : u.former ? _t('js.pad.chat.former', 'former member') : (u.display || u.login); }
+    // (wave 2: a veiled person's frog name - only the server sets u.alias on an anon user)
+    function label(u) { return u && u.anon && /^[A-Z][A-Za-z -]{2,30}$/.test(String(u.alias || '')) ? String(u.alias) : !u || u.anon ? _t('js.home.room.someone', 'someone') : u.former ? _t('js.pad.chat.former', 'former member') : (u.display || u.login); }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function nameEl(u) {
       // 1.99ea: the name is the PATV display name (server-resolved by login) linking to the profile,
@@ -879,7 +880,11 @@
       if (it.k === 'msg' || it.k === 'tx') {
         var d = el('div', 'ln' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
         if (it.k === 'tx') d.title = _t('js.home.room.said_on_mic', 'Said on the mic (auto-transcribed)');
-        d.appendChild(nameEl(it.u)); d.appendChild(document.createTextNode(it.k === 'tx' ? '“' + it.text + '”' : it.text)); d.appendChild(el('span', 't', hhmm(it.ts)));
+        d.appendChild(nameEl(it.u));
+        // wave 2 (spec D.4): a hidden line is the bar here too - never its words (it has none on the wire)
+        if (/^[sml]$/.test(String(it.mask || ''))) { var bar = el('span', 'redact redact-' + it.mask); bar.appendChild(el('span', 'sr-only', it.k === 'tx' ? _t('js.pad.veil.hidden_tx', 'hidden transcript') : _t('js.pad.veil.hidden_msg', 'hidden message'))); d.appendChild(bar); }
+        else d.appendChild(document.createTextNode(it.k === 'tx' ? '“' + it.text + '”' : it.text));
+        d.appendChild(el('span', 't', hhmm(it.ts)));
         return d;
       }
       if (it.k === 'live') {

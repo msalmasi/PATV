@@ -554,10 +554,30 @@ function withVoiceNotes(entries) {
   });
 }
 
+// ── wave 2 (incognito/mic-stage design section H, behind the Privacy wire v2 switch): Pepe's catalog says "someone" / "left out"
+// for incognito, !bridge hide and !transcripts - true until go-live. While the switch is on, the page adds what changed to those
+// cards (Pepe's own help-data stays as it is; he can't know the site's switch when he builds it). Off: nothing is added.
+const PRIVWIRE_NOTES = {
+  incognito: "On the website you now show up under a random frog name (like \"Soggy Bullfrog\") instead of \"someone\" - a new one each visit to a pad after an hour away, a different one in each pad. PATV administrators and the pad's owner can reveal who is behind it, for moderation; every reveal is logged.",
+  bridge: "!bridge hide now means \"hidden\": the website shows you under a random frog name and your messages and mic transcripts as a blacked-out bar, instead of leaving you out. PATV administrators and the pad's owner can reveal who is behind it and read hidden lines, for moderation; every reveal is logged.",
+  transcripts: "With !transcripts off your mic transcripts still never reach the website; your mic grabs and drops are shown (under your frog name if you're incognito or hidden).",
+};
+function withPrivwireNotes(entries) {
+  let on = false;
+  try { on = require("./privwire").isOn(); } catch (e) { on = false; }
+  if (!on) return entries;
+  return (entries || []).map((e) => {
+    const add = e && PRIVWIRE_NOTES[e.id];
+    if (!add) return e;
+    const base = e.details && String(e.details).trim() ? e.details : e.summary;
+    return { ...e, details: String(base || "") + "\n\n" + add };
+  });
+}
+
 // ── the page model ──
 async function pageModel() {
   const cur = await current();
-  const d = { ...cur.data, entries: withVoiceNotes(withMicrecNotes(cur.data.entries || [])) };
+  const d = { ...cur.data, entries: withPrivwireNotes(withVoiceNotes(withMicrecNotes(cur.data.entries || []))) };
   const cats = (d.categories || []).map((c) => ({ ...c, entries: (d.entries || []).filter((e) => e.category === c.id) })).filter((c) => c.entries.length);
   // the browser's search index: compact, no details (the filter reads each card's text)
   const index = (d.entries || []).map((e) => ({ id: e.id, title: e.title, commands: e.commands, aliases: e.aliases || [], syntax: e.syntax,
@@ -674,5 +694,6 @@ module.exports = {
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
   VOICE_NOTE, withVoiceNotes,                                       // WP-1 (design section H)
+  PRIVWIRE_NOTES, withPrivwireNotes,                                // wave 2 (design section H, behind the Privacy wire v2 switch)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };
