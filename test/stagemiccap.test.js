@@ -85,6 +85,18 @@ test("cam table enforces strict consent, veil, exact and pin rules and never fet
   assert.deepEqual(T.entries({ src: [cam("alice", { watch: "hidden" })] }), []);
   assert.equal((await T.tileFor({ kind: "unknown", id: "alice", watch: "ok" }, R, U)).mode, "blank");
 });
+test("wave2 WP-4 (F.3): with a dynamic template a tile the viewer reported stays a (blank) cell, so the capture keeps the page's template; a stage of only such tiles isn't capturable", async () => {
+  const src = [cam("alice"), cam("bob", { watch: "hidden" }), cam("carl", { newest: true })];
+  const p = { src, dyn: { n: 3, t: "d3", main: "carl" } };
+  assert.deepEqual(T.entries(p).map((e) => e.id), ["alice", "bob", "carl"], "kept with dyn");
+  const rs = M.rects(p);
+  assert.equal(rs.length, 3, "d3 - the template the viewer sees, not the legacy grid");
+  assert.equal(rs[0].id, "carl");
+  assert.equal((await T.tileFor(src[1], R, U)).mode, "blank", "drawn as a blank cell, never the cam");
+  assert.deepEqual(T.entries({ src }).map((e) => e.id), ["alice", "carl"], "without dyn: left out as before");
+  program = { on: true, src: [cam("bob", { watch: "hidden" })], dyn: { n: 1, t: "d1", main: "bob" } };
+  await assert.rejects(M.start(options()), /Nobody/, "nothing a viewer may see: not usable");
+});
 test("text is XML escaped, Unicode bounded and pictographs omitted", () => {
   const s = T.text('<Bob & "friends">🐸'); assert.equal(s, "&lt;Bob &amp; &quot;friends&quot;&gt;");
   assert.equal(Array.from(T.text("a".repeat(50))).length, 40); assert.ok(T.text("a".repeat(50)).endsWith("…"));

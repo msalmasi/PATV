@@ -90,6 +90,8 @@
 //                and stamps S.evictAt). Pepe frees the slot a tick later: a slots_busy within EVICT_WINDOW_MS of that, the
 //                first for that tile, is tried again once after EVICT_RETRY_MS - card "full", never soft, no backoff, no
 //                liveBlock; a second one takes the normal path.
+// wave2 WP-4 (F.3): the pad layout "dynamic" - capped like auto (9), its legacy shape is auto's; micfollow.js picks the main
+// cell with dynPick (the active speaker, at most every main_hold_s) and sends dyn {n, t, main} beside the legacy layout.
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
 // notice_first / spam / touch / deferred / keep / keep_drop / keep_taken.
 "use strict";
@@ -150,10 +152,16 @@ const FIELDS = Object.freeze({
   // HLS-remux question (J-10 ops) is decided and the owner OKs it at /stage/admin; a saved row without the key reads this default
   warm_keep_s:           { def: STAGING ? 180 : 0, min: 0, max: 600 },
   warm_max:              { def: 3, min: 0, max: 6 },            //   ... at most this many kept relays site-wide
+  // wave2 WP-4 (F.3, J-14): the "dynamic" layout (d1-d9 templates, the active speaker in the main cell). Off on prod: no pad can
+  // pick it, and a pad that already did shows "auto" (no dyn field) until staff switch it on at /stage/admin
+  dynamic:               { def: STAGING, bool: true },
+  main_hold_s:           { def: 3, min: 0, max: 15 },           //   ... the main cell changes at most this often (hysteresis)
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 
-const LAYOUTS = Object.freeze(["auto", "single", "split", "grid", "pip"]);
+// wave2 WP-4 (F.3): + "dynamic" - the legacy `layout` sent with it is the auto shape (an old page turns an unknown layout
+// into "single"), plus dyn {n, t: "d1".."d9", main} for a page that knows it (micfollow.snapshot / viewFor)
+const LAYOUTS = Object.freeze(["auto", "single", "split", "grid", "pip", "dynamic"]);
 const SHAPES = Object.freeze(["single", "split", "grid4", "grid9", "pip"]);
 const DEFAULT_VIEWS = Object.freeze(["first", "after_streams", "tab"]);
 const KEEP_RECENT = Object.freeze([0, 1, 2, 5]);
@@ -267,20 +275,32 @@ function normalizePad(input, opts = {}) {
   return r;
 }
 
-/** How many people a pad layout shows at most. */
+/** How many people a pad layout shows at most (wave2 WP-4: dynamic 9, like auto / grid). */
 function layoutCap(layout) {
   if (layout === "single") return 1;
   if (layout === "split" || layout === "pip") return 2;
   return 9;
 }
-/** The layout shape for n people on the mic stage (§6.1). */
+/** The layout shape for n people on the mic stage (§6.1). wave2 WP-4: "dynamic" -> the auto shape (the legacy `layout`). */
 function layoutFor(layout, n) {
   n = Math.max(0, n | 0);
   if (layout === "single") return "single";
   if (layout === "split") return n <= 1 ? "single" : "split";
   if (layout === "pip") return n <= 1 ? "single" : "pip";
   if (layout === "grid") return n <= 1 ? "single" : n <= 4 ? "grid4" : "grid9";
-  return n <= 1 ? "single" : n === 2 ? "split" : n <= 4 ? "grid4" : "grid9";   // auto
+  return n <= 1 ? "single" : n === 2 ? "split" : n <= 4 ? "grid4" : "grid9";   // auto (and dynamic's legacy shape)
+}
+/** wave2 WP-4 (F.3): the dynamic layout's main cell, with hysteresis. prev = {id, at} | null; ids = the program's entries in
+ *  place order; want = the active speaker's id (micfollow: the pin that holds the mic and grabbed last, else core.newest) or
+ *  null. The main moves to `want` - or, when the current main left, to the first entry - but never sooner than holdMs after
+ *  the last move while the current main is still there. -> {id, at} | null (no entries) */
+function dynPick(prev, ids, want, t, holdMs) {
+  const has = (id) => id != null && ids.includes(id);
+  const cur = prev && has(prev.id) ? prev : null;
+  const target = has(want) ? want : cur ? cur.id : ids[0];
+  if (target == null) return null;
+  if (cur && (target === cur.id || t - cur.at < Math.max(0, holdMs || 0))) return cur;
+  return { id: target, at: t };
 }
 /** mfix: the shape with `pins` pinned cams besides `tiles` mic tiles - a single layout with a pin is picture in picture. */
 function shapeFor(layout, tiles, pins) {
@@ -323,6 +343,7 @@ function newState() {
     camUnk: new Set(),         //   ... review: the logins whose cam the roster couldn't classify at the last step
     kept: new Map(),           // wave2 WP-4 (F.2): login -> {leftAt, until} - relays kept running after their tile left the stage
     evictAt: 0,                //   ... when micfollow.js last evicted a kept relay for this pad's open (the slots_busy retry)
+    dynMain: null,             // wave2 WP-4 (F.3): {id, at} - the dynamic layout's main cell (micfollow.js dynTick, dynPick)
     changes: [],               // times of the last minute's changes
     lastChangeAt: -Infinity,
     v: 0, active: false, running: false, staleSince: 0, whyOff: null,
@@ -1170,4 +1191,5 @@ module.exports = {
   normalize, normalizePad, layoutCap, layoutFor, shapeFor, maxPins, newState, step, holdDone, sessionEnded, stillFailed, yieldTile, cutNow, clearStage, hot, speaking,
   shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
   dropKept, keepFor, keptCheck, EVICT_WINDOW_MS, EVICT_RETRY_MS,                                                // wave2 WP-4 (F.2)
+  dynPick,                                                                                                      // wave2 WP-4 (F.3)
 };

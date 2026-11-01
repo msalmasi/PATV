@@ -364,7 +364,11 @@ test("pad settings + site knobs normalize like the other settings (ranges, choic
   const p = M.normalizePad({ on: "on", layout: "GRID", default_view: "tab", max_people: 12, max_live: 3 }, { maxLive: 2 });
   assert.deepEqual(p.cfg, { on: true, layout: "grid", default_view: "tab", max_people: 9, max_live: 2, keep_recent: 2 });
   assert.ok(p.errors.max_people && p.errors.max_live);
-  assert.equal(M.normalizePad({ layout: "huge" }).errors.layout, "one of auto, single, split, grid, pip");
+  // (wave2 WP-4: + dynamic - the site switch, not normalizePad, decides whether a pad may pick it: micfollow.setPad)
+  assert.equal(M.normalizePad({ layout: "huge" }).errors.layout, "one of auto, single, split, grid, pip, dynamic");
+  // wave2 WP-4: everything new ships dark on prod (STAGING unset here) - today's behaviour by default
+  assert.deepEqual([M.DEFAULTS.warm_keep_s, M.DEFAULTS.warm_max, M.DEFAULTS.dynamic, M.DEFAULTS.main_hold_s], [0, 3, false, 3]);
+  assert.deepEqual(M.normalize({ enabled: true }, { lenient: true }).cfg.warm_keep_s, 0, "a saved row without the key reads the default");
   const c = M.normalize({ min_hold_s: "3", cold_open: "off", max_changes_per_min: 50 });
   assert.equal(c.cfg.min_hold_s, 3);
   assert.equal(c.cfg.cold_open, false);
@@ -1131,6 +1135,29 @@ test("41. 1.99afl S4: Pepe's cam relay not there ('nopepe') says so on the card 
   assert.ok(!h.actions.some((a) => a.a === "still" || a.a === "hold"));
   h.at(2 + h.C.soft_retry_s + 1);
   assert.ok(h.actions.some((a) => a.a === "hold" && a.login === "y"), "tried again");
+});
+
+test("47. wave2 F.3 dynamic: a layout like auto (cap 9, the auto shape as the legacy layout); dynPick moves the main to the active speaker at most every main_hold_s, at once when the main left", () => {
+  assert.ok(M.LAYOUTS.includes("dynamic"));
+  assert.equal(M.layoutCap("dynamic"), 9);
+  for (const n of [0, 1, 2, 3, 4, 5, 9]) assert.equal(M.layoutFor("dynamic", n), M.layoutFor("auto", n), "n=" + n);
+  assert.equal(M.shapeFor("dynamic", 1, 1), "split", "a pin beside one tile: never pip (that's single's rule)");
+  const H = 3000;
+  let m = M.dynPick(null, ["a"], "a", 0, H);
+  assert.deepEqual(m, { id: "a", at: 0 });
+  m = M.dynPick(m, ["a", "b"], "b", 1000, H);
+  assert.equal(m.id, "a", "within main_hold_s: stays");
+  m = M.dynPick(m, ["a", "b"], "b", 3000, H);
+  assert.deepEqual(m, { id: "b", at: 3000 }, "then the active speaker");
+  m = M.dynPick(m, ["a", "b"], null, 3500, H);
+  assert.equal(m.id, "b", "nobody speaking: the current main stays");
+  m = M.dynPick(m, ["a", "c"], null, 3600, H);
+  assert.deepEqual(m, { id: "a", at: 3600 }, "the main left: the first entry at once (no hysteresis for a gone main)");
+  m = M.dynPick(m, ["a", "c"], "c", 3700, H);
+  assert.equal(m.id, "a", "a fresh main holds too");
+  assert.equal(M.dynPick(m, [], "c", 9000, H), null, "nobody on the stage");
+  assert.deepEqual(M.dynPick(null, ["x", "y"], "zz", 0, H), { id: "x", at: 0 }, "an unknown want: the first");
+  assert.deepEqual(M.dynPick({ id: "x", at: 0 }, ["x", "y"], "y", 1, 0), { id: "y", at: 1 }, "main_hold_s 0: at once");
 });
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.2, J-10): kept relays ("warm keep") ──

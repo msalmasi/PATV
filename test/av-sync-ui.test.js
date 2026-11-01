@@ -428,6 +428,20 @@ test("C2 stable anonymous IDs share exact timing between reordered mic and roste
   shown = s.api.micView("pad", { members: [a], mic: [] }, cb); assert.equal(shown.mic.length, 0);
 });
 
+test("wave2 WP-4 (F.3): the dynamic layout's ring is delayed like newest; dyn follows the delayed view (the page re-fits the template when its n differs)", async () => {
+  const s = await gated(); let shown; const cb = p => { shown = plain(p); };
+  const dynP = (ids, ring, main) => { const p = program(ids, { dyn: { n: ids.length, t: "d" + ids.length, main } }); p.src.forEach((x) => { if (ring.includes(x.id)) x.ring = true; }); return p; };
+  s.api.gateProgram("pad", dynP(["a"], [], "a"), cb); await s.advance(700);
+  assert.equal(shown.src[0].ring, undefined);
+  s.api.gateProgram("pad", dynP(["a"], ["a"], "a"), cb);
+  assert.equal(shown.src[0].ring, undefined, "not before the sound catches up");
+  await s.advance(700); assert.equal(shown.src[0].ring, true, "then the ring");
+  s.api.gateProgram("pad", dynP(["a", "b"], ["a", "b"], "b"), cb);
+  assert.equal(shown.src.length, 1, "b is born later");
+  assert.deepEqual(shown.dyn, { n: 1, t: "d1", main: "a" }, "the delayed view's own dyn (n = what it shows)");
+  await s.advance(700); assert.equal(shown.src.length, 2); assert.equal(shown.dyn.main, "b");
+});
+
 test("C1 follows the delayed newest/recent merge table for a short grab retained as a recent tile", async () => {
   const s = await gated(); let shown; const cb = p => { shown = plain(p); };
   s.api.gateProgram("pad", program(["a"]), cb); await s.advance(200);

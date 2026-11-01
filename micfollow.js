@@ -624,6 +624,7 @@ function stepPad(roomId, t = now(), R) {
   if (!why) { bump("holders_seen", holders.length + unproven, t, P); bump("proven", holders.length, t, P); bump("unproven", unproven, t, P); }
   const r = core.step(P.state, input, cfg(), t);
   apply(P, R, r.actions, t);
+  dynTick(P, t);                                 // wave2 WP-4 (F.3): the dynamic layout's main cell (hysteresis)
   for (const l of want) refresh(l, P.roomId);
   return r;
 }
@@ -1521,11 +1522,10 @@ async function watchOf(login, userId, t = now(), roomId = null) {
   if (GATE.size > 20000) GATE.delete(GATE.keys().next().value);
   return code;
 }
-/** A synchronous copy of the pad's program (bridge.liveView takes it before any await, like members / mic). */
-function snapshot(roomId, t = now()) {
-  const P = PADS.get(String(roomId));
-  if (!P || !P.settings.on) return null;
-  const S = P.state, lay = S.layoutOverride || P.settings.layout;
+/** The program's entries in place order: 📌 pins first, then the mic tiles; who's the newest speaker (a pin that holds the mic
+ *  and grabbed last - pinNew - else core.newest). -> {pins, pinNew, nw} */
+function stageEntries(P, t) {
+  const S = P.state;
   let nw = core.newest(S);
   // mfix: 📌 pinned cams first (fixed places), then the mic tiles. A pinned person who holds the mic is highlighted on their
   // pin when they grabbed it last; a pin's picture follows its relay (opened like a cam slot)
@@ -1538,13 +1538,44 @@ function snapshot(roomId, t = now()) {
   let pinNew = null;
   if (!S.speaking) for (const p of pins) if (p.hold != null && (!pinNew || p.hold > pinNew.hold) && (!nw || p.hold > (S.seen.get(nw.login) || {}).since)) pinNew = p;
   if (pinNew) nw = null;
-  const tiles = [...pins.map((p) => ({ login: p.login, pos: p.pos, pin: true, newest: p === pinNew, since: p.since, video: p.video, why: p.why })),
+  return { pins, pinNew, nw };
+}
+/** wave2 WP-4 (F.3): does pad P show the dynamic layout now? Its layout (or the owner's stage-bar choice) AND the site switch. */
+const dynOn = (P) => cfg().dynamic === true && (P.state.layoutOverride || P.settings.layout) === "dynamic";
+/** ... after each step: the main cell - the active speaker (the newest pin / tile holding the mic), else the current main,
+ *  else the first entry - moving at most every main_hold_s (core.dynPick). A move bumps v (pages repaint). */
+function dynTick(P, t = now()) {
+  const S = P.state;
+  if (!dynOn(P) || S.whyOff) { S.dynMain = null; return false; }
+  const { pins, pinNew, nw } = stageEntries(P, t);
+  const ids = [...pins.map((p) => p.login), ...S.tiles.map((x) => x.login)];
+  const want = pinNew ? pinNew.login : nw ? nw.login : null;
+  const next = core.dynPick(S.dynMain, ids, want, t, cfg().main_hold_s * 1000);
+  const moved = (S.dynMain && S.dynMain.id) !== (next && next.id);
+  S.dynMain = next;
+  if (moved && next) { S.v++; try { BR().touch(P.roomId); } catch (e) { /* no bridge */ } }
+  return moved;
+}
+/** A synchronous copy of the pad's program (bridge.liveView takes it before any await, like members / mic). */
+function snapshot(roomId, t = now()) {
+  const P = PADS.get(String(roomId));
+  if (!P || !P.settings.on) return null;
+  const S = P.state, lay = S.layoutOverride || P.settings.layout;
+  const { pins, pinNew, nw } = stageEntries(P, t);
+  // wave2 WP-4 (F.3): in the dynamic layout every current holder's tile gets the mic ring (`newest` keeps its meaning)
+  const dyn = dynOn(P) && !S.whyOff;
+  const ring = (holds) => (dyn && holds && !S.speaking ? { ring: true } : {});
+  const tiles = [...pins.map((p) => ({ login: p.login, pos: p.pos, pin: true, newest: p === pinNew, since: p.since, video: p.video, why: p.why, ...ring(p.hold != null) })),
                  ...S.tiles.map((x) => ({ login: x.login, pos: pins.length + x.pos, newest: x === nw, since: x.addedAt, video: x.video || "card", why: x.why || null,
-                                          recent: x.relAt != null }))];
+                                          recent: x.relAt != null, ...ring(x.relAt == null) }))];
+  const main = dyn && tiles.length ? (S.dynMain && tiles.some((x) => x.login === S.dynMain.id) ? S.dynMain.id : (tiles.find((x) => x.newest) || tiles[0]).login) : null;
   return { roomId: P.roomId, v: S.v, running: S.running && !S.whyOff, whyOff: S.whyOff || null,
            active: !!S.active || pins.some((p) => p.video === "live" || p.video === "starting"), default_view: P.settings.default_view,
-           layout: core.shapeFor(lay, S.tiles.length, pins.length), fixed: lay !== "auto", frozen_until: S.frozenUntil > t ? S.frozenUntil : null,
+           // (a stored "dynamic" while the site switch is off reads as auto: not fixed, no dyn)
+           layout: core.shapeFor(lay, S.tiles.length, pins.length), fixed: lay !== "auto" && (lay !== "dynamic" || dyn), frozen_until: S.frozenUntil > t ? S.frozenUntil : null,
            override: S.layoutOverride, padLayout: P.settings.layout, unproven: S.unproven,
+           ...(main ? { dyn: { n: tiles.length, t: "d" + tiles.length, main } } : {}),
+           dynOk: cfg().dynamic === true || P.settings.layout === "dynamic" || S.layoutOverride === "dynamic",
            // the neutral card (no tiles) - or, mfix, tiles kept up while speech nobody can show / Pepe runs (dimmed on the page)
            neutral: S.speaking || (tiles.length ? null : S.neutral || null),
            excluded_n: [...(EXCL.get(P.roomId) || new Map()).values()].filter((e) => e.until == null || e.until > t).length,
@@ -1568,7 +1599,8 @@ async function viewFor(snap, R, userId, nameOf, t = now()) {
     base.why_off = snap.whyOff;
     base.manage = { excluded_n: snap.excluded_n, unproven_n: snap.unproven, frozen_until: snap.frozen_until, layout_override: snap.override, layout_pad: snap.padLayout,
                     freeze_min: Math.min(30, cfg().freeze_max_min),       // ❄ / 🧹 freeze this long (the site's freeze_max_min caps it)
-                    pins_room: snap.pins_room || 0 };                      // mfix: 📌 how many cams may be pinned here
+                    pins_room: snap.pins_room || 0,                        // mfix: 📌 how many cams may be pinned here
+                    ...(snap.dynOk ? { dyn_ok: true } : {}) };            // wave2 WP-4: the stage bar may offer "Dynamic"
   }
   if (userId) base.report = true;                                          // ⚑ on each tile (signed in; the route checks the rest)
   if (!userId) return { ...base, signin: true, src: [] };
@@ -1591,7 +1623,13 @@ async function viewFor(snap, R, userId, nameOf, t = now()) {
     src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: patv && patv.avatar ? patv.avatar : null,
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,
                video: x.video, why: x.video === "card" ? x.why || "full" : null, watch,
-               ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(own && own === x.login ? { mine: true } : {}) });
+               ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
+               ...(own && own === x.login ? { mine: true } : {}) });
+  }
+  // wave2 WP-4 (F.3): the dynamic template over THIS viewer's entries (a tile they reported stays a cell: "hidden for you")
+  if (snap.dyn && src.length) {
+    const main = src.some((s) => s.id === snap.dyn.main) ? snap.dyn.main : (src.find((s) => s.newest) || src[0]).id;
+    return { ...base, src, dyn: { n: src.length, t: "d" + src.length, main } };
   }
   return { ...base, src };
 }
@@ -1621,8 +1659,15 @@ async function ownerState(roomId, t = now()) {
     .map(([login, e]) => ({ login, until: e.until, reason: e.reason, by: e.by, at: e.at })).sort((a, b) => b.at - a.at);
   return { settings: { ...s }, on: !!s.on, running: !!(P && P.state.running && s.on), why_off: s.on ? why : null, can_run: !runWhy, run_why: runWhy || null,
            tiles: P ? P.state.tiles.length : 0, unproven_n: P ? P.state.unproven : 0, excluded: ex, max_live_cap: caps.maxLive, max_people_cap: caps.maxPeople,
-           site_on: cfg().enabled === true, layouts: core.LAYOUTS, default_views: core.DEFAULT_VIEWS,
+           // (wave2 WP-4: "dynamic" only while its site switch is on - or the pad already uses it, so a save never silently
+           // turns it into "auto")
+           site_on: cfg().enabled === true, layouts: layoutsFor(s, P), default_views: core.DEFAULT_VIEWS,
            keep_recent: core.KEEP_RECENT, pins: pinsOf(roomId).length, pins_room: P ? pinRoom(P) : 0 };    // mfix
+}
+/** wave2 WP-4 (F.3): the layouts a pad owner may pick - "dynamic" while the site switch is on or the pad already uses it. */
+function layoutsFor(s, P) {
+  const uses = (s && s.layout === "dynamic") || (P && P.state.layoutOverride === "dynamic");
+  return cfg().dynamic === true || uses ? core.LAYOUTS.slice() : core.LAYOUTS.filter((l) => l !== "dynamic");
 }
 /** How far a pad owner may go: the site knobs max_people / max_live (micfollow_cfg) and live cams' own max_live (§3.6). */
 function padCaps() {
@@ -1651,6 +1696,10 @@ async function setPad(roomId, body, actor, t = now()) {
   const n = r.cfg;
   // an 18+ pad: no mic follows until a per-pad ask flow exists (addendum 14.1.2 #8) - switching it OFF always works
   if (n.on && padAdult(P.roomId)) throw new Refuse(409, "Mic follows can't be switched on for an 18+ pad yet.", "adult");
+  // wave2 WP-4 (F.3): the dynamic layout ships dark - a pad can't pick it until staff switch it on (a pad already on it keeps it)
+  if (n.layout === "dynamic" && P.settings.layout !== "dynamic" && cfg().dynamic !== true) {
+    throw new Refuse(400, "layout: one of " + core.LAYOUTS.filter((l) => l !== "dynamic").join(", "), "bad", { fields: { layout: "not available yet" } });
+  }
   // mfix: saving a new layout for the pad replaces the stage bar's choice (the owner just picked one); otherwise it's kept
   const override = body && body.layout != null && n.layout !== P.settings.layout ? null : P.state.layoutOverride;
   await runQuery(`INSERT INTO micfollow_pads (room_id, on_, layout, default_view, max_people, max_live, keep_recent, layout_override, updated, updated_by)
@@ -2077,7 +2126,12 @@ function register(app, { addUser, bySlug, isLive }) {
     try {
       const { u, R } = await owner(req);
       const want = (req.body || {}).layout;
-      if (want != null && want !== "" && !core.LAYOUTS.includes(String(want))) throw new Refuse(400, "Pick auto, single, split, grid or pip.", "bad");
+      // (wave2 WP-4: "dynamic" only while its site switch is on - layoutsFor)
+      const P0 = padOf(R.id, false);
+      const can = layoutsFor(P0 ? P0.settings : null, P0);
+      if (want != null && want !== "" && !can.includes(String(want))) {
+        throw new Refuse(400, can.includes("dynamic") ? "Pick auto, single, split, grid, pip or dynamic." : "Pick auto, single, split, grid or pip.", "bad");
+      }
       // mfix: kept (micfollow_pads.layout_override) until the owner resets it - never dropped when the stage empties
       const lay = await setOverride(R.id, want == null || want === "" ? null : String(want));
       try { BR().touch(R.id); } catch (e) { /* none */ }

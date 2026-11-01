@@ -2062,3 +2062,76 @@ test("67. wave2 F.2: !livecam off, the mic-stage switch, private activity, an ex
     }
   } finally { await MF.setCfg(ADMIN, { warm_keep_s: 0, relays_max: 2, reason: "test" }); }
 });
+
+// ── wave2 WP-4 (the incognito / mic-stage spec F.3, J-14): the dynamic layout ──
+test("68. wave2 F.3 dynamic: dark until its switch (a pad can't pick it; a stored one shows as auto with no dyn); on: the legacy layout still goes out with dyn {n, t, main}, rings on every holder, the main moves at most every main_hold_s, a pin takes it only by the pinNew rule", async () => {
+  await reset(); await plainPad();
+  assert.equal(MF.cfg().dynamic, false, "ships dark");
+  let st = await MF.ownerState(ROOM.id);
+  assert.ok(!st.layouts.includes("dynamic"), "not offered");
+  await assert.rejects(MF.setPad(ROOM.id, { layout: "dynamic" }, "test"), (e) => e.status === 400);
+  let r = await post(`/api/rooms/${slug()}/micfollow/layout`, { layout: "dynamic" }, "u_owner");
+  assert.equal(r.status, 400, "nor on the stage bar");
+  await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 15, reason: "test" });
+  try {
+    st = await MF.ownerState(ROOM.id);
+    assert.ok(st.layouts.includes("dynamic"));
+    await MF.setPad(ROOM.id, { layout: "dynamic" }, "test");
+    await onStage(["alice"]);
+    let snap = MF.snapshot(ROOM.id);
+    assert.equal(snap.layout, "single", "the legacy layout (an old page draws it)");
+    assert.deepEqual(snap.dyn, { n: 1, t: "d1", main: "alice" });
+    assert.equal(snap.tiles[0].ring, true, "the holder's ring");
+    // bob grabs 6 s later: the newest speaker - but the main holds main_hold_s (15 s) since alice took it
+    up("alice"); await at(3, ["alice", "bob"]); up("alice"); await at(3, ["alice", "bob"]); up("alice", "bob"); await at(1, ["alice", "bob"]);
+    snap = MF.snapshot(ROOM.id);
+    assert.deepEqual(snap.tiles.map((x) => x.login), ["alice", "bob"]);
+    assert.equal(snap.layout, "split");
+    assert.equal(snap.tiles.find((x) => x.login === "bob").newest, true);
+    assert.deepEqual(snap.dyn, { n: 2, t: "d2", main: "alice" }, "hysteresis: not yet");
+    assert.ok(snap.tiles.every((x) => x.ring), "both holders get rings (a 2-slot room)");
+    const v0 = MF._pads.get(ROOM.id).state.v;
+    up("alice", "bob"); await at(9, ["alice", "bob"]);
+    snap = MF.snapshot(ROOM.id);
+    assert.equal(snap.dyn.main, "bob", "after main_hold_s the newest speaker takes the main");
+    assert.ok(MF._pads.get(ROOM.id).state.v > v0, "a move bumps v (pages repaint)");
+    // viewFor: the template over this viewer's own entries
+    let v = await MF.viewFor(snap, R, "u_v1", null);
+    assert.deepEqual(v.dyn, { n: 2, t: "d2", main: "bob" });
+    assert.equal(v.layout, "split");
+    assert.ok(v.src.every((s) => s.ring === true));
+    // a recent speaker (let go of the mic) has no ring
+    up("alice", "bob"); await at(1, ["bob"]);
+    snap = MF.snapshot(ROOM.id);
+    assert.equal(snap.tiles.find((x) => x.login === "alice").ring, undefined);
+    // the site switch goes off: a pad on dynamic shows auto (no dyn, not fixed) and keeps its choice on a save
+    await MF.setCfg(ADMIN, { dynamic: false, reason: "test" });
+    snap = MF.snapshot(ROOM.id);
+    assert.equal(snap.dyn, undefined);
+    assert.equal(snap.fixed, false);
+    assert.equal(snap.tiles.some((x) => x.ring), false);
+    st = await MF.ownerState(ROOM.id);
+    assert.ok(st.layouts.includes("dynamic"), "still offered to a pad that uses it (a save never turns it into auto)");
+    await MF.setPad(ROOM.id, { max_people: 4 }, "test");
+    assert.equal(MF._pads.get(ROOM.id).settings.layout, "dynamic");
+    await MF.setCfg(ADMIN, { dynamic: true, reason: "test" });
+  } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, reason: "test" }); await plainPad(); }
+  // 📌 a pin takes the main only when it holds the mic and grabbed last (today's pinNew rule)
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 0, reason: "test" });
+  try {
+    await MF.setPad(ROOM.id, { layout: "dynamic" }, "test");
+    await bot(); room([]);
+    r = await post(`/api/rooms/${slug()}/micfollow/pin`, { login: "carl" }, "u_owner");
+    assert.equal(r.d.pinned, true, JSON.stringify(r.d));
+    up("carl"); await bot();
+    await step(["dana"]); await at(3, ["dana"]); up("carl", "dana"); await at(3, ["dana"]);
+    let snap = MF.snapshot(ROOM.id);
+    assert.deepEqual(snap.tiles.map((x) => x.login), ["carl", "dana"]);
+    assert.equal(snap.dyn.main, "dana", "the pin sits in a secondary cell while dana talks");
+    await at(3, ["dana", "carl"]); await at(1, ["dana", "carl"]);
+    snap = MF.snapshot(ROOM.id);
+    assert.equal(snap.dyn.main, "carl", "the pin holds the mic and grabbed last: it takes the main");
+    await post(`/api/rooms/${slug()}/micfollow/pin`, { login: "carl", remove: true }, "u_owner");
+  } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, reason: "test" }); await plainPad(); }
+});

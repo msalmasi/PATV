@@ -135,5 +135,19 @@
 .player .mf-stage .mf-pins li { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .player .mf-stage .mf-pn-name { font-weight: bold; }
 .player .mf-stage .mf-pn-state { color: #bbb; font-size: 12px; }
-@media (prefers-reduced-motion: no-preference) { .player .mf-tile.newest::after { transition: opacity .2s ease; } }
+/* wave2 WP-4 (F.3): the dynamic layout (d1-d9) - stage-mic.js sets the grid's template and each tile's grid-area (the active
+   speaker in the main cell); no fillers. Every current holder gets the mic ring (.ring, like .newest). .narrow keeps the
+   templates with smaller labels; on the small cells of 6+ the ✕ is in ⋯ Manage and the avatar shrinks */
+.player .mf-stage[data-layout=dynamic] .mf-grid { grid-auto-flow: row dense; }
+.player .mf-tile.ring { z-index: 2; }
+.player .mf-tile.ring::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
+                               box-shadow: inset 0 0 0 3px var(--ds-green-2, #7bd88f); }
+.player .mf-stage[data-layout=dynamic] .mf-tile:not(.main) .mf-why { font-size: 11.5px; line-height: 1.2; }
+.player .mf-stage[data-dyn=d6] .mf-tile:not(.main) .mf-av, .player .mf-stage[data-dyn=d7] .mf-tile:not(.main) .mf-av,
+.player .mf-stage[data-dyn=d8] .mf-tile:not(.main) .mf-av, .player .mf-stage[data-dyn=d9] .mf-tile:not(.main) .mf-av { width: 28px; height: 28px; font-size: 12px; }
+.player .mf-stage.narrow[data-layout=dynamic] .mf-tile:not(.main) .mf-label { left: 2px; bottom: 2px; padding: 1px 5px; font-size: 10.5px; }
+.player .mf-stage.narrow[data-layout=dynamic] .mf-tile:not(.main) .mf-av { display: none; }
+.player .mf-stage.narrow[data-dyn=d6] .mf-tile:not(.main) .mf-x, .player .mf-stage.narrow[data-dyn=d7] .mf-tile:not(.main) .mf-x,
+.player .mf-stage.narrow[data-dyn=d8] .mf-tile:not(.main) .mf-x, .player .mf-stage.narrow[data-dyn=d9] .mf-tile:not(.main) .mf-x { display: none; }
+@media (prefers-reduced-motion: no-preference) { .player .mf-tile.newest::after, .player .mf-tile.ring::after { transition: opacity .2s ease; } }
 @media (prefers-reduced-motion: reduce) { .player .mf-stage *, .player .mf-stage { transition: none !important; animation: none !important; } }

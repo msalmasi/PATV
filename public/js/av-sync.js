@@ -265,7 +265,8 @@
       compact = { src: [], count: 0, active: false, layout: null, dyn: null, speaking: null, override: null, fixed: false };
       if (latest) {
         if (latest.speaking === 'pepe') record.pepeAt = now;
-        (latest.src || []).forEach(function (tile) { var k = tileKey(tile); if (!k) return; present[k] = true; if (!own.call(record.births, k)) record.births[k] = now; compact.src.push({ key: k, newest: tile.newest, recent: tile.recent }); });
+        // (wave2 WP-4: `ring` - every current holder in the dynamic layout - is delayed like newest / recent)
+        (latest.src || []).forEach(function (tile) { var k = tileKey(tile); if (!k) return; present[k] = true; if (!own.call(record.births, k)) record.births[k] = now; compact.src.push({ key: k, newest: tile.newest, recent: tile.recent, ring: tile.ring }); });
         compact.count = latest.count; compact.active = latest.active; compact.layout = latest.layout; compact.dyn = latest.dyn; compact.speaking = latest.speaking;
         compact.override = latest.manage && latest.manage.layout_override; compact.fixed = latest.fixed;
       }
@@ -303,7 +304,9 @@
     var at = shownAt(record, wait, now), out = copy(latest), row = oldRow(record, at), old = row && row.data, oldTiles = Object.create(null);
     (old && old.src || []).forEach(function (tile) { oldTiles[tile.key] = tile; });
     out.src = (latest.src || []).filter(function (tile) { var k = tileKey(tile); return tile.pin || k && record.births[k] <= at; }).map(function (tile) {
-      var t = copy(tile), previous = oldTiles[tileKey(tile)]; t.newest = !!(previous && previous.newest); t.recent = !!(previous && previous.recent); return t;
+      var t = copy(tile), previous = oldTiles[tileKey(tile)]; t.newest = !!(previous && previous.newest); t.recent = !!(previous && previous.recent);
+      if (previous && previous.ring) t.ring = true; else delete t.ring;
+      return t;
     });
     out.count = old ? old.count : 0; out.active = old ? old.active : false;
     out.speaking = latest.speaking === 'pepe' ? 'pepe' : old && old.speaking === 'someone' && (record.pepeAt == null || row.at >= record.pepeAt) ? 'someone' : null;

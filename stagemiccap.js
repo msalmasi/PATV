@@ -102,11 +102,14 @@ function text(s, limit = 40) {
   return (a.length > limit ? a.slice(0, limit - 1).join("") + "…" : a.join("")).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]);
 }
 function entries(p) {
-  return (p && Array.isArray(p.src) ? p.src : []).filter(e => e && typeof e.id === "string" && /^[\w.-]{1,64}$/.test(e.id) && e.watch !== "hidden")
+  // wave2 WP-4 (F.3): with a dynamic template (program.dyn) a tile the viewer reported stays a cell - tileFor blanks it - so the
+  // capture keeps the template the viewer's own page shows ("hidden for you" there); without dyn it is left out as before
+  const keepHidden = !!(p && p.dyn);
+  return (p && Array.isArray(p.src) ? p.src : []).filter(e => e && typeof e.id === "string" && /^[\w.-]{1,64}$/.test(e.id) && (keepHidden || e.watch !== "hidden"))
     .slice(0, 9).sort((a, b) => (Number(a.pos) || 0) - (Number(b.pos) || 0));
 }
 function speaking(p) { return p && (p.speaking === "someone" || p.speaking === "pepe") ? p.speaking : null; }
-function usable(p) { return !!(p && !p.signin && !p.blocked && p.on !== false && (entries(p).length || speaking(p))); }
+function usable(p) { return !!(p && !p.signin && !p.blocked && p.on !== false && (entries(p).some(e => e.watch !== "hidden") || speaking(p))); }
 async function programFor(R, user) { return deps.program(R.id, user.userId); }
 
 /** CSS grid rectangles, including the intentional picture-in-picture overlap. No DOM required. */

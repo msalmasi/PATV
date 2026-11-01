@@ -163,8 +163,9 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.match(gate, /var showMic = function \(p\) \{ PATVPadStage\.setMic\(p\); \};/);
   assert.match(gate, /if \(window\.PATVAvSync\) window\.PATVAvSync\.gateProgram\(slug, d\.stage_program \|\| null, showMic\);/);
   assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
-  assert.ok(blk.indexOf('av-sync.js?v=2') >= 0 && blk.indexOf('av-sync.js?v=2') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
-  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=2"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
+  // (wave2 WP-4: av-sync.js?v=3 - it delays the dynamic layout's `ring` like newest / recent)
+  assert.ok(blk.indexOf('av-sync.js?v=3') >= 0 && blk.indexOf('av-sync.js?v=3') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
+  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=3"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
   assert.doesNotMatch(read("views", "home.ejs"), /stage-mic|setMic/, "the homepage never renders the mic stage");
 });
@@ -848,4 +849,130 @@ test("mfix staging proof stage-room.js: owners / staff get the 🎙 tab on an id
   o.sw.setMic(IDLE({ v: 4, manage: M, why_off: "pepe_gone" }));
   o.grace();
   assert.equal(o.sw.view(), "pepe");
+});
+
+// ── wave2 WP-4 (the incognito / mic-stage spec F.3): the dynamic layout on the page ──
+/** stage-mic.js in a sandbox whose stage box is `width` px wide (375 = a phone: .narrow). -> {ctx, ctl, host, stage, grid} */
+function dynSandbox(program, width = 640) {
+  const js = read("public", "js", "stage-mic.js");
+  const dom = fakeDom();
+  const ctx = { document: { createElement: dom.mk, hidden: false, addEventListener() {}, removeEventListener() {} }, console, setTimeout, clearTimeout,
+    setInterval: () => 0, clearInterval() {}, fetch: () => Promise.resolve({ json: () => Promise.resolve({ ok: true }) }),
+    PATVRtc: { watch: () => new Promise(() => {}) }, RTCPeerConnection: function () {}, Date };
+  ctx.window = ctx; ctx.window.addEventListener = () => {}; ctx.window.removeEventListener = () => {};
+  vm.runInNewContext(js, ctx);
+  const host = dom.mk("div");
+  host.clientWidth = width; host.getBoundingClientRect = () => ({ width });
+  const ctl = ctx.PATVStageMic.render(host, program, { slug: "pad" });
+  const stage = host.children[0];
+  return { ctx, ctl, host, stage, grid: stage.children[0] };
+}
+const dynProg = (ids, main, extra) => Object.assign({ v: 1, layout: ids.length <= 1 ? "single" : ids.length === 2 ? "split" : ids.length <= 4 ? "grid4" : "grid9",
+  count: ids.length, src: ids.map((id, i) => tileS(id, i, "card", { ring: true })), dyn: { n: ids.length, t: "d" + ids.length, main }, still_s: 20 }, extra || {});
+const tileEl = (grid, id) => grid.children.find((c) => c.getAttribute && c.getAttribute("data-id") === id);
+
+test("wave2 F.3 stage-mic.js: the d1-d9 templates equal stagemiccap.rects - same cells, the main first, the others in place order (a capture is what you see)", () => {
+  const { ctx } = dynSandbox({ v: 1, layout: "single", count: 0, src: [] });
+  const DYN = ctx.PATVStageMic._dyn;
+  const cap = require(path.join(repo, "stagemiccap"));
+  for (let n = 1; n <= 9; n++) {
+    for (const mainAt of [0, n - 1, Math.floor(n / 2)]) {
+      const src = Array.from({ length: n }, (_, i) => ({ kind: "cam", id: "p" + i, pos: i, watch: "ok" }));
+      const main = "p" + mainAt;
+      const want = cap.rects({ src, dyn: { n, t: "d" + n, main } });
+      const [cols, rows, cells] = DYN[n];
+      assert.equal(cells.length, n, "d" + n + ": one cell per tile");
+      // rects' own arithmetic (1280 x 720, 2 px gaps) over the PAGE's template
+      const W = 1280, H = 720, gap = 2, unit = (W - gap * (cols.length - 1)) / cols.reduce((a, b) => a + b, 0), rh = (H - gap * (rows - 1)) / rows;
+      const xs = [0]; for (const c of cols) xs.push(xs[xs.length - 1] + c * unit + gap);
+      const order = [src.find((e) => e.id === main), ...src.filter((e) => e.id !== main)];
+      const got = order.map((e, i) => {
+        const [cx, cy, cw, ch] = cells[i], x = xs[cx], y = cy * (rh + gap), w = xs[cx + cw] - xs[cx] - gap, h = ch * rh + (ch - 1) * gap;
+        return { id: e.id, x: Math.round(x), y: Math.round(y), w: Math.max(2, Math.min(W, Math.round(x + w)) - Math.round(x)), h: Math.max(2, Math.min(H, Math.round(y + h)) - Math.round(y)) };
+      });
+      assert.deepEqual(got, want, "d" + n + " main " + main);
+    }
+  }
+});
+
+test("wave2 F.3 stage-mic.js: dynamic - data-layout / data-dyn, the grid's template, each tile's grid-area (main in cell 0), no fillers, rings; the main changing moves NO node (no re-attach)", () => {
+  const s = dynSandbox(dynProg(["a", "b", "c"], "b"));
+  assert.equal(s.stage.getAttribute("data-layout"), "dynamic");
+  assert.equal(s.stage.getAttribute("data-dyn"), "d3");
+  assert.equal(s.grid.style.gridTemplateColumns, "2fr 1fr");
+  assert.equal(s.grid.style.gridTemplateRows, "repeat(2, 1fr)");
+  const A = tileEl(s.grid, "a"), B = tileEl(s.grid, "b"), C = tileEl(s.grid, "c");
+  assert.equal(B.style.gridArea, "1 / 1 / span 2 / span 1", "the main spans the left column");
+  assert.equal(A.style.gridArea, "1 / 2 / span 1 / span 1");
+  assert.equal(C.style.gridArea, "2 / 2 / span 1 / span 1");
+  assert.ok(B.classList.contains("main") && !A.classList.contains("main"));
+  assert.ok([A, B, C].every((e) => e.classList.contains("ring")), "every holder's ring");
+  assert.equal(s.grid.querySelectorAll("mf-empty").length, 0, "no fillers (grid4 would add one)");
+  assert.deepEqual(s.grid.children.map((c) => c.getAttribute("data-id")), ["a", "b", "c"], "reading order = positions");
+  // the active speaker changes: only grid-area moves - no appendChild / insertBefore / removeChild of an existing tile
+  const moved = [];
+  for (const k of ["appendChild", "insertBefore", "removeChild"]) { const f = s.grid[k]; s.grid[k] = function (c, ...r) { if ([A, B, C].includes(c)) moved.push(k); return f.call(this, c, ...r); }; }
+  const vidA = A.children.find((c) => c.tagName === "VIDEO");
+  s.ctl.update(dynProg(["a", "b", "c"], "c", { v: 2 }));
+  assert.deepEqual(moved, [], "no node moved");
+  assert.equal(A.children.find((c) => c.tagName === "VIDEO"), vidA, "the same video element");
+  assert.equal(C.style.gridArea, "1 / 1 / span 2 / span 1");
+  assert.equal(A.style.gridArea, "1 / 2 / span 1 / span 1");
+  assert.equal(B.style.gridArea, "2 / 2 / span 1 / span 1");
+  // a new tile (a pin, place 0) goes in at its place - the existing ones still never move
+  const p = dynProg(["z", "a", "b", "c"], "c", { v: 3 }); p.src[0].pin = true; p.src[0].ring = false;
+  s.ctl.update(p);
+  assert.deepEqual(moved, [], "existing tiles untouched");
+  assert.deepEqual(s.grid.children.map((c) => c.getAttribute("data-id")), ["z", "a", "b", "c"], "inserted before a");
+  assert.equal(s.stage.getAttribute("data-dyn"), "d4");
+  assert.equal(s.grid.style.gridTemplateColumns, "3fr 1fr");
+  assert.equal(tileEl(s.grid, "z").classList.contains("ring"), false);
+  // back to a legacy layout: the inline placement is cleared
+  s.ctl.update({ v: 4, layout: "grid4", count: 3, src: [tileS("a", 0, "card"), tileS("b", 1, "card"), tileS("c", 2, "card")], still_s: 20 });
+  assert.equal(s.stage.getAttribute("data-layout"), "grid4");
+  assert.equal(s.stage.getAttribute("data-dyn"), null);
+  assert.equal(s.grid.style.gridTemplateColumns, "");
+  assert.equal(A.style.gridArea, "");
+  s.ctl.stop();
+});
+
+test("wave2 F.3 stage-mic.js: a delayed view with another count than dyn.n re-fits the template (never the legacy grid); the main falls back to the newest, then the first; a bad dyn is the legacy layout", () => {
+  const p = dynProg(["a", "b"], "gone"); p.dyn = { n: 3, t: "d3", main: "gone" }; p.src[1].newest = true;
+  const s = dynSandbox(p);
+  assert.equal(s.stage.getAttribute("data-layout"), "dynamic", "not the legacy 'split'");
+  assert.equal(s.stage.getAttribute("data-dyn"), "d2");
+  assert.equal(tileEl(s.grid, "b").style.gridArea, "1 / 1 / span 1 / span 1", "the newest takes the main");
+  const q = dynProg(["a", "b"], "gone", { v: 2 });
+  s.ctl.update(q);
+  assert.equal(tileEl(s.grid, "a").style.gridArea, "1 / 1 / span 1 / span 1", "no newest: the first");
+  s.ctl.update(dynProg(["a", "b"], "a", { v: 3, dyn: { n: 2, t: "d<script>", main: "a" } }));
+  assert.equal(s.stage.getAttribute("data-layout"), "split", "a malformed dyn: the legacy layout");
+  s.ctl.stop();
+});
+
+test("wave2 F.3 stage-mic.js: a 375 px phone keeps the templates (.narrow) with short names on 6+ cells and ⚑ in the bar; the stage bar offers Dynamic only when the site does", () => {
+  const ids = ["alexander_the_great", "b", "c", "d", "e", "f", "g"];
+  const s = dynSandbox(Object.assign(dynProg(ids, "b"), { report: true }), 375);
+  assert.ok(s.stage.classList.contains("narrow"));
+  assert.equal(s.stage.getAttribute("data-dyn"), "d7");
+  assert.equal(s.grid.style.gridTemplateColumns, "2fr 1fr 1fr");
+  assert.equal(s.grid.style.gridTemplateRows, "repeat(3, 1fr)");
+  const nm = findCls(tileEl(s.grid, "alexander_the_great"), "mf-name");
+  assert.equal(nm.textContent, "ALEXANDER_…", "short names on small cells");
+  assert.ok(s.stage.classList.contains("barred"), "⚑ moves to the bar on small cells");
+  s.ctl.stop();
+  const css = read("public", "css", "webrtc.css");
+  assert.match(css, /\.player \.mf-stage\[data-layout=dynamic\] \.mf-grid/);
+  assert.match(css, /\.player \.mf-tile\.ring::after \{[^}]*box-shadow/);
+  assert.match(css, /\.player \.mf-stage\.narrow\[data-layout=dynamic\] \.mf-tile:not\(\.main\) \.mf-label/);
+  // the stage bar: "Dynamic" only with manage.dyn_ok (the site switch on, or the pad already uses it)
+  const opts = (st) => { const sel = findCls(st, "mf-layout"); return sel.children.map((o) => o.value); };
+  const off = dynSandbox({ v: 1, layout: "split", count: 2, src: [tileS("a", 0, "card"), tileS("b", 1, "card")], manage: { excluded_n: 0, freeze_min: 30 }, still_s: 20 });
+  findCls(off.stage, "mf-mbtn").listeners.click[0]();
+  assert.ok(!opts(off.stage).includes("dynamic"));
+  off.ctl.update({ v: 2, layout: "split", count: 2, src: [tileS("a", 0, "card"), tileS("b", 1, "card")], manage: { excluded_n: 0, freeze_min: 30, dyn_ok: true }, still_s: 20 });
+  assert.ok(opts(off.stage).includes("dynamic"));
+  assert.equal(EN["js.stage.mf.layout_dynamic"], "Dynamic (fits the speakers)");
+  assert.equal(EN["pad.settings.mf.layout.dynamic"], "Dynamic (fits the speakers)");
+  off.ctl.stop();
 });

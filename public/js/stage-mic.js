@@ -24,6 +24,13 @@
 // "checking their cam…" (the roster can't say yet), this browser not connecting to the video and a video that kept dropping each
 // say so; every tile carries data-why (the reason code of its card).
 //
+// wave2 WP-4 (the incognito / mic-stage spec F.3): the pad layout "dynamic" - program.dyn {n, t: "d1".."d9", main} beside the
+// legacy layout: templates d1-d9 (DYN - they equal stagemiccap.rects, so a capture is what you see), the main cell for the
+// active speaker, the others in their place order. Only each tile's style.gridArea changes: an existing tile's node (and its
+// video) is never moved when the main changes; a new one is inserted at its place. Every current holder gets the mic ring
+// (s.ring). When av-sync's delayed view holds a different number of tiles than dyn.n, the template is worked out here from
+// the tiles shown (never the legacy grid - that would jump).
+//
 //   var ctl = PATVStageMic.render(host, program, {slug, onChange})    host = the stage's player box (#rmVideo)
 //   ctl.update(program) · ctl.stop() · ctl.selection()
 (function () {
@@ -32,6 +39,28 @@
   var BEAT_MS = 15000, HIDDEN_MS = 30000, SAY_GAP = 5000, RETRY_MS = 10000;
   var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a live tile's re-watches after a dropped connection
   var LAYOUTS = ['single', 'split', 'grid4', 'grid9', 'pip'];
+  // wave2 WP-4 (F.3): d1-d9 - [column fractions, rows, cells]; a cell = [col, row, colspan, rowspan] (0-based), cell 0 = the main.
+  // MUST equal stagemiccap.rects (test/micfollow-ui.test.js compares them for n = 1..9)
+  var DYN = (function () {
+    var T = {};
+    function leftMain(cols, rows) { var c = [[0, 0, 1, rows]]; for (var y = 0; y < rows; y++) for (var x = 1; x < cols.length; x++) c.push([x, y, 1, 1]); return [cols, rows, c]; }
+    function bigMain(nc, rows, span) {
+      var cols = [], c = [[0, 0, span, span]];
+      for (var i = 0; i < nc; i++) cols.push(1);
+      for (var y = 0; y < rows; y++) for (var x = 0; x < nc; x++) if (x >= span || y >= span) c.push([x, y, 1, 1]);
+      return [cols, rows, c];
+    }
+    T[1] = [[1], 1, [[0, 0, 1, 1]]];
+    T[2] = [[1, 1], 1, [[0, 0, 1, 1], [1, 0, 1, 1]]];              // side by side (the owner's rule for 2-slot rooms)
+    T[3] = leftMain([2, 1], 2);
+    T[4] = leftMain([3, 1], 3);
+    T[5] = [[2, 1, 1], 2, [[0, 0, 1, 2], [1, 0, 1, 1], [2, 0, 1, 1], [1, 1, 1, 1], [2, 1, 1, 1]]];
+    T[6] = bigMain(3, 3, 2);
+    T[7] = leftMain([2, 1, 1], 3);
+    T[8] = bigMain(4, 4, 3);
+    T[9] = bigMain(4, 3, 2);
+    return T;
+  })();
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function btn(cls, text, label) { var b = el('button', cls, text); b.type = 'button'; if (label) b.setAttribute('aria-label', label); return b; }
   function post(url, body, keep) {
@@ -51,11 +80,16 @@
   function cleanProgram(p) {
     if (!p || typeof p !== 'object') return null;
     var src = Array.isArray(p.src) ? p.src.filter(function (s) { return s && typeof s.id === 'string' && /^[\w.\-]{1,40}$/.test(s.id); }).slice(0, 9) : [];
+    // wave2 WP-4 (F.3): the dynamic template - only a well-formed one (else the legacy layout)
+    var d = p.dyn && typeof p.dyn === 'object' && /^d[1-9]$/.test(String(p.dyn.t)) && typeof p.dyn.main === 'string' && /^[\w.\-]{1,40}$/.test(p.dyn.main) ? { n: Number(p.dyn.n) || 0, main: p.dyn.main } : null;
     return { v: p.v, layout: LAYOUTS.indexOf(p.layout) >= 0 ? p.layout : 'single', count: Math.max(0, Number(p.count) || 0), pins_n: Math.max(0, Number(p.pins_n) || 0), signin: p.signin === true, idle: p.idle === true,
              blocked: p.blocked === true, src: src, manage: p.manage && typeof p.manage === 'object' ? p.manage : null, frozen_until: Number(p.frozen_until) || 0,
              still_s: Math.max(10, Math.min(120, Number(p.still_s) || 20)), fixed: p.fixed === true, report: p.report === true,
-             speaking: p.speaking === 'someone' || p.speaking === 'pepe' ? p.speaking : null };
+             speaking: p.speaking === 'someone' || p.speaking === 'pepe' ? p.speaking : null, dyn: d };
   }
+  /** wave2 WP-4 (F.3): how many cells the dynamic template has for this program (0 = not dynamic): the tiles SHOWN - av-sync's
+   *  delayed view may hold fewer or more than dyn.n for a moment. */
+  function dynCount(P) { return P && P.dyn && P.src.length >= 1 && P.src.length <= 9 ? P.src.length : 0; }
   var REASONS = ['impersonation', 'sexual', 'abuse', 'minor', 'other'];
   function reasonText(r) {
     return r === 'impersonation' ? _t('js.stage.mf.r_impersonation', 'Not who they say they are') : r === 'sexual' ? _t('js.stage.mf.r_sexual', 'Nudity or sexual')
@@ -129,6 +163,8 @@
      ['grid', _t('js.stage.mf.layout_grid', 'Grid')], ['pip', _t('js.stage.mf.layout_pip', 'Picture in picture')]].forEach(function (o) {
       var op = el('option', null, o[1]); op.value = o[0]; layoutSel.appendChild(op);
     });
+    // wave2 WP-4 (F.3): "Dynamic" - only while the site offers it (program.manage.dyn_ok; paintPanel adds / removes it)
+    var dynOpt = el('option', null, _t('js.stage.mf.layout_dynamic', 'Dynamic (fits the speakers)')); dynOpt.value = 'dynamic';
     ask.hidden = true; pmsg.setAttribute('role', 'status');
     // mfix: 📌 Pin a cam - who's on cam in the room, and a Pin / Unpin for each (the server says who can't be pinned, never why)
     var pinBtn = btn('mf-pbtn', _t('js.stage.mf.pin_open', '📌 Pin a cam…')); pinBtn.setAttribute('aria-expanded', 'false');
@@ -290,7 +326,7 @@
       }
       function apply(s) {
         t.s = s;
-        name.textContent = P.layout === 'grid9' && box.classList.contains('narrow') ? short(s.name) : s.name;
+        name.textContent = tightNames() ? short(s.name) : s.name;
         name.className = 'mf-name' + (s.nameCss ? ' cx-name' : '');
         name.style.cssText = s.nameCss || '';
         e.setAttribute('aria-label', s.name);
@@ -298,6 +334,7 @@
         // mfix: pinned / recent (let go of the mic a moment ago - no ring) / the viewer's own cam
         e.classList.toggle('pinned', !!s.pin);
         e.classList.toggle('recent', !!s.recent);
+        e.classList.toggle('ring', !!s.ring);                              // wave2 WP-4 (F.3): every current holder (dynamic)
         pinTag.hidden = !s.pin;
         pinSr.textContent = s.pin ? ', ' + _t('js.stage.mf.pinned_tag', 'pinned') : '';
         pn.hidden = !P.manage || !!s.pin || !pinsFree();
@@ -514,6 +551,10 @@
       var frozen = P.frozen_until > Date.now();
       freeze.textContent = frozen ? _t('js.stage.mf.unfreeze', '▶ Unfreeze') : _t('js.stage.mf.freeze', '❄ Freeze (nobody new for {n} min)', { n: freezeMin() });
       freeze.setAttribute('aria-pressed', frozen ? 'true' : 'false');
+      // wave2 WP-4 (F.3): "Dynamic" only while the site offers it (or the pad already uses it)
+      var wantDyn = m.dyn_ok === true || m.layout_override === 'dynamic';
+      if (wantDyn && dynOpt.parentNode !== layoutSel) layoutSel.appendChild(dynOpt);
+      else if (!wantDyn && dynOpt.parentNode === layoutSel) layoutSel.removeChild(dynOpt);
       layoutSel.value = m.layout_override || '';
       pinBtn.hidden = !(Number(m.pins_room) > 0);
       if (pinBtn.hidden) pinPanel.hidden = true;
@@ -551,8 +592,11 @@
 
     /** The bar above the tiles: always for owners / staff (⋯ + 🧹); for viewers only where the tiles are too small for their
      *  own ⚑ (narrow grid4 / grid9). `.barred` moves the tiles below it - it never covers one. */
+    /** Short names on the small cells of a narrow stage (grid9; a dynamic template of 6 or more). */
+    function tightNames() { return box.classList.contains('narrow') && (dynCount(P) ? dynCount(P) >= 6 : P.layout === 'grid9'); }
     function barState() {
-      var tight = box.classList.contains('narrow') && (P.layout === 'grid4' || P.layout === 'grid9');
+      var dn = dynCount(P);
+      var tight = box.classList.contains('narrow') && (dn ? dn >= 3 : P.layout === 'grid4' || P.layout === 'grid9');
       rBtn.hidden = !!P.manage || !P.report || !tight || !P.src.length;
       box.classList.toggle('managed', !!P.manage);
       box.classList.toggle('barred', !!P.manage || !rBtn.hidden);
@@ -573,7 +617,9 @@
       if (!n) return;
       P = n;
       narrow();
-      box.setAttribute('data-layout', P.layout);
+      var dn = dynCount(P);                              // wave2 WP-4 (F.3): the dynamic template's cells (0 = the legacy layout)
+      box.setAttribute('data-layout', dn ? 'dynamic' : P.layout);
+      if (dn) box.setAttribute('data-dyn', 'd' + dn); else box.removeAttribute('data-dyn');
       var neutralText = P.speaking === 'pepe' ? _t('js.stage.mf.pepe', 'Pepe is on the mic') : P.speaking ? _t('js.stage.mf.someone', 'Someone is speaking') : '';
       // mfix: the page keeps this view a moment after the stage empties (stage-room.js): nobody is on the mic right now
       var idleText = !P.src.length && !neutralText && P.idle ? _t('js.stage.mf.idle', 'Nobody is on the mic right now') : '';
@@ -599,14 +645,22 @@
       var msg = P.signin ? _t('js.stage.mf.tab_signin', '🎙 On the mic: sign in to watch') : P.blocked ? _t('js.stage.mf.blocked', 'Live cams from this room are blocked for you.') : '';
       note.textContent = msg; note.hidden = !msg;
       var seen = {};
-      P.src.slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); }).forEach(function (s) {
+      var sorted = P.src.slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); });
+      sorted.forEach(function (s, i) {
         seen[s.id] = true;
         var t = tiles[s.id];
+        var fresh = !t;
         if (!t) {
           t = tiles[s.id] = tile(s);
           announce(_t('js.stage.mf.joined', '{name} is on the stage', { name: s.name }));
         } else t.apply(s);
-        grid.appendChild(t.el);                         // keeps reading order = positions
+        if (!dn) { grid.appendChild(t.el); return; }    // keeps reading order = positions
+        // wave2 WP-4 (F.3): dynamic - an existing tile's node never moves (its video would re-attach); a new one goes in at its
+        // place (before the next tile already there), so the reading order still follows the positions
+        if (!fresh && t.el.parentNode === grid) return;
+        var next = null;
+        for (var j = i + 1; j < sorted.length && !next; j++) { var o = tiles[sorted[j].id]; if (o && o.el.parentNode === grid) next = o.el; }
+        if (next) grid.insertBefore(t.el, next); else grid.appendChild(t.el);
       });
       Object.keys(tiles).forEach(function (id) {
         if (seen[id]) return;
@@ -619,15 +673,38 @@
       // mfix: the tile that fills the stage in picture in picture (the others are the corner inset): the newest speaker, else
       // the latest mic tile (a pin sits in the corner while someone else is up), else the first
       var order = P.src.slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); }), main = null;
-      for (var j = 0; j < order.length; j++) if (order[j].newest) main = order[j];
-      if (!main) for (var q = order.length - 1; q >= 0 && !main; q--) if (!order[q].pin) main = order[q];
-      if (!main) main = order[0] || null;
+      if (dn) {
+        // wave2 WP-4 (F.3): the server's main if it is still shown, else the newest speaker, else the first
+        for (var d0 = 0; d0 < order.length && !main; d0++) if (order[d0].id === P.dyn.main) main = order[d0];
+        for (var d1 = 0; d1 < order.length && !main; d1++) if (order[d1].newest) main = order[d1];
+        if (!main) main = order[0];
+      } else {
+        for (var j = 0; j < order.length; j++) if (order[j].newest) main = order[j];
+        if (!main) for (var q = order.length - 1; q >= 0 && !main; q--) if (!order[q].pin) main = order[q];
+        if (!main) main = order[0] || null;
+      }
       Object.keys(tiles).forEach(function (id) { tiles[id].el.classList.toggle('main', !!main && main.id === id); });
-      // grid9 keeps its 3 x 3 cells (empty ones stay black)
-      var cells = P.layout === 'grid9' ? 9 : P.layout === 'grid4' ? 4 : 0, have = grid.querySelectorAll('.mf-tile').length;
+      placeDyn(dn, main, order);
+      // grid9 keeps its 3 x 3 cells (empty ones stay black); the dynamic templates have exactly one cell per tile
+      var cells = dn ? 0 : P.layout === 'grid9' ? 9 : P.layout === 'grid4' ? 4 : 0, have = grid.querySelectorAll('.mf-tile').length;
       var fillers = grid.querySelectorAll('.mf-empty');
       for (var i = 0; i < fillers.length; i++) fillers[i].parentNode.removeChild(fillers[i]);
       for (var k = have; k < cells; k++) { var f = el('div', 'mf-empty'); f.setAttribute('aria-hidden', 'true'); grid.appendChild(f); }
+    }
+    /** wave2 WP-4 (F.3): the dynamic template - the grid's columns / rows and each tile's grid-area (the main in cell 0, the
+     *  others in place order). n = 0: back to the legacy layouts' CSS (every inline placement cleared). */
+    function placeDyn(n, main, order) {
+      var T = n ? DYN[n] : null;
+      grid.style.gridTemplateColumns = T ? T[0].map(function (c) { return c + 'fr'; }).join(' ') : '';
+      grid.style.gridTemplateRows = T ? 'repeat(' + T[1] + ', 1fr)' : '';
+      var rest = order.filter(function (s) { return s !== main; });
+      var seq = T ? [main].concat(rest) : [];
+      Object.keys(tiles).forEach(function (id) { tiles[id].el.style.gridArea = ''; });
+      seq.forEach(function (s, i) {
+        var c = T[2][i], tt = s && tiles[s.id];
+        if (!c || !tt) return;
+        tt.el.style.gridArea = (c[1] + 1) + ' / ' + (c[0] + 1) + ' / span ' + c[3] + ' / span ' + c[2];
+      });
     }
     function onVis() {
       if (document.hidden) {
@@ -660,5 +737,5 @@
       },
     };
   }
-  window.PATVStageMic = { render: render };
+  window.PATVStageMic = { render: render, _dyn: DYN };   // (_dyn: the d1-d9 templates, for the test that pins them to stagemiccap)
 })();
