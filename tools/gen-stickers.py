@@ -934,6 +934,370 @@ def fireside_pack():
     return out
 
 
+# ── wave2 WP-4 (incognito / mic-stage spec F.4, owner pick J-11 2026-10-28): the hooded-frog covers for veiled speakers ──
+# NOT a sticker pack: public/img/anon/hood-peek-{0..7}.svg (incognito: "Peek B", the bandana) and hood-shadow-{0..7}.svg
+# (hidden: "Shadow"), one per frog-name hood index. An anonymous frog - never Pepe's face and never his red lips (R / RD).
+# Ported from the owner's contact-sheet generators (hood-art/B-bandana/gen_bandana.py, scheme "tint", and
+# hood-art/shadow/gen_shadow.py); the two compact writers stay separate because their path syntaxes differ (the bandana's
+# greedy rects close with h-W, the shadow's layered plan picks the shorter of h-W / H<x>). Every SVG is parsed back into
+# pixels and compared with its grid before it is written.
+#     python tools/gen-stickers.py anon            -> public/img/anon/
+#     python tools/gen-stickers.py anon --check    -> compares byte for byte, writes nothing (exit 1 on a difference)
+ANON_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "img", "anon")
+HOODS = [                                    # (name, cloth, shade, rim) - index = the frog-name hood (frognames.js)
+    ("charcoal", "#2b2d31", "#1a1b1e", "#4a4d55"),
+    ("midnight", "#23305c", "#151d3a", "#3b4f8f"),
+    ("plum",     "#4b2a5e", "#2e183b", "#6f4290"),
+    ("forest",   "#1f4a33", "#123021", "#2f6e4c"),
+    ("maroon",   "#5c2228", "#3a1418", "#863440"),
+    ("teal",     "#1d4f57", "#113338", "#2b7480"),
+    ("mustard",  "#6b5418", "#45360e", "#9a7a26"),
+    ("slate",    "#3d4654", "#262d37", "#5b6779"),
+]
+
+
+def anon_inside(cx, cy, rx, ry, x, y):
+    return ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1.0
+
+
+# ·· peek B: hood up, a bandana over the lower face, round frog eyes looking forward over it ··
+PEEK_FACE = "#2c9a3f"     # the frog's face, a step darker than G: it is inside the hood
+PEEK_BRIM = "#17532a"     # shadow under the hood's brim
+PEEK_BROW = "#4cc860"     # light on the eye domes
+PEEK_STRING = "#d9d4c7"   # hoodie drawstrings
+PEEK_TINT = [             # the bandana per hood: (cloth, fold shade, dots) - scheme "tint"
+    ("#d0743c", "#9a5228", "#f6e3d2"),   # charcoal: rust (keeps it apart from slate)
+    ("#5577d0", "#3b56a0", "#e8dfc8"),
+    ("#a466cc", "#7a4a9c", "#f0e2f6"),
+    ("#c9b27a", "#9a8656", "#5d4a22"),   # forest: khaki (a green bandana would melt into the face)
+    ("#c8505c", "#94363f", "#f3dcd9"),   # maroon: a red-pink BANDANA (owner OK) - never lips
+    ("#41a3ae", "#2d7a84", "#e3f4f2"),
+    ("#e0b542", "#a8852b", "#fff3cf"),
+    ("#8d9bb3", "#66748a", "#eef1f6"),
+]
+PEEK_DOTS = [(7, 13), (11, 13), (15, 13), (9, 15), (13, 15), (11, 17)]
+
+
+def peek_hem(c):
+    r, g_, b = (int(c[k:k + 2], 16) for k in (1, 3, 5))
+    return "#%02x%02x%02x" % tuple(round(v + (255 - v) * 0.35) for v in (r, g_, b))
+
+
+def hood_peek(i):
+    _, cloth, shade, rim = HOODS[i]
+    band, band_d, dot = PEEK_TINT[i]
+    g = Grid()
+    opening = lambda x, y: anon_inside(12.0, 12.0, 7.3, 6.0, x, y)     # rows 6-17
+    for y in range(24):                       # hood: two bumps (the eye domes under the cloth), a round crown, shoulders
+        for x in range(24):
+            bumps = anon_inside(7.4, 6.4, 4.7, 4.6, x, y) or anon_inside(16.6, 6.4, 4.7, 4.6, x, y)
+            crown = anon_inside(12.0, 12.4, 10.6, 8.6, x, y)
+            cape = y >= 18 and abs(x + 0.5 - 12) <= 8.6 + (y - 18) * 1.25
+            if bumps or crown or cape:
+                g.px[y][x] = cloth
+    for y in range(24):                       # the opening: the frog's face, a row of brim shadow on top
+        for x in range(24):
+            if opening(x, y):
+                g.px[y][x] = PEEK_BRIM if not opening(x, y - 1) else PEEK_FACE
+    for y in range(24):                       # a lighter cloth rim round the opening
+        for x in range(24):
+            if g.px[y][x] == cloth and any(opening(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                g.px[y][x] = rim
+    for x0 in (6, 14):                        # round eyes, pupils centred (looking forward), light on the domes
+        g.rect(x0 + 1, 7, x0 + 2, 7, PEEK_BROW)
+        g.rect(x0 + 1, 8, x0 + 2, 11, W)
+        g.rect(x0, 9, x0 + 3, 10, W)
+        g.rect(x0 + 1, 9, x0 + 2, 10, K)
+    band_rows = {12: (10, 13), 13: (5, 18), 14: (5, 18)}     # the band, tied behind the head (inside the opening only)
+    tri_rows = {15: (6, 17), 16: (7, 16), 17: (8, 15), 18: (9, 14), 19: (10, 13), 20: (11, 12)}   # the triangle in front
+    for y, (a, b) in band_rows.items():
+        for x in range(a, b + 1):
+            if opening(x, y):
+                g.set(x, y, band)
+    for y, (a, b) in tri_rows.items():
+        g.rect(a, y, b, y, band)
+        if y >= 16:
+            g.pts([(a, y), (b, y)], band_d)
+    g.pts([(10, 12), (11, 12), (12, 12), (13, 12)], peek_hem(band))   # the folded top edge catches light
+    g.pts(PEEK_DOTS, dot)
+    g.pts([(3, 8), (20, 8), (11, 4), (12, 4)], shade)                  # cloth folds + highlights, drawstrings
+    g.pts([(5, 3), (6, 3), (15, 3), (16, 3)], rim)
+    g.pts([(7, 19), (7, 20), (16, 19), (16, 20)], PEEK_STRING)
+    g.pts([(7, 21), (16, 21)], "#9e998c")
+    for c in (cloth, rim, shade):
+        g.outline(c, K)
+    return g
+
+
+def anon_short(c):
+    c = c.lower()
+    return "#" + c[1] + c[3] + c[5] if len(c) == 7 and c[1] == c[2] and c[3] == c[4] and c[5] == c[6] else c
+
+
+def anon_long(c):
+    c = c.lower()
+    return "#" + "".join(ch * 2 for ch in c[1:]) if len(c) == 4 else c
+
+
+def svg_greedy(g, title):
+    """peek's writer: one <path> per colour, greedy rectangles; the outline colour first, then by area (later colours
+    may overpaint earlier ones)."""
+    count = {}
+    for row in g.px:
+        for c in row:
+            if c:
+                count[c] = count.get(c, 0) + 1
+    order = sorted(count, key=lambda c: (c != K, -count[c]))
+    rank = {c: n for n, c in enumerate(order)}
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {g.w} {g.h}" shape-rendering="crispEdges">'
+           f"<title>{title}</title>"]
+    for c in order:
+        r = rank[c]
+        allowed = lambda x, y: g.px[y][x] is not None and rank[g.px[y][x]] >= r
+        todo = {(x, y) for y in range(g.h) for x in range(g.w) if g.px[y][x] == c}
+        d = []
+        for y in range(g.h):
+            for x in range(g.w):
+                if (x, y) not in todo:
+                    continue
+                x1 = x
+                while x1 + 1 < g.w and allowed(x1 + 1, y):
+                    x1 += 1
+                y1 = y
+                while y1 + 1 < g.h and all(allowed(xx, y1 + 1) for xx in range(x, x1 + 1)):
+                    y1 += 1
+                cells = lambda xa, xb, ya, yb: any((xx, yy) in todo for xx in range(xa, xb + 1) for yy in range(ya, yb + 1))
+                while x1 > x and not cells(x1, x1, y, y1):
+                    x1 -= 1
+                while y1 > y and not cells(x, x1, y1, y1):
+                    y1 -= 1
+                for yy in range(y, y1 + 1):
+                    for xx in range(x, x1 + 1):
+                        todo.discard((xx, yy))
+                w, h = x1 - x + 1, y1 - y + 1
+                d.append(f"M{x} {y}h{w}v{h}h-{w}z")
+        out.append(f'<path fill="{anon_short(c)}" d="{"".join(d)}"/>')
+    out.append("</svg>")
+    return "".join(out) + "\n"
+
+
+# ·· shadow: the same kind of hood, the face fully dark, two eye glints under faint frog-eye bulges ··
+SHADOW_FIXED = {
+    "edge": K, "dark": "#0d1410", "dark2": "#13241a", "bulge": "#173d22", "eye": W,
+    "glhi": "#d7ffe0", "gllo": "#9fe3a8", "str": "#d9d4c7", "strd": "#9e998c",
+}
+
+
+def hood_shadow_roles():
+    """The hidden frog in colour roles (colourised per hood)."""
+    g = Grid()
+    face = lambda x, y: anon_inside(12.0, 13.0, 7.3, 5.7, x, y)
+    for y in range(24):
+        for x in range(24):
+            bumps = anon_inside(7.6, 7.4, 5.4, 5.0, x, y) or anon_inside(16.4, 7.4, 5.4, 5.0, x, y)
+            body = anon_inside(12.0, 13.2, 11.0, 8.4, x, y)
+            tip = 1 <= y <= 3 and 15 <= x <= 17 and (x - 15) <= y - 1
+            cape = y >= 19 and abs(x + 0.5 - 12) <= 7 + (y - 19) * 1.3
+            if bumps or body or tip or cape:
+                g.px[y][x] = "cloth"
+    for y in range(24):
+        for x in range(24):
+            if face(x, y):
+                g.px[y][x] = "dark" if y < 15 else "dark2"
+    for y in range(24):
+        for x in range(24):
+            if g.px[y][x] == "cloth" and any(face(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                g.px[y][x] = "rim"
+    g.pts([(4, 5), (3, 7), (20, 5), (21, 7), (11, 5), (12, 5)], "shade")
+    g.pts([(6, 3), (7, 3), (15, 3), (16, 3)], "rim")
+    g.pts([(8, 19), (8, 20), (8, 21), (15, 19), (15, 20), (15, 21)], "str")
+    g.pts([(8, 22), (15, 22)], "strd")
+    g.outline("cloth", "edge"); g.outline("rim", "edge"); g.outline("shade", "edge")
+    for x0 in (7, 14):
+        g.rect(x0, 9, x0 + 2, 9, "bulge")
+        g.pts([(x0 - 1, 10), (x0 + 3, 10)], "bulge")
+        g.rect(x0, 10, x0 + 2, 11, "eye")
+        g.set(x0, 10, "glhi")
+        g.set(x0 + 2, 11, "gllo")
+    return g
+
+
+def hood_shadow(i):
+    _, cloth, shade, rim = HOODS[i]
+    pal = dict(SHADOW_FIXED, cloth=cloth, shade=shade, rim=rim)
+    roles, g = hood_shadow_roles(), Grid()
+    for y in range(roles.h):
+        for x in range(roles.w):
+            c = roles.px[y][x]
+            if c:
+                g.px[y][x] = pal.get(c, c)
+    return g
+
+
+def _lay_cover(req, allowed, w, h):
+    unc = set(req)
+    rects = []
+    while unc:
+        px, py = min(unc, key=lambda p: (p[1], p[0]))
+        best = None
+        for y0 in range(py, -1, -1):
+            if (px, y0) not in allowed:
+                break
+            ok = [True] * w
+            for y1 in range(y0, h):
+                if (px, y1) not in allowed:
+                    break
+                for x in range(w):
+                    ok[x] = ok[x] and (x, y1) in allowed
+                if y1 < py:
+                    continue
+                x0 = px
+                while x0 > 0 and ok[x0 - 1]:
+                    x0 -= 1
+                x1 = px
+                while x1 < w - 1 and ok[x1 + 1]:
+                    x1 += 1
+                gain = sum(1 for yy in range(y0, y1 + 1) for xx in range(x0, x1 + 1) if (xx, yy) in unc)
+                if best is None or gain > best[0]:
+                    best = (gain, x0, y0, x1, y1)
+        _, x0, y0, x1, y1 = best
+        rects.append((x0, y0, x1, y1))
+        unc -= {(xx, yy) for yy in range(y0, y1 + 1) for xx in range(x0, x1 + 1)}
+    return rects
+
+
+def _lay_cmd(r):
+    x0, y0, x1, y1 = r
+    w, h = x1 - x0 + 1, y1 - y0 + 1
+    back = min(f"h-{w}", f"H{x0}", key=len)
+    return f"M{x0} {y0}h{w}v{h}{back}"
+
+
+def layer_plan(g):
+    """shadow's writer plan: the colour order (painter's) whose merged rectangles make the shortest path text."""
+    cols = {}
+    for y in range(g.h):
+        for x in range(g.w):
+            c = g.px[y][x]
+            if c:
+                cols.setdefault(c, set()).add((x, y))
+    cache = {}
+
+    def cost_of(c, above):
+        key = (c, above)
+        if key not in cache:
+            allowed = set(cols[c])
+            for d in above:
+                allowed |= cols[d]
+            rects = _lay_cover(cols[c], allowed, g.w, g.h)
+            cache[key] = (len("".join(_lay_cmd(r) for r in rects)) + 24 + len(anon_short(c)), rects)
+        return cache[key]
+
+    def total(order):
+        return sum(cost_of(c, frozenset(order[i + 1:]))[0] for i, c in enumerate(order))
+
+    top_down, left = [], set(cols)
+    while left:
+        above = frozenset(top_down)
+        c = min(sorted(left), key=lambda c: cost_of(c, above)[0])
+        top_down.append(c)
+        left.discard(c)
+    order = top_down[::-1]
+    best = total(order)
+    improved = True
+    while improved:
+        improved = False
+        for i in range(len(order) - 1):
+            o = order[:]
+            o[i], o[i + 1] = o[i + 1], o[i]
+            t = total(o)
+            if t < best:
+                order, best, improved = o, t, True
+    return [(c, cost_of(c, frozenset(order[i + 1:]))[1]) for i, c in enumerate(order)]
+
+
+def svg_layered(g, title):
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {g.w} {g.h}" shape-rendering="crispEdges">'
+             f"<title>{title}</title>"]
+    for c, rects in layer_plan(g):
+        parts.append(f'<path fill="{anon_short(c)}" d="{"".join(_lay_cmd(r) for r in rects)}"/>')
+    parts.append("</svg>\n")
+    return "".join(parts)
+
+
+def anon_svg_pixels(svg, w=24, h=24):
+    """Parse either writer's output back into pixels (painter's order; M / h / v / H / V rect sub-paths)."""
+    import re
+    px = [[None] * w for _ in range(h)]
+    for fill, d in re.findall(r'<path fill="(#[0-9a-fA-F]{3,6})" d="([^"]+)"', svg):
+        for sub in re.findall(r"M[^M]+", d):
+            toks = re.findall(r"[MhvHVz]|-?\d+", sub)
+            x = y = 0
+            pts, i, cmd = [], 0, None
+            while i < len(toks):
+                t = toks[i]
+                if t.isalpha():
+                    cmd = t
+                    i += 1
+                    if cmd == "z":
+                        continue
+                if cmd == "M":
+                    x, y = int(toks[i]), int(toks[i + 1]); i += 2
+                elif cmd == "h":
+                    x += int(toks[i]); i += 1
+                elif cmd == "v":
+                    y += int(toks[i]); i += 1
+                elif cmd == "H":
+                    x = int(toks[i]); i += 1
+                elif cmd == "V":
+                    y = int(toks[i]); i += 1
+                pts.append((x, y))
+            xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+            assert len(set(xs)) == 2 and len(set(ys)) == 2, sub
+            for yy in range(min(ys), max(ys)):
+                for xx in range(min(xs), max(xs)):
+                    px[yy][xx] = anon_long(fill)
+    return px
+
+
+def anon_files():
+    """-> {file name: svg text} for the 16 covers, each checked against its grid (and under 3 KB, no Pepe red)."""
+    out = {}
+    for i in range(len(HOODS)):
+        for name, g, write, title in ((f"hood-peek-{i}.svg", hood_peek(i), svg_greedy, "Incognito frog"),
+                                      (f"hood-shadow-{i}.svg", hood_shadow(i), svg_layered, "Hidden frog")):
+            svg = write(g, title)
+            want = [[(c.lower() if c else None) for c in row] for row in g.px]
+            assert anon_svg_pixels(svg) == want, f"{name}: the SVG does not round-trip"
+            assert len(svg.encode("utf-8")) <= 3072, f"{name}: {len(svg)} bytes"
+            assert R not in svg and RD not in svg and anon_short(R) not in svg, f"{name}: Pepe's red"
+            out[name] = svg
+    return out
+
+
+def anon_main(check=False):
+    if not check:
+        os.makedirs(ANON_ROOT, exist_ok=True)
+    bad = []
+    for name, svg in anon_files().items():
+        p = os.path.join(ANON_ROOT, name)
+        if check:
+            try:
+                with open(p, "rb") as f:
+                    if f.read() != svg.encode("utf-8"):
+                        bad.append(name)
+            except OSError:
+                bad.append(name)
+            continue
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
+            f.write(svg)
+    if check:
+        print("anon", "differs: " + ", ".join(bad) if bad else "same")
+        return not bad
+    print("anon ok")
+    return True
+
+
 PACKS = {"pixelpepe": pixel_pack, "kawaiipond": kawaii_pack, "patvreacts": reacts_pack,
          "miclife": mic_pack, "highroller": casino_pack, "movienight": movie_pack,
          "spooky": spooky_pack, "fireside": fireside_pack, "primeplus": plus_pack}
@@ -941,7 +1305,14 @@ PACKS = {"pixelpepe": pixel_pack, "kawaiipond": kawaii_pack, "patvreacts": react
 
 def main():
     import sys
-    only = [a for a in sys.argv[1:] if a in PACKS]       # 1.99qp: python tools/gen-stickers.py spooky primeplus (just those)
+    args = sys.argv[1:]
+    if "anon" in args:                                   # wave2 WP-4: the hooded-frog covers (public/img/anon/), not a pack
+        ok = anon_main(check="--check" in args)
+        if not ok:
+            sys.exit(1)
+        if not [a for a in args if a in PACKS]:
+            return
+    only = [a for a in args if a in PACKS]               # 1.99qp: python tools/gen-stickers.py spooky primeplus (just those)
     for pack, fn in PACKS.items():
         if only and pack not in only:
             continue
@@ -951,6 +1322,8 @@ def main():
             with open(os.path.join(d, sid + ".svg"), "w", encoding="utf-8", newline="\n") as f:
                 f.write(grid.svg(title))
         print(pack, "ok")
+    if not only:
+        anon_main()
 
 
 if __name__ == "__main__":

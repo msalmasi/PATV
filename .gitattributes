@@ -23,3 +23,7 @@ test/fixtures/chatlog/golden-* text eol=lf
 # 1.99aej: the chat hub's vendored widget (the platform repo's export; chatwidget.js checks the tab entry against its SRI and
 # the browser checks every file it loads): the build's exact bytes in every checkout, never line-end converted
 public/js/patv-chat/** -text
+
+# wave2 WP-4: the hooded-frog covers - tools/gen-stickers.py anon --check compares them byte for byte, and stagemiccap.js
+# draws them into captures: the generator's exact LF bytes in every checkout
+public/img/anon/*.svg text eol=lf
