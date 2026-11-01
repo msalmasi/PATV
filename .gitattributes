@@ -27,3 +27,4 @@ public/js/patv-chat/** -text
 # wave2 WP-4: the hooded-frog covers - tools/gen-stickers.py anon --check compares them byte for byte, and stagemiccap.js
 # draws them into captures: the generator's exact LF bytes in every checkout
 public/img/anon/*.svg text eol=lf
+test/fixtures/evidence-wire.json text eol=lf

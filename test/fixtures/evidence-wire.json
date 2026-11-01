@@ -1,0 +1,57 @@
+{
+ "advert": {
+  "evidence": 1
+ },
+ "answer_failed": {
+  "id": "w000000000000000f",
+  "state": "failed",
+  "status": "the website didn't log that request"
+ },
+ "answer_ok": {
+  "data": "AAAAGGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+  "id": "w000000000000000e",
+  "secs": 3.0,
+  "state": "ok",
+  "status": "ok",
+  "target": "hank",
+  "veil": "hidden",
+  "veil_ok": 7
+ },
+ "contract": "evidence-wire",
+ "doc": "G:/ops/incognito-micstage-design-2026-10-27.md E.3 (WP-5); camfrog-bot tools/gen_evidence_wire.py writes this from pepe_micclip's real builders. Bodies are shown without the bot token (_backend_post adds it).",
+ "job": {
+  "camfrog": "",
+  "id": "w000000000000000e",
+  "kind": "micevidence",
+  "room": "PepeLab",
+  "target": "hank",
+  "tx": "tx-00000000000000e1",
+  "user": "adm",
+  "veil": "hidden",
+  "veil_ok": 7,
+  "viewer": "adm"
+ },
+ "job_reads": [
+  "id",
+  "room",
+  "target",
+  "tx",
+  "veil",
+  "veil_ok"
+ ],
+ "paths": {
+  "answer": "/api/bridge/evidence",
+  "upload": "/api/bridge/evidence/upload"
+ },
+ "upload": {
+  "data": "AAAAGGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+  "requester": "boss",
+  "room": "PepeLab",
+  "said_at": 1793534400.0,
+  "secs": 3.0,
+  "target": "hank",
+  "tx": "tx-00000000000000e1",
+  "veil": "hidden"
+ },
+ "version": 1
+}

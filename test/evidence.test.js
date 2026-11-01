@@ -60,6 +60,10 @@ const settle = (ms = 40) => new Promise((r) => setTimeout(r, ms));
 const M4A = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypM4A "), crypto.randomBytes(400)]);
 const HIDDEN_WORDS = "the hidden sentence about the stolen bike";
 const MARK = "MARKER-" + crypto.randomBytes(4).toString("hex");
+// the shared wire fixture (camfrog-bot tools/gen_evidence_wire.py writes it from pepe_micclip's real builders; byte-identical with the
+// bot's ci/fixtures/evidence-wire.json). Update together with its pin there (evidence_wire_test.py PIN).
+const WIRE_PIN = "dd2c95438a0ef3805d388ffde0aec353510616d1a0b6b39b1008955c27dd4ca4";
+const WIRE_RAW = fs.readFileSync(path.join(__dirname, "fixtures", "evidence-wire.json"));
 
 function call(method, url, { user = null, body = null, headers = {} } = {}) {
   return new Promise((resolve, reject) => {
@@ -590,4 +594,43 @@ test("the UI: the pad-settings card is the OWNER's only (never staff, admins use
   await runQuery("DELETE FROM evidence_clips WHERE room_id = ?", [ROOM.id]);
   assert.equal(await EV.padCard(ROOM.id, U.own), null, "off + no clips: no card");
   await EV.setOn(true, { userId: U.adm.userId, username: "adm" });
+});
+
+test("the shared wire fixture (pinned in both repos): the site's job carries what Pepe reads; Pepe's answer, refusal and upload pass the real routes", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, { userId: U.adm.userId, username: "adm" });
+  assert.equal(crypto.createHash("sha256").update(WIRE_RAW).digest("hex"), WIRE_PIN, "regenerate in camfrog-bot (tools/gen_evidence_wire.py) and re-pin BOTH repos");
+  assert.ok(!WIRE_RAW.includes(Buffer.from("\r\n")), "LF line ends");
+  if (process.env.PEPE_BOT_DIR) {
+    const p = path.join(process.env.PEPE_BOT_DIR, "ci", "fixtures", "evidence-wire.json");
+    assert.ok(fs.existsSync(p) && fs.readFileSync(p).equals(WIRE_RAW), "the bot's copy is byte-identical");
+  }
+  const FX = JSON.parse(WIRE_RAW.toString("utf8"));
+  // the job as the site offers it carries every key Pepe reads, with the types he checks
+  const { hk } = await freshLines();
+  resetLimits();
+  const r = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.adm, body: { c: hk.c } });
+  assert.equal(r.status, 200, r.text);
+  const offered = relay.takeJobs(new Set([ROOM.id])).find((j) => j.id === r.d.id);
+  for (const k of FX.job_reads) assert.ok(k in offered, "the offered job has " + k);
+  assert.equal(offered.kind, FX.job.kind);
+  assert.ok(Number.isInteger(offered.veil_ok) && offered.veil_ok > 0, "veil_ok: a positive int (Pepe refuses anything else)");
+  assert.match(offered.id, /^w[a-f0-9]{16}$/);
+  // Pepe's answer, as his builders make it, accepted for a matching audited request; his refusal recorded
+  const pend = (id, stId) => EV._pending.set(id, { id, roomId: ROOM.id, slug: SLUG, c: 1, tx: FX.job.tx, target: FX.job.target, veil: FX.job.veil, saidAt: Date.now(),
+                                                   userId: U.adm.userId, username: "adm", role: "admin", stId, reason: "", state: "pending", status: "", ts: Date.now(), done: 0, secs: 0 });
+  pend(FX.answer_ok.id, FX.job.veil_ok);
+  const a = await call("POST", FX.paths.answer, { body: Object.assign({ password: "bot" }, FX.answer_ok) });
+  assert.equal(a.status, 200, a.text);
+  assert.equal(EV._pending.get(FX.answer_ok.id).state, "ready", "Pepe's real answer body is accepted");
+  pend(FX.answer_failed.id, FX.job.veil_ok);
+  assert.equal((await call("POST", FX.paths.answer, { body: Object.assign({ password: "bot" }, FX.answer_failed) })).status, 200);
+  assert.equal(EV._pending.get(FX.answer_failed.id).state, "failed", "his refusal is recorded");
+  // his upload, for a requester whose Camfrog login is an admin's
+  if (!U.boss) U.boss = await mkUser("boss", "Admin", "boss");
+  const u = await call("POST", FX.paths.upload, { body: Object.assign({ password: "bot" }, FX.upload) });
+  assert.equal(u.status, 200, u.text);
+  const row = (await getQuery("SELECT * FROM evidence_clips WHERE id = ?", [u.d.id]))[0];
+  assert.ok(row && row.subject_login === FX.upload.target && row.veil === FX.upload.veil && row.tx === FX.upload.tx && row.via === "camfrog");
+  for (const id of [FX.answer_ok.id, FX.answer_failed.id]) EV._pending.delete(id);
 });
