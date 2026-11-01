@@ -527,7 +527,7 @@
 <%# CL5: the chat's lines - right after the block they came from, so its rules keep their order in the cascade; <main> carries
     .chatlog (the stylesheet's scope) next to .rm. CL5 fix-up: v=5 - the chat's own --ds-chat-* colours again, the RTL highlight %>
 <link rel="stylesheet" href="/public/css/chatlog.css?v=9">
-<link rel="stylesheet" href="/public/css/veil.css?v=1"><%# wave 2: frog names, hooded avatars, masked bars (not in chatlog.css: the downloads inline that one) %>
+<link rel="stylesheet" href="/public/css/veil.css?v=2"><%# wave 2: frog names, hooded avatars, masked bars (not in chatlog.css: the downloads inline that one) %>
 <%# 1.99es: the pad's look (padlook.js via app.locals): accent -> CSS custom properties on <main> (validated hex only),
     an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
     A pad with no look renders exactly as before (the old link banner above the header). %>
@@ -635,7 +635,8 @@
   <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=3"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <script src="/public/js/stage-mic.js?v=6"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
+  <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
+  <script src="/public/js/stage-mic.js?v=7"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=18"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
@@ -967,9 +968,14 @@
     });
     // the toggle: offered once a line with Reveal shows (only an admin, or the owner in their era, gets rv lines); its state is the
     // server's - the first batch fetch says whether it is on (409 = off), so a reload while it's on keeps showing names
+    // wave 2 (J-18 x the mic stage): ONE toggle per pad for its chat lines AND its stage's cover tiles - its state is mirrored into
+    // window.PATVReveal (pad-reveal.js; the mic stage reveals rv covers while it's on and hides them on "Hide again"), what the stage
+    // learns (a cover's first ask: on / 409 off) comes back here, and a cover with Reveal offers this bar even with no such line
     (function () {
       if (!feedEl || !window.fetch || !window.MutationObserver || !scrollEl || !scrollEl.parentNode) return;
       var on = null, bar = null, busy = false, undo = [], timer = null;
+      var PR = window.PATVReveal && typeof window.PATVReveal.setState === 'function' ? window.PATVReveal : null;
+      function mirror() { if (PR) PR.setState(on); }
       function pending() { return Array.prototype.slice.call(feedEl.querySelectorAll('.veil-reveal:not([disabled])')); }
       function draw() {
         if (!bar) { bar = el('div', 'veil-banner'); bar.setAttribute('role', 'status'); scrollEl.parentNode.insertBefore(bar, scrollEl); }
@@ -991,7 +997,7 @@
         bs.forEach(function (b) { b.disabled = true; });
         busy = true;
         stPost('/api/chatlog/reveal', { room: slug, c: cs, toggle: true }).then(function (d) {
-          busy = false; on = true;
+          busy = false; on = true; mirror();
           var by = {};
           (d.items || []).forEach(function (o) { by[o.c] = o; });
           bs.forEach(function (b) { var o = by[Number(b.getAttribute('data-reveal'))]; if (o) undo.push(applyReveal(b, o)); else b.disabled = false; });
@@ -1001,6 +1007,7 @@
           busy = false;
           bs.forEach(function (b) { b.disabled = false; });
           on = false;                        // (409: it's off; anything else: shown as off - never retried on every new line)
+          if (err.status === 409) mirror();
           draw();
           if (err.status !== 409 && bar) bar.appendChild(el('span', 'veil-chip veil-err', _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: err.message })));
         });
@@ -1012,9 +1019,20 @@
         stPost('/api/chatlog/seethrough', { room: slug, on: !on }).then(function (d) {
           busy = false; on = !!d.on;
           if (!on) { undo.splice(0).forEach(function (f) { try { f(); } catch (e) { /* gone */ } }); }
+          mirror();
           draw();
           if (on) soon();
         }).catch(function (err) { busy = false; draw(); bar.appendChild(el('span', 'veil-chip veil-err', _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: err.message }))); });
+      }
+      if (PR) {
+        PR.on(function (s) {
+          if (s === on || busy) return;
+          on = s;
+          if (on === false) undo.splice(0).forEach(function (f) { try { f(); } catch (e) { /* gone */ } });
+          if (bar) draw();
+          if (on) soon();
+        });
+        PR.onOffer(function () { if (!bar) draw(); });
       }
       new MutationObserver(function () {
         if (!pending().length) return;

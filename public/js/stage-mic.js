@@ -33,6 +33,8 @@
 // wave2 WP-4 (F.4): a veiled speaker is a COVER tile ({kind: "cover"}): the hooded frog (/public/img/anon/hood-peek|shadow-N.svg)
 // on its hood colour under static scanlines, "<frog name or someone> · incognito / hidden", the mic ring; no cam, still, ⚑ or
 // 📌 for anyone; ✕ only with ex: 1, Reveal only with rv: 1 (WP-2's window.PATVReveal.tile), "this is you" with self: 1.
+// wave 2 (owner J-18): while the viewer's "Show real names" toggle for the pad is on (window.PATVReveal.state(), pad-reveal.js), a
+// cover with rv: 1 reveals itself (once per cover id; counted on the toggle's row on the server); "Hide again" hides those again.
 //
 //   var ctl = PATVStageMic.render(host, program, {slug, onChange})    host = the stage's player box (#rmVideo)
 //   ctl.update(program) · ctl.stop() · ctl.selection()
@@ -351,7 +353,7 @@
         e.classList.toggle('mf-cover', cover);
         if (!cover) {
           e.removeAttribute('data-hood'); e.removeAttribute('data-veil');
-          hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; e.classList.remove('revealed'); t.revealed = null;
+          hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; e.classList.remove('revealed'); t.revealed = null; t.revealedBy = null; t.autoId = null;
           return false;
         }
         if (t.mode === 'live') stopLive(true);
@@ -385,10 +387,11 @@
         chip.hidden = !(me || t.revealed);
         chip.textContent = t.revealed ? _t('js.stage.mf.revealed', '{login} · only you can see this', { login: t.revealed }) : me ? _t('js.stage.mf.cover_self', 'this is you') : '';
         e.classList.toggle('revealed', !!t.revealed);
+        if (s.rv === 1) autoReveal(t, s);              // wave 2 (J-18): "Show real names" on -> it reveals itself
         return true;
       }
       function apply(s) {
-        if (t.s && isCover(t.s) && (!isCover(s) || t.s.id !== s.id)) t.revealed = null;
+        if (t.s && isCover(t.s) && (!isCover(s) || t.s.id !== s.id)) { t.revealed = null; t.revealedBy = null; }
         t.s = s;
         if (coverApply(s)) return;
         name.textContent = tightNames() ? short(s.name) : s.name;
@@ -451,9 +454,40 @@
       b.disabled = true;
       Promise.resolve().then(function () { return window.PATVReveal.tile(slug, t.s.id); }).then(function (r) {
         b.disabled = false;
-        if (r && r.ok && typeof r.login === 'string' && /^[\w.\-]{1,40}$/.test(r.login)) { t.revealed = r.login; t.apply(t.s); }
+        if (r && r.ok && typeof r.login === 'string' && /^[\w.\-]{1,40}$/.test(r.login)) { t.revealed = r.login; t.revealedBy = 'click'; t.apply(t.s); }
         else bmsg.textContent = (r && typeof r.error === 'string' && r.error) || _t('js.stage.mf.e_do', 'Couldn\'t do that.');
       }, function () { b.disabled = false; bmsg.textContent = _t('js.stage.mf.e_do', 'Couldn\'t do that.'); });
+    }
+    /** wave 2 (owner J-18, spec E.1 / E.2): the viewer's "Show real names" toggle for this pad - window.PATVReveal (pad-reveal.js;
+     *  the pad chat's bar turns it on / off). While it is on - or not known yet: the first ask finds out, a 409 says off - each cover
+     *  with Reveal (rv: 1) reveals itself, once per cover id on this page, counted on the toggle's row on the server (never a row of
+     *  its own). "Hide again" (off) hides what the toggle revealed; a Reveal pressed by hand stays until the cover leaves. A cover with
+     *  Reveal also asks the pad chat to offer the toggle's bar (PATVReveal.offer). */
+    function revealer() { var R = window.PATVReveal; return R && typeof R.tile === 'function' && typeof R.state === 'function' ? R : null; }
+    var offered = false, unRev = null;
+    function listenReveal(R) {
+      if (unRev || typeof R.on !== 'function') return;
+      unRev = R.on(function (on) {
+        for (var id in tiles) {
+          var t = tiles[id];
+          if (!t.s || !isCover(t.s)) continue;
+          if (on !== true && t.revealedBy === 'toggle') { t.revealed = null; t.revealedBy = null; }
+          t.autoId = null;
+          t.apply(t.s);
+        }
+      }) || function () {};
+    }
+    function autoReveal(t, s) {
+      var R = revealer();
+      if (!R || stopped) return;
+      listenReveal(R);
+      if (!offered && typeof R.offer === 'function') { offered = true; try { R.offer(); } catch (er) { /* the page's own */ } }
+      if (t.revealed || t.autoId === s.id || R.state() === false) return;
+      var id = t.autoId = s.id;
+      Promise.resolve().then(function () { return R.tile(slug, id, { toggle: true }); }).then(function (r) {
+        if (stopped || !t.s || !isCover(t.s) || t.s.id !== id || t.revealed) return;
+        if (r && r.ok && typeof r.login === 'string' && /^[\w.\-]{1,40}$/.test(r.login)) { t.revealed = r.login; t.revealedBy = 'toggle'; t.apply(t.s); }
+      }, function () { /* it stays a cover */ });
     }
     // ── mfix: 📌 pins (owners / staff) and 🙈 Take me off (the person shown) ──
     function pinCount() { var n = 0; P.src.forEach(function (s) { if (s && s.pin) n++; }); return n; }
@@ -807,6 +841,7 @@
       stop: function () {
         stopped = true;
         clearTimeout(hideTimer); clearTimeout(sayTimer);
+        if (unRev) { try { unRev(); } catch (er) { /* gone */ } unRev = null; }
         for (var id in tiles) tiles[id].stop(true);
         tiles = Object.create(null);
         document.removeEventListener('visibilitychange', onVis);

@@ -1155,3 +1155,163 @@ test("wave2 review (B-privacy-ux-7) pad-micfollow.js: a veiled exclusion with no
   assert.deepEqual(sent[0], { xid: X1, remove: true });
   assert.equal(EN["js.padset.mf.veiled_anon"], "a veiled speaker");
 });
+
+// ── wave 2: WP-4's covers wired to WP-2 (veilstage.js) - the page side ──
+/** A stand-in for pad-reveal.js's window.PATVReveal: the toggle's state, its listeners, the asks. */
+function fakeReveal(state0, login = (id) => (id === "anon-0000000b" ? "erin" : "fay")) {
+  const R = { st: state0, calls: [], subs: [], offers: 0 };
+  R.api = { tile: (slug, id, o) => { R.calls.push([slug, id, !!(o && o.toggle)]); return Promise.resolve({ ok: true, login: login(id) }); },
+            state: () => R.st, on: (fn) => { R.subs.push(fn); return () => { R.subs = R.subs.filter((x) => x !== fn); }; }, offer: () => { R.offers++; } };
+  R.set = (v) => { R.st = v; R.subs.slice().forEach((fn) => fn(v)); };
+  return R;
+}
+
+test("wave2 (J-18) stage-mic.js: while 'Show real names' is on, each rv: 1 cover reveals itself ONCE ({toggle: true}) - never one without rv; 'Hide again' hides what the toggle showed (a Reveal pressed by hand stays); unknown asks once, off never; a cover with Reveal offers the toggle's bar", async () => {
+  const prog = (v, src) => ({ v, layout: "grid4", count: src.length, still_s: 20, src });
+  const three = () => [coverS("anon-0000000b", 0, { rv: 1 }), coverS("anon-0000000c", 1, { rv: 1 }), coverS("anon-0000000d", 2)];
+  const chipOf = (s, id) => { const e = tileEl(s.grid, id); const c = findCls(e, "mf-chip"); return c.hidden ? "" : c.textContent; };
+  // on: both rv covers reveal themselves, counted on the toggle (toggle: true); the cover without rv: never
+  let R = fakeReveal(true);
+  let s = dynSandbox({ v: 1, layout: "single", count: 0, still_s: 20, src: [] });
+  s.ctx.PATVReveal = R.api;
+  s.ctl.update(prog(2, three()));
+  await tick();
+  assert.deepEqual(R.calls, [["pad", "anon-0000000b", true], ["pad", "anon-0000000c", true]]);
+  assert.equal(chipOf(s, "anon-0000000b"), "erin · only you can see this");
+  assert.ok(tileEl(s.grid, "anon-0000000b").classList.contains("revealed"), "the dashed edge");
+  assert.equal(chipOf(s, "anon-0000000d"), "", "no rv: nothing");
+  assert.equal(R.offers, 1, "the pad chat is asked to offer its toggle bar (once)");
+  s.ctl.update(prog(3, three()));
+  await tick();
+  assert.equal(R.calls.length, 2, "once per cover id - a new program asks nothing again");
+  // "Hide again": what the toggle showed is hidden again; nothing is asked while it's off
+  R.set(false);
+  await tick();
+  assert.deepEqual([chipOf(s, "anon-0000000b"), chipOf(s, "anon-0000000c")], ["", ""]);
+  assert.ok(!tileEl(s.grid, "anon-0000000b").classList.contains("revealed"));
+  s.ctl.update(prog(4, three()));
+  await tick();
+  assert.equal(R.calls.length, 2, "off: no ask");
+  // a Reveal pressed by hand (no toggle) stays when the toggle goes on and off again
+  findCls(tileEl(s.grid, "anon-0000000b"), "mf-rv").listeners.click[0]();
+  await tick();
+  assert.deepEqual(R.calls[2], ["pad", "anon-0000000b", false]);
+  R.set(true);
+  await tick();
+  assert.deepEqual(R.calls.slice(3), [["pad", "anon-0000000c", true]], "on again: only the one not shown yet");
+  R.set(false);
+  await tick();
+  assert.deepEqual([chipOf(s, "anon-0000000b"), chipOf(s, "anon-0000000c")], ["erin · only you can see this", ""], "the hand-pressed one stays");
+  // a cover that leaves and comes back with a new id is asked about afresh; a stopped stage stops listening
+  s.ctl.stop();
+  assert.equal(R.subs.length, 0, "unsubscribed on stop");
+  // not known yet (null): the first ask finds out; off from the start: never asked
+  R = fakeReveal(null);
+  s = dynSandbox({ v: 1, layout: "single", count: 0, still_s: 20, src: [] });
+  s.ctx.PATVReveal = R.api;
+  s.ctl.update(prog(2, [coverS("anon-0000000b", 0, { rv: 1 })]));
+  await tick();
+  assert.deepEqual(R.calls, [["pad", "anon-0000000b", true]]);
+  s.ctl.stop();
+  R = fakeReveal(false);
+  s = dynSandbox({ v: 1, layout: "single", count: 0, still_s: 20, src: [] });
+  s.ctx.PATVReveal = R.api;
+  s.ctl.update(prog(2, [coverS("anon-0000000b", 0, { rv: 1 })]));
+  await tick();
+  assert.deepEqual(R.calls, []);
+  s.ctl.stop();
+  // a bad answer reveals nothing
+  R = fakeReveal(true, () => "<b>x</b>");
+  s = dynSandbox({ v: 1, layout: "single", count: 0, still_s: 20, src: [] });
+  s.ctx.PATVReveal = R.api;
+  s.ctl.update(prog(2, [coverS("anon-0000000b", 0, { rv: 1 })]));
+  await tick();
+  assert.equal(chipOf(s, "anon-0000000b"), "");
+  s.ctl.stop();
+});
+
+test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-store / no-referrer / fetch-only; {toggle: true} adds toggle and learns the toggle (ok -> on, 409 -> off, then no ask until it's on); a bad id never goes out, a bad login never comes back; on / offer reach their listeners", async () => {
+  const js = read("public", "js", "pad-reveal.js");
+  const sent = [];
+  let answer = { status: 200, d: { ok: true, tile: "anon-0000000b", login: "erin", display: "Erin" } };
+  const ctx = { console, fetch: (u, o) => { sent.push([u, o]); const a = answer; return Promise.resolve({ ok: a.status < 400, status: a.status, json: () => Promise.resolve(a.d) }); } };
+  ctx.window = ctx;
+  vm.runInNewContext(js, ctx);
+  const R = ctx.PATVReveal;
+  const seen = [];
+  const un = R.on((v) => seen.push(v));
+  assert.equal(R.state(), null, "not known yet");
+  // a press on Reveal
+  let r = await R.tile("pad", "anon-0000000b");
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), { ok: true, login: "erin", display: "Erin" });
+  assert.equal(sent[0][0], "/api/chatlog/reveal");
+  const o = sent[0][1];
+  assert.deepEqual([o.method, o.credentials, o.cache, o.referrerPolicy, o.headers["x-requested-with"]], ["POST", "same-origin", "no-store", "no-referrer", "fetch"]);
+  assert.deepEqual(JSON.parse(o.body), { room: "pad", tile: "anon-0000000b" });
+  assert.equal(R.state(), null, "a press says nothing about the toggle");
+  // the toggle's auto-reveal: toggle: true, an answer = on
+  r = await R.tile("pad", "anon-0000000b", { toggle: true });
+  assert.equal(r.ok, true);
+  assert.deepEqual(JSON.parse(sent[1][1].body), { room: "pad", tile: "anon-0000000b", toggle: true });
+  assert.equal(R.state(), true);
+  // 409 (the toggle is off): off, and no more asks until it's on again
+  answer = { status: 409, d: { ok: false, code: "toggle_off", error: "Show real names is off - turn it on first." } };
+  r = await R.tile("pad", "anon-0000000c", { toggle: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), { ok: false, off: true });
+  assert.equal(R.state(), false);
+  const n = sent.length;
+  r = await R.tile("pad", "anon-0000000c", { toggle: true });
+  assert.equal(sent.length, n, "off: not asked");
+  assert.deepEqual(seen, [true, false], "listeners told of each change");
+  R.setState(true);
+  assert.deepEqual(seen, [true, false, true], "the chat's bar turning it on");
+  // refusals carry the server's words; a bad id never goes out; a login that isn't one never comes back
+  answer = { status: 403, d: { ok: false, error: "Only PATV admins…" } };
+  assert.deepEqual(JSON.parse(JSON.stringify(await R.tile("pad", "anon-0000000c"))), { ok: false, error: "Only PATV admins…" });
+  const m = sent.length;
+  for (const bad of ["frankiefettuccine", "anon-1", "../x", ""]) assert.equal((await R.tile("pad", bad)).ok, false);
+  assert.equal((await R.tile("", "anon-0000000c")).ok, false);
+  assert.equal(sent.length, m, "nothing sent for a bad id or pad");
+  answer = { status: 200, d: { ok: true, login: "<img src=x>" } };
+  assert.equal((await R.tile("pad", "anon-0000000c")).ok, false);
+  let offered = 0;
+  R.onOffer(() => offered++);
+  R.offer(); R.offer();
+  assert.equal(offered, 2);
+  un();
+  R.setState(false);
+  assert.equal(seen.length, 3, "unsubscribed");
+});
+
+test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v7) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
+  const room = read("views", "room.ejs");
+  const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=7"), "pad-reveal.js, then stage-mic.js v7");
+  const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
+  assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
+  assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");
+  assert.ok(/if \(err\.status === 409\) mirror\(\);/.test(tg), "a 409: off");
+  assert.ok(/on = !!d\.on;[\s\S]{0,200}mirror\(\);/.test(tg), "the bar's own flip");
+  assert.ok(tg.includes("PR.on(function (s) {") && tg.includes("PR.onOffer(function () { if (!bar) draw(); });"), "what the stage learns comes back; a cover offers the bar");
+  for (const v of ["room.ejs", "home.ejs"]) assert.match(read("views", v), /\/public\/css\/veil\.css\?v=2"/, v + ": veil.css v2 (the hood tokens moved)");
+});
+
+test("wave2: one frog-name session = one hood - the chat bubble (chatlog-core .hdN over veil.css --hood-N) and the stage cover (stage-mic hood-*-N.svg over webrtc.css .mf-cover[data-hood=N]) use the same index, the same picture and the same colour token", () => {
+  const veil = read("public", "css", "veil.css"), rtc = read("public", "css", "webrtc.css");
+  const core = read("public", "js", "chatlog-core.js"), mic = read("public", "js", "stage-mic.js");
+  const tok = (n) => (veil.match(new RegExp("--hood-" + n + ": (#[0-9a-f]{6})")) || [])[1];
+  const coverTok = (n) => (n === 0 ? (rtc.match(/\.player \.mf-tile\.mf-cover \{ --mf-hood: (#[0-9a-f]{6})/) || [])[1]
+    : (rtc.match(new RegExp('\\.mf-cover\\[data-hood="' + n + '"\\] \\{ --mf-hood: (#[0-9a-f]{6})')) || [])[1]);
+  for (let n = 0; n < 8; n++) {
+    assert.ok(tok(n) && tok(n) === coverTok(n), `hood ${n}: chat ${tok(n)} = stage ${coverTok(n)}`);
+    assert.ok(veil.includes(`.av.hood.hd${n} { background-color: var(--hood-${n}); }`), "the bubble's colour " + n);
+    assert.ok(veil.includes(`.av.hood-peek.hd${n} { background-image: url(/public/img/anon/hood-peek-${n}.svg); }`), "the peek picture " + n);
+    assert.ok(veil.includes(`.av.hood-shadow.hd${n} { background-image: url(/public/img/anon/hood-shadow-${n}.svg); }`), "the shadow picture " + n);
+  }
+  // both pass the session's index through unchanged (0-7, integers only)
+  assert.ok(core.includes("' hd' + hd") && /function hoodOf\(u\) \{ var n = u \? Number\(u\.hood\) : NaN; return veilAlias\(u\) && n >= 0 && n <= 7/.test(core), "chatlog-core: .hd<session hood>");
+  assert.ok(mic.includes("hoodImg.src = '/public/img/anon/hood-' + (veil === 'hidden' ? 'shadow' : 'peek') + '-' + hood + '.svg';"), "stage-mic: hood-*-<session hood>.svg");
+  // the hood art itself: index N is the Nth hood colour of both palettes (charcoal, midnight, plum, forest, maroon, teal, mustard, slate)
+  const art = ["#2b2d31", "#23305c", "#4b2a5e", "#1f4a33", "#5c2228", "#1d4f57", "#6b5418", "#3d4654"];
+  for (let n = 0; n < 8; n++) assert.ok(read("public", "img", "anon", `hood-peek-${n}.svg`).includes(`fill="${art[n]}"`), "hood-peek-" + n);
+});
