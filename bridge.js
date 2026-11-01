@@ -1706,7 +1706,10 @@ function register(app, { isBotToken, addUser }) {
     const jobs = relay.takeJobs(liveIds);
     const mfc = relay.mfCancelled();               // micfollow: claimed mic-stage stills Pepe must drop (bridge-relay.mfCancelled)
     return { success: true, ...r, jobs, viewers: require("./padmod").viewersFor(liveIds), ...blocks, ...(mfc.length ? { mf_cancel: mfc } : {}),
-             ...(PW.isOn() ? { privwire: 2 } : {}) };
+             ...(PW.isOn() ? { privwire: 2 } : {}),
+             // wave 2 WP-5 (spec E.3): evidence clips can be made (evidence.js: its switch AND privacy wire v2) - Pepe offers the Camfrog
+             // !clipmic evidence path only after this (never said while either is off: the contract fixture runs without it)
+             ...(evidenceOn() ? { evidence: 1 } : {}) };
   }
   // wave 2 WP-2 (spec A.3 handshake): the privacy wire v2 receiver - Pepe's FULL form (real UserRefs + priv, hidden words, hold ids).
   //  * every call is counted FIRST (the dark proof: while the switch has never been on, the counter stays 0 - Pepe never calls);
@@ -1923,6 +1926,8 @@ function register(app, { isBotToken, addUser }) {
   require("./ghost").register(app, { isBotToken, addUser });   // 1.99aaf: 👻 staff ghost mode (cam views tell nobody; always audited)   // 1.99yq: 👁 who opened your cam (Pepe PMs you) + !blockviewer / the privacy card
   require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)
   require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
+  require("./evidence").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });  // wave 2 WP-5: moderation evidence clips of veiled turns (dark)
+  require("./evidenceexport").register(app, { addUser, bySlug });                // wave 2 WP-5 (E.4): the admin evidence export (dark)
   require("./padmod").register(app, { addUser, bySlug, isLive: isLiveShown });     // 1.99co: the pad Manage panel
   require("./padpepe").register(app, { addUser, bySlug, isLive: isLiveShown });    // 1.99qr: the 🐸 Pepe submenu (look / camroast / roast)
   require("./chatlog").register(app, { addUser });                               // CL2: the chat archive (dark) + its /admin/bridge card
@@ -2163,6 +2168,9 @@ function padTabsFor(o) {
   return { tabs, camfrog, active, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null, lineLive: !!o.lineLive }),
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })), lineLive: !!o.lineLive };
 }
+
+/** wave 2 WP-5: may evidence clips be made now (evidence.js)? Never throws: false on any error. */
+function evidenceOn() { try { return require("./evidence").effective(); } catch (e) { return false; } }
 
 /** wave 2 WP-2 (spec E.1): who is behind veiled line c of room roomId, for a reveal (seethrough.js checks role and era) -> {ts, vz, vw}
  *  | null. The live item's own (non-enumerable) identity first, else the archive's chat_log_veil row - only for a line of THIS room. */

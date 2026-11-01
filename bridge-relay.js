@@ -325,10 +325,11 @@ function takeJobs(liveRoomIds, via = "sync") {
     // ids it has seen) could run a paid command twice. Chat lines / clips / snaps may be retried.
     // 1.99ez: a cam clip is offered once too - a re-offer must never start a second recording of the same cam
     // 1.99fp: a mic clip preview too (once is enough - the browser asks again)
+    // wave 2 WP-5: an evidence clip request too (evidence.js)
     // 1.99il: a tip announcement too (a re-offer could say it twice)
     // 1.99kp: a stream-start announcement too (golive.js); 1.99lr: a 📼 queue's "now playing" too; 1.99nk: a boost too
     // 1.99ye: a say too - it carries a client id now, and "unconfirmed" (SAY_CLAIM_TTL) is safer than a double post
-    const due = j.state === "pending" || (j.kind !== "say" && j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.kind !== "boostnote" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
+    const due = j.state === "pending" || (j.kind !== "say" && j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "micevidence" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.kind !== "boostnote" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
     // micfollow: a mic-stage still is offered only while the mic stage still wants it (Pepe knows nothing of the mic-stage
     // switch, the pad's exclusions, stage bans, private activity or cam access - the site checks them here, last thing)
@@ -356,6 +357,9 @@ function takeJobs(liveRoomIds, via = "sync") {
     if (j.kind === "micclip") { base.target = j.target; base.viewer = j.username; base.tx = j.tx; }   // 1.99fp: 🔊 Clip on a 🎙 line
     // wave 2 (owner J-7): an incognito turn clipped under its frog name - Pepe posts it as the alias, never the speaker's name
     if (j.kind === "micclip" && j.alias) { base.alias = j.alias; base.veil = "incognito"; }
+    // wave 2 WP-5 (spec E.3): an evidence clip of a veiled turn (evidence.js) - offered ONCE; veil_ok = the seethrough_log row the site
+    // wrote for this request (Pepe passes include_veiled only for a job carrying it, and posts the audio back to /api/bridge/evidence only)
+    if (j.kind === "micevidence") { base.target = j.target; base.tx = j.tx; base.veil = j.veil; base.veil_ok = j.veil_ok; base.viewer = j.username; }
     // 1.99il: 💸 a tip made from this pad's page - Pepe says it in the room (target = the recipient's login)
     if (j.kind === "tipnote") { base.target = j.target; base.amount = j.amount; if (j.display) base.display = j.display; }
     if (j.kind === "golive" || j.kind === "nowplaying") { base.streamer = j.streamer; base.pad = j.pad; base.what = j.what || ""; base.link = j.link || ""; }   // 1.99kp / 1.99lr
