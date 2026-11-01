@@ -977,6 +977,32 @@ test("wave2 F.3 stage-mic.js: a 375 px phone keeps the templates (.narrow) with 
   off.ctl.stop();
 });
 
+test("wave2 WP-4 stage-room.js (?v=18): the mic stage repaints when only the dynamic main, a ring, a cover's flags or 'Dynamic offered' change", () => {
+  const x = switcher({});
+  const base = () => MIC({ dyn: { n: 2, t: "d2", main: "a" }, src: [{ id: "a" }, { id: "b" }], manage: { pins_room: 0 } });
+  x.sw.setMic(base());
+  const n0 = x.rendered.length;
+  x.sw.setMic(base());
+  assert.equal(x.rendered.length, n0, "nothing moved: no repaint");
+  const changes = [
+    (p) => { p.dyn.main = "b"; },
+    (p) => { p.src[1].ring = true; },
+    (p) => { p.src[1] = { id: "b", kind: "cover", hood: 2, veil: "incognito" }; },
+    (p) => { p.src[1] = { id: "b", kind: "cover", hood: 2, veil: "incognito", rv: 1, ex: 1 }; },
+    (p) => { p.src[1] = { id: "b", kind: "cover", hood: 2, veil: "hidden", rv: 1, ex: 1, self: 1 }; },
+    (p) => { p.manage.dyn_ok = true; },
+  ];
+  let last = base();
+  for (const f of changes) {
+    const p = JSON.parse(JSON.stringify(last)); f(p);
+    const before = x.rendered.length;
+    x.sw.setMic(p);
+    assert.equal(x.rendered.length, before + 1, "repainted after " + f.toString());
+    last = p;
+  }
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=18/, v);
+});
+
 // ── wave2 WP-4 (the incognito / mic-stage spec F.4): cover tiles on the page ──
 const coverS = (id, pos, extra) => Object.assign({ kind: "cover", id, name: null, hood: 3, veil: "incognito", pos, newest: false, video: "cover", watch: "cover" }, extra || {});
 

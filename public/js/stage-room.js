@@ -395,9 +395,13 @@
     function sigOf(p) {
       if (!p) return '';
       var m = p.manage || null;
+      // (wave2 WP-4: + the dynamic template, every holder's ring, a cover's kind / hood / veil / Reveal / ✕ / self flags, and
+      // whether the stage bar may offer "Dynamic" - each one repaints the mic stage)
       return JSON.stringify([p.v, p.count, p.pins_n || 0, p.signin, p.blocked, p.active, p.default, p.layout, p.frozen_until, p.speaking || null, !!p.report,
-        (Array.isArray(p.src) ? p.src : []).map(function (s) { return s ? [s.id, s.name, s.video, s.why, s.watch, s.newest, s.pos, !!s.pin, !!s.recent, !!s.mine] : null; }),
-        m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override, m.pins_room] : null]);
+        p.dyn ? [p.dyn.n, p.dyn.t, p.dyn.main] : null,
+        (Array.isArray(p.src) ? p.src : []).map(function (s) { return s ? [s.id, s.name, s.video, s.why, s.watch, s.newest, s.pos, !!s.pin, !!s.recent, !!s.mine,
+                                                                          !!s.ring, s.kind || null, s.hood == null ? null : s.hood, s.veil || null, s.rv || 0, s.ex || 0, s.self || 0] : null; }),
+        m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override, m.pins_room, !!m.dyn_ok] : null]);
     }
     function setMic(p) {
       if (!window.PATVStageMic) return;                     // WebRTC off: no mic stage on this page

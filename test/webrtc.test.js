@@ -572,7 +572,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(off, RTC, name + ": no WebRTC while off");
     const html = await render(on);
     assert.match(html, /webrtc-client\.js\?v=6/, name);   // avsync: register live-cam receivers before attaching the stream
-    assert.match(html, /webrtc\.css\?v=6/, name);   // micfollow: + the 🎙 mic stage layouts
+    assert.match(html, /webrtc\.css\?v=7/, name);   // micfollow: + the 🎙 mic stage layouts; wave2 WP-4: dynamic + cover tiles
   }
   // review fix: lip sync's controller loads only while its mode applies to the viewer (avsync.viewerOn -> avsyncOn), before
   // the live-cam receivers; while it's off nothing polls /api/rooms/:slug/avsync
@@ -580,10 +580,10 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(await render(on), /av-sync\.js/, name + ": no lip sync controller while off");
     assert.doesNotMatch(await render({ ...on, avsyncOn: false }), /av-sync\.js/, name);
     const html = await render({ ...on, avsyncOn: true });
-    assert.match(html, /av-sync\.js\?v=2"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=6"/, name);
+    assert.match(html, /av-sync\.js\?v=3"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=6"/, name);   // (wave2 WP-4: 3 - the ring)
     assert.doesNotMatch(await render({ ...offFn, avsyncOn: true }), /av-sync\.js/, name + ": never without WebRTC");
   }
-  assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=17/);   // train2: 14 = stagefix's 13 + micfollow's 12 merged
+  assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=18/);   // train2: 14 = stagefix's 13 + micfollow's 12 merged; wave2 WP-4: 18
   assert.match(await renderRoom(on), /stage-lowlat\.js\?v=2/);
   const book = await renderBook(on);
   assert.match(book, /id="tabRtc"[^>]*>⚡ Browser · ultra-low latency/);
