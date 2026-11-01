@@ -932,8 +932,13 @@ async function reportRead(user, c) {
   let d = {};
   try { d = JSON.parse(row.d) || {}; } catch (e) { d = {}; }
   const u = d.u || {};
-  return { c: Number(row.c), k: row.k, ts: Number(row.ts), text: row.purged ? null : row.text, purged: !!row.purged,
-           name: row.purged ? null : anon ? "someone" : (u.display || row.who || null), anon: !row.purged && anon,
+  // wave 2 WP-2 (spec E.7): a reported INCOGNITO line shows staff its frog name and words ("who, not what"); a reported HIDDEN line
+  // shows no words - "needs an admin" (only chatlog.see_through can reveal it, logged)
+  const hidden = !row.purged && (u.veil === "hidden" || p === "mask");
+  const alias = !row.purged && u.anon && typeof u.alias === "string" && !hidden ? u.alias : null;
+  return { c: Number(row.c), k: row.k, ts: Number(row.ts), text: row.purged || hidden ? null : row.text, purged: !!row.purged,
+           ...(hidden ? { masked: true, needs_admin: true } : {}),
+           name: row.purged ? null : anon || hidden ? (alias || "someone") : (u.display || row.who || null), anon: !row.purged && (anon || hidden),
            login: row.purged || anon || !row.who || String(row.who).startsWith("u:") ? null : row.who,
            removed: row.rm_at != null ? { at: Number(row.rm_at), by: String(row.rm_by || "").replace(/:.*/, ""), why: row.rm_why || "" } : null };
 }
@@ -1021,13 +1026,26 @@ async function resolveKeys(input) {
 const WHO_ACTIONS = Object.freeze(["look", "hide_all", "unhide_all", "purge_all", "export", "hold", "unhold"]);
 /** The owner's decision-9 change: a person's keys in the archive - their chat keys and the "h:<hash>" of each (the lines they said
  *  while incognito, which Pepe sent anonymised; a purged line's who has that shape too, so the counts below skip purged rows). */
-const lineKeys = (keys) => [...keys, ...keys.map((k) => "h:" + CL.hash(k))];
-async function whoSummary(keys) {
+// wave 2 WP-2 (spec E.7, owner J-2): the "h:" keys - who is behind "someone" / a frog name - only for chatlog.see_through (Admin,
+// locked "privacy"); each such use is a seethrough_log row (scope chat_tool). Staff look / export / summarise NAMED rows only, plus a
+// count ("N veiled lines - ask an admin"); hide_all / purge_all / hold still act on the veiled rows BLIND (counts only), so a
+// privacy@ request covers them. Without this a guessed login would confirm "Soggy Bullfrog = FrankieFettuccine".
+const lineKeys = (keys, see = false) => (see ? [...keys, ...keys.map((k) => "h:" + CL.hash(k))] : [...keys]);
+const veiledKeys = (keys) => keys.map((k) => "h:" + CL.hash(k));
+async function canSeeThrough(me) {
+  try { return !!(me && me.userId && (await SP.canId(me.userId, "chatlog.see_through"))); } catch (e) { return false; }
+}
+async function whoSummary(keys, see = false) {
   const q = keys.map(() => "?").join(",");
-  const lk = lineKeys(keys), lq = lk.map(() => "?").join(",");
+  const lk = lineKeys(keys, see), lq = lk.map(() => "?").join(",");
   const per = await getQuery(`SELECT r.room_id, COUNT(*) AS n, SUM(CASE WHEN l.rm_at IS NOT NULL THEN 1 ELSE 0 END) AS rm, MIN(l.ts) AS first, MAX(l.ts) AS last
                               FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE l.who IN (${lq}) AND (l.purged IS NULL OR l.who NOT LIKE 'h:%')
                               GROUP BY l.rk ORDER BY n DESC LIMIT 200`, lk);
+  let veiled = null;
+  if (!see) {
+    const vk = veiledKeys(keys);
+    veiled = Number((await getQuery(`SELECT COUNT(*) AS n FROM chat_log WHERE who IN (${vk.map(() => "?").join(",")}) AND purged IS NULL`, vk))[0].n) || 0;
+  }
   let relays = null;
   if (await tableThere("dm_relays")) {
     const cols = (await getQuery("SELECT name FROM pragma_table_info('dm_relays')")).map((r) => r.name);
@@ -1038,6 +1056,7 @@ async function whoSummary(keys) {
     rooms: per.map((r) => ({ room_id: r.room_id, title: padOf(r.room_id).title, n: Number(r.n) || 0, removed: Number(r.rm) || 0, first: Number(r.first) || null, last: Number(r.last) || null })),
     hidden: keys.some((k) => CL.isHiddenKey(k)), tx_hidden: keys.some((k) => CL.isTxHiddenKey(k)),
     held: keys.filter((k) => heldWhoKey(k)), relays_to: relays, camfrog: await camfrogSummary(keys),
+    ...(veiled != null ? { veiled, veiled_note: veiled ? `${veiled} veiled line(s) - ask an admin` : null } : {}),
   };
 }
 // Train 3 review - the CL13 merge item (commits 3a1e7ffa / c0b6bc26: "the CL6 per-login staff tool should call cfLoginSummary /
@@ -1093,6 +1112,17 @@ async function whoAction(user, input, { action = "look", why = "" } = {}) {
   await audit(me.userId, { who: keys.map((k) => pseudoOf.get(k) || k).join(" "), kind: "login_tool", why: `${action}${note ? ": " + note : ""}` });
   const out = { ok: true, keys, account: acct, label };
   const t = now();
+  // wave 2 (E.7): an admin's look / export / summary reaches the login's veiled rows too - logged as see-through (scope chat_tool)
+  const see = await canSeeThrough(me);
+  if (see && (action === "look" || action === "export")) {
+    const vk = veiledKeys(keys);
+    const n = Number((await getQuery(`SELECT COUNT(*) AS n FROM chat_log WHERE who IN (${vk.map(() => "?").join(",")}) AND purged IS NULL`, vk))[0].n) || 0;
+    if (n) {
+      try {
+        await require("./seethrough").log({ userId: me.userId, role: "admin", scope: "chat_tool", logins: cfLogins(keys), reason: note, ref: action });
+      } catch (e) { console.error("[chatlogmod] see-through log:", e.message); throw new Refuse(500, "Couldn't log the see-through - nothing shown.", "seethrough_log"); }
+    }
+  }
   if (action === "hide_all") {
     await CL.hideNow(keys, "staff");
     out.hidden = true;
@@ -1103,7 +1133,7 @@ async function whoAction(user, input, { action = "look", why = "" } = {}) {
   } else if (action === "purge_all") {
     if (keys.some((k) => heldWhoKey(k))) throw new Refuse(409, "A legal hold covers this login - release it first.", "held");
     let last = 0, purged = 0, skipped = 0;
-    const lk = lineKeys(keys), q = lk.map(() => "?").join(",");
+    const lk = lineKeys(keys, true), q = lk.map(() => "?").join(",");     // (wave 2: veiled rows too, blind - counts only)
     for (;;) {
       const rows = await getQuery(`SELECT l.*, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE l.who IN (${q}) AND l.purged IS NULL AND l.c > ?
                                    ORDER BY l.c LIMIT ?`, [...lk, last, BATCH]);
@@ -1137,7 +1167,7 @@ async function whoAction(user, input, { action = "look", why = "" } = {}) {
     console.log(`[chatlogmod] login tool: purge_all by ${me.username || me.userId} - ${purged} line(s), ${skipped} under a room hold`);
   } else if (action === "export") {
     const q = keys.map(() => "?").join(",");
-    const lk = lineKeys(keys), lq = lk.map(() => "?").join(",");
+    const lk = lineKeys(keys, see), lq = lk.map(() => "?").join(",");     // (wave 2: staff - named rows only)
     const rows = await getQuery(`SELECT l.c, l.ts, l.k, l.text, l.d, l.rm_at, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk
                                  WHERE l.who IN (${lq}) AND l.purged IS NULL ORDER BY l.c LIMIT ?`, [...lk, EXPORT_MAX]);
     const KIND = { msg: "chat", tx: "mic", join: "join", leave: "leave", mic: "mic_grab", unmic: "mic_drop" };
@@ -1168,7 +1198,7 @@ async function whoAction(user, input, { action = "look", why = "" } = {}) {
     }
     await loadHolds();
   }
-  out.summary = await whoSummary(keys);
+  out.summary = await whoSummary(keys, see);
   return out;
 }
 

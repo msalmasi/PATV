@@ -499,16 +499,26 @@ test("@mention alerts: an incognito speaker's line alerts nobody; hidden names a
   void R;
 });
 
-test("the per-login staff tool and the account export reach the lines they said while incognito; a merge re-keys an account's anonymised web lines", async () => {
+test("the per-login staff tool (E.7: named rows + a veiled COUNT for staff, every row for an admin, logged) and the account export reach the lines they said while incognito; a merge re-keys an account's anonymised web lines", async () => {
   await ready();
   const look = await call("POST", "/api/admin/chatlog/who", U.staff, { key: "inccf", action: "look", why: "privacy request #1" });   // CL6 fix-up: a look needs its reason
   assert.equal(look.status, 200, look.text.slice(0, 200));
-  const lines = look.d.summary.lines;
-  assert.ok(lines >= 4, "named and anonymised rows: " + lines);
+  const lines = look.d.summary.lines, veiled = look.d.summary.veiled;
+  // wave 2 (E.7): staff never reach the "h:" rows by typing a login - that would confirm who is behind "someone" / a frog name
+  assert.ok(lines >= 2 && veiled >= 2 && lines + veiled >= 4, `named ${lines} + veiled ${veiled} rows`);
+  assert.match(look.d.summary.veiled_note, /veiled line\(s\) - ask an admin/);
   const ex = await call("POST", "/api/admin/chatlog/who", U.staff, { key: "inccf", action: "export", why: "privacy request #1" });
   assert.equal(ex.status, 200, ex.text.slice(0, 200));
   const texts = ex.d.export.lines.map((l) => l.text);
-  for (const t of ["ina named words", "ina anonymous words"]) assert.ok(texts.includes(t), "export: " + t);
+  assert.ok(texts.includes("ina named words"), "export: the named line");
+  assert.ok(!texts.includes("ina anonymous words"), "E.7: a staff export never holds a line said while incognito");
+  // an admin (chatlog.see_through) reaches them - and that is a see-through log row (scope chat_tool)
+  const boss = U.boss || (U.boss = await mkUser("boss", "Admin", "bosscf"));
+  const exA = await call("POST", "/api/admin/chatlog/who", boss, { key: "inccf", action: "export", why: "privacy request #1" });
+  assert.equal(exA.status, 200, exA.text.slice(0, 200));
+  const textsA = exA.d.export.lines.map((l) => l.text);
+  for (const t of ["ina named words", "ina anonymous words"]) assert.ok(textsA.includes(t), "admin export: " + t);
+  assert.ok((await getQuery("SELECT 1 FROM seethrough_log WHERE scope = 'chat_tool' AND user_id = ?", [boss.userId])).length, "logged as see-through");
   const own = await CL.exportLines(U.inc.userId, "inccf");
   const a = own.find((l) => l.text === "ina anonymous words");
   assert.ok(a, "their own data export has the line they said while incognito");

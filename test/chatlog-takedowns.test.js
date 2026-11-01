@@ -659,7 +659,11 @@ test("a legal hold on a login covers what they said while incognito (who h:<hash
   // their own anonymised line: theirs to remove (no one else's); the export lists both, "someone"
   assert.equal((await act(c2, "remove", U.mem)).status, 404);
   assert.equal((await act(c2, "remove", U.inc)).status, 200);
+  // wave 2 (E.7): a staff export holds named rows only - an admin's (chatlog.see_through, logged) holds the incognito ones too
   r = await post("/api/admin/chatlog/who", U.staff, { key: "@inc", action: "export", why: "their own request #3" });
+  assert.ok(!r.d.export.lines.some((l) => /india incognito words/.test(l.text || "")), "staff: no veiled row");
+  assert.ok(r.d.summary.veiled >= 1, "staff: a count of them");
+  r = await post("/api/admin/chatlog/who", U.admin, { key: "@inc", action: "export", why: "their own request #3" });
   const texts2 = r.d.export.lines.map((l) => l.text);
   assert.ok(texts2.includes("india incognito words one") && texts2.includes("india incognito words two"));
   assert.ok(r.d.export.lines.every((l) => l.shown_as === "someone" || l.shown_as === null));
