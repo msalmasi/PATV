@@ -173,7 +173,7 @@
       if (seed != null) el.setAttribute('data-seed', seed);
       try { el.innerHTML = window.pepeAvatarSVG(+el.getAttribute('data-seed') || 7, 132, layers || JSON.parse(el.getAttribute('data-layers') || '{}')); } catch (e) { /* keep the tile */ }
     }
-    var sc = document.createElement('script'); sc.src = '/public/js/avatar.js'; sc.onload = function () { draw(); }; document.head.appendChild(sc);
+    var sc = document.createElement('script'); sc.src = '/public/js/avatar.js?v=2'; sc.onload = function () { draw(); }; document.head.appendChild(sc);
     var dlg = document.getElementById('gsConfirm'); if (!dlg) return;
     var msg = document.getElementById('gsMsg'), what = null, busy = false;
     function show(ok, text) { msg.className = 'msg on ' + (ok ? 'ok' : 'bad'); msg.innerHTML = text; }

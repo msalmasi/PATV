@@ -83,7 +83,7 @@
   var esc = function (s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; };
   var fill = function (s, o) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return o[k] != null ? o[k] : m; }); };
   var avaReady = false;
-  var sc = document.createElement('script'); sc.src = '/public/js/avatar.js'; sc.onload = function () { avaReady = true; render(); }; document.head.appendChild(sc);
+  var sc = document.createElement('script'); sc.src = '/public/js/avatar.js?v=2'; sc.onload = function () { avaReady = true; render(); }; document.head.appendChild(sc);
   function ava(seed) { return avaReady && typeof window.pepeAvatarSVG === 'function' && seed != null ? window.pepeAvatarSVG(seed, 32) : ''; }
 
   function render() {
