@@ -372,11 +372,22 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   // 1.99aft (review): WP-1 is dated the day this server first served it (terms.TEXT_DATES) - here, the test's own run
   const wp1 = (await terms.textDates())["wp1-voice"];
   assert.ok(wp1 && wp1.at > 0 && wp1.day, "WP-1's first-served day is recorded");
-  // mic keep (handoff 16 follow-up): the Mic-stage snaps and clips paragraph is dated the same way
+  // mic keep (handoff 16 follow-up): the Mic-stage snaps and clips paragraph is dated the same way - but only from the first time
+  // /privacy is served with mic-stage captures on (stagecap_mic); while they are off it isn't on the page at all
+  const MS = require("../mainstage");
+  assert.equal(MS.config().stagecap_mic, false, "mic-stage captures are off by default");
+  assert.equal((await terms.textDates())["mic-stage-keep"], undefined, "not published while mic-stage captures are off");
+  assert.doesNotMatch(p.text, /id="mic-stage-captures"/, "no Mic-stage paragraph while the switch is off");
+  assert.doesNotMatch(p.text, /added <a href="#mic-stage-captures">/, "and no change note");
+  await MS.setConfig({ stagecap_mic: true }, "test");
+  const pOn = await get("/privacy", null);
+  await MS.setConfig({ stagecap_mic: false }, "test");
   const msk = (await terms.textDates())["mic-stage-keep"];
   assert.ok(msk && msk.at > 0 && msk.day, "the mic-stage text's first-served day is recorded");
+  const pOff = await get("/privacy", null);
+  assert.match(pOff.text, /id="mic-stage-captures"/, "once published it stays after a switch-off (the copies it describes still exist)");
   // rebase onto retention (1.99afr): PRIVACY_UPDATED is 28 October 2026 - on or before that day the hand-set date is the newest
-  const top = msk.at > wp1.at ? msk : wp1;
+  const top = wp1;                                 // p was served before the mic-stage text was published
   const newest = top.at > Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC") ? top.day : terms.PRIVACY_UPDATED;
   assert.match(p.text, new RegExp("Last updated " + newest), "the Privacy Policy keeps its own date: the newest dated text");
   // 1.99wh: the Incognito section (§10) - a clarification of a user-controlled setting: the privacy date moves, VERSION doesn't
@@ -419,7 +430,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'wp1-voice'", [wp1.at]);
   await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'mic-stage-keep'", [msk.at]);
   // mic keep (handoff 16 follow-up, the owner's 2026-11-01 sentence as amended): section 3's paragraph, not behind a switch
-  const ms3 = (p.text.match(/<p id="mic-stage-captures">[\s\S]*?<\/p>/) || [""])[0];
+  const ms3 = (pOn.text.match(/<p id="mic-stage-captures">[\s\S]*?<\/p>/) || [""])[0];
   assert.match(ms3, /When a pad's Camfrog room has <code>!snap<\/code> on \(and <code>!clip<\/code> for clips\), eligible members can snap or clip the pad's 🎙 mic stage as it appears to them and add it to the pad's story\./);
   assert.match(ms3, /Incognito speakers appear only as their cover tile and frog name but their voice is included, hidden speakers appear only as their cover tile, people who keep their activity private aren't shown, and the whole room's audio is muted while a hidden or private speaker holds the mic\./);
   assert.match(ms3, /A snap or clip in which everyone was shown openly can also be saved to a collection or posted to the pad; one with a cover tile, a blanked tile or muted audio can't\./);

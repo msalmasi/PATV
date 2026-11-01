@@ -31,8 +31,11 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // heard" (incognito/mic-stage design section H, owner-approved 2026-10-28: section 3 and the incognito bullets - additive,
 // VERSION unchanged) is the first. Recorded at boot (register).
 // mic keep (handoff 16 follow-up, owner 2026-11-01): "mic-stage-keep" = section 3's Mic-stage snaps and clips paragraph (additive,
-// VERSION unchanged).
+// VERSION unchanged). Published (and dated) the first time /privacy is served with mic-stage captures switched on (mainstage
+// stagecap_mic), not at boot: while they are off it would describe a feature nobody can use, next to today's incognito bullet.
+// Once published it stays, so a later switch-off still describes the copies that exist.
 const TEXT_DATES = ["wp1-voice", "mic-stage-keep"];
+const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true };
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 let datesReady = null;
@@ -40,7 +43,7 @@ function initDates() {
   if (!datesReady) {
     datesReady = (async () => {
       await runQuery("CREATE TABLE IF NOT EXISTS policy_text_dates (key TEXT PRIMARY KEY, at INTEGER NOT NULL)");
-      for (const k of TEXT_DATES) await runQuery("INSERT OR IGNORE INTO policy_text_dates (key, at) VALUES (?, ?)", [k, Date.now()]);
+      for (const k of TEXT_DATES) if (!SWITCHED_TEXTS[k]) await runQuery("INSERT OR IGNORE INTO policy_text_dates (key, at) VALUES (?, ?)", [k, Date.now()]);
     })().catch((e) => { datesReady = null; throw e; });
   }
   return datesReady;
@@ -49,6 +52,11 @@ function initDates() {
 async function textDates() {
   try {
     await initDates();
+    for (const [k, on] of Object.entries(SWITCHED_TEXTS)) {
+      let live = false;
+      try { live = on(); } catch (e) { live = false; }
+      if (live) await runQuery("INSERT OR IGNORE INTO policy_text_dates (key, at) VALUES (?, ?)", [k, Date.now()]);
+    }
     const out = {};
     for (const r of await getQuery("SELECT key, at FROM policy_text_dates")) {
       if (TEXT_DATES.includes(r.key) && Number(r.at) > 0) out[r.key] = { at: Number(r.at), day: dayText(Number(r.at)) };
