@@ -159,6 +159,9 @@ test("overview: tiles by role - admin-only data never reaches Staff", async () =
   // CL2: the chat archive card (chatlog.admin: admins, privacy-locked)
   assert.match((await page("/admin/bridge", U.admin)).html, /id="clSwitches"/);
   assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="clSwitches"/);
+  // wave 2 WP-5: the Evidence clips card (chatlog.see_through: admins only - never staff) with the export form
+  assert.match((await page("/admin/bridge", U.admin)).html, /id="evidence"[\s\S]*id="exForm"/);
+  assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="evRows"|id="exForm"/);
   // CL7: deletion by tier (the retention purge's report) is on that card
   assert.match((await page("/admin/bridge", U.admin)).html, /id="clPurgeRows"[\s\S]*\/api\/admin\/chatlog\/purge/);
   assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="clPurgeRows"/);
