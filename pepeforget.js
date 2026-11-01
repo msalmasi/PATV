@@ -81,6 +81,16 @@ const loginOf = async (userId) => {
  *  archive's sticky hidden set for good (src forget: Pepe can never un-hide them): their lines are left out of every pad's chat,
  *  history, search and downloads, and their names are redacted in other people's lines. Outside any transaction (the hidden set
  *  serialises its own writes). -> keys hidden */
+/** wave 2 WP-2 (spec A.4.8): every trace of who was behind these keys' frog names - the live side tables (bridge_veil, bridge_rooms_veil;
+ *  their veiled live items leave the live feed), the archive's chat_log_veil, their open frog-name sessions. Never throws (logged by
+ *  code only: no login in a log line). Outside any transaction, like hideLines. -> {feed, archive} */
+async function forgetVeiled(keys) {
+  const list = (keys || []).filter(Boolean);
+  const out = { feed: 0, archive: 0 };
+  try { out.feed = (await require("./bridge").forgetVeiled(list)).feed; } catch (e) { console.error("[pepeforget] veil (live):", e && e.code ? e.code : "error"); }
+  try { out.archive = await require("./chatlog").forgetVeil(list); } catch (e) { console.error("[pepeforget] veil (archive):", e && e.code ? e.code : "error"); }
+  return out;
+}
 async function hideLines(userId, login) {
   const keys = ["u:" + String(userId).toLowerCase(), login || null].filter(Boolean);
   await require("./chatlog").hideNow(keys, "forget");
@@ -106,6 +116,7 @@ async function request(userId, { t = now(), hideLines: hide = false, keepOff = f
   }
   // CL6: first, and never inside the transaction below - hiding is what they asked for even if the rest has to be retried
   if (hide) await hideLines(uid, login);
+  await forgetVeiled(["u:" + uid.toLowerCase(), login || null]);   // wave 2: who was behind their frog names goes (never revealable again)
   await require("./messages").init();                 // (table creation never inside the transaction below)
   let dms = 0, action = null, ref = null, memAction = null;
   try {
@@ -160,6 +171,7 @@ async function fromBot(login, { t = now() } = {}) {
     });
   }
   if (!ids.length) await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms) VALUES (NULL, ?, ?, 'chat', 0)", [l, t]);
+  await forgetVeiled([l, ...ids.map((id) => "u:" + String(id).toLowerCase())]);   // wave 2: their frog names can't be revealed any more
   console.log(`[pepeforget] ${l}: ${dms} DM(s) with Pepe deleted (chat, ${ids.length} linked account(s))`);
   return { ok: true, dms, accounts: ids.length };
 }

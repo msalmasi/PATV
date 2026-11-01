@@ -113,6 +113,107 @@ async function list({ limit = 100, roomId = null } = {}) {
              logins, n: Number(r.n) || 0, reason: r.reason || "", ref: r.ref || null, ended: r.ended == null ? null : Number(r.ended) };
   });
 }
+// ── wave 2 WP-2 (spec E.1 / E.2 / E.5 / E.6, owner J-2 / J-18): see-through for the pad CHAT ──
+/** The owner era of userId on pad roomId (ms): max(chatlog_rooms.owner_since, the pad's last 'owner' event) while they own it - 0 when
+ *  they don't, or nothing dates the ownership (owner_since 0 with no 'owner' event: fails closed). chatlog_rooms.owner_grant is NEVER
+ *  read (CL6's "may read the earlier era" - any Staff member can set it, and Staff have no see-through, J-2). Shared by room analytics
+ *  (roomstats adds its 90-day rule, D-15) and the chat reveals (a line said at or after the era only). */
+async function ownerEra(roomId, userId) {
+  if (!roomId || !userId) return 0;
+  let row = null;
+  try { row = (await getQuery("SELECT owner_id, owner_since FROM chatlog_rooms WHERE room_id = ?", [String(roomId)]))[0]; } catch (e) { return 0; }
+  if (!row || String(row.owner_id || "") !== String(userId)) return 0;
+  let evTs = 0;
+  try {
+    const ev = (await getQuery("SELECT MAX(ts) AS ts FROM room_events WHERE room_id = ? AND what = 'owner'", [String(roomId)]))[0];
+    evTs = ev && ev.ts != null ? Number(ev.ts) || 0 : 0;
+  } catch (e) { evTs = 0; }
+  const since = Math.max(Number(row.owner_since) || 0, evTs);
+  return since > 0 ? since : 0;
+}
+/** Who may reveal frog names in pad roomId's CHAT: {role: "admin", since: 0} (chatlog.see_through, every pad and era) | {role: "owner",
+ *  since} (the pad's registered owner, lines said since their era began) | null. Never Staff; a check that can't run says null. */
+const ROLE_CACHE = new Map();            // "userId|room" -> {v, at}: the live long-poll asks on every answer (30 s; a loss of the
+const ROLE_MS = 30e3;                    // right shows within 30 s - a reveal itself always re-checks: revealChat's caller asks fresh)
+async function chatRoleCached(user, roomId) {
+  if (!user || !user.userId || !roomId) return null;
+  const k = String(user.userId) + "|" + String(roomId), c = ROLE_CACHE.get(k), t = clock();
+  if (c && t - c.at < ROLE_MS) return c.v;
+  const v = await chatRole(user, roomId);
+  ROLE_CACHE.set(k, { v, at: t });
+  if (ROLE_CACHE.size > 5000) ROLE_CACHE.delete(ROLE_CACHE.keys().next().value);
+  return v;
+}
+async function chatRole(user, roomId) {
+  if (!user || !user.userId || !roomId) return null;
+  try { if (await require("./siteperms").canId(user.userId, "chatlog.see_through")) return { role: "admin", since: 0 }; } catch (e) { return null; }
+  try {
+    const R = require("./rooms");
+    const pad = (R.getCached && R.getCached(roomId)) || (R.get ? await R.get(roomId) : null);
+    if (!pad || !pad.owner || String(pad.owner.userId) !== String(user.userId)) return null;
+    const since = await ownerEra(roomId, user.userId);
+    return since > 0 ? { role: "owner", since } : null;
+  } catch (e) { return null; }
+}
+/** May this role reveal a line said at ts? */
+const mayReveal = (role, ts) => !!role && (role.role === "admin" || (role.since > 0 && Number(ts) >= role.since));
+
+// E.6: a pad owner's reveals are counted per day; past 3 toggle-ons or 100 line reveals an admin is told (once per owner per day)
+const DAY = new Map();                    // "userId|day" -> {lines, toggles, told}
+const LIMIT_LINES = 100, LIMIT_TOGGLES = 3;
+async function noteOwnerUse(user, roomId, what, n = 1) {
+  const day = new Date(clock()).toISOString().slice(0, 10);
+  const k = String(user.userId) + "|" + day;
+  const c = DAY.get(k) || { lines: 0, toggles: 0, told: false };
+  c[what] += n;
+  DAY.set(k, c);
+  if (DAY.size > 5000) DAY.delete(DAY.keys().next().value);
+  if (c.told || (c.lines <= LIMIT_LINES && c.toggles <= LIMIT_TOGGLES)) return false;
+  c.told = true;
+  try {
+    const SP = require("./siteperms");
+    const rows = await getQuery("SELECT userId, class FROM users").catch(() => []);
+    const admins = rows.filter((u) => { try { return SP.can(u, "chatlog.see_through"); } catch (e) { return false; } }).map((u) => String(u.userId));
+    const note = { kind: "admin", link: "/admin/bridge#seethrough", ref: `seethrough-limit-${day}:${user.userId}`,
+                   title: "A pad owner is revealing a lot of frog names",
+                   body: `${user.username || "A pad owner"} revealed ${c.lines} chat line(s) and turned "show real names" on ${c.toggles} time(s) today in their pad. Every reveal is in the see-through log.` };
+    for (const id of admins) await require("./inbox").addSafe(id, note).catch(() => false);
+  } catch (e) { console.error("[seethrough] limit notice:", e.message); }
+  return true;
+}
+
+/**
+ * Reveal veiled chat lines (E.1): for each cursor c the viewer may reveal (role, pad, owner era, a veil row present), the real login
+ * and display name, a hidden speaker's words and (admins) the account. One seethrough_log row (scope chat_line). -> {items, refused}
+ * lookup(c) -> {ts, vz, vw} | null (the live item, else the archive's chat_log_veil row - bridge.revealRows).
+ */
+async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
+  const items = [], refused = [];
+  for (const c of [...new Set((cs || []).map(Number).filter((x) => x > 0))].slice(0, 50)) {
+    let r = null;
+    try { r = await lookup(c); } catch (e) { r = null; }
+    if (!r || !r.vz || !r.vz.login) { refused.push({ c, why: "no_veil" }); continue; }
+    if (!mayReveal(role, r.ts)) { refused.push({ c, why: "era" }); continue; }
+    const o = { c, login: String(r.vz.login), display: r.vz.display ? String(r.vz.display) : null };
+    if (r.vz.kind === "hidden" && typeof r.vw === "string") o.words = r.vw;
+    items.push(o);
+  }
+  if (items.length) {
+    if (role.role === "admin") {
+      try {
+        const logins = [...new Set(items.map((o) => o.login.toLowerCase()))];
+        const rows = await getQuery(`SELECT username, lower(camfrogUsername) AS cf FROM users WHERE lower(camfrogUsername) IN (${logins.map(() => "?").join(",")})`, logins);
+        const by = new Map(rows.map((x) => [x.cf, x.username]));
+        for (const o of items) { const u = by.get(o.login.toLowerCase()); if (u) o.account = "/admin/users?q=" + encodeURIComponent(u); }
+      } catch (e) { /* no account links */ }
+    }
+    await log({ userId: user.userId, role: role.role, scope: "chat_line", roomId, logins: items.map((o) => o.login), reason,
+                ref: "c:" + items.map((o) => o.c).slice(0, 8).join(",") });
+    if (role.role === "owner") await noteOwnerUse(user, roomId, "lines", items.length);
+  }
+  return { items, refused };
+}
+
 /** Rows older than 180 days go (an open toggle's row stays while it is on). -> deleted */
 async function prune(t = clock()) {
   await init();
@@ -128,6 +229,84 @@ function register(app, { addUser, noTimers = false }) {
     const iv = setInterval(() => prune().catch((e) => console.error("[seethrough] prune:", e.message)), 6 * 3600e3);
     if (iv.unref) iv.unref();
   }
+  // ── wave 2 WP-2: chat reveals (E.1, J-18) - fetch-only, same-origin, no-store, no-referrer, rate-limited; never through the homepage
+  // panel, embeds, the hub or downloads (those never call these). Per line (scope chat_line), or in batches while the viewer's toggle
+  // for this pad is on (scope chat_toggle: its one row counts the batches and the logins shown) ──
+  const guard = require("./middleware/authGuard");
+  const json = require("express").json({ limit: "8kb" });
+  const RL = new Map();
+  const limited = (uid, n) => {
+    const t = clock(), w = RL.get(uid) || { t, n: 0 };
+    if (t - w.t > 60e3) { w.t = t; w.n = 0; }
+    w.n += n;
+    RL.set(uid, w);
+    if (RL.size > 5000) RL.delete(RL.keys().next().value);
+    return w.n > 300;
+  };
+  async function chatCtx(req, res) {
+    res.set("Cache-Control", "private, no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    if (!guard.sameOriginFetch(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return null; }
+    if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
+    const B = require("./bridge");
+    const slug = clean(req.body && req.body.room, 80).toLowerCase();
+    const R = slug ? [...B._rooms.values()].find((x) => x.slug === slug || x.id === slug) : null;
+    if (!R) { res.status(404).json({ ok: false, error: "No such pad." }); return null; }
+    const role = await chatRole(req.user, R.id);
+    if (!role) { res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner in their own pad, can reveal who is behind a frog name." }); return null; }
+    return { R, role };
+  }
+  app.post("/api/chatlog/reveal", addUser, json, async (req, res) => {
+    try {
+      const ctx = await chatCtx(req, res);
+      if (!ctx) return;
+      const cs = Array.isArray(req.body.c) ? req.body.c : [req.body.c];
+      if (limited(String(req.user.userId), cs.length)) return res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." });
+      const lookup = (c) => require("./bridge").revealLookup(ctx.R.id, c);
+      if (req.body.toggle === true) {
+        // the toggle's batch fetch: no new row - the toggle's own row counts it (refused unless the toggle is on)
+        const tg = await toggleOf(req.user.userId, "chat_toggle", ctx.R.id);
+        if (!tg) return res.status(409).json({ ok: false, error: "Show real names is off - turn it on first." });
+        const items = [], refused = [];
+        for (const c of [...new Set(cs.map(Number).filter((x) => x > 0))].slice(0, 50)) {
+          const r = await lookup(c).catch(() => null);
+          if (!r || !r.vz || !r.vz.login) { refused.push({ c, why: "no_veil" }); continue; }
+          if (!mayReveal(ctx.role, r.ts)) { refused.push({ c, why: "era" }); continue; }
+          items.push({ c, login: String(r.vz.login), display: r.vz.display || null, ...(r.vz.kind === "hidden" && typeof r.vw === "string" ? { words: r.vw } : {}) });
+        }
+        if (items.length) await toggleUsed(tg.log_id, items.map((o) => o.login));
+        return res.json({ ok: true, items, refused });
+      }
+      const out = await revealChat({ user: req.user, role: ctx.role, roomId: ctx.R.id, cs, reason: req.body.reason, lookup });
+      res.json({ ok: true, ...out });
+    } catch (e) {
+      console.error("[seethrough] chat reveal:", e && e.code ? e.code : "error");
+      res.status(500).json({ ok: false, error: "Couldn't reveal it - try again." });
+    }
+  });
+  // the toggle (J-18): {room, on, reason?} - on until turned off (or the right is lost); each on / off is logged
+  app.post("/api/chatlog/seethrough", addUser, json, async (req, res) => {
+    try {
+      const on = req.body && req.body.on === true;
+      if (!on) {
+        res.set("Cache-Control", "private, no-store");
+        if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+        const B = require("./bridge");
+        const slug = clean(req.body && req.body.room, 80).toLowerCase();
+        const R = [...B._rooms.values()].find((x) => x.slug === slug || x.id === slug);
+        if (R) await toggleOff({ userId: req.user.userId, scope: "chat_toggle", roomId: R.id, why: "viewer" });
+        return res.json({ ok: true, on: false });
+      }
+      const ctx = await chatCtx(req, res);
+      if (!ctx) return;
+      const r = await toggleOn({ userId: req.user.userId, role: ctx.role.role, scope: "chat_toggle", roomId: ctx.R.id, reason: req.body.reason });
+      if (r.fresh && ctx.role.role === "owner") await noteOwnerUse(req.user, ctx.R.id, "toggles", 1);
+      res.json({ ok: true, on: true });
+    } catch (e) {
+      console.error("[seethrough] chat toggle:", e && e.code ? e.code : "error");
+      res.status(500).json({ ok: false, error: "Couldn't change it - try again." });
+    }
+  });
   app.get("/api/admin/seethrough", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -142,4 +321,5 @@ function register(app, { addUser, noTimers = false }) {
 }
 
 module.exports = { init, log, toggleOf, toggleOn, toggleOff, toggleUsed, list, prune, register, KEEP_MS,
-                   _setClock: (f) => { clock = f || (() => Date.now()); } };
+                   ownerEra, chatRole, chatRoleCached, mayReveal, revealChat, noteOwnerUse,
+                   _setClock: (f) => { clock = f || (() => Date.now()); }, _day: DAY };

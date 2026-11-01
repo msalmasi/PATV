@@ -775,6 +775,14 @@ async function execute(userId, { force = false } = {}) {
     // wrote stays (2 years, like content_audit_views: the users row is a tombstone); one that names them as its subject gets the
     // pseudonym
     for (const [k, v] of Object.entries(await require("./chatlog").deleteAccount(uid, { login, pseudo }))) n("chatlog:" + k, v);
+    // wave 2 WP-2 (spec A.4.8): who was behind their frog names in the live feed's side tables (bridge_veil, bridge_rooms_veil) - plain
+    // SQL inside this transaction; their live items are left out by the "delete" reason in the sticky set, and a reveal of a left-out
+    // line is refused (bridge.revealLookup), so nothing in memory can name them either
+    if (await has("bridge_veil", "vz")) {
+      const fv = await require("./veil").forgetLogins(["u:" + String(uid).toLowerCase(), login].filter(Boolean));
+      n("deleted:bridge_veil", fv.feed.length);
+      n("bridge_rooms_veil", fv.rooms);
+    }
     // CL3 fix-up: ...and the pad owner the chat watermarks last saw (chatlog_rooms.owner_id / inputs.owner) isn't their id any more
     n("chatlog:owner_ref", await require("./chatlogview").forgetOwner(uid));
     n("plex_unlinked", await run("plex_members", ["user_id"], "UPDATE plex_members SET user_id = NULL WHERE user_id = ?", [uid]));

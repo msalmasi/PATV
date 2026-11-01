@@ -381,12 +381,9 @@ async function realLogins(rows) {
  *  owner_since = 0 is the archive's "first owner seen" value (chatlog.rkInTx), not "owner since 1970": with no 'owner' event to
  *  date the ownership it fails closed (no). */
 async function ownerEraCovers(roomId, userId, t) {
-  const row = (await getQuery("SELECT owner_id, owner_since FROM chatlog_rooms WHERE room_id = ?", [String(roomId)]))[0];
-  if (!row || String(row.owner_id || "") !== String(userId)) return false;
-  const ev = (await getQuery("SELECT MAX(ts) AS ts FROM room_events WHERE room_id = ? AND what = 'owner'", [String(roomId)]))[0];
-  const evTs = ev && ev.ts != null ? Number(ev.ts) || 0 : 0;
-  const since = Math.max(Number(row.owner_since) || 0, evTs);
-  if (!(since > 0)) return false;                              // nothing dates the ownership: fail closed
+  // wave 2: the era rule itself is seethrough.ownerEra (shared with the chat reveals); analytics add the 90-day requirement (D-15)
+  const since = await ST.ownerEra(roomId, userId);
+  if (!(since > 0)) return false;                              // not the owner, or nothing dates the ownership: fail closed
   return since <= t - OWNER_ERA_MS;
 }
 /** Who may reveal frog names on pad padId: "admin" (chatlog.see_through, every pad) | "owner" (their own pad, D-15) | null. A check
