@@ -209,7 +209,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const it = vis.find((x) => x && x.k === "tx" && x.id === tx) || null;
       // wave 2 (owner J-7): a 🎙 line an INCOGNITO speaker said under a frog name (privacy wire v2, the switch on) may be clipped by
       // anyone - posted under that frog name; who it is stays server-only (the job's target, never on a page or in a log line). A
-      // hidden speaker's turn can't be clipped by members (admin evidence clips are WP-5); a "someone" line (no frog name) neither
+      // hidden speaker's turn can't be clipped by members (an admin's / the pad owner's evidence clip, after a reveal, is evidence.js - never a post); a "someone" line (no frog name) neither
       const alias = vClipAlias(it);
       if (!alias && (!it || !it.u || it.u.anon || !LOGIN_RE.test(String(it.u.login || "")))) return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_CLIPPABLE });
       const login = alias ? String(it._vz.login).toLowerCase() : String(it.u.login).toLowerCase();
