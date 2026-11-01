@@ -182,6 +182,17 @@ async function noteOwnerUse(user, roomId, what, n = 1) {
   return true;
 }
 
+/** Admins' answers carry the PATV account of each revealed login (o.account = the /admin/users search), when one is linked. */
+async function accountLinks(items) {
+  try {
+    const logins = [...new Set(items.map((o) => o.login.toLowerCase()))];
+    if (!logins.length) return;
+    const rows = await getQuery(`SELECT username, lower(camfrogUsername) AS cf FROM users WHERE lower(camfrogUsername) IN (${logins.map(() => "?").join(",")})`, logins);
+    const by = new Map(rows.map((x) => [x.cf, x.username]));
+    for (const o of items) { const u = by.get(o.login.toLowerCase()); if (u) o.account = "/admin/users?q=" + encodeURIComponent(u); }
+  } catch (e) { /* no account links */ }
+}
+
 /**
  * Reveal veiled chat lines (E.1): for each cursor c the viewer may reveal (role, pad, owner era, a veil row present), the real login
  * and display name, a hidden speaker's words and (admins) the account. One seethrough_log row (scope chat_line). -> {items, refused}
@@ -199,14 +210,7 @@ async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
     items.push(o);
   }
   if (items.length) {
-    if (role.role === "admin") {
-      try {
-        const logins = [...new Set(items.map((o) => o.login.toLowerCase()))];
-        const rows = await getQuery(`SELECT username, lower(camfrogUsername) AS cf FROM users WHERE lower(camfrogUsername) IN (${logins.map(() => "?").join(",")})`, logins);
-        const by = new Map(rows.map((x) => [x.cf, x.username]));
-        for (const o of items) { const u = by.get(o.login.toLowerCase()); if (u) o.account = "/admin/users?q=" + encodeURIComponent(u); }
-      } catch (e) { /* no account links */ }
-    }
+    if (role.role === "admin") await accountLinks(items);
     await log({ userId: user.userId, role: role.role, scope: "chat_line", roomId, logins: items.map((o) => o.login), reason,
                 ref: "c:" + items.map((o) => o.c).slice(0, 8).join(",") });
     if (role.role === "owner") await noteOwnerUse(user, roomId, "lines", items.length);
@@ -256,8 +260,47 @@ function register(app, { addUser, noTimers = false }) {
     if (!role) { res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner in their own pad, can reveal who is behind a frog name." }); return null; }
     return { R, role };
   }
+  // ── wave 2 WP-4 x WP-2 (spec F.4 / E.1 / A.6, owner J-18): Reveal on a mic-stage COVER tile - {room, tile, reason?, toggle?}. The
+  // same refusals as a line reveal (fetch-only, same-origin, signed in, the pad, the role, the rate limit, no-store / no-referrer),
+  // plus the privacy wire v2 on (else 409: no covers, nothing to reveal) and the tile a cover shown NOW (micfollow.coverWho, else
+  // 404). The role is the LIVE stage's (veilstage.stageRole): an Admin (chatlog.see_through) or the pad's owner NOW - not the chat's
+  // owner-era rule (that dates past lines; a cover is someone speaking now). Logged like a line, BEFORE the answer: one row scope
+  // stage_line (ref tile:<id>) - or, toggle: true, while the viewer's J-18 toggle for this pad is on, counted on that toggle's row
+  // (one "Show real names" toggle per pad covers its chat lines AND its stage tiles, scope chat_toggle); 409 while it is off.
+  async function tileReveal(req, res) {
+    res.set("Cache-Control", "private, no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    if (!guard.sameOriginFetch(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+    const B = require("./bridge");
+    const slug = clean(req.body.room, 80).toLowerCase();
+    const R = slug ? [...B._rooms.values()].find((x) => x.slug === slug || x.id === slug) : null;
+    if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
+    let on = false;
+    try { on = require("./privwire").isOn() === true; } catch (e) { on = false; }
+    if (!on) return res.status(409).json({ ok: false, code: "privwire_off", error: "Nothing on this mic stage can be revealed right now." });
+    const role = await require("./veilstage").stageRole(req.user, R.id);
+    if (!role) return res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner in their own pad, can reveal who is behind a frog name." });
+    if (limited(String(req.user.userId), 1)) return res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." });
+    const tile = clean(req.body.tile, 40);
+    let who = null;
+    try { who = require("./micfollow").coverWho(R.id, tile); } catch (e) { who = null; }
+    if (!who) return res.status(404).json({ ok: false, code: "gone", error: "That veiled speaker isn't on the mic stage any more." });
+    if (req.body.toggle === true) {
+      const tg = await toggleOf(req.user.userId, "chat_toggle", R.id);
+      if (!tg) return res.status(409).json({ ok: false, code: "toggle_off", error: "Show real names is off - turn it on first." });
+      await toggleUsed(tg.log_id, [who.login]);
+    } else {
+      await log({ userId: req.user.userId, role, scope: "stage_line", roomId: R.id, logins: [who.login], reason: req.body.reason, ref: "tile:" + tile });
+      if (role === "owner") await noteOwnerUse(req.user, R.id, "lines", 1);
+    }
+    const out = { tile, login: who.login, display: who.display };
+    if (role === "admin") await accountLinks([out]);
+    return res.json({ ok: true, ...out });
+  }
   app.post("/api/chatlog/reveal", addUser, json, async (req, res) => {
     try {
+      if (req.body && req.body.tile != null) return await tileReveal(req, res);
       const ctx = await chatCtx(req, res);
       if (!ctx) return;
       const cs = Array.isArray(req.body.c) ? req.body.c : [req.body.c];
@@ -280,7 +323,7 @@ function register(app, { addUser, noTimers = false }) {
       const out = await revealChat({ user: req.user, role: ctx.role, roomId: ctx.R.id, cs, reason: req.body.reason, lookup });
       res.json({ ok: true, ...out });
     } catch (e) {
-      console.error("[seethrough] chat reveal:", e && e.code ? e.code : "error");
+      console.error("[seethrough] reveal:", e && e.code ? e.code : "error");
       res.status(500).json({ ok: false, error: "Couldn't reveal it - try again." });
     }
   });

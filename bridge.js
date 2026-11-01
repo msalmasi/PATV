@@ -1905,6 +1905,7 @@ function register(app, { isBotToken, addUser }) {
   require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover
   require("./stageleave").register(app, { addUser });   // stagefix site: 🎬 "Take me off this Stage" (+ the privacy card's list)
   require("./micfollow").register(app, { addUser, bySlug, isLive: isLiveShown });   // micfollow: 🎙 whoever holds the mic, on the pad's own stage
+  require("./veilstage").wire();   // wave 2: the stage's hooded-frog covers + their Reveal fed by the privacy wire v2 (dark while it's off)
   require("./camviewers").register(app, { isBotToken, addUser });
   require("./pepeforget").register(app, { isBotToken, addUser });       // 1.99aat: 🧠 make Pepe forget me (+ the DMs with him)
   require("./ghost").register(app, { isBotToken, addUser });   // 1.99aaf: 👻 staff ghost mode (cam views tell nobody; always audited)   // 1.99yq: 👁 who opened your cam (Pepe PMs you) + !blockviewer / the privacy card

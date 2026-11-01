@@ -1815,7 +1815,8 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
 // then nothing reveals: no rv / ex flag exists anywhere); role(user, padId) -> "admin" | "owner" | null for the LIVE stage (an
 // Admin's chatlog.see_through, or the pad's CURRENT owner - "now", never roomstats' 90-day board rule). The default role is
 // exactly that rule. viewFor then marks a cover rv: 1 (Reveal) / ex: 1 (✕ without revealing) for such a viewer on the pad page,
-// and self: 1 for the person behind it. How WP-2 wires the rest: see the wave2-B hand-off notes (exclude {tile}, the audit).
+// and self: 1 for the person behind it. WP-2 is wired in by veilstage.js (bridge.register): the veil source, this reveal source,
+// POST /api/chatlog/reveal {room, tile} (seethrough.js, logged stage_line / on the J-18 toggle's row) and coverSessionEnded.
 const REVEAL_DEFAULT = Object.freeze({ available: () => false, role: null });
 let REVEAL = REVEAL_DEFAULT;
 function setRevealSource(src) {
@@ -1868,6 +1869,13 @@ async function excludeCover(user, R, tileId, hours) {
   const key = coverKeyOf(R.id, tileId), who = coverWho(R.id, tileId);
   const P = PADS.get(String(R.id));
   if (!key || !who || !P) throw new Refuse(404, "They aren't on the mic stage any more.", "gone");
+  // wave2 WP-4 x WP-2 follow-up: a veiled exclusion matches the person's later NAMED cam too (excluded() matches vlogin), so a ✕
+  // effectively says who it was - every one is a see-through row (scope stage_exclude: the login, the tile), written BEFORE it
+  // takes effect; a write that fails refuses the ✕ (never an unlogged one)
+  try {
+    await require("./seethrough").log({ userId: user.userId, role: (await seeRole(user.userId, R.id, t)) || "?", scope: "stage_exclude", roomId: R.id,
+                                        logins: [who.login], reason: hours === 0 ? "kept off: always" : `kept off: ${hours} h`, ref: "tile:" + tileId });
+  } catch (e) { throw new Refuse(500, "Couldn't keep them off - try again.", "audit"); }
   // (the frog name then - user-facing data, not copy: none = null, the page words "a veiled speaker" in its own language. Its
   // own row, whatever by-name rows exist: the list never pairs a name with a cover, either way)
   const label = (P.covers.get(key) && P.covers.get(key).alias) || null;
@@ -1876,6 +1884,24 @@ async function excludeCover(user, R, tileId, hours) {
   stepPad(P.roomId, t);
   ROOMS().event(P.roomId, "micfollow", user.username || null, hours === 0 ? "kept a veiled speaker off the mic stage (always)" : `kept a veiled speaker off the mic stage (${hours} h)`);
   return { excluded: true };
+}
+/** wave2 WP-4 x WP-2 follow-up (un-veil linkability): frog-name session `sess` of pad `roomId` ended (frognames.onEnd - off: incognito
+ *  off / un-hidden, a named sighting, the incognito -> hidden switch with named lines on the page (A-privacy-5), forget-me; or its
+ *  clock). Its cover comes off NOW - no hand-over, no keep_recent "recent" tile - and its public entry and identity go with it, so
+ *  the person's next named appearance (or next frog name) can't be tied to it. The veil source (veilstage.js) refuses the ended
+ *  session's stale R.mic entry, so no step brings it back: that holder is the neutral card until a snapshot sights them again.
+ *  -> did a cover come off */
+function coverSessionEnded(roomId, sess, t = now()) {
+  const P = PADS.get(String(roomId || ""));
+  if (!P || !loaded || sess == null || !SESS_RE.test(String(sess))) return false;
+  const key = core.COVER_PREFIX + "s" + String(sess);
+  const had = P.state.tiles.some((x) => x.cover && x.login === key);
+  if (P.covers) P.covers.delete(key);
+  if (P.coverWho) P.coverWho.delete(key);
+  if (!had) return false;
+  apply(P, roomOf(P.roomId), core.cutNow(P.state, key, "unveiled", t), t);
+  bump("cover_unveiled", 1, t, P);
+  return true;
 }
 /** xid: a veiled exclusion's handle for the pad's list (removal) - never the login. */
 const exclXid = (roomId, login) => crypto.createHmac("sha256", SECRET).update("mf-xid|" + String(roomId) + "|" + low(login)).digest("hex").slice(0, 16);
@@ -2520,6 +2546,7 @@ module.exports = {
   keptOf, keptList, evictKept,                                                                                     // wave2 WP-4 (F.2)
   setVeilSource, veiledOf, coverKeyOf, holdersOf,                                                                  // wave2 WP-4 (F.4)
   coverWho, setRevealSource, excludeCover,                                                                         // wave2 WP-4 (the Reveal seam)
+  coverSessionEnded,                                                                                               // wave2 WP-4 x WP-2 (veilstage.js)
   _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS, _siteBudget: siteBudget,
   /** tests: the pad's first notice to `login` went out at `at` (null = never). 1.99afn: also their courtesy row - told at `at`
    *  (courtesy v1, like the backfill), or (null) never told anywhere */

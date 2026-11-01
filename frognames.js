@@ -216,12 +216,18 @@ function endWhy(S, t) {
   if (t - S.started >= LONG_MS && t - Math.max(S.lastActive, S.started) >= QUIET_MS) return "long";
   return null;
 }
+// wave2 WP-4 x WP-2 (un-veil linkability): who is told, synchronously, the moment a session ends - the mic stage takes that
+// session's hooded-frog cover off at once (veilstage.js -> micfollow.coverSessionEnded), so the person's next NAMED appearance
+// (or the next frog name) can't be tied to a cover still lingering as a "recent" tile. fn({roomId, session, why}); never throws.
+const END_FNS = new Set();
+function onEnd(fn) { if (typeof fn === "function") END_FNS.add(fn); return () => END_FNS.delete(fn); }
 async function endSession(S, t, why) {
   const m = OPEN.get(S.roomId);
   if (m && m.get(S.sk) === S) m.delete(S.sk);
   if (m && !m.size) OPEN.delete(S.roomId);
   S.ended = t; S.why = why;
   if (S.name) recentOf(S.roomId).push({ name: S.name, ended: t });
+  for (const fn of [...END_FNS]) { try { fn({ roomId: S.roomId, session: S.id, why }); } catch (e) { /* a listener's own failure */ } }
   await runQuery("UPDATE incog_alias SET sk = NULL, nonce = NULL, ended = ? WHERE id = ?", [t, S.id]);
 }
 const view = (S) => (S ? { alias: S.name || null, hood: S.name ? S.hood : null, session: S.id } : null);
@@ -380,7 +386,7 @@ async function sweep(t = clock()) {
 module.exports = {
   ADJ, NOUN, DENY_WORDS, DENY_PAIRS, NAME_MAX, TRIES, HOODS, AWAY_MS, LONG_MS, QUIET_MS, CAP_MS, NAMED_GAP_MS, REUSE_MS,
   secret, secretState, norm, denied, candidate, boardPeriod, boardPeriodEnds, boardAliases,
-  sessInit, sight, named, left, leftRoom, openRooms, off, current, namesInUse, sweep,
+  sessInit, sight, named, left, leftRoom, openRooms, off, current, namesInUse, sweep, onEnd,
   _setClock: (f) => { clock = f || (() => Date.now()); },
   /** tests: forget the key (the next call reads ALIAS_SECRET again) and every session in memory */
   _reset: () => { KEY = null; STATE = null; OPEN.clear(); RECENT.clear(); NAMED.clear(); CHAINS.clear(); ready = null; },
