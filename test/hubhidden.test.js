@@ -789,8 +789,9 @@ test("bridge.js boots the set first and hands Pepe's lists (mixed and kinded), e
   assert.match(ttl, /if \(table === "pepe_actions" && row\.kind === "privacy\.incognito"\) await require\("\.\/incognito"\)\.actionsSettled\(\[row\.id\]\);/,
                "an expired ON settles them");
   const mc = fs.readFileSync(path.join(repo, "micclip.js"), "utf8");
-  // (cl-site's merge: the archive's set is asked too - chatlogview.isHiddenLogin(login) || quotes.isHidden(login))
-  assert.match(mc, /if \((?:require\("\.\/chatlogview"\)\.isHiddenLogin\(login\) \|\| )?require\("\.\/quotes"\)\.isHidden\(login\)\) return res\.status\(403\)/, "a private speaker's voice can't be clipped");
+  // (cl-site's merge: the archive's set is asked too - chatlogview.isHiddenLogin(login) || quotes.isHidden(login); wave 2 J-7: except
+  // an incognito turn under the frog name it was said with - `!alias && (...)`, micclip.vClipAlias)
+  assert.match(mc, /if \((?:!alias && \()?(?:require\("\.\/chatlogview"\)\.isHiddenLogin\(login\) \|\| )?require\("\.\/quotes"\)\.isHidden\(login\)\)\)? return res\.status\(403\)/, "a private speaker's voice can't be clipped");
 });
 
 // ── the website side of incognito (actions, the request) ──
