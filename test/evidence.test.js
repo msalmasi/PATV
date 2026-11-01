@@ -248,6 +248,7 @@ test("the website path: preview (audited) -> Pepe's audited answer -> save in ON
   assert.equal(r.headers["cache-control"], "private, no-store");
   const job = relay._jobs.get(r.d.id);
   assert.ok(job && job.kind === "micevidence" && job.target === "hankhidden" && job.veil === "hidden" && job.tx === hk.id, "the job");
+  assert.ok(!relay.mineFor(U.adm.userId, ROOM.id).some((j) => j.kind === "micevidence"), "never in the live view's relay list (the card polls its own route)");
   const pv = (await scopeRows("clip_preview")).slice(-1)[0];
   assert.ok(pv && pv.user_id === U.adm.userId && JSON.parse(pv.logins)[0] === "hankhidden" && pv.reason === "report #12", "clip_preview logged BEFORE Pepe is asked");
   assert.equal(job.veil_ok, pv.id, "veil_ok = that seethrough row");

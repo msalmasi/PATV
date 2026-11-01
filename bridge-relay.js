@@ -451,7 +451,7 @@ function echoJob(jobId, roomId = null) {
 function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
-    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.kind === "tipnote" || j.kind === "golive" || j.kind === "nowplaying" || j.kind === "boostnote" || j.gui || j.setting || j.pepe) continue;   // panel jobs: padmod.js / padpepe.js
+    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "micevidence" || j.kind === "modinfo" || j.kind === "tipnote" || j.kind === "golive" || j.kind === "nowplaying" || j.kind === "boostnote" || j.gui || j.setting || j.pepe) continue;   // panel jobs: padmod.js / padpepe.js
     const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
     if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
     if (j.kind === "say") {
