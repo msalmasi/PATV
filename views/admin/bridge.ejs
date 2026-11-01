@@ -336,7 +336,7 @@
 <% if (_can('chatlog.see_through')) { %>
 <section class="adm-card" id="seethrough" aria-labelledby="stT">
   <h2 id="stT">See-through log <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Every time a PATV admin, or a pad's owner on their own pad, revealed who is behind a private person's frog name - one row per reveal, or per "Show real names" toggle (open until it was turned off, with every login it showed). What: room analytics rows; pad chat lines (<code>chat_line</code>: a Reveal on one line, with its hidden words), the pad's "Show real names" toggle (<code>chat_toggle</code>, counting every batch it showed - chat lines and mic-stage covers alike), the mic stage's hooded-frog covers (<code>stage_line</code>: a Reveal on one cover; <code>stage_exclude</code>: a ✕ that kept a veiled speaker off the stage - it also matches their later named cam, so it counts as a reveal) and an admin's per-login tool reaching a login's veiled lines (<code>chat_tool</code>: a look or an export). Kept 180 days; never shown to the people revealed.</p>
+  <p class="adm-help">Every time a PATV admin, or a pad's owner on their own pad, revealed who is behind a private person's frog name - one row per reveal, or per "Show real names" toggle (open until it was turned off, with every login it showed). What: room analytics rows; pad chat lines (<code>chat_line</code>: a Reveal on one line, with its hidden words), the pad's "Show real names" toggle (<code>chat_toggle</code>, counting every batch it showed - chat lines and mic-stage covers alike), the mic stage's hooded-frog covers (<code>stage_line</code>: a Reveal on one cover; <code>stage_exclude</code>: a ✕ that kept a veiled speaker off the stage - it also matches their later named cam, so it counts as a reveal) and an admin's per-login tool reaching a login's veiled lines (<code>chat_tool</code>: a look or an export). Moderation evidence clips (<a href="#evidence">below</a>): <code>clip_preview</code> (Pepe asked for a veiled turn's audio), <code>clip_save</code> (kept as evidence - from the website or a Camfrog <code>!clipmic</code>), <code>clip_play</code> (played; once per person per clip per hour), <code>clip_download</code>, <code>clip_list</code> (a list of clips shown; once an hour), <code>clip_hold</code> (a legal hold on or off), <code>clip_delete</code>, and <code>export_evidence</code> (an evidence export, with every login in the file). Kept 180 days; never shown to the people revealed.</p>
   <form id="stForm" class="adm-form">
     <label>Room id<input type="text" name="room" placeholder="empty = every pad" autocomplete="off"></label>
     <label>Rows<select name="limit"><option>100</option><option>250</option><option>500</option></select></label>
@@ -375,6 +375,115 @@
   }
   f.addEventListener('submit', function (e) { e.preventDefault(); load(); });
   load();
+})();
+</script>
+<% } %>
+
+<%# wave 2 WP-5 (evidence.js, evidenceexport.js; the incognito / mic-stage spec E.3 / E.4): moderation evidence clips + the admin export - ships OFF %>
+<% if (_can('chatlog.see_through')) { %>
+<section class="adm-card" id="evidence" aria-labelledby="evT">
+  <h2 id="evT">Evidence clips <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Mic audio of an <b>incognito or hidden</b> person, saved as <b>moderation evidence</b> by a PATV admin or the pad's owner after a reveal (the pad's 🎙 line: Reveal, then "Save as evidence") or by a Camfrog <code>!clipmic</code> that landed on their turn (Pepe answers by PM, never in the room). Never posted anywhere - not the feed, stories, soundboards, voice features or search. Kept <b>30 days</b>, then deleted file and row by the hourly sweep - unless a legal hold covers it (the clip's own hold below, or a chat legal hold on the pad or the person). Admins see every pad's clips; a pad's owner sees their own pad's (turns said while they own it) in their pad settings, chat tab. Every save, play, download, list, hold and delete is in the <a href="#seethrough">see-through log</a>. Needs privacy wire v2 on.</p>
+  <% if (clOk) { %><p class="adm-help" id="evSummary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="evBtn" disabled>…</button><span id="evMsg" class="adm-msg" role="status"></span></div><% } %>
+  <form id="evForm" class="adm-form">
+    <label>Room id or pad<input type="text" name="room" placeholder="empty = every pad" autocomplete="off"></label>
+    <div class="adm-actions"><button type="submit">Show clips</button><span id="evListMsg" class="adm-msg" role="status"></span></div>
+  </form>
+  <div class="adm-tbl"><table aria-label="Evidence clips">
+    <thead><tr><th>Said (UTC)</th><th>Pad</th><th>Person</th><th>Saved by</th><th>Reason</th><th>Kept until</th><th>Hold</th><th></th></tr></thead>
+    <tbody id="evRows"><tr><td colspan="8" class="empty">Press Show clips.</td></tr></tbody>
+  </table></div>
+  <h3>Evidence export</h3>
+  <p class="adm-help">One pad's chat for a time range (UTC; at most 31 days, 50,000 lines, 10 a day) with the <b>real names</b> behind frog names and hidden people's words - for a report, a legal request or a case. The file starts with "Evidence export by &lt;you&gt;, &lt;time&gt;, &lt;pad&gt;" and is logged with every login in it (<code>export_evidence</code>). Lines taken down or left out (forget-me, account deletion, staff hides) stay out. It is not the member download: that one keeps frog names and bars for everyone.</p>
+  <form id="exForm" class="adm-form">
+    <label>Pad (address or room id)<input type="text" name="room" required autocomplete="off"></label>
+    <label>From (UTC)<input type="datetime-local" name="from" required></label>
+    <label>To (UTC)<input type="datetime-local" name="to" required></label>
+    <label>Format<select name="fmt"><option value="txt">Text (.txt)</option><option value="jsonl">Data (.jsonl)</option></select></label>
+    <label>Reason<input type="text" name="reason" required minlength="3" maxlength="200" autocomplete="off"></label>
+    <div class="adm-actions"><button type="submit">Download evidence export</button><span id="exMsg" class="adm-msg" role="status"></span></div>
+  </form>
+</section>
+<script>
+// wave 2 WP-5: the Evidence clips card (evidence.js: GET / POST /api/admin/evidence {on}, GET /api/evidence, /api/evidence/:id/audio,
+// POST /api/evidence/:id/hold | delete; evidenceexport.js: POST /api/admin/evidence-export)
+(function () {
+  'use strict';
+  var f = document.getElementById('evForm');
+  if (!f) return;
+  var body = document.getElementById('evRows'), lmsg = document.getElementById('evListMsg');
+  var sum = document.getElementById('evSummary'), btn = document.getElementById('evBtn'), msg = document.getElementById('evMsg'), cur = null;
+  var when = function (t) { return t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : ''; };
+  function td(t) { var d = document.createElement('td'); d.textContent = t == null ? '' : String(t); return d; }
+  function req(method, url, data) {
+    return fetch(url, { method: method, credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function render(d) {
+    if (!sum) return;
+    var s = d.state || {}, c = d.counts || {};
+    cur = s;
+    sum.textContent = 'Evidence clips are ' + (s.on ? 'ON' : 'off') + (s.on && !d.effective ? ' (but privacy wire v2 is off, so none can be made)' : '') +
+      ' · privacy wire v2 ' + (d.privwire ? 'on' : 'off') + ' · kept now ' + (c.clips || 0) + (c.held ? ' (' + c.held + ' under a hold)' : '') +
+      (s.at ? ' · last change ' + when(s.at) + ' UTC' + (s.by ? ' by ' + s.by : '') : '');
+    btn.disabled = false;
+    btn.textContent = s.on ? 'Turn off' : 'Turn on';
+  }
+  if (btn) btn.addEventListener('click', function () {
+    if (!cur) return;
+    var on = !cur.on;
+    if (on && !window.confirm('Turn evidence clips on? Admins, and a pad’s owner in their own pad, can then save an incognito or hidden person’s mic audio as moderation evidence after revealing them (kept 30 days, never posted, every step logged). The privacy page shows the approved evidence sentence from now on.')) return;
+    btn.disabled = true;
+    req('POST', '/api/admin/evidence', { on: on }).then(function () { msg.textContent = 'Switched ' + (on ? 'on' : 'off') + '.'; msg.className = 'adm-msg ok'; return req('GET', '/api/admin/evidence'); })
+      .then(render).catch(function (e) { btn.disabled = false; msg.textContent = e.message; msg.className = 'adm-msg err'; });
+  });
+  if (sum) req('GET', '/api/admin/evidence').then(render).catch(function (e) { sum.textContent = e.message; });
+  function act(id, what) {
+    var why = window.prompt(what === 'delete' ? 'Delete this evidence clip now? Give the reason (audited):' : what === 'hold' ? 'Put this clip under a legal hold (kept past 30 days)? Give the reason (audited):' : 'Release the hold? Give the reason (audited):');
+    if (!why) return;
+    var path = what === 'delete' ? 'delete' : 'hold';
+    req('POST', '/api/evidence/' + encodeURIComponent(id) + '/' + path, { why: why, on: what === 'hold' }).then(load).catch(function (e) { lmsg.textContent = e.message; lmsg.className = 'adm-msg err'; });
+  }
+  function load() {
+    var q = new URLSearchParams(), v = f.elements.room.value.trim();
+    if (v) q.set('room', v);
+    lmsg.textContent = 'Loading…'; lmsg.className = 'adm-msg';
+    req('GET', '/api/evidence?' + q.toString()).then(function (d) {
+      body.textContent = '';
+      (d.rows || []).forEach(function (r) {
+        var tr = document.createElement('tr');
+        [when(r.said_at), r.room_id, r.subject + ' (' + r.veil + ')' + (r.subject_gone ? ' - asked to be forgotten' : ''), (r.by || '?') + ' as ' + r.role + ' via ' + r.via,
+         r.reason, when(r.expires_at), r.hold ? 'held: ' + r.hold.why : '-'].forEach(function (x) { tr.appendChild(td(x)); });
+        var cell = document.createElement('td');
+        var play = document.createElement('button'); play.type = 'button'; play.textContent = 'Play';
+        play.addEventListener('click', function () { var au = document.createElement('audio'); au.controls = true; au.src = r.audio; play.replaceWith(au); try { au.play(); } catch (e) { /* controls */ } });
+        var dl = document.createElement('a'); dl.href = r.audio + '?dl=1'; dl.textContent = 'Download'; dl.rel = 'noreferrer';
+        var hold = document.createElement('button'); hold.type = 'button'; hold.textContent = r.hold ? 'Release hold' : 'Hold';
+        hold.addEventListener('click', function () { act(r.id, r.hold ? 'unhold' : 'hold'); });
+        var del = document.createElement('button'); del.type = 'button'; del.textContent = 'Delete';
+        del.addEventListener('click', function () { act(r.id, 'delete'); });
+        [play, dl, hold, del].forEach(function (x) { cell.appendChild(x); cell.appendChild(document.createTextNode(' ')); });
+        tr.appendChild(cell);
+        body.appendChild(tr);
+      });
+      if (!(d.rows || []).length) { var tr = document.createElement('tr'), c = td('No evidence clips.'); c.colSpan = 8; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
+      lmsg.textContent = (d.rows || []).length + ' clips'; lmsg.className = 'adm-msg ok';
+    }).catch(function (e) { lmsg.textContent = e.message; lmsg.className = 'adm-msg err'; });
+  }
+  f.addEventListener('submit', function (e) { e.preventDefault(); load(); });
+  var ex = document.getElementById('exForm'), exMsg = document.getElementById('exMsg');
+  ex.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var g = function (k) { return ex.elements[k].value.trim(); };
+    var utc = function (v) { return v ? v + (v.length === 16 ? ':00' : '') + 'Z' : ''; };
+    exMsg.textContent = 'Preparing…'; exMsg.className = 'adm-msg';
+    req('POST', '/api/admin/evidence-export', { room: g('room'), from: utc(g('from')), to: utc(g('to')), fmt: g('fmt'), reason: g('reason') }).then(function (d) {
+      exMsg.textContent = 'Downloading' + (d.cut ? ' (cut at 31 days - continue from ' + when(d.cut) + ' UTC)' : '') + '…'; exMsg.className = 'adm-msg ok';
+      window.location.href = d.url;
+    }).catch(function (e2) { exMsg.textContent = e2.message; exMsg.className = 'adm-msg err'; });
+  });
 })();
 </script>
 <% } %>

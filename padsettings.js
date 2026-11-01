@@ -94,6 +94,9 @@ async function hubData(R, viewer, app) {
     connect: R.profile ? null : await require("./padconnect").state(R, viewer).catch((e) => { console.error("[padsettings] connect:", e.message); return null; }),
     // CL3: 💬 Chat - how far back visitors read the pad's chat, search, downloads, room mods (padchat.js; Camfrog pads)
     chat: camfrog && !R.profile ? await require("./padchat").state(R.id, viewer).catch((e) => { console.error("[padsettings] chat:", e.message); return null; }) : null,
+    // wave 2 WP-5: 🎙 Moderation evidence (evidence.js) - only for the pad's OWNER (never Staff, who can open this page too), and only
+    // while evidence clips can be made or the pad has some
+    evidence: camfrog && !R.profile ? await require("./evidence").padCard(R.id, viewer) : null,
   };
 }
 

@@ -247,6 +247,11 @@ function register(app, { addUser, noTimers = false }) {
     if (RL.size > 5000) RL.delete(RL.keys().next().value);
     return w.n > 300;
   };
+  // wave 2 WP-5 (spec E.3): a revealed live veiled 🎙 line that can be saved as moderation evidence right now gets ev: 1 - a flag
+  // only (evidence.offerable: the evidence switch and privacy wire v2 on, Pepe's 15 minutes); the save itself re-checks everything
+  const evFlags = (R, items) => {
+    try { const EV = require("./evidence"); for (const o of items || []) if (EV.offerable(R, o.c)) o.ev = 1; } catch (e) { /* no offer */ }
+  };
   async function chatCtx(req, res) {
     res.set("Cache-Control", "private, no-store");
     res.set("Referrer-Policy", "no-referrer");
@@ -325,9 +330,11 @@ function register(app, { addUser, noTimers = false }) {
           items.push({ c, login: String(r.vz.login), display: r.vz.display || null, ...(r.vz.kind === "hidden" && typeof r.vw === "string" ? { words: r.vw } : {}) });
         }
         if (items.length) await toggleUsed(tg.log_id, items.map((o) => o.login));
+        evFlags(ctx.R, items);
         return res.json({ ok: true, items, refused });
       }
       const out = await revealChat({ user: req.user, role: ctx.role, roomId: ctx.R.id, cs, reason: req.body.reason, lookup });
+      evFlags(ctx.R, out.items);
       res.json({ ok: true, ...out });
     } catch (e) {
       console.error("[seethrough] reveal:", e && e.code ? e.code : "error");

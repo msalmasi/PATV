@@ -847,7 +847,7 @@
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
   <script src="/public/js/chat-clip.js?v=4"></script>
-  <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=3"></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
+  <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=3"></script><script src="/public/js/pad-evidence.js?v=1" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
@@ -946,7 +946,17 @@
       if (bar && typeof o.words === 'string') { words = document.createTextNode(o.words); bar.replaceWith(words); }
       var chip = el('span', 'veil-chip', _t('js.pad.veil.chip', '{name} · only you can see this', { name: o.login }));
       b.replaceWith(chip);
+      // wave 2 WP-5 (spec E.3): a revealed veiled 🎙 line the server says can be saved as moderation evidence (ev: 1) - the card asks
+      // Pepe for the turn's audio, plays it, and saves it (never posted; pad-evidence.js -> evidence.js, every step logged)
+      var evb = null;
+      if (o.ev === 1 && window.PATVPadEvidence && chip.parentNode) {
+        evb = el('button', 'veil-reveal ev-save', _t('js.pad.ev.save_btn', 'Save as evidence'));
+        evb.type = 'button';
+        evb.addEventListener('click', function () { evb.disabled = true; window.PATVPadEvidence.open(slug, o.c, line || chip, function () { evb.disabled = false; }); });
+        chip.parentNode.insertBefore(evb, chip.nextSibling);
+      }
       return function () {
+        if (evb && evb.parentNode) evb.parentNode.removeChild(evb);
         if (words && words.parentNode) words.replaceWith(bar);
         if (chip.parentNode) { b.disabled = false; chip.replaceWith(b); }
         if (line) line.classList.remove('revealed');

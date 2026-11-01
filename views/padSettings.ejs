@@ -531,6 +531,15 @@
       <div class="pcs-open" id="pcsOpen"></div>
       <p class="msg" id="pcsMsg" role="status" aria-live="polite"></p>
     </div>
+    <%# wave 2 WP-5 (evidence.js): the pad's moderation evidence clips - its owner only (padsettings: evidence.padCard), played inline, every play logged %>
+    <% if (typeof evidence !== 'undefined' && evidence) { %>
+    <div class="sb-card ps-card" id="evidence">
+      <h3><span class="ds-ic" aria-hidden="true">🎙</span> <%- t('pad.settings.ev.h') %></h3>
+      <p class="ds-meta"><%- t('pad.settings.ev.what') %></p>
+      <div id="evidenceList" data-slug="<%= slug %>" aria-live="polite"></div>
+    </div>
+    <script src="/public/js/pad-evidence.js?v=1" defer></script>
+    <% } %>
     <script type="application/json" id="pcsState"><%- JSON.stringify(C_).replace(/</g, '\\u003c') %></script>
   </section>
   <% } %>
