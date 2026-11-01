@@ -1639,7 +1639,7 @@
       if (!it) return;
       var path = it.getAttribute('data-copy-link');
       if (path) {
-        var url = location.origin + path, done = function () { it.textContent = _t('js.pad.menu.copied', '✅ Link copied'); setTimeout(function () { it.textContent = _t('js.pad.menu.copy', '🔗 Copy link'); m.open = false; }, 1200); };
+        var url = window.PATVShare ? window.PATVShare.url(path) : location.origin + path, done = function () { it.textContent = _t('js.pad.menu.copied', '✅ Link copied'); setTimeout(function () { it.textContent = _t('js.pad.menu.copy', '🔗 Copy link'); m.open = false; }, 1200); };
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt(_t('js.pad.menu.copy_prompt', 'Copy this link'), url); });
         else window.prompt(_t('js.pad.menu.copy_prompt', 'Copy this link'), url);
         return;

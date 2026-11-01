@@ -585,7 +585,9 @@ async function checkDirect(url, { lookup, probe = true, timeoutMs } = {}) {
   return { url: final.toString().slice(0, 2048), origin: origin.toLowerCase(), host: fh };
 }
 function liveDenied(host, cfg = {}) {
-  const deny = [...OWN_HOSTS];
+  // + the pa.tv short alias (sharelinks.ALIAS_HOSTS) everywhere: it always redirects to publicaccess.tv, which is denied on
+  // staging too (OWN_HOSTS), so OBS would land on the site itself
+  const deny = [...OWN_HOSTS, ...require("./sharelinks").ALIAS_HOSTS];
   try { if (process.env.SITE_URL) deny.push(new URL(process.env.SITE_URL).hostname.toLowerCase()); } catch (e) { /* none */ }
   for (const d of String(cfg.live_deny || "").split(",")) if (d.trim()) deny.push(d.trim().toLowerCase());
   return deny.some((d) => host === d || host.endsWith("." + d));

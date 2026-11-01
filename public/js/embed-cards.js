@@ -1,6 +1,6 @@
 /* embed-cards.js - live link-preview cards on the feed (embedcards.js serves GET /api/embeds).
    A post or comment that links to a prediction market, a betting pool, a poll or a bounty on this site (absolute links on
-   publicaccess.tv / staging / this host, or relative /markets/12) gets a card after its text: the question, prices / pool
+   publicaccess.tv / staging / this host / pa.tv off staging, or relative /markets/12) gets a card after its text: the question, prices / pool
    split / vote split, pot or volume, a live countdown, the status and the pad. The feed has no SSE, so live items are
    re-fetched in one batched request every ~25 s while the tab is visible (backing off on errors, paused while hidden).
    A post's own link-preview card (feedmedia.js) for the same item is hidden once the live card is in - one card per link.
@@ -8,6 +8,13 @@
 (function () {
   'use strict';
   var HOSTS = ['publicaccess.tv', 'www.publicaccess.tv', 'staging.publicaccess.tv'];
+  // the pa.tv short alias (sharelinks.js ALIAS_HOSTS): it redirects to publicaccess.tv with the path kept, so its links are
+  // this site's - except on staging, where pa.tv still points at production (ownHosts)
+  var ALIASES = ['pa.tv'];
+  function ownHosts(here) {
+    var h = String(here || '').toLowerCase();
+    return HOSTS.concat(h ? [h] : [], /^staging\./.test(h) ? [] : ALIASES);
+  }
   var MAX_REFS = 30, MAX_PER_BOX = 3, EVERY = 25000, MAX_BACKOFF = 300000;
   var FINAL = { settled: 1, void: 1, ended: 1, expired: 1 };
 
@@ -55,7 +62,7 @@
     return Math.round(v) + '%';
   }
 
-  var api = { refFromHref: refFromHref, fmtLeft: fmtLeft, leftParts: leftParts, pct: pct, HOSTS: HOSTS };
+  var api = { refFromHref: refFromHref, fmtLeft: fmtLeft, leftParts: leftParts, pct: pct, HOSTS: HOSTS, ALIASES: ALIASES, ownHosts: ownHosts };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   if (typeof document === 'undefined') return;
 
@@ -261,7 +268,7 @@
 
   /** Find links in post bodies / comments / a post's link card and give each new item a card. */
   function scan(root) {
-    var hosts = HOSTS.concat([location.hostname]);
+    var hosts = ownHosts(location.hostname);
     var links = (root || document).querySelectorAll('.fp-body a[href], .cm-body a[href], a.fp-link[href]');
     var fresh = [];
     for (var i = 0; i < links.length; i++) {

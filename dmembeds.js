@@ -1,6 +1,6 @@
 // dmembeds.js — PATV post cards inside direct messages (1.99cz). A message that contains a link to a feed post
 // (https://publicaccess.tv/p/<pad>/posts/<id>[/<slug>] or /u/<username>/posts/<id>[/<slug>] - 1.99dv; the old /feed/p/<id>
-// still counts - also www. / staging. / this server's SITE_URL host) gets a compact card:
+// still counts - also www. / staging. / this server's SITE_URL host, and the pa.tv short alias off staging) gets a compact card:
 // pad, title, author, score, comments and a thumbnail, linking to the post. "Share -> Send in a message" on a post
 // (/messages?share=<id>) just puts that link in the composer.
 //
@@ -25,6 +25,8 @@ const POST_ID = "[A-Za-z0-9]{8,16}";
 const KNOWN = new Set(["publicaccess.tv", "www.publicaccess.tv", "staging.publicaccess.tv"]);
 function hosts() {
   const h = new Set(KNOWN);
+  // pa.tv redirects to publicaccess.tv with the path kept, so its post links are ours too (not on staging: there it's prod's)
+  for (const a of require("./sharelinks").ownAliasHosts()) h.add(a);
   try { if (process.env.SITE_URL) h.add(new URL(process.env.SITE_URL).host.toLowerCase()); } catch (e) { /* bad env */ }
   for (const x of String(process.env.DM_EMBED_HOSTS || "").split(",")) if (x.trim()) h.add(x.trim().toLowerCase());
   return h;

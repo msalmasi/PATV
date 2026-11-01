@@ -2,7 +2,8 @@
 // pulls the page's title, description, site name and preview image, with SSRF protection.
 //
 // Safety rules (everything a user pastes is hostile until proven otherwise):
-//   * http / https only, ports 80 / 443 only, no user:password@, at most 2048 chars
+//   * http / https only, ports 80 / 443 only, no user:password@, at most 2048 chars; a pa.tv link becomes the
+//     publicaccess.tv address it redirects to (sharelinks.canonicalUrl - off on staging)
 //   * the host is resolved here, and EVERY address it resolves to must be public unicast: no
 //     loopback, private (RFC 1918), CGNAT, link-local (cloud metadata 169.254.169.254), multicast,
 //     reserved, documentation, benchmark, unique-local / site-local IPv6, NAT64 or IPv4-mapped forms
@@ -120,6 +121,10 @@ function checkUrl(input) {
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new PreviewError("Only http and https links.");
   if (u.username || u.password) throw new PreviewError("Links with a username or password aren't allowed.");
   if (u.port && u.port !== "80" && u.port !== "443" && !TEST_PORTS.has(u.port)) throw new PreviewError("Only links on the normal web ports.");
+  // a pa.tv link (sharelinks.canonicalUrl) is fetched at the publicaccess.tv address it redirects to - never pa.tv's 302
+  // from outside; a redirect hop that lands on pa.tv goes the same way (safeGet re-checks every hop here). Not on staging.
+  const c = require("./sharelinks").canonicalUrl(u.toString());
+  if (c !== u.toString()) u = new URL(c);
   u.hash = "";
   return u;
 }
