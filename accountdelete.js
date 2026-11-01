@@ -29,7 +29,9 @@
 //                                         Review fix (handoff 16): the 🎙 mic-stage captures that draw the account's cam
 //                                         (stage_capture_people, by its logins' ownership spans - stagecap.depictedOf) are stopped
 //                                         or deleted, with their saved copies and posts, like the clips of them; so are its own
-//                                         unfinished stage captures.
+//                                         unfinished stage captures. Mic keep (handoff 16 follow-up): the captures that show the
+//                                         account only as a name card lose its rows (stage_capture_cards), and every saved / posted
+//                                         copy that shows it (storykeep's story_keep_people, the same wide spans) goes with its rows.
 //
 // PAT never vanishes: the wallet debit ("account-deleted") and its legs (pools when the site owns them, the House as jackpot rakes,
 // else a negative Reserve claim Pepe's funding tick credits) are one transaction, keyed (account_deletion_routes, key
@@ -626,6 +628,11 @@ async function execute(userId, { force = false } = {}) {
   // only removes content; export and the delete right stop at the link)
   const depicted = SC ? await SC.depictedOf(uid, login, t, { wide: true }) : [];
   if (SC) { const k = await SC.stopFor(uid, depicted); if (k) report.stage_captures_stopped = k; }
+  // mic keep (handoff 16 follow-up): the same wide spans for the 24 h captures that show them only as a NAME CARD (their rows go; the
+  // capture stays - a card never had the delete right) and for the saved / posted copies that show them at all (storykeep's durable
+  // story_keep_people - the live rows die with the 24 h capture): every such copy goes, with its people rows
+  const carded = SC ? await SC.depictedOf(uid, login, t, { wide: true, cards: true }) : [];
+  const kept = (await tableExists("story_keep_people")) ? await require("./storykeep").keptOf(uid, login, t, { wide: true }) : [];
   const depictedMedia = [...new Set(depicted.map((r) => r.media_id).filter(Boolean))];
   if (depictedMedia.length) mediaRows.push(...(await getQuery(`SELECT id, file FROM media WHERE id IN (${depictedMedia.map(() => "?").join(",")}) AND COALESCE(deleted,0) = 0`, depictedMedia)));
   // Sign in with Apple: the link's Apple token joins applesso's revocation queue INSIDE the transaction that deletes the link (a
@@ -712,6 +719,13 @@ async function execute(userId, { force = false } = {}) {
       await require("./storykeep").onCaptureRemoved(id, { reason: "removed" });
     }
     for (const r of depicted) n("mic_capture_people_deleted", await run("stage_capture_people", ["login"], "DELETE FROM stage_capture_people WHERE capture_id = ? AND login = ?", [r.capture_id, r.login]));
+    //    mic keep: their name-card rows, and every saved / posted copy that shows them (read above) - the copy goes, then its rows
+    for (const r of carded) n("mic_capture_cards_deleted", await run("stage_capture_cards", ["login"], "DELETE FROM stage_capture_cards WHERE capture_id = ? AND login = ?", [r.capture_id, r.login]));
+    for (const id of new Set(kept.map((r) => r.capture_id))) {
+      await require("./storykeep").onCaptureRemoved(id, { reason: "removed" });
+      n("mic_copies_removed", 1);
+    }
+    for (const r of kept) n("mic_copy_people_deleted", await run("story_keep_people", ["login"], "DELETE FROM story_keep_people WHERE capture_id = ? AND login = ?", [r.capture_id, r.login]));
     // 5. personal rows (Apple's tokens to the revocation queue first, in this transaction)
     if (appleSso) {
       const appleLinks = await getQuery("SELECT subject, refresh_token_enc FROM sso_links WHERE provider = 'apple' AND user_id = ?", [uid]);

@@ -737,6 +737,37 @@ test("mic snap stores depicted people, uses the existing paid-save action, and p
   assert.equal((await getQuery("SELECT COUNT(*) n FROM stage_capture_people WHERE capture_id = ?", [c.id]))[0].n, 0, "normal media expiry/deletion clears identities");
 });
 
+// mic keep (handoff 16 follow-up): the engine's in-the-open flag and its name cards reach the capture row (never who was veiled)
+test("mic keep: a capture stores the engine's veiled flag (anything but false = veiled) and its name cards, never a drawn cam twice", async t => {
+  const f = await micJobs(t);
+  const shot = async (info) => {
+    const r = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10, surface: "pad" }, U.staff);
+    assert.equal(r.status, 200, r.d.error);
+    f.jobs.get(r.d.capture.id).finish(info);
+    const c = await waitCap(r.d.capture.id, "preview");
+    SC._hits.clear();
+    return { c, cards: (await getQuery("SELECT login FROM stage_capture_cards WHERE capture_id = ? ORDER BY login", [c.id])).map((x) => x.login) };
+  };
+  let s = await shot({ people: ["fixturecam"], cards: ["CardPerson", "fixturecam"], veiled: false });
+  assert.equal(s.c.veiled, 0, "shown in the open");
+  assert.deepEqual(s.cards, ["cardperson"], "the name card (lower case); a drawn cam is never also a card");
+  await post(`/api/stage/captures/${s.c.id}/discard`, {}, U.staff);
+  assert.equal((await getQuery("SELECT COUNT(*) n FROM stage_capture_cards WHERE capture_id = ?", [s.c.id]))[0].n, 0, "retired with the capture");
+  s = await shot({ people: ["fixturecam"], veiled: true });
+  assert.equal(s.c.veiled, 1);
+  await post(`/api/stage/captures/${s.c.id}/discard`, {}, U.staff);
+  s = await shot({ people: ["fixturecam"] });                              // an engine that says nothing: fail closed
+  assert.equal(s.c.veiled, 1, "no flag = veiled");
+  await post(`/api/stage/captures/${s.c.id}/discard`, {}, U.staff);
+});
+
+test("mic keep: the Stage admin switch stagecap_mic_keep defaults on, normalizes on/off and sits next to the mic switch", async () => {
+  assert.equal(MS.config().stagecap_mic_keep, true);
+  for (const [raw, want] of [["off", false], ["on", true], [false, false], [true, true]]) assert.equal((await MS.setConfig({ stagecap_mic_keep: raw }, "test")).stagecap_mic_keep, want);
+  const view = fs.readFileSync(path.join(repo, "views", "stageAdmin.ejs"), "utf8");
+  assert.ok(view.indexOf('name="stagecap_mic_keep"') > view.indexOf('name="stagecap_mic"'), "the admin checkbox, after the mic switch");
+});
+
 test("mic forward clip polls recording → cutting → preview, keeps audio notes and frees discarded jobs", async t => {
   const f = await micJobs(t);
   const r = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip", secs: 20, surface: "pad" }, U.staff);

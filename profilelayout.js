@@ -149,6 +149,11 @@ async function save(userId, layout) {
                   ON CONFLICT(user_id) DO UPDATE SET layout = excluded.layout, updated = excluded.updated`,
     [String(userId), JSON.stringify(clean), Date.now()]);
   await mfRecheck(userId);
+  // mic keep (handoff 16 follow-up): hiding Analytics or Rooms takes the saved / posted mic-stage copies that show them down
+  // (storykeep.onPeoplePrivate re-reads the layout; never throws). A reset is the public default: nothing to do.
+  if (stateOf(clean, "analytics") === "hidden" || stateOf(clean, "an_rooms") === "hidden") {
+    try { await require("./storykeep").onPeoplePrivate({ userId }); } catch (e) { /* no story keeping in this build */ }
+  }
   return clean;
 }
 

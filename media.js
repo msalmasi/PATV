@@ -229,7 +229,11 @@ function register(app, { isBotToken, addUser, noTimers }) {
     for (const it of items) {
       const id = String((it && it.id) || "");
       if (!/^[a-f0-9]{8,32}$/i.test(id) || !(it.subject || it.by)) continue;
+      // mic keep (handoff 16 follow-up): the login Pepe marks private here - read before it's blanked - takes the saved / posted
+      // mic-stage copies that show it down too (storykeep.onPeoplePrivate; never throws)
+      const was = it.subject ? (await getQuery("SELECT subject_login FROM media WHERE id = ?", [id]))[0] : null;
       if (it.subject) await runQuery("UPDATE media SET anon = 1, subject = '', subject_login = NULL WHERE id = ?", [id]);
+      if (was && was.subject_login) await require("./storykeep").onPeoplePrivate({ logins: [was.subject_login] });
       // 1.99eq: the subject went private - Saved copies of them go, a post of them is hidden (storykeep.js)
       if (it.subject) await require("./storykeep").onCaptureRemoved(id, { reason: "private" }).catch((e) => console.error("[media] keep cascade:", e.message));
       if (it.by) await runQuery("UPDATE media SET by_user = 'someone' WHERE id = ?", [id]);

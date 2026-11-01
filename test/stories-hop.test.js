@@ -206,13 +206,15 @@ test("post to pad / save: private subjects (incognito, bridge hide, hidden analy
   assert.deepEqual(S2.find((x) => x.id === ROOM).items.find((c) => c.id === live).can, { post: false, save: true }, "anyone signed in may save; only some may post");
 });
 
-test("review fix (handoff 16): a mic-stage capture (several people's cams) is never posted or saved - not even by its capturer or an admin", async () => {
+// mic keep (handoff 16 follow-up): mic-stage captures shown in the open may be kept now (test/mic-keep.test.js) - one with no in-the-open
+// record (no stage capture row / veiled NULL: everything from before mic keep) still never is
+test("review fix (handoff 16): a mic-stage capture without its in-the-open record is never posted or saved - not even by its capturer or an admin", async () => {
   const mic = await capture({ source: "stage", by: "Cap Per", byId: U.cap.userId, subject: "🎙 the mic", stream: "mic" });
   const slot = await capture({ source: "stage", by: "Cap Per", byId: U.cap.userId, subject: "Stream", stream: "pepe" });
   assert.equal((await keep.privacyBlocks([(await getQuery("SELECT * FROM media WHERE id = ?", [mic]))[0]])).has(mic), true);
   for (const who of [U.cap, U.admin, U.owner]) {
     const r = await post(`/api/stories/${mic}/post`, who, {});
-    assert.equal(r.status, 403, who.username + ": post"); assert.match(r.d.error, /mic-stage capture/);
+    assert.equal(r.status, 403, who.username + ": post"); assert.match(r.d.error, /mic-stage capture has no record that everyone in it was shown openly/);
   }
   for (const who of [U.cap, U.saver]) assert.equal((await post(`/api/stories/${mic}/save`, who)).status, 403, who.username + ": save");
   await assert.rejects(keep.postToPad(U.cap, mic), (e) => e.status === 403);

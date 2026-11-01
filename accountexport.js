@@ -371,6 +371,28 @@ async function collect(userId, { at = now(), parts = null } = {}) {
       .sort((a, b) => Number(a.created) - Number(b.created))
       .map((r) => ({ capture: r.capture_id, login: r.login, pad: r.room_id, kind: r.kind, state: r.state, media_id: r.media_id || null, created: r.created }))));
   }
+  // mic keep (handoff 16 follow-up): the same references for the captures that show you only as a NAME CARD, and the saved / posted
+  // copies of mic-stage captures that show you (cam or name card - storykeep's story_keep_people), by the same spans: the copy (its
+  // capture's media id), the login and role, when it was taken, whether a saved copy exists and the post made of it - never who saved
+  // it, who else is in it or who took it
+  if ((await colsOf("stage_capture_cards")).length) {
+    await put("chat", "mic_stage_captures_of_you_as_name_card", require("./stagecap").depictedOf(uid, login, at, { cards: true }).then((rs) => rs
+      .sort((a, b) => Number(a.created) - Number(b.created))
+      .map((r) => ({ capture: r.capture_id, login: r.login, pad: r.room_id, kind: r.kind, state: r.state, media_id: r.media_id || null, created: r.created }))));
+  }
+  if ((await colsOf("story_keep_people")).length) {
+    await put("chat", "mic_stage_copies_of_you", (async () => {
+      const rs = await require("./storykeep").keptOf(uid, login, at);
+      const out = [];
+      for (const r of rs.sort((a, b) => Number(a.captured_at) - Number(b.captured_at))) {
+        const k = (await getQuery("SELECT 1 FROM story_keeps WHERE capture_id = ? AND purged_at IS NULL", [r.capture_id]))[0];
+        const sp = (await getQuery("SELECT post_id, removed_at FROM story_posts WHERE capture_id = ?", [r.capture_id]))[0];
+        out.push({ capture: r.capture_id, login: r.login, role: r.role, captured: r.captured_at, saved_copy: !!k,
+                   post: sp && sp.post_id && !sp.removed_at ? sp.post_id : null });
+      }
+      return out;
+    })());
+  }
   await put("chat", "commands_from_the_website", rows("bridge_cmd_log", "user_id = ?", [uid]));
   // pads they own
   await put("pads", "owned", rows("rooms_registry", "owner_user_id = ?", [uid]));

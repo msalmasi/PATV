@@ -385,6 +385,22 @@ async function hiddenIds(viewer, rows, ctx = mkCtx()) {
   }
   return out;
 }
+/** mic keep (handoff 16 follow-up): the logins in `logins` blocked EITHER way with `userId` by the story block rule (any account
+ *  linked to the login, or that login's cam_blocks on them) - hiddenIds' per-person test, for storykeep's recheck of everyone a
+ *  mic-stage capture shows before it is saved or posted (whatever story_block_hide says). Lookups that fail throw. -> Set */
+async function loginsBlocked(userId, logins, ctx = mkCtx()) {
+  const me = String(userId || ""), out = new Set();
+  const ls = [...new Set((logins || []).map(lc).filter((l) => LOGIN_RE.test(l)))];
+  if (!me || !ls.length) return out;
+  const B = await blocksOf(ctx, me);
+  if (B.size) await loadLinked(ctx, ls);
+  const CV = await camv(ctx);
+  for (const l of ls) {
+    const L = B.size ? ctx.linked.get(l) : null;
+    if ((L && L.ids.some((id) => id !== me && B.has(id))) || (CV && CV.blocked(l, me))) out.add(l);
+  }
+  return out;
+}
 /** Story items (stories.clean shape, carrying their raw row) minus the ones blocks hide from `viewer` (D-3). When the block
  *  lookup fails it FAILS CLOSED: only the viewer's own uploads stay (a transient DB error never shows a blocked person). */
 async function hideBlocked(viewer, items, ctx = mkCtx()) {
@@ -922,6 +938,6 @@ function register(app, { addUser, idemBegin, noTimers = false } = {}) {
 }
 
 module.exports = {
-  init, register, POLICY, QUICK, GONE, Refuse, placed, visibleTo, storyFor, hideBlocked, hiddenIds, blockedWith, authorOf, annotate, counts, vote, selfUp, tip,
+  init, register, POLICY, QUICK, GONE, Refuse, placed, visibleTo, storyFor, hideBlocked, hiddenIds, loginsBlocked, blockedWith, authorOf, annotate, counts, vote, selfUp, tip,
   replyCheck, reply, insertRef, refsFor, dropRef, cardsFor, openFromMessage, thumbFor, sweep, live, mkCtx, _setClock,
 };

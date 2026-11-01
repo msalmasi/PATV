@@ -20,8 +20,22 @@
 //     reports them - padmod.capsFor) or site staff. Save: any signed-in member (stories are members-only).
 //   * Captures whose subject (or capturer) is private can never be posted or saved: media.anon (!incognito /
 //     !bridge hide), an anonymous capturer ("someone"), or a linked account that hides its Analytics / Rooms panel
-//     (stories.privateLogins; stage captures: the streamer's and capturer's accounts, same rule). Mic-stage captures
-//     (source "stage", stream "mic" - several people's cams) are never posted or saved (review fix, handoff 16).
+//     (stories.privateLogins; stage captures: the streamer's and capturer's accounts, same rule).
+//   * 🎙 Mic-stage captures (source "stage", stream "mic" - several people; mic keep, handoff 16 follow-up, owner 2026-11-01:
+//     "make clips savable and postable") may be saved / posted only when ALL of: the rules above; the admin switch
+//     stagecap_mic_keep (Stage admin, default on); the capture was taken in the open (stage_captures.veiled = 0: no cover tile,
+//     no blanked tile, no "Someone is speaking" card, no muted sound, no voice the tiles don't show - stagemiccap.js; NULL = taken
+//     before this rule: never); nobody shown removed its post; and, at that moment, EVERYONE shown - the cams drawn
+//     (stage_capture_people) and the name cards (stage_capture_cards) - passes the engine's consent for the actor (and, posting,
+//     the credited capturer): not hidden, the strict private-profile lookup, their cam rules; the accounts that had each login
+//     when it was taken don't keep their activity private; the story block rule holds both ways. Any lookup error refuses.
+//     The people shown are copied into story_keep_people (the live rows die with the 24 h capture) in the same transaction as the
+//     story_posts claim / story_keeps row; deleted when the capture has no copy left. Every person shown (cam or name card, by
+//     the spans their login was theirs - stagecap.ownSpans; a recycled login's later holder gets nothing) is told about a post
+//     and sees "Remove me" on it: one removal takes the post down AND deletes every saved copy (they can't see private
+//     collections, and a mic capture can't be cut). Copies go when someone shown goes private (profile, hidden / incognito,
+//     Pepe's /api/media/anon for their login) or deletes their account: hooks where those change, read-time checks (Saved,
+//     the story viewer) and an hourly backstop sweep (sweepKept). The story delete right stays cam-only (stagecap.canDelete).
 //   * Removed or expired captures (deleted, past expires, file gone) can't be posted or saved.
 //   * The person on cam (the subject: their account, or their linked Camfrog login) sees "Remove me" on a post of
 //     themselves: one click soft-deletes it (deleted_by "subject") and tells the poster (and the credited author).
@@ -41,11 +55,14 @@
 //                created, removed_at, removed_by, removed_reason
 //   story_keeps  capture_id (PK), kind, ct, file, thumb, poster, w, h, secs, bytes, created, purged_at, purge_reason
 //   story_saves  user_id + capture_id (PK), created, kind, room_id, room_title, subject, by_name, source, nsfw, captured
+//   story_keep_people  capture_id (the media id) + login (PK), role (cam | card), captured_at - who a saved / posted 🎙 mic-stage
+//                copy shows (mic keep). NOT re-keyed on a login change (loginrekey.js): read by the ownership spans.
+//   story_posts.stream  "mic" for a post made from a mic-stage capture (provenance "🎙 Mic stage in <room>", multi-subject Remove me)
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const media = require("./media");
 const fm = require("./feedmedia");
@@ -61,7 +78,8 @@ const CAPTION_MAX = 140;
 const SAVE_USER_KINDS = new Set(["photo", "clip"]);
 const userSaveable = (r) => !!r && r.source === "user" && SAVE_USER_KINDS.has(r.kind);
 
-class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
+// i18n: a refusal's locales/en.json key (the route answers req.t(key) - mic keep's texts; older ones are plain English)
+class Refuse extends Error { constructor(status, msg, i18n) { super(msg); this.status = status; this.refuse = true; if (i18n) this.i18n = i18n; } }
 
 let ready = null;
 function init() {
@@ -80,6 +98,11 @@ function init() {
         user_id TEXT NOT NULL, capture_id TEXT NOT NULL, created INTEGER, kind TEXT, room_id TEXT, room_title TEXT, subject TEXT, by_name TEXT,
         source TEXT, nsfw INTEGER NOT NULL DEFAULT 0, captured INTEGER, PRIMARY KEY (user_id, capture_id))`);
       await runQuery("CREATE INDEX IF NOT EXISTS story_saves_capture ON story_saves (capture_id)");
+      // mic keep (handoff 16 follow-up)
+      await runQuery(`CREATE TABLE IF NOT EXISTS story_keep_people (
+        capture_id TEXT NOT NULL, login TEXT NOT NULL, role TEXT NOT NULL, captured_at INTEGER NOT NULL, PRIMARY KEY (capture_id, login))`);
+      await runQuery("CREATE INDEX IF NOT EXISTS story_keep_people_login ON story_keep_people (login)");
+      if (!(await getQuery("PRAGMA table_info(story_posts)")).some((c) => c.name === "stream")) await runQuery("ALTER TABLE story_posts ADD COLUMN stream TEXT");
     })().catch((e) => { console.error("[storykeep] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -135,8 +158,162 @@ async function slotUser(slotId) {
   try { const s = await require("./mainstage").getSlot(String(slotId)); return s && s.userId ? s.userId : null; } catch (e) { return null; }
 }
 
-/** Privacy for many capture rows at once -> Map id -> reason (only blocked ones are in it). */
-async function privacyBlocks(rows) {
+// ── 🎙 mic-stage captures (mic keep, handoff 16 follow-up, owner 2026-11-01) ──
+const isMic = (r) => !!r && r.source === "stage" && r.stream === "mic";
+const MIC = {
+  off: "Saving and posting mic-stage snaps and clips is switched off right now.",
+  unknown: "This mic-stage capture has no record that everyone in it was shown openly, so it can't be kept.",
+  veiled: "Not everyone in this mic-stage capture was shown openly (a cover, a blanked tile, muted sound or a voice that isn't shown), so it can't be kept.",
+  person: "Someone shown in this mic-stage capture can't be in a saved or posted copy right now, so it can't be kept.",
+  error: "Couldn't check everyone shown in this mic-stage capture just now - try again in a moment.",
+  removed: "Someone shown in this mic-stage capture removed it, so it can't be kept again.",
+  not_shown: "Only someone shown in this capture can remove it.",
+};
+const micRefuse = (key, status = 403) => new Refuse(status, MIC[key], "storykeep.mic." + key);
+const CLAIM_STALE_MS = 5 * 60e3;            // a story_posts claim with no post this old was left by a crash (postToPad retries it)
+/** The admin kill switch (mainstage stage config stagecap_mic_keep, default on). Unreadable = off. */
+function micKeepOn() {
+  try { return require("./mainstage").config().stagecap_mic_keep !== false; } catch (e) { return false; }
+}
+const TABLES = new Set();
+async function tableThere(name) {
+  if (TABLES.has(name)) return true;
+  const ok = (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [name])).length > 0;
+  if (ok) TABLES.add(name);
+  return ok;
+}
+/** The stage capture behind a published mic-stage media row, and who it shows from its LIVE rows (stage_capture_people = the cams
+ *  drawn, role "cam"; stage_capture_cards = name cards, role "card") -> {cap, capturedAt, people: [{login, role}]} | null. */
+async function micCapture(mediaId) {
+  if (!(await tableThere("stage_captures"))) return null;
+  const cap = (await getQuery("SELECT * FROM stage_captures WHERE media_id = ? AND source = 'mic'", [String(mediaId)]))[0];
+  if (!cap) return null;
+  const people = [], seen = new Set();
+  const add = (l, role) => { const x = lc(l); if (x && !seen.has(x)) { seen.add(x); people.push({ login: x, role }); } };
+  if (await tableThere("stage_capture_people")) for (const r of await getQuery("SELECT login FROM stage_capture_people WHERE capture_id = ?", [cap.id])) add(r.login, "cam");
+  if (await tableThere("stage_capture_cards")) for (const r of await getQuery("SELECT login FROM stage_capture_cards WHERE capture_id = ?", [cap.id])) add(r.login, "card");
+  return { cap, capturedAt: Number(cap.created) || 0, people };
+}
+/** Who a saved / posted copy shows: its durable rows -> {capturedAt, people} | null (none). */
+async function keptCapture(captureId) {
+  const rows = await getQuery("SELECT login, role, captured_at FROM story_keep_people WHERE capture_id = ?", [String(captureId)]);
+  return rows.length ? { capturedAt: Number(rows[0].captured_at) || 0, people: rows.map((r) => ({ login: lc(r.login), role: r.role })) } : null;
+}
+/** Why NOBODY may keep this mic-stage capture right now (null: anyone may, pending micPeopleWhy) - the switch, no in-the-open
+ *  record (a row from before mic keep: veiled NULL, or no stage capture at all), veiled, or a person shown removed its post. */
+async function micCaptureWhy(row, mc) {
+  if (!micKeepOn()) return "off";
+  if (!mc || mc.cap.state !== "done" || mc.cap.veiled == null) return "unknown";
+  if (Number(mc.cap.veiled) !== 0) return "veiled";
+  const sp = (await getQuery("SELECT removed_by FROM story_posts WHERE capture_id = ?", [row.id]))[0];
+  if (sp && sp.removed_by === "subject") return "removed";
+  return null;
+}
+/**
+ * The per-person recheck at the moment of a save / post: everyone a mic-stage capture shows (cams drawn and name cards) passes the
+ * engine's consent now for each of `actorIds` (stagemiccap.consent: not hidden, the strict private-profile lookup that fails closed,
+ * their cam rules - !livecam off included), the accounts that had each login when it was taken (ownersAt) don't keep their activity
+ * private, and the story block rule holds both ways with each actor (storyreact.loginsBlocked). -> null | "person" | "error" (any
+ * lookup error refuses). The answer never says who. `cache` (a Map) shares lookups across one request. `owners: false` (the story
+ * viewer's buttons only - the action re-checks everything) skips the login-history walk; the current holder's privacy is in consent.
+ */
+async function micPeopleWhy(mc, actorIds, cache = new Map(), { owners = true } = {}) {
+  if (!mc) return "error";
+  const actors = [...new Set(actorIds.filter(Boolean).map(String))];
+  const logins = mc.people.map((p) => p.login);
+  try {
+    const SM = require("./stagemiccap"), SR = require("./storyreact");
+    if (!cache.has("srctx")) cache.set("srctx", SR.mkCtx());
+    for (const a of actors) {
+      for (const l of logins) {
+        const k = "consent|" + l + "|" + a;
+        if (!cache.has(k)) cache.set(k, (await SM.consent(l, a)) === true);
+        if (!cache.get(k)) return "person";
+      }
+      const kb = "block|" + a + "|" + logins.join(",");
+      if (!cache.has(kb)) cache.set(kb, (await SR.loginsBlocked(a, logins, cache.get("srctx"))).size > 0);
+      if (cache.get(kb)) return "person";
+    }
+    if (!owners) return null;
+    for (const l of logins) {
+      const k = "owners|" + l + "|" + mc.capturedAt;
+      if (!cache.has(k)) {
+        const owners = await ownersAt(l, mc.capturedAt);
+        cache.set(k, owners.length ? (await hiddenUsers(owners)).size > 0 : false);    // hiddenUsers fails closed
+      }
+      if (cache.get(k)) return "person";
+    }
+    return null;
+  } catch (e) {
+    console.error("[storykeep] mic recheck (refusing):", e.message);
+    return "error";
+  }
+}
+/** The PATV accounts whose Camfrog login `login` was at time `at`, by stagecap.ownSpans (a recycled login's later holder isn't one).
+ *  Candidates: whoever has it now and every account the login history names with it (a merged-away id followed to the account it
+ *  went into). Errors throw. -> [userId] */
+async function ownersAt(login, at) {
+  const l = lc(login);
+  if (!/^[\w.\-]{1,64}$/.test(l)) return [];
+  const ids = new Set();
+  for (const r of await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [l])) ids.add(String(r.userId));
+  if (await tableThere("login_changes")) for (const r of await getQuery("SELECT userId FROM login_changes WHERE lower(old_login) = ? OR lower(new_login) = ?", [l, l])) ids.add(String(r.userId));
+  if (await tableThere("username_history")) {
+    for (const r of await getQuery("SELECT userId FROM username_history WHERE kind = 'camfrog' AND (lower(old_username) = ? OR lower(new_username) = ?)", [l, l])) ids.add(String(r.userId));
+  }
+  let frontier = [...ids];
+  for (let hop = 0; hop < 6 && frontier.length; hop++) {
+    const next = [];
+    for (const id of frontier) {
+      const to = [];
+      if (await tableThere("account_merge_log")) to.push(...(await getQuery("SELECT to_id AS id FROM account_merge_log WHERE from_id = ?", [id])));
+      if (await tableThere("account_merges")) to.push(...(await getQuery("SELECT new_id AS id FROM account_merges WHERE old_id = ?", [id])));
+      for (const r of to) { const x = String(r.id || ""); if (x && !ids.has(x)) { ids.add(x); next.push(x); } }
+    }
+    frontier = next;
+  }
+  const SC = require("./stagecap"), out = [];
+  for (const uid of ids) {
+    const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [uid]))[0];
+    if (!u) continue;
+    const spans = await SC.ownSpans(uid, u.camfrogUsername ? lc(u.camfrogUsername) : null, NOW());
+    if (spans.some((w) => w.login === l && at > Number(w.from) && at <= Number(w.to))) out.push(uid);
+  }
+  return out;
+}
+/** Copy the LIVE people rows into story_keep_people - inside the caller's transaction, with the story_posts claim / story_keeps row. */
+async function copyPeople(captureId, mc) {
+  for (const p of mc.people) {
+    await runQuery("INSERT OR IGNORE INTO story_keep_people (capture_id, login, role, captured_at) VALUES (?, ?, ?, ?)", [String(captureId), p.login, p.role, mc.capturedAt]);
+  }
+}
+/** Re-read the live capture inside a transaction and copy its people (the capture still published, still in the open). */
+async function claimPeople(row) {
+  const m = (await getQuery("SELECT deleted, expires FROM media WHERE id = ?", [row.id]))[0];
+  if (!m || Number(m.deleted) || !(Number(m.expires) > NOW())) throw new Refuse(410, "That capture was removed.");
+  const live = await micCapture(row.id);
+  const why = await micCaptureWhy(row, live);
+  if (why) throw micRefuse(why);
+  await copyPeople(row.id, live);
+  return live;
+}
+/** The durable rows go once the capture has no copy left: no unpurged saved copy, and no post that's claimed (being made) or alive
+ *  (not removed by a cascade / Remove me, its files not purged). Idempotent. */
+async function dropPeopleIfNoCopy(captureId) {
+  const id = String(captureId || "");
+  if (!id) return 0;
+  const fp = await tableThere("feed_posts");
+  const r = await runQuery(`DELETE FROM story_keep_people WHERE capture_id = ?
+    AND NOT EXISTS (SELECT 1 FROM story_keeps k WHERE k.capture_id = ? AND k.purged_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM story_posts sp WHERE sp.capture_id = ? AND sp.removed_at IS NULL
+      AND ((sp.post_id IS NULL AND sp.created > ?) OR (sp.post_id IS NOT NULL AND ${fp ? "EXISTS (SELECT 1 FROM feed_posts p WHERE p.id = sp.post_id AND p.purged_at IS NULL)" : "1"})))`,
+    [id, id, id, NOW() - CLAIM_STALE_MS]);
+  return (r && r.changes) || 0;
+}
+
+/** Privacy for many capture rows at once -> Map id -> {msg, i18n} (only blocked ones are in it). Whoever asks: the per-person
+ *  recheck of a mic-stage capture (micPeopleWhy) is the caller's, for its actor. */
+async function privacyWhy(rows) {
   const out = new Map();
   const logins = [], uids = [], slots = new Map();
   for (const r of rows) {
@@ -150,23 +327,31 @@ async function privacyBlocks(rows) {
   }
   const priv = await require("./stories").privateLogins(logins);
   const hid = await hiddenUsers(uids);
+  const set = (id, msg, i18n) => out.set(id, { msg, i18n: i18n || null });
   for (const r of rows) {
     const by = String(r.by_user || "").trim();
     // 1.99ez: a member's own story upload (userstories.js) is theirs; 1.99fn: a snap / clip story may be SAVED (never
     // posted - postToPad refuses source "user" on its own), anything else can't be kept
-    if (r.source === "user") { if (!userSaveable(r)) out.set(r.id, "This is someone's own story, so it can't be kept."); continue; }
-    // review fix (handoff 16): a mic-stage capture draws several Camfrog cams (stage_capture_people). Nothing here re-checks
-    // their later incognito / !bridge hide / private profile, and it has no single subject for "Remove me", so (until the owner
-    // decides otherwise) it is never kept or posted.
-    if (r.source === "stage" && r.stream === "mic") { out.set(r.id, "This mic-stage capture shows several people, so it can't be kept."); continue; }
-    if (Number(r.anon)) out.set(r.id, "The person in this capture is private (incognito or hidden), so it can't be kept.");
-    else if (!by || lc(by) === "someone") out.set(r.id, "This capture was taken privately, so it can't be kept.");
+    if (r.source === "user") { if (!userSaveable(r)) set(r.id, "This is someone's own story, so it can't be kept."); continue; }
+    if (Number(r.anon)) set(r.id, "The person in this capture is private (incognito or hidden), so it can't be kept.");
+    else if (!by || lc(by) === "someone") set(r.id, "This capture was taken privately, so it can't be kept.");
     else if (r.source === "stage") {
-      if ((r.by_user_id && hid.has(r.by_user_id)) || (slots.get(r.id) && hid.has(slots.get(r.id)))) out.set(r.id, "Someone in this capture keeps their activity private, so it can't be kept.");
-    } else if (priv.has(lc(r.subject)) || priv.has(lc(r.by_user)) || (r.subject_login && priv.has(lc(r.subject_login)))) out.set(r.id, "Someone in this capture keeps their activity private, so it can't be kept.");
+      if ((r.by_user_id && hid.has(r.by_user_id)) || (slots.get(r.id) && hid.has(slots.get(r.id)))) set(r.id, "Someone in this capture keeps their activity private, so it can't be kept.");
+      // mic keep (replaces review fix 1's "never"): the switch, the in-the-open record, a removal by someone shown
+      else if (isMic(r)) {
+        let why;
+        try { why = await micCaptureWhy(r, await micCapture(r.id)); } catch (e) { console.error("[storykeep] mic capture:", e.message); why = "error"; }
+        if (why) set(r.id, MIC[why], "storykeep.mic." + why);
+      }
+    } else if (priv.has(lc(r.subject)) || priv.has(lc(r.by_user)) || (r.subject_login && priv.has(lc(r.subject_login)))) set(r.id, "Someone in this capture keeps their activity private, so it can't be kept.");
   }
   return out;
 }
+/** privacyWhy's reasons as plain text (Map id -> reason). */
+async function privacyBlocks(rows) {
+  return new Map([...(await privacyWhy(rows))].map(([id, w]) => [id, w.msg]));
+}
+const whyRefuse = (w) => new Refuse(403, w.msg, w.i18n);
 
 async function accountOf(user) {
   if (!user || !user.userId) return null;
@@ -271,17 +456,31 @@ async function postToPad(user, captureId, { caption = "", body = "" } = {}) {
   if (prev) return existing(prev, acct);
   const gone = goneWhy(row);
   if (gone) throw new Refuse(410, gone);
-  const block = (await privacyBlocks([row])).get(row.id);
-  if (block) throw new Refuse(403, block);
-  // the claim (one post per capture, even with two clicks at once)
+  const block = (await privacyWhy([row])).get(row.id);
+  if (block) throw whyRefuse(block);
+  const authorId = (await capturerId(row)) || acct.userId;
+  // mic keep: everyone shown passes the recheck for the poster AND the credited capturer (the post reads as theirs)
+  const mic = isMic(row);
+  if (mic) {
+    const pw = await micPeopleWhy(await micCapture(row.id), [acct.userId, authorId]);
+    if (pw) throw micRefuse(pw);
+  }
+  // the claim (one post per capture, even with two clicks at once) - mic keep: with the durable people record, copied from the live
+  // rows in the same transaction (the capture re-checked inside it: still published, still in the open)
   const t = NOW();
-  const claim = await runQuery("INSERT OR IGNORE INTO story_posts (capture_id, room_id, posted_by, created, kind, source) VALUES (?, ?, ?, ?, ?, ?)",
-                               [row.id, R.id, acct.userId, t, row.kind, row.source || "cam"]);
+  const claim = await tx(async () => {
+    const c = await runQuery("INSERT OR IGNORE INTO story_posts (capture_id, room_id, posted_by, created, kind, source, stream) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                             [row.id, R.id, acct.userId, t, row.kind, row.source || "cam", mic ? "mic" : null]);
+    if (c.changes && mic) await claimPeople(row);
+    return c;
+  });
   if (!claim.changes) return existing((await getQuery("SELECT * FROM story_posts WHERE capture_id = ?", [row.id]))[0], acct);
   let att = null, made = null;
+  const what = mic ? (row.kind === "clip" ? "Mic-stage clip" : "Mic-stage snap")
+    : row.source === "stage" ? (row.kind === "clip" ? "Stage clip" : "Stage snap") : KIND_NOUN[row.kind] || "Capture";
   try {
-    const authorId = (await capturerId(row)) || acct.userId;
-    const subj = await subjectOf(row);
+    // mic keep: no single subject - provenance is "🎙 Mic stage in <room>" (forPosts), every person shown has "Remove me"
+    const subj = mic ? { userId: null, login: null, name: null } : await subjectOf(row);
     const k = await persistImpl(row);
     if (roomFull(k.bytes)) { dropFiles(k); throw new Refuse(507, "The feed's storage is full right now."); }
     att = crypto.randomBytes(12).toString("hex");
@@ -290,8 +489,7 @@ async function postToPad(user, captureId, { caption = "", body = "" } = {}) {
                    [att, authorId, k.kind, k.ct, k.file, k.thumb, k.poster, k.w || 0, k.h || 0, k.secs || 0, k.bytes || 0, t, k.bytes || 0, k.bytes || 0]);
     const S = store();
     const cap = S.cleanLine(caption, CAPTION_MAX);
-    const what = row.source === "stage" ? (row.kind === "clip" ? "Stage clip" : "Stage snap") : KIND_NOUN[row.kind] || "Capture";
-    const title = cap || `${what}${subj.name ? " of " + subj.name : ""} in ${R.title || R.id}`.slice(0, CAPTION_MAX);
+    const title = cap || (mic ? `🎙 ${what} in ${R.title || R.id}` : `${what}${subj.name ? " of " + subj.name : ""} in ${R.title || R.id}`).slice(0, CAPTION_MAX);
     // adultgate site: liveRoom = the room it was captured in - the 18+ gate follows the post from its first notice on
     made = await S.create(authorId, { title, body: String(body || "").slice(0, 2000) || undefined, community: R.id, attachments: [att], nsfw: !!Number(row.nsfw), announce: [] },
                           { free: true, onBehalf: authorId !== acct.userId || managesAny(acct) || (await rooms.canManage(acct, R.id)), liveRoom: R.id });
@@ -303,20 +501,45 @@ async function postToPad(user, captureId, { caption = "", body = "" } = {}) {
         body: `${acct.displayname || acct.username} posted a ${what.toLowerCase()} of you to ${R.title || R.id}. Not OK? Open it and tap "Remove me".`,
         link: made.url, ref: "story-post:" + made.id });
     }
-    console.log(`[storykeep] capture ${row.id} -> post ${made.id} in ${R.id} by ${acct.username} (credited ${authorId})`);
-    return { post: { id: made.id, url: made.url }, again: false };
   } catch (e) {
     await runQuery("DELETE FROM story_posts WHERE capture_id = ? AND post_id IS NULL", [row.id]).catch(() => {});
+    if (mic) await dropPeopleIfNoCopy(row.id).catch(() => {});
     if (att && !made) {
       const a = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [att]))[0];
       if (a && !a.post_id) { dropFiles(a); await runQuery("UPDATE feed_attachments SET state = 'deleted' WHERE id = ?", [att]).catch(() => {}); }
     }
     throw e;
   }
+  if (mic) {
+    // mic keep: someone who went private between the recheck above and the durable rows (a hook that fired then found no row) takes
+    // the new post down now; a lookup error leaves it to the backstop sweep and the read-time checks
+    if ((await micPeopleWhy(await keptCapture(row.id), [acct.userId, authorId])) === "person") {
+      await onCaptureRemoved(row.id, { reason: "private" });
+      throw micRefuse("person");
+    }
+    await noticeShown(row.id, acct, made, what, R);
+  }
+  console.log(`[storykeep] capture ${row.id} -> post ${made.id} in ${R.id} by ${acct.username} (credited ${authorId})`);
+  return { post: { id: made.id, url: made.url }, again: false };
+}
+/** mic keep: every linked account a new mic-stage post shows (cam or name card, the account that had the login when it was taken)
+ *  hears about it with the way out - except the poster. A failed lookup tells nobody (they still have Remove me). */
+async function noticeShown(captureId, acct, made, what, R) {
+  try {
+    const kc = await keptCapture(captureId);
+    const tell = new Set();
+    for (const p of kc ? kc.people : []) for (const uid of await ownersAt(p.login, kc.capturedAt)) if (uid !== acct.userId) tell.add(uid);
+    for (const uid of tell) {
+      await store().notify(uid, { kind: "feed", title: "A capture of you was posted",
+        body: `${acct.displayname || acct.username} posted a ${what.toLowerCase()} that shows you to ${R.title || R.id}. Not OK? Open it and tap "Remove me" - that also deletes every saved copy.`,
+        link: made.url, ref: "story-post:" + made.id });
+    }
+  } catch (e) { console.error("[storykeep] mic post notices:", e.message); }
 }
 async function existing(sp, acct) {
   if (!sp) throw new Refuse(409, "Try again in a moment.");
   if (!sp.post_id) throw new Refuse(409, "It's being posted right now.");
+  if (sp.removed_at && sp.stream === "mic" && sp.removed_by === "subject") throw micRefuse("removed", 409);
   if (sp.removed_at) throw new Refuse(409, sp.removed_by === "subject" ? "The person in this capture removed its post, so it can't be posted again." : "This capture's post was removed.");
   const p = await store().get(sp.post_id, acct, { _inner: true });
   if (!p || p.deleted) throw new Refuse(409, "This capture's post was deleted.");
@@ -336,6 +559,7 @@ async function removeMe(user, postId) {
   if (!acct) throw new Refuse(401, "Sign in first.");
   if (!POST_RE.test(String(postId || ""))) throw new Refuse(404, "No such post.");
   const sp = (await getQuery("SELECT * FROM story_posts WHERE post_id = ?", [String(postId)]))[0];
+  if (sp && sp.stream === "mic") return micRemoveMe(acct, sp);
   if (!sp || !subjectMatches(acct, sp)) throw new Refuse(403, "Only the person in this capture can remove it.");
   if (sp.removed_at) return { removed: true, again: true };
   const t = NOW();
@@ -350,6 +574,53 @@ async function removeMe(user, postId) {
   console.log(`[storykeep] post ${sp.post_id} removed by its subject ${acct.username}`);
   return { removed: true, again: false };
 }
+/** mic keep: the captures (of `captureIds`) whose kept / posted copy shows `acct` - a durable row's login inside a span in which it
+ *  was the account's at captured_at (stagecap.ownSpans, depictedOf's rule: a recycled login's later holder is never shown). Errors
+ *  throw (callers grant nothing). -> Set of capture ids */
+async function micShownAs(acct, captureIds) {
+  const out = new Set();
+  const ids = [...new Set((captureIds || []).map(String))];
+  if (!acct || !acct.userId || !ids.length) return out;
+  const rows = await getQuery(`SELECT capture_id, login, captured_at FROM story_keep_people WHERE capture_id IN (${ids.map(() => "?").join(",")})`, ids);
+  if (!rows.length) return out;
+  let login = acct.camfrogUsername;
+  if (login === undefined) { const a = await accountOf(acct); login = a ? a.camfrogUsername : null; }
+  const spans = await require("./stagecap").ownSpans(acct.userId, login ? lc(login) : null, NOW());
+  for (const r of rows) {
+    const at = Number(r.captured_at) || 0;
+    if (spans.some((w) => w.login === lc(r.login) && at > Number(w.from) && at <= Number(w.to))) out.add(r.capture_id);
+  }
+  return out;
+}
+/**
+ * mic keep: multi-subject "Remove me" on a post of a mic-stage capture - anyone it shows (cam or name card, micShownAs; a lookup error
+ * grants nothing). One removal soft-deletes the post (deleted_by "subject") AND drops every saved copy (they can't see private
+ * collections, and a mic capture can't be cut); nobody can save or post it again. The poster and the credited capturer are told.
+ * Idempotent (a removed post answers again: true).
+ */
+async function micRemoveMe(acct, sp) {
+  if (sp.removed_at) return { removed: true, again: true };
+  let shown = false;
+  try { shown = (await micShownAs(acct, [sp.capture_id])).has(sp.capture_id); } catch (e) { console.error("[storykeep] mic remove-me (granting nothing):", e.message); }
+  if (!shown) throw micRefuse("not_shown");
+  const t = NOW();
+  await tx(async () => {
+    await runQuery(`UPDATE feed_posts SET deleted_at = ?, deleted_by = 'subject', delete_reason = 'removed by someone shown in it' WHERE id = ? AND deleted_at IS NULL`, [t, sp.post_id]);
+    await runQuery("UPDATE story_posts SET removed_at = ?, removed_by = 'subject', removed_reason = 'remove-me' WHERE capture_id = ? AND removed_at IS NULL", [t, sp.capture_id]);
+    await runQuery("DELETE FROM story_saves WHERE capture_id = ?", [sp.capture_id]);
+  });
+  await runQuery("DELETE FROM feed_mentions WHERE post_id = ? AND sent_at IS NULL", [sp.post_id]).catch(() => {});
+  await purgeKeep(sp.capture_id, "remove-me");
+  await dropPeopleIfNoCopy(sp.capture_id);
+  const tell = [...new Set([sp.posted_by, sp.author_id].filter((x) => x && x !== acct.userId))];
+  for (const uid of tell) {
+    await store().notify(uid, { kind: "feed", title: "A capture you posted was removed",
+      body: `${acct.displayname || acct.username} is in it and removed the post${sp.room_title ? " in " + sp.room_title : ""}. Saved copies of it were deleted too.`,
+      link: "/feed", ref: "story-rm:" + sp.post_id });
+  }
+  console.log(`[storykeep] mic post ${sp.post_id} removed by someone shown in it (${acct.username}); saved copies dropped`);
+  return { removed: true, again: false };
+}
 
 /** Provenance for decorated posts -> Map post_id -> {room, kind, source, subjectName, subject: {username}|null, canRemoveMe}. */
 async function forPosts(ids, viewer) {
@@ -360,10 +631,15 @@ async function forPosts(ids, viewer) {
   if (!rows.length) return out;
   let acct = viewer && viewer.userId ? viewer : null;
   if (acct && acct.camfrogUsername === undefined) acct = await accountOf(acct);
+  // mic keep: which mic-stage posts show this viewer (a lookup error grants nothing)
+  let shownIn = new Set();
+  const micIds = rows.filter((r) => r.stream === "mic" && !r.removed_at).map((r) => r.capture_id);
+  if (acct && micIds.length) { try { shownIn = await micShownAs(acct, micIds); } catch (e) { console.error("[storykeep] mic provenance:", e.message); } }
   for (const r of rows) {
-    // the subject's profile: their account if posted with one, else (linked later) by login
-    let su = r.subject_user_id ? await userById(r.subject_user_id) : null;
-    if (!su && r.subject_login) su = await userByLogin(r.subject_login);
+    const mic = r.stream === "mic";
+    // the subject's profile: their account if posted with one, else (linked later) by login (mic keep: a mic post has no single subject)
+    let su = !mic && r.subject_user_id ? await userById(r.subject_user_id) : null;
+    if (!mic && !su && r.subject_login) su = await userByLogin(r.subject_login);
     const R = rooms.getCached(r.room_id);
     // 1.99fu: captured in an Approved pad this viewer is outside of - say so without naming it
     const PA = require("./padaccess");
@@ -371,9 +647,11 @@ async function forPosts(ids, viewer) {
     out.set(r.post_id, {
       room: hid ? { id: null, title: "a members-only pad", href: null }
         : { id: r.room_id, title: (R && R.title) || r.room_title || r.room_id, href: R ? require("./pads").padHref(R) : null },
-      kind: r.kind, source: r.source, subjectName: r.subject_name || null,
+      kind: r.kind, source: r.source, subjectName: mic ? null : r.subject_name || null,
       subject: su ? { username: su.username, display: su.displayname || su.username } : null,
-      canRemoveMe: !r.removed_at && subjectMatches(acct, r),
+      // mic keep: "🎙 Mic stage in <room>"; Remove me for everyone it shows (cam or name card)
+      ...(mic ? { mic: true } : {}),
+      canRemoveMe: !r.removed_at && (mic ? shownIn.has(r.capture_id) : subjectMatches(acct, r)),
     });
   }
   return out;
@@ -388,12 +666,18 @@ async function ensureKeep(row) {
   const p = (async () => {
     const f = await persistImpl(row);
     if (roomFull(f.bytes)) { dropFiles(f); throw new Refuse(507, "Storage is full right now."); }
-    await runQuery(`INSERT INTO story_keeps (capture_id, kind, ct, file, thumb, poster, w, h, secs, bytes, created, purged_at, purge_reason)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
-                    ON CONFLICT(capture_id) DO UPDATE SET kind = excluded.kind, ct = excluded.ct, file = excluded.file, thumb = excluded.thumb,
-                      poster = excluded.poster, w = excluded.w, h = excluded.h, secs = excluded.secs, bytes = excluded.bytes, created = excluded.created,
-                      purged_at = NULL, purge_reason = NULL`,
-                   [row.id, f.kind, f.ct, f.file, f.thumb, f.poster, f.w || 0, f.h || 0, f.secs || 0, f.bytes || 0, NOW()]);
+    try {
+      // mic keep: the durable people record, copied from the live rows in the same transaction as the story_keeps row
+      await tx(async () => {
+        await runQuery(`INSERT INTO story_keeps (capture_id, kind, ct, file, thumb, poster, w, h, secs, bytes, created, purged_at, purge_reason)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                        ON CONFLICT(capture_id) DO UPDATE SET kind = excluded.kind, ct = excluded.ct, file = excluded.file, thumb = excluded.thumb,
+                          poster = excluded.poster, w = excluded.w, h = excluded.h, secs = excluded.secs, bytes = excluded.bytes, created = excluded.created,
+                          purged_at = NULL, purge_reason = NULL`,
+                       [row.id, f.kind, f.ct, f.file, f.thumb, f.poster, f.w || 0, f.h || 0, f.secs || 0, f.bytes || 0, NOW()]);
+        if (isMic(row)) await claimPeople(row);
+      });
+    } catch (e) { dropFiles(f); throw e; }
     return (await getQuery("SELECT * FROM story_keeps WHERE capture_id = ?", [row.id]))[0];
   })().finally(() => keepPending.delete(row.id));
   keepPending.set(row.id, p);
@@ -410,15 +694,29 @@ async function save(user, captureId) {
   if (have) return { saved: true, again: true };
   const gone = goneWhy(row);
   if (gone) throw new Refuse(410, gone);
-  const block = (await privacyBlocks([row])).get(row.id);
-  if (block) throw new Refuse(403, block);
+  const block = (await privacyWhy([row])).get(row.id);
+  if (block) throw whyRefuse(block);
+  // mic keep: everyone shown passes the recheck for the saver
+  const mic = isMic(row);
+  if (mic) {
+    const pw = await micPeopleWhy(await micCapture(row.id), [acct.userId]);
+    if (pw) throw micRefuse(pw);
+  }
   await ensureKeep(row);
   const R = row.room ? rooms.getCached(row.room) : null;
-  await runQuery(`INSERT OR IGNORE INTO story_saves (user_id, capture_id, created, kind, room_id, room_title, subject, by_name, source, nsfw, captured)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                 [acct.userId, row.id, NOW(), row.kind, row.room || null, R ? R.title : row.room || null, String(row.subject || "").slice(0, 60) || null,
-                  String(row.by_user || "").slice(0, 60) || null, row.source === "stage" ? "stage" : row.source === "user" ? "user" : "cam",
-                  Number(row.nsfw) ? 1 : 0, Number(row.created) || null]);
+  await tx(async () => {
+    await runQuery(`INSERT OR IGNORE INTO story_saves (user_id, capture_id, created, kind, room_id, room_title, subject, by_name, source, nsfw, captured)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   [acct.userId, row.id, NOW(), row.kind, row.room || null, R ? R.title : row.room || null, String(row.subject || "").slice(0, 60) || null,
+                    String(row.by_user || "").slice(0, 60) || null, row.source === "stage" ? "stage" : row.source === "user" ? "user" : "cam",
+                    Number(row.nsfw) ? 1 : 0, Number(row.created) || null]);
+    if (mic) await claimPeople(row);          // mic keep: (again, idempotent) the people record with the save, from the live rows
+  });
+  // mic keep: someone who went private between the recheck and the durable rows takes the copies down now (an error: the sweep's)
+  if (mic && (await micPeopleWhy(await keptCapture(row.id), [acct.userId])) === "person") {
+    await onCaptureRemoved(row.id, { reason: "private" });
+    throw micRefuse("person");
+  }
   return { saved: true, again: false };
 }
 async function purgeKeep(captureId, reason) {
@@ -426,6 +724,7 @@ async function purgeKeep(captureId, reason) {
   if (!k) return false;
   dropFiles(k);
   await runQuery("UPDATE story_keeps SET purged_at = ?, purge_reason = ? WHERE capture_id = ?", [NOW(), reason || null, captureId]);
+  await dropPeopleIfNoCopy(captureId);           // mic keep: the people record goes with the capture's last copy
   return true;
 }
 /** Take it out of the collection; the copy goes with the last save. Idempotent. */
@@ -448,9 +747,17 @@ async function savedFor(user, { limit = 200 } = {}) {
                                JOIN story_keeps k ON k.capture_id = s.capture_id AND k.purged_at IS NULL
                                LEFT JOIN media m ON m.id = s.capture_id
                                WHERE s.user_id = ? ORDER BY s.created DESC LIMIT ?`, [user.userId, Math.min(500, limit)]);
+  // mic keep: a saved mic-stage copy is checked against everyone it shows (keptStates) - someone private now takes it (and every
+  // other copy) down; a lookup that fails only leaves it out of this list (nothing is deleted on an error)
+  let micState = new Map();
+  try { micState = await keptStates(rows.map((r) => r.capture_id)); } catch (e) { console.error("[storykeep] saved mic check:", e.message); micState = null; }
   const out = [];
   for (const r of rows) {
     if (Number(r.m_anon)) { await onCaptureRemoved(r.capture_id, { reason: "private" }); continue; }
+    if (micState === null && r.source === "stage") continue;
+    const ms = micState && micState.get(r.capture_id);
+    if (ms === "private") { await onCaptureRemoved(r.capture_id, { reason: "private" }); continue; }
+    if (ms === "error") continue;
     const R = r.room_id ? rooms.getCached(r.room_id) : null;
     out.push({ id: r.capture_id, kind: r.kind, mediaKind: r.kkind, src: sUrl(r.file), thumb: sUrl(r.thumb) || sUrl(r.poster), poster: sUrl(r.poster), w: r.w, h: r.h, secs: r.secs,
                room: { id: r.room_id, title: (R && R.title) || r.room_title || r.room_id, href: R ? require("./pads").padHref(R) : null },
@@ -480,8 +787,131 @@ async function onCaptureRemoved(captureId, { reason = "removed", byCapturer = fa
       post = true;
     }
   }
+  await dropPeopleIfNoCopy(id);                  // mic keep: no copy left -> the people record goes (a post that stays keeps it)
   if (del.changes || post) console.log(`[storykeep] capture ${id} ${reason}: ${del.changes} save(s) dropped${post ? ", its post hidden" : ""}`);
   return { saves: del.changes, post };
+}
+
+// ── mic keep: copies go when someone they show goes private or deletes their account ──
+// Hooks: profilelayout.save (onPeoplePrivate {userId}), hubhidden's set changing (hiddenChanged -> the hidden check), Pepe's
+// /api/media/anon (onPeoplePrivate {logins}), account deletion (accountdelete.execute: keptOf wide + onCaptureRemoved). Backstop:
+// sweepKept (hourly, register) and the read-time checks (savedFor, annotate). Lookup errors never remove anything.
+/** quotes.isHidden only when it's sure: null while either hidden store is still loading (both then say "hidden" for everyone -
+ *  right for showing, never a reason to delete). Replaceable in tests (_setHiddenCheck). */
+function defaultHiddenCheck(login) {
+  try {
+    if (require("./hubhidden").loading()) return null;
+    try { if (!require("./chatlog").hiddenReady()) return null; } catch (e) { /* no chat archive set in this build */ }
+    return !!require("./quotes").isHidden(login);
+  } catch (e) { return null; }
+}
+let hiddenCheck = defaultHiddenCheck;
+function _setHiddenCheck(fn) { hiddenCheck = fn || defaultHiddenCheck; }
+/**
+ * One person a kept / posted copy shows (login, captured at `at`) for the cascade: "private" - hidden / incognito now (sure), an
+ * account that had the login since `at` was deleted (micrec's marker; reaching a later holder only removes content), or an account
+ * that had it at `at` (ownersAt) or has it now keeps its activity private (profile layout); "error" - a lookup failed; else "ok".
+ */
+async function personState(login, at, cache = new Map()) {
+  const k = login + "|" + at;
+  if (cache.has(k)) return cache.get(k);
+  let st = "ok";
+  try {
+    const h = hiddenCheck(login);
+    if (h === null) st = "error";
+    else if (h) st = "private";
+    else if ((await require("./micrec").goneAt(login)) > at) st = "private";
+    else {
+      const owners = new Set(await ownersAt(login, at));
+      for (const r of await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [lc(login)])) owners.add(String(r.userId));
+      const pl = require("./profilelayout");
+      for (const uid of owners) {
+        const L = await pl.get(uid);
+        if (pl.stateOf(L, "analytics") === "hidden" || pl.stateOf(L, "an_rooms") === "hidden") { st = "private"; break; }
+      }
+    }
+  } catch (e) { console.error("[storykeep] mic person check:", e.message); st = "error"; }
+  cache.set(k, st);
+  return st;
+}
+/** Captures (of `captureIds`, or every one with durable rows) -> Map capture id -> "private" | "error" | "ok" by everyone they show. */
+async function keptStates(captureIds = null, cache = new Map()) {
+  await init();
+  const ids = captureIds ? [...new Set(captureIds.map(String))] : null;
+  if (ids && !ids.length) return new Map();
+  const rows = ids ? await getQuery(`SELECT * FROM story_keep_people WHERE capture_id IN (${ids.map(() => "?").join(",")})`, ids)
+    : await getQuery("SELECT * FROM story_keep_people");
+  const out = new Map();
+  for (const r of rows) {
+    const st = await personState(lc(r.login), Number(r.captured_at) || 0, cache);
+    const was = out.get(r.capture_id);
+    if (st === "private" || was === "private") out.set(r.capture_id, "private");
+    else if (st === "error" || was === "error") out.set(r.capture_id, "error");
+    else out.set(r.capture_id, "ok");
+  }
+  return out;
+}
+/**
+ * The durable rows that show `userId` - each row's login inside a span in which it was the account's at captured_at
+ * (stagecap.ownSpans; `wide` for account deletion). `login` undefined = the account's login now. Errors throw.
+ * -> [{capture_id, login, role, captured_at}]
+ */
+async function keptOf(userId, login, upto = NOW(), { wide = false } = {}) {
+  await init();
+  if (!userId) return [];
+  let l = login;
+  if (l === undefined) { const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0]; l = u && u.camfrogUsername ? u.camfrogUsername : null; }
+  const out = new Map();
+  for (const w of await require("./stagecap").ownSpans(userId, l ? lc(l) : null, upto, { wide })) {
+    for (const r of await getQuery("SELECT * FROM story_keep_people WHERE login = ? AND captured_at > ? AND captured_at <= ?", [w.login, Number(w.from) || 0, Number(w.to) || 0])) {
+      out.set(r.capture_id + "|" + r.login, r);
+    }
+  }
+  return [...out.values()];
+}
+/** Someone shown went private: every kept / posted copy showing them goes. `logins`: by login (Pepe's /api/media/anon, the hidden
+ *  set); `userId`: an account whose profile NOW hides Analytics or Rooms (its spans, wide). Never throws. -> captures taken down */
+async function onPeoplePrivate({ logins = [], userId = null } = {}) {
+  try {
+    await init();
+    const caps = new Set();
+    const ls = [...new Set((logins || []).map(lc).filter(Boolean))];
+    if (ls.length) for (const r of await getQuery(`SELECT DISTINCT capture_id FROM story_keep_people WHERE login IN (${ls.map(() => "?").join(",")})`, ls)) caps.add(r.capture_id);
+    if (userId) {
+      const pl = require("./profilelayout"), L = await pl.get(userId);
+      if (pl.stateOf(L, "analytics") === "hidden" || pl.stateOf(L, "an_rooms") === "hidden") {
+        for (const r of await keptOf(userId, undefined, NOW(), { wide: true })) caps.add(r.capture_id);
+      }
+    }
+    for (const id of caps) await onCaptureRemoved(id, { reason: "private" });
+    return caps.size;
+  } catch (e) { console.error("[storykeep] mic cascade:", e.message); return 0; }
+}
+/** hubhidden's set changed (incognito / !bridge hide): the hidden check over the durable rows, debounced. */
+let hiddenTimer = null;
+function hiddenChanged() {
+  if (hiddenTimer) return;
+  hiddenTimer = setTimeout(() => { hiddenTimer = null; sweepHidden().catch((e) => console.error("[storykeep] hidden sweep:", e.message)); }, 2000);
+  if (hiddenTimer.unref) hiddenTimer.unref();
+}
+async function sweepHidden() {
+  await init();
+  const ls = (await getQuery("SELECT DISTINCT login FROM story_keep_people")).map((r) => r.login).filter((l) => hiddenCheck(lc(l)) === true);
+  return ls.length ? onPeoplePrivate({ logins: ls }) : 0;
+}
+/** The backstop (hourly, register): rows of captures with no copy left go; copies showing someone private now go. Cheap: one pass
+ *  over story_keep_people. -> captures taken down */
+let sweeping = null;
+function sweepKept() {
+  if (sweeping) return sweeping;
+  sweeping = (async () => {
+    await init();
+    for (const r of await getQuery("SELECT DISTINCT capture_id FROM story_keep_people")) await dropPeopleIfNoCopy(r.capture_id);
+    let n = 0;
+    for (const [id, st] of await keptStates()) if (st === "private") { await onCaptureRemoved(id, { reason: "private" }); n++; }
+    return n;
+  })().finally(() => { sweeping = null; });
+  return sweeping;
 }
 
 /** Story viewer flags for `viewer` on forViewer items: can.post / can.save, saved, posted (url). Mutates + returns items. */
@@ -498,30 +928,38 @@ async function annotate(viewer, items) {
     getQuery(`SELECT capture_id, post_id, removed_at FROM story_posts WHERE capture_id IN (${q})`, ids),
   ]);
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const blocks = await privacyBlocks(rows);
+  const blocks = await privacyWhy(rows);
   const saved = new Set(saves.map((s) => s.capture_id));
   const postMap = new Map(posts.map((p) => [p.capture_id, p]));
   const links = await store().postLinks(posts.filter((p) => p.post_id && !p.removed_at).map((p) => p.post_id));
   const canMap = new Map();
+  const micCache = new Map();                    // mic keep: one request's per-person lookups
   for (const c of items) {
     const r = byId.get(c.id);
     if (!r) { c.can = { post: false, save: false }; continue; }
-    const priv = blocks.has(r.id);
+    let priv = blocks.has(r.id);
     const live = !goneWhy(r);
     const sp = postMap.get(r.id);
     const key = r.room + "|" + (isCapturer(acct, r) ? "c" : "");
     if (!canMap.has(key)) canMap.set(key, await mayPost(acct, r));
     const hasPad = !!(r.room && rooms.getCached(r.room));
+    // mic keep: the read-time per-person recheck - this viewer for 🔖, and the credited capturer too for 📌 (an error = no button)
+    let micPost = true;
+    if (isMic(r) && !priv && live) {
+      const mc = await micCapture(r.id).catch(() => null);
+      priv = !!(await micPeopleWhy(mc, [acct.userId], micCache, { owners: false }));
+      micPost = !priv && (!r.by_user_id || r.by_user_id === acct.userId || !(await micPeopleWhy(mc, [r.by_user_id], micCache, { owners: false })));
+    }
     c.saved = saved.has(r.id);
     c.posted = sp && sp.post_id && !sp.removed_at ? links.get(sp.post_id) || null : null;
-    c.can = { post: r.source !== "user" && !priv && live && hasPad && !(sp && sp.removed_at) && canMap.get(key), save: !priv && live };
+    c.can = { post: r.source !== "user" && !priv && micPost && live && hasPad && !(sp && sp.removed_at) && canMap.get(key), save: !priv && live };
     if (priv) c.private = true;
   }
   return items;
 }
 
 // ── routes ──
-function register(app, { addUser }) {
+function register(app, { addUser, noTimers = false }) {
   const guard = require("./middleware/authGuard");
   const json = (req, res, next) => {
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });
@@ -532,8 +970,16 @@ function register(app, { addUser }) {
   const fail = (res, e) => {
     const st = e && e.status && e.status < 600 && e.refuse ? e.status : 500;
     if (st === 500) console.error("[storykeep]", e);
-    res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message });
+    // mic keep: refusals with a locales/en.json key answer in the reader's language
+    const msg = st === 500 ? "Something went wrong." : e.i18n && res.req && typeof res.req.t === "function" ? res.req.t(e.i18n) : e.message;
+    res.status(st).json({ ok: false, error: msg });
   };
+  // mic keep: the cascade's hidden-set hook and the hourly backstop sweep (unref'd - never keeps the process up)
+  try { require("./hubhidden").onChange(hiddenChanged); } catch (e) { console.error("[storykeep] hidden hook:", e.message); }
+  if (!noTimers) {
+    const t = setInterval(() => sweepKept().catch((e) => console.error("[storykeep] mic sweep:", e.message)), 60 * 60e3);
+    if (t.unref) t.unref();
+  }
   app.post("/api/stories/:id/post", addUser, json, async (req, res) => {
     try { res.json({ ok: true, ...(await postToPad(req.user, req.params.id, { caption: (req.body || {}).caption })) }); } catch (e) { fail(res, e); }
   });
@@ -596,4 +1042,6 @@ function register(app, { addUser }) {
 function isPadMod(acct, roomId) { try { return !!modCheck(acct, roomId); } catch (e) { return false; } }
 
 module.exports = { SAVE_USER_KINDS, userSaveable, init, register, postToPad, removeMe, forPosts, save, unsave, savedFor, onCaptureRemoved, annotate, privacyBlocks, mayPost, subjectOf,
-                   isPadMod, Refuse, _setClock, _setModCheck, _setPersistImpl, defaultPersist };
+                   isPadMod, Refuse, _setClock, _setModCheck, _setPersistImpl, defaultPersist,
+                   // mic keep (handoff 16 follow-up): the cascade + account deletion / export hooks
+                   onPeoplePrivate, hiddenChanged, sweepHidden, sweepKept, keptOf, keptStates, dropPeopleIfNoCopy, ownersAt, MIC, _setHiddenCheck };

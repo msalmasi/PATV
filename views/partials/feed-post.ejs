@@ -75,9 +75,11 @@
     <% } %>
     <%# 1.99eq: made from a story capture (storykeep.js): where it was captured, who's in it (their profile when linked), and
         the subject's own one-click "Remove me" %>
+    <%# mic keep (handoff 16 follow-up): a 🎙 mic-stage post reads "Mic stage in <room>" - no single subject; everyone it shows
+        (cam or name card) gets "Remove me", which also deletes every saved copy %>
     <% if (p.capture) { const c_ = p.capture; %>
-      <p class="fp-cap"><span aria-hidden="true">📸</span><span><%- t('feed.p.captured_from') %> <% if (c_.room.href) { %><a href="<%= c_.room.href %>"><%= c_.room.title %></a><% } else { %><%= c_.room.title %><% } %><% if (c_.subject) { %> · <%- t('feed.p.with') %> <a href="/u/<%= encodeURIComponent(c_.subject.username) %>">u/<%= c_.subject.username %></a><% } else if (c_.subjectName) { %> · <%- t('feed.p.with') %> <%= c_.subjectName %><% } %></span>
-        <% if (c_.canRemoveMe && !p.deleted) { %><button type="button" class="fp-rmme" data-act="remove-me" title="<%- t('feed.p.rm_capture_title') %>"><%- t('feed.p.remove_me') %></button><% } %></p>
+      <p class="fp-cap"><span aria-hidden="true"><%= c_.mic ? '🎙' : '📸' %></span><span><%- c_.mic ? t('feed.p.mic_stage_in') : t('feed.p.captured_from') %> <% if (c_.room.href) { %><a href="<%= c_.room.href %>"><%= c_.room.title %></a><% } else { %><%= c_.room.title %><% } %><% if (!c_.mic && c_.subject) { %> · <%- t('feed.p.with') %> <a href="/u/<%= encodeURIComponent(c_.subject.username) %>">u/<%= c_.subject.username %></a><% } else if (!c_.mic && c_.subjectName) { %> · <%- t('feed.p.with') %> <%= c_.subjectName %><% } %></span>
+        <% if (c_.canRemoveMe && !p.deleted) { %><button type="button" class="fp-rmme" data-act="remove-me" title="<%- c_.mic ? t('feed.p.rm_mic_title') : t('feed.p.rm_capture_title') %>"><%- t('feed.p.remove_me') %></button><% } %></p>
     <% } %>
     <%# 1.99fp: someone quoted / heard in it: one click anonymises them in the quote (quotes.js) or takes the clip down (micclip.js) %>
     <% if (p.quote && (p.quote.canRemoveMe || p.quote.removedMe) && !p.deleted) { %>

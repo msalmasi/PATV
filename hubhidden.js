@@ -360,7 +360,12 @@ function push() {
   // Train 3 review: the pad chat's readers take the stricter of this set and the archive's (chatlogview.kindNow) - its hidden-names
   // job and open pages' privacy digest follow a change here too (a no-op until chatlogview has started)
   try { require("./chatlogview").hubChanged(); } catch (e) { console.error("[hubhidden] chat view:", e.message); }
+  // mic keep (handoff 16 follow-up): listeners (storykeep - saved / posted mic-stage copies of someone now hidden go); never named here
+  for (const fn of ON_CHANGE) { try { fn(); } catch (e) { console.error("[hubhidden] listener:", e.message); } }
 }
+const ON_CHANGE = [];
+/** fn() after every change of the set (synchronously, inside push - keep it cheap: schedule the work). */
+function onChange(fn) { if (typeof fn === "function" && !ON_CHANGE.includes(fn)) ON_CHANGE.push(fn); }
 /** An un-hide of `kind` dated `ts` (his clock) older than a hide of that kind that arrived in the last STALE_MS: a late post. */
 function lateRemoval(h, kind, ts) {
   const r = rowOf(h, kind);
@@ -1107,7 +1112,7 @@ async function all() {
   return db().getQuery("SELECT h, since, scope FROM hub_hidden_h ORDER BY h");
 }
 
-module.exports = { init, boot, loading, whenBooted, note, noteSync, offReported, unhideReported, hiddenReported, fullReported, hideNow, webSettled,
+module.exports = { init, boot, loading, whenBooted, note, noteSync, offReported, unhideReported, hiddenReported, fullReported, hideNow, webSettled, onChange,
   unhideByOwner, checkByOwner, decideHeld, isHiddenHash, isLeftOutHash, hiddenHashes, kindsOf, status, all, hash, loginHash, clean, cleanEvent, MAX, SET_MAX,
   TRUNC, HOLD_N, HOLD_PCT, HELD_OPEN_MAX, STALE_MS, KINDS, HASH_RE, LOGIN_RE,
   _forget: () => { last = null; gen++; },          // the hub's table was emptied (the privacy switch went off): re-read on the next write

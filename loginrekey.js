@@ -21,6 +21,9 @@
 // capture drew, at that time; every reader (the delete right, account deletion, Download my data) attributes it by the spans
 // each login was an account's (stagecap.depictedOf), so the account keeps it after a change and the login's next holder never
 // gets it. A re-keyed row would name a login the person didn't have then - outside every span.
+// Mic keep (handoff 16 follow-up): the same for stagecap's stage_capture_cards (the logins shown as a name card) and storykeep's
+// story_keep_people (who a saved / posted mic-stage copy shows, with its captured_at): never re-keyed - multi-subject "Remove me",
+// account deletion and Download my data read them by the same spans (stagecap.ownSpans).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 

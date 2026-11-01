@@ -121,6 +121,10 @@ const DEFAULTS = {
   stagecap_snaps: true,
   stagecap_clips: true,
   stagecap_mic: false,
+  // mic keep (handoff 16 follow-up, owner 2026-11-01): mic-stage snaps / clips shown in the open may be 🔖 saved / 📌 posted
+  // (storykeep.js). The admin kill switch, default ON; off = no NEW saved / posted copies (existing ones, their cascades and
+  // "Remove me" keep working).
+  stagecap_mic_keep: true,
   // 1.99et: ultra-low-latency WebRTC (webrtc.js: WHIP ingest, WHEP ⚡ playback, TURN) - OFF until the
   // MediaMTX / coturn install (deploy/webrtc/) is live; off = nothing WebRTC anywhere
   webrtc_enabled: false,
@@ -355,6 +359,7 @@ function cleanConfig(c) {
     stagecap_snaps: onOff(c.stagecap_snaps, DEFAULTS.stagecap_snaps),
     stagecap_clips: onOff(c.stagecap_clips, DEFAULTS.stagecap_clips),
     stagecap_mic: onOff(c.stagecap_mic, DEFAULTS.stagecap_mic),
+    stagecap_mic_keep: onOff(c.stagecap_mic_keep, DEFAULTS.stagecap_mic_keep),
     webrtc_enabled: onOff(c.webrtc_enabled, DEFAULTS.webrtc_enabled),
     room_rtc: ["off", "prime", "all"].includes(String(c.room_rtc)) ? String(c.room_rtc) : DEFAULTS.room_rtc,
     room_rtc_cap: int(c.room_rtc_cap, 0, 500, DEFAULTS.room_rtc_cap),
