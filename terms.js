@@ -30,7 +30,9 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // was false whenever the promote slipped). /privacy's "Last updated" and the change note use it. WP-1's "your voice is still
 // heard" (incognito/mic-stage design section H, owner-approved 2026-10-28: section 3 and the incognito bullets - additive,
 // VERSION unchanged) is the first. Recorded at boot (register).
-const TEXT_DATES = ["wp1-voice"];
+// mic keep (handoff 16 follow-up, owner 2026-11-01): "mic-stage-keep" = section 3's Mic-stage snaps and clips paragraph (additive,
+// VERSION unchanged).
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 let datesReady = null;

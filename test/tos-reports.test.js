@@ -372,8 +372,12 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   // 1.99aft (review): WP-1 is dated the day this server first served it (terms.TEXT_DATES) - here, the test's own run
   const wp1 = (await terms.textDates())["wp1-voice"];
   assert.ok(wp1 && wp1.at > 0 && wp1.day, "WP-1's first-served day is recorded");
+  // mic keep (handoff 16 follow-up): the Mic-stage snaps and clips paragraph is dated the same way
+  const msk = (await terms.textDates())["mic-stage-keep"];
+  assert.ok(msk && msk.at > 0 && msk.day, "the mic-stage text's first-served day is recorded");
   // rebase onto retention (1.99afr): PRIVACY_UPDATED is 28 October 2026 - on or before that day the hand-set date is the newest
-  const newest = wp1.at > Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC") ? wp1.day : terms.PRIVACY_UPDATED;
+  const top = msk.at > wp1.at ? msk : wp1;
+  const newest = top.at > Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC") ? top.day : terms.PRIVACY_UPDATED;
   assert.match(p.text, new RegExp("Last updated " + newest), "the Privacy Policy keeps its own date: the newest dated text");
   // 1.99wh: the Incognito section (§10) - a clarification of a user-controlled setting: the privacy date moves, VERSION doesn't
   const inc = (p.text.match(/<h3 id="incognito">[\s\S]*?<\/section>/) || [""])[0];
@@ -407,11 +411,22 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   await terms.textDates();
   assert.equal((await terms.textDates())["wp1-voice"].at, wp1.at, "the first-served moment never moves");
   const PROD_DAY = Date.UTC(2026, 10, 3, 12, 0, 0);
-  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'wp1-voice'", [PROD_DAY]);
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key IN ('wp1-voice', 'mic-stage-keep')", [PROD_DAY]);
   const p2 = await get("/privacy", null);
   assert.match(p2.text, /Last updated 3 November 2026/);
   assert.match(p2.text, /3 November 2026:<\/b> sections 3 and 10 now say that/);
+  assert.match(p2.text, /3 November 2026:<\/b> added <a href="#mic-stage-captures">Mic-stage snaps and clips<\/a> \(section 3\)/, "mic keep: its change note, dated");
   await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'wp1-voice'", [wp1.at]);
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'mic-stage-keep'", [msk.at]);
+  // mic keep (handoff 16 follow-up, the owner's 2026-11-01 sentence as amended): section 3's paragraph, not behind a switch
+  const ms3 = (p.text.match(/<p id="mic-stage-captures">[\s\S]*?<\/p>/) || [""])[0];
+  assert.match(ms3, /When a pad's Camfrog room has <code>!snap<\/code> on \(and <code>!clip<\/code> for clips\), eligible members can snap or clip the pad's 🎙 mic stage as it appears to them and add it to the pad's story\./);
+  assert.match(ms3, /Incognito speakers appear only as their cover tile and frog name but their voice is included, hidden speakers appear only as their cover tile, people who keep their activity private aren't shown, and the whole room's audio is muted while a hidden or private speaker holds the mic\./);
+  assert.match(ms3, /A snap or clip in which everyone was shown openly can also be saved to a collection or posted to the pad; one with a cover tile, a blanked tile or muted audio can't\./);
+  assert.match(ms3, /Anyone shown in a posted copy, by cam or name card, can remove it, which also deletes every saved copy, and saved and posted copies go if someone shown goes private or deletes their account\./);
+  assert.match(ms3, /<code>!livecam off<\/code> keeps your cam \(not your voice\) out, and a person whose cam is shown in a capture can delete it from the story, while someone shown only as a name card can't\./);
+  assert.doesNotMatch(ms3, /where it can't be saved to a collection or posted to the pad/, "the clause this build changed is gone");
+  assert.match(inc, /snaps and clips that show you can't be kept or posted/, "still true: a capture showing an incognito person (a cover tile) is never kept");
   assert.equal(terms.PRIVACY_UPDATED, "28 October 2026");    // mic retention 8.5 A (merged 28 October); WP-1 (your voice is still heard): TEXT_DATES; F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#pepe-photos">/, "a dated change note for photos sent to Pepe");
   assert.match(p.text, /id="pepe-photos"/);
