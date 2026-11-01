@@ -523,12 +523,14 @@
       openPanel(true);
       ask.textContent = '';
       ask.hidden = false;
-      ask.appendChild(el('p', null, _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name })));
+      // (wave2 WP-4: a cover - ex: 1 only - is kept off by its tile id; the server maps it, nobody sees who)
+      ask.appendChild(el('p', null, isCover(s) ? _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage')
+        : _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name })));
       [[1, _t('js.stage.mf.exclude_1h', 'for 1 hour')], [24, _t('js.stage.mf.exclude_24h', 'for 24 hours')], [0, _t('js.stage.mf.exclude_always', 'always')]].forEach(function (o) {
         var b = btn('mf-pbtn danger', o[1]);
         b.addEventListener('click', function () {
           b.disabled = true;
-          post(base + '/exclude', { login: s.id, hours: o[0] }).then(function (d) {
+          post(base + '/exclude', isCover(s) ? { tile: s.id, hours: o[0] } : { login: s.id, hours: o[0] }).then(function (d) {
             pmsg.textContent = d && d.ok ? _t('js.stage.mf.excluded', 'Off the mic stage.') : (d && d.error) || _t('js.stage.mf.e_do', 'Couldn\'t do that.');
             ask.hidden = true; ask.textContent = '';
             if (ctx.onChange) { try { ctx.onChange(); } catch (er) { /* page's own */ } }

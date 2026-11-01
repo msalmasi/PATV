@@ -1618,9 +1618,10 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   };
 }
 /** micfollow: the pad's mic stage for this viewer (null = off on this pad); names like the "On the mic" card. */
-async function stageProgram(prog, R, userId, L, F) {
+async function stageProgram(prog, R, userId, L, F, surface = "pad") {
   if (!prog) return null;
-  try { return await require("./micfollow").viewFor(prog, R, userId || null, (u) => withPatv(u, L, F)); }
+  // (wave2 WP-4: surface "capture" - a mic-stage capture never carries a cover's Reveal / ✕ flags)
+  try { return await require("./micfollow").viewFor(prog, R, userId || null, (u) => withPatv(u, L, F), undefined, surface); }
   catch (e) { console.error("[bridge] stage program:", e.message); return null; }
 }
 /** 1.99??: the same viewer program as /live, using the bridge roster rather than the pad registry's title-only row. */
@@ -1633,7 +1634,7 @@ async function stageProgramFor(roomId, userId) {
   if (!prog) return null;
   const L = await resolveNames(prog.tiles.filter((tile) => !tile.cover).map((tile) => ({ login: tile.login })));   // (wave2 WP-4: a cover names nobody)
   const F = await require("./padflair").byUsername(roomId).catch(() => null);
-  return stageProgram(prog, R, userId, L, F);
+  return stageProgram(prog, R, userId, L, F, "capture");
 }
 
 /** The live view of the busiest live room, for the homepage. CL3: `viewer` = who's looking (the line's own access level,

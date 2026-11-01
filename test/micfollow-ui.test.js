@@ -1056,6 +1056,15 @@ test("wave2 F.4 stage-mic.js: Reveal only with rv: 1 AND WP-2's client (window.P
   assert.equal(findCls(e, "mf-rv").hidden, true);
   s.ctl.update(Object.assign(prog({ rv: 1, ex: 1 }), { v: 3 }));
   assert.equal(findCls(e, "mf-chip").textContent, "erin · only you can see this", "kept across updates while it stays up");
+  // its ✕ (ex: 1) keeps the veiled speaker off by the TILE id - the server maps it; the question never names anyone
+  const sent = [];
+  s.ctx.fetch = (u, o) => { sent.push([u, o && o.body ? JSON.parse(o.body) : null]); return Promise.resolve({ json: () => Promise.resolve({ ok: true }) }); };
+  e.children.find((c) => c.className === "mf-x").listeners.click[0]();
+  const askP = findCls(s.stage, "mf-ask");
+  assert.equal(askP.children[0].textContent, "Keep this veiled speaker off the mic stage");
+  askP.children[1].listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(sent.find((x) => /\/exclude$/.test(x[0]))[1], { tile: "anon-0000000a", hours: 1 });
   s.ctl.stop();
   // a bad answer reveals nothing
   s = dynSandbox(prog({ rv: 1 }));

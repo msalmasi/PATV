@@ -2281,3 +2281,95 @@ test("71. wave2 F.4 bridge: cleanMic keeps Pepe's per-hold ref on an anonymous h
   const CVw = require(path.join(repo, "chatlogview"));
   assert.deepEqual(CVw.roster([{ anon: true, display: "someone", ref: REF1 }]), [{ anon: true, display: "someone" }]);
 });
+
+test("72. wave2 WP-4 Reveal seam: no rv / ex anywhere until WP-2's reveal source is available AND the identity is known; then only an Admin (see-through) or the pad's current owner, on the pad page; self: 1 for the person; ✕ on a cover = a veiled exclusion listed by label, never by login", async () => {
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { covers: true, reason: "test" });
+  const coverId = async () => (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v1", null)).src.find((s) => s.kind === "cover").id;
+  try {
+    // v1 (today's wire): even an available reveal source finds nobody behind the cover
+    bridge._k3Refs.set(ROOM.id, new Map([[REF1, T]]));
+    MF.setRevealSource({ available: () => true });
+    await step([ANON(REF1)]); await at(3, [ANON(REF1)]); await at(6, [ANON(REF1)]);
+    let id = await coverId();
+    assert.equal(MF.coverWho(ROOM.id, id), null, "v1: no identity");
+    for (const uid of ["u_admin", "u_owner"]) {
+      const c = (await MF.viewFor(MF.snapshot(ROOM.id), R, uid, null)).src.find((s) => s.kind === "cover");
+      assert.deepEqual([c.rv, c.ex], [undefined, undefined], uid + ": no Reveal / ✕ on v1");
+    }
+    MF.setRevealSource(null);
+    bridge._k3Refs.delete(ROOM.id);
+    // v2: the seam knows who (alice) - but the reveal source isn't available: still nothing
+    await reset(); await plainPad();
+    MF.setVeilSource((u) => (u.anon && u.ref === REF1 ? { proven: true, sess: "s7", veil: "incognito", alias: "Damp Toad", hood: 2, login: "alice", display: "Alice W" } : null));
+    await step([ANON(REF1)]); await at(3, [ANON(REF1)]); await at(6, [ANON(REF1)]);
+    id = await coverId();
+    assert.deepEqual(MF.coverWho(ROOM.id, id), { login: "alice", display: "Alice W" });
+    assert.equal(MF.coverWho(ROOM.id, "anon-ffffffff"), null);
+    const flags = async (uid, surface) => { const v = await MF.viewFor(MF.snapshot(ROOM.id), R, uid, null, undefined, surface); const c = v.src.find((s) => s.kind === "cover"); return { rv: c.rv, ex: c.ex, self: c.self, json: JSON.stringify(v) }; };
+    for (const uid of ["u_admin", "u_owner", "u_staff", "u_v1"]) assert.equal((await flags(uid)).rv, undefined, uid + ": the switch is off");
+    assert.equal((await flags("u_alice")).self, 1, "the person behind it sees 'this is you'");
+    // WP-2 says the privacy wire is on: Admins (chatlog.see_through) and the pad's current owner get Reveal + ✕ on the pad page
+    MF.setRevealSource({ available: () => true });
+    for (const [uid, want] of [["u_admin", 1], ["u_owner", 1], ["u_staff", undefined], ["u_v1", undefined], [null, undefined]]) {
+      if (!uid) { assert.equal((await MF.viewFor(MF.snapshot(ROOM.id), R, null, null)).src.length, 0); continue; }
+      const f = await flags(uid);
+      assert.equal(f.rv, want, uid + " rv"); assert.equal(f.ex, want, uid + " ex");
+      assert.ok(!f.json.includes("alice") && !f.json.includes("Alice W") && !f.json.includes("s7"), uid + ": the program never carries the identity");
+    }
+    assert.equal((await flags("u_admin", "capture")).rv, undefined, "a capture never carries them");
+    MF.setRevealSource({ available: () => true, role: async () => null });
+    assert.equal((await flags("u_admin")).rv, undefined, "WP-2's own role rule decides");
+    MF.setRevealSource({ available: () => true });
+    // ✕ on the cover: a member can't; a see-through manager keeps them off without seeing who - listed by label, never by login
+    assert.equal((await post(`/api/rooms/${slug()}/micfollow/exclude`, { tile: id, hours: 1 }, "u_v1")).status, 403);
+    MF.setRevealSource(null);
+    const off = await post(`/api/rooms/${slug()}/micfollow/exclude`, { tile: id, hours: 1 }, "u_admin");   // (u_admin: the owner route's per-user rate limit is spent by earlier tests)
+    assert.equal(off.status, 403, "no reveal source: no veiled exclusion either");
+    assert.equal(off.d.code, "cover");
+    MF.setRevealSource({ available: () => true });
+    const r = await post(`/api/rooms/${slug()}/micfollow/exclude`, { tile: id, hours: 1 }, "u_admin");
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    const row = r.d.state.excluded.find((e) => e.veiled);
+    assert.ok(row && row.veiled === "Damp Toad" && row.login === null && /^[0-9a-f]{16}$/.test(row.xid));
+    assert.ok(!JSON.stringify(r.d).includes("alice"), "the owner's answer never names them");
+    assert.ok(!MF._pads.get(ROOM.id).state.tiles.some((x) => x.cover), "the cover came off at once");
+    await at(1, [ANON(REF1)]); await at(3, [ANON(REF1)]);
+    assert.ok(!MF._pads.get(ROOM.id).state.tiles.some((x) => x.cover), "and stays off (the neutral card meanwhile)");
+    assert.deepEqual(tiles(), []);
+    const rm = await post(`/api/rooms/${slug()}/micfollow/exclude`, { xid: row.xid, remove: true }, "u_admin");
+    assert.equal(rm.status, 200);
+    assert.ok(!rm.d.state.excluded.some((e) => e.veiled), "removed by its xid");
+  } finally { MF.setVeilSource(null); MF.setRevealSource(null); await MF.setCfg(ADMIN, { covers: false, reason: "test" }); await MF.unexclude(ROOM.id, "alice"); }
+});
+
+test("73. wave2 F.4 end to end on today's wire: Pepe's kinded sync with an anonymous grab (his per-hold ref in the event AND the snapshot's mic[]) -> B.1 stamps it -> a cover; the same hold from a sync without both kinded lists stays the neutral card", async () => {
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { covers: true, reason: "test" });
+  let n = 0;
+  const ev = (type, data) => ({ op: "event", id: "w4-cover-" + Date.now() + "-" + (++n), ts: new Date().toISOString(), type, scope: { platform: "camfrog", room: ROOM }, data });
+  const sync = (u, extra) => bridge.ingest(Object.assign({ rooms: [{ room: ROOM, members: [{ id: "alice", login: "alice", display: "Alice W", on_cam: true }], mic: [u], count: 2, cams: true, livecams: true }],
+                                                           events: [ev("mic.grab", { user: u })] }, extra || {}));
+  const ripe = async () => { for (let i = 0; i < 3; i++) { T += 3000; const B = bridge._rooms.get(ROOM.id); B.updated = T; MF.stepPad(ROOM.id, T); await MF._idle(); } };
+  try {
+    const stamped = { anonymous: true, id: "anon-c0ffee01", display: "someone" };
+    await sync(stamped, { bridge_hidden_h: [], incog_hidden_h: [] });
+    const B = bridge._rooms.get(ROOM.id);
+    assert.deepEqual(B.mic[0], { anon: true, display: "someone", ref: "anon-c0ffee01" }, "the ref is kept server-side");
+    assert.ok(bridge.k3Ref(ROOM.id, "anon-c0ffee01") != null, "B.1 stamped the grab");
+    await ripe();
+    let P = MF._pads.get(ROOM.id);
+    assert.ok(P.state.tiles.some((x) => x.cover), "a cover");
+    const v = await MF.viewFor(MF.snapshot(ROOM.id), B, "u_v1", null);
+    assert.ok(!JSON.stringify(v).includes("c0ffee01"), "Pepe's ref never reaches the program");
+    // an older / unloaded Pepe (no kinded lists): the hold isn't stamped - the neutral card, never a cover
+    await reset(); await plainPad();
+    const plain = { anonymous: true, id: "anon-c0ffee02", display: "someone" };
+    await sync(plain, { hidden_h: [] });
+    assert.equal(bridge.k3Ref(ROOM.id, "anon-c0ffee02"), null);
+    await ripe();
+    P = MF._pads.get(ROOM.id);
+    assert.ok(!P.state.tiles.some((x) => x.cover), "no cover");
+    assert.equal(P.state.oseen.size, 1, "an `others` entry (the neutral card), as today");
+  } finally { await MF.setCfg(ADMIN, { covers: false, reason: "test" }); }
+});
