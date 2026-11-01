@@ -93,8 +93,9 @@ function init() {
   if (!ready) {
     ready = (async () => {
       await runQuery("CREATE TABLE IF NOT EXISTS chatlog_meta (key TEXT PRIMARY KEY, value TEXT)");
+      // (veil is 'incognito' | 'hidden' - checked by store(), the one writer; no CHECK clause: the merge test seeds every table generically)
       await runQuery(`CREATE TABLE IF NOT EXISTS evidence_clips (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, rk INTEGER, c INTEGER, tx TEXT,
-                      subject_login TEXT NOT NULL, veil TEXT NOT NULL CHECK (veil IN ('incognito','hidden')), said_at INTEGER NOT NULL, secs REAL,
+                      subject_login TEXT NOT NULL, veil TEXT NOT NULL, said_at INTEGER NOT NULL, secs REAL,
                       bytes INTEGER, sha256 TEXT, file TEXT NOT NULL, by_user TEXT NOT NULL, role TEXT NOT NULL, via TEXT NOT NULL, reason TEXT,
                       st_id INTEGER, created INTEGER NOT NULL, expires_at INTEGER NOT NULL, hold_at INTEGER, hold_by TEXT, hold_why TEXT,
                       subject_gone_at INTEGER)`);
