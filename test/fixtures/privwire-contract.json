@@ -1,0 +1,1993 @@
+{
+ "contract": "privwire",
+ "version": 1,
+ "doc": "G:/ops/incognito-micstage-design-2026-10-27.md A.3 / B.2 / B.3 (owner answers section M); camfrog-bot tools/gen_privwire_contract.py writes this from pepe_bridge's real builders",
+ "constants": {
+  "privwire": 2,
+  "path": "/api/bridge/sync/v2",
+  "v1_path": "/api/bridge/sync",
+  "reprobe_s": 600,
+  "refuse": [
+   404,
+   405,
+   409
+  ],
+  "unclear": [
+   "no answer",
+   "timeout",
+   "connection error",
+   "5xx"
+  ],
+  "split": 413,
+  "max_bytes": 600000,
+  "refusal_body": {
+   "error": "privwire_off"
+  },
+  "v2only_id": "cf-pepe-<session>-v<n> (no seq)",
+  "hold_id": "hd-<12 hex>",
+  "mask": {
+   "s": "<= 24",
+   "m": "25-100",
+   "l": "> 100"
+  },
+  "priv": {
+   "kind": "incognito | hidden",
+   "h": "20 hex",
+   "hs": "[h, ...] optional",
+   "at": "epoch s",
+   "words": "hidden message / transcript only, redacted"
+  }
+ },
+ "session": "c0ffee000001",
+ "t0": 1793534400.0,
+ "room": "PepeFrog.Room",
+ "cases": [
+  {
+   "name": "room_joined",
+   "note": "Pepe's own room.joined (no person, no priv): the same on both paths",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-1",
+     "ts": "2026-11-01T12:00:00.000Z",
+     "seq": 1,
+     "type": "room.joined",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      },
+      "topic": "",
+      "member_count": 1,
+      "self": {
+       "id": "pepefrog",
+       "login": "PepeFrog",
+       "display": "PepeFrog",
+       "is_self": true
+      }
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-1",
+     "ts": "2026-11-01T12:00:00.000Z",
+     "seq": 1,
+     "type": "room.joined",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      },
+      "topic": "",
+      "member_count": 1,
+      "self": {
+       "id": "pepefrog",
+       "login": "PepeFrog",
+       "display": "PepeFrog",
+       "is_self": true
+      }
+     }
+    }
+   ],
+   "expect": [
+    null
+   ]
+  },
+  {
+   "name": "joins",
+   "note": "alice named; frankie incognito (v1: today's anonymous ref; v2: real + priv); hank hidden (v1: left out; v2: a v2-only join, its own id namespace, no seq); tina, bxdude180 named",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-2",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 2,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "initial": false
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-3",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 3,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "initial": false,
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534401.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v1",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "initial": false,
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534401.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-4",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 4,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "initial": false
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-5",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 5,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "initial": false
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-2",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 2,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "initial": false
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-3",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 3,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000001",
+       "display": "someone",
+       "anonymous": true
+      },
+      "initial": false
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-4",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 4,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "initial": false
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-5",
+     "ts": "2026-11-01T12:00:01.000Z",
+     "seq": 5,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "initial": false
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "join",
+     "named": "Alice"
+    },
+    {
+     "k": "join",
+     "veil": "incognito",
+     "alias": true
+    },
+    {
+     "k": "join",
+     "veil": "hidden",
+     "alias": true
+    },
+    {
+     "k": "join",
+     "named": "Tina"
+    },
+    {
+     "k": "join",
+     "named": "bxdude180"
+    }
+   ]
+  },
+  {
+   "name": "lines",
+   "note": "a named line naming veiled people (redacted on both paths); an incognito line (v2: real + priv, the same text); a hidden line (v2-only: no text, priv.words)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-6",
+     "ts": "2026-11-01T12:00:02.000Z",
+     "seq": 6,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-6",
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "text": "hi someone and someone"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-7",
+     "ts": "2026-11-01T12:00:02.000Z",
+     "seq": 7,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-7",
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "text": "hello all",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534402.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v2",
+     "ts": "2026-11-01T12:00:02.000Z",
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534402.0,
+       "words": "my secret words here"
+      },
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-v2"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-6",
+     "ts": "2026-11-01T12:00:02.000Z",
+     "seq": 6,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-6",
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "text": "hi someone and someone"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-7",
+     "ts": "2026-11-01T12:00:02.000Z",
+     "seq": 7,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-7",
+      "user": {
+       "id": "anon-00000002",
+       "display": "someone",
+       "anonymous": true
+      },
+      "text": "hello all",
+      "anon": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053"
+      }
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "msg",
+     "named": "Alice",
+     "text": "hi someone and someone"
+    },
+    {
+     "k": "msg",
+     "veil": "incognito",
+     "alias": true,
+     "text": "hello all"
+    },
+    {
+     "k": "msg",
+     "veil": "hidden",
+     "alias": true,
+     "mask": "s"
+    }
+   ]
+  },
+  {
+   "name": "relay",
+   "note": "relayed website lines: incognito (v2: real sender + priv, web.job only); hidden (v2-only, priv.words, web.job)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-8",
+     "ts": "2026-11-01T12:00:03.000Z",
+     "seq": 8,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-8",
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "text": "yo pond",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534403.0
+      },
+      "web": {
+       "job": "w0123456789abcdef"
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v3",
+     "ts": "2026-11-01T12:00:03.000Z",
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534403.0,
+       "words": "psst, a much longer hidden line typed on the website itself"
+      },
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-v3",
+      "web": {
+       "job": "wfedcba9876543210"
+      }
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-8",
+     "ts": "2026-11-01T12:00:03.000Z",
+     "seq": 8,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-8",
+      "user": {
+       "id": "anon-00000003",
+       "display": "someone",
+       "anonymous": true
+      },
+      "text": "yo pond",
+      "anon": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053"
+      },
+      "web": {
+       "user": {
+        "id": "anon-00000003",
+        "display": "someone",
+        "anonymous": true
+       },
+       "job": "w0123456789abcdef"
+      }
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "msg",
+     "veil": "incognito",
+     "alias": true,
+     "text": "yo pond"
+    },
+    {
+     "k": "msg",
+     "veil": "hidden",
+     "alias": true,
+     "mask": "m"
+    }
+   ]
+  },
+  {
+   "name": "hold_incognito_grab",
+   "note": "a proven incognito holder's grab: v2 real + proven/since + priv + hold",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-9",
+     "ts": "2026-11-01T12:00:04.000Z",
+     "seq": 9,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie",
+       "proven": true,
+       "since": 1793534404.0
+      },
+      "holders": [
+       {
+        "id": "anon-00000004",
+        "display": "someone",
+        "anonymous": true
+       }
+      ],
+      "hold": "hd-000000010000",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534404.0
+      }
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-9",
+     "ts": "2026-11-01T12:00:04.000Z",
+     "seq": 9,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000004",
+       "display": "someone",
+       "anonymous": true
+      },
+      "holders": [
+       {
+        "id": "anon-00000004",
+        "display": "someone",
+        "anonymous": true
+       }
+      ]
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "mic",
+     "veil": "incognito",
+     "alias": true
+    }
+   ]
+  },
+  {
+   "name": "hold_incognito_release",
+   "note": "its release (the same hold id, the same frog name on the site)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-10",
+     "ts": "2026-11-01T12:00:34.000Z",
+     "seq": 10,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie",
+       "proven": true,
+       "since": 1793534404.0
+      },
+      "reason": "released",
+      "held_ms": 30000,
+      "holders": [],
+      "hold": "hd-000000010000",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534404.0
+      }
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-10",
+     "ts": "2026-11-01T12:00:34.000Z",
+     "seq": 10,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000004",
+       "display": "someone",
+       "anonymous": true
+      },
+      "reason": "released",
+      "held_ms": 30000,
+      "holders": []
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "unmic",
+     "veil": "incognito",
+     "alias": true
+    }
+   ]
+  },
+  {
+   "name": "hold_named",
+   "note": "a named hold: v2 adds only its hold id",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-11",
+     "ts": "2026-11-01T12:00:35.000Z",
+     "seq": 11,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "holders": [
+       {
+        "id": "bxdude180",
+        "login": "bxdude180",
+        "display": "bxdude180"
+       }
+      ],
+      "hold": "hd-000000020000"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-12",
+     "ts": "2026-11-01T12:00:57.000Z",
+     "seq": 12,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "reason": "released",
+      "held_ms": 22000,
+      "holders": [],
+      "hold": "hd-000000020000"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-11",
+     "ts": "2026-11-01T12:00:35.000Z",
+     "seq": 11,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "holders": [
+       {
+        "id": "bxdude180",
+        "login": "bxdude180",
+        "display": "bxdude180"
+       }
+      ]
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-12",
+     "ts": "2026-11-01T12:00:57.000Z",
+     "seq": 12,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "reason": "released",
+      "held_ms": 22000,
+      "holders": []
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "mic",
+     "named": "bxdude180"
+    },
+    {
+     "k": "unmic",
+     "named": "bxdude180"
+    }
+   ]
+  },
+  {
+   "name": "transcripts",
+   "note": "🎙 lines after speech-to-text: frankie's (incognito: real + priv, the salted id kept for the website clip, anchored to his hold), bxdude180's (named, anchored); tina's (!transcripts off) is absent on BOTH paths",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-13",
+     "ts": "2026-11-01T12:01:02.000Z",
+     "seq": 13,
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-060c14f6a8739c44",
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "text": "Hercules is the funniest one",
+      "source": "mic",
+      "said_at": 1793534405.0,
+      "language": "en",
+      "hold": "hd-000000010000",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534405.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-14",
+     "ts": "2026-11-01T12:01:02.000Z",
+     "seq": 14,
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-92f9e5436ba544d2",
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "text": "nah the second one was",
+      "source": "mic",
+      "said_at": 1793534437.0,
+      "language": "en",
+      "hold": "hd-000000020000"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-13",
+     "ts": "2026-11-01T12:01:02.000Z",
+     "seq": 13,
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-060c14f6a8739c44",
+      "user": {
+       "id": "anon-00000005",
+       "display": "someone",
+       "anonymous": true
+      },
+      "text": "Hercules is the funniest one",
+      "source": "mic",
+      "said_at": 1793534405.0,
+      "anon": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053"
+      },
+      "language": "en"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-14",
+     "ts": "2026-11-01T12:01:02.000Z",
+     "seq": 14,
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-92f9e5436ba544d2",
+      "user": {
+       "id": "bxdude180",
+       "login": "bxdude180",
+       "display": "bxdude180"
+      },
+      "text": "nah the second one was",
+      "source": "mic",
+      "said_at": 1793534437.0,
+      "language": "en"
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "tx",
+     "veil": "incognito",
+     "alias": true,
+     "text": "Hercules is the funniest one",
+     "hold": true
+    },
+    {
+     "k": "tx",
+     "named": "bxdude180",
+     "text": "nah the second one was"
+    }
+   ]
+  },
+  {
+   "name": "hold_hidden",
+   "note": "a !bridge hide holder (unproven): v1 nothing; v2-only grab / release (hold id) and the 🎙 line with priv.words, anchored - it takes its hold's verdict: the mic packet didn't prove who held it, so the line is 'someone' with a bar too (B.2)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v4",
+     "ts": "2026-11-01T12:01:03.000Z",
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "hold": "hd-000000030000",
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank",
+       "proven": false,
+       "since": 1793534463.0
+      },
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534463.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v5",
+     "ts": "2026-11-01T12:01:15.000Z",
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "reason": "released",
+      "held_ms": 12000,
+      "hold": "hd-000000030000",
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank",
+       "proven": false,
+       "since": 1793534463.0
+      },
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534463.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v6",
+     "ts": "2026-11-01T12:01:18.000Z",
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-8841696a6c4817d7",
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "source": "mic",
+      "said_at": 1793534464.0,
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534464.0,
+       "words": "this is what someone said on the mic, at some length so the bar is long enough to be an l bucket for sure ok"
+      },
+      "hold": "hd-000000030000",
+      "language": "en"
+     }
+    }
+   ],
+   "v1": [],
+   "expect": [
+    {
+     "k": "mic",
+     "veil": "hidden",
+     "alias": false
+    },
+    {
+     "k": "unmic",
+     "veil": "hidden",
+     "alias": false
+    },
+    {
+     "k": "tx",
+     "veil": "hidden",
+     "alias": false,
+     "mask": "l",
+     "hold": true
+    }
+   ]
+  },
+  {
+   "name": "hold_began_named",
+   "note": "a named grab, then !incognito on mid-hold: v1 releases under a fresh anonymous ref; v2 real + priv + began_named (the site shows 'someone', never a frog name)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-15",
+     "ts": "2026-11-01T12:01:19.000Z",
+     "seq": 15,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "holders": [
+       {
+        "id": "alice",
+        "login": "alice",
+        "display": "Alice"
+       }
+      ],
+      "hold": "hd-000000050000"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-16",
+     "ts": "2026-11-01T12:01:29.000Z",
+     "seq": 16,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice",
+       "proven": true,
+       "since": 1793534479.0
+      },
+      "reason": "released",
+      "held_ms": 10000,
+      "holders": [],
+      "hold": "hd-000000050000",
+      "priv": {
+       "kind": "incognito",
+       "h": "a9359c0487b65dc652e7",
+       "at": 1793534479.0
+      },
+      "began_named": true
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-15",
+     "ts": "2026-11-01T12:01:19.000Z",
+     "seq": 15,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "holders": [
+       {
+        "id": "alice",
+        "login": "alice",
+        "display": "Alice"
+       }
+      ]
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-16",
+     "ts": "2026-11-01T12:01:29.000Z",
+     "seq": 16,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000007",
+       "display": "someone",
+       "anonymous": true
+      },
+      "reason": "released",
+      "held_ms": 10000,
+      "holders": []
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "mic",
+     "named": "Alice"
+    },
+    {
+     "k": "unmic",
+     "veil": "incognito",
+     "alias": false
+    }
+   ]
+  },
+  {
+   "name": "hold_incognito_unproven",
+   "note": "an incognito holder the mic packet doesn't prove: proven false -> 'someone'",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-17",
+     "ts": "2026-11-01T12:01:30.000Z",
+     "seq": 17,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie",
+       "proven": false,
+       "since": 1793534490.0
+      },
+      "holders": [
+       {
+        "id": "anon-00000008",
+        "display": "someone",
+        "anonymous": true
+       }
+      ],
+      "hold": "hd-000000060000",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534490.0
+      }
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-17",
+     "ts": "2026-11-01T12:01:30.000Z",
+     "seq": 17,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000008",
+       "display": "someone",
+       "anonymous": true
+      },
+      "holders": [
+       {
+        "id": "anon-00000008",
+        "display": "someone",
+        "anonymous": true
+       }
+      ]
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "mic",
+     "veil": "incognito",
+     "alias": false
+    }
+   ]
+  },
+  {
+   "name": "challenge",
+   "note": "x.pepe.challenge and cam.open / cam.close stay in today's form on v2 (anonymous refs, hidden people left out): the site doesn't keep them, so no identity rides for them",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-19",
+     "ts": "2026-11-01T12:01:32.000Z",
+     "seq": 19,
+     "type": "x.pepe.challenge",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000009",
+       "display": "someone",
+       "anonymous": true
+      },
+      "category": "sing",
+      "verdict": "solid",
+      "score": 7.0,
+      "quip": "nice one someone"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-19",
+     "ts": "2026-11-01T12:01:32.000Z",
+     "seq": 19,
+     "type": "x.pepe.challenge",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000009",
+       "display": "someone",
+       "anonymous": true
+      },
+      "category": "sing",
+      "verdict": "solid",
+      "score": 7.0,
+      "quip": "nice one someone"
+     }
+    }
+   ],
+   "expect": [
+    null
+   ]
+  },
+  {
+   "name": "leaves",
+   "note": "frankie (incognito: twin) and hank (hidden: v2-only) leave",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-20",
+     "ts": "2026-11-01T12:01:33.000Z",
+     "seq": 20,
+     "type": "member.leave",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "reason": "left",
+      "inferred": true,
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534493.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v7",
+     "ts": "2026-11-01T12:01:33.000Z",
+     "type": "member.leave",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "reason": "left",
+      "inferred": true,
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534493.0
+      }
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-20",
+     "ts": "2026-11-01T12:01:33.000Z",
+     "seq": 20,
+     "type": "member.leave",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000001",
+       "display": "someone",
+       "anonymous": true
+      },
+      "reason": "left",
+      "inferred": true
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "leave",
+     "veil": "incognito",
+     "alias": true
+    },
+    {
+     "k": "leave",
+     "veil": "hidden",
+     "alias": true
+    }
+   ]
+  },
+  {
+   "name": "privacy",
+   "note": "privacy.hidden / privacy.shown: the same on both paths",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-21",
+     "ts": "2026-11-01T12:01:33.000Z",
+     "seq": 21,
+     "type": "privacy.shown",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog"
+     },
+     "data": {
+      "h": "1c0bad95a524afbe4c13",
+      "scope": "tx"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-21",
+     "ts": "2026-11-01T12:01:33.000Z",
+     "seq": 21,
+     "type": "privacy.shown",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog"
+     },
+     "data": {
+      "h": "1c0bad95a524afbe4c13",
+      "scope": "tx"
+     }
+    }
+   ],
+   "expect": [
+    null
+   ]
+  }
+ ],
+ "snapshot": {
+  "note": "frankie (incognito) holds the mic; hank (hidden) is in the room - v1 leaves hank out and shows frankie as 'someone', v2 lists both with real UserRefs + priv (never on_cam), count = everyone",
+  "v1": {
+   "room": {
+    "id": "PepeFrog.Room",
+    "name": "Pepe's Pad",
+    "kind": "room"
+   },
+   "topic": "",
+   "members": [
+    {
+     "id": "pepefrog",
+     "login": "PepeFrog",
+     "display": "PepeFrog",
+     "is_self": true,
+     "on_cam": null,
+     "src": "self",
+     "on_mic": false
+    },
+    {
+     "id": "alice",
+     "login": "alice",
+     "display": "Alice",
+     "on_cam": null,
+     "src": "seen",
+     "on_mic": false
+    },
+    {
+     "id": "anon-00000001",
+     "display": "someone",
+     "anonymous": true,
+     "on_cam": null,
+     "src": "seen",
+     "on_mic": true
+    },
+    {
+     "id": "tina",
+     "login": "tina",
+     "display": "Tina",
+     "on_cam": null,
+     "src": "seen",
+     "on_mic": false
+    },
+    {
+     "id": "bxdude180",
+     "login": "bxdude180",
+     "display": "bxdude180",
+     "on_cam": null,
+     "src": "seen",
+     "on_mic": false
+    }
+   ],
+   "count": 5,
+   "mic": [
+    {
+     "id": "anon-00000004",
+     "display": "someone",
+     "anonymous": true
+    }
+   ],
+   "joined_at": 1793530800,
+   "list_at": 1793534340,
+   "list_fresh": true,
+   "list_stale_after": 600,
+   "seen_ttl": 900,
+   "transcripts": true,
+   "audio": false,
+   "audio_on": false,
+   "audio_why": "",
+   "relay": false,
+   "mic_relay": false,
+   "cams": false,
+   "livecams": false,
+   "snap": false,
+   "clip": false,
+   "cmds": {},
+   "mod": {},
+   "pepe": {}
+  },
+  "v2": {
+   "room": {
+    "id": "PepeFrog.Room",
+    "name": "Pepe's Pad",
+    "kind": "room"
+   },
+   "topic": "",
+   "members": [
+    {
+     "id": "pepefrog",
+     "login": "PepeFrog",
+     "display": "PepeFrog",
+     "is_self": true,
+     "on_cam": null,
+     "src": "self",
+     "on_mic": false
+    },
+    {
+     "id": "alice",
+     "login": "alice",
+     "display": "Alice",
+     "on_cam": null,
+     "src": "seen",
+     "on_mic": false
+    },
+    {
+     "id": "frankie",
+     "login": "frankie",
+     "display": "Frankie",
+     "priv": {
+      "kind": "incognito",
+      "h": "d6ec3490db9b6a915053",
+      "at": 1793534404.0
+     },
+     "src": "seen",
+     "on_mic": true
+    },
+    {
+     "id": "hank",
+     "login": "hank",
+     "display": "Hank",
+     "priv": {
+      "kind": "hidden",
+      "h": "cc68ad150b9515307722",
+      "at": 1793534404.0
+     },
+     "src": "seen",
+     "on_mic": false
+    },
+    {
+     "id": "tina",
+     "login": "tina",
+     "display": "Tina",
+     "on_cam": null,
+     "src": "seen",
+     "on_mic": false
+    },
+    {
+     "id": "bxdude180",
+     "login": "bxdude180",
+     "display": "bxdude180",
+     "on_cam": null,
+     "src": "seen",
+     "on_mic": false
+    }
+   ],
+   "count": 6,
+   "mic": [
+    {
+     "id": "frankie",
+     "login": "frankie",
+     "display": "Frankie",
+     "proven": true,
+     "since": 1793534404.0,
+     "priv": {
+      "kind": "incognito",
+      "h": "d6ec3490db9b6a915053",
+      "at": 1793534404.0
+     }
+    }
+   ],
+   "joined_at": 1793530800,
+   "list_at": 1793534340,
+   "list_fresh": true,
+   "list_stale_after": 600,
+   "seen_ttl": 900,
+   "transcripts": true,
+   "audio": false,
+   "audio_on": false,
+   "audio_why": "",
+   "relay": false,
+   "mic_relay": false,
+   "cams": false,
+   "livecams": false,
+   "snap": false,
+   "clip": false,
+   "cmds": {},
+   "mod": {},
+   "pepe": {}
+  }
+ },
+ "handshake": [
+  {
+   "mode": "v1",
+   "hold": false,
+   "answer": 200,
+   "body": {
+    "success": true,
+    "privwire": 2
+   },
+   "next_mode": "v2",
+   "requests": [
+    "/api/bridge/sync"
+   ],
+   "hold_s": 0,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "the site advertises (its switch is on): the next batch goes as v2"
+  },
+  {
+   "mode": "v1",
+   "hold": false,
+   "answer": 200,
+   "body": {
+    "success": true
+   },
+   "next_mode": "v1",
+   "requests": [
+    "/api/bridge/sync"
+   ],
+   "hold_s": 0,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "no advert: stays on v1"
+  },
+  {
+   "mode": "v1",
+   "hold": true,
+   "answer": 200,
+   "body": {
+    "success": true,
+    "privwire": 2
+   },
+   "next_mode": "v1",
+   "requests": [
+    "/api/bridge/sync"
+   ],
+   "hold_s": 300,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "an advert inside the re-probe hold is ignored"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 200,
+   "body": {
+    "success": true,
+    "privwire": 2
+   },
+   "next_mode": "v2",
+   "requests": [
+    "/api/bridge/sync/v2"
+   ],
+   "hold_s": 0,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "v2 accepted"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 409,
+   "body": {
+    "error": "privwire_off"
+   },
+   "next_mode": "v1",
+   "requests": [
+    "/api/bridge/sync/v2",
+    "/api/bridge/sync"
+   ],
+   "hold_s": 600,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "the switch went off: the same batch on v1 now, adverts ignored for the hold"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 404,
+   "body": {},
+   "next_mode": "v1",
+   "requests": [
+    "/api/bridge/sync/v2",
+    "/api/bridge/sync"
+   ],
+   "hold_s": 600,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "the site rolled back to a build without the v2 receiver: the same"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 405,
+   "body": {},
+   "next_mode": "v1",
+   "requests": [
+    "/api/bridge/sync/v2",
+    "/api/bridge/sync"
+   ],
+   "hold_s": 600,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "the same"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": null,
+   "body": {},
+   "next_mode": "v2",
+   "requests": [
+    "/api/bridge/sync/v2"
+   ],
+   "hold_s": 0,
+   "batch_kept": true,
+   "max_events": 300,
+   "note": "no answer / timeout / connection error: unclear - the same v2 batch again later, never a v1 copy"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 503,
+   "body": {},
+   "next_mode": "v2",
+   "requests": [
+    "/api/bridge/sync/v2"
+   ],
+   "hold_s": 0,
+   "batch_kept": true,
+   "max_events": 300,
+   "note": "a 5xx: unclear - the same"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 413,
+   "body": {},
+   "next_mode": "v2",
+   "requests": [
+    "/api/bridge/sync/v2"
+   ],
+   "hold_s": 0,
+   "batch_kept": true,
+   "max_events": 1,
+   "note": "too big for nginx: not a refusal - fewer events per v2 batch from now on"
+  }
+ ]
+}
