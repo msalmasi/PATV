@@ -9462,7 +9462,7 @@
   "sb.how": "In a room, {!cmd} lists what you can play and {!play} plays one - or tap 🔊 Soundboard on a pad's Live tab. Per play: common {common}, rare {rare}, epic {epic} PAT, free (∞) for clips you own. Everyone shares the cooldowns: one play every 45 s per person, the same clip once every 3 min per room.",
   "sb.sp_allowance": "Your 🎟️ Season Pass: the season board is unlimited, and you have {n} free standard pack(s) left this month.",
   "sb.season_chip": "this season only",
-  "sb.season_why": "Everyone can play these for {pat} PAT each - unlimited with a 🎟️ Season Pass or the season board. When the season ends the board stays playable per use.",
+  "sb.season_why": "Everyone can play these for {pat} PAT each - unlimited with a 🎟️ Season Pass or the season board. The board leaves when its season ends.",
   "sb.packs_h": "Packs",
   "sb.voice_pack": "voice pack",
   "sb.global_why": "The board every room shares. All-Access makes it - and every standard pack - unlimited.",

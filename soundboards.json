@@ -91,6 +91,23 @@
         { "id": "s2610-scream", "label": "Scream", "emoji": "😱", "text": "Aaaaaaaaah!" },
         { "id": "s2610-moon", "label": "Full moon", "emoji": "🌕", "text": "It's a full moon tonight. Awoooooo!" }
       ]
+    },
+    {
+      "id": "2026-11", "name": "Fireside Season", "emoji": "🍂", "from": "2026-11-01", "to": "2026-12-01",
+      "clips": [
+        { "id": "s2611-oohaah", "label": "Ooh aah", "emoji": "🎆", "text": "Ooooh! Aaaah! Ooooh! ...Okay, that one was rubbish." },
+        { "id": "s2611-rocket", "label": "Rocket", "emoji": "🚀", "text": "Fwoooosh... BANG! Every dog on the street just left." },
+        { "id": "s2611-toffee", "label": "Toffee apple", "emoji": "🍎", "text": "One bite of toffee apple and my teeth left the chat." },
+        { "id": "s2611-leafpile", "label": "Leaf pile", "emoji": "🍂", "text": "Cannonball into the leaf pile! Wheee! ...That was a hedge." },
+        { "id": "s2611-sweater", "label": "Sweater weather", "emoji": "🧶", "text": "Sweater weather! Jumper weather! Same frog, more layers." },
+        { "id": "s2611-rain", "label": "Rainy day", "emoji": "🌧️", "text": "It's raining again. I'm a frog and even I'm over it." },
+        { "id": "s2611-dark", "label": "Dark already", "emoji": "🌑", "text": "Dark at five o'clock? Who signed off on this?" },
+        { "id": "s2611-gobble", "label": "Gobble gobble", "emoji": "🦃", "text": "Gobble gobble! The turkey's escaped the oven! Get him!" },
+        { "id": "s2611-pants", "label": "Stretchy pants", "emoji": "👖", "text": "Stretchy pants on. Trousers, if you're British." },
+        { "id": "s2611-foodcoma", "label": "Food coma", "emoji": "😴", "text": "Too full. Can't move. Tell my points I loved them." },
+        { "id": "s2611-thankful", "label": "Thankful", "emoji": "🧡", "text": "Thankful for every frog in here. Yes, even you." },
+        { "id": "s2611-moustache", "label": "Moustache", "emoji": "🥸", "text": "Day one of the moustache. It's three hairs. They're brave." }
+      ]
     }
   ],
   "legendaries": [

@@ -34,7 +34,13 @@ test("the table reads the live config: slots, retention, soundboard, flair, seas
   const seasonal = byId("season_pass", "seasonal");
   assert.ok(seasonal && /Spooky Season \(Halloween\)/.test(seasonal.title[1].packs), "the 🎃 Season Pass stickers from stickers.json");
   for (const id of ["retention", "intro", "badge", "cosmetics", "stickers"]) assert.ok(byId("prime_plus", id), "plus: " + id);
-  for (const id of ["sb_season", "sb_priority", "pm_logs", "telegram", "uploads"]) assert.ok(byId("season_pass", id), "season pass: " + id);
+  for (const id of ["sb_priority", "pm_logs", "telegram", "uploads"]) assert.ok(byId("season_pass", id), "season pass: " + id);
+  // November 2026: the season board perk only while a season board is on (whatever today's date is: the season is fed in)
+  const SBm = require(path.join(repo, "soundboards"));
+  assert.deepEqual(v.sb_season ? v.sb_season.id : null, (SBm.seasonNow() || {}).id || null, "values() reads the current season");
+  const fire = { id: "2026-11", name: "Fireside Season", emoji: "🍂" };
+  assert.ok(PK.table({ ...v, sb_season: fire }).season_pass.find((p) => p.id === "sb_season"), "a season on: the perk is listed");
+  assert.ok(!PK.table({ ...v, sb_season: null }).season_pass.some((p) => p.id === "sb_season"), "between seasons: no board to promise");
   // 1.99aak: live cams per viewer - the Season Pass line carries livecam.js's caps (pad tiers don't change them)
   const lc = byId("season_pass", "livecams");
   const LCc = require(path.join(repo, "livecam")).current().cfg;
@@ -108,7 +114,7 @@ test("status follows the switches: low latency, soundboards off", () => {
   const v = PK.values();
   assert.equal(PK.table({ ...v, lowlat_live: true }).prime_time.find((p) => p.id === "lowlat").live, true);
   assert.equal(PK.table({ ...v, lowlat_live: false }).prime_time.find((p) => p.id === "lowlat").live, false);
-  const off = PK.table({ ...v, sb_on: false });
+  const off = PK.table({ ...v, sb_on: false, sb_season: { id: "2026-11", name: "Fireside Season", emoji: "🍂" } });
   assert.equal(off.season_pass.find((p) => p.id === "sb_season").live, false);
   assert.equal(PK.table({ ...v, sp_seasonal: [] }).season_pass.some((p) => p.id === "seasonal"), false, "no seasonal packs -> no line");
 });

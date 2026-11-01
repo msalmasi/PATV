@@ -35,6 +35,9 @@ function values() {
     ptplus_max_rooms: num("ptplus_max_rooms"), sp_upload_mult: num("sp_upload_mult"), sp_sticker_packs: num("sp_sticker_packs"),
     retention: safe(() => P().retention(), safe(() => ({ ...P().RETENTION_DEFAULTS }), {})),
     sb_on: sb.enabled !== false, sb_sp_packs: Number.isFinite(Number(sb.sp_packs)) ? Number(sb.sp_packs) : 1,
+    // November 2026: the season board perk is listed only while a season board is on (soundboards.json seasons) - between
+    // seasons there's no board to be unlimited on
+    sb_season: safe(() => { const s = require("./soundboards").seasonNow(); return s ? { id: s.id, name: s.name, emoji: s.emoji } : null; }, null),
     flairs: Number(fl.MAX_FLAIRS) || 25, flairs_plus: Number(fl.MAX_FLAIRS_PLUS) || 50,
     sp_seasonal: stk("season_pass").filter((p) => p.season),
     lowlat_live: rtc === "prime" || rtc === "all",
@@ -112,7 +115,7 @@ function table(v = values()) {
     perk("stickers", "🧸", ["premium.sp.stickers", { count: v.sp_sticker_packs }], "premium.sp.stickers_d", v.sp_sticker_packs > 0),
     ...(seasonal.length ? [perk("seasonal", (v.sp_seasonal[0] && v.sp_seasonal[0].emoji) || "🎃", ["perks.sp.seasonal", { packs: seasonal.join(", ") }], "perks.sp.seasonal_d")] : []),
     perk("uploads", "📤", ["premium.sp.uploads", { n: v.sp_upload_mult }], "premium.sp.uploads_d"),
-    perk("sb_season", "🔊", "perks.sp.sb_season", "perks.sp.sb_season_d", v.sb_on),
+    ...(v.sb_season ? [perk("sb_season", "🔊", "perks.sp.sb_season", "perks.sp.sb_season_d", v.sb_on)] : []),
     perk("sb_pack", "🎁", ["perks.sp.sb_pack", { count: v.sb_sp_packs }], "perks.sp.sb_pack_d", v.sb_on && v.sb_sp_packs > 0),
     perk("sb_priority", "⏩", "perks.sp.sb_priority", "perks.sp.sb_priority_d", v.sb_on),
     perk("pm_logs", "🔒", ["perks.sp.pm", { pm: W("pm_pass") }], ["perks.sp.pm_d", { pm: W("pm_pass"), none: W("pm_days") }]),
