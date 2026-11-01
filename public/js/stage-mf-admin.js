@@ -107,6 +107,10 @@
     row('Mic to picture, cold (p50 / p95 ms)', q.cold.n ? q.cold.p50 + ' / ' + q.cold.p95 : '–');
     row('Cold opens ok / failed · warm reuses ok', [c.cold_ok || 0, c.cold_failed || 0].join(' / ') + ' · ' + (c.warm_ok || 0));
     row('Yields to a manual slot', c.yields || 0);
+    // wave2 WP-4 (F.2): relays kept warm after their tiles left the stage (warm_keep_s / warm_max)
+    var kc = Object.keys(c).filter(function (k) { return k.indexOf('keep_cut:') === 0; }).map(function (k) { return k.slice(9) + ' ' + c[k]; });
+    row('Kept warm: now / kept / comebacks / expired / evicted', [m.current.kept || 0, c.keep_kept || 0, c.keep_taken || 0, c.keep_expired || 0, c.keep_evicted || 0].join(' / ') +
+        (q.keep && q.keep.n ? ' · comeback p50 / p95 ' + q.keep.p50 + ' / ' + q.keep.p95 + ' ms' : '') + (kc.length ? ' · ended: ' + kc.join(' · ') : ''));
     row('Stills: frames / refusals', [c.still_frames || 0, c.still_refusals || 0].join(' / '));
     // 1.99afl (S1/S3): still refusals by Pepe's code, and the "can't read the people list" alerts sent
     var srf = Object.keys(c).filter(function (k) { return k.indexOf('still_refused:') === 0; }).map(function (k) { return k.slice(14) + ' ' + c[k]; });

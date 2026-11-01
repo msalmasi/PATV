@@ -145,6 +145,40 @@ test("exact reports, mf-only counting, yield, the end + opt-out hooks", async ()
   assert.equal(LC.cooling(R.id, "carl", T), true, "ended by someone: cooling down");
 });
 
+test("wave2 WP-4 (F.2): stageWarm keeps a mic-stage relay up under 'mfw:' - its stage viewers kicked, never watchable, still a mic-stage relay for every count; stageDrop of 'mfw:' ends it", async () => {
+  T += LC.END_COOLDOWN_MS + 60 * 1000; LC.sweep(T);         // (carl's ended-by cooldown from the test before)
+  await bot({ mf: 1 });
+  const MFW = "mfw:" + R.id;
+  assert.equal(LC.isMfHolder(MFW), true, "a mic-stage holder");
+  assert.equal(LC.isMfHolder("mfwx"), false);
+  assert.equal(LC.stageWarm(R.id, "dave", T), false, "nothing to keep (the mic stage holds no such relay)");
+  await LC.stageHold(R, "carl", MF, T, { mf: true });
+  await bot({ mf: 1, live: [{ room: R.id, login: "carl", state: "live", exact: true }] });
+  const v = await LC.stageWatch({ userId: "u7" }, R, MF, { login: "carl" }, T);
+  assert.equal(await read(v.whep, "77777777-7777-7777-7777-777777777777"), 200);
+  const S = LC._sessions.get(LC.keyOf(R.id, "carl"));
+  kicked.length = 0;
+  assert.equal(LC.stageWarm(R.id, "carl", T), true);
+  assert.deepEqual([...S.holds], [MFW], "the warm holder only");
+  assert.ok(!S.ended, "never a moment without a holder: the relay lives on");
+  assert.equal(S.stageViewers.size, 0, "its stage viewer went");
+  assert.ok(kicked.includes("77777777-7777-7777-7777-777777777777"), "...and was kicked off the video");
+  assert.equal(await read(v.whep), 403, "the old ticket reads nothing now");
+  const st = LC.mfState(R.id, "carl", T);
+  assert.deepEqual([st.held, st.kept, st.mfOnly], [false, true, true], "kept; not the stage's; mic-stage only");
+  assert.equal(LC.mfOnlyCount(T), 1, "counted for relays_max");
+  assert.equal(LC.sharedBeyondMf(S, T), false);
+  assert.equal(S.mf, true);
+  assert.equal((await bot({ mf: 1 })).want.find((x) => x.login === "carl").mf, true, "Pepe keeps it exact");
+  await assert.rejects(LC.stageWatch({ userId: "u8" }, R, MFW, { login: "carl" }, T), (e) => e.code === "gone", "no ticket through a warm holder");
+  await assert.rejects(LC.stageWatch({ userId: "u8" }, R, MF, { login: "carl" }, T), (e) => e.code === "gone", "nor through the stage (it doesn't hold it)");
+  T += 10 * 60 * 1000; LC.sweep(T);
+  assert.equal(LC.mfState(R.id, "carl", T).state !== "ended", true, "held warm: it never ends unwatched");
+  assert.equal(LC.stageDrop(R.id, "carl", MFW, T, "mf_warm_expired"), true);
+  assert.equal(LC.mfState(R.id, "carl", T).state, "ended");
+  T += 2 * 60 * 1000; LC.sweep(T);
+});
+
 test("an old Pepe: no mf advertised, no mf_rooms needed", async () => {
   const r = await bot({});
   assert.equal(LC.botMf(), 0);

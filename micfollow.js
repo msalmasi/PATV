@@ -75,6 +75,15 @@
 //   S3             /stage/admin's pad rows carry the room's list age, freshness, a list pause, the last hour's failed opens /
 //                  stills by code and the cards shown now (health); a pad whose list Pepe hasn't read whole for 10 minutes
 //                  while people hold the mic sends the site's Admins an alert (listAlert, once per pad per 6 h).
+// wave2 WP-4 (the incognito / mic-stage spec F.2, J-10 - ships dark: warm_keep_s 0 on prod):
+//   warm keep      a tile leaving the stage for a plain reason while live may keep its relay running for warm_keep_s
+//                  (micfollow-core "keep"): livecam.stageWarm swaps "mf:<room>" for "mfw:<room>" (a mic-stage holder for every
+//                  count, never watchable). Site-wide at most warm_max, and relays_max still covers them (enforceKept: the least
+//                  recently used goes); an open / still that needs the room evicts one (evictKept, also first in yieldRelay -
+//                  ▶ Live, cam slots, pins, shed, enforceRelays). Every rule re-runs on kept relays each step (recheck, onExact
+//                  and the end hooks cover them); a comeback's hold takes the relay over (keep_taken) and is live in the tick.
+//                  /stage/admin: the knobs (auto-listed), kept counts + keep_* counters; /admin/pepe/livecams: "warm (Ns left)".
+//                  Kept relays write no rows (micfollow_spans covers time on the stage only).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -97,6 +106,7 @@ const BR = () => require("./bridge");
 const ROOMS = () => require("./rooms");
 const CV = () => require("./camviewers");
 const MFH = (roomId) => "mf:" + String(roomId);
+const MFW = (roomId) => "mfw:" + String(roomId);   // wave2 WP-4 (F.2): the holder of a relay kept warm after its tile left
 const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
 const bridgeOk = (id) => { try { return require("./premium").bridgeAllowed(id); } catch (e) { return true; } };
 const webrtcOn = () => { try { return !!require("./webrtc").enabled(); } catch (e) { return false; } };
@@ -257,7 +267,7 @@ function ptag(login, t = now()) {
 
 // ── metrics (counts and durations, 24 h, in memory) ──
 const MET = new Map();        // hour -> {key: n}
-const LAT = { warm: [], cold: [] };
+const LAT = { warm: [], cold: [], keep: [] };   // (wave2 WP-4: keep = a comeback onto a kept relay)
 const PER_MIN = new Map();    // minute -> changes (site-wide)
 let PEAK = 0;
 /** Count k: site-wide, and for pad P too when given (§12: per pad and site-wide). */
@@ -298,8 +308,10 @@ function metrics(t = now()) {
   for (const P of PADS.values()) for (const x of P.state.tiles) { tiles++; if (x.video === "still") stills++; if (core.liveish(x)) live++; }
   let mfOnly = 0;
   try { mfOnly = LC().mfOnlyCount(t); } catch (e) { mfOnly = 0; }
-  return { counts: out, qualify_to_picture: { warm: lat("warm"), cold: lat("cold") }, changes_per_min: { max: mins.length ? Math.max(...mins) : 0, p95: pct(mins, 0.95) || 0 },
-           peak_viewers: PEAK, current: { tiles, live, stills, mf_only_relays: mfOnly } };
+  let keptN = 0;                                  // (wave2 WP-4: relays kept warm after their tiles left)
+  for (const P of PADS.values()) keptN += P.state.kept ? P.state.kept.size : 0;
+  return { counts: out, qualify_to_picture: { warm: lat("warm"), cold: lat("cold"), keep: lat("keep") }, changes_per_min: { max: mins.length ? Math.max(...mins) : 0, p95: pct(mins, 0.95) || 0 },
+           peak_viewers: PEAK, current: { tiles, live, stills, mf_only_relays: mfOnly, kept: keptN } };
 }
 
 // ── who may be shown (§4.1) ──
@@ -515,20 +527,73 @@ function siteBudget(P, t) {
   const yielding = t < yieldUntil;                 // a manual cam slot is taking the relay we gave up: don't race it
   const relaysLeft = Math.min(c.relays_max - mfOnly - pendingCold, lc.max_live - L.liveCount() - pendingCold);
   const rateLeft = Math.min(c.cold_opens_per_min - COLD.length, c.cold_opens_per_pad - P.cold.length);
-  const coldLeft = c.cold_open && !yielding ? Math.max(0, Math.min(relaysLeft, rateLeft)) : 0;
+  // wave2 WP-4 (F.2): relays the mic stage only keeps warm (and nobody else uses) are reclaimable - an open that needs one
+  // evicts the least recently used first (core marks it evict); coldFree / poolFree = what's left without that
+  const reclaim = keptList(t).filter((k) => k.mfOnly).length;
+  const coldFree = c.cold_open && !yielding ? Math.max(0, Math.min(relaysLeft, rateLeft)) : 0;
+  const coldLeft = c.cold_open && !yielding ? Math.max(0, Math.min(relaysLeft + reclaim, rateLeft)) : 0;
   // mfix: why there's no cold open to give (the tile's card says so, instead of always "live cams are full")
-  const coldWhy = !c.cold_open ? "cold_off" : yielding || relaysLeft <= 0 ? "relays" : rateLeft <= 0 ? "rate" : null;
+  const coldWhy = !c.cold_open ? "cold_off" : yielding || relaysLeft + reclaim <= 0 ? "relays" : rateLeft <= 0 ? "rate" : null;
   // Pepe's cam pool (his learned capacity, else pool_max): every relay (▶ Live, cam slots, the mic stage's) and every
   // still is an open cam there - mic follows opens nothing new that would leave fewer than POOL_FREE for ▶ Live and
   // manual cam slots
   let poolCap = Number(lc.pool_max) || 6;
   try { const bp = L.botPool ? L.botPool() : null; if (bp && Number(bp.capacity) > 0) poolCap = Number(bp.capacity); } catch (e) { /* the knob */ }
-  const poolLeft = Math.max(0, poolCap - POOL_FREE - L.liveCount() - stills - pendingCold);
+  const poolFree = Math.max(0, poolCap - POOL_FREE - L.liveCount() - stills - pendingCold);
+  const poolLeft = poolFree + reclaim;
   // 1.99afl review (S2): Pepe opens a cam his roster can't classify by its exact name (his mic-stage level; none yet - through
   // 1.99afk he refuses it at once as not_on_cam, so the mic stage asks for none and the tile stays "checking their cam…")
   const unkOpen = (Number(L.botMf()) || 0) >= core.MF_UNK_OPEN;
-  return { maxLive: lc.max_live, coldLeft, coldWhy, stillsLeft: c.stills ? Math.max(0, c.stills_max - stills) : 0, poolLeft, shed: t < shedUntil, unkOpen };
+  return { maxLive: lc.max_live, coldLeft, coldWhy, stillsLeft: c.stills ? Math.max(0, c.stills_max - stills) : 0, poolLeft, shed: t < shedUntil, unkOpen,
+           ...(reclaim ? { coldFree, poolFree } : {}) };
 }
+// ── wave2 WP-4 (F.2): kept relays - a mic-stage relay kept running after its tile left the stage, for a comeback ──
+/** Every kept relay site-wide that isn't mid-comeback: [{P, login, leftAt, until, mfOnly}] (mfOnly: nobody else uses it, so
+ *  dropping it frees a relay). */
+function keptList(t = now()) {
+  const out = [];
+  for (const P of PADS.values()) {
+    const K = P.state.kept;
+    if (!K || !K.size) continue;
+    for (const [login, k] of K) {
+      if (core.tileOf(P.state, login)) continue;
+      let mfOnly = false;
+      try { mfOnly = !!LC().mfState(P.roomId, login, t).mfOnly; } catch (e) { mfOnly = false; }
+      out.push({ P, login, leftAt: k.leftAt, until: k.until, mfOnly });
+    }
+  }
+  return out.sort((a, b) => a.leftAt - b.leftAt);
+}
+/** A kept relay of `login` on pad `roomId`: {leftAt, until} | null (livecam's admin view: "warm (mic stage, Ns left)"). */
+function keptOf(roomId, login) {
+  const P = PADS.get(String(roomId));
+  const k = P && P.state.kept ? P.state.kept.get(low(login)) : null;
+  return k ? { leftAt: k.leftAt, until: k.until } : null;
+}
+/** Drop the least recently used kept relay site-wide (one that frees a relay unless any = true). `forP` = the pad whose open
+ *  needed it (its slots_busy retry window starts). -> true when one went */
+function evictKept(t = now(), { forP = null, any = false, why = "evicted" } = {}) {
+  const k = keptList(t).find((x) => any || x.mfOnly);
+  if (!k) return false;
+  apply(k.P, roomOf(k.P.roomId), core.dropKept(k.P.state, k.login, why), t);
+  if (forP) forP.state.evictAt = t;
+  return true;
+}
+/** The site-wide budget after a keep: at most warm_max kept relays, and relays_max still covers every relay only the mic
+ *  stage holds (kept ones count) - over it, the least recently used kept relays go. */
+function enforceKept(t = now()) {
+  const c = cfg();
+  let guard = 0;
+  while (guard++ < 50) {
+    const all = keptList(t);
+    let mfOnly = 0;
+    try { mfOnly = LC().mfOnlyCount(t); } catch (e) { mfOnly = 0; }
+    if (all.length > c.warm_max) { if (!evictKept(t, { any: true })) break; continue; }
+    if (mfOnly > c.relays_max && all.some((x) => x.mfOnly)) { if (!evictKept(t)) break; continue; }
+    break;
+  }
+}
+const keepMetric = (why) => (why === "expired" ? "keep_expired" : why === "evicted" || why === "pad_full" ? "keep_evicted" : "keep_cut:" + String(why || "").slice(0, 30));
 const roomOf = (roomId) => { try { return BR()._rooms.get(String(roomId)) || null; } catch (e) { return null; } };
 
 /** Run the engine for one pad (synchronous; never awaits). R = its bridge room (looked up when not given). */
@@ -541,7 +606,8 @@ function stepPad(roomId, t = now(), R) {
   const { holders, unproven, others, pepe } = R ? holdersOf(R) : { holders: [], unproven: 0, others: [], pepe: null };
   const elig = new Map(), sess = new Map(), want = new Set();
   if (!why || why === "stale") {
-    for (const l of new Set([...holders.map((h) => h.login), ...P.state.tiles.map((x) => x.login)])) {
+    // (wave2 WP-4: + the pad's kept relays - every rule re-runs on them each step)
+    for (const l of new Set([...holders.map((h) => h.login), ...P.state.tiles.map((x) => x.login), ...P.state.kept.keys()])) {
       elig.set(l, R ? eligOf(P, R, l, t, want) : "not_member");
       sess.set(l, LC().mfState(P.roomId, l, t));
     }
@@ -568,10 +634,33 @@ function apply(P, R, actions, t) {
   const who = [];                                // per-person tags for the log line (a daily HMAC, never the login)
   for (const a of actions || []) {
     switch (a.a) {
-      case "hold": doHold(P, a.login, a.cold, t); break;
+      // (wave2 WP-4: an open / still that needs a kept relay's room evicts the least recently used one first)
+      case "hold": if (a.evict) evictKept(t, { forP: P }); doHold(P, a.login, a.cold, t); break;
       // a relay only the mic stage held (no cam slot, no ▶ Live viewer) ends at once - it never lingers against max_live
       case "release": try { LC().stageDrop(P.roomId, a.login, MFH(P.roomId), t, "mf_released"); } catch (e) { /* none */ } break;
-      case "still": P.stills.set(a.login, { next: t }); bump("stills_started", 1, t, P); stillTick(P, t); break;
+      // wave2 WP-4 (F.2): the tile left but its relay stays warm ("mfw:") for a comeback; the site-wide budget right after
+      case "keep": {
+        let ok = false;
+        try { ok = LC().stageWarm(P.roomId, a.login, t); } catch (e) { ok = false; }
+        if (!ok) {                                 // (nothing to keep: the mic stage didn't hold it any more)
+          P.state.kept.delete(a.login);
+          try { LC().stageDrop(P.roomId, a.login, MFH(P.roomId), t, "mf_released"); } catch (e) { /* none */ }
+          break;
+        }
+        bump("keep_kept", 1, t, P);
+        enforceKept(t);
+        break;
+      }
+      case "keep_drop":
+        try { LC().stageDrop(P.roomId, a.login, MFW(P.roomId), t, "mf_warm_" + String(a.why || "dropped").slice(0, 24)); } catch (e) { /* none */ }
+        bump(keepMetric(a.why), 1, t, P);
+        break;
+      case "keep_taken":                           // the comeback's hold took it over: only the warm holder lets go
+        try { LC().stageRelease(MFW(P.roomId), LC().keyOf(P.roomId, a.login), t); } catch (e) { /* none */ }
+        bump("keep_taken", 1, t, P);
+        stepPad(P.roomId, t);                      // live in the same tick (the relay is running, Pepe said exact)
+        break;
+      case "still": if (a.evict) evictKept(t, { forP: P }); P.stills.set(a.login, { next: t }); bump("stills_started", 1, t, P); stillTick(P, t); break;
       // a still stops (live now, left, cut): its queued / claimed job is cancelled - Pepe never takes a frame of someone
       // the mic stage no longer shows (a cut person above all)
       case "still_stop": P.stills.delete(a.login); try { require("./bridge-relay").mfSnapCancel(P.roomId, a.login); } catch (e) { /* no relay */ } break;
@@ -580,7 +669,9 @@ function apply(P, R, actions, t) {
         who.push("-" + ptag(a.login, t) + ":" + a.reason);
         if (a.peak > PEAK) PEAK = a.peak; break;
       case "picture":
-        if (a.lat != null) { const k = a.warm ? "warm" : "cold"; LAT[k].push({ ms: a.lat, at: t }); if (LAT[k].length > 500) LAT[k].shift(); }
+        if (a.lat != null) {
+          for (const k of [a.warm ? "warm" : "cold", ...(a.kept ? ["keep"] : [])]) { LAT[k].push({ ms: a.lat, at: t }); if (LAT[k].length > 500) LAT[k].shift(); }
+        }
         break;                                    // (1.99afn, FU-1: no re-notice at a picture - one courtesy notice, ever)
       // DF-11: the pad's first notice, at the first qualifying grab - the person can be picked notice_lead_s after it
       case "notice_first": firstNotice(P, R, a.login, t).catch((e) => console.error("[micfollow] notice:", e.message)); break;
@@ -807,7 +898,15 @@ function onSessionEnd(S, why) {
   if (!S) return;
   // Pepe refused a relay that WASN'T the mic stage's (a manual cam slot, a viewer's ▶ Live) because his cams are full:
   // a manual action wins - mic follows stops its stills, opens nothing new for a minute and gives one relay back
-  if (why === "slots_busy" && !(S.lastHolds && [...S.lastHolds].some((h) => String(h).startsWith("mf:")))) shed(now());
+  // (wave2 WP-4: a kept relay's "mfw:" holder is the mic stage's too - livecam.isMfHolder)
+  const isMf = (h) => { try { return LC().isMfHolder(h); } catch (e) { return String(h).startsWith("mf:"); } };
+  if (why === "slots_busy" && !(S.lastHolds && [...S.lastHolds].some(isMf))) shed(now());
+  // wave2 WP-4 (F.2): a kept relay livecam ended (cam closed, Pepe stopped it, an admin ended it...) is gone - nothing to drop
+  const KP = PADS.get(String(S.roomId));
+  if (KP && KP.state.kept && KP.state.kept.has(low(S.login))) {
+    KP.state.kept.delete(low(S.login));
+    bump(keepMetric("ended_" + String(why || "ended").slice(0, 20)), 1, now(), KP);
+  }
   // mfix: a pinned cam's relay ended (cam closed, they opted out, someone ended it...): the pin ends with it. mfix review: a
   // passing reason (Pepe busy, a slow open, his cams full...) doesn't - pinTick holds it again after a short wait, up to
   // PIN_RETRIES times in a row before the pin ends
@@ -836,6 +935,8 @@ function onExactRefused(S, why) {
   const t = now();
   const P = PADS.get(String(S.roomId));
   if (P && core.tileOf(P.state, S.login)) { noteFail(P, why, t); apply(P, roomOf(P.roomId), core.sessionEnded(P.state, S.login, why, cfg(), t).actions, t); }
+  // (wave2 WP-4: a kept relay Pepe can't keep exact lets go too)
+  if (P && P.state.kept && P.state.kept.has(low(S.login))) apply(P, roomOf(P.roomId), core.dropKept(P.state, low(S.login), "refused"), t);
   try { LC().stageDrop(S.roomId, S.login, MFH(S.roomId), t, "mf_refused"); } catch (e) { /* no live cams */ }
   bump("exact_refused_shared:" + String(why || "").slice(0, 20), 1, t, P);
 }
@@ -848,7 +949,8 @@ async function recheck(login, { refresh: re = false } = {}) {
   let n = 0;
   for (const P of PADS.values()) {
     const R = roomOf(P.roomId);
-    const on = core.tileOf(P.state, l) || ((R && R.mic) || []).some((u) => u && low(u.login) === l);
+    // (wave2 WP-4: a kept relay of theirs follows the same rules)
+    const on = core.tileOf(P.state, l) || (P.state.kept && P.state.kept.has(l)) || ((R && R.mic) || []).some((u) => u && low(u.login) === l);
     if (!on) continue;
     if (re) { FACTS.delete(l); BANS.delete(l + "|" + P.roomId); await refresh(l, P.roomId, { force: true }); }
     stepPad(P.roomId);
@@ -877,6 +979,12 @@ async function recheckUser(userId) {
  *  place is the slot's: no cold opens for YIELD_WINDOW_MS (its stageHold retry runs right after this), and the pad isn't
  *  stepped here (a step would hand the place straight to another mic tile) - the 1 s timer gives the tile a still / card. */
 function yieldRelay(t = now(), { forSlot = true } = {}) {
+  // wave2 WP-4 (F.2): a relay the mic stage only keeps warm goes first (the least recently used) - nobody is watching it
+  if (evictKept(t)) {
+    if (forSlot) yieldUntil = Math.max(yieldUntil, t + YIELD_WINDOW_MS);
+    bump(forSlot ? "yields_kept" : "relays_trimmed_kept", 1, t);
+    return true;
+  }
   let best = null;
   // mfix: a recent speaker's tile (they let go of the mic) gives its relay up first - the one off the mic longest - then the
   // oldest-added holder's
@@ -916,7 +1024,7 @@ function enforceRelays(t = now()) {
  *  comes off live at once; one he just confirmed goes live). */
 function onExact(roomId, login) {
   const P = PADS.get(String(roomId));
-  if (P && loaded && core.tileOf(P.state, low(login))) stepPad(P.roomId);
+  if (P && loaded && (core.tileOf(P.state, low(login)) || (P.state.kept && P.state.kept.has(low(login))))) stepPad(P.roomId);   // (wave2 WP-4: + kept)
 }
 /** stageleave.leave (train2 merge): `login` took their cam off this pad's Stage ("Take me off this Stage" / "!stage off me") -
  *  step that pad now, so a mic-stage tile of theirs comes off at once (eligOf: the neutral CUT "unavailable") and lets go of
@@ -1705,6 +1813,7 @@ async function adminView(user, t = now()) {
                 live: S.tiles.filter(core.liveish).length, stills: S.tiles.filter((x) => x.video === "still").length, why_off: P.settings.on ? whyOff(P, roomOf(P.roomId), t) : "pad_off",
                 unproven_n: S.unproven, frozen_until: S.frozenUntil > t ? S.frozenUntil : null, counts: countsOf(P.met, t),   // §12: per pad too
                 pins: pinsOf(P.roomId).length, keep_recent: P.settings.keep_recent,                                                   // mfix
+                kept: S.kept ? S.kept.size : 0,                                                                                       // wave2 WP-4 (F.2)
                 ...health(P, roomOf(P.roomId), t) });                                                                                 // 1.99afl (S3)
   }
   let audit = [];
@@ -2083,6 +2192,7 @@ module.exports = {
   health, listAlert, failsOf, LIST_ALERT_MS, LIST_ALERT_GAP_MS,                                                    // 1.99afl (S3)
   courtesyOnce, courtesyOf, homeCourtesy, pmText, COURTESY_V, HOME_NOTICE_V,                                       // 1.99afn (FU-1)
   pinPut, unpin, pinTick, pinWhy, pinCandidates, pinsOf, pinsFor, pinOf, setOverride, onExactRefused, CFG_REV,      // mfix
+  keptOf, keptList, evictKept,                                                                                     // wave2 WP-4 (F.2)
   _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS,
   /** tests: the pad's first notice to `login` went out at `at` (null = never). 1.99afn: also their courtesy row - told at `at`
    *  (courtesy v1, like the backfill), or (null) never told anywhere */
@@ -2108,7 +2218,7 @@ module.exports = {
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setBoot: (t) => { bootAt = t; },
   _reset: () => { PADS.clear(); MFOPT = new Set(); EXCL.clear(); FACTS.clear(); BANS.clear(); INFLIGHT.clear(); HOLDING.clear(); GATE.clear(); BLK.clear(); MANAGE.clear(); NOTES.clear(); HIDE.clear();
-                   COLD.length = 0; pendingCold = 0; yieldUntil = 0; shedUntil = 0; caRetryAt = 0; relaysOverSince = 0; MET.clear(); PER_MIN.clear(); LAT.warm = []; LAT.cold = []; PEAK = 0;
+                   COLD.length = 0; pendingCold = 0; yieldUntil = 0; shedUntil = 0; caRetryAt = 0; relaysOverSince = 0; MET.clear(); PER_MIN.clear(); LAT.warm = []; LAT.cold = []; LAT.keep = []; PEAK = 0;
                    PINS.clear(); PIN_LEFT.clear(); pinBusy = false; lastPinTick = 0; OWN.clear();
                    CFG = { v: 0, cfg: { ...core.DEFAULTS }, at: null, by: null }; ready = null; loaded = false; },
 };

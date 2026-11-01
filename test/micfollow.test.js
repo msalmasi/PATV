@@ -1944,3 +1944,121 @@ test("64. 1.99afl S1 / S1b / S3: Pepe's still result code - busy retries soon (n
   room([], { listFresh: false, listAt: T - 60 * 60 * 1000 });
   assert.equal(MF.listAlert(P, bridge._rooms.get(ROOM.id), T), false, "nobody on the mic: no alert");
 });
+
+// ── wave2 WP-4 (the incognito / mic-stage spec F.2, J-10): kept ("warm") relays ──
+/** alice on the stage live, then she lets go: her tile leaves (the last-on lock, then released). */
+async function aliceLeaves() {
+  await onStage(["alice"]);
+  assert.equal(tile("alice").video, "live");
+  // (MediaMTX's 5 s path sync keeps the relay "live" meanwhile - up() each time)
+  for (let i = 0; i < 10 && tiles().length; i++) { up("alice"); await at(5, []); }
+  assert.deepEqual(tiles(), []);
+  up("alice");
+}
+
+test("65. wave2 F.2 warm keep: the leaving tile's relay stays up under 'mfw:' - counted in mfOnlyCount / relays_max, Pepe keeps it exact, NEVER watchable, 'warm' on the admin list; a comeback is live in the same step on the same relay", async () => {
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { warm_keep_s: 180, warm_max: 3, cold_open: true, relays_max: 4, reason: "test" });
+  try {
+    await aliceLeaves();
+    const S = LC._sessions.get(LC.keyOf(ROOM.id, "alice"));
+    assert.ok(S && !S.ended, "the relay lives on");
+    assert.ok(S.holds.has("mfw:" + ROOM.id) && !S.holds.has("mf:" + ROOM.id), "held warm, not by the stage");
+    const st = LC.mfState(ROOM.id, "alice", T);
+    assert.deepEqual([st.kept, st.held, st.state, st.exact, st.mfOnly], [true, false, "live", true, true]);
+    assert.equal(LC.mfOnlyCount(T), 1, "a mic-stage relay for relays_max");
+    assert.ok(MF.keptOf(ROOM.id, "alice"), "kept by the pad");
+    assert.equal(MF.metrics(T).current.kept, 1);
+    assert.equal(MF.metrics(T).counts.keep_kept, 1);
+    // no ticket, ever: the route (no tile) and livecam itself (a warm holder)
+    const w = await post("/api/rooms/" + slug() + "/micfollow/watch", { login: "alice" }, "u_v1");
+    assert.equal(w.d.state, "ended");
+    assert.ok(!w.d.whep);
+    await assert.rejects(LC.stageWatch({ userId: "u_v1", username: "viewer1" }, room([]), "mfw:" + ROOM.id, { login: "alice" }), (e) => e.code === "gone");
+    // Pepe is still asked for it by its exact name
+    const want = (await bot()).want.find((x) => x.login === "alice");
+    assert.ok(want && want.mf === true, "want[].mf");
+    const row = (await LC.adminView()).sessions.find((x) => x.login === "alice");
+    assert.ok(row && row.warm === true && row.warm_s > 0 && row.warm_s <= 180, "warm (mic stage, Ns left)");
+    // she talks again: live in the step that puts her up - the same relay, no cold open
+    const cold0 = MF.metrics(T).counts.cold_ok || 0;
+    await step(["alice"]);
+    T += 6000; up("alice"); await bot();                         // (held >= 2 s, and past the change budget's min_gap_s)
+    await step(["alice"]);
+    assert.equal(tile("alice").video, "live", "live in the step that put her up (server side)");
+    assert.equal(LC._sessions.get(LC.keyOf(ROOM.id, "alice")), S, "the same relay");
+    assert.ok(S.holds.has("mf:" + ROOM.id) && !S.holds.has("mfw:" + ROOM.id), "the stage holds it again");
+    assert.equal(MF._pads.get(ROOM.id).state.kept.size, 0);
+    assert.equal(MF.metrics(T).counts.keep_taken, 1);
+    assert.equal(MF.metrics(T).counts.cold_ok || 0, cold0, "no cold open");
+    assert.equal(MF.metrics(T).qualify_to_picture.keep.n, 1, "the comeback's latency");
+  } finally { await MF.setCfg(ADMIN, { warm_keep_s: 0, relays_max: 2, reason: "test" }); }
+});
+
+test("66. wave2 F.2 eviction: a viewer's ▶ Live start and a cold open that need the room drop the kept relay first (least recently used); the warm_max budget", async () => {
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { warm_keep_s: 180, warm_max: 3, cold_open: true, relays_max: 4, reason: "test" });
+  await LC.save(ADMIN, { cfg: { max_live: 1 } });
+  try {
+    await aliceLeaves();
+    assert.equal(LC.liveCount(), 1);
+    const r = await LC.start({ userId: "u_v1", username: "viewer1" }, room([]), "fay", T);
+    assert.ok(r && r.whep, "▶ Live went through (no slots_busy)");
+    assert.ok(LC._sessions.get(LC.keyOf(ROOM.id, "alice")).ended, "the kept relay made room");
+    assert.equal(MF._pads.get(ROOM.id).state.kept.size, 0);
+    assert.equal(MF.metrics(T).counts.keep_evicted, 1);
+    assert.ok(MF.metrics(T).counts.yields_kept >= 1, "evicted before any live tile was asked to yield");
+    LC.stop("u_v1", ROOM.id, "fay", T);
+  } finally { await LC.save(ADMIN, { cfg: { max_live: 4 } }); }
+  // relays_max 1: alice kept, bob's cold open needs her room - she goes first, his open proceeds in the same step
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { relays_max: 1, reason: "test" });
+  try {
+    await aliceLeaves();
+    assert.ok(MF.keptOf(ROOM.id, "alice"));
+    await step(["bob"]); up("alice"); await at(6, ["bob"]);
+    assert.equal(MF.keptOf(ROOM.id, "alice"), null, "evicted for bob");
+    assert.ok(LC._sessions.get(LC.keyOf(ROOM.id, "alice")).ended);
+    assert.ok(["starting", "live"].includes(tile("bob").video), "bob's open went ahead");
+    assert.ok(MF._pads.get(ROOM.id).state.evictAt > 0, "the slots_busy retry window starts");
+  } finally { await MF.setCfg(ADMIN, { relays_max: 4, reason: "test" }); }
+  // warm_max 0 while one is kept: it ends at the next step (warm keep off)
+  await reset(); await plainPad();
+  try {
+    await aliceLeaves();
+    await MF.setCfg(ADMIN, { warm_max: 0, reason: "test" });
+    await at(1, []);
+    assert.equal(MF.keptOf(ROOM.id, "alice"), null);
+    assert.ok(LC._sessions.get(LC.keyOf(ROOM.id, "alice")).ended);
+  } finally { await MF.setCfg(ADMIN, { warm_keep_s: 0, warm_max: 3, relays_max: 2, reason: "test" }); }
+});
+
+test("67. wave2 F.2: !livecam off, the mic-stage switch, private activity, an exclusion, 'Take me off this Stage' and mic follows off each end a kept relay at once", async () => {
+  const cases = [
+    ["!livecam off", async () => { await LC.setOptout("alice", true, { ts: T }); }, async () => { await LC.setOptout("alice", false, { ts: T + 1 }); }],
+    ["the mic-stage switch", async () => { await MF.setOptout("alice", true); }, async () => { await MF.setOptout("alice", false); }],
+    ["private activity", async () => { PRIV.add("alice"); await MF.recheck("alice", { refresh: true }); }, async () => { PRIV.delete("alice"); await MF.recheck("alice", { refresh: true }); }],
+    ["an exclusion", async () => { await MF.excludeFor(ROOM.id, "alice", 60, "owner", "test"); }, async () => { await MF.unexclude(ROOM.id, "alice"); }],
+    ["Take me off this Stage", async () => {
+      const SL = require(path.join(repo, "stageleave"));
+      SL._setClock(() => T); await SL.init();
+      await SL.leave({ roomId: ROOM.id, login: "alice", userId: "u_alice", via: "web" }, T);
+    }, async () => { const SL = require(path.join(repo, "stageleave")); await runQuery("DELETE FROM stage_leave"); await SL.load(T); }],
+    ["mic follows off on the pad", async () => { await MF.setPad(ROOM.id, { on: false }, "test"); }, async () => { await plainPad(); }],
+  ];
+  await MF.setCfg(ADMIN, { warm_keep_s: 180, warm_max: 3, cold_open: true, relays_max: 4, reason: "test" });
+  try {
+    for (const [name, on, off] of cases) {
+      await reset(); await plainPad();
+      await aliceLeaves();
+      assert.ok(MF.keptOf(ROOM.id, "alice"), name + ": kept");
+      try {
+        await on();
+        await until(() => !MF.keptOf(ROOM.id, "alice"));
+        assert.equal(MF.keptOf(ROOM.id, "alice"), null, name + ": no longer kept");
+        const S = LC._sessions.get(LC.keyOf(ROOM.id, "alice"));
+        assert.ok(!S || S.ended, name + ": the relay ended");
+      } finally { await off(); }
+    }
+  } finally { await MF.setCfg(ADMIN, { warm_keep_s: 0, relays_max: 2, reason: "test" }); }
+});

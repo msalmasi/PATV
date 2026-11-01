@@ -1132,3 +1132,234 @@ test("41. 1.99afl S4: Pepe's cam relay not there ('nopepe') says so on the card 
   h.at(2 + h.C.soft_retry_s + 1);
   assert.ok(h.actions.some((a) => a.a === "hold" && a.login === "y"), "tried again");
 });
+
+// ── wave2 WP-4 (the incognito / mic-stage spec F.2, J-10): kept relays ("warm keep") ──
+/** world() + kept relays: the wiring of micfollow.js / livecam (keep -> the relay stays up under "mfw:", keep_drop -> it ends,
+ *  keep_taken -> the comeback's hold owns it); the kept logins get elig / sess like micfollow.stepPad gives them. */
+function warmWorld(opts = {}) {
+  const w = world(Object.assign({}, opts, { C: Object.assign({ warm_keep_s: 180, warm_max: 3 }, opts.C || {}) }));
+  w.kept = new Set(); w.pins = null;
+  const input0 = w.input;
+  w.input = () => {
+    const I = input0();
+    for (const l of w.S.kept.keys()) {
+      if (!I.elig.has(l)) I.elig.set(l, w.cuts.get(l) || (w.pending.has(l) ? "pending" : w.offcam.has(l) ? "off_cam" : w.unknown.has(l) ? "cam_unknown" : "ok"));
+      const st = w.live.get(l) || "none";
+      if (!I.sess.has(l)) I.sess.set(l, { state: st, held: w.held.has(l), exact: w.exactNo.has(l) ? false : st === "live" ? true : null, viewers: 0 });
+    }
+    for (const [l, s] of I.sess) s.kept = w.kept.has(l);
+    if (w.pins) I.pins = w.pins;
+    return I;
+  };
+  w.after = (acts) => {
+    for (const a of acts) {
+      if (a.a === "hold") {
+        w.held.add(a.login);
+        if (!w.live.has(a.login) || w.live.get(a.login) === "ended") w.live.set(a.login, "connecting");
+        const more = M.holdDone(w.S, a.login, true, null, w.C, w.t);
+        w.actions.push(...more); w.after(more);
+      }
+      if (a.a === "release") { w.held.delete(a.login); if (!w.kept.has(a.login)) w.live.set(a.login, "ended"); }
+      if (a.a === "keep") { w.held.delete(a.login); w.kept.add(a.login); }
+      if (a.a === "keep_drop") { w.kept.delete(a.login); if (!w.held.has(a.login)) w.live.set(a.login, "ended"); }
+      if (a.a === "keep_taken") w.kept.delete(a.login);
+    }
+  };
+  w.step = () => { const r = M.step(w.S, w.input(), w.C, w.t); w.actions.push(...r.actions); w.after(r.actions); return r.actions; };
+  return w;
+}
+/** `l` on the stage, live (from second at0). */
+function onLive(w, l, at0 = 0) {
+  w.grab(l); w.at(at0); w.at(at0 + 2); w.live.set(l, "live"); w.at(at0 + 3);
+  assert.equal(vw(w, l)[0], "live", l + " is live");
+}
+/** `l` was live and left: kept since second `leftAt` (built directly - the pure state micfollow.js would have). */
+function kept(w, l, leftAt, until) {
+  w.S.kept.set(l, { leftAt: S0 + leftAt * 1000, until: S0 + (until == null ? leftAt + 180 : until) * 1000 });
+  w.kept.add(l); w.live.set(l, "live");
+}
+
+test("42. wave2 F.2 warm keep: a LIVE tile leaving for a plain reason keeps its relay (keep, never release); warm_keep_s 0 = today; never after a cut, off cam, starting, cold opens off or warm_max 0", () => {
+  const w = warmWorld();
+  onLive(w, "a");
+  w.drop("a"); w.actions = [];
+  w.run(4, 30);
+  assert.deepEqual(w.logins(), [], "off the stage (the last-on lock, then released)");
+  assert.equal(count(w.actions, "keep"), 1);
+  assert.equal(count(w.actions, "release"), 0, "the relay is NOT let go");
+  const k = w.S.kept.get("a");
+  assert.ok(k && k.until - k.leftAt === 180 * 1000, "kept warm_keep_s");
+  assert.ok(w.actions.some((a) => a.a === "span_close" && a.login === "a" && a.reason === "released"), "its span closes as usual");
+  assert.equal(M.hot(w.S, w.t), true, "the 1 s timer keeps stepping a pad with kept relays");
+  // today (warm_keep_s 0): released
+  const z = warmWorld({ C: { warm_keep_s: 0 } });
+  onLive(z, "a"); z.drop("a"); z.actions = []; z.run(4, 30);
+  assert.equal(count(z.actions, "keep"), 0); assert.equal(count(z.actions, "release"), 1); assert.equal(z.S.kept.size, 0);
+  // a cut: released, never kept
+  const c = warmWorld();
+  onLive(c, "a"); c.cuts.set("a", "opted_out"); c.actions = []; c.at(4);
+  assert.equal(count(c.actions, "keep"), 0); assert.equal(count(c.actions, "release"), 1);
+  // off cam when it leaves (the off_cam card let go already): no keep
+  const o = warmWorld();
+  onLive(o, "a"); o.offcam.add("a"); o.drop("a"); o.actions = []; o.run(4, 40);
+  assert.equal(count(o.actions, "keep"), 0); assert.equal(o.S.kept.size, 0);
+  // not live yet (starting): nothing worth keeping
+  const s = warmWorld();
+  s.grab("a"); s.at(0); s.at(2); s.drop("a"); s.actions = []; s.run(3, 30);
+  assert.equal(count(s.actions, "keep"), 0); assert.equal(count(s.actions, "release"), 1);
+  // cold opens off / warm_max 0: a kept relay would never be worth it
+  for (const C of [{ cold_open: false }, { warm_max: 0 }]) {
+    const q = warmWorld({ C, site: { coldLeft: 9 } });
+    q.live.set("a", "live"); q.grab("a"); q.at(0); q.at(2); q.at(3);
+    assert.equal(vw(q, "a")[0], "live", "(a warm relay held)");
+    q.drop("a"); q.actions = []; q.run(4, 30);
+    assert.equal(count(q.actions, "keep"), 0, JSON.stringify(C));
+  }
+  // a pinned person: the pin holds the relay, never kept as a mic tile
+  const p = warmWorld();
+  onLive(p, "a"); p.pins = ["a"]; p.actions = []; p.at(4);
+  assert.equal(count(p.actions, "keep"), 0);
+});
+
+test("43. wave2 F.2 comeback: a kept person who qualifies again takes the running relay - no cold-open budget, no still, live in one step", () => {
+  const w = warmWorld();
+  onLive(w, "a");
+  w.drop("a"); w.run(4, 30);
+  assert.ok(w.S.kept.has("a"));
+  w.site.coldLeft = 0; w.site.stillsLeft = 0; w.site.poolLeft = 0;    // no budget at all: a cold open / still couldn't happen
+  w.actions = [];
+  w.grab("a"); w.at(40); w.at(42);
+  const hold = w.actions.find((a) => a.a === "hold" && a.login === "a");
+  assert.ok(hold && hold.cold === false, "the running-relay hold (no cold open)");
+  assert.ok(w.actions.some((a) => a.a === "keep_taken" && a.login === "a"), "the hold took the kept relay over");
+  assert.equal(count(w.actions, "still"), 0);
+  assert.equal(w.S.kept.size, 0);
+  w.at(42.2);                                                       // micfollow.js steps at once after keep_taken
+  assert.equal(vw(w, "a")[0], "live", "live straight away");
+  const pic = w.actions.find((a) => a.a === "picture" && a.login === "a");
+  assert.ok(pic && pic.kept === true && pic.warm === true, "a kept comeback (its latency is measured on its own)");
+  // a comeback whose hold is refused (consent): the kept relay ends
+  const r = warmWorld();
+  onLive(r, "a"); r.drop("a"); r.run(4, 30);
+  r.grab("a"); r.at(40);
+  r.t = S0 + 42000;
+  const acts = M.step(r.S, r.input(), r.C, r.t).actions;
+  assert.ok(acts.some((a) => a.a === "hold" && a.login === "a"));
+  const done = M.holdDone(r.S, "a", false, "unavailable", r.C, r.t);
+  assert.ok(done.some((a) => a.a === "keep_drop" && a.login === "a" && a.why === "refused_unavailable"));
+  assert.equal(r.S.kept.size, 0);
+});
+
+test("44. wave2 F.2: EVERY end reason ends a kept relay within one step; cam_unknown (and notice) never do", () => {
+  const cases = [
+    ...M.CUT.map((code) => [code, (w) => w.cuts.set("a", code), code]),
+    ["off cam", (w) => w.offcam.add("a"), "off_cam"],
+    ["a fact look-up pending", (w) => w.pending.add("a"), "elig_pending"],
+    ["the relay ended", (w) => w.live.set("a", "ended"), "relay"],
+    ["Pepe says it isn't exact", (w) => w.exactNo.add("a"), "relay"],
+    ["its warm holder went", (w) => w.kept.delete("a"), "relay"],
+    ["pinned", (w) => { w.pins = ["a"]; }, "pinned"],
+    ["cold opens off", (w) => { w.C.cold_open = false; }, "cold_off"],
+    ["warm keep off", (w) => { w.C.warm_keep_s = 0; }, "keep_off"],
+    ["warm_max 0", (w) => { w.C.warm_max = 0; }, "keep_off"],
+    ["the stage stops (pad off)", (w) => { w.why_off = "pad_off"; }, "off"],
+    ["Pepe's sync stale with nothing on the stage", (w) => { w.why_off = "stale"; }, "off"],
+  ];
+  for (const [name, fn, why] of cases) {
+    const w = warmWorld();
+    kept(w, "a", 0);
+    w.at(1);
+    assert.ok(w.S.kept.has("a"), name + ": kept before");
+    fn(w); w.actions = [];
+    w.at(2);
+    const d = w.actions.find((a) => a.a === "keep_drop" && a.login === "a");
+    assert.ok(d, name + ": dropped within one step");
+    assert.equal(d.why, why, name);
+    assert.equal(w.S.kept.size, 0, name);
+  }
+  // expiry
+  const e = warmWorld(); kept(e, "a", 0, 100);
+  e.at(99); assert.ok(e.S.kept.has("a"));
+  e.actions = []; e.at(100);
+  assert.ok(e.actions.some((a) => a.a === "keep_drop" && a.why === "expired"));
+  // the owner's ✕ / an exclusion (cutNow) and Clear the stage
+  const x = warmWorld(); kept(x, "a", 0); x.at(1);
+  assert.ok(M.cutNow(x.S, "a", "excluded", x.t).some((a) => a.a === "keep_drop" && a.why === "excluded"));
+  const cl = warmWorld(); kept(cl, "a", 0); cl.at(1);
+  assert.ok(M.clearStage(cl.S, cl.t, 60e3).some((a) => a.a === "keep_drop" && a.why === "cleared"));
+  // the stale hold: kept relays stay under every rule (a cut ends one while the program is held)
+  const st = warmWorld(); onLive(st, "b"); kept(st, "a", 1); st.at(4);
+  st.why_off = "stale"; st.cuts.set("a", "hidden"); st.actions = []; st.at(5);
+  assert.ok(st.actions.some((a) => a.a === "keep_drop" && a.login === "a" && a.why === "hidden"), "cut under the stale hold");
+  // cam_unknown / notice: a running relay proves the cam is on - kept
+  for (const set of [(w) => w.unknown.add("a"), (w) => w.cuts.set("a", "notice")]) {
+    const u = warmWorld(); kept(u, "a", 0); set(u); u.actions = [];
+    for (let s = 1; s <= 60; s++) u.at(s);
+    assert.equal(count(u.actions, "keep_drop"), 0);
+    assert.ok(u.S.kept.has("a"));
+  }
+});
+
+test("45. wave2 F.2 budget: a pad keeps no more relays than its max_live leaves beside the live tiles - least recently used first; a comeback that gets no hold lets go", () => {
+  const w = warmWorld({ pad: { max_live: 2 } });
+  kept(w, "a", 0); kept(w, "b", 5);
+  w.at(6);
+  assert.deepEqual([...w.S.kept.keys()].sort(), ["a", "b"], "two fit beside no live tile");
+  w.grab("c"); w.at(7); w.actions = []; w.at(9);
+  assert.ok(w.S.tiles.some((x) => x.login === "c" && x.pend === false), "c on the stage, its relay held");
+  const d = w.actions.filter((a) => a.a === "keep_drop");
+  assert.deepEqual(d.map((a) => [a.login, a.why]), [["a", "pad_full"]], "a left the stage first: it goes");
+  assert.deepEqual([...w.S.kept.keys()], ["b"]);
+  // a kept person back on the stage whose tile gets no hold (backed off): the kept relay lets go
+  const n = warmWorld(); kept(n, "a", 0);
+  n.S.backoff.set("a", S0 + 3600e3);
+  n.grab("a"); n.at(1); n.actions = []; n.at(3);
+  assert.ok(n.S.tiles.some((x) => x.login === "a"));
+  assert.ok(n.actions.some((a) => a.a === "keep_drop" && a.login === "a" && a.why === "not_taken"));
+});
+
+test("46. wave2 F.2 eviction: an open / still beyond what's free without a kept relay is marked evict; a slots_busy right after an eviction is retried ONCE after 2 s (never soft, no liveBlock, no backoff); a second takes the normal path", () => {
+  const w = warmWorld({ site: { coldLeft: 1, coldFree: 0, poolLeft: 3, poolFree: 3 } });
+  w.grab("x"); w.at(0);
+  w.t = S0 + 2000;
+  let acts = M.step(w.S, w.input(), w.C, w.t).actions;
+  assert.ok(acts.some((a) => a.a === "hold" && a.login === "x" && a.cold === true && a.evict === true), "needs a kept relay's room");
+  const free = warmWorld({ site: { coldLeft: 2, coldFree: 1 } });
+  free.grab("x"); free.at(0); free.t = S0 + 2000;
+  assert.ok(M.step(free.S, free.input(), free.C, free.t).actions.some((a) => a.a === "hold" && !a.evict), "a free relay: no eviction");
+  const st = warmWorld({ site: { coldLeft: 0, stillsLeft: 2, poolLeft: 1, poolFree: 0 } });
+  st.grab("s"); st.at(0); st.t = S0 + 2000;
+  assert.ok(M.step(st.S, st.input(), st.C, st.t).actions.some((a) => a.a === "still" && a.evict === true), "a still is an open cam in Pepe's pool too");
+  // Pepe hadn't freed the evicted slot yet: one retry in 2 s
+  w.S.evictAt = w.t;
+  M.holdDone(w.S, "x", false, "slots_busy", w.C, w.t + 500);
+  assert.deepEqual(vw(w, "x"), ["card", "full"]);
+  assert.equal(w.S.soft.has("x"), false, "never a soft failure");
+  assert.equal(w.S.liveBlock.has("x"), false, "no liveBlock");
+  assert.equal(w.S.backoff.has("x"), false, "no backoff");
+  w.t = S0 + 3500;
+  acts = M.step(w.S, w.input(), w.C, w.t).actions;
+  assert.ok(!acts.some((a) => a.a === "hold"), "not before retryAt");
+  w.t = S0 + 4600;
+  acts = M.step(w.S, w.input(), w.C, w.t).actions;
+  assert.ok(acts.some((a) => a.a === "hold" && a.login === "x"), "tried again after 2 s");
+  M.holdDone(w.S, "x", false, "slots_busy", w.C, w.t + 100);
+  assert.ok((w.S.liveBlock.get("x") || 0) > w.t, "the second refusal: the normal 'full' path");
+  // a slots_busy long after any eviction: the normal path at once
+  const late = warmWorld({ site: { coldLeft: 1 } });
+  late.grab("y"); late.at(0); late.t = S0 + 2000;
+  M.step(late.S, late.input(), late.C, late.t);
+  late.S.evictAt = late.t - 6000;
+  M.holdDone(late.S, "y", false, "slots_busy", late.C, late.t);
+  assert.ok((late.S.liveBlock.get("y") || 0) > late.t);
+  // ... and through livecam's end hook (Pepe refused the open)
+  const se = warmWorld({ site: { coldLeft: 1 } });
+  se.grab("z"); se.at(0); se.t = S0 + 2000;
+  M.step(se.S, se.input(), se.C, se.t);
+  M.holdDone(se.S, "z", true, null, se.C, se.t);
+  se.S.evictAt = se.t;
+  M.sessionEnded(se.S, "z", "slots_busy", se.C, se.t + 800);
+  assert.deepEqual(vw(se, "z"), ["card", "full"]);
+  assert.equal(se.S.liveBlock.has("z"), false);
+  assert.ok(se.S.tiles[0].retryAt > se.t);
+});

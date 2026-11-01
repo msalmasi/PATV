@@ -61,6 +61,8 @@
 // can't hold the same cam (409 on_stage). Each stage viewer remembers which holder(s) they came through (v.via): letting
 // go of a holder kicks only the viewers who came through it alone. A session held by the mic stage is marked S.mf and
 // Pepe is asked to open it by its exact name (want[].mf); he reports live[].exact and advertises mf: 1 on his poll.
+// wave2 WP-4 (F.2): a relay whose mic-stage tile left the stage may stay warm under "mfw:<room>" (stageWarm) - a mic-stage
+// holder for every count, never watchable (stageWatch refuses it), listed on /admin/pepe/livecams as "warm".
 // Viewers who watch ONLY through the mic stage are not noted to the cam's owner one by one (micfollow sends one stage
 // notice instead); watchersOf marks them `mf` and the owner's lists (!whowatching, the privacy card) COUNT them, never name
 // them (D-19, owner 2026-10-19; camaccess still sees them to drop the ones a mode change refuses). Such a viewer reads only a relay Pepe
@@ -302,7 +304,11 @@ const keyOf = (roomId, login) => String(roomId) + "|" + String(login).toLowerCas
 /** micfollow: does any stage holder (a cam slot or the mic stage) hold this session? */
 const held = (S) => !!(S && S.holds && S.holds.size > 0);
 const MF_PREFIX = "mf:";
-const isMfHolder = (h) => String(h || "").startsWith(MF_PREFIX);
+/** wave2 WP-4 (F.2 warm keep): "mfw:<room>" - the mic stage keeps a relay warm for a while after its tile left the stage (no
+ *  viewer can ever watch through it: stageWatch refuses it; the tile is on no program). A mic-stage holder like "mf:" for every
+ *  count (mfOnlyCount / relays_max, S.mf / want[].mf exact opens, sharedBeyondMf); mfState.held stays "mf:" only. */
+const MFW_PREFIX = "mfw:";
+const isMfHolder = (h) => /^mfw?:/.test(String(h || ""));
 /** micfollow: a stage viewer who came ONLY through the mic stage (no cam slot): no 👻 ghost bypass, exact relays only. */
 const mfOnlyVia = (v) => !!(v && v.via instanceof Set && v.via.size > 0 && [...v.via].every(isMfHolder));
 /** A new session object (one per room + cam). */
@@ -871,6 +877,20 @@ function stageDrop(roomId, login, holderId, t = now(), why = "released") {
   if (!held(S) && !freshViewers(S, t).length) endSession(S, why, t);
   return true;
 }
+/** wave2 WP-4 (F.2): the mic stage's tile of `login` left the stage - keep its relay WARM instead of dropping it: the warm
+ *  holder "mfw:<room>" goes on first (synchronously, so the session never has a moment without a holder and never ends),
+ *  then "mf:<room>" lets go (its stage viewers are kicked, as on any release). -> true when the mic stage held it */
+function stageWarm(roomId, login, t = now()) {
+  const S = SESS.get(keyOf(roomId, String(login || "").toLowerCase()));
+  const H = MF_PREFIX + String(roomId);
+  if (!S || S.ended || !S.holds || !S.holds.has(H)) return false;
+  S.holds.add(MFW_PREFIX + String(roomId));
+  releaseHolder(S, H, t);
+  S.mf = true;                                         // (still a mic-stage relay: Pepe keeps it exact - want[].mf)
+  S.wantUntil = Math.max(S.wantUntil || 0, t + cfg().linger_s * 1000);
+  console.log(`[livecam] stage warm room=${S.roomId} target=-`);
+  return true;
+}
 /** -> {state: none | connecting | live | ended, why} for a stage slot's cam. */
 function stageState(slotId, t = now()) {
   const S = stageSess(slotId);
@@ -891,6 +911,7 @@ function mfState(roomId, login, t = now()) {
   if (S.ended) return { state: "ended", why: S.endWhy || "ended", exact, held: false, mfOnly: false, viewers: 0 };
   const holds = S.holds ? [...S.holds] : [];
   return { state: stateOf(S, t), why: S.botWhy || null, exact, held: holds.includes(MF_PREFIX + roomId),
+           kept: holds.includes(MFW_PREFIX + roomId),          // wave2 WP-4 (F.2): kept warm by the mic stage (no tile, no viewer)
            mfOnly: holds.length > 0 && holds.every(isMfHolder) && !freshViewers(S, t).length, viewers: shownCount(freshStage(S, t)) };
 }
 /** mfix: does anything besides the mic stage use this relay - a cam slot / pin holder, or a fresh ▶ Live viewer? */
@@ -913,6 +934,8 @@ async function stageWatch(u, R, holderId, { beatOnly = false, login = null } = {
   if (!u || !u.userId) throw refuse("signin");
   if (!on()) throw refuse("off");
   const H = String(holderId);
+  // wave2 WP-4 (F.2): a relay the mic stage only keeps warm is on no program - nobody can ever get a ticket through it
+  if (H.startsWith(MFW_PREFIX)) throw new Refuse(404, "That cam isn't on the stage any more.", "gone");
   let S;
   if (isMfHolder(H)) {
     S = SESS.get(keyOf(R.id, String(login || "").toLowerCase()));
@@ -1145,7 +1168,10 @@ async function adminView() {
   let audit = [];
   try { audit = await require("./adminaudit").recent(AUDIT, 15); } catch (e) { audit = []; }
   const c = cfg();
+  // wave2 WP-4 (F.2): relays the mic stage keeps warm - "warm (mic stage, Ns left)"
+  const keptOf = (S) => { try { return require("./micfollow").keptOf(S.roomId, S.login, t); } catch (e) { return null; } };
   const sessions = [...SESS.values()].filter((S) => !S.ended).map((S) => ({
+    ...(S.holds && S.holds.has(MFW_PREFIX + S.roomId) ? { warm: true, warm_s: (() => { const k = keptOf(S); return k ? Math.max(0, Math.round((k.until - t) / 1000)) : null; })() } : {}),
     key: S.key, room: S.roomId, login: S.login, display: S.display, state: stateOf(S, t), since: S.createdAt, liveAt: S.liveAt || null,
     viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since, ghost: !!v.ghost })), readers: S.readers, bot: S.botInfo || null,
     kbps: Math.round(rateOf(S, c)), measured: !!(S.botInfo && S.botInfo.source === "passthrough" && Number(S.botInfo.kbps) > 0),
@@ -1343,6 +1369,7 @@ module.exports = {
   mfState, mfOnlyCount, stageUnwatch, stageYield, stageDrop, cooling, liveCount, fitsBudget, onEnd, onOptout, keyOf, held, botOk, MF_PREFIX,   // micfollow
   dmBlockedSet,                                                                                              // train2 merge (micfollow's eligOf)
   sharedBeyondMf,                                                                                            // mfix
+  stageWarm, isMfHolder, MFW_PREFIX,                                                                         // wave2 WP-4 (F.2 warm keep)
   botMf: () => (BOT && BOT.mf) || 0, botPool: () => (BOT && BOT.pool) || null, enabled: () => cfg().enabled === true, cfg,
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
