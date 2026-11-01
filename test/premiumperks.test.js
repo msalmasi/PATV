@@ -33,6 +33,14 @@ test("the table reads the live config: slots, retention, soundboard, flair, seas
   assert.equal(byId("season_pass", "sb_pack").title[1].count, require(path.join(repo, "soundboards")).config().sp_packs);
   const seasonal = byId("season_pass", "seasonal");
   assert.ok(seasonal && /Spooky Season \(Halloween\)/.test(seasonal.title[1].packs), "the 🎃 Season Pass stickers from stickers.json");
+  assert.ok(/🍂 Fireside Season \(November\)/.test(seasonal.title[1].packs), "...and November's 🍂 pack");
+  // the line's icon is the pack in season right now (🍂 in November), else the first one
+  const STKm = require(path.join(repo, "stickers"));
+  for (const p of v.sp_seasonal) assert.equal(p.on, STKm.inSeason(p), p.id);
+  const sp2 = [{ id: "spooky", name: "Spooky Season", emoji: "🎃", season: { label: "Halloween" }, on: false },
+               { id: "fireside", name: "Fireside Season", emoji: "🍂", season: { label: "November" }, on: true }];
+  assert.equal(PK.table({ ...v, sp_seasonal: sp2 }).season_pass.find((p) => p.id === "seasonal").icon, "🍂");
+  assert.equal(PK.table({ ...v, sp_seasonal: sp2.map((p) => ({ ...p, on: false })) }).season_pass.find((p) => p.id === "seasonal").icon, "🎃");
   for (const id of ["retention", "intro", "badge", "cosmetics", "stickers"]) assert.ok(byId("prime_plus", id), "plus: " + id);
   for (const id of ["sb_priority", "pm_logs", "telegram", "uploads"]) assert.ok(byId("season_pass", id), "season pass: " + id);
   // November 2026: the season board perk only while a season board is on (whatever today's date is: the season is fed in)

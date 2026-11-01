@@ -39,7 +39,8 @@ function values() {
     // seasons there's no board to be unlimited on
     sb_season: safe(() => { const s = require("./soundboards").seasonNow(); return s ? { id: s.id, name: s.name, emoji: s.emoji } : null; }, null),
     flairs: Number(fl.MAX_FLAIRS) || 25, flairs_plus: Number(fl.MAX_FLAIRS_PLUS) || 50,
-    sp_seasonal: stk("season_pass").filter((p) => p.season),
+    // on: in its window right now (the Seasonal stickers line takes its icon from that pack - 🍂 in November, 🎃 in October)
+    sp_seasonal: stk("season_pass").filter((p) => p.season).map((p) => ({ ...p, on: safe(() => require("./stickers").inSeason(p), false) })),
     lowlat_live: rtc === "prime" || rtc === "all",
     // 1.99aak: live cams per viewer (livecam.js caps: free / Season Pass)
     lc_free: Number.isFinite(Number(lc.viewers_free)) ? Number(lc.viewers_free) : 1,
@@ -113,7 +114,7 @@ function table(v = values()) {
     perk("banner", "🏞️", "premium.sp.banner", "premium.sp.banner_d"),
     perk("chip", "🎟️", "premium.sp.chip", "premium.sp.chip_d"),
     perk("stickers", "🧸", ["premium.sp.stickers", { count: v.sp_sticker_packs }], "premium.sp.stickers_d", v.sp_sticker_packs > 0),
-    ...(seasonal.length ? [perk("seasonal", (v.sp_seasonal[0] && v.sp_seasonal[0].emoji) || "🎃", ["perks.sp.seasonal", { packs: seasonal.join(", ") }], "perks.sp.seasonal_d")] : []),
+    ...(seasonal.length ? [perk("seasonal", (v.sp_seasonal.find((p) => p.on) || v.sp_seasonal[0] || {}).emoji || "🎃", ["perks.sp.seasonal", { packs: seasonal.join(", ") }], "perks.sp.seasonal_d")] : []),
     perk("uploads", "📤", ["premium.sp.uploads", { n: v.sp_upload_mult }], "premium.sp.uploads_d"),
     ...(v.sb_season ? [perk("sb_season", "🔊", "perks.sp.sb_season", "perks.sp.sb_season_d", v.sb_on)] : []),
     perk("sb_pack", "🎁", ["perks.sp.sb_pack", { count: v.sb_sp_packs }], "perks.sp.sb_pack_d", v.sb_on && v.sb_sp_packs > 0),

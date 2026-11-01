@@ -142,9 +142,11 @@ test("sticker perk packs: Prime Time Plus for Plus pad owners, 🎃 Spooky Seaso
   await assert.rejects(STK.buy(U.fan, { pack: "spooky", ref: ref(), allowance: true }), /Season Pass/);
   assert.match(STK.inline("[sticker:spooky/pumpkin]"), /<img class="stk stk-l" src="\/public\/stickers\/spooky\/pumpkin\.svg"/);
   const saved = t;
-  t = Date.UTC(2026, 10, 9, 12);                      // 9 Nov: the season is over (the pass still runs)
-  assert.deepEqual(await has(U.fan), [], "out of season");
+  t = Date.UTC(2026, 10, 9, 12);                      // 9 Nov: Spooky's season is over (the pass still runs) - 🍂 Fireside's is on
+  assert.deepEqual(await has(U.fan), ["fireside"], "Spooky out of season; the November pack comes with the pass");
   assert.ok(!STK.catalog().some((p) => p.id === "spooky"), "not listed out of season");
+  await assert.rejects(STK.validate(U.fan.userId, "[sticker:spooky/ghost]"), /Season Pass \(Halloween only\)/);
+  assert.equal(await STK.validate(U.fan.userId, "[sticker:fireside/cocoa]"), true);
   assert.match(STK.inline("[sticker:spooky/ghost]"), /<img/, "already-sent stickers still render");
   t = saved;
   assert.equal(STK.inSeason({ season: { from: "12-20", to: "01-05" } }, Date.UTC(2027, 0, 2)), true, "a window can wrap the new year");

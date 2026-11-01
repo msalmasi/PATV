@@ -62,6 +62,42 @@ test("catalog: eight packs of eight (1.99lf added three, 1.99qp two perk packs -
   }
 });
 
+test("🍂 Fireside Season (November): a Season Pass perk pack listed Nov 1 - Dec 1 (UTC) every year, never sold or comped; art + English keys", async () => {
+  const pk = STK.CAT.byId.fireside;
+  assert.ok(pk, "in the catalog (a bad id or missing art drops a pack quietly)");
+  assert.ok(pk.season, "a parsed window - a typo would make the perk pack year-round");
+  assert.deepEqual([pk.perk, pk.emoji, pk.season.from, pk.season.to, pk.season.label], ["season_pass", "🍂", "11-01", "12-02", "November"]);
+  assert.deepEqual(pk.stickers.map((s) => s.id), ["fireworks", "toasty", "leafpile", "snug", "cocoa", "moustache", "drumstick", "pie"]);
+  const listed = (when) => STK.catalog(when).some((p) => p.id === "fireside");
+  assert.equal(listed(Date.UTC(2026, 9, 31, 23, 59)), false, "not on Oct 31");
+  assert.equal(listed(Date.UTC(2026, 10, 1, 0, 0)), true, "from Nov 1");
+  assert.equal(listed(Date.UTC(2026, 10, 26, 12)), true, "Thanksgiving");
+  assert.equal(listed(Date.UTC(2026, 11, 1, 23, 59)), true, "through Dec 1 (a Thanksgiving weekend can end on it)");
+  assert.equal(listed(Date.UTC(2026, 11, 2, 0, 0)), false, "gone on Dec 2");
+  assert.equal(listed(Date.UTC(2027, 10, 15)), true, "every year");
+  const nov3 = STK.catalog(Date.UTC(2026, 10, 3)).map((p) => p.id);
+  assert.ok(nov3.includes("spooky") && nov3.includes("fireside"), "overlaps Spooky's last week");
+  assert.ok(nov3.indexOf("fireside") === nov3.indexOf("spooky") + 1, "the seasonal packs sit together");
+  const EN = require("../locales/en.json");
+  assert.ok(EN["stk.pack.fireside.name"] && EN["stk.pack.fireside.desc"]);
+  for (const s of STK.catalog(Date.UTC(2026, 10, 15)).find((p) => p.id === "fireside").stickers) {
+    assert.ok(EN["stk.s.fireside." + s.id], "en.json names fireside/" + s.id);
+    const svg = fs.readFileSync(path.join(repo, s.url.replace(/^\//, "")), "utf8");
+    assert.match(svg, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 24 24" shape-rendering="crispEdges">\r?\n<title>[^<]+<\/title>\r?\n/);
+    assert.doesNotMatch(svg, /<script|on\w+=|<text/i, "no script, no text in the art");
+  }
+  // every pack in stickers.json (in season or not) has its English keys
+  for (const p of STK.CAT.packs) {
+    assert.ok(EN["stk.pack." + p.id + ".name"] && EN["stk.pack." + p.id + ".desc"], "en.json names " + p.id);
+    for (const s of p.stickers) assert.ok(EN["stk.s." + p.id + "." + s.id], "en.json names " + p.id + "/" + s.id);
+  }
+  await assert.rejects(STK.buy(U.ann, { pack: "fireside", ref: ref() }), /Fireside Season comes with a 🎟️ Season Pass \(November only\)/);
+  await assert.rejects(STK.grantComp(U.ann.userId, "fireside", "test"), /Comp the tier instead/);
+  // Pepe: house art in season, the readable stand-in out of it
+  assert.equal(STK.forPepe("[sticker:fireside/pie]", Date.UTC(2026, 10, 15)), "[sticker:fireside/pie]");
+  assert.equal(STK.forPepe("[sticker:fireside/pie]", Date.UTC(2026, 11, 15)), "[sticker: Room for pie]");
+});
+
 test("buying: one debit, 100% Fort Knox, owned for good; a replayed ref charges once; can't buy twice; not enough PAT refused", async () => {
   F.sync({ fortknox: 1 });
   const b0 = await bal(U.ann);

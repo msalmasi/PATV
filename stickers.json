@@ -37,6 +37,12 @@
         { "id": "pumpkin", "name": "Jack-o'-lantern" }, { "id": "ghost", "name": "Boo!" }, { "id": "witch", "name": "Witch Pepe" }, { "id": "vampire", "name": "Vampire Pepe" },
         { "id": "moonbat", "name": "Night flight" }, { "id": "candy", "name": "Sweet tooth" }, { "id": "zombie", "name": "Zombie Pepe" }, { "id": "cauldron", "name": "Bubble, bubble" }
       ] },
+    { "id": "fireside", "name": "Fireside Season", "emoji": "🍂", "perk": "season_pass", "season": { "from": "11-01", "to": "12-02", "label": "November" },
+      "desc": "Fireside season with Pepe: fireworks, a campfire with a toasting marshmallow, a leaf pile to jump in, a bobble hat and scarf, hot cocoa, a very distinguished moustache, dibs on the drumstick and room for pie. Season Pass only, all through November.",
+      "stickers": [
+        { "id": "fireworks", "name": "Ooh, aah!" }, { "id": "toasty", "name": "Toasty" }, { "id": "leafpile", "name": "Jump in!" }, { "id": "snug", "name": "Sweater weather" },
+        { "id": "cocoa", "name": "Hot cocoa" }, { "id": "moustache", "name": "Distinguished" }, { "id": "drumstick", "name": "Dibs" }, { "id": "pie", "name": "Room for pie" }
+      ] },
     { "id": "primeplus", "name": "Prime Time Plus", "emoji": "💎", "perk": "prime_plus",
       "desc": "Big-league stickers for the owners of Prime Time Plus pads: a crown, the spotlight, a trophy, a diamond, a studio camera, the red carpet, shades and a golden mic.",
       "stickers": [

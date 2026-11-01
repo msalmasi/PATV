@@ -187,7 +187,7 @@
           <h3><span class="ds-ic" aria-hidden="true"><%= p.emoji %></span> <%- stkL_('stk.pack.' + p.id + '.name', p.name) %><% if (p.owned) { %> <span class="ds-tag ac"><%- t('premium.stk.yours') %></span><% } %></h3>
           <p class="mut"><%- stkL_('stk.pack.' + p.id + '.desc', p.desc) %></p>
           <div class="sheet"><% p.stickers.forEach((s) => { const sn_ = stkL_('stk.s.' + p.id + '.' + s.id, s.name); %><img src="<%= s.url %>" alt="<%- sn_ %>" title="<%- sn_ %>" loading="lazy"><% }) %></div>
-          <% if (p.perk) { %><p class="row"><span class="ds-tag ac"><%- p.perk === 'prime_plus' ? t('premium.stk.perk_plus') : t('premium.stk.perk_sp') %></span><% if (p.season) { %> <span class="ds-tag"><%- t('premium.stk.seasonal', { label: t.esc(p.season.label || '') }) %></span><% } %></p>
+          <% if (p.perk) { %><p class="row"><span class="ds-tag ac"><%- p.perk === 'prime_plus' ? t('premium.stk.perk_plus') : t('premium.stk.perk_sp') %></span><% if (p.season) { %> <span class="ds-tag"><span aria-hidden="true"><%= p.emoji %></span> <%- t('premium.stk.seasonal', { label: t.esc(p.season.label || '') }) %></span><% } %></p>
           <% } else if (STK.signed) { %><div class="row">
             <% if (!p.owned) { %>
               <% if (STK.allowance && STK.allowance.left) { %><button type="button" class="ds-btn sm" data-stk="<%= p.id %>" data-free="1"><%- t('premium.stk.claim') %></button><% } %>

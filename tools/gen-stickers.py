@@ -746,9 +746,180 @@ def plus_pack():
     return out
 
 
+# ── November 2026: 🍂 Fireside Season (Season Pass, seasonal: Nov 1 - Dec 1). Bonfire Night, cosy autumn, the feast and
+#    moustache month - for the US and the UK alike. No text, no brands, no real people; every prop has a dark edge (the
+#    site is dark-only). ──
+LEAFO, LEAFR, LEAFG, LEAFB, LEAFE = "#e8772e", "#b5442a", "#f2b134", "#8a5a2b", "#4a2a12"   # leaves + their edge
+RUST, RUSTD, MUST, CREAM, CREAMD = "#c0502e", "#5a2412", "#e0a526", "#f3e3c3", "#cdb88f"   # knit
+COCOA, MUG, MUGL, MUGE = "#6b3e26", "#c0392b", "#e0604f", "#4a1410"                       # cocoa + a red mug
+LOG, LOGL, LOGD = "#7a4a24", "#c08a52", "#3e2410"                                          # logs
+CRUST, CRUSTL, CRUSTD, FILL, FILLD, PIEE = "#d9a35b", "#f0c987", "#a8702e", "#d2691e", "#9a4618", "#5a3412"
+MOU, MOUE = "#6b4423", "#24160a"                                                           # moustache
+MEAT, MEATL, MEATE = "#a0522d", "#d2884a", "#4a2208"                                       # roast drumstick
+BONE, BONED = "#f3ead8", "#8d8270"
+
+
+def leaf(g, x, y, c):
+    """A 3x3 leaf with a stem pixel (top-left at x, y)."""
+    g.pts([(x + 1, y), (x, y + 1), (x + 1, y + 1), (x + 2, y + 1), (x + 1, y + 2), (x + 2, y)], c)
+    g.set(x, y + 2, LEAFB)
+
+
+def burst(g, cx, cy, r, c, tip):
+    """A firework: 8 dotted rays from a bright core, white-hot tips."""
+    for d in range(2, r + 1):
+        if d == r - 1 and r > 3:
+            continue                                     # a gap near the tip so the rays read as sparks
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            g.set(cx + dx * d, cy + dy * d, tip if d == r else c)
+        dd = round(d * 0.72)
+        if dd >= 2:
+            for dx, dy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+                g.set(cx + dx * dd, cy + dy * dd, tip if d == r else c)
+    g.rect(cx - 1, cy - 1, cx + 1, cy + 1, c)
+    g.set(cx, cy, W)
+
+
+def fireside_pack():
+    out = {}
+
+    # Ooh, aah! - three firework bursts and a rising rocket trail (no Pepe: the sky is the star)
+    g = Grid()
+    for cx, cy, r, c, e in ((9, 8, 7, GOLD, "#8a6100"), (17, 16, 5, PINK, "#a8325a"), (19, 4, 3, CYAN, "#1b7fa6")):
+        b = Grid(); burst(b, cx, cy, r, c, W)
+        stamp(g, b, e)                                   # each burst gets a darker rim of its own colour
+    g.pts([(6, 23), (6, 21), (7, 19), (7, 18)], GOLD)  # the trail of the next one going up
+    out["fireworks"] = ("Ooh, aah!", g)
+
+    # Toasty - a campfire on crossed logs, a marshmallow toasting on a stick
+    g = Grid()
+    for x in range(3, 21):                                                   # two crossed logs
+        y1 = 18 + round((x - 3) * 4 / 17); y2 = 22 - round((x - 3) * 4 / 17)
+        g.rect(x, y1, x, y1 + 1, LOG); g.rect(x, y2 - 1, x, y2, LOG)
+    g.pts([(3, 18), (3, 19), (20, 18), (20, 19)], LOGL)                     # cut ends
+    g.outline(LOG, LOGD); g.outline(LOGL, LOGD)
+    f = Grid()                                                               # flame: red, orange, gold core
+    f.ellipse(12.0, 15.5, 6.2, 4.6, R)
+    for y in range(4, 12):
+        half = max(0, (y - 4) * 5 // 7)
+        f.rect(12 - half, y, 12 + half - (1 if y < 8 else 0), y, R)
+    f.pts([(8, 8), (8, 9), (16, 7), (16, 8), (15, 6)], R)                    # side licks
+    f.ellipse(12.0, 16.0, 4.2, 3.2, ORANGE); f.rect(11, 9, 13, 12, ORANGE); f.set(12, 8, ORANGE)
+    f.ellipse(12.0, 16.8, 2.2, 2.0, GLOW); f.rect(12, 13, 12, 14, GLOW)
+    stamp(g, f, RD)
+    for i in range(9):                                                       # the stick, from the left edge (light: it shows on dark)
+        g.set(i, 9 + i // 3, LOGL)
+    g.rect(8, 10, 10, 12, CREAM); g.rect(8, 12, 10, 12, "#d08a3a"); g.set(10, 10, W)   # the marshmallow, toasting
+    g.outline(CREAM, LOGD)
+    g.pts([(9, 3), (15, 2), (17, 5)], GOLD)                                  # sparks
+    out["toasty"] = ("Toasty", g)
+
+    # Jump in! - Pepe's eyes peeking out of a big leaf pile, two leaves blowing past
+    g = Grid(); pepe_head(g); eyes_look(g, 0, -1)
+    pal = (LEAFO, LEAFR, LEAFG, LEAFB)
+    m = Grid(); m.ellipse(12.0, 19.5, 12.4, 8.0, LEAFO)
+    for (x, y) in ((2, 12), (3, 11), (12, 11), (11, 11), (20, 11), (21, 12)):  # leaves sticking up out of the pile
+        m.set(x, y, LEAFO)
+    for y in range(24):
+        for x in range(24):
+            if m.px[y][x]:
+                m.px[y][x] = pal[(x * 7 + y * 13 + (x * y) % 5 + (x // 3) * (y // 3)) % 4]   # scattered, not striped
+    stamp(g, m, LEAFE)
+    leaf(g, 0, 1, LEAFG); leaf(g, 20, 0, LEAFR)
+    g.outline(LEAFG, LEAFE); g.outline(LEAFR, LEAFE)
+    out["leafpile"] = ("Jump in!", g)
+
+    # Sweater weather - Pepe in a striped bobble hat and a chunky scarf, eyes shut, blushing, snug
+    g = Grid(); pepe_head(g)
+    for x0 in (6, 14):                                                       # happy closed eyes ^ ^
+        g.pts([(x0, 8), (x0 + 1, 7), (x0 + 2, 7), (x0 + 3, 8)], K)
+    g.pts([(4, 12), (5, 12), (18, 12), (19, 12)], PINK)
+    mouth(g, "smile")
+    h = Grid()
+    h.rect(3, 4, 20, 5, CREAM)                                               # ribbed brim
+    for x in range(3, 21, 2):
+        h.set(x, 5, CREAMD)
+    h.rect(5, 3, 18, 3, MUST); h.rect(6, 2, 17, 2, RUST); h.rect(8, 1, 15, 1, MUST)
+    h.ellipse(12.0, 0.6, 2.2, 1.6, CREAM)                                    # the bobble
+    stamp(g, h, RUSTD)
+    s = Grid()
+    s.rect(2, 18, 21, 20, RUST)
+    for x in range(2, 22):
+        if x % 4 == 1:
+            s.rect(x, 18, x, 20, MUST)                                       # knit stripes
+    s.rect(15, 21, 18, 22, RUST); s.rect(15, 21, 18, 21, MUST)              # the tail
+    s.pts([(15, 23), (17, 23)], MUST)                                        # fringe
+    stamp(g, s, RUSTD)
+    out["snug"] = ("Sweater weather", g)
+
+    # Hot cocoa - a red mug of cocoa with marshmallows and steam, Pepe's green hands round it
+    g = Grid()
+    for i, y in enumerate(range(0, 7)):                                      # two curls of steam
+        g.set(9 + (1 if (i // 2) % 2 else 0), y, GREYL); g.set(14 - (1 if (i // 2) % 2 else 0), y + 1, GREYL)
+    mg = Grid()
+    mg.rect(5, 9, 17, 21, MUG); mg.rect(6, 22, 16, 22, MUG)                  # the mug
+    mg.rect(6, 10, 7, 20, MUGL)                                              # shine
+    mg.rect(18, 11, 20, 18, MUG)                                             # the handle (hollow in the middle)
+    for y in range(13, 17):
+        mg.px[y][18] = None
+    mg.rect(6, 9, 16, 9, COCOA)
+    mg.rect(7, 8, 8, 9, W); mg.rect(11, 7, 12, 8, PINK); mg.rect(14, 8, 15, 9, W)   # marshmallows
+    stamp(g, mg, MUGE)
+    hd = Grid(); hd.rect(3, 14, 6, 18, G); hd.rect(16, 15, 18, 19, G)
+    stamp(g, hd, GD)
+    g.pts([(4, 14), (17, 15)], GL)
+    heart(g, 9, 14, W)                                                       # a little heart on the mug
+    out["cocoa"] = ("Hot cocoa", g)
+
+    # Distinguished - Pepe with a big curled handlebar moustache and a gold monocle (moustache month)
+    g = Grid(); pepe_head(g); eyes_normal(g)
+    g.rect(6, 7, 9, 7, GD)                                                   # one lid lowered: very refined
+    mo = Grid()
+    mo.rect(8, 12, 15, 12, MOU); mo.rect(6, 13, 17, 13, MOU)
+    mo.rect(4, 14, 7, 14, MOU); mo.rect(16, 14, 19, 14, MOU)
+    mo.pts([(3, 13), (2, 12), (3, 11), (20, 13), (21, 12), (20, 11)], MOU)   # curled tips
+    for x, y in ((11, 13), (12, 13)):                                        # the centre notch
+        mo.px[y][x] = None
+    stamp(g, mo, MOUE)
+    mouth(g, "smile")
+    g.rect(14, 6, 17, 6, GOLD); g.rect(14, 9, 17, 9, GOLD); g.rect(13, 7, 13, 8, GOLD); g.rect(18, 7, 18, 8, GOLD)
+    g.pts([(19, 10), (19, 11), (20, 12), (20, 13)], GOLD)                    # the chain
+    out["moustache"] = ("Distinguished", g)
+
+    # Dibs - Pepe grinning at the roast drumstick he's holding (a Thanksgiving table or a Sunday roast)
+    g = Grid(); pepe_head(g, limbs=lambda q: q.rect(17, 19, 19, 21, G)); eyes_look(g, dx=1); mouth(g, "grin")
+    s = Grid()
+    s.ellipse(15.5, 17.5, 3.9, 3.0, MEAT)
+    s.pts([(18, 15), (19, 14), (19, 15), (20, 13), (20, 14), (21, 12), (21, 13)], MEAT)
+    s.pts([(13, 16), (14, 16), (13, 17), (15, 15)], MEATL)                   # glaze
+    stamp(g, s, MEATE)
+    b = Grid()
+    b.pts([(21, 11), (22, 11), (22, 10), (21, 10), (23, 10), (22, 9), (20, 10)], BONE)
+    stamp(g, b, BONED)
+    out["drumstick"] = ("Dibs", g)
+
+    # Room for pie - a slice of pumpkin pie with a swirl of cream
+    g = Grid()
+    p = Grid()
+    for x in range(2, 21):                                                   # the filling's top, a wedge to the point
+        top = 16 - round((x - 2) * 8 / 18)
+        p.rect(x, top, x, 16, FILL)
+    p.rect(2, 17, 21, 19, FILLD); p.rect(2, 20, 21, 20, CRUSTD)             # the cut face + crust bottom
+    p.rect(19, 7, 21, 19, CRUST)                                             # the back crust
+    for y in range(7, 20, 2):
+        p.set(21, y, CRUSTL)
+    p.rect(19, 7, 21, 7, CRUSTL)
+    stamp(g, p, PIEE)
+    c = Grid(); c.ellipse(12.5, 9.5, 3.2, 2.2, W); c.rect(12, 6, 13, 7, W); c.set(13, 5, W)
+    stamp(g, c, GREYL)
+    g.pts([(11, 10), (12, 10), (14, 9)], "#e6e1d6")
+    out["pie"] = ("Room for pie", g)
+    return out
+
+
 PACKS = {"pixelpepe": pixel_pack, "kawaiipond": kawaii_pack, "patvreacts": reacts_pack,
          "miclife": mic_pack, "highroller": casino_pack, "movienight": movie_pack,
-         "spooky": spooky_pack, "primeplus": plus_pack}
+         "spooky": spooky_pack, "fireside": fireside_pack, "primeplus": plus_pack}
 
 
 def main():

@@ -22,7 +22,7 @@
 // 1.99qp PERK PACKS (stickers.json "perk"): never sold, never comped - an account can use one while it has the perk:
 //   season_pass  a 🎟️ Season Pass right now (premium.hasPass);
 //   prime_plus   owns a pad with 💎 Prime Time Plus right now (premium.plusOwner).
-// A perk pack with a "season" window (MM-DD..MM-DD, UTC, every year: 🎃 Spooky Season, Oct 1 - Nov 7) is listed and
+// A perk pack with a "season" window (MM-DD..MM-DD, UTC, every year: 🎃 Spooky Season Oct 1 - Nov 7, 🍂 Fireside Nov 1 - Dec 1) is listed and
 // usable only inside it. Stickers already sent keep rendering (inline() never checks ownership).
 //
 // stkfix (V0 of the stickers addendum):
