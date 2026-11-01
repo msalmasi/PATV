@@ -214,8 +214,16 @@
    *  the display name (the PATV one when the login is linked), else the login - never an account key ("a PATV member"). */
   function label(u, ctx) {
     var _t = tr(ctx);
+    // wave 2 (spec C.7): a veiled person with a frog name of this pad's session ("Soggy Bullfrog") - only the server sets u.alias on
+    // an anon user; a Camfrog display name that reads like one is an ordinary named user
+    if (u && u.anon && veilAlias(u)) return veilAlias(u);
     return !u || u.anon ? _t('js.pad.someone', 'someone') : u.former ? _t('js.pad.chat.former', 'former member') : shownName(u, ctx);
   }
+  // ── wave 2: veiled people (privacy wire v2) ──
+  var ALIAS_RE = /^(?:[A-Z][A-Za-z-]{1,15} [A-Z][A-Za-z]{1,15}|Mystery Frog \d{1,4})$/;
+  function veilAlias(u) { var a = u && u.anon ? str(u.alias) : ''; return ALIAS_RE.test(a) ? a : ''; }
+  function veilOf(u) { return u && u.anon && (u.veil === 'incognito' || u.veil === 'hidden') ? u.veil : null; }
+  function hoodOf(u) { var n = u ? Number(u.hood) : NaN; return veilAlias(u) && n >= 0 && n <= 7 && Math.floor(n) === n ? n : null; }
   function avatarSrc(u, ctx) {
     if (!u || u.anon || u.former) return null;
     if (ctx && typeof ctx.avatar === 'function') return ctx.avatar(u) || null;
@@ -228,6 +236,10 @@
     if (typeof cls === 'string' && /^[a-z][a-z0-9-]{0,30}$/.test(cls)) return h('span', { 'class': 'av ' + cls, 'aria-hidden': 'true' }, null);
     var src = avatarSrc(u, ctx);
     if (src) return h('img', { 'class': 'av', src: src, alt: '', loading: 'lazy' });
+    // wave 2 (C.7 / F.4): a frog name's hooded frog in its session's hood colour ("peek" incognito, "shadow" hidden) - the picture is
+    // a CSS background (public/img/anon/hood-*-N.svg) over a plain fallback, so a missing file still draws a hood-coloured bubble
+    var hd = hoodOf(u);
+    if (hd != null) return h('span', { 'class': 'av hood ' + (veilOf(u) === 'hidden' ? 'hood-shadow' : 'hood-peek') + ' hd' + hd, 'aria-hidden': 'true' }, null);
     var nobody = !u || u.anon || u.former;
     return h('span', { 'class': 'av' + (nobody ? ' anon' : ''), style: nobody ? null : 'background:hsl(' + hue(u.login || '') + ',55%,62%)', 'aria-hidden': 'true' },
       [nobody ? '?' : (shownName(u, ctx) || '?').charAt(0).toUpperCase()]);
@@ -236,6 +248,14 @@
    *  display name differs; 🌐 after a line they typed on the website. Never a link for "someone" / "former member". */
   function nameNode(u, ctx, h) {
     var _t = tr(ctx);
+    var vl = veilOf(u);
+    if (vl) {
+      // wave 2 (C.7): the frog name in italics with a TEXT tag (never only an icon), never a link; "you, as Soggy Bullfrog" for the
+      // speaker themself (self view). Without a name (C.2 / B.2): "someone" + the tag
+      var al = veilAlias(u), tag = h('span', { 'class': 'veil-tag veil-' + vl }, [vl === 'hidden' ? _t('js.pad.veil.hidden', 'hidden') : _t('js.pad.veil.incognito', 'incognito')]);
+      var nm = al ? h('i', null, [ctx && ctx.self ? _t('js.pad.veil.self', 'you, as {name}', { name: al }) : al]) : _t('js.pad.someone', 'someone');
+      return h('span', { 'class': 'who veil' }, [nm, ' ', tag]);
+    }
     if (!u || u.anon) return h('span', { 'class': 'who' }, [_t('js.pad.someone', 'someone')]);
     if (u.former) return h('span', { 'class': 'who' }, [_t('js.pad.chat.former', 'former member')]);
     var style = u.patv && u.patv.style ? String(u.patv.style) : null;
@@ -346,29 +366,43 @@
   function chatLine(it, ctx, h, rm) {
     var _t = tr(ctx), k = it.k;
     var tx = k === 'tx', text = str(it.text);
-    var a = { 'class': 'line' + (tx ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : '') + (rm ? ' rm' : '') };
+    // wave 2 (D.2): a hidden line is a bar - never its words, never pickable by ✂️ Clip chat / 🔊 Clip / quotes; the speaker's own
+    // (self: 1) shows them their words with "only you can see this"
+    var mask = /^[sml]$/.test(String(it.mask || '')) ? String(it.mask) : null, mine = it.self === 1 && !!veilOf(it.u);
+    if (mask && !mine) text = '';
+    var a = { 'class': 'line' + (tx ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : '') + (rm ? ' rm' : '') + (veilOf(it.u) ? ' veiled' : '') + (mask ? ' masked' : '') };
     if (tx) a.title = _t('js.pad.chat.tx', 'Said on the mic (auto-transcribed)');
     // 1.99fp: what ✂️ Clip chat / 🔊 Clip read (public/js/chat-clip.js) - the server re-reads its own copy by id
     if (ctx.data !== false) {
       if (rm) { if (it.c) a['data-rmc'] = it.c; a['data-rm'] = rm.by || 'mod'; }
+      else if (mask) { if (it.c) a['data-vc'] = it.c; if (it.own) a['data-own'] = '1'; }
       else {
         if (it.c) a['data-c'] = it.c;
         a['data-k'] = k; a['data-name'] = label(it.u, ctx); a['data-text'] = text;
         if (tx && it.id) a['data-tx'] = it.id;
         if (it.own) a['data-own'] = '1';
       }
+      if (it.hold) a['data-hold'] = it.hold;                  // B.3: the live tail places a 🎙 line after its hold's drop
     }
-    var body = [nameNode(it.u, ctx, h)];
+    var body = [nameNode(it.u, mine ? Object.assign({}, ctx, { self: true }) : ctx, h)];
     var fl = flairNode(it.u, ctx, h);
     if (fl) body.push(fl, ' ');
     var marks = hlOf(ctx);
-    if (marks) {
+    if (mask && !mine) {
+      body.push(h('span', { 'class': 'redact redact-' + mask }, [h('span', { 'class': 'sr-only' },
+        [tx ? _t('js.pad.veil.hidden_tx', 'hidden transcript') : _t('js.pad.veil.hidden_msg', 'hidden message')])]), timeNode(it.ts, ctx, h));
+    } else if (marks) {
       // CL9: a search hit - the matched words in <mark>s (the same text, in pieces)
       if (tx) body.push('\u201c');
       body.push.apply(body, markKids(text, marks, h));
       if (tx) body.push('\u201d');
       body.push(timeNode(it.ts, ctx, h));
     } else body.push(tx ? '\u201c' + text + '\u201d' : text, timeNode(it.ts, ctx, h));
+    // B.3: when a \ud83c\udf99 line was said, and how long its turn ran ("said 11:53:41")
+    if (tx && Number(it.at) > 0) body.push(h('span', { 'class': 'said' }, [_t('js.pad.veil.said', 'said {time}', { time: fmtTime(Number(it.at), ctx) })]));
+    if (mine) body.push(h('span', { 'class': 'veil-self' }, [_t('js.pad.veil.only_you', 'only you can see this')]));
+    // E.2: a viewer who may see through frog names here (an admin, the pad's owner in their era) gets a Reveal control - a flag only
+    if (it.rv === 1 && it.c && ctx.data !== false) body.push(h('button', { type: 'button', 'class': 'veil-reveal', 'data-reveal': it.c }, [_t('js.pad.veil.reveal', 'Reveal')]));
     if (rm) body.push(h('span', { 'class': 'rm-note' }, [removedNote(rm, ctx)]));
     return h('div', a, [avatarNode(it.u, ctx, h), h('div', { 'class': 'body' }, body)]);
   }
@@ -402,7 +436,12 @@
       var tt = str(it.text);
       return h('div', { 'class': 'sys topic' }, [txt.slice(0, at)].concat(markKids(tt, marks, h), [txt.slice(at + tt.length) + ' · ' + fmtTime(it.ts, ctx)]));
     }
-    return h('div', { 'class': 'sys' + (k === 'topic' ? ' topic' : '') }, [txt + ' · ' + fmtTime(it.ts, ctx)]);
+    var sk = [txt + ' · ' + fmtTime(it.ts, ctx)];
+    // wave 2 (E.2): a veiled person's join / leave / mic line - the Reveal control for a viewer who may see through it
+    if (it.rv === 1 && it.c && veilOf(it.u) && ctx.data !== false) sk.push(' ', h('button', { type: 'button', 'class': 'veil-reveal', 'data-reveal': it.c }, [tr(ctx)('js.pad.veil.reveal', 'Reveal')]));
+    var sa = { 'class': 'sys' + (k === 'topic' ? ' topic' : '') + (veilOf(it.u) ? ' veiled' : '') };
+    if (ctx.data !== false && it.hold) sa['data-hold'] = it.hold;     // B.3: a 🎙 line of this hold goes right after it (room-bridge.js)
+    return h('div', sa, sk);
   }
 
   // ── the downloads' item formats (spec §3.8) ──
@@ -420,7 +459,9 @@
     var k = it.k, body;
     if (k === 'msg' || k === 'tx') {
       var who = label(it.u, ctx) + (it.u && it.u.web && !it.u.anon && !it.u.former ? ' \ud83c\udf10' : '');
-      body = k === 'tx' ? '\ud83c\udf99 ' + who + ': \u201c' + str(it.text) + '\u201d' : who + ': ' + str(it.text);
+      // wave 2 (D.4, J-9): a hidden line in a download is "[hidden]" for every role - never its words
+      var said = /^[sml]$/.test(String(it.mask || '')) ? '[hidden]' : str(it.text);
+      body = k === 'tx' ? '\ud83c\udf99 ' + who + ': \u201c' + said + '\u201d' : who + ': ' + said;
     } else if (k === 'live') body = liveText(it, ctx) + (safeLink(it.link) ? ' <' + linkOf(ctx, it.link) + '>' : '');
     else if (k === 'note') body = noteText(it, ctx);
     else body = sysText(it, ctx);
@@ -442,7 +483,9 @@
     var o = { c: it.c ? Number(it.c) : null, ts: isoOf(it.ts), local: localIso(it.ts, ctx), kind: kind };
     if (k === 'tx') o.auto = true;
     if (BY_PERSON[k]) o.author = author(it.u, ctx);
-    if (k === 'msg' || k === 'tx' || k === 'topic') o.text = str(it.text);
+    // wave 2 (D.4, J-9): {"masked": true, "mask": "m"} for a hidden line - never its words
+    if ((k === 'msg' || k === 'tx') && /^[sml]$/.test(String(it.mask || ''))) { o.masked = true; o.mask = String(it.mask); }
+    else if (k === 'msg' || k === 'tx' || k === 'topic') o.text = str(it.text);
     else if (k === 'unmic') o.held_ms = Math.max(0, Number(it.ms) || 0);
     else if (k === 'note') o.text = noteText(it, ctx) || '';
     else if (k === 'live') {

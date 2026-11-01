@@ -527,6 +527,7 @@
 <%# CL5: the chat's lines - right after the block they came from, so its rules keep their order in the cascade; <main> carries
     .chatlog (the stylesheet's scope) next to .rm. CL5 fix-up: v=5 - the chat's own --ds-chat-* colours again, the RTL highlight %>
 <link rel="stylesheet" href="/public/css/chatlog.css?v=9">
+<link rel="stylesheet" href="/public/css/veil.css?v=1"><%# wave 2: frog names, hooded avatars, masked bars (not in chatlog.css: the downloads inline that one) %>
 <%# 1.99es: the pad's look (padlook.js via app.locals): accent -> CSS custom properties on <main> (validated hex only),
     an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
     A pad with no look renders exactly as before (the old link banner above the header). %>
@@ -835,12 +836,12 @@
       <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
-  <script src="/public/js/chatlog-core.js?v=4"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
+  <script src="/public/js/chatlog-core.js?v=5"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
   <script src="/public/js/pad-history.js?v=3"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=2"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
-  <script src="/public/js/room-bridge.js?v=19"></script>
+  <script src="/public/js/room-bridge.js?v=20"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
@@ -919,6 +920,29 @@
     function item(it) { return CLR ? CLR.renderItem(it, rctx, H) : plainItem(it); }
     function renderLine(it, ctx) { return CLR ? CLR.renderItem(it, ctx, H) : plainItem(it); }   // scrollback's and search's lines
     // [end of the CL5 renderer wiring]
+    // wave 2 (spec E.1 / E.2): Reveal - only an admin, or the pad's owner on lines said in their era, gets the control (rv: 1); one
+    // POST per line, logged on the server (seethrough_log). The answer is shown only here: "login · only you can see this" on a
+    // dashed line, and a hidden line's words in place of its bar. Never kept, never re-sent.
+    if (feedEl && window.fetch) feedEl.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('.veil-reveal') : null;
+      if (!b || b.disabled) return;
+      var c = Number(b.getAttribute('data-reveal'));
+      if (!c) return;
+      b.disabled = true;
+      fetch('/api/chatlog/reveal', { method: 'POST', credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
+        headers: { 'content-type': 'application/json', 'x-requested-with': 'fetch' }, body: JSON.stringify({ room: slug, c: [c] }) })
+        .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
+        .then(function (d) {
+          var o = (d.items || [])[0], line = b.closest('.line, .sys');
+          if (!o) { b.textContent = _t('js.pad.veil.reveal_none', 'Can’t be revealed'); return; }
+          if (line) line.classList.add('revealed');
+          var bar = line && line.querySelector('.redact');
+          if (bar && typeof o.words === 'string') bar.replaceWith(document.createTextNode(o.words));
+          var chip = el('span', 'veil-chip', _t('js.pad.veil.chip', '{name} · only you can see this', { name: o.login }));
+          b.replaceWith(chip);
+        })
+        .catch(function (err) { b.disabled = false; b.title = err.message; });
+    });
 
     function nearBottom() { return scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 80; }
     function toBottom() { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
@@ -974,6 +998,16 @@
         if (!n) return;
         added++;
         n._c = it.c || 0; n._ts = Number(it.ts) || 0; n._k = it.k;     // CL3: refilter() reads the time and kind
+        // wave 2 (spec B.3): a 🎙 line arrives after speech-to-text, often after the next speaker's grab - it goes right after its own
+        // hold's drop (else its grab) when that line is among the last 200 and under 10 minutes old; else at the end as before
+        if (it.k === 'tx' && it.hold) {
+          var hk = String(it.hold), hit = null, pool = [].slice.call(frag.childNodes).concat([].slice.call(feedEl.childNodes, -200));
+          for (var q = pool.length - 1; q >= 0 && !hit; q--) {
+            var y = pool[q];
+            if (y !== n && y.getAttribute && y.getAttribute('data-hold') === hk && y._k !== 'tx' && Date.now() - (y._ts || 0) < 600000) hit = y;
+          }
+          if (hit && hit.parentNode) { hit.parentNode.insertBefore(n, hit.nextSibling); return; }
+        }
         if (it.c && it.c < maxC) {
           var after = null;
           for (var k = 0; k < feedEl.childNodes.length; k++) { var x = feedEl.childNodes[k]; if (x._c && x._c > it.c) { after = x; break; } }
@@ -1075,7 +1109,7 @@
           } else {
             cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? _t('js.pad.people.on_cam', 'On cam') : (u.on_cam === false ? _t('js.pad.people.off_cam', 'Off cam') : _t('js.pad.people.cam_unknown', 'Cam unknown'));
           }
-          ic.appendChild(cam);
+          if (!u.veil) ic.appendChild(cam);   // wave 2 (A.6): a veiled person never has a cam icon anywhere
           // 1.99dx: moderators (Pepe sent caps for this viewer) get a ⋯ menu next to the cam icon: the actions
           // Pepe allows them on this person (room-mod.js menuItems; the server re-checks every one). The name
           // itself stays the link to the person's profile. 1.99fu: every signed-in viewer gets the ⋯ too - the light

@@ -1,0 +1,46 @@
+/* veil.css - wave 2 WP-2 (incognito / mic-stage spec C.7, D.2, D.3, E.2): how a veiled person shows in the pad chat - the frog
+   name in italics with a text tag, the hooded frog avatar, the masked bar of a hidden line (no length or language hint, no motion,
+   a solid bar in forced colours), the speaker's own "only you can see this", the Reveal control. Kept out of chatlog.css on purpose:
+   that file is inlined into the HTML downloads, whose golden files pin it byte for byte. Markup: public/js/chatlog-core.js. */
+:root { --redact-a: #2d333b; --redact-b: #22272e; --veil-tag-bg: rgba(110, 118, 129, .18); --veil-tag-ink: #57606a;
+        --hood-0: #2e7d32; --hood-1: #1565c0; --hood-2: #6a1b9a; --hood-3: #c62828; --hood-4: #ef6c00; --hood-5: #00838f; --hood-6: #ad1457; --hood-7: #5d4037; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --redact-a: #adbac7; --redact-b: #909dab; --veil-tag-bg: rgba(173, 186, 199, .16); --veil-tag-ink: #adbac7; }
+}
+:root[data-theme="dark"] { --redact-a: #adbac7; --redact-b: #909dab; --veil-tag-bg: rgba(173, 186, 199, .16); --veil-tag-ink: #adbac7; }
+
+.chatlog .who.veil i { font-weight: 600; }
+.veil-tag { display: inline-block; font-size: 10.5px; font-weight: 600; font-style: normal; line-height: 1.5; padding: 0 6px; border-radius: 999px;
+            background: var(--veil-tag-bg); color: var(--veil-tag-ink); vertical-align: 1px; text-transform: lowercase; }
+
+/* D.2: the bar - a hidden line's length bucket only (s <= 24, m 25-100, l > 100 characters) */
+.redact { display: inline-block; height: .95em; vertical-align: -.12em; border-radius: 2px; max-width: 100%;
+          background: repeating-linear-gradient(135deg, var(--redact-a) 0 6px, var(--redact-b) 6px 12px);
+          -webkit-user-select: none; user-select: none; }
+.redact-s { width: 5em; } .redact-m { width: 10em; } .redact-l { width: 16em; }
+@media (forced-colors: active) { .redact { background: CanvasText; forced-color-adjust: none; } }
+
+/* C.7 / F.4: the hooded frog - the picture (public/img/anon/hood-{peek|shadow}-N.svg, WP-4) over the session's hood colour, so a
+   missing file still draws a coloured bubble, never a face */
+.av.hood { background-color: var(--hood-0); background-size: cover; background-position: center; background-repeat: no-repeat; }
+.av.hood.hd0 { background-color: var(--hood-0); } .av.hood.hd1 { background-color: var(--hood-1); } .av.hood.hd2 { background-color: var(--hood-2); }
+.av.hood.hd3 { background-color: var(--hood-3); } .av.hood.hd4 { background-color: var(--hood-4); } .av.hood.hd5 { background-color: var(--hood-5); }
+.av.hood.hd6 { background-color: var(--hood-6); } .av.hood.hd7 { background-color: var(--hood-7); }
+.av.hood-peek.hd0 { background-image: url(/public/img/anon/hood-peek-0.svg); } .av.hood-peek.hd1 { background-image: url(/public/img/anon/hood-peek-1.svg); }
+.av.hood-peek.hd2 { background-image: url(/public/img/anon/hood-peek-2.svg); } .av.hood-peek.hd3 { background-image: url(/public/img/anon/hood-peek-3.svg); }
+.av.hood-peek.hd4 { background-image: url(/public/img/anon/hood-peek-4.svg); } .av.hood-peek.hd5 { background-image: url(/public/img/anon/hood-peek-5.svg); }
+.av.hood-peek.hd6 { background-image: url(/public/img/anon/hood-peek-6.svg); } .av.hood-peek.hd7 { background-image: url(/public/img/anon/hood-peek-7.svg); }
+.av.hood-shadow.hd0 { background-image: url(/public/img/anon/hood-shadow-0.svg); } .av.hood-shadow.hd1 { background-image: url(/public/img/anon/hood-shadow-1.svg); }
+.av.hood-shadow.hd2 { background-image: url(/public/img/anon/hood-shadow-2.svg); } .av.hood-shadow.hd3 { background-image: url(/public/img/anon/hood-shadow-3.svg); }
+.av.hood-shadow.hd4 { background-image: url(/public/img/anon/hood-shadow-4.svg); } .av.hood-shadow.hd5 { background-image: url(/public/img/anon/hood-shadow-5.svg); }
+.av.hood-shadow.hd6 { background-image: url(/public/img/anon/hood-shadow-6.svg); } .av.hood-shadow.hd7 { background-image: url(/public/img/anon/hood-shadow-7.svg); }
+
+/* B.3: when a 🎙 line was said; A.2: the speaker's own line; E.2: Reveal and a revealed line */
+.chatlog .line .said { color: var(--ds-text-faint); font-size: 11px; font-style: normal; margin-left: 6px; white-space: nowrap; }
+.chatlog .line .veil-self { color: var(--ds-text-faint); font-size: 11px; font-style: normal; margin-left: 6px; }
+.veil-reveal { font: inherit; font-size: 11px; margin-left: 6px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ds-border, #8884);
+               background: transparent; color: var(--ds-text-muted, inherit); cursor: pointer; }
+.veil-reveal:focus-visible { outline: 2px solid var(--ds-focus, #0969da); outline-offset: 1px; }
+.chatlog .revealed { border-inline-start: 2px dashed var(--ds-text-faint, #8888); }
+.veil-chip { display: inline-block; font-size: 11px; margin-left: 6px; padding: 0 6px; border-radius: 999px; border: 1px dashed var(--ds-text-faint, #8888); }
+.veil-banner { font-size: 12.5px; padding: 6px 10px; border-radius: 8px; border: 1px dashed var(--ds-text-faint, #8888); margin: 4px 0; }
