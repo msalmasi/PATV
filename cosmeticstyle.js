@@ -34,12 +34,12 @@ const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "d
 const GTF_OPT = { gtf_hat: "hat", gtf_mask: "mask", gtf_outfit: "outfit", gtf_prop: "prop", gtf_bg: "bg", gtf_frame: "frame" };
 const GTF_LAYERS = {
   gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate",
-            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat", "lotus"],
+            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat", "lotus", "bobble"],
   gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades", "alien"],
   gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier",
-               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape", "reaper"],
+               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape", "reaper", "fireside"],
   gtf_prop: ["cigar", "moneybag", "crowbar", "briefcase", "rose", "dice",
-             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar", "scythe", "skateboard"],
+             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar", "scythe", "skateboard", "sparkler"],
   gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix",
            "progress", "intersex", "trans", "bi", "lesbian", "pan", "enby", "ace", "aro", "genderfluid",
            "lavalamp", "leopard", "redroom", "sakura", "clouds", "wanted", "lilypond"],

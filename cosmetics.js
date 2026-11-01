@@ -66,6 +66,7 @@ const LAYER_EMOJI = {
   bountyhat: "🤠", sheriffstar: "⭐", wanted: "📜", rope: "🪢",
   lotus: "🪷", lilypond: "🌙", laurel: "🌿",
   alien: "👽", reaper: "💀", scythe: "⚰️", skateboard: "🛹",
+  bobble: "🧶", fireside: "🧣", sparkler: "🎇",                    // November 2026: 🍂 Fireside
 };
 const EFFECTS = CSTYLE.EFFECTS;
 const TAGS = CAT.tags || {};
