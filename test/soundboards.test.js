@@ -147,7 +147,12 @@ test("buying a pack: one debit, routing claims, ownership; a replayed ref charge
   assert.equal(await bal(U.poor), 10);
 });
 
-test("Season Pass: the season board free + one free standard pack a month; legendaries numbered and limited", async () => {
+test("Season Pass: the season board free + one free standard pack a month; legendaries numbered and limited", async (t) => {
+  // inside the catalogue's first season, whatever today's date is (the board only lists the current season's clips)
+  const se = SB.CAT.seasons[0];
+  assert.ok(se, "the catalogue has a season");
+  SB._setClock(() => se.from + 86400e3);
+  t.after(() => SB._setClock(null));
   PASS.add(U.spfan.userId);
   let r = await call("POST", "/api/soundboards/buy", U.spfan, { item: "pack:drama", ref: ref(), allowance: true });
   assert.equal(r.status, 200, JSON.stringify(r.d));
