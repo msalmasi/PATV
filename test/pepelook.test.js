@@ -198,7 +198,7 @@ test("panel markup: Pepe's look section for admins only, thumbnails exist for ev
   assert.equal((await ejs.renderFile(file, { me: { username: "pleb", class: "pleb" }, pepeCtlCsrf: P.csrfToken })).trim(), "");
   const dir = path.join(repo, "public", "img", "pepe-looks");
   for (const id of ["pepe", "dolly", "dracula", "frankenstein", "mummy", "freddy", "jason", "pennywise", "werewolf", "pinhead", "pedro", "flirty", "gothmommy",
-                    "reaper", "skater", "alien", "bobross", "sagan", "attenborough"]) {
+                    "reaper", "skater", "alien", "bobross", "sagan", "attenborough", "fireside"]) {
     assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
   }
   // 1.99fo: the base picker + extras grid, with a thumbnail per base and per kawaii modifier
