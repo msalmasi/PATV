@@ -400,9 +400,12 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const title = cap ? `🎙 ${who ? who + ": " : ""}“${cap.length > 100 ? cap.slice(0, 99) + "…" : cap}”` : `🎙 ${who || "Mic clip"}`;
       const r = await deps.postToPad({ userId: acct.userId }, row.id, { caption: title.slice(0, 140), body: cap.length > 100 ? cap : "" });
       const t = NOW();
-      await runQuery(`INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created) VALUES (?, ?, ?, ?, ?, ?)
-                      ON CONFLICT(post_id) DO UPDATE SET logins = excluded.logins`,
-                     [r.post.id, row.room || "", row.id, " " + speakers.join(" ") + " ", by, t]);
+      // (wave2 integration review DARK-1: a J-7 clip Pepe posted under a frog name - `alias` - is recorded as one, so the staging
+      // refresh can blank its speakers' logins: they pair that frog name with the real speaker)
+      const alias = typeof b.alias === "string" ? b.alias.replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 60) || null : null;
+      await runQuery(`INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created, alias) VALUES (?, ?, ?, ?, ?, ?, ?)
+                      ON CONFLICT(post_id) DO UPDATE SET logins = excluded.logins, alias = excluded.alias`,
+                     [r.post.id, row.room || "", row.id, " " + speakers.join(" ") + " ", by, t, alias]);
       console.log(`[micclip] capture ${row.id} -> post ${r.post.id} (${speakers.length} speaker(s))`);
       try { require("./achievements").poke(acct.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🎙️ Hot Mic / 🐸 Frog Quotes
       res.json({ ok: true, url: r.post.url, id: r.post.id, again: !!r.again });

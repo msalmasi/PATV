@@ -480,6 +480,29 @@ test("publishing a mic clip: a pad post credited to the clipper (waveform card, 
   assert.equal((await post("/api/bridge/micclip/post", null, { password: "bot", media: mid2, by: "ghostcf", speakers: ["carolcf"] })).status, 409);
 });
 
+test("wave2 integration review (DARK-1): a J-7 clip Pepe posts under a FROG NAME is recorded as one (feed_voices.alias - the staging refresh blanks its speakers); a named clip has none; markup never stored", async () => {
+  micclip._setDeps({ makePoster: async () => true });
+  const now = Date.now();
+  const mk = async (mid, subject) => {
+    fs.writeFileSync(path.join(process.env.MEDIA_DIR, mid + ".m4a"), M4A);
+    await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, subject_login)
+                    VALUES (?, 'audio', 'audio/mp4', ?, ?, 3, ?, 'bobcf', ?, ?, ?, 0, 0, NULL)`, [mid, mid + ".m4a", M4A.length, subject, ROOM.id, now, now + 86400e3]);
+  };
+  await mk("a1".repeat(8), "Soggy Bullfrog");
+  const r = await post("/api/bridge/micclip/post", null, { password: "bot", media: "a1".repeat(8), by: "bobcf", user: "bob", speakers: ["carolcf"],
+    caption: "frog talk", secs: 3, alias: "Soggy Bullfrog" });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.deepEqual(await getQuery("SELECT logins, alias FROM feed_voices WHERE post_id = ?", [r.d.id]), [{ logins: " carolcf ", alias: "Soggy Bullfrog" }]);
+  await mk("a2".repeat(8), "carolcf");
+  const n = await post("/api/bridge/micclip/post", null, { password: "bot", media: "a2".repeat(8), by: "bobcf", user: "bob", speakers: ["carolcf"], caption: "named talk", secs: 3 });
+  assert.equal(n.status, 200, JSON.stringify(n.d));
+  assert.deepEqual(await getQuery("SELECT alias FROM feed_voices WHERE post_id = ?", [n.d.id]), [{ alias: null }], "a named clip: none");
+  await mk("a3".repeat(8), "x");
+  const m = await post("/api/bridge/micclip/post", null, { password: "bot", media: "a3".repeat(8), by: "bobcf", user: "bob", speakers: ["carolcf"], caption: "y", secs: 3, alias: "<b>Mossy</b> Newt" });
+  assert.equal(m.status, 200, JSON.stringify(m.d));
+  assert.deepEqual(await getQuery("SELECT alias FROM feed_voices WHERE post_id = ?", [m.d.id]), [{ alias: "Mossy Newt" }], "no markup kept");
+});
+
 test("the live view tells the page about the room's !clip switch (🔊 Clip shows where it's on)", async () => {
   await setClip(true);
   const v = (await get(`/api/rooms/${SLUG}/live`, U.alice)).d;

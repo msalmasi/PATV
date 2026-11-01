@@ -59,6 +59,17 @@ const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_sett
 // staging's switches already restored a DELETE of a source table (hub_hidden_h's hh trigger) would write a row of prod's
 // data into the outbox just emptied - so every source table is emptied first, the outbox after them.
 const EMPTY = ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"];
+// wave2 integration review (P4 / DARK-1 / T-2): prod rows that pair a frog name with the real login behind it, in tables whose other
+// rows stay prod's - scrubbed in the copy (same transaction), so real identities never cross here either:
+//   micfollow_excl  a VEILED exclusion (a ✕ on a cover: `vlogin` = the person, `veiled` = the frog name then) - the row goes (its
+//                   stage_exclude seethrough_log row is KEEP already); by-name rows stay prod's, as before
+//   feed_voices     a J-7 frog-name clip (`alias` = the frog name it was posted under): its speakers' logins are blanked (the post,
+//                   titled with the frog name, stays)
+// A column the copy lacks (prod a release behind: no such rows yet) skips its step.
+const SCRUB = [
+  { table: "micfollow_excl", col: "vlogin", sql: "DELETE FROM main.micfollow_excl WHERE vlogin IS NOT NULL" },
+  { table: "feed_voices", col: "alias", sql: "UPDATE main.feed_voices SET logins = '  ' WHERE alias IS NOT NULL AND logins IS NOT NULL AND logins <> '  '" },
+];
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
 
@@ -125,6 +136,17 @@ async function reindexChatlog(db) {
   return { table: "chat_log_fts", reindexed: n };
 }
 
+/** wave2 integration review: prod's frog-name <-> login pairings out of the copy (SCRUB, above). -> [{table, scrubbed}] */
+async function scrub(db) {
+  const out = [];
+  for (const s of SCRUB) {
+    if (!(await tableSql(db, "main", s.table)) || !(await columns(db, "main", s.table)).includes(s.col)) continue;
+    const r = await run(db, s.sql);
+    out.push({ table: s.table, scrubbed: r.changes || 0 });
+  }
+  return out;
+}
+
 /** Keep staging's own rows of the per-environment tables in the copy. -> [{table, kept | cleared}] */
 async function keep(db) {
   const out = [];
@@ -151,6 +173,7 @@ async function keep(db) {
     }
     const fts = await reindexChatlog(db);                                    // CL2: the index follows staging's own rows
     if (fts) out.push(fts);
+    out.push(...(await scrub(db)));                                          // wave2: no frog-name <-> login pairing of prod's
     for (const t of EMPTY) {
       let inCopy = await tableSql(db, "main", t);
       const inOld = await tableSql(db, "old", t);
@@ -185,6 +208,7 @@ async function clearOnly(db) {
       out.push({ table: t, cleared: r.changes || 0 });
     }
     if (await tableSql(db, "main", "chat_log_fts")) await run(db, "INSERT INTO main.chat_log_fts (chat_log_fts) VALUES ('delete-all')");
+    out.push(...(await scrub(db)));                                          // wave2: the fallback scrubs them too
     await exec(db, "COMMIT");
   } catch (e) {
     await exec(db, "ROLLBACK").catch(() => {});
@@ -221,9 +245,9 @@ if (require.main === module) {
   const [oldFile, newFile] = process.argv.slice(2);
   if (!oldFile || !newFile) { console.error("usage: node keep-staging-tables.js <staging's current DB> <the fresh copy>"); process.exit(2); }
   main(path.resolve(oldFile), path.resolve(newFile)).then((r) => {
-    const parts = r.tables.map((x) => x.table + " " + (x.dropped ? "dropped" : x.kept != null ? x.kept : x.reindexed != null ? "reindexed " + x.reindexed : "-" + x.cleared));
+    const parts = r.tables.map((x) => x.table + " " + (x.dropped ? "dropped" : x.kept != null ? x.kept : x.reindexed != null ? "reindexed " + x.reindexed : x.scrubbed != null ? "scrubbed " + x.scrubbed : "-" + x.cleared));
     console.log((r.mode === "kept" ? "kept staging's own tables: " : "cleared prod's per-environment tables: ") + parts.join(", "));
   }, (e) => { console.error("the per-environment tables couldn't be made safe: " + e.message); process.exit(1); });
 }
 
-module.exports = { main, keep, clearOnly, KEEP, EMPTY, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };
+module.exports = { main, keep, clearOnly, scrub, KEEP, EMPTY, SCRUB, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };

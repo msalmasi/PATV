@@ -327,3 +327,49 @@ test("CL2 fix-up: staging keeps its own live feed (bridge_feed, bridge_rooms), a
   const b9 = fs.readFileSync(p9).toString("latin1");
   for (const w of ["prodfeedsecret", "prodarchivesecret"]) assert.ok(!b9.includes(w), w + " is gone (fallback)");
 });
+
+test("wave2 integration review (P4 / DARK-1 / T-2): prod's frog-name <-> login pairings never cross - a veiled exclusion row (vlogin + the frog name) goes from the copy, a frog-name clip's speaker logins are blanked; by-name rows and named clips stay prod's (both paths, and no bytes left behind)", async () => {
+  assert.deepEqual(K.SCRUB.map((s) => [s.table, s.col]), [["micfollow_excl", "vlogin"], ["feed_voices", "alias"]]);
+  const EXCL = "CREATE TABLE micfollow_excl (room_id TEXT NOT NULL, login TEXT NOT NULL, user_id TEXT, until INTEGER, reason TEXT, by TEXT, at INTEGER, veiled TEXT, vlogin TEXT, PRIMARY KEY (room_id, login))";
+  const VOICES = "CREATE TABLE feed_voices (post_id TEXT PRIMARY KEY, room_id TEXT, media_id TEXT, logins TEXT, by_login TEXT, created INTEGER, removed_at INTEGER, removed_by TEXT, alias TEXT)";
+  const fill = async (file) => {
+    const p = db(file);
+    await run(p, EXCL); await run(p, VOICES);
+    await run(p, "INSERT INTO micfollow_excl (room_id, login, until, reason, by, at, veiled, vlogin) VALUES ('Prod.Room', '~v:096e582d3dc8e738', NULL, 'owner', 'owner1', 1, 'Glitchy Frog', 'prodveiledcf')");
+    await run(p, "INSERT INTO micfollow_excl (room_id, login, until, reason, by, at) VALUES ('Prod.Room', 'bobcf', NULL, 'owner', 'owner1', 2)");
+    await run(p, "INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created, alias) VALUES ('p1', 'Prod.Room', 'm1', ' prodclippedcf ', 'clippercf', 1, 'Soggy Bullfrog')");
+    await run(p, "INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created) VALUES ('p2', 'Prod.Room', 'm2', ' carolcf ', 'clippercf', 2)");
+    await close(p);
+  };
+  const check = async (file, mode) => {
+    const d = db(file);
+    try {
+      assert.deepEqual(await all(d, "SELECT login, vlogin, veiled FROM micfollow_excl ORDER BY login"), [{ login: "bobcf", vlogin: null, veiled: null }], mode + ": the veiled row is gone, the by-name one stays");
+      assert.deepEqual(await all(d, "SELECT post_id, logins, alias FROM feed_voices ORDER BY post_id"),
+                       [{ post_id: "p1", logins: "  ", alias: "Soggy Bullfrog" }, { post_id: "p2", logins: " carolcf ", alias: null }], mode + ": the frog-name clip's speakers blanked, the named clip's kept");
+    } finally { await close(d); }
+    const bytes = fs.readFileSync(file).toString("latin1");
+    for (const w of ["prodveiledcf", "prodclippedcf"]) assert.ok(!bytes.includes(w), mode + ": " + w + " is gone from the file, free pages included");
+  };
+  const prod = path.join(dir, "copy20.db"), stg = path.join(dir, "staging20.db");
+  await makeProd(prod); await makeStaging(stg); await fill(prod);
+  const r = await K.main(stg, prod, sqlite3);
+  assert.equal(r.mode, "kept");
+  assert.deepEqual(r.tables.filter((x) => x.scrubbed != null), [{ table: "micfollow_excl", scrubbed: 1 }, { table: "feed_voices", scrubbed: 1 }]);
+  await check(prod, "kept");
+  // the fallback (staging's DB unreadable) scrubs them the same way
+  const p21 = path.join(dir, "copy21.db");
+  await makeProd(p21); await fill(p21);
+  assert.equal((await K.main(path.join(dir, "no-such-dir", "missing.db"), p21, sqlite3)).mode, "cleared");
+  await check(p21, "cleared");
+  // a prod a release behind (no vlogin / alias columns yet): nothing to scrub, nothing breaks
+  const p22 = path.join(dir, "copy22.db");
+  await makeProd(p22);
+  const d22 = db(p22);
+  await run(d22, "CREATE TABLE micfollow_excl (room_id TEXT NOT NULL, login TEXT NOT NULL, until INTEGER, PRIMARY KEY (room_id, login))");
+  await run(d22, "INSERT INTO micfollow_excl (room_id, login) VALUES ('Prod.Room', 'bobcf')");
+  await close(d22);
+  assert.equal((await K.main(stg, p22, sqlite3)).mode, "kept");
+  const e22 = db(p22);
+  try { assert.deepEqual(await all(e22, "SELECT login FROM micfollow_excl"), [{ login: "bobcf" }]); } finally { await close(e22); }
+});

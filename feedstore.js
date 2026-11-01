@@ -179,6 +179,9 @@ function init() {
       // 1.99fp: mic clips (micclip.js) - who is heard in an audio post, for their "Remove me"
       await runQuery(`CREATE TABLE IF NOT EXISTS feed_voices (post_id TEXT PRIMARY KEY, room_id TEXT, media_id TEXT, logins TEXT, by_login TEXT,
         created INTEGER, removed_at INTEGER, removed_by TEXT)`);
+      // wave2 integration review (DARK-1): a J-7 clip posted under a FROG NAME records it (null = a named post) - logins then pairs
+      // that frog name with the real speaker, so a prod -> staging refresh blanks them (deploy/keep-staging-tables.js SCRUB)
+      await addCol("feed_voices", "alias", "TEXT");
       await TAGS().init();          // 1.99iq: content tags (feedtags.js)
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
