@@ -492,6 +492,7 @@ const DELETE_ROWS = [
   // micfollow: the 🎙 mic stage - appearances, pads keeping them off it, the pads' notices, reports on them and by them
   // (their "no" to the mic stage itself is kept as an unlinked suppression record - see execute(), like livecam_optout)
   ["micfollow_spans", "login", "login"], ["micfollow_excl", "login", "login"], ["micfollow_excl", "user_id", "uid"],
+  ["micfollow_excl", "vlogin", "login"],                          // wave2 WP-4: a pad's veiled exclusion of them (a ✕ on their cover)
   ["micfollow_notices", "login", "login"], ["micfollow_reports", "login", "login"], ["micfollow_reports", "reporter_id", "uid"],
   ["micfollow_courtesy", "login", "login"],                       // 1.99afn (FU-1): the one courtesy notice they had (account deletion only)
   ["seethrough_toggle", "user_id", "uid"],                        // 1.99afn: their "Show real names" switches (the audit log rows stay)

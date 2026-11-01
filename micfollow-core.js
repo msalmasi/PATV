@@ -97,7 +97,8 @@
 // hand-over / keep_recent / capacity / displacement / newest / the change budget) as tiles with cover: true and video
 // "cover"; they are never cut (no elig), pictured, held, stilled, kept, noticed or counted in micfollow_spans; speaking()
 // counts them as attributed (the stage isn't dimmed for "someone" while a cover talks); a stage of only covers never
-// becomes the default view (showsSoon: no picture).
+// becomes the default view (showsSoon: no picture). While cfg covers is off (its kill switch) the engine shows none and
+// takes any cover tile off at once (review B-privacy-ux-4).
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
 // notice_first / spam / touch / deferred / keep / keep_drop / keep_taken.
 "use strict";
@@ -485,9 +486,11 @@ function dropKept(S, login, why, A = []) {
 /** ... every kept relay of the pad ends (the stage stops, Clear the stage). */
 function dropAllKept(S, why, A) { for (const l of [...S.kept.keys()]) dropKept(S, l, why, A); }
 /** ... may tile x's relay stay up after it leaves? -> until (ms) | 0. LIVE on an exact relay the mic stage holds, its person
- *  eligible (ok / cam_unknown) and not pinned, cold opens and warm keep on (a kept relay is only worth it for a comeback). */
+ *  eligible (ok / cam_unknown) and not pinned, cold opens and warm keep on (a kept relay is only worth it for a comeback).
+ *  Review (B-relays-4): never while Pepe sheds (his cams are full for a ▶ Live / cam slot - ▶ Live wins over the mic stage). */
 function keepFor(S, I, C, t, x) {
   if (!(C.warm_keep_s > 0) || !(C.warm_max > 0) || C.cold_open !== true) return 0;
+  if (I.site && I.site.shed) return 0;
   if (x.video !== "live" || x.pend || (S.pinned && S.pinned.has(x.login))) return 0;
   const e = I.elig && I.elig.get(x.login);
   if (e !== "ok" && e !== "cam_unknown") return 0;
@@ -496,15 +499,19 @@ function keepFor(S, I, C, t, x) {
   return t + C.warm_keep_s * 1000;
 }
 /** ... each step: every kept relay whose reason to exist ended goes NOW (no grace). A kept person who is a tile again is
- *  mid-comeback (holdDone takes the relay over, or drops it) - skipped here. -> how many ended */
+ *  mid-comeback (holdDone takes the relay over, or drops it) - skipped here. Review: a shed in progress ends them all
+ *  (B-relays-4: nobody watches a kept relay, ▶ Live needs Pepe's cam), and a lowered warm_keep_s applies to the ones kept
+ *  already (B-relays-5: until never runs past leftAt + warm_keep_s now). -> how many ended */
 function keptCheck(S, I, C, t, A) {
   if (!S.kept.size) return 0;
   const onTile = new Set(S.tiles.map((x) => x.login));
+  const shed = !!(I.site && I.site.shed);
   let n = 0;
   for (const [l, k] of [...S.kept]) {
     if (onTile.has(l)) continue;
     const e = I.elig && I.elig.get(l);
     const ss = (I.sess && I.sess.get(l)) || { state: "none", exact: null };
+    if (C.warm_keep_s > 0 && Number.isFinite(k.leftAt)) k.until = Math.min(k.until, k.leftAt + C.warm_keep_s * 1000);
     let why = null;
     if (!(C.warm_keep_s > 0) || !(C.warm_max > 0)) why = "keep_off";
     else if (C.cold_open !== true) why = "cold_off";
@@ -512,6 +519,7 @@ function keptCheck(S, I, C, t, A) {
     else if (e === "off_cam") why = "off_cam";
     else if (e !== "ok" && e !== "notice" && e !== "cam_unknown") why = isCut(e) ? e : "elig_" + String(e || "none").slice(0, 20);
     else if (ss.state === "ended" || ss.state === "none" || ss.exact !== true || ss.kept === false) why = "relay";
+    else if (shed) why = "shed";
     else if (t >= k.until) why = "expired";
     if (why) { dropKept(S, l, why, A); n++; }
   }
@@ -552,6 +560,19 @@ function clearAll(S, reason, t, A) {
   return had;
 }
 
+/** wave2 WP-4 (F.4, review B-privacy-ux-4): the `covers` switch is the feature's kill switch - while it's off, every cover tile
+ *  comes off NOW (no hand-over, no keep_recent: today's neutral card / strip at once). -> how many came off */
+function coversOff(S, C, t, A) {
+  if (C.covers === true) return 0;
+  const off = S.tiles.filter((x) => x.cover);
+  if (!off.length) return 0;
+  for (const x of off) removeTile(S, x, "covers_off", t, A);
+  compact(S);
+  S.v++;
+  A.push({ a: "touch", why: "covers_off" });
+  if (!S.tiles.length) S.active = false;
+  return off.length;
+}
 /** 1: consent cuts. -> how many came off */
 function consentCuts(S, I, t, A) {
   const cut = [];
@@ -643,7 +664,7 @@ function speaking(S, I, C, t) {
   const minHold = C.min_hold_s * 1000;
   let attributed = false, other = false;
   // wave2 WP-4 (F.4): a veiled speaker the stage can show as a cover is attributed (their hooded frog is on the stage)
-  for (const c of I.covers || []) { const s = c && S.seen.get(c.key); if (s && s.held) attributed = true; }
+  if (C.covers === true) for (const c of I.covers || []) { const s = c && S.seen.get(c.key); if (s && s.held) attributed = true; }
   for (const h of I.holders || []) {
     if (S.pinned && S.pinned.has(h.login)) { attributed = true; continue; }   // mfix: a pinned cam's person: shown, named
     const e = I.elig.get(h.login);
@@ -868,6 +889,7 @@ function step(S, I, C, t) {
       if (t - S.staleSince <= C.stale_hold_s * 1000) {
         S.whyOff = null;
         consentCuts(S, I, t, A);
+        coversOff(S, C, t, A);                               // (wave2 WP-4: the covers kill switch, like a cut)
         keptCheck(S, I, C, t, A);                            // (wave2 WP-4: kept relays stay under every rule too)
         // the pictures still follow their relays (livecam's state, not Pepe's room sync): a starting tile turns live, an
         // ended one a card - but nothing new is opened on a stale roster
@@ -894,9 +916,12 @@ function step(S, I, C, t) {
   if (pinnedOff.length || pinsMoved) { compact(S); S.v++; A.push({ a: "touch", why: "pins" }); }
   // wave2 WP-4 (F.2): every kept relay whose reason to exist ended goes now (a cut, cam off, pinned, expired, ...)
   keptCheck(S, I, C, t, A);
+  // wave2 WP-4 (F.4): no cover tile while the `covers` switch is off (coversOff), and no new one goes up
+  const coversOn = C.covers === true;
+  coversOff(S, C, t, A);
   // 2 (wave2 WP-4: covers are tracked like holders, by their key)
   const coverKeys = new Set();
-  for (const c of I.covers || []) if (c && typeof c.key === "string" && c.key.startsWith(COVER_PREFIX)) coverKeys.add(c.key);
+  if (coversOn) for (const c of I.covers || []) if (c && typeof c.key === "string" && c.key.startsWith(COVER_PREFIX)) coverKeys.add(c.key);
   const HS = track(S, [...(I.holders || []), ...(I.covers || []).filter((c) => c && coverKeys.has(c.key)).map((c) => ({ login: c.key, since: c.since }))], C, t);
   trackOthers(S, I, t);
   for (const x of S.tiles) x.relAt = HS.has(x.login) ? null : (x.relAt || t);

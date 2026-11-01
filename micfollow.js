@@ -86,8 +86,8 @@
 //                  Kept relays write no rows (micfollow_spans covers time on the stage only).
 //   dynamic        (F.3, the `dynamic` switch) the pad layout "dynamic": dynTick picks the main cell after each step (the active
 //                  speaker, at most every main_hold_s); snapshot / viewFor send dyn {n, t, main} beside the legacy layout.
-//   covers         (F.4, the `covers` switch) veiled holders as hooded-frog cover tiles (veiledOf - see there): v1 = a B.1-stamped
-//                  anonymous hold (bridge.k3Ref), v2 = WP-2's setVeilSource. A cover never reaches eligOf, livecam, Pepe,
+//   covers         (F.4, the `covers` switch) veiled holders as hooded-frog cover tiles (veiledOf - see there): v1 = none (the
+//                  neutral card, as today), v2 = WP-2's setVeilSource (proven holds only). A cover never reaches eligOf, livecam, Pepe,
 //                  stills or micfollow_spans; its program entry is {kind: "cover", id: "anon-<8 hex>" (random, stable for the
 //                  tile, never a login), name (frog name | null), hood, veil}; the tile routes refuse its id.
 "use strict";
@@ -197,9 +197,12 @@ function init() {
       };
       await addColumn("micfollow_pads", "keep_recent", "INTEGER");
       await addColumn("micfollow_pads", "layout_override", "TEXT");
-      // wave2 WP-4 (F.4, v2): a VEILED exclusion (a see-through manager's ✕ on a cover tile) - the label the pad's list shows
-      // instead of the login (the frog name then, or "a veiled speaker"); the login stays server-side
+      // wave2 WP-4 (F.4, v2): a VEILED exclusion (a see-through manager's ✕ on a cover tile) is a row of its own, keyed by its
+      // xid ("~v:<xid>" in `login` - never a Camfrog login, so no by-name exclude / remove can ever touch it: review
+      // B-privacy-ux-3), with the person's login in `vlogin` (server-side only) and the frog name then in `veiled` (null = none:
+      // the page says "a veiled speaker" in its own language - review B-privacy-ux-7)
       await addColumn("micfollow_excl", "veiled", "TEXT");
+      await addColumn("micfollow_excl", "vlogin", "TEXT");
       await runQuery(`CREATE TABLE IF NOT EXISTS micfollow_pins (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, login TEXT NOT NULL, by_id TEXT, by_name TEXT,
                       at INTEGER NOT NULL, went_live INTEGER, UNIQUE (room_id, login))`);
       const r = (await getQuery("SELECT v, data, updated_at, updated_by FROM micfollow_cfg WHERE id = 1"))[0];
@@ -256,17 +259,23 @@ function padOf(roomId, create) {
 }
 const exclMap = (roomId) => { let m = EXCL.get(String(roomId)); if (!m) { m = new Map(); EXCL.set(String(roomId), m); } return m; };
 const rowExcl = (e) => ({ until: e.until == null ? null : Number(e.until), reason: e.reason || "owner", by: e.by || null, at: Number(e.at) || 0, user_id: e.user_id || null,
-                          veiled: e.veiled || null });   // (wave2 WP-4: a veiled exclusion's label - listed instead of the login)
+                          // (wave2 WP-4: a veiled exclusion - its row keyed "~v:<xid>": the person (server-side) and the frog name then)
+                          vlogin: e.vlogin ? low(e.vlogin) : null, veiled: e.vlogin && e.veiled ? String(e.veiled) : null });
+/** wave2 WP-4 (F.4): a veiled exclusion's row key ("~" never appears in a login - LOGIN_RE). */
+const VEXCL = "~v:";
 /** Is `login` kept off this pad's mic stage? By that Camfrog login, or - for an exclusion made by PATV name - by the PATV
- *  account: `userIds` = the accounts linked to `login` NOW (so a later re-link to another Camfrog name is still caught). */
+ *  account: `userIds` = the accounts linked to `login` NOW (so a later re-link to another Camfrog name is still caught), or
+ *  (wave2 WP-4) by a veiled exclusion of theirs. */
 function excluded(roomId, login, t = now(), userIds = null) {
   const m = EXCL.get(String(roomId));
   if (!m) return false;
   const live = (e) => !!(e && (e.until == null || e.until > t));
   if (live(m.get(login))) return true;
-  if (userIds && userIds.length) {
-    const ids = new Set(userIds.map(String));
-    for (const e of m.values()) if (e.user_id && ids.has(String(e.user_id)) && live(e)) return true;
+  const ids = userIds && userIds.length ? new Set(userIds.map(String)) : null;
+  for (const e of m.values()) {
+    if (!live(e)) continue;
+    if (e.vlogin && e.vlogin === login) return true;
+    if (ids && e.user_id && ids.has(String(e.user_id))) return true;
   }
   return false;
 }
@@ -509,15 +518,16 @@ function whyOff(P, R, t) {
 }
 // ── wave2 WP-4 (the incognito / mic-stage spec F.4): veiled speakers as hooded-frog COVER tiles ──
 // Which veiled mic holders the stage may show as a cover - never a cam, never an identity on any page:
-//   v1 (today's wire)  an anonymous holder whose hold's grab was B.1-stamped (bridge.k3Ref: an incognito person's hold - a
-//                      hashless anonymous grab in a sync carrying both kinded lists). The peek hood, no frog name ("someone ·
-//                      incognito"), a site-chosen hood (the least used on the pad), no Reveal (the site doesn't know who).
-//                      Unstamped holds (a hold begun named, a grab from before a restart) stay in `others` - the neutral card -
-//                      exactly as the chat's "someone grabbed the mic" lines do (B.1's fail-closed rule). A !bridge hide hold
-//                      never reaches the site on v1 (Pepe leaves it out).
+//   v1 (today's wire)  none. Every anonymous holder stays in `others` - the neutral card - even one whose grab was B.1-stamped:
+//                      review (B-privacy-ux-2) - today's wire also sends an unproven !bridge hide holder, and any name Pepe's
+//                      resolver can't read (fail closed), as a stamped anonymous hold, and the site can't tell them from an
+//                      incognito one nor see `proven` (spec F.4: unproven veiled holders stay in `others`; a cover needs WP-2's
+//                      priv). That also keeps one person's re-grabs - a new hold ref each time - from turning into several
+//                      covers that get past grab-spam, the cooldown and the regrab merge (review B-relays-1 / B-privacy-ux-1).
 //   v2 (WP-2 / WP-3)   setVeilSource(fn): fn(u, R) -> null | {veil: "incognito" | "hidden", alias, hood, since, proven, sess,
 //                      began_named, login, display}. Only a PROVEN hold that didn't begin named becomes a cover (key by the
-//                      frog-name session: "~cv:s<sess>"); the identity (login, display) stays server-side in P.coverWho for
+//                      frog-name session: "~cv:s<sess>" - one key per person across re-grabs, so DF-37 / the cooldown / the
+//                      regrab merge apply as to a login); the identity (login, display) stays server-side in P.coverWho for
 //                      the Reveal (coverWho / setRevealSource) and a veiled exclusion.
 // Today's handling that covers replace (cfg covers off - the default on prod): such a holder is an `others` entry, i.e. the
 // neutral "Someone is speaking" card / "Someone else is speaking" strip. Covers never reach eligOf, livecam, Pepe, stills or
@@ -527,8 +537,7 @@ const SESS_RE = /^[A-Za-z0-9_-]{1,64}$/;
 let VEIL_SOURCE = null;
 /** WP-2's hook: the privacy wire's per-hold facts (server-only). null = v1 (today's wire). */
 function setVeilSource(fn) { VEIL_SOURCE = typeof fn === "function" ? fn : null; }
-const k3RefOf = (roomId, ref) => { try { return BR().k3Ref(roomId, ref); } catch (e) { return null; } };
-/** A mic holder `u` of bridge room R the stage may show as a cover -> {key, veil, alias, hood, since, who} | null. */
+/** A mic holder `u` of bridge room R the stage may show as a cover -> {key, veil, alias, hood, since, who} | null (v2 only). */
 function veiledOf(u, R) {
   if (!u || u.self || u.bot || u.acct || !R) return null;
   if (VEIL_SOURCE) {
@@ -546,11 +555,7 @@ function veiledOf(u, R) {
                since: Number.isFinite(v.since) ? v.since : undefined, who: login ? { login, display: String(v.display || login).slice(0, 60) } : null };
     }
   }
-  if (u.anon && typeof u.ref === "string") {
-    const at = k3RefOf(R.id, u.ref);
-    if (at != null) return { key: core.COVER_PREFIX + "r" + u.ref, veil: "incognito", alias: null, hood: null, since: at || undefined, who: null };
-  }
-  return null;
+  return null;                                   // (v1: no cover - the neutral card; see above)
 }
 /** The cover key behind a cover id shown on pad `roomId` now (null = not a cover). */
 function coverKeyOf(roomId, id) {
@@ -620,30 +625,50 @@ function holdersOf(R) {
   });
   return { holders: out, unproven, others, pepe, covers };
 }
-function siteBudget(P, t) {
+/** The raw site-wide numbers behind siteBudget (no clamps): relays left (relays_max and livecam's max_live, both net of the
+ *  opens on their way), Pepe's cam pool left beyond POOL_FREE (every relay and still is an open cam there), the reclaimable
+ *  kept relays. Also apply's eviction recheck (review B-relays-3). */
+function budgetNums(P, t) {
   const c = cfg(), L = LC(), lc = L.cfg();
-  while (COLD.length && t - COLD[0] > 60 * 1000) COLD.shift();
-  P.cold = P.cold.filter((x) => t - x < 60 * 1000);
   let stills = 0;
   for (const Q of PADS.values()) for (const x of Q.state.tiles) if (x.video === "still") stills++;
-  const mfOnly = L.mfOnlyCount(t);
-  const yielding = t < yieldUntil;                 // a manual cam slot is taking the relay we gave up: don't race it
-  const relaysLeft = Math.min(c.relays_max - mfOnly - pendingCold, lc.max_live - L.liveCount() - pendingCold);
-  const rateLeft = Math.min(c.cold_opens_per_min - COLD.length, c.cold_opens_per_pad - P.cold.length);
-  // wave2 WP-4 (F.2): relays the mic stage only keeps warm (and nobody else uses) are reclaimable - an open that needs one
-  // evicts the least recently used first (core marks it evict); coldFree / poolFree = what's left without that
-  const reclaim = keptList(t).filter((k) => k.mfOnly).length;
-  const coldFree = c.cold_open && !yielding ? Math.max(0, Math.min(relaysLeft, rateLeft)) : 0;
-  const coldLeft = c.cold_open && !yielding ? Math.max(0, Math.min(relaysLeft + reclaim, rateLeft)) : 0;
-  // mfix: why there's no cold open to give (the tile's card says so, instead of always "live cams are full")
-  const coldWhy = !c.cold_open ? "cold_off" : yielding || relaysLeft + reclaim <= 0 ? "relays" : rateLeft <= 0 ? "rate" : null;
+  const mfOnly = L.mfOnlyCount(t), live = L.liveCount();
+  const relaysLeft = Math.min(c.relays_max - mfOnly - pendingCold, lc.max_live - live - pendingCold);
   // Pepe's cam pool (his learned capacity, else pool_max): every relay (▶ Live, cam slots, the mic stage's) and every
   // still is an open cam there - mic follows opens nothing new that would leave fewer than POOL_FREE for ▶ Live and
   // manual cam slots
   let poolCap = Number(lc.pool_max) || 6;
   try { const bp = L.botPool ? L.botPool() : null; if (bp && Number(bp.capacity) > 0) poolCap = Number(bp.capacity); } catch (e) { /* the knob */ }
-  const poolFree = Math.max(0, poolCap - POOL_FREE - L.liveCount() - stills - pendingCold);
-  const poolLeft = poolFree + reclaim;
+  const poolRaw = poolCap - POOL_FREE - live - stills - pendingCold;
+  // wave2 WP-4 (F.2): relays the mic stage only keeps warm (and nobody else uses) are reclaimable
+  const reclaim = keptList(t).filter((k) => k.mfOnly).length;
+  return { c, L, lc, stills, relaysLeft, poolRaw, reclaim };
+}
+/** wave2 WP-4 (F.2, review B-relays-3): an open (`still` false) or a still core marked evict - does it STILL need a kept relay's
+ *  room now? core decided on the numbers from before its step; a kept relay the same step dropped (keptCheck / keptBudget -
+ *  apply ends those first) or a released tile may have made the room already, and evicting another would cost a comeback.
+ *  (A still's tile counts as a still in the pool already; an open's hold doesn't count yet.) */
+function evictNeeded(P, t, still) {
+  const b = budgetNums(P, t);
+  if (!b.reclaim) return false;                    // (nothing kept to evict anyway)
+  return still ? b.poolRaw < 0 : b.relaysLeft <= 0 || b.poolRaw <= 0;
+}
+function siteBudget(P, t) {
+  while (COLD.length && t - COLD[0] > 60 * 1000) COLD.shift();
+  P.cold = P.cold.filter((x) => t - x < 60 * 1000);
+  const { c, L, lc, stills, relaysLeft, poolRaw, reclaim } = budgetNums(P, t);
+  const yielding = t < yieldUntil;                 // a manual cam slot is taking the relay we gave up: don't race it
+  const rateLeft = Math.min(c.cold_opens_per_min - COLD.length, c.cold_opens_per_pad - P.cold.length);
+  // wave2 WP-4 (F.2): an open that needs a kept relay's room evicts the least recently used first (core marks it evict);
+  // coldFree / poolFree = what's left without that
+  const coldFree = c.cold_open && !yielding ? Math.max(0, Math.min(relaysLeft, rateLeft)) : 0;
+  const coldLeft = c.cold_open && !yielding ? Math.max(0, Math.min(relaysLeft + reclaim, rateLeft)) : 0;
+  // mfix: why there's no cold open to give (the tile's card says so, instead of always "live cams are full")
+  const coldWhy = !c.cold_open ? "cold_off" : yielding || relaysLeft + reclaim <= 0 ? "relays" : rateLeft <= 0 ? "rate" : null;
+  // review (B-relays-2): the reclaim is added BEFORE the clamp - a pool already over (▶ Live grew while relays were kept) has
+  // nothing to give: evicting a kept relay only gets it back to where it was, never past POOL_FREE
+  const poolFree = Math.max(0, poolRaw);
+  const poolLeft = Math.max(0, poolRaw + reclaim);
   // 1.99afl review (S2): Pepe opens a cam his roster can't classify by its exact name (his mic-stage level; none yet - through
   // 1.99afk he refuses it at once as not_on_cam, so the mic stage asks for none and the tile stays "checking their cam…")
   const unkOpen = (Number(L.botMf()) || 0) >= core.MF_UNK_OPEN;
@@ -696,7 +721,7 @@ function enforceKept(t = now()) {
     break;
   }
 }
-const keepMetric = (why) => (why === "expired" ? "keep_expired" : why === "evicted" || why === "pad_full" ? "keep_evicted" : "keep_cut:" + String(why || "").slice(0, 30));
+const keepMetric = (why) => (why === "expired" ? "keep_expired" : why === "evicted" || why === "pad_full" || why === "shed" ? "keep_evicted" : "keep_cut:" + String(why || "").slice(0, 30));
 const roomOf = (roomId) => { try { return BR()._rooms.get(String(roomId)) || null; } catch (e) { return null; } };
 
 /** Run the engine for one pad (synchronous; never awaits). R = its bridge room (looked up when not given). */
@@ -739,10 +764,15 @@ function stepPad(roomId, t = now(), R) {
 function apply(P, R, actions, t) {
   let touch = null, add = 0, rem = 0, cut = 0;
   const who = [];                                // per-person tags for the log line (a daily HMAC, never the login)
-  for (const a of actions || []) {
+  // (wave2 WP-4, review B-relays-3: the kept relays the step dropped end FIRST - core already took them out of S.kept, so an
+  // eviction below would otherwise pick the next least recently used one, maybe a comeback another pad is waiting for)
+  const list = actions || [];
+  const ordered = list.some((a) => a.a === "keep_drop") ? [...list.filter((a) => a.a === "keep_drop"), ...list.filter((a) => a.a !== "keep_drop")] : list;
+  for (const a of ordered) {
     switch (a.a) {
-      // (wave2 WP-4: an open / still that needs a kept relay's room evicts the least recently used one first)
-      case "hold": if (a.evict) evictKept(t, { forP: P }); doHold(P, a.login, a.cold, t); break;
+      // (wave2 WP-4: an open / still that needs a kept relay's room evicts the least recently used one first - if it still
+      // does now: evictNeeded)
+      case "hold": if (a.evict && evictNeeded(P, t, false)) evictKept(t, { forP: P }); doHold(P, a.login, a.cold, t); break;
       // a relay only the mic stage held (no cam slot, no ▶ Live viewer) ends at once - it never lingers against max_live
       case "release": try { LC().stageDrop(P.roomId, a.login, MFH(P.roomId), t, "mf_released"); } catch (e) { /* none */ } break;
       // wave2 WP-4 (F.2): the tile left but its relay stays warm ("mfw:") for a comeback; the site-wide budget right after
@@ -767,7 +797,7 @@ function apply(P, R, actions, t) {
         bump("keep_taken", 1, t, P);
         stepPad(P.roomId, t);                      // live in the same tick (the relay is running, Pepe said exact)
         break;
-      case "still": if (a.evict) evictKept(t, { forP: P }); P.stills.set(a.login, { next: t }); bump("stills_started", 1, t, P); stillTick(P, t); break;
+      case "still": if (a.evict && evictNeeded(P, t, true)) evictKept(t, { forP: P }); P.stills.set(a.login, { next: t }); bump("stills_started", 1, t, P); stillTick(P, t); break;
       // a still stops (live now, left, cut): its queued / claimed job is cancelled - Pepe never takes a frame of someone
       // the mic stage no longer shows (a cut person above all)
       case "still_stop": P.stills.delete(a.login); try { require("./bridge-relay").mfSnapCancel(P.roomId, a.login); } catch (e) { /* no relay */ } break;
@@ -1151,25 +1181,28 @@ function shed(t = now()) {
   yieldRelay(t);
   for (const P of PADS.values()) if (P.state.tiles.some((x) => x.video === "still")) stepPad(P.roomId, t);
 }
-/** Keep `login` off this pad's mic stage: minutes (null / 0 with reason owner+always = always). */
-async function excludeFor(roomId, login, minutes, reason, by, { always = false, userId = null, veiled = null } = {}) {
+/** Keep `login` off this pad's mic stage: minutes (null / 0 with reason owner+always = always). wave2 WP-4 (F.4): veiled = true
+ *  stores a VEILED exclusion (a ✕ on a cover) - its own row, keyed by its xid, listed by `label` (the frog name then, or null),
+ *  never by the login; a by-name exclusion of the same login is another row (review B-privacy-ux-3: neither ever replaces,
+ *  removes or shows the other, so guessing a name tells nothing). */
+async function excludeFor(roomId, login, minutes, reason, by, { always = false, userId = null, veiled = false, label = null } = {}) {
   await init();
   const l = low(login);
   if (!LOGIN_RE.test(l)) throw new Refuse(400, "That isn't a Camfrog name.", "bad");
   const t = now();
   if (!always && !(Number(minutes) > 0)) return null;
   const until = always ? null : t + Math.round(Number(minutes) * 60 * 1000);
-  const m = exclMap(roomId), cur = m.get(l);
+  const key = veiled ? VEXCL + exclXid(roomId, l) : l;
+  const m = exclMap(roomId), cur = m.get(key);
   // never shorten a longer exclusion the owner set (a ✂ Cut after "always" keeps "always")
   if (cur && (cur.until == null || (until != null && cur.until > until)) && reason !== "owner") return cur;
-  // (wave2 WP-4: a veiled exclusion keeps its label; a later named exclusion of the same login replaces it - the owner named them)
-  const row = { until, reason: String(reason || "owner").slice(0, 20), by: by ? String(by).slice(0, 80) : null, at: t, user_id: userId || null,
-                veiled: veiled ? String(veiled).slice(0, 60) : null };
-  await runQuery(`INSERT INTO micfollow_excl (room_id, login, user_id, until, reason, by, at, veiled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  const row = { until, reason: String(reason || "owner").slice(0, 20), by: by ? String(by).slice(0, 80) : null, at: t, user_id: veiled ? null : userId || null,
+                vlogin: veiled ? l : null, veiled: veiled && typeof label === "string" && label.trim() ? label.trim().slice(0, 60) : null };
+  await runQuery(`INSERT INTO micfollow_excl (room_id, login, user_id, until, reason, by, at, veiled, vlogin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(room_id, login) DO UPDATE SET user_id = excluded.user_id, until = excluded.until, reason = excluded.reason, by = excluded.by, at = excluded.at,
-                  veiled = excluded.veiled`,
-                 [String(roomId), l, row.user_id, until, row.reason, row.by, t, row.veiled]);
-  m.set(l, row);
+                  veiled = excluded.veiled, vlogin = excluded.vlogin`,
+                 [String(roomId), key, row.user_id, until, row.reason, row.by, t, row.veiled, row.vlogin]);
+  m.set(key, row);
   const P = PADS.get(String(roomId));
   if (P) { apply(P, roomOf(P.roomId), core.cutNow(P.state, l, "excluded", t), t); stepPad(P.roomId, t); }
   // mfix review: two reports (staff review) or an ended-by cooldown stop a 📌 pin too - at once, not at the next pin check
@@ -1203,12 +1236,25 @@ async function exclTarget(R, name, kind) {
   }
   return { login: linked, userId: String(acc.userId) };
 }
+/** Lift the BY-NAME exclusion of `login` (wave2 WP-4: a veiled one of theirs stays - it's removed by its xid only). */
 async function unexclude(roomId, login) {
   await init();
   const l = low(login);
+  if (l.startsWith(VEXCL)) return false;          // (a veiled row is never addressed by a name)
   await runQuery("DELETE FROM micfollow_excl WHERE room_id = ? AND login = ?", [String(roomId), l]);
   const m = EXCL.get(String(roomId));
   if (m) m.delete(l);
+  return true;
+}
+/** wave2 WP-4 (F.4): lift a veiled exclusion by its xid (the pad's list). -> true when there was one */
+async function unexcludeXid(roomId, xid) {
+  await init();
+  const x = String(xid || "");
+  if (!/^[0-9a-f]{16}$/.test(x)) return false;
+  const m = EXCL.get(String(roomId)), key = VEXCL + x;
+  if (!m || !m.has(key) || !m.get(key).vlogin) return false;
+  await runQuery("DELETE FROM micfollow_excl WHERE room_id = ? AND login = ?", [String(roomId), key]);
+  m.delete(key);
   return true;
 }
 // ── 📌 pins (mfix): the pad's owner / site staff pin a cam on the mic stage ──
@@ -1822,9 +1868,10 @@ async function excludeCover(user, R, tileId, hours) {
   const key = coverKeyOf(R.id, tileId), who = coverWho(R.id, tileId);
   const P = PADS.get(String(R.id));
   if (!key || !who || !P) throw new Refuse(404, "They aren't on the mic stage any more.", "gone");
-  const label = (P.covers.get(key) && P.covers.get(key).alias) || "a veiled speaker";
-  // (already kept off - by name too: the row stays as it is, so the list never pairs a name with a cover)
-  if (!excluded(P.roomId, who.login, t)) await excludeFor(P.roomId, who.login, hours * 60, "owner", user.username, { always: hours === 0, veiled: label });
+  // (the frog name then - user-facing data, not copy: none = null, the page words "a veiled speaker" in its own language. Its
+  // own row, whatever by-name rows exist: the list never pairs a name with a cover, either way)
+  const label = (P.covers.get(key) && P.covers.get(key).alias) || null;
+  await excludeFor(P.roomId, who.login, hours * 60, "owner", user.username, { always: hours === 0, veiled: true, label });
   apply(P, roomOf(P.roomId), core.cutNow(P.state, key, "excluded", t), t);
   stepPad(P.roomId, t);
   ROOMS().event(P.roomId, "micfollow", user.username || null, hours === 0 ? "kept a veiled speaker off the mic stage (always)" : `kept a veiled speaker off the mic stage (${hours} h)`);
@@ -1861,8 +1908,8 @@ async function ownerState(roomId, t = now()) {
   // (wave2 WP-4: a veiled exclusion is listed by its label and an opaque xid - never by the login: excluding a cover never
   // reveals who it was)
   const ex = [...(EXCL.get(String(roomId)) || new Map()).entries()].filter(([, e]) => e.until == null || e.until > t)
-    .map(([login, e]) => (e.veiled ? { login: null, veiled: e.veiled, xid: exclXid(roomId, login), until: e.until, reason: e.reason, by: e.by, at: e.at }
-      : { login, until: e.until, reason: e.reason, by: e.by, at: e.at })).sort((a, b) => b.at - a.at);
+    .map(([key, e]) => (e.vlogin ? { login: null, veiled: e.veiled || null, xid: key.slice(VEXCL.length), until: e.until, reason: e.reason, by: e.by, at: e.at }
+      : { login: key, until: e.until, reason: e.reason, by: e.by, at: e.at })).sort((a, b) => b.at - a.at);
   return { settings: { ...s }, on: !!s.on, running: !!(P && P.state.running && s.on), why_off: s.on ? why : null, can_run: !runWhy, run_why: runWhy || null,
            tiles: P ? P.state.tiles.length : 0, unproven_n: P ? P.state.unproven : 0, excluded: ex, max_live_cap: caps.maxLive, max_people_cap: caps.maxPeople,
            // (wave2 WP-4: "dynamic" only while its site switch is on - or the pad already uses it, so a save never silently
@@ -2001,6 +2048,9 @@ async function saveCfg(user, next, reason, action) {
   });
   CFG = { v, cfg: { ...next }, at: t, by };
   clearAll();                                    // every pad steps with the new knobs (off -> cleared at once)
+  // wave2 WP-4 (F.2, review B-relays-5 / B-privacy-ux-5): a lowered warm_max (or relays_max) evicts the kept relays over it now,
+  // least recently used first (F.5: never more than warm_max) - a lowered warm_keep_s ended the older ones in the steps above
+  if (loaded) enforceKept(now());
   if (!next.enabled) for (const rid of [...PINS.keys()]) await dropPins(rid, "mf_off");   // mfix: the kill switch takes the pins too
   return { v, cfg: { ...next }, changed };
 }
@@ -2266,9 +2316,7 @@ function register(app, { addUser, bySlug, isLive }) {
       // (the same rule as Reveal: coverFlags' ex); the pad's list shows a label, never the login. Removal by its xid.
       if (b.tile != null) return res.json({ ok: true, ...(await excludeCover(u, R, String(b.tile), Number(b.hours))), state: await ownerStateFor(req, R.id) });
       if (b.xid != null && b.remove === true) {
-        const hit = [...(EXCL.get(String(R.id)) || new Map()).entries()].find(([l, e]) => e.veiled && exclXid(R.id, l) === String(b.xid));
-        if (!hit) throw new Refuse(404, "That exclusion is gone.", "none");
-        await unexclude(R.id, hit[0]);
+        if (!(await unexcludeXid(R.id, b.xid))) throw new Refuse(404, "That exclusion is gone.", "none");
         ROOMS().event(R.id, "micfollow", u.username || null, "removed an exclusion of a veiled speaker");
         return res.json({ ok: true, state: await ownerStateFor(req, R.id) });
       }
@@ -2277,6 +2325,7 @@ function register(app, { addUser, bySlug, isLive }) {
       if (!login && b.name) ({ login, userId } = await exclTarget(R, b.name, b.kind));
       if (!LOGIN_RE.test(login)) throw new Refuse(400, "That isn't a Camfrog name.", "bad");
       if (b.remove === true) {
+        // (wave2 WP-4: the by-name row only - a veiled one of the same person is never touched or told apart, B-privacy-ux-3)
         const was = (EXCL.get(String(R.id)) || new Map()).get(login);
         await unexclude(R.id, login);
         // lifting a hold-out two reports caused = the host vouches for them (logged; the reports stay for staff)
@@ -2462,7 +2511,7 @@ function register(app, { addUser, bySlug, isLive }) {
 
 module.exports = {
   register, init, cfg, current: () => ({ v: CFG.v, cfg: { ...CFG.cfg } }), onSync, onRoomGone, stepPad, snapshot, viewFor, ownerState, setPad, adminView, setKill, setCfg,
-  recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
+  recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, unexcludeXid, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,
   tick, prune, ptag, Refuse,
   health, listAlert, failsOf, LIST_ALERT_MS, LIST_ALERT_GAP_MS,                                                    // 1.99afl (S3)
@@ -2471,7 +2520,7 @@ module.exports = {
   keptOf, keptList, evictKept,                                                                                     // wave2 WP-4 (F.2)
   setVeilSource, veiledOf, coverKeyOf, holdersOf,                                                                  // wave2 WP-4 (F.4)
   coverWho, setRevealSource, excludeCover,                                                                         // wave2 WP-4 (the Reveal seam)
-  _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS,
+  _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS, _siteBudget: siteBudget,
   /** tests: the pad's first notice to `login` went out at `at` (null = never). 1.99afn: also their courtesy row - told at `at`
    *  (courtesy v1, like the backfill), or (null) never told anywhere */
   _noticed: async (roomId, login, at) => {

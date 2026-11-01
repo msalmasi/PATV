@@ -1392,9 +1392,9 @@ test("46. wave2 F.2 eviction: an open / still beyond what's free without a kept 
 });
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.4): cover tiles ──
-/** world() + veiled holders shown as covers (I.covers: [{key, since}]). */
+/** world() + veiled holders shown as covers (I.covers: [{key, since}]); the `covers` switch on (its default is off). */
 function coverWorld(opts = {}) {
-  const w = world(opts);
+  const w = world(Object.assign({}, opts, { C: Object.assign({ covers: true }, opts.C || {}) }));
   w.veiled = [];
   const input0 = w.input;
   // (like micfollow.stepPad: a cover's key never gets an elig / sess entry - unless a test forces one in, w.forceElig)
@@ -1468,4 +1468,61 @@ test("49. wave2 F.4 covers count toward max_people and displace like tiles; newe
   const I2 = Object.assign(s.input(), { others: [{ key: "anon:x", since: s.t - 10000 }] });
   M.step(s.S, I2, s.C, s.t + 1000);
   assert.equal(M.speaking(s.S, I2, s.C, s.t + 1000), "someone", "once the cover let go, the unprovable holder dims the stage as today");
+});
+
+// ── wave2 WP-4 review fixes ──
+test("50. wave2 review (B-relays-4): while Pepe sheds (his cams full for a ▶ Live / a cam slot) a LIVE tile leaving lets its relay go - never kept - and a relay kept already ends ('shed')", () => {
+  const w = warmWorld();
+  onLive(w, "a");
+  w.site.shed = true;
+  w.drop("a"); w.actions = [];
+  w.run(4, 30);
+  assert.deepEqual(w.logins(), []);
+  assert.equal(count(w.actions, "keep"), 0, "not kept during a shed (▶ Live wins over the mic stage)");
+  assert.equal(count(w.actions, "release"), 1, "let go: the cam is Pepe's for ▶ Live");
+  assert.equal(w.S.kept.size, 0);
+  const k = warmWorld(); kept(k, "a", 0); k.at(1);
+  assert.ok(k.S.kept.has("a"));
+  k.site.shed = true; k.actions = []; k.at(2);
+  const d = k.actions.find((a) => a.a === "keep_drop" && a.login === "a");
+  assert.ok(d && d.why === "shed", JSON.stringify(k.actions));
+  assert.equal(k.S.kept.size, 0);
+});
+
+test("51. wave2 review (B-relays-5): a lowered warm_keep_s applies to relays kept already - one kept longer than the new value ends at the next step, the others' until moves in", () => {
+  const w = warmWorld();
+  kept(w, "a", 0); kept(w, "b", 50);                          // kept until 180 / 230 under warm_keep_s 180
+  w.at(60);
+  assert.equal(w.S.kept.size, 2);
+  w.C.warm_keep_s = 60; w.actions = [];
+  w.at(61);
+  assert.deepEqual(w.actions.filter((a) => a.a === "keep_drop").map((a) => [a.login, a.why]), [["a", "expired"]], "a left 61 s ago: over the new 60 s");
+  assert.equal(w.S.kept.get("b").until, S0 + 110 * 1000, "b: left at 50 + 60 (the admin list's 'Ns left' follows)");
+  w.actions = []; w.at(109);
+  assert.ok(w.S.kept.has("b"));
+  w.at(110);
+  assert.ok(w.actions.some((a) => a.a === "keep_drop" && a.login === "b" && a.why === "expired"));
+});
+
+test("52. wave2 review (B-privacy-ux-4): the covers switch off (its kill switch) takes every cover tile off at once - no hand-over, no keep_recent - and puts none up while off", () => {
+  const w = coverWorld({ pad: { keep_recent: 5 } });
+  w.grab("a"); w.at(0); w.at(2);
+  w.veil(CV1); w.at(10); w.at(12);
+  assert.deepEqual(w.logins().sort(), [CV1, "a"].sort());
+  // switched off: micfollow.js sends no covers (the person is an `others` entry again) - the cover goes in this step
+  w.C.covers = false; w.unveil(CV1); w.actions = [];
+  w.at(13);
+  assert.deepEqual(w.logins(), ["a"], "off at once (keep_recent 5 would have kept it up ~5 minutes)");
+  assert.ok(w.actions.some((a) => a.a === "touch" && a.why === "covers_off"));
+  for (const a of ["span_close", "release", "keep", "still_stop"]) assert.equal(count(w.actions, a), 0, a);
+  // still off: a cover key handed in anyway is ignored (no tile, not attributed)
+  w.veil(CV2); w.at(20); w.at(25);
+  assert.ok(!w.S.tiles.some((x) => x.cover), "none goes up while off");
+  // on again: covers as before
+  w.C.covers = true; w.at(30); w.at(33);
+  assert.ok(w.logins().includes(CV2));
+  // ... and under the stale hold too (Pepe's sync late: the program is held, but the kill switch applies like a cut)
+  w.why_off = "stale"; w.C.covers = false; w.actions = [];
+  w.at(34);
+  assert.deepEqual(w.logins(), ["a"], "off under the stale hold");
 });

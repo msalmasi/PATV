@@ -640,8 +640,11 @@
       people.textContent = '';
       P.src.forEach(function (s) {
         if (s.pin) return;                                        // (a pin's own 📌✕ unpins it)
-        if (isCover(s)) return;                                   // (wave2 WP-4: a cover's own ✕ - only with ex: 1)
-        var li = el('li', null), b = btn('mf-pbtn', '✕ ' + s.name, _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
+        // (wave2 WP-4: a cover only with ex: 1 - by its frog name or "someone"; its ✕ posts {tile}, the server maps it. Review
+        // B-privacy-ux-6: the small cells of a narrow 6-9 dynamic stage hide a tile's own ✕, so ⋯ Manage must list it)
+        if (isCover(s) && s.ex !== 1) return;
+        var li = el('li', null), b = isCover(s) ? btn('mf-pbtn', '✕ ' + labelOf(s), _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage'))
+          : btn('mf-pbtn', '✕ ' + s.name, _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
         b.addEventListener('click', function () { askExclude(s); });
         li.appendChild(b); people.appendChild(li);
       });

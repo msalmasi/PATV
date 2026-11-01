@@ -20,8 +20,10 @@
     if (!list || !list.length) { var tr0 = el('tr'), td0 = el('td', _t('js.padset.mf.none', 'Nobody is excluded.')); td0.colSpan = 5; td0.className = 'muted'; tr0.appendChild(td0); rows.appendChild(tr0); return; }
     list.forEach(function (e) {
       var tr = el('tr');
-      // wave2 WP-4: a veiled speaker kept off from their cover tile is listed by a label, never by name (removal by its xid)
-      tr.appendChild(el('td', e.veiled ? '🕶 ' + e.veiled : e.login));
+      // wave2 WP-4: a veiled speaker kept off from their cover tile is listed by a label, never by name (removal by its xid) -
+      // the frog name then, else "a veiled speaker" in the page's language (the server stores no copy: review B-privacy-ux-7)
+      var veiled = !!e.xid && !e.login;
+      tr.appendChild(el('td', veiled ? '🕶 ' + (typeof e.veiled === 'string' && e.veiled ? e.veiled : _t('js.padset.mf.veiled_anon', 'a veiled speaker')) : e.login));
       tr.appendChild(el('td', when(e.until)));
       tr.appendChild(el('td', REASON[e.reason] || e.reason || ''));
       tr.appendChild(el('td', e.by || ''));
@@ -29,7 +31,7 @@
       b.type = 'button'; b.className = 'btn';
       b.addEventListener('click', function () {
         b.disabled = true;
-        post(rows.getAttribute('data-url'), e.veiled ? { xid: e.xid, remove: true } : { login: e.login, remove: true }).then(function (d) {
+        post(rows.getAttribute('data-url'), veiled ? { xid: e.xid, remove: true } : { login: e.login, remove: true }).then(function (d) {
           if (d && d.ok && d.state) { paint(d.state.excluded); status(d.state); } else { exMsg.textContent = (d && d.error) || _t('js.padset.mf.failed', 'Not saved - try again.'); b.disabled = false; }
         }).catch(function () { exMsg.textContent = _t('js.padset.mf.failed', 'Not saved - try again.'); b.disabled = false; });
       });

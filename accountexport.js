@@ -331,6 +331,8 @@ async function collect(userId, { at = now(), parts = null } = {}) {
     await put("chat", "mic_stage_appearances", rows("micfollow_spans", "login = ?", [login], { order: "started" }));
     await put("chat", "mic_stage_setting", rows("micfollow_optout", "login = ?", [login]));
     await put("chat", "mic_stage_kept_off", rows("micfollow_excl", "login = ? OR user_id = ?", [login, uid], { omit: ["by"] }));
+    // wave2 WP-4: a pad's veiled exclusion of them (a ✕ on their cover tile - its row keyed by an xid, their login in vlogin)
+    await put("chat", "mic_stage_kept_off_veiled", rows("micfollow_excl", "vlogin = ?", [login], { omit: ["by"] }));
     await put("chat", "mic_stage_notices", rows("micfollow_notices", "login = ?", [login]));
     await put("chat", "mic_stage_courtesy_notice", rows("micfollow_courtesy", "login = ?", [login]));   // 1.99afn (FU-1)
     await put("chat", "mic_stage_reports_on_you", rows("micfollow_reports", "login = ?", [login], { omit: ["reporter_id", "resolved_by"], order: "at" }));

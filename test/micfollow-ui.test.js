@@ -1106,3 +1106,52 @@ test("wave2 F.4 stage-mic.js: Reveal only with rv: 1 AND WP-2's client (window.P
   assert.equal(findCls(tileEl(s.grid, "anon-0000000a"), "mf-chip").textContent, "this is you");
   s.ctl.stop();
 });
+
+// ── wave2 WP-4 review fixes ──
+test("wave2 review (B-privacy-ux-6) stage-mic.js: ⋯ Manage lists a cover with ex: 1 ('✕ <frog name or someone>', posting {tile}) - the small cells of a narrow 6-9 dynamic stage hide a tile's own ✕; never a cover without ex: 1", async () => {
+  const src = ["a", "b", "c", "d", "e"].map((id, i) => tileS(id, i, "card"));
+  src.push(coverS("anon-0000000b", 5, { name: "Soggy Bullfrog", ex: 1 }), coverS("anon-0000000c", 6, { ex: 1 }), coverS("anon-0000000d", 7));
+  const s = dynSandbox({ v: 1, layout: "grid9", count: 8, src, dyn: { n: 8, t: "d8", main: "a" }, still_s: 20, manage: { excluded_n: 0, freeze_min: 30 } }, 375);
+  assert.ok(s.stage.classList.contains("narrow"), "a phone");
+  assert.match(read("public", "css", "webrtc.css"), /\.mf-stage\.narrow\[data-dyn=d8\] \.mf-tile:not\(\.main\) \.mf-x/, "(the CSS that hides the small cells' ✕)");
+  const sent = [];
+  s.ctx.fetch = (u, o) => { sent.push([u, o && o.body ? JSON.parse(o.body) : null]); return Promise.resolve({ json: () => Promise.resolve({ ok: true }) }); };
+  findCls(s.stage, "mf-mbtn").listeners.click[0]();
+  const panel = s.stage.children.find((c) => c.className === "mf-panel");
+  assert.equal(panel.hidden, false);
+  const people = panel.children.find((c) => c.className === "mf-people");
+  const items = people.children.map((li) => li.children[0]);
+  assert.deepEqual(items.map((b) => b.textContent), ["✕ A", "✕ B", "✕ C", "✕ D", "✕ E", "✕ Soggy Bullfrog", "✕ someone"], "the ex: 1 covers by frog name / 'someone'; anon-0000000d (no ex) isn't listed");
+  assert.equal(items[5].getAttribute("aria-label"), "Keep this veiled speaker off the mic stage");
+  items[6].listeners.click[0]();
+  const askP = findCls(s.stage, "mf-ask");
+  assert.equal(askP.children[0].textContent, "Keep this veiled speaker off the mic stage", "the question never names anyone");
+  askP.children[1].listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(sent.find((x) => /\/exclude$/.test(x[0]))[1], { tile: "anon-0000000c", hours: 1 }, "by the tile id - the server maps it");
+  s.ctl.stop();
+});
+
+test("wave2 review (B-privacy-ux-7) pad-micfollow.js: a veiled exclusion with no frog name (the server sends null - no English copy in the DB) reads 'a veiled speaker' in the page's language; removal by its xid; every key in en.json", async () => {
+  const js = read("public", "js", "pad-micfollow.js");
+  const dom = fakeDom();
+  const els = {};
+  for (const id of ["mfForm", "mfMsg", "mfExRows", "mfExForm", "mfExMsg", "mfStatus"]) els[id] = dom.mk(id === "mfForm" || id === "mfExForm" ? "form" : "p");
+  els.mfForm.setAttribute("data-url", "/api/rooms/pad/micfollow/settings");
+  els.mfExRows.setAttribute("data-url", "/api/rooms/pad/micfollow/exclude");
+  const X1 = "0123456789abcdef", X2 = "fedcba9876543210";
+  els.mfExRows.setAttribute("data-list", JSON.stringify([{ login: null, veiled: null, xid: X1, until: null, reason: "owner", by: "admin", at: 3 },
+    { login: null, veiled: "Soggy Bullfrog", xid: X2, until: null, reason: "owner", by: "admin", at: 2 }, { login: "bob", until: null, reason: "owner", by: "admin", at: 1 }]));
+  const sent = [];
+  const ctx = { document: { getElementById: (id) => els[id] || null, createElement: dom.mk }, console, setTimeout, Date,
+    __t: (k, d, v) => (k === "js.padset.mf.veiled_anon" ? "un orateur voilé" : String(d).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m))),
+    fetch: (u, o) => { sent.push(JSON.parse(o.body)); return Promise.resolve({ json: () => Promise.resolve({ ok: true, state: { excluded: [] } }) }); } };
+  ctx.window = ctx;
+  vm.runInNewContext(js, ctx);
+  const rows = els.mfExRows.children;
+  assert.deepEqual(rows.map((tr) => tr.children[0].textContent), ["🕶 un orateur voilé", "🕶 Soggy Bullfrog", "bob"]);
+  rows[0].children[4].children[0].listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(sent[0], { xid: X1, remove: true });
+  assert.equal(EN["js.padset.mf.veiled_anon"], "a veiled speaker");
+});
