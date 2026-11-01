@@ -156,7 +156,8 @@ function coverArt(entry) {
   const file = valid ? path.join(__dirname, "public", "img", "anon", "hood-" + (entry.veil === "hidden" ? "shadow-" : "peek-") + entry.hood + ".svg") : null;
   let art = null;
   try { if (file && fs.lstatSync(file).isFile() && !fs.lstatSync(file).isSymbolicLink()) art = fs.readFileSync(file); } catch (_) { /* WP-4 not installed yet */ }
-  return { art, label: String(entry.name || "") + (valid ? " · " + entry.veil : "") };
+  // (wave2 WP-4: a cover without a frog name - today's wire, a C.2 session - is "someone", never " · incognito")
+  return { art, label: String(entry.name || "someone") + (valid ? " · " + entry.veil : "") };
 }
 async function consent(login, userId) {
   // review fix: camRefusal treats a failed private-profile lookup as public. The strict lookup throws instead, which refuses here.

@@ -976,3 +976,98 @@ test("wave2 F.3 stage-mic.js: a 375 px phone keeps the templates (.narrow) with 
   assert.equal(EN["pad.settings.mf.layout.dynamic"], "Dynamic (fits the speakers)");
   off.ctl.stop();
 });
+
+// ── wave2 WP-4 (the incognito / mic-stage spec F.4): cover tiles on the page ──
+const coverS = (id, pos, extra) => Object.assign({ kind: "cover", id, name: null, hood: 3, veil: "incognito", pos, newest: false, video: "cover", watch: "cover" }, extra || {});
+
+test("wave2 F.4 stage-mic.js: a cover tile - the hooded frog (peek / shadow, its hood), '<frog name or someone> · incognito', the ring; NO button for members (no ⚑ ✕ 📌 🙈 Reveal), no ticket, no still; ⚑ lists skip it", async () => {
+  const s = dynSandbox({ v: 1, layout: "split", count: 2, report: true, still_s: 20,
+    src: [tileS("alice", 0, "live"), coverS("anon-1a2b3c4d", 1, { newest: true, ring: true })] });
+  const e = tileEl(s.grid, "anon-1a2b3c4d");
+  assert.ok(e.classList.contains("mf-cover"));
+  assert.equal(e.getAttribute("data-why"), "cover");
+  assert.equal(e.getAttribute("data-hood"), "3");
+  const hood = findCls(e, "mf-hood");
+  assert.equal(hood.src, "/public/img/anon/hood-peek-3.svg");
+  assert.equal(hood.hidden, false);
+  assert.equal(hood.alt, "", "decorative (the tile's label says who)");
+  assert.equal(findCls(e, "mf-name").textContent, "someone · incognito");
+  assert.equal(e.getAttribute("aria-label"), "someone, incognito, on the mic");
+  assert.ok(e.classList.contains("newest") && e.classList.contains("ring"));
+  assert.equal(e.children.find((c) => c.tagName === "VIDEO").hidden, true, "never a video");
+  assert.equal(findCls(e, "mf-card").hidden, true);
+  for (const cls of ["mf-rp", "mf-pn", "mf-off", "mf-rv"]) assert.equal(findCls(e, cls).hidden, true, cls);
+  assert.equal(e.children.find((c) => c.className === "mf-x").hidden, true, "✕");
+  await new Promise((r) => setTimeout(r, 10));
+  s.ctl.stop();
+  // a frog name (v2) and the hidden veil -> the shadow hood
+  const h = dynSandbox({ v: 1, layout: "single", count: 1, still_s: 20, src: [coverS("anon-00000001", 0, { name: "Soggy Bullfrog", veil: "hidden", hood: 6 })] });
+  const he = tileEl(h.grid, "anon-00000001");
+  assert.equal(findCls(he, "mf-hood").src, "/public/img/anon/hood-shadow-6.svg");
+  assert.equal(findCls(he, "mf-name").textContent, "Soggy Bullfrog · hidden");
+  h.ctl.stop();
+  // a bad hood can't build another path
+  const b = dynSandbox({ v: 1, layout: "single", count: 1, still_s: 20, src: [coverS("anon-00000002", 0, { hood: "../../x" })] });
+  assert.equal(findCls(tileEl(b.grid, "anon-00000002"), "mf-hood").src, "/public/img/anon/hood-peek-0.svg");
+  b.ctl.stop();
+  // no ticket asked for a cover; ⚑ in the bar (narrow) never lists it
+  const posts = [];
+  const n = dynSandbox({ v: 1, layout: "grid4", count: 3, report: true, still_s: 20, src: [tileS("alice", 0, "card"), tileS("bob", 1, "card"), coverS("anon-00000003", 2)] }, 375);
+  n.ctx.fetch = (u, o) => { posts.push(u); return Promise.resolve({ json: () => Promise.resolve({ ok: true }) }); };
+  const rb = findCls(n.stage, "mf-rbtn");
+  assert.equal(rb.hidden, false);
+  rb.listeners.click[0]();
+  const rp = findCls(n.stage, "mf-rpanel");
+  const labels = rp.children.map((c) => c.textContent);
+  assert.ok(labels.some((t) => /ALICE/.test(t)) && !labels.some((t) => /someone|anon-/.test(t)), JSON.stringify(labels));
+  assert.ok(!posts.some((u) => /watch|still/.test(u)), "no ticket / still for a cover");
+  n.ctl.stop();
+  for (const k of ["js.pad.veil.incognito", "js.pad.veil.hidden", "js.stage.mf.cover_someone", "js.stage.mf.cover_aria", "js.stage.mf.cover_self", "js.stage.mf.reveal",
+                   "js.stage.mf.reveal_aria", "js.stage.mf.revealed", "js.stage.mf.exclude_cover_q"]) assert.ok(k in EN, k);
+  const css = read("public", "css", "webrtc.css");
+  assert.match(css, /\.mf-tile\.mf-cover \{[^}]*repeating-linear-gradient/, "static scanlines");
+  assert.match(css, /\.mf-tile \.mf-hood \{[^}]*image-rendering: pixelated/);
+  for (let i = 1; i <= 7; i++) assert.match(css, new RegExp('\\.mf-cover\\[data-hood="' + i + '"\\]'), "hood token " + i);
+});
+
+test("wave2 F.4 stage-mic.js: Reveal only with rv: 1 AND WP-2's client (window.PATVReveal.tile) - the answer shows only to this viewer (dashed edge + chip); ✕ only with ex: 1; 'this is you' with self: 1", async () => {
+  const prog = (extra) => ({ v: 1, layout: "single", count: 1, still_s: 20, manage: { excluded_n: 0, freeze_min: 30 }, src: [coverS("anon-0000000a", 0, extra)] });
+  // rv: 1 but no PATVReveal on the page (WP-2 not in yet): no button
+  let s = dynSandbox(prog({ rv: 1 }));
+  let e = tileEl(s.grid, "anon-0000000a");
+  assert.equal(findCls(e, "mf-rv").hidden, true);
+  assert.equal(e.children.find((c) => c.className === "mf-x").hidden, true, "a manager without ex: 1 - no ✕");
+  s.ctl.stop();
+  // with WP-2's client
+  const calls = [];
+  s = dynSandbox(prog({ rv: 1, ex: 1 }));
+  s.ctx.PATVReveal = { tile: (slug, id) => { calls.push([slug, id]); return Promise.resolve({ ok: true, login: "erin" }); } };
+  s.ctl.update(Object.assign(prog({ rv: 1, ex: 1 }), { v: 2 }));
+  e = tileEl(s.grid, "anon-0000000a");
+  const rv = findCls(e, "mf-rv");
+  assert.equal(rv.hidden, false);
+  assert.equal(rv.getAttribute("aria-label"), "Reveal who this is (only you see it; it is logged)");
+  assert.equal(e.children.find((c) => c.className === "mf-x").hidden, false, "ex: 1 - ✕");
+  rv.listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(calls, [["pad", "anon-0000000a"]]);
+  assert.ok(e.classList.contains("revealed"), "the dashed edge");
+  assert.equal(findCls(e, "mf-chip").textContent, "erin · only you can see this");
+  assert.equal(findCls(e, "mf-rv").hidden, true);
+  s.ctl.update(Object.assign(prog({ rv: 1, ex: 1 }), { v: 3 }));
+  assert.equal(findCls(e, "mf-chip").textContent, "erin · only you can see this", "kept across updates while it stays up");
+  s.ctl.stop();
+  // a bad answer reveals nothing
+  s = dynSandbox(prog({ rv: 1 }));
+  s.ctx.PATVReveal = { tile: () => Promise.resolve({ ok: true, login: "<b>x</b>" }) };
+  s.ctl.update(Object.assign(prog({ rv: 1 }), { v: 2 }));
+  e = tileEl(s.grid, "anon-0000000a");
+  findCls(e, "mf-rv").listeners.click[0]();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!e.classList.contains("revealed"));
+  s.ctl.stop();
+  // the speaker sees their own cover
+  s = dynSandbox(prog({ self: 1 }));
+  assert.equal(findCls(tileEl(s.grid, "anon-0000000a"), "mf-chip").textContent, "this is you");
+  s.ctl.stop();
+});

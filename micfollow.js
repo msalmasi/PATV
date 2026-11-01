@@ -84,6 +84,12 @@
 //                  and the end hooks cover them); a comeback's hold takes the relay over (keep_taken) and is live in the tick.
 //                  /stage/admin: the knobs (auto-listed), kept counts + keep_* counters; /admin/pepe/livecams: "warm (Ns left)".
 //                  Kept relays write no rows (micfollow_spans covers time on the stage only).
+//   dynamic        (F.3, the `dynamic` switch) the pad layout "dynamic": dynTick picks the main cell after each step (the active
+//                  speaker, at most every main_hold_s); snapshot / viewFor send dyn {n, t, main} beside the legacy layout.
+//   covers         (F.4, the `covers` switch) veiled holders as hooded-frog cover tiles (veiledOf - see there): v1 = a B.1-stamped
+//                  anonymous hold (bridge.k3Ref), v2 = WP-2's setVeilSource. A cover never reaches eligOf, livecam, Pepe,
+//                  stills or micfollow_spans; its program entry is {kind: "cover", id: "anon-<8 hex>" (random, stable for the
+//                  tile, never a login), name (frog name | null), hood, veil}; the tile routes refuse its id.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -239,7 +245,8 @@ function padOf(roomId, create) {
   let P = PADS.get(id);
   if (!P && create && id) {
     P = { roomId: id, settings: { ...core.PAD_DEFAULTS }, state: core.newState(), stills: new Map(), spans: new Map(), cold: [], met: new Map(),
-          fails: [], alertAt: 0 };   // 1.99afl (S3): failed opens / stills of the last hour by code; when its list alert last went
+          fails: [], alertAt: 0,     // 1.99afl (S3): failed opens / stills of the last hour by code; when its list alert last went
+          covers: new Map(), coverWho: new Map() };   // wave2 WP-4 (F.4): cover key -> {id, hood, veil, alias}; -> identity (v2 only)
     PADS.set(id, P);
   }
   return P || null;
@@ -496,16 +503,106 @@ function whyOff(P, R, t) {
   if (!(Number(R.updated) >= bootAt) || t - Number(R.updated) > c.sync_fresh_s * 1000) return "stale";
   return null;
 }
+// ── wave2 WP-4 (the incognito / mic-stage spec F.4): veiled speakers as hooded-frog COVER tiles ──
+// Which veiled mic holders the stage may show as a cover - never a cam, never an identity on any page:
+//   v1 (today's wire)  an anonymous holder whose hold's grab was B.1-stamped (bridge.k3Ref: an incognito person's hold - a
+//                      hashless anonymous grab in a sync carrying both kinded lists). The peek hood, no frog name ("someone ·
+//                      incognito"), a site-chosen hood (the least used on the pad), no Reveal (the site doesn't know who).
+//                      Unstamped holds (a hold begun named, a grab from before a restart) stay in `others` - the neutral card -
+//                      exactly as the chat's "someone grabbed the mic" lines do (B.1's fail-closed rule). A !bridge hide hold
+//                      never reaches the site on v1 (Pepe leaves it out).
+//   v2 (WP-2 / WP-3)   setVeilSource(fn): fn(u, R) -> null | {veil: "incognito" | "hidden", alias, hood, since, proven, sess,
+//                      began_named, login, display}. Only a PROVEN hold that didn't begin named becomes a cover (key by the
+//                      frog-name session: "~cv:s<sess>"); the identity (login, display) stays server-side in P.coverWho for
+//                      the Reveal (coverWho / setRevealSource) and a veiled exclusion.
+// Today's handling that covers replace (cfg covers off - the default on prod): such a holder is an `others` entry, i.e. the
+// neutral "Someone is speaking" card / "Someone else is speaking" strip. Covers never reach eligOf, livecam, Pepe, stills or
+// micfollow_spans.
+const COVER_ID_RE = /^anon-[0-9a-f]{8}$/;
+const SESS_RE = /^[A-Za-z0-9_-]{1,64}$/;
+let VEIL_SOURCE = null;
+/** WP-2's hook: the privacy wire's per-hold facts (server-only). null = v1 (today's wire). */
+function setVeilSource(fn) { VEIL_SOURCE = typeof fn === "function" ? fn : null; }
+const k3RefOf = (roomId, ref) => { try { return BR().k3Ref(roomId, ref); } catch (e) { return null; } };
+/** A mic holder `u` of bridge room R the stage may show as a cover -> {key, veil, alias, hood, since, who} | null. */
+function veiledOf(u, R) {
+  if (!u || u.self || u.bot || u.acct || !R) return null;
+  if (VEIL_SOURCE) {
+    let v = null;
+    try { v = VEIL_SOURCE(u, R); } catch (e) { v = null; }
+    if (v && typeof v === "object") {
+      // (fail closed: unproven, begun named - Pepe re-refs such a hold - or no session key: not a cover, the neutral card)
+      if (v.proven !== true || v.began_named === true || !SESS_RE.test(String(v.sess || ""))) return null;
+      const alias = typeof v.alias === "string" && v.alias.trim() ? v.alias.trim().slice(0, 40) : null;
+      const hood = Number.isInteger(v.hood) && v.hood >= 0 && v.hood <= 7 ? v.hood : null;
+      const login = LOGIN_RE.test(low(v.login)) ? low(v.login) : null;
+      return { key: core.COVER_PREFIX + "s" + String(v.sess), veil: v.veil === "hidden" ? "hidden" : "incognito", alias, hood,
+               since: Number.isFinite(v.since) ? v.since : undefined, who: login ? { login, display: String(v.display || login).slice(0, 60) } : null };
+    }
+  }
+  if (u.anon && typeof u.ref === "string") {
+    const at = k3RefOf(R.id, u.ref);
+    if (at != null) return { key: core.COVER_PREFIX + "r" + u.ref, veil: "incognito", alias: null, hood: null, since: at || undefined, who: null };
+  }
+  return null;
+}
+/** The cover key behind a cover id shown on pad `roomId` now (null = not a cover). */
+function coverKeyOf(roomId, id) {
+  const P = PADS.get(String(roomId));
+  if (!P || !P.covers || !COVER_ID_RE.test(String(id || ""))) return null;
+  for (const [key, c] of P.covers) if (c.id === id) return key;
+  return null;
+}
+/** After a step: every cover TILE has its public entry (a random id - re-rolled if it equals a member's / tile's login - and a
+ *  hood: the frog name's, else the least used on the pad), stable for the tile's life; the identity (v2 only) stays in
+ *  P.coverWho, never in the engine's state or any program. */
+function syncCovers(P, R, covers) {
+  if (!P.covers) P.covers = new Map();
+  if (!P.coverWho) P.coverWho = new Map();
+  const on = new Set(P.state.tiles.filter((x) => x.cover).map((x) => x.login));
+  for (const k of [...P.covers.keys()]) if (!on.has(k)) { P.covers.delete(k); P.coverWho.delete(k); }
+  if (!on.size) return;
+  const info = new Map((covers || []).map((c) => [c.key, c]));
+  const taken = new Set([...((R && R.members) || []), ...((R && R.mic) || [])].map((u) => (u && u.login ? low(u.login) : "")).filter(Boolean));
+  for (const x of P.state.tiles) if (!x.cover) taken.add(x.login);
+  for (const c of P.covers.values()) taken.add(c.id);
+  for (const key of on) {
+    const v = info.get(key);
+    let c = P.covers.get(key);
+    if (!c) {
+      let id;
+      do { id = "anon-" + crypto.randomBytes(4).toString("hex"); } while (taken.has(id));
+      taken.add(id);
+      let hood = v && v.hood != null ? v.hood : null;
+      if (hood == null) {
+        const use = new Array(8).fill(0);
+        for (const o of P.covers.values()) use[o.hood]++;
+        const least = Math.min(...use);
+        hood = use.indexOf(least);
+      }
+      c = { id, hood, veil: v ? v.veil : "incognito", alias: v ? v.alias : null };
+      P.covers.set(key, c);
+    } else if (v) { c.veil = v.veil; if (v.alias) c.alias = v.alias; }
+    if (v && v.who) P.coverWho.set(key, v.who);
+  }
+}
+
 /** R.mic -> {holders: proven real logins (the only people ever staged), unproven (count), others: [{key, since}] the holders
  *  nobody can show (unproven, anonymous, account keys, bots - for the neutral "Someone is speaking" card, never a tile),
- *  pepe: since | true | null (Pepe himself holds the mic)}. */
+ *  pepe: since | true | null (Pepe himself holds the mic), covers (wave2 WP-4, cfg covers on): [{key, since, veil, alias,
+ *  hood, who}] veiled holders shown as hooded-frog covers (veiledOf)}. */
 function holdersOf(R) {
-  const out = [], seen = new Set(), others = [];
+  const out = [], seen = new Set(), others = [], covers = [], coverSeen = new Set();
+  const coverOn = cfg().covers === true;
   let unproven = 0, pepe = null;
   const sinceOf = (u) => (Number.isFinite(u.since) ? u.since : undefined);
   (((R && R.mic) || [])).forEach((u, i) => {
     if (!u) return;
     if (u.self) { pepe = Number.isFinite(u.since) ? u.since : true; return; }
+    if (coverOn) {
+      const v = veiledOf(u, R);
+      if (v) { if (!coverSeen.has(v.key)) { coverSeen.add(v.key); covers.push(v); } return; }
+    }
     const l = low(u.login);
     // a key that never names anyone to the page (an anonymous entry has no login: its place in the list)
     const okey = () => (u.anon || !LOGIN_RE.test(l) ? "anon:" + String(u.id || u.display || i).slice(0, 60) : "x:" + l);
@@ -515,7 +612,7 @@ function holdersOf(R) {
     seen.add(l);
     out.push({ login: l, since: sinceOf(u) });
   });
-  return { holders: out, unproven, others, pepe };
+  return { holders: out, unproven, others, pepe, covers };
 }
 function siteBudget(P, t) {
   const c = cfg(), L = LC(), lc = L.cfg();
@@ -603,11 +700,12 @@ function stepPad(roomId, t = now(), R) {
   if (R === undefined) R = roomOf(roomId);
   const why = whyOff(P, R, t);
   if (why === "pad_off" && !P.state.tiles.length && P.state.whyOff === "pad_off") return null;
-  const { holders, unproven, others, pepe } = R ? holdersOf(R) : { holders: [], unproven: 0, others: [], pepe: null };
+  const { holders, unproven, others, pepe, covers } = R ? holdersOf(R) : { holders: [], unproven: 0, others: [], pepe: null, covers: [] };
   const elig = new Map(), sess = new Map(), want = new Set();
   if (!why || why === "stale") {
-    // (wave2 WP-4: + the pad's kept relays - every rule re-runs on them each step)
-    for (const l of new Set([...holders.map((h) => h.login), ...P.state.tiles.map((x) => x.login), ...P.state.kept.keys()])) {
+    // (wave2 WP-4: + the pad's kept relays - every rule re-runs on them each step; a cover tile never asks eligOf / livecam)
+    for (const l of new Set([...holders.map((h) => h.login), ...P.state.tiles.filter((x) => !x.cover).map((x) => x.login), ...P.state.kept.keys()])) {
+      if (core.isCoverKey(l)) continue;
       elig.set(l, R ? eligOf(P, R, l, t, want) : "not_member");
       sess.set(l, LC().mfState(P.roomId, l, t));
     }
@@ -620,10 +718,12 @@ function stepPad(roomId, t = now(), R) {
                   // 1.99afl: Pepe's last complete participant-list read (S1b: a list pause ends on a newer one; S2: the cam_unknown epoch)
                   room: { cams: !!(R && R.cams), listAt: R && Number(R.listAt) > 0 ? Number(R.listAt) : null, listFresh: R ? (R.listFresh == null ? null : !!R.listFresh) : null },
                   site: siteBudget(P, t),
-                  pins: why ? [] : [...(PINS.get(P.roomId) || new Map()).keys()] };    // mfix: 📌 the pad's pinned cams
-  if (!why) { bump("holders_seen", holders.length + unproven, t, P); bump("proven", holders.length, t, P); bump("unproven", unproven, t, P); }
+                  pins: why ? [] : [...(PINS.get(P.roomId) || new Map()).keys()],    // mfix: 📌 the pad's pinned cams
+                  covers: why ? [] : covers.map((c) => ({ key: c.key, since: c.since })) };   // wave2 WP-4 (F.4): keys only
+  if (!why) { bump("holders_seen", holders.length + unproven, t, P); bump("proven", holders.length, t, P); bump("unproven", unproven, t, P); if (covers.length) bump("covers_seen", covers.length, t, P); }
   const r = core.step(P.state, input, cfg(), t);
   apply(P, R, r.actions, t);
+  syncCovers(P, R, covers);                      // wave2 WP-4 (F.4): each cover tile's public id + hood
   dynTick(P, t);                                 // wave2 WP-4 (F.3): the dynamic layout's main cell (hysteresis)
   for (const l of want) refresh(l, P.roomId);
   return r;
@@ -1565,10 +1665,21 @@ function snapshot(roomId, t = now()) {
   // wave2 WP-4 (F.3): in the dynamic layout every current holder's tile gets the mic ring (`newest` keeps its meaning)
   const dyn = dynOn(P) && !S.whyOff;
   const ring = (holds) => (dyn && holds && !S.speaking ? { ring: true } : {});
+  // wave2 WP-4 (F.4): a cover tile carries its public id / hood / veil / frog name only - never a login, a key, a ref or a session
+  const coverOf = (x) => (P.covers && P.covers.get(x.login)) || null;
+  const mics = S.tiles.filter((x) => !x.cover || coverOf(x));
   const tiles = [...pins.map((p) => ({ login: p.login, pos: p.pos, pin: true, newest: p === pinNew, since: p.since, video: p.video, why: p.why, ...ring(p.hold != null) })),
-                 ...S.tiles.map((x) => ({ login: x.login, pos: pins.length + x.pos, newest: x === nw, since: x.addedAt, video: x.video || "card", why: x.why || null,
-                                          recent: x.relAt != null, ...ring(x.relAt == null) }))];
-  const main = dyn && tiles.length ? (S.dynMain && tiles.some((x) => x.login === S.dynMain.id) ? S.dynMain.id : (tiles.find((x) => x.newest) || tiles[0]).login) : null;
+                 ...mics.map((x) => (x.cover
+                   ? { cover: true, cid: coverOf(x).id, name: coverOf(x).alias || null, hood: coverOf(x).hood, veil: coverOf(x).veil,
+                       pos: pins.length + x.pos, newest: x === nw, since: x.addedAt, video: "cover", why: null, recent: x.relAt != null, ...ring(x.relAt == null) }
+                   : { login: x.login, pos: pins.length + x.pos, newest: x === nw, since: x.addedAt, video: x.video || "card", why: x.why || null,
+                       recent: x.relAt != null, ...ring(x.relAt == null) }))];
+  // (the dynamic main by its internal key - a login or a cover key, kept off the snapshot - sent as the public id)
+  const keys = [...pins.map((p) => p.login), ...mics.map((x) => x.login)];
+  const pubOf = (x) => (x.cover ? x.cid : x.login);
+  const mi = dyn && tiles.length ? Math.max(0, S.dynMain ? keys.indexOf(S.dynMain.id) : -1) : -1;
+  const mainT = mi < 0 ? null : S.dynMain && keys[mi] === S.dynMain.id ? tiles[mi] : tiles.find((x) => x.newest) || tiles[0];
+  const main = mainT ? pubOf(mainT) : null;
   return { roomId: P.roomId, v: S.v, running: S.running && !S.whyOff, whyOff: S.whyOff || null,
            active: !!S.active || pins.some((p) => p.video === "live" || p.video === "starting"), default_view: P.settings.default_view,
            // (a stored "dynamic" while the site switch is off reads as auto: not fixed, no dyn)
@@ -1609,6 +1720,14 @@ async function viewFor(snap, R, userId, nameOf, t = now()) {
   const own = snap.tiles.length ? await viewerLogin(userId) : "";
   const src = [];
   for (const x of snap.tiles) {
+    // wave2 WP-4 (F.4): a veiled speaker's hooded frog - its public id, the frog name (v2; null = "someone"), the hood and the
+    // veil; never a login, avatar, nameCss, ref, key or session; no watch gate (there's no cam to watch)
+    if (x.cover) {
+      src.push({ kind: "cover", id: x.cid, name: x.name || null, hood: x.hood, veil: x.veil, pos: x.pos, newest: x.newest, since: x.since,
+                 video: "cover", watch: "cover", ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
+                 ...(await coverFlags(snap.roomId, x.cid, userId, t)) });
+      continue;
+    }
     const m = memberOf(R, x.login);
     const ref = { login: x.login, display: (m && m.display) || x.login };
     let u = ref;
@@ -1632,6 +1751,12 @@ async function viewFor(snap, R, userId, nameOf, t = now()) {
     return { ...base, src, dyn: { n: src.length, t: "d" + src.length, main } };
   }
   return { ...base, src };
+}
+/** wave2 WP-4 (F.4): a cover tile's per-viewer flags - the Reveal seam (rv / ex / self) comes with WP-2; none on v1. */
+async function coverFlags(roomId, cid, userId, t = now()) { void roomId; void cid; void userId; void t; return {}; }
+/** wave2 WP-4 (F.4): the tile routes (watch, still, exclude, report, pin) refuse a cover's id - an old page posts it like a login. */
+function refuseCover(roomId, id) {
+  if (coverKeyOf(roomId, low(id))) throw new Refuse(400, "That's a veiled speaker - there's no cam or name to act on.", "cover");
 }
 /** mfix: a viewer's own linked Camfrog login (lower case, "" = none), cached 30 s - pages long-poll /live. */
 const OWN = new Map();
@@ -1863,6 +1988,7 @@ async function adminView(user, t = now()) {
                 unproven_n: S.unproven, frozen_until: S.frozenUntil > t ? S.frozenUntil : null, counts: countsOf(P.met, t),   // §12: per pad too
                 pins: pinsOf(P.roomId).length, keep_recent: P.settings.keep_recent,                                                   // mfix
                 kept: S.kept ? S.kept.size : 0,                                                                                       // wave2 WP-4 (F.2)
+                covers: S.tiles.filter((x) => x.cover).length,                                                                        // wave2 WP-4 (F.4)
                 ...health(P, roomOf(P.roomId), t) });                                                                                 // 1.99afl (S3)
   }
   let audit = [];
@@ -1989,6 +2115,7 @@ function register(app, { addUser, bySlug, isLive }) {
       if (!beat && !stop && rate(watchHit, "u:" + u.userId, res)) return;
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R)) return res.json({ ok: true, state: "ended", why: "offline" });
+      refuseCover(R.id, login);                  // (wave2 WP-4: no cam behind a cover)
       // mfix: 📌 a pinned cam - held by its pin (opened like a cam slot); the same per-viewer gates as a mic tile
       if (b.pin === true) {
         const pin = pinOf(R.id, login);
@@ -2026,6 +2153,7 @@ function register(app, { addUser, bySlug, isLive }) {
       const login = low(req.params.login);
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R) || !LOGIN_RE.test(login)) return res.json({ ok: true, state: "none" });
+      refuseCover(R.id, login);                  // (wave2 WP-4)
       const P = PADS.get(R.id);
       const x = P && P.settings.on ? core.tileOf(P.state, login) : null;
       if (!x || x.video !== "still") return res.json({ ok: true, state: "none" });
@@ -2054,6 +2182,7 @@ function register(app, { addUser, bySlug, isLive }) {
       const { u, R } = await owner(req);
       const b = req.body || {};
       let login = low(b.login), userId = null;
+      if (b.login != null) refuseCover(R.id, b.login);   // (wave2 WP-4: a cover's ✕ needs WP-2's veiled exclusion - see coverWho)
       if (!login && b.name) ({ login, userId } = await exclTarget(R, b.name, b.kind));
       if (!LOGIN_RE.test(login)) throw new Refuse(400, "That isn't a Camfrog name.", "bad");
       if (b.remove === true) {
@@ -2111,6 +2240,7 @@ function register(app, { addUser, bySlug, isLive }) {
       const b = req.body || {};
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R)) throw new Refuse(404, "That room isn't live right now.", "offline");
+      refuseCover(R.id, b.login);                // (wave2 WP-4: covers have no ⚑ - nobody to report)
       // only someone who can see the pad's live room reports what it shows
       if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw new Refuse(403, "This pad's live room is for its approved members.", "pad_access");
       if (!bridgeOk(R.id)) throw new Refuse(403, "This pad's live chat room comes with 💎 Prime Time Plus.", "prime");
@@ -2159,6 +2289,7 @@ function register(app, { addUser, bySlug, isLive }) {
       const b = req.body || {};
       const login = low(b.login);
       if (!LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?", "bad");
+      refuseCover(R.id, login);                  // (wave2 WP-4)
       if (b.remove === true) {
         const was = await unpin(R.id, login, "unpinned", u.username || u.userId);
         return res.json({ ok: true, unpinned: was });
@@ -2247,6 +2378,7 @@ module.exports = {
   courtesyOnce, courtesyOf, homeCourtesy, pmText, COURTESY_V, HOME_NOTICE_V,                                       // 1.99afn (FU-1)
   pinPut, unpin, pinTick, pinWhy, pinCandidates, pinsOf, pinsFor, pinOf, setOverride, onExactRefused, CFG_REV,      // mfix
   keptOf, keptList, evictKept,                                                                                     // wave2 WP-4 (F.2)
+  setVeilSource, veiledOf, coverKeyOf, holdersOf,                                                                  // wave2 WP-4 (F.4)
   _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS,
   /** tests: the pad's first notice to `login` went out at `at` (null = never). 1.99afn: also their courtesy row - told at `at`
    *  (courtesy v1, like the backfill), or (null) never told anywhere */
@@ -2273,6 +2405,6 @@ module.exports = {
   _setBoot: (t) => { bootAt = t; },
   _reset: () => { PADS.clear(); MFOPT = new Set(); EXCL.clear(); FACTS.clear(); BANS.clear(); INFLIGHT.clear(); HOLDING.clear(); GATE.clear(); BLK.clear(); MANAGE.clear(); NOTES.clear(); HIDE.clear();
                    COLD.length = 0; pendingCold = 0; yieldUntil = 0; shedUntil = 0; caRetryAt = 0; relaysOverSince = 0; MET.clear(); PER_MIN.clear(); LAT.warm = []; LAT.cold = []; LAT.keep = []; PEAK = 0;
-                   PINS.clear(); PIN_LEFT.clear(); pinBusy = false; lastPinTick = 0; OWN.clear();
+                   PINS.clear(); PIN_LEFT.clear(); pinBusy = false; lastPinTick = 0; OWN.clear(); VEIL_SOURCE = null;
                    CFG = { v: 0, cfg: { ...core.DEFAULTS }, at: null, by: null }; ready = null; loaded = false; },
 };

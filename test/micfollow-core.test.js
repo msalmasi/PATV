@@ -1390,3 +1390,82 @@ test("46. wave2 F.2 eviction: an open / still beyond what's free without a kept 
   assert.equal(se.S.liveBlock.has("z"), false);
   assert.ok(se.S.tiles[0].retryAt > se.t);
 });
+
+// ── wave2 WP-4 (the incognito / mic-stage spec F.4): cover tiles ──
+/** world() + veiled holders shown as covers (I.covers: [{key, since}]). */
+function coverWorld(opts = {}) {
+  const w = world(opts);
+  w.veiled = [];
+  const input0 = w.input;
+  // (like micfollow.stepPad: a cover's key never gets an elig / sess entry - unless a test forces one in, w.forceElig)
+  w.input = () => {
+    const I = Object.assign(input0(), { covers: w.veiled.map((k) => ({ key: k })) });
+    for (const k of [...I.elig.keys()]) if (M.isCoverKey(k) && !(w.forceElig && w.forceElig.has(k))) { I.elig.delete(k); I.sess.delete(k); }
+    if (w.forceElig) for (const [k, e] of w.forceElig) I.elig.set(k, e);
+    return I;
+  };
+  w.veil = (k) => { if (!w.veiled.includes(k)) w.veiled.push(k); };
+  w.unveil = (k) => { w.veiled = w.veiled.filter((x) => x !== k); };
+  return w;
+}
+const CV1 = M.COVER_PREFIX + "ranon-0a1b2c3d", CV2 = M.COVER_PREFIX + "ranon-11223344";
+
+test("48. wave2 F.4 covers: a veiled holder held >= min_hold_s becomes a cover tile - never asked eligOf, never held, stilled, kept or spanned; released after the hand-over; a stage of only covers never becomes the default", () => {
+  assert.ok(!/^[\w.\-]{1,40}$/.test(CV1), "a cover key can never match a login");
+  assert.equal(M.isCoverKey(CV1), true); assert.equal(M.isCoverKey("alice"), false);
+  const w = coverWorld({ C: { warm_keep_s: 180 } });
+  w.veil(CV1); w.at(0); w.at(1);
+  assert.deepEqual(w.logins(), [], "not before min_hold_s");
+  w.at(2);
+  assert.deepEqual(w.logins(), [CV1]);
+  const x = w.S.tiles[0];
+  assert.deepEqual([x.cover, x.video, x.why], [true, "cover", null]);
+  for (const a of ["hold", "still", "span_open", "span_close", "release", "keep", "notice_first"]) assert.equal(count(w.actions, a), 0, a);
+  assert.equal(w.S.active, false, "no picture: never the default view (DF-15)");
+  assert.equal(M.newest(w.S), x, "the newest speaker - the mic ring");
+  assert.equal(M.speaking(w.S, w.input(), w.C, w.t), null, "attributed: no 'Someone is speaking' dimming for a cover");
+  // it needs no elig / sess entry, and even a CUT code forced in for its key changes nothing (no consent question)
+  w.forceElig = new Map([[CV1, "hidden"]]); w.at(3);
+  assert.deepEqual(w.logins(), [CV1], "never cut");
+  assert.equal(w.S.tiles[0].video, "cover", "never pictured");
+  w.forceElig = null;
+  // they let go: the hand-over / idle hold like any tile, then off - no span, no relay to let go
+  w.unveil(CV1); w.actions = [];
+  for (let s = 4; s <= 40; s++) w.at(s);
+  assert.deepEqual(w.logins(), []);
+  for (const a of ["span_close", "release", "keep", "still_stop"]) assert.equal(count(w.actions, a), 0, a);
+  // a key without the cover prefix is ignored
+  const z = coverWorld(); z.veil("alice"); z.at(0); z.at(3);
+  assert.deepEqual(z.logins(), []);
+});
+
+test("49. wave2 F.4 covers count toward max_people and displace like tiles; newest / keep_recent / regrab apply; speech nobody can show still dims the stage", () => {
+  const w = coverWorld({ pad: { max_people: 2, keep_recent: 1 } });
+  w.grab("a"); w.at(0); w.at(2);
+  w.grab("b"); w.at(8); w.at(10);
+  assert.deepEqual(w.logins().sort(), ["a", "b"]);
+  w.drop("a"); w.at(12);                                     // a lets go (recent: keep_recent 1 minute)
+  w.veil(CV1); w.at(20); w.at(22);
+  assert.ok(w.logins().includes(CV1), "the cover displaced the one off the mic longest");
+  assert.ok(!w.logins().includes("a"));
+  assert.equal(M.newest(w.S).login, CV1, "the newest speaker");
+  // a re-grab of the same cover within regrab_merge_s is the same hold (same since)
+  const since = w.S.seen.get(CV1).since;
+  w.unveil(CV1); w.at(23); w.veil(CV1); w.at(25);
+  assert.equal(w.S.seen.get(CV1).since, since);
+  // keep_recent: a cover that let go stays up as recent until the time passes (like any tile)
+  w.unveil(CV1); w.at(30);
+  assert.ok(w.logins().includes(CV1));
+  assert.ok(w.S.tiles.find((x) => x.login === CV1).relAt != null, "recent");
+  for (let s = 31; s <= 100; s++) w.at(s);
+  assert.ok(!w.logins().includes(CV1), "gone after keep_recent");
+  // an unprovable anonymous holder (an `others` entry) with only covers up: still "someone"? no - a cover holder is attributed
+  const s = coverWorld();
+  s.veil(CV2); s.at(0); s.at(2);
+  const I = Object.assign(s.input(), { others: [{ key: "anon:x", since: s.t - 10000 }] });
+  assert.equal(M.speaking(s.S, I, s.C, s.t), null, "a cover holding the mic is attributed");
+  s.unveil(CV2); s.at(3);
+  const I2 = Object.assign(s.input(), { others: [{ key: "anon:x", since: s.t - 10000 }] });
+  M.step(s.S, I2, s.C, s.t + 1000);
+  assert.equal(M.speaking(s.S, I2, s.C, s.t + 1000), "someone", "once the cover let go, the unprovable holder dims the stage as today");
+});

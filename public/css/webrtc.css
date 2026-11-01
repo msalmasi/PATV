@@ -149,5 +149,25 @@
 .player .mf-stage.narrow[data-layout=dynamic] .mf-tile:not(.main) .mf-av { display: none; }
 .player .mf-stage.narrow[data-dyn=d6] .mf-tile:not(.main) .mf-x, .player .mf-stage.narrow[data-dyn=d7] .mf-tile:not(.main) .mf-x,
 .player .mf-stage.narrow[data-dyn=d8] .mf-tile:not(.main) .mf-x, .player .mf-stage.narrow[data-dyn=d9] .mf-tile:not(.main) .mf-x { display: none; }
+/* wave2 WP-4 (F.4): a veiled speaker's cover tile - the hood colour darkened (8 tokens = the frog-name hood index), static CRT
+   scanlines (nothing moves: reduced motion needs nothing), the hooded frog centred a little low at ~56% of the height, pixelated */
+.player .mf-tile.mf-cover { --mf-hood: #101113; background-color: var(--mf-hood);
+                            background-image: repeating-linear-gradient(to bottom, rgba(255,255,255,.055) 0 1px, transparent 1px 3px); }
+.player .mf-tile.mf-cover[data-hood="1"] { --mf-hood: #0e1120; }
+.player .mf-tile.mf-cover[data-hood="2"] { --mf-hood: #190f20; }
+.player .mf-tile.mf-cover[data-hood="3"] { --mf-hood: #0d1a14; }
+.player .mf-tile.mf-cover[data-hood="4"] { --mf-hood: #1f0d10; }
+.player .mf-tile.mf-cover[data-hood="5"] { --mf-hood: #0c1b1f; }
+.player .mf-tile.mf-cover[data-hood="6"] { --mf-hood: #231d0c; }
+.player .mf-tile.mf-cover[data-hood="7"] { --mf-hood: #16191e; }
+.player .mf-tile .mf-hood { position: absolute; left: 50%; top: 56%; height: 56%; width: auto; aspect-ratio: 1 / 1; max-width: 90%; transform: translate(-50%, -50%);
+                            image-rendering: pixelated; image-rendering: crisp-edges; pointer-events: none; }
+.player .mf-tile .mf-chip { position: absolute; left: 6px; top: 6px; z-index: 4; max-width: calc(100% - 60px); padding: 2px 8px; border-radius: 999px;
+                            background: rgba(0,0,0,.7); color: #fff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player .mf-tile .mf-rv { position: absolute; right: 4px; bottom: 34px; z-index: 4; min-height: 44px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+                          border: 1px solid rgba(255,255,255,.4); background: rgba(0,0,0,.6); color: #fff; }
+.player .mf-tile .mf-rv:focus-visible { outline: 2px solid var(--ds-green-2, #7bd88f); outline-offset: 2px; }
+.player .mf-tile.mf-cover.revealed { outline: 2px dashed rgba(255,255,255,.75); outline-offset: -4px; }
+@media (forced-colors: active) { .player .mf-tile.mf-cover { background-image: none; border: 1px solid CanvasText; } }
 @media (prefers-reduced-motion: no-preference) { .player .mf-tile.newest::after, .player .mf-tile.ring::after { transition: opacity .2s ease; } }
 @media (prefers-reduced-motion: reduce) { .player .mf-stage *, .player .mf-stage { transition: none !important; animation: none !important; } }

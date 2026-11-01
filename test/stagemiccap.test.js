@@ -71,6 +71,12 @@ test("covers never consult an identity, consent, path or reader; labels and fall
   const tile = await T.tileFor(cover, R, U); assert.equal(tile.mode, "cover"); assert.equal(tile.login, undefined); assert.equal(tile.name, "Soggy Bullfrog · hidden");
   const buf = await M.renderFrame({ src: [cover] }, [tile], R); assert.ok(buf.length > 500);
   assert.equal(M.coverArt({ ...cover, hood: "../../../etc/passwd" }).art, null);
+  // wave2 WP-4: the art is installed (public/img/anon) and a cover without a frog name (today's wire) reads "someone"
+  const v1 = { kind: "cover", id: "anon-00ff00ff", name: null, veil: "incognito", hood: 0, watch: "cover" };
+  const art = M.coverArt(v1);
+  assert.ok(art.art && /<title>Incognito frog<\/title>/.test(art.art.toString("utf8")), "hood-peek-0.svg");
+  assert.equal(art.label, "someone · incognito");
+  assert.ok(/<title>Hidden frog<\/title>/.test(M.coverArt({ ...v1, veil: "hidden", hood: 7 }).art.toString("utf8")), "hood-shadow-7.svg");
 });
 test("cam table enforces strict consent, veil, exact and pin rules and never fetches avatar URLs", async () => {
   for (const watch of ["blocked", "unavailable", "members_only", "new-unknown"]) assert.equal((await T.tileFor(cam("alice", { watch }), R, U)).mode, "blank");

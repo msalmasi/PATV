@@ -123,7 +123,11 @@ function cleanUser(u, allowAcct = false) {
 const SINCE_PAST_MS = 6 * 3600 * 1000, SINCE_AHEAD_MS = 5 * 1000;
 function cleanMic(u, now = Date.now()) {
   const out = cleanUser(u);
-  if (!out || out.anon) return out;
+  // wave2 WP-4 (F.4): an anonymous holder keeps Pepe's per-hold ref (`ref`, HOLD_REF_RE) - SERVER-ONLY: the mic stage asks
+  // k3Ref whether that hold's grab was B.1-stamped (an incognito person's hold -> a cover tile). Pages never get it: every
+  // roster / mic list a page gets is built by chatlogview.roster (SOMEONE for an anonymous entry - a whitelist).
+  if (out && out.anon) { const ref = String((u && u.id) || ""); if (HOLD_REF_RE.test(ref)) out.ref = ref; return out; }
+  if (!out) return out;
   if (u.proven === true && !out.self) out.proven = true;
   const s = Number(u.since);
   if (Number.isFinite(s) && s > 0) out.since = Math.max(now - SINCE_PAST_MS, Math.min(now + SINCE_AHEAD_MS, Math.round(s * 1000)));
@@ -547,6 +551,14 @@ function k3Hold(roomId, it, kinded, t = Date.now(), leaving = false) {
   if (leaving) return false;                  // a sync that leaves someone out: no drop is shown (ingest's `leaving`)
   it.k3 = 1;
   return true;
+}
+/** wave2 WP-4 (F.4): was this anonymous hold's grab B.1-stamped in room `roomId` (an incognito person's hold, still open)?
+ *  -> when its grab came (ms) | null. Server-only (the mic stage's v1 cover rule). */
+function k3Ref(roomId, ref) {
+  const refs = K3_REFS.get(String(roomId || ""));
+  if (!refs || typeof ref !== "string" || !HOLD_REF_RE.test(ref)) return null;
+  const at = refs.get(ref);
+  return at == null ? null : Number(at) || 0;
 }
 /** At boot: the rooms' open stamped holds from what the live feed kept (a stamped grab whose release isn't there yet). */
 function k3Replay(R) {
@@ -1537,7 +1549,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const canReveal = see ? (x) => require("./seethrough").mayReveal(see, x && x.ts != null ? Number(x.ts) : Date.now()) : null;
   const members = CV.roster(R.members, { canReveal }), mic = CV.roster(R.mic, { canReveal });   // ingest replaces these arrays (never edits them): a snapshot too
   const L = await resolveNames([...items.map((it) => it.u), ...redoItems.map((it) => it.u), ...members, ...mic,
-                                ...(prog ? prog.tiles.map((x) => ({ login: x.login })) : [])]);
+                                ...(prog ? prog.tiles.filter((x) => !x.cover).map((x) => ({ login: x.login })) : [])]);   // (wave2 WP-4: a cover names nobody)
   const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal });
   const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal }) : [];
   if (V.audit) {
@@ -1619,7 +1631,7 @@ async function stageProgramFor(roomId, userId) {
   let prog;
   try { prog = require("./micfollow").snapshot(roomId); } catch (e) { return null; }
   if (!prog) return null;
-  const L = await resolveNames(prog.tiles.map((tile) => ({ login: tile.login })));
+  const L = await resolveNames(prog.tiles.filter((tile) => !tile.cover).map((tile) => ({ login: tile.login })));   // (wave2 WP-4: a cover names nobody)
   const F = await require("./padflair").byUsername(roomId).catch(() => null);
   return stageProgram(prog, R, userId, L, F);
 }
@@ -2203,4 +2215,5 @@ module.exports = { revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _a
   liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)
+  k3Ref,                                   // wave2 WP-4 (F.4): the mic stage's v1 cover rule
   cursorNow: () => cursor };          // CL8: the newest feed cursor (the history answer's `cursor`)

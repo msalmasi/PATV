@@ -30,6 +30,9 @@
 // video) is never moved when the main changes; a new one is inserted at its place. Every current holder gets the mic ring
 // (s.ring). When av-sync's delayed view holds a different number of tiles than dyn.n, the template is worked out here from
 // the tiles shown (never the legacy grid - that would jump).
+// wave2 WP-4 (F.4): a veiled speaker is a COVER tile ({kind: "cover"}): the hooded frog (/public/img/anon/hood-peek|shadow-N.svg)
+// on its hood colour under static scanlines, "<frog name or someone> · incognito / hidden", the mic ring; no cam, still, ⚑ or
+// 📌 for anyone; ✕ only with ex: 1, Reveal only with rv: 1 (WP-2's window.PATVReveal.tile), "this is you" with self: 1.
 //
 //   var ctl = PATVStageMic.render(host, program, {slug, onChange})    host = the stage's player box (#rmVideo)
 //   ctl.update(program) · ctl.stop() · ctl.selection()
@@ -90,6 +93,18 @@
   /** wave2 WP-4 (F.3): how many cells the dynamic template has for this program (0 = not dynamic): the tiles SHOWN - av-sync's
    *  delayed view may hold fewer or more than dyn.n for a moment. */
   function dynCount(P) { return P && P.dyn && P.src.length >= 1 && P.src.length <= 9 ? P.src.length : 0; }
+  // wave2 WP-4 (F.4): a veiled speaker's COVER tile ({kind: "cover", id, name: frog name | null, hood 0-7, veil}): the hooded
+  // frog on its hood colour, "<frog name or someone> · incognito / hidden", the mic ring - never a cam, a still, ⚑ or 📌. ✕
+  // only with ex: 1, Reveal only with rv: 1 (WP-2's window.PATVReveal.tile), "this is you" with self: 1.
+  var isCover = function (s) { return !!s && s.kind === 'cover'; };
+  var veilOf = function (s) { return s && s.veil === 'hidden' ? 'hidden' : 'incognito'; };
+  var hoodOf = function (s) { var h = s && Number(s.hood); return h >= 0 && h <= 7 && Math.floor(h) === h ? h : 0; };
+  function veilText(s) { return veilOf(s) === 'hidden' ? _t('js.pad.veil.hidden', 'hidden') : _t('js.pad.veil.incognito', 'incognito'); }
+  /** How a tile is named in labels and announcements (a cover without a frog name is "someone"). */
+  function labelOf(s) {
+    if (!isCover(s)) return String((s && s.name) || '');
+    return (typeof s.name === 'string' && s.name ? s.name.slice(0, 40) : _t('js.stage.mf.cover_someone', 'someone'));
+  }
   var REASONS = ['impersonation', 'sexual', 'abuse', 'minor', 'other'];
   function reasonText(r) {
     return r === 'impersonation' ? _t('js.stage.mf.r_impersonation', 'Not who they say they are') : r === 'sexual' ? _t('js.stage.mf.r_sexual', 'Nudity or sexual')
@@ -210,9 +225,15 @@
       var rp = btn('mf-x mf-rp', _t('js.stage.mf.report', '⚑'));            // ⚑ viewers (owners have ✕)
       var pn = btn('mf-x mf-pn', '📌'); pn.hidden = true;                      // mfix: owners - pin this person here
       var off = btn('mf-off', _t('js.stage.mf.take_off', '🙈 Take me off')); off.hidden = true;   // mfix: the viewer's OWN cam
-      e.appendChild(v); e.appendChild(img); e.appendChild(card); e.appendChild(label); e.appendChild(x); e.appendChild(rp); e.appendChild(pn); e.appendChild(off);
+      // wave2 WP-4 (F.4): the cover's hooded frog, its Reveal (rv: 1 only) and the "this is you" / revealed chips
+      var hoodImg = el('img', 'mf-hood'); hoodImg.alt = ''; hoodImg.hidden = true; hoodImg.setAttribute('aria-hidden', 'true');
+      var rv = btn('mf-rv', _t('js.stage.mf.reveal', 'Reveal'), _t('js.stage.mf.reveal_aria', 'Reveal who this is (only you see it; it is logged)')); rv.hidden = true;
+      var chip = el('span', 'mf-chip'); chip.hidden = true;
+      e.appendChild(v); e.appendChild(img); e.appendChild(hoodImg); e.appendChild(card); e.appendChild(label); e.appendChild(chip); e.appendChild(x); e.appendChild(rp); e.appendChild(pn);
+      e.appendChild(off); e.appendChild(rv);
       t.el = e; t.video = v;
       x.addEventListener('click', function () { if (t.s && t.s.pin) pinPost(t.s.id, true); else askExclude(t.s); });
+      rv.addEventListener('click', function () { revealTile(t, rv); });
       rp.addEventListener('click', function () { askReport(t.s, rp); });
       pn.addEventListener('click', function () { pn.disabled = true; pinPost(t.s.id, false).then(function () { pn.disabled = false; }); });
       off.addEventListener('click', function () { takeOff(off); });
@@ -324,8 +345,52 @@
         load();
         t.still = setInterval(load, (P.still_s || 20) * 1000);
       }
+      /** wave2 WP-4 (F.4): a cover tile - no video, no still, no card; the hood on its colour. -> true when s is a cover */
+      function coverApply(s) {
+        var cover = isCover(s);
+        e.classList.toggle('mf-cover', cover);
+        if (!cover) {
+          e.removeAttribute('data-hood'); e.removeAttribute('data-veil');
+          hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; e.classList.remove('revealed'); t.revealed = null;
+          return false;
+        }
+        if (t.mode === 'live') stopLive(true);
+        if (t.mode === 'still') stopStill();
+        clearTimeout(t.retry); t.retry = null;
+        t.mode = 'cover';
+        var hood = hoodOf(s), veil = veilOf(s), nm = labelOf(s);
+        e.setAttribute('data-hood', String(hood)); e.setAttribute('data-veil', veil);
+        hoodImg.src = '/public/img/anon/hood-' + (veil === 'hidden' ? 'shadow' : 'peek') + '-' + hood + '.svg';
+        hoodImg.hidden = false; v.hidden = true; img.hidden = true; card.hidden = true;
+        name.textContent = (tightNames() ? short(nm) : nm) + ' · ' + veilText(s);
+        name.className = 'mf-name'; name.style.cssText = '';
+        tag.textContent = '';
+        e.setAttribute('aria-label', _t('js.stage.mf.cover_aria', '{name}, {veil}, on the mic', { name: nm, veil: veilText(s) }));
+        e.classList.toggle('newest', !!s.newest);
+        e.classList.toggle('pinned', false);
+        e.classList.toggle('recent', !!s.recent);
+        e.classList.toggle('ring', !!s.ring);
+        pinTag.hidden = true; pinSr.textContent = '';
+        if (s.newest) { e.setAttribute('aria-current', 'true'); sr.textContent = ', ' + _t('js.stage.mf.newest', 'newest speaker'); }
+        else { e.removeAttribute('aria-current'); sr.textContent = ''; }
+        setWhy('cover');
+        // members never get a button on a cover; ✕ (a manager who may exclude it without seeing who) and Reveal only when the
+        // server says so (WP-2 - see micfollow.coverFlags)
+        rp.hidden = true; pn.hidden = true; off.hidden = true;
+        x.textContent = '✕';
+        x.setAttribute('aria-label', _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage'));
+        x.hidden = !(P.manage && s.ex === 1);
+        rv.hidden = !(s.rv === 1 && window.PATVReveal && typeof window.PATVReveal.tile === 'function') || !!t.revealed;
+        var me = s.self === 1;
+        chip.hidden = !(me || t.revealed);
+        chip.textContent = t.revealed ? _t('js.stage.mf.revealed', '{login} · only you can see this', { login: t.revealed }) : me ? _t('js.stage.mf.cover_self', 'this is you') : '';
+        e.classList.toggle('revealed', !!t.revealed);
+        return true;
+      }
       function apply(s) {
+        if (t.s && isCover(t.s) && (!isCover(s) || t.s.id !== s.id)) t.revealed = null;
         t.s = s;
+        if (coverApply(s)) return;
         name.textContent = tightNames() ? short(s.name) : s.name;
         name.className = 'mf-name' + (s.nameCss ? ' cx-name' : '');
         name.style.cssText = s.nameCss || '';
@@ -378,6 +443,18 @@
       return t;
     }
 
+    /** wave2 WP-4 (F.4): Reveal on a cover (rv: 1 - a see-through role; WP-2's client does the asking and the logging):
+     *  window.PATVReveal.tile(slug, id) -> Promise<{ok, login}>. Only this viewer sees the answer: a dashed edge and
+     *  "{login} · only you can see this" on the tile while it stays up. */
+    function revealTile(t, b) {
+      if (!t.s || !isCover(t.s) || t.s.rv !== 1 || !window.PATVReveal || typeof window.PATVReveal.tile !== 'function') return;
+      b.disabled = true;
+      Promise.resolve().then(function () { return window.PATVReveal.tile(slug, t.s.id); }).then(function (r) {
+        b.disabled = false;
+        if (r && r.ok && typeof r.login === 'string' && /^[\w.\-]{1,40}$/.test(r.login)) { t.revealed = r.login; t.apply(t.s); }
+        else bmsg.textContent = (r && typeof r.error === 'string' && r.error) || _t('js.stage.mf.e_do', 'Couldn\'t do that.');
+      }, function () { b.disabled = false; bmsg.textContent = _t('js.stage.mf.e_do', 'Couldn\'t do that.'); });
+    }
     // ── mfix: 📌 pins (owners / staff) and 🙈 Take me off (the person shown) ──
     function pinCount() { var n = 0; P.src.forEach(function (s) { if (s && s.pin) n++; }); return n; }
     function pinsFree() { return !!(P.manage && Number(P.manage.pins_room) > pinCount()); }
@@ -504,7 +581,7 @@
       rFocusBack = rBtn;
       rpanel.textContent = ''; rpanel.hidden = false; rBtn.setAttribute('aria-expanded', 'true');
       P.src.forEach(function (s) {
-        if (s.watch === 'hidden') return;
+        if (s.watch === 'hidden' || isCover(s)) return;            // (wave2 WP-4: a cover has nobody to report)
         var b = btn('mf-pbtn', '⚑ ' + s.name, _t('js.stage.mf.report_aria', 'Report {name}', { name: s.name }));
         b.addEventListener('click', function () { askReport(s, rBtn); });
         rpanel.appendChild(b);
@@ -561,6 +638,7 @@
       people.textContent = '';
       P.src.forEach(function (s) {
         if (s.pin) return;                                        // (a pin's own 📌✕ unpins it)
+        if (isCover(s)) return;                                   // (wave2 WP-4: a cover's own ✕ - only with ex: 1)
         var li = el('li', null), b = btn('mf-pbtn', '✕ ' + s.name, _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
         b.addEventListener('click', function () { askExclude(s); });
         li.appendChild(b); people.appendChild(li);
@@ -597,7 +675,7 @@
     function barState() {
       var dn = dynCount(P);
       var tight = box.classList.contains('narrow') && (dn ? dn >= 3 : P.layout === 'grid4' || P.layout === 'grid9');
-      rBtn.hidden = !!P.manage || !P.report || !tight || !P.src.length;
+      rBtn.hidden = !!P.manage || !P.report || !tight || !P.src.some(function (s) { return !isCover(s); });   // (wave2 WP-4: covers have no ⚑)
       box.classList.toggle('managed', !!P.manage);
       box.classList.toggle('barred', !!P.manage || !rBtn.hidden);
     }
@@ -652,7 +730,7 @@
         var fresh = !t;
         if (!t) {
           t = tiles[s.id] = tile(s);
-          announce(_t('js.stage.mf.joined', '{name} is on the stage', { name: s.name }));
+          announce(_t('js.stage.mf.joined', '{name} is on the stage', { name: labelOf(s) }));
         } else t.apply(s);
         if (!dn) { grid.appendChild(t.el); return; }    // keeps reading order = positions
         // wave2 WP-4 (F.3): dynamic - an existing tile's node never moves (its video would re-attach); a new one goes in at its
@@ -665,7 +743,7 @@
       Object.keys(tiles).forEach(function (id) {
         if (seen[id]) return;
         var t = tiles[id];
-        announce(_t('js.stage.mf.left', '{name} left the stage', { name: t.s.name }));
+        announce(_t('js.stage.mf.left', '{name} left the stage', { name: labelOf(t.s) }));
         t.stop(true);
         if (t.el.parentNode) t.el.parentNode.removeChild(t.el);
         delete tiles[id];

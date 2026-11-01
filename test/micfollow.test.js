@@ -2135,3 +2135,149 @@ test("68. wave2 F.3 dynamic: dark until its switch (a pad can't pick it; a store
     await post(`/api/rooms/${slug()}/micfollow/pin`, { login: "carl", remove: true }, "u_owner");
   } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, reason: "test" }); await plainPad(); }
 });
+
+// ── wave2 WP-4 (the incognito / mic-stage spec F.4): veiled speakers as hooded-frog cover tiles ──
+const REF1 = "anon-0a1b2c3d", REF2 = "anon-5e6f7a8b";
+const ANON = (ref) => ({ anon: true, display: "someone", ref });
+/** Every key the engine got an elig / sess entry for, every login livecam / the still relay were asked about (spies). */
+function coverSpies() {
+  const seen = { elig: new Set(), sess: new Set(), hold: [], mf: [], snap: [] };
+  const step0 = core.step, hold0 = LC.stageHold, mfs0 = LC.mfState, snap0 = relay.mfSnap;
+  core.step = (S, I, C, t) => { for (const k of I.elig.keys()) seen.elig.add(k); for (const k of I.sess.keys()) seen.sess.add(k); return step0(S, I, C, t); };
+  LC.stageHold = (R0, login, ...r) => { seen.hold.push(String(login)); return hold0(R0, login, ...r); };
+  LC.mfState = (room0, login, ...r) => { seen.mf.push(String(login)); return mfs0(room0, login, ...r); };
+  relay.mfSnap = (room0, login, ...r) => { seen.snap.push(String(login)); return snap0(room0, login, ...r); };
+  seen.restore = () => { core.step = step0; LC.stageHold = hold0; LC.mfState = mfs0; relay.mfSnap = snap0; };
+  return seen;
+}
+const noIdentity = (json, extra = []) => { for (const s of [REF1, REF2, "~cv:", '"login"', '"avatar"', '"nameCss"', '"ref"', '"key"', '"sess"', ...extra]) assert.ok(!json.includes(s), "leaks " + s); };
+
+test("69. wave2 F.4 covers: a B.1-stamped anonymous holder is a hooded-frog cover (incognito, no frog name on v1, a random id never a login) - in no role's program a login / avatar / ref / key; never eligOf / livecam / stills / spans; covers off = today's neutral card", async () => {
+  await reset(); await plainPad();
+  bridge._k3Refs.set(ROOM.id, new Map([[REF1, T - 1000]]));
+  // covers off (the prod default): today's path - an `others` entry: alice let go, the anonymous holder talks -> "Someone else
+  // is speaking" over her (recent) tile
+  assert.equal(MF.cfg().covers, false, "ships dark");
+  await onStage(["alice"]);
+  up("alice"); await at(3, [ANON(REF1)]); up("alice"); await at(3, [ANON(REF1)]);
+  assert.deepEqual(tiles(), ["alice"]);
+  assert.equal(MF.snapshot(ROOM.id).neutral, "someone", "the dimmed strip, as today");
+  await MF.setCfg(ADMIN, { covers: true, reason: "test" });
+  const spy = coverSpies();
+  try {
+    up("alice"); await at(1, [ANON(REF1)]); up("alice"); await at(6, [ANON(REF1)]);
+    const P = MF._pads.get(ROOM.id);
+    const ct = P.state.tiles.find((x) => x.cover);
+    assert.ok(ct, "a cover tile");
+    assert.equal(ct.login, "~cv:r" + REF1, "keyed by the hold (server-side only)");
+    const snap = MF.snapshot(ROOM.id);
+    assert.equal(snap.neutral, null, "a cover talking is attributed: no 'someone' strip");
+    for (const [who, uid] of [["member", "u_v1"], ["pad owner", "u_owner"], ["admin", "u_admin"], ["staff", "u_staff"]]) {
+      const v = await MF.viewFor(snap, R, uid, null);
+      const c = v.src.find((s) => s.kind === "cover");
+      assert.ok(c, who + ": the cover");
+      assert.match(c.id, /^anon-[0-9a-f]{8}$/, who);
+      assert.notEqual(c.id, REF1, "never Pepe's hold ref");
+      assert.ok(!MEMBERS().some((m) => m.login === c.id), "never a login");
+      assert.deepEqual([c.name, c.veil, c.video, c.watch], [null, "incognito", "cover", "cover"], who + ": no frog name on today's wire");
+      assert.ok(Number.isInteger(c.hood) && c.hood >= 0 && c.hood <= 7);
+      assert.equal(c.rv, undefined, who + ": no Reveal on v1 (the site doesn't know who)");
+      assert.equal(c.ex, undefined, who + ": no ✕ on v1");
+      noIdentity(JSON.stringify(c));
+      noIdentity(JSON.stringify(v.src.filter((s) => s.kind === "cover")));
+    }
+    assert.equal((await MF.viewFor(snap, R, null, null)).src.length, 0, "signed out: nothing");
+    // the page's whole /live answer
+    const live = JSON.stringify(await bridge.liveView(bridge._rooms.get(ROOM.id), 0, "u_v1", "viewer1", null, true, { program: true }));
+    assert.ok(!live.includes(REF1) && !live.includes("~cv:"), "no hold ref / key anywhere on the page's answer");
+    // the id stays put while the tile is up
+    const id0 = (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v1", null)).src.find((s) => s.kind === "cover").id;
+    up("alice"); await at(1, [ANON(REF1)]);
+    assert.equal((await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v1", null)).src.find((s) => s.kind === "cover").id, id0, "stable for the tile's life");
+    // never eligOf / livecam / stills / spans
+    for (const k of [...spy.elig, ...spy.sess, ...spy.hold, ...spy.mf, ...spy.snap]) assert.ok(!k.includes("~cv") && !k.includes(REF1), "asked about " + k);
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM micfollow_spans WHERE login LIKE '%cv%' OR login LIKE 'anon%'"))[0].n, 0, "no span row");
+    // the tile routes refuse the cover's id (an old page posts it like a login)
+    for (const [p, body, u] of [["watch", { login: id0 }, "u_v3"], ["report", { login: id0, reason: "other" }, "u_v3"], ["exclude", { login: id0, hours: 1 }, "u_admin"],
+                                ["pin", { login: id0 }, "u_admin"]]) {
+      const r = await post(`/api/rooms/${slug()}/micfollow/${p}`, body, u);
+      assert.equal(r.status, 400, p + ": " + JSON.stringify(r.d));
+      assert.equal(r.d.code, "cover", p);
+    }
+    assert.equal((await get(`/api/rooms/${slug()}/micfollow/still/${id0}`, "u_v1")).d.code, "cover");
+    // the hold ends: the cover leaves after the hand-over like any tile
+    for (let i = 0; i < 8; i++) { up("alice"); await at(5, ["alice"]); }
+    assert.ok(!P.state.tiles.some((x) => x.cover));
+    assert.equal(P.covers.size, 0, "its public entry went with it");
+  } finally { spy.restore(); await MF.setCfg(ADMIN, { covers: false, reason: "test" }); bridge._k3Refs.delete(ROOM.id); }
+});
+
+test("70. wave2 F.4: unstamped anonymous holds (begun named, before a restart, a hidden person's) and named hidden holders never become covers on v1; covers count toward max_people and ring / lead the dynamic layout; the v2 seam (setVeilSource): proven holds only, frog name + hood + veil on the page, the identity server-side", async () => {
+  await reset(); await plainPad();
+  await MF.setCfg(ADMIN, { covers: true, reason: "test" });
+  try {
+    bridge._k3Refs.set(ROOM.id, new Map([[REF1, T]]));
+    await step([ANON(REF2)]); await at(3, [ANON(REF2)]); await at(3, [ANON(REF2)]);
+    assert.deepEqual(tiles(), [], "an unstamped anonymous hold stays the neutral `others` entry");
+    assert.equal(MF._pads.get(ROOM.id).state.oseen.size, 1);
+    // a named holder the site's hidden set marks: cut as today (no cover - the v1 wire can't say who is veiled)
+    const Q = require(path.join(repo, "quotes")), hid0 = Q.isHidden;
+    Q.isHidden = (l) => String(l).toLowerCase() === "bob" || hid0(l);
+    try {
+      await at(1, ["bob"]); await at(3, ["bob"]); await at(3, ["bob"]);
+      assert.deepEqual(tiles(), []);
+    } finally { Q.isHidden = hid0; }
+    // capacity: max_people 2 - a cover counts and displaces like a tile; in the dynamic layout it rings and takes the main
+    await reset(); await MF.setPad(ROOM.id, { on: true, layout: "dynamic", max_people: 2, keep_recent: 0 }, "test").catch(() => {});
+    await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 0, reason: "test" });
+    await MF.setPad(ROOM.id, { on: true, layout: "dynamic", max_people: 2, keep_recent: 0 }, "test");
+    await onStage(["alice", "bob"]);
+    up("alice", "bob"); await at(10, ["alice", "bob"]);
+    bridge._k3Refs.set(ROOM.id, new Map([[REF1, T]]));        // (the veiled grab comes now: the newest speaker)
+    up("alice", "bob"); await at(1, ["alice", "bob", ANON(REF1)]); up("alice", "bob"); await at(6, ["alice", "bob", ANON(REF1)]);
+    const P = MF._pads.get(ROOM.id);
+    assert.equal(P.state.tiles.length, 2, "max_people 2");
+    assert.ok(P.state.tiles.some((x) => x.cover), "the cover displaced the tile added longest ago");
+    const snap = MF.snapshot(ROOM.id);
+    const c = snap.tiles.find((x) => x.cover);
+    assert.equal(c.newest, true); assert.equal(c.ring, true);
+    assert.equal(snap.dyn.main, c.cid, "the main cell, by its public id");
+    noIdentity(JSON.stringify((await MF.viewFor(snap, R, "u_owner", null)).src.filter((s) => s.kind === "cover")));
+  } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, reason: "test" }); await plainPad(); bridge._k3Refs.delete(ROOM.id); }
+  // v2 (WP-2 / WP-3): the privacy wire's per-hold facts through the seam
+  await reset(); await plainPad();
+  MF.setVeilSource((u) => {
+    if (!u.anon) return null;
+    if (u.ref === REF1) return { proven: true, sess: "s42", veil: "hidden", alias: "Soggy Bullfrog", hood: 3, login: "erin", display: "Erin" };
+    if (u.ref === REF2) return { proven: true, sess: "s43", began_named: true, login: "dana" };
+    return { proven: false, sess: "s44", login: "fay" };
+  });
+  try {
+    await step([ANON(REF1), ANON(REF2), ANON("anon-99999999")]);
+    await at(3, [ANON(REF1), ANON(REF2), ANON("anon-99999999")]); await at(6, [ANON(REF1), ANON(REF2), ANON("anon-99999999")]);
+    const P = MF._pads.get(ROOM.id);
+    assert.deepEqual(P.state.tiles.map((x) => x.login), ["~cv:ss42"], "only the proven hold that didn't begin named");
+    const v = await MF.viewFor(MF.snapshot(ROOM.id), R, "u_admin", null);
+    const c = v.src[0];
+    assert.deepEqual([c.kind, c.name, c.hood, c.veil], ["cover", "Soggy Bullfrog", 3, "hidden"]);
+    assert.deepEqual(P.coverWho.get("~cv:ss42"), { login: "erin", display: "Erin" }, "the identity stays server-side");
+    noIdentity(JSON.stringify(v), ["erin", "Erin", "s42"]);
+    assert.equal(P.state.oseen.size, 1, "the other two: the neutral `others` entry (anonymous holders collapse into one key, as today)");
+  } finally { MF.setVeilSource(null); await MF.setCfg(ADMIN, { covers: false, reason: "test" }); }
+});
+
+test("71. wave2 F.4 bridge: cleanMic keeps Pepe's per-hold ref on an anonymous holder (server-only); k3Ref answers only for a stamped, open hold", async () => {
+  assert.deepEqual(bridge.cleanMic({ anonymous: true, id: REF1, display: "someone" }), { anon: true, display: "someone", ref: REF1 });
+  assert.deepEqual(bridge.cleanMic({ anonymous: true, id: "alice", display: "someone" }), { anon: true, display: "someone" }, "only a hold ref (HOLD_REF_RE)");
+  assert.deepEqual(bridge.cleanMic({ anonymous: true }), { anon: true, display: "someone" });
+  bridge._k3Refs.set("K.Room", new Map([[REF1, 1234]]));
+  try {
+    assert.equal(bridge.k3Ref("K.Room", REF1), 1234);
+    assert.equal(bridge.k3Ref("K.Room", REF2), null);
+    assert.equal(bridge.k3Ref("Other.Room", REF1), null);
+    assert.equal(bridge.k3Ref("K.Room", "alice"), null);
+  } finally { bridge._k3Refs.delete("K.Room"); }
+  // a page's roster / mic list never carries it (chatlogview.roster builds "someone" from a whitelist)
+  const CVw = require(path.join(repo, "chatlogview"));
+  assert.deepEqual(CVw.roster([{ anon: true, display: "someone", ref: REF1 }]), [{ anon: true, display: "someone" }]);
+});

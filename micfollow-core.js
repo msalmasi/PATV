@@ -92,6 +92,12 @@
 //                liveBlock; a second one takes the normal path.
 // wave2 WP-4 (F.3): the pad layout "dynamic" - capped like auto (9), its legacy shape is auto's; micfollow.js picks the main
 // cell with dynPick (the active speaker, at most every main_hold_s) and sends dyn {n, t, main} beside the legacy layout.
+// wave2 WP-4 (F.4): COVER tiles - I.covers = veiled holders micfollow.js may show as a hooded frog (never a cam): {key, since},
+// key "~cv:..." (never a login - LOGIN_RE can't match "~" / ":"). They take part like holders (track / since / regrab / the
+// hand-over / keep_recent / capacity / displacement / newest / the change budget) as tiles with cover: true and video
+// "cover"; they are never cut (no elig), pictured, held, stilled, kept, noticed or counted in micfollow_spans; speaking()
+// counts them as attributed (the stage isn't dimmed for "someone" while a cover talks); a stage of only covers never
+// becomes the default view (showsSoon: no picture).
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
 // notice_first / spam / touch / deferred / keep / keep_drop / keep_taken.
 "use strict";
@@ -156,6 +162,9 @@ const FIELDS = Object.freeze({
   // pick it, and a pad that already did shows "auto" (no dyn field) until staff switch it on at /stage/admin
   dynamic:               { def: STAGING, bool: true },
   main_hold_s:           { def: 3, min: 0, max: 15 },           //   ... the main cell changes at most this often (hysteresis)
+  // wave2 WP-4 (F.4): veiled speakers as hooded-frog cover tiles. Off on prod: today's path (an incognito holder is the neutral
+  // "Someone is speaking" card / strip) until staff switch it on at /stage/admin (the backend switch rule)
+  covers:                { def: STAGING, bool: true },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 
@@ -449,6 +458,7 @@ function failOpen(S, login, why, C, t) {
  *  until then instead of letting go (keepFor decides; only the plain removals of a step ask). */
 function removeTile(S, x, reason, t, A, keepUntil = 0) {
   S.tiles = S.tiles.filter((y) => y !== x);
+  if (x.cover) { S.leftAt.set(x.login, t); return; }        // (wave2 WP-4: a cover has no relay, still or span)
   if (keepUntil > 0 && x.video === "live" && !x.pend) {
     S.kept.set(x.login, { leftAt: t, until: keepUntil });
     A.push({ a: "keep", login: x.login, until: keepUntil });
@@ -546,6 +556,7 @@ function clearAll(S, reason, t, A) {
 function consentCuts(S, I, t, A) {
   const cut = [];
   for (const x of S.tiles.slice()) {
+    if (x.cover) continue;                                    // (wave2 WP-4: no consent question for a cover - no cam, no identity)
     const e = I.elig.get(x.login);
     if (!isCut(e)) continue;
     removeTile(S, x, "cut:" + e, t, A);
@@ -631,6 +642,8 @@ function trackOthers(S, I, t) {
 function speaking(S, I, C, t) {
   const minHold = C.min_hold_s * 1000;
   let attributed = false, other = false;
+  // wave2 WP-4 (F.4): a veiled speaker the stage can show as a cover is attributed (their hooded frog is on the stage)
+  for (const c of I.covers || []) { const s = c && S.seen.get(c.key); if (s && s.held) attributed = true; }
   for (const h of I.holders || []) {
     if (S.pinned && S.pinned.has(h.login)) { attributed = true; continue; }   // mfix: a pinned cam's person: shown, named
     const e = I.elig.get(h.login);
@@ -655,6 +668,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
   const shed = !!I.site.shed;          // Pepe refused a manual cam slot / ▶ Live as full: mic follows makes room
   // a) what still holds
   for (const x of S.tiles) {
+    if (x.cover) continue;                                    // (wave2 WP-4: a cover never gets a picture)
     const e = I.elig.get(x.login);
     const ss = I.sess.get(x.login) || NONE;
     if (Number.isFinite(ss.viewers) && ss.viewers > (x.peak || 0)) x.peak = ss.viewers;
@@ -707,6 +721,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
   let poolFree = Number.isFinite(I.site.poolFree) ? Math.max(0, I.site.poolFree) : Infinity;
   const order = S.tiles.slice().sort((a, b) => newer(b, a));
   for (const x of order) {
+    if (x.cover) continue;                                    // (wave2 WP-4: no live place, cold open or still for a cover)
     const e = I.elig.get(x.login);
     if (e === "off_cam" || liveish(x) || x.pend) continue;
     const ss = I.sess.get(x.login) || NONE;
@@ -826,7 +841,8 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
  *          share: cold opens + stills), shed (make room for a manual cam), unkOpen (1.99afl review: Pepe opens a cam_unknown
  *          person's cam by its exact name - MF_UNK_OPEN), coldFree / poolFree (wave2 WP-4: coldLeft / poolLeft without
  *          evicting a kept relay - absent = no kept relays to reclaim)},
- *   pins: [login | {login}]  the pad's pinned cams (mfix) }
+ *   pins: [login | {login}]  the pad's pinned cams (mfix),
+ *   covers: [{key, since}]  wave2 WP-4 (F.4): veiled holders shown as hooded-frog covers (key "~cv:...", grab order) }
  * -> {state, actions}
  */
 function step(S, I, C, t) {
@@ -878,8 +894,10 @@ function step(S, I, C, t) {
   if (pinnedOff.length || pinsMoved) { compact(S); S.v++; A.push({ a: "touch", why: "pins" }); }
   // wave2 WP-4 (F.2): every kept relay whose reason to exist ended goes now (a cut, cam off, pinned, expired, ...)
   keptCheck(S, I, C, t, A);
-  // 2
-  const HS = track(S, I.holders || [], C, t);
+  // 2 (wave2 WP-4: covers are tracked like holders, by their key)
+  const coverKeys = new Set();
+  for (const c of I.covers || []) if (c && typeof c.key === "string" && c.key.startsWith(COVER_PREFIX)) coverKeys.add(c.key);
+  const HS = track(S, [...(I.holders || []), ...(I.covers || []).filter((c) => c && coverKeys.has(c.key)).map((c) => ({ login: c.key, since: c.since }))], C, t);
   trackOthers(S, I, t);
   for (const x of S.tiles) x.relAt = HS.has(x.login) ? null : (x.relAt || t);
   // grab-spam (DF-37): off the mic stage now (a forced removal, like a cut: no hold, no card)
@@ -919,6 +937,12 @@ function step(S, I, C, t) {
       if (e !== "ok" && e !== "off_cam" && e !== "cam_unknown") continue;
       if (spamming(S, h.login, t)) continue;
       qualified.push({ login: h.login, since: s.since });
+    }
+    // wave2 WP-4 (F.4): a veiled speaker held >= min_hold_s goes up as a cover (no consent question: no cam, no identity)
+    for (const key of coverKeys) {
+      const s = S.seen.get(key);
+      if (!s || !s.held || onStage.has(key) || t - s.since < C.min_hold_s * 1000 || spamming(S, key, t)) continue;
+      qualified.push({ login: key, since: s.since, cover: true });
     }
   }
   // 3 due removals (+ the last-on lock; with unattributed_clear neither hold applies while speech nobody can show runs).
@@ -982,11 +1006,12 @@ function step(S, I, C, t) {
       for (const x of displaced) removeTile(S, x, "displaced", t, A, keepFor(S, I, C, t, x));
       // the earliest grab first, so the one who grabbed LAST is the newest speaker (the highlight, live video first)
       for (const c of adds.slice().sort((a, b) => a.since - b.since)) {
-        const x = { login: c.login, addedAt: t, since: c.since, pos: S.tiles.length, relAt: null, video: "card", why: null, pend: false, pictured: false,
+        const x = { login: c.login, addedAt: t, since: c.since, pos: S.tiles.length, relAt: null, video: c.cover ? "cover" : "card", why: null, pend: false, pictured: false,
                     qualAt: c.since + C.min_hold_s * 1000, cold: false, vidSince: 0, vidMs: 0, peak: 0, unverifiedAt: 0,
-                    ...(S.kept.has(c.login) ? { kept: true } : {}) };   // (wave2 WP-4: a comeback onto its kept relay)
+                    ...(S.kept.has(c.login) ? { kept: true } : {}),     // (wave2 WP-4: a comeback onto its kept relay)
+                    ...(c.cover ? { cover: true } : {}) };               // (wave2 WP-4: a veiled speaker's hooded frog)
         S.tiles.push(x);
-        A.push({ a: "span_open", login: c.login });
+        if (!c.cover) A.push({ a: "span_open", login: c.login });
       }
       compact(S);
       S.lastChangeAt = t;
@@ -1013,6 +1038,9 @@ function step(S, I, C, t) {
   return { state: S, actions: A };
 }
 
+/** wave2 WP-4 (F.4): every cover tile's key starts with this ("~" and ":" never appear in a login - LOGIN_RE). */
+const COVER_PREFIX = "~cv:";
+const isCoverKey = (k) => typeof k === "string" && k.startsWith(COVER_PREFIX);
 /** wave2 WP-4 (F.2): a slots_busy within EVICT_WINDOW_MS of an eviction for this pad - the FIRST for this tile - is tried again
  *  once after EVICT_RETRY_MS: card "full", no S.soft, no liveBlock, no backoff. -> true when it took the refusal */
 function evictRetry(S, x, t) {
@@ -1192,4 +1220,5 @@ module.exports = {
   shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
   dropKept, keepFor, keptCheck, EVICT_WINDOW_MS, EVICT_RETRY_MS,                                                // wave2 WP-4 (F.2)
   dynPick,                                                                                                      // wave2 WP-4 (F.3)
+  COVER_PREFIX, isCoverKey,                                                                                     // wave2 WP-4 (F.4)
 };
