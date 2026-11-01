@@ -4,6 +4,9 @@
 // The optional mic stage uses stagemiccap.js: a viewer-specific snap or the NEXT 10/20/30 seconds,
 // never cam HLS or browser pixels. It checks consent during recording and at every preview/save
 // boundary. Only people actually drawn are retained for privacy rechecks and deletion rights.
+// mic keep (handoff 16 follow-up): a mic capture also records `veiled` (1 unless everyone was shown openly - never who) and the
+// logins shown only as a name card (stage_capture_cards); storykeep.js saves / posts only unveiled ones, after a per-person
+// recheck of both lists. Name cards never gain the delete right (canDelete -> depictedOf reads the drawn cams only).
 //
 // Flow
 //   1. Preview (POST /api/stage/capture {room, stream, kind, secs}). Signed in, with a linked Camfrog
@@ -112,6 +115,23 @@ function init() {
         DELETE FROM stage_capture_people WHERE capture_id = OLD.id; END`);
       await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_people_retired AFTER UPDATE OF state ON stage_captures
         WHEN NEW.state IN ('failed','discarded','expired') BEGIN DELETE FROM stage_capture_people WHERE capture_id = NEW.id; END`);
+      // mic keep (handoff 16 follow-up): `veiled` = 1 unless everyone in the capture was shown openly (stagemiccap's flag - never
+      // who); NULL on rows from before it (never kept or posted). stage_capture_cards = the logins shown openly only as a NAME CARD:
+      // storykeep's per-person recheck, notices and multi-subject "Remove me" read them; they never give the delete right
+      // (depictedOf reads stage_capture_people only). Retired with their capture exactly like stage_capture_people.
+      await addColumn("stage_captures", "veiled", "INTEGER");
+      await runQuery(`CREATE TABLE IF NOT EXISTS stage_capture_cards (
+        capture_id TEXT NOT NULL, login TEXT NOT NULL, PRIMARY KEY (capture_id, login))`);
+      await runQuery("CREATE INDEX IF NOT EXISTS stage_capture_cards_login ON stage_capture_cards (login)");
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_cards_media_deleted AFTER UPDATE OF deleted ON media
+        WHEN NEW.deleted != 0 BEGIN DELETE FROM stage_capture_cards WHERE capture_id IN
+        (SELECT id FROM stage_captures WHERE media_id = NEW.id); END`);
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_cards_media_removed AFTER DELETE ON media BEGIN
+        DELETE FROM stage_capture_cards WHERE capture_id IN (SELECT id FROM stage_captures WHERE media_id = OLD.id); END`);
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_cards_capture_removed AFTER DELETE ON stage_captures BEGIN
+        DELETE FROM stage_capture_cards WHERE capture_id = OLD.id; END`);
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_cards_retired AFTER UPDATE OF state ON stage_captures
+        WHEN NEW.state IN ('failed','discarded','expired') BEGIN DELETE FROM stage_capture_cards WHERE capture_id = NEW.id; END`);
       fs.mkdirSync(tmpDir(), { recursive: true });
       const crashed = await getQuery("SELECT * FROM stage_captures WHERE source = 'mic' AND state IN ('recording','cutting')");
       for (const c of crashed) dropPreview(c);
@@ -454,12 +474,17 @@ async function captureMic(u, req, R, kind, secs, surface) {
   const done = job.done.then(async info => {
     const note = info.audio && (info.audio.reason === "off" ? { kind: "off" } : info.audio.reason ? { kind: "old-pepe" }
       : info.audio.muted_s > 0 ? { kind: "muted", secs: info.audio.muted_s } : null);
+    // mic keep: the engine's in-the-open flag (anything but an explicit false counts as veiled - fail closed) and its name cards
+    const veiled = info.veiled === false ? 0 : 1;
     const accepted = await tx(async () => {
-      const result = await runQuery(`UPDATE stage_captures SET state = 'preview', secs = ?, bytes = ?, audio_note = ?, updated = ?
-        WHERE id = ? AND state IN ('recording','cutting')`, [info.secs || 0, info.bytes, note ? JSON.stringify(note) : null, NOW(), id]);
+      const result = await runQuery(`UPDATE stage_captures SET state = 'preview', secs = ?, bytes = ?, audio_note = ?, veiled = ?, updated = ?
+        WHERE id = ? AND state IN ('recording','cutting')`, [info.secs || 0, info.bytes, note ? JSON.stringify(note) : null, veiled, NOW(), id]);
       if (!result.changes) return false;
-      for (const login of new Set(info.people || [])) await runQuery("INSERT OR IGNORE INTO stage_capture_people (capture_id, login) VALUES (?, ?)",
-        [id, String(login).toLowerCase()]);
+      const drawn = new Set((info.people || []).map(l => String(l).toLowerCase()));
+      for (const login of drawn) await runQuery("INSERT OR IGNORE INTO stage_capture_people (capture_id, login) VALUES (?, ?)", [id, login]);
+      for (const login of new Set((info.cards || []).map(l => String(l).toLowerCase()))) {
+        if (!drawn.has(login)) await runQuery("INSERT OR IGNORE INTO stage_capture_cards (capture_id, login) VALUES (?, ?)", [id, login]);
+      }
       return true;
     });
     if (!accepted) { dropPreview(cap); return row(id); }
@@ -695,22 +720,39 @@ async function publishCapture(id, username, { hours, byAnon, by } = {}) {
  * letting it go and this account linking it is nobody's - Download my data and the delete right. `wide` (account deletion only)
  * keeps the span from the other holder's last record: reaching too far there only removes content.
  * -> [{capture_id, login, state, media_id, room_id, kind, created}] (never the capturer or the other people in it)
+ * mic keep: `cards` reads stage_capture_cards (the logins shown only as a name card) by the same spans - account deletion and Download
+ * my data only; the delete right (canDelete) never passes it.
  */
-async function depictedOf(userId, login, upto = NOW(), { mediaId = null, wide = false } = {}) {
-  if (!userId || !(await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stage_capture_people'")).length) return [];
-  const MR = require("./micrec"), ids = await MR.holderIds(userId), out = new Map();
+async function depictedOf(userId, login, upto = NOW(), { mediaId = null, wide = false, cards = false } = {}) {
+  const table = cards ? "stage_capture_cards" : "stage_capture_people";
+  if (!userId || !(await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [table])).length) return [];
+  const out = new Map();
+  for (const w of await ownSpans(userId, login, upto, { wide })) {
+    const rows = await getQuery(`SELECT p.capture_id, p.login, c.state, c.media_id, c.room_id, c.kind, c.created FROM ${table} p
+      JOIN stage_captures c ON c.id = p.capture_id WHERE p.login = ? AND c.created > ? AND c.created <= ?${mediaId ? " AND c.media_id = ?" : ""}`,
+      [w.login, w.from, w.to].concat(mediaId ? [String(mediaId)] : []));
+    for (const r of rows) out.set(r.capture_id + "|" + r.login, r);
+  }
+  return [...out.values()];
+}
+/**
+ * The spans in which each Camfrog login was `userId`'s own, by depictedOf's rule (see there): [{login, from, to}] - a time t is the
+ * account's under that login when from < t <= to. mic keep: storykeep matches its durable story_keep_people rows (the people a
+ * kept / posted copy shows, at captured_at) with these - multi-subject "Remove me", account deletion (`wide`) and Download my data.
+ * Errors throw (callers grant nothing).
+ */
+async function ownSpans(userId, login, upto = NOW(), { wide = false } = {}) {
+  if (!userId) return [];
+  const MR = require("./micrec"), ids = await MR.holderIds(userId), out = [];
   for (const w of await require("./accountdelete").loginWindowsOf(userId, login, upto)) {
     const others = (await MR.othersMarks(userId, w.login, ids)).reduce((m, at) => (at < w.to && at > m ? at : m), 0);
     // review fix 2: own link, unless deleting - a deleted earlier holder (its marker; its login history is pseudonymised) counts too
     const gone = wide ? 0 : await MR.goneAt(w.login);
     const earlier = Math.max(others, gone > 0 && gone < w.to ? gone : 0);
     const from = earlier > 0 && !wide ? Math.max(earlier, Number(w.from) || 0) : others;
-    const rows = await getQuery(`SELECT p.capture_id, p.login, c.state, c.media_id, c.room_id, c.kind, c.created FROM stage_capture_people p
-      JOIN stage_captures c ON c.id = p.capture_id WHERE p.login = ? AND c.created > ? AND c.created <= ?${mediaId ? " AND c.media_id = ?" : ""}`,
-      [w.login, from, w.to].concat(mediaId ? [String(mediaId)] : []));
-    for (const r of rows) out.set(r.capture_id + "|" + r.login, r);
+    out.push({ login: w.login, from, to: w.to });
   }
-  return [...out.values()];
+  return out;
 }
 /** Account deletion, before its transaction (idempotent): the account's own unfinished captures, and the unfinished mic captures
  *  in `depicted` (depictedOf), fail - the engine's job cancelled, the preview file gone, nothing published or charged. -> n */
@@ -1001,6 +1043,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
 module.exports = {
   register, init, capture, save, status, discard, check, publish, remove, canDelete, slotSettings, feed, sweep, eligibility, priceOf,
   depictedOf, stopFor,                                                    // review fix (handoff 16): account deletion / export
+  ownSpans,                                                               // mic keep: storykeep's durable people rows
   switches, killed, roomOff, ROOM_OFF,
   playlistPath, liveSegments, extractSnap, extractClip, resolveStream, view, PRICES, LIMITS, CLIP_MAX, CLIP_DEFAULT, PREVIEW_TTL, SAVE_TTL, MIN_LEVEL,
   _setDeps, _setDirs, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _hits: hits,

@@ -6,6 +6,11 @@
 // live streams without occupying feedmedia's encoding queue; the final composition uses that queue.
 // Room audio is future-only, with hidden/private turns muted. Missing hm metadata drops ALL audio.
 // stagecap owns database rows, previews, billing and publishing; this module owns only active jobs.
+// mic keep (handoff 16 follow-up, owner 2026-11-01): every finished job also reports `cards` (the logins shown openly only as a
+// name card) and `veiled` - true unless everyone in it was shown openly: no cover tile, no blank tile (whatever blanked it), no tile
+// that stopped because its person went private / hidden / incognito or withdrew (a tile that leaves when they leave the mic is
+// fine), no "Someone is speaking" card, and - while the clip carries room audio - no muted stretch and no voice of a person the
+// tiles don't show (noteVoices). stagecap stores the flag (never who was veiled); storykeep keeps / posts only unveiled captures.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -412,6 +417,7 @@ async function privateSampleNow(job) {
   let priv = true, from = Math.max(0, at - MIC_LAG);
   try {
     const mic = deps.mic(job.R.id);
+    if (job.kind === "clip") noteVoices(job, mic);
     if (Array.isArray(mic)) {
       const holders = mic.filter(x => x && !x.anon && LOGIN.test(String(x.login || "")));
       const found = await deps.privateLogins(holders.map(x => String(x.login).toLowerCase()));
@@ -424,12 +430,24 @@ async function privateSampleNow(job) {
       });
       if (starts.length) from = Math.min(at, ...starts);
     }
-  } catch (_) { /* unavailable mic list is private */ }
+  } catch (_) { if (job.kind === "clip") job.unseen = true; /* unavailable mic list is private */ }
   observation.private = priv;
   if (priv && from < at) privateSince(job.privateHistory, from);
   // The roster was observed before the lookup, not after it. If the lookup consumed more than
   // a polling interval, the unobserved remainder is private until the next successful sample.
   if ((deps.now() - job.started) / 1000 - at > .5) job.privateHistory.push({ at: at + .5, private: true });
+}
+/** mic keep: a clip's room audio carries the voice of everyone holding the mic. A holder the clip doesn't show openly right now -
+ *  anonymous, unproven, an account key, a new holder the fixed tiles never draw, one whose tile stopped - or a mic list that can't be
+ *  read marks the clip as not taken in the open (job.unseen; never who). Pepe himself (self) and bots aren't people. */
+function noteVoices(job, mic) {
+  if (!Array.isArray(mic)) { job.unseen = true; return; }
+  const shown = new Set((job.tiles || []).filter(t => t.login && t.stop == null && t.mode !== "blank" && t.mode !== "cover").map(t => t.login));
+  for (const x of mic) {
+    if (!x || x.self || x.bot) continue;
+    const l = String(x.login || "").toLowerCase();
+    if (x.anon || !LOGIN.test(l) || !shown.has(l)) { job.unseen = true; return; }
+  }
 }
 function stopTile(job, t, at) {
   if (t.stop != null) return; t.stop = Math.max(0, at); job.paths.delete(t.path);
@@ -448,7 +466,12 @@ async function sample(job) {
     const current = new Map((await tilesFor(p, job.R, user)).map(t => [t.id, t]));
     for (const t of job.tiles) {
       const next = current.get(t.id);
-      if (t.stop == null && (!next || next.mode === "blank" || next.mode !== t.mode || next.login !== t.login || next.path !== t.path || next.source.watch !== t.source.watch)) stopTile(job, t, at);
+      if (t.stop == null && (!next || next.mode === "blank" || next.mode !== t.mode || next.login !== t.login || next.path !== t.path || next.source.watch !== t.source.watch)) {
+        stopTile(job, t, at);
+        // mic keep: blanked now (or turned into a cover), or gone from the program while their consent fails (micfollow cuts a person who
+        // goes private / hidden / incognito or withdraws) -> not taken in the open. Leaving the mic with consent intact is fine.
+        if (next ? next.mode === "blank" || next.mode === "cover" : !(t.login && (await consent(t.login, user.userId)))) job.veiled = true;
+      }
       if (t.stop == null && !!next.newest !== t.lastNewest) { t.rings.push({ at, on: !!next.newest }); t.lastNewest = !!next.newest; }
     }
     const s = speaking(p);
@@ -500,7 +523,11 @@ async function snap(job) {
   }
   await renderFrame(p, final, job.R, job.out);
   const people = [...new Set(final.filter(t => t.login && t.image && (t.mode === "live" || t.mode === "still")).map(t => t.login))];
-  return { secs: 0, bytes: fs.statSync(job.out).size, people, audio: null };
+  // mic keep: a snap is its final frame - the logins drawn only as a name card (consent passed: tileFor sets a login only then; a
+  // picture that failed to render became a card), and whether everyone in that frame was shown openly
+  const cards = [...new Set(final.filter(t => t.login && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
+  const veiled = final.some(t => t.mode === "cover" || t.mode === "blank") || speaking(p) === "someone";
+  return { secs: 0, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: null };
 }
 
 function intervals(changes, end, key = "on") {
@@ -622,7 +649,15 @@ async function clip(job, hooks) {
     if (job.cancelled) throw refuse("failed", 409);
     const people = [...new Set(job.tiles.filter(t => t.login && (t.file || (t.image && t.mode === "still")) &&
       Math.min(duration, t.stop == null ? duration : t.stop) > (t.file ? (t.firstAt || 0) + (t.shift || 0) : 0)).map(t => t.login))];
-    return { secs: duration, bytes: fs.statSync(job.out).size, people, audio: { reason: audio.reason, muted_s: audio.muted_s } };
+    // mic keep: every other consenting tile shows its name (a card, or a live tile's label before its video) - recorded as a card. Not
+    // in the open: a cover / blank tile, a tile stopped for privacy (sample), a "Someone is speaking" card, and - only while the clip
+    // carries room audio (composeArgs' hasAudio) - a muted stretch or a voice the tiles don't show (noteVoices). Audio dropped whole
+    // ("off" / "outdated": no voice at all in the clip) adds nothing private, so such a clip is judged on its pictures alone.
+    const cards = [...new Set(job.tiles.filter(t => t.login && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
+    const heard = !audio.reason && audio.segments.length > 0;
+    const veiled = !!job.veiled || job.tiles.some(t => t.mode === "cover" || t.mode === "blank") || job.speaking.some(c => c.kind === "someone") ||
+      (heard && (audio.muted_s > 0 || !!job.unseen));
+    return { secs: duration, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: { reason: audio.reason, muted_s: audio.muted_s } };
   } finally { release(); }
 }
 async function start(opts, hooks = {}) {
@@ -659,4 +694,5 @@ async function start(opts, hooks = {}) {
 }
 module.exports = { configure, init, start, gate, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
-  _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
+  consent,                                    // mic keep: storykeep's per-person recheck at save / post (the engine's own rule)
+  _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, noteVoices, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
