@@ -141,6 +141,8 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          "bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil",
                                          // wave 2: frog-name sessions and the see-through audit
                                          "incog_alias", "seethrough_log", "seethrough_toggle",
+                                         // wave 2 WP-5: moderation evidence clips (the audio stays in each environment's EVIDENCE_DIR)
+                                         "evidence_clips",
                                          "pad_hub",
                                          // S1 Q4: staging's own CHAT_HUB
                                          "chat_switches",

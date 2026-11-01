@@ -89,6 +89,9 @@ async function forgetVeiled(keys) {
   const out = { feed: 0, archive: 0 };
   try { out.feed = (await require("./bridge").forgetVeiled(list)).feed; } catch (e) { console.error("[pepeforget] veil (live):", e && e.code ? e.code : "error"); }
   try { out.archive = await require("./chatlog").forgetVeil(list); } catch (e) { console.error("[pepeforget] veil (archive):", e && e.code ? e.code : "error"); }
+  // wave 2 WP-5: moderation evidence clips of them (evidence.js) are flagged, never extended, and still go at their 30 days (owner
+  // question Q1 - the default); a preview of theirs waiting for Save goes now
+  try { out.evidence = await require("./evidence").subjectGone(list); } catch (e) { console.error("[pepeforget] evidence:", e && e.code ? e.code : "error"); }
   return out;
 }
 async function hideLines(userId, login) {

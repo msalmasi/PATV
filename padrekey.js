@@ -36,6 +36,8 @@ const ROOM_BOUND = new Set([
   // wave 2: the live feed's veil side tables stay with their feed rows / snapshot; frog-name sessions are keyed by the Camfrog
   // room (incog_alias.sk = HMAC(room, login) - re-keying room_id alone would orphan every open session)
   "bridge_veil", "bridge_rooms_veil", "incog_alias",
+  // wave 2 WP-5: moderation evidence clips are of a turn said in the Camfrog room (evidence.js) - they stay with it, like bridge_feed
+  "evidence_clips",
 ]);
 // feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen)
 const FEED_KV_PREFIXES = ["room:", "rules:", "mention:", "mention_set:", "mention_at:", "automod:scope:", "pepe:scope:", "aigen_room:"];

@@ -784,6 +784,10 @@ async function execute(userId, { force = false } = {}) {
       n("deleted:bridge_veil", fv.feed.length);
       n("bridge_rooms_veil", fv.rooms);
     }
+    // wave 2 WP-5: moderation evidence clips of them (evidence.js) - flagged (subject_gone_at), never extended: they still go at their
+    // 30 days (owner question Q1, the default). Clips they SAVED as an admin / pad owner keep by_user (the audit follows the act, like
+    // seethrough_log)
+    if (login && (await has("evidence_clips", "subject_login"))) n("evidence_clips_flagged", await require("./evidence").subjectGone([login]));
     // CL3 fix-up: ...and the pad owner the chat watermarks last saw (chatlog_rooms.owner_id / inputs.owner) isn't their id any more
     n("chatlog:owner_ref", await require("./chatlogview").forgetOwner(uid));
     n("plex_unlinked", await run("plex_members", ["user_id"], "UPDATE plex_members SET user_id = NULL WHERE user_id = ?", [uid]));

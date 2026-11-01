@@ -47,8 +47,9 @@ const INDEXABLE = "text IS NOT NULL AND k IN ('msg','tx','topic') AND rm_at IS N
 // bridge_rooms_veil: of each veiled roster / mic entry) - real identities and hidden words must never be copied into staging
 const LIVE_FEED = ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"];
 // wave 2 WP-2: frog-name sessions (frognames.js, no logins but prod's open sessions' keyed handles) and the see-through audit
-// (seethrough.js: which logins an admin revealed) - staging's own
-const VEIL = ["incog_alias", "seethrough_log", "seethrough_toggle"];
+// (seethrough.js: which logins an admin revealed) - staging's own. WP-5: + moderation evidence clips (evidence.js: whose voice, when,
+// who saved it - the audio itself sits in each environment's own evidence directory and is never copied)
+const VEIL = ["incog_alias", "seethrough_log", "seethrough_toggle", "evidence_clips"];
 const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings",          // keys + switches
               "bot_route_log", "legacy_token_use", "legacy_token_daily", "events_auth_log", "bridge_spans",   // logs
               "pad_hub",         // S1-D1: the staging hub knows staging's hub pad ids (padhub.js mints the new pads' after the copy)

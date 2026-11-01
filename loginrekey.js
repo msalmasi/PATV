@@ -24,6 +24,9 @@
 // Mic keep (handoff 16 follow-up): the same for stagecap's stage_capture_cards (the logins shown as a name card) and storykeep's
 // story_keep_people (who a saved / posted mic-stage copy shows, with its captured_at): never re-keyed - multi-subject "Remove me",
 // account deletion and Download my data read them by the same spans (stagecap.ownSpans).
+// wave 2 WP-5: evidence.js's evidence_clips.subject_login is deliberately NOT re-keyed either - it is the login whose voice a moderation
+// evidence clip holds, at the moment it was said (said_at); a re-keyed row would pin someone else's login on that voice. It goes at its
+// 30 days whatever happens to the login (a subject's forget-me / deletion only flags it, owner question Q1).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 

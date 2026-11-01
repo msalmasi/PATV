@@ -342,6 +342,11 @@ const RULES = {
   // 1.99afn (seethrough.js): who revealed a frog name moves with the account (the audit follows the person); an open "Show real names"
   // toggle too - one per (scope, pad): the target's own wins a collision
   "seethrough_log.user_id": M(), "seethrough_toggle.user_id": M({ key: ["scope", "room_id"] }),
+  // wave 2 WP-5 (evidence.js): who saved a moderation evidence clip, and who put it under a legal hold, follow the account (the audit
+  // follows the person, like seethrough_log)
+  "evidence_clips.by_user": M(), "evidence_clips.hold_by": M(),
+  "evidence_clips.subject_login": { deny: "the Camfrog login whose voice the clip holds (when it was said) - never re-keyed, like stage_capture_people" },
+  "evidence_clips.subject_gone_at": { deny: "a time (the subject used forget-me or deleted their account)" },
   "chat_signin_prefs.user_id": M({ key: [], merge: { enabled: "MIN" } }),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)
