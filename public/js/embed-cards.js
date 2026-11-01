@@ -8,9 +8,10 @@
 (function () {
   'use strict';
   var HOSTS = ['publicaccess.tv', 'www.publicaccess.tv', 'staging.publicaccess.tv'];
-  // the pa.tv short alias (sharelinks.js ALIAS_HOSTS): it redirects to publicaccess.tv with the path kept, so its links are
-  // this site's - except on staging, where pa.tv still points at production (ownHosts)
-  var ALIASES = ['pa.tv'];
+  // the pa.tv short alias (sharelinks.js ALIAS_HOSTS - keep the two lists the same, a test compares them): pa.tv and www.pa.tv
+  // redirect to publicaccess.tv with the path kept, so their links are this site's - except on staging, where pa.tv still
+  // points at production (ownHosts)
+  var ALIASES = ['pa.tv', 'www.pa.tv'];
   function ownHosts(here) {
     var h = String(here || '').toLowerCase();
     return HOSTS.concat(h ? [h] : [], /^staging\./.test(h) ? [] : ALIASES);
