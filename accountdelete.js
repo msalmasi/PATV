@@ -32,6 +32,10 @@
 //                                         unfinished stage captures. Mic keep (handoff 16 follow-up): the captures that show the
 //                                         account only as a name card lose its rows (stage_capture_cards), and every saved / posted
 //                                         copy that shows it (storykeep's story_keep_people, the same wide spans) goes with its rows.
+//                                         Mic keep review: a mic post they made or are credited with is judged by its feed post
+//                                         (step 2 never marks it removed while it's up - the people shown keep Remove me and the
+//                                         cascade); a 24 h capture that showed them is never kept (stage_captures.veiled = 2); a
+//                                         saved copy only they saved is purged after the commit.
 //
 // PAT never vanishes: the wallet debit ("account-deleted") and its legs (pools when the site owns them, the House as jackpot rakes,
 // else a negative Reserve claim Pepe's funding tick credits) are one transaction, keyed (account_deletion_routes, key
@@ -633,6 +637,9 @@ async function execute(userId, { force = false } = {}) {
   // story_keep_people - the live rows die with the 24 h capture): every such copy goes, with its people rows
   const carded = SC ? await SC.depictedOf(uid, login, t, { wide: true, cards: true }) : [];
   const kept = (await tableExists("story_keep_people")) ? await require("./storykeep").keptOf(uid, login, t, { wide: true }) : [];
+  // mic keep review: the captures they saved - step 5 deletes their story_saves rows; a copy nobody else saves is purged after the
+  // commit (storykeep.purgeOrphanKeep), with its people rows
+  const savedCaps = (await has("story_saves", "user_id", "capture_id")) ? (await getQuery("SELECT capture_id FROM story_saves WHERE user_id = ?", [uid])).map((r) => r.capture_id) : [];
   const depictedMedia = [...new Set(depicted.map((r) => r.media_id).filter(Boolean))];
   if (depictedMedia.length) mediaRows.push(...(await getQuery(`SELECT id, file FROM media WHERE id IN (${depictedMedia.map(() => "?").join(",")}) AND COALESCE(deleted,0) = 0`, depictedMedia)));
   // Sign in with Apple: the link's Apple token joins applesso's revocation queue INSIDE the transaction that deletes the link (a
@@ -673,7 +680,19 @@ async function execute(userId, { force = false } = {}) {
       n("comments_anonymised", (await getQuery(`SELECT COUNT(*) AS n FROM feed_comments WHERE author_id = ? AND deleted_at IS NULL AND ${replied}`, [uid, uid]))[0].n);
       n("comments_deleted", await run("feed_comments", ["author_id"], `UPDATE feed_comments SET deleted_at = ?, deleted_by = ?, body = '' WHERE author_id = ? AND deleted_at IS NULL AND NOT ${replied}`, [t, uid, uid, uid]));
     }
-    n("stories_removed", await run("story_posts", ["author_id", "removed_at"], "UPDATE story_posts SET removed_at = ?, removed_reason = 'account deleted' WHERE (author_id = ? OR subject_user_id = ? OR posted_by = ?) AND removed_at IS NULL", [t, uid, uid, uid]));
+    //    mic keep review: a 🎙 mic-stage post (story_posts.stream 'mic') is judged by its FEED post, never by this blanket mark: one
+    //    the step above left up (someone else's they posted, or theirs with replies) stays a live copy - the people shown keep Remove
+    //    me and the cascade (step 4 takes it down if it shows them); one it deleted takes its saved copies with it
+    //    (storykeep.onPostDeleted). Their id leaves the record (no notices to a tombstone).
+    const micPosts = await has("story_posts", "stream", "post_id", "posted_by");
+    n("stories_removed", await run("story_posts", ["author_id", "removed_at"], `UPDATE story_posts SET removed_at = ?, removed_reason = 'account deleted'
+      WHERE (author_id = ? OR subject_user_id = ? OR posted_by = ?) AND removed_at IS NULL${micPosts ? " AND COALESCE(stream, '') <> 'mic'" : ""}`, [t, uid, uid, uid]));
+    if (micPosts) {
+      const mine = await getQuery("SELECT post_id FROM story_posts WHERE stream = 'mic' AND post_id IS NOT NULL AND (author_id = ? OR posted_by = ?)", [uid, uid]);
+      for (const r of mine) if (await require("./storykeep").onPostDeleted(r.post_id)) n("mic_posts_deleted", 1);
+      n("mic_posts_unlinked", await runQuery(`UPDATE story_posts SET author_id = CASE WHEN author_id = ? THEN NULL ELSE author_id END,
+        posted_by = CASE WHEN posted_by = ? THEN NULL ELSE posted_by END WHERE stream = 'mic' AND (author_id = ? OR posted_by = ?)`, [uid, uid, uid, uid]).then((x) => (x && x.changes) || 0));
+    }
     // 3. DMs: the messages they sent are deleted (the other side sees "deleted"); they leave every conversation
     //    (CL11: a `!msg` copy's relay row - its key and Camfrog logins - goes with the message)
     n("dm_relays_deleted", await run("dm_relays", ["message_id"], "DELETE FROM dm_relays WHERE message_id IN (SELECT id FROM messages WHERE sender_id = ?)", [uid]));
@@ -721,6 +740,12 @@ async function execute(userId, { force = false } = {}) {
     for (const r of depicted) n("mic_capture_people_deleted", await run("stage_capture_people", ["login"], "DELETE FROM stage_capture_people WHERE capture_id = ? AND login = ?", [r.capture_id, r.login]));
     //    mic keep: their name-card rows, and every saved / posted copy that shows them (read above) - the copy goes, then its rows
     for (const r of carded) n("mic_capture_cards_deleted", await run("stage_capture_cards", ["login"], "DELETE FROM stage_capture_cards WHERE capture_id = ? AND login = ?", [r.capture_id, r.login]));
+    //    review fix: a 24 h capture that showed them (card, or a cam on one that survives) can never be kept from here on - with
+    //    their rows gone, a later saved / posted copy couldn't record them. stage_captures.veiled = 2: "someone shown deleted their
+    //    account" (non-identifying; storykeep refuses it)
+    for (const id of new Set([...carded, ...depicted].map((r) => r.capture_id))) {
+      n("mic_captures_unkeepable", await run("stage_captures", ["veiled"], "UPDATE stage_captures SET veiled = 2 WHERE id = ? AND COALESCE(veiled, -1) <> 2", [id]));
+    }
     for (const id of new Set(kept.map((r) => r.capture_id))) {
       await require("./storykeep").onCaptureRemoved(id, { reason: "removed" });
       n("mic_copies_removed", 1);
@@ -843,6 +868,12 @@ async function execute(userId, { force = false } = {}) {
     catch (e) { console.error("[acctdel] remove public lines:", e.message); }
   }
   try { await require("./accountexport").removeAll(uid); } catch (e) { /* none */ }
+  // mic keep review: saved copies they were the last to save (their story_saves rows went in step 5) - purged now; a failure here is
+  // the hourly sweep's (storykeep.sweepKept purges orphaned copies after a grace)
+  for (const id of savedCaps) {
+    try { if (await require("./storykeep").purgeOrphanKeep(id)) report.saved_copies_purged = (report.saved_copies_purged || 0) + 1; }
+    catch (e) { console.error("[acctdel] orphaned saved copy:", e.message); }
+  }
   try { require("./sessions")._clearCache(); } catch (e) { /* none */ }
   // adultgate site: the 18+ gate forgets the account (and, when it was them, the switch card's "last changed by" reloads pseudonymised)
   try {

@@ -148,8 +148,13 @@
       return;
     }
     // 1.99eq: the person in a story capture takes its post down (storykeep.js; the poster is told)
+    // mic keep review: on a 🎙 mic-stage post (data-mic) it also deletes every saved copy - said in the confirm itself (a title
+    // tooltip never shows on touch screens)
     if (act === 'remove-me') {
-      if (!window.confirm(_t('js.feed.remove_me', 'Remove this post of you? It comes down for everyone and the person who posted it is told.'))) return;
+      var rmMsg = b.getAttribute('data-mic') === '1'
+        ? _t('js.feed.remove_me_mic', 'Remove this post of you? It comes down for everyone, every saved copy of it is deleted too, and the person who posted it is told.')
+        : _t('js.feed.remove_me', 'Remove this post of you? It comes down for everyone and the person who posted it is told.');
+      if (!window.confirm(rmMsg)) return;
       b.disabled = true;
       api('/api/stories/posts/' + id + '/remove-me', {}).then(function () { location.reload(); }).catch(function (e) { b.disabled = false; alert(e.message); });
       return;

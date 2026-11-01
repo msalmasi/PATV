@@ -64,5 +64,5 @@ test("Hop footer keeps cosmetic names legible, clipped and motion-aware", () => 
   assert.match(css,/\.hop-by \{[^}]*white-space: nowrap;[^}]*overflow: hidden;[^}]*text-overflow: ellipsis/);
   assert.match(css,/\.hop-av \{[^}]*width: 18px;[^}]*height: 18px;[^}]*vertical-align:/);
   const boot=fs.readFileSync(path.join(__dirname,"../views/partials/hop-boot.ejs"),"utf8");
-  assert.match(boot,/hop\.css\?v=5/); assert.match(boot,/hop\.js\?v=5/);
+  assert.match(boot,/hop\.css\?v=5/); assert.match(boot,/hop\.js\?v=6/);
 });

@@ -35,7 +35,7 @@ function reset(extra = {}) {
       graph = args.includes("-filter_complex") ? args[args.indexOf("-filter_complex") + 1] : null;
       fs.writeFileSync(args[args.length - 1], "fixture"); return { out: "" };
     } }),
-    reader: fakeReader, privacyWaitMs: 50, ...extra });
+    reader: fakeReader, privacyWaitMs: 50, lastRosterWaitMs: 0, cards: async () => [], ...extra });
 }
 function id() { return "c" + crypto.randomBytes(10).toString("hex"); }
 function options(kind = "snap") { const cid = id(); return { id: cid, R, user: U, kind, secs: 10, surface: "pad", tmpDir: tmp, out: path.join(tmp, cid + (kind === "snap" ? ".webp" : ".mp4")) }; }
@@ -61,17 +61,19 @@ async function snapWith(finalProgram) {
 }
 /**
  * A 6 s forward clip on the fixture clock: `during(job, t)` runs at each 0.5 s step (change the program / mic list there); the room
- * audio taps 0.25 s chunks unless `audio` is false. -> info
+ * audio taps 0.25 s chunks unless `audio` is false (`lat`: their MP3 latency, ms); `after(job)` runs after the last sample, before the
+ * clip ends (what only the last mic-list read can see). -> info
  */
-async function clipWith({ during = () => {}, audio = true, hmAt = () => 0 } = {}) {
+async function clipWith({ during = () => {}, audio = true, hmAt = () => 0, lat = 0, after = () => {} } = {}) {
   const o = options("clip"), running = await M.start(o); await tick();
   const job = T.jobs.get(o.id); clearInterval(job.timer);                   // the samples below run on the fixture clock only
   for (let i = 0; i < 24; i++) {
     const t = (i + 1) * .25;
     clock = job.started + t * 1000;
-    if (audio) taps[0].fn(Buffer.alloc(100, 1), { hm: hmAt(t), lat: { mp3_ms: 0 } });
+    if (audio) taps[0].fn(Buffer.alloc(100, 1), { hm: hmAt(t), lat: { mp3_ms: lat } });
     if (t % .5 === 0) { await during(job, t); await T.sample(job); }
   }
+  await after(job);
   job.finishEarly(6);
   return running.done;
 }
@@ -143,7 +145,7 @@ test("mic keep: while a clip carries room audio, a muted stretch or a voice the 
   assert.equal(info.veiled, true, "an anonymous voice");
   // the people shown, Pepe himself and a bot holding the mic are fine
   reset();
-  info = await clipWith({ during: (job, t) => { if (t === 3) mic = [{ login: "alice" }, { login: "BOB" }, { self: true, login: "pepefrog" }, { bot: true, login: "musicbot" }]; } });
+  info = await clipWith({ during: (job, t) => { if (t === 3) mic = [{ login: "alice", proven: true }, { login: "BOB", proven: true }, { self: true, login: "pepefrog" }, { bot: true, login: "musicbot" }]; } });
   assert.equal(info.veiled, false, "every voice is someone shown (or not a person)");
   // the same unseen voice with no room audio in the clip: nothing of him is in it
   reset();
@@ -153,8 +155,65 @@ test("mic keep: while a clip carries room audio, a muted stretch or a voice the 
 
 test("mic keep: noteVoices - an unreadable mic list or a holder whose tile stopped counts as unseen; the tiles shown don't", () => {
   const job = { tiles: [{ login: "alice", stop: null, mode: "live" }, { login: "bob", stop: 2, mode: "card" }, { mode: "cover", stop: null }] };
-  T.noteVoices(job, [{ login: "Alice" }]); assert.equal(!!job.unseen, false);
-  T.noteVoices(job, [{ login: "bob" }]); assert.equal(job.unseen, true, "bob's tile stopped while he still holds the mic");
+  T.noteVoices(job, [{ login: "Alice", proven: true }]); assert.equal(!!job.unseen, false);
+  T.noteVoices(job, [{ login: "bob", proven: true }]); assert.equal(job.unseen, true, "bob's tile stopped while he still holds the mic");
   const j2 = { tiles: [] }; T.noteVoices(j2, undefined); assert.equal(j2.unseen, true, "no mic list: fail closed");
   const j3 = { tiles: [{ login: "alice", stop: null, mode: "live" }] }; T.noteVoices(j3, [{ login: "bad login!" }]); assert.equal(j3.unseen, true);
+});
+
+// ── review fixes ──
+test("mic keep review: the lead-in every clip with MP3 latency has (sound made before the first mic-list read) is muted but doesn't veil it; a private mute does", async () => {
+  let info = await clipWith({ lat: 500 });
+  assert.ok(info.audio.muted_s > 0, "the lead-in is muted (future-only audio)");
+  assert.match(graph, /volume=0:enable=/);
+  assert.equal(info.veiled, false, "nothing heard in it is anyone's - everyone was shown openly");
+  reset();
+  info = await clipWith({ lat: 500, hmAt: t => (t > 3 && t <= 4 ? 1 : 0) });
+  assert.equal(info.veiled, true, "a hidden holder's stretch still veils it");
+  // the plan itself: private_s counts Pepe's hm mark, a private holder and audio that can't be placed - never the lead-in
+  const chunks = Array.from({ length: 8 }, (_, i) => ({ offset: i * 100, bytes: 100, at: (i + 1) * .25, hm: 0, lat: { mp3_ms: 1000 } }));
+  const packets = chunks.map(c => ({ pos: c.offset, size: 100, duration_time: .25 }));
+  const lead = M.audioPlan(chunks, packets, [{ at: 0, private: false }], 2);
+  assert.ok(lead.muted_s > 0); assert.equal(lead.private_s, 0);
+  assert.ok(M.audioPlan(chunks, packets, [{ at: 0, private: true }], 2).private_s > 0, "a private holder from the start");
+  assert.ok(M.audioPlan(chunks.map((c, i) => ({ ...c, hm: i === 6 ? 1 : 0 })), packets, [{ at: 0, private: false }], 2).private_s > 0, "Pepe's hm mark");
+  assert.ok(M.audioPlan(chunks.map(c => ({ ...c, lat: null })), packets, [{ at: 0, private: false }], 2).private_s > 0, "audio that can't be placed");
+  assert.ok(M.audioPlan(chunks, packets, [], 2).private_s > 0, "no mic-list read at all");
+});
+
+test("mic keep review: a hold that began in the clip's last seconds (after its last sample - Pepe's list is up to 2 s late) is still checked; one that began after the end isn't in it", async () => {
+  const wins = () => { const m = /volume=0:enable='([^']*)'/.exec(graph || ""); return m ? [...m[1].matchAll(/between\(t,([\d.]+),([\d.]+)\)/g)].map(x => [Number(x[1]), Number(x[2])]) : []; };
+  const mutedAt = x => wins().some(([a, b]) => a <= x && x <= b);
+  // zed (not shown) grabbed at 5.6 s; the list carrying him reaches the site only after the clip's last sample
+  let info = await clipWith({ after: job => { mic = [{ login: "zed", proven: true, since: job.started + 5600 }]; } });
+  assert.equal(info.veiled, true, "his voice is in the clip's last 0.4 s");
+  reset();
+  info = await clipWith({ after: job => { mic = [{ login: "zed", proven: true, since: job.started + 6500 }]; } });
+  assert.equal(info.veiled, false, "he grabbed after the clip ended");
+  // alice (shown) is private and her hold began at 5 s: the last read mutes her from her since - the 24 h story's clip too
+  reset();
+  info = await clipWith({ after: job => { mic = [{ login: "alice", proven: true, since: job.started + 5000 }]; privLogins.add("alice"); } });
+  assert.ok(mutedAt(5.5), "muted from her hold"); assert.ok(!mutedAt(2), "not before it");
+  assert.equal(info.veiled, true, "a private mute: not in the open");
+  // the list unreadable at that last read: unseen, and its last MIC_LAG muted
+  reset();
+  info = await clipWith({ after: () => { mic = undefined; } });
+  assert.equal(info.veiled, true); assert.ok(mutedAt(5));
+});
+
+test("mic keep review: noteVoices - a holder without Pepe's proven mark is unseen even when the name matches a shown tile", () => {
+  const job = { tiles: [{ login: "alice", stop: null, mode: "live" }] };
+  T.noteVoices(job, [{ login: "alice" }]); assert.equal(job.unseen, true);
+  const ok = { tiles: [{ login: "alice", stop: null, mode: "live" }] };
+  T.noteVoices(ok, [{ login: "alice", proven: true }]); assert.equal(!!ok.unseen, false);
+});
+
+test("mic keep review: the publish recheck covers the name cards - a card person who went private or hidden since the preview stops it", async () => {
+  const cap = { id: id(), user_id: U.userId, room_id: R.id, kind: "snap" };
+  M.configure({ people: async () => ["alice"], cards: async () => ["bob"] });
+  assert.equal(await M.recheck(cap), null);
+  hidden.add("bob");
+  assert.equal(await M.recheck(cap), T.MSG.revoked, "hidden");
+  hidden.clear(); privLogins.add("bob");
+  assert.equal(await M.recheck(cap), T.MSG.revoked, "keeps their activity private");
 });

@@ -24,6 +24,8 @@
   var NAME = (me && me.getAttribute('data-hop-name')) || 'Hop';
   var ICON = (me && me.getAttribute('data-hop-icon')) || '🐸';
   var H = null;
+  // mic keep review: the page's translations (window.__t, en.json defaults) - the capture label below
+  var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
 
   // ── helpers ──
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -142,7 +144,9 @@
     }
     var info = el('div', 'hop-info');
     if (it.pad) { var pad = el('a', 'hop-pad', it.pad.label); pad.href = it.pad.href; info.appendChild(pad); }
-    if (it.capture) info.appendChild(el('span', 'hop-capt', '📸 Captured from ' + it.capture.room));
+    // mic keep review: a 🎙 mic-stage post (several people, no single subject) says so, as in the feed
+    if (it.capture) info.appendChild(el('span', 'hop-capt', it.capture.mic ? _t('js.hop.mic_stage_in', '🎙 Mic stage in {room}', { room: it.capture.room })
+      : _t('js.hop.captured_from', '📸 Captured from {room}', { room: it.capture.room })));
     if (it.url) { var t = el('a', 'hop-title' + (it.titleFallback ? ' fb' : ''), it.title || 'View the post'); t.href = it.url; info.appendChild(t); }
     else if (it.title) info.appendChild(el('span', 'hop-title' + (it.titleFallback ? ' fb' : ''), it.title));
     if (it.author) {

@@ -1529,6 +1529,9 @@ async function remove(user, id, reason) {
                  [NOW(), own ? "author" : "admin:" + user.username, own ? null : cleanLine(reason, 200) || "removed by an admin", id]);
   await runQuery("UPDATE feed_reports SET resolved_at = ?, resolved_by = ?, action = 'deleted' WHERE post_id = ? AND resolved_at IS NULL", [NOW(), user.username, id]);
   await runQuery("DELETE FROM feed_mentions WHERE post_id = ? AND sent_at IS NULL", [id]);
+  // mic keep review (handoff 16 follow-up): a deleted 🎙 mic-stage post takes every saved copy of its capture with it (the people
+  // shown can't open a deleted post to tap Remove me); a no-op for any other post; never throws
+  try { await require("./storykeep").onPostDeleted(id); } catch (e) { /* no story keeping in this build */ }
   if (!own) {
     await notify(r.author_id, { title: "Your post was removed", body: `"${(r.title || r.body || "").slice(0, 80)}" was removed by an admin${reason ? ": " + cleanLine(reason, 200) : "."}`,
                           link: "/feed", ref: "feed-rm:" + id });

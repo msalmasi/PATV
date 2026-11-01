@@ -385,10 +385,13 @@ async function collect(userId, { at = now(), parts = null } = {}) {
       const rs = await require("./storykeep").keptOf(uid, login, at);
       const out = [];
       for (const r of rs.sort((a, b) => Number(a.captured_at) - Number(b.captured_at))) {
-        const k = (await getQuery("SELECT 1 FROM story_keeps WHERE capture_id = ? AND purged_at IS NULL", [r.capture_id]))[0];
-        const sp = (await getQuery("SELECT post_id, removed_at FROM story_posts WHERE capture_id = ?", [r.capture_id]))[0];
-        out.push({ capture: r.capture_id, login: r.login, role: r.role, captured: r.captured_at, saved_copy: !!k,
-                   post: sp && sp.post_id && !sp.removed_at ? sp.post_id : null });
+        // mic keep review: storykeep's own rules - a saved copy is an unpurged keep somebody still saves; a post is one whose feed
+        // post is up (not story_posts.removed_at alone)
+        const k = (await getQuery(`SELECT 1 FROM story_keeps k WHERE k.capture_id = ? AND k.purged_at IS NULL
+                                   AND EXISTS (SELECT 1 FROM story_saves s WHERE s.capture_id = k.capture_id)`, [r.capture_id]))[0];
+        const sp = (await getQuery(`SELECT sp.post_id FROM story_posts sp JOIN feed_posts p ON p.id = sp.post_id
+                                    WHERE sp.capture_id = ? AND p.deleted_at IS NULL AND p.purged_at IS NULL`, [r.capture_id]))[0];
+        out.push({ capture: r.capture_id, login: r.login, role: r.role, captured: r.captured_at, saved_copy: !!k, post: sp ? sp.post_id : null });
       }
       return out;
     })());

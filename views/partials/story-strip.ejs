@@ -66,6 +66,6 @@
 <%# 1.99fu: signed out, a Public pad's story (r.open, padaccess.js) is inlined too, so its circle opens %>
 <% const inl_ = S.signed ? (S.rooms || []) : (S.rooms || []).filter((r) => r.open && Array.isArray(r.items)); %>
 <% if (showRooms && inl_.length) { %><script type="application/json" class="ss-data"><%- JSON.stringify(inl_).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=11"<% if (me_) { %> data-me="<%= me_ %>"<% } %> defer></script>
+<script src="/public/js/stories.js?v=12"<% if (me_) { %> data-me="<%= me_ %>"<% } %> defer></script>
 <% if (compose_) { %><script src="/public/js/story-compose.js?v=1" defer></script><% } %>
 <% } %>

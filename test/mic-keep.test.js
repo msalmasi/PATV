@@ -285,7 +285,10 @@ test("multi-subject Remove me: every person shown (cam or card, by the login spa
   assert.deepEqual(told, ["carol"], "the poster (= the credited capturer here)");
   assert.deepEqual(await keep.removeMe(U.bob, r.post.id), { removed: true, again: true }, "idempotent");
   await refused(keep.save(U.dave, c.mid), /removed it, so it can't be kept again/);
-  await assert.rejects(keep.postToPad(U.carol, c.mid), (e) => e.status === 409 && /removed it/.test(e.message));
+  // review fix: the multi-subject text exactly (the generic "removed its post" matched a looser pattern), and its locales key
+  await assert.rejects(keep.postToPad(U.carol, c.mid), (e) => e.status === 409 && e.message === keep.MIC.removed && e.i18n === "storykeep.mic.removed");
+  const r2 = await fetch(base + `/api/stories/${c.mid}/post`, { method: "POST", headers: Object.assign(HDR(U.carol), { "x-test-t": "1" }), body: "{}" });
+  assert.equal(r2.status, 409); assert.equal((await r2.json()).error, "T:storykeep.mic.removed");
 });
 
 test("cascade: a person shown going private (profile), hidden (the hidden set, debounced) or marked private by Pepe's /api/media/anon takes every copy showing them down", async () => {
@@ -320,22 +323,23 @@ test("cascade: a person shown going private (profile), hidden (the hidden set, d
 });
 
 test("the window between the recheck and the durable rows: someone who goes private meanwhile takes the new post / saved copy down", async () => {
-  const sneak = (login) => keep._setPersistImpl(async (row) => { REFUSED.add(login); return keep.defaultPersist(row); });
+  // review fix: going hidden is everyone's business (every copy goes); a block or cam rule of the actor's undoes only their copy (below)
+  const sneak = (login) => keep._setPersistImpl(async (row) => { HIDDEN.add(login); return keep.defaultPersist(row); });
   try {
     const c = await micCap();
-    sneak("bobcf");                                                         // bob turns captures off while the copy is being made
+    sneak("bobcf");                                                         // bob goes hidden while the copy is being made
     await refused(keep.postToPad(U.carol, c.mid), /Someone shown in this mic-stage capture/);
     const sp = (await getQuery("SELECT * FROM story_posts WHERE capture_id = ?", [c.mid]))[0];
     assert.ok(sp && sp.post_id && sp.removed_at, "the post was made, then taken down");
     assert.ok((await store.getRow(sp.post_id)).deleted_at);
     assert.deepEqual(await peopleOf(c.mid), []);
-    REFUSED.clear();
+    HIDDEN.clear();
     const d = await micCap();
     sneak("alicecf");
     await refused(keep.save(U.dave, d.mid), /Someone shown/);
     assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_saves WHERE capture_id = ?", [d.mid]))[0].n, 0);
     assert.ok((await getQuery("SELECT purged_at FROM story_keeps WHERE capture_id = ?", [d.mid]))[0].purged_at);
-  } finally { keep._setPersistImpl(null); REFUSED.clear(); }
+  } finally { keep._setPersistImpl(null); HIDDEN.clear(); }
 });
 
 test("cascade backstop: the hourly sweep drops copies showing someone private now, and rows of captures with no copy left; a lookup error removes nothing", async () => {
@@ -399,6 +403,231 @@ test("Download my data lists the copies that show you (cam or card) and the name
     await runQuery("UPDATE users SET camfrogUsername = 'alicecf' WHERE userId = 'alice'");
     await require(path.join(repo, "loginrekey")).changed("alice", "alicenew", "alicecf", "verify");
   }
+});
+
+// ── review fixes (these run before the last test, which deletes bob) ──
+const PERSON = /Someone shown in this mic-stage capture can't be in a saved or posted copy right now/;
+const savesOf = async (mid) => (await getQuery("SELECT COUNT(*) AS n FROM story_saves WHERE capture_id = ?", [mid]))[0].n;
+const keepOf = async (mid) => (await getQuery("SELECT * FROM story_keeps WHERE capture_id = ?", [mid]))[0] || null;
+async function deleteAccount(id) {
+  await D.schedule({ userId: id, username: id });
+  const r = await D.execute(id, { force: true });
+  assert.equal(r.state, "done", JSON.stringify(r));
+  return r;
+}
+
+test("review: account deletion of a mic post's poster (a pad mod) leaves the post up - everyone shown keeps Remove me and the cascade; a stale removed mark never hides a live mic post", async () => {
+  const mod = await mkUser("modx", "modxcf");
+  const a = await micCap({ cards: ["carolcf"] }), b = await micCap({ cards: ["carolcf"] });
+  keep._setModCheck((acct) => !!acct && acct.userId === "modx");
+  let pa, pb;
+  try { pa = await keep.postToPad(mod, a.mid); pb = await keep.postToPad(mod, b.mid); } finally { keep._setModCheck(() => false); }
+  await deleteAccount("modx");
+  for (const p of [pa, pb]) assert.ok(!(await store.getRow(p.post.id)).deleted_at, "carol's posts (credited to her) stay up");
+  const sp = (await getQuery("SELECT * FROM story_posts WHERE capture_id = ?", [a.mid]))[0];
+  assert.equal(sp.removed_at, null, "never marked removed while it's up");
+  assert.equal(sp.posted_by, null, "the deleted account leaves the record");
+  assert.equal((await store.get(pa.post.id, U.alice)).capture.canRemoveMe, true, "alice keeps Remove me");
+  assert.deepEqual(await keep.removeMe(U.alice, pa.post.id), { removed: true, again: false });
+  assert.ok((await store.getRow(pa.post.id)).deleted_at, "and it really comes down");
+  // a stale mark (the blanket one from before the fix): judged by its feed post - Remove me, the sweep and the cascade still reach it
+  const s3 = await micCap({ cards: ["carolcf"] }), p3 = await keep.postToPad(U.carol, s3.mid);
+  await runQuery("UPDATE story_posts SET removed_at = 1, removed_reason = 'account deleted' WHERE capture_id IN (?, ?)", [b.mid, s3.mid]);
+  assert.equal((await store.get(pb.post.id, U.alice)).capture.canRemoveMe, true);
+  assert.deepEqual(await keep.removeMe(U.alice, p3.post.id), { removed: true, again: false }, "Remove me works on it");
+  assert.ok((await store.getRow(p3.post.id)).deleted_at);
+  await keep.sweepKept();
+  assert.equal((await peopleOf(b.mid)).length, 2, "its people record stays while the post is up");
+  await layout.save(U.alice.userId, { hidden: ["analytics"] });
+  try { assert.ok((await store.getRow(pb.post.id)).deleted_at, "alice going private takes it down"); } finally { await layout.reset(U.alice.userId); }
+});
+
+test("review: account deletion of a mic post's author (no replies: step 2 deletes the post) takes its saved copies with it", async () => {
+  const capy = await mkUser("capy", "capycf");
+  const c = await micCap({ by: "capy", cards: ["carolcf"] });
+  await keep.save(U.dave, c.mid);
+  const pc = await keep.postToPad(capy, c.mid);
+  const r = await deleteAccount("capy");
+  assert.ok((await store.getRow(pc.post.id)).deleted_at);
+  assert.equal(await savesOf(c.mid), 0, "dave's saved copy went with the post");
+  assert.ok((await keepOf(c.mid)).purged_at);
+  assert.deepEqual(await peopleOf(c.mid), []);
+  assert.equal(r.report.mic_posts_deleted, 1);
+});
+
+test("review: once someone shown (cam or name card) deletes their account, the 24 h capture can't be kept; a card row written after the deletion refuses too", async () => {
+  await mkUser("goner", "gonercf");
+  const c = await micCap({ cams: ["alicecf"], cards: ["gonercf"] });
+  await deleteAccount("goner");
+  assert.equal(Number((await getQuery("SELECT veiled FROM stage_captures WHERE media_id = ?", [c.mid]))[0].veiled), 2, "marked: someone shown deleted their account");
+  await refused(keep.save(U.dave, c.mid), PERSON);
+  await refused(keep.postToPad(U.carol, c.mid), PERSON);
+  // a capture still recording when the account went writes its card rows afterwards (veiled 0): micrec's gone marker refuses it
+  const late = await micCap({ cams: ["alicecf"], cards: ["gonercf"], created: Date.now() - 60e3 });
+  await refused(keep.save(U.dave, late.mid), PERSON);
+  assert.deepEqual(await peopleOf(late.mid), []);
+});
+
+test("review: the block recheck reaches the account that had a login when it was taken, not only its holder now", async () => {
+  const fc = await micCap({ cams: ["frankold"], cards: [], created: NOW - 3 * H });     // frank had frankold then; erin holds it now
+  await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('frank', 'dave', 1)");
+  try {
+    await refused(keep.save(U.dave, fc.mid), PERSON);
+    assert.equal((await keep.save(U.carol, fc.mid)).saved, true, "no block with carol");
+  } finally { await runQuery("DELETE FROM dm_blocks WHERE blocker_id = 'frank' AND blocked_id = 'dave'"); }
+});
+
+test("review: an unreadable stored profile layout of the account that had a login then refuses the save, and the cascade's check says error, not ok", async () => {
+  const fc = await micCap({ cams: ["frankold"], cards: [], created: NOW - 3 * H });
+  await keep.save(U.carol, fc.mid);
+  await runQuery("INSERT INTO profile_layout (user_id, layout, updated) VALUES ('frank', 'not json', 1) ON CONFLICT(user_id) DO UPDATE SET layout = excluded.layout");
+  try {
+    await refused(keep.save(U.dave, fc.mid), /Couldn't check everyone shown/);
+    assert.equal((await keep.keptStates([fc.mid])).get(fc.mid), "error");
+  } finally { await runQuery("DELETE FROM profile_layout WHERE user_id = 'frank'"); }
+  assert.equal((await keep.keptStates([fc.mid])).get(fc.mid), "ok");
+});
+
+test("review: a recheck after the write that fails only for this actor (a block) undoes only their new copy - the existing post and other copies stay", async () => {
+  const blockDuringPersist = (blocker, blocked) => keep._setPersistImpl(async (row) => {
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, 1)", [blocker, blocked]);
+    return keep.defaultPersist(row);
+  });
+  // the save side: the pad owner already posted it; alice blocks dave while his copy is being made
+  const c = await micCap({ cards: ["carolcf"] });
+  const pa = await keep.postToPad(U.plantowner, c.mid);
+  blockDuringPersist("alice", "dave");
+  try {
+    await refused(keep.save(U.dave, c.mid), PERSON);
+    keep._setPersistImpl(null);
+    assert.equal(await savesOf(c.mid), 0, "dave's save is undone (and the copy nobody else saves)");
+    assert.ok((await keepOf(c.mid)).purged_at);
+    assert.ok(!(await store.getRow(pa.post.id)).deleted_at, "the pad owner's post stays up");
+    assert.equal((await getQuery("SELECT removed_at FROM story_posts WHERE capture_id = ?", [c.mid]))[0].removed_at, null);
+    assert.equal((await peopleOf(c.mid)).length, 2, "its people record stays with the post");
+    assert.equal((await keep.save(U.erin, c.mid)).saved, true, "someone without a block still saves it");
+  } finally { keep._setPersistImpl(null); await runQuery("DELETE FROM dm_blocks WHERE blocker_id = 'alice' AND blocked_id = 'dave'"); }
+  // the post side: alice blocks the posting pad owner while the post is being made - only that post goes, and it may be posted later
+  const d = await micCap({ cards: ["carolcf"] });
+  await keep.save(U.erin, d.mid);
+  const before = (await getQuery("SELECT MAX(rowid) AS m FROM feed_posts"))[0].m || 0;
+  blockDuringPersist("alice", "plantowner");
+  try {
+    await refused(keep.postToPad(U.plantowner, d.mid), PERSON);
+    keep._setPersistImpl(null);
+    const made = await getQuery("SELECT * FROM feed_posts WHERE rowid > ?", [before]);
+    assert.equal(made.length, 1); assert.ok(made[0].deleted_at, "the new post is taken down");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_posts WHERE capture_id = ?", [d.mid]))[0].n, 0, "never really posted");
+    assert.equal(await savesOf(d.mid), 1, "erin's saved copy stays");
+  } finally { keep._setPersistImpl(null); await runQuery("DELETE FROM dm_blocks WHERE blocker_id = 'alice' AND blocked_id = 'plantowner'"); }
+  assert.equal((await keep.postToPad(U.carol, d.mid)).again, false, "posted later, once nothing stands in the way");
+});
+
+test("review: a post made but never recorded (its story_posts update failed) is taken down - never left live with no Remove me", async () => {
+  const c = await micCap({ cards: ["carolcf"] });
+  await runQuery(`CREATE TRIGGER fail_link_fixture BEFORE UPDATE OF post_id ON story_posts WHEN NEW.post_id IS NOT NULL AND OLD.capture_id = '${c.mid}'
+                  BEGIN SELECT RAISE(ABORT, 'fixture: database busy'); END`);
+  const before = (await getQuery("SELECT MAX(rowid) AS m FROM feed_posts"))[0].m || 0;
+  try { await assert.rejects(keep.postToPad(U.carol, c.mid), /fixture: database busy/); } finally { await runQuery("DROP TRIGGER fail_link_fixture"); }
+  const made = await getQuery("SELECT * FROM feed_posts WHERE rowid > ?", [before]);
+  assert.equal(made.length, 1, "the feed post had been made");
+  assert.ok(made[0].deleted_at, "... and is taken down");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_posts WHERE capture_id = ?", [c.mid]))[0].n, 0);
+  assert.deepEqual(await peopleOf(c.mid), []);
+  assert.equal((await keep.postToPad(U.carol, c.mid)).again, false, "it can be posted again");
+});
+
+test("review: saved copies nobody saves any more are purged with their people rows - the last saver's account deleted, a failed save, and (after a grace) anything else", async () => {
+  const gina = await mkUser("gina", "ginacf");
+  const c = await micCap({ cards: ["carolcf"] });
+  await keep.save(gina, c.mid);
+  await deleteAccount("gina");
+  assert.ok((await keepOf(c.mid)).purged_at, "purged after the deletion");
+  assert.deepEqual(await peopleOf(c.mid), []);
+  assert.ok(!(await X.collect("alice")).chat.mic_stage_copies_of_you.some((r) => r.capture === c.mid), "Download my data stops listing it");
+  // a save whose second write fails: the copy ensureKeep made goes at once
+  const d = await micCap({ cards: ["carolcf"] });
+  await runQuery(`CREATE TRIGGER fail_save_fixture BEFORE INSERT ON story_saves WHEN NEW.capture_id = '${d.mid}' BEGIN SELECT RAISE(ABORT, 'fixture: save failed'); END`);
+  try { await assert.rejects(keep.save(U.dave, d.mid), /fixture: save failed/); } finally { await runQuery("DROP TRIGGER fail_save_fixture"); }
+  assert.ok((await keepOf(d.mid)).purged_at);
+  assert.deepEqual(await peopleOf(d.mid), []);
+  // any other way (a row deleted directly): the sweep, once the copy is past the grace (a save may be between its two writes)
+  const e = await micCap({ cards: ["carolcf"] });
+  await keep.save(U.dave, e.mid);
+  await runQuery("DELETE FROM story_saves WHERE capture_id = ?", [e.mid]);
+  await keep.sweepKept();
+  assert.equal((await keepOf(e.mid)).purged_at, null, "inside the grace: kept");
+  assert.deepEqual(await peopleOf(e.mid), [], "... but a copy nobody saves isn't a copy: its people rows go now (a save in flight copies them again)");
+  await runQuery("UPDATE story_keeps SET created = created - 600000 WHERE capture_id = ?", [e.mid]);
+  await keep.sweepKept();
+  assert.ok((await keepOf(e.mid)).purged_at);
+  assert.deepEqual(await peopleOf(e.mid), []);
+});
+
+test("review: a mic post deleted by its poster takes every saved copy with it (nobody shown can open a deleted post to tap Remove me); other deletion paths: the sweep", async () => {
+  const c = await micCap({ cards: ["carolcf"] });
+  await keep.save(U.dave, c.mid);
+  const pa = await keep.postToPad(U.carol, c.mid);
+  await store.remove(U.carol, pa.post.id);
+  assert.equal(await savesOf(c.mid), 0);
+  assert.ok((await keepOf(c.mid)).purged_at);
+  assert.deepEqual(await peopleOf(c.mid), []);
+  assert.deepEqual(await keep.removeMe(U.alice, pa.post.id), { removed: true, again: true });
+  // a path without the hook (any other UPDATE of feed_posts): the hourly sweep
+  const d = await micCap({ cards: ["carolcf"] });
+  await keep.save(U.dave, d.mid);
+  const pd = await keep.postToPad(U.carol, d.mid);
+  await runQuery("UPDATE feed_posts SET deleted_at = ?, deleted_by = 'system' WHERE id = ?", [Date.now(), pd.post.id]);
+  await keep.sweepKept();
+  assert.equal(await savesOf(d.mid), 0);
+  assert.deepEqual(await peopleOf(d.mid), []);
+  assert.equal((await keep.save(U.dave, d.mid)).saved, true, "the live 24 h capture may still be saved anew (no post, no Remove me - like any saved copy)");
+  await keep.sweepKept();
+  assert.equal(await savesOf(d.mid), 1, "... and the next sweep leaves that new copy alone (the deletion was handled)");
+});
+
+test("review: the cascade's check walks each login's history once per sweep / Saved page, not once per durable row", async () => {
+  const caps = [];
+  for (let i = 0; i < 4; i++) { const c = await micCap({ cams: ["frankold"], cards: [], created: NOW - 3 * H - i * 60e3 }); await keep.save(U.carol, c.mid); caps.push(c.mid); }
+  const orig = SC.ownSpans, SMx = require(path.join(repo, "stagemiccap")), origL = SMx.privateLayoutStrict;
+  let spans = 0, layouts = 0;
+  SC.ownSpans = async (...a) => { spans++; return orig(...a); };
+  SMx.privateLayoutStrict = async (...a) => { layouts++; return origL(...a); };
+  try {
+    const st = await keep.keptStates(caps);
+    assert.deepEqual(caps.map((id) => st.get(id)), ["ok", "ok", "ok", "ok"]);
+    assert.equal(spans, 2, "frankold's two candidate accounts (frank, erin) - once each, for four rows");
+    assert.ok(layouts <= 2, "each account's profile once (" + layouts + ")");
+  } finally { SC.ownSpans = orig; SMx.privateLayoutStrict = origL; }
+});
+
+test("review: the story viewer hides 📌 Post from a pad owner when the credited capturer fails the recheck (the post would read as theirs)", async () => {
+  const c = await micCap({ cards: ["carolcf"] });
+  const items = async (u) => (await require(path.join(repo, "stories")).forViewer(u, { room: ROOM })).flatMap((x) => x.items || []);
+  assert.deepEqual((await items(U.plantowner)).find((x) => x.id === c.mid).can, { post: true, save: true });
+  await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('alice', 'carol', 1)");
+  try {
+    assert.deepEqual((await items(U.plantowner)).find((x) => x.id === c.mid).can, { post: false, save: true }, "saving is the owner's own business; posting is carol's");
+  } finally { await runQuery("DELETE FROM dm_blocks WHERE blocker_id = 'alice' AND blocked_id = 'carol'"); }
+});
+
+test("review: the copy texts - the viewer's 📌 panel knows a mic capture (mic flag), the Remove me confirm names the saved copies, Hop says '🎙 Mic stage in'", async () => {
+  const c = await micCap({ cards: ["carolcf"] });
+  const it = (await require(path.join(repo, "stories")).forViewer(U.carol, { room: ROOM })).flatMap((x) => x.items || []).find((x) => x.id === c.mid);
+  assert.equal(it.mic, true, "the viewer gets the mic flag (its subject is the stage's label, not a person)");
+  const pa = await keep.postToPad(U.carol, c.mid);
+  const html = await (await fetch(base + pa.post.url, { headers: { "x-test-user": "alice" } })).text();
+  assert.match(html, /data-act="remove-me" data-mic="1"/, "the mic Remove me button says so");
+  const feedJs = fs.readFileSync(path.join(repo, "public", "js", "feed.js"), "utf8");
+  assert.match(feedJs, /b\.getAttribute\('data-mic'\) === '1'\s*\? _t\('js\.feed\.remove_me_mic'/);
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.match(en["js.feed.remove_me_mic"], /every saved copy of it is deleted too/);
+  // Hop: the server passes the flag, the client renders its own label
+  const hopItem = require(path.join(repo, "hop")).itemOf(await store.get(pa.post.id, U.dave));
+  assert.deepEqual(hopItem.capture, { room: hopItem.capture.room, mic: true });
+  const hopJs = fs.readFileSync(path.join(repo, "public", "js", "hop.js"), "utf8");
+  assert.match(hopJs, /it\.capture\.mic \? _t\('js\.hop\.mic_stage_in', '🎙 Mic stage in \{room\}'/);
+  assert.doesNotMatch(hopJs, /'📸 Captured from ' \+/, "the camera label is i18n'd too");
 });
 
 test("account deletion: every copy showing the person goes (post hidden, saves dropped, rows gone); their name-card rows go, the 24 h capture of them as a card stays", async () => {

@@ -467,3 +467,24 @@ test("client strings: textContent only - no new innerHTML in the reaction / repl
   assert.ok(node.length > 300);
   assert.doesNotMatch(node, /href|\/media\//, "the DM card is a button: no link, no media address");
 });
+
+test("mic keep review: the 📌 panel on a 🎙 mic-stage capture says anyone shown can remove the post (and every saved copy) - never '<the stage's label> can remove it'", async () => {
+  const item = (id, extra) => Object.assign({ id, kind: "photo", src: "/x.jpg", page: "/x", subject: "🎙 the mic", by: "carolcf", created: Date.now() - 60e3,
+                                               expires: Date.now() + 3600e3, secs: 0, source: "stage", nsfw: false, poster: null, can: { post: true, save: true } }, extra || {});
+  const panelText = async (it) => {
+    const P = page({ routes: { "GET /api/stories": { body: { ok: true, rooms: [Object.assign({}, ROOM, { items: [it] })] } } } });
+    P.win.patvStories.open(ROOM.id, it.id, null, ROOM.id);
+    await flush();
+    const V = P.win.patvStories._state();
+    const pb = V.acts.querySelectorAll("button.sv-act").find((b) => /Post to pad/.test(b.textContent));
+    assert.ok(pb, "the 📌 button");
+    pb.click();
+    const panel = P.doc.querySelector("form.sv-panel");
+    assert.ok(panel, "the panel opened");
+    return panel.querySelector("p").textContent;
+  };
+  const mic = await panelText(item("cc000001", { mic: true }));
+  assert.match(mic, /Anyone shown in it can remove it any time - that also deletes every saved copy\./);
+  assert.doesNotMatch(mic, /the mic can remove/);
+  assert.match(await panelText(item("cc000002", { source: "cam", subject: "Carol C" })), /Carol C can remove it from the post any time\./, "a one-person capture still names its subject");
+});

@@ -116,7 +116,8 @@ function init() {
       await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_people_retired AFTER UPDATE OF state ON stage_captures
         WHEN NEW.state IN ('failed','discarded','expired') BEGIN DELETE FROM stage_capture_people WHERE capture_id = NEW.id; END`);
       // mic keep (handoff 16 follow-up): `veiled` = 1 unless everyone in the capture was shown openly (stagemiccap's flag - never
-      // who); NULL on rows from before it (never kept or posted). stage_capture_cards = the logins shown openly only as a NAME CARD:
+      // who); NULL on rows from before it (never kept or posted); review fix: 2 = someone shown has since deleted their account
+      // (accountdelete - never kept either; never who). stage_capture_cards = the logins shown openly only as a NAME CARD:
       // storykeep's per-person recheck, notices and multi-subject "Remove me" read them; they never give the delete right
       // (depictedOf reads stage_capture_people only). Retired with their capture exactly like stage_capture_people.
       await addColumn("stage_captures", "veiled", "INTEGER");

@@ -456,8 +456,11 @@
     if (!V.paused) setPaused(true);
     var p = el('form', 'sv-panel'); p.setAttribute('aria-label', _t('js.feed.sv.panel_aria', 'Post to {pad}', { pad: R.title }));
     p.appendChild(el('h3', null, _t('js.feed.sv.panel_h', '📌 Post to {pad}', { pad: R.title })));
+    // mic keep review: a 🎙 mic-stage capture shows several people - every one of them (cam or name card) can remove the post, and
+    // that also deletes every saved copy (its `subject` is the stage's label, never a person)
     p.appendChild(el('p', null, (it.by ? _t('js.feed.sv.permanent_by', 'It becomes a permanent post in this pad, credited to {name}.', { name: it.by }) : _t('js.feed.sv.permanent', 'It becomes a permanent post in this pad.')) + ' ' +
-      (it.subject ? _t('js.feed.sv.subject_can', '{name} can remove it from the post any time.', { name: it.subject }) : _t('js.feed.sv.person_can', 'The person in it can remove it any time.'))));
+      (it.mic ? _t('js.feed.sv.mic_can', 'Anyone shown in it can remove it any time - that also deletes every saved copy.')
+        : it.subject ? _t('js.feed.sv.subject_can', '{name} can remove it from the post any time.', { name: it.subject }) : _t('js.feed.sv.person_can', 'The person in it can remove it any time.'))));
     var cap = el('input', 'sv-cap'); cap.type = 'text'; cap.maxLength = 140; cap.placeholder = _t('js.feed.sv.caption_ph', 'Add a caption (optional)'); cap.setAttribute('aria-label', _t('js.feed.sv.caption_aria', 'Caption (optional)'));
     p.appendChild(cap);
     var err = el('p', 'sv-err'); err.setAttribute('role', 'alert'); p.appendChild(err);

@@ -99,7 +99,8 @@ function itemOf(p) {
     id: p.id, url: p.url, title: PL.postLabel(p), titleFallback: PL.labelOf(p).fallback,
     author: { username: p.author.username, display: p.author.display, bot: !!p.author.bot, avatar: p.author.avatar || null, nameCss: p.author.nameCss || "" },
     pad, score: p.score, comments: p.comments, myVote: p.myVote || 0, mine: !!p.mine, nsfw: !!p.nsfw, created: p.created, media,
-    capture: p.capture ? { room: p.capture.room.title } : null, xpost: !!p.xpost,
+    // mic keep review: + mic - a 🎙 mic-stage post reads "🎙 Mic stage in <room>" in Hop too (feed-post.ejs does in the feed)
+    capture: p.capture ? { room: p.capture.room.title, ...(p.capture.mic ? { mic: true } : {}) } : null, xpost: !!p.xpost,
   };
 }
 function canSee(p, viewer) {

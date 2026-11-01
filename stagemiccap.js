@@ -11,6 +11,9 @@
 // that stopped because its person went private / hidden / incognito or withdrew (a tile that leaves when they leave the mic is
 // fine), no "Someone is speaking" card, and - while the clip carries room audio - no muted stretch and no voice of a person the
 // tiles don't show (noteVoices). stagecap stores the flag (never who was veiled); storykeep keeps / posts only unveiled captures.
+// Review fixes: "muted" = a mute that may hide a hidden / private speaker (audioPlan's private_s) - not the lead-in every clip with
+// MP3 latency has; a clip's last mic-list read waits out Pepe's MIC_LAG after its end (lastRoster: a late grab is muted when private,
+// unseen when not shown); a holder without Pepe's `proven` is never a shown tile; recheck() covers the name cards too.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -39,6 +42,8 @@ let deps = {
   resolveRoom: id => require("./roomsweb").resolveRoom(id),
   account: async id => (await require("./dbUtils").getQuery("SELECT * FROM users WHERE userId = ?", [id]))[0],
   people: async id => (await require("./dbUtils").getQuery("SELECT login FROM stage_capture_people WHERE capture_id = ?", [id])).map(x => x.login),
+  // mic keep review: the logins a capture shows only as a name card (stagecap's stage_capture_cards) - recheck() covers them too
+  cards: async id => (await require("./dbUtils").getQuery("SELECT login FROM stage_capture_cards WHERE capture_id = ?", [id])).map(x => x.login),
   full: async (u, id) => { const p = require("./padaccess"); await p.init(); return p.full(u, id); },
   block: (id, u, kind) => require("./bridgeblocks").refusal(id, u, kind),
   clipSwitch: id => require("./bridge").clipSwitch(id), clipOffText: id => require("./bridge").clipOffText(id),
@@ -58,7 +63,8 @@ let deps = {
   privateLogins: ls => privateLoginsStrict(ls),
   note: (kind, id, l, u) => require("./camviewers").noteViewers(kind, id, l, [String(u)]),
   fm: () => require("./feedmedia"), reader: null,
-  privacyWaitMs: 1500   // review fix 2: how long a cut waits for a private-profile lookup still in flight (settlePrivacy)
+  privacyWaitMs: 1500,  // review fix 2: how long a cut waits for a private-profile lookup still in flight (settlePrivacy)
+  lastRosterWaitMs: MIC_LAG * 1000   // mic keep review: a clip's last mic-list read waits (at most) this long after its end (lastRoster)
 };
 const DEFAULT_DEPS = Object.freeze({ ...deps });   // review fix 2: (tests) the real checks, to put back after a stub
 function configure(d) { deps = { ...deps, ...d }; }
@@ -208,7 +214,9 @@ async function recheck(capture) {
   try {
     const u = await deps.account(capture.user_id), R = await deps.resolveRoom(capture.room_id);
     await gate(R, u, capture.kind === "clip" ? "clip" : "snap", "pad");
-    for (const login of await deps.people(capture.id)) if (!(await consent(login, u.userId))) return MSG.revoked;
+    // mic keep review: the name cards too - someone shown only by name who has gone private / hidden since the preview isn't published
+    const shown = [...(await deps.people(capture.id)), ...(await deps.cards(capture.id))];
+    for (const login of shown) if (!(await consent(login, u.userId))) return MSG.revoked;
     return null;
   } catch (_) { return MSG.revoked; }
 }
@@ -337,9 +345,13 @@ function shifts(offsets) {
   const video = vals.map(v => v + audio);
   return { audio, video, extra: Math.max(audio, ...video, 0) };
 }
+// mic keep review: `private_s` - the muted seconds that may hide a hidden / private speaker (Pepe's hm mark, a private holder in the
+// roster history, audio that can't be placed against it). The lead-in - sound made before the first roster read, muted because the
+// audio is future-only - isn't one: every clip with real MP3 latency starts with it, and nothing heard in it is anyone's. muted_s
+// stays the total (the preview's audio note).
 function audioPlan(chunks, packets, privateHistory, duration, audioShift = 0) {
-  if (!chunks.length) return { reason: "off", muted: [], segments: [], muted_s: 0 };
-  if (chunks.some(c => c.hm !== 0 && c.hm !== 1)) return { reason: "outdated", muted: [], segments: [], muted_s: 0 };
+  if (!chunks.length) return { reason: "off", muted: [], segments: [], muted_s: 0, private_s: 0 };
+  if (chunks.some(c => c.hm !== 0 && c.hm !== 1)) return { reason: "outdated", muted: [], segments: [], muted_s: 0, private_s: 0 };
   const ranges = chunks.map(c => ({ ...c, begin: Infinity, end: -Infinity }));
   let time = 0;
   for (const p of packets) {
@@ -348,8 +360,10 @@ function audioPlan(chunks, packets, privateHistory, duration, audioShift = 0) {
     for (const c of ranges) if (pos < c.offset + c.bytes && pos + size > c.offset) { c.begin = Math.min(c.begin, time); c.end = Math.max(c.end, time + dt); }
     time += dt;
   }
-  if (!time || ranges.some(c => !Number.isFinite(c.begin))) return { reason: "outdated", muted: [], segments: [], muted_s: 0 };
-  const muted = [], segments = [];
+  if (!time || ranges.some(c => !Number.isFinite(c.begin))) return { reason: "outdated", muted: [], segments: [], muted_s: 0, private_s: 0 };
+  const muted = [], priv = [], segments = [];
+  const mute = (w, isPrivate) => { muted.push(w); if (isPrivate) priv.push(w); };
+  const firstRead = privateHistory.length ? privateHistory[0].at : -Infinity;   // no roster read at all: nothing is a lead-in
   // A chunk's arrival marks the end of that chunk, not the start. Accommodate interrupted posts
   // without pulling later sound earlier: contiguous decoded ranges share one placement segment.
   let anchor = Math.max(0, ranges[0].at - (ranges[0].end - ranges[0].begin));
@@ -359,9 +373,9 @@ function audioPlan(chunks, packets, privateHistory, duration, audioShift = 0) {
     if (arrivalStart - (anchor + c.begin) > .5) { seg.end = c.begin; if (seg.end > seg.begin) segments.push(seg); anchor = arrivalStart - c.begin; seg = { begin: c.begin, end: c.end, at: arrivalStart + audioShift }; }
     seg.end = Math.max(seg.end, c.end);
     const begin = anchor + c.begin + audioShift, end = anchor + c.end + audioShift;
-    if (c.hm === 1) muted.push([begin - .25, end + .25]);
+    if (c.hm === 1) mute([begin - .25, end + .25], true);
     const latency = c.lat && c.lat.mp3_ms;
-    if (!Number.isFinite(latency)) { muted.push([begin, end]); continue; }
+    if (!Number.isFinite(latency)) { mute([begin, end], true); continue; }
     // Look BACK from audio arrival to the mic roster that produced it. A grab at 5 s and
     // a 1 s MP3 delay mutes sound arriving around 6 s, never sound that arrived at 4 s.
     const sourceA = arrivalStart - latency / 1000, sourceB = c.at - latency / 1000;
@@ -370,13 +384,15 @@ function audioPlan(chunks, packets, privateHistory, duration, audioShift = 0) {
       const h = privateHistory[i], next = privateHistory[i + 1];
       const a = h.at, b = next ? next.at : duration + 20;
       if (a <= coveredUntil && b > coveredUntil) coveredUntil = b;
-      if (h.private && sourceA < b + .5 && sourceB >= a - .5) muted.push([begin - .5, end + .5]);
+      if (h.private && sourceA < b + .5 && sourceB >= a - .5) mute([begin - .5, end + .5], true);
     }
-    if (coveredUntil < sourceB) muted.push([begin - .5, end + .5]);
+    // uncovered: made before the first roster read (the lead-in) - or, anywhere else, a stretch nobody read (private)
+    if (coveredUntil < sourceB) mute([begin - .5, end + .5], !(sourceA < firstRead));
   }
   if (seg.end > seg.begin) segments.push(seg);
-  const merged = mergeWindows(muted, duration);
-  return { reason: null, muted: merged, segments, muted_s: merged.reduce((n, w) => n + w[1] - w[0], 0) };
+  const merged = mergeWindows(muted, duration), privMerged = mergeWindows(priv, duration);
+  const secs = ws => ws.reduce((n, w) => n + w[1] - w[0], 0);
+  return { reason: null, muted: merged, segments, muted_s: secs(merged), private_s: secs(privMerged) };
 }
 /** review fix: every observation from `from` (job s) on is private, and the sorted history gets that boundary too. */
 function privateSince(history, from) {
@@ -439,15 +455,44 @@ async function privateSampleNow(job) {
 }
 /** mic keep: a clip's room audio carries the voice of everyone holding the mic. A holder the clip doesn't show openly right now -
  *  anonymous, unproven, an account key, a new holder the fixed tiles never draw, one whose tile stopped - or a mic list that can't be
- *  read marks the clip as not taken in the open (job.unseen; never who). Pepe himself (self) and bots aren't people. */
+ *  read marks the clip as not taken in the open (job.unseen; never who). Pepe himself (self) and bots aren't people.
+ *  Review: unproven = no `proven: true` from Pepe's identity resolver - such a 0x16 name is never the tile that shows that login
+ *  (micfollow stages proven holders only), even when the names match. */
 function noteVoices(job, mic) {
   if (!Array.isArray(mic)) { job.unseen = true; return; }
   const shown = new Set((job.tiles || []).filter(t => t.login && t.stop == null && t.mode !== "blank" && t.mode !== "cover").map(t => t.login));
   for (const x of mic) {
     if (!x || x.self || x.bot) continue;
     const l = String(x.login || "").toLowerCase();
-    if (x.anon || !LOGIN.test(l) || !shown.has(l)) { job.unseen = true; return; }
+    if (x.anon || x.proven !== true || !LOGIN.test(l) || !shown.has(l)) { job.unseen = true; return; }
   }
+}
+/**
+ * mic keep review: one last mic-list read MIC_LAG after a clip's end - Pepe's list reaches the site up to MIC_LAG after a grab, so the
+ * samples never saw a hold that began in the clip's last ~2 s, though its voice is in the clip. A hold that began before the end is
+ * checked like any sample's: a private holder is muted from their since (the 24 h story's clip too), and a voice the tiles don't show
+ * marks the clip as not taken in the open (noteVoices). A hold that began after the end isn't in the clip; one without a since counts.
+ * An unreadable list (or private lookup) is private for the last MIC_LAG and unseen. Waits at most deps.lastRosterWaitMs.
+ * (Sound from a hold that ended just before the clip started is in its lead-in, which audioPlan always mutes.)
+ */
+async function lastRoster(job, duration) {
+  const end = job.started + duration * 1000;
+  const wait = Math.min(Math.max(0, Number(deps.lastRosterWaitMs) || 0), end + MIC_LAG * 1000 - deps.now());
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  const unknown = () => { job.unseen = true; privateSince(job.privateHistory, Math.max(0, duration - MIC_LAG)); };
+  let mic;
+  try { mic = deps.mic(job.R.id); } catch (_) { mic = null; }
+  if (!Array.isArray(mic)) return unknown();
+  const held = mic.filter(x => x && !(Number(x.since) > end));
+  noteVoices(job, held);
+  const holders = held.filter(x => !x.anon && LOGIN.test(String(x.login || "")));
+  let found;
+  try { found = await deps.privateLogins(holders.map(x => String(x.login).toLowerCase())); } catch (_) { return unknown(); }
+  const starts = holders.filter(x => found.has(String(x.login).toLowerCase())).map(x => {
+    const s = Number(x.since);
+    return Number.isFinite(s) && s > 0 ? Math.max(0, (s - job.started) / 1000) : Math.max(0, duration - MIC_LAG);
+  });
+  if (starts.length) privateSince(job.privateHistory, Math.min(...starts));
 }
 function stopTile(job, t, at) {
   if (t.stop != null) return; t.stop = Math.max(0, at); job.paths.delete(t.path);
@@ -618,6 +663,9 @@ async function clip(job, hooks) {
   if (job.cancelled) throw refuse("failed", 409);
   const duration = Math.min(job.secs, elapsed);
   if (duration < CLIP_MIN) throw refuse("short", 409);
+  // mic keep review: the holds the samples were too early to see (the mic list's MIC_LAG) - before the audio is planned
+  await lastRoster(job, duration);
+  if (job.cancelled) throw refuse("failed", 409);
   // review fix 2: no sample starts after finishReaders; the last one's lookup may still be in flight with its private look-back
   await settlePrivacy(job);
   if (hooks.cutting) await hooks.cutting();
@@ -653,10 +701,11 @@ async function clip(job, hooks) {
     // in the open: a cover / blank tile, a tile stopped for privacy (sample), a "Someone is speaking" card, and - only while the clip
     // carries room audio (composeArgs' hasAudio) - a muted stretch or a voice the tiles don't show (noteVoices). Audio dropped whole
     // ("off" / "outdated": no voice at all in the clip) adds nothing private, so such a clip is judged on its pictures alone.
+    // Review: "a muted stretch" = one that may hide a hidden / private speaker (audioPlan's private_s), not the lead-in every clip has.
     const cards = [...new Set(job.tiles.filter(t => t.login && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
     const heard = !audio.reason && audio.segments.length > 0;
     const veiled = !!job.veiled || job.tiles.some(t => t.mode === "cover" || t.mode === "blank") || job.speaking.some(c => c.kind === "someone") ||
-      (heard && (audio.muted_s > 0 || !!job.unseen));
+      (heard && (audio.private_s > 0 || !!job.unseen));
     return { secs: duration, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: { reason: audio.reason, muted_s: audio.muted_s } };
   } finally { release(); }
 }
@@ -695,4 +744,5 @@ async function start(opts, hooks = {}) {
 module.exports = { configure, init, start, gate, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
   consent,                                    // mic keep: storykeep's per-person recheck at save / post (the engine's own rule)
-  _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, noteVoices, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
+  privateLayoutStrict,                        // mic keep review: storykeep's strict profile read (an unreadable layout throws)
+  _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, noteVoices, lastRoster, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };

@@ -108,6 +108,9 @@ async function clean(rows) {
     // 1.99cr: stage captures (stagecap.js) read "📺 Stage snap/clip of <stream> by <user>"; NSFW comes from the slot
     // 1.99ez: "user" = a member's own story upload (userstories.js); NSFW = their tick or the safety check
     source: r.source === "stage" ? "stage" : r.source === "user" ? "user" : "cam", nsfw: !!Number(r.nsfw || 0),
+    // mic keep review: a 🎙 mic-stage capture (several people) - the viewer's 📌 panel says anyone shown can remove its post (its
+    // `subject` is the stage's label "🎙 the mic", never a person)
+    ...(r.source === "stage" && r.stream === "mic" ? { mic: true } : {}),
     // 1.99dq: a clip's poster frame / an audio capture's waveform card (media.js) - null until it's made
     poster: media.hasPoster(r) ? "/media/" + encodeURIComponent(r.id) + "/poster" : null,
   }, r));

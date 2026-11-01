@@ -27,6 +27,8 @@ function reset(extra = {}) {
     still: () => null, offset: () => 0, mic: () => [], privateLogins: async () => new Set(),
     note: async (kind, r, l, u) => notices.push({ kind, r, l, u }),
     audioTap: (r, fn, u) => { const tap = { fn, u, stopped: false }; taps.push(tap); return () => { tap.stopped = true; }; },
+    // mic keep review: no real wait for a clip's last mic-list read (the fixture clock stands still); recheck's name cards
+    lastRosterWaitMs: 0, cards: async () => [],
     fm: () => fm, reader: fakeReader, ...extra });
 }
 function id() { return "c" + crypto.randomBytes(10).toString("hex"); }
