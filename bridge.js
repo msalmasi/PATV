@@ -209,6 +209,7 @@ function load() {
           const rv = (await getQuery("SELECT data FROM bridge_rooms_veil WHERE id = ?", [R.id]))[0];
           if (rv) V.attachRoomVeil(R, rv.data);
           await V.attachFeedVeil(R);
+          noteWhoAll(R);                         // (the hidden-names job: the identities just re-attached - above it saw them anon)
           V.seedSeen(R);                         // review fix (A-compat-5): the restored roster's veiled people count as seen (J-8)
           const FN = require("./frognames");
           const since = Date.now() - FN.NAMED_GAP_MS;
@@ -283,11 +284,21 @@ async function persistRoom(R) {
 // boot from what was kept across the restart (bridge_feed, the roster snapshot), and from every roster Pepe sends. Pepe
 // anonymises a hidden person's NEW items, so a person hidden after a restart is otherwise never seen again, and their name
 // stays in other people's lines (the archive's chat_log covers them only once it writes).
+// wave 2 (leak tests): on the privacy wire v2 a veiled person's NEW items and roster entries are anon on the page, but their identity
+// rides server-side (_vz) - the job learns it from there too, so their names leave other text the site shows (Pepe's analytics notes,
+// a line kept from before) even when the site never saw them named. Server-only: noteWho fills a map, never a page.
+const veilWho = (x) => (x && x._vz && x._vz.login ? x._vz : null);
 function noteWhoAll(R, items = R.feed) {
   let CV;
   try { CV = require("./chatlogview"); } catch (e) { return; }
-  for (const it of items || []) if (it && it.u && !it.u.anon && it.u.login) CV.noteWho(it.u.login, it.u.display);
-  for (const u of [...(R.members || []), ...(R.mic || [])]) if (u && !u.anon && u.login) CV.noteWho(u.login, u.display);
+  for (const it of items || []) {
+    if (it && it.u && !it.u.anon && it.u.login) CV.noteWho(it.u.login, it.u.display);
+    else if (veilWho(it)) CV.noteWho(it._vz.login, it._vz.display);
+  }
+  for (const u of [...(R.members || []), ...(R.mic || [])]) {
+    if (u && !u.anon && u.login) CV.noteWho(u.login, u.display);
+    else if (veilWho(u)) CV.noteWho(u._vz.login, u._vz.display);
+  }
 }
 
 // 1.99cj: after a restart, the persisted feed refills the activity tally (roomactivity.js)
@@ -1054,6 +1065,7 @@ async function ingest(body, opts = {}) {
     it.c = ++cursor;
     it.aud = audNow(R.id);                                // CL3: the pad's access level when it was said (never widened)
     if (it.u && !it.u.anon && it.u.login) CV.noteWho(it.u.login, it.u.display);   // CL3: the hidden-names job's login map
+    else if (veilWho(it)) CV.noteWho(it._vz.login, it._vz.display);              // wave 2: a veiled speaker's (server-only)
     wake.add(R.id);
     if (it.k === "msg" || it.k === "tx") lines.set(R.id, (lines.get(R.id) || 0) + 1);
     if (it.k === "msg") RA.line(R.id, it.u, now);

@@ -1650,6 +1650,474 @@
    "expect": [
     null
    ]
+  },
+  {
+   "name": "rejoins",
+   "note": "frankie (incognito) and hank (hidden) come back a moment after they left - the same frog names on the site (a session ends only after 1 h+ away, J-8)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-22",
+     "ts": "2026-11-01T12:01:34.000Z",
+     "seq": 22,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "initial": false,
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534494.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v8",
+     "ts": "2026-11-01T12:01:34.000Z",
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "initial": false,
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534494.0
+      }
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-22",
+     "ts": "2026-11-01T12:01:34.000Z",
+     "seq": 22,
+     "type": "member.join",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000001",
+       "display": "someone",
+       "anonymous": true
+      },
+      "initial": false
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "join",
+     "veil": "incognito",
+     "alias": true
+    },
+    {
+     "k": "join",
+     "veil": "hidden",
+     "alias": true
+    }
+   ]
+  },
+  {
+   "name": "cams",
+   "note": "cams open, then close: alice named; frankie (incognito) under today's anonymous ref on BOTH paths - no real UserRef, no priv (see extras() for why); hank (hidden) left out on both. The site keeps none of them (not feed types; on_cam only from snapshots, never for a veiled entry)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-23",
+     "ts": "2026-11-01T12:01:35.000Z",
+     "seq": 23,
+     "type": "cam.open",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-24",
+     "ts": "2026-11-01T12:01:35.000Z",
+     "seq": 24,
+     "type": "cam.open",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000001",
+       "display": "someone",
+       "anonymous": true
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-25",
+     "ts": "2026-11-01T12:01:55.000Z",
+     "seq": 25,
+     "type": "cam.close",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "reason": "stopped"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-26",
+     "ts": "2026-11-01T12:01:55.000Z",
+     "seq": 26,
+     "type": "cam.close",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000001",
+       "display": "someone",
+       "anonymous": true
+      },
+      "reason": "stopped"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-23",
+     "ts": "2026-11-01T12:01:35.000Z",
+     "seq": 23,
+     "type": "cam.open",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-24",
+     "ts": "2026-11-01T12:01:35.000Z",
+     "seq": 24,
+     "type": "cam.open",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000001",
+       "display": "someone",
+       "anonymous": true
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-25",
+     "ts": "2026-11-01T12:01:55.000Z",
+     "seq": 25,
+     "type": "cam.close",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "reason": "stopped"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-26",
+     "ts": "2026-11-01T12:01:55.000Z",
+     "seq": 26,
+     "type": "cam.close",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-00000001",
+       "display": "someone",
+       "anonymous": true
+      },
+      "reason": "stopped"
+     }
+    }
+   ],
+   "expect": [
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "name": "astral",
+   "note": "an astral emoji (U+1F600, two UTF-16 units) right before each veiled name: Pepe's redactor leaves 'someone' whole after it (no spans, no fragments) - in a named line, an incognito line and a hidden line's priv.words; the site archives the text as sent (its FTS holds no name)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-27",
+     "ts": "2026-11-01T12:01:56.000Z",
+     "seq": 27,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-27",
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "text": "😀someone and 😀someone, look"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-28",
+     "ts": "2026-11-01T12:01:56.000Z",
+     "seq": 28,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-28",
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "text": "😀someone is back",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534516.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v9",
+     "ts": "2026-11-01T12:01:56.000Z",
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534516.0,
+       "words": "😀someone psst"
+      },
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-v9"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-27",
+     "ts": "2026-11-01T12:01:56.000Z",
+     "seq": 27,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-27",
+      "user": {
+       "id": "alice",
+       "login": "alice",
+       "display": "Alice"
+      },
+      "text": "😀someone and 😀someone, look"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-28",
+     "ts": "2026-11-01T12:01:56.000Z",
+     "seq": 28,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-28",
+      "user": {
+       "id": "anon-0000000a",
+       "display": "someone",
+       "anonymous": true
+      },
+      "text": "😀someone is back",
+      "anon": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053"
+      }
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "msg",
+     "named": "Alice",
+     "text": "😀someone and 😀someone, look"
+    },
+    {
+     "k": "msg",
+     "veil": "incognito",
+     "alias": true,
+     "text": "😀someone is back"
+    },
+    {
+     "k": "msg",
+     "veil": "hidden",
+     "alias": true,
+     "mask": "s"
+    }
+   ]
   }
  ],
  "snapshot": {

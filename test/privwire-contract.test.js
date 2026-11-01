@@ -10,7 +10,11 @@
 //     the v1 answer says privwire: 2
 //   * every case of Pepe's scene through the REAL /api/bridge/sync/v2 -> what a member's /live shows: each fixture `expect` (frog
 //     names by pattern, masks, "someone" for C.2 / B.2), the v2 snapshot's roster; and nothing of a veiled person - no login,
-//     display name, hash, hidden word, priv, vz - in any answer, for a member, the pad's owner or an admin (before any reveal)
+//     display name, hash, hidden word, priv, vz - in any answer, for a member, the pad's owner or an admin (before any reveal);
+//     the leak-test pass's cases too: rejoins, cams (Pepe keeps today's form on v2 - the site keeps nothing of them), astral
+//   * FTS (spec I.3): Pepe's REAL redactor output with an astral emoji right before each veiled name (the "astral" case) archived
+//     through the real route - chat_log keeps "someone" whole; chat_log_fts (MATCH) holds no veiled login, display name or
+//     hidden word
 //   NODE_PATH=G:/PATV/node_modules node --test test/privwire-contract.test.js
 "use strict";
 const test = require("node:test");
@@ -25,7 +29,7 @@ const repo = path.resolve(__dirname, "..");
 const FIXTURE = path.join(__dirname, "fixtures", "privwire-contract.json");
 // Update together with camfrog-bot's copy (ci/fixtures/privwire-contract.json) and its pin (privwire_contract_test.py PIN):
 // python tools/gen_privwire_contract.py --site <this checkout> prints the new sha.
-const PIN = "3e2319cfd021a342ea5018ddbb5501c2a85bb04fffeb7b5625b30cb786b4cb3c";
+const PIN = "3dd07f2f5c78ce843223d8b5be1f3704ba976cb8ff41819e73aec6f67be4fb54";
 const RAW = fs.readFileSync(FIXTURE);
 const FX = JSON.parse(RAW.toString("utf8"));
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
@@ -308,4 +312,36 @@ test("v2 extras on named lines: a named hold and its 🎙 line carry the same ho
   assert.equal(new Set(bx.map((o) => o.hold)).size, 1, "one hold id across grab, release and 🎙 line");
   const tx = bx.find((o) => o.k === "tx");
   assert.ok(tx && tx.at > 0, "the said time");
+});
+
+test("FTS (spec I.3): the astral case - Pepe's redactor output, an emoji right before each veiled name - archived: 'someone' whole, no veiled name or hidden word in chat_log_fts", async () => {
+  await setup;
+  assert.equal(PW.isOn(), true);
+  // the archive on (its notice 8 days back), then the case again under fresh event ids (the replay above ran with the archive off)
+  CL._setClock(() => Date.now() - 8 * 864e5);
+  await CL.setSwitch("notice", true, "test");
+  CL._setClock(() => Date.now());
+  await CL.setSwitch("archive", true, "test");
+  const c = FX.cases.find((x) => x.name === "astral");
+  assert.ok(c, "the fixture has the astral case");
+  const evs = c.v2.map((e) => Object.assign(shift(e), { id: e.id + "-fts",
+    data: Object.assign({}, e.data, e.data.message_id ? { message_id: e.data.message_id + "-fts" } : {}) }));
+  const r = await call("POST", "/api/bridge/sync/v2", { body: body(evs) });
+  assert.equal(r.status, 200, r.text.slice(0, 300));
+  await new Promise((res) => setTimeout(res, 80));
+  const want = c.expect.filter((e) => e && e.text != null).map((e) => e.text);
+  assert.ok(want.length === 2 && want.every((t) => t.startsWith("\u{1F600}someone")), "the fixture's redacted texts");
+  const someone = (await getQuery("SELECT rowid FROM chat_log_fts WHERE chat_log_fts MATCH ?", ['"someone"'])).map((h) => h.rowid);
+  for (const t of want) {
+    const row = (await getQuery("SELECT c, text FROM chat_log WHERE text = ?", [t]))[0];
+    assert.ok(row, "archived whole (no fragment, no broken surrogate): " + t);
+    assert.ok(someone.includes(row.c), "its 'someone' is a whole token in the index");
+  }
+  const hidden = c.v2.find((e) => e.data.priv && e.data.priv.kind === "hidden");
+  const veilRow = (await getQuery("SELECT c, words FROM chat_log_veil WHERE words = ?", [hidden.data.priv.words]))[0];
+  assert.ok(veilRow, "the hidden line's words live in chat_log_veil");
+  assert.equal((await getQuery("SELECT text FROM chat_log WHERE c = ?", [veilRow.c]))[0].text, null, "...its chat_log text is NULL");
+  for (const tok of ["frankie", "Frankie", "hank", "Hank", "psst"]) {
+    assert.deepEqual(await getQuery("SELECT rowid FROM chat_log_fts WHERE chat_log_fts MATCH ?", ['"' + tok + '"']), [], "never indexed: " + tok);
+  }
 });
