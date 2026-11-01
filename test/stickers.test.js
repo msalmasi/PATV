@@ -86,10 +86,26 @@ test("🍂 Fireside Season (November): a Season Pass perk pack listed Nov 1 - De
     assert.match(svg, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 24 24" shape-rendering="crispEdges">\r?\n<title>[^<]+<\/title>\r?\n/);
     assert.doesNotMatch(svg, /<script|on\w+=|<text/i, "no script, no text in the art");
   }
+  // art review fixes: the leaf pile is a closed mound with a margin (it bled off three edges), and the moustache has no red
+  // mouth corners showing through its droops
+  const px = (id) => {
+    const g = new Map();
+    const svg = fs.readFileSync(path.join(repo, "public", "stickers", "fireside", id + ".svg"), "utf8");
+    for (const m of svg.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="1" fill="(#[0-9a-f]{6})"\/>/g))
+      for (let i = 0; i < +m[3]; i++) g.set(`${+m[1] + i},${m[2]}`, m[4]);
+    return g;
+  };
+  const pile = px("leafpile");
+  for (let y = 9; y < 24; y++) for (const x of [0, 23]) assert.ok(!pile.has(`${x},${y}`), `leafpile: nothing on the edge at ${x},${y}`);
+  for (let x = 0; x < 24; x++) assert.ok(!pile.has(`${x},23`), `leafpile: nothing on the bottom edge at ${x},23`);
+  const mo = px("moustache");
+  for (let y = 11; y <= 14; y++) for (let x = 0; x < 24; x++) assert.notEqual(mo.get(`${x},${y}`), "#e5383b", `moustache: red at ${x},${y}`);
   // every pack in stickers.json (in season or not) has its English keys
   for (const p of STK.CAT.packs) {
     assert.ok(EN["stk.pack." + p.id + ".name"] && EN["stk.pack." + p.id + ".desc"], "en.json names " + p.id);
     for (const s of p.stickers) assert.ok(EN["stk.s." + p.id + "." + s.id], "en.json names " + p.id + "/" + s.id);
+    // the '{label} only' tag's label is a key too, so the sync translates the month ('November' is not a proper noun everywhere)
+    if (p.season) assert.equal(EN["stk.season." + p.id], p.season.label, "en.json stk.season." + p.id);
   }
   await assert.rejects(STK.buy(U.ann, { pack: "fireside", ref: ref() }), /Fireside Season comes with a 🎟️ Season Pass \(November only\)/);
   await assert.rejects(STK.grantComp(U.ann.userId, "fireside", "test"), /Comp the tier instead/);

@@ -41,6 +41,9 @@ test("the table reads the live config: slots, retention, soundboard, flair, seas
                { id: "fireside", name: "Fireside Season", emoji: "🍂", season: { label: "November" }, on: true }];
   assert.equal(PK.table({ ...v, sp_seasonal: sp2 }).season_pass.find((p) => p.id === "seasonal").icon, "🍂");
   assert.equal(PK.table({ ...v, sp_seasonal: sp2.map((p) => ({ ...p, on: false })) }).season_pass.find((p) => p.id === "seasonal").icon, "🎃");
+  // Nov 1-7 both windows are open (Spooky runs to Nov 7): the newer pack's 🍂 wins, not the 🎃 listed first
+  assert.equal(PK.table({ ...v, sp_seasonal: sp2.map((p) => ({ ...p, on: true })) }).season_pass.find((p) => p.id === "seasonal").icon, "🍂",
+    "launch week: both packs in season -> the newest one's icon");
   for (const id of ["retention", "intro", "badge", "cosmetics", "stickers"]) assert.ok(byId("prime_plus", id), "plus: " + id);
   for (const id of ["sb_priority", "pm_logs", "telegram", "uploads"]) assert.ok(byId("season_pass", id), "season pass: " + id);
   // November 2026: the season board perk only while a season board is on (whatever today's date is: the season is fed in)

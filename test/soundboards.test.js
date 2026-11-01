@@ -253,12 +253,19 @@ test("🍂 Fireside Season (2026-11): the board through November - Pepe's sync, 
   assert.match(page.text, /Toffee apple/);
   assert.match(page.text, /data-sb-buy="season:2026-11"/);
   assert.doesNotMatch(page.text, /stays playable per use/);
+  // the Season Pass note names the season board only while there is one
+  let spPage = await call("GET", "/soundboards", U.spfan);
+  assert.match(spPage.text, /Your 🎟️ Season Pass: the season board is unlimited/);
   // ...and a month on, no season board anywhere
   SB._setClock(() => Date.parse("2026-12-15T12:00:00Z"));
   if (!SB.seasonNow()) {
     assert.equal((await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d.season, null);
     assert.ok(!(await call("GET", "/api/rooms/sb-room/soundboard", U.spfan)).d.tabs.some((x) => x.key === "season"));
     assert.equal((await call("POST", "/api/soundboards/buy", U.bob, { item: "season:2026-11", ref: ref() })).status, 404);
+    // ...and the pass holder's note stops promising one (just the free packs)
+    spPage = await call("GET", "/soundboards", U.spfan);
+    assert.doesNotMatch(spPage.text, /season board is unlimited/);
+    assert.match(spPage.text, /Your 🎟️ Season Pass: you have \d+ free standard pack\(s\) left this month\./);
   }
 });
 

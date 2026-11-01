@@ -144,7 +144,7 @@
     "!intro status"
    ],
    "summary": "Pepe introduces himself to the room: who he is, what PAT is, the website and your privacy options.",
-   "details": "A few short lines in the room: who Pepe is (games, heists, the casino, music, the mic), what PAT is (free points you earn by chatting, being on the mic and playing - not money), how to get a free publicaccess.tv account, and - in rooms linked to the website - that the pad's viewers can follow the room there and the pad can keep its chat per its tier and settings, with your choices there (`!bridge hide` keeps your lines off it, `!incognito` shows them as \"someone\", `!transcripts off`, `!livecam off`) - and, once the website has announced it, since when and for how long the pad keeps the room's chat. Anyone can use it; once per room every 10 minutes (inside that, Pepe answers you by PM instead). Pepe also posts it by himself, at most once every 6 hours per room and only while people are talking. Admins: `!intro auto on|off [-global|-all]` switches the automatic post for this room (or every room), `!intro every <hours>` sets how often, `!intro status` shows when it last went out.",
+   "details": "A few short lines in the room: who Pepe is (games, heists, the casino, music, the mic), what PAT is (free points you earn by chatting, being on the mic and playing - not money), how to get a free publicaccess.tv account, and - in rooms linked to the website - that the pad's viewers can follow the room there and the pad can keep its chat per its tier and settings, with your choices there (`!bridge hide` keeps your lines off it, `!incognito` shows them as \"someone\", `!transcripts off`, `!livecam off`; `!remember off` stops Pepe learning about you) - and, once the website has announced it, since when and for how long the pad keeps the room's chat. Anyone can use it; once per room every 10 minutes (inside that, Pepe answers you by PM instead). Pepe also posts it by himself, at most once every 6 hours per room and only while people are talking. Admins: `!intro auto on|off [-global|-all]` switches the automatic post for this room (or every room), `!intro every <hours>` sets how often, `!intro status` shows when it last went out.",
    "examples": [
     "!intro"
    ],
@@ -246,18 +246,50 @@
     "!forgetme now",
     "!forgetme confirm"
    ],
-   "summary": "Your own switch: with incognito on, nothing you say gets remembered at all — in the room or in PMs — and you show as \"someone\" on the website. Also on the website: Settings → Privacy.",
-   "details": "Your own switch: with incognito **on**, nothing you say gets remembered at all — in the room or in PMs — and anything still waiting to be processed is binned. **Off by default.** It stops new memories — it doesn't erase what he already knows (ask an admin if you want that wiped). Turning it on works from a PM or the room; turning it **off** works by **PM** only (a room line can't prove who typed it). The reply always comes back privately.\n\nWhile it's on you're also private on the website - incognito hides **who** you are, not what you say: on the live room view your lines show as \"someone\" (no name, avatar or looks), captures of you are private, nobody can quote you by name or use your cam in AI pictures, and your top words aren't recorded in your profile analytics. Bridged rooms' chat can be kept on the pad per its tier and settings; your past lines there show as \"someone\" too. To keep your lines off the website altogether, use `!bridge hide`.\n\nThe same switch is on the website at [/settings/privacy](/settings/privacy) (Settings → Privacy) for a linked chat account - a change in either place shows in the other. **Make Pepe forget you:** `!forgetme now` says what goes, then `!forgetme confirm` (within 2 minutes) deletes everything he remembers about you (what he learned, your nicknames and links, your mic history) AND your private conversations with him - Camfrog PMs, Message Pepe on the website and the Telegram chat. Public room chat, transcripts and captures stay (the room's record). Same as Settings → Privacy → Make Pepe forget me. He starts learning again if you keep talking to him - incognito stops that.",
+   "summary": "Your own switch: with incognito on you show as \"someone\" on the website. It changes what the website shows, not what Pepe remembers - that's !remember off. Also on the website: Settings → Privacy.",
+   "details": "Your own switch: with incognito **on**, you show as \"someone\" on the website. **Off by default.** Incognito changes what the website shows, **not what Pepe remembers**: to stop Pepe remembering what you say, use `!remember off` (or \"Pepe's memory\" in Settings → Privacy). Turning it on works from a PM or the room; turning it **off** works by **PM** only (a room line can't prove who typed it). The reply always comes back privately.\n\nWhile it's on you're private on the website - incognito hides **who** you are, not what you say: on the live room view your lines show as \"someone\" (no name, avatar or looks), captures of you are private, nobody can quote you by name or use your cam in AI pictures, and your top words aren't recorded in your profile analytics. Your voice is still heard in the website's room audio unless the pad owner turns audio off. Bridged rooms' chat can be kept on the pad per its tier and settings; your past lines there show as \"someone\" too. To keep your lines off the website altogether, use `!bridge hide`.\n\nThe same switch is on the website at [/settings/privacy](/settings/privacy) (Settings → Privacy) for a linked chat account - a change in either place shows in the other. **Make Pepe forget you:** `!forgetme now` says what goes, then `!forgetme confirm` (within 2 minutes) deletes everything he remembers about you (what he learned, your nicknames and links, your mic history) AND your private conversations with him - Camfrog PMs, Message Pepe on the website and the Telegram chat. Public room chat, transcripts and captures stay (the room's record). Same as Settings → Privacy → Make Pepe forget me. Keep it that way? Yes unless you say otherwise: Pepe's memory of you is switched off from then on (`!remember on`, by PM, lets him remember you again) - or type `!forgetme confirm remember` instead to let him start learning about you again.",
    "examples": [
     "!forgetme now"
    ],
    "keywords": [
     "privacy",
     "forget me",
-    "stop remembering"
+    "anonymous on the website"
    ],
    "web": {
     "label": "Turn incognito on or off",
+    "url": "/settings/privacy"
+   }
+  },
+  {
+   "id": "remember",
+   "title": "!remember off|on",
+   "category": "start",
+   "role": "everyone",
+   "commands": [
+    "!remember"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!remember off",
+    "!remember on",
+    "!remember"
+   ],
+   "summary": "Your own switch: !remember off and Pepe learns nothing new from what you say - in rooms, on the mic, in PMs and DMs - and leaves your lines out of his answers.",
+   "details": "Pepe remembers things people tell him - in rooms, on the mic, in PMs and in direct messages on the website or on Telegram - so he can talk to you like someone who knows you. **`!remember off`** stops that, from any room or a PM to Pepe. **On (remembering) by default.**\n\n**From then on Pepe learns nothing new from what you say:** no facts about you from chat, PMs or the mic, nothing on your profile with him, nothing worked out from your voice about other people or the room. What other people say about you isn't filed under your name, and his notes about a room call you \"someone\". **He doesn't bring up what you said:** his answers, recaps, roasts and room notes leave your lines out. **He still hears you in the moment:** he can answer what you just said, but he doesn't remember it.\n\n**What stays:** the room's own logs of public chat, mic transcripts and mic recordings, kept for the room's usual time like everyone's, as its record - the log commands `!log`, `!search`, `!replay` and `!seen` look things up there, so they still find your lines like everyone's; his logs of your PMs with him, until they expire or you ask him to forget you; your mic stats, levels, achievements and PAT points (the room's games and boards); moderation records (kicks, bans, strikes); and the link between your Camfrog login and the names you show, which Pepe needs to keep your privacy settings working. **What he already learned stays until you ask him to forget it:** `!remember off` tells you how much he still knows, and `!forgetme now` wipes it (with your private conversations with him).\n\n`!remember` shows your setting; `!remember on` lets him remember you again - by **PM** to Pepe (or from a room line he can tie to your login), so a display name that matches your login can never switch it back on. The answer always comes back privately, and lines starting with `!remember` never reach a pad's chat on the website. The same switch is on the website - Settings → Privacy → \"Pepe's memory\" (for a linked chat account) - and in the Telegram chat with Pepe (`/remember off`). It's separate from `!incognito` and `!bridge hide`, which only change what the website shows about you.",
+   "examples": [
+    "!remember off",
+    "!remember"
+   ],
+   "keywords": [
+    "privacy",
+    "don't remember me",
+    "stop remembering",
+    "memory",
+    "forget what I say"
+   ],
+   "web": {
+    "label": "Pepe's memory switch",
     "url": "/settings/privacy"
    }
   },
@@ -1067,7 +1099,7 @@
     "!bridge [hide|show]"
    ],
    "summary": "Is this room live on its PATV pad?",
-   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`). `!bridge hide` leaves you out of the website: \"someone\" in the room view, and your lines aren't shown. `!incognito on` hides who you are, not what you say: your lines show as \"someone\" (no name, avatar or looks). Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; `!bridge hide` also leaves your past lines there out, `!incognito` shows them as \"someone\"; `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`.",
+   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` leaves you out of the website: \"someone\" in the room view, and your lines aren't shown. `!incognito on` hides who you are, not what you say: your lines show as \"someone\" (no name, avatar or looks). Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; `!bridge hide` also leaves your past lines there out, `!incognito` shows them as \"someone\"; `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`.",
    "examples": [
     "!bridge hide",
     "!incognito on",
@@ -1321,7 +1353,8 @@
    "summary": "Mic stats for a user.",
    "details": "Mic stats for a user. Periods: 1h, 3h, 12h, today, week, month, all.",
    "examples": [],
-   "keywords": []
+   "keywords": [],
+   "webchat": true
   },
   {
    "id": "mictop",
@@ -1338,7 +1371,8 @@
    "summary": "Top 10 mic users by time.",
    "details": "Top 10 mic users by time. Same period options as micstats.",
    "examples": [],
-   "keywords": []
+   "keywords": [],
+   "webchat": true
   },
   {
    "id": "replay",
@@ -1718,7 +1752,7 @@
     "!persona <name>|off"
    ],
    "summary": "Personality profiles.",
-   "details": "**Personality profiles.** Pepe stays Pepe (same memories, family and opinions) but talks in a different style: `dolly` (drag queen), the horror classics (`dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`), `pedro` (the Temu Pepe: dumber, Spanglish), `flirty` and `gothmommy` (Goth Mommy: deadpan, teasing, protective, calls herself mommy, speaks in the moxier voice), `reaper` (deadpan gallows humour), `skater` (chill skate-park slang), `alien` (Zorp, a polite visitor studying the humans) and three affectionate homages: `bobross` (soft-spoken painter, happy little trees), `sagan` (cosmic wonder, star-stuff) and `attenborough` (hushed nature-documentary narration of the room) - Pepe in costume doing an impression, speaking in a stock voice. `kawaii` and `vtuber` (a bubbly streamer idol) switch his avatar style instead of a costume. Personas follow costumes: put on a costume and he gets the matching personality (`!persona link off` unlinks them). `!persona voice off` keeps him in the room's normal voice whatever the persona. Editable in the admin panel, and website admins can change his costume, persona and voice from the Pepe control panel on publicaccess.tv.",
+   "details": "**Personality profiles.** Pepe stays Pepe (same memories, family and opinions) but talks in a different style: `dolly` (drag queen), the horror classics (`dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`), `pedro` (the Temu Pepe: dumber, Spanglish), `flirty` and `gothmommy` (Goth Mommy: deadpan, teasing, protective, calls herself mommy, speaks in the moxier voice), `reaper` (deadpan gallows humour), `skater` (chill skate-park slang), `alien` (Zorp, a polite visitor studying the humans) and three affectionate homages: `bobross` (soft-spoken painter, happy little trees), `sagan` (cosmic wonder, star-stuff) and `attenborough` (hushed nature-documentary narration of the room) - Pepe in costume doing an impression, speaking in a stock voice. `fireside` (Fireside Pepe, for the cold months: warm, unhurried and a bit smug about how snug he is) keeps his own voice. `kawaii` and `vtuber` (a bubbly streamer idol) switch his avatar style instead of a costume. Personas follow costumes: put on a costume and he gets the matching personality (`!persona link off` unlinks them). `!persona voice off` keeps him in the room's normal voice whatever the persona. Editable in the admin panel, and website admins can change his costume, persona and voice from the Pepe control panel on publicaccess.tv.",
    "examples": [
     "!persona link off",
     "!persona voice off"
@@ -1741,7 +1775,7 @@
     "!costume <name>|off"
    ],
    "summary": "Dress Pepe up on the overlay.",
-   "details": "**Dress Pepe up on the overlay.** `!costume dolly` puts Pepe in full drag: big teased blonde wig, lashes, rhinestone earrings and a sparkly pink bustier. It stays on (even through restarts) until `!costume off`, and it beats the game outfits and the DJ hat. **Horror classics:** `dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`. Plus `pedro` (the Temu Pepe), `flirty` and `gothmommy` (also `goth`: long black hair, winged liner, black lipstick, a studded choker with a silver moon, black lace and fishnet), `reaper` (also `grim`: a black hood, red eyes, a tattered cloak and a scythe), `skater` (also `skate`: a backwards cap, riding a skateboard) `alien` (also `ufo`: huge black eyes, glowing antennae, a silver suit and a saucer), `bobross` (also `ross`, `painter`: a big afro, a curly beard, a denim shirt, a palette and a fan brush), `sagan` (also `cosmos`: a turtleneck under a tweed blazer, stars and a ringed planet) and `attenborough` (also `safari`, `naturalist`: white hair, a khaki safari shirt, binoculars, long grass and a butterfly). `!costume` lists the whole wardrobe.",
+   "details": "**Dress Pepe up on the overlay.** `!costume dolly` puts Pepe in full drag: big teased blonde wig, lashes, rhinestone earrings and a sparkly pink bustier. It stays on (even through restarts) until `!costume off`, and it beats the game outfits and the DJ hat. **Horror classics:** `dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`. Plus `pedro` (the Temu Pepe), `flirty` and `gothmommy` (also `goth`: long black hair, winged liner, black lipstick, a studded choker with a silver moon, black lace and fishnet), `reaper` (also `grim`: a black hood, red eyes, a tattered cloak and a scythe), `skater` (also `skate`: a backwards cap, riding a skateboard), `alien` (also `ufo`: huge black eyes, glowing antennae, a silver suit and a saucer), `bobross` (also `ross`, `painter`: a big afro, a curly beard, a denim shirt, a palette and a fan brush), `sagan` (also `cosmos`: a turtleneck under a tweed blazer, stars and a ringed planet), `attenborough` (also `safari`, `naturalist`: white hair, a khaki safari shirt, binoculars, long grass and a butterfly) and, for Fireside Season, `fireside` (also `cosy`, `bobble`, `jumper`: a bobble hat, a chunky striped scarf, a mug of hot cocoa and falling leaves). `!costume` lists the whole wardrobe.",
    "examples": [
     "!costume dolly",
     "!costume off",
@@ -1795,7 +1829,7 @@
     "!memory recall [user]"
    ],
    "summary": "See what the bot has learned about a user.",
-   "details": "See what the bot has learned about a user.",
+   "details": "See what the bot has learned about a user. Someone who switched Pepe's memory off (`!remember off`) shows nothing here - only Pepe's owners and admins are told (privately) that they opted out, and since when; asking about yourself shows your own switch.",
    "examples": [],
    "keywords": []
   },
@@ -2200,7 +2234,8 @@
     "tables",
     "links",
     "lobby"
-   ]
+   ],
+   "webchat": true
   },
   {
    "id": "bet-2",
@@ -6587,7 +6622,7 @@
   },
   {
    "id": "activeroom",
-   "title": "!activeroom [room] [force] · auto",
+   "title": "!activeroom [room] [force] · auto · names · unmap",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6598,14 +6633,18 @@
    ],
    "syntax": [
     "!activeroom [room] [force]",
-    "auto"
+    "auto",
+    "names",
+    "unmap <window name>"
    ],
    "summary": "When Pepe is in more than one room, set which room's window is targeted by window-driven actions — his own mic button, the participant-list read, and cam opening.",
-   "details": "When Pepe is in more than one room, set which room's **window** is targeted by window-driven actions — his own mic button, the participant-list read, and cam opening. **It's also the main-stage room:** the stream shows Pepe's room window, so pinning a room clicks its tab, the publicaccess.tv homepage shows that room as On stage, and its live room page plays the stream above the chat. Only rooms Pepe is in; it waits while a game is running (add `force` to move it anyway); Pepe's mic and music don't block it. Site admins can do the same from the homepage stage. `!activeroom` alone shows the setting; `!activeroom auto` follows whichever tab is open. `!activeroom <tab label>=<room>` tells Pepe which tab belongs to which room when the two are named differently. (Alias: `!winroom`.)\n\n**Auto-switch:** with Auto-switch room tab on in the admin panel, Pepe changes tabs himself instead of refusing — a window-driven command just runs in the room it was typed in. Spoken audio (`!say`, `-mic` replies, sponsor reads) **queues**: the tab is switched immediately before each clip takes the mic, so several people speaking from different rooms play one after another in the right rooms rather than fighting over the tab. Pinning a room with `!activeroom` disables auto-switching.",
+   "details": "When Pepe is in more than one room, set which room's **window** is targeted by window-driven actions — his own mic button, the participant-list read, and cam opening. **It's also the main-stage room:** the stream shows Pepe's room window, so pinning a room clicks its tab, the publicaccess.tv homepage shows that room as On stage, and its live room page plays the stream above the chat. Only rooms Pepe is in; it waits while a game is running (add `force` to move it anyway); Pepe's mic and music don't block it. Site admins can do the same from the homepage stage. `!activeroom` alone shows the setting; `!activeroom auto` follows whichever tab is open. `!activeroom <tab label>=<room>` tells Pepe which tab belongs to which room when the two are named differently. (Alias: `!winroom`.)\n\n**Room names:** Pepe learns each room's name from its window (\"Pepe's Pad\" is PepeFrog.Room) and uses it everywhere he names a room - his own replies, the casino's room list on the website, alerts. `!activeroom names` lists every room's id, the name he uses and each window name he has learned; a name that is another room's id, or the Camfrog client's own window, is marked ignored and never used. `!activeroom unmap <window name>` forgets a wrong one.\n\n**Auto-switch:** with Auto-switch room tab on in the admin panel, Pepe changes tabs himself instead of refusing — a window-driven command just runs in the room it was typed in. Spoken audio (`!say`, `-mic` replies, sponsor reads) **queues**: the tab is switched immediately before each clip takes the mic, so several people speaking from different rooms play one after another in the right rooms rather than fighting over the tab. Pinning a room with `!activeroom` disables auto-switching.",
    "examples": [
     "!activeroom",
     "!activeroom auto",
     "!activeroom <tab label>=<room>",
+    "!activeroom names",
+    "!activeroom unmap you_were_never_here",
     "!winroom"
    ],
    "keywords": []
@@ -8195,6 +8234,9 @@
  ],
  "undocumented": [],
  "private_args": [
+  "!bridge",
+  "!forgetme",
+  "!incognito",
   "!joinroom",
   "!message",
   "!msg",
@@ -8202,7 +8244,9 @@
   "!padmove",
   "!patvmsg",
   "!relay",
+  "!remember",
   "!tell",
+  "!transcripts",
   "!verify",
   "!verifypad"
  ],
@@ -8229,5 +8273,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "5a808853ddbdb78b"
+ "hash": "2f1d40c2272f2f3c"
 }

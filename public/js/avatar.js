@@ -324,15 +324,14 @@
       P(-2, 1, sp); P(-1, 10, sp);                    // sparkles
     },
     // ── November 2026: Fireside (🍂 Fireside 2026 season set) ──
-    bobble(P) {                                       // a knitted bobble hat: ribbed cuff, fair-isle dots, ear flaps with ties, a fat bobble
-      const r = '#C0502E', m = '#E0A526', c = '#F3E3C3', cd = '#CDB88F', d = '#7A2E18';
+    bobble(P) {                                       // a knitted bobble hat: ribbed cuff, fair-isle dots, ear flaps, a fat bobble
+      const r = '#C0502E', m = '#E0A526', c = '#F3E3C3', cd = '#CDB88F';
       for (let x = 1; x <= 9; x++) P(2, x, x % 2 ? c : cd);            // ribbed cuff
       for (let x = 2; x <= 8; x++) P(1, x, x % 3 === 1 ? m : r);       // fair-isle dots
       for (let x = 3; x <= 7; x++) P(0, x, m);                          // mustard band
       for (let x = 4; x <= 6; x++) P(-1, x, r);
       P(-2, 4, c); P(-2, 5, c); P(-2, 6, cd);                           // the bobble
-      P(3, 1, r); P(4, 1, r); P(3, 9, r); P(4, 9, r);                   // ear flaps
-      P(5, 0, d); P(6, 0, c); P(5, 10, d); P(6, 10, c);                 // ties with tassels
+      P(3, 1, r); P(4, 1, c); P(3, 9, r); P(4, 9, c);                   // ear flaps, cream-lined so they show on any skin
     }
   };
 
@@ -579,13 +578,16 @@
     },
     // ── November 2026: Fireside ──
     fireside(P, f) {                                    // a cream cable-knit jumper + a long striped scarf, one end blowing out
-      const k = '#F3E3C3', k2 = '#E6D3AE', cab = '#CDB88F', r = '#C0502E', m = '#E0A526', rd = '#8E3A20', leaf = '#E8772E';
+      const k = '#F3E3C3', k2 = '#E6D3AE', cab = '#CDB88F', r = '#C0502E', m = '#E0A526', rd = '#8E3A20';
       torso(P, (y, x) => (x === 3 || x === 7) ? (y % 2 ? cab : k) : ((x + y) % 2 ? k : k2));
-      for (let x = 2; x <= 8; x++) { P(9, x, x % 3 === 0 ? m : r); P(10, x, x % 3 === 0 ? m : rd); }   // wrapped high round the chin
+      for (let x = 2; x <= 8; x++) {                                                                    // wrapped high round the chin,
+        if (!isMouth(f.G[9][x])) P(9, x, x % 3 === 0 ? m : r);                                          // under the mouth (styles 1 + 2
+        P(10, x, x % 3 === 0 ? m : rd);                                                                 // reach row 9)
+      }
       for (let y = 11; y <= 13; y++) { P(y, 5, y === 12 ? m : r); P(y, 6, y === 12 ? m : r); }          // the hanging end
       P(14, 5, m); P(14, 6, r);                                                                          // fringe
-      P(10, 9, r); P(10, 10, m); P(9, 11, r); P(9, 12, m); P(10, 12, r);                                  // the other end, blowing out
-      P(11, 2, leaf); P(12, 2, '#B5442A');                                                               // a fallen leaf on the shoulder
+      P(10, 1, r); P(10, 0, m); P(9, -1, r); P(9, -2, m); P(10, -2, r);                                  // the other end, blowing out left
+                                                                                                         // (clear of every prop's hand)
     }
   };
 
@@ -757,10 +759,10 @@
       for (let r = 5; r <= 11; r++) A(r, 14, r <= 7 ? coat : wire);    // burnt coating near the top, bare wire below
       A(12, 14, f.body); A(12, 13, f.body);                             // hand
       A(3, 14, w); A(2, 14, y); A(4, 14, y); A(3, 13, y); A(3, 15, y); // the white-hot tip
-      A(1, 14, g); A(0, 14, w); A(3, 12, g); A(3, 11, w); A(3, 16, g);  // long rays
-      A(5, 14, g);
-      A(1, 12, g); A(1, 16, g); A(5, 12, p); A(5, 16, g); A(0, 11, p); A(0, 16, c);   // diagonals + stray sparks
-      A(2, 10, w); A(6, 16, p); A(6, 11, g); A(4, 10, c);
+      A(1, 14, g); A(0, 14, w); A(3, 12, g); A(3, 16, g); A(5, 14, g);  // long rays
+      A(1, 12, g); A(1, 16, g); A(5, 16, g);                            // diagonals
+      A(0, 11, p); A(0, 16, c); A(2, 11, w); A(7, 16, p);              // stray sparks - right of col 12 or above the hats,
+                                                                        // never on the face (the head is canvas rows 4-12, cols 4-12)
     }
   };
 

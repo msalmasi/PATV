@@ -395,7 +395,7 @@
           <div class="cxp-desc"><%- stkL_('stk.pack.' + p.id + '.desc', p.desc) %></div>
           <div class="cxp-src"><%- t('cos.stk.count', { count: p.stickers.length }) %></div>
           <% if (p.perk) { %>
-            <div class="cxp-row"><a class="ds-tag ac cxs-perk" href="/premium<%= p.perk === 'prime_plus' ? '#plus' : '' %>"><%- p.perk === 'prime_plus' ? t('premium.stk.perk_plus') : t('premium.stk.perk_sp') %></a><% if (p.season) { %><span class="ds-tag"><span aria-hidden="true"><%= p.emoji %></span> <%- t('premium.stk.seasonal', { label: t.esc(p.season.label || '') }) %></span><% } %></div>
+            <div class="cxp-row"><a class="ds-tag ac cxs-perk" href="/premium<%= p.perk === 'prime_plus' ? '#plus' : '' %>"><%- p.perk === 'prime_plus' ? t('premium.stk.perk_plus') : t('premium.stk.perk_sp') %></a><% if (p.season) { %><span class="ds-tag"><span aria-hidden="true"><%= p.emoji %></span> <%- t('premium.stk.seasonal', { label: stkL_('stk.season.' + p.id, p.season.label || '') }) %></span><% } %></div>
           <% } else { %>
             <div class="cxp-price"><%= fmt(p.price) %> PAT</div>
             <% if (STK.signed) { %>

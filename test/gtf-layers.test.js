@@ -96,3 +96,34 @@ test("🍂 Fireside 2026 (November): the bobble hat, the knit and the sparkler -
   assert.match(f(42, 64, { outfit: "fireside" }), /#C0502E/, "the rust scarf");
   assert.match(f(42, 64, { prop: "sparkler" }), /#FFD23F/, "gold sparks");
 });
+
+test("🍂 Fireside review: the sparkler never paints on the face or the hat, the knit keeps every mouth, the bobble has no stray ties", () => {
+  const f = globalThis.pepeAvatarSVG;
+  const RECT = /<rect x="(\d+)" y="(\d+)" width="([\d.]+)" height="[\d.]+" fill="([^"]+)"\/>/g;
+  const grid = (svg) => {
+    const g = Array.from({ length: 17 }, () => Array(17).fill(null));
+    for (const m of svg.matchAll(RECT)) for (let i = 0; i < Math.round(Number(m[3]) - 0.02); i++) g[+m[2]][+m[1] + i] = m[4];
+    return g;
+  };
+  const MOUTHS = ["#8a0f1a", "#610b12"];                 // MOUTH and the open mouth's darker row
+  const KNIT = ["#C0502E", "#E0A526", "#F3E3C3", "#CDB88F"];   // the bobble hat's rust, mustard, cream and shade
+  for (let seed = 0; seed < 200; seed++) {
+    const bare = grid(f(seed, 64, { bg: "city" }));
+    // the frog's head is canvas rows 4-12, cols 4-12: no spark lands there (one did, in the right eye)
+    const spark = grid(f(seed, 64, { bg: "city", prop: "sparkler" }));
+    for (let y = 4; y <= 12; y++) for (let x = 4; x <= 12; x++) assert.equal(spark[y][x], bare[y][x], `seed ${seed}: sparkler on the face at ${y},${x}`);
+    // every pixel the bobble hat paints (its knit colours) stays the hat's under the sparkler (no specks on the band or the cuff)
+    const hat = grid(f(seed, 64, { bg: "city", hat: "bobble" }));
+    const both = grid(f(seed, 64, { bg: "city", hat: "bobble", prop: "sparkler" }));
+    for (let y = 0; y < 17; y++) for (let x = 0; x < 17; x++) {
+      if (KNIT.includes(hat[y][x]) && hat[y][x] !== bare[y][x]) assert.equal(both[y][x], hat[y][x], `seed ${seed}: a spark on the bobble hat at ${y},${x}`);
+    }
+    // nothing below the ear flaps (the old tie tassels): from canvas row 7 down it draws what any hat layer does (the Beanie;
+    // a hat layer also drops the seed's own shades)
+    const beanie = grid(f(seed, 64, { bg: "city", hat: "beanie" }));
+    for (let y = 7; y < 17; y++) for (let x = 0; x < 17; x++) assert.equal(hat[y][x], beanie[y][x], `seed ${seed}: bobble paints ${y},${x}`);
+    // the knit's scarf wraps under the mouth: a frown's corners and an open mouth (frog row 9 = canvas row 11) survive
+    const knit = grid(f(seed, 64, { bg: "city", outfit: "fireside" }));
+    for (let x = 0; x < 17; x++) if (MOUTHS.includes(bare[11][x])) assert.equal(knit[11][x], bare[11][x], `seed ${seed}: the knit hides the mouth at 11,${x}`);
+  }
+});

@@ -4221,7 +4221,7 @@
     "kind": "profile_border",
     "name": "Flannel",
     "rarity": "rare",
-    "css": "border: 4px solid transparent; border-image: repeating-linear-gradient(45deg, #b5442a 0 8px, #3e2723 8px 10px, #b5442a 10px 18px, #e0a526 18px 20px) 4;",
+    "css": "border: 4px solid transparent; border-image: repeating-linear-gradient(45deg, #b5442a 0 3px, #3e2723 3px 4px, #b5442a 4px 7px, #e0a526 7px 8px, #3e2723 8px 9px, #b5442a 9px 12px) 4;",
     "cls": ""
    },
    "look": {
@@ -4245,7 +4245,7 @@
     "name": "Second Helping",
     "rarity": "uncommon",
     "ring": "",
-    "conic": "background: conic-gradient(#d9a05b, #f3c886, #d9a05b, #f3c886, #d9a05b, #f3c886, #d9a05b);",
+    "conic": "background: conic-gradient(#f3c886 0 6.25%, #c98b45 0 12.5%, #f3c886 0 18.75%, #c98b45 0 25%, #f3c886 0 31.25%, #c98b45 0 37.5%, #f3c886 0 43.75%, #c98b45 0 50%, #f3c886 0 56.25%, #c98b45 0 62.5%, #f3c886 0 68.75%, #c98b45 0 75%, #f3c886 0 81.25%, #c98b45 0 87.5%, #f3c886 0 93.75%, #c98b45 0 100%);",
     "spin": false,
     "emoji": "🥧"
    },
@@ -4254,8 +4254,8 @@
      "item": "ad_secondhelping",
      "ring": {
       "colors": [
-       "#d9a05b",
-       "#f3c886"
+       "#f3c886",
+       "#c98b45"
       ],
       "w": 6,
       "glow": 0,
@@ -4273,7 +4273,7 @@
     "kind": "profile_banner",
     "name": "Fireworks Night",
     "rarity": "uncommon",
-    "css": "background: radial-gradient(circle at 18% 38%, #fff3c4 0 2px, #ffd740 3px 4px, transparent 5px 12px, rgba(255, 215, 64, .6) 13px 14px, transparent 15px), radial-gradient(circle at 52% 26%, #ffe0ec 0 2px, #ff4f8b 3px 4px, transparent 5px 15px, rgba(255, 79, 139, .55) 16px 17px, transparent 18px), radial-gradient(circle at 84% 44%, #e0f7ff 0 2px, #4cc9f0 3px 4px, transparent 5px 10px, rgba(76, 201, 240, .6) 11px 12px, transparent 13px), linear-gradient(0deg, rgba(255, 109, 0, .45) 0%, transparent 38%), linear-gradient(180deg, #0b1026 0%, #1c1442 65%, #3e1f1a 100%);"
+    "css": "background: radial-gradient(circle at 18% 34%, #fff3c4 0 2px, #ffd740 3px 4px, transparent 5px), radial-gradient(circle at 22% 34%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 14% 34%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 18% 46%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 18% 22%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 20.9% 42.6%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 20.9% 25.4%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 15.1% 42.6%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 15.1% 25.4%, #ffd740 0 1.5px, transparent 2.5px), radial-gradient(circle at 16.8% 55%, rgba(255, 215, 64, .5) 0 1px, transparent 2px), radial-gradient(circle at 19% 61%, rgba(255, 215, 64, .5) 0 1px, transparent 2px), radial-gradient(circle at 52% 28%, #ffe0ec 0 2px, #ff4f8b 3px 4px, transparent 5px), radial-gradient(circle at 56% 28%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 48% 28%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 52% 40%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 52% 16%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 54.9% 36.6%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 54.9% 19.4%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 49.1% 36.6%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 49.1% 19.4%, #ff4f8b 0 1.5px, transparent 2.5px), radial-gradient(circle at 53.2% 48%, rgba(255, 79, 139, .5) 0 1px, transparent 2px), radial-gradient(circle at 51.2% 54%, rgba(255, 79, 139, .5) 0 1px, transparent 2px), radial-gradient(circle at 84% 38%, #e0f7ff 0 2px, #4cc9f0 3px 4px, transparent 5px), radial-gradient(circle at 87% 38%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 81% 38%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 84% 47%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 84% 29%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 86.2% 44.5%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 86.2% 31.5%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 81.8% 44.5%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 81.8% 31.5%, #4cc9f0 0 1.5px, transparent 2.5px), radial-gradient(circle at 83% 55%, rgba(76, 201, 240, .5) 0 1px, transparent 2px), radial-gradient(circle at 84.8% 60%, rgba(76, 201, 240, .5) 0 1px, transparent 2px), linear-gradient(0deg, rgba(255, 109, 0, .45) 0%, transparent 38%), linear-gradient(180deg, #0b1026 0%, #1c1442 65%, #3e1f1a 100%);"
    },
    "look": {
     "banner": {

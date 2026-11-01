@@ -52,7 +52,7 @@
   <section class="ds-card" aria-labelledby="sbHowH">
     <h2 class="ds-h3" id="sbHowH"><%- t('sb.how_h') %></h2>
     <p class="sb-how"><%- t('sb.how', { cmd: '<code>!sb</code>', play: '<code>!sb airhorn</code>', common: num(d.cfg.price_common), rare: num(d.cfg.price_rare), epic: num(d.cfg.price_epic) }) %></p>
-    <% if (d.allowance && d.allowance.per) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🎟️</span><div><%- t('sb.sp_allowance', { n: d.allowance.left }) %></div></div><% } %>
+    <% if (d.allowance && d.allowance.per) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🎟️</span><div><%- t(d.season ? 'sb.sp_allowance' : 'sb.sp_allowance_packs', { n: d.allowance.left }) %></div></div><% } %>
     <p class="sb-msg" id="sbMsg" role="status" aria-live="polite"></p>
   </section>
 

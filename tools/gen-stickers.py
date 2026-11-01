@@ -817,13 +817,20 @@ def fireside_pack():
     # Jump in! - Pepe's eyes peeking out of a big leaf pile, two leaves blowing past
     g = Grid(); pepe_head(g); eyes_look(g, 0, -1)
     pal = (LEAFO, LEAFR, LEAFG, LEAFB)
-    m = Grid(); m.ellipse(12.0, 19.5, 12.4, 8.0, LEAFO)
-    for (x, y) in ((2, 12), (3, 11), (12, 11), (11, 11), (20, 11), (21, 12)):  # leaves sticking up out of the pile
-        m.set(x, y, LEAFO)
-    for y in range(24):
-        for x in range(24):
-            if m.px[y][x]:
-                m.px[y][x] = pal[(x * 7 + y * 13 + (x * y) % 5 + (x // 3) * (y // 3)) % 4]   # scattered, not striped
+    m = Grid(); m.ellipse(12.0, 16.5, 10.4, 6.0, LEAFO)                    # a closed mound with a margin (review: no edge bleed)
+    tops = {x: min(y for y in range(24) if m.px[y][x]) for x in range(24) if any(m.px[y][x] for y in range(24))}
+    for x in (3, 8, 15, 20):                                                 # leaves sticking up out of the pile
+        m.set(x, tops[x] - 1, LEAFO)
+    shapes = (((1, 0), (0, 1), (1, 1), (2, 1)), ((0, 0), (1, 0), (2, 0), (1, 1)), ((0, 0), (1, 0), (1, 1)),
+              ((1, 0), (0, 1), (1, 1)), ((0, 0), (0, 1), (1, 1)))
+    for j, y0 in enumerate(range(8, 23, 2)):                                 # single leaves scattered over the orange, so they
+        for i, x0 in enumerate(range(-1, 24, 3)):                            # show at 48 px (a fixed hash, not random)
+            h = (i * 73 + j * 151 + 74 + i * j * 11) % 997
+            x, y = x0 + (h % 3) - 1 + (j % 2), y0 + (h // 3) % 2
+            c = pal[1 + (h // 7) % 3] if (h // 5) % 4 else LEAFO
+            for dx, dy in shapes[(h // 11) % len(shapes)]:
+                if 0 <= x + dx < 24 and 0 <= y + dy < 24 and m.px[y + dy][x + dx]:
+                    m.px[y + dy][x + dx] = c
     stamp(g, m, LEAFE)
     leaf(g, 0, 1, LEAFG); leaf(g, 20, 0, LEAFR)
     g.outline(LEAFG, LEAFE); g.outline(LEAFR, LEAFE)
@@ -880,19 +887,22 @@ def fireside_pack():
     mo.pts([(3, 13), (2, 12), (3, 11), (20, 13), (21, 12), (20, 11)], MOU)   # curled tips
     for x, y in ((11, 13), (12, 13)):                                        # the centre notch
         mo.px[y][x] = None
+    mouth(g, "smile")                                                       # under the moustache: its corners hide in the droops
     stamp(g, mo, MOUE)
-    mouth(g, "smile")
     g.rect(14, 6, 17, 6, GOLD); g.rect(14, 9, 17, 9, GOLD); g.rect(13, 7, 13, 8, GOLD); g.rect(18, 7, 18, 8, GOLD)
-    g.pts([(19, 10), (19, 11), (20, 12), (20, 13)], GOLD)                    # the chain
+    g.pts([(19, 10), (19, 11)], GOLD)                                        # the chain (short: the right curl mirrors the left)
     out["moustache"] = ("Distinguished", g)
 
     # Dibs - Pepe grinning at the roast drumstick he's holding (a Thanksgiving table or a Sunday roast)
-    g = Grid(); pepe_head(g, limbs=lambda q: q.rect(17, 19, 19, 21, G)); eyes_look(g, dx=1); mouth(g, "grin")
+    g = Grid(); pepe_head(g); eyes_look(g, dx=1); mouth(g, "grin")
     s = Grid()
     s.ellipse(15.5, 17.5, 3.9, 3.0, MEAT)
     s.pts([(18, 15), (19, 14), (19, 15), (20, 13), (20, 14), (21, 12), (21, 13)], MEAT)
     s.pts([(13, 16), (14, 16), (13, 17), (15, 15)], MEATL)                   # glaze
     stamp(g, s, MEATE)
+    hd = Grid(); hd.rect(18, 14, 20, 16, G)                                  # his fist round the shank
+    stamp(g, hd, GD)
+    g.set(18, 14, GL)
     b = Grid()
     b.pts([(21, 11), (22, 11), (22, 10), (21, 10), (23, 10), (22, 9), (20, 10)], BONE)
     stamp(g, b, BONED)
@@ -910,9 +920,16 @@ def fireside_pack():
         p.set(21, y, CRUSTL)
     p.rect(19, 7, 21, 7, CRUSTL)
     stamp(g, p, PIEE)
-    c = Grid(); c.ellipse(12.5, 9.5, 3.2, 2.2, W); c.rect(12, 6, 13, 7, W); c.set(13, 5, W)
+    c = Grid()                                                               # a dollop of cream, widest at the bottom
+    c.rect(9, 11, 15, 11, W); c.rect(10, 10, 14, 10, W); c.rect(11, 9, 13, 9, W); c.rect(12, 8, 13, 8, W); c.set(13, 7, W)
+    for x in range(9, 16):                                                   # its base follows the slope, so it sits on the pie
+        c.rect(x, 11, x, 16 - round((x - 2) * 8 / 18), W)
     stamp(g, c, GREYL)
-    g.pts([(11, 10), (12, 10), (14, 9)], "#e6e1d6")
+    for y in range(24):                                                      # no grey rim under it: it sits right on the pie
+        for x in range(24):
+            if g.px[y][x] == GREYL and p.px[y][x]:
+                g.px[y][x] = p.px[y][x]
+    g.pts([(9, 12), (9, 13), (10, 10), (11, 9), (12, 8)], "#e6e1d6")          # shade on the lower left of each tier
     out["pie"] = ("Room for pie", g)
     return out
 
