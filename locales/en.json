@@ -4477,8 +4477,6 @@
   "js.stage.mf.idle": "Nobody is on the mic right now",
   "js.stage.mf.pepe_strip": "🐸 Pepe is on the mic",
   "js.stage.mf.someone_strip": "Someone else is speaking",
-  "js.pad.veil.incognito": "incognito",
-  "js.pad.veil.hidden": "hidden",
   "js.stage.mf.cover_someone": "someone",
   "js.stage.mf.cover_aria": "{name}, {veil}, on the mic",
   "js.stage.mf.cover_self": "this is you",
