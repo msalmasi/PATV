@@ -560,7 +560,7 @@ async function search(user, slug, b = {}) {
   if (cmin >= hi) return answer([], false, null);
 
   // the people left out in SQL: the sticky hidden set's (chatloghist.hiddenLogins) and the viewer's DM-blockers
-  const X = hiddenSql ? require("./chatloghist").hiddenLogins() : { out: [], tx: [] };
+  const X = hiddenSql ? require("./chatloghist").hiddenLogins("search") : { out: [], tx: [] };   // (review fix A-privacy-2: masked rows too)
   const outSet = new Set(X.out);
   // (review 2 fix-up: never a blocker who is incognito now - their lines are "someone", searched like everyone's: see searchable)
   if (hiddenSql) {
@@ -638,6 +638,10 @@ async function search(user, slug, b = {}) {
     for (const it of items) {
       if (!keep.has(it) || !searchable(it, L, B, blockers, own)) continue;
       if (hidePepe && it.u && it.u.self) continue;
+      // review fix (A-privacy-2 / A-tests-ux-01, D.4 "search never matches a hidden line"): a MASKED line - a v2 hidden one, a named
+      // line said after G whose speaker is now !bridge hide, an incognito v2 line of someone hidden now - is never a hit: no
+      // match ranges are computed on its stored words, so neither its presence nor where it matched can be read out
+      if (it.mask || CV.privacyOf(it) === "mask") continue;
       const hl = matchRanges(CV.redact(it.text), Pe);
       if (!hl) continue;
       found.push({ it, hl });

@@ -1282,7 +1282,7 @@
       "priv": {
        "kind": "incognito",
        "h": "a9359c0487b65dc652e7",
-       "at": 1793534479.0
+       "at": 1793534489.0
       },
       "began_named": true
      }
@@ -1841,6 +1841,7 @@
     "success": true,
     "privwire": 2
    },
+   "events": 1,
    "next_mode": "v2",
    "requests": [
     "/api/bridge/sync"
@@ -1857,6 +1858,7 @@
    "body": {
     "success": true
    },
+   "events": 1,
    "next_mode": "v1",
    "requests": [
     "/api/bridge/sync"
@@ -1874,6 +1876,7 @@
     "success": true,
     "privwire": 2
    },
+   "events": 1,
    "next_mode": "v1",
    "requests": [
     "/api/bridge/sync"
@@ -1891,6 +1894,7 @@
     "success": true,
     "privwire": 2
    },
+   "events": 1,
    "next_mode": "v2",
    "requests": [
     "/api/bridge/sync/v2"
@@ -1907,6 +1911,7 @@
    "body": {
     "error": "privwire_off"
    },
+   "events": 1,
    "next_mode": "v1",
    "requests": [
     "/api/bridge/sync/v2",
@@ -1922,6 +1927,7 @@
    "hold": false,
    "answer": 404,
    "body": {},
+   "events": 1,
    "next_mode": "v1",
    "requests": [
     "/api/bridge/sync/v2",
@@ -1937,6 +1943,7 @@
    "hold": false,
    "answer": 405,
    "body": {},
+   "events": 1,
    "next_mode": "v1",
    "requests": [
     "/api/bridge/sync/v2",
@@ -1952,6 +1959,7 @@
    "hold": false,
    "answer": null,
    "body": {},
+   "events": 1,
    "next_mode": "v2",
    "requests": [
     "/api/bridge/sync/v2"
@@ -1966,6 +1974,7 @@
    "hold": false,
    "answer": 503,
    "body": {},
+   "events": 1,
    "next_mode": "v2",
    "requests": [
     "/api/bridge/sync/v2"
@@ -1980,14 +1989,53 @@
    "hold": false,
    "answer": 413,
    "body": {},
+   "events": 1,
+   "next_mode": "v1",
+   "requests": [
+    "/api/bridge/sync/v2",
+    "/api/bridge/sync"
+   ],
+   "hold_s": 600,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "a 413 that isn't the v2 route's own too_large (an older site's body parser after a rollback, nginx's page): a definite refusal - the same batch on v1 now, adverts ignored for the hold"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 413,
+   "body": {
+    "success": false,
+    "error": "too_large"
+   },
+   "events": 1,
+   "next_mode": "v1",
+   "requests": [
+    "/api/bridge/sync/v2",
+    "/api/bridge/sync"
+   ],
+   "hold_s": 600,
+   "batch_kept": false,
+   "max_events": 300,
+   "note": "the v2 route's own too_large at one event (it can't shrink): the same"
+  },
+  {
+   "mode": "v2",
+   "hold": false,
+   "answer": 413,
+   "body": {
+    "success": false,
+    "error": "too_large"
+   },
+   "events": 10,
    "next_mode": "v2",
    "requests": [
     "/api/bridge/sync/v2"
    ],
    "hold_s": 0,
    "batch_kept": true,
-   "max_events": 1,
-   "note": "too big for nginx: not a refusal - fewer events per v2 batch from now on"
+   "max_events": 5,
+   "note": "the v2 route's own too_large with events to spare: fewer events per v2 batch (they grow back after clean posts)"
   }
  ]
 }

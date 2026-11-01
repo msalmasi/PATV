@@ -306,6 +306,26 @@ function left(roomId, login, t = clock()) {
     return true;
   });
 }
+/** Review fix (A-compat-5): pad `roomId` is gone from the bridge (Pepe left the room, it was dropped, or it didn't come back after a
+ *  restart) - every open session there that isn't already away starts its absence clock now (J-8: back after 1 h+ = a new session).
+ *  -> how many */
+function leftRoom(roomId, t = clock()) {
+  const room = String(roomId || "");
+  if (!room) return Promise.resolve(0);
+  return serial(room, async () => {
+    await sessInit();
+    let n = 0;
+    for (const S of [...(OPEN.get(room) || new Map()).values()]) {
+      if (S.leftAt != null) continue;
+      S.leftAt = t; S.holding = false;
+      await runQuery("UPDATE incog_alias SET left_at = ? WHERE id = ?", [t, S.id]);
+      n++;
+    }
+    return n;
+  });
+}
+/** The pads with an open session (in memory, after sessInit). */
+function openRooms() { return [...OPEN.keys()]; }
 /** `login`'s level went back to normal (incognito off / un-hidden): their sessions end - in every pad, or just `roomId`. */
 async function off(login, roomId = null, t = clock()) {
   await sessInit();
@@ -360,7 +380,7 @@ async function sweep(t = clock()) {
 module.exports = {
   ADJ, NOUN, DENY_WORDS, DENY_PAIRS, NAME_MAX, TRIES, HOODS, AWAY_MS, LONG_MS, QUIET_MS, CAP_MS, NAMED_GAP_MS, REUSE_MS,
   secret, secretState, norm, denied, candidate, boardPeriod, boardPeriodEnds, boardAliases,
-  sessInit, sight, named, left, off, current, namesInUse, sweep,
+  sessInit, sight, named, left, leftRoom, openRooms, off, current, namesInUse, sweep,
   _setClock: (f) => { clock = f || (() => Date.now()); },
   /** tests: forget the key (the next call reads ALIAS_SECRET again) and every session in memory */
   _reset: () => { KEY = null; STATE = null; OPEN.clear(); RECENT.clear(); NAMED.clear(); CHAINS.clear(); ready = null; },

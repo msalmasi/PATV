@@ -136,14 +136,29 @@ function timeOf(v) {
 // NOT IN - their rows are then never walked, so a page can't run out of its scan budget on a hidden person's long run (an empty
 // page that still says "more" would have told the reader at least SCAN_MAX hidden lines sat there). Rebuilt when the hidden set
 // changes (chatlogview.hiddenVer) and, at most once a minute, when the who map grew.
-let HX = { key: null, at: 0, size: -1, out: [], tx: [] };
-function hiddenLogins() {
+// Review fixes (A-privacy-2 / A-privacy-7) - two modes:
+//   * history (scrollback, offline pads): a person whose lines may be MASKED (G set, left out only for !bridge hide) is read - the
+//     projection draws their post-G lines as bars ("[hidden]") and leaves the rest out; only who is left out for good (forget-me,
+//     deletion, staff, or no G yet) is skipped in SQL. That covers v2 "h:" rows too (a hidden speaker's v2 line, an incognito v2
+//     line of someone hidden now), which were all skipped before - their bars vanished from 📜 once they left the live tail.
+//   * search: every left-out person is skipped in SQL, masked lines included - a masked line is never a search hit, and its words
+//     (a named line said after G, an incognito v2 line's stored text) are never even fetched (search also skips any "mask" item).
+const HX = { history: { key: null, at: 0, size: -1, out: [], tx: [] }, search: { key: null, at: 0, size: -1, out: [], tx: [] } };
+function hiddenLogins(mode = "history") {
   const CV = require("./chatlogview");
   const W = CV._who;
-  const key = CV.hiddenVer(), t = Date.now();
-  if (HX.key === key && (W.size === HX.size || t - HX.at < 60e3)) return HX;
+  const M = mode === "search" ? "search" : "history";
+  let g = null, onAt = null;
+  try { const PW = require("./privwire"); g = PW.gAt(); onAt = PW.lastOnAt ? PW.lastOnAt() : g; } catch (e) { g = null; }
+  const key = CV.hiddenVer() + "|" + (g || 0) + "|" + (onAt || 0), t = Date.now();
+  const C = HX[M];
+  if (C.key === key && (W.size === C.size || t - C.at < 60e3)) return C;
+  // the probe's time: history asks at a moment the switch was on (a maskable person's post-G lines are bars, so read); search asks
+  // before G (the old rules: every left-out person out)
+  const pts = M === "history" ? (onAt || t) : g ? g - 1 : t;
   const probe = { floor: { chat: 0, tx: 0, presence: 0 }, now: t, role: "staff", signed: true, inside: true, aud: "p" };
-  const leftOut = (login, k) => CV.filter([{ k, c: 1, ts: t, aud: "p", u: { login, display: login } }], { view: probe, jc: null }).left.privacy === 1;
+  const leftOut = (login, k) => CV.filter([{ k, c: 1, ts: pts, aud: "p", u: { login, display: login } }], { view: probe, jc: null }).left.privacy === 1;
+  const maskableH = (h) => M === "history" && !!g && !!onAt && CV.maskable(h);
   const out = new Set(), tx = new Set();
   let ready = true;
   try { ready = CL.hiddenReady ? !!CL.hiddenReady() : true; } catch (e) { ready = false; }
@@ -155,12 +170,12 @@ function hiddenLogins() {
     // the owner's decision-9 change: an incognito person's lines Pepe sent anonymised are archived as who "h:<hash>" - once that hash
     // is left out (!bridge hide, forget-me) they are left out in SQL too (no who map needed: the hash is the key). Their own cap.
     let nh = 0;
-    for (const h of CL.hiddenHashes()) { if (nh >= HIDDEN_SQL_MAX) break; if (CL.isLeftOutHash(h)) { out.add("h:" + h); nh++; } }
+    for (const h of CL.hiddenHashes()) { if (nh >= HIDDEN_SQL_MAX) break; if (CL.isLeftOutHash(h) && !maskableH(h)) { out.add("h:" + h); nh++; } }
     let nt = 0;
     if (txn > 0 && CL.txHiddenHashes) for (const h of CL.txHiddenHashes()) { if (nt >= HIDDEN_SQL_MAX) break; if (!out.has("h:" + h)) { tx.add("h:" + h); nt++; } }
   }
-  HX = { key, at: t, size: W.size, out: [...out], tx: [...tx] };
-  return HX;
+  HX[M] = { key, at: t, size: W.size, out: [...out], tx: [...tx] };
+  return HX[M];
 }
 
 /**
@@ -515,6 +530,6 @@ module.exports = {
   dress,                                          // CL9: search results are dressed exactly like history's items
   PAGE, LIMIT_MAX, PER_MIN, AUX_PER_MIN, DAY_ITEMS, SCAN_MAX, BATCH_MAX, POS_TTL, CHECK_MAX, HIDDEN_SQL_MAX, PRESENCE,
   _setLimits: (o) => { Object.assign(limits, o || {}); HIT = null; HIT_AUX = null; },
-  _reset: () => { Object.assign(limits, { perMin: PER_MIN, auxPerMin: AUX_PER_MIN, dayItems: DAY_ITEMS, scanMax: SCAN_MAX }); HIT = null; HIT_AUX = null; DAY.clear(); HX = { key: null, at: 0, size: -1, out: [], tx: [] }; },
+  _reset: () => { Object.assign(limits, { perMin: PER_MIN, auxPerMin: AUX_PER_MIN, dayItems: DAY_ITEMS, scanMax: SCAN_MAX }); HIT = null; HIT_AUX = null; DAY.clear(); for (const m of Object.keys(HX)) HX[m] = { key: null, at: 0, size: -1, out: [], tx: [] }; },
   _day: (userId) => (DAY.get(String(userId)) || { n: 0 }).n,
 };

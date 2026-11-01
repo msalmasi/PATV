@@ -72,6 +72,14 @@ function realUser(u, allowAcct = false) {
   return { login, display: plain(u.display, 40) || login };
 }
 const holdOf = (v) => (typeof v === "string" && HOLD_RE.test(v) ? v : null);
+/** Pepe's hidden-set hash of a login / account key (chatlog.hash - sha256("pepe-hidden:" + key), trimmed, lower case, 20 hex). */
+const hiddenHash = (k) => crypto.createHash("sha256").update("pepe-hidden:" + lower(k), "utf8").digest("hex").slice(0, 20);
+/** Review fix (A-compat-2): is this real person one of the hashes the priv block names (h, or one of hs)? A UserRef whose login
+ *  hashes to neither is someone else (a resolved login beside a matched display name, two members sharing it) - never stored as the
+ *  identity behind a frog name or a bar (a reveal, a self view, a forget-me and an export would all point at the wrong person). */
+const owns = (real, p) => { const h = hiddenHash(real.login); return h === p.h || p.hs.includes(h); };
+/** Is a priv block present at all (any value but undefined / null)? One that is present but doesn't parse fails CLOSED. */
+const hasPriv = (o) => !!o && typeof o === "object" && o.priv !== undefined && o.priv !== null;
 
 /** A page-safe veiled user. */
 const veiledU = (kind) => ({ anon: true, display: "someone", veil: kind });
@@ -86,12 +94,13 @@ function veiledItem(ev, ts, opts = {}) {
   const p = parsePriv(d);
   if (!p) return null;
   const T = opts.transcript || "x.pepe.transcript";
+  const mine = (r) => (r && owns(r, p) ? r : null);
   let it = null;
   let real = null;
   let active = false, holding;
   switch (ev.type) {
     case "message": {
-      real = realUser(d.user, true);
+      real = mine(realUser(d.user, true));
       if (!real) return null;
       it = { k: "msg", ts, u: veiledU(p.kind) };
       if (p.kind === "incognito") { const t = cpStr(d.text, 490); if (!t) return null; it.text = t; }
@@ -102,7 +111,7 @@ function veiledItem(ev, ts, opts = {}) {
       break;
     }
     case T: {
-      real = realUser(d.user);
+      real = mine(realUser(d.user));
       if (!real) return null;
       it = { k: "tx", ts, u: veiledU(p.kind) };
       if (p.kind === "incognito") { const t = cpStr(d.text, 490); if (!t) return null; it.text = t; }
@@ -115,7 +124,7 @@ function veiledItem(ev, ts, opts = {}) {
     }
     case "mic.grab":
     case "mic.release": {
-      real = realUser(d.user);
+      real = mine(realUser(d.user));
       if (!real) return null;
       it = ev.type === "mic.grab" ? { k: "mic", ts, u: veiledU(p.kind) }
         : { k: "unmic", ts, u: veiledU(p.kind), ms: Math.max(0, Math.min(864e5, Number(d.held_ms) || 0)) };
@@ -125,13 +134,13 @@ function veiledItem(ev, ts, opts = {}) {
     }
     case "member.join": {
       if (d.initial) return null;
-      real = realUser(d.user);
+      real = mine(realUser(d.user));
       if (!real) return null;
       it = { k: "join", ts, u: veiledU(p.kind) };
       break;
     }
     case "member.leave": {
-      real = realUser(d.user);
+      real = mine(realUser(d.user));
       if (!real) return null;
       it = { k: "leave", ts, u: veiledU(p.kind) };
       break;
@@ -222,6 +231,12 @@ async function nameItem(R, it) {
   if (view && view.session != null) vz.sess = view.session;
   return it;
 }
+/** Review fix (A-compat-1): a NAMED mic grab with a hold id - that whole hold's verdict is "someone" (a veiled 🎙 line or release of
+ *  the same hold - its holder went private mid-hold - never carries a frog name or the hold id the named grab showed). */
+function namedHold(roomId, hold) {
+  const h = holdOf(hold);
+  if (h && holdName(roomId, h) === undefined) holdName(roomId, h, null);
+}
 /** A NAMED sighting of a login in a pad (C.2: no frog name for them there for 15 minutes) - and their open session, if any, ends
  *  (their level is back to normal). Cheap: an HMAC; the session check is in memory. */
 function namedSeen(roomId, login, t) {
@@ -237,27 +252,39 @@ function namedSeen(roomId, login, t) {
 /**
  * Pepe's v2 snapshot members[] / mic[] -> page-safe entries (veiled: anon + veil + frog name, never on_cam; real identity as _vz),
  * named entries through `clean` (bridge.cleanUser / cleanMic). Sightings: every veiled member is sighted (frognames.sight, quiet),
- * named members newly in the roster are noted named, veiled members gone since the last snapshot have left.
+ * every named member is noted named (on EVERY snapshot - C.2), veiled members gone since the last snapshot have left.
+ * Review fix (A-privacy-8): an entry whose priv block is present but doesn't parse (too many hashes, a bad h, an unknown kind) or
+ * whose UserRef isn't one of its hashes (A-compat-2) is DROPPED - never shown named with its real login and cam (fails closed, as
+ * feedItemV2 drops such an event). A holder's began_named rides on its identity (B.2: no frog name in the mic list either).
  */
 async function snapshotEntries(R, list, clean, { mic = false, max = 400 } = {}) {
   const out = [];
   for (const u of (Array.isArray(list) ? list : []).slice(0, max)) {
-    const p = u && typeof u === "object" ? parsePriv({ priv: u.priv }) : null;
-    if (!p) { const c = clean(u); if (c) out.push(c); continue; }
+    const veiled = hasPriv(u);
+    const p = veiled ? parsePriv({ priv: u.priv }) : null;
+    if (!veiled) { const c = clean(u); if (c) out.push(c); continue; }
+    if (!p) continue;
     const real = realUser(u);
-    if (!real) continue;
+    if (!real || !owns(real, p)) continue;
     const e = veiledU(p.kind);
     if (!mic) {
       if (u.on_mic) e.on_mic = true;
       if (u.src === "list" || u.src === "seen") e.src = u.src;
     }
     hide(e, "_vz", { login: real.login, display: real.display, kind: p.kind, h: p.h, hs: p.hs.slice(), sess: null,
-                     ...(mic ? { proven: u.proven === true, since: Number(u.since) > 0 ? Math.round(Number(u.since) * 1000) : null } : {}) });
+                     ...(mic ? { proven: u.proven === true, since: Number(u.since) > 0 ? Math.round(Number(u.since) * 1000) : null,
+                                 ...(u.began_named === true ? { beganNamed: true } : {}) } : {}) });
     out.push(e);
   }
   return out;
 }
-/** Frog names for a snapshot's veiled entries (members first, then holders - one session per person) + left / named bookkeeping. */
+/**
+ * Frog names for a snapshot's veiled entries (members first, then holders - one session per person) + left / named bookkeeping.
+ * Review fix (A-privacy-1 / A-compat-1): EVERY named roster and mic entry is a named sighting on every snapshot (C.2: lastNamed
+ * counts roster entries) - not only a login new to the roster. Someone who sat named in the people list for 40 minutes and then
+ * switches a veil on gets no frog name in the same slot (FN.named is an HMAC and a Map set). Never for a login this same snapshot
+ * also lists veiled (a session it just sighted isn't ended by its own snapshot).
+ */
 async function nameSnapshot(R, now) {
   const FN = require("./frognames");
   const prev = R._veilSeen || new Set();
@@ -274,7 +301,7 @@ async function nameSnapshot(R, now) {
     try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid }); } catch (err) { view = null; }
     seen.add(low);
     const isMic = (R.mic || []).includes(e);
-    if (view && view.alias && !(isMic && vz.proven !== true)) {
+    if (view && view.alias && !(isMic && (vz.proven !== true || vz.beganNamed === true))) {
       e.alias = view.alias;
       if (view.hood != null) e.hood = view.hood;
       const id = opaqueId(R.id, view.session);
@@ -283,10 +310,31 @@ async function nameSnapshot(R, now) {
     if (view && view.session != null) vz.sess = view.session;
   }
   for (const low of prev) if (!seen.has(low)) FN.left(R.id, low, now).catch(() => {});
-  const prevNamed = R._namedSeen || new Set();
-  for (const low of named) if (!prevNamed.has(low)) namedSeen(R.id, low, now);
+  for (const low of named) if (!seen.has(low)) namedSeen(R.id, low, now);
   hide(R, "_veilSeen", seen);
   hide(R, "_namedSeen", named);
+}
+/**
+ * Review fix (A-privacy-6): the order veiled entries are listed in carries no join information. Pepe sends members by `since`; a
+ * veiled entry kept at its index would sit in the exact slot of the named entry it replaced (and the reverse on un-veil). Named
+ * entries keep their order; veiled ones go after them, by frog name, alias-less ones last in the order of a keyed hash of their
+ * session (stable, meaningless). -> a new array (or the same one when nothing is veiled).
+ */
+function veilOrder(list, roomId) {
+  const named = [], veiled = [];
+  for (const e of Array.isArray(list) ? list : []) (e && e.anon && e.veil ? veiled : named).push(e);
+  if (!veiled.length) return list;
+  const key = (e) => (e.alias ? "0" + String(e.alias).toLowerCase() : "1" + (opaqueId(roomId, e._vz && e._vz.sess != null ? e._vz.sess : "") || ""));
+  veiled.sort((a, b) => { const x = key(a), y = key(b); return x < y ? -1 : x > y ? 1 : 0; });
+  return named.concat(veiled);
+}
+/** Review fix (A-compat-5): at boot, the veiled people a room's restored roster lists count as seen - the first snapshot that no
+ *  longer has them starts their away clock (J-8), instead of an empty memory that never notices they left during the restart. */
+function seedSeen(R) {
+  const s = new Set();
+  for (const e of [...(R.members || []), ...(R.mic || [])]) if (e && e.anon && e._vz && e._vz.login) s.add(lower(e._vz.login));
+  hide(R, "_veilSeen", s);
+  return s.size;
 }
 
 // ── storage ──
@@ -367,6 +415,6 @@ async function forgetLogins(logins) {
   return { feed: cs, rooms };
 }
 
-module.exports = { KINDS, hide, bucket, parsePriv, realUser, veiledItem, namedExtras, opaqueId, nameItem, namedSeen, snapshotEntries,
-                   nameSnapshot, veilRow, roomVeilData, attachRoomVeil, attachFeedVeil, forgetLogins, avoidOf,
-                   _holds: HOLDS };
+module.exports = { KINDS, hide, bucket, parsePriv, realUser, veiledItem, namedExtras, opaqueId, nameItem, namedSeen, namedHold, snapshotEntries,
+                   nameSnapshot, veilOrder, seedSeen, veilRow, roomVeilData, attachRoomVeil, attachFeedVeil, forgetLogins, avoidOf,
+                   hiddenHash, owns, hasPriv, _holds: HOLDS };

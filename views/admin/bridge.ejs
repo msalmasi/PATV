@@ -315,6 +315,7 @@
     cur = s;
     sum.textContent = 'Privacy wire v2 is ' + (s.on ? 'ON' : 'off') + ' · G (go-live) ' + when(s.g_at) + (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '') +
       ' · /api/bridge/sync/v2 calls ' + (c.calls || 0) + ' (accepted ' + (c.ok || 0) + ', refused ' + (c.refused || 0) + ', errors ' + (c.err || 0) + ')' +
+      (c.probes ? ' · ' + c.probes + ' hit(s) without the bot token (not counted as calls)' : '') +
       (c.last_at ? ', last ' + when(c.last_at) : '') + (s.on ? '' : ' - while it has never been on, the call count stays 0');
     btn.disabled = false;
     btn.textContent = s.on ? 'Turn off' : 'Turn on';
@@ -335,7 +336,7 @@
 <% if (_can('chatlog.see_through')) { %>
 <section class="adm-card" id="seethrough" aria-labelledby="stT">
   <h2 id="stT">See-through log <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Every time a PATV admin, or a pad's owner on their own pad, revealed who is behind a private person's frog name (room analytics now; pad chat later) - one row per reveal, or per "Show real names" toggle (open until it was turned off, with every login it showed). Kept 180 days; never shown to the people revealed.</p>
+  <p class="adm-help">Every time a PATV admin, or a pad's owner on their own pad, revealed who is behind a private person's frog name - one row per reveal, or per "Show real names" toggle (open until it was turned off, with every login it showed). What: room analytics rows; pad chat lines (<code>chat_line</code>: a Reveal on one line, with its hidden words), the pad chat's "Show real names" toggle (<code>chat_toggle</code>, counting every batch it showed) and an admin's per-login tool reaching a login's veiled lines (<code>chat_tool</code>: a look or an export). Kept 180 days; never shown to the people revealed.</p>
   <form id="stForm" class="adm-form">
     <label>Room id<input type="text" name="room" placeholder="empty = every pad" autocomplete="off"></label>
     <label>Rows<select name="limit"><option>100</option><option>250</option><option>500</option></select></label>
@@ -737,7 +738,9 @@
     out.textContent = '';
     var s = r.summary || {};
     var p = document.createElement('p');
+    // (wave 2 E.7, review fix A-tests-ux-04: staff see that veiled lines exist - "N veiled line(s) - ask an admin" - not just the named count)
     p.textContent = (r.account ? '@' + r.account.username + ' · ' : '') + 'keys ' + r.keys.join(', ') + ' · ' + (s.lines || 0) + ' archived line(s) in ' + (s.rooms || []).length + ' room(s)' +
+      (s.veiled_note ? ' · ' + s.veiled_note : '') +
       (s.hidden ? ' · hidden' : '') + (s.tx_hidden ? ' · transcripts off' : '') + ((s.held || []).length ? ' · legal hold' : '') +
       (s.relays_to != null ? ' · !msg copies sent to them: ' + s.relays_to : '') +
       (s.camfrog ? ' · their Camfrog login in !msg copy records: ' + (s.camfrog.copies_to + s.camfrog.copies_from) + ', admins’ Camfrog logs: ' + s.camfrog.threads : '') +

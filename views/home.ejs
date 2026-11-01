@@ -849,12 +849,26 @@
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     var feed = document.getElementById('lrFeed'), cursor = 0, started = false, timer = null, fails = 0, lastP = '', lastM = '';
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    // (wave 2: a veiled person's frog name - only the server sets u.alias on an anon user)
-    function label(u) { return u && u.anon && /^[A-Z][A-Za-z -]{2,30}$/.test(String(u.alias || '')) ? String(u.alias) : !u || u.anon ? _t('js.home.room.someone', 'someone') : u.former ? _t('js.pad.chat.former', 'former member') : (u.display || u.login); }
+    // (wave 2: a veiled person's frog name - only the server sets u.alias on an anon user. Review fix A-tests-ux-09, C.4 / C.7: a frog
+    // name is only ever drawn in italics with its incognito / hidden tag - never in the plain span a named user gets, so a Camfrog user
+    // who calls themselves "Soggy Bullfrog" can't pass for a veiled person; the same pattern as chatlog-core.js, "Mystery Frog N" too)
+    var ALIAS_RE = /^(?:[A-Z][A-Za-z-]{1,15} [A-Z][A-Za-z]{1,15}|Mystery Frog \d{1,4})$/;
+    function aliasOf(u) { var a = u && u.anon ? String(u.alias || '') : ''; return ALIAS_RE.test(a) ? a : ''; }
+    function veilOf(u) { return u && u.anon && (u.veil === 'hidden' || u.veil === 'incognito') ? u.veil : ''; }
+    function withVeil(node, text, u) {
+      var a = aliasOf(u), i = a ? text.indexOf(a) : -1;
+      if (i < 0) node.appendChild(document.createTextNode(text));
+      else { node.appendChild(document.createTextNode(text.slice(0, i))); node.appendChild(el('i', null, a)); node.appendChild(document.createTextNode(text.slice(i + a.length))); }
+      var v = veilOf(u);
+      if (v) { node.appendChild(document.createTextNode(' ')); node.appendChild(el('span', 'veil-tag veil-' + v, v === 'hidden' ? _t('js.pad.veil.hidden', 'hidden') : _t('js.pad.veil.incognito', 'incognito'))); }
+      return node;
+    }
+    function label(u) { return aliasOf(u) || (!u || u.anon ? _t('js.home.room.someone', 'someone') : u.former ? _t('js.pad.chat.former', 'former member') : (u.display || u.login)); }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function nameEl(u) {
       // 1.99ea: the name is the PATV display name (server-resolved by login) linking to the profile,
       // else the Camfrog display name; the login is the tooltip
+      if (veilOf(u)) return withVeil(el('span', 'w veil'), label(u), u);
       var n;
       if (u && !u.anon && !u.former && u.patv && u.patv.username) { n = el('a', 'w', label(u)); n.href = '/u/' + encodeURIComponent(u.patv.username); }
       else n = el('span', 'w', label(u));
@@ -914,9 +928,10 @@
       var t = it.k === 'join' ? '→ ' + _t('js.home.room.joined', '{name} joined', who) : it.k === 'leave' ? '← ' + _t('js.home.room.left', '{name} left', who)
         : it.k === 'mic' ? '🎙️ ' + _t('js.home.room.grabbed_mic', '{name} grabbed the mic', who) : it.k === 'unmic' ? '🎙️ ' + _t('js.home.room.dropped_mic', '{name} dropped the mic', who)
         : it.k === 'topic' ? '📌 ' + _t('js.home.room.topic', 'topic: {text}', { text: it.text }) : null;
+      if (t && it.k !== 'topic' && veilOf(it.u)) return withVeil(el('div', 'ln sys'), t + ' · ' + hhmm(it.ts), it.u);
       return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
     }
-    function chip(u, cls) { return chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
+    function chip(u, cls) { return veilOf(u) ? withVeil(el('span', 'chip' + (cls ? ' ' + cls : '')), label(u), u) : chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
     var roomAudio = PATVRoom.audio(document.getElementById('lrAudioBox'), slug, { showOff: true });
     window.PATVHomeAudio = roomAudio;            // the Top Pads 🎧 buttons play through this player (one room at a time)
     // 1.99ye: your messages show in the chat at once (sending… / ✓ sent / not sent · Retry)

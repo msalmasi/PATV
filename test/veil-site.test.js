@@ -68,7 +68,7 @@ function call(method, url, { user = null, body = null, headers = {} } = {}) {
       let s = "";
       res.setEncoding("utf8");
       res.on("data", (c) => { s += c; });
-      res.on("end", () => { let d = null; try { d = JSON.parse(s); } catch (e) { d = null; } resolve({ status: res.statusCode, d, text: s }); });
+      res.on("end", () => { let d = null; try { d = JSON.parse(s); } catch (e) { d = null; } resolve({ status: res.statusCode, d, text: s, headers: res.headers }); });
     });
     req.on("error", reject);
     if (data != null) req.write(data);
@@ -160,11 +160,17 @@ test("storage: identities only in the side tables; bridge_veil dies with its fee
   assert.ok(bv.some((r) => r.vw === WORDS[0]), "the hidden words live here only");
   const rv = await getQuery("SELECT data FROM bridge_rooms_veil WHERE id = ?", [ROOM.id]);
   assert.equal(rv.length, 1, "the roster's identities");
-  // a takedown deletes the feed row -> its veil row (trigger)
+  // a takedown deletes the feed row -> its veil row (trigger). (Review fix A-tests-ux-08: the takedown itself, awaited - it takes
+  // the line out of R.feed and bridge_feed, and the trigger takes its identity row)
   const one = veiled[0].c;
-  await bridge.takeDown ? bridge.takeDown(ROOM.id, [one]) : runQuery("DELETE FROM bridge_feed WHERE c = ?", [one]);
-  await runQuery("DELETE FROM bridge_feed WHERE c = ?", [one]);
+  assert.equal(await bridge.takeDown(ROOM.id, [one]), 1, "the takedown took the live line");
+  assert.ok(!R.feed.some((it) => it.c === one), "gone from the live feed");
+  assert.equal((await getQuery("SELECT 1 FROM bridge_feed WHERE c = ?", [one])).length, 0, "and from bridge_feed");
   assert.equal((await getQuery("SELECT 1 FROM bridge_veil WHERE c = ?", [one])).length, 0, "the veil row went with its feed row");
+  // the ring trim: a feed row deleted below the live window takes its veil row too
+  const two = veiled[1].c;
+  await runQuery("DELETE FROM bridge_feed WHERE room_id = ? AND c <= ?", [ROOM.id, two]);
+  assert.equal((await getQuery("SELECT 1 FROM bridge_veil WHERE c = ?", [two])).length, 0, "the ring trim drops the veil row");
   // the archive: chat_log_veil beside each veiled row; the FTS index never holds hidden words or veiled logins
   const cv = await getQuery("SELECT c, login, kind, words FROM chat_log_veil ORDER BY c");
   assert.equal(cv.length, 4, "chat_log_veil rows");
@@ -316,7 +322,10 @@ test("see-through: an admin's reveal (one log row), the owner in their era, refu
   assert.equal(row.role, "admin");
   assert.equal(row.reason, "report #7");
   assert.deepEqual(JSON.parse(row.logins), ["hankhidden"]);
-  assert.equal(r.text.includes("Cache") || true, true);
+  // (review fix A-tests-ux-08: the headers asserted, not a vacuous `|| true`)
+  assert.match(String(r.headers["cache-control"] || ""), /private/, "Cache-Control: private");
+  assert.match(String(r.headers["cache-control"] || ""), /no-store/, "Cache-Control: no-store");
+  assert.equal(r.headers["referrer-policy"], "no-referrer");
   // refusals
   assert.equal((await call("POST", "/api/chatlog/reveal", { user: U.mem, body: { room: SLUG, c: [it.c] } })).status, 403, "a member");
   assert.equal((await call("POST", "/api/chatlog/reveal", { user: U.staff, body: { room: SLUG, c: [it.c] } })).status, 403, "staff (J-2)");

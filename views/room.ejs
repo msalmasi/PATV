@@ -846,7 +846,7 @@
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
   <script src="/public/js/chat-clip.js?v=4"></script>
-  <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=2"></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
+  <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=3"></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
@@ -923,26 +923,106 @@
     // wave 2 (spec E.1 / E.2): Reveal - only an admin, or the pad's owner on lines said in their era, gets the control (rv: 1); one
     // POST per line, logged on the server (seethrough_log). The answer is shown only here: "login · only you can see this" on a
     // dashed line, and a hidden line's words in place of its bar. Never kept, never re-sent.
+    // Review fix (A-tests-ux-05): a failed reveal says so on the line (a chip), and the J-18 toggle - "Show real names", on until turned
+    // off (logged on the server: one row when it goes on, every batch it shows counted on it) - with the E.2 banner and "Hide again".
+    function stPost(url, body) {
+      return fetch(url, { method: 'POST', credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
+        headers: { 'content-type': 'application/json', 'x-requested-with': 'fetch' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok || !d.ok) { var x = new Error(d.error || ('HTTP ' + r.status)); x.status = r.status; throw x; } return d; }); });
+    }
+    function revealErr(b, msg) {
+      var old = b.parentNode && b.parentNode.querySelector('.veil-chip.veil-err');
+      if (old) old.parentNode.removeChild(old);
+      var chip = el('span', 'veil-chip veil-err', _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: msg }));
+      chip.setAttribute('role', 'status');
+      b.parentNode.insertBefore(chip, b.nextSibling);
+    }
+    /** Show what a reveal answered on line `b` is in; -> an undo (the toggle's "Hide again") */
+    function applyReveal(b, o) {
+      var line = b.closest('.line, .sys');
+      var bar = line && line.querySelector('.redact'), words = null;
+      if (line) line.classList.add('revealed');
+      if (bar && typeof o.words === 'string') { words = document.createTextNode(o.words); bar.replaceWith(words); }
+      var chip = el('span', 'veil-chip', _t('js.pad.veil.chip', '{name} · only you can see this', { name: o.login }));
+      b.replaceWith(chip);
+      return function () {
+        if (words && words.parentNode) words.replaceWith(bar);
+        if (chip.parentNode) { b.disabled = false; chip.replaceWith(b); }
+        if (line) line.classList.remove('revealed');
+      };
+    }
     if (feedEl && window.fetch) feedEl.addEventListener('click', function (e) {
       var b = e.target && e.target.closest ? e.target.closest('.veil-reveal') : null;
       if (!b || b.disabled) return;
       var c = Number(b.getAttribute('data-reveal'));
       if (!c) return;
       b.disabled = true;
-      fetch('/api/chatlog/reveal', { method: 'POST', credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
-        headers: { 'content-type': 'application/json', 'x-requested-with': 'fetch' }, body: JSON.stringify({ room: slug, c: [c] }) })
-        .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
+      stPost('/api/chatlog/reveal', { room: slug, c: [c] })
         .then(function (d) {
-          var o = (d.items || [])[0], line = b.closest('.line, .sys');
+          var o = (d.items || [])[0];
           if (!o) { b.textContent = _t('js.pad.veil.reveal_none', 'Can’t be revealed'); return; }
-          if (line) line.classList.add('revealed');
-          var bar = line && line.querySelector('.redact');
-          if (bar && typeof o.words === 'string') bar.replaceWith(document.createTextNode(o.words));
-          var chip = el('span', 'veil-chip', _t('js.pad.veil.chip', '{name} · only you can see this', { name: o.login }));
-          b.replaceWith(chip);
+          applyReveal(b, o);
         })
-        .catch(function (err) { b.disabled = false; b.title = err.message; });
+        .catch(function (err) { b.disabled = false; b.title = err.message; revealErr(b, err.message); });
     });
+    // the toggle: offered once a line with Reveal shows (only an admin, or the owner in their era, gets rv lines); its state is the
+    // server's - the first batch fetch says whether it is on (409 = off), so a reload while it's on keeps showing names
+    (function () {
+      if (!feedEl || !window.fetch || !window.MutationObserver || !scrollEl || !scrollEl.parentNode) return;
+      var on = null, bar = null, busy = false, undo = [], timer = null;
+      function pending() { return Array.prototype.slice.call(feedEl.querySelectorAll('.veil-reveal:not([disabled])')); }
+      function draw() {
+        if (!bar) { bar = el('div', 'veil-banner'); bar.setAttribute('role', 'status'); scrollEl.parentNode.insertBefore(bar, scrollEl); }
+        bar.textContent = '';
+        var btn = el('button', 'veil-reveal', on ? _t('js.pad.veil.st_hide', 'Hide again') : _t('js.pad.veil.st_show', 'Show real names'));
+        btn.type = 'button';
+        btn.disabled = busy;
+        btn.addEventListener('click', flip);
+        bar.appendChild(document.createTextNode(on ? _t('js.pad.veil.st_on', 'Showing who’s behind frog names on this pad - every reveal is logged.') + ' '
+          : _t('js.pad.veil.st_off', 'You can see who’s behind frog names here (every reveal is logged).') + ' '));
+        bar.appendChild(btn);
+      }
+      function batch() {
+        timer = null;
+        if (on === false || busy) return;
+        var bs = pending().slice(0, 50);
+        if (!bs.length) return;
+        var cs = bs.map(function (b) { return Number(b.getAttribute('data-reveal')); }).filter(Boolean);
+        bs.forEach(function (b) { b.disabled = true; });
+        busy = true;
+        stPost('/api/chatlog/reveal', { room: slug, c: cs, toggle: true }).then(function (d) {
+          busy = false; on = true;
+          var by = {};
+          (d.items || []).forEach(function (o) { by[o.c] = o; });
+          bs.forEach(function (b) { var o = by[Number(b.getAttribute('data-reveal'))]; if (o) undo.push(applyReveal(b, o)); else b.disabled = false; });
+          draw();
+          if (pending().length && (d.items || []).length) soon();
+        }).catch(function (err) {
+          busy = false;
+          bs.forEach(function (b) { b.disabled = false; });
+          on = false;                        // (409: it's off; anything else: shown as off - never retried on every new line)
+          draw();
+          if (err.status !== 409 && bar) bar.appendChild(el('span', 'veil-chip veil-err', _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: err.message })));
+        });
+      }
+      function soon() { if (!timer) timer = setTimeout(batch, 300); }
+      function flip() {
+        if (busy) return;
+        busy = true; draw();
+        stPost('/api/chatlog/seethrough', { room: slug, on: !on }).then(function (d) {
+          busy = false; on = !!d.on;
+          if (!on) { undo.splice(0).forEach(function (f) { try { f(); } catch (e) { /* gone */ } }); }
+          draw();
+          if (on) soon();
+        }).catch(function (err) { busy = false; draw(); bar.appendChild(el('span', 'veil-chip veil-err', _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: err.message }))); });
+      }
+      new MutationObserver(function () {
+        if (!pending().length) return;
+        if (!bar) draw();
+        if (on !== false) soon();
+      }).observe(feedEl, { childList: true, subtree: true });
+      if (pending().length) { draw(); soon(); }
+    })();
 
     function nearBottom() { return scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 80; }
     function toBottom() { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; jump.style.display = 'none'; }

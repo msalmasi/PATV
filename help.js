@@ -562,15 +562,26 @@ const PRIVWIRE_NOTES = {
   bridge: "!bridge hide now means \"hidden\": the website shows you under a random frog name and your messages and mic transcripts as a blacked-out bar, instead of leaving you out. PATV administrators and the pad's owner can reveal who is behind it and read hidden lines, for moderation; every reveal is logged.",
   transcripts: "With !transcripts off your mic transcripts still never reach the website; your mic grabs and drops are shown (under your frog name if you're incognito or hidden).",
 };
+// (the visible summary of a card whose old one says the opposite, for help data from a Pepe without the v2 wording)
+const PRIVWIRE_SUMMARY = {
+  incognito: "Your own switch: with incognito on, the website shows you under a random frog name instead of your name. It changes what the website shows, not what Pepe remembers - that's !remember off. Also on the website: Settings → Privacy.",
+};
 function withPrivwireNotes(entries) {
   let on = false;
   try { on = require("./privwire").isOn(); } catch (e) { on = false; }
   if (!on) return entries;
   return (entries || []).map((e) => {
+    // review fix (A-tests-ux-07): Pepe's help data carries the cards' privacy-wire-v2 wording (e.v2 {summary?, details?}, section H) -
+    // it REPLACES the old promise ("someone", "left out") while the switch is on, instead of a note under text that says the
+    // opposite. Data from an older Pepe without it: the visible summary of those cards still changes, and the note is added.
+    const v2 = e && e.v2 && typeof e.v2 === "object" ? e.v2 : null;
+    const vs = v2 && typeof v2.summary === "string" && v2.summary.trim() ? v2.summary.slice(0, L.summary) : null;
+    const vd = v2 && typeof v2.details === "string" && v2.details.trim() ? v2.details.slice(0, L.details) : null;
+    if (vs || vd) return { ...e, ...(vs ? { summary: vs } : {}), ...(vd ? { details: vd } : {}) };
     const add = e && PRIVWIRE_NOTES[e.id];
     if (!add) return e;
     const base = e.details && String(e.details).trim() ? e.details : e.summary;
-    return { ...e, details: String(base || "") + "\n\n" + add };
+    return { ...e, ...(PRIVWIRE_SUMMARY[e.id] ? { summary: PRIVWIRE_SUMMARY[e.id] } : {}), details: String(base || "") + "\n\n" + add };
   });
 }
 

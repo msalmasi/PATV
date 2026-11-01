@@ -179,13 +179,13 @@ function pick(feed, spec, before = null) {
     const idx = want.map((c) => F.findIndex((it) => it && it.c === c));
     if (idx.some((i) => i < 0)) return { error: "Some of those lines aren't in the room's feed any more — pick again.", code: "missing" };
     const items = idx.map((i) => F[i]);
-    if (items.some((it) => !isLine(it))) return { error: "Only chat and 🎙 mic lines can be quoted.", code: "not_line" };
+    if (items.some((it) => !isLine(it) || isMasked(it))) return { error: "Only chat and 🎙 mic lines can be quoted.", code: "not_line" };
     const span = Math.max(...idx) - Math.min(...idx) + 1;
     if (span > SPAN_MAX) return { error: "Those lines are too far apart — pick lines close together.", code: "span" };
     return { items: idx.map((i, k) => [i, items[k]]).sort((a, b) => a[0] - b[0]).map((x) => x[1]) };
   }
   const cut = Number(before) > 0 ? Number(before) : Infinity;
-  const cand = F.filter((it) => isLine(it) && it.ts <= cut && !isCmd(it) && !isPepeNoise(it));
+  const cand = F.filter((it) => isLine(it) && it.ts <= cut && !isCmd(it) && !isPepeNoise(it) && !isMasked(it));
   const mode = spec && spec.mode;
   const n = Math.max(1, Math.min(MAX_LINES, Math.floor(Number(spec && spec.n)) || 0));
   if (mode === "last") {
@@ -222,7 +222,14 @@ function pick(feed, spec, before = null) {
  *  them (chatlogview.privacyOf). The set fails closed while it loads (nothing to quote then). */
 function shownFeed(feed) {
   const CV = require("./chatlogview");
-  return (Array.isArray(feed) ? feed : []).filter((it) => !!it && CV.privacyOf(it) !== "out");
+  return (Array.isArray(feed) ? feed : []).filter((it) => !!it && CV.privacyOf(it) !== "out" && !isMasked(it));
+}
+/** Review fix (A-tests-ux-01, D.4 "hidden lines can't be searched or quoted"): a MASKED line (a bar on the pad - a v2 hidden line, a
+ *  named line said after G whose speaker is now !bridge hide, an incognito v2 line of someone hidden now) is never quoted: its
+ *  stored words would be republished on the pad's feed. Fails closed when the projection can't be asked. */
+function isMasked(it) {
+  if (it && it.mask) return true;
+  try { return require("./chatlogview").privacyOf(it) === "mask"; } catch (e) { return true; }
 }
 
 // ── building the stored lines (names as the bridge shows them; private people as "someone") ──
@@ -257,7 +264,7 @@ async function buildLines(items) {
     const anon = !!it.u.anon;
     const login = anon ? "" : low(it.u.login);
     // the owner's decision-9 change: someone LEFT OUT now isn't quoted at all (never stored); incognito only -> "someone" + h
-    const out = CV.privacyOf(it) === "out" || (!anon && isLeftOut(login));
+    const out = CV.privacyOf(it) === "out" || (!anon && isLeftOut(login)) || isMasked(it);   // (review fix: never a masked line's words)
     const u = view(it.u) || it.u;
     const hidden = anon || out || isPrivate(login) || CV.isHiddenLogin(login);
     if (hidden && !anon) {

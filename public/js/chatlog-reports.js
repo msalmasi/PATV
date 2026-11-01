@@ -19,9 +19,18 @@
     box.appendChild(el('div', 'mut', (L.k === 'tx' ? '🎙 Mic transcript' : 'Chat line') + ' by ' + who + ' · said ' + when(L.ts) +
       (L.removed ? ' · taken down ' + when(L.removed.at) + ' (' + L.removed.by + (L.removed.why ? ': ' + L.removed.why : '') + ')' : '')));
     var q = el('blockquote', 'fa-dm-text');
-    q.textContent = L.text == null ? '(its text is gone)' : L.text;
+    // wave 2 (E.7, review fix A-tests-ux-06): a HIDDEN line's words aren't gone - only an admin can read them (Reveal on the pad's
+    // line, logged); staff must not dismiss it as purged
+    q.textContent = L.needs_admin ? 'Hidden line - needs an admin (an admin can reveal it on the pad; every reveal is logged)'
+      : L.text == null ? '(its text is gone)' : L.text;
     q.style.cssText = 'margin:8px 0;padding:10px 12px;border-inline-start:3px solid var(--ds-danger, #ff8a80);background:var(--ds-danger-bg, #1a1414);white-space:pre-wrap;overflow-wrap:anywhere;';
     box.appendChild(q);
+    if (L.needs_admin && typeof L.link === 'string' && /^\/p\//.test(L.link)) {
+      var a = el('a', 'mut', 'Open the line on its pad');
+      a.href = L.link;
+      a.rel = 'noreferrer';
+      box.appendChild(a);
+    }
     box.hidden = false;
   }
   document.addEventListener('click', function (e) {

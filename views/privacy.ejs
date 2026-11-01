@@ -162,7 +162,7 @@
         <tr><td>Username, display name, avatar, level, badges, public profile panels, posts and comments (not NSFW)</td><td>Anyone, including visitors who aren't signed in</td></tr>
         <tr><td>A flag for the country you last signed in from (from Cloudflare's country header - never your IP or city). Hide it in Edit profile; it's never shown to others while you're incognito</td><td>Anyone, including visitors who aren't signed in</td></tr>
         <tr><td>NSFW posts, mirrored Camfrog room chat and mic transcripts, stories</td><td>Signed-in members</td></tr>
-        <% if (locals.chatlog) { %><tr><td>A pad's chat history (scrolling back, search, downloads)</td><td>Signed-in members who can see the pad, as far back as its settings allow (see <a href="#chat-history">Chat history on pads</a>); the pad's owner and PATV staff (logged) see everything its tier keeps</td></tr><% } %>
+        <% if (locals.chatlog) { %><tr><td>A pad's chat history (scrolling back, search, downloads)</td><td>Signed-in members who can see the pad, as far back as its settings allow (see <a href="#chat-history">Chat history on pads</a>); the pad's owner and PATV staff (logged) see everything its tier keeps<% if (locals.privwire) { %>; only the pad's owner and PATV administrators can reveal who is behind a frog name or read hidden lines, and every reveal is logged<% } %></td></tr><% } %>
         <tr><td>Profile panels you've made private, your PAT history, your inbox, your email address</td><td>You (and site admins / staff where needed to run the service)</td></tr>
         <tr><td>Reports you make</td><td>Site admins; pad owners for reports on posts in their pad (not child-safety, non-consensual imagery or copyright reports). The person you report isn't told who reported them.</td></tr>
         <tr><td>Safety data on posts and comments (IP, user agent, language, country, hashes)</td><td>Site administrators only, logged</td></tr>
@@ -250,7 +250,7 @@
     <h2>10. Your choices and rights</h2>
     <ul>
       <li>Edit or delete your posts and comments, and choose which profile panels are public, at any time.</li>
-      <li>In Camfrog rooms, <code>!incognito</code> / <code>!bridge hide</code> keep your name off the website. Incognito does more than that: see <a href="#incognito">Incognito</a> below.</li>
+      <% if (locals.privwire) { %><li>In Camfrog rooms, <code>!incognito</code> shows you on the website under a frog name instead of your name, and <code>!bridge hide</code> also blacks out what you say. Neither mutes your voice in the room's audio. See <a href="#incognito">Incognito</a> below.</li><% } else { %><li>In Camfrog rooms, <code>!incognito</code> / <code>!bridge hide</code> keep your name off the website. Incognito does more than that: see <a href="#incognito">Incognito</a> below.</li><% } %>
       <li>Choose who can see your cam on the website, or switch it off: see <a href="#livecams">Live cams</a>.</li>
       <% if (locals.memory) { %><li><b>Stop Pepe remembering what you tell him</b> (in rooms, on the mic, in PMs and DMs): see <a href="#memory">Pepe's memory</a> below.</li><% } %>
       <li><b>Make Pepe forget you</b> and delete your private conversations with him: see <a href="#forget">below</a>.</li>
@@ -273,7 +273,7 @@
     <ul>
       <li><b>Also remove my public messages:</b> if you tick it when you delete your account, the words of those messages are deleted too, in PATV chat and in pads' chat history alike (the lines you sent from the website, also those under a Camfrog name while it was linked to you, earlier ones included). You can ask for this once a day.</li>
       <li><b>What waits:</b> a message under a report is kept until 30 days after the report is decided (90 days at most while it isn't), and one under a legal hold until the hold ends; then its words are deleted.</li>
-      <li><b>Not reached:</b> in pads' chat history, your lines from Camfrog and the lines you sent from the website while incognito with a linked Camfrog name (they are shown as "someone"); <i>Also hide my past public chat lines</i> leaves those out for everyone instead (see <a href="#forget">Make Pepe forget me</a>). Nor are lines under a Camfrog name you unlinked before 12 October 2026 (we have no record of it), or copies already sent to Camfrog or downloaded.</li>
+      <li><b>Not reached:</b> in pads' chat history, your lines from Camfrog and the lines you sent from the website while incognito with a linked Camfrog name (they are shown as "someone"<% if (locals.privwire) { %>, or under a frog name from <%= locals.privwire.g_day %><% } %>); <i>Also hide my past public chat lines</i> leaves those out for everyone instead (see <a href="#forget">Make Pepe forget me</a>). Nor are lines under a Camfrog name you unlinked before 12 October 2026 (we have no record of it), or copies already sent to Camfrog or downloaded.</li>
       <li><b>Your copy:</b> <a href="/settings/account#data">Download my data</a> includes your lines in pads' chat history<% if (HE.export) { %>, and what PATV chat keeps about you, your messages there among it<% } %>.</li>
     </ul>
     <p>Deleted data may persist in backups until they expire (see section 9).</p>

@@ -20,15 +20,32 @@
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
+// Review fix (A-compat-4): `spans` = [[on, off | null], ...] - when the switch was on. A NAMED (or Pepe-anonymised v1) line whose
+// speaker is later only !bridge hide is masked only when it was said while the switch was ON (spans), not merely after G: after a
+// switch-off Pepe is back on v1, whose !bridge hide promise is "left out", and the policy page reads as before - so lines said then
+// stay left out. (A state from before spans: the current or last on period only - older periods fail toward "left out".)
+// Counters: calls / ok / refused / err are Pepe's calls (token checked); probes = anything else that hit the v2 path (A-compat-9).
+const SPANS_MAX = 500;
 let clock = () => Date.now();
-let STATE = { on: false, at: null, by: null, on_at: null, g_at: null };
-const COUNTS = { calls: 0, ok: 0, refused: 0, err: 0, last_at: null };
+let STATE = { on: false, at: null, by: null, on_at: null, g_at: null, spans: [] };
+const COUNTS = { calls: 0, ok: 0, refused: 0, err: 0, probes: 0, last_at: null };
+const COUNT_KEYS = ["calls", "ok", "refused", "err", "probes"];
 let ready = null, loaded = false, saveTimer = null;
 
 function clean(s) {
   const o = s && typeof s === "object" ? s : {};
   const n = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : null);
-  return { on: o.on === true, at: n(o.at), by: typeof o.by === "string" ? o.by.slice(0, 60) : null, on_at: n(o.on_at), g_at: n(o.g_at) };
+  const on = o.on === true, at = n(o.at), on_at = n(o.on_at), g_at = n(o.g_at);
+  let spans;
+  if (Array.isArray(o.spans)) {
+    spans = o.spans.filter((x) => Array.isArray(x) && n(x[0]) && (x[1] == null || n(x[1]) >= n(x[0]))).map((x) => [n(x[0]), x[1] == null ? null : n(x[1])]);
+    // (only the last span may be open, and only while the switch is on)
+    spans = spans.map((x, i) => (x[1] == null && (i < spans.length - 1 || !on) ? [x[0], Math.max(x[0], at || x[0])] : x));
+  } else if (g_at) {
+    spans = on ? [[on_at || g_at, null]] : on_at && at && at >= on_at ? [[on_at, at]] : [];
+  } else spans = [];
+  if (spans.length > SPANS_MAX) spans = spans.slice(-SPANS_MAX);
+  return { on, at, by: typeof o.by === "string" ? o.by.slice(0, 60) : null, on_at, g_at, spans };
 }
 function init() {
   if (!ready) {
@@ -39,7 +56,7 @@ function init() {
       const c = (await getQuery("SELECT value FROM chatlog_meta WHERE key = 'privwire_counts'"))[0];
       try {
         const v = c ? JSON.parse(c.value) : null;
-        if (v && typeof v === "object") for (const k of ["calls", "ok", "refused", "err"]) COUNTS[k] = Math.max(COUNTS[k], Math.floor(Number(v[k]) || 0));
+        if (v && typeof v === "object") for (const k of COUNT_KEYS) COUNTS[k] = Math.max(COUNTS[k], Math.floor(Number(v[k]) || 0));
         if (v && Number(v.last_at) > 0) COUNTS.last_at = COUNTS.last_at || Number(v.last_at);
       } catch (e) { /* counts start at 0 */ }
       loaded = true;
@@ -51,6 +68,15 @@ function init() {
 const isOn = () => loaded && STATE.on === true;
 /** G (ms): the first switch-on, sticky; null = never on (every line keeps the old rules). */
 const gAt = () => (loaded ? STATE.g_at : null);
+/** Review fix (A-compat-4): was the switch on at `ts` (ms)? false until loaded (fails toward "left out"). */
+function wasOnAt(ts) {
+  const t = Number(ts);
+  if (!loaded || !Number.isFinite(t)) return false;
+  for (const [a, b] of STATE.spans) if (t >= a && (b == null || t < b)) return true;
+  return false;
+}
+/** The start of the latest on period (ms) or null - a moment the switch was on (chatloghist probes its masking with it). */
+const lastOnAt = () => (loaded && STATE.spans.length ? STATE.spans[STATE.spans.length - 1][0] : null);
 /** The v2 route's counters: note("calls" | "ok" | "refused" | "err"). */
 function note(k) {
   if (!(k in COUNTS) || k === "last_at") return;
@@ -71,7 +97,10 @@ async function setOn(want, user) {
   const on = want === true;
   if (STATE.on === on) return { ...state(), unchanged: true };
   const t = clock();
-  const next = clean({ on, at: t, by: user && user.username ? user.username : null, on_at: on ? t : STATE.on_at, g_at: STATE.g_at || (on ? t : null) });
+  const spans = STATE.spans.map((x) => x.slice());
+  if (on) spans.push([t, null]);
+  else if (spans.length && spans[spans.length - 1][1] == null) spans[spans.length - 1][1] = t;
+  const next = clean({ on, at: t, by: user && user.username ? user.username : null, on_at: on ? t : STATE.on_at, g_at: STATE.g_at || (on ? t : null), spans });
   await runQuery("INSERT INTO chatlog_meta (key, value) VALUES ('privwire', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(next)]);
   STATE = next;
   await saveCounts().catch(() => {});
@@ -117,6 +146,6 @@ function register(app, { addUser, noTimers = false }) {
   }
 }
 
-module.exports = { init, isOn, gAt, note, counts, state, setOn, saveCounts, privacyCopy, register,
+module.exports = { init, isOn, gAt, wasOnAt, lastOnAt, note, counts, state, setOn, saveCounts, privacyCopy, register, _clean: clean,
                    _setClock: (f) => { clock = f || (() => Date.now()); },
-                   _reset: () => { STATE = clean(null); for (const k of ["calls", "ok", "refused", "err"]) COUNTS[k] = 0; COUNTS.last_at = null; ready = null; loaded = false; } };
+                   _reset: () => { STATE = clean(null); for (const k of COUNT_KEYS) COUNTS[k] = 0; COUNTS.last_at = null; ready = null; loaded = false; } };

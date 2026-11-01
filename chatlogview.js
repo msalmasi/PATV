@@ -191,10 +191,13 @@ function gAt() {
 function maskable(h) {
   try { return CL.hiddenReady() && !CL.hiddenReasons(h).some((r) => HARD_OUT.has(r)); } catch (e) { return false; }
 }
-/** May a line said at `ts` whose hash h is left out be masked instead (G set, said at or after G, only !bridge hide)? */
+/** May a line said at `ts` whose hash h is left out be masked instead (G set, said at or after G WHILE the switch was on - review fix
+ *  A-compat-4: a line said after a switch-off is Pepe's v1 "left out" again - and only !bridge hide)? */
 function maskOk(it, h) {
   const g = gAt();
-  return !!g && Number(it && it.ts) >= g && maskable(h);
+  const ts = Number(it && it.ts);
+  if (!g || !(ts >= g) || !maskable(h)) return false;
+  try { return PWM && typeof PWM.wasOnAt === "function" ? PWM.wasOnAt(ts) : true; } catch (e) { return false; }
 }
 /** A v2 item: Pepe stamped who said it as veiled (u.anon + u.veil, the real identity in a side table). */
 const isV2 = (it) => !!(it && it.u && typeof it.u === "object" && it.u.anon === true && (it.u.veil === "incognito" || it.u.veil === "hidden"));

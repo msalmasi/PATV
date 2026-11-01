@@ -71,7 +71,9 @@
     function gone(c) { try { if (typeof o.onGone === 'function') o.onGone(Number(c)); } catch (e) { /* the page drops it at the next answer anyway */ } }
 
     // ── which lines get a ⋯, and what it offers ──
-    function cOf(n) { return n.getAttribute('data-c') || n.getAttribute('data-rmc'); }
+    // (wave 2, review fix A-tests-ux-03: a MASKED line carries data-vc - kept out of the ✂️ / 🔊 pickers, which read data-c - and still
+    // gets its ⋯: Report, its speaker's Remove my line, a moderator's Hide / Delete; the server checks each by the cursor)
+    function cOf(n) { return n.getAttribute('data-c') || n.getAttribute('data-rmc') || n.getAttribute('data-vc'); }
     function itemsFor(n) {
       var out = [];
       if (!acts) return out;

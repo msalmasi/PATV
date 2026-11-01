@@ -338,8 +338,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (end - start < 1000) return res.status(400).json({ ok: false, error: "Keep at least 1 second." });
       const lim = relay.limited("savemic|" + u.userId, SAVE_GAP, SAVE_BURST, SAVE_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
-      // (wave 2: the action's label - the clipper's own queue on the website - says the frog name, never the login behind it)
-      const id = await deps.queueAction(u.userId, { kind: "micclip.save", args: [R.id, c.login, c.id, start, end], tag: "clip", label: "🔊 clip " + (c.alias || c.login) });
+      // (wave 2: the action's label - the clipper's own queue on the website - says the frog name, never the login behind it.
+      // Review fix (A-privacy-3): nor its args - pepe_actions is the CLIPPER's row (their data export returns it): a frog-name clip
+      // carries no speaker login at all; Pepe takes the target from /api/bridge/micclipdata, bot to site, by the clip id)
+      const id = await deps.queueAction(u.userId, { kind: "micclip.save", args: [R.id, c.alias ? "" : c.login, c.id, start, end], tag: "clip", label: "🔊 clip " + (c.alias || c.login) });
       c.save = id;
       c.done = Math.max(c.done, NOW() - PREVIEW_TTL + 5 * 60 * 1000);   // Pepe has at least 5 more minutes to fetch it
       console.log(`[micclip] save room=${R.id} viewer=${u.username} speaker=${c.alias ? "(a frog name)" : c.login} clip=${c.id} ${start}-${end}ms action=${id}`);

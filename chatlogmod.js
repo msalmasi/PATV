@@ -927,17 +927,19 @@ async function reportRead(user, c) {
   if (!(await getQuery("SELECT 1 FROM chatlog_reports WHERE c = ? LIMIT 1", [row.c])).length) throw new Refuse(404, "Nobody reported that line.", "not_found");
   let p = null;
   try { const CV = require("./chatlogview"); p = row.purged ? null : CV.privacyOf(CV.itemOf(row)); } catch (e) { p = "out"; }
-  const anon = p === "anon" || p === "out" || String(row.who || "").startsWith("h:");
-  await audit(me.userId, { rk: row.rk, who: row.who && !anon ? row.who : null, kind: "history", from: row.ts, to: row.ts, why: "report queue #" + row.c });
   let d = {};
   try { d = JSON.parse(row.d) || {}; } catch (e) { d = {}; }
   const u = d.u || {};
   // wave 2 WP-2 (spec E.7): a reported INCOGNITO line shows staff its frog name and words ("who, not what"); a reported HIDDEN line
   // shows no words - "needs an admin" (only chatlog.see_through can reveal it, logged)
   const hidden = !row.purged && (u.veil === "hidden" || p === "mask");
+  // review fix (A-privacy-10 / A-tests-ux-06): a MASKED line (a named line said after G whose speaker is hidden now) is anonymous too -
+  // no login in the answer or the audit row (staff aren't a see-through role, J-2; the row is shown as "needs an admin")
+  const anon = p === "anon" || p === "out" || p === "mask" || hidden || String(row.who || "").startsWith("h:");
+  await audit(me.userId, { rk: row.rk, who: row.who && !anon ? row.who : null, kind: "history", from: row.ts, to: row.ts, why: "report queue #" + row.c });
   const alias = !row.purged && u.anon && typeof u.alias === "string" && !hidden ? u.alias : null;
   return { c: Number(row.c), k: row.k, ts: Number(row.ts), text: row.purged || hidden ? null : row.text, purged: !!row.purged,
-           ...(hidden ? { masked: true, needs_admin: true } : {}),
+           ...(hidden ? { masked: true, needs_admin: true, link: lineLink(row.room_id, row.c) } : {}),
            name: row.purged ? null : anon || hidden ? (alias || "someone") : (u.display || row.who || null), anon: !row.purged && (anon || hidden),
            login: row.purged || anon || !row.who || String(row.who).startsWith("u:") ? null : row.who,
            removed: row.rm_at != null ? { at: Number(row.rm_at), by: String(row.rm_by || "").replace(/:.*/, ""), why: row.rm_why || "" } : null };
@@ -1198,7 +1200,10 @@ async function whoAction(user, input, { action = "look", why = "" } = {}) {
     }
     await loadHolds();
   }
-  out.summary = await whoSummary(keys, see);
+  // review fix (A-privacy-9): only look / export reach the veiled rows (and only they write the chat_tool see-through row above) - the
+  // summary after hide_all / unhide_all / hold / unhold / purge_all counts named rows plus "N veiled lines", like staff get it, so
+  // no action tells an admin where and when a login was veiled without a see-through row
+  out.summary = await whoSummary(keys, see && (action === "look" || action === "export"));
   return out;
 }
 

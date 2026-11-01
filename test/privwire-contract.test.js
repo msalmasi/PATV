@@ -25,7 +25,7 @@ const repo = path.resolve(__dirname, "..");
 const FIXTURE = path.join(__dirname, "fixtures", "privwire-contract.json");
 // Update together with camfrog-bot's copy (ci/fixtures/privwire-contract.json) and its pin (privwire_contract_test.py PIN):
 // python tools/gen_privwire_contract.py --site <this checkout> prints the new sha.
-const PIN = "806c5faa6a9e0f12aaed71f665c6bbee9901285603810956a5765170f3a91b3e";
+const PIN = "3e2319cfd021a342ea5018ddbb5501c2a85bb04fffeb7b5625b30cb786b4cb3c";
 const RAW = fs.readFileSync(FIXTURE);
 const FX = JSON.parse(RAW.toString("utf8"));
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
@@ -208,7 +208,19 @@ test("the switch: admins only, same-origin, audited; G set at the first ON and s
   assert.equal(again.d.state.g_at, g, "G is sticky");
   const st = await call("GET", "/api/admin/privwire", { user: U.adm });
   assert.equal(st.status, 200);
-  assert.ok(st.d.counts.calls >= 3);
+  // review fix (A-compat-9): calls are PEPE's calls only (the bot token checked) - the malformed body above is a probe, not a call
+  assert.ok(st.d.counts.calls >= 2, JSON.stringify(st.d.counts));
+  assert.ok(st.d.counts.probes >= 1, "the malformed body counted as a probe");
+  const c0 = PW.counts();
+  const junk = await call("POST", "/api/bridge/sync/v2", { body: { password: "not-the-bot", events: [], rooms: [] } });
+  assert.equal(junk.status, 403);
+  const bad = await call("POST", "/api/bridge/sync/v2", { body: "{not json" });
+  assert.equal(bad.status, 400);
+  const c1 = PW.counts();
+  assert.equal(c1.calls, c0.calls, "a crawler / probe never moves the call count (the dark proof)");
+  assert.equal(c1.refused, c0.refused);
+  assert.equal(c1.err, c0.err);
+  assert.equal(c1.probes, c0.probes + 2, "they count as probes");
 });
 
 const KINDS = { "member.join": "join", "member.leave": "leave", message: "msg", "x.pepe.transcript": "tx", "mic.grab": "mic", "mic.release": "unmic" };

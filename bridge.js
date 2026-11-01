@@ -205,11 +205,22 @@ function load() {
           const rv = (await getQuery("SELECT data FROM bridge_rooms_veil WHERE id = ?", [R.id]))[0];
           if (rv) V.attachRoomVeil(R, rv.data);
           await V.attachFeedVeil(R);
+          V.seedSeen(R);                         // review fix (A-compat-5): the restored roster's veiled people count as seen (J-8)
           const FN = require("./frognames");
           const since = Date.now() - FN.NAMED_GAP_MS;
           for (const it of R.feed) if (it && it.u && !it.u.anon && it.u.login && Number(it.ts) >= since) FN.named(R.id, it.u.login, Number(it.ts));
+          // (C.2: the restored roster's named people too - they were in the room named a moment ago)
+          for (const e of [...(R.members || []), ...(R.mic || [])]) if (e && !e.anon && e.login && !e.self) FN.named(R.id, e.login, R.updated || Date.now());
         } catch (e) { console.error("[bridge] veil load:", e && e.code ? e.code : "error"); }
       }
+      // review fix (A-compat-5): open frog-name sessions in a pad that didn't come back (dropped while the site was down) start
+      // their away clock now
+      try {
+        const FN = require("./frognames");
+        await FN.sessInit();
+        const t = Date.now();
+        for (const room of FN.openRooms()) if (!rooms.has(room)) FN.leftRoom(room, t).catch(() => {});
+      } catch (e) { console.error("[bridge] frog-name sessions:", e && e.code ? e.code : "error"); }
       // wave 2: frog-name sessions end on their clock (away 1 h+, 12 h + quiet, 24 h) even when nobody is sighted
       if (!FN_SWEEP) {
         FN_SWEEP = setInterval(() => { require("./frognames").sweep().catch(() => {}); }, 60e3);
@@ -325,17 +336,35 @@ function markRemoved(ch) {
   let n = 0;
   for (const R of rooms.values()) {
     const gone = [], redo = [], shown = [];
+    const reMasked = new Set();             // review fix (A-privacy-5): logins whose NAMED lines turn into bars in this change
     for (const it of R.feed) {
       if (!it || !it.u) continue;
       const m = CV.lookMove(it, ch);
       if (m.gone) gone.push(it.c);
       if (m.redo) redo.push(it.c);
+      if (m.gone && m.now === "masked" && !it.u.anon && it.u.login && !it.ah) reMasked.add(String(it.u.login).toLowerCase());
       // (a Pepe-anonymised line on pages again is "someone" on every page that holds it; a named line back BY NAME is redrawn)
       if (!m.gone && (m.now === "named" || (m.now === "someone" && typeof it.ah === "string"))) shown.push(it.c);
     }
     // such a line loses its older `removed` entries: a page loaded since must never read, from the hour's ring, which "someone"
     // lines left together with whose named ones. (A named line back only as "someone" keeps its entry: a page that missed every
     // answer since may still show it by name - it must drop it.)
+    // review fix (A-privacy-5): someone went from incognito (a frog name) to !bridge hide - their named lines said since G and their
+    // frog-name lines turn into bars in the SAME update, which ties the frog name to them. That frog name ends here: their session in
+    // this pad ends now and the moment counts as a named sighting (C.2), so their next sighting is "someone" - every later line under
+    // the old frog name would otherwise be theirs for anyone who watched the switch. (The one update itself can't be split: both
+    // sets of words must leave every page at once. Flagged to the owner as a spec interaction: C.2 "switching keeps the session".)
+    if (reMasked.size) {
+      try {
+        const FN = require("./frognames");
+        for (const login of reMasked) {
+          const cur = FN.current(R.id, login);
+          if (!cur || !cur.alias) continue;
+          FN.named(R.id, login, t);
+          FN.off(login, R.id, t).catch(() => {});
+        }
+      } catch (e) { /* frog names unavailable */ }
+    }
     const back = new Set(shown);
     const stale = back.size && (R.removed || []).some((x) => back.has(x.c));
     if (stale) R.removed = R.removed.filter((x) => !back.has(x.c));
@@ -409,6 +438,9 @@ function refreshRoom(id) {
 
 async function dropRoom(id) {
   rooms.delete(id);
+  // review fix (A-compat-5): everyone veiled in the room has left it now - their frog-name sessions start the J-8 away clock (a
+  // room Pepe drops or leaves never sends the snapshot that would have said so)
+  try { require("./frognames").leftRoom(id, Date.now()).catch(() => {}); } catch (e) { /* frog names unavailable */ }
   try { require("./micfollow").onRoomGone(id); } catch (e) { console.error("[bridge] micfollow:", e.message); }   // its mic stage clears
   wakeRoom(id);                                   // 1.99ye: its waiting pages answer (room gone)
   RA.drop(id);
@@ -844,6 +876,24 @@ async function ingest(body, opts = {}) {
   for (const id of (Array.isArray(body.closed) ? body.closed : []).slice(0, MAX_ROOMS)) {
     if (typeof id === "string" && rooms.has(id)) await dropRoom(id);
   }
+  const events = (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS);
+  if (v2) {
+    // review fix (A-compat-1): the batch's NAMED lines / mic events / joins are named sightings (C.2) BEFORE its snapshots open any
+    // session - a backlog batch whose named line and veiled snapshot arrive together must not hand the person a frog name in the
+    // same update. (Only noted here: the event loop below still ends an open session in event order.)
+    try {
+      const FN = require("./frognames");
+      for (const ev of events) {
+        const d = ev && ev.data && typeof ev.data === "object" ? ev.data : null;
+        if (!d || !FEED_TYPES.has(ev.type) || require("./veil").hasPriv(d) || d.self === true) continue;
+        const u = d.user && typeof d.user === "object" ? d.user : null;
+        if (!u || u.anonymous || u.is_self) continue;
+        const login = String(u.login || u.id || "").trim();
+        const ref = LOGIN_RE.test(login) ? cleanRoomRef(ev.scope && ev.scope.room) : null;
+        if (ref) FN.named(ref.id, login, Date.parse(ev.ts) || now);
+      }
+    } catch (e) { /* frog names unavailable: nothing to note */ }
+  }
   for (const s of (Array.isArray(body.rooms) ? body.rooms : []).slice(0, MAX_ROOMS)) {
     const ref = cleanRoomRef(s && s.room);
     if (!ref) continue;
@@ -857,6 +907,9 @@ async function ingest(body, opts = {}) {
       R.members = await V.snapshotEntries(R, s.members, cleanUser, { max: MAX_MEMBERS });
       R.mic = await V.snapshotEntries(R, s.mic, (u) => cleanMic(u, now), { mic: true, max: 20 });
       try { await V.nameSnapshot(R, now); } catch (e) { console.error("[bridge] veil snapshot:", e && e.code ? e.code : "error"); }
+      // review fix (A-privacy-6): veiled entries after the named ones, in an order that says nothing about who joined when
+      R.members = V.veilOrder(R.members, R.id);
+      R.mic = V.veilOrder(R.mic, R.id);
     } else {
       R.members = (Array.isArray(s.members) ? s.members : []).slice(0, MAX_MEMBERS).map(cleanUser).filter(Boolean);
       R.mic = (Array.isArray(s.mic) ? s.mic : []).slice(0, 20).map((u) => cleanMic(u, now)).filter(Boolean);   // micfollow: + proven / since
@@ -899,7 +952,6 @@ async function ingest(body, opts = {}) {
   const privacy = [];                      // CL2: privacy.hidden / privacy.shown events (the sticky hidden set)
   const privacyIds = [];                   // ...and their event ids
   const shownNow = new Set();              // review 2 fix-up: hashes this batch's privacy.shown events name (so far in its order)
-  const events = (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS);
   // 1.99afl (B.1): this sync carried BOTH kinded hash lists - only a Train 3 Pepe (1.99adm on: he never sends a !bridge hide
   // person's events) with both states loaded sends them (each is null while it failed to load). A hashless anonymous mic GRAB
   // in such a batch is an incognito person's: stamped k3 (page-safe, kept in bridge_feed and chat_log.d; never sent to a page -
@@ -918,6 +970,7 @@ async function ingest(body, opts = {}) {
     tx: events.filter((ev) => ev && ev.type === TRANSCRIPT && ev.data && typeof ev.data.id === "string")
       .map((ev) => [(cleanRoomRef(ev.scope && ev.scope.room) || {}).id, ev.data.id]).filter(([r]) => r),
   });
+  const cand = [];                         // review fix (A-compat-10): the batch's feed items, built first (no cursor yet)
   for (const ev of events) {
     if (!ev || typeof ev !== "object" || ev.op !== "event" || ev.type === "message.private") continue;
     // at-least-once delivery: a batch Pepe re-sends after a slow response must not double the feed
@@ -950,20 +1003,35 @@ async function ingest(body, opts = {}) {
     const it = v2 ? feedItemV2(ev, R.id) : feedItem(ev, R.id);
     if (!it) continue;
     if ((it.k === "mic" || it.k === "unmic") && it.u && it.u.anon && !it.ah) k3Hold(R.id, it, kinded, now, leaving);   // 1.99afl (B.1, above)
-    if (v2) {
-      // wave 2 WP-2 (C): a veiled item gets its frog name (or "someone": C.2 / B.2); a named sighting is noted (C.2) and ends an open
-      // session of that login (their level is back to normal). Serial per room inside frognames; never throws
-      const V = require("./veil");
-      if (it._vz) await V.nameItem(R, it);
-      else if (it.u && !it.u.anon && it.u.login && !it.u.self) V.namedSeen(R.id, it.u.login, Number(it.ts) || now);
+    // (review 2 fix-up's "so far in its order": whether this batch un-hid the speaker BEFORE this event, decided now)
+    const named = (it.k === "msg" || it.k === "tx") && it.u && !it.u.anon && !it.u.self && it.u.login ? CV.hashOf(it.u.login) : null;
+    cand.push({ ev, evId, R, it, named, shown: named ? shownNow.has(named) : false });
+  }
+  // wave 2 WP-2 (C): a veiled item gets its frog name (or "someone": C.2 / B.2); a named sighting is noted (C.2) and ends an open
+  // session of that login (their level is back to normal). Serial per room inside frognames; never throws.
+  // Review fix (A-compat-10): in a pass of its OWN, before any cursor is handed out - the loop that assigns `c` below never awaits,
+  // so a retry of this batch (Pepe's 6 s timeout while this one waits on the frog-name chain) finds every event already in
+  // SEEN_EVENTS and can't hand later events lower cursors than an earlier one of the same batch.
+  if (v2) {
+    const V = require("./veil");
+    for (const x of cand) {
+      try {
+        if (x.it._vz) await V.nameItem(x.R, x.it);
+        else if (x.it.u && !x.it.u.anon && x.it.u.login && !x.it.u.self) {
+          V.namedSeen(x.R.id, x.it.u.login, Number(x.it.ts) || now);
+          if (x.it.k === "mic" && x.it.hold) V.namedHold(x.R.id, x.it.hold);   // review fix (A-compat-1): the hold's verdict = "someone"
+        }
+      } catch (e) { console.error("[bridge] veil name:", e && e.code ? e.code : "error"); }
     }
+  }
+  for (const { ev, evId, R, it, named, shown } of cand) {
     // review 2 fix-up (LOW): a NAMED chat / 🎙 line of someone the site knows is incognito before Pepe does (a website Incognito
     // ON he hasn't confirmed yet - chatlog.siteAnonSince), said after they switched it on, is kept anonymised for good - "someone",
     // its hash server-only (`ah`, archived as who "h:<hash>"), exactly like Pepe's own anonymised lines - so `!incognito off` never
     // puts a name on words said while they had asked to be incognito. Not when this batch un-hides them (Pepe knows better then).
-    if ((it.k === "msg" || it.k === "tx") && it.u && !it.u.anon && !it.u.self && it.u.login) {
-      const h = CV.hashOf(it.u.login);
-      const since = shownNow.has(h) ? null : CL.siteAnonSince(h);
+    if (named && it.u && !it.u.anon) {
+      const h = named;
+      const since = shown ? null : CL.siteAnonSince(h);
       if (since != null && Number(it.ts) >= since) { it.u = { anon: true, display: "someone" }; it.ah = h; }
     }
     // CL2: a command whose arguments are private (!msg, !verify <code>, !joinroom ... -p <password>: Pepe's catalog private_args)
@@ -1630,19 +1698,23 @@ function register(app, { isBotToken, addUser }) {
   //  * switch OFF -> 409 {error: "privwire_off"} BEFORE anything happens: no acks applied, no jobs taken, no hidden set, no actor
   //    caps, nothing ingested (Pepe sends the same batch on v1 at once, so a refused call must have no side effect);
   //  * switch ON -> the same work as v1 (syncAnswer) with the v2 ingest.
+  // Review fix (A-compat-9): calls / refused / ok / err count PEPE's calls only - after the bot token checks out. Anything else (a
+  // crawler, a probe of the public path, a body that doesn't parse - it can't carry a token we can read) counts as `probes`, so
+  // nobody can falsify the dark proof ("calls stays 0") or hide Pepe's calls among junk. (The body is parsed first, as on the v1
+  // route - the token rides in it; checking the switch before parsing would hide a Pepe call while the switch is off from the proof.)
   const v2json = express.json({ limit: "1mb" });
   app.post("/api/bridge/sync/v2", (req, res, next) => {
-    PW.note("calls");
     v2json(req, res, (err) => {
       if (!err) return next();
-      PW.note("err");
+      PW.note("probes");
       const status = Number(err.status) === 413 ? 413 : 400;
       console.error(`[bridge] sync v2: body refused (${String(err.type || "parse").replace(/[^\w.]/g, "").slice(0, 40)}, ${status})`);
       return res.status(status).json({ success: false, error: status === 413 ? "too_large" : "bad_body" });
     });
   }, async (req, res) => {
     const body = req.body && typeof req.body === "object" ? req.body : {};
-    if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
+    if (!isBotToken(body.password)) { PW.note("probes"); return res.status(403).json({ success: false, error: "unauthorized" }); }
+    PW.note("calls");
     try { await PW.init(); } catch (e) { /* not loaded = off (below) */ }
     if (!PW.isOn()) { PW.note("refused"); return res.status(409).json({ success: false, error: "privwire_off" }); }
     try {
@@ -2087,11 +2159,18 @@ async function revealLookup(roomId, c) {
     if (!vr) return null;                                   // its identity row is gone (forget-me): nobody can reveal it any more
     return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null };
   }
+  // review fix (A-privacy-4 / A-compat-8 / A-tests-ux-02): the archive answers by the SAME rule as the live item - a line taken down
+  // (its author's Remove my line, a report hide, a moderator's hide: rm_at set) or whose speaker is left out now (forget-me, an
+  // account deletion, a staff hide_all, !transcripts off for a 🎙 line: privacyOf "out") is never revealed, whatever chat_log_veil
+  // still holds (it survives rm_at until the purge)
   try {
-    const r = (await getQuery(`SELECT l.ts, v.login, v.display, v.kind, v.words FROM chat_log l JOIN chat_log_veil v ON v.c = l.c
-                               JOIN chatlog_rooms cr ON cr.rk = l.rk WHERE l.c = ? AND cr.room_id = ? AND l.purged IS NULL`, [Number(c), String(roomId)]))[0];
+    const r = (await getQuery(`SELECT l.*, v.login AS v_login, v.display AS v_display, v.kind AS v_kind, v.words AS v_words FROM chat_log l
+                               JOIN chat_log_veil v ON v.c = l.c JOIN chatlog_rooms cr ON cr.rk = l.rk
+                               WHERE l.c = ? AND cr.room_id = ? AND l.purged IS NULL AND l.rm_at IS NULL`, [Number(c), String(roomId)]))[0];
     if (!r) return null;
-    return { ts: Number(r.ts), vz: { login: r.login, display: r.display, kind: r.kind }, vw: r.words == null ? null : String(r.words) };
+    const CV = require("./chatlogview");
+    if (CV.privacyOf(CV.itemOf(r)) === "out") return null;
+    return { ts: Number(r.ts), vz: { login: r.v_login, display: r.v_display, kind: r.v_kind }, vw: r.v_words == null ? null : String(r.v_words) };
   } catch (e) { return null; }
 }
 
