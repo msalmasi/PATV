@@ -14,7 +14,7 @@ function sandbox(options = {}) {
   const config = Object.assign({ ok: true, on: true, dbg: false, audio: { rtc_ms: 1000, mp3_ms: 1000, mix_ms: 700, helper_ms: 270, age_s: 0 },
     cams: { cam1: { src: "passthrough", hold_ms: 200 }, cam2: { src: "reencode", hold_ms: 300 } }, k: { pt: 100, re: -100, ind: 0 },
     fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
-    apply: { video: true, mic: true, mp3: true }, engines: { chromium: true, firefox: false, safari: false }, ind_path_ms: 300, mods_instant: false }, options.config || {});
+    apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true }, engines: { chromium: true, firefox: false, safari: false }, ind_path_ms: 300, mods_instant: false }, options.config || {});
   function element(tag) {
     const e = { tagName: tag.toUpperCase(), style: {}, attrs: {}, children: [], parentNode: null, hidden: false, textContent: "", events: {},
       setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
@@ -26,7 +26,8 @@ function sandbox(options = {}) {
     Object.defineProperty(e, "innerHTML", { set() { throw new Error("No HTML injection"); } });
     return e;
   }
-  const document = { createElement: element, body: null }; document.body = element("body");
+  const docEvents = {};
+  const document = { createElement: element, body: null, hidden: false, addEventListener(k, fn) { (docEvents[k] ||= []).push(fn); } }; document.body = element("body");
   const setTimeout = (fn, delay = 0) => { const id = ++sequence; timers.set(id, { at: now + delay, fn }); return id; };
   const clearTimeout = id => timers.delete(id);
   const ctx = { document, console, Promise, Date: { now: () => now }, setTimeout, clearTimeout,
@@ -70,7 +71,7 @@ function sandbox(options = {}) {
   function media(mode = "mp3", pad = "pad", extra = {}) { const input = { slug: pad, playing: true, mode, pc: mode === "rtc" ? peer("audio", 200, .3) : null, ahead: () => .5, ...extra }; ctx.PATVAvSync.audio(input); return input; }
   function tile(rx = receiver(), pc = peer(), pad) { ctx.PATVAvSync.video(rx, { pc, url: "https://relay.test/whep/cam1?pt=PRIVATE_TICKET", pad }); return { rx, pc }; }
   return { api: ctx.PATVAvSync, ctx, config, requests, storage, document, element, receiver, peer, media, tile, advance, flush, now: () => now,
-    event: (name, value) => (events[name] || []).forEach(fn => fn(value)) };
+    event: (name, value) => (events[name] || []).forEach(fn => fn(value)), docEvent: (name) => (docEvents[name] || []).forEach(fn => fn()) };
 }
 
 test("pure math: signed formula, caps, whole fallback, jitter deltas and ten-second exponential average", () => {
@@ -449,4 +450,73 @@ test("C1 follows the delayed newest/recent merge table for a short grab retained
   s.api.gateProgram("pad", recent, cb); await s.advance(500);
   assert.equal(shown.src[0].newest, true); assert.equal(shown.src[0].recent, false);
   await s.advance(200); assert.equal(shown.src[0].newest, false); assert.equal(shown.src[0].recent, true);
+});
+
+// 1.99??: "Delay the On the mic card" (apply.mic_card) and "Delay mic grab/drop lines in chat" (apply.mic_chat) - each its own switch,
+// the same mic-sign offset as "Delay mic signs" (apply.mic), the same who / audio-playing rules
+test("1.99??: the card and chat-line switches are their own - an old server (no such keys) or a switch off hands the card back as given and holds no line", async () => {
+  const s = await gated({ config: { apply: { video: true, mic: true, mp3: true } } });
+  const cb = () => {}, raw = roster(["a"]);
+  assert.equal(s.api.micView("pad", raw, cb), raw, "old server: the card is today's");
+  const line = s.element("div"); s.document.body.appendChild(line); line.style.display = "flex";
+  assert.equal(s.api.holdLine("pad", line), false); assert.equal(line.style.display, "flex", "old server: the line shows at once");
+  assert.equal(s.api.gateProgram("pad", program(["a"]), cb).src.length, 0, "Delay mic signs still holds the mic stage back");
+  assert.deepEqual([s.api.debug().indicator_ms, s.api.debug().card_ms, s.api.debug().chat_ms], [700, 0, 0]);
+  s.config.apply.mic_card = true; await s.advance(5000);
+  let shown; const view = d => { shown = plain(d); };
+  shown = plain(s.api.micView("pad", roster(["a", "b"]), view));
+  assert.deepEqual(shown.mic.map(p => p.login), ["a"], "the card switch alone: b waits for the audio");
+  assert.equal(s.api.holdLine("pad", line), false, "... and chat lines are not held");
+  await s.advance(699); assert.deepEqual(shown.mic.map(p => p.login), ["a"]);
+  await s.advance(1); assert.deepEqual(shown.mic.map(p => p.login), ["a", "b"], "the same offset as the mic signs (700 ms)");
+  s.config.apply.mic = false; s.config.apply.mic_card = false; s.config.apply.mic_chat = true; await s.advance(5000);
+  const p = program(["x"]); assert.equal(s.api.gateProgram("pad", p, cb), p, "Delay mic signs off: the stage is immediate");
+  const r2 = roster(["c"]); assert.equal(s.api.micView("pad", r2, view), r2, "the card switch off: immediate");
+  assert.equal(s.api.holdLine("pad", line), true, "the chat switch alone holds lines"); assert.equal(line.style.display, "none");
+  await s.advance(699); assert.equal(line.style.display, "none"); await s.advance(1); assert.equal(line.style.display, "flex");
+  s.config.on = false; await s.advance(5000);
+  const late = s.element("div"); s.document.body.appendChild(late);
+  assert.equal(s.api.holdLine("pad", late), false, "sync not for this viewer: nothing held"); assert.equal(late.style.display, undefined);
+});
+
+test("1.99??: held chat lines show in their place once the audio catches up, and at once on a hidden or frozen tab, leaving, or the audio stopping; never a line outside the page", async () => {
+  const s = await gated(); const host = s.element("div"); s.document.body.appendChild(host);
+  const mk = (text) => { const e = s.element("div"); e.textContent = text; host.appendChild(e); return e; };
+  const reveals = [];
+  const reveal = (el, show) => { const r = { el, before: el.style.display }; show(); r.after = el.style.display; reveals.push(r); };
+  const grab = mk("🎙️ Soggy Bullfrog grabbed the mic"), typed = mk("typed after it");
+  assert.equal(s.api.holdLine("pad", grab, reveal), true);
+  assert.equal(grab.style.display, "none"); assert.equal(typed.style.display, undefined, "typed chat is never touched");
+  assert.deepEqual(grab.attrs, {}, "a held line carries no attribute (no login, no data-*)");
+  assert.equal(s.api.holdLine("pad", grab, reveal), false, "never held twice");
+  await s.advance(699); assert.equal(grab.style.display, "none"); assert.equal(reveals.length, 0);
+  await s.advance(1); assert.equal(grab.style.display, ""); assert.deepEqual(host.children, [grab, typed], "in its true place, before the newer line");
+  assert.deepEqual(reveals.map(r => [r.el === grab, r.before, r.after]), [[true, "none", ""]], "the page's reveal runs once, around the show");
+  assert.equal(grab._patvAvSyncHeld, undefined);
+  const loose = s.element("div"); assert.equal(s.api.holdLine("pad", loose), false, "a line not in the page yet is never held (it could not be shown)");
+  assert.equal(loose.style.display, undefined);
+  const a = mk("a"), b = mk("b"); s.api.holdLine("pad", a); s.api.holdLine("pad", b);
+  s.document.hidden = true; s.docEvent("visibilitychange"); assert.deepEqual([a.style.display, b.style.display], ["", ""], "a hidden tab shows them at once");
+  const c = mk("c"); assert.equal(s.api.holdLine("pad", c), false, "nothing is held while hidden"); assert.equal(c.style.display, undefined);
+  s.document.hidden = false; s.docEvent("visibilitychange");
+  const f = mk("f"); s.api.holdLine("pad", f); s.docEvent("freeze"); assert.equal(f.style.display, "", "a frozen tab too");
+  const g = mk("g"); s.api.holdLine("pad", g); s.api.audio({ slug: "pad", mode: "mp3", playing: false }); assert.equal(g.style.display, "", "the audio stopping");
+  s.media("mp3", "pad", { ahead: () => 0 }); await s.advance(0);
+  const h = mk("h"); assert.equal(s.api.holdLine("pad", h, () => { throw new Error("page bug"); }), true);
+  const gone = mk("gone"); s.api.holdLine("pad", gone); host.removeChild(gone);
+  await s.advance(700); assert.equal(h.style.display, "", "a reveal that throws still shows the line"); assert.ok(!host.children.includes(gone), "a line the page took out stays out");
+  const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  const t = mk("t"); s.api.holdLine("pad", t); box.children[0].click(); assert.equal(t.style.display, "", "the viewer's own toggle off");
+  box.children[0].click(); const l = mk("l"); s.api.holdLine("pad", l); s.event("pagehide"); assert.equal(l.style.display, "", "leaving the page");
+});
+
+test("1.99??: with only the card / chat switches on, the audio is still measured (not the whole fallback) and the viewer's toggle is offered", async () => {
+  const s = sandbox({ config: { apply: { video: false, mic: false, mp3: true, mic_card: true, mic_chat: false } } });
+  s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  s.media("rtc"); await s.advance(0);
+  assert.equal(s.api.debug().card_ms, 500, "first RTC stats have no interval: the whole fallback");
+  await s.advance(2000); assert.equal(s.api.debug().card_ms, 900, "measured: 1000 + 200 - 300");
+  assert.deepEqual([s.api.debug().indicator_ms, s.api.debug().chat_ms], [0, 0]);
+  assert.equal(box.children[0].hidden, false, "the viewer can turn it off");
+  box.children[0].click(); assert.equal(s.api.debug().card_ms, 0, "their toggle off: nothing held");
 });

@@ -632,7 +632,7 @@
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=7">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
-  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=3"></script><% } %>
+  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=4"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
@@ -1085,7 +1085,21 @@
     // from just before a line it was told about but never given: room-bridge.js relay.refetch), and such a late line goes in
     // its place by cursor, not at the end
     var haveC = {}, haveList = [], maxC = 0;
-    function addFeed(items, first) {
+    // 1.99??: A/V sync "Delay mic grab/drop lines in chat" (avsync apply_mic_chat) - a grab / drop line that arrives live goes in its
+    // place, hidden, until the room audio this viewer hears catches up (PATVAvSync.holdLine shows it there: true time order, never
+    // after newer lines). Typed chat, transcripts, the page's first lines and lines drawn again (redo) are never held; a held line the
+    // site takes out (`removed`) just goes. A reader at the bottom stays at the bottom when it shows.
+    function revealHeld(n, show) {
+      var stick = nearBottom(), detached = !!(padHist && padHist.detached()), reading = !!(padHist && padHist.reading());
+      show();
+      if (detached) return;
+      if (stick) toBottom(); else if (!reading) jump.style.display = 'block';
+    }
+    function holdMicLines(nodes) {
+      if (!nodes.length || !window.PATVAvSync || !PATVAvSync.holdLine) return;
+      nodes.forEach(function (n) { try { PATVAvSync.holdLine(slug, n, revealHeld); } catch (e) { n.style.display = ''; } });
+    }
+    function addFeed(items, first, redo) {
       items = (items || []).filter(function (it) { return !it.c || !haveC[it.c]; });
       if (!items.length) {
         if (first && !feedEl.childNodes.length) {
@@ -1099,7 +1113,7 @@
       }
       var stick = first || nearBottom();
       // CL8: reading back (older lines above, or a jump / deep link) - see pad-history.js
-      var reading = !!(padHist && padHist.reading()), detached = !!(padHist && padHist.detached()), added = 0;
+      var reading = !!(padHist && padHist.reading()), detached = !!(padHist && padHist.detached()), added = 0, held = [];
       if (feedEl.firstChild && feedEl.firstChild.tagName === 'P') feedEl.removeChild(feedEl.firstChild);
       var frag = document.createDocumentFragment();
       items.forEach(function (it) {
@@ -1108,6 +1122,7 @@
         if (!n) return;
         added++;
         n._c = it.c || 0; n._ts = Number(it.ts) || 0; n._k = it.k;     // CL3: refilter() reads the time and kind
+        if (!first && !redo && (it.k === 'mic' || it.k === 'unmic')) held.push(n);   // 1.99??: held once it is in the log (below)
         // wave 2 (spec B.3): a 🎙 line arrives after speech-to-text, often after the next speaker's grab - it goes right after its own
         // hold's drop (else its grab) when that line is among the last 200 and under 10 minutes old; else at the end as before
         if (it.k === 'tx' && it.hold) {
@@ -1130,6 +1145,7 @@
       // 1.99ye: above your own lines that are still on their way (room-bridge.js relay outbox), like a native chat
       var anchor = roomRelay && roomRelay.anchor ? roomRelay.anchor() : null;
       if (anchor && anchor.parentNode === feedEl) feedEl.insertBefore(frag, anchor); else feedEl.appendChild(frag);
+      holdMicLines(held);
       if (detached) {
         // CL8: a jump / deep link is on screen: the live log keeps updating out of sight (300, as always), counted on Back to live
         trimLive();
@@ -1180,22 +1196,16 @@
       var live = document.getElementById('rmLive');
       live.classList.toggle('off', !r.live); live.classList.toggle('chat', !!r.live);
       document.getElementById('rmLiveTxt').textContent = r.live ? _t('js.pad.room_active', '💬 ROOM ACTIVE') : _t('js.pad.room_offline', 'ROOM OFFLINE');
-      var mk = JSON.stringify(d.mic) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
-      if (mk !== lastMic) {
-        lastMic = mk;
-        var mic = document.getElementById('rmMic'); mic.textContent = '';
-        if (!d.mic.length) mic.appendChild(el('p', 'muted', _t('js.pad.mic.nobody', 'Nobody on the mic right now.')));
-        d.mic.forEach(function (u) {
-          var h = el('div', 'holder'); h.appendChild(avatar(u));
-          var n = el('span', 'nm'); n.appendChild(name(u)); h.appendChild(n);
-          var eq = el('span', 'eq'); eq.setAttribute('aria-label', _t('js.pad.mic.talking', 'talking'));
-          if (!reduce) { eq.appendChild(el('i')); eq.appendChild(el('i')); eq.appendChild(el('i')); } else eq.textContent = '🎙️';
-          h.appendChild(eq);
-          // 1.99fu: the same ⋯ menu as the people list (View profile / Open cam / 💸 Tip; mods: their actions)
-          if (wantsMore(u)) h.appendChild(moreBtn(u, !!(r.cams && u.on_cam), true));
-          mic.appendChild(h);
-        });
+      micRoom = r;
+      // 1.99??: A/V sync "Delay the On the mic card" (avsync apply_mic_card) - while it applies to this viewer (the mode, this pad's
+      // room audio playing, their own toggle) PATVAvSync.micView hands back the holders as the viewer hears them and redraws the card when
+      // that changes; otherwise it hands back d.mic itself (no controller on the page: signed out, or the mode is off for them)
+      var micNow = d.mic;
+      if (window.PATVAvSync && PATVAvSync.micView) {
+        try { var heard = PATVAvSync.micView(slug, { members: d.members, mic: d.mic }, drawMicLater); if (heard && Array.isArray(heard.mic)) micNow = heard.mic; }
+        catch (e) { micNow = d.mic; }
       }
+      drawMic(micNow);
       var pk = JSON.stringify(d.members) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
       if (pk !== lastPeople) {
         lastPeople = pk;
@@ -1234,6 +1244,27 @@
       var note = listNote(r), noteEl = document.getElementById('rmListNote');
       if (noteEl.textContent !== note) noteEl.textContent = note;
     }
+    // the "On the mic" card: who holds the mic (1.99??: as this viewer hears it - see renderRoom); r = the room of the last answer
+    var micRoom = null;
+    function drawMic(list) {
+      var r = micRoom || {};
+      var mk = JSON.stringify(list) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
+      if (mk === lastMic) return;
+      lastMic = mk;
+      var mic = document.getElementById('rmMic'); mic.textContent = '';
+      if (!list.length) mic.appendChild(el('p', 'muted', _t('js.pad.mic.nobody', 'Nobody on the mic right now.')));
+      list.forEach(function (u) {
+        var h = el('div', 'holder'); h.appendChild(avatar(u));
+        var n = el('span', 'nm'); n.appendChild(name(u)); h.appendChild(n);
+        var eq = el('span', 'eq'); eq.setAttribute('aria-label', _t('js.pad.mic.talking', 'talking'));
+        if (!reduce) { eq.appendChild(el('i')); eq.appendChild(el('i')); eq.appendChild(el('i')); } else eq.textContent = '🎙️';
+        h.appendChild(eq);
+        // 1.99fu: the same ⋯ menu as the people list (View profile / Open cam / 💸 Tip; mods: their actions)
+        if (wantsMore(u)) h.appendChild(moreBtn(u, !!(r.cams && u.on_cam), true));
+        mic.appendChild(h);
+      });
+    }
+    function drawMicLater(v) { safe('miccard', function () { drawMic(v && Array.isArray(v.mic) ? v.mic : []); }); }
 
     // How far the roster can be trusted. Pepe re-reads each room's participant list every minute or
     // so; when he can't (the list is stale), he only keeps people seen arriving / talking / on the
@@ -1582,7 +1613,7 @@
       var cs = {};
       keep.forEach(function (it) { cs[it.c] = 1; delete haveC[it.c]; });
       Array.prototype.slice.call(feedEl.childNodes).forEach(function (n) { if (n._c && cs[n._c]) feedEl.removeChild(n); });
-      addFeed(keep, false);
+      addFeed(keep, false, true);       // 1.99??: lines drawn again are never held (A/V sync) - they were in the log already
     }
     // CL8 fix-up: scrollback's lines + the 🔍 results, checked again (pad-history.js recheck -> POST /history/check): gone ones leave,
     // re-dressed ones are drawn again in scrollback (a search result whose look changed just goes - search again for it); a check
