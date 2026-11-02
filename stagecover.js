@@ -54,12 +54,14 @@
 //       a site path under /public/ (read from the site's own public folder)
 //     (Google, Apple, Telegram and Plex sign-ins, the sign-up form and Pepe's automatic Camfrog accounts write the default Pepe face
 //     = no photo.) The fetch: https on 443 only, no credentials in the URL, the host resolved and refused when ANY of its addresses
-//     is private / loopback / link-local / CGNAT / multicast / reserved (no SSRF), then connected to that vetted address (no DNS
+//     is private / loopback / link-local / CGNAT / multicast / reserved / an IPv6 one outside global unicast (no SSRF), then
+//     connected to that vetted address (no DNS
 //     rebinding); no redirects (any 3xx = refused); an image type or the bucket's octet-stream only (never SVG / HTML), sniffed and
 //     decoded by sharp; at most PHOTO_MAX_BYTES; PHOTO_TIMEOUT_MS for all of it (DNS included). Never logs the URL.
 //   * FILES - HELD PICTURES IN THEIR OWN FOLDER: COVER_DIR/<xx>/<name> = pictures that are UP (state ok) - the off-site backup (pve1,
 //     12-month GFS) copies this folder; COVER_DIR/held/<xx>/<name> = pictures HELD for an admin's check (and the HEIC decoder's temp
-//     files) - EXCLUDED from that backup, like imagesafety/: a flagged picture is never backed up. A held picture moves into the
+//     files; review fix 3: every new upload until its row commits "ok") - EXCLUDED from that backup, like imagesafety/: a flagged
+//     picture is never backed up. A held picture moves into the
 //     normal folder when it's put up (the card's Put up, a "false positive" review: the row first, then the file - a crash between
 //     leaves an "ok" picture in held/, never a held one in the backed-up folder) and is deleted from held/ when it's taken down.
 //     Serving, uploadUp and the capture look in the row's folder first, then the other (a move cut short); removeFile clears both;
@@ -68,6 +70,14 @@
 //     deletion and merges leave; an export carries records only, never the file).
 //   * THE BLOCK RACE: hashBlocked is checked again right before the store - and inside the transaction that stores the row - so an
 //     upload being classified while an admin / a review blocks the same picture is refused, never stored after the block.
+// Review fixes 3 (1.99??):
+//   * THE HOLD RACE (SEC-3): held-or-up is decided inside that same transaction (hold_until read there), so a take-down's strike + hold
+//     that lands while the next picture is classified or waits for its transaction holds it. Every upload is written to held/ first
+//     and moved into the normal folder only after its row commits "ok" (never a held picture in the backed-up folder).
+//   * a take-down of a row from before review fix 1 (no upload_hash) hashes its file wherever it is (held/ too), and placeFiles gives
+//     such rows their hash (SEC-4).
+//   * an IPv6 photo address must be global unicast (2000::/3), minus the special ranges (SEC-1: IPv4-compatible ::/96, SIIT, 3fff::/20,
+//     5f00::/16 were let through).
 //
 // PRIVACY (hard rules, spec wave 2 + this task): a cover is ONLY for a person the stage shows BY NAME. Veiled tiles (incognito, `!bridge
 // hide`: wave 2's hooded covers, veilstage.js) never reach this module - micfollow.viewFor builds them before any lookup - and
@@ -446,21 +456,28 @@ function photoSource(raw) {
   return ok ? { href: u.href, host, path: u.pathname + u.search } : null;
 }
 // Never fetched from (SSRF): private, loopback, link-local, CGNAT, multicast, documentation / benchmarking / reserved ranges, and the
-// IPv6 forms that carry an IPv4 address (mapped, NAT64, 6to4, Teredo)
+// IPv6 forms that carry an IPv4 address (mapped, IPv4-compatible, SIIT, NAT64, 6to4, Teredo)
 // (one list per family: a BlockList's ::ffff:0:0/96 rule also matches every plain IPv4 address)
+// 1.99?? review fix 3 (SEC-1): an IPv6 address must be GLOBAL UNICAST (2000::/3) - everything outside it is refused whole (::/96
+// IPv4-compatible, ::ffff:0:0:0/96 SIIT, 5f00::/16 SRv6 SIDs and whatever IANA assigns there next); inside it the special ranges below
+// (+ 3fff::/20 documentation) are refused too. The ::/96 and SIIT entries stay listed for the record.
 const NOT_PUBLIC = (() => {
-  const v4 = new net.BlockList(), v6 = new net.BlockList();
+  const v4 = new net.BlockList(), v6 = new net.BlockList(), unicast6 = new net.BlockList();
   for (const [a, n] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24],
     ["192.0.2.0", 24], ["192.88.99.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 3]]) v4.addSubnet(a, n, "ipv4");
-  for (const [a, n] of [["::", 127], ["::ffff:0:0", 96], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64], ["2001::", 32], ["2001:2::", 48], ["2001:10::", 28],
-    ["2001:db8::", 32], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8]]) v6.addSubnet(a, n, "ipv6");
-  return { 4: v4, 6: v6 };
+  for (const [a, n] of [["::", 96], ["::ffff:0:0", 96], ["::ffff:0:0:0", 96], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64], ["2001::", 32], ["2001:2::", 48],
+    ["2001:10::", 28], ["2001:db8::", 32], ["2002::", 16], ["3fff::", 20], ["5f00::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8]]) v6.addSubnet(a, n, "ipv6");
+  unicast6.addSubnet("2000::", 3, "ipv6");
+  return { 4: v4, 6: v6, unicast6 };
 })();
 /** Is this resolved address one a photo may be fetched from? (the family is the address's own, whatever the resolver said) */
 function publicAddr(address) {
   const a = String(address == null ? "" : address), v = net.isIP(a);
   if (!v) return false;
-  try { return !NOT_PUBLIC[v].check(a, v === 6 ? "ipv6" : "ipv4"); } catch (e) { return false; }
+  try {
+    if (v === 6 && !NOT_PUBLIC.unicast6.check(a, "ipv6")) return false;          // 1.99?? review fix 3 (SEC-1): global unicast only
+    return !NOT_PUBLIC[v].check(a, v === 6 ? "ipv6" : "ipv4");
+  } catch (e) { return false; }
 }
 // the network (tests swap it: no test ever reaches the internet)
 const PNET_REAL = Object.freeze({
@@ -662,26 +679,33 @@ async function setUpload(userId, buf) {
     console.error("[stagecover] check record:", e.message);
     throw new Refuse(503, "The picture couldn't be safety-checked right now - try again in a minute.", "unchecked");
   }
-  // HELD = not shown until an admin's check: a flagged picture, or any picture while the account is on hold after a take-down
-  const cur = await rowOf(userId);
-  const onHold = !!(cur && Number(cur.hold_until) > NOW());
-  const state = v.flagged || onHold ? "held" : "ok";
   // 1.99?? fix 3 (the block race): an admin / a review may have blocked this very picture while it was being classified (the check
   // above ran before) - asked again right before the store, and again inside the transaction that stores the row: a block that
   // commits before it is seen there; one that commits after finds this row (takeDownCopies) and takes it down
   const blockedNow = () => new Refuse(422, "That picture was taken down - it can't be used as a stage cover.", "blocked");
   if (await hashBlocked(hash)) throw blockedNow();
+  // 1.99?? review fix 3 (SEC-3, the hold race): whether it is HELD is decided inside that transaction too (below), so the file is
+  // written to held/ first (never backed up) and moves into the normal folder only once its row says "ok" - a held picture never sits
+  // in the backed-up folder, not even for a moment
   const name = crypto.randomBytes(16).toString("hex") + ".webp";
-  const p = filePath(name, state === "held");          // 1.99?? fix 3: a held picture goes to held/ (never backed up)
+  const p = filePath(name, true);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, enc.buf, { flag: "wx" });
-  let old;
+  let old, state = "held", onHold = false;
   try {
     old = await require("./dbUtils").tx(async () => {
       if (await hashBlocked(hash)) throw blockedNow();
+      // HELD = not shown until an admin's check: a flagged picture, or any picture while the account is on hold after a take-down.
+      // 1.99?? review fix 3 (SEC-3): read HERE - a take-down (its strike + hold) that lands while this picture is classified or waits
+      // for this transaction holds it; one that lands after the commit finds this row and takes it down
+      const cur = await rowOf(userId);
+      onHold = !!(cur && Number(cur.hold_until) > NOW());
+      state = v.flagged || onHold ? "held" : "ok";
       return upsert(userId, { kind: "upload", upload: name, upload_state: state, upload_log: Number(v.logId) || null, upload_at: NOW(), upload_hash: hash });
     });
   } catch (e) { removeFile(name); invalidate(userId); throw e; }
+  // (up: out of held/ - after the commit; a crash between leaves an "ok" picture in held/, which serving finds and placeFiles moves)
+  if (state === "ok") { try { placeFile(name, false); } catch (e) { console.error("[stagecover] upload - move:", e.message); } }
   if (old && old.upload && old.upload !== name) removeFile(old.upload);
   console.log(`[stagecover] ${userId}: cover upload ${enc.w}x${enc.h} ${state}${onHold && !v.flagged ? " (account on hold)" : ""}${v.logId ? " (check #" + v.logId + ")" : ""}`);
   return { state };
@@ -698,7 +722,8 @@ async function removeUpload(userId, why = "owner", { strike = true, copies = tru
   let hash = null;
   if (takedown) {
     hash = r.upload_hash;
-    if (!hash) { try { hash = sha256(fs.readFileSync(filePath(r.upload))); } catch (e) { hash = null; } }
+    // (a row from before review fix 1 has no upload_hash: its file's - 1.99?? review fix 3 (SEC-4): wherever it is, held/ too)
+    if (!hash) { try { hash = sha256(fs.readFileSync(fileAt(r.upload, r.upload_state))); } catch (e) { hash = null; } }
     if (hash) await blockHash(hash, blockCode(why));
   }
   await upsert(userId, patch);
@@ -885,16 +910,29 @@ async function adminList(limit = 60) {
 }
 
 /** 1.99?? fix 3: every row's picture into its state's folder - a HELD one into held/ (never backed up), any other into the normal
- *  folder. At boot (the one-time migration of held pictures stored before held/ existed) and in every sweepFiles. -> files moved */
+ *  folder. At boot (the one-time migration of held pictures stored before held/ existed) and in every sweepFiles. -> files moved
+ *  1.99?? review fix 3 (SEC-4): a row from before review fix 1 (no upload_hash - staging only) gets its file's hash, so a take-down
+ *  blocks it and finds its copies like any other. */
 async function placeFiles() {
   await init();
-  let n = 0;
-  for (const r of await getQuery("SELECT upload, upload_state FROM stage_covers WHERE upload IS NOT NULL")) {
+  let n = 0, h = 0;
+  for (const r of await getQuery("SELECT user_id, upload, upload_state, upload_hash FROM stage_covers WHERE upload IS NOT NULL")) {
     const held = r.upload_state === "held", to = filePath(r.upload, held);
-    if (!to || isFile(to) || !isFile(filePath(r.upload, !held))) continue;
-    try { if (placeFile(r.upload, held)) n++; } catch (e) { console.error("[stagecover] place:", e.message); }
+    if (!to) continue;
+    if (!isFile(to) && isFile(filePath(r.upload, !held))) {
+      try { if (placeFile(r.upload, held)) n++; } catch (e) { console.error("[stagecover] place:", e.message); }
+    }
+    if (!r.upload_hash) {
+      const p = fileAt(r.upload, r.upload_state);
+      if (!p) continue;
+      try {
+        await runQuery("UPDATE stage_covers SET upload_hash = ? WHERE user_id = ? AND upload = ? AND upload_hash IS NULL", [sha256(fs.readFileSync(p)), String(r.user_id), r.upload]);
+        h++;
+      } catch (e) { console.error("[stagecover] hash:", e.message); }
+    }
   }
   if (n) console.log(`[stagecover] ${n} cover picture(s) moved to their folder (held/ or the normal one)`);
+  if (h) console.log(`[stagecover] ${h} older cover row(s) given their picture's hash`);
   return n;
 }
 /** Uploaded files no row holds any more (a replace that crashed, a deleted / merged account) - gone after an hour, from BOTH folders

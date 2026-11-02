@@ -17,6 +17,8 @@
 //   * the stage page (stage-mic.js): the picture on the card with the reason kept, set only when the URL changes, never on a cover /
 //     a reported tile, the letter after a failed load; stage-room.js repaints on a new picture
 //   * the capture (stagemiccap.js): a name card draws the cover picture; never the network
+//   * review fixes 3 (1.99??): IPv6 photo addresses global unicast only; a block / a take-down's hold that lands while an upload
+//     waits for its row's transaction (refused / held - every upload goes to held/ first); legacy rows' hashes (held/ too)
 //   node --test test/stagecover.test.js      (temp DB + dirs)
 "use strict";
 const test = require("node:test");
@@ -1187,3 +1189,101 @@ test("fix 3 (the block race): a picture blocked WHILE its upload is being classi
     assert.ok(!c || c.k !== "upload");
   } finally { ANSWER = CLEAN; }
 });
+
+// ── review fixes 3 (1.99??): the IPv6 gaps, the block race inside the row's transaction, the hold race, legacy rows' hashes ──
+/** Stall setUpload's own row transaction (the window after its check before the store and the file write - e.g. a transaction
+ *  queued behind others) and run `during` in it. -> {restore(), fired()} */
+function stallStore(during) {
+  const realTx = DB.tx;
+  let fired = false;
+  DB.tx = function (fn) {
+    if (!fired && /\bsetUpload\b/.test(String(new Error().stack))) {
+      fired = true;
+      return Promise.resolve().then(during).then(() => realTx(fn));
+    }
+    return realTx(fn);
+  };
+  return { restore: () => { DB.tx = realTx; }, fired: () => fired };
+}
+
+test("review fix 3 (SEC-1): an IPv6 photo address must be global unicast - IPv4-compatible (::/96), SIIT (::ffff:0:a.b.c.d), 3fff::/20, 5f00::/16 and anything outside 2000::/3 are refused", () => {
+  for (const a of ["::7f00:1", "::127.0.0.1", "::a00:1", "::a9fe:a9fe", "::2", "::ffff:0:7f00:1", "::ffff:0:a9fe:a9fe", "3fff::1", "3fff:fff::1",
+                   "5f00::1", "4000::1", "e000::1", "1::1"]) assert.equal(SC.publicAddr(a), false, a);
+  for (const a of ["2606:4700::1111", "2001:4860:4860::8888", "2a00:1450:4001::1", "2c0f:fb50:4002::1", "3ffe:1::1", "8.8.8.8"]) assert.equal(SC.publicAddr(a), true, a);
+});
+
+test("review fix 3 (SEC-2): a block that lands while an upload WAITS FOR ITS ROW'S TRANSACTION (after the check before the store and the file write) is refused inside that transaction - nothing stored, no file left in either folder", async () => {
+  const a = await mkUser("tia"), b = await mkUser("tob", { camfrog: "tobcf" });
+  await safety({ enabled: true });
+  ANSWER = CLEAN;
+  const pic = await png(242, 243, { r: 14, g: 150, b: 90 });
+  const ra = await upload(a, pic);
+  assert.equal(ra.d && ra.d.held, false, JSON.stringify(ra.d));
+  const before = allFiles();
+  // b uploads the same picture; it passes every check before the store, then an admin takes a's copy down (the hash is blocked)
+  const st = stallStore(async () => { assert.equal(await SC.removeUpload(a.userId, "admin boss"), true); });
+  let rb;
+  try { rb = await upload(b, pic); } finally { st.restore(); }
+  assert.equal(st.fired(), true, "the block landed while b's row waited for its transaction");
+  assert.equal(rb.status, 422, JSON.stringify(rb.d)); assert.equal(rb.d.code, "blocked");
+  const row = (await getQuery("SELECT upload FROM stage_covers WHERE user_id = ?", [b.userId]))[0];
+  assert.ok(!row || !row.upload, "nothing stored for b");
+  const after = allFiles();
+  assert.deepEqual([...after].filter((f) => !before.has(f)), [], "no file left behind (held/ or the normal folder)");
+  assert.equal(after.size, before.size - 1, "a's copy is down");
+  const c = await SC.coverOf("tobcf");
+  assert.ok(!c || c.k !== "upload");
+});
+
+test("review fix 3 (SEC-3, the hold race): a take-down (strike + hold) that lands while the account's NEXT picture waits for its row's transaction holds that picture - in held/ only, not public; with no race a picture that is up ends in the normal folder", async () => {
+  const c = await mkUser("cato", { camfrog: "catocf" });
+  await safety({ enabled: true });
+  ANSWER = CLEAN;
+  const r1 = await upload(c, await png(250, 251, { r: 200, g: 200, b: 10 }));
+  assert.equal(r1.d && r1.d.held, false, JSON.stringify(r1.d));
+  const n1 = r1.d.upload.url.split("/").pop();
+  assert.ok(fs.existsSync(path.join(SC.dir(), n1.slice(0, 2), n1)), "up: in the normal (backed-up) folder");
+  assert.ok(!fs.existsSync(path.join(SC.dir(), "held", n1.slice(0, 2), n1)), "and no longer in held/ (moved after its row committed)");
+  const st = stallStore(async () => { assert.equal(await SC.removeUpload(c.userId, "admin boss"), true); });
+  let r2;
+  try { r2 = await upload(c, await png(252, 253, { r: 10, g: 200, b: 200 })); } finally { st.restore(); }
+  assert.equal(st.fired(), true, "the take-down landed while the next picture waited for its transaction");
+  assert.equal(r2.status, 200, JSON.stringify(r2.d));
+  assert.equal(r2.d.held, true, "HELD: the account went on hold before the row was stored");
+  const row = (await getQuery("SELECT upload, upload_state, hold_until, strikes FROM stage_covers WHERE user_id = ?", [c.userId]))[0];
+  assert.equal(row.upload_state, "held"); assert.ok(Number(row.hold_until) > Date.now()); assert.equal(Number(row.strikes), 1);
+  assert.ok(fs.existsSync(path.join(SC.dir(), "held", row.upload.slice(0, 2), row.upload)), "in held/");
+  assert.ok(!fs.existsSync(path.join(SC.dir(), row.upload.slice(0, 2), row.upload)), "never in the backed-up folder");
+  assert.equal((await fetch(base + "/media/cover/u/" + row.upload)).status, 404, "not public");
+  SC.invalidate();
+  const cv = await SC.coverOf("catocf");
+  assert.ok(!cv || cv.k !== "upload");
+});
+
+test("review fix 3 (SEC-4): a row from before review fix 1 (no upload_hash) whose HELD picture sits in held/ - an admin's take-down still blocks the picture; placeFiles gives such rows their picture's hash", async () => {
+  const sha = (b) => require("crypto").createHash("sha256").update(b).digest("hex");
+  const legacy = async (name, state, inHeld, c) => {
+    const u = await mkUser(name);
+    const buf = await sharp(await png(44, 45, c)).webp().toBuffer();
+    const file = require("crypto").randomBytes(16).toString("hex") + ".webp";
+    const p = path.join(SC.dir(), inHeld ? "held" : "", file.slice(0, 2), file);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, buf);
+    await runQuery("INSERT INTO stage_covers (user_id, kind, upload, upload_state, updated) VALUES (?, 'upload', ?, ?, 1)", [u.userId, file, state]);
+    return { u, file, p, hash: sha(buf) };
+  };
+  const blocked = async (h) => (await getQuery("SELECT 1 AS x FROM stage_cover_blocks WHERE hash = ?", [h])).length > 0;
+  // a held picture already in held/ (the migration ran), its row without a hash: taken down by an admin
+  const h1 = await legacy("legheld", "held", true, { r: 3, g: 77, b: 5 });
+  assert.equal(await SC.removeUpload(h1.u.userId, "admin boss"), true);
+  assert.equal(await blocked(h1.hash), true, "the picture in held/ is blocked");
+  assert.ok(!fs.existsSync(h1.p), "and deleted from held/");
+  // placeFiles: a legacy "ok" row (normal folder) and a legacy held one in the normal folder (moved to held/) get their hashes
+  const h2 = await legacy("legok", "ok", false, { r: 4, g: 78, b: 6 }), h3 = await legacy("legmove", "held", false, { r: 5, g: 79, b: 7 });
+  await SC.placeFiles();
+  const hashOf = async (u) => (await getQuery("SELECT upload_hash FROM stage_covers WHERE user_id = ?", [u.userId]))[0].upload_hash;
+  assert.equal(await hashOf(h2.u), h2.hash);
+  assert.equal(await hashOf(h3.u), h3.hash);
+  assert.ok(fs.existsSync(path.join(SC.dir(), "held", h3.file.slice(0, 2), h3.file)), "the held one moved into held/");
+});
+
