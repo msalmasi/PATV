@@ -149,7 +149,7 @@
     <div class="tblwrap"><table><tbody id="mfMetrics"></tbody></table></div>
     <% if (mf.admin) { %>
     <details class="adm-adv"><summary>Settings (admins)</summary>
-      <%# 1.99?? stable slots (owner 2026-11-02): the knob is listed with the others by stage-mf-admin.js; this line says what it does %>
+      <%# 1.99ahp stable slots (owner 2026-11-02): the knob is listed with the others by stage-mf-admin.js; this line says what it does %>
       <p class="muted" id="mfStableHelp"><b>stable_slots</b> (on by default): everyone on a mic stage keeps their place while they stay on it - two people taking turns never swap places (the speaking ring shows who talks), a new speaker takes the place of whoever they push off (or an empty one), and someone leaving leaves an empty cell until the layout gets smaller. In the Dynamic layout the active speaker takes the big cell once 3 or more are on the stage (the one leaving it takes their old cell); with 2 nobody moves. Picture in picture - and the Single layout with a 📌 pin - changes its big picture only when someone new comes on. Untick it to get the old order back: places by when each person came on (📌 pins first), the big cell and picture in picture follow whoever spoke last.</p>
       <form id="mfCfg" class="settings"><div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save mic follows settings</button>
         <input type="text" name="reason" placeholder="reason (optional)" aria-label="Reason" maxlength="200"><span class="msg" id="mfCfgMsg" role="status"></span></div></form>

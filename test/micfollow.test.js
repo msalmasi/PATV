@@ -2066,7 +2066,7 @@ test("67. wave2 F.2: !livecam off, the mic-stage switch, private activity, an ex
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.3, J-14): the dynamic layout ──
 test("68. wave2 F.3 dynamic: dark until its switch (a pad can't pick it; a stored one shows as auto with no dyn); on: the legacy layout still goes out with dyn {n, t, main}, rings on every holder, the main moves at most every main_hold_s, a pin takes it only by the pinNew rule", async () => {
-  // (1.99??: the dynamic layout WITHOUT stable slots - the knob off, today's main; with them: test/micfollow-slots.test.js)
+  // (1.99ahp: the dynamic layout WITHOUT stable slots - the knob off, today's main; with them: test/micfollow-slots.test.js)
   await reset(); await plainPad();
   assert.equal(MF.cfg().dynamic, false, "ships dark");
   let st = await MF.ownerState(ROOM.id);
@@ -2232,7 +2232,7 @@ test("70. wave2 F.4: anonymous holds (stamped or not) and named hidden holders n
     } finally { Q.isHidden = hid0; }
     // capacity: max_people 2 - a cover counts and displaces like a tile; in the dynamic layout it rings and takes the main
     await reset(); await MF.setPad(ROOM.id, { on: true, layout: "dynamic", max_people: 2, keep_recent: 0 }, "test").catch(() => {});
-    // (1.99??: today's dynamic main - the knob stable_slots off; with it on, 2 on the stage never move: see below)
+    // (1.99ahp: today's dynamic main - the knob stable_slots off; with it on, 2 on the stage never move: see below)
     await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 0, stable_slots: false, reason: "test" });
     await MF.setPad(ROOM.id, { on: true, layout: "dynamic", max_people: 2, keep_recent: 0 }, "test");
     await onStage(["alice", "bob"]);
@@ -2248,7 +2248,7 @@ test("70. wave2 F.4: anonymous holds (stamped or not) and named hidden holders n
     assert.equal(c.newest, true); assert.equal(c.ring, true);
     assert.equal(snap.dyn.main, c.cid, "the main cell, by its public id");
     noIdentity(JSON.stringify((await MF.viewFor(snap, R, "u_owner", null)).src.filter((s) => s.kind === "cover")));
-    // 1.99?? stable slots on: 2 on the stage - nobody moves; the cover sits after the named one (never in a named place), rings
+    // 1.99ahp stable slots on: 2 on the stage - nobody moves; the cover sits after the named one (never in a named place), rings
     await MF.setCfg(ADMIN, { stable_slots: true, reason: "test" });
     const st = MF.snapshot(ROOM.id), sc = st.tiles.find((x) => x.cover);
     assert.equal(st.stable, true);

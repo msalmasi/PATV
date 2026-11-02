@@ -586,7 +586,7 @@ test('mic capture UI strings match English catalog and the admin checkbox uses n
 });
 }
 
-test("1.99?? stable slots: a stable program's capture draws each tile in its place's cell - an empty place stays empty (grid), picture in picture's big picture is place 0 (not the newest), dynamic keeps place order with 2 and puts the main in the big cell with 3+", () => {
+test("1.99ahp stable slots: a stable program's capture draws each tile in its place's cell - an empty place stays empty (grid), picture in picture's big picture is place 0 (not the newest), dynamic keeps place order with 2 and puts the main in the big cell with 3+", () => {
   const grid = M.rects({ layout: "grid4", stable: true, src: [cam("a", { pos: 0 }), cam("c", { pos: 2 }), cam("d", { pos: 3 })] });
   const r = id => grid.find(x => x.id === id);
   assert.deepEqual([r("a").x, r("a").y], [0, 0]);

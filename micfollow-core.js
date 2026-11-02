@@ -99,7 +99,7 @@
 // counts them as attributed (the stage isn't dimmed for "someone" while a cover talks); a stage of only covers never
 // becomes the default view (showsSoon: no picture). While cfg covers is off (its kill switch) the engine shows none and
 // takes any cover tile off at once (review B-privacy-ux-4).
-// 1.99?? STABLE SLOTS (owner 2026-11-02): the places the page shows are arrange()'s (micfollow.js arrangeOf, the site knob
+// 1.99ahp STABLE SLOTS (owner 2026-11-02): the places the page shows are arrange()'s (micfollow.js arrangeOf, the site knob
 // stable_slots - on): a person keeps their place while they stay on the stage. The engine's own tile order (pos, compact) is
 // unchanged - it is today's order the knob falls back to; a tile that pushed another off carries slotOf (whose place it takes).
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
@@ -169,7 +169,7 @@ const FIELDS = Object.freeze({
   // wave2 WP-4 (F.4): veiled speakers as hooded-frog cover tiles. Off on prod: today's path (an incognito holder is the neutral
   // "Someone is speaking" card / strip) until staff switch it on at /stage/admin (the backend switch rule)
   covers:                { def: STAGING, bool: true },
-  // 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in"): everyone on
+  // 1.99ahp STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in"): everyone on
   // the mic stage keeps their place while they stay on it (arrange; micfollow.js arrangeOf) - a back-and-forth never swaps two
   // people; dynamic with 3+ the active speaker still takes the big cell. On for staging and prod; off = today's order (places by
   // when each came on, 📌 pins first; the dynamic main and picture in picture's big picture follow the active speaker)
@@ -322,12 +322,12 @@ function dynPick(prev, ids, want, t, holdMs) {
   if (cur && (target === cur.id || t - cur.at < Math.max(0, holdMs || 0))) return cur;
   return { id: target, at: t };
 }
-/** 1.99?? STABLE SLOTS: how many cells each layout shape has (a place at or past it closes up - arrange's `cells`). */
+/** 1.99ahp STABLE SLOTS: how many cells each layout shape has (a place at or past it closes up - arrange's `cells`). */
 const SHAPE_CELLS = Object.freeze({ single: 1, split: 2, pip: 2, grid4: 4, grid9: 9 });
-/** 1.99?? stable slots, review fix B3: a place a COVER left (arrange) - an empty cell nobody sits down in; never a login or a key. */
+/** 1.99ahp stable slots, review fix B3: a place a COVER left (arrange) - an empty cell nobody sits down in; never a login or a key. */
 const VEILED_GAP = "\u0000veiled-gap";
 /**
- * 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in"): the mic
+ * 1.99ahp STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in"): the mic
  * stage's places as a list of entry keys (null = an empty place, an empty cell on the page). prev = the last arrangement (null:
  * none yet); keys = who is on the stage now in today's order (📌 pins by pin time, then the mic tiles by when they came on).
  *   - everyone already there keeps their place;
@@ -435,7 +435,7 @@ function newState() {
     kept: new Map(),           // wave2 WP-4 (F.2): login -> {leftAt, until} - relays kept running after their tile left the stage
     evictAt: 0,                //   ... when micfollow.js last evicted a kept relay for this pad's open (the slots_busy retry)
     dynMain: null,             // wave2 WP-4 (F.3): {id, at} - the dynamic layout's main cell (micfollow.js dynTick, dynPick)
-    slots: null,               // 1.99?? stable slots: [key | null | VEILED_GAP] - who sits in which place (micfollow.js arrangeOf; null = not arranged)
+    slots: null,               // 1.99ahp stable slots: [key | null | VEILED_GAP] - who sits in which place (micfollow.js arrangeOf; null = not arranged)
     changes: [],               // times of the last minute's changes
     lastChangeAt: -Infinity,
     v: 0, active: false, running: false, staleSince: 0, whyOff: null,
@@ -1094,7 +1094,7 @@ function step(S, I, C, t) {
       .sort((a, b) => (a.relAt != null ? 0 : 1) - (b.relAt != null ? 0 : 1) || (a.relAt || 0) - (b.relAt || 0) || a.addedAt - b.addedAt);
     if (!pool.length) continue;
     displaced.push(pool[0]);
-    adds.push({ ...c, disp: pool[0].login });               // (1.99?? stable slots: the newcomer takes this one's place)
+    adds.push({ ...c, disp: pool[0].login });               // (1.99ahp stable slots: the newcomer takes this one's place)
   }
   // 6 the change budget
   const change = due.length + trim.length + displaced.length + adds.length > 0;
@@ -1117,7 +1117,7 @@ function step(S, I, C, t) {
                     qualAt: c.since + C.min_hold_s * 1000, cold: false, vidSince: 0, vidMs: 0, peak: 0, unverifiedAt: 0,
                     ...(S.kept.has(c.login) ? { kept: true } : {}),     // (wave2 WP-4: a comeback onto its kept relay)
                     ...(c.cover ? { cover: true } : {}),                 // (wave2 WP-4: a veiled speaker's hooded frog)
-                    ...(c.disp ? { slotOf: c.disp } : {}) };             // (1.99?? stable slots: whose place they take - arrange's hint)
+                    ...(c.disp ? { slotOf: c.disp } : {}) };             // (1.99ahp stable slots: whose place they take - arrange's hint)
         S.tiles.push(x);
         if (!c.cover) A.push({ a: "span_open", login: c.login });
       }
@@ -1328,6 +1328,6 @@ module.exports = {
   shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
   dropKept, keepFor, keptCheck, EVICT_WINDOW_MS, EVICT_RETRY_MS,                                                // wave2 WP-4 (F.2)
   dynPick,                                                                                                      // wave2 WP-4 (F.3)
-  arrange, SHAPE_CELLS, VEILED_GAP,                                                                                        // 1.99?? stable slots
+  arrange, SHAPE_CELLS, VEILED_GAP,                                                                                        // 1.99ahp stable slots
   COVER_PREFIX, isCoverKey,                                                                                     // wave2 WP-4 (F.4)
 };

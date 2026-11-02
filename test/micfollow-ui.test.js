@@ -164,7 +164,7 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.match(gate, /if \(window\.PATVAvSync\) window\.PATVAvSync\.gateProgram\(slug, d\.stage_program \|\| null, showMic\);/);
   assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
   // (wave2 WP-4: av-sync.js?v=3 - it delays the dynamic layout's `ring` like newest / recent; 1.99ahm: v=4 - the On the mic card / chat lines;
-  // v=5 - the people list's 🎙 icons; 1.99?? v=6 - a stable program's places too)
+  // v=5 - the people list's 🎙 icons; 1.99ahp v=6 - a stable program's places too)
   assert.ok(blk.indexOf('av-sync.js?v=6') >= 0 && blk.indexOf('av-sync.js?v=6') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
   assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=6"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
@@ -1284,10 +1284,10 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
   assert.equal(seen.length, 3, "unsubscribed");
 });
 
-test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v9 - 1.99?? stable slots) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
+test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v9 - 1.99ahp stable slots) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=9"), "pad-reveal.js, then stage-mic.js v9");   // (1.99ahn dead relay: v8 - resuming…; 1.99?? stable slots: v9)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=9"), "pad-reveal.js, then stage-mic.js v9");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");
@@ -1485,7 +1485,7 @@ test("1.99ahn review UX-2 stage-mic.js: 'resuming…' only on a tile whose pictu
   H.ctl.stop();
 });
 
-// ── 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in") ──
+// ── 1.99ahp STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in") ──
 /** Spy on the grid: which existing tile nodes get appended / inserted / removed (a moved node re-attaches its video). */
 function moves(grid, nodes) {
   const out = [];
@@ -1504,7 +1504,7 @@ const idsOf = (grid) => grid.children.filter((c) => c.getAttribute && c.getAttri
 const area = (grid, id) => tileEl(grid, id).style.gridArea;
 const fillersOf = (grid) => grid.children.filter((c) => c.className === "mf-empty").length;
 
-test("1.99?? stage-mic.js: a node only moves when its place changed - the same program again (legacy grid, no stable flag) moves NO tile (it used to re-append every one); a newcomer goes in at its place, the others stay", () => {
+test("1.99ahp stage-mic.js: a node only moves when its place changed - the same program again (legacy grid, no stable flag) moves NO tile (it used to re-append every one); a newcomer goes in at its place, the others stay", () => {
   const prog = (src, extra) => Object.assign({ v: 1, layout: "grid4", count: src.length, src, still_s: 20 }, extra || {});
   const s = dynSandbox(prog([tileS("a", 0, "card"), tileS("b", 1, "card"), tileS("c", 2, "card")]));
   const A = tileEl(s.grid, "a"), B = tileEl(s.grid, "b"), C = tileEl(s.grid, "c");
@@ -1530,7 +1530,7 @@ test("1.99?? stage-mic.js: a node only moves when its place changed - the same p
   s.ctl.stop();
 });
 
-test("1.99?? stage-mic.js (program.stable): a tile's cell is its place - an empty place stays an empty cell, each tile its grid-area in the layout's columns, a newcomer fills its cell, no node ever moves", () => {
+test("1.99ahp stage-mic.js (program.stable): a tile's cell is its place - an empty place stays an empty cell, each tile its grid-area in the layout's columns, a newcomer fills its cell, no node ever moves", () => {
   const prog = (layout, src, extra) => Object.assign({ v: 1, layout, count: src.length, src, still_s: 20, stable: true }, extra || {});
   const s = dynSandbox(prog("grid4", [tileS("a", 0, "card"), tileS("c", 2, "card"), tileS("d", 3, "card")]));
   assert.equal(area(s.grid, "a"), "1 / 1 / span 1 / span 1");
@@ -1562,7 +1562,7 @@ test("1.99?? stage-mic.js (program.stable): a tile's cell is its place - an empt
   s.ctl.stop();
 });
 
-test("1.99?? stage-mic.js (program.stable): a back-and-forth of 2 moves nobody - dynamic keeps place order (never the main first), picture in picture's big picture is place 0; dynamic 3+: only the two trading tiles change cells", () => {
+test("1.99ahp stage-mic.js (program.stable): a back-and-forth of 2 moves nobody - dynamic keeps place order (never the main first), picture in picture's big picture is place 0; dynamic 3+: only the two trading tiles change cells", () => {
   const dyn = (src, main, extra) => Object.assign({ v: 1, layout: src.length === 2 ? "split" : "grid4", count: src.length, src, dyn: { n: src.length, t: "d" + src.length, main }, still_s: 20, stable: true }, extra || {});
   const s = dynSandbox(dyn([tileS("a", 0, "card", { ring: true }), tileS("b", 1, "card", { ring: true, newest: true })], "a"));
   const A = tileEl(s.grid, "a"), B = tileEl(s.grid, "b");
@@ -1598,7 +1598,7 @@ test("1.99?? stage-mic.js (program.stable): a back-and-forth of 2 moves nobody -
   p.ctl.stop();
 });
 
-test("1.99?? stable slots: the page's cells are the capture's - stage-mic.js slotCells / CELLS / COLS equal stagemiccap's, and a stable program's grid-areas match stagemiccap.rects cell for cell (a capture is what you see)", () => {
+test("1.99ahp stable slots: the page's cells are the capture's - stage-mic.js slotCells / CELLS / COLS equal stagemiccap's, and a stable program's grid-areas match stagemiccap.rects cell for cell (a capture is what you see)", () => {
   const { ctx } = dynSandbox({ v: 1, layout: "single", count: 0, src: [] });
   const page = ctx.PATVStageMic, cap = require(path.join(repo, "stagemiccap"));
   assert.deepEqual(JSON.parse(JSON.stringify(page._cells)), { ...cap.CELLS });
@@ -1624,7 +1624,7 @@ test("1.99?? stable slots: the page's cells are the capture's - stage-mic.js slo
   }
 });
 
-test("1.99?? review fix C2 stage-mic.js (program.stable): on the grid / side by side / single layouts the reading order (DOM order) is the cells' again - a node a picture in picture pick or a dynamic main swap left out of place moves back on the next layout; picture in picture and dynamic themselves never move a node; the same program again moves nothing", () => {
+test("1.99ahp review fix C2 stage-mic.js (program.stable): on the grid / side by side / single layouts the reading order (DOM order) is the cells' again - a node a picture in picture pick or a dynamic main swap left out of place moves back on the next layout; picture in picture and dynamic themselves never move a node; the same program again moves nothing", () => {
   const prog = (layout, src, extra) => Object.assign({ v: 1, layout, count: src.length, src, still_s: 20, stable: true }, extra || {});
   // the single layout with a pin (picture in picture): alice in place 0, the pin fay in place 1
   const s = dynSandbox(prog("pip", [tileS("alice", 0, "card"), tileS("fay", 1, "card", { pin: true })]));

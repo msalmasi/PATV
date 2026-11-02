@@ -1,4 +1,4 @@
-// 1.99?? STABLE SLOTS on the 🎙 mic stage (owner 2026-11-02: "In mic follows, when 2 speakers are having a back and forth, it
+// 1.99ahp STABLE SLOTS on the 🎙 mic stage (owner 2026-11-02: "In mic follows, when 2 speakers are having a back and forth, it
 // will put the most recent speaker on the left. So it keeps swapping the slots between the 2, which can be jarring. It doesn't
 // need to move speaker slots unless a new speaker is coming in." - and, for the dynamic layout: "when it is more than 2
 // speakers, the most recent speaker can still take the big cell"). micfollow.js end to end (stepPad / snapshot / viewFor, the
@@ -167,7 +167,7 @@ const SCENARIOS = {
     await MF.unpin(ROOM.id, "carl", "unpinned", "padowner"); await at(1, ["dana"]); trace.push(await look());
     await talk("alice"); trace.push(await look());
   },
-  /** the single layout with a pin (picture in picture): knob off, the current speaker fills the stage (1.99?? review fix V2/B2:
+  /** the single layout with a pin (picture in picture): knob off, the current speaker fills the stage (1.99ahp review fix V2/B2:
    *  on, the pin and the speaker taking turns never swap - S12) */
   async single(trace) {
     await pad({ layout: "single", max_people: 4 });

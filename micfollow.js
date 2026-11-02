@@ -90,12 +90,12 @@
 //                  neutral card, as today), v2 = WP-2's setVeilSource (proven holds only). A cover never reaches eligOf, livecam, Pepe,
 //                  stills or micfollow_spans; its program entry is {kind: "cover", id: "anon-<8 hex>" (random, stable for the
 //                  tile, never a login), name (frog name | null), hood, veil}; the tile routes refuse its id.
-// 1.99?? STABLE SLOTS (owner 2026-11-02 - a back-and-forth of two swapped their places on every turn): with the site knob
+// 1.99ahp STABLE SLOTS (owner 2026-11-02 - a back-and-forth of two swapped their places on every turn): with the site knob
 //   stable_slots (on; /stage/admin) a person keeps their place while they stay on the stage (arrangeOf over core.arrange, after
 //   each step; the snapshot shows the same places): a newcomer takes the place of whom they pushed off, else the first empty one;
 //   leaving frees a place (an empty cell) until the layout has fewer cells; 📌 pins keep theirs too. Dynamic: with 2 nobody moves,
 //   with 3+ the active speaker takes the main cell (main_hold_s) and trades places with whoever leaves it. Picture in picture's
-//   big picture changes only when someone new comes on (1.99?? review fix V2/B2: the single layout's with a 📌 pin too - it
+//   big picture changes only when someone new comes on (1.99ahp review fix V2/B2: the single layout's with a 📌 pin too - it
 //   re-picked the current speaker on every turn, so the pin and the speaker swapped). The program carries
 //   stable: true and the places as `pos` (gaps allowed); the page (stage-mic.js), A/V sync's delayed view (av-sync.js) and the
 //   captures (stagemiccap.rects) place tiles by them. Off: today's order, byte for byte.
@@ -1721,12 +1721,12 @@ function stageEntries(P, t) {
 }
 /** wave2 WP-4 (F.3): does pad P show the dynamic layout now? Its layout (or the owner's stage-bar choice) AND the site switch. */
 const dynOn = (P) => cfg().dynamic === true && (P.state.layoutOverride || P.settings.layout) === "dynamic";
-/** 1.99?? STABLE SLOTS: the site knob (micfollow_cfg stable_slots, on; off = today's order, byte for byte). */
+/** 1.99ahp STABLE SLOTS: the site knob (micfollow_cfg stable_slots, on; off = today's order, byte for byte). */
 const slotsOn = () => cfg().stable_slots === true;
 /** wave2 WP-4 (F.4): a cover tile's public entry (its id, hood, veil, frog name) - none: the program leaves the tile out. */
 const coverPub = (P, x) => (P.covers && P.covers.get(x.login)) || null;
 /**
- * 1.99?? STABLE SLOTS (owner 2026-11-02: "In mic follows, when 2 speakers are having a back and forth, it will put the most
+ * 1.99ahp STABLE SLOTS (owner 2026-11-02: "In mic follows, when 2 speakers are having a back and forth, it will put the most
  * recent speaker on the left. So it keeps swapping the slots between the 2, which can be jarring. It doesn't need to move
  * speaker slots unless a new speaker is coming in." - and "when it is more than 2 speakers, the most recent speaker can still
  * take the big cell"): the pad's places (core.arrange) over the program's entries - 📌 pins and mic tiles, each keeping its
@@ -1737,7 +1737,7 @@ const coverPub = (P, x) => (P.covers && P.covers.get(x.login)) || null;
  *                             over the places - today's hysteresis); they trade places with whoever leaves it. With 1-2 nobody
  *                             moves (whoever talks has the ring) - the main cell is simply place 0;
  *   picture in picture        the big picture changes only when someone new comes on - today's rule then (the newest speaker,
- *                             else the latest mic tile). 1.99?? review fix V2/B2: the SINGLE layout's picture in picture (a 📌
+ *                             else the latest mic tile). 1.99ahp review fix V2/B2: the SINGLE layout's picture in picture (a 📌
  *                             pin beside the one speaker) the same - the pinned person and the speaker taking turns never swap
  *                             the big picture and the inset (the highlight shows who talks); a new speaker pushing the one off
  *                             still takes the big picture (it re-picked the current speaker on every turn).
@@ -1764,7 +1764,7 @@ function arrangeOf(P, t, ent, { persist = false } = {}) {
     pick = (ids) => { dynMain = core.dynPick(S.dynMain, ids, want, t, cfg().main_hold_s * 1000); return dynMain ? dynMain.id : null; };
   } else if (!dyn && shape === "pip" && (!prev || keys.some((k) => !had.has(k)))) {
     // (today's rule - the client's pre-stable-slots pip: the newest speaker, else the latest mic tile, else the first - only when
-    // someone new comes on. 1.99?? review fix V2/B2: the single layout with a pin too - it re-picked on every turn)
+    // someone new comes on. 1.99ahp review fix V2/B2: the single layout with a pin too - it re-picked on every turn)
     pick = (ids) => (pinNew ? pinNew.login : nw ? nw.login : mics.length ? mics[mics.length - 1].login : ids[0]);
   }
   // (covers: a place never passes between a hooded frog and a named person - core.arrange's veiled rule)
@@ -1780,12 +1780,12 @@ function arrangeOf(P, t, ent, { persist = false } = {}) {
   return { slots, dynMain, moved };
 }
 /** ... after each step: the main cell - the active speaker (the newest pin / tile holding the mic), else the current main,
- *  else the first entry - moving at most every main_hold_s (core.dynPick). A move bumps v (pages repaint). 1.99??: with stable
+ *  else the first entry - moving at most every main_hold_s (core.dynPick). A move bumps v (pages repaint). 1.99ahp: with stable
  *  slots on, arrangeOf does it all (the places, and the main as place 0); off, the places are today's (S.slots forgotten). */
 function dynTick(P, t = now()) {
   const S = P.state;
   if (slotsOn()) return arrangeOf(P, t, stageEntries(P, t), { persist: true }).moved;
-  // 1.99?? stable slots, review fix C1: the knob just went off (/stage/admin; saveCfg steps every pad) while people were on the
+  // 1.99ahp stable slots, review fix C1: the knob just went off (/stage/admin; saveCfg steps every pad) while people were on the
   // stage - the places pages show go back to today's order NOW: v moves and the pad's long-polls wake (not at the next change
   // or the 20 s long-poll timeout). Never arranged (the knob off all along): nothing extra - today's v, byte for byte.
   const wasStable = Array.isArray(S.slots) && S.slots.some((k) => k != null && k !== core.VEILED_GAP);
@@ -1815,7 +1815,7 @@ function snapshot(roomId, t = now()) {
   // wave2 WP-4 (F.4): a cover tile carries its public id / hood / veil / frog name only - never a login, a key, a ref or a session
   const coverOf = (x) => coverPub(P, x);
   const mics = S.tiles.filter((x) => !x.cover || coverOf(x));
-  // 1.99?? stable slots: each entry's place is the pad's arrangement's (arrangeOf - nothing is kept here: the next step keeps the
+  // 1.99ahp stable slots: each entry's place is the pad's arrangement's (arrangeOf - nothing is kept here: the next step keeps the
   // same answer); off: today's (pins first, then the mic tiles by when they came on)
   const ar = slotsOn() ? arrangeOf(P, t, { pins, pinNew, nw }) : null;
   const placeOf = ar ? new Map(ar.slots.map((k, i) => [k, i])) : null;
@@ -1831,7 +1831,7 @@ function snapshot(roomId, t = now()) {
   const pubOf = (x) => (x.cover ? x.cid : x.login);
   let main = null;
   if (ar) {
-    // 1.99??: the program in place order; the dynamic main is whoever sits in place 0 (the main cell - with 3+ the active speaker)
+    // 1.99ahp: the program in place order; the dynamic main is whoever sits in place 0 (the main cell - with 3+ the active speaker)
     tiles.sort((a, b) => a.pos - b.pos);
     main = dyn && tiles.length ? pubOf(tiles[0]) : null;
   } else {
@@ -1849,7 +1849,7 @@ function snapshot(roomId, t = now()) {
            // the neutral card (no tiles) - or, mfix, tiles kept up while speech nobody can show / Pepe runs (dimmed on the page)
            neutral: S.speaking || (tiles.length ? null : S.neutral || null),
            excluded_n: [...(EXCL.get(P.roomId) || new Map()).values()].filter((e) => e.until == null || e.until > t).length,
-           ...(ar ? { stable: true } : {}),       // 1.99?? stable slots: the page places tiles by `pos` (an empty place = an empty cell)
+           ...(ar ? { stable: true } : {}),       // 1.99ahp stable slots: the page places tiles by `pos` (an empty place = an empty cell)
            pins_room: pinRoom(P), tiles };
 }
 /**
@@ -1866,7 +1866,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
                  // mfix review: count = the people ON THE MIC (the 🎙 tab says "On the mic (n)"); pins_n = the 📌 pinned cams
                  count: snap.tiles.filter((x) => !x.pin).length, pins_n: snap.tiles.filter((x) => x.pin).length, still_s: cfg().still_refresh_s, manage: null,
                  speaking: snap.neutral || null,
-                 ...(snap.stable ? { stable: true } : {}) };   // 1.99?? stable slots: tiles go by `pos` (stage-mic.js, stagemiccap.rects)
+                 ...(snap.stable ? { stable: true } : {}) };   // 1.99ahp stable slots: tiles go by `pos` (stage-mic.js, stagemiccap.rects)
   const manage = userId ? await canManageId(userId, snap.roomId, t) : false;
   if (manage) {
     base.why_off = snap.whyOff;

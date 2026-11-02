@@ -678,7 +678,7 @@ test("1.99ahm: the list, the card and the held grab/drop lines agree - one momen
   s.api.caughtUp("pad"); assert.deepEqual([card(), list()], [["b"], ["b"]]);
 });
 
-test("1.99?? stable slots: a stable program's places are delayed with it - an exchange of places (the dynamic main cell) shows when the voices do, never ahead of its main; without stable the latest places as before", async () => {
+test("1.99ahp stable slots: a stable program's places are delayed with it - an exchange of places (the dynamic main cell) shows when the voices do, never ahead of its main; without stable the latest places as before", async () => {
   const prog = (order, extra = {}) => ({ v: 1, src: order.map(([id, pos]) => ({ id, name: id.toUpperCase(), pos, newest: false, recent: false, video: "live", watch: "ok" })),
     count: order.length, active: true, layout: "grid4", dyn: { n: order.length, t: "d" + order.length, main: order.find(o => o[1] === 0)[0] }, manage: { layout_override: null }, fixed: true, stable: true, ...extra });
   const at = p => p.src.map(t => t.id + "@" + t.pos).sort().join(" ");

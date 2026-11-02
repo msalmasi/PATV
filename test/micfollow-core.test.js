@@ -1527,8 +1527,8 @@ test("52. wave2 review (B-privacy-ux-4): the covers switch off (its kill switch)
   assert.deepEqual(w.logins(), ["a"], "off under the stale hold");
 });
 
-// ── 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in") ──
-test("53. 1.99?? stable slots - arrange: everyone keeps their place; a newcomer takes the place of whom they pushed off, else the first empty one, else the end; leaving leaves an empty place until there are more places than cells (or dense) - then they close up in order", () => {
+// ── 1.99ahp STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in") ──
+test("53. 1.99ahp stable slots - arrange: everyone keeps their place; a newcomer takes the place of whom they pushed off, else the first empty one, else the end; leaving leaves an empty place until there are more places than cells (or dense) - then they close up in order", () => {
   assert.equal(typeof M.arrange, "function");
   // nothing yet: today's order
   assert.deepEqual(M.arrange(null, ["a", "b"], { cells: 2 }), ["a", "b"]);
@@ -1563,7 +1563,7 @@ test("53. 1.99?? stable slots - arrange: everyone keeps their place; a newcomer 
   assert.deepEqual(M.SHAPE_CELLS, { single: 1, split: 2, pip: 2, grid4: 4, grid9: 9 });
 });
 
-test("54. 1.99?? stable slots - arrange's main cell (place 0): the pick trades places with whoever is there (nobody else moves); an empty place 0 (the main left) is just taken, then the places close up", () => {
+test("54. 1.99ahp stable slots - arrange's main cell (place 0): the pick trades places with whoever is there (nobody else moves); an empty place 0 (the main left) is just taken, then the places close up", () => {
   const pick = (m) => () => m;
   // c becomes the main: a (place 0) takes c's old place; b and d never move
   assert.deepEqual(M.arrange(["a", "b", "c", "d"], ["a", "b", "c", "d"], { cells: 4, dense: true, pick: pick("c") }), ["c", "b", "a", "d"]);
@@ -1583,7 +1583,7 @@ test("54. 1.99?? stable slots - arrange's main cell (place 0): the pick trades p
   assert.deepEqual(seen, ["m", "c", "d"]);
 });
 
-test("55. 1.99?? stable slots - the engine: a newcomer who displaced a tile carries slotOf (whose place it takes); the engine's own pos is today's order; the knob stable_slots is on by default - on staging and on prod", () => {
+test("55. 1.99ahp stable slots - the engine: a newcomer who displaced a tile carries slotOf (whose place it takes); the engine's own pos is today's order; the knob stable_slots is on by default - on staging and on prod", () => {
   const w = world({ pad: { layout: "split", keep_recent: 2 } });
   w.grab("a"); w.at(0); w.at(2);
   w.drop("a"); w.grab("b"); w.at(15); w.at(17);
@@ -1607,7 +1607,7 @@ test("55. 1.99?? stable slots - the engine: a newcomer who displaced a tile carr
   assert.equal(M.newState().slots, null, "not arranged yet");
 });
 
-test("56. 1.99?? stable slots - covers (hooded frogs): a place never passes between a cover and a named person - a cover goes after the last one on (never an empty place, never the place of whom it pushed off), a named newcomer never takes a cover's place by the hint, and the empty places close up before anyone new sits down after a cover left", () => {
+test("56. 1.99ahp stable slots - covers (hooded frogs): a place never passes between a cover and a named person - a cover goes after the last one on (never an empty place, never the place of whom it pushed off), a named newcomer never takes a cover's place by the hint, and the empty places close up before anyone new sits down after a cover left", () => {
   const veiled = (k) => String(k).startsWith("~cv:");
   // bob (named, place 1) is cut by !bridge hide and his cover comes up: NOT in his place - after the last one on
   assert.deepEqual(M.arrange(["a", "bob", "c"], ["a", "c", "~cv:1"], { cells: 4, veiled }), ["a", null, "c", "~cv:1"]);
@@ -1625,7 +1625,7 @@ test("56. 1.99?? stable slots - covers (hooded frogs): a place never passes betw
   assert.deepEqual(M.arrange(["a", "b", "c"], ["a", "b", "c", "~cv:2"], { dense: true, veiled, pick: () => "~cv:2" }), ["~cv:2", "b", "c", "a"]);
 });
 
-test("57. 1.99?? stable slots, review fix B3 - a cover leaving shuffles nobody: its place stays an empty cell nobody sits down in (VEILED_GAP) until someone new comes on - then every empty place closes up first (the privacy rule kept); a smaller layout / dense closes it like any", () => {
+test("57. 1.99ahp stable slots, review fix B3 - a cover leaving shuffles nobody: its place stays an empty cell nobody sits down in (VEILED_GAP) until someone new comes on - then every empty place closes up first (the privacy rule kept); a smaller layout / dense closes it like any", () => {
   const veiled = (k) => String(k).startsWith("~cv:"), G = M.VEILED_GAP;
   assert.equal(typeof G, "string");
   assert.ok(!veiled(G) && G.includes("\u0000"), "never a login or a cover key");

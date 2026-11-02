@@ -37,7 +37,7 @@
 // 📌 for anyone; ✕ only with ex: 1, Reveal only with rv: 1 (WP-2's window.PATVReveal.tile), "this is you" with self: 1.
 // wave 2 (owner J-18): while the viewer's "Show real names" toggle for the pad is on (window.PATVReveal.state(), pad-reveal.js), a
 // cover with rv: 1 reveals itself (once per cover id; counted on the toggle's row on the server); "Hide again" hides those again.
-// 1.99?? STABLE SLOTS (owner 2026-11-02: two people taking turns swapped places on every turn): with program.stable a tile's
+// 1.99ahp STABLE SLOTS (owner 2026-11-02: two people taking turns swapped places on every turn): with program.stable a tile's
 // cell is its place (pos) - an empty place is an empty (black) cell, the fillers flow into them; each tile gets its grid-area,
 // so an existing node stays put (its video never re-attaches) and a new one goes in at its place (review fix C2: on the grid /
 // side by side / single layouts a node out of the places' order - after a pick or a main swap, then a layout change - moves
@@ -106,9 +106,9 @@
     return src.map(function (s, i) { return [s, i]; }).sort(function (a, b) { return (Number(a[0].pos) || 0) - (Number(b[0].pos) || 0) || a[1] - b[1]; })
       .map(function (x) { return x[0]; });
   }
-  // 1.99?? STABLE SLOTS: how many cells each legacy layout has, and its columns (MUST equal stagemiccap.slotCells / rects)
+  // 1.99ahp STABLE SLOTS: how many cells each legacy layout has, and its columns (MUST equal stagemiccap.slotCells / rects)
   var CELLS = { single: 1, split: 2, grid4: 4, grid9: 9, pip: 2 }, COLS = { single: 1, split: 2, grid4: 2, grid9: 3, pip: 1 };
-  /** 1.99?? STABLE SLOTS (program.stable): each entry's cell is its place (pos) - an empty place stays an empty cell; two entries
+  /** 1.99ahp STABLE SLOTS (program.stable): each entry's cell is its place (pos) - an empty place stays an empty cell; two entries
    *  on one place (a delayed view mixing an older program's places with a new pin's) take the next free one; more places than
    *  cells - or a layout without empty cells (dense: the dynamic templates) - close up, in place order. -> [entry | null] */
   function slotCells(sorted, cells, dense) {
@@ -121,7 +121,7 @@
     for (var i = 0; i < out.length; i++) if (!out[i]) out[i] = null;
     return dense || out.length > cells ? out.filter(Boolean) : out;
   }
-  /** 1.99?? STABLE SLOTS: the dynamic template's cells in order - the places, with the server's main in cell 0 once there are 3 or
+  /** 1.99ahp STABLE SLOTS: the dynamic template's cells in order - the places, with the server's main in cell 0 once there are 3 or
    *  more (it trades places with whoever is there; the server already put it there - this only covers a view where it didn't);
    *  with 1-2 nobody moves (cell 0 is just place 0). */
   function dynSeq(sorted, P) {
@@ -818,7 +818,7 @@
       note.textContent = msg; note.hidden = !msg;
       var seen = {};
       var sorted = byPos(P.src);
-      // 1.99?? STABLE SLOTS (program.stable): every tile's cell is its place - an empty place is an empty cell; the dynamic
+      // 1.99ahp STABLE SLOTS (program.stable): every tile's cell is its place - an empty place is an empty cell; the dynamic
       // template's cells are the places with the main in cell 0 (3+). Off: today's (reading order = positions, the main first)
       var stable = P.stable, slots = stable ? (dn ? dynSeq(sorted, P) : slotCells(sorted, CELLS[P.layout] || 1, false)) : null;
       sorted.forEach(function (s) { seen[s.id] = true; });
@@ -842,7 +842,7 @@
       });
       var els = sorted.map(function (s) { return tiles[s.id].el; });
       if (dn || (stable && P.layout === 'pip')) {
-        // wave2 WP-4 (F.3) / 1.99??: an existing tile's node never moves (its video would re-attach) - the cell comes from its
+        // wave2 WP-4 (F.3) / 1.99ahp: an existing tile's node never moves (its video would re-attach) - the cell comes from its
         // grid-area (picture in picture: the .main class); a new one goes in at its place (before the next tile already there).
         // (Here the reading order can trail the cells after a main swap - the swap itself never moves a node.)
         els.forEach(function (e, n) {
@@ -852,22 +852,22 @@
           if (next) grid.insertBefore(e, next); else grid.appendChild(e);
         });
       } else {
-        // reading order = positions; 1.99??: only a node out of place moves - none when nothing changed (it never re-attaches).
-        // 1.99?? review fix C2: stable slots on the grid / side by side / single layouts too (the places' order is the cells'):
+        // reading order = positions; 1.99ahp: only a node out of place moves - none when nothing changed (it never re-attaches).
+        // 1.99ahp review fix C2: stable slots on the grid / side by side / single layouts too (the places' order is the cells'):
         // a node only moves after a picture in picture pick or a dynamic main swap left it out of place, then a layout change
         els.forEach(function (e, n) { if (grid.children[n] !== e) grid.insertBefore(e, grid.children[n] || null); });
       }
       // mfix: the tile that fills the stage in picture in picture (the others are the corner inset): the newest speaker, else
       // the latest mic tile (a pin sits in the corner while someone else is up), else the first
       var order = sorted, main = null;
-      if (dn && stable) main = slots[0] || null;                  // 1.99??: the main cell is place 0 (the server's main with 3+)
+      if (dn && stable) main = slots[0] || null;                  // 1.99ahp: the main cell is place 0 (the server's main with 3+)
       else if (dn) {
         // wave2 WP-4 (F.3): the server's main if it is still shown, else the newest speaker, else the first
         for (var d0 = 0; d0 < order.length && !main; d0++) if (order[d0].id === P.dyn.main) main = order[d0];
         for (var d1 = 0; d1 < order.length && !main; d1++) if (order[d1].newest) main = order[d1];
         if (!main) main = order[0];
       } else if (stable && P.layout === 'pip') {
-        // 1.99??: the big picture is place 0 - it changes only when someone new comes on (the server picks it then)
+        // 1.99ahp: the big picture is place 0 - it changes only when someone new comes on (the server picks it then)
         for (var p0 = 0; p0 < slots.length && !main; p0++) main = slots[p0];
       } else {
         for (var j = 0; j < order.length; j++) if (order[j].newest) main = order[j];
@@ -876,13 +876,13 @@
       }
       Object.keys(tiles).forEach(function (id) { tiles[id].el.classList.toggle('main', !!main && main.id === id); });
       place(dn, dn ? (stable ? slots : [main].concat(order.filter(function (s) { return s !== main; }))) : stable && P.layout !== 'pip' ? slots : null);
-      // grid9 keeps its 3 x 3 cells (empty ones stay black); the dynamic templates have exactly one cell per tile. 1.99??: with
+      // grid9 keeps its 3 x 3 cells (empty ones stay black); the dynamic templates have exactly one cell per tile. 1.99ahp: with
       // stable slots each tile has its cell, the fillers flow into the empty ones
       var cells = dn ? 0 : P.layout === 'grid9' ? 9 : P.layout === 'grid4' ? 4 : 0, have = grid.querySelectorAll('.mf-tile').length;
       for (var k = have; k < cells; k++) { var f = el('div', 'mf-empty'); f.setAttribute('aria-hidden', 'true'); grid.appendChild(f); }
     }
     /** wave2 WP-4 (F.3): the dynamic template - the grid's columns / rows and each tile's grid-area (seq: the main in cell 0, the
-     *  others in place order). n = 0: back to the legacy layouts' CSS (every inline placement cleared) - 1.99??: with stable slots
+     *  others in place order). n = 0: back to the legacy layouts' CSS (every inline placement cleared) - 1.99ahp: with stable slots
      *  (seq = the cells, null = an empty one) each tile still gets its cell in the layout's columns. */
     function place(n, seq) {
       var T = n ? DYN[n] : null;
@@ -930,6 +930,6 @@
       },
     };
   }
-  // (_dyn: the d1-d9 templates, for the test that pins them to stagemiccap; 1.99??: _slotCells / _cells / _cols likewise)
+  // (_dyn: the d1-d9 templates, for the test that pins them to stagemiccap; 1.99ahp: _slotCells / _cells / _cols likewise)
   window.PATVStageMic = { render: render, _dyn: DYN, _slotCells: slotCells, _cells: CELLS, _cols: COLS };
 })();

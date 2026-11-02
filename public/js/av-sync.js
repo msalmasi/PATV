@@ -272,7 +272,7 @@
       if (latest) {
         if (latest.speaking === 'pepe') record.pepeAt = now;
         // (wave2 WP-4: `ring` - every current holder in the dynamic layout - is delayed like newest / recent)
-        // (1.99?? stable slots: a stable program's places are delayed too - an exchange of places shows with the voices)
+        // (1.99ahp stable slots: a stable program's places are delayed too - an exchange of places shows with the voices)
         (latest.src || []).forEach(function (tile) { var k = tileKey(tile); if (!k) return; present[k] = true; if (!own.call(record.births, k)) record.births[k] = now; var c = { key: k, newest: tile.newest, recent: tile.recent, ring: tile.ring }; if (latest.stable === true) c.pos = tile.pos; compact.src.push(c); });
         compact.count = latest.count; compact.active = latest.active; compact.layout = latest.layout; compact.dyn = latest.dyn; compact.speaking = latest.speaking;
         compact.override = latest.manage && latest.manage.layout_override; compact.fixed = latest.fixed;
@@ -319,7 +319,7 @@
     out.src = (latest.src || []).filter(function (tile) { var k = tileKey(tile); return tile.pin || k && record.births[k] <= at; }).map(function (tile) {
       var t = copy(tile), previous = oldTiles[tileKey(tile)]; t.newest = !!(previous && previous.newest); t.recent = !!(previous && previous.recent);
       if (previous && previous.ring) t.ring = true; else delete t.ring;
-      // 1.99?? stable slots: the place it had then (with the layout / main of then); a tile the older program didn't have (a pin,
+      // 1.99ahp stable slots: the place it had then (with the layout / main of then); a tile the older program didn't have (a pin,
       // shown at once) keeps its own - the page gives a place two tiles claim to one of them and the next free cell to the other
       if (latest.stable === true && previous && previous.pos != null) t.pos = previous.pos;
       return t;

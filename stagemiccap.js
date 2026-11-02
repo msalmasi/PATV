@@ -112,9 +112,9 @@ function speaking(p) { return p && (p.speaking === "someone" || p.speaking === "
 function usable(p) { return !!(p && !p.signin && !p.blocked && p.on !== false && (entries(p).some(e => e.watch !== "hidden") || speaking(p))); }
 async function programFor(R, user) { return deps.program(R.id, user.userId); }
 
-/** 1.99?? STABLE SLOTS: each legacy layout's cells / columns - MUST equal stage-mic.js CELLS / COLS (test/micfollow-ui.test.js). */
+/** 1.99ahp STABLE SLOTS: each legacy layout's cells / columns - MUST equal stage-mic.js CELLS / COLS (test/micfollow-ui.test.js). */
 const CELLS = Object.freeze({ single: 1, split: 2, grid4: 4, grid9: 9, pip: 2 }), COLS = Object.freeze({ single: 1, split: 2, grid4: 2, grid9: 3, pip: 1 });
-/** 1.99?? STABLE SLOTS (program.stable): each entry's cell is its place (pos) - an empty place stays an empty cell; two on one
+/** 1.99ahp STABLE SLOTS (program.stable): each entry's cell is its place (pos) - an empty place stays an empty cell; two on one
  *  place take the next free one; more places than cells (or dense: the dynamic templates) close up in place order. The page's
  *  stage-mic.js slotCells does exactly this. -> [entry | null] */
 function slotCells(sorted, cells, dense) {
@@ -127,14 +127,14 @@ function slotCells(sorted, cells, dense) {
   for (let i = 0; i < out.length; i++) if (!out[i]) out[i] = null;
   return dense || out.length > cells ? out.filter(Boolean) : out;
 }
-/** CSS grid rectangles, including the intentional picture-in-picture overlap. No DOM required. 1.99??: a stable program
+/** CSS grid rectangles, including the intentional picture-in-picture overlap. No DOM required. 1.99ahp: a stable program
  *  (program.stable) places each tile in its place's cell - what the viewer's page (stage-mic.js) shows. */
 function rects(program, width = W, height = H) {
   const es = entries(program), n = es.length, out = [], gap = 2;
   if (!n) return out;
   const dyn = program.dyn, d = dyn && dyn.n === n && dyn.t === "d" + n ? n : 0;
   const stable = program.stable === true;
-  // 1.99??: stable - the dynamic cells are the places with the main in cell 0 once there are 3+ (it trades places with whoever is
+  // 1.99ahp: stable - the dynamic cells are the places with the main in cell 0 once there are 3+ (it trades places with whoever is
   // there); picture in picture's big picture is place 0; the legacy grids keep empty places as empty cells
   let seq = null;
   if (stable && d) {
@@ -169,7 +169,7 @@ function rects(program, width = W, height = H) {
     const c = program.layout === "grid9" ? 3 : program.layout === "grid4" || program.layout === "split" ? 2 : 1;
     cols = Array(c).fill(1); rows = program.layout === "grid9" ? 3 : program.layout === "grid4" ? 2 : Math.ceil((seq ? seq.length : n) / c);
   }
-  // (1.99??: a stable program's cells follow its places - seq, null = an empty cell)
+  // (1.99ahp: a stable program's cells follow its places - seq, null = an empty cell)
   const ordered = seq || (d ? [main, ...es.filter(e => e !== main)] : es);
   if (!cells.length) for (let i = 0; i < ordered.length; i++) cells.push([i % cols.length, Math.floor(i / cols.length), 1, 1]);
   const unit = (width - gap * (cols.length - 1)) / cols.reduce((a, b) => a + b, 0), rh = (height - gap * (rows - 1)) / rows;
@@ -774,7 +774,7 @@ async function start(opts, hooks = {}) {
 }
 module.exports = { configure, init, start, gate, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
-  slotCells, CELLS, COLS,                     // 1.99?? stable slots: the cells of a stable program (stage-mic.js has the same)
+  slotCells, CELLS, COLS,                     // 1.99ahp stable slots: the cells of a stable program (stage-mic.js has the same)
   consent,                                    // mic keep: storykeep's per-person recheck at save / post (the engine's own rule)
   privateLayoutStrict,                        // mic keep review: storykeep's strict profile read (an unreadable layout throws)
   _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, noteVoices, lastRoster, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
