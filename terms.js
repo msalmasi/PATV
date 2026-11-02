@@ -34,8 +34,13 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // VERSION unchanged). Published (and dated) the first time /privacy is served with mic-stage captures switched on (mainstage
 // stagecap_mic), not at boot: while they are off it would describe a feature nobody can use, next to today's incognito bullet.
 // Once published it stays, so a later switch-off still describes the copies that exist.
-const TEXT_DATES = ["wp1-voice", "mic-stage-keep"];
-const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true };
+// 1.99?? transcripts bar (owner 2026-11-02): "tx-bar" = the !transcripts off blacked-out bar sentences (sections 3 and 10, the change note),
+// shown only while privacy wire v2 is on AND the latest Pepe sends those 🎙 lines as a bar (privwire.txBar) - dated the first time
+// /privacy is served that way. Unlike mic-stage-keep its text isn't kept after that: with the bar off the page says what is true
+// then (left out), and its date doesn't count toward "Last updated" while the text isn't shown.
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar"];
+const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
+                         "tx-bar": () => require("./privwire").txBar() === true };
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 let datesReady = null;
@@ -168,13 +173,15 @@ function register(app, { addUser }) {
     // wave 2 WP-5 (section H, approved 2026-10-28 / 2026-11-01): the evidence-clip sentence, its section 9 row and its changelog clause
     // from the moment evidence clips can be made (evidence.privacyCopy: its switch AND privacy wire v2), and while any are still kept;
     // null otherwise - the page reads exactly as before. Its first switch-on date joins "Last updated"
-    let chatlog = null, hubErasure = null, micrec = null, memory = null, privwire = null, evidence = null, policyDates = {};
+    let chatlog = null, hubErasure = null, micrec = null, memory = null, privwire = null, evidence = null, policyDates = {}, txbar = null;
     if (view === "privacy") {
       try { chatlog = await require("./chatlog").policy(); } catch (e) { chatlog = null; }
       try { hubErasure = await require("./accountdelete").privacyCopy(); } catch (e) { hubErasure = null; }
       try { micrec = await require("./micrec").privacyCopy(); } catch (e) { micrec = null; }
       try { memory = await require("./memoryoptout").privacyCopy(); } catch (e) { memory = null; }
       try { await require("./privwire").init(); privwire = require("./privwire").privacyCopy(); } catch (e) { privwire = null; }
+      // 1.99?? transcripts bar: its text only inside the privwire branches, only while it is live (privwire.txBar)
+      try { await require("./privwire").loadTxCap(); txbar = privwire && require("./privwire").txBar() === true ? { on: true } : null; } catch (e) { txbar = null; }
       try { evidence = await require("./evidence").privacyCopy(); } catch (e) { evidence = null; }
       policyDates = await textDates();                // 1.99aft: the texts dated the day this server first served them
     }
@@ -183,10 +190,10 @@ function register(app, { addUser }) {
                              [micrec && micrec.on_at, micrec && micrec.on_day], [micrec && micrec.rule_at, micrec && micrec.rule_day],   // 1.99afv review
                              [memory && memory.on_at, memory && memory.on_day], [privwire && privwire.g, privwire && privwire.g_day],
                              [evidence && evidence.on_at, evidence && evidence.on_day],
-                             ...Object.values(policyDates).map((d) => [d.at, d.day])]) {
+                             ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).map(([, d]) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
-    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, privwire, evidence, policyDates }); } catch (e) { next(e); }
+    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));
   app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy", PRIVACY_UPDATED));

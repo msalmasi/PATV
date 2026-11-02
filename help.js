@@ -566,7 +566,39 @@ const PRIVWIRE_NOTES = {
 const PRIVWIRE_SUMMARY = {
   incognito: "Your own switch: with incognito on, the website shows you under a random frog name instead of your name. It changes what the website shows, not what Pepe remembers - that's !remember off. Also on the website: Settings → Privacy.",
 };
+// 1.99?? transcripts bar (owner 2026-11-02): while the site ALSO shows !transcripts off 🎙 lines as a blacked-out bar (privwire.txBar: the
+// switch on AND the latest Pepe sends them), Pepe's catalog's v2tx wording replaces the card's (e.v2tx {summary?, details?}); help data
+// from a Pepe without it gets the site's own wording for the transcripts card, and the bridge card's old transcripts clause swapped.
+const PRIVWIRE_TX_CARDS = {
+  transcripts: {
+    summary: "Your own switch: with !transcripts off, your mic turns show on the website as a blacked-out bar instead of words.",
+    details: "When you're on the mic in a room linked to the website, its pad shows what you said as a 🎙 line (an automatic transcript). " +
+      "With `!transcripts off`, your mic turns show there as a blacked-out bar instead of words. Only PATV administrators, and a pad's " +
+      "owner in their own pad, can reveal what you said, and every reveal is logged. Members can't clip those mic turns. Turning " +
+      "transcripts back on doesn't uncover the bars from while they were off. Works by **PM** to Pepe only (`!transcripts off`, " +
+      "`!transcripts on`, `!transcripts` for your setting).",
+  },
+};
+const TX_CLAUSE_OLD = "`!transcripts off` keeps your mic transcripts off the website.";
+const TX_CLAUSE_NEW = "`!transcripts off` shows only your mic transcripts as a blacked-out bar.";
 function withPrivwireNotes(entries) {
+  const out = privwireNotes(entries);
+  if (out === entries) return out;                            // the switch off: byte-equal, the same objects
+  let tx = false;
+  try { tx = require("./privwire").txBar() === true; } catch (e) { tx = false; }
+  if (!tx) return out;
+  return out.map((r, i) => {
+    const e = (entries || [])[i];
+    const vt = e && e.v2tx && typeof e.v2tx === "object" ? e.v2tx : null;
+    const ts = vt && typeof vt.summary === "string" && vt.summary.trim() ? vt.summary.slice(0, L.summary) : null;
+    const td = vt && typeof vt.details === "string" && vt.details.trim() ? vt.details.slice(0, L.details) : null;
+    if (ts || td) return { ...e, ...(ts ? { summary: ts } : {}), ...(td ? { details: td } : {}) };
+    if (e && PRIVWIRE_TX_CARDS[e.id]) return { ...e, ...PRIVWIRE_TX_CARDS[e.id] };
+    if (r && typeof r.details === "string" && r.details.includes(TX_CLAUSE_OLD)) return { ...r, details: r.details.split(TX_CLAUSE_OLD).join(TX_CLAUSE_NEW) };
+    return r;
+  });
+}
+function privwireNotes(entries) {
   let on = false;
   try { on = require("./privwire").isOn(); } catch (e) { on = false; }
   if (!on) return entries;
@@ -705,6 +737,6 @@ module.exports = {
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
   VOICE_NOTE, withVoiceNotes,                                       // WP-1 (design section H)
-  PRIVWIRE_NOTES, withPrivwireNotes,                                // wave 2 (design section H, behind the Privacy wire v2 switch)
+  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS,                                // wave 2 (design section H, behind the Privacy wire v2 switch)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };
