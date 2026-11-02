@@ -4214,6 +4214,33 @@
    }
   },
   {
+   "id": "nc_twinkle",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_twinkle",
+    "kind": "name_color",
+    "name": "Twinkle",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #ff5a5f, #ffe9a0, #3ee0a0, #ffe9a0, #4cc9f0, #ffe9a0, #c77dff); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_twinkle",
+     "kind": "gradient",
+     "colors": [
+      "#ff5a5f",
+      "#ffe9a0",
+      "#3ee0a0",
+      "#ffe9a0",
+      "#4cc9f0",
+      "#ffe9a0",
+      "#c77dff"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
    "id": "pb_flannel",
    "kind": "profile_border",
    "render": {
@@ -4230,6 +4257,29 @@
       "#b5442a",
       "#3e2723",
       "#e0a526"
+     ],
+     "w": 4,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_fairisle",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_fairisle",
+    "kind": "profile_border",
+    "name": "Fair Isle",
+    "rarity": "rare",
+    "css": "border: 4px solid transparent; border-image: repeating-linear-gradient(90deg, #c2255c 0 6px, #f3e3c3 6px 8px, #1e3566 8px 14px, #f3e3c3 14px 16px) 4;",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#c2255c",
+      "#f3e3c3",
+      "#1e3566"
      ],
      "w": 4,
      "anim": "none"
@@ -4266,6 +4316,35 @@
    }
   },
   {
+   "id": "ad_countdown",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_countdown",
+    "kind": "avatar_decoration",
+    "name": "Countdown",
+    "rarity": "uncommon",
+    "ring": "",
+    "conic": "background: conic-gradient(#ffd23f 0 8.3%, #1c1f4a 0 16.7%, #ffd23f 0 25%, #1c1f4a 0 33.3%, #ffd23f 0 41.7%, #1c1f4a 0 50%, #ffd23f 0 58.3%, #1c1f4a 0 66.7%, #ffd23f 0 75%, #1c1f4a 0 83.3%, #ffd23f 0 91.7%, #1c1f4a 0 100%);",
+    "spin": false,
+    "emoji": "🎉"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_countdown",
+     "ring": {
+      "colors": [
+       "#ffd23f",
+       "#1c1f4a"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "🎉"
+    }
+   }
+  },
+  {
    "id": "bn_fireworks",
    "kind": "profile_banner",
    "render": {
@@ -4287,6 +4366,27 @@
    }
   },
   {
+   "id": "bn_brightnight",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_brightnight",
+    "kind": "profile_banner",
+    "name": "Bright Night",
+    "rarity": "uncommon",
+    "css": "background: radial-gradient(circle at 6% 20.5%, #ff5a5f 0 3px, rgba(255, 90, 95, .3) 4px 8px, transparent 9px), radial-gradient(circle at 18% 28.9%, #ffd23f 0 3px, rgba(255, 210, 63, .3) 4px 8px, transparent 9px), radial-gradient(circle at 30% 35.4%, #3ee0a0 0 3px, rgba(62, 224, 160, .3) 4px 8px, transparent 9px), radial-gradient(circle at 42% 39.2%, #4cc9f0 0 3px, rgba(76, 201, 240, .3) 4px 8px, transparent 9px), radial-gradient(circle at 54% 39.8%, #c77dff 0 3px, rgba(199, 125, 255, .3) 4px 8px, transparent 9px), radial-gradient(circle at 66% 37%, #ff5a5f 0 3px, rgba(255, 90, 95, .3) 4px 8px, transparent 9px), radial-gradient(circle at 78% 31.3%, #ffd23f 0 3px, rgba(255, 210, 63, .3) 4px 8px, transparent 9px), radial-gradient(circle at 90% 23.4%, #3ee0a0 0 3px, rgba(62, 224, 160, .3) 4px 8px, transparent 9px), radial-gradient(circle at 12% 82%, #ffd98a 0 2px, rgba(255, 217, 138, .25) 3px 6px, transparent 7px), radial-gradient(circle at 34% 79%, #ffd98a 0 2px, rgba(255, 217, 138, .25) 3px 6px, transparent 7px), radial-gradient(circle at 63% 83%, #ffd98a 0 2px, rgba(255, 217, 138, .25) 3px 6px, transparent 7px), radial-gradient(circle at 86% 80%, #ffd98a 0 2px, rgba(255, 217, 138, .25) 3px 6px, transparent 7px), linear-gradient(0deg, #eef5fc 0 9%, #a9bfd6 9% 12%, transparent 12%), linear-gradient(180deg, #0b1026 0%, #14204a 70%, #22305e 100%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#0b1026",
+      "#14204a",
+      "#22305e"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
    "id": "fx_fallingleaves",
    "kind": "profile_effect",
    "render": {
@@ -4298,6 +4398,20 @@
    },
    "look": {
     "effect": "leaves"
+   }
+  },
+  {
+   "id": "fx_fairylights",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_fairylights",
+    "kind": "profile_effect",
+    "name": "Fairy Lights",
+    "rarity": "epic",
+    "effect": "lights"
+   },
+   "look": {
+    "effect": "lights"
    }
   },
   {
@@ -4316,6 +4430,25 @@
     "gtf": [
      "hat",
      "bobble"
+    ]
+   }
+  },
+  {
+   "id": "gh_earmuffs",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_earmuffs",
+    "kind": "gtf_hat",
+    "name": "Earmuffs",
+    "rarity": "uncommon",
+    "layer": "earmuffs",
+    "opt": "hat",
+    "emoji": "🎧"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "earmuffs"
     ]
    }
   },
@@ -4354,6 +4487,44 @@
     "gtf": [
      "prop",
      "sparkler"
+    ]
+   }
+  },
+  {
+   "id": "go_winterlights",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_winterlights",
+    "kind": "gtf_outfit",
+    "name": "Lit-Up Puffer",
+    "rarity": "epic",
+    "layer": "winterlights",
+    "opt": "outfit",
+    "emoji": "🧥"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "winterlights"
+    ]
+   }
+  },
+  {
+   "id": "gp_lantern",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_lantern",
+    "kind": "gtf_prop",
+    "name": "Winter Lantern",
+    "rarity": "legendary",
+    "layer": "lantern",
+    "opt": "prop",
+    "emoji": "🕯️"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "lantern"
     ]
    }
   }

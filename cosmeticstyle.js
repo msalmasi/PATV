@@ -30,16 +30,16 @@
 // evenly (first and last kept) - a guard only: the test refuses it for any catalog item.
 "use strict";
 
-const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti", "leaves"];
+const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti", "leaves", "lights"];
 const GTF_OPT = { gtf_hat: "hat", gtf_mask: "mask", gtf_outfit: "outfit", gtf_prop: "prop", gtf_bg: "bg", gtf_frame: "frame" };
 const GTF_LAYERS = {
   gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate",
-            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat", "lotus", "bobble"],
+            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat", "lotus", "bobble", "earmuffs"],
   gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades", "alien"],
   gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier",
-               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape", "reaper", "fireside"],
+               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape", "reaper", "fireside", "winterlights"],
   gtf_prop: ["cigar", "moneybag", "crowbar", "briefcase", "rose", "dice",
-             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar", "scythe", "skateboard", "sparkler"],
+             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar", "scythe", "skateboard", "sparkler", "lantern"],
   gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix",
            "progress", "intersex", "trans", "bi", "lesbian", "pan", "enby", "ace", "aro", "genderfluid",
            "lavalamp", "leopard", "redroom", "sakura", "clouds", "wanted", "lilypond"],

@@ -21,7 +21,10 @@
 //                               starts at the first veiled sighting and ends at the first of (owner J-8): back after 1 h+ away
 //                               (left the room and came back - a shorter absence keeps the name), their level going back to
 //                               normal (incognito off / un-hidden), 12 h old AND quiet for 10 minutes, or 24 h. Never during a
-//                               mic hold (the caps wait for the release). Incognito <-> hidden keeps the session. A random
+//                               mic hold (the caps wait for the release). Hidden -> incognito keeps the session; INCOGNITO ->
+//                               HIDDEN ENDS IT AT ONCE (owner, spec M addendum 3 #1: the old frog name's lines would be tied to
+//                               the person) - even mid-hold - and the next sighting is alias-less (masked, "someone") for the C.2
+//                               15 minutes, like a named sighting: never the incognito name again (sight / level). A random
 //                               16-byte nonce per session makes sessions unlinkable even to someone holding the key; the
 //                               row (incog_alias) has no login - only sk = HMAC(key, room, login) finds an open session after a
 //                               restart, and sk / nonce are wiped when it ends (the row is deleted 24 h later). A name is not
@@ -179,8 +182,22 @@ function sessInit() {
                       left_at INTEGER, ended INTEGER)`);
       await runQuery("CREATE INDEX IF NOT EXISTS incog_alias_room ON incog_alias (room_id, ended)");
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS incog_alias_sk ON incog_alias (sk) WHERE sk IS NOT NULL");
+      // privacy fix (M addendum 3 #1): the level the session was last sighted at ("incognito" | "hidden"; NULL = unknown - a row
+      // from before this column), so an incognito -> hidden switch ends it after a restart too
+      const cols = (await getQuery("SELECT name FROM pragma_table_info('incog_alias')")).map((r) => r.name);
+      if (!cols.includes("lvl")) await runQuery("ALTER TABLE incog_alias ADD COLUMN lvl TEXT");
+      // privacy fix (1.99ahc, review F7): an incognito -> hidden switch's no-name window (endLevel's burn), kept across a restart -
+      // NAMED is memory only and a switch through level() (Pepe's privacy.hidden, a hidden leave) leaves no alias-less session row
+      // behind to carry it: a restart inside the 15 minutes gave the next hidden sighting a fresh frog name, tied to the old one by
+      // timing. One row per (pad, session key) for NAMED_GAP_MS; no login, no name, no session id.
+      await runQuery("CREATE TABLE IF NOT EXISTS incog_alias_burn (room_id TEXT NOT NULL, sk TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (room_id, sk))");
       OPEN.clear(); RECENT.clear();
       const t = clock();
+      await runQuery("DELETE FROM incog_alias_burn WHERE at <= ?", [t - NAMED_GAP_MS]);
+      for (const r of await getQuery("SELECT room_id, sk, at FROM incog_alias_burn")) {
+        const k = String(r.room_id) + "\t" + String(r.sk), at = Number(r.at) || 0;
+        if (!(NAMED.get(k) >= at)) NAMED.set(k, at);
+      }
       for (const r of await getQuery("SELECT * FROM incog_alias WHERE ended IS NULL AND sk IS NOT NULL")) {
         const S = rowSession(r);
         roomOpen(S.roomId).set(S.sk, S);
@@ -195,8 +212,14 @@ function sessInit() {
 function rowSession(r) {
   return { id: Number(r.id), roomId: String(r.room_id), sk: String(r.sk), adj: r.adj || null, noun: r.noun || null, name: r.name || null,
            hood: r.hood == null ? null : Number(r.hood), started: Number(r.started) || 0, lastSeen: Number(r.last_seen) || 0,
-           lastActive: Number(r.last_active) || 0, leftAt: r.left_at == null ? null : Number(r.left_at), holding: false, wroteAt: 0 };
+           lastActive: Number(r.last_active) || 0, leftAt: r.left_at == null ? null : Number(r.left_at), holding: false, wroteAt: 0,
+           kind: LEVELS.has(r.lvl) ? r.lvl : null };
 }
+const LEVELS = new Set(["incognito", "hidden"]);
+/** privacy fix (owner, spec M addendum 3 #1): does a sighting at level `kind` end session S at once? Only incognito -> hidden: the
+ *  incognito frog name's lines (words shown) would otherwise be tied to the same person's hidden ones. A session whose level is
+ *  unknown (a row from before the column) ends too (fails closed). Hidden -> incognito keeps it (C.2). */
+const levelEnds = (S, kind) => kind === "hidden" && S.kind !== "hidden";
 const roomOpen = (roomId) => { let m = OPEN.get(roomId); if (!m) { m = new Map(); OPEN.set(roomId, m); } return m; };
 const recentOf = (roomId) => { let a = RECENT.get(roomId); if (!a) { a = []; RECENT.set(roomId, a); } return a; };
 const skOf = (roomId, login) => hmac(secret(), "patv/alias-row/v1\0", String(roomId), "\0", lower(login)).toString("hex");
@@ -230,9 +253,23 @@ async function endSession(S, t, why) {
   for (const fn of [...END_FNS]) { try { fn({ roomId: S.roomId, session: S.id, why }); } catch (e) { /* a listener's own failure */ } }
   await runQuery("UPDATE incog_alias SET sk = NULL, nonce = NULL, ended = ? WHERE id = ?", [t, S.id]);
 }
+/** privacy fix (M addendum 3 #1): end S for an incognito -> hidden switch ("level"). When S was incognito (or the caller knows they
+ *  were: `wasIncognito`), the moment counts as a named sighting (C.2): their next session has NO frog name for 15 minutes - a new name
+ *  starting the instant the old one stops would be tied to it by timing. */
+async function endLevel(S, t, wasIncognito = false) {
+  const burn = wasIncognito || S.kind === "incognito";
+  await endSession(S, t, "level");
+  if (burn) {
+    NAMED.set(S.roomId + "\t" + S.sk, t);
+    if (NAMED.size > 50000) NAMED.delete(NAMED.keys().next().value);
+    // review F7: stored too (a restart inside the window keeps it). The time is rounded UP to the minute - the window is never
+    // shorter, and the row can't be joined to the ended session's row by its exact end time (which still holds the old name)
+    await runQuery("INSERT OR REPLACE INTO incog_alias_burn (room_id, sk, at) VALUES (?, ?, ?)", [S.roomId, S.sk, Math.ceil(t / 60e3) * 60e3]);
+  }
+}
 const view = (S) => (S ? { alias: S.name || null, hood: S.name ? S.hood : null, session: S.id } : null);
 /** A new session for (room, login): a name (C.3) unless they were seen named there lately (C.2). avoidNames: the pad's roster. */
-async function startSession(roomId, login, sk, t, avoidNames) {
+async function startSession(roomId, login, sk, t, avoidNames, kind = null) {
   const open = [...(OPEN.get(roomId) || new Map()).values()];
   const recent = recentOf(roomId).filter((x) => t - x.ended < REUSE_MS);
   RECENT.set(roomId, recent);
@@ -257,16 +294,20 @@ async function startSession(roomId, login, sk, t, avoidNames) {
       for (let d = 1; d <= HOODS; d++) { const h = (pref + d) % HOODS; if (use[h] === least) { hood = h; break; } }
     }
   }
-  const r = await runQuery(`INSERT INTO incog_alias (room_id, sk, nonce, adj, noun, name, hood, started, last_seen, last_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                           [roomId, sk, nonce, adj, noun, name, hood, t, t, t]);
-  const S = { id: Number(r && r.id), roomId, sk, adj, noun, name, hood, started: t, lastSeen: t, lastActive: t, leftAt: null, holding: false, wroteAt: t };
+  const lvl = LEVELS.has(kind) ? kind : null;
+  const r = await runQuery(`INSERT INTO incog_alias (room_id, sk, nonce, adj, noun, name, hood, started, last_seen, last_active, lvl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           [roomId, sk, nonce, adj, noun, name, hood, t, t, t, lvl]);
+  const S = { id: Number(r && r.id), roomId, sk, adj, noun, name, hood, started: t, lastSeen: t, lastActive: t, leftAt: null, holding: false, wroteAt: t,
+              kind: lvl };
   roomOpen(roomId).set(sk, S);
   return S;
 }
 /**
  * A veiled sighting of `login` in pad `roomId` (a roster entry, a line, a mic grab, a website relay line). Opens a session if
  * none is open (or the open one has ended), else keeps it. opts: {t, active: a line or a mic event (resets the quiet clock),
- * holding: true / false while a mic hold starts / ends, avoidNames: the pad's roster logins + display names}.
+ * holding: true / false while a mic hold starts / ends, avoidNames: the pad's roster logins + display names, kind: the level of
+ * this sighting - "incognito" | "hidden" (privacy fix, M addendum 3 #1: an incognito session sighted "hidden" ends at once, even
+ * mid-hold, and the next one is alias-less for 15 minutes)}.
  * -> {alias (null = no name: "someone"), hood, session}
  */
 function sight(roomId, login, opts = {}) {
@@ -276,21 +317,49 @@ function sight(roomId, login, opts = {}) {
     await sessInit();
     const t = opts.t || clock();
     const sk = skOf(room, login);
+    const kind = LEVELS.has(opts.kind) ? opts.kind : null;
+    // review R1: a FROZEN kind (a mic hold's, kept as it was when the hold began - the person's level now may differ) never ends a
+    // session on level and never changes its level; it only gives a session it opens its level
+    const frozen = opts.frozen === true;
     let S = (OPEN.get(room) || new Map()).get(sk) || null;
     if (S) {
+      const lv = !frozen && levelEnds(S, kind);
       const why = endWhy(S, t);
-      if (why) { await endSession(S, t, why); S = null; }
+      if (lv) { await endLevel(S, t); S = null; }             // (whatever the clock says too: the switch decides the next name)
+      else if (why) { await endSession(S, t, why); S = null; }
     }
-    if (!S) S = await startSession(room, login, sk, t, opts.avoidNames);
+    if (!S) S = await startSession(room, login, sk, t, opts.avoidNames, kind);
     S.leftAt = null;
     S.lastSeen = t;
     if (opts.active) S.lastActive = t;
     if (opts.holding === true || opts.holding === false) S.holding = opts.holding;
+    if (kind && S.kind !== kind && !frozen) {                 // hidden -> incognito (kept), or a row's first known level
+      S.kind = kind;
+      await runQuery("UPDATE incog_alias SET lvl = ? WHERE id = ?", [kind, S.id]);
+    }
     if (t - S.wroteAt >= SEEN_WRITE_MS) {
       S.wroteAt = t;
       await runQuery("UPDATE incog_alias SET last_seen = ?, last_active = ?, left_at = NULL WHERE id = ?", [S.lastSeen, S.lastActive, S.id]);
     }
     return view(S);
+  });
+}
+/**
+ * privacy fix (owner, spec M addendum 3 #1): `login` is at level `kind` in pad `roomId` now, learned WITHOUT a sighting that opens a
+ * session (their leave line, Pepe's privacy.hidden / a hidden-set change): an open incognito session ends at once on "hidden" (its
+ * next session alias-less, as in sight); any other level is just noted. opts.wasIncognito: the caller knows they were incognito
+ * (the hidden set said so) - alias-less next even when the session's level is unknown. -> did a session end
+ */
+function level(roomId, login, kind, t = clock(), opts = {}) {
+  const room = String(roomId || "");
+  if (!room || !lower(login) || !LEVELS.has(kind)) return Promise.resolve(false);
+  return serial(room, async () => {
+    await sessInit();
+    const S = (OPEN.get(room) || new Map()).get(skOf(room, login));
+    if (!S) return false;
+    if (levelEnds(S, kind)) { await endLevel(S, t, opts.wasIncognito === true); return true; }
+    if (S.kind !== kind) { S.kind = kind; await runQuery("UPDATE incog_alias SET lvl = ? WHERE id = ?", [kind, S.id]); }
+    return false;
   });
 }
 /** `login` was seen NAMED in pad `roomId` (C.2: a veiled sighting less than 15 minutes later opens a session without a name). */
@@ -380,13 +449,14 @@ async function sweep(t = clock()) {
   }
   for (const [k, at] of NAMED) if (t - at >= NAMED_GAP_MS) NAMED.delete(k);
   await runQuery("DELETE FROM incog_alias WHERE ended IS NOT NULL AND ended < ?", [t - REUSE_MS]);
+  await runQuery("DELETE FROM incog_alias_burn WHERE at <= ?", [t - NAMED_GAP_MS]);     // review F7: the window is over
   return n;
 }
 
 module.exports = {
   ADJ, NOUN, DENY_WORDS, DENY_PAIRS, NAME_MAX, TRIES, HOODS, AWAY_MS, LONG_MS, QUIET_MS, CAP_MS, NAMED_GAP_MS, REUSE_MS,
   secret, secretState, norm, denied, candidate, boardPeriod, boardPeriodEnds, boardAliases,
-  sessInit, sight, named, left, leftRoom, openRooms, off, current, namesInUse, sweep, onEnd,
+  sessInit, sight, level, named, left, leftRoom, openRooms, off, current, namesInUse, sweep, onEnd,
   _setClock: (f) => { clock = f || (() => Date.now()); },
   /** tests: forget the key (the next call reads ALIAS_SECRET again) and every session in memory */
   _reset: () => { KEY = null; STATE = null; OPEN.clear(); RECENT.clear(); NAMED.clear(); CHAINS.clear(); ready = null; },

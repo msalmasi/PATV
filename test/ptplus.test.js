@@ -148,6 +148,19 @@ test("sticker perk packs: Prime Time Plus for Plus pad owners, 🎃 Spooky Seaso
   await assert.rejects(STK.validate(U.fan.userId, "[sticker:spooky/ghost]"), /Season Pass \(Halloween only\)/);
   assert.equal(await STK.validate(U.fan.userId, "[sticker:fireside/cocoa]"), true);
   assert.match(STK.inline("[sticker:spooky/ghost]"), /<img/, "already-sent stickers still render");
+  // December (❄️ Winter Lights): two more months of pass, then the hand-over on Dec 1 and the window's wrap into January
+  await PR.buy(U.fan, { tier: "season_pass", months: 2, ref: ref() });
+  t = Date.UTC(2026, 11, 1, 12);                      // 1 Dec: Fireside's last day, Winter Lights' first
+  assert.deepEqual(await has(U.fan), ["fireside", "winterlights"], "Dec 1: both seasonal packs");
+  t = Date.UTC(2026, 11, 9, 12);
+  assert.deepEqual(await has(U.fan), ["winterlights"], "9 Dec: the December pack comes with the pass");
+  assert.equal(await STK.validate(U.fan.userId, "[sticker:winterlights/brr]"), true);
+  await assert.rejects(STK.validate(U.fan.userId, "[sticker:fireside/cocoa]"), /Season Pass \(November only\)/);
+  t = Date.UTC(2027, 0, 1, 12);
+  assert.deepEqual(await has(U.fan), ["winterlights"], "New Year's Day: still December's pack");
+  t = Date.UTC(2027, 0, 2, 12);
+  assert.ok(!(await has(U.fan)).includes("winterlights"), "2 Jan: December's pack is over");
+  await assert.rejects(STK.validate(U.fan.userId, "[sticker:winterlights/brr]"), /Season Pass \(December only\)/);
   t = saved;
   assert.equal(STK.inSeason({ season: { from: "12-20", to: "01-05" } }, Date.UTC(2027, 0, 2)), true, "a window can wrap the new year");
   // comps never hand out a perk pack

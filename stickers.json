@@ -43,6 +43,12 @@
         { "id": "fireworks", "name": "Ooh, aah!" }, { "id": "toasty", "name": "Toasty" }, { "id": "leafpile", "name": "Jump in!" }, { "id": "snug", "name": "Sweater weather" },
         { "id": "cocoa", "name": "Hot cocoa" }, { "id": "moustache", "name": "Distinguished" }, { "id": "drumstick", "name": "Dibs" }, { "id": "pie", "name": "Room for pie" }
       ] },
+    { "id": "winterlights", "name": "Winter Lights Season", "emoji": "❄️", "perk": "season_pass", "season": { "from": "12-01", "to": "01-02", "label": "December" },
+      "desc": "Winter Lights with Pepe: strings of coloured lights, earmuffs and chattering teeth, a snowfrog, mittens on a string, a gift for you, a sled run, a snowball with your name on it and a party hat for the New Year. Season Pass only, all through December.",
+      "stickers": [
+        { "id": "lights", "name": "Lights up!" }, { "id": "brr", "name": "Brr!" }, { "id": "snowfrog", "name": "Snowfrog" }, { "id": "mittens", "name": "Mittens" },
+        { "id": "gift", "name": "For you!" }, { "id": "sled", "name": "Wheee!" }, { "id": "snowball", "name": "Incoming!" }, { "id": "newyear", "name": "New year!" }
+      ] },
     { "id": "primeplus", "name": "Prime Time Plus", "emoji": "💎", "perk": "prime_plus",
       "desc": "Big-league stickers for the owners of Prime Time Plus pads: a crown, the spotlight, a trophy, a diamond, a studio camera, the red carpet, shades and a golden mic.",
       "stickers": [

@@ -7,6 +7,7 @@ shape-rendering="crispEdges", so it stays crisp at any size and is a few hundred
 pixel Pepe (public/img/pepe-looks/base-pixel.png) and the kawaii Pepe (base-kawaii.png). Re-running it rewrites the
 files byte-for-byte the same.
 """
+import math
 import os
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "stickers")
@@ -934,6 +935,191 @@ def fireside_pack():
     return out
 
 
+# ── December 2026: ❄️ Winter Lights Season (Season Pass, seasonal: Dec 1 - Jan 1). Every winter holiday and the New Year
+#    without making one of them the theme: lights, the cold, snow, mittens, a gift, a sled, a snowball, a party hat. No
+#    text, no brands, no Santa, no religious symbols; every prop has a dark edge of its own colour (the site is dark-only). ──
+BULBS = (("#ff5a5f", "#8a1c22"), ("#ffd23f", "#8a6100"), ("#3ee0a0", "#0f6b47"), ("#4cc9f0", "#1b6f9a"), ("#c77dff", "#5a2a8a"))
+WIRE, CAP, CAPD = "#8fa3b8", "#d5dae1", "#5b6470"                                          # light string + sockets
+SNOW, SNOWD, SNOWE, ICE = "#ffffff", "#d6ebfb", "#6f97bd", "#9fd3f5"                       # snow, its shade + edge, ice
+CRAN, CRANL, CRAND = "#c2255c", "#e64980", "#5c0f2b"                                       # cranberry knit
+FLUFF, FLUFFD = "#f4f1ea", "#9e978c"                                                       # earmuff fluff
+GIFT, GIFTL, GIFTD = "#1fa39a", "#5fd8cc", "#0b4f4a"                                       # teal wrapping
+WOOD, WOODL, WOODD = "#b9763a", "#e0a868", "#5a3414"                                       # the sled
+COAL = "#2b2b30"
+
+
+def bulb(g, x, y, c, e):
+    """A string-light bulb hanging from the wire at (x + 1, y): a light socket, 3 x 3 glass with a point, a white glint, its
+    own dark edge."""
+    b = Grid(g.w, g.h)
+    b.rect(x, y + 1, x + 2, y + 3, c); b.set(x + 1, y + 4, c)
+    stamp(g, b, e)
+    g.set(x + 1, y, CAP); g.set(x, y + 1, W)
+
+
+def flake(g, x, y, c=SNOW, tip=ICE):
+    """A 5 x 5 snowflake: eight arms from the centre (never a plain plus - that reads as a first-aid cross)."""
+    g.pts([(x, y - 2), (x, y - 1), (x - 1, y - 1), (x + 1, y - 1), (x - 2, y), (x - 1, y), (x, y), (x + 1, y), (x + 2, y),
+           (x - 1, y + 1), (x, y + 1), (x + 1, y + 1), (x, y + 2)], c)
+    g.pts([(x - 2, y - 2), (x + 2, y - 2), (x - 2, y + 2), (x + 2, y + 2)], tip)
+
+
+def winterlights_pack():
+    out = {}
+
+    # Lights up! - two strands of coloured bulbs swagged across the dark (no Pepe: the lights are the star)
+    g = Grid()
+    for top, sag, x0 in ((1, 4, 1), (11, 5, 3)):
+        wy = {x: top + round(sag * math.sin(math.pi * x / 23)) for x in range(24)}
+        for x in range(24):
+            g.set(x, wy[x], WIRE)
+            if x and wy[x] != wy[x - 1]:
+                g.set(x, min(wy[x], wy[x - 1]) + (1 if wy[x] > wy[x - 1] else 0), WIRE)
+        for i, x in enumerate(range(x0, 22, 5)):
+            c, e = BULBS[(i + (0 if top == 1 else 2)) % len(BULBS)]
+            bulb(g, x, wy[x + 1] + 1, c, e)
+    out["lights"] = ("Lights up!", g)
+
+    # Brr! - Pepe in fluffy earmuffs, teeth chattering, cheeks gone blue, snow coming down
+    g = Grid(); pepe_head(g); eyes_look(g, 0, -1)
+    g.rect(6, 6, 9, 6, GD); g.rect(14, 6, 17, 6, GD)                           # brows up: cold
+    g.rect(6, 14, 17, 16, RD)                                                 # chattering teeth: a zigzag of white
+    for x in range(6, 18):
+        if x % 3 != 2:
+            g.set(x, 14, W)                                                   # top teeth
+        if x % 3 != 0:
+            g.set(x, 16, W)                                                   # bottom teeth, out of step: chattering
+    g.pts([(4, 12), (5, 12), (18, 12), (19, 12)], ICE)
+    m = Grid()
+    for x, y in ((3, 6), (4, 4), (5, 3), (6, 2), (7, 2), (8, 1), (9, 1), (10, 1), (11, 1), (12, 1), (13, 1), (14, 1), (15, 1),
+                 (16, 2), (17, 2), (18, 3), (19, 4), (20, 6), (3, 5), (20, 5)):
+        m.set(x, y, CRAN)                                                     # the headband over the top
+    stamp(g, m, CRAND)
+    f = Grid(); f.ellipse(2.5, 10.0, 2.6, 3.2, FLUFF); f.ellipse(21.5, 10.0, 2.6, 3.2, FLUFF)
+    stamp(g, f, FLUFFD)
+    g.pts([(1, 9), (2, 8), (21, 8), (22, 9)], W)                              # fluff highlights
+    flake(g, 3, 20); flake(g, 20, 20)
+    out["brr"] = ("Brr!", g)
+
+    # Snowfrog - a snowman built frog-shaped: snow Pepe with coal eyes, a pebble smile and a cranberry scarf, on a snow drift
+    g = Grid()
+    d = Grid(); d.ellipse(12.0, 24.5, 13.0, 3.6, SNOWD)
+    stamp(g, d, SNOWE)
+    pepe_head_c(g, SNOW, SNOWE, ICE)
+    for x0 in (7, 15):
+        g.rect(x0, 7, x0 + 1, 8, COAL)
+        g.set(x0, 7, GREY)                                                    # a glint on each coal
+    for x, y in ((6, 13), (8, 14), (10, 15), (13, 15), (15, 14), (17, 13)):
+        g.set(x, y, COAL)
+    g.pts([(4, 11), (19, 11)], PINK)
+    s = Grid()
+    s.rect(3, 17, 20, 18, CRAN)
+    for x in range(3, 21):
+        if x % 3 == 0:
+            s.rect(x, 17, x, 18, CRANL)
+    s.rect(15, 19, 17, 21, CRAN); s.rect(15, 20, 17, 20, CRANL); s.pts([(15, 22), (17, 22)], CRANL)
+    stamp(g, s, CRAND)
+    tw = Grid()                                                               # twig arms, waving
+    tw.pts([(3, 15), (2, 14), (1, 13), (0, 12), (1, 12), (1, 11), (20, 15), (21, 14), (22, 13), (23, 12), (22, 12), (22, 11)], WOOD)
+    for y in range(24):
+        for x in range(24):
+            if tw.px[y][x]:
+                g.set(x, y, tw.px[y][x])
+    for x, y in ((1, 2), (22, 3), (12, 0)):
+        g.set(x, y, W)
+    out["snowfrog"] = ("Snowfrog", g)
+
+    # Mittens - a pair of cranberry mittens on a string, ribbed cream cuffs, a snowflake on each
+    g = Grid()
+    for x, y in ((6, 7), (6, 6), (7, 5), (7, 4), (8, 3), (9, 2), (10, 2), (11, 1), (12, 1), (13, 2), (14, 2), (15, 3),
+                 (16, 4), (16, 5), (17, 6), (17, 7), (17, 8)):
+        g.set(x, y, CREAM)                                                    # the string, looped over a peg
+    for dx, dy, thumb in ((0, 0, 1), (11, 2, -1)):
+        mt = Grid()
+        x0, y0 = 3 + dx, 8 + dy
+        mt.rect(x0, y0 + 3, x0 + 6, y0 + 11, CRAN)                            # the hand
+        mt.rect(x0 + 1, y0 + 12, x0 + 5, y0 + 12, CRAN)                       # its rounded tip
+        tx = x0 + 7 if thumb > 0 else x0 - 2
+        mt.rect(tx, y0 + 5, tx + 1, y0 + 8, CRAN); mt.set(tx + (0 if thumb > 0 else 1), y0 + 4, CRAN)   # the thumb
+        mt.rect(x0, y0, x0 + 6, y0 + 2, CREAM)                                # the cuff
+        for x in range(x0, x0 + 7, 2):
+            mt.rect(x, y0, x, y0 + 2, CREAMD)
+        stamp(g, mt, CRAND)
+        flake(g, x0 + 3, y0 + 7, W, CRANL)
+    out["mittens"] = ("Mittens", g)
+
+    # For you! - Pepe's green hands holding out a wrapped gift: teal paper, a gold ribbon and a big bow
+    g = Grid()
+    bx = Grid()
+    bx.rect(5, 11, 18, 21, GIFT); bx.rect(4, 8, 19, 10, GIFT); bx.rect(4, 8, 19, 8, GIFTL)   # box + lid
+    bx.rect(6, 12, 6, 20, GIFTL)                                              # shine
+    stamp(g, bx, GIFTD)
+    g.rect(11, 8, 12, 21, GOLD); g.rect(5, 15, 18, 16, GOLD)                 # the ribbon
+    bw = Grid()
+    bw.rect(7, 4, 10, 6, GOLD); bw.rect(13, 4, 16, 6, GOLD); bw.rect(11, 6, 12, 7, GOLD)
+    bw.pts([(8, 3), (9, 3), (14, 3), (15, 3), (9, 7), (14, 7)], GOLD)
+    stamp(g, bw, GOLDD)
+    g.pts([(8, 5), (15, 5)], GOLDD); g.pts([(11, 6)], GOLDL)                 # the loops' holes + a glint on the knot
+    hd = Grid(); hd.rect(1, 14, 4, 18, G); hd.rect(19, 14, 22, 18, G)
+    stamp(g, hd, GD)
+    g.pts([(2, 14), (20, 14)], GL)
+    sparkle(g, 2, 3, W); sparkle(g, 21, 2, GOLD)
+    out["gift"] = ("For you!", g)
+
+    # Wheee! - Pepe on a wooden sled, mouth open, speed lines and a spray of snow behind
+    g = Grid(); pepe_head(g); eyes_look(g, 1, -1); mouth(g, "grin")
+    sl = Grid()
+    sl.rect(2, 19, 20, 20, WOOD)
+    for x in range(3, 21, 3):
+        sl.set(x, 19, WOODL)
+    sl.rect(1, 22, 21, 22, CAP); sl.pts([(22, 21), (23, 20), (23, 19)], CAP)   # the runner, curled up at the front
+    for x in (4, 11, 18):
+        sl.set(x, 21, CAPD)                                                   # struts
+    stamp(g, sl, WOODD)
+    for y in (9, 13, 17):
+        g.rect(0, y, 1, y, ICE)                                               # speed lines
+    g.pts([(0, 21), (1, 20), (0, 19), (2, 23), (0, 23)], SNOW)               # snow spray
+    out["sled"] = ("Wheee!", g)
+
+    # Incoming! - Pepe, very pleased with himself, holding up a big snowball
+    g = Grid(); pepe_head(g); eyes_look(g, 1, 0); mouth(g, "smile")
+    g.rect(6, 7, 9, 7, GD)                                                    # one lid lowered: up to something
+    b = Grid(); b.ellipse(19.5, 4.0, 3.8, 3.8, SNOW)
+    for y in range(24):
+        for x in range(24):
+            if b.px[y][x] and (x - 19.5) + (y - 4.0) > 2.2:
+                b.px[y][x] = SNOWD                                            # shade on the lower right
+    stamp(g, b, SNOWE)
+    g.pts([(18, 2), (17, 3)], W)
+    hd = Grid(); hd.rect(17, 8, 21, 10, G)
+    stamp(g, hd, GD)
+    g.set(18, 8, GL)
+    flake(g, 3, 2); g.pts([(1, 20), (22, 18)], W)
+    out["snowball"] = ("Incoming!", g)
+
+    # New year! - Pepe in a striped party hat with a party horn, confetti everywhere, eyes shut with glee
+    g = Grid(); pepe_head(g)
+    for x0 in (6, 14):
+        g.pts([(x0, 8), (x0 + 1, 7), (x0 + 2, 7), (x0 + 3, 8)], K)
+    mouth(g, "smile")
+    h = Grid()
+    for i, y in enumerate(range(1, 6)):
+        h.rect(12 - i, y, 12 + i, y, PURPLE if y % 2 else GOLD)
+    stamp(g, h, HATD)
+    g.rect(11, 0, 13, 0, W); g.set(12, 1, W)                                  # the pompom
+    hn = Grid()
+    hn.rect(16, 15, 21, 16, PINK)
+    for x in range(16, 22, 2):
+        hn.rect(x, 15, x, 16, W)
+    hn.pts([(22, 15), (23, 14), (23, 13), (22, 12)], PINK)                    # the curled tip
+    stamp(g, hn, "#a8325a")
+    for (x, y), c in zip(((2, 1), (5, 3), (19, 1), (21, 5), (1, 6), (22, 9), (8, 0), (16, 2), (3, 22), (20, 22)),
+                         (BULBS[0][0], BLUE, GOLD, PINK, GOLD, PURPLE, BLUE, BULBS[2][0], PINK, GOLD)):
+        g.set(x, y, c)
+    out["newyear"] = ("New year!", g)
+    return out
+
+
 # ── wave2 WP-4 (incognito / mic-stage spec F.4, owner pick J-11 2026-10-28): the hooded-frog covers for veiled speakers ──
 # NOT a sticker pack: public/img/anon/hood-peek-{0..7}.svg (incognito: "Peek B", the bandana) and hood-shadow-{0..7}.svg
 # (hidden: "Shadow"), one per frog-name hood index. An anonymous frog - never Pepe's face and never his red lips (R / RD).
@@ -1300,7 +1486,28 @@ def anon_main(check=False):
 
 PACKS = {"pixelpepe": pixel_pack, "kawaiipond": kawaii_pack, "patvreacts": reacts_pack,
          "miclife": mic_pack, "highroller": casino_pack, "movienight": movie_pack,
-         "spooky": spooky_pack, "fireside": fireside_pack, "primeplus": plus_pack}
+         "spooky": spooky_pack, "fireside": fireside_pack, "winterlights": winterlights_pack, "primeplus": plus_pack}
+
+
+def packs_check(only=()):
+    """December 2026: `python tools/gen-stickers.py --check [pack ...]` regenerates the packs in memory and compares them with
+    public/stickers/<pack>/ byte for byte (a Windows checkout's CRLF line ends read as LF: git stores the files with LF), so a
+    change to a shared helper can't quietly redraw a pack nobody meant to touch. Writes nothing."""
+    ok = True
+    for pack, fn in PACKS.items():
+        if only and pack not in only:
+            continue
+        bad = []
+        for sid, (title, grid) in fn().items():
+            try:
+                with open(os.path.join(ROOT, pack, sid + ".svg"), "rb") as f:
+                    if f.read().replace(b"\r\n", b"\n") != grid.svg(title).encode("utf-8"):
+                        bad.append(sid)
+            except OSError:
+                bad.append(sid + " (missing)")
+        print(pack, "differs: " + ", ".join(bad) if bad else "same")
+        ok = ok and not bad
+    return ok
 
 
 def main():
@@ -1313,6 +1520,10 @@ def main():
         if not [a for a in args if a in PACKS]:
             return
     only = [a for a in args if a in PACKS]               # 1.99qp: python tools/gen-stickers.py spooky primeplus (just those)
+    if "--check" in args:                                # 1.99ahe: compare, write nothing (exit 1 on a difference)
+        if not packs_check(only):
+            sys.exit(1)
+        return
     for pack, fn in PACKS.items():
         if only and pack not in only:
             continue

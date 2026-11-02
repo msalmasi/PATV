@@ -130,6 +130,41 @@ test("status follows the switches: low latency, soundboards off", () => {
   assert.equal(PK.table({ ...v, sp_seasonal: [] }).season_pass.some((p) => p.id === "seasonal"), false, "no seasonal packs -> no line");
 });
 
+// December 2026: the Season Pass lines with the clocks PINNED (soundboards.js + stickers.js) - never today's date (a Season Pass
+// test that read the real clock broke on Nov 1)
+test("❄️ December's Season Pass: the Winter Lights board + stickers are listed in December, and no board is promised between seasons", (t) => {
+  const SBm = require(path.join(repo, "soundboards")), STKm = require(path.join(repo, "stickers"));
+  let at = 0;
+  SBm._setClock(() => at); STKm._setClock(() => at);
+  t.after(() => { SBm._setClock(null); STKm._setClock(null); });
+  const sp = (when) => { at = when; return PK.table(PK.values()).season_pass; };
+  const line = (rows, id) => rows.find((p) => p.id === id);
+  // Nov 30: Fireside's board, the 🍂 icon
+  let rows = sp(Date.UTC(2026, 10, 30, 23, 59));
+  assert.ok(line(rows, "sb_season"), "Nov 30: a season board to be unlimited on");
+  assert.equal(PK.values().sb_season.id, "2026-11");
+  assert.equal(line(rows, "seasonal").icon, "🍂");
+  // Dec 1 00:00 UTC: Winter Lights' board; both sticker packs are on, the newest one's ❄️ wins
+  rows = sp(Date.UTC(2026, 11, 1, 0, 0));
+  assert.deepEqual(PK.values().sb_season, { id: "2026-12", name: "Winter Lights Season", emoji: "❄️" });
+  assert.ok(line(rows, "sb_season"), "the season board perk is listed in December");
+  assert.equal(line(rows, "seasonal").icon, "❄️", "Dec 1: Fireside's last sticker day, Winter Lights' icon");
+  assert.match(line(rows, "seasonal").title[1].packs, /❄️ Winter Lights Season \(December\)/, "the seasonal sticker line names December's pack");
+  assert.deepEqual(PK.values().sp_seasonal.filter((p) => p.on).map((p) => p.id), ["fireside", "winterlights"]);
+  rows = sp(Date.UTC(2026, 11, 20, 12));
+  assert.equal(line(rows, "seasonal").icon, "❄️");
+  assert.deepEqual(PK.values().sp_seasonal.filter((p) => p.on).map((p) => p.id), ["winterlights"]);
+  // New Year's Day: the board is over at midnight UTC (Jan 1), the stickers run through the day
+  rows = sp(Date.UTC(2027, 0, 1, 12));
+  assert.notEqual((PK.values().sb_season || {}).id, "2026-12", "the December board ends at Jan 1 00:00 UTC");
+  assert.equal(line(rows, "seasonal").icon, "❄️", "...the December stickers run through New Year's Day");
+  // mid-January (the next gap): no season board -> no 'season's soundboard, unlimited' line
+  rows = sp(Date.UTC(2027, 0, 15, 12));
+  if (!PK.values().sb_season) assert.ok(!line(rows, "sb_season"), "between seasons: no board to promise");
+  // the perk copy itself never names a month or promises a board that isn't on
+  assert.doesNotMatch(en["perks.sp.sb_season"] + " " + en["perks.sp.sb_season_d"], /november|december|always|every month|year-round/i);
+});
+
 test("the partial renders the shared list (full + compact + skip)", async () => {
   const file = path.join(repo, "views", "partials", "tier-perks.ejs");
   const locals = { i18nT: t, perkTable: () => PK.table(), perkText: PK.text };

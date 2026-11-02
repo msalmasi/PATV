@@ -17,7 +17,7 @@
     el.textContent = s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 129600 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago';
   });
   var s = document.createElement('script');
-  s.src = '/public/js/avatar.js?v=2';
+  s.src = '/public/js/avatar.js?v=3';
   s.onload = draw;
   document.head.appendChild(s);
 })();

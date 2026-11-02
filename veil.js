@@ -197,6 +197,19 @@ function holdName(roomId, hold, v) {
   while (m.size > HOLDS_MAX) m.delete(m.keys().next().value);
   return v;
 }
+/** review R1: per room, hold id -> the veil kind its last item came with. Pepe keeps a hold's kind as it was when the hold began
+ *  (a !bridge show mid-hold leaves it "hidden"), so the SAME kind again is that frozen kind - not the person's level now - and never
+ *  ends their frog-name session; a CHANGED kind (incognito -> hidden mid-hold: they went hidden now) does, as any sighting would. */
+const HOLD_KINDS = new Map();
+function holdKind(roomId, hold, kind) {
+  let m = HOLD_KINDS.get(roomId);
+  if (kind === undefined) return m ? m.get(hold) : undefined;
+  if (!m) { m = new Map(); HOLD_KINDS.set(roomId, m); }
+  m.delete(hold);
+  m.set(hold, kind);
+  while (m.size > HOLDS_MAX) m.delete(m.keys().next().value);
+  return kind;
+}
 /**
  * A veiled item's frog name: sets u.alias / u.hood / u.id (or leaves "someone"), and _vz.sess. B.2: an unproven holder or the release
  * of a hold begun named -> no name (the session is still sighted - they're there). A hold's release / 🎙 line reuse its grab's name.
@@ -209,17 +222,30 @@ async function nameItem(R, it) {
   let view = null;
   try {
     if (v2.leaving) {
+      // privacy fix (M addendum 3 #1): a "hidden" leave of someone whose open session is incognito ends it first - the leave never
+      // carries the incognito frog name under a hidden veil
+      await FN.level(roomId, vz.login, vz.kind, it.ts);
       view = FN.current(roomId, vz.login);
       await FN.left(roomId, vz.login, it.ts);
     } else {
-      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R) });
+      // review R1: a hold's item at the kind its hold already had is the hold's frozen kind (see holdKind); the first one (the grab,
+      // or the first seen after a restart) and a changed one decide the level as usual (fails closed)
+      let frozen = false;
+      if (it.hold && vz.kind) {
+        frozen = holdKind(roomId, it.hold) === vz.kind;
+        holdKind(roomId, it.hold, vz.kind);
+      }
+      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), kind: vz.kind,
+                                                 frozen });
     }
   } catch (e) { view = null; console.error("[veil] frog name:", e && e.code ? e.code : "error"); }
   let named = view && view.alias ? view : null;
   if (it.hold) {
     const was = holdName(roomId, it.hold);
     if (it.k === "mic") holdName(roomId, it.hold, named && v2.proven ? named : null);
-    else if (was !== undefined) named = was;                 // the grab's verdict (a name, or "someone") for the whole hold
+    // the grab's verdict (a name, or "someone") for the whole hold - privacy fix: only while it is still the same session (an
+    // incognito -> hidden switch mid-hold ends it at once: the release / 🎙 line then never shows the grab's incognito name)
+    else if (was !== undefined) named = was && view && view.session === was.session ? was : null;
   }
   if ((it.k === "mic" || it.k === "unmic") && (!v2.proven || v2.beganNamed)) named = null;
   if (named) {
@@ -236,6 +262,32 @@ async function nameItem(R, it) {
 function namedHold(roomId, hold) {
   const h = holdOf(hold);
   if (h && holdName(roomId, h) === undefined) holdName(roomId, h, null);
+  if (h) {
+    let m = BEGAN_NAMED.get(roomId);
+    if (!m) { m = new Map(); BEGAN_NAMED.set(roomId, m); }
+    m.delete(h);
+    m.set(h, true);
+    while (m.size > HOLDS_MAX) m.delete(m.keys().next().value);
+  }
+}
+/** privacy fix (C, spec B.2 / B.4 "named-then-veiled hold"): per room, the holds whose grab came NAMED (a release of one is "someone"). */
+const BEGAN_NAMED = new Map();
+/**
+ * privacy fix (C): did hold `hold` of bridge room R begin NAMED - its grab seen named here (namedHold), or, after a restart, a named
+ * grab with that hold id still in the live feed? Pepe sends the RELEASE of such a hold in today's anonymous form (no priv) when he
+ * can't tie the veil to the holder - an unresolved roster name (B-1b `anon`), a veil key that isn't provably theirs (A-compat-2) -
+ * and it used to be dropped for everyone (a hashless anonymous drop without a stamped grab). The spec's rule for that release is
+ * "someone dropped the mic" (B.2): bridge.js stamps it showable (k3) and the page shows it as plain "someone", never the hold id.
+ * once: the hold's release - forgotten after (a hold id is never reused).
+ */
+function beganNamed(R, hold, once = false) {
+  const h = holdOf(hold);
+  if (!h || !R) return false;
+  const m = BEGAN_NAMED.get(R.id);
+  let yes = !!(m && m.get(h));
+  if (!yes) yes = (R.feed || []).some((x) => x && x.k === "mic" && x.hold === h && x.u && !x.u.anon && x.u.login);
+  if (yes && once && m) m.delete(h);
+  return yes;
 }
 /** A NAMED sighting of a login in a pad (C.2: no frog name for them there for 15 minutes) - and their open session, if any, ends
  *  (their level is back to normal). Cheap: an HMAC; the session check is in memory. */
@@ -299,14 +351,27 @@ async function nameSnapshot(R, now) {
   const seen = new Set();
   const named = new Set();
   const avoid = avoidOf(R);
+  // review R1: the level is a PERSON's, not an entry's. Pepe gives a roster entry the person's level now, but a mic entry its hold's
+  // level as it was when the hold began (a hold begun hidden stays "hidden" after a !bridge show) - sighting both with their own kind
+  // ended the session and burnt the name on every snapshot of the hold (incognito roster entry, then "hidden" mic entry). Every
+  // entry of a person on the roster is sighted at their roster level (the strictest, if listed twice); a holder not on the roster
+  // at their mic entry's.
+  const personKind = new Map();
+  for (const e of R.members || []) {
+    const vz = e && e.anon && e._vz;
+    if (!vz || !vz.login) continue;
+    const low = lower(vz.login);
+    if (personKind.get(low) !== "hidden") personKind.set(low, vz.kind);
+  }
   for (const e of [...(R.members || []), ...(R.mic || [])]) {
     if (!e) continue;
     if (!e.anon && e.login) { named.add(lower(e.login)); continue; }
     const vz = e._vz;
     if (!vz) continue;
     const low = lower(vz.login);
+    const kind = personKind.has(low) ? personKind.get(low) : vz.kind;
     let view = null;
-    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid }); } catch (err) { view = null; }
+    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid, kind }); } catch (err) { view = null; }
     seen.add(low);
     const isMic = (R.mic || []).includes(e);
     if (view && view.alias && !(isMic && (vz.proven !== true || vz.beganNamed === true))) {
@@ -423,6 +488,6 @@ async function forgetLogins(logins) {
   return { feed: cs, rooms };
 }
 
-module.exports = { KINDS, hide, bucket, parsePriv, realUser, veiledItem, namedExtras, opaqueId, nameItem, namedSeen, namedHold, snapshotEntries,
+module.exports = { KINDS, hide, bucket, parsePriv, realUser, veiledItem, namedExtras, opaqueId, nameItem, namedSeen, namedHold, beganNamed, snapshotEntries,
                    nameSnapshot, veilOrder, seedSeen, veilRow, roomVeilData, attachRoomVeil, attachFeedVeil, forgetLogins, avoidOf,
-                   hiddenHash, owns, hasPriv, _holds: HOLDS };
+                   hiddenHash, owns, hasPriv, _holds: HOLDS, _beganNamed: BEGAN_NAMED, _holdKinds: HOLD_KINDS };

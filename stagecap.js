@@ -100,6 +100,10 @@ function init() {
         stream_label TEXT, kind TEXT NOT NULL, ct TEXT NOT NULL, secs REAL, bytes INTEGER, nsfw INTEGER NOT NULL DEFAULT 0,
         state TEXT NOT NULL, action_id INTEGER, media_id TEXT, message TEXT, created INTEGER NOT NULL, updated INTEGER)`);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_captures_user ON stage_captures (user_id, created)");
+      // 1.99ahe: media id -> its capture. Every media delete / expiry runs the stage_capture_{people,cards} triggers below
+      // (WHERE media_id = NEW.id / OLD.id), and storykeep.micCapture + storyreact.loadMicPeople look captures up by media id;
+      // without this each of those was a full scan of stage_captures.
+      await runQuery("CREATE INDEX IF NOT EXISTS stage_captures_media ON stage_captures (media_id)");
       await addColumn("stage_captures", "ready_by", "INTEGER");
       await addColumn("stage_captures", "audio_note", "TEXT");
       await runQuery(`CREATE TABLE IF NOT EXISTS stage_capture_people (

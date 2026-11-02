@@ -71,6 +71,18 @@
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath transform='translate(36 72) rotate(-10) scale(.85)' d='M8 0C2 4 2 12 8 18C14 12 14 4 8 0z M8 18v4' fill='%23f2b134' stroke='%238a3a12' stroke-width='1'/%3E%3C/svg%3E");
     background-size: 120px 120px, 200px 200px, 150px 150px; animation: cx-fall 14s linear infinite; opacity: .8;
   }
+  /* December 2026 (❄️ Winter Lights): coloured bulbs - red, gold, green, blue, violet - each with a soft halo, twinkling
+     (cx-twinkle; reduced motion stops it with every other .cx-fx) */
+  .cx-fx-lights {
+    background-image:
+      radial-gradient(3px 3px at 14% 24%, #ff5a5f, transparent 70%), radial-gradient(10px 10px at 14% 24%, rgba(255, 90, 95, .35), transparent 70%),
+      radial-gradient(3px 3px at 46% 62%, #ffd23f, transparent 70%), radial-gradient(10px 10px at 46% 62%, rgba(255, 210, 63, .35), transparent 70%),
+      radial-gradient(3px 3px at 78% 30%, #3ee0a0, transparent 70%), radial-gradient(10px 10px at 78% 30%, rgba(62, 224, 160, .35), transparent 70%),
+      radial-gradient(3px 3px at 30% 84%, #4cc9f0, transparent 70%), radial-gradient(10px 10px at 30% 84%, rgba(76, 201, 240, .35), transparent 70%),
+      radial-gradient(3px 3px at 88% 76%, #c77dff, transparent 70%), radial-gradient(10px 10px at 88% 76%, rgba(199, 125, 255, .35), transparent 70%);
+    background-size: 150px 110px, 150px 110px, 190px 140px, 190px 140px, 170px 120px, 170px 120px, 210px 150px, 210px 150px, 130px 100px, 130px 100px;
+    animation: cx-twinkle 2.4s ease-in-out infinite alternate; opacity: .9;
+  }
   /* avatar decoration */
   .cx-av { position: relative; display: inline-block; line-height: 0; border-radius: 50%; }
   .cx-av .cx-conic { position: absolute; inset: -7px; border-radius: 50%; pointer-events: none;

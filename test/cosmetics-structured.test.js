@@ -168,3 +168,59 @@ test("🍂 Fireside 2026: eight seasonal items like October's - one window, list
   assert.match(view, /\.cxp \.season\.fireside \{/);
   assert.doesNotMatch(view, /\(Halloween, winter\)/, "the how-it-works copy names no particular season");
 });
+
+// December 2026 - every date is passed in (C.onSale / C.seasonState take the time): nothing reads today's date
+test("❄️ Winter Lights 2026: eight seasonal items like November's - one December window, list prices, never dropped; the new lights effect is drawn", () => {
+  const ids = ["nc_twinkle", "pb_fairisle", "ad_countdown", "bn_brightnight", "fx_fairylights", "gh_earmuffs", "go_winterlights", "gp_lantern"];
+  const set = CAT.items.filter((it) => it.season && it.season.label === "Winter Lights 2026");
+  assert.deepEqual(set.map((it) => it.id), ids, "the set, in shop order");
+  const RAR = CAT.rarities;
+  for (const it of set) {
+    assert.deepEqual(it.season, { from: "2026-12-01", to: "2027-01-01", label: "Winter Lights 2026" }, it.id);
+    assert.deepEqual(it.source, ["season"], it.id);
+    assert.equal(it.price, RAR[it.rarity].price, it.id + " costs its rarity's list price");
+    assert.ok(!it.drop_weight && !it.perk, it.id + ": never dropped, not a perk");
+    assert.equal(C.onSale(it, Date.parse("2026-11-30T23:59:59Z")), false, it.id + ": not in November");
+    assert.equal(C.seasonState(it, Date.parse("2026-11-15T12:00:00Z")), "upcoming", it.id + ": shown as coming in November");
+    assert.equal(C.onSale(it, Date.parse("2026-12-01T00:00:00Z")), true, it.id + ": on sale from Dec 1 00:00 UTC");
+    assert.equal(C.onSale(it, Date.parse("2026-12-31T23:59:59Z")), true, it.id + ": through New Year's Eve");
+    assert.equal(C.onSale(it, Date.parse("2027-01-01T00:00:00Z")), false, it.id + ": gone on New Year's Day (December only)");
+    assert.equal(C.seasonState(it, Date.parse("2027-01-15T00:00:00Z")), "over");
+  }
+  // the hand-over: Fireside's set leaves the shop the second Winter Lights' arrives
+  const fire = CAT.items.filter((it) => it.season && it.season.label === "Fireside 2026");
+  for (const [when, f, w] of [["2026-11-30T23:59:59Z", true, false], ["2026-12-01T00:00:00Z", false, true]]) {
+    assert.ok(fire.every((it) => C.onSale(it, Date.parse(when)) === f), "Fireside at " + when);
+    assert.ok(set.every((it) => C.onSale(it, Date.parse(when)) === w), "Winter Lights at " + when);
+  }
+  // the same kinds, rarities and prices as the Fireside 2026 and Halloween 2026 sets; names of its own
+  const key = (xs) => xs.map((it) => [it.kind, it.rarity, it.price].join(" ")).sort();
+  assert.deepEqual(key(set), key(fire));
+  assert.deepEqual(key(set), key(CAT.items.filter((it) => it.season && it.season.label === "Halloween 2026")));
+  const others = CAT.items.filter((it) => !ids.includes(it.id)).map((it) => it.name.toLowerCase());
+  for (const it of set) assert.ok(!others.includes(it.name.toLowerCase()), it.name + ": a name of its own (Winter 2026 has Northern Lights, Let It Snow ...)");
+  // every winter holiday, none of them the theme (and no Santa: hand-off 07 builds that costume)
+  for (const it of set) assert.doesNotMatch(it.name + " " + it.desc, /\b(christmas|xmas|santa|claus|hanukk?ah|kwanzaa|reindeer|sleigh|elf)\b/i, it.id);
+  const ring = byId.get("ad_countdown");
+  assert.ok(Array.isArray(ring.style.conic) && !ring.style.ring, "a conic ring (the nine hand-written rings stay nine)");
+  assert.equal(ring.style.conic.length, 12, "twelve hard strokes");
+  assert.deepEqual(CS.lookOf(ring).deco.ring.colors, ["#ffd23f", "#1c1f4a"], "the hub's look: gold and midnight");
+  // the new profile effect: its enum entry, its CSS (every effect has one), drawn for the item; reduced motion stops it
+  assert.ok(CS.EFFECTS.includes("lights"));
+  assert.equal(C.render(byId.get("fx_fairylights")).effect, "lights");
+  assert.deepEqual(CS.lookOf(byId.get("fx_fairylights")), { effect: "lights" });
+  const css = fs.readFileSync(path.join(repo, "views", "partials", "cosmetics-css.ejs"), "utf8");
+  for (const e of CS.EFFECTS) assert.ok(css.includes(`.cx-fx-${e} {`), "CSS for every effect: " + e);
+  assert.match(css, /\.cx-fx-lights \{[^}]*animation: cx-twinkle/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.cx-fx,/);
+  // the banner and the border carry their own colours into the hub's look
+  assert.ok(CS.lookOf(byId.get("bn_brightnight")).banner.colors.includes("#0b1026"), "the night sky is the banner's base");
+  assert.deepEqual(CS.lookOf(byId.get("pb_fairisle")).border.colors, ["#c2255c", "#f3e3c3", "#1e3566"]);
+  // the shop's set heading: ❄️ and its own colours (the older 'Winter 2026' set keeps its own)
+  const view = fs.readFileSync(path.join(repo, "views", "cosmetics.ejs"), "utf8");
+  const helpers = new Function([view.match(/const seasonEmoji = .*;/)[0], view.match(/const seasonClass = .*;/)[0],
+                                "return { seasonEmoji, seasonClass };"].join(";"))();
+  assert.deepEqual([helpers.seasonEmoji("Winter Lights 2026"), helpers.seasonClass("Winter Lights 2026")], ["❄️", "winterlights"]);
+  assert.deepEqual([helpers.seasonEmoji("Winter 2026"), helpers.seasonClass("Winter 2026")], ["❄️", "winter"]);
+  assert.match(view, /\.cxp \.season\.winterlights \{/);
+});

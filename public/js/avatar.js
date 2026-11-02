@@ -332,6 +332,14 @@
       for (let x = 4; x <= 6; x++) P(-1, x, r);
       P(-2, 4, c); P(-2, 5, c); P(-2, 6, cd);                           // the bobble
       P(3, 1, r); P(4, 1, c); P(3, 9, r); P(4, 9, c);                   // ear flaps, cream-lined so they show on any skin
+    },
+    // ── December 2026: Winter Lights (❄️ Winter Lights 2026 season set) ──
+    earmuffs(P) {                                     // fluffy cream earmuffs on a cranberry band arched over the head
+      const b = '#C2255C', bl = '#E64980', f = '#F4F1EA', fd = '#CFC8BC';
+      for (let x = 3; x <= 7; x++) P(0, x, x === 4 ? bl : b);          // the band over the top (a glint on it)
+      P(1, 2, b); P(1, 8, b);
+      P(2, 0, f); P(2, 1, f); P(3, 0, f); P(3, 1, fd); P(4, 0, fd);    // the muffs, over the ears - cream with a shade,
+      P(2, 9, f); P(2, 10, f); P(3, 10, f); P(3, 9, fd); P(4, 10, fd); // clear of the eyes (cols 2-3 / 7-8)
     }
   };
 
@@ -588,6 +596,15 @@
       P(14, 5, m); P(14, 6, r);                                                                          // fringe
       P(10, 1, r); P(10, 0, m); P(9, -1, r); P(9, -2, m); P(10, -2, r);                                  // the other end, blowing out left
                                                                                                          // (clear of every prop's hand)
+    },
+    // ── December 2026: Winter Lights ──
+    winterlights(P) {                                   // a quilted navy puffer with a string of coloured lights wound across it
+      const n = '#2C4A8A', q = '#1E3566', l = '#4F73C2', wire = '#8FA3B8';
+      const bulbs = ['#FF5A5F', '#FFD23F', '#3EE0A0', '#4CC9F0', '#C77DFF'];
+      torso(P, (y, x) => (y === 10 ? l : y === 12 ? q : n));                                          // puffy collar, quilt seam
+      const sag = [11, 11, 12, 12, 13, 13, 13, 12, 12, 11];                                            // the strand swags across the
+      for (let x = 1; x <= 9; x++) P(sag[x], x, x % 2 ? bulbs[(x >> 1) % bulbs.length] : wire);       // chest: a bulb, a bit of wire
+      P(10, 1, wire); P(10, 9, wire);                                                                  // ...up over both shoulders
     }
   };
 
@@ -763,6 +780,18 @@
       A(1, 12, g); A(1, 16, g); A(5, 16, g);                            // diagonals
       A(0, 11, p); A(0, 16, c); A(2, 11, w); A(7, 16, p);              // stray sparks - right of col 12 or above the hats,
                                                                         // never on the face (the head is canvas rows 4-12, cols 4-12)
+    },
+    // ── December 2026: Winter Lights ──
+    lantern(A, P, f) {                                // a brass lantern with a candle glowing inside, held up by its ring
+      const br = '#C9A14A', bd = '#7A5A1E', glass = '#FFE9A0', fl = '#FFD23F', core = '#FFFFFF', glow = '#FFF3C4';
+      A(3, 14, f.body);                                                 // the hand on the ring
+      A(4, 13, br); A(4, 15, br);                                       // the ring
+      for (let x = 13; x <= 15; x++) { A(5, x, bd); A(10, x, bd); }     // the cap and the base
+      A(6, 13, br); A(6, 15, br); A(6, 14, glass);
+      for (let y = 7; y <= 9; y++) { A(y, 13, br); A(y, 15, br); }      // the frame round the glass
+      A(7, 14, fl); A(8, 14, core); A(9, 14, fl);                       // the candle flame, white-hot in the middle
+      A(11, 14, bd);                                                    // the foot
+      A(6, 16, glow); A(8, 16, glow); A(10, 16, glow);                  // its glow, right of col 12 (never on the face)
     }
   };
 

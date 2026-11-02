@@ -146,6 +146,22 @@ async function userFor(login) {
                           WHERE LOWER(camfrogUsername) = LOWER(?) ORDER BY CASE WHEN camfrogUsername = ? THEN 0 ELSE 1 END LIMIT 1`, [login, login]))[0] || null;
 }
 
+/** privacy fix (1.99ahc, heist review F4): is `k` (a lower-cased login) private on the website NOW - incognito (incognito_state on,
+ *  incognito_anon: the gtfboards.privateSet / roomstats.maskedLogins rule) or on the sticky hidden set (!bridge hide / !incognito,
+ *  either store: chatlogview.isHiddenLogin)? Any check that can't run says yes (fails closed); a store with no table yet is empty. */
+async function privateNow(k) {
+  try {
+    for (const sql of [`SELECT 1 AS x FROM incognito_state WHERE "on" = 1 AND LOWER(login) = ? LIMIT 1`,
+                       "SELECT 1 AS x FROM incognito_anon WHERE LOWER(login) = ? LIMIT 1"]) {
+      try { if ((await getQuery(sql, [k])).length) return true; }
+      catch (e) { if (!/no such table/i.test(String(e && e.message))) return true; }
+    }
+    const CV = require("./chatlogview");
+    await CV.init();
+    return !!CV.isHiddenLogin(k);
+  } catch (e) { return true; }
+}
+
 /**
  * Everything the page draws, or {private: true} / {missing: true}. viewer: the signed-in userId (or null).
  */
@@ -161,6 +177,12 @@ async function view(login, viewer) {
     const v = PL.view(await PL.get(u.userId), { owner, admin: isAdmin });
     if (!v.show("gtf")) return { private: true, login: k, display: u.displayname || u.camfrogUsername || k };
   }
+  // privacy fix (1.99ahc, heist review F4): a login that is private NOW - !incognito (incognito_state on, incognito_anon: the
+  // gtfboards.privateSet rule) or on the sticky hidden set (!bridge hide / !incognito, either store) - has no public sheet. Its stats
+  // (modifiers, best stat), items, record and avatar seed matched a heist's "someone" round by round, and the record's heists / loot
+  // bump at the heist's end confirmed a guessed login. Visitors get what a login with no sheet gets (nothing says "private": that
+  // would tell who is incognito; no display name); the owner and admins still see it. Fails closed (privateNow).
+  if (!owner && !isAdmin && (await privateNow(k))) return { missing: true, login: k, mode: src.mode, owner: false, display: k };
   if (!src.sheet) return { missing: true, login: k, mode: src.mode, owner, display: (u && (u.displayname || u.camfrogUsername)) || k };
   let sh;
   try { sh = JSON.parse(src.sheet); } catch (e) { return { missing: true, login: k }; }

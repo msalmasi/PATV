@@ -9,12 +9,20 @@
 //   global          voice lines + 🎛️ sound effects (soundboards.json), everyone may play them per use (rarity price); free with All-Access
 //   pack:<id>       8 clips each; the pack's owners play them free, anyone else per use (rarity price)
 //   season:<id>     12 clips, the current season only; free with a 🎟️ Season Pass (or the season board bought), else 2,500
+//                   1.99ahe make-good: a season in KEPT_SEASONS stays playable for the people who BOUGHT its board, free and for good
+//                   (the drawer's own tab, Pepe's board "kept:<id>") - see KEPT_SEASONS
 //   legend          single-clip cosmetics, own-only (Gawk gawk gawk 20,000,000 - a random free voice every play; Founder
 //                   10,000,000, numbered 1-25)
 //   room:<room id>  a pad's own board: Prime Time 8 slots, Prime Time Plus 24 (premium.padPerks().soundboardSlots), clips
 //                   added by the pad owner / staff here (/p/<pad>/owner#soundboard) or in chat (`!sb add`, `!sb addmic`);
 //                   owner-set price 0-10,000 (default 1,000). A mic clip of someone is allowed unless THEY opted out of
 //                   "soundboard" (likeness.js, D4) - re-checked at every play.
+//                   1.99aha owner 11-02 (wave 2 open question 1): a J-7 FROG-NAME mic clip (feed_voices.alias: an incognito speaker's turn
+//                   posted under the frog name it was said with) may go on a room board too, LABELLED WITH THE FROG NAME: its
+//                   public subject (sb_clips.subject_alias) is the frog name everywhere the board shows or answers - the drawer,
+//                   the owner's editor, every refusal; the real login (subject_login) stays server-side for the rules only (their
+//                   opt-out, "Remove me", account deletion / merge, and Pepe's own copy: his opt-out check, the speaker's likeness
+//                   cut, the caption rule - botState, bot token only).
 // PRICES (D5/D6, sb_config): common 1,000 / rare 2,500 / epic 5,000 per use; packs 250,000 (a voice pack 400,000), the
 //   season board 600,000, All-Access (global + standard packs) 1,500,000. Season Pass: the season board unlimited + 1 free
 //   standard pack per month (sp_packs).
@@ -37,7 +45,7 @@
 //
 //   sb_clips    id, board, label, emoji, kind (tts|audio), voice, text, subject_login, src, trim_start, trim_end, audio, sha,
 //               secs, rarity, price, status (render|active|hidden|removed|failed), note, sort, created_by, created, updated,
-//               catalog, live, supply
+//               catalog, live, supply, subject_alias (1.99aha owner 11-02: a frog-name clip's public subject; subject_login is then never shown)
 //   sb_owned    user_id, item (pack:<id> | season:<id> | legend:<id> | all_access), source, payer_id, price, ref, period,
 //               serial, routing, created
 //   sb_reports  clip_id, user_id, reason, created
@@ -125,6 +133,30 @@ function loadCatalog(file = CATALOG_FILE) {
 loadCatalog();
 const seasonNow = (t = now()) => CAT.seasons.find((s) => t >= s.from && t < s.to) || null;
 const periodKey = (t = now()) => new Date(t).toISOString().slice(0, 7);
+// 1.99ahe (owner decision 2026-11-02): until 1.99agq the store said a season board "stays playable" after its season, yet every
+// path dropped past seasons on 1 November. The people who BOUGHT the board of a season listed here keep its clips, free and for
+// good: the 🔊 drawer shows them a tab of their own and Pepe's sync carries the clips as board "kept:<id>" with item "kept:<id>"
+// on those buyers only (a Pepe without kept support skips both). The entitlement IS the purchase row: sb_owned item "season:<id>",
+// source 'buy', bought before the season ended (no later one is possible: itemOf / grantComp sell the current season only). NOT a
+// comp, NOT the Season Pass, nobody else - and no refund. Only a season whose store copy made that promise belongs here: the
+// copy changed with 1.99agq ("The board leaves when its season ends"), before 🍂 Fireside went on sale, so later seasons don't.
+const KEPT_SEASONS = Object.freeze(["2026-10"]);
+/** The KEPT_SEASONS that are over (their own catalogue entries) - only then does a buyer need the kept path. */
+const keptOver = (t = now()) => KEPT_SEASONS.map((id) => CAT.bySeason[id]).filter((se) => se && t >= se.to);
+/** One sb_owned row -> "kept:<season id>" when it is a qualifying purchase of a kept season's board, else null. */
+function keptItem(r) {
+  if (!r || r.source !== "buy" || !String(r.item || "").startsWith("season:")) return null;
+  const id = String(r.item).slice(7), se = CAT.bySeason[id];
+  return se && KEPT_SEASONS.includes(id) && Number(r.created) < se.to ? "kept:" + id : null;
+}
+/** userId -> Set of "kept:<id>" they're entitled to (bought the board of a kept season before it ended). */
+async function keptFor(userId) {
+  await init();
+  if (!userId || !KEPT_SEASONS.length) return new Set();
+  const rows = await getQuery(`SELECT item, source, created FROM sb_owned WHERE user_id = ? AND source = 'buy' AND item IN (${KEPT_SEASONS.map(() => "?").join(",")})`,
+                              [userId, ...KEPT_SEASONS.map((id) => "season:" + id)]);
+  return new Set(rows.map(keptItem).filter(Boolean));
+}
 
 // ── storage ──
 let CONFIG = Object.assign({}, DEFAULTS);
@@ -140,6 +172,8 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS sb_clips_board ON sb_clips (board, status)");
       // 1.99vu: a clip whose audio is being replaced (a new catalogue file) keeps playing until Pepe has uploaded the new WAV
       try { await runQuery("ALTER TABLE sb_clips ADD COLUMN pending INTEGER DEFAULT 0"); } catch (e) { /* already there */ }
+      // 1.99aha owner 11-02: a J-7 frog-name mic clip's public subject (the frog name) - subject_login then stays server-side
+      try { await runQuery("ALTER TABLE sb_clips ADD COLUMN subject_alias TEXT"); } catch (e) { /* already there */ }
       await runQuery(`CREATE TABLE IF NOT EXISTS sb_owned (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, item TEXT NOT NULL, source TEXT NOT NULL,
         payer_id TEXT, price INTEGER NOT NULL DEFAULT 0, ref TEXT NOT NULL, period TEXT, serial INTEGER, routing TEXT, created INTEGER NOT NULL)`);
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS sb_owned_own ON sb_owned (user_id, item)");
@@ -289,8 +323,10 @@ async function allowance(userId, t = now()) {
 }
 
 // ── clips ──
+// 1.99aha owner 11-02: a frog-name clip's subject is its frog name (subject_frog: 1) - never the login behind it, in any answer built from this
 const pub = (c) => ({ id: c.id, board: c.board, label: c.label, emoji: c.emoji, kind: c.kind, rarity: c.rarity, secs: c.secs ? Math.round(c.secs * 10) / 10 : null,
-                      voice: c.voice || null, subject: c.subject_login || null, price: priceOf(c), status: c.status, live: !!c.live,
+                      voice: c.voice || null, subject: c.subject_alias || c.subject_login || null, ...(c.subject_alias ? { subject_frog: 1 } : {}),
+                      price: priceOf(c), status: c.status, live: !!c.live,
                       group: (c.board === "global" && CAT.groupOf[c.id]) || null,
                       audio: c.status === "active" && c.audio ? `/sb/audio/${c.id}.wav?v=${String(c.sha || "").slice(0, 8)}` : null });
 async function clip(id) { await init(); return (await getQuery("SELECT * FROM sb_clips WHERE id = ?", [String(id || "")]))[0] || null; }
@@ -325,7 +361,8 @@ const newId = (prefix) => prefix + "-" + crypto.randomBytes(5).toString("hex");
 
 /**
  * Add a clip to a pad's room board. who = {userId|null, login|null, staff}; o = {kind: "tts"|"audio", label, emoji, text, voice,
- * price, subject, src (a media file or "pepe:<upload>"), trim_start, trim_end, wav (Buffer: Pepe's ready audio), secs}.
+ * price, subject, alias (1.99aha owner 11-02: a J-7 frog-name clip's frog name - its public subject), src (a media file or "pepe:<upload>"),
+ * trim_start, trim_end, wav (Buffer: Pepe's ready audio), secs}.
  */
 async function addRoomClip(roomId, who, o) {
   await init();
@@ -341,7 +378,7 @@ async function addRoomClip(roomId, who, o) {
     throw new Refuse(409, `There's already a clip called "${label}" on this board.`);
   }
   const kind = o.kind === "audio" ? "audio" : "tts";
-  let text = null, subject = null;
+  let text = null, subject = null, alias = null;
   if (kind === "tts") {
     text = String(o.text || "").trim();
     const why = textRefusal(text);
@@ -356,13 +393,17 @@ async function addRoomClip(roomId, who, o) {
   } else {
     subject = low(o.subject) || null;
     if (subject && !LOGIN_RE.test(subject)) subject = null;
+    // 1.99aha owner 11-02: a frog-name clip - the frog name is all anyone is ever shown (the login only for the rules, server-side)
+    alias = subject && typeof o.alias === "string" ? o.alias.replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 60) || null : null;
     // 1.99ww: a mic clip may bring its transcript (Pepe's !sb addmic) - its chat caption when it plays; a line that wouldn't
     // pass as a TTS line is simply not kept (the clip still is)
     const said = String(o.text || "").replace(/[\u0000-\u001f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, TEXT_MAX);
     text = said && !textRefusal(said) ? said : null;
     if (subject) {
       const su = await L().userByLogin(subject);
-      if (su && !(await L().allows(su.userId, "soundboard"))) throw new Refuse(403, `${subject} has opted out of being on soundboards.`);
+      if (su && !(await L().allows(su.userId, "soundboard"))) {
+        throw new Refuse(403, alias ? "The person heard in that clip has opted out of being on soundboards." : `${subject} has opted out of being on soundboards.`);
+      }
     }
   }
   let price = o.price == null || o.price === "" ? CONFIG.room_default_price : Math.floor(Number(o.price));
@@ -375,10 +416,10 @@ async function addRoomClip(roomId, who, o) {
     status = r.status; audio = r.audio; hash = r.sha; secs = r.secs;
   }
   await runQuery(`INSERT INTO sb_clips (id, board, label, emoji, kind, voice, text, subject_login, src, trim_start, trim_end, audio, sha, secs, rarity, price, status,
-                  sort, created_by, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'epic', ?, ?, ?, ?, ?, ?)`,
+                  sort, created_by, created, updated, subject_alias) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'epic', ?, ?, ?, ?, ?, ?, ?)`,
                  [id, "room:" + roomId, label, String(o.emoji || (kind === "audio" ? "🎙️" : "🔊")).slice(0, 8), kind, o.voice || null, text, subject,
                   o.src || null, o.trim_start == null ? null : Number(o.trim_start), o.trim_end == null ? null : Number(o.trim_end), audio, hash, secs, price, status,
-                  used, who.userId || ("cf:" + (who.login || "?")), t, t]);
+                  used, who.userId || ("cf:" + (who.login || "?")), t, t, alias]);
   return clip(id);
 }
 async function removeClip(id, by, why) {
@@ -457,20 +498,32 @@ async function botState() {
                         AND IFNULL(note, '') != src AND updated < ?`, [now(), now() - 3600e3]);
   const rows = await getQuery("SELECT * FROM sb_clips WHERE status IN ('active','render') ORDER BY board, sort, created");
   const season = seasonNow();
-  const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id)))
+  const own = await getQuery(`SELECT o.item, o.source, o.created, u.camfrogUsername AS cf FROM sb_owned o JOIN users u ON u.userId = o.user_id
+                              WHERE u.camfrogUsername IS NOT NULL AND u.camfrogUsername != ''`);
+  const owned = {};
+  for (const r of own) (owned[low(r.cf)] = owned[low(r.cf)] || []).push(r.item);
+  // 1.99ahe KEPT_SEASONS: a kept season that's over rides as board "kept:<id>", and its buyers get item "kept:<id>" - only while
+  // someone linked is entitled (nobody: nothing extra on the wire)
+  const kept = {};
+  for (const r of own) { const k = keptItem(r); if (k) { owned[low(r.cf)].push(k); kept[k] = true; } }
+  const keptNow = keptOver().filter((se) => kept["kept:" + se.id]);
+  const keptBoard = {};
+  for (const se of keptNow) keptBoard["season:" + se.id] = "kept:" + se.id;
+  const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id) || keptBoard[c.board]))
     // 1.99ww: every clip carries its line - Pepe posts it in the room as the clip plays (his TTS caption switch); a mic clip's
     // line is the transcript Pepe stored with it (or none); a sound effect is shown by its label (pub().group)
-    .map((c) => Object.assign(pub(c), { text: c.text || undefined, voice_owner: null, sha: c.sha || null }));
+    // 1.99aha owner 11-02: Pepe (bot token, server to server) gets a frog-name clip's REAL login as `subject` - his rules need it (their
+    // opt-out at every play, the speaker's likeness cut, the caption rule); he never prints it (labels only), and `subject_alias`
+    // says it is a frog-name clip
+    .map((c) => Object.assign(pub(c), { subject: c.subject_login || null, ...(c.subject_alias ? { subject_alias: c.subject_alias } : {}),
+                                        text: c.text || undefined, voice_owner: null, sha: c.sha || null },
+                                      keptBoard[c.board] ? { board: keptBoard[c.board] } : {}));
   // the owners of cloned voices (their cut) and who may not be on a soundboard any more
   try {
     const VS = require("./voicestore");
     const owners = await VS.ownerMap();
     for (const c of clips) if (c.voice && owners[low(c.voice)]) c.voice_owner = owners[low(c.voice)];
   } catch (e) { /* no voice store yet */ }
-  const own = await getQuery(`SELECT o.item, u.camfrogUsername AS cf FROM sb_owned o JOIN users u ON u.userId = o.user_id
-                              WHERE u.camfrogUsername IS NOT NULL AND u.camfrogUsername != ''`);
-  const owned = {};
-  for (const r of own) (owned[low(r.cf)] = owned[low(r.cf)] || []).push(r.item);
   let sp = [];
   try { sp = await P().passCamfrogs(); } catch (e) { sp = []; }
   const optouts = await L().optoutMap().catch(() => ({}));
@@ -489,7 +542,8 @@ async function botState() {
     .map((c) => ({ id: c.id, kind: String(c.src || "").startsWith("file:") ? "audio" : c.kind, voice: c.voice, text: c.text,
                    src: c.src ? `/api/soundboards/bot/src/${c.id}` + (String(c.src).startsWith("file:") ? `?v=${String(c.src).split("#")[1] || ""}` : "") : null,
                    trim_start: c.trim_start, trim_end: c.trim_end, cap: capFor(c) }));
-  return { on: CONFIG.enabled, cfg: CONFIG, season: season ? { id: season.id, name: season.name, emoji: season.emoji } : null, clips, owned, sp, sb_optouts: sbOut, render };
+  return { on: CONFIG.enabled, cfg: CONFIG, season: season ? { id: season.id, name: season.name, emoji: season.emoji } : null, clips, owned, sp, sb_optouts: sbOut, render,
+           kept_seasons: keptNow.map((se) => ({ id: "kept:" + se.id, name: se.name, emoji: se.emoji })) };
 }
 async function notePlays(list) {
   for (const p of (Array.isArray(list) ? list : []).slice(0, 500)) {
@@ -512,6 +566,13 @@ async function roomBoard(user, roomId) {
   add("room", "Room", "🏠", roomId ? await boardClips("room:" + roomId) : []);
   add("global", CAT.global.name, CAT.global.emoji, await boardClips("global"));
   if (season) add("season", season.name, season.emoji, await boardClips("season:" + season.id));
+  // 1.99ahe KEPT_SEASONS: a past season whose board this viewer bought - theirs, unlimited, for good (nobody else sees it)
+  const keptMine = user && user.userId ? await keptFor(user.userId) : new Set();
+  for (const se of keptOver()) {
+    if (!keptMine.has("kept:" + se.id)) continue;
+    const rows = await boardClips("season:" + se.id);
+    if (rows.length) tabs.push({ key: "kept:" + se.id, name: se.name, emoji: se.emoji, kept: true, clips: rows.map((c) => Object.assign(pub(c), { free: true })) });
+  }
   const mine = [];
   for (const p of CAT.packs) if (!p.retired) mine.push(...(await boardClips("pack:" + p.id)));
   add("packs", "Packs", "🎁", mine);
@@ -822,7 +883,9 @@ function register(app, { addUser, isBotToken }) {
         if (logins.length !== 1) throw new Refuse(400, "Pick a mic clip with one person in it.");
         const st = Math.max(0, Number(b.start) || 0), en = Number(b.end) || st + ROOM_SECS;
         if (en - st > ROOM_SECS + 0.01 || en <= st) throw new Refuse(400, `Pick at most ${ROOM_SECS} seconds.`);
-        await addRoomClip(R.id, who, { kind: "audio", label: b.label, emoji: b.emoji, subject: logins[0], src: "media:" + v.media_id, trim_start: st, trim_end: en, price: b.price });
+        // 1.99aha owner 11-02: a J-7 clip posted under a frog name (feed_voices.alias) goes on the board under that frog name
+        await addRoomClip(R.id, who, { kind: "audio", label: b.label, emoji: b.emoji, subject: logins[0], alias: v.alias || null, src: "media:" + v.media_id,
+                                       trim_start: st, trim_end: en, price: b.price });
       } else if (b.action === "price" || b.action === "remove" || b.action === "move") {
         const c = await clip(b.clip);
         if (!c || c.board !== "room:" + R.id || c.status === "removed") throw new Refuse(404, "No such clip on this board.");
@@ -903,7 +966,7 @@ async function adminState() {
 
 module.exports = {
   init, config, setConfig, loadCatalog, seasonNow, botState, notePlays, roomBoard, addRoomClip, removeClip, storeAudio, buy, grantComp, allowance, ownedItems,
-  report, removeMe, priceOf, clipStatus: clip, freeFor, textRefusal, wavSecs, register, Refuse, RARITIES, ROOM_SECS,
+  report, removeMe, priceOf, clipStatus: clip, freeFor, textRefusal, wavSecs, register, Refuse, RARITIES, ROOM_SECS, KEPT_SEASONS, keptFor,
   get CAT() { return CAT; }, get DIR() { return DIR; }, get AUDIO_SRC() { return AUDIO_SRC; }, fileSrc, healLive,
   _setAudioSrc: (d) => { AUDIO_SRC = path.resolve(d); },
   _seed: () => seedCatalog(),

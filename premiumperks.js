@@ -39,8 +39,9 @@ function values() {
     // seasons there's no board to be unlimited on
     sb_season: safe(() => { const s = require("./soundboards").seasonNow(); return s ? { id: s.id, name: s.name, emoji: s.emoji } : null; }, null),
     flairs: Number(fl.MAX_FLAIRS) || 25, flairs_plus: Number(fl.MAX_FLAIRS_PLUS) || 50,
-    // on: in its window right now (the Seasonal stickers line takes its icon from that pack - 🍂 in November, 🎃 in October;
-    // where two windows overlap, e.g. Nov 1-7, the newest one wins: stickers.json lists the packs in date order)
+    // on: in its window right now (the Seasonal stickers line takes its icon from that pack - 🎃 in October, 🍂 in November,
+    // ❄️ in December; where two windows overlap, e.g. Nov 1-7 or Dec 1, the newest one wins: stickers.json lists the packs in
+    // date order)
     sp_seasonal: stk("season_pass").filter((p) => p.season).map((p) => ({ ...p, on: safe(() => require("./stickers").inSeason(p), false) })),
     lowlat_live: rtc === "prime" || rtc === "all",
     // 1.99aak: live cams per viewer (livecam.js caps: free / Season Pass)

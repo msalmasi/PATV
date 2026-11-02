@@ -127,3 +127,82 @@ test("🍂 Fireside review: the sparkler never paints on the face or the hat, th
     for (let x = 0; x < 17; x++) if (MOUTHS.includes(bare[11][x])) assert.equal(knit[11][x], bare[11][x], `seed ${seed}: the knit hides the mouth at 11,${x}`);
   }
 });
+
+test("❄️ Winter Lights 2026 (December): the earmuffs, the lit-up puffer and the lantern - painted, listed, seasonal, the November slots and prices", () => {
+  const by = Object.fromEntries(CAT.items.map((i) => [i.id, i]));
+  const want = {
+    gh_earmuffs: ["gtf_hat", "earmuffs", "uncommon", 75000],
+    go_winterlights: ["gtf_outfit", "winterlights", "epic", 750000],
+    gp_lantern: ["gtf_prop", "lantern", "legendary", 2500000],
+  };
+  const season = { from: "2026-12-01", to: "2027-01-01", label: "Winter Lights 2026" };
+  for (const [id, [kind, layer, rarity, price]] of Object.entries(want)) {
+    const it = by[id];
+    assert.ok(it, id);
+    assert.deepEqual([it.kind, it.style.layer, it.rarity, it.price], [kind, layer, rarity, price], id);
+    assert.equal(price, CAT.rarities[rarity].price, `${id} costs its rarity's list price`);
+    assert.deepEqual(it.source, ["season"], id);
+    assert.deepEqual(it.season, season, `${id} sells in the Winter Lights 2026 window`);
+    assert.ok(!it.drop_weight && !it.perk, `${id}: seasonal gear never drops and isn't a perk`);
+    assert.ok(globalThis.pepeAvatarLayers[OPT[kind]].includes(layer), `${id}: avatar.js paints ${layer}`);
+    assert.ok(require(path.join(repo, "cosmeticstyle")).GTF_LAYERS[kind].includes(layer), `${id}: the hub's look enum knows ${layer}`);
+  }
+  // the same slots and prices as November's bobble / knit / sparkler
+  assert.deepEqual(["gh_bobble", "go_fireside", "gp_sparkler"].map((id) => by[id].price), [75000, 750000, 2500000]);
+  const f = globalThis.pepeAvatarSVG;
+  for (const seed of [7, 42, 1234, 99999]) {
+    const bare = f(seed, 64, { bg: "city" });
+    for (const o of [{ hat: "earmuffs" }, { outfit: "winterlights" }, { prop: "lantern" }, { hat: "earmuffs", outfit: "winterlights", prop: "lantern" }]) {
+      const svg = f(seed, 64, { bg: "city", ...o });
+      assert.match(svg, /viewBox="0 0 17 17"/);
+      assert.notEqual(svg, bare, JSON.stringify(o) + " draws something");
+    }
+  }
+  assert.match(f(42, 64, { hat: "earmuffs" }), /#F4F1EA/, "the cream muffs");
+  assert.match(f(42, 64, { hat: "earmuffs" }), /#C2255C/, "the cranberry band");
+  assert.notEqual(f(42, 64, { hat: "earmuffs" }), f(42, 64, { hat: "bobble" }), "not November's bobble hat");
+  assert.match(f(42, 64, { outfit: "winterlights" }), /#2C4A8A/, "the navy puffer");
+  for (const c of ["#FF5A5F", "#FFD23F", "#3EE0A0", "#4CC9F0", "#C77DFF"]) assert.match(f(42, 64, { outfit: "winterlights" }), new RegExp(c), "a bulb " + c);
+  assert.match(f(42, 64, { prop: "lantern" }), /#C9A14A/, "the brass lantern");
+});
+
+test("❄️ Winter Lights art: the lantern never paints on the face, the muffs keep both eyes, the puffer keeps every mouth (200 seeds)", () => {
+  const f = globalThis.pepeAvatarSVG;
+  const RECT = /<rect x="(\d+)" y="(\d+)" width="([\d.]+)" height="[\d.]+" fill="([^"]+)"\/>/g;
+  const grid = (svg) => {
+    const g = Array.from({ length: 17 }, () => Array(17).fill(null));
+    for (const m of svg.matchAll(RECT)) for (let i = 0; i < Math.round(Number(m[3]) - 0.02); i++) g[+m[2]][+m[1] + i] = m[4];
+    return g;
+  };
+  const MOUTHS = ["#8a0f1a", "#610b12"];
+  for (let seed = 0; seed < 200; seed++) {
+    const bare = grid(f(seed, 64, { bg: "city" }));
+    // the frog's head is canvas rows 4-12, cols 4-12: the lantern, its hand and its glow stay right of it
+    const lan = grid(f(seed, 64, { bg: "city", prop: "lantern" }));
+    for (let y = 4; y <= 12; y++) for (let x = 4; x <= 12; x++) assert.equal(lan[y][x], bare[y][x], `seed ${seed}: lantern on the face at ${y},${x}`);
+    // the muffs sit over the ears: every eye pixel (frog rows 4-5, cols 2-3 / 7-8 = canvas rows 6-7, cols 5-6 / 10-11) is the
+    // bare frog's - against the Beanie, which also drops the seed's own hat (and its shades)
+    const muffs = grid(f(seed, 64, { bg: "city", hat: "earmuffs" })), beanie = grid(f(seed, 64, { bg: "city", hat: "beanie" }));
+    for (const y of [6, 7]) for (const x of [5, 6, 10, 11]) assert.equal(muffs[y][x], beanie[y][x], `seed ${seed}: earmuffs over an eye at ${y},${x}`);
+    // ...and nothing below the ears (canvas row 7 down, cols 4-12) changes
+    for (let y = 7; y < 17; y++) for (let x = 4; x <= 12; x++) assert.equal(muffs[y][x], beanie[y][x], `seed ${seed}: earmuffs paint ${y},${x}`);
+    // the puffer starts at the shoulders: a frown's corners and an open mouth (frog row 9 = canvas row 11) survive
+    const puff = grid(f(seed, 64, { bg: "city", outfit: "winterlights" }));
+    for (let x = 0; x < 17; x++) if (MOUTHS.includes(bare[11][x])) assert.equal(puff[11][x], bare[11][x], `seed ${seed}: the puffer hides the mouth at 11,${x}`);
+    for (let y = 0; y <= 10; y++) for (let x = 0; x < 17; x++) assert.equal(puff[y][x], bare[y][x], `seed ${seed}: the puffer paints above the chin at ${y},${x}`);
+  }
+});
+
+test("every page loads avatar.js with one cache-buster, bumped past the Fireside build (a cached copy would drop the new layers)", () => {
+  const fs = require("fs");
+  const views = path.join(repo, "views");
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  const loads = [];
+  for (const f of walk(views).filter((p) => p.endsWith(".ejs"))) {
+    for (const m of fs.readFileSync(f, "utf8").matchAll(/['"]\/public\/js\/avatar\.js(\?v=(\d+))?['"]/g)) loads.push([path.relative(repo, f), m[2] ? Number(m[2]) : 0]);
+  }
+  assert.ok(loads.length >= 4, "cosmetics, the GTF sheet, the heist view and the gang avatars: " + JSON.stringify(loads));
+  const vs = new Set(loads.map((x) => x[1]));
+  assert.equal(vs.size, 1, "one version everywhere: " + JSON.stringify(loads));
+  assert.ok([...vs][0] >= 3, "?v=3 or later: the ❄️ Winter Lights layers (earmuffs, winterlights, lantern) came after ?v=2");
+});

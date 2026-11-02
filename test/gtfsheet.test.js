@@ -196,3 +196,42 @@ test("the web endpoint: signed-in, same-site fetch only", async () => {
   assert.equal((await post("/api/gtf/sheet/reroll", { what: "sheet", idem: "abcdefgh1" })).status, 403, "no X-Requested-With");
   cookieUser = null;
 });
+
+test("privacy fix (heist review F4): a login private NOW (incognito / the sticky hidden set) has no public sheet - visitors get the no-sheet answer, the owner and admins see it", async () => {
+  const CL = require(path.join(repo, "chatlog"));
+  const get = (p) => fetch(base + p).then(async (r) => ({ status: r.status, text: await r.text() }));
+  assert.ok((await S.view("ann_cf", null)).stats, "public before");
+  const nosheet = await S.view("nosheet_zz", null);           // what any login with no sheet (and no account) answers
+  const leaks = (v) => /Burglar|4242|"ANN"|"stats"|"record"|"items"|"avatar"/.test(JSON.stringify(v));
+  const masked = async (why) => {
+    for (const viewer of [null, "u2"]) {
+      const v = await S.view("ann_cf", viewer);
+      assert.equal(v.missing, true, `${why}: a visitor gets no sheet`);
+      assert.deepEqual(Object.keys(v).sort(), Object.keys(nosheet).sort(), `${why}: the same answer as a login with no sheet`);
+      assert.equal(v.display, "ann_cf", `${why}: no display name (only the login asked for)`);
+      assert.ok(!leaks(v), `${why}: no stat, item, record or seed`);
+    }
+    assert.ok((await S.view("ann_cf", "u1")).stats, `${why}: the owner still sees it`);
+    assert.ok((await S.view("ann_cf", "u9")).stats, `${why}: an admin still sees it`);
+    const api = await get("/api/gtf/sheet/ann_cf");
+    assert.ok(!leaks(JSON.parse(api.text)), `${why}: the JSON route serves nothing`);
+    const page = await get("/gtf/sheet/ann_cf");
+    assert.equal(page.status, 404, `${why}: the page is a 404 like a missing sheet`);
+    assert.ok(!/Burglar|4242|28,862/.test(page.text), `${why}: the page shows nothing of the sheet`);
+  };
+  // Pepe's incognito report for any login (incognito_anon)
+  await runQuery("CREATE TABLE IF NOT EXISTS incognito_anon (login TEXT PRIMARY KEY, since INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO incognito_anon (login, since) VALUES ('ann_cf', 1)");
+  await masked("incognito_anon");
+  await runQuery("DELETE FROM incognito_anon");
+  assert.ok((await S.view("ann_cf", null)).stats, "incognito off: public again");
+  // a linked account's incognito switch (incognito_state on)
+  await runQuery(`CREATE TABLE IF NOT EXISTS incognito_state (login TEXT PRIMARY KEY, "on" INTEGER NOT NULL DEFAULT 0, updated INTEGER)`);
+  await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated) VALUES ('ann_cf', 1, 1)`);
+  await masked("incognito_state");
+  await runQuery(`UPDATE incognito_state SET "on" = 0`);
+  assert.ok((await S.view("ann_cf", null)).stats, "the switch off: public again");
+  // !bridge hide (the sticky hidden set, Pepe's privacy.hidden)
+  await CL.hideNow(["ann_cf"], "pepe", "bridge");
+  await masked("the sticky hidden set");
+});

@@ -40,6 +40,14 @@ async function mkUser(name, o = {}) {
   users.set(id, x);
   return x;
 }
+// 1.99ahe review: someone who BOUGHT October's 🎃 board in October (a linked Camfrog login) - the October make-good keeps its clips
+// in Pepe's sync for good (board kept:2026-10), so a season test's "October's clips are gone" holds only for its season board
+async function octBuyer(name) {
+  const u = await mkUser(name);
+  await runQuery("INSERT INTO sb_owned (user_id, item, source, payer_id, price, ref, created) VALUES (?, 'season:2026-10', 'buy', ?, 600000, ?, ?)",
+                 [u.userId, u.userId, "oct-" + name, Date.parse("2026-10-20T12:00:00Z")]);
+  return u;
+}
 const bal = async (u) => (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [u.userId]))[0].points_balance;
 const H = (x) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch", origin: base }, x ? { "x-test-user": x.userId } : {});
 async function call(method, url, x, body) {
@@ -209,13 +217,18 @@ test("🍂 Fireside Season (2026-11): the board through November - Pepe's sync, 
   assert.ok(rows.every((r) => r.kind === "tts" && r.status === "render" && r.rarity === "rare" && !r.voice && r.text), JSON.stringify(rows));
   // the render queue is oldest-first (6 at a time, other clips waiting too): bring one forward to see its job
   await runQuery("UPDATE sb_clips SET created = 0 WHERE id = 's2611-oohaah'");
+  await octBuyer("kfire");          // as on a real site: an October buyer is linked (whatever ran before this test)
   let sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
   assert.deepEqual(sync.season, { id: "2026-11", name: "Fireside Season", emoji: "🍂" }, "Pepe's !sb season");
   const job = sync.render.find((j) => j.id === "s2611-oohaah");
   assert.ok(job, JSON.stringify(sync.render));
   assert.deepEqual([job.kind, job.cap, job.voice, job.src], ["tts", 8, null, null]);
   assert.match(job.text, /^Ooooh! Aaaah!/);
-  assert.ok(!sync.clips.some((c) => /^s2610-/.test(c.id)), "October's clips leave Pepe's pool once its season is over");
+  assert.ok(!sync.clips.some((c) => c.board === "season:2026-10"), "October's season board leaves Pepe's pool once its season is over");
+  const oct = sync.clips.filter((c) => /^s2610-/.test(c.id));
+  assert.equal(oct.length, 12, "...its clips ride on only for the people who bought it (the make-good)");
+  assert.ok(oct.every((c) => c.board === "kept:2026-10"), "...as their kept board, never a season board");
+  assert.ok(sync.owned.kfirecf.includes("kept:2026-10") && !(sync.owned.alicecf || []).includes("kept:2026-10"), "the buyer carries it, nobody else");
   assert.ok(sync.clips.filter((c) => /^s2611-/.test(c.id)).every((c) => c.status === "render" && !c.audio), "not playable before their WAVs are up");
   // a take longer than the cap fails; a good one goes live
   let r = await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: "s2611-moustache", data: wav(9).toString("base64") });
@@ -256,8 +269,8 @@ test("🍂 Fireside Season (2026-11): the board through November - Pepe's sync, 
   // the Season Pass note names the season board only while there is one
   let spPage = await call("GET", "/soundboards", U.spfan);
   assert.match(spPage.text, /Your 🎟️ Season Pass: the season board is unlimited/);
-  // ...and a month on, no season board anywhere
-  SB._setClock(() => Date.parse("2026-12-15T12:00:00Z"));
+  // ...and between seasons (Winter Lights holds December since 1.99ahe; mid-January 2027 is the next gap), no season board anywhere
+  SB._setClock(() => Date.parse("2027-01-15T12:00:00Z"));
   if (!SB.seasonNow()) {
     assert.equal((await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d.season, null);
     assert.ok(!(await call("GET", "/api/rooms/sb-room/soundboard", U.spfan)).d.tabs.some((x) => x.key === "season"));
@@ -267,6 +280,208 @@ test("🍂 Fireside Season (2026-11): the board through November - Pepe's sync, 
     assert.doesNotMatch(spPage.text, /season board is unlimited/);
     assert.match(spPage.text, /Your 🎟️ Season Pass: you have \d+ free standard pack\(s\) left this month\./);
   }
+});
+
+// December 2026 (❄️ Winter Lights Season) - every check below runs on a PINNED clock (SB._setClock), never today's date
+test("❄️ Winter Lights Season (2026-12): the board through December - Pepe's sync, render jobs, the drawer, the store; November's is over", async (t) => {
+  t.after(() => SB._setClock(null));
+  const raw = JSON.parse(fs.readFileSync(path.join(repo, "soundboards.json"), "utf8"));
+  const rawWl = raw.seasons.find((s) => s.id === "2026-12");
+  assert.ok(rawWl, "the December season is in soundboards.json");
+  assert.deepEqual([rawWl.name, rawWl.emoji, rawWl.from, rawWl.to], ["Winter Lights Season", "❄️", "2026-12-01", "2027-01-01"]);
+  for (const c of rawWl.clips) {
+    assert.match(c.id, /^s2612-[a-z0-9]{2,20}$/, c.id);
+    assert.ok(c.text && c.text.length <= 60, "a short line inside the 8 s 'rare' cap: " + c.id);
+    assert.ok(!c.voice && !c.file && !c.rarity, "TTS in Pepe's default voice at the season default, as October / November: " + c.id);
+    // inclusive of every winter holiday: no single religion's (or Santa's) bit on the board
+    assert.doesNotMatch(c.text + " " + c.label, /\b(christmas|xmas|santa|claus|hanukk?ah|chanukah|kwanzaa|jesus|church|reindeer|elf|elves|sleigh)\b/i, c.id);
+  }
+  const wl = SB.CAT.bySeason["2026-12"];
+  assert.deepEqual([wl.name, wl.emoji, wl.clips.length], ["Winter Lights Season", "❄️", 12]);
+  assert.ok(wl.clips.every((c) => /^s2612-/.test(c.id) && c.rarity === "rare"));
+  // the window: Dec 1 00:00 UTC up to (not including) Jan 1 00:00 UTC
+  assert.equal(SB.seasonNow(Date.parse("2026-12-01T00:00:00Z")).id, "2026-12");
+  assert.equal(SB.seasonNow(Date.parse("2026-12-25T12:00:00Z")).id, "2026-12");
+  assert.equal(SB.seasonNow(Date.parse("2026-12-31T23:59:59Z")).id, "2026-12");
+  assert.notEqual((SB.seasonNow(Date.parse("2027-01-01T00:00:00Z")) || {}).id, "2026-12", "over at midnight UTC on New Year's Day");
+
+  SB._setClock(() => Date.parse("2026-12-15T12:00:00Z"));
+  assert.equal(SB.seasonNow().id, "2026-12");
+  // seeded at boot like October and November: 12 TTS render jobs in Pepe's default voice, the 8 s cap. They're handed out
+  // straight away (Pepe renders them in November, after the deploy) but only play from Dec 1.
+  const rows = await getQuery("SELECT id, kind, status, rarity, voice, text FROM sb_clips WHERE board = 'season:2026-12' ORDER BY sort");
+  assert.equal(rows.length, 12);
+  assert.ok(rows.every((r) => r.kind === "tts" && r.status === "render" && r.rarity === "rare" && !r.voice && r.text), JSON.stringify(rows));
+  await runQuery("UPDATE sb_clips SET created = 0 WHERE id = 's2612-untangle'");
+  await octBuyer("kwl");            // an October buyer linked, whatever ran before this test
+  let sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  assert.deepEqual(sync.season, { id: "2026-12", name: "Winter Lights Season", emoji: "❄️" }, "Pepe's !sb season");
+  const job = sync.render.find((j) => j.id === "s2612-untangle");
+  assert.ok(job, JSON.stringify(sync.render));
+  assert.deepEqual([job.kind, job.cap, job.voice, job.src], ["tts", 8, null, null]);
+  assert.match(job.text, /^Who put the lights away in a knot\?/);
+  assert.ok(!sync.clips.some((c) => c.board === "season:2026-10" || c.board === "season:2026-11"), "October's and November's season boards are out of Pepe's pool in December");
+  assert.ok(!sync.clips.some((c) => /^s2611-/.test(c.id)), "November's board was never a kept one (KEPT_SEASONS) - its clips are gone");
+  const oct = sync.clips.filter((c) => /^s2610-/.test(c.id));
+  assert.ok(oct.length === 12 && oct.every((c) => c.board === "kept:2026-10"), "October's ride on only as its buyers' kept board");
+  assert.ok(sync.clips.filter((c) => /^s2612-/.test(c.id)).every((c) => c.status === "render" && !c.audio), "not playable before their WAVs are up");
+  let r = await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: "s2612-gym", data: wav(8.5).toString("base64") });
+  assert.deepEqual([r.d.ok, r.d.status], [false, "failed"], "a take over the 8 s cap fails");
+  for (const c of wl.clips) {
+    r = await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: c.id, data: wav(3).toString("base64") });
+    assert.equal(r.d.status, "active", c.id);
+  }
+  sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  const live = sync.clips.filter((c) => c.board === "season:2026-12");
+  assert.equal(live.length, 12);
+  assert.ok(live.every((c) => c.status === "active" && c.audio && c.text && c.price === SB.config().price_season), "playable, with the caption line");
+  assert.ok(!sync.render.some((j) => /^s2612-/.test(j.id)), "nothing left to render");
+  // the 🔊 drawer: the season tab - unlimited with a Season Pass, per use without
+  PASS.add(U.spfan.userId);
+  let season = (await call("GET", "/api/rooms/sb-room/soundboard", U.spfan)).d.tabs.find((x) => x.key === "season");
+  assert.deepEqual([season.name, season.emoji, season.clips.length], ["Winter Lights Season", "❄️", 12]);
+  assert.ok(season.clips.every((c) => c.free && /^s2612-/.test(c.id)));
+  season = (await call("GET", "/api/rooms/sb-room/soundboard", U.r1)).d.tabs.find((x) => x.key === "season");
+  assert.ok(season.clips.every((c) => !c.free && c.price === SB.config().price_season), "per use without the pass or the board");
+  // the board: December's on sale in December, November's isn't
+  assert.equal((await call("POST", "/api/soundboards/buy", U.r1, { item: "season:2026-11", ref: ref() })).status, 404);
+  const b0 = await bal(U.r1);
+  r = await call("POST", "/api/soundboards/buy", U.r1, { item: "season:2026-12", ref: ref() });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(await bal(U.r1), b0 - SB.config().season_price);
+  // the store: the season's own section, and the Season Pass note names the board while there is one
+  const page = await call("GET", "/soundboards", U.r2);
+  assert.match(page.text, /id="sbSeasonH">[\s\S]*?❄️ Winter Lights Season/);
+  assert.match(page.text, /Longest night/);
+  assert.match(page.text, /data-sb-buy="season:2026-12"/);
+  assert.match((await call("GET", "/soundboards", U.spfan)).text, /Your 🎟️ Season Pass: the season board is unlimited/);
+});
+
+test("🍂 -> ❄️ midnight UTC on Dec 1 (pinned clock): Fireside off, Winter Lights on - no gap, no overlap", async (t) => {
+  t.after(() => SB._setClock(null));
+  const fire = SB.CAT.bySeason["2026-11"], wl = SB.CAT.bySeason["2026-12"];
+  assert.equal(fire.to, wl.from, "Fireside's end is exactly Winter Lights' start (no gap, no overlap)");
+  assert.equal(wl.from, Date.parse("2026-12-01T00:00:00Z"));
+  // second by second across the minute either side of midnight: always exactly one season, and it switches at 00:00:00
+  for (let ms = Date.parse("2026-11-30T23:59:00Z"); ms <= Date.parse("2026-12-01T00:01:00Z"); ms += 1000) {
+    const on = SB.CAT.seasons.filter((s) => ms >= s.from && ms < s.to).map((s) => s.id);
+    assert.deepEqual(on, [ms < wl.from ? "2026-11" : "2026-12"], new Date(ms).toISOString());
+  }
+  assert.equal(SB.seasonNow(Date.parse("2026-11-30T23:59:59.999Z")).id, "2026-11");
+
+  SB._setClock(() => Date.parse("2026-11-30T23:59:00Z"));
+  let sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  assert.equal(sync.season.id, "2026-11", "Nov 30 23:59: still Fireside");
+  assert.ok(!sync.clips.some((c) => c.board === "season:2026-12"), "December's clips wait (rendered, not playable)");
+  let tab = (await call("GET", "/api/rooms/sb-room/soundboard", U.spfan)).d.tabs.find((x) => x.key === "season");
+  assert.equal(tab && tab.name, "Fireside Season");
+  assert.equal((await call("POST", "/api/soundboards/buy", U.r3, { item: "season:2026-12", ref: ref() })).status, 404, "not on sale before Dec 1");
+
+  SB._setClock(() => Date.parse("2026-12-01T00:00:00Z"));
+  sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  assert.deepEqual(sync.season, { id: "2026-12", name: "Winter Lights Season", emoji: "❄️" }, "Dec 1 00:00: Winter Lights");
+  assert.ok(!sync.clips.some((c) => c.board === "season:2026-11"), "Fireside's clips leave the pool");
+  assert.equal(sync.clips.filter((c) => c.board === "season:2026-12" && c.status === "active").length, 12, "all 12 play from the first second");
+  tab = (await call("GET", "/api/rooms/sb-room/soundboard", U.spfan)).d.tabs.find((x) => x.key === "season");
+  assert.equal(tab && tab.name, "Winter Lights Season");
+  assert.equal((await call("POST", "/api/soundboards/buy", U.r3, { item: "season:2026-11", ref: ref() })).status, 404, "Fireside's board is off sale");
+  assert.equal((await call("POST", "/api/soundboards/buy", U.r3, { item: "season:2026-12", ref: ref() })).status, 200);
+  // the store: one season section, December's
+  const page = (await call("GET", "/soundboards", U.r2)).text;
+  assert.match(page, /data-sb-buy="season:2026-12"/);
+  assert.doesNotMatch(page, /data-sb-buy="season:2026-11"/);
+});
+
+// Pepe picks a clip by its label (pepe_soundboard._sb_match): exact id, exact label, then the FIRST label that starts with what
+// was typed, then the first that contains it - and the season board comes before the global board and the packs. In November
+// "!sb go" played Gobble gobble instead of Gong. This port of his matcher (keep it in step with the bot's: december_test.py runs
+// the real one over this catalogue) checks that the December clips take nothing any other clip answered to.
+// SB_ORDER = the bot's _sb_pool order (1.99ahe review: "kept" - a buyer's kept past season - comes after the season, before global).
+const SB_ORDER = Object.freeze({ room: 0, legend: 1, season: 2, kept: 3, global: 4, pack: 5 });
+function sbPool(clipsByKind) {
+  const out = [];
+  for (const [kind, clips] of Object.entries(clipsByKind)) {
+    assert.ok(kind in SB_ORDER, "a board kind Pepe's matcher doesn't order: " + kind);
+    for (const c of clips) out.push([SB_ORDER[kind], String(c.label || ""), c]);
+  }
+  out.sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  return out.map((x) => x[2]);
+}
+function sbMatch(pool, q) {
+  q = String(q || "").trim().replace(/^@+/, "").trim().toLowerCase();
+  if (!q) return null;
+  for (const c of pool) if (String(c.id).toLowerCase() === q) return c;
+  const labels = pool.map((c) => [String(c.label || "").toLowerCase().replace(/[^a-z0-9 ]/g, ""), c]);
+  const qq = q.replace(/[^a-z0-9 ]/g, "");
+  for (const [lab, c] of labels) if (lab === qq) return c;
+  for (const [lab, c] of labels) if (lab.startsWith(qq)) return c;
+  for (const [lab, c] of labels) if (lab.includes(qq)) return c;
+  return null;                                        // (the bot's last step, difflib, only runs when nothing above matched)
+}
+test("❄️ Winter Lights clips shadow no other clip's short !sb prefix (the November 'go' -> Gobble gobble mistake)", () => {
+  const C = SB.CAT;
+  const wl = C.bySeason["2026-12"].clips;
+  const others = [...C.global.clips, ...C.packs.flatMap((p) => p.clips), ...C.legendaries];
+  const pastSeasons = C.seasons.filter((s) => s.id !== "2026-12").flatMap((s) => s.clips);
+  // what people type for an existing clip: every prefix of 2+ letters of its label, every word of 3+ letters, the whole label
+  const queries = (c) => {
+    const lab = String(c.label).toLowerCase().replace(/[^a-z0-9 ]/g, "");
+    const qs = new Set([lab]);
+    for (let n = 2; n < lab.length; n++) qs.add(lab.slice(0, n).trim());
+    for (const w of lab.split(" ")) if (w.length >= 3) qs.add(w);
+    return [...qs].filter((q) => q.length >= 2);
+  };
+  // with or without a buyer's kept past board in the pool (1.99ahe KEPT_SEASONS: the only way a past season plays again - as board
+  // "kept:<id>", ordered after the season), December changes nothing
+  const keptClips = SB.KEPT_SEASONS.flatMap((id) => C.bySeason[id].clips);
+  assert.ok(keptClips.length, "the kept seasons are in the catalogue");
+  for (const withKept of [false, true]) {
+    const base = { legend: C.legendaries, global: C.global.clips, pack: C.packs.flatMap((p) => p.clips), ...(withKept ? { kept: keptClips } : {}) };
+    const before = sbPool(base), after = sbPool({ ...base, season: wl });
+    for (const c of [...others, ...(withKept ? keptClips : [])]) {
+      for (const q of queries(c)) {
+        const was = sbMatch(before, q), now = sbMatch(after, q);
+        assert.equal(now && now.id, was && was.id, `'!sb ${q}' played ${was && was.label}, with December it plays ${now && now.label}`);
+      }
+    }
+  }
+  // the November case itself: Gong answers to 'go' again in December
+  const decPool = sbPool({ season: wl, global: C.global.clips, pack: C.packs.flatMap((p) => p.clips) });
+  assert.equal(sbMatch(decPool, "go").id, "sfx-gong");
+  assert.equal(sbMatch(sbPool({ season: C.bySeason["2026-11"].clips, global: C.global.clips }), "go").id, "s2611-gobble", "(November's shadow, for the record)");
+  // (and for the record, an October buyer's kept board: the season still wins over it, it wins over global + packs - as in October)
+  const kPool = (season) => sbPool({ season, kept: C.bySeason["2026-10"].clips, global: C.global.clips, pack: C.packs.flatMap((p) => p.clips) });
+  assert.equal(sbMatch(kPool(C.bySeason["2026-11"].clips), "th").id, "s2611-thankful", "November: Thankful before the buyer's Thunder");
+  assert.equal(sbMatch(kPool(wl), "th").id, "s2610-thunder", "December: Thunder before The GOAT (pack)");
+  assert.equal(sbMatch(kPool(wl), "bo").id, "s2610-boo", "December: Boo before Booing (global)");
+  // ...and every December clip answers to its own first two letters (distinct inside the season, taken by nothing else)
+  const firstTwo = wl.map((c) => c.label.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 2));
+  assert.equal(new Set(firstTwo).size, wl.length, "distinct first two letters: " + firstTwo.join(" "));
+  const taken = new Set([...others, ...pastSeasons].map((c) => String(c.label).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 2)));
+  for (const c of wl) {
+    assert.ok(!taken.has(firstTwo[wl.indexOf(c)]), `${c.label}: its first two letters belong to another clip`);
+    assert.equal(sbMatch(decPool, firstTwo[wl.indexOf(c)]).id, c.id, `'!sb ${firstTwo[wl.indexOf(c)]}' plays ${c.label}`);
+  }
+  // and no December label is a !sb subcommand
+  const SUBS = ["backend", "on", "off", "add", "addmic", "remove", "rm", "del", "delete", "list", "help", "room", "global", "season", "packs", "pack", "legend", "mine", "kept"];
+  for (const c of wl) assert.ok(!SUBS.includes(c.label.toLowerCase().split(" ")[0]), c.label);
+});
+
+// 1.99ahe review: the port above orders every board kind Pepe's sync sends (a kept past season is "kept:<id>"), in the bot's order
+test("Pepe's matcher port: every board kind the sync sends has a place, in the bot's _sb_pool order (PEPE_BOT_DIR)", async (t) => {
+  t.after(() => SB._setClock(null));
+  await octBuyer("kport");
+  SB._setClock(() => Date.parse("2026-11-15T12:00:00Z"));
+  const sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  const kinds = new Set(sync.clips.map((c) => String(c.board).split(":")[0]));
+  assert.ok(kinds.has("kept"), "the sync carries a kept board (an October buyer is linked)");
+  for (const k of kinds) assert.ok(k in SB_ORDER, "sbPool has no place for board kind " + k);
+  const bot = process.env.PEPE_BOT_DIR;
+  if (!bot) return t.skip("PEPE_BOT_DIR not set - the bot's _sb_pool order isn't compared here");
+  const src = fs.readFileSync(path.join(bot, "pepe_soundboard.py"), "utf8");
+  const m = /def _sb_pool\([\s\S]*?\n\s*order = (\{[^}]*\})/.exec(src);
+  assert.ok(m, "pepe_soundboard.py _sb_pool has an order = {...} line");
+  assert.deepEqual(JSON.parse(m[1]), { ...SB_ORDER }, "the port's order = the bot's _sb_pool order");
 });
 
 test("pad boards: Prime Time slots, the text guard, the speaker's opt-out, owner-only editor", async () => {
@@ -322,6 +537,58 @@ test("reports hide a clip at 3; the person heard in it removes it at once", asyn
   assert.equal((await call("POST", "/api/soundboards/remove-me", U.bob, { clip: live })).status, 403);
   assert.equal((await call("POST", "/api/soundboards/remove-me", U.alice, { clip: live })).status, 200);
   assert.equal((await SB.clipStatus(live)).status, "removed");
+});
+
+test("owner 11-02: a J-7 frog-name mic clip goes on a room board under its frog name - no answer to anyone else ever carries the login; the rules still run on the real person; a named clip is as before", async () => {
+  PRIME.set(ROOM.id, 24);
+  try { await runQuery("ALTER TABLE feed_voices ADD COLUMN alias TEXT"); } catch (e) { /* there */ }
+  U.zq = await mkUser("zqveil");                       // Camfrog login zqveilcf - incognito when the clip was posted (J-7)
+  const NEEDLE = /zqveil/i;
+  await runQuery("INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created, alias) VALUES ('PostF', ?, 'mf', ' zqveilcf ', 'alicecf', 3, 'Mossy Newt')", [ROOM.id]);
+  await runQuery("INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created, alias) VALUES ('PostG', ?, 'mg', ' zqveilcf ', 'alicecf', 4, 'Mossy Newt')", [ROOM.id]);
+  // the speaker's opt-out still applies - and the refusal doesn't say who
+  await L.setPrefs(U.zq.userId, { soundboard: false });
+  let r = await call("POST", "/api/rooms/sb-room/soundboard/clips", U.owner, { action: "add_mic", label: "Croak", post: "PostF", start: 0, end: 3 });
+  assert.equal(r.status, 403);
+  assert.equal(r.d.error, "The person heard in that clip has opted out of being on soundboards.");
+  assert.doesNotMatch(r.text, NEEDLE);
+  await L.setPrefs(U.zq.userId, { soundboard: true });
+  r = await call("POST", "/api/rooms/sb-room/soundboard/clips", U.owner, { action: "add_mic", label: "Croak", post: "/p/sb-room/posts/PostF", start: 0, end: 3 });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.doesNotMatch(r.text, NEEDLE, "the owner's editor: the frog name only");
+  const frog = r.d.clips.find((c) => c.label === "Croak");
+  assert.deepEqual([frog.kind, frog.subject, frog.subject_frog], ["audio", "Mossy Newt", 1]);
+  assert.deepEqual((await getQuery("SELECT subject_login, subject_alias FROM sb_clips WHERE id = ?", [frog.id]))[0],
+                   { subject_login: "zqveilcf", subject_alias: "Mossy Newt" }, "the login is kept server-side, for the rules");
+  assert.equal((await SB.storeAudio(frog.id, wav(2))).status, "active", "Pepe rendered it (it plays from the drawer now)");
+  // every page / answer anyone else gets: the drawer (signed in / out), the editor, the store
+  for (const [who, url] of [[U.alice, "/api/rooms/sb-room/soundboard"], [null, "/api/rooms/sb-room/soundboard"], [U.owner, "/api/rooms/sb-room/soundboard/manage"],
+                            [U.alice, "/api/soundboards"], [U.alice, "/soundboards"]]) {
+    const a = await call("GET", url, who);
+    assert.equal(a.status, 200, url);
+    assert.doesNotMatch(a.text, NEEDLE, `${url} (${who ? who.username : "signed out"})`);
+  }
+  const drawer = (await call("GET", "/api/rooms/sb-room/soundboard", U.alice)).d.tabs.find((t) => t.key === "room").clips.find((c) => c.id === frog.id);
+  assert.deepEqual([drawer.subject, drawer.subject_frog], ["Mossy Newt", 1], "the drawer labels it with the frog name");
+  // a named clip is exactly as before: the login, no frog flag
+  const named = (await call("GET", "/api/rooms/sb-room/soundboard/manage", U.owner)).d.clips.find((c) => c.label === "Bob");
+  assert.deepEqual([named.subject, "subject_frog" in named], ["bobcf", false]);
+  // Pepe (bot token, server to server) keeps the real login for his rules (opt-out at every play, the likeness cut, the caption)
+  const bot = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d.clips.find((c) => c.id === frog.id);
+  assert.deepEqual([bot.subject, bot.subject_alias], ["zqveilcf", "Mossy Newt"]);
+  assert.equal((await call("POST", "/api/soundboards/bot/sync", null, { password: "nope" })).status, 403, "never without the bot token");
+  // "Remove me": refused for anyone else (without saying who), works for the person heard in it
+  r = await call("POST", "/api/soundboards/remove-me", U.alice, { clip: frog.id });
+  assert.equal(r.status, 403);
+  assert.doesNotMatch(r.text, NEEDLE);
+  r = await call("POST", "/api/soundboards/remove-me", U.zq, { clip: frog.id });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal((await SB.clipStatus(frog.id)).status, "removed");
+  // the owner removes one in chat through Pepe: the answer is the label
+  r = await call("POST", "/api/rooms/sb-room/soundboard/clips", U.owner, { action: "add_mic", label: "Croak again", post: "PostG", start: 0, end: 2 });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  r = await call("POST", "/api/soundboards/bot/room-remove", null, { password: "bot", room: ROOM.id, camfrog: "ownercf", clip: "croak again" });
+  assert.deepEqual(r.d, { ok: true, label: "Croak again" });
 });
 
 test("the store page and the drawer render", async () => {
@@ -529,4 +796,62 @@ test("drawer consumes existing relay snapshots for waiting, playback and failure
   assert.equal(status.textContent, "the mic stayed busy");
   assert.match(status.className, /bad/);
   assert.equal(calls.length, 2, "no separate status polling channel");
+});
+
+test("1.99ahe October make-good: whoever BOUGHT the 🎃 Spooky Season board keeps its clips after 1 Nov (drawer + Pepe's sync); nobody else does", async (t) => {
+  assert.deepEqual([...SB.KEPT_SEASONS], ["2026-10"], "only October's store copy promised a board that outlives its season");
+  const kbuy = await mkUser("kbuy"), kcomp = await mkUser("kcomp"), kpass = await mkUser("kpass"), knone = await mkUser("knone");
+  const late = await mkUser("klate");
+  PASS.add(kpass.userId);
+  const oct = SB.CAT.bySeason["2026-10"];
+  assert.deepEqual([oct.name, oct.emoji, oct.clips.length], ["Spooky Season", "🎃", 12]);
+  for (const c of oct.clips) await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: c.id, data: wav(2).toString("base64") });
+  // October: kbuy buys the board (600,000), kcomp is comped it, kpass has the Season Pass
+  SB._setClock(() => Date.parse("2026-10-15T12:00:00Z"));
+  t.after(() => SB._setClock(null));
+  const b0 = await bal(kbuy);
+  let r = await call("POST", "/api/soundboards/buy", kbuy, { item: "season:2026-10", ref: ref() });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(await bal(kbuy), b0 - 600000, "the board was 600,000 PAT");
+  assert.equal((await SB.grantComp(kcomp.userId, "season:2026-10", "boss")).already, false);
+  let sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  assert.ok(sync.clips.filter((c) => /^s2610-/.test(c.id)).every((c) => c.board === "season:2026-10"), "in season: the ordinary season board");
+  assert.deepEqual(sync.kept_seasons, [], "nothing kept while the season is on");
+  // a row dated after the season's end can't exist through the store; one forced in by hand never qualifies
+  await runQuery("INSERT INTO sb_owned (user_id, item, source, payer_id, price, ref, created) VALUES (?, 'season:2026-10', 'buy', ?, 600000, 'k-late', ?)",
+                 [late.userId, late.userId, Date.parse("2026-11-02T00:00:00Z")]);
+
+  // November (and for good): only kbuy
+  for (const when of ["2026-11-15T12:00:00Z", "2027-06-01T12:00:00Z"]) {
+    SB._setClock(() => Date.parse(when));
+    const tabsOf = async (u) => (await call("GET", "/api/rooms/sb-room/soundboard", u)).d.tabs;
+    const mine = (await tabsOf(kbuy)).find((x) => x.key === "kept:2026-10");
+    assert.ok(mine, when + ": the buyer's drawer has the October tab");
+    assert.deepEqual([mine.name, mine.emoji, mine.clips.length], ["Spooky Season", "🎃", 12]);
+    assert.ok(mine.clips.every((c) => c.free && /^s2610-/.test(c.id)), "yours, unlimited");
+    for (const u of [knone, kcomp, kpass, late, U.admin]) {
+      assert.ok(!(await tabsOf(u)).some((x) => String(x.key).startsWith("kept:") || x.clips.some((c) => /^s2610-/.test(c.id))),
+                `${when}: no October clips for ${u.username}`);
+    }
+    assert.equal((await call("POST", "/api/soundboards/buy", knone, { item: "season:2026-10", ref: ref() })).status, 404, "October's board isn't sold again");
+    sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+    const k = sync.clips.filter((c) => /^s2610-/.test(c.id));
+    assert.equal(k.length, 12, when + ": Pepe gets October's clips");
+    assert.ok(k.every((c) => c.board === "kept:2026-10" && c.status === "active" && c.audio), "...as board kept:2026-10 (a Pepe without kept support skips it)");
+    assert.ok(!sync.clips.some((c) => c.board === "season:2026-10"), "never as an ordinary season board");
+    assert.deepEqual(sync.kept_seasons, [{ id: "kept:2026-10", name: "Spooky Season", emoji: "🎃" }]);
+    assert.ok(sync.owned.kbuycf.includes("kept:2026-10"), "the buyer carries kept:2026-10");
+    for (const n of ["kcompcf", "kpasscf", "knonecf", "klatecf", "bosscf"]) assert.ok(!(sync.owned[n] || []).includes("kept:2026-10"), "not " + n);
+    assert.ok(sync.sp.includes("kpasscf"), "the pass holder is still a pass holder");
+    assert.deepEqual([...(await SB.keptFor(kbuy.userId))], ["kept:2026-10"]);
+    assert.equal((await SB.keptFor(kcomp.userId)).size + (await SB.keptFor(late.userId)).size + (await SB.keptFor(kpass.userId)).size, 0);
+  }
+  // Season Pass holders: unchanged - the current season free, October not at all
+  SB._setClock(() => Date.parse("2026-11-15T12:00:00Z"));
+  const pt = (await call("GET", "/api/rooms/sb-room/soundboard", kpass)).d.tabs;
+  assert.ok(pt.find((x) => x.key === "season").clips.every((c) => c.free && /^s2611-/.test(c.id)), "the pass: Fireside unlimited, as before");
+  const bt = (await call("GET", "/api/rooms/sb-room/soundboard", kbuy)).d.tabs;
+  assert.ok(bt.find((x) => x.key === "season").clips.every((c) => !c.free), "October's board doesn't make Fireside free");
+  // no refund: the buyer's balance didn't move after the purchase
+  assert.equal(await bal(kbuy), b0 - 600000, "no PAT refund");
 });

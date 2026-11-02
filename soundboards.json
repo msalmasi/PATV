@@ -108,6 +108,23 @@
         { "id": "s2611-thankful", "label": "Thankful", "emoji": "🧡", "text": "Thankful for every frog in here. Yes, even you." },
         { "id": "s2611-moustache", "label": "Moustache", "emoji": "🥸", "text": "Day one of the moustache. It's three hairs. They're brave." }
       ]
+    },
+    {
+      "id": "2026-12", "name": "Winter Lights Season", "emoji": "❄️", "from": "2026-12-01", "to": "2027-01-01",
+      "clips": [
+        { "id": "s2612-untangle", "label": "Untangle", "emoji": "💡", "text": "Who put the lights away in a knot? Three hours. Three!" },
+        { "id": "s2612-freezing", "label": "Freezing", "emoji": "🥶", "text": "It's freezing! I'm a frog. I should be hibernating!" },
+        { "id": "s2612-snowday", "label": "Snow day", "emoji": "❄️", "text": "Snow day! Everybody outside! ...Okay, everybody back in." },
+        { "id": "s2612-earmuffs", "label": "Earmuffs", "emoji": "🎧", "text": "What? Can't hear you! I've got my earmuffs on!" },
+        { "id": "s2612-icypath", "label": "Icy path", "emoji": "🧊", "text": "Careful, it's icy. Whoa, whoa, whoa... I'm fine. I'm fine." },
+        { "id": "s2612-giftwrap", "label": "Gift wrap", "emoji": "🎁", "text": "I wrapped it myself. Yes, it's meant to look like that." },
+        { "id": "s2612-puffer", "label": "Puffer coat", "emoji": "🧥", "text": "Big puffy coat. Can't put my arms down. Send help." },
+        { "id": "s2612-longnight", "label": "Longest night", "emoji": "🌙", "text": "Longest night of the year. More time for chat!" },
+        { "id": "s2612-warmwishes", "label": "Warm wishes", "emoji": "✨", "text": "Warm wishes to every frog in here, whatever you celebrate." },
+        { "id": "s2612-countdown", "label": "Countdown", "emoji": "⏳", "text": "Ten! Nine! Eight! ...Wait, what comes after eight?" },
+        { "id": "s2612-newyear", "label": "New year", "emoji": "🎉", "text": "New year, new frog! ...Nope. Same frog." },
+        { "id": "s2612-gym", "label": "Gym tomorrow", "emoji": "🏋️", "text": "My resolution? The gym. Starting... tomorrow." }
+      ]
     }
   ],
   "legendaries": [
