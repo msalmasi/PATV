@@ -241,6 +241,32 @@ async function nameItem(R, it) {
 function namedHold(roomId, hold) {
   const h = holdOf(hold);
   if (h && holdName(roomId, h) === undefined) holdName(roomId, h, null);
+  if (h) {
+    let m = BEGAN_NAMED.get(roomId);
+    if (!m) { m = new Map(); BEGAN_NAMED.set(roomId, m); }
+    m.delete(h);
+    m.set(h, true);
+    while (m.size > HOLDS_MAX) m.delete(m.keys().next().value);
+  }
+}
+/** privacy fix (C, spec B.2 / B.4 "named-then-veiled hold"): per room, the holds whose grab came NAMED (a release of one is "someone"). */
+const BEGAN_NAMED = new Map();
+/**
+ * privacy fix (C): did hold `hold` of bridge room R begin NAMED - its grab seen named here (namedHold), or, after a restart, a named
+ * grab with that hold id still in the live feed? Pepe sends the RELEASE of such a hold in today's anonymous form (no priv) when he
+ * can't tie the veil to the holder - an unresolved roster name (B-1b `anon`), a veil key that isn't provably theirs (A-compat-2) -
+ * and it used to be dropped for everyone (a hashless anonymous drop without a stamped grab). The spec's rule for that release is
+ * "someone dropped the mic" (B.2): bridge.js stamps it showable (k3) and the page shows it as plain "someone", never the hold id.
+ * once: the hold's release - forgotten after (a hold id is never reused).
+ */
+function beganNamed(R, hold, once = false) {
+  const h = holdOf(hold);
+  if (!h || !R) return false;
+  const m = BEGAN_NAMED.get(R.id);
+  let yes = !!(m && m.get(h));
+  if (!yes) yes = (R.feed || []).some((x) => x && x.k === "mic" && x.hold === h && x.u && !x.u.anon && x.u.login);
+  if (yes && once && m) m.delete(h);
+  return yes;
 }
 /** A NAMED sighting of a login in a pad (C.2: no frog name for them there for 15 minutes) - and their open session, if any, ends
  *  (their level is back to normal). Cheap: an HMAC; the session check is in memory. */
@@ -428,6 +454,6 @@ async function forgetLogins(logins) {
   return { feed: cs, rooms };
 }
 
-module.exports = { KINDS, hide, bucket, parsePriv, realUser, veiledItem, namedExtras, opaqueId, nameItem, namedSeen, namedHold, snapshotEntries,
+module.exports = { KINDS, hide, bucket, parsePriv, realUser, veiledItem, namedExtras, opaqueId, nameItem, namedSeen, namedHold, beganNamed, snapshotEntries,
                    nameSnapshot, veilOrder, seedSeen, veilRow, roomVeilData, attachRoomVeil, attachFeedVeil, forgetLogins, avoidOf,
-                   hiddenHash, owns, hasPriv, _holds: HOLDS };
+                   hiddenHash, owns, hasPriv, _holds: HOLDS, _beganNamed: BEGAN_NAMED };

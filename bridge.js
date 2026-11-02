@@ -1062,6 +1062,11 @@ async function ingest(body, opts = {}) {
         else if (x.it.u && !x.it.u.anon && x.it.u.login && !x.it.u.self) {
           V.namedSeen(x.R.id, x.it.u.login, Number(x.it.ts) || now);
           if (x.it.k === "mic" && x.it.hold) V.namedHold(x.R.id, x.it.hold);   // review fix (A-compat-1): the hold's verdict = "someone"
+        } else if (x.it.k === "unmic" && x.it.u && x.it.u.anon && !x.it.ah && x.it.k3 !== 1 && x.it.hold && V.beganNamed(x.R, x.it.hold, true)) {
+          // privacy fix (C, spec B.2 / B.4): the release of a hold that began NAMED, its holder private since (incognito / hidden
+          // mid-hold) and sent in today's anonymous form (no priv: an unresolved roster name, a veil not provably theirs) -
+          // "someone dropped the mic", never dropped for everyone, never named; the page never gets the hold id (dress: anon)
+          x.it.k3 = 1;
         }
       } catch (e) { console.error("[bridge] veil name:", e && e.code ? e.code : "error"); }
     }

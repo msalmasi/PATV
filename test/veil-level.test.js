@@ -8,6 +8,8 @@
 //   * a "hidden" leave never carries the incognito frog name
 //   * a mic hold begun incognito whose holder switches to hidden mid-hold: the release / its 🎙 line never shows the grab's name
 // The next hidden sighting is alias-less (the masked form, "someone" with a bar) - never the incognito name.
+// (C) a mid-hold release (spec B.2 / B.4): a hold that began NAMED whose holder went private mid-hold is "someone dropped the mic" -
+//     never dropped for everyone (staging bridge_feed 157841: the unresolved holder's anonymous release), never named, never the hold id.
 //   node --test test/veil-level.test.js
 "use strict";
 const test = require("node:test");
@@ -160,4 +162,58 @@ test("a hold begun incognito whose holder switches to hidden mid-hold: the relea
   const after = of("holder7").slice(1);
   assert.ok(after.length >= 1, "the hidden items are there");
   for (const x of after) assert.ok(x.u.alias !== A && x.u.alias === undefined, `${x.k}: never the grab's incognito name`);
+});
+
+// ── privacy fix (C, spec B.2 / B.4 "named-then-veiled hold"): a mid-hold release is never dropped for everyone, never named ──
+const anonRef = (ref) => ({ id: ref, display: "someone", anonymous: true });
+const shown = (it) => { const o = CV.dress([it], { view: null })[0]; return { p: CV.privacyOf(it), o }; };
+
+test("C: the staging 157841 shape - a NAMED grab, the holder unresolved and private mid-hold, the release in today's anonymous form with the hold id: 'someone dropped the mic', no hold, no name", async () => {
+  await setup;
+  const t0 = Date.now() + 6000;
+  await sync([ev("mic.grab", { user: real("zqEchoHold", "zqEchoHold"), holders: [], hold: "hd-0c93e4480436" }, t0)]);
+  assert.ok(R().feed.some((x) => x.k === "mic" && x.u.login === "zqEchoHold"), "the named grab (157833)");
+  await sync([ev("mic.release", { user: anonRef("anon-6921a48a"), reason: "released", held_ms: 7415, holders: [], hold: "hd-0c93e4480436" }, t0 + 7415)]);
+  const rel = R().feed.filter((x) => x.k === "unmic" && x.ar === "anon-6921a48a").pop();
+  assert.ok(rel && rel.k3 === 1, "stamped showable (157841 was dropped for everyone)");
+  const { p, o } = shown(rel);
+  assert.equal(p, "anon", "shown as 'someone'");
+  assert.deepEqual(o.u, { anon: true, display: "someone" }, "plain 'someone' - no name, no veil kind, no frog name");
+  assert.equal(o.hold, undefined, "the page never gets the hold id (it would pair the release with the named grab)");
+  assert.equal(o.ms, 7415, "...dropped the mic after 7s");
+  assert.ok(!JSON.stringify(o).includes("zqEcho") && !JSON.stringify(o).includes("anon-6921a48a"), "nothing ties it to the holder");
+});
+
+test("C: fails closed - an anonymous release whose hold never came named (or has no hold id) stays out; after a restart the live feed still pairs it", async () => {
+  await setup;
+  const t0 = Date.now() + 7000;
+  await sync([ev("mic.release", { user: anonRef("anon-11112222"), reason: "released", held_ms: 1000, holders: [], hold: "hd-99990000aaaa" }, t0)]);
+  const a = R().feed.filter((x) => x.ar === "anon-11112222").pop();
+  assert.ok(a && a.k3 !== 1 && CV.privacyOf(a) === "out", "an unknown hold: left out, as before");
+  await sync([ev("mic.release", { user: anonRef("anon-33334444"), reason: "released", held_ms: 1000, holders: [] }, t0 + 10)]);
+  const b = R().feed.filter((x) => x.ar === "anon-33334444").pop();
+  assert.ok(b && b.k3 !== 1 && CV.privacyOf(b) === "out", "no hold id: left out, as before");
+  // a named grab, then the site restarts (its hold maps are memory) - the grab is still in the live feed
+  await sync([ev("mic.grab", { user: real("restarter", "Restarter"), holders: [], hold: "hd-5555aaaa6666" }, t0 + 20)]);
+  require(path.join(repo, "veil"))._beganNamed.clear();
+  require(path.join(repo, "veil"))._holds.clear();
+  await sync([ev("mic.release", { user: anonRef("anon-77778888"), reason: "released", held_ms: 3000, holders: [], hold: "hd-5555aaaa6666" }, t0 + 3020)]);
+  const c = R().feed.filter((x) => x.ar === "anon-77778888").pop();
+  assert.ok(c && c.k3 === 1 && CV.privacyOf(c) === "anon", "paired from the live feed after a restart");
+});
+
+test("C: a resolved holder who grabbed named and went incognito / hidden mid-hold (priv + began_named): 'someone dropped the mic', never a frog name", async () => {
+  await setup;
+  const t0 = Date.now() + 8000;
+  for (const [login, kind, hold] of [["midincog", "incognito", "hd-abab0000cdcd"], ["midhidden", "hidden", "hd-efef1111abab"]]) {
+    await sync([ev("mic.grab", { user: Object.assign(real(login, login.toUpperCase()), { proven: true, since: t0 / 1000 }), holders: [], hold }, t0)]);
+    await sync([ev("message", { user: real(login, login.toUpperCase()), text: "said while " + kind, priv: priv(kind, login, kind === "hidden" ? { words: "w" } : {}) }, t0 + 500)]);
+    await sync([ev("mic.release", { user: real(login, login.toUpperCase()), reason: "released", held_ms: 2000, holders: [], hold, priv: priv(kind, login), began_named: true }, t0 + 2000)]);
+    const rel = R().feed.filter((x) => x.k === "unmic" && x._vz && x._vz.login === login).pop();
+    assert.ok(rel, `${kind}: the release is there`);
+    const { p, o } = shown(rel);
+    assert.notEqual(p, "out", `${kind}: shown`);
+    assert.ok(o.u.anon && o.u.display === "someone" && !o.u.alias && o.hold === undefined, `${kind}: 'someone', no frog name, no hold`);
+    assert.ok(!JSON.stringify(o).includes(login) && !JSON.stringify(o).includes(login.toUpperCase()), `${kind}: never named`);
+  }
 });
