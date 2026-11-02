@@ -25,7 +25,7 @@
   const typeText = (k) => kindGroup(k) + ' · ' + kindSlot(k);
   const whereText = (k) => kindGroup(k) === 'GTF avatar' ? 'Worn by your Grand Theft Frogger pixel avatar (heist sheets, stream overlay)' : 'Shows on your PATV profile' + (k === 'name_color' ? ' and the rankings' : '');
   const seasonEmoji = (label) => /winter/i.test(label) ? '❄️' : /pride/i.test(label) ? '🏳️‍🌈' : /hallowe/i.test(label) ? '🎃' : /fireside|autumn|november/i.test(label) ? '🍂' : '📅';
-  const seasonClass = (label) => /winter/i.test(label) ? 'winter' : /pride/i.test(label) ? 'pride' : /fireside|autumn|november/i.test(label) ? 'fireside' : '';
+  const seasonClass = (label) => /winter lights/i.test(label) ? 'winterlights' : /winter/i.test(label) ? 'winter' : /pride/i.test(label) ? 'pride' : /fireside|autumn|november/i.test(label) ? 'fireside' : '';
   const fmtDay = (ms) => { const d = new Date(ms); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC', ...(d.getUTCFullYear() !== new Date(now).getUTCFullYear() ? { year: 'numeric' } : {}) }); };
   const itemTags = (it) => (it && Array.isArray(it.tags) ? it.tags : []).filter((t) => tags[t]);
   const chips = (it) => {
@@ -219,6 +219,7 @@
   .cxp .season.winter { background: linear-gradient(135deg, #0f2233, var(--ds-surface) 60%); border-color: #26475f; }
   .cxp .season.pride { background: linear-gradient(135deg, rgba(228, 3, 3, .16), rgba(255, 237, 0, .08) 30%, rgba(0, 77, 255, .1) 60%, var(--ds-surface) 85%); border-color: #5a3a6a; }
   .cxp .season.fireside { background: linear-gradient(135deg, #2a160c, var(--ds-surface) 60%); border-color: #6b3a1e; }
+  .cxp .season.winterlights { background: radial-gradient(circle at 8% 18%, rgba(255, 210, 63, .14), transparent 30%), linear-gradient(135deg, #10183a, var(--ds-surface) 62%); border-color: #34477a; }
   .cxp .season-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px var(--ds-sp-3h); align-items: center; margin-block-end: var(--ds-sp-3); }
   .cxp .season-head b { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: var(--ds-fs-h3); color: var(--ds-text-strong); }
   .cxp .season-head b .cxp-muted { font-weight: 400; }
