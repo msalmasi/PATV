@@ -323,6 +323,29 @@ test("the website: deposit / withdraw / invite / accept / leave for signed-in me
   assert.equal(board.gangs[0].tag, "FAM");
 });
 
+test("room wars: a gang holding a room can't disband (R1, from Pepe's pushed copy); room-war treasury moves say so on the gang page", async () => {
+  const RW = require(path.join(repo, "roomwars"));
+  await RW.init();
+  await RW.put({ revision: 10, map: { rooms: { Room_A: { name: "Room A", tier: "outer", eligible: true, bond: 600000 } } },
+                 room_control: { Room_A: { gang: "cc33dd44", bond: 600000, perks: [] } } });
+  const r = await op({ op: "disband", key: "dsb-rw-000001", actor: "bob_cf" });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.code, "E_ROOM_HELD");
+  assert.deepEqual(r.body.rooms, ["Room_A"]);
+  assert.match(r.body.error, /\[MET\] holds Room A in Room Wars - release it first/);
+  assert.ok((await G.stateAll()).gangs.cc33dd44, "nothing changed");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM gang_ops WHERE key = 'dsb-rw-000001'"))[0].n, 0, "a refusal isn't recorded (a retry can pass)");
+  // Pepe's room-war treasury moves (pepe_gangstore: gd-rw-<tx>:<leg> / gc-rw-<tx>:<leg>, flow "turf") read "room wars" on the gang page
+  const d = await op({ op: "move", key: "gd-rw-rw76-upkeep:0", gid: "aa11bb22", legs: [["gang", -10]], why: "room wars", flow: "turf" });
+  assert.equal(d.body.ok, true, JSON.stringify(d.body));
+  const c = await op({ op: "move", key: "gc-rw-rw77-release:0", legs: [["gang:aa11bb22", 10]], why: "room wars", flow: "turf" });
+  assert.equal(c.body.ok, true, JSON.stringify(c.body));
+  const h = (await G.gangView("FAM", null)).gang.history.filter((x) => x.op === "move");
+  assert.ok(h.length >= 2 && h.slice(0, 2).every((x) => x.roomwars === true), JSON.stringify(h));
+  // released in Pepe's next push -> the disband below goes through
+  await RW.put({ revision: 11, map: { rooms: {} }, room_control: {} });
+});
+
 test("disband: treasury + released stakes split among the members, dust to the Reserve, the record kept", async () => {
   await op({ op: "deposit", key: "dep-000010", member: "bob_cf", username: "bob", amount: 1000 });
   const t = (await G.stateAll()).gangs.cc33dd44.treasury;

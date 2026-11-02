@@ -1,0 +1,70 @@
+{
+  "_about": "Turf Wars: London - the archive (room-wars plan R8, 2026-11-02). Built from the season records Pepe saved on his VM: turf_archive/season-4-london.json and seasons/season-2-london.json. Seasons 1 and 3 left no record (Port Croak never ran), so they are not here. Gangs by id, tag and name only - the records' member lists are left out on purpose. London closed for good on 2026-10-31; Room Wars replaced it.",
+  "city": "London",
+  "areas": {
+    "croydon": { "name": "Croydon", "tier": "outer", "business": "Autoshop", "xy": [123, 190], "neighbors": ["brixton", "camden", "canary"] },
+    "brixton": { "name": "Brixton", "tier": "outer", "business": "Fight Club", "xy": [123, 440], "neighbors": ["croydon", "peckham", "canary"] },
+    "peckham": { "name": "Peckham", "tier": "outer", "business": "Gun Store", "xy": [340, 565], "neighbors": ["brixton", "hackney", "shoreditch"] },
+    "hackney": { "name": "Hackney", "tier": "outer", "business": "Warehouse", "xy": [557, 440], "neighbors": ["peckham", "tottenham", "shoreditch"] },
+    "tottenham": { "name": "Tottenham", "tier": "outer", "business": "Bunker", "xy": [557, 190], "neighbors": ["hackney", "camden", "soho"] },
+    "camden": { "name": "Camden", "tier": "outer", "business": "Dispensary", "xy": [340, 65], "neighbors": ["tottenham", "croydon", "soho"] },
+    "canary": { "name": "Canary Wharf", "tier": "mid", "business": "Money Laundering", "xy": [232, 377], "neighbors": ["croydon", "brixton", "shoreditch", "soho", "mayfair"] },
+    "shoreditch": { "name": "Shoreditch", "tier": "mid", "business": "Counterfeit Cash", "xy": [448, 377], "neighbors": ["peckham", "hackney", "canary", "soho", "mayfair"] },
+    "soho": { "name": "Soho", "tier": "mid", "business": "Nightclub", "xy": [340, 190], "neighbors": ["camden", "tottenham", "canary", "shoreditch", "mayfair"] },
+    "mayfair": { "name": "Mayfair", "tier": "center", "business": "Casino", "xy": [340, 315], "neighbors": ["canary", "shoreditch", "soho"] }
+  },
+  "gangs": {
+    "bd6e773c": { "tag": "FAM", "name": "The Family" }
+  },
+  "seasons": [
+    {
+      "season": 4,
+      "archived": "2026-10-31",
+      "closed_ts": 1793421509,
+      "reason": "the season ran its course",
+      "winner": "bd6e773c",
+      "pot": 2234749,
+      "match": 0,
+      "stakes_back": 5000000,
+      "standings": [["bd6e773c", 24205]],
+      "final": {
+        "croydon": { "owner": "bd6e773c", "stake": 500000, "bank": 66 },
+        "brixton": { "owner": "bd6e773c", "stake": 500000, "bank": 705 },
+        "peckham": { "owner": "bd6e773c", "stake": 500000, "bank": 139 },
+        "hackney": { "owner": "bd6e773c", "stake": 500000, "bank": 49 },
+        "tottenham": { "owner": "bd6e773c", "stake": 500000, "bank": 192 },
+        "camden": { "owner": "bd6e773c", "stake": 500000, "bank": 25 },
+        "canary": { "owner": null, "stake": 0, "bank": 0 },
+        "shoreditch": { "owner": null, "stake": 0, "bank": 0 },
+        "soho": { "owner": "bd6e773c", "stake": 2000000, "bank": 0 },
+        "mayfair": { "owner": null, "stake": 0, "bank": 0 }
+      },
+      "cargo": { "camden": 17640, "brixton": 6149, "croydon": 2160, "hackney": 20160, "peckham": 0, "tottenham": 23580 }
+    },
+    {
+      "season": 2,
+      "archived": "2026-10-04",
+      "closed_ts": null,
+      "reason": null,
+      "winner": null,
+      "pot": null,
+      "match": null,
+      "stakes_back": null,
+      "standings": [],
+      "final": {
+        "croydon": { "owner": "bd6e773c", "stake": 500000, "bank": 0 },
+        "brixton": { "owner": "bd6e773c", "stake": 500000, "bank": 112000 },
+        "peckham": { "owner": "bd6e773c", "stake": 500000, "bank": 0 },
+        "hackney": { "owner": "bd6e773c", "stake": 500000, "bank": 0 },
+        "tottenham": { "owner": "bd6e773c", "stake": 500000, "bank": 0 },
+        "camden": { "owner": "bd6e773c", "stake": 500000, "bank": 0 },
+        "canary": { "owner": null, "stake": 0, "bank": 0 },
+        "shoreditch": { "owner": null, "stake": 0, "bank": 0 },
+        "soho": { "owner": null, "stake": 0, "bank": 0 },
+        "mayfair": { "owner": null, "stake": 0, "bank": 0 }
+      },
+      "cargo": { "camden": 10440, "brixton": 0, "croydon": 12960, "hackney": 0, "peckham": 10440, "tottenham": 25200 },
+      "published": "https://pepe.publicaccess.tv/seasons/season-2-london.html"
+    }
+  ]
+}

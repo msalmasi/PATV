@@ -1,0 +1,54 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# Room Wars R4b: 🏙️ the pad page's Room Wars card (About tab, under the pad vault). roomwars.js forPad(): this pad's row on
+    Pepe's room map - held (the gang by tag / name, its bond, perks, timers, the gang slice of the last payout from the pad
+    vault's recipe days), free (the claim command and the bond) or not contestable. Gangs only - never a member.
+    Locals: rw (forPad), rv (the pad vault card, for the slice; may be null), num. Shown only when the pad is on the map. %>
+<% const r_ = rw.room, h_ = r_.held, n_ = locals.num || ((n) => Math.round(Number(n) || 0).toLocaleString('en-US'));
+   const tzT_ = locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time;
+   const tag_ = (g) => '<span class="rw-tag" style="background:' + t.esc(g.color) + ';color:' + t.esc(g.ink) + '">[' + t.esc(g.tag || '?') + ']</span>';
+   const gang_ = h_ ? (h_.href ? '<a href="' + h_.href + '">' + tag_(h_) + (h_.name ? ' ' + t.esc(h_.name) : '') + '</a>' : tag_(h_) + (h_.name ? ' ' + t.esc(h_.name) : '')) : '';
+   const slice_ = h_ && rw.show_slice ? (h_.slice || null) : null; %>
+<style>
+  .rm .rw-card { display: grid; gap: var(--ds-sp-3); }
+  .rm .rw-card > h2 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .rm .rw-card p { margin: 0; color: var(--ds-text-2); font-size: 13.5px; line-height: 1.55; }
+  .rm .rw-card .rw-tag { display: inline-block; font: 9px/1.5 var(--ds-font-pixel); letter-spacing: .04em; padding: 3px 5px; border-radius: var(--ds-r-xs); vertical-align: middle; }
+  .rm .rw-card .rw-held { font-size: 15px; color: var(--ds-text-strong); }
+  .rm .rw-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .rm .rw-chips li { font-size: 12.5px; line-height: 1.4; padding: 3px 9px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); color: var(--ds-text-2); }
+  .rm .rw-chips li.warn { border-color: var(--ds-gold-line); color: var(--ds-gold-text); }
+  .rm .rw-chips li.bad { border-color: var(--ds-danger-line); color: var(--ds-danger-ink); }
+  .rm .rw-chips li.off { opacity: .75; font-style: italic; }
+</style>
+<section class="card rw-card" id="roomwars" aria-labelledby="rwPadH">
+  <h2 id="rwPadH"><span><%- t('rw.pad.h') %></span>
+    <span class="ds-chip <%= h_ ? 'ok' : r_.state === 'free' ? 'warn' : 'mute' %>"><%- t('rw.state.' + r_.state) %></span></h2>
+  <% if (h_) { %>
+    <p class="rw-held"><%- t('rw.pad.held', { gang: gang_ }) %><% if (h_.since) { %> · <%- t('rw.pad.since', { when: tzT_(h_.since, 'date') }) %><% } %></p>
+  <% } else if (r_.state === 'free') { %>
+    <p><%- t('rw.pad.free', { cmd: '<code>!claim ' + t.esc(r_.name) + '</code>', bond: n_(r_.bond) }) %></p>
+  <% } else { %>
+    <p><%- t('rw.pad.dormant') %></p>
+  <% } %>
+  <div class="ds-stats">
+    <% if (h_) { %><div class="ds-stat"><span><%- t('rw.pad.bond') %></span><b class="gold"><%= n_(h_.bond) %></b><small><%- t('rw.pat') %></small></div><% } else if (r_.bond) { %><div class="ds-stat"><span><%- t('rw.pad.bond_ask') %></span><b class="gold"><%= n_(r_.bond) %></b><small><%- t('rw.pat') %></small></div><% } %>
+    <div class="ds-stat"><span><%- t('rw.pad.upkeep') %></span><b><%= n_(r_.upkeep) %></b><small><%- t('rw.pad.upkeep_sub') %></small></div>
+    <div class="ds-stat"><span><%- t('rw.pad.tier') %></span><b><%- t('rw.tier.' + r_.tier) %></b><small><%- t('rw.pad.slots', { count: r_.perk_slots, n: r_.perk_slots }) %></small></div>
+    <% if (slice_) { %><div class="ds-stat"><span><%- t('rw.pad.slice') %></span><b><%= n_(slice_.amount) %></b><small><%- t('rw.pad.slice_sub', { day: slice_.day }) %></small></div><% } %>
+  </div>
+  <% if (h_) { %>
+    <% if (h_.perks.length) { %><ul class="rw-chips" aria-label="<%- t('rw.perks') %>"><% h_.perks.forEach((p) => { %><li class="<%= p.live ? '' : 'off' %>"><%- t.has('rw.perk.' + p.key) ? t('rw.perk.' + p.key) : t.esc(p.pepe) %><% if (!p.live) { %> · <%- t('rw.perk_off') %><% } %></li><% }) %></ul>
+    <% } else { %><p><%- t('rw.no_perks') %></p><% } %>
+    <% const c_ = [];
+       if (h_.locked_until) c_.push(['', t('rw.chip.locked', { when: tzT_(h_.locked_until, 'datetime') })]);
+       if (h_.lockdown_until) c_.push(['warn', t('rw.chip.lockdown', { when: tzT_(h_.lockdown_until, 'time') })]);
+       if (h_.exposed) c_.push(['bad', t('rw.chip.exposed')]); else if (h_.topup_by) c_.push(['warn', t('rw.chip.topup', { when: tzT_(h_.topup_by, 'datetime') })]);
+       if (h_.neglected) c_.push(['bad', t('rw.chip.neglected')]);
+       if (h_.release_at) c_.push(['warn', t('rw.chip.leaving', { when: tzT_(h_.release_at, 'datetime') })]);
+       if (r_.raid) c_.push(['bad', t('rw.raid_here', { att: tag_(r_.raid.attacker || { tag: '?', color: '#333', ink: '#fff' }), def: tag_(r_.raid.defender || { tag: '?', color: '#333', ink: '#fff' }) })]); %>
+    <% if (c_.length) { %><ul class="rw-chips"><% c_.forEach((c) => { %><li class="<%= c[0] %>"><%- c[1] %></li><% }) %></ul><% } %>
+    <% if (slice_) { %><p class="muted"><%- t('rw.pad.slice_note') %></p><% } %>
+  <% } %>
+  <% if (rw.stale) { %><p class="muted"><%- t('rw.stale') %></p><% } %>
+  <p><a class="ab-btn" href="/gtf/roomwars#room-<%= encodeURIComponent(r_.id) %>"><%- t('rw.pad.map') %></a></p>
+</section>

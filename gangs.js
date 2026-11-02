@@ -23,7 +23,8 @@
 // What stays in Pepe: the game engines (heists, invasions, claims, the turf map, the daily turf tick) and every chat
 // announcement. They post keyed moves here: a treasury credit from turf money Pepe holds (tills, stakes, buy-ins) is a
 // one-leg move, a debit to it the same; a tick's income / interest / upkeep / raid tax is one multi-leg move per gang.
-// Turf state (boroughs, room control) is NOT here - see docs/room-turf-map.md.
+// Turf state (boroughs, room control) is NOT here - see docs/room-turf-map.md. Room Wars: Pepe pushes a read-only copy of the
+// room map and room control to roomwars.js (R4a); disband() reads it to refuse a gang that still holds a room (R1).
 //
 // Rep: Pepe posts the rep of every Camfrog win (batched, keyed); the site's own wins (the casino, the lotto) apply it here
 // directly - casino_rep_queue and Pepe's lotto rep path retire once the gangs are live.
@@ -50,6 +51,7 @@ const KNOWN = new Set(["name", "tag", "boss", "officers", "members", "recruits",
 const NO_EXTRA = new Set(["wd_pending", "turf_marks"]);         // Pepe-local journals that never travel
 const MAX_LEGS = 24;
 const POOL_PREFIX = "gang:";
+const ROOMWARS_KEY = /^g[dc]-rw-/;   // Pepe's room-war treasury moves (pepe_gangstore: gd-rw-<tx>:<leg> debits, gc-rw-<tx>:<leg> credits)
 
 // Pepe's constants (frida-bot.py GANG_* / TURF_GANG_UPGRADES / TURF_LAUNDER_CUT ...). He pushes his own at the cutover and
 // at every start (/api/gangs/bot/config); these are the same values, for a site that never heard from him.
@@ -742,6 +744,13 @@ async function disband(b, via) {
     const m = await needMember(actor);
     if (m.rank !== "owner" && !b.admin) throw new Refuse(403, "only the boss can disband.", "E_RANK");
     const g = await needGang(m.gid);
+    // Room Wars (room-wars plan R1, decision 7's default until R5): a gang holding a room can't disband - its bond would be
+    // stranded under a ghost gang. Read from Pepe's latest pushed copy (roomwars.js; its disband_guard switch on /admin/games).
+    const rooms = await require("./roomwars").heldBy(g.gid);
+    if (rooms.length) {
+      throw new Refuse(409, `[${g.tag}] holds ${rooms.map((r) => r.name).join(", ")} in Room Wars - release ${rooms.length > 1 ? "them" : "it"} first (!room release <room>), then disband.`,
+                       "E_ROOM_HELD", { rooms: rooms.map((r) => r.id) });
+    }
     const stakes = Math.max(0, Math.trunc(Number(b.stakes) || 0));
     const released = b.released && typeof b.released === "object" ? b.released : {};
     const ms = await getQuery("SELECT member_key, userId FROM gang_members WHERE gid = ? ORDER BY seq", [g.gid]);
@@ -1141,6 +1150,31 @@ async function sourceState() {
   const m = await mirrorState();
   return m ? { mode: "mirror", st: { gangs: m.gangs }, ts: m.ts } : { mode: null, st: { gangs: {} } };
 }
+/**
+ * Room Wars (roomwars.js): tag + name for gang ids - {gid: {tag, name, live}}. The live gangs (the site's rows, or Pepe's
+ * mirror before the cutover), then a disbanded gang's record (live: false). No members.
+ */
+async function namesOf(gids) {
+  const want = [...new Set((gids || []).map(String).filter((g) => GID_RE.test(g)))];
+  const out = {};
+  if (!want.length) return out;
+  await init();
+  const q = want.map(() => "?").join(",");
+  if (await live()) {
+    for (const r of await getQuery(`SELECT gid, tag, name FROM gangs WHERE gid IN (${q})`, want)) out[r.gid] = { tag: r.tag, name: r.name, live: true };
+  } else {
+    const m = await mirrorState();
+    for (const g of want) { const x = m && m.gangs[g]; if (x) out[g] = { tag: x.tag || null, name: x.name || null, live: true }; }
+  }
+  const rest = want.filter((g) => !out[g]);
+  if (rest.length) {
+    for (const r of await getQuery(`SELECT gid, data FROM gangs_disbanded WHERE gid IN (${rest.map(() => "?").join(",")})`, rest)) {
+      const d = parse(r.data, {});
+      out[r.gid] = { tag: d.tag || null, name: d.name || null, live: false };
+    }
+  }
+  return out;
+}
 /** A gang's members with their rank: the boss, the officers, then the rest (by rep earned for the gang, then roster order). */
 async function rosterOf(gid, g, mode) {
   const officers = new Set((g.officers || []).map(low)), recruits = new Set((g.recruits || []).map(low));
@@ -1274,7 +1308,8 @@ async function gangView(tag, viewerId) {
       history: history.map((h) => {
         const r = parse(h.result, {});
         return { op: h.op, ts: h.ts, via: h.via, who: h.actor_key ? (hn[h.actor_key] || { name: h.actor_key }).name : null,
-                 amount: r.amount || null, net: r.net || null, cut: r.cut || null };
+                 amount: r.amount || null, net: r.net || null, cut: r.cut || null,
+                 roomwars: h.op === "move" && ROOMWARS_KEY.test(String(h.key || "")) };   // room wars R4a: labelled "room wars", not "turf"
       }),
     },
     me: mine ? { key: mine.member_key, rank: mine.rank, limit: rankLimit(row, mine.rank, c), used: Number(taken[mine.member_key]) || 0,
@@ -1404,7 +1439,9 @@ function register(app, { isBotToken, addUser, patSupply }) {
     try {
       const v = await gangView(req.params.tag, uid(req));
       if (v.live && !v.gang) return res.status(404).render("gang", { user: req.user ? req.user.username : null, v, signedIn: !!uid(req) });
-      res.render("gang", { user: req.user ? req.user.username : null, v, signedIn: !!uid(req) });
+      // Room Wars R4b: the rooms this gang holds (Pepe's latest pushed copy - roomwars.js); null before his first push
+      const roomWar = v.gang ? await require("./roomwars").forGang(v.gang.gid).catch((e) => { console.error("[gangs] rooms:", e.message); return null; }) : null;
+      res.render("gang", { user: req.user ? req.user.username : null, v, signedIn: !!uid(req), roomWar });
     } catch (e) { console.error("[gangs] page:", e); res.status(500).send("Something went wrong."); }
   });
 
@@ -1445,4 +1482,5 @@ function register(app, { isBotToken, addUser, patSupply }) {
 module.exports = { init, register, enabled, live, rev, cfg, stateAll, totalsOf, digestOf, create, invite, accept, decline, leaveLike, kick, role,
                    setBoss, setTag, limits, deposit, withdraw, spend, move, disband, patch, applyRep, addRep, importFromPepe, exportState,
                    rollbackToPepe, supplyRows, boardView, gangView, putMirror, webAct, opStatus, settledOpStatus, splitShares, cutLegs, Refuse, DEFAULT_CFG,
+                   namesOf,
                    _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta };

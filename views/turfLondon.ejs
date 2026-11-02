@@ -1,0 +1,120 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('rw.ldn.title'), user: user }) %>
+<%#
+  views/turfLondon.ejs - Room Wars R8: "Turf Wars: London", the archive of the borough game (roomwars.js london(), from
+  data/turf-london.json). Only the seasons that left a saved record (2 and 4). Each: the winner and prize when recorded, the
+  final standings, the final map (server-rendered SVG: the ten boroughs, their roads, the holder's colour) and the borough
+  table. Gangs by tag / name only - the records' member lists are not in the data. One column on phones.
+%>
+<%- include('partials/gangs-css') %>
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const tzT = locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time;
+  const tag = (g) => g ? '<span class="rw-tag" style="background:' + t.esc(g.color) + ';color:' + t.esc(g.ink) + '">[' + t.esc(g.tag) + ']</span>' : '';
+  const gangLink = (g) => !g ? '' : (g.href ? '<a href="' + g.href + '">' + tag(g) + ' ' + t.esc(g.name) + '</a>' : tag(g) + ' ' + t.esc(g.name));
+  const seasonList = a.seasons.map((s) => s.season).sort((x, y) => x - y).join(', ');
+%>
+<style>
+  .ldn .hero { background: radial-gradient(90% 130% at 0% 0%, #241a0a 0%, rgba(17,17,17,0) 60%), radial-gradient(80% 120% at 100% 100%, #0e1a2b 0%, rgba(17,17,17,0) 60%), #111; }
+  .ldn .hero::after { background: repeating-linear-gradient(-45deg, #8e8e8e 0 12px, #111 12px 24px); }
+  .ldn .eyebrow { color: var(--ds-text-muted); }
+  .ldn .rw-tag { display: inline-block; font: 9px/1.5 var(--ds-font-pixel); letter-spacing: .04em; padding: 3px 5px; border-radius: var(--ds-r-xs); vertical-align: middle; }
+  .ldn .season { display: grid; gap: var(--ds-sp-4); }
+  .ldn .card h3 { margin: 0 0 var(--ds-sp-3); }
+  .ldn .season > h2 { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; font: 700 var(--ds-fs-h2)/var(--ds-lh-h2) var(--ds-font); color: var(--ds-text-strong); }
+  .ldn .season > h2 small { font: 400 var(--ds-fs-sm)/1.4 var(--ds-font); color: var(--ds-text-muted); }
+  .ldn .facts { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .ldn svg.lmap { display: block; width: 100%; max-width: 680px; height: auto; margin: 0 auto; }
+  .ldn svg.lmap .edge { stroke: #2c4a2c; stroke-width: 2; }
+  .ldn svg.lmap .free rect { fill: #1c1f1c; stroke: #3a3a40; stroke-dasharray: 4 3; }
+  .ldn svg.lmap rect { stroke: rgba(0,0,0,.45); stroke-width: 1.5; }
+  .ldn svg.lmap .nm { font: 700 13px var(--ds-font); text-anchor: middle; }
+  .ldn svg.lmap .sub { font: 10px var(--ds-font); text-anchor: middle; }
+  .ldn svg.lmap .free .nm, .ldn svg.lmap .free .sub { fill: #a8b0a8; }
+  .ldn .tbl { overflow-x: auto; }
+  .ldn table { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-sm); }
+  .ldn th, .ldn td { text-align: start; padding: 8px 10px; border-bottom: 1px solid var(--ds-line-soft); white-space: nowrap; }
+  .ldn th { font: 9px/1.6 var(--ds-font-pixel); letter-spacing: .06em; color: #a0a8a0; text-transform: uppercase; }
+  .ldn td.n { text-align: end; font-variant-numeric: tabular-nums; }
+  .ldn .free-t { color: var(--ds-text-muted); }
+  .ldn .stand { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .ldn .stand li { display: flex; justify-content: space-between; gap: 10px; align-items: center; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2) var(--ds-sp-3); }
+  .ldn .stand b { font-variant-numeric: tabular-nums; color: var(--ds-text-strong); }
+  .ldn .links { display: flex; flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 600px) { .ldn .hero { padding: var(--ds-sp-6) var(--ds-sp-4) var(--ds-sp-5); } }
+</style>
+<main class="ds-page wide gg ldn">
+  <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <a href="/gtf/roomwars"><%- t('rw.crumb') %></a> › <%- t('rw.ldn.crumb') %></div>
+  <section class="hero" aria-labelledby="ldnH">
+    <div class="eyebrow"><%- t('rw.ldn.eyebrow') %></div>
+    <h1 id="ldnH"><span class="ds-ic" aria-hidden="true">🗄️</span><%- t('rw.ldn.h1') %></h1>
+    <p class="lead"><%- t('rw.ldn.lead', { seasons: seasonList }) %></p>
+    <div class="links" style="margin-top:var(--ds-sp-4)"><a class="btn gold" href="/gtf/roomwars">🏙️ <%- t('rw.ldn.now') %></a></div>
+  </section>
+
+  <% a.seasons.forEach((s) => { %>
+  <section class="season" aria-labelledby="ldnS<%= s.season %>">
+    <h2 id="ldnS<%= s.season %>"><%- t('rw.ldn.season', { n: s.season }) %>
+      <small><%- s.closed_ts ? t('rw.ldn.closed', { when: tzT(s.closed_ts, 'long') }) : t('rw.ldn.saved', { day: s.archived }) %></small></h2>
+    <div class="grid2">
+      <div class="card gold">
+        <h3 class="ds-pixel-h"><%- t('rw.ldn.map') %></h3>
+        <svg class="lmap" viewBox="44 22 592 590" role="img" aria-label="<%- t('rw.ldn.map_aria', { n: s.season }) %>">
+          <% s.edges.forEach((e) => { %><line class="edge" x1="<%= e[0][0] %>" y1="<%= e[0][1] %>" x2="<%= e[1][0] %>" y2="<%= e[1][1] %>"/><% }) %>
+          <% s.areas.forEach((ar) => { const x = ar.xy[0], y = ar.xy[1]; %>
+          <g class="<%= ar.owner ? 'held' : 'free' %>">
+            <rect x="<%= x - 62 %>" y="<%= y - 26 %>" width="124" height="52" rx="9"<% if (ar.owner) { %> fill="<%= ar.owner.color %>"<% } %>/>
+            <text x="<%= x %>" y="<%= y - 5 %>" class="nm"<% if (ar.owner) { %> fill="<%= ar.owner.ink %>"<% } %>><%= ar.name %></text>
+            <text x="<%= x %>" y="<%= y + 13 %>" class="sub"<% if (ar.owner) { %> fill="<%= ar.owner.ink %>"<% } %>><%= ar.business %> · <%= ar.owner ? '[' + ar.owner.tag + ']' : t('rw.ldn.free_short') %></text>
+          </g>
+          <% }) %>
+        </svg>
+      </div>
+      <div style="display:grid;gap:var(--ds-sp-4);min-width:0">
+        <div class="card violet">
+          <h3 class="ds-pixel-h"><%- t('rw.ldn.result') %></h3>
+          <ul class="facts">
+            <% if (s.winner) { %><li><%- t('rw.ldn.winner', { gang: gangLink(s.winner) }) %></li><% } %>
+            <% if (s.pot != null) { %><li><%- t('rw.ldn.prize', { n: fmt(s.pot) }) %><% if (s.match) { %> <%- t('rw.ldn.match', { n: fmt(s.match) }) %><% } %></li><% } %>
+            <% if (s.stakes_back) { %><li><%- t('rw.ldn.stakes', { n: fmt(s.stakes_back) }) %></li><% } %>
+            <% s.held.forEach((h) => { %><li><%- t('rw.ldn.held_n', { gang: gangLink(h.gang), count: h.n, n: h.n, of: s.areas.length }) %></li><% }) %>
+            <% if (!s.winner && s.pot == null) { %><li class="free-t"><%- t('rw.ldn.no_result') %></li><% } %>
+          </ul>
+        </div>
+        <div class="card green">
+          <h3 class="ds-pixel-h"><%- t('rw.ldn.standings') %></h3>
+          <% if (s.standings.length) { %>
+          <ol class="stand"><% s.standings.forEach((x) => { %><li><span><%- gangLink(x.gang) %></span><b><%= fmt(x.score) %> <small><%- t('rw.ldn.score') %></small></b></li><% }) %></ol>
+          <% } else { %><p class="note"><%- t('rw.ldn.no_standings') %></p><% } %>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="ds-pixel-h"><%- t('rw.ldn.boroughs') %></h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th scope="col"><%- t('rw.ldn.k_borough') %></th><th scope="col"><%- t('rw.ldn.k_business') %></th><th scope="col"><%- t('rw.ldn.k_tier') %></th>
+            <th scope="col"><%- t('rw.ldn.k_held') %></th><th scope="col" class="n"><%- t('rw.ldn.k_stake') %></th><th scope="col" class="n"><%- t('rw.ldn.k_till') %></th><th scope="col" class="n"><%- t('rw.ldn.k_cargo') %></th></tr></thead>
+          <tbody>
+          <% s.areas.forEach((ar) => { %>
+            <tr><td><b><%= ar.name %></b></td><td><%= ar.business %></td><td><%- t('rw.tier.' + ar.tier) %></td>
+              <td><%- ar.owner ? gangLink(ar.owner) : '<span class="free-t">' + t('rw.ldn.free') + '</span>' %></td>
+              <td class="n"><%= ar.stake ? fmt(ar.stake) : '—' %></td><td class="n"><%= ar.bank ? fmt(ar.bank) : '—' %></td><td class="n"><%= ar.cargo ? fmt(ar.cargo) : '—' %></td></tr>
+          <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p class="note"><%- t('rw.ldn.table_note') %></p>
+      <% if (s.published) { %><p class="note"><a href="<%= s.published %>" rel="noopener"><%- t('rw.ldn.published') %> ›</a></p><% } %>
+    </div>
+  </section>
+  <% }) %>
+
+  <div class="links">
+    <a class="btn" href="/gtf/roomwars">🏙️ <%- t('rw.ldn.now') %></a>
+    <a class="btn" href="/gtf/gangs">🎩 <%- t('rw.links.gangs') %></a>
+    <a class="btn" href="/gtf">🕹️ Grand Theft Frogger</a>
+  </div>
+</main>
+</body>
+</html>

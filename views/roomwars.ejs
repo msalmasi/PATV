@@ -1,0 +1,176 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('rw.title'), user: user }) %>
+<%#
+  views/roomwars.ejs - Room Wars R4b (roomwars.js view()): the live room map. Gangs hold Camfrog rooms; Pepe pushes the map
+  and who holds what after every change. The map is drawn in the browser from the page's JSON (public/js/roomwars-map.js,
+  which also polls /api/gtf/roomwars and says when the map changed); every room is also listed below as server-rendered
+  cards (no JavaScript needed). Gangs by tag / name / colour only - never a member, crew or defender. One column on phones.
+%>
+<%- include('partials/gangs-css') %>
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const tzT = locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time;
+  const R = v.rules || {};
+  const tag = (g) => g ? '<span class="rw-tag" style="background:' + t.esc(g.color) + ';color:' + t.esc(g.ink) + '">[' + t.esc(g.tag || '?') + ']</span>' : '';
+  const gangLink = (g) => !g ? '' : (g.href ? '<a href="' + g.href + '">' + tag(g) + (g.name ? ' ' + t.esc(g.name) : '') + '</a>' : tag(g) + (g.name ? ' ' + t.esc(g.name) : ''));
+  const bondsLocked = v.all.reduce((s, r) => s + (r.held ? r.held.bond || 0 : 0), 0);
+  const code = (c) => '<code>' + t.esc(c) + '</code>';
+  const mapRooms = v.rooms.map((r) => ({ id: r.id, name: r.name, tier: r.tier, xy: r.xy, state: r.state, bond: r.bond, href: r.pad ? r.pad.href : null,
+                                         held: r.held ? { tag: r.held.tag, color: r.held.color, ink: r.held.ink } : null, raid: !!r.raid, convoy: !!r.convoy }));
+%>
+<style>
+  /* Room Wars: the gang pages' arcade look (.gg) with a city-at-night map. Every colour is a ds token, a GTF part colour or a gang's own. */
+  .rw .hero { background: radial-gradient(90% 130% at 0% 0%, #0d1a2b 0%, rgba(17,17,17,0) 60%), radial-gradient(80% 120% at 100% 100%, #2b0d18 0%, rgba(17,17,17,0) 60%), #111; }
+  .rw .hero::after { background: repeating-linear-gradient(-45deg, var(--gold) 0 12px, #111 12px 24px); }
+  .rw .eyebrow { color: var(--gold); }
+  .rw .banner { border: 1px solid var(--ds-line-strong); background: var(--ds-surface-2); border-radius: var(--ds-r-lg); padding: var(--ds-sp-3) var(--ds-sp-4); color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .rw .banner.warn { border-color: var(--ds-gold-line); }
+  .rw .banner.live { border-color: var(--red); background: #1a0b0b; color: var(--ds-danger-ink); }
+  .rw .banner[hidden] { display: none; }
+  .rw .rw-tag { display: inline-block; font: 9px/1.5 var(--ds-font-pixel); letter-spacing: .04em; padding: 3px 5px; border-radius: var(--ds-r-xs); vertical-align: middle; }
+  .rw .mapcard { padding: var(--ds-sp-3); }
+  .rw .mapwrap { position: relative; max-width: 680px; margin: 0 auto; }
+  .rw #rwMap svg { display: block; width: 100%; height: auto; }
+  .rw #rwMap .ring { fill: none; stroke: #2c3a4a; stroke-width: 2; stroke-dasharray: 6 6; }
+  .rw #rwMap .ring-l { fill: #8e978e; font: 9px var(--ds-font-pixel); letter-spacing: .06em; text-anchor: middle; }
+  .rw #rwMap .node rect { stroke: rgba(0,0,0,.45); stroke-width: 1.5; }
+  .rw #rwMap .node.free rect { fill: #1c2b1e; stroke: var(--green); stroke-dasharray: 4 3; }
+  .rw #rwMap .node.dormant rect { fill: #1a1a1d; stroke: #3a3a40; }
+  .rw #rwMap .node .nm { font: 700 12px var(--ds-font); text-anchor: middle; }
+  .rw #rwMap .node .sub { font: 10px var(--ds-font); text-anchor: middle; }
+  .rw #rwMap .node.free .nm, .rw #rwMap .node.free .sub { fill: #d8f5d0; }
+  .rw #rwMap .node.dormant .nm, .rw #rwMap .node.dormant .sub { fill: #9a9a9a; }
+  .rw #rwMap .node.raid rect { stroke: var(--red); stroke-width: 3; }
+  .rw #rwMap .node.raid { animation: rw-pulse 1.2s ease-in-out infinite; }
+  .rw #rwMap a:focus-visible rect { stroke: var(--ds-focus); stroke-width: 3; }
+  .rw #rwMap .badge { font: 13px var(--ds-font-emoji); }
+  @keyframes rw-pulse { 50% { opacity: .65; } }
+  @media (prefers-reduced-motion: reduce) { .rw #rwMap .node.raid { animation: none; } }
+  .rw .rooms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--ds-sp-3); }
+  .rw .room { display: grid; gap: var(--ds-sp-2h); border-top: 3px solid var(--ac, var(--ds-line-strong)); scroll-margin-top: 80px; }
+  .rw .room.free { --ac: var(--green); } .rw .room.dormant { --ac: #3a3a40; }
+  .rw .room h3 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); }
+  .rw .tier { font: 9px/1.5 var(--ds-font-pixel); letter-spacing: .06em; padding: 3px 6px; border-radius: var(--ds-r-xs); background: #222; color: #ccc; text-transform: uppercase; }
+  .rw .tier.center { background: rgba(255,90,90,.16); color: #ff9a9a; } .rw .tier.mid { background: rgba(255,207,64,.14); color: var(--ds-gold-text); } .rw .tier.outer { background: rgba(76,175,80,.14); color: #9fdca2; }
+  .rw .room dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-sp-2); }
+  .rw .room dl div { background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2) var(--ds-sp-2h); min-width: 0; }
+  .rw .room dt { font: 9px/1.6 var(--ds-font-pixel); letter-spacing: .06em; color: #a0a8a0; text-transform: uppercase; }
+  .rw .room dd { margin: 2px 0 0; font-weight: 700; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .rw .room dd small { display: block; font-weight: 400; color: var(--mut); font-size: 12px; }
+  .rw .room p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .rw .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .rw .chips li { font-size: 12.5px; line-height: 1.4; padding: 3px 9px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); color: var(--ds-text-2); }
+  .rw .chips li.warn { border-color: var(--ds-gold-line); color: var(--ds-gold-text); }
+  .rw .chips li.bad { border-color: var(--ds-danger-line); color: var(--ds-danger-ink); }
+  .rw .chips li.off { opacity: .75; font-style: italic; }
+  .rw .how { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--ds-sp-2); }
+  .rw .how li { display: grid; grid-template-columns: minmax(0, 13em) minmax(0, 1fr); gap: var(--ds-sp-1) var(--ds-sp-3); align-items: start; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-3); }
+  .rw .how li code { justify-self: start; color: var(--ds-gold-text); font-weight: 700; overflow-wrap: anywhere; }
+  .rw .how li > span:last-child { color: var(--ds-text-2); font-size: 13.5px; line-height: 1.5; }
+  .rw .how li .cmds { justify-self: start; color: var(--ds-text-muted); }
+  .rw .links { display: flex; flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 600px) {
+    .rw .hero { padding: var(--ds-sp-6) var(--ds-sp-4) var(--ds-sp-5); }
+    .rw .how li { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+<main class="ds-page wide gg rw">
+  <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <%- t('rw.crumb') %></div>
+  <section class="hero" aria-labelledby="rwH">
+    <div class="eyebrow"><%- t('rw.eyebrow') %></div>
+    <h1 id="rwH"><span class="ds-ic" aria-hidden="true">🏙️</span><%- t('rw.h1') %></h1>
+    <p class="lead"><%- t('rw.lead') %></p>
+    <% if (v.live) { %>
+    <dl class="stats">
+      <div class="stat"><dt><%- t('rw.st.held') %></dt><dd><%= fmt(v.counts.held) %></dd></div>
+      <div class="stat"><dt><%- t('rw.st.free') %></dt><dd><%= fmt(v.counts.free) %></dd></div>
+      <div class="stat"><dt><%- t('rw.st.bonds') %></dt><dd><%= fmt(bondsLocked) %> <small><%- t('rw.pat') %></small></dd></div>
+      <div class="stat"><dt><%- t('rw.st.updated') %></dt><dd style="font-size:15px"><%- tzT(v.updated, 'datetime') %></dd></div>
+    </dl>
+    <% } %>
+  </section>
+
+  <% if (!v.live) { %>
+  <div class="banner"><%- t('rw.none') %></div>
+  <% } else { %>
+  <% if (!v.on) { %><div class="banner warn" role="note"><%- t('rw.off') %></div><% } %>
+  <% if (v.stale) { %><div class="banner warn" role="note"><%- t('rw.stale') %></div><% } %>
+  <% if (v.raid) { %><div class="banner live" role="status"><%- t('rw.raid_banner', { room: v.raid.room, att: tag(v.raid.attacker), def: tag(v.raid.defender), crew: v.raid.crew, defs: v.raid.defenders }) %></div><% } %>
+  <% if (v.hit) { %><div class="banner live" role="status"><%- t('rw.hit_banner', { room: v.hit.room, crew: v.hit.crew }) %></div><% } %>
+  <% v.convoys.forEach((c) => { %><div class="banner warn" role="status"><%- t('rw.convoy_banner', { room: c.room, n: fmt(c.amount), when: tzT(c.until, 'time') }) %></div><% }) %>
+  <div class="banner" id="rwNew" role="status" hidden><%- t('rw.changed') %> <a class="btn small" href="/gtf/roomwars"><%- t('rw.reload') %></a></div>
+
+  <section class="card mapcard" aria-labelledby="rwMapH">
+    <h2 id="rwMapH" class="ds-pixel-h"><%- t('rw.map.h') %></h2>
+    <div class="mapwrap"><div id="rwMap" data-api="/api/gtf/roomwars" data-revision="<%= v.revision %>"><noscript><p class="note"><%- t('rw.map.noscript') %></p></noscript></div></div>
+    <p class="note"><%- t('rw.map.legend') %></p>
+  </section>
+  <script type="application/json" id="rwData"><%- JSON.stringify({ revision: v.revision, rooms: mapRooms }).replace(/</g, '\\u003c') %></script>
+
+  <section aria-labelledby="rwRoomsH" style="display:grid;gap:var(--ds-sp-3)">
+    <h2 id="rwRoomsH" class="ds-pixel-h"><%- t('rw.rooms.h') %></h2>
+    <% if (!v.rooms.length) { %><div class="card"><p class="note"><%- t('rw.rooms.none') %></p></div><% } %>
+    <div class="rooms">
+    <% v.rooms.forEach((r) => { const h = r.held; %>
+      <article class="card room <%= r.state %>" id="room-<%= r.id %>" style="<%= h ? '--ac:' + h.color : '' %>">
+        <h3><span class="tier <%= r.tier %>"><%- t('rw.tier.' + r.tier) %></span>
+          <% if (r.pad) { %><a href="<%= r.pad.href %>"><%= r.name %></a><% } else { %><%= r.name %><% } %>
+          <% if (h) { %><%- tag(h) %><% } %></h3>
+        <dl>
+          <div><dt><%- t('rw.k.i30') %></dt><dd><%= fmt(r.i30) %> <small><%- t('rw.k.i30_sub') %></small></dd></div>
+          <div><dt><%- t('rw.k.bond') %></dt><dd><%= r.bond ? fmt(r.bond) : '—' %> <small><%- t('rw.pat') %></small></dd></div>
+          <div><dt><%- t('rw.k.upkeep') %></dt><dd><%= fmt(r.upkeep) %> <small><%- t('rw.k.upkeep_sub') %></small></dd></div>
+          <div><dt><%- t('rw.k.slots') %></dt><dd><%= r.perk_slots %></dd></div>
+        </dl>
+        <% if (h) { %>
+          <p><%- t('rw.held_by', { gang: gangLink(h), when: h.since ? tzT(h.since, 'date') : '—' }) %></p>
+          <p><%- t('rw.bond_posted', { bond: fmt(h.bond) }) %><% if (h.bond_req && h.bond_req !== h.bond) { %> <%- t('rw.bond_req', { req: fmt(h.bond_req) }) %><% } %></p>
+          <% if (h.perks.length) { %>
+          <ul class="chips" aria-label="<%- t('rw.perks') %>"><% h.perks.forEach((p) => { %><li class="<%= p.live ? '' : 'off' %>"><%- t.has('rw.perk.' + p.key) ? t('rw.perk.' + p.key) : t.esc(p.pepe) %><% if (!p.live) { %> · <%- t('rw.perk_off') %><% } %></li><% }) %></ul>
+          <% } else { %><p class="note" style="margin:0"><%- t('rw.no_perks') %></p><% } %>
+          <% const chips = [];
+             if (h.locked_until) chips.push(['', t('rw.chip.locked', { when: tzT(h.locked_until, 'datetime') })]);
+             if (h.lockdown_until) chips.push(['warn', t('rw.chip.lockdown', { when: tzT(h.lockdown_until, 'time') })]);
+             if (h.exposed) chips.push(['bad', t('rw.chip.exposed')]);
+             else if (h.topup_by) chips.push(['warn', t('rw.chip.topup', { when: tzT(h.topup_by, 'datetime') })]);
+             if (h.neglected) chips.push(['bad', t('rw.chip.neglected')]);
+             if (h.release_at) chips.push(['warn', t('rw.chip.leaving', { when: tzT(h.release_at, 'datetime') })]); %>
+          <% if (chips.length) { %><ul class="chips"><% chips.forEach((c) => { %><li class="<%= c[0] %>"><%- c[1] %></li><% }) %></ul><% } %>
+          <% if (v.cfg.show_slice && h.slice) { %><p class="note" style="margin:0"><%- t('rw.slice', { day: h.slice.day, n: fmt(h.slice.amount) }) %></p><% } %>
+        <% } else if (r.state === 'free') { %>
+          <p><%- t('rw.free_how', { cmd: code('!claim ' + r.name) }) %></p>
+        <% } else { %>
+          <p><%- t('rw.dormant_how') %></p>
+        <% } %>
+        <% if (r.raid) { %><p class="note" style="margin:0;color:var(--ds-danger-ink)"><%- t('rw.raid_here', { att: tag(r.raid.attacker), def: tag(r.raid.defender) }) %></p><% } %>
+        <% if (r.convoy) { %><p class="note" style="margin:0"><%- t('rw.convoy_here', { n: fmt(r.convoy.amount), when: tzT(r.convoy.until, 'time') }) %></p><% } %>
+      </article>
+    <% }) %>
+    </div>
+  </section>
+  <% } %>
+
+  <section class="card gold" id="how" aria-labelledby="rwHowH">
+    <h2 id="rwHowH" class="ds-pixel-h"><%- t('rw.how.h') %></h2>
+    <ul class="how">
+      <li><%- code('!room') %><span><%- t('rw.how.map') %></span></li>
+      <li><%- code('!gang deposit <amount>') %><span><%- t('rw.how.fund') %></span></li>
+      <li><%- code('!claim <room>') %><span><%- t('rw.how.claim') %></span></li>
+      <li><%- code('!invade <room>') %><span><%- t('rw.how.raid', { buyin: fmt(R.raid_buyin), crew: R.min_crew, slash: Math.round((R.slash || 0) * 100), lock: R.lock_h }) %></span></li>
+      <li><span class="cmds"><%- code('!join') %> · <%- code('!defend') %></span><span><%- t('rw.how.join') %></span></li>
+      <li><%- code('!room perks <room> <perk> <perk>') %><span><%- t('rw.how.perks') %></span></li>
+      <li><%- code('!room release <room>') %><span><%- t('rw.how.release', { h: R.release_h }) %></span></li>
+      <li><%- code('!hijack') %><span><%- t('rw.how.convoy', { n: fmt(R.payout_convoy_min), min: Math.round((R.convoy_s || 600) / 60), hour: String(R.convoy_hour).padStart(2, '0'), take: Math.round((R.hijack_take || 0) * 100), buyin: fmt(R.hijack_buyin) }) %></span></li>
+    </ul>
+    <p class="note"><%- t('rw.how.money') %></p>
+  </section>
+
+  <div class="links">
+    <a class="btn" href="/gtf/gangs">🎩 <%- t('rw.links.gangs') %></a>
+    <a class="btn" href="/gtf/london">🗄️ <%- t('rw.links.london') %></a>
+    <a class="btn" href="/help#cat-heists">📖 <%- t('rw.links.help') %></a>
+  </div>
+</main>
+<script src="/public/js/roomwars-map.js?v=1" defer></script>
+</body>
+</html>

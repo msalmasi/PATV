@@ -2,14 +2,15 @@
 <%- include('layout', { title: 'Grand Theft Frogger', user: user}) %>
 <%#
   views/gtf.ejs - Grand Theft Frogger overview (gtf.js). 1.99lv design pass: hero + your-character card, the four
-  parts as cards, a numbered "start here" list. The turf map changes every season, so nothing here names districts.
+  parts as cards, a numbered "start here" list. The turf part is Room Wars now (gangs hold chat rooms - /gtf/roomwars);
+  London's borough seasons are archived at /gtf/london (room-wars plan R4b / R8).
 %>
 <%
   const ext = (u) => /^https:/.test(u) ? ' rel="noopener"' : '';
   const PARTS = [
     { key: 'heists', icon: '🥷', accent: 'gold', links: [[links.heistHelp, t('gtf.heists.l_how')], [links.heistBoard, t('gtf.heists.l_board')], [links.heistMarket, t('gtf.heists.l_market')]] },
-    { key: 'turf', icon: '🗺️', accent: 'green', links: [[links.turfGuide, t('gtf.turf.l_guide')], [links.turfHelp, t('gtf.turf.l_cmds')], [links.turfMap, t('gtf.turf.l_map')],
-        ['https://pepe.publicaccess.tv/seasons/season-2-london.html', t('gtf.turf.l_archive')]] },
+    { key: 'turf', icon: '🏙️', accent: 'green', links: [[links.turfMap, t('gtf.turf.l_map')], [links.turfGuide, t('gtf.turf.l_guide')], [links.turfHelp, t('gtf.turf.l_cmds')],
+        [links.turfArchive || '/gtf/london', t('gtf.turf.l_archive')], ['https://pepe.publicaccess.tv/seasons/season-2-london.html', t('gtf.turf.l_season2')]] },
     { key: 'gangs', icon: '🎩', accent: 'violet', links: [[links.gangs, t('gtf.gangs.l_board')], [links.turfHelp, t('gtf.gangs.l_cmds')]] },
     { key: 'bounties', icon: '🎯', accent: 'red', links: [['/bounties', t('gtf.bounties.l_board')]] },
   ];

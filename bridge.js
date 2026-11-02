@@ -2119,6 +2119,8 @@ function register(app, { isBotToken, addUser }) {
       twitch: platform === "twitch" ? await twitchPlayer(R.id, req.hostname) : null,      // 1.99ja: a Twitch pad's login + its player
       roomVault: !require("./roomvaults").hasVault(R.id) ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage })
         .catch((e) => { console.error("[roomvaults] card:", e.message); return null; }),
+      // Room Wars R4b: this pad's row on Pepe's room map (held / free / not contestable) - null when it isn't on the map
+      padRoomWar: await require("./roomwars").forPad(R.id).catch((e) => { console.error("[roomwars] pad card:", e.message); return null; }),
       feed,
       padBets: await require("./padbets").forPad(R.id).catch((e) => { console.error("[padbets]", e.message); return null; }),   // 1.99ur
       // 1.99xk: 🎫 the pad's raffles (raffles.forPad) - shown while the feature is on

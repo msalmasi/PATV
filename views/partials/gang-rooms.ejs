@@ -1,0 +1,24 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# Room Wars R4b: the rooms a gang holds, on its gang page (views/gang.ejs; roomwars.js forGang()). Each room: its pad link,
+    tier, the bond posted, perks and timers. Locals: rw (forGang - null before Pepe's first push: nothing is shown). %>
+<% if (rw) {
+   const n_ = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+   const tzT_ = locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time; %>
+<section class="card" aria-labelledby="ggRooms">
+  <h2 id="ggRooms" class="ds-pixel-h"><%- t('rw.gang.h') %></h2>
+  <% if (!rw.rooms.length) { %>
+    <p class="note"><%- t('rw.gang.none') %> <a href="/gtf/roomwars"><%- t('rw.gang.map') %></a></p>
+  <% } else { %>
+  <ul class="hist">
+    <% rw.rooms.forEach((r) => { const h = r.held; %>
+    <li><span><b><% if (r.pad) { %><a href="<%= r.pad.href %>"><%= r.name %></a><% } else { %><%= r.name %><% } %></b> · <%- t('rw.tier.' + r.tier) %>
+      <% if (h.perks.length) { %> · <%- h.perks.map((p) => t.has('rw.perkname.' + p.key) ? t('rw.perkname.' + p.key) : t.esc(p.key)).join(', ') %><% } %>
+      <% if (h.exposed || h.neglected) { %> · <span style="color:var(--red)"><%- h.neglected ? t('rw.gang.neglected') : t('rw.gang.exposed') %></span><% } %>
+      <% if (h.release_at) { %> · <%- t('rw.chip.leaving', { when: tzT_(h.release_at, 'date') }) %><% } %></span>
+      <span class="when"><%= n_(h.bond) %> <%- t('rw.pat') %></span></li>
+    <% }) %>
+  </ul>
+  <p class="note"><%- t('rw.gang.bonds', { n: n_(rw.bonds) }) %> · <a href="/gtf/roomwars"><%- t('rw.gang.map') %></a></p>
+  <% } %>
+</section>
+<% } %>

@@ -1,7 +1,8 @@
-// gtf.js — "Grand Theft Frogger" (GTF), the crime game that ties Pepe's heists, turf wars and gangs
+// gtf.js — "Grand Theft Frogger" (GTF), the crime game that ties Pepe's heists, Room Wars and gangs
 // together. Pepe registers each player's heist sheet here when he publishes it, so a PATV profile
-// can link it; /gtf is the overview page linking the guides and the live boards. The turf map's
-// districts change from season to season, so nothing here names them.
+// can link it; /gtf is the overview page linking the guides and the live boards. Room Wars (gangs hold
+// the chat rooms) replaced the London borough game on 2026-10-31: its map lives at /gtf/roomwars and
+// London's seasons at /gtf/london (roomwars.js).
 const { runQuery, getQuery } = require("./dbUtils");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS heist_sheets (
@@ -10,8 +11,9 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS heist_sheets (
 const LINKS = {
   heistHelp: "/help#cat-heists",
   turfHelp: "/help#cat-heists",
-  turfGuide: "https://pepe.publicaccess.tv/turfwars",
-  turfMap: "https://pepe.publicaccess.tv/turf",
+  turfGuide: "/gtf/roomwars#how",           // Room Wars R8: London's pepe.publicaccess.tv/turfwars guide is frozen as an archive
+  turfMap: "/gtf/roomwars",                 // R4b: the live room map on the site (pepe.publicaccess.tv/turf redirects here)
+  turfArchive: "/gtf/london",               // R8: Turf Wars: London, from the saved season records
   gangs: "/gtf/gangs",                      // G1: the gang board lives on the site (Pepe's Netlify board retired)
   heistBoard: "/gtf/leaderboards",          // 1.99wg: the GTF leaderboards on the site (gtfboards.js; Pepe's Netlify board retired)
   heistMarket: "/gtf/market",               // 1.99tt: players sell heist items (heistmarket.js)

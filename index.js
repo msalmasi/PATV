@@ -1344,6 +1344,8 @@ require("./oracleadmin").register(app, { addUser });   // 1.99uc: /admin/oracle 
 require("./econstore").register(app, { isBotToken, addUser });
 // G1: the gang system on the site (gangs.js) - registry, ranks, treasuries (keyed pools rows), rep; /gtf/gangs pages
 require("./gangs").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
+// Room Wars R4a/R4b/R8: Pepe's room map + room control (read-only copy, daily history), /gtf/roomwars, /gtf/london, pad + gang cards
+require("./roomwars").register(app, { isBotToken, addUser });
 // Phase 3: the capital cluster (LMSR markets + Market maker, Reserve loans + Bank, the staking vaults) - capital/service.js
 require("./capital/service").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
 // Phase 4: the policy engines (treasury waterfall + daily release, the monetary day, the burn accrual) on ONE site scheduler

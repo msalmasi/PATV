@@ -1,0 +1,20 @@
+<%# Room Wars (roomwars.js): the site's switches for the read-only copy of Pepe's room map - the feed itself, the disband
+    guard, the gang slice on pad pages, rooms that aren't contestable on the map. The defaults are the room-wars plan's
+    recommended answers (section 4, decisions 18 / 7 / 11 / 5) until the owner decides. public/js/admin-roomwars.js. Admins. %>
+<section class="adm-card" id="roomwars" aria-labelledby="roomwarsT">
+  <h2 id="roomwarsT">Room Wars (site copy) <span class="adm-pill admin">admins</span> <span class="adm-msg" id="rwCfgMsg" role="status" aria-live="polite"></span></h2>
+  <% if (!locals.isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <p class="adm-help">Pepe runs Room Wars in chat and pushes the room map and who holds what here after every change. The site only
+    shows it (<a href="/gtf/roomwars">/gtf/roomwars</a>, pad pages, gang pages) and keeps one copy per day - nothing here moves PAT.
+    Changes apply at once.</p>
+  <p class="adm-help" id="rwFeedState">Loading…</p>
+  <form id="rwCfgForm" class="adm-form" autocomplete="off">
+    <label><input type="checkbox" name="feed_on"> Accept Pepe's room map (off: his pushes are refused and the pages keep the last copy)</label>
+    <label><input type="checkbox" name="disband_guard"> A gang that holds a room can't disband (it must release the room first)</label>
+    <label><input type="checkbox" name="show_slice"> Show the gang's slice of the last payout on pad pages</label>
+    <label><input type="checkbox" name="show_dormant"> Draw rooms that aren't contestable on the map</label>
+    <div class="adm-actions"><button class="ds-btn sm" type="submit">Save</button></div>
+  </form>
+  <script src="/public/js/admin-roomwars.js?v=1" defer></script>
+  <% } %>
+</section>

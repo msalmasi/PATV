@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: v && v.gang ? `[${v.gang.tag}] ${v.gang.name}` : 'Gang', user: user }) %>
 <%#
   views/gang.ejs - one gang (gangs.js gangView, G1): roster with ranks, treasury, upgrades, war record, recent treasury
@@ -108,6 +109,9 @@
       <section class="card green"><p class="note"><a href="/login?next=/gtf/gangs/<%= encodeURIComponent(g.tag) %>">Sign in</a> to manage your gang here.</p></section>
       <% } %>
 
+      <%# Room Wars R4b: the rooms this gang holds (partials/gang-rooms.ejs; roomwars.js forGang) %>
+      <%- include('partials/gang-rooms', { rw: typeof roomWar !== 'undefined' ? roomWar : null }) %>
+
       <section class="card" aria-labelledby="ggWar">
         <h2 id="ggWar" class="ds-pixel-h">WAR RECORD</h2>
         <div class="war"><span class="w"><%= g.wars.wins %>W</span><span class="l"><%= g.wars.losses %>L</span>
@@ -120,7 +124,7 @@
         <% if (!g.history.length) { %><p class="note">Nothing yet.</p><% } else { %>
         <ul class="hist">
           <% g.history.forEach((h) => { %>
-          <li><span><%= OPS[h.op] || h.op %><% if (h.who) { %> · <%= h.who %><% } %><% if (h.amount) { %> · <%= fmt(h.amount) %> PAT<% } %><% if (h.via === 'web') { %> · web<% } %></span>
+          <li><span><%- h.roomwars ? t('rw.gang.ledger') : (OPS[h.op] || h.op) %><% if (h.who) { %> · <%= h.who %><% } %><% if (h.amount) { %> · <%= fmt(h.amount) %> PAT<% } %><% if (h.via === 'web') { %> · web<% } %></span>
             <span class="when"><%= when(h.ts) %></span></li>
           <% }) %>
         </ul>
