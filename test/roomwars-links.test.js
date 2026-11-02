@@ -1,4 +1,4 @@
-// Room Wars R9 (room-wars plan 2026-11-02, 1.99??): shared-regular lines on the room map (roomwars.js cleanLinks / view,
+// Room Wars R9 (room-wars plan 2026-11-02, 1.99ahr): shared-regular lines on the room map (roomwars.js cleanLinks / view,
 // views/roomwars.ejs, public/js/roomwars-map.js). Pepe (pepe_roomlinks.py) sends links [{a, b, score}] in the R4a push.
 //   * the push: only {a, b, score} between two rooms of the map is stored - a < b, the score re-rounded to 0.05, a pair once,
 //     a sanity cap per room; a planted name / count / login on a line, a self line, an unknown or bad room id, a score that

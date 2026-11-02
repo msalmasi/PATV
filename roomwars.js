@@ -10,7 +10,7 @@
 //                                 replaces the latest copy and the day's history row (one transaction). 503 while the
 //                                 site's feed switch is off. Everything is whitelisted (clean()): gang ids, bonds, perks,
 //                                 tiers, timers and counts - no member, crew, defender or recipient ever gets stored.
-//                                 R9 (1.99??): + links [{a, b, score}] - SHARED-REGULAR LINES between two map rooms whose
+//                                 R9 (1.99ahr): + links [{a, b, score}] - SHARED-REGULAR LINES between two map rooms whose
 //                                 30-day regulars overlap (Pepe's pepe_roomlinks: Jaccard >= 0.15, >= 3 shared, <= 4 a room,
 //                                 the score in 0.05 steps). Drawn only, never a rule; room ids and a score - never who or how
 //                                 many (cleanLinks keeps nothing else, re-rounds the score and caps the lines a room gets).

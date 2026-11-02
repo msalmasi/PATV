@@ -747,7 +747,7 @@ async function disband(b, via) {
     const g = await needGang(m.gid);
     // Room Wars (room-wars plan R1, decision 7's default until R5): a gang holding a room can't disband - its bond would be
     // stranded under a ghost gang. Read from Pepe's latest pushed copy (roomwars.js; its disband_guard switch on /admin/games).
-    // R5 (1.99??, Pepe's disband_release switch): `room_release` = the rooms Pepe puts on his 72 h release clock after this
+    // R5 (1.99ahr, Pepe's disband_release switch): `room_release` = the rooms Pepe puts on his 72 h release clock after this
     // disband (the bond then split among these members) - the guard stands aside for exactly those. Only Pepe's op sends it.
     const releasing = new Set((Array.isArray(b.room_release) ? b.room_release : []).slice(0, 50).map((x) => String(x).slice(0, 80)));
     const rooms = (await require("./roomwars").heldBy(g.gid)).filter((r) => !releasing.has(String(r.id)));

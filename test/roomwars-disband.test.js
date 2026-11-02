@@ -1,4 +1,4 @@
-// Room Wars R5 (1.99??, room-wars plan 2026-11-02): Pepe's disband_release switch (decision 7) - a gang holding a room may
+// Room Wars R5 (1.99ahr, room-wars plan 2026-11-02): Pepe's disband_release switch (decision 7) - a gang holding a room may
 // disband; Pepe puts its rooms on his own 72 h release clock and splits what comes back of each bond among the members.
 // His disband op lists those rooms (`room_release`), and the site's disband guard (R1, roomwars.heldBy) stands aside for
 // exactly them - any other held room still refuses, and a disband without the field is refused as before.

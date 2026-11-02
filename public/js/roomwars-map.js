@@ -2,7 +2,7 @@
 // then polls /api/gtf/roomwars once a minute: the map redraws with the new data and, when the revision changed, the
 // "the map changed" note offers a reload (the room cards below are server-rendered). Rings = tiers (centre = the busiest
 // rooms); a held room takes its gang's colour. Plain text only (textContent / SVG text nodes) - no HTML from the data.
-// R9 (1.99??): dashed lines between rooms that share regulars (data.links: {a, b, score}), under the room boxes, thicker for
+// R9 (1.99ahr): dashed lines between rooms that share regulars (data.links: {a, b, score}), under the room boxes, thicker for
 // a bigger overlap; each line's title names the two rooms and the overlap - never who.
 (function () {
   'use strict';
