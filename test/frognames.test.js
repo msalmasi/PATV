@@ -207,3 +207,102 @@ test("sessions: never the same name in a pad within 24 h; restart-stable; the ta
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM incog_alias WHERE ended IS NOT NULL AND ended < ?", [t + 3600e3]))[0].n, 0, "ended 24 h ago: deleted");
   FN._setClock(null);
 });
+
+test("privacy fix (M addendum 3 #1): incognito -> hidden ends the session AT ONCE (even mid-hold) and the next one is alias-less; hidden -> incognito keeps it; the level survives a restart", async () => {
+  const t = Date.UTC(2026, 10, 4, 12);
+  const a = await FN.sight("Pad.L", "bouncy", { t, active: true, kind: "incognito" });
+  assert.match(String(a.alias), /^[A-Z]/, "a frog name while incognito");
+  assert.equal((await FN.sight("Pad.L", "bouncy", { t: t + 1000, active: true, kind: "incognito" })).session, a.session, "kept while incognito");
+  await FN.sight("Pad.L", "bouncy", { t: t + 2000, active: true, holding: true, kind: "incognito" });
+  const b = await FN.sight("Pad.L", "bouncy", { t: t + 3000, active: true, kind: "hidden" });
+  assert.notEqual(b.session, a.session, "the switch to hidden ends it at once - mid-hold too");
+  assert.equal(b.alias, null, "the next session has no frog name (masked, 'someone') - never the incognito one");
+  assert.equal(b.hood, null);
+  assert.equal((await FN.sight("Pad.L", "bouncy", { t: t + 4000, kind: "incognito" })).session, b.session, "hidden -> incognito keeps the session");
+  const b2 = await FN.sight("Pad.L", "bouncy", { t: t + 5000, kind: "hidden" });
+  assert.ok(b2.session !== b.session && b2.alias === null, "...and incognito -> hidden again ends it again (alias-less)");
+  // a hidden session from the start keeps its name through more hidden sightings, and through a restart (the level is stored)
+  const h = await FN.sight("Pad.L", "shadowy", { t, kind: "hidden" });
+  assert.match(String(h.alias), /^[A-Z]/);
+  assert.equal((await FN.sight("Pad.L", "shadowy", { t: t + 60e3, kind: "hidden" })).session, h.session);
+  const i = await FN.sight("Pad.L", "peeky", { t, kind: "incognito" });
+  FN._reset();
+  FN._setClock(() => t + 120e3);
+  assert.equal((await FN.sight("Pad.L", "shadowy", { t: t + 120e3, kind: "hidden" })).alias, h.alias, "after a restart a hidden session keeps its name");
+  const i2 = await FN.sight("Pad.L", "peeky", { t: t + 121e3, kind: "hidden" });
+  assert.notEqual(i2.session, i.session, "after a restart an incognito session still ends on the switch to hidden");
+  assert.equal(i2.alias, null, "...alias-less");
+  // a session of unknown level (no kind given) sighted hidden: ends (fails closed) with a NEW name, never the old one
+  const u = await FN.sight("Pad.L", "oldrow", { t: t + 130e3 });
+  const u2 = await FN.sight("Pad.L", "oldrow", { t: t + 131e3, kind: "hidden" });
+  assert.notEqual(u2.session, u.session);
+  assert.notEqual(u2.alias, u.alias);
+  // level(): Pepe's privacy.hidden / a hidden leave, without a sighting
+  const p = await FN.sight("Pad.L", "evented", { t: t + 140e3, kind: "incognito" });
+  assert.equal(await FN.level("Pad.L", "evented", "incognito", t + 141e3), false, "incognito again: nothing ends");
+  assert.equal(await FN.level("Pad.L", "evented", "hidden", t + 142e3), true, "hidden: the session ends");
+  assert.equal(FN.current("Pad.L", "evented"), null);
+  assert.equal((await FN.sight("Pad.L", "evented", { t: t + 143e3, kind: "hidden" })).alias, null, "the next one is alias-less");
+  assert.ok(p.session);
+  const q = await FN.sight("Pad.L", "unknownlvl", { t: t + 150e3 });
+  assert.equal(await FN.level("Pad.L", "unknownlvl", "hidden", t + 151e3, { wasIncognito: true }), true);
+  assert.equal((await FN.sight("Pad.L", "unknownlvl", { t: t + 152e3, kind: "hidden" })).alias, null, "wasIncognito: alias-less even at an unknown level");
+  assert.ok(q.session);
+  const hh = await FN.sight("Pad.L", "stayhidden", { t: t + 160e3, kind: "hidden" });
+  assert.equal(await FN.level("Pad.L", "stayhidden", "hidden", t + 161e3), false, "a hidden session isn't ended by 'hidden'");
+  assert.equal(FN.current("Pad.L", "stayhidden").session, hh.session);
+  const rows = await getQuery("SELECT lvl FROM incog_alias WHERE ended IS NULL AND lvl IS NOT NULL");
+  assert.ok(rows.length >= 1 && rows.every((r) => r.lvl === "incognito" || r.lvl === "hidden"), "the level column holds only the two levels");
+  FN._setClock(null);
+});
+
+test("privacy fix (review F7): the switch's 15-minute no-name window survives a site restart on the level() paths (Pepe's privacy.hidden, a hidden leave)", async () => {
+  const t = Date.UTC(2026, 10, 5, 12);
+  FN._setClock(() => t);
+  // level(): the person isn't sighted at the switch (privacy.hidden while off the roster, a hidden leave) - no alias-less row is left
+  const a = await FN.sight("Pad.R", "restarty", { t, active: true, kind: "incognito" });
+  assert.match(String(a.alias), /^[A-Z]/, "a frog name while incognito");
+  assert.equal(await FN.level("Pad.R", "restarty", "hidden", t + 1000, { wasIncognito: true }), true, "the switch ends the session");
+  FN._reset();                                                         // a site restart (same DB, same ALIAS_SECRET)
+  FN._setClock(() => t + 120e3);
+  const b = await FN.sight("Pad.R", "restarty", { t: t + 120e3, kind: "hidden" });
+  assert.equal(b.alias, null, "2 minutes after the switch, after a restart: still no frog name (a fresh one would be tied to the old by timing)");
+  assert.notEqual(b.session, a.session);
+  // the same through the hidden-leave shape: level() on an incognito session (no wasIncognito needed)
+  const c = await FN.sight("Pad.R", "leavey", { t: t + 130e3, active: true, kind: "incognito" });
+  assert.ok(c.alias);
+  assert.equal(await FN.level("Pad.R", "leavey", "hidden", t + 131e3), true);
+  await FN.left("Pad.R", "leavey", t + 131e3);
+  FN._reset();
+  FN._setClock(() => t + 300e3);
+  assert.equal((await FN.sight("Pad.R", "leavey", { t: t + 300e3, kind: "hidden" })).alias, null, "a hidden leave's window survives a restart too");
+  // the window is 15 minutes: once over (and after another restart) the next session gets a name again
+  FN._reset();
+  FN._setClock(() => t + 20 * 60e3);
+  await FN.off("restarty", "Pad.R", t + 20 * 60e3);                   // (end the alias-less one)
+  const d = await FN.sight("Pad.R", "restarty", { t: t + 20 * 60e3 + 1000, kind: "hidden" });
+  assert.match(String(d.alias), /^[A-Z]/, "after the 15 minutes a new session has a frog name");
+  // the stored window holds no login, no name, no session id - and goes once it is over
+  const cols = (await getQuery("SELECT name FROM pragma_table_info('incog_alias_burn')")).map((r) => r.name).sort();
+  assert.deepEqual(cols, ["at", "room_id", "sk"]);
+  const rows = await getQuery("SELECT * FROM incog_alias_burn");
+  assert.ok(!JSON.stringify(rows).includes("restarty") && !JSON.stringify(rows).includes("leavey"), "no login in the table");
+  assert.ok(rows.every((r) => Number(r.at) % 60e3 === 0), "the time is rounded to the minute (not joinable to the ended row's exact end)");
+  await FN.sweep(t + 40 * 60e3);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM incog_alias_burn WHERE at <= ?", [t + 40 * 60e3 - FN.NAMED_GAP_MS]))[0].n, 0, "swept once over");
+  FN._setClock(null);
+});
+
+test("review R1: a FROZEN kind (a mic hold's, as it was when the hold began) never ends a session on level nor changes its level; it only gives a new session its level", async () => {
+  const t = Date.UTC(2026, 10, 6, 12);
+  const a = await FN.sight("Pad.Z", "frozeny", { t, active: true, kind: "incognito" });
+  assert.ok(a.alias);
+  const b = await FN.sight("Pad.Z", "frozeny", { t: t + 1000, kind: "hidden", frozen: true });
+  assert.equal(b.session, a.session, "a frozen 'hidden' on an incognito session: kept");
+  assert.equal(b.alias, a.alias);
+  assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [a.session]))[0].lvl, "incognito", "its level unchanged");
+  const c = await FN.sight("Pad.Z", "frozeny", { t: t + 2000, kind: "hidden" });
+  assert.ok(c.session !== a.session && c.alias === null, "a person-level 'hidden' still ends it at once (alias-less next)");
+  const d = await FN.sight("Pad.Z", "newfrozen", { t: t + 3000, kind: "hidden", frozen: true });
+  assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [d.session]))[0].lvl, "hidden", "a session a frozen sighting opens gets that level");
+});

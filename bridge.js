@@ -349,6 +349,17 @@ function markRemoved(ch) {
   const CV = require("./chatlogview");
   const t = Date.now();
   let n = 0;
+  // privacy fix (M addendum 3 #1): the hashes this change moved from incognito ("anon") to left out / hidden ("out")
+  const levelUp = new Set();
+  if (ch.prev instanceof Map) {
+    for (const h of [...(ch.kinds || []), ...(ch.added || [])]) {
+      const was = ch.prev.get(h);
+      if (!was || was.kind !== "anon") continue;
+      let kindNow;
+      try { kindNow = CV.kindNow(h); } catch (e) { kindNow = "out"; }      // (can't ask: fails closed)
+      if (kindNow === "out") levelUp.add(h);
+    }
+  }
   for (const R of rooms.values()) {
     const gone = [], redo = [], shown = [];
     const reMasked = new Set();             // review fix (A-privacy-5): logins whose NAMED lines turn into bars in this change
@@ -378,6 +389,22 @@ function markRemoved(ch) {
           FN.named(R.id, login, t);
           FN.off(login, R.id, t).catch(() => {});
         }
+      } catch (e) { /* frog names unavailable */ }
+    }
+    // privacy fix (owner, spec M addendum 3 #1): incognito -> hidden ends the frog-name session AT ONCE on Pepe's privacy.hidden / a
+    // kinded list - also for someone with NO named line since G (the reMasked rule above needs one): their veiled roster, holder or
+    // feed entries name the login (server-only _vz); their next sighting is alias-less (frognames.level, wasIncognito)
+    if (levelUp.size) {
+      try {
+        const FN = require("./frognames");
+        const who = new Set();
+        for (const e of [...(R.members || []), ...(R.mic || []), ...R.feed]) {
+          const vz = e && e._vz;
+          if (!vz || typeof vz.login !== "string" || !vz.login || vz.acct) continue;
+          const hs = [vz.h, ...(Array.isArray(vz.hs) ? vz.hs : []), CV.hashOf(vz.login)];
+          if (hs.some((h) => levelUp.has(h))) who.add(vz.login.toLowerCase());
+        }
+        for (const login of who) if (!reMasked.has(login)) FN.level(R.id, login, "hidden", t, { wasIncognito: true }).catch(() => {});
       } catch (e) { /* frog names unavailable */ }
     }
     const back = new Set(shown);
@@ -1035,6 +1062,11 @@ async function ingest(body, opts = {}) {
         else if (x.it.u && !x.it.u.anon && x.it.u.login && !x.it.u.self) {
           V.namedSeen(x.R.id, x.it.u.login, Number(x.it.ts) || now);
           if (x.it.k === "mic" && x.it.hold) V.namedHold(x.R.id, x.it.hold);   // review fix (A-compat-1): the hold's verdict = "someone"
+        } else if (x.it.k === "unmic" && x.it.u && x.it.u.anon && !x.it.ah && x.it.k3 !== 1 && x.it.hold && V.beganNamed(x.R, x.it.hold, true)) {
+          // privacy fix (C, spec B.2 / B.4): the release of a hold that began NAMED, its holder private since (incognito / hidden
+          // mid-hold) and sent in today's anonymous form (no priv: an unresolved roster name, a veil not provably theirs) -
+          // "someone dropped the mic", never dropped for everyone, never named; the page never gets the hold id (dress: anon)
+          x.it.k3 = 1;
         }
       } catch (e) { console.error("[bridge] veil name:", e && e.code ? e.code : "error"); }
     }
