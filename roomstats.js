@@ -32,8 +32,20 @@
 //     have owned it for the whole 90 days the boards cover, can reveal who is behind a frog name - one row (POST .../reveal) or a
 //     toggle that stays on until turned off (POST .../seethrough), each one a seethrough_log row; nothing passive (a GET never
 //     turns anything on), no-store, no-referrer. Staff, members and other pads' owners: 403, no row.
+//   * owner 11-02 (wave 2 open question 2: "This should be hidden server side, so admins can see through it"): Pepe's notes can
+//     name a !bridge hide person - his own send-time scrub covers incognito and memory-off people only, and on privacy wire v1 the
+//     site never sees a bridge-hidden person named anywhere else, so it couldn't mask them. Every sync now carries `veiled` (bot
+//     pepe_roomintel._ri_veiled): the COMPLETE list of bridge-hidden people the rows count or the notes name, {login, names} -
+//     stored server-only (camfrog_roomstats_veiled; never rendered, never in a view model) and masked "someone" in every room's
+//     free text for every viewer (notesView: placeholder-first, before freeTextScrub, so v2's names job never double-masks). A
+//     person Pepe drops from his list stays masked while the site's own sticky hidden set still holds them. PATV admins
+//     (chatlog.see_through) - never a pad's owner (the owner said "admins"; the boards' 90-day owner rule never covered the free
+//     text, D-17) - can reveal them: the notes' Reveal (POST .../reveal-notes, one seethrough_log row, scope analytics_note) or
+//     their "Show real names" toggle (counted on its row). Old stored notes are masked too: the list applies to every room's
+//     stored text at render time.
 const express = require("express");
-const { runQuery, getQuery } = require("./dbUtils");
+const crypto = require("crypto");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 const { _render: R } = require("./userstats");
 const FN = require("./frognames");
 const ST = require("./seethrough");
@@ -45,6 +57,9 @@ const ready = (async () => {
     room_id TEXT PRIMARY KEY, name TEXT, data TEXT NOT NULL, updated INTEGER)`);
   await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_roomstats_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1), tz TEXT, days INTEGER, updated INTEGER)`);
+  // owner 11-02: Pepe's bridge-hidden people (server-only: h = chatlog.hash(login); live = on his latest list)
+  await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_roomstats_veiled (
+    h TEXT PRIMARY KEY, login TEXT NOT NULL, names TEXT NOT NULL, live INTEGER NOT NULL DEFAULT 1, at INTEGER NOT NULL)`);
 })().catch((e) => console.error("[roomstats] init:", e));
 
 // ── sanitising ──
@@ -298,6 +313,154 @@ async function cachedLogins(hs) {
   }
   return out;
 }
+
+// ── owner 11-02: Pepe's !bridge hide people in his notes - masked server-side, revealed to admins only (logged) ──
+const VEIL_MAX = 400, VEIL_NAMES = 12;
+const SEE_NOTE = "analytics_note";                       // seethrough.js scope: one reveal of the hidden names in a pad's notes
+const PUA = /[\uE000-\uE0FF]/g;                          // (the placeholders' range - never kept from Pepe's text)
+const PH_RE = /\uE000([\uE010-\uE019]+)\uE001/g;
+const ph = (i) => "\uE000" + String(i).split("").map((d) => String.fromCharCode(0xE010 + Number(d))).join("") + "\uE001";
+const phIndex = (d) => Number(Array.from(d).map((c) => c.charCodeAt(0) - 0xE010).join(""));
+const VEIL_KEY = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
+/** Pepe's `veiled` list, shaped: Map(h -> {login, names}) - a login, and up to VEIL_NAMES names (markup / controls stripped). */
+function cleanVeiled(list) {
+  const out = new Map();
+  for (const v of (Array.isArray(list) ? list : []).slice(0, VEIL_MAX)) {
+    const login = str(v && v.login, 40).toLowerCase();
+    if (!LOGIN_RE.test(login)) continue;
+    const names = [];
+    for (const n of (Array.isArray(v.names) ? v.names : []).slice(0, VEIL_NAMES * 2)) {
+      const s = str(String(n == null ? "" : n).replace(/<[^<>]{0,40}>/g, "").replace(PUA, ""), 40).replace(/^@+/, "").trim();
+      if (s && !names.some((x) => x.toLowerCase() === s.toLowerCase())) names.push(s);
+      if (names.length >= VEIL_NAMES) break;
+    }
+    const h = hiddenHash(login);
+    if (h) out.set(h, { login, names });
+  }
+  return out;
+}
+/** A sync's `veiled` (Pepe's COMPLETE current list): replaces which rows are live. A row Pepe no longer lists stays (still masked)
+ *  while the site's own sticky hidden set holds that login (chatlogview.isHiddenLogin: fails closed while it loads), and goes once it
+ *  doesn't (a !bridge show reaches the set as privacy.shown). -> rows on the list */
+async function storeVeiled(list, t = Date.now()) {
+  await ready;
+  const rows = cleanVeiled(list);
+  await tx(async () => {
+    await runQuery("UPDATE camfrog_roomstats_veiled SET live = 0 WHERE live = 1");
+    for (const [h, v] of rows) {
+      await runQuery(`INSERT INTO camfrog_roomstats_veiled (h, login, names, live, at) VALUES (?, ?, ?, 1, ?)
+                      ON CONFLICT(h) DO UPDATE SET login = excluded.login, names = excluded.names, live = 1, at = excluded.at`,
+                     [h, v.login, JSON.stringify(v.names), t]);
+    }
+  });
+  let CV = null;
+  try { CV = require("./chatlogview"); await CV.init(); } catch (e) { CV = null; }
+  if (CV) {
+    for (const r of await getQuery("SELECT h, login FROM camfrog_roomstats_veiled WHERE live = 0")) {
+      let hid = true;
+      try { hid = !!CV.isHiddenLogin(r.login); } catch (e) { hid = true; }
+      if (!hid) await runQuery("DELETE FROM camfrog_roomstats_veiled WHERE h = ? AND live = 0", [r.h]);
+    }
+  }
+  return rows.size;
+}
+/** The people masked now: on Pepe's latest list, or dropped from it but still in the site's sticky hidden set. Throws when the
+ *  table can't be read (the caller leaves the free text out). -> [{login, names}] */
+async function veiledActive() {
+  await ready;
+  const rows = await getQuery("SELECT h, login, names, live FROM camfrog_roomstats_veiled");
+  if (!rows.length) return [];
+  let CV = null;
+  if (rows.some((r) => !r.live)) { try { CV = require("./chatlogview"); await CV.init(); } catch (e) { CV = null; } }
+  const out = [];
+  for (const r of rows) {
+    let on = !!r.live;
+    if (!on) { try { on = !CV || !!CV.isHiddenLogin(r.login); } catch (e) { on = true; } }
+    if (!on) continue;
+    let names = [];
+    try { names = JSON.parse(r.names) || []; } catch (e) { names = []; }
+    out.push({ login: String(r.login), names: Array.isArray(names) ? names : [] });
+  }
+  return out;
+}
+/** The masking regex over every name of every person masked now -> {re, terms: Map(lower-case name -> Set(logins))} | null.
+ *  A login from 2 characters, other names from 3 (chatlogview's NAME_MIN). No stop-list here: Pepe only lists names his notes
+ *  hold, so a common word that is someone's name is masked rather than risk naming them. */
+async function veilMasker() {
+  const terms = new Map();
+  const add = (t, login, min) => {
+    const s = String(t == null ? "" : t).replace(/^@+/, "").trim();
+    if (Array.from(s).length < min || s.toLowerCase() === "someone") return;
+    const k = s.toLowerCase();
+    if (!terms.has(k)) terms.set(k, new Set());
+    terms.get(k).add(login);
+  };
+  for (const p of await veiledActive()) { add(p.login, p.login, 2); for (const n of p.names) add(n, p.login, 3); }
+  if (!terms.size) return null;
+  const CV = require("./chatlogview");
+  return { re: new RegExp("(?<![\\p{L}\\p{N}_])@?(?:" + CV.trieSource([...terms.keys()]) + ")(?![\\p{L}\\p{N}_])", "giu"), terms };
+}
+/**
+ * Pepe's free text as the page shows it, in ONE fixed order (the page and the reveal POST count the hidden mentions the same way):
+ * summary, vibe, topics, jokes, events, rules, changes, topics over time. Each text: the masked people's names (veilMasker) become
+ * placeholders FIRST, then freeTextScrub's redaction runs (everyone private now the site knows of - v2's names job included: a
+ * name already replaced is never masked twice), then per mode:
+ *   "plain"  (everyone but an admin)  every placeholder -> "someone": a string, exactly as before for text naming nobody masked
+ *   "mark"   (an admin)               {html}: escaped text, each mention <span class="ra-hid" data-k="N">someone</span> (Reveal)
+ *   "reveal" (an admin whose "Show real names" toggle is on)  {html}: each mention as Pepe wrote it, marked 🕶 (logged on the toggle)
+ * Fails closed: when the masked list or the redaction can't run, the free text is left out (""). -> {summary, vibe, topics, jokes,
+ * events, rules, changes, history, hits: [{text, logins}] (SERVER-ONLY), v (the notes' version: a reveal of another version is 409)}
+ */
+async function notesView(r, md, anonHashes, mode = "plain") {
+  const scrub = await freeTextScrub(anonHashes);
+  let vm = null, failed = false;
+  try { vm = await veilMasker(); } catch (e) { console.error("[roomstats] bridge-hidden names:", e && e.message); failed = true; }
+  const hits = [];
+  const one = (s) => {
+    if (failed || typeof s !== "string" || !s) return "";
+    let x = s.replace(PUA, "");
+    if (vm) {
+      x = x.replace(vm.re, (m) => {
+        const ls = vm.terms.get(m.replace(/^@+/, "").toLowerCase());
+        hits.push({ text: m, logins: ls ? [...ls] : [] });
+        return ph(hits.length - 1);
+      });
+    }
+    return scrub(x);
+  };
+  const fin = (o) => {
+    if (typeof o !== "string" || !o || o.indexOf("\uE000") < 0) return typeof o === "string" ? o : "";
+    if (mode !== "mark" && mode !== "reveal") return o.replace(PH_RE, "someone");
+    let html = "", last = 0;
+    o.replace(PH_RE, (m, d, off) => {
+      html += R.esc(o.slice(last, off));
+      const k = phIndex(d), h = hits[k];
+      html += mode === "reveal" && h
+        ? `<span class="real" title="${R.esc((h.logins.length === 1 ? h.logins[0] + " - " : "") + "only you can see this")}">${R.esc(h.text)} 🕶</span>`
+        : `<span class="ra-hid" data-k="${k}">someone</span>`;
+      last = off + m.length;
+      return m;
+    });
+    return { html: html + R.esc(o.slice(last)) };
+  };
+  const k = r.knowledge || {};
+  const list = (a) => (Array.isArray(a) ? a : []).map(one);
+  const raw = {
+    summary: one(sentenceTrim(k.summary)), vibe: one(k.vibe || ""),
+    topics: (k.topics || []).map((t) => ({ t: one(t.t), w: t.w })),
+    jokes: list(k.jokes), events: list(k.events), rules: list(k.rules), changes: list(r.changes),
+    history: (r.history || []).slice(-8).reverse().map((h) => ({ when: histWhen(h.at, md.tz), topics: list(h.topics) })),
+  };
+  const v = crypto.createHmac("sha256", VEIL_KEY).update(JSON.stringify([r.room, r.updated || 0, raw, hits])).digest("hex").slice(0, 24);
+  const strs = (a) => a.map(fin).filter(Boolean);
+  return {
+    summary: fin(raw.summary), vibe: fin(raw.vibe), topics: raw.topics.map((t) => ({ t: fin(t.t), w: t.w })).filter((t) => t.t),
+    jokes: strs(raw.jokes), events: strs(raw.events), rules: strs(raw.rules), changes: strs(raw.changes),
+    history: raw.history.map((h) => ({ when: h.when, topics: strs(h.topics) })), hits, v,
+  };
+}
+/** The anon rows' hashes on the boards (freeTextScrub's FU-3a input). */
+const anonHashesOf = (regs, mics) => [...regs.shown, ...mics.shown].filter((p) => p.anon && p.h).map((p) => p.h);
 /** The viewer's own linked Camfrog login (lower case) or null. */
 async function viewerLogin(userId) {
   if (!userId) return null;
@@ -547,7 +710,10 @@ function preview(r) {
 
 /** The analytics page's view model. viewer (1.99afl) = {userId} of the signed-in viewer, or null: their own private row is marked
  *  "you". 1.99afn: opts.reveal = the viewer's see-through toggle is on (they may - the route checked): private rows also carry
- *  their real login (`real`, null when the site doesn't know it); opts.see = {role, on} for the page's see-through controls. */
+ *  their real login (`real`, null when the site doesn't know it); opts.see = {role, on} for the page's see-through controls.
+ *  owner 11-02: Pepe's notes by notesView - "mark" for an admin (each masked bridge-hidden mention a Reveal target; notesHidden =
+ *  {n, v} for the notes' Reveal), "reveal" for an admin whose toggle is on (noteLogins: the logins shown - the route counts them on
+ *  the toggle's row), "plain" for everyone else (a pad's owner included). */
 async function forRoom(r, slug, viewer = null, opts = {}) {
   const md = await meta().catch(() => ({}));
   const hl = headline(r);
@@ -585,12 +751,14 @@ async function forRoom(r, slug, viewer = null, opts = {}) {
   const avgVisitors = Math.round(visitorDays30 / 30);
   const how = r.how || [], hows = r.hows || [];
   const k = r.knowledge || {};
-  // 1.99afl review (section K): Pepe's free text names nobody private now (freeTextScrub; fails closed: left out)
-  const scrub = await freeTextScrub([...regs.shown, ...mics.shown].filter((p) => p.anon && p.h).map((p) => p.h));
-  const scrubList = (a) => (Array.isArray(a) ? a : []).map(scrub).filter(Boolean);
-  const topics = (k.topics || []).map((t) => ({ t: scrub(t.t), w: t.w })).filter((t) => t.t);
+  // 1.99afl review (section K): Pepe's free text names nobody private now (freeTextScrub; fails closed: left out); owner 11-02: and
+  // never a !bridge hide person Pepe listed - masked for everyone, revealable by admins only (notesView)
+  const noteMode = opts.see && opts.see.role === "admin" ? (opts.see.on ? "reveal" : "mark") : "plain";
+  const nv = await notesView(r, md, anonHashesOf(regs, mics), noteMode);
+  const topics = nv.topics;
   const wmax = Math.max(1, ...topics.map((t) => t.w));
-  const summary = scrub(sentenceTrim(k.summary));
+  const summary = nv.summary;
+  const anyPrivate = [...regs.shown, ...mics.shown].some((p) => p.anon);
   return {
     name: r.name, slug, tz: md.tz || "", updated: r.updated ? R.ago(Math.floor(r.updated / 1000)) : null,
     tiles: {
@@ -617,18 +785,21 @@ async function forRoom(r, slug, viewer = null, opts = {}) {
     micHidden: mics.hidden,
     // 1.99afn: any private row on the page (the frog-name footnote, the see-through controls); the controls only for a viewer who may
     hasPrivate: [...regs.shown, ...mics.shown].some((p) => p.anon),
-    see: opts.see && (opts.see.on || [...regs.shown, ...mics.shown].some((p) => p.anon)) ? { role: opts.see.role, on: !!opts.see.on } : null,
+    see: opts.see && (opts.see.on || anyPrivate || (noteMode !== "plain" && nv.hits.length)) ? { role: opts.see.role, on: !!opts.see.on } : null,
     cmds: top.map(([c, n, cat]) => ({ cmd: "!" + c, n: R.fmt(n), pct: Math.max(3, (n / cmax) * 100), color: (CAT[cat] || [0, "#90a4ae"])[1], cat: (CAT[cat] || [cat])[0] })),
     cats: cats.map(([c, n]) => ({ label: (CAT[c] || [c])[0], color: (CAT[c] || [0, "#90a4ae"])[1], n: R.fmt(n), pct: (n / catSum) * 100 })),
     games: gameRows, mod: modRows, modTotal: R.fmt(Object.values(mod90).reduce((a, b) => a + b, 0)),
     know: {
-      has: !!(summary || topics.length), summary, vibe: scrub(k.vibe || ""),
+      has: !!(summary || topics.length), summary, vibe: nv.vibe,
       at: k.at ? R.ago(k.at) : null,
       topics: topics.map((t) => ({ t: t.t, w: t.w, size: (0.85 + 0.45 * (t.w / wmax)).toFixed(2) })),
-      jokes: scrubList(k.jokes), events: scrubList(k.events), rules: scrubList(k.rules),
+      jokes: nv.jokes, events: nv.events, rules: nv.rules,
     },
-    changes: scrubList(r.changes),
-    history: (r.history || []).slice(-8).reverse().map((h) => ({ when: histWhen(h.at, md.tz), topics: scrubList(h.topics) })),
+    changes: nv.changes,
+    history: nv.history,
+    // owner 11-02: the notes' Reveal (admins, toggle off) - the count and the version only, never who
+    notesHidden: noteMode === "mark" && nv.hits.length ? { n: nv.hits.length, v: nv.v } : null,
+    noteLogins: noteMode === "reveal" ? [...new Set(nv.hits.flatMap((h) => h.logins))] : [],
   };
 }
 
@@ -660,7 +831,10 @@ function register(app, { isBotToken, addUser }) {
       await runQuery(`INSERT INTO camfrog_roomstats_meta (id, tz, days, updated) VALUES (1, ?, ?, ?)
                       ON CONFLICT(id) DO UPDATE SET tz = excluded.tz, days = excluded.days, updated = excluded.updated`,
         [str(body.tz, 60), int(body.days, 1, 365) || DAYS, now]);
-      res.json({ success: true, saved, removed });
+      // owner 11-02: Pepe's bridge-hidden people (server-only). Absent (an older Pepe, or one that couldn't build it): kept as it is
+      let veiled = null;
+      if (Array.isArray(body.veiled)) veiled = await storeVeiled(body.veiled, now);
+      res.json({ success: true, saved, removed, ...(veiled != null ? { veiled } : {}) });
     } catch (e) {
       console.error("[roomstats] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
@@ -728,9 +902,11 @@ function register(app, { isBotToken, addUser }) {
       try { a = await forRoom(r, slug, viewer, { reveal: !!(see && see.on), see }); } catch (e) { console.error("[roomstats] view:", e); a = null; }
       if (a && see && see.on) {
         res.set("Referrer-Policy", "no-referrer");
-        const shown = [...a.regulars, ...a.mic].filter((x) => x.revealed && x.real).map((x) => x.real);
+        // (owner 11-02: an admin's toggle also shows the bridge-hidden people Pepe's notes name - counted on the same row)
+        const shown = [...a.regulars, ...a.mic].filter((x) => x.revealed && x.real).map((x) => x.real).concat(a.noteLogins || []);
         try { await ST.toggleUsed(see.logId, shown); } catch (e) { console.error("[roomstats] see-through log:", e.message); a = null; }   // not logged: not shown
       }
+      if (a) delete a.noteLogins;
     }
     let bridged = false;
     try { const b = bridgeMod(); bridged = !!(b && b._rooms && [...b._rooms.values()].some((x) => x.id === r.room)); } catch (e) { bridged = false; }
@@ -773,6 +949,31 @@ function register(app, { isBotToken, addUser }) {
       res.status(500).json({ ok: false, error: "Couldn't reveal it - try again." });
     }
   });
+  // owner 11-02: the bridge-hidden people Pepe's notes name, revealed - {v: the notes' version (the page's), reason?} -> {names: [{k,
+  // text (the name as Pepe wrote it), login (null when the name is more than one person's)}]}. ADMINS ONLY (chatlog.see_through): the
+  // owner said "admins", and the boards' 90-day owner rule never covered the free text. Logged BEFORE the answer: one seethrough_log
+  // row (scope analytics_note, every login named, ref notes:<n>); notes that changed since the page was drawn: 409, nothing logged.
+  const NOPE_NOTES = "Only PATV admins can see who Pepe's notes name here.";
+  app.post("/p/:slug/analytics/reveal-notes", addUser, async (req, res) => {
+    try {
+      const ctx = await seeCtx(req, res);
+      if (!ctx) return;
+      if (ctx.role !== "admin") return res.status(403).json({ ok: false, error: NOPE_NOTES });
+      const md = await meta().catch(() => ({}));
+      const { regs, mics } = await boards(ctx.r, { userId: req.user.userId });
+      const nv = await notesView(ctx.r, md, anonHashesOf(regs, mics), "mark");
+      if (!nv.hits.length || String((req.body && req.body.v) || "") !== nv.v) {
+        return res.status(409).json({ ok: false, error: "Pepe's notes have changed since this page was drawn - reload the page." });
+      }
+      const logins = [...new Set(nv.hits.flatMap((h) => h.logins))];
+      await ST.logAll({ userId: req.user.userId, role: "admin", scope: SEE_NOTE, roomId: ctx.padId, logins, reason: req.body && req.body.reason,
+                        ref: "notes:" + nv.hits.length });
+      res.json({ ok: true, names: nv.hits.map((h, k) => ({ k, text: h.text, login: h.logins.length === 1 ? h.logins[0] : null })) });
+    } catch (e) {
+      console.error("[roomstats] reveal notes:", e.message);
+      res.status(500).json({ ok: false, error: "Couldn't reveal them - try again." });
+    }
+  });
   // the toggle: {on: true, reason?} shows real names on this pad's analytics (for this viewer) until {on: false}
   app.post("/p/:slug/analytics/seethrough", addUser, async (req, res) => {
     try {
@@ -790,4 +991,4 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { register, clean, forRoom, bySlug, listing, all, preview, sentenceTrim, histWhen, maskedLogins,
-                   boards, seeThroughRole, loginsForHashes, SEE_LINE, SEE_TOGGLE };
+                   boards, seeThroughRole, loginsForHashes, SEE_LINE, SEE_TOGGLE, SEE_NOTE, storeVeiled, veiledActive, notesView };

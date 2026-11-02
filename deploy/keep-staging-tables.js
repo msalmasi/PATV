@@ -50,6 +50,9 @@ const LIVE_FEED = ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_v
 // (seethrough.js: which logins an admin revealed) - staging's own. WP-5: + moderation evidence clips (evidence.js: whose voice, when,
 // who saved it - the audio itself sits in each environment's own evidence directory and is never copied)
 const VEIL = ["incog_alias", "seethrough_log", "seethrough_toggle", "evidence_clips"];
+// (owner 11-02: camfrog_roomstats_veiled - Pepe's !bridge hide people, server-only - is NOT listed: like hub_hidden_set the copy keeps
+//  prod's, because it is what masks those people in prod's room notes, copied along with it in camfrog_roomstats; staging's Pepe
+//  replaces it on his next sync and the people he drops stay masked while the copied sticky hidden set holds them)
 const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings",          // keys + switches
               "bot_route_log", "legacy_token_use", "legacy_token_daily", "events_auth_log", "bridge_spans",   // logs
               "pad_hub",         // S1-D1: the staging hub knows staging's hub pad ids (padhub.js mints the new pads' after the copy)
