@@ -124,3 +124,22 @@ test("S0: livecam-never-kept is not dated while the archive notice is off", asyn
   } finally { CL.cfg = realCfg; }
   assert.ok((await terms.textDates())["livecam-never-kept"], "dated once the notice is on");
 });
+
+// S0 check (spec section 5 S0 "tx_off count: Pepe 1, site sticky tx set 0 - find why before S1 ships"): there is no mismatch. The
+// spec's site count read chatlog_hidden's scopes for "tx" - a reason that table never holds (its reasons are bridge / incognito /
+// list_b / list_i / web / forget / delete / staff / of:<h>). !transcripts off has its own sticky table, chatlog_tx_hidden (Pepe's
+// tx_hidden_h list on every sync, add-only, and privacy.hidden / privacy.shown {scope: tx}); a read-only prod count on 2026-11-02
+// found 1 row there, src "pepe" = Pepe's 1. These pin that, so a count (or txbar, S1) reads the right table.
+test("S0 check: !transcripts off lands in chatlog_tx_hidden (the sticky tx set), never as a chatlog_hidden scope", async () => {
+  await setup;
+  const h1 = CL.hash("txlist_person"), h2 = CL.hash("txevent_person");
+  await CL.noteSync({ txList: [h1] });                                                    // Pepe's tx_hidden_h, on every sync
+  await CL.noteSync({ events: [{ type: "privacy.hidden", ts: new Date().toISOString(), data: { h: h2, scope: "tx" } }] });   // his !transcripts off event
+  const tx = (await getQuery("SELECT h, src FROM chatlog_tx_hidden WHERE h IN (?, ?) ORDER BY h", [h1, h2])).map((r) => ({ ...r }));
+  assert.deepEqual(tx, [{ h: h1, src: "pepe" }, { h: h2, src: "pepe" }].sort((a, b) => (a.h < b.h ? -1 : 1)), "both in the tx table, src pepe");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM chatlog_hidden WHERE h IN (?, ?)", [h1, h2]))[0].n, 0, "never a chatlog_hidden row");
+  assert.equal((await getQuery(`SELECT COUNT(*) AS n FROM chatlog_hidden WHERE scopes LIKE '%"tx"%'`))[0].n, 0, "the spec's query can only ever count 0");
+  assert.equal(CL.isTxHiddenHash(h1) && CL.isTxHiddenHash(h2), true);
+  assert.equal(CL.isHiddenHash(h1) || CL.isHiddenHash(h2), false, "transcripts off alone hides no name");
+  assert.ok(CL.hiddenCount().tx >= 2, "the admin count (/admin/bridge) reads the tx table");
+});
