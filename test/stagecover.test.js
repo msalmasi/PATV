@@ -12,6 +12,8 @@
 //   * review fixes (1.99??): a take-down sticks (hash block + held uploads), short caches for uploaded covers, per-account caps,
 //     restricted accounts, fp -> ok, the sweep keeps a cover's check, a missing file, accountOf / incognito fail closed, the GTF render
 //     version, "Automatic", the Settings preview, the stage's small cells and wrapping reasons
+//   * review fixes 2 (1.99??): a take-down review of a picture the member already replaced / removed still sticks (blocked, held,
+//     copies down, one strike per check); a short reason in a small cell stays on one line (a full-width column)
 //   * the stage page (stage-mic.js): the picture on the card with the reason kept, set only when the URL changes, never on a cover /
 //     a reported tile, the letter after a failed load; stage-room.js repaints on a new picture
 //   * the capture (stagemiccap.js): a name card draws the cover picture; never the network
@@ -829,4 +831,98 @@ test("review fix SC-SAFE-6: the safety sweep keeps the check a stage cover still
   await ISF.review(logId, "fp", "boss");
   assert.equal((await fetch(base + r.d.upload.url)).status, 200, "still reviewable: put up");
   ANSWER = CLEAN;
+});
+
+test("review fix 2 SC-SAFE-1b: a review take-down reaches a picture the member already REPLACED or REMOVED - blocked (refused before it's classified again), the account held (one strike per check); a copy that's up again comes down; the check records name nobody and go with their log rows", async () => {
+  await safety({ enabled: true });
+  let calls = 0;
+  const as = (a) => ISF.setClassifier(async () => { calls++; return a; });
+  const strikes = async (u) => Number(((await getQuery("SELECT strikes FROM stage_covers WHERE user_id = ?", [u.userId]))[0] || {}).strikes) || 0;
+  const state = async (u) => (await call("GET", "/api/stage-cover", u)).d;
+  try {
+    // REPLACED: X (clean, up), Y replaces it, then "False negative" on X's check
+    const kai = await mkUser("kai", { camfrog: "kaicf" });
+    as(CLEAN);
+    const X = await png(270, 210, { r: 160, g: 40, b: 120 });
+    const rx = await upload(kai, X);
+    assert.equal(rx.status, 200, JSON.stringify(rx.d)); assert.equal(rx.d.held, false);
+    const logX = await logOf(kai);
+    const ry = await upload(kai, await png(271, 210, { r: 40, g: 160, b: 120 }));
+    assert.equal(ry.d.held, false);
+    assert.notEqual(await logOf(kai), logX, "X is no longer the current upload");
+    assert.equal(await SC.onReview(logX, "fp", "boss"), null, "fp on an old check: nothing");
+    await ISF.review(logX, "fn", "boss");
+    assert.equal((await state(kai)).hold, true, "the account is on hold");
+    assert.equal(await strikes(kai), 1);
+    assert.equal((await fetch(base + ry.d.upload.url)).status, 200, "Y passed its own check: it stays up");
+    const n0 = calls;
+    const back = await upload(kai, X);
+    assert.equal(back.status, 422, JSON.stringify(back.d)); assert.equal(back.d.code, "blocked");
+    assert.equal((await upload(U.dee, X)).d.code, "blocked", "whoever sends it");
+    assert.equal(calls, n0, "refused before any classification");
+    await ISF.review(logX, "fn", "boss"); await ISF.review(logX, "ok", "boss");
+    assert.equal(await strikes(kai), 1, "marking the same check again: no second strike");
+    const next = await upload(kai, await png(272, 210, { r: 4, g: 4, b: 140 }));
+    assert.equal(next.status, 200, JSON.stringify(next.d)); assert.equal(next.d.held, true, "the next picture is held for an admin");
+    // REMOVED by its owner: a FLAGGED (held) picture, removed, then "Correct" on its check
+    const lia = await mkUser("lia", { camfrog: "liacf" });
+    as(HATE);
+    const F = await png(273, 210, { r: 200, g: 120, b: 0 });
+    const rf = await upload(lia, F);
+    assert.equal(rf.d.held, true);
+    const logF = await logOf(lia);
+    assert.equal((await call("POST", "/api/stage-cover/upload/remove", lia, {})).d.upload, null);
+    assert.equal((await state(lia)).hold, false, "the owner's own removal: no strike");
+    await ISF.review(logF, "ok", "boss");
+    assert.equal((await state(lia)).hold, true, "'Correct' on the flagged check: held");
+    as(CLEAN);
+    const again = await upload(lia, F);
+    assert.equal(again.status, 422, JSON.stringify(again.d)); assert.equal(again.d.code, "blocked");
+    assert.equal((await upload(lia, await png(274, 210, { r: 9, g: 120, b: 9 }))).d.held, true);
+    // a clean pass marked "Correct" after it was replaced: nothing
+    const mo = await mkUser("mo", { camfrog: "mocf" });
+    const Z = await png(275, 210, { r: 230, g: 230, b: 230 });
+    const z1 = await upload(mo, Z);
+    assert.equal(z1.d.held, false);
+    const logZ1 = await logOf(mo);
+    await upload(mo, await png(276, 210, { r: 30, g: 30, b: 30 }));
+    const logW = await logOf(mo);
+    // RE-UPLOADED under a newer check before the review, and another account's copy: both come down (one strike, its owner's only)
+    const z2 = await upload(mo, Z);
+    assert.equal(z2.d.held, false);
+    const logZ2 = await logOf(mo);
+    const nia = await mkUser("nia", { camfrog: "niacf" });
+    const zn = await upload(nia, Z);
+    assert.equal(zn.status, 200, JSON.stringify(zn.d)); assert.equal(zn.d.held, false);
+    await ISF.review(logW, "ok", "boss");
+    assert.equal(await strikes(mo), 0, "'Correct' on a clean pass: no take-down");
+    assert.equal((await fetch(base + z2.d.upload.url)).status, 200);
+    await ISF.review(logZ1, "fn", "boss");
+    assert.equal((await fetch(base + z2.d.upload.url)).status, 404, "the re-upload of the same picture comes down");
+    assert.equal((await fetch(base + zn.d.upload.url)).status, 404, "another account's copy too");
+    assert.equal(await strikes(mo), 1); assert.equal((await state(mo)).removed, true);
+    assert.equal(await strikes(nia), 0); assert.equal((await state(nia)).hold, false, "a copy's account: no strike"); assert.equal((await state(nia)).removed, true);
+    assert.notEqual((await SC.coverOf("mocf") || {}).k, "upload"); assert.notEqual((await SC.coverOf("niacf") || {}).k, "upload");
+    await ISF.review(logZ2, "fn", "boss");
+    assert.equal(await strikes(mo), 1, "the copy's own check, marked later: already taken down - no second strike");
+    // the records: a log id, the picture's hash, when - nobody named; gone with their log rows (imagesafety's retention)
+    const cols = (await getQuery("PRAGMA table_info(stage_cover_checks)")).map((c) => c.name);
+    assert.deepEqual(cols, ["log_id", "hash", "at", "taken"]);
+    assert.ok((await getQuery("SELECT log_id FROM stage_cover_checks WHERE log_id = ?", [logX])).length);
+    await ISF.sweep(Date.now() + 31 * 86400e3);
+    assert.ok((await SC.sweepChecks()) >= 1);
+    assert.equal((await getQuery("SELECT log_id FROM stage_cover_checks WHERE log_id = ?", [logX])).length, 0, "X's check is gone: its record too");
+    assert.equal((await getQuery("SELECT log_id FROM stage_cover_checks WHERE log_id = ?", [await logOf(kai)])).length, 1, "a held cover's check stays: its record too");
+  } finally { ISF.setClassifier(async () => (typeof ANSWER === "function" ? ANSWER() : ANSWER)); }
+});
+
+test("review fix 2 UX-1b: a short reason in a small cell stays on one line - the cover card's column is the card's whole width (minmax(0, 1fr)), so the reason's max-width: 90% is 90% of the cell, not 90% of its own width", () => {
+  const css = fs.readFileSync(path.join(repo, "public", "css", "webrtc.css"), "utf8");
+  // (the letter card's justify-content: center, which the cover card keeps, sizes an implicit column by its content: then a reason
+  // alone in a small cell - the picture hidden - wrapped at 90% of its own width, "cam off" on two lines over the name label)
+  assert.match(/\.player \.mf-tile \.mf-card \{([^}]*)\}/.exec(css)[1], /justify-content: center/);
+  const card = /\.player \.mf-tile \.mf-card\.cov \{([^}]*)\}/.exec(css)[1];
+  assert.match(card, /grid-template-rows: minmax\(0, 1fr\) auto; grid-template-columns: minmax\(0, 1fr\);/, "a definite, full-width column");
+  const cq = /@container mfcov \(max-height: \d+px\) or \(max-width: \d+px\) \{([^]*?)\r?\n\}/.exec(css)[1];
+  assert.match(cq, /\.mf-card\.cov \.mf-why \{[^}]*max-width: 90%;/, "the small-cell reason: 90% of the cell, like the letter card's");
 });

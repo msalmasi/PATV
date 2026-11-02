@@ -143,7 +143,8 @@
      above <b>enforce</b> for "Stage covers" (on, not shadow) and only with a real pass - anything else is refused. A <b>held</b> one isn't
      shown until an admin decides: it was flagged, or its account is <b>on hold</b> after an earlier take-down. <b>Put up</b> (or
      <b>False positive</b> on its check above) shows it; <b>Take down</b> (or <b>Correct</b> / <b>False negative</b> on a flagged check)
-     removes it. A take-down here or by a review sticks: that picture can never be uploaded again, and the member's next uploads are held
+     removes it. A take-down here or by a review sticks (a review too of a picture the member has since replaced or removed): that picture
+     can never be uploaded again, any copy of it that's up comes down, and the member's next uploads are held
      for 30 days. Their stage shows their GTF avatar (or profile photo, or letter) instead. Members can upload 5 pictures an hour, 20 a day.</p>
   <% if (!(locals.covers || []).length) { %><p class="adm-help">No uploaded stage covers.</p><% } else { %>
   <ul class="isf-list" id="scvList">

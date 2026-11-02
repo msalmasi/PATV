@@ -28,6 +28,8 @@
 // Review fixes (1.99??):
 //   * a TAKE-DOWN that isn't the owner's own (an admin's, a review's) sticks: the picture's hash is blocked for every account
 //     (stage_cover_blocks - no user id) and the account's uploads are HELD for an admin's check for HOLD_MS (hold_until, strikes).
+//     Review fix 2 (SC-SAFE-1b): also when the reviewed picture is no longer the member's current upload (replaced, removed) - every
+//     stored check's picture is recorded (stage_cover_checks), and any copy of a blocked picture that is up comes down too.
 //   * an OK upload is cached SHORT (public, max-age=600 + a 300 s CDN TTL, ETag) - never immutable: a take-down must reach the
 //     browsers and Cloudflare's edge within minutes (nothing on the site can purge the edge). A row whose file is missing = no upload.
 //   * uploads are capped per account (UPLOADS_PER_HOUR / UPLOADS_PER_DAY image-safety checks, one held picture at a time) and refused
@@ -108,6 +110,10 @@ function init() {
       // 1.99?? review fix: pictures taken down by an admin or a review - by the re-encoded file's sha256, never reusable as a cover
       // (no user id: a safety record of the picture, not of the member)
       await runQuery("CREATE TABLE IF NOT EXISTS stage_cover_blocks (hash TEXT PRIMARY KEY, at INTEGER, why TEXT)");
+      // 1.99?? review fix 2 (SC-SAFE-1b): the picture each stage-cover check passed (the log id -> the stored file's sha256), so a
+      // review of a check whose picture the member has since REPLACED or REMOVED still blocks it. No user id (the log row has it);
+      // kept only while its log row is (sweepChecks); taken = when a take-down acted on that check (one strike per check)
+      await runQuery("CREATE TABLE IF NOT EXISTS stage_cover_checks (log_id INTEGER PRIMARY KEY, hash TEXT NOT NULL, at INTEGER, taken INTEGER)");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -413,6 +419,15 @@ async function setUpload(userId, buf) {
     throw new Refuse(v && v.ok === false ? 422 : 503, v && v.ok === false ? (v.reason || "That picture can't be used.")
       : "The picture couldn't be safety-checked right now - try again in a minute.", v && v.ok === false ? "refused" : "unchecked");
   }
+  // 1.99?? review fix 2 (SC-SAFE-1b): remember which picture this check passed - a later review of it must reach the picture even
+  // after the member replaced or removed it. Fails closed: a check that can't be recorded (or has no log row) = nothing stored.
+  try {
+    if (!(Number(v.logId) > 0)) throw new Error("no check id");
+    await runQuery("INSERT OR REPLACE INTO stage_cover_checks (log_id, hash, at, taken) VALUES (?, ?, ?, NULL)", [Number(v.logId), hash, NOW()]);
+  } catch (e) {
+    console.error("[stagecover] check record:", e.message);
+    throw new Refuse(503, "The picture couldn't be safety-checked right now - try again in a minute.", "unchecked");
+  }
   // HELD = not shown until an admin's check: a flagged picture, or any picture while the account is on hold after a take-down
   const cur = await rowOf(userId);
   const onHold = !!(cur && Number(cur.hold_until) > NOW());
@@ -431,22 +446,41 @@ async function setUpload(userId, buf) {
 /** Take an account's uploaded cover down (its owner, an admin, a review). The choice falls back to the default when it was "upload".
  *  1.99?? review fix (SC-SAFE-1): a take-down that isn't the owner's own STICKS - the picture's hash is blocked (every account) and
  *  the account's next uploads are held for an admin's check for HOLD_MS (a strike). */
-async function removeUpload(userId, why = "owner") {
+async function removeUpload(userId, why = "owner", { strike = true, copies = true } = {}) {
   const r = await rowOf(userId);
   if (!r || !r.upload) return false;
   const takedown = why !== "owner";
   const patch = { upload: null, upload_state: takedown ? "removed" : null, upload_log: null, upload_hash: null, ...(r.kind === "upload" ? { kind: null } : {}) };
-  if (takedown) Object.assign(patch, { hold_until: NOW() + HOLD_MS, strikes: (Number(r.strikes) || 0) + 1 });
+  if (takedown && strike) Object.assign(patch, { hold_until: NOW() + HOLD_MS, strikes: (Number(r.strikes) || 0) + 1 });
+  let hash = null;
   if (takedown) {
-    let hash = r.upload_hash;
+    hash = r.upload_hash;
     if (!hash) { try { hash = sha256(fs.readFileSync(filePath(r.upload))); } catch (e) { hash = null; } }
-    const code = /^admin\b/.test(why) ? "admin" : /^review (fn|ok)\b/.test(why) ? why.slice(0, 9) : "other";      // (a code, never a name)
-    if (hash) await runQuery("INSERT OR IGNORE INTO stage_cover_blocks (hash, at, why) VALUES (?, ?, ?)", [hash, NOW(), code]);
+    if (hash) await blockHash(hash, blockCode(why));
   }
   await upsert(userId, patch);
   removeFile(r.upload);
-  console.log(`[stagecover] ${userId}: uploaded cover taken down (${why})${takedown ? " - picture blocked, uploads held until checked" : ""}`);
+  console.log(`[stagecover] ${userId}: uploaded cover taken down (${why})${takedown ? (strike ? " - picture blocked, uploads held until checked" : " - picture blocked") : ""}`);
+  if (takedown) {
+    await markTaken(r.upload_log);
+    if (hash && copies) await takeDownCopies(hash, why);
+  }
   return true;
+}
+// 1.99?? review fix 2 (SC-SAFE-1b): the pieces of a take-down that a review of an OLD check (no current row holds it) needs too
+const blockCode = (why) => (/^admin\b/.test(why) ? "admin" : /^review (fn|ok)\b/.test(why) ? why.slice(0, 9) : "other");    // (a code, never a name)
+function blockHash(hash, code) { return runQuery("INSERT OR IGNORE INTO stage_cover_blocks (hash, at, why) VALUES (?, ?, ?)", [String(hash), NOW(), code]); }
+/** A take-down acted on this check: a later review of it is no second strike. */
+async function markTaken(logId) {
+  if (!(Number(logId) > 0)) return;
+  await runQuery("UPDATE stage_cover_checks SET taken = ? WHERE log_id = ? AND taken IS NULL", [NOW(), Number(logId)]);
+}
+/** A blocked picture is never shown as a cover: every account's current upload of it comes down too (it passed its own, later check
+ *  before the block - a re-upload, another account's copy). Its own strike is the reviewed check's account's only. */
+async function takeDownCopies(hash, why) {
+  const rows = await getQuery("SELECT user_id FROM stage_covers WHERE upload_hash = ? AND upload IS NOT NULL", [String(hash)]);
+  for (const x of rows) await removeUpload(x.user_id, why, { strike: false, copies: false });
+  return rows.length;
 }
 /** An admin puts a HELD picture up (the "Stage covers" card's Put up; a "false positive" review). -> true when it was held. */
 async function releaseUpload(userId) {
@@ -458,20 +492,42 @@ async function releaseUpload(userId) {
 /** imagesafety.review's hook (stage_cover checks): "fn" takes the picture down; "ok" (the check was right) on a check that FLAGGED it
  *  takes it down whatever its state now (1.99?? review fix SC-SAFE-5: a mistaken "fp" corrected to "ok" brings it down again - a
  *  picture held only because its account is on hold passed its check, so "ok" leaves it to the card's Put up / Take down);
- *  "fp" on a held one puts it up. */
+ *  "fp" on a held one puts it up.
+ *  1.99?? review fix 2 (SC-SAFE-1b): a take-down review of a check whose picture is no longer the member's current upload (they
+ *  replaced it or removed it themselves) still sticks - from stage_cover_checks: the picture is blocked, any copy that is up again
+ *  (a re-upload under a newer check, another account's) comes down, and the check's account gets the hold + a strike (once per check). */
 async function onReview(logId, mark, actor) {
   await init();
-  const r = (await getQuery("SELECT * FROM stage_covers WHERE upload_log = ? AND upload IS NOT NULL", [Number(logId) || 0]))[0];
-  if (!r) return null;
-  let flagged = false;
-  try { const l = (await getQuery("SELECT flagged FROM image_safety_log WHERE id = ?", [Number(logId) || 0]))[0]; flagged = !!(l && Number(l.flagged) === 1); }
+  const id = Number(logId) || 0;
+  const r = (await getQuery("SELECT * FROM stage_covers WHERE upload_log = ? AND upload IS NOT NULL", [id]))[0];
+  let flagged = false, owner = null;
+  try { const l = (await getQuery("SELECT flagged, user_id FROM image_safety_log WHERE id = ?", [id]))[0]; flagged = !!(l && Number(l.flagged) === 1); owner = l ? l.user_id : null; }
   catch (e) { flagged = true; }        // (unreadable: treat "ok" as the flag being right - fails closed)
-  if (mark === "fn" || (mark === "ok" && flagged)) {
-    await removeUpload(r.user_id, "review " + mark + " by " + String(actor || "?").slice(0, 60));
-    return "removed";
+  const take = mark === "fn" || (mark === "ok" && flagged);
+  const why = "review " + mark + " by " + String(actor || "?").slice(0, 60);
+  if (r) {
+    if (take) { await removeUpload(r.user_id, why); return "removed"; }
+    if (mark === "fp" && r.upload_state === "held") { await releaseUpload(r.user_id); return "released"; }
+    return null;
   }
-  if (mark === "fp" && r.upload_state === "held") { await releaseUpload(r.user_id); return "released"; }
-  return null;
+  if (!take) return null;
+  const ck = (await getQuery("SELECT hash, taken FROM stage_cover_checks WHERE log_id = ?", [id]))[0];
+  if (!ck || !ck.hash || ck.taken) return null;          // (not a stored picture's check, or a take-down already acted on it)
+  await blockHash(ck.hash, blockCode(why));
+  await markTaken(id);
+  if (owner && (await getQuery("SELECT 1 AS x FROM users WHERE userId = ?", [String(owner)])).length) {
+    const cur = await rowOf(owner);
+    await upsert(owner, { hold_until: NOW() + HOLD_MS, strikes: (Number(cur && cur.strikes) || 0) + 1 });
+  }
+  const n = await takeDownCopies(ck.hash, why);
+  console.log(`[stagecover] check #${id}: a replaced / removed cover taken down (${why}) - picture blocked${owner ? ", uploads held until checked" : ""}${n ? ", " + n + " copy(ies) down" : ""}`);
+  return "blocked";
+}
+/** 1.99?? review fix 2: a check's picture record goes with its log row (imagesafety.sweep's retention) - a review needs both. */
+async function sweepChecks() {
+  await init();
+  try { return (await runQuery("DELETE FROM stage_cover_checks WHERE log_id NOT IN (SELECT id FROM image_safety_log)")).changes || 0; }
+  catch (e) { if (/no such table/i.test(String(e && e.message))) return 0; throw e; }
 }
 
 // ── chunked uploads (padlook's protocol; in memory: one process, a few MB each, a short TTL) ──
@@ -724,12 +780,13 @@ function register(app, { addUser, noTimers = false }) {
     setInterval(() => sweepUploads(), 5 * 60e3).unref();
     setTimeout(() => sweepFiles().catch(() => {}), 60e3).unref();
     setInterval(() => sweepFiles().catch(() => {}), 6 * 3600e3).unref();
+    setInterval(() => sweepChecks().catch(() => {}), 6 * 3600e3).unref();      // 1.99?? review fix 2
   }
 }
 
 module.exports = {
   init, register, coverOf, invalidate, localImage, localImageChecked, onReview, removeUpload, releaseUpload, setUpload, uploadRefusal, save, stateFor, choiceOf,
-  adminList, sweepFiles, gtfUrl, parseGtf, forAccount, uploadsOn, openUpload, chunkUpload, finishUpload, filePath, dir, _setDir, Refuse,
+  adminList, sweepFiles, sweepChecks, gtfUrl, parseGtf, forAccount, uploadsOn, openUpload, chunkUpload, finishUpload, filePath, dir, _setDir, Refuse,
   KINDS, PIC_KINDS, SURFACE, MAX_BYTES, CHUNK, COVER_PX, CACHE_MS, FILE_RE, UPLOADS_PER_HOUR, UPLOADS_PER_DAY, HOLD_MS, UPLOAD_MAX_AGE, UPLOAD_CDN_MAX_AGE,
   _setClock: (fn) => { NOW = fn || (() => Date.now()); },
   _setRenderVersion: (v) => { RENDER_V = v == null ? null : String(v); SVGS.clear(); },

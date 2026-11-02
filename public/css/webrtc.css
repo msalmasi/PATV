@@ -124,8 +124,10 @@
 /* (a grid, not the letter's flex column: the picture's row is a definite minmax(0, 1fr), so a 176 px GTF render or a 512 px upload
    always shrinks into the cell - never past it. The card is a size container (it is absolutely placed, inset 0: its size never
    depends on what's in it), so the rule below can tell how much room the picture really gets.) */
-.player .mf-tile .mf-card.cov { display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; gap: 3px; padding: 6px 6px 30px;
-                                container: mfcov / size; }
+/* (1.99?? review fix 2, UX-1b: the column is the card's whole width too - minmax(0, 1fr). Sized by its content (the letter card's
+   justify-content: center), a reason's max-width: 90% was 90% of its OWN width, so even "cam off" wrapped in a small cell.) */
+.player .mf-tile .mf-card.cov { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: center;
+                                gap: 3px; padding: 6px 6px 30px; container: mfcov / size; }
 .player .mf-tile .mf-card.cov .mf-av { display: block !important; width: 100% !important; height: 100% !important; max-height: 240px; min-height: 0;
                                        border-radius: 0; background: transparent; overflow: hidden; }
 .player .mf-tile .mf-card.cov .mf-av img { display: block; width: 100%; height: 100%; object-fit: contain; }
