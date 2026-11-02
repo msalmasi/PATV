@@ -2,6 +2,8 @@
 // {kind, sticker?}), upload a picture of your own in chunks (POST /api/stage-cover/uploads -> PUT ?offset= -> /finish; only while the
 // page offers it - the server refuses otherwise), take it down (POST /api/stage-cover/upload/remove), and keep the "On the stage
 // right now" preview in step with what the server answers. All text via textContent (never innerHTML).
+// Review fix (UX-4): picking an option previews it at once (each option's data-pv / data-pk = what the stage would show for it, from
+// the server; a sticker = the sticker picked), marked as not saved until Save.
 (function () {
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -33,16 +35,48 @@
     if (url && URL_OK.test(url)) { if (cur && cur.getAttribute('src') === url) return; box.textContent = ''; box.appendChild(img(url)); }
     else { box.textContent = ''; box.appendChild(letterEl(cls)); }
   }
-  /** The server's state -> the preview, the upload option and the radios. */
-  function paint(st) {
-    if (!st) return;
+  /** The "On the stage right now" tile: now = {url, k} | null (the letter); draft = a pick not saved yet. */
+  function showNow(now, draft) {
     var tile = document.getElementById('scNowTile');
     if (tile) {
-      tile.setAttribute('data-k', st.now ? st.now.k : '');
-      fill(tile.querySelector('.sc-pic'), st.now && st.now.url, 'sc-letter');
+      tile.setAttribute('data-k', now ? now.k : '');
+      tile.classList.toggle('draft', !!draft);
+      fill(tile.querySelector('.sc-pic'), now && now.url, 'sc-letter');
     }
     var txt = document.getElementById('scNowTxt');
-    if (txt) txt.textContent = st.now ? _t('js.scov.now_k', 'Showing: {kind}', { kind: KIND[st.now.k] || st.now.k }) : _t('js.scov.now_none', 'A plain card with your first letter.');
+    if (!txt) return;
+    if (draft) txt.textContent = now ? _t('js.scov.preview_k', 'Preview: {kind} - press Save to use it.', { kind: KIND[now.k] || now.k })
+      : _t('js.scov.preview_none', 'Preview: a plain card with your first letter - press Save to use it.');
+    else txt.textContent = now ? _t('js.scov.now_k', 'Showing: {kind}', { kind: KIND[now.k] || now.k }) : _t('js.scov.now_none', 'A plain card with your first letter.');
+  }
+  /** What the stage would show for an option (its data-pv / data-pk; a sticker: the one picked). undefined = can't tell yet. */
+  function previewOf(kind) {
+    if (kind === 'sticker') {
+      var s = form.querySelector('input[name="sticker"]:checked');
+      var im = s && s.parentNode ? s.parentNode.querySelector('img') : null;
+      return im && URL_OK.test(im.getAttribute('src') || '') ? { url: im.getAttribute('src'), k: 'sticker' } : undefined;
+    }
+    var o = form.querySelector('.sc-opt[data-kind="' + kind + '"]');
+    if (!o) return undefined;
+    var u = o.getAttribute('data-pv') || '';
+    return u && URL_OK.test(u) ? { url: u, k: o.getAttribute('data-pk') || 'photo' } : null;
+  }
+  var saved = null;      // the server's answer last painted ({now, kind, sticker}) - a pick equal to it isn't a draft
+  (function () {         // (the page as the server rendered it)
+    var k0 = form.querySelector('input[name="kind"]:checked'), s0 = form.querySelector('input[name="sticker"]:checked');
+    var tile0 = document.getElementById('scNowTile'), im0 = document.getElementById('scNowImg');
+    saved = { kind: k0 ? k0.value : null, sticker: s0 ? s0.value : null,
+              now: im0 && im0.getAttribute('src') ? { url: im0.getAttribute('src'), k: (tile0 && tile0.getAttribute('data-k')) || 'photo' } : null };
+  })();
+  /** The server's state -> the preview, each option's preview, the upload option and the radios. */
+  function paint(st) {
+    if (!st) return;
+    saved = st;
+    showNow(st.now, false);
+    if (st.preview) for (var pk in st.preview) {
+      var o = form.querySelector('.sc-opt[data-kind="' + pk + '"]');
+      if (o) { o.setAttribute('data-pv', st.preview[pk] ? st.preview[pk].url : ''); o.setAttribute('data-pk', st.preview[pk] ? st.preview[pk].k : ''); }
+    }
     fill(document.getElementById('scUpThumb'), st.upload && st.upload.url);
     var stk = null;
     for (var i = 0; st.sticker && Array.isArray(st.stickers) && i < st.stickers.length; i++) if (st.stickers[i] && st.stickers[i].ref === st.sticker) stk = st.stickers[i];
@@ -58,11 +92,17 @@
     if (r && !r.disabled) r.checked = true;
   }
 
-  // a sticker picked = the sticker cover picked
+  // a sticker picked = the sticker cover picked; any pick previews at once (not saved until Save)
   form.addEventListener('change', function (ev) {
     var el = ev.target;
     if (el && el.name === 'sticker') { var r = radio('sticker'); if (r && !r.disabled) r.checked = true; }
     say('');
+    var k = form.querySelector('input[name="kind"]:checked');
+    if (!k) return;
+    var pv = previewOf(k.value);
+    if (pv === undefined) return;
+    var same = saved && saved.kind === k.value && (k.value !== 'sticker' || saved.sticker === (form.querySelector('input[name="sticker"]:checked') || {}).value);
+    showNow(same ? saved.now : pv, !same);
   });
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();

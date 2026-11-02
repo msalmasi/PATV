@@ -922,9 +922,17 @@ async function sweep(t = NOW()) {
   await init();
   const c = await config();
   const cut = t - c.retention_days * 86400e3;
-  const old = await getQuery("SELECT id, thumb FROM image_safety_log WHERE at < ?", [cut]);
+  // 1.99?? stage cover review fix (SC-SAFE-6): a check a member's uploaded stage cover still points at stays (with its thumbnail)
+  // while that picture is held or up - an admin must still be able to see and review it (stagecover.onReview needs the row)
+  let keep = new Set();
+  try { keep = new Set((await getQuery("SELECT upload_log FROM stage_covers WHERE upload IS NOT NULL AND upload_log IS NOT NULL")).map((r) => Number(r.upload_log))); }
+  catch (e) { if (!/no such table/i.test(String(e && e.message))) throw e; }
+  const old = (await getQuery("SELECT id, thumb FROM image_safety_log WHERE at < ?", [cut])).filter((r) => !keep.has(Number(r.id)));
   for (const r of old) { const p = thumbPath(r.thumb); if (p) { try { fs.unlinkSync(p); } catch (e) { /* gone */ } } }
-  if (old.length) await runQuery("DELETE FROM image_safety_log WHERE at < ?", [cut]);
+  for (let i = 0; i < old.length; i += 500) {
+    const ids = old.slice(i, i + 500).map((r) => Number(r.id));
+    await runQuery(`DELETE FROM image_safety_log WHERE id IN (${ids.map(() => "?").join(",")})`, ids);
+  }
   expireJobs(t);
   return old.length;
 }

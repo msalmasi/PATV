@@ -2761,3 +2761,45 @@ test("83. 1.99?? stage cover: a NAMED tile carries its person's cover (GTF avata
     await runQuery("DELETE FROM micfollow_reports WHERE login = 'alice'").catch(() => {});
   }
 });
+
+test("82. 1.99?? stage cover review fix (PRIV-2): a viewer the person blocked - from their cam (camviewers) or in DMs, either way - gets the letter on that tile, never their cover; a cam-mode refusal (members only) still shows it", async () => {
+  await reset(); await plainPad();
+  const SC = require(path.join(repo, "stagecover"));
+  await SC.init();
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES ('alice', 4242, 1)");
+  await runQuery("CREATE TABLE IF NOT EXISTS dm_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (blocker_id, blocked_id))");
+  await runQuery("DELETE FROM dm_blocks");
+  MF._hide.clear();                                                  // (tiles reported in earlier tests)
+  try { await CV.unblock("alice", "viewer3"); } catch (e) { /* (test 7's block) */ }
+  SC.invalidate();
+  const gtf = SC.gtfUrl(4242, {});
+  const tileFor = async (uid) => (await MF.viewFor(MF.snapshot(ROOM.id), R, uid, null)).src.find((s) => s.id === "alice");
+  try {
+    await CA.setMode("alice", "members");
+    await onStage(["alice"]);
+    let a = await tileFor("u_v2");
+    assert.equal(a.watch, "members_only");
+    assert.equal(a.avatar, gtf, "a cam-mode refusal (members only) still shows her cover");
+    assert.equal((await tileFor("u_v3")).avatar, gtf, "before any block");
+    // she blocks viewer3 from her cam
+    await CV.block("alice", "viewer3");
+    a = await tileFor("u_v3");
+    assert.equal(a.watch, "unavailable");
+    assert.equal(a.avatar, null, "blocked from her cam: the letter, not her cover"); assert.equal(a.ck, undefined);
+    // DM blocks, either way: she blocked viewer1; fay blocked her
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_alice', 'u_v1', ?), ('u_fay', 'u_alice', ?)", [T, T]);
+    for (const uid of ["u_v1", "u_fay"]) {
+      a = await tileFor(uid);
+      assert.equal(a.watch, "unavailable", uid);
+      assert.equal(a.avatar, null, uid + ": a DM block - the letter"); assert.equal(a.ck, undefined, uid);
+    }
+    const live = JSON.stringify(await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v3", null));
+    assert.ok(!live.includes("/media/cover/") && !live.includes("4242"), "nothing of her cover in the blocked viewer's answer");
+  } finally {
+    await runQuery("DELETE FROM dm_blocks");
+    try { await CV.unblock("alice", "viewer3"); } catch (e) { /* not blocked */ }
+    await CA.setMode("alice", "everyone");
+    await runQuery("DELETE FROM cosmetic_avatar_seeds WHERE camfrog = 'alice'"); SC.invalidate();
+  }
+});

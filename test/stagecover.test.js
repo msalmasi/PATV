@@ -9,6 +9,9 @@
 //     a flagged picture is HELD (not served to others, falls back) until a review; fp puts it up, fn / ok takes it down; admins take
 //     one down; the files are served only while held by a row, immutable, re-encoded (no metadata), named without a user id
 //   * Settings -> 🎙 Stage cover: the page (signed in only), saving (refusals), the hub row
+//   * review fixes (1.99??): a take-down sticks (hash block + held uploads), short caches for uploaded covers, per-account caps,
+//     restricted accounts, fp -> ok, the sweep keeps a cover's check, a missing file, accountOf / incognito fail closed, the GTF render
+//     version, "Automatic", the Settings preview, the stage's small cells and wrapping reasons
 //   * the stage page (stage-mic.js): the picture on the card with the reason kept, set only when the URL changes, never on a cover /
 //     a reported tile, the letter after a failed load; stage-room.js repaints on a new picture
 //   * the capture (stagemiccap.js): a name card draws the cover picture; never the network
@@ -31,7 +34,12 @@ process.env.IMAGESAFETY_DIR = path.join(tmp, "isf");
 process.env.COVER_DIR = path.join(tmp, "cover");
 const express = require("express");
 const sharp = require("sharp");
-const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
+const DB = require(path.join(repo, "dbUtils"));
+// (review fix PRIV-3's test: make chosen reads fail like a locked database - before any module binds getQuery)
+let FAIL_SQL = null;
+const realGet = DB.getQuery;
+DB.getQuery = (sql, params) => (FAIL_SQL && FAIL_SQL.test(String(sql)) ? Promise.reject(new Error("SQLITE_BUSY: database is locked")) : realGet(sql, params));
+const { runQuery, getQuery } = DB;
 const SC = require(path.join(repo, "stagecover"));
 const ISF = require(path.join(repo, "imagesafety"));
 const STK = require(path.join(repo, "stickers"));
@@ -213,7 +221,7 @@ test("uploads are OFF while the safety checks don't enforce for stage_cover (off
   assert.ok(ISF.SURFACES.includes("stage_cover") && ISF.GROUP.stage_cover === "profile", "a surface of its own, the strict profile policy");
 });
 
-test("an upload while enforcing: re-encoded webp (no metadata, a random name), served public + immutable, picked as the cover; a refused one is never stored; a fail-open pass is refused", async () => {
+test("an upload while enforcing: re-encoded webp (no metadata, a random name), served public with a SHORT cache (never immutable), picked as the cover; a refused one is never stored; a fail-open pass is refused", async () => {
   await safety({ enabled: true });
   assert.equal(await SC.uploadsOn(), true);
   ANSWER = CLEAN;
@@ -230,7 +238,16 @@ test("an upload while enforcing: re-encoded webp (no metadata, a random name), s
   const f = await fetch(base + url);
   assert.equal(f.status, 200);
   assert.equal(f.headers.get("content-type"), "image/webp");
-  assert.match(f.headers.get("cache-control"), /public, max-age=31536000, immutable/);
+  // review fix SC-SAFE-2 / PRIV-4 / COMPAT-2: a take-down must reach caches within minutes - short browser + CDN-edge lifetimes, an ETag
+  assert.equal(f.headers.get("cache-control"), "public, max-age=" + SC.UPLOAD_MAX_AGE);
+  assert.ok(SC.UPLOAD_MAX_AGE <= 3600 && SC.UPLOAD_CDN_MAX_AGE <= 600);
+  assert.equal(f.headers.get("cdn-cache-control"), "max-age=" + SC.UPLOAD_CDN_MAX_AGE);
+  assert.equal(f.headers.get("cloudflare-cdn-cache-control"), "max-age=" + SC.UPLOAD_CDN_MAX_AGE);
+  const etag = f.headers.get("etag");
+  assert.ok(etag, "an ETag: the browser revalidates instead of refetching");
+  // (a browser's own revalidation - node's fetch would add "Cache-Control: no-cache" to a hand-made conditional request)
+  const revalidated = await new Promise((ok, no) => require("http").get(base + url, { headers: { "if-none-match": etag } }, (res) => { res.resume(); ok(res.statusCode); }).on("error", no));
+  assert.equal(revalidated, 304);
   const out = Buffer.from(await f.arrayBuffer());
   const meta = await sharp(out).metadata();
   assert.equal(meta.format, "webp"); assert.ok(meta.width <= SC.COVER_PX && meta.height <= SC.COVER_PX);
@@ -254,7 +271,7 @@ test("an upload while enforcing: re-encoded webp (no metadata, a random name), s
   assert.equal(html.status, 415);
   // the owner takes it down: the file is gone, the default is back
   const rm = await call("POST", "/api/stage-cover/upload/remove", U.bo, {});
-  assert.equal(rm.d.ok, true); assert.equal(rm.d.upload, null); assert.equal(rm.d.kind, "gtf");
+  assert.equal(rm.d.ok, true); assert.equal(rm.d.upload, null); assert.equal(rm.d.kind, "auto", "back to Automatic (no choice)");
   assert.equal((await fetch(base + url)).status, 404);
   assert.equal((await SC.coverOf("bocf")).k, "gtf");
 });
@@ -283,16 +300,31 @@ test("a FLAGGED upload is held: not served to others, the stage falls back; revi
   assert.equal((await SC.coverOf("cycf")).k, "photo");
   const st = await call("GET", "/api/stage-cover", U.cy);
   assert.equal(st.d.removed, true); assert.equal(st.d.upload, null);
+  assert.equal(st.d.hold, true, "review fix SC-SAFE-1: a review take-down puts the account on hold");
+  // review fix SC-SAFE-1: the same picture can't come straight back (refused before it's classified again)
+  ANSWER = CLEAN;
+  const same = await upload(U.cy, await png());
+  assert.equal(same.status, 422, JSON.stringify(same.d)); assert.equal(same.d.code, "blocked");
+  assert.notEqual((await SC.coverOf("cycf")).k, "upload");
+  ANSWER = HATE;
   // a held one marked "correct" (the flag was right) comes down too
   const r2 = await upload(U.cy, await png(250, 250, { r: 50, g: 50, b: 200 }));
   const log2 = (await getQuery("SELECT upload_log FROM stage_covers WHERE user_id = ?", [U.cy.userId]))[0].upload_log;
   await ISF.review(log2, "ok", "boss");
   assert.equal((await fetch(base + r2.d.upload.url, { headers: { "x-test-user": U.cy.userId } })).status, 404);
-  // the admin card's take-down: admins only (not staff, not members)
+  // a clean picture while the account is on hold (two take-downs): held for an admin; the card puts it up (admins only)
   ANSWER = CLEAN;
   const r3 = await upload(U.cy, await png(260, 250, { r: 90, g: 50, b: 20 }));
-  assert.equal(r3.d.held, false);
+  assert.equal(r3.d.held, true, "review fix SC-SAFE-1: on hold - held");
+  assert.ok((await SC.adminList()).some((c) => c.userId === U.cy.userId && c.state === "held" && c.onHold && c.strikes === 2 && c.inUse));
+  for (const who of [U.cy, U.staff, null]) {
+    const x = await call("POST", "/api/admin/stage-cover/release", who, { user_id: U.cy.userId });
+    assert.ok(x.status === 403 || x.status === 401, (who ? who.username : "anon") + ": " + x.status);
+  }
+  assert.equal((await call("POST", "/api/admin/stage-cover/release", U.admin, { user_id: U.cy.userId })).status, 200);
+  assert.deepEqual(await SC.coverOf("cycf"), { url: r3.d.upload.url, k: "upload" }, "put up");
   assert.ok((await SC.adminList()).some((c) => c.userId === U.cy.userId && c.state === "ok" && c.inUse));
+  // the admin card's take-down: admins only (not staff, not members)
   for (const who of [U.cy, U.staff, null]) {
     const x = await call("POST", "/api/admin/stage-cover/remove", who, { user_id: U.cy.userId });
     assert.ok(x.status === 403 || x.status === 401, (who ? who.username : "anon") + ": " + x.status);
@@ -415,6 +447,7 @@ test("stage-mic.js: a card shows the cover picture (pixel art classes, alt empty
   assert.ok(card.classList.contains("cov") && card.classList.contains("cv-gtf"), card.className);
   assert.equal(img.getAttribute("src"), gtf); assert.equal(img.hidden, false); assert.equal(img.alt, "");
   assert.match(card.textContent, /cam starting…/, "the reason stays");
+  assert.equal(card.children[1].getAttribute("title"), "cam starting…", "review fix UX-1: the whole reason is the label's title (it's clamped under a picture)");
   assert.equal(card.children[0].children[1].hidden, true, "the letter is hidden while the picture shows");
   const sets0 = img._srcSets;
   for (let i = 0; i < 5; i++) ctl.update(prog([camS("ann", { avatar: gtf, ck: "gtf", why: "off_cam", video: "card" })]));
@@ -452,7 +485,7 @@ test("stage-mic.js: a card shows the cover picture (pixel art classes, alt empty
   ctl.stop();
 });
 
-test("stage-room.js repaints the mic stage when only a tile's cover picture changes; the CSS keeps the picture on small cells", () => {
+test("stage-room.js repaints the mic stage when only a tile's cover picture changes; the CSS: the picture fills a cell big enough for it, a small cell keeps the letter card's look (no picture, the whole reason)", () => {
   const src = fs.readFileSync(path.join(repo, "public", "js", "stage-room.js"), "utf8");
   const sig = src.slice(src.indexOf("function sigOf(p)"), src.indexOf("function setMic(p)"));
   const fn = new Function(sig + "; return sigOf;")();
@@ -461,8 +494,19 @@ test("stage-room.js repaints the mic stage when only a tile's cover picture chan
   b.src[0].avatar = "/media/cover/u/" + "a".repeat(32) + ".webp"; b.src[0].ck = "upload";
   assert.notEqual(fn(a), fn(b), "a new picture repaints");
   const css = fs.readFileSync(path.join(repo, "public", "css", "webrtc.css"), "utf8");
-  assert.match(css, /\.mf-card\.cov \.mf-av \{ display: block !important; width: 100% !important; height: 100% !important;/, "shown on narrow grids too (the letter rules hide .mf-av), sized by its grid row");
-  assert.match(css, /\.mf-card\.cov \{ display: grid; grid-template-rows: minmax\(0, 1fr\) auto;/, "the picture row is definite: it never overflows the cell");
+  assert.match(css, /\.mf-card\.cov \.mf-av \{ display: block !important; width: 100% !important; height: 100% !important;/, "sized by its grid row");
+  assert.match(css, /\.mf-card\.cov \{ display: grid; grid-template-rows: minmax\(0, 1fr\) auto;[^}]*container: mfcov \/ size;/, "the picture row is definite: it never overflows the cell; the card is a size container");
+  // review fix UX-2: a cell too small for a useful picture (the cells where the letter is hidden too) hides it and shows the whole reason
+  const cq = /@container mfcov \(max-height: (\d+)px\) or \(max-width: (\d+)px\) \{([^]*?)\r?\n\}/.exec(css);
+  assert.ok(cq, "the small-cell rule");
+  assert.ok(Number(cq[1]) >= 60 && Number(cq[2]) >= 40, "a picture under ~32 px is never drawn: " + cq[1] + "/" + cq[2]);
+  assert.match(cq[3], /\.mf-card\.cov \.mf-av \{ display: none !important; \}/);
+  assert.match(cq[3], /\.mf-card\.cov \.mf-why \{ display: block; -webkit-line-clamp: unset; line-clamp: none; overflow: visible;/);
+  // review fix UX-1: the reason under a picture wraps (2 lines, the title has it all), and never pokes out of its cell
+  const why = /\.player \.mf-tile \.mf-card\.cov \.mf-why \{([^}]*)\}/.exec(css)[1];
+  assert.doesNotMatch(why, /nowrap|ellipsis/);
+  assert.match(why, /box-sizing: border-box; max-width: 100%;/);
+  assert.match(why, /white-space: normal;[^]*-webkit-line-clamp: 2;/);
   assert.match(css, /\.mf-card\.cv-gtf \.mf-av img, [^{]*\.mf-card\.cv-sticker \.mf-av img \{ image-rendering: pixelated;/);
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
   assert.match(room, /stage-mic\.js\?v=10/); assert.match(room, /webrtc\.css\?v=8/);   // (stage-mic.js v10: 1.99ahn's v8 + 1.99ahp's v9 + the cover)
@@ -495,4 +539,294 @@ test("stagemiccap: a consenting name card draws its cover picture (local data on
     const plain = await px({ ...t, cover: null });
     assert.ok(!(plain[0] > 200 && plain[1] < 40), "no cover: the letter card " + plain);
   } finally { M.configure(T.defaults); }
+});
+
+// ── review fixes (1.99??) ──
+const escRe = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const logOf = async (u) => (await getQuery("SELECT upload_log FROM stage_covers WHERE user_id = ?", [u.userId]))[0].upload_log;
+
+test("review fix SC-SAFE-1: an admin's take-down sticks - the same picture is refused (any account) before it's classified again, the account's next pictures are held until an admin puts one up, one held at a time; the hold ends after HOLD_MS; the owner's own removal is no strike", async () => {
+  const u = await mkUser("eve", { camfrog: "evecf" });
+  await safety({ enabled: true });
+  let calls = 0;
+  ISF.setClassifier(async () => { calls++; return CLEAN; });
+  const pic = await png(240, 200, { r: 200, g: 200, b: 10 });
+  let r = await upload(u, pic);
+  assert.equal(r.d.held, false);
+  await call("POST", "/api/stage-cover/upload/remove", u, {});
+  r = await upload(u, pic);
+  assert.equal(r.status, 200, JSON.stringify(r.d)); assert.equal(r.d.held, false, "the owner's own removal: no strike, no block");
+  assert.equal(r.d.hold, false);
+  assert.equal((await call("POST", "/api/admin/stage-cover/remove", U.admin, { user_id: u.userId })).status, 200);
+  const n0 = calls;
+  const again = await upload(u, pic);
+  assert.equal(again.status, 422, JSON.stringify(again.d)); assert.equal(again.d.code, "blocked");
+  assert.equal((await upload(U.dee, pic)).d.code, "blocked", "the picture is blocked, whoever sends it");
+  assert.equal(calls, n0, "refused before any classification");
+  assert.ok((await getQuery("SELECT why FROM stage_cover_blocks")).every((b) => !/boss|eve|u_/.test(b.why)), "the block names nobody");
+  // another picture: checked and taken, but HELD - not public, the stage shows the default
+  const q = await upload(u, await png(250, 200, { r: 10, g: 10, b: 200 }));
+  assert.equal(q.status, 200, JSON.stringify(q.d)); assert.equal(q.d.held, true); assert.equal(q.d.hold, true);
+  assert.equal((await fetch(base + q.d.upload.url)).status, 404);
+  assert.equal(await SC.coverOf("evecf"), null, "no GTF seed, no photo: the letter while it's held");
+  assert.ok((await call("GET", "/settings/stage-cover", u)).text.includes(EN["scov.upload_hold"]), "the page says why");
+  const busy = await call("POST", "/api/stage-cover/uploads", u, { size: 1000 });
+  assert.equal(busy.status, 409); assert.equal(busy.d.code, "held", "one picture waiting for a check at a time");
+  // review fix SC-SAFE-6 (part): the admins see a held picture (the card's preview); nobody else does
+  assert.equal((await fetch(base + q.d.upload.url, { headers: { "x-test-user": U.admin.userId } })).status, 200);
+  assert.equal((await fetch(base + q.d.upload.url, { headers: { "x-test-user": U.staff.userId } })).status, 404);
+  assert.equal((await call("POST", "/api/admin/stage-cover/release", U.admin, { user_id: u.userId })).status, 200);
+  assert.deepEqual(await SC.coverOf("evecf"), { url: q.d.upload.url, k: "upload" });
+  // HOLD_MS later: no longer held
+  SC._setClock(() => Date.now() + SC.HOLD_MS + 60e3);
+  try {
+    const z = await upload(u, await png(260, 200, { r: 90, g: 10, b: 90 }));
+    assert.equal(z.status, 200, JSON.stringify(z.d)); assert.equal(z.d.held, false); assert.equal(z.d.hold, false);
+  } finally { SC._setClock(null); }
+  ISF.setClassifier(async () => (typeof ANSWER === "function" ? ANSWER() : ANSWER));
+});
+
+test("review fix SC-SAFE-3: uploads are capped per account (UPLOADS_PER_HOUR / UPLOADS_PER_DAY safety checks) - refused before any classification", async () => {
+  const u = await mkUser("flo", { camfrog: "flocf" });
+  await safety({ enabled: true });
+  let calls = 0;
+  ISF.setClassifier(async () => { calls++; return CLEAN; });
+  for (let i = 0; i < SC.UPLOADS_PER_HOUR; i++) {
+    const r = await upload(u, await png(200 + i, 200, { r: 30 * i, g: 60, b: 70 }));
+    assert.equal(r.status, 200, "upload " + i + ": " + JSON.stringify(r.d));
+  }
+  const n0 = calls;
+  const over = await call("POST", "/api/stage-cover/uploads", u, { size: 5000 });
+  assert.equal(over.status, 429); assert.equal(over.d.code, "rate");
+  await assert.rejects(SC.setUpload(u.userId, await png(300, 300)), /this hour/);
+  assert.equal(calls, n0, "no classification over the cap");
+  // the day's cap counts the earlier hours too
+  const v = await mkUser("gil", { camfrog: "gilcf" });
+  for (let i = 0; i < SC.UPLOADS_PER_DAY; i++) {
+    await runQuery("INSERT INTO image_safety_log (at, surface, user_id, mode, action) VALUES (?, 'stage_cover', ?, 'enforce', 'allow')", [Date.now() - 3 * 3600e3, v.userId]);
+  }
+  const day = await call("POST", "/api/stage-cover/uploads", v, { size: 5000 });
+  assert.equal(day.status, 429); assert.match(day.d.error, /today/);
+  assert.equal((await call("POST", "/api/stage-cover/uploads", U.ann, { size: 5000 })).status, 200, "other accounts aren't touched");
+  ISF.setClassifier(async () => (typeof ANSWER === "function" ? ANSWER() : ANSWER));
+});
+
+test("review fix SC-SAFE-4: a restricted account can't upload a cover - archived, casino_banned, a global feed ban, Pepe's global feed_restricted (a pad's own ban isn't one)", async () => {
+  await safety({ enabled: true }); ANSWER = CLEAN;
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER, until INTEGER,
+                  PRIMARY KEY (user_id, room_id))`);
+  await runQuery("CREATE TABLE IF NOT EXISTS feed_restricted (login TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', reason TEXT, until INTEGER, PRIMARY KEY (login, room_id))");
+  const a = await mkUser("rex", { camfrog: "RexCF" });
+  const id = a.userId;
+  const cases = [
+    ["casino_banned", "UPDATE users SET casino_banned = 1 WHERE userId = ?", [id], "UPDATE users SET casino_banned = 0 WHERE userId = ?", [id]],
+    ["archived", "UPDATE users SET archived_at = 1 WHERE userId = ?", [id], "UPDATE users SET archived_at = NULL WHERE userId = ?", [id]],
+    ["a global feed ban", "INSERT INTO feed_bans (user_id, room_id, until) VALUES (?, '', NULL)", [id], "DELETE FROM feed_bans WHERE user_id = ?", [id]],
+    ["Pepe's restriction", "INSERT INTO feed_restricted (login, room_id, reason, until) VALUES ('rexcf', '', 'spam', ?)", [Date.now() + 3600e3], "DELETE FROM feed_restricted WHERE login = 'rexcf'", []],
+  ];
+  for (const [what, on, onArgs, off, offArgs] of cases) {
+    await runQuery(on, onArgs);
+    try {
+      const o = await call("POST", "/api/stage-cover/uploads", a, { size: 5000 });
+      assert.equal(o.status, 403, what + ": " + JSON.stringify(o.d)); assert.equal(o.d.code, "restricted", what);
+      await assert.rejects(SC.setUpload(id, await png()), (e) => e.code === "restricted", what + " (the check before classifying)");
+    } finally { await runQuery(off, offArgs); }
+  }
+  // an expired ban and a pad's own ban don't count
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES (?, '', ?), (?, 'somepad', NULL)", [id, Date.now() - 1000, id]);
+  try { assert.equal((await call("POST", "/api/stage-cover/uploads", a, { size: 5000 })).status, 200); }
+  finally { await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [id]); }
+});
+
+test("review fix SC-SAFE-5: a held cover put up by a mistaken 'False positive' comes down again when the review is corrected to 'Correct'; 'Correct' on a clean pass leaves it up", async () => {
+  const u = await mkUser("hal", { camfrog: "halcf" });
+  await seed("halcf", 6161);
+  await safety({ enabled: true }); ANSWER = HATE;
+  const r = await upload(u, await png(230, 230, { r: 1, g: 100, b: 200 }));
+  assert.equal(r.d.held, true);
+  const logId = await logOf(u);
+  await ISF.review(logId, "fp", "boss");
+  assert.equal((await fetch(base + r.d.upload.url)).status, 200, "fp: up");
+  await ISF.review(logId, "ok", "boss");
+  assert.equal((await fetch(base + r.d.upload.url)).status, 404, "corrected to ok: down");
+  assert.deepEqual(await SC.coverOf("halcf"), { url: SC.gtfUrl(6161, {}), k: "gtf" });
+  // a clean pass marked "Correct": stays up
+  const w = await mkUser("wes", { camfrog: "wescf" });
+  ANSWER = CLEAN;
+  const c = await upload(w, await png(231, 230, { r: 1, g: 100, b: 201 }));
+  await ISF.review(await logOf(w), "ok", "boss");
+  assert.equal((await fetch(base + c.d.upload.url)).status, 200);
+});
+
+test("review fix SC-SAFE-7: an 'ok' upload whose file is missing (a restore without the cover folder) is no upload - the default shows, not a broken picture", async () => {
+  const u = await mkUser("gus", { camfrog: "guscf" });
+  await seed("guscf", 5151);
+  await safety({ enabled: true }); ANSWER = CLEAN;
+  const r = await upload(u, await png(220, 220, { r: 5, g: 90, b: 5 }));
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal((await SC.coverOf("guscf")).k, "upload");
+  fs.unlinkSync(SC.filePath(r.d.upload.url.split("/").pop()));
+  SC.invalidate();
+  assert.deepEqual(await SC.coverOf("guscf"), { url: SC.gtfUrl(5151, {}), k: "gtf" });
+});
+
+test("review fix PRIV-3: a failed account read never makes a linked member 'Camfrog-only' (whose seed would override their choice): the letter, not cached; a failed incognito read fails closed too", async () => {
+  await SC.save(U.bo.userId, { kind: "card" });                     // bo has a seed (2222) and chose the plain card
+  try {
+    assert.equal(await SC.coverOf("bocf"), null);
+    SC.invalidate();
+    FAIL_SQL = /FROM users WHERE LOWER\(camfrogUsername\)/;
+    try {
+      assert.equal(await SC.coverOf("bocf"), null, "a failed read: the letter, never her seed's GTF avatar");
+      assert.equal(await SC.coverOf("anncf"), null, "(ann too)");
+    } finally { FAIL_SQL = null; }
+    assert.equal((await SC.coverOf("anncf")).k, "gtf", "the failure wasn't cached");
+    SC.invalidate();
+    FAIL_SQL = /FROM incognito_state/;
+    try { assert.equal(await SC.coverOf("anncf"), null, "Pepe's incognito report unreadable: no cover"); } finally { FAIL_SQL = null; }
+    assert.equal((await SC.coverOf("anncf")).k, "gtf");
+  } finally { await runQuery("DELETE FROM stage_covers WHERE user_id = ?", [U.bo.userId]); SC.invalidate(); }
+});
+
+test("review fix COMPAT-1: the GTF cover URL carries avatar.js's render version - a redraw gives new URLs; the old ones 404", async () => {
+  const before = SC.gtfUrl(1111, {});
+  assert.equal((await fetch(base + before)).status, 200);
+  SC._setRenderVersion("redrawn-layers");
+  try {
+    const after = SC.gtfUrl(1111, {});
+    assert.notEqual(after, before);
+    assert.equal(SC.parseGtf(before.split("/").pop()), null);
+    assert.equal((await fetch(base + before)).status, 404);
+    const r = await fetch(base + after);
+    assert.equal(r.status, 200); assert.match(r.headers.get("cache-control"), /immutable/);
+  } finally { SC._setRenderVersion(null); }
+  assert.equal(SC.gtfUrl(1111, {}), before, "back to avatar.js's own version");
+});
+
+test("review fix UX-3: no saved choice = 'Automatic' - checked on the page (never GTF), the hub says so; Save untouched changes nothing; picking it is the way back to the default; each option carries its preview", async () => {
+  const photo = "https://cdn.example.test/jo.png";
+  const u = await mkUser("jo", { camfrog: "jocf", avatar: photo });
+  await seed("jocf", 7171);
+  await PLY.save(u.userId, { ...PLY.DEFAULT, hidden: ["gtf"] });
+  try {
+    assert.deepEqual(await SC.coverOf("jocf"), { url: photo, k: "photo" }, "her GTF section is hidden: the photo");
+    const p = await call("GET", "/settings/stage-cover", u);
+    assert.match(p.text, /name="kind" value="auto" checked/);
+    assert.doesNotMatch(p.text, /name="kind" value="gtf" checked/);
+    assert.match(p.text, new RegExp('data-kind="gtf" data-pv="' + escRe(SC.gtfUrl(7171, {})) + '" data-pk="gtf"'), "the GTF option's preview");
+    assert.match(p.text, new RegExp('data-kind="auto" data-pv="' + escRe(photo) + '" data-pk="photo"'));
+    const hub = await call("GET", "/settings", u);
+    assert.match(hub.text, new RegExp('data-entry="stagecover">\\s*<a class="sh-row" href="/settings/stage-cover">[^]*?data-state>' + escRe(EN["scov.k.auto"]) + "<"));
+    assert.equal(await SC.choiceOf(u.userId), "auto");
+    let s = await call("POST", "/api/stage-cover", u, { kind: "auto" });           // Save on the untouched form
+    assert.equal(s.status, 200); assert.equal(s.d.kind, "auto"); assert.equal(s.d.chosen, false);
+    assert.deepEqual(s.d.now, { url: photo, k: "photo" }, "still her photo - her hidden GTF section is respected");
+    s = await call("POST", "/api/stage-cover", u, { kind: "gtf" });
+    assert.equal(s.d.now.k, "gtf", "picked: shown anyway");
+    s = await call("POST", "/api/stage-cover", u, { kind: "auto" });
+    assert.deepEqual(s.d.now, { url: photo, k: "photo" }, "Automatic: back to the default");
+    assert.equal(s.d.chosen, false); assert.equal(await SC.choiceOf(u.userId), "auto");
+    assert.deepEqual(s.d.preview, { auto: { url: photo, k: "photo" }, gtf: { url: SC.gtfUrl(7171, {}), k: "gtf" }, photo: { url: photo, k: "photo" },
+                                    upload: { url: photo, k: "photo" }, card: null });
+  } finally { await PLY.reset(u.userId); }
+});
+
+// a small DOM for public/js/stage-cover.js (no jsdom here): elements with attributes, children, classList and a querySelector for
+// compound selectors (tag, .class, [attr="v"], :checked) joined by spaces
+function miniDom() {
+  const byId = {};
+  function el(tag, attrs = {}, kids = []) {
+    const e = { tagName: tag.toUpperCase(), attrs: {}, children: [], parentNode: null, listeners: {}, checked: false, disabled: false, hidden: false, _text: "",
+      setAttribute(k, v) { this.attrs[k] = String(v); if (k === "id") byId[v] = this; }, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
+      hasAttribute(k) { return k in this.attrs; }, removeAttribute(k) { delete this.attrs[k]; },
+      appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
+      addEventListener(k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); },
+      get textContent() { return this._text + this.children.map((c) => c.textContent).join(""); },
+      set textContent(v) { this._text = String(v); this.children = []; },
+      get className() { return this.attrs.class || ""; }, set className(v) { this.attrs.class = String(v); },
+      get src() { return this.attrs.src || ""; }, set src(v) { this.attrs.src = String(v); },
+      get value() { return this.attrs.value || ""; }, get name() { return this.attrs.name || ""; },
+      querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+      querySelectorAll(sel) {
+        const parts = sel.trim().split(/\s+/);
+        const all = (n) => n.children.flatMap((c) => [c, ...all(c)]);
+        let set = [this];
+        for (const p of parts) { const next = []; for (const n of set) for (const d of all(n)) if (match(d, p) && !next.includes(d)) next.push(d); set = next; }
+        return set;
+      } };
+    e.classList = { contains: (c) => (" " + e.className + " ").includes(" " + c + " "),
+      toggle(c, on) {
+        const has = this.contains(c), w = on === undefined ? !has : !!on;
+        if (w && !has) e.className = (e.className + " " + c).trim();
+        if (!w && has) e.className = (" " + e.className + " ").replace(" " + c + " ", " ").trim();
+        return w;
+      } };
+    for (const [k, v] of Object.entries(attrs)) { if (k === "checked") e.checked = !!v; else e.setAttribute(k, v); }
+    for (const k of kids) e.appendChild(k);
+    return e;
+  }
+  function match(e, p) {
+    const m = /^([a-z]+)?((?:\.[\w-]+)*)((?:\[[\w-]+(?:="[^"]*")?\])*)(:checked)?$/.exec(p);
+    if (!m) throw new Error("selector " + p);
+    if (m[1] && e.tagName !== m[1].toUpperCase()) return false;
+    for (const c of (m[2] || "").split(".").filter(Boolean)) if (!e.classList.contains(c)) return false;
+    for (const a of (m[3] || "").match(/\[[^\]]+\]/g) || []) {
+      const [, k, v] = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(a);
+      if (!(k in e.attrs) || (v !== undefined && e.attrs[k] !== v)) return false;
+    }
+    if (m[4] && !e.checked) return false;
+    return true;
+  }
+  return { el, byId };
+}
+
+test("review fix UX-4: picking an option previews it at once on the page (marked not saved), from each option's preview; picking the saved one again shows 'Showing'", () => {
+  const { el, byId } = miniDom();
+  const photo = "https://cdn.example.test/jo.png", gtf = "/media/cover/a/7171.0123456789abcdef0123.svg", stk = "/public/stickers/pixelpepe/cool.svg";
+  const radio = (v, on) => el("input", { type: "radio", name: "kind", value: v, checked: on });
+  const opt = (kind, pv, pk, kids) => el("div", { class: "sc-opt", "data-kind": kind, "data-pv": pv, "data-pk": pk }, kids);
+  const r = { auto: radio("auto", true), gtf: radio("gtf"), sticker: radio("sticker"), card: radio("card") };
+  const sIn = el("input", { type: "radio", name: "sticker", value: "pixelpepe/cool" });
+  const form = el("form", { id: "scForm" }, [
+    opt("auto", photo, "photo", [el("label", { class: "sc-head" }, [r.auto])]),
+    opt("gtf", gtf, "gtf", [el("label", { class: "sc-head" }, [r.gtf])]),
+    el("div", { class: "sc-opt", "data-kind": "sticker" }, [el("label", { class: "sc-head" }, [r.sticker, el("span", { class: "sc-thumb" })]),
+      el("label", { class: "sc-stk" }, [sIn, el("img", { src: stk })])]),
+    opt("card", "", "", [el("label", { class: "sc-head" }, [r.card])]),
+    el("button", { id: "scSave" }), el("p", { id: "scMsg" })]);
+  const tile = el("div", { id: "scNowTile", "data-k": "photo" }, [el("span", { class: "sc-pic" }, [el("img", { id: "scNowImg", src: photo })])]);
+  const txt = el("p", { id: "scNowTxt" });
+  el("main", { id: "scov", "data-max-mb": "5", "data-letter": "J" }, [tile, txt, form]);
+  const ctx = { document: { getElementById: (id) => byId[id] || null, createElement: (t) => el(t) }, console, fetch: () => new Promise(() => {}) };
+  ctx.window = ctx;
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "stage-cover.js"), "utf8"), ctx);
+  const pick = (target) => { for (const x of Object.values(r)) x.checked = x === target; form.listeners.change.forEach((fn) => fn({ target })); };
+  const shown = () => { const i = tile.querySelector("img"); return i ? i.getAttribute("src") : null; };
+  pick(r.gtf);
+  assert.equal(shown(), gtf); assert.equal(tile.getAttribute("data-k"), "gtf"); assert.ok(tile.classList.contains("draft"));
+  assert.match(txt.textContent, /^Preview: GTF avatar/);
+  pick(r.card);
+  assert.equal(shown(), null); assert.equal(tile.querySelector("span").textContent, "J"); assert.match(txt.textContent, /^Preview: a plain card/);
+  sIn.checked = true;
+  form.listeners.change.forEach((fn) => fn({ target: sIn }));
+  assert.equal(r.sticker.checked, true, "a sticker picked = the sticker cover picked");
+  assert.equal(shown(), stk); assert.equal(tile.getAttribute("data-k"), "sticker");
+  pick(r.auto);
+  assert.equal(shown(), photo); assert.ok(!tile.classList.contains("draft")); assert.match(txt.textContent, /^Showing: Profile picture/);
+});
+
+test("review fix SC-SAFE-6: the safety sweep keeps the check a stage cover still points at (and its thumbnail) - a held picture stays reviewable after retention_days", async () => {
+  const u = await mkUser("ivy", { camfrog: "ivycf" });
+  await safety({ enabled: true }); ANSWER = HATE;
+  const r = await upload(u, await png(240, 240, { r: 120, g: 0, b: 60 }));
+  assert.equal(r.d.held, true);
+  const logId = await logOf(u);
+  await runQuery("INSERT INTO image_safety_log (at, surface, user_id, mode, action) VALUES (1, 'feed', 'someone', 'enforce', 'allow')");
+  const gone = await ISF.sweep(Date.now() + 31 * 86400e3);
+  assert.ok(gone >= 1, "other old checks go");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM image_safety_log WHERE id = ?", [logId]))[0].n, 1, "the held cover's check stays");
+  assert.equal((await fetch(base + "/admin/imagesafety/thumb/" + logId, { headers: { "x-test-user": U.admin.userId } })).status, 200, "its thumbnail too");
+  await ISF.review(logId, "fp", "boss");
+  assert.equal((await fetch(base + r.d.upload.url)).status, 200, "still reviewable: put up");
+  ANSWER = CLEAN;
 });

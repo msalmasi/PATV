@@ -327,6 +327,8 @@
       function showCard(text) {
         card.hidden = false; v.hidden = true; img.hidden = true;
         reason.textContent = text || '';
+        // 1.99?? stage cover review fix (UX-1): a cover card's reason is at most 2 lines under the picture - its whole text here
+        if (text) reason.setAttribute('title', text); else reason.removeAttribute('title');
         tag.textContent = '';
       }
       /** A live picture didn't work out: a card with the reason, and one more try after RETRY_MS (unless it's for good).

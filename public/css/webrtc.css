@@ -118,22 +118,33 @@
 .player .mf-stage.barred.narrow[data-layout=grid4] .mf-tile .mf-av { display: none; }
 .player .mf-stage.narrow[data-layout=grid4] .mf-tile .mf-x { display: none; }       /* ✕ is in ⋯ Manage, ⚑ in the bar there (as on grid9) */
 /* 1.99?? stage cover (stagecover.js, stage-mic.js setCover): a card with the person's picture instead of the letter - it fills the
-   card above the name label (contained, never cropped), the reason stays as a small one-line label under it. GTF avatars and
-   stickers are pixel art (crisp); a profile photo keeps its round crop. Shown at every size: on the small cells of narrow grids
-   (where the letter is hidden) the picture is what tells people apart, so the size rules above don't hide it (!important). */
+   card above the name label (contained, never cropped), the reason stays as a small label under it (it wraps; at most 2 lines with
+   the picture - the whole reason is the label's title). GTF avatars and stickers are pixel art (crisp); a profile photo keeps its
+   round crop. */
 /* (a grid, not the letter's flex column: the picture's row is a definite minmax(0, 1fr), so a 176 px GTF render or a 512 px upload
-   always shrinks into the cell - never past it) */
-.player .mf-tile .mf-card.cov { display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; gap: 3px; padding: 6px 6px 30px; }
+   always shrinks into the cell - never past it. The card is a size container (it is absolutely placed, inset 0: its size never
+   depends on what's in it), so the rule below can tell how much room the picture really gets.) */
+.player .mf-tile .mf-card.cov { display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; gap: 3px; padding: 6px 6px 30px;
+                                container: mfcov / size; }
 .player .mf-tile .mf-card.cov .mf-av { display: block !important; width: 100% !important; height: 100% !important; max-height: 240px; min-height: 0;
                                        border-radius: 0; background: transparent; overflow: hidden; }
 .player .mf-tile .mf-card.cov .mf-av img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .player .mf-tile .mf-card.cv-gtf .mf-av img, .player .mf-tile .mf-card.cv-sticker .mf-av img { image-rendering: pixelated; image-rendering: crisp-edges; }
 .player .mf-tile .mf-card.cv-photo .mf-av { width: auto !important; aspect-ratio: 1 / 1; max-width: 100%; border-radius: 50%; }
 .player .mf-tile .mf-card.cv-photo .mf-av img { object-fit: cover; }
-.player .mf-tile .mf-card.cov .mf-why { max-width: 100%; padding: 1px 8px; border-radius: 999px; background: rgba(0,0,0,.55);
-                                        font-size: 11.5px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player .mf-tile .mf-card.cov .mf-why { box-sizing: border-box; max-width: 100%; padding: 1px 8px; border-radius: 8px; background: rgba(0,0,0,.55);
+                                        font-size: 11.5px; line-height: 1.3; white-space: normal; overflow-wrap: anywhere;
+                                        display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .player .mf-stage.narrow .mf-tile .mf-card.cov { padding: 3px 3px 22px; gap: 2px; }
 .player .mf-stage.narrow .mf-tile .mf-card.cov .mf-why { font-size: 10.5px; padding: 0 6px; }
+/* review fix (UX-1, UX-2): a cell too small to draw the picture at a useful size (narrow grid9, grid4 under the ⚑ bar, the small
+   cells of a dynamic stage, a small PiP inset - the cells where the letter is hidden too) keeps the letter card's look: no picture,
+   the WHOLE reason, wrapping. (Under these sizes the picture would be a few pixels tall with the reason cut short.) */
+@container mfcov (max-height: 64px) or (max-width: 44px) {
+  .player .mf-tile .mf-card.cov .mf-av { display: none !important; }
+  .player .mf-tile .mf-card.cov .mf-why { display: block; -webkit-line-clamp: unset; line-clamp: none; overflow: visible; max-width: 90%; padding: 0; border-radius: 0;
+                                          background: transparent; font-size: 11px; line-height: 1.2; }
+}
 /* mfix: tiles kept up while someone nobody can show (or Pepe) talks - dimmed, nobody ringed, a strip says who speaks */
 .player .mf-stage.mf-dim .mf-tile .rtc-video, .player .mf-stage.mf-dim .mf-tile .mf-still, .player .mf-stage.mf-dim .mf-tile .mf-card { opacity: .3; }
 .player .mf-stage .mf-strip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; max-width: 86%; padding: 8px 14px;

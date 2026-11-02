@@ -1,8 +1,10 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%# /settings/stage-cover - 1.99?? (stagecover.js): the member's STAGE COVER - the picture a pad's 🎙 mic stage shows for them while
-    their cam isn't live (by default their GTF avatar). Choices: GTF avatar, profile picture, a sticker they own, a picture of their
-    own (only while the site's picture safety checks enforce - stagecover.uploadsOn), the plain card. Client: public/js/stage-cover.js
-    (no innerHTML; it saves through /api/stage-cover and uploads in chunks). st = stagecover.stateFor(). %>
+    their cam isn't live (by default their GTF avatar). Choices: Automatic (no choice saved: the default chain), GTF avatar, profile
+    picture, a sticker they own, a picture of their own (only while the site's picture safety checks enforce - stagecover.uploadsOn),
+    the plain card. Each option carries what the stage would show for it (data-pv / data-pk, from st.preview) so the preview follows a
+    pick before Save. Client: public/js/stage-cover.js (no innerHTML; it saves through /api/stage-cover and uploads in chunks).
+    st = stagecover.stateFor(). %>
 <%- include('layout', { title: t('scov.title'), user: user }) %>
 <style>
   .scov .sc-why-p { margin: 0; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
@@ -44,6 +46,7 @@
   .scov .sc-up input[type=file] { max-width: 100%; min-height: 44px; color: var(--ds-text-2); font: 14px var(--ds-font); }
   .scov .sc-msg { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); margin: var(--ds-sp-2) 0 0; }
   .scov .sc-msg.ok { color: var(--ds-ok); } .scov .sc-msg.bad { color: var(--ds-danger); }
+  .scov .sc-tile.draft { border-style: dashed; border-color: var(--ds-ac); }
   .scov .sc-list { margin: 0; padding-inline-start: 1.1em; display: grid; gap: 6px; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
   @media (max-width: 420px) { .scov .sc-head { grid-template-columns: auto 44px minmax(0, 1fr); gap: var(--ds-sp-2); } .scov .sc-thumb { width: 44px; height: 44px; } .scov .sc-more { padding-inline-start: 0; } }
 </style>
@@ -52,6 +55,8 @@
   const k = st.kind;
   const opt = (id) => (k === id ? ' checked' : '');
   const thumb = (url, alt) => url ? '<img src="' + t.esc(url) + '" alt="' + t.esc(alt || '') + '" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '<span aria-hidden="true">' + t.esc(letter) + '</span>';
+  // what the stage would show for an option (the preview before Save) - escaped attributes
+  const pv = (id) => { const c = st.preview && st.preview[id]; return ' data-pv="' + t.esc(c ? c.url : '') + '" data-pk="' + t.esc(c ? c.k : '') + '"'; };
 %>
 <main class="ds-page mid scov" id="scov" data-max-mb="<%= st.max_mb %>" data-letter="<%= letter %>">
   <a class="ds-back" href="/settings">← <%- t('sethub.back') %></a>
@@ -80,16 +85,24 @@
       <fieldset class="sc-opts">
         <legend class="sc-sr"><%- t('scov.pick_legend') %></legend>
 
-        <div class="sc-opt" data-kind="gtf">
+        <div class="sc-opt" data-kind="auto"<%- pv('auto') %>>
+          <label class="sc-head"><input type="radio" name="kind" value="auto"<%= opt('auto') %>>
+            <span class="sc-thumb"><%- thumb(st.preview && st.preview.auto && st.preview.auto.url, '') %></span>
+            <span class="sc-txt"><b><%- t('scov.k.auto') %> <span class="ds-tag"><%- t('scov.default_tag') %></span></b>
+              <span class="ds-meta"><%- t('scov.auto_d') %></span></span>
+          </label>
+        </div>
+
+        <div class="sc-opt" data-kind="gtf"<%- pv('gtf') %>>
           <label class="sc-head"><input type="radio" name="kind" value="gtf"<%= opt('gtf') %>>
             <span class="sc-thumb"><%- thumb(st.gtf && st.gtf.url, '') %></span>
-            <span class="sc-txt"><b><%- t('scov.k.gtf') %> <span class="ds-tag"><%- t('scov.default_tag') %></span></b>
+            <span class="sc-txt"><b><%- t('scov.k.gtf') %></b>
               <span class="ds-meta"><%- st.gtf ? t('scov.gtf_d') : t('scov.gtf_none') %></span>
               <% if (st.gtf && st.gtf_private) { %><span class="ds-meta"><%- t('scov.gtf_private') %></span><% } %></span>
           </label>
         </div>
 
-        <div class="sc-opt<%= st.photo ? '' : ' off' %>" data-kind="photo">
+        <div class="sc-opt<%= st.photo ? '' : ' off' %>" data-kind="photo"<%- pv('photo') %>>
           <label class="sc-head"><input type="radio" name="kind" value="photo"<%= opt('photo') %><%= st.photo ? '' : ' disabled' %>>
             <span class="sc-thumb"><%- thumb(st.photo, '') %></span>
             <span class="sc-txt"><b><%- t('scov.k.photo') %></b><span class="ds-meta"><%- st.photo ? t('scov.photo_d') : t('scov.photo_none') %></span></span>
@@ -113,11 +126,12 @@
           </div>
         </div>
 
-        <div class="sc-opt<%= st.uploads || st.upload ? '' : ' off' %>" data-kind="upload" id="scUpOpt">
+        <div class="sc-opt<%= st.uploads || st.upload ? '' : ' off' %>" data-kind="upload" id="scUpOpt"<%- pv('upload') %>>
           <label class="sc-head"><input type="radio" name="kind" value="upload" id="scUpRadio"<%= opt('upload') %><%= st.upload ? '' : ' disabled' %>>
             <span class="sc-thumb" id="scUpThumb"><%- thumb(st.upload && st.upload.url, '') %></span>
             <span class="sc-txt"><b><%- t('scov.k.upload') %></b><span class="ds-meta"><%- st.uploads ? t('scov.upload_d') : t('scov.upload_off') %></span>
-              <span class="ds-meta" id="scUpState"><%- st.upload ? (st.upload.state === 'held' ? t('scov.upload_held') : t('scov.upload_ok')) : st.removed ? t('scov.upload_removed') : '' %></span></span>
+              <span class="ds-meta" id="scUpState"><%- st.upload ? (st.upload.state === 'held' ? t('scov.upload_held') : t('scov.upload_ok')) : st.removed ? t('scov.upload_removed') : '' %></span>
+              <% if (st.hold) { %><span class="ds-meta"><%- t('scov.upload_hold') %></span><% } %></span>
           </label>
           <div class="sc-more">
             <% if (st.uploads) { %>
@@ -132,7 +146,7 @@
           </div>
         </div>
 
-        <div class="sc-opt" data-kind="card">
+        <div class="sc-opt" data-kind="card"<%- pv('card') %>>
           <label class="sc-head"><input type="radio" name="kind" value="card"<%= opt('card') %>>
             <span class="sc-thumb"><span aria-hidden="true"><%= letter %></span></span>
             <span class="sc-txt"><b><%- t('scov.k.card') %></b><span class="ds-meta"><%- t('scov.card_d') %></span></span>
@@ -153,4 +167,4 @@
     </ul>
   </section>
 </main>
-<script src="/public/js/stage-cover.js?v=1" defer></script>
+<script src="/public/js/stage-cover.js?v=2" defer></script>

@@ -1681,6 +1681,12 @@ async function dmBlocked(login, userId) {
       [me, ...ids, me, ...ids])).length > 0;
   } catch (e) { return !/no such table/i.test(String(e && e.message)); }
 }
+/** 1.99?? stage cover review fix (PRIV-2): has this person blocked the viewer - from their cam (camviewers) or in DMs (either way)?
+ *  (Not a cam-mode refusal like "members only": those still see the person's cover.) Fails closed. */
+async function personBlocks(login, userId) {
+  try { if (CV().blocked(login, userId)) return true; } catch (e) { return true; }
+  return dmBlocked(login, userId);
+}
 /** The viewer reported this tile (⚑): it's hidden for them (DF-31). */
 function hiddenFor(roomId, userId, login, t = now()) {
   const m = HIDE.get(String(roomId) + "|" + String(userId));
@@ -1905,8 +1911,9 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     if (watch === "ok" && x.video === "still" && (await blockedHere(snap.roomId, String(userId), t, "snapshots"))) watch = "blocked";
     // 1.99?? stage cover (stagecover.js): the picture a card shows while there's no live one - the person's choice (Settings ->
     // 🎙 Stage cover), by default their GTF avatar, then their profile photo, else the letter (avatar null). Only for a tile shown BY
-    // NAME (a veiled one is a cover above and never reaches this); none on a tile this viewer reported or is blocked from here
-    const cv = watch === "hidden" || watch === "blocked" ? null : await coverOf(x.login);
+    // NAME (a veiled one is a cover above and never reaches this); none on a tile this viewer reported or is blocked from here, and
+    // (review fix PRIV-2) none for a viewer the PERSON blocked - from their cam (camviewers) or in DMs (either way): the letter
+    const cv = watch === "hidden" || watch === "blocked" || (watch === "unavailable" && (await personBlocks(x.login, String(userId)))) ? null : await coverOf(x.login);
     src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: cv ? cv.url : null, ...(cv ? { ck: cv.k } : {}),
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,
                video: x.video, why: x.video === "card" ? x.why || "full" : null, watch,

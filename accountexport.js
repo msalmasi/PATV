@@ -173,8 +173,9 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("account", "language", rows("user_language", "userId = ?", [uid]));
   await put("account", "time_zone", rows("user_timezone", "userId = ?", [uid]));
   await put("account", "profile_layout", rows("profile_layout", "user_id = ?", [uid]));
-  // 1.99??: the 🎙 stage cover choice (stagecover.js) - the kind, the sticker, the uploaded picture's state (its file name is not a link)
-  await put("account", "stage_cover", rows("stage_covers", "user_id = ?", [uid], { omit: ["upload_log"] }));
+  // 1.99??: the 🎙 stage cover choice (stagecover.js) - the kind, the sticker, the uploaded picture's state (its file name is not a link),
+  // an upload hold after a take-down (hold_until, strikes); not the safety check's id or the picture's hash
+  await put("account", "stage_cover", rows("stage_covers", "user_id = ?", [uid], { omit: ["upload_log", "upload_hash"] }));
   await put("account", "terms", Promise.resolve({ version: u.terms_accepted_version || null, at: u.terms_accepted_at || null }));
   // adultgate site: the one-time age confirmation (users.age_confirmed_at, ms + the wording's version) + the 18+ creator-content one
   // (creators age_attest)
