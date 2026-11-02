@@ -986,7 +986,9 @@
       var on = null, bar = null, busy = false, undo = [], timer = null;
       var PR = window.PATVReveal && typeof window.PATVReveal.setState === 'function' ? window.PATVReveal : null;
       function mirror() { if (PR) PR.setState(on); }
-      function pending() { return Array.prototype.slice.call(feedEl.querySelectorAll('.veil-reveal:not([disabled])')); }
+      // (review fix MC-1: a Reveal still waiting is one with a cursor - WP-5's "Save as evidence" button wears .veil-reveal's look
+      // but has none, and counting it sent an empty batch after every chat line and disabled it while that ran)
+      function pending() { return Array.prototype.slice.call(feedEl.querySelectorAll('.veil-reveal[data-reveal]:not([disabled])')); }
       function draw() {
         if (!bar) { bar = el('div', 'veil-banner'); bar.setAttribute('role', 'status'); scrollEl.parentNode.insertBefore(bar, scrollEl); }
         bar.textContent = '';
