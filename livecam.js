@@ -85,7 +85,10 @@
 // back (bot 1.99??) - and it ends as "start_timeout" (never ready: START_MS, and BOT_GRACE_MS after Pepe's first "live") or
 // "relay_lost" (was ready: START_MS after the first nomedia) - both soft, so the mic stage tries again. A stale path list
 // (MediaMTX's API unreachable) changes nothing: Pepe's word counts as before and nothing is ended for it. Every "hasn't been
-// ready for N s" is what the lists saw (missedSince: up to the latest list, never up to now - review F1).
+// ready for N s" is what the lists saw (missedSince: up to the latest list, never up to now - review F1). Neither ends a relay
+// before the restart nomedia asked for has had its chance (restartSpent - review F2): a dead publish Pepe reports live gets
+// its nomedia first, then RESTART_MS for him to act, START_MS for a restart to come live, BOT_GRACE_MS of lists for the
+// restarted publish - capped at RESTART_CAP_MS after the first nomedia / START_CAP_MS after the hold.
 //
 // Path names share the room-audio family on MediaMTX (deploy/webrtc/mediamtx.yml "~^(room|stgr)-[0-9a-f]{16}$"), so no
 // MediaMTX change is needed: prod "room-<16 hex>", staging "stgr-<16 hex>", an HMAC of "live-cam-path:<room>|<login>"
@@ -111,6 +114,12 @@ const SYNC_FRESH_MS = 15 * 1000;
 const NOMEDIA_MS = 15 * 1000;
 const LOST_MS = 20 * 1000;              // ...for a relay that WAS ready (then "relay_lost" START_MS after the first nomedia)
 const BOT_GRACE_MS = 15 * 1000;         // a never-ready relay Pepe reported live ends no sooner than this after his first "live"
+// 1.99?? dead relay review (F2): a nomedia restart moves those deadlines - Pepe acts on it within RESTART_MS (his next poll ends
+// that publish), a restart that isn't live yet gets START_MS (like a fresh open), a restarted publish BOT_GRACE_MS of lists -
+// and a relay's restarts never hold it past RESTART_CAP_MS after the first nomedia (START_CAP_MS after the hold, never ready)
+const RESTART_MS = 10 * 1000;
+const RESTART_CAP_MS = 2 * START_MS;
+const START_CAP_MS = 3 * START_MS;
 const EXACT_REFUSAL_SLACK_MS = 3 * 1000;   // mfix review: refused[].age is measured when Pepe sends it (his poll's round trip)
 const AUDIT = "livecam_cfg";
 
@@ -333,8 +342,8 @@ function newSess(R, login, m, t) {
               wantUntil: t + cfg().linger_s * 1000, liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null,
               // 1.99?? dead relay: liveAt = MediaMTX had the stream; botLiveAt = Pepe's first "live"; botLiveSince = his current
               // live streak (a restart / a new publisher starts it over); missSince = fresh path lists without it since;
-              // nomediaAt = the first want[].nomedia of this loss
-              botLiveAt: 0, botLiveSince: 0, botRestarts: 0, missSince: 0, nomediaAt: 0,
+              // nomediaAt = the first want[].nomedia of this loss; botDownAt = when his last live streak ended (review F2)
+              botLiveAt: 0, botLiveSince: 0, botRestarts: 0, missSince: 0, nomediaAt: 0, botDownAt: 0,
               ended: 0, endWhy: null, holds: new Set(), lastHolds: null, mf: false, stageViewers: new Map(),
               sid: crypto.randomBytes(6).toString("hex") };   // mfix: this session's id (want[].sid -> refused[] / live[])
   SESS.set(S.key, S);
@@ -430,16 +439,33 @@ const syncFresh = (t = now()) => SYNC_AT > 0 && t - SYNC_AT <= SYNC_FRESH_MS;
  *  stream arrived). 0 = the latest list had it. */
 const missedSince = (S, from = 0) => (S.missSince ? SYNC_AT - Math.max(S.missSince, from || 0) : 0);
 /** Never live within START_MS? Pepe never said live: as before. Pepe said live: only on a fresh path list, after the lists
- *  have shown no stream for NOMEDIA_MS, BOT_GRACE_MS of them after his first "live" (a slow but real open isn't cut). */
+ *  have shown no stream for NOMEDIA_MS, BOT_GRACE_MS of them after his first "live" (a slow but real open isn't cut) - and
+ *  (review F2) a dead publish he reports live gets its restart (want[].nomedia) first, and that restart its chance
+ *  (restartSpent), at most until START_CAP_MS after the hold. */
 function startOver(S, t) {
   if (S.liveAt || t - S.createdAt <= START_MS) return false;
   if (!S.botLiveAt) return true;
-  return syncFresh(t) && missedSince(S) >= NOMEDIA_MS && missedSince(S, S.botLiveAt) >= BOT_GRACE_MS;
+  if (!syncFresh(t) || missedSince(S) < NOMEDIA_MS || missedSince(S, S.botLiveAt) < BOT_GRACE_MS) return false;
+  if (t - S.createdAt > START_CAP_MS) return true;
+  if (!S.nomediaAt) return !(S.botLiveSince && botOk(t));   // he's live on it: his next poll gets the nomedia (forBot)
+  return restartSpent(S, t);
 }
 /** A relay that WAS ready lost its stream, Pepe was asked to restart it (nomediaAt) and the lists still don't have it
- *  START_MS later. */
+ *  START_MS later - nor once his restart has had its chance (review F2). */
 function lostOver(S, t) {
-  return !!(S.liveAt && S.nomediaAt && S.missSince > 0 && syncFresh(t) && SYNC_AT - S.nomediaAt > START_MS);
+  return !!(S.liveAt && S.nomediaAt && S.missSince > 0 && syncFresh(t) && SYNC_AT - S.nomediaAt > START_MS && restartSpent(S, t));
+}
+/** 1.99?? dead relay review (F2): has the restart Pepe was asked for (nomediaAt, the first of this loss) had its chance? Not
+ *  within RESTART_MS (he acts on his next poll). Not live yet (backoff / starting): START_MS from when he went down, like a
+ *  fresh open. Still the publish he was asked to end (an older Pepe ignores nomedia): yes. A restarted publish: once the lists
+ *  have shown BOT_GRACE_MS without it since its "live". Never past RESTART_CAP_MS. */
+function restartSpent(S, t) {
+  const since = t - S.nomediaAt;
+  if (since > RESTART_CAP_MS) return true;
+  if (since <= RESTART_MS) return false;
+  if (!S.botLiveSince) return !S.botDownAt || t - S.botDownAt > START_MS;
+  if (S.botLiveSince <= S.nomediaAt) return true;
+  return missedSince(S, S.botLiveSince) >= BOT_GRACE_MS;
 }
 /** Pepe reports this relay live (botLive: on this poll), but the fresh path lists haven't had its stream for NOMEDIA_MS (LOST_MS
  *  for one that was ready) - NOMEDIA_MS of them since his latest (re)start's "live". -> true = want[].nomedia */
@@ -1063,7 +1089,7 @@ async function forBot(body, t = now()) {
     if (S.botState === "live") {
       if (!S.botLiveAt) S.botLiveAt = t;
       if (!S.botLiveSince || prevState !== "live" || restarts !== S.botRestarts) S.botLiveSince = t;
-    } else S.botLiveSince = 0;
+    } else liveEnded(S, t);
     S.botRestarts = restarts;
     const wasExact = S.botInfo ? S.botInfo.exact : null;
     if (S.mf && wasExact !== (typeof x.exact === "boolean" ? x.exact : null)) exactMoved.push(S);
@@ -1079,7 +1105,7 @@ async function forBot(body, t = now()) {
       else if (TERMINAL.has(why)) endSession(S, why, t);
     }
   }
-  for (const S of SESS.values()) if (!S.ended && !seen.has(S.key)) S.botLiveSince = 0;   // 1.99??: not on his report = not live now
+  for (const S of SESS.values()) if (!S.ended && !seen.has(S.key)) liveEnded(S, t);   // 1.99??: not on his report = not live now
   for (const S of exactMoved) {
     if (S.ended) continue;
     try { require("./micfollow").onExact(S.roomId, S.login); } catch (e) { /* no mic follows */ }
@@ -1169,6 +1195,8 @@ function noteSync(items, t = now()) {
   }
   for (const S of SESS.values()) if (!seen.has(S.key)) { S.ready = false; S.readers = 0; S.seenAt = t; noteMiss(S, false, streak, t); }
 }
+/** 1.99?? dead relay: Pepe isn't live on this relay now (review F2: botDownAt - when a restart's START_MS starts). */
+function liveEnded(S, t) { if (S.botLiveSince) S.botDownAt = t; S.botLiveSince = 0; }
 /** 1.99?? dead relay: since when fresh path lists have gone without this relay's stream (0 = it's there). */
 function noteMiss(S, ready, streak, t) {
   if (ready) { S.missSince = 0; S.nomediaAt = 0; return; }

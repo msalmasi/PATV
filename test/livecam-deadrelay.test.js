@@ -105,10 +105,12 @@ test("BOT_GRACE_MS: a slow open Pepe reports live late (+35 s) isn't cut at +40 
   const S = sess("ben"), t0 = S.createdAt;
   await run(t0, 1, 49, { pepeAt: (s) => (s >= 35 ? { ben: {} } : {}), syncAt: () => [] });
   assert.ok(!S.ended, "+49 s: still in the grace after Pepe's first 'live' at +35 s");
-  await run(t0, 50, 52, { pepeAt: () => ({ ben: {} }), syncAt: () => [], stop: () => S.ended });
+  // (review F1: judged on the lists - the one at +50 s is the first with 15 s of them after his "live": nomedia then; review
+  // F2: he gets RESTART_MS to act on it - this Pepe ignores it, like an older one - so it ends 10 s after that)
+  const answers = await run(t0, 50, 70, { pepeAt: () => ({ ben: {} }), syncAt: () => [], stop: () => S.ended });
+  assert.equal(firstNomedia(answers, "ben"), 50, "asked to restart it on the +50 s list - not ended before he could");
   assert.ok(S.ended && S.endWhy === "start_timeout", `then start_timeout (${S.endWhy})`);
-  // (review F1: judged on the lists - the one at +50 s is the first with 15 s of them after his "live")
-  assert.equal(S.ended, t0 + 50 * 1000);
+  assert.equal(S.ended, t0 + 61 * 1000, "RESTART_MS after the nomedia");
 });
 
 test("control: MediaMTX has the stream - live (liveAt is MediaMTX's moment, not Pepe's report), never ended, no nomedia", async () => {
@@ -251,4 +253,106 @@ test("review F1: a path list taken just before MediaMTX had the stream, then its
   const c = await runMs("gil", { lists: [0.5, 5.5, 10.5, 15.5, 20.5, 25.5, 30.5, 35.5, 40.5, 45.5, 50.5, 55.5], readyAt: 5.8, upto: 60, pepeAt: (s) => (s >= 5 ? { gil: {} } : {}) });
   assert.deepEqual(c.nomedia, []);
   assert.ok(!c.S.ended && c.S.liveAt === c.t0 + 10500, "live from the list at +10.5 s");
+});
+
+/**
+ * Second by second from the hold to `upto` s: MediaMTX's list every 5 s (`ready(s)` - the stream in it), then Pepe's poll
+ * (`bot(s, nomedia)` -> his entry for this relay or null; `nomedia` = the polls so far whose answer asked him to restart it).
+ * -> {S, t0, nomedia}
+ */
+async function drive(login, { bot, ready, upto, holder = MFH }) {
+  fresh();
+  await pepe({});
+  await LC.stageHold(R, login, holder, T, holder === MFH ? { mf: true } : undefined);
+  const S = sess(login), t0 = S.createdAt, nomedia = [];
+  for (let s = 1; s <= upto && !S.ended; s++) {
+    T = t0 + s * 1000;
+    if (s % 5 === 0) mtx(...(ready(s) ? [login] : []));
+    const x = bot(s, nomedia);
+    const w = wantOf(await pepe(x ? { [login]: x } : {}), login);
+    if (w && w.nomedia) nomedia.push(s);
+  }
+  return { S, t0, nomedia };
+}
+/**
+ * A NEW Pepe (bot 1.99??): live on the relay from `firstLive` s. A want[].nomedia ends that publish (at most once per 20 s, never
+ * mid-restart): "live" on his next 2 polls (_end_procs), "backoff" backoffs[n] s, "starting" 2 s, then live again (restarts
+ * n+1). bot.lives = the s each publish came live.
+ */
+function newPepe(firstLive, backoffs = [1]) {
+  let r = 0, kick = null, lastKick = -1e9, liveFrom = firstLive, seen = 0;
+  const lives = [firstLive];
+  const bot = (s, nm) => {
+    if (s < firstLive) return null;
+    if (nm.length > seen) {
+      const k = nm[nm.length - 1];
+      seen = nm.length;
+      if (kick == null && k - lastKick >= 20) { kick = k; lastKick = k; }
+    }
+    if (kick != null) {
+      const d = s - kick, b = backoffs[Math.min(r, backoffs.length - 1)];
+      if (d <= 2) return { restarts: r };
+      if (d <= 2 + b) return { state: "backoff", restarts: r + 1 };
+      if (d <= 4 + b) return { state: "starting", restarts: r + 1 };
+      r++; kick = null; liveFrom = s; lives.push(s);
+    }
+    return { restarts: r };
+  };
+  bot.lives = lives;
+  return bot;
+}
+
+test("review F2/R1: a slow first 'live' (+20 s / +25 s) on a one-sided publish - Pepe's nomedia restart comes up healthy just after START_MS: it goes live, not start_timeout", async () => {
+  for (const firstLive of [3, 12, 16, 20, 25]) {
+    const bot = newPepe(firstLive);
+    const r = await drive("ann", { bot, ready: (s) => bot.lives.length > 1 && s >= bot.lives[1] + 1, upto: 90 });
+    const at = `first live +${firstLive} s, nomedia ${JSON.stringify(r.nomedia)}, restarted live +${bot.lives[1]} s`;
+    assert.ok(r.nomedia.length > 0, at + ": asked to restart the dead publish");
+    assert.ok(!r.S.ended, `${at}: not cut while the restart came up (ended ${r.S.endWhy} +${(r.S.ended - r.t0) / 1000} s)`);
+    assert.ok(r.S.liveAt > r.t0 + bot.lives[1] * 1000, at + ": live on MediaMTX's word, from the restarted publish");
+    assert.equal(LC.stageState(MFH, T).state, "live");
+  }
+});
+
+test("review F2: the restarted publish is one-sided again - start_timeout once the lists show 15 s without it after its 'live' (one restart for a relay that was never live)", async () => {
+  const bot = newPepe(3);
+  const r = await drive("ben", { bot, ready: () => false, upto: 90 });
+  assert.deepEqual(r.nomedia, [20, 21, 22], "asked on the +20 s list, and while that publish still ran - never for the restarted one");
+  assert.equal(bot.lives[1], 26, "his restart was live at +26 s");
+  assert.equal(r.S.endWhy, "start_timeout");
+  assert.equal(r.S.ended, r.t0 + 45 * 1000, "on the +45 s list - 15 s of lists after the restart's 'live' (+26 s)");
+});
+
+test("review F2: a restart that never comes live again (stuck in backoff) ends START_MS after Pepe went down - not at the hold's START_MS", async () => {
+  const bot = newPepe(3, [1000]);
+  const r = await drive("cat", { bot, ready: () => false, upto: 90 });
+  assert.equal(r.nomedia[0], 20);
+  assert.equal(r.S.endWhy, "start_timeout");
+  assert.equal(r.S.ended, r.t0 + 64 * 1000, "down at +23 s (backoff): ended once START_MS had passed since then");
+});
+
+test("review F2: a ready relay that lost its stream - the second restart is still in its backoff at nomedia + START_MS: not relay_lost; live again once MediaMTX has it", async () => {
+  // ready +5..+55, lost from +60; nomedia +80 -> restart 1 live +86 (one-sided again); nomedia +105 -> restart 2 backs off
+  // 20 s (live +130), MediaMTX has it from +131
+  const bot = newPepe(2, [1, 20]);
+  const r = await drive("dot", { bot, ready: (s) => (s >= 5 && s < 60) || (bot.lives.length > 2 && s >= bot.lives[2] + 1), upto: 150, holder: "slot-dot" });
+  assert.ok(!r.S.ended, `not cut at +125 s while the restart backed off (ended ${r.S.endWhy} +${(r.S.ended - r.t0) / 1000} s)`);
+  assert.deepEqual([r.nomedia[0], r.nomedia.find((s) => s > 86)], [80, 105], "two restarts asked " + JSON.stringify(r.nomedia));
+  assert.deepEqual(bot.lives, [2, 86, 130]);
+  assert.ok(r.S.ready && r.S.missSince === 0 && r.S.nomediaAt === 0, "back on MediaMTX: nothing missing, nothing asked");
+  assert.equal(LC.stageState("slot-dot", T).state, "live");
+});
+
+test("review F2: the caps - a publish that keeps restarting on its own never holds a never-ready relay past RESTART_CAP_MS after the nomedia, nor START_CAP_MS after the hold", async () => {
+  // after the nomedia (+20 s) his publisher restarts itself every 10 s (a new restart count, never 15 s of lists after one)
+  const flap = (s, nm) => (s < 3 ? null : { restarts: nm.length && s > nm[0] ? 1 + Math.floor((s - nm[0] - 1) / 10) : 0 });
+  const a = await drive("eve", { bot: flap, ready: () => false, upto: 150 });
+  assert.equal(a.nomedia[0], 20);
+  assert.equal(a.S.endWhy, "start_timeout");
+  assert.equal(a.S.ended, a.t0 + 101 * 1000, "RESTART_CAP_MS (80 s) after the nomedia");
+  // he restarts himself every 10 s from the start: no nomedia is ever due, the relay is held until START_CAP_MS (120 s)
+  const b = await drive("fox", { bot: (s) => (s < 3 ? null : { restarts: Math.floor((s - 3) / 10) }), ready: () => false, upto: 150 });
+  assert.deepEqual(b.nomedia, []);
+  assert.equal(b.S.endWhy, "start_timeout");
+  assert.equal(b.S.ended, b.t0 + 121 * 1000, "START_CAP_MS after the hold");
 });
