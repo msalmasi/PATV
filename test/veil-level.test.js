@@ -10,7 +10,9 @@
 // The next hidden sighting is alias-less (the masked form, "someone" with a bar) - never the incognito name.
 // (C) a mid-hold release (spec B.2 / B.4): a hold that began NAMED whose holder went private mid-hold is "someone dropped the mic" -
 //     never dropped for everyone (staging bridge_feed 157841: the unresolved holder's anonymous release), never named, never the hold id.
-//   node --test test/veil-level.test.js
+// (D) the bot's REAL batches (PEPE_BOT_DIR, micveil_test.py --dump): a !bridge hide 0x16 holder whose display isn't their login is never
+//     named in the mic list, the feed or the stage program, on v1 or v2.
+//   node --test test/veil-level.test.js        (PEPE_BOT_DIR=<camfrog-bot checkout> for the cross-check)
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -215,5 +217,52 @@ test("C: a resolved holder who grabbed named and went incognito / hidden mid-hol
     assert.notEqual(p, "out", `${kind}: shown`);
     assert.ok(o.u.anon && o.u.display === "someone" && !o.u.alias && o.hold === undefined, `${kind}: 'someone', no frog name, no hold`);
     assert.ok(!JSON.stringify(o).includes(login) && !JSON.stringify(o).includes(login.toUpperCase()), `${kind}: never named`);
+  }
+});
+
+// ── (D) + (C) cross-check with the bot's REAL builders (PEPE_BOT_DIR: micveil_test.py --dump) ──
+test("D + C cross-check (PEPE_BOT_DIR): the bot's real batches - a !bridge hide 0x16 holder whose display isn't their login, an unresolved mid-hold release - on v1 and v2: never named in the mic list, the feed or the stage program; on v2 the release is 'someone dropped the mic'", async (t) => {
+  const botDir = process.env.PEPE_BOT_DIR;
+  if (!botDir || !fs.existsSync(path.join(botDir, "micveil_test.py"))) { t.skip("PEPE_BOT_DIR (a camfrog-bot checkout) isn't set"); return; }
+  await setup;
+  const { execFileSync } = require("child_process");
+  const py = process.env.PYTHON || (process.platform === "win32" ? "python" : "python3");
+  const d = JSON.parse(execFileSync(py, [path.join(botDir, "micveil_test.py"), "--dump", "Cross.Room"],
+                                    { cwd: botDir, encoding: "utf8", maxBuffer: 32 << 20, env: Object.assign({}, process.env, { PYTHONIOENCODING: "utf-8" }) }));
+  const NAMES = /hankreal|hank w/i;
+  const MF = require(path.join(repo, "micfollow"));
+  for (const v of ["v1", "v2"]) {
+    const rid = "Cross.Room." + v;
+    for (const step of d[v].steps) {
+      await bridge.ingest({ events: step[v], rooms: step.snap ? [step.snap[v]] : [], bridge_hidden_h: [hash("hank"), hash("hankreal")],
+                            incog_hidden_h: [] }, { v2: v === "v2" });
+      await settle(20);
+      const Rx = bridge._rooms.get(rid);
+      if (!Rx) continue;
+      // the stored / served room state (enumerable fields: what a page, a snapshot row or an API answer can carry)
+      assert.ok(!NAMES.test(JSON.stringify({ members: Rx.members, mic: Rx.mic, feed: Rx.feed })), `${v}: the room state never names them`);
+      for (const e of [...(Rx.mic || []), ...(Rx.members || [])]) {
+        if (e && e._vz && NAMES.test(String(e._vz.login) + " " + String(e._vz.display))) assert.equal(e.anon, true, `${v}: their entry stays anonymous`);
+      }
+      // the feed as a page gets it
+      const page = CV.dress(Rx.feed.filter((it) => CV.privacyOf(it) !== "out"), { view: null });
+      assert.ok(!NAMES.test(JSON.stringify(page)), `${v}: no page line names them`);
+      // the stage program: holdersOf (who mic follows stages / counts) never has them as a named holder
+      const H = MF.holdersOf(Rx);
+      assert.ok(!H.holders.some((x) => NAMES.test(x.login)), `${v}: never a staged holder`);
+      assert.ok(!NAMES.test(JSON.stringify(H.others)) && !NAMES.test(JSON.stringify(H.covers.map((c) => ({ key: c.key, alias: c.alias })))),
+                `${v}: nor on the neutral card / a cover's public fields`);
+    }
+    const Rx = bridge._rooms.get(rid);
+    const rel = Rx.feed.filter((it) => it.k === "unmic" && it.u && it.u.anon && !it._vz).pop();
+    assert.ok(rel, `${v}: the unresolved holder's release reached the feed`);
+    if (v === "v2") {
+      assert.equal(CV.privacyOf(rel), "anon", "v2: the unresolved mid-hold release is shown - 'someone dropped the mic'");
+      const o = CV.dress([rel], { view: null })[0];
+      assert.ok(o.u.display === "someone" && o.hold === undefined && !/zqecho/i.test(JSON.stringify(o)), "v2: plain 'someone', no hold, no name");
+    } else {
+      assert.equal(CV.privacyOf(rel), "out", "v1: today's rule (an unpaired anonymous drop stays out) - unchanged");
+    }
+    assert.ok(Rx.feed.some((it) => it.k === "mic" && it.u && it.u.login === "zqechohold"), `${v}: (its grab went out named - it began named)`);
   }
 });
