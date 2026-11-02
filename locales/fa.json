@@ -4647,6 +4647,7 @@
   "js.stage.mf.group_aria_pins": "پین‌شده روی صحنه: {n}",
   "js.stage.mf.starting": "دوربین در حال شروع…",
   "js.stage.mf.reconnecting": "در حال اتصال دوباره…",
+  "js.stage.mf.resuming": "در حال ادامه…",
   "js.stage.mf.cam_off": "دوربین خاموش",
   "js.stage.mf.full": "دوربین‌های زنده الان پُرند",
   "js.stage.mf.members_only": "فقط برای اعضا",

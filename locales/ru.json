@@ -4791,6 +4791,7 @@
   "js.stage.mf.group_aria_pins": "Закреплено на сцене: {n}",
   "js.stage.mf.starting": "камера запускается…",
   "js.stage.mf.reconnecting": "переподключение…",
+  "js.stage.mf.resuming": "возобновление…",
   "js.stage.mf.cam_off": "камера выключена",
   "js.stage.mf.full": "живые камеры сейчас заняты",
   "js.stage.mf.members_only": "только для участников",

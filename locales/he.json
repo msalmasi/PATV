@@ -4720,6 +4720,7 @@
   "js.stage.mf.group_aria_pins": "מוצמדים על הבמה: {n}",
   "js.stage.mf.starting": "המצלמה מתחילה…",
   "js.stage.mf.reconnecting": "מתחבר מחדש…",
+  "js.stage.mf.resuming": "ממשיך…",
   "js.stage.mf.cam_off": "המצלמה כבויה",
   "js.stage.mf.full": "המצלמות החיות מלאות כרגע",
   "js.stage.mf.members_only": "רק לחברים",

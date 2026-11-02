@@ -4933,6 +4933,7 @@
   "js.stage.mf.group_aria_pins": "مثبّت على المسرح: {n}",
   "js.stage.mf.starting": "الكاميرا تبدأ…",
   "js.stage.mf.reconnecting": "إعادة الاتصال…",
+  "js.stage.mf.resuming": "جارٍ الاستئناف…",
   "js.stage.mf.cam_off": "الكاميرا مغلقة",
   "js.stage.mf.full": "كاميرات البث ممتلئة الآن",
   "js.stage.mf.members_only": "للأعضاء فقط",

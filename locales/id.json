@@ -4578,6 +4578,7 @@
   "js.stage.mf.group_aria_pins": "Disematkan di panggung: {n}",
   "js.stage.mf.starting": "kamera sedang dimulai…",
   "js.stage.mf.reconnecting": "menyambung ulang…",
+  "js.stage.mf.resuming": "melanjutkan…",
   "js.stage.mf.cam_off": "kamera mati",
   "js.stage.mf.full": "kamera live sedang penuh",
   "js.stage.mf.members_only": "khusus member",

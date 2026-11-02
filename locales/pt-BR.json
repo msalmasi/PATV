@@ -4683,6 +4683,7 @@
   "js.stage.mf.group_aria_pins": "Fixados no palco: {n}",
   "js.stage.mf.starting": "câmera iniciando…",
   "js.stage.mf.reconnecting": "reconectando…",
+  "js.stage.mf.resuming": "retomando…",
   "js.stage.mf.cam_off": "câmera desligada",
   "js.stage.mf.full": "as câmeras ao vivo estão lotadas agora",
   "js.stage.mf.members_only": "só para membros",

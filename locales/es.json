@@ -4683,6 +4683,7 @@
   "js.stage.mf.group_aria_pins": "Fijadas en el escenario: {n}",
   "js.stage.mf.starting": "la cámara se está iniciando…",
   "js.stage.mf.reconnecting": "reconectando…",
+  "js.stage.mf.resuming": "reanudando…",
   "js.stage.mf.cam_off": "cámara apagada",
   "js.stage.mf.full": "las cámaras en vivo están llenas ahora mismo",
   "js.stage.mf.members_only": "solo para miembros",

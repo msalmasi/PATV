@@ -4578,6 +4578,7 @@
   "js.stage.mf.group_aria_pins": "Được ghim trên sân khấu: {n}",
   "js.stage.mf.starting": "cam đang khởi động…",
   "js.stage.mf.reconnecting": "đang kết nối lại…",
+  "js.stage.mf.resuming": "đang tiếp tục…",
   "js.stage.mf.cam_off": "cam đã tắt",
   "js.stage.mf.full": "cam trực tiếp hiện đã đầy",
   "js.stage.mf.members_only": "chỉ dành cho thành viên",

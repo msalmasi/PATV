@@ -4683,6 +4683,7 @@
   "js.stage.mf.group_aria_pins": "Épinglés sur la scène : {n}",
   "js.stage.mf.starting": "cam en cours de lancement…",
   "js.stage.mf.reconnecting": "reconnexion…",
+  "js.stage.mf.resuming": "reprise…",
   "js.stage.mf.cam_off": "cam coupée",
   "js.stage.mf.full": "les cams en direct sont pleines pour l'instant",
   "js.stage.mf.members_only": "réservé aux membres",

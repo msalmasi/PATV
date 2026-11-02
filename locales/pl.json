@@ -4791,6 +4791,7 @@
   "js.stage.mf.group_aria_pins": "Przypięte na scenie: {n}",
   "js.stage.mf.starting": "kamera się włącza…",
   "js.stage.mf.reconnecting": "ponowne łączenie…",
+  "js.stage.mf.resuming": "wznawianie…",
   "js.stage.mf.cam_off": "kamera wyłączona",
   "js.stage.mf.full": "kamery na żywo są teraz pełne",
   "js.stage.mf.members_only": "tylko dla członków",

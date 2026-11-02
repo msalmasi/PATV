@@ -4649,6 +4649,7 @@
   "js.stage.mf.group_aria_pins": "Auf der Bühne angepinnt: {n}",
   "js.stage.mf.starting": "Kamera startet…",
   "js.stage.mf.reconnecting": "verbinde neu…",
+  "js.stage.mf.resuming": "wird fortgesetzt…",
   "js.stage.mf.cam_off": "Kamera aus",
   "js.stage.mf.full": "Die Live-Kameras sind gerade voll",
   "js.stage.mf.members_only": "nur für Mitglieder",

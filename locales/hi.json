@@ -4649,6 +4649,7 @@
   "js.stage.mf.group_aria_pins": "स्टेज पर पिन किए गए: {n}",
   "js.stage.mf.starting": "कैम शुरू हो रहा है…",
   "js.stage.mf.reconnecting": "फिर से जुड़ रहा है…",
+  "js.stage.mf.resuming": "फिर से शुरू हो रहा है…",
   "js.stage.mf.cam_off": "कैम बंद",
   "js.stage.mf.full": "अभी लाइव कैम भरे हुए हैं",
   "js.stage.mf.members_only": "सिर्फ़ सदस्यों के लिए",

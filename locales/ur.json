@@ -4649,6 +4649,7 @@
   "js.stage.mf.group_aria_pins": "اسٹیج پر پن کیا گیا: {n}",
   "js.stage.mf.starting": "کیم شروع ہو رہا ہے…",
   "js.stage.mf.reconnecting": "دوبارہ کنیکٹ ہو رہا ہے…",
+  "js.stage.mf.resuming": "دوبارہ شروع ہو رہا ہے…",
   "js.stage.mf.cam_off": "کیم بند",
   "js.stage.mf.full": "لائیو کیمز ابھی بھرے ہوئے ہیں",
   "js.stage.mf.members_only": "صرف ممبرز کے لیے",
