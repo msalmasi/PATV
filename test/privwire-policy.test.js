@@ -154,10 +154,10 @@ test("WP-5: terms.js dates /privacy by the evidence switch's first ON too (evide
 // 1.99?? S1 (owner answers Q5 / Q6 / Q7, 2026-11-02): the name still shows, only the words are blacked out, members can still clip the
 // audio (never the words), administrators and the pad's owner can reveal the words (logged); earlier mic transcripts stay left out
 const TXB_SENTENCES = [
-  " If you type <code>!transcripts off</code>, your name still shows, but the words of your mic transcripts are blacked out. Administrators and the pad's owner can reveal the words, and every reveal is logged.",
-  "With <code>!transcripts off</code>, your name still shows (your frog name if you're incognito), but the words of your mic transcripts are a blacked-out bar for everyone else. They can't be searched or quoted. Only the pad's owner and PATV administrators can reveal the words, and each reveal is logged. While it's on, your earlier mic transcripts are left out.",
+  " If you type <code>!transcripts off</code>, your name still shows, but the words of your mic transcripts are blacked out. Members can still clip the audio, but never see the words. Administrators and the pad's owner can reveal the words, and every reveal is logged.",
+  "With <code>!transcripts off</code>, your name still shows (your frog name if you're incognito), but the words of your mic transcripts are a blacked-out bar for everyone else. They can't be searched or quoted. Only the pad's owner and PATV administrators can reveal the words, and each reveal is logged. Your mic transcripts from before you turned transcripts off are left out until you turn them back on.",
   " Mic transcripts said with <code>!transcripts off</code> before 3 November 2026 stay left out.",
-  " Neither mutes your voice in the room's audio. <code>!transcripts off</code> blacks out only the words of your mic transcripts; your name still shows. See",
+  " Neither mutes your voice in the room's audio. <code>!transcripts off</code> blacks out only the words of your mic transcripts; your name still shows. Members can still clip the audio, but never see the words. See",
   "<li><b><code>!transcripts off</code> blacks out only your words on the mic:</b> your name still shows (your frog name if you're incognito or hidden), but your mic transcripts show on the website as a blacked-out bar. Your typed lines and your mic grabs and drops show as usual. Members can still clip the audio of your mic turns, but never see the words. Only PATV administrators and a pad's owner (in their own pad, for lines said while they own it) can reveal the words, and every reveal is logged.",
   "<li><b>3 November 2026:</b> <code>!transcripts off</code> (sections 3 and 10): your mic transcripts now show on the website instead of being left out. Your name still shows; only the words are blacked out. Members can still clip the audio, but never see the words. PATV administrators and a pad's owner can reveal the words, for moderation (each reveal logged). This applies to mic transcripts said from 3 November 2026; earlier ones stay left out.</li>",
 ];
@@ -173,6 +173,10 @@ test("transcripts bar: its sentences only with privacy wire v2 AND the bar live,
   assert.ok(!on.includes("<code>!transcripts off</code> leaves your mic transcripts out."), "the old chat-history sentence is replaced");
   // 1.99?? S1: nothing of the txbar build's first wording ("without your name", "can't clip") is left
   for (const s of ["without your name", "Members can't clip those mic turns", "members can no longer clip"]) assert.ok(!on.includes(s), "gone: " + s);
+  // 1.99?? RV-4: "While it's on, your earlier mic transcripts are left out." read as "while transcripts are on" - gone; the clip point
+  // is in section 3 and section 10 too (the same sentence as Pepe's replies)
+  assert.ok(!on.includes("While it's on, your earlier mic transcripts"), "RV-4: the misreadable sentence is gone");
+  assert.equal(on.split("Members can still clip the audio, but never see the words.").length - 1, 3, "RV-4: sections 3 and 10 and the change note carry the clip point");
   assert.ok(on.indexOf("<b>3 November 2026:</b> <code>!transcripts off</code>") < on.indexOf("<b>1 November 2026:</b> <a href=\"#incognito\">"), "the newest change note first");
   for (const s of TXB_EVIDENCE) assert.ok(!on.includes(s), "no evidence sentence while evidence clips are off");
   // the approved wave 2 sentences are untouched (the evidence sentence still follows the hidden-clip one)
