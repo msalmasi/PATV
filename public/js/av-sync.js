@@ -262,7 +262,7 @@
   function tileKey(tile) { return tile && typeof tile.id === 'string' ? (tile.anon ? 'anonymous:' : 'tile:') + tile.id : ''; }
   function historyRecord(kind, pad, latest, callback) {
     var key = kind + ':' + pad, record = records[key], now = Date.now();
-    if (!record) record = records[key] = { kind: kind, pad: pad, rows: [], births: Object.create(null), onsets: Object.create(null), latest: null, signature: null, touched: now };
+    if (!record) record = records[key] = { kind: kind, pad: pad, rows: [], births: Object.create(null), latest: null, signature: null, touched: now };
     record.latest = latest; record.callback = callback; record.touched = now;
     var compact, present = Object.create(null);
     if (kind === 'program') {
@@ -276,11 +276,10 @@
       }
       Object.keys(record.births).forEach(function (k) { if (!present[k]) delete record.births[k]; });
     } else {
-      compact = { mic: [], on: Object.create(null), since: Object.create(null) };
+      // 1.99??: review fix (T1, T2) - no onset times any more: the card shows a turn from its grab + the offset to its drop + the offset
+      compact = { mic: [], on: Object.create(null) };
       visitPeople(latest && latest.mic, 'mic', function (person, k) { if (k) { compact.mic.push(k); compact.on[k] = true; } });
       visitPeople(latest && latest.members, 'members', function (person, k) { if (k && person.on_mic) compact.on[k] = true; });
-      Object.keys(compact.on).forEach(function (k) { if (!own.call(record.onsets, k)) record.onsets[k] = now; compact.since[k] = record.onsets[k]; });
-      Object.keys(record.onsets).forEach(function (k) { if (!compact.on[k]) delete record.onsets[k]; });
     }
     var signature = JSON.stringify(compact);
     if (!record.rows.length || record.rows[record.rows.length - 1].signature !== signature) record.rows.push({ at: now, data: compact, signature: signature });
@@ -318,18 +317,15 @@
     if (old && old.override === override && old.fixed === latest.fixed) { out.layout = old.layout; if (own.call(latest, 'dyn')) out.dyn = old.dyn; }
     return out;
   }
-  function qualified(record, row, key, wait, now) {
-    if (!row || !row.data.on[key]) return false;
-    var end = now;
-    for (var i = record.rows.indexOf(row) + 1; i < record.rows.length; i++) { if (!record.rows[i].data.on[key]) { end = record.rows[i].at; break; } }
-    return end - row.data.since[key] >= wait;
-  }
+  // 1.99??: review fix (T1, T2) - the card is held back, never thinned: whoever was on the mic at the moment the view shows (now - the
+  // offset) is on it. The old minimum-hold rule (a turn shorter than the offset never showed) dropped a turn already on screen early
+  // when the offset rose - before its "dropped the mic" line and before the viewer heard it end - and hid short turns whose grab and
+  // drop lines the chat does show.
+  function onAt(row, key) { return !!(row && row.data.on[key]); }
   function mergedMic(record, wait, now) {
     var latest = record.latest; if (!latest) return latest;
     if (!wait) { record.shownAt = now; return latest; }
-    // review fix: a held view uses its own effective delay, so a grab already shown still meets the minimum hold
     var at = shownAt(record, wait, now), out = copy(latest), row = oldRow(record, at), people = Object.create(null);
-    wait = now - at;
     visitPeople(latest.members, 'members', function (person, k, keyless, ordinal) {
       if (k) people[k] = person;
       // Today's public anonymous records have no stable ID. Retain only a generic mic count,
@@ -339,8 +335,8 @@
     });
     visitPeople(latest.mic, 'mic', function (person, k) { if (k) people[k] = person; });
     out.members = [];
-    visitPeople(latest.members, 'members', function (person, k) { var p = copy(person); p.on_mic = qualified(record, row, k, wait, now); out.members.push(p); });
-    out.mic = (row && row.data.mic || []).filter(function (k) { return own.call(people, k) && qualified(record, row, k, wait, now); }).map(function (k) { var p = copy(people[k]); p.on_mic = true; return p; });
+    visitPeople(latest.members, 'members', function (person, k) { var p = copy(person); p.on_mic = onAt(row, k); out.members.push(p); });
+    out.mic = (row && row.data.mic || []).filter(function (k) { return own.call(people, k); }).map(function (k) { var p = copy(people[k]); p.on_mic = true; return p; });
     return out;
   }
   // 1.99??: the mic stage's program follows "Delay mic signs"; the "On the mic" card's view (micView) follows its own switch

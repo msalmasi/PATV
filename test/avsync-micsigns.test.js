@@ -295,6 +295,20 @@ test("1.99??: pad page - the On the mic card and the grab/drop lines wait for th
   assert.deepEqual(P.errors, []);
 });
 
+test("1.99??: review fix (T2) - pad page: a turn shorter than the offset is on the card one offset late, for as long as it lasted - in step with its lines", async () => {
+  const P = await pad();
+  await P.play();
+  await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  await P.advance(500);
+  await P.deliver(P.answer({ feed: [drop(8, ALICE, 500)], mic: [on(BOB)], members: [on(BOB), ALICE, FROG] }));   // a 500 ms turn
+  await P.advance(199); assert.deepEqual(P.card(), ["Bob"]); assert.equal(P.shown(7), false);
+  await P.advance(1); assert.deepEqual(P.card(), ["Bob", "Alice"], "held back, not dropped (today's card shows such a turn too)");
+  assert.equal(P.shown(7), true); assert.equal(P.shown(8), false);
+  await P.advance(499); assert.deepEqual(P.card(), ["Bob", "Alice"]); assert.equal(P.shown(8), false);
+  await P.advance(1); assert.deepEqual(P.card(), ["Bob"]); assert.equal(P.shown(8), true, "off the card with its drop line");
+  assert.deepEqual(P.errors, []);
+});
+
 test("1.99??: pad page - switches off, sync not for this viewer, or no controller at all (signed out): exactly today's page", async () => {
   const script = async (P) => {
     await P.play().catch(() => {});

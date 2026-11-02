@@ -235,7 +235,7 @@ test("C2 micView delays grab/drop and sorting flags, keeps new identity/permissi
   s.config.mods_instant = true; await s.advance(5000); assert.equal(s.api.modsInstant("pad"), true);
 });
 
-test("review fix: C2 people already shown stay when D rises; a grab shorter than the delay still never flashes", async () => {
+test("review fix: C2 people already shown stay when D rises; (1.99??) a grab shorter than the delay shows late for its own length", async () => {
   const s = sandbox(); s.api.pad("pad"); s.media("rtc"); await s.advance(0);
   let shown; const cb = d => { shown = plain(d); };
   s.api.micView("pad", roster([]), cb); await s.advance(1200);
@@ -243,15 +243,22 @@ test("review fix: C2 people already shown stay when D rises; a grab shorter than
   await s.advance(500); assert.equal(shown.mic[0].login, "a"); assert.equal(shown.members[0].on_mic, true);
   await s.advance(300); assert.equal(s.api.debug().indicator_ms, 900);
   assert.equal(shown.mic.length, 1, "not pulled when D rises"); assert.equal(shown.members[0].on_mic, true);
+  // the view held at +1500 since D rose catches up at +2400: b's grab (+2000) shows at +2900, its drop (+2400) at +3300
   shown = plain(s.api.micView("pad", roster(["a", "b"]), cb)); await s.advance(400);
-  shown = plain(s.api.micView("pad", roster(["a"]), cb)); await s.advance(2000);
-  assert.deepEqual(shown.mic.map(p => p.login), ["a"], "b's 400 ms grab never shows"); assert.equal(shown.members[1].on_mic, false);
+  shown = plain(s.api.micView("pad", roster(["a"]), cb)); await s.advance(499);
+  assert.deepEqual(shown.mic.map(p => p.login), ["a"]);
+  await s.advance(1); assert.deepEqual(shown.mic.map(p => p.login), ["a", "b"], "1.99??: b's 400 ms grab is held back, not dropped"); assert.equal(shown.members[1].on_mic, true);
+  await s.advance(399); assert.deepEqual(shown.mic.map(p => p.login), ["a", "b"]);
+  await s.advance(1); assert.deepEqual(shown.mic.map(p => p.login), ["a"], "for as long as it lasted"); assert.equal(shown.members[1].on_mic, false);
 });
 
-test("C2 brief grabs never flash late, same-key veil replacement drops names, and lines retain their insertion order", async () => {
+test("C2 brief grabs show late for their own length (1.99??), same-key veil replacement drops names, and lines retain their insertion order", async () => {
   const s = await gated(); let shown; const cb = d => { shown = plain(d); };
   s.api.micView("pad", roster([]), cb); s.api.micView("pad", roster(["a"]), cb); await s.advance(200);
-  shown = plain(s.api.micView("pad", roster([]), cb)); await s.advance(1000); assert.equal(shown.mic.length, 0, "short canceled grab never appears");
+  shown = plain(s.api.micView("pad", roster([]), cb)); assert.equal(shown.mic.length, 0);
+  await s.advance(500); assert.equal(shown.mic.length, 1, "1.99??: a 200 ms grab shows one offset late");
+  await s.advance(200); assert.equal(shown.mic.length, 0, "and goes 200 ms later, one offset after its drop");
+  await s.advance(300);
   s.api.micView("pad", roster(["a"]), cb); await s.advance(700);
   shown = plain(s.api.micView("pad", { members: [{ login: "a", anon: true, display: "someone", on_mic: true }], mic: [{ anon: true, display: "someone" }] }, cb));
   assert.equal(shown.mic.length, 0, "anonymous key cannot borrow named history"); assert.equal(shown.members[0].display, "someone");
@@ -508,6 +515,23 @@ test("1.99??: held chat lines show in their place once the audio catches up, and
   const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
   const t = mk("t"); s.api.holdLine("pad", t); box.children[0].click(); assert.equal(t.style.display, "", "the viewer's own toggle off");
   box.children[0].click(); const l = mk("l"); s.api.holdLine("pad", l); s.event("pagehide"); assert.equal(l.style.display, "", "leaving the page");
+});
+
+test("1.99??: review fix (T1) - when the offset rises, a turn already on the card stays until its drop catches up - in step with its held drop line", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const host = s.element("div"); s.document.body.appendChild(host);
+  const on = () => shown.mic.map(p => p.login);
+  shown = plain(s.api.micView("pad", roster([]), cb));
+  await s.advance(3800); shown = plain(s.api.micView("pad", roster(["a"]), cb));     // a grabs at +3800 (offset 700)
+  await s.advance(700); assert.deepEqual(on(), ["a"], "on the card at +4500");
+  await s.advance(450); shown = plain(s.api.micView("pad", roster([]), cb));          // and drops at +4950: a 1150 ms turn
+  const dropLine = s.element("div"); host.appendChild(dropLine);
+  assert.equal(s.api.holdLine("pad", dropLine), true, "its drop line is held");
+  s.config.audio.mp3_ms = 2000;                                                        // the settings check at +5000: offset 1700
+  await s.advance(50); assert.equal(s.api.debug().card_ms, 1700); assert.deepEqual(on(), ["a"]);
+  await s.advance(1649); assert.deepEqual(on(), ["a"], "still on at +6649 (the old minimum-hold rule took a off at +5500)");
+  assert.equal(dropLine.style.display, "none");
+  await s.advance(1); assert.deepEqual(on(), [], "off at +6650 = the drop + the new offset"); assert.equal(dropLine.style.display, "", "the same moment as its drop line");
 });
 
 test("1.99??: with only the card / chat switches on, the audio is still measured (not the whole fallback) and the viewer's toggle is offered", async () => {
