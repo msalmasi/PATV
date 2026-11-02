@@ -215,6 +215,7 @@ const RULES = {
   "sb_owned.user_id": M({ key: ["item"] }), "sb_owned.payer_id": M(),
   "sb_reports.user_id": M({ key: ["clip_id"] }),
   "sb_clips.created_by": M(), "sb_clips.subject_login": { deny: NAME },
+  "sb_clips.subject_alias": { deny: "owner 11-02: a J-7 clip's frog name (its public subject), never a userId" },
   "voice_owned.user_id": M({ key: ["voice_id"] }),
   "voices.owner_user_id": M(), "voices.owner_login": { deny: NAME },
   // 1.99ri voiceclone.js: consent records follow the account (the proof of consent / revocation must survive a merge)
