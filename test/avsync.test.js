@@ -234,10 +234,11 @@ test("1.99??: the card and chat-line switches - off by default, strict booleans,
 });
 
 // The admin card (public/js/admin-avsync.js) in a small fake DOM: the two switches with their labels and what each holds back
-function adminCard(viewData) {
+// (review fix C-1: the GETs answer viewData, then each of `later` in turn - a deploy while the page is open; poll() = the 5 s check)
+function adminCard(viewData, ...later) {
   const src = fs.readFileSync(path.join(repo, "public", "js", "admin-avsync.js"), "utf8");
   const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
-  const byId = {}, posts = [];
+  const byId = {}, posts = [], views = [viewData, ...later]; let tick = null, gets = 0;
   class El {
     constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.style = {}; this.listeners = {}; this.text = ""; this.className = ""; }
     set textContent(v) { this.children = []; this.text = String(v); }
@@ -256,10 +257,15 @@ function adminCard(viewData) {
   byId.avsForm = form; byId.avsFields = fields;
   const document = { getElementById: (id) => byId[id] || null, createElement: (t) => new El(t), createTextNode: text, hidden: false };
   const window = { __t: (k, d) => (k in EN ? EN[k] : "MISSING " + k), confirm: () => true };
-  const fetch = (url, opts) => { if (opts && opts.body) posts.push(JSON.parse(opts.body)); return Promise.resolve({ json: async () => ({ ok: true, v: 9, ...viewData, view: viewData }) }); };
+  const fetch = (url, opts) => {
+    const post = !!(opts && opts.body), v = post ? views.at(-1) : views[Math.min(gets++, views.length - 1)];
+    if (post) posts.push(JSON.parse(opts.body));
+    return Promise.resolve({ json: async () => ({ ok: true, v: 9, ...v, view: v }) });
+  };
   const vm = require("node:vm");
-  vm.runInNewContext(src, { window, document, fetch, setInterval: () => 0, Date, JSON, Object, Array });
-  return { form, fields, posts, EN, labelOf: (key) => fields.children.find((l) => l.children.some((c) => c.name === key)) };
+  vm.runInNewContext(src, { window, document, fetch, setInterval: (fn) => { tick = fn; return 1; }, Date, JSON, Object, Array });
+  return { form, fields, posts, EN, labelOf: (key) => fields.children.find((l) => l.children.some((c) => c.name === key)),
+    poll: () => tick(), message: () => byId.avsMessage.textContent, views };
 }
 
 test("1.99??: the admin card lists the two switches with clear labels (locales/en.json) and says what each one holds back; a save sends them", async () => {
@@ -279,4 +285,38 @@ test("1.99??: the admin card lists the two switches with clear labels (locales/e
   assert.deepEqual([box("apply_mic_card").checked, box("apply_mic_chat").checked], [false, false], "off until an admin ticks them");
   box("apply_mic_chat").checked = true; A.form.fire("change"); A.form.fire("submit");
   assert.equal(A.posts.length, 1); assert.equal(A.posts[0].cfg.apply_mic_chat, true); assert.equal(A.posts[0].cfg.apply_mic_card, false);
+});
+
+test("1.99??: review fix (C-1) - an admin card left open across a deploy that changes the field list draws itself again; Save works and sends every field it shows", async () => {
+  const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+  const data = (await get("/api/admin/pepe/avsync", "adm")).data;
+  const older = JSON.parse(JSON.stringify(data));        // the site before a deploy that adds two switches
+  for (const key of ["apply_mic_card", "apply_mic_chat"]) { delete older.fields[key]; delete older.cfg[key]; delete older.defaults[key]; }
+  // (1) the 5 s check brings the new list while the admin is changing a setting
+  const A = adminCard(older, data); await flush();
+  assert.equal(A.labelOf("apply_mic_card"), undefined, "drawn from the older site");
+  const box = (C, key) => C.form.elements[key];
+  box(A, "apply_video").checked = !box(A, "apply_video").checked; A.form.fire("change");
+  const typed = box(A, "apply_video").checked;
+  A.poll(); await flush();
+  assert.ok(A.labelOf("apply_mic_card") && A.labelOf("apply_mic_chat"), "drawn again with the new switches");
+  assert.equal(box(A, "apply_video").checked, typed, "what the admin was changing stays");
+  assert.equal(box(A, "apply_mic_card").checked, false, "a new switch shows the site's value");
+  box(A, "apply_mic_card").checked = true; A.form.fire("change"); A.form.fire("submit"); await flush();
+  assert.equal(A.posts.length, 1, "Save posts");
+  assert.deepEqual(Object.keys(A.posts[0].cfg).sort(), Object.keys(data.fields).sort(), "every field the card shows, no other");
+  assert.equal(A.posts[0].cfg.apply_mic_card, true); assert.equal(A.posts[0].cfg.apply_video, typed);
+  assert.match(A.message(), /^Saved as v\d+\./);
+  // (2) a tab that slept through the deploy (no 5 s check): Save lands and the answer's new view is drawn - no "did not answer"
+  const B = adminCard(older, data); await flush();
+  box(B, "apply_mic").checked = false; B.form.fire("change"); B.form.fire("submit"); await flush();
+  assert.equal(B.posts.length, 1); assert.match(B.message(), /^Saved as v\d+\./);
+  assert.ok(B.labelOf("apply_mic_chat"), "the saved answer's field list is drawn");
+  // (3) and back (a rollback): the fields the site no longer has go; Save sends only the site's own
+  const C = adminCard(data, older); await flush();
+  assert.ok(C.labelOf("apply_mic_card"));
+  C.poll(); await flush();
+  assert.equal(C.labelOf("apply_mic_card"), undefined); C.form.fire("submit"); await flush();
+  assert.deepEqual(Object.keys(C.posts[0].cfg).sort(), Object.keys(older.fields).sort());
+  assert.doesNotMatch(A.fields.textContent + C.fields.textContent, /undefined|MISSING/);
 });

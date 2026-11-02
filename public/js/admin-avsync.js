@@ -44,8 +44,19 @@
       fields.appendChild(label);
     });
   }
+  // 1.99??: review fix (C-1) - the card reads and writes only the fields it has drawn (form.elements has no others), and is drawn
+  // again when the site's field list changes (a deploy while this page was open) - it used to throw on a field it never drew, so the
+  // readout stopped refreshing and Save / Reset did nothing
+  var drawn = null;
+  function values() {
+    var out = {}; Object.keys(view ? view.fields : {}).forEach(function (key) { var input = form.elements[key]; if (input) out[key] = input.type === 'checkbox' ? input.checked : input.value; });
+    return out;
+  }
+  function put(cfg) {
+    Object.keys(view.fields).forEach(function (key) { var input = form.elements[key]; if (!input || !Object.prototype.hasOwnProperty.call(cfg, key)) return; if (input.type === 'checkbox') input.checked = !!cfg[key]; else input.value = cfg[key]; });
+  }
   function fill() {
-    Object.keys(view.fields).forEach(function (key) { var input = form.elements[key]; if (input.type === 'checkbox') input.checked = view.cfg[key]; else input.value = view.cfg[key]; });
+    put(view.cfg || {});
     document.getElementById('avsVersion').textContent = view.v ? 'v' + view.v : 'off by default · never saved';
   }
   function ms(value) { return value == null ? 'unknown' : value + ' ms'; }
@@ -55,9 +66,11 @@
     if (!rows.length) { var tr = node('tr'), td = node('td', empty, 'adm-help'); td.colSpan = columns.length; tr.appendChild(td); body.appendChild(tr); }
   }
   function render(next) {
-    var first = !view; view = next;
-    if (first) build();
-    if (!editing) fill();
+    var keys = Object.keys(next.fields || {}).join(','), redraw = keys !== drawn, typed = redraw && editing ? values() : null;
+    view = next;
+    // 1.99??: (C-1) another field list: drawn again from the site's values, keeping what the admin was changing
+    if (redraw) { build(); drawn = keys; fill(); if (typed) put(typed); }
+    else if (!editing) fill();
     table('avsRooms', view.rooms || [], [function (r) { return r.room; }, function (r) { return ms(r.lat.mix_ms); }, function (r) { return ms(r.lat.helper_ms); },
       function (r) { return ms(r.lat.rtc_ms); }, function (r) { return ms(r.lat.mp3_ms); }, function (r) { return r.age_s.toFixed(1) + ' s'; }], 'No recent streaming-room report.');
     table('avsRelays', view.relays || [], [function (r) { return r.path; }, function (r) { return r.src; }, function (r) { return ms(r.hold_ms); }], 'No relay timing reported.');
@@ -76,7 +89,7 @@
   }
   function send(reset) {
     if (!view || saving) return;
-    var cfg = {}; Object.keys(view.fields).forEach(function (key) { var input = form.elements[key]; cfg[key] = input.type === 'checkbox' ? input.checked : input.value; });
+    var cfg = values();
     saving = true; buttons(true); message.textContent = 'Saving…';
     request({ cfg: cfg, reset: reset, reason: form.elements.reason.value.trim() }).then(function (data) {
       if (!data.ok) { message.textContent = data.error || 'Could not save.'; return; }
