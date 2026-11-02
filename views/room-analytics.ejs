@@ -8,6 +8,9 @@
   a "private" tag, no link / avatar / tooltip; "(you)" on their own row). a.see = the viewer may see through (admin / this pad's
   owner after 90 days): a Reveal per row and the on-until-off toggle (fetch POSTs, each logged); r.revealed + r.real only while the
   viewer's toggle is on.
+  1.99aha owner 11-02: Pepe's notes (summary, vibe, topics, jokes, moments, norms, changes, topics over time) are strings - or, for a PATV
+  admin, {html} (roomstats.notesView: escaped text, a !bridge hide person Pepe named as <span class="ra-hid" data-k>someone</span>,
+  or as the name 🕶 while their toggle is on); NT() prints either. a.notesHidden = {n, v}: the notes' Reveal (admins, logged).
 %>
 <style>
   .ra { max-width: var(--ds-w-wide); margin: 0 auto; padding: var(--ds-sp-4) var(--ds-gutter) var(--ds-sp-14); font-family: var(--ds-font); color: var(--ds-text); display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
@@ -70,6 +73,9 @@
   .ra .ptag { display: inline-block; font-style: normal; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ds-text-muted); border: 1px solid var(--ds-line-strong); border-radius: 999px; padding: 0 6px; margin-left: 4px; line-height: 1.5; vertical-align: 1px; white-space: nowrap; }
   .ra .you { color: var(--ds-text-muted); white-space: nowrap; }
   .ra .real { color: var(--ds-gold); white-space: nowrap; }
+  /* 1.99aha owner 11-02: a hidden person Pepe's notes name (only admins see the mark) and the notes' Reveal */
+  .ra .ra-hid { border-bottom: 1px dotted var(--ds-gold); }
+  .ra .ra-nrv { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-size: 13px; color: var(--ds-text-2); }
   .ra .ra-rv { font: inherit; font-size: 11px; line-height: 1.4; padding: 1px 8px; margin-left: 4px; border-radius: 999px; border: 1px solid var(--ds-line-strong); background: transparent; color: var(--ds-text-2); cursor: pointer; white-space: nowrap; }
   .ra .ra-rv:hover { border-color: var(--ds-gold); color: var(--ds-text-strong); }
   .ra .ra-rv:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
@@ -151,27 +157,32 @@
 
   <section class="card" aria-labelledby="raKnow">
     <h2 id="raKnow"><span><span class="ds-ic" aria-hidden="true">🧠</span> What people talk about</span><small><%= a.know.at ? "Pepe's notes from " + a.know.at : "no notes yet" %></small></h2>
+    <% const NT = (x) => typeof x === 'string' ? x.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' })[c]) : String((x && x.html) || ''); %>
     <% if (!a.know.has) { %>
       <div class="empty">Pepe hasn't summarised this Camfrog room yet — he reads the room a few times a day once it's been chatty.</div>
     <% } else { %>
     <div class="know">
-      <% if (a.know.summary) { %><p><%= a.know.summary %></p><% } %>
-      <% if (a.know.vibe) { %><div><span class="vibe">✨ <%= a.know.vibe %></span></div><% } %>
+      <% if (a.know.summary) { %><p><%- NT(a.know.summary) %></p><% } %>
+      <% if (a.know.vibe) { %><div><span class="vibe">✨ <%- NT(a.know.vibe) %></span></div><% } %>
       <% if (a.know.topics.length) { %>
-      <div><p class="ksub">Recurring topics</p><div class="topics"><% a.know.topics.forEach((t) => { %><span style="font-size:<%= t.size %>em"><%= t.t %></span><% }) %></div></div>
+      <div><p class="ksub">Recurring topics</p><div class="topics"><% a.know.topics.forEach((t) => { %><span style="font-size:<%= t.size %>em"><%- NT(t.t) %></span><% }) %></div></div>
       <% } %>
       <div class="two">
-        <% if (a.know.jokes.length) { %><div><p class="ksub">Running jokes</p><ul><% a.know.jokes.forEach((j) => { %><li><%= j %></li><% }) %></ul></div><% } %>
-        <% if (a.know.events.length) { %><div><p class="ksub">Notable moments</p><ul><% a.know.events.forEach((j) => { %><li><%= j %></li><% }) %></ul></div><% } %>
-        <% if (a.know.rules.length) { %><div><p class="ksub">House norms</p><ul><% a.know.rules.forEach((j) => { %><li><%= j %></li><% }) %></ul></div><% } %>
+        <% if (a.know.jokes.length) { %><div><p class="ksub">Running jokes</p><ul><% a.know.jokes.forEach((j) => { %><li><%- NT(j) %></li><% }) %></ul></div><% } %>
+        <% if (a.know.events.length) { %><div><p class="ksub">Notable moments</p><ul><% a.know.events.forEach((j) => { %><li><%- NT(j) %></li><% }) %></ul></div><% } %>
+        <% if (a.know.rules.length) { %><div><p class="ksub">House norms</p><ul><% a.know.rules.forEach((j) => { %><li><%- NT(j) %></li><% }) %></ul></div><% } %>
       </div>
       <% if (a.changes.length || a.history.length > 1) { %>
       <div class="two">
-        <% if (a.changes.length) { %><div><p class="ksub">How it's changing</p><ul><% a.changes.forEach((c) => { %><li><%= c %></li><% }) %></ul></div><% } %>
-        <% if (a.history.length > 1) { %><div><p class="ksub">Topics over time</p><div class="hist"><% a.history.forEach((h) => { %><div><b><%= h.when %></b><span><%= h.topics.join(' · ') %></span></div><% }) %></div></div><% } %>
+        <% if (a.changes.length) { %><div><p class="ksub">How it's changing</p><ul><% a.changes.forEach((c) => { %><li><%- NT(c) %></li><% }) %></ul></div><% } %>
+        <% if (a.history.length > 1) { %><div><p class="ksub">Topics over time</p><div class="hist"><% a.history.forEach((h) => { %><div><b><%= h.when %></b><span><%- h.topics.map(NT).join(' · ') %></span></div><% }) %></div></div><% } %>
       </div>
       <% } %>
     </div>
+    <% } %>
+    <% if (a.notesHidden) { %>
+    <p class="ra-nrv" id="raNotes" data-slug="<%= room.slug %>" data-v="<%= a.notesHidden.v %>"><span>🕶 Pepe's notes mention <%= a.notesHidden.n === 1 ? 'a hidden person' : 'hidden people' %> (<code>!bridge hide</code>) - everyone else reads "someone". As a PATV admin you can see who; it's logged.</span>
+      <button type="button" class="ds-btn sm" id="raNotesRv">Reveal who</button><span id="raNotesMsg" class="muted" role="status"></span></p>
     <% } %>
   </section>
 
@@ -287,6 +298,33 @@
     root.addEventListener('pointerleave', function () { tip.style.display = 'none'; });
     root.querySelectorAll('[data-tip] title').forEach(function (n) { n.remove(); });
     root.querySelectorAll('.ra-cell[title]').forEach(function (n) { n.removeAttribute('title'); });
+  })();
+  // 1.99aha owner 11-02: the notes' Reveal (PATV admins) - one same-site fetch POST, one log row on the server; the names fill the marks
+  (function () {
+    var box = document.getElementById('raNotes');
+    if (!box) return;
+    var btn = document.getElementById('raNotesRv'), msg = document.getElementById('raNotesMsg'), why = document.getElementById('raSeeWhy');
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      fetch('/p/' + encodeURIComponent(box.getAttribute('data-slug')) + '/analytics/reveal-notes', { method: 'POST', credentials: 'same-origin', referrerPolicy: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ v: box.getAttribute('data-v'), reason: why ? why.value : '' }) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (d) {
+          if (!d || !d.ok) { btn.disabled = false; if (msg) msg.textContent = (d && d.error) || 'Could not reveal them.'; return; }
+          (d.names || []).forEach(function (n) {
+            document.querySelectorAll('#ra .ra-hid[data-k="' + Number(n.k) + '"]').forEach(function (el) {
+              var s = document.createElement('span');
+              s.className = 'real';
+              s.title = (n.login ? n.login + ' - ' : '') + 'only you can see this';
+              s.textContent = n.text + ' 🕶';
+              el.replaceWith(s);
+            });
+          });
+          btn.remove();
+          if (msg) msg.textContent = 'Shown to you only - logged.';
+        }, function () { btn.disabled = false; if (msg) msg.textContent = 'Could not reveal them - check your connection.'; });
+    });
   })();
   // 1.99afn see-through: a row's Reveal and the on-until-off toggle - same-site fetch POSTs (each one a log row on the server)
   (function () {

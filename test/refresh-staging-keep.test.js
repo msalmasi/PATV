@@ -337,7 +337,7 @@ test("CL2 fix-up: staging keeps its own live feed (bridge_feed, bridge_rooms), a
 });
 
 test("wave2 integration review (P4 / DARK-1 / T-2): prod's frog-name <-> login pairings never cross - a veiled exclusion row (vlogin + the frog name) goes from the copy, a frog-name clip's speaker logins are blanked; by-name rows and named clips stay prod's (both paths, and no bytes left behind)", async () => {
-  assert.deepEqual(K.SCRUB.map((s) => [s.table, s.col]), [["micfollow_excl", "vlogin"], ["feed_voices", "alias"]]);
+  assert.deepEqual(K.SCRUB.map((s) => [s.table, s.col]), [["micfollow_excl", "vlogin"], ["feed_voices", "alias"], ["sb_clips", "subject_alias"]]);
   const EXCL = "CREATE TABLE micfollow_excl (room_id TEXT NOT NULL, login TEXT NOT NULL, user_id TEXT, until INTEGER, reason TEXT, by TEXT, at INTEGER, veiled TEXT, vlogin TEXT, PRIMARY KEY (room_id, login))";
   const VOICES = "CREATE TABLE feed_voices (post_id TEXT PRIMARY KEY, room_id TEXT, media_id TEXT, logins TEXT, by_login TEXT, created INTEGER, removed_at INTEGER, removed_by TEXT, alias TEXT)";
   const fill = async (file) => {
@@ -380,4 +380,42 @@ test("wave2 integration review (P4 / DARK-1 / T-2): prod's frog-name <-> login p
   assert.equal((await K.main(stg, p22, sqlite3)).mode, "kept");
   const e22 = db(p22);
   try { assert.deepEqual(await all(e22, "SELECT login FROM micfollow_excl"), [{ login: "bobcf" }]); } finally { await close(e22); }
+});
+
+test("owner 11-02: a frog-name clip on a room soundboard (sb_clips.subject_alias) has the login behind it blanked in the copy; named clips stay prod's (both paths, no bytes left behind; a prod without the column skips it)", async () => {
+  const SB = "CREATE TABLE sb_clips (id TEXT PRIMARY KEY, board TEXT NOT NULL, label TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'tts', subject_login TEXT, status TEXT, subject_alias TEXT)";
+  const fill = async (file) => {
+    const p = db(file);
+    await run(p, SB);
+    await run(p, "INSERT INTO sb_clips (id, board, label, kind, subject_login, status, subject_alias) VALUES ('r-1', 'room:Prod.Room', 'Croak', 'audio', 'prodsbveiledcf', 'active', 'Mossy Newt')");
+    await run(p, "INSERT INTO sb_clips (id, board, label, kind, subject_login, status) VALUES ('r-2', 'room:Prod.Room', 'Bob', 'audio', 'bobcf', 'active')");
+    await close(p);
+  };
+  const check = async (file, mode) => {
+    const d = db(file);
+    try {
+      assert.deepEqual(await all(d, "SELECT id, subject_login, subject_alias FROM sb_clips ORDER BY id"),
+                       [{ id: "r-1", subject_login: null, subject_alias: "Mossy Newt" }, { id: "r-2", subject_login: "bobcf", subject_alias: null }], mode);
+    } finally { await close(d); }
+    assert.ok(!fs.readFileSync(file).toString("latin1").includes("prodsbveiledcf"), mode + ": the login is gone from the file, free pages included");
+  };
+  const prod = path.join(dir, "copy30.db"), stg = path.join(dir, "staging30.db");
+  await makeProd(prod); await makeStaging(stg); await fill(prod);
+  const r = await K.main(stg, prod, sqlite3);
+  assert.equal(r.mode, "kept");
+  assert.deepEqual(r.tables.filter((x) => x.scrubbed != null), [{ table: "sb_clips", scrubbed: 1 }]);
+  await check(prod, "kept");
+  const p31 = path.join(dir, "copy31.db");
+  await makeProd(p31); await fill(p31);
+  assert.equal((await K.main(path.join(dir, "no-such-dir", "missing.db"), p31, sqlite3)).mode, "cleared");
+  await check(p31, "cleared");
+  const p32 = path.join(dir, "copy32.db");
+  await makeProd(p32);
+  const d32 = db(p32);
+  await run(d32, "CREATE TABLE sb_clips (id TEXT PRIMARY KEY, board TEXT NOT NULL, label TEXT NOT NULL, subject_login TEXT)");
+  await run(d32, "INSERT INTO sb_clips (id, board, label, subject_login) VALUES ('r-3', 'room:Prod.Room', 'Bob', 'bobcf')");
+  await close(d32);
+  assert.equal((await K.main(stg, p32, sqlite3)).mode, "kept");
+  const e32 = db(p32);
+  try { assert.deepEqual(await all(e32, "SELECT subject_login FROM sb_clips"), [{ subject_login: "bobcf" }], "a prod a release behind: nothing scrubbed"); } finally { await close(e32); }
 });

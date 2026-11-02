@@ -539,6 +539,58 @@ test("reports hide a clip at 3; the person heard in it removes it at once", asyn
   assert.equal((await SB.clipStatus(live)).status, "removed");
 });
 
+test("owner 11-02: a J-7 frog-name mic clip goes on a room board under its frog name - no answer to anyone else ever carries the login; the rules still run on the real person; a named clip is as before", async () => {
+  PRIME.set(ROOM.id, 24);
+  try { await runQuery("ALTER TABLE feed_voices ADD COLUMN alias TEXT"); } catch (e) { /* there */ }
+  U.zq = await mkUser("zqveil");                       // Camfrog login zqveilcf - incognito when the clip was posted (J-7)
+  const NEEDLE = /zqveil/i;
+  await runQuery("INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created, alias) VALUES ('PostF', ?, 'mf', ' zqveilcf ', 'alicecf', 3, 'Mossy Newt')", [ROOM.id]);
+  await runQuery("INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created, alias) VALUES ('PostG', ?, 'mg', ' zqveilcf ', 'alicecf', 4, 'Mossy Newt')", [ROOM.id]);
+  // the speaker's opt-out still applies - and the refusal doesn't say who
+  await L.setPrefs(U.zq.userId, { soundboard: false });
+  let r = await call("POST", "/api/rooms/sb-room/soundboard/clips", U.owner, { action: "add_mic", label: "Croak", post: "PostF", start: 0, end: 3 });
+  assert.equal(r.status, 403);
+  assert.equal(r.d.error, "The person heard in that clip has opted out of being on soundboards.");
+  assert.doesNotMatch(r.text, NEEDLE);
+  await L.setPrefs(U.zq.userId, { soundboard: true });
+  r = await call("POST", "/api/rooms/sb-room/soundboard/clips", U.owner, { action: "add_mic", label: "Croak", post: "/p/sb-room/posts/PostF", start: 0, end: 3 });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.doesNotMatch(r.text, NEEDLE, "the owner's editor: the frog name only");
+  const frog = r.d.clips.find((c) => c.label === "Croak");
+  assert.deepEqual([frog.kind, frog.subject, frog.subject_frog], ["audio", "Mossy Newt", 1]);
+  assert.deepEqual((await getQuery("SELECT subject_login, subject_alias FROM sb_clips WHERE id = ?", [frog.id]))[0],
+                   { subject_login: "zqveilcf", subject_alias: "Mossy Newt" }, "the login is kept server-side, for the rules");
+  assert.equal((await SB.storeAudio(frog.id, wav(2))).status, "active", "Pepe rendered it (it plays from the drawer now)");
+  // every page / answer anyone else gets: the drawer (signed in / out), the editor, the store
+  for (const [who, url] of [[U.alice, "/api/rooms/sb-room/soundboard"], [null, "/api/rooms/sb-room/soundboard"], [U.owner, "/api/rooms/sb-room/soundboard/manage"],
+                            [U.alice, "/api/soundboards"], [U.alice, "/soundboards"]]) {
+    const a = await call("GET", url, who);
+    assert.equal(a.status, 200, url);
+    assert.doesNotMatch(a.text, NEEDLE, `${url} (${who ? who.username : "signed out"})`);
+  }
+  const drawer = (await call("GET", "/api/rooms/sb-room/soundboard", U.alice)).d.tabs.find((t) => t.key === "room").clips.find((c) => c.id === frog.id);
+  assert.deepEqual([drawer.subject, drawer.subject_frog], ["Mossy Newt", 1], "the drawer labels it with the frog name");
+  // a named clip is exactly as before: the login, no frog flag
+  const named = (await call("GET", "/api/rooms/sb-room/soundboard/manage", U.owner)).d.clips.find((c) => c.label === "Bob");
+  assert.deepEqual([named.subject, "subject_frog" in named], ["bobcf", false]);
+  // Pepe (bot token, server to server) keeps the real login for his rules (opt-out at every play, the likeness cut, the caption)
+  const bot = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d.clips.find((c) => c.id === frog.id);
+  assert.deepEqual([bot.subject, bot.subject_alias], ["zqveilcf", "Mossy Newt"]);
+  assert.equal((await call("POST", "/api/soundboards/bot/sync", null, { password: "nope" })).status, 403, "never without the bot token");
+  // "Remove me": refused for anyone else (without saying who), works for the person heard in it
+  r = await call("POST", "/api/soundboards/remove-me", U.alice, { clip: frog.id });
+  assert.equal(r.status, 403);
+  assert.doesNotMatch(r.text, NEEDLE);
+  r = await call("POST", "/api/soundboards/remove-me", U.zq, { clip: frog.id });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal((await SB.clipStatus(frog.id)).status, "removed");
+  // the owner removes one in chat through Pepe: the answer is the label
+  r = await call("POST", "/api/rooms/sb-room/soundboard/clips", U.owner, { action: "add_mic", label: "Croak again", post: "PostG", start: 0, end: 2 });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  r = await call("POST", "/api/soundboards/bot/room-remove", null, { password: "bot", room: ROOM.id, camfrog: "ownercf", clip: "croak again" });
+  assert.deepEqual(r.d, { ok: true, label: "Croak again" });
+});
+
 test("the store page and the drawer render", async () => {
   const page = await call("GET", "/soundboards", U.alice);
   assert.equal(page.status, 200);

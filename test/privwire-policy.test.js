@@ -88,9 +88,11 @@ test("switch on: the approved section H text shows, dated by G; no evidence-clip
   if (both) assert.ok(both.includes("Your mic-ups are also recorded and kept like everyone's"), "the merged capture bullet with mic recordings on");
 });
 
-// wave 2 WP-5: the three insertions, word for word as approved (section H, M addendum 2; the merged bullet M addendum 3) - never reworded
-const EV_SENTENCE = " An administrator or the pad's owner can save your mic audio as moderation evidence after revealing who you are - never posted, kept 30 days, and every evidence clip is logged.";
-const EV_ROW = "<tr><td>Moderation evidence clips of incognito or hidden people</td><td>30 days (longer only under a legal hold)</td></tr>";
+// wave 2 WP-5: the three insertions, word for word as approved (section H, M addendum 2; the merged bullet M addendum 3) - never reworded.
+// owner 11-02 (M addendum 4, item 5): the sentence and the section 9 row, where they state the 30 days, add "copies in backups are deleted
+// within 30 days after" (the changelog clause is unchanged)
+const EV_SENTENCE = " An administrator or the pad's owner can save your mic audio as moderation evidence after revealing who you are - never posted, kept 30 days (copies in backups are deleted within 30 days after), and every evidence clip is logged.";
+const EV_ROW = "<tr><td>Moderation evidence clips of incognito or hidden people</td><td>30 days (longer only under a legal hold). Copies in backups are deleted within 30 days after.</td></tr>";
 const EV_CHANGE = "for moderation (each reveal logged; kept for the pad's chat window); they can also save an incognito or hidden person's mic audio as moderation evidence (logged, 30 days, never posted). Neither setting mutes";
 test("WP-5: evidence clips on -> the approved capture sentence, section 9 row and changelog clause, exactly; kept clips alone keep the row", () => {
   const now = fs.readFileSync(FILE, "utf8");
@@ -101,6 +103,7 @@ test("WP-5: evidence clips on -> the approved capture sentence, section 9 row an
   assert.ok(both.includes(EV_ROW), "the section 9 row");
   assert.ok(both.includes(EV_CHANGE), "the changelog clause, before the full stop");
   assert.equal(both.split(/moderation evidence/i).length - 1, 3, "three places, no more");
+  assert.equal(both.split("deleted within 30 days after").length - 1, 2, "owner 11-02: the backup clause in the sentence and the row, nowhere else");
   // with mic recordings too: the sentence stays before the recordings sentence (the merged bullet)
   const withRec = render(now, { privwire: PWON, evidence: EV, micrec: { on_day: "28 October 2026", on_at: 1793100000000, ret: null } });
   assert.ok(withRec.includes(EV_SENTENCE + " Your mic-ups are also recorded and kept like everyone's"), "before the mic-recordings sentence");
