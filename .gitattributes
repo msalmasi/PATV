@@ -28,3 +28,6 @@ public/js/patv-chat/** -text
 # draws them into captures: the generator's exact LF bytes in every checkout
 public/img/anon/*.svg text eol=lf
 test/fixtures/evidence-wire.json text eol=lf
+
+# Feed Markdown golden files are shared byte-for-byte with v2 on every platform.
+test/fixtures/postmd/* text eol=lf
