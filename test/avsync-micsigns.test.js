@@ -381,6 +381,22 @@ test("1.99??: pad page privacy - a veiled holder is held exactly like a named on
   assert.doesNotMatch(JSON.stringify(P.win.PATVAvSync.debug()), /alice|bob|Soggy|plant_based/i, "measurements name no one");
 });
 
+test("1.99??: review fix (PRIV-L1) - pad page: after an alias-less incognito holder drops, the card keeps a someone · incognito for the offset - never a someone · hidden who never held the mic", async () => {
+  const P = await pad();
+  await P.play();
+  const SI = { anon: true, display: "someone", veil: "incognito" }, SH = { anon: true, display: "someone", veil: "hidden" };
+  await P.deliver(P.answer({ feed: [grab(7, SI)], mic: [on(BOB), on(SI)], members: [on(BOB), SH, on(SI)] }));
+  await P.advance(D); assert.deepEqual(P.card(), ["Bob", "someone incognito"]);
+  await P.advance(100);
+  await P.deliver(P.answer({ feed: [drop(8, SI)], mic: [on(BOB)], members: [on(BOB), SH, SI] }));
+  const seen = new Set();
+  for (let i = 0; i < D; i += 25) { seen.add(JSON.stringify(P.card())); await P.advance(25); }
+  seen.add(JSON.stringify(P.card()));
+  assert.deepEqual([...seen], [JSON.stringify(["Bob", "someone incognito"]), JSON.stringify(["Bob"])], "held one offset as it was, then gone - no someone · hidden");
+  assert.equal(P.shown(8), true);
+  assert.deepEqual(P.errors, []);
+});
+
 test("1.99??: pad page - a hidden tab shows held lines at once (the poll sleeps); a reader at the bottom stays at the bottom, one reading back gets the jump", async () => {
   const P = await pad();
   await P.play();

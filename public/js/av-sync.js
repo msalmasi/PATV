@@ -260,6 +260,7 @@
     });
   }
   function tileKey(tile) { return tile && typeof tile.id === 'string' ? (tile.anon ? 'anonymous:' : 'tile:') + tile.id : ''; }
+  function levelOf(person) { return person && (person.veil === 'incognito' || person.veil === 'hidden') ? person.veil : ''; }
   function historyRecord(kind, pad, latest, callback) {
     var key = kind + ':' + pad, record = records[key], now = Date.now();
     if (!record) record = records[key] = { kind: kind, pad: pad, rows: [], births: Object.create(null), latest: null, signature: null, touched: now };
@@ -277,8 +278,10 @@
       Object.keys(record.births).forEach(function (k) { if (!present[k]) delete record.births[k]; });
     } else {
       // 1.99??: review fix (T1, T2) - no onset times any more: the card shows a turn from its grab + the offset to its drop + the offset
-      compact = { mic: [], on: Object.create(null) };
-      visitPeople(latest && latest.mic, 'mic', function (person, k) { if (k) { compact.mic.push(k); compact.on[k] = true; } });
+      // 1.99??: review fix (PRIV-L1) - lv: a keyless "someone" slot's veil level (a level, never who), so the card can keep that slot
+      // for one offset after its holder drops without borrowing a room member's object
+      compact = { mic: [], on: Object.create(null), lv: Object.create(null) };
+      visitPeople(latest && latest.mic, 'mic', function (person, k, keyless) { if (k) { compact.mic.push(k); compact.on[k] = true; if (keyless) compact.lv[k] = levelOf(person); } });
       visitPeople(latest && latest.members, 'members', function (person, k) { if (k && person.on_mic) compact.on[k] = true; });
     }
     var signature = JSON.stringify(compact);
@@ -326,17 +329,32 @@
     var latest = record.latest; if (!latest) return latest;
     if (!wait) { record.shownAt = now; return latest; }
     var at = shownAt(record, wait, now), out = copy(latest), row = oldRow(record, at), people = Object.create(null);
-    visitPeople(latest.members, 'members', function (person, k, keyless, ordinal) {
+    var spare = Object.create(null), current = Object.create(null);
+    visitPeople(latest.members, 'members', function (person, k, keyless) {
       if (k) people[k] = person;
       // Today's public anonymous records have no stable ID. Retain only a generic mic count,
       // bounded by anonymous entries still in the newest room; never infer roster mic flags
       // from mic-array positions. WP-2's stable anonymous IDs enable exact cross-list timing.
-      if (keyless) people['anonymous-group:mic:' + ordinal] = person;
+      // 1.99??: review fix (PRIV-L1) - the count is per veil level: a keyless slot needs a keyless person of its own level still in
+      // the room, and never shows that person's object (it used to show the N-th one's, so a "someone · hidden" who never held the
+      // mic could stand in for the "someone · incognito" who did)
+      if (keyless) { var level = levelOf(person); spare[level] = (spare[level] || 0) + 1; }
     });
-    visitPeople(latest.mic, 'mic', function (person, k) { if (k) people[k] = person; });
+    visitPeople(latest.mic, 'mic', function (person, k, keyless) { if (!k) return; if (keyless) current[k] = person; else people[k] = person; });
     out.members = [];
     visitPeople(latest.members, 'members', function (person, k) { var p = copy(person); p.on_mic = onAt(row, k); out.members.push(p); });
-    out.mic = (row && row.data.mic || []).filter(function (k) { return own.call(people, k); }).map(function (k) { var p = copy(people[k]); p.on_mic = true; return p; });
+    var keys = row && row.data.mic || [], levels = row && row.data.lv || {}, picks = [];
+    keys.forEach(function (k, i) {
+      if (!own.call(levels, k)) { if (own.call(people, k)) picks[i] = people[k]; return; }     // a keyed person, as they are now
+      var here = current[k];                                // the same slot, the same level, still on the mic: today's entry
+      if (here && levelOf(here) === levels[k]) { picks[i] = here; spare[levels[k]] = (spare[levels[k]] || 0) - 1; }
+    });
+    keys.forEach(function (k, i) {
+      // 1.99??: (PRIV-L1) a slot whose holder dropped (or changed level) stays one offset as a bare "someone" of its own level
+      if (picks[i] || !own.call(levels, k) || !(spare[levels[k]] > 0)) return;
+      spare[levels[k]]--; picks[i] = levels[k] ? { anon: true, display: 'someone', veil: levels[k] } : { anon: true, display: 'someone' };
+    });
+    out.mic = picks.filter(Boolean).map(function (person) { var p = copy(person); p.on_mic = true; return p; });
     return out;
   }
   // 1.99??: the mic stage's program follows "Delay mic signs"; the "On the mic" card's view (micView) follows its own switch

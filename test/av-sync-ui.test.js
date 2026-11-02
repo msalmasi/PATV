@@ -409,6 +409,29 @@ test("C2 keyless anonymous panel counts retain drop timing in a mixed roster wit
   await s.advance(699); assert.equal(shown.mic.length, 1); await s.advance(1); assert.equal(shown.mic.length, 0);
 });
 
+test("1.99??: review fix (PRIV-L1) - a keyless someone's slot kept after the drop is a bare someone of its own veil level, never another member's object", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const I = { anon: true, display: "someone", veil: "incognito" }, Hd = { anon: true, display: "someone", veil: "hidden", src: "list", rv: 1 }, Y = { login: "yname", display: "Y" };
+  // veil.js orders alias-less veiled people by a keyed hash: here the hidden member (never on the mic) sorts before the incognito holder
+  s.api.micView("pad", { members: [Y, Hd, { ...I, on_mic: true }], mic: [I] }, cb); await s.advance(2000);
+  assert.deepEqual(shown.mic, [{ ...I, on_mic: true }], "holding: the holder's own entry");
+  shown = plain(s.api.micView("pad", { members: [Y, Hd, I], mic: [] }, cb));
+  assert.deepEqual(shown.mic, [{ anon: true, display: "someone", veil: "incognito", on_mic: true }], "dropped: one offset more as a bare someone · incognito (no src, no rv)");
+  await s.advance(699); assert.deepEqual(shown.mic.map(p => p.veil), ["incognito"]);
+  await s.advance(1); assert.deepEqual(shown.mic, []);
+  // the holder drops and leaves the room: no incognito someone is left - the slot goes at once; the hidden member never stands in
+  s.api.micView("pad", { members: [Y, Hd, { ...I, on_mic: true }], mic: [I] }, cb); await s.advance(2000); assert.equal(shown.mic.length, 1);
+  shown = plain(s.api.micView("pad", { members: [Y, Hd], mic: [] }, cb)); assert.deepEqual(shown.mic, []);
+  await s.advance(2000);
+  // two keyless holders of different levels; the hidden one drops: for the offset each slot keeps its own level
+  s.api.micView("pad", { members: [Y, { ...Hd, on_mic: true }, { ...I, on_mic: true }], mic: [Hd, I] }, cb); await s.advance(2000);
+  assert.deepEqual(shown.mic.map(p => p.veil), ["hidden", "incognito"]);
+  shown = plain(s.api.micView("pad", { members: [Y, Hd, { ...I, on_mic: true }], mic: [I] }, cb));
+  assert.deepEqual(shown.mic.map(p => [p.display, p.veil]), [["someone", "hidden"], ["someone", "incognito"]]);
+  assert.doesNotMatch(JSON.stringify(shown.mic), /"src"|"rv"/, "nothing copied from a member");
+  await s.advance(700); assert.deepEqual(shown.mic, [{ ...I, on_mic: true }]);
+});
+
 test("C2 anonymous roster flags require their own explicit flag when there is no shared stable ID", async () => {
   const s = await gated(); let shown; const cb = d => { shown = plain(d); };
   const anon = { anon: true, display: "someone" };
