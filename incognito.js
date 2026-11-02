@@ -477,7 +477,11 @@ function register(app, { addUser, isBotToken }) {
       // new wording only while Pepe's latest report has the switch (mem.capable)
       let mem = null;
       try { mem = await require("./memoryoptout").stateOf(req.user.userId); } catch (e) { mem = null; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn, mem });
+      // 1.99?? (privacy controls S0): the incognito card's wording follows the Privacy wire v2 switch (privwire.js): a random frog name
+      // and !bridge hide's blacked-out bar while it's on; the v1 wording ("someone", lines kept off) while it's off
+      let pwOn = false;
+      try { await require("./privwire").init(); pwOn = require("./privwire").isOn() === true; } catch (e) { pwOn = false; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn, mem, pwOn });
     } catch (e) { next(e); }
   });
 }

@@ -60,8 +60,10 @@
     <ul class="pv-list">
       <li><%- t(memOn ? 'inc.what_memory_v2' : 'inc.what_memory') %></li>
       <%# review 2 fix-up: new keys for the owner's decision-9 change (incognito hides WHO, not WHAT) - every other language falls
-          back to this English until it is translated, instead of keeping the old promise ("your chat lines aren't shown") -%>
-      <li><%- t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
+          back to this English until it is translated, instead of keeping the old promise ("your chat lines aren't shown").
+          1.99?? (privacy controls S0): while the Privacy wire v2 switch is on (incognito.js pwOn) the _v2 keys - a random frog name,
+          and !bridge hide blacks lines out (the v1 keys said "someone" and "keeps your lines off"); off, the page is as before -%>
+      <li><%- locals.pwOn ? t(st.account ? 'inc.what_web_someone_acct_v2' : 'inc.what_web_someone_v2') : t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
       <li><%- t('inc.what_media_someone') %></li>
       <%# WP-1 (design section H, approved 2026-10-28): true today - not behind any switch %>
       <li><%- t('inc.what_voice') %></li>
