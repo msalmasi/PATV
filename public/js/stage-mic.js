@@ -39,7 +39,9 @@
 // cover with rv: 1 reveals itself (once per cover id; counted on the toggle's row on the server); "Hide again" hides those again.
 // 1.99?? STABLE SLOTS (owner 2026-11-02: two people taking turns swapped places on every turn): with program.stable a tile's
 // cell is its place (pos) - an empty place is an empty (black) cell, the fillers flow into them; each tile gets its grid-area,
-// so an existing node never moves (its video never re-attaches) and a new one goes in at its place. Dynamic: the cells are the
+// so an existing node stays put (its video never re-attaches) and a new one goes in at its place (review fix C2: on the grid /
+// side by side / single layouts a node out of the places' order - after a pick or a main swap, then a layout change - moves
+// back, so the reading order is the cells'; dynamic and picture in picture never move one). Dynamic: the cells are the
 // places, the main in cell 0 (with 3+ the server's active speaker; with 2 nobody moves); picture in picture: the big picture is
 // place 0. Without it (the site knob off) today's order - and, either way, a node only moves when its place changed.
 //
@@ -839,9 +841,10 @@
         } else t.apply(s);
       });
       var els = sorted.map(function (s) { return tiles[s.id].el; });
-      if (dn || stable) {
+      if (dn || (stable && P.layout === 'pip')) {
         // wave2 WP-4 (F.3) / 1.99??: an existing tile's node never moves (its video would re-attach) - the cell comes from its
-        // grid-area; a new one goes in at its place (before the next tile already there), so the reading order follows the places
+        // grid-area (picture in picture: the .main class); a new one goes in at its place (before the next tile already there).
+        // (Here the reading order can trail the cells after a main swap - the swap itself never moves a node.)
         els.forEach(function (e, n) {
           if (e.parentNode === grid) return;
           var next = null;
@@ -849,7 +852,9 @@
           if (next) grid.insertBefore(e, next); else grid.appendChild(e);
         });
       } else {
-        // reading order = positions; 1.99??: only a node out of place moves - none when nothing changed (it never re-attaches)
+        // reading order = positions; 1.99??: only a node out of place moves - none when nothing changed (it never re-attaches).
+        // 1.99?? review fix C2: stable slots on the grid / side by side / single layouts too (the places' order is the cells'):
+        // a node only moves after a picture in picture pick or a dynamic main swap left it out of place, then a layout change
         els.forEach(function (e, n) { if (grid.children[n] !== e) grid.insertBefore(e, grid.children[n] || null); });
       }
       // mfix: the tile that fills the stage in picture in picture (the others are the corner inset): the newest speaker, else

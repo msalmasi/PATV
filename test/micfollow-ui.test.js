@@ -1623,3 +1623,44 @@ test("1.99?? stable slots: the page's cells are the capture's - stage-mic.js slo
     s.ctl.stop();
   }
 });
+
+test("1.99?? review fix C2 stage-mic.js (program.stable): on the grid / side by side / single layouts the reading order (DOM order) is the cells' again - a node a picture in picture pick or a dynamic main swap left out of place moves back on the next layout; picture in picture and dynamic themselves never move a node; the same program again moves nothing", () => {
+  const prog = (layout, src, extra) => Object.assign({ v: 1, layout, count: src.length, src, still_s: 20, stable: true }, extra || {});
+  // the single layout with a pin (picture in picture): alice in place 0, the pin fay in place 1
+  const s = dynSandbox(prog("pip", [tileS("alice", 0, "card"), tileS("fay", 1, "card", { pin: true })]));
+  const A = tileEl(s.grid, "alice"), F = tileEl(s.grid, "fay");
+  const moved = moves(s.grid, [A, F]);
+  // the pick: fay (talking) takes place 0 - the big picture changes by the .main class, no node moves
+  s.ctl.update(prog("pip", [tileS("fay", 0, "card", { pin: true, newest: true }), tileS("alice", 1, "card")], { v: 2 }));
+  assert.ok(F.classList.contains("main") && !A.classList.contains("main"), "fay fills the stage");
+  assert.deepEqual(moved, [], "picture in picture: no node moved");
+  assert.deepEqual(idsOf(s.grid), ["alice", "fay"], "(the DOM order trails the places here)");
+  // the layout becomes grid4, the same places: fay's cell is 1/1, alice's 1/2 - and the reading order follows (one move)
+  s.ctl.update(prog("grid4", [tileS("fay", 0, "card", { pin: true }), tileS("alice", 1, "card")], { v: 3 }));
+  assert.deepEqual([area(s.grid, "fay"), area(s.grid, "alice")], ["1 / 1 / span 1 / span 1", "1 / 2 / span 1 / span 1"]);
+  assert.deepEqual(idsOf(s.grid), ["fay", "alice"], "the reading order = the cells'");
+  assert.equal(moved.length, 1, "one node moved: " + moved.join(","));
+  // the same program again / a back-and-forth (ring only): nothing moves
+  moved.length = 0;
+  s.ctl.update(prog("grid4", [tileS("fay", 0, "card", { pin: true }), tileS("alice", 1, "card", { newest: true })], { v: 4 }));
+  s.ctl.update(prog("grid4", [tileS("fay", 0, "card", { pin: true, newest: true }), tileS("alice", 1, "card")], { v: 5 }));
+  assert.deepEqual(moved, [], "unchanged places: no node moved");
+  // a gap and a newcomer in it: inserted at its place, nobody else moves
+  s.ctl.update(prog("grid4", [tileS("fay", 0, "card", { pin: true }), tileS("bob", 1, "card"), tileS("alice", 2, "card")], { v: 6 }));
+  assert.deepEqual(idsOf(s.grid), ["fay", "bob", "alice"]);
+  assert.deepEqual(moved, [], "existing nodes untouched");
+  s.ctl.stop();
+  // dynamic: a main swap never moves a node (the cells come from grid-area) - and the same on split after a dynamic swap
+  const dyn = (src, main, v) => prog(src.length <= 2 ? "split" : "grid4", src, { v, dyn: { n: src.length, t: "d" + src.length, main } });
+  const d = dynSandbox(dyn([tileS("a", 0, "card"), tileS("b", 1, "card"), tileS("c", 2, "card")], "a", 1));
+  const DA = tileEl(d.grid, "a"), DB = tileEl(d.grid, "b"), DC = tileEl(d.grid, "c");
+  const dm = moves(d.grid, [DA, DB, DC]);
+  d.ctl.update(dyn([tileS("c", 0, "card"), tileS("b", 1, "card"), tileS("a", 2, "card")], "c", 2));
+  assert.deepEqual(dm, [], "dynamic: no node moved");
+  assert.deepEqual(idsOf(d.grid), ["a", "b", "c"]);
+  // the stage leaves dynamic (grid4, the same places): the reading order is the cells' again
+  d.ctl.update(prog("grid4", [tileS("c", 0, "card"), tileS("b", 1, "card"), tileS("a", 2, "card")], { v: 3 }));
+  assert.deepEqual(idsOf(d.grid), ["c", "b", "a"]);
+  assert.deepEqual(["c", "b", "a"].map((x) => area(d.grid, x)), ["1 / 1 / span 1 / span 1", "1 / 2 / span 1 / span 1", "2 / 1 / span 1 / span 1"]);
+  d.ctl.stop();
+});
