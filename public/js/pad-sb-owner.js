@@ -36,7 +36,7 @@
       var left = el('div');
       var b = el('b', null, (c.emoji || '🔊') + ' ' + c.label);
       left.appendChild(b);
-      // owner 11-02: a J-7 frog-name clip's subject is its frog name (subject_frog) - the server never sends the login behind it
+      // 1.99?? owner 11-02: a J-7 frog-name clip's subject is its frog name (subject_frog) - the server never sends the login behind it
       var meta = c.kind === 'audio' ? _t('js.sbo.mic_of', 'mic clip of {who}', { who: (c.subject_frog ? '🐸 ' : '') + (c.subject || '?') }) :('“' + (c.text || '') + '”' + (c.voice ? ' · ' + c.voice : ''));
       left.appendChild(el('div', 'ds-meta', meta + ' · ' + _t('js.sbo.st_' + c.status, c.status) + (c.note ? ' (' + c.note + ')' : '')));
       li.appendChild(left);

@@ -50,7 +50,7 @@ const LIVE_FEED = ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_v
 // (seethrough.js: which logins an admin revealed) - staging's own. WP-5: + moderation evidence clips (evidence.js: whose voice, when,
 // who saved it - the audio itself sits in each environment's own evidence directory and is never copied)
 const VEIL = ["incog_alias", "seethrough_log", "seethrough_toggle", "evidence_clips"];
-// (owner 11-02: camfrog_roomstats_veiled - Pepe's !bridge hide people, server-only - is NOT listed: like hub_hidden_set the copy keeps
+// (1.99?? owner 11-02: camfrog_roomstats_veiled - Pepe's !bridge hide people, server-only - is NOT listed: like hub_hidden_set the copy keeps
 //  prod's, because it is what masks those people in prod's room notes, copied along with it in camfrog_roomstats; staging's Pepe
 //  replaces it on his next sync and the people he drops stay masked while the copied sticky hidden set holds them)
 const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings",          // keys + switches
@@ -69,7 +69,7 @@ const EMPTY = ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inboun
 //                   stage_exclude seethrough_log row is KEEP already); by-name rows stay prod's, as before
 //   feed_voices     a J-7 frog-name clip (`alias` = the frog name it was posted under): its speakers' logins are blanked (the post,
 //                   titled with the frog name, stays)
-//   sb_clips        owner 11-02: a frog-name clip on a room soundboard (`subject_alias` = the frog name it shows): the login behind it
+//   sb_clips        1.99?? owner 11-02: a frog-name clip on a room soundboard (`subject_alias` = the frog name it shows): the login behind it
 //                   is blanked (the clip, labelled with the frog name, stays)
 // A column the copy lacks (prod a release behind: no such rows yet) skips its step.
 const SCRUB = [
