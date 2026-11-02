@@ -1,7 +1,7 @@
 // feedstore.js — feed posts, rooms as hubs, votes, comments, reports, feed bans (1.99bv).
 //
 // Data model (shaped after v2 §10 "Social feed": posts, attachments, votes, comments, rooms as hubs)
-//   feed_posts         id (12 chars, random), author_id, title, body (plain text, <= 5000), link_url,
+//   feed_posts         id (12 chars, random), author_id, title, body (source text, <= 5000), link_url,
 //                      link_json ({url, domain, title, description, site, embed: {p,t,id}|null, thumb}),
 //                      nsfw (author flag), nsfw_admin (admin override: null = author's flag, 0/1 = forced),
 //                      global (on the main feed), score (cached upvotes), comments (cached count),
@@ -29,6 +29,7 @@
 //   feed_comment_votes comment_id, post_id, user_id, value, w, created, updated (comments: ups/downs/score)
 //   feed_comments      id, post_id, parent_id (one level of replies), author_id, body, created,
 //                      edited, deleted_at, deleted_by
+//                      Posts and comments: fmt is NULL for plain text, "md" for stored Markdown.
 //   feed_reports       id, post_id, comment_id, reporter_id, reason, note, created, resolved_at,
 //                      resolved_by, action
 //   feed_bans          user_id, room_id ('' = the whole feed), reason, by, at, until (NULL = forever)
@@ -61,6 +62,7 @@ const PAGE = 20;
 const MAX_PINS = 3;
 const DEFAULTS = Object.freeze({
   enabled: true,
+  feed_markdown: false,              // 1.99??: new posts/comments only; stored fmt survives switch changes
   max_image_mb: 10, max_audio_mb: 25, max_video_mb: 100,
   max_audio_secs: 600, max_video_secs: 180,
   user_quota_mb: 500, global_quota_gb: 20, min_free_gb: 8,
@@ -104,8 +106,10 @@ function _setClock(fn) { NOW = fn; }
 
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
 // 1.99iw: stickers in a post / comment must come from packs the writer owns (stickers.js)
-async function stickerCheck(userId, text) {
-  try { await require("./stickers").validate(userId, text); } catch (e) { if (e.refuse) throw new Refuse(e.status, e.message); throw e; }
+async function stickerCheck(userId, text, fmt) {
+  // 1.99??: validate only text that can render stickers; code, URL destinations and split tokens stay literal.
+  const used = fmt === "md" ? require("./postmd").sourceText(text) : text;
+  try { await require("./stickers").validate(userId, used); } catch (e) { if (e.refuse) throw new Refuse(e.status, e.message); throw e; }
 }
 // stkfix B2: in a notice's text a sticker reads "[sticker: Happy Pepe]", never the raw [sticker:pack/id] token
 const stickerText = (s) => { try { return require("./stickers").fallbackText(s); } catch (e) { return String(s == null ? "" : s); } };
@@ -182,6 +186,9 @@ function init() {
       // wave2 integration review (DARK-1): a J-7 clip posted under a FROG NAME records it (null = a named post) - logins then pairs
       // that frog name with the real speaker, so a prod -> staging refresh blanks them (deploy/keep-staging-tables.js SCRUB)
       await addCol("feed_voices", "alias", "TEXT");
+      // 1.99??: legacy bodies stay plain; no backfill or default reinterprets existing posts/comments.
+      await addCol("feed_posts", "fmt", "TEXT");
+      await addCol("feed_comments", "fmt", "TEXT");
       await TAGS().init();          // 1.99iq: content tags (feedtags.js)
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
@@ -504,6 +511,8 @@ const config = () => CONFIG;
 const CTRL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f‪-‮⁦-⁩]/g;
 const cleanLine = (s, n) => String(s == null ? "" : s).replace(CTRL, "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, n);
 const cleanText = (s, n) => String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(CTRL, "").replace(/\n{4,}/g, "\n\n\n").trim().slice(0, n);
+// 1.99??: text-only consumers use a body's stored format, never the current switch or its title.
+const plainBody = (row) => row.fmt === "md" ? require("./postmd").plain(row.body || "") : row.body || "";
 const newId = (n = 12) => crypto.randomBytes(16).toString("base64url").replace(/[-_]/g, "").slice(0, n).padEnd(n, "x");
 // 1.99ack: was isStaff (Admin / Staff) - now feed.see_hidden / feed.limits_exempt / feed.moderate (siteperms.js) at each check
 // 1.99cg: Pepe's own site account (pepefeed.js creates it). His posts / comments go through the same create /
@@ -696,7 +705,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   const origIds = [...new Set(rows.map((r) => r.crosspost_of).filter(Boolean))];
   const [ORIG, XP] = _inner ? [[], []] : await Promise.all([
     origIds.length ? getQuery(`SELECT * FROM feed_posts WHERE id IN (${origIds.map(() => "?").join(",")})`, origIds) : [],
-    getQuery(`SELECT x.id, x.crosspost_of, x.title, x.body, pr.room_id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id
+    getQuery(`SELECT x.id, x.crosspost_of, x.title, x.body, x.fmt, pr.room_id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id
               WHERE x.crosspost_of IN (${q}) AND x.deleted_at IS NULL AND x.hidden_at IS NULL AND pr.removed_at IS NULL AND pr.pending = 0 AND pr.hidden_at IS NULL`, ids),
   ]);
   const origs = new Map((ORIG.length ? await decorate(ORIG, viewer, { detail, _inner: true, access }) : []).map((o) => [o.id, o]));
@@ -784,7 +793,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       const R = rooms.getCached(x.room_id);
       const c = { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, profile: profileName(R), label: padLabelOf(R, x.room_id) };
       // 1.99dv: the crosspost's own address (its pad + its title)
-      c.url = require("./pads").postHref({ id: x.id, title: x.title, body: x.body, roomsAll: [{ id: x.room_id, slug: c.slug, profile: c.profile }] });
+      c.url = require("./pads").postHref({ id: x.id, title: x.title, body: x.body, fmt: x.fmt, roomsAll: [{ id: x.room_id, slug: c.slug, profile: c.profile }] });
       return [x.room_id, c];
     })).values()];
     const mineRow = !!(viewer && viewer.userId === r.author_id);
@@ -801,6 +810,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       // (review 2 fix-up: and its title with the names of hidden people redacted - quotes.forPosts)
       id: r.id, title: QUO.has(r.id) && typeof QUO.get(r.id).title === "string" ? QUO.get(r.id).title : r.title || "",
       body: QUO.has(r.id) && typeof QUO.get(r.id).body === "string" ? QUO.get(r.id).body : r.body || "",
+      fmt: r.fmt || null,
       created: r.created, edited: r.edited, score: r.score, comments: r.comments,
       ups: r.ups || 0, downs: r.downs || 0, myVote: mv ? (mv.value > 0 ? 1 : -1) : 0,
       nsfw, nsfwAuthor: !!r.nsfw, nsfwRoom: !!(ctx && ctx.nsfw), pinned: !!(ctx && ctx.pinned), roomHidden: !!(ctx && ctx.hidden), pending: !!(ctx && ctx.pending),
@@ -1104,7 +1114,8 @@ function priceOf(C, { images, audio, video, link }) {
 }
 
 /**
- * Create a post. input: {title, body, link (url string), attachments: [ids], rooms: [room ids], global, nsfw}
+ * Create a post. input: {title, body, link (url string), attachments: [ids], rooms: [room ids], global, nsfw, fmt?}
+ * fmt: "plain" opts out; otherwise the new row follows feed_markdown. Edits never change its stored format.
  * deps.preview(url) -> link preview ({url, domain, title, description, site, embed, thumb: attachment row|null})
  * 1.99dn: deps.free - no post price (aigen.js: a Camfrog room's !imagine / !video posted to its pad, already paid in
  * chat); deps.roomGen - that post, made by Pepe on a room member's behalf: the pad's who-can-post rules are about
@@ -1121,7 +1132,8 @@ async function create(userId, input, deps = {}) {
   if (!u) throw new Refuse(401, "Sign in to post.");
   const title = cleanLine(input.title, TITLE_MAX);
   const body = cleanText(input.body, BODY_MAX);
-  await stickerCheck(u.userId, body);
+  const fmt = C.feed_markdown && input.fmt !== "plain" ? "md" : null;
+  await stickerCheck(u.userId, body, fmt);
   const linkIn = String(input.link || "").trim();
   const attIds = [...new Set((Array.isArray(input.attachments) ? input.attachments : []).map(String))].slice(0, MAX_ATTACH + 1);
   if (attIds.length > MAX_ATTACH) throw new Refuse(400, `At most ${MAX_ATTACH} files per post.`);
@@ -1216,11 +1228,11 @@ async function create(userId, input, deps = {}) {
   await chargeFor(u, cost, label);
   try {
     const t = NOW();
-    await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created, in_all, home_pad)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created, in_all, home_pad, fmt)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, u.userId, title || null, body || null, link ? link.url : null, link ? JSON.stringify(link) : null,
                     aiNsfw || input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t, inAll,
-                    roomIds[0] || null]);      // 1.99ep: its fixed home pad (one pad per post since 1.99ci)
+                    roomIds[0] || null, fmt]);      // 1.99ep: its fixed home pad (one pad per post since 1.99ci)
     let i = 0;
     for (const a of atts) {
       const r = await runQuery("UPDATE feed_attachments SET post_id = ?, sort = ? WHERE id = ? AND owner_id = ? AND post_id IS NULL AND state = 'ready'", [id, i++, a.id, u.userId]);
@@ -1261,7 +1273,7 @@ async function create(userId, input, deps = {}) {
   const made = await get(id, u);
   if (made && filt && filt.message) made.safety = { action: filt.action, selfharm: filt.selfharm, message: filt.message };
   // 1.99kk: @mentions in the body (feedmentions.js; not while the post waits for a pad's approval everywhere)
-  if (made && body && !lock && !filtHide) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, link: made.url || await postLink(id) });
+  if (made && body && !lock && !filtHide) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, fmt, link: made.url || await postLink(id) });
   // 1.99bz: followers who asked for it get an inbox notice (default off); never blocks the post
   if (made && !filtHide) {
     const pending = require("./follows").notifyNewPost(made, u.displayname || u.username);
@@ -1392,7 +1404,7 @@ async function crosspostMany(userId, origId, input = {}) {
   const ann = Array.isArray(input.announce) ? new Set(input.announce.map(String)) : null;
   const wantsAnnounce = (R) => !ann || ann.has(R.id) || ann.has(R.slug || "") || ann.has(padSlugOf(R, R.id));
   const olink = parseJson(o.link_json);
-  const title = cleanLine(input.title, TITLE_MAX) || o.title || cleanLine(o.body, 100) || (olink && cleanLine(olink.title, 100)) || "Crosspost";
+  const title = cleanLine(input.title, TITLE_MAX) || o.title || cleanLine(plainBody(o), 100) || (olink && cleanLine(olink.title, 100)) || "Crosspost";
   for (const [res, R] of go) {
     try {
       const made = await crosspostOne(u, o, R, title, wantsAnnounce(R));
@@ -1407,7 +1419,7 @@ async function crosspostMany(userId, origId, input = {}) {
   if (made.length && o.author_id !== u.userId) {
     const where = made.map((r) => (r.pad.profile ? "their profile" : r.pad.label || "p/" + r.pad.slug)).join(", ");
     await notify(o.author_id, { title: `${u.displayname || u.username} crossposted your post to ${where}`,
-                                body: `"${(o.title || o.body || "your post").replace(/\s+/g, " ").slice(0, 80)}"`, link: made[0].url, ref: "feed-xp:" + made[0].id });
+                                body: `"${(o.title || plainBody(o) || "your post").replace(/\s+/g, " ").slice(0, 80)}"`, link: made[0].url, ref: "feed-xp:" + made[0].id });
   }
   return { original: o.id, title, results, created: results.filter((r) => r.status === "created").length,
            pending: results.filter((r) => r.status === "pending").length, refused: results.filter((r) => r.status === "refused").length };
@@ -1477,7 +1489,7 @@ async function hot(viewer = null, limit = 5) {
   });
 }
 
-/** Author edit: title, body, nsfw. (Files, link and rooms stay - delete and repost to change those.) */
+/** Author edit: title, body, nsfw. Stored fmt stays fixed. (Files, link and rooms stay - delete and repost to change those.) */
 async function edit(user, id, patch) {
   const r = await getRow(id);
   if (!r || r.deleted_at) throw new Refuse(404, "No such post.");
@@ -1486,7 +1498,7 @@ async function edit(user, id, patch) {
   // 1.99fp: a chat quote's text is what was said - only its title can be edited
   const isQuote = (await getQuery("SELECT 1 FROM feed_quotes WHERE post_id = ?", [id]).catch(() => [])).length > 0;
   const body = patch.body != null && !isQuote ? cleanText(patch.body, BODY_MAX) : r.body;
-  if (body !== r.body) await stickerCheck(user.userId, body);
+  if (body !== r.body) await stickerCheck(user.userId, body, r.fmt);
   const nsfw = patch.nsfw != null ? (patch.nsfw === true || patch.nsfw === 1 || patch.nsfw === "1" || patch.nsfw === "on" ? 1 : 0) : r.nsfw;
   if (r.lock_kind && nsfw) throw new Refuse(400, "A locked post can't be NSFW (Creator Terms).");      // 1.99pv
   if (!title && !body && !r.link_url && !r.crosspost_of && !(await getQuery("SELECT 1 FROM feed_attachments WHERE post_id = ? AND kind != 'preview' AND state = 'ready' LIMIT 1", [id])).length) {
@@ -1517,7 +1529,7 @@ async function edit(user, id, patch) {
   // 1.99kk: names added by the edit get their @mention notice (feedmentions.js) - not for an edit the filter hid
   if (!onlyInAll && body && body !== r.body && !(filt && filt.action === "hide")) {
     const u = await account(user.userId);
-    if (u) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, prevText: r.body, link: await postLink(id) });
+    if (u) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, fmt: r.fmt, prevText: r.body, link: await postLink(id) });
   }
   return get(id, user);
 }
@@ -1536,7 +1548,7 @@ async function remove(user, id, reason) {
   // shown can't open a deleted post to tap Remove me); a no-op for any other post; never throws
   try { await require("./storykeep").onPostDeleted(id); } catch (e) { /* no story keeping in this build */ }
   if (!own) {
-    await notify(r.author_id, { title: "Your post was removed", body: `"${(r.title || r.body || "").slice(0, 80)}" was removed by an admin${reason ? ": " + cleanLine(reason, 200) : "."}`,
+    await notify(r.author_id, { title: "Your post was removed", body: `"${(r.title || plainBody(r)).slice(0, 80)}" was removed by an admin${reason ? ": " + cleanLine(reason, 200) : "."}`,
                           link: "/feed", ref: "feed-rm:" + id });
   }
   console.log(`[feed] post ${id} deleted by ${own ? "author" : user.username}`);
@@ -1699,7 +1711,7 @@ async function comments(postId, viewer, sort = "best") {
   // 1.99cc: a comment hidden by an urgent report is gone for everyone but staff (it shows to them, tagged)
   const staff = SP.can(viewer, "feed.see_hidden");
   const gone = (c) => !!c.deleted_at || (!!c.hidden_at && !staff);
-  const all = rows.map((c) => ({ id: c.id, parent: c.parent_id, body: gone(c) ? "" : c.body, deleted: gone(c), hidden: !!c.hidden_at && staff, created: c.created, edited: c.edited,
+  const all = rows.map((c) => ({ id: c.id, parent: c.parent_id, body: gone(c) ? "" : c.body, fmt: c.fmt || null, deleted: gone(c), hidden: !!c.hidden_at && staff, created: c.created, edited: c.edited,
     author: gone(c) ? null : A.get(c.author_id) || { username: "[gone]", display: "[deleted account]" },
     ups: c.ups || 0, downs: c.downs || 0, score: c.score || 0, myVote: mine.get(c.id) || 0,
     mine: !!(viewer && viewer.userId === c.author_id && !gone(c)), replies: [] }));
@@ -1728,7 +1740,7 @@ async function comments(postId, viewer, sort = "best") {
     });
 }
 
-async function comment(user, postId, { body, parent } = {}) {
+async function comment(user, postId, { body, parent, fmt: requestedFmt } = {}) {
   const p = await getRow(postId);
   if (!p || p.deleted_at || p.hidden_at) throw new Refuse(404, "No such post.");
   const u = await account(user && user.userId);
@@ -1739,8 +1751,9 @@ async function comment(user, postId, { body, parent } = {}) {
   const refusal = await postRefusal(u, roomIds);
   if (refusal) throw new Refuse(refusal.status, refusal.message.replace("to post", "to comment"));
   const text = cleanText(body, COMMENT_MAX);
+  const fmt = CONFIG.feed_markdown && requestedFmt !== "plain" ? "md" : null;
   if (!text) throw new Refuse(400, "Write something first.");
-  await stickerCheck(u.userId, text);
+  await stickerCheck(u.userId, text, fmt);
   if (!SP.can(u, "feed.limits_exempt") && !isPepe(u)) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_comments WHERE author_id = ? AND created > ?", [u.userId, NOW() - 3600e3]))[0].n;
     if (n >= CONFIG.comments_per_hour) throw new Refuse(429, "You've commented a lot this hour - try again later.");
@@ -1760,8 +1773,8 @@ async function comment(user, postId, { body, parent } = {}) {
   const filtHide = !!(filt && filt.action === "hide");
   const id = newId(10);
   const t = NOW();
-  await runQuery("INSERT INTO feed_comments (id, post_id, parent_id, author_id, body, created, hidden_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                 [id, postId, par ? par.id : null, u.userId, text, t, filtHide ? t : null]);
+  await runQuery("INSERT INTO feed_comments (id, post_id, parent_id, author_id, body, created, hidden_at, fmt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                 [id, postId, par ? par.id : null, u.userId, text, t, filtHide ? t : null, fmt]);
   if (filt) await FILTER().record(filt, { kind: "comment", postId, commentId: id, authorId: u.userId }).catch((e) => console.error("[feed] filter record:", e.message));
   const safety = filt && filt.message ? { action: filt.action, selfharm: filt.selfharm, message: filt.message } : undefined;
   if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_comment_votes (comment_id, post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, 1, 1, ?, ?)", [id, postId, u.userId, t, t]);
@@ -1772,8 +1785,8 @@ async function comment(user, postId, { body, parent } = {}) {
   if (filtHide) return { id, safety };                              // 1.99ux: hidden by the filter - no notices until it's released
   // notices: the post's author, and the person replied to (never yourself, never twice)
   const who = u.displayname || u.username;
-  const what = stickerText(p.title || p.body || "your post").replace(/\s+/g, " ").slice(0, 60);
-  const said = stickerText(text).slice(0, 200);                     // stkfix B2
+  const what = stickerText(p.title || plainBody(p) || "your post").replace(/\s+/g, " ").slice(0, 60);
+  const said = stickerText(plainBody({ body: text, fmt })).slice(0, 200);                     // stkfix B2
   const link = await postLink(postId, "#c-" + id);
   const told = new Set([u.userId]);
   if (par && !told.has(par.author_id)) {
@@ -1785,7 +1798,7 @@ async function comment(user, postId, { body, parent } = {}) {
     await notify(p.author_id, { title: `${who} commented on your post`, body: `"${what}": ${said}`, link, ref: "feed-c:" + id });
   }
   // 1.99kk: @mentions (feedmentions.js; never the people just told above)
-  await require("./feedmentions").notify({ author: u, kind: "comment", id, postId, text, skip: [...told], link });
+  await require("./feedmentions").notify({ author: u, kind: "comment", id, postId, text, fmt, skip: [...told], link });
   return { id, safety };
 }
 async function recount(postId) {
@@ -1798,7 +1811,7 @@ async function editComment(user, id, body) {
   if (!user || user.userId !== c.author_id) throw new Refuse(403, "Only the author can edit a comment.");
   const text = cleanText(body, COMMENT_MAX);
   if (!text) throw new Refuse(400, "A comment can't be empty.");
-  await stickerCheck(user.userId, text);
+  await stickerCheck(user.userId, text, c.fmt);
   // 1.99ux: an edit goes through the content filter too (a block refuses the edit, a hide hides the comment)
   let filt = null;
   if (text !== c.body) {
@@ -1806,12 +1819,13 @@ async function editComment(user, id, body) {
     filt = await FILTER().check(await account(user.userId), roomIds, { kind: "comment", body: text, edit: true, postId: c.post_id, commentId: c.id });
     if (filt && filt.action === "block") throw new Refuse(422, filt.message);
   }
+  // 1.99??: the stored format stays fixed even when feed_markdown has changed since creation.
   await runQuery("UPDATE feed_comments SET body = ?, edited = ? WHERE id = ?", [text, NOW(), c.id]);
   if (filt) await FILTER().record(filt, { kind: "comment", postId: c.post_id, commentId: c.id, authorId: c.author_id }).catch((e) => console.error("[feed] filter record:", e.message));
   // 1.99kk: names added by the edit get their @mention notice (feedmentions.js) - not for an edit the filter hid
   if (text !== c.body && !(filt && filt.action === "hide")) {
     const u = await account(user.userId);
-    if (u) await require("./feedmentions").notify({ author: u, kind: "comment", id: c.id, postId: c.post_id, text, prevText: c.body, link: await postLink(c.post_id, "#c-" + c.id) });
+    if (u) await require("./feedmentions").notify({ author: u, kind: "comment", id: c.id, postId: c.post_id, text, fmt: c.fmt, prevText: c.body, link: await postLink(c.post_id, "#c-" + c.id) });
   }
   return true;
 }
@@ -1832,7 +1846,7 @@ async function removeComment(user, id, reason) {
   await recount(c.post_id);
   if (!own) {
     const why = cleanLine(reason, 200);
-    await notify(c.author_id, { title: "Your comment was removed", body: `"${cleanLine(c.body, 80)}" was removed by a moderator${why ? ": " + why : "."}`,
+    await notify(c.author_id, { title: "Your comment was removed", body: `"${cleanLine(plainBody(c), 80)}" was removed by a moderator${why ? ": " + why : "."}`,
                                 link: await postLink(c.post_id), ref: "feed-crm:" + c.id });
     if (!SP.can(user, "feed.moderate")) {
       for (const r of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [c.post_id])) {
@@ -1955,7 +1969,7 @@ async function report(user, { post, comment: cid, reason, note } = {}) {
   const open = (await getQuery("SELECT COUNT(*) AS n FROM feed_reports WHERE post_id = ? AND resolved_at IS NULL", [p.id]))[0].n;
   if (open === 1) {
     for (const a of await admins()) {
-      await notify(a.userId, { kind: "admin", title: `A feed ${c ? "comment" : "post"} was reported`, body: `${REASONS[why]}: "${(p.title || p.body || "").slice(0, 80)}"`, link: "/feed/admin", ref: "feed-rep:" + p.id + ":" + p.created });
+      await notify(a.userId, { kind: "admin", title: `A feed ${c ? "comment" : "post"} was reported`, body: `${REASONS[why]}: "${(p.title || plainBody(p)).slice(0, 80)}"`, link: "/feed/admin", ref: "feed-rep:" + p.id + ":" + p.created });
     }
   }
   return { ok: true };
@@ -2004,7 +2018,7 @@ async function reports({ open = true } = {}) {
   }
   const posts = await decorate(await getQuery(`SELECT * FROM feed_posts WHERE id IN (${[...byPost.keys()].map(() => "?").join(",") || "''"})`, [...byPost.keys()]), { class: "Admin", userId: "_" });
   const cmts = rows.filter((r) => r.comment_id).map((r) => r.comment_id);
-  const C = cmts.length ? await getQuery(`SELECT c.id, c.body, c.deleted_at, c.hidden_at, c.author_id, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id
+  const C = cmts.length ? await getQuery(`SELECT c.id, c.body, c.fmt, c.deleted_at, c.hidden_at, c.author_id, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id
                                           WHERE c.id IN (${cmts.map(() => "?").join(",")})`, cmts) : [];
   return posts.map((p) => {
     const reps = byPost.get(p.id).map((r) => ({ ...r, label: REASONS[r.reason] || r.reason, urgent: URGENT.includes(r.reason), adminOnly: ADMIN_ONLY.includes(r.reason),
@@ -2248,7 +2262,7 @@ async function queueMention(roomId, postId) {
 async function takeMentions(site) {
   await init();
   const t = NOW(), gap = CONFIG.mention_gap_min * 60e3;
-  const pend = await getQuery(`SELECT m.id, m.room_id, m.post_id, p.title, p.body, p.author_id, p.nsfw, p.nsfw_admin, p.deleted_at, p.hidden_at
+  const pend = await getQuery(`SELECT m.id, m.room_id, m.post_id, p.title, p.body, p.fmt, p.author_id, p.nsfw, p.nsfw_admin, p.deleted_at, p.hidden_at
                                FROM feed_mentions m JOIN feed_posts p ON p.id = m.post_id WHERE m.sent_at IS NULL ORDER BY m.id LIMIT 200`);
   const byRoom = new Map();
   for (const m of pend) { if (!byRoom.has(m.room_id)) byRoom.set(m.room_id, []); byRoom.get(m.room_id).push(m); }
@@ -2268,7 +2282,7 @@ async function takeMentions(site) {
     const name = A ? (A.displayname || A.username) : "someone";
     const nsfw = effNsfw(first);
     // stkfix B2: this line is said in the Camfrog room - a sticker in the post reads "[sticker: Happy Pepe]", never the raw token
-    const what = nsfw ? "(NSFW)" : cleanLine(stickerText(first.title || first.body || ""), 70);
+    const what = nsfw ? "(NSFW)" : cleanLine(stickerText(first.title || plainBody(first)), 70);
     // 1.99cu: every line links the post itself (1.99dv: its canonical address, <site>/p/<pad>/posts/<id>/<slug>); several
     // posts folded into one line link each post when they fit in MENTION_LINE_MAX, else the newest post + the pad page
     const urls = await postLinks(live.map((m) => m.post_id));
@@ -2505,7 +2519,7 @@ async function roomReports(roomId) {
   const posts = new Map((await decorate(await getQuery(`SELECT * FROM feed_posts WHERE id IN (${list.map(() => "?").join(",") || "''"})`, list.map((g) => g.postId)),
                                         { class: "Admin", userId: "_" }, { ctxRoom: roomId })).map((p) => [p.id, p]));
   const cids = list.filter((g) => g.commentId).map((g) => g.commentId);
-  const C = cids.length ? await getQuery(`SELECT c.id, c.body, c.deleted_at, c.hidden_at, c.author_id, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id WHERE c.id IN (${cids.map(() => "?").join(",")})`, cids) : [];
+  const C = cids.length ? await getQuery(`SELECT c.id, c.body, c.fmt, c.deleted_at, c.hidden_at, c.author_id, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id WHERE c.id IN (${cids.map(() => "?").join(",")})`, cids) : [];
   const out = list.filter((g) => posts.has(g.postId)).map((g) => ({ ...g, post: posts.get(g.postId), comment: g.commentId ? C.find((c) => c.id === g.commentId) || null : null }))
     .filter((g) => !g.comment || (!g.comment.deleted_at && !g.comment.hidden_at)).sort((a, b) => b.count - a.count || b.last - a.last);
   // 1.99cc: owners see the author's account age + which identities are linked - never network data (contentaudit.ownerInfo)

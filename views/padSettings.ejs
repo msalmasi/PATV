@@ -9,7 +9,7 @@
   panel by pad-settings.js.
 %>
 <link rel="stylesheet" href="/public/css/stage.css?v=9">
-<link rel="stylesheet" href="/public/css/feed.css?v=20">
+<link rel="stylesheet" href="/public/css/feed.css?v=21">
 <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=3">
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
@@ -378,7 +378,7 @@
       <div class="fd-list">
         <% pending.forEach((p) => { %>
           <div class="rm-item" data-post="<%= p.id %>">
-            <div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %></span> <a href="<%= p.url %>">Open ›</a></div>
+            <div class="rm-what"><b><%= p.title || fx.plainBody(p).slice(0, 120) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %></span> <a href="<%= p.url %>">Open ›</a></div>
             <div class="fa-acts"><button type="button" class="ok" data-op="approve"><%- fx.icon('check') %>Approve</button><button type="button" class="bad" data-op="reject"><%- fx.icon('x') %>Reject</button></div>
           </div>
         <% }) %>
@@ -390,8 +390,8 @@
       <% reports.forEach((g) => { const p = g.post; %>
         <div class="rm-item" data-post="<%= p.id %>"<% if (g.commentId) { %> data-comment="<%= g.commentId %>"<% } %>>
           <div class="rm-what">
-            <% if (g.comment) { %><span class="tag warn">Comment</span> <b><%= (g.comment.body || '').slice(0, 160) %></b><span class="mut">by <%= g.comment.username || '?' %> · on "<%= (p.title || p.body || '').slice(0, 60) %>"</span>
-            <% } else { %><span class="tag warn">Post</span> <b><%= p.title || (p.body || '').slice(0, 160) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.roomHidden ? ' · hidden in this pad' : '' %></span><% } %>
+            <% if (g.comment) { %><span class="tag warn">Comment</span> <b><%= fx.plainBody(g.comment).slice(0, 160) %></b><span class="mut">by <%= g.comment.username || '?' %> · on "<%= (p.title || fx.plainBody(p)).slice(0, 60) %>"</span>
+            <% } else { %><span class="tag warn">Post</span> <b><%= p.title || fx.plainBody(p).slice(0, 160) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.roomHidden ? ' · hidden in this pad' : '' %></span><% } %>
             <a href="<%= p.url %><%= g.commentId ? '#c-' + g.commentId : '' %>">Open ›</a>
             <% const ai_ = g.authorInfo; if (ai_) { const d_ = ai_.ageDays; %>
               <%# 1.99cc: owners see the author's account age + linked identities only (no IPs - those are site-admin-only) %>
@@ -431,7 +431,7 @@
     <div class="fa-card ps-card" id="pins">
       <h3>📌 Pinned posts <span class="n"><%= pins.length %></span></h3>
       <% if (!pins.length) { %><p class="mut">Nothing pinned. Pin a post from its ⋯ menu on the pad page (up to 3).</p><% } %>
-      <% pins.forEach((p) => { %><div class="rm-item" data-post="<%= p.id %>"><div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">pinned by <%= p.pinned_by || '?' %> · <%= dt(p.pinned_at) %></span> <a href="<%= p.url %>">Open ›</a></div>
+      <% pins.forEach((p) => { %><div class="rm-item" data-post="<%= p.id %>"><div class="rm-what"><b><%= p.title || fx.plainBody(p).slice(0, 120) || '(media post)' %></b><span class="mut">pinned by <%= p.pinned_by || '?' %> · <%= dt(p.pinned_at) %></span> <a href="<%= p.url %>">Open ›</a></div>
         <div class="fa-acts"><button type="button" data-op="unpin"><%- fx.icon('pin') %>Unpin</button></div></div><% }) %>
     </div>
     <div class="fa-card ps-card" id="bans">

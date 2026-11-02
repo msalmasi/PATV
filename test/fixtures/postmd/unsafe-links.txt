@@ -1,0 +1,7 @@
+[run](javascript:alert(1))
+[doc](data:text/html,<svg/onload=x>)
+[relative](/admin)
+[network](//evil.test)
+[anchor](#top)
+[spaces](https://example.test/a b)
+quote (https://example.test/"onerror=x)

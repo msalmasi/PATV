@@ -377,6 +377,9 @@ function gate(what, why, S, G, U, { scope = "", depth = 0, cost = 0, t = NOW() }
 
 // ── who / what he may answer ──
 const MENTION_RE = /(^|[^\w@])@?pepe(?![\w])/i;
+// 1.99??: the bot reads stored Markdown as plain text; only prose can summon it, never a closed code example.
+const plainBody = (row) => row.fmt === "md" ? require("./postmd").plain(row.body || "") : String(row.body || "");
+const mentionBody = (row) => row.fmt === "md" ? require("./postmd").sourceText(row.body || "") : String(row.body || "");
 /** "@pepe", "pepe" as a word, or "@<his username>". */
 function mentions(text, username = null) {
   const s = String(text || "");
@@ -483,7 +486,7 @@ async function postView(p) {
   // 1.99cu: the pad the post lives in, and for a crosspost the original's own title + pad (Pepe's reply context);
   // source_id = the post whose content/pictures these are (his vision-description cache key)
   return {
-    id: p.id, url: SITE() + (await store.postLink(p.id)), title: tc(p.title || src.title || ""), body: tc(String(src.body || p.body || "")).slice(0, 2000), created: p.created,
+    id: p.id, url: SITE() + (await store.postLink(p.id)), title: tc(p.title || src.title || ""), body: tc(plainBody(src.body ? src : p)).slice(0, 2000), created: p.created,
     author: who(A, p.author_id), pad: await padOf(p.id), source_id: src.id,
     crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id), id: src.id, title: tc(src.title || ""),
                              pad: await padOf(src.id) } : null,
@@ -521,7 +524,7 @@ async function conversation(postId, top, targetId = null) {
   const out = [];
   for (const c of rows.slice(-CONVO_MAX)) {
     // 1.99ade: comment text his LLM reads loses invisible characters too (textclean.js)
-    out.push({ id: c.id, parent: c.parent_id || null, author: who(await store.account(c.author_id), c.author_id), body: require("./textclean").stripFormat(String(c.body)).slice(0, 1500),
+    out.push({ id: c.id, parent: c.parent_id || null, author: who(await store.account(c.author_id), c.author_id), body: require("./textclean").stripFormat(plainBody(c)).slice(0, 1500),
                created: c.created, ...(c.id === targetId ? { target: true } : {}) });
   }
   return out;
@@ -533,7 +536,7 @@ async function otherComments(postId, excludeTop = null) {
                                  AND NOT EXISTS (SELECT 1 FROM feed_reports fr WHERE fr.comment_id = c.id AND fr.resolved_at IS NULL)
                                ORDER BY c.score DESC, c.created DESC LIMIT ?`, [postId, excludeTop, OTHERS_MAX]);
   const out = [];
-  for (const c of rows) out.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: require("./textclean").stripFormat(String(c.body)).slice(0, 500), created: c.created, replies: c.replies || 0 });
+  for (const c of rows) out.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: require("./textclean").stripFormat(plainBody(c)).slice(0, 500), created: c.created, replies: c.replies || 0 });
   return out;
 }
 async function depthOf(postId, top) {
@@ -560,7 +563,7 @@ async function findMentions(acct, t = NOW()) {
   const ps = await getQuery("SELECT * FROM feed_posts WHERE created > ? AND author_id != ? AND deleted_at IS NULL ORDER BY created LIMIT 200", [since, PEPE_ID]);
   const cand = [];
   for (const c of cs) {
-    const hit = mentions(c.body, acct.username) || c.par_author === PEPE_ID || (!c.parent_id && c.post_author === PEPE_ID)
+    const hit = mentions(mentionBody(c), acct.username) || c.par_author === PEPE_ID || (!c.parent_id && c.post_author === PEPE_ID)
       || (c.parent_id && c.prev_author === PEPE_ID);
     if (!hit) continue;
     // a reply to Pepe that comes AFTER a later Pepe reply in the same conversation is still a mention (he answers
@@ -575,12 +578,12 @@ async function findMentions(acct, t = NOW()) {
   for (const p of ps) {
     if (!p.crosspost_of || origText.has(p.crosspost_of)) continue;
     const o = (await store.getRow(p.crosspost_of)) || {};
-    origText.set(p.crosspost_of, ((o.title || "") + "\n" + (o.body || "")).replace(/\s+/g, " ").trim());
+    origText.set(p.crosspost_of, ((o.title || "") + "\n" + plainBody(o)).replace(/\s+/g, " ").trim());
   }
   for (const p of ps) {
     const own = String(p.title || "").replace(/\s+/g, " ").trim();
     if (p.crosspost_of && (!own || String(origText.get(p.crosspost_of) || "").includes(own))) continue;
-    if (mentions((p.title || "") + "\n" + (p.body || ""), acct.username)) cand.push({ target: "p:" + p.id, p });
+    if (mentions((p.title || "") + "\n" + mentionBody(p), acct.username)) cand.push({ target: "p:" + p.id, p });
   }
   const seen = await seenMap(cand.map((x) => x.target));
   for (const x of cand) {
@@ -602,7 +605,7 @@ async function findMentions(acct, t = NOW()) {
     const post = await postView(p);
     out.push({
       target: x.target, why: "mention", scope, post, parent: top, depth, max_depth: S.max_depth, vision: S.vision,
-      reply_to: x.c ? { id: x.c.id, parent: x.c.parent_id || null, body: String(x.c.body).slice(0, 1500), author: who(await store.account(x.c.author_id), x.c.author_id) } : null,
+      reply_to: x.c ? { id: x.c.id, parent: x.c.parent_id || null, body: plainBody(x.c).slice(0, 1500), author: who(await store.account(x.c.author_id), x.c.author_id) } : null,
       thread: x.c ? await conversation(p.id, top, x.c.id) : [],
       others: await otherComments(p.id, top),                     // 1.99cu: sibling conversations (trimmed first by Pepe)
       created: x.c ? x.c.created : p.created,
@@ -630,7 +633,7 @@ async function findThreads(autoScopes, t = NOW()) {
     const S = await scopeSettings(scope);
     const top = await getQuery(`SELECT * FROM feed_comments WHERE post_id = ? AND parent_id IS NULL AND ${LIVE_COMMENT} ORDER BY score DESC, created LIMIT 6`, [p.id]);
     const thread = [];
-    for (const c of top) thread.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: String(c.body).slice(0, 500), created: c.created });
+    for (const c of top) thread.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: plainBody(c).slice(0, 500), created: c.created });
     out.push({ target: "a:" + p.id, why: "auto", scope, post: await postView(p), parent: null, depth: 0, max_depth: S.max_depth, vision: S.vision, thread, created: p.created });
     if (out.length >= 5) break;
   }
@@ -862,8 +865,8 @@ async function adminView() {
   const rows = await getQuery("SELECT * FROM pepe_feed_log ORDER BY id DESC LIMIT 150");
   const titles = new Map();
   const ids = [...new Set(rows.map((r) => r.post_id).filter(Boolean))];
-  if (ids.length) for (const p of await getQuery(`SELECT id, title, body, deleted_at FROM feed_posts WHERE id IN (${ids.map(() => "?").join(",")})`, ids)) {
-    titles.set(p.id, { t: (p.title || p.body || "").replace(/\s+/g, " ").slice(0, 70), deleted: !!p.deleted_at });
+  if (ids.length) for (const p of await getQuery(`SELECT id, title, body, fmt, deleted_at FROM feed_posts WHERE id IN (${ids.map(() => "?").join(",")})`, ids)) {
+    titles.set(p.id, { t: (p.title || plainBody(p)).replace(/\s+/g, " ").slice(0, 70), deleted: !!p.deleted_at });
   }
   const cids = [...new Set(rows.map((r) => r.comment_id).filter(Boolean))];
   const cdel = new Set();

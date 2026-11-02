@@ -87,9 +87,9 @@ test("Pepe's feed context (pepefeed) and the bounty page: member text is cleaned
   const fs = require("fs");
   const src = (f) => fs.readFileSync(path.join(repo, f), "utf8");
   // the post, its crosspost title, its link preview and the comments he reads (old posts included: cleaned when read)
-  assert.match(src("pepefeed.js"), /title: tc\(p\.title \|\| src\.title \|\| ""\), body: tc\(String\(src\.body \|\| p\.body \|\| ""\)\)/);
+  assert.match(src("pepefeed.js"), /title: tc\(p\.title \|\| src\.title \|\| ""\), body: tc\(plainBody\(src\.body \? src : p\)\)/);
   assert.match(src("pepefeed.js"), /title: tc\(link\.title \|\| ""\), description: tc\(link\.description \|\| ""\)/);
-  assert.equal((src("pepefeed.js").match(/body: require\("\.\/textclean"\)\.stripFormat\(String\(c\.body\)\)/g) || []).length, 2, "both comment readers");
+  assert.equal((src("pepefeed.js").match(/body: require\("\.\/textclean"\)\.stripFormat\(plainBody\(c\)\)/g) || []).length, 2, "both comment readers still clean text after selecting the stored format");
   // a wager's terms and the AI-judge request reasons (pools + wagers), whoever sent them
   assert.match(src("escrow/wagers.js"), /const terms = require\("\.\.\/textclean"\)\.stripFormat\(a\.terms\)/);
   assert.match(src("escrow/wagers.js"), /why: require\("\.\.\/textclean"\)\.oneLine\(a\.why, 200\)/);

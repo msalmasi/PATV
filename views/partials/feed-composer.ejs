@@ -29,6 +29,7 @@
       <input name="title" maxlength="140" placeholder="<%- t('feed.title_opt') %>" aria-label="<%- t('feed.title_aria') %>" autocomplete="off">
     </div>
     <textarea name="body" maxlength="5000" rows="3" placeholder="<%- cp.room && /^u\//.test(cp.room) ? t('feed.fc.ph_profile') : cp.room ? t('feed.fc.ph_pad') : t('feed.fc.ph_any') %>" aria-label="<%- t('feed.text_aria') %>"></textarea>
+    <% if (cp.markdown) { %><%- include('post-formatting-help') %><% } %>
     <div class="fc-stk" style="margin:2px 0 6px"><button type="button" class="fc-bar-q" data-sticker-picker="#fcForm textarea[name=body]" aria-expanded="false" title="<%- t('feed.fc.sticker_add') %>" aria-label="<%- t('feed.fc.sticker_add') %>">🧸<span class="lb"> <%- t('feed.fc.sticker') %></span></button></div>
     <div class="fc-link hide" id="fcLinkRow">
       <input name="link" type="url" inputmode="url" placeholder="<%- t('feed.fc.link_ph') %>" aria-label="<%- t('feed.fc.link') %>" autocomplete="off">

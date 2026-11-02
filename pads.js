@@ -58,7 +58,7 @@ function titleSlug(s) {
 /** A post's slug: its title, else its link's title, else the first words of its body. */
 function postSlug(p) {
   if (!p) return "";
-  const body = require("./postlabel").firstWords(p.body).text;      // 1.99ex: the same words postLabel() uses
+  const body = require("./postlabel").bodyWords(p).text;      // the same words postLabel() uses, including stored Markdown
   return titleSlug(p.title) || titleSlug(p.link && p.link.title) || titleSlug(body);
 }
 /**

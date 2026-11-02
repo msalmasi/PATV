@@ -1,0 +1,7 @@
+> ## Quoted heading
+> Here is **bold**.
+>
+> - One
+> - Two
+
+After the quote.

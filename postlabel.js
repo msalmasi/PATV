@@ -34,6 +34,12 @@ function firstWords(s, n = WORDS) {
   const w = plain(s).split(" ").filter(Boolean);
   return { text: w.slice(0, n).join(" "), cut: w.length > n };
 }
+/** Stored Markdown uses the same readable text as previews; old labels retain their exact rules. */
+function bodyWords(p, n = WORDS) {
+  if (!p || p.fmt !== "md") return firstWords(p && p.body, n);
+  const w = require("./postmd").plain(p.body).replace(CTRL_RE, " ").trim().split(/\s+/).filter(Boolean);
+  return { text: w.slice(0, n).join(" "), cut: w.length > n };
+}
 const line = (s, max = 200) => { const t = plain(s); return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t; };
 const has = (a) => Array.isArray(a) && a.length > 0;
 function authorOf(p) {
@@ -50,7 +56,7 @@ function labelOf(p) {
   if (q !== p) { const t = line(q.title); if (t) return { text: t, fallback: false, level: 1 }; }
   const lt = line(q.link && q.link.title);
   if (lt) return { text: lt, fallback: true, level: 2 };
-  const fw = firstWords(q.body);
+  const fw = bodyWords(q);
   if (fw.text) return { text: fw.text + (fw.cut ? "…" : ""), fallback: true, level: 3 };
   const by = authorOf(q.author ? q : p);
   if (q.capture && q.capture.room) return { text: `📌 Capture from ${line(q.capture.room.title || q.capture.room.id, 80) || "a pad"}`, fallback: true, level: 4 };
@@ -63,4 +69,4 @@ function labelOf(p) {
 }
 const postLabel = (p) => labelOf(p).text;
 
-module.exports = { postLabel, labelOf, firstWords, plain, WORDS };
+module.exports = { postLabel, labelOf, firstWords, bodyWords, plain, WORDS };

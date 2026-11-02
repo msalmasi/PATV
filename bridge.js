@@ -2188,7 +2188,7 @@ async function padLatest(roomId, user, feed) {
   return (posts || []).filter((p) => p && !p.deleted && !p.hidden && !p.pending && !p.roomHidden)
     .sort((a, b) => Number(b.created) - Number(a.created)).slice(0, 10)
     .map((p) => ({ id: p.id, url: typeof p.url === "string" && /^\/(?![/\\])/.test(p.url) ? p.url : null, created: Number(p.created) || 0, title: require("./postlabel").postLabel(p).slice(0, 120), titleFallback: require("./postlabel").labelOf(p).fallback,
-                   text: String(p.body || "").replace(/\s+/g, " ").trim().slice(0, 140), nsfw: !!p.nsfw,
+                   text: (p.fmt === "md" ? require("./postmd").plain(p.body) : String(p.body || "")).replace(/\s+/g, " ").trim().slice(0, 140), nsfw: !!p.nsfw,
                    author: p.author ? (p.author.bot ? "Pepe" : p.author.display || p.author.username || "") : "" }));
 }
 /** Which tabs a pad page has and which opens first (before the browser's own choice: its remembered tab,

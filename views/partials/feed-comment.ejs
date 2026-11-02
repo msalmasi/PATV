@@ -34,7 +34,7 @@
   <% } %>
   <span class="rail" aria-hidden="true"></span>
   <% if (!c.deleted) { %>
-    <div class="cm-body"><%- fx.body(c.body) %></div>
+    <div class="cm-body<%= c.fmt === 'md' ? ' post-md' : '' %>"><%- fx.postBody(c, { spoilerLabel: t('feed.md.spoiler') }) %></div>
     <div class="bar cm-bar">
       <div class="vote h" data-v="<%= cv %>" data-kind="comment"<%- c.mine ? ' data-own="1"' : '' %>>
         <button type="button" class="vb vb-up" data-act="vote" data-dir="1" aria-pressed="<%= cv === 1 ? 'true' : 'false' %>" aria-label="<%- t('feed.c.upvote') %>"><%- fx.icon('up') %></button>
@@ -60,6 +60,7 @@
     <% if (c.mine) { %>
       <form class="cm-editf composer hide" data-act="cedit-save">
         <textarea name="body" maxlength="2000" rows="3" aria-label="<%- t('feed.c.edit_aria') %>"><%= c.body %></textarea>
+        <% if (c.fmt === 'md') { %><%- include('post-formatting-help') %><% } %>
         <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="cedit"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.save') %></button></div>
       </form>
     <% } %>
@@ -67,6 +68,7 @@
   <% if (!isReply && signed && !c.deleted) { %>
     <form class="cm-replyf composer hide" data-act="comment" data-post="<%= p.id %>" data-parent="<%= c.id %>">
       <textarea name="body" id="cmr-<%= c.id %>" maxlength="2000" rows="2" placeholder="<%- t('feed.c.reply_to', { name: c.author.display }) %>" aria-label="<%- t('feed.c.your_reply') %>"></textarea>
+      <% if (locals.markdownEnabled) { %><%- include('post-formatting-help') %><% } %>
       <%# stkfix B6: the 🧸 sticker picker (public/js/stickers.js, loaded by post.ejs) - this reply box's own textarea %>
       <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g cm-stk" data-sticker-picker="#cmr-<%= c.id %>" aria-expanded="false" title="<%- t('feed.fc.sticker_add') %>" aria-label="<%- t('feed.fc.sticker_add') %>">🧸</button><button type="button" class="btn-g" data-act="reply"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.c.reply') %></button></div>
     </form>

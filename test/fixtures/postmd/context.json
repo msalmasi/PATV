@@ -1,0 +1,9 @@
+{
+  "schema": "postmd-goldens-v1",
+  "origin": "https://example.test",
+  "knownUsers": ["Alice", "Bob", "with_under"],
+  "knownPads": ["lounge"],
+  "spoilerLabel": "Spoiler",
+  "lineEndings": "LF",
+  "notes": "Each .md is input; .html is render(input) and .txt is plain(input), ignoring the golden output file final LF. The same grammar applies to posts and comments. Known sticker catalog: pixelpepe/happy = Happy Pepe, Pixel Pepe. Internal pipeline references use the specified HTTP/S origin. Authored relative links stay literal. No H1, tables, images, raw HTML, entity decoding, or more than one nested list. Empty and CRLF cases are exercised in the test runner."
+}

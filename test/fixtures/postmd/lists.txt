@@ -1,0 +1,13 @@
+First bold
+Nested bullet
+- Too deep stays text
+Nested numbered
+Back at parent
+Second
+
+One
+Two
+Nested star
+
+Star bullet
+Dash bullet

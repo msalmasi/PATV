@@ -147,8 +147,9 @@ async function notify(opts = {}) {
     const store = require("./feedstore");
     const author = opts.author || {};
     if (!author.userId) return [];
-    const before = new Set(names(opts.prevText));
-    const fresh = names(opts.text).filter((n) => !before.has(n));
+    const prose = (text) => opts.fmt === "md" ? require("./postmd").sourceText(text) : text;
+    const before = new Set(names(prose(opts.prevText)));
+    const fresh = names(prose(opts.text)).filter((n) => !before.has(n));
     if (!fresh.length) return [];
     const p = (await getQuery("SELECT * FROM feed_posts WHERE id = ?", [String(opts.postId || "")]))[0];
     if (!p || p.deleted_at || p.hidden_at) return [];
@@ -176,7 +177,7 @@ async function notify(opts = {}) {
       const ref = `fmention:${opts.kind === "comment" ? "c" : "p"}:${opts.id}:${a.userId}`;
       const stored = await inbox.addSafe(a.userId, {
         // stkfix B2: a sticker reads "[sticker: Happy Pepe]" in the notice (and its Telegram alert), never the raw token
-        kind: "mention", title: `💬 ${who} mentioned you in ${where}`, body: snip(stickerText(opts.text), 300), link: opts.link || "/feed", ref,
+        kind: "mention", title: `💬 ${who} mentioned you in ${where}`, body: snip(stickerText(opts.fmt === "md" ? require("./postmd").plain(opts.text) : opts.text), 300), link: opts.link || "/feed", ref,
       });
       if (!stored) continue;
       // 1.99acd: the browser notification (webpush.js) - "You were mentioned in a post / comment", never the text or the author

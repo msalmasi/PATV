@@ -1,6 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: fx.postLabel(p).slice(0, 80) + ' — ' + t('feed.post.title_suffix'), user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=20">
+<link rel="stylesheet" href="/public/css/feed.css?v=21">
 <%
   const signed = !!viewer;
   const cs = typeof csort !== 'undefined' ? csort : 'best';
@@ -28,6 +28,7 @@
     <% } else if (signed) { %>
       <form class="cm-new composer" data-act="comment" data-post="<%= p.id %>">
         <textarea name="body" maxlength="2000" rows="2" placeholder="<%- t('feed.post.add_comment') %>" aria-label="<%- t('feed.post.your_comment') %>" required></textarea>
+        <% if (locals.markdownEnabled) { %><%- include('partials/post-formatting-help') %><% } %>
         <div class="cbar"><span class="hint mut"><%- t('feed.post.commenting_as', { name: viewer.display }) %><% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %> · <%- t('feed.post.agree', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('feed.post.terms') + '</a>' }) %><%- typeof termsNeeded !== 'undefined' && termsNeeded ? ' ' + t('feed.post.asked_once') : '' %><% } %></span><span class="fc-err" role="alert"></span><button type="button" class="btn-g cm-stk" data-sticker-picker="form.cm-new textarea[name=body]" aria-expanded="false" title="<%- t('feed.fc.sticker_add') %>" aria-label="<%- t('feed.fc.sticker_add') %>">🧸</button><button type="submit" class="btn-s"><%- t('feed.post.comment_btn') %></button></div>
       </form>
     <% } else { %>

@@ -23,6 +23,20 @@ const bridge = require(path.join(repo, "bridge"));
 const relay = require(path.join(repo, "bridge-relay"));
 const pm = require(path.join(repo, "padmod"));
 
+test("latest-feed summaries use readable stored Markdown and leave plain summaries unchanged", async () => {
+  const body = "## Update\n**Hello** `a_b`";
+  const posts = [
+    { id: "md", fmt: "md", body, created: 2, url: "/feed/p/md" },
+    { id: "plain", fmt: null, body, created: 1, url: "/feed/p/plain" },
+    { id: "hidden", fmt: "md", body, created: 3, hidden: true }
+  ];
+  const result = await bridge.padLatest("test", null, { sort: "new", page: 1, posts });
+  assert.deepEqual(result.map((p) => p.id), ["md", "plain"]);
+  assert.equal(result[0].text, "Update Hello a_b");
+  assert.equal(result[0].title, "Update Hello a_b");
+  assert.equal(result[1].text, "## Update **Hello** `a_b`");
+});
+
 // room-mod.js is a browser file: run it in a sandbox with just enough of `window`
 function loadRoomMod() {
   const win = {};

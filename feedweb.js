@@ -19,38 +19,16 @@ const rooms = require("./rooms");
 const embeds = require("./stageembed");
 const audit = require("./contentaudit");
 const terms = require("./terms");
+const postmd = require("./postmd");
 
 const STAGING = !!process.env.STAGING;
 const SITE = () => process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
 
 // ── text rendering: escape everything, then turn bare http(s) links into safe anchors ──
-const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
-const esc = (s) => String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESC[c]);
-const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,2000}/gi;
-// 1.99ck: the plain-text parts also get p/<slug> pad links (pads.js; known pads only, never inside a URL)
-// 1.99df: and u/<username> profile links
-// 1.99kk: and @username mentions + #hashtags (feedmentions.js - the same for post bodies and comments)
-const padText = (t) => { const P = require("./pads"); return stickerHtml(require("./feedmentions").inlineRefs(P.userRefs(P.padRefs(esc(t))))); };
-// 1.99iw: [sticker:<pack>/<id>] -> the sticker (stickers.js; ownership is checked when the post / comment is written)
-const stickerHtml = (h) => { try { return require("./stickers").inline(h); } catch (e) { return h; } };
-function linkify(text) {
-  const s = String(text == null ? "" : text);
-  let out = "", last = 0, m;
-  URL_RE.lastIndex = 0;
-  while ((m = URL_RE.exec(s))) {
-    let url = m[0];
-    const trail = url.match(/[).,;:!?\]}]+$/);        // "see (https://x.y/z)." - keep the punctuation outside
-    if (trail) url = url.slice(0, -trail[0].length);
-    out += padText(s.slice(last, m.index));
-    let ok = false;
-    try { const u = new URL(url); ok = u.protocol === "http:" || u.protocol === "https:"; } catch (e) { ok = false; }
-    out += ok ? `<a href="${esc(url)}" rel="nofollow noopener noreferrer ugc" target="_blank">${esc(url.length > 80 ? url.slice(0, 77) + "…" : url)}</a>` : esc(url);
-    last = m.index + url.length;
-    URL_RE.lastIndex = last;
-  }
-  return out + padText(s.slice(last));
-}
+const { esc, linkify } = require("./feedinline");
 const body = (text) => linkify(text).replace(/\n/g, "<br>");
+const postBody = (post, options) => post && post.fmt === "md" ? postmd.render(post.body, options) : body(post && post.body);
+const plainBody = (post) => post && post.fmt === "md" ? postmd.plain(post.body) : String(post && post.body || "");
 // 1.99iv: a 🎟️ Season Pass multiplies the feed's upload size caps, daily allowance and space (premium sp_upload_mult)
 const spMult = (userId) => { try { return Math.max(1, require("./premium").userPerks(userId).uploadMult || 1); } catch (e) { return 1; } };
 function ago(ms, now = Date.now()) {
@@ -170,8 +148,8 @@ const PL = require("./postlabel"), UL = require("./userlook");
 const TAGS = require("./feedtags");
 const tagHref = (tag, padSlug = null) => (padSlug ? "/p/" + encodeURIComponent(padSlug) + "?tag=" + encodeURIComponent(tag) + "#feed" : "/feed?tag=" + encodeURIComponent(tag));
 // 1.99ir: a person's flair in a pad (padflair.js) - the chip next to their name
-const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, flair: (f) => require("./padflair").html(f), postFlair: (f, href) => require("./padflair").postHtml(f, href), postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
-             SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
+const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, flair: (f) => require("./padflair").html(f), postFlair: (f, href) => require("./padflair").postHtml(f, href), postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, postBody, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+             plainBody, SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
 // 1.99bz: stories.js owns them (privacy: anonymous subjects, missing files skipped) ──
@@ -259,7 +237,7 @@ async function composerFor(viewer, roomId) {
   } catch (e) { /* flair choices are a convenience; the server checks on post */ }
   // 1.99pv: ⭐ PATV Creators - the lock options (null unless the viewer is an active creator)
   const creator = await require("./creators").composerInfo(viewer).catch(() => null);
-  return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all, creator,
+  return { user: viewer.username, markdown: !!C.feed_markdown, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all, creator,
            tags: { max: TAGS.MAX_TAGS, len: TAGS.TAG_MAX, suggest: tagSuggest }, flairs,
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
            refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
@@ -530,7 +508,7 @@ function register(app, { addUser, isBotToken }) {
       if (here !== p.url && !gatedHere) return res.redirect(301, p.url + require("./pads").qsOf(req));
       const csort = store.cleanCSort(req.query.csort);
       const C = await store.comments(p.id, viewer, csort);
-      const desc = (p.nsfw ? "NSFW post" : (p.body || (p.link && p.link.title) || "")).replace(/\s+/g, " ").slice(0, 180) || "A post on the PATV feed";
+      const desc = (p.nsfw ? "NSFW post" : (plainBody(p) || (p.link && p.link.title) || "")).replace(/\s+/g, " ").slice(0, 180) || "A post on the PATV feed";
       res.locals.og = { title: (p.nsfw ? "[NSFW] " : "") + require("./postlabel").postLabel(p).slice(0, 90) + " — PATV feed",
                         // 1.99ade: the post's own card route (looks the post up on every draw; a signed /og/page.png
                         // address of its title stayed valid after the post was deleted or hidden)
@@ -539,7 +517,7 @@ function register(app, { addUser, isBotToken }) {
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
       // 1.99fu: a post in an Approved pad (only its members got this far): never indexed, never cached in between
       if (p.roomsAll.some((r) => PA().isApproved(r.id))) res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
-      res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id),
+      res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id), markdownEnabled: !!store.config().feed_markdown,
                            reasons: store.REASONS, staff, termsEnforced: terms.enforced(), termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false,
                            pepeMuted: await require("./pepefeed").isMuted(p.id).catch(() => false) });
     } catch (e) {
@@ -928,7 +906,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       if (await termsGate(req)) return termsRefusal(res);
       const b = req.body || {}, postId = String(req.params.id);
-      const r = await store.comment(await viewerOf(req), postId, { body: b.body, parent: b.parent });
+      const r = await store.comment(await viewerOf(req), postId, { body: b.body, parent: b.parent, fmt: b.fmt });
       await record(req, { kind: "comment", id: r.id, postId, event: "create" });
       res.json({ ok: true, ...r });
     } catch (e) { fail(res, e); }

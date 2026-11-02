@@ -90,6 +90,7 @@
 
   <nav class="ds-subnav" aria-label="<%- t('chatfmt.nav') %>"><div class="ds-tabs">
     <a class="ds-tab" href="#forms"><%- t('chatfmt.nav_ref') %></a>
+    <a class="ds-tab" href="#posts"><%- t('chatfmt.nav_posts') %></a>
     <a class="ds-tab" href="#bar"><%- t('chatfmt.nav_bar') %></a>
     <a class="ds-tab" href="#times"><%- t('chatfmt.nav_time') %></a>
     <a class="ds-tab" href="#bridges"><%- t('chatfmt.nav_bridges') %></a>
@@ -119,6 +120,24 @@
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section class="cf-sec" id="posts" aria-labelledby="cfPostsH">
+    <h2 class="ds-h2" id="cfPostsH"><span class="dot"></span><%- t('chatfmt.posts_h') %></h2>
+    <p class="ds-lead"><%- t('chatfmt.posts_lead') %></p>
+    <p><%- t('chatfmt.posts_inline') %></p>
+    <div class="ds-tbl"><table>
+      <thead><tr><th scope="col"><%- t('chatfmt.col_form') %></th><th scope="col"><%- t('chatfmt.col_type') %></th><th scope="col"><%- t('chatfmt.col_see') %></th></tr></thead>
+      <tbody><% ['headings', 'lists', 'quotes', 'rule'].forEach((id) => { %>
+        <tr id="post-fmt-<%= id %>">
+          <td><b><%- t('chatfmt.posts_' + id) %></b></td>
+          <td data-label="<%- attr(t('chatfmt.col_type')) %>"><code class="cf-mark"><%- t('chatfmt.posts_' + id + '_type') %></code></td>
+          <td data-label="<%- attr(t('chatfmt.col_see')) %>"><%- t('chatfmt.posts_' + id + '_note') %></td>
+        </tr>
+      <% }) %></tbody>
+    </table></div>
+    <p><%- t('chatfmt.posts_links') %></p>
+    <p class="ds-meta"><%- t('chatfmt.posts_scope') %></p>
   </section>
 
   <section class="ds-card lg cf-sec" id="bar" aria-labelledby="cfBarH">

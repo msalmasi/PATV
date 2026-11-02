@@ -209,3 +209,63 @@ test("the post page links the mentions and hashtags in the post and its comments
   assert.match(html, /<a class="tag-ref" href="\/feed\?tag=monstera">#monstera<\/a>/);
   assert.match(html, /mention-complete\.js/);
 });
+
+test("Markdown rendering is selected only by stored fmt; legacy body output stays byte-for-byte unchanged", () => {
+  const text = "## Heading\n- **bold** & <tag>\nhttps://example.test/a.";
+  const expected = '## Heading<br>- **bold** &amp; &lt;tag&gt;<br><a href="https://example.test/a" rel="nofollow noopener noreferrer ugc" target="_blank">https://example.test/a</a>.';
+  assert.equal(web.fx.body(text), expected);
+  assert.equal(web.fx.postBody({ body: text, fmt: null }), expected);
+  assert.equal(web.fx.postBody({ body: text, fmt: "plain" }), expected);
+  assert.match(web.fx.postBody({ body: text, fmt: "md" }), /<h2>Heading<\/h2>/);
+  const PL = require(path.join(repo, "postlabel"));
+  assert.equal(PL.postLabel({ body: "## Read `a_b` with **care**", fmt: "md" }), "Read a_b with care");
+  assert.equal(PL.postLabel({ body: "## Read `a_b` with **care**", fmt: null }), "Read ab with care");
+});
+
+test("Markdown post/comment routes preserve format, plain opt-out, readable metadata and help gating", async () => {
+  const denied = await call("POST", "/api/feed/admin/config", U.alice, { feed_markdown: true });
+  assert.equal(denied.status, 403, "ordinary posters cannot change the site switch");
+  assert.equal(store.config().feed_markdown, false);
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    let r = await call("POST", "/api/feed/posts", U.alice, { community: ROOM_B, body: "## Garden notes\nA **bold** update." });
+    assert.equal(r.status, 200, r.text);
+    const id = r.d.id;
+    assert.equal((await store.get(id, U.alice)).fmt, "md");
+    r = await call("POST", "/api/feed/posts/" + id + "/comments", U.bob, { body: "### Reply heading\n||A secret||" });
+    assert.equal(r.status, 200, r.text);
+    r = await call("POST", "/api/feed/posts/" + id + "/comments", U.cat, { body: "## Literal reply", fmt: "plain" });
+    assert.equal(r.status, 200, r.text);
+    const comments = await getQuery("SELECT fmt FROM feed_comments WHERE post_id = ? ORDER BY created, rowid", [id]);
+    assert.deepEqual(comments.map((c) => c.fmt), ["md", null]);
+    await store.setConfig({ feed_markdown: false }, "test");
+    const p = await store.get(id, U.alice);
+    r = await call("GET", p.url, U.alice);
+    assert.equal(r.status, 200, r.text.slice(0, 1000));
+    assert.match(r.text, /<h2>Garden notes<\/h2>/);
+    assert.match(r.text, /<h3>Reply heading<\/h3>/);
+    assert.match(r.text, /## Literal reply/);
+    assert.match(r.text, /content="Garden notes A bold update\."/);
+    assert.match(r.text, /post-md\.js\?v=/);
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});
+
+test("Markdown code and split-name mentions stay silent; an edit can make a live mention", async () => {
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    const beforeBob = (await notices(U.bob)).length;
+    const beforeCat = (await notices(U.cat)).length;
+    const p = await store.create(U.alice.userId, { community: ROOM_B, body: "## Notes\n`@bob` @b**o**b\n\n```text\n@cat\n```" });
+    assert.equal((await notices(U.bob)).length, beforeBob);
+    assert.equal((await notices(U.cat)).length, beforeCat);
+    await store.setConfig({ feed_markdown: false }, "test");
+    await store.edit(U.alice, p.id, { body: "## Notes\n**Hello** @bob\n\n```text\n@cat\n```" });
+    const n = await notices(U.bob);
+    assert.equal(n.length, beforeBob + 1);
+    assert.match(n[n.length - 1].body, /^Notes Hello @bob @cat$/);
+    assert.equal((await notices(U.cat)).length, beforeCat);
+    const c = await store.comment(U.bob, p.id, { body: "`@cat`", fmt: "plain" });
+    assert.ok(c.id);
+    assert.equal((await notices(U.cat)).length, beforeCat + 1, "legacy plain code-like text keeps the old mention behavior");
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});
