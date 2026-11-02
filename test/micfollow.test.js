@@ -2066,6 +2066,7 @@ test("67. wave2 F.2: !livecam off, the mic-stage switch, private activity, an ex
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.3, J-14): the dynamic layout ──
 test("68. wave2 F.3 dynamic: dark until its switch (a pad can't pick it; a stored one shows as auto with no dyn); on: the legacy layout still goes out with dyn {n, t, main}, rings on every holder, the main moves at most every main_hold_s, a pin takes it only by the pinNew rule", async () => {
+  // (1.99??: the dynamic layout WITHOUT stable slots - the knob off, today's main; with them: test/micfollow-slots.test.js)
   await reset(); await plainPad();
   assert.equal(MF.cfg().dynamic, false, "ships dark");
   let st = await MF.ownerState(ROOM.id);
@@ -2073,7 +2074,7 @@ test("68. wave2 F.3 dynamic: dark until its switch (a pad can't pick it; a store
   await assert.rejects(MF.setPad(ROOM.id, { layout: "dynamic" }, "test"), (e) => e.status === 400);
   let r = await post(`/api/rooms/${slug()}/micfollow/layout`, { layout: "dynamic" }, "u_owner");
   assert.equal(r.status, 400, "nor on the stage bar");
-  await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 15, reason: "test" });
+  await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 15, stable_slots: false, reason: "test" });
   try {
     st = await MF.ownerState(ROOM.id);
     assert.ok(st.layouts.includes("dynamic"));
@@ -2116,10 +2117,10 @@ test("68. wave2 F.3 dynamic: dark until its switch (a pad can't pick it; a store
     await MF.setPad(ROOM.id, { max_people: 4 }, "test");
     assert.equal(MF._pads.get(ROOM.id).settings.layout, "dynamic");
     await MF.setCfg(ADMIN, { dynamic: true, reason: "test" });
-  } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, reason: "test" }); await plainPad(); }
+  } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, stable_slots: true, reason: "test" }); await plainPad(); }
   // 📌 a pin takes the main only when it holds the mic and grabbed last (today's pinNew rule)
   await reset(); await plainPad();
-  await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 0, reason: "test" });
+  await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 0, stable_slots: false, reason: "test" });
   try {
     await MF.setPad(ROOM.id, { layout: "dynamic" }, "test");
     await bot(); room([]);
@@ -2134,7 +2135,7 @@ test("68. wave2 F.3 dynamic: dark until its switch (a pad can't pick it; a store
     snap = MF.snapshot(ROOM.id);
     assert.equal(snap.dyn.main, "carl", "the pin holds the mic and grabbed last: it takes the main");
     await post(`/api/rooms/${slug()}/micfollow/pin`, { login: "carl", remove: true }, "u_owner");
-  } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, reason: "test" }); await plainPad(); }
+  } finally { await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, stable_slots: true, reason: "test" }); await plainPad(); }
 });
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.4): veiled speakers as hooded-frog cover tiles ──
@@ -2231,7 +2232,8 @@ test("70. wave2 F.4: anonymous holds (stamped or not) and named hidden holders n
     } finally { Q.isHidden = hid0; }
     // capacity: max_people 2 - a cover counts and displaces like a tile; in the dynamic layout it rings and takes the main
     await reset(); await MF.setPad(ROOM.id, { on: true, layout: "dynamic", max_people: 2, keep_recent: 0 }, "test").catch(() => {});
-    await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 0, reason: "test" });
+    // (1.99??: today's dynamic main - the knob stable_slots off; with it on, 2 on the stage never move: see below)
+    await MF.setCfg(ADMIN, { dynamic: true, main_hold_s: 0, stable_slots: false, reason: "test" });
     await MF.setPad(ROOM.id, { on: true, layout: "dynamic", max_people: 2, keep_recent: 0 }, "test");
     await onStage(["alice", "bob"]);
     up("alice", "bob"); await at(10, ["alice", "bob"]);
@@ -2246,7 +2248,14 @@ test("70. wave2 F.4: anonymous holds (stamped or not) and named hidden holders n
     assert.equal(c.newest, true); assert.equal(c.ring, true);
     assert.equal(snap.dyn.main, c.cid, "the main cell, by its public id");
     noIdentity(JSON.stringify((await MF.viewFor(snap, R, "u_owner", null)).src.filter((s) => s.kind === "cover")));
-  } finally { MF.setVeilSource(null); await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, reason: "test" }); await plainPad(); bridge._k3Refs.delete(ROOM.id); }
+    // 1.99?? stable slots on: 2 on the stage - nobody moves; the cover sits after the named one (never in a named place), rings
+    await MF.setCfg(ADMIN, { stable_slots: true, reason: "test" });
+    const st = MF.snapshot(ROOM.id), sc = st.tiles.find((x) => x.cover);
+    assert.equal(st.stable, true);
+    assert.deepEqual([sc.pos, sc.ring, sc.newest], [1, true, true]);
+    assert.equal(st.dyn.main, st.tiles.find((x) => !x.cover).login, "the main cell is place 0 with 2");
+    noIdentity(JSON.stringify((await MF.viewFor(st, R, "u_owner", null)).src.filter((s) => s.kind === "cover")));
+  } finally { MF.setVeilSource(null); await MF.setCfg(ADMIN, { dynamic: false, main_hold_s: 3, stable_slots: true, reason: "test" }); await plainPad(); bridge._k3Refs.delete(ROOM.id); }
   // v2 (WP-2 / WP-3): the privacy wire's per-hold facts through the seam
   await reset(); await plainPad();
   MF.setVeilSource((u) => {
