@@ -29,7 +29,7 @@ const repo = path.resolve(__dirname, "..");
 const FIXTURE = path.join(__dirname, "fixtures", "privwire-contract.json");
 // Update together with camfrog-bot's copy (ci/fixtures/privwire-contract.json) and its pin (privwire_contract_test.py PIN):
 // python tools/gen_privwire_contract.py --site <this checkout> prints the new sha.
-const PIN = "0b8fe79c82970f13aaf9f10f1cba033375cf8a4b5cc21314126174e975a509a9";
+const PIN = "e1a947dbe0efb70dca0cd282cfe321b7eb4cf056d97545f4e6d1a5476e8b8ebb";
 const RAW = fs.readFileSync(FIXTURE);
 const FX = JSON.parse(RAW.toString("utf8"));
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
@@ -271,6 +271,9 @@ test("every case of Pepe's scene through the real /api/bridge/sync/v2: a member 
       if (e.named) {
         assert.ok(!o.u.anon, s.name + ": named");
         assert.equal(o.u.display, e.named, s.name);
+        // 1.99?? S1 (owner Q5): a named !transcripts off bar - the name, the bar, no words
+        if (e.mask) { assert.equal(o.mask, e.mask, s.name + ": the bar"); assert.ok(!("text" in o) && !("id" in o), s.name + ": a bar never carries words or the 🎙 id"); }
+        if (viewer === U.mem && e.mask) assert.ok(!o.rv, s.name + ": no reveal flag for a member");
       } else {
         assert.equal(o.u.anon, true, s.name + ": veiled");
         assert.equal(o.u.display, "someone", s.name);
@@ -284,6 +287,7 @@ test("every case of Pepe's scene through the real /api/bridge/sync/v2: a member 
         if (viewer === U.mem) assert.ok(!o.rv, s.name + ": no reveal flag for a member");
       }
       if (e.text != null) assert.equal(o.text, e.text, s.name + ": the words");
+      assert.equal(o.txh === 1, e.txh === true, s.name + ": the 'transcript hidden' tag (1.99?? S1) only on a !transcripts off bar not hidden");
     }
     // the frog names: one per session - frankie's lines share theirs, hank's another; hoods differ
     // (1.99?? transcripts bar: expect.as = the frog name's own level - frankie's !transcripts off 🎙 bar carries his INCOGNITO name)
