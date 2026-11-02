@@ -4,14 +4,24 @@
   var form = document.getElementById('avsForm'); if (!form) return;
   var fields = document.getElementById('avsFields'), message = document.getElementById('avsMessage');
   var view = null, editing = false, saving = false;
+  var _t = typeof window.__t === 'function' ? window.__t : function (k, d) { return d; };
   var labels = {
     mode: 'Who gets sync', apply_video: 'Delay relayed cams', apply_mic: 'Delay mic signs', apply_mp3: 'Also sync with standard MP3 audio',
+    // 1.99??: the "On the mic" card and the chat's grab / drop lines, each its own switch
+    apply_mic_card: _t('js.admavsync.apply_mic_card', 'Delay the On the mic card'),
+    apply_mic_chat: _t('js.admavsync.apply_mic_chat', 'Delay mic grab/drop lines in chat'),
     engine_chromium: 'Enable Chromium video delay', engine_firefox: 'Enable Firefox video delay', engine_safari: 'Enable Safari video delay',
     fallback_rtc_ms: 'WebRTC fallback delay (ms)', fallback_mp3_ms: 'MP3 fallback delay (ms)',
     k_pt_ms: 'Pass-through calibration (ms)', k_re_ms: 'Re-encode calibration (ms)',
     ind_path_ms: 'Mic-sign delivery time (ms)', k_ind_ms: 'Mic-sign calibration (ms)',
     cap_ms: 'Maximum video delay (ms)', cap_ind_ms: 'Maximum mic-sign delay (ms)', deadband_ms: 'Ignore changes smaller than (ms)',
     period_s: 'Recompute every (s)', mods_instant: 'Show the moderation mic panel instantly for room moderators'
+  };
+  // 1.99??: what each mic switch holds back (all three by the same mic-sign delay, so they line up with each other)
+  var helps = {
+    apply_mic: _t('js.admavsync.apply_mic_help', 'The mic stage’s tiles: a new speaker’s tile, the ring and newest highlights, who is speaking and the layout.'),
+    apply_mic_card: _t('js.admavsync.apply_mic_card_help', 'The On the mic card beside the chat: people joining or leaving it and its order. Same delay as the mic signs.'),
+    apply_mic_chat: _t('js.admavsync.apply_mic_chat_help', 'The chat’s “grabbed the mic” and “dropped the mic” lines: each shows in its place once the audio catches up. Typed chat is never held. Same delay as the mic signs.')
   };
   function node(tag, text, cls) { var el = document.createElement(tag); if (text != null) el.textContent = text; if (cls) el.className = cls; return el; }
   function buttons(disabled) { Array.prototype.forEach.call(form.querySelectorAll('button'), function (el) { el.disabled = disabled; }); }
@@ -20,9 +30,9 @@
     Object.keys(view.fields).forEach(function (key) {
       var def = view.fields[key], label = node('label'), input;
       label.style.display = 'block'; label.style.margin = '8px 0';
-      if (typeof def.def === 'boolean') { input = node('input'); input.type = 'checkbox'; label.appendChild(input); label.appendChild(document.createTextNode(' ' + labels[key])); }
+      if (typeof def.def === 'boolean') { input = node('input'); input.type = 'checkbox'; label.appendChild(input); label.appendChild(document.createTextNode(' ' + (labels[key] || key))); }
       else {
-        label.appendChild(document.createTextNode(labels[key] + ' '));
+        label.appendChild(document.createTextNode((labels[key] || key) + ' '));
         input = node(def.choices ? 'select' : 'input');
         if (def.choices) def.choices.forEach(function (choice) { var option = node('option', choice); option.value = choice; input.appendChild(option); });
         else { input.type = 'number'; input.min = def.min; input.max = def.max; input.step = '1'; input.inputMode = 'numeric'; }
@@ -30,6 +40,7 @@
       }
       input.name = key;
       label.appendChild(node('small', ' · default ' + def.def + (def.min == null ? '' : ' · ' + def.min + '–' + def.max), 'adm-help'));
+      if (helps[key]) { var help = node('small', helps[key], 'adm-help'); help.style.display = 'block'; label.appendChild(help); }
       fields.appendChild(label);
     });
   }

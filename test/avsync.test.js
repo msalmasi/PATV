@@ -88,7 +88,7 @@ test("admin capability + same-site fetch, every save versioned and audited, inva
   assert.equal(audit[0].admin_id, "adm");
   const prior = AV.current(); AV._reset(); await AV.init(); assert.deepEqual(AV.current(), prior, "versioned database row survives process cache reset");
   const page = await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } });
-  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=1/);
+  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=2/);
 });
 
 test("public route requires sign-in/full pad access; mode does not grant access; no identifiers or unheld cams", async () => {
@@ -203,4 +203,80 @@ test("queued partial saves preserve both changes; reset restores dark defaults a
   const reset = await post("/api/admin/pepe/avsync", { reset: true, reason: "test reset" }, "adm", { "X-Requested-With": "fetch" });
   assert.equal(reset.status, 200); assert.equal(reset.data.v, before + 3); assert.deepEqual(reset.data.cfg, AV.DEFAULTS);
   assert.equal(reset.data.view.audit[0].detail.action, "reset"); assert.equal(reset.data.view.audit[0].reason, "test reset");
+});
+
+// 1.99??: "Delay the On the mic card" (apply_mic_card) and "Delay mic grab/drop lines in chat" (apply_mic_chat)
+test("1.99??: the card and chat-line switches - off by default, strict booleans, audited, in the viewer's answer; an older stored row reads them off", async () => {
+  assert.equal(AV.DEFAULTS.apply_mic_card, false); assert.equal(AV.DEFAULTS.apply_mic_chat, false);
+  assert.ok(AV.normalize({ apply_mic_card: "yes" }).errors.apply_mic_card); assert.ok(AV.normalize({ apply_mic_chat: 2 }).errors.apply_mic_chat);
+  assert.equal(AV.normalize({ apply_mic_card: "true", apply_mic_chat: 1 }).cfg.apply_mic_card, true);
+  assert.equal(AV.normalize({ apply_mic_chat: "1" }).cfg.apply_mic_chat, true);
+  const bad = await adminSave({ mode: "everyone", apply_mic_card: "on" });
+  assert.equal(bad.status, 400); assert.equal(bad.data.fields.apply_mic_card, "on or off"); assert.equal(AV.current().cfg.apply_mic_card, false, "nothing saved");
+  const off = await get(publicPath(), "v1");
+  assert.deepEqual([off.data.apply.mic_card, off.data.apply.mic_chat], [false, false]);
+  const saved = await adminSave({ mode: "everyone", apply_mic_card: true });
+  assert.equal(saved.status, 200); assert.deepEqual(saved.data.changed.apply_mic_card, [false, true]); assert.equal(saved.data.changed.apply_mic_chat, undefined);
+  const audit = await db.getQuery("SELECT detail FROM admin_audit WHERE action = 'avsync_cfg' ORDER BY id DESC LIMIT 1");
+  assert.deepEqual(JSON.parse(audit[0].detail).changed.apply_mic_card, [false, true], "audited like the others");
+  const on = await get(publicPath(), "v1");
+  assert.deepEqual(on.data.apply, { video: true, mic: true, mp3: true, mic_card: true, mic_chat: false });
+  await adminSave({ apply_mic_chat: true }); assert.equal((await get(publicPath(), "v2")).data.apply.mic_chat, true);
+  // a row saved before these switches existed: both read off, everything else as it was
+  await db.runQuery("UPDATE avsync_cfg SET data = ? WHERE id = 1", [JSON.stringify({ mode: "everyone", apply_mic: true, cap_ind_ms: 2500 })]);
+  AV._reset(); await AV.init();
+  assert.equal(AV.current().cfg.mode, "everyone"); assert.equal(AV.current().cfg.cap_ind_ms, 2500);
+  assert.deepEqual([AV.current().cfg.apply_mic_card, AV.current().cfg.apply_mic_chat], [false, false]);
+  const view = await get("/api/admin/pepe/avsync", "adm");
+  const keys = Object.keys(view.data.fields);
+  assert.deepEqual(keys.slice(keys.indexOf("apply_mic"), keys.indexOf("apply_mic") + 3), ["apply_mic", "apply_mic_card", "apply_mic_chat"], "the card lists them under Delay mic signs");
+  await AV.save(ADMIN, { reset: true });
+});
+
+// The admin card (public/js/admin-avsync.js) in a small fake DOM: the two switches with their labels and what each holds back
+function adminCard(viewData) {
+  const src = fs.readFileSync(path.join(repo, "public", "js", "admin-avsync.js"), "utf8");
+  const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  const byId = {}, posts = [];
+  class El {
+    constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.style = {}; this.listeners = {}; this.text = ""; this.className = ""; }
+    set textContent(v) { this.children = []; this.text = String(v); }
+    get textContent() { return this.text + this.children.map((c) => c.textContent).join(""); }
+    appendChild(c) { this.children.push(c); return c; }
+    addEventListener(k, fn) { (this.listeners[k] ||= []).push(fn); }
+    fire(k, e = {}) { (this.listeners[k] || []).forEach((fn) => fn({ preventDefault() {}, ...e })); }
+    all() { return this.children.flatMap((c) => (c instanceof El ? [c, ...c.all()] : [])); }
+    querySelectorAll(sel) { return this.all().filter((n) => n.tagName === sel.toUpperCase()); }
+  }
+  const text = (t) => ({ textContent: String(t) });
+  const form = new El("form"), reason = new El("input"); reason.name = "reason"; reason.value = ""; form.appendChild(reason);
+  const fields = new El("div"); form.appendChild(fields); form.appendChild(new El("button"));
+  Object.defineProperty(form, "elements", { get() { const out = {}; for (const n of form.all()) if (n.name) out[n.name] = n; return out; } });
+  for (const id of ["avsMessage", "avsVersion", "avsRooms", "avsRelays", "avsAudit", "avsReset"]) byId[id] = new El("div");
+  byId.avsForm = form; byId.avsFields = fields;
+  const document = { getElementById: (id) => byId[id] || null, createElement: (t) => new El(t), createTextNode: text, hidden: false };
+  const window = { __t: (k, d) => (k in EN ? EN[k] : "MISSING " + k), confirm: () => true };
+  const fetch = (url, opts) => { if (opts && opts.body) posts.push(JSON.parse(opts.body)); return Promise.resolve({ json: async () => ({ ok: true, v: 9, ...viewData, view: viewData }) }); };
+  const vm = require("node:vm");
+  vm.runInNewContext(src, { window, document, fetch, setInterval: () => 0, Date, JSON, Object, Array });
+  return { form, fields, posts, EN, labelOf: (key) => fields.children.find((l) => l.children.some((c) => c.name === key)) };
+}
+
+test("1.99??: the admin card lists the two switches with clear labels (locales/en.json) and says what each one holds back; a save sends them", async () => {
+  const data = (await get("/api/admin/pepe/avsync", "adm")).data;
+  const A = adminCard(data); for (let i = 0; i < 12; i++) await Promise.resolve();
+  const card = A.labelOf("apply_mic_card"), chat = A.labelOf("apply_mic_chat"), mic = A.labelOf("apply_mic");
+  assert.ok(card && chat && mic, "both switches are drawn");
+  assert.equal(A.EN["js.admavsync.apply_mic_card"], "Delay the On the mic card");
+  assert.equal(A.EN["js.admavsync.apply_mic_chat"], "Delay mic grab/drop lines in chat");
+  assert.ok(card.textContent.includes(" Delay the On the mic card"), card.textContent);
+  assert.ok(chat.textContent.includes(" Delay mic grab/drop lines in chat"), chat.textContent);
+  assert.ok(card.textContent.includes(A.EN["js.admavsync.apply_mic_card_help"]) && /On the mic card beside the chat/.test(card.textContent));
+  assert.ok(chat.textContent.includes(A.EN["js.admavsync.apply_mic_chat_help"]) && /Typed chat is never held/.test(chat.textContent));
+  assert.ok(mic.textContent.includes(A.EN["js.admavsync.apply_mic_help"]) && /mic stage/.test(mic.textContent), "Delay mic signs says it is the mic stage's");
+  assert.doesNotMatch(A.fields.textContent, /undefined|MISSING/);
+  const box = (key) => A.labelOf(key).children.find((c) => c.name === key);
+  assert.deepEqual([box("apply_mic_card").checked, box("apply_mic_chat").checked], [false, false], "off until an admin ticks them");
+  box("apply_mic_chat").checked = true; A.form.fire("change"); A.form.fire("submit");
+  assert.equal(A.posts.length, 1); assert.equal(A.posts[0].cfg.apply_mic_chat, true); assert.equal(A.posts[0].cfg.apply_mic_card, false);
 });
