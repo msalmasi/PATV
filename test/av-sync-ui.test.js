@@ -235,7 +235,7 @@ test("C2 micView delays grab/drop and sorting flags, keeps new identity/permissi
   s.config.mods_instant = true; await s.advance(5000); assert.equal(s.api.modsInstant("pad"), true);
 });
 
-test("review fix: C2 people already shown stay when D rises; (1.99??) a grab shorter than the delay shows late for its own length", async () => {
+test("review fix: C2 people already shown stay when D rises; (1.99ahm) a grab shorter than the delay shows late for its own length", async () => {
   const s = sandbox(); s.api.pad("pad"); s.media("rtc"); await s.advance(0);
   let shown; const cb = d => { shown = plain(d); };
   s.api.micView("pad", roster([]), cb); await s.advance(1200);
@@ -247,16 +247,16 @@ test("review fix: C2 people already shown stay when D rises; (1.99??) a grab sho
   shown = plain(s.api.micView("pad", roster(["a", "b"]), cb)); await s.advance(400);
   shown = plain(s.api.micView("pad", roster(["a"]), cb)); await s.advance(499);
   assert.deepEqual(shown.mic.map(p => p.login), ["a"]);
-  await s.advance(1); assert.deepEqual(shown.mic.map(p => p.login), ["a", "b"], "1.99??: b's 400 ms grab is held back, not dropped"); assert.equal(shown.members[1].on_mic, true);
+  await s.advance(1); assert.deepEqual(shown.mic.map(p => p.login), ["a", "b"], "1.99ahm: b's 400 ms grab is held back, not dropped"); assert.equal(shown.members[1].on_mic, true);
   await s.advance(399); assert.deepEqual(shown.mic.map(p => p.login), ["a", "b"]);
   await s.advance(1); assert.deepEqual(shown.mic.map(p => p.login), ["a"], "for as long as it lasted"); assert.equal(shown.members[1].on_mic, false);
 });
 
-test("C2 brief grabs show late for their own length (1.99??), same-key veil replacement drops names, and lines retain their insertion order", async () => {
+test("C2 brief grabs show late for their own length (1.99ahm), same-key veil replacement drops names, and lines retain their insertion order", async () => {
   const s = await gated(); let shown; const cb = d => { shown = plain(d); };
   s.api.micView("pad", roster([]), cb); s.api.micView("pad", roster(["a"]), cb); await s.advance(200);
   shown = plain(s.api.micView("pad", roster([]), cb)); assert.equal(shown.mic.length, 0);
-  await s.advance(500); assert.equal(shown.mic.length, 1, "1.99??: a 200 ms grab shows one offset late");
+  await s.advance(500); assert.equal(shown.mic.length, 1, "1.99ahm: a 200 ms grab shows one offset late");
   await s.advance(200); assert.equal(shown.mic.length, 0, "and goes 200 ms later, one offset after its drop");
   await s.advance(300);
   s.api.micView("pad", roster(["a"]), cb); await s.advance(700);
@@ -409,7 +409,7 @@ test("C2 keyless anonymous panel counts retain drop timing in a mixed roster wit
   await s.advance(699); assert.equal(shown.mic.length, 1); await s.advance(1); assert.equal(shown.mic.length, 0);
 });
 
-test("1.99??: review fix (PRIV-L1) - a keyless someone's slot kept after the drop is a bare someone of its own veil level, never another member's object", async () => {
+test("1.99ahm: review fix (PRIV-L1) - a keyless someone's slot kept after the drop is a bare someone of its own veil level, never another member's object", async () => {
   const s = await gated(); let shown; const cb = d => { shown = plain(d); };
   const I = { anon: true, display: "someone", veil: "incognito" }, Hd = { anon: true, display: "someone", veil: "hidden", src: "list", rv: 1 }, Y = { login: "yname", display: "Y" };
   // veil.js orders alias-less veiled people by a keyed hash: here the hidden member (never on the mic) sorts before the incognito holder
@@ -482,9 +482,9 @@ test("C1 follows the delayed newest/recent merge table for a short grab retained
   await s.advance(200); assert.equal(shown.src[0].newest, false); assert.equal(shown.src[0].recent, true);
 });
 
-// 1.99??: "Delay the On the mic card" (apply.mic_card) and "Delay mic grab/drop lines in chat" (apply.mic_chat) - each its own switch,
+// 1.99ahm: "Delay the On the mic card" (apply.mic_card) and "Delay mic grab/drop lines in chat" (apply.mic_chat) - each its own switch,
 // the same mic-sign offset as "Delay mic signs" (apply.mic), the same who / audio-playing rules
-test("1.99??: the card and chat-line switches are their own - an old server (no such keys) or a switch off hands the card back as given and holds no line", async () => {
+test("1.99ahm: the card and chat-line switches are their own - an old server (no such keys) or a switch off hands the card back as given and holds no line", async () => {
   const s = await gated({ config: { apply: { video: true, mic: true, mp3: true } } });
   const cb = () => {}, raw = roster(["a"]);
   assert.equal(s.api.micView("pad", raw, cb), raw, "old server: the card is today's");
@@ -509,7 +509,7 @@ test("1.99??: the card and chat-line switches are their own - an old server (no 
   assert.equal(s.api.holdLine("pad", late), false, "sync not for this viewer: nothing held"); assert.equal(late.style.display, undefined);
 });
 
-test("1.99??: held chat lines show in their place once the audio catches up, and at once on a hidden or frozen tab, leaving, or the audio stopping; never a line outside the page", async () => {
+test("1.99ahm: held chat lines show in their place once the audio catches up, and at once on a hidden or frozen tab, leaving, or the audio stopping; never a line outside the page", async () => {
   const s = await gated(); const host = s.element("div"); s.document.body.appendChild(host);
   const mk = (text) => { const e = s.element("div"); e.textContent = text; host.appendChild(e); return e; };
   const reveals = [];
@@ -540,7 +540,7 @@ test("1.99??: held chat lines show in their place once the audio catches up, and
   box.children[0].click(); const l = mk("l"); s.api.holdLine("pad", l); s.event("pagehide"); assert.equal(l.style.display, "", "leaving the page");
 });
 
-test("1.99??: review fix (T1) - when the offset rises, a turn already on the card stays until its drop catches up - in step with its held drop line", async () => {
+test("1.99ahm: review fix (T1) - when the offset rises, a turn already on the card stays until its drop catches up - in step with its held drop line", async () => {
   const s = await gated(); let shown; const cb = d => { shown = plain(d); };
   const host = s.element("div"); s.document.body.appendChild(host);
   const on = () => shown.mic.map(p => p.login);
@@ -557,7 +557,7 @@ test("1.99??: review fix (T1) - when the offset rises, a turn already on the car
   await s.advance(1); assert.deepEqual(on(), [], "off at +6650 = the drop + the new offset"); assert.equal(dropLine.style.display, "", "the same moment as its drop line");
 });
 
-test("1.99??: review fix (T3) - caughtUp: a backlog answer's card, stage tiles and held lines show as they are now; changes after it wait the offset", async () => {
+test("1.99ahm: review fix (T3) - caughtUp: a backlog answer's card, stage tiles and held lines show as they are now; changes after it wait the offset", async () => {
   const s = await gated(); let card, stage; const host = s.element("div"); s.document.body.appendChild(host);
   const view = d => { card = plain(d); }, show = p => { stage = plain(p); };
   const mic = () => card.mic.map(p => p.login), tiles = () => stage.src.map(t => t.id);
@@ -579,7 +579,7 @@ test("1.99??: review fix (T3) - caughtUp: a backlog answer's card, stage tiles a
   await s.advance(1); assert.deepEqual(mic(), ["b", "a"]); assert.equal(later.style.display, "");
 });
 
-test("1.99??: with only the card / chat switches on, the audio is still measured (not the whole fallback) and the viewer's toggle is offered", async () => {
+test("1.99ahm: with only the card / chat switches on, the audio is still measured (not the whole fallback) and the viewer's toggle is offered", async () => {
   const s = sandbox({ config: { apply: { video: false, mic: false, mp3: true, mic_card: true, mic_chat: false } } });
   s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
   s.media("rtc"); await s.advance(0);

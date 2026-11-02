@@ -7,7 +7,7 @@
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d) { return d; };
   var labels = {
     mode: 'Who gets sync', apply_video: 'Delay relayed cams', apply_mic: 'Delay mic signs', apply_mp3: 'Also sync with standard MP3 audio',
-    // 1.99??: the "On the mic" card and the chat's grab / drop lines, each its own switch
+    // 1.99ahm: the "On the mic" card and the chat's grab / drop lines, each its own switch
     apply_mic_card: _t('js.admavsync.apply_mic_card', 'Delay the On the mic card'),
     apply_mic_chat: _t('js.admavsync.apply_mic_chat', 'Delay mic grab/drop lines in chat'),
     engine_chromium: 'Enable Chromium video delay', engine_firefox: 'Enable Firefox video delay', engine_safari: 'Enable Safari video delay',
@@ -17,7 +17,7 @@
     cap_ms: 'Maximum video delay (ms)', cap_ind_ms: 'Maximum mic-sign delay (ms)', deadband_ms: 'Ignore changes smaller than (ms)',
     period_s: 'Recompute every (s)', mods_instant: 'Show the moderation mic panel instantly for room moderators'
   };
-  // 1.99??: what each mic switch holds back (all three by the same mic-sign delay, so they line up with each other)
+  // 1.99ahm: what each mic switch holds back (all three by the same mic-sign delay, so they line up with each other)
   var helps = {
     apply_mic: _t('js.admavsync.apply_mic_help', 'The mic stage’s tiles: a new speaker’s tile, the ring and newest highlights, who is speaking and the layout.'),
     apply_mic_card: _t('js.admavsync.apply_mic_card_help', 'The On the mic card beside the chat: people joining or leaving it and its order. Same delay as the mic signs.'),
@@ -44,7 +44,7 @@
       fields.appendChild(label);
     });
   }
-  // 1.99??: review fix (C-1) - the card reads and writes only the fields it has drawn (form.elements has no others), and is drawn
+  // 1.99ahm: review fix (C-1) - the card reads and writes only the fields it has drawn (form.elements has no others), and is drawn
   // again when the site's field list changes (a deploy while this page was open) - it used to throw on a field it never drew, so the
   // readout stopped refreshing and Save / Reset did nothing
   var drawn = null;
@@ -68,7 +68,7 @@
   function render(next) {
     var keys = Object.keys(next.fields || {}).join(','), redraw = keys !== drawn, typed = redraw && editing ? values() : null;
     view = next;
-    // 1.99??: (C-1) another field list: drawn again from the site's values, keeping what the admin was changing
+    // 1.99ahm: (C-1) another field list: drawn again from the site's values, keeping what the admin was changing
     if (redraw) { build(); drawn = keys; fill(); if (typed) put(typed); }
     else if (!editing) fill();
     table('avsRooms', view.rooms || [], [function (r) { return r.room; }, function (r) { return ms(r.lat.mix_ms); }, function (r) { return ms(r.lat.helper_ms); },

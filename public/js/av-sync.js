@@ -71,7 +71,7 @@
     return { pepe: number(a[sound.mode + '_ms']), browser: soundStats.browser, fresh: ageOf(pad) <= 30,
       statsOK: soundStats.ok, fallback: c.fallback && c.fallback[sound.mode], cap: c.cap, k: 0 };
   }
-  // 1.99??: kind = which switch holds the sign back - 'mic' (the mic stage's tile signs, the default), 'mic_card' (the "On the mic"
+  // 1.99ahm: kind = which switch holds the sign back - 'mic' (the mic stage's tile signs, the default), 'mic_card' (the "On the mic"
   // card) or 'mic_chat' (the chat's grab / drop lines). All three use the same mic-sign offset, so they line up with each other.
   var MIC_KINDS = ['mic', 'mic_card', 'mic_chat'];
   function anyMic(pad, ignoreToggle) { return MIC_KINDS.some(function (kind) { return eligible(pad, kind, ignoreToggle); }); }
@@ -182,7 +182,7 @@
     // Clear ineligible receivers before any asynchronous work, including a pending fetch.
     receivers.forEach(function (entry) { if (!eligible(entry.pad, 'video')) setTarget(entry, null); });
     (sound.playing ? fetchConfig(sound.slug) : Promise.resolve()).then(function () {
-      if (generation !== epoch || !anyMic(sound.slug) && !eligible(sound.slug, 'video')) return;   // 1.99??: any of the mic switches
+      if (generation !== epoch || !anyMic(sound.slug) && !eligible(sound.slug, 'video')) return;   // 1.99ahm: any of the mic switches
       var tasks = [sampleAudio(generation)];
       receivers.forEach(function (entry) {
         if (!eligible(entry.pad, 'video')) return;
@@ -277,8 +277,8 @@
       }
       Object.keys(record.births).forEach(function (k) { if (!present[k]) delete record.births[k]; });
     } else {
-      // 1.99??: review fix (T1, T2) - no onset times any more: the card shows a turn from its grab + the offset to its drop + the offset
-      // 1.99??: review fix (PRIV-L1) - lv: a keyless "someone" slot's veil level (a level, never who), so the card can keep that slot
+      // 1.99ahm: review fix (T1, T2) - no onset times any more: the card shows a turn from its grab + the offset to its drop + the offset
+      // 1.99ahm: review fix (PRIV-L1) - lv: a keyless "someone" slot's veil level (a level, never who), so the card can keep that slot
       // for one offset after its holder drops without borrowing a room member's object
       compact = { mic: [], on: Object.create(null), lv: Object.create(null) };
       visitPeople(latest && latest.mic, 'mic', function (person, k, keyless) { if (k) { compact.mic.push(k); compact.on[k] = true; if (keyless) compact.lv[k] = levelOf(person); } });
@@ -320,7 +320,7 @@
     if (old && old.override === override && old.fixed === latest.fixed) { out.layout = old.layout; if (own.call(latest, 'dyn')) out.dyn = old.dyn; }
     return out;
   }
-  // 1.99??: review fix (T1, T2) - the card is held back, never thinned: whoever was on the mic at the moment the view shows (now - the
+  // 1.99ahm: review fix (T1, T2) - the card is held back, never thinned: whoever was on the mic at the moment the view shows (now - the
   // offset) is on it. The old minimum-hold rule (a turn shorter than the offset never showed) dropped a turn already on screen early
   // when the offset rose - before its "dropped the mic" line and before the viewer heard it end - and hid short turns whose grab and
   // drop lines the chat does show.
@@ -335,7 +335,7 @@
       // Today's public anonymous records have no stable ID. Retain only a generic mic count,
       // bounded by anonymous entries still in the newest room; never infer roster mic flags
       // from mic-array positions. WP-2's stable anonymous IDs enable exact cross-list timing.
-      // 1.99??: review fix (PRIV-L1) - the count is per veil level: a keyless slot needs a keyless person of its own level still in
+      // 1.99ahm: review fix (PRIV-L1) - the count is per veil level: a keyless slot needs a keyless person of its own level still in
       // the room, and never shows that person's object (it used to show the N-th one's, so a "someone · hidden" who never held the
       // mic could stand in for the "someone · incognito" who did)
       if (keyless) { var level = levelOf(person); spare[level] = (spare[level] || 0) + 1; }
@@ -350,14 +350,14 @@
       if (here && levelOf(here) === levels[k]) { picks[i] = here; spare[levels[k]] = (spare[levels[k]] || 0) - 1; }
     });
     keys.forEach(function (k, i) {
-      // 1.99??: (PRIV-L1) a slot whose holder dropped (or changed level) stays one offset as a bare "someone" of its own level
+      // 1.99ahm: (PRIV-L1) a slot whose holder dropped (or changed level) stays one offset as a bare "someone" of its own level
       if (picks[i] || !own.call(levels, k) || !(spare[levels[k]] > 0)) return;
       spare[levels[k]]--; picks[i] = levels[k] ? { anon: true, display: 'someone', veil: levels[k] } : { anon: true, display: 'someone' };
     });
     out.mic = picks.filter(Boolean).map(function (person) { var p = copy(person); p.on_mic = true; return p; });
     return out;
   }
-  // 1.99??: the mic stage's program follows "Delay mic signs"; the "On the mic" card's view (micView) follows its own switch
+  // 1.99ahm: the mic stage's program follows "Delay mic signs"; the "On the mic" card's view (micView) follows its own switch
   function switchOf(record) { return record.kind === 'program' ? 'mic' : 'mic_card'; }
   function renderRecord(record, call) {
     var wait = delayFor(record.pad, false, switchOf(record)), now = Date.now(), out = record.kind === 'program' ? mergedProgram(record, wait, now) : mergedMic(record, wait, now);
@@ -374,7 +374,7 @@
       trimHistory(record, now);
       if (wait) record.rows.forEach(function (row) { var at = row.at + wait; if (at > now) due = Math.min(due, at); });
     });
-    // 1.99??: a held chat line is shown once the room audio has caught up to it ("Delay mic grab/drop lines in chat"); the delay is
+    // 1.99ahm: a held chat line is shown once the room audio has caught up to it ("Delay mic grab/drop lines in chat"); the delay is
     // read again each time, so stopping the audio, the switch going off or the viewer's own toggle shows every held line at once
     lines = lines.filter(function (line) {
       if (line.el.isConnected === false) { release(line); return false; }      // taken out by the page (privacy, trims): nothing to show
@@ -384,7 +384,7 @@
     });
     if (due !== Infinity) viewTimer = setTimeout(refreshViews, Math.max(1, Math.ceil(due - now)));
   }
-  /** 1.99??: show a held line where it already sits (its true place in the log); the page's reveal(el, show) keeps a reader who was
+  /** 1.99ahm: show a held line where it already sits (its true place in the log); the page's reveal(el, show) keeps a reader who was
    *  at the bottom there. It is always shown, whatever reveal does. */
   function release(line) {
     var el = line.el, done = false, show = function () { if (!done) { done = true; el.style.display = line.display; } };
@@ -392,28 +392,28 @@
     if (line.reveal && el.isConnected !== false) { try { line.reveal(el, show); } catch (e) { /* the line still shows */ } }
     show();
   }
-  /** 1.99??: the viewer leaves, the tab is hidden or frozen - every held line shows at once (never lost while timers sleep). */
+  /** 1.99ahm: the viewer leaves, the tab is hidden or frozen - every held line shows at once (never lost while timers sleep). */
   function releaseLines() { var held = lines; lines = []; held.forEach(release); }
   function refreshViews() { Object.keys(records).forEach(function (key) { renderRecord(records[key], true); }); scheduleViews(); }
   function gateProgram(pad, program, callback) {
     var record = historyRecord('program', slug(pad), program, callback), out = renderRecord(record, false);
     if (typeof callback === 'function') callback(out); scheduleViews(); return out;
   }
-  // C2 helpers. 1.99??: wired - the pad page's and the homepage panel's "On the mic" card (micView, the apply_mic_card switch) and
+  // C2 helpers. 1.99ahm: wired - the pad page's and the homepage panel's "On the mic" card (micView, the apply_mic_card switch) and
   // their chat's grab / drop lines (holdLine, apply_mic_chat). With the switch off, or sync not applying to this viewer, micView hands
   // back the data it was given and holdLine holds nothing.
   function micView(pad, data, rerender) { var record = historyRecord('mic', slug(pad), data, rerender), out = renderRecord(record, false); scheduleViews(); return out; }
   /** Hold a live grab / drop line the page has just put in its place in the log; -> true when held. The line keeps its place (hidden),
    *  so it shows in its true time order. Only a timing flag is kept on it - never who it names. */
   function holdLine(pad, element, reveal) {
-    // 1.99??: a hidden tab shows lines as they come (its timers sleep); a line not in the page yet is never held (it could not be shown)
+    // 1.99ahm: a hidden tab shows lines as they come (its timers sleep); a line not in the page yet is never held (it could not be shown)
     if (!element || !element.style || element._patvAvSyncHeld || element.isConnected === false || D.hidden || !delayFor(pad, false, 'mic_chat')) return false;
     var line = { pad: slug(pad), el: element, at: Date.now(), display: element.style.display || '', reveal: typeof reveal === 'function' ? reveal : null };
     element._patvAvSyncHeld = true; element.style.display = 'none'; lines.push(line);
     if (lines.length > 600) release(lines.shift());
     scheduleViews(); return true;
   }
-  /** 1.99??: review fix (T3) - the answer the page has just drawn was a backlog (the first after its tab was hidden, or after a poll
+  /** 1.99ahm: review fix (T3) - the answer the page has just drawn was a backlog (the first after its tab was hidden, or after a poll
    *  failed): the room audio passed those events long ago. This pad's mic signs, its On the mic card and its held grab / drop lines
    *  show as they are now, not one offset after they came in; changes after it wait the offset as before. */
   function caughtUp(pad) {
@@ -430,14 +430,14 @@
         fallback_ms: c && c.fallback ? number(c.fallback[sound.mode]) : null, deadband_ms: c ? number(c.deadband) : null, period_s: c ? number(c.period_s) : null },
       audio: { pepe_ms: number(a[sound.mode + '_ms']), mix_ms: number(a.mix_ms), helper_ms: number(a.helper_ms), age_s: isFinite(ageOf(sound.slug)) ? ageOf(sound.slug) : null,
         browser_ms: number(soundStats.browser), stats_ok: soundStats.ok, rtt_s: number(soundStats.rtt) }, indicator_ms: delayFor(sound.slug),
-      card_ms: delayFor(sound.slug, false, 'mic_card'), chat_ms: delayFor(sound.slug, false, 'mic_chat'),   // 1.99??
+      card_ms: delayFor(sound.slug, false, 'mic_card'), chat_ms: delayFor(sound.slug, false, 'mic_chat'),   // 1.99ahm
       tiles: receivers.map(function (entry, index) { var cam = c && c.cams && c.cams[entry.path]; return { slot: index + 1, same_pad: entry.pad === sound.slug,
         hold_ms: cam ? number(cam.hold_ms) : null, src: cam && ['passthrough', 'pt', 'reencode'].indexOf(cam.src) >= 0 ? cam.src : null,
         target_ms: number(entry.target), supported: entry.supported, rtt_s: number(entry.rtt), stats: copy(entry.diagnostics),
         playout_delay_extension: !!(entry.pc.remoteDescription && /a=extmap:[^\r\n]*playout-delay/.test(entry.pc.remoteDescription.sdp || '')) }; }) };
   }
   function notify() {
-    // (1.99??: the viewer's toggle is offered while any of the mic switches holds something back too)
+    // (1.99ahm: the viewer's toggle is offered while any of the mic switches holds something back too)
     var available = MIC_KINDS.some(function (kind) { return delayFor(sound.slug, true, kind) > 0; }) || receivers.some(function (entry) { return targetFor(entry, true) != null; });
     buttons = buttons.filter(function (item) { if (item.box.isConnected === false) return false; item.button.hidden = !available; item.button.setAttribute('aria-pressed', enabled ? 'true' : 'false'); return true; });
     var c = cfgFor(sound.slug), wantsDebug = /(?:^|[?&])avsync=1(?:&|$)/.test(W.location && W.location.search || '');
@@ -474,7 +474,7 @@
     W.addEventListener('pagehide', function () { stopped = true; epoch++; clearTimeout(timer); clearTimeout(pollTimer); pollTimer = null; clearTimeout(viewTimer); receivers.forEach(function (r) { setTarget(r, null, true); }); releaseLines(); });
     W.addEventListener('pageshow', function () { if (stopped) { stopped = false; wake(); } });
   }
-  // 1.99??: a hidden or frozen tab's timers sleep - its held chat lines show at once; back in view, the card is drawn as it is now
+  // 1.99ahm: a hidden or frozen tab's timers sleep - its held chat lines show at once; back in view, the card is drawn as it is now
   if (D.addEventListener) {
     D.addEventListener('visibilitychange', function () { if (D.hidden) releaseLines(); else if (!stopped) refreshViews(); });
     D.addEventListener('freeze', releaseLines);

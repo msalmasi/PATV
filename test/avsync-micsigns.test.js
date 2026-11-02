@@ -1,4 +1,4 @@
-// 1.99??: A/V sync's two new mic switches on the real pages - "Delay the On the mic card" (avsync apply_mic_card) and "Delay mic
+// 1.99ahm: A/V sync's two new mic switches on the real pages - "Delay the On the mic card" (avsync apply_mic_card) and "Delay mic
 // grab/drop lines in chat" (apply_mic_chat). The pad page's script (views/room.ejs) and the homepage panel's (views/home.ejs), rendered
 // with ejs, run in a small fake DOM with the REAL controller (public/js/av-sync.js) and renderer (public/js/chatlog-core.js) on one
 // fake clock; the long poll is answered by the test. Room audio here is MP3 with an empty buffer, so the mic-sign offset is
@@ -264,12 +264,12 @@ const grab = (c, u) => ({ k: "mic", c, ts: T0 + c, u });
 const drop = (c, u, ms) => ({ k: "unmic", c, ts: T0 + c, u, ms });
 const say = (c, u, text) => ({ k: "msg", c, ts: T0 + c, u, text });
 
-test("1.99??: the rendered pages load the controller (v=4) only while A/V sync applies to the viewer", async () => {
+test("1.99ahm: the rendered pages load the controller (v=4) only while A/V sync applies to the viewer", async () => {
   assert.match(await padHtml(true), /<script src="\/public\/js\/av-sync\.js\?v=4"><\/script>/);
   assert.doesNotMatch(await padHtml(false), /av-sync\.js/);
 });
 
-test("1.99??: pad page - the On the mic card and the grab/drop lines wait for the room audio; typed chat is immediate; a held line shows in its true place", async () => {
+test("1.99ahm: pad page - the On the mic card and the grab/drop lines wait for the room audio; typed chat is immediate; a held line shows in its true place", async () => {
   const P = await pad();
   assert.deepEqual(P.errors, []);
   assert.deepEqual(P.card(), ["Bob"]);
@@ -300,7 +300,7 @@ test("1.99??: pad page - the On the mic card and the grab/drop lines wait for th
   assert.deepEqual(P.errors, []);
 });
 
-test("1.99??: review fix (T2) - pad page: a turn shorter than the offset is on the card one offset late, for as long as it lasted - in step with its lines", async () => {
+test("1.99ahm: review fix (T2) - pad page: a turn shorter than the offset is on the card one offset late, for as long as it lasted - in step with its lines", async () => {
   const P = await pad();
   await P.play();
   await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
@@ -314,7 +314,7 @@ test("1.99??: review fix (T2) - pad page: a turn shorter than the offset is on t
   assert.deepEqual(P.errors, []);
 });
 
-test("1.99??: pad page - switches off, sync not for this viewer, or no controller at all (signed out): exactly today's page", async () => {
+test("1.99ahm: pad page - switches off, sync not for this viewer, or no controller at all (signed out): exactly today's page", async () => {
   const script = async (P) => {
     await P.play().catch(() => {});
     await P.deliver(P.answer({ feed: [grab(7, ALICE), say(8, BOB, "typed")], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
@@ -336,7 +336,7 @@ test("1.99??: pad page - switches off, sync not for this viewer, or no controlle
   }
 });
 
-test("1.99??: pad page - the page's first lines and lines drawn again are never held; a held line the site takes out never comes back; never duplicated", async () => {
+test("1.99ahm: pad page - the page's first lines and lines drawn again are never held; a held line the site takes out never comes back; never duplicated", async () => {
   const P = await pad({ playFirst: true });
   assert.deepEqual(P.errors, []);
   for (const c of [2, 3, 4, 5]) assert.equal(P.shown(c), true, "first lines (history) show as they are: " + c);
@@ -362,7 +362,7 @@ test("1.99??: pad page - the page's first lines and lines drawn again are never 
   assert.equal(P.shown(11), true, "the redrawn line shows at once"); assert.match(P.line(11).textContent, /someone grabbed the mic/);
 });
 
-test("1.99??: pad page privacy - a veiled holder is held exactly like a named one; holding adds nothing to a line; the card shows only the frog name", async () => {
+test("1.99ahm: pad page privacy - a veiled holder is held exactly like a named one; holding adds nothing to a line; the card shows only the frog name", async () => {
   const P = await pad();
   await P.play();
   await P.deliver(P.answer({ feed: [grab(7, ALICE), grab(8, FROG)], mic: [on(BOB), on(ALICE), on(FROG)], members: [on(BOB), on(ALICE), on(FROG)] }));
@@ -386,7 +386,7 @@ test("1.99??: pad page privacy - a veiled holder is held exactly like a named on
   assert.doesNotMatch(JSON.stringify(P.win.PATVAvSync.debug()), /alice|bob|Soggy|plant_based/i, "measurements name no one");
 });
 
-test("1.99??: review fix (PRIV-L1) - pad page: after an alias-less incognito holder drops, the card keeps a someone · incognito for the offset - never a someone · hidden who never held the mic", async () => {
+test("1.99ahm: review fix (PRIV-L1) - pad page: after an alias-less incognito holder drops, the card keeps a someone · incognito for the offset - never a someone · hidden who never held the mic", async () => {
   const P = await pad();
   await P.play();
   const SI = { anon: true, display: "someone", veil: "incognito" }, SH = { anon: true, display: "someone", veil: "hidden" };
@@ -402,7 +402,7 @@ test("1.99??: review fix (PRIV-L1) - pad page: after an alias-less incognito hol
   assert.deepEqual(P.errors, []);
 });
 
-test("1.99??: pad page - a hidden tab shows held lines at once (the poll sleeps); a reader at the bottom stays at the bottom, one reading back gets the jump", async () => {
+test("1.99ahm: pad page - a hidden tab shows held lines at once (the poll sleeps); a reader at the bottom stays at the bottom, one reading back gets the jump", async () => {
   const P = await pad();
   await P.play();
   P.scroll.scrollHeight = 500; P.scroll.clientHeight = 500; P.scroll.scrollTop = 0;
@@ -426,7 +426,7 @@ test("1.99??: pad page - a hidden tab shows held lines at once (the poll sleeps)
   assert.deepEqual(P.errors, []);
 });
 
-test("1.99??: review fix (T3) - pad page: the first answer after the tab comes back, or after a failed poll, is old news - its card and grab/drop lines show at once; later ones wait again", async () => {
+test("1.99ahm: review fix (T3) - pad page: the first answer after the tab comes back, or after a failed poll, is old news - its card and grab/drop lines show at once; later ones wait again", async () => {
   const P = await pad();
   await P.play();
   await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
@@ -487,7 +487,7 @@ async function home({ avsync = true, config = baseConfig() } = {}) {
   return H;
 }
 
-test("1.99??: homepage panel - its On the mic box and grab/drop lines follow the same two switches; without them it is today's panel", async () => {
+test("1.99ahm: homepage panel - its On the mic box and grab/drop lines follow the same two switches; without them it is today's panel", async () => {
   const P = await home();
   assert.deepEqual(P.errors, []);
   assert.deepEqual(P.chips(), ["Bob"]);
@@ -519,7 +519,7 @@ test("1.99??: homepage panel - its On the mic box and grab/drop lines follow the
   assert.deepEqual(await run(await home({ config: off })), none);
 });
 
-test("1.99??: review fix (T3) - homepage panel: the first answer after the tab comes back, or after a failed poll, shows its mic box and lines at once", async () => {
+test("1.99ahm: review fix (T3) - homepage panel: the first answer after the tab comes back, or after a failed poll, shows its mic box and lines at once", async () => {
   const P = await home();
   await P.play();
   await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));

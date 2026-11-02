@@ -31,7 +31,7 @@ test("room.ejs: static ids used by the live loop are unique", () => {
 });
 
 test("room.ejs: one widget can't freeze the page - every sub-update is isolated and the poll always starts", () => {
-  const apply = room.slice(room.indexOf("function apply(d, first"), room.indexOf("function poll()"));   // 1.99??: (d, first, late)
+  const apply = room.slice(room.indexOf("function apply(d, first"), room.indexOf("function poll()"));   // 1.99ahm: (d, first, late)
   assert.ok(room.indexOf("function apply(d, first") > 0, "apply() found");
   for (const name of ["mod", "room", "compose", "audio", "feed", "clip"]) {
     assert.match(apply, new RegExp(`safe\\('${name}'`), `${name} update wrapped`);

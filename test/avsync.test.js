@@ -205,8 +205,8 @@ test("queued partial saves preserve both changes; reset restores dark defaults a
   assert.equal(reset.data.view.audit[0].detail.action, "reset"); assert.equal(reset.data.view.audit[0].reason, "test reset");
 });
 
-// 1.99??: "Delay the On the mic card" (apply_mic_card) and "Delay mic grab/drop lines in chat" (apply_mic_chat)
-test("1.99??: the card and chat-line switches - off by default, strict booleans, audited, in the viewer's answer; an older stored row reads them off", async () => {
+// 1.99ahm: "Delay the On the mic card" (apply_mic_card) and "Delay mic grab/drop lines in chat" (apply_mic_chat)
+test("1.99ahm: the card and chat-line switches - off by default, strict booleans, audited, in the viewer's answer; an older stored row reads them off", async () => {
   assert.equal(AV.DEFAULTS.apply_mic_card, false); assert.equal(AV.DEFAULTS.apply_mic_chat, false);
   assert.ok(AV.normalize({ apply_mic_card: "yes" }).errors.apply_mic_card); assert.ok(AV.normalize({ apply_mic_chat: 2 }).errors.apply_mic_chat);
   assert.equal(AV.normalize({ apply_mic_card: "true", apply_mic_chat: 1 }).cfg.apply_mic_card, true);
@@ -268,7 +268,7 @@ function adminCard(viewData, ...later) {
     poll: () => tick(), message: () => byId.avsMessage.textContent, views };
 }
 
-test("1.99??: the admin card lists the two switches with clear labels (locales/en.json) and says what each one holds back; a save sends them", async () => {
+test("1.99ahm: the admin card lists the two switches with clear labels (locales/en.json) and says what each one holds back; a save sends them", async () => {
   const data = (await get("/api/admin/pepe/avsync", "adm")).data;
   const A = adminCard(data); for (let i = 0; i < 12; i++) await Promise.resolve();
   const card = A.labelOf("apply_mic_card"), chat = A.labelOf("apply_mic_chat"), mic = A.labelOf("apply_mic");
@@ -287,7 +287,7 @@ test("1.99??: the admin card lists the two switches with clear labels (locales/e
   assert.equal(A.posts.length, 1); assert.equal(A.posts[0].cfg.apply_mic_chat, true); assert.equal(A.posts[0].cfg.apply_mic_card, false);
 });
 
-test("1.99??: review fix (C-1) - an admin card left open across a deploy that changes the field list draws itself again; Save works and sends every field it shows", async () => {
+test("1.99ahm: review fix (C-1) - an admin card left open across a deploy that changes the field list draws itself again; Save works and sends every field it shows", async () => {
   const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   const data = (await get("/api/admin/pepe/avsync", "adm")).data;
   const older = JSON.parse(JSON.stringify(data));        // the site before a deploy that adds two switches

@@ -932,7 +932,7 @@
       return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
     }
     function chip(u, cls) { return veilOf(u) ? withVeil(el('span', 'chip' + (cls ? ' ' + cls : '')), label(u), u) : chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
-    // the "On the mic" box (1.99??: drawn from what PATVAvSync.micView hands back while A/V sync delays it for this viewer)
+    // the "On the mic" box (1.99ahm: drawn from what PATVAvSync.micView hands back while A/V sync delays it for this viewer)
     function drawMic(list) {
       var mk = JSON.stringify(list);
       if (mk === lastM) return;
@@ -940,7 +940,7 @@
       if (!list.length) m.appendChild(el('span', 'muted', _t('js.home.room.mic_free', 'Mic is free')));
       list.forEach(function (u) { m.appendChild(chip(u, 'mic')); });
     }
-    // 1.99??: a held grab / drop line shows in its place - a reader at the bottom of the feed stays there
+    // 1.99ahm: a held grab / drop line shows in its place - a reader at the bottom of the feed stays there
     function revealHeld(n, show) { var near = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60; show(); if (near) feed.scrollTop = feed.scrollHeight; }
     var roomAudio = PATVRoom.audio(document.getElementById('lrAudioBox'), slug, { showOff: true });
     window.PATVHomeAudio = roomAudio;            // the Top Pads 🎧 buttons play through this player (one room at a time)
@@ -988,7 +988,7 @@
       // answer of 80+ lines - a tab coming back, a busy room - dropped your pending line for a line it never drew)
       var all = d.feed || [];
       var shown = all.length > 80 ? all.filter(function (it, i) { return i >= all.length - 80 || it.job || it.cid; }) : all;
-      // 1.99??: A/V sync "Delay mic grab/drop lines in chat" (avsync apply_mic_chat), as on the pad page: a grab / drop line that
+      // 1.99ahm: A/V sync "Delay mic grab/drop lines in chat" (avsync apply_mic_chat), as on the pad page: a grab / drop line that
       // arrives live sits in its place, hidden, until the room audio this viewer hears catches up (PATVAvSync.holdLine); never the
       // widget's first lines, never typed chat or transcripts; review fix (T3): nor a backlog answer's (`late` - see `behind` by poll())
       var held = [];
@@ -1023,7 +1023,7 @@
       // 1.99acb: your room line the site named but this answer didn't carry - ask again from just before it (once per line)
       var miss = roomRelay && roomRelay.refetch ? roomRelay.refetch() : 0;
       if (miss && miss <= cursor) cursor = miss - 1;
-      // 1.99??: A/V sync "Delay the On the mic card" (avsync apply_mic_card) - the holders as this viewer hears them (see the pad page)
+      // 1.99ahm: A/V sync "Delay the On the mic card" (avsync apply_mic_card) - the holders as this viewer hears them (see the pad page)
       var micNow = d.mic;
       if (window.PATVAvSync && PATVAvSync.micView) {
         try { var heard = PATVAvSync.micView(slug, { members: d.members, mic: d.mic }, function (v) { try { drawMic(v && Array.isArray(v.mic) ? v.mic : []); } catch (e) { /* the next answer draws it */ } }); if (heard && Array.isArray(heard.mic)) micNow = heard.mic; }
@@ -1042,7 +1042,7 @@
     // 1.99ye: a long-poll (?wait=1, like the pad page): answered when something changes, asked again at once; an older
     // site (no `lp` in the answer) is polled every 3 s as before
     var lp = { ok: false, v: null, mv: null }, inflight = false;
-    // 1.99??: review fix (T3) - the next answer is a backlog (the tab was hidden - the panel stops asking - or a poll failed): A/V sync
+    // 1.99ahm: review fix (T3) - the next answer is a backlog (the tab was hidden - the panel stops asking - or a poll failed): A/V sync
     // shows its mic box and grab / drop lines as they are now (PATVAvSync.caughtUp), not one offset after they came in
     var behind = false;
     function poll() {
@@ -1067,7 +1067,7 @@
         .catch(function () { fails++; behind = true; lp.ok = false; })
         .then(function () { inflight = false; if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(30000, 3000 * Math.pow(2, fails)) : (lp.ok ? 50 : 3000)); });
     }
-    document.addEventListener('visibilitychange', function () { if (document.hidden) behind = true; else if (!timer) poll(); });   // 1.99??: (T3)
+    document.addEventListener('visibilitychange', function () { if (document.hidden) behind = true; else if (!timer) poll(); });   // 1.99ahm: (T3)
     var init = JSON.parse(document.getElementById('lrInit').textContent);
     if (init) apply(init);
     timer = setTimeout(poll, 300);

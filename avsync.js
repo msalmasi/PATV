@@ -10,7 +10,7 @@ const guard = require("./middleware/authGuard");
 const FIELDS = Object.freeze({
   mode: { def: "off", choices: ["off", "admins", "everyone"] },
   apply_video: { def: true }, apply_mic: { def: true },
-  // 1.99??: the "On the mic" card and the chat's grab/drop lines, each its own switch (off until an admin ticks it); they use the
+  // 1.99ahm: the "On the mic" card and the chat's grab/drop lines, each its own switch (off until an admin ticks it); they use the
   // mic-sign offset (ind_path_ms / k_ind_ms / cap_ind_ms) and the same who / audio-playing rules as apply_mic
   apply_mic_card: { def: false }, apply_mic_chat: { def: false },
   apply_mp3: { def: true },
@@ -148,7 +148,7 @@ function answer(roomId, paths, user) {
   return { ok: true, on: viewerOn(user), dbg, audio: roomAudio(roomId), cams,
     k: { pt: c.k_pt_ms, re: c.k_re_ms, ind: c.k_ind_ms }, fallback: { rtc: c.fallback_rtc_ms, mp3: c.fallback_mp3_ms },
     cap: c.cap_ms, cap_ind: c.cap_ind_ms, deadband: c.deadband_ms, period_s: c.period_s,
-    apply: { video: c.apply_video, mic: c.apply_mic, mp3: c.apply_mp3, mic_card: c.apply_mic_card, mic_chat: c.apply_mic_chat },   // 1.99??: + card / chat
+    apply: { video: c.apply_video, mic: c.apply_mic, mp3: c.apply_mp3, mic_card: c.apply_mic_card, mic_chat: c.apply_mic_chat },   // 1.99ahm: + card / chat
     engines: { chromium: c.engine_chromium, firefox: c.engine_firefox, safari: c.engine_safari }, ind_path_ms: c.ind_path_ms, mods_instant: c.mods_instant };
 }
 async function view() {

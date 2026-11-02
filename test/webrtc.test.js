@@ -580,7 +580,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(await render(on), /av-sync\.js/, name + ": no lip sync controller while off");
     assert.doesNotMatch(await render({ ...on, avsyncOn: false }), /av-sync\.js/, name);
     const html = await render({ ...on, avsyncOn: true });
-    assert.match(html, /av-sync\.js\?v=4"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=6"/, name);   // (wave2 WP-4: 3 - the ring; 1.99??: 4 - the On the mic card / chat lines)
+    assert.match(html, /av-sync\.js\?v=4"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=6"/, name);   // (wave2 WP-4: 3 - the ring; 1.99ahm: 4 - the On the mic card / chat lines)
     assert.doesNotMatch(await render({ ...offFn, avsyncOn: true }), /av-sync\.js/, name + ": never without WebRTC");
   }
   assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=18/);   // train2: 14 = stagefix's 13 + micfollow's 12 merged; wave2 WP-4: 18
