@@ -671,7 +671,9 @@ async function namesInto(users, M) {
 async function dressPage(kept, P, M, F) {
   if (!kept.length) return [];
   const B = require("./bridge"), CV = require("./chatlogview");
-  await namesInto(kept.filter((it) => CV.privacyOf(it) == null).map((it) => it.u).filter(Boolean), M);
+  // 1.99?? S1: a !transcripts off bar said named shows that name in the file too (chatlogview.attachBarNames / barUser)
+  await CV.attachBarNames(kept);
+  await namesInto([...kept.filter((it) => CV.privacyOf(it) == null).map((it) => it.u), ...kept.map((it) => CV.barUser(it))].filter(Boolean), M);
   const dressed = CV.dress(kept, { view: P.V, lookup: (u) => M.get(B.nameKey(u.login)) });
   return dressed.map((it) => (it.u ? Object.assign({}, it, { u: B.withPatv(it.u, M, F) }) : it));
 }

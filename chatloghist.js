@@ -255,7 +255,9 @@ async function scan(S, dir, from, need) {
 async function dress(roomId, items, V, viewer, login, acts) {
   if (!items.length) return [];
   const CV = require("./chatlogview"), B = require("./bridge");
-  const L = await B.resolveNames(items.map((it) => it.u).filter(Boolean));
+  // 1.99?? S1: an archived !transcripts off bar said named shows that name (who said it, from chat_log_veil) - its PATV look resolved too
+  await CV.attachBarNames(items);
+  const L = await B.resolveNames([...items.map((it) => it.u), ...items.map((it) => CV.barUser(it))].filter(Boolean));
   let rmNames = null;
   if (items.some((it) => it.rm_at != null && !it.purged)) { try { rmNames = await require("./chatlogmod").rmNames(items); } catch (e) { rmNames = null; } }
   const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(B.nameKey(u.login)), rmNames });
@@ -477,7 +479,8 @@ async function check(user, slug, body = {}) {
   // late). Review 2 fix-up: never a line that was "someone" before and after (Pepe's anonymised "h:" rows, a speaker who was hidden
   // already) - this answer would otherwise pick out, from any c's asked about, exactly the "someone" lines of whoever moved
   let changed = keep.filter((it) => it.rm_at != null || it.purged || red(it.text) || (it.k === "live" && (red(it.who) || red(it.what))) ||
-                                     (CV.privacyOf(it) === "anon" && CV.namedToAnonLately(it, MOVED_MS)));
+                                     (CV.privacyOf(it) === "anon" && CV.namedToAnonLately(it, MOVED_MS)) ||
+                                     CV.barNamedToAnonLately(it, MOVED_MS));        // (1.99?? S1: a named !transcripts off bar, the same move)
   if (!G.full) {
     const left = dayLeft(G.uid);
     if (changed.length > left) { for (const it of changed.slice(left)) out.gone.push(Number(it.c)); changed = changed.slice(0, left); }

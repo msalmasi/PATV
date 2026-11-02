@@ -5364,6 +5364,7 @@
   "js.pad.veil.self": "you, as {name}",
   "js.pad.veil.hidden_msg": "hidden message",
   "js.pad.veil.hidden_tx": "hidden transcript",
+  "js.pad.veil.tx_hidden": "transcript hidden",
   "js.pad.veil.said": "said {time}",
   "js.pad.veil.only_you": "only you can see this",
   "js.pad.veil.reveal": "Reveal",

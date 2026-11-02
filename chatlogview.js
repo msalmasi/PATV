@@ -217,6 +217,56 @@ function privacyV2(it, kindOf, txOf) {
   }
   return mask ? "mask" : "anon";
 }
+// ── 1.99?? S1 (owner Q5, privacy spec 2.3 "Transcripts off": transcripts off covers the WORDS only) ──
+// A !transcripts off bar (tm 1) is stored as a hidden 🎙 line (veil.js) but shows WHO said it: the person's name, or their frog name if
+// they said it incognito, with a "transcript hidden" tag. Only a bar whose speaker is !bridge hide (then or now) is the one hidden bar.
+const LOGIN_OK = /^[\w.\-]{1,40}$/;              // (a Camfrog login, as veil.js LOGIN_RE)
+/**
+ * The look of a !transcripts off bar under a state of the sticky set (kindOf(h) -> "out" | "anon" | null; now by default) -> "named"
+ * (said named, and nobody it could be is private now), "someone" (said named, but its speaker is incognito now - A.1, stricter wins:
+ * their earlier named lines are "someone" too), "incognito" (said under their incognito frog name), "hidden" (!bridge hide when said
+ * or now, or a bar without its level - the old look) or null (not a !transcripts off bar). tl = the level Pepe said (veil.js).
+ */
+function barLook(it, kindOf = kindNow) {
+  if (!it || typeof it !== "object" || it.k !== "tx" || it.tm !== 1) return null;
+  const tl = it.tl === "tx" || it.tl === "incognito" ? it.tl : "hidden";
+  if (tl === "hidden") return "hidden";
+  const ks = speakerHashes(it).map((h) => { try { return kindOf(h); } catch (e) { return "out"; } });
+  if (!ks.length || ks.includes("out")) return "hidden";
+  if (tl === "incognito") return "incognito";
+  return ks.includes("anon") ? "someone" : "named";
+}
+/** The page-safe user a "named" bar shows ({login, display}) - from its identity (_vz: the live item's, or attachBarNames' for an
+ *  archived row) when it is the bar's own speaker; null otherwise (the bar then shows "someone" with the tag - never a guessed name). */
+function barUser(it) {
+  const vz = it && it._vz;
+  if (!vz || !LOGIN_OK.test(String(vz.login || "")) || barLook(it) !== "named") return null;
+  if (!speakerHashes(it).includes(hashOf(vz.login))) return null;
+  return { login: String(vz.login), display: vz.display ? String(vz.display).slice(0, 80) : String(vz.login) };
+}
+/** Archived !transcripts off bars said named ("h:" rows, tl "tx") get who said them back from chat_log_veil, as a non-enumerable _vz
+ *  (never serialised), so history and downloads show the name like the live chat. One read per call; only an identity that hashes to
+ *  the row's own speaker hash; a row without one (forget-me took it) stays "someone" with the tag. Never throws. -> items */
+async function attachBarNames(items) {
+  const want = (Array.isArray(items) ? items : []).filter((it) => it && !it._vz && it.k === "tx" && it.tm === 1 && it.tl === "tx" &&
+                                                            typeof it.ah === "string" && Number(it.c) > 0);
+  if (!want.length) return items;
+  try {
+    const cs = [...new Set(want.map((it) => Number(it.c)))];
+    const by = new Map();
+    for (let i = 0; i < cs.length; i += 400) {
+      const part = cs.slice(i, i + 400);
+      for (const r of await roQuery(`SELECT c, login, display FROM chat_log_veil WHERE c IN (${part.map(() => "?").join(",")})`, part)) by.set(Number(r.c), r);
+    }
+    for (const it of want) {
+      const r = by.get(Number(it.c));
+      if (!r || !LOGIN_OK.test(String(r.login || "")) || !speakerHashes(it).includes(hashOf(r.login))) continue;
+      Object.defineProperty(it, "_vz", { value: { login: String(r.login), display: r.display == null ? null : String(r.display), kind: "hidden", tx: 1, lv: "tx" },
+                                         enumerable: false, writable: true, configurable: true });
+    }
+  } catch (e) { /* no identity at hand: "someone" with the tag */ }
+  return items;
+}
 /** privacyOf against a given state of the set: kindOf(h) -> "out" | "anon" | null, txOf(h) -> !transcripts off. The owner-change
  *  fix-up: the live tail asks it with the set as it was BEFORE a change (chatlog's ch.prev) to tell which lines' look moved. */
 function privacyAt(it, kindOf, txOf) {
@@ -266,6 +316,13 @@ function privacyAt(it, kindOf, txOf) {
  *  (or being masked) changes them. */
 const lookOf = (it, p) => (p === "out" ? "out" : p === "mask" ? "masked"
   : p === "anon" || (it && typeof it.ah === "string" && HASH20.test(it.ah)) || (it && it.u && it.u.anon) ? "someone" : "named");
+/** 1.99?? S1: a line's look under a state of the set (kindOf / txOf, as privacyAt) - lookOf, except that a !transcripts off bar shown
+ *  under its speaker's NAME (barLook "named") looks "named": it moves to a "someone" bar when they go private, and back, like their
+ *  named lines (the live tail draws it again - lookStep). */
+function lookAt(it, kindOf, txOf) {
+  const l = lookOf(it, privacyAt(it, kindOf, txOf));
+  return l === "masked" && barLook(it, kindOf) === "named" ? "named" : l;
+}
 /**
  * The owner-change fix-up (review 2, HIGH): what a change of the hidden set does to a line an open page may hold, from its look
  * before (ch.prev: each touched hash's kind / !transcripts off as it was) to its look now. -> {gone, redo}:
@@ -296,7 +353,7 @@ function lookMove(it, ch) {
   const touched = has("added") || has("kinds") || has("removed") || (it.k === "tx" && (has("addedTx") || has("removedTx"))) ||
     (!!prev && hs.some((h) => prev.has(h)));
   if (!touched) return { gone: false, redo: false, now: null };
-  const now = lookOf(it, privacyOf(it));
+  const now = lookAt(it, kindNow, CL.isTxHiddenHash);       // (= lookOf(it, privacyOf(it)) but for a named !transcripts off bar)
   const m = lookStep(it, ch, prev, has, now);
   m.now = now;                                              // (a touched line's look now: bridge.js clears stale entries by it)
   return m;
@@ -307,7 +364,7 @@ function lookStep(it, ch, prev, has, now) {
     const was = (x) => (prev.has(x) ? prev.get(x) : null);
     // (Train 3 review: "before" stays this set's own state - hubhidden takes the same inputs and usually moves in the same sync,
     // so its kind NOW would hide the very move a page must see: named -> "someone" leaving a name up. "now" is the stricter of both)
-    before = lookOf(it, privacyAt(it, (x) => (was(x) ? was(x).kind : CL.hiddenKind(x)), (x) => (was(x) ? !!was(x).tx : CL.isTxHiddenHash(x))));
+    before = lookAt(it, (x) => (was(x) ? was(x).kind : CL.hiddenKind(x)), (x) => (was(x) ? !!was(x).tx : CL.isTxHiddenHash(x)));
   } else {
     // the guess (fails toward leaving): newly hidden = it was named; un-hidden = it was "someone" or out (never assumed on the page)
     before = has("added") || (it.k === "tx" && has("addedTx")) ? "named" : has("kinds") ? (now === "out" ? "someone" : "out") : "out";
@@ -347,6 +404,13 @@ function namedToAnonLately(it, ms = 3600e3) {
   const h = speakerHash(it);
   const r = h ? NAMED_TO_ANON.get(h) : null;
   return !!r && Date.now() - r.at < ms && !(it.k === "tx" && r.tx);
+}
+/** 1.99?? S1: was this !transcripts off bar shown under its speaker's NAME until they went private in the last `ms`? (/history/check
+ *  draws it again - "someone" with the tag - as namedToAnonLately does for their named lines.) */
+function barNamedToAnonLately(it, ms = 3600e3) {
+  if (!it || it.k !== "tx" || it.tm !== 1 || it.tl !== "tx") return false;
+  const t = Date.now();
+  return speakerHashes(it).some((h) => { const r = NAMED_TO_ANON.get(h); return !!r && t - r.at < ms; });
 }
 /** (kept for callers from before the fix-up: any line of a hash that moved from named to "someone" lately) */
 const movedLately = (h, ms = 3600e3) => !!h && NAMED_TO_ANON.has(h) && Date.now() - NAMED_TO_ANON.get(h).at < ms;
@@ -1000,10 +1064,23 @@ function dress(items, ctx) {
         o.mask = typeof it.mask === "string" && /^[sml]$/.test(it.mask) ? it.mask : maskOf(it.text);
         delete o.text;
       }
+      // 1.99?? S1 (owner Q5): a !transcripts off bar shows WHO said it - only the words are masked - with the "transcript hidden" tag
+      // (txh): their name (barUser: the page-safe {login, display} a named line has), "someone" (said named, private now - A.1; or no
+      // identity at hand), or their incognito frog name. A bar of a !bridge hide speaker (then or now) stays the one hidden bar, no tag
+      const bl = p === "mask" ? barLook(it) : null;
+      if (bl === "named" || bl === "someone" || bl === "incognito") {
+        o.txh = 1;
+        if (bl === "incognito") o.u.veil = "incognito";
+        else {
+          const nu = bl === "named" ? barUser(it) : null;
+          o.u = nu ? pick(nu, OUT_U) : { anon: true, display: "someone" };
+        }
+      }
       // the 🎙 id only on an incognito frog-name line (owner J-7: anyone may clip it, under the frog name; Pepe salts the id); the hold
-      // only beside a frog name (a "someone" release next to a named grab must not pair up - B.2)
+      // only beside a frog name (a "someone" release next to a named grab must not pair up - B.2) - or, 1.99?? S1, beside the name of a
+      // named bar (its grab and drop are named: the same person, shown)
       if (o.k === "tx" && !(v2 && p === "anon" && u.veil === "incognito" && o.u.alias)) delete o.id;
-      if (!o.u.alias) delete o.hold;
+      if (!o.u.alias && !(o.txh === 1 && o.u.login && !o.u.anon)) delete o.hold;
       const sh = speakerHash(it);
       if (sh) Object.defineProperty(o, "_sh", { value: sh, enumerable: false });
       const vz = it._vz || (ctx.veilOf && ctx.veilOf.get ? ctx.veilOf.get(Number(it.c)) : null);
@@ -1591,6 +1668,7 @@ module.exports = {
   privacyVer, hiddenVer, noteGone, pubFloor,          // CL8 fix-up
   privacyOf, speakerHash, isLeftOutLogin, movedLately, // owner change (decision 9: incognito "someone", !bridge hide left out)
   privacyAt, lookOf, lookMove, namedToAnonLately,      // owner-change fix-up (review 2): only a line whose look moves is drawn again
+  barLook, barUser, attachBarNames, barNamedToAnonLately, lookAt,   // 1.99?? S1: a !transcripts off bar shows who said it (the words only masked)
   tierOf, raiseExp, ensurePremium,                    // CL7: the retention purge (chatlogpurge.js)
   graceOf, lapsedOf, noteFirst, retentionFresh,       // CL7 fix-up
   speakerHashes, kindNow, hubChanged,                 // Train 3 review: every hash a "someone" line could be; the stricter of both stores

@@ -1585,7 +1585,9 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const canReveal = see ? (x) => require("./seethrough").mayReveal(see, x && x.ts != null ? Number(x.ts) : Date.now()) : null;
   const members = CV.roster(R.members, { canReveal }), mic = CV.roster(R.mic, { canReveal });   // ingest replaces these arrays (never edits them): a snapshot too
   const L = await resolveNames([...items.map((it) => it.u), ...redoItems.map((it) => it.u), ...members, ...mic,
-                                ...(prog ? prog.tiles.filter((x) => !x.cover).map((x) => ({ login: x.login })) : [])]);   // (wave2 WP-4: a cover names nobody)
+                                ...(prog ? prog.tiles.filter((x) => !x.cover).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody)
+                                // 1.99?? S1: a !transcripts off bar said named shows that name - and its PATV look (chatlogview.barUser)
+                                ...[...items, ...redoItems].map((it) => CV.barUser(it)).filter(Boolean)]);
   const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal });
   const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal }) : [];
   if (V.audit) {
@@ -2222,9 +2224,10 @@ async function revealLookup(roomId, c) {
     const vr = (await getQuery("SELECT 1 FROM bridge_veil WHERE c = ?", [Number(c)]).catch(() => []))[0];
     if (!vr) return null;                                   // its identity row is gone (forget-me): nobody can reveal it any more
     // (1.99?? transcripts bar: tx = a 🎙 line masked for !transcripts off - the see-through log names that toggle)
-    // (review fix TXBAR-ST-2: idv = it also had a frog name - incognito or !bridge hide - so a reveal sees through that toggle too)
+    // (review fix TXBAR-ST-2: idv = it also had a frog name - incognito or !bridge hide - so a reveal sees through that toggle too;
+    // 1.99?? S1: = the bar doesn't show its speaker's name now - a frog name, the hidden bar, or "someone" (private since) - chatlogview.barLook)
     return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null,
-             ...(it.tm === 1 ? { tx: true, ...(it._vz.lv && it._vz.lv !== "tx" ? { idv: true } : {}) } : {}) };
+             ...(it.tm === 1 ? { tx: true, ...(require("./chatlogview").barLook(it) !== "named" ? { idv: true } : {}) } : {}) };
   }
   // review fix (A-privacy-4 / A-compat-8 / A-tests-ux-02): the archive answers by the SAME rule as the live item - a line taken down
   // (its author's Remove my line, a report hide, a moderator's hide: rm_at set) or whose speaker is left out now (forget-me, an
@@ -2239,7 +2242,7 @@ async function revealLookup(roomId, c) {
     const ai = CV.itemOf(r);
     if (CV.privacyOf(ai) === "out") return null;
     return { ts: Number(r.ts), vz: { login: r.v_login, display: r.v_display, kind: r.v_kind }, vw: r.v_words == null ? null : String(r.v_words),
-             ...(ai.k === "tx" && ai.tm === 1 ? { tx: true, ...(ai.u && ai.u.alias ? { idv: true } : {}) } : {}) };
+             ...(ai.k === "tx" && ai.tm === 1 ? { tx: true, ...(CV.barLook(ai) !== "named" ? { idv: true } : {}) } : {}) };   // (1.99?? S1: as above)
   } catch (e) { return null; }
 }
 

@@ -53,9 +53,13 @@ function bucket(words) {
 // u.veil "hidden", a bar, _vz.kind "hidden" (the side tables, the reveal, the evidence clip, the archive, retention and forget-me all
 // treat it as one) - plus `tm: 1` on the item (server-only: dress is a whitelist) and _vz.tx, so the see-through log says which toggle
 // was seen through (seethrough.js scope tx_line) and the sticky !transcripts off set never leaves the bar out (chatlogview.privacyV2).
-// priv.kind says how the speaker's IDENTITY shows: "tx" = a named speaker ("someone" with the bar - no frog-name session is opened for
-// them), "incognito" = their incognito frog name (_vz.lv: the frog-name session keeps its incognito level), "hidden" = one bar, as ever.
+// priv.kind says how the speaker's IDENTITY shows: "tx" = a named speaker (no frog-name session is opened for them), "incognito" = their
+// incognito frog name (_vz.lv: the frog-name session keeps its incognito level), "hidden" = one bar, as ever.
 // Only Pepe's 🎙 lines carry it (a message, mic line, join or leave with priv.tx is malformed: dropped).
+// 1.99?? S1 (owner Q5, spec 2.3 "Transcripts off": transcripts off covers the WORDS only): the item also keeps that level as `tl`
+// ("tx" | "incognito" | "hidden" - server-only like tm, and archived with the row), and the page shows the bar under the person's NAME
+// ("tx"), their frog name ("incognito") with a "transcript hidden" tag, or as one hidden bar ("hidden") - chatlogview.barLook / dress.
+// Stored and revealed exactly as before (the side tables, the reveal, the evidence clip, the archive, retention and forget-me).
 const TX_KINDS = new Set(["incognito", "hidden", "tx"]);
 /** Pepe's priv block -> {kind, h, hs[], at (ms) | null, words, tx} | null (none, or anything malformed: then the event isn't v2-veiled). */
 function parsePriv(d) {
@@ -127,11 +131,11 @@ function veiledItem(ev, ts, opts = {}) {
     case T: {
       real = mine(realUser(d.user));
       if (!real) return null;
-      // transcripts bar: masked whatever the identity level - shown exactly as a hidden speaker's 🎙 line (u.veil "hidden", the bar)
+      // transcripts bar: masked whatever the identity level - stored exactly as a hidden speaker's 🎙 line (u.veil "hidden", the bar)
       it = { k: "tx", ts, u: veiledU(p.tx ? "hidden" : p.kind) };
       if (p.kind === "incognito" && !p.tx) { const t = cpStr(d.text, 490); if (!t) return null; it.text = t; }
       else { if (!p.words) return null; it.mask = bucket(p.words); }
-      if (p.tx) it.tm = 1;
+      if (p.tx) { it.tm = 1; it.tl = p.kind; }                // (1.99?? S1: tl = how the bar's speaker shows - see the header)
       if (/^tx-[0-9a-f]{8,32}$/.test(String(d.id || ""))) it.id = String(d.id);
       const s = Number(d.said_at);
       if (Number.isFinite(s) && s > 0) it.at = Math.round(s * 1000);
@@ -237,8 +241,8 @@ async function nameItem(R, it) {
   const FN = require("./frognames");
   const vz = it._vz, v2 = it._v2 || {};
   if (!vz) return it;
-  // 1.99?? transcripts bar: a NAMED speaker's 🎙 line masked only for !transcripts off is "someone" with the bar - no frog-name session
-  // is opened, sighted or ended for them (their grab / release are named; a frog name here would tie it to their name). An incognito
+  // 1.99?? transcripts bar: a NAMED speaker's 🎙 line masked only for !transcripts off gets no frog name - no frog-name session is
+  // opened, sighted or ended for them (their grab / release are named; 1.99?? S1: the page shows the bar under their name). An incognito
   // one's line follows their incognito session (lv), never the bar's "hidden" level (that would end it - M addendum 3 #1)
   if (vz.tx && vz.lv === "tx") return it;
   const lvl = vz.tx && vz.lv ? vz.lv : vz.kind;

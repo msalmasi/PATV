@@ -895,6 +895,8 @@
         var d = el('div', 'ln' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
         if (it.k === 'tx') d.title = _t('js.home.room.said_on_mic', 'Said on the mic (auto-transcribed)');
         d.appendChild(nameEl(it.u));
+        // 1.99?? S1: a !transcripts off bar - the name (or frog name) shows, only the words are masked: its "transcript hidden" tag
+        if (it.k === 'tx' && it.txh === 1 && /^[sml]$/.test(String(it.mask || ''))) { d.appendChild(document.createTextNode(' ')); d.appendChild(el('span', 'veil-tag veil-tx', _t('js.pad.veil.tx_hidden', 'transcript hidden'))); }
         // wave 2 (spec D.4): a hidden line is the bar here too - never its words (it has none on the wire)
         if (/^[sml]$/.test(String(it.mask || ''))) { var bar = el('span', 'redact redact-' + it.mask); bar.appendChild(el('span', 'sr-only', it.k === 'tx' ? _t('js.pad.veil.hidden_tx', 'hidden transcript') : _t('js.pad.veil.hidden_msg', 'hidden message'))); d.appendChild(bar); }
         else d.appendChild(document.createTextNode(it.k === 'tx' ? '“' + it.text + '”' : it.text));
