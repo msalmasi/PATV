@@ -1403,9 +1403,10 @@ test("wave2 integration review (T-3) stage-mic.js: the pad chat's toggle bar is 
 
 // ── 1.99?? dead relay: back from a hidden tab, the paused tiles say "resuming…" (their cams never stopped - only this tab's
 // players did), never "cam starting…"; a tile that really starts still says "cam starting…"; the pause itself is unchanged ──
-test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pause; on return they say 'resuming…', not 'cam starting…'", async () => {
+/** stage-mic.js with a hidden-tab switch: every live tile plays (its WHEP connects) unless its login is in `stuck`; a still
+ *  gets its picture. -> {ctx, host, ctl, posts, tileOf, hide(), show()} */
+function visHarness(program, stuck = new Set()) {
   const js = read("public", "js", "stage-mic.js");
-  assert.match(js, /HIDDEN_MS = 30000/, "the pause is unchanged");
   const dom = fakeDom();
   let vis = null;
   const posts = [];
@@ -1413,23 +1414,41 @@ test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pau
     console, clearTimeout,
     setTimeout: (fn, ms) => (ms >= 30000 ? (fn(), 0) : setTimeout(fn, ms)),            // the 30 s hidden-tab wait runs at once
     setInterval: () => 0, clearInterval() {},
-    fetch: (u, o) => { posts.push([u, o && o.body ? JSON.parse(o.body) : null]); return Promise.resolve({ json: () => Promise.resolve({ ok: true, whep: "https://x/whep?pt=1", state: "pending" }) }); },
-    PATVRtc: { watch: () => new Promise(() => {}) }, RTCPeerConnection: function () {}, Date };
+    fetch: (u, o) => {
+      const body = o && o.body ? JSON.parse(o.body) : null;
+      posts.push([u, body]);
+      const d = /\/still\//.test(u) ? { ok: true, state: "ok", img: "data:image/jpeg;base64,AAAA" }
+        : { ok: true, whep: "https://x/whep?pt=1&who=" + (body && body.login), state: "pending" };
+      return Promise.resolve({ json: () => Promise.resolve(d) });
+    },
+    PATVRtc: { watch: (whep) => (stuck.has(String(whep).split("who=")[1]) ? new Promise(() => {}) : Promise.resolve({ close() {} })) },
+    RTCPeerConnection: function () {}, Date };
   ctx.window = ctx; ctx.window.addEventListener = () => {}; ctx.window.removeEventListener = () => {};
   vm.runInNewContext(js, ctx);
   const host = dom.mk("div");
-  const s = (id, pos, video) => ({ kind: "cam", id, name: id.toUpperCase(), pos, newest: pos === 0, video, why: null, watch: "ok" });
-  const ctl = ctx.PATVStageMic.render(host, { v: 1, layout: "split", count: 2, src: [s("a", 0, "live"), s("b", 1, "still")], manage: null, still_s: 20 }, { slug: "pad" });
+  const ctl = ctx.PATVStageMic.render(host, program, { slug: "pad" });
   const tileOf = (id) => findBy(host, "mf-tile").find((t) => t.getAttribute("data-id") === id) || null;
+  return { ctx, host, ctl, posts, tileOf, hide() { ctx.document.hidden = true; vis(); }, show() { ctx.document.hidden = false; vis(); } };
+}
+const visTile = (id, pos, video) => ({ kind: "cam", id, name: id.toUpperCase(), pos, newest: pos === 0, video, why: null, watch: "ok" });
+/** the words on a tile's card (its "mf-why") */
+const reasonOf = (tile) => (findBy(tile, "mf-why")[0] || {}).textContent;
+
+test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pause; on return they say 'resuming…', not 'cam starting…'", async () => {
+  const js = read("public", "js", "stage-mic.js");
+  assert.match(js, /HIDDEN_MS = 30000/, "the pause is unchanged");
+  const s = visTile;
+  const H = visHarness({ v: 1, layout: "split", count: 2, src: [s("a", 0, "live"), s("b", 1, "still")], manage: null, still_s: 20 });
+  const { posts, tileOf, ctl } = H;
   const A = tileOf("a"), Bt = tileOf("b");
   assert.match(A.textContent, /cam starting…/, "a first start says 'cam starting…'");
   assert.match(Bt.textContent, /cam starting…/);
   await tick();
   const tickets = () => posts.filter((p) => /\/micfollow\/watch$/.test(p[0]) && !p[1].beat && !p[1].stop).length;
   const n0 = tickets();
-  ctx.document.hidden = true; vis();
+  H.hide();
   assert.ok(posts.some((p) => /\/micfollow\/watch$/.test(p[0]) && p[1].stop === true), "hidden 30 s: the live tile's session closes (as before)");
-  ctx.document.hidden = false; vis();
+  H.show();
   assert.match(A.textContent, /resuming…/, "back: the live tile says 'resuming…'");
   assert.doesNotMatch(A.textContent, /cam starting/);
   assert.match(Bt.textContent, /resuming…/, "...and so does the still");
@@ -1440,4 +1459,28 @@ test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pau
   assert.match(tileOf("c").textContent, /cam starting…/, "a new tile: 'cam starting…'");
   ctl.stop();
   assert.equal(EN["js.stage.mf.resuming"], "resuming…", "the new string is in locales/en.json");
+});
+
+test("1.99?? review UX-2 stage-mic.js: 'resuming…' only on a tile whose picture the pause took away - one still starting, one that came on or went live while hidden says 'cam starting…'", async () => {
+  const s = visTile;
+  // a plays; b's live video never connects (still "cam starting…" when the tab hides); c is "starting" (a card)
+  const H = visHarness({ v: 1, layout: "grid4", count: 3, src: [s("a", 0, "live"), s("b", 1, "live"), s("c", 2, "starting")], manage: null, still_s: 20 }, new Set(["b"]));
+  await tick();
+  H.hide();
+  // while hidden: c's cam goes live, d comes on the stage
+  H.ctl.update({ v: 2, layout: "grid4", count: 4, src: [s("a", 0, "live"), s("b", 1, "live"), s("c", 2, "live"), s("d", 3, "live")], manage: null, still_s: 20 });
+  H.show();
+  assert.equal(reasonOf(H.tileOf("a")), "resuming…", "a had its picture: 'resuming…'");
+  assert.equal(reasonOf(H.tileOf("b")), "cam starting…", "b never played here: 'cam starting…'");
+  assert.equal(reasonOf(H.tileOf("c")), "cam starting…", "c went live while hidden: 'cam starting…'");
+  assert.equal(reasonOf(H.tileOf("d")), "cam starting…", "d came on while hidden: 'cam starting…'");
+  // a tile that played, then went to a card while hidden (its relay restarted) and live again: it starts over
+  await tick();
+  H.hide();
+  H.ctl.update({ v: 3, layout: "grid4", count: 4, src: [s("a", 0, "starting"), s("b", 1, "live"), s("c", 2, "live"), s("d", 3, "live")], manage: null, still_s: 20 });
+  H.ctl.update({ v: 4, layout: "grid4", count: 4, src: [s("a", 0, "live"), s("b", 1, "live"), s("c", 2, "live"), s("d", 3, "live")], manage: null, still_s: 20 });
+  H.show();
+  assert.equal(reasonOf(H.tileOf("a")), "cam starting…", "a's relay started over while hidden: 'cam starting…'");
+  assert.equal(reasonOf(H.tileOf("c")), "resuming…", "c played after the first return: 'resuming…'");
+  H.ctl.stop();
 });
