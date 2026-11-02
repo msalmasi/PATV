@@ -1781,16 +1781,23 @@ function arrangeOf(P, t, ent, { persist = false } = {}) {
 function dynTick(P, t = now()) {
   const S = P.state;
   if (slotsOn()) return arrangeOf(P, t, stageEntries(P, t), { persist: true }).moved;
+  // 1.99?? stable slots, review fix C1: the knob just went off (/stage/admin; saveCfg steps every pad) while people were on the
+  // stage - the places pages show go back to today's order NOW: v moves and the pad's long-polls wake (not at the next change
+  // or the 20 s long-poll timeout). Never arranged (the knob off all along): nothing extra - today's v, byte for byte.
+  const wasStable = Array.isArray(S.slots) && S.slots.some((k) => k != null && k !== core.VEILED_GAP);
   S.slots = null;
-  if (!dynOn(P) || S.whyOff) { S.dynMain = null; return false; }
-  const { pins, pinNew, nw } = stageEntries(P, t);
-  const ids = [...pins.map((p) => p.login), ...S.tiles.map((x) => x.login)];
-  const want = pinNew ? pinNew.login : nw ? nw.login : null;
-  const next = core.dynPick(S.dynMain, ids, want, t, cfg().main_hold_s * 1000);
-  const moved = (S.dynMain && S.dynMain.id) !== (next && next.id);
-  S.dynMain = next;
-  if (moved && next) { S.v++; try { BR().touch(P.roomId); } catch (e) { /* no bridge */ } }
-  return moved;
+  let moved = false, next = null;
+  if (!dynOn(P) || S.whyOff) S.dynMain = null;
+  else {
+    const { pins, pinNew, nw } = stageEntries(P, t);
+    const ids = [...pins.map((p) => p.login), ...S.tiles.map((x) => x.login)];
+    const want = pinNew ? pinNew.login : nw ? nw.login : null;
+    next = core.dynPick(S.dynMain, ids, want, t, cfg().main_hold_s * 1000);
+    moved = (S.dynMain && S.dynMain.id) !== (next && next.id);
+    S.dynMain = next;
+  }
+  if ((moved && next) || wasStable) { S.v++; try { BR().touch(P.roomId); } catch (e) { /* no bridge */ } }
+  return moved || wasStable;
 }
 /** A synchronous copy of the pad's program (bridge.liveView takes it before any await, like members / mic). */
 function snapshot(roomId, t = now()) {

@@ -564,3 +564,42 @@ test("S10. review fix B3: a cover (hooded frog) leaving shuffles nobody - its pl
     assert.ok(P.state.v > v0);
   } finally { MF.setVeilSource(null); await knobs({ covers: false }); await reset(); }
 });
+
+test("S11. review fix C1: turning stable_slots OFF in /stage/admin repaints open pages at once - v moves and the pad's long-polls wake (it waited for the next change or the 20 s timeout); a step after that moves nothing; a pad that was never arranged gets no extra v", async () => {
+  await reset();
+  await knobs({ dynamic: true, main_hold_s: 3, cold_open: true, stable_slots: true });
+  const Rm = () => bridge._rooms.get(ROOM.id);
+  try {
+    // grid: alice@0, carl@2, dana@3 (bob left place 1 empty) - today's order would be alice@0 carl@1 dana@2
+    await pad({ layout: "auto", max_people: 4, keep_recent: 0 });
+    await talk(["alice"]); await talk(["alice", "bob"]); await talk(["alice", "bob", "carl"]); await talk(["alice", "bob", "carl", "dana"]);
+    for (let i = 0; i < 3; i++) await at(6, ["alice", "carl", "dana"]);
+    const S = MF._pads.get(ROOM.id).state;
+    assert.deepEqual(MF.snapshot(ROOM.id).tiles.map((x) => [x.login, x.pos]), [["alice", 0], ["carl", 2], ["dana", 3]]);
+    let v0 = S.v, w0 = Rm().ver || 0;
+    await knobs({ stable_slots: false });
+    assert.deepEqual(MF.snapshot(ROOM.id).tiles.map((x) => [x.login, x.pos]), [["alice", 0], ["carl", 1], ["dana", 2]], "today's order");
+    assert.ok(S.v > v0, "v moved (pages repaint)");
+    assert.ok((Rm().ver || 0) > w0, "the pad's long-polls woke (bridge.touch)");
+    v0 = S.v; w0 = Rm().ver || 0;
+    MF.stepPad(ROOM.id, T);
+    assert.equal(S.v, v0, "a step with nothing new: no v");
+    assert.equal(Rm().ver || 0, w0, "... no touch");
+    // dynamic: the same
+    await knobs({ stable_slots: true });
+    await reset();
+    await pad({ layout: "dynamic", max_people: 4 });
+    await talk("alice"); await talk("bob"); await talk("carl"); await talk("dana"); await talk("bob");
+    const D = MF._pads.get(ROOM.id).state;
+    const before = MF.snapshot(ROOM.id).tiles.map((x) => x.login);
+    v0 = D.v; w0 = Rm().ver || 0;
+    await knobs({ stable_slots: false });
+    assert.notDeepEqual(MF.snapshot(ROOM.id).tiles.map((x) => x.login), before, "today's order differs here");
+    assert.ok(D.v > v0, "dynamic: v moved");
+    assert.ok((Rm().ver || 0) > w0, "dynamic: woke");
+    // not arranged any more: a step adds no v (a pad with the knob off all along: today's v, byte for byte - S1's golden)
+    v0 = D.v;
+    MF.stepPad(ROOM.id, T);
+    assert.equal(D.v, v0);
+  } finally { await knobs({ stable_slots: true }); await reset(); }
+});
