@@ -88,7 +88,7 @@ test("admin capability + same-site fetch, every save versioned and audited, inva
   assert.equal(audit[0].admin_id, "adm");
   const prior = AV.current(); AV._reset(); await AV.init(); assert.deepEqual(AV.current(), prior, "versioned database row survives process cache reset");
   const page = await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } });
-  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=2/);
+  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=3/);   // 1.99ahm: 3 - Delay the people list's 🎙 icons
 });
 
 test("public route requires sign-in/full pad access; mode does not grant access; no identifiers or unheld cams", async () => {
@@ -220,7 +220,7 @@ test("1.99ahm: the card and chat-line switches - off by default, strict booleans
   const audit = await db.getQuery("SELECT detail FROM admin_audit WHERE action = 'avsync_cfg' ORDER BY id DESC LIMIT 1");
   assert.deepEqual(JSON.parse(audit[0].detail).changed.apply_mic_card, [false, true], "audited like the others");
   const on = await get(publicPath(), "v1");
-  assert.deepEqual(on.data.apply, { video: true, mic: true, mp3: true, mic_card: true, mic_chat: false });
+  assert.deepEqual(on.data.apply, { video: true, mic: true, mp3: true, mic_card: true, mic_chat: false, mic_list: false });   // (1.99ahm: + mic_list)
   await adminSave({ apply_mic_chat: true }); assert.equal((await get(publicPath(), "v2")).data.apply.mic_chat, true);
   // a row saved before these switches existed: both read off, everything else as it was
   await db.runQuery("UPDATE avsync_cfg SET data = ? WHERE id = 1", [JSON.stringify({ mode: "everyone", apply_mic: true, cap_ind_ms: 2500 })]);
@@ -229,7 +229,8 @@ test("1.99ahm: the card and chat-line switches - off by default, strict booleans
   assert.deepEqual([AV.current().cfg.apply_mic_card, AV.current().cfg.apply_mic_chat], [false, false]);
   const view = await get("/api/admin/pepe/avsync", "adm");
   const keys = Object.keys(view.data.fields);
-  assert.deepEqual(keys.slice(keys.indexOf("apply_mic"), keys.indexOf("apply_mic") + 3), ["apply_mic", "apply_mic_card", "apply_mic_chat"], "the card lists them under Delay mic signs");
+  assert.deepEqual(keys.slice(keys.indexOf("apply_mic"), keys.indexOf("apply_mic") + 4), ["apply_mic", "apply_mic_card", "apply_mic_chat", "apply_mic_list"],
+    "the card lists them under Delay mic signs (1.99ahm: + the people list's)");
   await AV.save(ADMIN, { reset: true });
 });
 
@@ -290,8 +291,8 @@ test("1.99ahm: the admin card lists the two switches with clear labels (locales/
 test("1.99ahm: review fix (C-1) - an admin card left open across a deploy that changes the field list draws itself again; Save works and sends every field it shows", async () => {
   const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   const data = (await get("/api/admin/pepe/avsync", "adm")).data;
-  const older = JSON.parse(JSON.stringify(data));        // the site before a deploy that adds two switches
-  for (const key of ["apply_mic_card", "apply_mic_chat"]) { delete older.fields[key]; delete older.cfg[key]; delete older.defaults[key]; }
+  const older = JSON.parse(JSON.stringify(data));        // the site before a deploy that adds the mic switches (1.99ahm: three, with the people list's)
+  for (const key of ["apply_mic_card", "apply_mic_chat", "apply_mic_list"]) { delete older.fields[key]; delete older.cfg[key]; delete older.defaults[key]; }
   // (1) the 5 s check brings the new list while the admin is changing a setting
   const A = adminCard(older, data); await flush();
   assert.equal(A.labelOf("apply_mic_card"), undefined, "drawn from the older site");
@@ -299,7 +300,7 @@ test("1.99ahm: review fix (C-1) - an admin card left open across a deploy that c
   box(A, "apply_video").checked = !box(A, "apply_video").checked; A.form.fire("change");
   const typed = box(A, "apply_video").checked;
   A.poll(); await flush();
-  assert.ok(A.labelOf("apply_mic_card") && A.labelOf("apply_mic_chat"), "drawn again with the new switches");
+  assert.ok(A.labelOf("apply_mic_card") && A.labelOf("apply_mic_chat") && A.labelOf("apply_mic_list"), "drawn again with the new switches");
   assert.equal(box(A, "apply_video").checked, typed, "what the admin was changing stays");
   assert.equal(box(A, "apply_mic_card").checked, false, "a new switch shows the site's value");
   box(A, "apply_mic_card").checked = true; A.form.fire("change"); A.form.fire("submit"); await flush();
@@ -319,4 +320,51 @@ test("1.99ahm: review fix (C-1) - an admin card left open across a deploy that c
   assert.equal(C.labelOf("apply_mic_card"), undefined); C.form.fire("submit"); await flush();
   assert.deepEqual(Object.keys(C.posts[0].cfg).sort(), Object.keys(older.fields).sort());
   assert.doesNotMatch(A.fields.textContent + C.fields.textContent, /undefined|MISSING/);
+});
+
+// 1.99ahm: "Delay the people list's 🎙 icons" (apply_mic_list) - the 🎙 icons and on-mic order of the pad page's people list and the
+// homepage panel's mic chips; its own switch beside the card's and the chat lines', the same offset and the same who / audio rules
+test("1.99ahm: the people-list switch - off by default, a strict boolean, audited, in the viewer's answer as apply.mic_list; an older stored row reads it off", async () => {
+  assert.equal(AV.DEFAULTS.apply_mic_list, false);
+  assert.ok(AV.normalize({ apply_mic_list: "yes" }).errors.apply_mic_list); assert.ok(AV.normalize({ apply_mic_list: 2 }).errors.apply_mic_list);
+  assert.equal(AV.normalize({ apply_mic_list: "true" }).cfg.apply_mic_list, true); assert.equal(AV.normalize({ apply_mic_list: 0 }).cfg.apply_mic_list, false);
+  // (its own admin: "adm" spent most of its 20 changes a minute in the tests above)
+  const LIST_ADMIN = { userId: "adm-list", username: "adm-list", class: "Admin" };
+  await assert.rejects(AV.save(LIST_ADMIN, { cfg: { mode: "everyone", apply_mic_list: "on" } }), (e) => e.status === 400 && e.fields.apply_mic_list === "on or off");
+  assert.equal(AV.current().cfg.apply_mic_list, false, "nothing saved");
+  assert.equal((await get(publicPath(), "v1")).data.apply.mic_list, false);
+  const saved = await AV.save(LIST_ADMIN, { cfg: { mode: "everyone", apply_mic_list: true } });
+  assert.deepEqual(saved.changed.apply_mic_list, [false, true]);
+  assert.equal(saved.changed.apply_mic_card, undefined); assert.equal(saved.changed.apply_mic_chat, undefined);
+  const audit = await db.getQuery("SELECT detail FROM admin_audit WHERE action = 'avsync_cfg' ORDER BY id DESC LIMIT 1");
+  assert.deepEqual(JSON.parse(audit[0].detail).changed.apply_mic_list, [false, true], "audited like the others");
+  const on = await get(publicPath(), "v1");
+  assert.deepEqual(on.data.apply, { video: true, mic: true, mp3: true, mic_card: false, mic_chat: false, mic_list: true }, "its own switch: the card and the chat stay off");
+  assert.doesNotMatch(JSON.stringify(on.data), /frog-example|Example frog/, "the answer names no one");
+  // a row saved before this switch existed (the card and chat switches on): it reads off, everything else as it was
+  await db.runQuery("UPDATE avsync_cfg SET data = ? WHERE id = 1", [JSON.stringify({ mode: "everyone", apply_mic_card: true, apply_mic_chat: true, cap_ind_ms: 2500 })]);
+  AV._reset(); await AV.init();
+  assert.deepEqual([AV.current().cfg.apply_mic_card, AV.current().cfg.apply_mic_chat, AV.current().cfg.apply_mic_list, AV.current().cfg.cap_ind_ms], [true, true, false, 2500]);
+  assert.equal((await get(publicPath(), "v2")).data.apply.mic_list, false);
+  await AV.save(LIST_ADMIN, { reset: true });
+  assert.equal(AV.current().cfg.apply_mic_list, false, "reset: off again");
+});
+
+test("1.99ahm: the admin card shows \"Delay the people list's 🎙 icons\" under the other mic switches, says what it holds back, and a save sends it", async () => {
+  const data = (await get("/api/admin/pepe/avsync", "adm")).data;
+  const A = adminCard(data); for (let i = 0; i < 12; i++) await Promise.resolve();
+  const list = A.labelOf("apply_mic_list");
+  assert.ok(list, "the switch is drawn");
+  assert.equal(A.EN["js.admavsync.apply_mic_list"], "Delay the people list's 🎙 icons");
+  assert.equal(A.EN["js.admavsync.apply_mic_list_help"], "The 🎙 icons in the people list and its on-mic order, and the homepage's mic chips. Same delay as the mic signs.");
+  assert.ok(list.textContent.includes(" Delay the people list's 🎙 icons"), list.textContent);
+  assert.ok(list.textContent.includes(A.EN["js.admavsync.apply_mic_list_help"]), list.textContent);
+  const order = A.fields.children.map((l) => (l.children.find((c) => c.name) || {}).name);
+  assert.deepEqual(order.slice(order.indexOf("apply_mic"), order.indexOf("apply_mic") + 4), ["apply_mic", "apply_mic_card", "apply_mic_chat", "apply_mic_list"]);
+  assert.doesNotMatch(A.fields.textContent, /undefined|MISSING/);
+  const box = A.labelOf("apply_mic_list").children.find((c) => c.name === "apply_mic_list");
+  assert.equal(box.checked, false, "off until an admin ticks it");
+  box.checked = true; A.form.fire("change"); A.form.fire("submit");
+  assert.equal(A.posts.length, 1); assert.equal(A.posts[0].cfg.apply_mic_list, true);
+  assert.deepEqual([A.posts[0].cfg.apply_mic_card, A.posts[0].cfg.apply_mic_chat], [false, false]);
 });

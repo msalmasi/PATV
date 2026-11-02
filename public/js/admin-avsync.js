@@ -10,6 +10,7 @@
     // 1.99ahm: the "On the mic" card and the chat's grab / drop lines, each its own switch
     apply_mic_card: _t('js.admavsync.apply_mic_card', 'Delay the On the mic card'),
     apply_mic_chat: _t('js.admavsync.apply_mic_chat', 'Delay mic grab/drop lines in chat'),
+    apply_mic_list: _t('js.admavsync.apply_mic_list', "Delay the people list's 🎙 icons"),   // 1.99ahm: the people list's 🎙 icons, its own switch
     engine_chromium: 'Enable Chromium video delay', engine_firefox: 'Enable Firefox video delay', engine_safari: 'Enable Safari video delay',
     fallback_rtc_ms: 'WebRTC fallback delay (ms)', fallback_mp3_ms: 'MP3 fallback delay (ms)',
     k_pt_ms: 'Pass-through calibration (ms)', k_re_ms: 'Re-encode calibration (ms)',
@@ -21,7 +22,8 @@
   var helps = {
     apply_mic: _t('js.admavsync.apply_mic_help', 'The mic stage’s tiles: a new speaker’s tile, the ring and newest highlights, who is speaking and the layout.'),
     apply_mic_card: _t('js.admavsync.apply_mic_card_help', 'The On the mic card beside the chat: people joining or leaving it and its order. Same delay as the mic signs.'),
-    apply_mic_chat: _t('js.admavsync.apply_mic_chat_help', 'The chat’s “grabbed the mic” and “dropped the mic” lines: each shows in its place once the audio catches up. Typed chat is never held. Same delay as the mic signs.')
+    apply_mic_chat: _t('js.admavsync.apply_mic_chat_help', 'The chat’s “grabbed the mic” and “dropped the mic” lines: each shows in its place once the audio catches up. Typed chat is never held. Same delay as the mic signs.'),
+    apply_mic_list: _t('js.admavsync.apply_mic_list_help', "The 🎙 icons in the people list and its on-mic order, and the homepage's mic chips. Same delay as the mic signs.")   // 1.99ahm
   };
   function node(tag, text, cls) { var el = document.createElement(tag); if (text != null) el.textContent = text; if (cls) el.className = cls; return el; }
   function buttons(disabled) { Array.prototype.forEach.call(form.querySelectorAll('button'), function (el) { el.disabled = disabled; }); }
