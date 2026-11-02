@@ -1406,7 +1406,6 @@ test("wave2 integration review (T-3) stage-mic.js: the pad chat's toggle bar is 
 test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pause; on return they say 'resuming…', not 'cam starting…'", async () => {
   const js = read("public", "js", "stage-mic.js");
   assert.match(js, /HIDDEN_MS = 30000/, "the pause is unchanged");
-  assert.equal(EN["js.stage.mf.resuming"], "resuming…", "the new string is in locales/en.json");
   const dom = fakeDom();
   let vis = null;
   const posts = [];
@@ -1440,4 +1439,5 @@ test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pau
   ctl.update({ v: 2, layout: "grid4", count: 3, src: [s("a", 0, "live"), s("b", 1, "still"), s("c", 2, "live")], manage: null, still_s: 20 });
   assert.match(tileOf("c").textContent, /cam starting…/, "a new tile: 'cam starting…'");
   ctl.stop();
+  assert.equal(EN["js.stage.mf.resuming"], "resuming…", "the new string is in locales/en.json");
 });
