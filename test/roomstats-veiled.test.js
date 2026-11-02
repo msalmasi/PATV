@@ -249,3 +249,82 @@ test("the list never reaches a page or an answer: no veiled names, login or hash
   assert.equal(bad.status, 403);
   assert.deepEqual(leaks(await bad.text()), []);
 });
+
+// ── review fixes (owner 11-02) ──
+const bare = (knowledge) => Object.assign({ summary: "", vibe: "", topics: [], jokes: [], events: [], rules: [] }, knowledge);
+
+test("review (T1): Pepe's vibe and house norms are masked too - every viewer ('Hanky': a name only Pepe's list knows)", async () => {
+  await sync({ rooms: [row(PAD, "Veil Pad", bare({ summary: "A quiet night.", vibe: "Hanky's crowd", rules: ["never talk over Hanky"] }))], veiled: VEILED });
+  for (const who of [null, "u_mem", "u_admin"]) assert.deepEqual(leaks(await page("veil-pad", who)), [], String(who));
+  const mem = await page("veil-pad", "u_mem");
+  assert.match(mem, /<span class="vibe">✨ someone&#39;s crowd<\/span>/, "the vibe");
+  assert.match(mem, /<li>never talk over someone<\/li>/, "the house norms");
+  assert.equal(((await page("veil-pad", "u_admin")).match(/class="ra-hid"/g) || []).length, 2, "an admin: both marked");
+});
+
+test("review (T2): an admin's marked and revealed notes are escaped - Pepe's text is room chat, never markup (a revealed name too)", async () => {
+  const BO = { login: "bojocf", names: ["bojocf", "Bo&Jo<3"] };
+  await sync({ rooms: [row(PAD, "Veil Pad", bare({ summary: "Hanky posted <img src=x onerror=alert(1)> & left; Bo&Jo<3 laughed <b>loud</b> & long." }))],
+               veiled: [...VEILED, BO] });
+  const mark = await page("veil-pad", "u_admin");
+  assert.doesNotMatch(mark, /<img src=x|<b>loud/, "mark mode: raw markup must not reach the page (before, between and after the marks)");
+  assert.match(mark, /<span class="ra-hid" data-k="0">someone<\/span> posted &lt;img src=x onerror=alert\(1\)&gt; &amp; left; <span class="ra-hid" data-k="1">someone<\/span> laughed &lt;b&gt;loud&lt;\/b&gt; &amp; long\./);
+  assert.deepEqual(await (await post("/p/veil-pad/analytics/seethrough", "u_admin", { on: true, reason: "audit" })).json(), { ok: true, on: true });
+  try {
+    const rev = await page("veil-pad", "u_admin");
+    assert.doesNotMatch(rev, /<img src=x|<b>loud|Bo&Jo<3/, "reveal mode: neither Pepe's text nor a revealed name is raw markup");
+    assert.match(rev, /<span class="real" title="hankhidden - only you can see this">Hanky 🕶<\/span> posted &lt;img src=x onerror=alert\(1\)&gt; &amp; left; <span class="real" title="bojocf - only you can see this">Bo&amp;Jo&lt;3 🕶<\/span> laughed &lt;b&gt;loud&lt;\/b&gt; &amp; long\./);
+  } finally {
+    await post("/p/veil-pad/analytics/seethrough", "u_admin", { on: false });
+    await runQuery("DELETE FROM seethrough_log");
+    await runQuery("DELETE FROM seethrough_toggle");
+  }
+  const mem = await page("veil-pad", "u_mem");
+  assert.match(mem, /someone posted &lt;img src=x onerror=alert\(1\)&gt; &amp; left; someone laughed &lt;b&gt;loud&lt;\/b&gt; &amp; long\./,
+               "a member: plain text, escaped as before");
+  await sync({ rooms: [], veiled: VEILED });
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM camfrog_roomstats_veiled WHERE login = 'bojocf'"))[0].n, 0);
+});
+
+test("review (T6): the notes' Reveal logs BEFORE it answers - when the log row can't be written, no names (500)", async () => {
+  await sync({ rooms: [PAD_ROW()], veiled: VEILED });
+  const v = noteV(await page("veil-pad", "u_admin"));
+  assert.ok(v);
+  await runQuery("ALTER TABLE seethrough_log RENAME TO seethrough_log_x");
+  let r, body;
+  try {
+    r = await post("/p/veil-pad/analytics/reveal-notes", "u_admin", { v });
+    body = await r.text();
+  } finally { await runQuery("ALTER TABLE seethrough_log_x RENAME TO seethrough_log"); }
+  assert.equal(r.status, 500);
+  assert.deepEqual(leaks(body), [], "no names without their log row");
+  assert.equal((await logRows()).length, 0);
+  assert.equal((await post("/p/veil-pad/analytics/reveal-notes", "u_admin", { v })).status, 200, "the log back: the Reveal works again");
+  assert.equal((await logRows()).length, 1);
+  await runQuery("DELETE FROM seethrough_log");
+});
+
+test("review (T8): the length rules - a login from 2 characters, any other name from 3 (a 2-character nickname is left alone)", async () => {
+  const KZ = { login: "kz", names: ["kz", "Kat", "Hidz", "Jo"] };
+  await sync({ rooms: [row(PAD, "Veil Pad", bare({ summary: "Kat and Hidz argued while kz watched and Jo laughed." }))], veiled: [...VEILED, KZ] });
+  assert.match(await page("veil-pad", "u_mem"), /someone and someone argued while someone watched and Jo laughed\./);
+  await sync({ rooms: [PAD_ROW()], veiled: VEILED });
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM camfrog_roomstats_veiled WHERE login = 'kz'"))[0].n, 0);
+});
+
+test("review (T8): fails closed while the site's sticky hidden set can't answer - someone Pepe drops stays masked, their row kept", async () => {
+  const LZ = { login: "lurky2cf", names: ["lurky2cf", "Lurky Two"] };
+  await sync({ rooms: [row("Lurk_Room", "Lurk Room", bare({ summary: "Lurky Two lurked." }))], veiled: [...VEILED, LZ] });
+  assert.match(await page("lurk-room", "u_mem"), /someone lurked\./);
+  const CV = require(path.join(repo, "chatlogview"));
+  const real = CV.isHiddenLogin;
+  CV.isHiddenLogin = () => { throw new Error("not loaded yet"); };
+  try {
+    await sync({ rooms: [], veiled: VEILED });
+    assert.deepEqual((await getQuery("SELECT live FROM camfrog_roomstats_veiled WHERE login = 'lurky2cf'")).map((x) => x.live), [0], "kept, not live");
+    assert.match(await page("lurk-room", "u_mem"), /someone lurked\./, "still masked");
+  } finally { CV.isHiddenLogin = real; }
+  await sync({ rooms: [], veiled: VEILED });
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM camfrog_roomstats_veiled WHERE login = 'lurky2cf'"))[0].n, 0, "the set answers (not hidden): gone");
+  assert.match(await page("lurk-room", "u_mem"), /Lurky Two lurked\./);
+});
