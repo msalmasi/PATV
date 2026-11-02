@@ -79,6 +79,10 @@ async function stageRole(user, padId) {
 /** frognames: a session ended -> its cover (if one is up) comes off now. */
 function sessionEnded(ev) {
   try { if (ev && ev.roomId) require("./micfollow").coverSessionEnded(ev.roomId, ev.session); } catch (e) { /* no mic follows */ }
+  // 1.99?? (privacy controls S5): an incognito person's cam sessions under that frog name end with it (livecam.veilEnded) - and their
+  // mic-stage cam tile (micfollow.veilCamEnded): nothing started under one identity carries on under the next
+  try { if (ev && ev.roomId) require("./livecam").veilEnded(ev.roomId, ev.session); } catch (e) { /* no live cams */ }
+  try { if (ev && ev.roomId) require("./micfollow").veilCamEnded(ev.roomId, ev.session); } catch (e) { /* no mic follows */ }
 }
 
 /** Plug WP-2 into micfollow's seams (bridge.register, after micfollow.register). Idempotent. */

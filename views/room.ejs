@@ -636,7 +636,7 @@
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=10"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover %>
+  <script src="/public/js/stage-mic.js?v=11"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99?? (privacy controls S5) v11: veiled cams %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
@@ -852,7 +852,7 @@
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=1"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
-  <script src="/public/js/pad-livecam.js?v=8"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost %>
+  <script src="/public/js/pad-livecam.js?v=9"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99?? privacy controls S5): a veiled cam by its id %>
   <script src="/public/js/room-mod.js?v=12"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
@@ -1235,7 +1235,10 @@
           li.appendChild(n);
           var ic = el('span', 'ic');
           var cam;
-          if (r.cams && u.on_cam && !u.self && !u.anon && u.login) {
+          // 1.99?? (privacy controls S5): an incognito person's cam under their frog name (the server sends on_cam on a frog entry only
+          // while incognito cams are on) - the popover asks for it by the entry's opaque id, never a login
+          var vcam = !!(r.cams && u.on_cam && u.anon && u.veil === 'incognito' && u.id);
+          if ((r.cams && u.on_cam && !u.self && !u.anon && u.login) || vcam) {
             cam = el('button', 'cam', '📷'); cam.type = 'button';
             cam.title = _t('js.pad.people.ask_snap', 'Ask Pepe for a snapshot of {name}\'s cam', { name: label(u) });
             cam.setAttribute('aria-label', _t('js.pad.people.snap_aria', 'Snapshot of {name}\'s cam', { name: label(u) }));
@@ -1243,7 +1246,7 @@
           } else {
             cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? _t('js.pad.people.on_cam', 'On cam') : (u.on_cam === false ? _t('js.pad.people.off_cam', 'Off cam') : _t('js.pad.people.cam_unknown', 'Cam unknown'));
           }
-          if (!u.veil) ic.appendChild(cam);   // wave 2 (A.6): a veiled person never has a cam icon anywhere
+          if (!u.veil || vcam) ic.appendChild(cam);   // wave 2 (A.6): a veiled person never has a cam icon anywhere (1.99?? S5: but an incognito cam shown under its frog name)
           // 1.99dx: moderators (Pepe sent caps for this viewer) get a ⋯ menu next to the cam icon: the actions
           // Pepe allows them on this person (room-mod.js menuItems; the server re-checks every one). The name
           // itself stays the link to the person's profile. 1.99fu: every signed-in viewer gets the ⋯ too - the light
@@ -1368,9 +1371,10 @@
       // 1.99ez: 🎬 Clip - Pepe records 10 / 20 / 30 s of this cam (camclip.js); a free preview, pay only to save it
       if (s.state === 'ok' && s.img && s.clip) snapClipRow(box, s);
       // 1.99qr: 🐸 Pepe on this cam - 👀 Look / 🔥 Cam roast / 🎤 Roast with their prices, a confirm step, Pepe's answer
-      if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe);
+      // (1.99?? privacy controls S5: never on a veiled cam - its command line would name them)
+      if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe && snapWho.login) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe);
       // 1.99aag: 📺 admins - put this cam on Pepe's OBS (his main stream + his Camfrog cam); onair.js decides (opt-in / owner's OK)
-      if (window.PATVOnAirCam) PATVOnAirCam.row(box, snapWho);
+      if (window.PATVOnAirCam && snapWho.login) PATVOnAirCam.row(box, snapWho);   // (1.99?? S5: not for a veiled cam in this build)
     }
     var clipTimer = null;
     function snapClipRow(box, s) {
@@ -1530,7 +1534,7 @@
       if (s.save.id) { sv.disabled = true; say(_t('js.pad.snap.checking', 'Checking your save…')); watch(s.save.id, 0); }
     }
     function snapPoll(who, n) {
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login), { credentials: 'same-origin', cache: 'no-store' })
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login || who.id), { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { return r.json(); })
         .then(function (s) {
           if (snapWho !== who) return;
@@ -1543,7 +1547,7 @@
       clearTimeout(snapTimer); clearTimeout(saveTimer);
       snapWho = who;
       snapBox(_t('js.pad.snap.asking', 'Asking Pepe to open {name}\'s cam…', { name: label(who) }));
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: who.login }) })
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(who.login ? { login: who.login } : { id: who.id }) })
         .then(function (r) { return r.json().then(function (d) { return { st: r.status, d: d }; }); })
         .then(function (x) {
           if (snapWho !== who) return;

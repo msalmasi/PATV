@@ -1377,6 +1377,7 @@ require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-
 require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)
 require("./seethrough").register(app, { addUser });              // 1.99afn: the see-through audit log (/api/admin/seethrough) + its 180-day prune
 require("./privwire").register(app, { addUser });                // wave 2: the "Privacy wire v2" switch (/api/admin/privwire; ships OFF)
+require("./incogcams").register(app, { addUser });               // 1.99?? (privacy controls S5): the "Incognito cams" switch (/api/admin/incogcams; ships OFF)
 require("./pepecontrol").register(app, { isBotToken, addUser });
 require("./roomctl").register(app, { isBotToken, addUser });   // 1.99kp: 📡 /admin/pepe/rooms - join / leave / active / mute Pepe's Camfrog rooms
 require("./cmdswitch").register(app, { isBotToken, addUser }); // 1.99vc: 🎛️ /admin/pepe/commands - master switch + global default per command

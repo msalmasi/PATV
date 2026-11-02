@@ -325,14 +325,22 @@ async function claimCamRef(user, b) {
   if (!R || !R.cams) throw new Refuse(403, "Cam snapshots aren't switched on in that Camfrog room.");
   const s = snapForGen(R.id, b.sid, u.userId);
   if (!s || s.error) throw new Refuse((s && s.status) || 410, (s && s.error) || "That snapshot expired - take a fresh one.");
-  const m = camMember(R, s.login);
+  // 1.99?? (privacy controls S5, owner Q4): a frame of an incognito person's cam (taken under their frog name) is a reference under
+  // that FROG NAME - only while that frog-name session is still theirs and incognito cams are on (the login stays server-side: the
+  // job's ref_cam and Pepe's check; the composer and the job list show the frog name)
+  let m = null;
+  if (s.vkey) {
+    let V = null;
+    try { const IC = require("./incogcams"); V = IC.effective() ? IC.entryByLogin(R, s.login, String(s.vkey).slice(2)) : null; } catch (e) { V = null; }
+    m = V ? { login: V.login, display: V.alias || "someone" } : null;
+  } else m = camMember(R, s.login);
   if (!m) throw new Refuse(403, "Their cam can't be used.");          // incognito / hidden since, or gone
   const t = NOW();
   const mineNow = [...camRefs.entries()].filter(([, c]) => c.userId === u.userId).sort((x, y) => x[1].ts - y[1].ts);
   while (mineNow.length >= CAMREF_PER_USER) camRefs.delete(mineNow.shift()[0]);
   const id = "c" + crypto.randomBytes(10).toString("hex");
   camRefs.set(id, { img: s.img, userId: u.userId, room: R.id, login: String(m.login).toLowerCase(), display: String(m.display || m.login), ts: t });
-  console.log(`[aigen] cam ref ${id} by ${u.username}: ${m.login} in ${R.id}`);
+  console.log(`[aigen] cam ref ${id} by ${u.username}: ${s.vkey ? "-" : m.login} in ${R.id}`);
   return { ok: true, id, display: String(m.display || m.login), room: R.id, until: t + CAMREF_TTL };
 }
 

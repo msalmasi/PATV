@@ -1287,7 +1287,7 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
 test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v10 - 1.99ahq stage cover) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=10"), "pad-reveal.js, then stage-mic.js v10");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=11"), "pad-reveal.js, then stage-mic.js v11");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99?? privacy controls S5: v11 - veiled cams)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");

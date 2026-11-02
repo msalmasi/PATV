@@ -46,7 +46,14 @@
   function row(box, slug, who, info, opts) {
     opts = opts || {};
     var ctl = { stop: function () {} };
-    if (!info || !who || !who.login) return ctl;
+    // 1.99?? (privacy controls S5): an incognito person's cam under their frog name - asked for by the opaque id of their roster
+    // entry ({id}), never a login; no strip pin, no stage slot, no "ask to watch" for it in this build
+    var veiled = !!who && !who.login && who.veil === 'incognito' && typeof who.id === 'string' && /^v-[A-Za-z0-9_-]{12}$/.test(who.id);
+    if (!info || !who || (!who.login && !veiled)) return ctl;
+    var ref = veiled ? { id: who.id } : ref;
+    var key = veiled ? who.id : String(who.login).toLowerCase();
+    var nm = veiled ? (who.alias || _t('js.stage.mf.cover_someone', 'someone')) : (who.display || who.login);
+    if (veiled) { opts = Object.assign({}, opts, { strip: null, stage: null }); }
     var acts = el('div', 'acts livecam'), res = el('div', 'res'), stage = el('div', 'lc-stage');
     res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
     var b = el('button', 'live', _t('js.pad.live.btn', '▶ Live')); b.type = 'button';
@@ -64,16 +71,16 @@
       inS.addEventListener('click', function () { strip.focus(who.login); if (opts.onPin) opts.onPin(); });
       acts.appendChild(inS); stageBtn(acts); box.appendChild(acts); box.appendChild(res); return ctl;
     }
-    var watchingThis = (info.watching || []).indexOf(String(who.login).toLowerCase()) >= 0;
+    var watchingThis = (info.watching || []).indexOf(key) >= 0;
     var left = Math.max(0, (s.max || 0) - (s.used || 0));
     var hint = el('span', 'lc-slots', _t('js.pad.live.slots', '{n} of {max} live slots free', { n: left, max: s.max || 0 }));
-    b.title = _t('js.pad.live.title', 'Watch {name}\'s cam live (about a second behind the room)', { name: who.display || who.login });
+    b.title = _t('js.pad.live.title', 'Watch {name}\'s cam live (about a second behind the room)', { name: nm });
     if (!left && !watchingThis) { b.disabled = true; res.textContent = why('viewer_cap'); }
     acts.appendChild(b);
     var pin = null;
     if (strip) {                                             // 1.99zc: 📌 Pin to strip
       pin = el('button', 'live pin', _t('js.pad.strip.pin', '📌 Pin to strip')); pin.type = 'button';
-      pin.title = _t('js.pad.strip.pin_title', 'Keep {name}\'s cam playing in the strip under the stage - watch several cams at once', { name: who.display || who.login });
+      pin.title = _t('js.pad.strip.pin_title', 'Keep {name}\'s cam playing in the strip under the stage - watch several cams at once', { name: nm });
       if (!left && !watchingThis) pin.disabled = true;
       acts.appendChild(pin);
     }
@@ -86,11 +93,11 @@
     function stageBtn(into) {
       if (!opts.stage || !opts.stage.slug) return;
       var sb = el('button', 'live onstage', _t('js.pad.strip.stage', '🎬 Put on stage')); sb.type = 'button';
-      sb.title = _t('js.pad.strip.stage_title', 'Show {name}\'s live cam on this pad\'s stage (they are told; it ends when they leave cam or switch live video off)', { name: who.display || who.login });
+      sb.title = _t('js.pad.strip.stage_title', 'Show {name}\'s live cam on this pad\'s stage (they are told; it ends when they leave cam or switch live video off)', { name: nm });
       sb.addEventListener('click', function () {
-        if (!confirm(_t('js.pad.strip.stage_q', 'Put {name}\'s cam on the stage? It takes one of the pad\'s stage slots.', { name: who.display || who.login }))) return;
+        if (!confirm(_t('js.pad.strip.stage_q', 'Put {name}\'s cam on the stage? It takes one of the pad\'s stage slots.', { name: nm }))) return;
         sb.disabled = true;
-        post('/api/rooms/' + encodeURIComponent(opts.stage.slug) + '/stage/cam', { login: who.login }).then(function (d) {
+        post('/api/rooms/' + encodeURIComponent(opts.stage.slug) + '/stage/cam', ref).then(function (d) {
           sb.disabled = false;
           // stagefix final round (stagepin.js): their level may turn the pin into an ask - it goes up once they say yes
           say(d && d.ok ? (d.asked ? _t('js.pad.strip.stage_asked', 'Asked them - it goes on the stage once they say yes (they have 10 minutes).')
@@ -106,7 +113,7 @@
       if (video) { try { video.srcObject = null; } catch (e) { /* gone */ } }
       stage.textContent = ''; video = null;
       box.classList.remove('lc-on');
-      if (tell) post(base + '/stop', { login: who.login }).catch(function () {});
+      if (tell) post(base + '/stop', ref).catch(function () {});
     }
     function ended(code, msg) {
       teardown(false);
@@ -127,7 +134,7 @@
       var my = ++gen;
       rew = [];
       b.disabled = true; say(_t('js.pad.live.asking', 'Asking Pepe to go live…'));
-      post(base, { login: who.login }).then(function (d) {
+      post(base, ref).then(function (d) {
         if (my !== gen) return;
         if (!d || !d.ok) {
           b.disabled = false;
@@ -135,13 +142,13 @@
           if (d && (d.can_ask || d.pending)) askUi(!!d.pending);            // 1.99aar: members / followers / on request - ask the owner
           return;
         }
-        if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { b.disabled = false; post(base + '/stop', { login: who.login }); return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad'); }
+        if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { b.disabled = false; post(base + '/stop', ref); return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad'); }
         if (d.slots) hint.textContent = _t('js.pad.live.slots', '{n} of {max} live slots free', { n: Math.max(0, d.slots.max - d.slots.used), max: d.slots.max });
         box.classList.add('lc-on');
         if (opts.onStart) { try { opts.onStart(); } catch (e) { /* page's own */ } }
         var wrap = el('div', 'lc-wrap');
         video = el('video'); video.autoplay = true; video.muted = true; video.playsInline = true; video.setAttribute('playsinline', '');
-        video.setAttribute('aria-label', _t('js.pad.live.aria', '{name}\'s cam, live', { name: who.display || who.login }));
+        video.setAttribute('aria-label', _t('js.pad.live.aria', '{name}\'s cam, live', { name: nm }));
         var badge = el('span', 'lc-badge', _t('js.pad.live.connecting', 'connecting…'));
         var x = el('button', 'lc-x', '✕'); x.type = 'button'; x.setAttribute('aria-label', _t('js.pad.live.stop', 'Stop the live cam'));
         x.addEventListener('click', function () { teardown(true); b.disabled = false; b.textContent = _t('js.pad.live.btn', '▶ Live'); say(_t('js.pad.live.stopped', 'Stopped - your slot is free again.')); });
@@ -151,7 +158,7 @@
         if (offer) stage.appendChild(offer);
         b.textContent = _t('js.pad.live.btn_on', '⚡ Live'); say('');
         beatT = setInterval(function () {
-          post(base + '/beat', { login: who.login }).then(function (k) {
+          post(base + '/beat', ref).then(function (k) {
             if (my !== gen) return;
             if (k && k.ok === false) return ended(k.code, k.error);
             if (k && k.state === 'ended') return ended(k.why);
@@ -172,11 +179,11 @@
           rew.push(t0);
           if (sess) { try { sess.close(); } catch (e) { /* gone */ } sess = null; }
           badge.textContent = _t('js.pad.live.reconnecting', 'reconnecting…'); badge.classList.remove('on');
-          post(base + '/beat', { login: who.login }).then(function (k) {
+          post(base + '/beat', ref).then(function (k) {
             if (my !== gen) return null;
             if (!k || k.ok === false) return ended(k && k.code, k && k.error);
             if (k.state === 'ended') return ended(k.why);
-            return post(base, { login: who.login }).then(function (d2) {
+            return post(base, ref).then(function (d2) {
               if (my !== gen) return null;
               if (!d2 || !d2.ok || !d2.whep) return ended(d2 && d2.code, d2 && d2.error);
               return PATVRtc.watch(d2.whep, video, { timeout: 40000, cancelled: function () { return my !== gen; } }).then(function (ss) {
@@ -191,9 +198,9 @@
           playing(ss);
         }, function (e) {
           if (my !== gen || (e && e.cancelled)) return;
-          post(base + '/beat', { login: who.login }).then(function (k) { if (my === gen) ended(k && k.state === 'ended' ? k.why : 'failed'); },
+          post(base + '/beat', ref).then(function (k) { if (my === gen) ended(k && k.state === 'ended' ? k.why : 'failed'); },
             function () { if (my === gen) ended('failed'); });
-          post(base + '/stop', { login: who.login }).catch(function () {});
+          post(base + '/stop', ref).catch(function () {});
         });
       }).catch(function () { if (my === gen) { b.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); } });
     }
@@ -220,7 +227,7 @@
         askB = el('button', 'live ask', ''); askB.type = 'button';
         askB.addEventListener('click', function () {
           askB.disabled = true;
-          post(base + '/ask', { login: who.login }).then(function (k) {
+          post(base + '/ask', ref).then(function (k) {
             if (k && k.ok && k.allowed) { askB.remove(); askB = null; return start(); }
             if (!k || !k.ok) { askB.disabled = false; return say((k && k.error) || _t('js.pad.live.ask_fail', 'Couldn’t ask - try again in a bit.'), 'bad'); }
             askB.textContent = _t('js.pad.live.asked', '⏳ Asked - waiting');

@@ -202,7 +202,10 @@ const PAD_DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(PAD_FIELDS)
  *  "Take me off this Stage" on this pad, or a DM block either way with the pad's owner (never which) - the same rules
  *  livecam.stageConsent refuses a hold for, so the person isn't re-picked every cooldown_s only to be refused again. */
 const CUT = Object.freeze(["not_member", "opted_out", "mf_opted_out", "private", "hidden", "excluded", "banned", "blocked_owner", "unavailable",
-  "mode_closed", "ended_by"]);
+  "mode_closed", "ended_by",
+  // 1.99?? (privacy controls S5): the person's identity changed under a tile (incognito on / off, !bridge hide, their frog-name session
+  // ended, incognito cams off) - it comes off at once; they come back as a fresh tile (or cover) under the new one (micfollow.eligOf)
+  "veil_changed"]);
 const CUT_SET = new Set(CUT);
 const isCut = (e) => CUT_SET.has(e);
 // a session that ended for one of these: a card ("failed") and no new open for that person until the backoff passes

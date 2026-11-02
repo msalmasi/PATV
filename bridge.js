@@ -1583,9 +1583,10 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   let see = null;
   if (!opts.nonExempt && viewer && viewer.userId) { try { see = await require("./seethrough").chatRoleCached(viewer, R.id); } catch (e) { see = null; } }
   const canReveal = see ? (x) => require("./seethrough").mayReveal(see, x && x.ts != null ? Number(x.ts) : Date.now()) : null;
-  const members = CV.roster(R.members, { canReveal }), mic = CV.roster(R.mic, { canReveal });   // ingest replaces these arrays (never edits them): a snapshot too
+  // (1.99?? privacy controls S5: roomId - an incognito member's on_cam under their frog name, incogcams.pageOnCam)
+  const members = CV.roster(R.members, { canReveal, roomId: R.id }), mic = CV.roster(R.mic, { canReveal });   // ingest replaces these arrays (never edits them): a snapshot too
   const L = await resolveNames([...items.map((it) => it.u), ...redoItems.map((it) => it.u), ...members, ...mic,
-                                ...(prog ? prog.tiles.filter((x) => !x.cover).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody)
+                                ...(prog ? prog.tiles.filter((x) => !x.cover && !x.veil).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody; 1.99?? S5: nor a veiled cam)
                                 // 1.99aht S1: a !transcripts off bar said named shows that name - and its PATV look (chatlogview.barUser)
                                 ...[...items, ...redoItems].map((it) => CV.barUser(it)).filter(Boolean)]);
   const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal });
@@ -1670,7 +1671,7 @@ async function stageProgramFor(roomId, userId) {
   let prog;
   try { prog = require("./micfollow").snapshot(roomId); } catch (e) { return null; }
   if (!prog) return null;
-  const L = await resolveNames(prog.tiles.filter((tile) => !tile.cover).map((tile) => ({ login: tile.login })));   // (wave2 WP-4: a cover names nobody)
+  const L = await resolveNames(prog.tiles.filter((tile) => !tile.cover && !tile.veil).map((tile) => ({ login: tile.login })));   // (wave2 WP-4: a cover names nobody; 1.99?? S5: nor a veiled cam)
   const F = await require("./padflair").byUsername(roomId).catch(() => null);
   return stageProgram(prog, R, userId, L, F, "capture");
 }
@@ -1723,6 +1724,7 @@ function register(app, { isBotToken, addUser }) {
     relay.applyAcks(body.acks);
     PW.noteTxCap(body.txbar_cap === 1);        // 1.99aht transcripts bar: does this Pepe send them as a bar? (the policy / help text)
     require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
+    try { require("./incogcams").noteBot(body); } catch (e) { /* none */ }   // 1.99?? (privacy controls S5): Pepe applies incognito cams?
     // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
     // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
     // privacy.shown events, his incognito OFF reports, an older Pepe's drop within one bridge session (no tx_hidden_h: he sends
@@ -1748,7 +1750,10 @@ function register(app, { isBotToken, addUser }) {
              ...(PW.txAdvert() ? { txbar: 1 } : {}),
              // wave 2 WP-5 (spec E.3): evidence clips can be made (evidence.js: its switch AND privacy wire v2) - Pepe offers the Camfrog
              // !clipmic evidence path only after this (never said while either is off: the contract fixture runs without it)
-             ...(evidenceOn() ? { evidence: 1 } : {}) };
+             ...(evidenceOn() ? { evidence: 1 } : {}),
+             // 1.99?? (privacy controls S5): incognito cams (incogcams.js: its switch AND privacy wire v2) - Pepe shows an incognito
+             // person's cam under the frog name only after this (never said while either is off)
+             ...(incogcamAdvert() ? { incogcam: 1 } : {}) };
   }
   // wave 2 WP-2 (spec A.3 handshake): the privacy wire v2 receiver - Pepe's FULL form (real UserRefs + priv, hidden words, hold ids).
   //  * every call is counted FIRST (the dark proof: while the switch has never been on, the counter stays 0 - Pepe never calls);
@@ -2212,6 +2217,7 @@ function padTabsFor(o) {
 
 /** wave 2 WP-5: may evidence clips be made now (evidence.js)? Never throws: false on any error. */
 function evidenceOn() { try { return require("./evidence").effective(); } catch (e) { return false; } }
+function incogcamAdvert() { try { return require("./incogcams").advert() === true; } catch (e) { return false; } }
 
 /** wave 2 WP-2 (spec E.1): who is behind veiled line c of room roomId, for a reveal (seethrough.js checks role and era) -> {ts, vz, vw}
  *  | null. The live item's own (non-enumerable) identity first, else the archive's chat_log_veil row - only for a line of THIS room. */

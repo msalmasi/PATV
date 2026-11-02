@@ -225,6 +225,10 @@ async function coverFor(e) {
 async function tileFor(e, R, user, { covers = true } = {}) {
   const t = { id: e.id, mode: "blank", newest: !!e.newest, pin: !!e.pin, name: "", source: e };
   if (e.kind === "cover") { const c = coverArt(e); return { ...t, mode: "cover", name: c.label, image: c.art }; }
+  // 1.99?? (privacy controls S5): an incognito person's cam tile (shown live under the frog name on the page) is drawn in a capture as
+  // its peek hood + frog name - never its id taken for a login, never the cam itself in this build (a capture's people / consent /
+  // recheck have no veiled path yet); it makes the capture veiled like a cover (storykeep never keeps it)
+  if (e.kind === "cam" && e.veil === "incognito") { const c = coverArt({ veil: "incognito", hood: e.hood, name: e.name }); return { ...t, mode: "cover", name: c.label, image: c.art }; }
   if (e.kind !== "cam" || (e.watch !== "ok" && e.watch !== "notice")) return t;
   const login = String(e.login || e.id).toLowerCase();
   if (!LOGIN.test(login)) return t;

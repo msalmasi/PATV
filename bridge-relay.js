@@ -675,6 +675,29 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     res.json({ ok: true, mime: j.mime, data });
   });
 
+  // 1.99?? (privacy controls S5, G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5"; owner Q4): an incognito person's cam
+  // snapshot under their FROG NAME - asked for by the opaque id of their roster entry ({id}; incogcams.camOf: the switch and Pepe's
+  // word, their open frog-name session, on cam). The login is resolved here and never answered: the frame lives under its own key
+  // ("<room>|<login>|v:<session>" - never served to a named request, nor a named frame to it), a refusal is the generic one (Q23),
+  // the saved snap's action is labelled "!snap someone" (Pepe names the subject "someone" and sends no subject login - his
+  // _capture_hidden: it never reaches the person's profile story), and its 🎬 Clip isn't offered in this build. ✨ Use in Generate
+  // works under the frog name (aigen.claimCamRef). A named snapshot waits while the person shows veiled in the room (spec 2.2).
+  const IC = () => require("./incogcams");
+  const icOn = () => { try { return IC().effective() === true; } catch (e) { return false; } };
+  /** -> {login, vkey, veil} for a snapshot request's cam ({id} or {login}), or {error} */
+  const snapTarget = (R, b) => {
+    if (b && b.id != null && b.id !== "") {
+      let V = null;
+      try { V = IC().camOf(R, String(b.id).slice(0, 40)); } catch (e) { V = null; }
+      if (!V) return { error: "They aren't on cam." };
+      return { login: V.login, vkey: "v:" + V.sess, veil: V };
+    }
+    const login = String((b && b.login) || "").toLowerCase().slice(0, 40);
+    const m = R.members.find((x) => !x.anon && String(x.login).toLowerCase() === login);
+    if (!m || !m.on_cam || m.self) return { error: "They aren't on cam." };
+    if (icOn() && IC().veiledPresence(R, login)) return { error: "They aren't on cam." };
+    return { login, vkey: null, veil: null };
+  };
   app.post("/api/rooms/:slug/snap", addUser, express.json({ limit: "4kb" }), async (req, res) => {
     const u = await me(req);
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
@@ -683,12 +706,13 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!(await padFull(u.userId, R.id))) return res.status(403).json(PAD_DENIED);
     const blk = await blockedWhy(R, u, "snapshots");        // 1.99zf: a bridge block on cam snapshots
     if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "snapshots" });
-    const login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
-    const m = R.members.find((x) => !x.anon && String(x.login).toLowerCase() === login);
-    if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
+    const tg = snapTarget(R, req.body || {});
+    if (tg.error) return res.status(400).json({ ok: false, error: tg.error });
+    const login = tg.login;
     const ref = await CV().camRefusal(login, u.userId);
-    if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
-    const key = R.id + "|" + login;
+    // (1.99?? S5: a veiled cam's refusal is the one generic word - never a reason, a mode or "ask to watch")
+    if (ref) return res.status(ref.status).json(tg.veil ? { ok: false, code: "unavailable", error: CV().UNAVAILABLE } : { ok: false, code: ref.code, error: ref.error });
+    const key = R.id + "|" + login + (tg.vkey ? "|" + tg.vkey : "");
     const cached = snaps.get(key);
     // Whoever asks shares the frame they're shown - and only they may save it (Save snap, 1.99ap).
     // Pepe judged the save rule for whoever's request opened the cam; another viewer riding on that
@@ -700,7 +724,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     }
     for (const j of jobs.values()) {
       // (never a 🎙 mic-stage still's job: that frame is never a viewer's - no Save, no Generate, no clip)
-      if (j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id && j.target === login && j.state !== "done") {
+      if (j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id && j.target === login && (j.vkey || null) === tg.vkey && j.state !== "done") {
         if (j.viewers) j.viewers.add(u.userId);
         return res.json({ ok: true, pending: true });
       }
@@ -708,8 +732,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const lim = limited("snap|" + u.userId, SNAP_VIEWER_GAP, 6, 60000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
     const j = newJob({ kind: "snap", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "",
-      target: login, viewers: new Set([u.userId]), ghost: (() => { try { return require("./ghost").isGhost(u.userId); } catch (e) { return false; } })() });
-    console.log(`[bridge-relay] snap room=${R.id} viewer=${u.username} target=${login} job=${j.id}`);
+      target: login, viewers: new Set([u.userId]), ghost: (() => { try { return require("./ghost").isGhost(u.userId); } catch (e) { return false; } })(),
+      ...(tg.vkey ? { vkey: tg.vkey, valias: tg.veil.alias || null } : {}) });
+    console.log(`[bridge-relay] snap room=${R.id} viewer=${u.username} target=${tg.vkey ? "-" : login} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });
 
@@ -744,8 +769,15 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       return res.json({ ok: true });
     }
     if (img && j && rule && rule !== "no" && b.viewer_ok) okFor.set(j.userId, cost);
-    snaps.set(roomId + "|" + login, { sid: "f" + crypto.randomBytes(9).toString("hex"), ts: Date.now(), ok: !!img, status: clean(b.status, 120), img,
-      viewers: new Set(j && j.viewers ? j.viewers : []), rule, okFor, cost, saves: new Map() });
+    // 1.99?? (privacy controls S5): a veiled request's frame under its own key; a frame with no job left (swept) of someone who shows
+    // veiled in the room now is dropped - it may have been taken for their frog name
+    if (!j) {
+      try { const BR = require("./bridge"), RR = BR._rooms.get(roomId); if (RR && require("./incogcams").veiledPresence(RR, login)) return res.json({ ok: true, dropped: true }); }
+      catch (e) { /* no bridge */ }
+    }
+    snaps.set(roomId + "|" + login + (j && j.vkey ? "|" + j.vkey : ""), { sid: "f" + crypto.randomBytes(9).toString("hex"), ts: Date.now(), ok: !!img, status: clean(b.status, 120), img,
+      viewers: new Set(j && j.viewers ? j.viewers : []), rule, okFor, cost, saves: new Map(), login, vkey: j && j.vkey ? j.vkey : null,
+      valias: j && j.vkey ? j.valias || null : null });
     if (j) { j.state = "done"; j.result = { ok: !!img, msg: clean(b.status, 120) }; }
     // 1.99yq: everyone this frame is shown to opened their cam - Pepe tells the owner (only once there IS a picture)
     if (img && j && j.viewers) CV().noteViewers("snap", roomId, login, [...j.viewers]);
@@ -758,11 +790,19 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const R = bySlug(req.params.slug);
     if (!R || !R.cams) return res.status(404).json({ state: "off" });
     if (!(await padFull(req.user.userId, R.id))) return res.status(403).json(PAD_DENIED);
-    const login = String(req.params.login || "").toLowerCase().slice(0, 40);
+    // (1.99?? privacy controls S5: "v-..." = a veiled cam's opaque id - its own frame, generic refusals, no 🎬 Clip)
+    const p0 = String(req.params.login || "").slice(0, 40);
+    let login = p0.toLowerCase(), vkey = null;
+    if (/^v-[A-Za-z0-9_-]{12}$/.test(p0) && icOn()) {
+      let V = null;
+      try { V = IC().camOf(R, p0); } catch (e) { V = null; }
+      if (!V) return res.json({ state: "refused", status: CV().UNAVAILABLE });
+      login = V.login; vkey = "v:" + V.sess;
+    }
     const ref = await CV().camRefusal(login, req.user.userId);         // 1.99yq: blocked / switched off since the frame was taken
-    if (ref) return res.json({ state: "refused", status: ref.error });
-    const s = snaps.get(R.id + "|" + login);
-    const pending = [...jobs.values()].some((j) => j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id && j.target === login && j.state !== "done");
+    if (ref) return res.json({ state: "refused", status: vkey ? CV().UNAVAILABLE : ref.error });
+    const s = snaps.get(R.id + "|" + login + (vkey ? "|" + vkey : ""));
+    const pending = [...jobs.values()].some((j) => j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id && j.target === login && (j.vkey || null) === vkey && j.state !== "done");
     if (s && (!pending || Date.now() - s.ts < SNAP_TARGET_GAP)) {
       let save = null;
       if (s.ok && s.img && saveRight(s, req.user.userId) !== null) {
@@ -774,7 +814,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       const gen = s.ok && s.img && s.viewers && s.viewers.has(req.user.userId) ? { sid: s.sid, until: s.ts + SNAP_TTL } : null;
       // 1.99ez: "🎬 Clip" (camclip.js) - the lengths, and why it's greyed out here (null = it isn't)
       let clip = null;
-      if (s.ok && s.img) { try { clip = await require("./camclip").clipInfo(R, req.user.userId, login); } catch (e) { clip = null; } }
+      if (s.ok && s.img && !vkey) { try { clip = await require("./camclip").clipInfo(R, req.user.userId, login); } catch (e) { clip = null; } }
       return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save, gen, clip,
         img: s.img ? "data:image/jpeg;base64," + s.img.toString("base64") : null });
     }
@@ -796,12 +836,19 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "snapshots" });
     const sid = String((req.body || {}).sid || "").slice(0, 40);
     let s = null, login = "";
-    for (const [k, v] of snaps) if (sid && v.sid === sid && k.startsWith(R.id + "|")) { s = v; login = k.slice(R.id.length + 1); break; }
+    // (1.99?? privacy controls S5: the frame knows its own login - a veiled one's key carries its session after it)
+    for (const [k, v] of snaps) if (sid && v.sid === sid && k.startsWith(R.id + "|")) { s = v; login = v.login || k.slice(R.id.length + 1); break; }
     if (!s || !s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return res.status(410).json({ ok: false, error: "That snapshot expired — take a fresh one." });
     if (!s.viewers || !s.viewers.has(u.userId)) return res.status(403).json({ ok: false, error: "That isn't a snapshot you asked for." });
     if (saveRight(s, u.userId) === null) return res.status(403).json({ ok: false, error: "Snaps of them aren't allowed here." });
     const ref = await CV().camRefusal(login, u.userId, { strict: true });   // 1.99aak: a 👻 ghost can't SAVE past the owner's rules
-    if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
+    if (ref) return res.status(ref.status).json(s.vkey ? { ok: false, code: "unavailable", error: CV().UNAVAILABLE } : { ok: false, code: ref.code, error: ref.error });
+    // (1.99?? privacy controls S5: a veiled frame is saved only while that frog-name session is still theirs and incognito cams are on)
+    if (s.vkey) {
+      let V = null;
+      try { V = icOn() ? IC().entryByLogin(R, login, s.vkey.slice(2)) : null; } catch (e) { V = null; }
+      if (!V) return res.status(410).json({ ok: false, error: "That snapshot expired — take a fresh one." });
+    }
     const prev = s.saves.get(u.userId);
     if (prev) {
       const a = (await getQuery("SELECT status FROM pepe_actions WHERE id = ? AND user_id = ?", [prev, u.userId]))[0];
@@ -812,9 +859,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const fid = "f" + crypto.randomBytes(12).toString("hex");
     frames.set(fid, { img: s.img, userId: u.userId, username: u.username, roomId: R.id, login, ts: Date.now() });
     try {
-      const id = await queueAction(u.userId, { kind: "snap.save", args: [R.id, login, fid], tag: "snap", label: "!snap " + login });
+      // (1.99?? privacy controls S5: a veiled subject is "someone" in the action's label - the viewer's own list never names them)
+      const id = await queueAction(u.userId, { kind: "snap.save", args: [R.id, login, fid], tag: "snap", label: "!snap " + (s.vkey ? "someone" : login) });
       s.saves.set(u.userId, id);
-      console.log(`[bridge-relay] save-snap room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${login} action=${id}`);
+      console.log(`[bridge-relay] save-snap room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${s.vkey ? "-" : login} action=${id}`);
       res.json({ ok: true, id });
     } catch (e) {
       frames.delete(fid);
@@ -912,13 +960,13 @@ function snapForGen(roomId, sid, userId) {
     if (!sid || s.sid !== sid || !k.startsWith(roomId + "|")) continue;
     if (!s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return { status: 410, error: "That snapshot expired — take a fresh one." };
     if (!s.viewers || !s.viewers.has(userId)) return { status: 403, error: "That isn't a snapshot you asked for." };
-    const login = k.slice(roomId.length + 1);
+    const login = s.login || k.slice(roomId.length + 1);
     // 1.99yq: the owner's switch and blocks (sync parts; Pepe re-checks private / hidden himself)
     try {
       if (require("./livecam").optedOut(login)) return { status: 403, error: CV().MSG.opted_out };
       if (CV().blocked(login, userId)) return { status: 403, error: CV().UNAVAILABLE };
     } catch (e) { /* the modules are there */ }
-    return { login, img: s.img, ts: s.ts };
+    return { login, img: s.img, ts: s.ts, ...(s.vkey ? { vkey: s.vkey } : {}) };   // (1.99?? S5: a veiled frame says so - aigen names the frog)
   }
   return { status: 410, error: "That snapshot expired — take a fresh one." };
 }

@@ -98,6 +98,8 @@ const owns = (real, p) => { const h = hiddenHash(real.login); return h === p.h |
 /** Is a priv block present at all (any value but undefined / null)? One that is present but doesn't parse fails CLOSED. */
 const hasPriv = (o) => !!o && typeof o === "object" && o.priv !== undefined && o.priv !== null;
 
+/** 1.99?? (privacy controls S5): the incog_cams switch (incogcams.js) - false while it can't be asked. */
+const icOn = () => { try { return require("./incogcams").isOn() === true; } catch (e) { return false; } };
 /** A page-safe veiled user. */
 const veiledU = (kind) => ({ anon: true, display: "someone", veil: kind });
 
@@ -343,7 +345,8 @@ const clampSince = (sec, now) => {
   return Number.isFinite(s) && s > 0 ? Math.max(now - SINCE_PAST_MS, Math.min(now + SINCE_AHEAD_MS, Math.round(s * 1000))) : null;
 };
 /**
- * Pepe's v2 snapshot members[] / mic[] -> page-safe entries (veiled: anon + veil + frog name, never on_cam; real identity as _vz),
+ * Pepe's v2 snapshot members[] / mic[] -> page-safe entries (veiled: anon + veil + frog name, never on_cam - 1.99?? privacy
+ * controls S5: an incognito member's on_cam is kept server-side on _vz while incognito cams are on; real identity as _vz),
  * named entries through `clean` (bridge.cleanUser / cleanMic). Sightings: every veiled member is sighted (frognames.sight, quiet),
  * every named member is noted named (on EVERY snapshot - C.2), veiled members gone since the last snapshot have left.
  * Review fix (A-privacy-8): an entry whose priv block is present but doesn't parse (too many hashes, a bad h, an unknown kind) or
@@ -366,7 +369,10 @@ async function snapshotEntries(R, list, clean, { mic = false, max = 400, now = D
     }
     hide(e, "_vz", { login: real.login, display: real.display, kind: p.kind, h: p.h, hs: p.hs.slice(), sess: null,
                      ...(mic ? { proven: u.proven === true, since: clampSince(u.since, now),
-                                 ...(u.began_named === true ? { beganNamed: true } : {}) } : {}) });
+                                 ...(u.began_named === true ? { beganNamed: true } : {}) } : {}),
+                     // 1.99?? (privacy controls S5): an INCOGNITO member's cam state (Pepe sends it only while incognito cams are
+                     // advertised) - server-only on _vz; chatlogview.roster shows it on the page only while they're effective
+                     ...(!mic && p.kind === "incognito" && typeof u.on_cam === "boolean" && icOn() ? { on_cam: u.on_cam } : {}) });
     out.push(e);
   }
   return out;

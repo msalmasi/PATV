@@ -1016,6 +1016,9 @@ function roster(list, ctx = {}) {
       if (vz && vz.h && kindNow(vz.h) === "out") e.veil = "hidden";
       if (!e.alias) { delete e.hood; delete e.id; }
       if (vz && typeof ctx.canReveal === "function" && ctx.canReveal(u)) e.rv = 1;
+      // 1.99?? (privacy controls S5): an incognito person's cam shows under their frog name (incogcams.pageOnCam: the switch and
+      // Pepe's word, on cam, their live cam not switched off) - on_cam on the frog entry, ▶ Live by its opaque id (never a login)
+      if (e.veil === "incognito" && e.id && ctx.roomId != null && incogOnCam(u, ctx.roomId)) e.on_cam = true;
       out.push(e);
       continue;
     }
@@ -1028,6 +1031,8 @@ function roster(list, ctx = {}) {
   return out;
 }
 const SOMEONE = Object.freeze({ anon: true, display: "someone" });
+/** 1.99?? (privacy controls S5): incogcams.pageOnCam - false while it can't be asked (fails closed: no cam icon). */
+function incogOnCam(u, roomId) { try { return require("./incogcams").pageOnCam(u, roomId) === true; } catch (e) { return false; } }
 // 1.99afl (S6 - the incognito spec's rollback floor): the projection BUILDS every object it hands out from the fields its kind may
 // show; it never copies an item (or a roster entry) and deletes the fields it knows about. A field nobody listed here - a server-
 // only hash (ah / ahs), a stamp (k3), a later build's veiled identity or hidden words - can never reach a page, an API answer or a

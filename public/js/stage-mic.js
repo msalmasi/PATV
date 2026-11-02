@@ -144,6 +144,10 @@
   // frog on its hood colour, "<frog name or someone> · incognito / hidden", the mic ring - never a cam, a still, ⚑ or 📌. ✕
   // only with ex: 1, Reveal only with rv: 1 (WP-2's window.PATVReveal.tile), "this is you" with self: 1.
   var isCover = function (s) { return !!s && s.kind === 'cover'; };
+  // 1.99?? (privacy controls S5): an incognito person's CAM under their frog name ({kind: "cam", veil: "incognito", hood, id
+  // "anon-<8 hex>"}) - live / still like any cam tile, but its cards show the peek hood (never initials or an avatar), its label
+  // "<frog name> · incognito"; ✕ and Reveal as on a cover ({tile}, ex / rv only); no 📌
+  var isVeiledCam = function (s) { return !!s && s.kind === 'cam' && s.veil === 'incognito'; };
   var veilOf = function (s) { return s && s.veil === 'hidden' ? 'hidden' : 'incognito'; };
   var hoodOf = function (s) { var h = s && Number(s.hood); return h >= 0 && h <= 7 && Math.floor(h) === h ? h : 0; };
   function veilText(s) { return veilOf(s) === 'hidden' ? _t('js.pad.veil.hidden', 'hidden') : _t('js.pad.veil.incognito', 'incognito'); }
@@ -447,7 +451,8 @@
         e.classList.toggle('mf-cover', cover);
         if (!cover) {
           e.removeAttribute('data-hood'); e.removeAttribute('data-veil');
-          hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; e.classList.remove('revealed'); t.revealed = null; t.revealedBy = null; t.autoId = null;
+          hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; e.classList.remove('revealed');
+          if (!isVeiledCam(s)) { t.revealed = null; t.revealedBy = null; t.autoId = null; }   // (1.99?? S5: a veiled cam keeps its Reveal - apply())
           return false;
         }
         if (t.mode === 'live') stopLive(true);
@@ -486,13 +491,15 @@
         return true;
       }
       function apply(s) {
-        if (t.s && isCover(t.s) && (!isCover(s) || t.s.id !== s.id)) { t.revealed = null; t.revealedBy = null; }
+        if (t.s && (isCover(t.s) || isVeiledCam(t.s)) && (!(isCover(s) || isVeiledCam(s)) || t.s.id !== s.id)) { t.revealed = null; t.revealedBy = null; }
         t.s = s;
         if (coverApply(s)) return;
-        name.textContent = tightNames() ? short(s.name) : s.name;
-        name.className = 'mf-name' + (s.nameCss ? ' cx-name' : '');
-        name.style.cssText = s.nameCss || '';
-        e.setAttribute('aria-label', s.name);
+        var vc = isVeiledCam(s);
+        name.textContent = vc ? (tightNames() ? short(labelOf(s)) : labelOf(s)) + ' · ' + veilText(s) : tightNames() ? short(s.name) : s.name;
+        name.className = 'mf-name' + (s.nameCss && !vc ? ' cx-name' : '');
+        name.style.cssText = vc ? '' : s.nameCss || '';
+        e.setAttribute('aria-label', vc ? _t('js.stage.mf.cover_aria', '{name}, {veil}, on the mic', { name: labelOf(s), veil: veilText(s) }) : s.name);
+        e.classList.toggle('mf-vcam', vc);
         e.classList.toggle('newest', !!s.newest);
         // mfix: pinned / recent (let go of the mic a moment ago - no ring) / the viewer's own cam
         e.classList.toggle('pinned', !!s.pin);
@@ -506,11 +513,26 @@
         off.setAttribute('aria-label', _t('js.stage.mf.take_off_aria', 'Take my cam off this pad\'s stage'));
         if (s.newest) { e.setAttribute('aria-current', 'true'); sr.textContent = ', ' + _t('js.stage.mf.newest', 'newest speaker'); }
         else { e.removeAttribute('aria-current'); sr.textContent = ''; }
-        avTxt.textContent = initials(s.name);
-        setCover(coverPic(s));
+        // (1.99?? privacy controls S5: a veiled cam's card picture is its peek hood - never initials, an avatar or a 1.99ahq cover)
+        avTxt.textContent = vc ? '' : initials(s.name);
+        if (vc) {
+          card.classList.remove('cov');
+          for (var ci = 0; ci < CKS.length; ci++) card.classList.remove('cv-' + CKS[ci]);
+          var hood = '/public/img/anon/hood-peek-' + hoodOf(s) + '.svg';
+          if (avImg.getAttribute('src') !== hood) avImg.src = hood;
+          avImg.hidden = false; avTxt.hidden = true;
+        } else setCover(coverPic(s));
         x.textContent = s.pin ? '📌✕' : '✕';
-        x.setAttribute('aria-label', s.pin ? _t('js.stage.mf.unpin_q', 'Unpin {name}', { name: s.name }) : _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
-        x.hidden = !P.manage;
+        x.setAttribute('aria-label', s.pin ? _t('js.stage.mf.unpin_q', 'Unpin {name}', { name: s.name }) : vc ? _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage')
+          : _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
+        x.hidden = vc ? !(P.manage && s.ex === 1) : !P.manage;
+        if (vc) {
+          pn.hidden = true;
+          rv.hidden = !(s.rv === 1 && window.PATVReveal && typeof window.PATVReveal.tile === 'function') || !!t.revealed;
+          chip.hidden = !(s.self === 1 || t.revealed);
+          chip.textContent = t.revealed ? _t('js.stage.mf.revealed', '{login} · only you can see this', { login: t.revealed }) : s.self === 1 ? _t('js.stage.mf.cover_self', 'this is you') : '';
+          e.classList.toggle('revealed', !!t.revealed);
+        } else { rv.hidden = true; chip.hidden = true; e.classList.remove('revealed'); }
         rp.setAttribute('aria-label', _t('js.stage.mf.report_aria', 'Report {name}', { name: s.name }));
         rp.hidden = !P.report || !!P.manage || s.watch === 'hidden';
         var want = s.watch !== 'ok' ? 'card' : s.video === 'live' ? 'live' : s.video === 'still' ? 'still' : 'card';
@@ -548,7 +570,7 @@
      *  window.PATVReveal.tile(slug, id) -> Promise<{ok, login}>. Only this viewer sees the answer: a dashed edge and
      *  "{login} · only you can see this" on the tile while it stays up. */
     function revealTile(t, b) {
-      if (!t.s || !isCover(t.s) || t.s.rv !== 1 || !window.PATVReveal || typeof window.PATVReveal.tile !== 'function') return;
+      if (!t.s || !(isCover(t.s) || isVeiledCam(t.s)) || t.s.rv !== 1 || !window.PATVReveal || typeof window.PATVReveal.tile !== 'function') return;
       b.disabled = true;
       Promise.resolve().then(function () { return window.PATVReveal.tile(slug, t.s.id); }).then(function (r) {
         b.disabled = false;
@@ -665,13 +687,13 @@
       ask.textContent = '';
       ask.hidden = false;
       // (wave2 WP-4: a cover - ex: 1 only - is kept off by its tile id; the server maps it, nobody sees who)
-      ask.appendChild(el('p', null, isCover(s) ? _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage')
+      ask.appendChild(el('p', null, isCover(s) || isVeiledCam(s) ? _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage')
         : _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name })));
       [[1, _t('js.stage.mf.exclude_1h', 'for 1 hour')], [24, _t('js.stage.mf.exclude_24h', 'for 24 hours')], [0, _t('js.stage.mf.exclude_always', 'always')]].forEach(function (o) {
         var b = btn('mf-pbtn danger', o[1]);
         b.addEventListener('click', function () {
           b.disabled = true;
-          post(base + '/exclude', isCover(s) ? { tile: s.id, hours: o[0] } : { login: s.id, hours: o[0] }).then(function (d) {
+          post(base + '/exclude', isCover(s) || isVeiledCam(s) ? { tile: s.id, hours: o[0] } : { login: s.id, hours: o[0] }).then(function (d) {
             pmsg.textContent = d && d.ok ? _t('js.stage.mf.excluded', 'Off the mic stage.') : (d && d.error) || _t('js.stage.mf.e_do', 'Couldn\'t do that.');
             ask.hidden = true; ask.textContent = '';
             if (ctx.onChange) { try { ctx.onChange(); } catch (er) { /* page's own */ } }
