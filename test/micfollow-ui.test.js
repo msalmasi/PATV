@@ -1287,7 +1287,7 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
 test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v7) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=7"), "pad-reveal.js, then stage-mic.js v7");
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=8"), "pad-reveal.js, then stage-mic.js v8");   // (1.99?? dead relay: v8 - resuming…)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");
@@ -1399,4 +1399,45 @@ test("wave2 integration review (T-3) stage-mic.js: the pad chat's toggle bar is 
   assert.deepEqual([o.R.calls.length, o.R.offers], [0, 1], "off but theirs: offered, not asked");
   o = await run(false, false, { can: false, r: { ok: false } });
   assert.deepEqual([o.R.calls.length, o.R.offers], [0, 0], "not theirs: neither");
+});
+
+// ── 1.99?? dead relay: back from a hidden tab, the paused tiles say "resuming…" (their cams never stopped - only this tab's
+// players did), never "cam starting…"; a tile that really starts still says "cam starting…"; the pause itself is unchanged ──
+test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pause; on return they say 'resuming…', not 'cam starting…'", async () => {
+  const js = read("public", "js", "stage-mic.js");
+  assert.match(js, /HIDDEN_MS = 30000/, "the pause is unchanged");
+  assert.equal(EN["js.stage.mf.resuming"], "resuming…", "the new string is in locales/en.json");
+  const dom = fakeDom();
+  let vis = null;
+  const posts = [];
+  const ctx = { document: { createElement: dom.mk, hidden: false, addEventListener(k, fn) { if (k === "visibilitychange") vis = fn; }, removeEventListener() {} },
+    console, clearTimeout,
+    setTimeout: (fn, ms) => (ms >= 30000 ? (fn(), 0) : setTimeout(fn, ms)),            // the 30 s hidden-tab wait runs at once
+    setInterval: () => 0, clearInterval() {},
+    fetch: (u, o) => { posts.push([u, o && o.body ? JSON.parse(o.body) : null]); return Promise.resolve({ json: () => Promise.resolve({ ok: true, whep: "https://x/whep?pt=1", state: "pending" }) }); },
+    PATVRtc: { watch: () => new Promise(() => {}) }, RTCPeerConnection: function () {}, Date };
+  ctx.window = ctx; ctx.window.addEventListener = () => {}; ctx.window.removeEventListener = () => {};
+  vm.runInNewContext(js, ctx);
+  const host = dom.mk("div");
+  const s = (id, pos, video) => ({ kind: "cam", id, name: id.toUpperCase(), pos, newest: pos === 0, video, why: null, watch: "ok" });
+  const ctl = ctx.PATVStageMic.render(host, { v: 1, layout: "split", count: 2, src: [s("a", 0, "live"), s("b", 1, "still")], manage: null, still_s: 20 }, { slug: "pad" });
+  const tileOf = (id) => findBy(host, "mf-tile").find((t) => t.getAttribute("data-id") === id) || null;
+  const A = tileOf("a"), Bt = tileOf("b");
+  assert.match(A.textContent, /cam starting…/, "a first start says 'cam starting…'");
+  assert.match(Bt.textContent, /cam starting…/);
+  await tick();
+  const tickets = () => posts.filter((p) => /\/micfollow\/watch$/.test(p[0]) && !p[1].beat && !p[1].stop).length;
+  const n0 = tickets();
+  ctx.document.hidden = true; vis();
+  assert.ok(posts.some((p) => /\/micfollow\/watch$/.test(p[0]) && p[1].stop === true), "hidden 30 s: the live tile's session closes (as before)");
+  ctx.document.hidden = false; vis();
+  assert.match(A.textContent, /resuming…/, "back: the live tile says 'resuming…'");
+  assert.doesNotMatch(A.textContent, /cam starting/);
+  assert.match(Bt.textContent, /resuming…/, "...and so does the still");
+  await tick();
+  assert.equal(tickets(), n0 + 1, "it watches again with a fresh ticket (as before)");
+  // a tile that comes on the stage now (not a resume) still says "cam starting…"
+  ctl.update({ v: 2, layout: "grid4", count: 3, src: [s("a", 0, "live"), s("b", 1, "still"), s("c", 2, "live")], manage: null, still_s: 20 });
+  assert.match(tileOf("c").textContent, /cam starting…/, "a new tile: 'cam starting…'");
+  ctl.stop();
 });

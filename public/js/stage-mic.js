@@ -8,7 +8,8 @@
 // still (a snapshot every few seconds, "📷 still") or a name card with the reason (cam off, starting, live cams full,
 // members only, not available). Each live tile asks POST /api/rooms/<slug>/micfollow/watch for a ticket of its own, plays
 // it with PATVRtc.watch (muted: the room's sound is the 🔊 room audio) and beats every 15 s; a tile that leaves closes its
-// session. After 30 s in a hidden tab every session closes and stills stop polling; they come back when the tab does. The player box keeps its
+// session. After 30 s in a hidden tab every session closes and stills stop polling; they come back when the tab does (1.99??: their
+// card says "resuming…" meanwhile, not "cam starting…" - the cam never stopped, only this tab's player did). The player box keeps its
 // 16:9 size whatever the layout, so the page never moves. Owners / staff (program.manage) get a bar ABOVE the tiles (it
 // never covers one): ⋯ Manage (❄ freeze, the layout for this session, ✕ to keep someone off the mic stage 1 h / 24 h /
 // always) and 🧹 Clear the stage (everyone off now, frozen). Signed-in viewers get ⚑ on each tile (on narrow grids, in a
@@ -264,9 +265,14 @@
         clearTimeout(t.retry); t.retry = null;
         if (!forGood) t.retry = setTimeout(function () { t.retry = null; if (!stopped && tiles[t.id] === t) apply(t.s); }, RETRY_MS + 50);
       }
+      /** 1.99??: the first card of a start - "resuming…" when the tile comes back from a hidden tab's pause (t.resume) */
+      function startText() {
+        var back = t.resuming; t.resuming = false;
+        return back ? _t('js.stage.mf.resuming', 'resuming…') : _t('js.stage.mf.starting', 'cam starting…');
+      }
       function startLive() {
         var my = ++t.gen;
-        showCard(_t('js.stage.mf.starting', 'cam starting…'));
+        showCard(startText());
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { failed(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), true); return; }
         post(base + '/watch', wb({})).then(function (d) {
           if (my !== t.gen) return;
@@ -318,7 +324,7 @@
       }
       function startStill() {
         stopStill();
-        showCard(_t('js.stage.mf.starting', 'cam starting…'));
+        showCard(startText());
         var waits = 0, gen = t.gen;
         var load = function () {
           getJson(base + '/still/' + encodeURIComponent(t.id)).then(function (d) {
@@ -441,7 +447,7 @@
         if (t.mode === 'live') { stopLive(true); t.mode = 'paused'; }
         else if (t.mode === 'still') { stopStill(); t.mode = 'paused'; }
       };
-      t.resume = function () { if (t.mode === 'paused') { t.mode = null; apply(t.s); } };
+      t.resume = function () { if (t.mode === 'paused') { t.mode = null; t.resuming = true; apply(t.s); t.resuming = false; } };
       apply(s);
       return t;
     }

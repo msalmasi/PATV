@@ -4568,6 +4568,7 @@
   "js.stage.mf.group_aria_pins": "Pinned on the stage: {n}",
   "js.stage.mf.starting": "cam starting…",
   "js.stage.mf.reconnecting": "reconnecting…",
+  "js.stage.mf.resuming": "resuming…",
   "js.stage.mf.cam_off": "cam off",
   "js.stage.mf.full": "live cams are full right now",
   "js.stage.mf.members_only": "only for members",
