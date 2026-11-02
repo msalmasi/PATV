@@ -18,7 +18,7 @@
     cap_ms: 'Maximum video delay (ms)', cap_ind_ms: 'Maximum mic-sign delay (ms)', deadband_ms: 'Ignore changes smaller than (ms)',
     period_s: 'Recompute every (s)', mods_instant: 'Show the moderation mic panel instantly for room moderators'
   };
-  // 1.99ahm: what each mic switch holds back (all three by the same mic-sign delay, so they line up with each other)
+  // 1.99ahm: what each mic switch holds back (all four by the same mic-sign delay, so they line up with each other)
   var helps = {
     apply_mic: _t('js.admavsync.apply_mic_help', 'The mic stage’s tiles: a new speaker’s tile, the ring and newest highlights, who is speaking and the layout.'),
     apply_mic_card: _t('js.admavsync.apply_mic_card_help', 'The On the mic card beside the chat: people joining or leaving it and its order. Same delay as the mic signs.'),
