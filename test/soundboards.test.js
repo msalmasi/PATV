@@ -40,7 +40,7 @@ async function mkUser(name, o = {}) {
   users.set(id, x);
   return x;
 }
-// 1.99?? review: someone who BOUGHT October's 🎃 board in October (a linked Camfrog login) - the October make-good keeps its clips
+// 1.99ahe review: someone who BOUGHT October's 🎃 board in October (a linked Camfrog login) - the October make-good keeps its clips
 // in Pepe's sync for good (board kept:2026-10), so a season test's "October's clips are gone" holds only for its season board
 async function octBuyer(name) {
   const u = await mkUser(name);
@@ -269,7 +269,7 @@ test("🍂 Fireside Season (2026-11): the board through November - Pepe's sync, 
   // the Season Pass note names the season board only while there is one
   let spPage = await call("GET", "/soundboards", U.spfan);
   assert.match(spPage.text, /Your 🎟️ Season Pass: the season board is unlimited/);
-  // ...and between seasons (Winter Lights holds December since 1.99??; mid-January 2027 is the next gap), no season board anywhere
+  // ...and between seasons (Winter Lights holds December since 1.99ahe; mid-January 2027 is the next gap), no season board anywhere
   SB._setClock(() => Date.parse("2027-01-15T12:00:00Z"));
   if (!SB.seasonNow()) {
     assert.equal((await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d.season, null);
@@ -396,7 +396,7 @@ test("🍂 -> ❄️ midnight UTC on Dec 1 (pinned clock): Fireside off, Winter 
 // was typed, then the first that contains it - and the season board comes before the global board and the packs. In November
 // "!sb go" played Gobble gobble instead of Gong. This port of his matcher (keep it in step with the bot's: december_test.py runs
 // the real one over this catalogue) checks that the December clips take nothing any other clip answered to.
-// SB_ORDER = the bot's _sb_pool order (1.99?? review: "kept" - a buyer's kept past season - comes after the season, before global).
+// SB_ORDER = the bot's _sb_pool order (1.99ahe review: "kept" - a buyer's kept past season - comes after the season, before global).
 const SB_ORDER = Object.freeze({ room: 0, legend: 1, season: 2, kept: 3, global: 4, pack: 5 });
 function sbPool(clipsByKind) {
   const out = [];
@@ -431,7 +431,7 @@ test("❄️ Winter Lights clips shadow no other clip's short !sb prefix (the No
     for (const w of lab.split(" ")) if (w.length >= 3) qs.add(w);
     return [...qs].filter((q) => q.length >= 2);
   };
-  // with or without a buyer's kept past board in the pool (1.99?? KEPT_SEASONS: the only way a past season plays again - as board
+  // with or without a buyer's kept past board in the pool (1.99ahe KEPT_SEASONS: the only way a past season plays again - as board
   // "kept:<id>", ordered after the season), December changes nothing
   const keptClips = SB.KEPT_SEASONS.flatMap((id) => C.bySeason[id].clips);
   assert.ok(keptClips.length, "the kept seasons are in the catalogue");
@@ -467,7 +467,7 @@ test("❄️ Winter Lights clips shadow no other clip's short !sb prefix (the No
   for (const c of wl) assert.ok(!SUBS.includes(c.label.toLowerCase().split(" ")[0]), c.label);
 });
 
-// 1.99?? review: the port above orders every board kind Pepe's sync sends (a kept past season is "kept:<id>"), in the bot's order
+// 1.99ahe review: the port above orders every board kind Pepe's sync sends (a kept past season is "kept:<id>"), in the bot's order
 test("Pepe's matcher port: every board kind the sync sends has a place, in the bot's _sb_pool order (PEPE_BOT_DIR)", async (t) => {
   t.after(() => SB._setClock(null));
   await octBuyer("kport");
@@ -798,7 +798,7 @@ test("drawer consumes existing relay snapshots for waiting, playback and failure
   assert.equal(calls.length, 2, "no separate status polling channel");
 });
 
-test("1.99?? October make-good: whoever BOUGHT the 🎃 Spooky Season board keeps its clips after 1 Nov (drawer + Pepe's sync); nobody else does", async (t) => {
+test("1.99ahe October make-good: whoever BOUGHT the 🎃 Spooky Season board keeps its clips after 1 Nov (drawer + Pepe's sync); nobody else does", async (t) => {
   assert.deepEqual([...SB.KEPT_SEASONS], ["2026-10"], "only October's store copy promised a board that outlives its season");
   const kbuy = await mkUser("kbuy"), kcomp = await mkUser("kcomp"), kpass = await mkUser("kpass"), knone = await mkUser("knone");
   const late = await mkUser("klate");

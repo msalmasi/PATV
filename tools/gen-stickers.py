@@ -1520,7 +1520,7 @@ def main():
         if not [a for a in args if a in PACKS]:
             return
     only = [a for a in args if a in PACKS]               # 1.99qp: python tools/gen-stickers.py spooky primeplus (just those)
-    if "--check" in args:                                # 1.99??: compare, write nothing (exit 1 on a difference)
+    if "--check" in args:                                # 1.99ahe: compare, write nothing (exit 1 on a difference)
         if not packs_check(only):
             sys.exit(1)
         return

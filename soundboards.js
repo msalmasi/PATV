@@ -9,7 +9,7 @@
 //   global          voice lines + 🎛️ sound effects (soundboards.json), everyone may play them per use (rarity price); free with All-Access
 //   pack:<id>       8 clips each; the pack's owners play them free, anyone else per use (rarity price)
 //   season:<id>     12 clips, the current season only; free with a 🎟️ Season Pass (or the season board bought), else 2,500
-//                   1.99?? make-good: a season in KEPT_SEASONS stays playable for the people who BOUGHT its board, free and for good
+//                   1.99ahe make-good: a season in KEPT_SEASONS stays playable for the people who BOUGHT its board, free and for good
 //                   (the drawer's own tab, Pepe's board "kept:<id>") - see KEPT_SEASONS
 //   legend          single-clip cosmetics, own-only (Gawk gawk gawk 20,000,000 - a random free voice every play; Founder
 //                   10,000,000, numbered 1-25)
@@ -133,7 +133,7 @@ function loadCatalog(file = CATALOG_FILE) {
 loadCatalog();
 const seasonNow = (t = now()) => CAT.seasons.find((s) => t >= s.from && t < s.to) || null;
 const periodKey = (t = now()) => new Date(t).toISOString().slice(0, 7);
-// 1.99?? (owner decision 2026-11-02): until 1.99agq the store said a season board "stays playable" after its season, yet every
+// 1.99ahe (owner decision 2026-11-02): until 1.99agq the store said a season board "stays playable" after its season, yet every
 // path dropped past seasons on 1 November. The people who BOUGHT the board of a season listed here keep its clips, free and for
 // good: the 🔊 drawer shows them a tab of their own and Pepe's sync carries the clips as board "kept:<id>" with item "kept:<id>"
 // on those buyers only (a Pepe without kept support skips both). The entitlement IS the purchase row: sb_owned item "season:<id>",
@@ -502,7 +502,7 @@ async function botState() {
                               WHERE u.camfrogUsername IS NOT NULL AND u.camfrogUsername != ''`);
   const owned = {};
   for (const r of own) (owned[low(r.cf)] = owned[low(r.cf)] || []).push(r.item);
-  // 1.99?? KEPT_SEASONS: a kept season that's over rides as board "kept:<id>", and its buyers get item "kept:<id>" - only while
+  // 1.99ahe KEPT_SEASONS: a kept season that's over rides as board "kept:<id>", and its buyers get item "kept:<id>" - only while
   // someone linked is entitled (nobody: nothing extra on the wire)
   const kept = {};
   for (const r of own) { const k = keptItem(r); if (k) { owned[low(r.cf)].push(k); kept[k] = true; } }
@@ -566,7 +566,7 @@ async function roomBoard(user, roomId) {
   add("room", "Room", "🏠", roomId ? await boardClips("room:" + roomId) : []);
   add("global", CAT.global.name, CAT.global.emoji, await boardClips("global"));
   if (season) add("season", season.name, season.emoji, await boardClips("season:" + season.id));
-  // 1.99?? KEPT_SEASONS: a past season whose board this viewer bought - theirs, unlimited, for good (nobody else sees it)
+  // 1.99ahe KEPT_SEASONS: a past season whose board this viewer bought - theirs, unlimited, for good (nobody else sees it)
   const keptMine = user && user.userId ? await keptFor(user.userId) : new Set();
   for (const se of keptOver()) {
     if (!keptMine.has("kept:" + se.id)) continue;
