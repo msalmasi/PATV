@@ -9,6 +9,8 @@
 //   global          voice lines + 🎛️ sound effects (soundboards.json), everyone may play them per use (rarity price); free with All-Access
 //   pack:<id>       8 clips each; the pack's owners play them free, anyone else per use (rarity price)
 //   season:<id>     12 clips, the current season only; free with a 🎟️ Season Pass (or the season board bought), else 2,500
+//                   1.99?? make-good: a season in KEPT_SEASONS stays playable for the people who BOUGHT its board, free and for good
+//                   (the drawer's own tab, Pepe's board "kept:<id>") - see KEPT_SEASONS
 //   legend          single-clip cosmetics, own-only (Gawk gawk gawk 20,000,000 - a random free voice every play; Founder
 //                   10,000,000, numbered 1-25)
 //   room:<room id>  a pad's own board: Prime Time 8 slots, Prime Time Plus 24 (premium.padPerks().soundboardSlots), clips
@@ -125,6 +127,30 @@ function loadCatalog(file = CATALOG_FILE) {
 loadCatalog();
 const seasonNow = (t = now()) => CAT.seasons.find((s) => t >= s.from && t < s.to) || null;
 const periodKey = (t = now()) => new Date(t).toISOString().slice(0, 7);
+// 1.99?? (owner decision 2026-11-02): until 1.99agq the store said a season board "stays playable" after its season, yet every
+// path dropped past seasons on 1 November. The people who BOUGHT the board of a season listed here keep its clips, free and for
+// good: the 🔊 drawer shows them a tab of their own and Pepe's sync carries the clips as board "kept:<id>" with item "kept:<id>"
+// on those buyers only (a Pepe without kept support skips both). The entitlement IS the purchase row: sb_owned item "season:<id>",
+// source 'buy', bought before the season ended (no later one is possible: itemOf / grantComp sell the current season only). NOT a
+// comp, NOT the Season Pass, nobody else - and no refund. Only a season whose store copy made that promise belongs here: the
+// copy changed with 1.99agq ("The board leaves when its season ends"), before 🍂 Fireside went on sale, so later seasons don't.
+const KEPT_SEASONS = Object.freeze(["2026-10"]);
+/** The KEPT_SEASONS that are over (their own catalogue entries) - only then does a buyer need the kept path. */
+const keptOver = (t = now()) => KEPT_SEASONS.map((id) => CAT.bySeason[id]).filter((se) => se && t >= se.to);
+/** One sb_owned row -> "kept:<season id>" when it is a qualifying purchase of a kept season's board, else null. */
+function keptItem(r) {
+  if (!r || r.source !== "buy" || !String(r.item || "").startsWith("season:")) return null;
+  const id = String(r.item).slice(7), se = CAT.bySeason[id];
+  return se && KEPT_SEASONS.includes(id) && Number(r.created) < se.to ? "kept:" + id : null;
+}
+/** userId -> Set of "kept:<id>" they're entitled to (bought the board of a kept season before it ended). */
+async function keptFor(userId) {
+  await init();
+  if (!userId || !KEPT_SEASONS.length) return new Set();
+  const rows = await getQuery(`SELECT item, source, created FROM sb_owned WHERE user_id = ? AND source = 'buy' AND item IN (${KEPT_SEASONS.map(() => "?").join(",")})`,
+                              [userId, ...KEPT_SEASONS.map((id) => "season:" + id)]);
+  return new Set(rows.map(keptItem).filter(Boolean));
+}
 
 // ── storage ──
 let CONFIG = Object.assign({}, DEFAULTS);
@@ -457,20 +483,27 @@ async function botState() {
                         AND IFNULL(note, '') != src AND updated < ?`, [now(), now() - 3600e3]);
   const rows = await getQuery("SELECT * FROM sb_clips WHERE status IN ('active','render') ORDER BY board, sort, created");
   const season = seasonNow();
-  const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id)))
+  const own = await getQuery(`SELECT o.item, o.source, o.created, u.camfrogUsername AS cf FROM sb_owned o JOIN users u ON u.userId = o.user_id
+                              WHERE u.camfrogUsername IS NOT NULL AND u.camfrogUsername != ''`);
+  const owned = {};
+  for (const r of own) (owned[low(r.cf)] = owned[low(r.cf)] || []).push(r.item);
+  // 1.99?? KEPT_SEASONS: a kept season that's over rides as board "kept:<id>", and its buyers get item "kept:<id>" - only while
+  // someone linked is entitled (nobody: nothing extra on the wire)
+  const kept = {};
+  for (const r of own) { const k = keptItem(r); if (k) { owned[low(r.cf)].push(k); kept[k] = true; } }
+  const keptNow = keptOver().filter((se) => kept["kept:" + se.id]);
+  const keptBoard = {};
+  for (const se of keptNow) keptBoard["season:" + se.id] = "kept:" + se.id;
+  const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id) || keptBoard[c.board]))
     // 1.99ww: every clip carries its line - Pepe posts it in the room as the clip plays (his TTS caption switch); a mic clip's
     // line is the transcript Pepe stored with it (or none); a sound effect is shown by its label (pub().group)
-    .map((c) => Object.assign(pub(c), { text: c.text || undefined, voice_owner: null, sha: c.sha || null }));
+    .map((c) => Object.assign(pub(c), { text: c.text || undefined, voice_owner: null, sha: c.sha || null }, keptBoard[c.board] ? { board: keptBoard[c.board] } : {}));
   // the owners of cloned voices (their cut) and who may not be on a soundboard any more
   try {
     const VS = require("./voicestore");
     const owners = await VS.ownerMap();
     for (const c of clips) if (c.voice && owners[low(c.voice)]) c.voice_owner = owners[low(c.voice)];
   } catch (e) { /* no voice store yet */ }
-  const own = await getQuery(`SELECT o.item, u.camfrogUsername AS cf FROM sb_owned o JOIN users u ON u.userId = o.user_id
-                              WHERE u.camfrogUsername IS NOT NULL AND u.camfrogUsername != ''`);
-  const owned = {};
-  for (const r of own) (owned[low(r.cf)] = owned[low(r.cf)] || []).push(r.item);
   let sp = [];
   try { sp = await P().passCamfrogs(); } catch (e) { sp = []; }
   const optouts = await L().optoutMap().catch(() => ({}));
@@ -489,7 +522,8 @@ async function botState() {
     .map((c) => ({ id: c.id, kind: String(c.src || "").startsWith("file:") ? "audio" : c.kind, voice: c.voice, text: c.text,
                    src: c.src ? `/api/soundboards/bot/src/${c.id}` + (String(c.src).startsWith("file:") ? `?v=${String(c.src).split("#")[1] || ""}` : "") : null,
                    trim_start: c.trim_start, trim_end: c.trim_end, cap: capFor(c) }));
-  return { on: CONFIG.enabled, cfg: CONFIG, season: season ? { id: season.id, name: season.name, emoji: season.emoji } : null, clips, owned, sp, sb_optouts: sbOut, render };
+  return { on: CONFIG.enabled, cfg: CONFIG, season: season ? { id: season.id, name: season.name, emoji: season.emoji } : null, clips, owned, sp, sb_optouts: sbOut, render,
+           kept_seasons: keptNow.map((se) => ({ id: "kept:" + se.id, name: se.name, emoji: se.emoji })) };
 }
 async function notePlays(list) {
   for (const p of (Array.isArray(list) ? list : []).slice(0, 500)) {
@@ -512,6 +546,13 @@ async function roomBoard(user, roomId) {
   add("room", "Room", "🏠", roomId ? await boardClips("room:" + roomId) : []);
   add("global", CAT.global.name, CAT.global.emoji, await boardClips("global"));
   if (season) add("season", season.name, season.emoji, await boardClips("season:" + season.id));
+  // 1.99?? KEPT_SEASONS: a past season whose board this viewer bought - theirs, unlimited, for good (nobody else sees it)
+  const keptMine = user && user.userId ? await keptFor(user.userId) : new Set();
+  for (const se of keptOver()) {
+    if (!keptMine.has("kept:" + se.id)) continue;
+    const rows = await boardClips("season:" + se.id);
+    if (rows.length) tabs.push({ key: "kept:" + se.id, name: se.name, emoji: se.emoji, kept: true, clips: rows.map((c) => Object.assign(pub(c), { free: true })) });
+  }
   const mine = [];
   for (const p of CAT.packs) if (!p.retired) mine.push(...(await boardClips("pack:" + p.id)));
   add("packs", "Packs", "🎁", mine);
@@ -903,7 +944,7 @@ async function adminState() {
 
 module.exports = {
   init, config, setConfig, loadCatalog, seasonNow, botState, notePlays, roomBoard, addRoomClip, removeClip, storeAudio, buy, grantComp, allowance, ownedItems,
-  report, removeMe, priceOf, clipStatus: clip, freeFor, textRefusal, wavSecs, register, Refuse, RARITIES, ROOM_SECS,
+  report, removeMe, priceOf, clipStatus: clip, freeFor, textRefusal, wavSecs, register, Refuse, RARITIES, ROOM_SECS, KEPT_SEASONS, keptFor,
   get CAT() { return CAT; }, get DIR() { return DIR; }, get AUDIO_SRC() { return AUDIO_SRC; }, fileSrc, healLive,
   _setAudioSrc: (d) => { AUDIO_SRC = path.resolve(d); },
   _seed: () => seedCatalog(),

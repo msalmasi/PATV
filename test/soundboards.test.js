@@ -530,3 +530,61 @@ test("drawer consumes existing relay snapshots for waiting, playback and failure
   assert.match(status.className, /bad/);
   assert.equal(calls.length, 2, "no separate status polling channel");
 });
+
+test("1.99?? October make-good: whoever BOUGHT the 🎃 Spooky Season board keeps its clips after 1 Nov (drawer + Pepe's sync); nobody else does", async (t) => {
+  assert.deepEqual([...SB.KEPT_SEASONS], ["2026-10"], "only October's store copy promised a board that outlives its season");
+  const kbuy = await mkUser("kbuy"), kcomp = await mkUser("kcomp"), kpass = await mkUser("kpass"), knone = await mkUser("knone");
+  const late = await mkUser("klate");
+  PASS.add(kpass.userId);
+  const oct = SB.CAT.bySeason["2026-10"];
+  assert.deepEqual([oct.name, oct.emoji, oct.clips.length], ["Spooky Season", "🎃", 12]);
+  for (const c of oct.clips) await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: c.id, data: wav(2).toString("base64") });
+  // October: kbuy buys the board (600,000), kcomp is comped it, kpass has the Season Pass
+  SB._setClock(() => Date.parse("2026-10-15T12:00:00Z"));
+  t.after(() => SB._setClock(null));
+  const b0 = await bal(kbuy);
+  let r = await call("POST", "/api/soundboards/buy", kbuy, { item: "season:2026-10", ref: ref() });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(await bal(kbuy), b0 - 600000, "the board was 600,000 PAT");
+  assert.equal((await SB.grantComp(kcomp.userId, "season:2026-10", "boss")).already, false);
+  let sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  assert.ok(sync.clips.filter((c) => /^s2610-/.test(c.id)).every((c) => c.board === "season:2026-10"), "in season: the ordinary season board");
+  assert.deepEqual(sync.kept_seasons, [], "nothing kept while the season is on");
+  // a row dated after the season's end can't exist through the store; one forced in by hand never qualifies
+  await runQuery("INSERT INTO sb_owned (user_id, item, source, payer_id, price, ref, created) VALUES (?, 'season:2026-10', 'buy', ?, 600000, 'k-late', ?)",
+                 [late.userId, late.userId, Date.parse("2026-11-02T00:00:00Z")]);
+
+  // November (and for good): only kbuy
+  for (const when of ["2026-11-15T12:00:00Z", "2027-06-01T12:00:00Z"]) {
+    SB._setClock(() => Date.parse(when));
+    const tabsOf = async (u) => (await call("GET", "/api/rooms/sb-room/soundboard", u)).d.tabs;
+    const mine = (await tabsOf(kbuy)).find((x) => x.key === "kept:2026-10");
+    assert.ok(mine, when + ": the buyer's drawer has the October tab");
+    assert.deepEqual([mine.name, mine.emoji, mine.clips.length], ["Spooky Season", "🎃", 12]);
+    assert.ok(mine.clips.every((c) => c.free && /^s2610-/.test(c.id)), "yours, unlimited");
+    for (const u of [knone, kcomp, kpass, late, U.admin]) {
+      assert.ok(!(await tabsOf(u)).some((x) => String(x.key).startsWith("kept:") || x.clips.some((c) => /^s2610-/.test(c.id))),
+                `${when}: no October clips for ${u.username}`);
+    }
+    assert.equal((await call("POST", "/api/soundboards/buy", knone, { item: "season:2026-10", ref: ref() })).status, 404, "October's board isn't sold again");
+    sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+    const k = sync.clips.filter((c) => /^s2610-/.test(c.id));
+    assert.equal(k.length, 12, when + ": Pepe gets October's clips");
+    assert.ok(k.every((c) => c.board === "kept:2026-10" && c.status === "active" && c.audio), "...as board kept:2026-10 (a Pepe without kept support skips it)");
+    assert.ok(!sync.clips.some((c) => c.board === "season:2026-10"), "never as an ordinary season board");
+    assert.deepEqual(sync.kept_seasons, [{ id: "kept:2026-10", name: "Spooky Season", emoji: "🎃" }]);
+    assert.ok(sync.owned.kbuycf.includes("kept:2026-10"), "the buyer carries kept:2026-10");
+    for (const n of ["kcompcf", "kpasscf", "knonecf", "klatecf", "bosscf"]) assert.ok(!(sync.owned[n] || []).includes("kept:2026-10"), "not " + n);
+    assert.ok(sync.sp.includes("kpasscf"), "the pass holder is still a pass holder");
+    assert.deepEqual([...(await SB.keptFor(kbuy.userId))], ["kept:2026-10"]);
+    assert.equal((await SB.keptFor(kcomp.userId)).size + (await SB.keptFor(late.userId)).size + (await SB.keptFor(kpass.userId)).size, 0);
+  }
+  // Season Pass holders: unchanged - the current season free, October not at all
+  SB._setClock(() => Date.parse("2026-11-15T12:00:00Z"));
+  const pt = (await call("GET", "/api/rooms/sb-room/soundboard", kpass)).d.tabs;
+  assert.ok(pt.find((x) => x.key === "season").clips.every((c) => c.free && /^s2611-/.test(c.id)), "the pass: Fireside unlimited, as before");
+  const bt = (await call("GET", "/api/rooms/sb-room/soundboard", kbuy)).d.tabs;
+  assert.ok(bt.find((x) => x.key === "season").clips.every((c) => !c.free), "October's board doesn't make Fireside free");
+  // no refund: the buyer's balance didn't move after the purchase
+  assert.equal(await bal(kbuy), b0 - 600000, "no PAT refund");
+});
