@@ -1316,3 +1316,81 @@ test("review fix 3 (FID-3): a cover picture that failed to load on the page is t
   assert.equal(r2[0].on, false, "cleared when the tile left");
   ctl.stop();
 });
+
+// ── 1.99?? landed on 1.99ahn (dead relay) + 1.99ahp (stable slots): the cover is on every card a named tile shows, in its place's cell ──
+/** stage-mic.js on this file's fake DOM + class lookups (the grid's fillers), a hidden-tab switch (the 30 s pause runs at once), live
+ *  tiles that play and stills that load. -> {ctx, host, ctl, grid, hide(), show()} */
+function landSandbox(program) {
+  const dom = fakeDom();
+  const mk = (tag) => {
+    const e = dom.mk(tag);
+    e.querySelectorAll = function (sel) {
+      const cls = String(sel).replace(/^\./, ""), out = [];
+      const walk = (n) => { for (const c of n.children) { if ((" " + c.className + " ").includes(" " + cls + " ")) out.push(c); walk(c); } };
+      walk(this);
+      return out;
+    };
+    e.querySelector = function (sel) { return this.querySelectorAll(sel)[0] || null; };
+    return e;
+  };
+  let vis = null;
+  const ctx = { document: { createElement: mk, hidden: false, addEventListener(k, fn) { if (k === "visibilitychange") vis = fn; }, removeEventListener() {} },
+    console, clearTimeout, setTimeout: (fn, ms) => (ms === 30000 ? (fn(), 0) : setTimeout(fn, ms)), setInterval: () => 0, clearInterval() {},
+    fetch: (u) => Promise.resolve({ json: () => Promise.resolve(/\/still\//.test(u) ? { ok: true, state: "ok", img: "data:image/jpeg;base64,AAAA" } : { ok: true, whep: "https://x/whep?pt=1", state: "pending" }) }),
+    PATVRtc: { watch: () => Promise.resolve({ close() {} }) }, RTCPeerConnection: function () {}, Date };
+  ctx.window = ctx; ctx.window.addEventListener = () => {}; ctx.window.removeEventListener = () => {};
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "stage-mic.js"), "utf8"), ctx);
+  const host = mk("div");
+  const ctl = ctx.PATVStageMic.render(host, program, { slug: "pad" });
+  return { ctx, host, ctl, grid: host.children[0].children[0], hide() { ctx.document.hidden = true; vis(); }, show() { ctx.document.hidden = false; vis(); } };
+}
+
+test("1.99?? landed on 1.99ahn + 1.99ahp (stage-mic.js v10): a stable program puts each cover card in its PLACE's cell (an empty place stays an empty cell, a newcomer fills its cell, no node moves); the dead relay's cards - 'resuming…' back from a hidden tab and relay_lost's soft retry - show the cover like every card state; the hood never does", async () => {
+  const gtfA = "/media/cover/a/1111.0123456789abcdef0123.svg", upC = "/media/cover/u/" + "c".repeat(32) + ".webp", phD = "/media/cover/p/" + "d".repeat(32) + ".webp";
+  const FROG = { kind: "cover", id: "anon-0011aabb", name: "Soggy Bullfrog", hood: 2, veil: "incognito", pos: 3, video: "cover", watch: "cover", avatar: gtfA, ck: "gtf" };
+  const prog = (src, v) => ({ v, layout: "grid4", count: src.length, src, still_s: 20, stable: true });
+  const ann = (extra) => camS("ann", Object.assign({ pos: 0, video: "live", avatar: gtfA, ck: "gtf" }, extra || {}));
+  const cy = (extra) => camS("cy", Object.assign({ pos: 2, newest: false, video: "still", avatar: upC, ck: "upload" }, extra || {}));
+  const S = landSandbox(prog([ann(), cy(), FROG], 1));
+  const T = (id) => tileOf(S.host, id);
+  const why = (id) => cardOf(T(id)).children[1].textContent;
+  const shows = (id, url, k) => {
+    const card = cardOf(T(id)), img = imgOf(card);
+    assert.equal(card.hidden, false, id + ": a card");
+    assert.ok(card.classList.contains("cov") && card.classList.contains("cv-" + k), id + ": " + card.className);
+    assert.equal(img.getAttribute("src"), url, id); assert.equal(img.hidden, false, id);
+  };
+  // the places: ann 0, cy 2 (second row, first column), the frog 3; place 1 is an empty cell
+  assert.deepEqual(["ann", "cy", "anon-0011aabb"].map((id) => T(id).style.gridArea), ["1 / 1 / span 1 / span 1", "2 / 1 / span 1 / span 1", "2 / 2 / span 1 / span 1"]);
+  assert.equal(S.grid.children.filter((c) => c.className === "mf-empty").length, 1, "place 1: an empty cell");
+  // starting: each named card shows its cover over "cam starting…"; the frog shows the hood, never a stage cover
+  shows("ann", gtfA, "gtf"); shows("cy", upC, "upload");
+  assert.equal(why("ann"), "cam starting…"); assert.equal(why("cy"), "cam starting…");
+  const frogCard = cardOf(T("anon-0011aabb"));
+  assert.equal(imgOf(frogCard).getAttribute("src"), null); assert.ok(!frogCard.classList.contains("cov"));
+  const imgA = imgOf(cardOf(T("ann"))), imgC = imgOf(cardOf(T("cy"))), nodes = [T("ann"), T("cy"), T("anon-0011aabb")];
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(cardOf(T("ann")).hidden, true, "ann's live picture plays (the card is down)");
+  assert.equal(cardOf(T("cy")).hidden, true, "cy's still shows");
+  // 1.99ahn: 30 s in a hidden tab, then back - "resuming…" on both, each over its own cover
+  S.hide(); S.show();
+  assert.equal(why("ann"), "resuming…"); assert.equal(why("cy"), "resuming…");
+  shows("ann", gtfA, "gtf"); shows("cy", upC, "upload");
+  assert.equal(cardOf(T("ann")).children[1].getAttribute("title"), "resuming…", "the reason under the picture keeps its title");
+  await new Promise((r) => setTimeout(r, 10));
+  // 1.99ahn: ann's relay is lost (relay_lost - soft: the program says card / retry): her cover over "trying their cam again…"
+  S.ctl.update(prog([ann({ video: "card", why: "retry" }), cy(), FROG], 2));
+  assert.equal(why("ann"), "trying their cam again in a moment…");
+  assert.equal(T("ann").getAttribute("data-why"), "retry");
+  shows("ann", gtfA, "gtf");
+  // 1.99ahp: dee comes on in the empty place 1 - her cell, her own cover (the proxied photo); nobody else's node or cell changes
+  S.ctl.update(prog([ann({ video: "card", why: "retry" }), camS("dee", { pos: 1, newest: true, video: "card", why: "off_cam", avatar: phD, ck: "photo" }), cy(), FROG], 3));
+  assert.equal(T("dee").style.gridArea, "1 / 2 / span 1 / span 1");
+  assert.equal(S.grid.children.filter((c) => c.className === "mf-empty").length, 0);
+  shows("dee", phD, "photo");
+  assert.deepEqual([T("ann"), T("cy"), T("anon-0011aabb")], nodes, "the same nodes");
+  assert.deepEqual(["ann", "cy", "anon-0011aabb"].map((id) => T(id).style.gridArea), ["1 / 1 / span 1 / span 1", "2 / 1 / span 1 / span 1", "2 / 2 / span 1 / span 1"]);
+  // through every state, each picture was set once (a cover URL never changes: it is never fetched again)
+  assert.equal(imgA._srcSets, 1, "ann's cover set once"); assert.equal(imgC._srcSets, 1, "cy's cover set once");
+  S.ctl.stop();
+});

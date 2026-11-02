@@ -648,3 +648,72 @@ test("S12. review fix V2/B2: the single layout with a 📌 pin (picture in pictu
   assert.deepEqual(off.map((x) => x.big), ["alice", "carl", "alice", "carl", "alice", "bob", "carl", "bob", "carl", "bob"], "knob off: the big picture follows the speaker");
   assert.equal(off[0].L.src.length, 2);
 });
+
+// ── 1.99?? stage cover (landed on 1.99ahp): a named card's picture rides its person's PLACE - the viewer's program, the capture's
+// program and the capture's drawing agree; a hooded frog never carries one, and the frog / named place boundary holds with pictures on ──
+test("S13. 1.99?? stage cover x stable slots: each named tile carries ITS person's cover at its place (the viewer's program = the capture's), a capture draws each cover inside its place's cell (the frog's empty place stays dark), a hooded frog never carries one - and the frog's person, back named with his cover, never sits in the frog's place", async () => {
+  const SC = require(path.join(repo, "stagecover")), cap = require(path.join(repo, "stagemiccap")), sharp = require("sharp");
+  const REF = "anon-0a1b2c3d", ANON = { anon: true, display: "someone", ref: REF };
+  const SEEDS = { alice: 1101, carl: 3303, dana: 4404, gus: 7707 };
+  await SC.init();
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  for (const [l, s] of Object.entries(SEEDS)) await runQuery("INSERT OR REPLACE INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES (?, ?, 1)", [l, s]);
+  SC.invalidate();
+  const gtf = (l) => SC.gtfUrl(SEEDS[l], {});
+  const row = (s) => [s.kind === "cover" ? "~frog" : s.id, s.pos, s.avatar || null, s.ck || null];
+  const rows = (p) => p.src.map(row).sort((a, b) => a[1] - b[1]);
+  await reset();
+  await knobs({ dynamic: true, main_hold_s: 3, cold_open: true, stable_slots: true, covers: true });
+  try {
+    await pad({ layout: "grid", max_people: 4, keep_recent: 0 });
+    MF.setVeilSource((u) => (u.anon && u.ref === REF ? { proven: true, sess: "s13", veil: "hidden", login: "gus", display: "Gus" } : null));
+    const P = MF._pads.get(ROOM.id);
+    await talk(["alice"]); await talk(["alice", "carl"]);
+    await at(1, ["alice", "carl", ANON]); await at(3, ["alice", "carl", ANON]); await at(3, ["alice", "carl", ANON]);
+    await talk(["alice", "carl", ANON, "dana"]);
+    // (a) alice, carl, the frog (gus behind it), dana: each named tile its own person's cover at its place; the frog none
+    const page = await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v1", null);
+    assert.equal(page.stable, true);
+    assert.deepEqual(rows(page), [["alice", 0, gtf("alice"), "gtf"], ["carl", 1, gtf("carl"), "gtf"], ["~frog", 2, null, null], ["dana", 3, gtf("dana"), "gtf"]]);
+    let prog = await bridge.stageProgramFor(ROOM.id, "u_v1");
+    assert.deepEqual(rows(prog), rows(page), "the capture's program: the same places, the same covers");
+    for (const x of [page, prog]) assert.ok(!JSON.stringify(x).includes(gtf("gus")) && !JSON.stringify(x).includes("/media/cover/a/" + SEEDS.gus + "."), "the frog's person's cover is nowhere");
+    // (b) the veiled hold ends, nobody new: the frog's place stays an empty cell - nobody shuffles, every cover stays with its person
+    for (let i = 0; i < 10 && P.state.tiles.some((x) => x.cover); i++) await at(4, ["alice", "carl", "dana"]);
+    assert.ok(!P.state.tiles.some((x) => x.cover), "the frog is gone");
+    prog = await bridge.stageProgramFor(ROOM.id, "u_v1");
+    assert.deepEqual(rows(prog), [["alice", 0, gtf("alice"), "gtf"], ["carl", 1, gtf("carl"), "gtf"], ["dana", 3, gtf("dana"), "gtf"]]);
+    // the capture: each card's cover (stagecover.captureImage of the program's URL) is drawn INSIDE its place's cell
+    const tiles = await Promise.all(prog.src.map(async (s) => ({ id: s.id, mode: "card", name: s.name, newest: false, pin: false, source: s, cover: await SC.captureImage(s.avatar) })));
+    for (const t of tiles) assert.ok(t.cover && t.cover.k === "gtf" && Buffer.isBuffer(t.cover.buf), t.id + ": its GTF picture");
+    const RR = { id: ROOM.id, title: "Slots Room" };
+    const raw = async (ts) => sharp(await cap.renderFrame(prog, ts, RR)).raw().toBuffer({ resolveWithObject: true });
+    const a = await raw(tiles), b = await raw(tiles.map((t) => ({ ...t, cover: null })));
+    const rs = cap.rects(prog, 1280, 720 - 32), cell = (id) => rs.find((r) => r.id === id);
+    assert.ok(cell("dana").x > 600 && cell("dana").y > 300, "dana: bottom right (place 3)");
+    const inR = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+    const diff = { alice: 0, carl: 0, dana: 0 };
+    let outside = 0;
+    for (let y = 0; y < a.info.height; y++) {
+      for (let x = 0; x < a.info.width; x++) {
+        const i = (y * a.info.width + x) * a.info.channels;
+        if (a.data[i] === b.data[i] && a.data[i + 1] === b.data[i + 1] && a.data[i + 2] === b.data[i + 2]) continue;
+        const r = rs.find((q) => inR(q, x, y));
+        if (r) diff[r.id]++; else outside++;
+      }
+    }
+    for (const id of ["alice", "carl", "dana"]) assert.ok(diff[id] > 400, id + "'s cover drawn in " + id + "'s cell: " + diff[id] + " px");
+    assert.equal(outside, 0, "no cover pixel outside its own tile's cell");
+    // the frog's empty place (bottom left) is the dark background in the capture
+    const px = (x, y) => { const i = (y * a.info.width + x) * a.info.channels; return [a.data[i], a.data[i + 1], a.data[i + 2]]; };
+    assert.deepEqual(px(Math.round(cell("dana").x / 2), Math.round(cell("dana").y + cell("dana").h / 2)), [16, 21, 29], "the empty cell: dark");
+    // (c) someone new - gus, the frog's person, NAMED: the empty places close up first, he goes after the last one on with his own
+    // cover - never in the frog's place (2), and his cover never went to anyone else's place
+    for (let i = 0; i < 4; i++) await at(4, ["alice", "carl", "dana", "gus"]);
+    const back = await MF.viewFor(MF.snapshot(ROOM.id), R, "u_v1", null);
+    assert.deepEqual(rows(back), [["alice", 0, gtf("alice"), "gtf"], ["carl", 1, gtf("carl"), "gtf"], ["dana", 2, gtf("dana"), "gtf"], ["gus", 3, gtf("gus"), "gtf"]]);
+  } finally {
+    MF.setVeilSource(null); await knobs({ covers: false }); await reset();
+    await runQuery("DELETE FROM cosmetic_avatar_seeds"); SC.invalidate();
+  }
+});
