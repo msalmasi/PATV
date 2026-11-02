@@ -2,6 +2,8 @@
 // then polls /api/gtf/roomwars once a minute: the map redraws with the new data and, when the revision changed, the
 // "the map changed" note offers a reload (the room cards below are server-rendered). Rings = tiers (centre = the busiest
 // rooms); a held room takes its gang's colour. Plain text only (textContent / SVG text nodes) - no HTML from the data.
+// R9 (1.99??): dashed lines between rooms that share regulars (data.links: {a, b, score}), under the room boxes, thicker for
+// a bigger overlap; each line's title names the two rooms and the overlap - never who.
 (function () {
   'use strict';
   var box = document.getElementById('rwMap'), dataEl = document.getElementById('rwData');
@@ -57,8 +59,22 @@
       el('circle', { cx: C, cy: C, r: RING[ring], 'class': 'ring' }, svg);
       text(svg, C, C - RING[ring] - 6, 'ring-l', RL[ring]).style.fontSize = RLS + 'px';
     });
+    var pos = {};
     rooms.forEach(function (r) {
-      var x = Math.min(680 - W / 2 - 2, Math.max(W / 2 + 2, r.xy[0])), y = Math.min(680 - H / 2 - 2, Math.max(H / 2 + 14, r.xy[1]));
+      pos[r.id] = { x: Math.min(680 - W / 2 - 2, Math.max(W / 2 + 2, r.xy[0])), y: Math.min(680 - H / 2 - 2, Math.max(H / 2 + 14, r.xy[1])), name: r.name };
+    });
+    // R9: the shared-regular lines go under the boxes (drawn first), centre to centre
+    var lg = el('g', { 'class': 'links' }, svg);
+    (d && Array.isArray(d.links) ? d.links : []).forEach(function (l) {
+      var p = pos[l && l.a], q = pos[l && l.b], s = Number(l && l.score);
+      if (!p || !q || !(s > 0 && s <= 1)) return;
+      var tip = _t('js.rw.link_title', '{a} and {b} share regulars ({pct}% overlap)', { a: p.name, b: q.name, pct: Math.round(s * 100) });
+      var line = el('line', { x1: p.x, y1: p.y, x2: q.x, y2: q.y, 'class': 'link', role: 'img', 'aria-label': tip,
+                              'stroke-width': ((2 + 6 * Math.min(1, Math.max(0, (s - 0.15) / 0.85))) * (big ? 1.6 : 1)).toFixed(1) }, lg);
+      el('title', {}, line).textContent = tip;
+    });
+    rooms.forEach(function (r) {
+      var x = pos[r.id].x, y = pos[r.id].y;
       var held = r.held, cls = 'node ' + (held ? 'held' : r.state === 'free' ? 'free' : 'dormant') + (r.raid ? ' raid' : '');
       var sub = held ? '[' + (held.tag || '?') + ']' : r.state === 'free' ? _t('js.rw.free_bond', 'free · bond {n}', { n: short(r.bond) }) : _t('js.rw.dormant', 'not contestable');
       var label = held ? _t('js.rw.held_aria', '{room}: held by {tag}', { room: r.name, tag: '[' + (held.tag || '?') + ']' })
@@ -91,7 +107,7 @@
         return { id: r.id, name: r.name, tier: r.tier, xy: r.xy, state: r.state, bond: r.bond, href: r.pad ? r.pad.href : null,
                  held: r.held ? { tag: r.held.tag, color: r.held.color, ink: r.held.ink } : null, raid: !!r.raid, convoy: !!r.convoy };
       });
-      last = { revision: j.revision, rooms: rooms };
+      last = { revision: j.revision, rooms: rooms, links: Array.isArray(j.links) ? j.links : [] };
       draw(last);
       if (note && j.revision && j.revision !== shown) note.hidden = false;
     }).catch(function () { /* the next poll tries again */ });

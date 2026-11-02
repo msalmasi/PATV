@@ -10,8 +10,13 @@
 //                                 replaces the latest copy and the day's history row (one transaction). 503 while the
 //                                 site's feed switch is off. Everything is whitelisted (clean()): gang ids, bonds, perks,
 //                                 tiers, timers and counts - no member, crew, defender or recipient ever gets stored.
+//                                 R9 (1.99??): + links [{a, b, score}] - SHARED-REGULAR LINES between two map rooms whose
+//                                 30-day regulars overlap (Pepe's pepe_roomlinks: Jaccard >= 0.15, >= 3 shared, <= 4 a room,
+//                                 the score in 0.05 steps). Drawn only, never a rule; room ids and a score - never who or how
+//                                 many (cleanLinks keeps nothing else, re-rounds the score and caps the lines a room gets).
 //   GET  /api/gtf/roomwars        the public view: rooms (pad link, tier, I30, bond, upkeep), the holder by gang (tag, name,
-//                                 colour), its bond / perks / timers, live raid / convoys (counts only)
+//                                 colour), its bond / perks / timers, live raid / convoys (counts only), links (R9: between
+//                                 two DRAWN rooms only)
 //   GET  /api/gtf/roomwars/history?days=N   one row per day: who held which room, with what bond
 //   GET  /gtf/roomwars            the live map page (views/roomwars.ejs; public/js/roomwars-map.js draws the map from the JSON);
 //                                 /gtf/turf -> 301 here (pepe.publicaccess.tv/turf redirects here too - poll-site/netlify.toml)
@@ -45,6 +50,9 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 // the numbers "how it works" quotes - Pepe's rw_cfg as he pushes it (pepe_roomwars RW_DEFAULTS until he has)
 const RULES = Object.freeze({ release_h: 72, lock_h: 72, raid_buyin: 20000, hijack_buyin: 5000, convoy_min: 25000, convoy_s: 600, slash: 0.25,
                               hijack_take: 0.2, min_crew: 2, raid_lobby_s: 45, payout_convoy_min: 25000, convoy_hour: 5 });
+// R9: shared-regular lines - a sanity bound on what is stored (Pepe draws at most 4 a room by default; the owner may raise it
+// in chat, so the site keeps a little headroom rather than second-guessing his setting)
+const LINKS_MAX = 60, LINKS_PER_ROOM = 8, LINK_STEPS = 20;
 const STALE_MS = 3 * 3600e3;            // Pepe resends every 30 min; 3 h without word = the page says it may be out of date
 const GUARD_FRESH_MS = 40 * 60e3;       // the disband guard trusts a copy Pepe confirmed within his 30-min resend (+ slack)
 const HISTORY_MAX = 800;
@@ -93,7 +101,30 @@ function cleanCtl(c) {
            neglected: c.neglected === true, exposed_at: ts(c.exposed_at), release_at: ts(c.release_at), wars: int(c.wars, 0, 1e6),
            upkeep_day: DAY_RE.test(String(c.upkeep_day || "")) ? String(c.upkeep_day) : null };
 }
-/** Pepe's push -> {revision, day, built_at, on, map: {rooms}, room_control, convoys, raid, hit, perks, perks_live}; throws Refuse. */
+/**
+ * R9: Pepe's shared-regular lines -> [{a, b, score}] between two rooms of the cleaned map: a < b, the score a finite overlap in
+ * (0, 1] re-rounded to 0.05 steps; a pair once, a room in at most LINKS_PER_ROOM lines. Anything else on a line (a name, a
+ * count) is dropped with it - only these three fields are ever kept.
+ */
+function cleanLinks(src, rooms) {
+  const out = [], seen = new Set(), deg = {};
+  for (const l of (Array.isArray(src) ? src : []).slice(0, LINKS_MAX * 2)) {
+    if (!l || typeof l !== "object" || out.length >= LINKS_MAX) continue;
+    const p = String(l.a == null ? "" : l.a), q = String(l.b == null ? "" : l.b);
+    if (p === q || !RID_RE.test(p) || !RID_RE.test(q) || !Object.prototype.hasOwnProperty.call(rooms, p) || !Object.prototype.hasOwnProperty.call(rooms, q)) continue;
+    const s = typeof l.score === "number" ? Math.round(l.score * LINK_STEPS) / LINK_STEPS : NaN;
+    if (!Number.isFinite(s) || s <= 0 || s > 1) continue;
+    const [a, b] = p < q ? [p, q] : [q, p];
+    const k = a + "\u0000" + b;
+    if (seen.has(k) || (deg[a] || 0) >= LINKS_PER_ROOM || (deg[b] || 0) >= LINKS_PER_ROOM) continue;
+    seen.add(k);
+    deg[a] = (deg[a] || 0) + 1;
+    deg[b] = (deg[b] || 0) + 1;
+    out.push({ a, b, score: s });
+  }
+  return out;
+}
+/** Pepe's push -> {revision, day, built_at, on, map: {rooms}, room_control, convoys, raid, hit, perks, perks_live, links}; throws Refuse. */
 function clean(b) {
   const revision = Number(b && b.revision);
   if (!Number.isSafeInteger(revision) || revision <= 0) throw new Refuse(400, "revision required", "E_REV");
@@ -125,7 +156,7 @@ function clean(b) {
     if (Number.isFinite(n) && n >= 0 && n <= 1e9) rules[k] = n;
   }
   return { revision, day: DAY_RE.test(String(b.day || "")) ? String(b.day) : null, built_at: ts(b.built_at), on: b.on === true,
-           map: { rooms }, room_control, convoys, raid: r, hit: h, perks, perks_live: live, rules };
+           map: { rooms }, room_control, convoys, raid: r, hit: h, perks, perks_live: live, rules, links: cleanLinks(b.links, rooms) };
 }
 
 // ── settings ──
@@ -286,7 +317,7 @@ async function view() {
   const L = await latest();
   const c = await cfg();
   if (!L) return { live: false, cfg: c, rooms: [], all: [], counts: { held: 0, free: 0, dormant: 0 }, convoys: [], raid: null, hit: null, perks: [],
-                   rules: { ...RULES } };
+                   rules: { ...RULES }, links: [] };
   if (viewCache && viewCache.revision === L.revision && viewCache.cfgKey === JSON.stringify(c) && now() - viewCache.at < 15000) {
     return Object.assign({}, viewCache.v, { stale: now() - L.seen > STALE_MS, seen: L.seen });
   }
@@ -325,6 +356,16 @@ async function view() {
   const order = { center: 0, mid: 1, outer: 2 };
   all.sort((a, b) => (order[a.tier] - order[b.tier]) || (b.i30 - a.i30) || a.id.localeCompare(b.id));
   const rooms = all.filter((r) => c.show_dormant || r.state !== "dormant");
+  // R9: shared-regular lines between two DRAWN rooms (a hidden end = no line); each drawn room lists who it shares regulars with
+  const shown = new Map(rooms.map((r) => [r.id, r]));
+  const links = (Array.isArray(st.links) ? st.links : []).filter((l) => l && shown.has(l.a) && shown.has(l.b))
+    .map((l) => ({ a: l.a, b: l.b, score: l.score }));
+  for (const r of all) r.shares = [];
+  for (const l of links) {
+    shown.get(l.a).shares.push({ id: l.b, name: shown.get(l.b).name, score: l.score });
+    shown.get(l.b).shares.push({ id: l.a, name: shown.get(l.a).name, score: l.score });
+  }
+  for (const r of rooms) r.shares.sort((x, y) => (y.score - x.score) || x.name.localeCompare(y.name));
   const v = {
     live: true, on: st.on, revision: L.revision, updated: L.updated, built_at: st.built_at || null, day: st.day, cfg: c,
     rooms, all, counts: { held: all.filter((r) => r.held).length, free: all.filter((r) => r.state === "free").length, dormant: all.filter((r) => r.state === "dormant").length },
@@ -333,6 +374,7 @@ async function view() {
     hit: st.hit ? Object.assign({}, st.hit, { room: (all.find((r) => r.id === st.hit.rid) || {}).name || st.hit.rid }) : null,
     perks: Object.keys(st.perks || {}).map((k) => perkList([k], st)[0]),
     rules: Object.assign({}, RULES, st.rules || {}),
+    links,
   };
   viewCache = { at: now(), revision: L.revision, cfgKey: JSON.stringify(c), v };
   return Object.assign({}, v, { stale: now() - L.seen > STALE_MS, seen: L.seen });
@@ -431,7 +473,8 @@ function register(app, { isBotToken, addUser }) {
     try {
       const v = await view();
       res.json({ ok: true, live: v.live, on: !!v.on, revision: v.revision || null, updated: v.updated || null, built_at: v.built_at || null,
-                 stale: !!v.stale, rooms: v.rooms, counts: v.counts, convoys: v.convoys, raid: v.raid, hit: v.hit, perks: v.perks, rules: v.rules });
+                 stale: !!v.stale, rooms: v.rooms, counts: v.counts, convoys: v.convoys, raid: v.raid, hit: v.hit, perks: v.perks, rules: v.rules,
+                 links: v.links || [] });
     } catch (e) { fail(res, e, "api"); }
   });
   app.get("/api/gtf/roomwars/history", async (req, res) => {

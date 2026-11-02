@@ -5,6 +5,8 @@
   and who holds what after every change. The map is drawn in the browser from the page's JSON (public/js/roomwars-map.js,
   which also polls /api/gtf/roomwars and says when the map changed); every room is also listed below as server-rendered
   cards (no JavaScript needed). Gangs by tag / name / colour only - never a member, crew or defender. One column on phones.
+  R9 (1.99??): dashed lines join rooms that share regulars (v.links: room ids + an overlap score, never who); each room card says
+  which rooms it shares regulars with, so the lines need no JavaScript either.
 %>
 <%- include('partials/gangs-css') %>
 <%
@@ -33,6 +35,7 @@
   .rw #rwMap svg { display: block; width: 100%; height: auto; }
   .rw #rwMap .ring { fill: none; stroke: #2c3a4a; stroke-width: 2; stroke-dasharray: 6 6; }
   .rw #rwMap .ring-l { fill: #8e978e; font: 9px var(--ds-font-pixel); letter-spacing: .06em; text-anchor: middle; }
+  .rw #rwMap .link { stroke: #7f9cc2; stroke-dasharray: 9 7; stroke-linecap: round; fill: none; opacity: .85; }
   .rw #rwMap .node rect { stroke: rgba(0,0,0,.45); stroke-width: 1.5; }
   .rw #rwMap .node.free rect { fill: #1c2b1e; stroke: var(--green); stroke-dasharray: 4 3; }
   .rw #rwMap .node.dormant rect { fill: #1a1a1d; stroke: #3a3a40; }
@@ -104,8 +107,9 @@
     <h2 id="rwMapH" class="ds-pixel-h"><%- t('rw.map.h') %></h2>
     <div class="mapwrap"><div id="rwMap" data-api="/api/gtf/roomwars" data-revision="<%= v.revision %>"><noscript><p class="note"><%- t('rw.map.noscript') %></p></noscript></div></div>
     <p class="note"><%- t('rw.map.legend') %></p>
+    <% if ((v.links || []).length) { %><p class="note" id="rwLinksNote"><%- t('rw.map.shared') %></p><% } %>
   </section>
-  <script type="application/json" id="rwData"><%- JSON.stringify({ revision: v.revision, rooms: mapRooms }).replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="rwData"><%- JSON.stringify({ revision: v.revision, rooms: mapRooms, links: v.links || [] }).replace(/</g, '\\u003c') %></script>
 
   <section aria-labelledby="rwRoomsH" style="display:grid;gap:var(--ds-sp-3)">
     <h2 id="rwRoomsH" class="ds-pixel-h"><%- t('rw.rooms.h') %></h2>
@@ -144,6 +148,7 @@
         <% } %>
         <% if (r.raid) { %><p class="note" style="margin:0;color:var(--ds-danger-ink)"><%- t('rw.raid_here', { att: tag(r.raid.attacker), def: tag(r.raid.defender) }) %></p><% } %>
         <% if (r.convoy) { %><p class="note" style="margin:0"><%- t('rw.convoy_here', { n: fmt(r.convoy.amount), when: tzT(r.convoy.until, 'time') }) %></p><% } %>
+        <% if ((r.shares || []).length) { %><p class="note" style="margin:0"><%- t('rw.shares', { rooms: r.shares.map((s) => s.name + ' (' + Math.round(s.score * 100) + '%)').join(', ') }) %></p><% } %>
       </article>
     <% }) %>
     </div>
