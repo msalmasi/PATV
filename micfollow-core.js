@@ -99,6 +99,9 @@
 // counts them as attributed (the stage isn't dimmed for "someone" while a cover talks); a stage of only covers never
 // becomes the default view (showsSoon: no picture). While cfg covers is off (its kill switch) the engine shows none and
 // takes any cover tile off at once (review B-privacy-ux-4).
+// 1.99?? STABLE SLOTS (owner 2026-11-02): the places the page shows are arrange()'s (micfollow.js arrangeOf, the site knob
+// stable_slots - on): a person keeps their place while they stay on the stage. The engine's own tile order (pos, compact) is
+// unchanged - it is today's order the knob falls back to; a tile that pushed another off carries slotOf (whose place it takes).
 // Actions (micfollow.js carries them out): hold / release / still / still_stop / span_open / span_close / picture /
 // notice_first / spam / touch / deferred / keep / keep_drop / keep_taken.
 "use strict";
@@ -166,6 +169,11 @@ const FIELDS = Object.freeze({
   // wave2 WP-4 (F.4): veiled speakers as hooded-frog cover tiles. Off on prod: today's path (an incognito holder is the neutral
   // "Someone is speaking" card / strip) until staff switch it on at /stage/admin (the backend switch rule)
   covers:                { def: STAGING, bool: true },
+  // 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in"): everyone on
+  // the mic stage keeps their place while they stay on it (arrange; micfollow.js arrangeOf) - a back-and-forth never swaps two
+  // people; dynamic with 3+ the active speaker still takes the big cell. On for staging and prod; off = today's order (places by
+  // when each came on, 📌 pins first; the dynamic main and picture in picture's big picture follow the active speaker)
+  stable_slots:          { def: true, bool: true },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 
@@ -314,6 +322,69 @@ function dynPick(prev, ids, want, t, holdMs) {
   if (cur && (target === cur.id || t - cur.at < Math.max(0, holdMs || 0))) return cur;
   return { id: target, at: t };
 }
+/** 1.99?? STABLE SLOTS: how many cells each layout shape has (a place at or past it closes up - arrange's `cells`). */
+const SHAPE_CELLS = Object.freeze({ single: 1, split: 2, pip: 2, grid4: 4, grid9: 9 });
+/**
+ * 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in"): the mic
+ * stage's places as a list of entry keys (null = an empty place, an empty cell on the page). prev = the last arrangement (null:
+ * none yet); keys = who is on the stage now in today's order (📌 pins by pin time, then the mic tiles by when they came on).
+ *   - everyone already there keeps their place;
+ *   - a newcomer takes the place of whom they pushed off (opts.hint(key) -> that key: the core marks a displacing tile slotOf),
+ *     else the first empty place, else a new one at the end;
+ *   - someone leaving leaves an empty place - nobody shuffles - until there are more places than the layout's cells
+ *     (opts.cells), or the layout has no empty cells at all (opts.dense: the dynamic templates): then the places close up,
+ *     everyone keeping their order;
+ *   - opts.pick(ids) (ids = who is on, in place order) -> the key for place 0, the MAIN cell (dynamic with 3+, picture in
+ *     picture's big picture): it trades places with whoever is there (the one leaving the main cell takes the newcomer's old
+ *     place - nobody else moves), or just takes it when it is empty (the main left; then the places close up as above).
+ *   - opts.veiled(key) -> true for a veiled speaker's COVER (wave2 WP-4 F.4: a hooded frog - who is behind it is never shown):
+ *     a place never passes between a cover and a named person, or the place would say who the frog is (a named tile cut by
+ *     !bridge hide whose cover comes up in its place, a cover whose person comes back named in its place). So a cover never
+ *     takes an empty place or the place of whom it pushed off - it goes after the last one on (today's rule); a named newcomer
+ *     never takes a cover's place by the hint; and when a cover leaves, the empty places close up before anyone new sits down.
+ * Pure; never mutates prev. -> the arrangement (trailing empty places dropped)
+ */
+function arrange(prev, keys, opts = {}) {
+  const want = new Set((keys || []).filter((k) => k != null));
+  const veiled = typeof opts.veiled === "function" ? opts.veiled : () => false;
+  let slots = [], freed = new Map();
+  const on = new Set();
+  (Array.isArray(prev) ? prev : []).forEach((k, i) => {
+    if (k != null && want.has(k) && !on.has(k)) { slots.push(k); on.add(k); return; }
+    slots.push(null);
+    if (k != null && !want.has(k) && !freed.has(k)) freed.set(k, i);
+  });
+  // (a cover left: no empty place it leaves - or any other - is handed on; the places close up first)
+  if ([...freed.keys()].some((k) => veiled(k))) { slots = slots.filter((k) => k !== null); freed = new Map(); }
+  const hintOf = (k) => {
+    const g = typeof opts.hint === "function" && !veiled(k) ? opts.hint(k) : null;
+    return g != null && !veiled(g) && freed.has(g) ? freed.get(g) : -1;
+  };
+  const fresh = [...want].filter((k) => !on.has(k));
+  // the ones who pushed someone off first (their place is theirs), then the rest in today's order; covers after the last one on
+  for (const k of fresh) { const i = hintOf(k); if (i >= 0 && slots[i] === null) { slots[i] = k; on.add(k); } }
+  for (const k of fresh) {
+    if (on.has(k) || veiled(k)) continue;
+    let i = slots.indexOf(null);
+    if (i < 0) i = slots.length;
+    slots[i] = k;
+    on.add(k);
+  }
+  for (const k of fresh) {
+    if (on.has(k)) continue;
+    while (slots.length && slots[slots.length - 1] === null) slots.pop();
+    slots.push(k);
+    on.add(k);
+  }
+  if (typeof opts.pick === "function" && on.size) {
+    const m = opts.pick(slots.filter((k) => k !== null));
+    const i = m != null ? slots.indexOf(m) : -1;
+    if (i > 0) { slots[i] = slots[0]; slots[0] = m; }
+  }
+  while (slots.length && slots[slots.length - 1] === null) slots.pop();
+  const cells = Math.max(1, Number(opts.cells) || 1);
+  return opts.dense || slots.length > cells ? slots.filter((k) => k !== null) : slots;
+}
 /** mfix: the shape with `pins` pinned cams besides `tiles` mic tiles - a single layout with a pin is picture in picture. */
 function shapeFor(layout, tiles, pins) {
   const n = Math.max(0, tiles | 0) + Math.max(0, pins | 0);
@@ -356,6 +427,7 @@ function newState() {
     kept: new Map(),           // wave2 WP-4 (F.2): login -> {leftAt, until} - relays kept running after their tile left the stage
     evictAt: 0,                //   ... when micfollow.js last evicted a kept relay for this pad's open (the slots_busy retry)
     dynMain: null,             // wave2 WP-4 (F.3): {id, at} - the dynamic layout's main cell (micfollow.js dynTick, dynPick)
+    slots: null,               // 1.99?? stable slots: [key | null] - who sits in which place (micfollow.js arrangeOf; null = not arranged)
     changes: [],               // times of the last minute's changes
     lastChangeAt: -Infinity,
     v: 0, active: false, running: false, staleSince: 0, whyOff: null,
@@ -1014,7 +1086,7 @@ function step(S, I, C, t) {
       .sort((a, b) => (a.relAt != null ? 0 : 1) - (b.relAt != null ? 0 : 1) || (a.relAt || 0) - (b.relAt || 0) || a.addedAt - b.addedAt);
     if (!pool.length) continue;
     displaced.push(pool[0]);
-    adds.push(c);
+    adds.push({ ...c, disp: pool[0].login });               // (1.99?? stable slots: the newcomer takes this one's place)
   }
   // 6 the change budget
   const change = due.length + trim.length + displaced.length + adds.length > 0;
@@ -1036,7 +1108,8 @@ function step(S, I, C, t) {
         const x = { login: c.login, addedAt: t, since: c.since, pos: S.tiles.length, relAt: null, video: c.cover ? "cover" : "card", why: null, pend: false, pictured: false,
                     qualAt: c.since + C.min_hold_s * 1000, cold: false, vidSince: 0, vidMs: 0, peak: 0, unverifiedAt: 0,
                     ...(S.kept.has(c.login) ? { kept: true } : {}),     // (wave2 WP-4: a comeback onto its kept relay)
-                    ...(c.cover ? { cover: true } : {}) };               // (wave2 WP-4: a veiled speaker's hooded frog)
+                    ...(c.cover ? { cover: true } : {}),                 // (wave2 WP-4: a veiled speaker's hooded frog)
+                    ...(c.disp ? { slotOf: c.disp } : {}) };             // (1.99?? stable slots: whose place they take - arrange's hint)
         S.tiles.push(x);
         if (!c.cover) A.push({ a: "span_open", login: c.login });
       }
@@ -1247,5 +1320,6 @@ module.exports = {
   shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
   dropKept, keepFor, keptCheck, EVICT_WINDOW_MS, EVICT_RETRY_MS,                                                // wave2 WP-4 (F.2)
   dynPick,                                                                                                      // wave2 WP-4 (F.3)
+  arrange, SHAPE_CELLS,                                                                                         // 1.99?? stable slots
   COVER_PREFIX, isCoverKey,                                                                                     // wave2 WP-4 (F.4)
 };

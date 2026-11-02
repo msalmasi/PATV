@@ -1526,3 +1526,100 @@ test("52. wave2 review (B-privacy-ux-4): the covers switch off (its kill switch)
   w.at(34);
   assert.deepEqual(w.logins(), ["a"], "off under the stale hold");
 });
+
+// ── 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in") ──
+test("53. 1.99?? stable slots - arrange: everyone keeps their place; a newcomer takes the place of whom they pushed off, else the first empty one, else the end; leaving leaves an empty place until there are more places than cells (or dense) - then they close up in order", () => {
+  assert.equal(typeof M.arrange, "function");
+  // nothing yet: today's order
+  assert.deepEqual(M.arrange(null, ["a", "b"], { cells: 2 }), ["a", "b"]);
+  // the same people in another order (today's would move them): nobody moves
+  assert.deepEqual(M.arrange(["a", "b"], ["b", "a"], { cells: 2 }), ["a", "b"]);
+  // a third: a new place at the end; a fourth with an empty place: that one
+  assert.deepEqual(M.arrange(["a", "b"], ["a", "b", "c"], { cells: 4 }), ["a", "b", "c"]);
+  assert.deepEqual(M.arrange(["a", null, "c", "d"], ["a", "c", "d", "e"], { cells: 4 }), ["a", "e", "c", "d"]);
+  // someone leaving: an empty place - nobody shuffles (grid4 keeps its 4 cells with 3 on it)
+  assert.deepEqual(M.arrange(["a", "b", "c", "d"], ["a", "c", "d"], { cells: 4 }), ["a", null, "c", "d"]);
+  // ... the last place: nothing left behind it
+  assert.deepEqual(M.arrange(["a", "b", "c"], ["a", "b"], { cells: 2 }), ["a", "b"]);
+  // the layout has fewer cells than places (3 left of 4 -> grid4 still; 2 -> split): close up, in order
+  assert.deepEqual(M.arrange(["a", null, "c", "d"], ["c", "d"], { cells: 2 }), ["c", "d"]);
+  assert.deepEqual(M.arrange(["a", null, "c"], ["a", "c"], { cells: 2 }), ["a", "c"]);
+  assert.deepEqual(M.arrange(["a", "b", "c", "d", "e"], ["a", "c", "e"], { cells: 4 }), ["a", "c", "e"], "5 places > 4 cells: closed up");
+  // dense (the dynamic templates: no empty cells): always closed up, in order
+  assert.deepEqual(M.arrange(["a", "b", "c", "d"], ["a", "c", "d"], { cells: 9, dense: true }), ["a", "c", "d"]);
+  // displacement: the newcomer takes exactly the place of whom they pushed off - even with an empty place before it
+  const hint = (m) => (k) => m[k] || null;
+  assert.deepEqual(M.arrange(["a", null, "c", "d"], ["a", "c", "e"], { cells: 4, hint: hint({ e: "d" }) }), ["a", null, "c", "e"]);
+  assert.deepEqual(M.arrange(["a", "b"], ["b", "c"], { cells: 2, hint: hint({ c: "a" }) }), ["c", "b"]);
+  // two newcomers, one with a hint: the hinted place is theirs, the other takes the first empty one
+  assert.deepEqual(M.arrange(["a", "b", "c", "d"], ["b", "x", "y", "d"], { cells: 4, hint: hint({ y: "a" }) }), ["y", "b", "x", "d"]);
+  // a hint to someone who didn't leave (or no one): the first empty place / the end
+  assert.deepEqual(M.arrange(["a", "b"], ["a", "b", "c"], { cells: 4, hint: hint({ c: "a" }) }), ["a", "b", "c"]);
+  // never mutates prev; duplicates are one entry
+  const prev = Object.freeze(["a", "b"]);
+  assert.deepEqual(M.arrange(prev, ["a", "a", "b", "c"], { cells: 4 }), ["a", "b", "c"]);
+  assert.deepEqual(M.arrange(["a", "a"], ["a"], { cells: 2 }), ["a"]);
+  assert.deepEqual(M.arrange(["a"], [], { cells: 1 }), []);
+  assert.deepEqual(M.SHAPE_CELLS, { single: 1, split: 2, pip: 2, grid4: 4, grid9: 9 });
+});
+
+test("54. 1.99?? stable slots - arrange's main cell (place 0): the pick trades places with whoever is there (nobody else moves); an empty place 0 (the main left) is just taken, then the places close up", () => {
+  const pick = (m) => () => m;
+  // c becomes the main: a (place 0) takes c's old place; b and d never move
+  assert.deepEqual(M.arrange(["a", "b", "c", "d"], ["a", "b", "c", "d"], { cells: 4, dense: true, pick: pick("c") }), ["c", "b", "a", "d"]);
+  // the main already there / none: nothing moves
+  assert.deepEqual(M.arrange(["c", "b", "a"], ["a", "b", "c"], { dense: true, pick: pick("c") }), ["c", "b", "a"]);
+  assert.deepEqual(M.arrange(["c", "b", "a"], ["a", "b", "c"], { dense: true, pick: pick(null) }), ["c", "b", "a"]);
+  assert.deepEqual(M.arrange(["c", "b", "a"], ["a", "b", "c"], { dense: true, pick: pick("zz") }), ["c", "b", "a"], "an unknown main moves nobody");
+  // a newcomer who is the main: they come in at their place (here the end), then trade with place 0
+  assert.deepEqual(M.arrange(["a", "b", "c"], ["a", "b", "c", "n"], { dense: true, pick: pick("n") }), ["n", "b", "c", "a"]);
+  // ... at the place of whom they pushed off
+  assert.deepEqual(M.arrange(["m", "b", "c", "d"], ["m", "c", "d", "n"], { dense: true, hint: (k) => (k === "n" ? "b" : null), pick: pick("n") }), ["n", "m", "c", "d"]);
+  // the main left: the new main takes the empty place 0, the rest close up in order (b, c keep their order)
+  assert.deepEqual(M.arrange(["m", "b", "c", "d"], ["b", "c", "d"], { dense: true, pick: pick("d") }), ["d", "b", "c"]);
+  // the pick sees who is on, in place order
+  let seen = null;
+  M.arrange(["m", null, "c", "d"], ["m", "c", "d"], { cells: 4, pick: (ids) => { seen = ids; return null; } });
+  assert.deepEqual(seen, ["m", "c", "d"]);
+});
+
+test("55. 1.99?? stable slots - the engine: a newcomer who displaced a tile carries slotOf (whose place it takes); the engine's own pos is today's order; the knob stable_slots is on by default - on staging and on prod", () => {
+  const w = world({ pad: { layout: "split", keep_recent: 2 } });
+  w.grab("a"); w.at(0); w.at(2);
+  w.drop("a"); w.grab("b"); w.at(15); w.at(17);
+  w.drop("b"); w.grab("a"); w.at(30); w.at(33);
+  w.drop("a"); w.at(40);
+  w.grab("c"); w.at(50); w.at(53);
+  const c = w.S.tiles.find((x) => x.login === "c");
+  assert.equal(c.slotOf, "b", "c pushed b off (off the mic longest)");
+  assert.equal(w.S.tiles.find((x) => x.login === "a").slotOf, undefined, "a pushed nobody off");
+  assert.deepEqual(w.S.tiles.map((x) => [x.login, x.pos]), [["a", 0], ["c", 1]], "the engine's pos: today's order (by when they came on)");
+  assert.equal(M.DEFAULTS.stable_slots, true);
+  assert.equal(M.normalize({}).cfg.stable_slots, true);
+  assert.equal(M.normalize({ stable_slots: "off" }).cfg.stable_slots, false);
+  // a STAGING process reads the same default
+  const p = path.join(path.resolve(__dirname, ".."), "micfollow-core.js");
+  const was = process.env.STAGING;
+  delete require.cache[require.resolve(p)];
+  process.env.STAGING = "1";
+  try { assert.equal(require(p).DEFAULTS.stable_slots, true, "staging: on"); assert.equal(require(p).DEFAULTS.dynamic, true, "(a STAGING read indeed)"); }
+  finally { if (was == null) delete process.env.STAGING; else process.env.STAGING = was; delete require.cache[require.resolve(p)]; }
+  assert.equal(M.newState().slots, null, "not arranged yet");
+});
+
+test("56. 1.99?? stable slots - covers (hooded frogs): a place never passes between a cover and a named person - a cover goes after the last one on (never an empty place, never the place of whom it pushed off), a named newcomer never takes a cover's place by the hint, and a cover leaving closes the empty places up first", () => {
+  const veiled = (k) => String(k).startsWith("~cv:");
+  // bob (named, place 1) is cut by !bridge hide and his cover comes up: NOT in his place - after the last one on
+  assert.deepEqual(M.arrange(["a", "bob", "c"], ["a", "c", "~cv:1"], { cells: 4, veiled }), ["a", null, "c", "~cv:1"]);
+  // ... nor in the place of whom it pushed off
+  assert.deepEqual(M.arrange(["a", "b", "c", "d"], ["a", "c", "d", "~cv:1"], { cells: 4, veiled, hint: (k) => (k === "~cv:1" ? "b" : null) }), ["a", "c", "d", "~cv:1"]);
+  // the cover (place 1) leaves and its person comes back named: the places close up first - the named one never sits in the frog's place
+  assert.deepEqual(M.arrange(["a", "~cv:1", "c"], ["a", "c", "gus"], { cells: 4, veiled }), ["a", "c", "gus"]);
+  assert.deepEqual(M.arrange(["a", "~cv:1", "c"], ["a", "c"], { cells: 4, veiled }), ["a", "c"], "closed up even with nobody new");
+  // ... nor by the hint (a named newcomer pushing the cover off)
+  assert.deepEqual(M.arrange(["a", "~cv:1", "c", "d"], ["a", "c", "d", "gus"], { cells: 4, veiled, hint: (k) => (k === "gus" ? "~cv:1" : null) }), ["a", "c", "d", "gus"]);
+  // named people among themselves keep the plain rules; a cover that stays keeps its place like anyone
+  assert.deepEqual(M.arrange(["~cv:1", "b", "c"], ["~cv:1", "c", "x"], { cells: 4, veiled }), ["~cv:1", "x", "c"]);
+  // a cover may take the main cell (the active speaker) - trading with whoever is there, like anyone
+  assert.deepEqual(M.arrange(["a", "b", "c"], ["a", "b", "c", "~cv:2"], { dense: true, veiled, pick: () => "~cv:2" }), ["~cv:2", "b", "c", "a"]);
+});
