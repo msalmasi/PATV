@@ -42,10 +42,14 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // 1.99ahx frog names (owner 2026-11-03, "Lets do 2"): "frog-15" = section 10's incognito bullet now saying "someone" lasts 15 minutes after
 // being seen by name, then a frog name (it said "until your next visit") - inside the privacy wire v2 text, so dated the first time /privacy
 // is served with that switch on, and its date counts toward "Last updated" only while the switch is on.
-const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15"];
+// 1.99?? (privacy controls S0, spec 4.1): "livecam-never-kept" = !livecam joins section 3's list of privacy settings a pad's chat
+// history never keeps (chatlog.PRIVATE_ARGS; additive, VERSION unchanged). That list is shown only while the chat archive's notice
+// is on (chatlog.policy), so the change is dated the first time /privacy is served with it showing - never while nobody can read it.
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
                          "tx-bar": () => require("./privwire").txBar() === true,
-                         "frog-15": () => require("./privwire").isOn() === true };
+                         "frog-15": () => require("./privwire").isOn() === true,
+                         "livecam-never-kept": () => { const c = require("./chatlog").cfg(); return !!(c && c.notice && c.notice_at); } };
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 let datesReady = null;

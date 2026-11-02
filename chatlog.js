@@ -131,7 +131,10 @@ const REASON_RE = /^(bridge|incognito|list_b|list_i|web|forget|delete|staff|of:[
 // (!forgetme is !incognito's alias for the forget-me flow).
 const PRIVATE_ARGS = Object.freeze(["!msg", "!message", "!patvmsg", "!verify", "!verifypad", "!joinroom", "!padfine", "!padmove", "!relay", "!tell",
                                     "!incognito", "!forgetme", "!bridge", "!transcripts",
-                                    "!remember"]);   // wave 3 (design §N.3): 🧠 Pepe's memory switch (bot private_args floor too)
+                                    "!remember",     // wave 3 (design §N.3): 🧠 Pepe's memory switch (bot private_args floor too)
+                                    // 1.99?? (privacy controls S0, spec 4.1): 📡 the cam switch - "X: !livecam off" on a pad told
+                                    // everyone whose cam had just gone off the website (bot pepe_privargs.PRIVACY_CMDS too)
+                                    "!livecam"]);
 const INDEXABLE_KINDS = ["msg", "tx", "topic"];
 const INDEXABLE = "text IS NOT NULL AND k IN ('msg','tx','topic') AND rm_at IS NULL AND purged IS NULL";
 // the feed item -> d: what isn't a column (c, ts, k, text, the tx id, CL3's aud) and, of `u`, only what renders (login is `who`)

@@ -107,7 +107,8 @@ test("before a Pepe with the switch reports: no card, no policy text, requests r
   assert.ok(CL.PRIVATE_ARGS.includes("!remember"));
   assert.equal(CL.isPrivateCmd("!remember off"), true);
   assert.equal(CL.isPrivateCmd("!REMEMBER status"), true);
-  assert.match(fs.readFileSync(path.join(repo, "views", "privacy.ejs"), "utf8"), /<code>!transcripts<\/code>, <code>!remember<\/code>\)/);
+  // (1.99?? privacy controls S0: + !livecam after it)
+  assert.match(fs.readFileSync(path.join(repo, "views", "privacy.ejs"), "utf8"), /<code>!transcripts<\/code>, <code>!remember<\/code>, <code>!livecam<\/code>\)/);
 });
 
 test("a report with caps [\"memory\"]: the card, the policy text (N.8, dated), the new incognito wording and forget-me's box show", async () => {
