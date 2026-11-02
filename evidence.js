@@ -515,7 +515,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       const jid = "w" + crypto.randomBytes(8).toString("hex");
       await ST.init(); await AA.init();
       const stId = await tx(async () => {
-        const st = await ST.log({ userId: uid, role: rl.role, scope: "clip_preview", roomId: R.id, logins: [login], reason, ref: "evp:" + jid });
+        // (1.99?? transcripts bar: ":tx" = the turn of a !transcripts off 🎙 bar - the log says which toggle was seen through)
+        const st = await ST.log({ userId: uid, role: rl.role, scope: "clip_preview", roomId: R.id, logins: [login], reason,
+                                  ref: "evp:" + jid + (it.tm === 1 ? ":tx" : "") });
         if (!st) throw new Error("evidence: no see-through row");
         await AA.record({ userId: uid, username: req.user.username || null }, "evidence.preview", null, { room: R.id, c, veil, st }, reason || null);
         return st;

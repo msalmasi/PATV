@@ -110,6 +110,34 @@ async function setOn(want, user) {
   return state();
 }
 
+// ── 1.99?? transcripts bar (owner 2026-11-02): a !transcripts off speaker's 🎙 lines as a blacked-out bar ──
+// The site always says txbar: 1 while the switch is on (bridge.js syncAnswer); Pepe sends those lines (masked, v2 only) only after
+// that, and only a Pepe that does it says txbar_cap: 1 on his syncs. The text that describes the bar (privacy.ejs, /help) shows only
+// while BOTH are true - the switch on AND the latest sync came from a Pepe that sends the bar - so neither deploy order makes it say
+// something that isn't so: an older Pepe keeps those lines left out and their turns clippable as before, and the text says that.
+// Kept in chatlog_meta 'privwire_txcap' {cap, at} (written only when it changes), so a restart doesn't flip the text back meanwhile.
+let TXCAP = { cap: false, at: null };
+let txcapLoaded = false;
+async function loadTxCap() {
+  if (txcapLoaded) return;
+  await init();
+  const r = (await getQuery("SELECT value FROM chatlog_meta WHERE key = 'privwire_txcap'"))[0];
+  try { const v = r ? JSON.parse(r.value) : null; if (v && typeof v === "object") TXCAP = { cap: v.cap === true, at: Number(v.at) > 0 ? Number(v.at) : null }; } catch (e) { /* off */ }
+  txcapLoaded = true;
+}
+/** Every sync (v1 or v2): does the Pepe that sent it show !transcripts off 🎙 lines as a bar (txbar_cap: 1)? Writes only on a change. */
+function noteTxCap(cap) {
+  const want = cap === true;
+  loadTxCap().then(async () => {
+    if (TXCAP.cap === want) return;
+    TXCAP = { cap: want, at: clock() };
+    await runQuery("INSERT INTO chatlog_meta (key, value) VALUES ('privwire_txcap', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(TXCAP)]);
+    console.log(`[privwire] Pepe ${want ? "sends" : "no longer sends"} !transcripts off 🎙 lines as a bar`);
+  }).catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));
+}
+/** Is the transcripts bar live - the switch on AND the latest Pepe sends it? Synchronous; false until loaded (fails toward the old text). */
+const txBar = () => isOn() && txcapLoaded && TXCAP.cap === true;
+
 /** For views: {on, g, g_day} - the policy text behind the switch reads it (privacy.ejs locals.privwire; terms.js dates the page by
  *  G, the go-live). null while the switch is off: the policy reads exactly as before. */
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -121,6 +149,7 @@ function privacyCopy() {
 
 function register(app, { addUser, noTimers = false }) {
   init().catch((e) => console.error("[privwire] init:", e.message));
+  loadTxCap().catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));   // 1.99?? transcripts bar
   const SP = require("./siteperms");
   const guard = require("./middleware/authGuard");
   const json = require("express").json({ limit: "2kb" });
@@ -128,7 +157,7 @@ function register(app, { addUser, noTimers = false }) {
   app.get("/api/admin/privwire", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!can(req)) return res.status(403).json({ ok: false, error: "Site admins only." });
-    try { await init(); res.json({ ok: true, state: state(), counts: counts() }); }
+    try { await init(); await loadTxCap(); res.json({ ok: true, state: state(), counts: counts(), txbar: { on: txBar(), cap: TXCAP.cap, at: TXCAP.at } }); }
     catch (e) { console.error("[privwire] admin:", e.message); res.status(500).json({ ok: false, error: "Something went wrong." }); }
   });
   app.post("/api/admin/privwire", addUser, json, async (req, res) => {
@@ -137,7 +166,7 @@ function register(app, { addUser, noTimers = false }) {
     if (req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     const b = req.body || {};
     if (typeof b.on !== "boolean") return res.status(400).json({ ok: false, error: "Say on: true or false." });
-    try { res.json({ ok: true, state: await setOn(b.on, { userId: req.user.userId, username: req.user.username }), counts: counts() }); }
+    try { const st = await setOn(b.on, { userId: req.user.userId, username: req.user.username }); await loadTxCap(); res.json({ ok: true, state: st, counts: counts(), txbar: { on: txBar(), cap: TXCAP.cap, at: TXCAP.at } }); }
     catch (e) { console.error("[privwire] switch:", e.message); res.status(500).json({ ok: false, error: "Something went wrong." }); }
   });
   if (!noTimers && !saveTimer) {
@@ -147,5 +176,7 @@ function register(app, { addUser, noTimers = false }) {
 }
 
 module.exports = { init, isOn, gAt, wasOnAt, lastOnAt, note, counts, state, setOn, saveCounts, privacyCopy, register, _clean: clean,
+                   noteTxCap, txBar, loadTxCap,                                    // 1.99?? transcripts bar
                    _setClock: (f) => { clock = f || (() => Date.now()); },
-                   _reset: () => { STATE = clean(null); for (const k of COUNT_KEYS) COUNTS[k] = 0; COUNTS.last_at = null; ready = null; loaded = false; } };
+                   _reset: () => { STATE = clean(null); for (const k of COUNT_KEYS) COUNTS[k] = 0; COUNTS.last_at = null; ready = null; loaded = false;
+                                   TXCAP = { cap: false, at: null }; txcapLoaded = false; } };

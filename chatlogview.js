@@ -208,8 +208,11 @@ function privacyV2(it, kindOf, txOf) {
   if (!hs.length) return "out";                               // a v2 line always carries its hash: without one, fail closed
   if (it.purged) return null;
   let mask = it.u.veil === "hidden";
+  // 1.99?? transcripts bar: a 🎙 line Pepe sent masked BECAUSE of !transcripts off (tm: 1 - no words in it) stays the bar while the
+  // sticky set says their transcripts are off; any other 🎙 line of someone with them off now is left out, as before
+  const bar = it.k === "tx" && it.tm === 1 && mask;
   for (const x of hs) {
-    if (it.k === "tx" && txOf(x)) return "out";
+    if (it.k === "tx" && txOf(x) && !bar) return "out";
     if (kindOf(x) === "out") { if (!maskable(x)) return "out"; mask = true; }
   }
   return mask ? "mask" : "anon";

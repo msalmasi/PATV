@@ -1719,6 +1719,7 @@ function register(app, { isBotToken, addUser }) {
   /** One sync's work and answer (v1 and v2 alike). wave 2: the answer says privwire: 2 only while the switch is on (the advert). */
   async function syncAnswer(body, v2) {
     relay.applyAcks(body.acks);
+    PW.noteTxCap(body.txbar_cap === 1);        // 1.99?? transcripts bar: does this Pepe send them as a bar? (the policy / help text)
     require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
     // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
     // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
@@ -1739,6 +1740,9 @@ function register(app, { isBotToken, addUser }) {
     const mfc = relay.mfCancelled();               // micfollow: claimed mic-stage stills Pepe must drop (bridge-relay.mfCancelled)
     return { success: true, ...r, jobs, viewers: require("./padmod").viewersFor(liveIds), ...blocks, ...(mfc.length ? { mf_cancel: mfc } : {}),
              ...(PW.isOn() ? { privwire: 2 } : {}),
+             // 1.99?? transcripts bar: this site shows a !transcripts off speaker's 🎙 lines as a blacked-out bar (veil.js) - said only
+             // while privacy wire v2 is on; Pepe sends them (masked, v2 only) only after it, and says txbar_cap: 1 (privwire.noteTxCap)
+             ...(PW.isOn() ? { txbar: 1 } : {}),
              // wave 2 WP-5 (spec E.3): evidence clips can be made (evidence.js: its switch AND privacy wire v2) - Pepe offers the Camfrog
              // !clipmic evidence path only after this (never said while either is off: the contract fixture runs without it)
              ...(evidenceOn() ? { evidence: 1 } : {}) };
@@ -2217,7 +2221,8 @@ async function revealLookup(roomId, c) {
     if (require("./chatlogview").privacyOf(it) === "out" || it.rm_at != null || it.purged) return null;
     const vr = (await getQuery("SELECT 1 FROM bridge_veil WHERE c = ?", [Number(c)]).catch(() => []))[0];
     if (!vr) return null;                                   // its identity row is gone (forget-me): nobody can reveal it any more
-    return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null };
+    // (1.99?? transcripts bar: tx = a 🎙 line masked for !transcripts off - the see-through log names that toggle)
+    return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null, ...(it.tm === 1 ? { tx: true } : {}) };
   }
   // review fix (A-privacy-4 / A-compat-8 / A-tests-ux-02): the archive answers by the SAME rule as the live item - a line taken down
   // (its author's Remove my line, a report hide, a moderator's hide: rm_at set) or whose speaker is left out now (forget-me, an
@@ -2229,8 +2234,10 @@ async function revealLookup(roomId, c) {
                                WHERE l.c = ? AND cr.room_id = ? AND l.purged IS NULL AND l.rm_at IS NULL`, [Number(c), String(roomId)]))[0];
     if (!r) return null;
     const CV = require("./chatlogview");
-    if (CV.privacyOf(CV.itemOf(r)) === "out") return null;
-    return { ts: Number(r.ts), vz: { login: r.v_login, display: r.v_display, kind: r.v_kind }, vw: r.v_words == null ? null : String(r.v_words) };
+    const ai = CV.itemOf(r);
+    if (CV.privacyOf(ai) === "out") return null;
+    return { ts: Number(r.ts), vz: { login: r.v_login, display: r.v_display, kind: r.v_kind }, vw: r.v_words == null ? null : String(r.v_words),
+             ...(ai.k === "tx" && ai.tm === 1 ? { tx: true } : {}) };
   } catch (e) { return null; }
 }
 

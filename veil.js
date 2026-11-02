@@ -47,10 +47,23 @@ function bucket(words) {
   const n = [...String(words == null ? "" : words).trim()].length;
   return n <= 24 ? "s" : n <= 100 ? "m" : "l";
 }
-/** Pepe's priv block -> {kind, h, hs[], at (ms) | null, words} | null (none, or anything malformed: then the event isn't v2-veiled). */
+// 1.99?? transcripts bar (owner 2026-11-02: "If someone has !transcripts off, it should still show in the chat but blocked out like with
+// bridge hide. Admins should be able to see through this like the other privacy toggles."): a 🎙 line of someone with !transcripts off
+// comes with priv.tx: true and their words in priv.words (never text) and is stored and shown EXACTLY like a hidden speaker's 🎙 line -
+// u.veil "hidden", a bar, _vz.kind "hidden" (the side tables, the reveal, the evidence clip, the archive, retention and forget-me all
+// treat it as one) - plus `tm: 1` on the item (server-only: dress is a whitelist) and _vz.tx, so the see-through log says which toggle
+// was seen through (seethrough.js scope tx_line) and the sticky !transcripts off set never leaves the bar out (chatlogview.privacyV2).
+// priv.kind says how the speaker's IDENTITY shows: "tx" = a named speaker ("someone" with the bar - no frog-name session is opened for
+// them), "incognito" = their incognito frog name (_vz.lv: the frog-name session keeps its incognito level), "hidden" = one bar, as ever.
+// Only Pepe's 🎙 lines carry it (a message, mic line, join or leave with priv.tx is malformed: dropped).
+const TX_KINDS = new Set(["incognito", "hidden", "tx"]);
+/** Pepe's priv block -> {kind, h, hs[], at (ms) | null, words, tx} | null (none, or anything malformed: then the event isn't v2-veiled). */
 function parsePriv(d) {
   const p = d && d.priv && typeof d.priv === "object" ? d.priv : null;
-  if (!p || !KINDS.has(p.kind) || typeof p.h !== "string" || !HASH20.test(p.h)) return null;
+  if (!p || typeof p.h !== "string" || !HASH20.test(p.h)) return null;
+  if (p.tx !== undefined && p.tx !== true) return null;
+  const tx = p.tx === true;
+  if (!(tx ? TX_KINDS : KINDS).has(p.kind)) return null;
   const hs = [];
   if (Array.isArray(p.hs)) {
     for (const x of p.hs) {
@@ -61,7 +74,7 @@ function parsePriv(d) {
   }
   const at = Number(p.at);
   return { kind: p.kind, h: p.h, hs, at: Number.isFinite(at) && at > 0 ? Math.round(at * 1000) : null,
-           words: p.kind === "hidden" && typeof p.words === "string" ? cpStr(p.words, 490) : "" };
+           words: (p.kind === "hidden" || tx) && typeof p.words === "string" ? cpStr(p.words, 490) : "", tx };
 }
 /** The real person of a v2 UserRef: {login, display, acct} | null. Accounts ("u:<id>") only where a web line may carry one. */
 function realUser(u, allowAcct = false) {
@@ -98,6 +111,7 @@ function veiledItem(ev, ts, opts = {}) {
   let it = null;
   let real = null;
   let active = false, holding;
+  if (p.tx && ev.type !== T) return null;                   // (transcripts bar: only a 🎙 line can be masked for !transcripts off)
   switch (ev.type) {
     case "message": {
       real = mine(realUser(d.user, true));
@@ -113,9 +127,11 @@ function veiledItem(ev, ts, opts = {}) {
     case T: {
       real = mine(realUser(d.user));
       if (!real) return null;
-      it = { k: "tx", ts, u: veiledU(p.kind) };
-      if (p.kind === "incognito") { const t = cpStr(d.text, 490); if (!t) return null; it.text = t; }
+      // transcripts bar: masked whatever the identity level - shown exactly as a hidden speaker's 🎙 line (u.veil "hidden", the bar)
+      it = { k: "tx", ts, u: veiledU(p.tx ? "hidden" : p.kind) };
+      if (p.kind === "incognito" && !p.tx) { const t = cpStr(d.text, 490); if (!t) return null; it.text = t; }
       else { if (!p.words) return null; it.mask = bucket(p.words); }
+      if (p.tx) it.tm = 1;
       if (/^tx-[0-9a-f]{8,32}$/.test(String(d.id || ""))) it.id = String(d.id);
       const s = Number(d.said_at);
       if (Number.isFinite(s) && s > 0) it.at = Math.round(s * 1000);
@@ -152,8 +168,11 @@ function veiledItem(ev, ts, opts = {}) {
   if (hold && (it.k === "mic" || it.k === "unmic" || it.k === "tx")) it.hold = hold;
   it.ah = p.h;
   if (p.hs.length) it.ahs = p.hs.slice();
-  hide(it, "_vz", { login: real.login, display: real.display, kind: p.kind, h: p.h, hs: p.hs.slice(), sess: null, ...(real.acct ? { acct: true } : {}) });
-  if (p.kind === "hidden") hide(it, "_vw", p.words);
+  // transcripts bar: kind "hidden" (the bar's words, its reveal and its evidence clip work as a hidden line's), tx: 1 (which toggle - the
+  // see-through log), lv = the identity level its frog name follows ("tx": none - "someone"; "incognito": their incognito session)
+  hide(it, "_vz", { login: real.login, display: real.display, kind: p.tx ? "hidden" : p.kind, h: p.h, hs: p.hs.slice(), sess: null,
+                    ...(real.acct ? { acct: true } : {}), ...(p.tx ? { tx: 1, lv: p.kind } : {}) });
+  if (p.kind === "hidden" || p.tx) hide(it, "_vw", p.words);
   hide(it, "_v2", { active, holding, proven: !!(d.user && d.user.proven === true), beganNamed: d.began_named === true,
                     leaving: it.k === "leave" });
   return it;
@@ -218,6 +237,11 @@ async function nameItem(R, it) {
   const FN = require("./frognames");
   const vz = it._vz, v2 = it._v2 || {};
   if (!vz) return it;
+  // 1.99?? transcripts bar: a NAMED speaker's 🎙 line masked only for !transcripts off is "someone" with the bar - no frog-name session
+  // is opened, sighted or ended for them (their grab / release are named; a frog name here would tie it to their name). An incognito
+  // one's line follows their incognito session (lv), never the bar's "hidden" level (that would end it - M addendum 3 #1)
+  if (vz.tx && vz.lv === "tx") return it;
+  const lvl = vz.tx && vz.lv ? vz.lv : vz.kind;
   const roomId = R.id;
   let view = null;
   try {
@@ -231,11 +255,11 @@ async function nameItem(R, it) {
       // review R1: a hold's item at the kind its hold already had is the hold's frozen kind (see holdKind); the first one (the grab,
       // or the first seen after a restart) and a changed one decide the level as usual (fails closed)
       let frozen = false;
-      if (it.hold && vz.kind) {
-        frozen = holdKind(roomId, it.hold) === vz.kind;
-        holdKind(roomId, it.hold, vz.kind);
+      if (it.hold && lvl) {
+        frozen = holdKind(roomId, it.hold) === lvl;
+        holdKind(roomId, it.hold, lvl);
       }
-      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), kind: vz.kind,
+      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), kind: lvl,
                                                  frozen });
     }
   } catch (e) { view = null; console.error("[veil] frog name:", e && e.code ? e.code : "error"); }
@@ -323,7 +347,7 @@ async function snapshotEntries(R, list, clean, { mic = false, max = 400, now = D
     const veiled = hasPriv(u);
     const p = veiled ? parsePriv({ priv: u.priv }) : null;
     if (!veiled) { const c = clean(u); if (c) out.push(c); continue; }
-    if (!p) continue;
+    if (!p || p.tx) continue;                               // (transcripts bar: a 🎙 line's mark, never a roster entry's - fails closed)
     const real = realUser(u);
     if (!real || !owns(real, p)) continue;
     const e = veiledU(p.kind);

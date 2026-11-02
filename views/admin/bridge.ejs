@@ -316,7 +316,9 @@
     sum.textContent = 'Privacy wire v2 is ' + (s.on ? 'ON' : 'off') + ' · G (go-live) ' + when(s.g_at) + (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '') +
       ' · /api/bridge/sync/v2 calls ' + (c.calls || 0) + ' (accepted ' + (c.ok || 0) + ', refused ' + (c.refused || 0) + ', errors ' + (c.err || 0) + ')' +
       (c.probes ? ' · ' + c.probes + ' hit(s) without the bot token (not counted as calls)' : '') +
-      (c.last_at ? ', last ' + when(c.last_at) : '') + (s.on ? '' : ' - while it has never been on, the call count stays 0');
+      (c.last_at ? ', last ' + when(c.last_at) : '') + (s.on ? '' : ' - while it has never been on, the call count stays 0') +
+      // 1.99?? transcripts bar: !transcripts off 🎙 lines as a blacked-out bar - live only with the switch on AND a Pepe that sends them
+      (d.txbar ? ' · !transcripts off bar ' + (d.txbar.on ? 'ON' : d.txbar.cap ? 'ready (on with the switch)' : "off (Pepe doesn't send it yet)") : '');
     btn.disabled = false;
     btn.textContent = s.on ? 'Turn off' : 'Turn on';
   }

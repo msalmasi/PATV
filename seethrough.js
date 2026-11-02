@@ -208,7 +208,7 @@ async function accountLinks(items) {
  * lookup(c) -> {ts, vz, vw} | null (the live item, else the archive's chat_log_veil row - bridge.revealRows).
  */
 async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
-  const items = [], refused = [];
+  const items = [], refused = [], txcs = new Set();
   for (const c of [...new Set((cs || []).map(Number).filter((x) => x > 0))].slice(0, 50)) {
     let r = null;
     try { r = await lookup(c); } catch (e) { r = null; }
@@ -216,12 +216,18 @@ async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
     if (!mayReveal(role, r.ts)) { refused.push({ c, why: "era" }); continue; }
     const o = { c, login: String(r.vz.login), display: r.vz.display ? String(r.vz.display) : null };
     if (r.vz.kind === "hidden" && typeof r.vw === "string") o.words = r.vw;
+    if (r.tx === true) txcs.add(c);
     items.push(o);
   }
   if (items.length) {
     if (role.role === "admin") await accountLinks(items);
-    await log({ userId: user.userId, role: role.role, scope: "chat_line", roomId, logins: items.map((o) => o.login), reason,
-                ref: "c:" + items.map((o) => o.c).slice(0, 8).join(",") });
+    // 1.99?? transcripts bar: the log says which toggle was seen through - a 🎙 line masked for !transcripts off gets its own row, scope
+    // tx_line; every other line chat_line, as before. Both written BEFORE the answer (nothing is shown unlogged)
+    for (const [scope, part] of [["chat_line", items.filter((o) => !txcs.has(o.c))], ["tx_line", items.filter((o) => txcs.has(o.c))]]) {
+      if (!part.length) continue;
+      await log({ userId: user.userId, role: role.role, scope, roomId, logins: part.map((o) => o.login), reason,
+                  ref: "c:" + part.map((o) => o.c).slice(0, 8).join(",") });
+    }
     if (role.role === "owner") await noteOwnerUse(user, roomId, "lines", items.length);
   }
   return { items, refused };
@@ -334,14 +340,19 @@ function register(app, { addUser, noTimers = false }) {
         // the toggle's batch fetch: no new row - the toggle's own row counts it (refused unless the toggle is on)
         const tg = await toggleOf(req.user.userId, "chat_toggle", ctx.R.id);
         if (!tg) return res.status(409).json({ ok: false, error: "Show real names is off - turn it on first." });
-        const items = [], refused = [];
+        const items = [], refused = [], txl = [];
         for (const c of [...new Set(cs.map(Number).filter((x) => x > 0))].slice(0, 50)) {
           const r = await lookup(c).catch(() => null);
           if (!r || !r.vz || !r.vz.login) { refused.push({ c, why: "no_veil" }); continue; }
           if (!mayReveal(ctx.role, r.ts)) { refused.push({ c, why: "era" }); continue; }
           items.push({ c, login: String(r.vz.login), display: r.vz.display || null, ...(r.vz.kind === "hidden" && typeof r.vw === "string" ? { words: r.vw } : {}) });
+          if (r.tx === true) txl.push(items[items.length - 1]);
         }
         if (items.length) await toggleUsed(tg.log_id, items.map((o) => o.login));
+        // 1.99?? transcripts bar: a !transcripts off 🎙 line shown while the toggle is on also gets a tx_line row (ref toggle:<its row>), so
+        // the log says that toggle was seen through too - the toggle's own row still counts the batch
+        if (txl.length) await log({ userId: req.user.userId, role: ctx.role.role, scope: "tx_line", roomId: ctx.R.id, logins: txl.map((o) => o.login),
+                                    reason: req.body.reason, ref: "toggle:" + tg.log_id });
         evFlags(ctx.R, items);
         return res.json({ ok: true, items, refused });
       }

@@ -171,8 +171,11 @@ function hiddenLogins(mode = "history") {
     // is left out (!bridge hide, forget-me) they are left out in SQL too (no who map needed: the hash is the key). Their own cap.
     let nh = 0;
     for (const h of CL.hiddenHashes()) { if (nh >= HIDDEN_SQL_MAX) break; if (CL.isLeftOutHash(h) && !maskableH(h)) { out.add("h:" + h); nh++; } }
+    // 1.99?? transcripts bar: history (once G is set) reads a !transcripts off person's "h:" 🎙 rows - the projection draws the ones Pepe
+    // sent as a bar (tm) as bars and leaves the rest out (chatlogview.privacyV2 / privacyAt); search still skips them all in SQL
     let nt = 0;
-    if (txn > 0 && CL.txHiddenHashes) for (const h of CL.txHiddenHashes()) { if (nt >= HIDDEN_SQL_MAX) break; if (!out.has("h:" + h)) { tx.add("h:" + h); nt++; } }
+    const txBars = M === "history" && !!g;
+    if (txn > 0 && CL.txHiddenHashes && !txBars) for (const h of CL.txHiddenHashes()) { if (nt >= HIDDEN_SQL_MAX) break; if (!out.has("h:" + h)) { tx.add("h:" + h); nt++; } }
   }
   HX[M] = { key, at: t, size: W.size, out: [...out], tx: [...tx] };
   return HX[M];
