@@ -209,17 +209,22 @@ async function nameItem(R, it) {
   let view = null;
   try {
     if (v2.leaving) {
+      // privacy fix (M addendum 3 #1): a "hidden" leave of someone whose open session is incognito ends it first - the leave never
+      // carries the incognito frog name under a hidden veil
+      await FN.level(roomId, vz.login, vz.kind, it.ts);
       view = FN.current(roomId, vz.login);
       await FN.left(roomId, vz.login, it.ts);
     } else {
-      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R) });
+      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), kind: vz.kind });
     }
   } catch (e) { view = null; console.error("[veil] frog name:", e && e.code ? e.code : "error"); }
   let named = view && view.alias ? view : null;
   if (it.hold) {
     const was = holdName(roomId, it.hold);
     if (it.k === "mic") holdName(roomId, it.hold, named && v2.proven ? named : null);
-    else if (was !== undefined) named = was;                 // the grab's verdict (a name, or "someone") for the whole hold
+    // the grab's verdict (a name, or "someone") for the whole hold - privacy fix: only while it is still the same session (an
+    // incognito -> hidden switch mid-hold ends it at once: the release / 🎙 line then never shows the grab's incognito name)
+    else if (was !== undefined) named = was && view && view.session === was.session ? was : null;
   }
   if ((it.k === "mic" || it.k === "unmic") && (!v2.proven || v2.beganNamed)) named = null;
   if (named) {
@@ -306,7 +311,7 @@ async function nameSnapshot(R, now) {
     if (!vz) continue;
     const low = lower(vz.login);
     let view = null;
-    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid }); } catch (err) { view = null; }
+    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid, kind: vz.kind }); } catch (err) { view = null; }
     seen.add(low);
     const isMic = (R.mic || []).includes(e);
     if (view && view.alias && !(isMic && (vz.proven !== true || vz.beganNamed === true))) {
