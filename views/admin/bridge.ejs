@@ -294,6 +294,11 @@
   <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
   <p class="adm-help" id="pwSummary" role="status">Loading…</p>
   <div class="adm-actions"><button type="button" id="pwBtn" disabled>…</button><span id="pwMsg" class="adm-msg" role="status"></span></div>
+  <%# 1.99?? transcripts bar gate (privwire.txAdvert / setTxBarOn): its own switch - ships OFF %>
+  <h3 id="pwTxT"><code>!transcripts off</code> bar</h3>
+  <p class="adm-help">While this is <b>off</b> (the default) nothing changes, even with privacy wire v2 on: the mic transcripts of someone who typed <code>!transcripts off</code> stay left out of the website, and Pepe's replies, his room notice, /help and the privacy policy say so. Turn it <b>on</b> (privacy wire v2 must be on too) and the site's sync answers say <code>txbar: 1</code>: from Pepe's next batch their 🎙 lines show as a <b>blacked-out bar</b> under their name (their frog name if they're incognito) with a "transcript hidden" tag; members can clip the audio of those mic turns (posted without a caption: never the words); PATV admins, and a pad's owner in their own pad, can reveal the words (logged). Pepe's replies, his room notice, /help and the privacy policy switch to that wording once a Pepe that sends the bar has synced. <b>Turn it on only after the owner has approved that wording.</b> Turning it off: new ones are left out again from Pepe's next batch; bars already shown stay bars, and the policy says so.</p>
+  <p class="adm-help" id="pwTxSummary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="pwTxBtn" disabled>…</button><span id="pwTxMsg" class="adm-msg" role="status"></span></div>
   <% } %>
 </section>
 <script>
@@ -303,10 +308,11 @@
   var sum = document.getElementById('pwSummary');
   if (!sum) return;
   var btn = document.getElementById('pwBtn'), msg = document.getElementById('pwMsg'), cur = null;
+  var txSum = document.getElementById('pwTxSummary'), txBtn = document.getElementById('pwTxBtn'), txMsg = document.getElementById('pwTxMsg'), txCur = null;
   function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never'; }
   function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
-  function req(data) {
-    return fetch('/api/admin/privwire', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+  function req(data, path) {
+    return fetch(path || '/api/admin/privwire', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
       headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
       .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
   }
@@ -316,12 +322,30 @@
     sum.textContent = 'Privacy wire v2 is ' + (s.on ? 'ON' : 'off') + ' · G (go-live) ' + when(s.g_at) + (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '') +
       ' · /api/bridge/sync/v2 calls ' + (c.calls || 0) + ' (accepted ' + (c.ok || 0) + ', refused ' + (c.refused || 0) + ', errors ' + (c.err || 0) + ')' +
       (c.probes ? ' · ' + c.probes + ' hit(s) without the bot token (not counted as calls)' : '') +
-      (c.last_at ? ', last ' + when(c.last_at) : '') + (s.on ? '' : ' - while it has never been on, the call count stays 0') +
-      // 1.99?? transcripts bar: !transcripts off 🎙 lines as a blacked-out bar - live only with the switch on AND a Pepe that sends them
-      (d.txbar ? ' · !transcripts off bar ' + (d.txbar.on ? 'ON' : d.txbar.cap ? 'ready (on with the switch)' : "off (Pepe doesn't send it yet)") : '');
+      (c.last_at ? ', last ' + when(c.last_at) : '') + (s.on ? '' : ' - while it has never been on, the call count stays 0');
     btn.disabled = false;
     btn.textContent = s.on ? 'Turn off' : 'Turn on';
+    // 1.99?? transcripts bar gate: its own switch (default off); live = privacy wire v2 on + this switch on + a Pepe that sends the bar
+    var t = d.txbar || {};
+    txCur = t;
+    if (txSum) {
+      txSum.textContent = 'The !transcripts off bar switch is ' + (t.sw ? 'ON' : 'off') + (t.sw_at ? ' · last change ' + when(t.sw_at) + (t.sw_by ? ' by ' + t.sw_by : '') : '') +
+        ' · the bar is ' + (t.on ? 'LIVE' : !t.sw ? 'not live (this switch is off)' : !s.on ? 'not live (privacy wire v2 is off)'
+          : t.cap ? 'not live yet' : "not live (Pepe doesn't send it yet - his next sync after an update)") +
+        ' · Pepe ' + (t.cap ? 'can send it' : "can't send it yet") + (t.at ? ' (since ' + when(t.at) + ')' : '');
+      txBtn.disabled = false;
+      txBtn.textContent = t.sw ? 'Turn off' : 'Turn on';
+    }
   }
+  if (txBtn) txBtn.addEventListener('click', function () {
+    if (!txCur) return;
+    var on = !txCur.sw;
+    if (on && !window.confirm('Turn the !transcripts off bar on? With privacy wire v2 on, the mic transcripts of people who typed !transcripts off show on the website as a blacked-out bar under their name (members can clip the audio, never the words), and Pepe’s replies, his room notice, /help and the privacy policy switch to that wording. Only with the owner’s OK on that wording.')) return;
+    if (!on && !window.confirm('Turn it off? New mic transcripts of !transcripts off people are left out again from Pepe’s next batch; bars already shown stay bars.')) return;
+    txBtn.disabled = true;
+    req({ on: on }, '/api/admin/privwire/txbar').then(function (d) { txMsg.textContent = 'Switched ' + (on ? 'on' : 'off') + '.'; txMsg.className = 'adm-msg ok'; render(d); })
+      .catch(function (e) { txBtn.disabled = false; txMsg.textContent = e.message; txMsg.className = 'adm-msg err'; });
+  });
   btn.addEventListener('click', function () {
     if (!cur) return;
     var on = !cur.on;

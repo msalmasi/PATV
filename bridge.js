@@ -1743,8 +1743,9 @@ function register(app, { isBotToken, addUser }) {
     return { success: true, ...r, jobs, viewers: require("./padmod").viewersFor(liveIds), ...blocks, ...(mfc.length ? { mf_cancel: mfc } : {}),
              ...(PW.isOn() ? { privwire: 2 } : {}),
              // 1.99?? transcripts bar: this site shows a !transcripts off speaker's 🎙 lines as a blacked-out bar (veil.js) - said only
-             // while privacy wire v2 is on; Pepe sends them (masked, v2 only) only after it, and says txbar_cap: 1 (privwire.noteTxCap)
-             ...(PW.isOn() ? { txbar: 1 } : {}),
+             // while privacy wire v2 is on; Pepe sends them (masked, v2 only) only after it, and says txbar_cap: 1 (privwire.noteTxCap).
+             // 1.99?? gate: AND the bar's own switch (privwire.txAdvert; /admin/bridge, default OFF - the owner approves the wording first)
+             ...(PW.txAdvert() ? { txbar: 1 } : {}),
              // wave 2 WP-5 (spec E.3): evidence clips can be made (evidence.js: its switch AND privacy wire v2) - Pepe offers the Camfrog
              // !clipmic evidence path only after this (never said while either is off: the contract fixture runs without it)
              ...(evidenceOn() ? { evidence: 1 } : {}) };

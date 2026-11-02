@@ -59,6 +59,8 @@ function init() {
         if (v && typeof v === "object") for (const k of COUNT_KEYS) COUNTS[k] = Math.max(COUNTS[k], Math.floor(Number(v[k]) || 0));
         if (v && Number(v.last_at) > 0) COUNTS.last_at = COUNTS.last_at || Number(v.last_at);
       } catch (e) { /* counts start at 0 */ }
+      const s = (await getQuery("SELECT value FROM chatlog_meta WHERE key = 'privwire_txbar'"))[0];   // 1.99?? transcripts bar gate
+      try { TXSW = cleanSw(s ? JSON.parse(s.value) : null); } catch (e) { TXSW = cleanSw(null); }
       loaded = true;
     })().catch((e) => { ready = null; throw e; });
   }
@@ -111,9 +113,10 @@ async function setOn(want, user) {
 }
 
 // ── 1.99?? transcripts bar (owner 2026-11-02): a !transcripts off speaker's 🎙 lines as a blacked-out bar ──
-// The site always says txbar: 1 while the switch is on (bridge.js syncAnswer); Pepe sends those lines (masked, v2 only) only after
-// that, and only a Pepe that does it says txbar_cap: 1 on his syncs. The text that describes the bar as what happens NOW (privacy.ejs,
-// /help: "live") shows only while BOTH are true - the switch on AND the latest sync came from a Pepe that sends the bar: an older Pepe
+// The site says txbar: 1 while privacy wire v2 AND its own "!transcripts off bar" switch are on (txAdvert, below; bridge.js syncAnswer);
+// Pepe sends those lines (masked, v2 only) only after that, and only a Pepe that does it says txbar_cap: 1 on his syncs. The text that
+// describes the bar as what happens NOW (privacy.ejs, /help: "live") shows only while ALL are true - both switches on AND the latest
+// sync came from a Pepe that sends the bar: an older Pepe
 // (a bot rollback, a site-first deploy) leaves new ones out and their turns clippable as before. Review fix (F1): the bars already
 // stored DON'T go away with it - their words stay in bridge_veil / chat_log_veil (revealable by the see-through roles) and their turns
 // may be evidence clips - so while any is left the text says so ("kept", txKept below); only with none left does it read as wave 2
@@ -140,8 +143,42 @@ function noteTxCap(cap) {
     if (!want) await refreshTxKept();                // (review fix F1: the "kept" text from the next request on, not 10 minutes later)
   }).catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));
 }
-/** Is the transcripts bar live - the switch on AND the latest Pepe sends it? Synchronous; false until loaded (fails toward the old text). */
-const txBar = () => isOn() && txcapLoaded && TXCAP.cap === true;
+// ── 1.99?? transcripts bar GATE: the "!transcripts off bar" switch (/admin/bridge, in the Privacy wire v2 card) ──
+// Privacy wire v2 was already ON on prod (since 2026-11-02 18:24Z) when the bar was built, so without a switch of its own a deploy of
+// both repos would have made it live at once - before the owner approved its wording. OFF (the default): the site never says txbar: 1,
+// so Pepe keeps leaving a !transcripts off speaker's 🎙 lines out of the website (as before) and his replies, his room notice, /help
+// and the privacy policy read as before. ON (privacy wire v2 on too): the advert - and once a Pepe that sends the bar syncs
+// (txbar_cap), the bar and all of its text are live (txBar). Turned off again: Pepe leaves new ones out from his next sync (the advert
+// stops); the bars already stored stay bars and the text says so ("kept"). State: chatlog_meta 'privwire_txbar' {on, at, by}; every
+// flip audited (admin_audit privwire.txbar + a room_events row), like the privacy wire's own switch.
+function cleanSw(o) {
+  const v = o && typeof o === "object" ? o : {};
+  return { on: v.on === true, at: Number(v.at) > 0 ? Math.floor(Number(v.at)) : null, by: typeof v.by === "string" ? v.by.slice(0, 60) : null };
+}
+let TXSW = cleanSw(null);
+/** Is the "!transcripts off bar" switch on? Synchronous; false until loaded (fails toward the old behaviour). */
+const txSwitch = () => loaded && TXSW.on === true;
+/** Does the site say txbar: 1 to Pepe now - privacy wire v2 AND the bar's own switch on? (bridge.js syncAnswer) */
+const txAdvert = () => isOn() && txSwitch();
+/** Flip the "!transcripts off bar" switch. user = {userId, username}. -> {on, at, by[, unchanged]}. Audited. */
+async function setTxBarOn(want, user) {
+  await init();
+  const on = want === true;
+  if (TXSW.on === on) return { ...TXSW, unchanged: true };
+  const next = cleanSw({ on, at: clock(), by: user && user.username ? user.username : null });
+  await runQuery("INSERT INTO chatlog_meta (key, value) VALUES ('privwire_txbar', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(next)]);
+  TXSW = next;
+  if (!on) await refreshTxKept().catch(() => {});      // (the "kept" text from the next request on, as when Pepe's cap goes off)
+  try { await require("./adminaudit").record(user || { userId: "system" }, "privwire.txbar", null, { on, privwire: isOn() }); } catch (e) { console.error("[privwire] txbar audit:", e.message); }
+  try { await require("./rooms").event(null, "privwire.txbar", user && user.username ? user.username : null, `!transcripts off bar ${on ? "on" : "off"}`); } catch (e) { /* best effort */ }
+  console.log(`[privwire] !transcripts off bar switched ${on ? "ON" : "OFF"} (${(user && user.username) || "?"})${on && !isOn() ? " - waits for privacy wire v2" : ""}`);
+  return { ...TXSW };
+}
+/** Is the transcripts bar live - privacy wire v2 on, the bar's switch on AND the latest Pepe sends it? Synchronous; false until loaded
+ *  (fails toward the old text). */
+const txBar = () => txAdvert() && txcapLoaded && TXCAP.cap === true;
+/** The admin card's view of the bar: {on (live), cap, at, sw, sw_at, sw_by}. */
+const txInfo = () => ({ on: txBar(), cap: TXCAP.cap, at: TXCAP.at, sw: TXSW.on, sw_at: TXSW.at, sw_by: TXSW.by });
 
 // Review fix (F1): are any !transcripts off bars still kept with what was said - a bar's identity + words in the live ring's side table
 // (bridge_veil vz.tx) or the archive's (chat_log_veil of a tm 🎙 row), or an evidence clip of such a turn (evidence.anyTxClip - evidence.js
@@ -212,8 +249,18 @@ function register(app, { addUser, noTimers = false }) {
   app.get("/api/admin/privwire", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!can(req)) return res.status(403).json({ ok: false, error: "Site admins only." });
-    try { await init(); await loadTxCap(); res.json({ ok: true, state: state(), counts: counts(), txbar: { on: txBar(), cap: TXCAP.cap, at: TXCAP.at } }); }
+    try { await init(); await loadTxCap(); res.json({ ok: true, state: state(), counts: counts(), txbar: txInfo() }); }
     catch (e) { console.error("[privwire] admin:", e.message); res.status(500).json({ ok: false, error: "Something went wrong." }); }
+  });
+  // 1.99?? transcripts bar gate: the "!transcripts off bar" switch (the same admins, the same checks as the privacy wire's own)
+  app.post("/api/admin/privwire/txbar", addUser, json, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!can(req)) return res.status(403).json({ ok: false, error: "Site admins only." });
+    if (req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
+    const b = req.body || {};
+    if (typeof b.on !== "boolean") return res.status(400).json({ ok: false, error: "Say on: true or false." });
+    try { await setTxBarOn(b.on, { userId: req.user.userId, username: req.user.username }); await loadTxCap(); res.json({ ok: true, state: state(), counts: counts(), txbar: txInfo() }); }
+    catch (e) { console.error("[privwire] txbar switch:", e.message); res.status(500).json({ ok: false, error: "Something went wrong." }); }
   });
   app.post("/api/admin/privwire", addUser, json, async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -221,7 +268,7 @@ function register(app, { addUser, noTimers = false }) {
     if (req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     const b = req.body || {};
     if (typeof b.on !== "boolean") return res.status(400).json({ ok: false, error: "Say on: true or false." });
-    try { const st = await setOn(b.on, { userId: req.user.userId, username: req.user.username }); await loadTxCap(); res.json({ ok: true, state: st, counts: counts(), txbar: { on: txBar(), cap: TXCAP.cap, at: TXCAP.at } }); }
+    try { const st = await setOn(b.on, { userId: req.user.userId, username: req.user.username }); await loadTxCap(); res.json({ ok: true, state: st, counts: counts(), txbar: txInfo() }); }
     catch (e) { console.error("[privwire] switch:", e.message); res.status(500).json({ ok: false, error: "Something went wrong." }); }
   });
   if (!noTimers && !saveTimer) {
@@ -233,6 +280,7 @@ function register(app, { addUser, noTimers = false }) {
 module.exports = { init, isOn, gAt, wasOnAt, lastOnAt, note, counts, state, setOn, saveCounts, privacyCopy, register, _clean: clean,
                    noteTxCap, txBar, loadTxCap,                                    // 1.99?? transcripts bar
                    txKept, refreshTxKept, txText, txTextNow, txOff, setTxClipProbe, // 1.99?? transcripts bar review fix (F1)
+                   txSwitch, txAdvert, setTxBarOn, txInfo,                         // 1.99?? transcripts bar gate (its own switch, default OFF)
                    _setClock: (f) => { clock = f || (() => Date.now()); },
                    _reset: () => { STATE = clean(null); for (const k of COUNT_KEYS) COUNTS[k] = 0; COUNTS.last_at = null; ready = null; loaded = false;
-                                   TXCAP = { cap: false, at: null }; txcapLoaded = false; TXKEPT = { any: null, at: 0 }; } };
+                                   TXCAP = { cap: false, at: null }; txcapLoaded = false; TXKEPT = { any: null, at: 0 }; TXSW = cleanSw(null); } };
