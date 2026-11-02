@@ -107,6 +107,11 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS evidence_clips_room ON evidence_clips (room_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS evidence_clips_exp ON evidence_clips (expires_at)");
       await runQuery("CREATE INDEX IF NOT EXISTS evidence_clips_subject ON evidence_clips (subject_login)");
+      // 1.99?? transcripts bar review fix (TXBAR-ST-2 / ST-3 / F1): tm = 1 - the turn of a !transcripts off 🎙 bar (its veil is "hidden" for
+      // every gate, as the bar's): its clip_save row names that toggle (ref ev:<id>:tx), the lists and exports say "transcripts off"
+      // instead of passing it off as !bridge hide, and the privacy text describes it while one is kept (privwire.txKept)
+      const ecols = new Set((await getQuery("PRAGMA table_info(evidence_clips)")).map((x) => x.name));
+      if (!ecols.has("tm")) { try { await runQuery("ALTER TABLE evidence_clips ADD COLUMN tm INTEGER"); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; } }
       const r = (await getQuery("SELECT value FROM chatlog_meta WHERE key = 'evidence'"))[0];
       try { STATE = cleanState(r ? JSON.parse(r.value) : null); } catch (e) { STATE = cleanState(null); }
       loaded = true;
@@ -138,6 +143,13 @@ async function setOn(want, user) {
   console.log(`[evidence] evidence clips switched ${on ? "ON" : "OFF"} (${(user && user.username) || "?"})`);
   return state();
 }
+/** 1.99?? transcripts bar review fix (F1): is an evidence clip of a !transcripts off bar's turn (tm) still kept? (privwire.txKept - the
+ *  privacy text keeps describing those bars while one is.) Only this module reads the store. */
+async function anyTxClip() {
+  await init();
+  return (await getQuery("SELECT 1 FROM evidence_clips WHERE tm = 1 LIMIT 1")).length > 0;
+}
+try { require("./privwire").setTxClipProbe(anyTxClip); } catch (e) { /* (privwire's own tests load it alone) */ }
 /** For the privacy page (terms.js -> privacy.ejs locals.evidence): {on, any, on_at, on_day} while evidence clips can be made, or while
  *  any are still kept (the retention row stays true until the last one is gone); null otherwise - the page reads as before. */
 async function privacyCopy() {
@@ -245,7 +257,7 @@ function previewView(p, slug) {
 
 /** Write one evidence clip: the file into the store (moved from `from`, or `buf` written), then ONE dbUtils.tx - the row, its
  *  seethrough_log row (clip_save) and its admin_audit row (evidence.save). The file goes again if the transaction fails. -> {id, expires_at} */
-async function store({ from = null, buf = null, roomId, c = null, txId = null, subject, veil, saidAt, secs, user, role: by, via, reason = "" }) {
+async function store({ from = null, buf = null, roomId, c = null, txId = null, subject, veil, saidAt, secs, user, role: by, via, reason = "", tm = false }) {
   const ST = require("./seethrough"), AA = require("./adminaudit");
   await init(); await ST.init(); await AA.init();
   if (!LOGIN_RE.test(subject) || !VEILS.has(veil)) throw new Refuse(400, "bad evidence", "bad_request");
@@ -268,13 +280,13 @@ async function store({ from = null, buf = null, roomId, c = null, txId = null, s
   const why = clean(reason, REASON_MAX) || null;
   try {
     await tx(async () => {
-      const st = await ST.log({ userId: user.userId, role: by, scope: "clip_save", roomId, logins: [subject], reason: why || "", ref: "ev:" + id });
+      const st = await ST.log({ userId: user.userId, role: by, scope: "clip_save", roomId, logins: [subject], reason: why || "", ref: "ev:" + id + (tm ? ":tx" : "") });
       if (!st) throw new Error("evidence: no see-through row");          // never a clip without its audit row
       await runQuery(`INSERT INTO evidence_clips (id, room_id, rk, c, tx, subject_login, veil, said_at, secs, bytes, sha256, file, by_user, role, via, reason,
-                      st_id, created, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      st_id, created, expires_at, tm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                      [id, String(roomId), rk, c == null ? null : Number(c), txId && TX_RE.test(txId) ? txId : null, subject, veil, Math.floor(Number(saidAt) || t),
                       Math.max(0, Math.min(600, Number(secs) || 0)), data.length, crypto.createHash("sha256").update(data).digest("hex"), file,
-                      String(user.userId), String(by), String(via), why, st, t, exp]);
+                      String(user.userId), String(by), String(via), why, st, t, exp, tm ? 1 : null]);
       await AA.record({ userId: user.userId, username: user.username || null }, "evidence.save", null, { id, room: String(roomId), veil, via, st }, why);
     });
   } catch (e) {
@@ -399,7 +411,8 @@ async function padCard(roomId, viewer) {
 // (review fix WP5-ACC-8: subject_gone - the subject used forget-me or deleted their account - is an ADMIN's to see; a pad's owner never
 // learns that private fact about a login)
 function rowView(r, admin, names) {
-  return { id: r.id, room_id: r.room_id, subject: r.subject_login, veil: r.veil, said_at: Number(r.said_at), secs: Number(r.secs) || 0, bytes: Number(r.bytes) || 0,
+  return { id: r.id, room_id: r.room_id, subject: r.subject_login, veil: r.veil, ...(Number(r.tm) === 1 ? { tx: true } : {}),   // (tx: a !transcripts off bar's turn)
+           said_at: Number(r.said_at), secs: Number(r.secs) || 0, bytes: Number(r.bytes) || 0,
            role: r.role, via: r.via, by: names.get(String(r.by_user)) || null, reason: r.reason || "", created: Number(r.created), expires_at: Number(r.expires_at),
            audio: "/api/evidence/" + r.id + "/audio",
            ...(admin ? { subject_gone: r.subject_gone_at != null, hold: r.hold_at ? { at: Number(r.hold_at), by: names.get(String(r.hold_by)) || null, why: r.hold_why || "" } : null } : {}) };
@@ -522,7 +535,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
         await AA.record({ userId: uid, username: req.user.username || null }, "evidence.preview", null, { room: R.id, c, veil, st }, reason || null);
         return st;
       });
-      PEND.set(jid, { id: jid, roomId: R.id, slug: R.slug || String(req.params.slug), c, tx: it.id, target: login, veil, saidAt: Number(it.ts), userId: uid,
+      PEND.set(jid, { id: jid, roomId: R.id, slug: R.slug || String(req.params.slug), c, tx: it.id, tm: it.tm === 1, target: login, veil, saidAt: Number(it.ts), userId: uid,
                       username: req.user.username || null, role: rl.role, stId, reason, state: "pending", status: "", ts: now(), done: 0, secs: 0 });
       relay.newJob({ id: jid, kind: "micevidence", roomId: R.id, userId: uid, username: req.user.username || null, camfrog: "", target: login, tx: it.id, veil,
                      veil_ok: stId, viewers: new Set([uid]) });
@@ -608,7 +621,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       try {
         saved = await store({ from: pendingPath(p.id), roomId: R.id, c: p.c, txId: p.tx, subject: p.target, veil: p.veil, saidAt: p.saidAt, secs: p.secs,
                               user: { userId: String(req.user.userId), username: req.user.username || null }, role: rl.role, via: "web",
-                              reason: clean((req.body || {}).reason, REASON_MAX) || p.reason });
+                              reason: clean((req.body || {}).reason, REASON_MAX) || p.reason, tm: p.tm === true });
       } finally { p.saving = false; }
       PEND.delete(p.id);
       if (rl.role === "owner") { try { await ST.noteOwnerUse(req.user, R.id, "lines", 1); } catch (e) { /* the E.6 notice is best effort */ } }
@@ -635,8 +648,14 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       let acct = null, rl = null;
       for (const a of accts) { const r = await role(a, room, saidMs); if (r) { acct = a; rl = r; break; } }
       if (!rl) return res.status(403).json({ ok: false, error: "not_entitled" });
+      // (1.99?? transcripts bar review fix TXBAR-ST-2: the turn of a !transcripts off bar - its 🎙 line in the live ring is tm)
+      let tm = false;
+      try {
+        const txId = String(b.tx || ""), R = TX_RE.test(txId) ? require("./bridge")._rooms.get(room) : null;
+        tm = !!(R && (R.feed || []).some((x) => x && x.k === "tx" && x.id === txId && x.tm === 1));
+      } catch (e) { tm = false; }
       const saved = await store({ buf, roomId: room, txId: String(b.tx || ""), subject: target, veil, saidAt: saidMs, secs: Number(b.secs) || 0,
-                                  user: { userId: String(acct.userId), username: acct.username || null }, role: rl.role, via: "camfrog", reason: "Camfrog !clipmic" });
+                                  user: { userId: String(acct.userId), username: acct.username || null }, role: rl.role, via: "camfrog", reason: "Camfrog !clipmic", tm });
       if (rl.role === "owner") { try { await ST.noteOwnerUse({ userId: String(acct.userId), username: acct.username }, room, "lines", 1); } catch (e) { /* best effort */ } }
       let url = "/admin/bridge#evidence";
       if (rl.role === "owner") {
@@ -790,7 +809,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
   });
 }
 
-module.exports = { init, isOn, effective, state, setOn, privacyCopy, role, heldWhy, lapsed, store, sweep, subjectGone, offerable, padCard, register,
+module.exports = { init, isOn, effective, state, setOn, privacyCopy, anyTxClip, role, heldWhy, lapsed, store, sweep, subjectGone, offerable, padCard, register,
                    KEEP_MS, PREVIEW_TTL, LINE_MAX_AGE, PRIVATE_HEADERS, ID_RE, Refuse, filePath, pendingPath, SWEEP_PAGE, BOOT_SWEEP_MS, CHUNK_TARGETS,
                    _pending: PEND, _seen: SEEN, _setDir,
                    _setClock: (f) => { clock = f || (() => Date.now()); },

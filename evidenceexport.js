@@ -62,10 +62,12 @@ async function padOf(ref, bySlug) {
   return r ? { roomId: r.room_id, slug: null, pad: r.room_id, R: null } : null;
 }
 
-/** One line as the file shows it. who = {login, display} (null for Pepe's own topic lines), veil = {kind, alias} | null. */
-function lineOf({ ts, k, who, veil, text, words, unrevealable }) {
+/** One line as the file shows it. who = {login, display} (null for Pepe's own topic lines), veil = {kind, alias} | null.
+ *  1.99?? transcripts bar review fix (TXBAR-ST-3): tm = a 🎙 line shown as a bar because its speaker turned !transcripts off - stored
+ *  and revealed as a hidden line, but labelled transcripts_off (TXT "[hidden, transcripts off]"), never passed off as !bridge hide. */
+function lineOf({ ts, k, who, veil, text, words, unrevealable, tm = false }) {
   const o = { ts: Number(ts), kind: KIND[k] || String(k), login: who && who.login ? String(who.login) : null, display: who && who.display ? String(who.display) : null };
-  if (veil) { o.veil = veil.kind; if (veil.alias) o.alias = veil.alias; }
+  if (veil) { o.veil = veil.kind; if (veil.alias) o.alias = veil.alias; if (tm && k === "tx") o.transcripts_off = true; }
   if (unrevealable) o.unrevealable = true;
   if (veil && veil.kind === "hidden") { if (typeof words === "string") o.text = words; else o.masked = true; }
   else if (text != null) o.text = String(text);
@@ -113,11 +115,11 @@ async function collect(pad, from, to) {
         const vk = it.u && it.u.veil ? String(it.u.veil) : null;
         if (r.v_login) {
           out.lines.push(lineOf({ ts: r.ts, k: r.k, who: { login: r.v_login, display: r.v_display }, veil: { kind: r.v_kind, alias: it.u && it.u.alias },
-                                  text: red(it.text), words: r.v_words == null ? null : red(String(r.v_words)) }));
+                                  text: red(it.text), words: r.v_words == null ? null : red(String(r.v_words)), tm: it.tm === 1 }));
         } else if (vk || (it.u && it.u.anon) || it.ah || p === "anon" || p === "mask") {
           out.left.unrevealable++;
           out.lines.push(lineOf({ ts: r.ts, k: r.k, who: { login: null, display: memberDisplay(it.u) }, veil: { kind: vk || (p === "mask" ? "hidden" : "incognito"), alias: it.u && it.u.alias },
-                                  text: red(it.text), unrevealable: true }));
+                                  text: red(it.text), unrevealable: true, tm: it.tm === 1 }));
         } else {
           out.lines.push(lineOf({ ts: r.ts, k: r.k, who: it.u ? { login: it.u.login || null, display: it.u.display || it.u.login || null } : null, veil: null, text: red(it.text) }));
         }
@@ -147,11 +149,11 @@ async function collect(pad, from, to) {
     if (out.lines.length >= limits.linesMax) { out.truncated = true; out.next = Number(it.ts); break; }
     if (it._vz && ids.has(Number(it.c))) {
       out.lines.push(lineOf({ ts: it.ts, k: it.k, who: { login: it._vz.login, display: it._vz.display }, veil: { kind: it._vz.kind, alias: it.u && it.u.alias },
-                              text: red(it.text), words: typeof it._vw === "string" ? red(it._vw) : null }));
+                              text: red(it.text), words: typeof it._vw === "string" ? red(it._vw) : null, tm: it.tm === 1 }));
     } else if ((it.u && (it.u.anon || it.u.veil)) || p === "anon" || p === "mask") {
       out.left.unrevealable++;
       out.lines.push(lineOf({ ts: it.ts, k: it.k, who: { login: null, display: memberDisplay(it.u) }, veil: { kind: (it.u && it.u.veil) || (p === "mask" ? "hidden" : "incognito"), alias: it.u && it.u.alias },
-                              text: red(it.text), unrevealable: true }));
+                              text: red(it.text), unrevealable: true, tm: it.tm === 1 }));
     } else {
       out.lines.push(lineOf({ ts: it.ts, k: it.k, who: it.u ? { login: it.u.login || null, display: it.u.display || it.u.login || null } : null, veil: null, text: red(it.text) }));
     }
@@ -163,7 +165,7 @@ const SYS = { join: "joined", leave: "left", mic_grab: "grabbed the mic", mic_dr
 function txtLine(o) {
   const t = iso(o.ts).slice(0, 19).replace("T", " ");
   const who = o.login ? o.login + (o.display && o.display !== o.login ? ` (${o.display})` : "") : (o.display || "someone");
-  const tag = o.veil ? ` [${o.veil}${o.alias ? " as " + o.alias : ""}${o.unrevealable ? ", can't be revealed" : ""}]` : "";
+  const tag = o.veil ? ` [${o.veil}${o.transcripts_off ? ", transcripts off" : ""}${o.alias ? " as " + o.alias : ""}${o.unrevealable ? ", can't be revealed" : ""}]` : "";
   if (o.kind === "topic") return `[${t}] topic: ${o.text || ""}`;
   if (SYS[o.kind]) return `[${t}] ${who}${tag} ${SYS[o.kind]}`;
   const body = o.masked ? "[hidden]" : (o.text || "");
@@ -253,14 +255,20 @@ function register(app, { addUser, bySlug }) {
                      from: T.from, to: T.to, reason: T.reason, cut: T.cut };
       // the log BEFORE the first byte: every login in the file, the revealed (veiled) ones first; past 200 logins the row is split over
       // several rows with the same ref (seethrough.logAll - review fix WP5-T8: none is dropped)
-      const veiled = [], named = [];
-      for (const o of got.lines) if (o.login) (o.veil ? veiled : named).push(o.login.toLowerCase());
+      const veiled = [], named = [], txOff = [];
+      for (const o of got.lines) if (o.login) { (o.veil ? veiled : named).push(o.login.toLowerCase()); if (o.transcripts_off) txOff.push(o.login.toLowerCase()); }
       const logins = [...new Set([...veiled, ...named])];
       const ST = require("./seethrough"), AA = require("./adminaudit");
       await ST.init(); await AA.init();
       await tx(async () => {
         const sts = await ST.logAll({ userId: T.userId, role: "admin", scope: "export_evidence", roomId: T.roomId, logins, reason: T.reason, ref: "exp:" + id });
         if (!sts.length || sts.some((x) => !x)) throw new Error("evidence export: no see-through row");
+        // (1.99?? transcripts bar review fix TXBAR-ST-2: the log says which toggle was seen through - the !transcripts off speakers whose
+        // 🎙 bars the file shows get a tx_line row with the same ref)
+        if (txOff.length) {
+          const txs = await ST.logAll({ userId: T.userId, role: "admin", scope: "tx_line", roomId: T.roomId, logins: [...new Set(txOff)], reason: T.reason, ref: "exp:" + id });
+          if (!txs.length || txs.some((x) => !x)) throw new Error("evidence export: no see-through row");
+        }
         await AA.record({ userId: T.userId, username: T.username }, "evidence.export", null,
                         { id, room: T.roomId, from: T.from, to: T.to, fmt: T.fmt, lines: got.lines.length, revealed: new Set(veiled).size, source: got.source, st: sts[0],
                           ...(sts.length > 1 ? { st_rows: sts.length } : {}) }, T.reason);

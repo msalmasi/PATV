@@ -36,6 +36,7 @@ process.env.FEED_DIR = path.join(tmp, "feedfiles");
 process.env.MEDIA_DIR = path.join(tmp, "mediafiles");
 process.env.MICCLIP_DIR = path.join(tmp, "micclip");
 process.env.HLS_PLAYLIST_PATH = path.join(tmp, "no-hls", "broadcast.m3u8");
+process.env.EVIDENCE_DIR = path.join(tmp, "evidence");            // (review fixes: an evidence clip is stored below - never next to the repo)
 fs.mkdirSync(process.env.MEDIA_DIR, { recursive: true });
 const express = require("express");
 const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
@@ -417,6 +418,128 @@ test("quotes, member clips and moderation evidence: a bar is never quotable or c
   } finally { await EV.setOn(false, { userId: U.adm.userId, username: "adm" }); }
 });
 
+// ── review fixes ──
+const M4A = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypM4A "), crypto.randomBytes(400)]);
+let app2 = null, base2 = null;
+async function termsApp() {
+  if (base2) return base2;
+  app2 = express();
+  app2.set("views", path.join(repo, "views"));
+  app2.set("view engine", "ejs");
+  app2.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
+  const addUser = (req, res, next) => { const x = req.get("x-test-user"); req.user = x ? users.get(x) || null : null; next(); };
+  require(path.join(repo, "terms")).register(app2, { addUser });
+  require(path.join(repo, "evidenceexport")).register(app2, { addUser, bySlug: (s) => (s === SLUG ? R() : null) });
+  const srv = await new Promise((r) => { const s = app2.listen(0, () => r(s)); });
+  srv.unref();
+  base2 = "http://127.0.0.1:" + srv.address().port;
+  return base2;
+}
+function get2(p, user = null) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(base2 + p);
+    http.get({ hostname: u.hostname, port: u.port, path: u.pathname + u.search, headers: user ? { "x-test-user": user.userId } : {} }, (res) => {
+      const parts = [];
+      res.on("data", (c) => parts.push(c));
+      res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(parts).toString("utf8") }));
+    }).on("error", reject);
+  });
+}
+const LIVE_S = "With <code>!transcripts off</code>, your mic transcripts are kept like hidden lines";
+const KEPT_S = ["<code>!transcripts off</code> leaves your mic transcripts out. The ones already shown as a blacked-out bar are kept like hidden lines: never searched or quoted, and only the pad's owner and PATV administrators can reveal what you said.",
+                " <code>!transcripts off</code> leaves your mic transcripts out; the ones already shown as a blacked-out bar stay that way, and administrators and the pad's owner can reveal those too.",
+                "<li><b><code>!transcripts off</code> leaves your mic transcripts out.</b> Mic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators and a pad's owner (in their own pad, for lines said while they own it) can reveal what you said, and every reveal is logged.</li>",
+                "(sections 3 and 10): new mic transcripts are left out of the website again; the ones already shown as a blacked-out bar stay that way.</li>"];
+const LIVE_NOTE = "(sections 3 and 10): your mic transcripts now show on the website as a blacked-out bar without your name instead of being left out";
+const WAVE2_S = "<code>!transcripts off</code> leaves your mic transcripts out. Lines said before";
+const KEPT_HELP = "Mic turns that already show on the website as a blacked-out bar stay that way";
+
+test("review fix F1: the bar no longer live (a Pepe without it - a rollback) while bars it made are kept: /privacy and /help say so, never just 'left out'", async () => {
+  await ready();
+  await termsApp();
+  const H = require(path.join(repo, "help"));
+  await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+  await settle();
+  assert.equal(PW.txBar(), true);
+  const p1 = await get2("/privacy");
+  assert.equal(p1.status, 200, p1.text.slice(0, 300));
+  assert.ok(p1.text.includes(LIVE_S) && p1.text.includes(LIVE_NOTE), "live: the bar's text and its dated note");
+  for (const s of KEPT_S) assert.ok(!p1.text.includes(s), "live: no kept text - " + s.slice(0, 60));
+  // a rolled-back Pepe: a sync without txbar_cap; privacy wire v2 stays on - tina's / frankie's / hank's bars are still kept and revealable
+  await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [] } });
+  await settle(150);
+  assert.equal(PW.isOn(), true);
+  assert.equal(PW.txBar(), false, "the bar isn't live any more");
+  const rv = await call("POST", "/api/chatlog/reveal", { user: U.adm, body: { room: SLUG, c: [C.fr], reason: "after rollback" } });
+  assert.equal(rv.status, 200, rv.text);
+  assert.equal(rv.d.items[0] && rv.d.items[0].words, W.fr, "...its bars are still revealable (why the text must say so)");
+  const p2 = await get2("/privacy");
+  assert.equal(p2.status, 200);
+  for (const s of KEPT_S) assert.equal(p2.text.split(s).length, 2, "kept, once: " + s.slice(0, 70));
+  assert.ok(p2.text.includes(LIVE_NOTE), "the dated note of when the bar started stays (history)");
+  assert.ok(!p2.text.includes(LIVE_S), "no 'live' sentence (new ones are left out)");
+  assert.ok(!p2.text.includes(WAVE2_S), "not wave 2's bare 'leaves your mic transcripts out' while bars are kept");
+  assert.ok(p2.text.indexOf(KEPT_S[3]) < p2.text.indexOf(LIVE_NOTE), "the kept note comes first (newest)");
+  const card = H.withPrivwireNotes([{ id: "transcripts", summary: "off", details: "Pepe's own words." }, { id: "dice", summary: "roll" }]);
+  assert.ok(String(card[0].details).includes(KEPT_HELP), "/help: the transcripts card says the bars stay - " + card[0].details);
+  assert.equal(card[1].summary, "roll", "other cards untouched");
+  assert.equal(await PW.refreshTxKept(), true, "the site knows bars are still kept");
+  assert.equal(PW.txText(), "kept");
+  // the bar live again: the live text
+  await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+  await settle();
+  assert.equal(PW.txText(), "live");
+  const p3 = await get2("/privacy");
+  assert.ok(p3.text.includes(LIVE_S) && !p3.text.includes(KEPT_S[0]));
+});
+
+test("review fix TXBAR-ST-2 / ST-3: the log names the transcripts toggle on every path; exports and evidence lists say 'transcripts off', not !bridge hide", async () => {
+  await ready();
+  await termsApp();
+  const EV = require(path.join(repo, "evidence"));
+  await EV.init();
+  await EV.setOn(true, { userId: U.adm.userId, username: "adm" });
+  try {
+    // a bar whose speaker ALSO has a frog name (hank: !bridge hide + transcripts off): both toggles seen through - a row for each
+    const id0 = (await getQuery("SELECT COALESCE(MAX(id), 0) AS m FROM seethrough_log"))[0].m;
+    const r = await call("POST", "/api/chatlog/reveal", { user: U.adm, body: { room: SLUG, c: [C.hk], reason: "case 31" } });
+    assert.equal(r.status, 200, r.text);
+    const rows = await getQuery("SELECT scope, logins FROM seethrough_log WHERE id > ? ORDER BY id", [id0]);
+    assert.deepEqual(rows.map((x) => [x.scope, JSON.parse(x.logins)]), [["chat_line", [HK]], ["tx_line", [HK]]], JSON.stringify(rows));
+    // the Camfrog !clipmic evidence upload of tina's bar's turn: marked (tm), its clip_save row names the toggle, the list says so
+    const up = await call("POST", "/api/bridge/evidence/upload", { body: { password: "bot", room: ROOM.id, target: TI, veil: "hidden", requester: "admcf",
+                                                                           said_at: Date.now() / 1000 - 60, secs: 3, tx: "tx-00000000000000b1", data: M4A.toString("base64") } });
+    assert.equal(up.status, 200, up.text);
+    const row = (await getQuery("SELECT * FROM evidence_clips WHERE id = ?", [up.d.id]))[0];
+    assert.equal(Number(row.tm), 1, "the clip of a transcripts bar's turn is marked");
+    assert.equal(row.veil, "hidden", "...and gated like a hidden turn");
+    const cs = (await getQuery("SELECT ref FROM seethrough_log WHERE scope = 'clip_save' ORDER BY id DESC LIMIT 1"))[0];
+    assert.equal(cs.ref, "ev:" + up.d.id + ":tx", "clip_save names the transcripts toggle");
+    const ls = await call("GET", "/api/evidence?room=" + SLUG, { user: U.adm });
+    assert.equal(ls.status, 200, ls.text);
+    const lr = (ls.d.rows || []).find((x) => x.id === up.d.id);
+    assert.ok(lr && lr.tx === true && lr.veil === "hidden", "the list marks it transcripts off: " + JSON.stringify(lr));
+    // the admin evidence export: tina's 🎙 line is "[hidden, transcripts off]", and a tx_line row with the export's ref names her
+    const X2 = require(path.join(repo, "evidenceexport"));
+    const tok = "tok" + crypto.randomBytes(8).toString("hex");
+    X2._tokens.set(tok, { userId: U.adm.userId, username: "adm", roomId: ROOM.id, slug: SLUG, pad: "Txbar Room", from: Date.now() - 3 * 3600e3, to: Date.now() + 60e3,
+                          fmt: "txt", reason: "case 32", cut: null, exp: Date.now() + 60e3 });
+    const ex = await get2("/admin/evidence-export/dl/" + tok, U.adm);
+    assert.equal(ex.status, 200, ex.text.slice(0, 300));
+    assert.match(ex.text, /🎙 tinatxoff \(Tina\) \[hidden, transcripts off\]: quokkatina zebrafinch said on the mic/, "the export labels tina's bar");
+    assert.ok(!/🎙 tinatxoff \(Tina\) \[hidden\]:/.test(ex.text), "never as a plain hidden (!bridge hide) line");
+    const er = await getQuery("SELECT scope, ref, logins FROM seethrough_log WHERE scope IN ('export_evidence', 'tx_line') ORDER BY id DESC LIMIT 2");
+    const exp = er.find((x) => x.scope === "export_evidence"), txr = er.find((x) => x.scope === "tx_line");
+    assert.ok(exp && txr && txr.ref === exp.ref && JSON.parse(txr.logins).includes(TI), "a tx_line row with the export's ref: " + JSON.stringify(er));
+    // an admin's per-login tool reaching tina's bars: chat_tool + tx_line
+    const CM = require(path.join(repo, "chatlogmod"));
+    const id1 = (await getQuery("SELECT COALESCE(MAX(id), 0) AS m FROM seethrough_log"))[0].m;
+    await CM.whoAction(U.adm, TI, { action: "look", why: "case 33" });
+    const tr = await getQuery("SELECT scope, ref FROM seethrough_log WHERE id > ? ORDER BY id", [id1]);
+    assert.deepEqual(tr.map((x) => [x.scope, x.ref]), [["chat_tool", "look"], ["tx_line", "look"]], JSON.stringify(tr));
+  } finally { await EV.setOn(false, { userId: U.adm.userId, username: "adm" }); }
+});
+
 test("forget-me: the bar's identity and words leave the side tables - nobody can reveal it any more", async () => {
   await ready();
   await bridge.forgetVeiled([TI]);
@@ -426,4 +549,22 @@ test("forget-me: the bar's identity and words leave the side tables - nobody can
   const r = await call("POST", "/api/chatlog/reveal", { user: U.adm, body: { room: SLUG, c: [C.tina] } });
   assert.equal(r.status, 200);
   assert.deepEqual(r.d.items, [], r.text);
+});
+
+test("review fix F1: once no bar's words and no clip of one are left, the page reads as wave 2 did again (the bar not live)", async () => {
+  await ready();
+  await termsApp();
+  await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [] } });          // the bar not live
+  await settle(150);
+  await bridge.forgetVeiled([FR, HK]);
+  await CL.forgetVeil([FR, HK]);
+  assert.equal(await PW.refreshTxKept(), true, "an evidence clip of a bar's turn is still kept (30 days): still 'kept'");
+  await runQuery("DELETE FROM evidence_clips WHERE tm = 1");                                            // (as its sweep would)
+  assert.equal(await PW.refreshTxKept(), false, "none left");
+  assert.equal(PW.txText(), null);
+  const p = await get2("/privacy");
+  assert.ok(p.text.includes(WAVE2_S), "wave 2's sentence again");
+  for (const s of KEPT_S) assert.ok(!p.text.includes(s), "no kept text: " + s.slice(0, 60));
+  await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+  await settle();
 });

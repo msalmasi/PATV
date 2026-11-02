@@ -35,9 +35,10 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // stagecap_mic), not at boot: while they are off it would describe a feature nobody can use, next to today's incognito bullet.
 // Once published it stays, so a later switch-off still describes the copies that exist.
 // 1.99?? transcripts bar (owner 2026-11-02): "tx-bar" = the !transcripts off blacked-out bar sentences (sections 3 and 10, the change note),
-// shown only while privacy wire v2 is on AND the latest Pepe sends those 🎙 lines as a bar (privwire.txBar) - dated the first time
-// /privacy is served that way. Unlike mic-stage-keep its text isn't kept after that: with the bar off the page says what is true
-// then (left out), and its date doesn't count toward "Last updated" while the text isn't shown.
+// shown while privacy wire v2 is on AND the latest Pepe sends those 🎙 lines as a bar (privwire.txBar) - dated the first time /privacy
+// is served that way. Review fix (F1): once the bar stops being live (a bot rollback) the bars it made are still kept and revealable,
+// so while any is left the page says THAT instead ("kept": new ones left out, the shown ones stay bars; a change note dated by when
+// the bar stopped - privwire.txOff); with none left it reads as wave 2 did, and the tx-bar date no longer counts toward "Last updated".
 const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
                          "tx-bar": () => require("./privwire").txBar() === true };
@@ -181,7 +182,12 @@ function register(app, { addUser }) {
       try { memory = await require("./memoryoptout").privacyCopy(); } catch (e) { memory = null; }
       try { await require("./privwire").init(); privwire = require("./privwire").privacyCopy(); } catch (e) { privwire = null; }
       // 1.99?? transcripts bar: its text only inside the privwire branches, only while it is live (privwire.txBar)
-      try { await require("./privwire").loadTxCap(); txbar = privwire && require("./privwire").txBar() === true ? { on: true } : null; } catch (e) { txbar = null; }
+      // (review fix F1: "kept" while the bar isn't live but bars it made are still kept - privwire.txTextNow)
+      try {
+        const PWm = require("./privwire");
+        const m = privwire ? await PWm.txTextNow() : null;
+        txbar = m === "live" ? { on: true } : m === "kept" ? { kept: true, ...(PWm.txOff() || {}) } : null;
+      } catch (e) { txbar = null; }
       try { evidence = await require("./evidence").privacyCopy(); } catch (e) { evidence = null; }
       policyDates = await textDates();                // 1.99aft: the texts dated the day this server first served them
     }
@@ -190,6 +196,7 @@ function register(app, { addUser }) {
                              [micrec && micrec.on_at, micrec && micrec.on_day], [micrec && micrec.rule_at, micrec && micrec.rule_day],   // 1.99afv review
                              [memory && memory.on_at, memory && memory.on_day], [privwire && privwire.g, privwire && privwire.g_day],
                              [evidence && evidence.on_at, evidence && evidence.on_day],
+                             [txbar && txbar.kept && txbar.off_at, txbar && txbar.kept && txbar.off_day],   // (review fix F1: the "kept" note)
                              ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).map(([, d]) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }

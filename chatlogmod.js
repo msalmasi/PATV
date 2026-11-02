@@ -1122,6 +1122,10 @@ async function whoAction(user, input, { action = "look", why = "" } = {}) {
     if (n) {
       try {
         await require("./seethrough").log({ userId: me.userId, role: "admin", scope: "chat_tool", logins: cfLogins(keys), reason: note, ref: action });
+        // 1.99?? transcripts bar review fix (TXBAR-ST-2): reaching a !transcripts off speaker's 🎙 bars names that toggle too (tx_line)
+        const nt = Number((await getQuery(`SELECT COUNT(*) AS n FROM chat_log WHERE who IN (${vk.map(() => "?").join(",")}) AND purged IS NULL
+                                           AND k = 'tx' AND json_extract(d, '$.tm') = 1`, vk))[0].n) || 0;
+        if (nt) await require("./seethrough").log({ userId: me.userId, role: "admin", scope: "tx_line", logins: cfLogins(keys), reason: note, ref: action });
       } catch (e) { console.error("[chatlogmod] see-through log:", e.message); throw new Refuse(500, "Couldn't log the see-through - nothing shown.", "seethrough_log"); }
     }
   }

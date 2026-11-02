@@ -2222,7 +2222,9 @@ async function revealLookup(roomId, c) {
     const vr = (await getQuery("SELECT 1 FROM bridge_veil WHERE c = ?", [Number(c)]).catch(() => []))[0];
     if (!vr) return null;                                   // its identity row is gone (forget-me): nobody can reveal it any more
     // (1.99?? transcripts bar: tx = a 🎙 line masked for !transcripts off - the see-through log names that toggle)
-    return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null, ...(it.tm === 1 ? { tx: true } : {}) };
+    // (review fix TXBAR-ST-2: idv = it also had a frog name - incognito or !bridge hide - so a reveal sees through that toggle too)
+    return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null,
+             ...(it.tm === 1 ? { tx: true, ...(it._vz.lv && it._vz.lv !== "tx" ? { idv: true } : {}) } : {}) };
   }
   // review fix (A-privacy-4 / A-compat-8 / A-tests-ux-02): the archive answers by the SAME rule as the live item - a line taken down
   // (its author's Remove my line, a report hide, a moderator's hide: rm_at set) or whose speaker is left out now (forget-me, an
@@ -2237,7 +2239,7 @@ async function revealLookup(roomId, c) {
     const ai = CV.itemOf(r);
     if (CV.privacyOf(ai) === "out") return null;
     return { ts: Number(r.ts), vz: { login: r.v_login, display: r.v_display, kind: r.v_kind }, vw: r.v_words == null ? null : String(r.v_words),
-             ...(ai.k === "tx" && ai.tm === 1 ? { tx: true } : {}) };
+             ...(ai.k === "tx" && ai.tm === 1 ? { tx: true, ...(ai.u && ai.u.alias ? { idv: true } : {}) } : {}) };
   } catch (e) { return null; }
 }
 

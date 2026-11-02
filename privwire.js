@@ -112,9 +112,13 @@ async function setOn(want, user) {
 
 // ── 1.99?? transcripts bar (owner 2026-11-02): a !transcripts off speaker's 🎙 lines as a blacked-out bar ──
 // The site always says txbar: 1 while the switch is on (bridge.js syncAnswer); Pepe sends those lines (masked, v2 only) only after
-// that, and only a Pepe that does it says txbar_cap: 1 on his syncs. The text that describes the bar (privacy.ejs, /help) shows only
-// while BOTH are true - the switch on AND the latest sync came from a Pepe that sends the bar - so neither deploy order makes it say
-// something that isn't so: an older Pepe keeps those lines left out and their turns clippable as before, and the text says that.
+// that, and only a Pepe that does it says txbar_cap: 1 on his syncs. The text that describes the bar as what happens NOW (privacy.ejs,
+// /help: "live") shows only while BOTH are true - the switch on AND the latest sync came from a Pepe that sends the bar: an older Pepe
+// (a bot rollback, a site-first deploy) leaves new ones out and their turns clippable as before. Review fix (F1): the bars already
+// stored DON'T go away with it - their words stay in bridge_veil / chat_log_veil (revealable by the see-through roles) and their turns
+// may be evidence clips - so while any is left the text says so ("kept", txKept below); only with none left does it read as wave 2
+// did. (The first build said "neither deploy order makes it say something that isn't so" - after a rollback it said "left out" about
+// bars that were still kept and revealable.)
 // Kept in chatlog_meta 'privwire_txcap' {cap, at} (written only when it changes), so a restart doesn't flip the text back meanwhile.
 let TXCAP = { cap: false, at: null };
 let txcapLoaded = false;
@@ -133,10 +137,61 @@ function noteTxCap(cap) {
     TXCAP = { cap: want, at: clock() };
     await runQuery("INSERT INTO chatlog_meta (key, value) VALUES ('privwire_txcap', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(TXCAP)]);
     console.log(`[privwire] Pepe ${want ? "sends" : "no longer sends"} !transcripts off 🎙 lines as a bar`);
+    if (!want) await refreshTxKept();                // (review fix F1: the "kept" text from the next request on, not 10 minutes later)
   }).catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));
 }
 /** Is the transcripts bar live - the switch on AND the latest Pepe sends it? Synchronous; false until loaded (fails toward the old text). */
 const txBar = () => isOn() && txcapLoaded && TXCAP.cap === true;
+
+// Review fix (F1): are any !transcripts off bars still kept with what was said - a bar's identity + words in the live ring's side table
+// (bridge_veil vz.tx) or the archive's (chat_log_veil of a tm 🎙 row), or an evidence clip of such a turn (evidence.anyTxClip - evidence.js
+// hands it over when it loads: only that module reads its store)? Asked at most every TXKEPT_TTL (and at once when the cap goes off); a
+// table that isn't there has none; any other error counts as "yes" (the text then describes bars that may exist - never "left out"
+// about bars that do).
+const TXKEPT_TTL = 10 * 60e3;
+let TXCLIP = null;
+const setTxClipProbe = (f) => { TXCLIP = typeof f === "function" ? f : null; };
+let TXKEPT = { any: null, at: 0 };
+let txkeptRun = null;
+async function anyRow(sql) {
+  try { return (await getQuery(sql)).length > 0; } catch (e) { return !/no such (table|column)/i.test(String(e && e.message)); }
+}
+function refreshTxKept() {
+  if (!txkeptRun) {
+    txkeptRun = (async () => {
+      const any = (await anyRow("SELECT 1 FROM bridge_veil WHERE json_extract(vz, '$.tx') = 1 LIMIT 1")) ||
+        (await anyRow(`SELECT 1 FROM chat_log_veil v JOIN chat_log l ON l.c = v.c
+                       WHERE l.k = 'tx' AND l.purged IS NULL AND json_extract(l.d, '$.tm') = 1 LIMIT 1`)) ||
+        (await (async () => { try { return TXCLIP ? (await TXCLIP()) === true : false; } catch (e) { return true; } })());
+      TXKEPT = { any, at: clock() };
+      return any;
+    })().finally(() => { txkeptRun = null; });
+  }
+  return txkeptRun;
+}
+/** Synchronous: the last answer (a stale one asks again in the background). false until first asked. */
+function txKept() {
+  if (!TXKEPT.at || clock() - TXKEPT.at >= TXKEPT_TTL) refreshTxKept().catch(() => {});
+  return TXKEPT.any === true;
+}
+/** Which transcripts-bar text the switch-on branches show: "live" (the bar is live), "kept" (it isn't, but bars it made are still kept)
+ *  or null (neither: the wave 2 wording). Synchronous (help.js); txTextNow() for a page that can wait for a fresh answer. */
+function txText() {
+  if (!isOn()) return null;
+  if (txBar()) return "live";
+  return txKept() ? "kept" : null;
+}
+async function txTextNow() {
+  await loadTxCap();
+  if (isOn() && !txBar() && (!TXKEPT.at || clock() - TXKEPT.at >= TXKEPT_TTL)) await refreshTxKept();
+  return txText();
+}
+/** When the bar stopped being live (the cap went off): {off_at, off_day} | null - the "kept" change note's date. */
+function txOff() {
+  if (TXCAP.cap !== false || !(Number(TXCAP.at) > 0)) return null;
+  const d = new Date(Number(TXCAP.at));
+  return { off_at: Number(TXCAP.at), off_day: `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}` };
+}
 
 /** For views: {on, g, g_day} - the policy text behind the switch reads it (privacy.ejs locals.privwire; terms.js dates the page by
  *  G, the go-live). null while the switch is off: the policy reads exactly as before. */
@@ -149,7 +204,7 @@ function privacyCopy() {
 
 function register(app, { addUser, noTimers = false }) {
   init().catch((e) => console.error("[privwire] init:", e.message));
-  loadTxCap().catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));   // 1.99?? transcripts bar
+  loadTxCap().then(() => refreshTxKept()).catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));   // 1.99?? transcripts bar
   const SP = require("./siteperms");
   const guard = require("./middleware/authGuard");
   const json = require("express").json({ limit: "2kb" });
@@ -177,6 +232,7 @@ function register(app, { addUser, noTimers = false }) {
 
 module.exports = { init, isOn, gAt, wasOnAt, lastOnAt, note, counts, state, setOn, saveCounts, privacyCopy, register, _clean: clean,
                    noteTxCap, txBar, loadTxCap,                                    // 1.99?? transcripts bar
+                   txKept, refreshTxKept, txText, txTextNow, txOff, setTxClipProbe, // 1.99?? transcripts bar review fix (F1)
                    _setClock: (f) => { clock = f || (() => Date.now()); },
                    _reset: () => { STATE = clean(null); for (const k of COUNT_KEYS) COUNTS[k] = 0; COUNTS.last_at = null; ready = null; loaded = false;
-                                   TXCAP = { cap: false, at: null }; txcapLoaded = false; } };
+                                   TXCAP = { cap: false, at: null }; txcapLoaded = false; TXKEPT = { any: null, at: 0 }; } };

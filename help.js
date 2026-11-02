@@ -581,11 +581,22 @@ const PRIVWIRE_TX_CARDS = {
 };
 const TX_CLAUSE_OLD = "`!transcripts off` keeps your mic transcripts off the website.";
 const TX_CLAUSE_NEW = "`!transcripts off` shows only your mic transcripts as a blacked-out bar.";
+// Review fix (F1): the bar no longer live (a Pepe without it - a rollback) while bars it made are still kept (privwire.txKept): the
+// transcripts card keeps its wording for NEW mic turns (left out) and adds that the ones already shown as a bar stay bars.
+const TX_KEPT_NOTE = "Mic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators, and a pad's owner in " +
+  "their own pad, can reveal what you said, and every reveal is logged.";
 function withPrivwireNotes(entries) {
   const out = privwireNotes(entries);
   if (out === entries) return out;                            // the switch off: byte-equal, the same objects
-  let tx = false;
-  try { tx = require("./privwire").txBar() === true; } catch (e) { tx = false; }
+  let tx = false, kept = false;
+  try { const PW = require("./privwire"); tx = PW.txBar() === true; kept = !tx && PW.txKept() === true; } catch (e) { tx = false; kept = false; }
+  if (kept) {
+    return out.map((r) => {
+      if (!r || r.id !== "transcripts") return r;
+      const base = r.details && String(r.details).trim() ? r.details : r.summary;
+      return { ...r, details: String(base || "") + "\n\n" + TX_KEPT_NOTE };
+    });
+  }
   if (!tx) return out;
   return out.map((r, i) => {
     const e = (entries || [])[i];
@@ -737,6 +748,6 @@ module.exports = {
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
   VOICE_NOTE, withVoiceNotes,                                       // WP-1 (design section H)
-  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS,                                // wave 2 (design section H, behind the Privacy wire v2 switch)
+  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS, TX_KEPT_NOTE,                                // wave 2 (design section H, behind the Privacy wire v2 switch)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };

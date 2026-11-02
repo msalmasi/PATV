@@ -190,7 +190,60 @@ test("transcripts bar: terms.js dates it by policy_text_dates 'tx-bar' while pri
   const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
   assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar"\];/);
   assert.match(src, /"tx-bar": \(\) => require\("\.\/privwire"\)\.txBar\(\) === true/);
-  assert.match(src, /txbar = privwire && require\("\.\/privwire"\)\.txBar\(\) === true \? \{ on: true \} : null/);
+  // (review fix F1: "live" while privwire.txBar, "kept" while it isn't but bars it made are still kept - privwire.txTextNow)
+  assert.match(src, /const m = privwire \? await PWm\.txTextNow\(\) : null;/);
+  assert.match(src, /txbar = m === "live" \? \{ on: true \} : m === "kept" \? \{ kept: true, \.\.\.\(PWm\.txOff\(\) \|\| \{\}\) \} : null;/);
+  assert.match(src, /\[txbar && txbar\.kept && txbar\.off_at, txbar && txbar\.kept && txbar\.off_day\]/);
   assert.match(src, /filter\(\(\[k\]\) => k !== "tx-bar" \|\| txbar\)/);
   assert.match(src, /memory, txbar, privwire, evidence, policyDates \}\)/);
+});
+
+// 1.99?? transcripts bar review fix (F1): the bar no longer live (a Pepe without it - a bot rollback, any sync without txbar_cap) while
+// bars it made are still kept and revealable (privwire.txKept): terms.js passes locals.txbar = {kept, off_at, off_day} and the page says
+// new mic transcripts are left out AND the ones already shown as a bar stay bars, with a change note dated by when the bar stopped. The
+// owner approves this wording before it ships - these are the exact sentences.
+const TXB_KEPT = [
+  " <code>!transcripts off</code> leaves your mic transcripts out; the ones already shown as a blacked-out bar stay that way, and administrators and the pad's owner can reveal those too.",
+  "<code>!transcripts off</code> leaves your mic transcripts out. The ones already shown as a blacked-out bar are kept like hidden lines: never searched or quoted, and only the pad's owner and PATV administrators can reveal what you said.",
+  "<li><b><code>!transcripts off</code> leaves your mic transcripts out.</b> Mic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators and a pad's owner (in their own pad, for lines said while they own it) can reveal what you said, and every reveal is logged.</li>",
+  "<li><b>4 November 2026:</b> <code>!transcripts off</code> (sections 3 and 10): new mic transcripts are left out of the website again; the ones already shown as a blacked-out bar stay that way.</li>",
+];
+test("transcripts bar review fix F1: the bar no longer live but bars it made kept - the kept sentences and a dated note; switch off: the page as before", () => {
+  const now = fs.readFileSync(FILE, "utf8");
+  const PWON = { on: true, g: 1793534400000, g_day: "1 November 2026" };
+  const TXD = Object.assign({}, DATES, { "tx-bar": { at: 1793700000000, day: "3 November 2026" } });
+  const CLOC = { notice_day: "1 October 2026", start_day: "8 October 2026" };
+  const KEPT = { kept: true, off_at: 1793800000000, off_day: "4 November 2026" };
+  const page = render(now, { privwire: PWON, txbar: KEPT, policyDates: TXD, chatlog: CLOC });
+  for (const s of TXB_KEPT) assert.equal(page.split(s).length, 2, "once: " + s.slice(0, 70));
+  for (const i of [0, 1, 2, 3, 4]) assert.ok(!page.includes(TXB_SENTENCES[i]), "no 'live' sentence: " + TXB_SENTENCES[i].slice(0, 60));
+  assert.ok(page.includes(TXB_SENTENCES[5]), "the dated note of when the bar started stays (history)");
+  assert.ok(page.indexOf(TXB_KEPT[3]) < page.indexOf(TXB_SENTENCES[5]), "the kept note first (newest)");
+  assert.ok(!page.includes("<code>!transcripts off</code> leaves your mic transcripts out. Lines said before"), "never wave 2's bare sentence while bars are kept");
+  assert.ok(!render(now, { privwire: PWON, txbar: KEPT, policyDates: TXD, chatlog: CLOC, evidence: { on: true, any: true, on_at: 1793600000000, on_day: "2 November 2026" } })
+    .includes(TXB_EVIDENCE[0].replace("</li>", "")), "kept: no 'can save one as evidence' in the bullet (new turns aren't masked then; the dated note keeps its clause)");
+  // no date for when it stopped (its meta row lost): no kept note, the rest as above
+  const undated = render(now, { privwire: PWON, txbar: { kept: true }, policyDates: TXD, chatlog: CLOC });
+  assert.ok(!undated.includes(TXB_KEPT[3].slice(30)) && undated.includes(TXB_KEPT[1]), "undated: no kept note");
+  // the switch off: the switch-off page, whatever txbar says (byte-identical - the first test compares it with 119e948b)
+  assert.equal(render(now, { txbar: KEPT, policyDates: TXD, chatlog: CLOC }), render(now, { policyDates: TXD, chatlog: CLOC }));
+  assert.equal(render(now, { txbar: KEPT }), render(now, {}));
+});
+
+test("transcripts bar review fix F1: /help - the bar no longer live but bars kept: the transcripts card says the shown ones stay bars", () => {
+  const H = require(path.join(repo, "help"));
+  const PW = require(path.join(repo, "privwire"));
+  const on = PW.isOn, tb = PW.txBar, tk = PW.txKept;
+  PW.isOn = () => true; PW.txBar = () => false; PW.txKept = () => true;
+  try {
+    const out = H.withPrivwireNotes([{ id: "transcripts", summary: "off", v2: { details: "Pepe's v2 words." }, v2tx: { summary: "bar words" } }, { id: "dice", summary: "roll" }]);
+    assert.equal(out[0].details, "Pepe's v2 words.\n\nMic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators, and a pad's owner in their own pad, can reveal what you said, and every reveal is logged.");
+    assert.equal(out[0].summary, "off", "v2tx (the live wording) isn't used");
+    assert.equal(out[1].summary, "roll");
+    PW.txKept = () => false;
+    assert.equal(H.withPrivwireNotes([{ id: "transcripts", summary: "off", v2: { details: "Pepe's v2 words." } }])[0].details, "Pepe's v2 words.", "none kept: wave 2's card");
+    PW.isOn = () => false; PW.txKept = () => true;
+    const cards = [{ id: "transcripts", summary: "off" }];
+    assert.equal(H.withPrivwireNotes(cards), cards, "the switch off: byte-equal, the same objects");
+  } finally { PW.isOn = on; PW.txBar = tb; PW.txKept = tk; }
 });

@@ -208,7 +208,7 @@ async function accountLinks(items) {
  * lookup(c) -> {ts, vz, vw} | null (the live item, else the archive's chat_log_veil row - bridge.revealRows).
  */
 async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
-  const items = [], refused = [], txcs = new Set();
+  const items = [], refused = [], txcs = new Set(), idcs = new Set();
   for (const c of [...new Set((cs || []).map(Number).filter((x) => x > 0))].slice(0, 50)) {
     let r = null;
     try { r = await lookup(c); } catch (e) { r = null; }
@@ -217,13 +217,16 @@ async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
     const o = { c, login: String(r.vz.login), display: r.vz.display ? String(r.vz.display) : null };
     if (r.vz.kind === "hidden" && typeof r.vw === "string") o.words = r.vw;
     if (r.tx === true) txcs.add(c);
+    if (r.tx === true && r.idv === true) idcs.add(c);          // (review fix TXBAR-ST-2: a frog name too - both toggles seen through)
     items.push(o);
   }
   if (items.length) {
     if (role.role === "admin") await accountLinks(items);
     // 1.99?? transcripts bar: the log says which toggle was seen through - a 🎙 line masked for !transcripts off gets its own row, scope
     // tx_line; every other line chat_line, as before. Both written BEFORE the answer (nothing is shown unlogged)
-    for (const [scope, part] of [["chat_line", items.filter((o) => !txcs.has(o.c))], ["tx_line", items.filter((o) => txcs.has(o.c))]]) {
+    // review fix (TXBAR-ST-2): a bar whose speaker ALSO had a frog name (incognito or !bridge hide + !transcripts off) reveals both - who
+    // was behind the frog name (chat_line) and what was said (tx_line): a row for each
+    for (const [scope, part] of [["chat_line", items.filter((o) => !txcs.has(o.c) || idcs.has(o.c))], ["tx_line", items.filter((o) => txcs.has(o.c))]]) {
       if (!part.length) continue;
       await log({ userId: user.userId, role: role.role, scope, roomId, logins: part.map((o) => o.login), reason,
                   ref: "c:" + part.map((o) => o.c).slice(0, 8).join(",") });

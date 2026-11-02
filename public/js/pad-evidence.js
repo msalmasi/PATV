@@ -110,7 +110,7 @@
         var li = el('li', 'ev-row');
         li.style.cssText = 'padding:6px 0;border-top:1px solid rgba(127,127,127,.25);';
         li.appendChild(el('div', 'ev-head', _t('js.pad.ev.row', '{when} · {who} ({veil}) · {secs} s · saved by {by} · kept until {until}',
-          { when: when(r.said_at), who: r.subject, veil: r.veil, secs: Math.round(r.secs || 0), by: r.by || '?', until: day(r.expires_at) })));
+          { when: when(r.said_at), who: r.subject, veil: r.veil + (r.tx ? ', transcripts off' : ''), secs: Math.round(r.secs || 0), by: r.by || '?', until: day(r.expires_at) })));
         if (r.reason) li.appendChild(el('div', 'ds-meta', r.reason));
         // (review fix WP5-ACC-8: whether the subject used forget-me or deleted their account is never shown to a pad's owner - the
         // server sends subject_gone to admins only)
