@@ -220,6 +220,69 @@ test("C: a resolved holder who grabbed named and went incognito / hidden mid-hol
   }
 });
 
+// ── review R1: the level is a PERSON's - a hold's frozen kind never ends the session (it churned on every snapshot of the hold) ──
+test("R1: hidden -> incognito keeps the session for someone HOLDING the mic: the hold keeps its begun-hidden kind, the roster says incognito - no churn, no lost name", async () => {
+  await setup;
+  const t0 = Date.now() + 9000;
+  const HOLD = "hd-1a1b2c3d4e5f";
+  const mic = (kind) => veiled("pzholder", "PzDisp", kind, { proven: true, since: t0 / 1000 });
+  const ends = [];
+  const off = FN.onEnd((e) => { if (e.roomId === ROOM.id) ends.push(e); });
+  try {
+    // pz is !bridge hide + incognito, grabs the mic (the hold's kind: hidden), and is in the roster as hidden
+    await sync([ev("mic.grab", { user: Object.assign(real("pzholder", "PzDisp"), { proven: true, since: t0 / 1000 }), priv: priv("hidden", "pzholder"), hold: HOLD }, t0)],
+               { rooms: [snap([real("zqcharlie", "ZqCharlieDisp"), veiled("pzholder", "PzDisp", "hidden")], [mic("hidden")])] });
+    const g = of("pzholder").pop();
+    assert.equal(g.k, "mic");
+    // mid-hold: !bridge show - incognito now. Their line is incognito; Pepe's hold stays "hidden" (it began hidden)
+    await sync([ev("message", pd("incognito", "pzholder", "PzDisp", { text: "pz talks incognito now" }), t0 + 1000)]);
+    const line = of("pzholder").pop();
+    const S1 = FN.current(ROOM.id, "pzholder");
+    assert.ok(S1 && line.u.alias && line.u.alias === S1.alias, "the incognito line: the session's frog name");
+    const A = line.u.alias;
+    ends.length = 0;
+    for (let i = 0; i < 4; i++) {
+      await sync([], { rooms: [snap([real("zqcharlie", "ZqCharlieDisp"), veiled("pzholder", "PzDisp", "incognito")], [mic("hidden")])] });
+      await settle(20);
+    }
+    const cur = FN.current(ROOM.id, "pzholder");
+    assert.equal(cur && cur.session, S1.session, "four snapshots of the hold (roster incognito, mic hidden): the same session");
+    assert.equal(cur.alias, A, "...and its frog name");
+    assert.equal(ends.filter((e) => e.session === S1.session || e.why === "level").length, 0, "no session ended (END_FNS never fired: the hooded cover stays)");
+    const roster = R().members.find((e) => e.anon && e._vz && e._vz.login === "pzholder");
+    assert.equal(roster.alias, A, "the roster entry keeps the name");
+    // the hold's 🎙 line and its release come with the hold's frozen kind: still the same session
+    await sync([ev("x.pepe.transcript", { user: real("pzholder", "PzDisp"), id: "tx-r1r1r1r1r1r1r1r1", said_at: (t0 + 3000) / 1000, hold: HOLD,
+                                           priv: priv("hidden", "pzholder", { words: "words on the mic" }) }, t0 + 4000)]);
+    await sync([ev("mic.release", { user: real("pzholder", "PzDisp"), hold: HOLD, held_ms: 6000, priv: priv("hidden", "pzholder") }, t0 + 6000)]);
+    assert.equal(FN.current(ROOM.id, "pzholder").session, S1.session, "the hold's 🎙 line and release (frozen kind) keep the session");
+    const rel = of("pzholder").filter((x) => x.k === "unmic").pop();
+    assert.ok(rel && rel._vz.sess === S1.session, "the release is sighted in the same session (the grab's name, if it had one, still applies)");
+    await sync([ev("message", pd("incognito", "pzholder", "PzDisp", { text: "pz after the hold" }), t0 + 7000)]);
+    assert.equal(of("pzholder").pop().u.alias, A, "the next incognito line: the same frog name");
+    assert.equal(ends.filter((e) => e.session === S1.session).length, 0, "the session never ended");
+  } finally { off(); }
+});
+
+test("R1: a hold's CHANGED kind still ends the session at once (incognito -> hidden mid-hold), and so does the roster's - per person", async () => {
+  await setup;
+  const t0 = Date.now() + 10000;
+  const HOLD = "hd-f0f0f0f0f0f1";
+  await sync([ev("mic.grab", { user: Object.assign(real("pzswitch", "PzSw"), { proven: true, since: t0 / 1000 }), priv: priv("incognito", "pzswitch"), hold: HOLD }, t0)],
+             { rooms: [snap([real("zqcharlie", "ZqCharlieDisp"), veiled("pzswitch", "PzSw", "incognito")],
+                            [veiled("pzswitch", "PzSw", "incognito", { proven: true, since: t0 / 1000 })])] });
+  const S1 = FN.current(ROOM.id, "pzswitch");
+  assert.ok(S1 && S1.alias, "incognito holder: a frog name");
+  // they go hidden: the roster entry says hidden, the hold says hidden (strictest now) - one end, then the alias-less session stays
+  await sync([], { rooms: [snap([real("zqcharlie", "ZqCharlieDisp"), veiled("pzswitch", "PzSw", "hidden")],
+                                [veiled("pzswitch", "PzSw", "hidden", { proven: true, since: t0 / 1000 })])] });
+  const S2 = FN.current(ROOM.id, "pzswitch");
+  assert.ok(S2 && S2.session !== S1.session && S2.alias === null, "the switch to hidden ended it at once (alias-less next)");
+  await sync([ev("mic.release", { user: real("pzswitch", "PzSw"), hold: HOLD, held_ms: 3000, priv: priv("hidden", "pzswitch") }, t0 + 3000)]);
+  assert.equal(FN.current(ROOM.id, "pzswitch").session, S2.session, "the release (the hold's kind changed to hidden) - the session already ended, no further churn");
+  assert.ok(!JSON.stringify(of("pzswitch").slice(1)).includes(S1.alias), "nothing after the switch carries the incognito name");
+});
+
 // ── (D) + (C) cross-check with the bot's REAL builders (PEPE_BOT_DIR: micveil_test.py --dump) ──
 test("D + C cross-check (PEPE_BOT_DIR): the bot's real batches - a !bridge hide 0x16 holder whose display isn't their login, an unresolved mid-hold release - on v1 and v2: never named in the mic list, the feed or the stage program; on v2 the release is 'someone dropped the mic'", async (t) => {
   const botDir = process.env.PEPE_BOT_DIR;

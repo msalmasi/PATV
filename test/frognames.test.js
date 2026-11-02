@@ -292,3 +292,17 @@ test("privacy fix (review F7): the switch's 15-minute no-name window survives a 
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM incog_alias_burn WHERE at <= ?", [t + 40 * 60e3 - FN.NAMED_GAP_MS]))[0].n, 0, "swept once over");
   FN._setClock(null);
 });
+
+test("review R1: a FROZEN kind (a mic hold's, as it was when the hold began) never ends a session on level nor changes its level; it only gives a new session its level", async () => {
+  const t = Date.UTC(2026, 10, 6, 12);
+  const a = await FN.sight("Pad.Z", "frozeny", { t, active: true, kind: "incognito" });
+  assert.ok(a.alias);
+  const b = await FN.sight("Pad.Z", "frozeny", { t: t + 1000, kind: "hidden", frozen: true });
+  assert.equal(b.session, a.session, "a frozen 'hidden' on an incognito session: kept");
+  assert.equal(b.alias, a.alias);
+  assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [a.session]))[0].lvl, "incognito", "its level unchanged");
+  const c = await FN.sight("Pad.Z", "frozeny", { t: t + 2000, kind: "hidden" });
+  assert.ok(c.session !== a.session && c.alias === null, "a person-level 'hidden' still ends it at once (alias-less next)");
+  const d = await FN.sight("Pad.Z", "newfrozen", { t: t + 3000, kind: "hidden", frozen: true });
+  assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [d.session]))[0].lvl, "hidden", "a session a frozen sighting opens gets that level");
+});

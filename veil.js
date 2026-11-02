@@ -197,6 +197,19 @@ function holdName(roomId, hold, v) {
   while (m.size > HOLDS_MAX) m.delete(m.keys().next().value);
   return v;
 }
+/** review R1: per room, hold id -> the veil kind its last item came with. Pepe keeps a hold's kind as it was when the hold began
+ *  (a !bridge show mid-hold leaves it "hidden"), so the SAME kind again is that frozen kind - not the person's level now - and never
+ *  ends their frog-name session; a CHANGED kind (incognito -> hidden mid-hold: they went hidden now) does, as any sighting would. */
+const HOLD_KINDS = new Map();
+function holdKind(roomId, hold, kind) {
+  let m = HOLD_KINDS.get(roomId);
+  if (kind === undefined) return m ? m.get(hold) : undefined;
+  if (!m) { m = new Map(); HOLD_KINDS.set(roomId, m); }
+  m.delete(hold);
+  m.set(hold, kind);
+  while (m.size > HOLDS_MAX) m.delete(m.keys().next().value);
+  return kind;
+}
 /**
  * A veiled item's frog name: sets u.alias / u.hood / u.id (or leaves "someone"), and _vz.sess. B.2: an unproven holder or the release
  * of a hold begun named -> no name (the session is still sighted - they're there). A hold's release / 🎙 line reuse its grab's name.
@@ -215,7 +228,15 @@ async function nameItem(R, it) {
       view = FN.current(roomId, vz.login);
       await FN.left(roomId, vz.login, it.ts);
     } else {
-      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), kind: vz.kind });
+      // review R1: a hold's item at the kind its hold already had is the hold's frozen kind (see holdKind); the first one (the grab,
+      // or the first seen after a restart) and a changed one decide the level as usual (fails closed)
+      let frozen = false;
+      if (it.hold && vz.kind) {
+        frozen = holdKind(roomId, it.hold) === vz.kind;
+        holdKind(roomId, it.hold, vz.kind);
+      }
+      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), kind: vz.kind,
+                                                 frozen });
     }
   } catch (e) { view = null; console.error("[veil] frog name:", e && e.code ? e.code : "error"); }
   let named = view && view.alias ? view : null;
@@ -330,14 +351,27 @@ async function nameSnapshot(R, now) {
   const seen = new Set();
   const named = new Set();
   const avoid = avoidOf(R);
+  // review R1: the level is a PERSON's, not an entry's. Pepe gives a roster entry the person's level now, but a mic entry its hold's
+  // level as it was when the hold began (a hold begun hidden stays "hidden" after a !bridge show) - sighting both with their own kind
+  // ended the session and burnt the name on every snapshot of the hold (incognito roster entry, then "hidden" mic entry). Every
+  // entry of a person on the roster is sighted at their roster level (the strictest, if listed twice); a holder not on the roster
+  // at their mic entry's.
+  const personKind = new Map();
+  for (const e of R.members || []) {
+    const vz = e && e.anon && e._vz;
+    if (!vz || !vz.login) continue;
+    const low = lower(vz.login);
+    if (personKind.get(low) !== "hidden") personKind.set(low, vz.kind);
+  }
   for (const e of [...(R.members || []), ...(R.mic || [])]) {
     if (!e) continue;
     if (!e.anon && e.login) { named.add(lower(e.login)); continue; }
     const vz = e._vz;
     if (!vz) continue;
     const low = lower(vz.login);
+    const kind = personKind.has(low) ? personKind.get(low) : vz.kind;
     let view = null;
-    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid, kind: vz.kind }); } catch (err) { view = null; }
+    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid, kind }); } catch (err) { view = null; }
     seen.add(low);
     const isMic = (R.mic || []).includes(e);
     if (view && view.alias && !(isMic && (vz.proven !== true || vz.beganNamed === true))) {
@@ -456,4 +490,4 @@ async function forgetLogins(logins) {
 
 module.exports = { KINDS, hide, bucket, parsePriv, realUser, veiledItem, namedExtras, opaqueId, nameItem, namedSeen, namedHold, beganNamed, snapshotEntries,
                    nameSnapshot, veilOrder, seedSeen, veilRow, roomVeilData, attachRoomVeil, attachFeedVeil, forgetLogins, avoidOf,
-                   hiddenHash, owns, hasPriv, _holds: HOLDS, _beganNamed: BEGAN_NAMED };
+                   hiddenHash, owns, hasPriv, _holds: HOLDS, _beganNamed: BEGAN_NAMED, _holdKinds: HOLD_KINDS };

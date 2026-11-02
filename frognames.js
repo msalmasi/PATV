@@ -186,7 +186,7 @@ function sessInit() {
       // from before this column), so an incognito -> hidden switch ends it after a restart too
       const cols = (await getQuery("SELECT name FROM pragma_table_info('incog_alias')")).map((r) => r.name);
       if (!cols.includes("lvl")) await runQuery("ALTER TABLE incog_alias ADD COLUMN lvl TEXT");
-      // privacy fix (1.99??, review F7): an incognito -> hidden switch's no-name window (endLevel's burn), kept across a restart -
+      // privacy fix (1.99ahc, review F7): an incognito -> hidden switch's no-name window (endLevel's burn), kept across a restart -
       // NAMED is memory only and a switch through level() (Pepe's privacy.hidden, a hidden leave) leaves no alias-less session row
       // behind to carry it: a restart inside the 15 minutes gave the next hidden sighting a fresh frog name, tied to the old one by
       // timing. One row per (pad, session key) for NAMED_GAP_MS; no login, no name, no session id.
@@ -318,9 +318,12 @@ function sight(roomId, login, opts = {}) {
     const t = opts.t || clock();
     const sk = skOf(room, login);
     const kind = LEVELS.has(opts.kind) ? opts.kind : null;
+    // review R1: a FROZEN kind (a mic hold's, kept as it was when the hold began - the person's level now may differ) never ends a
+    // session on level and never changes its level; it only gives a session it opens its level
+    const frozen = opts.frozen === true;
     let S = (OPEN.get(room) || new Map()).get(sk) || null;
     if (S) {
-      const lv = levelEnds(S, kind);
+      const lv = !frozen && levelEnds(S, kind);
       const why = endWhy(S, t);
       if (lv) { await endLevel(S, t); S = null; }             // (whatever the clock says too: the switch decides the next name)
       else if (why) { await endSession(S, t, why); S = null; }
@@ -330,7 +333,7 @@ function sight(roomId, login, opts = {}) {
     S.lastSeen = t;
     if (opts.active) S.lastActive = t;
     if (opts.holding === true || opts.holding === false) S.holding = opts.holding;
-    if (kind && S.kind !== kind) {                            // hidden -> incognito (kept), or a row's first known level
+    if (kind && S.kind !== kind && !frozen) {                 // hidden -> incognito (kept), or a row's first known level
       S.kind = kind;
       await runQuery("UPDATE incog_alias SET lvl = ? WHERE id = ?", [kind, S.id]);
     }
