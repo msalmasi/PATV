@@ -198,8 +198,18 @@ test("panel markup: Pepe's look section for admins only, thumbnails exist for ev
   assert.equal((await ejs.renderFile(file, { me: { username: "pleb", class: "pleb" }, pepeCtlCsrf: P.csrfToken })).trim(), "");
   const dir = path.join(repo, "public", "img", "pepe-looks");
   for (const id of ["pepe", "dolly", "dracula", "frankenstein", "mummy", "freddy", "jason", "pennywise", "werewolf", "pinhead", "pedro", "flirty", "gothmommy",
-                    "reaper", "skater", "alien", "bobross", "sagan", "attenborough", "fireside", "winterlights"]) {
-    assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
+                    "reaper", "skater", "alien", "bobross", "sagan", "attenborough", "fireside", "winterlights",
+                    "dino", "demon", "gangster", "santa"]) {
+    const filename = path.join(dir, id + ".png");
+    assert.ok(fs.existsSync(filename), id + ".png");
+    const png = fs.readFileSync(filename);
+    assert.ok(png.length >= 33, id + " has a PNG header");
+    assert.deepEqual(png.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), id + " is PNG");
+    assert.equal(png.toString("ascii", 12, 16), "IHDR", id + " has image metadata");
+    assert.equal(png.readUInt32BE(16), 96, id + " width");
+    assert.equal(png.readUInt32BE(20), 96, id + " height");
+    assert.equal(png[24], 8, id + " uses 8-bit channels");
+    assert.equal(png[25], 6, id + " is RGBA");
   }
   // december: the ❄️ Winter Lights Pepe thumbnail is a 96x96 RGBA PNG like the others (the bot's pepe-avatar.html, rendered)
   const png = fs.readFileSync(path.join(dir, "winterlights.png"));
