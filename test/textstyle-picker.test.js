@@ -424,7 +424,7 @@ test("one home: the control is on Edit profile only; the /settings hub links to 
   assert.match(h, /data-state>Default</);
   // the hub row sits with the other "how others see you" rows, after Cosmetics
   const ids = (await HUB.hub(U.plain, {})).find((s) => s.id === "profile").entries.map((e) => e.id);
-  assert.deepEqual(ids, ["profile", "feed", "cosmetics", "textstyle", "stickers"]);
+  assert.deepEqual(ids, ["profile", "feed", "cosmetics", "textstyle", "stickers", "stagecover"]);
 });
 
 // ── the looks switch ──
@@ -458,7 +458,7 @@ test("the looks switch: while it is off there is no card, no /settings row and n
     assert.ok(!html.includes('href="' + TS.webfontHref().replace(/&/g, "&amp;") + '"'), "the picker's webfonts don't load");
     // /settings: no row
     assert.equal(await hubRow(), false);
-    assert.deepEqual(await profileIds(), ["profile", "feed", "cosmetics", "stickers"]);
+    assert.deepEqual(await profileIds(), ["profile", "feed", "cosmetics", "stickers", "stagecover"]);
   } finally {
     await setLooks(true);
   }
@@ -470,7 +470,7 @@ test("the looks switch: while it is off there is no card, no /settings row and n
   assert.match(html, /<section class="card" id="textstyle">/);
   assert.deepEqual(radios(html, "color").filter((x) => x.checked).map((x) => x.v), ["blue"]);
   assert.equal(await hubRow(), true);
-  assert.deepEqual(await profileIds(), ["profile", "feed", "cosmetics", "textstyle", "stickers"]);
+  assert.deepEqual(await profileIds(), ["profile", "feed", "cosmetics", "textstyle", "stickers", "stagecover"]);
   const r = await post(u, { color: "rose", font: "serif" });
   assert.equal(r.status, 200);
   assert.equal(await stored(u), '{"color":"#fb7185","font":"serif"}');

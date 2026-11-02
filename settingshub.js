@@ -58,12 +58,16 @@ async function hub(user, ctx = {}) {
   const ts = tsOn ? await safe(async () => TS.pickerState(await TS.get(uid))) : null;
   const tsSt = !ts ? null : !ts.color && ts.font === "sans" ? st("ts_default")
     : Object.assign(ts.color ? st("ts") : st("ts_font"), { vk: Object.assign(ts.color ? { color: "textstyle.color." + ts.color } : {}, { font: "textstyle.font." + ts.font }) });
+  // 1.99?? 🎙 the stage cover (stagecover.js; its one home is /settings/stage-cover): what the mic stage shows while your cam isn't
+  // live - the state names the choice (a catalog key the view translates)
+  const cov = await safe(() => require("./stagecover").choiceOf(uid));
   const profile = [
     E("profile", "✏️", edit),
     E("feed", "📝", "/u/" + me + "/posts#profile-settings"),
     E("cosmetics", "🎨", "/cosmetics"),
     ...(tsOn ? [E("textstyle", "🔤", edit + "#textstyle", tsSt)] : []),
     E("stickers", "🧸", "/cosmetics?tab=stickers"),
+    E("stagecover", "🎙️", "/settings/stage-cover", cov ? Object.assign(st("cover"), { vk: { kind: "scov.k." + cov } }) : null),
   ];
 
   // ── Notifications ──

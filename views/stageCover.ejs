@@ -1,0 +1,156 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /settings/stage-cover - 1.99?? (stagecover.js): the member's STAGE COVER - the picture a pad's 🎙 mic stage shows for them while
+    their cam isn't live (by default their GTF avatar). Choices: GTF avatar, profile picture, a sticker they own, a picture of their
+    own (only while the site's picture safety checks enforce - stagecover.uploadsOn), the plain card. Client: public/js/stage-cover.js
+    (no innerHTML; it saves through /api/stage-cover and uploads in chunks). st = stagecover.stateFor(). %>
+<%- include('layout', { title: t('scov.title'), user: user }) %>
+<style>
+  .scov .sc-why-p { margin: 0; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
+  .scov .sc-now { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-3); }
+  /* a small copy of a stage card (the player is always dark, like the real one) */
+  .scov .sc-tile { position: relative; flex: 0 0 auto; width: 240px; max-width: 100%; height: 135px; border-radius: var(--ds-r-md); overflow: hidden; background: #111;
+                   border: 1px solid var(--ds-line); display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; gap: 3px; padding: 6px 6px 28px; }
+  .scov .sc-tile .sc-pic { width: 100%; height: 100%; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .scov .sc-tile .sc-pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .scov .sc-tile .sc-letter { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: #2a2a2a; color: #fff; font-weight: 700; font-size: 18px; }
+  .scov .sc-tile .sc-tag { font-size: 11px; color: #bbb; background: rgba(0,0,0,.55); border-radius: 999px; padding: 0 8px; }
+  .scov .sc-tile .sc-name { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); padding: 1px 8px; border-radius: 999px; background: rgba(0,0,0,.65);
+                            color: #fff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scov [data-k="gtf"] img, .scov [data-k="sticker"] img, .scov .sc-opt[data-kind="gtf"] .sc-thumb img, .scov .sc-stk img { image-rendering: pixelated; image-rendering: crisp-edges; }
+  .scov [data-k="photo"] .sc-pic img { width: auto; aspect-ratio: 1 / 1; max-width: 100%; border-radius: 50%; object-fit: cover; }
+  .scov .sc-opts { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: var(--ds-sp-2); }
+  .scov .sc-sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .scov .sc-opt { border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-sunken); padding: var(--ds-sp-2h) var(--ds-sp-3); min-width: 0; }
+  .scov .sc-opt:has(> .sc-head input:checked) { border-color: var(--ds-ac); box-shadow: 0 0 0 1px var(--ds-ac) inset; }
+  .scov .sc-opt.off { opacity: .7; }
+  .scov .sc-head { display: grid; grid-template-columns: auto 56px minmax(0, 1fr); align-items: center; gap: var(--ds-sp-3); cursor: pointer; min-height: 44px; }
+  .scov .sc-head input { width: 20px; height: 20px; margin: 0; accent-color: var(--ds-ac); }
+  .scov .sc-thumb { width: 56px; height: 56px; border-radius: var(--ds-r-md); background: #111; display: grid; place-items: center; overflow: hidden; color: #fff; font-weight: 700; }
+  .scov .sc-thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .scov .sc-opt[data-kind="photo"] .sc-thumb img { object-fit: cover; border-radius: 50%; }
+  .scov .sc-txt { min-width: 0; display: grid; gap: 2px; }
+  .scov .sc-txt b { color: var(--ds-text-strong); }
+  .scov .sc-txt .ds-meta { overflow-wrap: anywhere; }
+  .scov .sc-more { margin: var(--ds-sp-2) 0 0; padding-inline-start: calc(20px + var(--ds-sp-3)); display: grid; gap: var(--ds-sp-2); min-width: 0; }
+  .scov .sc-more a { overflow-wrap: anywhere; }
+  .scov .sc-stks { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
+  .scov .sc-stks legend { padding: 0 0 4px; font-size: 13px; color: var(--ds-text-2); }
+  .scov .sc-stk { position: relative; display: grid; place-items: center; min-height: 52px; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-md); background: #111; cursor: pointer; }
+  .scov .sc-stk input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .scov .sc-stk img { width: 40px; height: 40px; }
+  .scov .sc-stk:has(input:checked) { border-color: var(--ds-ac); box-shadow: 0 0 0 2px var(--ds-ac); }
+  .scov .sc-stk:has(input:focus-visible) { outline: 2px solid var(--ds-ac); outline-offset: 2px; }
+  .scov .sc-up { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2); min-width: 0; }
+  .scov .sc-up input[type=file] { max-width: 100%; min-height: 44px; color: var(--ds-text-2); font: 14px var(--ds-font); }
+  .scov .sc-msg { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); margin: var(--ds-sp-2) 0 0; }
+  .scov .sc-msg.ok { color: var(--ds-ok); } .scov .sc-msg.bad { color: var(--ds-danger); }
+  .scov .sc-list { margin: 0; padding-inline-start: 1.1em; display: grid; gap: 6px; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
+  @media (max-width: 420px) { .scov .sc-head { grid-template-columns: auto 44px minmax(0, 1fr); gap: var(--ds-sp-2); } .scov .sc-thumb { width: 44px; height: 44px; } .scov .sc-more { padding-inline-start: 0; } }
+</style>
+<%
+  const letter = String(user || '?').trim().charAt(0).toUpperCase() || '?';
+  const k = st.kind;
+  const opt = (id) => (k === id ? ' checked' : '');
+  const thumb = (url, alt) => url ? '<img src="' + t.esc(url) + '" alt="' + t.esc(alt || '') + '" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '<span aria-hidden="true">' + t.esc(letter) + '</span>';
+%>
+<main class="ds-page mid scov" id="scov" data-max-mb="<%= st.max_mb %>" data-letter="<%= letter %>">
+  <a class="ds-back" href="/settings">← <%- t('sethub.back') %></a>
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🎙️</span> <%- t('scov.eyebrow') %></span>
+    <h1><%- t('scov.h1') %></h1>
+    <p class="ds-lead"><%- t('scov.lead') %></p>
+  </header>
+  <% if (!st.linked) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">🐸</span><div><%- t('scov.unlinked') %> <a href="/settings/account#camfrogDiv"><%- t('scov.unlinked_link') %></a></div></div><% } %>
+
+  <section class="ds-card lg" id="now" aria-labelledby="scNowH">
+    <h2 class="ds-h2" id="scNowH"><span class="dot"></span><%- t('scov.now_h') %></h2>
+    <div class="sc-now">
+      <div class="sc-tile" id="scNowTile" data-k="<%= st.now ? st.now.k : '' %>" aria-hidden="true">
+        <span class="sc-pic"><% if (st.now) { %><img id="scNowImg" src="<%= st.now.url %>" alt="" decoding="async" referrerpolicy="no-referrer"><% } else { %><span class="sc-letter" id="scNowLetter"><%= letter %></span><% } %></span>
+        <span class="sc-tag"><%- t('scov.now_why') %></span>
+        <span class="sc-name"><%= user %></span>
+      </div>
+      <p class="sc-why-p" id="scNowTxt" role="status"><%- st.now ? t('scov.now_k', { kind: t('scov.k.' + st.now.k) }) : t('scov.now_none') %></p>
+    </div>
+  </section>
+
+  <section class="ds-card lg" id="pick" aria-labelledby="scPickH">
+    <h2 class="ds-h2" id="scPickH"><span class="dot"></span><%- t('scov.pick_h') %></h2>
+    <form id="scForm" novalidate>
+      <fieldset class="sc-opts">
+        <legend class="sc-sr"><%- t('scov.pick_legend') %></legend>
+
+        <div class="sc-opt" data-kind="gtf">
+          <label class="sc-head"><input type="radio" name="kind" value="gtf"<%= opt('gtf') %>>
+            <span class="sc-thumb"><%- thumb(st.gtf && st.gtf.url, '') %></span>
+            <span class="sc-txt"><b><%- t('scov.k.gtf') %> <span class="ds-tag"><%- t('scov.default_tag') %></span></b>
+              <span class="ds-meta"><%- st.gtf ? t('scov.gtf_d') : t('scov.gtf_none') %></span>
+              <% if (st.gtf && st.gtf_private) { %><span class="ds-meta"><%- t('scov.gtf_private') %></span><% } %></span>
+          </label>
+        </div>
+
+        <div class="sc-opt<%= st.photo ? '' : ' off' %>" data-kind="photo">
+          <label class="sc-head"><input type="radio" name="kind" value="photo"<%= opt('photo') %><%= st.photo ? '' : ' disabled' %>>
+            <span class="sc-thumb"><%- thumb(st.photo, '') %></span>
+            <span class="sc-txt"><b><%- t('scov.k.photo') %></b><span class="ds-meta"><%- st.photo ? t('scov.photo_d') : t('scov.photo_none') %></span></span>
+          </label>
+          <p class="sc-more"><a href="/u/<%= encodeURIComponent(user) %>/edit#avatar"><%- t('scov.photo_edit') %></a></p>
+        </div>
+
+        <div class="sc-opt<%= st.stickers.length ? '' : ' off' %>" data-kind="sticker">
+          <% const curStk = st.stickers.find((s) => s.ref === st.sticker); %>
+          <label class="sc-head"><input type="radio" name="kind" value="sticker"<%= opt('sticker') %><%= st.stickers.length ? '' : ' disabled' %>>
+            <span class="sc-thumb"><%- thumb(curStk && curStk.url, '') %></span>
+            <span class="sc-txt"><b><%- t('scov.k.sticker') %></b><span class="ds-meta"><%- st.stickers.length ? t('scov.sticker_d') : t('scov.sticker_none') %></span></span>
+          </label>
+          <div class="sc-more">
+            <% if (st.stickers.length) { %>
+            <fieldset class="sc-stks" id="scStks">
+              <legend><%- t('scov.sticker_pick') %></legend>
+              <% st.stickers.forEach((s) => { %><label class="sc-stk" title="<%= s.pack %> · <%= s.name %>"><input type="radio" name="sticker" value="<%= s.ref %>"<%= st.sticker === s.ref ? ' checked' : '' %> aria-label="<%= s.pack %> · <%= s.name %>"><img src="<%= s.url %>" alt="" loading="lazy" decoding="async"></label><% }) %>
+            </fieldset>
+            <% } else { %><a href="/cosmetics?tab=stickers"><%- t('scov.sticker_shop') %></a><% } %>
+          </div>
+        </div>
+
+        <div class="sc-opt<%= st.uploads || st.upload ? '' : ' off' %>" data-kind="upload" id="scUpOpt">
+          <label class="sc-head"><input type="radio" name="kind" value="upload" id="scUpRadio"<%= opt('upload') %><%= st.upload ? '' : ' disabled' %>>
+            <span class="sc-thumb" id="scUpThumb"><%- thumb(st.upload && st.upload.url, '') %></span>
+            <span class="sc-txt"><b><%- t('scov.k.upload') %></b><span class="ds-meta"><%- st.uploads ? t('scov.upload_d') : t('scov.upload_off') %></span>
+              <span class="ds-meta" id="scUpState"><%- st.upload ? (st.upload.state === 'held' ? t('scov.upload_held') : t('scov.upload_ok')) : st.removed ? t('scov.upload_removed') : '' %></span></span>
+          </label>
+          <div class="sc-more">
+            <% if (st.uploads) { %>
+            <div class="sc-up">
+              <label class="sc-sr" for="scFile"><%- t('scov.upload_file') %></label>
+              <input type="file" id="scFile" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif">
+              <button type="button" class="ds-btn ghost" id="scUpBtn"><%- t('scov.upload_btn') %></button>
+            </div>
+            <span class="ds-meta"><%- t('scov.upload_limits', { n: st.max_mb }) %></span>
+            <% } %>
+            <div><button type="button" class="ds-btn ghost" id="scUpDel"<%= st.upload ? '' : ' hidden' %>><%- t('scov.upload_remove') %></button></div>
+          </div>
+        </div>
+
+        <div class="sc-opt" data-kind="card">
+          <label class="sc-head"><input type="radio" name="kind" value="card"<%= opt('card') %>>
+            <span class="sc-thumb"><span aria-hidden="true"><%= letter %></span></span>
+            <span class="sc-txt"><b><%- t('scov.k.card') %></b><span class="ds-meta"><%- t('scov.card_d') %></span></span>
+          </label>
+        </div>
+      </fieldset>
+      <div class="ds-ctas"><button type="submit" class="ds-btn" id="scSave"><%- t('scov.save') %></button></div>
+      <p class="sc-msg" id="scMsg" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <section class="ds-card lg" id="who" aria-labelledby="scWhoH">
+    <h2 class="ds-h2" id="scWhoH"><span class="dot"></span><%- t('scov.privacy_h') %></h2>
+    <ul class="sc-list">
+      <li><%- t('scov.privacy_public') %></li>
+      <li><%- t('scov.privacy_veil') %></li>
+      <li><%- t('scov.privacy_fallback') %></li>
+    </ul>
+  </section>
+</main>
+<script src="/public/js/stage-cover.js?v=1" defer></script>

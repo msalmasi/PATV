@@ -117,7 +117,7 @@ test("signed in: every section, a row per page with title + description, and the
     assert.match(r.text, new RegExp('<section class="ds-card lg sh-sec" id="' + s + '"'), s);
     assert.match(r.text, new RegExp('<a class="ds-tab" href="#' + s + '">' + EN["sethub.sec." + s].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "</a>"), "jump to " + s);
   }
-  for (const k of ["account", "password", "chatsignin", "connections", "camfrog", "profile", "feed", "cosmetics", "textstyle", "stickers",
+  for (const k of ["account", "password", "chatsignin", "connections", "camfrog", "profile", "feed", "cosmetics", "textstyle", "stickers", "stagecover",
                    "messages", "mentions", "telegram", "likeness", "voice", "clone", "policy", "wallet", "subscriptions", "premium", "creators",
                    "support", "newpad", "ownerguide", "language", "timezone"]) {
     assert.match(r.text, new RegExp('data-entry="' + k + '"'), k + " row");
@@ -166,7 +166,7 @@ test("every link on the hub resolves to a registered page, and every #fragment i
 });
 
 test("old addresses keep working", () => {
-  for (const p of ["/settings/likeness", "/settings/mentions", "/settings/telegram", "/settings/subscriptions", "/subscriptions", "/language", "/u/x/edit", "/u/x/profile/edit", "/settings/account"]) {
+  for (const p of ["/settings/likeness", "/settings/mentions", "/settings/telegram", "/settings/stage-cover", "/settings/subscriptions", "/subscriptions", "/language", "/u/x/edit", "/u/x/profile/edit", "/settings/account"]) {
     assert.ok(routed(p), p);
   }
   assert.match(fs.readFileSync(path.join(repo, "subscriptions.js"), "utf8"), /app\.get\("\/settings\/subscriptions"[^]*?redirect\(301, "\/subscriptions"/);
@@ -243,7 +243,7 @@ test("Settings -> Account and Edit profile render (fake member)", async () => {
 });
 
 test("each settings sub-page links back to /settings", () => {
-  for (const v of ["likeness", "mentions", "telegram", "subscriptions", "editProfile", "language", "settingsAccount"]) {
+  for (const v of ["likeness", "mentions", "telegram", "subscriptions", "editProfile", "language", "settingsAccount", "stageCover"]) {   // (1.99??: + 🎙 Stage cover)
     const src = fs.readFileSync(path.join(repo, "views", v + ".ejs"), "utf8");
     assert.match(src, /<a class="ds-back" href="\/settings">← <%- t\('(sethub|lk)\.back'\) %><\/a>/, v);
   }
