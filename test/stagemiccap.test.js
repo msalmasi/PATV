@@ -295,18 +295,82 @@ test("recording fixes tiles, kills departed readers at the sampled time, and dis
   const graph = args[args.indexOf("-filter_complex") + 1]; assert.match(graph, /between\(t,0\.0000,5\.0000\)/); assert.match(graph, /gte\(t,5\.0000\)/);
   assert.equal(M.cancel(o.id), true); await assert.rejects(running.done); assert.equal(activeReaders, 0); assert.equal(taps[0].stopped, true); assert.equal(fs.existsSync(o.out), false); assert.equal(fs.existsSync(job.dir), false);
 });
-test("1.99?? stage cover fix 3: a clip loads each card's cover once when it starts; the 500 ms samples never wait on a picture (a slow photo fetch can't delay a privacy cut)", async () => {
-  let asked = 0, gate = null;
-  reset({ cover: async () => { asked++; if (gate) await gate; return null; } });
-  program = { layout: "split", src: [cam("alice", { video: "card", avatar: "https://cdn.discordapp.com/avatars/1/x.png", ck: "photo" }), cam("bob", { pos: 1, avatar: "/media/cover/a/1.abc.svg", ck: "gtf" })] };
-  const o = options("clip"), running = await M.start(o); await tick(); const job = T.jobs.get(o.id);
-  assert.equal(asked, 2, "both cards' covers at the start");
-  gate = new Promise(() => {});                                            // a picture that never arrives
+test("1.99?? stage cover fix 3 + review fix 3 (FID-1): a capture STARTS without waiting on any picture (a photo host that never answers can't hold it up), and the 500 ms samples never wait on one (a slow photo fetch can't delay a privacy cut)", async () => {
+  let asked = 0;
+  reset({ cover: () => { asked++; return new Promise(() => {}); } });     // a photo host that never answers
+  const photo = "https://cdn.discordapp.com/avatars/1/x.png", gtf = "/media/cover/a/1.abc.svg";
+  program = { layout: "split", src: [cam("alice", { video: "card", avatar: photo, ck: "photo" }), cam("bob", { pos: 1, avatar: gtf, ck: "gtf" })] };
+  const t0 = Date.now();
+  const o = options("clip"), running = await M.start(o);
+  const waited = Date.now() - t0;
+  await tick(); const job = T.jobs.get(o.id);
+  assert.ok(waited < 1500, "started at once: " + waited + " ms");
+  assert.equal(asked, 0, "no picture asked when a capture starts");
+  assert.equal(readers.length, 1, "bob's cam reader opened at once");
+  assert.deepEqual(job.tiles.map(t => t.coverUrl), [photo, gtf], "each named tile's cover URL kept for the cut");
   clock += 1000; hidden.add("alice");
   await T.sample(job);
-  assert.equal(asked, 2, "no cover asked by the sample");
+  assert.equal(asked, 0, "no cover asked by the sample");
   assert.equal(job.tiles[0].stop, 1, "the privacy cut landed at once");
   M.cancel(o.id); await assert.rejects(running.done);
+  assert.equal(asked, 0, "a cancelled clip loads none either");
+});
+test("1.99?? stage cover review fix 3 (FID-1): a tile's consent is read AFTER its picture - someone who goes hidden while a slow picture loads (a snap's final frame) is never drawn by name", async () => {
+  let release = null;
+  reset({ cover: () => new Promise(r => { release = r; }) });
+  const e = cam("alice", { video: "card", avatar: "/media/cover/a/1.abc.svg", ck: "gtf" });
+  const pending = T.tileFor(e, R, U);
+  await tick(); await tick();
+  assert.equal(typeof release, "function", "the picture is asked first");
+  hidden.add("alice");                                                    // she goes hidden while it loads
+  release({ buf: frame, k: "gtf" });
+  const t = await pending;
+  assert.equal(t.mode, "blank"); assert.equal(t.name, ""); assert.equal(t.login, undefined); assert.equal(t.cover, undefined);
+  hidden.clear();                                                         // control: still public -> her card with the picture
+  const p2 = T.tileFor(e, R, U); await tick(); release({ buf: frame, k: "gtf" });
+  const t2 = await p2;
+  assert.equal(t2.mode, "card"); assert.equal(t2.cover && t2.cover.k, "gtf");
+});
+test("1.99?? stage cover review fix 3 (FID-2): a clip draws each card's cover as it is at the END - a picture taken down mid-recording is never in it, a changed one shows the new picture (real ffmpeg)", async () => {
+  const solid = (r, g, b) => sharp({ create: { width: 200, height: 200, channels: 3, background: { r, g, b } } }).png().toBuffer();
+  const red = await solid(230, 10, 10), blue = await solid(10, 10, 230);
+  const up = "/media/cover/u/" + "a".repeat(32) + ".webp", gtf = "/media/cover/a/1.abc.svg";
+  let answer = null;
+  const asked = [];
+  reset({ cover: async u => { asked.push(u); return answer(u); } });
+  /** a 5 s clip of alice's name card; `during` runs 1 s in, before the samples (stagecover.captureImage answers `answer` now) */
+  async function clipOf(during) {
+    answer = u => (u === up ? { buf: red, k: "upload" } : null);
+    program = { layout: "single", src: [cam("alice", { name: "Alice", video: "card", avatar: up, ck: "upload" })] };
+    asked.length = 0;
+    const o = options("clip"), running = await M.start(o); await tick();
+    const job = T.jobs.get(o.id);
+    clock += 1000; during();
+    for (let i = 0; i < 6; i++) { await T.sample(job); clock += 500; }
+    job.finishEarly(5);
+    const info = await running.done;
+    const png = path.join(tmp, o.id + "-at.png");
+    ff(["-ss", "4.5", "-i", o.out, "-frames:v", "1", png]);
+    const { data, info: im } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const i = (330 * im.width + 640) * im.channels;
+    return { info, px: [data[i], data[i + 1], data[i + 2]], asked: asked.slice() };
+  }
+  const isRed = c => c[0] > 180 && c[1] < 70 && c[2] < 70, isBlue = c => c[2] > 180 && c[0] < 70 && c[1] < 70;
+  // control: nothing changes - the uploaded picture is drawn, loaded once (at the cut)
+  let r = await clipOf(() => {});
+  assert.ok(isRed(r.px), "control: the picture is in the clip " + r.px);
+  assert.deepEqual(r.asked, [up]); assert.equal(r.info.veiled, false); assert.deepEqual(r.info.cards, ["alice"]);
+  // an admin takes it down 1 s in: the page shows the fallback; captureImage now answers null (localImageChecked) -> the letter
+  r = await clipOf(() => { answer = () => null; });
+  assert.ok(!isRed(r.px), "the taken-down picture is never in the clip " + r.px);
+  assert.deepEqual(r.asked, [up], "read at the cut, after the take-down");
+  // alice changes her cover 1 s in (a new program URL): the end state - her new picture - for the whole clip
+  r = await clipOf(() => {
+    program = { layout: "single", src: [cam("alice", { name: "Alice", video: "card", avatar: gtf, ck: "gtf" })] };
+    answer = u => (u === gtf ? { buf: blue, k: "gtf" } : u === up ? { buf: red, k: "upload" } : null);
+  });
+  assert.ok(isBlue(r.px), "the cover she carries at the end " + r.px);
+  assert.deepEqual(r.asked, [gtf]);
 });
 test("startup sweeps only its own job directories", async () => {
   const own = path.join(tmp, "mic-" + id()), other = path.join(tmp, "other-tool-work");

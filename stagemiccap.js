@@ -20,6 +20,12 @@
 // cover the VIEWER's program carries (their own stage: none on a tile they reported / are blocked from, none on a veiled tile) - a
 // profile photo too, round as the page crops it: stagecover.captureImage fetches it server-side from the site's allow-listed photo
 // hosts only (cached; failing to the letter, never failing the capture). The 500 ms samples never wait on a picture (covers: false).
+// 1.99?? review fix 3: neither does start() - a capture starts at once; a snap loads the covers of its final frame (each tile's
+// consent read AFTER its picture, so nobody who went hidden / private meanwhile is drawn), a clip at its cut (loadCovers: the cover
+// each card carried at the END, read again then - a picture taken down or changed during the recording is never drawn; the end state
+// shows for the whole clip). Known divergence, deliberate since handoff 16 (an owner decision to change): a tile the viewer may not
+// watch - members_only / unavailable - shows its name card with the cover and the reason on the page, but a capture draws it BLANK
+// (no name, no cover): a cam the viewer can't watch is never in a capture, not even by name. hidden / blocked tiles: blank on both.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -221,12 +227,16 @@ async function tileFor(e, R, user, { covers = true } = {}) {
   if (e.kind === "cover") { const c = coverArt(e); return { ...t, mode: "cover", name: c.label, image: c.art }; }
   if (e.kind !== "cam" || (e.watch !== "ok" && e.watch !== "notice")) return t;
   const login = String(e.login || e.id).toLowerCase();
-  if (!LOGIN.test(login) || !(await consent(login, user.userId))) return t;
-  Object.assign(t, { login, name: String(e.name || login), mode: "card" });
+  if (!LOGIN.test(login)) return t;
   // 1.99?? stage cover: the picture this person's name card shows on the page (their GTF avatar by default) - loaded for every
   // consenting named tile, so a live / still tile that ends up a card draws it too. A cover tile never gets here (coverArt above)
-  // (fix 3: the 500 ms samples compare tiles only - they never wait on a picture)
-  t.cover = covers ? await coverFor(e) : null;
+  // (fix 3: the 500 ms samples compare tiles only - they never wait on a picture; review fix 3 (FID-1): neither does start())
+  // 1.99?? review fix 3 (FID-1): the picture FIRST, consent after it - consent is the last thing read before a tile is drawn, so
+  // someone who goes hidden / private while a slow picture loads (a snap's final frame) is never drawn by name
+  const cover = covers ? await coverFor(e) : null;
+  if (!(await consent(login, user.userId))) return t;
+  Object.assign(t, { login, name: String(e.name || login), mode: "card" });
+  t.cover = cover;
   if (e.watch === "notice") return t;
   if (e.video === "live") {
     let allowed = false;
@@ -243,6 +253,17 @@ async function tileFor(e, R, user, { covers = true } = {}) {
   return t;
 }
 async function tilesFor(p, R, user, opts) { return Promise.all(entries(p).map(e => tileFor(e, R, user, opts))); }
+/** 1.99?? review fix 3 (FID-2): a clip's card covers, loaded at its cut - the cover each named tile carried on the viewer's stage at
+ *  the end (t.coverUrl, kept by the samples), read again then (stagecover.captureImage re-checks an upload's state): a picture taken
+ *  down or changed during the recording is never drawn; the end state is drawn for the whole clip. All at once, each bounded by
+ *  COVER_WAIT_MS. Veiled (cover) and blank tiles have no login: never a picture. Never throws. */
+async function loadCovers(tiles) {
+  await Promise.all(tiles.map(async t => {
+    t.cover = null;
+    if (!t.login || t.mode === "blank" || t.mode === "cover") return;
+    try { t.cover = await coverFor({ avatar: t.coverUrl }); } catch (_) { t.cover = null; }
+  }));
+}
 async function gate(R, user, kind, surface, { live = false } = {}) {
   if (!R || !user || !user.userId) throw refuse("Sign in first.", 401);
   if (deps.config().stagecap_mic !== true) throw refuse("disabled");
@@ -590,6 +611,8 @@ async function sample(job) {
         if (next ? next.mode === "blank" || next.mode === "cover" : !(t.login && (await consent(t.login, user.userId)))) job.veiled = true;
       }
       if (t.stop == null && !!next.newest !== t.lastNewest) { t.rings.push({ at, on: !!next.newest }); t.lastNewest = !!next.newest; }
+      // 1.99?? review fix 3 (FID-2): the cover this tile carries on the viewer's stage now (no picture loaded here - the cut loads it)
+      if (t.stop == null && t.login) t.coverUrl = next.source.avatar;
     }
     const s = speaking(p);
     if (s !== job.lastSpeaking) { job.speaking.push({ at, kind: s }); job.lastSpeaking = s; }
@@ -735,11 +758,15 @@ async function clip(job, hooks) {
   if (job.cancelled) throw refuse("failed", 409);
   const duration = Math.min(job.secs, elapsed);
   if (duration < CLIP_MIN) throw refuse("short", 409);
+  // 1.99?? review fix 3 (FID-2): the card covers as the recording ENDS (never the ones at its start) - loaded alongside the last
+  // roster read, before the feed queue's slot is taken (a slow picture never holds the queue)
+  const covers = loadCovers(job.tiles);
   // mic keep review: the holds the samples were too early to see (the mic list's MIC_LAG) - before the audio is planned
   await lastRoster(job, duration);
   if (job.cancelled) throw refuse("failed", 409);
   // review fix 2: no sample starts after finishReaders; the last one's lookup may still be in flight with its private look-back
   await settlePrivacy(job);
+  await covers;
   if (hooks.cutting) await hooks.cutting();
   const release = await fm.slot();
   try {
@@ -785,7 +812,9 @@ async function start(opts, hooks = {}) {
   const { R, user } = opts, kind = opts.kind === "clip" ? "clip" : "snap", secs = [10, 20, 30].includes(Number(opts.secs)) ? Number(opts.secs) : 20;
   await gate(R, user, kind, opts.surface, { live: true });   // review fix 2: a capture starts only while Pepe is live
   const program = await programFor(R, user); if (!usable(program)) throw refuse("empty", 409);
-  const tiles = await tilesFor(program, R, user), now = deps.now();
+  // 1.99?? review fix 3 (FID-1): no picture here - a slow photo never delays the recording or opens a cam reader after a consent read
+  // it outlasted (a snap loads its covers with its final frame, a clip at its cut: loadCovers)
+  const tiles = await tilesFor(program, R, user, { covers: false }), now = deps.now();
   const offsets = shifts(tiles.filter(t => t.mode === "live").map(t => { try { return deps.offset(R.id, t.path); } catch (_) { return null; } }));
   if (!CID.test(opts.id)) throw refuse("failed", 500);
   const active = [...JOBS.values()];
@@ -799,7 +828,7 @@ async function start(opts, hooks = {}) {
   const job = { ...opts, id: opts.id, R, user, kind, secs, program, tiles, dir, shifts: offsets, started: now, deadline: now + (kind === "snap" ? 6 : secs + offsets.extra + 1) * 1000,
     expiry: now + (kind === "snap" ? 21 : secs + 15) * 1000, paths: new Set(tiles.filter(t => t.path).map(t => t.path)), reading: true, cancelled: false,
     privateHistory: [], speaking: [{ at: 0, kind: speaking(program) }], lastSpeaking: speaking(program), finishEarly: () => {} };
-  tiles.forEach(t => { t.stop = null; t.rings = [{ at: 0, on: t.newest }]; t.lastNewest = t.newest; });
+  tiles.forEach(t => { t.stop = null; t.rings = [{ at: 0, on: t.newest }]; t.lastNewest = t.newest; t.coverUrl = t.login ? t.source.avatar : null; });
   JOBS.set(job.id, job); if (kind === "snap") SNAP_AT.set(R.id, now);
   try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { JOBS.delete(job.id); throw refuse("failed", 500); }
   const done = Promise.resolve().then(() => kind === "snap" ? snap(job) : clip(job, hooks)).then(async info => {
