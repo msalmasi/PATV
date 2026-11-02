@@ -661,3 +661,14 @@ test("review fix F2: scrollback reads only the bars of a !transcripts off person
   assert.ok((X1.txb || []).includes("h:" + hash(FR)) && !X1.tx.includes("h:" + hash(FR)), "history: his 'h:' 🎙 rows are read only as bars (txb)");
   assert.match(CH.pageSql({ nTxB: 1 }), /\(who NOT IN \(\?\) OR json_extract\(d, '\$\.tm'\) = 1\)/);
 });
+
+test("review fix: pad-evidence.js (the evidence list's ', transcripts off' label) loads as v=3 on the pad page and Pad settings - never a cached v=2", () => {
+  // 1.99?? transcripts bar review: the build changed public/js/pad-evidence.js but kept ?v=2, so a browser holding 1.99agv's copy never
+  // showed which evidence clips are a !transcripts off bar's turn (1.99agv bumped it to v=2 for its own change)
+  for (const f of ["views/room.ejs", "views/padSettings.ejs"]) {
+    const src = fs.readFileSync(path.join(repo, f), "utf8");
+    assert.ok(src.includes("/public/js/pad-evidence.js?v=3"), f + " loads pad-evidence.js?v=3");
+    assert.ok(!/pad-evidence\.js\?v=[12]\b/.test(src), f + " has no older pad-evidence.js");
+  }
+  assert.ok(fs.readFileSync(path.join(repo, "public/js/pad-evidence.js"), "utf8").includes("', transcripts off'"), "the label it loads for");
+});
