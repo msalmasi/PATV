@@ -526,3 +526,41 @@ test("S9. covers (hooded frogs) keep every privacy rule: a place never passes be
     assert.deepEqual(["alice", "carl", "dana", "gus"].map(placeOf), [0, 1, 2, 3], "the places closed up, gus after the last one on");
   } finally { Q.isHidden = hid0; MF.setVeilSource(null); await knobs({ covers: false }); await reset(); }
 });
+
+test("S10. review fix B3: a cover (hooded frog) leaving shuffles nobody - its place stays an empty cell (the program, the viewer's places, the capture) until someone new comes on; then the empty places close up first and the newcomer never sits in the frog's place", async () => {
+  const REF = "anon-0a1b2c3d", ANON = { anon: true, display: "someone", ref: REF };
+  const cap = require(path.join(repo, "stagemiccap"));
+  await reset();
+  await knobs({ dynamic: true, main_hold_s: 3, cold_open: true, stable_slots: true, covers: true });
+  try {
+    await pad({ layout: "grid", max_people: 4, keep_recent: 0 });
+    MF.setVeilSource((u) => (u.anon && u.ref === REF ? { proven: true, sess: "s10", veil: "hidden", login: "gus", display: "Gus" } : null));
+    const P = MF._pads.get(ROOM.id);
+    const placeOf = (key) => { const L = MF.snapshot(ROOM.id); const x = key.startsWith("~cv:") ? L.tiles.find((t) => t.cover) : L.tiles.find((t) => t.login === key); return x ? x.pos : undefined; };
+    await talk(["alice"]); await talk(["alice", "carl"]);
+    await at(1, ["alice", "carl", ANON]); await at(3, ["alice", "carl", ANON]); await at(3, ["alice", "carl", ANON]);
+    await talk(["alice", "carl", ANON, "dana"]);
+    assert.deepEqual(["alice", "carl", "~cv:", "dana"].map(placeOf), [0, 1, 2, 3], "alice, carl, the frog, dana (grid4)");
+    // the veiled hold ends - nobody new: the frog goes, dana keeps place 3 (the review's cover-handoff: she slid to 2)
+    for (let i = 0; i < 10 && P.state.tiles.some((x) => x.cover); i++) await at(4, ["alice", "carl", "dana"]);
+    assert.ok(!P.state.tiles.some((x) => x.cover), "the frog is gone");
+    const snap = MF.snapshot(ROOM.id);
+    assert.equal(snap.layout, "grid4", "still grid4 with 3 on the stage");
+    assert.deepEqual(["alice", "carl", "dana"].map(placeOf), [0, 1, 3], "nobody shuffled: the frog's cell stays empty");
+    assert.ok(!snap.tiles.some((x) => x.login === core.VEILED_GAP || x.pos === 2), "nothing in the frog's place - and no marker reaches the program");
+    const prog = await bridge.stageProgramFor(ROOM.id, "u_v1");
+    assert.deepEqual(prog.src.map((s) => [s.id, s.pos]), [["alice", 0], ["carl", 1], ["dana", 3]], "the capture's (and every viewer's) places");
+    const rs = cap.rects(prog), r = (id) => rs.find((x) => x.id === id);
+    assert.ok(r("dana").x > 600 && r("dana").y > 300, "dana drawn bottom right (place 3)");
+    assert.ok(!rs.some((x) => x.x === 0 && x.y > 300), "the frog's cell (bottom left) drawn empty");
+    // steps go by: still nobody moves (v steady)
+    const v0 = P.state.v;
+    for (let i = 0; i < 3; i++) await at(4, ["alice", "carl", "dana"]);
+    assert.deepEqual(["alice", "carl", "dana"].map(placeOf), [0, 1, 3]);
+    assert.equal(P.state.v, v0, "nothing moved: no repaint");
+    // someone new (gus - the frog's person - named): the empty places close up FIRST, he goes after the last one on
+    for (let i = 0; i < 4; i++) await at(4, ["alice", "carl", "dana", "gus"]);
+    assert.deepEqual(["alice", "carl", "dana", "gus"].map(placeOf), [0, 1, 2, 3], "closed up, gus after the last one on");
+    assert.ok(P.state.v > v0);
+  } finally { MF.setVeilSource(null); await knobs({ covers: false }); await reset(); }
+});

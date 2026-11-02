@@ -324,6 +324,8 @@ function dynPick(prev, ids, want, t, holdMs) {
 }
 /** 1.99?? STABLE SLOTS: how many cells each layout shape has (a place at or past it closes up - arrange's `cells`). */
 const SHAPE_CELLS = Object.freeze({ single: 1, split: 2, pip: 2, grid4: 4, grid9: 9 });
+/** 1.99?? stable slots, review fix B3: a place a COVER left (arrange) - an empty cell nobody sits down in; never a login or a key. */
+const VEILED_GAP = "\u0000veiled-gap";
 /**
  * 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in"): the mic
  * stage's places as a list of entry keys (null = an empty place, an empty cell on the page). prev = the last arrangement (null:
@@ -342,25 +344,31 @@ const SHAPE_CELLS = Object.freeze({ single: 1, split: 2, pip: 2, grid4: 4, grid9
  *     !bridge hide whose cover comes up in its place, a cover whose person comes back named in its place). So a cover never
  *     takes an empty place or the place of whom it pushed off - it goes after the last one on (today's rule); a named newcomer
  *     never takes a cover's place by the hint; and when a cover leaves, the empty places close up before anyone new sits down.
- * Pure; never mutates prev. -> the arrangement (trailing empty places dropped)
+ *     (review fix B3: not at once - the cover's place stays an empty cell (VEILED_GAP: nobody sits down in it) and nobody
+ *     shuffles until someone new comes on; then every empty place closes up first, as before. A layout with fewer cells than
+ *     places, or a dense one, closes it up like any empty place.)
+ * Pure; never mutates prev. -> the arrangement (trailing empty places dropped; VEILED_GAP = a cover's empty place)
  */
 function arrange(prev, keys, opts = {}) {
-  const want = new Set((keys || []).filter((k) => k != null));
+  const want = new Set((keys || []).filter((k) => k != null && k !== VEILED_GAP));
   const veiled = typeof opts.veiled === "function" ? opts.veiled : () => false;
+  const empty = (k) => k === null || k === VEILED_GAP;
   let slots = [], freed = new Map();
   const on = new Set();
   (Array.isArray(prev) ? prev : []).forEach((k, i) => {
     if (k != null && want.has(k) && !on.has(k)) { slots.push(k); on.add(k); return; }
+    // (review fix B3: a cover that left - now or before - leaves an empty cell nobody sits down in; nobody shuffles)
+    if (k === VEILED_GAP || (k != null && !want.has(k) && veiled(k))) { slots.push(VEILED_GAP); return; }
     slots.push(null);
     if (k != null && !want.has(k) && !freed.has(k)) freed.set(k, i);
   });
-  // (a cover left: no empty place it leaves - or any other - is handed on; the places close up first)
-  if ([...freed.keys()].some((k) => veiled(k))) { slots = slots.filter((k) => k !== null); freed = new Map(); }
+  const fresh = [...want].filter((k) => !on.has(k));
+  // (a cover left: no empty place - its own or any other - is handed on; the places close up before anyone new sits down)
+  if (fresh.length && slots.includes(VEILED_GAP)) { slots = slots.filter((k) => !empty(k)); freed = new Map(); }
   const hintOf = (k) => {
     const g = typeof opts.hint === "function" && !veiled(k) ? opts.hint(k) : null;
     return g != null && !veiled(g) && freed.has(g) ? freed.get(g) : -1;
   };
-  const fresh = [...want].filter((k) => !on.has(k));
   // the ones who pushed someone off first (their place is theirs), then the rest in today's order; covers after the last one on
   for (const k of fresh) { const i = hintOf(k); if (i >= 0 && slots[i] === null) { slots[i] = k; on.add(k); } }
   for (const k of fresh) {
@@ -372,18 +380,18 @@ function arrange(prev, keys, opts = {}) {
   }
   for (const k of fresh) {
     if (on.has(k)) continue;
-    while (slots.length && slots[slots.length - 1] === null) slots.pop();
+    while (slots.length && empty(slots[slots.length - 1])) slots.pop();
     slots.push(k);
     on.add(k);
   }
   if (typeof opts.pick === "function" && on.size) {
-    const m = opts.pick(slots.filter((k) => k !== null));
+    const m = opts.pick(slots.filter((k) => !empty(k)));
     const i = m != null ? slots.indexOf(m) : -1;
     if (i > 0) { slots[i] = slots[0]; slots[0] = m; }
   }
-  while (slots.length && slots[slots.length - 1] === null) slots.pop();
+  while (slots.length && empty(slots[slots.length - 1])) slots.pop();
   const cells = Math.max(1, Number(opts.cells) || 1);
-  return opts.dense || slots.length > cells ? slots.filter((k) => k !== null) : slots;
+  return opts.dense || slots.length > cells ? slots.filter((k) => !empty(k)) : slots;
 }
 /** mfix: the shape with `pins` pinned cams besides `tiles` mic tiles - a single layout with a pin is picture in picture. */
 function shapeFor(layout, tiles, pins) {
@@ -427,7 +435,7 @@ function newState() {
     kept: new Map(),           // wave2 WP-4 (F.2): login -> {leftAt, until} - relays kept running after their tile left the stage
     evictAt: 0,                //   ... when micfollow.js last evicted a kept relay for this pad's open (the slots_busy retry)
     dynMain: null,             // wave2 WP-4 (F.3): {id, at} - the dynamic layout's main cell (micfollow.js dynTick, dynPick)
-    slots: null,               // 1.99?? stable slots: [key | null] - who sits in which place (micfollow.js arrangeOf; null = not arranged)
+    slots: null,               // 1.99?? stable slots: [key | null | VEILED_GAP] - who sits in which place (micfollow.js arrangeOf; null = not arranged)
     changes: [],               // times of the last minute's changes
     lastChangeAt: -Infinity,
     v: 0, active: false, running: false, staleSince: 0, whyOff: null,
@@ -1320,6 +1328,6 @@ module.exports = {
   shapeOf, newest, tileOf, hasPicture, liveish, failOpen,
   dropKept, keepFor, keptCheck, EVICT_WINDOW_MS, EVICT_RETRY_MS,                                                // wave2 WP-4 (F.2)
   dynPick,                                                                                                      // wave2 WP-4 (F.3)
-  arrange, SHAPE_CELLS,                                                                                         // 1.99?? stable slots
+  arrange, SHAPE_CELLS, VEILED_GAP,                                                                                        // 1.99?? stable slots
   COVER_PREFIX, isCoverKey,                                                                                     // wave2 WP-4 (F.4)
 };

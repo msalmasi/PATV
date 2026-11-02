@@ -1607,7 +1607,7 @@ test("55. 1.99?? stable slots - the engine: a newcomer who displaced a tile carr
   assert.equal(M.newState().slots, null, "not arranged yet");
 });
 
-test("56. 1.99?? stable slots - covers (hooded frogs): a place never passes between a cover and a named person - a cover goes after the last one on (never an empty place, never the place of whom it pushed off), a named newcomer never takes a cover's place by the hint, and a cover leaving closes the empty places up first", () => {
+test("56. 1.99?? stable slots - covers (hooded frogs): a place never passes between a cover and a named person - a cover goes after the last one on (never an empty place, never the place of whom it pushed off), a named newcomer never takes a cover's place by the hint, and the empty places close up before anyone new sits down after a cover left", () => {
   const veiled = (k) => String(k).startsWith("~cv:");
   // bob (named, place 1) is cut by !bridge hide and his cover comes up: NOT in his place - after the last one on
   assert.deepEqual(M.arrange(["a", "bob", "c"], ["a", "c", "~cv:1"], { cells: 4, veiled }), ["a", null, "c", "~cv:1"]);
@@ -1615,11 +1615,48 @@ test("56. 1.99?? stable slots - covers (hooded frogs): a place never passes betw
   assert.deepEqual(M.arrange(["a", "b", "c", "d"], ["a", "c", "d", "~cv:1"], { cells: 4, veiled, hint: (k) => (k === "~cv:1" ? "b" : null) }), ["a", "c", "d", "~cv:1"]);
   // the cover (place 1) leaves and its person comes back named: the places close up first - the named one never sits in the frog's place
   assert.deepEqual(M.arrange(["a", "~cv:1", "c"], ["a", "c", "gus"], { cells: 4, veiled }), ["a", "c", "gus"]);
-  assert.deepEqual(M.arrange(["a", "~cv:1", "c"], ["a", "c"], { cells: 4, veiled }), ["a", "c"], "closed up even with nobody new");
+  // (review fix B3: with nobody new, the frog's place stays an empty cell - c keeps its place; test 57)
+  assert.deepEqual(M.arrange(["a", "~cv:1", "c"], ["a", "c"], { cells: 4, veiled }), ["a", M.VEILED_GAP, "c"], "nobody new: nobody shuffles");
   // ... nor by the hint (a named newcomer pushing the cover off)
   assert.deepEqual(M.arrange(["a", "~cv:1", "c", "d"], ["a", "c", "d", "gus"], { cells: 4, veiled, hint: (k) => (k === "gus" ? "~cv:1" : null) }), ["a", "c", "d", "gus"]);
   // named people among themselves keep the plain rules; a cover that stays keeps its place like anyone
   assert.deepEqual(M.arrange(["~cv:1", "b", "c"], ["~cv:1", "c", "x"], { cells: 4, veiled }), ["~cv:1", "x", "c"]);
   // a cover may take the main cell (the active speaker) - trading with whoever is there, like anyone
   assert.deepEqual(M.arrange(["a", "b", "c"], ["a", "b", "c", "~cv:2"], { dense: true, veiled, pick: () => "~cv:2" }), ["~cv:2", "b", "c", "a"]);
+});
+
+test("57. 1.99?? stable slots, review fix B3 - a cover leaving shuffles nobody: its place stays an empty cell nobody sits down in (VEILED_GAP) until someone new comes on - then every empty place closes up first (the privacy rule kept); a smaller layout / dense closes it like any", () => {
+  const veiled = (k) => String(k).startsWith("~cv:"), G = M.VEILED_GAP;
+  assert.equal(typeof G, "string");
+  assert.ok(!veiled(G) && G.includes("\u0000"), "never a login or a cover key");
+  // the review's cover-handoff (grid4, 3 named + a frog): the frog leaves - dana stays in place 3 (it used to slide to 2)
+  const one = M.arrange(["alice", "carl", "~cv:1", "dana"], ["alice", "carl", "dana"], { cells: 4, veiled });
+  assert.deepEqual(one, ["alice", "carl", G, "dana"]);
+  // ... and stays there step after step while the set doesn't change
+  assert.deepEqual(M.arrange(one, ["alice", "carl", "dana"], { cells: 4, veiled }), ["alice", "carl", G, "dana"]);
+  assert.deepEqual(M.arrange(one, ["dana", "carl", "alice"], { cells: 4, veiled }), ["alice", "carl", G, "dana"], "today's order of the keys moves nobody");
+  // someone new (gus - maybe the frog's person, named again): the empty places close up first, he goes after the last one on -
+  // never in the frog's place
+  assert.deepEqual(M.arrange(one, ["alice", "carl", "dana", "gus"], { cells: 4, veiled }), ["alice", "carl", "dana", "gus"]);
+  // ... nor by a hint (whom he pushed off - even a named one leaving at the same time: no place is handed on)
+  assert.deepEqual(M.arrange(one, ["alice", "dana", "gus"], { cells: 4, veiled, hint: (k) => (k === "gus" ? "carl" : null) }), ["alice", "dana", "gus"]);
+  // a named person leaving beside the frog's place: an empty cell too; the next newcomer closes both up first
+  const two = M.arrange(one, ["alice", "dana"], { cells: 4, veiled });
+  assert.deepEqual(two, ["alice", null, G, "dana"]);
+  assert.deepEqual(M.arrange(two, ["alice", "dana", "erin"], { cells: 4, veiled }), ["alice", "dana", "erin"], "erin never in place 1 or 2");
+  // a new cover: the same (after the last one on, the places closed up)
+  assert.deepEqual(M.arrange(one, ["alice", "carl", "dana", "~cv:2"], { cells: 4, veiled }), ["alice", "carl", "dana", "~cv:2"]);
+  // the frog's place at the end: nothing left behind it (as before)
+  assert.deepEqual(M.arrange(["a", "b", "~cv:1"], ["a", "b"], { cells: 4, veiled }), ["a", "b"]);
+  // fewer cells than places / dense (the dynamic templates): closed up like any empty place
+  assert.deepEqual(M.arrange(["a", "~cv:1", "c"], ["a", "c"], { cells: 2, veiled }), ["a", "c"]);
+  assert.deepEqual(M.arrange(["a", "~cv:1", "c"], ["a", "c"], { dense: true, veiled }), ["a", "c"]);
+  assert.deepEqual(M.arrange(["a", G, "c"], ["a", "c"], { cells: 2, veiled }), ["a", "c"]);
+  // the pick never sees the frog's place, and the main taking place 0 just moves it (then it is dropped at the end)
+  let seen = null;
+  M.arrange(["a", G, "c"], ["a", "c"], { cells: 4, veiled, pick: (ids) => { seen = ids; return null; } });
+  assert.deepEqual(seen, ["a", "c"]);
+  assert.deepEqual(M.arrange([G, "a"], ["a"], { cells: 2, veiled, pick: () => "a" }), ["a"]);
+  // a stray VEILED_GAP among the keys is nobody
+  assert.deepEqual(M.arrange(["a", G, "c"], ["a", G, "c"], { cells: 4, veiled }), ["a", G, "c"]);
 });

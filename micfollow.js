@@ -1739,7 +1739,8 @@ const coverPub = (P, x) => (P.covers && P.covers.get(x.login)) || null;
  *                             else the latest mic tile); the SINGLE layout's picture in picture (a pin beside the one speaker)
  *                             keeps today's rule every time (the single layout shows the current speaker).
  * Covers (hooded frogs) never inherit a named person's place or hand theirs to one (who is behind a frog stays unsaid): a
- * cover goes after the last one on, and a cover leaving closes the empty places up (core.arrange's veiled rule).
+ * cover goes after the last one on, and a cover's place stays an empty cell (nobody shuffles) until someone new comes on - then
+ * the empty places close up before they sit down (core.arrange's veiled rule; review fix B3).
  * persist: stepPad's (S.slots / S.dynMain kept, v bumped when a place or the main moved) - else the snapshot's look, nothing
  * kept: the same answer the next step keeps. -> {slots, dynMain, moved}
  */
