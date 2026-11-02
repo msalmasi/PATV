@@ -18,7 +18,8 @@
 //     a reported tile, the letter after a failed load; stage-room.js repaints on a new picture
 //   * the capture (stagemiccap.js): a name card draws the cover picture; never the network
 //   * review fixes 3 (1.99??): IPv6 photo addresses global unicast only; a block / a take-down's hold that lands while an upload
-//     waits for its row's transaction (refused / held - every upload goes to held/ first); legacy rows' hashes (held/ too)
+//     waits for its row's transaction (refused / held - every upload goes to held/ first); legacy rows' hashes (held/ too); the page
+//     retries a failed cover after the site's failure TTL
 //   node --test test/stagecover.test.js      (temp DB + dirs)
 "use strict";
 const test = require("node:test");
@@ -427,11 +428,11 @@ function fakeDom() {
   }
   return { mk };
 }
-function stageSandbox() {
+function stageSandbox(over = {}) {
   const dom = fakeDom();
   const ctx = { document: { createElement: dom.mk, hidden: false, addEventListener() {}, removeEventListener() {} }, console, setTimeout, clearTimeout,
     setInterval: () => 0, clearInterval() {}, fetch: () => Promise.resolve({ json: () => Promise.resolve({ ok: false }) }),
-    PATVRtc: { watch: () => new Promise(() => {}) }, RTCPeerConnection: function () {}, Date };
+    PATVRtc: { watch: () => new Promise(() => {}) }, RTCPeerConnection: function () {}, Date, ...over };
   ctx.window = ctx; ctx.window.addEventListener = () => {}; ctx.window.removeEventListener = () => {};
   vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "stage-mic.js"), "utf8"), ctx);
   const host = dom.mk("div");
@@ -1190,7 +1191,8 @@ test("fix 3 (the block race): a picture blocked WHILE its upload is being classi
   } finally { ANSWER = CLEAN; }
 });
 
-// ── review fixes 3 (1.99??): the IPv6 gaps, the block race inside the row's transaction, the hold race, legacy rows' hashes ──
+// ── review fixes 3 (1.99??): the IPv6 gaps, the block race inside the row's transaction, the hold race, legacy rows' hashes, the page's
+// cover retry ──
 /** Stall setUpload's own row transaction (the window after its check before the store and the file write - e.g. a transaction
  *  queued behind others) and run `during` in it. -> {restore(), fired()} */
 function stallStore(during) {
@@ -1287,3 +1289,30 @@ test("review fix 3 (SEC-4): a row from before review fix 1 (no upload_hash) whos
   assert.ok(fs.existsSync(path.join(SC.dir(), "held", h3.file.slice(0, 2), h3.file)), "the held one moved into held/");
 });
 
+test("review fix 3 (FID-3): a cover picture that failed to load on the page is tried again after COVER_RETRY_MS (past the site's PHOTO_FAIL_TTL), not never; a program update meanwhile keeps the letter; a tile that leaves drops its retry", () => {
+  const timers = [];
+  const { ctx, host } = stageSandbox({ setTimeout: (fn, ms) => { const t = { fn, ms, on: true }; timers.push(t); return t; }, clearTimeout: (t) => { if (t && typeof t === "object") t.on = false; } });
+  const prog = (src) => ({ v: 1, layout: "single", count: src.length, src, still_s: 20 });
+  const photo = "/media/cover/p/" + "ab".repeat(16) + ".webp";
+  const ann = (why) => camS("ann", { avatar: photo, ck: "photo", video: "card", why });
+  const ctl = ctx.PATVStageMic.render(host, prog([ann("off_cam")]), { slug: "pad" });
+  const img = () => imgOf(cardOf(tileOf(host, "ann")));
+  assert.equal(img().getAttribute("src"), photo);
+  img().listeners.error.forEach((fn) => fn());                       // the proxy 404s (the site's fetch failed)
+  assert.equal(img().getAttribute("src"), null); assert.equal(img().hidden, true);
+  const retries = () => timers.filter((t) => t.on && t.ms > SC.PHOTO_FAIL_TTL);
+  assert.equal(retries().length, 1, "one retry, after the site's failure TTL");
+  ctl.update(prog([ann("cam_unknown")]));
+  assert.equal(img().getAttribute("src"), null, "a program update meanwhile: still the letter");
+  const r = retries()[0];
+  r.on = false; r.fn();
+  assert.equal(img().getAttribute("src"), photo, "tried again - the same URL");
+  assert.equal(img().hidden, false);
+  img().listeners.error.forEach((fn) => fn());                       // still failing: the letter, and one more retry later
+  assert.equal(img().getAttribute("src"), null);
+  const r2 = retries();
+  assert.equal(r2.length, 1);
+  ctl.update(prog([]));                                               // ann leaves the stage
+  assert.equal(r2[0].on, false, "cleared when the tile left");
+  ctl.stop();
+});

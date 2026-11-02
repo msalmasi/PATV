@@ -55,6 +55,9 @@
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000, HIDDEN_MS = 30000, SAY_GAP = 5000, RETRY_MS = 10000;
+  // 1.99?? review fix 3 (FID-3): a cover picture that failed to load is tried again after this (the site keeps a failed photo fetch
+  // for stagecover's PHOTO_FAIL_TTL = 5 min, then a capture fetches it again - the page does too, a little after)
+  var COVER_RETRY_MS = 315000;
   var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a live tile's re-watches after a dropped connection
   var LAYOUTS = ['single', 'split', 'grid4', 'grid9', 'pip'];
   // wave2 WP-4 (F.3): d1-d9 - [column fractions, rows, cells]; a cell = [col, row, colspan, rowspan] (0-based), cell 0 = the main.
@@ -302,7 +305,8 @@
       function stopStill() { clearInterval(t.still); t.still = null; img.hidden = true; img.removeAttribute('src'); }
       /** 1.99?? stage cover: the card's picture (the person's GTF avatar by default - stagecover.js), or the letter (pic null). The
        *  src is set only when it CHANGES (every cover URL is immutable), so a program update never re-fetches it; a picture that
-       *  fails to load falls back to the letter until a different one comes. Decorative (alt ""): the name is in the label. */
+       *  fails to load falls back to the letter until a different one comes (review fix 3: or COVER_RETRY_MS passes). Decorative
+       *  (alt ""): the name is in the label. */
       function setCover(pic) {
         var url = pic ? pic.url : '';
         if (url && url === t.coverBad) url = '';
@@ -321,6 +325,15 @@
         if (!bad) return;
         t.coverBad = bad;
         setCover(null);
+        // 1.99?? review fix 3 (FID-3): not for good - the same URL is tried again after COVER_RETRY_MS (a proxied photo's URL never
+        // changes, and a capture draws the photo again once the site fetches it again); a program update meanwhile keeps the letter
+        clearTimeout(t.coverRetry);
+        t.coverRetry = setTimeout(function () {
+          t.coverRetry = null;
+          if (t.coverBad !== bad) return;
+          t.coverBad = null;
+          if (t.s) setCover(coverPic(t.s));
+        }, COVER_RETRY_MS);
       });
       /** 1.99afl (S4): the tile's data-why - why it shows a card (none while it has a picture). */
       function setWhy(w) { if (w) e.setAttribute('data-why', String(w)); else e.removeAttribute('data-why'); }
@@ -519,7 +532,7 @@
         } else if (want === 'card') showCard(text);
       }
       t.apply = apply;
-      t.stop = function (tell) { clearTimeout(t.retry); t.retry = null; if (t.mode === 'live') stopLive(tell); stopStill(); t.mode = null; };
+      t.stop = function (tell) { clearTimeout(t.retry); t.retry = null; clearTimeout(t.coverRetry); t.coverRetry = null; if (t.mode === 'live') stopLive(tell); stopStill(); t.mode = null; };
       // 1.99ahn (review UX-2): "resuming…" only for a tile whose picture this pause took away (t.shown: it had a live picture or a
       // still on screen) - a tile that was still "cam starting…", or that came on (or went live) while the tab was hidden, starts
       t.pause = function () {
