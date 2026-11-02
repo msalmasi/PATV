@@ -400,7 +400,8 @@
       return JSON.stringify([p.v, p.count, p.pins_n || 0, p.signin, p.blocked, p.active, p.default, p.layout, p.frozen_until, p.speaking || null, !!p.report,
         p.dyn ? [p.dyn.n, p.dyn.t, p.dyn.main] : null,
         (Array.isArray(p.src) ? p.src : []).map(function (s) { return s ? [s.id, s.name, s.video, s.why, s.watch, s.newest, s.pos, !!s.pin, !!s.recent, !!s.mine,
-                                                                          !!s.ring, s.kind || null, s.hood == null ? null : s.hood, s.veil || null, s.rv || 0, s.ex || 0, s.self || 0] : null; }),
+                                                                          !!s.ring, s.kind || null, s.hood == null ? null : s.hood, s.veil || null, s.rv || 0, s.ex || 0, s.self || 0,
+                                                                          s.avatar || null, s.ck || null] : null; }),   // 1.99??: + the stage cover (a new picture repaints)
         m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override, m.pins_room, !!m.dyn_ok] : null]);
     }
     function setMic(p) {

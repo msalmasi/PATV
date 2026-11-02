@@ -25,6 +25,10 @@
 // 1.99afl (S2-S4): "Pepe couldn't open their cam" only for his refusal - his relay offline, the room's people list he can't read,
 // "checking their cam…" (the roster can't say yet), this browser not connecting to the video and a video that kept dropping each
 // say so; every tile carries data-why (the reason code of its card).
+// 1.99?? stage cover (owner 2026-11-02): a card shows the person's STAGE COVER instead of the letter - the program's avatar (a URL)
+// + ck (gtf | photo | sticker | upload): their GTF pixel avatar by default, or what they picked in Settings -> 🎙 Stage cover
+// (stagecover.js); the reason ("cam starting…") stays as a small label under it. Set only when the URL changes; never on a cover
+// tile (the hood), a tile the viewer reported or one blocked for them.
 //
 // wave2 WP-4 (the incognito / mic-stage spec F.3): the pad layout "dynamic" - program.dyn {n, t: "d1".."d9", main} beside the
 // legacy layout: templates d1-d9 (DYN - they equal stagemiccap.rects, so a capture is what you see), the main cell for the
@@ -145,6 +149,15 @@
     if (!isCover(s)) return String((s && s.name) || '');
     return (typeof s.name === 'string' && s.name ? s.name.slice(0, 40) : _t('js.stage.mf.cover_someone', 'someone'));
   }
+  // 1.99?? stage cover (stagecover.js): a NAMED tile's picture while it has no live one - {url, k} from the program's avatar + ck
+  // (k: gtf | photo | sticker | upload - how the card draws it), or null = the letter. Never on a cover (a veiled speaker keeps the
+  // hood), on a tile this viewer reported ("hidden for you") or one blocked for them here.
+  var CKS = ['gtf', 'photo', 'sticker', 'upload'];
+  function coverPic(s) {
+    if (!s || isCover(s) || s.watch === 'hidden' || s.watch === 'blocked') return null;
+    if (typeof s.avatar !== 'string' || !/^(https:\/\/|\/)[^\s"'<>()\\]+$/.test(s.avatar) || /^\/\//.test(s.avatar)) return null;
+    return { url: s.avatar, k: CKS.indexOf(s.ck) >= 0 ? s.ck : 'photo' };
+  }
   var REASONS = ['impersonation', 'sexual', 'abuse', 'minor', 'other'];
   function reasonText(r) {
     return r === 'impersonation' ? _t('js.stage.mf.r_impersonation', 'Not who they say they are') : r === 'sexual' ? _t('js.stage.mf.r_sexual', 'Nudity or sexual')
@@ -255,6 +268,7 @@
       var img = el('img', 'mf-still'); img.alt = ''; img.hidden = true;
       var card = el('div', 'mf-card'), av = el('span', 'mf-av'), avImg = el('img'), avTxt = el('span', 'mf-avt'), reason = el('span', 'mf-why');
       avImg.alt = ''; avImg.hidden = true; av.appendChild(avImg); av.appendChild(avTxt); card.appendChild(av); card.appendChild(reason);
+      avImg.setAttribute('decoding', 'async'); avImg.setAttribute('referrerpolicy', 'no-referrer');   // 1.99??: (a photo may be on another host)
       var label = el('div', 'mf-label'), name = el('span', 'mf-name'), mic = el('span', 'mf-mic', '🎙'), tag = el('span', 'mf-tag'), sr = el('span', 'mf-sr-only');
       mic.setAttribute('aria-hidden', 'true');
       // mfix: 📌 on a pinned cam's label (its place is fixed: hand-overs and new speakers never move it)
@@ -286,6 +300,28 @@
         if (tell) post(base + '/watch', wb({ stop: true }), true).catch(function () {});
       }
       function stopStill() { clearInterval(t.still); t.still = null; img.hidden = true; img.removeAttribute('src'); }
+      /** 1.99?? stage cover: the card's picture (the person's GTF avatar by default - stagecover.js), or the letter (pic null). The
+       *  src is set only when it CHANGES (every cover URL is immutable), so a program update never re-fetches it; a picture that
+       *  fails to load falls back to the letter until a different one comes. Decorative (alt ""): the name is in the label. */
+      function setCover(pic) {
+        var url = pic ? pic.url : '';
+        if (url && url === t.coverBad) url = '';
+        card.classList.toggle('cov', !!url);
+        for (var i = 0; i < CKS.length; i++) card.classList.toggle('cv-' + CKS[i], !!url && pic.k === CKS[i]);
+        if (url) {
+          if (avImg.getAttribute('src') !== url) avImg.src = url;
+          avImg.hidden = false; avTxt.hidden = true;
+        } else {
+          if (avImg.hasAttribute('src')) avImg.removeAttribute('src');
+          avImg.hidden = true; avTxt.hidden = false;
+        }
+      }
+      avImg.addEventListener('error', function () {
+        var bad = avImg.getAttribute('src');
+        if (!bad) return;
+        t.coverBad = bad;
+        setCover(null);
+      });
       /** 1.99afl (S4): the tile's data-why - why it shows a card (none while it has a picture). */
       function setWhy(w) { if (w) e.setAttribute('data-why', String(w)); else e.removeAttribute('data-why'); }
       function showCard(text) {
@@ -403,6 +439,7 @@
         if (t.mode === 'still') stopStill();
         clearTimeout(t.retry); t.retry = null;
         t.mode = 'cover';
+        setCover(null);                                // 1.99??: a veiled speaker never carries a stage cover (only the hood)
         var hood = hoodOf(s), veil = veilOf(s), nm = labelOf(s);
         e.setAttribute('data-hood', String(hood)); e.setAttribute('data-veil', veil);
         hoodImg.src = '/public/img/anon/hood-' + (veil === 'hidden' ? 'shadow' : 'peek') + '-' + hood + '.svg';
@@ -455,7 +492,7 @@
         if (s.newest) { e.setAttribute('aria-current', 'true'); sr.textContent = ', ' + _t('js.stage.mf.newest', 'newest speaker'); }
         else { e.removeAttribute('aria-current'); sr.textContent = ''; }
         avTxt.textContent = initials(s.name);
-        if (s.avatar && /^(https:\/\/|\/)[^\s"'<>]+$/.test(s.avatar)) { avImg.src = s.avatar; avImg.hidden = false; avTxt.hidden = true; } else { avImg.hidden = true; avTxt.hidden = false; }
+        setCover(coverPic(s));
         x.textContent = s.pin ? '📌✕' : '✕';
         x.setAttribute('aria-label', s.pin ? _t('js.stage.mf.unpin_q', 'Unpin {name}', { name: s.name }) : _t('js.stage.mf.exclude_q', 'Keep {name} off the mic stage', { name: s.name }));
         x.hidden = !P.manage;

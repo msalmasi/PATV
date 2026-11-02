@@ -14,6 +14,8 @@
 // Review fixes: "muted" = a mute that may hide a hidden / private speaker (audioPlan's private_s) - not the lead-in every clip with
 // MP3 latency has; a clip's last mic-list read waits out Pepe's MIC_LAG after its end (lastRoster: a late grab is muted when private,
 // unseen when not shown); a holder without Pepe's `proven` is never a shown tile; recheck() covers the name cards too.
+// 1.99?? stage cover: a name card draws the person's cover picture (stagecover.js - by default their GTF avatar) instead of the
+// letter, read from LOCAL data only (a profile photo, an outside URL, stays the letter here); covers of veiled speakers stay hoods.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -59,6 +61,9 @@ let deps = {
   still: (id, l) => require("./bridge-relay").mfFrame(id, l),
   audioTap: (id, fn, u) => require("./bridge").audioTap(id, fn, u),
   offset: (id, p) => require("./avsync").serverOffsetMs(id, p, "mp3"),
+  // 1.99?? stage cover: a name card's picture from LOCAL data only (stagecover.localImageChecked - never the network; a profile
+  // photo is an outside URL, so a capture draws the letter for it)
+  cover: url => require("./stagecover").localImageChecked(url),
   mic: id => { const r = require("./bridge")._rooms.get(id); return r && r.mic; },
   privateLogins: ls => privateLoginsStrict(ls),
   note: (kind, id, l, u) => require("./camviewers").noteViewers(kind, id, l, [String(u)]),
@@ -193,6 +198,12 @@ async function consent(login, userId) {
       !(await deps.camRefusal(login, userId, { strict: true }));
   } catch (_) { return false; }
 }
+/** A named card's stage cover {buf, k} from the program entry's avatar URL (local pictures only), or null = the letter. */
+async function coverFor(e) {
+  const u = typeof e.avatar === "string" ? e.avatar : "";
+  if (!/^\/(?:media\/cover\/[au]\/|public\/stickers\/)[\w.~\-/]+$/.test(u) || u.includes("..")) return null;
+  try { const c = await deps.cover(u); return c && Buffer.isBuffer(c.buf) && c.buf.length <= 4 * 1024 * 1024 ? c : null; } catch (_) { return null; }
+}
 async function tileFor(e, R, user) {
   const t = { id: e.id, mode: "blank", newest: !!e.newest, pin: !!e.pin, name: "", source: e };
   if (e.kind === "cover") { const c = coverArt(e); return { ...t, mode: "cover", name: c.label, image: c.art }; }
@@ -200,6 +211,9 @@ async function tileFor(e, R, user) {
   const login = String(e.login || e.id).toLowerCase();
   if (!LOGIN.test(login) || !(await consent(login, user.userId))) return t;
   Object.assign(t, { login, name: String(e.name || login), mode: "card" });
+  // 1.99?? stage cover: the picture this person's name card shows on the page (their GTF avatar by default) - loaded for every
+  // consenting named tile, so a live / still tile that ends up a card draws it too. A cover tile never gets here (coverArt above)
+  t.cover = await coverFor(e);
   if (e.watch === "notice") return t;
   if (e.video === "live") {
     let allowed = false;
@@ -334,7 +348,17 @@ async function renderFrame(p, tiles, R, out, opts = {}) {
         picture = { input: data, left: ir.x, top: ir.y };
       } catch (_) { if (t.mode !== "cover") t.mode = "card"; }
     }
-    if (t.mode === "card") {
+    // 1.99?? stage cover: a name card shows the person's cover picture (as on the page) - pixel art kept crisp - else the letter
+    if (t.mode === "card" && t.cover && t.cover.buf) {
+      try {
+        const side = Math.max(16, Math.floor(Math.min(ir.w * .8, ir.h * .8, 260)));
+        const pixel = t.cover.k === "gtf" || t.cover.k === "sticker";
+        const data = await sharp(t.cover.buf, { limitInputPixels: 30e6, density: pixel ? 72 : 144 })
+          .resize(side, side, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: pixel ? "nearest" : "lanczos3" }).png().toBuffer();
+        picture = { input: data, left: Math.round(r.x + (r.w - side) / 2), top: Math.round(ir.y + (ir.h - side) / 2) };
+      } catch (_) { t.cover = null; }
+    }
+    if (t.mode === "card" && !picture) {
       const initials = String(t.name).trim().split(/\s+/).map(x => Array.from(x)[0]).slice(0, 2).join("").toUpperCase();
       tile += `<circle cx="${r.x + r.w / 2}" cy="${r.y + r.h / 2 - 20}" r="${Math.min(48, r.h / 5)}" fill="#293747"/>` + svgText(r.x + r.w / 2, r.y + r.h / 2 - 10, initials, Math.min(32, r.h / 7));
     }

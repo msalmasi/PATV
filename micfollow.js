@@ -120,6 +120,8 @@ const LC = () => require("./livecam");
 const BR = () => require("./bridge");
 const ROOMS = () => require("./rooms");
 const CV = () => require("./camviewers");
+// 1.99?? stage cover: a named tile's picture while it has no live one (stagecover.js; a failure = the letter, never a stall)
+const coverOf = async (login) => { try { return await require("./stagecover").coverOf(login); } catch (e) { return null; } };
 const MFH = (roomId) => "mf:" + String(roomId);
 const MFW = (roomId) => "mfw:" + String(roomId);   // wave2 WP-4 (F.2): the holder of a relay kept warm after its tile left
 const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
@@ -1901,7 +1903,11 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     let watch = await watchOf(x.login, String(userId), t, snap.roomId);
     // a still is a snapshot: a bridge block on cam snapshots for this viewer here says so on the tile
     if (watch === "ok" && x.video === "still" && (await blockedHere(snap.roomId, String(userId), t, "snapshots"))) watch = "blocked";
-    src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: patv && patv.avatar ? patv.avatar : null,
+    // 1.99?? stage cover (stagecover.js): the picture a card shows while there's no live one - the person's choice (Settings ->
+    // 🎙 Stage cover), by default their GTF avatar, then their profile photo, else the letter (avatar null). Only for a tile shown BY
+    // NAME (a veiled one is a cover above and never reaches this); none on a tile this viewer reported or is blocked from here
+    const cv = watch === "hidden" || watch === "blocked" ? null : await coverOf(x.login);
+    src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: cv ? cv.url : null, ...(cv ? { ck: cv.k } : {}),
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,
                video: x.video, why: x.video === "card" ? x.why || "full" : null, watch,
                ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),

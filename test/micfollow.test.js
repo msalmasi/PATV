@@ -2708,3 +2708,56 @@ test("82. 1.99ahn dead relay: a live mic-stage relay that loses its stream at Me
   const S2 = LC._sessions.get(key);
   assert.ok(S2 && S2 !== S && !S2.ended, "held again");
 });
+
+// ── 1.99?? stage cover (stagecover.js): a named card's picture; never a veiled speaker's ──
+test("83. 1.99?? stage cover: a NAMED tile carries its person's cover (GTF avatar by default, then the profile photo, a plain-card choice = none); a veiled speaker's cover tile never does - no GTF URL, seed, photo or /media/cover anywhere on the page's answer; a reported tile / a hidden login gets none", async () => {
+  await reset(); await plainPad();
+  await runQuery("DELETE FROM micfollow_reports");
+  const SC = require(path.join(repo, "stagecover"));
+  await SC.init();
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES ('alice', 4242, 1), ('erin', 777777, 1)");
+  await runQuery("UPDATE users SET avatar = 'https://cdn.example.test/alice.png' WHERE userId = 'u_alice'");
+  SC.invalidate();
+  const erinGtf = SC.gtfUrl(777777, {});
+  MF.setVeilSource((u) => (u.anon && u.ref === REF1 ? { proven: true, sess: "s81", veil: "incognito", alias: "Soggy Bullfrog", login: "erin", display: "Erin" } : null));
+  await MF.setCfg(ADMIN, { covers: true, reason: "test" });
+  try {
+    await onStage(["alice"]);
+    for (let i = 0; i < 4 && !MF._pads.get(ROOM.id).state.tiles.some((x) => x.cover); i++) { up("alice"); await at(3, ["alice", ANON(REF1)]); }
+    const snap = MF.snapshot(ROOM.id);
+    assert.ok(snap.tiles.some((x) => x.cover), "a cover tile is up beside alice: " + JSON.stringify(MF._pads.get(ROOM.id).state.tiles.map((x) => x.login)));
+    const v = await MF.viewFor(snap, R, "u_staff", null);
+    const a = v.src.find((s) => s.id === "alice"), c = v.src.find((s) => s.kind === "cover");
+    assert.equal(a.ck, "gtf", "the default: her GTF avatar");
+    assert.equal(a.avatar, SC.gtfUrl(4242, {}));
+    assert.match(a.avatar, /^\/media\/cover\/a\/4242\.[a-f0-9]{20}\.svg$/, "the URL names no login and no user id");
+    assert.ok(!a.avatar.includes("alice") && !a.avatar.includes("u_alice"));
+    assert.ok(c, "the cover");
+    for (const k of ["avatar", "ck"]) assert.equal(c[k], undefined, "a cover carries no " + k);
+    const live = JSON.stringify(await bridge.liveView(bridge._rooms.get(ROOM.id), 0, "u_staff", "staffer", null, true, { program: true }));
+    for (const s of [erinGtf, "777777", "/media/cover/a/777777"]) assert.ok(!live.includes(s), "the veiled speaker's GTF avatar leaks: " + s);
+    // her choice: the profile photo; then the plain card (no picture at all)
+    await SC.save("u_alice", { kind: "photo" });
+    let a2 = (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_staff", null)).src.find((s) => s.id === "alice");
+    assert.deepEqual([a2.avatar, a2.ck], ["https://cdn.example.test/alice.png", "photo"]);
+    await SC.save("u_alice", { kind: "card" });
+    a2 = (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_staff", null)).src.find((s) => s.id === "alice");
+    assert.equal(a2.avatar, null); assert.equal(a2.ck, undefined);
+    await SC.save("u_alice", { kind: "gtf" });
+    // a viewer who reported her tile gets no picture on it (the letter); a login the site hides now gets none for anyone
+    const mine = (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_fay", null)).src.find((s) => s.id === "alice");
+    assert.ok(mine.avatar, "fay sees her cover before reporting");
+    const rr = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "alice", reason: "other" }, "u_fay");
+    assert.equal(rr.status, 200, JSON.stringify(rr.d));
+    const hid = (await MF.viewFor(MF.snapshot(ROOM.id), R, "u_fay", null)).src.find((s) => s.id === "alice");
+    assert.equal(hid.watch, "hidden"); assert.equal(hid.avatar, null, "a reported tile: no cover");
+    const Q = require(path.join(repo, "quotes")), hid0 = Q.isHidden;
+    Q.isHidden = (l) => String(l).toLowerCase() === "alice" || hid0(l);
+    try { assert.equal(await SC.coverOf("alice"), null, "hidden now: no cover, whatever is cached"); } finally { Q.isHidden = hid0; }
+  } finally {
+    MF.setVeilSource(null); await MF.setCfg(ADMIN, { covers: false, reason: "test" });
+    await runQuery("DELETE FROM stage_covers"); await runQuery("UPDATE users SET avatar = NULL WHERE userId = 'u_alice'"); SC.invalidate();
+    await runQuery("DELETE FROM micfollow_reports WHERE login = 'alice'").catch(() => {});
+  }
+});

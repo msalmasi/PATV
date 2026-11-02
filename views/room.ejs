@@ -630,14 +630,14 @@
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
   <script src="/public/js/stage-player.js?v=9"></script>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
-  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=7">
+  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=8">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
   <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=6"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=9"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…) %>
-  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=18"></script>
+  <script src="/public/js/stage-mic.js?v=10"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99?? v10: the stage cover %>
+  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
   <script src="/public/js/share-link.js?v=1" defer></script>
