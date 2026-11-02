@@ -167,7 +167,8 @@ const SCENARIOS = {
     await MF.unpin(ROOM.id, "carl", "unpinned", "padowner"); await at(1, ["dana"]); trace.push(await look());
     await talk("alice"); trace.push(await look());
   },
-  /** the single layout with a pin (picture in picture): the current speaker fills the stage - unchanged */
+  /** the single layout with a pin (picture in picture): knob off, the current speaker fills the stage (1.99?? review fix V2/B2:
+   *  on, the pin and the speaker taking turns never swap - S12) */
   async single(trace) {
     await pad({ layout: "single", max_people: 4 });
     room([]); await bot();
@@ -602,4 +603,48 @@ test("S11. review fix C1: turning stable_slots OFF in /stage/admin repaints open
     MF.stepPad(ROOM.id, T);
     assert.equal(D.v, v0);
   } finally { await knobs({ stable_slots: true }); await reset(); }
+});
+
+test("S12. review fix V2/B2: the single layout with a 📌 pin (picture in picture) - the pinned person and the speaker taking turns never swap the big picture and the inset (the highlight shows who talks; the program, the viewer's places and the capture); someone NEW pushing the speaker off still takes the big picture; the knob off keeps today's (the current speaker fills the stage every turn)", async () => {
+  const cap = require(path.join(repo, "stagemiccap"));
+  /** carl pinned; alice, then turns; bob pushes alice off; more turns. -> [{L, big (the capture's full-stage tile)}] */
+  async function singlePin(stable) {
+    await reset();
+    await knobs({ dynamic: true, main_hold_s: 3, cold_open: true, stable_slots: stable });
+    await pad({ layout: "single", max_people: 4 });
+    const out = [];
+    const note = async () => {
+      const L = await look(), prog = await bridge.stageProgramFor(ROOM.id, "u_v1");
+      const rs = cap.rects(prog), big = rs.find((r) => r.x === 0 && r.y === 0 && r.w === 1280 && r.h === 720);
+      out.push({ L, big: big ? big.id : null, inset: rs.filter((r) => r !== big).map((r) => r.id) });
+    };
+    try {
+      room([]); await bot();
+      await pinBy("carl"); up("carl"); await bot();
+      await talk("alice"); await note();
+      for (const w of ["carl", "alice", "carl", "alice"]) { await talk(w); await note(); }
+      await talk("bob", 12); await note();
+      for (const w of ["carl", "bob", "carl", "bob"]) { await talk(w); await note(); }
+    } finally { await reset(); }
+    return out;
+  }
+  const on = await singlePin(true);
+  const talker = (L) => (L.src.find((s) => s[2]) || [])[0];
+  for (const x of on) {
+    assert.equal(x.L.layout, "pip", "the single layout with a pin is picture in picture");
+    assert.deepEqual(x.L.tiles.map((t) => [t[0], t[1]]), x.L.src.map((s) => [s[0], s[1]]), "the program and the viewer's agree");
+    assert.equal(x.big, places(x.L)[0], "the capture's big picture is place 0");
+    assert.deepEqual(x.inset, places(x.L).slice(1), "the inset is the rest");
+  }
+  assert.deepEqual(on.map((x) => talker(x.L)), ["alice", "carl", "alice", "carl", "alice", "bob", "carl", "bob", "carl", "bob"], "the highlight follows the speaker");
+  // turns between the two already shown: nobody moves
+  for (let i = 1; i <= 4; i++) assert.deepEqual(places(on[i].L), places(on[0].L), "turn " + i + ": nobody swapped " + JSON.stringify(on[i].L.src));
+  assert.deepEqual(places(on[0].L), ["alice", "carl"], "alice (new, talking) took the big picture when she came on");
+  // bob is NEW (he pushed alice off): he takes the big picture - V1, as built ("unless a new speaker is coming in")
+  assert.deepEqual(places(on[5].L), ["bob", "carl"], "the newcomer takes the big picture; the pin stays in the inset");
+  for (let i = 6; i < on.length; i++) assert.deepEqual(places(on[i].L), ["bob", "carl"], "turn " + i + ": nobody swapped " + JSON.stringify(on[i].L.src));
+  // the knob off: today's - the current speaker fills the stage on every turn (the swap the owner saw)
+  const off = await singlePin(false);
+  assert.deepEqual(off.map((x) => x.big), ["alice", "carl", "alice", "carl", "alice", "bob", "carl", "bob", "carl", "bob"], "knob off: the big picture follows the speaker");
+  assert.equal(off[0].L.src.length, 2);
 });

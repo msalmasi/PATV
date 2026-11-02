@@ -95,7 +95,8 @@
 //   each step; the snapshot shows the same places): a newcomer takes the place of whom they pushed off, else the first empty one;
 //   leaving frees a place (an empty cell) until the layout has fewer cells; 📌 pins keep theirs too. Dynamic: with 2 nobody moves,
 //   with 3+ the active speaker takes the main cell (main_hold_s) and trades places with whoever leaves it. Picture in picture's
-//   big picture changes only when someone new comes on (the single layout's keeps today's rule). The program carries
+//   big picture changes only when someone new comes on (1.99?? review fix V2/B2: the single layout's with a 📌 pin too - it
+//   re-picked the current speaker on every turn, so the pin and the speaker swapped). The program carries
 //   stable: true and the places as `pos` (gaps allowed); the page (stage-mic.js), A/V sync's delayed view (av-sync.js) and the
 //   captures (stagemiccap.rects) place tiles by them. Off: today's order, byte for byte.
 "use strict";
@@ -1736,8 +1737,10 @@ const coverPub = (P, x) => (P.covers && P.covers.get(x.login)) || null;
  *                             over the places - today's hysteresis); they trade places with whoever leaves it. With 1-2 nobody
  *                             moves (whoever talks has the ring) - the main cell is simply place 0;
  *   picture in picture        the big picture changes only when someone new comes on - today's rule then (the newest speaker,
- *                             else the latest mic tile); the SINGLE layout's picture in picture (a pin beside the one speaker)
- *                             keeps today's rule every time (the single layout shows the current speaker).
+ *                             else the latest mic tile). 1.99?? review fix V2/B2: the SINGLE layout's picture in picture (a 📌
+ *                             pin beside the one speaker) the same - the pinned person and the speaker taking turns never swap
+ *                             the big picture and the inset (the highlight shows who talks); a new speaker pushing the one off
+ *                             still takes the big picture (it re-picked the current speaker on every turn).
  * Covers (hooded frogs) never inherit a named person's place or hand theirs to one (who is behind a frog stays unsaid): a
  * cover goes after the last one on, and a cover's place stays an empty cell (nobody shuffles) until someone new comes on - then
  * the empty places close up before they sit down (core.arrange's veiled rule; review fix B3).
@@ -1759,8 +1762,9 @@ function arrangeOf(P, t, ent, { persist = false } = {}) {
   if (dyn && keys.length >= 3) {
     const want = pinNew ? pinNew.login : nw ? nw.login : null;
     pick = (ids) => { dynMain = core.dynPick(S.dynMain, ids, want, t, cfg().main_hold_s * 1000); return dynMain ? dynMain.id : null; };
-  } else if (!dyn && shape === "pip" && (lay === "single" || !prev || keys.some((k) => !had.has(k)))) {
-    // (today's rule - the client's pre-stable-slots pip: the newest speaker, else the latest mic tile, else the first)
+  } else if (!dyn && shape === "pip" && (!prev || keys.some((k) => !had.has(k)))) {
+    // (today's rule - the client's pre-stable-slots pip: the newest speaker, else the latest mic tile, else the first - only when
+    // someone new comes on. 1.99?? review fix V2/B2: the single layout with a pin too - it re-picked on every turn)
     pick = (ids) => (pinNew ? pinNew.login : nw ? nw.login : mics.length ? mics[mics.length - 1].login : ids[0]);
   }
   // (covers: a place never passes between a hooded frog and a named person - core.arrange's veiled rule)
