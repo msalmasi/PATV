@@ -68,11 +68,13 @@ test("/help: Pepe's incognito / bridge / transcripts cards get the v2 notes only
     try {
       const bridgeV2 = { id: "bridge", summary: "b", v2: { details: "Hidden people show as a bar. `!transcripts off` keeps your mic transcripts off the website." } };
       const out2 = H.withPrivwireNotes([...cards, bridgeV2, { id: "transcripts", summary: "off", v2tx: { summary: "Pepe's bar words" } }]);
-      assert.match(out2[2].summary, /blacked-out bar/, "the transcripts card's summary: the bar");
-      assert.match(out2[2].details, /blacked-out bar/);
-      assert.match(out2[2].details, /Only PATV administrators, and a pad's owner in their own pad, can reveal what you said, and every reveal is logged/);
-      assert.ok(!/never reach the website/.test(out2[2].details), "no longer 'never reach the website'");
-      assert.equal(out2[4].details, "Hidden people show as a bar. `!transcripts off` shows only your mic transcripts as a blacked-out bar.");
+      // (1.99?? S1, owner Q5 / Q6: the name still shows, only the words are blacked out, members can still clip the audio)
+      assert.equal(out2[2].summary, "Your own switch: with !transcripts off, your name still shows on the website, but your mic words are blacked out.");
+      assert.ok(out2[2].details.includes("With `!transcripts off`, your name still shows there, but your words are blacked out. Members can still clip " +
+                                         "the audio, but never see the words. PATV administrators, and a pad's owner in their own pad, can reveal the " +
+                                         "words. Every reveal is logged."), out2[2].details);
+      assert.ok(!/never reach the website|Members can't clip/.test(out2[2].details), "no longer 'never reach the website' or 'can't clip'");
+      assert.equal(out2[4].details, "Hidden people show as a bar. `!transcripts off` blacks out only the words of your mic transcripts (your name still shows).");
       assert.equal(out2[5].summary, "Pepe's bar words", "Pepe's own v2tx wording wins");
       assert.equal(out2[3], cards[3], "other cards untouched");
     } finally { PW.txBar = tb; }
@@ -149,13 +151,15 @@ test("WP-5: terms.js dates /privacy by the evidence switch's first ON too (evide
 // bridge hide."): its sentences show only inside the privacy-wire-v2 branches AND while the bar is live (terms.js locals.txbar =
 // privwire.txBar: the switch on and a Pepe that sends the bar); the change note is dated by policy_text_dates "tx-bar". The owner approves
 // this wording before it ships - these are the exact sentences.
+// 1.99?? S1 (owner answers Q5 / Q6 / Q7, 2026-11-02): the name still shows, only the words are blacked out, members can still clip the
+// audio (never the words), administrators and the pad's owner can reveal the words (logged); earlier mic transcripts stay left out
 const TXB_SENTENCES = [
-  " If you type <code>!transcripts off</code>, your mic transcripts appear only as a blacked-out bar, without your name; administrators and the pad's owner can reveal those too.",
-  "With <code>!transcripts off</code>, your mic transcripts are kept like hidden lines: shown to everyone else as a blacked-out bar without your name, never searched or quoted, and only the pad's owner and PATV administrators can reveal what you said.",
+  " If you type <code>!transcripts off</code>, your name still shows, but the words of your mic transcripts are blacked out. Administrators and the pad's owner can reveal the words, and every reveal is logged.",
+  "With <code>!transcripts off</code>, your name still shows (your frog name if you're incognito), but the words of your mic transcripts are a blacked-out bar for everyone else. They can't be searched or quoted. Only the pad's owner and PATV administrators can reveal the words, and each reveal is logged. While it's on, your earlier mic transcripts are left out.",
   " Mic transcripts said with <code>!transcripts off</code> before 3 November 2026 stay left out.",
-  " <code>!transcripts off</code> blacks out only your mic transcripts.",
-  "<li><b><code>!transcripts off</code> blacks out your mic transcripts:</b> what you say on the mic shows on the website only as a blacked-out bar - without your name, or under your frog name if you're incognito or hidden. Your typed lines and your mic grabs and drops show as usual. Only PATV administrators and a pad's owner (in their own pad, for lines said while they own it) can reveal what you said, and every reveal is logged. Members can't clip those mic turns.",
-  "<li><b>3 November 2026:</b> <code>!transcripts off</code> (sections 3 and 10): your mic transcripts now show on the website as a blacked-out bar without your name instead of being left out; PATV administrators and a pad's owner can reveal what you said, for moderation (each reveal logged), and members can no longer clip those mic turns. This applies to mic transcripts said from 3 November 2026; earlier ones stay left out.</li>",
+  " Neither mutes your voice in the room's audio. <code>!transcripts off</code> blacks out only the words of your mic transcripts; your name still shows. See",
+  "<li><b><code>!transcripts off</code> blacks out only your words on the mic:</b> your name still shows (your frog name if you're incognito or hidden), but your mic transcripts show on the website as a blacked-out bar. Your typed lines and your mic grabs and drops show as usual. Members can still clip the audio of your mic turns, but never see the words. Only PATV administrators and a pad's owner (in their own pad, for lines said while they own it) can reveal the words, and every reveal is logged.",
+  "<li><b>3 November 2026:</b> <code>!transcripts off</code> (sections 3 and 10): your mic transcripts now show on the website instead of being left out. Your name still shows; only the words are blacked out. Members can still clip the audio, but never see the words. PATV administrators and a pad's owner can reveal the words, for moderation (each reveal logged). This applies to mic transcripts said from 3 November 2026; earlier ones stay left out.</li>",
 ];
 const TXB_EVIDENCE = [" An administrator or the pad's owner can save one as moderation evidence, like a hidden person's.</li>",
                       "; an administrator or the pad's owner can save one as moderation evidence (logged, 30 days, never posted)."];
@@ -167,6 +171,8 @@ test("transcripts bar: its sentences only with privacy wire v2 AND the bar live,
   const on = render(now, { privwire: PWON, txbar: { on: true }, policyDates: TXD, chatlog: CLOC });
   for (const s of TXB_SENTENCES) assert.equal(on.split(s).length, 2, "once: " + s.slice(0, 70));
   assert.ok(!on.includes("<code>!transcripts off</code> leaves your mic transcripts out."), "the old chat-history sentence is replaced");
+  // 1.99?? S1: nothing of the txbar build's first wording ("without your name", "can't clip") is left
+  for (const s of ["without your name", "Members can't clip those mic turns", "members can no longer clip"]) assert.ok(!on.includes(s), "gone: " + s);
   assert.ok(on.indexOf("<b>3 November 2026:</b> <code>!transcripts off</code>") < on.indexOf("<b>1 November 2026:</b> <a href=\"#incognito\">"), "the newest change note first");
   for (const s of TXB_EVIDENCE) assert.ok(!on.includes(s), "no evidence sentence while evidence clips are off");
   // the approved wave 2 sentences are untouched (the evidence sentence still follows the hidden-clip one)

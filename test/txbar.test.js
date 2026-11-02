@@ -4,9 +4,13 @@
 // line as a v2-only line with priv.tx: true and their words in priv.words (camfrog-bot txbar_test.py; the shared contract's txbar_*
 // cases) - this site stores and shows it EXACTLY like a hidden speaker's 🎙 line:
 //   * the advert (txbar: 1 in every sync answer while the switch is on) and Pepe's cap (txbar_cap: 1 -> privwire.txBar, kept)
-//   * the item: u {anon, "someone", veil hidden}, a bar, tm: 1 (server-only), no words; the identity + words only in bridge_veil; a named
-//     speaker gets NO frog-name session ("someone"); an incognito one keeps their incognito frog name (the session isn't ended); a
-//     !bridge hide one gets one bar; a malformed priv.tx is dropped
+//   * the item: stored u {anon, "someone", veil hidden}, a bar, tm: 1 and tl (server-only), no words; the identity + words only in
+//     bridge_veil; a named speaker gets NO frog-name session; an incognito one keeps their incognito frog name (the session isn't
+//     ended); a !bridge hide one gets one bar; a malformed priv.tx is dropped
+//   * 1.99?? S1 (owner Q5 - transcripts off covers the WORDS only): the PAGE shows a named speaker's bar under their NAME (their PATV look
+//     too), an incognito one's under their frog name (incognito), each with a "transcript hidden" tag (txh); a !bridge hide one is the one
+//     hidden bar (no tag); a named bar is "someone" (with the tag) once its speaker goes incognito or !bridge hide - live, redrawn in
+//     place, in scrollback and in downloads - and named again after; the name, never the words, reaches every page
 //   * the sticky !transcripts off set never leaves the bar out (it does leave out their 🎙 lines that carry words, as before)
 //   * every surface as a hidden line: the live view (member, staff, owner, admin: the same, rv flags only), history (a bar - read in SQL,
 //     masked by the projection), search (never), downloads ([hidden] / masked), quotes and member clips (never), evidence (offered to
@@ -222,8 +226,10 @@ test("the stored item: a hidden 🎙 line's shape + tm; identity and words only 
   await ready();
   for (const k of ["tina", "fr", "hk"]) assert.ok(C[k], "stored: " + k);
   const it = R().feed.find((x) => x.c === C.tina);
-  assert.deepEqual(it.u, { anon: true, display: "someone", veil: "hidden" }, "u: 'someone', hidden - no frog name");
+  assert.deepEqual(it.u, { anon: true, display: "someone", veil: "hidden" }, "stored u: 'someone', hidden - no frog name (the page names her: S1)");
   assert.ok(/^[sml]$/.test(it.mask) && !("text" in it) && it.tm === 1, "a bar, tm: 1, no words");
+  assert.deepEqual([it.tl, R().feed.find((x) => x.c === C.fr).tl, R().feed.find((x) => x.c === C.hk).tl], ["tx", "incognito", "hidden"],
+                   "1.99?? S1: tl = how each bar's speaker shows");
   assert.equal(it._vz.login, TI);
   assert.equal(it._vz.kind, "hidden", "stored as a hidden line (reveal, evidence, archive, retention)");
   assert.equal(it._vz.tx, 1);
@@ -268,7 +274,7 @@ test("the sticky !transcripts off set never leaves the bar out - it does leave o
   assert.ok(lv.d.feed.some((o) => o.k === "mic" && o.u && o.u.login === TI), "her mic grab, named");
 });
 
-test("every role's live view: the bar under 'someone' (frankie's under his frog name), no words, no hold / id; rv for the owner and admins only", async () => {
+test("every role's live view (S1): tina's bar under her NAME, frankie's under his incognito frog name, each tagged; hank's one hidden bar; no words or id; rv for the owner and admins only", async () => {
   await ready();
   for (const u of [U.mem, U.staff, U.own, U.adm, null]) {
     const lv = await live(u);
@@ -276,18 +282,70 @@ test("every role's live view: the bar under 'someone' (frankie's under his frog 
     const by = new Map(lv.d.feed.map((o) => [o.c, o]));
     const t = by.get(C.tina), f = by.get(C.fr), h = by.get(C.hk);
     assert.ok(t && f && h, "the three bars are shown");
-    assert.deepEqual(t.u, { anon: true, display: "someone", veil: "hidden" });
+    // 1.99?? S1 (owner Q5): her name - the page-safe named user any named line has (+ her PATV look) - and the "transcript hidden" tag
+    const typed = lv.d.feed.find((o) => o.k === "msg" && o.text === "tina typed this line");
+    assert.ok(!t.u.anon && t.u.login === TI && !t.u.veil && !t.u.alias, "tina's bar: her name - " + JSON.stringify(t.u));
+    assert.deepEqual(t.u, typed.u, "...exactly as on her named typed line (her PATV look too)");
+    assert.equal(t.txh, 1, "tina's bar: the 'transcript hidden' tag");
+    assert.equal(t.hold, H1, "tina's bar keeps her named hold (her grab and drop are named: the same person, shown)");
     for (const o of [t, f, h]) {
       assert.ok(/^[sml]$/.test(o.mask) && !("text" in o) && !("id" in o), "a bar: no words, no 🎙 id (no clip)");
-      assert.ok(!("tm" in o), "the stamp is server-only");
+      assert.ok(!("tm" in o) && !("tl" in o), "the stamps are server-only");
     }
-    assert.ok(!t.hold, "no hold beside 'someone' (her grab was named)");
-    assert.ok(ALIAS_RE.test(f.u.alias || ""), "frankie's frog name");
+    assert.ok(ALIAS_RE.test(f.u.alias || "") && f.u.anon === true && f.u.veil === "incognito" && f.txh === 1,
+              "frankie's bar: his frog name, incognito (not 'hidden'), the tag - " + JSON.stringify([f.u, f.txh]));
+    assert.ok(h.u.veil === "hidden" && !("txh" in h), "hank's bar: the one hidden bar, no transcript tag (bridge off covers it)");
     assert.ok(!by.get(C.before), "her earlier named 🎙 line isn't there");
     const mayReveal = u === U.own || u === U.adm;
     for (const o of [t, f, h]) assert.equal(o.rv === 1, mayReveal, `rv for ${u ? u.username : "signed out"}`);
     assert.deepEqual(leaks(lv.text).filter((x) => x !== TI), [], `nothing of the bars reaches ${u ? u.username : "a visitor"}: ` + leaks(lv.text).join(", "));
   }
+});
+
+test("1.99?? S1: a named bar is 'someone' (with the tag) while its speaker is incognito or !bridge hide - live (redrawn in place), scrollback, downloads - and named again after", async () => {
+  await ready();
+  const CH = require(path.join(repo, "chatloghist"));
+  const named = (o) => !!o && !o.u.anon && o.u.login === TI;
+  let lv = await live(U.mem);
+  assert.ok(named(lv.d.feed.find((o) => o.c === C.tina)), "named to begin with");
+  for (const [scope, look] of [["incognito", "someone"], ["bridge", "hidden"]]) {
+    const at = lv.d.cursor;
+    const rs0 = lv.d.rs;
+    await sync([{ op: "event", id: "tb-s1-" + scope, ts: new Date().toISOString(), type: "privacy.hidden", data: { h: hash(TI), scope } }],
+               scope === "bridge" ? { bridge_hidden_h: [hash(HK), hash(TI)] } : { incog_hidden_h: [hash(FR), hash(TI)] });
+    await settle(120);
+    CV._clearCaches();
+    assert.equal(CV.barLook(R().feed.find((x) => x.c === C.tina)), look, scope + ": the bar's look");
+    // the live tail: the page that holds her named bar is told to draw it again ("removed" + "redo"), and the redo is "someone"
+    const up = await call("GET", `/api/rooms/${SLUG}/live?after=${at}` + (rs0 != null ? "&rs=" + rs0 : ""), { user: U.mem });
+    assert.equal(up.status, 200, up.text.slice(0, 200));
+    assert.ok((up.d.removed || []).includes(C.tina), scope + ": the named bar leaves open pages - " + JSON.stringify(up.d.removed));
+    const re = (up.d.redo || []).find((o) => o.c === C.tina);
+    assert.ok(re && re.u.anon && !re.u.login && !re.u.alias, scope + ": redrawn without her name - " + JSON.stringify(re));
+    if (scope === "incognito") assert.equal(re.txh, 1, "incognito: 'someone' with the tag");
+    else assert.ok(re.u.veil === "hidden" && !("txh" in re), "!bridge hide: the one hidden bar");
+    lv = await live(U.mem);
+    const o = lv.d.feed.find((x) => x.c === C.tina);
+    assert.ok(o && !named(o) && !lv.text.includes(W.tina), scope + ": a fresh load - no name, no words");
+    assert.deepEqual(leaks(lv.text).filter((x) => x !== TI), []);
+    assert.ok(!lv.text.includes('"login":"' + TI + '"') || lv.d.feed.some((x) => x.c !== C.tina && x.u && x.u.login === TI && x.k !== "tx"),
+              scope + ": her login only on her other named lines, never beside the bar");
+    CH._reset();
+    const pg = await CH.page(U.mem, SLUG, { limit: 200 });
+    const row = (pg.items || []).find((x) => x.c === C.tina);
+    assert.ok(row && !named(row) && /^[sml]$/.test(row.mask), scope + ": scrollback - no name: " + JSON.stringify(row));
+    // the way back: privacy.shown - her bar is named again (lines said named come back named, like her other named lines)
+    await sync([{ op: "event", id: "tb-s1-un-" + scope, ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash(TI), scope } }]);
+    await settle(120);
+    CV._clearCaches();
+    assert.equal(CV.barLook(R().feed.find((x) => x.c === C.tina)), "named", scope + ": named again after");
+    lv = await live(U.mem);
+  }
+  assert.ok(named(lv.d.feed.find((o) => o.c === C.tina)), "named again on the live view");
+  CH._reset();
+  const pg = await CH.page(U.mem, SLUG, { limit: 200 });
+  const row = (pg.items || []).find((x) => x.c === C.tina);
+  assert.ok(named(row) && row.txh === 1 && !("text" in row), "scrollback: her name from chat_log_veil, the tag, no words - " + JSON.stringify(row));
 });
 
 test("see-through: admins and the pad's owner reveal the words (logged tx_line); members and staff can't; the toggle's batches log tx_line too", async () => {
@@ -368,6 +426,7 @@ test("history: read in SQL, a bar for everyone (no words); search never finds it
   const pg = await CH.page(U.mem, SLUG, { limit: 200 });
   const row = (pg.items || []).find((o) => o.c === C.tina);
   assert.ok(row && /^[sml]$/.test(row.mask) && !("text" in row), "a bar in scrollback: " + JSON.stringify(row));
+  assert.ok(!row.u.anon && row.u.login === TI && row.txh === 1, "1.99?? S1: under her name in scrollback too (chat_log_veil), tagged: " + JSON.stringify(row.u));
   assert.ok(!(pg.items || []).some((o) => o.c === C.before), "her earlier named 🎙 line stays out");
   assert.deepEqual(leaks(JSON.stringify(pg)).filter((x) => x !== TI), []);
   const db = (await getQuery("SELECT text, who FROM chat_log WHERE c = ?", [C.tina]))[0];
@@ -389,8 +448,15 @@ test("history: read in SQL, a bar for everyone (no words); search never finds it
     const f = await call("GET", r.d.url, { user: U.adm });
     assert.equal(f.status, 200);
     assert.deepEqual(leaks(f.text).filter((x) => x !== TI), [], fmt + ": " + leaks(f.text).join(", "));
-    if (fmt === "txt") assert.match(f.text, /^\[\d\d:\d\d\] 🎙 someone: “\[hidden\]”$/m, "TXT: someone + [hidden]");
-    else assert.ok(f.text.trim().split("\n").slice(1).map((l) => JSON.parse(l)).some((o) => o.masked === true && o.k !== "msg"), "JSONL: masked");
+    // 1.99?? S1: tina's bar under her name, "[transcript hidden]"; frankie's under his frog name; hank's "[hidden]"
+    if (fmt === "txt") {
+      assert.match(f.text, /^\[\d\d:\d\d\] 🎙 (Tina|tina): “\[transcript hidden\]”$/m, "TXT: tina + [transcript hidden]");
+      assert.match(f.text, /^\[\d\d:\d\d\] 🎙 [A-Z][A-Za-z-]+ [A-Z][A-Za-z]+: “\[hidden\]”$/m, "TXT: hank's frog name + [hidden]");
+    } else {
+      const js = f.text.trim().split("\n").slice(1).map((l) => JSON.parse(l));
+      assert.ok(js.some((o) => o.masked === true && o.transcript_hidden === true && o.author && o.author.camfrog === TI), "JSONL: tina's bar, named, transcript_hidden");
+      assert.ok(js.some((o) => o.masked === true && !o.transcript_hidden && o.author && o.author.someone), "JSONL: hank's hidden bar");
+    }
   }
 });
 
@@ -445,12 +511,12 @@ function get2(p, user = null) {
     }).on("error", reject);
   });
 }
-const LIVE_S = "With <code>!transcripts off</code>, your mic transcripts are kept like hidden lines";
+const LIVE_S = "With <code>!transcripts off</code>, your name still shows (your frog name if you're incognito), but the words of your mic transcripts are a blacked-out bar";
 const KEPT_S = ["<code>!transcripts off</code> leaves your mic transcripts out. The ones already shown as a blacked-out bar are kept like hidden lines: never searched or quoted, and only the pad's owner and PATV administrators can reveal what you said.",
                 " <code>!transcripts off</code> leaves your mic transcripts out; the ones already shown as a blacked-out bar stay that way, and administrators and the pad's owner can reveal those too.",
                 "<li><b><code>!transcripts off</code> leaves your mic transcripts out.</b> Mic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators and a pad's owner (in their own pad, for lines said while they own it) can reveal what you said, and every reveal is logged.</li>",
                 "(sections 3 and 10): new mic transcripts are left out of the website again; the ones already shown as a blacked-out bar stay that way.</li>"];
-const LIVE_NOTE = "(sections 3 and 10): your mic transcripts now show on the website as a blacked-out bar without your name instead of being left out";
+const LIVE_NOTE = "(sections 3 and 10): your mic transcripts now show on the website instead of being left out. Your name still shows; only the words are blacked out.";
 const WAVE2_S = "<code>!transcripts off</code> leaves your mic transcripts out. Lines said before";
 const KEPT_HELP = "Mic turns that already show on the website as a blacked-out bar stay that way";
 
