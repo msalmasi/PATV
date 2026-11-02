@@ -192,3 +192,17 @@ test("❄️ Winter Lights art: the lantern never paints on the face, the muffs 
     for (let y = 0; y <= 10; y++) for (let x = 0; x < 17; x++) assert.equal(puff[y][x], bare[y][x], `seed ${seed}: the puffer paints above the chin at ${y},${x}`);
   }
 });
+
+test("every page loads avatar.js with one cache-buster, bumped past the Fireside build (a cached copy would drop the new layers)", () => {
+  const fs = require("fs");
+  const views = path.join(repo, "views");
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  const loads = [];
+  for (const f of walk(views).filter((p) => p.endsWith(".ejs"))) {
+    for (const m of fs.readFileSync(f, "utf8").matchAll(/['"]\/public\/js\/avatar\.js(\?v=(\d+))?['"]/g)) loads.push([path.relative(repo, f), m[2] ? Number(m[2]) : 0]);
+  }
+  assert.ok(loads.length >= 4, "cosmetics, the GTF sheet, the heist view and the gang avatars: " + JSON.stringify(loads));
+  const vs = new Set(loads.map((x) => x[1]));
+  assert.equal(vs.size, 1, "one version everywhere: " + JSON.stringify(loads));
+  assert.ok([...vs][0] >= 3, "?v=3 or later: the ❄️ Winter Lights layers (earmuffs, winterlights, lantern) came after ?v=2");
+});
