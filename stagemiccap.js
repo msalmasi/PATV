@@ -15,7 +15,11 @@
 // MP3 latency has; a clip's last mic-list read waits out Pepe's MIC_LAG after its end (lastRoster: a late grab is muted when private,
 // unseen when not shown); a holder without Pepe's `proven` is never a shown tile; recheck() covers the name cards too.
 // 1.99?? stage cover: a name card draws the person's cover picture (stagecover.js - by default their GTF avatar) instead of the
-// letter, read from LOCAL data only (a profile photo, an outside URL, stays the letter here); covers of veiled speakers stay hoods.
+// letter; covers of veiled speakers stay hoods.
+// 1.99?? stage cover fix 3 (owner 2026-11-02: snaps and clips replicate what the snapper / clipper sees): a card draws exactly the
+// cover the VIEWER's program carries (their own stage: none on a tile they reported / are blocked from, none on a veiled tile) - a
+// profile photo too, round as the page crops it: stagecover.captureImage fetches it server-side from the site's allow-listed photo
+// hosts only (cached; failing to the letter, never failing the capture). The 500 ms samples never wait on a picture (covers: false).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -61,9 +65,9 @@ let deps = {
   still: (id, l) => require("./bridge-relay").mfFrame(id, l),
   audioTap: (id, fn, u) => require("./bridge").audioTap(id, fn, u),
   offset: (id, p) => require("./avsync").serverOffsetMs(id, p, "mp3"),
-  // 1.99?? stage cover: a name card's picture from LOCAL data only (stagecover.localImageChecked - never the network; a profile
-  // photo is an outside URL, so a capture draws the letter for it)
-  cover: url => require("./stagecover").localImageChecked(url),
+  // 1.99?? stage cover: a name card's picture (stagecover.captureImage - fix 3: local data, or a profile photo fetched server-side
+  // from an allow-listed host only, cached; null = the letter)
+  cover: url => require("./stagecover").captureImage(url),
   mic: id => { const r = require("./bridge")._rooms.get(id); return r && r.mic; },
   privateLogins: ls => privateLoginsStrict(ls),
   note: (kind, id, l, u) => require("./camviewers").noteViewers(kind, id, l, [String(u)]),
@@ -198,13 +202,21 @@ async function consent(login, userId) {
       !(await deps.camRefusal(login, userId, { strict: true }));
   } catch (_) { return false; }
 }
-/** A named card's stage cover {buf, k} from the program entry's avatar URL (local pictures only), or null = the letter. */
+/** A named card's stage cover {buf, k} from the program entry's avatar URL - the picture the viewer's own stage shows on that card
+ *  (fix 3: a profile photo too - an https URL or the site's /media/cover/p/ proxy; stagecover decides which hosts it may fetch), or
+ *  null = the letter. Bounded (COVER_WAIT_MS): a slow picture never holds the capture up. */
+const COVER_WAIT_MS = 4000;
 async function coverFor(e) {
   const u = typeof e.avatar === "string" ? e.avatar : "";
-  if (!/^\/(?:media\/cover\/[au]\/|public\/stickers\/)[\w.~\-/]+$/.test(u) || u.includes("..")) return null;
-  try { const c = await deps.cover(u); return c && Buffer.isBuffer(c.buf) && c.buf.length <= 4 * 1024 * 1024 ? c : null; } catch (_) { return null; }
+  if (u.includes("..") || u.length > 600) return null;
+  if (!/^\/(?:media\/cover\/[aup]\/|public\/)[\w.~\-/]+$/.test(u) && !/^https:\/\/[^\s"'<>()\\]+$/.test(u)) return null;
+  let timer;
+  try {
+    const c = await Promise.race([deps.cover(u), new Promise(r => { timer = setTimeout(() => r(null), COVER_WAIT_MS); })]);
+    return c && Buffer.isBuffer(c.buf) && c.buf.length <= 4 * 1024 * 1024 ? c : null;
+  } catch (_) { return null; } finally { clearTimeout(timer); }
 }
-async function tileFor(e, R, user) {
+async function tileFor(e, R, user, { covers = true } = {}) {
   const t = { id: e.id, mode: "blank", newest: !!e.newest, pin: !!e.pin, name: "", source: e };
   if (e.kind === "cover") { const c = coverArt(e); return { ...t, mode: "cover", name: c.label, image: c.art }; }
   if (e.kind !== "cam" || (e.watch !== "ok" && e.watch !== "notice")) return t;
@@ -213,7 +225,8 @@ async function tileFor(e, R, user) {
   Object.assign(t, { login, name: String(e.name || login), mode: "card" });
   // 1.99?? stage cover: the picture this person's name card shows on the page (their GTF avatar by default) - loaded for every
   // consenting named tile, so a live / still tile that ends up a card draws it too. A cover tile never gets here (coverArt above)
-  t.cover = await coverFor(e);
+  // (fix 3: the 500 ms samples compare tiles only - they never wait on a picture)
+  t.cover = covers ? await coverFor(e) : null;
   if (e.watch === "notice") return t;
   if (e.video === "live") {
     let allowed = false;
@@ -229,7 +242,7 @@ async function tileFor(e, R, user) {
   }
   return t;
 }
-async function tilesFor(p, R, user) { return Promise.all(entries(p).map(e => tileFor(e, R, user))); }
+async function tilesFor(p, R, user, opts) { return Promise.all(entries(p).map(e => tileFor(e, R, user, opts))); }
 async function gate(R, user, kind, surface, { live = false } = {}) {
   if (!R || !user || !user.userId) throw refuse("Sign in first.", 401);
   if (deps.config().stagecap_mic !== true) throw refuse("disabled");
@@ -353,8 +366,12 @@ async function renderFrame(p, tiles, R, out, opts = {}) {
       try {
         const side = Math.max(16, Math.floor(Math.min(ir.w * .8, ir.h * .8, 260)));
         const pixel = t.cover.k === "gtf" || t.cover.k === "sticker";
-        const data = await sharp(t.cover.buf, { limitInputPixels: 30e6, density: pixel ? 72 : 144 })
-          .resize(side, side, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: pixel ? "nearest" : "lanczos3" }).png().toBuffer();
+        // fix 3: a profile photo is cropped round, as the page draws it (.cv-photo: object-fit cover in a circle)
+        const round = t.cover.k === "photo";
+        let img = sharp(t.cover.buf, { limitInputPixels: 30e6, density: pixel ? 72 : 144 })
+          .resize(side, side, round ? { fit: "cover", kernel: "lanczos3" } : { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: pixel ? "nearest" : "lanczos3" });
+        if (round) img = sharp(await img.ensureAlpha().png().toBuffer()).composite([{ input: svg(`<circle cx="${side / 2}" cy="${side / 2}" r="${side / 2}" fill="#fff"/>`, side, side), blend: "dest-in" }]);
+        const data = await img.png().toBuffer();
         picture = { input: data, left: Math.round(r.x + (r.w - side) / 2), top: Math.round(ir.y + (ir.h - side) / 2) };
       } catch (_) { t.cover = null; }
     }
@@ -563,7 +580,7 @@ async function sample(job) {
     await gate(job.R, user, job.kind, job.surface, { live: true });   // review fix 2: a recording needs Pepe live
     const p = await programFor(job.R, user);
     if (!usable(p)) throw refuse("empty", 409);
-    const current = new Map((await tilesFor(p, job.R, user)).map(t => [t.id, t]));
+    const current = new Map((await tilesFor(p, job.R, user, { covers: false })).map(t => [t.id, t]));   // (fix 3: no picture waits)
     for (const t of job.tiles) {
       const next = current.get(t.id);
       if (t.stop == null && (!next || next.mode === "blank" || next.mode !== t.mode || next.login !== t.login || next.path !== t.path || next.source.watch !== t.source.watch)) {

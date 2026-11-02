@@ -174,6 +174,10 @@ const FIELDS = Object.freeze({
   // people; dynamic with 3+ the active speaker still takes the big cell. On for staging and prod; off = today's order (places by
   // when each came on, 📌 pins first; the dynamic main and picture in picture's big picture follow the active speaker)
   stable_slots:          { def: true, bool: true },
+  // 1.99?? stage cover fix 3: a named card's PROFILE PHOTO reaches the page through the site's own proxy (stagecover.photoProxyUrl:
+  // /media/cover/p/<key>.webp - no Discord id / user id in the URL, and the very bytes a snap / clip draws). Off = the photo's own
+  // URL, as before (captures still fetch an allowed photo server-side)
+  cover_photo_proxy:     { def: true, bool: true },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 

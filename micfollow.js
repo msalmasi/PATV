@@ -122,6 +122,12 @@ const ROOMS = () => require("./rooms");
 const CV = () => require("./camviewers");
 // 1.99?? stage cover: a named tile's picture while it has no live one (stagecover.js; a failure = the letter, never a stall)
 const coverOf = async (login) => { try { return await require("./stagecover").coverOf(login); } catch (e) { return null; } };
+// 1.99?? stage cover fix 3: the URL a program carries for a cover - a profile photo on an allowed host through the site's proxy while
+// cfg cover_photo_proxy is on (no Discord id / user id in the URL; the page and a capture draw the same bytes), else its own URL
+const coverUrl = (cv) => {
+  if (!cv || cv.k !== "photo" || cfg().cover_photo_proxy === false) return cv ? cv.url : null;
+  try { return require("./stagecover").photoProxyUrl(cv.url) || cv.url; } catch (e) { return cv.url; }
+};
 const MFH = (roomId) => "mf:" + String(roomId);
 const MFW = (roomId) => "mfw:" + String(roomId);   // wave2 WP-4 (F.2): the holder of a relay kept warm after its tile left
 const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
@@ -1914,7 +1920,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     // NAME (a veiled one is a cover above and never reaches this); none on a tile this viewer reported or is blocked from here, and
     // (review fix PRIV-2) none for a viewer the PERSON blocked - from their cam (camviewers) or in DMs (either way): the letter
     const cv = watch === "hidden" || watch === "blocked" || (watch === "unavailable" && (await personBlocks(x.login, String(userId)))) ? null : await coverOf(x.login);
-    src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: cv ? cv.url : null, ...(cv ? { ck: cv.k } : {}),
+    src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: coverUrl(cv), ...(cv ? { ck: cv.k } : {}),
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,
                video: x.video, why: x.video === "card" ? x.why || "full" : null, watch,
                ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),

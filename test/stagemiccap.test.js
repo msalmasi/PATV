@@ -295,6 +295,19 @@ test("recording fixes tiles, kills departed readers at the sampled time, and dis
   const graph = args[args.indexOf("-filter_complex") + 1]; assert.match(graph, /between\(t,0\.0000,5\.0000\)/); assert.match(graph, /gte\(t,5\.0000\)/);
   assert.equal(M.cancel(o.id), true); await assert.rejects(running.done); assert.equal(activeReaders, 0); assert.equal(taps[0].stopped, true); assert.equal(fs.existsSync(o.out), false); assert.equal(fs.existsSync(job.dir), false);
 });
+test("1.99?? stage cover fix 3: a clip loads each card's cover once when it starts; the 500 ms samples never wait on a picture (a slow photo fetch can't delay a privacy cut)", async () => {
+  let asked = 0, gate = null;
+  reset({ cover: async () => { asked++; if (gate) await gate; return null; } });
+  program = { layout: "split", src: [cam("alice", { video: "card", avatar: "https://cdn.discordapp.com/avatars/1/x.png", ck: "photo" }), cam("bob", { pos: 1, avatar: "/media/cover/a/1.abc.svg", ck: "gtf" })] };
+  const o = options("clip"), running = await M.start(o); await tick(); const job = T.jobs.get(o.id);
+  assert.equal(asked, 2, "both cards' covers at the start");
+  gate = new Promise(() => {});                                            // a picture that never arrives
+  clock += 1000; hidden.add("alice");
+  await T.sample(job);
+  assert.equal(asked, 2, "no cover asked by the sample");
+  assert.equal(job.tiles[0].stop, 1, "the privacy cut landed at once");
+  M.cancel(o.id); await assert.rejects(running.done);
+});
 test("startup sweeps only its own job directories", async () => {
   const own = path.join(tmp, "mic-" + id()), other = path.join(tmp, "other-tool-work");
   fs.mkdirSync(own); fs.writeFileSync(path.join(own, "video.ts"), "fixture"); fs.mkdirSync(other); fs.writeFileSync(path.join(other, "keep.txt"), "keep");

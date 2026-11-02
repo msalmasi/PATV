@@ -515,7 +515,7 @@ test("stage-room.js repaints the mic stage when only a tile's cover picture chan
 });
 
 // ── the capture ──
-test("stagemiccap: a consenting name card draws its cover picture (local data only, never the network); without one the letter circle", async () => {
+test("stagemiccap: a consenting name card draws its cover picture (stagecover decides what it may fetch); without one the letter circle", async () => {
   const M = require(path.join(repo, "stagemiccap")), T = M._test;
   const R = { id: "pad", slug: "pad", title: "Pad" }, user = { userId: "viewer" };
   const red = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 230, g: 10, b: 10 } } }).png().toBuffer();
@@ -527,8 +527,12 @@ test("stagemiccap: a consenting name card draws its cover picture (local data on
     const t = await T.tileFor(e, R, user);
     assert.equal(t.mode, "card"); assert.ok(t.cover && t.cover.buf.equals(red));
     const net = await T.tileFor({ ...e, id: "cy", avatar: "https://cdn.example.test/cy.png", ck: "photo" }, R, user);
-    assert.equal(net.cover, null, "an outside photo: the letter (no fetch)");
-    assert.deepEqual(asked, [e.avatar], "deps.cover is asked only for local cover paths");
+    assert.equal(net.cover, null, "a photo stagecover won't give: the letter");
+    // (1.99?? fix 3: a photo URL is handed to stagecover.captureImage too - it fetches allowed hosts only; anything else never is)
+    for (const bad of ["//evil.test/x.png", "http://cdn.example.test/x.png", "/media/cover/u/../../etc/passwd", "javascript:alert(1)", "/other/x.png"]) {
+      assert.equal((await T.tileFor({ ...e, id: "cy", avatar: bad, ck: "photo" }, R, user)).cover, null, bad);
+    }
+    assert.deepEqual(asked, [e.avatar, "https://cdn.example.test/cy.png"], "deps.cover is asked only for cover paths and https photos");
     const p = { layout: "single", src: [e] };
     const px = async (tile) => {
       const buf = await M.renderFrame(p, [tile], R);
@@ -925,4 +929,261 @@ test("review fix 2 UX-1b: a short reason in a small cell stays on one line - the
   assert.match(card, /grid-template-rows: minmax\(0, 1fr\) auto; grid-template-columns: minmax\(0, 1fr\);/, "a definite, full-width column");
   const cq = /@container mfcov \(max-height: \d+px\) or \(max-width: \d+px\) \{([^]*?)\r?\n\}/.exec(css)[1];
   assert.match(cq, /\.mf-card\.cov \.mf-why \{[^}]*max-width: 90%;/, "the small-cell reason: 90% of the cell, like the letter card's");
+});
+
+// ── fix 3 (1.99??): a capture draws the photo too (the allow-list, the guarded fetch, the proxy); held pictures in held/; the block race ──
+const http = require("http");
+const P = "/avatars/123456789012345678/";
+const discordAt = (f) => "https://cdn.discordapp.com" + P + f;
+/** A local stand-in for the photo hosts (no test ever reaches the internet): path -> handler(req, res). */
+async function photoHost(routes) {
+  const hits = [];
+  const srv = http.createServer((req, res) => {
+    hits.push(req.url);
+    const h = routes[req.url];
+    if (h) return h(req, res);
+    res.statusCode = 404; res.end();
+  });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  return { hits, port: srv.address().port, close: () => new Promise((r) => { if (srv.closeAllConnections) srv.closeAllConnections(); srv.close(() => r()); }) };
+}
+/** The photo fetch's network, stubbed: every host "resolves" to addrs() (a public address by default); requests go to the local host. */
+function stubNet(host, { addrs = () => [{ address: "93.184.216.34", family: 4 }], seen = [] } = {}) {
+  return {
+    lookup: async (h) => { seen.push({ lookup: h }); return addrs(h); },
+    request: (opts, cb) => { seen.push({ opts }); return http.request({ host: "127.0.0.1", port: host.port, path: opts.path, method: opts.method, headers: opts.headers, agent: false }, cb); },
+  };
+}
+const allFiles = () => {
+  const out = new Set();
+  for (const root of [SC.dir(), path.join(SC.dir(), "held")]) {
+    let subs = [];
+    try { subs = fs.readdirSync(root).filter((d) => /^[a-f0-9]{2}$/.test(d)); } catch (e) { continue; }
+    for (const d of subs) for (const f of fs.readdirSync(path.join(root, d))) out.add(path.relative(SC.dir(), path.join(root, d, f)));
+  }
+  return out;
+};
+
+test("fix 3: the photo allow-list = the hosts the site writes into users.avatar (its S3 bucket, Discord, Twitch): https on 443 only, no credentials, their avatar paths; private / loopback / link-local / CGNAT / mapped addresses are never public", () => {
+  const env = { b: process.env.S3_BUCKET_NAME, r: process.env.AWS_REGION, x: process.env.COVER_PHOTO_HOSTS };
+  const put = (k, v) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
+  try {
+    put("S3_BUCKET_NAME", "pics.patv-test.example"); put("AWS_REGION", "us-east-2"); put("COVER_PHOTO_HOSTS", " img.patv-cdn.test , 10.0.0.1, bad host");
+    const ok = [discordAt("a".repeat(32) + ".png"), "https://cdn.discordapp.com/embed/avatars/3.png", discordAt("a_" + "b".repeat(32) + ".gif?size=256"),
+      "https://static-cdn.jtvnw.net/jtv_user_pictures/abc-profile_image-300x300.png", "https://static-cdn.jtvnw.net/user-default-pictures-uv/x-profile_image-300x300.png",
+      "https://pics.patv-test.example/avatars/u1-1700000000000.jpeg", "https://pics.patv-test.example.s3.amazonaws.com/avatars/u1-1.jpeg",
+      "https://pics.patv-test.example.s3.us-east-2.amazonaws.com/avatars/u1-1.jpeg", "https://s3.us-east-2.amazonaws.com/pics.patv-test.example/avatars/u1-1.jpeg",
+      "https://s3.amazonaws.com/pics.patv-test.example/avatars/u1-1.jpeg", "https://img.patv-cdn.test/avatars/u1.jpeg", "https://CDN.DISCORDAPP.COM/avatars/1/x.png"];
+    for (const u of ok) assert.ok(SC.photoSource(u), "allowed: " + u);
+    const no = ["http://cdn.discordapp.com/avatars/1/x.png", "https://cdn.discordapp.com:8443/avatars/1/x.png", "https://u:p@cdn.discordapp.com/avatars/1/x.png",
+      "https://cdn.discordapp.com/attachments/1/2/x.png", "https://cdn.discordapp.com/avatars/", "https://cdn.discordapp.com.evil.test/avatars/1/x.png",
+      "https://evil.test/cdn.discordapp.com/avatars/1/x.png", "https://cdn.example.test/ann.png", "https://127.0.0.1/avatars/x.png", "https://[::1]/avatars/x.png",
+      "https://10.0.0.1/avatars/x.png", "https://s3.amazonaws.com/other-bucket/avatars/x.jpeg", "https://pics.patv-test.example/other/x.jpeg",
+      "https://other.s3.amazonaws.com/avatars/x.jpeg", "https://cdn.discordapp.com/avatars/1/../../attachments/x.png", "https://cdn.discordapp.com/avatars/1/x.png#f",
+      "https://static-cdn.jtvnw.net/other/x.png", "/public/img/avatar.png", "", null, "javascript:alert(1)", "https://cdn.discordapp.com/avatars/1/" + "x".repeat(700) + ".png"];
+    for (const u of no) assert.equal(SC.photoSource(u), null, "refused: " + u);
+    assert.ok(SC.photoSources().some((s) => s.host === "img.patv-cdn.test") && !SC.photoSources().some((s) => s.host === "10.0.0.1"), "COVER_PHOTO_HOSTS: host names only");
+    put("S3_BUCKET_NAME", undefined); put("COVER_PHOTO_HOSTS", undefined);
+    assert.equal(SC.photoSource("https://pics.patv-test.example/avatars/u1.jpeg"), null, "no bucket configured: none of its hosts");
+    assert.deepEqual(SC.photoSources().map((s) => s.host), ["cdn.discordapp.com", "static-cdn.jtvnw.net"]);
+  } finally { put("S3_BUCKET_NAME", env.b); put("AWS_REGION", env.r); put("COVER_PHOTO_HOSTS", env.x); }
+  for (const a of ["10.0.0.1", "172.16.5.4", "192.168.1.1", "127.0.0.1", "169.254.169.254", "100.64.1.1", "0.0.0.0", "224.0.0.1", "255.255.255.255", "198.18.0.1",
+                   "::1", "::", "fe80::1", "fc00::1", "fd12:3456::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "64:ff9b::a00:1", "2002:a00:1::1", "2001:db8::1", "ff02::1", "x", ""]) {
+    assert.equal(SC.publicAddr(a), false, a);
+  }
+  for (const a of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:4700::1111", "2001:4860:4860::8888"]) assert.equal(SC.publicAddr(a), true, a);
+});
+
+test("fix 3: the photo fetch - re-encoded webp (no metadata), cached by the URL's hash; refused (the letter, cached briefly): a non-public address (any of the host's), a redirect, a non-image type, markup bytes, more than 2 MB, a timeout; it connects to the vetted address with the host's name for TLS", async () => {
+  const red = await sharp({ create: { width: 300, height: 300, channels: 3, background: { r: 240, g: 20, b: 20 } } }).jpeg()
+    .withMetadata({ exif: { IFD0: { Copyright: "photo-owner-secret" } } }).toBuffer();
+  // (a REAL picture over the cap - noise, stored: only the size cap refuses it)
+  const big = await sharp(require("crypto").randomBytes(1000 * 1000 * 3), { raw: { width: 1000, height: 1000, channels: 3 } }).png({ compressionLevel: 0 }).toBuffer();
+  assert.ok(big.length > SC.PHOTO_MAX_BYTES && big.length < 4 * SC.PHOTO_MAX_BYTES, "fixture: " + big.length);
+  const img = (type, body) => (q, s) => { s.setHeader("content-type", type); s.end(body); };
+  const host = await photoHost({
+    [P + "ok.png"]: img("image/jpeg", red),
+    [P + "s3.jpeg"]: img("binary/octet-stream", red),
+    // (a redirect that even carries a picture: only "no redirects" refuses it)
+    [P + "moved.png"]: (q, s) => { s.statusCode = 302; s.setHeader("location", "http://127.0.0.1" + P + "ok.png"); s.setHeader("content-type", "image/jpeg"); s.end(red); },
+    [P + "page.png"]: img("text/html", "<html>hi</html>"),
+    [P + "typed.png"]: img("text/html", red),                        // (a real picture sent as a page: the type alone refuses it)
+    [P + "vector.png"]: img("image/svg+xml", '<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    [P + "lies.png"]: img("image/png", "<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>"),
+    [P + "big.png"]: img("image/png", big),
+    // (chunked: no length up front - the running count refuses it)
+    [P + "stream.png"]: (q, s) => { s.setHeader("content-type", "image/png"); s.write(big.subarray(0, 1024 * 1024)); s.end(big.subarray(1024 * 1024)); },
+    [P + "slow.png"]: () => { /* never answers */ },
+  });
+  const seen = [];
+  try {
+    SC._setPhotoNet(stubNet(host, { seen }));
+    const a = await SC.photoImage(discordAt("ok.png"));
+    assert.equal(a && a.k, "photo");
+    const meta = await sharp(a.buf).metadata();
+    assert.equal(meta.format, "webp"); assert.ok(meta.width <= SC.COVER_PX);
+    assert.ok(!a.buf.includes(Buffer.from("photo-owner-secret")), "re-encoded: no metadata");
+    const req = seen.find((x) => x.opts).opts;
+    assert.deepEqual([req.protocol, req.hostname, req.servername, req.port, req.path, req.method], ["https:", "cdn.discordapp.com", "cdn.discordapp.com", 443, P + "ok.png", "GET"]);
+    assert.equal(req.headers.Host, "cdn.discordapp.com");
+    // the connection's own lookup answers the address vetted above (never a second, rebinding lookup) - either form Node asks for
+    await new Promise((ok) => req.lookup("cdn.discordapp.com", { all: true }, (e, list) => { assert.deepEqual(list, [{ address: "93.184.216.34", family: 4 }]); ok(); }));
+    await new Promise((ok) => req.lookup("cdn.discordapp.com", {}, (e, addr, fam) => { assert.deepEqual([addr, fam], ["93.184.216.34", 4]); ok(); }));
+    const n = host.hits.length;
+    assert.ok((await SC.photoImage(discordAt("ok.png"))).buf.equals(a.buf)); assert.equal(host.hits.length, n, "cached: no second fetch");
+    assert.equal((await SC.photoImage(discordAt("s3.jpeg"))).k, "photo", "the bucket's uploads carry no image type: sniffed instead");
+    for (const f of ["moved.png", "page.png", "typed.png", "vector.png", "lies.png", "big.png", "stream.png"]) assert.ok((await SC.photoImage(discordAt(f))) === null, f);
+    assert.equal(host.hits.filter((h) => h === P + "ok.png").length, 1, "the redirect was never followed");
+    const h2 = host.hits.length;
+    assert.ok((await SC.photoImage(discordAt("page.png"))) === null); assert.equal(host.hits.length, h2, "a failure is cached too (no refetch)");
+    const t0 = Date.now();
+    assert.ok((await SC.photoImage(discordAt("slow.png"))) === null);
+    assert.ok(Date.now() - t0 < SC.PHOTO_TIMEOUT_MS + 1500, "timed out, never hangs: " + (Date.now() - t0) + " ms");
+    // non-public addresses: ANY of the host's = refused, never asked
+    for (const addrs of [[{ address: "10.0.0.5", family: 4 }], [{ address: "93.184.216.34", family: 4 }, { address: "127.0.0.1", family: 4 }],
+                         [{ address: "::ffff:169.254.169.254", family: 6 }], [{ address: "fd00::1", family: 6 }], []]) {
+      const s2 = [];
+      SC._setPhotoNet(stubNet(host, { addrs: () => addrs, seen: s2 }));
+      assert.ok((await SC.photoImage(discordAt("ok.png"))) === null, JSON.stringify(addrs));
+      assert.ok(s2.some((x) => x.lookup) && !s2.some((x) => x.opts), "resolved, never requested: " + JSON.stringify(addrs));
+    }
+    // a host that isn't on the list is never even resolved
+    const s3 = [];
+    SC._setPhotoNet(stubNet(host, { seen: s3 }));
+    assert.ok((await SC.photoImage("https://cdn.example.test/ann.png")) === null); assert.equal(s3.length, 0);
+  } finally { SC._setPhotoNet(null); await host.close(); }
+});
+
+test("fix 3: the live proxy - /media/cover/p/<key>.webp names no user / Discord id, serves the cached picture with a short public cache (ETag); only keys a program handed out; a failed fetch is a 404", async () => {
+  const red = await png(120, 120, { r: 200, g: 10, b: 10 });
+  const host = await photoHost({ [P + "ok.png"]: (q, s) => { s.setHeader("content-type", "image/png"); s.end(red); } });
+  try {
+    SC._setPhotoNet(stubNet(host));
+    const url = SC.photoProxyUrl(discordAt("ok.png"));
+    assert.match(url, /^\/media\/cover\/p\/[a-f0-9]{32}\.webp$/);
+    assert.ok(!url.includes("123456789012345678") && !url.includes("avatars"), url);
+    assert.equal(SC.photoProxyUrl(discordAt("ok.png")), url, "stable per photo");
+    assert.equal(SC.photoProxyUrl("https://cdn.example.test/ann.png"), null, "not on the list: no proxy");
+    const f = await fetch(base + url);
+    assert.equal(f.status, 200); assert.equal(f.headers.get("content-type"), "image/webp");
+    assert.equal(f.headers.get("cache-control"), "public, max-age=" + SC.UPLOAD_MAX_AGE);
+    assert.equal(f.headers.get("cdn-cache-control"), "max-age=" + SC.UPLOAD_CDN_MAX_AGE);
+    assert.equal(f.headers.get("x-content-type-options"), "nosniff");
+    assert.equal((await sharp(Buffer.from(await f.arrayBuffer())).metadata()).format, "webp");
+    const etag = f.headers.get("etag");
+    assert.ok(etag);
+    const re = await new Promise((ok, no) => http.get(base + url, { headers: { "if-none-match": etag } }, (res) => { res.resume(); ok(res.statusCode); }).on("error", no));
+    assert.equal(re, 304);
+    assert.equal((await fetch(base + "/media/cover/p/" + "0".repeat(32) + ".webp")).status, 404, "a key nobody handed out");
+    assert.equal((await fetch(base + "/media/cover/p/" + url.slice(15, 47).toUpperCase() + ".webp")).status, 404);
+    const g = await fetch(base + SC.photoProxyUrl(discordAt("gone.png")));
+    assert.equal(g.status, 404, "the host has no such photo"); assert.equal(g.headers.get("cache-control"), "no-store");
+  } finally { SC._setPhotoNet(null); await host.close(); }
+});
+
+test("fix 3: a snap / clip draws the profile photo the viewer's stage shows (its own URL or the proxy), round like the page; a host off the list, a failed fetch, a reported / blocked tile = the letter; a veiled tile never asks", async () => {
+  const M = require(path.join(repo, "stagemiccap")), T = M._test;
+  const R = { id: "pad", slug: "pad", title: "Pad" }, user = { userId: "viewer" };
+  const red = await sharp({ create: { width: 200, height: 200, channels: 3, background: { r: 230, g: 10, b: 10 } } }).png().toBuffer();
+  const host = await photoHost({ [P + "ok.png"]: (q, s) => { s.setHeader("content-type", "image/png"); s.end(red); } });
+  M.configure({ hidden: () => false, privateLogins: async () => new Set(), camRefusal: async () => null, exact: () => false, still: () => null });   // (cover: the real one)
+  try {
+    SC._setPhotoNet(stubNet(host));
+    const e = { kind: "cam", id: "ann", name: "Ann", video: "card", watch: "ok", pos: 0, avatar: discordAt("ok.png"), ck: "photo" };
+    const t = await T.tileFor(e, R, user);
+    assert.equal(t.mode, "card"); assert.equal(t.cover && t.cover.k, "photo");
+    const viaProxy = await T.tileFor({ ...e, avatar: SC.photoProxyUrl(discordAt("ok.png")) }, R, user);
+    assert.ok(viaProxy.cover && viaProxy.cover.buf.equals(t.cover.buf), "the proxy and the URL: the same bytes");
+    const buf = await M.renderFrame({ layout: "single", src: [e] }, [t], R);
+    const { data, info } = await sharp(buf).raw().toBuffer({ resolveWithObject: true });
+    const at = (x, y) => { const i = (y * info.width + x) * info.channels; return [data[i], data[i + 1], data[i + 2]]; };
+    const isRed = (c) => c[0] > 200 && c[1] < 40 && c[2] < 40;
+    assert.ok(isRed(at(640, 330)), "the photo in the middle: " + at(640, 330));
+    assert.ok(isRed(at(640, 205)), "the circle's top is the photo: " + at(640, 205));
+    // round, like the page (.cv-photo): the corners of its 260 px square (510..770 x 199..459) are the card, not the photo
+    for (const [x, y] of [[514, 203], [766, 203], [514, 455], [766, 455]]) assert.ok(!isRed(at(x, y)), `cropped round: ${x},${y} ` + at(x, y));
+    for (const [why, ent] of [["off the list", { ...e, avatar: "https://cdn.example.test/ann.png" }], ["a failed fetch", { ...e, avatar: discordAt("missing.png") }],
+                              ["reported", { ...e, watch: "hidden" }], ["blocked", { ...e, watch: "blocked" }], ["unavailable", { ...e, watch: "unavailable" }]]) {
+      assert.ok(!(await T.tileFor(ent, R, user)).cover, why);
+    }
+    const hits = host.hits.length;
+    const veiled = await T.tileFor({ kind: "cover", id: "anon-ab12cd34", name: "Soggy Bullfrog", veil: "incognito", hood: 1, watch: "cover", avatar: discordAt("ok.png"), ck: "photo" }, R, user);
+    assert.equal(veiled.mode, "cover"); assert.equal(veiled.cover, undefined, "a veiled tile: the hood only");
+    assert.equal(host.hits.length, hits, "nothing fetched for it");
+  } finally { M.configure(T.defaults); SC._setPhotoNet(null); await host.close(); }
+});
+
+test("fix 3: a HELD picture lives in COVER_DIR/held/ (never in the backed-up folder) - served from there to its owner; put up = moved out; taken down = deleted from held/; the migration and the sweep handle both folders", async () => {
+  const u = await mkUser("hela", { camfrog: "helacf" });
+  await safety({ enabled: true });
+  ANSWER = HATE;
+  const r = await upload(u, await png(230, 230, { r: 70, g: 20, b: 120 }));
+  assert.equal(r.d && r.d.held, true, JSON.stringify(r.d));
+  const name = r.d.upload.url.split("/").pop();
+  const heldP = path.join(SC.dir(), "held", name.slice(0, 2), name), upP = path.join(SC.dir(), name.slice(0, 2), name);
+  assert.ok(fs.existsSync(heldP), "held: in held/"); assert.ok(!fs.existsSync(upP), "never in the normal (backed-up) folder");
+  assert.equal((await fetch(base + r.d.upload.url, { headers: { "x-test-user": u.userId } })).status, 200, "its owner sees it (from held/)");
+  assert.equal((await fetch(base + r.d.upload.url)).status, 404);
+  await ISF.review(await logOf(u), "fp", "boss");                  // put up
+  assert.ok(fs.existsSync(upP) && !fs.existsSync(heldP), "put up: moved out of held/");
+  assert.equal((await fetch(base + r.d.upload.url)).status, 200);
+  assert.equal((await SC.coverOf("helacf")).k, "upload");
+  // the next one is flagged: in held/; the replaced one is gone; taken down ("false negative") = deleted from held/
+  const r2 = await upload(u, await png(231, 230, { r: 71, g: 20, b: 120 }));
+  const n2 = r2.d.upload.url.split("/").pop(), held2 = path.join(SC.dir(), "held", n2.slice(0, 2), n2);
+  assert.ok(fs.existsSync(held2) && !fs.existsSync(path.join(SC.dir(), n2.slice(0, 2), n2)));
+  assert.ok(!fs.existsSync(upP), "the replaced picture is gone");
+  await ISF.review(await logOf(u), "fn", "boss");
+  assert.ok(!fs.existsSync(held2), "taken down: deleted from held/");
+  // the one-time migration: a held picture stored in the normal folder (before held/ existed) moves into held/; an "ok" one whose move
+  // out of held/ was cut short moves out (and is served meanwhile)
+  const w1 = await mkUser("mig1"), w2 = await mkUser("mig2");
+  const nA = "ab" + "1".repeat(30) + ".webp", nB = "cd" + "2".repeat(30) + ".webp";
+  const webp = await sharp(await png(40, 40)).webp().toBuffer();
+  fs.mkdirSync(path.join(SC.dir(), "ab"), { recursive: true }); fs.writeFileSync(path.join(SC.dir(), "ab", nA), webp);
+  fs.mkdirSync(path.join(SC.dir(), "held", "cd"), { recursive: true }); fs.writeFileSync(path.join(SC.dir(), "held", "cd", nB), webp);
+  await runQuery("INSERT INTO stage_covers (user_id, kind, upload, upload_state, updated) VALUES (?, 'upload', ?, 'held', 1), (?, 'upload', ?, 'ok', 1)", [w1.userId, nA, w2.userId, nB]);
+  assert.equal((await fetch(base + "/media/cover/u/" + nB)).status, 200, "an 'ok' picture still in held/ is served all the same");
+  assert.ok((await SC.placeFiles()) >= 2);
+  assert.ok(fs.existsSync(path.join(SC.dir(), "held", "ab", nA)) && !fs.existsSync(path.join(SC.dir(), "ab", nA)), "held -> held/");
+  assert.ok(fs.existsSync(path.join(SC.dir(), "cd", nB)) && !fs.existsSync(path.join(SC.dir(), "held", "cd", nB)), "ok -> the normal folder");
+  assert.equal(await SC.placeFiles(), 0, "idempotent");
+  assert.equal((await fetch(base + "/media/cover/u/" + nA, { headers: { "x-test-user": w1.userId } })).status, 200);
+  // the sweep: files no row holds go from BOTH folders after an hour (a deleted account's held picture too); the ones in use stay
+  await runQuery("DELETE FROM stage_covers WHERE user_id = ?", [w1.userId]);          // (account deletion: accountdelete.DELETE_ROWS)
+  const orphanUp = path.join(SC.dir(), "ef", "ef" + "3".repeat(30) + ".webp");
+  fs.mkdirSync(path.dirname(orphanUp), { recursive: true }); fs.writeFileSync(orphanUp, webp);
+  const stale = path.join(SC.dir(), "held", "tmp-" + "0".repeat(16) + ".heic");
+  fs.writeFileSync(stale, "x");
+  assert.equal(await SC.sweepFiles(Date.now()), 0, "nothing under an hour old");
+  assert.ok((await SC.sweepFiles(Date.now() + 2 * 3600e3)) >= 3);
+  assert.ok(!fs.existsSync(path.join(SC.dir(), "held", "ab", nA)), "a deleted account's held picture: swept from held/");
+  assert.ok(!fs.existsSync(orphanUp), "an orphan in the normal folder"); assert.ok(!fs.existsSync(stale), "a HEIC decode's leftover in held/");
+  assert.ok(fs.existsSync(path.join(SC.dir(), "cd", nB)), "a picture in use stays");
+  assert.ok(fs.readFileSync(path.join(repo, "stagecover.js"), "utf8").includes("tmpDir: heldDir()"), "a HEIC's raw bytes are decoded in held/ (not backed up)");
+});
+
+test("fix 3 (the block race): a picture blocked WHILE its upload is being classified is refused at the store - never stored after the block (checked again right before it, inside the row's transaction)", async () => {
+  const a = await mkUser("ria"), b = await mkUser("rob", { camfrog: "robcf" });
+  await safety({ enabled: true });
+  ANSWER = CLEAN;
+  const pic = await png(240, 241, { r: 12, g: 140, b: 160 });
+  const ra = await upload(a, pic);
+  assert.equal(ra.d && ra.d.held, false, JSON.stringify(ra.d));
+  const before = allFiles();
+  // b uploads the same picture; while it is being classified an admin takes a's copy down (the picture's hash is blocked)
+  let took = false;
+  ANSWER = async () => { if (!took) { took = true; assert.equal(await SC.removeUpload(a.userId, "admin boss"), true); } return CLEAN; };
+  try {
+    const rb = await upload(b, pic);
+    assert.equal(took, true, "the block landed during the classification");
+    assert.equal(rb.status, 422, JSON.stringify(rb.d)); assert.equal(rb.d.code, "blocked");
+    const row = (await getQuery("SELECT upload FROM stage_covers WHERE user_id = ?", [b.userId]))[0];
+    assert.ok(!row || !row.upload, "nothing stored for b");
+    const after = allFiles();
+    assert.deepEqual([...after].filter((f) => !before.has(f)), [], "no file left behind");
+    assert.equal(after.size, before.size - 1, "a's copy is down");
+    const c = await SC.coverOf("robcf");
+    assert.ok(!c || c.k !== "upload");
+  } finally { ANSWER = CLEAN; }
 });

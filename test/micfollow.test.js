@@ -2762,7 +2762,7 @@ test("83. 1.99?? stage cover: a NAMED tile carries its person's cover (GTF avata
   }
 });
 
-test("82. 1.99?? stage cover review fix (PRIV-2): a viewer the person blocked - from their cam (camviewers) or in DMs, either way - gets the letter on that tile, never their cover; a cam-mode refusal (members only) still shows it", async () => {
+test("84. 1.99?? stage cover review fix (PRIV-2): a viewer the person blocked - from their cam (camviewers) or in DMs, either way - gets the letter on that tile, never their cover; a cam-mode refusal (members only) still shows it", async () => {
   await reset(); await plainPad();
   const SC = require(path.join(repo, "stagecover"));
   await SC.init();
@@ -2801,5 +2801,47 @@ test("82. 1.99?? stage cover review fix (PRIV-2): a viewer the person blocked - 
     try { await CV.unblock("alice", "viewer3"); } catch (e) { /* not blocked */ }
     await CA.setMode("alice", "everyone");
     await runQuery("DELETE FROM cosmetic_avatar_seeds WHERE camfrog = 'alice'"); SC.invalidate();
+  }
+});
+
+test("85. 1.99?? stage cover fix 3: a profile photo on an allowed host reaches the page through the site's proxy (cfg cover_photo_proxy, default on) - no Discord id in the program; off = its own URL; a host off the list keeps its own URL; a reported tile still gets none", async () => {
+  await reset(); await plainPad();
+  const SC = require(path.join(repo, "stagecover"));
+  await SC.init();
+  MF._hide.clear();
+  // (never the internet: the background warm-up fetch fails at once)
+  SC._setPhotoNet({ lookup: async () => { throw Object.assign(new Error("offline test"), { code: "OFFLINE" }); }, request: () => { throw new Error("no request in tests"); } });
+  const photo = "https://cdn.discordapp.com/avatars/123456789012345678/" + "c".repeat(32) + ".png";
+  await runQuery("UPDATE users SET avatar = ? WHERE userId = 'u_alice'", [photo]);
+  SC.invalidate();
+  const tileFor = async (uid) => (await MF.viewFor(MF.snapshot(ROOM.id), R, uid, null)).src.find((s) => s.id === "alice");
+  try {
+    assert.equal(core.DEFAULTS.cover_photo_proxy, true, "default on");
+    await SC.save("u_alice", { kind: "photo" });
+    await onStage(["alice"]);
+    let a = await tileFor("u_staff");
+    assert.equal(a.ck, "photo");
+    assert.match(a.avatar, /^\/media\/cover\/p\/[a-f0-9]{32}\.webp$/);
+    assert.equal(a.avatar, SC.photoProxyUrl(photo));
+    const live = JSON.stringify(await MF.viewFor(MF.snapshot(ROOM.id), R, "u_staff", null));
+    assert.ok(!live.includes("123456789012345678") && !live.includes("discordapp"), "no Discord id / host in the program");
+    await MF.setCfg(ADMIN, { cover_photo_proxy: false, reason: "test" });
+    a = await tileFor("u_staff");
+    assert.deepEqual([a.avatar, a.ck], [photo, "photo"], "off: the photo's own URL, as before");
+    await MF.setCfg(ADMIN, { cover_photo_proxy: true, reason: "test" });
+    await runQuery("UPDATE users SET avatar = 'https://cdn.example.test/alice.png' WHERE userId = 'u_alice'"); SC.invalidate();
+    a = await tileFor("u_staff");
+    assert.deepEqual([a.avatar, a.ck], ["https://cdn.example.test/alice.png", "photo"], "a host off the list: its own URL (a capture draws the letter)");
+    await runQuery("UPDATE users SET avatar = ? WHERE userId = 'u_alice'", [photo]); SC.invalidate();
+    const rr = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "alice", reason: "other" }, "u_fay");
+    assert.equal(rr.status, 200, JSON.stringify(rr.d));
+    const hid = await tileFor("u_fay");
+    assert.equal(hid.watch, "hidden"); assert.equal(hid.avatar, null, "a reported tile: no cover, proxied or not");
+  } finally {
+    await MF.setCfg(ADMIN, { cover_photo_proxy: true, reason: "test" });
+    SC._setPhotoNet(null);
+    await runQuery("DELETE FROM stage_covers"); await runQuery("UPDATE users SET avatar = NULL WHERE userId = 'u_alice'"); SC.invalidate();
+    await runQuery("DELETE FROM micfollow_reports WHERE login = 'alice'").catch(() => {});
+    MF._hide.clear();
   }
 });

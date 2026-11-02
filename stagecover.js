@@ -35,6 +35,39 @@
 //   * uploads are capped per account (UPLOADS_PER_HOUR / UPLOADS_PER_DAY image-safety checks, one held picture at a time) and refused
 //     for a restricted account (archived, casino_banned = the relay's "restricted", a global feed ban, Pepe's global feed_restricted).
 //   * the GTF URL's signature covers avatar.js's render version: a redrawn layer = new URLs (the route is immutable-cached).
+// Fix 3 (1.99??, owner 2026-11-02: "snaps and clips should replicate whatever the snap/clipper [sees], not just be a letter"; "uploaded
+// covers can join the 12-month site backup"):
+//   * PROFILE PHOTOS IN CAPTURES: stagemiccap draws every cover the viewer's stage shows, a profile photo too (round, as the page
+//     crops it). The photo is fetched SERVER-SIDE (photoImage) - only from PHOTO SOURCES below, never an arbitrary URL - re-encoded
+//     by sharp and cached in memory by its keyed URL hash (PHOTO_TTL; a failure PHOTO_FAIL_TTL). Anything that fails = the letter,
+//     never a failed or stalled capture. While micfollow's cfg cover_photo_proxy is on (default ON) the live stage gets an allowed
+//     photo through the same proxy (/media/cover/p/<key>.webp - no Discord id / user id in the URL; the page and the capture draw the
+//     very same bytes); off = the photo's own URL on the page, as before (captures still fetch it here).
+//   * PHOTO SOURCES - the hosts the site itself writes into users.avatar (anything else draws as the letter in a capture):
+//       the site's own storage: Settings -> profile photo (user.controller updateAvatar -> the S3 bucket S3_BUCKET_NAME, keys
+//         avatars/...): the bucket's custom-domain host (the uploader's "customDomainURL" for a bucket named after a domain),
+//         <bucket>.s3[.<region> | -<region>].amazonaws.com, the path style s3[.<region>].amazonaws.com/<bucket>/avatars/, plus any host
+//         in COVER_PHOTO_HOSTS (comma-separated: a CDN in front of the bucket) - path /avatars/ only
+//       Discord (Sign in with Discord - index.js; the Discord bot's accounts): cdn.discordapp.com /avatars/, /embed/avatars/
+//       Twitch (Sign in with Twitch - index.js; the Twitch bot's accounts): static-cdn.jtvnw.net /jtv_user_pictures/,
+//         /user-default-pictures-uv/
+//       a site path under /public/ (read from the site's own public folder)
+//     (Google, Apple, Telegram and Plex sign-ins, the sign-up form and Pepe's automatic Camfrog accounts write the default Pepe face
+//     = no photo.) The fetch: https on 443 only, no credentials in the URL, the host resolved and refused when ANY of its addresses
+//     is private / loopback / link-local / CGNAT / multicast / reserved (no SSRF), then connected to that vetted address (no DNS
+//     rebinding); no redirects (any 3xx = refused); an image type or the bucket's octet-stream only (never SVG / HTML), sniffed and
+//     decoded by sharp; at most PHOTO_MAX_BYTES; PHOTO_TIMEOUT_MS for all of it (DNS included). Never logs the URL.
+//   * FILES - HELD PICTURES IN THEIR OWN FOLDER: COVER_DIR/<xx>/<name> = pictures that are UP (state ok) - the off-site backup (pve1,
+//     12-month GFS) copies this folder; COVER_DIR/held/<xx>/<name> = pictures HELD for an admin's check (and the HEIC decoder's temp
+//     files) - EXCLUDED from that backup, like imagesafety/: a flagged picture is never backed up. A held picture moves into the
+//     normal folder when it's put up (the card's Put up, a "false positive" review: the row first, then the file - a crash between
+//     leaves an "ok" picture in held/, never a held one in the backed-up folder) and is deleted from held/ when it's taken down.
+//     Serving, uploadUp and the capture look in the row's folder first, then the other (a move cut short); removeFile clears both;
+//     placeFiles() - at boot (the one-time migration: held files already in the normal folder, staging has some) and in every
+//     sweepFiles - moves each file to its row's folder; sweepFiles removes files no row holds from both folders (what account
+//     deletion and merges leave; an export carries records only, never the file).
+//   * THE BLOCK RACE: hashBlocked is checked again right before the store - and inside the transaction that stores the row - so an
+//     upload being classified while an admin / a review blocks the same picture is refused, never stored after the block.
 //
 // PRIVACY (hard rules, spec wave 2 + this task): a cover is ONLY for a person the stage shows BY NAME. Veiled tiles (incognito, `!bridge
 // hide`: wave 2's hooded covers, veilstage.js) never reach this module - micfollow.viewFor builds them before any lookup - and
@@ -49,12 +82,15 @@
 // then revalidated by its ETag (a 304) - see the review fixes above. Lookups are cached CACHE_MS per login.
 //
 //   coverOf(login) -> {url, k} | null        k = gtf | photo | sticker | upload    (micfollow.viewFor)
-//   localImage(url) -> {buf, k} | null       the picture of a cover URL from local data, never the network (stagemiccap)
+//   photoProxyUrl(url) -> url | null         an allowed photo's /media/cover/p/ URL (micfollow.viewFor, cfg cover_photo_proxy)
+//   captureImage(url) -> {buf, k} | null     the picture of a cover URL for a capture: local data, or an allowed photo (stagemiccap)
+//   localImage(url) -> {buf, k} | null       the picture of a cover URL from local data, never the network
 //   onReview(logId, mark, actor)             imagesafety.review's hook for stage_cover checks
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const net = require("net");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const KINDS = Object.freeze(["gtf", "photo", "sticker", "upload", "card"]);
@@ -71,6 +107,10 @@ const MAX_BYTES = 5 * 1024 * 1024, CHUNK = 512 * 1024, CHUNK_MAX = 768 * 1024, U
 const UPLOADS_PER_HOUR = 5, UPLOADS_PER_DAY = 20, HOLD_MS = 30 * 86400e3;
 const UPLOAD_MAX_AGE = 600, UPLOAD_CDN_MAX_AGE = 300;
 const CACHE_MS = 60e3, CACHE_MAX = 5000, SVG_MAX = 500;
+// 1.99?? fix 3: profile photos fetched for captures / the live proxy (see PHOTO SOURCES) - the caps, the cache lifetimes and sizes
+const PHOTO_MAX_BYTES = 2 * 1024 * 1024, PHOTO_TIMEOUT_MS = 3000, PHOTO_TTL = 3600e3, PHOTO_FAIL_TTL = 5 * 60e3;
+const PHOTO_CACHE_MAX = 300, PHOTO_CACHE_BYTES = 32 * 1024 * 1024, PHOTO_KEYS_MAX = 5000, PHOTO_KEY_TTL = 24 * 3600e3, PHOTO_MAX_PIXELS = 16e6;
+const HELD = "held";                                        // 1.99?? fix 3: COVER_DIR/held/ - never in the off-site backup
 const SURFACE = "stage_cover";
 const SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
 let NOW = () => Date.now();
@@ -90,8 +130,27 @@ function pickDir() {
 let DIR = null;
 function dir() { if (!DIR) { DIR = pickDir(); fs.mkdirSync(DIR, { recursive: true }); } return DIR; }
 function _setDir(d) { DIR = d; fs.mkdirSync(DIR, { recursive: true }); }
-function filePath(name) { return FILE_RE.test(String(name || "")) ? path.join(dir(), name.slice(0, 2), name) : null; }
-function removeFile(name) { const p = filePath(name); if (p) { try { fs.unlinkSync(p); } catch (e) { /* gone */ } } }
+/** 1.99?? fix 3: where a picture lives - COVER_DIR/<xx>/<name> (up), COVER_DIR/held/<xx>/<name> (held: never backed up). */
+function heldDir() { return path.join(dir(), HELD); }
+function filePath(name, held = false) { return FILE_RE.test(String(name || "")) ? path.join(held ? heldDir() : dir(), name.slice(0, 2), name) : null; }
+const isFile = (p) => { try { return !!p && fs.statSync(p).isFile(); } catch (e) { return false; } };
+/** 1.99?? fix 3: the file of a row's picture - its state's folder first, then the other (a move a crash cut short); null = none. */
+function fileAt(name, state) {
+  const held = state === "held";
+  for (const p of [filePath(name, held), filePath(name, !held)]) if (isFile(p)) return p;
+  return null;
+}
+/** 1.99?? fix 3: move a picture into its state's folder (held/ or the normal one). -> true when it is there now. */
+function placeFile(name, held) {
+  const to = filePath(name, held), from = filePath(name, !held);
+  if (!to) return false;
+  if (isFile(to)) { if (isFile(from)) { try { fs.unlinkSync(from); } catch (e) { /* gone */ } } return true; }
+  if (!isFile(from)) return false;
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.renameSync(from, to);
+  return true;
+}
+function removeFile(name) { for (const held of [false, true]) { const p = filePath(name, held); if (p) { try { fs.unlinkSync(p); } catch (e) { /* gone */ } } } }
 const uploadUrl = (name) => (FILE_RE.test(String(name || "")) ? "/media/cover/u/" + name : null);
 
 // ── table ──
@@ -266,7 +325,7 @@ async function forAccount(acct, login, row) {
  *  cover folder the row outlives its file - that's no upload, so the default shows instead of a 404 and the letter). */
 function uploadUp(r) {
   if (!r || r.upload_state !== "ok" || !uploadUrl(r.upload)) return false;
-  try { return fs.statSync(filePath(r.upload)).isFile(); } catch (e) { return false; }
+  return !!fileAt(r.upload, "ok");                     // (1.99?? fix 3: the normal folder, else held/ - a put-up cut short)
 }
 async function resolve(login) {
   if (await incognitoOn(login)) return { v: null, uid: null };
@@ -291,6 +350,7 @@ async function coverOf(login) {
     INFLIGHT.set(l, (async () => {
       try {
         const r = await resolve(l);
+        if (r.v && r.v.k === "photo") warmPhoto(r.v.url);        // 1.99?? fix 3: a capture / the proxy then finds it cached
         CACHE.delete(l); CACHE.set(l, { v: r.v, uid: r.uid, at: NOW() });
         while (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value);
         return r.v;
@@ -315,7 +375,7 @@ function localImage(url) {
   if (m) { const g = parseGtf(m[1]); const svg = g && gtfSvg(g.seed, g.layers); return svg ? { buf: Buffer.from(svg), k: "gtf" } : null; }
   m = /^\/media\/cover\/u\/([a-f0-9]{32}\.webp)$/.exec(u);
   if (m) {
-    const p = filePath(m[1]);
+    const p = filePath(m[1]);                          // (the normal folder only: a held picture is never read here)
     try { return p ? { buf: fs.readFileSync(p), k: "upload" } : null; } catch (e) { return null; }
   }
   m = /^\/public\/stickers\/([a-z0-9]{1,32})\/([a-z0-9]{1,32})\.svg$/.exec(u);
@@ -329,8 +389,180 @@ async function localImageChecked(url) {
     await init();
     const r = (await getQuery("SELECT upload_state FROM stage_covers WHERE upload = ?", [m[1]]))[0];
     if (!r || r.upload_state !== "ok") return null;
+    const p = fileAt(m[1], "ok");                      // 1.99?? fix 3: (an "ok" picture whose move out of held/ was cut short too)
+    try { return p ? { buf: fs.readFileSync(p), k: "upload" } : null; } catch (e) { return null; }
   }
   return localImage(url);
+}
+/** 1.99?? fix 3: the picture a capture draws for a cover URL from the viewer's program - what their stage shows: the local pictures
+ *  (localImageChecked), a proxied photo (/media/cover/p/<key>.webp), a photo's own URL on an allowed host (PHOTO SOURCES) or a site
+ *  photo under /public/. -> {buf, k} | null (the letter). Never throws; a photo waits at most PHOTO_TIMEOUT_MS (cold cache). */
+async function captureImage(url) {
+  try {
+    const u = String(url || "");
+    let m = /^\/media\/cover\/p\/([a-f0-9]{32})\.webp$/.exec(u);
+    if (m) { const src = proxiedUrl(m[1]); return src ? await photoImage(src) : null; }
+    if (/^https:\/\//.test(u)) return await photoImage(u);
+    m = /^\/public\/((?:[A-Za-z0-9_\-]+\/)*[A-Za-z0-9_\-.]+\.(?:png|jpe?g|webp|gif|avif))$/.exec(u);
+    if (m && !u.includes("..") && !/^\/public\/stickers\//.test(u)) {
+      if (!require("./userlook").avatarOf(u)) return null;            // (the default Pepe face is no photo)
+      const root = path.join(__dirname, "public"), p = path.join(root, m[1]);
+      const real = fs.realpathSync(p);
+      if (!real.startsWith(fs.realpathSync(root) + path.sep) || !isFile(real) || fs.statSync(real).size > PHOTO_MAX_BYTES) return null;
+      return { buf: fs.readFileSync(real), k: "photo" };
+    }
+    return await localImageChecked(u);
+  } catch (e) { return null; }
+}
+
+// ── profile photos (1.99?? fix 3 - see PHOTO SOURCES): the allow-list, the guarded fetch, the cache, the live proxy's keys ──
+const HOST_RE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+/** The hosts (+ path prefixes) the site writes into users.avatar. The bucket's from the environment the uploader uses. */
+function photoSources() {
+  const out = [
+    { host: "cdn.discordapp.com", paths: ["/avatars/", "/embed/avatars/"] },                         // Discord sign-in / bot
+    { host: "static-cdn.jtvnw.net", paths: ["/jtv_user_pictures/", "/user-default-pictures-uv/"] },  // Twitch sign-in / bot
+  ];
+  const b = low(process.env.S3_BUCKET_NAME), region = low(process.env.AWS_REGION);
+  const reg = /^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/.test(region) ? region : null;
+  if (/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(b) && !b.includes("..") && !net.isIP(b)) {
+    if (b.includes(".") && HOST_RE.test(b)) out.push({ host: b, paths: ["/avatars/"] });          // the uploader's "customDomainURL"
+    for (const h of [b + ".s3.amazonaws.com", reg && b + ".s3." + reg + ".amazonaws.com", reg && b + ".s3-" + reg + ".amazonaws.com"]) if (h) out.push({ host: h, paths: ["/avatars/"] });
+    for (const h of ["s3.amazonaws.com", reg && "s3." + reg + ".amazonaws.com"]) if (h) out.push({ host: h, paths: ["/" + b + "/avatars/"] });
+  }
+  for (const x of String(process.env.COVER_PHOTO_HOSTS || "").split(",")) { const h = low(x); if (HOST_RE.test(h)) out.push({ host: h, paths: ["/avatars/"] }); }
+  return out;
+}
+/** A photo URL -> {href, host, path} when it is on an allowed host (https, 443, no credentials, an allowed path), else null. */
+function photoSource(raw) {
+  const s = String(raw == null ? "" : raw).trim();
+  if (!/^https:\/\/[^\s"'<>()\\]+$/.test(s) || s.length > 600) return null;
+  let u;
+  try { u = new URL(s); } catch (e) { return null; }
+  if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443") || u.hash) return null;
+  const host = u.hostname.toLowerCase();
+  if (!HOST_RE.test(host) || /%2e|%2f|%5c/i.test(u.pathname)) return null;
+  const ok = photoSources().some((x) => x.host === host && x.paths.some((p) => u.pathname.startsWith(p) && u.pathname.length > p.length));
+  return ok ? { href: u.href, host, path: u.pathname + u.search } : null;
+}
+// Never fetched from (SSRF): private, loopback, link-local, CGNAT, multicast, documentation / benchmarking / reserved ranges, and the
+// IPv6 forms that carry an IPv4 address (mapped, NAT64, 6to4, Teredo)
+// (one list per family: a BlockList's ::ffff:0:0/96 rule also matches every plain IPv4 address)
+const NOT_PUBLIC = (() => {
+  const v4 = new net.BlockList(), v6 = new net.BlockList();
+  for (const [a, n] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24],
+    ["192.0.2.0", 24], ["192.88.99.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 3]]) v4.addSubnet(a, n, "ipv4");
+  for (const [a, n] of [["::", 127], ["::ffff:0:0", 96], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64], ["2001::", 32], ["2001:2::", 48], ["2001:10::", 28],
+    ["2001:db8::", 32], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8]]) v6.addSubnet(a, n, "ipv6");
+  return { 4: v4, 6: v6 };
+})();
+/** Is this resolved address one a photo may be fetched from? (the family is the address's own, whatever the resolver said) */
+function publicAddr(address) {
+  const a = String(address == null ? "" : address), v = net.isIP(a);
+  if (!v) return false;
+  try { return !NOT_PUBLIC[v].check(a, v === 6 ? "ipv6" : "ipv4"); } catch (e) { return false; }
+}
+// the network (tests swap it: no test ever reaches the internet)
+const PNET_REAL = Object.freeze({
+  lookup: (host) => require("dns").promises.lookup(host, { all: true, verbatim: true }),
+  request: (opts, cb) => require("https").request(opts, cb),
+});
+let PNET = PNET_REAL;
+const OK_TYPE = /^(?:image\/(?:png|jpeg|jpg|pjpeg|gif|webp|avif)|application\/octet-stream|binary\/octet-stream)$/;   // (the bucket's uploads carry no type)
+/** GET an allowed photo: the vetted address, no redirects, the type / size caps, one deadline for all of it. -> Buffer (throws). */
+function fetchPhoto(src) {
+  return new Promise((resolve, reject) => {
+    let req = null, done = false;
+    const finish = (e, v) => { if (done) return; done = true; clearTimeout(timer); if (req) { try { req.destroy(); } catch (x) { /* closed */ } } if (e) reject(e); else resolve(v); };
+    const timer = setTimeout(() => finish(new Error("timeout")), PHOTO_TIMEOUT_MS);
+    (async () => {
+      const addrs = await PNET.lookup(src.host);
+      const list = (Array.isArray(addrs) ? addrs : [addrs]).filter(Boolean);
+      // ANY address of the host that isn't public = refused (a name that also points inside the network is never asked)
+      if (!list.length || list.some((a) => !a || !publicAddr(a.address))) throw new Error("address");
+      if (done) return;
+      const a = list[0], fam = net.isIPv6(String(a.address)) ? 6 : 4;
+      req = PNET.request({ protocol: "https:", hostname: src.host, servername: src.host, port: 443, path: src.path, method: "GET", agent: false,
+        // connect to the address vetted above (never a second, rebinding lookup)
+        lookup: (h, o, cb) => (o && o.all ? cb(null, [{ address: a.address, family: fam }]) : cb(null, a.address, fam)),
+        headers: { Host: src.host, Accept: "image/avif,image/webp,image/png,image/jpeg,image/gif", "Accept-Encoding": "identity", "User-Agent": "publicaccess.tv-stage-cover" } }, (res) => {
+        if (res.statusCode !== 200) { res.resume(); return finish(new Error("status " + res.statusCode)); }      // (a 3xx: no redirects)
+        const type = String(res.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+        if (!OK_TYPE.test(type)) { res.resume(); return finish(new Error("type")); }
+        if (Number(res.headers["content-length"]) > PHOTO_MAX_BYTES) return finish(new Error("big"));
+        const parts = [];
+        let n = 0;
+        res.on("data", (c) => { n += c.length; if (n > PHOTO_MAX_BYTES) finish(new Error("big")); else parts.push(c); });
+        res.on("end", () => finish(null, Buffer.concat(parts, n)));
+        res.on("error", (e) => finish(e));
+        res.on("aborted", () => finish(new Error("aborted")));
+      });
+      req.on("error", (e) => finish(e));
+      req.end();
+    })().catch((e) => finish(e));
+  });
+}
+/** Decode + re-encode (sharp): a picture only (sniffed, never SVG / HEIC), first frame, orientation baked, at most COVER_PX, webp. */
+async function reencodePhoto(buf) {
+  const sn = require("./feedmedia").sniff(buf);
+  if (sn.bad || sn.kind !== "image" || !["jpeg", "png", "gif", "webp", "avif"].includes(sn.fmt)) throw new Error("not a picture");
+  const sharp = require("sharp");
+  // (PHOTO_MAX_PIXELS: a 2 MB file can still be a pixel bomb)
+  const out = await sharp(buf, { limitInputPixels: PHOTO_MAX_PIXELS }).rotate()
+    .resize({ width: COVER_PX, height: COVER_PX, fit: "inside", withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+  if (!out.length) throw new Error("empty");
+  return out;
+}
+// the cache: key -> {at, buf | null (failed), ttl} - in memory only (never in the cover folder, so never in a backup)
+const PHOTOS = new Map(), PHOTO_INFLIGHT = new Map();
+let photoBytes = 0;
+/** The URL's keyed hash: the cache key and the live proxy's file name (names no user / Discord id; unguessable without SECRET). */
+const photoKey = (href) => crypto.createHmac("sha256", SECRET).update("stagecover-photo|" + href).digest("hex").slice(0, 32);
+function photoPut(key, buf, ttl) {
+  const old = PHOTOS.get(key);
+  if (old) { photoBytes -= old.buf ? old.buf.length : 0; PHOTOS.delete(key); }
+  PHOTOS.set(key, { at: NOW(), buf, ttl });
+  photoBytes += buf ? buf.length : 0;
+  while (PHOTOS.size > PHOTO_CACHE_MAX || photoBytes > PHOTO_CACHE_BYTES) {
+    const [k, v] = PHOTOS.entries().next().value;
+    PHOTOS.delete(k); photoBytes -= v.buf ? v.buf.length : 0;
+  }
+}
+/** An allowed photo's picture {buf (webp), k: "photo"} - cached, else fetched (deduplicated); null when it's not allowed or failed. */
+async function photoImage(url) {
+  const src = photoSource(url);
+  if (!src) return null;
+  const key = photoKey(src.href);
+  const c = PHOTOS.get(key);
+  if (c && NOW() - c.at < c.ttl) return c.buf ? { buf: c.buf, k: "photo" } : null;
+  if (!PHOTO_INFLIGHT.has(key)) {
+    PHOTO_INFLIGHT.set(key, (async () => {
+      try { const buf = await reencodePhoto(await fetchPhoto(src)); photoPut(key, buf, PHOTO_TTL); return buf; }
+      catch (e) { photoPut(key, null, PHOTO_FAIL_TTL); console.log(`[stagecover] a profile photo couldn't be fetched (${String((e && (e.code || e.message)) || "?").slice(0, 40)}) - the letter`); return null; }
+      finally { PHOTO_INFLIGHT.delete(key); }
+    })());
+  }
+  const buf = await PHOTO_INFLIGHT.get(key);
+  return buf ? { buf, k: "photo" } : null;
+}
+/** Fetch an allowed photo in the background (a program carries it: the capture / the proxy then finds it cached). */
+function warmPhoto(url) { if (photoSource(url)) photoImage(url).catch(() => {}); }
+// the live proxy: key -> the photo's URL, only for photos a program handed out (PHOTO_KEY_TTL since the last time)
+const PHOTO_KEYS = new Map();
+/** An allowed photo's proxied URL for the live stage (micfollow.viewFor while cfg cover_photo_proxy is on), else null (not allowed). */
+function photoProxyUrl(url) {
+  const src = photoSource(url);
+  if (!src) return null;
+  const key = photoKey(src.href);
+  PHOTO_KEYS.delete(key); PHOTO_KEYS.set(key, { url: src.href, at: NOW() });
+  while (PHOTO_KEYS.size > PHOTO_KEYS_MAX) PHOTO_KEYS.delete(PHOTO_KEYS.keys().next().value);
+  return "/media/cover/p/" + key + ".webp";
+}
+function proxiedUrl(key) {
+  const e = PHOTO_KEYS.get(String(key || ""));
+  if (!e) return null;
+  if (NOW() - e.at > PHOTO_KEY_TTL) { PHOTO_KEYS.delete(String(key)); return null; }
+  return e.url;
 }
 
 // ── uploads ──
@@ -342,9 +574,11 @@ async function encode(buf) {
   if (sn.bad || sn.kind !== "image") throw new Refuse(415, "Pictures only: JPEG, PNG, GIF, WebP, AVIF or HEIC.", "type");
   let input = buf, cleanup = () => {};
   if (sn.fmt === "heic") {
-    const tmp = path.join(dir(), "tmp-" + crypto.randomBytes(8).toString("hex") + ".heic");
+    // 1.99?? fix 3: the member's raw bytes (not checked yet) only in held/ - never in the backed-up folder, even for a moment
+    fs.mkdirSync(heldDir(), { recursive: true });
+    const tmp = path.join(heldDir(), "tmp-" + crypto.randomBytes(8).toString("hex") + ".heic");
     fs.writeFileSync(tmp, buf);
-    try { const h = await media.heicToPng(tmp, { tmpDir: dir() }); input = h.png; cleanup = h.cleanup; } finally { try { fs.unlinkSync(tmp); } catch (e) { /* none */ } }
+    try { const h = await media.heicToPng(tmp, { tmpDir: heldDir() }); input = h.png; cleanup = h.cleanup; } finally { try { fs.unlinkSync(tmp); } catch (e) { /* none */ } }
   }
   const sharp = require("sharp");
   try {
@@ -432,13 +666,22 @@ async function setUpload(userId, buf) {
   const cur = await rowOf(userId);
   const onHold = !!(cur && Number(cur.hold_until) > NOW());
   const state = v.flagged || onHold ? "held" : "ok";
+  // 1.99?? fix 3 (the block race): an admin / a review may have blocked this very picture while it was being classified (the check
+  // above ran before) - asked again right before the store, and again inside the transaction that stores the row: a block that
+  // commits before it is seen there; one that commits after finds this row (takeDownCopies) and takes it down
+  const blockedNow = () => new Refuse(422, "That picture was taken down - it can't be used as a stage cover.", "blocked");
+  if (await hashBlocked(hash)) throw blockedNow();
   const name = crypto.randomBytes(16).toString("hex") + ".webp";
-  const p = filePath(name);
+  const p = filePath(name, state === "held");          // 1.99?? fix 3: a held picture goes to held/ (never backed up)
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, enc.buf, { flag: "wx" });
   let old;
-  try { old = await upsert(userId, { kind: "upload", upload: name, upload_state: state, upload_log: Number(v.logId) || null, upload_at: NOW(), upload_hash: hash }); }
-  catch (e) { removeFile(name); throw e; }
+  try {
+    old = await require("./dbUtils").tx(async () => {
+      if (await hashBlocked(hash)) throw blockedNow();
+      return upsert(userId, { kind: "upload", upload: name, upload_state: state, upload_log: Number(v.logId) || null, upload_at: NOW(), upload_hash: hash });
+    });
+  } catch (e) { removeFile(name); invalidate(userId); throw e; }
   if (old && old.upload && old.upload !== name) removeFile(old.upload);
   console.log(`[stagecover] ${userId}: cover upload ${enc.w}x${enc.h} ${state}${onHold && !v.flagged ? " (account on hold)" : ""}${v.logId ? " (check #" + v.logId + ")" : ""}`);
   return { state };
@@ -487,6 +730,9 @@ async function releaseUpload(userId) {
   const r = await rowOf(userId);
   if (!r || !r.upload || r.upload_state !== "held") return false;
   await upsert(userId, { upload_state: "ok" });
+  // 1.99?? fix 3: out of held/ into the normal (backed-up) folder - after the row (a crash between leaves an "ok" picture in held/,
+  // which serving still finds and placeFiles moves; never a held one in the backed-up folder)
+  try { placeFile(r.upload, false); } catch (e) { console.error("[stagecover] put up - move:", e.message); }
   return true;
 }
 /** imagesafety.review's hook (stage_cover checks): "fn" takes the picture down; "ok" (the check was right) on a check that FLAGGED it
@@ -638,18 +884,42 @@ async function adminList(limit = 60) {
                             at: x.upload_at, url: uploadUrl(x.upload), onHold: Number(x.hold_until) > NOW(), strikes: Number(x.strikes) || 0 }));
 }
 
-/** Uploaded files no row holds any more (a replace that crashed, a deleted / merged account) - gone after an hour. */
+/** 1.99?? fix 3: every row's picture into its state's folder - a HELD one into held/ (never backed up), any other into the normal
+ *  folder. At boot (the one-time migration of held pictures stored before held/ existed) and in every sweepFiles. -> files moved */
+async function placeFiles() {
+  await init();
+  let n = 0;
+  for (const r of await getQuery("SELECT upload, upload_state FROM stage_covers WHERE upload IS NOT NULL")) {
+    const held = r.upload_state === "held", to = filePath(r.upload, held);
+    if (!to || isFile(to) || !isFile(filePath(r.upload, !held))) continue;
+    try { if (placeFile(r.upload, held)) n++; } catch (e) { console.error("[stagecover] place:", e.message); }
+  }
+  if (n) console.log(`[stagecover] ${n} cover picture(s) moved to their folder (held/ or the normal one)`);
+  return n;
+}
+/** Uploaded files no row holds any more (a replace that crashed, a deleted / merged account) - gone after an hour, from BOTH folders
+ *  (1.99?? fix 3: held/ too, and the HEIC decoder's leftovers there). */
 async function sweepFiles(t = NOW()) {
   await init();
+  try { await placeFiles(); } catch (e) { console.error("[stagecover] place files:", e.message); }
   const used = new Set((await getQuery("SELECT upload FROM stage_covers WHERE upload IS NOT NULL")).map((r) => r.upload));
   let n = 0;
-  let subs = [];
-  try { subs = fs.readdirSync(dir(), { withFileTypes: true }).filter((d) => d.isDirectory() && /^[a-f0-9]{2}$/.test(d.name)); } catch (e) { return 0; }
-  for (const d of subs) {
-    for (const f of fs.readdirSync(path.join(dir(), d.name))) {
-      if (!FILE_RE.test(f) || used.has(f)) continue;
-      const p = path.join(dir(), d.name, f);
-      try { if (t - fs.statSync(p).mtimeMs > 3600e3) { fs.unlinkSync(p); n++; } } catch (e) { /* gone */ }
+  const old = (p) => { try { return t - fs.statSync(p).mtimeMs > 3600e3; } catch (e) { return false; } };
+  for (const root of [dir(), heldDir()]) {
+    let subs = [];
+    try { subs = fs.readdirSync(root, { withFileTypes: true }); } catch (e) { continue; }
+    for (const d of subs) {
+      const at = path.join(root, d.name);
+      if (root === heldDir() && /^(?:tmp-[a-f0-9]{16}\.heic|heic-.+)$/.test(d.name) && old(at)) {        // (a HEIC decode a crash cut short)
+        try { fs.rmSync(at, { recursive: true, force: true }); n++; } catch (e) { /* gone */ }
+        continue;
+      }
+      if (!d.isDirectory() || !/^[a-f0-9]{2}$/.test(d.name)) continue;
+      for (const f of fs.readdirSync(at)) {
+        if (!FILE_RE.test(f) || used.has(f)) continue;
+        const p = path.join(at, f);
+        try { if (old(p)) { fs.unlinkSync(p); n++; } } catch (e) { /* gone */ }
+      }
     }
   }
   return n;
@@ -756,8 +1026,7 @@ function register(app, { addUser, noTimers = false }) {
   // an uploaded cover: public while it is up; a held one only to its owner and the safety admins (the "Stage covers" card); else 404
   app.get("/media/cover/u/:file", async (req, res) => {
     const name = String(req.params.file || "");
-    const p = filePath(name);
-    if (!p) return res.status(404).end();
+    if (!filePath(name)) return res.status(404).end();
     try {
       await init();
       const r = (await getQuery("SELECT user_id, upload_state FROM stage_covers WHERE upload = ?", [name]))[0];
@@ -767,7 +1036,8 @@ function register(app, { addUser, noTimers = false }) {
         if (req.user === undefined && typeof addUser === "function") await new Promise((next) => addUser(req, res, next));
         ok = !!(req.user && req.user.userId && (String(req.user.userId) === String(r.user_id) || (await safetyAdmin(req))));
       }
-      if (!ok) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
+      const p = ok ? fileAt(name, r.upload_state) : null;            // 1.99?? fix 3: held/ for a held one, else the normal folder
+      if (!ok || !p) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
       const H = pictureHeaders("image/webp", pub ? "public" : "private");
       res.set(H);
       res.sendFile(p, { etag: true, lastModified: false, cacheControl: false, headers: H }, (err) => { if (err && !res.headersSent) res.status(404).end(); });
@@ -776,6 +1046,24 @@ function register(app, { addUser, noTimers = false }) {
       if (!res.headersSent) res.status(500).end();
     }
   });
+  // 1.99?? fix 3: a profile photo through the proxy (micfollow's cfg cover_photo_proxy) - only a key a program handed out
+  // (photoProxyUrl), the re-encoded picture from the cache (else fetched from its allowed host); short public caches like an upload
+  // (the member may change or remove their photo); anything else / a failed fetch = 404 (the page then shows the letter)
+  app.get("/media/cover/p/:file", async (req, res) => {
+    const m = /^([a-f0-9]{32})\.webp$/.exec(String(req.params.file || ""));
+    const src = m ? proxiedUrl(m[1]) : null;
+    try {
+      const pic = src ? await photoImage(src) : null;
+      if (!pic) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
+      res.set({ ...pictureHeaders("image/webp", "public"), ETag: '"' + sha256(pic.buf).slice(0, 32) + '"' });
+      if (req.fresh) return res.status(304).end();
+      res.send(pic.buf);
+    } catch (e) {
+      console.error("[stagecover] photo:", e.message);
+      if (!res.headersSent) res.status(500).end();
+    }
+  });
+  placeFiles().catch((e) => console.error("[stagecover] place files:", e.message));   // 1.99?? fix 3: the one-time migration (idempotent)
   if (!noTimers) {
     setInterval(() => sweepUploads(), 5 * 60e3).unref();
     setTimeout(() => sweepFiles().catch(() => {}), 60e3).unref();
@@ -788,6 +1076,11 @@ module.exports = {
   init, register, coverOf, invalidate, localImage, localImageChecked, onReview, removeUpload, releaseUpload, setUpload, uploadRefusal, save, stateFor, choiceOf,
   adminList, sweepFiles, sweepChecks, gtfUrl, parseGtf, forAccount, uploadsOn, openUpload, chunkUpload, finishUpload, filePath, dir, _setDir, Refuse,
   KINDS, PIC_KINDS, SURFACE, MAX_BYTES, CHUNK, COVER_PX, CACHE_MS, FILE_RE, UPLOADS_PER_HOUR, UPLOADS_PER_DAY, HOLD_MS, UPLOAD_MAX_AGE, UPLOAD_CDN_MAX_AGE,
+  // 1.99?? fix 3: captures draw the photo too (the allow-list + the guarded fetch + the proxy); held pictures in held/
+  captureImage, photoImage, photoProxyUrl, photoSource, photoSources, publicAddr, placeFiles, fileAt, heldDir, hashBlocked,
+  PHOTO_MAX_BYTES, PHOTO_TIMEOUT_MS, PHOTO_TTL, PHOTO_FAIL_TTL,
   _setClock: (fn) => { NOW = fn || (() => Date.now()); },
   _setRenderVersion: (v) => { RENDER_V = v == null ? null : String(v); SVGS.clear(); },
+  /** (tests) the photo fetch's network - {lookup, request}; null = the real one. Clears the photo cache and keys. */
+  _setPhotoNet: (n) => { PNET = n ? { ...PNET_REAL, ...n } : PNET_REAL; PHOTOS.clear(); PHOTO_INFLIGHT.clear(); PHOTO_KEYS.clear(); photoBytes = 0; },
 };
