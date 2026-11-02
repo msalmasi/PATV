@@ -32,7 +32,7 @@
 //     have owned it for the whole 90 days the boards cover, can reveal who is behind a frog name - one row (POST .../reveal) or a
 //     toggle that stays on until turned off (POST .../seethrough), each one a seethrough_log row; nothing passive (a GET never
 //     turns anything on), no-store, no-referrer. Staff, members and other pads' owners: 403, no row.
-//   * 1.99?? owner 11-02 (wave 2 open question 2: "This should be hidden server side, so admins can see through it"): Pepe's notes can
+//   * 1.99aha owner 11-02 (wave 2 open question 2: "This should be hidden server side, so admins can see through it"): Pepe's notes can
 //     name a !bridge hide person - his own send-time scrub covers incognito and memory-off people only, and on privacy wire v1 the
 //     site never sees a bridge-hidden person named anywhere else, so it couldn't mask them. Every sync now carries `veiled` (bot
 //     pepe_roomintel._ri_veiled): the COMPLETE list of bridge-hidden people the rows count or the notes name, {login, names} -
@@ -57,7 +57,7 @@ const ready = (async () => {
     room_id TEXT PRIMARY KEY, name TEXT, data TEXT NOT NULL, updated INTEGER)`);
   await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_roomstats_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1), tz TEXT, days INTEGER, updated INTEGER)`);
-  // 1.99?? owner 11-02: Pepe's bridge-hidden people (server-only: h = chatlog.hash(login); live = on his latest list)
+  // 1.99aha owner 11-02: Pepe's bridge-hidden people (server-only: h = chatlog.hash(login); live = on his latest list)
   await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_roomstats_veiled (
     h TEXT PRIMARY KEY, login TEXT NOT NULL, names TEXT NOT NULL, live INTEGER NOT NULL DEFAULT 1, at INTEGER NOT NULL)`);
 })().catch((e) => console.error("[roomstats] init:", e));
@@ -314,7 +314,7 @@ async function cachedLogins(hs) {
   return out;
 }
 
-// ── 1.99?? owner 11-02: Pepe's !bridge hide people in his notes - masked server-side, revealed to admins only (logged) ──
+// ── 1.99aha owner 11-02: Pepe's !bridge hide people in his notes - masked server-side, revealed to admins only (logged) ──
 const VEIL_MAX = 400, VEIL_NAMES = 12;
 const SEE_NOTE = "analytics_note";                       // seethrough.js scope: one reveal of the hidden names in a pad's notes
 const PUA = /[\uE000-\uE0FF]/g;                          // (the placeholders' range - never kept from Pepe's text)
@@ -384,8 +384,12 @@ async function veiledActive() {
   return out;
 }
 /** The masking regex over every name of every person masked now -> {re, terms: Map(lower-case name -> Set(logins))} | null.
- *  A login from 2 characters, other names from 3 (chatlogview's NAME_MIN). No stop-list here: Pepe only lists names his notes
- *  hold, so a common word that is someone's name is masked rather than risk naming them. */
+ *  A login from 2 characters, other names from 3 (chatlogview's NAME_MIN). No stop-list here, unlike the chat log's redaction
+ *  (chatlogview.STOP, collisions counted on /admin/bridge): Pepe lists a person's login and display names ALWAYS (old stored rows
+ *  can name them by those) - only nicknames, a real name and the words of a name are listed because his notes hold them - so a
+ *  login or display name that is a common word ("Music", "Angel", a 2-character "dj") is masked in every room's notes, and
+ *  counted as a hit of theirs on an admin's Reveal, for as long as they are hidden. Kept that way on purpose (1.99aha review F2,
+ *  the owner's call pending): masking too much never names anyone; the chat log's rule would print a hidden "Angel". */
 async function veilMasker() {
   const terms = new Map();
   const add = (t, login, min) => {
@@ -711,7 +715,7 @@ function preview(r) {
 /** The analytics page's view model. viewer (1.99afl) = {userId} of the signed-in viewer, or null: their own private row is marked
  *  "you". 1.99afn: opts.reveal = the viewer's see-through toggle is on (they may - the route checked): private rows also carry
  *  their real login (`real`, null when the site doesn't know it); opts.see = {role, on} for the page's see-through controls.
- *  1.99?? owner 11-02: Pepe's notes by notesView - "mark" for an admin (each masked bridge-hidden mention a Reveal target; notesHidden =
+ *  1.99aha owner 11-02: Pepe's notes by notesView - "mark" for an admin (each masked bridge-hidden mention a Reveal target; notesHidden =
  *  {n, v} for the notes' Reveal), "reveal" for an admin whose toggle is on (noteLogins: the logins shown - the route counts them on
  *  the toggle's row), "plain" for everyone else (a pad's owner included). */
 async function forRoom(r, slug, viewer = null, opts = {}) {
@@ -751,7 +755,7 @@ async function forRoom(r, slug, viewer = null, opts = {}) {
   const avgVisitors = Math.round(visitorDays30 / 30);
   const how = r.how || [], hows = r.hows || [];
   const k = r.knowledge || {};
-  // 1.99afl review (section K): Pepe's free text names nobody private now (freeTextScrub; fails closed: left out); 1.99?? owner 11-02: and
+  // 1.99afl review (section K): Pepe's free text names nobody private now (freeTextScrub; fails closed: left out); 1.99aha owner 11-02: and
   // never a !bridge hide person Pepe listed - masked for everyone, revealable by admins only (notesView)
   const noteMode = opts.see && opts.see.role === "admin" ? (opts.see.on ? "reveal" : "mark") : "plain";
   const nv = await notesView(r, md, anonHashesOf(regs, mics), noteMode);
@@ -797,7 +801,7 @@ async function forRoom(r, slug, viewer = null, opts = {}) {
     },
     changes: nv.changes,
     history: nv.history,
-    // 1.99?? owner 11-02: the notes' Reveal (admins, toggle off) - the count and the version only, never who
+    // 1.99aha owner 11-02: the notes' Reveal (admins, toggle off) - the count and the version only, never who
     notesHidden: noteMode === "mark" && nv.hits.length ? { n: nv.hits.length, v: nv.v } : null,
     noteLogins: noteMode === "reveal" ? [...new Set(nv.hits.flatMap((h) => h.logins))] : [],
   };
@@ -831,7 +835,7 @@ function register(app, { isBotToken, addUser }) {
       await runQuery(`INSERT INTO camfrog_roomstats_meta (id, tz, days, updated) VALUES (1, ?, ?, ?)
                       ON CONFLICT(id) DO UPDATE SET tz = excluded.tz, days = excluded.days, updated = excluded.updated`,
         [str(body.tz, 60), int(body.days, 1, 365) || DAYS, now]);
-      // 1.99?? owner 11-02: Pepe's bridge-hidden people (server-only). Absent (an older Pepe, or one that couldn't build it): kept as it is
+      // 1.99aha owner 11-02: Pepe's bridge-hidden people (server-only). Absent (an older Pepe, or one that couldn't build it): kept as it is
       let veiled = null;
       if (Array.isArray(body.veiled)) veiled = await storeVeiled(body.veiled, now);
       res.json({ success: true, saved, removed, ...(veiled != null ? { veiled } : {}) });
@@ -902,7 +906,7 @@ function register(app, { isBotToken, addUser }) {
       try { a = await forRoom(r, slug, viewer, { reveal: !!(see && see.on), see }); } catch (e) { console.error("[roomstats] view:", e); a = null; }
       if (a && see && see.on) {
         res.set("Referrer-Policy", "no-referrer");
-        // (1.99?? owner 11-02: an admin's toggle also shows the bridge-hidden people Pepe's notes name - counted on the same row)
+        // (1.99aha owner 11-02: an admin's toggle also shows the bridge-hidden people Pepe's notes name - counted on the same row)
         const shown = [...a.regulars, ...a.mic].filter((x) => x.revealed && x.real).map((x) => x.real).concat(a.noteLogins || []);
         try { await ST.toggleUsed(see.logId, shown); } catch (e) { console.error("[roomstats] see-through log:", e.message); a = null; }   // not logged: not shown
       }
@@ -949,7 +953,7 @@ function register(app, { isBotToken, addUser }) {
       res.status(500).json({ ok: false, error: "Couldn't reveal it - try again." });
     }
   });
-  // 1.99?? owner 11-02: the bridge-hidden people Pepe's notes name, revealed - {v: the notes' version (the page's), reason?} -> {names: [{k,
+  // 1.99aha owner 11-02: the bridge-hidden people Pepe's notes name, revealed - {v: the notes' version (the page's), reason?} -> {names: [{k,
   // text (the name as Pepe wrote it), login (null when the name is more than one person's)}]}. ADMINS ONLY (chatlog.see_through): the
   // owner said "admins", and the boards' 90-day owner rule never covered the free text. Logged BEFORE the answer: one seethrough_log
   // row (scope analytics_note, every login named, ref notes:<n>); notes that changed since the page was drawn: 409, nothing logged.

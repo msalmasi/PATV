@@ -8,7 +8,7 @@
   a "private" tag, no link / avatar / tooltip; "(you)" on their own row). a.see = the viewer may see through (admin / this pad's
   owner after 90 days): a Reveal per row and the on-until-off toggle (fetch POSTs, each logged); r.revealed + r.real only while the
   viewer's toggle is on.
-  1.99?? owner 11-02: Pepe's notes (summary, vibe, topics, jokes, moments, norms, changes, topics over time) are strings - or, for a PATV
+  1.99aha owner 11-02: Pepe's notes (summary, vibe, topics, jokes, moments, norms, changes, topics over time) are strings - or, for a PATV
   admin, {html} (roomstats.notesView: escaped text, a !bridge hide person Pepe named as <span class="ra-hid" data-k>someone</span>,
   or as the name 🕶 while their toggle is on); NT() prints either. a.notesHidden = {n, v}: the notes' Reveal (admins, logged).
 %>
@@ -73,7 +73,7 @@
   .ra .ptag { display: inline-block; font-style: normal; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ds-text-muted); border: 1px solid var(--ds-line-strong); border-radius: 999px; padding: 0 6px; margin-left: 4px; line-height: 1.5; vertical-align: 1px; white-space: nowrap; }
   .ra .you { color: var(--ds-text-muted); white-space: nowrap; }
   .ra .real { color: var(--ds-gold); white-space: nowrap; }
-  /* 1.99?? owner 11-02: a hidden person Pepe's notes name (only admins see the mark) and the notes' Reveal */
+  /* 1.99aha owner 11-02: a hidden person Pepe's notes name (only admins see the mark) and the notes' Reveal */
   .ra .ra-hid { border-bottom: 1px dotted var(--ds-gold); }
   .ra .ra-nrv { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-size: 13px; color: var(--ds-text-2); }
   .ra .ra-rv { font: inherit; font-size: 11px; line-height: 1.4; padding: 1px 8px; margin-left: 4px; border-radius: 999px; border: 1px solid var(--ds-line-strong); background: transparent; color: var(--ds-text-2); cursor: pointer; white-space: nowrap; }
@@ -299,7 +299,7 @@
     root.querySelectorAll('[data-tip] title').forEach(function (n) { n.remove(); });
     root.querySelectorAll('.ra-cell[title]').forEach(function (n) { n.removeAttribute('title'); });
   })();
-  // 1.99?? owner 11-02: the notes' Reveal (PATV admins) - one same-site fetch POST, one log row on the server; the names fill the marks
+  // 1.99aha owner 11-02: the notes' Reveal (PATV admins) - one same-site fetch POST, one log row on the server; the names fill the marks
   (function () {
     var box = document.getElementById('raNotes');
     if (!box) return;
