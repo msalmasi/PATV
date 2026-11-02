@@ -2626,3 +2626,75 @@ test("80. wave2 integration review (P1 / T-1, P2, P3): only a VEILED exclusion t
     for (const e of (await MF.ownerState(ROOM.id, undefined, { lift: true })).excluded) if (e.xid) await MF.unexcludeXid(ROOM.id, e.xid);
   }
 });
+
+// ── 1.99?? dead relay (owner 2026-11-02, "Scarface's cam isn't loading here even though on the VM I see it loaded"): a
+// mic-stage relay Pepe reports live + exact but MediaMTX never has (a one-sided WHIP publish) no longer holds its tile at
+// "cam starting…" until the person leaves the stage ──
+test("81. 1.99?? dead relay: Pepe says live + exact, MediaMTX's lists (every 5 s) never have it - want[].nomedia from +20 s, the relay ends start_timeout by +45 s, the tile says 'trying again' and the mic stage holds it again after soft_retry_s", async () => {
+  await reset(); await plainPad();
+  await step(["carl"]); await at(3, ["carl"]);
+  const key = LC.keyOf(ROOM.id, "carl");
+  const S = LC._sessions.get(key);
+  assert.ok(S && !S.ended && S.holds.has("mf:" + ROOM.id), "the mic stage holds carl's relay");
+  const t0 = S.createdAt;
+  EXACT.add("carl");                         // Pepe: live, exact - but no up(): MediaMTX never has the stream
+  const logs = [], log0 = console.log;
+  console.log = (...a) => { logs.push(a.join(" ")); };
+  let nomediaAt = null;
+  try {
+    for (let s = 1; s <= 60 && !S.ended; s++) {
+      T = t0 + s * 1000;
+      if (s % 5 === 0) LC.noteSync([], T);
+      const ans = await bot();
+      const w = ans.want.find((x) => x.login === "carl");
+      if (w && w.nomedia === true && nomediaAt == null) nomediaAt = s;
+      if (s === 30) { await step(["carl"]); assert.equal(tile("carl").video, "starting", "+30 s: cam starting…"); }
+    }
+  } finally { console.log = log0; }
+  assert.equal(nomediaAt, 20, "Pepe is asked to restart the publish after 15 s of fresh lists without it");
+  assert.ok(S.ended && S.endWhy === "start_timeout", `the dead relay ends (${S.endWhy}) - Pepe's 'live' alone never counts`);
+  assert.ok(S.ended > t0 + LC.START_MS && S.ended <= t0 + 45 * 1000);
+  const nm = logs.filter((l) => l.startsWith("[livecam] no media "));
+  assert.equal(nm.length, 1);
+  assert.ok(nm[0].startsWith("[livecam] no media room=" + ROOM.id + " target=- ") && !nm[0].includes("carl"), "logged without the login: " + nm[0]);
+  await step(["carl"]);
+  assert.deepEqual([tile("carl").video, tile("carl").why], ["card", "retry"], "a soft failure: 'trying again', never the 10-minute backoff");
+  assert.ok(!(MF._pads.get(ROOM.id).state.backoff.get("carl") > T));
+  await at(MF.cfg().soft_retry_s + 1, ["carl"]);
+  const S2 = LC._sessions.get(key);
+  assert.ok(S2 && S2 !== S && !S2.ended && S2.holds.has("mf:" + ROOM.id), "held again after soft_retry_s: a new relay");
+  up("carl"); await at(1, ["carl"]);
+  assert.equal(tile("carl").video, "live", "this time MediaMTX has it: live");
+});
+
+test("82. 1.99?? dead relay: a live mic-stage relay that loses its stream at MediaMTX - nomedia after 20 s, relay_lost START_MS later, a soft retry; a stale MediaMTX list ends nothing", async () => {
+  await reset(); await plainPad();
+  await onStage(["dana"]);
+  const key = LC.keyOf(ROOM.id, "dana");
+  const S = LC._sessions.get(key);
+  assert.equal(tile("dana").video, "live");
+  const t0 = T;
+  // MediaMTX's API stops answering for 5 minutes: nothing is judged, nothing ends, Pepe isn't asked for anything
+  for (let s = 1; s <= 300; s++) {
+    T = t0 + s * 1000;
+    const ans = await bot();
+    assert.ok(!(ans.want.find((x) => x.login === "dana") || {}).nomedia, "no nomedia on a stale list");
+  }
+  assert.ok(!S.ended, "a stale list ends nothing");
+  // it answers again - without dana's stream: nomedia 20 s on, relay_lost START_MS after that
+  let nomediaAt = null;
+  for (let s = 301; s <= 400 && !S.ended; s++) {
+    T = t0 + s * 1000;
+    if (s % 5 === 0) LC.noteSync([], T);
+    const w = (await bot()).want.find((x) => x.login === "dana");
+    if (w && w.nomedia === true && nomediaAt == null) nomediaAt = s;
+  }
+  assert.equal(nomediaAt, 325, "lost from the first fresh list (+305 s): nomedia at +325 s");
+  assert.ok(S.ended && S.endWhy === "relay_lost", `relay_lost (${S.endWhy})`);
+  assert.equal(S.ended, t0 + 366 * 1000, "START_MS after the first nomedia");
+  await step(["dana"]);
+  assert.deepEqual([tile("dana").video, tile("dana").why], ["card", "retry"], "relay_lost is soft: another try soon");
+  await at(MF.cfg().soft_retry_s + 1, ["dana"]);
+  const S2 = LC._sessions.get(key);
+  assert.ok(S2 && S2 !== S && !S2.ended, "held again");
+});

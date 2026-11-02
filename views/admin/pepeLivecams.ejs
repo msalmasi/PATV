@@ -117,7 +117,9 @@
       var c = el('td'); c.appendChild(el('b', null, s.display || s.login)); c.appendChild(el('div', 'adm-help', s.room + ' · since ' + when(s.since))); tr.appendChild(c);
       // wave2 WP-4 (F.2): a relay the mic stage keeps warm after its tile left the stage (nobody can watch it)
       tr.appendChild(el('td', null, s.state + (s.botState ? ' (Pepe: ' + s.botState + ')' : '') + (s.botWhy ? ' · ' + s.botWhy : '') +
-        (s.warm ? ' · warm (mic stage, ' + (s.warm_s != null ? s.warm_s + 's left' : 'leaving') + ')' : '')));
+        (s.warm ? ' · warm (mic stage, ' + (s.warm_s != null ? s.warm_s + 's left' : 'leaving') + ')' : '') +
+        // 1.99?? dead relay: Pepe says live but MediaMTX has no stream - Pepe was asked to restart it
+        (s.nomedia ? ' · ⚠ no media' + (s.nomedia_s != null ? ' ' + s.nomedia_s + 's' : '') + (s.lost ? ' (lost)' : ' (never arrived)') : '')));
       tr.appendChild(el('td', null, s.viewers.map(function (v) { return v.username || v.userId; }).join(', ') + ' · ' + s.readers + ' connected'));
       tr.appendChild(el('td', 'num', s.bot && s.bot.source === 'passthrough' ? 'pass-through' + (s.bot.fps ? ' · ' + s.bot.fps + ' fps' : '')
         : s.bot && s.bot.grab_fps ? s.bot.grab_fps + ' fps · ' + s.bot.grab_ms + ' ms' + (s.bot.fallback ? ' (re-encode: ' + s.bot.fallback + ')' : '') : '–'));

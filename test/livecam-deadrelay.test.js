@@ -1,0 +1,211 @@
+// 1.99?? dead relay (owner 2026-11-02: "Scarface's cam isn't loading here even though on the VM I see it loaded"): a relay
+// counts as live only when MediaMTX has its stream (noteSync), never on Pepe's word alone. ~7% of Pepe's WHIP publishes are
+// one-sided - MediaMTX drops the session but ffmpeg says "connected" and never exits - so Pepe reports them live for good and
+// the tile sat at "cam starting…" until the person left the stage. Here, on a fake clock: a never-ready relay Pepe reports
+// live ends start_timeout at START_MS (+ BOT_GRACE_MS after his first "live"), want[].nomedia asks Pepe to restart it after
+// NOMEDIA_MS of fresh path lists without it, a relay that WAS ready and lost its stream gets nomedia after LOST_MS and ends
+// relay_lost START_MS later, a stale MediaMTX path list (its API unreachable) ends nothing, the admin view says "no media",
+// and the mic stage treats relay_lost as a soft failure (another try soon).
+//   node --test test/livecam-deadrelay.test.js      (needs the repo's node_modules; uses a temp DB)
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const repo = path.resolve(__dirname, "..");
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lcdead-test-"));
+process.chdir(tmp);
+process.env.SECRET_KEY = "test-secret";
+delete process.env.STAGING;
+const { runQuery } = require(path.join(repo, "dbUtils"));
+const LC = require(path.join(repo, "livecam"));
+const W = require(path.join(repo, "webrtc"));
+const B = require(path.join(repo, "bridge"));
+const relay = require(path.join(repo, "bridge-relay"));
+const M = require(path.join(repo, "micfollow-core"));
+
+W.enabled = () => true;
+let T = 1_000_000_000_000;
+LC._setClock(() => T);
+LC._setKick(() => {});
+relay.padFull = async () => true;
+
+const LOGINS = ["ann", "ben", "cat", "dot", "eve", "fox", "gil", "hal"];
+const R = { id: "Dead.Room", slug: "dead-room", cams: true, livecams: true, members: LOGINS.map((l) => ({ login: l, display: l.toUpperCase(), on_cam: true })) };
+const MFH = "mf:" + R.id;
+const key = (l) => LC.keyOf(R.id, l);
+const sess = (l) => LC._sessions.get(key(l));
+/** Pepe's poll: these cams live (exact, as the mic stage asks), with their restart counts. -> the site's answer */
+const pepe = (live) => LC.forBot({ cap: true, mf: 1, live: Object.entries(live).map(([login, x]) => ({ room: R.id, login, state: x.state || "live",
+  exact: true, restarts: x.restarts || 0 })) }, T);
+/** MediaMTX's path list (webrtc.sync, every 5 s): `ready` = these cams' paths have their stream. */
+const mtx = (...ready) => LC.noteSync(ready.map((l) => ({ name: LC.pathFor(R.id, l), ready: true, readers: [] })), T);
+const wantOf = (ans, l) => ans.want.find((x) => x.login === l) || null;
+
+/**
+ * Run second by second from `t0 + from` to `t0 + to` (both s): each second Pepe polls (`pepeAt(s)` -> his live map, or null for
+ * no poll), every 5 s MediaMTX's list comes (`syncAt(s)` -> the ready logins, or null = its API didn't answer). Stops when `stop()`.
+ * -> [{s, ans}] Pepe's answers
+ */
+async function run(t0, from, to, { pepeAt, syncAt, stop }) {
+  const out = [];
+  for (let s = from; s <= to; s++) {
+    T = t0 + s * 1000;
+    if (s % 5 === 0 && syncAt) { const r = syncAt(s); if (r) mtx(...r); }
+    const live = pepeAt ? pepeAt(s) : null;
+    if (live) out.push({ s, ans: await pepe(live) });
+    else LC.sweep(T);
+    if (stop && stop()) break;
+  }
+  return out;
+}
+const firstNomedia = (answers, l) => { const x = answers.find((a) => { const w = wantOf(a.ans, l); return w && w.nomedia === true; }); return x ? x.s : null; };
+
+test.before(async () => {
+  await runQuery(`CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT, class TEXT DEFAULT 'pleb',
+                  points_balance INTEGER DEFAULT 0, camfrogUsername TEXT)`);
+  await LC.init();
+  await LC.save({ class: "Admin", userId: "a", username: "admin" }, { cfg: { enabled: true } });
+  B._rooms.set(R.id, R);
+  await pepe({});
+});
+
+test("a relay Pepe reports live + exact that MediaMTX never has: want[].nomedia after 15 s of fresh lists without it, ends start_timeout at +45 s (logged without the login on the mic stage)", async () => {
+  T += 120 * 1000;
+  await pepe({});
+  await LC.stageHold(R, "ann", MFH, T, { mf: true });
+  const S = sess("ann"), t0 = S.createdAt;
+  const logs = [], log0 = console.log;
+  console.log = (...a) => { logs.push(a.join(" ")); };
+  let answers;
+  try {
+    answers = await run(t0, 1, 60, { pepeAt: (s) => (s >= 2 ? { ann: {} } : {}), syncAt: () => [], stop: () => S.ended });
+  } finally { console.log = log0; }
+  // the fresh lists without it start at +5 s: 15 s later (+20 s) Pepe is asked to restart the publish - never sooner
+  assert.equal(firstNomedia(answers, "ann"), 20, "nomedia only after 15 s of fresh path lists without the stream");
+  assert.ok(answers.filter((a) => a.s < 20).every((a) => !(wantOf(a.ans, "ann") || {}).nomedia));
+  assert.ok(S.ended, "a relay MediaMTX never had ends");
+  assert.equal(S.endWhy, "start_timeout");
+  assert.ok(S.ended > t0 + LC.START_MS && S.ended <= t0 + 45 * 1000, `at START_MS: ended +${(S.ended - t0) / 1000}s`);
+  assert.equal(S.liveAt, 0, "never live - Pepe's word alone isn't");
+  const nm = logs.filter((l) => /^\[livecam\] no media /.test(l));
+  assert.equal(nm.length, 1, "one 'no media' line per loss: " + JSON.stringify(nm));
+  assert.match(nm[0], /^\[livecam\] no media room=Dead\.Room target=- /, "a mic-stage relay's line has no login");
+  assert.ok(!nm[0].includes("ann"));
+});
+
+test("BOT_GRACE_MS: a slow open Pepe reports live late (+35 s) isn't cut at +40 s - it ends 15 s after his first 'live'", async () => {
+  T += 120 * 1000;
+  await pepe({});
+  await LC.stageHold(R, "ben", "slot-ben", T);
+  const S = sess("ben"), t0 = S.createdAt;
+  await run(t0, 1, 50, { pepeAt: (s) => (s >= 35 ? { ben: {} } : {}), syncAt: () => [] });
+  assert.ok(!S.ended, "+50 s: still in the grace after Pepe's first 'live' at +35 s");
+  await run(t0, 51, 52, { pepeAt: () => ({ ben: {} }), syncAt: () => [] });
+  assert.ok(S.ended && S.endWhy === "start_timeout", `then start_timeout (${S.endWhy})`);
+  assert.ok(S.ended - t0 > 50 * 1000);
+});
+
+test("control: MediaMTX has the stream - live (liveAt is MediaMTX's moment, not Pepe's report), never ended, no nomedia", async () => {
+  T += 120 * 1000;
+  await pepe({});
+  await LC.stageHold(R, "cat", "slot-cat", T);
+  const S = sess("cat"), t0 = S.createdAt;
+  const answers = await run(t0, 1, 180, { pepeAt: (s) => (s >= 2 ? { cat: {} } : {}), syncAt: (s) => (s >= 5 ? ["cat"] : []) });
+  assert.ok(!S.ended, "a healthy relay lives on");
+  assert.equal(LC.stageState("slot-cat", T).state, "live");
+  assert.equal(S.liveAt, t0 + 5000, "liveAt = the first MediaMTX list that had it (+5 s), not Pepe's 'live' (+2 s)");
+  assert.equal(firstNomedia(answers, "cat"), null, "never nomedia");
+  const row = (await LC.adminView()).sessions.find((x) => x.login === "cat");
+  assert.ok(row && !row.nomedia && row.liveAt === t0 + 5000);
+});
+
+test("a stale MediaMTX list (its API unreachable) ends nothing and asks for no restart; once it answers again, the dead relay ends 15 s later", async () => {
+  T += 120 * 1000;
+  await pepe({});
+  await LC.stageHold(R, "dot", "slot-dot", T);
+  const S = sess("dot"), t0 = S.createdAt;
+  // the API answered once (+0 s), then not for 5 minutes: Pepe's word counts as before
+  mtx();
+  const answers = await run(t0, 1, 300, { pepeAt: (s) => (s >= 2 ? { dot: {} } : {}), syncAt: () => null });
+  assert.equal(LC.syncFresh(T), false);
+  assert.ok(!S.ended, "nothing is ended on a stale list");
+  assert.equal(firstNomedia(answers, "dot"), null, "no restart asked on a stale list");
+  // it answers again (every 5 s) and still has no stream: the not-ready clock starts over at +305 s
+  await run(t0, 301, 330, { pepeAt: () => ({ dot: {} }), syncAt: () => [], stop: () => S.ended });
+  assert.ok(S.ended && S.endWhy === "start_timeout", `then it ends (${S.endWhy})`);
+  assert.equal(S.ended, t0 + 320 * 1000, "15 s after the lists came back - not on the first fresh list after the gap");
+});
+
+test("relay_lost: a relay that WAS ready loses its stream - nomedia after 20 s, the admin view says 'no media', relay_lost START_MS after the first nomedia", async () => {
+  T += 120 * 1000;
+  await pepe({});
+  await LC.stageHold(R, "eve", "slot-eve", T);
+  const S = sess("eve"), t0 = S.createdAt;
+  const answers = await run(t0, 1, 130, { pepeAt: (s) => (s >= 2 ? { eve: {} } : {}), syncAt: (s) => (s >= 5 && s < 60 ? ["eve"] : []), stop: () => S.ended });
+  assert.ok(S.liveAt === t0 + 5000, "it was live");
+  assert.equal(firstNomedia(answers, "eve"), 80, "lost at +60 s: nomedia at +80 s (LOST_MS), not before");
+  const at85 = answers.find((a) => a.s === 85);
+  assert.ok(at85 && wantOf(at85.ans, "eve").nomedia, "...and on every poll while it lasts (Pepe rate-limits his restarts)");
+  assert.ok(S.ended, "it doesn't come back");
+  assert.equal(S.endWhy, "relay_lost");
+  assert.ok(S.ended > t0 + 120 * 1000 && S.ended <= t0 + 125 * 1000, `START_MS after the first nomedia: +${(S.ended - t0) / 1000}s`);
+  assert.deepEqual(LC.stageState("slot-eve", T), { state: "ended", why: "relay_lost" });
+});
+
+test("relay_lost: Pepe restarts on nomedia - no second nomedia until he's been live 15 s again; a stream that comes back clears it all; the admin view", async () => {
+  T += 120 * 1000;
+  await pepe({});
+  await LC.stageHold(R, "fox", "slot-fox", T);
+  const S = sess("fox"), t0 = S.createdAt;
+  // ready +5..+55, lost from +60; nomedia at +80; Pepe restarts: "backoff" +81..+83, live again (restarts 1) from +84
+  const pepeAt = (s) => (s < 2 ? {} : s <= 80 ? { fox: {} } : s <= 83 ? { fox: { state: "backoff" } } : { fox: { restarts: 1 } });
+  const answers = await run(t0, 1, 104, { pepeAt, syncAt: (s) => (s >= 5 && s < 60 ? ["fox"] : []) });
+  const nm = answers.filter((a) => (wantOf(a.ans, "fox") || {}).nomedia).map((a) => a.s);
+  assert.equal(nm[0], 80);
+  assert.ok(!nm.some((s) => s > 80 && s < 99), "after his restart: nothing until he's been live 15 s again " + JSON.stringify(nm));
+  assert.ok(nm.includes(99), "still nothing at the server 15 s after the restart: asked again");
+  const row = (await LC.adminView()).sessions.find((x) => x.login === "fox");
+  assert.ok(row && row.nomedia === true && row.lost === true && row.nomedia_s === 44, "the admin view: no media for 44 s, lost " + JSON.stringify(row && { nm: row.nomedia, s: row.nomedia_s }));
+  assert.ok(!S.ended);
+  // the stream is back at +105 s: nothing ends, nothing asked
+  const later = await run(t0, 105, 200, { pepeAt: () => ({ fox: { restarts: 2 } }), syncAt: () => ["fox"] });
+  assert.ok(!S.ended, "back in time: it lives on");
+  assert.equal(firstNomedia(later, "fox"), null);
+  assert.equal(S.nomediaAt, 0);
+  const row2 = (await LC.adminView()).sessions.find((x) => x.login === "fox");
+  assert.ok(row2 && !row2.nomedia, "the admin view drops 'no media'");
+});
+
+test("the mic stage: relay_lost and start_timeout are soft failures - a 'trying again' card, another try after soft_retry_s", () => {
+  for (const why of ["relay_lost", "start_timeout"]) {
+    assert.ok(M.FAIL_WHYS.has(why) && M.SOFT_WHYS.has(why), why + " is a soft failure");
+    const S = M.newState();
+    const C = { ...M.DEFAULTS, cold_open: true, enabled: true };
+    const PAD = { layout: "auto", max_people: 4, max_live: 4, default_view: "first" };
+    const t = 1_000_000_000_000;
+    let held = false;
+    const input = () => ({ why_off: null, holders: [{ login: "a" }], unproven_n: 0, elig: new Map([["a", "ok"]]),
+      sess: new Map([["a", { state: held ? "connecting" : "none", held, exact: null, viewers: 0 }]]), pad: PAD,
+      room: { cams: true, listAt: null, listFresh: null }, site: { maxLive: 4, coldLeft: 9, stillsLeft: 4 } });
+    // the wiring (as micfollow.js): a hold succeeds at once and its relay is connecting - "cam starting…"
+    const step = (at) => { for (const a of M.step(S, input(), C, at).actions) if (a.a === "hold") { held = true; M.holdDone(S, "a", true, null, C, at); } };
+    step(t); step(t + 2000); step(t + 2500);
+    assert.equal((S.tiles.find((y) => y.login === "a") || {}).video, "starting", why + ": on the stage, starting");
+    const r = M.sessionEnded(S, "a", why, C, t + 4000);
+    assert.equal(r.cut, null);
+    const x = S.tiles.find((y) => y.login === "a");
+    assert.ok(x, why + ": the tile stays");
+    assert.equal(x.why, "retry", why + ": 'trying again', not the 10-minute backoff");
+    assert.equal(S.liveBlock.get("a"), t + 4000 + C.soft_retry_s * 1000, why + ": another try after soft_retry_s");
+  }
+});
+
+test("the pages: /admin/pepe/livecams says 'no media' for such a relay; a ▶ Live viewer of a lost relay reads 'The live cam stopped.'", () => {
+  const ejs = fs.readFileSync(path.join(repo, "views", "admin", "pepeLivecams.ejs"), "utf8");
+  assert.match(ejs, /s\.nomedia \? ' · ⚠ no media'/, "the admin row");
+  const js = fs.readFileSync(path.join(repo, "public", "js", "pad-livecam.js"), "utf8");
+  assert.match(js, /case 'unwatched': case 'gone': case 'relay_lost': return _t\('js\.pad\.live\.err_gone'/);
+});

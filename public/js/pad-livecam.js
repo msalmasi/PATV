@@ -36,7 +36,7 @@
       case 'room_off': case 'off': return _t('js.pad.live.err_off', 'Live cams aren\'t on in this room.');
       case 'ended_by': case 'ended_by_admin': return _t('js.pad.live.err_ended', 'Their live cam was ended.');
       case 'cam_closed': return _t('js.pad.live.err_closed', 'Their cam closed.');
-      case 'unwatched': case 'gone': return _t('js.pad.live.err_gone', 'The live cam stopped.');
+      case 'unwatched': case 'gone': case 'relay_lost': return _t('js.pad.live.err_gone', 'The live cam stopped.');   // 1.99??: relay_lost (dead relay)
       case 'switched_off': return _t('js.pad.live.err_off', 'Live cams aren\'t on in this room.');
       // 1.99afl (S3): Pepe can't read the room's participant list (bot 1.99afk) - not a refused cam
       case 'list_unread': return _t('js.pad.live.err_list', 'Pepe can\'t read this room\'s people list right now - try again in a bit.');
