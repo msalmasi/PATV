@@ -168,7 +168,7 @@ function harness({ script, json, ids, avsync, config, playFirst, slug }) {
     fetch(url) {
       requests.push(url);
       if (/\/avsync\?/.test(url)) return Promise.resolve({ ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(config)) });
-      if (/\/live\?/.test(url)) return new Promise((resolve) => pending.push(resolve));
+      if (/\/live\?/.test(url)) return new Promise((resolve, reject) => pending.push({ resolve, reject }));
       return new Promise(() => {});
     },
     PATVRoom: {
@@ -189,7 +189,12 @@ function harness({ script, json, ids, avsync, config, playFirst, slug }) {
     waiting: () => pending.length,
     async deliver(answer) {
       assert.ok(pending.length, "the page is waiting on its long poll");
-      pending.shift()({ ok: true, status: 200, json: async () => answer });
+      pending.shift().resolve({ ok: true, status: 200, json: async () => answer });
+      await clock.flush();
+    },
+    async fail() {             // review fix (T3): the open long poll fails (a dropped connection)
+      assert.ok(pending.length, "the page is waiting on its long poll");
+      pending.shift().reject(new TypeError("Failed to fetch"));
       await clock.flush();
     },
   };
@@ -421,6 +426,40 @@ test("1.99??: pad page - a hidden tab shows held lines at once (the poll sleeps)
   assert.deepEqual(P.errors, []);
 });
 
+test("1.99??: review fix (T3) - pad page: the first answer after the tab comes back, or after a failed poll, is old news - its card and grab/drop lines show at once; later ones wait again", async () => {
+  const P = await pad();
+  await P.play();
+  await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  await P.advance(2000); assert.deepEqual(P.card(), ["Bob", "Alice"]); assert.equal(P.shown(7), true);
+  // the tab is hidden: the open poll answers (a typed line), then the page stops asking
+  P.doc.hidden = true; P.doc.fire("visibilitychange");
+  await P.deliver(P.answer({ feed: [say(8, BOB, "while you were away")] }));
+  await P.advance(60000); assert.equal(P.waiting(), 0, "a hidden page doesn't ask");
+  P.doc.hidden = false; P.doc.fire("visibilitychange"); await P.advance(0);
+  assert.equal(P.waiting(), 1, "back in view: it asks at once");
+  const d9 = drop(9, ALICE, 5000); d9.ts = P.clock.now() - 55000;                     // said ~55 s ago
+  await P.deliver(P.answer({ feed: [d9, say(10, BOB, "said while hidden")], mic: [on(BOB)], members: [on(BOB), ALICE, FROG] }));
+  assert.equal(P.shown(10), true);
+  assert.equal(P.shown(9), true, "the backlog's drop line shows at once, with the typed line from the same answer");
+  assert.deepEqual(P.card(), ["Bob"], "the card drops Alice at once");
+  assert.deepEqual(P.order().slice(-2), [9, 10]);
+  // the next live answer waits the offset again
+  await P.advance(100);
+  await P.deliver(P.answer({ feed: [grab(11, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  assert.equal(P.shown(11), false); assert.deepEqual(P.card(), ["Bob"]);
+  await P.advance(D); assert.equal(P.shown(11), true); assert.deepEqual(P.card(), ["Bob", "Alice"]);
+  // a failed poll: the answer after it (the retry, 3 s later) is a backlog too
+  await P.advance(100);
+  await P.fail();
+  await P.advance(3000); assert.equal(P.waiting(), 1, "the retry");
+  await P.deliver(P.answer({ feed: [drop(12, ALICE)], mic: [on(BOB)], members: [on(BOB), ALICE, FROG] }));
+  assert.equal(P.shown(12), true); assert.deepEqual(P.card(), ["Bob"]);
+  await P.advance(100);
+  await P.deliver(P.answer({ feed: [grab(13, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  assert.equal(P.shown(13), false, "and live again after it");
+  assert.deepEqual(P.errors, []);
+});
+
 // ── the homepage panel (the front pad's chat + its "On the mic" box) ──
 const HOME_LIVE = { room: ROOMD, mine: [], ver: 1, mver: 0, members: MEMBERS0, mic: [on(BOB)], feed: FEED0, cursor: 6, lp: 1 };
 async function homeHtml(avsyncOn) {
@@ -478,4 +517,27 @@ test("1.99??: homepage panel - its On the mic box and grab/drop lines follow the
   assert.deepEqual([none.shown, none.chips], [true, ["Bob", "Alice"]]);
   const off = baseConfig(); off.apply.mic_card = false; off.apply.mic_chat = false;
   assert.deepEqual(await run(await home({ config: off })), none);
+});
+
+test("1.99??: review fix (T3) - homepage panel: the first answer after the tab comes back, or after a failed poll, shows its mic box and lines at once", async () => {
+  const P = await home();
+  await P.play();
+  await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  await P.advance(2000); assert.deepEqual(P.chips(), ["Bob", "Alice"]); assert.equal(P.shown(7), true);
+  // hidden with its long poll still open (a frozen tab gets the answer late): the answer that lands after the tab is back is old news
+  P.doc.hidden = true; P.doc.fire("visibilitychange");
+  await P.advance(60000);
+  P.doc.hidden = false; P.doc.fire("visibilitychange"); await P.advance(0);
+  await P.deliver(P.answer({ feed: [drop(8, ALICE), say(9, BOB, "said while hidden")], mic: [on(BOB)], members: [on(BOB), ALICE, FROG] }));
+  assert.equal(P.shown(8), true); assert.equal(P.shown(9), true); assert.deepEqual(P.chips(), ["Bob"]);
+  await P.advance(100);
+  await P.deliver(P.answer({ feed: [grab(10, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  assert.equal(P.shown(10), false, "live again"); assert.deepEqual(P.chips(), ["Bob"]);
+  await P.advance(D); assert.equal(P.shown(10), true); assert.deepEqual(P.chips(), ["Bob", "Alice"]);
+  await P.advance(100);
+  await P.fail();
+  await P.advance(6000); assert.equal(P.waiting(), 1, "the retry");
+  await P.deliver(P.answer({ feed: [drop(11, ALICE)], mic: [on(BOB)], members: [on(BOB), ALICE, FROG] }));
+  assert.equal(P.shown(11), true); assert.deepEqual(P.chips(), ["Bob"]);
+  assert.deepEqual(P.errors, []);
 });

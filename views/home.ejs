@@ -964,7 +964,7 @@
         if (n._ts < floor) feed.removeChild(n);
       });
     }
-    function apply(d) {
+    function apply(d, late) {
       var near = !started || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
       if (started && d.cursor < cursor) { started = false; cursor = 0; }
       if (d.jc) { jcTok = d.jc; jcAt = Number(String(d.jc).split('.')[1]) || jcAt; }
@@ -990,14 +990,14 @@
       var shown = all.length > 80 ? all.filter(function (it, i) { return i >= all.length - 80 || it.job || it.cid; }) : all;
       // 1.99??: A/V sync "Delay mic grab/drop lines in chat" (avsync apply_mic_chat), as on the pad page: a grab / drop line that
       // arrives live sits in its place, hidden, until the room audio this viewer hears catches up (PATVAvSync.holdLine); never the
-      // widget's first lines, never typed chat or transcripts
+      // widget's first lines, never typed chat or transcripts; review fix (T3): nor a backlog answer's (`late` - see `behind` by poll())
       var held = [];
       shown.forEach(function (it) {
         if (it.c && haveC[it.c]) return;
         if (it.c) { haveC[it.c] = 1; haveList.push(it.c); }
         var n = line(it); if (!n) return;
         n._c = it.c || 0; n._ts = it.ts || 0; n._k = it.k;      // CL3 fix-up: refilter() reads them
-        if (started && (it.k === 'mic' || it.k === 'unmic')) held.push(n);
+        if (started && !late && (it.k === 'mic' || it.k === 'unmic')) held.push(n);
         if (it.c && it.c < maxC) {
           for (var k = 0; k < feed.childNodes.length; k++) { var x = feed.childNodes[k]; if (x._c && x._c > it.c) { feed.insertBefore(n, x); return; } }
         }
@@ -1042,6 +1042,9 @@
     // 1.99ye: a long-poll (?wait=1, like the pad page): answered when something changes, asked again at once; an older
     // site (no `lp` in the answer) is polled every 3 s as before
     var lp = { ok: false, v: null, mv: null }, inflight = false;
+    // 1.99??: review fix (T3) - the next answer is a backlog (the tab was hidden - the panel stops asking - or a poll failed): A/V sync
+    // shows its mic box and grab / drop lines as they are now (PATVAvSync.caughtUp), not one offset after they came in
+    var behind = false;
     function poll() {
       timer = null;
       if (document.hidden || inflight) return;
@@ -1057,12 +1060,14 @@
           if (d.gone) return;
           if (d.ver != null) lp.v = d.ver;
           if (d.mver != null) lp.mv = d.mver;
-          apply(d);
+          var late = behind; behind = !!document.hidden;
+          apply(d, late);
+          if (late && window.PATVAvSync && PATVAvSync.caughtUp) { try { PATVAvSync.caughtUp(slug); } catch (e) { /* optional timing */ } }
         })
-        .catch(function () { fails++; lp.ok = false; })
+        .catch(function () { fails++; behind = true; lp.ok = false; })
         .then(function () { inflight = false; if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(30000, 3000 * Math.pow(2, fails)) : (lp.ok ? 50 : 3000)); });
     }
-    document.addEventListener('visibilitychange', function () { if (!document.hidden && !timer) poll(); });
+    document.addEventListener('visibilitychange', function () { if (document.hidden) behind = true; else if (!timer) poll(); });   // 1.99??: (T3)
     var init = JSON.parse(document.getElementById('lrInit').textContent);
     if (init) apply(init);
     timer = setTimeout(poll, 300);

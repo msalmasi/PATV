@@ -557,6 +557,28 @@ test("1.99??: review fix (T1) - when the offset rises, a turn already on the car
   await s.advance(1); assert.deepEqual(on(), [], "off at +6650 = the drop + the new offset"); assert.equal(dropLine.style.display, "", "the same moment as its drop line");
 });
 
+test("1.99??: review fix (T3) - caughtUp: a backlog answer's card, stage tiles and held lines show as they are now; changes after it wait the offset", async () => {
+  const s = await gated(); let card, stage; const host = s.element("div"); s.document.body.appendChild(host);
+  const view = d => { card = plain(d); }, show = p => { stage = plain(p); };
+  const mic = () => card.mic.map(p => p.login), tiles = () => stage.src.map(t => t.id);
+  s.api.micView("pad", roster(["a"]), view); s.api.gateProgram("pad", program(["a"]), show);
+  await s.advance(2000); assert.deepEqual([mic(), tiles()], [["a"], ["a"]]);
+  const older = s.element("div"); host.appendChild(older); assert.equal(s.api.holdLine("pad", older), true);   // a live line, still held
+  await s.advance(100);
+  // the backlog: a dropped, b on - long ago
+  card = plain(s.api.micView("pad", roster(["b"]), view)); stage = plain(s.api.gateProgram("pad", program(["b"]), show));
+  assert.deepEqual([mic(), tiles()], [["a"], []], "drawn as a live answer first");
+  s.api.caughtUp("pad");
+  assert.deepEqual(mic(), ["b"], "the card as it is now"); assert.deepEqual(tiles(), ["b"], "the stage too");
+  assert.equal(older.style.display, "", "a line still held shows");
+  // after it (the page's next answer comes 50 ms+ later), the offset as before
+  await s.advance(50);
+  card = plain(s.api.micView("pad", roster(["b", "a"]), view)); assert.deepEqual(mic(), ["b"]);
+  const later = s.element("div"); host.appendChild(later); assert.equal(s.api.holdLine("pad", later), true);
+  await s.advance(699); assert.deepEqual(mic(), ["b"]); assert.equal(later.style.display, "none");
+  await s.advance(1); assert.deepEqual(mic(), ["b", "a"]); assert.equal(later.style.display, "");
+});
+
 test("1.99??: with only the card / chat switches on, the audio is still measured (not the whole fallback) and the viewer's toggle is offered", async () => {
   const s = sandbox({ config: { apply: { video: false, mic: false, mp3: true, mic_card: true, mic_chat: false } } });
   s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);

@@ -413,6 +413,15 @@
     if (lines.length > 600) release(lines.shift());
     scheduleViews(); return true;
   }
+  /** 1.99??: review fix (T3) - the answer the page has just drawn was a backlog (the first after its tab was hidden, or after a poll
+   *  failed): the room audio passed those events long ago. This pad's mic signs, its On the mic card and its held grab / drop lines
+   *  show as they are now, not one offset after they came in; changes after it wait the offset as before. */
+  function caughtUp(pad) {
+    pad = slug(pad); var now = Date.now(), held = lines.filter(function (line) { return line.pad === pad; });
+    Object.keys(records).forEach(function (key) { if (records[key].pad === pad) records[key].shownAt = now; });
+    lines = lines.filter(function (line) { return line.pad !== pad; }); held.forEach(release);
+    refreshViews();
+  }
   function debug() {
     var c = cfgFor(sound.slug), a = c && c.audio || {};
     return { on: !!(c && c.on), enabled: enabled, playing: sound.playing, mode: sound.mode, engine: browserEngine,
@@ -458,7 +467,7 @@
   }
   function onChange(callback) { if (typeof callback !== 'function') return function () {}; listeners.push(callback); return function () { listeners = listeners.filter(function (f) { return f !== callback; }); }; }
   W.PATVAvSync = { pad: function (value) { padSource = value; wake(); }, video: video, audio: audio, decorate: decorate, debug: debug,
-    latency: latency, modsInstant: modsInstant, onChange: onChange, gateProgram: gateProgram, micView: micView, holdLine: holdLine,
+    latency: latency, modsInstant: modsInstant, onChange: onChange, gateProgram: gateProgram, micView: micView, holdLine: holdLine, caughtUp: caughtUp,
     _math: { videoTarget: videoTarget, indicatorTarget: indicatorTarget, delta: delta, average: average, pathOf: pathOf } };
   if (W.addEventListener) {
     W.addEventListener('storage', function (event) { if (event.key === storageKey) setEnabled(event.newValue !== '0'); });
