@@ -66,10 +66,13 @@ const EMPTY = ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inboun
 //                   stage_exclude seethrough_log row is KEEP already); by-name rows stay prod's, as before
 //   feed_voices     a J-7 frog-name clip (`alias` = the frog name it was posted under): its speakers' logins are blanked (the post,
 //                   titled with the frog name, stays)
+//   sb_clips        owner 11-02: a frog-name clip on a room soundboard (`subject_alias` = the frog name it shows): the login behind it
+//                   is blanked (the clip, labelled with the frog name, stays)
 // A column the copy lacks (prod a release behind: no such rows yet) skips its step.
 const SCRUB = [
   { table: "micfollow_excl", col: "vlogin", sql: "DELETE FROM main.micfollow_excl WHERE vlogin IS NOT NULL" },
   { table: "feed_voices", col: "alias", sql: "UPDATE main.feed_voices SET logins = '  ' WHERE alias IS NOT NULL AND logins IS NOT NULL AND logins <> '  '" },
+  { table: "sb_clips", col: "subject_alias", sql: "UPDATE main.sb_clips SET subject_login = NULL WHERE subject_alias IS NOT NULL AND subject_login IS NOT NULL" },
 ];
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
