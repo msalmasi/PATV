@@ -67,6 +67,7 @@ const LAYER_EMOJI = {
   lotus: "🪷", lilypond: "🌙", laurel: "🌿",
   alien: "👽", reaper: "💀", scythe: "⚰️", skateboard: "🛹",
   bobble: "🧶", fireside: "🧣", sparkler: "🎇",                    // November 2026: 🍂 Fireside
+  earmuffs: "🎧", winterlights: "🧥", lantern: "🕯️",              // December 2026: ❄️ Winter Lights
 };
 const EFFECTS = CSTYLE.EFFECTS;
 const TAGS = CAT.tags || {};
