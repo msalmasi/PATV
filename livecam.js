@@ -362,12 +362,12 @@ function camForPath(p) {
   const k = BY_PATH.get(p);
   return k ? SESS.get(k) || null : null;
 }
-/** 1.99ahn: timing only; an optional room binding keeps server-side clips on their own room's relay. */
+/** 1.99??: timing only; an optional room binding keeps server-side clips on their own room's relay. */
 function relayHold(path, roomId) {
   const S = camForPath(path), b = S && S.botInfo;
   return !S || S.ended || !b || roomId != null && S.roomId !== roomId ? null : { src: b.source, hold_ms: b.hold_ms == null ? null : b.hold_ms };
 }
-/** 1.99ahn: never reveal whether an unheld cam exists; use the same fresh-slot rule as WHEP auth. */
+/** 1.99??: never reveal whether an unheld cam exists; use the same fresh-slot rule as WHEP auth. */
 function holdOf(path, userId, roomId) {
   const S = camForPath(path), t = now(), fresh = (v) => !!v && Number.isFinite(v.beat) && t >= v.beat && t - v.beat <= BEAT_MS;
   if (!S || S.ended || userId == null || !(fresh(S.viewers.get(String(userId))) || held(S) && S.stageViewers && fresh(S.stageViewers.get(String(userId))))) return null;
@@ -1218,7 +1218,7 @@ async function auth(b, action, proto) {
     return sameSecret(cred, pubKey(p)) ? 200 : 403;
   }
   if (action === "read") {
-    // 1.99ahn: only a running mic-stage capture may authenticate a loopback RTSP reader.
+    // 1.99??: only a running mic-stage capture may authenticate a loopback RTSP reader.
     if (action === "read" && proto === "rtsp") return require("./stagemiccap").rtspAuth(b, p);
     if (proto !== "webrtc") return 403;                      // cam HLS and every other protocol remain refused
     let tok = null;
