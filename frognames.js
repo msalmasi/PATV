@@ -186,8 +186,18 @@ function sessInit() {
       // from before this column), so an incognito -> hidden switch ends it after a restart too
       const cols = (await getQuery("SELECT name FROM pragma_table_info('incog_alias')")).map((r) => r.name);
       if (!cols.includes("lvl")) await runQuery("ALTER TABLE incog_alias ADD COLUMN lvl TEXT");
+      // privacy fix (1.99??, review F7): an incognito -> hidden switch's no-name window (endLevel's burn), kept across a restart -
+      // NAMED is memory only and a switch through level() (Pepe's privacy.hidden, a hidden leave) leaves no alias-less session row
+      // behind to carry it: a restart inside the 15 minutes gave the next hidden sighting a fresh frog name, tied to the old one by
+      // timing. One row per (pad, session key) for NAMED_GAP_MS; no login, no name, no session id.
+      await runQuery("CREATE TABLE IF NOT EXISTS incog_alias_burn (room_id TEXT NOT NULL, sk TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (room_id, sk))");
       OPEN.clear(); RECENT.clear();
       const t = clock();
+      await runQuery("DELETE FROM incog_alias_burn WHERE at <= ?", [t - NAMED_GAP_MS]);
+      for (const r of await getQuery("SELECT room_id, sk, at FROM incog_alias_burn")) {
+        const k = String(r.room_id) + "\t" + String(r.sk), at = Number(r.at) || 0;
+        if (!(NAMED.get(k) >= at)) NAMED.set(k, at);
+      }
       for (const r of await getQuery("SELECT * FROM incog_alias WHERE ended IS NULL AND sk IS NOT NULL")) {
         const S = rowSession(r);
         roomOpen(S.roomId).set(S.sk, S);
@@ -252,6 +262,9 @@ async function endLevel(S, t, wasIncognito = false) {
   if (burn) {
     NAMED.set(S.roomId + "\t" + S.sk, t);
     if (NAMED.size > 50000) NAMED.delete(NAMED.keys().next().value);
+    // review F7: stored too (a restart inside the window keeps it). The time is rounded UP to the minute - the window is never
+    // shorter, and the row can't be joined to the ended session's row by its exact end time (which still holds the old name)
+    await runQuery("INSERT OR REPLACE INTO incog_alias_burn (room_id, sk, at) VALUES (?, ?, ?)", [S.roomId, S.sk, Math.ceil(t / 60e3) * 60e3]);
   }
 }
 const view = (S) => (S ? { alias: S.name || null, hood: S.name ? S.hood : null, session: S.id } : null);
@@ -433,6 +446,7 @@ async function sweep(t = clock()) {
   }
   for (const [k, at] of NAMED) if (t - at >= NAMED_GAP_MS) NAMED.delete(k);
   await runQuery("DELETE FROM incog_alias WHERE ended IS NOT NULL AND ended < ?", [t - REUSE_MS]);
+  await runQuery("DELETE FROM incog_alias_burn WHERE at <= ?", [t - NAMED_GAP_MS]);     // review F7: the window is over
   return n;
 }
 

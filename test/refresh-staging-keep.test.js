@@ -140,7 +140,7 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          // CL2 fix-up: the live feed's tables (the archive's seed reads bridge_feed); wave 2: + its veil side tables
                                          "bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil",
                                          // wave 2: frog-name sessions and the see-through audit
-                                         "incog_alias", "seethrough_log", "seethrough_toggle",
+                                         "incog_alias", "incog_alias_burn", "seethrough_log", "seethrough_toggle",
                                          // wave 2 WP-5: moderation evidence clips (the audio stays in each environment's EVIDENCE_DIR)
                                          "evidence_clips",
                                          "pad_hub",
