@@ -435,6 +435,10 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(ms3, /Incognito speakers appear only as their cover tile and frog name but their voice is included, hidden speakers appear only as their cover tile, people who keep their activity private aren't shown, and the whole room's audio is muted while a hidden or private speaker holds the mic\./);
   assert.match(ms3, /A snap or clip in which everyone was shown openly can also be saved to a collection or posted to the pad; one with a cover tile, a blanked tile or muted audio can't\./);
   assert.match(ms3, /Anyone shown in a posted copy, by cam or name card, can remove it, which also deletes every saved copy, and saved and posted copies go if someone shown goes private or deletes their account\./);
+  // the wording fix (owner-approved 2026-11-02): "muted audio" is the privacy mute, not the lead-in every clip has; deleting a posted
+  // copy any other way takes the saved copies too (storykeep.onPostDeleted)
+  assert.match(ms3, /muted audio can't\. "Muted audio" here means sound muted for a hidden or private speaker, not the second or so of silence every clip starts with\. Anyone shown/);
+  assert.match(ms3, /deletes their account\. Deleting a posted copy any other way - by the person who posted it, an admin or an account deletion - also deletes every saved copy\. <code>!livecam off<\/code>/);
   assert.match(ms3, /<code>!livecam off<\/code> keeps your cam \(not your voice\) out, and a person whose cam is shown in a capture can delete it from the story, while someone shown only as a name card can't\./);
   assert.doesNotMatch(ms3, /where it can't be saved to a collection or posted to the pad/, "the clause this build changed is gone");
   assert.match(inc, /snaps and clips that show you can't be kept or posted/, "still true: a capture showing an incognito person (a cover tile) is never kept");
