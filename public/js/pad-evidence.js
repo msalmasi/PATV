@@ -112,7 +112,8 @@
         li.appendChild(el('div', 'ev-head', _t('js.pad.ev.row', '{when} · {who} ({veil}) · {secs} s · saved by {by} · kept until {until}',
           { when: when(r.said_at), who: r.subject, veil: r.veil, secs: Math.round(r.secs || 0), by: r.by || '?', until: day(r.expires_at) })));
         if (r.reason) li.appendChild(el('div', 'ds-meta', r.reason));
-        if (r.subject_gone) li.appendChild(el('div', 'ds-meta', _t('js.pad.ev.gone', 'They’ve since asked to be forgotten - this clip still goes at its 30 days.')));
+        // (review fix WP5-ACC-8: whether the subject used forget-me or deleted their account is never shown to a pad's owner - the
+        // server sends subject_gone to admins only)
         var b = el('button', 'ds-btn sm', _t('js.pad.ev.play', 'Play'));
         b.type = 'button';
         b.addEventListener('click', function () {

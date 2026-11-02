@@ -234,7 +234,9 @@ function register(app, { addUser }) {
   app.get("/admin/games", addUser, gate, page("games", "Admin · Games", async (req, me) => ({ casino: await safe(() => require("./casino/service").loadSettings(true), null),
     hm: SP.can(me, "games.config") ? await safe(() => require("./heistmarket").adminView(), null) : null })));
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));
-  app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge"));
+  // wave 2 WP-5 review fix (WP5-ACC-1): the Evidence card's export form only while evidence clips can be made (evidence.effective();
+  // evidenceexport.js refuses otherwise anyway)
+  app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge", async () => ({ evExport: await safe(() => require("./evidence").effective(), false) })));
   // wave 3 (design §N.3): + 🧠 Pepe's memory - how many people opted out (never who), admins only
   app.get("/admin/pepe", addUser, gate, page("pepe", "Admin · Pepe", async (req, me) => ({
     mem: SP.can(me, "admin.sensitive_overview") ? await safe(() => require("./memoryoptout").adminSummary(), null) : null })));

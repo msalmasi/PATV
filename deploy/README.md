@@ -93,7 +93,26 @@ spans; prod's `hub_outbox` rows are dropped, and with them prod's `hub_hidden_h`
 before the outbox, because prod's triggers come along with the copy; 1.99add: also `hub_hidden_meta` and `hub_hidden_held`,
 while `hub_hidden_set` keeps prod's rows, so people hidden on prod stay hidden on staging). 1.99acm: prod's unfinished "Download my data" jobs
 are marked expired in the copy, so staging never zips prod members' data. If that can't be done, staging keeps its old
-database.
+database. Wave 2 WP-5: the script also runs the staging checkout's `keep-staging-tables.js` when it differs from prod's, so the
+union of both lists stays staging's own (after a prod rollback, prod's older list may lack a table staging has, such as
+`evidence_clips`). A prod checkout older than WP-5 doesn't do this: after such a rollback, run the staging checkout's copy instead,
+`bash /home/PATV-staging/deploy/refresh-staging-db.sh`.
+
+## Rolling the site back past wave 2 WP-5 (moderation evidence clips)
+
+An older build has no evidence sweep, no evidence routes and no `evidence_clips` in its staging keep list, so clips kept at
+the time would outlive their 30 days and prod's rows could reach staging. **Before** deploying a build older than WP-5:
+
+1. At `/admin/bridge#evidence`, turn evidence clips off (and privacy wire v2, as its own rollback steps say).
+2. Copy the purge tool out of the checkout first (the older build doesn't have it):
+   `cp /home/PATV/tools/evidence-purge.js /root/evidence-purge.js`.
+3. Decide what a legal hold must keep. Clips under their own hold or a chat legal hold are kept (and counted) unless
+   `--include-held` is given; export a held clip from `/admin/bridge#evidence` (Download) before purging it if it must survive.
+4. From `/home/PATV`: `node tools/evidence-purge.js myapp.db --all` (a dry run: counts only), then
+   `node tools/evidence-purge.js myapp.db --all --apply` (file, then row, for every clip not under a hold).
+5. Roll back. Held clips that were kept stay in `evidence_clips` and `/var/lib/patv/evidence`: run the copied tool
+   (`NODE_PATH=/home/PATV/node_modules node /root/evidence-purge.js /home/PATV/myapp.db --apply`) once their holds end, and don't refresh staging from
+   prod while any are kept unless the refresh runs from the staging checkout (above).
 
 ## The chat hub seam's /internal/ routes (1.99acm)
 

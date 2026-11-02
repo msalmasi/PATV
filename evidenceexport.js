@@ -5,17 +5,21 @@
 //   POST /api/admin/evidence-export {room (pad address or room id), from, to (ms, ISO-8601 or YYYY-MM-DD[THH:MM], UTC), fmt: txt | jsonl,
 //        reason (>= 3 characters)}  -> {ok, url: "/admin/evidence-export/dl/<token>", from, to, cut?}
 //        chatlog.see_through only (Admins, locked "privacy"), a same-origin fetch, no-store. Single-use link, 2 minutes, that admin only.
-//   GET  /admin/evidence-export/dl/:token -> the file (attachment; Cache-Control: private, no-store; noindex; no-referrer)
+//        DARK: only while evidence clips can be made (evidence.effective(): its switch AND privacy wire v2) - 409 evidence_off otherwise.
+//   GET  /admin/evidence-export/dl/:token -> the file (attachment; Cache-Control: private, no-store; noindex; no-referrer); the same
+//        switch check again (a link minted before a switch-off sends nothing)
 // The seethrough_log row (scope export_evidence: every login in the file, the veiled ones first; ref exp:<id>) and the admin_audit row
 // (evidence.export) are written in ONE transaction BEFORE the first byte - a file that is never logged is never sent.
 // What is in it: the pad's archive (chat_log + chat_log_veil) when it has lines in the range, else the live ring (bridge_feed's items +
 // bridge_veil, owner question Q12). A veiled line shows its real login and display name (and a hidden speaker's words) when its identity
 // row is still there; lines revealLookup would refuse stay OUT and are counted: taken down (rm_at) or purged ("removed"), left out for
 // members now - forget-me, account deletion, a staff hide, !transcripts off ("privacy"); a veiled line whose identity is gone (said
-// before G, or its row went) is shown as it is shown to members, counted "can't be revealed". Names of veiled people INSIDE other lines
-// stay "someone" (see-through covers speakers, not mentions - spec A.3). The watermark line "Evidence export by <admin>, <time>, <pad>"
-// is the first line of the TXT (and its last), the JSONL header's `watermark` (and the footer line's). Limits: 31 days (a longer
-// range is cut and says where to continue), 50,000 lines, 10 a day per admin (counted from admin_audit, so a restart forgets nothing).
+// before G, or its row went), and a line whose speaker is anonymised or hidden NOW with no identity row (a named line of someone who went
+// incognito later), is shown as it is shown to members, counted "can't be revealed". Names of people hidden, incognito or forgotten INSIDE
+// any line's text stay "someone" (chatlogview.redact - see-through covers speakers, not mentions: spec A.3, owner J-6). The watermark line
+// "Evidence export by <admin>, <time>, <pad>" is the first line of the TXT (and its last), the JSONL header's `watermark` (and the footer
+// line's). Limits: 31 days (a longer range is cut and says where to continue), 50,000 lines, 10 a day per admin (admin_audit's downloads
+// of the last 24 h - a restart forgets nothing - plus the links that admin holds now).
 // Nothing here logs a line, a login or a name.
 "use strict";
 const crypto = require("crypto");
@@ -68,9 +72,22 @@ function lineOf({ ts, k, who, veil, text, words, unrevealable }) {
   return o;
 }
 
-/** Collect the range's lines (<= linesMax) -> {lines, left: {removed, privacy, unrevealable}, source, truncated, next} */
+/** A speaker shown as members see them (no identity to reveal): their frog name when the line had one, else "someone" - never the
+ *  display name a NAMED line carried (its speaker is anonymised or hidden now: decision 9). */
+const memberDisplay = (u) => (u && (u.anon || u.veil) ? (u.alias || u.display || "someone") : (u && u.alias) || "someone");
+
+/** Collect the range's lines (<= linesMax) -> {lines, left: {removed, privacy, unrevealable}, source, truncated, next}
+ *  Review fixes (WP5-ACC-2, WP5-ACC-1 part a): every line's text (a hidden speaker's words and topics too) goes through chatlogview's
+ *  redaction - the names of people hidden, incognito or forgotten NOW stay "someone" inside other people's lines, as on every page
+ *  (owner J-6, spec A.3: see-through covers speakers, not mentions); the hidden-names job runs first so someone hidden a moment ago is
+ *  covered, and the export fails closed when the names can't be loaded. A line whose speaker is anonymised or hidden NOW (privacyOf
+ *  "anon" / "mask") with no identity row to reveal - e.g. a named line of someone who went incognito later - is shown as members see
+ *  it and counted "can't be revealed", by revealLookup's rule (it reveals only lines with an identity row). */
 async function collect(pad, from, to) {
   const CV = require("./chatlogview");
+  await CV.init();
+  try { await CV.scheduleNames(); } catch (e) { /* the job logs its own failures; redact() still uses the names already loaded */ }
+  const red = (s) => (typeof s === "string" ? CV.redact(s) : s);
   const out = { lines: [], left: { removed: 0, privacy: 0, unrevealable: 0 }, source: "archive", truncated: false, next: null };
   let rk = null;
   try { const r = (await getQuery("SELECT rk FROM chatlog_rooms WHERE room_id = ?", [pad.roomId]))[0]; rk = r ? Number(r.rk) : null; } catch (e) { rk = null; }
@@ -90,18 +107,19 @@ async function collect(pad, from, to) {
       for (const r of rows) {
         if (r.purged || r.rm_at != null) { out.left.removed++; continue; }
         const it = CV.itemOf(r);
-        if (CV.privacyOf(it) === "out") { out.left.privacy++; continue; }
+        const p = CV.privacyOf(it);
+        if (p === "out") { out.left.privacy++; continue; }
         if (out.lines.length >= limits.linesMax) { out.truncated = true; out.next = Number(r.ts); return out; }
         const vk = it.u && it.u.veil ? String(it.u.veil) : null;
         if (r.v_login) {
           out.lines.push(lineOf({ ts: r.ts, k: r.k, who: { login: r.v_login, display: r.v_display }, veil: { kind: r.v_kind, alias: it.u && it.u.alias },
-                                  text: it.text, words: r.v_words == null ? null : String(r.v_words) }));
-        } else if (vk || (it.u && it.u.anon) || it.ah) {
+                                  text: red(it.text), words: r.v_words == null ? null : red(String(r.v_words)) }));
+        } else if (vk || (it.u && it.u.anon) || it.ah || p === "anon" || p === "mask") {
           out.left.unrevealable++;
-          out.lines.push(lineOf({ ts: r.ts, k: r.k, who: { login: null, display: (it.u && (it.u.alias || it.u.display)) || "someone" }, veil: { kind: vk || "incognito", alias: it.u && it.u.alias },
-                                  text: it.text, unrevealable: true }));
+          out.lines.push(lineOf({ ts: r.ts, k: r.k, who: { login: null, display: memberDisplay(it.u) }, veil: { kind: vk || (p === "mask" ? "hidden" : "incognito"), alias: it.u && it.u.alias },
+                                  text: red(it.text), unrevealable: true }));
         } else {
-          out.lines.push(lineOf({ ts: r.ts, k: r.k, who: it.u ? { login: it.u.login || null, display: it.u.display || it.u.login || null } : null, veil: null, text: it.text }));
+          out.lines.push(lineOf({ ts: r.ts, k: r.k, who: it.u ? { login: it.u.login || null, display: it.u.display || it.u.login || null } : null, veil: null, text: red(it.text) }));
         }
       }
       if (rows.length < PAGE) break;
@@ -124,17 +142,18 @@ async function collect(pad, from, to) {
   for (const it of feed) {
     if (it.rm_at != null || it.purged) { out.left.removed++; continue; }
     if (!KIND[it.k]) continue;                                           // (live notices, Pepe's notes: not chat)
-    if (CV.privacyOf(it) === "out") { out.left.privacy++; continue; }
+    const p = CV.privacyOf(it);
+    if (p === "out") { out.left.privacy++; continue; }
     if (out.lines.length >= limits.linesMax) { out.truncated = true; out.next = Number(it.ts); break; }
     if (it._vz && ids.has(Number(it.c))) {
       out.lines.push(lineOf({ ts: it.ts, k: it.k, who: { login: it._vz.login, display: it._vz.display }, veil: { kind: it._vz.kind, alias: it.u && it.u.alias },
-                              text: it.text, words: typeof it._vw === "string" ? it._vw : null }));
-    } else if (it.u && (it.u.anon || it.u.veil)) {
+                              text: red(it.text), words: typeof it._vw === "string" ? red(it._vw) : null }));
+    } else if ((it.u && (it.u.anon || it.u.veil)) || p === "anon" || p === "mask") {
       out.left.unrevealable++;
-      out.lines.push(lineOf({ ts: it.ts, k: it.k, who: { login: null, display: it.u.alias || it.u.display || "someone" }, veil: { kind: it.u.veil || "incognito", alias: it.u.alias },
-                              text: it.text, unrevealable: true }));
+      out.lines.push(lineOf({ ts: it.ts, k: it.k, who: { login: null, display: memberDisplay(it.u) }, veil: { kind: (it.u && it.u.veil) || (p === "mask" ? "hidden" : "incognito"), alias: it.u && it.u.alias },
+                              text: red(it.text), unrevealable: true }));
     } else {
-      out.lines.push(lineOf({ ts: it.ts, k: it.k, who: it.u ? { login: it.u.login || null, display: it.u.display || it.u.login || null } : null, veil: null, text: it.text }));
+      out.lines.push(lineOf({ ts: it.ts, k: it.k, who: it.u ? { login: it.u.login || null, display: it.u.display || it.u.login || null } : null, veil: null, text: red(it.text) }));
     }
   }
   return out;
@@ -177,6 +196,10 @@ function register(app, { addUser, bySlug }) {
   const guard = require("./middleware/authGuard");
   const json = express.json({ limit: "4kb" });
   const may = async (user) => { if (!user || !user.userId) return false; try { return !!(await SP.canId(user.userId, "chatlog.see_through")); } catch (e) { return false; } };
+  // review fix WP5-ACC-1 / R3 / WP5-T1: dark like the rest of WP-5 - the export works only while evidence clips can be made
+  // (evidence.effective(): its switch AND privacy wire v2); both routes refuse otherwise (409 evidence_off), the link too
+  const on = async () => { try { const EV = require("./evidence"); await EV.init(); return EV.effective(); } catch (e) { return false; } };
+  const OFF = { ok: false, code: "evidence_off", error: "The evidence export is switched off - it opens with evidence clips (privacy wire v2 and evidence clips on)." };
   const priv = (res) => { res.set("Cache-Control", "private, no-store"); res.set("Referrer-Policy", "no-referrer"); res.set("X-Robots-Tag", "noindex"); res.set("X-Content-Type-Options", "nosniff"); };
   setInterval(() => { const t = now(); for (const [k, v] of TOKENS) if (v.exp < t) TOKENS.delete(k); }, 60e3).unref();
 
@@ -185,6 +208,7 @@ function register(app, { addUser, bySlug }) {
     try {
       if (!req.is("application/json") || !guard.sameOriginFetch(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
       if (!(await may(req.user))) return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!(await on())) return res.status(409).json(OFF);
       const b = req.body || {};
       const fmt = FMTS[b.fmt] ? b.fmt : null;
       if (!fmt) return res.status(400).json({ ok: false, code: "fmt", error: "Pick txt or jsonl." });
@@ -199,7 +223,10 @@ function register(app, { addUser, bySlug }) {
       if (!pad) return res.status(404).json({ ok: false, code: "pad", error: "No such pad." });
       await require("./adminaudit").init();
       const n = (await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'evidence.export' AND admin_id = ? AND at > ?", [String(req.user.userId), now() - DAY]))[0].n;
-      if (Number(n) >= limits.perDay) return res.status(429).json({ ok: false, code: "limit_day", error: `That's ${limits.perDay} evidence exports in a day - try again tomorrow.` });
+      // (review fix WP5-T7: the day's downloads AND the links this admin holds now - minting links first can't get past the limit)
+      const t0 = now(), uid = String(req.user.userId);
+      const held = [...TOKENS.values()].filter((v) => v.userId === uid && v.exp >= t0).length;
+      if (Number(n) + held >= limits.perDay) return res.status(429).json({ ok: false, code: "limit_day", error: `That's ${limits.perDay} evidence exports in a day - try again tomorrow.` });
       const tok = crypto.randomBytes(24).toString("base64url");
       TOKENS.set(tok, { userId: String(req.user.userId), username: req.user.username || null, roomId: pad.roomId, slug: pad.slug, pad: pad.pad, from, to, fmt, reason, cut,
                         exp: now() + TOKEN_TTL_MS });
@@ -218,22 +245,25 @@ function register(app, { addUser, bySlug }) {
       if (T) TOKENS.delete(tok);                                          // single use, whatever happens next
       if (!T || T.exp < now() || !req.user || String(req.user.userId) !== T.userId) return res.status(404).type("text/plain").send("That download link has expired or was already used.");
       if (!(await may(req.user))) return res.status(403).type("text/plain").send("Admins only.");
+      if (!(await on())) return res.status(409).type("text/plain").send("The evidence export is switched off - nothing was sent.");
       const got = await collect({ roomId: T.roomId, slug: T.slug, pad: T.pad, R: null }, T.from, T.to);
       const at = now();
       const id = crypto.randomBytes(6).toString("hex");
       const meta = { watermark: `Evidence export by ${T.username || T.userId}, ${iso(at)}, ${T.pad}`, by: T.username || T.userId, at, pad: T.pad, roomId: T.roomId,
                      from: T.from, to: T.to, reason: T.reason, cut: T.cut };
-      // the log BEFORE the first byte: every login in the file, the revealed (veiled) ones first so the 200-login cap never drops them
+      // the log BEFORE the first byte: every login in the file, the revealed (veiled) ones first; past 200 logins the row is split over
+      // several rows with the same ref (seethrough.logAll - review fix WP5-T8: none is dropped)
       const veiled = [], named = [];
       for (const o of got.lines) if (o.login) (o.veil ? veiled : named).push(o.login.toLowerCase());
       const logins = [...new Set([...veiled, ...named])];
       const ST = require("./seethrough"), AA = require("./adminaudit");
       await ST.init(); await AA.init();
       await tx(async () => {
-        const st = await ST.log({ userId: T.userId, role: "admin", scope: "export_evidence", roomId: T.roomId, logins, reason: T.reason, ref: "exp:" + id });
-        if (!st) throw new Error("evidence export: no see-through row");
+        const sts = await ST.logAll({ userId: T.userId, role: "admin", scope: "export_evidence", roomId: T.roomId, logins, reason: T.reason, ref: "exp:" + id });
+        if (!sts.length || sts.some((x) => !x)) throw new Error("evidence export: no see-through row");
         await AA.record({ userId: T.userId, username: T.username }, "evidence.export", null,
-                        { id, room: T.roomId, from: T.from, to: T.to, fmt: T.fmt, lines: got.lines.length, revealed: new Set(veiled).size, source: got.source, st }, T.reason);
+                        { id, room: T.roomId, from: T.from, to: T.to, fmt: T.fmt, lines: got.lines.length, revealed: new Set(veiled).size, source: got.source, st: sts[0],
+                          ...(sts.length > 1 ? { st_rows: sts.length } : {}) }, T.reason);
       });
       const body = render(T.fmt, meta, got);
       const F = FMTS[T.fmt];

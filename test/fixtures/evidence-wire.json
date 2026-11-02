@@ -17,6 +17,15 @@
   "veil": "hidden",
   "veil_ok": 7
  },
+ "chunked": {
+  "bitrate": "48k",
+  "max_turn_secs": 300,
+  "over": 700000,
+  "paths": [
+   "/api/bridge/evidence",
+   "/api/bridge/evidence/upload"
+  ]
+ },
  "contract": "evidence-wire",
  "doc": "G:/ops/incognito-micstage-design-2026-10-27.md E.3 (WP-5); camfrog-bot tools/gen_evidence_wire.py writes this from pepe_micclip's real builders. Bodies are shown without the bot token (_backend_post adds it).",
  "job": {

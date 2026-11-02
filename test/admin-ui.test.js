@@ -159,8 +159,18 @@ test("overview: tiles by role - admin-only data never reaches Staff", async () =
   // CL2: the chat archive card (chatlog.admin: admins, privacy-locked)
   assert.match((await page("/admin/bridge", U.admin)).html, /id="clSwitches"/);
   assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="clSwitches"/);
-  // wave 2 WP-5: the Evidence clips card (chatlog.see_through: admins only - never staff) with the export form
-  assert.match((await page("/admin/bridge", U.admin)).html, /id="evidence"[\s\S]*id="exForm"/);
+  // wave 2 WP-5: the Evidence clips card (chatlog.see_through: admins only - never staff); review fix WP5-ACC-1: its export form only
+  // while evidence clips can be made (evidence.effective()) - dark by default, the card says the export is off
+  const evAdm = (await page("/admin/bridge", U.admin)).html;
+  assert.match(evAdm, /id="evidence"[\s\S]*id="exOff"/, "dark: the card, with the export off");
+  assert.doesNotMatch(evAdm, /id="exForm"/, "dark: no export form");
+  const EVM = require(path.join(repo, "evidence"));
+  const keepEff = EVM.effective;
+  EVM.effective = () => true;
+  try {
+    assert.match((await page("/admin/bridge", U.admin)).html, /id="evidence"[\s\S]*id="exForm"/, "on: the export form");
+    assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="evRows"|id="exForm"/);
+  } finally { EVM.effective = keepEff; }
   assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="evRows"|id="exForm"/);
   // CL7: deletion by tier (the retention purge's report) is on that card
   assert.match((await page("/admin/bridge", U.admin)).html, /id="clPurgeRows"[\s\S]*\/api\/admin\/chatlog\/purge/);

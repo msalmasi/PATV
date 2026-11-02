@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // tools/evidence-purge.js - wave 2 WP-5 (incognito / mic-stage spec I.5): moderation evidence clips (evidence.js) without the site's
 // hourly sweep. A site rolled back past WP-5 runs no sweep, so stored clips would outlive their 30 days: switch evidence clips off at
-// /admin/bridge#evidence, then run this (or plan to run it by hand once the newest clip's 30 days are up) before or after that rollback.
+// /admin/bridge#evidence, then run this with --all BEFORE that rollback (the older build doesn't have this file - copy it out of the
+// checkout first). The steps, holds included: deploy/README.md "Rolling the site back past wave 2 WP-5".
 //
 //   node tools/evidence-purge.js [myapp.db] [--dir <EVIDENCE_DIR>]                   dry run (the default): counts only
 //   node tools/evidence-purge.js [myapp.db] [--dir <dir>] --apply                    delete the clips past their 30 days (file, then row)

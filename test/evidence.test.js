@@ -43,9 +43,11 @@ const PW = require(path.join(repo, "privwire"));
 const ST = require(path.join(repo, "seethrough"));
 const EV = require(path.join(repo, "evidence"));
 const EX = require(path.join(repo, "evidenceexport"));
+const BU = require(path.join(repo, "botupload"));
 
 const D = 864e5;
 const EVDIR = path.join(tmp, "evidence-store");
+const BUDIR = path.join(tmp, "uploads", ".botupload");
 const hash = (login) => crypto.createHash("sha256").update("pepe-hidden:" + String(login).trim().toLowerCase()).digest("hex").slice(0, 20);
 const ROOM = { id: "Ev.Room", name: "Evidence Room" }, SLUG = "evidence-room";
 const OTHER = { id: "EvOther.Room", name: "Evidence Other" };
@@ -62,7 +64,7 @@ const HIDDEN_WORDS = "the hidden sentence about the stolen bike";
 const MARK = "MARKER-" + crypto.randomBytes(4).toString("hex");
 // the shared wire fixture (camfrog-bot tools/gen_evidence_wire.py writes it from pepe_micclip's real builders; byte-identical with the
 // bot's ci/fixtures/evidence-wire.json). Update together with its pin there (evidence_wire_test.py PIN).
-const WIRE_PIN = "dd2c95438a0ef3805d388ffde0aec353510616d1a0b6b39b1008955c27dd4ca4";
+const WIRE_PIN = "84a7b57fe089c963765d25d9c1c0012bda2d8f8569bb7f87ac6322020ee9ed65";
 const WIRE_RAW = fs.readFileSync(path.join(__dirname, "fixtures", "evidence-wire.json"));
 
 function call(method, url, { user = null, body = null, headers = {} } = {}) {
@@ -140,8 +142,11 @@ const setup = (async () => {
   U.adm2 = await mkUser("adm2", "Admin", "adm2cf");
   await rooms.init();
   const app = express();
-  app.use((req, res, next) => (["/api/bridge/sync", "/api/bridge/sync/v2", "/api/bridge/evidence", "/api/bridge/evidence/upload", "/api/bridge/micclip"].includes(req.path)
+  app.use((req, res, next) => (["/api/bridge/sync", "/api/bridge/sync/v2", "/api/bridge/evidence", "/api/bridge/evidence/upload", "/api/bridge/micclip",
+                                "/api/bot/upload/chunk", "/api/bot/upload/finish"].includes(req.path)
     ? next() : express.json()(req, res, next)));
+  BU._setDir(BUDIR);
+  BU.register(app, { isBotToken: (t) => t === "bot", noTimers: true });     // (index.js: Pepe's bodies over 700 KB come in chunks)
   const addUser = (req, res, next) => { const x = req.get("x-test-user"); req.user = x ? users.get(x) || null : null; next(); };
   app.set("views", path.join(repo, "views"));
   app.set("view engine", "ejs");
@@ -191,8 +196,15 @@ test("dark: switch off -> no clip anywhere (409), no sync advert, no offer on re
   assert.equal(rv.status, 200, rv.text);
   assert.ok(rv.d.items[0] && !("ev" in rv.d.items[0]), "no evidence offer while off");
   assert.equal(await EV.privacyCopy(), null, "the privacy page reads as before");
+  // review fix WP5-ACC-1 / R3 / WP5-T1: the admin evidence export is dark too - refused before any link, any log row, any file
+  const ex0 = await call("POST", "/api/admin/evidence-export", { user: U.adm, body: { room: SLUG, from: Date.now() - 3600e3, to: Date.now(), fmt: "txt", reason: "report #1" } });
+  assert.equal(ex0.status, 409, ex0.text);
+  assert.equal(ex0.d.code, "evidence_off");
+  assert.equal(EX._tokens.size, 0, "no link minted");
+  assert.equal((await scopeRows("export_evidence")).length, 0, "nothing logged");
+  assert.equal((await call("POST", "/api/admin/evidence-export", { user: U.staff, body: { room: SLUG, from: 1, to: 2, fmt: "txt", reason: "xyz" } })).status, 403, "staff: 403 as ever");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM evidence_clips"))[0].n, 0);
-  assert.deepEqual(await EV.sweep(), { deleted: 0, held: 0, pending: 0, orphans: 0 }, "the sweep: a no-op on an empty table");
+  assert.deepEqual(await EV.sweep(), { deleted: 0, held: 0, pending: 0, orphans: 0, failed: 0 }, "the sweep: a no-op on an empty table");
   // the admin switch: refused ON while privacy wire v2 is off
   await PW.setOn(false, { userId: U.adm.userId, username: "adm" });
   await assert.rejects(() => EV.setOn(true, { userId: U.adm.userId, username: "adm" }), (e) => e.code === "privwire_off");
@@ -351,8 +363,8 @@ test("the store: no module but evidence.js (and its rollback tool / lifecycle ho
   assert.deepEqual(table, ["accountMerge.js", "accountdelete.js", "deploy/keep-staging-tables.js", "evidence.js", "loginrekey.js", "padrekey.js", "tools/evidence-purge.js"].sort(),
                    "evidence_clips: only the store, its rollback tool and the lifecycle / coverage lists");
   const req = files.filter((f) => /require\(\s*["']\.\/evidence["']\s*\)/.test(fs.readFileSync(f, "utf8"))).map(rel).sort();
-  assert.deepEqual(req, ["accountdelete.js", "bridge.js", "padsettings.js", "pepeforget.js", "seethrough.js", "terms.js"].sort(),
-                   "require('./evidence'): the advert, the reveal offer, the policy copy, the owner card and the lifecycle hooks only");
+  assert.deepEqual(req, ["accountdelete.js", "adminweb.js", "bridge.js", "evidenceexport.js", "padsettings.js", "pepeforget.js", "seethrough.js", "terms.js"].sort(),
+                   "require('./evidence'): the advert, the reveal offer, the policy copy, the owner card, the lifecycle hooks and the export's switch (the export and its admin form) only");
   const dir = files.filter((f) => /EVIDENCE_DIR/.test(fs.readFileSync(f, "utf8"))).map(rel).sort();
   assert.deepEqual(dir, ["evidence.js", "tools/evidence-purge.js"], "the directory");
   for (const m of ["media.js", "storykeep.js", "stories.js", "soundboards.js", "voiceclone.js", "voicestore.js", "search.js", "micclip.js", "feedstore.js", "crawlers.js"]) {
@@ -508,6 +520,7 @@ test("nothing logs a body, a login or the audio (a marker in every field of Pepe
 
 test("the export: admins only; watermarked first and last; real names + hidden words; left-out lines stay out; logged BEFORE the file; single use; no-store", async () => {
   await setup;
+  if (!EV.isOn()) await EV.setOn(true, { userId: U.adm.userId, username: "adm" });
   const { hk } = await freshLines();
   await sync([ev("message", { user: real("hankhidden", "Hank Hide"), priv: priv("hidden", "hankhidden", { words: "words of a line taken down" }) })]);
   await settle();
@@ -589,6 +602,7 @@ test("the UI: the pad-settings card is the OWNER's only (never staff, admins use
   assert.ok(!/innerHTML/.test(js), "textContent only");
   const adm = fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8");
   assert.match(adm, /<% if \(_can\('chatlog\.see_through'\)\) \{ %>\s*<section class="adm-card" id="evidence"/, "the admin card: see-through admins only");
+  assert.match(adm, /<% if \(locals\.evExport\) \{ %>\s*<form id="exForm"/, "review fix WP5-ACC-1: the export form only while evidence clips can be made");
   for (const s of ["clip_preview", "clip_save", "clip_play", "clip_download", "export_evidence"]) assert.ok(adm.includes("<code>" + s + "</code>"), "the see-through legend names " + s);
   // switching evidence off hides the owner's card again once the pad has no clips (and refuses new ones)
   await EV.setOn(false, { userId: U.adm.userId, username: "adm" });
@@ -634,4 +648,319 @@ test("the shared wire fixture (pinned in both repos): the site's job carries wha
   const row = (await getQuery("SELECT * FROM evidence_clips WHERE id = ?", [u.d.id]))[0];
   assert.ok(row && row.subject_login === FX.upload.target && row.veil === FX.upload.veil && row.tx === FX.upload.tx && row.via === "camfrog");
   for (const id of [FX.answer_ok.id, FX.answer_failed.id]) EV._pending.delete(id);
+});
+
+// ── wave 2 WP-5 review fixes ──
+const ADMIN = () => ({ userId: U.adm.userId, username: "adm" });
+const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
+/** A clip row straight into the store (and its file unless file: false). */
+async function rawClip({ room = ROOM.id, subject = "hankhidden", veil = "hidden", saidAt = Date.now(), expires = Date.now() + 30 * D, hold = null, gone = null, file = true } = {}) {
+  const id = "ev" + crypto.randomBytes(8).toString("hex");
+  const name = crypto.randomBytes(16).toString("hex") + ".m4a";
+  const f = EV.filePath(name, EVDIR);
+  if (file) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, M4A); }
+  await runQuery(`INSERT INTO evidence_clips (id, room_id, subject_login, veil, said_at, secs, bytes, file, by_user, role, via, created, expires_at, hold_at, subject_gone_at)
+                  VALUES (?, ?, ?, ?, ?, 3, ?, ?, ?, 'admin', 'web', ?, ?, ?, ?)`,
+                 [id, room, subject, veil, saidAt, M4A.length, name, U.adm.userId, expires - 30 * D, expires, hold, gone]);
+  return { id, file: f };
+}
+
+test("review fixes (WP5-ACC-1/2, R3, WP5-T1): the export - dark with either switch off, even for a link minted while on; mentions of people forgotten or hidden since stay \"someone\"; a named line of someone incognito NOW is shown as members see it", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, ADMIN());
+  const ask = (u, over = {}) => call("POST", "/api/admin/evidence-export", { user: u, body: Object.assign({ room: SLUG, from: Date.now() - 3600e3, to: Date.now() + 60e3, fmt: "txt", reason: "report #7" }, over) });
+  const m = await ask(U.adm);
+  assert.equal(m.status, 200, m.text);
+  const n0 = (await scopeRows("export_evidence")).length;
+  await EV.setOn(false, ADMIN());
+  const g = await call("GET", m.d.url, { user: U.adm });
+  assert.equal(g.status, 409, "a link minted while on sends nothing after the switch-off");
+  assert.ok(!g.text.includes("Evidence export by"), "no file");
+  assert.equal((await scopeRows("export_evidence")).length, n0, "nothing logged");
+  assert.equal((await call("GET", m.d.url, { user: U.adm })).status, 404, "and the link is spent");
+  assert.equal((await ask(U.adm)).status, 409, "evidence clips off: refused");
+  await EV.setOn(true, ADMIN());
+  await PW.setOn(false, ADMIN());
+  assert.equal(EV.effective(), false);
+  const pw = await ask(U.adm);
+  assert.equal(pw.status, 409, "privacy wire v2 off (evidence clips still on): refused too");
+  assert.equal(pw.d.code, "evidence_off");
+  await PW.setOn(true, ADMIN());
+  // mentions + the decision-9 rule
+  await sync([
+    ev("message", { user: real("davecf", "Dave"), text: "dave was here" }),
+    ev("message", { user: real("carolcf", "Carol"), text: "davecf keeps spamming the room" }),
+    ev("message", { user: real("erincf", "Erin"), text: "a named line before going incognito" }),
+  ]);
+  await settle();
+  await CL.hideNow(["davecf"], "forget");
+  await CL.hideNow(["erincf"], "pepe", "incognito");
+  for (const fmt of ["txt", "jsonl"]) {
+    const r = await ask(U.adm, { fmt });
+    assert.equal(r.status, 200, r.text);
+    const f = await call("GET", r.d.url, { user: U.adm });
+    assert.equal(f.status, 200, f.text.slice(0, 200));
+    assert.ok(f.text.includes("someone keeps spamming the room"), fmt + ": the forgotten login inside another line is \"someone\"");
+    assert.ok(!f.text.includes("davecf keeps"), fmt + ": never named there");
+    assert.ok(!f.text.includes("dave was here"), fmt + ": their own line stays out");
+    assert.ok(!f.text.includes("erincf") && !f.text.includes("Erin"), fmt + ": a speaker incognito NOW (no identity row) isn't named");
+    if (fmt === "txt") {
+      assert.ok(f.text.includes("carolcf (Carol): someone keeps spamming the room"), "the named speaker keeps their name");
+      assert.match(f.text, /\] someone \[incognito, can't be revealed\]: a named line before going incognito/, "shown as members see it, counted");
+    } else {
+      const rows = f.text.trim().split("\n").map((x) => JSON.parse(x));
+      assert.ok(rows.some((o) => o.text === "a named line before going incognito" && o.login === null && o.display === "someone" && o.unrevealable === true));
+    }
+  }
+});
+
+test("review fix WP5-T7: the daily export limit counts the links an admin holds - minting first can't get past it", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, ADMIN());
+  if (!U.adm3) U.adm3 = await mkUser("adm3", "Admin", "adm3cf");
+  const keep = EX._limits.perDay;
+  EX._limits.perDay = 2;
+  try {
+    const ask = () => call("POST", "/api/admin/evidence-export", { user: U.adm3, body: { room: SLUG, from: Date.now() - 3600e3, to: Date.now(), fmt: "txt", reason: "limit test" } });
+    const a = await ask(), b = await ask();
+    assert.equal(a.status, 200, a.text);
+    assert.equal(b.status, 200, b.text);
+    const c = await ask();
+    assert.equal(c.status, 429, "two links held: the third is refused before any download");
+    assert.equal(c.d.code, "limit_day");
+    assert.equal((await call("GET", a.d.url, { user: U.adm3 })).status, 200);
+    assert.equal((await ask()).status, 429, "one download + one link held");
+    assert.equal((await call("GET", b.d.url, { user: U.adm3 })).status, 200);
+    assert.equal((await ask()).status, 429, "two downloads");
+    assert.equal((await auditRows("evidence.export")).filter((x) => x.admin_id === U.adm3.userId).length, 2, "never more than the limit");
+  } finally { EX._limits.perDay = keep; }
+});
+
+test("review fix WP5-T8: an export naming more than 200 logins logs every one of them (the row is split, same ref)", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, ADMIN());
+  const t = Date.now();
+  await sync(Array.from({ length: 230 }, (_, i) => ev("message", { user: real("crowd" + i, "Crowd " + i), text: "line " + i }, t - 1000 + i)));
+  await settle(80);
+  const r = await call("POST", "/api/admin/evidence-export", { user: U.adm2, body: { room: SLUG, from: t - 5000, to: t + 5000, fmt: "txt", reason: "crowd case" } });
+  assert.equal(r.status, 200, r.text);
+  const maxId = Number(((await getQuery("SELECT MAX(id) AS m FROM seethrough_log"))[0] || {}).m) || 0;
+  const f = await call("GET", r.d.url, { user: U.adm2 });
+  assert.equal(f.status, 200);
+  const got = await getQuery("SELECT * FROM seethrough_log WHERE scope = 'export_evidence' AND id > ?", [maxId]);
+  assert.ok(got.length >= 2 && new Set(got.map((x) => x.ref)).size === 1, "split over rows with one ref");
+  const all = new Set(got.flatMap((x) => JSON.parse(x.logins)));
+  for (let i = 0; i < 230; i++) assert.ok(all.has("crowd" + i), "crowd" + i + " logged");
+  const a = (await auditRows("evidence.export")).slice(-1)[0];
+  assert.equal(JSON.parse(a.detail).st_rows, got.length, "the audit row says how many");
+});
+
+test("review fixes (WP5-ACC-3, R1, R7, WP5-T3): 200+ clips under a chat legal hold never stall the sweep; a hold placed mid-sweep keeps row AND file; the count is what really went", async () => {
+  await setup;
+  await runQuery("DELETE FROM evidence_clips");
+  const rk = (await getQuery("SELECT rk FROM chatlog_rooms WHERE room_id = ?", [ROOM.id]))[0].rk;
+  await runQuery("INSERT INTO chatlog_holds (key, by_user, why, at) VALUES (?, ?, ?, ?)", ["room:" + rk, U.adm.userId, "a long case", Date.now()]);
+  const t0 = Date.now() - 40 * D;
+  for (let i = 0; i < EV.SWEEP_PAGE + 5; i++) await rawClip({ expires: t0 + i, file: false });
+  const loose = await rawClip({ room: OTHER.id, subject: "bobcf", veil: "incognito", expires: t0 + 1000 });
+  for (const pass of [1, 2]) {
+    const s = await EV.sweep();
+    assert.equal(s.held, EV.SWEEP_PAGE + 5, `pass ${pass}: every held row looked at once`);
+    assert.equal(s.deleted, pass === 1 ? 1 : 0, `pass ${pass}`);
+  }
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM evidence_clips WHERE id = ?", [loose.id]))[0].n, 0, "the unheld clip behind them went");
+  assert.ok(!fs.existsSync(loose.file), "with its file");
+  await runQuery("DELETE FROM chatlog_holds WHERE key = ?", ["room:" + rk]);
+  await runQuery("DELETE FROM evidence_clips");
+  // a clip hold placed while the sweep runs (after its page was read, before it reaches the row)
+  const N = 150, made = [];
+  for (let i = 0; i < N; i++) made.push(await rawClip({ room: OTHER.id, subject: "bobcf", veil: "incognito", expires: t0 + i }));
+  const last = made[N - 1];
+  const count = async () => Number((await getQuery("SELECT COUNT(*) AS n FROM evidence_clips"))[0].n);
+  const run = EV.sweep();
+  while ((await count()) === N) await new Promise((r) => setImmediate(r));
+  await runQuery("UPDATE evidence_clips SET hold_at = ?, hold_by = ?, hold_why = 'court order 9' WHERE id = ?", [Date.now(), U.adm.userId, last.id]);
+  const s = await run;
+  const row = (await getQuery("SELECT * FROM evidence_clips WHERE id = ?", [last.id]))[0];
+  assert.ok(row && row.hold_at, "the late hold kept the row");
+  assert.ok(fs.existsSync(last.file), "...and its audio (the row goes first, the file only after)");
+  assert.equal(s.deleted, N - 1, "deleted = the rows that really went");
+  assert.equal(await count(), 1);
+  assert.equal(s.failed, 0, "(a file that won't go would be counted, and retried by the orphan pass)");
+  await runQuery("DELETE FROM evidence_clips");
+});
+
+test("review fixes (WP5-ACC-4/6/8, R6, WP5-T5, WP5-T8): listing logs every subject newly shown (split past 200); owners never see subject_gone; a lapsed clip is neither listed nor served; the owner era bounds the list, the audio and the pad card", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, ADMIN());
+  await runQuery("DELETE FROM evidence_clips");
+  EV._seen.clear();
+  const list = (u, q) => call("GET", "/api/evidence" + q, { user: u });
+  const since = await ST.ownerEra(ROOM.id, U.own.userId);
+  assert.ok(since > 0, "the owner has an era");
+  // a subject shown later within the hour is logged too - only the new one
+  const base0 = (await scopeRows("clip_list")).length;
+  await rawClip({ subject: "subja" });
+  assert.equal((await list(U.own, "?room=" + SLUG)).status, 200);
+  let rows = await scopeRows("clip_list");
+  assert.equal(rows.length, base0 + 1);
+  assert.deepEqual(JSON.parse(rows[rows.length - 1].logins), ["subja"]);
+  const c = await rawClip({ subject: "subjc" });
+  const l2 = await list(U.own, "?room=" + SLUG);
+  assert.ok(l2.d.rows.some((r) => r.subject === "subjc"));
+  rows = await scopeRows("clip_list");
+  assert.equal(rows.length, base0 + 2, "the newly shown subject gets its row");
+  assert.deepEqual(JSON.parse(rows[rows.length - 1].logins), ["subjc"]);
+  await list(U.own, "?room=" + SLUG);
+  assert.equal((await scopeRows("clip_list")).length, base0 + 2, "nothing new shown: no new row within the hour");
+  // subject_gone: admins only
+  await runQuery("UPDATE evidence_clips SET subject_gone_at = ? WHERE id = ?", [Date.now(), c.id]);
+  const ow = (await list(U.own, "?room=" + SLUG)).d.rows.find((r) => r.id === c.id);
+  assert.ok(ow && !("subject_gone" in ow), "a pad's owner never learns the subject used forget-me / deleted their account");
+  const ad = (await list(U.adm, "?room=" + SLUG)).d.rows.find((r) => r.id === c.id);
+  assert.equal(ad.subject_gone, true, "admins do");
+  assert.ok(!fs.readFileSync(path.join(repo, "public", "js", "pad-evidence.js"), "utf8").includes("r.subject_gone"), "the owner's list never renders it");
+  // lapsed (past expires_at, no hold): gone for everyone whenever the sweep runs; a hold keeps it
+  const lap = await rawClip({ subject: "subjold", expires: Date.now() - 1000 });
+  assert.ok(!(await list(U.adm, "?room=" + SLUG)).d.rows.some((r) => r.id === lap.id), "not listed");
+  assert.equal((await call("GET", `/api/evidence/${lap.id}/audio`, { user: U.adm })).status, 410, "not served");
+  await runQuery("UPDATE evidence_clips SET hold_at = ?, hold_by = ?, hold_why = 'case' WHERE id = ?", [Date.now(), U.adm.userId, lap.id]);
+  assert.ok((await list(U.adm, "?room=" + SLUG)).d.rows.some((r) => r.id === lap.id), "under a hold: listed");
+  assert.equal((await call("GET", `/api/evidence/${lap.id}/audio`, { user: U.adm })).status, 200, "and served");
+  assert.ok(EV.BOOT_SWEEP_MS > 0 && EV.BOOT_SWEEP_MS <= 120e3, "a sweep shortly after every start");
+  assert.match(fs.readFileSync(path.join(repo, "evidence.js"), "utf8"), /setTimeout\(\(\) => sweep\(\)[^\n]*BOOT_SWEEP_MS\)/);
+  // the owner era: a clip said before it is not theirs - not listed, not played, no card
+  const pre = await rawClip({ subject: "subjpre", saidAt: since - 3600e3 });
+  assert.ok(!(await list(U.own, "?room=" + SLUG)).d.rows.some((r) => r.id === pre.id), "owner: not listed");
+  assert.ok((await list(U.adm, "?room=" + SLUG)).d.rows.some((r) => r.id === pre.id), "admins: listed");
+  assert.equal((await call("GET", `/api/evidence/${pre.id}/audio`, { user: U.own })).status, 404, "owner: not played");
+  assert.equal((await call("GET", `/api/evidence/${pre.id}/audio`, { user: U.adm })).status, 200, "admins: played");
+  await runQuery("DELETE FROM evidence_clips WHERE id != ?", [pre.id]);
+  await EV.setOn(false, ADMIN());
+  try {
+    assert.equal(await EV.padCard(ROOM.id, U.own), null, "switch off + only an earlier era's clip: no card (nothing says evidence exists)");
+    await rawClip({ subject: "subjnow" });
+    assert.deepEqual(await EV.padCard(ROOM.id, U.own), { on: false, n: 1 }, "a clip of their era: the card");
+  } finally { await EV.setOn(true, ADMIN()); }
+  // more than 200 subjects in one list: split over rows, none dropped
+  await runQuery("DELETE FROM evidence_clips");
+  EV._seen.clear();
+  for (let i = 0; i < 230; i++) await rawClip({ room: OTHER.id, subject: "many" + i, veil: "incognito", file: false });
+  const maxId = Number(((await getQuery("SELECT MAX(id) AS m FROM seethrough_log"))[0] || {}).m) || 0;
+  const big = await list(U.adm, "?room=" + encodeURIComponent(OTHER.id) + "&limit=500");
+  assert.equal(big.d.rows.length, 230);
+  const got = await getQuery("SELECT * FROM seethrough_log WHERE scope = 'clip_list' AND id > ?", [maxId]);
+  assert.equal(got.length, 2, "two rows (200 + 30)");
+  assert.equal(new Set(got.flatMap((r) => JSON.parse(r.logins))).size, 230, "every subject logged");
+  await runQuery("DELETE FROM evidence_clips");
+});
+
+test("review fixes (R2, WP5-T2): Pepe's long evidence turns arrive in chunks on both routes, staged in the store's pending/ (never uploads/.botupload); the shared fixture names the chunked paths", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, ADMIN());
+  const FX = JSON.parse(WIRE_RAW.toString("utf8"));
+  assert.ok(FX.chunked && Array.isArray(FX.chunked.paths), "the fixture's chunked block (from Pepe's real constants)");
+  assert.deepEqual([...FX.chunked.paths].sort(), Object.values(FX.paths).sort(), "both evidence bodies go through _backend_post (chunked over its limit)");
+  const kbps = parseInt(String(FX.chunked.bitrate), 10);
+  const maxBody = Math.ceil(FX.chunked.max_turn_secs * kbps * 1000 / 8 * 1.25 * 4 / 3) + 4096;     // the longest turn, container slack, base64
+  assert.ok(maxBody > 1024 * 1024 && FX.chunked.over < 1024 * 1024, "a long turn can't pass nginx's 1m in one piece - it must be chunked");
+  for (const p of FX.chunked.paths) {
+    assert.ok(BU.TARGETS[p] >= maxBody, p + " takes chunks, capped above the longest turn");
+    assert.ok(BU.PRIVATE.includes(p), p + " is staged privately");
+    assert.ok(String(BU.rootFor(p, false)).startsWith(EVDIR), p + ": in the store's own directory");
+  }
+  const BIG = Buffer.concat([M4A.subarray(0, 12), crypto.randomBytes(1200000)]);        // ~200 s of 48k AAC: ~1.6 MB of base64 JSON
+  async function viaChunks(target, payload) {
+    const raw = Buffer.from(JSON.stringify(Object.assign({ password: "bot" }, payload)));
+    const slice = 384 * 1024, total = Math.ceil(raw.length / slice), id = crypto.randomBytes(8).toString("hex");
+    assert.ok(raw.length > 1024 * 1024, "the body is over nginx's limit");
+    for (let i = 0; i < total; i++) {
+      const body = { password: "bot", id, target, seq: i, total, size: raw.length, data: raw.subarray(i * slice, (i + 1) * slice).toString("base64") };
+      assert.ok(Buffer.byteLength(JSON.stringify(body)) < 1024 * 1024, "each chunk fits under nginx's 1m");
+      const r = await call("POST", "/api/bot/upload/chunk", { body });
+      assert.equal(r.status, 200, target + ": " + r.text);
+      assert.ok(fs.existsSync(path.join(EVDIR, "pending", "chunks", id, "p" + i)), "staged in the store's pending/");
+      assert.ok(!fs.existsSync(path.join(BUDIR, id)), "never under uploads/.botupload");
+    }
+    const fin = await call("POST", "/api/bot/upload/finish", { body: { password: "bot", id, target, sha256: sha(raw) } });
+    assert.ok(!fs.existsSync(path.join(EVDIR, "pending", "chunks", id, "p0")), "the slices go once delivered");
+    return fin;
+  }
+  // the website path: Pepe's answer to a preview job
+  const { hk } = await freshLines();
+  resetLimits();
+  const r = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.adm, body: { c: hk.c } });
+  assert.equal(r.status, 200, r.text);
+  const job = relay._jobs.get(r.d.id);
+  const fin = await viaChunks("/api/bridge/evidence", { id: job.id, state: "ok", status: "ok", data: BIG.toString("base64"), secs: 200, target: job.target, veil: job.veil, veil_ok: job.veil_ok });
+  assert.equal(fin.status, 200, fin.text);
+  assert.equal(EV._pending.get(r.d.id).state, "ready", "the long preview arrived");
+  const au = await call("GET", `/api/rooms/${SLUG}/evidence/${r.d.id}/audio`, { user: U.adm });
+  assert.ok(au.status === 200 && au.buf.equals(BIG), "byte for byte");
+  await call("POST", `/api/rooms/${SLUG}/evidence/${r.d.id}/discard`, { user: U.adm, body: {} });
+  // the Camfrog path: the upload
+  const up = await viaChunks("/api/bridge/evidence/upload", { room: ROOM.id, target: "hankhidden", veil: "hidden", requester: "admcf", said_at: Date.now() / 1000 - 5, secs: 200,
+                                                              tx: "tx-00000000000000aa", data: BIG.toString("base64") });
+  assert.equal(up.status, 200, up.text);
+  const row = (await getQuery("SELECT * FROM evidence_clips WHERE id = ?", [up.d.id]))[0];
+  assert.ok(row && row.bytes === BIG.length && row.sha256 === sha(BIG), "the long clip is stored whole");
+  await runQuery("DELETE FROM evidence_clips WHERE id = ?", [up.d.id]);
+});
+
+test("review fixes (WP5-T5, WP5-ACC-7): every guard on the website path has a test - no identity row, past 15 minutes, switched off before Save, the right lost before Save; a preview stops playing once the right is gone", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, ADMIN());
+  // the request: revealLookup's refusal (the line's identity row is gone)
+  let L = await freshLines();
+  await runQuery("DELETE FROM bridge_veil WHERE c = ?", [L.hk.c]);
+  resetLimits();
+  const r3 = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.adm, body: { c: L.hk.c } });
+  assert.equal(r3.status, 404, "no identity row: not evidence");
+  assert.equal(r3.d.code, "not_evidence");
+  // the request: Pepe's 15 minutes
+  L = await freshLines();
+  L.fr.ts = Date.now() - 16 * 60e3;
+  resetLimits();
+  const r4 = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.adm, body: { c: L.fr.c } });
+  assert.equal(r4.status, 410, r4.text);
+  assert.equal(r4.d.code, "too_old");
+  // save: evidence clips switched off after the preview
+  L = await freshLines();
+  resetLimits();
+  const p2 = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.adm, body: { c: L.hk.c } });
+  assert.equal(p2.status, 200, p2.text);
+  assert.equal((await answer(relay._jobs.get(p2.d.id))).status, 200);
+  const n0 = (await getQuery("SELECT COUNT(*) AS n FROM evidence_clips"))[0].n;
+  await EV.setOn(false, ADMIN());
+  const s2 = await call("POST", `/api/rooms/${SLUG}/evidence/${p2.d.id}/save`, { user: U.adm, body: {} });
+  await EV.setOn(true, ADMIN());
+  assert.equal(s2.status, 409, "switched off: no save");
+  assert.equal(s2.d.code, "evidence_off");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM evidence_clips"))[0].n, n0);
+  await call("POST", `/api/rooms/${SLUG}/evidence/${p2.d.id}/discard`, { user: U.adm, body: {} });
+  // the owner loses the pad between the preview and Save
+  L = await freshLines();
+  resetLimits();
+  const pa = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.own, body: { c: L.fr.c } });
+  assert.equal(pa.status, 200, pa.text);
+  assert.equal((await answer(relay._jobs.get(pa.d.id))).status, 200);
+  resetLimits();
+  const pb = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.own, body: { c: L.hk.c } });
+  assert.equal(pb.status, 200, pb.text);
+  assert.equal((await answer(relay._jobs.get(pb.d.id))).status, 200);
+  assert.equal((await call("GET", `/api/rooms/${SLUG}/evidence/${pb.d.id}`, { user: U.own })).d.state, "ready", "still theirs");
+  assert.equal((await call("GET", `/api/rooms/${SLUG}/evidence/${pb.d.id}/audio`, { user: U.own })).status, 200);
+  await rooms.setOwner(ROOM.id, "own2", "test");
+  try {
+    assert.equal(await ST.chatRole(U.own, ROOM.id), null, "no longer the owner");
+    const sa = await call("POST", `/api/rooms/${SLUG}/evidence/${pa.d.id}/save`, { user: U.own, body: {} });
+    assert.equal(sa.status, 403, "save re-checks the right");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM evidence_clips"))[0].n, n0);
+    assert.equal((await call("GET", `/api/rooms/${SLUG}/evidence/${pb.d.id}/audio`, { user: U.own })).status, 404, "the preview stops playing");
+    assert.equal((await call("GET", `/api/rooms/${SLUG}/evidence/${pb.d.id}`, { user: U.own })).status, 404, "its status too");
+    assert.ok(!EV._pending.has(pb.d.id), "and it goes at once");
+  } finally {
+    await rooms.setOwner(ROOM.id, "own", "test");
+    EV._pending.delete(pa.d.id);
+  }
 });

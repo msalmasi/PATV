@@ -12,9 +12,10 @@
 //     the file's sha256, created / expires_at (+30 days, never moved), a per-clip legal hold, subject_gone_at (the subject used
 //     forget-me or deleted their account: flagged, never extended). Deliberately NO transcript and NO hidden words: those stay in
 //     bridge_veil / chat_log_veil, which go at forget-me and with the pad's chat window - myapp.db sits in 12 monthly backups;
-//   * the hourly sweep deletes file then row once expires_at passes, unless the clip's own hold or a chat legal hold (chatlog_holds
-//     "room:<rk>" / "who:<login>" / "who:h:<hash>" / "who:u:<id>" of an account linked to the login) covers it; it also drops
-//     previews past 10 minutes and orphan files (no row) older than an hour. A no-op on an empty table and a missing directory.
+//   * the hourly sweep (and one 90 s after a start) deletes row then file once expires_at passes, unless the clip's own hold or a chat
+//     legal hold (chatlog_holds "room:<rk>" / "who:<login>" / "who:h:<hash>" / "who:u:<id>" of an account linked to the login) covers
+//     it; it also drops previews past 10 minutes and orphan files (no row) older than an hour. A no-op on an empty table and a missing
+//     directory. A clip past expires_at under no hold is no longer listed or served, whenever the sweep runs;
 // Every access is a seethrough_log row (seethrough.js, 180 days; scopes clip_preview, clip_save, clip_play (once per viewer per clip
 // per hour - an audio element asks in Ranges), clip_download, clip_list, clip_hold, clip_delete; the admin export is evidenceexport.js:
 // export_evidence) plus, for what changes or copies something, an admin_audit row (evidence.preview / save / download / hold /
@@ -279,25 +280,43 @@ async function store({ from = null, buf = null, roomId, c = null, txId = null, s
   return { id, expires_at: exp };
 }
 
-/** The hourly sweep. -> {deleted, held, pending, orphans} */
+/** The hourly sweep (and once shortly after a start). -> {deleted, held, pending, orphans, failed}
+ *  Review fixes (WP5-ACC-3 / R1 / R7): the due rows are walked with a keyset cursor (expires_at, id) - every due row is looked at once
+ *  per sweep, so rows kept by a chat legal hold (or anything else) at the head of the queue never stall the rest; each row goes FIRST,
+ *  re-checked inside one dbUtils.tx (a hold placed since the page was read keeps it, file and all), and its file only once the row is
+ *  gone - a file that won't go is an orphan then, retried by the orphan pass below (counted `failed`). */
+const SWEEP_PAGE = 200;
 async function sweep(t = now()) {
   await init();
-  const out = { deleted: 0, held: 0, pending: 0, orphans: 0 };
+  const out = { deleted: 0, held: 0, pending: 0, orphans: 0, failed: 0 };
   for (const p of [...PEND.values()]) {
     timeOut(p, t);
     if (isOpen(p) ? t - p.ts > JOB_TTL : t - (p.done || p.ts) > PREVIEW_TTL) { dropPending(p); out.pending++; }
   }
   const base = existingDir();
+  let cur = null;
   for (;;) {
-    const due = await getQuery("SELECT * FROM evidence_clips WHERE expires_at <= ? AND hold_at IS NULL ORDER BY expires_at LIMIT 200", [t]);
-    let gone = 0;
+    const due = cur
+      ? await getQuery(`SELECT * FROM evidence_clips WHERE expires_at <= ? AND hold_at IS NULL AND (expires_at > ? OR (expires_at = ? AND id > ?))
+                        ORDER BY expires_at, id LIMIT ?`, [t, cur.e, cur.e, cur.id, SWEEP_PAGE])
+      : await getQuery("SELECT * FROM evidence_clips WHERE expires_at <= ? AND hold_at IS NULL ORDER BY expires_at, id LIMIT ?", [t, SWEEP_PAGE]);
     for (const r of due) {
       if (await heldWhy(r)) { out.held++; continue; }
-      if (base && !unlinkQuiet(filePath(r.file, base))) { console.error("[evidence] sweep: a file couldn't be deleted - kept for the next sweep"); continue; }
-      await runQuery("DELETE FROM evidence_clips WHERE id = ? AND hold_at IS NULL", [r.id]);
-      out.deleted++; gone++;
+      const what = await tx(async () => {
+        const x = (await getQuery("SELECT * FROM evidence_clips WHERE id = ? AND hold_at IS NULL", [r.id]))[0];
+        if (!x) return (await getQuery("SELECT 1 FROM evidence_clips WHERE id = ?", [r.id])).length ? "held" : "gone";
+        if (await heldWhy(x)) return "held";
+        const d = await runQuery("DELETE FROM evidence_clips WHERE id = ? AND hold_at IS NULL", [r.id]);
+        return d && d.changes === 1 ? "deleted" : "held";
+      });
+      if (what === "held") { out.held++; continue; }
+      if (what !== "deleted") continue;                              // (an admin deleted it meanwhile: their route took the file)
+      out.deleted++;
+      if (base && !unlinkQuiet(filePath(r.file, base))) out.failed++;  // an orphan now: the orphan pass below retries it every sweep
     }
-    if (due.length < 200 || !gone) break;
+    if (due.length < SWEEP_PAGE) break;
+    const last = due[due.length - 1];
+    cur = { e: Number(last.expires_at), id: String(last.id) };
   }
   if (base) {
     // previews nobody saved (a restart forgets them) and files with no row (a save that failed half-way)
@@ -319,14 +338,23 @@ async function sweep(t = now()) {
           const p = path.join(base, sh, f);
           let st = null;
           try { st = fs.statSync(p); } catch (e) { continue; }
-          if (t - st.mtimeMs > ORPHAN_MS && unlinkQuiet(p)) out.orphans++;
+          if (t - st.mtimeMs <= ORPHAN_MS) continue;
+          if (unlinkQuiet(p)) out.orphans++; else out.failed++;
         }
       }
     } catch (e) { /* nothing there */ }
   }
   for (const [k, at] of SEEN) if (t - at > PLAY_LOG_MS) SEEN.delete(k);
-  if (out.deleted || out.orphans) console.log(`[evidence] sweep: ${out.deleted} expired clip(s) deleted, ${out.held} kept under a hold, ${out.orphans} orphan file(s)`);
+  if (out.deleted || out.orphans || out.failed) {
+    (out.failed ? console.error : console.log)(`[evidence] sweep: ${out.deleted} expired clip(s) deleted, ${out.held} kept under a hold, ${out.orphans} orphan file(s)` +
+      (out.failed ? `, ${out.failed} file(s) that couldn't be deleted (retried every sweep)` : ""));
+  }
   return out;
+}
+/** Is a clip past its 30 days and under no hold (its own or a chat legal hold)? Such a clip is gone for everyone at expires_at, whenever
+ *  the sweep runs (review fix R6: the list and the audio stop serving it then). */
+async function lapsed(r, t = now()) {
+  return Number(r.expires_at) <= t && !r.hold_at && !(await heldWhy(r));
 }
 
 /** Forget-me / account deletion of the SUBJECT (owner question Q1, default): their clips are flagged (subject_gone_at), never extended,
@@ -357,17 +385,20 @@ async function padCard(roomId, viewer) {
     if (!viewer || !viewer.userId) return null;
     const r = await require("./seethrough").chatRole(viewer, roomId);
     if (!r || r.role !== "owner") return null;
-    const n = Number((await getQuery("SELECT COUNT(*) AS n FROM evidence_clips WHERE room_id = ?", [String(roomId)]))[0].n) || 0;
+    // (review fix WP5-ACC-6: only the clips of THEIR era - the ones GET /api/evidence shows them - never a sign of an earlier owner's)
+    const n = Number((await getQuery("SELECT COUNT(*) AS n FROM evidence_clips WHERE room_id = ? AND said_at >= ?", [String(roomId), Number(r.since) || 0]))[0].n) || 0;
     if (!effective() && !n) return null;
     return { on: effective(), n };
   } catch (e) { return null; }
 }
 
+// (review fix WP5-ACC-8: subject_gone - the subject used forget-me or deleted their account - is an ADMIN's to see; a pad's owner never
+// learns that private fact about a login)
 function rowView(r, admin, names) {
   return { id: r.id, room_id: r.room_id, subject: r.subject_login, veil: r.veil, said_at: Number(r.said_at), secs: Number(r.secs) || 0, bytes: Number(r.bytes) || 0,
            role: r.role, via: r.via, by: names.get(String(r.by_user)) || null, reason: r.reason || "", created: Number(r.created), expires_at: Number(r.expires_at),
-           subject_gone: r.subject_gone_at != null, audio: "/api/evidence/" + r.id + "/audio",
-           ...(admin ? { hold: r.hold_at ? { at: Number(r.hold_at), by: names.get(String(r.hold_by)) || null, why: r.hold_why || "" } : null } : {}) };
+           audio: "/api/evidence/" + r.id + "/audio",
+           ...(admin ? { subject_gone: r.subject_gone_at != null, hold: r.hold_at ? { at: Number(r.hold_at), by: names.get(String(r.hold_by)) || null, why: r.hold_why || "" } : null } : {}) };
 }
 async function namesOf(ids) {
   const list = [...new Set(ids.filter(Boolean).map(String))];
@@ -377,14 +408,24 @@ async function namesOf(ids) {
     return new Map(rows.map((x) => [String(x.userId), x.username]));
   } catch (e) { return new Map(); }
 }
-const seenOnce = (k, t = now()) => { const at = SEEN.get(k); if (at && t - at < PLAY_LOG_MS) return false; SEEN.set(k, t); if (SEEN.size > 5000) SEEN.delete(SEEN.keys().next().value); return true; };
+const seenLately = (k, t = now()) => { const at = SEEN.get(k); return !!(at && t - at < PLAY_LOG_MS); };
+const markSeen = (k, t = now()) => { SEEN.delete(k); SEEN.set(k, t); if (SEEN.size > 20000) SEEN.delete(SEEN.keys().next().value); };
+const seenOnce = (k, t = now()) => { if (seenLately(k, t)) return false; markSeen(k, t); return true; };
+const BOOT_SWEEP_MS = 90e3;              // review fix R6: a sweep shortly after every start (a restart no longer moves it an hour out)
+// Pepe's evidence bodies in chunks (botupload.js, nginx's 1m): their slices are staged HERE, in the store's pending/ (outside uploads/ and
+// so outside every backup) - never in uploads/.botupload (review fix R2)
+const CHUNK_TARGETS = ["/api/bridge/evidence", "/api/bridge/evidence/upload"];
+const chunkStage = (create) => { const b = create ? dir() : existingDir(); return b ? path.join(b, "pending", "chunks") : null; };
 
 function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }) {
   init().catch((e) => console.error("[evidence] init:", e.message));
   if (!noTimers) {
     const iv = setInterval(() => sweep().catch((e) => console.error("[evidence] sweep:", e.message)), SWEEP_MS);
     if (iv.unref) iv.unref();
+    const boot = setTimeout(() => sweep().catch((e) => console.error("[evidence] sweep:", e.message)), BOOT_SWEEP_MS);
+    if (boot.unref) boot.unref();
   }
+  try { const BU = require("./botupload"); for (const t of CHUNK_TARGETS) BU.stageAt(t, chunkStage); } catch (e) { console.error("[evidence] chunk staging:", e.message); }
   const SP = require("./siteperms");
   const guard = require("./middleware/authGuard");
   const relay = require("./bridge-relay");
@@ -420,6 +461,19 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
     const R = bySlug(req.params.slug);
     if (!p || !R || p.roomId !== R.id || !req.user || p.userId !== String(req.user.userId)) { res.status(404).json({ ok: false, error: "No such clip." }); return null; }
     return { p, R };
+  };
+  // review fix WP5-ACC-7: the preview's status and audio re-check the right (and the switches) on every ask - a requester who lost it
+  // (a pad transferred, see-through taken away, evidence clips switched off) hears nothing more, and the preview goes at once
+  const mineStill = async (req, res) => {
+    const x = mine(req, res);
+    if (!x) return null;
+    const rl = effective() ? await role(req.user, x.R.id, x.p.saidAt) : null;
+    if (rl) return x;
+    const j = relay._jobs.get(x.p.id);
+    if (j && j.state === "pending") relay._jobs.delete(x.p.id);
+    dropPending(x.p);
+    res.status(404).json({ ok: false, error: "No such clip." });
+    return null;
   };
 
   // ── 1. the website: ask Pepe for a veiled 🎙 line's audio (after a reveal) ──
@@ -498,13 +552,16 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
   });
 
   // ── 3. the requester's preview: status, audio (10 minutes), discard, save ──
-  app.get("/api/rooms/:slug/evidence/:id", addUser, (req, res) => {
+  app.get("/api/rooms/:slug/evidence/:id", addUser, async (req, res) => {
     noStore(res);
-    const x = mine(req, res);
-    if (x) res.json(previewView(x.p, req.params.slug));
+    try {
+      const x = await mineStill(req, res);
+      if (x) res.json(previewView(x.p, req.params.slug));
+    } catch (e) { fail(res, "status", e); }
   });
-  app.get("/api/rooms/:slug/evidence/:id/audio", addUser, (req, res) => {
-    const x = mine(req, res);
+  app.get("/api/rooms/:slug/evidence/:id/audio", addUser, async (req, res) => {
+    let x = null;
+    try { x = await mineStill(req, res); } catch (e) { return fail(res, "preview audio", e); }
     if (!x) return;
     const base = existingDir(), f = base ? pendingPath(x.p.id, base) : null;
     if (x.p.state !== "ready" || now() - x.p.done >= PREVIEW_TTL || !f || !fs.existsSync(f)) return res.status(410).json({ ok: false, error: "That clip expired." });
@@ -604,12 +661,20 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
         if (!r || r.role !== "owner") return res.status(403).json(NOT_ENTITLED);
         rows = await getQuery("SELECT * FROM evidence_clips WHERE room_id = ? AND said_at >= ? ORDER BY created DESC LIMIT ?", [String(roomId), r.since, n]);
       }
-      const names = await namesOf(rows.flatMap((r) => [r.by_user, r.hold_by]));
-      const out = rows.map((r) => rowView(r, admin, names));
-      // listing names the subjects: a seethrough row (clip_list), once per viewer per list per hour
-      if (out.length && seenOnce(`${req.user.userId}|list|${roomId || "*"}`)) {
-        await ST.log({ userId: String(req.user.userId), role: admin ? "admin" : "owner", scope: "clip_list", roomId,
-                       logins: out.map((o) => o.subject), ref: "evl:" + out.length });
+      // (review fix R6: a clip past its 30 days and under no hold is gone for everyone, whether or not the sweep has run yet)
+      const live = [];
+      for (const r of rows) if (!(await lapsed(r))) live.push(r);
+      const names = await namesOf(live.flatMap((r) => [r.by_user, r.hold_by]));
+      const out = live.map((r) => rowView(r, admin, names));
+      // listing names the subjects: a seethrough row (clip_list) naming every subject this viewer hasn't been logged for in this list within
+      // the hour (review fix WP5-ACC-4 / WP5-T8: a subject added later, or shown by a bigger ?limit, is logged too; past 200 logins the
+      // row is split - logAll - so none is dropped)
+      const key = `${req.user.userId}|list|${roomId || "*"}|`;
+      const fresh = [...new Set(out.map((o) => low(o.subject)))].filter((s) => !seenLately(key + s));
+      if (fresh.length) {
+        await ST.init();
+        await tx(() => ST.logAll({ userId: String(req.user.userId), role: admin ? "admin" : "owner", scope: "clip_list", roomId, logins: fresh, ref: "evl:" + out.length }));
+        for (const s of fresh) markSeen(key + s);
       }
       res.json({ ok: true, on: effective(), admin, rows: out });
     } catch (e) { fail(res, "list", e); }
@@ -623,6 +688,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       const admin = await isAdmin(req.user);
       const rl = r ? (admin ? { role: "admin" } : await role(req.user, r.room_id, r.said_at)) : null;
       if (!r || !rl) return res.status(404).json({ ok: false, error: "No such clip." });       // (the same answer: nothing confirmed to others)
+      if (await lapsed(r)) return res.status(410).json({ ok: false, error: "That clip's 30 days are up - it's being deleted." });   // (review fix R6)
       const base = existingDir(), f = base ? filePath(r.file, base) : null;
       if (!f || !fs.existsSync(f)) return res.status(410).json({ ok: false, error: "That clip's file is gone." });
       const dl = req.query.dl === "1";
@@ -660,12 +726,16 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       if (!x) return;
       const on = (req.body || {}).on === true;
       await ST.init(); await AA.init();
-      await tx(async () => {
-        if (on) await runQuery("UPDATE evidence_clips SET hold_at = ?, hold_by = ?, hold_why = ? WHERE id = ?", [now(), x.uid, x.why, x.r.id]);
-        else await runQuery("UPDATE evidence_clips SET hold_at = NULL, hold_by = NULL, hold_why = NULL WHERE id = ?", [x.r.id]);
+      const done = await tx(async () => {
+        // (review fix R7: the row may have gone since it was read - the sweep deletes the row first now; then nothing is held or logged)
+        const u = on ? await runQuery("UPDATE evidence_clips SET hold_at = ?, hold_by = ?, hold_why = ? WHERE id = ?", [now(), x.uid, x.why, x.r.id])
+          : await runQuery("UPDATE evidence_clips SET hold_at = NULL, hold_by = NULL, hold_why = NULL WHERE id = ?", [x.r.id]);
+        if (!u || u.changes !== 1) return false;
         await ST.log({ userId: x.uid, role: "admin", scope: "clip_hold", roomId: x.r.room_id, logins: [x.r.subject_login], reason: x.why, ref: (on ? "hold:" : "unhold:") + x.r.id });
         await AA.record({ userId: x.uid, username: req.user.username || null }, on ? "evidence.hold" : "evidence.unhold", null, { id: x.r.id, room: x.r.room_id }, x.why);
+        return true;
       });
+      if (!done) return res.status(404).json({ ok: false, error: "No such clip." });
       res.json({ ok: true, held: on });
     } catch (e) { fail(res, "hold", e); }
   });
@@ -709,8 +779,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
   });
 }
 
-module.exports = { init, isOn, effective, state, setOn, privacyCopy, role, heldWhy, store, sweep, subjectGone, offerable, padCard, register,
-                   KEEP_MS, PREVIEW_TTL, LINE_MAX_AGE, PRIVATE_HEADERS, ID_RE, Refuse, filePath, pendingPath,
+module.exports = { init, isOn, effective, state, setOn, privacyCopy, role, heldWhy, lapsed, store, sweep, subjectGone, offerable, padCard, register,
+                   KEEP_MS, PREVIEW_TTL, LINE_MAX_AGE, PRIVATE_HEADERS, ID_RE, Refuse, filePath, pendingPath, SWEEP_PAGE, BOOT_SWEEP_MS, CHUNK_TARGETS,
                    _pending: PEND, _seen: SEEN, _setDir,
                    _setClock: (f) => { clock = f || (() => Date.now()); },
                    _reset: () => { STATE = cleanState(null); loaded = false; ready = null; PEND.clear(); SEEN.clear(); } };

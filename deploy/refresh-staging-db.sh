@@ -45,6 +45,18 @@ if ! node "$(dirname "$0")/keep-staging-tables.js" "$S/myapp.db" "$S/myapp.db.ne
   pm2 start patv-staging >/dev/null
   exit 1
 fi
+# wave 2 WP-5 review fix (R4): ALSO the staging checkout's own list when it differs - staging usually runs the newer release, and after
+# a prod rollback this checkout's list can lack tables staging knows (evidence_clips: real identities behind frog names). Keeping a
+# table twice is harmless (staging's rows come back again), so the union of both lists is kept.
+SK="$S/deploy/keep-staging-tables.js"
+if [ -f "$SK" ] && ! cmp -s "$SK" "$(dirname "$0")/keep-staging-tables.js"; then
+  if ! node "$SK" "$S/myapp.db" "$S/myapp.db.new"; then
+    echo "staging's own tables (staging's list) couldn't be kept - staging untouched"
+    rm -f "$S/myapp.db.new" "$S/myapp.db.new-wal" "$S/myapp.db.new-shm"
+    pm2 start patv-staging >/dev/null
+    exit 1
+  fi
+fi
 mv -f "$S/myapp.db" "$S/myapp.db.previous"
 rm -f "$S/myapp.db-wal" "$S/myapp.db-shm" "$S/myapp.db.previous-wal" "$S/myapp.db.previous-shm"
 mv "$S/myapp.db.new" "$S/myapp.db"

@@ -5204,7 +5204,6 @@
   "js.pad.ev.loading": "Loading…",
   "js.pad.ev.empty": "No evidence clips on this pad.",
   "js.pad.ev.row": "{when} · {who} ({veil}) · {secs} s · saved by {by} · kept until {until}",
-  "js.pad.ev.gone": "They’ve since asked to be forgotten - this clip still goes at its 30 days.",
   "js.pad.ev.play": "Play",
   "js.pad.ev.list_err": "Couldn’t load the evidence clips: {error}",
   "js.pad.flair": "Pad flair: {name}",

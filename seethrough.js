@@ -45,6 +45,15 @@ async function log({ userId, role, scope, roomId = null, logins = [], reason = "
                             clean(reason, 200) || null, ref == null ? null : clean(ref, 80), t]);
   return Number(r && r.id) || null;
 }
+/** log() for any number of logins (wave 2 WP-5 review fix WP5-T8): one row per LOGINS_MAX of them, the same scope / reason / ref on
+ *  each, at least one row - an audit row never drops a login. Run it inside the caller's dbUtils.tx when the rows must land together.
+ *  -> [ids] */
+async function logAll(o) {
+  const all = [...new Set((Array.isArray(o.logins) ? o.logins : [o.logins]).map((x) => clean(x, 40).toLowerCase()).filter(Boolean))];
+  const ids = [];
+  for (let i = 0; i === 0 || i < all.length; i += LOGINS_MAX) ids.push(await log(Object.assign({}, o, { logins: all.slice(i, i + LOGINS_MAX) })));
+  return ids;
+}
 /** The viewer's toggle for (scope, room): {on_at, log_id} or null. */
 async function toggleOf(userId, scope, roomId) {
   if (!userId) return null;
@@ -377,6 +386,6 @@ function register(app, { addUser, noTimers = false }) {
   });
 }
 
-module.exports = { init, log, toggleOf, toggleOn, toggleOff, toggleUsed, list, prune, register, KEEP_MS,
+module.exports = { init, log, logAll, LOGINS_MAX, toggleOf, toggleOn, toggleOff, toggleUsed, list, prune, register, KEEP_MS,
                    ownerEra, chatRole, chatRoleCached, mayReveal, revealChat, noteOwnerUse,
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _day: DAY };

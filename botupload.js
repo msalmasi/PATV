@@ -24,7 +24,10 @@
 //   * abandoned uploads expire TTL after their last chunk (sweep every minute + on each chunk); at most MAX_OPEN uploads and
 //     MAX_OPEN_BYTES announced bytes at once (429 beyond).
 //
-// Slices live on disk under BOTUPLOAD_DIR (default uploads/.botupload, git-ignored) - one directory per upload.
+// Slices live on disk under BOTUPLOAD_DIR (default uploads/.botupload, git-ignored) - one directory per upload. wave 2 WP-5 review fix
+// (R2): a target registered with stageAt() (evidence.js: Pepe's moderation evidence bodies - a veiled person's voice) stages its slices
+// in that module's own private directory instead (the evidence store's pending/chunks: outside uploads/, so never in a backup); such a target
+// in PRIVATE takes no chunks at all until its directory is registered (400 E_TARGET - Pepe then POSTs it in one piece, as before).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -46,6 +49,8 @@ const TARGETS = Object.freeze({
   "/api/soundboards/bot/room-clip": 6 * MB,
   "/api/bridge/micclip": 9 * MB,
   "/api/bridge/camclip": 9 * MB,
+  "/api/bridge/evidence": 9 * MB,           // wave 2 WP-5 (review fix R2 / WP5-T2): a mic turn up to 300 s is ~2.4 MB of base64 JSON
+  "/api/bridge/evidence/upload": 9 * MB,    //   (evidence.js's own parser takes 9 MB); staged privately (PRIVATE below)
   "/api/media": 9 * MB,
   "/api/gtf/bot/import": 32 * MB,
   "/api/gtf/bot/put": 32 * MB,
@@ -61,36 +66,64 @@ const TARGETS = Object.freeze({
   "/api/userstats/sync": 4 * MB,
 });
 
+// targets whose bodies must never be staged under uploads/ (a veiled person's voice): chunks only into the directory their module registers
+const PRIVATE = Object.freeze(["/api/bridge/evidence", "/api/bridge/evidence/upload"]);
+const STAGE = new Map();                // target -> (create: boolean) => its private staging directory | null (not made yet)
+
 let clock = () => Date.now();
 function _setClock(fn) { clock = fn || (() => Date.now()); }
 function _setDir(d) { DIR = d; }
+/** A module's own staging directory for `target` (fn(create) -> dir | null; create = false must not make it). */
+function stageAt(target, fn) {
+  if (!TARGETS[target]) throw new Error("botupload: no such target");
+  if (typeof fn !== "function") throw new Error("botupload: stageAt needs a function");
+  STAGE.set(target, fn);
+}
+/** Where `target`'s slices live: its registered directory, else DIR (null: a PRIVATE target with none - it takes no chunks). */
+function rootFor(target, create) {
+  const f = STAGE.get(target);
+  if (!f) return PRIVATE.includes(target) ? null : DIR;
+  try { return f(!!create) || null; } catch (e) { return null; }
+}
+/** Every directory that may hold uploads (DIR + the registered private ones that exist). */
+function roots() {
+  const out = [DIR];
+  for (const t of STAGE.keys()) { const r = rootFor(t, false); if (r && !out.includes(r)) out.push(r); }
+  return out;
+}
 
 class Refuse extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra || {}; } }
-const dirOf = (id) => path.join(DIR, id);
-const metaOf = (id) => path.join(DIR, id, "meta.json");
-const partOf = (id, seq) => path.join(DIR, id, "p" + seq);
+const dirOf = (root, id) => path.join(root, id);
+const metaOf = (root, id) => path.join(root, id, "meta.json");
+const partOf = (root, id, seq) => path.join(root, id, "p" + seq);
 const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { return null; } };
 function writeAtomic(file, data) {
   const tmp = file + ".tmp" + process.pid + "-" + crypto.randomBytes(3).toString("hex");
-  fs.writeFileSync(tmp, data);
+  fs.writeFileSync(tmp, data, { mode: 0o600 });
   fs.renameSync(tmp, file);
 }
-const rm = (id) => { try { fs.rmSync(dirOf(id), { recursive: true, force: true }); } catch (e) { /* gone */ } };
+const rm = (root, id) => { try { fs.rmSync(dirOf(root, id), { recursive: true, force: true }); } catch (e) { /* gone */ } };
 const int = (v) => (typeof v === "number" && Number.isInteger(v) ? v : (typeof v === "string" && /^\d{1,12}$/.test(v) ? Number(v) : NaN));
 
 function listOpen() {
-  let ids = [];
-  try { ids = fs.readdirSync(DIR).filter((d) => ID_RE.test(d)); } catch (e) { return []; }
-  return ids.map((id) => ({ id, meta: readJson(metaOf(id)) }));
+  const out = [];
+  for (const root of roots()) {
+    let ids = [];
+    try { ids = fs.readdirSync(root).filter((d) => ID_RE.test(d)); } catch (e) { continue; }
+    for (const id of ids) out.push({ id, root, meta: readJson(metaOf(root, id)) });
+  }
+  return out;
 }
+/** An upload id's record in a directory OTHER than `root` (an id is one upload, whatever directory it was started in). */
+const elsewhere = (root, id) => roots().some((r) => r !== root && fs.existsSync(metaOf(r, id)));
 
 /** Throw away uploads nobody touched for TTL (and delivered markers after DONE_TTL). -> how many went. */
 function sweep(t = clock()) {
   let n = 0;
-  for (const { id, meta } of listOpen()) {
+  for (const { id, root, meta } of listOpen()) {
     const last = meta ? Number(meta.done || meta.touched || meta.created || 0) : 0;
-    if (!meta || t - last > (meta.done ? DONE_TTL : TTL)) { rm(id); n += 1; }
+    if (!meta || t - last > (meta.done ? DONE_TTL : TTL)) { rm(root, id); n += 1; }
   }
   return n;
 }
@@ -115,10 +148,13 @@ function chunk(b) {
   if (typeof b.data !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(b.data)) throw new Refuse(400, "data must be base64");
   const buf = Buffer.from(b.data, "base64");
   if (!buf.length || buf.length > CHUNK_MAX) throw new Refuse(400, `a chunk is 1..${CHUNK_MAX} bytes`);
+  const root = rootFor(target, true);
+  if (!root) throw new Refuse(400, "that route doesn't take chunked uploads", { code: "E_TARGET" });
   maybeSweep();
   const t = clock();
-  let meta = readJson(metaOf(id));
+  let meta = readJson(metaOf(root, id));
   if (meta && meta.done) throw new Refuse(409, "that upload was already delivered", { delivered: true });
+  if (!meta && elsewhere(root, id)) throw new Refuse(409, "that upload id was started with a different target / size");
   if (meta) {
     if (meta.target !== target || meta.total !== total || meta.size !== size) throw new Refuse(409, "that upload id was started with a different target / size");
   } else {
@@ -126,10 +162,10 @@ function chunk(b) {
     if (open.length >= MAX_OPEN || open.reduce((s, o) => s + (Number(o.meta.size) || 0), 0) + size > MAX_OPEN_BYTES) {
       throw new Refuse(429, "too many uploads at once - try again in a minute");
     }
-    fs.mkdirSync(dirOf(id), { recursive: true });
+    fs.mkdirSync(dirOf(root, id), { recursive: true, mode: 0o700 });
     meta = { id, target, total, size, created: t };
   }
-  const part = partOf(id, seq);
+  const part = partOf(root, id, seq);
   let dup = false;
   if (fs.existsSync(part)) {
     if (sha(fs.readFileSync(part)) !== sha(buf)) throw new Refuse(409, `chunk ${seq} was already sent with different data`);
@@ -138,9 +174,9 @@ function chunk(b) {
     writeAtomic(part, buf);
   }
   meta.touched = t;
-  writeAtomic(metaOf(id), JSON.stringify(meta));
+  writeAtomic(metaOf(root, id), JSON.stringify(meta));
   let have = 0;
-  for (let i = 0; i < total; i++) if (fs.existsSync(partOf(id, i))) have += 1;
+  for (let i = 0; i < total; i++) if (fs.existsSync(partOf(root, id, i))) have += 1;
   return { ok: true, have, total, ...(dup ? { dup: true } : {}) };
 }
 
@@ -148,25 +184,29 @@ function chunk(b) {
 function assemble(b) {
   const id = String(b.id || ""), target = String(b.target || "");
   if (!ID_RE.test(id)) throw new Refuse(400, "bad upload id");
-  const meta = readJson(metaOf(id));
-  if (!meta) throw new Refuse(404, "no such upload (expired?) - send it again", { code: "E_UNKNOWN" });
+  const root = TARGETS[target] ? rootFor(target, false) : null;
+  const meta = root ? readJson(metaOf(root, id)) : null;
+  if (!meta) {
+    if (roots().some((r) => fs.existsSync(metaOf(r, id)))) throw new Refuse(409, "that upload is for a different route");
+    throw new Refuse(404, "no such upload (expired?) - send it again", { code: "E_UNKNOWN" });
+  }
   if (meta.done) throw new Refuse(409, "that upload was already delivered", { delivered: true });
   if (meta.target !== target) throw new Refuse(409, "that upload is for a different route");
   const missing = [];
-  for (let i = 0; i < meta.total; i++) if (!fs.existsSync(partOf(id, i))) missing.push(i);
+  for (let i = 0; i < meta.total; i++) if (!fs.existsSync(partOf(root, id, i))) missing.push(i);
   if (missing.length) throw new Refuse(409, `missing chunk(s) ${missing.slice(0, 20).join(", ")}`, { missing: missing.slice(0, 200) });
-  const whole = Buffer.concat(Array.from({ length: meta.total }, (_, i) => fs.readFileSync(partOf(id, i))));
+  const whole = Buffer.concat(Array.from({ length: meta.total }, (_, i) => fs.readFileSync(partOf(root, id, i))));
   const want = String(b.sha256 || "").toLowerCase();
   if (whole.length !== meta.size || !/^[0-9a-f]{64}$/.test(want) || sha(whole) !== want) {
-    rm(id);
+    rm(root, id);
     throw new Refuse(400, "the upload doesn't match its size / sha256 - send it again", { code: "E_SHA" });
   }
   let body;
   try { body = JSON.parse(whole.toString("utf8")); } catch (e) { body = null; }
-  if (!body || typeof body !== "object" || Array.isArray(body)) { rm(id); throw new Refuse(400, "the upload isn't a JSON object"); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) { rm(root, id); throw new Refuse(400, "the upload isn't a JSON object"); }
   // delivered: the slices go, a small marker answers a retried finish until DONE_TTL
-  rm(id);
-  try { fs.mkdirSync(dirOf(id), { recursive: true }); writeAtomic(metaOf(id), JSON.stringify({ id, target, done: clock() })); } catch (e) { /* best effort */ }
+  rm(root, id);
+  try { fs.mkdirSync(dirOf(root, id), { recursive: true, mode: 0o700 }); writeAtomic(metaOf(root, id), JSON.stringify({ id, target, done: clock() })); } catch (e) { /* best effort */ }
   return { body, bytes: whole.length };
 }
 
@@ -203,4 +243,4 @@ function register(app, { isBotToken, noTimers } = {}) {
   }
 }
 
-module.exports = { register, chunk, assemble, sweep, TARGETS, CHUNK_MAX, TTL, DONE_TTL, MAX_OPEN, Refuse, _setClock, _setDir };
+module.exports = { register, chunk, assemble, sweep, stageAt, rootFor, TARGETS, PRIVATE, CHUNK_MAX, TTL, DONE_TTL, MAX_OPEN, Refuse, _setClock, _setDir };

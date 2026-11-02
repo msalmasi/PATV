@@ -396,6 +396,8 @@
   </table></div>
   <h3>Evidence export</h3>
   <p class="adm-help">One pad's chat for a time range (UTC; at most 31 days, 50,000 lines, 10 a day) with the <b>real names</b> behind frog names and hidden people's words - for a report, a legal request or a case. The file starts with "Evidence export by &lt;you&gt;, &lt;time&gt;, &lt;pad&gt;" and is logged with every login in it (<code>export_evidence</code>). Lines taken down or left out (forget-me, account deletion, staff hides) stay out. It is not the member download: that one keeps frog names and bars for everyone.</p>
+  <%# (review fix WP5-ACC-1: the form only while evidence clips can be made - evidenceexport.js refuses otherwise too) %>
+  <% if (locals.evExport) { %>
   <form id="exForm" class="adm-form">
     <label>Pad (address or room id)<input type="text" name="room" required autocomplete="off"></label>
     <label>From (UTC)<input type="datetime-local" name="from" required></label>
@@ -404,6 +406,9 @@
     <label>Reason<input type="text" name="reason" required minlength="3" maxlength="200" autocomplete="off"></label>
     <div class="adm-actions"><button type="submit">Download evidence export</button><span id="exMsg" class="adm-msg" role="status"></span></div>
   </form>
+  <% } else { %>
+  <p class="adm-help" id="exOff">The evidence export is off: it opens while evidence clips are on (and they need privacy wire v2).</p>
+  <% } %>
 </section>
 <script>
 // wave 2 WP-5: the Evidence clips card (evidence.js: GET / POST /api/admin/evidence {on}, GET /api/evidence, /api/evidence/:id/audio,
@@ -474,7 +479,7 @@
   }
   f.addEventListener('submit', function (e) { e.preventDefault(); load(); });
   var ex = document.getElementById('exForm'), exMsg = document.getElementById('exMsg');
-  ex.addEventListener('submit', function (e) {
+  if (ex) ex.addEventListener('submit', function (e) {
     e.preventDefault();
     var g = function (k) { return ex.elements[k].value.trim(); };
     var utc = function (v) { return v ? v + (v.length === 16 ? ':00' : '') + 'Z' : ''; };

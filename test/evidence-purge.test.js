@@ -54,6 +54,19 @@ test("dry run counts; --apply takes expired unheld clips (file then row); holds 
   db.close();
 });
 
+test("review fix R5: the rollback step is written down where operators look (deploy/README.md), the tool points at it", () => {
+  const readme = fs.readFileSync(path.join(repo, "deploy", "README.md"), "utf8");
+  const i = readme.indexOf("## Rolling the site back past wave 2 WP-5");
+  assert.ok(i > 0, "deploy/README.md has the section");
+  const sec = readme.slice(i, readme.indexOf("\n## ", i + 5));
+  assert.match(sec, /turn evidence clips off/, "switch off first");
+  assert.match(sec, /cp \/home\/PATV\/tools\/evidence-purge\.js /, "copy the tool out (the older build doesn't have it)");
+  assert.match(sec, /node tools\/evidence-purge\.js myapp\.db --all --apply/, "purge every clip before the rollback");
+  assert.match(sec, /--include-held/, "what happens to held clips");
+  assert.match(sec, /refresh-staging-db\.sh|refresh staging/, "the staging refresh after such a rollback");
+  assert.match(fs.readFileSync(path.join(repo, "tools", "evidence-purge.js"), "utf8").slice(0, 800), /deploy\/README\.md "Rolling the site back past wave 2 WP-5"/);
+});
+
 test("a database without the table: nothing to do", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "evidence-purge-test-"));
   const db = new sqlite3.Database(path.join(tmp, "myapp.db"));

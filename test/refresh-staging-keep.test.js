@@ -156,6 +156,12 @@ test("the lists cover every per-environment table, and the script runs it with s
   assert.match(sh, /if ! node "\$\(dirname "\$0"\)\/keep-staging-tables\.js" "\$S\/myapp\.db" "\$S\/myapp\.db\.new"; then[\s\S]{0,300}rm -f "\$S\/myapp\.db\.new"[\s\S]{0,120}pm2 start patv-staging[\s\S]{0,40}exit 1/,
                "a copy that can't be made safe is thrown away and staging restarted on its old DB");
   assert.ok(!/DELETE FROM bot_keys;/.test(sh), "the old bot_keys-only handling is gone");
+  // wave 2 WP-5 review fix (R4): the staging checkout's own list runs too when it differs (after a prod rollback, prod's older list can
+  // lack evidence_clips) - before the swap, and a failure throws the copy away the same way
+  const sk = sh.indexOf('SK="$S/deploy/keep-staging-tables.js"');
+  assert.ok(sk > keep && sk < swap, "the staging checkout's keep list runs after prod's and before the swap");
+  assert.match(sh, /if \[ -f "\$SK" \] && ! cmp -s "\$SK" "\$\(dirname "\$0"\)\/keep-staging-tables\.js"; then\s+if ! node "\$SK" "\$S\/myapp\.db" "\$S\/myapp\.db\.new"; then[\s\S]{0,300}rm -f "\$S\/myapp\.db\.new"[\s\S]{0,120}pm2 start patv-staging[\s\S]{0,40}exit 1/,
+               "staging's list: the union is kept; a copy it can't make safe is thrown away");
   // 1.99acm: prod's unfinished exports never run on staging
   assert.match(sh, /if has_table account_exports; then sqlite3 "\$S\/myapp\.db\.new" "UPDATE account_exports SET state = 'expired', file = NULL WHERE state IN \('queued', 'running'\);"; fi/);
   assert.ok(sh.indexOf("UPDATE account_exports") < sh.indexOf("pm2 stop patv-staging"), "scrubbed in the copy before staging ever opens it");
