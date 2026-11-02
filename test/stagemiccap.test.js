@@ -585,3 +585,24 @@ test('mic capture UI strings match English catalog and the admin checkbox uses n
   assert.match(fs.readFileSync(path.join(uiRepo, 'public/js/stage-admin.js'), 'utf8'), /body\[el.name\] = el.type === 'checkbox' \? el.checked : el.value/);
 });
 }
+
+test("1.99?? stable slots: a stable program's capture draws each tile in its place's cell - an empty place stays empty (grid), picture in picture's big picture is place 0 (not the newest), dynamic keeps place order with 2 and puts the main in the big cell with 3+", () => {
+  const grid = M.rects({ layout: "grid4", stable: true, src: [cam("a", { pos: 0 }), cam("c", { pos: 2 }), cam("d", { pos: 3 })] });
+  const r = id => grid.find(x => x.id === id);
+  assert.deepEqual([r("a").x, r("a").y], [0, 0]);
+  assert.deepEqual([r("c").x, r("c").y > 300], [0, true], "place 2: bottom left - place 1 stays an empty cell");
+  assert.ok(r("d").x > 600 && r("d").y > 300);
+  const old = M.rects({ layout: "grid4", src: [cam("a", { pos: 0 }), cam("c", { pos: 2 }), cam("d", { pos: 3 })] });
+  assert.ok(old.find(x => x.id === "c").x > 600 && old.find(x => x.id === "c").y === 0, "without stable: today's (filled in order)");
+  // picture in picture: place 0 fills the frame even while the other one talks
+  const pip = M.rects({ layout: "pip", stable: true, src: [cam("a", { pos: 0 }), cam("b", { pos: 1, newest: true })] });
+  assert.deepEqual(pip[0], { id: "a", x: 0, y: 0, w: 1280, h: 720 });
+  assert.equal(M.rects({ layout: "pip", src: [cam("a", { pos: 0 }), cam("b", { pos: 1, newest: true })] })[0].id, "b", "without stable: the newest");
+  // dynamic, 2: place order (the main field never jumps a tile into cell 0)
+  const d2 = M.rects({ stable: true, src: [cam("a", { pos: 0 }), cam("b", { pos: 1 })], dyn: { n: 2, t: "d2", main: "b" } });
+  assert.deepEqual(d2.map(x => [x.id, x.x === 0]), [["a", true], ["b", false]]);
+  // dynamic, 3+: the main in the big cell, trading with place 0 - the others keep their cells
+  const d3 = M.rects({ stable: true, src: [cam("a", { pos: 0 }), cam("b", { pos: 1 }), cam("c", { pos: 2 })], dyn: { n: 3, t: "d3", main: "c" } });
+  const plain = M.rects({ src: [cam("c", { pos: 0 }), cam("b", { pos: 1 }), cam("a", { pos: 2 })], dyn: { n: 3, t: "d3", main: "c" } });
+  assert.deepEqual(d3, plain, "c big, b where it was, a in c's old cell");
+});

@@ -112,12 +112,38 @@ function speaking(p) { return p && (p.speaking === "someone" || p.speaking === "
 function usable(p) { return !!(p && !p.signin && !p.blocked && p.on !== false && (entries(p).some(e => e.watch !== "hidden") || speaking(p))); }
 async function programFor(R, user) { return deps.program(R.id, user.userId); }
 
-/** CSS grid rectangles, including the intentional picture-in-picture overlap. No DOM required. */
+/** 1.99?? STABLE SLOTS: each legacy layout's cells / columns - MUST equal stage-mic.js CELLS / COLS (test/micfollow-ui.test.js). */
+const CELLS = Object.freeze({ single: 1, split: 2, grid4: 4, grid9: 9, pip: 2 }), COLS = Object.freeze({ single: 1, split: 2, grid4: 2, grid9: 3, pip: 1 });
+/** 1.99?? STABLE SLOTS (program.stable): each entry's cell is its place (pos) - an empty place stays an empty cell; two on one
+ *  place take the next free one; more places than cells (or dense: the dynamic templates) close up in place order. The page's
+ *  stage-mic.js slotCells does exactly this. -> [entry | null] */
+function slotCells(sorted, cells, dense) {
+  const out = [];
+  for (const s of sorted) {
+    let p = Math.min(64, Math.max(0, Math.floor(Number(s.pos)) || 0));
+    while (out[p]) p++;
+    out[p] = s;
+  }
+  for (let i = 0; i < out.length; i++) if (!out[i]) out[i] = null;
+  return dense || out.length > cells ? out.filter(Boolean) : out;
+}
+/** CSS grid rectangles, including the intentional picture-in-picture overlap. No DOM required. 1.99??: a stable program
+ *  (program.stable) places each tile in its place's cell - what the viewer's page (stage-mic.js) shows. */
 function rects(program, width = W, height = H) {
   const es = entries(program), n = es.length, out = [], gap = 2;
   if (!n) return out;
   const dyn = program.dyn, d = dyn && dyn.n === n && dyn.t === "d" + n ? n : 0;
-  const main = d ? es.find(e => e.id === dyn.main) || es[0] : es.find(e => e.newest) || es.filter(e => !e.pin).at(-1) || es[0];
+  const stable = program.stable === true;
+  // 1.99??: stable - the dynamic cells are the places with the main in cell 0 once there are 3+ (it trades places with whoever is
+  // there); picture in picture's big picture is place 0; the legacy grids keep empty places as empty cells
+  let seq = null;
+  if (stable && d) {
+    seq = slotCells(es, n, true);
+    const mi = seq.findIndex(e => e.id === dyn.main);
+    if (seq.length >= 3 && mi > 0) [seq[0], seq[mi]] = [seq[mi], seq[0]];
+  } else if (stable && program.layout !== "pip") seq = slotCells(es, CELLS[program.layout] || 1, false);
+  const main = stable ? (d ? seq[0] : es[0])
+    : d ? es.find(e => e.id === dyn.main) || es[0] : es.find(e => e.newest) || es.filter(e => !e.pin).at(-1) || es[0];
   const add = (e, x, y, w, h) => out.push({ id: e.id, x: Math.round(x), y: Math.round(y),
     w: Math.max(2, Math.min(width, Math.round(x + w)) - Math.round(x)), h: Math.max(2, Math.min(height, Math.round(y + h)) - Math.round(y)) });
   if (!d && program.layout === "pip") {
@@ -141,13 +167,14 @@ function rects(program, width = W, height = H) {
     }
   } else {
     const c = program.layout === "grid9" ? 3 : program.layout === "grid4" || program.layout === "split" ? 2 : 1;
-    cols = Array(c).fill(1); rows = program.layout === "grid9" ? 3 : program.layout === "grid4" ? 2 : Math.ceil(n / c);
+    cols = Array(c).fill(1); rows = program.layout === "grid9" ? 3 : program.layout === "grid4" ? 2 : Math.ceil((seq ? seq.length : n) / c);
   }
-  if (!cells.length) for (let i = 0; i < n; i++) cells.push([i % cols.length, Math.floor(i / cols.length), 1, 1]);
+  // (1.99??: a stable program's cells follow its places - seq, null = an empty cell)
+  const ordered = seq || (d ? [main, ...es.filter(e => e !== main)] : es);
+  if (!cells.length) for (let i = 0; i < ordered.length; i++) cells.push([i % cols.length, Math.floor(i / cols.length), 1, 1]);
   const unit = (width - gap * (cols.length - 1)) / cols.reduce((a, b) => a + b, 0), rh = (height - gap * (rows - 1)) / rows;
   const xs = [0]; for (const c of cols) xs.push(xs[xs.length - 1] + c * unit + gap);
-  const ordered = d ? [main, ...es.filter(e => e !== main)] : es;
-  ordered.forEach((e, i) => { const [x, y, cw, ch] = cells[i]; add(e, xs[x], y * (rh + gap), xs[x + cw] - xs[x] - gap, ch * rh + (ch - 1) * gap); });
+  ordered.forEach((e, i) => { if (!e) return; const [x, y, cw, ch] = cells[i]; add(e, xs[x], y * (rh + gap), xs[x + cw] - xs[x] - gap, ch * rh + (ch - 1) * gap); });
   return out;
 }
 /** Central alignment point for WP-4. Deliberately never reads a cover's login or id as identity. */
@@ -747,6 +774,7 @@ async function start(opts, hooks = {}) {
 }
 module.exports = { configure, init, start, gate, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
+  slotCells, CELLS, COLS,                     // 1.99?? stable slots: the cells of a stable program (stage-mic.js has the same)
   consent,                                    // mic keep: storykeep's per-person recheck at save / post (the engine's own rule)
   privateLayoutStrict,                        // mic keep review: storykeep's strict profile read (an unreadable layout throws)
   _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, noteVoices, lastRoster, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };

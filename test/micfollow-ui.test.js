@@ -164,9 +164,9 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.match(gate, /if \(window\.PATVAvSync\) window\.PATVAvSync\.gateProgram\(slug, d\.stage_program \|\| null, showMic\);/);
   assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
   // (wave2 WP-4: av-sync.js?v=3 - it delays the dynamic layout's `ring` like newest / recent; 1.99ahm: v=4 - the On the mic card / chat lines;
-  // v=5 - the people list's 🎙 icons)
-  assert.ok(blk.indexOf('av-sync.js?v=5') >= 0 && blk.indexOf('av-sync.js?v=5') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
-  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=5"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
+  // v=5 - the people list's 🎙 icons; 1.99?? v=6 - a stable program's places too)
+  assert.ok(blk.indexOf('av-sync.js?v=6') >= 0 && blk.indexOf('av-sync.js?v=6') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
+  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=6"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
   assert.doesNotMatch(read("views", "home.ejs"), /stage-mic|setMic/, "the homepage never renders the mic stage");
 });
@@ -1284,10 +1284,10 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
   assert.equal(seen.length, 3, "unsubscribed");
 });
 
-test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v7) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
+test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v9 - 1.99?? stable slots) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=8"), "pad-reveal.js, then stage-mic.js v8");   // (1.99ahn dead relay: v8 - resuming…)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=9"), "pad-reveal.js, then stage-mic.js v9");   // (1.99ahn dead relay: v8 - resuming…; 1.99?? stable slots: v9)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");
@@ -1483,4 +1483,143 @@ test("1.99ahn review UX-2 stage-mic.js: 'resuming…' only on a tile whose pictu
   assert.equal(reasonOf(H.tileOf("a")), "cam starting…", "a's relay started over while hidden: 'cam starting…'");
   assert.equal(reasonOf(H.tileOf("c")), "resuming…", "c played after the first return: 'resuming…'");
   H.ctl.stop();
+});
+
+// ── 1.99?? STABLE SLOTS (owner 2026-11-02: "It doesn't need to move speaker slots unless a new speaker is coming in") ──
+/** Spy on the grid: which existing tile nodes get appended / inserted / removed (a moved node re-attaches its video). */
+function moves(grid, nodes) {
+  const out = [];
+  let inside = 0;                        // (the fake DOM's insertBefore / appendChild detach through removeChild: one move)
+  for (const k of ["appendChild", "insertBefore", "removeChild"]) {
+    const f = grid[k];
+    grid[k] = function (c, ...r) {
+      if (nodes.includes(c) && !inside) out.push(k + ":" + c.getAttribute("data-id"));
+      inside++;
+      try { return f.call(this, c, ...r); } finally { inside--; }
+    };
+  }
+  return out;
+}
+const idsOf = (grid) => grid.children.filter((c) => c.getAttribute && c.getAttribute("data-id")).map((c) => c.getAttribute("data-id"));
+const area = (grid, id) => tileEl(grid, id).style.gridArea;
+const fillersOf = (grid) => grid.children.filter((c) => c.className === "mf-empty").length;
+
+test("1.99?? stage-mic.js: a node only moves when its place changed - the same program again (legacy grid, no stable flag) moves NO tile (it used to re-append every one); a newcomer goes in at its place, the others stay", () => {
+  const prog = (src, extra) => Object.assign({ v: 1, layout: "grid4", count: src.length, src, still_s: 20 }, extra || {});
+  const s = dynSandbox(prog([tileS("a", 0, "card"), tileS("b", 1, "card"), tileS("c", 2, "card")]));
+  const A = tileEl(s.grid, "a"), B = tileEl(s.grid, "b"), C = tileEl(s.grid, "c");
+  const moved = moves(s.grid, [A, B, C]);
+  s.ctl.update(prog([tileS("a", 0, "card"), tileS("b", 1, "card", { newest: true }), tileS("c", 2, "card")], { v: 2 }));
+  s.ctl.update(prog([tileS("a", 0, "card", { newest: true }), tileS("b", 1, "card"), tileS("c", 2, "card")], { v: 3 }));
+  assert.deepEqual(moved, [], "nothing moved: no node re-attached");
+  assert.deepEqual(idsOf(s.grid), ["a", "b", "c"]);
+  assert.equal(fillersOf(s.grid), 1, "grid4: one empty cell");
+  // d comes in at place 1 (today's order can do that: a pin first): inserted there - a, b, c never move
+  s.ctl.update(prog([tileS("a", 0, "card"), tileS("d", 1, "card"), tileS("b", 2, "card"), tileS("c", 3, "card")], { v: 4 }));
+  assert.deepEqual(moved, [], "existing tiles untouched");
+  assert.deepEqual(idsOf(s.grid), ["a", "d", "b", "c"], "reading order = positions");
+  // b leaves: removed; the others stay where they are
+  s.ctl.update(prog([tileS("a", 0, "card"), tileS("d", 1, "card"), tileS("c", 2, "card")], { v: 5 }));
+  assert.deepEqual(moved, ["removeChild:b"]);
+  assert.deepEqual(idsOf(s.grid), ["a", "d", "c"]);
+  // today's order really changed (c before a): only what's out of place moves
+  moved.length = 0;
+  s.ctl.update(prog([tileS("c", 0, "card"), tileS("a", 1, "card"), tileS("d", 2, "card")], { v: 6 }));
+  assert.deepEqual(idsOf(s.grid), ["c", "a", "d"]);
+  assert.deepEqual(moved, ["insertBefore:c"], "one move, not three");
+  s.ctl.stop();
+});
+
+test("1.99?? stage-mic.js (program.stable): a tile's cell is its place - an empty place stays an empty cell, each tile its grid-area in the layout's columns, a newcomer fills its cell, no node ever moves", () => {
+  const prog = (layout, src, extra) => Object.assign({ v: 1, layout, count: src.length, src, still_s: 20, stable: true }, extra || {});
+  const s = dynSandbox(prog("grid4", [tileS("a", 0, "card"), tileS("c", 2, "card"), tileS("d", 3, "card")]));
+  assert.equal(area(s.grid, "a"), "1 / 1 / span 1 / span 1");
+  assert.equal(area(s.grid, "c"), "2 / 1 / span 1 / span 1", "place 2: second row, first column (place 1 is empty)");
+  assert.equal(area(s.grid, "d"), "2 / 2 / span 1 / span 1");
+  assert.equal(fillersOf(s.grid), 1, "the empty cell is a filler (it flows into place 1)");
+  const A = tileEl(s.grid, "a"), C = tileEl(s.grid, "c"), D = tileEl(s.grid, "d");
+  const moved = moves(s.grid, [A, C, D]);
+  // e takes the empty place 1
+  s.ctl.update(prog("grid4", [tileS("a", 0, "card"), tileS("e", 1, "card", { newest: true }), tileS("c", 2, "card"), tileS("d", 3, "card")], { v: 2 }));
+  assert.equal(area(s.grid, "e"), "1 / 2 / span 1 / span 1");
+  assert.deepEqual(idsOf(s.grid), ["a", "e", "c", "d"], "inserted at its place");
+  assert.equal(fillersOf(s.grid), 0);
+  // grid9 with gaps: 3 columns
+  s.ctl.update(prog("grid9", [tileS("a", 0, "card"), tileS("e", 1, "card"), tileS("c", 2, "card"), tileS("d", 3, "card"), tileS("f", 7, "card")], { v: 3 }));
+  assert.equal(area(s.grid, "d"), "2 / 1 / span 1 / span 1");
+  assert.equal(area(s.grid, "f"), "3 / 2 / span 1 / span 1");
+  assert.equal(fillersOf(s.grid), 4);
+  // two on one place (a delayed view mixing places with a new pin's): the second takes the next free cell
+  s.ctl.update(prog("grid9", [tileS("a", 0, "card"), tileS("p", 0, "card", { pin: true }), tileS("e", 1, "card")], { v: 4 }));
+  assert.deepEqual(["a", "p", "e"].map((x) => area(s.grid, x)), ["1 / 1 / span 1 / span 1", "1 / 2 / span 1 / span 1", "1 / 3 / span 1 / span 1"]);
+  assert.deepEqual(moved.filter((m) => !m.startsWith("removeChild")), [], "no existing node moved");
+  // split: two cells side by side
+  s.ctl.update(prog("split", [tileS("e", 0, "card"), tileS("a", 1, "card")], { v: 5 }));
+  assert.deepEqual([area(s.grid, "e"), area(s.grid, "a")], ["1 / 1 / span 1 / span 1", "1 / 2 / span 1 / span 1"]);
+  // the knob off again: no inline placement (the legacy CSS)
+  s.ctl.update({ v: 6, layout: "split", count: 2, src: [tileS("e", 0, "card"), tileS("a", 1, "card")], still_s: 20 });
+  assert.deepEqual([area(s.grid, "e"), area(s.grid, "a")], ["", ""]);
+  s.ctl.stop();
+});
+
+test("1.99?? stage-mic.js (program.stable): a back-and-forth of 2 moves nobody - dynamic keeps place order (never the main first), picture in picture's big picture is place 0; dynamic 3+: only the two trading tiles change cells", () => {
+  const dyn = (src, main, extra) => Object.assign({ v: 1, layout: src.length === 2 ? "split" : "grid4", count: src.length, src, dyn: { n: src.length, t: "d" + src.length, main }, still_s: 20, stable: true }, extra || {});
+  const s = dynSandbox(dyn([tileS("a", 0, "card", { ring: true }), tileS("b", 1, "card", { ring: true, newest: true })], "a"));
+  const A = tileEl(s.grid, "a"), B = tileEl(s.grid, "b");
+  const moved = moves(s.grid, [A, B]);
+  assert.deepEqual([area(s.grid, "a"), area(s.grid, "b")], ["1 / 1 / span 1 / span 1", "1 / 2 / span 1 / span 1"]);
+  // even a main the server didn't put in place 0 (an older program / a delayed view) moves nobody with 2
+  for (const [v, main] of [[2, "b"], [3, "a"], [4, "b"]]) {
+    s.ctl.update(dyn([tileS("a", 0, "card", { ring: true, newest: main === "a" }), tileS("b", 1, "card", { ring: true, newest: main === "b" })], main, { v }));
+    assert.deepEqual([area(s.grid, "a"), area(s.grid, "b")], ["1 / 1 / span 1 / span 1", "1 / 2 / span 1 / span 1"], "v" + v + ": nobody moved");
+  }
+  // 3: the main in cell 0 (the big one) - the server's main trades with whoever is in place 0, b keeps its cell
+  s.ctl.update(dyn([tileS("a", 0, "card"), tileS("b", 1, "card"), tileS("c", 2, "card")], "c", { v: 5 }));
+  assert.equal(area(s.grid, "c"), "1 / 1 / span 2 / span 1", "c: the big cell");
+  assert.equal(area(s.grid, "b"), "1 / 2 / span 1 / span 1", "b stays in its cell");
+  assert.equal(area(s.grid, "a"), "2 / 2 / span 1 / span 1", "a: c's old cell");
+  assert.ok(tileEl(s.grid, "c").classList.contains("main"));
+  // the server's own swap (c in place 0): the same cells
+  s.ctl.update(dyn([tileS("c", 0, "card"), tileS("b", 1, "card"), tileS("a", 2, "card")], "c", { v: 6 }));
+  assert.deepEqual(["c", "b", "a"].map((x) => area(s.grid, x)), ["1 / 1 / span 2 / span 1", "1 / 2 / span 1 / span 1", "2 / 2 / span 1 / span 1"]);
+  assert.deepEqual(moved, [], "no node moved, ever");
+  s.ctl.stop();
+  // picture in picture: the big picture is place 0 - the newest speaker only rings
+  const pip = (newest, v) => ({ v, layout: "pip", count: 2, src: [tileS("a", 0, "card", { newest: newest === "a" }), tileS("b", 1, "card", { newest: newest === "b" })], still_s: 20, stable: true });
+  const p = dynSandbox(pip("b", 1));
+  for (const [nw, v] of [["b", 1], ["a", 2], ["b", 3]]) {
+    if (v > 1) p.ctl.update(pip(nw, v));
+    assert.ok(tileEl(p.grid, "a").classList.contains("main") && !tileEl(p.grid, "b").classList.contains("main"), "v" + v + ": a (place 0) fills the stage");
+    assert.ok(tileEl(p.grid, nw).classList.contains("newest"), "the one talking is highlighted");
+  }
+  // without stable (an older server): today's - the newest fills the stage
+  p.ctl.update(Object.assign(pip("b", 9), { stable: undefined }));
+  assert.ok(tileEl(p.grid, "b").classList.contains("main"));
+  p.ctl.stop();
+});
+
+test("1.99?? stable slots: the page's cells are the capture's - stage-mic.js slotCells / CELLS / COLS equal stagemiccap's, and a stable program's grid-areas match stagemiccap.rects cell for cell (a capture is what you see)", () => {
+  const { ctx } = dynSandbox({ v: 1, layout: "single", count: 0, src: [] });
+  const page = ctx.PATVStageMic, cap = require(path.join(repo, "stagemiccap"));
+  assert.deepEqual(JSON.parse(JSON.stringify(page._cells)), { ...cap.CELLS });
+  assert.deepEqual(JSON.parse(JSON.stringify(page._cols)), { ...cap.COLS });
+  const cases = [[[0, 2, 3], 4, false], [[1, 1, 5], 9, false], [[0, 4, 7, 8], 4, false], [[3, 0], 2, false], [[2, 6, 4], 9, true], [["x", -3, 70], 9, false]];
+  for (const [ps, cells, dense] of cases) {
+    const src = ps.map((p, i) => ({ id: "p" + i, pos: p }));
+    const norm = (r) => r.map((e) => (e ? e.id : null));
+    assert.deepEqual(norm(JSON.parse(JSON.stringify(page._slotCells(src, cells, dense)))), norm(cap.slotCells(src, cells, dense)), JSON.stringify([ps, cells, dense]));
+  }
+  // grid-areas vs rects: each tile's (row, column) on the page = its rectangle's cell in the capture
+  for (const [layout, ps] of [["grid4", [0, 2, 3]], ["grid9", [0, 4, 8, 5]], ["split", [1, 0]], ["grid4", [3]]]) {
+    const src = ps.map((p, i) => tileS("t" + i, p, "card"));
+    const s = dynSandbox({ v: 1, layout, count: src.length, src, still_s: 20, stable: true });
+    const rs = cap.rects({ layout, src: src.map((x) => ({ ...x, kind: "cam" })), stable: true });
+    assert.equal(rs.length, src.length, layout);
+    const cols = cap.COLS[layout], rows = layout === "grid9" ? 3 : layout === "grid4" ? 2 : 1;
+    for (const r of rs) {
+      const col = Math.round(r.x / (1280 / cols)) + 1, row = Math.round(r.y / (720 / rows)) + 1;
+      assert.equal(area(s.grid, r.id), row + " / " + col + " / span 1 / span 1", layout + " " + r.id);
+    }
+    s.ctl.stop();
+  }
 });

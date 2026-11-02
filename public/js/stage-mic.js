@@ -37,6 +37,11 @@
 // 📌 for anyone; ✕ only with ex: 1, Reveal only with rv: 1 (WP-2's window.PATVReveal.tile), "this is you" with self: 1.
 // wave 2 (owner J-18): while the viewer's "Show real names" toggle for the pad is on (window.PATVReveal.state(), pad-reveal.js), a
 // cover with rv: 1 reveals itself (once per cover id; counted on the toggle's row on the server); "Hide again" hides those again.
+// 1.99?? STABLE SLOTS (owner 2026-11-02: two people taking turns swapped places on every turn): with program.stable a tile's
+// cell is its place (pos) - an empty place is an empty (black) cell, the fillers flow into them; each tile gets its grid-area,
+// so an existing node never moves (its video never re-attaches) and a new one goes in at its place. Dynamic: the cells are the
+// places, the main in cell 0 (with 3+ the server's active speaker; with 2 nobody moves); picture in picture: the big picture is
+// place 0. Without it (the site knob off) today's order - and, either way, a node only moves when its place changed.
 //
 //   var ctl = PATVStageMic.render(host, program, {slug, onChange})    host = the stage's player box (#rmVideo)
 //   ctl.update(program) · ctl.stop() · ctl.selection()
@@ -92,7 +97,36 @@
     return { v: p.v, layout: LAYOUTS.indexOf(p.layout) >= 0 ? p.layout : 'single', count: Math.max(0, Number(p.count) || 0), pins_n: Math.max(0, Number(p.pins_n) || 0), signin: p.signin === true, idle: p.idle === true,
              blocked: p.blocked === true, src: src, manage: p.manage && typeof p.manage === 'object' ? p.manage : null, frozen_until: Number(p.frozen_until) || 0,
              still_s: Math.max(10, Math.min(120, Number(p.still_s) || 20)), fixed: p.fixed === true, report: p.report === true,
-             speaking: p.speaking === 'someone' || p.speaking === 'pepe' ? p.speaking : null, dyn: d };
+             speaking: p.speaking === 'someone' || p.speaking === 'pepe' ? p.speaking : null, dyn: d, stable: p.stable === true };
+  }
+  /** Entries in place order (pos; ties keep the program's order). */
+  function byPos(src) {
+    return src.map(function (s, i) { return [s, i]; }).sort(function (a, b) { return (Number(a[0].pos) || 0) - (Number(b[0].pos) || 0) || a[1] - b[1]; })
+      .map(function (x) { return x[0]; });
+  }
+  // 1.99?? STABLE SLOTS: how many cells each legacy layout has, and its columns (MUST equal stagemiccap.slotCells / rects)
+  var CELLS = { single: 1, split: 2, grid4: 4, grid9: 9, pip: 2 }, COLS = { single: 1, split: 2, grid4: 2, grid9: 3, pip: 1 };
+  /** 1.99?? STABLE SLOTS (program.stable): each entry's cell is its place (pos) - an empty place stays an empty cell; two entries
+   *  on one place (a delayed view mixing an older program's places with a new pin's) take the next free one; more places than
+   *  cells - or a layout without empty cells (dense: the dynamic templates) - close up, in place order. -> [entry | null] */
+  function slotCells(sorted, cells, dense) {
+    var out = [];
+    sorted.forEach(function (s) {
+      var p = Math.min(64, Math.max(0, Math.floor(Number(s.pos)) || 0));
+      while (out[p]) p++;
+      out[p] = s;
+    });
+    for (var i = 0; i < out.length; i++) if (!out[i]) out[i] = null;
+    return dense || out.length > cells ? out.filter(Boolean) : out;
+  }
+  /** 1.99?? STABLE SLOTS: the dynamic template's cells in order - the places, with the server's main in cell 0 once there are 3 or
+   *  more (it trades places with whoever is there; the server already put it there - this only covers a view where it didn't);
+   *  with 1-2 nobody moves (cell 0 is just place 0). */
+  function dynSeq(sorted, P) {
+    var seq = slotCells(sorted, sorted.length, true), mi = -1;
+    for (var i = 0; i < seq.length; i++) if (seq[i].id === (P.dyn && P.dyn.main)) mi = i;
+    if (seq.length >= 3 && mi > 0) { var m = seq[mi]; seq[mi] = seq[0]; seq[0] = m; }
+    return seq;
   }
   /** wave2 WP-4 (F.3): how many cells the dynamic template has for this program (0 = not dynamic): the tiles SHOWN - av-sync's
    *  delayed view may hold fewer or more than dyn.n for a moment. */
@@ -781,23 +815,12 @@
       var msg = P.signin ? _t('js.stage.mf.tab_signin', '🎙 On the mic: sign in to watch') : P.blocked ? _t('js.stage.mf.blocked', 'Live cams from this room are blocked for you.') : '';
       note.textContent = msg; note.hidden = !msg;
       var seen = {};
-      var sorted = P.src.slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); });
-      sorted.forEach(function (s, i) {
-        seen[s.id] = true;
-        var t = tiles[s.id];
-        var fresh = !t;
-        if (!t) {
-          t = tiles[s.id] = tile(s);
-          announce(_t('js.stage.mf.joined', '{name} is on the stage', { name: labelOf(s) }));
-        } else t.apply(s);
-        if (!dn) { grid.appendChild(t.el); return; }    // keeps reading order = positions
-        // wave2 WP-4 (F.3): dynamic - an existing tile's node never moves (its video would re-attach); a new one goes in at its
-        // place (before the next tile already there), so the reading order still follows the positions
-        if (!fresh && t.el.parentNode === grid) return;
-        var next = null;
-        for (var j = i + 1; j < sorted.length && !next; j++) { var o = tiles[sorted[j].id]; if (o && o.el.parentNode === grid) next = o.el; }
-        if (next) grid.insertBefore(t.el, next); else grid.appendChild(t.el);
-      });
+      var sorted = byPos(P.src);
+      // 1.99?? STABLE SLOTS (program.stable): every tile's cell is its place - an empty place is an empty cell; the dynamic
+      // template's cells are the places with the main in cell 0 (3+). Off: today's (reading order = positions, the main first)
+      var stable = P.stable, slots = stable ? (dn ? dynSeq(sorted, P) : slotCells(sorted, CELLS[P.layout] || 1, false)) : null;
+      sorted.forEach(function (s) { seen[s.id] = true; });
+      // who left goes first (its session closes, its node goes) - so placing the others never steps around a leaving node
       Object.keys(tiles).forEach(function (id) {
         if (seen[id]) return;
         var t = tiles[id];
@@ -806,40 +829,68 @@
         if (t.el.parentNode) t.el.parentNode.removeChild(t.el);
         delete tiles[id];
       });
+      var fillers = grid.querySelectorAll('.mf-empty');
+      for (var i = 0; i < fillers.length; i++) fillers[i].parentNode.removeChild(fillers[i]);
+      sorted.forEach(function (s) {
+        var t = tiles[s.id];
+        if (!t) {
+          t = tiles[s.id] = tile(s);
+          announce(_t('js.stage.mf.joined', '{name} is on the stage', { name: labelOf(s) }));
+        } else t.apply(s);
+      });
+      var els = sorted.map(function (s) { return tiles[s.id].el; });
+      if (dn || stable) {
+        // wave2 WP-4 (F.3) / 1.99??: an existing tile's node never moves (its video would re-attach) - the cell comes from its
+        // grid-area; a new one goes in at its place (before the next tile already there), so the reading order follows the places
+        els.forEach(function (e, n) {
+          if (e.parentNode === grid) return;
+          var next = null;
+          for (var j = n + 1; j < els.length && !next; j++) if (els[j].parentNode === grid) next = els[j];
+          if (next) grid.insertBefore(e, next); else grid.appendChild(e);
+        });
+      } else {
+        // reading order = positions; 1.99??: only a node out of place moves - none when nothing changed (it never re-attaches)
+        els.forEach(function (e, n) { if (grid.children[n] !== e) grid.insertBefore(e, grid.children[n] || null); });
+      }
       // mfix: the tile that fills the stage in picture in picture (the others are the corner inset): the newest speaker, else
       // the latest mic tile (a pin sits in the corner while someone else is up), else the first
-      var order = P.src.slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); }), main = null;
-      if (dn) {
+      var order = sorted, main = null;
+      if (dn && stable) main = slots[0] || null;                  // 1.99??: the main cell is place 0 (the server's main with 3+)
+      else if (dn) {
         // wave2 WP-4 (F.3): the server's main if it is still shown, else the newest speaker, else the first
         for (var d0 = 0; d0 < order.length && !main; d0++) if (order[d0].id === P.dyn.main) main = order[d0];
         for (var d1 = 0; d1 < order.length && !main; d1++) if (order[d1].newest) main = order[d1];
         if (!main) main = order[0];
+      } else if (stable && P.layout === 'pip') {
+        // 1.99??: the big picture is place 0 - it changes only when someone new comes on (the server picks it then)
+        for (var p0 = 0; p0 < slots.length && !main; p0++) main = slots[p0];
       } else {
         for (var j = 0; j < order.length; j++) if (order[j].newest) main = order[j];
         if (!main) for (var q = order.length - 1; q >= 0 && !main; q--) if (!order[q].pin) main = order[q];
         if (!main) main = order[0] || null;
       }
       Object.keys(tiles).forEach(function (id) { tiles[id].el.classList.toggle('main', !!main && main.id === id); });
-      placeDyn(dn, main, order);
-      // grid9 keeps its 3 x 3 cells (empty ones stay black); the dynamic templates have exactly one cell per tile
+      place(dn, dn ? (stable ? slots : [main].concat(order.filter(function (s) { return s !== main; }))) : stable && P.layout !== 'pip' ? slots : null);
+      // grid9 keeps its 3 x 3 cells (empty ones stay black); the dynamic templates have exactly one cell per tile. 1.99??: with
+      // stable slots each tile has its cell, the fillers flow into the empty ones
       var cells = dn ? 0 : P.layout === 'grid9' ? 9 : P.layout === 'grid4' ? 4 : 0, have = grid.querySelectorAll('.mf-tile').length;
-      var fillers = grid.querySelectorAll('.mf-empty');
-      for (var i = 0; i < fillers.length; i++) fillers[i].parentNode.removeChild(fillers[i]);
       for (var k = have; k < cells; k++) { var f = el('div', 'mf-empty'); f.setAttribute('aria-hidden', 'true'); grid.appendChild(f); }
     }
-    /** wave2 WP-4 (F.3): the dynamic template - the grid's columns / rows and each tile's grid-area (the main in cell 0, the
-     *  others in place order). n = 0: back to the legacy layouts' CSS (every inline placement cleared). */
-    function placeDyn(n, main, order) {
+    /** wave2 WP-4 (F.3): the dynamic template - the grid's columns / rows and each tile's grid-area (seq: the main in cell 0, the
+     *  others in place order). n = 0: back to the legacy layouts' CSS (every inline placement cleared) - 1.99??: with stable slots
+     *  (seq = the cells, null = an empty one) each tile still gets its cell in the layout's columns. */
+    function place(n, seq) {
       var T = n ? DYN[n] : null;
       grid.style.gridTemplateColumns = T ? T[0].map(function (c) { return c + 'fr'; }).join(' ') : '';
       grid.style.gridTemplateRows = T ? 'repeat(' + T[1] + ', 1fr)' : '';
-      var rest = order.filter(function (s) { return s !== main; });
-      var seq = T ? [main].concat(rest) : [];
       Object.keys(tiles).forEach(function (id) { tiles[id].el.style.gridArea = ''; });
-      seq.forEach(function (s, i) {
-        var c = T[2][i], tt = s && tiles[s.id];
-        if (!c || !tt) return;
-        tt.el.style.gridArea = (c[1] + 1) + ' / ' + (c[0] + 1) + ' / span ' + c[3] + ' / span ' + c[2];
+      var cols = COLS[P.layout] || 1;
+      (seq || []).forEach(function (s, i) {
+        var tt = s && tiles[s.id];
+        if (!tt) return;
+        if (!T) { tt.el.style.gridArea = (Math.floor(i / cols) + 1) + ' / ' + (i % cols + 1) + ' / span 1 / span 1'; return; }
+        var c = T[2][i];
+        if (c) tt.el.style.gridArea = (c[1] + 1) + ' / ' + (c[0] + 1) + ' / span ' + c[3] + ' / span ' + c[2];
       });
     }
     function onVis() {
@@ -874,5 +925,6 @@
       },
     };
   }
-  window.PATVStageMic = { render: render, _dyn: DYN };   // (_dyn: the d1-d9 templates, for the test that pins them to stagemiccap)
+  // (_dyn: the d1-d9 templates, for the test that pins them to stagemiccap; 1.99??: _slotCells / _cells / _cols likewise)
+  window.PATVStageMic = { render: render, _dyn: DYN, _slotCells: slotCells, _cells: CELLS, _cols: COLS };
 })();

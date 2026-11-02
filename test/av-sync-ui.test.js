@@ -677,3 +677,27 @@ test("1.99ahm: the list, the card and the held grab/drop lines agree - one momen
   shown = plain(s.api.micView("pad", roster(["b"]), cb)); assert.deepEqual([card(), list()], [[], []]);
   s.api.caughtUp("pad"); assert.deepEqual([card(), list()], [["b"], ["b"]]);
 });
+
+test("1.99?? stable slots: a stable program's places are delayed with it - an exchange of places (the dynamic main cell) shows when the voices do, never ahead of its main; without stable the latest places as before", async () => {
+  const prog = (order, extra = {}) => ({ v: 1, src: order.map(([id, pos]) => ({ id, name: id.toUpperCase(), pos, newest: false, recent: false, video: "live", watch: "ok" })),
+    count: order.length, active: true, layout: "grid4", dyn: { n: order.length, t: "d" + order.length, main: order.find(o => o[1] === 0)[0] }, manage: { layout_override: null }, fixed: true, stable: true, ...extra });
+  const at = p => p.src.map(t => t.id + "@" + t.pos).sort().join(" ");
+  let s = await gated(), shown; const cb = p => { shown = plain(p); };
+  s.api.gateProgram("pad", prog([["a", 0], ["b", 1], ["c", 2]]), cb); await s.advance(700);
+  assert.equal(at(shown), "a@0 b@1 c@2"); assert.equal(shown.dyn.main, "a");
+  // the server: c takes the main cell - c and a trade places
+  s.api.gateProgram("pad", prog([["c", 0], ["b", 1], ["a", 2]]), cb);
+  assert.equal(at(shown), "a@0 b@1 c@2", "the places of then"); assert.equal(shown.dyn.main, "a", "with the main of then");
+  await s.advance(700);
+  assert.equal(at(shown), "a@2 b@1 c@0", "the exchange shows with the voices"); assert.equal(shown.dyn.main, "c");
+  // a pin shown at once keeps its own place (the page gives a shared place's second claimant the next free cell)
+  const withPin = prog([["c", 0], ["b", 1], ["a", 2], ["p", 3]]); withPin.src[3].pin = true;
+  s.api.gateProgram("pad", withPin, cb);
+  assert.equal(at(shown), "a@2 b@1 c@0 p@3", "the pin at once, at its own place");
+  // without stable (the knob off): the latest places at once, as before
+  s = await gated();
+  const off = order => { const p = prog(order); delete p.stable; return p; };
+  s.api.gateProgram("pad", off([["a", 0], ["b", 1], ["c", 2]]), cb); await s.advance(700);
+  s.api.gateProgram("pad", off([["c", 0], ["b", 1], ["a", 2]]), cb);
+  assert.equal(at(shown), "a@2 b@1 c@0", "off: today's (latest places)"); assert.equal(shown.dyn.main, "a");
+});
