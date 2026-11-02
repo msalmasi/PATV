@@ -1045,3 +1045,18 @@ test("an HLS encode in flight reserves the last shared preview slot before anoth
   for (const id of ids) { await SC.discard(U.staff, id); f.jobs.get(id).reject(new Error("cancelled")); }
   await new Promise(resolve => setTimeout(resolve, 30));
 });
+
+test("storage: stage_captures(media_id) is indexed and every media-id lookup (triggers, storykeep, storyreact) uses it", async () => {
+  const idx = await getQuery("SELECT name FROM pragma_index_info('stage_captures_media')");
+  assert.deepEqual(idx.map((r) => r.name), ["media_id"]);
+  await SC.init();                                                    // init is idempotent: CREATE INDEX IF NOT EXISTS
+  const plan = async (sql, args) => (await getQuery("EXPLAIN QUERY PLAN " + sql, args)).map((r) => r.detail).join(" | ");
+  // storykeep.micCapture
+  assert.match(await plan("SELECT * FROM stage_captures WHERE media_id = ? AND source = 'mic'", ["m1"]), /USING INDEX stage_captures_media/);
+  // storyreact.loadMicPeople
+  assert.match(await plan(`SELECT c.media_id AS mid, lower(p.login) AS login FROM stage_capture_people p JOIN stage_captures c ON c.id = p.capture_id
+                           WHERE c.media_id IN (?, ?)`, ["m1", "m2"]), /stage_captures_media/);
+  // the media-deleted / media-removed triggers' subquery
+  assert.match(await plan("DELETE FROM stage_capture_people WHERE capture_id IN (SELECT id FROM stage_captures WHERE media_id = ?)", ["m1"]),
+    /USING INDEX stage_captures_media/);
+});

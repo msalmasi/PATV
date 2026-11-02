@@ -25,12 +25,25 @@ const MEMORY = { on_day: "29 October 2026", on_at: 1793200000000 };
 const DATES = { "wp1-voice": { at: 1793100000000, day: "28 October 2026" }, "mic-stage-keep": { at: 1793534400000, day: "1 November 2026" } };
 const render = (src, extra) => ejs.render(lf(src), Object.assign({}, BASE, extra), { filename: FILE });
 
+// mic keep wording fix (owner-approved 2026-11-02): the two sentences added to the Mic-stage snaps and clips paragraph - the only
+// difference from 119e948b, and only on a page that publishes that paragraph (never served anywhere yet: mic-stage captures are off)
+const MSK_FIX = [" \"Muted audio\" here means sound muted for a hidden or private speaker, not the second or so of silence every clip starts with.",
+                 " Deleting a posted copy any other way - by the person who posted it, an admin or an account deletion - also deletes every saved copy."];
 test("switch off: the privacy page is byte for byte today's prod one (plain, with the memory switch, with the dated texts)", (t) => {
   const old = spawnSync("git", ["show", "119e948b:views/privacy.ejs"], { cwd: repo, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   if (old.status !== 0) { t.skip("119e948b isn't in this clone"); return; }
   const now = fs.readFileSync(FILE, "utf8");
-  for (const extra of [{}, { memory: MEMORY }, { privwire: null }, { policyDates: DATES }, { policyDates: DATES, memory: MEMORY, privwire: null }]) {
+  // mic-stage captures off (prod and staging today: only wp1-voice is dated) - byte for byte
+  for (const extra of [{}, { memory: MEMORY }, { privwire: null }, { policyDates: { "wp1-voice": DATES["wp1-voice"] } },
+                       { policyDates: { "wp1-voice": DATES["wp1-voice"] }, memory: MEMORY, privwire: null }]) {
     assert.equal(render(now, extra), render(old.stdout, extra), "identical with " + JSON.stringify(extra));
+  }
+  // the mic-stage paragraph published: identical but for the wording fix's two sentences, each once, inside that paragraph
+  for (const extra of [{ policyDates: DATES }, { policyDates: DATES, memory: MEMORY, privwire: null }]) {
+    const page = render(now, extra);
+    const para = (page.match(/<p id="mic-stage-captures">[\s\S]*?<\/p>/) || [""])[0];
+    for (const s of MSK_FIX) assert.equal(page.split(s).length, 2, "once: " + s), assert.ok(para.includes(s), "in the paragraph: " + s);
+    assert.equal(MSK_FIX.reduce((x, s) => x.replace(s, ""), page), render(old.stdout, extra), "nothing else changed with " + JSON.stringify(extra));
   }
 });
 
