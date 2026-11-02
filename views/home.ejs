@@ -66,7 +66,7 @@
 <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
 <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=7">
 <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
-<% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=4"></script><% } %>
+<% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=5"></script><% } %>
 <script src="/public/js/webrtc-client.js?v=6"></script>
 <script src="/public/js/stage-lowlat.js?v=2"></script>
 <% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=18"></script>
@@ -1023,21 +1023,34 @@
       // 1.99acb: your room line the site named but this answer didn't carry - ask again from just before it (once per line)
       var miss = roomRelay && roomRelay.refetch ? roomRelay.refetch() : 0;
       if (miss && miss <= cursor) cursor = miss - 1;
-      // 1.99ahm: A/V sync "Delay the On the mic card" (avsync apply_mic_card) - the holders as this viewer hears them (see the pad page)
-      var micNow = d.mic;
+      // 1.99ahm: A/V sync "Delay the On the mic card" (avsync apply_mic_card) - the holders as this viewer hears them (see the pad page);
+      // "Delay the people list's 🎙 icons" (apply_mic_list) - the same view's members: the In the room chips' "mic" highlight and order
+      var micNow = d.mic, peopleNow = d.members;
       if (window.PATVAvSync && PATVAvSync.micView) {
-        try { var heard = PATVAvSync.micView(slug, { members: d.members, mic: d.mic }, function (v) { try { drawMic(v && Array.isArray(v.mic) ? v.mic : []); } catch (e) { /* the next answer draws it */ } }); if (heard && Array.isArray(heard.mic)) micNow = heard.mic; }
-        catch (e) { micNow = d.mic; }
+        try {
+          var heard = PATVAvSync.micView(slug, { members: d.members, mic: d.mic }, drawHeard);
+          if (heard && Array.isArray(heard.mic)) micNow = heard.mic;
+          if (heard && Array.isArray(heard.members)) peopleNow = heard.members;
+        } catch (e) { micNow = d.mic; peopleNow = d.members; }
       }
       drawMic(micNow);
-      var pk = JSON.stringify(d.members);
+      drawPeople(peopleNow);
+    }
+    // the In the room chips (1.99ahm: who is highlighted "mic", and first, as this viewer hears it - see apply)
+    function drawPeople(members) {
+      var pk = JSON.stringify(members);
       if (pk !== lastP) {
         lastP = pk; var p = document.getElementById('lrPeople'); p.textContent = '';
-        var ms = d.members.filter(function (u) { return !u.self; }).sort(function (a, b) { return (b.on_mic ? 1 : 0) - (a.on_mic ? 1 : 0) || (a.anon ? 1 : 0) - (b.anon ? 1 : 0) || label(a).localeCompare(label(b)); });
+        var ms = members.filter(function (u) { return !u.self; }).sort(function (a, b) { return (b.on_mic ? 1 : 0) - (a.on_mic ? 1 : 0) || (a.anon ? 1 : 0) - (b.anon ? 1 : 0) || label(a).localeCompare(label(b)); });
         ms.slice(0, 30).forEach(function (u) { p.appendChild(chip(u, u.on_mic ? 'mic' : '')); });
         if (ms.length > 30) p.appendChild(el('span', 'muted', _t('js.home.room.more', '+{n} more', { n: ms.length - 30 })));
         if (!ms.length) p.appendChild(el('span', 'muted', _t('js.home.room.just_pepe', 'Just Pepe')));
       }
+    }
+    // 1.99ahm: A/V sync redraws the mic box and the chips when what the viewer hears changes (each on its own: one can't stop the other)
+    function drawHeard(v) {
+      try { drawMic(v && Array.isArray(v.mic) ? v.mic : []); } catch (e) { /* the next answer draws it */ }
+      try { if (v && Array.isArray(v.members)) drawPeople(v.members); } catch (e) { /* the next answer draws it */ }
     }
     // 1.99ye: a long-poll (?wait=1, like the pad page): answered when something changes, asked again at once; an older
     // site (no `lp` in the answer) is polled every 3 s as before

@@ -150,7 +150,7 @@ const on = (u) => Object.assign({}, u, { on_mic: true });
 function baseConfig() {
   return { ok: true, on: true, dbg: false, audio: { rtc_ms: 1000, mp3_ms: 1000, mix_ms: 700, helper_ms: 270, age_s: 0 }, cams: {},
     k: { pt: 0, re: 0, ind: 0 }, fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
-    apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true }, engines: { chromium: true, firefox: false, safari: false },
+    apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true, mic_list: true }, engines: { chromium: true, firefox: false, safari: false },
     ind_path_ms: 300, mods_instant: false };
 }
 
@@ -264,8 +264,8 @@ const grab = (c, u) => ({ k: "mic", c, ts: T0 + c, u });
 const drop = (c, u, ms) => ({ k: "unmic", c, ts: T0 + c, u, ms });
 const say = (c, u, text) => ({ k: "msg", c, ts: T0 + c, u, text });
 
-test("1.99ahm: the rendered pages load the controller (v=4) only while A/V sync applies to the viewer", async () => {
-  assert.match(await padHtml(true), /<script src="\/public\/js\/av-sync\.js\?v=4"><\/script>/);
+test("1.99ahm: the rendered pages load the controller (v=5: + the people list's 🎙) only while A/V sync applies to the viewer", async () => {
+  assert.match(await padHtml(true), /<script src="\/public\/js\/av-sync\.js\?v=5"><\/script>/);
   assert.doesNotMatch(await padHtml(false), /av-sync\.js/);
 });
 
@@ -321,14 +321,15 @@ test("1.99ahm: pad page - switches off, sync not for this viewer, or no controll
     const at = { shown: P.shown(7), card: P.card() };
     await P.advance(D + 100);
     await P.deliver(P.answer({ feed: [drop(9, BOB)], mic: [on(ALICE)], members: [BOB, on(ALICE), FROG] }));
-    return { at, now: { shown: P.shown(9), card: P.card() }, feed: P.feed.childNodes.map(tree), mic: tree(P.doc.getElementById("rmMic")) };
+    return { at, now: { shown: P.shown(9), card: P.card() }, feed: P.feed.childNodes.map(tree), mic: tree(P.doc.getElementById("rmMic")),
+      people: tree(P.doc.getElementById("rmPeople")) };   // 1.99ahm: + the people list (apply_mic_list)
   };
   const none = await script(Object.assign(await pad({ avsync: false }), { play: async () => {} }));
   assert.deepEqual(none.at, { shown: true, card: ["Bob", "Alice"] }); assert.deepEqual(none.now, { shown: true, card: ["Alice"] });
   const control = await script(await pad());
   assert.deepEqual(control.at, { shown: false, card: ["Bob"] }, "the control: with both switches on the same answers are held");
-  const off = baseConfig(); off.apply.mic_card = false; off.apply.mic_chat = false;
-  const oldServer = baseConfig(); delete oldServer.apply.mic_card; delete oldServer.apply.mic_chat;
+  const off = baseConfig(); off.apply.mic_card = false; off.apply.mic_chat = false; off.apply.mic_list = false;
+  const oldServer = baseConfig(); delete oldServer.apply.mic_card; delete oldServer.apply.mic_chat; delete oldServer.apply.mic_list;
   const notMine = baseConfig(); notMine.on = false;
   for (const [name, config] of [["switches off", off], ["an older site without the switches", oldServer], ["mode not for this viewer", notMine]]) {
     const got = await script(await pad({ config }));
@@ -442,6 +443,7 @@ test("1.99ahm: review fix (T3) - pad page: the first answer after the tab comes 
   assert.equal(P.shown(10), true);
   assert.equal(P.shown(9), true, "the backlog's drop line shows at once, with the typed line from the same answer");
   assert.deepEqual(P.card(), ["Bob"], "the card drops Alice at once");
+  assert.deepEqual(people(P.doc).find(([n]) => n === "Alice"), ["Alice", false], "and the people list's 🎙 (1.99ahm: apply_mic_list)");
   assert.deepEqual(P.order().slice(-2), [9, 10]);
   // the next live answer waits the offset again
   await P.advance(100);
@@ -470,7 +472,7 @@ async function homeHtml(avsyncOn) {
 }
 async function home({ avsync = true, config = baseConfig() } = {}) {
   const html = await homeHtml(avsync);
-  if (avsync) assert.match(html, /<script src="\/public\/js\/av-sync\.js\?v=4"><\/script>/); else assert.doesNotMatch(html, /av-sync\.js/);
+  if (avsync) assert.match(html, /<script src="\/public\/js\/av-sync\.js\?v=5"><\/script>/); else assert.doesNotMatch(html, /av-sync\.js/);
   const { json, src } = pageScript(html, "lrInit");
   const els = {}; for (const id of ["lrFeed", "lrTopic", "lrCount", "lrLive", "lrLiveTxt", "lrMic", "lrPeople", "lrAudioBox"]) els[id] = {};
   const H = harness({ script: src, json, ids: { init: "lrInit", els }, avsync, config, slug: SLUG });
@@ -511,11 +513,11 @@ test("1.99ahm: homepage panel - its On the mic box and grab/drop lines follow th
   const run = async (H) => {
     await H.play().catch(() => {});
     await H.deliver(H.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
-    return { shown: H.shown(7), chips: H.chips(), feed: H.feed.childNodes.map(tree) };
+    return { shown: H.shown(7), chips: H.chips(), feed: H.feed.childNodes.map(tree), people: tree(H.doc.getElementById("lrPeople")) };   // 1.99ahm: + the chips
   };
   const none = await run(Object.assign(await home({ avsync: false }), { play: async () => {} }));
   assert.deepEqual([none.shown, none.chips], [true, ["Bob", "Alice"]]);
-  const off = baseConfig(); off.apply.mic_card = false; off.apply.mic_chat = false;
+  const off = baseConfig(); off.apply.mic_card = false; off.apply.mic_chat = false; off.apply.mic_list = false;
   assert.deepEqual(await run(await home({ config: off })), none);
 });
 
@@ -540,4 +542,107 @@ test("1.99ahm: review fix (T3) - homepage panel: the first answer after the tab 
   await P.deliver(P.answer({ feed: [drop(11, ALICE)], mic: [on(BOB)], members: [on(BOB), ALICE, FROG] }));
   assert.equal(P.shown(11), true); assert.deepEqual(P.chips(), ["Bob"]);
   assert.deepEqual(P.errors, []);
+});
+
+// ── 1.99ahm: "Delay the people list's 🎙 icons" (avsync apply_mic_list) - the pad page's people list (its 🎙 icons and on-mic order) and
+// the homepage panel's In the room chips (their "mic" highlight and order), from the same micView as the card ──
+// [name as shown, 🎙 lit] in the list's order
+function people(doc) {
+  return doc.getElementById("rmPeople").children.map((li) => [li.children[1].textContent, li.children[2].lastChild.className !== "off"]);
+}
+const FROG_NAME = "Soggy Bullfrog incognito";
+
+test("1.99ahm: pad page - the people list's 🎙 icons and on-mic order wait for the room audio, in step with the card and the grab/drop lines", async () => {
+  const P = await pad();
+  await P.play();
+  assert.equal(P.win.PATVAvSync.debug().list_ms, D);
+  assert.deepEqual(people(P.doc), [["Bob", true], ["Alice", false], [FROG_NAME, false]]);
+  await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  assert.deepEqual(people(P.doc), [["Bob", true], ["Alice", false], [FROG_NAME, false]], "Alice's 🎙 isn't lit before the viewer hears her");
+  await P.advance(D - 1);
+  assert.deepEqual(people(P.doc), [["Bob", true], ["Alice", false], [FROG_NAME, false]]); assert.deepEqual(P.card(), ["Bob"]); assert.equal(P.shown(7), false);
+  await P.advance(1);
+  assert.deepEqual(people(P.doc), [["Alice", true], ["Bob", true], [FROG_NAME, false]], "lit, and up with the people on the mic");
+  assert.deepEqual(P.card(), ["Bob", "Alice"], "the same moment as the card"); assert.equal(P.shown(7), true, "and her grab line");
+  assert.equal(P.doc.getElementById("rmPplN").textContent, "(3)");
+  // a drop: Bob's 🎙 stays lit until the audio catches up, with the card and his drop line
+  await P.advance(100);
+  await P.deliver(P.answer({ feed: [drop(8, BOB, 5000)], mic: [on(ALICE)], members: [BOB, on(ALICE), FROG] }));
+  await P.advance(D - 1);
+  assert.deepEqual(people(P.doc), [["Alice", true], ["Bob", true], [FROG_NAME, false]]); assert.deepEqual(P.card(), ["Bob", "Alice"]); assert.equal(P.shown(8), false);
+  await P.advance(1);
+  assert.deepEqual(people(P.doc), [["Alice", true], ["Bob", false], [FROG_NAME, false]]); assert.deepEqual(P.card(), ["Alice"]); assert.equal(P.shown(8), true);
+  // a veiled holder is held like a named one; the audio stopping shows today's list at once
+  await P.advance(100);
+  await P.deliver(P.answer({ feed: [grab(9, FROG)], mic: [on(ALICE), on(FROG)], members: [BOB, on(ALICE), on(FROG)] }));
+  assert.deepEqual(people(P.doc), [["Alice", true], ["Bob", false], [FROG_NAME, false]]);
+  await P.stop();
+  assert.deepEqual(people(P.doc), [["Alice", true], [FROG_NAME, true], ["Bob", false]], "audio stopped: the list is now's");
+  assert.deepEqual(P.card(), ["Alice", "Soggy Bullfrog incognito"]);
+  assert.deepEqual(P.errors, []);
+});
+
+test("1.99ahm: pad page - the list's switch is its own: with only the card's the list is immediate, with only the list's the card is", async () => {
+  const run = async (config) => {
+    const P = await pad({ config });
+    await P.play();
+    await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+    const at = { people: people(P.doc), card: P.card(), line: P.shown(7) };
+    await P.advance(D);
+    assert.deepEqual(P.errors, []);
+    return { at, later: { people: people(P.doc), card: P.card(), line: P.shown(7) } };
+  };
+  const lit = [["Alice", true], ["Bob", true], [FROG_NAME, false]], dark = [["Bob", true], ["Alice", false], [FROG_NAME, false]];
+  const cardOnly = baseConfig(); cardOnly.apply.mic_list = false;
+  assert.deepEqual(await run(cardOnly), { at: { people: lit, card: ["Bob"], line: false }, later: { people: lit, card: ["Bob", "Alice"], line: true } },
+    "the card's switch alone: the list is today's");
+  const listOnly = baseConfig(); listOnly.apply.mic_card = false; listOnly.apply.mic_chat = false;
+  assert.deepEqual(await run(listOnly), { at: { people: dark, card: ["Bob", "Alice"], line: true }, later: { people: lit, card: ["Bob", "Alice"], line: true } },
+    "the list's switch alone: the card and the lines are today's");
+});
+
+test("1.99ahm: pad page privacy - the held list is today's list (frog names, someone, no login added); an alias-less someone's 🎙 never moves to another veil level", async () => {
+  const P = await pad(), T = await pad({ avsync: false });
+  await P.play();
+  const SI = { anon: true, display: "someone", veil: "incognito" }, SH = { anon: true, display: "someone", veil: "hidden" }, SH2 = { anon: true, display: "someone", veil: "hidden" };
+  await P.deliver(P.answer({ feed: [grab(7, SI)], mic: [on(BOB), on(SI)], members: [on(BOB), SH, on(SI), FROG] }));
+  await P.advance(D);
+  const before = people(P.doc);
+  assert.deepEqual(before.filter(([, m]) => m).map(([n]) => n), ["Bob", "someone incognito"]);
+  await P.advance(100);
+  // the incognito someone drops as another hidden someone joins ahead of them (veil.js's keyed order): for one offset the list
+  // still shows the 🎙 on the incognito someone - never on a hidden one
+  const after = P.answer({ feed: [drop(8, SI)], mic: [on(BOB)], members: [on(BOB), SH2, SH, SI, FROG] });
+  await P.deliver(after);
+  const seen = new Set();
+  for (let i = 0; i < D; i += 25) { seen.add(JSON.stringify(people(P.doc).filter(([, m]) => m).map(([n]) => n))); await P.advance(25); }
+  seen.add(JSON.stringify(people(P.doc).filter(([, m]) => m).map(([n]) => n)));
+  assert.deepEqual([...seen], [JSON.stringify(["Bob", "someone incognito"]), JSON.stringify(["Bob"])], "held one offset as it was, then out - no someone · hidden lit");
+  assert.equal(P.shown(8), true); assert.deepEqual(P.card(), ["Bob"]);
+  // caught up: exactly the list a page without A/V sync draws from the same answer
+  await T.deliver(after);
+  assert.deepEqual(tree(P.doc.getElementById("rmPeople")), tree(T.doc.getElementById("rmPeople")), "the same list, node for node");
+  assert.doesNotMatch(JSON.stringify(tree(P.doc.getElementById("rmPeople"))), /opaque-7f|"h3"/, "the frog name only");
+  assert.deepEqual(P.errors, []); assert.deepEqual(T.errors, []);
+});
+
+test("1.99ahm: homepage panel - the In the room chips' mic highlight and order wait for the room audio with the mic box; the switch off: today's chips", async () => {
+  const chips = (H) => H.doc.getElementById("lrPeople").children.map((n) => [n.textContent, n.className.split(" ").includes("mic")]);
+  const P = await home();
+  assert.deepEqual(chips(P), [["Bob", true], ["Alice", false], [FROG_NAME, false]]);
+  await P.play();
+  await P.deliver(P.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  assert.deepEqual(chips(P), [["Bob", true], ["Alice", false], [FROG_NAME, false]]); assert.deepEqual(P.chips(), ["Bob"]);
+  await P.advance(D - 1); assert.deepEqual(chips(P), [["Bob", true], ["Alice", false], [FROG_NAME, false]]);
+  await P.advance(1);
+  assert.deepEqual(chips(P), [["Alice", true], ["Bob", true], [FROG_NAME, false]], "highlighted and first, with the mic box");
+  assert.deepEqual(P.chips(), ["Bob", "Alice"]); assert.equal(P.shown(7), true);
+  assert.deepEqual(P.errors, []);
+  const off = baseConfig(); off.apply.mic_list = false;
+  const Q = await home({ config: off });
+  await Q.play();
+  await Q.deliver(Q.answer({ feed: [grab(7, ALICE)], mic: [on(BOB), on(ALICE)], members: [on(BOB), on(ALICE), FROG] }));
+  assert.deepEqual(chips(Q), [["Alice", true], ["Bob", true], [FROG_NAME, false]], "the switch off: at once");
+  assert.deepEqual(Q.chips(), ["Bob"], "(the mic box's own switch still holds it)");
+  assert.deepEqual(Q.errors, []);
 });

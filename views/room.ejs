@@ -632,7 +632,7 @@
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=7">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
-  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=4"></script><% } %>
+  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=5"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
@@ -1200,18 +1200,31 @@
       micRoom = r;
       // 1.99ahm: A/V sync "Delay the On the mic card" (avsync apply_mic_card) - while it applies to this viewer (the mode, this pad's
       // room audio playing, their own toggle) PATVAvSync.micView hands back the holders as the viewer hears them and redraws the card when
-      // that changes; otherwise it hands back d.mic itself (no controller on the page: signed out, or the mode is off for them)
-      var micNow = d.mic;
+      // that changes; otherwise it hands back d.mic itself (no controller on the page: signed out, or the mode is off for them).
+      // 1.99ahm: "Delay the people list's 🎙 icons" (apply_mic_list) - the same view's members: today's people, each with the 🎙 (and so
+      // the on-mic order) the viewer hears, so the list and the card agree; with that switch off, d.members itself
+      var micNow = d.mic, peopleNow = d.members;
       if (window.PATVAvSync && PATVAvSync.micView) {
-        try { var heard = PATVAvSync.micView(slug, { members: d.members, mic: d.mic }, drawMicLater); if (heard && Array.isArray(heard.mic)) micNow = heard.mic; }
-        catch (e) { micNow = d.mic; }
+        try {
+          var heard = PATVAvSync.micView(slug, { members: d.members, mic: d.mic }, drawMicLater);
+          if (heard && Array.isArray(heard.mic)) micNow = heard.mic;
+          if (heard && Array.isArray(heard.members)) peopleNow = heard.members;
+        } catch (e) { micNow = d.mic; peopleNow = d.members; }
       }
       drawMic(micNow);
-      var pk = JSON.stringify(d.members) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
+      drawPeople(peopleNow);
+      // every render, not only when the people change: "checked 3 min ago" has to keep counting
+      var note = listNote(r), noteEl = document.getElementById('rmListNote');
+      if (noteEl.textContent !== note) noteEl.textContent = note;
+    }
+    // the people list (1.99ahm: its 🎙 icons and on-mic order as this viewer hears them - see renderRoom); r = the room of the last answer
+    function drawPeople(members) {
+      var r = micRoom || {};
+      var pk = JSON.stringify(members) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
       if (pk !== lastPeople) {
         lastPeople = pk;
         var ul = document.getElementById('rmPeople'); ul.textContent = '';
-        var ms = d.members.slice().sort(function (a, b) {
+        var ms = members.slice().sort(function (a, b) {
           return (b.self ? 1 : 0) - (a.self ? 1 : 0) || (b.on_mic ? 1 : 0) - (a.on_mic ? 1 : 0) || (b.on_cam ? 1 : 0) - (a.on_cam ? 1 : 0)
             || (a.anon ? 1 : 0) - (b.anon ? 1 : 0) || label(a).localeCompare(label(b));
         });
@@ -1239,11 +1252,8 @@
           var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? _t('js.pad.people.on_mic', 'On the mic') : _t('js.pad.people.not_on_mic', 'Not on the mic'); ic.appendChild(m);
           li.appendChild(ic); ul.appendChild(li);
         });
-        document.getElementById('rmPplN').textContent = d.members.length ? '(' + d.members.length + ')' : '';
+        document.getElementById('rmPplN').textContent = members.length ? '(' + members.length + ')' : '';
       }
-      // every render, not only when the people change: "checked 3 min ago" has to keep counting
-      var note = listNote(r), noteEl = document.getElementById('rmListNote');
-      if (noteEl.textContent !== note) noteEl.textContent = note;
     }
     // the "On the mic" card: who holds the mic (1.99ahm: as this viewer hears it - see renderRoom); r = the room of the last answer
     var micRoom = null;
@@ -1265,7 +1275,10 @@
         mic.appendChild(h);
       });
     }
-    function drawMicLater(v) { safe('miccard', function () { drawMic(v && Array.isArray(v.mic) ? v.mic : []); }); }
+    function drawMicLater(v) {
+      safe('miccard', function () { drawMic(v && Array.isArray(v.mic) ? v.mic : []); });
+      safe('people', function () { if (v && Array.isArray(v.members)) drawPeople(v.members); });   // 1.99ahm: the list's 🎙 icons (apply_mic_list)
+    }
 
     // How far the roster can be trusted. Pepe re-reads each room's participant list every minute or
     // so; when he can't (the list is stale), he only keeps people seen arriving / talking / on the

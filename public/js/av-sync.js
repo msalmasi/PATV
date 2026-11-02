@@ -72,8 +72,9 @@
       statsOK: soundStats.ok, fallback: c.fallback && c.fallback[sound.mode], cap: c.cap, k: 0 };
   }
   // 1.99ahm: kind = which switch holds the sign back - 'mic' (the mic stage's tile signs, the default), 'mic_card' (the "On the mic"
-  // card) or 'mic_chat' (the chat's grab / drop lines). All three use the same mic-sign offset, so they line up with each other.
-  var MIC_KINDS = ['mic', 'mic_card', 'mic_chat'];
+  // card), 'mic_chat' (the chat's grab / drop lines) or 'mic_list' (the people list's 🎙 icons and on-mic order, the homepage's mic
+  // chips). All four use the same mic-sign offset, so they line up with each other.
+  var MIC_KINDS = ['mic', 'mic_card', 'mic_chat', 'mic_list'];
   function anyMic(pad, ignoreToggle) { return MIC_KINDS.some(function (kind) { return eligible(pad, kind, ignoreToggle); }); }
   function delayFor(pad, ignoreToggle, kind) {
     if (!eligible(pad, kind || 'mic', ignoreToggle)) return 0;
@@ -280,9 +281,14 @@
       // 1.99ahm: review fix (T1, T2) - no onset times any more: the card shows a turn from its grab + the offset to its drop + the offset
       // 1.99ahm: review fix (PRIV-L1) - lv: a keyless "someone" slot's veil level (a level, never who), so the card can keep that slot
       // for one offset after its holder drops without borrowing a room member's object
-      compact = { mic: [], on: Object.create(null), lv: Object.create(null) };
+      // 1.99ahm: ml - how many alias-less veiled people ("someone") of each veil level the people list showed on the mic (a count per
+      // level, never a position: their order in the list moves as people come and go)
+      compact = { mic: [], on: Object.create(null), lv: Object.create(null), ml: Object.create(null) };
       visitPeople(latest && latest.mic, 'mic', function (person, k, keyless) { if (k) { compact.mic.push(k); compact.on[k] = true; if (keyless) compact.lv[k] = levelOf(person); } });
-      visitPeople(latest && latest.members, 'members', function (person, k) { if (k && person.on_mic) compact.on[k] = true; });
+      visitPeople(latest && latest.members, 'members', function (person, k, keyless) {
+        if (!k || !person.on_mic) return;
+        if (keyless) { var level = levelOf(person); compact.ml[level] = (compact.ml[level] || 0) + 1; } else compact.on[k] = true;
+      });
     }
     var signature = JSON.stringify(compact);
     if (!record.rows.length || record.rows[record.rows.length - 1].signature !== signature) record.rows.push({ at: now, data: compact, signature: signature });
@@ -325,11 +331,38 @@
   // when the offset rose - before its "dropped the mic" line and before the viewer heard it end - and hid short turns whose grab and
   // drop lines the chat does show.
   function onAt(row, key) { return !!(row && row.data.on[key]); }
-  function mergedMic(record, wait, now) {
+  // 1.99ahm: card = the "On the mic" card's wait (apply_mic_card), list = the people list's (apply_mic_list). Each is 0 or the same
+  // mic-sign offset, so one moment (shownAt) serves both and they agree; the part whose switch doesn't apply is today's, as given.
+  function mergedMic(record, card, list, now) {
     var latest = record.latest; if (!latest) return latest;
+    var wait = Math.max(card, list);
     if (!wait) { record.shownAt = now; return latest; }
-    var at = shownAt(record, wait, now), out = copy(latest), row = oldRow(record, at), people = Object.create(null);
-    var spare = Object.create(null), current = Object.create(null);
+    var at = shownAt(record, wait, now), out = copy(latest), row = oldRow(record, at);
+    if (list && Array.isArray(latest.members)) out.members = heardMembers(latest.members, row);
+    if (card) out.mic = heardMic(latest, row);
+    return out;
+  }
+  // 1.99ahm: "Delay the people list's 🎙 icons" (apply_mic_list) - everyone in today's list (today's names, veils and order inputs),
+  // each with the 🎙 they had at the moment the view shows. A keyed person (a login, an opaque id) by their key, as the card; an
+  // alias-less veiled person ("someone") has no key: per veil level, as many of today's keyless people of that level show it as the
+  // list showed then (today's holders of that level first) - never by position, so a "someone · hidden" never wears the 🎙 of the
+  // "someone · incognito" who held the mic. Someone with no key at all keeps today's flag.
+  function heardMembers(members, row) {
+    var out = [], keyless = [], left = Object.create(null), ml = row && row.data.ml || {};
+    Object.keys(ml).forEach(function (level) { left[level] = ml[level]; });
+    visitPeople(members, 'members', function (person, k, isKeyless) {
+      var p = copy(person);
+      if (isKeyless) { p.on_mic = false; keyless.push({ p: p, now: !!person.on_mic, level: levelOf(person) }); }
+      else p.on_mic = k ? onAt(row, k) : !!(person && person.on_mic);
+      out.push(p);
+    });
+    [true, false].forEach(function (holding) {
+      keyless.forEach(function (e) { if (e.now === holding && left[e.level] > 0) { left[e.level]--; e.p.on_mic = true; } });
+    });
+    return out;
+  }
+  function heardMic(latest, row) {
+    var people = Object.create(null), spare = Object.create(null), current = Object.create(null);
     visitPeople(latest.members, 'members', function (person, k, keyless) {
       if (k) people[k] = person;
       // Today's public anonymous records have no stable ID. Retain only a generic mic count,
@@ -341,8 +374,6 @@
       if (keyless) { var level = levelOf(person); spare[level] = (spare[level] || 0) + 1; }
     });
     visitPeople(latest.mic, 'mic', function (person, k, keyless) { if (!k) return; if (keyless) current[k] = person; else people[k] = person; });
-    out.members = [];
-    visitPeople(latest.members, 'members', function (person, k) { var p = copy(person); p.on_mic = onAt(row, k); out.members.push(p); });
     var keys = row && row.data.mic || [], levels = row && row.data.lv || {}, picks = [];
     keys.forEach(function (k, i) {
       if (!own.call(levels, k)) { if (own.call(people, k)) picks[i] = people[k]; return; }     // a keyed person, as they are now
@@ -354,13 +385,17 @@
       if (picks[i] || !own.call(levels, k) || !(spare[levels[k]] > 0)) return;
       spare[levels[k]]--; picks[i] = levels[k] ? { anon: true, display: 'someone', veil: levels[k] } : { anon: true, display: 'someone' };
     });
-    out.mic = picks.filter(Boolean).map(function (person) { var p = copy(person); p.on_mic = true; return p; });
-    return out;
+    return picks.filter(Boolean).map(function (person) { var p = copy(person); p.on_mic = true; return p; });
   }
-  // 1.99ahm: the mic stage's program follows "Delay mic signs"; the "On the mic" card's view (micView) follows its own switch
-  function switchOf(record) { return record.kind === 'program' ? 'mic' : 'mic_card'; }
+  // 1.99ahm: the mic stage's program follows "Delay mic signs"; micView's "On the mic" card (mic) and people list (members) follow
+  // their own switches
+  function waitsOf(record) {
+    if (record.kind === 'program') return { all: delayFor(record.pad, false, 'mic') };
+    var card = delayFor(record.pad, false, 'mic_card'), list = delayFor(record.pad, false, 'mic_list');
+    return { card: card, list: list, all: Math.max(card, list) };
+  }
   function renderRecord(record, call) {
-    var wait = delayFor(record.pad, false, switchOf(record)), now = Date.now(), out = record.kind === 'program' ? mergedProgram(record, wait, now) : mergedMic(record, wait, now);
+    var w = waitsOf(record), now = Date.now(), out = record.kind === 'program' ? mergedProgram(record, w.all, now) : mergedMic(record, w.card, w.list, now);
     var signature = JSON.stringify(out), changed = signature !== record.signature; record.signature = signature;
     if (call && changed && typeof record.callback === 'function') { try { record.callback(out); } catch (e) { /* isolate optional rendering */ } }
     return out;
@@ -369,7 +404,7 @@
     clearTimeout(viewTimer); viewTimer = null; if (stopped) return;
     var now = Date.now(), due = Infinity;
     Object.keys(records).forEach(function (key) {
-      var record = records[key], wait = delayFor(record.pad, false, switchOf(record));
+      var record = records[key], wait = waitsOf(record).all;
       if (now - record.touched > 60000 && record.pad !== defaultPad() && record.pad !== sound.slug) { delete records[key]; return; }
       trimHistory(record, now);
       if (wait) record.rows.forEach(function (row) { var at = row.at + wait; if (at > now) due = Math.min(due, at); });
@@ -399,9 +434,10 @@
     var record = historyRecord('program', slug(pad), program, callback), out = renderRecord(record, false);
     if (typeof callback === 'function') callback(out); scheduleViews(); return out;
   }
-  // C2 helpers. 1.99ahm: wired - the pad page's and the homepage panel's "On the mic" card (micView, the apply_mic_card switch) and
-  // their chat's grab / drop lines (holdLine, apply_mic_chat). With the switch off, or sync not applying to this viewer, micView hands
-  // back the data it was given and holdLine holds nothing.
+  // C2 helpers. 1.99ahm: wired - the pad page's and the homepage panel's "On the mic" card (micView's mic, the apply_mic_card switch),
+  // their people list's 🎙 icons and on-mic order / the homepage's mic chips (micView's members, apply_mic_list) and their chat's grab /
+  // drop lines (holdLine, apply_mic_chat). With the switches off, or sync not applying to this viewer, micView hands back the data it
+  // was given and holdLine holds nothing; a part whose switch is off is handed back as given.
   function micView(pad, data, rerender) { var record = historyRecord('mic', slug(pad), data, rerender), out = renderRecord(record, false); scheduleViews(); return out; }
   /** Hold a live grab / drop line the page has just put in its place in the log; -> true when held. The line keeps its place (hidden),
    *  so it shows in its true time order. Only a timing flag is kept on it - never who it names. */
@@ -430,7 +466,7 @@
         fallback_ms: c && c.fallback ? number(c.fallback[sound.mode]) : null, deadband_ms: c ? number(c.deadband) : null, period_s: c ? number(c.period_s) : null },
       audio: { pepe_ms: number(a[sound.mode + '_ms']), mix_ms: number(a.mix_ms), helper_ms: number(a.helper_ms), age_s: isFinite(ageOf(sound.slug)) ? ageOf(sound.slug) : null,
         browser_ms: number(soundStats.browser), stats_ok: soundStats.ok, rtt_s: number(soundStats.rtt) }, indicator_ms: delayFor(sound.slug),
-      card_ms: delayFor(sound.slug, false, 'mic_card'), chat_ms: delayFor(sound.slug, false, 'mic_chat'),   // 1.99ahm
+      card_ms: delayFor(sound.slug, false, 'mic_card'), chat_ms: delayFor(sound.slug, false, 'mic_chat'), list_ms: delayFor(sound.slug, false, 'mic_list'),   // 1.99ahm
       tiles: receivers.map(function (entry, index) { var cam = c && c.cams && c.cams[entry.path]; return { slot: index + 1, same_pad: entry.pad === sound.slug,
         hold_ms: cam ? number(cam.hold_ms) : null, src: cam && ['passthrough', 'pt', 'reencode'].indexOf(cam.src) >= 0 ? cam.src : null,
         target_ms: number(entry.target), supported: entry.supported, rtt_s: number(entry.rtt), stats: copy(entry.diagnostics),

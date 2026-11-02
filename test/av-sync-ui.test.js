@@ -14,7 +14,7 @@ function sandbox(options = {}) {
   const config = Object.assign({ ok: true, on: true, dbg: false, audio: { rtc_ms: 1000, mp3_ms: 1000, mix_ms: 700, helper_ms: 270, age_s: 0 },
     cams: { cam1: { src: "passthrough", hold_ms: 200 }, cam2: { src: "reencode", hold_ms: 300 } }, k: { pt: 100, re: -100, ind: 0 },
     fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
-    apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true }, engines: { chromium: true, firefox: false, safari: false }, ind_path_ms: 300, mods_instant: false }, options.config || {});
+    apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true, mic_list: true }, engines: { chromium: true, firefox: false, safari: false }, ind_path_ms: 300, mods_instant: false }, options.config || {});
   function element(tag) {
     const e = { tagName: tag.toUpperCase(), style: {}, attrs: {}, children: [], parentNode: null, hidden: false, textContent: "", events: {},
       setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
@@ -588,4 +588,92 @@ test("1.99ahm: with only the card / chat switches on, the audio is still measure
   assert.deepEqual([s.api.debug().indicator_ms, s.api.debug().chat_ms], [0, 0]);
   assert.equal(box.children[0].hidden, false, "the viewer can turn it off");
   box.children[0].click(); assert.equal(s.api.debug().card_ms, 0, "their toggle off: nothing held");
+});
+
+// 1.99ahm: "Delay the people list's 🎙 icons" (apply.mic_list) - micView's members: the pad page's people list (its 🎙 icons and on-mic
+// order) and the homepage panel's mic chips. Its own switch; the same mic-sign offset and the same who / audio-playing rules.
+test("1.99ahm: the people-list switch is its own - micView's members follow apply.mic_list, its mic the card's switch; off, or an older site: the list as given", async () => {
+  const s = await gated({ config: { apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true } } });   // an older site: no mic_list
+  let shown; const view = d => { shown = plain(d); };
+  const lit = () => shown.members.filter(p => p.on_mic).map(p => p.login);
+  s.api.micView("pad", roster([]), view); await s.advance(1000);
+  let r = roster(["a"]), out = s.api.micView("pad", r, view);
+  assert.equal(out.members, r.members, "an older site: the list is today's - the very array the page gave");
+  assert.equal(out.mic.length, 0, "... while the card waits");
+  assert.equal(s.api.debug().list_ms, 0);
+  await s.advance(700);
+  s.config.apply.mic_card = false; s.config.apply.mic_list = true; await s.advance(5000);
+  assert.deepEqual([s.api.debug().card_ms, s.api.debug().list_ms, s.api.debug().indicator_ms], [0, 700, 700]);
+  r = roster(["a", "b"]); out = s.api.micView("pad", r, view); shown = plain(out);
+  assert.equal(out.mic, r.mic, "the card's switch off: the card is today's");
+  assert.deepEqual(lit(), ["a"], "b's 🎙 waits for the audio");
+  await s.advance(699); assert.deepEqual(lit(), ["a"]);
+  await s.advance(1); assert.deepEqual(lit(), ["a", "b"], "the same offset as the mic signs (700 ms)");
+  assert.deepEqual(shown.members.map(p => [p.display, p.can]), [["A", "current"], ["B", "current"]], "today's people, names and data");
+  // the viewer's own toggle off: today's list at once; on again: held again
+  const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  r = roster(["b"]); s.api.micView("pad", r, view); assert.deepEqual(lit(), ["a", "b"]);
+  box.children[0].click(); assert.deepEqual(lit(), ["b"], "the toggle off: a's 🎙 goes out at once");
+  assert.equal(s.api.micView("pad", r, view), r, "and micView hands back what it was given");
+  box.children[0].click();
+  // the switch off: as given
+  s.config.apply.mic_list = false; await s.advance(5000);
+  r = roster(["a"]); assert.equal(s.api.micView("pad", r, view), r, "both switches off: as given");
+  // sync not for this viewer
+  s.config.apply.mic_list = true; s.config.on = false; await s.advance(5000);
+  r = roster(["b"]); assert.equal(s.api.micView("pad", r, view), r, "mode not for this viewer: as given");
+  // only the list's switch on: the audio is measured for it and the viewer's toggle is offered
+  const t = sandbox({ config: { apply: { video: false, mic: false, mp3: true, mic_card: false, mic_chat: false, mic_list: true } } });
+  t.api.pad("pad"); const tb = t.element("div"); t.document.body.appendChild(tb); t.api.decorate(tb);
+  t.media("rtc"); await t.advance(0);
+  assert.equal(t.api.debug().list_ms, 500, "first RTC stats have no interval: the whole fallback");
+  await t.advance(2000); assert.equal(t.api.debug().list_ms, 900, "measured: 1000 + 200 - 300");
+  assert.deepEqual([t.api.debug().indicator_ms, t.api.debug().card_ms, t.api.debug().chat_ms], [0, 0, 0]);
+  assert.equal(tb.children[0].hidden, false, "the viewer can turn it off");
+  tb.children[0].click(); assert.equal(t.api.debug().list_ms, 0, "their toggle off: nothing held");
+});
+
+test("1.99ahm: people list privacy - an alias-less veiled holder's 🎙 stays one offset on a keyless person of the same veil level, never by position", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const I = { anon: true, display: "someone", veil: "incognito" }, Hd = { anon: true, display: "someone", veil: "hidden", src: "list" };
+  const H2 = { anon: true, display: "someone", veil: "hidden", src: "seen" }, Y = { login: "yname", display: "Y" };
+  const lit = () => shown.members.filter(p => p.on_mic).map(p => p.veil || p.login);
+  s.api.micView("pad", { members: [Y, Hd, { ...I, on_mic: true }], mic: [I] }, cb); await s.advance(2000);
+  assert.deepEqual(lit(), ["incognito"]);
+  // the holder drops as a hidden someone joins: veil.js's keyed-hash order puts the newcomer before them, so the incognito someone
+  // is no longer the 2nd keyless entry - the 2nd is now the hidden someone who never held the mic
+  shown = plain(s.api.micView("pad", { members: [Y, H2, Hd, I], mic: [] }, cb));
+  assert.deepEqual(lit(), ["incognito"], "for one offset the incognito someone keeps the 🎙 - not the hidden someone now in that position");
+  assert.deepEqual(shown.members.map(p => { const c = { ...p }; delete c.on_mic; return c; }), [Y, H2, Hd, I], "today's people as given: nothing from history");
+  await s.advance(699); assert.deepEqual(lit(), ["incognito"]);
+  await s.advance(1); assert.deepEqual(lit(), [], "then out - with the card's someone and the drop line");
+  // a holder who drops and leaves: no incognito someone is left - the 🎙 goes at once, never onto a hidden one
+  s.api.micView("pad", { members: [Y, Hd, { ...I, on_mic: true }], mic: [I] }, cb); await s.advance(2000); assert.deepEqual(lit(), ["incognito"]);
+  shown = plain(s.api.micView("pad", { members: [Hd, Y, H2], mic: [] }, cb)); assert.deepEqual(lit(), []);
+  await s.advance(2000);
+  // two keyless people of one level, one grabs: one of them lights one offset later (today's holder first); the other level never
+  s.api.micView("pad", { members: [Y, Hd, H2, I], mic: [] }, cb); await s.advance(2000);
+  shown = plain(s.api.micView("pad", { members: [Y, Hd, { ...H2, on_mic: true }, I], mic: [H2] }, cb)); assert.deepEqual(lit(), []);
+  await s.advance(700); assert.deepEqual(shown.members.map(p => !!p.on_mic), [false, false, true, false], "the hidden someone who holds it now");
+});
+
+test("1.99ahm: the list, the card and the held grab/drop lines agree - one moment for all three, when the offset rises, and on caughtUp", async () => {
+  const s = await gated(); let shown; const cb = d => { shown = plain(d); };
+  const host = s.element("div"); s.document.body.appendChild(host);
+  const card = () => shown.mic.map(p => p.login), list = () => shown.members.filter(p => p.on_mic).map(p => p.login);
+  shown = plain(s.api.micView("pad", roster([]), cb));
+  await s.advance(3800); shown = plain(s.api.micView("pad", roster(["a"]), cb));     // a grabs at +3800 (offset 700)
+  const grabLine = s.element("div"); host.appendChild(grabLine); assert.equal(s.api.holdLine("pad", grabLine), true);
+  await s.advance(699); assert.deepEqual([card(), list(), grabLine.style.display], [[], [], "none"]);
+  await s.advance(1); assert.deepEqual([card(), list(), grabLine.style.display], [["a"], ["a"], ""], "card, list and line at +4500");
+  await s.advance(450); shown = plain(s.api.micView("pad", roster([]), cb));          // drops at +4950
+  const dropLine = s.element("div"); host.appendChild(dropLine); assert.equal(s.api.holdLine("pad", dropLine), true);
+  s.config.audio.mp3_ms = 2000;                                                        // the settings check at +5000: offset 1700
+  await s.advance(50); assert.deepEqual([s.api.debug().card_ms, s.api.debug().list_ms], [1700, 1700]);
+  await s.advance(1649); assert.deepEqual([card(), list(), dropLine.style.display], [["a"], ["a"], "none"]);
+  await s.advance(1); assert.deepEqual([card(), list(), dropLine.style.display], [[], [], ""], "all three at +6650 = the drop + the new offset");
+  // a backlog answer: the list is drawn as it is now with the card
+  await s.advance(100);
+  shown = plain(s.api.micView("pad", roster(["b"]), cb)); assert.deepEqual([card(), list()], [[], []]);
+  s.api.caughtUp("pad"); assert.deepEqual([card(), list()], [["b"], ["b"]]);
 });
