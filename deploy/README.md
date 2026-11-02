@@ -114,6 +114,13 @@ the time would outlive their 30 days and prod's rows could reach staging. **Befo
    (`NODE_PATH=/home/PATV/node_modules node /root/evidence-purge.js /home/PATV/myapp.db --apply`) once their holds end, and don't refresh staging from
    prod while any are kept unless the refresh runs from the staging checkout (above).
 
+Backups: the purge does not remove copies already in pve1's evidence backup. `/usr/local/sbin/patv-backup` (part `evidence`)
+pulls `/var/lib/patv/evidence/` nightly, without `pending/` (previews and chunk slices are never backed up), into the ZFS dataset
+`tank/backups/patv-evidence` (mode 700) and keeps one `@daily-YYYY-MM-DD` snapshot a day for 30 days by date, never a weekly or
+monthly one (any other snapshot there fails the run and alerts). A purged clip's file therefore ages out of the backup on its own
+within 30 days of the purge; don't restore from those snapshots after a rollback. The `evidence_clips` rows (metadata, no audio)
+are in `myapp.db`, so they stay in the database backups (up to 12 months) like the rest of the database.
+
 ## The chat hub seam's /internal/ routes (1.99acm)
 
 `hubinbound.js` mounts `/internal/v1/...` (the chat hub's signed snapshot pulls and rewinds) on the website's own Express

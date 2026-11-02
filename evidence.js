@@ -8,6 +8,10 @@
 //   * the files live in EVIDENCE_DIR (env; default /var/lib/patv[-staging]/evidence, 0700; off Linux a folder NEXT TO the code tree)
 //     - never under uploads/ or media/ (both are in the GFS backup mirror), never a public URL, random 32-hex names in 2-hex shards;
 //     previews Pepe sent wait in EVIDENCE_DIR/pending/ for 10 minutes and are served only to the person who asked;
+//     prod's EVIDENCE_DIR has a backup of its own (owner decision 2026-11-01; pve1's patv-backup part "evidence"): pulled nightly into
+//     tank/backups/patv-evidence (mode 700) WITHOUT pending/ (previews and chunk slices are never backed up), one @daily snapshot a
+//     day kept 30 days by date, never a weekly or monthly one - so a deleted or purged clip's file can sit in those snapshots up to
+//     30 more days, and nothing here (the sweep, a delete, tools/evidence-purge.js) reaches them;
 //   * the rows live in evidence_clips (myapp.db): pad, subject login, veil level, requester, when the turn was said, size, length,
 //     the file's sha256, created / expires_at (+30 days, never moved), a per-clip legal hold, subject_gone_at (the subject used
 //     forget-me or deleted their account: flagged, never extended). Deliberately NO transcript and NO hidden words: those stay in
@@ -412,8 +416,8 @@ const seenLately = (k, t = now()) => { const at = SEEN.get(k); return !!(at && t
 const markSeen = (k, t = now()) => { SEEN.delete(k); SEEN.set(k, t); if (SEEN.size > 20000) SEEN.delete(SEEN.keys().next().value); };
 const seenOnce = (k, t = now()) => { if (seenLately(k, t)) return false; markSeen(k, t); return true; };
 const BOOT_SWEEP_MS = 90e3;              // review fix R6: a sweep shortly after every start (a restart no longer moves it an hour out)
-// Pepe's evidence bodies in chunks (botupload.js, nginx's 1m): their slices are staged HERE, in the store's pending/ (outside uploads/ and
-// so outside every backup) - never in uploads/.botupload (review fix R2)
+// Pepe's evidence bodies in chunks (botupload.js, nginx's 1m): their slices are staged HERE, in the store's pending/ (outside uploads/, and
+// the evidence backup leaves pending/ out - so outside every backup) - never in uploads/.botupload (review fix R2)
 const CHUNK_TARGETS = ["/api/bridge/evidence", "/api/bridge/evidence/upload"];
 const chunkStage = (create) => { const b = create ? dir() : existingDir(); return b ? path.join(b, "pending", "chunks") : null; };
 

@@ -26,8 +26,8 @@
 //
 // Slices live on disk under BOTUPLOAD_DIR (default uploads/.botupload, git-ignored) - one directory per upload. wave 2 WP-5 review fix
 // (R2): a target registered with stageAt() (evidence.js: Pepe's moderation evidence bodies - a veiled person's voice) stages its slices
-// in that module's own private directory instead (the evidence store's pending/chunks: outside uploads/, so never in a backup); such a target
-// in PRIVATE takes no chunks at all until its directory is registered (400 E_TARGET - Pepe then POSTs it in one piece, as before).
+// in that module's own private directory instead (the evidence store's pending/chunks: outside uploads/, and the evidence store's own
+// backup leaves pending/ out - so never in a backup); such a target in PRIVATE takes no chunks at all until its directory is registered (400 E_TARGET - Pepe then POSTs it in one piece, as before).
 "use strict";
 const fs = require("fs");
 const path = require("path");

@@ -13,6 +13,9 @@
 // "who:h:<hash>", "who:u:<id>" of an account linked to the login) - the same rule as evidence.js's sweep. The directory: --dir, else
 // EVIDENCE_DIR, else /var/lib/patv[-staging]/evidence on Linux (STAGING=1 for staging), else ../<repo>-evidence. Its own sqlite
 // connection (run it with the site stopped or not - each row goes in its own statement, file first). Prints counts - never a row.
+// It never reaches backup copies: pve1's evidence backup (tank/backups/patv-evidence: /var/lib/patv/evidence without pending/, one
+// @daily snapshot a day kept 30 days) still holds a purged clip's file until its snapshots age out, within 30 days; the purged rows
+// (metadata, no audio) stay in myapp.db's own backups until those expire.
 "use strict";
 const fs = require("fs");
 const path = require("path");
