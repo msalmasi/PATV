@@ -98,16 +98,17 @@ test("a relay Pepe reports live + exact that MediaMTX never has: want[].nomedia 
   assert.ok(!nm[0].includes("ann"));
 });
 
-test("BOT_GRACE_MS: a slow open Pepe reports live late (+35 s) isn't cut at +40 s - it ends 15 s after his first 'live'", async () => {
+test("BOT_GRACE_MS: a slow open Pepe reports live late (+35 s) isn't cut at +40 s - it ends once the path lists have shown 15 s without it after his first 'live'", async () => {
   fresh();
   await pepe({});
   await LC.stageHold(R, "ben", "slot-ben", T);
   const S = sess("ben"), t0 = S.createdAt;
-  await run(t0, 1, 50, { pepeAt: (s) => (s >= 35 ? { ben: {} } : {}), syncAt: () => [] });
-  assert.ok(!S.ended, "+50 s: still in the grace after Pepe's first 'live' at +35 s");
-  await run(t0, 51, 52, { pepeAt: () => ({ ben: {} }), syncAt: () => [] });
+  await run(t0, 1, 49, { pepeAt: (s) => (s >= 35 ? { ben: {} } : {}), syncAt: () => [] });
+  assert.ok(!S.ended, "+49 s: still in the grace after Pepe's first 'live' at +35 s");
+  await run(t0, 50, 52, { pepeAt: () => ({ ben: {} }), syncAt: () => [], stop: () => S.ended });
   assert.ok(S.ended && S.endWhy === "start_timeout", `then start_timeout (${S.endWhy})`);
-  assert.ok(S.ended - t0 > 50 * 1000);
+  // (review F1: judged on the lists - the one at +50 s is the first with 15 s of them after his "live")
+  assert.equal(S.ended, t0 + 50 * 1000);
 });
 
 test("control: MediaMTX has the stream - live (liveAt is MediaMTX's moment, not Pepe's report), never ended, no nomedia", async () => {
@@ -169,8 +170,9 @@ test("relay_lost: Pepe restarts on nomedia - no second nomedia until he's been l
   const answers = await run(t0, 1, 104, { pepeAt, syncAt: (s) => (s >= 5 && s < 60 ? ["fox"] : []) });
   const nm = answers.filter((a) => (wantOf(a.ans, "fox") || {}).nomedia).map((a) => a.s);
   assert.equal(nm[0], 80);
-  assert.ok(!nm.some((s) => s > 80 && s < 99), "after his restart: nothing until he's been live 15 s again " + JSON.stringify(nm));
-  assert.ok(nm.includes(99), "still nothing at the server 15 s after the restart: asked again");
+  assert.ok(!nm.some((s) => s > 80 && s < 100), "after his restart: nothing until he's been live 15 s again " + JSON.stringify(nm));
+  // (review F1: judged on the lists - the one at +100 s is the first with 15 s of them after his restart's "live" at +84 s)
+  assert.ok(nm.includes(100), "still nothing at the server 15 s after the restart: asked again");
   const row = (await LC.adminView()).sessions.find((x) => x.login === "fox");
   assert.ok(row && row.nomedia === true && row.lost === true && row.nomedia_s === 44, "the admin view: no media for 44 s, lost " + JSON.stringify(row && { nm: row.nomedia, s: row.nomedia_s }));
   assert.ok(!S.ended);
@@ -212,4 +214,41 @@ test("the pages: /admin/pepe/livecams says 'no media' for such a relay; a ▶ Li
   assert.match(ejs, /s\.nomedia \? ' · ⚠ no media'/, "the admin row");
   const js = fs.readFileSync(path.join(repo, "public", "js", "pad-livecam.js"), "utf8");
   assert.match(js, /case 'unwatched': case 'gone': case 'relay_lost': return _t\('js\.pad\.live\.err_gone'/);
+});
+
+// ── review fixes ──
+/**
+ * Millisecond steps from the hold to `upto` s: MediaMTX's lists at `lists` (s; the stream in them from `readyAt` s), Pepe's
+ * poll every 1 s at `off` s past each second -> `pepeAt(s)` his live map. -> {S, t0, nomedia: [s of polls asked to restart]}
+ */
+async function runMs(login, { lists, readyAt, off = 0, upto, pepeAt, holder = MFH }) {
+  fresh();
+  await pepe({});
+  await LC.stageHold(R, login, holder, T, holder === MFH ? { mf: true } : undefined);
+  const S = sess(login), t0 = S.createdAt;
+  const listMs = new Set(lists.map((x) => Math.round(x * 1000))), offMs = Math.round(off * 1000), nomedia = [];
+  for (let ms = 100; ms <= upto * 1000 && !S.ended; ms += 100) {
+    T = t0 + ms;
+    if (listMs.has(ms)) mtx(...(ms >= readyAt * 1000 ? [login] : []));
+    if ((ms - offMs) % 1000 === 0) {
+      const w = wantOf(await pepe(pepeAt(ms / 1000)), login);
+      if (w && w.nomedia) nomedia.push(ms / 1000);
+    } else LC.sweep(T);
+  }
+  return { S, t0, nomedia };
+}
+
+test("review F1: a path list taken just before MediaMTX had the stream, then its API goes quiet - judged only on what the lists saw: no nomedia for a healthy relay, a slow open isn't cut", async () => {
+  // A: Pepe live at +5 s; lists at +0.5 / +5.5 (0.3 s before MediaMTX's ready at +5.8), then the API doesn't answer. Healthy.
+  const a = await runMs("gil", { lists: [0.5, 5.5], readyAt: 5.8, upto: 60, pepeAt: (s) => (s >= 5 ? { gil: {} } : {}) });
+  assert.deepEqual(a.nomedia, [], "no restart asked: the lists saw 0.5 s of it missing after his 'live', not 15 s");
+  assert.ok(!a.S.ended, "nothing ended");
+  // B: a slow open - Pepe live at +24.9 s; lists every 5 s +0.9 .. +25.9 (ready at +26.2), then the API doesn't answer
+  const b = await runMs("hal", { lists: [0.9, 5.9, 10.9, 15.9, 20.9, 25.9], readyAt: 26.2, off: 0.9, upto: 60, pepeAt: (s) => (s >= 24.9 ? { hal: {} } : {}) });
+  assert.deepEqual(b.nomedia, [], "no restart asked");
+  assert.ok(!b.S.ended, `not ended start_timeout on lists that stopped 1 s after his 'live' (${b.S.endWhy})`);
+  // control: the API answers on - the same healthy open is live, nothing asked
+  const c = await runMs("gil", { lists: [0.5, 5.5, 10.5, 15.5, 20.5, 25.5, 30.5, 35.5, 40.5, 45.5, 50.5, 55.5], readyAt: 5.8, upto: 60, pepeAt: (s) => (s >= 5 ? { gil: {} } : {}) });
+  assert.deepEqual(c.nomedia, []);
+  assert.ok(!c.S.ended && c.S.liveAt === c.t0 + 10500, "live from the list at +10.5 s");
 });

@@ -84,7 +84,8 @@
 // NOMEDIA_MS (LOST_MS for one that WAS ready) carries want[].nomedia - Pepe ends that publish and his restart loop puts it
 // back (bot 1.99??) - and it ends as "start_timeout" (never ready: START_MS, and BOT_GRACE_MS after Pepe's first "live") or
 // "relay_lost" (was ready: START_MS after the first nomedia) - both soft, so the mic stage tries again. A stale path list
-// (MediaMTX's API unreachable) changes nothing: Pepe's word counts as before and nothing is ended for it.
+// (MediaMTX's API unreachable) changes nothing: Pepe's word counts as before and nothing is ended for it. Every "hasn't been
+// ready for N s" is what the lists saw (missedSince: up to the latest list, never up to now - review F1).
 //
 // Path names share the room-audio family on MediaMTX (deploy/webrtc/mediamtx.yml "~^(room|stgr)-[0-9a-f]{16}$"), so no
 // MediaMTX change is needed: prod "room-<16 hex>", staging "stgr-<16 hex>", an HMAC of "live-cam-path:<room>|<login>"
@@ -423,23 +424,28 @@ function endSession(S, why, t = now()) {
 let SYNC_AT = 0;                         // the last MediaMTX path list (noteSync)
 /** Is MediaMTX's path list fresh (its API answered within SYNC_FRESH_MS)? Stale = nothing is judged by it. */
 const syncFresh = (t = now()) => SYNC_AT > 0 && t - SYNC_AT <= SYNC_FRESH_MS;
-/** Never live within START_MS? Pepe never said live: as before. Pepe said live: only on a fresh path list that has missed the
- *  stream for NOMEDIA_MS, and BOT_GRACE_MS after his first "live" (a slow but real open isn't cut). */
+/** 1.99?? dead relay review (F1): how long the path lists THEMSELVES have shown this relay without its stream, counted from
+ *  `from` (Pepe's "live") when that is later - up to the latest list (SYNC_AT), never up to now: a list is trusted for
+ *  SYNC_FRESH_MS, but it proves nothing about the time after it was taken (MediaMTX's API may have gone quiet just before the
+ *  stream arrived). 0 = the latest list had it. */
+const missedSince = (S, from = 0) => (S.missSince ? SYNC_AT - Math.max(S.missSince, from || 0) : 0);
+/** Never live within START_MS? Pepe never said live: as before. Pepe said live: only on a fresh path list, after the lists
+ *  have shown no stream for NOMEDIA_MS, BOT_GRACE_MS of them after his first "live" (a slow but real open isn't cut). */
 function startOver(S, t) {
   if (S.liveAt || t - S.createdAt <= START_MS) return false;
   if (!S.botLiveAt) return true;
-  return syncFresh(t) && S.missSince > 0 && t - S.missSince >= NOMEDIA_MS && t - S.botLiveAt > BOT_GRACE_MS;
+  return syncFresh(t) && missedSince(S) >= NOMEDIA_MS && missedSince(S, S.botLiveAt) >= BOT_GRACE_MS;
 }
-/** A relay that WAS ready lost its stream, Pepe was asked to restart it (nomediaAt) and it isn't back START_MS later. */
+/** A relay that WAS ready lost its stream, Pepe was asked to restart it (nomediaAt) and the lists still don't have it
+ *  START_MS later. */
 function lostOver(S, t) {
-  return !!(S.liveAt && S.nomediaAt && S.missSince > 0 && syncFresh(t) && t - S.nomediaAt > START_MS);
+  return !!(S.liveAt && S.nomediaAt && S.missSince > 0 && syncFresh(t) && SYNC_AT - S.nomediaAt > START_MS);
 }
-/** Pepe reports this relay live (botLive: on this poll), but a fresh path list hasn't had its stream for NOMEDIA_MS (LOST_MS
- *  for one that was ready) - and he has been live that long since his latest (re)start. -> true = want[].nomedia */
+/** Pepe reports this relay live (botLive: on this poll), but the fresh path lists haven't had its stream for NOMEDIA_MS (LOST_MS
+ *  for one that was ready) - NOMEDIA_MS of them since his latest (re)start's "live". -> true = want[].nomedia */
 function noMedia(S, t, botLive) {
   if (!botLive || !S.botLiveSince || !S.missSince || !syncFresh(t)) return false;
-  if (t - S.botLiveSince < NOMEDIA_MS) return false;
-  return t - S.missSince >= (S.liveAt ? LOST_MS : NOMEDIA_MS);
+  return missedSince(S) >= (S.liveAt ? LOST_MS : NOMEDIA_MS) && missedSince(S, S.botLiveSince) >= NOMEDIA_MS;
 }
 function sweep(t = now()) {
   for (const S of [...SESS.values()]) {
