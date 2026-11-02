@@ -72,9 +72,9 @@ const SHUTDOWN = require("./shutdown");
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
-const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked", "shop"]);
+const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked", "shop", "stage_cover"]);
 const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures", banner: "Homepage banner ads",
-                                      locked: "Locked creator posts (PATV Creators)", shop: "Generated shop pictures",
+                                      locked: "Locked creator posts (PATV Creators)", shop: "Generated shop pictures", stage_cover: "Stage covers (mic stage pictures)",
                                       onair: "Pepe's broadcast (on-air pictures)" });
 // 1.99acw: "onair" = a picture going on Pepe's broadcast (onairmedia.js: his OBS -> the site's Pepe stream, his Camfrog cam and
 // the Twitch relay). Its own entry point checkBroadcast() - ALWAYS enforcing, fail-CLOSED, independent of the master switch,
@@ -87,8 +87,11 @@ const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_p
 // passes, explicit nudity / sexual content never does). A locked post can never be NSFW, so "nsfw" / "nsfw_pad" mean refuse there.
 // 1.99xr: "shop" = a picture made by the shop's Generate image button (shopart.js) - shown on public shop pages, so the strict
 // profile policy (nothing NSFW)
+// 1.99??: "stage_cover" = a picture a member uploads as their 🎙 mic-stage cover (stagecover.js) - public on every pad stage, so the
+// strict profile policy; stagecover takes an upload ONLY while this check enforces (enforcing()) and treats anything but an
+// enforcing pass as a refusal (fail-closed), and review() hands its marks to stagecover.onReview (a flagged cover is held)
 const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile", locked: "locked", shop: "profile",
-                              onair: "broadcast" });
+                              stage_cover: "profile", onair: "broadcast" });
 // 1.99acw: the broadcast policy - frozen here, never part of the editable config.policy (admins can't loosen it; only the
 // broadcast_max_score margin is tunable, within [0.05, 0.5])
 const BROADCAST_POLICY = Object.freeze({ nudity_explicit: "refuse", sexual: "refuse", suggestive: "refuse", minor_risk: "refuse_flag", gore: "refuse",
@@ -110,7 +113,7 @@ const DEFAULTS = Object.freeze({
   locked_enforce: !!process.env.STAGING,
   enabled: false, shadow: false, fail_mode: "open", timeout_secs: 20, video_frames: 3, notify_minor: true, retention_days: 30,
   broadcast_max_score: 0.3,      // 1.99acw: on-air pictures are "clearly safe" only with EVERY category score below this
-  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true, locked: true, shop: true }),
+  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true, locked: true, shop: true, stage_cover: true }),
   thresholds: Object.freeze({ nudity_explicit: 0.5, sexual: 0.5, suggestive: 0.5, minor_risk: 0.4, gore: 0.5, hate_symbols: 0.6 }),
   policy: DEFAULT_POLICY,
 });
@@ -252,6 +255,11 @@ function settingsView(c) {
 }
 /** Is anything going to be classified for this surface? (master switch or shadow mode, and the surface's toggle) */
 function active(c, surface) { return !!c && (c.enabled || c.shadow) && SURFACES.includes(surface) && c.surfaces[surface] !== false; }
+/** 1.99??: does check() ENFORCE for this surface right now (master switch on, shadow mode off, the surface on)? A surface that must
+ *  never take an unscanned picture (stagecover.js) opens its uploads only while this is true. Unreadable = false. */
+async function enforcing(surface) {
+  try { const c = await config(); return !!c.enabled && !c.shadow && SURFACES.includes(surface) && c.surfaces[surface] !== false; } catch (e) { return false; }
+}
 
 // ── the classification ──
 /** Pepe's (or a stub's) classification -> a clean one, or null when it's unusable. */
@@ -903,6 +911,11 @@ async function review(id, mark, actor, note) {
     try { await require("./onair").blockFromSafetyLog(Number(id), "imagesafety:" + String(actor || "?").slice(0, 60)); }
     catch (e) { console.error("[imagesafety] onair block:", e.message); }
   }
+  // 1.99??: a stage cover's check - "fn" takes the picture down; on a held (flagged) one "ok" takes it down and "fp" puts it up
+  if (m && row && row.surface === "stage_cover") {
+    try { await require("./stagecover").onReview(Number(id), m, actor); }
+    catch (e) { console.error("[imagesafety] stage cover review:", e.message); }
+  }
   return rowView(row);
 }
 async function sweep(t = NOW()) {
@@ -980,8 +993,10 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
       if (!a) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The image safety review page is for site admins.", title: "Admins only" });
       const filter = ["all", "flagged", "blocked", "unchecked", "shadow", "unreviewed"].includes(req.query.f) ? req.query.f : "all";
       const C = await config();
+      // 1.99??: the "Stage covers" card - members' uploaded 🎙 stage covers, with Take down (stagecover.js)
+      const covers = await (async () => { try { return await require("./stagecover").adminList(); } catch (e) { return []; } })();
       res.render("admin/imagesafety", { user: a.username, isAdmin: true, C, S: settingsView(C), rows: await recent({ filter }), filter, stats: await stats(),
-                                        SURFACES, SURFACE_LABEL, CATEGORIES, POLICY_KEYS, ACTIONS, DEFAULTS, SETTING_NAMES });
+                                        SURFACES, SURFACE_LABEL, CATEGORIES, POLICY_KEYS, ACTIONS, DEFAULTS, SETTING_NAMES, covers });
     } catch (e) { console.error("[imagesafety] page:", e); res.status(500).send("Something went wrong."); }
   });
   app.get("/admin/imagesafety/thumb/:id", addUser, async (req, res) => {
@@ -1023,7 +1038,7 @@ function _setLastPull(t) { LAST_PULL = Number(t) || 0; }
 module.exports = {
   init, register, install, check, checkLocked, checkBroadcast, recordPepeDm, imageFrames, broadcastFrames, mergeVerdicts, BROADCAST_POLICY, BROADCAST_REFUSED,
   BROADCAST_MAX_RANGE, BROADCAST_BG, BROADCAST_FRAME_CAP, BROADCAST_BATCH, BSAME_PIXEL, _setLastPull,
-  lockedEnforcing, POLICY_GROUPS, prefetch, decide, cleanVerdict, cleanConfig, config, setConfig, settingsView, active, framesFor, hashFrames,
+  lockedEnforcing, enforcing, POLICY_GROUPS, prefetch, decide, cleanVerdict, cleanConfig, config, setConfig, settingsView, active, framesFor, hashFrames,
   enqueue, pull, result, queueStats, setClassifier, recent, stats, review, sweep, padAllowsNsfw, thumbPath, dir, _setDir, _setClock, _reset,
   SURFACES, SURFACE_LABEL, GROUP, CATEGORIES, POLICY_KEYS, ACTIONS, DEFAULTS, DEFAULT_POLICY, SETTING_NAMES, PULL_WAIT_MAX, CLAIM_TTL, LATE_MS,
 };

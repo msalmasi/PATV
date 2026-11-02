@@ -238,6 +238,7 @@ const RULES = {
   // inbox / prefs / onboarding
   "inbox.user_id": M({ key: ["ref"] }), "inbox_prefs.user_id": M({ key: ["kind"] }),
   "profile_layout.user_id": M({ key: [] }), "tipjar_seen.userId": M({ key: [] }),
+  "stage_covers.user_id": M({ key: [] }),    // 1.99??: stagecover.js - the survivor keeps its own choice if it has one (an orphaned upload is swept)
   "mention_prefs.user_id": M({ key: [] }), "mention_words.user_id": M({ key: ["phrase", "room_id"] }),   // 1.99ii: mentions.js
   // 1.99kk banner.js: homepage banner bookings follow their buyer (holds, refunds and stats); staff / admin columns hold a username
   "banner_bookings.user_id": M({ name: "username" }), "banner_bookings.decided_by": { deny: NAME }, "banner_promos.updated_by": { deny: NAME },
