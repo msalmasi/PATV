@@ -568,3 +568,30 @@ test("review fix F1: once no bar's words and no clip of one are left, the page r
   await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
   await settle();
 });
+
+test("review fix F2: scrollback reads only the bars of a !transcripts off person's 'h:' 🎙 rows - their other rows stay skipped in SQL", async () => {
+  await ready();
+  // frankie (incognito, transcripts off): 40 incognito 🎙 lines WITH words (as Pepe sends them while transcripts are on) - left out
+  const evs = [];
+  for (let i = 0; i < 40; i++) {
+    evs.push(ev("x.pepe.transcript", { id: "tx-0000000000f" + String(i).padStart(5, "0"), user: real(FR, "Frankie"), source: "mic", said_at: Date.now() / 1000,
+                                       text: "frankie incog words " + i, priv: priv("incognito", FR) }));
+  }
+  await sync(evs);
+  await settle(200);
+  const n = (await getQuery("SELECT COUNT(*) AS n FROM chat_log WHERE who = ? AND k = 'tx'", ["h:" + hash(FR)]))[0].n;
+  assert.ok(n >= 40, "archived as 'h:' rows: " + n);
+  const CH = require(path.join(repo, "chatloghist"));
+  CH._reset();
+  CV._clearCaches();
+  CH._setLimits({ scanMax: 10 });
+  try {
+    const pg = await CH.page(U.mem, SLUG, { limit: 5 });
+    assert.ok((pg.items || []).length > 0, "a page past his 40 left-out rows still has items (they weren't walked): " + JSON.stringify(Object.keys(pg)));
+    assert.ok(!(pg.items || []).some((o) => /frankie incog words/.test(o.text || "")), "never shown");
+  } finally { CH._reset(); }
+  CV._clearCaches();
+  const X1 = CH.hiddenLogins("history");
+  assert.ok((X1.txb || []).includes("h:" + hash(FR)) && !X1.tx.includes("h:" + hash(FR)), "history: his 'h:' 🎙 rows are read only as bars (txb)");
+  assert.match(CH.pageSql({ nTxB: 1 }), /\(who NOT IN \(\?\) OR json_extract\(d, '\$\.tm'\) = 1\)/);
+});

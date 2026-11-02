@@ -143,7 +143,7 @@ function timeOf(v) {
 //     line of someone hidden now), which were all skipped before - their bars vanished from 📜 once they left the live tail.
 //   * search: every left-out person is skipped in SQL, masked lines included - a masked line is never a search hit, and its words
 //     (a named line said after G, an incognito v2 line's stored text) are never even fetched (search also skips any "mask" item).
-const HX = { history: { key: null, at: 0, size: -1, out: [], tx: [] }, search: { key: null, at: 0, size: -1, out: [], tx: [] } };
+const HX = { history: { key: null, at: 0, size: -1, out: [], tx: [], txb: [] }, search: { key: null, at: 0, size: -1, out: [], tx: [], txb: [] } };
 function hiddenLogins(mode = "history") {
   const CV = require("./chatlogview");
   const W = CV._who;
@@ -159,7 +159,7 @@ function hiddenLogins(mode = "history") {
   const probe = { floor: { chat: 0, tx: 0, presence: 0 }, now: t, role: "staff", signed: true, inside: true, aud: "p" };
   const leftOut = (login, k) => CV.filter([{ k, c: 1, ts: pts, aud: "p", u: { login, display: login } }], { view: probe, jc: null }).left.privacy === 1;
   const maskableH = (h) => M === "history" && !!g && !!onAt && CV.maskable(h);
-  const out = new Set(), tx = new Set();
+  const out = new Set(), tx = new Set(), txb = new Set();
   let ready = true;
   try { ready = CL.hiddenReady ? !!CL.hiddenReady() : true; } catch (e) { ready = false; }
   if (ready) {
@@ -171,13 +171,15 @@ function hiddenLogins(mode = "history") {
     // is left out (!bridge hide, forget-me) they are left out in SQL too (no who map needed: the hash is the key). Their own cap.
     let nh = 0;
     for (const h of CL.hiddenHashes()) { if (nh >= HIDDEN_SQL_MAX) break; if (CL.isLeftOutHash(h) && !maskableH(h)) { out.add("h:" + h); nh++; } }
-    // 1.99?? transcripts bar: history (once G is set) reads a !transcripts off person's "h:" 🎙 rows - the projection draws the ones Pepe
-    // sent as a bar (tm) as bars and leaves the rest out (chatlogview.privacyV2 / privacyAt); search still skips them all in SQL
+    // 1.99?? transcripts bar: history (once G is set) reads a !transcripts off person's "h:" 🎙 rows Pepe sent as a bar (tm) - the
+    // projection draws them as bars (chatlogview.privacyV2); search still skips them all in SQL. Review fix (F2): only the bars - their
+    // other "h:" 🎙 rows (an older Pepe's, or any with words) are still skipped in SQL (txb: "who NOT IN txb OR d.tm = 1"), so a run of
+    // them is never walked against the scan budget (an empty page that still says "more" - CL8)
     let nt = 0;
     const txBars = M === "history" && !!g;
-    if (txn > 0 && CL.txHiddenHashes && !txBars) for (const h of CL.txHiddenHashes()) { if (nt >= HIDDEN_SQL_MAX) break; if (!out.has("h:" + h)) { tx.add("h:" + h); nt++; } }
+    if (txn > 0 && CL.txHiddenHashes) for (const h of CL.txHiddenHashes()) { if (nt >= HIDDEN_SQL_MAX) break; if (!out.has("h:" + h)) { (txBars ? txb : tx).add("h:" + h); nt++; } }
   }
-  HX[M] = { key, at: t, size: W.size, out: [...out], tx: [...tx] };
+  HX[M] = { key, at: t, size: W.size, out: [...out], tx: [...tx], txb: [...txb] };
   return HX[M];
 }
 
@@ -188,14 +190,17 @@ function hiddenLogins(mode = "history") {
  * stand-ins (a join / leave row without a login), as a CASE again (never an OR). 1.99afl (B.1): a mic grab / drop row without a
  * login is read - the projection keeps the stamped ones (d.k3: an incognito person's, "someone grabbed the mic") and leaves out
  * the rest (chatlogview.privacyAt). Newest first for "before", oldest first for "after".
- * Params: [rk, lo, hi, c_tx, c_presence, c_chat, ...out + tx (when nOut + nTx), ...out (when nOut), limit].
+ * Params: [rk, lo, hi, c_tx, c_presence, c_chat, ...out + tx (when nOut + nTx), ...txb (when nTxB), ...out (when nOut), limit].
+ * 1.99?? transcripts bar review fix (F2): nTxB more 🎙-only keys whose rows are read only when they are a transcripts bar (d.tm = 1).
  */
-function pageSql({ dir = "before", sys = true, keepRemoved = false, approved = true, nOut = 0, nTx = 0 } = {}) {
+function pageSql({ dir = "before", sys = true, keepRemoved = false, approved = true, nOut = 0, nTx = 0, nTxB = 0 } = {}) {
   const qs = (n) => new Array(n).fill("?").join(",");
+  const txw = [...(nOut + nTx > 0 ? ["who NOT IN (" + qs(nOut + nTx) + ")"] : []),
+               ...(nTxB > 0 ? ["(who NOT IN (" + qs(nTxB) + ") OR json_extract(d, '$.tm') = 1)"] : [])];
   return "SELECT * FROM chat_log WHERE rk = ? AND c >= ? AND c < ?" +
     " AND (CASE WHEN k = 'tx' THEN c >= ? WHEN k IN ('join','leave','mic','unmic') THEN c >= ? ELSE c >= ? END)" +
     " AND (CASE WHEN who IS NULL THEN k NOT IN ('join','leave')" +
-    (nOut + nTx > 0 ? " WHEN k = 'tx' THEN who NOT IN (" + qs(nOut + nTx) + ")" : "") +
+    (txw.length ? " WHEN k = 'tx' THEN " + txw.join(" AND ") : "") +
     (nOut > 0 ? " ELSE who NOT IN (" + qs(nOut) + ") END)" : " ELSE 1 END)") +
     (keepRemoved ? "" : " AND rm_at IS NULL AND purged IS NULL") +
     (approved ? "" : " AND aud <> 'a'") +
@@ -209,8 +214,9 @@ async function scanner(V, sys) {
   const cb0 = await CV.cursorBounds(V.rk, V.floor);
   const cb = { tx: cb0.tx == null ? C_MAX : cb0.tx, presence: !sys || cb0.presence == null ? C_MAX : cb0.presence, chat: cb0.chat == null ? C_MAX : cb0.chat };
   const X = hiddenLogins();
-  const o = { sys, keepRemoved: V.role === "owner" || V.role === "staff", approved: !!V.inside, nOut: X.out.length, nTx: X.tx.length };
-  const hp = [...(o.nOut + o.nTx ? [...X.out, ...X.tx] : []), ...X.out];
+  const txb = X.txb || [];
+  const o = { sys, keepRemoved: V.role === "owner" || V.role === "staff", approved: !!V.inside, nOut: X.out.length, nTx: X.tx.length, nTxB: txb.length };
+  const hp = [...(o.nOut + o.nTx ? [...X.out, ...X.tx] : []), ...txb, ...X.out];
   return { rk: V.rk, V, cb, cb0, hp, cmin: Math.min(cb.tx, cb.presence, cb.chat),
            sql: { before: pageSql(Object.assign({ dir: "before" }, o)), after: pageSql(Object.assign({ dir: "after" }, o)) } };
 }
@@ -533,6 +539,6 @@ module.exports = {
   dress,                                          // CL9: search results are dressed exactly like history's items
   PAGE, LIMIT_MAX, PER_MIN, AUX_PER_MIN, DAY_ITEMS, SCAN_MAX, BATCH_MAX, POS_TTL, CHECK_MAX, HIDDEN_SQL_MAX, PRESENCE,
   _setLimits: (o) => { Object.assign(limits, o || {}); HIT = null; HIT_AUX = null; },
-  _reset: () => { Object.assign(limits, { perMin: PER_MIN, auxPerMin: AUX_PER_MIN, dayItems: DAY_ITEMS, scanMax: SCAN_MAX }); HIT = null; HIT_AUX = null; DAY.clear(); for (const m of Object.keys(HX)) HX[m] = { key: null, at: 0, size: -1, out: [], tx: [] }; },
+  _reset: () => { Object.assign(limits, { perMin: PER_MIN, auxPerMin: AUX_PER_MIN, dayItems: DAY_ITEMS, scanMax: SCAN_MAX }); HIT = null; HIT_AUX = null; DAY.clear(); for (const m of Object.keys(HX)) HX[m] = { key: null, at: 0, size: -1, out: [], tx: [], txb: [] }; },
   _day: (userId) => (DAY.get(String(userId)) || { n: 0 }).n,
 };
