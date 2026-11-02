@@ -495,7 +495,7 @@ const DELETE_ROWS = [
   ["micfollow_excl", "vlogin", "login"],                          // wave2 WP-4: a pad's veiled exclusion of them (a ✕ on their cover)
   ["micfollow_notices", "login", "login"], ["micfollow_reports", "login", "login"], ["micfollow_reports", "reporter_id", "uid"],
   ["micfollow_courtesy", "login", "login"],                       // 1.99afn (FU-1): the one courtesy notice they had (account deletion only)
-  ["stage_covers", "user_id", "uid"],                             // 1.99??: their 🎙 stage cover choice (an uploaded picture's file goes with stagecover.sweepFiles - either folder, held/ too: fix 3)
+  ["stage_covers", "user_id", "uid"],                             // 1.99ahq: their 🎙 stage cover choice (an uploaded picture's file goes with stagecover.sweepFiles - either folder, held/ too: fix 3)
   ["seethrough_toggle", "user_id", "uid"],                        // 1.99afn: their "Show real names" switches (the audit log rows stay)
   // mfix: 📌 pins of their cam on a pad's mic stage, and the pins they made (micfollow's pin check ends a pin whose row is gone)
   ["micfollow_pins", "login", "login"], ["micfollow_pins", "by_id", "uid"],

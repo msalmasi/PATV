@@ -1,4 +1,4 @@
-// stagecover.js — 1.99?? the STAGE COVER: the picture the 🎙 mic stage shows for a person it names but has no live picture of
+// stagecover.js — 1.99ahq the STAGE COVER: the picture the 🎙 mic stage shows for a person it names but has no live picture of
 // (cam off / not broadcasting, "cam starting…", a refused or failed cam card, a still not loaded yet). Owner 2026-11-02: "When cam
 // is off, lets also show their GTF avatar as a default cover (but give every user the ability to configure their default cover as
 // anything)." The card keeps its reason ("cam starting…") as a small label under the picture.
@@ -25,7 +25,7 @@
 // Admins can also take any uploaded cover down from the "Stage covers" card there (removeUpload). A removed / held picture falls
 // back to the default. Files: COVER_DIR (default /var/lib/patv[-staging]/cover), random 32-hex names (never a user id), served by
 // GET /media/cover/u/<file> only while a member's row holds it: OK = public; HELD = to its owner and the safety admins only.
-// Review fixes (1.99??):
+// Review fixes (1.99ahq):
 //   * a TAKE-DOWN that isn't the owner's own (an admin's, a review's) sticks: the picture's hash is blocked for every account
 //     (stage_cover_blocks - no user id) and the account's uploads are HELD for an admin's check for HOLD_MS (hold_until, strikes).
 //     Review fix 2 (SC-SAFE-1b): also when the reviewed picture is no longer the member's current upload (replaced, removed) - every
@@ -35,7 +35,7 @@
 //   * uploads are capped per account (UPLOADS_PER_HOUR / UPLOADS_PER_DAY image-safety checks, one held picture at a time) and refused
 //     for a restricted account (archived, casino_banned = the relay's "restricted", a global feed ban, Pepe's global feed_restricted).
 //   * the GTF URL's signature covers avatar.js's render version: a redrawn layer = new URLs (the route is immutable-cached).
-// Fix 3 (1.99??, owner 2026-11-02: "snaps and clips should replicate whatever the snap/clipper [sees], not just be a letter"; "uploaded
+// Fix 3 (1.99ahq, owner 2026-11-02: "snaps and clips should replicate whatever the snap/clipper [sees], not just be a letter"; "uploaded
 // covers can join the 12-month site backup"):
 //   * PROFILE PHOTOS IN CAPTURES: stagemiccap draws every cover the viewer's stage shows, a profile photo too (round, as the page
 //     crops it). The photo is fetched SERVER-SIDE (photoImage) - only from PHOTO SOURCES below, never an arbitrary URL - re-encoded
@@ -70,7 +70,7 @@
 //     deletion and merges leave; an export carries records only, never the file).
 //   * THE BLOCK RACE: hashBlocked is checked again right before the store - and inside the transaction that stores the row - so an
 //     upload being classified while an admin / a review blocks the same picture is refused, never stored after the block.
-// Review fixes 3 (1.99??):
+// Review fixes 3 (1.99ahq):
 //   * THE HOLD RACE (SEC-3): held-or-up is decided inside that same transaction (hold_until read there), so a take-down's strike + hold
 //     that lands while the next picture is classified or waits for its transaction holds it. Every upload is written to held/ first
 //     and moved into the normal folder only after its row commits "ok" (never a held picture in the backed-up folder).
@@ -112,15 +112,15 @@ const GTF_RE = /^(\d{1,10}(?:~(?:bg|outfit|mask|hat|prop|frame)-[a-z0-9_]{1,40})
 const STICKER_RE = /^([a-z0-9]{1,32})\/([a-z0-9]{1,32})$/;
 const GTF_PX = 176, COVER_PX = 512, MAX_INPUT_PIXELS = 60e6;
 const MAX_BYTES = 5 * 1024 * 1024, CHUNK = 512 * 1024, CHUNK_MAX = 768 * 1024, UPLOAD_TTL = 15 * 60e3, OPEN_PER_USER = 2;
-// 1.99?? review fixes: per-account upload caps (counted in image_safety_log: every check is a classification + a row + a thumbnail),
+// 1.99ahq review fixes: per-account upload caps (counted in image_safety_log: every check is a classification + a row + a thumbnail),
 // the forced hold after a take-down, and the uploaded file's cache lifetimes (browser / CDN edge)
 const UPLOADS_PER_HOUR = 5, UPLOADS_PER_DAY = 20, HOLD_MS = 30 * 86400e3;
 const UPLOAD_MAX_AGE = 600, UPLOAD_CDN_MAX_AGE = 300;
 const CACHE_MS = 60e3, CACHE_MAX = 5000, SVG_MAX = 500;
-// 1.99?? fix 3: profile photos fetched for captures / the live proxy (see PHOTO SOURCES) - the caps, the cache lifetimes and sizes
+// 1.99ahq fix 3: profile photos fetched for captures / the live proxy (see PHOTO SOURCES) - the caps, the cache lifetimes and sizes
 const PHOTO_MAX_BYTES = 2 * 1024 * 1024, PHOTO_TIMEOUT_MS = 3000, PHOTO_TTL = 3600e3, PHOTO_FAIL_TTL = 5 * 60e3;
 const PHOTO_CACHE_MAX = 300, PHOTO_CACHE_BYTES = 32 * 1024 * 1024, PHOTO_KEYS_MAX = 5000, PHOTO_KEY_TTL = 24 * 3600e3, PHOTO_MAX_PIXELS = 16e6;
-const HELD = "held";                                        // 1.99?? fix 3: COVER_DIR/held/ - never in the off-site backup
+const HELD = "held";                                        // 1.99ahq fix 3: COVER_DIR/held/ - never in the off-site backup
 const SURFACE = "stage_cover";
 const SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
 let NOW = () => Date.now();
@@ -140,17 +140,17 @@ function pickDir() {
 let DIR = null;
 function dir() { if (!DIR) { DIR = pickDir(); fs.mkdirSync(DIR, { recursive: true }); } return DIR; }
 function _setDir(d) { DIR = d; fs.mkdirSync(DIR, { recursive: true }); }
-/** 1.99?? fix 3: where a picture lives - COVER_DIR/<xx>/<name> (up), COVER_DIR/held/<xx>/<name> (held: never backed up). */
+/** 1.99ahq fix 3: where a picture lives - COVER_DIR/<xx>/<name> (up), COVER_DIR/held/<xx>/<name> (held: never backed up). */
 function heldDir() { return path.join(dir(), HELD); }
 function filePath(name, held = false) { return FILE_RE.test(String(name || "")) ? path.join(held ? heldDir() : dir(), name.slice(0, 2), name) : null; }
 const isFile = (p) => { try { return !!p && fs.statSync(p).isFile(); } catch (e) { return false; } };
-/** 1.99?? fix 3: the file of a row's picture - its state's folder first, then the other (a move a crash cut short); null = none. */
+/** 1.99ahq fix 3: the file of a row's picture - its state's folder first, then the other (a move a crash cut short); null = none. */
 function fileAt(name, state) {
   const held = state === "held";
   for (const p of [filePath(name, held), filePath(name, !held)]) if (isFile(p)) return p;
   return null;
 }
-/** 1.99?? fix 3: move a picture into its state's folder (held/ or the normal one). -> true when it is there now. */
+/** 1.99ahq fix 3: move a picture into its state's folder (held/ or the normal one). -> true when it is there now. */
 function placeFile(name, held) {
   const to = filePath(name, held), from = filePath(name, !held);
   if (!to) return false;
@@ -176,10 +176,10 @@ function init() {
       }
       await runQuery("CREATE INDEX IF NOT EXISTS stage_covers_upload ON stage_covers (upload)");
       await runQuery("CREATE INDEX IF NOT EXISTS stage_covers_log ON stage_covers (upload_log)");
-      // 1.99?? review fix: pictures taken down by an admin or a review - by the re-encoded file's sha256, never reusable as a cover
+      // 1.99ahq review fix: pictures taken down by an admin or a review - by the re-encoded file's sha256, never reusable as a cover
       // (no user id: a safety record of the picture, not of the member)
       await runQuery("CREATE TABLE IF NOT EXISTS stage_cover_blocks (hash TEXT PRIMARY KEY, at INTEGER, why TEXT)");
-      // 1.99?? review fix 2 (SC-SAFE-1b): the picture each stage-cover check passed (the log id -> the stored file's sha256), so a
+      // 1.99ahq review fix 2 (SC-SAFE-1b): the picture each stage-cover check passed (the log id -> the stored file's sha256), so a
       // review of a check whose picture the member has since REPLACED or REMOVED still blocks it. No user id (the log row has it);
       // kept only while its log row is (sweepChecks); taken = when a take-down acted on that check (one strike per check)
       await runQuery("CREATE TABLE IF NOT EXISTS stage_cover_checks (log_id INTEGER PRIMARY KEY, hash TEXT NOT NULL, at INTEGER, taken INTEGER)");
@@ -215,7 +215,7 @@ function avatarFn() {
   return _avatarFn;
 }
 function layerIds(k) { try { require("./public/js/avatar.js"); const L = globalThis.pepeAvatarLayers; return L && Array.isArray(L[k]) ? L[k] : []; } catch (e) { return []; } }
-// 1.99?? review fix (COMPAT-1): the render version - avatar.js's source + the render size. The signature covers it, so a redrawn
+// 1.99ahq review fix (COMPAT-1): the render version - avatar.js's source + the render size. The signature covers it, so a redrawn
 // layer (avatar.js changed) gives every GTF cover a NEW URL; the old ones 404 (the stage then shows the letter until the next program
 // carries the new URL). The route's pictures stay immutable-cacheable.
 let RENDER_V = null;
@@ -289,7 +289,7 @@ async function stickerOf(userId, ref) {
   } catch (e) { return null; }
 }
 /** The linked account of a Camfrog login (the bridge's rule: a real account before an automatic "CF..." one; never archived).
- *  1.99?? review fix (PRIV-3): a failed read THROWS (coverOf then shows the letter, uncached) - only "no rows" means Camfrog-only;
+ *  1.99ahq review fix (PRIV-3): a failed read THROWS (coverOf then shows the letter, uncached) - only "no rows" means Camfrog-only;
  *  a read error must never turn a linked member into a Camfrog-only login (whose seed would override their choice). */
 async function accountOf(login) {
   const l = low(login);
@@ -331,11 +331,11 @@ async function forAccount(acct, login, row) {
   if (kind === "upload") return uploadUp(r) ? { url: uploadUrl(r.upload), k: "upload" } : dflt();
   return dflt(kind === "gtf");
 }
-/** An uploaded picture that is up: its row says "ok" AND its file is there (1.99?? review fix SC-SAFE-7: after a restore without the
+/** An uploaded picture that is up: its row says "ok" AND its file is there (1.99ahq review fix SC-SAFE-7: after a restore without the
  *  cover folder the row outlives its file - that's no upload, so the default shows instead of a 404 and the letter). */
 function uploadUp(r) {
   if (!r || r.upload_state !== "ok" || !uploadUrl(r.upload)) return false;
-  return !!fileAt(r.upload, "ok");                     // (1.99?? fix 3: the normal folder, else held/ - a put-up cut short)
+  return !!fileAt(r.upload, "ok");                     // (1.99ahq fix 3: the normal folder, else held/ - a put-up cut short)
 }
 async function resolve(login) {
   if (await incognitoOn(login)) return { v: null, uid: null };
@@ -360,7 +360,7 @@ async function coverOf(login) {
     INFLIGHT.set(l, (async () => {
       try {
         const r = await resolve(l);
-        if (r.v && r.v.k === "photo") warmPhoto(r.v.url);        // 1.99?? fix 3: a capture / the proxy then finds it cached
+        if (r.v && r.v.k === "photo") warmPhoto(r.v.url);        // 1.99ahq fix 3: a capture / the proxy then finds it cached
         CACHE.delete(l); CACHE.set(l, { v: r.v, uid: r.uid, at: NOW() });
         while (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value);
         return r.v;
@@ -399,12 +399,12 @@ async function localImageChecked(url) {
     await init();
     const r = (await getQuery("SELECT upload_state FROM stage_covers WHERE upload = ?", [m[1]]))[0];
     if (!r || r.upload_state !== "ok") return null;
-    const p = fileAt(m[1], "ok");                      // 1.99?? fix 3: (an "ok" picture whose move out of held/ was cut short too)
+    const p = fileAt(m[1], "ok");                      // 1.99ahq fix 3: (an "ok" picture whose move out of held/ was cut short too)
     try { return p ? { buf: fs.readFileSync(p), k: "upload" } : null; } catch (e) { return null; }
   }
   return localImage(url);
 }
-/** 1.99?? fix 3: the picture a capture draws for a cover URL from the viewer's program - what their stage shows: the local pictures
+/** 1.99ahq fix 3: the picture a capture draws for a cover URL from the viewer's program - what their stage shows: the local pictures
  *  (localImageChecked), a proxied photo (/media/cover/p/<key>.webp), a photo's own URL on an allowed host (PHOTO SOURCES) or a site
  *  photo under /public/. -> {buf, k} | null (the letter). Never throws; a photo waits at most PHOTO_TIMEOUT_MS (cold cache). */
 async function captureImage(url) {
@@ -425,7 +425,7 @@ async function captureImage(url) {
   } catch (e) { return null; }
 }
 
-// ── profile photos (1.99?? fix 3 - see PHOTO SOURCES): the allow-list, the guarded fetch, the cache, the live proxy's keys ──
+// ── profile photos (1.99ahq fix 3 - see PHOTO SOURCES): the allow-list, the guarded fetch, the cache, the live proxy's keys ──
 const HOST_RE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 /** The hosts (+ path prefixes) the site writes into users.avatar. The bucket's from the environment the uploader uses. */
 function photoSources() {
@@ -458,7 +458,7 @@ function photoSource(raw) {
 // Never fetched from (SSRF): private, loopback, link-local, CGNAT, multicast, documentation / benchmarking / reserved ranges, and the
 // IPv6 forms that carry an IPv4 address (mapped, IPv4-compatible, SIIT, NAT64, 6to4, Teredo)
 // (one list per family: a BlockList's ::ffff:0:0/96 rule also matches every plain IPv4 address)
-// 1.99?? review fix 3 (SEC-1): an IPv6 address must be GLOBAL UNICAST (2000::/3) - everything outside it is refused whole (::/96
+// 1.99ahq review fix 3 (SEC-1): an IPv6 address must be GLOBAL UNICAST (2000::/3) - everything outside it is refused whole (::/96
 // IPv4-compatible, ::ffff:0:0:0/96 SIIT, 5f00::/16 SRv6 SIDs and whatever IANA assigns there next); inside it the special ranges below
 // (+ 3fff::/20 documentation) are refused too. The ::/96 and SIIT entries stay listed for the record.
 const NOT_PUBLIC = (() => {
@@ -475,7 +475,7 @@ function publicAddr(address) {
   const a = String(address == null ? "" : address), v = net.isIP(a);
   if (!v) return false;
   try {
-    if (v === 6 && !NOT_PUBLIC.unicast6.check(a, "ipv6")) return false;          // 1.99?? review fix 3 (SEC-1): global unicast only
+    if (v === 6 && !NOT_PUBLIC.unicast6.check(a, "ipv6")) return false;          // 1.99ahq review fix 3 (SEC-1): global unicast only
     return !NOT_PUBLIC[v].check(a, v === 6 ? "ipv6" : "ipv4");
   } catch (e) { return false; }
 }
@@ -591,7 +591,7 @@ async function encode(buf) {
   if (sn.bad || sn.kind !== "image") throw new Refuse(415, "Pictures only: JPEG, PNG, GIF, WebP, AVIF or HEIC.", "type");
   let input = buf, cleanup = () => {};
   if (sn.fmt === "heic") {
-    // 1.99?? fix 3: the member's raw bytes (not checked yet) only in held/ - never in the backed-up folder, even for a moment
+    // 1.99ahq fix 3: the member's raw bytes (not checked yet) only in held/ - never in the backed-up folder, even for a moment
     fs.mkdirSync(heldDir(), { recursive: true });
     const tmp = path.join(heldDir(), "tmp-" + crypto.randomBytes(8).toString("hex") + ".heic");
     fs.writeFileSync(tmp, buf);
@@ -612,7 +612,7 @@ async function encode(buf) {
     throw new Refuse(415, "That picture couldn't be processed.", "read");
   } finally { cleanup(); }
 }
-/** 1.99?? review fixes (SC-SAFE-3/4): may this account upload a cover now? -> a Refuse, or null. Checked when an upload opens and
+/** 1.99ahq review fixes (SC-SAFE-3/4): may this account upload a cover now? -> a Refuse, or null. Checked when an upload opens and
  *  again before its safety check. Fails closed (a read error = refused).
  *   * the account: archived, restricted (casino_banned = the relay's "restricted", as feedstore.postRefusal), a global feed ban, or
  *     Pepe's global feed_restricted for its Camfrog login (the feed's media rules that apply to a public picture anywhere)
@@ -658,7 +658,7 @@ async function setUpload(userId, buf) {
   const no = await uploadRefusal(userId);
   if (no) throw no;
   const enc = await encode(buf);
-  // 1.99?? review fix (SC-SAFE-1): a picture that was taken down is refused before it is classified again (the re-encode is
+  // 1.99ahq review fix (SC-SAFE-1): a picture that was taken down is refused before it is classified again (the re-encode is
   // deterministic: the same picture = the same file = the same hash)
   const hash = sha256(enc.buf);
   if (await hashBlocked(hash)) throw new Refuse(422, "That picture was taken down - it can't be used as a stage cover.", "blocked");
@@ -670,7 +670,7 @@ async function setUpload(userId, buf) {
     throw new Refuse(v && v.ok === false ? 422 : 503, v && v.ok === false ? (v.reason || "That picture can't be used.")
       : "The picture couldn't be safety-checked right now - try again in a minute.", v && v.ok === false ? "refused" : "unchecked");
   }
-  // 1.99?? review fix 2 (SC-SAFE-1b): remember which picture this check passed - a later review of it must reach the picture even
+  // 1.99ahq review fix 2 (SC-SAFE-1b): remember which picture this check passed - a later review of it must reach the picture even
   // after the member replaced or removed it. Fails closed: a check that can't be recorded (or has no log row) = nothing stored.
   try {
     if (!(Number(v.logId) > 0)) throw new Error("no check id");
@@ -679,12 +679,12 @@ async function setUpload(userId, buf) {
     console.error("[stagecover] check record:", e.message);
     throw new Refuse(503, "The picture couldn't be safety-checked right now - try again in a minute.", "unchecked");
   }
-  // 1.99?? fix 3 (the block race): an admin / a review may have blocked this very picture while it was being classified (the check
+  // 1.99ahq fix 3 (the block race): an admin / a review may have blocked this very picture while it was being classified (the check
   // above ran before) - asked again right before the store, and again inside the transaction that stores the row: a block that
   // commits before it is seen there; one that commits after finds this row (takeDownCopies) and takes it down
   const blockedNow = () => new Refuse(422, "That picture was taken down - it can't be used as a stage cover.", "blocked");
   if (await hashBlocked(hash)) throw blockedNow();
-  // 1.99?? review fix 3 (SEC-3, the hold race): whether it is HELD is decided inside that transaction too (below), so the file is
+  // 1.99ahq review fix 3 (SEC-3, the hold race): whether it is HELD is decided inside that transaction too (below), so the file is
   // written to held/ first (never backed up) and moves into the normal folder only once its row says "ok" - a held picture never sits
   // in the backed-up folder, not even for a moment
   const name = crypto.randomBytes(16).toString("hex") + ".webp";
@@ -696,7 +696,7 @@ async function setUpload(userId, buf) {
     old = await require("./dbUtils").tx(async () => {
       if (await hashBlocked(hash)) throw blockedNow();
       // HELD = not shown until an admin's check: a flagged picture, or any picture while the account is on hold after a take-down.
-      // 1.99?? review fix 3 (SEC-3): read HERE - a take-down (its strike + hold) that lands while this picture is classified or waits
+      // 1.99ahq review fix 3 (SEC-3): read HERE - a take-down (its strike + hold) that lands while this picture is classified or waits
       // for this transaction holds it; one that lands after the commit finds this row and takes it down
       const cur = await rowOf(userId);
       onHold = !!(cur && Number(cur.hold_until) > NOW());
@@ -711,7 +711,7 @@ async function setUpload(userId, buf) {
   return { state };
 }
 /** Take an account's uploaded cover down (its owner, an admin, a review). The choice falls back to the default when it was "upload".
- *  1.99?? review fix (SC-SAFE-1): a take-down that isn't the owner's own STICKS - the picture's hash is blocked (every account) and
+ *  1.99ahq review fix (SC-SAFE-1): a take-down that isn't the owner's own STICKS - the picture's hash is blocked (every account) and
  *  the account's next uploads are held for an admin's check for HOLD_MS (a strike). */
 async function removeUpload(userId, why = "owner", { strike = true, copies = true } = {}) {
   const r = await rowOf(userId);
@@ -722,7 +722,7 @@ async function removeUpload(userId, why = "owner", { strike = true, copies = tru
   let hash = null;
   if (takedown) {
     hash = r.upload_hash;
-    // (a row from before review fix 1 has no upload_hash: its file's - 1.99?? review fix 3 (SEC-4): wherever it is, held/ too)
+    // (a row from before review fix 1 has no upload_hash: its file's - 1.99ahq review fix 3 (SEC-4): wherever it is, held/ too)
     if (!hash) { try { hash = sha256(fs.readFileSync(fileAt(r.upload, r.upload_state))); } catch (e) { hash = null; } }
     if (hash) await blockHash(hash, blockCode(why));
   }
@@ -735,7 +735,7 @@ async function removeUpload(userId, why = "owner", { strike = true, copies = tru
   }
   return true;
 }
-// 1.99?? review fix 2 (SC-SAFE-1b): the pieces of a take-down that a review of an OLD check (no current row holds it) needs too
+// 1.99ahq review fix 2 (SC-SAFE-1b): the pieces of a take-down that a review of an OLD check (no current row holds it) needs too
 const blockCode = (why) => (/^admin\b/.test(why) ? "admin" : /^review (fn|ok)\b/.test(why) ? why.slice(0, 9) : "other");    // (a code, never a name)
 function blockHash(hash, code) { return runQuery("INSERT OR IGNORE INTO stage_cover_blocks (hash, at, why) VALUES (?, ?, ?)", [String(hash), NOW(), code]); }
 /** A take-down acted on this check: a later review of it is no second strike. */
@@ -755,16 +755,16 @@ async function releaseUpload(userId) {
   const r = await rowOf(userId);
   if (!r || !r.upload || r.upload_state !== "held") return false;
   await upsert(userId, { upload_state: "ok" });
-  // 1.99?? fix 3: out of held/ into the normal (backed-up) folder - after the row (a crash between leaves an "ok" picture in held/,
+  // 1.99ahq fix 3: out of held/ into the normal (backed-up) folder - after the row (a crash between leaves an "ok" picture in held/,
   // which serving still finds and placeFiles moves; never a held one in the backed-up folder)
   try { placeFile(r.upload, false); } catch (e) { console.error("[stagecover] put up - move:", e.message); }
   return true;
 }
 /** imagesafety.review's hook (stage_cover checks): "fn" takes the picture down; "ok" (the check was right) on a check that FLAGGED it
- *  takes it down whatever its state now (1.99?? review fix SC-SAFE-5: a mistaken "fp" corrected to "ok" brings it down again - a
+ *  takes it down whatever its state now (1.99ahq review fix SC-SAFE-5: a mistaken "fp" corrected to "ok" brings it down again - a
  *  picture held only because its account is on hold passed its check, so "ok" leaves it to the card's Put up / Take down);
  *  "fp" on a held one puts it up.
- *  1.99?? review fix 2 (SC-SAFE-1b): a take-down review of a check whose picture is no longer the member's current upload (they
+ *  1.99ahq review fix 2 (SC-SAFE-1b): a take-down review of a check whose picture is no longer the member's current upload (they
  *  replaced it or removed it themselves) still sticks - from stage_cover_checks: the picture is blocked, any copy that is up again
  *  (a re-upload under a newer check, another account's) comes down, and the check's account gets the hold + a strike (once per check). */
 async function onReview(logId, mark, actor) {
@@ -794,7 +794,7 @@ async function onReview(logId, mark, actor) {
   console.log(`[stagecover] check #${id}: a replaced / removed cover taken down (${why}) - picture blocked${owner ? ", uploads held until checked" : ""}${n ? ", " + n + " copy(ies) down" : ""}`);
   return "blocked";
 }
-/** 1.99?? review fix 2: a check's picture record goes with its log row (imagesafety.sweep's retention) - a review needs both. */
+/** 1.99ahq review fix 2: a check's picture record goes with its log row (imagesafety.sweep's retention) - a review needs both. */
 async function sweepChecks() {
   await init();
   try { return (await runQuery("DELETE FROM stage_cover_checks WHERE log_id NOT IN (SELECT id FROM image_safety_log)")).changes || 0; }
@@ -859,12 +859,12 @@ async function stateFor(userId, t) {
     for (const p of S.CAT.packs) if (mine.has(p.id)) for (const s of p.stickers) stickers.push({ ref: p.id + "/" + s.id, url: s.url, name: L(`stk.s.${p.id}.${s.id}`, s.name), pack: L(`stk.pack.${p.id}.name`, p.name) });
   } catch (e) { stickers = []; }
   const now = await forAccount(u, login, r);
-  // 1.99?? review fix (UX-4): what the stage would show for each choice (the page previews a pick before Save); a sticker previews
+  // 1.99ahq review fix (UX-4): what the stage would show for each choice (the page previews a pick before Save); a sticker previews
   // the sticker picked on the page
   const pv = async (kind) => { const c = await forAccount(u, login, { ...(r || {}), kind }); return c ? { url: c.url, k: c.k } : null; };
   const preview = { auto: await pv(null), gtf: await pv("gtf"), photo: await pv("photo"), upload: await pv("upload"), card: null };
   return {
-    // 1.99?? review fix (UX-3): no saved choice = "auto" (the default chain) - never shown as a GTF pick the member didn't make
+    // 1.99ahq review fix (UX-3): no saved choice = "auto" (the default chain) - never shown as a GTF pick the member didn't make
     kind: r && KINDS.includes(r.kind) ? r.kind : "auto", chosen: !!(r && KINDS.includes(r.kind)), linked: !!login,
     gtf: seed ? { url: gtfUrl(seed, await layersOf(userId)) } : null, gtf_private: !(await gtfPublic(userId)),
     photo: photoOf(u.avatar), stickers, sticker: r && STICKER_RE.test(String(r.sticker || "")) ? r.sticker : null,
@@ -909,9 +909,9 @@ async function adminList(limit = 60) {
                             at: x.upload_at, url: uploadUrl(x.upload), onHold: Number(x.hold_until) > NOW(), strikes: Number(x.strikes) || 0 }));
 }
 
-/** 1.99?? fix 3: every row's picture into its state's folder - a HELD one into held/ (never backed up), any other into the normal
+/** 1.99ahq fix 3: every row's picture into its state's folder - a HELD one into held/ (never backed up), any other into the normal
  *  folder. At boot (the one-time migration of held pictures stored before held/ existed) and in every sweepFiles. -> files moved
- *  1.99?? review fix 3 (SEC-4): a row from before review fix 1 (no upload_hash - staging only) gets its file's hash, so a take-down
+ *  1.99ahq review fix 3 (SEC-4): a row from before review fix 1 (no upload_hash - staging only) gets its file's hash, so a take-down
  *  blocks it and finds its copies like any other. */
 async function placeFiles() {
   await init();
@@ -936,7 +936,7 @@ async function placeFiles() {
   return n;
 }
 /** Uploaded files no row holds any more (a replace that crashed, a deleted / merged account) - gone after an hour, from BOTH folders
- *  (1.99?? fix 3: held/ too, and the HEIC decoder's leftovers there). */
+ *  (1.99ahq fix 3: held/ too, and the HEIC decoder's leftovers there). */
 async function sweepFiles(t = NOW()) {
   await init();
   try { await placeFiles(); } catch (e) { console.error("[stagecover] place files:", e.message); }
@@ -1006,7 +1006,7 @@ function register(app, { addUser, noTimers = false }) {
   app.post("/api/stage-cover/uploads", addUser, me(true), async (req, res) => {
     try {
       if (!(await uploadsOn())) throw new Refuse(409, "Picture uploads are off until the site's picture safety checks are on.", "off");
-      const no = await uploadRefusal(uid(req));                 // 1.99?? review fixes: restricted accounts, caps, one held at a time
+      const no = await uploadRefusal(uid(req));                 // 1.99ahq review fixes: restricted accounts, caps, one held at a time
       if (no) throw no;
       res.json({ ok: true, ...openUpload(uid(req), (req.body || {}).size) });
     } catch (e) { fail(res, e); }
@@ -1044,7 +1044,7 @@ function register(app, { addUser, noTimers = false }) {
       res.json({ ok: true });
     } catch (e) { fail(res, e); }
   });
-  // 1.99?? review fixes (SC-SAFE-2, PRIV-4, COMPAT-2): only a GTF render is immutable (its URL is its picture + render version). An
+  // 1.99ahq review fixes (SC-SAFE-2, PRIV-4, COMPAT-2): only a GTF render is immutable (its URL is its picture + render version). An
   // uploaded cover can be taken down, so it is cached SHORT - the browser revalidates (ETag) after UPLOAD_MAX_AGE, and the CDN edge
   // (Cloudflare: CDN-Cache-Control / Cloudflare-CDN-Cache-Control win over Cache-Control there) keeps it UPLOAD_CDN_MAX_AGE at most,
   // so a removed picture stops being served within minutes. The stage sets a src only when the URL changes, so this costs no refetch
@@ -1074,7 +1074,7 @@ function register(app, { addUser, noTimers = false }) {
         if (req.user === undefined && typeof addUser === "function") await new Promise((next) => addUser(req, res, next));
         ok = !!(req.user && req.user.userId && (String(req.user.userId) === String(r.user_id) || (await safetyAdmin(req))));
       }
-      const p = ok ? fileAt(name, r.upload_state) : null;            // 1.99?? fix 3: held/ for a held one, else the normal folder
+      const p = ok ? fileAt(name, r.upload_state) : null;            // 1.99ahq fix 3: held/ for a held one, else the normal folder
       if (!ok || !p) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
       const H = pictureHeaders("image/webp", pub ? "public" : "private");
       res.set(H);
@@ -1084,7 +1084,7 @@ function register(app, { addUser, noTimers = false }) {
       if (!res.headersSent) res.status(500).end();
     }
   });
-  // 1.99?? fix 3: a profile photo through the proxy (micfollow's cfg cover_photo_proxy) - only a key a program handed out
+  // 1.99ahq fix 3: a profile photo through the proxy (micfollow's cfg cover_photo_proxy) - only a key a program handed out
   // (photoProxyUrl), the re-encoded picture from the cache (else fetched from its allowed host); short public caches like an upload
   // (the member may change or remove their photo); anything else / a failed fetch = 404 (the page then shows the letter)
   app.get("/media/cover/p/:file", async (req, res) => {
@@ -1101,12 +1101,12 @@ function register(app, { addUser, noTimers = false }) {
       if (!res.headersSent) res.status(500).end();
     }
   });
-  placeFiles().catch((e) => console.error("[stagecover] place files:", e.message));   // 1.99?? fix 3: the one-time migration (idempotent)
+  placeFiles().catch((e) => console.error("[stagecover] place files:", e.message));   // 1.99ahq fix 3: the one-time migration (idempotent)
   if (!noTimers) {
     setInterval(() => sweepUploads(), 5 * 60e3).unref();
     setTimeout(() => sweepFiles().catch(() => {}), 60e3).unref();
     setInterval(() => sweepFiles().catch(() => {}), 6 * 3600e3).unref();
-    setInterval(() => sweepChecks().catch(() => {}), 6 * 3600e3).unref();      // 1.99?? review fix 2
+    setInterval(() => sweepChecks().catch(() => {}), 6 * 3600e3).unref();      // 1.99ahq review fix 2
   }
 }
 
@@ -1114,7 +1114,7 @@ module.exports = {
   init, register, coverOf, invalidate, localImage, localImageChecked, onReview, removeUpload, releaseUpload, setUpload, uploadRefusal, save, stateFor, choiceOf,
   adminList, sweepFiles, sweepChecks, gtfUrl, parseGtf, forAccount, uploadsOn, openUpload, chunkUpload, finishUpload, filePath, dir, _setDir, Refuse,
   KINDS, PIC_KINDS, SURFACE, MAX_BYTES, CHUNK, COVER_PX, CACHE_MS, FILE_RE, UPLOADS_PER_HOUR, UPLOADS_PER_DAY, HOLD_MS, UPLOAD_MAX_AGE, UPLOAD_CDN_MAX_AGE,
-  // 1.99?? fix 3: captures draw the photo too (the allow-list + the guarded fetch + the proxy); held pictures in held/
+  // 1.99ahq fix 3: captures draw the photo too (the allow-list + the guarded fetch + the proxy); held pictures in held/
   captureImage, photoImage, photoProxyUrl, photoSource, photoSources, publicAddr, placeFiles, fileAt, heldDir, hashBlocked,
   PHOTO_MAX_BYTES, PHOTO_TIMEOUT_MS, PHOTO_TTL, PHOTO_FAIL_TTL,
   _setClock: (fn) => { NOW = fn || (() => Date.now()); },

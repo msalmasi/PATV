@@ -295,7 +295,7 @@ test("recording fixes tiles, kills departed readers at the sampled time, and dis
   const graph = args[args.indexOf("-filter_complex") + 1]; assert.match(graph, /between\(t,0\.0000,5\.0000\)/); assert.match(graph, /gte\(t,5\.0000\)/);
   assert.equal(M.cancel(o.id), true); await assert.rejects(running.done); assert.equal(activeReaders, 0); assert.equal(taps[0].stopped, true); assert.equal(fs.existsSync(o.out), false); assert.equal(fs.existsSync(job.dir), false);
 });
-test("1.99?? stage cover fix 3 + review fix 3 (FID-1): a capture STARTS without waiting on any picture (a photo host that never answers can't hold it up), and the 500 ms samples never wait on one (a slow photo fetch can't delay a privacy cut)", async () => {
+test("1.99ahq stage cover fix 3 + review fix 3 (FID-1): a capture STARTS without waiting on any picture (a photo host that never answers can't hold it up), and the 500 ms samples never wait on one (a slow photo fetch can't delay a privacy cut)", async () => {
   let asked = 0;
   reset({ cover: () => { asked++; return new Promise(() => {}); } });     // a photo host that never answers
   const photo = "https://cdn.discordapp.com/avatars/1/x.png", gtf = "/media/cover/a/1.abc.svg";
@@ -315,7 +315,7 @@ test("1.99?? stage cover fix 3 + review fix 3 (FID-1): a capture STARTS without 
   M.cancel(o.id); await assert.rejects(running.done);
   assert.equal(asked, 0, "a cancelled clip loads none either");
 });
-test("1.99?? stage cover review fix 3 (FID-1): a tile's consent is read AFTER its picture - someone who goes hidden while a slow picture loads (a snap's final frame) is never drawn by name", async () => {
+test("1.99ahq stage cover review fix 3 (FID-1): a tile's consent is read AFTER its picture - someone who goes hidden while a slow picture loads (a snap's final frame) is never drawn by name", async () => {
   let release = null;
   reset({ cover: () => new Promise(r => { release = r; }) });
   const e = cam("alice", { video: "card", avatar: "/media/cover/a/1.abc.svg", ck: "gtf" });
@@ -331,7 +331,7 @@ test("1.99?? stage cover review fix 3 (FID-1): a tile's consent is read AFTER it
   const t2 = await p2;
   assert.equal(t2.mode, "card"); assert.equal(t2.cover && t2.cover.k, "gtf");
 });
-test("1.99?? stage cover review fix 3 (FID-2): a clip draws each card's cover as it is at the END - a picture taken down mid-recording is never in it, a changed one shows the new picture (real ffmpeg)", async () => {
+test("1.99ahq stage cover review fix 3 (FID-2): a clip draws each card's cover as it is at the END - a picture taken down mid-recording is never in it, a changed one shows the new picture (real ffmpeg)", async () => {
   const solid = (r, g, b) => sharp({ create: { width: 200, height: 200, channels: 3, background: { r, g, b } } }).png().toBuffer();
   const red = await solid(230, 10, 10), blue = await solid(10, 10, 230);
   const up = "/media/cover/u/" + "a".repeat(32) + ".webp", gtf = "/media/cover/a/1.abc.svg";

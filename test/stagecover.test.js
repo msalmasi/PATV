@@ -1,4 +1,4 @@
-// Offline tests for 1.99?? the 🎙 STAGE COVER (stagecover.js): the picture the mic stage shows for a person it names while their
+// Offline tests for 1.99ahq the 🎙 STAGE COVER (stagecover.js): the picture the mic stage shows for a person it names while their
 // cam isn't live - the owner's "show their GTF avatar as a default cover (but give every user the ability to configure their default
 // cover as anything)".
 //   * the default chain (GTF avatar while the profile's GTF section is public -> profile photo -> letter), every choice and its
@@ -9,15 +9,15 @@
 //     a flagged picture is HELD (not served to others, falls back) until a review; fp puts it up, fn / ok takes it down; admins take
 //     one down; the files are served only while held by a row, immutable, re-encoded (no metadata), named without a user id
 //   * Settings -> 🎙 Stage cover: the page (signed in only), saving (refusals), the hub row
-//   * review fixes (1.99??): a take-down sticks (hash block + held uploads), short caches for uploaded covers, per-account caps,
+//   * review fixes (1.99ahq): a take-down sticks (hash block + held uploads), short caches for uploaded covers, per-account caps,
 //     restricted accounts, fp -> ok, the sweep keeps a cover's check, a missing file, accountOf / incognito fail closed, the GTF render
 //     version, "Automatic", the Settings preview, the stage's small cells and wrapping reasons
-//   * review fixes 2 (1.99??): a take-down review of a picture the member already replaced / removed still sticks (blocked, held,
+//   * review fixes 2 (1.99ahq): a take-down review of a picture the member already replaced / removed still sticks (blocked, held,
 //     copies down, one strike per check); a short reason in a small cell stays on one line (a full-width column)
 //   * the stage page (stage-mic.js): the picture on the card with the reason kept, set only when the URL changes, never on a cover /
 //     a reported tile, the letter after a failed load; stage-room.js repaints on a new picture
 //   * the capture (stagemiccap.js): a name card draws the cover picture; never the network
-//   * review fixes 3 (1.99??): IPv6 photo addresses global unicast only; a block / a take-down's hold that lands while an upload
+//   * review fixes 3 (1.99ahq): IPv6 photo addresses global unicast only; a block / a take-down's hold that lands while an upload
 //     waits for its row's transaction (refused / held - every upload goes to held/ first); legacy rows' hashes (held/ too); the page
 //     retries a failed cover after the site's failure TTL
 //   node --test test/stagecover.test.js      (temp DB + dirs)
@@ -531,7 +531,7 @@ test("stagemiccap: a consenting name card draws its cover picture (stagecover de
     assert.equal(t.mode, "card"); assert.ok(t.cover && t.cover.buf.equals(red));
     const net = await T.tileFor({ ...e, id: "cy", avatar: "https://cdn.example.test/cy.png", ck: "photo" }, R, user);
     assert.equal(net.cover, null, "a photo stagecover won't give: the letter");
-    // (1.99?? fix 3: a photo URL is handed to stagecover.captureImage too - it fetches allowed hosts only; anything else never is)
+    // (1.99ahq fix 3: a photo URL is handed to stagecover.captureImage too - it fetches allowed hosts only; anything else never is)
     for (const bad of ["//evil.test/x.png", "http://cdn.example.test/x.png", "/media/cover/u/../../etc/passwd", "javascript:alert(1)", "/other/x.png"]) {
       assert.equal((await T.tileFor({ ...e, id: "cy", avatar: bad, ck: "photo" }, R, user)).cover, null, bad);
     }
@@ -550,7 +550,7 @@ test("stagemiccap: a consenting name card draws its cover picture (stagecover de
   } finally { M.configure(T.defaults); }
 });
 
-// ── review fixes (1.99??) ──
+// ── review fixes (1.99ahq) ──
 const escRe = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const logOf = async (u) => (await getQuery("SELECT upload_log FROM stage_covers WHERE user_id = ?", [u.userId]))[0].upload_log;
 
@@ -934,7 +934,7 @@ test("review fix 2 UX-1b: a short reason in a small cell stays on one line - the
   assert.match(cq, /\.mf-card\.cov \.mf-why \{[^}]*max-width: 90%;/, "the small-cell reason: 90% of the cell, like the letter card's");
 });
 
-// ── fix 3 (1.99??): a capture draws the photo too (the allow-list, the guarded fetch, the proxy); held pictures in held/; the block race ──
+// ── fix 3 (1.99ahq): a capture draws the photo too (the allow-list, the guarded fetch, the proxy); held pictures in held/; the block race ──
 const http = require("http");
 const P = "/avatars/123456789012345678/";
 const discordAt = (f) => "https://cdn.discordapp.com" + P + f;
@@ -1191,7 +1191,7 @@ test("fix 3 (the block race): a picture blocked WHILE its upload is being classi
   } finally { ANSWER = CLEAN; }
 });
 
-// ── review fixes 3 (1.99??): the IPv6 gaps, the block race inside the row's transaction, the hold race, legacy rows' hashes, the page's
+// ── review fixes 3 (1.99ahq): the IPv6 gaps, the block race inside the row's transaction, the hold race, legacy rows' hashes, the page's
 // cover retry ──
 /** Stall setUpload's own row transaction (the window after its check before the store and the file write - e.g. a transaction
  *  queued behind others) and run `during` in it. -> {restore(), fired()} */
@@ -1317,7 +1317,7 @@ test("review fix 3 (FID-3): a cover picture that failed to load on the page is t
   ctl.stop();
 });
 
-// ── 1.99?? landed on 1.99ahn (dead relay) + 1.99ahp (stable slots): the cover is on every card a named tile shows, in its place's cell ──
+// ── 1.99ahq landed on 1.99ahn (dead relay) + 1.99ahp (stable slots): the cover is on every card a named tile shows, in its place's cell ──
 /** stage-mic.js on this file's fake DOM + class lookups (the grid's fillers), a hidden-tab switch (the 30 s pause runs at once), live
  *  tiles that play and stills that load. -> {ctx, host, ctl, grid, hide(), show()} */
 function landSandbox(program) {
@@ -1345,7 +1345,7 @@ function landSandbox(program) {
   return { ctx, host, ctl, grid: host.children[0].children[0], hide() { ctx.document.hidden = true; vis(); }, show() { ctx.document.hidden = false; vis(); } };
 }
 
-test("1.99?? landed on 1.99ahn + 1.99ahp (stage-mic.js v10): a stable program puts each cover card in its PLACE's cell (an empty place stays an empty cell, a newcomer fills its cell, no node moves); the dead relay's cards - 'resuming…' back from a hidden tab and relay_lost's soft retry - show the cover like every card state; the hood never does", async () => {
+test("1.99ahq landed on 1.99ahn + 1.99ahp (stage-mic.js v10): a stable program puts each cover card in its PLACE's cell (an empty place stays an empty cell, a newcomer fills its cell, no node moves); the dead relay's cards - 'resuming…' back from a hidden tab and relay_lost's soft retry - show the cover like every card state; the hood never does", async () => {
   const gtfA = "/media/cover/a/1111.0123456789abcdef0123.svg", upC = "/media/cover/u/" + "c".repeat(32) + ".webp", phD = "/media/cover/p/" + "d".repeat(32) + ".webp";
   const FROG = { kind: "cover", id: "anon-0011aabb", name: "Soggy Bullfrog", hood: 2, veil: "incognito", pos: 3, video: "cover", watch: "cover", avatar: gtfA, ck: "gtf" };
   const prog = (src, v) => ({ v, layout: "grid4", count: src.length, src, still_s: 20, stable: true });

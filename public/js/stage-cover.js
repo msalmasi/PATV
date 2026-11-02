@@ -1,4 +1,4 @@
-// stage-cover.js — 1.99?? Settings -> 🎙 Stage cover (views/stageCover.ejs, stagecover.js): save the choice (POST /api/stage-cover
+// stage-cover.js — 1.99ahq Settings -> 🎙 Stage cover (views/stageCover.ejs, stagecover.js): save the choice (POST /api/stage-cover
 // {kind, sticker?}), upload a picture of your own in chunks (POST /api/stage-cover/uploads -> PUT ?offset= -> /finish; only while the
 // page offers it - the server refuses otherwise), take it down (POST /api/stage-cover/upload/remove), and keep the "On the stage
 // right now" preview in step with what the server answers. All text via textContent (never innerHTML).

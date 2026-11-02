@@ -25,7 +25,7 @@
 // 1.99afl (S2-S4): "Pepe couldn't open their cam" only for his refusal - his relay offline, the room's people list he can't read,
 // "checking their cam…" (the roster can't say yet), this browser not connecting to the video and a video that kept dropping each
 // say so; every tile carries data-why (the reason code of its card).
-// 1.99?? stage cover (owner 2026-11-02): a card shows the person's STAGE COVER instead of the letter - the program's avatar (a URL)
+// 1.99ahq stage cover (owner 2026-11-02): a card shows the person's STAGE COVER instead of the letter - the program's avatar (a URL)
 // + ck (gtf | photo | sticker | upload): their GTF pixel avatar by default, or what they picked in Settings -> 🎙 Stage cover
 // (stagecover.js); the reason ("cam starting…") stays as a small label under it. Set only when the URL changes; never on a cover
 // tile (the hood), a tile the viewer reported or one blocked for them.
@@ -55,7 +55,7 @@
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000, HIDDEN_MS = 30000, SAY_GAP = 5000, RETRY_MS = 10000;
-  // 1.99?? review fix 3 (FID-3): a cover picture that failed to load is tried again after this (the site keeps a failed photo fetch
+  // 1.99ahq review fix 3 (FID-3): a cover picture that failed to load is tried again after this (the site keeps a failed photo fetch
   // for stagecover's PHOTO_FAIL_TTL = 5 min, then a capture fetches it again - the page does too, a little after)
   var COVER_RETRY_MS = 315000;
   var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a live tile's re-watches after a dropped connection
@@ -152,7 +152,7 @@
     if (!isCover(s)) return String((s && s.name) || '');
     return (typeof s.name === 'string' && s.name ? s.name.slice(0, 40) : _t('js.stage.mf.cover_someone', 'someone'));
   }
-  // 1.99?? stage cover (stagecover.js): a NAMED tile's picture while it has no live one - {url, k} from the program's avatar + ck
+  // 1.99ahq stage cover (stagecover.js): a NAMED tile's picture while it has no live one - {url, k} from the program's avatar + ck
   // (k: gtf | photo | sticker | upload - how the card draws it), or null = the letter. Never on a cover (a veiled speaker keeps the
   // hood), on a tile this viewer reported ("hidden for you") or one blocked for them here.
   var CKS = ['gtf', 'photo', 'sticker', 'upload'];
@@ -271,7 +271,7 @@
       var img = el('img', 'mf-still'); img.alt = ''; img.hidden = true;
       var card = el('div', 'mf-card'), av = el('span', 'mf-av'), avImg = el('img'), avTxt = el('span', 'mf-avt'), reason = el('span', 'mf-why');
       avImg.alt = ''; avImg.hidden = true; av.appendChild(avImg); av.appendChild(avTxt); card.appendChild(av); card.appendChild(reason);
-      avImg.setAttribute('decoding', 'async'); avImg.setAttribute('referrerpolicy', 'no-referrer');   // 1.99??: (a photo may be on another host)
+      avImg.setAttribute('decoding', 'async'); avImg.setAttribute('referrerpolicy', 'no-referrer');   // 1.99ahq: (a photo may be on another host)
       var label = el('div', 'mf-label'), name = el('span', 'mf-name'), mic = el('span', 'mf-mic', '🎙'), tag = el('span', 'mf-tag'), sr = el('span', 'mf-sr-only');
       mic.setAttribute('aria-hidden', 'true');
       // mfix: 📌 on a pinned cam's label (its place is fixed: hand-overs and new speakers never move it)
@@ -303,7 +303,7 @@
         if (tell) post(base + '/watch', wb({ stop: true }), true).catch(function () {});
       }
       function stopStill() { clearInterval(t.still); t.still = null; img.hidden = true; img.removeAttribute('src'); }
-      /** 1.99?? stage cover: the card's picture (the person's GTF avatar by default - stagecover.js), or the letter (pic null). The
+      /** 1.99ahq stage cover: the card's picture (the person's GTF avatar by default - stagecover.js), or the letter (pic null). The
        *  src is set only when it CHANGES (every cover URL is immutable), so a program update never re-fetches it; a picture that
        *  fails to load falls back to the letter until a different one comes (review fix 3: or COVER_RETRY_MS passes). Decorative
        *  (alt ""): the name is in the label. */
@@ -325,7 +325,7 @@
         if (!bad) return;
         t.coverBad = bad;
         setCover(null);
-        // 1.99?? review fix 3 (FID-3): not for good - the same URL is tried again after COVER_RETRY_MS (a proxied photo's URL never
+        // 1.99ahq review fix 3 (FID-3): not for good - the same URL is tried again after COVER_RETRY_MS (a proxied photo's URL never
         // changes, and a capture draws the photo again once the site fetches it again); a program update meanwhile keeps the letter
         clearTimeout(t.coverRetry);
         t.coverRetry = setTimeout(function () {
@@ -340,7 +340,7 @@
       function showCard(text) {
         card.hidden = false; v.hidden = true; img.hidden = true;
         reason.textContent = text || '';
-        // 1.99?? stage cover review fix (UX-1): a cover card's reason is at most 2 lines under the picture - its whole text here
+        // 1.99ahq stage cover review fix (UX-1): a cover card's reason is at most 2 lines under the picture - its whole text here
         if (text) reason.setAttribute('title', text); else reason.removeAttribute('title');
         tag.textContent = '';
       }
@@ -454,7 +454,7 @@
         if (t.mode === 'still') stopStill();
         clearTimeout(t.retry); t.retry = null;
         t.mode = 'cover';
-        setCover(null);                                // 1.99??: a veiled speaker never carries a stage cover (only the hood)
+        setCover(null);                                // 1.99ahq: a veiled speaker never carries a stage cover (only the hood)
         var hood = hoodOf(s), veil = veilOf(s), nm = labelOf(s);
         e.setAttribute('data-hood', String(hood)); e.setAttribute('data-veil', veil);
         hoodImg.src = '/public/img/anon/hood-' + (veil === 'hidden' ? 'shadow' : 'peek') + '-' + hood + '.svg';

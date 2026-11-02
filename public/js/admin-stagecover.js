@@ -1,4 +1,4 @@
-// admin-stagecover.js — 1.99?? /admin/imagesafety's "Stage covers" card (views/admin/imagesafety.ejs, stagecover.js): Take down a
+// admin-stagecover.js — 1.99ahq /admin/imagesafety's "Stage covers" card (views/admin/imagesafety.ejs, stagecover.js): Take down a
 // member's uploaded 🎙 stage cover (POST /api/admin/stage-cover/remove {user_id}) or Put up a held one (POST
 // /api/admin/stage-cover/release {user_id}; review fix: a picture held because its account is on hold after a take-down passed its
 // check, so it has no flag to mark "false positive"). Admins only - the routes check. Text via textContent.

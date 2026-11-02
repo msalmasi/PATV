@@ -87,7 +87,7 @@ const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_p
 // passes, explicit nudity / sexual content never does). A locked post can never be NSFW, so "nsfw" / "nsfw_pad" mean refuse there.
 // 1.99xr: "shop" = a picture made by the shop's Generate image button (shopart.js) - shown on public shop pages, so the strict
 // profile policy (nothing NSFW)
-// 1.99??: "stage_cover" = a picture a member uploads as their 🎙 mic-stage cover (stagecover.js) - public on every pad stage, so the
+// 1.99ahq: "stage_cover" = a picture a member uploads as their 🎙 mic-stage cover (stagecover.js) - public on every pad stage, so the
 // strict profile policy; stagecover takes an upload ONLY while this check enforces (enforcing()) and treats anything but an
 // enforcing pass as a refusal (fail-closed), and review() hands its marks to stagecover.onReview (a flagged cover is held)
 const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile", locked: "locked", shop: "profile",
@@ -255,7 +255,7 @@ function settingsView(c) {
 }
 /** Is anything going to be classified for this surface? (master switch or shadow mode, and the surface's toggle) */
 function active(c, surface) { return !!c && (c.enabled || c.shadow) && SURFACES.includes(surface) && c.surfaces[surface] !== false; }
-/** 1.99??: does check() ENFORCE for this surface right now (master switch on, shadow mode off, the surface on)? A surface that must
+/** 1.99ahq: does check() ENFORCE for this surface right now (master switch on, shadow mode off, the surface on)? A surface that must
  *  never take an unscanned picture (stagecover.js) opens its uploads only while this is true. Unreadable = false. */
 async function enforcing(surface) {
   try { const c = await config(); return !!c.enabled && !c.shadow && SURFACES.includes(surface) && c.surfaces[surface] !== false; } catch (e) { return false; }
@@ -911,7 +911,7 @@ async function review(id, mark, actor, note) {
     try { await require("./onair").blockFromSafetyLog(Number(id), "imagesafety:" + String(actor || "?").slice(0, 60)); }
     catch (e) { console.error("[imagesafety] onair block:", e.message); }
   }
-  // 1.99??: a stage cover's check - "fn" takes the picture down; on a held (flagged) one "ok" takes it down and "fp" puts it up
+  // 1.99ahq: a stage cover's check - "fn" takes the picture down; on a held (flagged) one "ok" takes it down and "fp" puts it up
   if (m && row && row.surface === "stage_cover") {
     try { await require("./stagecover").onReview(Number(id), m, actor); }
     catch (e) { console.error("[imagesafety] stage cover review:", e.message); }
@@ -922,7 +922,7 @@ async function sweep(t = NOW()) {
   await init();
   const c = await config();
   const cut = t - c.retention_days * 86400e3;
-  // 1.99?? stage cover review fix (SC-SAFE-6): a check a member's uploaded stage cover still points at stays (with its thumbnail)
+  // 1.99ahq stage cover review fix (SC-SAFE-6): a check a member's uploaded stage cover still points at stays (with its thumbnail)
   // while that picture is held or up - an admin must still be able to see and review it (stagecover.onReview needs the row)
   let keep = new Set();
   try { keep = new Set((await getQuery("SELECT upload_log FROM stage_covers WHERE upload IS NOT NULL AND upload_log IS NOT NULL")).map((r) => Number(r.upload_log))); }
@@ -1001,7 +1001,7 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
       if (!a) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The image safety review page is for site admins.", title: "Admins only" });
       const filter = ["all", "flagged", "blocked", "unchecked", "shadow", "unreviewed"].includes(req.query.f) ? req.query.f : "all";
       const C = await config();
-      // 1.99??: the "Stage covers" card - members' uploaded 🎙 stage covers, with Take down (stagecover.js)
+      // 1.99ahq: the "Stage covers" card - members' uploaded 🎙 stage covers, with Take down (stagecover.js)
       const covers = await (async () => { try { return await require("./stagecover").adminList(); } catch (e) { return []; } })();
       res.render("admin/imagesafety", { user: a.username, isAdmin: true, C, S: settingsView(C), rows: await recent({ filter }), filter, stats: await stats(),
                                         SURFACES, SURFACE_LABEL, CATEGORIES, POLICY_KEYS, ACTIONS, DEFAULTS, SETTING_NAMES, covers });

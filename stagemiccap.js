@@ -14,13 +14,13 @@
 // Review fixes: "muted" = a mute that may hide a hidden / private speaker (audioPlan's private_s) - not the lead-in every clip with
 // MP3 latency has; a clip's last mic-list read waits out Pepe's MIC_LAG after its end (lastRoster: a late grab is muted when private,
 // unseen when not shown); a holder without Pepe's `proven` is never a shown tile; recheck() covers the name cards too.
-// 1.99?? stage cover: a name card draws the person's cover picture (stagecover.js - by default their GTF avatar) instead of the
+// 1.99ahq stage cover: a name card draws the person's cover picture (stagecover.js - by default their GTF avatar) instead of the
 // letter; covers of veiled speakers stay hoods.
-// 1.99?? stage cover fix 3 (owner 2026-11-02: snaps and clips replicate what the snapper / clipper sees): a card draws exactly the
+// 1.99ahq stage cover fix 3 (owner 2026-11-02: snaps and clips replicate what the snapper / clipper sees): a card draws exactly the
 // cover the VIEWER's program carries (their own stage: none on a tile they reported / are blocked from, none on a veiled tile) - a
 // profile photo too, round as the page crops it: stagecover.captureImage fetches it server-side from the site's allow-listed photo
 // hosts only (cached; failing to the letter, never failing the capture). The 500 ms samples never wait on a picture (covers: false).
-// 1.99?? review fix 3: neither does start() - a capture starts at once; a snap loads the covers of its final frame (each tile's
+// 1.99ahq review fix 3: neither does start() - a capture starts at once; a snap loads the covers of its final frame (each tile's
 // consent read AFTER its picture, so nobody who went hidden / private meanwhile is drawn), a clip at its cut (loadCovers: the cover
 // each card carried at the END, read again then - a picture taken down or changed during the recording is never drawn; the end state
 // shows for the whole clip). Known divergence, deliberate since handoff 16 (an owner decision to change): a tile the viewer may not
@@ -71,7 +71,7 @@ let deps = {
   still: (id, l) => require("./bridge-relay").mfFrame(id, l),
   audioTap: (id, fn, u) => require("./bridge").audioTap(id, fn, u),
   offset: (id, p) => require("./avsync").serverOffsetMs(id, p, "mp3"),
-  // 1.99?? stage cover: a name card's picture (stagecover.captureImage - fix 3: local data, or a profile photo fetched server-side
+  // 1.99ahq stage cover: a name card's picture (stagecover.captureImage - fix 3: local data, or a profile photo fetched server-side
   // from an allow-listed host only, cached; null = the letter)
   cover: url => require("./stagecover").captureImage(url),
   mic: id => { const r = require("./bridge")._rooms.get(id); return r && r.mic; },
@@ -228,10 +228,10 @@ async function tileFor(e, R, user, { covers = true } = {}) {
   if (e.kind !== "cam" || (e.watch !== "ok" && e.watch !== "notice")) return t;
   const login = String(e.login || e.id).toLowerCase();
   if (!LOGIN.test(login)) return t;
-  // 1.99?? stage cover: the picture this person's name card shows on the page (their GTF avatar by default) - loaded for every
+  // 1.99ahq stage cover: the picture this person's name card shows on the page (their GTF avatar by default) - loaded for every
   // consenting named tile, so a live / still tile that ends up a card draws it too. A cover tile never gets here (coverArt above)
   // (fix 3: the 500 ms samples compare tiles only - they never wait on a picture; review fix 3 (FID-1): neither does start())
-  // 1.99?? review fix 3 (FID-1): the picture FIRST, consent after it - consent is the last thing read before a tile is drawn, so
+  // 1.99ahq review fix 3 (FID-1): the picture FIRST, consent after it - consent is the last thing read before a tile is drawn, so
   // someone who goes hidden / private while a slow picture loads (a snap's final frame) is never drawn by name
   const cover = covers ? await coverFor(e) : null;
   if (!(await consent(login, user.userId))) return t;
@@ -253,7 +253,7 @@ async function tileFor(e, R, user, { covers = true } = {}) {
   return t;
 }
 async function tilesFor(p, R, user, opts) { return Promise.all(entries(p).map(e => tileFor(e, R, user, opts))); }
-/** 1.99?? review fix 3 (FID-2): a clip's card covers, loaded at its cut - the cover each named tile carried on the viewer's stage at
+/** 1.99ahq review fix 3 (FID-2): a clip's card covers, loaded at its cut - the cover each named tile carried on the viewer's stage at
  *  the end (t.coverUrl, kept by the samples), read again then (stagecover.captureImage re-checks an upload's state): a picture taken
  *  down or changed during the recording is never drawn; the end state is drawn for the whole clip. All at once, each bounded by
  *  COVER_WAIT_MS. Veiled (cover) and blank tiles have no login: never a picture. Never throws. */
@@ -382,7 +382,7 @@ async function renderFrame(p, tiles, R, out, opts = {}) {
         picture = { input: data, left: ir.x, top: ir.y };
       } catch (_) { if (t.mode !== "cover") t.mode = "card"; }
     }
-    // 1.99?? stage cover: a name card shows the person's cover picture (as on the page) - pixel art kept crisp - else the letter
+    // 1.99ahq stage cover: a name card shows the person's cover picture (as on the page) - pixel art kept crisp - else the letter
     if (t.mode === "card" && t.cover && t.cover.buf) {
       try {
         const side = Math.max(16, Math.floor(Math.min(ir.w * .8, ir.h * .8, 260)));
@@ -611,7 +611,7 @@ async function sample(job) {
         if (next ? next.mode === "blank" || next.mode === "cover" : !(t.login && (await consent(t.login, user.userId)))) job.veiled = true;
       }
       if (t.stop == null && !!next.newest !== t.lastNewest) { t.rings.push({ at, on: !!next.newest }); t.lastNewest = !!next.newest; }
-      // 1.99?? review fix 3 (FID-2): the cover this tile carries on the viewer's stage now (no picture loaded here - the cut loads it)
+      // 1.99ahq review fix 3 (FID-2): the cover this tile carries on the viewer's stage now (no picture loaded here - the cut loads it)
       if (t.stop == null && t.login) t.coverUrl = next.source.avatar;
     }
     const s = speaking(p);
@@ -758,7 +758,7 @@ async function clip(job, hooks) {
   if (job.cancelled) throw refuse("failed", 409);
   const duration = Math.min(job.secs, elapsed);
   if (duration < CLIP_MIN) throw refuse("short", 409);
-  // 1.99?? review fix 3 (FID-2): the card covers as the recording ENDS (never the ones at its start) - loaded alongside the last
+  // 1.99ahq review fix 3 (FID-2): the card covers as the recording ENDS (never the ones at its start) - loaded alongside the last
   // roster read, before the feed queue's slot is taken (a slow picture never holds the queue)
   const covers = loadCovers(job.tiles);
   // mic keep review: the holds the samples were too early to see (the mic list's MIC_LAG) - before the audio is planned
@@ -812,7 +812,7 @@ async function start(opts, hooks = {}) {
   const { R, user } = opts, kind = opts.kind === "clip" ? "clip" : "snap", secs = [10, 20, 30].includes(Number(opts.secs)) ? Number(opts.secs) : 20;
   await gate(R, user, kind, opts.surface, { live: true });   // review fix 2: a capture starts only while Pepe is live
   const program = await programFor(R, user); if (!usable(program)) throw refuse("empty", 409);
-  // 1.99?? review fix 3 (FID-1): no picture here - a slow photo never delays the recording or opens a cam reader after a consent read
+  // 1.99ahq review fix 3 (FID-1): no picture here - a slow photo never delays the recording or opens a cam reader after a consent read
   // it outlasted (a snap loads its covers with its final frame, a clip at its cut: loadCovers)
   const tiles = await tilesFor(program, R, user, { covers: false }), now = deps.now();
   const offsets = shifts(tiles.filter(t => t.mode === "live").map(t => { try { return deps.offset(R.id, t.path); } catch (_) { return null; } }));

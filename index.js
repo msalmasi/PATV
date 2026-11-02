@@ -1262,7 +1262,7 @@ require("./cryptoweb").register(app, { addUser });   // 1.99ks: stablecoin donat
 require("./donationpromo").register(app, { addUser });   // 1.99tq: time-limited donation promos (boosted PAT per $1, per-donor cap, budget) - /admin/economy#donations
 require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
-require("./stagecover").register(app, { addUser });     // 1.99??: 🎙 the stage cover - the mic stage's picture of you while your cam isn't live (/settings/stage-cover)
+require("./stagecover").register(app, { addUser });     // 1.99ahq: 🎙 the stage cover - the mic stage's picture of you while your cam isn't live (/settings/stage-cover)
 require("./likeness").register(app, { addUser, isBotToken });   // 1.99qw: likeness royalties (subject cuts, held + released daily) + opt-outs (/settings/likeness)
 require("./incognito").register(app, { addUser, isBotToken });   // 1.99wa: Settings → Privacy - !incognito from the website (Pepe applies it, reports the state back)
 require("./memoryoptout").register(app, { addUser });   // wave 3 (design §N): 🧠 Pepe's memory - "don't remember me" from the website (Pepe's report rides incognito's sync)

@@ -649,9 +649,9 @@ test("S12. review fix V2/B2: the single layout with a 📌 pin (picture in pictu
   assert.equal(off[0].L.src.length, 2);
 });
 
-// ── 1.99?? stage cover (landed on 1.99ahp): a named card's picture rides its person's PLACE - the viewer's program, the capture's
+// ── 1.99ahq stage cover (landed on 1.99ahp): a named card's picture rides its person's PLACE - the viewer's program, the capture's
 // program and the capture's drawing agree; a hooded frog never carries one, and the frog / named place boundary holds with pictures on ──
-test("S13. 1.99?? stage cover x stable slots: each named tile carries ITS person's cover at its place (the viewer's program = the capture's), a capture draws each cover inside its place's cell (the frog's empty place stays dark), a hooded frog never carries one - and the frog's person, back named with his cover, never sits in the frog's place", async () => {
+test("S13. 1.99ahq stage cover x stable slots: each named tile carries ITS person's cover at its place (the viewer's program = the capture's), a capture draws each cover inside its place's cell (the frog's empty place stays dark), a hooded frog never carries one - and the frog's person, back named with his cover, never sits in the frog's place", async () => {
   const SC = require(path.join(repo, "stagecover")), cap = require(path.join(repo, "stagemiccap")), sharp = require("sharp");
   const REF = "anon-0a1b2c3d", ANON = { anon: true, display: "someone", ref: REF };
   const SEEDS = { alice: 1101, carl: 3303, dana: 4404, gus: 7707 };

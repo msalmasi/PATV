@@ -243,7 +243,7 @@ test("Settings -> Account and Edit profile render (fake member)", async () => {
 });
 
 test("each settings sub-page links back to /settings", () => {
-  for (const v of ["likeness", "mentions", "telegram", "subscriptions", "editProfile", "language", "settingsAccount", "stageCover"]) {   // (1.99??: + 🎙 Stage cover)
+  for (const v of ["likeness", "mentions", "telegram", "subscriptions", "editProfile", "language", "settingsAccount", "stageCover"]) {   // (1.99ahq: + 🎙 Stage cover)
     const src = fs.readFileSync(path.join(repo, "views", v + ".ejs"), "utf8");
     assert.match(src, /<a class="ds-back" href="\/settings">← <%- t\('(sethub|lk)\.back'\) %><\/a>/, v);
   }

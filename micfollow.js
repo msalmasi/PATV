@@ -120,9 +120,9 @@ const LC = () => require("./livecam");
 const BR = () => require("./bridge");
 const ROOMS = () => require("./rooms");
 const CV = () => require("./camviewers");
-// 1.99?? stage cover: a named tile's picture while it has no live one (stagecover.js; a failure = the letter, never a stall)
+// 1.99ahq stage cover: a named tile's picture while it has no live one (stagecover.js; a failure = the letter, never a stall)
 const coverOf = async (login) => { try { return await require("./stagecover").coverOf(login); } catch (e) { return null; } };
-// 1.99?? stage cover fix 3: the URL a program carries for a cover - a profile photo on an allowed host through the site's proxy while
+// 1.99ahq stage cover fix 3: the URL a program carries for a cover - a profile photo on an allowed host through the site's proxy while
 // cfg cover_photo_proxy is on (no Discord id / user id in the URL; the page and a capture draw the same bytes), else its own URL
 const coverUrl = (cv) => {
   if (!cv || cv.k !== "photo" || cfg().cover_photo_proxy === false) return cv ? cv.url : null;
@@ -1687,7 +1687,7 @@ async function dmBlocked(login, userId) {
       [me, ...ids, me, ...ids])).length > 0;
   } catch (e) { return !/no such table/i.test(String(e && e.message)); }
 }
-/** 1.99?? stage cover review fix (PRIV-2): has this person blocked the viewer - from their cam (camviewers) or in DMs (either way)?
+/** 1.99ahq stage cover review fix (PRIV-2): has this person blocked the viewer - from their cam (camviewers) or in DMs (either way)?
  *  (Not a cam-mode refusal like "members only": those still see the person's cover.) Fails closed. */
 async function personBlocks(login, userId) {
   try { if (CV().blocked(login, userId)) return true; } catch (e) { return true; }
@@ -1915,7 +1915,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     let watch = await watchOf(x.login, String(userId), t, snap.roomId);
     // a still is a snapshot: a bridge block on cam snapshots for this viewer here says so on the tile
     if (watch === "ok" && x.video === "still" && (await blockedHere(snap.roomId, String(userId), t, "snapshots"))) watch = "blocked";
-    // 1.99?? stage cover (stagecover.js): the picture a card shows while there's no live one - the person's choice (Settings ->
+    // 1.99ahq stage cover (stagecover.js): the picture a card shows while there's no live one - the person's choice (Settings ->
     // 🎙 Stage cover), by default their GTF avatar, then their profile photo, else the letter (avatar null). Only for a tile shown BY
     // NAME (a veiled one is a cover above and never reaches this); none on a tile this viewer reported or is blocked from here, and
     // (review fix PRIV-2) none for a viewer the PERSON blocked - from their cam (camviewers) or in DMs (either way): the letter

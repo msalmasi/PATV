@@ -2709,8 +2709,8 @@ test("82. 1.99ahn dead relay: a live mic-stage relay that loses its stream at Me
   assert.ok(S2 && S2 !== S && !S2.ended, "held again");
 });
 
-// ── 1.99?? stage cover (stagecover.js): a named card's picture; never a veiled speaker's ──
-test("83. 1.99?? stage cover: a NAMED tile carries its person's cover (GTF avatar by default, then the profile photo, a plain-card choice = none); a veiled speaker's cover tile never does - no GTF URL, seed, photo or /media/cover anywhere on the page's answer; a reported tile / a hidden login gets none", async () => {
+// ── 1.99ahq stage cover (stagecover.js): a named card's picture; never a veiled speaker's ──
+test("83. 1.99ahq stage cover: a NAMED tile carries its person's cover (GTF avatar by default, then the profile photo, a plain-card choice = none); a veiled speaker's cover tile never does - no GTF URL, seed, photo or /media/cover anywhere on the page's answer; a reported tile / a hidden login gets none", async () => {
   await reset(); await plainPad();
   await runQuery("DELETE FROM micfollow_reports");
   const SC = require(path.join(repo, "stagecover"));
@@ -2762,7 +2762,7 @@ test("83. 1.99?? stage cover: a NAMED tile carries its person's cover (GTF avata
   }
 });
 
-test("84. 1.99?? stage cover review fix (PRIV-2): a viewer the person blocked - from their cam (camviewers) or in DMs, either way - gets the letter on that tile, never their cover; a cam-mode refusal (members only) still shows it", async () => {
+test("84. 1.99ahq stage cover review fix (PRIV-2): a viewer the person blocked - from their cam (camviewers) or in DMs, either way - gets the letter on that tile, never their cover; a cam-mode refusal (members only) still shows it", async () => {
   await reset(); await plainPad();
   const SC = require(path.join(repo, "stagecover"));
   await SC.init();
@@ -2804,7 +2804,7 @@ test("84. 1.99?? stage cover review fix (PRIV-2): a viewer the person blocked - 
   }
 });
 
-test("85. 1.99?? stage cover fix 3: a profile photo on an allowed host reaches the page through the site's proxy (cfg cover_photo_proxy, default on) - no Discord id in the program; off = its own URL; a host off the list keeps its own URL; a reported tile still gets none", async () => {
+test("85. 1.99ahq stage cover fix 3: a profile photo on an allowed host reaches the page through the site's proxy (cfg cover_photo_proxy, default on) - no Discord id in the program; off = its own URL; a host off the list keeps its own URL; a reported tile still gets none", async () => {
   await reset(); await plainPad();
   const SC = require(path.join(repo, "stagecover"));
   await SC.init();
