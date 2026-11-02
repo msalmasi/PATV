@@ -76,13 +76,13 @@
 // relay that a cam slot / a ▶ Live viewer / a pin also uses lets only the mic stage go (micfollow.onExactRefused): the relay
 // lives on for the others and Pepe opens it his ordinary way again.
 //
-// 1.99?? dead relay (owner 2026-11-02, "Scarface's cam isn't loading here even though on the VM I see it loaded"): ~7% of
+// 1.99ahn dead relay (owner 2026-11-02, "Scarface's cam isn't loading here even though on the VM I see it loaded"): ~7% of
 // Pepe's WHIP publishes are one-sided - MediaMTX answers the POST, then drops the session ("deadline exceeded while waiting
 // connection"), but ffmpeg still prints its connected line and never exits, so Pepe reports the relay "live" for good. A
 // relay counts as live (liveAt) only when MediaMTX has its stream (noteSync); Pepe's word is kept as botLiveAt. While the
 // path lists are fresh (syncFresh - MediaMTX's API answers), a relay Pepe reports live whose path hasn't been ready for
 // NOMEDIA_MS (LOST_MS for one that WAS ready) carries want[].nomedia - Pepe ends that publish and his restart loop puts it
-// back (bot 1.99??) - and it ends as "start_timeout" (never ready: START_MS, and BOT_GRACE_MS after Pepe's first "live") or
+// back (bot 1.99ahn) - and it ends as "start_timeout" (never ready: START_MS, and BOT_GRACE_MS after Pepe's first "live") or
 // "relay_lost" (was ready: START_MS after the first nomedia) - both soft, so the mic stage tries again. A stale path list
 // (MediaMTX's API unreachable) changes nothing: Pepe's word counts as before and nothing is ended for it. Every "hasn't been
 // ready for N s" is what the lists saw (missedSince: up to the latest list, never up to now - review F1). Neither ends a relay
@@ -110,11 +110,11 @@ const BOT_FRESH_MS = 20 * 1000;         // Pepe's poll within this long = he can
 const START_MS = 40 * 1000;             // a wanted cam Pepe hasn't reported live within this long -> "Pepe couldn't open it"
 const END_COOLDOWN_MS = 10 * 60 * 1000; // after an owner / mod / admin ends a relay
 const SYNC_FRESH_MS = 15 * 1000;
-// 1.99?? dead relay (see the header): Pepe says live, a FRESH MediaMTX path list says the path isn't ready this long -> nomedia
+// 1.99ahn dead relay (see the header): Pepe says live, a FRESH MediaMTX path list says the path isn't ready this long -> nomedia
 const NOMEDIA_MS = 15 * 1000;
 const LOST_MS = 20 * 1000;              // ...for a relay that WAS ready (then "relay_lost" START_MS after the first nomedia)
 const BOT_GRACE_MS = 15 * 1000;         // a never-ready relay Pepe reported live ends no sooner than this after his first "live"
-// 1.99?? dead relay review (F2): a nomedia restart moves those deadlines - Pepe acts on it within RESTART_MS (his next poll ends
+// 1.99ahn dead relay review (F2): a nomedia restart moves those deadlines - Pepe acts on it within RESTART_MS (his next poll ends
 // that publish), a restart that isn't live yet gets START_MS (like a fresh open), a restarted publish BOT_GRACE_MS of lists -
 // and a relay's restarts never hold it past RESTART_CAP_MS after the first nomedia (START_CAP_MS after the hold, never ready)
 const RESTART_MS = 10 * 1000;
@@ -340,7 +340,7 @@ function newSess(R, login, m, t) {
   const p = pathFor(R.id, login);
   const S = { key: keyOf(R.id, login), roomId: R.id, login, display: (m && m.display) || login, path: p, viewers: new Map(), createdAt: t,
               wantUntil: t + cfg().linger_s * 1000, liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null,
-              // 1.99?? dead relay: liveAt = MediaMTX had the stream; botLiveAt = Pepe's first "live"; botLiveSince = his current
+              // 1.99ahn dead relay: liveAt = MediaMTX had the stream; botLiveAt = Pepe's first "live"; botLiveSince = his current
               // live streak (a restart / a new publisher starts it over); missSince = fresh path lists without it since;
               // nomediaAt = the first want[].nomedia of this loss; botDownAt = when his last live streak ended (review F2)
               botLiveAt: 0, botLiveSince: 0, botRestarts: 0, missSince: 0, nomediaAt: 0, botDownAt: 0,
@@ -362,12 +362,12 @@ function camForPath(p) {
   const k = BY_PATH.get(p);
   return k ? SESS.get(k) || null : null;
 }
-/** 1.99??: timing only; an optional room binding keeps server-side clips on their own room's relay. */
+/** 1.99ahn: timing only; an optional room binding keeps server-side clips on their own room's relay. */
 function relayHold(path, roomId) {
   const S = camForPath(path), b = S && S.botInfo;
   return !S || S.ended || !b || roomId != null && S.roomId !== roomId ? null : { src: b.source, hold_ms: b.hold_ms == null ? null : b.hold_ms };
 }
-/** 1.99??: never reveal whether an unheld cam exists; use the same fresh-slot rule as WHEP auth. */
+/** 1.99ahn: never reveal whether an unheld cam exists; use the same fresh-slot rule as WHEP auth. */
 function holdOf(path, userId, roomId) {
   const S = camForPath(path), t = now(), fresh = (v) => !!v && Number.isFinite(v.beat) && t >= v.beat && t - v.beat <= BEAT_MS;
   if (!S || S.ended || userId == null || !(fresh(S.viewers.get(String(userId))) || held(S) && S.stageViewers && fresh(S.stageViewers.get(String(userId))))) return null;
@@ -429,11 +429,11 @@ function endSession(S, why, t = now()) {
   console.log(`[livecam] end room=${S.roomId} target=${S.mfEver ? "-" : S.login} why=${why}`);
   runHooks(END_HOOKS, [S, why], "end");               // micfollow: the mic stage's tile follows its relay
 }
-// ── 1.99?? dead relay (see the header) ──
+// ── 1.99ahn dead relay (see the header) ──
 let SYNC_AT = 0;                         // the last MediaMTX path list (noteSync)
 /** Is MediaMTX's path list fresh (its API answered within SYNC_FRESH_MS)? Stale = nothing is judged by it. */
 const syncFresh = (t = now()) => SYNC_AT > 0 && t - SYNC_AT <= SYNC_FRESH_MS;
-/** 1.99?? dead relay review (F1): how long the path lists THEMSELVES have shown this relay without its stream, counted from
+/** 1.99ahn dead relay review (F1): how long the path lists THEMSELVES have shown this relay without its stream, counted from
  *  `from` (Pepe's "live") when that is later - up to the latest list (SYNC_AT), never up to now: a list is trusted for
  *  SYNC_FRESH_MS, but it proves nothing about the time after it was taken (MediaMTX's API may have gone quiet just before the
  *  stream arrived). 0 = the latest list had it. */
@@ -455,7 +455,7 @@ function startOver(S, t) {
 function lostOver(S, t) {
   return !!(S.liveAt && S.nomediaAt && S.missSince > 0 && syncFresh(t) && SYNC_AT - S.nomediaAt > START_MS && restartSpent(S, t));
 }
-/** 1.99?? dead relay review (F2): has the restart Pepe was asked for (nomediaAt, the first of this loss) had its chance? Not
+/** 1.99ahn dead relay review (F2): has the restart Pepe was asked for (nomediaAt, the first of this loss) had its chance? Not
  *  within RESTART_MS (he acts on his next poll). Not live yet (backoff / starting): START_MS from when he went down, like a
  *  fresh open. Still the publish he was asked to end (an older Pepe ignores nomedia): yes. A restarted publish: once the lists
  *  have shown BOT_GRACE_MS without it since its "live". Never past RESTART_CAP_MS. */
@@ -480,7 +480,7 @@ function sweep(t = now()) {
       if (S.stageViewers) for (const [uid, v] of [...S.stageViewers.entries()]) if (t - v.beat > BEAT_MS) { S.stageViewers.delete(uid); for (const rid of v.readers || []) kickReader(rid); }
       if (held(S)) S.wantUntil = Math.max(S.wantUntil || 0, t + cfg().linger_s * 1000);   // 1.99zc: held by a stage slot / the mic stage
       if (!S.viewers.size && !held(S) && S.wantUntil && S.wantUntil < t) endSession(S, "unwatched", t);
-      // 1.99?? dead relay: Pepe opened it but MediaMTX never had it -> start_timeout (not an older refusal's botWhy)
+      // 1.99ahn dead relay: Pepe opened it but MediaMTX never had it -> start_timeout (not an older refusal's botWhy)
       else if (startOver(S, t)) endSession(S, S.botLiveAt ? "start_timeout" : (S.botWhy || "start_timeout"), t);
       else if (lostOver(S, t)) endSession(S, "relay_lost", t);
     }
@@ -1083,7 +1083,7 @@ async function forBot(body, t = now()) {
     seen.add(S.key);
     const prevState = S.botState;
     S.botState = str(x.state, 20);
-    // 1.99?? dead relay: Pepe's word is his, never MediaMTX's - liveAt comes from noteSync only. His live streak starts over
+    // 1.99ahn dead relay: Pepe's word is his, never MediaMTX's - liveAt comes from noteSync only. His live streak starts over
     // when he wasn't live on his last report, or his publisher restarted / is a new one (its restart count moved).
     const restarts = Math.max(0, Math.floor(Number(x.restarts) || 0));
     if (S.botState === "live") {
@@ -1105,7 +1105,7 @@ async function forBot(body, t = now()) {
       else if (TERMINAL.has(why)) endSession(S, why, t);
     }
   }
-  for (const S of SESS.values()) if (!S.ended && !seen.has(S.key)) liveEnded(S, t);   // 1.99??: not on his report = not live now
+  for (const S of SESS.values()) if (!S.ended && !seen.has(S.key)) liveEnded(S, t);   // 1.99ahn: not on his report = not live now
   for (const S of exactMoved) {
     if (S.ended) continue;
     try { require("./micfollow").onExact(S.roomId, S.login); } catch (e) { /* no mic follows */ }
@@ -1145,7 +1145,7 @@ async function forBot(body, t = now()) {
       if (!key) continue;
       // 1.99aaf: ghosts aren't counted; ghost_only = nobody but staff in ghost mode watches -> Pepe says nothing in the room
       const fv = freshViewers(S, t), shown = shownCount(fv);
-      // 1.99?? dead relay: Pepe says live, MediaMTX has no stream -> he ends that publish and restarts it (an older Pepe ignores it)
+      // 1.99ahn dead relay: Pepe says live, MediaMTX has no stream -> he ends that publish and restarts it (an older Pepe ignores it)
       const nomedia = noMedia(S, t, seen.has(S.key) && S.botState === "live");
       if (nomedia && !S.nomediaAt) {
         S.nomediaAt = t;
@@ -1178,7 +1178,7 @@ async function forBot(body, t = now()) {
 // ── MediaMTX ──
 /** webrtc.sync hands over MediaMTX's path list every 5 s: readers + the publisher's session id per cam path. */
 function noteSync(items, t = now()) {
-  // 1.99?? dead relay: a gap in the lists (MediaMTX's API didn't answer for SYNC_FRESH_MS) starts every not-ready clock over
+  // 1.99ahn dead relay: a gap in the lists (MediaMTX's API didn't answer for SYNC_FRESH_MS) starts every not-ready clock over
   const streak = syncFresh(t);
   SYNC_AT = t;
   const seen = new Set();
@@ -1195,9 +1195,9 @@ function noteSync(items, t = now()) {
   }
   for (const S of SESS.values()) if (!seen.has(S.key)) { S.ready = false; S.readers = 0; S.seenAt = t; noteMiss(S, false, streak, t); }
 }
-/** 1.99?? dead relay: Pepe isn't live on this relay now (review F2: botDownAt - when a restart's START_MS starts). */
+/** 1.99ahn dead relay: Pepe isn't live on this relay now (review F2: botDownAt - when a restart's START_MS starts). */
 function liveEnded(S, t) { if (S.botLiveSince) S.botDownAt = t; S.botLiveSince = 0; }
-/** 1.99?? dead relay: since when fresh path lists have gone without this relay's stream (0 = it's there). */
+/** 1.99ahn dead relay: since when fresh path lists have gone without this relay's stream (0 = it's there). */
 function noteMiss(S, ready, streak, t) {
   if (ready) { S.missSince = 0; S.nomediaAt = 0; return; }
   if (!streak) { S.missSince = t; S.nomediaAt = 0; }
@@ -1218,7 +1218,7 @@ async function auth(b, action, proto) {
     return sameSecret(cred, pubKey(p)) ? 200 : 403;
   }
   if (action === "read") {
-    // 1.99??: only a running mic-stage capture may authenticate a loopback RTSP reader.
+    // 1.99ahn: only a running mic-stage capture may authenticate a loopback RTSP reader.
     if (action === "read" && proto === "rtsp") return require("./stagemiccap").rtspAuth(b, p);
     if (proto !== "webrtc") return 403;                      // cam HLS and every other protocol remain refused
     let tok = null;
@@ -1278,7 +1278,7 @@ async function adminView() {
     viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since, ghost: !!v.ghost })), readers: S.readers, bot: S.botInfo || null,
     kbps: Math.round(rateOf(S, c)), measured: !!(S.botInfo && S.botInfo.source === "passthrough" && Number(S.botInfo.kbps) > 0),
     outKbps: Math.round(rateOf(S, c) * (freshViewers(S, t).length + freshStage(S, t).length)),
-    // 1.99?? dead relay: Pepe says live, MediaMTX has had no stream this long (he was asked to restart it)
+    // 1.99ahn dead relay: Pepe says live, MediaMTX has had no stream this long (he was asked to restart it)
     ...(S.nomediaAt && S.missSince ? { nomedia: true, nomedia_s: Math.max(0, Math.round((t - S.missSince) / 1000)), lost: !!S.liveAt } : {}),
     botState: S.botState, botWhy: S.botWhy, stage: (S.holds ? [...S.holds].find((h) => !isMfHolder(h)) : null) || null, mf: !!S.mf,
     stageViewers: freshStage(S, t).length }));
@@ -1477,7 +1477,7 @@ module.exports = {
   botMf: () => (BOT && BOT.mf) || 0, botPool: () => (BOT && BOT.pool) || null, enabled: () => cfg().enabled === true, cfg,
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
-  syncFresh, NOMEDIA_MS, LOST_MS, BOT_GRACE_MS,                                                              // 1.99?? dead relay
+  syncFresh, NOMEDIA_MS, LOST_MS, BOT_GRACE_MS,                                                              // 1.99ahn dead relay
   _sessions: SESS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setKick: (fn) => { kickImpl = fn; },
