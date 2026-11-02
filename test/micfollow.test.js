@@ -2691,7 +2691,8 @@ test("82. 1.99?? dead relay: a live mic-stage relay that loses its stream at Med
   }
   assert.equal(nomediaAt, 325, "lost from the first fresh list (+305 s): nomedia at +325 s");
   assert.ok(S.ended && S.endWhy === "relay_lost", `relay_lost (${S.endWhy})`);
-  assert.equal(S.ended, t0 + 366 * 1000, "START_MS after the first nomedia");
+  // (review F1: judged on the lists - the +370 s one is the first more than START_MS after the first nomedia)
+  assert.equal(S.ended, t0 + 370 * 1000, "START_MS after the first nomedia");
   await step(["dana"]);
   assert.deepEqual([tile("dana").video, tile("dana").why], ["card", "retry"], "relay_lost is soft: another try soon");
   await at(MF.cfg().soft_retry_s + 1, ["dana"]);
