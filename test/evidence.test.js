@@ -3,7 +3,8 @@
 //   * dark: with the evidence switch off (or privacy wire v2 off) no route makes a clip (409), the sync answer never says
 //     `evidence`, reveal answers carry no offer, the privacy copy is null and the sweep is a no-op on an empty table
 //   * an evidence clip only with see-through: an admin anywhere, the pad's owner in their era; a member, staff, another pad's owner and
-//     a signed-out visitor are refused - on the website path and the Camfrog upload alike
+//     a signed-out visitor are refused - on the website path and the Camfrog upload alike; the role is asked before anything about
+//     the line (review fix XT-3: the same 403 for every cursor - no "which are veiled turns / whose identity row is gone" oracle)
 //   * Pepe's answer must be THAT login's turn at the same veil answering THIS audited request (veil_ok = its seethrough row)
 //   * evidence-only for both levels: no media row, no post, no story; the pad-post / clip-data routes refuse an evidence id; a member's
 //     clip of a hidden turn is refused; no other module reads the store (a source scan)
@@ -963,4 +964,32 @@ test("review fixes (WP5-T5, WP5-ACC-7): every guard on the website path has a te
     await rooms.setOwner(ROOM.id, "own", "test");
     EV._pending.delete(pa.d.id);
   }
+});
+
+test("review fix XT-3: the role comes FIRST - a member gets the same 403 for every cursor (a veiled 🎙 turn, a named turn, a chat line, one that doesn't exist, one whose identity row is gone) and nothing is written", async () => {
+  await setup;
+  if (!EV.isOn()) await EV.setOn(true, ADMIN());
+  const L = await freshLines();
+  const msg = R0().feed.find((x) => x.k === "msg");
+  // what an account deletion without "also hide my past lines" does to the side table (accountdelete -> veil.forgetLogins): the line
+  // stays on the page under its frog name, its identity row is gone
+  await require(path.join(repo, "veil")).forgetLogins(["u:id-frankie", "frankiefettuccine"]);
+  assert.ok(R0().feed.some((x) => x.c === L.fr.c), "(the line is still in the live feed)");
+  assert.equal(await bridge.revealLookup(ROOM.id, L.fr.c), null, "(no identity row behind it now)");
+  const n0 = { st: (await getQuery("SELECT COUNT(*) AS n FROM seethrough_log"))[0].n, aa: (await getQuery("SELECT COUNT(*) AS n FROM admin_audit"))[0].n };
+  const probes = [["a hidden 🎙 turn", L.hk.c], ["a forgotten 🎙 turn", L.fr.c], ["a named turn", L.al.c], ["a chat line", msg && msg.c], ["no such line", 987654321]];
+  for (const u of [U.mem, U.staff, U.own2]) {
+    for (const [what, c] of probes) {
+      resetLimits();
+      const r = await call("POST", `/api/rooms/${SLUG}/evidence`, { user: u, body: { c } });
+      assert.deepEqual([r.status, r.d && r.d.code], [403, "not_entitled"], u.username + ", " + what + ": " + r.text);
+    }
+  }
+  // an entitled admin still gets the line's own answer
+  resetLimits();
+  assert.equal((await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.adm, body: { c: L.fr.c } })).status, 404, "admin: the forgotten turn is no evidence clip");
+  resetLimits();
+  assert.equal((await call("POST", `/api/rooms/${SLUG}/evidence`, { user: U.adm, body: { c: 987654321 } })).status, 404, "admin: no such line");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM seethrough_log"))[0].n, n0.st, "no see-through row");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit"))[0].n, n0.aa, "no audit row");
 });

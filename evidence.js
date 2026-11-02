@@ -489,7 +489,12 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       await init();
       if (!effective()) return res.status(409).json(OFF);
       const R = bySlug(req.params.slug);
-      if (!R || !isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
+      if (!R) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
+      // review fix XT-3: the role FIRST, before anything about the line (seethrough's chatCtx and the tile Reveal ask in this order): a
+      // caller with no see-through on this pad gets the same 403 for every cursor - never which are veiled 🎙 turns, or whose
+      // identity row is gone. (The per-line era check, role(..., it.ts), stays below.)
+      if (!(await ST.chatRole(req.user, R.id))) return res.status(403).json(NOT_ENTITLED);
+      if (!isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
       const c = Number((req.body || {}).c);
       const it = Number.isFinite(c) && c > 0 ? (R.feed || []).find((x) => x && Number(x.c) === c) : null;
       if (!it || it.k !== "tx" || !TX_RE.test(String(it.id || "")) || !it._vz || !LOGIN_RE.test(String(it._vz.login || "")) || !VEILS.has(it._vz.kind) || !it.u || !it.u.anon) {
