@@ -29,7 +29,7 @@ const repo = path.resolve(__dirname, "..");
 const FIXTURE = path.join(__dirname, "fixtures", "privwire-contract.json");
 // Update together with camfrog-bot's copy (ci/fixtures/privwire-contract.json) and its pin (privwire_contract_test.py PIN):
 // python tools/gen_privwire_contract.py --site <this checkout> prints the new sha.
-const PIN = "3dd07f2f5c78ce843223d8b5be1f3704ba976cb8ff41819e73aec6f67be4fb54";
+const PIN = "0b8fe79c82970f13aaf9f10f1cba033375cf8a4b5cc21314126174e975a509a9";
 const RAW = fs.readFileSync(FIXTURE);
 const FX = JSON.parse(RAW.toString("utf8"));
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
@@ -286,8 +286,9 @@ test("every case of Pepe's scene through the real /api/bridge/sync/v2: a member 
       if (e.text != null) assert.equal(o.text, e.text, s.name + ": the words");
     }
     // the frog names: one per session - frankie's lines share theirs, hank's another; hoods differ
-    const fr = shown.filter((s) => s.expect && s.expect.veil === "incognito" && s.expect.alias).map((s) => by.get(s.c).u);
-    const hk = shown.filter((s) => s.expect && s.expect.veil === "hidden" && s.expect.alias).map((s) => by.get(s.c).u);
+    // (1.99?? transcripts bar: expect.as = the frog name's own level - frankie's !transcripts off 🎙 bar carries his INCOGNITO name)
+    const fr = shown.filter((s) => s.expect && (s.expect.as || s.expect.veil) === "incognito" && s.expect.alias).map((s) => by.get(s.c).u);
+    const hk = shown.filter((s) => s.expect && (s.expect.as || s.expect.veil) === "hidden" && s.expect.alias).map((s) => by.get(s.c).u);
     assert.equal(new Set(fr.map((u) => u.alias)).size, 1, "frankie keeps one frog name");
     assert.equal(new Set(hk.map((u) => u.alias)).size, 1, "hank keeps one frog name");
     assert.notEqual(fr[0].alias, hk[0].alias);
@@ -303,6 +304,12 @@ test("every case of Pepe's scene through the real /api/bridge/sync/v2: a member 
   // the owner and the admin get the member view plus rv flags - nothing more
   const own = await call("GET", `/api/rooms/${SLUG}/live`, { user: U.adm });
   assert.ok(own.d.feed.some((o) => o.rv === 1), "an admin's items say they may be revealed");
+  // 1.99?? transcripts bar: every txbar_* bar is revealable by an admin, never by a member; its words reach no page (SECRETS)
+  const bars = shown.filter((x) => /^txbar_/.test(x.name) && x.expect && x.expect.mask);
+  assert.equal(bars.length, 3, "tina's, frankie's and hank's !transcripts off bars");
+  const byA = new Map(own.d.feed.map((x) => [x.c, x]));
+  for (const b of bars) assert.equal(byA.get(b.c).rv, 1, b.name + ": an admin may reveal it");
+  for (const b of bars) assert.ok(R.feed.find((it) => it.c === b.c).tm === 1, b.name + ": stamped tm (server-only)");
 });
 
 test("v2 extras on named lines: a named hold and its 🎙 line carry the same hold id; the said time rides", async () => {

@@ -31,11 +31,22 @@
    "l": "> 100"
   },
   "priv": {
-   "kind": "incognito | hidden",
+   "kind": "incognito | hidden | tx",
    "h": "20 hex",
    "hs": "[h, ...] optional",
    "at": "epoch s",
-   "words": "hidden message / transcript only, redacted"
+   "words": "hidden message / transcript only, redacted",
+   "tx": "true on a 🎙 line masked because of !transcripts off (1.99?? transcripts bar); kind tx = a named speaker (shown as 'someone' with the bar), incognito = their frog name with the bar, hidden = one bar"
+  },
+  "txbar": {
+   "advert": {
+    "txbar": 1
+   },
+   "cap": {
+    "txbar_cap": 1
+   },
+   "advert_s": 600,
+   "rule": "!transcripts off 🎙 lines go as a bar only while the site's answers say txbar: 1, and only for lines said since they have said it without a break; otherwise left out on both paths"
   }
  },
  "session": "c0ffee000001",
@@ -2118,6 +2129,485 @@
      "mask": "s"
     }
    ]
+  },
+  {
+   "name": "txbar_before",
+   "note": "the site starts saying txbar: 1 - a !transcripts off 🎙 line SAID before that (its mic-up began earlier) stays left out on both paths, as it was",
+   "v2": [],
+   "v1": [],
+   "expect": []
+  },
+  {
+   "name": "txbar_named",
+   "note": "tina has !transcripts off and is otherwise named: her grab / release and her typed line are named as ever; her 🎙 line is v2-only - real UserRef, no text, priv {kind: tx, words, tx: true} - and the site shows it as a bar under 'someone' (no frog name: she isn't veiled, and her hold began named)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-29",
+     "ts": "2026-11-01T12:01:58.000Z",
+     "seq": 29,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "holders": [
+       {
+        "id": "tina",
+        "login": "tina",
+        "display": "Tina"
+       }
+      ],
+      "hold": "hd-000000070000"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-30",
+     "ts": "2026-11-01T12:02:06.000Z",
+     "seq": 30,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "reason": "released",
+      "held_ms": 8000,
+      "holders": [],
+      "hold": "hd-000000070000"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-31",
+     "ts": "2026-11-01T12:02:08.000Z",
+     "seq": 31,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-31",
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "text": "typed chat is unaffected"
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v10",
+     "ts": "2026-11-01T12:02:08.000Z",
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-6572b9f105080878",
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "source": "mic",
+      "said_at": 1793534519.0,
+      "priv": {
+       "kind": "tx",
+       "h": "1c0bad95a524afbe4c13",
+       "at": 1793534519.0,
+       "words": "my transcripts are off",
+       "tx": true
+      },
+      "hold": "hd-000000070000",
+      "language": "en"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-29",
+     "ts": "2026-11-01T12:01:58.000Z",
+     "seq": 29,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "holders": [
+       {
+        "id": "tina",
+        "login": "tina",
+        "display": "Tina"
+       }
+      ]
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-30",
+     "ts": "2026-11-01T12:02:06.000Z",
+     "seq": 30,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "reason": "released",
+      "held_ms": 8000,
+      "holders": []
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-31",
+     "ts": "2026-11-01T12:02:08.000Z",
+     "seq": 31,
+     "type": "message",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "message_id": "cf-m-c0ffee000001-PepeFrog.Room-31",
+      "user": {
+       "id": "tina",
+       "login": "tina",
+       "display": "Tina"
+      },
+      "text": "typed chat is unaffected"
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "mic",
+     "named": "Tina"
+    },
+    {
+     "k": "unmic",
+     "named": "Tina"
+    },
+    {
+     "k": "msg",
+     "named": "Tina",
+     "text": "typed chat is unaffected"
+    },
+    {
+     "k": "tx",
+     "veil": "hidden",
+     "alias": false,
+     "mask": "s"
+    }
+   ]
+  },
+  {
+   "name": "txbar_incognito",
+   "note": "frankie is incognito AND has !transcripts off: his grab / release under his frog name (incognito, as ever); his 🎙 line v2-only with priv {kind: incognito, words, tx: true} - the site shows his frog name with a bar, anchored to his hold: no words (transcripts off) and no name (incognito)",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-32",
+     "ts": "2026-11-01T12:02:09.000Z",
+     "seq": 32,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie",
+       "proven": true,
+       "since": 1793534529.0
+      },
+      "holders": [
+       {
+        "id": "anon-0000000b",
+        "display": "someone",
+        "anonymous": true
+       }
+      ],
+      "hold": "hd-000000080000",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534529.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-33",
+     "ts": "2026-11-01T12:02:19.000Z",
+     "seq": 33,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie",
+       "proven": true,
+       "since": 1793534529.0
+      },
+      "reason": "released",
+      "held_ms": 10000,
+      "holders": [],
+      "hold": "hd-000000080000",
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534529.0
+      }
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v11",
+     "ts": "2026-11-01T12:02:21.000Z",
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-349e45fd86682560",
+      "user": {
+       "id": "frankie",
+       "login": "frankie",
+       "display": "Frankie"
+      },
+      "source": "mic",
+      "said_at": 1793534530.0,
+      "priv": {
+       "kind": "incognito",
+       "h": "d6ec3490db9b6a915053",
+       "at": 1793534530.0,
+       "words": "incognito and transcripts off, both at once here",
+       "tx": true
+      },
+      "hold": "hd-000000080000",
+      "language": "en"
+     }
+    }
+   ],
+   "v1": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-32",
+     "ts": "2026-11-01T12:02:09.000Z",
+     "seq": 32,
+     "type": "mic.grab",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-0000000b",
+       "display": "someone",
+       "anonymous": true
+      },
+      "holders": [
+       {
+        "id": "anon-0000000b",
+        "display": "someone",
+        "anonymous": true
+       }
+      ]
+     }
+    },
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-33",
+     "ts": "2026-11-01T12:02:19.000Z",
+     "seq": 33,
+     "type": "mic.release",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "user": {
+       "id": "anon-0000000b",
+       "display": "someone",
+       "anonymous": true
+      },
+      "reason": "released",
+      "held_ms": 10000,
+      "holders": []
+     }
+    }
+   ],
+   "expect": [
+    {
+     "k": "mic",
+     "veil": "incognito",
+     "alias": true
+    },
+    {
+     "k": "unmic",
+     "veil": "incognito",
+     "alias": true
+    },
+    {
+     "k": "tx",
+     "veil": "hidden",
+     "alias": true,
+     "mask": "m",
+     "hold": true,
+     "as": "incognito"
+    }
+   ]
+  },
+  {
+   "name": "txbar_hidden",
+   "note": "hank is !bridge hide AND has !transcripts off: one bar (priv {kind: hidden, words, tx: true}), under his frog name as any of his lines",
+   "v2": [
+    {
+     "op": "event",
+     "id": "cf-pepe-c0ffee000001-v12",
+     "ts": "2026-11-01T12:02:22.000Z",
+     "type": "x.pepe.transcript",
+     "connector": "cf-pepe",
+     "scope": {
+      "platform": "camfrog",
+      "room": {
+       "id": "PepeFrog.Room",
+       "name": "Pepe's Pad",
+       "kind": "room"
+      }
+     },
+     "data": {
+      "id": "tx-6b35c10a7e11312d",
+      "user": {
+       "id": "hank",
+       "login": "hank",
+       "display": "Hank"
+      },
+      "source": "mic",
+      "said_at": 1793534541.0,
+      "priv": {
+       "kind": "hidden",
+       "h": "cc68ad150b9515307722",
+       "at": 1793534541.0,
+       "words": "hidden and transcripts off: still one bar",
+       "tx": true
+      },
+      "language": "en"
+     }
+    }
+   ],
+   "v1": [],
+   "expect": [
+    {
+     "k": "tx",
+     "veil": "hidden",
+     "alias": true,
+     "mask": "m"
+    }
+   ]
+  },
+  {
+   "name": "txbar_lapsed",
+   "note": "an answer without txbar: 1 - from then on tina's 🎙 lines are left out on both paths again",
+   "v2": [],
+   "v1": [],
+   "expect": []
   }
  ],
  "snapshot": {

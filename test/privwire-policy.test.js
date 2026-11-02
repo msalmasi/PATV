@@ -61,6 +61,23 @@ test("/help: Pepe's incognito / bridge / transcripts cards get the v2 notes only
     assert.match(out[1].details, /blacked-out bar/);
     assert.match(out[2].details, /never reach the website/);
     assert.equal(out[3], cards[3], "other cards untouched");
+    // 1.99?? transcripts bar: while the bar is live too (privwire.txBar: the switch AND a Pepe that sends it), the transcripts card says
+    // the bar - Pepe's v2tx wording when his data has it, else the site's own; the bridge card's old transcripts clause is swapped
+    const tb = PW.txBar;
+    PW.txBar = () => true;
+    try {
+      const bridgeV2 = { id: "bridge", summary: "b", v2: { details: "Hidden people show as a bar. `!transcripts off` keeps your mic transcripts off the website." } };
+      const out2 = H.withPrivwireNotes([...cards, bridgeV2, { id: "transcripts", summary: "off", v2tx: { summary: "Pepe's bar words" } }]);
+      assert.match(out2[2].summary, /blacked-out bar/, "the transcripts card's summary: the bar");
+      assert.match(out2[2].details, /blacked-out bar/);
+      assert.match(out2[2].details, /Only PATV administrators, and a pad's owner in their own pad, can reveal what you said, and every reveal is logged/);
+      assert.ok(!/never reach the website/.test(out2[2].details), "no longer 'never reach the website'");
+      assert.equal(out2[4].details, "Hidden people show as a bar. `!transcripts off` shows only your mic transcripts as a blacked-out bar.");
+      assert.equal(out2[5].summary, "Pepe's bar words", "Pepe's own v2tx wording wins");
+      assert.equal(out2[3], cards[3], "other cards untouched");
+    } finally { PW.txBar = tb; }
+    const out3 = H.withPrivwireNotes([{ id: "transcripts", summary: "off", v2tx: { summary: "Pepe's bar words" } }]);
+    assert.match(out3[0].details, /never reach the website/, "the switch on but no bar: v2tx is ignored");
   } finally { PW.isOn = on; }
 });
 
@@ -126,4 +143,54 @@ test("WP-5: terms.js dates /privacy by the evidence switch's first ON too (evide
   assert.match(src, /evidence = await require\("\.\/evidence"\)\.privacyCopy\(\)/);
   assert.match(src, /\[evidence && evidence\.on_at, evidence && evidence\.on_day\]/);
   assert.match(src, /privwire, evidence, policyDates \}\)/);
+});
+
+// 1.99?? transcripts bar (owner 2026-11-02: "If someone has !transcripts off, it should still show in the chat but blocked out like with
+// bridge hide."): its sentences show only inside the privacy-wire-v2 branches AND while the bar is live (terms.js locals.txbar =
+// privwire.txBar: the switch on and a Pepe that sends the bar); the change note is dated by policy_text_dates "tx-bar". The owner approves
+// this wording before it ships - these are the exact sentences.
+const TXB_SENTENCES = [
+  " If you type <code>!transcripts off</code>, your mic transcripts appear only as a blacked-out bar, without your name; administrators and the pad's owner can reveal those too.",
+  "With <code>!transcripts off</code>, your mic transcripts are kept like hidden lines: shown to everyone else as a blacked-out bar without your name, never searched or quoted, and only the pad's owner and PATV administrators can reveal what you said.",
+  " Mic transcripts said with <code>!transcripts off</code> before 3 November 2026 stay left out.",
+  " <code>!transcripts off</code> blacks out only your mic transcripts.",
+  "<li><b><code>!transcripts off</code> blacks out your mic transcripts:</b> what you say on the mic shows on the website only as a blacked-out bar - without your name, or under your frog name if you're incognito or hidden. Your typed lines and your mic grabs and drops show as usual. Only PATV administrators and a pad's owner (in their own pad, for lines said while they own it) can reveal what you said, and every reveal is logged. Members can't clip those mic turns.",
+  "<li><b>3 November 2026:</b> <code>!transcripts off</code> (sections 3 and 10): your mic transcripts now show on the website as a blacked-out bar without your name instead of being left out; PATV administrators and a pad's owner can reveal what you said, for moderation (each reveal logged), and members can no longer clip those mic turns. This applies to mic transcripts said from 3 November 2026; earlier ones stay left out.</li>",
+];
+const TXB_EVIDENCE = [" An administrator or the pad's owner can save one as moderation evidence, like a hidden person's.</li>",
+                      "; an administrator or the pad's owner can save one as moderation evidence (logged, 30 days, never posted)."];
+test("transcripts bar: its sentences only with privacy wire v2 AND the bar live, dated by tx-bar; switch off or no bar: the page as before", () => {
+  const now = fs.readFileSync(FILE, "utf8");
+  const PWON = { on: true, g: 1793534400000, g_day: "1 November 2026" };
+  const TXD = Object.assign({}, DATES, { "tx-bar": { at: 1793700000000, day: "3 November 2026" } });
+  const CLOC = { notice_day: "1 October 2026", start_day: "8 October 2026" };    // (the chat-history section: the archive's notice is on)
+  const on = render(now, { privwire: PWON, txbar: { on: true }, policyDates: TXD, chatlog: CLOC });
+  for (const s of TXB_SENTENCES) assert.equal(on.split(s).length, 2, "once: " + s.slice(0, 70));
+  assert.ok(!on.includes("<code>!transcripts off</code> leaves your mic transcripts out."), "the old chat-history sentence is replaced");
+  assert.ok(on.indexOf("<b>3 November 2026:</b> <code>!transcripts off</code>") < on.indexOf("<b>1 November 2026:</b> <a href=\"#incognito\">"), "the newest change note first");
+  for (const s of TXB_EVIDENCE) assert.ok(!on.includes(s), "no evidence sentence while evidence clips are off");
+  // the approved wave 2 sentences are untouched (the evidence sentence still follows the hidden-clip one)
+  const ev = render(now, { privwire: PWON, txbar: { on: true }, policyDates: TXD, chatlog: CLOC, evidence: { on: true, any: false, on_at: 1793600000000, on_day: "2 November 2026" } });
+  for (const s of TXB_EVIDENCE) assert.equal(ev.split(s).length, 2, "evidence on: " + s.slice(0, 60));
+  assert.ok(ev.includes("If you're hidden, members can't clip them." + EV_SENTENCE), "wave 2's capture sentence as approved");
+  // no tx-bar date (the dates table failed): the sentences, without the dated ones
+  const nodate = render(now, { privwire: PWON, txbar: { on: true }, policyDates: DATES, chatlog: CLOC });
+  assert.ok(nodate.includes(TXB_SENTENCES[0]) && !nodate.includes("3 November 2026"), "undated: no date clause, no change note");
+  // privacy wire v2 on, the bar not live (an older Pepe): exactly the wave 2 page
+  assert.equal(render(now, { privwire: PWON, policyDates: TXD, chatlog: CLOC }), render(now, { privwire: PWON, txbar: null, policyDates: TXD, chatlog: CLOC }));
+  const noBar = render(now, { privwire: PWON, policyDates: DATES, chatlog: CLOC });
+  for (const s of TXB_SENTENCES) assert.ok(!noBar.includes(s.trim().slice(0, 60)), "no bar: " + s.slice(0, 50));
+  assert.ok(noBar.includes("<code>!transcripts off</code> leaves your mic transcripts out."), "no bar: the wave 2 sentence");
+  // the switch off: whatever txbar says, the switch-off page (byte-identical - the first test compares it with 119e948b)
+  assert.equal(render(now, { txbar: { on: true }, policyDates: TXD, chatlog: CLOC }), render(now, { policyDates: TXD, chatlog: CLOC }));
+  assert.equal(render(now, { txbar: { on: true } }), render(now, {}));
+});
+
+test("transcripts bar: terms.js dates it by policy_text_dates 'tx-bar' while privwire.txBar, passes locals.txbar, and its date counts only while shown", () => {
+  const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
+  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar"\];/);
+  assert.match(src, /"tx-bar": \(\) => require\("\.\/privwire"\)\.txBar\(\) === true/);
+  assert.match(src, /txbar = privwire && require\("\.\/privwire"\)\.txBar\(\) === true \? \{ on: true \} : null/);
+  assert.match(src, /filter\(\(\[k\]\) => k !== "tx-bar" \|\| txbar\)/);
+  assert.match(src, /memory, txbar, privwire, evidence, policyDates \}\)/);
 });
