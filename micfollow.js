@@ -1464,7 +1464,7 @@ async function pinWhy(pin, t = now()) {
 /** mfix review: a pin's relay ended (or its re-hold was refused) for a PASSING reason - Pepe busy, a slow open, his cams full: wait
  *  PIN_RETRY_MS x the try, then hold it again (pinWhy); after PIN_RETRIES in a row the pin ends. -> true = it waits. */
 const PIN_SOFT = new Set(["busy", "start_timeout", "slots_busy", "noswitch", "open_failed", "spawn_failed", "failed", "not_that_cam", "nopepe", "budget",
-  "relay_lost"]);                // 1.99?? dead relay: a pinned relay whose stream MediaMTX lost is held again, like a slow open
+  "relay_lost"]);                // 1.99ahn dead relay: a pinned relay whose stream MediaMTX lost is held again, like a slow open
 const PIN_RETRIES = 3, PIN_RETRY_MS = 15 * 1000;
 function pinRetry(pin, why, t = now()) {
   if (!pin || !PIN_SOFT.has(String(why || "")) || (pin.fails || 0) >= PIN_RETRIES) return false;

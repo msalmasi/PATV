@@ -196,14 +196,14 @@ const isCut = (e) => CUT_SET.has(e);
 // a session that ended for one of these: a card ("failed") and no new open for that person until the backoff passes
 const FAIL_WHYS = new Set(["open_failed", "not_that_cam", "ambiguous", "noswitch", "busy", "start_timeout", "slots_busy", "spawn_failed", "failed",
   "nopepe", "not_open", "no_pic", "list_unread",
-  "relay_lost"]);                // 1.99?? dead relay: a relay that was live lost its stream at MediaMTX and Pepe's restart didn't bring it back
+  "relay_lost"]);                // 1.99ahn dead relay: a relay that was live lost its stream at MediaMTX and Pepe's restart didn't bring it back
 /** mfix: failures that say nothing about the person or their cam (Pepe's cam lock was busy, a window titled with their name
  *  that no exact open made was in the way, the room window wasn't on screen, a slow open, a warm relay Pepe couldn't confirm
  *  yet): another try after soft_retry_s, soft_fails_max times, before the full backoff. "ambiguous" (two people go by that
  *  name) is never soft. 1.99afl: "list_unread" is never a person's failure at all - its own branch (the room pauses) runs
  *  before failOpen; it is listed so it is never mistaken for a hard one. */
 const SOFT_WHYS = new Set(["busy", "noswitch", "not_that_cam", "start_timeout", "no_pic", "not_open", "nopepe", "inexact", "list_unread",
-  "relay_lost"]);                // 1.99?? dead relay: soft like start_timeout (a one-sided publish says nothing about the person)
+  "relay_lost"]);                // 1.99ahn dead relay: soft like start_timeout (a one-sided publish says nothing about the person)
 const OFFCAM_WHYS = new Set(["not_on_cam", "cam_closed", "left_cam"]);
 /** 1.99afl (S1): the still refusals Pepe names (his still result's `code`, bot 1.99afk) that start the full backoff - the
  *  spec's two (not_public, not_on_cam) plus "ambiguous", the live path's rule (two people go by that name: a retry can't tell

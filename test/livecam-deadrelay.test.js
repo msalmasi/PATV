@@ -1,4 +1,4 @@
-// 1.99?? dead relay (owner 2026-11-02: "Scarface's cam isn't loading here even though on the VM I see it loaded"): a relay
+// 1.99ahn dead relay (owner 2026-11-02: "Scarface's cam isn't loading here even though on the VM I see it loaded"): a relay
 // counts as live only when MediaMTX has its stream (noteSync), never on Pepe's word alone. ~7% of Pepe's WHIP publishes are
 // one-sided - MediaMTX drops the session but ffmpeg says "connected" and never exits - so Pepe reports them live for good and
 // the tile sat at "cam starting…" until the person left the stage. Here, on a fake clock: a never-ready relay Pepe reports
@@ -277,7 +277,7 @@ async function drive(login, { bot, ready, upto, holder = MFH }) {
   return { S, t0, nomedia };
 }
 /**
- * A NEW Pepe (bot 1.99??): live on the relay from `firstLive` s. A want[].nomedia ends that publish (at most once per 20 s, never
+ * A NEW Pepe (bot 1.99ahn): live on the relay from `firstLive` s. A want[].nomedia ends that publish (at most once per 20 s, never
  * mid-restart): "live" on his next 2 polls (_end_procs), "backoff" backoffs[n] s, "starting" 2 s, then live again (restarts
  * n+1). bot.lives = the s each publish came live.
  */

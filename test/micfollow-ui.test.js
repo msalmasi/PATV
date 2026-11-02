@@ -1287,7 +1287,7 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
 test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v7) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=8"), "pad-reveal.js, then stage-mic.js v8");   // (1.99?? dead relay: v8 - resuming…)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=1") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=1") < blk.indexOf("/public/js/stage-mic.js?v=8"), "pad-reveal.js, then stage-mic.js v8");   // (1.99ahn dead relay: v8 - resuming…)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");
@@ -1401,7 +1401,7 @@ test("wave2 integration review (T-3) stage-mic.js: the pad chat's toggle bar is 
   assert.deepEqual([o.R.calls.length, o.R.offers], [0, 0], "not theirs: neither");
 });
 
-// ── 1.99?? dead relay: back from a hidden tab, the paused tiles say "resuming…" (their cams never stopped - only this tab's
+// ── 1.99ahn dead relay: back from a hidden tab, the paused tiles say "resuming…" (their cams never stopped - only this tab's
 // players did), never "cam starting…"; a tile that really starts still says "cam starting…"; the pause itself is unchanged ──
 /** stage-mic.js with a hidden-tab switch: every live tile plays (its WHEP connects) unless its login is in `stuck`; a still
  *  gets its picture. -> {ctx, host, ctl, posts, tileOf, hide(), show()} */
@@ -1434,7 +1434,7 @@ const visTile = (id, pos, video) => ({ kind: "cam", id, name: id.toUpperCase(), 
 /** the words on a tile's card (its "mf-why") */
 const reasonOf = (tile) => (findBy(tile, "mf-why")[0] || {}).textContent;
 
-test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pause; on return they say 'resuming…', not 'cam starting…'", async () => {
+test("1.99ahn stage-mic.js: after 30 s in a hidden tab the live / still tiles pause; on return they say 'resuming…', not 'cam starting…'", async () => {
   const js = read("public", "js", "stage-mic.js");
   assert.match(js, /HIDDEN_MS = 30000/, "the pause is unchanged");
   const s = visTile;
@@ -1461,7 +1461,7 @@ test("1.99?? stage-mic.js: after 30 s in a hidden tab the live / still tiles pau
   assert.equal(EN["js.stage.mf.resuming"], "resuming…", "the new string is in locales/en.json");
 });
 
-test("1.99?? review UX-2 stage-mic.js: 'resuming…' only on a tile whose picture the pause took away - one still starting, one that came on or went live while hidden says 'cam starting…'", async () => {
+test("1.99ahn review UX-2 stage-mic.js: 'resuming…' only on a tile whose picture the pause took away - one still starting, one that came on or went live while hidden says 'cam starting…'", async () => {
   const s = visTile;
   // a plays; b's live video never connects (still "cam starting…" when the tab hides); c is "starting" (a card)
   const H = visHarness({ v: 1, layout: "grid4", count: 3, src: [s("a", 0, "live"), s("b", 1, "live"), s("c", 2, "starting")], manage: null, still_s: 20 }, new Set(["b"]));

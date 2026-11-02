@@ -8,7 +8,7 @@
 // still (a snapshot every few seconds, "📷 still") or a name card with the reason (cam off, starting, live cams full,
 // members only, not available). Each live tile asks POST /api/rooms/<slug>/micfollow/watch for a ticket of its own, plays
 // it with PATVRtc.watch (muted: the room's sound is the 🔊 room audio) and beats every 15 s; a tile that leaves closes its
-// session. After 30 s in a hidden tab every session closes and stills stop polling; they come back when the tab does (1.99??: a
+// session. After 30 s in a hidden tab every session closes and stills stop polling; they come back when the tab does (1.99ahn: a
 // tile whose picture the pause took away says "resuming…" meanwhile, not "cam starting…" - the cam never stopped, only this
 // tab's player did; a tile that had no picture yet, or came on while the tab was hidden, says "cam starting…"). The player box keeps its
 // 16:9 size whatever the layout, so the page never moves. Owners / staff (program.manage) get a bar ABOVE the tiles (it
@@ -266,7 +266,7 @@
         clearTimeout(t.retry); t.retry = null;
         if (!forGood) t.retry = setTimeout(function () { t.retry = null; if (!stopped && tiles[t.id] === t) apply(t.s); }, RETRY_MS + 50);
       }
-      /** 1.99??: the first card of a start - "resuming…" when the tile comes back from a hidden tab's pause (t.resume) */
+      /** 1.99ahn: the first card of a start - "resuming…" when the tile comes back from a hidden tab's pause (t.resume) */
       function startText() {
         var back = t.resuming; t.resuming = false;
         return back ? _t('js.stage.mf.resuming', 'resuming…') : _t('js.stage.mf.starting', 'cam starting…');
@@ -437,7 +437,7 @@
           if (t.mode === 'live') stopLive(true);
           if (t.mode === 'still') stopStill();
           t.mode = want;
-          if (want !== 'paused') t.shown = false;                         // 1.99?? (review UX-2): a card meanwhile - it starts over
+          if (want !== 'paused') t.shown = false;                         // 1.99ahn (review UX-2): a card meanwhile - it starts over
           if (want === 'live') { setWhy('starting'); startLive(); }
           else if (want === 'still') { setWhy('starting'); startStill(); }
           else showCard(want === 'paused' ? '' : text);
@@ -445,7 +445,7 @@
       }
       t.apply = apply;
       t.stop = function (tell) { clearTimeout(t.retry); t.retry = null; if (t.mode === 'live') stopLive(tell); stopStill(); t.mode = null; };
-      // 1.99?? (review UX-2): "resuming…" only for a tile whose picture this pause took away (t.shown: it had a live picture or a
+      // 1.99ahn (review UX-2): "resuming…" only for a tile whose picture this pause took away (t.shown: it had a live picture or a
       // still on screen) - a tile that was still "cam starting…", or that came on (or went live) while the tab was hidden, starts
       t.pause = function () {
         if (t.mode === 'live') { t.shown = card.hidden; stopLive(true); t.mode = 'paused'; }

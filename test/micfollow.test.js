@@ -2627,10 +2627,10 @@ test("80. wave2 integration review (P1 / T-1, P2, P3): only a VEILED exclusion t
   }
 });
 
-// ── 1.99?? dead relay (owner 2026-11-02, "Scarface's cam isn't loading here even though on the VM I see it loaded"): a
+// ── 1.99ahn dead relay (owner 2026-11-02, "Scarface's cam isn't loading here even though on the VM I see it loaded"): a
 // mic-stage relay Pepe reports live + exact but MediaMTX never has (a one-sided WHIP publish) no longer holds its tile at
 // "cam starting…" until the person leaves the stage ──
-test("81. 1.99?? dead relay: Pepe says live + exact, MediaMTX's lists (every 5 s) never have it - want[].nomedia from +20 s, the relay ends start_timeout by +45 s, the tile says 'trying again' and the mic stage holds it again after soft_retry_s", async () => {
+test("81. 1.99ahn dead relay: Pepe says live + exact, MediaMTX's lists (every 5 s) never have it - want[].nomedia from +20 s, the relay ends start_timeout by +45 s, the tile says 'trying again' and the mic stage holds it again after soft_retry_s", async () => {
   await reset(); await plainPad();
   await step(["carl"]); await at(3, ["carl"]);
   const key = LC.keyOf(ROOM.id, "carl");
@@ -2667,7 +2667,7 @@ test("81. 1.99?? dead relay: Pepe says live + exact, MediaMTX's lists (every 5 s
   assert.equal(tile("carl").video, "live", "this time MediaMTX has it: live");
 });
 
-test("82. 1.99?? dead relay: a live mic-stage relay that loses its stream at MediaMTX - nomedia after 20 s, relay_lost START_MS later, a soft retry; a stale MediaMTX list ends nothing", async () => {
+test("82. 1.99ahn dead relay: a live mic-stage relay that loses its stream at MediaMTX - nomedia after 20 s, relay_lost START_MS later, a soft retry; a stale MediaMTX list ends nothing", async () => {
   await reset(); await plainPad();
   await onStage(["dana"]);
   const key = LC.keyOf(ROOM.id, "dana");
