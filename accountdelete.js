@@ -777,8 +777,9 @@ async function execute(userId, { force = false } = {}) {
     // pseudonym
     for (const [k, v] of Object.entries(await require("./chatlog").deleteAccount(uid, { login, pseudo }))) n("chatlog:" + k, v);
     // wave 2 WP-2 (spec A.4.8): who was behind their frog names in the live feed's side tables (bridge_veil, bridge_rooms_veil) - plain
-    // SQL inside this transaction; their live items are left out by the "delete" reason in the sticky set, and a reveal of a left-out
-    // line is refused (bridge.revealLookup), so nothing in memory can name them either
+    // SQL inside this transaction. What memory holds (their veiled live items, people-list / mic entries and open frog-name sessions)
+    // goes right after the commit (bridge.forgetVeiled, below - review fix XT-2): the "delete" reason in the sticky set exists only
+    // when they ticked "also hide my past lines"
     if (await has("bridge_veil", "vz")) {
       const fv = await require("./veil").forgetLogins(["u:" + String(uid).toLowerCase(), login].filter(Boolean));
       n("deleted:bridge_veil", fv.feed.length);
@@ -870,6 +871,15 @@ async function execute(userId, { force = false } = {}) {
     await require("./huboutbox").emit("privacy/account-deleted", "acct:" + uid,
       hubRow({ id: reqRow.id, user_id: uid, pseudonym: pseudo, done_at: t, remove_public: reqRow.remove_public }), { dedupe: "acctdel:" + reqRow.id });
   });
+  // wave 2 integrate, review fix XT-2 (spec A.4.8): what memory still holds of who was behind their frog names goes too, as for a
+  // forget-me (pepeforget.forgetVeiled) - after the commit, never inside it: their veiled live items leave the live feed, their veiled
+  // people-list / mic entries go (so no persist writes bridge_rooms_veil back), and their frog-name sessions end, which takes a mic-stage
+  // cover of theirs off at once (veilstage -> micfollow.coverSessionEnded). Pepe keeps relaying them incognito (an account deletion
+  // doesn't switch that off): their next line or cover starts a NEW frog name, which can't tie their earlier lines to their login
+  try {
+    const fv = await require("./bridge").forgetVeiled(["u:" + String(uid).toLowerCase(), login].filter(Boolean));
+    if (fv && fv.feed) report.veiled_live_down = fv.feed;
+  } catch (e) { console.error("[acctdel] veil (live):", e && e.code ? e.code : "error"); }
   // 11. S1 V4: "Also remove my public messages" - the pad chat archive's part (ADR 0007 OQ-20: the same choice hard-deletes the
   //     account's web lines there, with the hub's exceptions; a linked member's web lines are under its logins, each inside the
   //     span it was theirs - review 2: loginWindowsOf, read above; the login released now is someone else's to link from here on).

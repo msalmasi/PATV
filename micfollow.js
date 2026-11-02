@@ -1926,7 +1926,13 @@ async function liftVeiled(user, R, xid) {
  *  the person's next named appearance (or next frog name) can't be tied to it. The veil source (veilstage.js) refuses the ended
  *  session's stale R.mic entry, so no step brings it back: that holder is the neutral card until a snapshot sights them again.
  *  -> did a cover come off */
-function coverSessionEnded(roomId, sess, t = now()) {
+function coverSessionEnded(roomId, sess, t = now()) { return coverOff(roomId, sess, "unveiled", "cover_unveiled", t); }
+/** wave2 integrate, review fix XT-1: the person behind frog-name session `sess` of pad `roomId` is LEFT OUT now (forget-me, an account
+ *  deletion, a staff removal - chatlogview's HARD_OUT: the people list leaves them out and a chat Reveal of their lines is refused).
+ *  veilstage.veilSource stops offering them as a cover and calls this: the cover comes off NOW like an ended session's - no "recent"
+ *  tile with their identity still behind it for coverWho, a Reveal or a ✕. -> did a cover come off */
+function coverLeftOut(roomId, sess, t = now()) { return coverOff(roomId, sess, "left_out", "cover_left_out", t); }
+function coverOff(roomId, sess, code, metric, t) {
   const P = PADS.get(String(roomId || ""));
   if (!P || !loaded || sess == null || !SESS_RE.test(String(sess))) return false;
   const key = core.COVER_PREFIX + "s" + String(sess);
@@ -1934,8 +1940,8 @@ function coverSessionEnded(roomId, sess, t = now()) {
   if (P.covers) P.covers.delete(key);
   if (P.coverWho) P.coverWho.delete(key);
   if (!had) return false;
-  apply(P, roomOf(P.roomId), core.cutNow(P.state, key, "unveiled", t), t);
-  bump("cover_unveiled", 1, t, P);
+  apply(P, roomOf(P.roomId), core.cutNow(P.state, key, code, t), t);
+  bump(metric, 1, t, P);
   return true;
 }
 /** wave2 WP-4 (F.4): the tile routes (watch, still, exclude, report, pin) refuse a cover's id - an old page posts it like a login. */
@@ -2581,7 +2587,7 @@ module.exports = {
   keptOf, keptList, evictKept,                                                                                     // wave2 WP-4 (F.2)
   setVeilSource, veiledOf, coverKeyOf, holdersOf,                                                                  // wave2 WP-4 (F.4)
   coverWho, setRevealSource, excludeCover, liftVeiled, veilExcluded,                                               // wave2 WP-4 (the Reveal seam)
-  coverSessionEnded,                                                                                               // wave2 WP-4 x WP-2 (veilstage.js)
+  coverSessionEnded, coverLeftOut,                                                                                 // wave2 WP-4 x WP-2 (veilstage.js)
   _pads: PADS, _notes: NOTES, _hide: HIDE, _pins: PINS, _siteBudget: siteBudget,
   /** tests: the pad's first notice to `login` went out at `at` (null = never). 1.99afn: also their courtesy row - told at `at`
    *  (courtesy v1, like the backfill), or (null) never told anywhere */

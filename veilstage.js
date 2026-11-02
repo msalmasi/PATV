@@ -8,7 +8,9 @@
 //                          veil / alias / hood on the entry, the identity on its non-enumerable _vz {login, display, proven, since,
 //                          beganNamed, sess}. Only while the privacy wire v2 is ON, and only while that frog-name session is still
 //                          the person's OPEN one (frognames.current) - an ended session's stale entry is no cover (the neutral card
-//                          until the next snapshot sights them again). micfollow keeps only proven && !began_named && a valid sess.
+//                          until the next snapshot sights them again). Never someone LEFT OUT (leftOut: forget-me, an account
+//                          deletion, a staff removal - the people list leaves them out too); a cover already up for them comes off
+//                          at once (micfollow.coverLeftOut). micfollow keeps only proven && !began_named && a valid sess.
 //                          The hood is the session's own (frognames), the same index the chat bubble draws (chatlog-core hoodOf ->
 //                          veil.css .hd0-7 / hood-*-N.svg), so one person shows one hood colour in the chat and on the stage.
 //   setRevealSource(...)   available() = the privacy wire v2 is on; role(user, padId) = "admin" (chatlog.see_through - Admin, locked
@@ -26,6 +28,20 @@ let wired = false;
 const PW = () => require("./privwire");
 const FN = () => require("./frognames");
 
+/** wave2 integrate, review fix XT-1: is this person LEFT OUT now for a reason no frog name may carry - chatlogview's HARD_OUT (forget-me,
+ *  an account deletion, a staff removal), the same rule chatlogview.roster leaves a veiled entry out of the people list by (never a
+ *  "someone" entry that says they are there) and a chat Reveal of their lines is refused by (bridge.revealLookup)? A !bridge hide alone
+ *  is not (that person is masked: a shadow cover). Their login's hash and the priv block's h (Pepe's, when given) are both asked.
+ *  Fails closed: while the hidden set loads, or when it can't be asked, everyone is (no cover, no tile Reveal). */
+function leftOut(login, h) {
+  try {
+    const CV = require("./chatlogview");
+    const hs = [...new Set([login ? CV.hashOf(login) : null, typeof h === "string" && h ? h : null].filter(Boolean))];
+    if (!hs.length) return true;
+    return hs.some((x) => CV.kindNow(x) === "out" && !CV.maskable(x));
+  } catch (e) { return true; }
+}
+
 /** WP-2's facts for an R.mic entry `u` of bridge room R -> {veil, alias, hood, since, proven, sess, began_named, login, display} | null. */
 function veilSource(u, R) {
   try { if (!PW().isOn()) return null; } catch (e) { return null; }
@@ -35,6 +51,13 @@ function veilSource(u, R) {
   let cur = null;
   try { cur = FN().current(R.id, vz.login); } catch (e) { cur = null; }
   if (!cur || cur.session == null || String(cur.session) !== String(vz.sess)) return null;   // (ended / replaced: no cover)
+  // review fix XT-1: left out (forget-me, an account deletion, a staff removal) -> no cover, as the people list leaves them out; one
+  // up now comes off at once (after this step: never from inside micfollow's holder scan)
+  if (leftOut(vz.login, vz.h)) {
+    const roomId = R.id, sess = vz.sess;
+    queueMicrotask(() => { try { require("./micfollow").coverLeftOut(roomId, sess); } catch (e) { /* no mic follows */ } });
+    return null;
+  }
   const hood = Number(u.hood);
   return { veil: u.veil, alias: typeof u.alias === "string" && u.alias ? u.alias : null,
            hood: typeof u.alias === "string" && u.alias && Number.isInteger(hood) && hood >= 0 && hood <= 7 ? hood : null,
@@ -66,4 +89,4 @@ function wire() {
   if (!wired) { FN().onEnd(sessionEnded); wired = true; }
 }
 
-module.exports = { veilSource, stageRole, sessionEnded, wire };
+module.exports = { veilSource, leftOut, stageRole, sessionEnded, wire };

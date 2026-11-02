@@ -299,6 +299,9 @@ function register(app, { addUser, noTimers = false }) {
     const tile = clean(req.body.tile, 40);
     let who = null;
     try { who = require("./micfollow").coverWho(R.id, tile); } catch (e) { who = null; }
+    // review fix XT-1: someone left out since their cover went up (forget-me, an account deletion, a staff removal - a chat Reveal of
+    // their lines is refused) is never named here either; the same answer as a cover that's gone (it comes off at the next step)
+    if (who) { try { if (require("./veilstage").leftOut(who.login)) who = null; } catch (e) { who = null; } }
     if (!who) return res.status(404).json({ ok: false, code: "gone", error: "That veiled speaker isn't on the mic stage any more." });
     if (req.body.toggle === true) {
       const tg = await toggleOf(req.user.userId, "chat_toggle", R.id);
