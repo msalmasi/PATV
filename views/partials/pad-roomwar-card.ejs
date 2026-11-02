@@ -2,12 +2,14 @@
 <%# Room Wars R4b: 🏙️ the pad page's Room Wars card (About tab, under the pad vault). roomwars.js forPad(): this pad's row on
     Pepe's room map - held (the gang by tag / name, its bond, perks, timers, the gang slice of the last payout from the pad
     vault's recipe days), free (the claim command and the bond) or not contestable. Gangs only - never a member.
-    Locals: rw (forPad), rv (the pad vault card, for the slice; may be null), num. Shown only when the pad is on the map. %>
+    Locals: rw (forPad), rv (the pad vault card, for the slice; may be null), num. Shown only when the pad is on the map.
+    Room Wars switched off in chat (rw.on false): the map page's "switched off" line instead of a claim invitation. %>
 <% const r_ = rw.room, h_ = r_.held, n_ = locals.num || ((n) => Math.round(Number(n) || 0).toLocaleString('en-US'));
    const tzT_ = locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time;
    const tag_ = (g) => '<span class="rw-tag" style="background:' + t.esc(g.color) + ';color:' + t.esc(g.ink) + '">[' + t.esc(g.tag || '?') + ']</span>';
    const gang_ = h_ ? (h_.href ? '<a href="' + h_.href + '">' + tag_(h_) + (h_.name ? ' ' + t.esc(h_.name) : '') + '</a>' : tag_(h_) + (h_.name ? ' ' + t.esc(h_.name) : '')) : '';
-   const slice_ = h_ && rw.show_slice ? (h_.slice || null) : null; %>
+   const slice_ = h_ && rw.show_slice ? (h_.slice || null) : null;
+   const off_ = rw.on === false;      /* Room Wars switched off in chat: no claim invitation Pepe would refuse (RW-SITE-4) */ %>
 <style>
   .rm .rw-card { display: grid; gap: var(--ds-sp-3); }
   .rm .rw-card > h2 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
@@ -25,13 +27,15 @@
     <span class="ds-chip <%= h_ ? 'ok' : r_.state === 'free' ? 'warn' : 'mute' %>"><%- t('rw.state.' + r_.state) %></span></h2>
   <% if (h_) { %>
     <p class="rw-held"><%- t('rw.pad.held', { gang: gang_ }) %><% if (h_.since) { %> · <%- t('rw.pad.since', { when: tzT_(h_.since, 'date') }) %><% } %></p>
-  <% } else if (r_.state === 'free') { %>
+  <% } else if (r_.state === 'free' && !off_) { %>
     <p><%- t('rw.pad.free', { cmd: '<code>!claim ' + t.esc(r_.name) + '</code>', bond: n_(r_.bond) }) %></p>
+  <% } else if (r_.state === 'free') { %>
+    <p><%- t('rw.off') %></p>
   <% } else { %>
     <p><%- t('rw.pad.dormant') %></p>
   <% } %>
   <div class="ds-stats">
-    <% if (h_) { %><div class="ds-stat"><span><%- t('rw.pad.bond') %></span><b class="gold"><%= n_(h_.bond) %></b><small><%- t('rw.pat') %></small></div><% } else if (r_.bond) { %><div class="ds-stat"><span><%- t('rw.pad.bond_ask') %></span><b class="gold"><%= n_(r_.bond) %></b><small><%- t('rw.pat') %></small></div><% } %>
+    <% if (h_) { %><div class="ds-stat"><span><%- t('rw.pad.bond') %></span><b class="gold"><%= n_(h_.bond) %></b><small><%- t('rw.pat') %></small></div><% } else if (r_.bond && !off_) { %><div class="ds-stat"><span><%- t('rw.pad.bond_ask') %></span><b class="gold"><%= n_(r_.bond) %></b><small><%- t('rw.pat') %></small></div><% } %>
     <div class="ds-stat"><span><%- t('rw.pad.upkeep') %></span><b><%= n_(r_.upkeep) %></b><small><%- t('rw.pad.upkeep_sub') %></small></div>
     <div class="ds-stat"><span><%- t('rw.pad.tier') %></span><b><%- t('rw.tier.' + r_.tier) %></b><small><%- t('rw.pad.slots', { count: r_.perk_slots, n: r_.perk_slots }) %></small></div>
     <% if (slice_) { %><div class="ds-stat"><span><%- t('rw.pad.slice') %></span><b><%= n_(slice_.amount) %></b><small><%- t('rw.pad.slice_sub', { day: slice_.day }) %></small></div><% } %>
@@ -49,6 +53,7 @@
     <% if (c_.length) { %><ul class="rw-chips"><% c_.forEach((c) => { %><li class="<%= c[0] %>"><%- c[1] %></li><% }) %></ul><% } %>
     <% if (slice_) { %><p class="muted"><%- t('rw.pad.slice_note') %></p><% } %>
   <% } %>
+  <% if (off_ && h_) { %><p class="muted"><%- t('rw.off') %></p><% } %>
   <% if (rw.stale) { %><p class="muted"><%- t('rw.stale') %></p><% } %>
   <p><a class="ab-btn" href="/gtf/roomwars#room-<%= encodeURIComponent(r_.id) %>"><%- t('rw.pad.map') %></a></p>
 </section>

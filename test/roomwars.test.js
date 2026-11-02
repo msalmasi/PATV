@@ -230,6 +230,18 @@ test("the pages: the map page, /gtf/turf, the pad card, the gang section and the
   const free = await ejs.renderFile(path.join(repo, "views/partials/pad-roomwar-card.ejs"), { rw: await RW.forPad("PepeFrog.Room"), i18nT: t });
   assert.match(free, /<code>!claim Pepe&#39;s Pad<\/code>/);
   assert.match(free, /2,630,020/);
+  // RW-SITE-4: Room Wars switched off in chat (Pepe pushes on: false) - no claim invitation Pepe would refuse, the "switched
+  // off" line instead (as the map page's banner); a held room says so too
+  const offFree = await ejs.renderFile(path.join(repo, "views/partials/pad-roomwar-card.ejs"),
+                                       { rw: Object.assign({}, await RW.forPad("PepeFrog.Room"), { on: false }), i18nT: t });
+  assert.doesNotMatch(offFree, /!claim/, "off: no claim command");
+  assert.doesNotMatch(offFree, /Bond to claim/, "off: no bond to claim");
+  assert.match(offFree, /Room Wars is switched off in chat right now/);
+  const offHeld = await ejs.renderFile(path.join(repo, "views/partials/pad-roomwar-card.ejs"),
+                                       { rw: Object.assign({}, await RW.forPad("You_Were_Never_Here"), { on: false }), i18nT: t });
+  assert.match(offHeld, /\[FAM\]/);
+  assert.match(offHeld, /Room Wars is switched off in chat right now/);
+  assert.doesNotMatch(card + free, /switched off in chat/, "on: no off line");
   assert.equal(await RW.forPad("No_Such.Room"), null);
   for (const s of LEAKS) assert.ok(!(card + free).includes(s), "not on the card: " + s);
 
@@ -256,6 +268,20 @@ test("the disband guard reads the latest copy (and its switch)", async () => {
   await RW.setCfg({ disband_guard: false });
   assert.deepEqual(await RW.heldBy(FAM), []);
   await RW.setCfg({ disband_guard: true });
+  // RW-SITE-5: only a copy Pepe is still confirming counts - the feed switched off (the copy frozen) or no push for 40 min
+  // (Pepe backing off after a blip) and a room released in chat since would refuse the disband here; Pepe's guard decides
+  await RW.setCfg({ feed_on: false });
+  assert.deepEqual(await RW.heldBy(FAM), [], "feed off: the frozen copy doesn't refuse a disband");
+  await RW.setCfg({ feed_on: true });
+  assert.equal((await RW.heldBy(FAM)).length, 1, "feed back on: guarded");
+  RW._reset();
+  const seen0 = (await RW.latest()).seen;                 // Pepe's last push (an earlier test's clock may have set it ahead)
+  RW._setClock(() => seen0 + 41 * 60e3);
+  try {
+    assert.deepEqual(await RW.heldBy(FAM), [], "no push for 40+ min: the guard stands aside");
+    await post("/api/g/roomwars/state", push(101, { day: "2026-11-03" }));       // Pepe's 30-min resend: seen moves
+    assert.equal((await RW.heldBy(FAM)).length, 1, "a resend confirms the copy: guarded again");
+  } finally { RW._setClock(null); RW._reset(); }
   await post("/api/g/roomwars/state", push(102, { control: {} }));
   assert.deepEqual(await RW.heldBy(FAM), [], "released in the next push -> free to disband");
 });
@@ -301,6 +327,26 @@ test("admin: the switches are admins-only and same-site fetch only", async () =>
   // the card is on /admin/games, never on the public page
   assert.match(fs.readFileSync(path.join(repo, "views/admin/games.ejs"), "utf8"), /admin-roomwars/);
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "views/roomwars.ejs"), "utf8"), /admin-roomwars|roomwars-cfg/);
+});
+
+test("R2 site copy: /economy teaches Room Wars (no 'coming later'), the fight rake's real split; help's footer links the room map", async () => {
+  const t = require(path.join(repo, "i18n-core.js"))(JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8")));
+  const html = await ejs.renderFile(path.join(repo, "views/economy.ejs"), { user: null, treasury: null, roomVaults: null, ogBase: "http://t", i18nT: t },
+                                    { views: [path.join(repo, "views")] });
+  for (const s of ["Coming later", "room turf wars", "this season's map", "Fight Club turf business", "old turf businesses"]) {
+    assert.ok(!html.includes(s), "stale London copy gone: " + s);
+  }
+  assert.match(html, /id="room-wars"/);
+  assert.match(html, /<a href="\/gtf\/roomwars">the live room map<\/a>/);
+  assert.match(html, /<a href="\/gtf\/london">Turf Wars: London<\/a>/);
+  assert.match(html, /<code>!room claim<\/code>/);
+  assert.match(html, /60% to the vault of the pad the fight was in/);
+  assert.match(html, /now go to the vault of the pad where the game was played/);
+  assert.doesNotMatch(html, /economy\.(gtf|fees)\.[a-z_]+/, "no raw i18n keys");
+  const help = fs.readFileSync(path.join(repo, "views/help.ejs"), "utf8");
+  assert.ok(!help.includes("pepe.publicaccess.tv/turfwars"), "help's footer no longer sends people to the frozen London guide");
+  assert.match(help, /<a href="\/gtf\/roomwars"><%- t\('help\.foot\.turfwars'\) %><\/a>/);
+  assert.equal(t("help.foot.turfwars"), "Room Wars map");
 });
 
 test("the GTF links point at the site pages", async () => {

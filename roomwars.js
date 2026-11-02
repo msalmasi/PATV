@@ -45,6 +45,7 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const RULES = Object.freeze({ release_h: 72, lock_h: 72, raid_buyin: 20000, hijack_buyin: 5000, convoy_min: 25000, convoy_s: 600, slash: 0.25,
                               hijack_take: 0.2, min_crew: 2, raid_lobby_s: 45, payout_convoy_min: 25000, convoy_hour: 5 });
 const STALE_MS = 3 * 3600e3;            // Pepe resends every 30 min; 3 h without word = the page says it may be out of date
+const GUARD_FRESH_MS = 40 * 60e3;       // the disband guard trusts a copy Pepe confirmed within his 30-min resend (+ slack)
 const HISTORY_MAX = 800;
 let clock = () => Date.now();
 const now = () => clock();
@@ -205,12 +206,17 @@ async function latest() {
 /**
  * gangs.js's disband guard (R1): the rooms this gang holds in the latest copy - [{id, name}]. Never creates a table and
  * never throws (it runs inside the disband's transaction: a memoized CREATE there would roll back with a refusal).
+ * Only a copy Pepe is still confirming counts (RW-SITE-5): with the feed switched off (his pushes refused, the copy frozen)
+ * or no push for GUARD_FRESH_MS (he backs off after a site blip), a room released in chat since would refuse the disband
+ * here forever - so the guard stands aside and Pepe's own check (it runs first, the only way into a disband) decides.
  */
 async function heldBy(gangId) {
   try {
-    if (!(await cfgNoInit()).disband_guard) return [];
-    const r = (await getQuery("SELECT data FROM roomwars_state WHERE id = 1"))[0];
+    const c = await cfgNoInit();
+    if (!c.disband_guard || !c.feed_on) return [];
+    const r = (await getQuery("SELECT data, updated, seen FROM roomwars_state WHERE id = 1"))[0];
     if (!r) return [];
+    if (now() - (Number(r.seen) || Number(r.updated) || 0) > GUARD_FRESH_MS) return [];
     const st = JSON.parse(r.data);
     return Object.entries(st.room_control || {}).filter(([, c]) => c && c.gang === String(gangId))
       .map(([rid]) => ({ id: rid, name: ((st.map && st.map.rooms && st.map.rooms[rid]) || {}).name || rid }));

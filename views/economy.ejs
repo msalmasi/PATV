@@ -1648,12 +1648,11 @@
         <div class="cmd"><code>!heist</code> · <code>!join</code> · <code>!bail</code> · <code>!shop</code></div>
         <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. Heists never burn PAT, and the admins can switch the heist faucet on and off.</div>
       </div>
-      <div class="card">
-        <h3><span class="ds-ic" aria-hidden="true">🗺️</span> Turf Wars</h3>
-        <p>Gangs fight over the districts on this season's map (the map changes every season). Each district runs a business
-          that earns its owner PAT every day. Claim, raid, defend, and climb the season score.</p>
-        <div class="cmd"><code>!turf</code> · <code>!claim</code> · <code>!raid</code></div>
-        <div class="goes"><b>PAT goes:</b> turf income and the season prize are paid from the incentive budget, and a small slice of blackjack, hold'em and fight rake still goes to the gang that owns the matching business. <b>Coming later:</b> room turf wars, where gangs take control of real rooms and their vaults.</div>
+      <div class="card" id="room-wars">
+        <h3><span class="ds-ic" aria-hidden="true">🗺️</span> <%- t('economy.gtf.rw_h') %></h3>
+        <p><%- t('economy.gtf.rw_d', { map: '<a href="/gtf/roomwars">' + t('economy.gtf.rw_map') + '</a>' }) %></p>
+        <div class="cmd"><code>!room</code> · <code>!room claim</code> · <code>!invade</code> · <code>!hit</code> · <code>!gang deposit</code></div>
+        <div class="goes"><%- t('economy.gtf.rw_goes', { london: '<a href="/gtf/london">' + t('economy.gtf.rw_london') + '</a>' }) %></div>
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🎩</span> Gangs</h3>
@@ -1727,7 +1726,7 @@
           <tr><td>Reserve loan</td><td class="n">Reserve rate</td><td>Interest and late penalties to the Bank that lent it</td></tr>
           <tr><td>Player loan</td><td class="n">10% of interest</td><td>To the Bank; principal never taxed</td></tr>
           <tr><td>Late loan</td><td class="n">+2% / day</td><td>On what's still owed, capped at +50% of the loan</td></tr>
-          <tr><td>Duel / Brawl / Arena</td><td class="n">small cut <span class="cfg">⚙</span></td><td>Shared by the Federal Reserve and the Fight Club turf business (to Fort Knox once room turf wars arrive)</td></tr>
+          <tr><td>Duel / Brawl / Arena</td><td class="n">small cut <span class="cfg">⚙</span></td><td><%- t('economy.fees.fight_to') %></td></tr>
           <% if (skCap > 0) { %><tr><td>Staking yield cap</td><td class="n">above <%= skCap %>% APR <span class="cfg">⚙</span></td><td>Stakers' weekly share above the cap rejoins the rest of the surplus</td></tr><% } %>
           <tr><td>Fee splits</td><td class="n"><span class="cfg">⚙</span></td><td>Where each fee goes is set in the routing table</td></tr>
         </tbody>
