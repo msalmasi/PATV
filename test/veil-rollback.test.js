@@ -1,8 +1,9 @@
 // wave 2 WP-2 (incognito / mic-stage spec I.3 "rollback test", I.5): the rollback floor. A DB holding privacy-wire-v2 rows -
 // bridge_feed items and a bridge_rooms snapshot with veiled people, the archive's veiled chat_log rows, the side tables - is read by
-// the PREVIOUS site build (72b12510 = today's prod, 1.99agq + 1.99ago, WP-1's whitelisted projection; the track was built against
-// 6ee3c0a1 and moved here at integration - a rollback of this deploy lands on 72b12510), unpacked with `git archive` into the
-// temp dir and run in a child process (NODE_PATH = this checkout's node_modules: no worktree, no junction). Its live view and its
+// the PREVIOUS site build (119e948b = today's prod, 1.99agr's short links on 72b12510's 1.99agq + 1.99ago, WP-1's whitelisted
+// projection; the track was built against 6ee3c0a1 and moved here at integration - a rollback of this deploy lands on 119e948b),
+// unpacked with `git archive` into the temp dir and run in a child process (NODE_PATH = this checkout's node_modules: no worktree,
+// no junction). Its live view and its
 // archive projection, for a member, must hold no real identity: no vz / vw / priv, no hidden-set hash, no veiled login or display
 // name, no hidden word. tools/veil-scrub.js (the scrub before a rollback PAST WP-1): a dry run changes nothing, --apply empties the
 // live side tables and takes the frog-name fields out of the JSON, chat_log_veil stays.
@@ -17,7 +18,7 @@ const path = require("path");
 const { execFileSync, spawnSync } = require("child_process");
 
 const repo = path.resolve(__dirname, "..");
-const OLD = "72b12510";
+const OLD = "119e948b";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "veil-rollback-test-"));
 const dbDir = path.join(tmp, "db");
 fs.mkdirSync(dbDir);

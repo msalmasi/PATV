@@ -1,6 +1,7 @@
 // wave 2 WP-2 (incognito / mic-stage spec H, owner-approved 2026-10-28; I.2 go-live): the privacy text behind the "Privacy wire v2"
 // switch. With the switch OFF the privacy page is byte for byte what the build before wave 2 renders - today's prod privacy page
-// (72b12510: 1.99agq + 1.99ago's mic-stage keep text; the track was built on 6ee3c0a1 and moved here at integration) - with and
+// (119e948b: 1.99agr's short links on 72b12510's 1.99agq + 1.99ago mic-stage keep text - the privacy page, layout and legal css are
+// unchanged between the two; the track was built on 6ee3c0a1 and moved here at integration) - with and
 // without the memory switch's and the dated texts (wp1-voice, mic-stage-keep), so shipping dark changes nothing a member reads. With it
 // ON the approved paragraphs show (frog names, the hidden bar, who can see through it, the retention rows, the changelog entry dated
 // by G), and nothing promises the WP-5 evidence clips while they are off (locals.evidence null). WP-5: with evidence clips on (or kept),
@@ -25,8 +26,8 @@ const DATES = { "wp1-voice": { at: 1793100000000, day: "28 October 2026" }, "mic
 const render = (src, extra) => ejs.render(lf(src), Object.assign({}, BASE, extra), { filename: FILE });
 
 test("switch off: the privacy page is byte for byte today's prod one (plain, with the memory switch, with the dated texts)", (t) => {
-  const old = spawnSync("git", ["show", "72b12510:views/privacy.ejs"], { cwd: repo, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
-  if (old.status !== 0) { t.skip("72b12510 isn't in this clone"); return; }
+  const old = spawnSync("git", ["show", "119e948b:views/privacy.ejs"], { cwd: repo, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  if (old.status !== 0) { t.skip("119e948b isn't in this clone"); return; }
   const now = fs.readFileSync(FILE, "utf8");
   for (const extra of [{}, { memory: MEMORY }, { privwire: null }, { policyDates: DATES }, { policyDates: DATES, memory: MEMORY, privwire: null }]) {
     assert.equal(render(now, extra), render(old.stdout, extra), "identical with " + JSON.stringify(extra));
@@ -97,7 +98,7 @@ test("WP-5: evidence clips on -> the approved capture sentence, section 9 row an
   const keptOnly = render(now, { evidence: { on: false, any: true, on_at: 1793600000000, on_day: "2 November 2026" } });
   assert.ok(keptOnly.includes(EV_ROW), "the retention row while clips are kept");
   assert.ok(!keptOnly.includes(EV_SENTENCE.trim()) && !keptOnly.includes("they can also save an incognito"), "the privwire paragraphs stay off");
-  // and with evidence null (the default) the page is the switch-off page: byte-identical (the first test compares that with 72b12510)
+  // and with evidence null (the default) the page is the switch-off page: byte-identical (the first test compares that with 119e948b)
   assert.equal(render(now, { evidence: null }), render(now, {}));
 });
 
