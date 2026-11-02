@@ -70,12 +70,15 @@ test("switch on: the approved section H text shows, dated by G; no evidence-clip
   const off = render(now, {});
   for (const s of ["random frog name", "blacked-out bar", "Who can see through it", "Hidden (<code>!bridge hide</code>) is incognito plus a blacked-out bar",
                    "Log of reveals by pad owners and administrators", "<b>1 November 2026:</b> <a href=\"#incognito\">Incognito</a> and hidden",
-                   "anyone can clip your mic turns like everyone's, and the clip shows your frog name"]) {
+                   "anyone can clip your mic turns like everyone's, including onto a soundboard, and the clip shows your frog name",
+                   "it's never used for voice features, and a hidden person's turns never reach a soundboard"]) {
     assert.ok(on.includes(s), "on: " + s);
     assert.ok(!off.includes(s), "off: " + s);
   }
   assert.ok(!/moderation evidence|evidence clip/i.test(on), "no moderation-evidence sentence while evidence clips are off (locals.evidence null)");
   assert.ok(!on.includes("you appear as \"someone\";"), "the old section 3 sentence is replaced");
+  // owner 11-02 (M addendum 4, item 1): frog-name clips may go on soundboards, so the bullet no longer says the buffer is never used for them
+  assert.ok(!on.includes("never used for soundboards"), "no blanket soundboard promise with the switch on");
   // 1.99ago's mic-stage keep paragraph (and its change note) stays after section 3's privwire paragraph with the switch on too
   const onKeep = render(now, { privwire: { on: true, g: 1793534400000, g_day: "1 November 2026" }, policyDates: DATES });
   assert.ok(onKeep.includes("random frog name") && onKeep.includes('<p id="mic-stage-captures">'), "on + mic-stage-keep: both paragraphs");
