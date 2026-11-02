@@ -25,7 +25,8 @@
 //
 // SITE SETTINGS (roomwars_meta.cfg; plan section 4 defaults until the owner answers - changeable without a deploy):
 //   feed_on        true   decision 18: the site keeps a read-only copy of room control now (off: pushes answered 503)
-//   disband_guard  true   R1 / decision 7: a gang that holds a room can't disband (release first) until R5's rule lands
+//   disband_guard  true   R1 / decision 7: a gang that holds a room can't disband (release first); R5 (Pepe's
+//                         disband_release switch): his disband op lists the rooms he releases (`room_release`) - not refused
 //   show_slice     true   decision 11: the pad page shows the gang slice of the last payout (it comes out of room games)
 //   show_dormant   false  decision 5: only rooms that are contestable or held are drawn
 "use strict";

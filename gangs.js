@@ -24,7 +24,8 @@
 // announcement. They post keyed moves here: a treasury credit from turf money Pepe holds (tills, stakes, buy-ins) is a
 // one-leg move, a debit to it the same; a tick's income / interest / upkeep / raid tax is one multi-leg move per gang.
 // Turf state (boroughs, room control) is NOT here - see docs/room-turf-map.md. Room Wars: Pepe pushes a read-only copy of the
-// room map and room control to roomwars.js (R4a); disband() reads it to refuse a gang that still holds a room (R1).
+// room map and room control to roomwars.js (R4a); disband() reads it to refuse a gang that still holds a room (R1) - except
+// the rooms Pepe's op says he is releasing on his own clock (R5 disband_release: `room_release`).
 //
 // Rep: Pepe posts the rep of every Camfrog win (batched, keyed); the site's own wins (the casino, the lotto) apply it here
 // directly - casino_rep_queue and Pepe's lotto rep path retire once the gangs are live.
@@ -746,7 +747,10 @@ async function disband(b, via) {
     const g = await needGang(m.gid);
     // Room Wars (room-wars plan R1, decision 7's default until R5): a gang holding a room can't disband - its bond would be
     // stranded under a ghost gang. Read from Pepe's latest pushed copy (roomwars.js; its disband_guard switch on /admin/games).
-    const rooms = await require("./roomwars").heldBy(g.gid);
+    // R5 (1.99??, Pepe's disband_release switch): `room_release` = the rooms Pepe puts on his 72 h release clock after this
+    // disband (the bond then split among these members) - the guard stands aside for exactly those. Only Pepe's op sends it.
+    const releasing = new Set((Array.isArray(b.room_release) ? b.room_release : []).slice(0, 50).map((x) => String(x).slice(0, 80)));
+    const rooms = (await require("./roomwars").heldBy(g.gid)).filter((r) => !releasing.has(String(r.id)));
     if (rooms.length) {
       throw new Refuse(409, `[${g.tag}] holds ${rooms.map((r) => r.name).join(", ")} in Room Wars - release ${rooms.length > 1 ? "them" : "it"} first (!room release <room>), then disband.`,
                        "E_ROOM_HELD", { rooms: rooms.map((r) => r.id) });
@@ -777,6 +781,7 @@ async function disband(b, via) {
     const rec = { rid, tag: g.tag, name: g.name, boss: g.boss, by: actor, ts: Math.floor(now() / 1000), members: ms.map((x) => x.member_key),
                   treasury: tre, released, payouts: per > 0 ? Object.fromEntries(ms.map((x) => [x.member_key, per])) : {}, paid, dust,
                   dust_done: 1, done: Math.floor(now() / 1000), site: true };
+    if (releasing.size) rec.rooms_release = [...releasing];          // R5: the rooms Pepe releases (their bonds -> these members)
     await runQuery("INSERT INTO gangs_disbanded (gid, data, ts) VALUES (?, ?, ?) ON CONFLICT(gid) DO UPDATE SET data = excluded.data, ts = excluded.ts",
                    [g.gid, J(rec), now()]);
     await runQuery("DELETE FROM gang_members WHERE gid = ?", [g.gid]);
