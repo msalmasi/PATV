@@ -12,8 +12,9 @@ const fs = require("fs");
 const path = require("path");
 
 const repo = path.resolve(__dirname, "..");
-// = public/js/avatar.js at 1.99agq (5cd7d0fb, the Fireside layers). Move together with the bot's avatar_sync_test.py PIN.
-const AVATAR_PIN = "a01b7c23e8f40af1e92862f461b3274dd6ad1ab0bffd3b6bc8dbee199e44b1e6";
+// = public/js/avatar.js at 1.99?? (d5c480b0, the Winter Lights layers: earmuffs, winterlights, lantern; was a01b7c23... at
+// 1.99agq 5cd7d0fb, the Fireside layers). Move together with the bot's avatar_sync_test.py PIN.
+const AVATAR_PIN = "34c586164b895fa820fdccfe3edd31ae2caef1324b05f761a56c0417cce8133f";
 const lf = (p) => fs.readFileSync(p).toString("latin1").replace(/\r\n/g, "\n");
 const sha = (s) => crypto.createHash("sha256").update(Buffer.from(s, "latin1")).digest("hex");
 
