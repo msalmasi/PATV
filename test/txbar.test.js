@@ -140,6 +140,7 @@ const setup = (async () => {
   for (const s of ["archive", "history", "search", "downloads"]) await CL.setSwitch(s, true, "test");
   await PW.init();
   await PW.setOn(true, { userId: U.adm.userId, username: "adm" });
+  await PW.setTxBarOn(true, { userId: U.adm.userId, username: "adm" });   // 1.99?? gate: the bar's own switch (default off - its own test below)
   await rooms.setOwner(ROOM.id, "own", "test");
   await sync([], { rooms: [{ room: ROOM, members: [ALICE, real(TI, "Tina")], mic: [], count: 2, transcripts: true }] });
   await require(path.join(repo, "padaccess")).setLevel(U.own, { id: ROOM.id }, "public");
@@ -222,6 +223,71 @@ test("the advert and Pepe's cap: txbar: 1 in every answer while the switch is on
   assert.equal(PW.txBar(), true);
 });
 
+// 1.99?? GATE: privacy wire v2 was already ON on prod when the bar was built - without a switch of its own, deploying both repos would
+// have made the bar live at once, before the owner approved its wording. The bar has its own switch (/admin/bridge), OFF by default.
+test("1.99?? gate: the bar's own switch is OFF by default - privacy wire v2 alone sends no txbar advert and shows no bar text; an admin turns it on (audited); off again: the advert stops at once", async () => {
+  await ready();
+  const n0 = (await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'privwire.txbar'"))[0].n;
+  await runQuery("DELETE FROM chatlog_meta WHERE key = 'privwire_txbar'");     // (a site that has never had it: the deploy's state)
+  PW._reset();
+  await PW.init();
+  await PW.loadTxCap();
+  try {
+    assert.equal(PW.isOn(), true, "privacy wire v2 is on (as on prod)");
+    assert.equal(PW.txSwitch(), false, "the bar's switch: off by default");
+    const a = await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+    assert.equal(a.status, 200);
+    assert.equal(a.d.privwire, 2, "privacy wire v2 is advertised as before");
+    assert.ok(!("txbar" in a.d), "...but no txbar: 1 - Pepe keeps leaving !transcripts off 🎙 lines out");
+    const a2 = await call("POST", "/api/bridge/sync/v2", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+    assert.equal(a2.status, 200, a2.text.slice(0, 200));
+    assert.ok(!("txbar" in a2.d), "nor on the v2 answer");
+    await settle();
+    assert.equal(PW.txBar(), false, "no live bar text, even with a Pepe that can send it (cap)");
+    assert.notEqual(PW.txText(), "live", "/privacy and /help never describe the bar as live");
+    const g = await call("GET", "/api/admin/privwire", { user: U.adm });
+    assert.deepEqual([g.d.txbar.sw, g.d.txbar.on, g.d.txbar.cap], [false, false, true], "the admin card: switch off, not live, Pepe ready");
+    // only a site admin flips it, only from the page (JSON + X-Requested-With + same site), only with a real boolean
+    for (const u of [U.mem, U.staff, U.own, null]) {
+      const r = await call("POST", "/api/admin/privwire/txbar", { user: u, body: { on: true } });
+      assert.equal(r.status, 403, (u ? u.username : "signed out") + ": " + r.text);
+    }
+    assert.equal((await call("POST", "/api/admin/privwire/txbar", { user: U.adm, body: { on: "yes" } })).status, 400);
+    assert.equal((await call("POST", "/api/admin/privwire/txbar", { user: U.adm, body: { on: true }, headers: { "x-requested-with": "" } })).status, 403);
+    assert.equal(PW.txSwitch(), false, "still off");
+    // an admin turns it on: audited, the advert, the text live (Pepe's next sync carries his cap)
+    const on = await call("POST", "/api/admin/privwire/txbar", { user: U.adm, body: { on: true } });
+    assert.equal(on.status, 200, on.text);
+    assert.deepEqual([on.d.txbar.sw, on.d.txbar.sw_by], [true, "adm"]);
+    const au = (await getQuery("SELECT admin_name, detail FROM admin_audit WHERE action = 'privwire.txbar' ORDER BY id DESC LIMIT 1"))[0];
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'privwire.txbar'"))[0].n, n0 + 1, "one audit row");
+    assert.deepEqual([au.admin_name, JSON.parse(au.detail)], ["adm", { on: true, privwire: true }]);
+    assert.equal(JSON.parse((await getQuery("SELECT value FROM chatlog_meta WHERE key = 'privwire_txbar'"))[0].value).on, true, "kept");
+    const b = await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+    assert.equal(b.d.txbar, 1, "the advert");
+    assert.equal(PW.txBar(), true, "the bar is live");
+    // privacy wire v2 off: no advert, whatever the bar's switch says
+    await PW.setOn(false, { userId: U.adm.userId, username: "adm" });
+    const c = await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+    assert.ok(!("txbar" in c.d) && PW.txBar() === false, "privacy wire v2 off: no advert, no bar");
+    await PW.setOn(true, { userId: U.adm.userId, username: "adm" });
+    // off again: the advert stops at once (Pepe leaves new ones out from his next sync); a restart keeps the switch as it is
+    const off = await call("POST", "/api/admin/privwire/txbar", { user: U.adm, body: { on: false } });
+    assert.equal(off.status, 200, off.text);
+    const d = await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+    assert.ok(!("txbar" in d.d) && PW.txBar() === false, "switched off: no advert, no live text");
+    PW._reset();
+    await PW.init();
+    await PW.loadTxCap();
+    assert.equal(PW.txSwitch(), false, "a restart: still off");
+  } finally {
+    await PW.setTxBarOn(true, { userId: U.adm.userId, username: "adm" });
+    await call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], txbar_cap: 1 } });
+    await settle();
+  }
+  assert.equal(PW.txBar(), true, "(back on for the tests below)");
+});
+
 test("the stored item: a hidden 🎙 line's shape + tm; identity and words only in bridge_veil; no frog name for a named speaker; malformed ones dropped", async () => {
   await ready();
   for (const k of ["tina", "fr", "hk"]) assert.ok(C[k], "stored: " + k);
@@ -289,9 +355,12 @@ test("every role's live view (S1): tina's bar under her NAME, frankie's under hi
     assert.equal(t.txh, 1, "tina's bar: the 'transcript hidden' tag");
     assert.equal(t.hold, H1, "tina's bar keeps her named hold (her grab and drop are named: the same person, shown)");
     for (const o of [t, f, h]) {
-      assert.ok(/^[sml]$/.test(o.mask) && !("text" in o) && !("id" in o), "a bar: no words, no 🎙 id (no clip)");
+      assert.ok(/^[sml]$/.test(o.mask) && !("text" in o), "a bar: no words");
       assert.ok(!("tm" in o) && !("tl" in o), "the stamps are server-only");
     }
+    // 1.99?? RV-1 (owner Q6): tina's (named) and frankie's (incognito frog name) bars carry Pepe's salted 🎙 id - members may clip the
+    // audio; hank's (!bridge hide) never does
+    assert.deepEqual([t.id, f.id, "id" in h], ["tx-00000000000000b1", "tx-00000000000000b2", false], "the 🎙 id only on the bars members may clip");
     assert.ok(ALIAS_RE.test(f.u.alias || "") && f.u.anon === true && f.u.veil === "incognito" && f.txh === 1,
               "frankie's bar: his frog name, incognito (not 'hidden'), the tag - " + JSON.stringify([f.u, f.txh]));
     assert.ok(h.u.veil === "hidden" && !("txh" in h), "hank's bar: the one hidden bar, no transcript tag (bridge off covers it)");
@@ -460,13 +529,20 @@ test("history: read in SQL, a bar for everyone (no words); search never finds it
   }
 });
 
-test("quotes, member clips and moderation evidence: a bar is never quotable or clippable by members; evidence is offered (see-through roles)", async () => {
+test("quotes, member clips and moderation evidence: a bar is never quotable; members may clip a named / frog-name bar's audio (RV-1), never a hidden one's; evidence is offered (see-through roles)", async () => {
   await ready();
   const it = R().feed.find((x) => x.c === C.tina);
   const Q = require(path.join(repo, "quotes"));
-  assert.ok(!Q.shownFeed(R().feed).includes(it), "Pepe's !quote never picks it");
-  assert.ok(Q.pick(R().feed, { cs: [it.c] }).error, "nor a website selection");
-  assert.notEqual(CV.privacyOf(it), "anon", "the site's 🔊 Clip takes only 'anon' (frog-name) lines - never a bar");
+  for (const c of [C.tina, C.fr, C.hk]) {
+    const x = R().feed.find((y) => y.c === c);
+    assert.ok(!Q.shownFeed(R().feed).includes(x), "Pepe's !quote never picks a bar");
+    assert.ok(Q.pick(R().feed, { cs: [c] }).error, "nor a website selection");
+  }
+  // 1.99?? RV-1: the 🔊 Clip rule (chatlogview.barClip - the same one that hands the page the 🎙 id)
+  assert.deepEqual(CV.barClip(it), { login: TI, alias: null }, "tina's bar: clippable under her name");
+  const fr = R().feed.find((x) => x.c === C.fr);
+  assert.deepEqual(CV.barClip(fr), { login: FR, alias: fr.u.alias }, "frankie's bar: clippable under his frog name (J-7)");
+  assert.equal(CV.barClip(R().feed.find((x) => x.c === C.hk)), null, "hank's bar (!bridge hide): never a member's clip");
   const EV = require(path.join(repo, "evidence"));
   await EV.init();
   await EV.setOn(true, { userId: U.adm.userId, username: "adm" });
@@ -482,6 +558,177 @@ test("quotes, member clips and moderation evidence: a bar is never quotable or c
     assert.ok(row && /^evp:w[0-9a-f]{16}:tx$/.test(row.ref), "logged with :tx - " + JSON.stringify(row));
     assert.deepEqual(JSON.parse(row.logins), [TI]);
   } finally { await EV.setOn(false, { userId: U.adm.userId, username: "adm" }); }
+});
+
+// 1.99?? RV-1 (owner Q6, 2026-11-02: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): the website's
+// 🔊 Clip on a bar shown under its speaker's name or incognito frog name - through the real routes, as a member. The clip carries NO
+// words anywhere on the site: not the preview, its page view, the posting action, nor what Pepe fetches back to post (micclipdata) - even
+// when a Pepe answers with words. A !bridge hide bar and a "someone" bar (private since) are refused with the one answer.
+test("1.99?? RV-1: a member clips the audio of a named bar and an incognito frog-name bar on the website - never the words; hidden and 'someone' bars can't be clipped", async () => {
+  await ready();
+  const relay = require(path.join(repo, "bridge-relay"));
+  const micclip = require(path.join(repo, "micclip"));
+  const take = () => relay.takeJobs(new Set([ROOM.id])).filter((j) => j.kind === "micclip");
+  const AUDIO = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypM4A "), crypto.randomBytes(400)]);
+  const roster = [ALICE, real(TI, "Tina"), real(FR, "Frankie", { priv: priv("incognito", FR), src: "list" }), real(HK, "Hank", { priv: priv("hidden", HK), src: "list" })];
+  await sync([], { rooms: [{ room: ROOM, members: roster, mic: [], count: 4, transcripts: true, clip: true }] });   // the room's !clip on
+  await settle();
+  take();
+  micclip._clips.clear();
+  if (relay._hits) relay._hits.clear();
+  const tina = R().feed.find((x) => x.c === C.tina), fr = R().feed.find((x) => x.c === C.fr);
+  const NO = [403, "not_quotable", "That mic line can't be clipped."];
+  const ask = (tx, user = U.mem) => { if (relay._hits) relay._hits.clear(); return call("POST", `/api/rooms/${SLUG}/micclip`, { user, body: { tx } }); };
+  // hank's (!bridge hide) bar: the one refusal, its id isn't even on the page
+  const h = await ask("tx-00000000000000b3");
+  assert.deepEqual([h.status, h.d.code, h.d.error], NO, "a hidden bar: never a member's clip");
+  // ── tina's named bar: under her name ──
+  const r = await ask(tina.id);
+  assert.equal(r.status, 200, r.text);
+  const j = take().find((x) => x.id === r.d.id);
+  assert.ok(j && j.tx === tina.id && j.target === TI && j.camfrog === "memcf" && !j.alias && !j.veil, "Pepe's job: her turn, under her name - " + JSON.stringify(j));
+  // Pepe answers - even with words (an older or broken one): the site keeps none
+  const ok = await call("POST", "/api/bridge/micclip", { body: { password: "bot", id: r.d.id, state: "ok", status: "ok", target: TI, secs: 4, text: W.tina,
+                                                               data: AUDIO.toString("base64"), save: "on", viewer_ok: true, cost: 0 } });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(micclip._clips.get(r.d.id).text, "", "the clip record: no words");
+  const v = await call("GET", `/api/rooms/${SLUG}/micclip/${r.d.id}`, { user: U.mem });
+  assert.deepEqual([v.d.state, v.d.text, v.d.words_off, v.d.login], ["ready", "", true, TI], "the preview: her name, no words, 'no caption' - " + v.text);
+  assert.deepEqual(leaks(v.text).filter((x) => x !== TI), []);
+  const s = await call("POST", `/api/rooms/${SLUG}/micclip/${r.d.id}/save`, { user: U.mem, body: { start: 0, end: 4000 } });
+  assert.equal(s.status, 200, s.text);
+  const act = (await getQuery("SELECT kind, args, label FROM pepe_actions WHERE id = ?", [s.d.id]))[0];
+  assert.deepEqual([act.kind, JSON.parse(act.args)[1]], ["micclip.save", TI]);
+  assert.deepEqual(leaks(JSON.stringify(act)).filter((x) => x !== TI), [], "the posting action (the clipper's own row): no words");
+  const d = await call("POST", "/api/bridge/micclipdata", { body: { password: "bot", id: r.d.id, user: "mem" } });
+  assert.equal(d.status, 200, d.text);
+  assert.deepEqual([d.d.target, d.d.text, d.d.words_off, d.d.veil], [TI, "", 1, undefined], "what Pepe posts from: no words, words_off: 1 (no caption)");
+  assert.ok(!d.text.includes(W.tina), "never her words");
+  // ── frankie's bar: under his incognito frog name (J-7) ──
+  const r2 = await ask(fr.id);
+  assert.equal(r2.status, 200, r2.text);
+  const j2 = take().find((x) => x.id === r2.d.id);
+  assert.ok(j2 && j2.tx === fr.id && j2.target === FR && j2.alias === fr.u.alias && j2.veil === "incognito", "Pepe's job: his frog-name turn - " + JSON.stringify(j2));
+  // Pepe's turn must be the incognito one the frog name is for (as any J-7 clip)
+  const bad = await call("POST", "/api/bridge/micclip", { body: { password: "bot", id: r2.d.id, state: "ok", status: "ok", target: FR, secs: 3, text: W.fr,
+                                                                data: AUDIO.toString("base64"), viewer_ok: true, cost: 0 } });
+  assert.equal(bad.status, 200);
+  assert.equal(micclip._clips.get(r2.d.id).state, "failed", "a turn that isn't the incognito one: refused");
+  micclip._clips.delete(r2.d.id);
+  if (relay._hits) relay._hits.clear();
+  const r3 = await ask(fr.id);
+  assert.equal(r3.status, 200, r3.text);
+  take();
+  await call("POST", "/api/bridge/micclip", { body: { password: "bot", id: r3.d.id, state: "ok", status: "ok", target: FR, veil: "incognito", secs: 3, text: W.fr,
+                                                      data: AUDIO.toString("base64"), save: "on", viewer_ok: true, cost: 0 } });
+  const v3 = await call("GET", `/api/rooms/${SLUG}/micclip/${r3.d.id}`, { user: U.mem });
+  assert.deepEqual([v3.d.state, v3.d.text, v3.d.words_off, v3.d.login, v3.d.alias], ["ready", "", true, null, fr.u.alias], "his frog name, never his login or words");
+  assert.deepEqual(leaks(v3.text), [], "nothing of who or what: " + leaks(v3.text).join(", "));
+  const s3 = await call("POST", `/api/rooms/${SLUG}/micclip/${r3.d.id}/save`, { user: U.mem, body: { start: 0, end: 3000 } });
+  assert.equal(s3.status, 200, s3.text);
+  assert.deepEqual(leaks(JSON.stringify((await getQuery("SELECT args, label FROM pepe_actions WHERE id = ?", [s3.d.id]))[0])), [], "his clip's action names nobody");
+  const d3 = await call("POST", "/api/bridge/micclipdata", { body: { password: "bot", id: r3.d.id, user: "mem" } });
+  assert.deepEqual([d3.d.target, d3.d.text, d3.d.words_off, d3.d.veil, d3.d.alias], [FR, "", 1, "incognito", fr.u.alias], "Pepe posts it under the frog name, no caption");
+  // ── tina goes incognito: her named bar is "someone" now (A.1) - no 🎙 id on the page, and no clip ──
+  micclip._clips.clear();
+  if (relay._hits) relay._hits.clear();
+  await sync([{ op: "event", id: "tb-rv1-in", ts: new Date().toISOString(), type: "privacy.hidden", data: { h: hash(TI), scope: "incognito" } }],
+             { incog_hidden_h: [hash(FR), hash(TI)] });
+  await settle(120);
+  CV._clearCaches();
+  try {
+    assert.equal(CV.barClip(R().feed.find((x) => x.c === C.tina)), null);
+    const lv = await live(U.mem);
+    const o = lv.d.feed.find((x) => x.c === C.tina);
+    assert.ok(o && o.u.anon && !("id" in o), "a 'someone' bar: no 🎙 id - " + JSON.stringify(o));
+    const x = await ask(tina.id);
+    assert.deepEqual([x.status, x.d.code, x.d.error], NO, "a 'someone' bar: the one refusal");
+  } finally {
+    await sync([{ op: "event", id: "tb-rv1-out", ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash(TI), scope: "incognito" } }]);
+    await settle(120);
+    CV._clearCaches();
+  }
+  assert.deepEqual(CV.barClip(R().feed.find((x) => x.c === C.tina)), { login: TI, alias: null }, "named again: clippable again");
+  // privacy wire v2 off: no bar clip (as no J-7 clip)
+  await PW.setOn(false, { userId: U.adm.userId, username: "adm" });
+  try {
+    if (relay._hits) relay._hits.clear();
+    const y = await ask(tina.id);
+    assert.deepEqual([y.status, y.d.code], [403, "not_quotable"], "privacy wire v2 off: refused");
+  } finally { await PW.setOn(true, { userId: U.adm.userId, username: "adm" }); }
+  micclip._clips.clear();
+  take();
+});
+
+// 1.99?? RV-1: the page's one renderer (chatlog-core.js) and the 🔊 Clip card (chat-clip.js)
+test("1.99?? RV-1: chatlog-core gives a bar with a 🎙 id data-tx (🔊 Clip) - never data-c / data-text / its words; chat-clip says 'without a caption'; both bumped", () => {
+  const CLR = require(path.join(repo, "public", "js", "chatlog-core.js"));
+  const tEN = function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+  const named = { c: 501, k: "tx", ts: Date.now(), id: "tx-00000000000000e1", mask: "m", txh: 1, u: { login: "tinatxoff", display: "Tina" } };
+  const s = String(CLR.renderItem(named, { t: tEN, lang: "en" }, CLR.htmlH));
+  assert.match(s, /data-tx="tx-00000000000000e1"/, "the 🔊 Clip's id");
+  assert.match(s, /data-vc="501"/);
+  assert.doesNotMatch(s, /data-c=|data-text=|data-name=/, "never pickable by ✂️ Clip chat or a quote");
+  assert.match(s, /transcript hidden/);
+  const frog = { c: 502, k: "tx", ts: Date.now(), id: "tx-00000000000000e2", mask: "s", txh: 1, u: { anon: true, display: "someone", veil: "incognito", alias: "Soggy Bullfrog" } };
+  assert.match(String(CLR.renderItem(frog, { t: tEN, lang: "en" }, CLR.htmlH)), /data-tx="tx-00000000000000e2"/);
+  const hidden = { c: 503, k: "tx", ts: Date.now(), mask: "s", u: { anon: true, display: "someone", veil: "hidden", alias: "Soggy Bullfrog" } };
+  assert.doesNotMatch(String(CLR.renderItem(hidden, { t: tEN, lang: "en" }, CLR.htmlH)), /data-tx=/, "a hidden bar: no 🔊 Clip");
+  const idOnHidden = Object.assign({}, hidden, { id: "tx-00000000000000e3" });
+  assert.doesNotMatch(String(CLR.renderItem(idOnHidden, { t: tEN, lang: "en" }, CLR.htmlH)), /data-tx=/, "(only a !transcripts off bar - txh - ever gets one)");
+  assert.doesNotMatch(String(CLR.renderItem(named, { t: tEN, lang: "en", data: false }, CLR.htmlH)), /data-tx=/, "downloads: no data-*");
+  // the speaker's own view (their words, "only you"): the id, never the words in an attribute
+  const mine = String(CLR.renderItem(Object.assign({}, named, { self: 1, text: W.tina }), { t: tEN, lang: "en" }, CLR.htmlH));
+  assert.match(mine, /data-tx=/);
+  assert.doesNotMatch(mine, /data-text=/);
+  // the clip card: a bar's clip (words_off) says it goes up without a caption
+  const cc = fs.readFileSync(path.join(repo, "public/js/chat-clip.js"), "utf8");
+  assert.ok(cc.includes("v.words_off ? _t('js.pad.cc.mic_note_nowords', 'Trim it, then post it. It goes up without a caption: the speaker\\'s words stay hidden. Whoever is heard in it can remove it.')"));
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"));
+  assert.equal(en["js.pad.cc.mic_note_nowords"], "Trim it, then post it. It goes up without a caption: the speaker's words stay hidden. Whoever is heard in it can remove it.");
+  const room = fs.readFileSync(path.join(repo, "views/room.ejs"), "utf8");
+  assert.ok(room.includes("/public/js/chat-clip.js?v=5") && !/chat-clip\.js\?v=[1-4]\b/.test(room), "chat-clip.js loads as v=5");
+  assert.ok(room.includes("/public/js/chatlog-core.js?v=6"), "chatlog-core.js as v=6 (this build's bump - never shipped as v6 before)");
+});
+
+// 1.99?? RV-4: the privacy policy now says "Your mic transcripts from before you turned transcripts off are left out until you turn them
+// back on." - this is what the site does (Q7): her named 🎙 line from before is left out while her transcripts are off, and back after
+test("1.99?? RV-4 (owner Q7): a speaker's mic transcripts from before !transcripts off are left out while it is set - and back after !transcripts on", async () => {
+  await ready();
+  const before = R().feed.find((x) => x.c === C.before);
+  assert.equal(CV.privacyOf(before), "out", "while her transcripts are off: left out");
+  await sync([{ op: "event", id: "tb-q7-on", ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash(TI), scope: "tx" } }],
+             { tx_hidden_h: [hash(FR), hash(HK)] });
+  await settle(120);
+  CV._clearCaches();
+  try {
+    assert.equal(CL.isTxHiddenHash(hash(TI)), false);
+    assert.equal(CV.privacyOf(before), null, "after !transcripts on: shown again");
+    assert.equal(CV.privacyOf(R().feed.find((x) => x.c === C.tina)), "mask", "her bar from while they were off stays a bar");
+    const lv = await live(U.mem);
+    assert.ok(lv.d.feed.some((o) => o.c === C.before && o.text === "tina said this earlier with transcripts on"), "her earlier line is on the page again");
+  } finally {
+    await sync([{ op: "event", id: "tb-q7-off", ts: new Date(Date.now() + 1000).toISOString(), type: "privacy.hidden", data: { h: hash(TI), scope: "tx" } }]);
+    await settle(120);
+    CV._clearCaches();
+  }
+  assert.equal(CV.privacyOf(before), "out", "off again: left out again");
+});
+
+// 1.99?? S0 check ("tx_off count: Pepe 1, site sticky tx set 0" - privacy spec 2026-11-02, section 5): the site's !transcripts off set is
+// its OWN table, chatlog_tx_hidden - never a "tx" reason in chatlog_hidden.scopes, which is what that count read (privspec/chat/counts.sql:
+// SELECT ... FROM chatlog_hidden WHERE scopes LIKE '%"tx"%' - always 0). Pepe's tx_hidden_h (sent on every sync) lands there.
+test("1.99?? S0: Pepe's !transcripts off list lands in chatlog_tx_hidden - chatlog_hidden.scopes never holds 'tx' (the S0 count read the wrong table)", async () => {
+  await ready();
+  const n = (await getQuery("SELECT COUNT(*) AS n FROM chatlog_tx_hidden WHERE h IN (?, ?, ?)", [hash(TI), hash(FR), hash(HK)]))[0].n;
+  assert.equal(n, 3, "tina, frankie and hank are in the site's sticky !transcripts off set (chatlog_tx_hidden)");
+  assert.equal((await getQuery(`SELECT COUNT(*) AS n FROM chatlog_hidden WHERE scopes LIKE '%"tx"%'`))[0].n, 0, "the S0 count's query: 0, whoever has transcripts off");
+  // a login only Pepe's list names (no privacy event - e.g. one who turned it off before the site kept the set) is added by the list alone
+  const late = "latetxoff";
+  await sync([], { tx_hidden_h: [hash(TI), hash(FR), hash(HK), hash(late)] });
+  await settle(120);
+  assert.equal((await getQuery("SELECT src FROM chatlog_tx_hidden WHERE h = ?", [hash(late)]))[0].src, "pepe", "the list alone adds them");
+  assert.equal(CL.isTxHiddenHash(hash(late)), true);
 });
 
 // ── review fixes ──
