@@ -5711,6 +5711,7 @@
   "js.pad.cc.end": "End",
   "js.pad.cc.secs_aria": "{what} (seconds)",
   "js.pad.cc.mic_note": "Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.",
+  "js.pad.cc.mic_note_nowords": "Trim it, then post it. It goes up without a caption: the speaker's words stay hidden. Whoever is heard in it can remove it.",
   "js.pad.cc.mic_rules": "The room's !clip rules don't let you post clips here.",
   "js.pad.cc.cutting": "Posting… Pepe is cutting your clip.",
   "js.pad.cc.cut_failed": "Pepe couldn't post it.",

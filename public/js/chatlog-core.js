@@ -377,7 +377,12 @@
     // 1.99fp: what ✂️ Clip chat / 🔊 Clip read (public/js/chat-clip.js) - the server re-reads its own copy by id
     if (ctx.data !== false) {
       if (rm) { if (it.c) a['data-rmc'] = it.c; a['data-rm'] = rm.by || 'mod'; }
-      else if (mask) { if (it.c) a['data-vc'] = it.c; if (it.own) a['data-own'] = '1'; }
+      else if (mask) {
+        if (it.c) a['data-vc'] = it.c; if (it.own) a['data-own'] = '1';
+        // 1.99?? RV-1 (owner Q6): a !transcripts off bar members may clip carries its 🎙 id (the server sends one only then) - 🔊 Clip
+        // reads data-tx; never data-c / data-text (✂️ Clip chat and quotes never pick a bar) and never its words
+        if (txh && it.id) a['data-tx'] = it.id;
+      }
       else {
         if (it.c) a['data-c'] = it.c;
         a['data-k'] = k; a['data-name'] = label(it.u, ctx); a['data-text'] = text;

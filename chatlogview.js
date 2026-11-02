@@ -244,6 +244,29 @@ function barUser(it) {
   if (!speakerHashes(it).includes(hashOf(vz.login))) return null;
   return { login: String(vz.login), display: vz.display ? String(vz.display).slice(0, 80) : String(vz.login) };
 }
+/**
+ * 1.99?? RV-1 (owner Q6: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): may members clip this
+ * !transcripts off bar's mic turn on the website, and as whom? -> {login, alias} | null. Only a bar shown under its speaker's NAME
+ * (barLook "named": alias null - the clip names them, as the bar does) or under their INCOGNITO FROG NAME (barLook "incognito" with
+ * the frog name it shows: posted under that name, J-7). A "someone" bar (private since, A.1), a !bridge hide bar ("hidden": never a
+ * member's clip) and a bar without Pepe's salted 🎙 id: null. The SAME predicate decides whether a page gets the bar's 🎙 id (dress)
+ * and whether micclip.js takes it, so the 🔊 Clip shows exactly where it works. The words never go with it: micclip.js keeps a bar
+ * clip's text empty whatever Pepe sends (no preview text, caption, post body, story or download - and Pepe blanks them too).
+ */
+const TX_ID = /^tx-[0-9a-f]{8,32}$/;
+function barClip(it) {
+  try {
+    if (!it || it.k !== "tx" || it.tm !== 1 || it.purged || it.rm_at != null || !TX_ID.test(String(it.id || ""))) return null;
+    if (privacyOf(it) !== "mask") return null;
+    const bl = barLook(it);
+    if (bl === "named") { const nu = barUser(it); return nu ? { login: nu.login.toLowerCase(), alias: null } : null; }
+    if (bl === "incognito") {
+      const a = it.u && typeof it.u.alias === "string" ? it.u.alias : "", l = it._vz && it._vz.login;
+      return a && LOGIN_OK.test(String(l || "")) ? { login: String(l).toLowerCase(), alias: a } : null;
+    }
+    return null;
+  } catch (e) { return null; }
+}
 /** Archived !transcripts off bars said named ("h:" rows, tl "tx") get who said them back from chat_log_veil, as a non-enumerable _vz
  *  (never serialised), so history and downloads show the name like the live chat. One read per call; only an identity that hashes to
  *  the row's own speaker hash; a row without one (forget-me took it) stays "someone" with the tag. Never throws. -> items */
@@ -1079,7 +1102,11 @@ function dress(items, ctx) {
       // the 🎙 id only on an incognito frog-name line (owner J-7: anyone may clip it, under the frog name; Pepe salts the id); the hold
       // only beside a frog name (a "someone" release next to a named grab must not pair up - B.2) - or, 1.99?? S1, beside the name of a
       // named bar (its grab and drop are named: the same person, shown)
-      if (o.k === "tx" && !(v2 && p === "anon" && u.veil === "incognito" && o.u.alias)) delete o.id;
+      // 1.99?? RV-1 (owner Q6): and on a !transcripts off bar members may clip (barClip: under the name or the incognito frog name it
+      // shows) - Pepe's SALTED id (never testable against a guess of the words); the 🔊 Clip posts the audio only, no caption
+      const bc = o.k === "tx" && o.txh === 1 ? barClip(it) : null;
+      const clipBar = !!bc && (bc.alias ? o.u.alias === bc.alias : !!o.u.login && !o.u.anon);
+      if (o.k === "tx" && !(v2 && p === "anon" && u.veil === "incognito" && o.u.alias) && !clipBar) delete o.id;
       if (!o.u.alias && !(o.txh === 1 && o.u.login && !o.u.anon)) delete o.hold;
       const sh = speakerHash(it);
       if (sh) Object.defineProperty(o, "_sh", { value: sh, enumerable: false });
@@ -1669,6 +1696,7 @@ module.exports = {
   privacyOf, speakerHash, isLeftOutLogin, movedLately, // owner change (decision 9: incognito "someone", !bridge hide left out)
   privacyAt, lookOf, lookMove, namedToAnonLately,      // owner-change fix-up (review 2): only a line whose look moves is drawn again
   barLook, barUser, attachBarNames, barNamedToAnonLately, lookAt,   // 1.99?? S1: a !transcripts off bar shows who said it (the words only masked)
+  barClip,                                            // 1.99?? RV-1: a bar members may clip (the audio, never the words)
   tierOf, raiseExp, ensurePremium,                    // CL7: the retention purge (chatlogpurge.js)
   graceOf, lapsedOf, noteFirst, retentionFresh,       // CL7 fix-up
   speakerHashes, kindNow, hubChanged,                 // Train 3 review: every hash a "someone" line could be; the stricter of both stores

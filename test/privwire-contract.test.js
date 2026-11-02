@@ -272,7 +272,9 @@ test("every case of Pepe's scene through the real /api/bridge/sync/v2: a member 
         assert.ok(!o.u.anon, s.name + ": named");
         assert.equal(o.u.display, e.named, s.name);
         // 1.99?? S1 (owner Q5): a named !transcripts off bar - the name, the bar, no words
-        if (e.mask) { assert.equal(o.mask, e.mask, s.name + ": the bar"); assert.ok(!("text" in o) && !("id" in o), s.name + ": a bar never carries words or the 🎙 id"); }
+        // (1.99?? RV-1, owner Q6: members may clip its audio - it carries Pepe's salted 🎙 id, never its words)
+        if (e.mask) { assert.equal(o.mask, e.mask, s.name + ": the bar"); assert.ok(!("text" in o), s.name + ": a bar never carries words"); }
+        if (e.mask && e.txh) assert.match(String(o.id || ""), /^tx-[0-9a-f]{8,32}$/, s.name + ": a named !transcripts off bar - its 🎙 id (🔊 Clip, audio only)");
         if (viewer === U.mem && e.mask) assert.ok(!o.rv, s.name + ": no reveal flag for a member");
       } else {
         assert.equal(o.u.anon, true, s.name + ": veiled");
@@ -282,6 +284,8 @@ test("every case of Pepe's scene through the real /api/bridge/sync/v2: a member 
         else assert.ok(!o.u.alias && o.u.hood == null && !o.u.id, s.name + ": 'someone' (C.2 / B.2) - no name, hood or id");
         if (e.alias) assert.match(String(o.u.id || ""), /^v-[A-Za-z0-9_-]{12}$/, s.name + ": the opaque session id");
         if (e.mask) { assert.equal(o.mask, e.mask, s.name + ": the bar"); assert.ok(!("text" in o), s.name + ": a bar never carries words"); }
+        // (1.99?? RV-1: the 🎙 id on a bar only where members may clip it - an incognito frog-name !transcripts off bar - never a hidden one)
+        if (e.mask && e.k === "tx") assert.equal("id" in o, !!(e.txh && e.alias), s.name + ": the 🎙 id only on a frog-name !transcripts off bar");
         if (e.hold && e.alias) assert.match(String(o.hold || ""), /^hd-/, s.name + ": the hold (B.3)");   // ("someone": dropped, below)
         if (!e.alias) assert.ok(!o.hold, s.name + ": no hold beside 'someone'");
         if (viewer === U.mem) assert.ok(!o.rv, s.name + ": no reveal flag for a member");
