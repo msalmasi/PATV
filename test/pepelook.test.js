@@ -198,9 +198,13 @@ test("panel markup: Pepe's look section for admins only, thumbnails exist for ev
   assert.equal((await ejs.renderFile(file, { me: { username: "pleb", class: "pleb" }, pepeCtlCsrf: P.csrfToken })).trim(), "");
   const dir = path.join(repo, "public", "img", "pepe-looks");
   for (const id of ["pepe", "dolly", "dracula", "frankenstein", "mummy", "freddy", "jason", "pennywise", "werewolf", "pinhead", "pedro", "flirty", "gothmommy",
-                    "reaper", "skater", "alien", "bobross", "sagan", "attenborough", "fireside"]) {
+                    "reaper", "skater", "alien", "bobross", "sagan", "attenborough", "fireside", "winterlights"]) {
     assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
   }
+  // december: the ❄️ Winter Lights Pepe thumbnail is a 96x96 RGBA PNG like the others (the bot's pepe-avatar.html, rendered)
+  const png = fs.readFileSync(path.join(dir, "winterlights.png"));
+  assert.equal(png.toString("latin1", 1, 4), "PNG");
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20), png[24], png[25]], [96, 96, 8, 6], "96x96, 8-bit RGBA");
   // 1.99fo: the base picker + extras grid, with a thumbnail per base and per kawaii modifier
   assert.match(html, /id="plBases"/);
   assert.match(html, /id="plMods"/);
