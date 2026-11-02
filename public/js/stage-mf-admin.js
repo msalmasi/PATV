@@ -28,7 +28,24 @@
       var tr = el('tr');
       var a = el('a', r.title || r.room); a.href = '/p/' + encodeURIComponent(r.slug || r.room);
       var td = el('td'); td.appendChild(a); tr.appendChild(td);
-      tr.appendChild(el('td', r.login));
+      // 1.99?? (privacy controls S0): a veiled row has no login (the server never sends it) - "someone (veiled)"; an Admin with the
+      // see-through right gets "Reveal (logged)" (a reason, a seethrough_log row, then the login in this cell only)
+      if (r.veiled) {
+        var who = el('td', r.who || 'someone (veiled)', 'muted');
+        if (V.see_through) {
+          var rv = el('button', 'Reveal (logged)'); rv.type = 'button'; rv.className = 'btn';
+          rv.addEventListener('click', function () {
+            var why = window.prompt('Why do you need to see who this is? (logged)');
+            if (!why || why.trim().length < 3) return;
+            rv.disabled = true;
+            post('/api/stage/admin/micfollow/report/reveal', { room: r.room, ref: r.ref, reason: why.trim() }).then(function (d) {
+              if (d.ok && d.login) { who.textContent = d.login + ' (revealed, logged)'; who.className = ''; } else { alert(d.error || 'Could not reveal it.'); rv.disabled = false; }
+            });
+          });
+          who.appendChild(document.createTextNode(' ')); who.appendChild(rv);
+        }
+        tr.appendChild(who);
+      } else tr.appendChild(el('td', r.login));
       tr.appendChild(el('td', String(r.n), 'num'));
       tr.appendChild(el('td', String(r.qualified), 'num'));
       tr.appendChild(el('td', (r.reasons || []).map(function (x) { return RWHY[x] || x; }).join(', ')));
@@ -39,7 +56,7 @@
         var b = el('button', o[1]); b.type = 'button'; b.className = o[2];
         b.addEventListener('click', function () {
           b.disabled = true;
-          post('/api/stage/admin/micfollow/report', { room: r.room, login: r.login, action: o[0] }).then(function (d) {
+          post('/api/stage/admin/micfollow/report', r.veiled ? { room: r.room, ref: r.ref, action: o[0] } : { room: r.room, login: r.login, action: o[0] }).then(function (d) {
             if (d.ok && d.view) { var keep = V.fields; V = d.view; if (!V.fields) V.fields = keep; paint(); } else { alert(d.error || 'Could not do that.'); b.disabled = false; }
           });
         });

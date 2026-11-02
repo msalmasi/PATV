@@ -1247,6 +1247,77 @@ test("45. ⚑ reports (14.1.2 #3, DF-31): hidden for the reporter at once; two D
   try { assert.equal((await post(`/api/rooms/${slug()}/micfollow/report`, { login: "bob" }, "u_v3")).d.code, "pad_access"); } finally { padFullOk = true; }
 });
 
+test("45b. privacy controls S0: the staff report queue never shows a veiled person's login - \"someone (veiled)\", a ref for dismiss / uphold, the login only through an Admin's logged reveal", async () => {
+  await reset(); await plainPad();
+  for (const col of ["created_at TEXT", "isEmailVerified INTEGER DEFAULT 0", "discordId TEXT", "twitchId TEXT"]) await runQuery(`ALTER TABLE users ADD COLUMN ${col}`).catch(() => {});
+  await runQuery("DELETE FROM micfollow_reports");
+  await onStage(["alice", "bob"]);
+  const Q = require(path.join(repo, "quotes"));
+  const ST = require(path.join(repo, "seethrough"));
+  await ST.init();
+  await runQuery("DELETE FROM seethrough_log");
+  let r = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "bob", reason: "abuse" }, "u_v2");      // named: as before
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  // alice turns incognito; her tile is still up for a moment (or just left - the 2-minute window): a report on her login now
+  Q.setHidden([Q.hiddenHash("alice")]);
+  try {
+    r = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "alice", reason: "sexual" }, "u_v2");
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.deepEqual(Object.keys(r.d).sort(), ["counted", "cut", "hidden", "ok", "qualified"], "the reporter's answer is the same as for anyone");
+  } finally { Q.setHidden([]); }
+  assert.equal((await getQuery("SELECT veiled FROM micfollow_reports WHERE login = 'alice'"))[0].veiled, 1, "the row is marked");
+  assert.equal((await getQuery("SELECT veiled FROM micfollow_reports WHERE login = 'bob'"))[0].veiled, 0);
+  // staff: alice's row has no login anywhere in the answer (veiled when reported, even though she isn't any more); bob's is as before
+  let view = await MF.adminView(STAFF);
+  const ali = view.reports.find((x) => x.veiled);
+  assert.ok(ali && ali.login === null && ali.who === "someone (veiled)" && /^r[0-9]+$/.test(ali.ref), JSON.stringify(view.reports));
+  assert.ok(!JSON.stringify(view).includes("alice"), "no 'alice' anywhere in the staff view");
+  assert.equal(view.see_through, undefined, "Staff are never offered the reveal");
+  const bob = view.reports.find((x) => x.login === "bob");
+  assert.ok(bob && !bob.veiled && bob.ref === undefined && bob.who === undefined, "a named row is exactly as before");
+  // someone veiled NOW is masked too (a report filed while they were named) - fails closed while the hidden set says so
+  Q.setHidden([Q.hiddenHash("bob")]);
+  try {
+    view = await MF.adminView(STAFF);
+    assert.ok(!JSON.stringify(view.reports).includes("bob") && view.reports.filter((x) => x.veiled).length === 2, "bob, incognito now: masked");
+    const g = await get("/api/stage/admin/micfollow", "u_staff");
+    assert.equal(g.status, 200);
+    assert.ok(!JSON.stringify(g.d).includes("alice") && !JSON.stringify(g.d).includes("bob"), "the route's answer too");
+  } finally { Q.setHidden([]); }
+  // the reveal: Admins only, with a reason, logged before the answer
+  const ref = ali.ref;
+  assert.equal((await post("/api/stage/admin/micfollow/report/reveal", { room: ROOM.id, ref, reason: "checking a report" }, "u_staff")).status, 403, "Staff: never");
+  assert.equal((await post("/api/stage/admin/micfollow/report/reveal", { room: ROOM.id, ref, reason: "checking a report" }, "u_v1")).status, 403, "members: never");
+  assert.equal((await post("/api/stage/admin/micfollow/report/reveal", { room: ROOM.id, ref, reason: "x" }, "u_admin")).d.code, "reason", "a reason is required");
+  assert.equal((await post("/api/stage/admin/micfollow/report/reveal", { room: ROOM.id, ref: "r999999", reason: "checking" }, "u_admin")).status, 404);
+  assert.equal((await post("/api/stage/admin/micfollow/report/reveal", { room: "Other.Room", ref, reason: "checking" }, "u_admin")).status, 404, "a ref only in its own pad");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM seethrough_log"))[0].n, 0, "refusals log nothing (and reveal nothing)");
+  const adminView = await MF.adminView(ADMIN);
+  assert.equal(adminView.see_through, true, "an Admin is offered the reveal");
+  assert.ok(!JSON.stringify(adminView.reports).includes("alice"), "...but sees no login without it");
+  r = await post("/api/stage/admin/micfollow/report/reveal", { room: ROOM.id, ref, reason: "checking a report" }, "u_admin");
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(r.d.login, "alice");
+  const lg = await getQuery("SELECT user_id, role, scope, room_id, logins, reason, ref FROM seethrough_log");
+  assert.equal(lg.length, 1);
+  assert.deepEqual({ ...lg[0] }, { user_id: "u_admin", role: "admin", scope: "stage_report", room_id: ROOM.id, logins: JSON.stringify(["alice"]),
+                                   reason: "checking a report", ref: "report:" + ref.slice(1) });
+  // someone left out since (forget-me, deletion, staff removal) is never named
+  const VS = require(path.join(repo, "veilstage")), lo = VS.leftOut;
+  VS.leftOut = () => true;
+  try { assert.equal((await post("/api/stage/admin/micfollow/report/reveal", { room: ROOM.id, ref, reason: "checking a report" }, "u_admin")).status, 404); }
+  finally { VS.leftOut = lo; }
+  // staff resolve a veiled row by its ref (never a login); a login still works for a named row
+  r = await post("/api/stage/admin/micfollow/report", { room: ROOM.id, ref, action: "dismiss" }, "u_staff");
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(r.d.n, 1);
+  assert.ok(!JSON.stringify(r.d).includes("alice"), "the answer names nobody");
+  assert.equal((await getQuery("SELECT state FROM micfollow_reports WHERE login = 'alice'"))[0].state, "dismissed");
+  assert.equal((await post("/api/stage/admin/micfollow/report", { room: ROOM.id, ref: "r999999", action: "dismiss" }, "u_staff")).status, 404);
+  r = await post("/api/stage/admin/micfollow/report", { room: ROOM.id, login: "bob", action: "uphold" }, "u_staff");
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+});
+
 test("46. the neutral card (14.1.2 #4) - mfix: by default the last speaker's tile stays, dimmed ('Someone is speaking' over it, nobody the speaker); unattributed_clear = the old give-way; Pepe never clears it", async () => {
   // mfix default: kept, dimmed
   await reset(); await plainPad();

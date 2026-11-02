@@ -220,6 +220,9 @@ function init() {
       // the page says "a veiled speaker" in its own language - review B-privacy-ux-7)
       await addColumn("micfollow_excl", "veiled", "TEXT");
       await addColumn("micfollow_excl", "vlogin", "TEXT");
+      // 1.99?? (privacy controls S0): a ⚑ report filed while its subject was veiled (incognito or !bridge hide - quotes.isHidden) is
+      // marked: the staff queue on /stage/admin never shows that login (adminView), only "someone (veiled)" and an opaque ref
+      await addColumn("micfollow_reports", "veiled", "INTEGER NOT NULL DEFAULT 0");
       await runQuery(`CREATE TABLE IF NOT EXISTS micfollow_pins (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, login TEXT NOT NULL, by_id TEXT, by_name TEXT,
                       at INTEGER NOT NULL, went_live INTEGER, UNIQUE (room_id, login))`);
       const r = (await getQuery("SELECT v, data, updated_at, updated_by FROM micfollow_cfg WHERE id = 1"))[0];
@@ -1589,8 +1592,11 @@ async function report(roomId, login, user, reason, t = now()) {
   const voided = (await getQuery(`SELECT 1 AS x FROM micfollow_reports WHERE reporter_id = ? AND room_id = ? AND login = ? AND state = 'dismissed' AND resolved_at > ? LIMIT 1`,
     [uid, P.roomId, l, t - 24 * 3600e3])).length > 0;
   const qualified = !voided && (await qualifiedReporter(uid));
-  await runQuery("INSERT INTO micfollow_reports (room_id, login, reporter_id, reason, at, qualified, state) VALUES (?, ?, ?, ?, ?, ?, 'open')",
-                 [P.roomId, l, uid, why, t, qualified ? 1 : 0]);
+  // 1.99?? (privacy controls S0): veiled now (a tile reported in the 2 minutes after its person went incognito / hidden, or a pin
+  // that ended because of it) - the row is marked, so staff never see this login in the queue (the reporter's answer is the same)
+  const veiled = hiddenLogin(l) ? 1 : 0;
+  await runQuery("INSERT INTO micfollow_reports (room_id, login, reporter_id, reason, at, qualified, state, veiled) VALUES (?, ?, ?, ?, ?, ?, 'open', ?)",
+                 [P.roomId, l, uid, why, t, qualified ? 1 : 0, veiled]);
   bump("reports", 1, t, P);
   if (!qualified) return { hidden: true, counted: true, qualified: false, cut: false };
   bump("reports_qualified", 1, t, P);
@@ -1609,12 +1615,26 @@ async function report(roomId, login, user, reason, t = now()) {
   try { ROOMS().event(P.roomId, "micfollow", null, `two reports: someone was taken off the mic stage for ${c.report_out_h} h (staff review)`); } catch (e) { /* none */ }
   return { hidden: true, counted: true, qualified: true, cut: true };
 }
+/** 1.99?? (privacy controls S0): a veiled report group's opaque handle ("r<id>": its newest row's id) -> that row's login in pad
+ *  `roomId`, or null. Server-only: the staff queue gets the handle, never the login. */
+const REPORT_REF_RE = /^r([1-9][0-9]{0,15})$/;
+async function reportRefLogin(roomId, ref) {
+  const m = REPORT_REF_RE.exec(String(ref || ""));
+  if (!m) return null;
+  const r = (await getQuery("SELECT login FROM micfollow_reports WHERE id = ? AND room_id = ?", [Number(m[1]), String(roomId || "")]))[0];
+  return r && LOGIN_RE.test(low(r.login)) ? low(r.login) : null;
+}
 /** Staff: dismiss (lifts a "reported" hold-out; those reporters carry no weight on that person for 24 h) or uphold the
- *  open reports on `login` in pad `roomId`. Audited. -> {n} */
-async function resolveReports(user, roomId, login, action, t = now()) {
+ *  open reports on `login` in pad `roomId`. Audited. -> {n}
+ *  1.99?? (privacy controls S0): a veiled group (adminView) is named by its opaque `ref` instead of a login. */
+async function resolveReports(user, roomId, login, action, t = now(), ref = null) {
   await init();
   if (!SP.can(user, "micfollow.kill")) throw new Refuse(403, "Staff only.", "forbidden");
   if (action !== "dismiss" && action !== "uphold") throw new Refuse(400, "dismiss or uphold", "bad");
+  if (ref != null && ref !== "") {
+    login = await reportRefLogin(roomId, ref);
+    if (!login) throw new Refuse(404, "Nothing open on them there.", "none");
+  }
   const rid = String(roomId || ""), l = low(login);
   const rows = await getQuery("SELECT id FROM micfollow_reports WHERE room_id = ? AND login = ? AND state IN ('open', 'cut')", [rid, l]);
   if (!rows.length) throw new Refuse(404, "Nothing open on them there.", "none");
@@ -2305,18 +2325,26 @@ async function adminView(user, t = now()) {
   // ⚑ reports waiting for staff (open, or already cut by two qualified reporters), the last 7 days
   let reports = [];
   try {
+    // 1.99?? (privacy controls S0, the veiled-identity rule - J-2: no Staff see-through of identities): a group whose person was
+    // veiled when reported (the row's mark) or is veiled NOW (quotes.isHidden - fails closed while the hidden set loads) shows no
+    // login - "someone (veiled)" and an opaque ref for dismiss / uphold; an Admin sees who only through the logged reveal
+    // (POST /api/stage/admin/micfollow/report/reveal: seethrough_log scope stage_report). Every other row is as before.
     reports = (await getQuery(`SELECT room_id, login, COUNT(*) AS n, SUM(qualified) AS q, MAX(at) AS last, GROUP_CONCAT(DISTINCT reason) AS reasons,
-                                      MAX(CASE WHEN state = 'cut' THEN 1 ELSE 0 END) AS cut
+                                      MAX(CASE WHEN state = 'cut' THEN 1 ELSE 0 END) AS cut, MAX(veiled) AS v, MAX(id) AS rid
                                FROM micfollow_reports WHERE state IN ('open', 'cut') AND at > ? GROUP BY room_id, login ORDER BY last DESC LIMIT 100`, [t - 7 * 24 * 3600e3]))
       .map((r) => {
         let title = r.room_id, slug = null;
         try { const p = ROOMS().getCached(r.room_id); if (p) { title = p.title || title; slug = p.slug || null; } } catch (e) { /* none */ }
-        return { room: r.room_id, title, slug, login: r.login, n: Number(r.n) || 0, qualified: Number(r.q) || 0, last: Number(r.last) || 0,
-                 reasons: String(r.reasons || "").split(",").filter(Boolean), cut: !!Number(r.cut) };
+        const row = { room: r.room_id, title, slug, login: r.login, n: Number(r.n) || 0, qualified: Number(r.q) || 0, last: Number(r.last) || 0,
+                      reasons: String(r.reasons || "").split(",").filter(Boolean), cut: !!Number(r.cut) };
+        if (Number(r.v) || hiddenLogin(r.login)) Object.assign(row, { login: null, veiled: true, who: "someone (veiled)", ref: "r" + Number(r.rid) });
+        return row;
       });
   } catch (e) { reports = []; }
   const out = { now: t, v: CFG.v, cfg: { ...CFG.cfg }, defaults: { ...core.DEFAULTS }, fields: core.FIELDS, updated_at: CFG.at, updated_by: CFG.by,
                 admin, pads, metrics: metrics(t), audit, reports };
+  // 1.99?? (privacy controls S0): the queue offers "Reveal (logged)" on a veiled row only to an Admin with the see-through right
+  if (reports.some((r) => r.veiled) && SP.can(user, "chatlog.see_through")) out.see_through = true;
   if (admin) {
     out.spans = (await getQuery(`SELECT id, room_id, login, started, ended, secs, video_secs, peak_viewers, end_reason, noticed FROM micfollow_spans
                                  ORDER BY id DESC LIMIT 200`)).map((x) => ({ ...x }));
@@ -2676,13 +2704,38 @@ function register(app, { addUser, bySlug, isLive }) {
     if (!fetchOnly(req, res)) return;
     try { const r = await setCfg(req.user, req.body || {}); res.json({ ok: true, ...r, view: await adminView(req.user) }); } catch (e) { fail(res, e); }
   });
-  // ⚑ staff review of mic-stage reports: dismiss (lifts the hold-out) or uphold
+  // ⚑ staff review of mic-stage reports: dismiss (lifts the hold-out) or uphold (1.99?? privacy controls S0: a veiled row by its ref)
   app.post("/api/stage/admin/micfollow/report", addUser, staffOnly, async (req, res) => {
     if (!fetchOnly(req, res)) return;
     try {
       const b = req.body || {};
-      const r = await resolveReports(req.user, b.room, b.login, b.action);
+      const r = await resolveReports(req.user, b.room, b.login, b.action, now(), b.ref != null ? String(b.ref).slice(0, 24) : null);
       res.json({ ok: true, ...r, view: await adminView(req.user) });
+    } catch (e) { fail(res, e); }
+  });
+  // 1.99?? (privacy controls S0): who is behind a veiled report row - Admins with the see-through right only (chatlog.see_through;
+  // Staff never: J-2), with a reason, logged BEFORE the answer (seethrough_log scope stage_report, ref report:<id> - /admin/bridge
+  // #seethrough); a failed log write answers nothing. Someone left out since (forget-me, an account deletion, a staff removal) is
+  // never named (XT-1).
+  const revealHit = guard.limiter({ max: 20, windowMs: 60 * 1000 });
+  app.post("/api/stage/admin/micfollow/report/reveal", addUser, staffOnly, async (req, res) => {
+    if (!fetchOnly(req, res)) return;
+    res.set("Cache-Control", "private, no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    try {
+      if (!SP.can(req.user, "chatlog.see_through")) throw new Refuse(403, "Only PATV admins can reveal who a veiled report is about.", "forbidden");
+      if (rate(revealHit, "u:" + req.user.userId, res)) return;
+      const b = req.body || {};
+      const roomId = String(b.room || "").slice(0, 128), ref = String(b.ref || "").slice(0, 24);
+      const reason = String(b.reason || "").trim();
+      if (reason.length < 3) throw new Refuse(400, "Say why (a few words) - every reveal is logged.", "reason");
+      const login = await reportRefLogin(roomId, ref);
+      let gone = !login;
+      if (login) { try { gone = !!require("./veilstage").leftOut(login); } catch (e) { gone = true; } }
+      if (gone) throw new Refuse(404, "There's nothing to reveal there.", "none");
+      await require("./seethrough").log({ userId: req.user.userId, role: "admin", scope: "stage_report", roomId, logins: [login], reason,
+                                          ref: "report:" + ref.slice(1) });
+      res.json({ ok: true, ref, login });
     } catch (e) { fail(res, e); }
   });
 }

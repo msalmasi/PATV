@@ -259,7 +259,7 @@ test("/stage/admin: the 🎙 Mic follows card - the kill switch for staff, knobs
   assert.match(staff, /id="mfCard"/);
   assert.match(staff, /id="mfKill" checked/);
   assert.doesNotMatch(staff, /id="mfCfg"|id="mfSpans"/);
-  assert.match(staff, /stage-mf-admin\.js\?v=4/);           // (1.99afl: the Health column; 1.99afn: the courtesy-notice counts; wave2 WP-4: kept relays)
+  assert.match(staff, /stage-mf-admin\.js\?v=5/);           // (1.99afl: the Health column; 1.99afn: the courtesy-notice counts; wave2 WP-4: kept relays; 1.99?? privacy controls S0: veiled report rows)
   assert.match(staff, /id="mfReports"/, "⚑ reports to review (staff)");
   const adm = ejs.render(tpl, { user: "a", isAdmin: true, state, mf: mf(true) }, { filename: file });
   assert.match(adm, /id="mfCfg"/);
