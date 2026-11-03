@@ -29,7 +29,8 @@
       var a = el('a', r.title || r.room); a.href = '/p/' + encodeURIComponent(r.slug || r.room);
       var td = el('td'); td.appendChild(a); tr.appendChild(td);
       // 1.99aid (privacy controls S0): a veiled row has no login (the server never sends it) - "someone (veiled)"; an Admin with the
-      // see-through right gets "Reveal (logged)" (a reason, a seethrough_log row, then the login in this cell only)
+      // see-through right - and, while text reveal roles are on, Staff with chatlog.reveal_text (1.99?? round 6: micfollow reportRevealRole,
+      // the server's see_through flag) - gets "Reveal (logged)" (a reason, a seethrough_log row, then the login in this cell only)
       if (r.veiled) {
         var who = el('td', r.who || 'someone (veiled)', 'muted');
         if (V.see_through) {

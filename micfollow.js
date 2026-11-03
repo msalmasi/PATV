@@ -2741,7 +2741,8 @@ async function adminView(user, t = now()) {
   try {
     // 1.99aid (privacy controls S0, the veiled-identity rule - J-2: no Staff see-through of identities): a group whose person was
     // veiled when reported (the row's mark) or is veiled NOW (quotes.isHidden - fails closed while the hidden set loads) shows no
-    // login - "someone (veiled)" and an opaque ref for dismiss / uphold; an Admin sees who only through the logged reveal
+    // login - "someone (veiled)" and an opaque ref for dismiss / uphold; an Admin (or, while text reveal roles are on, Staff with
+    // chatlog.reveal_text - reportRevealRole; 1.99?? round 6 comment) sees who only through the logged reveal
     // (POST /api/stage/admin/micfollow/report/reveal: seethrough_log scope stage_report). Every other row is as before.
     reports = (await getQuery(`SELECT room_id, login, COUNT(*) AS n, SUM(qualified) AS q, MAX(at) AS last, GROUP_CONCAT(DISTINCT reason) AS reasons,
                                       MAX(CASE WHEN state = 'cut' THEN 1 ELSE 0 END) AS cut, MAX(veiled) AS v, MAX(id) AS rid
