@@ -587,6 +587,22 @@ const TX_CLAUSE_NEW = "`!transcripts off` blacks out only the words of your mic 
 // transcripts card keeps its wording for NEW mic turns (left out) and adds that the ones already shown as a bar stay bars.
 const TX_KEPT_NOTE = "Mic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators, and a pad's owner in " +
   "their own pad, can reveal what you said, and every reveal is logged.";
+// 1.99?? (privacy controls, landed on 1.99aht): the transcripts bar's sentences that name who can reveal the words - while text reveal roles
+// are on (textreveal.js, S4t) they name PATV staff and the room's moderators too, with a reason (the same words as Pepe's catalog's pc
+// "textreveal" swap on the v2tx card); off: 1.99aht's words exactly
+const TX_TR_SWAPS = [
+  ["PATV administrators, and a pad's owner in their own pad, can reveal the words.",
+   "PATV administrators and staff, the pad's owner (in their own pad) and the room's moderators can reveal the words, each time with a reason."],
+  ["only PATV administrators, and a pad's owner in their own pad, can reveal what you said,",
+   "only PATV administrators and staff, the pad's owner (in their own pad) and the room's moderators can reveal what you said, each time with a reason,"],
+];
+function txTr(s) {
+  let on = false;
+  try { on = require("./textreveal").isOn() === true; } catch (e) { on = false; }
+  if (!on || typeof s !== "string") return s;
+  for (const [a, b] of TX_TR_SWAPS) s = s.split(a).join(b);
+  return s;
+}
 function withPrivwireNotes(entries) {
   const out = privwireNotes(entries);
   if (out === entries) return out;                            // the switch off: byte-equal, the same objects
@@ -596,7 +612,7 @@ function withPrivwireNotes(entries) {
     return out.map((r) => {
       if (!r || r.id !== "transcripts") return r;
       const base = r.details && String(r.details).trim() ? r.details : r.summary;
-      return { ...r, details: String(base || "") + "\n\n" + TX_KEPT_NOTE };
+      return { ...r, details: String(base || "") + "\n\n" + txTr(TX_KEPT_NOTE) };
     });
   }
   if (!tx) return out;
@@ -605,8 +621,9 @@ function withPrivwireNotes(entries) {
     const vt = e && e.v2tx && typeof e.v2tx === "object" ? e.v2tx : null;
     const ts = vt && typeof vt.summary === "string" && vt.summary.trim() ? vt.summary.slice(0, L.summary) : null;
     const td = vt && typeof vt.details === "string" && vt.details.trim() ? vt.details.slice(0, L.details) : null;
-    if (ts || td) return { ...e, ...(ts ? { summary: ts } : {}), ...(td ? { details: td } : {}) };
-    if (e && PRIVWIRE_TX_CARDS[e.id]) return { ...e, ...PRIVWIRE_TX_CARDS[e.id] };
+    // (1.99?? privacy controls: who can reveal the words - txTr; a Pepe whose v2tx card carries its own pc swap gets the same words)
+    if (ts || td) return { ...e, ...(ts ? { summary: ts } : {}), ...(td ? { details: txTr(td) } : {}) };
+    if (e && PRIVWIRE_TX_CARDS[e.id]) return { ...e, ...PRIVWIRE_TX_CARDS[e.id], details: txTr(PRIVWIRE_TX_CARDS[e.id].details) };
     if (r && typeof r.details === "string" && r.details.includes(TX_CLAUSE_OLD)) return { ...r, details: r.details.split(TX_CLAUSE_OLD).join(TX_CLAUSE_NEW) };
     return r;
   });
@@ -812,6 +829,6 @@ module.exports = {
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
   VOICE_NOTE, withVoiceNotes,                                       // WP-1 (design section H)
-  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS, TX_KEPT_NOTE, PV3_DARK_CARDS, withoutDarkCards, PC_KEYS, pcApply, withPrivacyCopy,   // + S7: the cards' pc variants                                // wave 2 (design section H, behind the Privacy wire v2 switch)
+  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS, TX_KEPT_NOTE, TX_TR_SWAPS, PV3_DARK_CARDS, withoutDarkCards, PC_KEYS, pcApply, withPrivacyCopy,   // + S7: the cards' pc variants                                // wave 2 (design section H, behind the Privacy wire v2 switch)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };
