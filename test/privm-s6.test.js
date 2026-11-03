@@ -39,7 +39,7 @@ const PS = require(path.join(repo, "privacystate"));
 const INC = require(path.join(repo, "incognito"));
 const CL = require(path.join(repo, "chatlog"));
 const HELP = require(path.join(repo, "help"));
-const BASE = process.env.PRIVM_S6_BASE_REV || "09b25406";   // (the S4 head as rebased onto 1.99ahz; was fc5282bf on 1.99ahx, ba36ab81 on 1.99aht, 4f33f528 before)
+const BASE = process.env.PRIVM_S6_BASE_REV || "d1e8b807";   // (the S4 head as rebased onto 1.99aib; was 09b25406 on 1.99ahz, fc5282bf on 1.99ahx, ba36ab81 on 1.99aht, 4f33f528 before)
 
 const users = new Map();
 const U = {};
