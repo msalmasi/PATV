@@ -102,6 +102,10 @@ function init() {
       if (!cols.includes("bypass")) await runQuery("ALTER TABLE cam_views ADD COLUMN bypass TEXT");   // 1.99aak: what a ghost got past
       // 1.99?? (privacy controls S4): a reveal of a veiled person - the frog name (or "veiled") admin views show instead of the login
       if (!cols.includes("veil")) await runQuery("ALTER TABLE cam_views ADD COLUMN veil TEXT");
+      // 1.99?? (privacy controls review RV-3): a reveal row's session (rv) and whether its person was TOLD (the first frame, not a
+      // ghost - camreveal.notify sets it): !whowatching / the privacy card list a moderator's view only once it was told
+      if (!cols.includes("rv")) await runQuery("ALTER TABLE cam_views ADD COLUMN rv TEXT");
+      if (!cols.includes("told")) await runQuery("ALTER TABLE cam_views ADD COLUMN told INTEGER");
       await loadBlocks();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -241,6 +245,15 @@ function noteReveal(roomId, owner, pad, t = now()) {
     return false;
   }
 }
+/** 1.99?? (privacy controls review RV-3): moderator `userId`'s reveal rows of session `sid` - their person was told now (the first frame,
+ *  not a ghost): from here on !whowatching / the privacy card list it as "someone moderating <pad>". -> rows marked */
+async function markRevealTold(sid, userId) {
+  try {
+    await init();
+    const r = await runQuery("UPDATE cam_views SET told = 1 WHERE kind = 'reveal' AND rv = ? AND user_id = ? AND (told IS NULL OR told = 0)", [String(sid || ""), String(userId || "")]);
+    return (r && r.changes) || 0;
+  } catch (e) { console.error("[camviewers] reveal told:", e.message); return 0; }
+}
 /** The notices for Pepe's poll (and his acks of the last ones). body: {cv, cv_ack}. */
 function forBot(body, t = now()) {
   body = body || {};
@@ -301,7 +314,9 @@ async function watching(owner, t = now()) {
   const micStage = new Set(all.filter((x) => x.mf && !named.has(String(x.userId))).map((x) => String(x.userId)));
   const rows = await getQuery(`SELECT user_id, kind, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND ghost = 0 AND kind != 'reveal' GROUP BY user_id, kind ORDER BY at DESC LIMIT 200`,
     [o, t - RECENT_MS]);
-  const rvRows = await getQuery(`SELECT room_id, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND ghost = 0 AND kind = 'reveal' GROUP BY room_id ORDER BY at DESC LIMIT 20`,
+  // (review RV-3: only a reveal its person was TOLD about - the first frame, not a ghost; a failed open, or a view still waiting for its
+  // first frame, is never listed)
+  const rvRows = await getQuery(`SELECT room_id, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND told = 1 AND kind = 'reveal' GROUP BY room_id ORDER BY at DESC LIMIT 20`,
     [o, t - RECENT_MS]);
   const U = await usersById(live.map((x) => x.userId).concat(rows.map((r) => r.user_id)));
   const liveIds = new Set(live.map((x) => String(x.userId)));
@@ -488,6 +503,7 @@ function register(app, { addUser, isBotToken }) {
 module.exports = {
   init, register, camRefusal, bypassOf, blocked, noteView, noteViewers, forBot, watching, block, unblock, listBlocks, resolveViewer, stats, prune,
   noteReveal, modLabel,                                                                                   // 1.99?? (privacy controls S4)
+  markRevealTold,                                                                                         // 1.99?? (privacy controls review RV-3)
   UNAVAILABLE, MSG, RECENT_MS, LIVE_GAP_MS, OWNER_GAP_MS, NOTE_TTL_MS, RESEND_MS, DIGEST_MAX,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setDeps: (d) => { deps = Object.assign({}, deps, d || {}); },

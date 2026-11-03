@@ -248,7 +248,7 @@ function padName(roomId) {
 const evidenceOn = () => { try { return require("./camevidence").on() === true; } catch (e) { return false; } };
 
 // ── the rows (one transaction) ──
-async function writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veiled, byLogin, what }) {
+async function writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veiled, byLogin, what, told = false }) {
   const ST = require("./seethrough"), AA = require("./adminaudit");
   await ST.init(); await AA.init(); await require("./camviewers").init(); await require("./livecam").init();
   const t = now(), uid = String(u.userId);
@@ -260,8 +260,10 @@ async function writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veil
                              [String(R.id), sub.login, uid, u.username || null, t, ghost ? 1 : 0, "reveal:" + why, veiled ? label : null]);
     const auditId = a && a.id ? Number(a.id) : null;
     if (!auditId) throw new Error("camreveal: no livecam_audit row");
-    await runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost, bypass, veil) VALUES (?, ?, ?, ?, 'reveal', ?, ?, ?, ?)",
-                   [sub.login, String(R.id), uid, u.username || null, t, ghost ? 1 : 0, "reveal:" + why, veiled ? label : null]);
+    // (review RV-3: the row names its session and starts untold - camviewers.markRevealTold flips it at the first frame (notify), so a
+    // failed open is never listed to the person; an Extend of a view they were already told about is told at once)
+    await runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost, bypass, veil, rv, told) VALUES (?, ?, ?, ?, 'reveal', ?, ?, ?, ?, ?, ?)",
+                   [sub.login, String(R.id), uid, u.username || null, t, ghost ? 1 : 0, "reveal:" + why, veiled ? label : null, String(sid), told ? 1 : 0]);
     await AA.record({ userId: uid, username: u.username || null }, "seethrough.cam_reveal", null,
                     { room: String(R.id), sid, role, why, ghost: !!ghost, by_login: !!byLogin, what, st }, reason || null);
     return { auditId, st };
@@ -340,7 +342,7 @@ async function extend(u, R, sid, reason0) {
   if (lim) throw new Refuse(429, lim, "rate");
   const ghost = isGhost(uid);
   const a = await writeRows({ u, R, sub: { login: S.login }, role, reason, why: S.rv.why, sid: S.sid, ghost, label: S.rv.label, veiled: S.rv.veiled,
-                              byLogin: S.rv.bylogin, what: "extend" });
+                              byLogin: S.rv.bylogin, what: "extend", told: !!v.told });
   if (!LC.revealExtend(uid, R.id, S.sid, a.auditId)) {
     await runQuery("UPDATE livecam_audit SET ended = ?, secs = 0, end_reason = 'ended' WHERE id = ? AND ended IS NULL", [now(), a.auditId]).catch(() => {});
     throw new Refuse(410, MSG.ended, "ended");
@@ -352,8 +354,10 @@ async function extend(u, R, sid, reason0) {
 // ── the notice (Q10 / Q11): livecam calls this at the first frame, once per moderator per reveal session, never for a ghost ──
 async function inboxNotice(S, uid, pad) {
   const rows = await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [S.login]).catch(() => []);
-  // (the ref names the session and an HMAC of the moderator - never their id: inbox rows go out in a person's own data export)
-  const ref = "camreveal:" + S.sid + ":" + crypto.createHmac("sha256", SECRET).update("camreveal-ref:" + uid).digest("hex").slice(0, 10);
+  // (the ref names the session and an HMAC of the moderator - never their id: inbox rows go out in a person's own data export.
+  // Review RV-5: the HMAC covers the session too, so it still tells one moderator's notice from another's within a reveal, but two
+  // reveals by the same moderator never share a tail - the person can't link them)
+  const ref = "camreveal:" + S.sid + ":" + crypto.createHmac("sha256", SECRET).update("camreveal-ref:" + S.sid + ":" + uid).digest("hex").slice(0, 10);
   const I = require("./inbox");
   for (const r of rows) {
     await I.addSafe(String(r.userId), { kind: "privacy", title: `👁 Someone moderating ${pad} viewed your cam`,
@@ -365,6 +369,8 @@ function notify(S, uid) {
   if (!S || !S.rv || isGhost(uid)) return false;
   const pad = padName(S.roomId);
   try { require("./camviewers").noteReveal(S.roomId, S.login, pad); } catch (e) { console.error("[camreveal] PM notice:", e.message); }
+  // (review RV-3: from now on !whowatching / the privacy card list this view - never before its first frame)
+  try { require("./camviewers").markRevealTold(S.sid, uid).catch(() => 0); } catch (e) { /* best effort */ }
   inboxNotice(S, uid, pad).catch((e) => console.error("[camreveal] inbox notice:", e.message));
   console.log(`[camreveal] told room=${S.roomId} rv=${S.sid}`);
   return true;

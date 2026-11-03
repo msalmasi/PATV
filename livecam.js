@@ -787,7 +787,8 @@ function watchersOf(login, t = now()) {
     if (S.ended || S.login !== l) continue;
     // 1.99?? (privacy controls S4): a moderator viewing it through a reveal - `reveal`: camviewers counts them as "someone moderating
     // <pad>", never by name (owner Q11); a 👻 ghost is never counted (isGhost: the live switch, not the one at the start)
-    if (S.rv) { for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: null, room: S.roomId, since: v.since, ghost: isGhost(uid), reveal: true }); continue; }
+    // (review RV-3: only once the person was TOLD - the first frame, not a ghost: before it, or after a failed open, nobody is listed)
+    if (S.rv) { for (const [uid, v] of freshViewers(S, t)) if (v.told) out.push({ userId: uid, username: null, room: S.roomId, since: v.since, ghost: isGhost(uid), reveal: true }); continue; }
     for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: v.username, room: S.roomId, since: v.since, ghost: !!v.ghost });
     // 1.99zc; micfollow (D-19): `mf` = they watch ONLY through a pad's mic stage - counted for the cam's owner, never named
     for (const [uid, v] of freshStage(S, t)) out.push({ userId: uid, username: v.username || null, room: S.roomId, since: v.since, stage: true, ghost: !!v.ghost, mf: mfOnlyVia(v) });
