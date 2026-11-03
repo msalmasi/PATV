@@ -300,3 +300,51 @@ test("R4 F4 probing: /admin/bridge's see-through card says what a miss row is", 
   assert.ok(br.includes("a ref <code>miss:&lt;code&gt;:l</code> is a by-login try by staff, a pad's owner or a room moderator that opened nothing"), "the see-through card names the miss rows");
 });
 
+// ───────────────────── round 4: F4 UX - can_save is camevidence's own answer for that session ─────────────────────
+test("R4 F4 UX: a pad owner's by-login reveal offers no Save - camevidence refuses it; an admin's by login and the owner's own reveals still offer it", async () => {
+  await ready;
+  CE._setDeps({ capture: async () => JPEG });
+  assert.equal(CE.on(), true, "cam evidence is in effect on this harness");
+  clean(); T += 11000; await fresh(); RL._hits.clear();
+  const o = await byPad(U.own, "zeldaforgot");
+  assert.equal(o.status, 200, o.text);
+  try {
+    assert.equal(o.d.role, "owner");
+    assert.equal(o.d.can_save, false, "a session opened by login keeps evidence to admins - the owner isn't offered it");   // (round 3: true)
+    await firstFrame(o.d.rv, o.d.whep);
+    const sv = await saveEv(U.own, o.d.rv);
+    assert.deepEqual([sv.status, sv.d.code], [403, "not_entitled"], "what camevidence answers: " + sv.text);
+  } finally { await stopRv(U.own, o.d.rv); clean(); }
+  // an admin's session by login: offered (admins save anything they view)
+  clean(); T += 11000; await fresh(); RL._hits.clear();
+  const a = await byAdmin(U.adm, "alicecf", "report by login");
+  assert.equal(a.status, 200, a.text);
+  try {
+    assert.equal(a.d.can_save, true);
+    // the owner joins it from the pad (alice is listed - RV-C lets them): the session is still a by-login one, so no Save for them
+    const j = await reveal(U.own, { login: "alicecf", reason: "check alice" });
+    assert.equal(j.status, 200, j.text);
+    assert.equal(j.d.rv, a.d.rv, "the one session of that person");
+    assert.equal(j.d.can_save, false, "joined a by-login session: not offered");                                          // (round 3: true)
+    await firstFrame(a.d.rv, a.d.whep);
+    assert.equal((await saveEv(U.own, j.d.rv)).d.code, "not_entitled", "and camevidence agrees");
+    await stopRv(U.own, j.d.rv);
+  } finally { await stopRv(U.adm, a.d.rv); clean(); }
+  // the owner's own reveal from the pad (alice, live cam off): offered, and it saves
+  clean(); T += 11000; await fresh(); RL._hits.clear();
+  const p = await reveal(U.own, { login: "alicecf", reason: "check alice" });
+  assert.equal(p.status, 200, p.text);
+  try {
+    assert.equal(p.d.can_save, true, "not a by-login session: the owner may save");
+    await firstFrame(p.d.rv, p.d.whep);
+    const ok = await saveEv(U.own, p.d.rv);
+    assert.equal(ok.status, 200, ok.text);
+  } finally { await stopRv(U.own, p.d.rv); clean(); }
+  // a mod / staff: never offered (as before)
+  clean(); T += 11000; await fresh(); RL._hits.clear();
+  const s = await reveal(U.staff, { login: "alicecf", reason: "check alice" });
+  assert.equal(s.status, 200, s.text);
+  assert.equal(s.d.can_save, false);
+  await stopRv(U.staff, s.d.rv); clean();
+});
+

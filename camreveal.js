@@ -257,7 +257,6 @@ function padName(roomId) {
   pad = clean(pad, 40).replace(/[<>]/g, "");
   return pad || "this pad";
 }
-const evidenceOn = () => { try { return require("./camevidence").on() === true; } catch (e) { return false; } };
 
 // ── the rows (one transaction) ──
 async function writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veiled, byLogin, what, told = false }) {
@@ -378,7 +377,11 @@ async function startChecked(u, R, b, { byLogin, role, reason, probe, rows }) {
     async (sid) => { const a = await writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veiled, byLogin, what: "open" }); rows.wrote = true; return a; });
   console.log(`[camreveal] open room=${R.id} by=${u.userId} as=${role}${ghost ? " ghost" : ""}${byLogin ? " by-login" : ""} why=${why}`);
   // (the player shows the frog name for a veiled person - never the login; the by-login entry shows what the admin typed)
-  return { ...ans, name: byLogin || !veiled ? sub.login : sub.alias || null, veiled: veiled && !byLogin, can_save: SAVERS.has(role) && evidenceOn(), role };
+  // 1.99?? (privacy controls, round 4 - F4 UX): can_save asks camevidence's own rule for THIS session (a session opened by login: admins
+  // only), so the player never offers a Save that camevidence would refuse
+  let canSave = false;
+  try { canSave = require("./camevidence").maySave(role, LC.revealSess(R.id, ans.rv)) === true; } catch (e) { canSave = false; }
+  return { ...ans, name: byLogin || !veiled ? sub.login : sub.alias || null, veiled: veiled && !byLogin, can_save: canSave, role };
 }
 /** A beat: the right, the pad, the person still withheld (and listed, unless by login) - else the moderator's view ends with why. */
 async function beat(u, R, sid) {

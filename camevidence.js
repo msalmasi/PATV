@@ -199,6 +199,18 @@ async function store({ buf, kind, S, secs, user, role, reason }) {
   return { id, expires_at: exp };
 }
 
+/** 1.99?? (privacy controls, round 4 - F4 UX): may moderator `role` save evidence of reveal session S (null: the role alone)? -> null (yes) |
+ *  the refusal. save() and camreveal.start's can_save both ask this, so the player offers "Save still / clip" only where save() allows it
+ *  (a pad's owner on a session opened by login was offered it and then refused). */
+function saveRefusal(role, S) {
+  const CR = require("./camreveal");
+  if (!role || !CR.SAVERS.has(role)) return new Refuse(403, "Only PATV admins, and a pad's owner in their own pad, can save evidence of a cam.", "not_entitled");
+  if (S && S.rv && S.rv.bylogin && !CR.SITE_WIDE.has(role)) return new Refuse(403, "Only PATV admins can save evidence of a cam opened by its login.", "not_entitled");
+  return null;
+}
+/** The player's can_save: evidence is on and saveRefusal(role, S) has nothing. Never throws. */
+function maySave(role, S) { try { return on() && !saveRefusal(role, S); } catch (e) { return false; } }
+
 /** A moderator saves evidence from the reveal they're viewing. -> {ok, id, kind, expires_at} */
 async function save(user, R, sid, kind, secs0, reason0) {
   await init();
@@ -208,13 +220,15 @@ async function save(user, R, sid, kind, secs0, reason0) {
   if (reason.length < WHY_MIN) throw new Refuse(400, "Say why (at least 3 characters) - it's logged.", "why");
   const CR = require("./camreveal"), LC = require("./livecam");
   const role = await CR.roleOf(user, R);
-  if (!role || !CR.SAVERS.has(role)) throw new Refuse(403, "Only PATV admins, and a pad's owner in their own pad, can save evidence of a cam.", "not_entitled");
+  const noRole = saveRefusal(role, null);
+  if (noRole) throw noRole;
   const S = LC.revealSess(R.id, sid);
   const v = S && !S.ended ? S.viewers.get(String(user.userId)) : null;
   const t = now();
   if (!v || t - v.beat > LC.BEAT_MS || t > v.until) throw new Refuse(410, "Open the cam first - evidence comes from a view that's running.", "ended");
   if (!S.liveAt) throw new Refuse(409, "Their cam isn't showing yet.", "not_live");
-  if (S.rv.bylogin && !CR.SITE_WIDE.has(role)) throw new Refuse(403, "Only PATV admins can save evidence of a cam opened by its login.", "not_entitled");
+  const noSess = saveRefusal(role, S);
+  if (noSess) throw noSess;
   const uid = String(user.userId);
   if (BUSY.has(uid)) throw new Refuse(409, "Your last capture is still running.", "busy");
   const lim = require("./bridge-relay").limited("camevidence|" + uid, REQ_GAP, REQ_BURST, REQ_WINDOW);
@@ -435,6 +449,7 @@ function register(app, { addUser, bySlug, noTimers = false }) {
 }
 
 module.exports = { init, on, rtspAuth, save, store, sweep, subjectGone, register, KEEP_MS, CLIP_MIN, CLIP_MAX, CLIP_DEF, ID_RE, Refuse,
+                   saveRefusal, maySave,                                                        // 1.99?? (privacy controls, round 4)
                    _jobs: JOBS, password,
                    _setDeps: (d) => { deps = Object.assign({}, deps, d || {}); },
                    _setClock: (f) => { clock = f || (() => Date.now()); },
