@@ -60,7 +60,7 @@
     <% if (c.mine) { %>
       <form class="cm-editf composer hide" data-act="cedit-save">
         <textarea name="body" maxlength="2000" rows="3" aria-label="<%- t('feed.c.edit_aria') %>"><%= c.body %></textarea>
-        <% if (c.fmt === 'md') { %><%- include('post-formatting-help') %><% } %>
+        <% if (c.fmt === 'md' && fx.markdownOn()) { %><%- include('post-formatting-help') %><% } %><%# 1.99aij: only while feed_markdown is on (/help/formatting#posts shows only then) %>
         <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="cedit"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.save') %></button></div>
       </form>
     <% } %>

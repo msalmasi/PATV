@@ -149,7 +149,8 @@ const TAGS = require("./feedtags");
 const tagHref = (tag, padSlug = null) => (padSlug ? "/p/" + encodeURIComponent(padSlug) + "?tag=" + encodeURIComponent(tag) + "#feed" : "/feed?tag=" + encodeURIComponent(tag));
 // 1.99ir: a person's flair in a pad (padflair.js) - the chip next to their name
 const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, flair: (f) => require("./padflair").html(f), postFlair: (f, href) => require("./padflair").postHtml(f, href), postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, postBody, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
-             plainBody, SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
+             plainBody, markdownOn: () => !!store.config().feed_markdown,       // 1.99aij: edit forms link the posts formatting guide only while it shows
+             SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
 // 1.99bz: stories.js owns them (privacy: anonymous subjects, missing files skipped) ──

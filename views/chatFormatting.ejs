@@ -8,9 +8,13 @@
   opened, and a tap opens it everywhere. Linked from the composer's formatting bar (its ? button) and from /help.
   Chat widget 0.2.0: times again (the row and the Times section, drawn in UTC here), the bar's Link button, and words with
   a link, shown as "words (address)".
+  1.99aij: the "Posts and comments" section (#posts) and its tab show only while the feed's formatting switch is on
+  (`markdown`, chatformat.js); with it off the heading is the chat-only one.
 %>
 <%
   const e = t.esc;
+  // 1.99aij: the posts section, its tab and the heading's "posts and comments" only while feed_markdown is on (chatformat.js)
+  const markdown_ = typeof markdown !== 'undefined' && !!markdown;
   // a catalog string (HTML-safe text) inside a double-quoted attribute
   const attr = (s) => String(s).replace(/"/g, '&#34;');
   const mark = (s) => '<code class="cf-mark">' + e(s) + '</code>';
@@ -84,13 +88,13 @@
 <main class="ds-page cf" id="cf">
   <section class="ds-hero" aria-labelledby="cfH">
     <p class="ds-eyebrow"><%- t('chatfmt.eyebrow') %></p>
-    <h1 id="cfH"><%- t('chatfmt.h1') %></h1>
+    <h1 id="cfH"><%- t(markdown_ ? 'chatfmt.h1' : 'chatfmt.h1_chat') %></h1>
     <p class="ds-lead"><%- t('chatfmt.lead', { aa: '<span class="cf-aa">Aa</span>' }) %></p>
   </section>
 
   <nav class="ds-subnav" aria-label="<%- t('chatfmt.nav') %>"><div class="ds-tabs">
     <a class="ds-tab" href="#forms"><%- t('chatfmt.nav_ref') %></a>
-    <a class="ds-tab" href="#posts"><%- t('chatfmt.nav_posts') %></a>
+    <% if (markdown_) { %><a class="ds-tab" href="#posts"><%- t('chatfmt.nav_posts') %></a><% } %>
     <a class="ds-tab" href="#bar"><%- t('chatfmt.nav_bar') %></a>
     <a class="ds-tab" href="#times"><%- t('chatfmt.nav_time') %></a>
     <a class="ds-tab" href="#bridges"><%- t('chatfmt.nav_bridges') %></a>
@@ -122,6 +126,7 @@
     </div>
   </section>
 
+  <% if (markdown_) { %>
   <section class="cf-sec" id="posts" aria-labelledby="cfPostsH">
     <h2 class="ds-h2" id="cfPostsH"><span class="dot"></span><%- t('chatfmt.posts_h') %></h2>
     <p class="ds-lead"><%- t('chatfmt.posts_lead') %></p>
@@ -139,6 +144,7 @@
     <p><%- t('chatfmt.posts_links') %></p>
     <p class="ds-meta"><%- t('chatfmt.posts_scope') %></p>
   </section>
+  <% } %>
 
   <section class="ds-card lg cf-sec" id="bar" aria-labelledby="cfBarH">
     <h2 class="ds-h2" id="cfBarH"><%- t('chatfmt.bar_h') %></h2>

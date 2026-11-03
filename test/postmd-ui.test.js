@@ -21,9 +21,10 @@ const comment = (extra = {}) => Object.assign({
   id: "comment1", body: "**reply**", fmt: null, author: user, mine: true,
   created: 1700000000000, score: 0, ups: 0, downs: 0, replies: [],
 }, extra);
-function helpers(calls = []) {
+function helpers(calls = [], markdownOn = false) {
   return {
     icon: () => "", num: String, ago: () => "now", uav: () => "", uname: () => "Sample",
+    markdownOn: () => markdownOn,                  // 1.99aij: feedweb fx - the feed_markdown switch
     postBody: (record, opts) => {
       calls.push({ record, opts });
       return record.fmt === "md" ? "<strong>rendered</strong>" : "**literal**";
@@ -64,7 +65,12 @@ test("crossposts render the original record's format and preserve its edit forma
   assert.match(html, /class="fp-body post-md clamp"/);
   assert.equal(hasHelp(html), false, "the legacy wrapper's edit form stays plain");
   const edit = await render("partials/feed-post", { ...common, p: post({ fmt: "md" }), fx: helpers(), markdownEnabled: false });
-  assert.equal(hasHelp(edit), true, "Markdown edit help remains available after rollback");
+  // 1.99aij (owner 2026-11-03): /help/formatting#posts shows only while feed_markdown is on, so the link to it does too
+  assert.equal(hasHelp(edit), false, "no help link to a section that isn't there after rollback");
+  const on = await render("partials/feed-post", { ...common, p: post({ fmt: "md" }), fx: helpers([], true), markdownEnabled: true });
+  assert.equal(hasHelp(on), true, "Markdown edit help while the switch is on");
+  const plainOn = await render("partials/feed-post", { ...common, p: post({ fmt: null }), fx: helpers([], true), markdownEnabled: true });
+  assert.equal(hasHelp(plainOn), false, "a plain post's edit form never gets it");
 });
 
 test("new composer help follows the switch without changing the legacy form or showing a live preview", async () => {
@@ -77,16 +83,16 @@ test("new composer help follows the switch without changing the legacy form or s
   }
 });
 
-test("comments use stored fmt, edit help is sticky, and new reply help follows the switch", async () => {
+test("comments use stored fmt; edit help needs a Markdown comment and the switch on; new reply help follows the switch", async () => {
   for (const fmt of [null, "md"]) {
     for (const markdownEnabled of [false, true]) {
       const c = comment({ fmt }), calls = [];
-      const html = await render("partials/feed-comment", { ...common, c, p: post(), fx: helpers(calls), staff: false, reply: false, markdownEnabled });
+      const html = await render("partials/feed-comment", { ...common, c, p: post(), fx: helpers(calls, markdownEnabled), staff: false, reply: false, markdownEnabled });
       assert.equal(calls[0].record, c);
       assert.equal(html.includes('class="cm-body post-md"'), fmt === "md");
       const edit = /<form class="cm-editf[\s\S]*?<\/form>/.exec(html)[0];
       const reply = /<form class="cm-replyf[\s\S]*?<\/form>/.exec(html)[0];
-      assert.equal(hasHelp(edit), fmt === "md");
+      assert.equal(hasHelp(edit), fmt === "md" && markdownEnabled, "1.99aij: edit help only while the switch is on");
       assert.equal(hasHelp(reply), markdownEnabled);
     }
   }
@@ -120,7 +126,7 @@ test("spoiler controls toggle both visibility and accessible state, including dy
 
 test("formatting help documents post blocks separately without adding chat grammar", async () => {
   const cf = require("../chatformat");
-  const html = await render("chatFormatting", { user: null, ogBase: "http://test", ...cf });
+  const html = await render("chatFormatting", { user: null, ogBase: "http://test", ...cf, markdown: true });
   const posts = /<section class="cf-sec" id="posts"[\s\S]*?<\/section>/.exec(html)[0];
   for (const id of ["headings", "lists", "quotes", "rule"]) assert.match(posts, new RegExp('id="post-fmt-' + id + '"'));
   assert.match(posts, /## Heading\n### Smaller heading\n#### Smallest heading/);
@@ -129,6 +135,22 @@ test("formatting help documents post blocks separately without adding chat gramm
   assert.ok(!/chatfmt\.[a-z_]/.test(posts));
   assert.equal(cf.FORMS.length, 18, "chat's reference remains its existing 18 forms");
   assert.ok(!cf.FORMS.some((f) => ["headings", "lists", "rule"].includes(f.id)));
+});
+
+// 1.99aij (owner 2026-11-03): the posts section shows only while feed_markdown is on; the chat guide is the same either way
+test("formatting help: the posts section, its tab and the heading's posts and comments only while the switch is on", async () => {
+  const cf = require("../chatformat");
+  const on = await render("chatFormatting", { user: null, ogBase: "http://test", ...cf, markdown: true });
+  for (const off of [await render("chatFormatting", { user: null, ogBase: "http://test", ...cf, markdown: false }),
+                     await render("chatFormatting", { user: null, ogBase: "http://test", ...cf })]) {
+    assert.ok(!/id="posts"|href="#posts"|post-fmt-|Posts and comments/.test(off), "no posts section or tab");
+    assert.match(off, /<h1 id="cfH">Formatting your messages<\/h1>/);
+    const forms = (h) => /<section class="cf-sec" id="forms"[\s\S]*?<\/section>/.exec(h)[0];
+    assert.equal(forms(off), forms(on), "the chat guide is unchanged");
+    for (const id of ['href="#forms"', 'href="#bar"', 'href="#times"', 'href="#bridges"', 'href="#not"']) assert.ok(off.includes(id), id);
+  }
+  assert.match(on, /<h1 id="cfH">Formatting messages, posts and comments<\/h1>/);
+  assert.match(on, /<a class="ds-tab" href="#posts">Posts and comments<\/a>/);
 });
 
 test("admin and pad moderation excerpts strip Markdown only on stored Markdown entries", () => {

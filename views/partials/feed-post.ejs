@@ -180,7 +180,7 @@
       <form class="fp-editf hide" data-act="edit-save">
         <input name="title" maxlength="140" value="<%= p.title %>" placeholder="<%- t('feed.title_opt') %>" aria-label="<%- t('feed.title_aria') %>">
         <textarea name="body" maxlength="5000" rows="4" aria-label="<%- t('feed.text_aria') %>"><%= p.body %></textarea>
-        <% if (p.fmt === 'md') { %><%- include('post-formatting-help') %><% } %>
+        <% if (p.fmt === 'md' && fx.markdownOn()) { %><%- include('post-formatting-help') %><% } %><%# 1.99aij: only while feed_markdown is on (/help/formatting#posts shows only then) %>
         <input name="tags" maxlength="200" value="<%= (p.tags || []).join(', ') %>" placeholder="<%- t('feed.p.tags_ph', { n: fx.MAX_TAGS || 5 }) %>" aria-label="<%- t('feed.tags.aria') %>" autocomplete="off">
         <% const hp_ = (p.roomsAll || []).find((x) => x.id === p.homePad && !x.profile); if (hp_) { %><%# 1.99wq: post flair - the pad's choices load when the form opens (feed.js) %>
         <select name="flair" data-flair-pad="<%= hp_.slug %>" data-cur="<%= p.postFlair ? p.postFlair.id : '' %>" aria-label="<%- t('feed.flair.aria') %>" hidden></select><% } %>

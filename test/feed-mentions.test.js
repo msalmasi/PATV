@@ -288,5 +288,12 @@ test("1.99aij: a Markdown spoiler never reaches the post page's og tags, title o
     const body = r.text.slice(r.text.indexOf("</head>"));
     assert.match(body, /<span hidden>Snape kills Dumbledore<\/span>/);
     assert.equal(body.split("Snape").length - 1, 1, "only inside the spoiler");
+    // the author's edit form links the posts formatting guide only while /help/formatting shows it (feedweb fx.markdownOn)
+    const editForm = async () => /<form class="fp-editf[\s\S]*?<\/form>/.exec((await call("GET", p.url, U.alice)).text)[0];
+    assert.equal(web.fx.markdownOn(), true);
+    assert.match(await editForm(), /href="\/help\/formatting#posts"/);
+    await store.setConfig({ feed_markdown: false }, "test");
+    assert.equal(web.fx.markdownOn(), false);
+    assert.doesNotMatch(await editForm(), /help\/formatting/);
   } finally { await store.setConfig({ feed_markdown: false }, "test"); }
 });

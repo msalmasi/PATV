@@ -69,12 +69,16 @@ function typed(form, t) {
   return form.type.map((x) => x.split("{w}").join(w));
 }
 
-function register(app, { addUser }) {
+// 1.99aij (owner 2026-11-03): the "Posts and comments" section (#posts, its tab and the heading's "posts and comments")
+// shows only while the feed's formatting switch (feedstore feed_markdown, admin) is on: markdownOn(), read per request.
+// Not wired = off. The chat guide is the same either way.
+function register(app, { addUser, markdownOn = () => false }) {
   app.get(PATH, addUser, (req, res) => {
     try {
       res.set("Cache-Control", "private, max-age=0, must-revalidate");
       res.render("chatFormatting", {
         user: req.user ? req.user.username : null,
+        markdown: !!markdownOn(),
         FORMS,
         TIME_STYLES,
         SAMPLE_TIME,

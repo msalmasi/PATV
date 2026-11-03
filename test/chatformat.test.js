@@ -124,3 +124,29 @@ test("every key the view asks for is in en.json, and /help links to the guide", 
   assert.ok(en["help.formatting_note"].includes("{!link}"), "the note's link is a raw placeholder");
   ejs.compile(src, { filename: path.join(repo, "views", "chatFormatting.ejs") });
 });
+
+// 1.99aij (owner 2026-11-03): /help/formatting's "Posts and comments" section follows the feed's formatting switch
+// (index.js passes markdownOn = feed_markdown), read on every request; not wired = off
+test("the posts section shows only while markdownOn() says the feed's formatting switch is on", async () => {
+  let on = false;
+  const app = express();
+  app.set("views", path.join(repo, "views"));
+  app.set("view engine", "ejs");
+  app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
+  CF.register(app, { addUser: (req, res, next) => { req.user = null; next(); }, markdownOn: () => on });
+  const srv = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
+  try {
+    const get = () => fetch("http://127.0.0.1:" + srv.address().port + "/help/formatting").then((r) => r.text());
+    let html = await get();
+    assert.ok(!/id="posts"|href="#posts"/.test(html), "off: no section, no tab");
+    assert.match(html, /Formatting your messages/);
+    on = true;
+    html = await get();
+    assert.match(html, /<section class="cf-sec" id="posts"/);
+    assert.match(html, /href="#posts"/);
+    assert.match(html, /Formatting messages, posts and comments/);
+    // the default wiring (this file's app) is off
+    assert.ok(!/id="posts"/.test((await page("/help/formatting")).text));
+    assert.match(fs.readFileSync(path.join(repo, "index.js"), "utf8"), /require\("\.\/chatformat"\)\.register\(app, \{ addUser, markdownOn: \(\) => !!require\("\.\/feedstore"\)\.config\(\)\.feed_markdown \}\)/);
+  } finally { srv.close(); }
+});

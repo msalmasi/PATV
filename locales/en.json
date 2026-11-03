@@ -10718,6 +10718,7 @@
   "chatfmt.og": "Bold, italics, spoilers, quotes, code, links and times in PATV Chat, and what a bridged chat will show for each.",
   "chatfmt.eyebrow": "PATV · FORMATTING HELP",
   "chatfmt.h1": "Formatting messages, posts and comments",
+  "chatfmt.h1_chat": "Formatting your messages",
   "chatfmt.lead": "PATV Chat reads the same marks as Discord. Type them yourself, or tap {!aa} next to Send for the formatting bar.",
   "chatfmt.nav": "On this page",
   "chatfmt.nav_ref": "Chat formatting",
