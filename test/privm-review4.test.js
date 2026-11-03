@@ -380,3 +380,7 @@ test("R4 wording: /privacy says who can use ghost mode the same way in every sen
   assert.ok(!stripTags(privacyPage({})).includes("using ghost mode"), "cam reveals off: no such sentence");
 });
 
+test("R4 wording: the S4t admin card names the mic-stage report queue's reveal for staff (text reveal roles on; off: admins only)", () => {
+  const br = fs.readFileSync(path.join(repo, "views", "admin", "bridge.ejs"), "utf8");
+  assert.ok(br.includes("staff can also reveal who a veiled row of the mic-stage report queue on /stage/admin is about (off: admins only)."), "the S4t card");
+});

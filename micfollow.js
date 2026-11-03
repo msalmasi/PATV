@@ -1858,6 +1858,17 @@ async function reportRefLogin(roomId, ref) {
   const r = (await getQuery("SELECT login FROM micfollow_reports WHERE id = ? AND room_id = ?", [Number(m[1]), String(roomId || "")]))[0];
   return r && LOGIN_RE.test(low(r.login)) ? low(r.login) : null;
 }
+/** 1.99?? (privacy controls, round 4 - owner Q8): who may reveal who a veiled report row is about - "admin" (chatlog.see_through), "staff"
+ *  (chatlog.reveal_text, only while text reveal roles are on), or null. Off: Admins only, as S0 had it. Fails closed. */
+const textRevealOn = () => { try { return require("./textreveal").isOn() === true; } catch (e) { return false; } };
+function reportRevealRole(user) {
+  if (!user) return null;
+  try {
+    if (SP.can(user, "chatlog.see_through")) return "admin";
+    if (textRevealOn() && SP.can(user, "chatlog.reveal_text")) return "staff";
+  } catch (e) { return null; }
+  return null;
+}
 /** Staff: dismiss (lifts a "reported" hold-out; those reporters carry no weight on that person for 24 h) or uphold the
  *  open reports on `login` in pad `roomId`. Audited. -> {n}
  *  1.99?? (privacy controls S0): a veiled group (adminView) is named by its opaque `ref` instead of a login. */
@@ -2649,7 +2660,8 @@ async function adminView(user, t = now()) {
   const out = { now: t, v: CFG.v, cfg: { ...CFG.cfg }, defaults: { ...core.DEFAULTS }, fields: core.FIELDS, updated_at: CFG.at, updated_by: CFG.by,
                 admin, pads, metrics: metrics(t), audit, reports };
   // 1.99?? (privacy controls S0): the queue offers "Reveal (logged)" on a veiled row only to an Admin with the see-through right
-  if (reports.some((r) => r.veiled) && SP.can(user, "chatlog.see_through")) out.see_through = true;
+  // (1.99?? round 4, owner Q8: + staff with chatlog.reveal_text while text reveal roles are on - reportRevealRole)
+  if (reports.some((r) => r.veiled) && reportRevealRole(user)) out.see_through = true;
   if (admin) {
     // (1.99?? privacy controls S5: a veiled cam tile's span shows its frog name, never the login - micfollow.admin is "ops")
     out.spans = (await getQuery(`SELECT id, room_id, login, started, ended, secs, video_secs, peak_viewers, end_reason, noticed, veil FROM micfollow_spans
@@ -3095,24 +3107,31 @@ function register(app, { addUser, bySlug, isLive }) {
   // Staff never: J-2), with a reason, logged BEFORE the answer (seethrough_log scope stage_report, ref report:<id> - /admin/bridge
   // #seethrough); a failed log write answers nothing. Someone left out since (forget-me, an account deletion, a staff removal) is
   // never named (XT-1).
+  // 1.99?? (privacy controls, round 4 - owner Q8: staff, pad owners and mods may reveal for moderation behind the reveal audit log): while
+  // text reveal roles are on (textreveal.js), staff with chatlog.reveal_text may too - with the reason everyone gives here, a see-through row
+  // with their role, the pad text reveals' rate limit (textreveal.limitedNonAdmin) and their daily count (seethrough.noteOwnerUse). Off: Admins
+  // only, exactly as before. (Pad owners and room mods never see this staff queue - their reveals are on the pad.)
   const revealHit = guard.limiter({ max: 20, windowMs: 60 * 1000 });
   app.post("/api/stage/admin/micfollow/report/reveal", addUser, staffOnly, async (req, res) => {
     if (!fetchOnly(req, res)) return;
     res.set("Cache-Control", "private, no-store");
     res.set("Referrer-Policy", "no-referrer");
     try {
-      if (!SP.can(req.user, "chatlog.see_through")) throw new Refuse(403, "Only PATV admins can reveal who a veiled report is about.", "forbidden");
+      const role = reportRevealRole(req.user);
+      if (!role) throw new Refuse(403, textRevealOn() ? "Only PATV admins and staff can reveal who a veiled report is about." : "Only PATV admins can reveal who a veiled report is about.", "forbidden");
       if (rate(revealHit, "u:" + req.user.userId, res)) return;
       const b = req.body || {};
       const roomId = String(b.room || "").slice(0, 128), ref = String(b.ref || "").slice(0, 24);
       const reason = String(b.reason || "").trim();
       if (reason.length < 3) throw new Refuse(400, "Say why (a few words) - every reveal is logged.", "reason");
+      if (role !== "admin" && require("./textreveal").limitedNonAdmin(String(req.user.userId), 1)) throw new Refuse(429, "Too many reveals - wait a minute.", "rate");
       const login = await reportRefLogin(roomId, ref);
       let gone = !login;
       if (login) { try { gone = !!require("./veilstage").leftOut(login); } catch (e) { gone = true; } }
       if (gone) throw new Refuse(404, "There's nothing to reveal there.", "none");
-      await require("./seethrough").log({ userId: req.user.userId, role: "admin", scope: "stage_report", roomId, logins: [login], reason,
-                                          ref: "report:" + ref.slice(1) });
+      const ST = require("./seethrough");
+      await ST.log({ userId: req.user.userId, role, scope: "stage_report", roomId, logins: [login], reason, ref: "report:" + ref.slice(1) });
+      if (role !== "admin") { try { await ST.noteOwnerUse(req.user, roomId, "lines", 1, role); } catch (e) { /* best effort */ } }
       res.json({ ok: true, ref, login });
     } catch (e) { fail(res, e); }
   });

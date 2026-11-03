@@ -1318,6 +1318,55 @@ test("45b. privacy controls S0: the staff report queue never shows a veiled pers
   assert.equal(r.status, 200, JSON.stringify(r.d));
 });
 
+test("45c. privacy controls round 4 (owner Q8): text reveal roles on - Staff reveal who a veiled report is about too (a reason, a see-through row as staff, the pad text reveals' rate limit); off: Admins only", async () => {
+  await reset(); await plainPad();
+  await runQuery("DELETE FROM micfollow_reports");
+  await onStage(["alice", "bob"]);
+  const Q = require(path.join(repo, "quotes"));
+  const ST = require(path.join(repo, "seethrough"));
+  const TRV = require(path.join(repo, "textreveal"));
+  await ST.init(); await TRV.init();
+  await runQuery("DELETE FROM seethrough_log");
+  Q.setHidden([Q.hiddenHash("alice")]);
+  let r;
+  try { r = await post(`/api/rooms/${slug()}/micfollow/report`, { login: "alice", reason: "sexual" }, "u_v2"); } finally { Q.setHidden([]); }
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  const ref = (await MF.adminView(STAFF)).reports.find((x) => x.veiled).ref;
+  const rv = (u, reason) => post("/api/stage/admin/micfollow/report/reveal", { room: ROOM.id, ref, reason }, u);
+  // off: S0 exactly - Staff are neither offered the reveal nor allowed it
+  assert.equal(TRV.isOn(), false);
+  assert.equal((await MF.adminView(STAFF)).see_through, undefined);
+  r = await rv("u_staff", "checking a report");
+  assert.deepEqual([r.status, r.d.code, r.d.error], [403, "forbidden", "Only PATV admins can reveal who a veiled report is about."]);
+  await TRV.setOn(true, ADMIN);
+  try {
+    assert.equal((await MF.adminView(STAFF)).see_through, true, "on: the queue offers Staff 'Reveal (logged)'");          // (round 3: undefined)
+    assert.equal((await MF.adminView({ userId: "u_v1", username: "viewer1", class: "pleb" })).see_through, undefined, "never a member");
+    assert.equal((await rv("u_staff", "x")).d.code, "reason", "a reason first");
+    r = await rv("u_staff", "checking a report");
+    assert.equal(r.status, 200, JSON.stringify(r.d));                                                                       // (round 3: 403)
+    assert.equal(r.d.login, "alice");
+    const lg = await getQuery("SELECT user_id, role, scope, room_id, logins, reason, ref FROM seethrough_log");
+    assert.equal(lg.length, 1, "logged before the answer, one row");
+    assert.deepEqual({ ...lg[0] }, { user_id: "u_staff", role: "staff", scope: "stage_report", room_id: ROOM.id, logins: JSON.stringify(["alice"]),
+                                     reason: "checking a report", ref: "report:" + ref.slice(1) });
+    // the pad text reveals' rate limit (textreveal.limitedNonAdmin): past it, refused - and nothing logged
+    TRV.limitedNonAdmin("u_staff", TRV.NONADMIN_PER_MIN);
+    r = await rv("u_staff", "checking a report");
+    assert.deepEqual([r.status, r.d.code], [429, "rate"], JSON.stringify(r.d));
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM seethrough_log"))[0].n, 1, "a refused reveal logs nothing");
+    // Admins: as before (no such limit)
+    TRV.limitedNonAdmin("u_admin", TRV.NONADMIN_PER_MIN);
+    r = await rv("u_admin", "checking a report");
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.equal((await getQuery("SELECT role FROM seethrough_log ORDER BY id DESC LIMIT 1"))[0].role, "admin");
+  } finally { await TRV.setOn(false, ADMIN); TRV._reset(); await TRV.init(); }
+  // off again: Admins only
+  r = await rv("u_staff", "checking a report");
+  assert.equal(r.status, 403, JSON.stringify(r.d));
+  assert.equal((await MF.adminView(STAFF)).see_through, undefined);
+});
+
 test("46. the neutral card (14.1.2 #4) - mfix: by default the last speaker's tile stays, dimmed ('Someone is speaking' over it, nobody the speaker); unattributed_clear = the old give-way; Pepe never clears it", async () => {
   // mfix default: kept, dimmed
   await reset(); await plainPad();
