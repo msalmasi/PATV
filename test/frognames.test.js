@@ -501,3 +501,30 @@ test("1.99?? review fix: the 15 minutes don't end early when NAMED is full - the
   assert.match(String((await FN.sight("Pad.EV", "evicty", { t: t + 16 * MIN })).alias), ALIAS_RE, "then a frog name, as usual");
   FN._reset();
 });
+
+test("1.99?? review fix: a frog name is never the person's OWN login (a veiled person isn't in the roster's avoid list)", async () => {
+  // find a (login, nonce) whose first draw IS that login: "analoghopper" -> "Analog Hopper" style
+  const crypto = require("crypto");
+  const hm = (k, ...p) => { const h = crypto.createHmac("sha256", k); for (const x of p) h.update(Buffer.isBuffer(x) ? x : Buffer.from(String(x), "utf8")); return h.digest(); };
+  const key = Buffer.from(KEY, "hex");
+  let hit = null;
+  for (let j = 0; j < 200 && !hit; j++) {
+    const nonce = crypto.createHash("sha256").update("own-login-" + j).digest().subarray(0, 16);
+    for (const a of FN.ADJ) {
+      for (const n of FN.NOUN) {
+        const login = (a + n).toLowerCase(), name = a + " " + n;
+        if (name.length > FN.NAME_MAX || FN.denied(name)) continue;
+        const [ca, cn] = FN.candidate(hm(key, "patv/alias/v1\0", "Pad.OWN", "\0", login, "\0", nonce), 0);
+        if (ca === a && cn === n) { hit = { login, nonce, name }; break; }
+      }
+      if (hit) break;
+    }
+  }
+  assert.ok(hit, "a fixed point exists");
+  const orig = crypto.randomBytes;
+  crypto.randomBytes = (n, ...rest) => (n === 16 && !rest.length ? Buffer.from(hit.nonce) : orig(n, ...rest));
+  let s;
+  try { s = await FN.sight("Pad.OWN", hit.login, { t: Date.UTC(2026, 10, 12, 14), kind: "incognito" }); } finally { crypto.randomBytes = orig; }
+  assert.match(String(s.alias), ALIAS_RE);
+  assert.notEqual(FN.norm(s.alias), FN.norm(hit.login), hit.login + " got " + s.alias);
+});

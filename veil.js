@@ -208,6 +208,8 @@ function avoidOf(R) {
   }
   return out;
 }
+/** 1.99?? review fix: a veiled person's frog name never reads as their OWN display name either (avoidOf lists named entries only). */
+const ownToo = (avoid, vz) => (vz && typeof vz.display === "string" && vz.display ? avoid.concat(vz.display) : avoid);
 /** Per room: hold id -> the name its grab got (a release / its 🎙 line reuse it: the session can't end during a hold). */
 const HOLDS = new Map();
 const HOLDS_MAX = 200;
@@ -263,7 +265,8 @@ async function nameItem(R, it) {
         frozen = holdKind(roomId, it.hold) === lvl;
         holdKind(roomId, it.hold, lvl);
       }
-      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), kind: lvl,
+      // (1.99?? review fix: + their own display name - a veiled person isn't in avoidOf's named roster; frognames adds the login)
+      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: ownToo(avoidOf(R), vz), kind: lvl,
                                                  frozen });
     }
   } catch (e) { view = null; console.error("[veil] frog name:", e && e.code ? e.code : "error"); }
@@ -399,7 +402,7 @@ async function nameSnapshot(R, now) {
     const low = lower(vz.login);
     const kind = personKind.has(low) ? personKind.get(low) : vz.kind;
     let view = null;
-    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid, kind }); } catch (err) { view = null; }
+    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: ownToo(avoid, vz), kind }); } catch (err) { view = null; }
     seen.add(low);
     const isMic = (R.mic || []).includes(e);
     if (view && view.alias && !(isMic && (vz.proven !== true || vz.beganNamed === true))) {

@@ -307,7 +307,10 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null) {
   if (!aliasLess) {
     const usedA = new Set(open.map((x) => x.adj).filter(Boolean)), usedN = new Set(open.map((x) => x.noun).filter(Boolean));
     const taken = new Set([...open.map((x) => x.name), ...recent.map((x) => x.name)].filter(Boolean));
-    const avoid = new Set((avoidNames || []).map(norm).filter(Boolean));    const seed = hmac(secret(), "patv/alias/v1\0", String(roomId), "\0", lower(login), "\0", nonce);
+    const avoid = new Set((avoidNames || []).map(norm).filter(Boolean));
+    const own = norm(login);                                // 1.99?? review fix: never the person's OWN login (a veiled entry isn't in
+    if (own) avoid.add(own);                                // the roster's avoid list - veil.js adds their own display name)
+    const seed = hmac(secret(), "patv/alias/v1\0", String(roomId), "\0", lower(login), "\0", nonce);
     const got = draw(seed, (a, n, nm) => !usedA.has(a) && !usedN.has(n) && !taken.has(nm) && !avoid.has(norm(nm)));
     let pref;
     if (got) { adj = got.adj; noun = got.noun; name = adj + " " + noun; pref = got.hood; }
