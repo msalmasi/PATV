@@ -50,7 +50,7 @@
     // entry ({id}), never a login; no strip pin, no stage slot, no "ask to watch" for it in this build
     var veiled = !!who && !who.login && who.veil === 'incognito' && typeof who.id === 'string' && /^v-[A-Za-z0-9_-]{12}$/.test(who.id);
     if (!info || !who || (!who.login && !veiled)) return ctl;
-    var ref = veiled ? { id: who.id } : ref;
+    var ref = veiled ? { id: who.id } : { login: who.login };   // (privacy controls S5 fix: a NAMED cam is asked for by its login, as before)
     var key = veiled ? who.id : String(who.login).toLowerCase();
     var nm = veiled ? (who.alias || _t('js.stage.mf.cover_someone', 'someone')) : (who.display || who.login);
     if (veiled) { opts = Object.assign({}, opts, { strip: null, stage: null }); }
