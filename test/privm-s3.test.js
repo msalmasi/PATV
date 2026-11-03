@@ -440,7 +440,8 @@ test("round 5: someone who ALREADY keeps their cam off mic stages (live cam off,
       return { pm: await pmOf(), ib };
     } finally { await unset(); await MF._noticed(ROOM.id, who, 1); }
   };
-  const WH = /Other pads with mic follows do too\. Your cam stays off: you can show in ~2 min with your cover picture\. https:\/\/publicaccess\.tv\/p\//;
+  // (1.99?? privacy controls round 6: "off mic stages" - a followers / on-request cam is still watchable in the live room)
+  const WH = /Other pads with mic follows do too\. Your cam stays off mic stages: you can show in ~2 min with your cover picture\. https:\/\/publicaccess\.tv\/p\//;
   try {
     for (const how of ["livecam", "mf", "followers", "request"]) {
       const r = await told("dana", true, how);
@@ -887,7 +888,7 @@ test("round 5 review: a _wh courtesy PM is queued under Pepe's own account, neve
   try {
     for (const how of ["livecam", "mf", "followers", "request"]) {
       const r = await told(true, how);
-      assert.ok(r && /Your cam stays off: you can show in ~2 min with your cover picture\./.test(r.pm), how + ": the _wh PM - " + JSON.stringify(r));
+      assert.ok(r && /Your cam stays off mic stages: you can show in ~2 min with your cover picture\./.test(r.pm), how + ": the _wh PM - " + JSON.stringify(r));
       assert.equal(r.by, "pepe-bot", how + ": under Pepe's own account");
     }
     const n = await told(true, "none");
@@ -976,6 +977,56 @@ test("round 6: a capture's consent (the recheck before a save / post, a name car
     assert.equal(await SM.cardConsent("bob", "u_v1"), true, "lifted: as before");
     assert.equal(await SM.recheck(cap), null, "lifted: postable");
   } finally { await runQuery("DELETE FROM dm_blocks"); SM.configure(defaults); }
+});
+
+// 1.99?? (privacy controls round 6): the _wh courtesy PM is true for each person it goes to - someone staged under a FROG NAME (incognito
+// cams) shows as a hooded frog, never "with your cover picture" (_wh_frog); and a followers / on-request cam is still watchable by
+// followers / people they granted in the live room, so the PM says their cam stays off mic STAGES. Both fit 300 with the link
+test("round 6: the _wh PM says the cam stays off mic stages, and someone staged under a frog name is told they show as a hooded frog (never the cover picture); both fit 300 with the link", async () => {
+  const rowOf = async () => (await getQuery("SELECT user_id, args FROM pepe_actions WHERE kind = 'notify' ORDER BY id DESC LIMIT 1"))[0] || null;
+  const T0 = require(path.join(repo, "i18n")).tFor("en");
+  const FROG = /Other pads with mic follows do too\. Your cam stays off mic stages: you can show in ~2 min as a hooded frog\. https:\/\/publicaccess\.tv\/p\//;
+  const COVER = /Other pads with mic follows do too\. Your cam stays off mic stages: you can show in ~2 min with your cover picture\. https:\/\/publicaccess\.tv\/p\//;
+  const SET = { livecam: [() => optout("dana", true), () => optout("dana", false)], mf: [() => MF.setOptout("dana", true), () => MF.setOptout("dana", false)],
+                followers: [() => CA.setMode("dana", "followers"), () => CA.setMode("dana", "everyone")], request: [() => CA.setMode("dana", "request"), () => CA.setMode("dana", "everyone")] };
+  await knobs({ withheld_cover: true });
+  try {
+    await reset(); await plainPad();
+    room([]);
+    for (const [how, [set, unset]] of Object.entries(SET)) {
+      await set();
+      await MF._idle(); for (let i = 0; i < 3; i++) await settle();
+      try {
+        for (const veiled of [true, false]) {
+          await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
+          await MF._noticed(ROOM.id, "dana", null);
+          if (!P().vnow) P().vnow = new Map();
+          P().vnow.clear();
+          if (veiled) P().vnow.set("dana", { sess: "r6" });     // (staged under a frog name this step - stepPad's vcands)
+          const c = await MF.courtesyOnce(P(), R, "dana", T);
+          assert.ok(c.ok && c.sent, how + ": told");
+          const r = await rowOf();
+          const pm = r && JSON.parse(r.args)[1];
+          assert.match(pm, veiled ? FROG : COVER, how + (veiled ? ", under a frog name" : ", by name") + ": " + pm);
+          assert.ok(veiled ? !pm.includes("cover picture") : !pm.includes("hooded frog"), how + ": " + pm);
+          assert.ok(pm.length <= 300 && !pm.includes("!livecam off") && !pm.includes("Your cam stays off:"), how + ": " + pm);
+          assert.equal(String(r.user_id), "pepe-bot", how + ": under Pepe's own account, as before");
+        }
+      } finally { P().vnow.clear(); await unset(); await MF._noticed(ROOM.id, "dana", 1); }
+    }
+    // the texts: ordinary names fit with the link; long ones drop it, never past 300, and keep their last sentence
+    for (const [key, end] of [["mf.notice.pm_once_wh", "cover picture."], ["mf.notice.pm_once_wh_frog", "hooded frog."]]) {
+      for (const [room0, pad0, slug] of [["Players__Lounge", "Players Lounge", "players-lounge"], ["R".repeat(40), "P".repeat(40), "s".repeat(40)], ["R".repeat(60), "P".repeat(60), "s".repeat(60)]]) {
+        const s = MF.pmText(T0, key, room0, pad0, 2, "https://publicaccess.tv/p/" + slug);
+        assert.ok(s.length <= 300 && !s.includes("!livecam off") && s.endsWith(slug.length < 16 ? "/p/" + slug : end), key + ": " + s);
+      }
+      const I18N = require(path.join(repo, "i18n")), dir = path.join(repo, "locales");
+      for (const f of fs.readdirSync(dir).filter((x) => /^[a-z]{2}(-[A-Z]{2})?\.json$/.test(x))) {
+        if (typeof JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"))[key] !== "string") continue;
+        assert.ok(MF.pmText(I18N.tFor(f.replace(/\.json$/, "")), key, "R".repeat(60), "P".repeat(60), 2, "https://publicaccess.tv/p/" + "s".repeat(60), T0).length <= 300, key + " " + f);
+      }
+    }
+  } finally { await knobs({ withheld_cover: false }); }
 });
 
 // ── the engine (pure) ──

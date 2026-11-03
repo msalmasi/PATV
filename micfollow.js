@@ -1113,7 +1113,8 @@ const OPT_OUT = "!livecam off";
 // 1.99aif (privacy controls round 5): a PM whose person already keeps their cam off mic stages (the _wh texts) has no "!livecam off" to
 // carry - it says their cam stays off and they show with their cover picture; only the length is checked, and the last resort keeps
 // its last sentence (that is what it says)
-const PM_NEED = { "mf.notice.pm_once_wh": null };
+// (1.99?? privacy controls round 6: + its variant for someone staged under a frog name - "_wh_frog": they show as a hooded frog)
+const PM_NEED = { "mf.notice.pm_once_wh": null, "mf.notice.pm_once_wh_frog": null };
 /** The PM: its own text, then the link - at most PM_MAX characters, and ALWAYS with the way to stop it ("!livecam off"): for most
  *  people this PM is the only notice they ever get. Long room / pad names are shortened first, then the link is left off. Review
  *  fix: a translation that still doesn't fit (Turkish runs ~1.34x the English) or lost the command is replaced by the English
@@ -1203,7 +1204,10 @@ async function courtesyPlan(P, R, login, kind) {
     // (1.99aif privacy controls round 5 review: a _wh PM - its text says the person keeps their cam off mic stages - goes under Pepe's own
     // account too: the pad owner's action rows (their Download my data) would pair the login with that private setting)
     by: !veiled && !wh && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
-    text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once" + sfx, roomName, padTitle, mins, siteUrl() + link),
+    // (1.99?? privacy controls round 6: the _wh PM true for its person - their cam stays off mic STAGES (a followers / on-request cam is still
+    // watchable by followers / people they granted in the live room), and someone staged under a frog name now shows as a hooded frog,
+    // never "with your cover picture" ("_wh_frog"); the inbox body says both)
+    text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once" + sfx + (wh && veiled ? "_frog" : ""), roomName, padTitle, mins, siteUrl() + link),
     link, title: T(home ? "mf.notice.home_title" : wh ? "mf.notice.once_title_wh" : "mf.notice.once_title", { pad: padTitle }),
     body: T(home ? "mf.notice.home_body" : "mf.notice.once_body" + sfx, { room: roomName, pad: padTitle, n: mins }),
   };
