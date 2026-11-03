@@ -67,6 +67,7 @@ const GOLDEN = {
   "restream.staff": ["staff", false], "restream.main": ["admin", true], "livecam.admin": ["admin", true], "livecam.end_any": ["staff", false],
   "camclip.override": ["admin", false], "ghost.mode": ["staff", true],
   "micfollow.kill": ["staff", true], "micfollow.admin": ["admin", true],     // micfollow: 🎙 mic follows on pad stages
+  "livecam.reveal": ["staff", true],                                         // 1.99?? (privacy controls S4, owner Q8): view a hidden cam, logged
   "soundboards.moderate": ["assistant", false], "soundboards.config": ["admin", true], "voices.view": ["staff", false], "voices.manage": ["admin", true],
   "voiceclone.view": ["staff", true], "voiceclone.decide": ["admin", true], "likeness.view": ["staff", false], "likeness.manage": ["admin", true],
   "pepe.control": ["admin", true], "pepe.rooms_commands_audio": ["admin", true], "pepe.modlog": ["admin", true], "ops.action_ttl": ["admin", true],

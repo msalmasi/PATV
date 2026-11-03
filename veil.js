@@ -100,6 +100,8 @@ const hasPriv = (o) => !!o && typeof o === "object" && o.priv !== undefined && o
 
 /** 1.99?? (privacy controls S5): the incog_cams switch (incogcams.js) - false while it can't be asked. */
 const icOn = () => { try { return require("./incogcams").isOn() === true; } catch (e) { return false; } };
+/** 1.99?? (privacy controls S4): the cam_reveal switch (camreveal.js) - false while it can't be asked. */
+const crOn = () => { try { return require("./camreveal").isOn() === true; } catch (e) { return false; } };
 /** A page-safe veiled user. */
 const veiledU = (kind) => ({ anon: true, display: "someone", veil: kind });
 
@@ -372,7 +374,10 @@ async function snapshotEntries(R, list, clean, { mic = false, max = 400, now = D
                                  ...(u.began_named === true ? { beganNamed: true } : {}) } : {}),
                      // 1.99?? (privacy controls S5): an INCOGNITO member's cam state (Pepe sends it only while incognito cams are
                      // advertised) - server-only on _vz; chatlogview.roster shows it on the page only while they're effective
-                     ...(!mic && p.kind === "incognito" && typeof u.on_cam === "boolean" && icOn() ? { on_cam: u.on_cam } : {}) });
+                     ...(!mic && p.kind === "incognito" && typeof u.on_cam === "boolean" && icOn() ? { on_cam: u.on_cam } : {}),
+                     // 1.99?? (privacy controls S4): ANY veiled member's cam state while cam reveals are on (Pepe sends it then) - server-
+                     // only, for a moderator's "View cam (logged)" (camreveal.js); never on a page (chatlogview.roster sends a cv flag only)
+                     ...(!mic && typeof u.on_cam === "boolean" && crOn() ? { on_cam: u.on_cam } : {}) });
     out.push(e);
   }
   return out;

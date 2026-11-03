@@ -137,6 +137,11 @@ var CAPS = [
   ["restream.main", "stage", "admin", "ops"],
   ["livecam.admin", "stage", "admin", "ops"],
   ["livecam.end_any", "stage", "staff", null],
+  // 1.99?? (privacy controls S4, owner Q8 2026-11-02): view a cam someone has hidden from the website, for moderation (camreveal.js -
+  // on every pad; the person is told unless the viewer is in 👻 ghost mode; every view is in the see-through log). Locked: who may
+  // look past a person's own cam settings is an owner decision, never an /admin/roles edit. Pad owners (their pad) and the room's
+  // mods (their room) get the same view through camreveal's roles, not through this key.
+  ["livecam.reveal", "stage", "staff", "privacy"],
   ["camclip.override", "stage", "admin", null],
   ["ghost.mode", "stage", "staff", "consent"],
   // micfollow: 🎙 mic follows on pad stages (/stage/admin) - never below Staff (a cam shown without anyone choosing it)

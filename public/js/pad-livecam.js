@@ -12,8 +12,18 @@
 // The page beats every 15 s while watching (the server drops a slot without beats after 45 s). All text via textContent.
 // mfix review: a connection that drops after it played (Pepe re-opened the relay, its publisher restarted) is watched again
 // while the site still says the cam is connecting / live ("reconnecting…") - a few times, then "the live cam stopped".
+// 1.99?? (privacy controls S4): a moderator (info.reveal: 1 - camreveal.js) whose ▶ Live is refused because the person hid their cam
+// gets "👁 View for moderation (logged)" -> window.PATVCamRevealOpen (below: loads cam-reveal.js on first use, then opens it).
 (function () {
   'use strict';
+  /** 1.99?? (privacy controls S4): cam-reveal.js on demand - a page with cam reveals off never loads it. */
+  window.PATVCamRevealOpen = window.PATVCamRevealOpen || function (o) {
+    if (window.PATVCamReveal) return window.PATVCamReveal.open(o);
+    var sc = document.createElement('script');
+    sc.src = '/public/js/cam-reveal.js?v=1';
+    sc.onload = function () { if (window.PATVCamReveal) window.PATVCamReveal.open(o); };
+    document.head.appendChild(sc);
+  };
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000;
   var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: re-watches after a dropped connection (see rewatch)
@@ -140,6 +150,7 @@
           b.disabled = false;
           say(why(d && d.code, d && d.error), 'bad');
           if (d && (d.can_ask || d.pending)) askUi(!!d.pending);            // 1.99aar: members / followers / on request - ask the owner
+          modOffer(d && d.code);                                             // 1.99?? (privacy controls S4)
           return;
         }
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { b.disabled = false; post(base + '/stop', ref); return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad'); }
@@ -207,6 +218,15 @@
     // 1.99aar: 🙋 Ask to watch (camaccess.js): the owner is PM'd in Camfrog + told in their inbox; this waits for the answer
     // (up to 10 minutes) and starts the cam by itself on a yes.
     var askB = null, askT = null;
+    // 1.99?? (privacy controls S4): the cam is hidden from this viewer and they may view it for moderation (the server decides again)
+    var modB = null;
+    var NOT_HIDDEN = { signin: 1, off: 1, offline: 1, room_off: 1, not_on_cam: 1, nopepe: 1, viewer_cap: 1, budget: 1, slots_busy: 1, rate: 1, blocked: 1, pad_access: 1, list_unread: 1 };
+    function modOffer(code) {
+      if (!info.reveal || modB || !code || NOT_HIDDEN[code] || typeof window.PATVCamRevealOpen !== 'function') return;
+      modB = el('button', 'live mod', _t('js.camrv.popover', '👁 View for moderation (logged)')); modB.type = 'button';
+      modB.addEventListener('click', function () { window.PATVCamRevealOpen(veiled ? { slug: slug, member: who.id, name: nm } : { slug: slug, login: who.login, name: nm }); });
+      acts.appendChild(modB);
+    }
     function askStop() { clearInterval(askT); askT = null; }
     function askWait() {
       askStop();

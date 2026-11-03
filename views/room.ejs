@@ -636,7 +636,7 @@
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=11"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99?? (privacy controls S5) v11: veiled cams %>
+  <script src="/public/js/stage-mic.js?v=12"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99?? (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
@@ -852,7 +852,7 @@
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=1"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
-  <script src="/public/js/pad-livecam.js?v=9"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99?? privacy controls S5): a veiled cam by its id %>
+  <script src="/public/js/pad-livecam.js?v=10"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99?? privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen %>
   <script src="/public/js/room-mod.js?v=12"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
@@ -1247,6 +1247,30 @@
             cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? _t('js.pad.people.on_cam', 'On cam') : (u.on_cam === false ? _t('js.pad.people.off_cam', 'Off cam') : _t('js.pad.people.cam_unknown', 'Cam unknown'));
           }
           if (!u.veil || vcam) ic.appendChild(cam);   // wave 2 (A.6): a veiled person never has a cam icon anywhere (1.99?? S5: but an incognito cam shown under its frog name)
+          // 1.99?? (privacy controls S4): a moderator's 👁 on a frog entry whose cam is on but hidden (cv: 1 - camreveal.js), asked for
+          // by the entry's opaque id; the person is told unless the moderator is in ghost mode, and it's logged
+          // 1.99?? (privacy controls S4): Reveal on a frog entry (rvm: 1 - an admin, or the pad's owner now): who it is, logged
+          // (roster_line); shown here only, never kept
+          if (u.rvm === 1 && u.anon && u.id) {
+            var rvb = el('button', 'veil-reveal rvm', _t('js.pad.veil.reveal', 'Reveal')); rvb.type = 'button';
+            rvb.title = _t('js.pad.veil.reveal_people', 'Reveal who this is (only you see it; it is logged)');
+            (function (who, b) {
+              b.addEventListener('click', function () {
+                b.disabled = true;
+                stPost('/api/chatlog/reveal', { room: slug, member: who.id }).then(function (o) {
+                  b.replaceWith(el('span', 'veil-chip', _t('js.pad.veil.chip', '{name} · only you can see this', { name: o.login })));
+                }).catch(function (err) { b.disabled = false; revealErr(b, err.message); });
+              });
+            })(u, rvb);
+            n.appendChild(rvb);
+          }
+          if (u.cv === 1 && u.anon && u.id && typeof window.PATVCamRevealOpen === 'function') {
+            var cvb = el('button', 'cam cv', '👁'); cvb.type = 'button';
+            cvb.title = _t('js.camrv.people', 'View this hidden cam for moderation (logged)');
+            cvb.setAttribute('aria-label', cvb.title);
+            (function (who) { cvb.addEventListener('click', function () { window.PATVCamRevealOpen({ slug: slug, member: who.id, name: label(who) }); }); })(u);
+            ic.appendChild(cvb);
+          }
           // 1.99dx: moderators (Pepe sent caps for this viewer) get a ⋯ menu next to the cam icon: the actions
           // Pepe allows them on this person (room-mod.js menuItems; the server re-checks every one). The name
           // itself stays the link to the person's profile. 1.99fu: every signed-in viewer gets the ⋯ too - the light

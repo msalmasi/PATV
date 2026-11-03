@@ -143,6 +143,8 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          "incog_alias", "incog_alias_burn", "seethrough_log", "seethrough_toggle",
                                          // wave 2 WP-5: moderation evidence clips (the audio stays in each environment's EVIDENCE_DIR)
                                          "evidence_clips",
+                                         // 1.99?? (privacy controls S4): + cam evidence stills / clips (camevidence.js; their files stay in each store)
+                                         "cam_evidence",
                                          "pad_hub",
                                          // S1 Q4: staging's own CHAT_HUB
                                          "chat_switches",

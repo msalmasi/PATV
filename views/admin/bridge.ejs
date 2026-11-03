@@ -401,11 +401,54 @@
 })();
 </script>
 
+<%# 1.99?? (privacy controls S4, camreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + section 8): "Cam reveals" - ships OFF %>
+<section class="adm-card" id="camreveal" aria-labelledby="crT">
+  <h2 id="crT">Cam reveals <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">While this is <b>off</b> (the default) nothing changes. Turn it <b>on</b> (it needs privacy wire v2) and the site's sync answers say <code>camreveal: 1</code>; once Pepe confirms it (his sync says <code>camreveal: 1</code> too), a moderator can view a cam someone has hidden from the website - <code>!livecam off</code>, <code>!bridge hide</code>, incognito while incognito cams are off, private activity, a block or a who-may-watch mode - for moderation: "👁 View cam" on a mic-stage cover, 👁 on a people-list frog entry, "View for moderation" in the ▶ Live popover, and "View a cam by Camfrog login" on /admin/pepe/livecams (admins and staff; also people left out). Who: PATV admins and staff (every pad), a pad's owner (their pad) and the room's moderators (their room). Each view: a reason, only that moderator sees it, 3 minutes (Extend writes a new row), blurred until clicked, no capture controls; Pepe opens it by its exact name and says nothing in the room. Logged in one transaction before anything opens: the see-through log (<code>cam_reveal</code>), livecam_audit, cam_views and admin_audit. The person gets a PM from Pepe and an inbox notice - "Someone moderating &lt;pad&gt; viewed your cam", never who - unless the moderator is in 👻 ghost mode. Admins and the pad's owner can also save a still or a clip as evidence (below; needs evidence clips on too). The pad's own switches stand. Turning it off ends every view at once. Needs the owner's OK on the wording first.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="crSummary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="crBtn" disabled>…</button><span id="crMsg" class="adm-msg" role="status"></span></div>
+  <% } %>
+</section>
+<script>
+// 1.99?? (privacy controls S4): the Cam reveals card (camreveal.js: GET / POST /api/admin/camreveal {on})
+(function () {
+  'use strict';
+  var sum = document.getElementById('crSummary');
+  if (!sum) return;
+  var btn = document.getElementById('crBtn'), msg = document.getElementById('crMsg'), cur = null;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(data) {
+    return fetch('/api/admin/camreveal', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function render(d) {
+    var s = d.state || {};
+    cur = s;
+    sum.textContent = 'Cam reveals are ' + (s.on ? 'ON' : 'off') + (s.on && !s.privwire ? ' (but privacy wire v2 is off, so nothing opens)' : '') +
+      (s.on && s.privwire && !s.pepe ? ' (waiting for Pepe to confirm)' : '') + (s.effective ? ' · in effect' : '') +
+      (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '');
+    btn.disabled = false;
+    btn.textContent = s.on ? 'Turn off' : 'Turn on';
+  }
+  btn.addEventListener('click', function () {
+    if (!cur) return;
+    var on = !cur.on;
+    if (on && !window.confirm('Turn cam reveals on? Admins, staff, pad owners and room moderators can then view a cam someone hid from the website, for moderation - logged, and the person is told unless the viewer is in ghost mode. Make sure the owner approved the wording.')) return;
+    btn.disabled = true;
+    req({ on: on }).then(function (d) { say('Switched ' + (on ? 'on' : 'off') + '.', true); render(d); }).catch(function (e) { btn.disabled = false; say(e.message, false); });
+  });
+  req().then(render).catch(function (e) { sum.textContent = e.message; });
+})();
+</script>
+
 <%# 1.99afn: who saw through a frog name, when and why (seethrough.js; chatlog.see_through = Admins) %>
 <% if (_can('chatlog.see_through')) { %>
 <section class="adm-card" id="seethrough" aria-labelledby="stT">
   <h2 id="stT">See-through log <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Every time a PATV admin, or a pad's owner on their own pad, revealed who is behind a private person's frog name - one row per reveal, or per "Show real names" toggle (open until it was turned off, with every login it showed). What: room analytics rows (and, admins only, the <code>!bridge hide</code> people Pepe's room notes name: <code>analytics_note</code>, a Reveal of a pad's notes - an admin's toggle counts them on its row); pad chat lines (<code>chat_line</code>: a Reveal on one line, with its hidden words; <code>tx_line</code>: a Reveal of a 🎙 line shown as a bar because its speaker turned <code>!transcripts off</code> - with a frog name or hidden too, both rows - and, with ref <code>toggle:&lt;row&gt;</code>, such lines a "Show real names" toggle showed), the pad's "Show real names" toggle (<code>chat_toggle</code>, counting every batch it showed - chat lines and mic-stage covers alike), the mic stage's hooded-frog covers (<code>stage_line</code>: a Reveal on one cover; <code>stage_exclude</code>: a ✕ that kept a veiled speaker off the stage - it also matches their later named cam, so it counts as a reveal) and an admin's per-login tool reaching a login's veiled lines (<code>chat_tool</code>: a look or an export). Moderation evidence clips (<a href="#evidence">below</a>): <code>clip_preview</code> (Pepe asked for a veiled turn's audio), <code>clip_save</code> (kept as evidence - from the website or a Camfrog <code>!clipmic</code>; a ref ending <code>:tx</code> = the turn of a <code>!transcripts off</code> bar), <code>clip_play</code> (played; once per person per clip per hour), <code>clip_download</code>, <code>clip_list</code> (a list of clips shown; once an hour), <code>clip_hold</code> (a legal hold on or off), <code>clip_delete</code>, and <code>export_evidence</code> (an evidence export, with every login in the file; a <code>tx_line</code> row with the same ref names the <code>!transcripts off</code> speakers whose 🎙 bars it shows). An admin's per-login tool reaching a login's <code>!transcripts off</code> bars adds a <code>tx_line</code> row too (ref look / export). Kept 180 days; never shown to the people revealed.</p>
+  <p class="adm-help">Every time a PATV admin, or a pad's owner on their own pad, revealed who is behind a private person's frog name - one row per reveal, or per "Show real names" toggle (open until it was turned off, with every login it showed). What: room analytics rows (and, admins only, the <code>!bridge hide</code> people Pepe's room notes name: <code>analytics_note</code>, a Reveal of a pad's notes - an admin's toggle counts them on its row); pad chat lines (<code>chat_line</code>: a Reveal on one line, with its hidden words; <code>tx_line</code>: a Reveal of a 🎙 line shown as a bar because its speaker turned <code>!transcripts off</code> - with a frog name or hidden too, both rows - and, with ref <code>toggle:&lt;row&gt;</code>, such lines a "Show real names" toggle showed), the pad's "Show real names" toggle (<code>chat_toggle</code>, counting every batch it showed - chat lines and mic-stage covers alike), the mic stage's hooded-frog covers (<code>stage_line</code>: a Reveal on one cover; <code>stage_exclude</code>: a ✕ that kept a veiled speaker off the stage - it also matches their later named cam, so it counts as a reveal) and an admin's per-login tool reaching a login's veiled lines (<code>chat_tool</code>: a look or an export). Moderation evidence clips (<a href="#evidence">below</a>): <code>clip_preview</code> (Pepe asked for a veiled turn's audio), <code>clip_save</code> (kept as evidence - from the website or a Camfrog <code>!clipmic</code>; a ref ending <code>:tx</code> = the turn of a <code>!transcripts off</code> bar), <code>clip_play</code> (played; once per person per clip per hour), <code>clip_download</code>, <code>clip_list</code> (a list of clips shown; once an hour), <code>clip_hold</code> (a legal hold on or off), <code>clip_delete</code>, and <code>export_evidence</code> (an evidence export, with every login in the file; a <code>tx_line</code> row with the same ref names the <code>!transcripts off</code> speakers whose 🎙 bars it shows). An admin's per-login tool reaching a login's <code>!transcripts off</code> bars adds a <code>tx_line</code> row too (ref look / export). Cam reveals (<a href="#camreveal">above</a>): <code>cam_reveal</code> (a moderator viewed a hidden cam - an admin, staff, the pad's owner or the room's moderator; the ref ends <code>:x</code> for an Extend, <code>:g</code> in ghost mode, <code>:l</code> by login) and their evidence (<a href="#camevidence">below</a>): <code>cam_evidence_save</code>, <code>_view</code>, <code>_list</code>, <code>_download</code>, <code>_hold</code>, <code>_delete</code>. Kept 180 days; never shown to the people revealed.</p>
   <form id="stForm" class="adm-form">
     <label>Room id<input type="text" name="room" placeholder="empty = every pad" autocomplete="off"></label>
     <label>Rows<select name="limit"><option>100</option><option>250</option><option>500</option></select></label>
@@ -558,6 +601,67 @@
       window.location.href = d.url;
     }).catch(function (e2) { exMsg.textContent = e2.message; exMsg.className = 'adm-msg err'; });
   });
+})();
+</script>
+<% } %>
+
+<%# 1.99?? (privacy controls S4, camevidence.js; owner Q12): evidence stills / clips of a cam viewed for moderation %>
+<% if (_can('chatlog.see_through')) { %>
+<section class="adm-card" id="camevidence" aria-labelledby="ceT">
+  <h2 id="ceT">Cam evidence <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Stills and clips of a <b>hidden cam</b>, saved as moderation evidence by a PATV admin or the pad's owner while viewing it for moderation (the 👁 view's "Save still / clip"). The site records them itself from the view's own relay - never a picture a browser sent. Never posted anywhere. Kept <b>30 days</b> in the evidence store, then deleted by the hourly sweep unless a hold covers it (its own below, or a chat legal hold on the pad or the person). Every save, view, list, download, hold and delete is in the see-through log (<code>cam_evidence_*</code>). Needs cam reveals and evidence clips on.</p>
+  <form id="ceForm" class="adm-form">
+    <label>Room id or pad<input type="text" name="room" placeholder="empty = every pad" autocomplete="off"></label>
+    <div class="adm-actions"><button type="submit">Show cam evidence</button><span id="ceMsg" class="adm-msg" role="status"></span></div>
+  </form>
+  <div class="adm-tbl"><table aria-label="Cam evidence">
+    <thead><tr><th>Saved (UTC)</th><th>Pad</th><th>Person</th><th>What</th><th>Saved by</th><th>Reason</th><th>Kept until</th><th>Hold</th><th></th></tr></thead>
+    <tbody id="ceRows"><tr><td colspan="9" class="empty">Press Show cam evidence.</td></tr></tbody>
+  </table></div>
+</section>
+<script>
+// 1.99?? (privacy controls S4): the Cam evidence card (camevidence.js: GET /api/evidence/cam, /api/evidence/cam/:id/file, POST .../hold | delete)
+(function () {
+  'use strict';
+  var f = document.getElementById('ceForm'), body = document.getElementById('ceRows'), msg = document.getElementById('ceMsg');
+  if (!f) return;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') : ''; }
+  function td(t) { var d = document.createElement('td'); d.textContent = t == null ? '' : String(t); return d; }
+  function req(method, url, data) {
+    return fetch(url, { method: method, credentials: 'same-origin', cache: 'no-store', headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {},
+      body: data ? JSON.stringify(data) : undefined }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function act(id, what) {
+    var why = window.prompt(what === 'delete' ? 'Delete this evidence now? Give the reason (audited):' : what === 'hold' ? 'Put it under a legal hold (kept past 30 days)? Give the reason (audited):' : 'Release the hold? Give the reason (audited):');
+    if (!why) return;
+    req('POST', '/api/evidence/cam/' + encodeURIComponent(id) + '/' + (what === 'delete' ? 'delete' : 'hold'), { why: why, on: what === 'hold' }).then(load).catch(function (e) { msg.textContent = e.message; msg.className = 'adm-msg err'; });
+  }
+  function load() {
+    var q = new URLSearchParams(), v = f.elements.room.value.trim();
+    if (v) q.set('room', v);
+    msg.textContent = 'Loading…'; msg.className = 'adm-msg';
+    req('GET', '/api/evidence/cam?' + q.toString()).then(function (d) {
+      body.textContent = '';
+      (d.rows || []).forEach(function (r) {
+        var tr = document.createElement('tr');
+        [when(r.created), r.room_id, r.subject + (r.veil === 'veiled' ? ' (veiled)' : '') + (r.subject_gone ? ' - asked to be forgotten' : ''),
+         r.kind + (r.kind === 'clip' ? ' ' + r.secs + ' s' : ''), (r.by || '?') + ' as ' + r.role, r.reason, when(r.expires_at), r.hold ? 'held: ' + r.hold.why : '-'].forEach(function (x) { tr.appendChild(td(x)); });
+        var cell = document.createElement('td');
+        var open = document.createElement('a'); open.href = r.file; open.target = '_blank'; open.rel = 'noreferrer noopener'; open.textContent = 'Open';
+        var dl = document.createElement('a'); dl.href = r.file + '?dl=1'; dl.textContent = 'Download'; dl.rel = 'noreferrer';
+        var hold = document.createElement('button'); hold.type = 'button'; hold.textContent = r.hold ? 'Release hold' : 'Hold';
+        hold.addEventListener('click', function () { act(r.id, r.hold ? 'unhold' : 'hold'); });
+        var del = document.createElement('button'); del.type = 'button'; del.textContent = 'Delete';
+        del.addEventListener('click', function () { act(r.id, 'delete'); });
+        [open, dl, hold, del].forEach(function (x) { cell.appendChild(x); cell.appendChild(document.createTextNode(' ')); });
+        tr.appendChild(cell);
+        body.appendChild(tr);
+      });
+      if (!(d.rows || []).length) { var tr = document.createElement('tr'), c = td('No cam evidence.'); c.colSpan = 9; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
+      msg.textContent = (d.rows || []).length + ' saved'; msg.className = 'adm-msg ok';
+    }).catch(function (e) { msg.textContent = e.message; msg.className = 'adm-msg err'; });
+  }
+  f.addEventListener('submit', function (e) { e.preventDefault(); load(); });
 })();
 </script>
 <% } %>

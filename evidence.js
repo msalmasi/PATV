@@ -810,6 +810,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
 }
 
 module.exports = { init, isOn, effective, state, setOn, privacyCopy, anyTxClip, role, heldWhy, lapsed, store, sweep, subjectGone, offerable, padCard, register,
+                   storeDir: () => dir(), existingStoreDir: () => existingDir(),   // 1.99?? (privacy controls S4): camevidence.js keeps its files under it
                    KEEP_MS, PREVIEW_TTL, LINE_MAX_AGE, PRIVATE_HEADERS, ID_RE, Refuse, filePath, pendingPath, SWEEP_PAGE, BOOT_SWEEP_MS, CHUNK_TARGETS,
                    _pending: PEND, _seen: SEEN, _setDir,
                    _setClock: (f) => { clock = f || (() => Date.now()); },

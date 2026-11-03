@@ -349,6 +349,10 @@ const RULES = {
   "evidence_clips.by_user": M(), "evidence_clips.hold_by": M(),
   "evidence_clips.subject_login": { deny: "the Camfrog login whose voice the clip holds (when it was said) - never re-keyed, like stage_capture_people" },
   "evidence_clips.subject_gone_at": { deny: "a time (the subject used forget-me or deleted their account)" },
+  // 1.99?? (privacy controls S4): camevidence.js - evidence stills / clips of a cam viewed for moderation (the evidence_clips rules)
+  "cam_evidence.by_user": M(), "cam_evidence.hold_by": M(),
+  "cam_evidence.subject_login": { deny: "the Camfrog login whose cam the still / clip shows (when it was saved) - never re-keyed, like evidence_clips" },
+  "cam_evidence.subject_gone_at": { deny: "a time (the subject used forget-me or deleted their account)" },
   "chat_signin_prefs.user_id": M({ key: [], merge: { enabled: "MIN" } }),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)

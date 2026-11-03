@@ -364,8 +364,10 @@ test("the store: no module but evidence.js (and its rollback tool / lifecycle ho
   assert.deepEqual(table, ["accountMerge.js", "accountdelete.js", "deploy/keep-staging-tables.js", "evidence.js", "loginrekey.js", "padrekey.js", "tools/evidence-purge.js"].sort(),
                    "evidence_clips: only the store, its rollback tool and the lifecycle / coverage lists");
   const req = files.filter((f) => /require\(\s*["']\.\/evidence["']\s*\)/.test(fs.readFileSync(f, "utf8"))).map(rel).sort();
-  assert.deepEqual(req, ["accountdelete.js", "adminweb.js", "bridge.js", "evidenceexport.js", "padsettings.js", "pepeforget.js", "seethrough.js", "terms.js"].sort(),
-                   "require('./evidence'): the advert, the reveal offer, the policy copy, the owner card, the lifecycle hooks and the export's switch (the export and its admin form) only");
+  // (1.99?? privacy controls S4: + camevidence.js - cam evidence stills / clips keep their files in this store's directory, under its
+  // switch and its holds; it reads nothing of evidence_clips)
+  assert.deepEqual(req, ["accountdelete.js", "adminweb.js", "bridge.js", "camevidence.js", "evidenceexport.js", "padsettings.js", "pepeforget.js", "seethrough.js", "terms.js"].sort(),
+                   "require('./evidence'): the advert, the reveal offer, the policy copy, the owner card, the lifecycle hooks, the export's switch (the export and its admin form) and cam evidence's store only");
   const dir = files.filter((f) => /EVIDENCE_DIR/.test(fs.readFileSync(f, "utf8"))).map(rel).sort();
   assert.deepEqual(dir, ["evidence.js", "tools/evidence-purge.js"], "the directory");
   for (const m of ["media.js", "storykeep.js", "stories.js", "soundboards.js", "voiceclone.js", "voicestore.js", "search.js", "micclip.js", "feedstore.js", "crawlers.js"]) {

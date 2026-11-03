@@ -92,6 +92,8 @@ async function forgetVeiled(keys) {
   // wave 2 WP-5: moderation evidence clips of them (evidence.js) are flagged, never extended, and still go at their 30 days (owner
   // question Q1 - the default); a preview of theirs waiting for Save goes now
   try { out.evidence = await require("./evidence").subjectGone(list); } catch (e) { console.error("[pepeforget] evidence:", e && e.code ? e.code : "error"); }
+  // 1.99?? (privacy controls S4): cam evidence of them (camevidence.js) - flagged the same way (only when there is any)
+  try { const ce = await require("./camevidence").subjectGone(list); if (ce) out.cam_evidence = ce; } catch (e) { console.error("[pepeforget] cam evidence:", e && e.code ? e.code : "error"); }
   return out;
 }
 async function hideLines(userId, login) {

@@ -84,10 +84,12 @@ async function adminView(limit = 50) {
   const log = await getQuery("SELECT username, on_, via, at FROM ghost_log ORDER BY id DESC LIMIT 30");
   let views = [];
   try {
-    views = await getQuery(`SELECT owner, room_id, username, kind, at, bypass FROM cam_views WHERE ghost = 1 ORDER BY id DESC LIMIT ?`, [limit]);
+    // 1.99?? (privacy controls S4): a ghost's cam REVEAL of a veiled person shows the frog name (or "veiled") - never the login
+    views = await getQuery(`SELECT owner, room_id, username, kind, at, bypass, veil FROM cam_views WHERE ghost = 1 ORDER BY id DESC LIMIT ?`, [limit])
+      .catch(() => getQuery(`SELECT owner, room_id, username, kind, at, bypass FROM cam_views WHERE ghost = 1 ORDER BY id DESC LIMIT ?`, [limit]));
   } catch (e) { views = []; }
   return { on: [...ON.values()].map((x) => x.username), log: log.map((r) => ({ username: r.username, on: !!r.on_, via: r.via, at: Number(r.at) })),
-           views: views.map((r) => ({ owner: r.owner, room: r.room_id, username: r.username, kind: r.kind, at: Number(r.at), bypass: r.bypass || null })) };
+           views: views.map((r) => ({ owner: r.veil != null ? String(r.veil) + " (veiled)" : r.owner, room: r.room_id, username: r.username, kind: r.kind, at: Number(r.at), bypass: r.bypass || null })) };
 }
 
 function register(app, { addUser, isBotToken }) {

@@ -1019,6 +1019,12 @@ function roster(list, ctx = {}) {
       // 1.99?? (privacy controls S5): an incognito person's cam shows under their frog name (incogcams.pageOnCam: the switch and
       // Pepe's word, on cam, their live cam not switched off) - on_cam on the frog entry, ▶ Live by its opaque id (never a login)
       if (e.veil === "incognito" && e.id && ctx.roomId != null && incogOnCam(u, ctx.roomId)) e.on_cam = true;
+      // 1.99?? (privacy controls S4): a moderator who may view a hidden cam here (ctx.camReveal - camreveal.viewerRole) gets cv: 1 on a
+      // frog entry whose cam is on but withheld - a flag only: the cam is asked for by the entry's id (POST .../livecam/reveal {member})
+      if (ctx.camReveal === true && e.id && !e.on_cam && vz && vz.on_cam === true) e.cv = 1;
+      // 1.99?? (privacy controls S4): rvm: 1 - the people list's own Reveal (POST /api/chatlog/reveal {member}, scope roster_line) for a
+      // viewer the live stage's rule lets see who it is (ctx.rosterReveal: an Admin, or the pad's owner now); only while cam_reveal is on
+      if (ctx.rosterReveal === true && e.id && e.alias) e.rvm = 1;
       out.push(e);
       continue;
     }

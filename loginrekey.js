@@ -26,7 +26,8 @@
 // account deletion and Download my data read them by the same spans (stagecap.ownSpans).
 // wave 2 WP-5: evidence.js's evidence_clips.subject_login is deliberately NOT re-keyed either - it is the login whose voice a moderation
 // evidence clip holds, at the moment it was said (said_at); a re-keyed row would pin someone else's login on that voice. It goes at its
-// 30 days whatever happens to the login (a subject's forget-me / deletion only flags it, owner question Q1).
+// 30 days whatever happens to the login (a subject's forget-me / deletion only flags it, owner question Q1). 1.99?? (privacy controls S4):
+// the same for camevidence.js's cam_evidence.subject_login (whose cam a moderation still / clip shows, when it was saved).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 

@@ -331,8 +331,41 @@ function register(app, { addUser, noTimers = false }) {
     if (role === "admin") await accountLinks([out]);
     return res.json({ ok: true, ...out });
   }
+  // ── 1.99?? (privacy controls S4, spec 3.1 "NEW roster_line"): Reveal on a PEOPLE-LIST frog entry - {room, member, reason?}: the
+  // entry's opaque id (veil.opaqueId), never a login. The live stage's rule (veilstage.stageRole: an Admin, or the pad's owner NOW - the
+  // person is here now), privacy wire v2 on, someone left out never (XT-1, the same 404 as an entry that's gone), one seethrough_log row
+  // scope roster_line (ref member:<id>) BEFORE the answer. Dark: only while the cam_reveal switch is on (camreveal.isOn) - until then the
+  // body's `member` is ignored here exactly as before.
+  async function memberReveal(req, res) {
+    res.set("Cache-Control", "private, no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    if (!guard.sameOriginFetch(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+    const B = require("./bridge");
+    const slug = clean(req.body.room, 80).toLowerCase();
+    const R = slug ? [...B._rooms.values()].find((x) => x.slug === slug || x.id === slug) : null;
+    if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
+    let on = false;
+    try { on = require("./privwire").isOn() === true; } catch (e) { on = false; }
+    if (!on) return res.status(409).json({ ok: false, code: "privwire_off", error: "Nothing in this people list can be revealed right now." });
+    const role = await require("./veilstage").stageRole(req.user, R.id);
+    if (!role) return res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner in their own pad, can reveal who is behind a frog name." });
+    if (limited(String(req.user.userId), 1)) return res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." });
+    const id = clean(req.body.member, 20);
+    const e = /^v-[A-Za-z0-9_-]{12}$/.test(id) ? (R.members || []).find((x) => x && x.anon && x.id === id && x._vz && x._vz.login) : null;
+    let login = e ? String(e._vz.login).toLowerCase() : null;
+    if (login) { try { if (require("./veilstage").leftOut(login, e._vz.h)) login = null; } catch (er) { login = null; } }
+    if (!login) return res.status(404).json({ ok: false, code: "gone", error: "That person isn't in the people list any more." });
+    await log({ userId: req.user.userId, role, scope: "roster_line", roomId: R.id, logins: [login], reason: req.body.reason, ref: "member:" + id });
+    if (role === "owner") await noteOwnerUse(req.user, R.id, "lines", 1);
+    const out = { member: id, login, display: e._vz.display ? String(e._vz.display) : null };
+    if (role === "admin") await accountLinks([out]);
+    return res.json({ ok: true, ...out });
+  }
+  const camRevealOn = () => { try { return require("./camreveal").isOn() === true; } catch (e) { return false; } };
   app.post("/api/chatlog/reveal", addUser, json, async (req, res) => {
     try {
+      if (req.body && req.body.member != null && req.body.tile == null && camRevealOn()) return await memberReveal(req, res);
       if (req.body && req.body.tile != null) return await tileReveal(req, res);
       const ctx = await chatCtx(req, res);
       if (!ctx) return;

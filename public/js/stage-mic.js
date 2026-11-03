@@ -290,11 +290,17 @@
       var hoodImg = el('img', 'mf-hood'); hoodImg.alt = ''; hoodImg.hidden = true; hoodImg.setAttribute('aria-hidden', 'true');
       var rv = btn('mf-rv', _t('js.stage.mf.reveal', 'Reveal'), _t('js.stage.mf.reveal_aria', 'Reveal who this is (only you see it; it is logged)')); rv.hidden = true;
       var chip = el('span', 'mf-chip'); chip.hidden = true;
+      // 1.99?? (privacy controls S4): "👁 View cam" on a cover whose cam is on but hidden (cv: 1 - a moderator, camreveal.js): the
+      // cam for this viewer alone, logged (cam-reveal.js, loaded on first use by pad-livecam.js's PATVCamRevealOpen)
+      var cvb = btn('mf-rv mf-cv', _t('js.camrv.tile', '👁 View cam'), _t('js.camrv.tile_aria', 'View this hidden cam for moderation (only you see it; it is logged)')); cvb.hidden = true;
       e.appendChild(v); e.appendChild(img); e.appendChild(hoodImg); e.appendChild(card); e.appendChild(label); e.appendChild(chip); e.appendChild(x); e.appendChild(rp); e.appendChild(pn);
-      e.appendChild(off); e.appendChild(rv);
+      e.appendChild(off); e.appendChild(rv); e.appendChild(cvb);
       t.el = e; t.video = v;
       x.addEventListener('click', function () { if (t.s && t.s.pin) pinPost(t.s.id, true); else askExclude(t.s); });
       rv.addEventListener('click', function () { revealTile(t, rv); });
+      cvb.addEventListener('click', function () {
+        if (t.s && isCover(t.s) && t.s.cv === 1 && typeof window.PATVCamRevealOpen === 'function') window.PATVCamRevealOpen({ slug: slug, tile: t.s.id, name: labelOf(t.s) });
+      });
       rp.addEventListener('click', function () { askReport(t.s, rp); });
       pn.addEventListener('click', function () { pn.disabled = true; pinPost(t.s.id, false).then(function () { pn.disabled = false; }); });
       off.addEventListener('click', function () { takeOff(off); });
@@ -451,7 +457,7 @@
         e.classList.toggle('mf-cover', cover);
         if (!cover) {
           e.removeAttribute('data-hood'); e.removeAttribute('data-veil');
-          hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; e.classList.remove('revealed');
+          hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; cvb.hidden = true; e.classList.remove('revealed');
           if (!isVeiledCam(s)) { t.revealed = null; t.revealedBy = null; t.autoId = null; }   // (1.99?? S5: a veiled cam keeps its Reveal - apply())
           return false;
         }
@@ -483,6 +489,7 @@
         x.setAttribute('aria-label', _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage'));
         x.hidden = !(P.manage && s.ex === 1);
         rv.hidden = !(s.rv === 1 && window.PATVReveal && typeof window.PATVReveal.tile === 'function') || !!t.revealed;
+        cvb.hidden = !(s.cv === 1 && typeof window.PATVCamRevealOpen === 'function');   // 1.99?? (privacy controls S4)
         var me = s.self === 1;
         chip.hidden = !(me || t.revealed);
         chip.textContent = t.revealed ? _t('js.stage.mf.revealed', '{login} · only you can see this', { login: t.revealed }) : me ? _t('js.stage.mf.cover_self', 'this is you') : '';

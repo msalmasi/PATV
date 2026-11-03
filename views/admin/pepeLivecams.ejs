@@ -73,6 +73,38 @@
   <ul id="ghLog" class="adm-help"></ul>
 </section>
 
+<%# 1.99?? (privacy controls S4, camreveal.js; owner Q22): view a cam by its Camfrog login - only while cam reveals are in effect %>
+<% if (locals.cr && cr.on) { %>
+<section class="adm-card" id="reveal" aria-labelledby="rvT">
+  <h2 id="rvT">👁 View a cam by Camfrog login (logged)</h2>
+  <p class="adm-help">For a report that names a login: someone who isn't on a pad's mic stage or people list - left out (forget-me, an account deletion, a staff removal) or not listed. Pick the room, type the login and why. Only you see it, for 3 minutes (Extend writes a new row); it's in the see-through log (<code>cam_reveal</code>) and they're told someone moderating that pad viewed their cam - unless you're in 👻 ghost mode. It shows nothing you didn't type: no frog name, no profile. Admins and staff only.</p>
+  <form id="rvForm" class="adm-form">
+    <label>Room (pad address or room id) <input type="text" name="room" required autocomplete="off"></label>
+    <label>Camfrog login <input type="text" name="login" required autocomplete="off" maxlength="40"></label>
+    <label>Why (logged) <input type="text" name="reason" required minlength="3" maxlength="200" autocomplete="off"></label>
+    <div class="adm-actions"><button type="submit">👁 View cam (logged)</button><span id="rvMsg" class="adm-msg" role="status"></span></div>
+  </form>
+</section>
+<script src="/public/js/cam-reveal.js?v=1"></script>
+<script>
+(function () {
+  'use strict';
+  var f = document.getElementById('rvForm'), m = document.getElementById('rvMsg');
+  if (!f) return;
+  f.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var g = function (k) { return f.elements[k].value.trim(); };
+    m.textContent = 'Asking Pepe to open it…'; m.className = 'adm-msg';
+    fetch('/api/admin/pepe/livecams/reveal', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ room: g('room'), login: g('login'), reason: g('reason') }) }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) { m.textContent = (window.PATVCamReveal ? window.PATVCamReveal.why(d && d.code, d && d.error) : (d && d.error) || 'Failed.'); m.className = 'adm-msg err'; return; }
+      m.textContent = ''; window.PATVCamReveal.play(d.slug, d, g('login'), g('reason'));
+    }).catch(function () { m.textContent = 'The site did not answer.'; m.className = 'adm-msg err'; });
+  });
+})();
+</script>
+<% } %>
+
 <style>
   #lcForm fieldset { border: 1px solid var(--adm-line, rgba(127,127,127,.3)); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
   #lcForm label { display: block; margin: 6px 0; }
@@ -118,6 +150,7 @@
       // wave2 WP-4 (F.2): a relay the mic stage keeps warm after its tile left the stage (nobody can watch it)
       tr.appendChild(el('td', null, s.state + (s.botState ? ' (Pepe: ' + s.botState + ')' : '') + (s.botWhy ? ' · ' + s.botWhy : '') +
         (s.warm ? ' · warm (mic stage, ' + (s.warm_s != null ? s.warm_s + 's left' : 'leaving') + ')' : '') +
+        (s.reveal ? ' · 👁 moderation view (logged)' : '') +       // 1.99?? (privacy controls S4)
         // 1.99ahn dead relay: Pepe says live but MediaMTX has no stream - Pepe was asked to restart it
         (s.nomedia ? ' · ⚠ no media' + (s.nomedia_s != null ? ' ' + s.nomedia_s + 's' : '') + (s.lost ? ' (lost)' : ' (never arrived)') : '')));
       tr.appendChild(el('td', null, s.viewers.map(function (v) { return v.username || v.userId; }).join(', ') + ' · ' + s.readers + ' connected'));
@@ -136,7 +169,7 @@
     var rc = document.getElementById('rcRows'); rc.textContent = '';
     (V.recent || []).forEach(function (r) {
       var tr = el('tr');
-      [when(r.started), (r.viewer_name || '?') + (r.ghost ? ' 👻' : ''), r.target, r.room_id].forEach(function (t) { tr.appendChild(el('td', null, t)); });
+      [when(r.started), (r.viewer_name || '?') + (r.ghost ? ' 👻' : '') + (r.reveal ? ' 👁' : ''), r.target, r.room_id].forEach(function (t) { tr.appendChild(el('td', null, t)); });
       tr.appendChild(el('td', 'num', r.secs == null ? '…' : String(r.secs)));
       tr.appendChild(el('td', null, r.end_reason || 'watching'));
       rc.appendChild(tr);

@@ -34,6 +34,13 @@
 //   POST /api/bridge/camviewers        Pepe: {op: block | unblock | list | watching, owner, target}
 //   GET  /api/privacy/camviewers       the signed-in owner: {linked, login, blocks, live, recent}
 //   POST /api/privacy/camviewers       {op: block | unblock, target} (JSON + X-Requested-With + same site)
+//
+// 1.99?? (privacy controls S4, G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + the owner's answers Q10 / Q11): a moderator's CAM
+// REVEAL (camreveal.js) is logged as cam_views kind "reveal" (written in camreveal's own transaction - veil = the frog name or "veiled"
+// for a veiled person, so the 👻 views list never shows their login) and told through noteReveal(): ONE notice per person per reveal
+// session per moderator, never naming who ("Someone moderating <pad> viewed your cam", Pepe's PM - his notice_text reads `reveal`),
+// merged while it waits like any notice (OWNER_GAP_MS), never sent for a 👻 ghost. watching() never names a reveal either: its live
+// moderators and its cam_views rows are "someone moderating <pad>" (mod: true).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -49,7 +56,7 @@ const RESEND_MS = 20 * 1000;
 const DIGEST_MAX = 6;
 const KEEP_MS = 7 * 24 * 3600 * 1000;
 const MAX_BLOCKS = 500;
-const KINDS = new Set(["live", "snap", "clip"]);
+const KINDS = new Set(["live", "snap", "clip", "reveal"]);   // 1.99?? (privacy controls S4): "reveal" - a moderator's view (camreveal.js)
 const GHOST_KEEP_MS = 180 * 24 * 3600 * 1000;   // = ghost.js
 const WEB_MARK = "\u{1f310}";
 
@@ -93,6 +100,8 @@ function init() {
       const cols = (await getQuery("PRAGMA table_info(cam_views)")).map((c) => c.name);
       if (!cols.includes("ghost")) await runQuery("ALTER TABLE cam_views ADD COLUMN ghost INTEGER NOT NULL DEFAULT 0");
       if (!cols.includes("bypass")) await runQuery("ALTER TABLE cam_views ADD COLUMN bypass TEXT");   // 1.99aak: what a ghost got past
+      // 1.99?? (privacy controls S4): a reveal of a veiled person - the frog name (or "veiled") admin views show instead of the login
+      if (!cols.includes("veil")) await runQuery("ALTER TABLE cam_views ADD COLUMN veil TEXT");
       await loadBlocks();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -202,16 +211,40 @@ function noteViewers(kind, roomId, owner, userIds, t = now()) {
     return n;
   }).catch((e) => { console.error("[camviewers] note:", e.message); return 0; });
 }
+/** 1.99?? (privacy controls S4): a moderator's reveal reached `owner`'s cam (the first frame, not a 👻 ghost - livecam / camreveal
+ *  checked). Queues the one notice Pepe PMs them - never who it was: {reveal: {pad, n}}. Several within the wait merge (n). -> bool */
+const RPEND = new Map();     // owner -> id of the reveal notice still collecting
+const oneLine = (x, n) => String(x == null ? "" : x).replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+function noteReveal(roomId, owner, pad, t = now()) {
+  try {
+    const o = low(owner);
+    if (!LOGIN_RE.test(o)) return false;
+    let N = RPEND.has(o) ? OUT.get(RPEND.get(o)) : null;
+    if (!N) {
+      N = { id: "cr" + crypto.randomBytes(8).toString("hex"), owner: o, room: String(roomId || ""), items: new Map(), created: t,
+            notBefore: Math.max(t, (LASTPM.get(o) || 0) + OWNER_GAP_MS), sentAt: 0, tries: 0, reveal: { pad: "", n: 0 } };
+      OUT.set(N.id, N);
+      RPEND.set(o, N.id);
+    }
+    if (roomId) N.room = String(roomId);
+    N.reveal.pad = oneLine(pad, 60);
+    N.reveal.n++;
+    return true;
+  } catch (e) {
+    console.error("[camviewers] reveal note:", e.message);
+    return false;
+  }
+}
 /** The notices for Pepe's poll (and his acks of the last ones). body: {cv, cv_ack}. */
 function forBot(body, t = now()) {
   body = body || {};
   for (const id of (Array.isArray(body.cv_ack) ? body.cv_ack : []).slice(0, 200)) {
     const N = OUT.get(String(id));
-    if (N) { OUT.delete(N.id); if (PEND.get(N.owner) === N.id) PEND.delete(N.owner); }
+    if (N) { OUT.delete(N.id); if (PEND.get(N.owner) === N.id) PEND.delete(N.owner); if (RPEND.get(N.owner) === N.id) RPEND.delete(N.owner); }
   }
   const out = [];
   for (const N of [...OUT.values()]) {
-    if (t - N.created > NOTE_TTL_MS) { OUT.delete(N.id); if (PEND.get(N.owner) === N.id) PEND.delete(N.owner); continue; }
+    if (t - N.created > NOTE_TTL_MS) { OUT.delete(N.id); if (PEND.get(N.owner) === N.id) PEND.delete(N.owner); if (RPEND.get(N.owner) === N.id) RPEND.delete(N.owner); continue; }
     if (body.cv !== true) continue;
     const due = N.sentAt ? t - N.sentAt > RESEND_MS && N.tries < 3 : N.notBefore <= t;
     if (!due) continue;
@@ -219,6 +252,12 @@ function forBot(body, t = now()) {
     N.sentAt = t;
     N.tries++;
     if (PEND.get(N.owner) === N.id) PEND.delete(N.owner);              // frozen: new views start the next notice
+    if (N.reveal) {                                                    // 1.99?? (privacy controls S4): never a viewer's name
+      if (RPEND.get(N.owner) === N.id) RPEND.delete(N.owner);
+      out.push({ id: N.id, room: N.room, login: N.owner, reveal: { pad: N.reveal.pad, n: N.reveal.n }, viewers: [], more: 0 });
+      if (out.length >= 50) break;
+      continue;
+    }
     const items = [...N.items.values()].sort((a, b) => (b.kinds.includes("live") - a.kinds.includes("live")) || b.at - a.at);
     out.push({ id: N.id, room: N.room, login: N.owner, viewers: items.slice(0, DIGEST_MAX).map((x) => ({ username: x.username, display: x.display,
       camfrog: x.camfrog, kinds: x.kinds.slice() })), more: Math.max(0, items.length - DIGEST_MAX) });
@@ -249,10 +288,14 @@ async function watching(owner, t = now()) {
   const o = low(owner);
   if (!LOGIN_RE.test(o)) return { live: [], recent: [], mic_stage_n: 0 };
   const all = (deps.liveWatchers(o) || []).filter((x) => x && x.userId && !x.ghost);           // 1.99aaf: ghosts aren't listed
-  const live = all.filter((x) => !x.mf);
+  // 1.99?? (privacy controls S4): a moderator's reveal is never named - "someone moderating <pad>" (one entry per pad)
+  const mods = all.filter((x) => x.reveal);
+  const live = all.filter((x) => !x.mf && !x.reveal);
   const named = new Set(live.map((x) => String(x.userId)));
   const micStage = new Set(all.filter((x) => x.mf && !named.has(String(x.userId))).map((x) => String(x.userId)));
-  const rows = await getQuery(`SELECT user_id, kind, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND ghost = 0 GROUP BY user_id, kind ORDER BY at DESC LIMIT 200`,
+  const rows = await getQuery(`SELECT user_id, kind, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND ghost = 0 AND kind != 'reveal' GROUP BY user_id, kind ORDER BY at DESC LIMIT 200`,
+    [o, t - RECENT_MS]);
+  const rvRows = await getQuery(`SELECT room_id, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND ghost = 0 AND kind = 'reveal' GROUP BY room_id ORDER BY at DESC LIMIT 20`,
     [o, t - RECENT_MS]);
   const U = await usersById(live.map((x) => x.userId).concat(rows.map((r) => r.user_id)));
   const liveIds = new Set(live.map((x) => String(x.userId)));
@@ -265,11 +308,22 @@ async function watching(owner, t = now()) {
     x.at = Math.max(x.at, Number(r.at) || 0);
     rec.set(uid, x);
   }
+  const modRooms = [...new Set(mods.map((x) => String(x.room || "")))];
   return {
-    live: live.map((x) => ({ ...person(U.get(String(x.userId)), String(x.userId)), room: x.room || "", since: x.since || null })),
-    recent: [...rec.values()].sort((a, b) => b.at - a.at).slice(0, 30),
+    live: live.map((x) => ({ ...person(U.get(String(x.userId)), String(x.userId)), room: x.room || "", since: x.since || null }))
+      .concat(modRooms.map((r) => ({ username: "", display: modLabel(r), camfrog: "", room: r, since: null, mod: true }))),
+    recent: [...rec.values()].concat(rvRows.map((r) => ({ username: "", display: modLabel(r.room_id), camfrog: "", kinds: ["reveal"], at: Number(r.at) || 0, mod: true })))
+      .sort((a, b) => b.at - a.at).slice(0, 30),
     mic_stage_n: micStage.size,
   };
+}
+/** 1.99?? (privacy controls S4): how a moderator's view is listed - never who (owner Q11). */
+function modLabel(roomId) {
+  let pad = "";
+  try { const r = require("./rooms").getCached(String(roomId || "")); pad = (r && (r.title || r.name)) || ""; } catch (e) { pad = ""; }
+  if (!pad) { try { const R = require("./bridge")._rooms.get(String(roomId || "")); pad = (R && R.name) || ""; } catch (e) { pad = ""; } }
+  pad = oneLine(pad, 40);
+  return pad ? `someone moderating ${pad}` : "someone moderating this pad";
 }
 
 // ── blocks ──
@@ -427,9 +481,10 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, register, camRefusal, bypassOf, blocked, noteView, noteViewers, forBot, watching, block, unblock, listBlocks, resolveViewer, stats, prune,
+  noteReveal, modLabel,                                                                                   // 1.99?? (privacy controls S4)
   UNAVAILABLE, MSG, RECENT_MS, LIVE_GAP_MS, OWNER_GAP_MS, NOTE_TTL_MS, RESEND_MS, DIGEST_MAX,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setDeps: (d) => { deps = Object.assign({}, deps, d || {}); },
-  _reset: () => { BLOCKS = new Map(); NOTED.clear(); OUT.clear(); PEND.clear(); LASTPM.clear(); ready = null; },
+  _reset: () => { BLOCKS = new Map(); NOTED.clear(); OUT.clear(); PEND.clear(); RPEND.clear(); LASTPM.clear(); ready = null; },
   _out: OUT,
 };

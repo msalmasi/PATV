@@ -52,7 +52,13 @@ const KINDS = {
   mention:     { icon: "📣", label: "Mentions (@you in posts and comments, your name or words in a Camfrog room)", link: "/settings/mentions" },   // 1.99ii: mentions.js; site-only; 1.99kk: + feed @mentions (feedmentions.js)
   admin:       { icon: "🛠️", label: "Admin", link: null },
   system:      { icon: "🐸", label: "Account notices from Pepe", link: null },
+  // 1.99?? (privacy controls S4): "Someone moderating <pad> viewed your cam" (camreveal.js; Telegram default-on). Listed (prefs, the
+  // category list) only once cam reveals have ever been switched on - before that the Notices page reads exactly as it did
+  privacy:     { icon: "🔒", label: "Privacy (moderation views of your cam)", link: "/settings/privacy", when: () => privacyShown() },
 };
+function privacyShown() { try { const C = require("./camreveal"); return C.isOn() === true || C.everOn() === true; } catch (e) { return false; } }
+/** The categories shown now (a kind with `when` only while it says so). */
+const shownKinds = () => Object.keys(KINDS).filter((k) => typeof KINDS[k].when !== "function" || KINDS[k].when() === true);
 const NOTICES = "/messages/notices";  // where the notices are shown (the 🔔 Notices item of /messages)
 const PAGE = 25;
 const KEEP_PER_USER = 1000;          // oldest beyond this are pruned
@@ -168,7 +174,7 @@ async function attachPendingSafe(userId, camfrog) {
 async function prefs(userId) {
   await ready;
   const out = {};
-  for (const k of Object.keys(KINDS)) out[k] = { pm: true };
+  for (const k of shownKinds()) out[k] = { pm: true };
   if (!userId) return out;
   for (const r of await getQuery("SELECT kind, pm_off FROM inbox_prefs WHERE user_id = ?", [userId])) {
     if (out[r.kind]) out[r.kind].pm = !r.pm_off;
@@ -207,7 +213,7 @@ async function list(userId, { page = 1, kind = null } = {}) {
 
 /** Categories for the page, in display order: [{key, icon, label}]. */
 function kindList() {
-  return Object.keys(KINDS).map((k) => ({ key: k, icon: KINDS[k].icon, label: KINDS[k].label }));
+  return shownKinds().map((k) => ({ key: k, icon: KINDS[k].icon, label: KINDS[k].label }));
 }
 
 /** Everything the Notices pane needs, as JSON (plain text only - the page puts it in with textContent). */
@@ -339,7 +345,7 @@ function register(app, { isBotToken, addUser }) {
     const b = req.body || {};
     try {
       const pm = {};
-      for (const k of Object.keys(KINDS)) pm[k] = !!b["pm_" + k];
+      for (const k of shownKinds()) pm[k] = !!b["pm_" + k];
       await setPrefs(req.user.userId, pm);
       // 1.99ade: catalog notices (notices.js), never ?msg= text
       res.redirect(N.href(req, NOTICES, N.K("inbox_saved")));

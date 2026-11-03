@@ -39,6 +39,7 @@ const ROOM_BOUND = new Set([
   "incog_alias_burn",                                   // privacy fix (1.99ahc, review F7): keyed like incog_alias
   // wave 2 WP-5: moderation evidence clips are of a turn said in the Camfrog room (evidence.js) - they stay with it, like bridge_feed
   "evidence_clips",
+  "cam_evidence",                                       // 1.99?? (privacy controls S4): stills / clips of a cam in that room (camevidence.js)
 ]);
 // feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen)
 const FEED_KV_PREFIXES = ["room:", "rules:", "mention:", "mention_set:", "mention_at:", "automod:scope:", "pepe:scope:", "aigen_room:"];

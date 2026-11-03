@@ -103,6 +103,19 @@
 // generic "That cam isn't available right now.", never "ask to watch" or a reason. Switch off (or no word from Pepe): exactly as
 // before - a veiled person has no on_cam on the page and start() takes logins only.
 //
+// 1.99?? (privacy controls S4, G:/ops/privacy-controls-spec-2026-11-02.md section 3.2 "The new CAM REVEAL" + the owner's answers,
+// section 8): CAM REVEALS (camreveal.js holds the rules - who, which cam, the audit rows, the notice; the cam_reveal switch, dark). A
+// reveal is a session of its own (S.rv): its key is keyOf(room, login) + ":rv:" + sid (so nothing that asks SESS by keyOf - ▶ Live,
+// a stage hold, the mic stage, warm keep, a capture - ever finds it), its WHEP path is RANDOM (never pathFor / vpathFor: a URL ties
+// nothing to anyone), its viewers are only the moderators who revealed it (each with their own audit row and 3-minute cap -
+// revealStart / revealExtend), it never counts as anyone's ▶ Live slot, a block / an opt-out / a veil change never ends it (it got
+// past those on purpose - logged as livecam_audit.bypass "reveal:<what>"), it runs no END_HOOKS (micfollow never sees it), and
+// relayHold / holdOf / watchersOf name nobody through it. Pepe's want carries {rv, reveal, exact, bypass, quiet}: he opens it by the
+// exact name, says nothing in the room, writes no room mod-log line and closes the cam window when it ends; his live[] / refused[]
+// lines name it by rv. The person is told at the FIRST FRAME (a moderator's reader authenticated AND MediaMTX had the stream:
+// revealNotices -> camreveal's notice hook), unless that moderator is in 👻 ghost mode - re-checked on every beat, so a ghost who
+// turns ghost off mid-reveal tells them then. A reveal with no frame by the dead-relay timeouts ends "no_video" and tells nobody.
+//
 // Path names share the room-audio family on MediaMTX (deploy/webrtc/mediamtx.yml "~^(room|stgr)-[0-9a-f]{16}$"), so no
 // MediaMTX change is needed: prod "room-<16 hex>", staging "stgr-<16 hex>", an HMAC of "live-cam-path:<room>|<login>"
 // that never collides with a room's audio path (different HMAC input). webrtc.js asks camForPath first.
@@ -290,7 +303,7 @@ async function setOptout(login, off, { via = "web", userId = null, ts = now() } 
   await runQuery(`INSERT INTO livecam_optout (login, off, updated, via, user_id) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(login) DO UPDATE SET off = excluded.off, updated = excluded.updated, via = excluded.via, user_id = COALESCE(excluded.user_id, livecam_optout.user_id)`,
                  [l, off ? 1 : 0, ts, via === "chat" ? "chat" : "web", userId]);
-  if (off) { OPTOUT.add(l); for (const S of [...SESS.values()]) if (S.login === l) ownerClosed(S, "opted_out"); }
+  if (off) { OPTOUT.add(l); for (const S of [...SESS.values()]) if (S.login === l && !S.rv) ownerClosed(S, "opted_out"); }   // (S4: a reveal got past it)
   else OPTOUT.delete(l);
   runHooks(OPTOUT_HOOKS, [l, !!off], "opt-out");      // micfollow: the mic stage drops them at once too
   return true;
@@ -396,18 +409,19 @@ function camForPath(p) {
 /** 1.99??: timing only; an optional room binding keeps server-side clips on their own room's relay. */
 function relayHold(path, roomId) {
   const S = camForPath(path), b = S && S.botInfo;
-  return !S || S.ended || !b || roomId != null && S.roomId !== roomId ? null : { src: b.source, hold_ms: b.hold_ms == null ? null : b.hold_ms };
+  // (1.99?? privacy controls S4: never a reveal's relay - nothing but its moderators' players may lean on it)
+  return !S || S.ended || S.rv || !b || roomId != null && S.roomId !== roomId ? null : { src: b.source, hold_ms: b.hold_ms == null ? null : b.hold_ms };
 }
 /** 1.99??: never reveal whether an unheld cam exists; use the same fresh-slot rule as WHEP auth. */
 function holdOf(path, userId, roomId) {
   const S = camForPath(path), t = now(), fresh = (v) => !!v && Number.isFinite(v.beat) && t >= v.beat && t - v.beat <= BEAT_MS;
-  if (!S || S.ended || userId == null || !(fresh(S.viewers.get(String(userId))) || held(S) && S.stageViewers && fresh(S.stageViewers.get(String(userId))))) return null;
+  if (!S || S.ended || S.rv || userId == null || !(fresh(S.viewers.get(String(userId))) || held(S) && S.stageViewers && fresh(S.stageViewers.get(String(userId))))) return null;
   return relayHold(path, roomId);
 }
 const freshViewers = (S, t = now()) => [...S.viewers.entries()].filter(([, v]) => t - v.beat <= BEAT_MS);
 function slotsOf(userId, t = now()) {
   let n = 0;
-  for (const S of SESS.values()) if (!S.ended) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) n++; }
+  for (const S of SESS.values()) if (!S.ended && !S.rv) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) n++; }   // (S4: a reveal is no slot)
   return n;
 }
 const freshStage = (S, t = now()) => (S.stageViewers ? [...S.stageViewers.entries()].filter(([, v]) => t - v.beat <= BEAT_MS) : []);
@@ -457,7 +471,8 @@ function endSession(S, why, t = now()) {
   if (S.sourceId) kickReader(S.sourceId);
   // micfollow: a relay the mic stage ever held is logged without its login (spec §12 - mic stages relay people who never
   // asked to be watched; the appearance log is their record)
-  console.log(`[livecam] end room=${S.roomId} target=${S.mfEver || S.veil ? "-" : S.login} why=${why}`);
+  console.log(`[livecam] end room=${S.roomId} target=${S.mfEver || S.veil || S.rv ? "-" : S.login} why=${why}`);
+  if (S.rv) return;                                   // 1.99?? (privacy controls S4): a reveal is nobody's tile, slot or pin
   runHooks(END_HOOKS, [S, why], "end");               // micfollow: the mic stage's tile follows its relay
 }
 // ── 1.99ahn dead relay (see the header) ──
@@ -508,7 +523,7 @@ function noMedia(S, t, botLive) {
  *  session isn't the person's open incognito one now (incognito off, !bridge hide, the session ended, the switch off / Pepe's word
  *  gone); a named one whose person shows veiled in its room now (while incognito cams are effective - before that Pepe ends it). */
 function veilWhy(S, t = now()) {
-  if (!S || S.ended) return null;
+  if (!S || S.ended || S.rv) return null;             // (1.99?? privacy controls S4: a reveal got past the veil on purpose)
   const R = bridgeRooms().get(String(S.roomId));
   if (S.veil) {
     if (!icEffective(t)) return "switched_off";
@@ -535,7 +550,8 @@ function veilEnded(roomId, sess, t = now()) {
 function sweep(t = now()) {
   for (const S of [...SESS.values()]) {
     if (!S.ended) { const vw = veilWhy(S, t); if (vw) endSession(S, vw, t); }   // 1.99?? (privacy controls S5)
-    if (!S.ended) {
+    if (!S.ended && S.rv) revealSweep(S, t);                                     // 1.99?? (privacy controls S4)
+    else if (!S.ended) {
       for (const [uid, v] of [...S.viewers.entries()]) if (t - v.beat > BEAT_MS) dropViewer(S, uid, "gone", t);
       if (S.stageViewers) for (const [uid, v] of [...S.stageViewers.entries()]) if (t - v.beat > BEAT_MS) { S.stageViewers.delete(uid); for (const rid of v.readers || []) kickReader(rid); }
       if (held(S)) S.wantUntil = Math.max(S.wantUntil || 0, t + cfg().linger_s * 1000);   // 1.99zc: held by a stage slot / the mic stage
@@ -752,7 +768,7 @@ function dropViewerOf(login, userId, why = "blocked", t = now()) {
   const l = String(login || "").toLowerCase();
   const ghost = isGhost(userId);                       // 1.99aak: a block doesn't stop staff in 👻 ghost mode (audited) -
   for (const S of SESS.values()) {                     // stagefix: on their personal ▶ Live only; a Stage tile never (DF-43)
-    if (S.ended || S.login !== l) continue;
+    if (S.ended || S.login !== l || S.rv) continue;    // (1.99?? privacy controls S4: a block doesn't stop a moderation view)
     if (!ghost && dropViewer(S, String(userId), why, t)) n++;
     // 1.99zc: a stage viewer of that cam, too - through a cam slot or the 🎙 mic stage alike (stagefix DF-43: no ghost on a
     // Stage tile; micfollow §3.5: none on the mic stage either)
@@ -765,6 +781,9 @@ function watchersOf(login, t = now()) {
   const l = String(login || "").toLowerCase(), out = [];
   for (const S of SESS.values()) {
     if (S.ended || S.login !== l) continue;
+    // 1.99?? (privacy controls S4): a moderator viewing it through a reveal - `reveal`: camviewers counts them as "someone moderating
+    // <pad>", never by name (owner Q11); a 👻 ghost is never counted (isGhost: the live switch, not the one at the start)
+    if (S.rv) { for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: null, room: S.roomId, since: v.since, ghost: isGhost(uid), reveal: true }); continue; }
     for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: v.username, room: S.roomId, since: v.since, ghost: !!v.ghost });
     // 1.99zc; micfollow (D-19): `mf` = they watch ONLY through a pad's mic stage - counted for the cam's owner, never named
     for (const [uid, v] of freshStage(S, t)) out.push({ userId: uid, username: v.username || null, room: S.roomId, since: v.since, stage: true, ghost: !!v.ghost, mf: mfOnlyVia(v) });
@@ -1159,6 +1178,159 @@ function stageUnwatch(userId, roomId, login, holderId, t = now()) {
 /** micfollow: is `login`'s cam in this room in its ended-by cooldown (an owner / mod / admin ended its relay)? */
 const cooling = (roomId, login, t = now()) => (COOL.get(keyOf(roomId, String(login || "").toLowerCase())) || 0) > t;
 
+// ── 1.99?? (privacy controls S4): cam reveals (see the header; camreveal.js decides who may and writes the rows) ──
+const REVEAL_MS = 3 * 60 * 1000;          // a moderator's view lasts this long; "Extend" writes a new row and gives another REVEAL_MS (Q15)
+const RV_KEY = ":rv:";
+const SID_RE = /^[0-9a-f]{12}$/;
+const RV_STARTING = new Set();             // "room|login" while a reveal of them is being opened (its audit rows are on their way)
+let RV_NOTICE = null;                      // camreveal's hook: fn(S, userId, v) - tell the person (called once per moderator per session)
+function onRevealNotice(fn) { RV_NOTICE = typeof fn === "function" ? fn : null; }
+/** The reveal session `sid` of room `roomId` (an ended one too, for a last beat's "why"), or null. */
+function revealSess(roomId, sid) {
+  const s = String(sid == null ? "" : sid);
+  if (!SID_RE.test(s)) return null;
+  for (const S of SESS.values()) if (S.rv && S.sid === s && S.roomId === String(roomId)) return S;
+  return null;
+}
+/** The open reveal of `login`'s cam in room `roomId` - one per person at a time (a second moderator joins it). */
+function revealOf(roomId, login) {
+  const l = low(login);
+  for (const S of SESS.values()) if (S.rv && !S.ended && S.roomId === String(roomId) && S.login === l) return S;
+  return null;
+}
+/** The open reveal a moderator is viewing now (one at a time each), or null. */
+function revealOfViewer(userId, t = now()) {
+  for (const S of SESS.values()) {
+    if (!S.rv || S.ended) continue;
+    const v = S.viewers.get(String(userId));
+    if (v && t - v.beat <= BEAT_MS && t <= v.until) return S;
+  }
+  return null;
+}
+function newRevealSess(R, login, sid, meta, t) {
+  const p = PREFIX + crypto.randomBytes(8).toString("hex");      // RANDOM: never pathFor / vpathFor (a URL ties nothing to anyone)
+  const S = { key: keyOf(R.id, login) + RV_KEY + sid, roomId: R.id, login, display: meta.label || "someone", path: p, viewers: new Map(), createdAt: t,
+              veil: null, rv: { why: String(meta.why || "withheld"), veiled: meta.veiled === true, label: meta.label || null, bylogin: meta.bylogin === true },
+              wantUntil: t + REVEAL_MS, liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null,
+              botLiveAt: 0, botLiveSince: 0, botRestarts: 0, missSince: 0, nomediaAt: 0, botDownAt: 0,
+              ended: 0, endWhy: null, holds: new Set(), lastHolds: null, mf: false, stageViewers: new Map(), sid };
+  SESS.set(S.key, S);
+  BY_PATH.set(p, S.key);
+  console.log(`[livecam] reveal start room=${R.id} target=-`);
+  return S;
+}
+/**
+ * A moderator opens (or joins) a reveal of `login`'s cam in room R. The caller (camreveal.js) has checked the right, the target and
+ * that the cam is withheld from them. meta = {why, label, veiled, bylogin, role}. writeRows(sid) -> Promise<{auditId}> writes the reveal's
+ * rows in ONE transaction BEFORE any ticket - a throw refuses it and nothing is opened.
+ * -> {ok, rv, whep, state, until, expires, ghost?} | throws Refuse
+ */
+async function revealStart(u, R, login, meta, writeRows, t0 = now()) {
+  await init();
+  if (!on()) throw refuse("off");
+  if (!R || !R.cams || R.livecams === false || !bridgeOk(R.id)) throw refuse("room_off");   // (Q13: the pad's own switches)
+  if (!botOk(t0)) throw refuse("nopepe");
+  login = low(login);
+  if (!LOGIN_RE.test(login)) throw refuse("not_on_cam");
+  const uid = String(u.userId);
+  const mine = revealOfViewer(uid, t0);
+  if (mine && !(mine.roomId === R.id && mine.login === login)) throw new Refuse(409, "Close the cam you're viewing for moderation first.", "one_open");
+  const rk = keyOf(R.id, login);
+  if (RV_STARTING.has(rk)) throw new Refuse(409, "Someone is opening that cam right now - try again in a moment.", "busy");
+  let S = revealOf(R.id, login);
+  if (!S || !S.viewers.has(uid)) {
+    if (!fitsBudget(S, t0)) throw refuse("budget");
+    if (!S && liveCount() >= cfg().max_live) throw refuse("slots_busy");
+  }
+  const sid = S ? S.sid : crypto.randomBytes(6).toString("hex");
+  RV_STARTING.add(rk);
+  let a;
+  try { a = await writeRows(sid); }
+  finally { RV_STARTING.delete(rk); }
+  if (!a || !a.auditId) throw new Refuse(500, "Couldn't log it - nothing was opened.", "audit");
+  const t = now();
+  S = revealOf(R.id, login);
+  if (!S) S = newRevealSess(R, login, sid, meta, t);
+  const old = S.viewers.get(uid);
+  if (old) audit(S, uid, old, "reopened", t);                    // (the new rows are this view's; the old row closes)
+  const v = { since: old ? old.since : t, beat: t, username: u.username || null, readers: old ? old.readers : new Set(), auditId: a.auditId,
+              ghost: isGhost(uid), bypass: "reveal:" + S.rv.why, role: meta.role || null, until: t + REVEAL_MS, readAt: old ? old.readAt : 0,
+              told: old ? old.told : false, rv: true };
+  S.viewers.set(uid, v);
+  S.wantUntil = Math.max(S.wantUntil, v.until);
+  return { ok: true, rv: S.sid, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t),
+           until: v.until, expires: t + TICKET_MS, ...(v.ghost ? { ghost: true } : {}) };
+}
+/** Drop one moderator from a reveal; the reveal ends when nobody is left (no linger: Pepe closes the cam window). */
+function revealDrop(S, userId, why, t = now()) {
+  if (!S || !S.rv) return false;
+  const had = dropViewer(S, String(userId), why, t);
+  if (!S.ended && !freshViewers(S, t).length) endSession(S, why, t);
+  return had;
+}
+/** The reveal player's beat (the route re-checked the right and the target first). -> {ok, state, until?, why?, ghost?} */
+function revealBeat(userId, roomId, sid, t = now()) {
+  const S = revealSess(roomId, sid);
+  if (!S) return { ok: true, state: "ended", why: "gone" };
+  if (S.ended) return { ok: true, state: "ended", why: S.endWhy || "ended" };
+  const v = S.viewers.get(String(userId));
+  if (!v || t - v.beat > BEAT_MS) return { ok: true, state: "ended", why: "gone" };
+  if (t > v.until) { revealDrop(S, userId, "time_up", t); return { ok: true, state: "ended", why: "time_up" }; }
+  v.beat = t;
+  revealNotices(S, t);                                           // (a ghost who turned ghost off since: the person is told now)
+  return { ok: true, state: stateOf(S, t), until: v.until, ...(isGhost(userId) ? { ghost: true } : {}) };
+}
+/** "Extend (logged)": the route wrote the new rows (auditId); the old livecam_audit row closes, the cap moves. -> bool */
+function revealExtend(userId, roomId, sid, auditId, t = now()) {
+  const S = revealSess(roomId, sid);
+  const v = S && !S.ended ? S.viewers.get(String(userId)) : null;
+  if (!v || t - v.beat > BEAT_MS || t > v.until) return false;
+  audit(S, userId, v, "extended", t);
+  v.auditId = auditId;
+  v.until = t + REVEAL_MS;
+  v.beat = t;
+  S.wantUntil = Math.max(S.wantUntil, v.until);
+  return true;
+}
+/** The moderator closes the player (or the route ends it: lost_right, visible, left_out ...). */
+function revealStop(userId, roomId, sid, why = "stopped", t = now()) {
+  const S = revealSess(roomId, sid);
+  if (!S || S.ended) return false;
+  return revealDrop(S, userId, why, t);
+}
+/** camreveal.setOn(false): every reveal ends now. -> how many */
+function revealSwitchOff(t = now()) {
+  let n = 0;
+  for (const S of [...SESS.values()]) if (!S.ended && S.rv) { endSession(S, "switched_off", t); n++; }
+  return n;
+}
+/** The first frame: a moderator's reader authenticated (v.readAt) AND MediaMTX had the stream (S.liveAt) - the person is told, once
+ *  per moderator per session, unless that moderator is a 👻 ghost NOW (asked again on every beat). A failed open never gets here. */
+function revealNotices(S, t = now()) {
+  if (!S || !S.rv || S.ended || !S.liveAt) return 0;
+  let n = 0;
+  for (const [uid, v] of S.viewers) {
+    if (v.told || !v.readAt || isGhost(uid)) continue;
+    v.told = true;
+    n++;
+    if (RV_NOTICE) { try { RV_NOTICE(S, uid, v); } catch (e) { console.error("[livecam] reveal notice:", e && e.message); } }
+  }
+  return n;
+}
+/** The sweep's turn for a reveal: stale beats ("gone") and spent caps ("time_up") drop their moderator; empty -> it ends; never a
+ *  frame by the dead-relay timeouts -> "no_video" (nobody is told); a lost stream -> "relay_lost". */
+function revealSweep(S, t) {
+  let last = null;
+  for (const [uid, v] of [...S.viewers.entries()]) {
+    if (t - v.beat > BEAT_MS) { dropViewer(S, uid, "gone", t); last = "gone"; }
+    else if (t > v.until) { dropViewer(S, uid, "time_up", t); last = "time_up"; }
+  }
+  if (!S.viewers.size) return endSession(S, last || "unwatched", t);
+  if (startOver(S, t)) return endSession(S, "no_video", t);
+  if (lostOver(S, t)) return endSession(S, "relay_lost", t);
+  revealNotices(S, t);
+}
+
 // ── Pepe ──
 const str = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n);
 const TERMINAL = new Set(["opted_out", "not_on_cam", "room_off", "slots_busy", "open_failed", "not_that_cam", "noswitch", "busy", "spawn_failed",
@@ -1185,9 +1357,15 @@ async function forBot(body, t = now()) {
   const live = Array.isArray(body.live) ? body.live.slice(0, 50) : [];
   const seen = new Set();
   const exactMoved = [];          // micfollow: relays the mic stage holds whose exact flag changed (the pad steps at once)
+  // 1.99?? (privacy controls S4): Pepe's line about a reveal names it by rv (its sid) - never matched by keyOf (that's ▶ Live's)
+  const lineSess = (x) => {
+    if (x.rv == null) return SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
+    const S = revealSess(str(x.room, 128), str(x.rv, 24));
+    return S && S.login === low(str(x.login, 40)) ? S : null;
+  };
   for (const x of live) {
     if (!x || typeof x !== "object") continue;
-    const S = SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
+    const S = lineSess(x);
     if (!S || S.ended) continue;
     seen.add(S.key);
     const prevState = S.botState;
@@ -1210,7 +1388,8 @@ async function forBot(body, t = now()) {
                   exact: typeof x.exact === "boolean" ? x.exact : null };   // micfollow: opened / verified by its exact name
     if (S.botState === "ended" || S.botState === "stopped") {
       const why = str(x.why, 30);
-      if (why === "opted_out") ownerClosed(S, why, t);                     // 1.99aak: a ghost keeps watching
+      if (S.rv) { if (TERMINAL.has(why)) endSession(S, why, t); }          // (S4: a reveal has no "ghost keeps watching")
+      else if (why === "opted_out") ownerClosed(S, why, t);                // 1.99aak: a ghost keeps watching
       else if (TERMINAL.has(why)) endSession(S, why, t);
     }
   }
@@ -1220,11 +1399,14 @@ async function forBot(body, t = now()) {
     try { require("./micfollow").onExact(S.roomId, S.login); } catch (e) { /* no mic follows */ }
   }
   for (const x of (Array.isArray(body.refused) ? body.refused.slice(0, 50) : [])) {
-    const S = x && SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
+    const S = x && typeof x === "object" ? lineSess(x) : null;
     if (!S || S.ended) continue;
     // mfix: Pepe says which session it was about (he re-sends a refusal for 30 s): an older one's never ends this one
     if (x.sid != null && str(x.sid, 24) !== S.sid) continue;
     const why = str(x.why, 30);
+    // 1.99?? (privacy controls S4): a reveal Pepe couldn't open ends with his reason (nobody is told: no frame ever came); a passing
+    // one ("cam_unknown" - he is reading the participant list again) only notes it
+    if (S.rv) { if (!seen.has(S.key)) { S.botWhy = why; if (TERMINAL.has(why) || why === "opted_out") endSession(S, why, t); } continue; }
     if (x.x === true && why !== "opted_out") {
       // mfix review: an exact refusal from before the mic stage's latest hold of this cam is about an earlier hold (Pepe
       // re-sends one for 30 s; the mic stage may re-hold after soft_retry_s) - never a second soft failure of the new hold
@@ -1249,6 +1431,19 @@ async function forBot(body, t = now()) {
       if (S.ended) continue;
       const R = rooms.get ? rooms.get(S.roomId) : null;
       if (!R || R.livecams === false || !R.cams) { endSession(S, R ? "room_off" : "offline", t); continue; }
+      // 1.99?? (privacy controls S4): a reveal - opened by its EXACT name, past the person's opt-out (bypass: it's a moderation view),
+      // quiet (no room line, no room mod-log line), never the mic stage's; ghost_only while every moderator on it is a 👻 ghost
+      if (S.rv) {
+        const rkey = pubKey(S.path);
+        if (!rkey) continue;
+        const rfv = freshViewers(S, t);
+        const rnm = noMedia(S, t, seen.has(S.key) && S.botState === "live");
+        if (rnm && !S.nomediaAt) S.nomediaAt = t;
+        want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: rkey, path: S.path, viewers: 1, sid: S.sid, rv: S.sid,
+                    reveal: true, exact: true, bypass: true, quiet: true,
+                    ...(rnm ? { nomedia: true } : {}), ...(rfv.length && rfv.every(([uid]) => isGhost(uid)) ? { ghost_only: true } : {}) });
+        continue;
+      }
       if (optedOut(S.login) && !ownerClosed(S, "opted_out", t)) continue;     // 1.99aak: only staff in ghost mode stay
       const key = pubKey(S.path);
       if (!key) continue;
@@ -1303,6 +1498,7 @@ function noteSync(items, t = now()) {
     seen.add(S.key);
   }
   for (const S of SESS.values()) if (!seen.has(S.key)) { S.ready = false; S.readers = 0; S.seenAt = t; noteMiss(S, false, streak, t); }
+  for (const S of SESS.values()) if (S.rv && !S.ended && S.liveAt) revealNotices(S, t);   // 1.99?? (privacy controls S4): the first frame
 }
 /** 1.99ahn dead relay: Pepe isn't live on this relay now (review F2: botDownAt - when a restart's START_MS starts). */
 function liveEnded(S, t) { if (S.botLiveSince) S.botDownAt = t; S.botLiveSince = 0; }
@@ -1327,6 +1523,7 @@ async function auth(b, action, proto) {
     return sameSecret(cred, pubKey(p)) ? 200 : 403;
   }
   if (action === "read") {
+    if (S.rv) return revealAuth(S, b, p, proto);           // 1.99?? (privacy controls S4): a reveal's own rules
     // 1.99??: only a running mic-stage capture may authenticate a loopback RTSP reader.
     if (action === "read" && proto === "rtsp") return require("./stagemiccap").rtspAuth(b, p);
     if (proto !== "webrtc") return 403;                      // cam HLS and every other protocol remain refused
@@ -1360,6 +1557,28 @@ async function auth(b, action, proto) {
   return 403;
 }
 
+/** 1.99?? (privacy controls S4): a reader of a reveal's path. WebRTC: only a moderator on it (a fresh beat, inside their cap) with a
+ *  valid ticket for THIS path, who may still see the pad (padFull) and still holds the right (camreveal.stillMay - asked fresh, as on
+ *  every beat). RTSP: only a running evidence capture of it (camevidence.rtspAuth - loopback, job-scoped). Nothing else, ever. */
+async function revealAuth(S, b, p, proto) {
+  if (proto === "rtsp") { try { return require("./camevidence").rtspAuth(b, p); } catch (e) { return 403; } }
+  if (proto !== "webrtc") return 403;
+  let tok = null;
+  try { tok = new URLSearchParams(String(b.query || "").replace(/^\?/, "")).get("pt"); } catch (e) { tok = null; }
+  const c = checkTicket(tok, p);
+  if (!c) return loopbackIp(b.ip) ? 403 : 401;
+  const t = now();
+  const v = S.viewers.get(String(c.uid));
+  if (!v || t - v.beat > BEAT_MS || t > v.until) return 403;
+  if (!(await require("./bridge-relay").padFull(c.uid, S.roomId))) return 403;
+  try { if (!(await require("./camreveal").stillMay(c.uid, S))) return 403; } catch (e) { return 403; }
+  if (S.ended) return 403;
+  if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) v.readers.add(String(b.id));
+  if (!v.readAt) v.readAt = t;
+  revealNotices(S, t);
+  return 200;
+}
+
 // ── views ──
 /** For the pad's live view: may the ▶ Live button show, and the viewer's slots. null = no live cams here. */
 function hint(R, userId) {
@@ -1368,7 +1587,7 @@ function hint(R, userId) {
   const t = now();
   const watching = [];
   // (1.99?? privacy controls S5: a veiled session by its opaque id - never the login)
-  for (const S of SESS.values()) if (!S.ended && S.roomId === R.id) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) watching.push(S.veil ? S.veil.id : S.login); }
+  for (const S of SESS.values()) if (!S.ended && !S.rv && S.roomId === R.id) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) watching.push(S.veil ? S.veil.id : S.login); }
   return { on: true, slots: { used: slotsOf(userId, t), max: maxSlots(userId) }, watching, sp_max: cfg().viewers_sp,
            ...(isGhost(userId) ? { ghost: true } : {}) };   // 1.99aaf: the 👻 badge on the popover   // 1.99zc: sp_max for the strip's hint
 }
@@ -1386,8 +1605,11 @@ async function adminView() {
     ...(S.holds && S.holds.has(MFW_PREFIX + S.roomId) ? { warm: true, warm_s: (() => { const k = keptOf(S); return k ? Math.max(0, Math.round((k.until - t) / 1000)) : null; })() } : {}),
     // 1.99?? (privacy controls S5): a veiled session shows its frog name only - never the login or keyOf (livecam.admin is "ops":
     // it may be granted to Staff, who never see through a veil - J-2); the End button names it by "v:<opaque id>"
-    key: S.veil ? "v:" + S.veil.id : S.key, room: S.roomId, login: S.veil ? null : S.login, display: S.veil ? (S.veil.alias || "someone") + " (incognito)" : S.display,
-    ...(S.veil ? { veiled: true } : {}), state: stateOf(S, t), since: S.createdAt, liveAt: S.liveAt || null,
+    // 1.99?? (privacy controls S4): a reveal shows "rv:<sid>" and, for a veiled person, the frog name or "veiled" - never the login (the
+    // login of a veiled reveal is only in the see-through log, /admin/bridge#seethrough)
+    key: S.rv ? "rv:" + S.sid : S.veil ? "v:" + S.veil.id : S.key, room: S.roomId, login: S.veil || (S.rv && S.rv.veiled) ? null : S.login,
+    display: S.rv ? (S.rv.veiled ? (S.rv.label || "veiled") + " (veiled)" : S.login) : S.veil ? (S.veil.alias || "someone") + " (incognito)" : S.display,
+    ...(S.veil || (S.rv && S.rv.veiled) ? { veiled: true } : {}), ...(S.rv ? { reveal: true } : {}), state: stateOf(S, t), since: S.createdAt, liveAt: S.liveAt || null,
     viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since, ghost: !!v.ghost })), readers: S.readers, bot: S.botInfo || null,
     kbps: Math.round(rateOf(S, c)), measured: !!(S.botInfo && S.botInfo.source === "passthrough" && Number(S.botInfo.kbps) > 0),
     outKbps: Math.round(rateOf(S, c) * (freshViewers(S, t).length + freshStage(S, t).length)),
@@ -1397,8 +1619,16 @@ async function adminView() {
     stageViewers: freshStage(S, t).length }));
   const viewers = totalViewers(t);
   // (1.99?? privacy controls S5: a row watched under a frog name shows that name, never the login)
-  const recent = (await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason, ghost, veil FROM livecam_audit ORDER BY id DESC LIMIT 30`))
-    .map((r) => { const o = { ...r }; if (o.veil != null) { o.target = String(o.veil) + " (incognito)"; o.veiled = true; } delete o.veil; return o; });
+  // (1.99?? privacy controls S4: a reveal's row says so - reveal: true - and a veiled person's shows "<frog name or veiled> (veiled)")
+  const recent = (await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason, ghost, veil, bypass FROM livecam_audit ORDER BY id DESC LIMIT 30`))
+    .map((r) => {
+      const o = { ...r };
+      const rv = String(o.bypass || "").startsWith("reveal:");
+      if (o.veil != null) { o.target = String(o.veil) + (rv ? " (veiled)" : " (incognito)"); o.veiled = true; }
+      if (rv) o.reveal = true;
+      delete o.veil; delete o.bypass;
+      return o;
+    });
   return { now: t, v: CFG.v, cfg: { ...c }, defaults: { ...DEFAULTS }, fields: FIELDS, updated_at: CFG.at, updated_by: CFG.by, webrtc: W().enabled(),
            bot: BOT ? { at: BOT.at, online: botOk(t), pool: BOT.pool, cfgFrom: BOT.cfgFrom } : null, sessions,
            usage: { viewers, viewerCap: viewerCap(c), mbps: Math.round(usedKbps(t, c) / 100) / 10, budget_mbps: c.budget_mbps, live: sessions.length,
@@ -1574,7 +1804,10 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
   app.get("/admin/pepe/livecams", addUser, admin(false), async (req, res) => {
     try {
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
-      res.render("admin/pepeLivecams", { user: req.user.username, title: "Admin · Live cams", section: "pepe", isAdmin: true, v: await adminView() });
+      // (1.99?? privacy controls S4: cr = the by-login reveal card, only while cam reveals are in effect)
+      let cr = null;
+      try { cr = require("./camreveal").effective() ? { on: true } : null; } catch (e) { cr = null; }
+      res.render("admin/pepeLivecams", { user: req.user.username, title: "Admin · Live cams", section: "pepe", isAdmin: true, v: await adminView(), cr });
     } catch (e) { console.error("[livecam] page:", e); res.status(500).send("Couldn't load the page."); }
   });
   app.get("/api/admin/pepe/livecams", addUser, admin(true), async (req, res) => {
@@ -1588,12 +1821,15 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
   app.post("/api/admin/pepe/livecams/end", addUser, admin(true), async (req, res) => {
     if (!fetchOnly(req, res)) return;
     const key = String((req.body || {}).key || "");
-    // (1.99?? privacy controls S5: a veiled session by "v:<opaque id>")
-    const S = key.startsWith("v:") ? [...SESS.values()].find((x) => x.veil && x.veil.id === key.slice(2) && !x.ended) || null : SESS.get(key);
+    // (1.99?? privacy controls S5: a veiled session by "v:<opaque id>"; S4: a reveal by "rv:<sid>" - its "<room>|<login>:rv:" key is
+    // never accepted, nor shown)
+    const S = key.startsWith("v:") ? [...SESS.values()].find((x) => x.veil && x.veil.id === key.slice(2) && !x.ended) || null
+      : key.startsWith("rv:") ? [...SESS.values()].find((x) => x.rv && x.sid === key.slice(3) && !x.ended) || null
+      : key.includes(RV_KEY) ? null : SESS.get(key);
     if (!S || S.ended) return res.status(404).json({ ok: false, error: "That live cam already ended." });
-    COOL.set(S.key, now() + END_COOLDOWN_MS);
+    if (!S.rv) COOL.set(S.key, now() + END_COOLDOWN_MS);
     endSession(S, "ended_by_admin");
-    console.log(`[livecam] admin end ${S.veil ? "v:" + S.veil.id : S.key} by=${req.user.username || req.user.userId}`);
+    console.log(`[livecam] admin end ${S.rv ? "rv:" + S.sid : S.veil ? "v:" + S.veil.id : S.key} by=${req.user.username || req.user.userId}`);
     res.json({ ok: true, view: await adminView() });
   });
 }
@@ -1608,6 +1844,8 @@ module.exports = {
   dmBlockedSet,                                                                                              // train2 merge (micfollow's eligOf)
   sharedBeyondMf,                                                                                            // mfix
   stageWarm, isMfHolder, MFW_PREFIX,                                                                         // wave2 WP-4 (F.2 warm keep)
+  revealStart, revealSess, revealOf, revealOfViewer, revealBeat, revealExtend, revealStop, revealSwitchOff, revealNotices, onRevealNotice,
+  REVEAL_MS,                                                                                                 // 1.99?? (privacy controls S4)
   botMf: () => (BOT && BOT.mf) || 0, botPool: () => (BOT && BOT.pool) || null, enabled: () => cfg().enabled === true, cfg,
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
@@ -1615,5 +1853,5 @@ module.exports = {
   _sessions: SESS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setKick: (fn) => { kickImpl = fn; },
-  _reset: () => { SESS.clear(); BY_PATH.clear(); COOL.clear(); BOT = null; OPTOUT = new Set(); CFG = { v: 0, cfg: { ...DEFAULTS }, at: null, by: null }; ready = null; SYNC_AT = 0; },
+  _reset: () => { SESS.clear(); BY_PATH.clear(); COOL.clear(); RV_STARTING.clear(); BOT = null; OPTOUT = new Set(); CFG = { v: 0, cfg: { ...DEFAULTS }, at: null, by: null }; ready = null; SYNC_AT = 0; },
 };

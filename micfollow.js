@@ -2088,7 +2088,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     if (x.cover) {
       src.push({ kind: "cover", id: x.cid, name: x.name || null, hood: x.hood, veil: x.veil, pos: x.pos, newest: x.newest, since: x.since,
                  video: "cover", watch: "cover", ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
-                 ...(await coverFlags(snap.roomId, x.cid, userId, t, surface)) });
+                 ...(await coverFlags(snap.roomId, x.cid, userId, t, surface)), ...(await camRevealFlag(R, x.cid, userId, t, surface)) });
       continue;
     }
     // 1.99?? (privacy controls S5): an incognito person's cam under their frog name - its public id, the frog name, the hood (the page
@@ -2192,6 +2192,19 @@ async function coverFlags(roomId, cid, userId, t = now(), surface = "pad") {
   if ((await viewerLogin(userId, t)) === who.login) out.self = 1;
   if (surface === "pad" && revealOn() && (await seeRole(userId, roomId, t))) { out.rv = 1; out.ex = 1; }
   return out;
+}
+/** 1.99?? (privacy controls S4): cv: 1 on a cover for a moderator who may view its hidden cam (camreveal.viewerRole: cam reveals in
+ *  effect, an admin / staff / the pad's owner / the room's mods) while Pepe says the person behind it is on cam - a flag only, on the
+ *  pad page only; the cam is asked for by the tile's id (POST .../livecam/reveal {tile}) and the server resolves who. */
+async function camRevealFlag(R, cid, userId, t = now(), surface = "pad") {
+  if (surface !== "pad" || !userId || !R) return {};
+  let CR = null;
+  try { CR = require("./camreveal"); if (!CR.effective(t)) return {}; } catch (e) { return {}; }
+  const who = coverWho(R.id, cid);
+  if (!who) return {};
+  const e = (R.members || []).find((u) => u && u.anon && u._vz && low(u._vz.login) === low(who.login));
+  if (!e || e._vz.on_cam !== true) return {};
+  try { return (await CR.viewerRole(userId, R)) ? { cv: 1 } : {}; } catch (e2) { return {}; }
 }
 /** wave2 WP-4 (F.4, v2): a see-through manager's ✕ on cover `tileId` of pad R: the person behind it is kept off this pad's mic
  *  stage for `hours` (1 / 24 / 0 = always) - stored as a VEILED exclusion (listed by the frog name then, or "a veiled speaker";

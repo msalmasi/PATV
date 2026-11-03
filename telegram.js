@@ -69,7 +69,9 @@ const MAX_TRIES = 5;
 const KEEP_MS = 3 * 86400e3;
 const TEXT_MAX = 3500;               // Telegram's limit is 4096
 const TG_ID_RE = /^[1-9]\d{0,19}$/;
-const DEFAULT_ON = new Set(["dm", "mention", "tip", "follow", "stage", "store_purchase", "ops"]);   // 1.99aai: "ops" = opsalerts.js, admins only, never a notice kind   // 1.99tp: store_purchase - an admin set them up for it
+const DEFAULT_ON = new Set(["dm", "mention", "tip", "follow", "stage", "store_purchase", "ops",
+  "privacy"]);   // 1.99?? (privacy controls S4): a moderator viewed your cam (inbox kind "privacy", shown once cam reveals have been on)
+//   // 1.99aai: "ops" = opsalerts.js, admins only, never a notice kind   // 1.99tp: store_purchase - an admin set them up for it
 const isLiveKind = (k) => /live/i.test(String(k || ""));    // go-live alerts (whatever the go-live feature names its kind)
 
 let NOW = () => Date.now();
