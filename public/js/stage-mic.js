@@ -296,6 +296,15 @@
       e.appendChild(v); e.appendChild(img); e.appendChild(hoodImg); e.appendChild(card); e.appendChild(label); e.appendChild(chip); e.appendChild(x); e.appendChild(rp); e.appendChild(pn);
       e.appendChild(off); e.appendChild(rv); e.appendChild(cvb);
       t.el = e; t.video = v;
+      // 1.99ain: the corner buttons (⚑ / 📌 / ✕) are hidden until the tile is hovered or focused (webrtc.css); on a touch
+      // screen a tap on the tile shows them for 4 s - the hidden buttons take no taps, so that first tap lands here
+      var toolsT = 0;
+      e.addEventListener('pointerup', function (ev) {
+        if (ev.pointerType !== 'touch' && ev.pointerType !== 'pen') return;
+        e.classList.add('mf-tools');
+        clearTimeout(toolsT);
+        toolsT = setTimeout(function () { e.classList.remove('mf-tools'); }, 4000);
+      });
       x.addEventListener('click', function () { if (t.s && t.s.pin) pinPost(t.s.id, true); else askExclude(t.s); });
       rv.addEventListener('click', function () { revealTile(t, rv); });
       cvb.addEventListener('click', function () {

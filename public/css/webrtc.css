@@ -88,6 +88,13 @@
 /* ⚑ on a tile (viewers; owners have ✕ in the same corner) */
 .player .mf-stage .mf-tile .mf-rp { font-size: 16px; }
 .player .mf-stage .mf-tile .mf-x[hidden] { display: none; }
+/* 1.99ain (owner 2026-11-03): the tile's corner buttons (⚑ report, 📌 pin, ✕ / 📌✕) stay out of the way: shown while the
+   pointer is over the tile, while one of them has keyboard focus, or for 4 s after a tap on a touch screen (.mf-tools,
+   stage-mic.js) - a hidden one can't be clicked by accident */
+.player .mf-stage .mf-tile .mf-x { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+.player .mf-stage .mf-tile:hover .mf-x, .player .mf-stage .mf-tile:focus-within .mf-x,
+.player .mf-stage .mf-tile.mf-tools .mf-x { opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .player .mf-stage .mf-tile .mf-x { transition: none; } }
 .player .mf-stage .mf-panel { position: absolute; top: 54px; left: 6px; z-index: 8; max-width: min(320px, calc(100% - 12px)); max-height: calc(100% - 60px); overflow: auto;
                               display: grid; gap: 6px; padding: 10px; border-radius: 10px; background: rgba(15,15,15,.94); border: 1px solid rgba(255,255,255,.2); }
 .player .mf-stage .mf-panel select, .player .mf-stage .mf-pbtn { min-height: 44px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: #222; color: #fff;
