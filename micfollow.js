@@ -2250,7 +2250,9 @@ function coverWho(roomId, tileId) {
 /** The default live-stage see-through role: an Admin with chatlog.see_through, or the pad's current owner. Cached 30 s. */
 const SEE = new Map();
 async function seeRole(userId, roomId, t = now()) {
-  const k = String(userId) + "|" + String(roomId), c = SEE.get(k);
+  let trOn = false;
+  try { trOn = require("./textreveal").isOn(); } catch (e) { trOn = false; }
+  const k = String(userId) + "|" + String(roomId) + (trOn ? "|t" : ""), c = SEE.get(k);   // (1.99?? S4t: the switch is part of the key)
   if (c && t - c.at < MANAGE_MS) return c.role;
   let role = null;
   try {
@@ -2258,7 +2260,8 @@ async function seeRole(userId, roomId, t = now()) {
     if (u && REVEAL.role) role = await REVEAL.role(u, String(roomId));
     else if (u) role = SP.can(u, "chatlog.see_through") ? "admin" : padOwnerId(roomId) === String(u.userId) ? "owner" : null;
   } catch (e) { role = null; }
-  role = role === "admin" || role === "owner" ? role : null;
+  // (1.99?? privacy controls S4t: "staff" / "mod" too while text_reveal_roles is on - Reveal only; ✕ / lift stay admin / owner: seeManage)
+  role = role === "admin" || role === "owner" || role === "staff" || role === "mod" ? role : null;
   SEE.set(k, { role, at: t });
   if (SEE.size > 5000) SEE.delete(SEE.keys().next().value);
   return role;
@@ -2271,7 +2274,10 @@ async function coverFlags(roomId, cid, userId, t = now(), surface = "pad") {
   if (!who) return {};
   const out = {};
   if ((await viewerLogin(userId, t)) === who.login) out.self = 1;
-  if (surface === "pad" && revealOn() && (await seeRole(userId, roomId, t))) { out.rv = 1; out.ex = 1; }
+  if (surface === "pad" && revealOn()) {
+    const role = await seeRole(userId, roomId, t);
+    if (role) { out.rv = 1; if (role === "admin" || role === "owner") out.ex = 1; }   // (1.99?? S4t: a staff / mod Reveal, never ✕)
+  }
   return out;
 }
 /** 1.99?? (privacy controls S4): cv: 1 on a cover for a moderator who may view its hidden cam (camreveal.viewerRole: cam reveals in
@@ -2326,7 +2332,7 @@ async function liftVeiled(user, R, xid) {
   await init();
   const t = now();
   const role = await seeRole(user.userId, R.id, t);
-  if (!role) throw new Refuse(403, "That's a veiled speaker - only someone who may see who it is can lift this.", "cover");
+  if (role !== "admin" && role !== "owner") throw new Refuse(403, "That's a veiled speaker - only someone who may see who it is can lift this.", "cover");   // (1.99?? S4t: not staff / mod)
   const x = String(xid == null ? "" : xid);
   const e = /^[0-9a-f]{16}$/.test(x) ? (EXCL.get(String(R.id)) || new Map()).get(VEXCL + x) : null;
   if (!e || !e.vlogin) throw new Refuse(404, "That exclusion is gone.", "none");
@@ -2401,7 +2407,7 @@ async function ownerState(roomId, t = now(), { viewerId = null, lift = false } =
   const why = P ? whyOff(P, R, t) : "pad_off";
   const runWhy = why === "pad_off" ? whyOff({ roomId: String(roomId), settings: { ...s, on: true } }, R, t) : why;
   const caps = padCaps();
-  const mayLift = lift === true || (viewerId != null && !!(await seeRole(viewerId, roomId, t)));
+  const mayLift = lift === true || (viewerId != null && ["admin", "owner"].includes(await seeRole(viewerId, roomId, t)));   // (1.99?? S4t: not staff / mod)
   // (wave2 WP-4: a veiled exclusion is listed by its label and an opaque xid - never by the login: excluding a cover never
   // reveals who it was. The xid only for a viewer who may lift it; it's random per ✕, so it never ties two frog names together)
   const ex = [...(EXCL.get(String(roomId)) || new Map()).entries()].filter(([, e]) => e.until == null || e.until > t)

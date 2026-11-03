@@ -1583,7 +1583,8 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   // frog names here (an admin, or the pad's owner for lines said in their era - never on the homepage panel), rv: 1 flags
   const selfKeys = new Set([userId ? "u:" + String(userId).toLowerCase() : null, login ? String(login).toLowerCase() : null].filter(Boolean));
   let see = null;
-  if (!opts.nonExempt && viewer && viewer.userId) { try { see = await require("./seethrough").chatRoleCached(viewer, R.id); } catch (e) { see = null; } }
+  // (1.99?? privacy controls S4t: the TEXT-reveal role - + staff / room mods while text_reveal_roles is on; off: chatRoleCached exactly)
+  if (!opts.nonExempt && viewer && viewer.userId) { try { see = await require("./seethrough").textRoleCached(viewer, R.id); } catch (e) { see = null; } }
   const canReveal = see ? (x) => require("./seethrough").mayReveal(see, x && x.ts != null ? Number(x.ts) : Date.now()) : null;
   // (1.99?? privacy controls S5: roomId - an incognito member's on_cam under their frog name, incogcams.pageOnCam)
   // (1.99?? privacy controls S4: camReveal - a moderator who may view a hidden cam here gets cv: 1 on a frog entry whose cam is on;
@@ -1773,7 +1774,10 @@ function register(app, { isBotToken, addUser }) {
              // 1.99?? (privacy controls S6): the privacy switchboard v3 (privacystate.js: its switch AND privacy wire v2) - Pepe answers
              // !privacy, lets an unproven room line switch a control on and off for its name, takes the card's actions and reports
              // bridge / tx only after this (never said while either is off)
-             ...(privstateAdvert() ? { privstate: 1 } : {}) };
+             ...(privstateAdvert() ? { privstate: 1 } : {}),
+             // 1.99?? (privacy controls S4t): text reveal roles (textreveal.js: its switch) - Pepe's replies and help cards that name who
+             // can reveal hidden text switch to the new wording only after this (never said while it's off)
+             ...(textrevealAdvert() ? { textreveal: 1 } : {}) };
   }
   // wave 2 WP-2 (spec A.3 handshake): the privacy wire v2 receiver - Pepe's FULL form (real UserRefs + priv, hidden words, hold ids).
   //  * every call is counted FIRST (the dark proof: while the switch has never been on, the counter stays 0 - Pepe never calls);
@@ -2240,6 +2244,7 @@ function evidenceOn() { try { return require("./evidence").effective(); } catch 
 function incogcamAdvert() { try { return require("./incogcams").advert() === true; } catch (e) { return false; } }
 function camrevealAdvert() { try { return require("./camreveal").advert() === true; } catch (e) { return false; } }
 function privstateAdvert() { try { return require("./privacystate").advert() === true; } catch (e) { return false; } }
+function textrevealAdvert() { try { return require("./textreveal").advert() === true; } catch (e) { return false; } }   // 1.99?? (S4t)
 
 /** wave 2 WP-2 (spec E.1): who is behind veiled line c of room roomId, for a reveal (seethrough.js checks role and era) -> {ts, vz, vw}
  *  | null. The live item's own (non-enumerable) identity first, else the archive's chat_log_veil row - only for a line of THIS room. */

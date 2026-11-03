@@ -84,7 +84,9 @@ var CAPS = [
   ["chatlog.admin", "pads", "admin", "privacy"],                // CL2: the chat archive's switches, held un-hides, FTS repair (/admin/bridge)
   ["chatlog.read_all", "pads", "staff", "privacy"],             // CL6: every pad's full chat history (every read past a pad's public window is logged),
                                                                 //      staff purge, the chat line report queue, the per-login tool, legal holds
-  ["chatlog.see_through", "pads", "admin", "privacy"],          // 1.99afn (incognito spec A.2 / E, owner J-2): reveal who is behind a frog name on
+  ["chatlog.see_through", "pads", "admin", "privacy"],
+  ["chatlog.reveal_text", "pads", "staff", "privacy"],          // 1.99?? (privacy controls S4t, owner 2026-11-02): Staff reveal hidden text and who is behind
+                                                                //   a frog name - ONLY while the text_reveal_roles switch is on (textreveal.js); logged, a reason each time          // 1.99afn (incognito spec A.2 / E, owner J-2): reveal who is behind a frog name on
                                                                 //   every pad (analytics now, chat with WP-2) - on demand, each reveal logged
                                                                 //   (seethrough.js); locked: never Staff without a code change and an owner decision
   // ── feed, trust & safety ──

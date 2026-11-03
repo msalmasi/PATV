@@ -37,7 +37,14 @@
     if (auto && state === false) return Promise.resolve({ ok: false, off: true });
     var body = { room: slug, tile: id };
     if (auto) body.toggle = true;
+    if (opts && typeof opts.reason === 'string') body.reason = opts.reason;
     return post(body).then(function (r) {
+      // 1.99?? (privacy controls S4t): a staff / moderator / owner Reveal while text reveal roles are on needs a reason - asked once
+      if (!auto && r.status === 409 && r.d.code === 'reason_needed' && !(opts && typeof opts.reason === 'string') && typeof window.prompt === 'function') {
+        var tr = typeof window.__t === 'function' ? window.__t : function (k, d) { return d; };
+        var why = window.prompt(tr('js.pad.veil.reveal_why', 'Why are you revealing this? (at least 3 characters - it\'s logged)'), '');
+        if (why != null && String(why).trim().length >= 3) return tile(slug, id, { reason: String(why).trim().slice(0, 200) });
+      }
       if (r.ok && typeof r.d.login === 'string' && LOGIN_RE.test(r.d.login)) {
         if (auto) { can = true; setState(true); }
         return { ok: true, login: r.d.login, display: typeof r.d.display === 'string' ? r.d.display : null };

@@ -65,15 +65,20 @@ function veilSource(u, R) {
            began_named: vz.beganNamed === true, login: vz.login, display: vz.display ? String(vz.display) : vz.login };
 }
 
-/** The live-stage see-through role of `user` ({userId}) on pad `padId`: "admin" | "owner" | null (a check that can't run: null). */
+/** The live-stage see-through role of `user` ({userId}) on pad `padId`: "admin" | "owner" | null (a check that can't run: null).
+ *  1.99?? (privacy controls S4t): + "staff" / "mod" while text_reveal_roles is on (textreveal.extraRole) - a NAME reveal only: the
+ *  mic stage's ✕ / lift stay the admin's and the owner's (micfollow.seeManage). */
 async function stageRole(user, padId) {
   if (!user || !user.userId || !padId) return null;
   try { if (await require("./siteperms").canId(user.userId, "chatlog.see_through")) return "admin"; } catch (e) { return null; }
+  let owner = false;
   try {
     const R = require("./rooms");
     const pad = (R.getCached && R.getCached(padId)) || (R.get ? await R.get(padId) : null);
-    return pad && pad.owner && pad.owner.userId != null && String(pad.owner.userId) === String(user.userId) ? "owner" : null;
+    owner = !!(pad && pad.owner && pad.owner.userId != null && String(pad.owner.userId) === String(user.userId));
   } catch (e) { return null; }
+  if (owner) return "owner";
+  try { const x = await require("./textreveal").extraRole(user, padId); return x === "staff" || x === "mod" ? x : null; } catch (e) { return null; }
 }
 
 /** frognames: a session ended -> its cover (if one is up) comes off now. */

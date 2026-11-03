@@ -9,6 +9,7 @@
 //   camevidence S4's evidence stills / clips (camevidence.js - cam reveals AND evidence clips; Q12): also while any is still kept, like
 //               evidence.privacyCopy (the copies exist); dated by the later of the two switches' first ON
 //   pv3         S6 the privacy switchboard v3 (privacystate.js, switch privacy_v3): one switch at a time, !privacy, room lines (Q20)
+//   textreveal  1.99?? S4t text reveal roles (textreveal.js, switch text_reveal_roles): staff and room mods reveal hidden text too
 //
 // load() -> {incogcam, camreveal, camevidence, pv3}: each {on, on_at, on_day} or null (off - the text is exactly as before). Used by
 // /privacy (terms.js), /settings/privacy (incognito.js) and, through flags(), /help (help.js). Never throws.
@@ -29,8 +30,9 @@ async function stateOf(file) {
 
 /** The four copies (see the header). */
 async function load() {
-  const out = { incogcam: null, camreveal: null, camevidence: null, pv3: null };
+  const out = { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null };
   out.incogcam = copyOf(await stateOf("./incogcams"));
+  out.textreveal = copyOf(await stateOf("./textreveal"));          // 1.99?? (privacy controls S4t)
   const crs = await stateOf("./camreveal");
   out.camreveal = copyOf(crs);
   out.pv3 = copyOf(await stateOf("./privacystate"));
@@ -52,7 +54,7 @@ async function load() {
 /** Synchronous: which slices' text is on now (their adverts) - /help's cards (help.js withPrivacyCopy). Fails closed. */
 function flags() {
   const adv = (file) => { try { return require(file).advert() === true; } catch (e) { return false; } };
-  return { incogcam: adv("./incogcams"), camreveal: adv("./camreveal"), privstate: adv("./privacystate") };
+  return { incogcam: adv("./incogcams"), camreveal: adv("./camreveal"), privstate: adv("./privacystate"), textreveal: adv("./textreveal") };
 }
 
 module.exports = { load, flags, dayText };

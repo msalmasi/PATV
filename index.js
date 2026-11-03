@@ -1377,7 +1377,8 @@ require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-
 require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)
 require("./seethrough").register(app, { addUser });              // 1.99afn: the see-through audit log (/api/admin/seethrough) + its 180-day prune
 require("./privwire").register(app, { addUser });                // wave 2: the "Privacy wire v2" switch (/api/admin/privwire; ships OFF)
-require("./incogcams").register(app, { addUser });               // 1.99?? (privacy controls S5): the "Incognito cams" switch (/api/admin/incogcams; ships OFF)
+require("./incogcams").register(app, { addUser });
+require("./textreveal").register(app, { addUser });             // 1.99?? (privacy controls S4t): the "Text reveal roles" switch (/api/admin/textreveal; ships OFF)               // 1.99?? (privacy controls S5): the "Incognito cams" switch (/api/admin/incogcams; ships OFF)
 // 1.99?? (privacy controls S4): cam reveals - a moderator views a hidden cam, logged (/api/rooms/:slug/livecam/reveal*, the by-login entry,
 // /api/admin/camreveal; ships OFF) + their evidence stills / clips (/api/evidence/cam*)
 require("./camreveal").register(app, { addUser, bySlug: (s) => require("./bridge").bySlug(s), isLive: (R) => require("./bridge").isLiveShown(R) });

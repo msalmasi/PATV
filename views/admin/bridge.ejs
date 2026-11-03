@@ -401,6 +401,48 @@
 })();
 </script>
 
+<%# 1.99?? (privacy controls S4t, textreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 22:05Z "yes"): "Text reveal roles" - ships OFF %>
+<section class="adm-card" id="textreveal" aria-labelledby="trT">
+  <h2 id="trT">Text reveal roles <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">While this is <b>off</b> (the default) nothing changes: only PATV admins (anywhere) and a pad's owner (their own pad, lines said while they own it) can reveal who is behind a frog name or read a blacked-out line. Turn it <b>on</b> and PATV staff (<code>chatlog.reveal_text</code>, every pad) and the room's moderators (their own pad) can too - chat lines, the people list, mic-stage tiles and the analytics boards. Every non-admin reveal needs a reason (at least 3 characters), is rate-limited and counted (the admins are told past the daily limits), and every reveal is a see-through row. The privacy policy, /help and Pepe's replies and help cards switch their "who can reveal" sentences with it (the site's sync answer says <code>textreveal: 1</code>). Audio and cam evidence, the report queues and Pepe's analytics notes stay as they are. Needs the owner's OK on the privacy text first.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="trSummary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="trBtn" disabled>…</button><span id="trMsg" class="adm-msg" role="status"></span></div>
+  <% } %>
+</section>
+<script>
+// 1.99?? (privacy controls S4t): the Text reveal roles card (textreveal.js: GET / POST /api/admin/textreveal {on})
+(function () {
+  'use strict';
+  var sum = document.getElementById('trSummary');
+  if (!sum) return;
+  var btn = document.getElementById('trBtn'), msg = document.getElementById('trMsg'), cur = null;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(data) {
+    return fetch('/api/admin/textreveal', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function render(d) {
+    var s = d.state || {};
+    cur = s;
+    sum.textContent = 'Text reveal roles are ' + (s.on ? 'ON (staff and room moderators can reveal, with a reason)' : 'off (admins and pad owners only)') +
+      (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '');
+    btn.disabled = false;
+    btn.textContent = s.on ? 'Turn off' : 'Turn on';
+  }
+  btn.addEventListener('click', function () {
+    if (!cur) return;
+    var on = !cur.on;
+    if (on && !window.confirm('Turn text reveal roles on? PATV staff and the rooms\' moderators can then reveal who is behind a frog name and read blacked-out lines (with a reason, logged). Make sure the owner approved the privacy text.')) return;
+    btn.disabled = true;
+    req({ on: on }).then(function (d) { say('Switched ' + (on ? 'on' : 'off') + '.', true); render(d); }).catch(function (e) { btn.disabled = false; say(e.message, false); });
+  });
+  req().then(render).catch(function (e) { sum.textContent = e.message; });
+})();
+</script>
+
 <%# 1.99?? (privacy controls S4, camreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + section 8): "Cam reveals" - ships OFF %>
 <section class="adm-card" id="camreveal" aria-labelledby="crT">
   <h2 id="crT">Cam reveals <span class="adm-pill admin">admins</span></h2>

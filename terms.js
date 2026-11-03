@@ -219,7 +219,8 @@ function register(app, { addUser }) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
     // (S7's copies ride res.locals: the view reads them as locals.incogcam / camreveal / camevidence / pv3 - null on /terms)
-    Object.assign(res.locals, { incogcam: pcopy.incogcam, camreveal: pcopy.camreveal, camevidence: pcopy.camevidence, pv3: pcopy.pv3 });
+    Object.assign(res.locals, { incogcam: pcopy.incogcam, camreveal: pcopy.camreveal, camevidence: pcopy.camevidence, pv3: pcopy.pv3,
+                                textreveal: pcopy.textreveal });   // (1.99?? privacy controls S4t)
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));

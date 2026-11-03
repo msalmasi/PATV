@@ -623,8 +623,10 @@ function privwireNotes(entries) {
     const vs = v2 && typeof v2.summary === "string" && v2.summary.trim() ? v2.summary.slice(0, L.summary) : null;
     const vd = v2 && typeof v2.details === "string" && v2.details.trim() ? v2.details.slice(0, L.details) : null;
     if (vs || vd) return { ...e, ...(vs ? { summary: vs } : {}), ...(vd ? { details: vd } : {}) };
-    const add = e && PRIVWIRE_NOTES[e.id];
+    let add = e && PRIVWIRE_NOTES[e.id];
     if (!add) return e;
+    // (1.99?? privacy controls S4t: who can reveal, while text reveal roles are on)
+    try { if (require("./textreveal").isOn()) add = add.replace("PATV administrators and the pad's owner can reveal", "PATV administrators and staff, the pad's owner and the room's moderators can reveal (with a reason)"); } catch (e2) { /* as before */ }
     const base = e.details && String(e.details).trim() ? e.details : e.summary;
     return { ...e, ...(PRIVWIRE_SUMMARY[e.id] ? { summary: PRIVWIRE_SUMMARY[e.id] } : {}), details: String(base || "") + "\n\n" + add };
   });
@@ -646,7 +648,7 @@ function withoutDarkCards(entries) {
 // withPrivwireNotes - every slice needs privacy wire v2) with that slice's swaps made, in PC_KEYS order, each old text found exactly
 // once in the text as it stands then; a later slice's summary wins. A slice whose swaps don't fit is left out WHOLE (never half
 // made); Pepe's build refuses such data, so that is an older or hand-edited copy. Every switch off: nothing changes. ──
-const PC_KEYS = ["camreveal", "incogcam", "privstate"];
+const PC_KEYS = ["camreveal", "incogcam", "privstate", "textreveal"];   // (1.99?? privacy controls S4t: + textreveal, last)
 const PC_SWAPS_MAX = 12;
 function pcApply(summary, details, pc, active) {
   const applied = [];

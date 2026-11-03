@@ -635,7 +635,7 @@
   <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=6"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
+  <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99?? privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
   <script src="/public/js/stage-mic.js?v=13"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99?? (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
@@ -929,7 +929,14 @@
     function stPost(url, body) {
       return fetch(url, { method: 'POST', credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
         headers: { 'content-type': 'application/json', 'x-requested-with': 'fetch' }, body: JSON.stringify(body) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok || !d.ok) { var x = new Error(d.error || ('HTTP ' + r.status)); x.status = r.status; throw x; } return d; }); });
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) {
+          // 1.99?? (privacy controls S4t): a staff / moderator / owner reveal while text reveal roles are on needs a reason - asked once
+          // when the site says so, then the same request again with it (the reason is logged with the see-through row)
+          if (r.status === 409 && d && d.code === 'reason_needed' && body && body.reason == null && typeof window.prompt === 'function') {
+            var why = window.prompt(_t('js.pad.veil.reveal_why', 'Why are you revealing this? (at least 3 characters - it\'s logged)'), '');
+            if (why != null && String(why).trim().length >= 3) return stPost(url, Object.assign({}, body, { reason: String(why).trim().slice(0, 200) }));
+          }
+          if (!r.ok || !d.ok) { var x = new Error(d.error || ('HTTP ' + r.status)); x.status = r.status; x.code = d && d.code; throw x; } return d; }); });
     }
     function revealErr(b, msg) {
       var old = b.parentNode && b.parentNode.querySelector('.veil-chip.veil-err');

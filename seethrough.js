@@ -9,10 +9,15 @@
 // Plain viewing writes nothing (it reveals nothing). Rows are kept 180 days (like livecam_audit) and are never shown to the
 // person revealed (spec E.5); admins read them at /admin/bridge#seethrough. The capability is chatlog.see_through
 // (siteperms-core.js: Admin, locked "privacy" - Staff never hold it, owner decision J-2).
+// 1.99?? (privacy controls S4t, owner 2026-11-02 "yes"): while the text_reveal_roles switch is on (textreveal.js), TEXT reveals - names
+// behind frog names, hidden lines - are also open to Staff (chatlog.reveal_text, every pad) and the room's moderators (Pepe's mod caps on
+// their linked login, their pad) - textRole; every non-admin reveal needs a reason (409 reason_needed), is rate-limited and counted.
+// Off: chatRole / today's rules exactly. Audio / cam evidence keep chatRole (Admins and owners only).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const KEEP_MS = 180 * 864e5;
+const TR = () => require("./textreveal");   // 1.99?? (privacy controls S4t)
 const SCOPE_RE = /^[a-z_]{2,32}$/;
 const LOGINS_MAX = 200;
 let clock = () => Date.now();
@@ -164,13 +169,38 @@ async function chatRole(user, roomId) {
     return since > 0 ? { role: "owner", since } : null;
   } catch (e) { return null; }
 }
-/** May this role reveal a line said at ts? */
-const mayReveal = (role, ts) => !!role && (role.role === "admin" || (role.since > 0 && Number(ts) >= role.since));
+/** 1.99?? (privacy controls S4t): the TEXT-reveal role - chatRole, plus (text_reveal_roles on) Staff {role: "staff", since: 0} and the
+ *  room's moderators {role: "mod", since: 0} (textreveal.extraRole). An Admin is "admin", a staff member "staff" before their owner
+ *  role (no era), a mod after it. Off: exactly chatRole. */
+async function textRole(user, roomId) {
+  const r = await chatRole(user, roomId);
+  if (r && r.role === "admin") return r;
+  let x = null;
+  try { x = await require("./textreveal").extraRole(user, roomId); } catch (e) { x = null; }
+  if (x === "staff") return { role: "staff", since: 0 };
+  if (r) return r;
+  return x === "mod" ? { role: "mod", since: 0 } : null;
+}
+const TROLE_CACHE = new Map();
+async function textRoleCached(user, roomId) {
+  if (!user || !user.userId || !roomId) return null;
+  let on = false;
+  try { on = TR().isOn(); } catch (e) { on = false; }
+  // (the switch is part of the key: flipping it never serves the other rule's cached answer)
+  const k = String(user.userId) + "|" + String(roomId) + "|" + (on ? 1 : 0), c = TROLE_CACHE.get(k), t = clock();
+  if (c && t - c.at < ROLE_MS) return c.v;
+  const v = await textRole(user, roomId);
+  TROLE_CACHE.set(k, { v, at: t });
+  if (TROLE_CACHE.size > 5000) TROLE_CACHE.delete(TROLE_CACHE.keys().next().value);
+  return v;
+}
+/** May this role reveal a line said at ts? (1.99?? S4t: staff / mod - their pad, every era) */
+const mayReveal = (role, ts) => !!role && (role.role === "admin" || role.role === "staff" || role.role === "mod" || (role.since > 0 && Number(ts) >= role.since));
 
 // E.6: a pad owner's reveals are counted per day; past 3 toggle-ons or 100 line reveals an admin is told (once per owner per day)
 const DAY = new Map();                    // "userId|day" -> {lines, toggles, told}
 const LIMIT_LINES = 100, LIMIT_TOGGLES = 3;
-async function noteOwnerUse(user, roomId, what, n = 1) {
+async function noteOwnerUse(user, roomId, what, n = 1, who = "owner") {
   const day = new Date(clock()).toISOString().slice(0, 10);
   const k = String(user.userId) + "|" + day;
   const c = DAY.get(k) || { lines: 0, toggles: 0, told: false };
@@ -183,9 +213,12 @@ async function noteOwnerUse(user, roomId, what, n = 1) {
     const SP = require("./siteperms");
     const rows = await getQuery("SELECT userId, class FROM users").catch(() => []);
     const admins = rows.filter((u) => { try { return SP.can(u, "chatlog.see_through"); } catch (e) { return false; } }).map((u) => String(u.userId));
+    // (1.99?? privacy controls S4t: staff and room moderators are counted the same way - their own words)
+    const lab = who === "staff" ? "A staff member" : who === "mod" ? "A room moderator" : "A pad owner";
+    const where = who === "owner" ? "in their pad" : "on the website";
     const note = { kind: "admin", link: "/admin/bridge#seethrough", ref: `seethrough-limit-${day}:${user.userId}`,
-                   title: "A pad owner is revealing a lot of frog names",
-                   body: `${user.username || "A pad owner"} revealed ${c.lines} chat line(s) and turned "show real names" on ${c.toggles} time(s) today in their pad. Every reveal is in the see-through log.` };
+                   title: `${lab} is revealing a lot of frog names`,
+                   body: `${user.username || lab} revealed ${c.lines} chat line(s) and turned "show real names" on ${c.toggles} time(s) today ${where}. Every reveal is in the see-through log.` };
     for (const id of admins) await require("./inbox").addSafe(id, note).catch(() => false);
   } catch (e) { console.error("[seethrough] limit notice:", e.message); }
   return true;
@@ -231,7 +264,7 @@ async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
       await log({ userId: user.userId, role: role.role, scope, roomId, logins: part.map((o) => o.login), reason,
                   ref: "c:" + part.map((o) => o.c).slice(0, 8).join(",") });
     }
-    if (role.role === "owner") await noteOwnerUse(user, roomId, "lines", items.length);
+    if (role.role !== "admin") await noteOwnerUse(user, roomId, "lines", items.length, role.role);
   }
   return { items, refused };
 }
@@ -279,9 +312,18 @@ function register(app, { addUser, noTimers = false }) {
     const slug = clean(req.body && req.body.room, 80).toLowerCase();
     const R = slug ? [...B._rooms.values()].find((x) => x.slug === slug || x.id === slug) : null;
     if (!R) { res.status(404).json({ ok: false, error: "No such pad." }); return null; }
-    const role = await chatRole(req.user, R.id);
-    if (!role) { res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner in their own pad, can reveal who is behind a frog name." }); return null; }
+    const role = await textRole(req.user, R.id);         // (1.99?? S4t: + staff / room mods while text_reveal_roles is on)
+    if (!role) { res.status(403).json({ ok: false, error: TR().whoMay() }); return null; }
     return { R, role };
+  }
+  // 1.99?? (privacy controls S4t): a non-admin's reveal while text_reveal_roles is on - a reason first (409 reason_needed), and a rate
+  // limit of its own. -> true when it answered (the caller stops)
+  function nonAdminGate(req, res, role, n, { toggle = false } = {}) {
+    const r = typeof role === "object" && role ? role.role : role;
+    if (!TR().isOn() || !r || r === "admin") return false;
+    if (!toggle && !TR().reasonOk(req.body && req.body.reason)) { TR().reasonRefusal(res); return true; }
+    if (TR().limitedNonAdmin(String(req.user.userId), n)) { res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." }); return true; }
+    return false;
   }
   // ── wave 2 WP-4 x WP-2 (spec F.4 / E.1 / A.6, owner J-18): Reveal on a mic-stage COVER tile - {room, tile, reason?, toggle?}. The
   // same refusals as a line reveal (fetch-only, same-origin, signed in, the pad, the role, the rate limit, no-store / no-referrer),
@@ -303,8 +345,9 @@ function register(app, { addUser, noTimers = false }) {
     try { on = require("./privwire").isOn() === true; } catch (e) { on = false; }
     if (!on) return res.status(409).json({ ok: false, code: "privwire_off", error: "Nothing on this mic stage can be revealed right now." });
     const role = await require("./veilstage").stageRole(req.user, R.id);
-    if (!role) return res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner in their own pad, can reveal who is behind a frog name." });
+    if (!role) return res.status(403).json({ ok: false, error: TR().whoMay() });
     if (limited(String(req.user.userId), 1)) return res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." });
+    if (nonAdminGate(req, res, role, 1, { toggle: req.body.toggle === true })) return;   // (1.99?? S4t)
     const tile = clean(req.body.tile, 40);
     let who = null;
     try { who = require("./micfollow").coverWho(R.id, tile); } catch (e) { who = null; }
@@ -318,14 +361,14 @@ function register(app, { addUser, noTimers = false }) {
         // integration review (T-3): ONE toggle, ONE rule - it's turned on by the chat's rule (chatRole: an Admin, or the owner in a
         // dated era). A stage role that rule refuses (an owner nothing dates) could never turn it on: toggle_na, so the page never
         // offers that viewer the bar (pad-reveal.js / stage-mic.js) - their per-tile Reveal still works
-        const can = !!(await chatRole(req.user, R.id));
+        const can = !!(await textRole(req.user, R.id));   // (1.99?? S4t: the text-reveal role turns it on)
         return res.status(409).json(can ? { ok: false, code: "toggle_off", error: "Show real names is off - turn it on first." }
           : { ok: false, code: "toggle_na", error: "Show real names isn't available to you on this pad - use Reveal on the tile." });
       }
       await toggleUsed(tg.log_id, [who.login]);
     } else {
       await log({ userId: req.user.userId, role, scope: "stage_line", roomId: R.id, logins: [who.login], reason: req.body.reason, ref: "tile:" + tile });
-      if (role === "owner") await noteOwnerUse(req.user, R.id, "lines", 1);
+      if (role !== "admin") await noteOwnerUse(req.user, R.id, "lines", 1, role);
     }
     const out = { tile, login: who.login, display: who.display };
     if (role === "admin") await accountLinks([out]);
@@ -349,15 +392,16 @@ function register(app, { addUser, noTimers = false }) {
     try { on = require("./privwire").isOn() === true; } catch (e) { on = false; }
     if (!on) return res.status(409).json({ ok: false, code: "privwire_off", error: "Nothing in this people list can be revealed right now." });
     const role = await require("./veilstage").stageRole(req.user, R.id);
-    if (!role) return res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner in their own pad, can reveal who is behind a frog name." });
+    if (!role) return res.status(403).json({ ok: false, error: TR().whoMay() });
     if (limited(String(req.user.userId), 1)) return res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." });
+    if (nonAdminGate(req, res, role, 1)) return;          // (1.99?? S4t)
     const id = clean(req.body.member, 20);
     const e = /^v-[A-Za-z0-9_-]{12}$/.test(id) ? (R.members || []).find((x) => x && x.anon && x.id === id && x._vz && x._vz.login) : null;
     let login = e ? String(e._vz.login).toLowerCase() : null;
     if (login) { try { if (require("./veilstage").leftOut(login, e._vz.h)) login = null; } catch (er) { login = null; } }
     if (!login) return res.status(404).json({ ok: false, code: "gone", error: "That person isn't in the people list any more." });
     await log({ userId: req.user.userId, role, scope: "roster_line", roomId: R.id, logins: [login], reason: req.body.reason, ref: "member:" + id });
-    if (role === "owner") await noteOwnerUse(req.user, R.id, "lines", 1);
+    if (role !== "admin") await noteOwnerUse(req.user, R.id, "lines", 1, role);
     const out = { member: id, login, display: e._vz.display ? String(e._vz.display) : null };
     if (role === "admin") await accountLinks([out]);
     return res.json({ ok: true, ...out });
@@ -371,6 +415,7 @@ function register(app, { addUser, noTimers = false }) {
       if (!ctx) return;
       const cs = Array.isArray(req.body.c) ? req.body.c : [req.body.c];
       if (limited(String(req.user.userId), cs.length)) return res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." });
+      if (nonAdminGate(req, res, ctx.role, cs.length, { toggle: req.body.toggle === true })) return;   // (1.99?? S4t)
       const lookup = (c) => require("./bridge").revealLookup(ctx.R.id, c);
       if (req.body.toggle === true) {
         // the toggle's batch fetch: no new row - the toggle's own row counts it (refused unless the toggle is on)
@@ -415,8 +460,9 @@ function register(app, { addUser, noTimers = false }) {
       }
       const ctx = await chatCtx(req, res);
       if (!ctx) return;
+      if (nonAdminGate(req, res, ctx.role, 1)) return;      // (1.99?? S4t: a non-admin turns it on with a reason)
       const r = await toggleOn({ userId: req.user.userId, role: ctx.role.role, scope: "chat_toggle", roomId: ctx.R.id, reason: req.body.reason });
-      if (r.fresh && ctx.role.role === "owner") await noteOwnerUse(req.user, ctx.R.id, "toggles", 1);
+      if (r.fresh && ctx.role.role !== "admin") await noteOwnerUse(req.user, ctx.R.id, "toggles", 1, ctx.role.role);
       res.json({ ok: true, on: true });
     } catch (e) {
       console.error("[seethrough] chat toggle:", e && e.code ? e.code : "error");
@@ -438,4 +484,5 @@ function register(app, { addUser, noTimers = false }) {
 
 module.exports = { init, log, logAll, LOGINS_MAX, toggleOf, toggleOn, toggleOff, toggleUsed, list, prune, register, KEEP_MS,
                    ownerEra, chatRole, chatRoleCached, mayReveal, revealChat, noteOwnerUse,
+                   textRole, textRoleCached,                                                   // 1.99?? (privacy controls S4t)
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _day: DAY };
