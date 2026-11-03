@@ -297,6 +297,9 @@ test("a refused or failed generation stores nothing, shows the refund state, and
   assert.equal(n.length, 1, "notice filed (nobody was polling)");
   assert.match(n[0].title, /couldn't be made/);
   assert.equal(n[0].link, "/feed");
+  // 1.99?? (privacy controls, round 4): Pepe's refusal already says it - the notice says it once ("... - nothing was charged." - never a
+  // second "Nothing was charged.")
+  assert.equal(n[0].body, "that prompt contains restricted content - nothing was charged.");
   // a generation that failed after the charge: refunded
   const c2 = await post("/api/feed/aigen", U.bob, { kind: "image", prompt: "a frog astronaut", pad: LOUNGE });
   await pepe("/api/feed/aigen/start", { id: c2.d.job.id });
@@ -305,6 +308,28 @@ test("a refused or failed generation stores nothing, shows the refund state, and
   const v2 = (await get("/api/feed/aigen/" + c2.d.job.id, U.bob)).d.job;
   assert.equal(v2.refunded, true);
   assert.equal((await getQuery("SELECT * FROM inbox WHERE ref = ?", ["aigen-" + c2.d.job.id])).length, 0, "no notice while the composer watches");
+});
+
+test("1.99?? round 4: an inbox notice says 'nothing was charged' / 'refunded' once - a cam-reference refusal's '(nothing was charged)' too", async () => {
+  const notice = async (prompt, res) => {
+    const c = await post("/api/feed/aigen", U.alice, { kind: "image", prompt, pad: LOUNGE, back: "/feed" });
+    await pepe("/api/feed/aigen/start", { id: c.d.job.id });
+    assert.equal((await pepe("/api/feed/aigen/result", Object.assign({ id: c.d.job.id, ok: false }, res))).status, 200);
+    const n = await getQuery("SELECT body FROM inbox WHERE user_id = ? AND ref = ?", [U.alice.userId, "aigen-" + c.d.job.id]);
+    assert.equal(n.length, 1, "a notice");
+    return n[0].body;
+  };
+  // (Pepe's pepe_aigen: "<why> (nothing was charged)" - an AI picture reference refused by someone's !likeness choice, named or by frog name)
+  const b1 = await notice("a frog with my friend", { refused: true, refunded: false, error: "Soggy Bullfrog has opted out of !look, !camroast and cam references (nothing was charged)" });
+  assert.equal(b1, "Soggy Bullfrog has opted out of !look, !camroast and cam references (nothing was charged).");
+  // a message that doesn't say it: said once, as before
+  const b2 = await notice("a frog on a bike", { refused: true, refunded: false, error: "that prompt isn't allowed" });
+  assert.equal(b2, "that prompt isn't allowed. Nothing was charged.");
+  // refunded, and the message says so already: once
+  const b3 = await notice("a frog in space", { refunded: true, cost: 25000, error: "the generator failed - the PAT was refunded" });
+  assert.equal(b3, "the generator failed - the PAT was refunded.");
+  const b4 = await notice("a frog in a tree", { refunded: true, cost: 25000, error: "the generator failed" });
+  assert.equal(b4, "the generator failed. The PAT was refunded.");
 });
 
 test("the site can't keep it (quota, a broken file, a wrong type): refused so Pepe refunds", async () => {

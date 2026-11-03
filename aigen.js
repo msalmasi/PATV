@@ -557,8 +557,13 @@ async function tell(j) {
   const what = j.kind === "video" ? "video" : "picture";
   const ok = j.status === "done";
   const title = ok ? `✨ Your AI ${what} is ready` : `✨ Your AI ${what} couldn't be made`;
+  // 1.99?? (privacy controls, round 4): said once - Pepe's refusals already end "(nothing was charged)" / "- nothing was charged" (an AI
+  // picture reference refused by someone's !likeness choice, named or by frog name; a prompt refused) and read "... (nothing was charged).
+  // Nothing was charged." here; the same for "refunded"
+  const said = String(j.message || "It failed").trim();
+  const tail = j.refunded ? (/refunded/i.test(said) ? "" : " The PAT was refunded.") : (j.cost || /nothing was charged/i.test(said) ? "" : " Nothing was charged.");
   const body = ok ? `"${j.prompt.slice(0, 120)}" - open the composer to attach it to a post (kept for 6 hours).`
-    : `${j.message || "It failed"}.${j.refunded ? " The PAT was refunded." : (j.cost ? "" : " Nothing was charged.")}`;
+    : `${said}${/[.!?]$/.test(said) ? "" : "."}${tail}`;
   return store.notify(j.user_id, { kind: "feed", title, body, link: j.back || "/feed", ref: "aigen-" + j.id });
 }
 
