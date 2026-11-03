@@ -465,6 +465,8 @@ const DELETE_ROWS = [
   // wave 3 (design §N.4): 🧠 Pepe's memory switch - the audit and the linked login's state (the account key's row: below; Pepe's
   // side goes with his privacy.forget action)
   ["memory_optout_log", "user_id", "uid"], ["memory_optout_state", "login", "login"],
+  // 1.99?? (privacy controls S6): the "On the website" card's audit and the linked login's bridge / tx state as Pepe reported it
+  ["privacy_state_log", "user_id", "uid"], ["privacy_state", "login", "login"],
   ["inbox", "user_id", "uid"], ["inbox_prefs", "user_id", "uid"], ["inbox_pending", "camfrog", "login"],
   ["dm_prefs", "user_id", "uid"], ["dm_alerts", "user_id", "uid"], ["dm_blocks", "blocker_id", "uid"], ["dm_blocks", "blocked_id", "uid"], ["pepe_dm_jobs", "user_id", "uid"],
   ["mention_prefs", "user_id", "uid"], ["mention_words", "user_id", "uid"], ["follow_prefs", "user_id", "uid"], ["golive_prefs", "user_id", "uid"],

@@ -52,6 +52,58 @@
     <p class="ds-lead"><%- t('inc.lead') %></p>
   </header>
 
+  <%_ if (locals.pv3) { const P = pv3;
+       const hid = !!(P.bridge && P.bridge.on), incOn = !!(P.incognito && P.incognito.on), txOn = !!(P.tx && P.tx.on), camOn = !!(P.livecam && P.livecam.off);
+       const pvLog = (r) => r.ev === 'refused' ? t('pv3.log_refused')
+         : t((r.ev === 'request' ? 'pv3.log_req_' : 'pv3.log_') + (r.kind === 'tx' ? 'tx' : 'bridge') + (r.on ? '_on' : '_off')); -%>
+  <%# 1.99?? (privacy controls S6, privacystate.js; G:/ops/privacy-controls-spec-2026-11-02.md 4.3): "On the website" - a master bridge
+      switch over one switch per website control. Only while the privacy switchboard v3 is in effect (its switch + Pepe's word). The
+      master shows the BRIDGE (checked = shown; off = !bridge hide); the others show the privacy switch ON (checked = hidden). While the
+      bridge is off they show on and greyed (bridge off is an override - the stored switches come back). Client: privacy-web.js %>
+  <section class="ds-card lg" id="web" aria-labelledby="pvWebH" data-linked="<%= P.linked ? 1 : 0 %>"
+           data-bridge="<%= P.bridge && P.bridge.on !== null ? (P.bridge.on ? 1 : 0) : '' %>" data-tx="<%= P.tx && P.tx.on !== null ? (P.tx.on ? 1 : 0) : '' %>"
+           data-inc="<%= incOn ? 1 : 0 %>" data-cam="<%= camOn ? 1 : 0 %>"
+           data-wait-bridge="<%= P.bridge && P.bridge.waiting ? (P.bridge.waiting.want ? 1 : 0) : '' %>" data-wait-tx="<%= P.tx && P.tx.waiting ? (P.tx.waiting.want ? 1 : 0) : '' %>">
+    <h2 class="ds-h2" id="pvWebH"><span class="dot"></span>🌉 <%- t('pv3.h2') %></h2>
+    <p class="pv-why"><%- t('pv3.what') %></p>
+    <% if (!P.linked) { %>
+      <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('pv3.unlinked') %></div></div>
+      <div class="ds-ctas"><a class="ds-btn" href="/u/<%= encodeURIComponent(user) %>/edit#camfrogDiv"><%- t('inc.link_btn') %></a></div>
+    <% } else { %>
+      <div class="pv-set<%= P.bridge && P.bridge.waiting ? ' pending' : '' %>" id="pvWebBridgeRow">
+        <div><b><%- t('pv3.master') %></b><p class="ds-meta"><%- t('pv3.master_meta') %></p></div>
+        <label class="ds-switch"><input type="checkbox" id="pvWebBridge" <%= hid ? '' : 'checked' %> <%= P.bridge && P.bridge.waiting ? 'disabled' : '' %> aria-label="<%- t('pv3.master') %>"><span></span></label>
+      </div>
+      <p class="pv-st<%= P.bridge && P.bridge.waiting ? ' wait' : '' %>" id="pvWebBridgeSt" role="status" aria-live="polite"><%- P.bridge && P.bridge.waiting ? t('inc.waiting') : P.bridge && P.bridge.on === null ? t('pv3.st_unknown') : hid ? t('pv3.st_hidden') : t('pv3.st_shown') %></p>
+      <div class="pv-ca" id="pvWebSubs">
+        <p class="ds-meta" id="pvWebForced"<%= hid ? '' : ' hidden' %>><%- t('pv3.forced') %></p>
+        <div class="pv-set<%= P.incognito && P.incognito.waiting ? ' pending' : '' %>" id="pvWebIncRow">
+          <div><b><%- t('pv3.name') %></b><p class="ds-meta"><%- t('pv3.name_meta') %></p></div>
+          <label class="ds-switch"><input type="checkbox" id="pvWebInc" <%= hid || incOn ? 'checked' : '' %> <%= hid || (P.incognito && P.incognito.waiting) ? 'disabled' : '' %> aria-label="<%- t('pv3.name') %>"><span></span></label>
+        </div>
+        <p class="pv-st" id="pvWebIncSt" role="status" aria-live="polite"></p>
+        <div class="pv-set<%= P.tx && P.tx.waiting ? ' pending' : '' %>" id="pvWebTxRow">
+          <div><b><%- t('pv3.tx') %></b><p class="ds-meta"><%- t('pv3.tx_meta') %></p></div>
+          <label class="ds-switch"><input type="checkbox" id="pvWebTx" <%= hid || txOn ? 'checked' : '' %> <%= hid || (P.tx && P.tx.waiting) ? 'disabled' : '' %> aria-label="<%- t('pv3.tx') %>"><span></span></label>
+        </div>
+        <p class="pv-st<%= P.tx && P.tx.waiting ? ' wait' : '' %>" id="pvWebTxSt" role="status" aria-live="polite"><%- P.tx && P.tx.waiting ? t('inc.waiting') : '' %></p>
+        <div class="pv-set" id="pvWebCamRow">
+          <div><b><%- t('pv3.cam') %></b><p class="ds-meta"><%- t('pv3.cam_meta') %></p></div>
+          <label class="ds-switch"><input type="checkbox" id="pvWebCam" <%= hid || camOn ? 'checked' : '' %> <%= hid ? 'disabled' : '' %> aria-label="<%- t('pv3.cam') %>"><span></span></label>
+        </div>
+        <p class="pv-st" id="pvWebCamSt" role="status" aria-live="polite"></p>
+      </div>
+    <% } %>
+    <p class="ds-meta"><%- t('pv3.chat') %></p>
+    <% if (P.log && P.log.length) { %>
+    <details><summary class="ds-meta"><%- t('inc.log_h') %></summary>
+      <ul class="pv-log">
+        <% P.log.forEach((r) => { %><li><span><%- pvLog(r) %></span><span><%= when(r.at) %></span></li><% }) %>
+      </ul>
+    </details>
+    <% } %>
+  </section>
+  <%_ } _%>
   <section class="ds-card lg" id="incognito" aria-labelledby="pvIncH"
            data-linked="<%= st.linked ? 1 : 0 %>" data-on="<%= st.on === null ? '' : st.on ? 1 : 0 %>" data-waiting="<%= st.waiting ? st.waiting.id : '' %>"
            data-want="<%= st.waiting && st.waiting.want !== null ? (st.waiting.want ? 1 : 0) : '' %>" data-mem="<%= memOn ? 1 : 0 %>">
@@ -325,7 +377,8 @@
     </nav>
   </section>
 </main>
-<script src="/public/js/privacy-settings.js?v=2" defer></script>
+<script src="/public/js/privacy-settings.js?v=2" defer></script><% if (locals.pv3) { %>
+<script src="/public/js/privacy-web.js?v=1" defer></script><% } %>
 <script src="/public/js/privacy-livecam.js?v=6" defer></script>
 <script src="/public/js/privacy-camaccess.js?v=1" defer></script>
 <script src="/public/js/privacy-forget.js?v=3" defer></script>

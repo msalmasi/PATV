@@ -444,6 +444,52 @@
 })();
 </script>
 
+<%# 1.99?? (privacy controls S6, privacystate.js; G:/ops/privacy-controls-spec-2026-11-02.md section 4 + 5 "S6" + section 8 Q20):
+    "Privacy switchboard v3" - ships OFF %>
+<section class="adm-card" id="privacyv3" aria-labelledby="pv3T">
+  <h2 id="pv3T">Privacy switchboard v3 <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">While this is <b>off</b> (the default) nothing changes. Turn it <b>on</b> (it needs privacy wire v2) and the site's sync answers say <code>privstate: 1</code>; once Pepe confirms it (his sync says <code>privstate: 1</code> too): Settings → Privacy gets the "On the website" card (a master <i>Show me on the website (bridge)</i> switch over Name, Mic transcripts and Cam - "Waiting for Pepe…" until he reports); Pepe answers <code>!privacy</code> (privately, for a login he can prove); a privacy switch typed in a Camfrog room works on <b>and off</b> (owner Q20) - a room line Pepe can't tie to a login covers only the name it showed and never changes anyone's settings here; Pepe reports each linked login's <code>!bridge hide</code> and <code>!transcripts off</code> state (shown on the card, one inbox notice per change); the <code>!privacy</code> card shows on /help; a room-typed <code>!privacy</code> line stays off the pads. Turning it off hides the card and stops all of that at once (what Pepe reported stays in the table). Needs the owner's OK on the wording first.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="pv3Summary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="pv3Btn" disabled>…</button><span id="pv3Msg" class="adm-msg" role="status"></span></div>
+  <% } %>
+</section>
+<script>
+// 1.99?? (privacy controls S6): the Privacy switchboard v3 card (privacystate.js: GET / POST /api/admin/privacyv3 {on})
+(function () {
+  'use strict';
+  var sum = document.getElementById('pv3Summary');
+  if (!sum) return;
+  var btn = document.getElementById('pv3Btn'), msg = document.getElementById('pv3Msg'), cur = null;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(data) {
+    return fetch('/api/admin/privacyv3', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function count(k) { return k && k.all != null ? k.all + ' (' + k.linked + ' linked)' : (k ? k.linked + ' linked' : '-'); }
+  function render(d) {
+    var s = d.state || {};
+    cur = s;
+    sum.textContent = 'The privacy switchboard v3 is ' + (s.on ? 'ON' : 'off') + (s.on && !s.privwire ? ' (but privacy wire v2 is off, so nothing changes)' : '') +
+      (s.on && s.privwire && !s.pepe ? ' (waiting for Pepe to confirm)' : '') + (s.effective ? ' · in effect' : '') +
+      (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '') +
+      ' · Pepe reports !bridge hide: ' + count(s.bridge) + ', !transcripts off: ' + count(s.tx);
+    btn.disabled = false;
+    btn.textContent = s.on ? 'Turn off' : 'Turn on';
+  }
+  btn.addEventListener('click', function () {
+    if (!cur) return;
+    var on = !cur.on;
+    if (on && !window.confirm('Turn the privacy switchboard v3 on? Members get the On the website card and !privacy, and privacy switches typed in a Camfrog room work on and off. Make sure the owner approved the wording.')) return;
+    btn.disabled = true;
+    req({ on: on }).then(function (d) { say('Switched ' + (on ? 'on' : 'off') + '.', true); render(d); }).catch(function (e) { btn.disabled = false; say(e.message, false); });
+  });
+  req().then(render).catch(function (e) { sum.textContent = e.message; });
+})();
+</script>
+
 <%# 1.99afn: who saw through a frog name, when and why (seethrough.js; chatlog.see_through = Admins) %>
 <% if (_can('chatlog.see_through')) { %>
 <section class="adm-card" id="seethrough" aria-labelledby="stT">

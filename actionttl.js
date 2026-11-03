@@ -29,6 +29,8 @@ const TTL_DEFAULTS = Object.freeze({
   "poll.vote": 30, "poll.create": 30, "poll.end": 30,
   "table": 2,                          // a seat move only makes sense at the table it was made for
   "privacy.incognito": 15,            // 1.99wa: Settings → Privacy (incognito.js)
+  "privacy.bridge": 15,               // 1.99?? (privacy controls S6): Settings → Privacy "On the website" (privacystate.js)
+  "privacy.tx": 15,                   // 1.99?? (privacy controls S6): the same card's mic transcripts switch
   "privacy.forgetme": 1440,           // 1.99aat: 🧠 Settings → Privacy "Make Pepe forget me" (pepeforget.js)
   "privacy.memory": 1440,             // wave 3: 🧠 Settings → Privacy "Pepe's memory" (memoryoptout.js) - like forget-me (it rides along with it)
   "privacy.forget": 7 * 1440,         // 1.99wj: a deleted account's Camfrog login - Pepe forgets it (accountdelete.js retries an expired one)

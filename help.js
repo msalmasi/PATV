@@ -629,10 +629,20 @@ function privwireNotes(entries) {
   });
 }
 
+// ── 1.99?? (privacy controls S6): cards of a dark feature - Pepe's !privacy card shows only while the privacy switchboard v3 is
+// advertised (privacystate.js); until then /help is exactly as before (Pepe's !help leaves it out the same way) ──
+const PV3_DARK_CARDS = new Set(["privacy"]);
+function withoutDarkCards(entries) {
+  let on = false;
+  try { on = require("./privacystate").advert() === true; } catch (e) { on = false; }
+  if (on) return entries;
+  return (entries || []).filter((e) => !(e && PV3_DARK_CARDS.has(e.id)));
+}
+
 // ── the page model ──
 async function pageModel() {
   const cur = await current();
-  const d = { ...cur.data, entries: withPrivwireNotes(withVoiceNotes(withMicrecNotes(cur.data.entries || []))) };
+  const d = { ...cur.data, entries: withPrivwireNotes(withVoiceNotes(withMicrecNotes(withoutDarkCards(cur.data.entries || [])))) };
   const cats = (d.categories || []).map((c) => ({ ...c, entries: (d.entries || []).filter((e) => e.category === c.id) })).filter((c) => c.entries.length);
   // the browser's search index: compact, no details (the filter reads each card's text)
   const index = (d.entries || []).map((e) => ({ id: e.id, title: e.title, commands: e.commands, aliases: e.aliases || [], syntax: e.syntax,
@@ -749,6 +759,6 @@ module.exports = {
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
   VOICE_NOTE, withVoiceNotes,                                       // WP-1 (design section H)
-  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS, TX_KEPT_NOTE,                                // wave 2 (design section H, behind the Privacy wire v2 switch)
+  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS, TX_KEPT_NOTE, PV3_DARK_CARDS, withoutDarkCards,    // wave 2 (design section H, behind the Privacy wire v2 switch)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };

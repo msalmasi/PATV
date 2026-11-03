@@ -300,12 +300,16 @@ async function setOptout(login, off, { via = "web", userId = null, ts = now() } 
   if (!LOGIN_RE.test(l)) return false;
   const cur = (await getQuery("SELECT updated FROM livecam_optout WHERE login = ?", [l]))[0];
   if (cur && Number(cur.updated) > ts) return false;
+  const was = OPTOUT.has(l);
   await runQuery(`INSERT INTO livecam_optout (login, off, updated, via, user_id) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(login) DO UPDATE SET off = excluded.off, updated = excluded.updated, via = excluded.via, user_id = COALESCE(excluded.user_id, livecam_optout.user_id)`,
                  [l, off ? 1 : 0, ts, via === "chat" ? "chat" : "web", userId]);
   if (off) { OPTOUT.add(l); for (const S of [...SESS.values()]) if (S.login === l && !S.rv) ownerClosed(S, "opted_out"); }   // (S4: a reveal got past it)
   else OPTOUT.delete(l);
   runHooks(OPTOUT_HOOKS, [l, !!off], "opt-out");      // micfollow: the mic stage drops them at once too
+  // 1.99?? (privacy controls S6): a real change files one inbox notice while the privacy switchboard v3 is in effect (privacystate.js;
+  // nothing otherwise) - never waited for
+  if (was !== !!off) { try { require("./privacystate").camChanged(l, !!off, via, ts).catch(() => {}); } catch (e) { /* none */ } }
   return true;
 }
 async function optoutState(userId) {

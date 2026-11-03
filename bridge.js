@@ -1737,6 +1737,7 @@ function register(app, { isBotToken, addUser }) {
     require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
     try { require("./incogcams").noteBot(body); } catch (e) { /* none */ }   // 1.99?? (privacy controls S5): Pepe applies incognito cams?
     try { require("./camreveal").noteBot(body); } catch (e) { /* none */ }   // 1.99?? (privacy controls S4): Pepe opens cam reveals?
+    try { require("./privacystate").noteBot(body); } catch (e) { /* none */ }   // 1.99?? (privacy controls S6): Pepe runs the switchboard v3?
     // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
     // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
     // privacy.shown events, his incognito OFF reports, an older Pepe's drop within one bridge session (no tx_hidden_h: he sends
@@ -1768,7 +1769,11 @@ function register(app, { isBotToken, addUser }) {
              ...(incogcamAdvert() ? { incogcam: 1 } : {}),
              // 1.99?? (privacy controls S4): cam reveals (camreveal.js: its switch AND privacy wire v2) - Pepe opens a reveal want and
              // sends a veiled member's on_cam only after this (never said while either is off)
-             ...(camrevealAdvert() ? { camreveal: 1 } : {}) };
+             ...(camrevealAdvert() ? { camreveal: 1 } : {}),
+             // 1.99?? (privacy controls S6): the privacy switchboard v3 (privacystate.js: its switch AND privacy wire v2) - Pepe answers
+             // !privacy, lets an unproven room line switch a control on and off for its name, takes the card's actions and reports
+             // bridge / tx only after this (never said while either is off)
+             ...(privstateAdvert() ? { privstate: 1 } : {}) };
   }
   // wave 2 WP-2 (spec A.3 handshake): the privacy wire v2 receiver - Pepe's FULL form (real UserRefs + priv, hidden words, hold ids).
   //  * every call is counted FIRST (the dark proof: while the switch has never been on, the counter stays 0 - Pepe never calls);
@@ -2234,6 +2239,7 @@ function padTabsFor(o) {
 function evidenceOn() { try { return require("./evidence").effective(); } catch (e) { return false; } }
 function incogcamAdvert() { try { return require("./incogcams").advert() === true; } catch (e) { return false; } }
 function camrevealAdvert() { try { return require("./camreveal").advert() === true; } catch (e) { return false; } }
+function privstateAdvert() { try { return require("./privacystate").advert() === true; } catch (e) { return false; } }
 
 /** wave 2 WP-2 (spec E.1): who is behind veiled line c of room roomId, for a reveal (seethrough.js checks role and era) -> {ts, vz, vw}
  *  | null. The live item's own (non-enumerable) identity first, else the archive's chat_log_veil row - only for a line of THIS room. */

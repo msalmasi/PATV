@@ -432,7 +432,10 @@ function register(app, { addUser, isBotToken }) {
     // items only to a site that says "memory" - an older site would take them as incognito reports)
     try {
       const memory = await require("./memoryoptout").sync(b);
-      res.json({ ok: true, ...(await sync(b)), memory, caps: ["memory"] });
+      // 1.99?? (privacy controls S6): Pepe's bridge / tx items and full lists (privacystate.js) - only while its switch's advert is on
+      // (Pepe sends them only then; anything else is ignored there). Off: the answer is exactly as before
+      const pv = await require("./privacystate").sync(b);
+      res.json({ ok: true, ...(await sync(b)), memory, caps: ["memory"], ...(pv && !pv.off ? { privstate: pv } : {}) });
     } catch (e) { fail(res, e); }
   });
   app.get("/api/privacy/incognito", addUser, async (req, res) => {
@@ -481,7 +484,10 @@ function register(app, { addUser, isBotToken }) {
       // and !bridge hide's blacked-out bar while it's on; the v1 wording ("someone", lines kept off) while it's off
       let pwOn = false;
       try { await require("./privwire").init(); pwOn = require("./privwire").isOn() === true; } catch (e) { pwOn = false; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn, mem, pwOn });
+      // 1.99?? (privacy controls S6): the "On the website" card (privacystate.js) - only while the privacy switchboard v3 is in effect
+      let pv3 = null;
+      try { const PS = require("./privacystate"); await PS.init(); pv3 = PS.effective() ? await PS.stateOf(req.user.userId) : null; } catch (e) { pv3 = null; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn, mem, pwOn, pv3 });
     } catch (e) { next(e); }
   });
 }

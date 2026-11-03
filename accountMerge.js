@@ -341,6 +341,7 @@ const RULES = {
   // chatsignin.js (!signin): links, the owner's switch (off wins) and the account's chat sign-in log follow the account
   "chat_signin_tokens.user_id": M(), "chat_signin_log.user_id": M(), "incognito_log.user_id": M(),   // 1.99wa (incognito.js: incognito_state is keyed by chat login)
   "memory_optout_log.user_id": M(),   // wave 3 (memoryoptout.js, design §N): the 🧠 Pepe's memory audit follows the account (its state is keyed by chat login)
+  "privacy_state_log.user_id": M(),   // 1.99?? (privacy controls S6): the "On the website" card's audit follows the account (its state is keyed by chat login)
   // 1.99afn (seethrough.js): who revealed a frog name moves with the account (the audit follows the person); an open "Show real names"
   // toggle too - one per (scope, pad): the target's own wins a collision
   "seethrough_log.user_id": M(), "seethrough_toggle.user_id": M({ key: ["scope", "room_id"] }),

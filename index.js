@@ -1381,6 +1381,9 @@ require("./incogcams").register(app, { addUser });               // 1.99?? (priv
 // 1.99?? (privacy controls S4): cam reveals - a moderator views a hidden cam, logged (/api/rooms/:slug/livecam/reveal*, the by-login entry,
 // /api/admin/camreveal; ships OFF) + their evidence stills / clips (/api/evidence/cam*)
 require("./camreveal").register(app, { addUser, bySlug: (s) => require("./bridge").bySlug(s), isLive: (R) => require("./bridge").isLiveShown(R) });
+// 1.99?? (privacy controls S6): the privacy switchboard v3 - Settings → Privacy "On the website" (/api/privacy/state) + its switch
+// (/api/admin/privacyv3; ships OFF)
+require("./privacystate").register(app, { addUser });
 require("./camevidence").register(app, { addUser, bySlug: (s) => require("./bridge").bySlug(s) });
 require("./pepecontrol").register(app, { isBotToken, addUser });
 require("./roomctl").register(app, { isBotToken, addUser });   // 1.99kp: 📡 /admin/pepe/rooms - join / leave / active / mute Pepe's Camfrog rooms

@@ -585,11 +585,16 @@ async function setSwitch(name, value, actor = null) {
 // ── commands with private arguments ──
 const CMD_RE = /^![a-z0-9_]{1,40}$/;
 /** Is this chat line a private_args command ("!verify 1234", "/msg bob ...")? First token, case-insensitive. */
+// 1.99?? (privacy controls S6): commands kept out ONLY while their dark feature is on - !privacy is no command at all until Pepe runs
+// the switchboard v3 (privacystate.js advert), so its line is ordinary chat as today; while it's on it is a privacy command (bot
+// pepe_privargs.PV3_PRIVATE - the same rule)
+const PV3_PRIVATE = Object.freeze(["!privacy"]);
+const pv3On = () => { try { return require("./privacystate").advert() === true; } catch (e) { return false; } };
 function isPrivateCmd(text) {
   const t = String(text == null ? "" : text).replace(/^\s+/, "");
   if (t[0] !== "!" && t[0] !== "/") return false;
   const first = "!" + t.slice(1).split(/\s/)[0].toLowerCase();
-  return PRIVATE.has(first);
+  return PRIVATE.has(first) || (PV3_PRIVATE.includes(first) && pv3On());
 }
 /** Pepe's published help can only ADD commands to the list. 1.99afn: Pepe's build publishes them as ONE top-level list,
  *  help-data.json `private_args` (camfrog-bot tools/build_help.py: every flagged card's commands with their aliases, lower case) -
