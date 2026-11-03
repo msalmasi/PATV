@@ -771,7 +771,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (img && j && rule && rule !== "no" && b.viewer_ok) okFor.set(j.userId, cost);
     // 1.99?? (privacy controls S5): a veiled request's frame under its own key; a frame with no job left (swept) of someone who shows
     // veiled in the room now is dropped - it may have been taken for their frog name
-    if (!j) {
+    // (review DARK-4: only while incognito cams are in effect - with the switch off a late frame is cached exactly as before)
+    if (!j && icOn()) {
       try { const BR = require("./bridge"), RR = BR._rooms.get(roomId); if (RR && require("./incogcams").veiledPresence(RR, login)) return res.json({ ok: true, dropped: true }); }
       catch (e) { /* no bridge */ }
     }

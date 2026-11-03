@@ -809,6 +809,13 @@ function mayEnd(u, R, login) {
   const r = require("./rooms").getCached ? require("./rooms").getCached(String(R.id)) : null;
   return !!(r && r.owner && r.owner.userId && String(r.owner.userId) === String(u.userId));
 }
+/** 1.99?? (privacy controls review ID-6): would ending `login` by its typed name touch a veiled cam - a frog-name session under that
+ *  login's key, or (incognito cams in effect) the person showing veiled in R now (a cooldown would then refuse their frog-name ▶ Live)? */
+function veiledByLogin(R, login, t = now()) {
+  const S = SESS.get(keyOf(R.id, String(login || "").toLowerCase()));
+  if (S && S.veil) return true;
+  try { return icEffective(t) && !!IC().veiledPresence(R, String(login || "").toLowerCase()); } catch (e) { return false; }
+}
 function endBy(u, R, login, t = now()) {
   login = String(login || "").toLowerCase();
   const k = keyOf(R.id, login);
@@ -1762,7 +1769,12 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       } else login = String(ref || "").toLowerCase();
       if (!LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?", "bad");
       if (!mayEnd(u, R, login)) throw new Refuse(403, "Only the cam's owner, the room's mods and the pad owner can end it.", "forbidden");
-      const out = endBy(u, R, login);
+      // 1.99?? (privacy controls review ID-6): a typed login never reaches a VEILED cam - neither its session (same key as a named one)
+      // nor the login's cooldown (which a frog-name ▶ Live checks too). The answer and the history line are the ones a wrong guess
+      // gets, so ending by a guessed login can't confirm who is behind a frog name. Only {id} ends a veiled session.
+      let out;
+      if (!VS && veiledByLogin(R, login)) out = { ok: true };
+      else out = endBy(u, R, login);
       // 1.99zf: a mod / the owner / staff ending someone else's live cam goes in the room's moderation history (pepemodlog.js)
       if (String(u.camfrogUsername || "").toLowerCase() !== login) {
         require("./rooms").event(R.id, "livecam-end", u.username || null, `ended the live view of ${VS ? VS.veil.alias || "someone" : login}'s cam`);
