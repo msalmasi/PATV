@@ -812,3 +812,27 @@ test("1.99?? avf (F5): mic_follow_toggle false - the mic signs are held with the
   assert.equal(later.style.display, "", "the held line shows at once");
   assert.equal(button.hidden, false, "the toggle is offered again (it governs the mic signs)"); assert.match(button.title, /cams and the mic signs/);
 });
+
+// 1.99?? avf review (product): the toggle's title and the debug panel's first line say what it holds for THIS viewer - a Firefox
+// or Safari viewer (engine_firefox / engine_safari off: no cam delay) was told it holds the cams, and with mic_follow_toggle off
+// and no mic switch on, "the mic signs are held for everyone" though nothing held them
+test("1.99?? avf review: the toggle's title names only what it holds here - no cams on an engine that isn't enabled; 'held for everyone' only while a mic switch holds them", async () => {
+  const f = sandbox({ ua: "Firefox/140.0", search: "?avsync=1", config: { dbg: true } });
+  f.api.pad("pad"); const fbox = f.element("div"); f.document.body.appendChild(fbox); f.api.decorate(fbox);
+  f.media("rtc"); await f.advance(2000);
+  const fb = fbox.children[0];
+  assert.equal(fb.hidden, false, "offered: the mic signs follow the toggle");
+  assert.match(fb.title, /^Holds the mic signs/); assert.doesNotMatch(fb.title, /cams/, "Firefox's cams aren't delayed (engine_firefox off)");
+  // Chrome, mic_follow_toggle off and none of the mic switches on: the cams only, nothing "held for everyone"
+  const c = sandbox({ search: "?avsync=1", config: { dbg: true, mic_follow_toggle: false,
+    apply: { video: true, mic: false, mp3: true, mic_card: false, mic_chat: false, mic_list: false } } });
+  c.api.pad("pad"); const cbox = c.element("div"); c.document.body.appendChild(cbox); c.api.decorate(cbox);
+  c.tile(); c.media("rtc"); await c.advance(2000);
+  const cb = cbox.children[0], first = () => c.document.body.children.find((e) => e.tagName === "ASIDE").children[2].textContent.split("\n")[0];
+  assert.equal(cb.hidden, false);
+  assert.equal(cb.title, "Holds the cams back to match the room audio you hear."); assert.doesNotMatch(cb.title, /mic signs/);
+  assert.equal(first(), "sync for you: ON (your toggle)", "no 'mic signs: held for everyone' when no switch holds them");
+  // a mic switch on again: they are held for everyone, and both say so
+  c.config.apply.mic_card = true; await c.advance(5000);
+  assert.match(cb.title, /mic signs are held for everyone/); assert.equal(first(), "sync for you: ON (your toggle) · mic signs: held for everyone");
+});

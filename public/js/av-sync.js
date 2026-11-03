@@ -508,10 +508,18 @@
   // .rb-avsync) and aria-pressed - and its title says what it holds (the cams and the mic signs; the cams only while the mic signs
   // are held for everyone, mic_follow_toggle off). It used to read "Sync cams to the audio" either way, so a click meant to sync
   // turned it off.
+  // 1.99?? avf review: what the toggle holds for this viewer - the cams only where their engine is enabled (a Firefox / Safari viewer
+  // gets no cam delay while engine_firefox / engine_safari are off), and "the mic signs are held for everyone" only while a mic switch
+  // holds them (mic_follow_toggle off)
+  function holds() {
+    var pad = sound.slug, mics = anyMic(pad, true), all = micIgnoresToggle(pad);
+    return { cams: eligible(pad, 'video', true), mics: mics && !all, all: mics && all };
+  }
   function paint(button) {
     var text = enabled ? translate('js.pad.audio.sync_on', 'Sync to the audio: on') : translate('js.pad.audio.sync_off', 'Sync to the audio: off');
-    var title = micIgnoresToggle(sound.slug)
-      ? translate('js.pad.audio.sync_title_cams', 'Holds the cams back to match the room audio you hear. The mic signs are held for everyone.')
+    var h = holds(), title = h.cams && h.all ? translate('js.pad.audio.sync_title_cams', 'Holds the cams back to match the room audio you hear. The mic signs are held for everyone.')
+      : h.cams && !h.mics ? translate('js.pad.audio.sync_title_cams_only', 'Holds the cams back to match the room audio you hear.')
+      : !h.cams && h.mics ? translate('js.pad.audio.sync_title_mic', 'Holds the mic signs (the On the mic card, the people list, the mic lines in chat and the mic stage) back to match the room audio you hear.')
       : translate('js.pad.audio.sync_title', 'Holds the cams and the mic signs (the On the mic card, the people list, the mic lines in chat and the mic stage) back to match the room audio you hear.');
     if (button.textContent !== text) button.textContent = text;          // (each tick repaints: only what changed)
     if (button.title !== title) button.title = title;
@@ -521,7 +529,7 @@
   function youLine() {
     // 1.99?? avf (F2): the debug panel's first line - whether sync applies to this viewer by their own toggle
     var line = enabled ? translate('js.pad.audio.avsync_you_on', 'sync for you: ON (your toggle)') : translate('js.pad.audio.avsync_you_off', 'sync for you: OFF (your toggle)');
-    return micIgnoresToggle(sound.slug) ? line + ' · ' + translate('js.pad.audio.avsync_mic_all', 'mic signs: held for everyone') : line;
+    return holds().all ? line + ' · ' + translate('js.pad.audio.avsync_mic_all', 'mic signs: held for everyone') : line;   // (review: only while held)
   }
   function notify() {
     // (1.99ahm: the viewer's toggle is offered while any of the mic switches holds something back too; 1.99?? avf F5: while they

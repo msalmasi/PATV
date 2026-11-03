@@ -4736,6 +4736,8 @@
   "js.pad.audio.sync_off": "Sync to the audio: off",
   "js.pad.audio.sync_title": "Holds the cams and the mic signs (the On the mic card, the people list, the mic lines in chat and the mic stage) back to match the room audio you hear.",
   "js.pad.audio.sync_title_cams": "Holds the cams back to match the room audio you hear. The mic signs are held for everyone.",
+  "js.pad.audio.sync_title_cams_only": "Holds the cams back to match the room audio you hear.",
+  "js.pad.audio.sync_title_mic": "Holds the mic signs (the On the mic card, the people list, the mic lines in chat and the mic stage) back to match the room audio you hear.",
   "js.pad.audio.avsync_you_on": "sync for you: ON (your toggle)",
   "js.pad.audio.avsync_you_off": "sync for you: OFF (your toggle)",
   "js.pad.audio.avsync_mic_all": "mic signs: held for everyone",
