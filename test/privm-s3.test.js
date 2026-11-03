@@ -736,6 +736,89 @@ test("round 5: the cover picture in Settings' Live cam card, /privacy's livecam 
   } finally { await knobs({ withheld_cover: false }); }
 });
 
+// 1.99?? (privacy controls round 6, spec 6.1): the rest of /privacy's cover-picture wording, behind withheld_cover like round 5's Live cams
+// clause - the mic-stage captures paragraph (spec :91: a cam opt-out is a name card), section 3's privacy-wire paragraph (both variants)
+// and the spec's "On a pad's mic stage" bullet. Off: the page is the round-5 head's, byte for byte; on: the round-5 head's plus exactly these
+const BASE6 = process.env.PRIVM_R6_BASE_REV || "0d51bb6f";
+const R6 = {
+  cap: " People with <code>!livecam off</code>, or whose settings keep their cam off pads' mic stages, appear by name with their cover picture (as a hooded frog if they're incognito): a snap or clip can show that name card, and it counts as shown openly.",
+  wire: ": pads' mic stages show your cover picture (or a hooded frog) instead",
+  wire3: " (pads' mic stages show your cover picture, or a hooded frog, instead)",
+  stage: "<li><b>On a pad's mic stage:</b> if your cam is hidden from the website, or your settings keep it off pads' mic stages, the stage shows your name with your cover picture (<a href=\"/settings/stage-cover\">Settings → Stage cover</a>) instead - or a hooded frog if you're incognito or hidden.</li>",
+};
+test("round 6: /privacy's captures paragraph, its privacy-wire paragraph and a new 'On a pad's mic stage' bullet say the cover picture only while withheld_cover is on; off = the round-5 head byte for byte", async () => {
+  const ejs = require("ejs");
+  const pfile = path.join(repo, "views", "privacy.ejs");
+  const pnow = fs.readFileSync(pfile, "utf8").replace(/\r\n/g, "\n");
+  let pbase = null;
+  try { pbase = execFileSync("git", ["-C", repo, "show", `${BASE6}:views/privacy.ejs`], { encoding: "utf8" }).replace(/\r\n/g, "\n"); } catch (e) { pbase = null; }
+  const L0 = { user: null, title: "Privacy Policy", VERSION: "x", UPDATED: "1 November 2026", enforced: false, chatlog: null, hubErasure: null, micrec: null,
+               memory: null, privwire: null, evidence: null, policyDates: {}, ogBase: "http://test" };
+  const prender = (src, v) => ejs.render(src, Object.assign({}, L0, v), { filename: pfile });
+  const ON1 = { on: true, on_at: null, on_day: null }, MSK = { "mic-stage-keep": { at: 1, day: "1 November 2026" } };
+  const WIRE_AT = "under your frog name. <code>!bridge hide</code> and <code>!livecam off</code> keep your cam off the website";   // (section 3's paragraph, not the Live cams bullet)
+  let n = 0;
+  for (const privwire of [null, { g_day: "1 November 2026" }]) for (const pv3 of [null, ON1]) for (const incogcam of [null, ON1]) for (const policyDates of [{}, MSK]) {
+    const v = { privwire, pv3, incogcam, policyDates }, tag = JSON.stringify([!!privwire, !!pv3, !!incogcam, !!policyDates["mic-stage-keep"]]);
+    const off = prender(pnow, { ...v, wcover: null }), on = prender(pnow, { ...v, wcover: { on: true } });
+    for (const s of Object.values(R6)) assert.ok(!off.includes(s), tag + ": off - never " + s.slice(0, 40));
+    assert.equal(on.includes(R6.cap), !!policyDates["mic-stage-keep"], tag + ": the captures sentence, where the paragraph is");
+    assert.equal(on.includes(WIRE_AT + R6.wire + "."), !!(privwire && !pv3 && incogcam), tag + ": the privacy-wire paragraph (wave 2 + incognito cams)");
+    assert.equal(on.includes("<code>!livecam off</code> keeps your cam off it" + R6.wire3 + ";"), !!(privwire && pv3), tag + ": the privacy-wire paragraph (switchboard v3)");
+    assert.ok(on.includes(R6.stage), tag + ": the 'On a pad's mic stage' bullet");
+    if (pbase) {
+      assert.equal(off, prender(pbase, { ...v, wcover: null }), tag + ": off - the same page as " + BASE6);
+      assert.equal(prender(pnow, v), prender(pbase, v), tag + ": no copy at all - the same page as " + BASE6);
+      let strip = on;
+      for (const s of [R6.cap, R6.stage, R6.wire3]) strip = strip.split(s).join("");
+      if (privwire && !pv3 && incogcam) strip = strip.replace(WIRE_AT + R6.wire + ".", WIRE_AT + ".");
+      assert.equal(strip, prender(pbase, { ...v, wcover: { on: true } }), tag + ": on - " + BASE6 + "'s page plus exactly round 6's sentences");
+      n++;
+    }
+  }
+  if (pbase) assert.equal(n, 16);
+});
+
+// 1.99?? (privacy controls round 6): with withheld_cover on, the cover-picture text moves /privacy's "Last updated" - dated the first time the
+// page is served with the knob on (terms.js SWITCHED_TEXTS "stage-cover", policy_text_dates), counted only while it is on (like frog-15)
+test("round 6: /privacy's 'Last updated' is dated by the first time it is served with withheld_cover on ('stage-cover'), only while the knob is on; off: never recorded", async () => {
+  const terms = require(path.join(repo, "terms"));
+  assert.ok(terms.TEXT_DATES.includes("stage-cover"));
+  const app2 = express();
+  app2.set("views", path.join(repo, "views"));
+  app2.set("view engine", "ejs");
+  app2.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
+  terms.register(app2, { addUser: (req, res, next) => { req.user = null; next(); } });
+  const srv = app2.listen(0);
+  const page = async () => (await (await fetch("http://127.0.0.1:" + srv.address().port + "/privacy")).text());
+  const updated = (h) => ((h.match(/Last updated ([^<]+)</) || [])[1] || "").trim();
+  try {
+    await knobs({ withheld_cover: false });
+    await runQuery("DELETE FROM policy_text_dates WHERE key = 'stage-cover'").catch(() => {});
+    const off0 = await page();
+    assert.ok(!off0.includes(R6.stage), "off: no cover text");
+    assert.equal((await terms.textDates())["stage-cover"], undefined, "off: never dated");
+    await knobs({ withheld_cover: true });
+    const on1 = await page();
+    assert.ok(on1.includes(R6.stage) && on1.includes(R6.wire), "on: the cover text");
+    const d = (await terms.textDates())["stage-cover"];
+    assert.ok(d && d.at > 0 && d.day, "on: dated the first time it is served");
+    const LATER = Date.UTC(2027, 0, 15, 12, 0, 0);       // (a day after every other dated text here)
+    await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'stage-cover'", [LATER]);
+    assert.equal(updated(await page()), "15 January 2027", "on: 'Last updated' is the cover text's day");
+    assert.equal((await terms.textDates())["stage-cover"].at, LATER, "the first-served moment never moves");
+    await knobs({ withheld_cover: false });
+    const off2 = await page();
+    assert.ok(!off2.includes(R6.stage), "off again: no cover text");
+    assert.notEqual(updated(off2), "15 January 2027", "off again: its date no longer counts");
+    assert.equal(updated(off2), updated(off0), "off again: 'Last updated' as before it was on");
+  } finally {
+    srv.close();
+    await knobs({ withheld_cover: false });
+    await runQuery("DELETE FROM policy_text_dates WHERE key = 'stage-cover'").catch(() => {});
+  }
+});
+
 // 1.99aif (privacy controls round 5 review): the NAMED withheld card answers the person's own blocks (cam or DM, either way) for EVERY viewer
 // - the letter and "isn't available" - as round 5's veiled withheld card does. watchOf stops at the cam's members-only gate before its DM
 // check, so a members-only viewer the person DM-blocked used to get "ok" and their cover picture (only a viewer the gate refused as

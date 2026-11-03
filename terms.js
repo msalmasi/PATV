@@ -48,11 +48,16 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // 1.99aid (privacy controls S7, spec section 5 "S7": "PRIVACY_UPDATED moves; no re-accept"): the privacy text of S4 / S5 / S6 is dated
 // like wave 2's - by its switch's first ON (privacycopy.js), not by a hand-edited PRIVACY_UPDATED - so "Last updated" moves on the day
 // each switch first goes on, on each server, and never before; VERSION (re-acceptance) doesn't move.
-const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept"];
+// 1.99?? (privacy controls round 6): "stage-cover" = S3's cover-picture sentences (micfollow_cfg withheld_cover - privacycopy wcover:
+// section 3's privacy-wire paragraph, its Mic-stage snaps and clips paragraph and the Live cams bullets, 1.99aif round 5 and round 6),
+// shown only while that knob is on - dated the first time /privacy is served with it on (the knob keeps no first ON of its own), and
+// its date counts toward "Last updated" only while the knob is on (like frog-15)
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
                          "tx-bar": () => require("./privwire").txBar() === true,
                          "frog-15": () => require("./privwire").isOn() === true,
-                         "livecam-never-kept": () => { const c = require("./chatlog").cfg(); return !!(c && c.notice && c.notice_at); } };
+                         "livecam-never-kept": () => { const c = require("./chatlog").cfg(); return !!(c && c.notice && c.notice_at); },
+                         "stage-cover": () => require("./micfollow").withheldCover() === true };   // (1.99?? privacy controls round 6)
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 let datesReady = null;
@@ -214,7 +219,7 @@ function register(app, { addUser }) {
                              [evidence && evidence.on_at, evidence && evidence.on_day],
                              [txbar && txbar.kept && txbar.off_at, txbar && txbar.kept && txbar.off_day],   // (review fix F1: the "kept" note)
                              ...Object.values(pcopy).map((c) => [c && c.on_at, c && c.on_day]),
-                             ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).filter(([k]) => k !== "frog-15" || privwire)
+                             ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).filter(([k]) => k !== "frog-15" || privwire).filter(([k]) => k !== "stage-cover" || pcopy.wcover)
                                .map(([, d]) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
