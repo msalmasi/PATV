@@ -86,6 +86,7 @@ const MSG = {
   offline: "That Camfrog room isn't live right now.",
   room_off: "Live cams aren't on in this Camfrog room.",
   ended: "That moderation view already ended.",
+  held: "Their cam can't be viewed right now.",          // 1.99?? (review fixes 2 - RV-B)
 };
 
 // ── the switch ──
@@ -293,10 +294,22 @@ async function start(u, R, b, { byLogin = false } = {}) {
   if (sub.onCam === false) throw new Refuse(400, MSG.not_on_cam, "not_on_cam");
   const why = await withheldWhy(R, sub, u.userId);
   if (!why) throw new Refuse(409, MSG.visible, "visible");
+  // 1.99?? (privacy controls, review fixes 2 - RV-B): a NAMED person whose mic hold still shows a frog name (veiled_hold) - their face
+  // next to their login pairs the two, which S5 refuses to everyone (ghosts too). Only a role that may reveal who is behind a frog
+  // name (veilstage.stageRole: an Admin, the pad's owner, + staff / room mods while text_reveal_roles is on) gets it; anyone else the
+  // neutral refusal - before the rate limit and before any row
+  if (why === "veiled_hold") {
+    let nameRight = null;
+    try { nameRight = await require("./veilstage").stageRole(u, R.id); } catch (e) { nameRight = null; }
+    if (!nameRight) throw new Refuse(409, MSG.held, "unavailable");
+  }
   const LC = require("./livecam");
   const mine = LC.revealOfViewer(String(u.userId));
   if (mine && !(mine.roomId === R.id && mine.login === sub.login)) throw new Refuse(409, "Close the cam you're viewing for moderation first.", "one_open");
   const cur = LC.revealOf(R.id, sub.login);
+  // 1.99?? (review fixes 2 - RV-C): an open by-login session (an admin's / staff's, from the admin page) is theirs alone - a pad role
+  // can't join it (MediaMTX and the first beat would end it with lost_right after its rows and its rate were spent): refused first
+  if (cur && cur.rv && cur.rv.bylogin && !SITE_WIDE.has(role)) throw new Refuse(409, MSG.held, "unavailable");
   if (!(cur && cur.viewers.has(String(u.userId)))) {                             // (a re-open of the one they're on isn't a new reveal)
     const lim = require("./bridge-relay").limited("camreveal|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
     if (lim) throw new Refuse(429, lim, "rate");

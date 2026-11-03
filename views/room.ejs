@@ -1480,15 +1480,24 @@
           clipTimer = setTimeout(function () { poll(id, n + 1); }, 1500);
         }).catch(function () { if (alive()) clipTimer = setTimeout(function () { poll(id, n + 1); }, 3000); });
       }
-      b.addEventListener('click', function () {
+      function ask(reason) {
         b.disabled = true; sel.disabled = true; vid.textContent = ''; say(_t('js.pad.clip.asking', 'Asking Pepe to record…'));
         // (1.99?? privacy controls V-1: an incognito person's cam is clipped by its opaque id - never a login)
-        post('/api/rooms/' + encodeURIComponent(slug) + '/camclip', who.login ? { login: who.login, secs: Number(sel.value) } : { id: who.id, secs: Number(sel.value) }).then(function (d) {
+        var body = who.login ? { login: who.login, secs: Number(sel.value) } : { id: who.id, secs: Number(sel.value) };
+        if (typeof reason === 'string') body.reason = reason;      // (1.99?? review fixes 2 - RV-A: a 👻 ghost clip past someone's rules - logged)
+        post('/api/rooms/' + encodeURIComponent(slug) + '/camclip', body).then(function (d) {
           if (!alive()) return;
+          if (!d.ok && d.code === 'reason_needed' && typeof reason !== 'string' && typeof window.prompt === 'function') {
+            b.disabled = false; sel.disabled = false;
+            var why = window.prompt(_t('js.pad.live.ghost_why', '👻 Their cam is hidden from you - a ghost view gets past that and is logged. Why? (at least 3 characters)'), '');
+            if (why != null && String(why).trim().length >= 3) return ask(String(why).trim().slice(0, 200));
+            return say(_t('js.camrv.need_reason', 'Say why (at least 3 characters) - it\'s logged.'), 'bad');
+          }
           if (!d.ok) { if (d.id) return poll(d.id, 0); b.disabled = false; sel.disabled = false; return say(d.error || _t('js.pad.snap.not_now', 'Not right now.'), 'bad'); }
           poll(d.id, 0);
         }).catch(function () { b.disabled = false; sel.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
-      });
+      }
+      b.addEventListener('click', function () { ask(); });
       if (typeof s.clip.busy === 'string') { b.disabled = true; sel.disabled = true; poll(s.clip.busy, 0); }
       else if (s.clip.busy) { b.disabled = true; sel.disabled = true; say(_t('js.pad.clip.busy', 'Pepe is already clipping their cam - try again in a bit.')); }
     }
@@ -1576,14 +1585,22 @@
           snapTimer = setTimeout(function () { snapPoll(who, n + 1); }, 1500);
         }).catch(function () { snapBox(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.')); });
     }
-    function snapOpen(who, refresh) {
+    function snapOpen(who, refresh, reason) {
       clearTimeout(snapTimer); clearTimeout(saveTimer);
       snapWho = who;
       snapBox(_t('js.pad.snap.asking', 'Asking Pepe to open {name}\'s cam…', { name: label(who) }));
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(who.login ? { login: who.login } : { id: who.id }) })
+      // 1.99?? (privacy controls, review fixes 2 - RV-A): a 👻 ghost snapshot past someone's rules asks why first, like ▶ Live (logged)
+      var snapBody = who.login ? { login: who.login } : { id: who.id };
+      if (typeof reason === 'string') snapBody.reason = reason;
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(snapBody) })
         .then(function (r) { return r.json().then(function (d) { return { st: r.status, d: d }; }); })
         .then(function (x) {
           if (snapWho !== who) return;
+          if (!x.d.ok && x.d.code === 'reason_needed' && typeof reason !== 'string' && typeof window.prompt === 'function') {
+            var why = window.prompt(_t('js.pad.live.ghost_why', '👻 Their cam is hidden from you - a ghost view gets past that and is logged. Why? (at least 3 characters)'), '');
+            if (why != null && String(why).trim().length >= 3) return snapOpen(who, refresh, String(why).trim().slice(0, 200));
+            return snapBox(_t('js.camrv.need_reason', 'Say why (at least 3 characters) - it\'s logged.'));
+          }
           if (!x.d.ok) return snapBox(x.d.error || _t('js.pad.snap.not_now', 'Not right now.'));
           snapPoll(who, 0);
         }).catch(function () { snapBox(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.')); });

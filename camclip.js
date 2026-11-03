@@ -89,6 +89,8 @@ const deps = {
   camRefusal: (login, userId, opts) => require("./camviewers").camRefusal(login, userId, opts),
   isGhost: (userId) => { try { return require("./ghost").isGhost(userId); } catch (e) { return false; } },   // 1.99aak
   noteViewers: (...a) => require("./camviewers").noteViewers(...a),
+  // 1.99?? (privacy controls, review fixes 2 - RV-A): the 👻 ghost capture gate (livecam.ghostCaptureGate: reason + see-through log)
+  ghostCapture: (u, roomId, login, reason) => require("./livecam").ghostCaptureGate(u, roomId, login, { reason, kind: "clip" }),
 };
 /** 1.99fb: may this account clip while the room's !clip is off / unknown? Site admins, and anyone Pepe gave
  *  room-moderation caps on their linked login (the ⋯ menu's source). Pepe re-checks with chat !clip's admin rule. */
@@ -204,6 +206,13 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
         if (!deps.isGhost(u.userId) && (await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });   // 1.99aak: 👻 ghosts get past it (audited)
         const ref = await deps.camRefusal(login, u.userId);
         if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
+        // 1.99?? (privacy controls, review fixes 2 - RV-A): a 👻 ghost clip past a named person's rules while cam reveals are in effect
+        // gives a reason first and is logged before any job, as ▶ Live (a veiled cam's clip above is strict: no ghost gets past it)
+        try { await deps.ghostCapture(u, R.id, login, (req.body || {}).reason); }
+        catch (e) {
+          if (e && e.refuse) return res.status(e.status).json({ ok: false, code: e.code, error: e.message, ...(e.extra || {}) });
+          return res.status(500).json({ ok: false, error: "Couldn't log it - nothing was opened." });
+        }
       }
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
       if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF(R.id), code: "E_FEATURE_OFF" });

@@ -698,6 +698,15 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (icOn() && IC().veiledPresence(R, login)) return { error: "They aren't on cam." };
     return { login, vkey: null, veil: null };
   };
+  // 1.99?? (review fixes 2 - RV-A): is this a 👻 ghost who gets past `login`'s rules where that needs the reveal audit log (a veiled cam
+  // always, a named one while cam reveals are in effect)? Fails closed (an error = yes: the frame waits for a logged request)
+  const ghostPast = async (uid, login, veiled) => {
+    try {
+      if (!require("./ghost").isGhost(uid)) return false;
+      if (!veiled && !require("./livecam").crEffective()) return false;
+      return (await CV().bypassOf(login, uid)) != null;
+    } catch (e) { return true; }
+  };
   app.post("/api/rooms/:slug/snap", addUser, express.json({ limit: "4kb" }), async (req, res) => {
     const u = await me(req);
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
@@ -712,6 +721,14 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const ref = await CV().camRefusal(login, u.userId);
     // (1.99?? S5: a veiled cam's refusal is the one generic word - never a reason, a mode or "ask to watch")
     if (ref) return res.status(ref.status).json(tg.veil ? { ok: false, code: "unavailable", error: CV().UNAVAILABLE } : { ok: false, code: ref.code, error: ref.error });
+    // 1.99?? (privacy controls, review fixes 2 - RV-A): a 👻 ghost past someone's rules (a veiled cam always, a named one while cam
+    // reveals are in effect) gives a reason first and is logged BEFORE any frame - a shared one, a pending job or a new job - as ▶ Live
+    try {
+      await require("./livecam").ghostCaptureGate(u, R.id, login, { veilLabel: tg.veil ? tg.veil.alias || "someone" : null, reason: (req.body || {}).reason, kind: "snap" });
+    } catch (e) {
+      if (e && e.refuse) return res.status(e.status).json({ ok: false, code: e.code, error: e.message, ...(e.extra || {}) });
+      return res.status(500).json({ ok: false, error: "Couldn't log it - nothing was opened." });
+    }
     const key = R.id + "|" + login + (tg.vkey ? "|" + tg.vkey : "");
     const cached = snaps.get(key);
     // Whoever asks shares the frame they're shown - and only they may save it (Save snap, 1.99ap).
@@ -804,6 +821,14 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const ref = await CV().camRefusal(login, req.user.userId);         // 1.99yq: blocked / switched off since the frame was taken
     if (ref) return res.json({ state: "refused", status: vkey ? CV().UNAVAILABLE : ref.error });
     const s = snaps.get(R.id + "|" + login + (vkey ? "|" + vkey : ""));
+    // 1.99?? (review fixes 2 - RV-A): a 👻 ghost who gets past someone's rules sees a frame only after its own POST gave a reason and was
+    // logged (it is then one of that frame's viewers) - never by reading a frame someone else asked for
+    const askedBy = (uid) => (s && s.viewers && s.viewers.has(uid)) || [...jobs.values()].some((j) => j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id &&
+      j.target === login && (j.vkey || null) === vkey && j.state !== "done" && j.viewers && j.viewers.has(uid));
+    if (await ghostPast(req.user.userId, login, !!vkey) && !askedBy(req.user.userId)) {
+      const strict = await CV().camRefusal(login, req.user.userId, { strict: true });
+      return res.json({ state: "refused", status: vkey || !strict ? CV().UNAVAILABLE : strict.error });
+    }
     const pending = [...jobs.values()].some((j) => j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id && j.target === login && (j.vkey || null) === vkey && j.state !== "done");
     if (s && (!pending || Date.now() - s.ts < SNAP_TARGET_GAP)) {
       let save = null;

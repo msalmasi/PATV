@@ -768,6 +768,40 @@ async function ghostRows(u, R, login, veilLabel, bypass, t = now(), reason = "")
     return id;
   });
 }
+/**
+ * 1.99?? (privacy controls, review fixes 2 - RV-A): a 👻 ghost's SNAPSHOT or CLIP of a cam past someone's rules goes the live view's
+ * way (RV-4 / V-5, owner Q8 + Q9 "behind the reveal audit log"): for a veiled (frog-name) cam always, a named one while cam reveals are
+ * in effect - a reason first (409 reason_needed), then its rows in ONE transaction BEFORE any job or frame: the see-through log (scope
+ * cam_reveal, ref "ghost-<kind>:<random>:g") and admin_audit (seethrough.cam_reveal). A failed write refuses it (nothing opened). With
+ * the switch off, a named cam's ghost capture is as before (null: cam_views still records its bypass).
+ * -> null (not a ghost past anyone's rules, or the switch off for a named cam) | {st, bypass} | throws Refuse
+ */
+async function ghostCaptureGate(u, roomId, login, { veilLabel = null, reason = "", kind = "snap", t = now() } = {}) {
+  const uid = String((u && u.userId) || "");
+  if (!uid || !isGhost(uid)) return null;
+  let bypass = null;
+  try { bypass = await CV().bypassOf(login, uid); } catch (e) { bypass = "unknown"; }       // (an unreadable rule: treated as passed by)
+  if (bypass == null) return null;
+  if (veilLabel == null && !crEffective(t)) return null;
+  const why = cleanReason(reason);
+  if (why.length < 3) throw new Refuse(409, "Say why (at least 3 characters) - it's logged.", "reason_needed", { reason_needed: true });
+  let st = null;
+  try {
+    const ST = require("./seethrough"), AA = require("./adminaudit");
+    await ST.init(); await AA.init();
+    const k = kind === "clip" ? "clip" : "snap";
+    st = await tx(async () => {
+      const id = await ST.log({ userId: uid, role: "ghost", scope: "cam_reveal", roomId: String(roomId), logins: [login], reason: why,
+                                ref: "ghost-" + k + ":" + crypto.randomBytes(6).toString("hex") + ":g" });
+      if (!id) throw new Error("livecam: no see-through row");
+      await AA.record({ userId: uid, username: (u && u.username) || null }, "seethrough.cam_reveal", null,
+                      { room: String(roomId), ghost: true, [k]: true, veiled: veilLabel != null, bypass, st: id, reason: why }, null);
+      return id;
+    });
+  } catch (e) { console.error("[livecam] ghost capture audit:", e && e.message); st = null; }
+  if (!st) throw new Refuse(500, "Couldn't log it - nothing was opened.", "audit");
+  return { st, bypass };
+}
 function stateOf(S, t = now()) {
   if (!S) return "none";
   if (S.ended) return "ended";
@@ -1912,6 +1946,7 @@ module.exports = {
   stageWarm, isMfHolder, MFW_PREFIX,                                                                         // wave2 WP-4 (F.2 warm keep)
   revealStart, revealSess, revealOf, revealOfViewer, revealBeat, revealExtend, revealStop, revealSwitchOff, revealNotices, onRevealNotice,
   REVEAL_MS,                                                                                                 // 1.99?? (privacy controls S4)
+  ghostCaptureGate, crEffective,                                                                             // 1.99?? (review fixes 2 - RV-A)
   botMf: () => (BOT && BOT.mf) || 0, botPool: () => (BOT && BOT.pool) || null, enabled: () => cfg().enabled === true, cfg,
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
