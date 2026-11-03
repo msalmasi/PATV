@@ -2216,6 +2216,14 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
       // (watchOf without the room: its hide is by LOGIN - a report of their named tile must never mark this one)
       let watch = hiddenFor(snap.roomId, String(userId), veilHideKey(x.veil, snap.roomId, x.login), t) ? "hidden" : await watchOf(x.login, String(userId), t, null);
       if (watch === "ok" && x.video === "still" && (await blockedHere(snap.roomId, String(userId), t, "snapshots"))) watch = "blocked";
+      // 1.99?? (privacy controls round 5): a WITHHELD veiled cam (cfg withheld_cover + incognito cams: an incognito cam opt-out) is its
+      // peek-hood card - there is no cam to gate, so the cam's per-viewer gates (followers, on request, members only) must not show
+      // through: a follower or someone they granted would read "cam off" and everyone else "isn't available", which tells a viewer
+      // whether the frog is someone they follow. Every viewer reads the same, as on the named withheld card - but this viewer's own
+      // report ("hidden") and the person's own blocks of them (cam or DM, either way: "isn't available", as for any tile)
+      if (x.video === "card" && x.why === "withheld" && watch !== "hidden" && watch !== "blocked") {
+        watch = (await personBlocks(x.login, String(userId))) ? "unavailable" : "ok";
+      }
       if (watch !== "ok" && watch !== "hidden" && watch !== "blocked") watch = "unavailable";
       src.push({ kind: "cam", id: x.veil.id, name: String(x.veil.alias || "someone").slice(0, 40), veil: "incognito", hood: x.veil.hood,
                  avatar: null, nameCss: "", pos: x.pos, newest: x.newest, since: x.since,

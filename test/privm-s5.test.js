@@ -573,3 +573,57 @@ test("S3 (withheld_cover on): incognito + live cam off stays the PEEK hood - a v
     await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
   }
 });
+
+// ── 1.99?? (privacy controls round 5, the round-4 verify's low finding): withheld_cover AND incognito cams - a veiled cam whose person
+// sets cam access to followers / on request becomes its WITHHELD peek-hood card; that card must read the same to every viewer who may
+// see the tile at all (the named withheld card already does), or "cam off" vs "isn't available" tells a viewer whether the frog is
+// someone they follow / granted. A viewer the person blocked and one who reported the tile keep today's treatment ──
+test("round 5 (withheld_cover + incognito cams): a veiled WITHHELD card reads the same to a follower / someone granted and to everyone else; a blocked viewer and a reporter keep theirs", async () => {
+  await setup;
+  MF._hide.clear();
+  if (!U.mem3) U.mem3 = await mkUser("mem3", "pleb", "mem3cf");
+  if (!U.mem4) U.mem4 = await mkUser("mem4", "pleb", "mem4cf");
+  const follows0 = (userId, ownerId) => require(path.join(repo, "follows")).isFollowing(String(userId), "user", String(ownerId));
+  CA._setDeps({ follows: async (uid, ownerId) => String(uid) === U.mem.userId && String(ownerId) === U.frankie.userId });
+  await CAMV.block("frankiefettuccine", "mem2", { byUserId: U.frankie.userId });       // (blocked by her - as the Q23 test left it)
+  await MF.setCfg(ADM(), { withheld_cover: true, reason: "test" });
+  try {
+    for (const [mode, privileged] of [["followers", "a follower"], ["request", "someone she granted"]]) {
+      if (mode === "request") await CA.allow("frankiefettuccine", { userId: U.mem.userId, username: "mem" });
+      await CA.setMode("frankiefettuccine", "everyone");
+      MF._hide.clear();
+      await fresh();
+      await syncAt({ rooms: [v2Room({ mic: true })] });
+      for (let i = 0; i < 15 && !pad().state.tiles.some((x) => !x.cover && x.video !== "card"); i++) await stepAt(3);
+      const vid = pad().vids.get("frankiefettuccine");
+      assert.ok(vid && pad().state.tiles.some((x) => !x.cover && x.login === "frankiefettuccine"), mode + ": her veiled cam tile");
+      await CA.setMode("frankiefettuccine", mode);
+      for (let i = 0; i < 10 && !pad().state.tiles.some((x) => x.login === "frankiefettuccine" && x.why === "withheld"); i++) await stepAt(3);
+      const x1 = pad().state.tiles.find((x) => x.login === "frankiefettuccine");
+      assert.deepEqual(x1 && [x1.video, x1.why, !!x1.cover], ["card", "withheld", false], mode + ": the veiled tile is its withheld card");
+      await stepAt(31);                                                                   // (past the viewer gate cache)
+      const rp = await call("POST", `/api/rooms/${SLUG}/micfollow/report`, { user: U.mem4, body: { login: vid, reason: "other" } });
+      assert.equal(rp.status, 200, rp.text);
+      const entry = async (u) => {
+        const r = await live(u);
+        assert.deepEqual(leaks(r.text), [], mode + ": " + leaks(r.text).join(", "));
+        return (r.d.stage_program.src || []).find((s) => s.id === vid) || null;
+      };
+      const p = await entry(U.mem), o = await entry(U.mem3), bl = await entry(U.mem2), rep = await entry(U.mem4);
+      assert.ok(p && o && bl && rep, mode + ": every viewer has the tile");
+      assert.deepEqual(p, o, mode + ": " + privileged + " and everyone else get the very same entry (no hint who the frog is)");
+      assert.deepEqual([p.kind, p.veil, p.video, p.why, p.watch, p.avatar], ["cam", "incognito", "card", "off_cam", "ok", null], mode + ": the peek hood's card, 'cam off'");
+      assert.equal(bl.watch, "unavailable", mode + ": a viewer she blocked - 'isn't available', as today");
+      assert.equal(rep.watch, "hidden", mode + ": the reporter - hidden for them, as today");
+    }
+    // the switch off: the cam opt-out is today's cut again (no withheld card at all)
+    await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
+    for (let i = 0; i < 4; i++) await stepAt(3);
+    assert.equal(pad().state.tiles.some((x) => x.login === "frankiefettuccine" && x.why === "withheld"), false, "switch off: no withheld card");
+  } finally {
+    CA._setDeps({ follows: follows0 });
+    try { await CA.disallow("frankiefettuccine", U.mem.userId); } catch (e) { /* none */ }
+    await CA.setMode("frankiefettuccine", "everyone");
+    await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
+  }
+});
