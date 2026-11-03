@@ -474,14 +474,14 @@
       clearTimeout(camTimer);
       camSay(_t('js.feed.fc.asking', 'Asking Pepe for a snapshot of {name}\'s cam…', { name: who.display }));
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: who.login }) })
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(who.login ? { login: who.login } : { id: who.id }) })   // (1.99?? Q4-B: a frog-name cam by its id)
         .then(function (r) { return r.json(); })
         .then(function (d) { if (seq !== camSeq) return; if (!d.ok) return camSay(d.error || _t('js.feed.fc.not_now', 'Not right now.')); camPoll(slug, who, seq, 0); })
         .catch(function () { if (seq === camSeq) camSay(_t('js.feed.fc.unreachable', 'Couldn\'t reach the site.')); });
     }
     function camPoll(slug, who, seq, n) {
       camTimer = setTimeout(function () {
-        fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login), { credentials: 'same-origin', cache: 'no-store' })
+        fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login || who.id), { credentials: 'same-origin', cache: 'no-store' })
           .then(function (r) { return r.json(); })
           .then(function (snap) {
             if (seq !== camSeq) return;

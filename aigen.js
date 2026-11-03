@@ -306,8 +306,21 @@ async function camList(user, padId) {
   if (!R) return { ok: true, cams: [], why: "That pad's Camfrog room isn't live on the site right now." };
   if (!R.cams) return { ok: true, cams: [], why: "Cam snapshots aren't switched on in that Camfrog room." };
   const cams = R.members.filter((m) => m && !m.anon && !m.self && m.on_cam === true && m.login)
-    .map((m) => ({ login: String(m.login), display: String(m.display || m.login) }))
-    .sort((a, b) => a.display.localeCompare(b.display));
+    .map((m) => ({ login: String(m.login), display: String(m.display || m.login) }));
+  // 1.99?? (privacy controls, review fixes 2 - Q4-B; owner Q4: AI picture references work for an incognito cam under its frog name):
+  // while incognito cams are in effect, the cams of incognito people whose cam may show (incogcams.pageOnCam) - by their opaque
+  // people-list id and frog name, never a login. The snapshot goes by that id (POST /snap {id}); claimCamRef takes its frame as today
+  try {
+    const IC = require("./incogcams");
+    if (IC.effective()) {
+      for (const e of R.members || []) {
+        if (!e || e.anon !== true || e.veil !== "incognito" || !IC.pageOnCam(e, R.id)) continue;
+        const V = IC.camOf(R, e.id);
+        if (V) cams.push({ id: String(V.id), display: String(IC.labelOf(V) || "someone"), veiled: true });
+      }
+    }
+  } catch (e) { /* no frog-name cams listed */ }
+  cams.sort((a, b) => a.display.localeCompare(b.display));
   return { ok: true, slug: R.slug, room: R.id, cams, why: cams.length ? null : "Nobody is on cam there right now." };
 }
 /** Claim a bridge snapshot this account was shown (sid) as its reference picture -> {ok, id, display, room, until}. */

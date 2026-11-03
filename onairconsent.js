@@ -32,6 +32,10 @@ function init() {
                       scope TEXT, decided_at INTEGER, decided_via TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS onair_consent_status ON onair_consent (status, expires)");
       await runQuery(`CREATE TABLE IF NOT EXISTS onair_pad_allow (pad TEXT PRIMARY KEY, owner_id TEXT, at INTEGER NOT NULL)`);
+      // 1.99?? (privacy controls, review fixes 2 - ID-C): 1 = the ask is for a FROG-NAME cam (an incognito person's cam picked by
+      // its opaque id) - its login is kept for Pepe's PM to the cam's owner and their own answer, never shown next to the frog label
+      const cols = await getQuery("PRAGMA table_info(onair_consent)");
+      if (!cols.some((c) => c.name === "veiled")) await runQuery("ALTER TABLE onair_consent ADD COLUMN veiled INTEGER");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -79,7 +83,11 @@ async function setPadAllow(pad, userId, on) {
 }
 
 // ── requests ──
-const rowView = (r) => r && ({ id: r.id, kind: r.kind, pad: r.pad, login: r.login, room: r.room, slot_id: r.slot_id, label: r.label, by: r.by,
+// 1.99?? (privacy controls, review fixes 2 - ID-C): a FROG-NAME cam's ask (veiled) carries its login only for whoever may pair the
+// two - the cam's own owner (their own ask) and Pepe (camAsks: he PMs them); everyone else (the pad's owner on a pad ask, Staff in
+// the on-air admin view, the request page) gets login null next to the frog label. A named ask is unchanged.
+const rowView = (r, { withLogin = false } = {}) => r && ({ id: r.id, kind: r.kind, pad: r.pad, login: Number(r.veiled) && !withLogin ? null : r.login,
+  room: r.room, slot_id: r.slot_id, label: r.label, by: r.by,
   created: r.created, expires: r.expires, status: r.status, scope: r.scope, decided_at: r.decided_at });
 async function get(id) { await init(); return rowView((await getQuery("SELECT * FROM onair_consent WHERE id = ?", [String(id || "")]))[0]); }
 
@@ -90,10 +98,10 @@ async function ask(o) {
   const id = crypto.randomBytes(9).toString("base64url");
   const owner = o.kind === "pad" ? module.exports.padOwnerId(o.pad) : await userOfLogin(o.login);
   const mins = Math.max(1, Math.min(60, Number(o.minutes) || 10));
-  await runQuery(`INSERT INTO onair_consent (id, kind, pad, owner_id, login, room, slot_id, label, by, created, expires, status)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+  await runQuery(`INSERT INTO onair_consent (id, kind, pad, owner_id, login, room, slot_id, label, by, created, expires, status, veiled)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
     [id, o.kind, o.pad || null, owner, o.login ? String(o.login).toLowerCase() : null, o.room || null, o.slot_id || null,
-     String(o.label || "").slice(0, 120), String(o.by || "?").slice(0, 80), t, t + mins * 60000]);
+     String(o.label || "").slice(0, 120), String(o.by || "?").slice(0, 80), t, t + mins * 60000, o.veiled ? 1 : null]);
   if (owner) {
     const what = o.kind === "pad" ? `a stream on your pad (${o.label})` : "your Camfrog cam";
     rooms().notify(owner, { kind: "stage", title: "📺 May Pepe show " + (o.kind === "pad" ? "your pad's stream" : "your cam") + " on his main stream?",
@@ -109,12 +117,14 @@ async function mine(userId) {
   const login = u && u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : "";
   const rows = await getQuery(`SELECT * FROM onair_consent WHERE status = 'pending' AND expires > ? AND (owner_id = ? OR (kind = 'cam' AND login = ?))
                                ORDER BY created DESC LIMIT 5`, [now(), String(userId), login || "\u0000"]);
-  return rows.map(rowView);
+  // (review fixes 2 - ID-C: the login only on the cam owner's own cam ask - never on a pad owner's ask about a frog-name cam)
+  return rows.map((r) => rowView(r, { withLogin: r.kind === "cam" && !!login && r.login === login }));
 }
-/** Pending cam asks Pepe should PM about (by login). */
+/** Pending cam asks Pepe should PM about (by login - a frog-name cam's too: he PMs its owner, never anyone else). */
 async function camAsks() {
   await init();
-  return (await getQuery("SELECT * FROM onair_consent WHERE status = 'pending' AND kind = 'cam' AND expires > ? ORDER BY created LIMIT 20", [now()])).map(rowView);
+  return (await getQuery("SELECT * FROM onair_consent WHERE status = 'pending' AND kind = 'cam' AND expires > ? ORDER BY created LIMIT 20", [now()]))
+    .map((r) => rowView(r, { withLogin: true }));
 }
 
 /** Answer. answer: once | session | always | deny. who: {userId} (web) or {login} (Pepe: the cam owner typing in Camfrog). */

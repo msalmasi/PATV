@@ -819,7 +819,19 @@ async function end(slotId, reason, actor) {
     // 1.99lm: its feature (auto or not) is gone - hand the pad to the next live stream, or back to Pepe
     await autoFeature(res.room_id || rooms.HOUSE_ROOM).catch((e) => console.error("[stage] auto-feature:", e.message));
   }
-  return res;
+  return settledView(res);
+}
+
+// 1.99?? (privacy controls, review fixes 2 - ID-A): what end() hands back - the End / Cut routes send it to the pad's owner or
+// manager as `settled`. A frog-name cam slot's login and veil stay server-side (the mic-stage exclusion above used them): the
+// answer carries neither (cam_login null), so a manager who opened the slot by the frog's opaque id never gets the login next
+// to the frog name. A named slot's answer is today's (no cam_veil key either way).
+function settledView(res) {
+  if (!res) return res;
+  const out = { ...res };
+  delete out.cam_veil;
+  if (res.cam_veil) out.cam_login = null;
+  return out;
 }
 
 // ── featuring (free: the pad owner / staff pick the pad's main stream; 1.99ep: never paid) ──

@@ -694,8 +694,10 @@ async function setCam(room, login, by, { admin, ask = false, id = null } = {}) {
              login, display: shown, pad: R.id,
              label: `📷 ${shown} (${R.name || R.id})`, by: String(by), at: now(), cam_ok: camOk || null, pad_ok: padOk || null,
              pending: [], actor_ids: actorIds, ...(vz ? { veil: vz } : {}) };
-  if (!camOk) TARGET.pending.push((await C().ask({ kind: "cam", login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min })).id);
-  if (!padOk) TARGET.pending.push((await C().ask({ kind: "pad", pad: R.id, login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min })).id);
+  // (1.99?? review fixes 2 - ID-C: a frog-name pick's asks are marked veiled - the stored login never shows next to the frog label)
+  const vo = vz ? { veiled: true } : {};
+  if (!camOk) TARGET.pending.push((await C().ask({ kind: "cam", login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min, ...vo })).id);
+  if (!padOk) TARGET.pending.push((await C().ask({ kind: "pad", pad: R.id, login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min, ...vo })).id);
   await persist(by);
   if (prev) await log("replaced", by, prev);
   const detail = TARGET.pending.length ? { waiting_for: [!camOk ? "cam owner" : null, !padOk ? "pad owner" : null].filter(Boolean), consent: TARGET.pending } : null;
