@@ -9,6 +9,8 @@
 // its price and asks first ("Pay 10,000 PAT"); Pepe charges it as the viewer's linked Camfrog login (Pepe admins are
 // free), in the room, with his cooldowns and room switches. 👀 and 🔥 need the person's cam OPEN - greyed out otherwise
 // (the server and Pepe re-check, nothing is charged for a closed cam). All user-visible text goes in via textContent.
+// 1.99?? (privacy controls, round 3 - F2): an incognito person's cam shown under their frog name gets 👀 / 🔥 too, sent by its opaque
+// id ({action, id}); the answer and Pepe's reply come back under the frog name (padpepe.js / Pepe mask them).
 (function () {
   'use strict';
   var P = window.PATVRoom = window.PATVRoom || {};
@@ -25,15 +27,20 @@
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function fmt(n) { return Number(n || 0).toLocaleString(window.PATV_I18N && PATV_I18N.lang || undefined); }
   function priceText(n) { return n > 0 ? _t('js.pad.pepe.price', '{n} PAT', { n: fmt(n) }) : _t('js.pad.pepe.free', 'free'); }
-  function who(u) { return (u && (u.display || u.login)) || '?'; }
+  // 1.99?? (privacy controls, round 3 - F2): an incognito person's cam shown under their frog name (a people-list entry {anon, veil:
+  // 'incognito', id: 'v-…', alias}) gets 👀 / 🔥 by its opaque id - never a login; 🎤 Roast is about the person, so never on a frog
+  function frogCam(u) { return !!u && u.anon === true && u.veil === 'incognito' && typeof u.id === 'string' && /^v-[A-Za-z0-9_-]{12}$/.test(u.id); }
+  function who(u) { return frogCam(u) ? (u.alias || _t('js.stage.mf.cover_someone', 'someone')) : ((u && (u.display || u.login)) || '?'); }
 
-  /** What the submenu offers for person u (nothing for Pepe, anonymous people or bots). */
+  /** What the submenu offers for person u (nothing for Pepe, anonymous people or bots; a frog-name cam: the cam actions). */
   function items(menu, u) {
-    if (!menu || !u || u.self || u.anon || u.bot || !u.login) return [];
+    var frog = frogCam(u);
+    if (!menu || !u || u.self || u.bot || (!frog && (u.anon || !u.login))) return [];
     var out = [];
     ORDER.forEach(function (a) {
       var m = menu[a];
       if (!m) return;
+      if (frog && !A[a].cam) return;
       var camShut = A[a].cam && u.on_cam !== true;
       var note = !m.on ? (m.why || _t('js.pad.pepe.off_here', 'switched off here')) : camShut ? _t('js.pad.pepe.cam_closed', 'their cam is closed') : '';
       out.push({ action: a, icon: A[a].icon, label: A[a].label(), price: m.price || 0, disabled: !m.on || camShut, note: note });
@@ -75,7 +82,7 @@
     go.addEventListener('click', function () {
       go.disabled = true; no.disabled = true; go.setAttribute('aria-busy', 'true');
       say(_t('js.pad.pepe.sending', 'Sending to Pepe…'));
-      api('/api/rooms/' + encodeURIComponent(slug) + '/pepe', { action: action, target: u.login }).then(function (d) {
+      api('/api/rooms/' + encodeURIComponent(slug) + '/pepe', frogCam(u) ? { action: action, id: u.id } : { action: action, target: u.login }).then(function (d) {
         if (!d || !d.ok) { go.disabled = false; no.disabled = false; go.removeAttribute('aria-busy'); say((d && d.error) || _t('js.pad.pepe.not_sent', 'Not sent.'), 'bad'); return; }
         say(_t('js.pad.pepe.waiting', 'Pepe is on it… ({line})', { line: d.line }));
         var n = 0;

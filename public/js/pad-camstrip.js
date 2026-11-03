@@ -9,7 +9,10 @@
 //   var strip = PATVCamStrip.init(host, slug, {audioHost})     host = views/partials/cam-strip.ejs's #rmStrip
 //   strip.update(info)         the live view's room.livecams (null = live cams off here) - every poll
 //   strip.add(who) / strip.adopt(who, {sess, stream})    pin a cam (adopt = the popover hands over a cam already playing)
-//   strip.has(login) / strip.full() / strip.focus(login)
+//   strip.has(key) / strip.full() / strip.focus(key)      key = the login (lower case) - or a frog-name cam's opaque id
+// 1.99?? (privacy controls, round 3 - F2; owner Q4: every cam feature works for an incognito person's cam under the frog name): a
+//   frog-name cam ({id: "v-…", alias} - the people list's entry, never a login) is pinned by its id: its tile shows the frog name,
+//   asks / beats / stops by {id} and is remembered as {id, display}; once that frog-name session ends the id opens nothing.
 // The page beats every 15 s per tile (the server drops a slot without beats after 45 s). All text via textContent.
 // mfix review: a tile whose connection drops after it played is watched again while the site still says the cam is connecting /
 // live ("reconnecting…") - a few times, then "the live cam stopped" with ↻ Retry.
@@ -26,12 +29,18 @@
   function why(code, msg) {
     return window.PATVLiveCam && PATVLiveCam.why ? PATVLiveCam.why(code, msg) : (msg || _t('js.pad.live.err_failed', 'Pepe couldn\'t open their cam live - try again in a bit.'));
   }
+  var FROG_RE = /^v-[A-Za-z0-9_-]{12}$/;
+  /** 1.99?? (round 3 - F2): a frog-name cam's opaque id (no login) - else null */
+  function frogId(w) { return w && !w.login && typeof w.id === 'string' && FROG_RE.test(w.id) ? w.id : null; }
+  /** a cam's key in the strip: its login (lower case), or a frog-name cam's id (as it is - ids are case-sensitive) */
+  function keyOf(w) { if (!w) return null; var f = frogId(w); return f || (typeof w.login === 'string' && w.login ? String(w.login).toLowerCase() : null); }
+  function normKey(k) { k = String(k == null ? '' : k); return FROG_RE.test(k) ? k : k.toLowerCase(); }
   function load(key) {
-    try { var a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(function (x) { return x && typeof x.login === 'string' && /^[\w.\-$]{1,40}$/.test(x.login); }).slice(0, KEEP) : []; }
+    try { var a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(function (x) { return x && ((typeof x.login === 'string' && /^[\w.\-$]{1,40}$/.test(x.login)) || frogId(x)); }).slice(0, KEEP) : []; }
     catch (e) { return []; }
   }
   function save(key, tiles) {
-    try { localStorage.setItem(key, JSON.stringify(tiles.map(function (t) { return { login: t.login, display: String(t.display || t.login).slice(0, 60) }; }))); } catch (e) { /* not remembered */ }
+    try { localStorage.setItem(key, JSON.stringify(tiles.map(function (t) { return t.id ? { id: t.id, display: String(t.display || '').slice(0, 60) } : { login: t.login, display: String(t.display || t.login).slice(0, 60) }; }))); } catch (e) { /* not remembered */ }
   }
 
   function init(host, slug, opts) {
@@ -65,10 +74,14 @@
       host.classList.toggle('cs-many', tiles.length > 1);
     }
     function remember() { save(KEY, tiles); }
-    function find(login) { login = String(login || '').toLowerCase(); for (var i = 0; i < tiles.length; i++) if (tiles[i].login === login) return tiles[i]; return null; }
+    function find(key) { key = normKey(key); for (var i = 0; i < tiles.length; i++) if (tiles[i].key === key) return tiles[i]; return null; }
 
     function tile(who) {
-      var t = { login: String(who.login).toLowerCase(), display: who.display || who.login, state: 'new', gen: 0, sess: null, beat: null };
+      var fid = frogId(who);
+      var t = { key: keyOf(who), login: fid ? null : String(who.login).toLowerCase(), id: fid,
+                display: fid ? (who.alias || who.display || _t('js.stage.mf.cover_someone', 'someone')) : (who.display || who.login),
+                state: 'new', gen: 0, sess: null, beat: null };
+      t.ref = fid ? { id: fid } : { login: t.login };          // (1.99?? round 3 - F2: a frog-name cam by its id, never a login)
       var li = el('div', 'cs-tile'); li.setAttribute('role', 'listitem');
       var vw = el('div', 'cs-vid');
       var v = el('video'); v.muted = true; v.autoplay = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
@@ -95,13 +108,13 @@
         t.gen++; clearInterval(t.beat); t.beat = null;
         if (t.sess) { try { t.sess.close(); } catch (e) { /* gone */ } t.sess = null; }
         try { v.srcObject = null; } catch (e) { /* gone */ }
-        if (tell && t.state !== 'ended') post(base + '/stop', { login: t.login }, keep).catch(function () {});
+        if (tell && t.state !== 'ended') post(base + '/stop', t.ref, keep).catch(function () {});
         t.state = 'ended';
       };
       function beats(my) {
         clearInterval(t.beat);
         t.beat = setInterval(function () {
-          post(base + '/beat', { login: t.login }).then(function (k) {
+          post(base + '/beat', t.ref).then(function (k) {
             if (my !== t.gen) return;
             if (k && k.ok === false) return t.ended(k.code, k.error);
             if (k && k.state === 'ended') return t.ended(k.why);
@@ -126,11 +139,11 @@
         t.rew.push(t0);
         if (t.sess) { try { t.sess.close(); } catch (e) { /* gone */ } t.sess = null; }
         t.state = 'connecting'; badge.textContent = _t('js.pad.live.reconnecting', 'reconnecting…'); badge.classList.remove('on'); paint();
-        post(base + '/beat', { login: t.login }).then(function (k) {
+        post(base + '/beat', t.ref).then(function (k) {
           if (my !== t.gen) return null;
           if (!k || k.ok === false) return t.ended(k && k.code, k && k.error);
           if (k.state === 'ended') return t.ended(k.why);
-          return post(base, { login: t.login }).then(function (d) {
+          return post(base, t.ref).then(function (d) {
             if (my !== t.gen) return null;
             if (!d || !d.ok || !d.whep) return t.ended(d && d.code, d && d.error);
             return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) {
@@ -145,7 +158,7 @@
         t.rew = [];
         t.state = 'asking'; badge.textContent = _t('js.pad.live.connecting', 'connecting…'); badge.classList.remove('on'); tap.hidden = true; say('', false);
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) return t.ended('browser', _t('js.pad.live.err_browser', 'This browser can\'t play live cams.'));
-        post(base, { login: t.login }).then(function (d) {
+        post(base, t.ref).then(function (d) {
           if (my !== t.gen) return;
           if (!d || !d.ok) return t.ended(d && d.code, d && d.error);
           if (d.slots && info && info.slots) { info.slots.used = d.slots.used; info.slots.max = d.slots.max; }
@@ -156,9 +169,9 @@
             playing(ss, my);
           }, function (e) {
             if (my !== t.gen || (e && e.cancelled)) return;
-            post(base + '/beat', { login: t.login }).then(function (k) { if (my === t.gen) t.ended(k && k.state === 'ended' ? k.why : 'failed'); },
+            post(base + '/beat', t.ref).then(function (k) { if (my === t.gen) t.ended(k && k.state === 'ended' ? k.why : 'failed'); },
               function () { if (my === t.gen) t.ended('failed'); });
-            post(base + '/stop', { login: t.login }).catch(function () {});
+            post(base + '/stop', t.ref).catch(function () {});
           });
         }).catch(function () { if (my === t.gen) t.ended('net', _t('js.pad.snap.unreachable', 'Couldn\'t reach the site.')); });
       };
@@ -200,22 +213,23 @@
       return t;
     }
 
-    api.has = function (login) { return !!find(login); };
+    api.has = function (key) { return !!find(key); };
     api.count = function () { return tiles.length; };
     api.full = function () { var m = slots(); return !m || liveTiles() >= m; };
-    api.focus = function (login) { var t = find(login); if (t && t.el.scrollIntoView) { try { t.el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }); } catch (e) { t.el.scrollIntoView(); } } };
+    api.focus = function (key) { var t = find(key); if (t && t.el.scrollIntoView) { try { t.el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }); } catch (e) { t.el.scrollIntoView(); } } };
     api.add = function (who) {
-      if (!who || !who.login) return false;
-      var t = find(who.login);
-      if (t) { if (t.state === 'ended') t.start(); api.focus(who.login); return true; }
+      var k = keyOf(who);
+      if (!k) return false;
+      var t = find(k);
+      if (t) { if (t.state === 'ended') t.start(); api.focus(k); return true; }
       if (!info || info.signin) return false;
       if (api.full()) { note.textContent = why('viewer_cap'); return false; }
       put(who).start();
       return true;
     };
     api.adopt = function (who, h) {
-      if (!who || !who.login || !h || !h.sess) return false;
-      var t = find(who.login);
+      if (!keyOf(who) || !h || !h.sess) return false;
+      var t = find(keyOf(who));
       if (!t) t = put(who);
       t.take(h);
       return true;
@@ -228,7 +242,7 @@
         restored = true;
         var room = slots();
         saved.forEach(function (w) {
-          if (find(w.login)) return;
+          if (find(keyOf(w))) return;
           var t = put(w);
           if (room > 0) { room--; t.start(); } else t.ended('viewer_cap');
         });

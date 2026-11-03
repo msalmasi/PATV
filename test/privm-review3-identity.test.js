@@ -329,3 +329,69 @@ test("F1: a frog-name reference claimed before a veil change, incognito cams goi
   try { await refused(c, "live cam off"); } finally { await LC.setOptout(LOGIN, false, { via: "web", ts: T }); }
 });
 
+// ── F2: the pad's 🐸 cam actions ──
+const pepe = (user, body) => { RL._hits.clear(); return call("POST", `/api/rooms/${SLUG}/pepe`, { user, body }); };
+const pepeRoom = () => freshRoom({ relay: true, cmds: { "!look": 10000, "!camroast": 15000, "!roast": 5000 }, pepe: MENU });
+
+test("F2: 👀 / 🔥 on a frog-name cam by its opaque id - Pepe gets the login line + veil; the website only ever gets the frog name", async () => {
+  await v1ready;
+  await pepeRoom();
+  const id = frankId(), alias = frankEntry().alias;
+  for (const [action, cmd] of [["look", "!look"], ["camroast", "!camroast"]]) {
+    const r = await pepe(U.mem, { action, id });
+    assert.equal(r.status, 200, action + ": " + r.text);
+    assert.equal(r.d.line, `${cmd} ${alias}`, "the answer's line names the frog");
+    assert.deepEqual(named(r.text), [], action + ": the answer names nobody");
+    assert.deepEqual(leaks(r.text), [], action + ": no leak");
+    const j = RL._jobs.get(r.d.id);
+    assert.equal(j.text, `${cmd} ${LOGIN}`, "Pepe runs the usual line (the Camfrog room sees what it sees today)");
+    assert.deepEqual(j.veil, { alias });
+    assert.equal(Object.keys(j).includes("vmask"), false, "the mask never rides on the job's fields");
+    const off = RL.takeJobs(new Set([ROOM.id])).find((x) => x.id === j.id);
+    assert.deepEqual(off.veil, { alias }, "Pepe is told to word it by the frog name");
+    // Pepe's answer (even one that slipped a name through) comes back under the frog name, late replies too
+    RL.applyAcks([{ id: j.id, ok: true, msg: `@memcf ${LOGIN}'s cam: Frankie Fett is wearing a tiny hat`,
+                    replies: [`🌐 mem (web): ${cmd} ${LOGIN}`, `@memcf Frankie looks great today, frankiefettuccine!`] }]);
+    RL.applyAcks([{ id: j.id, ok: true, late: true, replies: ["FRANKIE FETT strikes again"] }]);
+    const p = await call("GET", `/api/rooms/${SLUG}/pepe/job/${j.id}`, { user: U.mem });
+    assert.equal(p.status, 200, p.text);
+    assert.equal(p.d.line, `${cmd} ${alias}`);
+    assert.deepEqual(named(p.text), [], action + ": the job's answer names nobody - " + p.text);
+    assert.ok(p.d.msg.includes(alias) && p.d.replies.length === 3 && p.d.replies.every((x) => !named(x).length), JSON.stringify(p.d));
+    await settle(30);
+    const logs = await getQuery("SELECT command, result FROM bridge_cmd_log WHERE job = ?", [j.id]);
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].command, `${cmd} ${alias} [pepe menu]`, "the command log (Download my data) names the frog");
+    assert.deepEqual(named(JSON.stringify(logs)), [], "...and its result too");
+  }
+  // a named target is as before
+  const n = await pepe(U.mem, { action: "look", target: "alicecf" });
+  assert.equal(n.status, 200, n.text);
+  assert.equal(n.d.line, "!look alicecf");
+  assert.equal(RL._jobs.get(n.d.id).veil, undefined, "no veil on a named job");
+  assert.equal(RL.takeJobs(new Set([ROOM.id])).find((x) => x.id === n.d.id).veil, undefined);
+});
+
+test("F2: refused by its id with one word that names nobody - 🎤 roast, incognito cams off, the person's live cam off or block, a stale id", async () => {
+  await v1ready;
+  await pepeRoom();
+  const id = frankId();
+  const nobody = (r, why, status) => {
+    assert.equal(r.status, status, why + ": " + r.text);
+    assert.deepEqual(named(r.text), [], why + ": names nobody");
+    assert.deepEqual(leaks(r.text), [], why + ": no leak");
+  };
+  nobody(await pepe(U.mem, { action: "roast", id }), "🎤 roast by id", 400);
+  nobody(await pepe(U.mem, { action: "look", id: "v-AAAAAAAAAAAA" }), "an unknown id", 409);
+  await LC.setOptout(LOGIN, true, { via: "web", ts: T });
+  try { nobody(await pepe(U.mem, { action: "look", id }), "live cam off", 409); } finally { await LC.setOptout(LOGIN, false, { via: "web", ts: T }); }
+  await CAMV.block(LOGIN, "mem").catch(() => {});
+  try { if (CAMV.blocked(LOGIN, U.mem.userId)) nobody(await pepe(U.mem, { action: "look", id }), "they blocked this viewer", 409); }
+  finally { await CAMV.unblock(LOGIN, "mem").catch(() => {}); }
+  WORD = false; await fresh();
+  try { nobody(await pepe(U.mem, { action: "look", id }), "incognito cams off", 409); } finally { WORD = true; await fresh(); }
+  // by login, an incognito person is never found (as before): no line, no job
+  const byLogin = await pepe(U.mem, { action: "look", target: LOGIN });
+  assert.equal(byLogin.status, 404, byLogin.text);
+});
+

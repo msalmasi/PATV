@@ -346,6 +346,8 @@ function takeJobs(liveRoomIds, via = "sync") {
     if (j.kind === "cmd" && j.gui) { base.gui = j.gui; if (j.reason) base.reason = j.reason; }
     if (j.kind === "cmd" && j.setting) base.setting = j.setting;
     if (j.kind === "cmd" && j.pepe) base.pepe = j.pepe;   // 1.99qr: a 🐸 Pepe menu action (padpepe.js) - Pepe re-checks line + cam
+    // 1.99?? (privacy controls, round 3 - F2): ... on a frog-name cam - Pepe words what comes back by the frog name (never the login)
+    if (j.kind === "cmd" && j.pepe && j.veil) base.veil = { alias: String(j.veil.alias || "someone").slice(0, 40) };
     if (j.kind === "modinfo") base.target = j.target || "";
     if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
     // 1.99ea: the PATV display name for "🌐 <name> (web)" (Pepe falls back to the Camfrog display name, then the login)
@@ -375,7 +377,11 @@ function applyAcks(acks) {
   for (const a of Array.isArray(acks) ? acks.slice(0, 100) : []) {
     const j = a && jobs.get(String(a.id || ""));
     if (!j) continue;
-    const replies = (Array.isArray(a.replies) ? a.replies : []).slice(0, CMD_MAX_REPLIES).map(cleanReply).filter(Boolean);
+    let replies = (Array.isArray(a.replies) ? a.replies : []).slice(0, CMD_MAX_REPLIES).map(cleanReply).filter(Boolean);
+    // 1.99?? (privacy controls, round 3 - F2): a 🐸 cam action on a frog-name cam (padpepe.js vmask) - Pepe's answer as the website keeps
+    // it names the frog: his replies and his reply line (also the command log's result, cmdLogResult below)
+    const vmask = typeof j.vmask === "function" ? j.vmask : null;
+    if (vmask) replies = replies.map((x) => vmask(x));
     if (a.late) {
       // a reply that came after the command finished (Pepe answered from a thread / timer)
       if (j.result) j.result.replies = (j.result.replies || []).concat(replies).slice(-CMD_MAX_REPLIES);
@@ -392,7 +398,7 @@ function applyAcks(acks) {
       continue;
     }
     j.state = st;
-    j.result = { ok: !!a.ok, msg: clean(a.msg, 200) };
+    j.result = { ok: !!a.ok, msg: vmask ? clean(vmask(clean(a.msg, 200)), 200) : clean(a.msg, 200) };
     if (typeof a.code === "string" && CODE_RE.test(a.code)) j.result.code = a.code;
     if (st === "done") j.doneAt = Date.now();
     if (j.kind === "say") {
