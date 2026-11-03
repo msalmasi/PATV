@@ -12,6 +12,11 @@
   <p class="adm-help" id="usPool"></p>
   <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Cam</th><th>State</th><th>Viewers</th><th class="num">Grab</th><th class="num">Bitrate</th><th></th></tr></thead>
     <tbody id="usRows"><tr><td colspan="6" class="adm-help">Loading…</td></tr></tbody></table></div>
+  <%# 1.99??: relays that failed with ffmpeg errors (live[].err_first, bot 1.99aik) - livecam.failsOf, memory only %>
+  <div id="usFail" hidden>
+    <p class="adm-help">Relays that failed in the last 24 hours, with ffmpeg's first error lines (kept in memory only - a site restart clears them):</p>
+    <ul id="usFailList" class="adm-help"></ul>
+  </div>
 </section>
 
 <section class="adm-card" id="settings" aria-labelledby="lcT">
@@ -25,9 +30,12 @@
     <fieldset>
       <legend>Stream</legend>
       <label>Source <select name="source"><option value="reencode">Re-encode - grab the cam window, x264 at the fps / bitrate below</option><option value="passthrough">Pass-through - Camfrog's own H.264 forwarded untouched (native ~30 fps, no encoding; new viewers wait for the cam's next keyframe, up to ~3 s)</option><option value="auto">Auto - pass-through when Pepe can, else re-encode</option></select></label>
+      <%# 1.99?? (bot 1.99aik): mic-stage (exact) cams may pass through too, behind Pepe's own livecam_pt_exact (default off) %>
+      <p class="adm-help" id="lcSrcMf">Mic-stage cams are re-encoded, unless Pepe's mic-stage pass-through is on (<code>!livecam passthru exact on</code> in Camfrog, admins; off by default). Then, under Pass-through or Auto, a mic-stage cam goes out untouched when Pepe proves its stream with that cam's own setup token - anything less is still re-encoded. Its row under Now says pass-through.</p>
       <label>Pass-through falls back to re-encode after this many seconds without video <input type="number" name="pt_fallback_s" inputmode="numeric"></label>
       <label>Frames per second <input type="number" name="fps" inputmode="numeric"></label>
-      <label>Video bitrate per cam (kbps) <input type="number" name="kbps" inputmode="numeric"></label>
+      <%# 1.99?? (bot 1.99aik): Pepe clamps a re-encode to 1/3 bit per pixel per frame (pepe_livecam.kbps_cap) %>
+      <label>Video bitrate per cam (kbps) - re-encode only. Pepe never encodes a cam at more than 1/3 bit per pixel per frame (768 kbps for a 320x240 cam at 30 fps, 384 at 15): a higher setting is clamped to that, and the cam's row under Now says so <input type="number" name="kbps" inputmode="numeric"></label>
       <label>Keyframe every (s) - new viewers start at the next one <input type="number" name="keyint_s" step="0.5" inputmode="decimal"></label>
       <label>Frame grab <select name="capture"><option value="blt">BitBlt - DWM's copy of the window, ~0.1 ms, no Camfrog UI-thread work</option><option value="pw2">PrintWindow - as snapshots, ~40 ms of Camfrog's UI thread per frame</option></select></label>
       <label>Camfrog UI time all grabs may take (ms per second) - above it every live cam's grab rate drops <input type="number" name="ui_budget_ms" inputmode="numeric"></label>
@@ -37,7 +45,7 @@
       <label>Live cams at once (site-wide) <input type="number" name="max_live" inputmode="numeric"></label>
       <label>Live cams one viewer may watch at once <input type="number" name="viewers_free" inputmode="numeric"></label>
       <label>...with a Season Pass <input type="number" name="viewers_sp" inputmode="numeric"></label>
-      <label>Bandwidth budget (Mbps) - every viewer counts at their cam's real bitrate (pass-through: measured; re-encode: the bitrate above) <input type="number" name="budget_mbps" inputmode="numeric"></label>
+      <label>Bandwidth budget (Mbps) - every viewer counts at their cam's real bitrate (pass-through: measured; re-encode: the rate Pepe encodes at - the bitrate above, or less where a cam is clamped) <input type="number" name="budget_mbps" inputmode="numeric"></label>
       <label>Linger after the last viewer (s) <input type="number" name="linger_s" inputmode="numeric"></label>
     </fieldset>
     <fieldset>
@@ -148,16 +156,22 @@
       var tr = el('tr');
       var c = el('td'); c.appendChild(el('b', null, s.display || s.login)); c.appendChild(el('div', 'adm-help', s.room + ' · since ' + when(s.since))); tr.appendChild(c);
       // wave2 WP-4 (F.2): a relay the mic stage keeps warm after its tile left the stage (nobody can watch it)
-      tr.appendChild(el('td', null, s.state + (s.botState ? ' (Pepe: ' + s.botState + ')' : '') + (s.botWhy ? ' · ' + s.botWhy : '') +
+      var st = el('td', null, s.state + (s.botState ? ' (Pepe: ' + s.botState + ')' : '') + (s.botWhy ? ' · ' + s.botWhy : '') +
         (s.warm ? ' · warm (mic stage, ' + (s.warm_s != null ? s.warm_s + 's left' : 'leaving') + ')' : '') +
         (s.reveal ? ' · 👁 moderation view (logged)' : '') +       // 1.99aid (privacy controls S4)
         // 1.99ahn dead relay: Pepe says live but MediaMTX has no stream - Pepe was asked to restart it
-        (s.nomedia ? ' · ⚠ no media' + (s.nomedia_s != null ? ' ' + s.nomedia_s + 's' : '') + (s.lost ? ' (lost)' : ' (never arrived)') : '')));
+        (s.nomedia ? ' · ⚠ no media' + (s.nomedia_s != null ? ' ' + s.nomedia_s + 's' : '') + (s.lost ? ' (lost)' : ' (never arrived)') : ''));
+      // 1.99??: the relay's last ffmpeg errors (Pepe's err_first, bot 1.99aik; URLs masked) - this page only
+      if (s.err_first && s.err_first.text) st.appendChild(el('div', 'adm-help', '⚠ ffmpeg\'s first errors (' + when(s.err_first.at) + '): ' + s.err_first.text));
+      tr.appendChild(st);
       tr.appendChild(el('td', null, s.viewers.map(function (v) { return v.username || v.userId; }).join(', ') + ' · ' + s.readers + ' connected'));
       tr.appendChild(el('td', 'num', s.bot && s.bot.source === 'passthrough' ? 'pass-through' + (s.bot.fps ? ' · ' + s.bot.fps + ' fps' : '')
         : s.bot && s.bot.grab_fps ? s.bot.grab_fps + ' fps · ' + s.bot.grab_ms + ' ms' + (s.bot.fallback ? ' (re-encode: ' + s.bot.fallback + ')' : '') : '–'));
-      // 1.99aab: what the cam really costs - measured (pass-through) or configured (re-encode) kbit/s, and x viewers out
-      tr.appendChild(el('td', 'num', (s.kbps != null ? s.kbps + ' kbit/s ' + (s.measured ? 'measured' : 'configured') : '–') +
+      // 1.99aab: what the cam really costs, and x viewers out - 1.99??: measured (pass-through), encoded (the re-encode rate Pepe
+      // reports; "clamped from N" when that's below the setting it started with - bot 1.99aik) or configured (an older Pepe / no report)
+      var rb = s.bot || {};
+      tr.appendChild(el('td', 'num', (s.kbps != null ? s.kbps + ' kbit/s ' + (s.rate === 'measured' ? 'measured'
+        : s.rate === 'encoded' ? (rb.kbps_cfg > s.kbps ? '(clamped from ' + rb.kbps_cfg + ')' : 'encoded') : 'configured') : '–') +
         (s.outKbps ? ' · ' + (Math.round(s.outKbps / 100) / 10) + ' Mbps out' : '')));
       var td = el('td'); var x = el('button', 'adm-btn ghost', 'End'); x.type = 'button';
       x.addEventListener('click', function () {
@@ -166,6 +180,12 @@
       });
       td.appendChild(x); tr.appendChild(td); rows.appendChild(tr);
     });
+    // 1.99??: relays that failed with ffmpeg errors (named as their rows were: a veiled one by its frog name only)
+    var fl = document.getElementById('usFailList'); fl.textContent = '';
+    (V.failed || []).forEach(function (f) {
+      fl.appendChild(el('li', null, when(f.at) + ' · ' + (f.display || f.login || '?') + ' · ' + f.room + ' · ' + f.why + ' · ' + f.err_first));
+    });
+    document.getElementById('usFail').hidden = !(V.failed && V.failed.length);
     var rc = document.getElementById('rcRows'); rc.textContent = '';
     (V.recent || []).forEach(function (r) {
       var tr = el('tr');
