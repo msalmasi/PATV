@@ -2288,14 +2288,16 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     // 🎙 Stage cover), by default their GTF avatar, then their profile photo, else the letter (avatar null). Only for a tile shown BY
     // NAME (a veiled one is a cover above and never reaches this); none on a tile this viewer reported or is blocked from here, and
     // (review fix PRIV-2) none for a viewer the PERSON blocked - from their cam (camviewers) or in DMs (either way): the letter
-    const pb = watch === "unavailable" && (await personBlocks(x.login, String(userId)));
     // 1.99aid (privacy controls S3): a WITHHELD cam (cfg withheld_cover: !livecam off, the mic-stage switch off, cam access followers /
     // request) - their named card with their cover for everyone; there is no cam to gate, so the cam's per-viewer gates (members only,
     // followers, request) don't apply - only this viewer's report, a bridge block on them and the person's own blocks (the letter,
     // "isn't available", as for any tile). The page reads "cam off" (why off_cam - never that it is withheld); a capture's program
     // says "withheld" (stagemiccap draws the name and cover, never asking the cam's rules)
     const wh = x.video === "card" && x.why === "withheld";
-    if (wh && watch !== "hidden" && watch !== "blocked" && !pb) watch = "ok";
+    // (1.99?? privacy controls round 5 review: a withheld card asks about the person's blocks whatever the cam's gate said - watchOf stops
+    // at "members only" before its DM check, so a members-only viewer the person DM-blocked got "ok" and the cover; as on the veiled card)
+    const pb = (watch === "unavailable" || (wh && watch !== "hidden" && watch !== "blocked")) && (await personBlocks(x.login, String(userId)));
+    if (wh && watch !== "hidden" && watch !== "blocked") watch = pb ? "unavailable" : "ok";
     const cv = watch === "hidden" || watch === "blocked" || pb ? null : await coverOf(x.login);
     src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: coverUrl(cv), ...(cv ? { ck: cv.k } : {}),
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,

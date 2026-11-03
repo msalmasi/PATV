@@ -736,6 +736,47 @@ test("round 5: the cover picture in Settings' Live cam card, /privacy's livecam 
   } finally { await knobs({ withheld_cover: false }); }
 });
 
+// 1.99?? (privacy controls round 5 review): the NAMED withheld card answers the person's own blocks (cam or DM, either way) for EVERY viewer
+// - the letter and "isn't available" - as round 5's veiled withheld card does. watchOf stops at the cam's members-only gate before its DM
+// check, so a members-only viewer the person DM-blocked used to get "ok" and their cover picture (only a viewer the gate refused as
+// "unavailable" was asked about blocks). Off: no withheld card at all
+test("round 5 review: a named WITHHELD card is the letter and 'isn't available' for every viewer the person blocked (DM either way) - a members-only viewer too, as on the veiled card", async () => {
+  const SC = require(path.join(repo, "stagecover"));
+  await SC.init();
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES ('alice', 4242, 1)");
+  SC.invalidate();
+  const gtf = SC.gtfUrl(4242, {});
+  await knobs({ withheld_cover: true });
+  try {
+    await reset(); await plainPad();
+    await CA.setMode("alice", "members");                 // (the default: verified members - u_v2 has no linked name, so it isn't one)
+    await optout("alice", true);
+    await step(["alice"]); await at(3, ["alice"]); await at(3, ["alice"]);
+    assert.deepEqual(tile("alice") && [tile("alice").video, tile("alice").why], ["card", "withheld"], "set up: her withheld card");
+    const entry = async (uid) => {
+      const s = (await MF.viewFor(MF.snapshot(ROOM.id), R, uid, null)).src.find((e) => e.id === "alice");
+      assert.ok(s, uid);
+      return [s.watch, s.avatar || null];
+    };
+    assert.deepEqual(await entry("u_v2"), ["ok", gtf], "no block: a members-only viewer reads 'cam off' with her cover, like everyone");
+    assert.deepEqual(await entry("u_v1"), ["ok", gtf]);
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_alice', 'u_v2', ?)", [T]);
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_v3', 'u_alice', ?)", [T]);
+    await at(31, ["alice"]);                               // (past the viewer gate cache)
+    assert.deepEqual(tile("alice") && tile("alice").why, "withheld");
+    assert.deepEqual(await entry("u_v2"), ["unavailable", null], "a members-only viewer she DM-blocked: the letter, 'isn't available' - never her cover");
+    assert.deepEqual(await entry("u_v3"), ["unavailable", null], "a viewer who DM-blocked her: the same");
+    assert.deepEqual(await entry("u_v1"), ["ok", gtf], "everyone else as before");
+  } finally {
+    await runQuery("DELETE FROM dm_blocks");
+    await optout("alice", false);
+    await CA.setMode("alice", "everyone");
+    await knobs({ withheld_cover: false });
+    await runQuery("DELETE FROM cosmetic_avatar_seeds"); SC.invalidate();
+  }
+});
+
 // ── the engine (pure) ──
 test("core: 'withheld' is a card state - a candidate and a tile, attributed in speaking(), never a hold / still / warm keep; a running relay or still is let go; opted_out from livecam is the card while cfg withheld_cover is on, a cut while off", () => {
   const C = { ...core.DEFAULTS, cold_open: true, enabled: true, stills: true, warm_keep_s: 180, warm_max: 3 };
