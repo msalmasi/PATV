@@ -539,7 +539,7 @@ test("1.99?? review fix: no word of a frog name is in the person's own login ('m
       const nonce = crypto.createHash("sha256").update("own-word-" + j).digest().subarray(0, 16);
       for (const w of [...FN.ADJ, ...FN.NOUN]) {
         const login = mk(w);
-        const [a, n] = FN.candidate(hm(key, "patv/alias/v1 ", "Pad.WORD", " ", login, " ", nonce), 0);
+        const [a, n] = FN.candidate(hm(key, "patv/alias/v1\0", "Pad.WORD", "\0", login, "\0", nonce), 0);
         const name = a + " " + n;
         if (name.length <= FN.NAME_MAX && !FN.denied(name) && ok(w, a, n)) return { login, nonce, name };
       }
