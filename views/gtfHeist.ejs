@@ -129,11 +129,16 @@
   // 1.99aad: the countdown to the next round / the vault door - the heist's last event when it's Pepe's "timer" (any later
   // event replaces it); `until` is Pepe's moment, corrected by the site clock's skew. Ticks on its own, 4x a second.
   var skew = state && state.now ? Date.now() - state.now : 0;
+  // train2 17 review fix (R3): Midnight Break's settlement / item_use events are observations that ride along mid-countdown
+  // (a !bail's settlement lands ~4 s before its window closes) - they never end the countdown; the next scene event does.
+  var SIDE = { settlement: 1, item_use: 1 };
   function nextTick() {
     var el = document.getElementById('hlNext');
     var h = state && state.heist, ev = (state && state.events) || [];
     var last = null;
-    for (var i = ev.length - 1; i >= 0; i--) { if (ev[i].event === 'heist') { last = ev[i]; break; } }
+    for (var i = ev.length - 1; i >= 0; i--) {
+      if (ev[i].event === 'heist' && !(ev[i].data && SIDE[ev[i].data.action] === 1)) { last = ev[i]; break; }
+    }
     var d = last && last.data;
     if (!h || h.ended || !d || d.action !== 'timer' || !d.until) { el.hidden = true; return; }
     var left = Math.ceil((Number(d.until) + skew - Date.now()) / 1000);
