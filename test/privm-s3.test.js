@@ -1029,6 +1029,25 @@ test("round 6: the _wh PM says the cam stays off mic stages, and someone staged 
   } finally { await knobs({ withheld_cover: false }); }
 });
 
+// 1.99?? (privacy controls round 6): the switchboard's short cam sentence (Settings → Privacy, On the website: pv3.cam_meta_rv, shown while
+// cam reveals are on) said "(you're told)" with no ghost exception - every long form says a ghost's view isn't told. Behind the same switches
+test("round 6: Settings' short cam sentence (pv3.cam_meta_rv) says a ghost's moderation view isn't told; shown only while cam reveals are on, as before", async () => {
+  const ejs = require("ejs");
+  const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(EN["pv3.cam_meta_rv"], "!livecam off - nobody on the website can watch your cam live, snap it or clip it; moderators can still view it for moderation (you're told, unless they use ghost mode). Who may watch while it's on: Live cam, below.");
+  assert.ok(!EN["pv3.cam_meta"].includes("ghost") && !EN["pv3.cam_meta"].includes("moderat"), "without cam reveals: the sentence as before");
+  const sfile = path.join(repo, "views", "privacy-settings.ejs");
+  const src = fs.readFileSync(sfile, "utf8");
+  const PV = { effective: true, linked: true, login: "bob123", bridge: { on: false, waiting: null }, tx: { on: false, waiting: null },
+               incognito: { on: false, waiting: null }, livecam: { off: true }, log: [] };
+  const L = (extra) => Object.assign({ user: "bob", st: { linked: true, login: "bob123", account: false, on: false, updated: null, reported: null, waiting: null, failed: null, log: [] },
+                                       lc: { linked: true, login: "bob123", off: true }, oa: { linked: true, on: false }, gh: { on: false }, pf: null, slChat: false, slOk: false,
+                                       mf: null, micrecOn: false, mem: null, pwOn: true, ogBase: "http://test", pv3: PV }, extra || {});
+  const on = ejs.render(src, L({ crvOn: true }), { filename: sfile }), off = ejs.render(src, L({}), { filename: sfile });
+  assert.ok(on.includes(EN["pv3.cam_meta_rv"]), "cam reveals on: the ghost exception");
+  assert.ok(!off.includes(EN["pv3.cam_meta_rv"]) && off.includes(EN["pv3.cam_meta"]) && !off.includes("unless they use ghost mode"), "off: as before");
+});
+
 // ── the engine (pure) ──
 test("core: 'withheld' is a card state - a candidate and a tile, attributed in speaking(), never a hold / still / warm keep; a running relay or still is let go; opted_out from livecam is the card while cfg withheld_cover is on, a cut while off", () => {
   const C = { ...core.DEFAULTS, cold_open: true, enabled: true, stills: true, warm_keep_s: 180, warm_max: 3 };

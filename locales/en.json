@@ -11261,7 +11261,7 @@
   "pv3.tx_meta": "!transcripts off - the website doesn't show what you say on the mic. Mic transcripts from before you switched it on stay off too.",
   "pv3.cam": "Hide my cam",
   "pv3.cam_meta": "!livecam off - nobody on the website can watch your cam live, snap it or clip it. Who may watch while it's on: Live cam, below.",
-  "pv3.cam_meta_rv": "!livecam off - nobody on the website can watch your cam live, snap it or clip it; moderators can still view it for moderation (you're told). Who may watch while it's on: Live cam, below.",
+  "pv3.cam_meta_rv": "!livecam off - nobody on the website can watch your cam live, snap it or clip it; moderators can still view it for moderation (you're told, unless they use ghost mode). Who may watch while it's on: Live cam, below.",
   "pv3.chat": "In a Camfrog room: !privacy (by PM) shows all of these; !bridge hide / !bridge show, !incognito on|off, !transcripts off|on and !livecam off|on switch them, from a PM or the room. A room line Pepe can't tie to your login covers only the name you typed it under - your settings here change once he can.",
   "pv3.log_req_bridge_on": "You asked Pepe to hide you on the website",
   "pv3.log_req_bridge_off": "You asked Pepe to show you on the website again",
