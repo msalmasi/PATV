@@ -1110,7 +1110,7 @@ async function setBlock(user, username, on = true) {
   } else {
     await runQuery("DELETE FROM dm_blocks WHERE blocker_id = ? AND blocked_id = ?", [user.userId, other.userId]);
   }
-  // 1.99?? (privacy controls round 6 review): a pad's mic stage reads DM blocks through a cam-gate cache (micfollow watchOf, 30 s) -
+  // 1.99aih (privacy controls round 6 review): a pad's mic stage reads DM blocks through a cam-gate cache (micfollow watchOf, 30 s) -
   // dropped for both accounts now, so a viewer just blocked (either way) never keeps that person's cover or "ok" tile meanwhile
   try { require("./micfollow").dmBlockChanged(user.userId, other.userId); } catch (e) { /* no mic follows */ }
   return { blocked: !!on, user: { username: other.username, display: display(other) } };

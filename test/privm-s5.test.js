@@ -656,7 +656,7 @@ test("round 5: the sync answer says wcover: 1 only while micfollow_cfg withheld_
   }
 });
 
-// 1.99?? (privacy controls round 6 review): the one courtesy notice to someone staged under a FROG NAME, through the REAL step. stepPad
+// 1.99aih (privacy controls round 6 review): the one courtesy notice to someone staged under a FROG NAME, through the REAL step. stepPad
 // sends it from its veiled-candidate loop and drops a candidate still at its notice gate from P.vnow at once, so courtesyPlan (which
 // runs after the step) read them as named: the PM was queued under the pad OWNER's account (the ID-3 leak class 1.99aid V-1 closed on
 // paper - their Download my data pairs the login with their pad's veiled speaker), and with withheld_cover on a _wh PM said "with your

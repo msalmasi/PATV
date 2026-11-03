@@ -954,7 +954,7 @@ function stepPad(roomId, t = now(), R) {
   for (const c of vcands || []) {
     P.vnow.set(c.login, c.vc);
     const e = R && (!why || why === "stale") ? eligOf(P, R, c.login, t, want) : "pending";
-    // (1.99?? privacy controls round 6 review: the notice is told it goes to someone staged under a frog name NOW - courtesyPlan runs
+    // (1.99aih privacy controls round 6 review: the notice is told it goes to someone staged under a frog name NOW - courtesyPlan runs
     // after this step returns, when P.vnow no longer holds a candidate still at its notice gate (deleted just below), so it read
     // "named": the PM went under the pad owner's account and a _wh one said "with your cover picture" to a hooded frog)
     if (e === "notice") firstNotice(P, R, c.login, t, { veiled: true }).catch((er) => console.error("[micfollow] notice:", er.message));
@@ -1116,7 +1116,7 @@ const OPT_OUT = "!livecam off";
 // 1.99aif (privacy controls round 5): a PM whose person already keeps their cam off mic stages (the _wh texts) has no "!livecam off" to
 // carry - it says their cam stays off and they show with their cover picture; only the length is checked, and the last resort keeps
 // its last sentence (that is what it says)
-// (1.99?? privacy controls round 6: + its variant for someone staged under a frog name - "_wh_frog": they show as a hooded frog)
+// (1.99aih privacy controls round 6: + its variant for someone staged under a frog name - "_wh_frog": they show as a hooded frog)
 const PM_NEED = { "mf.notice.pm_once_wh": null, "mf.notice.pm_once_wh_frog": null };
 /** The PM: its own text, then the link - at most PM_MAX characters, and ALWAYS with the way to stop it ("!livecam off"): for most
  *  people this PM is the only notice they ever get. Long room / pad names are shortened first, then the link is left off. Review
@@ -1192,7 +1192,7 @@ async function courtesyPlan(P, R, login, kind, { veiled: vflag = false } = {}) {
   const home = kind === "home";
   // 1.99aid (privacy controls V-1, the ID-3 leak class): a candidate staged under a FROG NAME is told from Pepe's own account - the PM
   // action is the queuing account's row (their action list, their Download my data), and the pad owner's would pair the login with
-  // their pad's veiled speaker. (1.99?? privacy controls round 6 review: `veiled` from the step that sent it - firstNotice's caller; P.vnow
+  // their pad's veiled speaker. (1.99aih privacy controls round 6 review: `veiled` from the step that sent it - firstNotice's caller; P.vnow
   // alone missed every candidate still at its notice gate, the only ones a courtesy notice goes to)
   const veiled = vflag === true || !!(P.vnow && P.vnow.has(low(login)));
   // 1.99aid (privacy controls S3, spec 6.2): with cfg withheld_cover on, "!livecam off" stops the CAM on a mic stage, not the person -
@@ -1208,7 +1208,7 @@ async function courtesyPlan(P, R, login, kind, { veiled: vflag = false } = {}) {
     // (1.99aif privacy controls round 5 review: a _wh PM - its text says the person keeps their cam off mic stages - goes under Pepe's own
     // account too: the pad owner's action rows (their Download my data) would pair the login with that private setting)
     by: !veiled && !wh && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
-    // (1.99?? privacy controls round 6: the _wh PM true for its person - their cam stays off mic STAGES (a followers / on-request cam is still
+    // (1.99aih privacy controls round 6: the _wh PM true for its person - their cam stays off mic STAGES (a followers / on-request cam is still
     // watchable by followers / people they granted in the live room), and someone staged under a frog name now shows as a hooded frog,
     // never "with your cover picture" ("_wh_frog"); the inbox body says both. Round 6 review: the _wc PM too - for someone staged under a
     // frog name, !livecam off makes them a hooded frog, not their cover picture ("_wc_frog"); its inbox body now says both)
@@ -1235,7 +1235,7 @@ async function deliver(plan, login, ref) {
 async function courtesyOnce(P, R, login, t, opts = {}) {
   const have = await courtesyOf(login);
   if (have) return { ok: true, sent: false, at: Number(have.sent_at) };
-  const plan = await courtesyPlan(P, R, login, "once", opts);     // (opts.veiled: staged under a frog name - 1.99?? round 6 review)
+  const plan = await courtesyPlan(P, R, login, "once", opts);     // (opts.veiled: staged under a frog name - 1.99aih round 6 review)
   const at = now();
   const via = [plan.pm ? "pm" : null, plan.real ? "inbox" : null].filter(Boolean).join("+") || "none";
   const sent = await tx(async () => {
@@ -2031,7 +2031,7 @@ async function dmBlocked(login, userId) {
       [me, ...ids, me, ...ids])).length > 0;
   } catch (e) { return !/no such table/i.test(String(e && e.message)); }
 }
-/** 1.99?? (privacy controls round 6 review): a DM block between accounts `aId` and `bId` was set or lifted (messages.setBlock). watchOf
+/** 1.99aih (privacy controls round 6 review): a DM block between accounts `aId` and `bId` was set or lifted (messages.setBlock). watchOf
  *  caches its answer - DM check included - for GATE_MS per login|viewer, so a viewer the person had just blocked (either way) kept an
  *  "ok" named tile with their cover for up to 30 s. The gates cached for either account as the VIEWER go now: the next stage program
  *  asks the block again. Synchronous; never throws. */
@@ -2315,7 +2315,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     const wh = x.video === "card" && x.why === "withheld";
     // (1.99aif privacy controls round 5 review: a withheld card asks about the person's blocks whatever the cam's gate said - watchOf stops
     // at "members only" before its DM check, so a members-only viewer the person DM-blocked got "ok" and the cover; as on the veiled card)
-    // (1.99?? privacy controls round 6: EVERY named tile, withheld or not - since 1.99ahq a members-only viewer the person DM-blocked (either
+    // (1.99aih privacy controls round 6: EVERY named tile, withheld or not - since 1.99ahq a members-only viewer the person DM-blocked (either
     // way) read "members only" with their cover. Whatever the cam's gate said but "ok" (watchOf asked the blocks then), this viewer's report
     // or a bridge block on them: a viewer the person blocked, by cam or DM, reads the letter and "isn't available", like every blocked viewer)
     const open = watch !== "hidden" && watch !== "blocked";
@@ -2755,7 +2755,7 @@ async function adminView(user, t = now()) {
     // 1.99aid (privacy controls S0, the veiled-identity rule - J-2: no Staff see-through of identities): a group whose person was
     // veiled when reported (the row's mark) or is veiled NOW (quotes.isHidden - fails closed while the hidden set loads) shows no
     // login - "someone (veiled)" and an opaque ref for dismiss / uphold; an Admin (or, while text reveal roles are on, Staff with
-    // chatlog.reveal_text - reportRevealRole; 1.99?? round 6 comment) sees who only through the logged reveal
+    // chatlog.reveal_text - reportRevealRole; 1.99aih round 6 comment) sees who only through the logged reveal
     // (POST /api/stage/admin/micfollow/report/reveal: seethrough_log scope stage_report). Every other row is as before.
     reports = (await getQuery(`SELECT room_id, login, COUNT(*) AS n, SUM(qualified) AS q, MAX(at) AS last, GROUP_CONCAT(DISTINCT reason) AS reasons,
                                       MAX(CASE WHEN state = 'cut' THEN 1 ELSE 0 END) AS cut, MAX(veiled) AS v, MAX(id) AS rid
@@ -3253,8 +3253,8 @@ module.exports = {
   vidLogin, veilCamEnded, veilSessOf, veilOfTile,                                // 1.99aid (privacy controls S5)
   vidVeil, pinByVid,                                                              // 1.99aid (privacy controls V-1)
   withheldCover: () => cfg().withheld_cover === true,                            // 1.99aid (privacy controls S3)
-  dmBlocked,                                                                      // 1.99?? (privacy controls round 6: stagemiccap's consent)
-  dmBlockChanged,                                                                 // 1.99?? (privacy controls round 6 review: messages.setBlock)
+  dmBlocked,                                                                      // 1.99aih (privacy controls round 6: stagemiccap's consent)
+  dmBlockChanged,                                                                 // 1.99aih (privacy controls round 6 review: messages.setBlock)
   register, init, cfg, current: () => ({ v: CFG.v, cfg: { ...CFG.cfg } }), onSync, onRoomGone, stepPad, snapshot, viewFor, ownerState, setPad, adminView, setKill, setCfg,
   recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, unexcludeXid, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,

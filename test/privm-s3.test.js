@@ -397,7 +397,7 @@ test("on: the DF-11 notice gate's one courtesy notice says !livecam off stops th
     assert.ok(on.length <= 300, String(on.length));
     // the texts themselves: _wc only while on; the PM fits with the link for ordinary names, like today's
     const T0 = require(path.join(repo, "i18n")).tFor("en");
-    // (1.99?? privacy controls round 6 review: + the frog-name variant "_wc_frog" - "Hooded frog instead: !livecam off", the same limits)
+    // (1.99aih privacy controls round 6 review: + the frog-name variant "_wc_frog" - "Hooded frog instead: !livecam off", the same limits)
     for (const key of ["mf.notice.pm_once_wc", "mf.notice.pm_once_wc_frog"]) {
       for (const [room0, pad0, slug] of [["Players__Lounge", "Players Lounge", "players-lounge"], ["R".repeat(40), "P".repeat(40), "s".repeat(40)]]) {
         const s = MF.pmText(T0, key, room0, pad0, 2, "https://publicaccess.tv/p/" + slug);
@@ -413,7 +413,7 @@ test("on: the DF-11 notice gate's one courtesy notice says !livecam off stops th
       }
     }
     assert.match(T0("mf.notice.pm_once_wc_frog", { room: "R", pad: "P", n: 2 }), /Yours can show in ~2 min\. Hooded frog instead: !livecam off$/);
-    // (1.99?? round 6 review: the inbox body is the person's for good - it says both, as the _wh one does)
+    // (1.99aih round 6 review: the inbox body is the person's for good - it says both, as the _wh one does)
     assert.match(T0("mf.notice.once_body_wc", { room: "R", pad: "P", n: 2 }), /To stop your cam on every pad: Settings → Privacy, or !livecam off - mic stages then show you with your cover picture instead, or as a hooded frog while you're incognito\.$/);
     assert.match(T0("mf.notice.once_body", { room: "R", pad: "P", n: 2 }), /To stop it on every pad: Settings → Privacy, or !livecam off\.$/, "today's body unchanged");
   } finally { await knobs({ withheld_cover: false }); }
@@ -445,7 +445,7 @@ test("round 5: someone who ALREADY keeps their cam off mic stages (live cam off,
       return { pm: await pmOf(), ib };
     } finally { await unset(); await MF._noticed(ROOM.id, who, 1); }
   };
-  // (1.99?? privacy controls round 6: "off mic stages" - a followers / on-request cam is still watchable in the live room)
+  // (1.99aih privacy controls round 6: "off mic stages" - a followers / on-request cam is still watchable in the live room)
   const WH = /Other pads with mic follows do too\. Your cam stays off mic stages: you can show in ~2 min with your cover picture\. https:\/\/publicaccess\.tv\/p\//;
   try {
     for (const how of ["livecam", "mf", "followers", "request"]) {
@@ -742,7 +742,7 @@ test("round 5: the cover picture in Settings' Live cam card, /privacy's livecam 
   } finally { await knobs({ withheld_cover: false }); }
 });
 
-// 1.99?? (privacy controls round 6, spec 6.1): the rest of /privacy's cover-picture wording, behind withheld_cover like round 5's Live cams
+// 1.99aih (privacy controls round 6, spec 6.1): the rest of /privacy's cover-picture wording, behind withheld_cover like round 5's Live cams
 // clause - the mic-stage captures paragraph (spec :91: a cam opt-out is a name card), section 3's privacy-wire paragraph (both variants)
 // and the spec's "On a pad's mic stage" bullet. Off: the page is the round-5 head's, byte for byte; on: the round-5 head's plus exactly these
 const BASE6 = process.env.PRIVM_R6_BASE_REV || "0d51bb6f";
@@ -785,7 +785,7 @@ test("round 6: /privacy's captures paragraph, its privacy-wire paragraph and a n
   if (pbase) assert.equal(n, 16);
 });
 
-// 1.99?? (privacy controls round 6): with withheld_cover on, the cover-picture text moves /privacy's "Last updated" - dated the first time the
+// 1.99aih (privacy controls round 6): with withheld_cover on, the cover-picture text moves /privacy's "Last updated" - dated the first time the
 // page is served with the knob on (terms.js SWITCHED_TEXTS "stage-cover", policy_text_dates), counted only while it is on (like frog-15)
 test("round 6: /privacy's 'Last updated' is dated by the first time it is served with withheld_cover on ('stage-cover'), only while the knob is on; off: never recorded", async () => {
   const terms = require(path.join(repo, "terms"));
@@ -904,7 +904,7 @@ test("round 5 review: a _wh courtesy PM is queued under Pepe's own account, neve
   } finally { await knobs({ withheld_cover: false }); }
 });
 
-// 1.99?? (privacy controls round 6, the LIVE fix - on prod since 1.99ahq, so it changes the switches-off behaviour, deliberately): a NAMED
+// 1.99aih (privacy controls round 6, the LIVE fix - on prod since 1.99ahq, so it changes the switches-off behaviour, deliberately): a NAMED
 // tile that isn't withheld (a live cam, a card) showed its person's cover to a members-only viewer the person DM-blocked (either way) -
 // viewFor asked the person's blocks only when the cam's gate said "unavailable", and watchOf stops at "members only" before its DM check.
 // Every named tile now: a viewer the person blocked, by cam or DM, reads the letter and "isn't available" (as every blocked viewer does)
@@ -950,7 +950,7 @@ test("round 6: EVERY named tile (a live cam, a card - not only a withheld one) i
   }
 });
 
-// 1.99?? (privacy controls round 6 review): watchOf caches its answer - DM check included - for GATE_MS (30 s) per login|viewer, and nothing
+// 1.99aih (privacy controls round 6 review): watchOf caches its answer - DM check included - for GATE_MS (30 s) per login|viewer, and nothing
 // dropped it when a DM block was set or lifted: a verified viewer the person had just DM-blocked (either way) kept an "ok" named tile with
 // their cover for up to 30 s, and one just unblocked stayed "isn't available". messages.setBlock now drops both accounts' gates
 test("round 6 review: a DM block (either way) takes a verified viewer's named tile to the letter and 'isn't available' on the very next program, and lifting it gives the tile back at once - not after the 30 s cam-gate cache; nobody else's tile changes", async () => {
@@ -994,7 +994,7 @@ test("round 6 review: a DM block (either way) takes a verified viewer's named ti
   }
 });
 
-// 1.99?? (privacy controls round 6): the same gap in captures - consent() asked the person's cam blocks (camRefusal) but not a DM block,
+// 1.99aih (privacy controls round 6): the same gap in captures - consent() asked the person's cam blocks (camRefusal) but not a DM block,
 // and cardConsent (withheld_cover on) only the cam blocks: a capture taken before the person DM-blocked the viewer could still be saved
 // or posted by name after. Both now ask the DM block either way (micfollow.dmBlocked, as the viewer's stage program does)
 test("round 6: a capture's consent (the recheck before a save / post, a name card's cardConsent) refuses a person who DM-blocked the viewer, either way - switches off and on", async () => {
@@ -1028,7 +1028,7 @@ test("round 6: a capture's consent (the recheck before a save / post, a name car
   } finally { await runQuery("DELETE FROM dm_blocks"); SM.configure(defaults); }
 });
 
-// 1.99?? (privacy controls round 6): the _wh courtesy PM is true for each person it goes to - someone staged under a FROG NAME (incognito
+// 1.99aih (privacy controls round 6): the _wh courtesy PM is true for each person it goes to - someone staged under a FROG NAME (incognito
 // cams) shows as a hooded frog, never "with your cover picture" (_wh_frog); and a followers / on-request cam is still watchable by
 // followers / people they granted in the live room, so the PM says their cam stays off mic STAGES. Both fit 300 with the link
 test("round 6: the _wh PM says the cam stays off mic stages, and someone staged under a frog name is told they show as a hooded frog (never the cover picture); both fit 300 with the link", async () => {
@@ -1078,7 +1078,7 @@ test("round 6: the _wh PM says the cam stays off mic stages, and someone staged 
   } finally { await knobs({ withheld_cover: false }); }
 });
 
-// 1.99?? (privacy controls round 6): the switchboard's short cam sentence (Settings → Privacy, On the website: pv3.cam_meta_rv, shown while
+// 1.99aih (privacy controls round 6): the switchboard's short cam sentence (Settings → Privacy, On the website: pv3.cam_meta_rv, shown while
 // cam reveals are on) said "(you're told)" with no ghost exception - every long form says a ghost's view isn't told. Behind the same switches
 test("round 6: Settings' short cam sentence (pv3.cam_meta_rv) says a ghost's moderation view isn't told; shown only while cam reveals are on, as before", async () => {
   const ejs = require("ejs");
