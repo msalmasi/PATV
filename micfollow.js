@@ -1200,7 +1200,9 @@ async function courtesyPlan(P, R, login, kind) {
   const sfx = wh ? "_wh" : wc ? "_wc" : "";
   return {
     userId: u ? String(u.userId) : null, real, pm: !(real && !pmOk),
-    by: !veiled && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
+    // (1.99?? privacy controls round 5 review: a _wh PM - its text says the person keeps their cam off mic stages - goes under Pepe's own
+    // account too: the pad owner's action rows (their Download my data) would pair the login with that private setting)
+    by: !veiled && !wh && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
     text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once" + sfx, roomName, padTitle, mins, siteUrl() + link),
     link, title: T(home ? "mf.notice.home_title" : wh ? "mf.notice.once_title_wh" : "mf.notice.once_title", { pad: padTitle }),
     body: T(home ? "mf.notice.home_body" : "mf.notice.once_body" + sfx, { room: roomName, pad: padTitle, n: mins }),

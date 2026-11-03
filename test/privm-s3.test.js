@@ -777,6 +777,44 @@ test("round 5 review: a named WITHHELD card is the letter and 'isn't available' 
   }
 });
 
+// 1.99?? (privacy controls round 5 review): the _wh courtesy PM says the person already keeps their cam off mic stages (!livecam off, the
+// mic-stage switch off, cam access followers / on request). It is queued like any courtesy PM - under the pad owner's account, whose
+// action rows (their Download my data) carry its text and the login - so the owner could read a member's private cam settings there.
+// A _wh PM goes under Pepe's own account (as a veiled candidate's does); everyone else's as before
+test("round 5 review: a _wh courtesy PM is queued under Pepe's own account, never the pad owner's (whose data export would pair the login with that setting); everyone else's as before", async () => {
+  const rowOf = async () => (await getQuery("SELECT user_id, args FROM pepe_actions WHERE kind = 'notify' ORDER BY id DESC LIMIT 1"))[0] || null;
+  const told = async (on, how) => {
+    await knobs({ withheld_cover: on });
+    await reset(); await plainPad();
+    const set = { livecam: () => optout("dana", true), mf: () => MF.setOptout("dana", true), followers: () => CA.setMode("dana", "followers"),
+                  request: () => CA.setMode("dana", "request"), none: async () => {} }[how];
+    const unset = { livecam: () => optout("dana", false), mf: () => MF.setOptout("dana", false), followers: () => CA.setMode("dana", "everyone"),
+                    request: () => CA.setMode("dana", "everyone"), none: async () => {} }[how];
+    await set();
+    await MF._idle(); for (let i = 0; i < 3; i++) await settle();
+    await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
+    await MF._noticed(ROOM.id, "dana", null);
+    try {
+      await step(["dana"]); await at(3, ["dana"]);
+      for (let i = 0; i < 10; i++) await settle();
+      const r = await rowOf();
+      return r ? { by: String(r.user_id), pm: JSON.parse(r.args)[1] } : null;
+    } finally { await unset(); await MF._noticed(ROOM.id, "dana", 1); }
+  };
+  try {
+    for (const how of ["livecam", "mf", "followers", "request"]) {
+      const r = await told(true, how);
+      assert.ok(r && /Your cam stays off: you can show in ~2 min with your cover picture\./.test(r.pm), how + ": the _wh PM - " + JSON.stringify(r));
+      assert.equal(r.by, "pepe-bot", how + ": under Pepe's own account");
+    }
+    const n = await told(true, "none");
+    assert.ok(n && /Yours can show in ~2 min/.test(n.pm), JSON.stringify(n));
+    assert.equal(n.by, "u_owner", "switch on, nobody opted out: the pad owner's, as before");
+    const o = await told(false, "none");
+    assert.equal(o && o.by, "u_owner", "switch off: the pad owner's, as before");
+  } finally { await knobs({ withheld_cover: false }); }
+});
+
 // ── the engine (pure) ──
 test("core: 'withheld' is a card state - a candidate and a tile, attributed in speaking(), never a hold / still / warm keep; a running relay or still is let go; opted_out from livecam is the card while cfg withheld_cover is on, a cut while off", () => {
   const C = { ...core.DEFAULTS, cold_open: true, enabled: true, stills: true, warm_keep_s: 180, warm_max: 3 };
