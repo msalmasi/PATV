@@ -216,3 +216,72 @@ test("formatting fragments and URL destinations cannot manufacture active sticke
   await store.edit(U.alice, p.id, { body: url });
   await store.editComment(U.bob, c.id, fragments);
 });
+
+// ── 1.99aij (owner 2026-11-03): a Markdown spoiler reads "[spoiler]" in every plain excerpt, never its words ──
+const SECRET = "Snape kills Dumbledore";
+const spoiled = "## The ||" + SECRET + "|| ending\nWorth **reading**.";
+const LABEL = "The [spoiler] ending Worth reading.";
+const noSecret = (s, what) => assert.ok(!/snape|kills|dumbledore/i.test(String(s)), what + " leaks the spoiler: " + s);
+async function admin() {
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, password, class, level, created_at) VALUES ('u_boss', 'boss', 'boss', 'x', 'Admin', 5, '2020-01-01 00:00:00')");
+  return { userId: "u_boss", username: "boss", class: "Admin" };
+}
+
+test("1.99aij: comment, reply, mention, crosspost, report and removal notices read [spoiler]", async () => {
+  const A = await admin();
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    const p = await create(U.alice, spoiled);
+    const c = await store.comment(U.bob, p.id, { body: "Agreed, ||" + SECRET + "|| was a shock" });
+    assert.equal((await notice("feed-c:" + c.id)).body, '"' + LABEL + '": Agreed, [spoiler] was a shock');
+    const r = await store.comment(U.alice, p.id, { body: "||" + SECRET + "|| indeed", parent: c.id });
+    assert.equal((await notice("feed-c:" + r.id + ":p")).body, 'On "' + LABEL + '": [spoiler] indeed');
+    // a name inside a spoiler still notifies its owner (sourceText), but the notice's text is "[spoiler]" too
+    const m = await store.comment(U.owner, p.id, { body: "@bob look: ||" + SECRET + " @bob||" });
+    assert.equal((await notice("fmention:c:" + m.id + ":" + U.bob.userId)).body, "@bob look: [spoiler]");
+    const x = await store.crosspost(U.bob.userId, p.id, { community: ROOM });
+    assert.equal(x.title, LABEL, "the crosspost's stored title");
+    assert.equal((await row("feed_posts", x.id)).title, LABEL);
+    assert.equal((await notice("feed-xp:" + x.id)).body, '"' + LABEL + '"');
+    await store.report(U.bob, { post: p.id, reason: "spam" });
+    const rep = await notice("feed-rep:" + p.id + ":" + (await row("feed_posts", p.id)).created);
+    assert.equal(rep.body, 'Spam: "The [spoiler] ending\n\nWorth reading."');
+    await store.removeComment(A, c.id, "spoilers");
+    assert.equal((await notice("feed-crm:" + c.id)).body, '"Agreed, [spoiler] was a shock" was removed by a moderator: spoilers');
+    await store.remove(A, p.id, "spoilers");
+    assert.equal((await notice("feed-rm:" + p.id)).body, '"The [spoiler] ending\n\nWorth reading." was removed by an admin: spoilers');
+    for (const n of await getQuery("SELECT title, body FROM inbox")) { noSecret(n.title, "a title"); noSecret(n.body, "a notice"); }
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});
+
+test("1.99aij: labels, slugs and Pepe's Camfrog relay read [spoiler]; a cut never reaches into the hidden words", async () => {
+  await store.setMention(U.owner, ROOM, true);
+  await runQuery("DELETE FROM feed_mentions");
+  await runQuery("DELETE FROM feed_kv WHERE key LIKE 'mention_at:%'");
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    const p = await create(U.alice, spoiled, { community: ROOM });
+    const PL = require(path.join(repo, "postlabel"));
+    assert.equal(PL.postLabel(p), LABEL);
+    noSecret(p.url, "the post's address");
+    assert.match(p.url, /\/the-spoiler-ending/);
+    const lines = await store.takeMentions("https://example.test");
+    assert.equal(lines.length, 1);
+    assert.match(lines[0].text, /The \[spoiler\] ending Worth reading\. — /);
+    noSecret(lines[0].text, "the relay line");
+    // a long spoiler is one word: the words after it survive the label's word limit, none of its own are counted
+    const long = "Intro ||" + Array.from({ length: 40 }, (_, i) => "hidden" + i).join(" ") + "|| after the spoiler";
+    const w = PL.bodyWords({ body: long, fmt: "md" });
+    assert.equal(w.text, "Intro [spoiler] after the spoiler");
+    assert.equal(w.cut, false);
+    for (const n of [5, 9, 12, 60]) assert.ok(!/hidden/.test(require(path.join(repo, "postmd")).plain(long).slice(0, n)), "a cut at " + n);
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});
+
+test("1.99aij: plain-stored posts and comments keep || as typed (no spoilers to hide), the switch off as before", async () => {
+  await store.setConfig({ feed_markdown: false }, "test");
+  const p = await create(U.alice, "Plain ||" + SECRET + "|| text");
+  assert.equal(p.fmt, null);
+  const c = await store.comment(U.bob, p.id, { body: "Plain ||reply||" });
+  assert.equal((await notice("feed-c:" + c.id)).body, '"Plain ||' + SECRET + '|| text": Plain ||reply||');
+});

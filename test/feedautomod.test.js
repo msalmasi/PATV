@@ -469,3 +469,19 @@ test("the pad page's Rules card + the composer line", async () => {
   assert.match(h2, /This pad follows Padiquette/); assert.match(h2, /\/settings#rules/);
   assert.match(h2, /read the rules<\/a> \(it follows <a href="\/guidelines"/);
 });
+
+// 1.99aij: a Markdown spoiler reads "[spoiler]" everywhere Pepe answers from, but his automod verdict still reads its
+// words (a spoiler must not hide what a rule is about)
+test("1.99aij: the automod's post view reads a Markdown spoiler's words; Pepe's own view of the same post doesn't", async () => {
+  await runQuery("DELETE FROM feed_automod");
+  clock += AM.WINDOW + 60e3;                       // earlier tests' posts leave the window
+  await turnOn(OWNED);
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    const id = await mkPost(U.alice, { body: "Spoiler ahead: ||the butler did it||" });
+    const it = (await work()).items.find((x) => x.target === "p:" + id);
+    assert.ok(it, "queued for a verdict");
+    assert.equal(it.post.body, "Spoiler ahead: the butler did it");
+    assert.equal((await PF.postView(await store.getRow(id))).body, "Spoiler ahead: [spoiler]");
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});

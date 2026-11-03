@@ -269,3 +269,24 @@ test("Markdown code and split-name mentions stay silent; an edit can make a live
     assert.equal((await notices(U.cat)).length, beforeCat + 1, "legacy plain code-like text keeps the old mention behavior");
   } finally { await store.setConfig({ feed_markdown: false }, "test"); }
 });
+
+// 1.99aij (owner 2026-11-03): a Markdown spoiler reads "[spoiler]" in the post page's link preview (og tags, the card's
+// title, the tab title and the address); on the page itself its words stay behind the spoiler's button
+test("1.99aij: a Markdown spoiler never reaches the post page's og tags, title or address", async () => {
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    const r0 = await call("POST", "/api/feed/posts", U.alice, { community: ROOM_B, body: "Finale: ||Snape kills Dumbledore||\nNo more hints." });
+    assert.equal(r0.status, 200, r0.text);
+    const p = await store.get(r0.d.id, U.alice);
+    assert.doesNotMatch(p.url, /snape|kills|dumbledore/i);
+    const r = await call("GET", p.url, U.bob);       // a reader (the author's own edit box holds the source as typed)
+    assert.equal(r.status, 200, r.text.slice(0, 500));
+    const head = r.text.slice(0, r.text.indexOf("</head>"));
+    assert.match(head, /content="Finale: \[spoiler\] No more hints\."/);
+    assert.match(head, /<title>Finale: \[spoiler\] No more hints\./);
+    assert.doesNotMatch(head, /Snape|Dumbledore/);
+    const body = r.text.slice(r.text.indexOf("</head>"));
+    assert.match(body, /<span hidden>Snape kills Dumbledore<\/span>/);
+    assert.equal(body.split("Snape").length - 1, 1, "only inside the spoiler");
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});

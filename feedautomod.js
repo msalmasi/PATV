@@ -278,7 +278,9 @@ async function work(t = NOW()) {
       const target = "p:" + p.id;
       if (seen.has(target) || (await exempt(p.author_id, R.id))) continue;
       seen.add(target);
-      const view = await PF.postView(p);
+      // 1.99aij: the verdict reads a Markdown spoiler's words (a spoiler must not hide what a rule is about); Pepe's
+      // replies read "[spoiler]" (pepefeed.postView). Comments below go as typed, as before.
+      const view = await PF.postView(p, { spoilers: "show" });
       items.push({ target, kind: "post", scope, room: pad, rules, vision, nsfw: !!store.effNsfw(p),
                    post: { id: p.id, title: view.title, body: view.body, link: view.link, images: view.images, media: view.media, source_id: view.source_id,
                            crosspost: view.crosspost ? { author: view.crosspost.author.display } : null },

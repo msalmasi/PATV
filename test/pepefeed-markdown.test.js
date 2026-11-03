@@ -155,3 +155,28 @@ test("admin log fallback labels are readable only for stored Markdown", async ()
   assert.equal(log.find((x) => x.post_id === plain.id).postTitle, "## Plain **label**");
   assert.equal(log.find((x) => x.post_id === titled.id).postTitle, "**Literal title**");
 });
+
+// ── 1.99aij (owner 2026-11-03): Pepe reads a Markdown spoiler as "[spoiler]", so he can't give it away ──
+const SECRET = "Snape kills Dumbledore";
+test("1.99aij: post, crosspost, thread, sibling, reply and admin-log context read [spoiler]; only moderation asks for the words", async () => {
+  const p = await create("## Finale\nIt ends: ||" + SECRET + "||.");
+  const shared = await store.crosspost(U.bob.userId, p.id, { community: ROOM });
+  const top = await cmt(p, "||" + SECRET + "|| was sad");
+  const reply = await cmt(p, "**@pepe** was it ||" + SECRET + "||?", { parent: top.id });
+  const other = await cmt(p, "Also ||" + SECRET + "||");
+  await store.setConfig({ feed_markdown: false }, "test");
+  const v = await PF.postView(await store.getRow(p.id));
+  assert.equal(v.body, "Finale\n\nIt ends: [spoiler].");
+  assert.equal((await PF.postView(await store.getRow(shared.id))).body, "Finale\n\nIt ends: [spoiler].");
+  assert.equal((await PF.postView(await store.getRow(p.id), { spoilers: "show" })).body, "Finale\n\nIt ends: " + SECRET + ".");
+  const thread = await PF.conversation(p.id, top.id, reply.id);
+  assert.equal(thread.find((x) => x.id === top.id).body, "[spoiler] was sad");
+  assert.equal(thread.find((x) => x.id === reply.id).body, "@pepe was it [spoiler]?");
+  assert.equal((await PF.otherComments(p.id, top.id)).find((x) => x.id === other.id).body, "Also [spoiler]");
+  const found = (await PF.findMentions(acct)).find((x) => x.target === "c:" + reply.id);
+  assert.ok(found, "the reply summons him");
+  assert.equal(found.reply_to.body, "@pepe was it [spoiler]?");
+  assert.ok(!JSON.stringify(found).includes("Snape"), "nothing he is sent holds the words");
+  await PF.setMute(U.alice, p.id, true);
+  assert.equal((await PF.adminView()).log.find((x) => x.post_id === p.id).postTitle, "Finale It ends: [spoiler].");
+});

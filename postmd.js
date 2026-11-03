@@ -9,6 +9,7 @@ const inline = require("./feedinline");
 const LINK_ATTRS = ' rel="nofollow noopener noreferrer ugc" target="_blank"';
 const MARKS = { "**": "strong", "__": "u", "~~": "del", "||": "spoiler", "*": "em", "_": "em" };
 const MAX_DEPTH = 12;
+const SPOILER = "[spoiler]";              // 1.99aij: what a spoiler reads in plain text (plain() below)
 const source = (value) => String(value == null ? "" : value).replace(/\r\n?/g, "\n");
 const word = (c) => !!c && /[\p{L}\p{N}_]/u.test(c);
 
@@ -212,6 +213,7 @@ function blockHtml(nodes, options) {
 
 function inlinePlain(nodes, options) {
   return nodes.map((n) => {
+    if (n.type === "spoiler") return options.spoilers === "show" ? inlinePlain(n.children, options) : SPOILER;
     if (n.type === "code") return options.omitCode ? " " : n.text;
     if (n.type === "link") return inlinePlain(n.children, options) + " (" + n.href + ")";
     return n.children ? inlinePlain(n.children, options) : n.text;
@@ -233,6 +235,10 @@ function blockPlain(nodes, options) {
 function render(text, options = {}) { return blockHtml(blocks(source(text).split("\n")), options || {}); }
 // Sticker tokens deliberately stay tokens: existing callers can apply the localized fallback.
 // omitCode produces code-free readable text (closed code only). Activity/ownership checks use sourceText below.
+// 1.99aij (owner 2026-11-03): a closed spoiler reads SPOILER, one word whatever it holds, so no excerpt (a notice, an
+// inbox row and its Telegram alert, og tags and link previews, card labels and slugs, search snippets, Pepe's relays and
+// the context his LLM reads) shows the hidden words, and no cut can land inside them. Only moderation input asks for the
+// words with { spoilers: "show" } (Pepe's automod: a spoiler must not hide what a rule is about).
 function plain(text, options = {}) { return blockPlain(blocks(source(text).split("\n")), options || {}); }
 
 // Text eligible for the ordinary inline pipeline, for mention/ownership/summon checks. Keep leaf
@@ -260,4 +266,4 @@ function sourceText(text) {
   return leaves.join("\n");
 }
 
-module.exports = { render, plain, sourceText };
+module.exports = { render, plain, sourceText, SPOILER };

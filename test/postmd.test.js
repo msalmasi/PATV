@@ -170,3 +170,22 @@ test("pathological bracket/marker/quote runs remain bounded and preserve their t
     assert.ok(md.plain(input).length > 0);
   }
 });
+
+// 1.99aij (owner 2026-11-03): plain text never holds a spoiler's words - one "[spoiler]" whatever it wraps, in every block
+test("plain text reads a closed spoiler as [spoiler]; unclosed / escaped / code ones stay as typed; moderation can ask for the words", () => {
+  const ctx = JSON.parse(fs.readFileSync(path.join(fixtures, "context.json"), "utf8"));
+  assert.equal(md.SPOILER, "[spoiler]");
+  assert.equal(ctx.spoilerPlain, md.SPOILER, "the goldens' contract");
+  const input = "## ||The end|| explained\n\n- ||**Bold** @Alice [sticker:pixelpepe/happy] https://example.test/x||\n\n> ||quoted||\n\n[||label||](https://example.test/r)";
+  assert.equal(md.plain(input), "[spoiler] explained\n\n[spoiler]\n\n[spoiler]\n\n[spoiler] (https://example.test/r)");
+  assert.equal(md.plain(input, { spoilers: "show" }),
+    "The end explained\n\nBold @Alice [sticker:pixelpepe/happy] https://example.test/x\n\nquoted\n\nlabel (https://example.test/r)");
+  assert.equal(md.plain("a ||b|| c ||d||"), "a [spoiler] c [spoiler]");
+  assert.equal(md.plain("||" + "word ".repeat(500).trim() + "||"), "[spoiler]", "one word, however long");
+  assert.equal(md.plain("||unclosed secret"), "||unclosed secret");
+  assert.equal(md.plain(String.raw`\||escaped|| marks`), "||escaped|| marks");
+  assert.equal(md.plain("`||in code||`"), "||in code||");
+  assert.equal(md.plain("```\n||in a fence||\n```"), "||in a fence||");
+  // the rendered page still hides the words behind the button (unchanged)
+  assert.match(md.render("||secret||", options), /<span hidden>secret<\/span>/);
+});

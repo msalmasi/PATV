@@ -37,6 +37,16 @@ test("latest-feed summaries use readable stored Markdown and leave plain summari
   assert.equal(result[1].text, "## Update **Hello** `a_b`");
 });
 
+// 1.99aij (owner 2026-11-03): the pad page's latest posts (bridged chats read them too) say "[spoiler]", never its words
+test("latest-feed summaries read a Markdown spoiler as [spoiler]; a plain post's || stay as typed", async () => {
+  const body = "## ||Snape kills Dumbledore||\nThe end";
+  const posts = [{ id: "md", fmt: "md", body, created: 2, url: "/feed/p/md" }, { id: "plain", fmt: null, body, created: 1, url: "/feed/p/plain" }];
+  const result = await bridge.padLatest("test", null, { sort: "new", page: 1, posts });
+  assert.equal(result[0].text, "[spoiler] The end");
+  assert.equal(result[0].title, "[spoiler] The end");
+  assert.equal(result[1].text, "## ||Snape kills Dumbledore|| The end");
+});
+
 // room-mod.js is a browser file: run it in a sandbox with just enough of `window`
 function loadRoomMod() {
   const win = {};

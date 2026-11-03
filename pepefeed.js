@@ -378,7 +378,8 @@ function gate(what, why, S, G, U, { scope = "", depth = 0, cost = 0, t = NOW() }
 // ── who / what he may answer ──
 const MENTION_RE = /(^|[^\w@])@?pepe(?![\w])/i;
 // 1.99ahz: the bot reads stored Markdown as plain text; only prose can summon it, never a closed code example.
-const plainBody = (row) => row.fmt === "md" ? require("./postmd").plain(row.body || "") : String(row.body || "");
+// 1.99aij: a spoiler reads "[spoiler]" there (postmd.plain), so he can't give it away; opts.spoilers "show" is for moderation only.
+const plainBody = (row, opts) => row.fmt === "md" ? require("./postmd").plain(row.body || "", opts) : String(row.body || "");
 const mentionBody = (row) => row.fmt === "md" ? require("./postmd").sourceText(row.body || "") : String(row.body || "");
 /** "@pepe", "pepe" as a word, or "@<his username>". */
 function mentions(text, username = null) {
@@ -467,8 +468,9 @@ async function postScopes(p) {
 
 const SITE = () => process.env.SITE_URL || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
 /** The post as Pepe reads it (no NSFW ever gets here). 1.99cq: a crosspost reads as its original (title, body,
- *  link, pictures - postScopes already checked the original), with crosspost: {author} saying whose it was. */
-async function postView(p) {
+ *  link, pictures - postScopes already checked the original), with crosspost: {author} saying whose it was.
+ *  1.99aij: a Markdown spoiler's words read "[spoiler]" in body, except with { spoilers: "show" } (feedautomod's verdicts). */
+async function postView(p, { spoilers = null } = {}) {
   const A = await store.account(p.author_id);
   const o = p.crosspost_of ? await store.getRow(p.crosspost_of) : null;
   const src = o && !o.deleted_at && !o.hidden_at ? o : p;
@@ -486,7 +488,7 @@ async function postView(p) {
   // 1.99cu: the pad the post lives in, and for a crosspost the original's own title + pad (Pepe's reply context);
   // source_id = the post whose content/pictures these are (his vision-description cache key)
   return {
-    id: p.id, url: SITE() + (await store.postLink(p.id)), title: tc(p.title || src.title || ""), body: tc(plainBody(src.body ? src : p)).slice(0, 2000), created: p.created,
+    id: p.id, url: SITE() + (await store.postLink(p.id)), title: tc(p.title || src.title || ""), body: tc(plainBody(src.body ? src : p, { spoilers })).slice(0, 2000), created: p.created,
     author: who(A, p.author_id), pad: await padOf(p.id), source_id: src.id,
     crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id), id: src.id, title: tc(src.title || ""),
                              pad: await padOf(src.id) } : null,
