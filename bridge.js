@@ -2173,6 +2173,7 @@ function register(app, { isBotToken, addUser }) {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
+      padDockOn: require("./paddock").viewerOn(req.user),
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       // 1.99aiq cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)

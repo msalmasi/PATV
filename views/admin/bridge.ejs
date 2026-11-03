@@ -9,6 +9,25 @@
   <p>The Camfrog bridge: Pepe relays each Camfrog room he's in to its pad. Members with a linked Camfrog name can send chat and <code>!commands</code> from the pad page; every web command is logged here.</p>
 </div>
 
+<% const _dt = typeof t === 'function' ? t : function (key, fallback) { return fallback; }; %>
+<section class="adm-card" id="room-dock" aria-labelledby="paddockTitle">
+  <h2 id="paddockTitle"><span class="ds-ic" aria-hidden="true">🧭</span> <%= _dt('js.pad.dock.admin.title', 'Room Dock') %></h2>
+  <p class="adm-help"><%= _dt('js.pad.dock.admin.hint', 'A compact Live view for bridged pads. Off by default; reload open pads after changing the audience.') %></p>
+  <% if (_can('pads.config')) { %>
+  <form id="paddockForm" class="adm-form">
+    <div id="paddockFields"></div>
+    <label><%= _dt('js.pad.dock.admin.reason', 'Reason (optional)') %><input class="ds-in" name="reason" maxlength="200" autocomplete="off"></label>
+    <div class="adm-actions">
+      <button type="button" id="paddockReset" class="ds-btn quiet"><%= _dt('js.pad.dock.admin.reset', 'Reset to off') %></button>
+      <button type="submit" class="ds-btn"><%= _dt('js.pad.dock.admin.save', 'Save') %></button>
+      <span id="paddockMessage" class="adm-msg" role="status"><%= _dt('js.pad.dock.admin.loading', 'Loading…') %></span>
+    </div>
+  </form>
+  <ul id="paddockAudit" class="adm-help" aria-label="<%= _dt('js.pad.dock.admin.audit', 'Recent setting changes') %>"></ul>
+  <script src="/public/js/admin-paddock.js?v=1"></script>
+  <% } else { %><p class="adm-help"><%= _dt('js.pad.dock.admin.admins', 'Site admins only.') %></p><% } %>
+</section>
+
 <section class="adm-card" id="cmdlog" aria-labelledby="cmdT">
   <h2 id="cmdT">Web command log <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Newest first. Filter by pad (Camfrog room id) and/or Camfrog name; up to 500 rows.</p>

@@ -208,7 +208,7 @@ test("the rendered pad page: <main> carries .chatlog, chatlog.css right after th
   assert.match(html, /<\/style>\s*<link rel="stylesheet" href="\/public\/css\/chatlog\.css\?v=\d+">/);
   const core = html.search(/<script src="\/public\/js\/chatlog-core\.js\?v=\d+"><\/script>/), init = html.indexOf('<script id="rmInit"');
   assert.ok(core > 0 && core < init, "the renderer loads before the page script");
-  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/ds\.css\?v=3">/, "the tokens chatlog.css reads (--ds-chat-*)");
+  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/ds\.css\?v=4">/, "the tokens chatlog.css reads (--ds-chat-*)");
   // mentions.js's ?line= highlight is styled by chatlog.css (in both directions)
   const css = rd("public", "css", "chatlog.css");
   assert.match(css, /\.chatlog \.line\.hl \{/);

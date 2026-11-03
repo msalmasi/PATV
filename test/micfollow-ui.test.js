@@ -29,6 +29,7 @@ function fakeDom() {
       setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }, removeAttribute(k) { delete this.attrs[k]; },
       hasAttribute(k) { return k in this.attrs; },
       addEventListener(k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); },
+      removeEventListener(k, fn) { this.listeners[k] = (this.listeners[k] || []).filter((f) => f !== fn); },
       get textContent() { return this._text + this.children.map((c) => c.textContent).join(""); },
       set textContent(v) { this._text = String(v); this.children = []; },
       get firstChild() { return this.children[0] || null; },
@@ -1288,7 +1289,7 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
 test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v13 - 1.99ahq stage cover + privacy controls) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=14"), "pad-reveal.js v2, then stage-mic.js v14 (1.99ain: corner buttons auto-hide)");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99aid privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=15"), "pad-reveal.js v2, then stage-mic.js v15 (1.99ain: corner buttons auto-hide)");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99aid privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");
@@ -1460,6 +1461,25 @@ test("1.99ahn stage-mic.js: after 30 s in a hidden tab the live / still tiles pa
   assert.match(tileOf("c").textContent, /cam starting…/, "a new tile: 'cam starting…'");
   ctl.stop();
   assert.equal(EN["js.stage.mf.resuming"], "resuming…", "the new string is in locales/en.json");
+});
+
+test("Dock PiP mic stage follows its adopted document's visibility and resumes on redock", async () => {
+  const H = visHarness({ v: 1, layout: 'split', count: 1, src: [visTile('a', 0, 'live')], manage: null, still_s: 20 });
+  await tick();
+  let onPipVisibility = null;
+  const pip = { hidden: false, addEventListener(k, fn) { if (k === 'visibilitychange') onPipVisibility = fn; }, removeEventListener(k, fn) { if (k === 'visibilitychange' && onPipVisibility === fn) onPipVisibility = null; } };
+  H.host.ownerDocument = pip; H.host.listeners['patv:surfacechange'][0]();
+  const stops = () => H.posts.filter(p => p[1] && p[1].stop === true).length;
+  const before = stops(); H.hide();
+  assert.equal(stops(), before, 'hiding the opener does not stop a visible PiP tile');
+  pip.hidden = true; onPipVisibility();
+  assert.ok(stops() > before, 'hiding the actual PiP document stops its tile');
+  H.ctx.document.hidden = false; H.host.ownerDocument = H.ctx.document;
+  H.host.listeners['patv:surfacechange'][0]();
+  assert.equal(onPipVisibility, null, 'redock removes the PiP visibility listener');
+  assert.match(H.tileOf('a').textContent, /resuming…/);
+  await tick(); H.ctl.stop();
+  assert.equal(H.host.listeners['patv:surfacechange'].length, 0, 'stop removes the adoption hook');
 });
 
 test("1.99ahn review UX-2 stage-mic.js: 'resuming…' only on a tile whose picture the pause took away - one still starting, one that came on or went live while hidden says 'cam starting…'", async () => {

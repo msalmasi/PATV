@@ -5,7 +5,7 @@
   'use strict';
   var W = window, D = document, own = Object.prototype.hasOwnProperty;
   var translate = typeof W.__t === 'function' ? W.__t : function (key, fallback) { return fallback; };
-  var receivers = [], configs = Object.create(null), records = Object.create(null), lines = [], buttons = [], listeners = [];
+  var receivers = [], configs = Object.create(null), records = Object.create(null), lines = [], buttons = [], listeners = [], surfaceDocs = [];
   var padSource = '', sound = { slug: '', playing: false, mode: 'rtc', pc: null, ahead: null };
   var soundStats = { browser: null, rtt: null, ok: false }, audioPrevious = null, mp3Average = null, mp3At = 0;
   var enabled = true, epoch = 0, timer = null, pollTimer = null, viewTimer = null, busy = false, again = false, stopped = false, debugBox = null;
@@ -457,6 +457,36 @@
   }
   /** 1.99ahm: the viewer leaves, the tab is hidden or frozen - every held line shows at once (never lost while timers sleep). */
   function releaseLines() { var held = lines; lines = []; held.forEach(release); }
+  // A Dock PiP adopts the existing feed; only its actual document can hide/freeze its held lines.
+  function releaseDocumentLines(doc, frozen) {
+    var held = [];
+    lines = lines.filter(function (line) {
+      var owner = line.el.ownerDocument || D;
+      if (owner === doc && (frozen || doc.hidden)) { held.push(line); return false; }
+      return true;
+    });
+    held.forEach(release);
+  }
+  function watchDocument(doc) {
+    if (!doc || !doc.addEventListener || surfaceDocs.some(function (entry) { return entry.doc === doc; })) return;
+    var entry = { doc: doc };
+    entry.visibility = function () { if (doc.hidden) releaseDocumentLines(doc, false); else if (!stopped) refreshViews(); };
+    entry.freeze = function () { releaseDocumentLines(doc, true); };
+    entry.close = function () {
+      releaseDocumentLines(doc, true);
+      doc.removeEventListener('visibilitychange', entry.visibility); doc.removeEventListener('freeze', entry.freeze);
+      if (doc.defaultView) doc.defaultView.removeEventListener('pagehide', entry.close);
+      surfaceDocs = surfaceDocs.filter(function (item) { return item !== entry; });
+    };
+    surfaceDocs.push(entry);
+    doc.addEventListener('visibilitychange', entry.visibility); doc.addEventListener('freeze', entry.freeze);
+    if (doc !== D && doc.defaultView) doc.defaultView.addEventListener('pagehide', entry.close);
+  }
+  function surfaceChanged(element) {
+    var doc = element && element.ownerDocument || D;
+    watchDocument(doc);
+    if (doc.hidden) releaseDocumentLines(doc, false); else if (!stopped) refreshViews();
+  }
   function refreshViews() { Object.keys(records).forEach(function (key) { renderRecord(records[key], true); }); scheduleViews(); }
   function gateProgram(pad, program, callback) {
     var record = historyRecord('program', slug(pad), program, callback), out = renderRecord(record, false);
@@ -471,7 +501,8 @@
    *  so it shows in its true time order. Only a timing flag is kept on it - never who it names. */
   function holdLine(pad, element, reveal) {
     // 1.99ahm: a hidden tab shows lines as they come (its timers sleep); a line not in the page yet is never held (it could not be shown)
-    if (!element || !element.style || element._patvAvSyncHeld || element.isConnected === false || D.hidden || !delayFor(pad, false, 'mic_chat')) return false;
+    if (!element || !element.style || element._patvAvSyncHeld || element.isConnected === false || (element.ownerDocument || D).hidden || !delayFor(pad, false, 'mic_chat')) return false;
+    watchDocument(element.ownerDocument || D);
     var line = { pad: slug(pad), el: element, at: Date.now(), display: element.style.display || '', reveal: typeof reveal === 'function' ? reveal : null };
     element._patvAvSyncHeld = true; element.style.display = 'none'; lines.push(line);
     if (lines.length > 600) release(lines.shift());
@@ -564,7 +595,7 @@
   }
   function onChange(callback) { if (typeof callback !== 'function') return function () {}; listeners.push(callback); return function () { listeners = listeners.filter(function (f) { return f !== callback; }); }; }
   W.PATVAvSync = { pad: function (value) { padSource = value; wake(); }, video: video, audio: audio, decorate: decorate, debug: debug,
-    latency: latency, modsInstant: modsInstant, onChange: onChange, gateProgram: gateProgram, micView: micView, holdLine: holdLine, caughtUp: caughtUp,
+    latency: latency, modsInstant: modsInstant, onChange: onChange, gateProgram: gateProgram, micView: micView, holdLine: holdLine, caughtUp: caughtUp, surfaceChanged: surfaceChanged,
     _math: { videoTarget: videoTarget, indicatorTarget: indicatorTarget, delta: delta, average: average, pathOf: pathOf } };
   if (W.addEventListener) {
     W.addEventListener('storage', function (event) { if (event.key === storageKey) setEnabled(event.newValue !== '0'); });
@@ -572,8 +603,5 @@
     W.addEventListener('pageshow', function () { if (stopped) { stopped = false; wake(); } });
   }
   // 1.99ahm: a hidden or frozen tab's timers sleep - its held chat lines show at once; back in view, the card is drawn as it is now
-  if (D.addEventListener) {
-    D.addEventListener('visibilitychange', function () { if (D.hidden) releaseLines(); else if (!stopped) refreshViews(); });
-    D.addEventListener('freeze', releaseLines);
-  }
+  watchDocument(D);
 })();

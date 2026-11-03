@@ -678,6 +678,31 @@ test("1.99ahm: the list, the card and the held grab/drop lines agree - one momen
   s.api.caughtUp("pad"); assert.deepEqual([card(), list()], [["b"], ["b"]]);
 });
 
+test("Dock PiP keeps the adopted chat's timing while the opener hides, then releases only its own hidden lines", async () => {
+  const s = await gated(), events = {};
+  const pip = { hidden: false, addEventListener(k, fn) { (events[k] ||= []).push(fn); }, removeEventListener(k, fn) { events[k] = (events[k] || []).filter(f => f !== fn); } };
+  const host = s.element('div'); s.document.body.appendChild(host);
+  const moved = s.element('div'); host.appendChild(moved); moved.ownerDocument = pip;
+  const opener = s.element('div'); host.appendChild(opener); opener.ownerDocument = s.document;
+  s.api.surfaceChanged(moved);
+  assert.equal(s.api.holdLine('pad', moved), true);
+  assert.equal(s.api.holdLine('pad', opener), true);
+  s.document.hidden = true; s.docEvent('visibilitychange');
+  assert.equal(opener.style.display, '', 'the hidden opener releases its own line');
+  assert.equal(moved.style.display, 'none', 'visible PiP keeps its line until the audio');
+  const next = s.element('div'); host.appendChild(next); next.ownerDocument = pip;
+  assert.equal(s.api.holdLine('pad', next), true, 'new PiP lines still use the configured delay');
+  await s.advance(700);
+  assert.equal(moved.style.display, ''); assert.equal(next.style.display, '');
+  const later = s.element('div'); host.appendChild(later); later.ownerDocument = pip;
+  assert.equal(s.api.holdLine('pad', later), true);
+  pip.hidden = true; events.visibilitychange.forEach(fn => fn());
+  assert.equal(later.style.display, '', 'hiding PiP releases its own held line');
+  pip.hidden = false; events.visibilitychange.forEach(fn => fn());
+  later.ownerDocument = s.document; s.api.surfaceChanged(later);
+  assert.equal(s.api.holdLine('pad', later), false, 'redocked into a hidden opener, it is no longer held');
+});
+
 test("1.99ahp stable slots: a stable program's places are delayed with it - an exchange of places (the dynamic main cell) shows when the voices do, never ahead of its main; without stable the latest places as before", async () => {
   const prog = (order, extra = {}) => ({ v: 1, src: order.map(([id, pos]) => ({ id, name: id.toUpperCase(), pos, newest: false, recent: false, video: "live", watch: "ok" })),
     count: order.length, active: true, layout: "grid4", dyn: { n: order.length, t: "d" + order.length, main: order.find(o => o[1] === 0)[0] }, manage: { layout_override: null }, fixed: true, stable: true, ...extra });

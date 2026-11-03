@@ -26,6 +26,9 @@
   --ds-hover: #24242a;         /* hover / pressed fill on quiet controls */
   --ds-scrim: rgba(0, 0, 0, .62);  /* behind modals and sheets */
   --ds-glass: rgba(0, 0, 0, .35);  /* stat pills and tiles laid over a hero */
+  --ds-media-bg: #000;              /* stage, cam and Story Studio preview background */
+  --ds-media-chip: rgba(0, 0, 0, .65); /* compact on-video name / mention chips */
+  --ds-media-panel: rgba(0, 0, 0, .88); /* readable text plate over even a white video frame */
 
   /* lines */
   --ds-line-soft: #1d1d1d;     /* row dividers inside a card or table */

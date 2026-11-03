@@ -50,7 +50,7 @@
     <% (cwHead_.preconnect || []).forEach((o) => { %><link rel="preconnect" href="<%= o %>" crossorigin>
     <% }) %><% if (cwHead_.fonts) { %><link href="<%= cwHead_.fonts %>" rel="stylesheet"><% } %>
     <% } %>
-    <link rel="stylesheet" href="/public/css/ds.css?v=3"><%# CL5 fix-up: v=3 - the pad chat's --ds-chat-* tokens (chatlog.css reads them) %>
+    <link rel="stylesheet" href="/public/css/ds.css?v=4"><%# CL5 fix-up: v=3 - the pad chat's --ds-chat-* tokens (chatlog.css reads them) %>
     <link rel="stylesheet" href="/public/css/styles.css?v=6">
     <%# 1.99jo: page scripts translate with __t(key, englishDefault, vars), key = js.<area>.<name> - PATV_I18N holds the page language's
         "js.*" strings (nothing for English: the defaults are the English). Plain text: put it in textContent, or escape it. %>

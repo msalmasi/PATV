@@ -37,8 +37,8 @@ test("room.ejs: one widget can't freeze the page - every sub-update is isolated 
     assert.match(apply, new RegExp(`safe\\('${name}'`), `${name} update wrapped`);
   }
   assert.match(room, /try \{ apply\(data, true\); \} finally \{ schedule\(\); \}/);
-  assert.match(room, /function setStatus\(t, err\) \{ var s = document\.getElementById\('rmStatus'\); if \(!s\) return;/);
-  assert.match(room, /var cntEl = document\.getElementById\('rmCount'\); if \(cntEl\)/);
+  assert.match(room, /function setStatus\(t, err\) \{ var s = roomEl\('rmStatus'\); if \(!s\) return;/);
+  assert.match(room, /var cntEl = roomEl\('rmCount'\); if \(cntEl\)/);
 });
 
 // ── the audio player in a tiny fake DOM ──
@@ -155,7 +155,7 @@ test("home: Top Pads rows get a 🎧 - enabled when the pad's audio relay is on 
   assert.match(btn("c"), /disabled/);
   assert.match(btn("c"), /sign in to listen/);
   assert.match(html, /<div id="tpAudioBox"><\/div>/);
-  assert.match(html, /room-bridge\.js\?v=19/, "the player script loads for the 🎧 even without the room widget");   // v=17: soundboard progress through the shared relay; v=19: lip sync review fix (stall grace)
+  assert.match(html, /room-bridge\.js\?v=20/, "the player script loads for the 🎧 even without the room widget");   // v=17: soundboard progress through the shared relay; v=19: lip sync review fix (stall grace)
   assert.match(html, /get\(\)\.listen\(b\.getAttribute\('data-listen'\)/);
   const none = await renderHome({ tops: tops.map((t) => Object.assign({}, t, { audio: false })) });
   assert.doesNotMatch(none, /room-bridge\.js/, "nothing to listen to and no room widget: no player script");
@@ -181,7 +181,7 @@ test("player: 0.75 s cushion; catch-up to the live edge only on a real backlog (
   assert.match(js, /setInterval\(edge, 500\)/);
   assert.match(js, /isTypeSupported\('audio\/mpeg'\)/, "MSE where the browser can, plain stream URL otherwise (iOS)");
   for (const v of ["home.ejs", "room.ejs"]) {
-    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=19/, v + " loads the new player");
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=20/, v + " loads the new player");
   }
 });
 

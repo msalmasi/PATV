@@ -51,8 +51,11 @@ All values are in ds.css `:root`. Contrast ratios below are measured against `--
 | `--ds-hover` | #24242a | hover or pressed fill on quiet controls |
 | `--ds-scrim` | rgba(0,0,0,.62) | behind modals and sheets |
 | `--ds-glass` | rgba(0,0,0,.35) | stat pills and tiles over a hero gradient |
+| `--ds-media-bg` | #000 | stage and cam backgrounds; Story Studio preview |
+| `--ds-media-chip` | rgba(0,0,0,.65) | compact names and mention chips on video, with strong text |
+| `--ds-media-panel` | rgba(0,0,0,.88) | a text plate over video; keeps muted text readable even over a white frame |
 
-The hero base is `#111` under radial gradients (§6.4). It is the only other dark that may appear.
+The hero base is `#111` under radial gradients (§6.4). Media surfaces use the dedicated tokens above instead of introducing page colours.
 
 ### 2.2 Lines
 
@@ -111,6 +114,21 @@ Area accents:
 | Plex | #ffa726 (Plex brand #e5a00d) | — | #1a1000 |
 | Premium | #b388ff | — | #12002a |
 | Achievements | #39ff88 | — | #02140a |
+
+The Room Dock maps an equipped pad accent once, on `.rm-dock.pad-acc` and the matching moved-surface shell. The values come from the server's existing `padLook()` CSS variables; the client does not repeat palette, contrast or cosmetic rules:
+
+```css
+--ds-ac: var(--pad-accent);
+--ds-ac-2: var(--pad-accent);
+--ds-ac-bg: color-mix(in srgb, var(--pad-accent) 12%, transparent);
+--ds-ac-line: color-mix(in srgb, var(--pad-accent) 45%, transparent);
+--ds-on-ac: var(--pad-accent-ink);
+--ds-focus: var(--pad-accent);
+--ds-focus-ring: 0 0 0 2px var(--ds-bg), 0 0 0 4px var(--ds-focus);
+--ds-glow: 0 0 10px var(--ds-ac);
+```
+
+This pad focus colour is the scoped exception to the gold focus default in §9. Pads without an accent retain the defaults. Only the pad's own surfaces use this mapping: the Dock now, with Story Studio added in its separate package. The mapping follows the same stage, chat, menus and sheets into fullscreen, floating and Document Picture-in-Picture views. It does not restyle Feed or About, and PAT amounts keep their gold tokens.
 
 ### 2.5 PAT gold
 
@@ -315,6 +333,9 @@ CSS can't use variables in media queries, so these are the only widths to write.
 | `.ds-page.mid` | `--ds-w-mid` | 900 | a single item (poll, bounty, order, market) |
 | `.ds-page` | `--ds-w-page` | 1040 | the default |
 | `.ds-page.wide` | `--ds-w-wide` | 1200 | grids, a feed with a rail, shop |
+| `.pad-dock-live .ds-page.rm.rm-dock` | viewport width minus `--ds-gutter` | fluid | bridged pad Live workspace; viewport-height flex frame with scrolling chat and the normal 16px phone gutter |
+
+The Room Dock frame uses the viewport width only on Live, retaining the standard design-system gutters. Feed and About retain the existing pad width cap, normal document scrolling and the footer; the stage and pinned cams stay mounted but hidden there. The existing story strip is placed in the Dock unchanged; Story Studio is a separate package.
 
 `--ds-gutter` is 16px below 760, 20px at ≥ 760 and 24px at ≥ 1100. Never less than 16 on mobile. The home page (1400) and full-bleed game tables (casino felt, GTF map) may exceed `wide`, but keep the gutter.
 
@@ -573,6 +594,7 @@ PATV's icons are emoji plus a few PNGs (Pepe, star.gif, Discord, Twitch, coin). 
   - Text on fills: white only on fills ≥ 4.5:1 (#2f5f99, #d32f2f, #5a2a2a). Dark ink on bright fills (green, gold, amber, cyan, pink).
   - **Known legacy fail:** `styles.css`'s global `button` (white on #3cc47c, 2.2:1) and the old #4caf50 buttons with white text. Fix them per page during polish by switching to `.ds-btn`.
 - **Focus.** Every interactive element shows `:focus-visible`: a 2px solid `--ds-focus` (#ffcf40) outline with a 2px offset, or `--ds-focus-ring` (box-shadow) on pills. Never `outline: none` without a replacement. `.ds-page` applies the outline to plain links, buttons and fields automatically.
+  - **Pad exception:** the Room Dock and its moved surfaces use the equipped pad accent for `--ds-focus` and `--ds-focus-ring` (§2.4). The server's existing contrast guard and ink selection remain the source of truth.
 - **Tap targets.** At least 44×44 for primary controls. 36 is allowed for secondary or compact controls (`.sm`, tabs) on desktop; touch raises them to 40. Inline text links are exempt but get `text-underline-offset: 3px`.
 - **Semantics.**
   - One `<h1>` per page, and headings in order.

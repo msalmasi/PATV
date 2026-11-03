@@ -1,0 +1,336 @@
+/* Room Dock: the existing pad components, scoped to this opt-in layout. */
+body.pad-dock-live { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 520px; overflow: hidden; }
+body.pad-dock-live > header { flex: none; }
+body.pad-dock-live > main.rm.rm-dock { flex: 1 1 0; min-block-size: 0; max-inline-size: none; }
+body.pad-dock-live .site-foot { display: none; }
+main.rm.rm-dock { inline-size: 100%; min-inline-size: 0; gap: var(--ds-sp-2); padding-block: var(--ds-sp-2) var(--ds-sp-3); padding-inline: var(--ds-gutter); }
+body.pad-dock-live > main.rm.rm-dock { display: flex; flex-direction: column; }
+main.rm.rm-dock [hidden] { display: none !important; }
+main.rm.rm-dock .crumb { flex: none; font-size: var(--ds-fs-xs); }
+main.rm.rm-dock #padPanel-live { min-block-size: 0; min-inline-size: 0; }
+body.pad-dock-live main.rm.rm-dock #padPanel-live { display: flex; flex-direction: column; flex: 1 1 0; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-drawer { flex: none; min-inline-size: 0; display: grid; gap: var(--ds-sp-2); }
+main.rm.rm-dock #rmHero { padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); background: var(--ds-surface); }
+main.rm.rm-dock #rmHero .hd { gap: var(--ds-sp-2); }
+main.rm.rm-dock #rmHero .hd-id { display: flex; align-items: center; gap: var(--ds-sp-2); }
+main.rm.rm-dock #rmHero h1 { flex: 1 1 auto; min-inline-size: 0; }
+main.rm.rm-dock #rmHero .hd-st { flex: none; }
+main.rm.rm-dock #rmHero .rm-av { width: 32px; height: 32px; border-radius: var(--ds-r-sm); }
+main.rm.rm-dock #rmHero.has-bn { position: relative; padding-block: var(--ds-sp-2); }
+main.rm.rm-dock #rmHero .hero-bn { position: absolute; inset: 0; block-size: 100%; margin: 0; border-radius: inherit; }
+main.rm.rm-dock #rmHero .hero-bn::after { background: var(--ds-media-panel); }
+main.rm.rm-dock #rmHero.has-bn .hd { margin-block-start: 0; position: relative; z-index: var(--ds-z-raised); }
+main.rm.rm-dock #rmHero h1 { font-size: var(--ds-fs-h3); }
+main.rm.rm-dock #padTabs { margin: 0; min-inline-size: 0; padding: var(--ds-sp-1); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock #padTabs .ptab { min-block-size: 36px; padding-inline: var(--ds-sp-3); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-padbar { display: none; flex: none; min-inline-size: 0; gap: var(--ds-sp-2); align-items: center; }
+main.rm.rm-dock .rmd-padbar > button { min-block-size: 44px; }
+
+/* Shared pad-accent mapping: hand-off 19 compares these exact eight declarations. */
+main.rm.rm-dock.pad-acc #rmHero,
+main.rm.rm-dock.pad-acc .rmd-padbar,
+main.rm.rm-dock.pad-acc #padTabs,
+main.rm.rm-dock.pad-acc #padPanel-live,
+main.rm.rm-dock.pad-acc .rmd-float,
+main.rm.rm-dock.pad-acc .rmd-fullscreen,
+main.rm.rm-dock.pad-acc .rmd-layer,
+main.rm.rm-dock.pad-acc .rmd-menu,
+main.rm.rm-dock.pad-acc .rmd-mini,
+main.rm.rm-dock.pad-acc[data-rmd-pip] {
+  --ds-ac: var(--pad-accent);
+  --ds-ac-2: var(--pad-accent);
+  --ds-ac-bg: color-mix(in srgb, var(--pad-accent) 12%, transparent);
+  --ds-ac-line: color-mix(in srgb, var(--pad-accent) 45%, transparent);
+  --ds-on-ac: var(--pad-accent-ink);
+  --ds-focus: var(--pad-accent);
+  --ds-focus-ring: 0 0 0 2px var(--ds-bg), 0 0 0 4px var(--ds-focus);
+  --ds-glow: 0 0 10px var(--ds-ac);
+}
+main.rm.rm-dock :is(#rmHero, #padTabs, #padPanel-live, .rmd-float, .rmd-fullscreen, .rmd-layer, .rmd-menu, .rmd-mini) a:not(.ds-btn) { color: var(--ds-ac-2); }
+main.rm.rm-dock[data-rmd-pip] a:not(.ds-btn) { color: var(--ds-ac-2); }
+main.rm.rm-dock :is(#padTabs .ptab[aria-selected="true"], #rmTabs .stab[aria-selected="true"]) { color: var(--ds-text-strong); background: var(--ds-ac-bg); border-color: var(--ds-ac-line); }
+main.rm.rm-dock :is(#padPanel-live, .rmd-float, .rmd-fullscreen, .rmd-layer, .rmd-menu, .rmd-mini, #rmdBar) :is(button, a, input, select, textarea):focus-visible { outline-color: var(--ds-focus); }
+main.rm.rm-dock :is(.rb-ac, .rb-audio.on, .rmd-padbar, .rmd-float) { border-color: var(--ds-ac-line); }
+main.rm.rm-dock :is(.rb-ac-it.on, .rb-ac-it:hover, .ic button.cam:hover, .ic button.cam:focus-visible, .mic .holder) { background: var(--ds-ac-bg); border-color: var(--ds-ac-line); }
+main.rm.rm-dock :is(.rb-ac-c, .rb-cmd-t, .rb-hint) { color: var(--ds-ac-2); }
+main.rm.rm-dock .eq i { background: var(--ds-ac); }
+main.rm.rm-dock #rmStageH .btn { background: var(--ds-ac); border-color: var(--ds-ac); color: var(--ds-on-ac) !important; }
+main.rm.rm-dock #rmJump { background: var(--ds-ac); color: var(--ds-on-ac); }
+main.rm.rm-dock #rmHero :is(.ibtn:hover, .ibtn:focus-visible, .hd-more[open] > summary) { border-color: var(--ds-ac); }
+main.rm.rm-dock #rmHero .hd-menu :is(a, button):is(:hover, :focus-visible) { background: var(--ds-ac-bg); }
+main.rm.rm-dock #rmPlexQ { border-color: var(--ds-ac-line); background: var(--ds-ac-bg); }
+main.rm.rm-dock #rmPlexQ .pq-scrub { accent-color: var(--ds-ac); }
+main.rm.rm-dock #rmPlexQ .pq-bar span { background: var(--ds-ac); }
+main.rm.rm-dock :is(#rmGoLive, .rmd-layer) .rs .srow:not(.live) .when { color: var(--ds-ac-2); }
+main.rm.rm-dock :is(#rmGoLive, .rmd-layer) .rs .srow.mine { box-shadow: inset 3px 0 0 var(--ds-ac); }
+main.rm.rm-dock :is(#rmGoLive, .rmd-layer) .rs .tg.you { background: var(--ds-ac-bg); color: var(--ds-ac-2); border-color: var(--ds-ac-line); }
+
+/* Identity frames contain only identity; view controls are their siblings. */
+main.rm.rm-dock .rmd-id { position: relative; display: flex; min-inline-size: 0; max-inline-size: 100%; border-radius: var(--ds-r-lg); padding: var(--ds-sp-2) var(--ds-sp-3); isolation: isolate; background: var(--ds-surface); }
+main.rm.rm-dock .rmd-id-content { display: flex; align-items: center; gap: var(--ds-sp-2); min-inline-size: 0; inline-size: 100%; }
+main.rm.rm-dock .rmd-id .rm-av { width: 32px; height: 32px; border-radius: var(--ds-r-sm); }
+main.rm.rm-dock .rmd-id-name { display: flex; align-items: center; gap: var(--ds-sp-2); flex: 1 1 auto; min-inline-size: 0; overflow: hidden; }
+main.rm.rm-dock .rmd-id-name > .rm-nm { min-inline-size: min(8ch, 100%); text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); font-weight: 700; }
+main.rm.rm-dock .rmd-id-name > .pfx-bs { flex: 0 1 auto; }
+main.rm.rm-dock .rmd-id > .rmd-id-banner { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }
+main.rm.rm-dock .rmd-id-banner img { inline-size: 100%; block-size: 100%; object-fit: cover; object-position: 50% var(--pad-banner-y, 50%); display: block; }
+main.rm.rm-dock .rmd-id-banner::after { content: ""; position: absolute; inset: 0; background: var(--ds-media-panel); }
+main.rm.rm-dock .rmd-id > .rmd-id-content { position: relative; z-index: var(--ds-z-raised); }
+main.rm.rm-dock .rmd-viewbar { display: flex; align-items: center; gap: var(--ds-sp-2); padding: var(--ds-sp-2); min-inline-size: 0; flex: none; }
+main.rm.rm-dock .rmd-viewbar > .rmd-id { flex: 1 1 auto; }
+main.rm.rm-dock .rmd-viewbar > button { flex: none; }
+main.rm.rm-dock .rmd-icon { inline-size: 40px; min-inline-size: 40px; padding-inline: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-icon > .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* The stage, then personal cams, then chat and its room list. */
+main.rm.rm-dock #rmLiveStat { margin: 0; flex: none; font-size: var(--ds-fs-xs); }
+main.rm.rm-dock #rmStage { position: relative; isolation: isolate; display: flex; flex-direction: column; flex: 0 1 32%; min-block-size: 116px; max-block-size: 32%; padding: 0; margin: 0; border-radius: var(--ds-r-lg); background: var(--ds-media-bg); }
+main.rm.rm-dock.rmd-stage-hidden #rmStage,
+main.rm.rm-dock.rmd-stage-hidden .rmd-local-player,
+main.rm.rm-dock.rmd-local-cam #rmStage { display: none; }
+main.rm.rm-dock #rmStage .player { position: relative; isolation: isolate; flex: 1 1 auto; min-block-size: 0; inline-size: 100%; max-inline-size: none; aspect-ratio: 16 / 9; background: var(--ds-media-bg); border-radius: inherit; overflow: hidden; }
+main.rm.rm-dock #rmStage #rmVideo { block-size: 100%; min-block-size: 0; aspect-ratio: auto; padding: 0; border-radius: inherit; }
+main.rm.rm-dock #rmStage :is(.video-js, .vjs-tech, #rmEmbed, #rmEmbed iframe) { inline-size: 100%; block-size: 100%; }
+main.rm.rm-dock #rmStage video { object-fit: contain; background: var(--ds-media-bg); }
+main.rm.rm-dock #rmStageH { display: flex; align-items: center; margin: 0; gap: var(--ds-sp-2); padding: var(--ds-sp-2); font-size: var(--ds-fs-eyebrow); }
+main.rm.rm-dock .rmd-stage-overlay #rmStageH { padding: 0; }
+main.rm.rm-dock .rmd-stage-overlay #rmStageH > span:first-child { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main.rm.rm-dock #rmTabs { display: flex; flex-wrap: nowrap; overflow-x: auto; min-inline-size: 0; gap: var(--ds-sp-1); margin: 0; }
+main.rm.rm-dock #rmTabs .stab { flex: none; min-block-size: 36px; }
+main.rm.rm-dock .rmd-stage-overlay { position: absolute; inset-block-start: 0; inset-inline: 0; z-index: var(--ds-z-raised); display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1); background: var(--ds-media-panel); padding: var(--ds-sp-2); border-radius: var(--ds-r-lg) var(--ds-r-lg) 0 0; opacity: 0; pointer-events: none; transition: opacity var(--ds-dur-1) var(--ds-ease); }
+main.rm.rm-dock .rmd-stage-overlay > .rmd-id { flex: 1 1 160px; padding: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-stage-overlay #rmTabs { flex: 1 1 100%; }
+main.rm.rm-dock #rmStage.rmd-controls-on .rmd-stage-overlay { opacity: 1; pointer-events: auto; }
+main.rm.rm-dock #rmStage:focus-within .rmd-stage-overlay { opacity: 1; pointer-events: auto; }
+main.rm.rm-dock #rmStage:is(.rmd-controls-on, :focus-within) { z-index: var(--ds-z-sticky); }
+main.rm.rm-dock .rmd-stage-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmCap { margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2); flex: none; font-size: var(--ds-fs-xs); }
+main.rm.rm-dock #rmGoLive { flex: none; margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock #rmGoLive .stage-bar { gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-side #rmGoLive .stage-bar { display: grid; }
+main.rm.rm-dock .rmd-side #rmGoLive .stage-acts { flex-wrap: wrap; }
+main.rm.rm-dock .rmd-side #rmGoLive .sact { flex: 1 1 auto; }
+main.rm.rm-dock .rmd-stage-status { display: flex; flex: none; align-items: center; gap: var(--ds-sp-3); min-inline-size: 0; font-size: var(--ds-fs-xs); line-height: var(--ds-lh-xs); overflow-x: auto; white-space: nowrap; }
+main.rm.rm-dock .rmd-stage-status > .slots { flex: none; }
+main.rm.rm-dock .rmd-stage-status #rmSched { flex: 1 1 auto; min-inline-size: 0; display: block; margin: 0; padding: 0; border: 0; }
+main.rm.rm-dock .rmd-stage-status .scols { display: block; }
+main.rm.rm-dock .rmd-stage-status .scols > div:first-child { display: flex; align-items: center; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-stage-status :is(.scols > div:not(:first-child), .note, .tags, .when) { display: none; }
+main.rm.rm-dock .rmd-stage-status h3 { flex: none; margin: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); letter-spacing: normal; text-transform: none; }
+main.rm.rm-dock .rmd-stage-status #rsLive { display: flex; gap: var(--ds-sp-3); min-inline-size: 0; overflow-x: auto; }
+main.rm.rm-dock .rmd-stage-status #rsLive > li { display: inline-flex; flex: none; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: var(--ds-fs-xs); }
+main.rm.rm-dock .rmd-layer .rs .scols { grid-template-columns: minmax(0, 1fr); }
+main.rm.rm-dock #rmStrip { position: relative; isolation: isolate; flex: none; min-block-size: 0; margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock #rmStrip .cs-title { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main.rm.rm-dock #rmStrip .cs-head { justify-content: space-between; flex-wrap: nowrap; gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmStrip .cs-acts { flex-wrap: nowrap; gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmStrip .cs-row { display: flex; overflow-x: auto; gap: var(--ds-sp-2); margin-block-start: var(--ds-sp-1); padding-block-end: var(--ds-sp-1); }
+main.rm.rm-dock #rmStrip .cs-tile { position: relative; flex: 0 0 144px; min-inline-size: 0; display: block; }
+main.rm.rm-dock #rmStrip .cs-name { position: absolute; inset-inline: 0; inset-block-end: 0; background: var(--ds-media-panel); padding: var(--ds-sp-1); border-radius: 0 0 var(--ds-r-md) var(--ds-r-md); pointer-events: none; }
+main.rm.rm-dock #rmStrip .rmd-cam-tools { position: absolute; inset-inline-start: var(--ds-sp-1); inset-block-end: var(--ds-sp-5); z-index: var(--ds-z-raised); border-radius: var(--ds-r-pill); background: var(--ds-media-panel); opacity: 0; pointer-events: none; }
+main.rm.rm-dock #rmStrip .cs-tile:is(:hover, :focus-within) .rmd-cam-tools { opacity: 1; pointer-events: auto; }
+main.rm.rm-dock #rmStrip[data-rmd-layout="large"] .cs-tile,
+main.rm.rm-dock #rmStrip.rmd-cams-large .cs-tile { flex-basis: 176px; }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row,
+main.rm.rm-dock #rmStrip.rmd-cams-grid .cs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); max-block-size: 200px; overflow-y: auto; }
+main.rm.rm-dock :is(#rmStrip, .rmd-full-media) .cs-vid { isolation: isolate; aspect-ratio: 4 / 3; background: var(--ds-media-bg); border-radius: var(--ds-r-md); }
+main.rm.rm-dock :is(#rmStrip, .rmd-full-media) video { object-fit: contain; }
+main.rm.rm-dock .cs-name { font-size: var(--ds-fs-xs); }
+main.rm.rm-dock .cs-ic { min-inline-size: 36px; min-block-size: 36px; background: var(--ds-media-chip); }
+main.rm.rm-dock .rmd-body { flex: 1 1 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(200px, 22vw, 260px); align-items: stretch; min-block-size: 0; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-body > .rm-main { display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; }
+main.rm.rm-dock .rmd-body > .side,
+main.rm.rm-dock .rmd-side { display: flex; flex-direction: column; gap: var(--ds-sp-2); min-block-size: 0; min-inline-size: 0; overflow-y: auto; overscroll-behavior: contain; }
+main.rm.rm-dock #rmChat { display: flex; flex-direction: column; position: relative; flex: 1 1 0; min-block-size: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock #chatH { flex: none; align-items: center; flex-wrap: wrap; margin-block-end: var(--ds-sp-1); gap: var(--ds-sp-1); }
+main.rm.rm-dock #chatH > .rmd-chat-tools { margin-block: 0; margin-inline-start: auto; }
+main.rm.rm-dock #chatH > :is(.hist-chip, .hist-jump) { order: 2; }
+main.rm.rm-dock #chatH > .rmd-chat-tools { order: 3; }
+main.rm.rm-dock #chatH .hist-jump { min-block-size: 36px; min-inline-size: 36px; }
+main.rm.rm-dock #rmTopic { flex: none; margin-block: 0 var(--ds-sp-1); font-size: var(--ds-fs-meta); color: var(--ds-chat-topic); }
+main.rm.rm-dock .rmd-topic-line { display: flex; align-items: center; gap: var(--ds-sp-1); flex: none; min-inline-size: 0; font: 400 var(--ds-fs-meta)/var(--ds-lh-sm) var(--ds-font); letter-spacing: normal; text-transform: none; }
+main.rm.rm-dock #chatH > .rmd-topic-line { flex: 1 1 160px; order: 1; }
+main.rm.rm-dock .rmd-topic-line #rmTopic { flex: 1 1 auto; min-inline-size: 0; margin-block: 0 var(--ds-sp-1); }
+main.rm.rm-dock .rmd-topic-line > button { flex: none; }
+main.rm.rm-dock #rmTopic[role="button"] { cursor: pointer; border-radius: var(--ds-r-xs); }
+main.rm.rm-dock #rmScroll { flex: 1 1 0; min-block-size: 0; max-block-size: none; block-size: auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+main.rm.rm-dock #rmJump { position: absolute; inset-inline-start: var(--ds-sp-3); inset-block-end: var(--ds-sp-12); z-index: var(--ds-z-raised); }
+main.rm.rm-dock :is(#rmPplCard, #rmMicCard, #rmMod, .rm-story) { padding: var(--ds-sp-2); border-radius: var(--ds-r-lg); flex: none; }
+main.rm.rm-dock #rmPeople { max-block-size: none; overflow: visible; }
+main.rm.rm-dock #rmPeople > li { min-block-size: 40px; }
+main.rm.rm-dock #rmMicCard { display: block; }
+main.rm.rm-dock .rmd-chat-tools,
+main.rm.rm-dock .rmd-composer-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--ds-sp-1); flex: none; }
+main.rm.rm-dock .rmd-chat-tools { margin-block-end: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-chat-tools .rmd-label,
+main.rm.rm-dock .rmd-composer-tools .rmd-label,
+main.rm.rm-dock .rmd-extras .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main.rm.rm-dock .rmd-chat-tools button { min-inline-size: 36px; padding-inline: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-composer-tools { justify-content: flex-start; }
+main.rm.rm-dock .rmd-strip-layout { margin: 0; flex: none; }
+main.rm.rm-dock .rmd-strip-select { display: none; }
+main.rm.rm-dock .rmd-cam-tools { display: flex; align-items: center; gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-cam-tools .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+main.rm.rm-dock .rmd-local-player { flex: 0 1 32%; max-block-size: 32%; min-block-size: 116px; display: flex; flex-direction: column; padding: 0; background: var(--ds-media-bg); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock .rmd-local-player .cs-tile { display: flex; flex-direction: column; min-block-size: 0; flex: 1 1 auto; }
+main.rm.rm-dock .rmd-local-player .cs-vid { min-block-size: 0; flex: 1 1 auto; }
+main.rm.rm-dock .rmd-person { display: inline-flex; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; }
+main.rm.rm-dock .rmd-person > .av { flex: none; }
+main.rm.rm-dock .rmd-person-name { display: inline-flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; }
+main.rm.rm-dock #rmPeople .nm { display: flex; align-items: center; gap: var(--ds-sp-1); flex-wrap: wrap; }
+main.rm.rm-dock #rmPeople .nm > .ufl { margin-inline: 0; }
+
+/* One composer: existing audio, relay and recording nodes retain their handlers. */
+main.rm.rm-dock .rmd-composer { position: relative; flex: none; min-inline-size: 0; border-block-start: 1px solid var(--ds-line); margin-block-start: var(--ds-sp-1); padding-block-start: var(--ds-sp-1); display: grid; gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmAudioBox { margin: 0; flex: none; }
+main.rm.rm-dock #rmAudioBox .rb-audio { padding: var(--ds-sp-1); border: 0; border-radius: 0; background: transparent; gap: var(--ds-sp-1) var(--ds-sp-2); }
+main.rm.rm-dock #rmAudioBox .rb-state { flex: 0 1 auto; font: 500 var(--ds-fs-xs)/var(--ds-lh-xs) var(--ds-font); letter-spacing: normal; }
+main.rm.rm-dock .rmd-composer :is(.rb-play, .rb-mute, .rb-btn, .rb-talk, .rb-send) { min-block-size: 36px; }
+main.rm.rm-dock #rmAudioBox .rb-vol { margin-inline: 0 var(--ds-sp-1); flex: 0 1 84px; inline-size: 84px; }
+main.rm.rm-dock .rmd-holders { display: flex; align-items: center; gap: var(--ds-sp-1); flex: 1 1 140px; min-inline-size: 0; overflow-x: auto; }
+main.rm.rm-dock .rmd-holders > * { flex: none; max-inline-size: 180px; min-block-size: 32px; }
+main.rm.rm-dock .rmd-holders .rmd-person { max-inline-size: 100%; }
+main.rm.rm-dock .rmd-holders .rmd-person-name { flex: 0 1 auto; }
+main.rm.rm-dock .rmd-holders .av { inline-size: 24px; block-size: 24px; }
+main.rm.rm-dock .rmd-holders .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-input-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; }
+main.rm.rm-dock .rmd-input-row #rmRelay,
+main.rm.rm-dock .rmd-input-row .rb-say:not(.hide),
+main.rm.rm-dock .rmd-input-row #rmPtt,
+main.rm.rm-dock .rmd-input-row .rb-ptt:not(.hide) { display: contents; }
+main.rm.rm-dock .rmd-input-row .rmd-extras { grid-row: 1; grid-column: 1; padding-inline: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-input-row .rb-say-in { grid-row: 1; grid-column: 2; }
+main.rm.rm-dock .rmd-input-row .rb-talk { grid-row: 1; grid-column: 3; }
+main.rm.rm-dock .rmd-input-row .rb-send { grid-row: 1; grid-column: 4; }
+main.rm.rm-dock .rmd-input-row .rb-count { grid-column: 2 / -1; justify-self: end; }
+main.rm.rm-dock .rmd-input-row .rb-micsel { grid-column: 2 / -1; inline-size: min(100%, 260px); }
+main.rm.rm-dock .rmd-input-row :is(.rb-ptt-txt, .rb-mine, .rb-note, .rb-offline, .rb-hint, .rb-cmdfeed) { grid-column: 1 / -1; }
+main.rm.rm-dock .rmd-composer .rb-say input { min-block-size: 40px; border-radius: var(--ds-r-md); background: var(--ds-sunken); color: var(--ds-text); }
+main.rm.rm-dock .rmd-composer .rb-say input:focus { border-color: var(--ds-ac); box-shadow: var(--ds-focus-ring); }
+main.rm.rm-dock .rmd-composer .rb-talk { white-space: nowrap; padding-inline: var(--ds-sp-3); color: var(--ds-ac-2); border-color: var(--ds-ac-line); background: var(--ds-ac-bg); }
+main.rm.rm-dock .rmd-composer .rb-talk[aria-pressed="true"] { color: var(--ds-text-strong); border-color: var(--ds-live); background: var(--ds-live); }
+main.rm.rm-dock .rmd-composer #rmCompose { margin: 0; padding: 0; border: 0; }
+main.rm.rm-dock .rmd-composer :is(.rb-hint, .rb-ptt-idle) { display: none; }
+main.rm.rm-dock .rmd-composer :is(.rb-mine, .rb-cmdfeed):empty { display: none; }
+main.rm.rm-dock .rmd-composer #rmSb { display: none; }
+main.rm.rm-dock #rmClip .cc-bar:not(:has(.cc-toggle.on)) { display: none; }
+main.rm.rm-dock .rmd-composer :is(.rb-ptt-txt, .rb-mine, .rb-note, .rb-hint) { font-size: var(--ds-fs-xs); }
+main.rm.rm-dock .rmd-composer .rb-cmdfeed { max-block-size: 120px; overflow-y: auto; }
+main.rm.rm-dock .rmd-composer .rb-ptt { gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-extras { flex: none; min-inline-size: 40px; min-block-size: 40px; }
+main.rm.rm-dock .rmd-menu { max-block-size: min(60vh, 420px); overflow-y: auto; min-inline-size: 220px; }
+main.rm.rm-dock .rmd-layer { z-index: var(--ds-z-modal); }
+main.rm.rm-dock .rmd-layer .ds-modal { max-inline-size: 520px; inline-size: 100%; max-block-size: 85dvh; overflow-y: auto; }
+main.rm.rm-dock .rmd-tts { display: grid; gap: var(--ds-sp-3); }
+main.rm.rm-dock .rmd-menu.ds-pop { inset-inline-start: var(--ds-sp-3); inset-block-end: var(--ds-sp-12); }
+
+/* Same nodes, alternative viewing surfaces. */
+main.rm.rm-dock .rmd-mini { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; min-inline-size: 0; padding: var(--ds-sp-1); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); }
+main.rm.rm-dock .rmd-mini .rmd-id { flex: 1 1 auto; }
+main.rm.rm-dock .rmd-float { position: fixed; inset-inline-end: var(--ds-sp-4); inset-block-end: var(--ds-sp-4); inline-size: min(560px, calc(100vw - 32px)); block-size: min(620px, calc(100dvh - 120px)); min-block-size: 260px; display: flex; flex-direction: column; background: var(--ds-surface); border: 1px solid var(--ds-ac-line); border-radius: var(--ds-r-lg); box-shadow: var(--ds-e-4); z-index: var(--ds-z-sticky); }
+main.rm.rm-dock .rmd-float .rmd-viewbar { cursor: move; touch-action: none; }
+main.rm.rm-dock .rmd-float #rmChat { min-block-size: 0; }
+main.rm.rm-dock .rmd-fullscreen { position: relative; display: flex; flex-direction: column; inline-size: 100%; block-size: 100%; padding: 0; background: var(--ds-media-bg); color: var(--ds-text); }
+main.rm.rm-dock .rmd-fullscreen::backdrop { background: var(--ds-media-bg); }
+main.rm.rm-dock .rmd-fullscreen .rmd-viewbar { position: absolute; inset-block-start: 0; inset-inline: 0; z-index: var(--ds-z-raised); background: var(--ds-media-panel); }
+main.rm.rm-dock .rmd-full-media { isolation: isolate; flex: 1 1 0; min-block-size: 0; display: flex; align-items: stretch; justify-content: center; }
+main.rm.rm-dock .rmd-full-media #rmStage { flex: 1 1 auto; min-block-size: 0; max-block-size: none; inline-size: 100%; }
+main.rm.rm-dock .rmd-full-media .cs-tile { inline-size: 100%; min-block-size: 0; display: flex; flex-direction: column; }
+main.rm.rm-dock .rmd-full-media .cs-vid { flex: 1 1 auto; min-block-size: 0; inline-size: 100%; }
+main.rm.rm-dock .rmd-overlay { position: absolute; inset-inline-end: var(--ds-sp-3); inset-block-start: calc(var(--ds-sp-8) + var(--ds-sp-8)); inset-block-end: var(--ds-sp-3); display: flex; inline-size: min(440px, 42%); z-index: var(--ds-z-raised); }
+main.rm.rm-dock .rmd-overlay #rmChat { background: var(--ds-media-panel); backdrop-filter: blur(6px); }
+main.rm.rm-dock .rmd-overlay :is(.rmd-composer, .rb-audio) { background: transparent; }
+main.rm.rm-dock :is(.rmd-overlay, .rmd-stage-overlay, .rmd-full-media, .rmd-local-player) :is(.rmd-person-name, .line-head, .cs-name, .mf-name),
+main.rm.rm-dock[data-rmd-pip] :is(.rmd-person-name, .line-head, .cs-name, .mf-name) { background-color: var(--ds-media-panel); border-radius: var(--ds-r-xs); padding-inline: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-placeholder { padding: var(--ds-sp-3); color: var(--ds-text-muted); border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-lg); text-align: center; }
+body.pad-dock-live main.rm.rm-dock[data-rmd-pip] { display: flex; flex-direction: column; inline-size: 100%; max-inline-size: none; block-size: 100%; padding: var(--ds-sp-2); gap: var(--ds-sp-2); }
+main.rm.rm-dock[data-rmd-pip] #rmStage { flex: 1 1 0; min-block-size: 0; max-block-size: none; }
+main.rm.rm-dock[data-rmd-pip] #rmChat { flex: 1 1 0; }
+main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  body.pad-dock-live { min-block-size: 440px; }
+  main.rm.rm-dock { padding-inline: var(--ds-gutter); gap: var(--ds-sp-1); }
+  main.rm.rm-dock .rmd-padbar { display: flex; }
+  main.rm.rm-dock .rmd-padbar > .rmd-id { flex: 1 1 auto; }
+  main.rm.rm-dock:not(.rmd-drawer-open) .rmd-drawer { display: none; }
+  main.rm.rm-dock #rmHero { padding: var(--ds-sp-2); }
+  main.rm.rm-dock .rmd-body { grid-template-columns: minmax(0, 1fr); }
+  main.rm.rm-dock .rmd-body > .side { display: none; }
+  main.rm.rm-dock .rmd-side { max-block-size: 75dvh; }
+  main.rm.rm-dock #rmStage { min-block-size: 90px; }
+  main.rm.rm-dock #rmLiveStat { font-size: var(--ds-fs-chip); }
+  main.rm.rm-dock #rmChat { padding: var(--ds-sp-1h) var(--ds-sp-2); }
+  main.rm.rm-dock #chatH > .rmd-topic-line { flex-basis: 100%; order: 4; }
+  main.rm.rm-dock #rmGoLive .stage-acts { gap: var(--ds-sp-1); }
+  main.rm.rm-dock .rmd-holders { flex-basis: 64px; }
+  main.rm.rm-dock .rmd-composer .rb-ptt-txt { font-size: var(--ds-fs-chip); }
+  main.rm.rm-dock #rmAudioBox .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+  main.rm.rm-dock #rmAudioBox .rb-audio { flex-wrap: nowrap; gap: var(--ds-sp-1); }
+  main.rm.rm-dock #rmAudioBox .rb-state { display: none; }
+  main.rm.rm-dock #rmAudioBox .rb-mode { display: none; }
+  main.rm.rm-dock #rmAudioBox .rb-vol { inline-size: 60px; flex-basis: 60px; }
+  main.rm.rm-dock .rmd-input-row { flex-wrap: nowrap; gap: var(--ds-sp-1); }
+  main.rm.rm-dock .rmd-input-row .rb-talk { padding-inline: var(--ds-sp-2); font-size: var(--ds-fs-xs); }
+  main.rm.rm-dock .rmd-input-row .rb-send { padding-inline: var(--ds-sp-2); }
+  main.rm.rm-dock .rmd-float { inset-inline: var(--ds-gutter); inline-size: auto; }
+  main.rm.rm-dock .rmd-overlay { inline-size: min(440px, calc(100% - 16px)); inset-inline: var(--ds-sp-2); inset-block-start: 45%; }
+  main.rm.rm-dock .rmd-viewbar { flex-wrap: wrap; }
+}
+@media (pointer: coarse) {
+  main.rm.rm-dock :is(.rmd-stage-tools, .rmd-viewbar, .rmd-padbar, .rmd-input-row) button,
+  main.rm.rm-dock :is(.cs-ic, .rmd-cam-tools button, .rmd-strip-select, #chatH .hist-jump, #rmTabs .stab, #padTabs .ptab) { min-block-size: 44px; min-inline-size: 40px; }
+  main.rm.rm-dock .rmd-icon { inline-size: 44px; min-inline-size: 44px; }
+}
+@media (hover: none) {
+  main.rm.rm-dock #rmStrip .rmd-cam-tools { opacity: 1; pointer-events: auto; }
+  main.rm.rm-dock .cs-ic { opacity: 1; }
+}
+@media (max-height: 720px) {
+  body.pad-dock-live main.rm.rm-dock { gap: var(--ds-sp-1); padding-block: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock #padPanel-live { gap: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock :is(.crumb, #rmLiveStat) { display: none; }
+  body.pad-dock-live main.rm.rm-dock .rmd-drawer { gap: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock #rmHero { padding-block: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock #padTabs .ptab { min-block-size: 32px; }
+  body.pad-dock-live main.rm.rm-dock #padPanel-live > :is(#rmStage, .rmd-local-player) { flex: 0 1 104px; min-block-size: 104px; max-block-size: 104px; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--ds-sp-2); align-items: center; padding-block: 0; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-head { flex-direction: row; justify-content: center; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-layout { display: none; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-select { display: block; inline-size: 78px; min-inline-size: 0; min-block-size: 44px; padding-inline: var(--ds-sp-1); font-size: var(--ds-fs-xs); }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-row { margin-block: 0; padding-block: 0; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-tile { flex-basis: 140px; display: grid; grid-template-columns: minmax(0, 1fr) 40px; align-items: center; gap: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock #rmStrip[data-rmd-layout="large"] .cs-tile { flex-basis: 176px; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-vid { grid-column: 1; grid-row: 1; block-size: 64px; aspect-ratio: auto; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-name { inset-inline-end: 44px; inset-block-end: var(--ds-sp-1h); padding-block: 0; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-cam-tools { position: static; grid-column: 2; grid-row: 1; display: grid; gap: var(--ds-sp-1); background: transparent; opacity: 1; pointer-events: auto; }
+  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-cam-tools button { padding-inline: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-block-size: 80px; }
+  body.pad-dock-live main.rm.rm-dock #rmChat { padding-block: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock .rmd-composer-tools { display: none; }
+  body.pad-dock-live main.rm.rm-dock #rmAudioBox :is(.rb-state, .rb-mode) { display: none; }
+  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rb-audio { flex-wrap: nowrap; }
+  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rmd-holders { flex-basis: 64px; }
+}
+@media (min-width: 761px) and (max-height: 640px) {
+  body.pad-dock-live main.rm.rm-dock .rmd-drawer { grid-template-columns: minmax(0, 1fr) 210px; align-items: center; }
+  body.pad-dock-live main.rm.rm-dock #rmHero .hd-id { flex-basis: 0; }
+  body.pad-dock-live main.rm.rm-dock #rmHero .hd-fc { display: none; }
+  body.pad-dock-live main.rm.rm-dock #padTabs .ptab { padding-block: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock #padPanel-live > :is(#rmStage, .rmd-local-player) { flex-basis: 96px; min-block-size: 96px; max-block-size: 96px; }
+}
+@media (max-width: 760px) {
+  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-select,
+  main.rm.rm-dock .rmd-composer .rb-say input,
+  main.rm.rm-dock .rmd-composer .rb-micsel,
+  main.rm.rm-dock .rmd-tts input { font-size: var(--ds-fs-lead); }
+}
+@media (prefers-reduced-motion: reduce) {
+  main.rm.rm-dock :is(.rmd-stage-overlay, .rmd-drawer, .rmd-float) { transition: none; animation: none; }
+}
+@media (forced-colors: active) {
+  main.rm.rm-dock :is(.rmd-overlay #rmChat, .rmd-stage-overlay, .rmd-viewbar, .rmd-mini, .rmd-menu) { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
+  main.rm.rm-dock .cx-name,
+  body.pad-dock-live .pm-pop.chatlog .cx-name { color: CanvasText !important; -webkit-text-fill-color: CanvasText !important; background: none !important; animation: none !important; forced-color-adjust: auto; }
+  main.rm.rm-dock :is(.rmd-drawer-toggle, .rmd-holder, .rmd-cam-tools button):focus-visible { outline: 2px solid Highlight; }
+}

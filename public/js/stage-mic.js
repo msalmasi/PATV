@@ -993,16 +993,31 @@
         if (c) tt.el.style.gridArea = (c[1] + 1) + ' / ' + (c[0] + 1) + ' / span ' + c[3] + ' / span ' + c[2];
       });
     }
+    // The same stage may be adopted into Document Picture-in-Picture. Its document owns visibility.
+    var visibilityDoc = null;
     function onVis() {
-      if (document.hidden) {
+      var current = host.ownerDocument || document;
+      if (current.hidden) {
         clearTimeout(hideTimer);
-        hideTimer = setTimeout(function () { dark = true; for (var id in tiles) tiles[id].pause(); }, HIDDEN_MS);
+        hideTimer = setTimeout(function () {
+          if (!(host.ownerDocument || document).hidden) { onVis(); return; }
+          dark = true; for (var id in tiles) tiles[id].pause();
+        }, HIDDEN_MS);
       } else {
         clearTimeout(hideTimer); hideTimer = null;
         if (dark) { dark = false; for (var id2 in tiles) tiles[id2].resume(); }
       }
     }
-    document.addEventListener('visibilitychange', onVis);
+    function surfaceChanged() {
+      var next = host.ownerDocument || document;
+      if (next !== visibilityDoc) {
+        if (visibilityDoc) visibilityDoc.removeEventListener('visibilitychange', onVis);
+        visibilityDoc = next; visibilityDoc.addEventListener('visibilitychange', onVis);
+      }
+      onVis();
+    }
+    host.addEventListener('patv:surfacechange', surfaceChanged);
+    surfaceChanged();
     function onHide() { for (var id in tiles) tiles[id].stop(true); }
     window.addEventListener('pagehide', onHide);
     update(program);
@@ -1014,7 +1029,8 @@
         if (unRev) { try { unRev(); } catch (er) { /* gone */ } unRev = null; }
         for (var id in tiles) tiles[id].stop(true);
         tiles = Object.create(null);
-        document.removeEventListener('visibilitychange', onVis);
+        if (visibilityDoc) visibilityDoc.removeEventListener('visibilitychange', onVis);
+        host.removeEventListener('patv:surfacechange', surfaceChanged);
         window.removeEventListener('pagehide', onHide);
         if (ro) { try { ro.disconnect(); } catch (er) { /* gone */ } } else window.removeEventListener('resize', narrow);
         if (box.parentNode) box.parentNode.removeChild(box);

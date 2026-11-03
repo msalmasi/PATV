@@ -415,6 +415,7 @@ function fakeDom() {
       setAttribute(k, v) { this.attrs[k] = String(v); if (k === "src") this._srcSets++; }, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
       removeAttribute(k) { delete this.attrs[k]; }, hasAttribute(k) { return k in this.attrs; },
       addEventListener(k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); },
+      removeEventListener(k, fn) { this.listeners[k] = (this.listeners[k] || []).filter(f => f !== fn); },
       get textContent() { return this._text + this.children.map((c) => c.textContent).join(""); },
       set textContent(v) { this._text = String(v); this.children = []; },
       querySelectorAll() { return []; }, querySelector() { return null; },
@@ -514,7 +515,7 @@ test("stage-room.js repaints the mic stage when only a tile's cover picture chan
   assert.match(why, /white-space: normal;[^]*-webkit-line-clamp: 2;/);
   assert.match(css, /\.mf-card\.cv-gtf \.mf-av img, [^{]*\.mf-card\.cv-sticker \.mf-av img \{ image-rendering: pixelated;/);
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
-  assert.match(room, /stage-mic\.js\?v=14/); assert.match(room, /webrtc\.css\?v=9/);   // (1.99ain: v14 / v9 - the corner buttons auto-hide)   // (stage-mic.js v10: 1.99ahn's v8 + 1.99ahp's v9 + the cover; v13: + privacy controls S5 / S4 / V-1)
+  assert.match(room, /stage-mic\.js\?v=15/); assert.match(room, /webrtc\.css\?v=9/);   // Dock: v15 follows the owning document's visibility; webrtc.css stays unchanged.
 });
 
 // ── the capture ──
@@ -750,6 +751,7 @@ function miniDom() {
       hasAttribute(k) { return k in this.attrs; }, removeAttribute(k) { delete this.attrs[k]; },
       appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
       addEventListener(k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); },
+      removeEventListener(k, fn) { this.listeners[k] = (this.listeners[k] || []).filter(f => f !== fn); },
       get textContent() { return this._text + this.children.map((c) => c.textContent).join(""); },
       set textContent(v) { this._text = String(v); this.children = []; },
       get className() { return this.attrs.class || ""; }, set className(v) { this.attrs.class = String(v); },

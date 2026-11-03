@@ -54,7 +54,7 @@ test("Live tab order: chat (room audio under its heading) -> On the mic -> In th
 
 test("the cam strip insertion point sits above the chat, under the stage / Go live cards (source)", () => {
   const src = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
-  const golive = src.indexOf('id="rmGoLive"'), slot = src.indexOf("include('partials/cam-strip'"), grid = src.indexOf('<div class="grid rm-live">'), chat = src.indexOf('id="rmChat"');
+  const golive = src.indexOf('id="rmGoLive"'), slot = src.indexOf("include('partials/cam-strip'"), grid = src.indexOf('<div class="grid rm-live'), chat = src.indexOf('id="rmChat"');
   assert.ok(golive > 0 && slot > golive && grid > slot && chat > grid, "go live -> strip -> chat grid");
   assert.equal(src.split("include('partials/cam-strip'").length, 2, "one insertion point");
   // compact on phones: zero height while empty, one short swipe row with tiles

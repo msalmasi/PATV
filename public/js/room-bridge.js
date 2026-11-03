@@ -144,10 +144,12 @@
     var v0 = Number(store('patvRoomVol')); vol.value = isFinite(v0) && store('patvRoomVol') !== null ? Math.max(0, Math.min(100, v0)) : 80;
     // What the USER set. The only source of truth for volume / mute - see the session notes above.
     var userVol = vol.value / 100, userMuted = store('patvRoomMuted') === '1';
+    // Viewer-selected recording ducking: transient attenuation never replaces the saved slider value.
+    var duckOn = false, recording = false, DUCK_LEVEL = 0.2;
     function applyVolume() {
       [au, rau].forEach(function (x) {            // 1.99il: both players (MP3 relay / WebRTC) follow the user's volume + mute
         x.muted = userMuted;
-        if (!IOS) { try { x.volume = userVol; } catch (e) { /* read-only */ } }
+        if (!IOS) { try { x.volume = userVol * (duckOn && recording ? DUCK_LEVEL : 1); } catch (e) { /* read-only */ } }
       });
     }
     function setMode(m) {
@@ -487,6 +489,8 @@
         return true;
       },
       playingSlug: function () { return playing ? cur : null; },
+      duck: function (on) { if (arguments.length) { duckOn = !!on; applyVolume(); } return duckOn; },
+      setRecording: function (on) { recording = !!on; applyVolume(); },
       onChange: function (f) { listeners.push(f); },
       update: function (d) {
         if (cur !== home && playing) return;          // playing another pad: that pad's state isn't this one's
@@ -849,6 +853,22 @@
         if (feedEl) outbox.forEach(function (it) { if (it.node && it.node.parentNode !== feedEl) feedEl.appendChild(it.node); });
       },
       pending: function () { return outbox.slice(); },
+      // Dock tools use the same command path / input and counter as typing; no second network path.
+      sendCmd: sendCmd,
+      getInput: function () { return inp; },
+      insert: function (text, options) {
+        var replace = !!(options && options.replace), value = String(text == null ? '' : text);
+        var start = replace ? 0 : typeof inp.selectionStart === 'number' ? inp.selectionStart : inp.value.length;
+        var end = replace ? inp.value.length : typeof inp.selectionEnd === 'number' ? inp.selectionEnd : start;
+        var room = Math.max(0, SAY_MAX - (inp.value.length - (end - start)));
+        value = value.slice(0, room);
+        // Never split a Unicode surrogate pair at the 300-code-unit boundary.
+        if (/[\uD800-\uDBFF]$/.test(value)) value = value.slice(0, -1);
+        inp.value = inp.value.slice(0, start) + value + inp.value.slice(end);
+        if (inp.setSelectionRange) inp.setSelectionRange(start + value.length, start + value.length);
+        closeAc(); paintCount(); inp.focus();
+        return value;
+      },
       _send: sendChat,
     };
   }
@@ -873,7 +893,7 @@
   function ptt(host, slug) {
     var box = el('div', 'rb-ptt hide');
     var btn = el('button', 'rb-btn rb-talk', _t('js.pad.ptt.hold', '🎙 Hold to talk')); btn.type = 'button'; btn.setAttribute('aria-pressed', 'false');
-    var txt = el('span', 'rb-ptt-txt', _t('js.pad.ptt.upto', 'up to 20 s · Pepe plays it on the mic when it\'s free'));
+    var txt = el('span', 'rb-ptt-txt rb-ptt-idle', _t('js.pad.ptt.upto', 'up to 20 s · Pepe plays it on the mic when it\'s free'));
     txt.setAttribute('aria-live', 'polite');
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
     // 1.99bx: which mic (shown once the browser has named them - after the first clip - and only
@@ -904,11 +924,32 @@
     host.appendChild(box); host.appendChild(mine);
     var can = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     var rec = null, stream = null, recAt = 0, recTimer = null, held = false, last = '';
-    var opening = false, pressAt = 0, upAt = 0, tapMode = false;
+    var opening = false, pressAt = 0, upAt = 0, tapMode = false, requestGen = 0;
+    var recording = false, recordListeners = [], activeDoc = null, activeWin = null;
+    function recordState(on) {
+      if (recording === on) return;
+      recording = on;
+      recordListeners.slice().forEach(function (fn) { try { fn(on); } catch (e) { /* one view cannot break recording */ } });
+      try { host.dispatchEvent(new CustomEvent('patv:recording', { bubbles: true, detail: { recording: on } })); } catch (e) { /* callback remains available */ }
+    }
+    function visibility() { if (activeDoc && activeDoc.hidden) stop(); }
+    function adopt(doc) {
+      doc = doc || host.ownerDocument || document;
+      if (doc === activeDoc) return;
+      if (activeDoc && activeDoc.removeEventListener) activeDoc.removeEventListener('visibilitychange', visibility);
+      if (activeWin && activeWin.removeEventListener) activeWin.removeEventListener('pagehide', stop, true);
+      activeDoc = doc; activeWin = doc.defaultView || null;
+      activeDoc.addEventListener('visibilitychange', visibility);
+      // Stop before the Dock's pagehide handler redocks us and removes this document's listeners.
+      if (activeWin && activeWin.addEventListener) activeWin.addEventListener('pagehide', stop, true);
+    }
+    host.addEventListener('patv:surfacechange', function () { adopt(host.ownerDocument); });
+    adopt(host.ownerDocument || document);
     function idle() { btn.setAttribute('aria-pressed', 'false'); btn.textContent = _t('js.pad.ptt.hold', '🎙 Hold to talk'); }
     // Every mic track stopped and the stream dropped (iOS keeps the page in play-and-record while any
     // track is alive), then the room player gets its playback session + the user's volume back.
     function release() {
+      recordState(false);
       var s = stream; stream = null;
       if (s) s.getTracks().forEach(function (t) { try { t.stop(); } catch (e) { /* already ended */ } });
       recSession.after();
@@ -916,6 +957,7 @@
     // Called from the gesture that ends the clip (pointerup / tap / key), so the release - and the room
     // player's resume - happen inside that gesture instead of later in MediaRecorder's onstop.
     function stop() {
+      requestGen++;                           // a late permission grant must not record after a surface closed
       clearTimeout(recTimer);
       if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* onstop still runs */ } }
       if (stream) release();
@@ -933,7 +975,9 @@
       if (rec && rec.state === 'recording') return stop();
       if (opening) return;                       // a second press while the browser is still opening the mic
       opening = true; pressAt = Date.now();
+      var myRequest = ++requestGen;
       recSession.before();
+      txt.classList.remove('rb-ptt-idle');
       txt.textContent = _t('js.pad.ptt.opening', 'opening the microphone…');
       navigator.mediaDevices.getUserMedia({ audio: micCons() }).then(function (s) {
         opening = false;
@@ -942,8 +986,9 @@
         // The press already ended while the browser opened the mic (first-time permission prompt, a
         // slow device). A HOLD that's over is not a recording - let the mic go at once. (Before
         // 1.99bk this recorded on for 20 s with the room ducked; the next press "fixed" it.)
-        if ((upAt && upAt - pressAt > 400) || document.hidden || box.classList.contains('hide')) {
+        if (myRequest !== requestGen || (upAt && upAt - pressAt > 400) || (host.ownerDocument || activeDoc || document).hidden || box.classList.contains('hide')) {
           release();
+          txt.classList.toggle('rb-ptt-idle', !upAt);
           txt.textContent = upAt ? _t('js.pad.ptt.keep_holding', 'keep holding until it says Recording, then talk') : _t('js.pad.ptt.upto', 'up to 20 s · Pepe plays it on the mic when it\'s free');
           return;
         }
@@ -958,7 +1003,7 @@
           idle();
           send(chunks, r.mimeType, (Date.now() - t0) / 1000);
         };
-        r.start(250);
+        r.start(250); recordState(true);
         tapMode = !!upAt;                        // a quick tap started it: tap again to send
         btn.setAttribute('aria-pressed', 'true');
         btn.textContent = tapMode ? _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send') : _t('js.pad.ptt.rec_release', '⏺ Recording — release to send');
@@ -979,8 +1024,13 @@
     btn.addEventListener('pointerleave', up);
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });   // iOS / Android long-press menu
     btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); upAt = 1; start(); } });
-    document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); });
     return {
+      adopt: adopt,
+      onRecording: function (fn) {
+        if (typeof fn !== 'function') return function () {};
+        recordListeners.push(fn); fn(recording);
+        return function () { var i = recordListeners.indexOf(fn); if (i >= 0) recordListeners.splice(i, 1); };
+      },
       update: function (d) {
         var on = !!(d && d.room && d.room.micRelay) && can;
         box.classList.toggle('hide', !on);

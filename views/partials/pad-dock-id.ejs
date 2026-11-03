@@ -1,0 +1,5 @@
+<%# The compact pad identity receives the header's existing values. It calls no look/cosmetic helper and carries no ids. %>
+<span class="rmd-id<%= PFX_ && PFX_.cls ? ' ' + PFX_.cls : '' %>"><%- PFX_ ? PFX_.layer : '' %>
+  <% if (bnSrc_) { %><span class="rmd-id-banner" aria-hidden="true"><img src="<%= bnSrc_ %>" alt="" decoding="async"<%- bnLook_ ? '' : ' loading="lazy" referrerpolicy="no-referrer"' %>></span><% } %>
+  <span class="rmd-id-content"><%- avHtml_ %><span class="rmd-id-name"><span class="rm-nm<%= PFX_ && PFX_.glow ? ' ' + PFX_.glow : '' %>" data-fit-name title="<%= room.name %>"><%= room.name %></span><%- PFX_ ? PFX_.badgesMini : '' %></span></span>
+</span>

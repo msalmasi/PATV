@@ -3,7 +3,7 @@
 .rb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .rb-btn { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 6px 10px;
           font: inherit; font-size: 13px; cursor: pointer; line-height: 1.2; }
-.rb-btn:hover, .rb-btn:focus-visible { border-color: var(--ds-green); }
+.rb-btn:hover, .rb-btn:focus-visible { border-color: var(--ds-ac); }
 .rb-btn:focus-visible, .rb-vol:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
 .rb-btn[disabled] { opacity: .5; cursor: not-allowed; }
 /* 1.99ait avf (F2): the "Sync to the audio" toggle (av-sync.js) shows its state - on: green outline, text and tint; off: the plain
@@ -20,7 +20,7 @@
             border-radius: 10px; padding: 6px 8px; font-family: var(--ds-font); color: #ccc; }
 .rb-audio.on { border-color: #2f6d3a; }
 .rb-audio.off { opacity: .6; }
-.rb-play { width: 34px; height: 30px; padding: 0; background: var(--ds-green); border-color: var(--ds-green); color: var(--ds-on-ac); font-weight: bold; }
+.rb-play { width: 34px; height: 30px; padding: 0; background: var(--ds-ac); border-color: var(--ds-ac); color: var(--ds-on-ac); font-weight: bold; }
 .rb-state { font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .06em; color: var(--ds-text-muted); min-width: 0; flex: 1 1 90px; }
 .rb-state.live { color: #ff8a80; }
 .rb-state.live::before { content: "● "; }
@@ -30,14 +30,14 @@
 .rb-mode.rtc { color: var(--ds-focus); border-color: #1f6f6a; }
 .rb-mode.hide { display: none; }
 .rb-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; width: 24px; }
-.rb-meter i { display: block; width: 3px; height: 2px; background: var(--ds-green); border-radius: 1px; transition: height .08s linear; }
+.rb-meter i { display: block; width: 3px; height: 2px; background: var(--ds-ac); border-radius: 1px; transition: height .08s linear; }
 .rb-mute { padding: 4px 6px; }
-.rb-vol { width: 84px; accent-color: var(--ds-green); }
+.rb-vol { width: 84px; accent-color: var(--ds-ac); }
 .rb-jump { font-size: 12px; padding: 4px 8px; color: #ffd54f; border-color: #6b5a20; }
 
 .rb-say { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .rb-say input { background: #0d0d0d; color: #eee; border: 1px solid var(--ds-line-strong); border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; min-width: 0; }
-.rb-send { background: var(--ds-green); border-color: var(--ds-green); color: var(--ds-on-ac); font-weight: bold; }
+.rb-send { background: var(--ds-ac); border-color: var(--ds-ac); color: var(--ds-on-ac); font-weight: bold; }
 .rb-ptt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rb-talk { padding: 8px 14px; font-weight: bold; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .rb-talk[aria-pressed="true"] { background: #b71c1c; border-color: var(--ds-badge); color: #fff; }
