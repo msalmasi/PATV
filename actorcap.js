@@ -17,7 +17,7 @@ let seenAt = 0;
 // sender, "u:<userId>" for an account with no chat login), who honours an ACCOUNT's incognito ("privacy.incognito" for
 // "u:<userId>") and enforces !bridge block (bridgeblocks.js). An older Pepe never says it: the site then keeps the old paths.
 let relaySeenAt = 0;
-// 1.99?? cliplink: `clipacct_cap: 1` = a Pepe (camfrog-bot 1.99??+, pepe_cliplink.py) that takes 🔊 mic / 🎬 cam clips from a PATV account
+// 1.99aiq cliplink: `clipacct_cap: 1` = a Pepe (camfrog-bot 1.99aiq+, pepe_cliplink.py) that takes 🔊 mic / 🎬 cam clips from a PATV account
 // with no chat login on a pad whose "Clips from the website need a linked Camfrog name" switch is off (cliplink.js) - acting as
 // "u:<userId>", charged to that account. An older Pepe never says it: the site keeps today's "Link your Camfrog name first".
 let clipSeenAt = 0;
@@ -31,7 +31,7 @@ function note(body) {
 }
 /** 1.99xa: true while a Pepe that treats relay lines as normal chat (and account incognito / bridge blocks) was heard from. */
 function relayOn() { return relaySeenAt > 0 && clock() - relaySeenAt < CAP_TTL_MS; }
-/** 1.99?? cliplink: true while a Pepe that takes clips from accounts with no chat login was heard from (cliplink.accountOk). */
+/** 1.99aiq cliplink: true while a Pepe that takes clips from accounts with no chat login was heard from (cliplink.accountOk). */
 function clipOn() { return clipSeenAt > 0 && clock() - clipSeenAt < CAP_TTL_MS; }
 /** true while a Pepe that acts for accounts was heard from recently. */
 function on() { return seenAt > 0 && clock() - seenAt < CAP_TTL_MS; }

@@ -23,7 +23,7 @@
 //      also through the capture's own subject rule, several (a merged !clipmic 3) only through this.
 //   Pepe himself (1.99md): his TTS mic-ups get a 🎙 line too (the bot keeps only what its TTS engine said - never
 //      Spotify, stings or jingles), so a 🔊 Clip on his line works the same way, with the speaker "Pepe".
-//   1.99?? cliplink: on a pad whose owner switched "Clips from the website need a linked Camfrog name" OFF (cliplink.js), a signed-in
+//   1.99aiq cliplink: on a pad whose owner switched "Clips from the website need a linked Camfrog name" OFF (cliplink.js), a signed-in
 //      account WITHOUT a linked Camfrog name may preview and post too (while Pepe can - cliplink.accountOk): its job / action carries
 //      no Camfrog name, and Pepe acts as the PATV account itself ("u:<userId>": the role gate as "everyone", never an admin by Camfrog
 //      name, rate limits on the account, the price charged to - and refunded to - that account). Everything else is the same.
@@ -62,9 +62,9 @@ const deps = {
   clipOffText: (roomId) => { try { return require("./bridge").clipOffText(roomId); } catch (e) { return "Clips are switched off in this room (a mod can type !clip on there)."; } },
   clipAdmin: (R, u) => { try { return require("./camclip").clipAdmin(R, u); } catch (e) { return false; } },
   privateLogins: (list) => require("./stories").privateLogins(list),
-  // 1.99?? cliplink: may an account with no linked Camfrog name clip on this pad (the pad's switch off, a Pepe that can)?
+  // 1.99aiq cliplink: may an account with no linked Camfrog name clip on this pad (the pad's switch off, a Pepe that can)?
   accountOk: (roomId) => { try { return require("./cliplink").accountOk(roomId); } catch (e) { return false; } },
-  // 1.99?? cliplink (review fix): ...and does the account meet the account rule (a proven identity, no feed ban, its own name)?
+  // 1.99aiq cliplink (review fix): ...and does the account meet the account rule (a proven identity, no feed ban, its own name)?
   accountWhy: (u, R) => require("./cliplink").accountWhy(u, R),
   queueAction: (...a) => require("./actions").queue(...a),
   postToPad: (...a) => require("./storykeep").postToPad(...a),
@@ -219,7 +219,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
       if (require("./adultgate").refuseJson(req, res, R.id)) return;          // adultgate site: the 18+ gate on this room
-      // 1.99?? cliplink: no linked Camfrog name - only on a pad whose owner switched the link requirement off (cliplink.js)
+      // 1.99aiq cliplink: no linked Camfrog name - only on a pad whose owner switched the link requirement off (cliplink.js)
       const acct = !u.camfrogUsername;
       if (acct && !deps.accountOk(R.id)) return res.status(403).json({ ok: false, error: LINK });
       // (review fix: the account rule before anything is recorded - Pepe charges before the pad post, which needs the same)
@@ -268,7 +268,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       }
       const lim = relay.limited("micclip|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
-      // (1.99?? cliplink: `acct` = the clipper has no linked Camfrog name - takeJobs hands it out with clip_acct: 1 only while the pad's
+      // (1.99aiq cliplink: `acct` = the clipper has no linked Camfrog name - takeJobs hands it out with clip_acct: 1 only while the pad's
       // switch is still off; Pepe then acts as the PATV account)
       const j = relay.newJob({ kind: "micclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", target: login, tx,
                                viewers: new Set([u.userId]), ...(alias ? { alias } : {}), ...(acct ? { acct: true } : {}) });
@@ -351,7 +351,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!x) return;
       const { c, R } = x;
       const u = await me(req);
-      // 1.99?? cliplink: an account with no linked Camfrog name posts only while the pad's switch is off (Pepe charges the account)
+      // 1.99aiq cliplink: an account with no linked Camfrog name posts only while the pad's switch is off (Pepe charges the account)
       if (!u || (!u.camfrogUsername && !deps.accountOk(R.id))) return res.status(403).json({ ok: false, error: LINK });
       const aw = u.camfrogUsername ? null : await deps.accountWhy(u, R);              // (review fix: the account rule, again at Post)
       if (aw) return res.status(aw.status).json({ ok: false, code: aw.code, error: aw.error });
@@ -422,7 +422,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const by = String(b.by || "").toLowerCase();
       // the clipper's account: the PATV account that asked (website), else the one linked to their Camfrog login
       let acct = null;
-      // 1.99?? cliplink: Pepe acted as a PATV account with no linked Camfrog name (`by` = its "u:<userId>") - the account the website
+      // 1.99aiq cliplink: Pepe acted as a PATV account with no linked Camfrog name (`by` = its "u:<userId>") - the account the website
       // asked for (`user`), checked against that id; never a Camfrog login's fallback, and no Camfrog login is recorded for it
       const ACCT = /^u:([A-Za-z0-9-]{6,64})$/.exec(by);
       if (b.user) acct = (await getQuery("SELECT userId, camfrogUsername FROM users WHERE username = ?", [String(b.user).slice(0, 60)]))[0] || null;

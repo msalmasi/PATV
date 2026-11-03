@@ -1782,7 +1782,7 @@ function register(app, { isBotToken, addUser }) {
              // 1.99aif (privacy controls round 5): S3's cover picture (micfollow_cfg withheld_cover - no privacy wire needed) - Pepe's !livecam
              // off reply and his !livecam help card say a cam opt-out shows on mic stages with their cover picture only after this
              ...(wcoverAdvert() ? { wcover: 1 } : {}),
-             // 1.99?? cliplink: the pads whose "Clips from the website need a linked Camfrog name" switch is OFF (cliplink.js) - Pepe takes a
+             // 1.99aiq cliplink: the pads whose "Clips from the website need a linked Camfrog name" switch is OFF (cliplink.js) - Pepe takes a
              // clip from an account with no chat login only for a room on this list (and a job / action the site marked clip_acct: 1)
              clip_acct_rooms: clipAcctRooms() };
   }
@@ -2008,7 +2008,7 @@ function register(app, { isBotToken, addUser }) {
   require("./chatlog").register(app, { addUser });                               // CL2: the chat archive (dark) + its /admin/bridge card
   require("./chatlogview").start();                                              // CL3: floors, watermarks, the hidden-names job
   require("./padchat").register(app, { addUser });                               // CL3: the pad's 💬 Chat settings (window, search, downloads, mods)
-  require("./cliplink").register(app, { addUser });                              // 1.99?? cliplink: "Clips from the website need a linked Camfrog name"
+  require("./cliplink").register(app, { addUser });                              // 1.99aiq cliplink: "Clips from the website need a linked Camfrog name"
   require("./chatlogmod").register(app, { addUser });                            // CL6: ⚑ report / remove / hide / purge a line, the staff tools
   require("./chatloghist").register(app, { addUser });                           // CL8: scrollback - GET /api/rooms/:slug/history (dark)
   require("./chatlogsearch").register(app, { addUser });                         // CL9: 🔍 search - POST /api/rooms/:slug/search (dark)
@@ -2175,7 +2175,7 @@ function register(app, { isBotToken, addUser }) {
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
-      // 1.99?? cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)
+      // 1.99aiq cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)
       clipAcct: !!(signedIn && !linked && (() => { try { return require("./cliplink").accountOk(R.id); } catch (e) { return false; } })()),
       // CL3 fix-up: the topic as /live and #rmInit show it - hidden people's names redacted (it was printed raw into #rmTopic,
       // to every viewer and crawler); "" when the names can't be loaded (fails closed)

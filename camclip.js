@@ -36,7 +36,7 @@
 // "!clip someone" - the action is the saver's row: their list, their Download my data; review ID-3's rule). Pepe takes the target
 // from /api/bridge/camclipdata (bot token, only while the site advertises incognito cams) with the frog name as the capture's
 // subject (`label`) - never the login, never the subject's profile story.
-// 1.99?? cliplink: on a pad whose owner switched "Clips from the website need a linked Camfrog name" OFF (cliplink.js), a signed-in
+// 1.99aiq cliplink: on a pad whose owner switched "Clips from the website need a linked Camfrog name" OFF (cliplink.js), a signed-in
 // account WITHOUT a linked Camfrog name may record, preview and save too (while Pepe can - cliplink.accountOk). Its job / action
 // carries no Camfrog name and Pepe acts as the PATV account itself ("u:<userId>": the !clip role gate as "everyone", never an admin by
 // Camfrog name - a site admin keeps clipAdmin's site rule -, rate limits on the account, the price charged to and refunded to that
@@ -96,13 +96,13 @@ const deps = {
   noteViewers: (...a) => require("./camviewers").noteViewers(...a),
   // 1.99aid (privacy controls, review fixes 2 - RV-A): the 👻 ghost capture gate (livecam.ghostCaptureGate: reason + see-through log)
   ghostCapture: (u, roomId, login, reason) => require("./livecam").ghostCaptureGate(u, roomId, login, { reason, kind: "clip" }),
-  // 1.99?? cliplink: may an account with no linked Camfrog name clip on this pad (the pad's switch off, a Pepe that can)?
+  // 1.99aiq cliplink: may an account with no linked Camfrog name clip on this pad (the pad's switch off, a Pepe that can)?
   accountOk: (roomId) => { try { return require("./cliplink").accountOk(roomId); } catch (e) { return false; } },
-  // 1.99?? cliplink (review fix): ...and does the account meet the account rule (a proven identity, no feed ban, its own name)?
+  // 1.99aiq cliplink (review fix): ...and does the account meet the account rule (a proven identity, no feed ban, its own name)?
   accountWhy: (u, R) => require("./cliplink").accountWhy(u, R),
 };
 const LINK = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
-/** 1.99?? cliplink: the LINK refusal for an account with no linked Camfrog name on a pad that needs one, else null. */
+/** 1.99aiq cliplink: the LINK refusal for an account with no linked Camfrog name on a pad that needs one, else null. */
 const linkWhy = (R, u) => (u && !u.camfrogUsername && !deps.accountOk(R.id) ? LINK : null);
 /** 1.99fb: may this account clip while the room's !clip is off / unknown? Site admins, and anyone Pepe gave
  *  room-moderation caps on their linked login (the ⋯ menu's source). Pepe re-checks with chat !clip's admin rule. */
@@ -155,7 +155,7 @@ async function clipInfo(R, userId, login, { veiled = false } = {}) {
   const u = (await getQuery("SELECT camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   let off = null, hint = null;
   if (!u) off = LINK;
-  else if (linkWhy(R, u)) off = LINK;                     // (1.99?? cliplink: unlinked accounts too, on a pad whose switch is off)
+  else if (linkWhy(R, u)) off = LINK;                     // (1.99aiq cliplink: unlinked accounts too, on a pad whose switch is off)
   else if (deps.snapSwitch(R.id) !== true) off = OFF(R.id);
   else if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) off = CLIP_OFF(R.id);
   // (1.99aid privacy controls V-1: a veiled cam - the person's own rules strictly, one generic word, never why)
@@ -200,7 +200,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!R || !isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
       if (!R.cams) return res.status(403).json({ ok: false, error: "Cam snapshots aren't switched on in this Camfrog room." });
       if (!(await relay.padFull(u.userId, R.id))) return res.status(403).json(relay.PAD_DENIED);
-      if (linkWhy(R, u)) return res.status(403).json({ ok: false, error: LINK });          // (1.99?? cliplink: per pad - cliplink.js)
+      if (linkWhy(R, u)) return res.status(403).json({ ok: false, error: LINK });          // (1.99aiq cliplink: per pad - cliplink.js)
       const acct = !u.camfrogUsername;
       // (review fix: the account rule before anything is recorded - a proven identity, no feed ban, its own name)
       const aw = acct ? await deps.accountWhy(u, R) : null;
@@ -240,7 +240,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (open >= OPEN_PER_USER) return res.status(429).json({ ok: false, error: "Save or discard the clips you have first." });
       const lim = relay.limited("camclip|" + u.userId, CLIP_GAP, CLIP_BURST, CLIP_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
-      // (1.99?? cliplink: `acct` = no linked Camfrog name - takeJobs hands it out with clip_acct: 1 only while the pad's switch is still off)
+      // (1.99aiq cliplink: `acct` = no linked Camfrog name - takeJobs hands it out with clip_acct: 1 only while the pad's switch is still off)
       const j = relay.newJob({ kind: "camclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", target: login, secs,
                                viewers: new Set([u.userId]), ghost: (() => { try { return require("./ghost").isGhost(u.userId); } catch (e) { return false; } })(),
                                ...(acct ? { acct: true } : {}) });
@@ -333,7 +333,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!x) return;
       const { c, R } = x;
       const u = await me(req);
-      if (!u || linkWhy(R, u)) return res.status(403).json({ ok: false, error: LINK });    // (1.99?? cliplink: per pad)
+      if (!u || linkWhy(R, u)) return res.status(403).json({ ok: false, error: LINK });    // (1.99aiq cliplink: per pad)
       const aw = u.camfrogUsername ? null : await deps.accountWhy(u, R);              // (review fix: the account rule, again at Save)
       if (aw) return res.status(aw.status).json({ ok: false, code: aw.code, error: aw.error });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips

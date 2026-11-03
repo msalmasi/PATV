@@ -797,7 +797,7 @@ async function canDelete(user, m) {
   // 1.99abh: a capture made in Camfrog (!snap / !clip, source NULL): the person who took it - their linked chat name is the
   // requester's login Pepe sent - and the person in it (their likeness), besides the pad's managers and staff above
   if (!m.source) {
-    if (m.by_user_id && m.by_user_id === user.userId) return true;   // 1.99?? cliplink: a website clip by an account with no Camfrog name
+    if (m.by_user_id && m.by_user_id === user.userId) return true;   // 1.99aiq cliplink: a website clip by an account with no Camfrog name
     if (!m.by_login && !m.subject_login) return false;
     const acct = user.camfrogUsername !== undefined ? user : await require("./feedstore").account(user.userId).catch(() => null);
     const mine = acct && acct.camfrogUsername ? String(acct.camfrogUsername).toLowerCase() : "";

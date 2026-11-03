@@ -458,17 +458,17 @@ async function subjectOf(row) {
   const u = login ? await userByLogin(login) : null;
   return { userId: u ? u.userId : null, login, name: String(row.subject || "").slice(0, 60) || null };
 }
-/** The capturer's PATV account id, or null (cam: their linked login - 1.99?? cliplink: or by_user_id, an account with none; stage: by_user_id). */
+/** The capturer's PATV account id, or null (cam: their linked login - 1.99aiq cliplink: or by_user_id, an account with none; stage: by_user_id). */
 async function capturerId(row) {
   if (row.source === "stage") return row.by_user_id || null;
-  if (!row.source && row.by_user_id) return row.by_user_id;   // 1.99?? cliplink: Pepe's capture for a PATV account with no Camfrog name
+  if (!row.source && row.by_user_id) return row.by_user_id;   // 1.99aiq cliplink: Pepe's capture for a PATV account with no Camfrog name
   const u = await userByLogin(row.by_user);
   return u ? u.userId : null;
 }
 function isCapturer(acct, row) {
   if (!acct) return false;
   if (row.source === "stage") return !!row.by_user_id && row.by_user_id === acct.userId;
-  if (!row.source && row.by_user_id) return row.by_user_id === acct.userId;   // 1.99?? cliplink: (media.js by_uid - the account that took it)
+  if (!row.source && row.by_user_id) return row.by_user_id === acct.userId;   // 1.99aiq cliplink: (media.js by_uid - the account that took it)
   return !!acct.camfrogUsername && lc(acct.camfrogUsername) === lc(row.by_user);
 }
 /** May `acct` post `row` to its pad? (permission only - privacy / gone are separate) */

@@ -1,4 +1,4 @@
-// 1.99?? cliplink (cliplink.js): a pad's "Clips from the website need a linked Camfrog name" switch, and what it does.
+// 1.99aiq cliplink (cliplink.js): a pad's "Clips from the website need a linked Camfrog name" switch, and what it does.
 //   * the setting: ON by default, the pad's owner / site staff / admins only (members can't), validation, same-origin writes, the
 //     rate limit, a room event; only Camfrog pads; it renders on the Camfrog room tab; the owner reference names its route
 //   * the handshake: an older Pepe (no clipacct_cap) -> today's LINK answer everywhere; the sync answer lists the pads that are off

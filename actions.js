@@ -328,7 +328,7 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     require("./actorcap").note(req.body);        // 1.99wv: a Pepe that acts for accounts says so (actorcap.js)
     await ready;
-    // 1.99?? cliplink: a clip post ("micclip.save" / "camclip.save") of an account with NO linked Camfrog name carries clip_acct: 1 only while
+    // 1.99aiq cliplink: a clip post ("micclip.save" / "camclip.save") of an account with NO linked Camfrog name carries clip_acct: 1 only while
     // its pad's "Clips from the website need a linked Camfrog name" switch is off right now (cliplink.js) - Pepe then charges the account;
     // without it he refuses it as before
     const CL = require("./cliplink");

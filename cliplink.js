@@ -1,4 +1,4 @@
-// cliplink.js — 1.99?? cliplink (the owner, 2026-11-03: "Let's make the 'linked Camfrog name' requirement for clips from bridge a per
+// cliplink.js — 1.99aiq cliplink (the owner, 2026-11-03: "Let's make the 'linked Camfrog name' requirement for clips from bridge a per
 // pad toggle"): a pad's "Clips from the website need a linked Camfrog name" switch, on /p/<slug>/settings?tab=camfrog.
 //
 // Before this, a 🔊 mic clip (micclip.js) and a 🎬 cam clip (camclip.js) from a pad page needed a signed-in PATV account WITH a linked
@@ -68,7 +68,7 @@ function accountOk(roomId) { return !needLink(roomId) && capable(); }
 /** The pads whose switch is off - for Pepe's bridge sync (clip_acct_rooms). */
 function openRooms() { return loaded ? [...CACHE].slice(0, OPEN_MAX) : []; }
 
-/** 1.99?? cliplink (review fix): why a signed-in account WITH NO linked Camfrog name can't clip in pad R although the switch is off,
+/** 1.99aiq cliplink (review fix): why a signed-in account WITH NO linked Camfrog name can't clip in pad R although the switch is off,
  *  or null. The rules every website path that has Pepe act as a PATV account in a pad's live room already applies
  *  (bridge-relay.accountRefusal: the relayed line, the 🐸 Pepe menu) - a linked Camfrog name was the proof these replace:
  *    * a proven identity (verified.js: a verified email, Discord, Twitch, Telegram, Google, Apple or Plex - the anti-throwaway rule);

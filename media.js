@@ -188,7 +188,7 @@ function register(app, { isBotToken, addUser, noTimers }) {
       const subjectLogin = !anon && /^[\w.\-]{1,40}$/.test(sl) ? sl : null;
       const bl = String(b.by_login || "").trim().replace(/^@/, "").toLowerCase();   // 1.99abh
       const byLogin = /^[\w.\-$]{1,40}$/.test(bl) ? bl : null;
-      // 1.99?? cliplink: a website clip Pepe made for a PATV account with NO linked Camfrog name ("u:<userId>") names that account
+      // 1.99aiq cliplink: a website clip Pepe made for a PATV account with NO linked Camfrog name ("u:<userId>") names that account
       // (by_uid - never sent for a private requester) - who took it, for the pad post and the capturer's own delete (storykeep.js)
       const bu = String(b.by_uid || "").trim().toLowerCase();
       const byUid = !byLogin && /^[a-z0-9-]{6,64}$/.test(bu)

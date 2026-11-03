@@ -12,7 +12,7 @@
 //   Rules        the pad's own rules (padrules.js), or Padiquette when it has none
 //   Moderation   approval queue, reports, Pepe's automod calls (reversible), pins, feed bans, the audit log
 //   Camfrog room the live Manage panel (padmod.js / room-mod.js: kick, ban, topic ... as your Camfrog login, run by
-//                Pepe) and the website-bridge switches - Camfrog-backed pads only; 1.99?? cliplink: + "Clips from the website
+//                Pepe) and the website-bridge switches - Camfrog-backed pads only; 1.99aiq cliplink: + "Clips from the website
 //                need a linked Camfrog name" (cliplink.js, public/js/pad-clip-settings.js)
 // Old addresses redirect here (pads.js): /p/<s>/manage -> ?tab=stage, /p/<s>/mod -> ?tab=moderation; the old
 // in-page anchors (#royalties, #pepe, #announce, #settings, #queue, #reports, #members, #bans, #audit) exist on this
@@ -98,7 +98,7 @@ async function hubData(R, viewer, app) {
     // wave 2 WP-5: 🎙 Moderation evidence (evidence.js) - only for the pad's OWNER (never Staff, who can open this page too), and only
     // while evidence clips can be made or the pad has some
     evidence: camfrog && !R.profile ? await require("./evidence").padCard(R.id, viewer) : null,
-    // 1.99?? cliplink: 🔊 / 🎬 "Clips from the website need a linked Camfrog name" (cliplink.js; the Camfrog room tab) - Camfrog pads
+    // 1.99aiq cliplink: 🔊 / 🎬 "Clips from the website need a linked Camfrog name" (cliplink.js; the Camfrog room tab) - Camfrog pads
     clips: camfrog && !R.profile ? await require("./cliplink").init().then(() => require("./cliplink").state(R.id)).catch((e) => { console.error("[padsettings] clips:", e.message); return null; }) : null,
   };
 }

@@ -1,4 +1,4 @@
-// pad-clip-settings.js — 1.99?? cliplink: the pad settings' Camfrog room tab, "Clips from the website need a linked Camfrog name"
+// pad-clip-settings.js — 1.99aiq cliplink: the pad settings' Camfrog room tab, "Clips from the website need a linked Camfrog name"
 // (cliplink.js; views/padSettings.ejs #padClipSet). One switch, saved when it changes (same-site JSON); the server checks who may
 // change it (the pad's owner, site staff and admins) on every request and answers the saved value.
 (function () {

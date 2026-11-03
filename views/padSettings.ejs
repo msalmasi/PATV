@@ -492,7 +492,7 @@
         <p class="msg" id="brMsg" role="status" aria-live="polite"></p>
       <% } %>
     </div>
-    <%# 1.99?? cliplink: 🔊 mic / 🎬 cam clips from the website without a linked Camfrog name (cliplink.js; public/js/pad-clip-settings.js wires it) %>
+    <%# 1.99aiq cliplink: 🔊 mic / 🎬 cam clips from the website without a linked Camfrog name (cliplink.js; public/js/pad-clip-settings.js wires it) %>
     <% if (typeof clips !== 'undefined' && clips) { %>
     <div class="sb-card ps-card pcs" id="padClipSet" data-slug="<%= slug %>">
       <h3><%- t('pad.settings.clips.h') %></h3>
@@ -636,7 +636,7 @@
 <script src="/public/js/pad-cosmetics.js?v=5" defer></script>
 <% if (typeof flair !== 'undefined' && flair) { %><script src="/public/js/pad-flair.js?v=3" defer></script><% } %>
 <% if (typeof chat !== 'undefined' && chat) { %><link rel="stylesheet" href="/public/css/pad-chatset.css?v=1"><script src="/public/js/pad-chat-settings.js?v=1" defer></script><% } %>
-<%# 1.99?? cliplink: the Camfrog tab's clip switch (its card uses the chat tab's row styles) %>
+<%# 1.99aiq cliplink: the Camfrog tab's clip switch (its card uses the chat tab's row styles) %>
 <% if (typeof clips !== 'undefined' && clips) { %><% if (!(typeof chat !== 'undefined' && chat)) { %><link rel="stylesheet" href="/public/css/pad-chatset.css?v=1"><% } %><script src="/public/js/pad-clip-settings.js?v=2" defer></script><% } %>
 </body>
 </html>
