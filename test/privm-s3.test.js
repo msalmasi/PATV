@@ -373,24 +373,26 @@ test("on: every other stage rule still keeps a live-cam-off holder OFF - private
 
 test("on: the DF-11 notice gate's one courtesy notice says !livecam off stops the CAM (cover picture instead), fits 300 characters with the link; off: today's text", async () => {
   const pm = async () => (await getQuery("SELECT args FROM pepe_actions WHERE kind = 'notify' ORDER BY id DESC LIMIT 1")).map((r) => JSON.parse(r.args)[1])[0];
-  const told = async (on) => {
+  // (1.99?? privacy controls round 5: someone who has live cam off when they're told gets the _wh text - test "round 5: someone who
+  // ALREADY keeps their cam off" below; this one is about everyone else: their cam can show, so the notice says how to stop it)
+  const told = async (on, opt = true) => {
     await knobs({ withheld_cover: on });
     await reset(); await plainPad();
     await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
     await MF._noticed(ROOM.id, "dana", null);
-    await optout("dana", true);
+    if (opt) await optout("dana", true);
     try {
       await step(["dana"]); await at(3, ["dana"]);
       for (let i = 0; i < 10; i++) await settle();
       assert.equal(tileOn("dana"), false, "not before the notice's lead time");
       return await pm();
-    } finally { await optout("dana", false); await MF._noticed(ROOM.id, "dana", 1); }
+    } finally { if (opt) await optout("dana", false); await MF._noticed(ROOM.id, "dana", 1); }
   };
   try {
     const off = await told(false);
     assert.ok(off == null, "switch off: a live-cam-off holder is never noticed (they never reach the stage) - " + off);
-    const on = await told(true);
-    assert.ok(on, "switch on: told once (they can show by name)");
+    const on = await told(true, false);
+    assert.ok(on, "switch on: told once");
     assert.match(on, /Yours can show in ~2 min\. Cover picture instead: !livecam off https:\/\/publicaccess\.tv\/p\//);
     assert.ok(on.length <= 300, String(on.length));
     // the texts themselves: _wc only while on; the PM fits with the link for ordinary names, like today's
@@ -409,6 +411,70 @@ test("on: the DF-11 notice gate's one courtesy notice says !livecam off stops th
     }
     assert.match(T0("mf.notice.once_body_wc", { room: "R", pad: "P", n: 2 }), /To stop your cam on every pad: Settings → Privacy, or !livecam off - mic stages then show you with your cover picture instead\.$/);
     assert.match(T0("mf.notice.once_body", { room: "R", pad: "P", n: 2 }), /To stop it on every pad: Settings → Privacy, or !livecam off\.$/, "today's body unchanged");
+  } finally { await knobs({ withheld_cover: false }); }
+});
+
+// 1.99?? (privacy controls round 5, the round-4 review): with withheld_cover on, a cam opt-out passes the DF-11 notice gate, so they
+// get the one courtesy notice - which said their cam can show and ended "Cover picture instead: !livecam off". Someone who ALREADY keeps
+// their cam off mic stages gets wording that fits: the stage shows them with their cover picture, never their cam (_wh; one PM, one
+// inbox row). Everyone else, and the switch off, as before
+test("round 5: someone who ALREADY keeps their cam off mic stages (live cam off, the mic-stage switch off, followers, on request) is told the stage shows their cover picture, never their cam; everyone else as before", async () => {
+  const pmOf = async () => (await getQuery("SELECT args FROM pepe_actions WHERE kind = 'notify' ORDER BY id DESC LIMIT 1")).map((r) => JSON.parse(r.args)[1])[0];
+  const T0 = require(path.join(repo, "i18n")).tFor("en");
+  const told = async (who, on, how) => {
+    await knobs({ withheld_cover: on });
+    await reset(); await plainPad();
+    const set = { livecam: () => optout(who, true), mf: () => MF.setOptout(who, true), followers: () => CA.setMode(who, "followers"),
+                  request: () => CA.setMode(who, "request"), none: async () => {} }[how];
+    const unset = { livecam: () => optout(who, false), mf: () => MF.setOptout(who, false), followers: () => CA.setMode(who, "everyone"),
+                    request: () => CA.setMode(who, "everyone"), none: async () => {} }[how];
+    await set();
+    await MF._idle(); for (let i = 0; i < 3; i++) await settle();      // (a recheck the switch started reads the notice rows first)
+    await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
+    await runQuery("DELETE FROM inbox WHERE kind = 'stage'");
+    await MF._noticed(ROOM.id, who, null);
+    try {
+      await step([who]); await at(3, [who]);
+      for (let i = 0; i < 10; i++) await settle();
+      const ib = (await getQuery("SELECT title, body FROM inbox WHERE kind = 'stage' ORDER BY id DESC LIMIT 1"))[0] || null;
+      return { pm: await pmOf(), ib };
+    } finally { await unset(); await MF._noticed(ROOM.id, who, 1); }
+  };
+  const WH = /Other pads with mic follows do too\. Your cam stays off: you can show in ~2 min with your cover picture\. https:\/\/publicaccess\.tv\/p\//;
+  try {
+    for (const how of ["livecam", "mf", "followers", "request"]) {
+      const r = await told("dana", true, how);
+      assert.ok(r.pm, how + ": told once");
+      assert.match(r.pm, WH, how + ": their cam stays off, the cover picture - with the link");
+      assert.ok(!r.pm.includes("!livecam off") && !r.pm.includes("cam too") && !r.pm.includes("Yours can show") && r.pm.length <= 300, how + ": " + r.pm);
+    }
+    // a real account: the PM and ONE inbox row, with its own title and body
+    const b = await told("bob", true, "livecam");
+    assert.match(b.pm, WH, "bob's PM");
+    assert.ok(b.ib, "bob's inbox row");
+    assert.equal(b.ib.title, T0("mf.notice.once_title_wh", { pad: "S3 Room" }));
+    assert.equal(b.ib.title, "🎙 Pads on PATV may show your cover picture while you hold the mic");
+    assert.match(b.ib.body, /Your settings keep your cam off mic stages, so in about 2 minutes you can show there by name with your cover picture \(Settings → Stage cover\), or as a hooded frog while you're incognito - never your cam\. This is the only notice you'll get about it: if you change those settings, your cam can show too\.$/);
+    assert.ok(!b.ib.body.includes("Your cam can show") && !b.ib.body.includes("!livecam off"), "never that their cam can show");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE kind = 'stage'"))[0].n, 1, "one inbox row");
+    // nobody opted out, switch on: the _wc text (their cam can show; how to stop it); switch off: today's
+    const n = await told("dana", true, "none");
+    assert.match(n.pm, /Yours can show in ~2 min\. Cover picture instead: !livecam off/);
+    const o = await told("dana", false, "none");
+    assert.match(o.pm, /Yours can show in ~2 min\. Stop it everywhere: !livecam off/);
+    const ob = await told("bob", false, "none");
+    assert.equal(ob.ib.title, T0("mf.notice.once_title", { pad: "S3 Room" }), "switch off: today's title");
+    // the PM fits 300 with the link for ordinary names; long names drop the link, never past 300, never an "!livecam off" tacked on
+    for (const [room0, pad0, slug] of [["Players__Lounge", "Players Lounge", "players-lounge"], ["R".repeat(40), "P".repeat(40), "s".repeat(40)], ["R".repeat(60), "P".repeat(60), "s".repeat(60)]]) {
+      const s = MF.pmText(T0, "mf.notice.pm_once_wh", room0, pad0, 2, "https://publicaccess.tv/p/" + slug);
+      assert.ok(s.length <= 300 && !s.includes("!livecam off") && s.endsWith(slug.length < 16 ? "/p/" + slug : "cover picture."), s);
+    }
+    const I18N = require(path.join(repo, "i18n")), dir = path.join(repo, "locales");
+    for (const f of fs.readdirSync(dir).filter((x) => /^[a-z]{2}(-[A-Z]{2})?\.json$/.test(x))) {
+      if (typeof JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"))["mf.notice.pm_once_wh"] !== "string") continue;
+      const s = MF.pmText(I18N.tFor(f.replace(/\.json$/, "")), "mf.notice.pm_once_wh", "R".repeat(60), "P".repeat(60), 2, "https://publicaccess.tv/p/" + "s".repeat(60), T0);
+      assert.ok(s.length <= 300, f);
+    }
   } finally { await knobs({ withheld_cover: false }); }
 });
 

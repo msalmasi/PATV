@@ -1110,12 +1110,17 @@ const HOME_NOTICE_V = 2;       // D-3: told with an older text -> one short PM t
 const PM_MAX = 300;            // a Camfrog PM is cut at 300 characters
 const siteUrl = () => process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
 const OPT_OUT = "!livecam off";
+// 1.99?? (privacy controls round 5): a PM whose person already keeps their cam off mic stages (the _wh texts) has no "!livecam off" to
+// carry - it says their cam stays off and they show with their cover picture; only the length is checked, and the last resort keeps
+// its last sentence (that is what it says)
+const PM_NEED = { "mf.notice.pm_once_wh": null };
 /** The PM: its own text, then the link - at most PM_MAX characters, and ALWAYS with the way to stop it ("!livecam off"): for most
  *  people this PM is the only notice they ever get. Long room / pad names are shortened first, then the link is left off. Review
  *  fix: a translation that still doesn't fit (Turkish runs ~1.34x the English) or lost the command is replaced by the English
  *  text, which always fits (test: every locale with the key); the very last resort cuts the MIDDLE, never the end.
  *  Ten = English's T (tests). */
 function pmText(T, key, room, pad, n, url, Ten = null) {
+  if (Object.prototype.hasOwnProperty.call(PM_NEED, key)) return pmTextPlain(T, key, room, pad, n, url, Ten);
   const fits = (s) => s.length <= PM_MAX && s.includes(OPT_OUT);
   const tryWith = (t) => {
     const at = (len) => String(t(key, { room: String(room).slice(0, len), pad: String(pad).slice(0, len), n }));
@@ -1131,6 +1136,35 @@ function pmText(T, key, room, pad, n, url, Ten = null) {
   if (s.length <= PM_MAX) return s;
   const tail = s.slice(s.lastIndexOf(OPT_OUT));
   return s.slice(0, PM_MAX - tail.length - 2).trimEnd() + "… " + tail;
+}
+/** 1.99?? (privacy controls round 5): pmText for a PM_NEED key - the same shortening (names, then the link, then English), with no
+ *  command it must carry; the very last resort keeps the last sentence and cuts the middle. */
+function pmTextPlain(T, key, room, pad, n, url, Ten = null) {
+  const fits = (s) => s.length <= PM_MAX;
+  const tryWith = (t) => {
+    const at = (len) => String(t(key, { room: String(room).slice(0, len), pad: String(pad).slice(0, len), n }));
+    for (const len of [40, 24, 14]) { const s = at(len) + " " + url; if (fits(s)) return s; }
+    for (const len of [40, 24, 14, 8]) { const s = at(len); if (fits(s)) return s; }
+    return null;
+  };
+  const en = Ten || require("./i18n").tFor("en");
+  const got = tryWith(T) || tryWith(en);
+  if (got) return got;
+  const s = String(en(key, { room: String(room).slice(0, 8), pad: String(pad).slice(0, 8), n }));
+  if (s.length <= PM_MAX) return s;
+  const cut = s.lastIndexOf(". ", s.length - 2);
+  const tail = cut > 0 ? s.slice(cut + 2) : "";
+  return tail && tail.length < PM_MAX - 40 ? s.slice(0, PM_MAX - tail.length - 2).trimEnd() + "… " + tail : s.slice(0, PM_MAX - 1).trimEnd() + "…";
+}
+/** 1.99?? (privacy controls round 5): does `login` keep their cam off mic stages themselves - !livecam off, "Pads may put my cam on their
+ *  stage" off, or cam access followers / on request (the cam opt-outs eligCore withholds with cfg withheld_cover on)? Fails to false
+ *  (they are told with the ordinary text, which says how to stop the cam). */
+function camWithheld(login, t = now()) {
+  const l = low(login);
+  try { if (LC().optedOut(l)) return true; } catch (e) { /* no live cams */ }
+  if (MFOPT.has(l)) return true;
+  const mode = modeOf(l, t);
+  return mode === "followers" || mode === "request";
 }
 /** What `login`, shown on pad P, is sent and how (read before the transaction): the PM (always, unless a real account switched
  *  "stage" PMs off - then the inbox row is the notice, D-8), the silent inbox row (real accounts only: an auto account has nobody
@@ -1159,12 +1193,17 @@ async function courtesyPlan(P, R, login, kind) {
   // 1.99aid (privacy controls S3, spec 6.2): with cfg withheld_cover on, "!livecam off" stops the CAM on a mic stage, not the person -
   // the one courtesy notice says so ("_wc": they'd show with their cover picture). Off: the texts as before
   const wc = !home && cfg().withheld_cover === true;
+  // 1.99?? (privacy controls round 5): ...and someone who ALREADY keeps their cam off mic stages (camWithheld: !livecam off, the mic-stage
+  // switch off, cam access followers / on request) is told what the stage will show of them - their cover picture, never their cam
+  // ("_wh": one PM, one inbox row, its own title) - not that their cam can show
+  const wh = wc && camWithheld(login);
+  const sfx = wh ? "_wh" : wc ? "_wc" : "";
   return {
     userId: u ? String(u.userId) : null, real, pm: !(real && !pmOk),
     by: !veiled && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
-    text: pmText(T, home ? "mf.notice.pm_home" : wc ? "mf.notice.pm_once_wc" : "mf.notice.pm_once", roomName, padTitle, mins, siteUrl() + link),
-    link, title: T(home ? "mf.notice.home_title" : "mf.notice.once_title", { pad: padTitle }),
-    body: T(home ? "mf.notice.home_body" : wc ? "mf.notice.once_body_wc" : "mf.notice.once_body", { room: roomName, pad: padTitle, n: mins }),
+    text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once" + sfx, roomName, padTitle, mins, siteUrl() + link),
+    link, title: T(home ? "mf.notice.home_title" : wh ? "mf.notice.once_title_wh" : "mf.notice.once_title", { pad: padTitle }),
+    body: T(home ? "mf.notice.home_body" : "mf.notice.once_body" + sfx, { room: roomName, pad: padTitle, n: mins }),
   };
 }
 /** `login`'s courtesy row {sent_at, v, home_at} or null. */
