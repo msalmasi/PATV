@@ -87,7 +87,8 @@ test("relays that failed are listed with ffmpeg's first errors, named as their r
 test("the settings explain the clamp, the re-encode rate in the budget, and the mic-stage pass-through", () => {
   const strip = (s) => s.replace(/<[^>]+>/g, "");
   const text = strip(EJS);
-  assert.ok(text.includes("Video bitrate per cam (kbps) - re-encode only. Pepe never encodes a cam at more than 1/3 bit per pixel per frame (768 kbps for a 320x240 cam at 30 fps, 384 at 15): a higher setting is clamped to that, and the cam's row under Now says so"));
+  // (lcadm review: the cap is the Frames per second setting's, and never below the 80 kbps floor - bot pepe_livecam.kbps_cap)
+  assert.ok(text.includes("Video bitrate per cam (kbps) - re-encode only. Pepe never encodes a cam at more than 1/3 bit per pixel per frame at the fps above (768 kbps for a 320x240 cam at 30 fps, 384 at 15; never below 80): a higher setting is clamped to that, and the cam's row under Now says so"));
   assert.ok(text.includes("(pass-through: measured; re-encode: the rate Pepe encodes at - the bitrate above, or less where a cam is clamped)"));
   assert.ok(text.includes("Mic-stage cams are re-encoded, unless Pepe's mic-stage pass-through is on (!livecam passthru exact on in Camfrog, admins; off by default). Then, under Pass-through or Auto, a mic-stage cam goes out untouched when Pepe proves its stream with that cam's own setup token - anything less is still re-encoded."));
   assert.equal(LC.FIELDS.kbps.min, 80);
