@@ -222,6 +222,58 @@ test("a re-encoded relay counts at the rate Pepe encodes it at; kbps_cfg / kbps_
   await LC.save(A, { cfg: { budget_mbps: 100, kbps: 300 } });
 });
 
+// 1.99?? (lcadm review): the admin page's numbers with an older Pepe, err_first never a URL or a credential, and a mic-stage relay's
+// failure listed without its login
+test("lcadm review: over budget the cap now is below the viewers watching; err_first masked by the site too; a mic-stage failure has no login", async () => {
+  T += 5 * 60 * 1000; LC.sweep();
+  await bot();
+  const A = { class: "Admin", userId: "staff", username: "boss" };
+  await LC.save(A, { cfg: { max_live: 4, budget_mbps: 4, kbps: 2000 } });
+  assert.equal((await watch("alice", "v1")).d.ok, true);
+  assert.equal((await watch("bob", "v2")).d.ok, true);
+  const want = (await bot()).d.want;
+  const key = want.find((x) => x.login === "alice").token;
+  assert.ok(key && key.length > 20);
+  // an older Pepe (no kbps_cap; bob's line has no kbps at all): both count at cfg.kbps - 2 x 2000 = the whole 4 Mbps
+  const old = (extra) => bot({ live: [Object.assign({ room: R.id, login: "alice", state: "live", source: "reencode", kbps: 2000 }, extra || {}),
+                                      { room: R.id, login: "bob", state: "live", source: "reencode" }] });
+  await old();
+  let av = await LC.adminView();
+  assert.equal(av.usage.viewers, 2);
+  assert.equal(av.usage.viewerCap, 2);
+  await LC.save(A, { cfg: { budget_mbps: 2 } });           // lowered while they watch: 4 Mbps out of a 2 Mbps budget
+  av = await LC.adminView();
+  assert.equal(av.usage.viewerCap, LC.viewerCap(), "an older Pepe: the cap is the settings' own figure, as before");
+  assert.equal(av.usage.viewerCap, 1, "over the budget: below the 2 watching, never 'full' at 2 / 2");
+  for (const s of av.sessions) assert.equal(s.rate, "configured");
+  // err_first: Pepe masks http(s) URLs and drops lines naming the token; the site masks any URL and a publish key too
+  const ERR = "[tcp @ 0x1] Connection to tcp://10.1.2.3:8889 failed: Error number -138 | [whip @ 0x2] Bearer " + key +
+              " refused | [whip @ 0x3] Invalid answer for " + key + " at udp://203.0.113.9:40000";
+  await old({ state: "backoff", err_first: ERR });
+  av = await LC.adminView();
+  const row = av.sessions.find((x) => x.login === "alice");
+  const MASKED = "[tcp @ 0x1] Connection to <url> failed: Error number -138 | [whip @ 0x3] Invalid answer for <key> at <url>";
+  assert.equal(row.err_first.text, MASKED);
+  assert.equal(row.bot.err_first, MASKED);
+  assert.ok(!JSON.stringify(av).includes(key), "the publish key is nowhere on the admin page");
+  assert.ok(!JSON.stringify(av).includes("10.1.2.3") && !JSON.stringify(av).includes("203.0.113.9"));
+  await old({ state: "backoff", err_first: "[whip @ 0x2] Authorization header rejected" });
+  assert.equal((await LC.adminView()).sessions.find((x) => x.login === "alice").bot.err_first, null, "nothing left: no errors");
+  // a relay the mic stage ever held: its failure is listed without its login (the end log line never names it either - spec §12)
+  const S = [...LC._sessions.values()].find((x) => x.login === "bob" && !x.ended);
+  S.mfEver = true;
+  await bot({ live: [{ room: R.id, login: "bob", state: "ended", why: "failed", source: "reencode", err_first: "Conversion failed!" }] });
+  av = await LC.adminView();
+  const f = av.failed.find((x) => x.err_first === "Conversion failed!");
+  assert.ok(f, JSON.stringify(av.failed));
+  assert.equal(f.login, null);
+  assert.equal(f.mf, true);
+  assert.ok(!JSON.stringify(f).includes("bob"), JSON.stringify(f));
+  assert.equal(f.room, R.id);
+  await post("/api/rooms/room-one/livecam/stop", { login: "alice" }, "v1");
+  await LC.save(A, { cfg: { budget_mbps: 100, kbps: 300 } });
+});
+
 test("opt-out: the website switch ends a relay at once and refuses new viewers; Pepe's !livecam writes through", async () => {
   T += 5 * 60 * 1000; LC.sweep();
   await bot();

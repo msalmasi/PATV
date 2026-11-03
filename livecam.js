@@ -457,9 +457,10 @@ function usedKbps(t = now(), c = cfg()) {
 /** One more viewer of S (null = a cam not relayed yet, counted at cfg.kbps) fits the bandwidth budget? */
 const fitsBudget = (S, t = now(), c = cfg()) => usedKbps(t, c) + rateOf(S, c) <= c.budget_mbps * 1000;
 /** 1.99??: the site-wide viewer cap right now: the viewers watching (each at their cam's real rate - rateOf) plus the new ones
- *  the budget left over still takes at cfg.kbps (a cam not relayed yet - fitsBudget(null)). */
+ *  the budget left over still takes at cfg.kbps (a cam not relayed yet - fitsBudget(null)). Over the budget (it was lowered, or
+ *  the rates rose, while people watch) it is below the viewers watching - with an older Pepe exactly viewerCap(), as before. */
 const viewerCapNow = (t = now(), c = cfg()) =>
-  totalViewers(t) + Math.max(0, Math.floor((c.budget_mbps * 1000 - usedKbps(t, c)) / Math.max(1, c.kbps)));
+  Math.max(0, totalViewers(t) + Math.floor((c.budget_mbps * 1000 - usedKbps(t, c)) / Math.max(1, c.kbps)));
 const liveCount = () => [...SESS.values()].filter((S) => !S.ended).length;
 
 // 1.99??: relays that failed with ffmpeg errors (Pepe's live[].err_first, bot 1.99aik) - their admin row is gone once they end,
@@ -471,7 +472,11 @@ let FAILS = [];
 function noteFailed(S, why, t) {
   if (!S.errFirst || !FAIL_WHYS.has(why)) return;
   const w = adminWho(S);
-  FAILS = [{ at: t, why, room: w.room, login: w.login, display: w.display, ...(w.veiled ? { veiled: true } : {}), ...(w.reveal ? { reveal: true } : {}),
+  // (lcadm review: a relay the mic stage ever held is listed without its login, as the end log line names it - spec §12: mic
+  // stages relay people who never asked to be watched; while it runs its row names it, but this list outlives it by 24 h)
+  const mfAnon = !!S.mfEver && !w.veiled;
+  FAILS = [{ at: t, why, room: w.room, login: mfAnon ? null : w.login, display: mfAnon ? "a mic-stage cam" : w.display,
+             ...(S.mfEver ? { mf: true } : {}), ...(w.veiled ? { veiled: true } : {}), ...(w.reveal ? { reveal: true } : {}),
              err_first: S.errFirst.text, err_at: S.errFirst.at }, ...FAILS].slice(0, FAILS_MAX);
 }
 const failsOf = (t = now()) => FAILS.filter((f) => t - f.at <= FAILS_KEEP_MS).map((f) => ({ ...f }));
@@ -1456,6 +1461,22 @@ function revealSweep(S, t) {
 const str = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n);
 /** 1.99??: a kbit/s figure from Pepe's live[] (a number, 0-100000) or null. */
 const kbpsNum = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.min(100000, Math.round(v)) : null);
+/** 1.99?? (lcadm review): Pepe's err_first for the admin page - never a URL or a credential, whatever Pepe sends. Bot 1.99aik masks
+ *  http(s) URLs only and drops lines naming the token; the site also drops any " | " line naming a token / bearer / authorization,
+ *  masks every URL (tcp://, udp://, ...) and anything shaped like a publish key (pubKey; this relay's own key by value too),
+ *  BEFORE the 200-character cut (a cut key would slip past the mask). null = nothing left. */
+const ERR_DROP_RE = /token|bearer|authori[sz]ation/i;
+function errText(v, S) {
+  const raw = str(v, 2000);
+  if (!raw) return null;
+  const key = S && S.path ? pubKey(S.path) : null;
+  const out = raw.split(" | ").filter((x) => x && !ERR_DROP_RE.test(x)).map((x) => {
+    let s = x.replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, "<url>").replace(/lp[A-Za-z0-9_-]{40}/g, "<key>");
+    if (key) s = s.split(key).join("<key>");
+    return s;
+  }).join(" | ").slice(0, 200).trim();
+  return out || null;
+}
 const TERMINAL = new Set(["opted_out", "not_on_cam", "room_off", "slots_busy", "open_failed", "not_that_cam", "noswitch", "busy", "spawn_failed",
   "failed", "cam_closed", "ambiguous",     // micfollow: "ambiguous" = an exact open found two people with that name
   "list_unread"]);                         // 1.99afl: Pepe can't read the room's participant list (bot 1.99afk; the mic stage pauses the room)
@@ -1510,8 +1531,8 @@ async function forBot(body, t = now()) {
                   kbps: Number.isFinite(Number(x.kbps)) && Number(x.kbps) >= 0 ? Math.min(100000, Number(x.kbps)) : null,
                   // 1.99?? (bot 1.99aik): a re-encode's kbps is the rate it encodes at; kbps_cfg = the setting it started with,
                   // kbps_cap = that cam's ceiling (1/3 bit per pixel per frame); err_first = ffmpeg's first error lines of
-                  // this run (URLs masked by Pepe) - staff-only: the admin view, never a pad or a public answer
-                  kbps_cfg: kbpsNum(x.kbps_cfg), kbps_cap: kbpsNum(x.kbps_cap), err_first: str(x.err_first, 200) || null,
+                  // this run (URLs masked by Pepe, and by the site: errText) - staff-only: the admin view, never a pad or a public answer
+                  kbps_cfg: kbpsNum(x.kbps_cfg), kbps_cap: kbpsNum(x.kbps_cap), err_first: errText(x.err_first, S),
                   exact: typeof x.exact === "boolean" ? x.exact : null };   // micfollow: opened / verified by its exact name
     // 1.99??: the relay's last ffmpeg errors stay on its admin row after a restart clears them (Pepe resets err_first per run)
     if (S.botInfo.err_first && !(S.errFirst && S.errFirst.text === S.botInfo.err_first)) S.errFirst = { text: S.botInfo.err_first, at: t };
