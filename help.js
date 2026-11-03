@@ -486,7 +486,8 @@ async function ask({ q, user, ip }) {
   q = String(q == null ? "" : q).replace(/\s+/g, " ").trim();
   if (q.length < Q_MIN || q.length > Q_MAX) throw Object.assign(new Error(`Ask in ${Q_MIN}-${Q_MAX} characters.`), { status: 400 });
   const cur = await current();
-  const ranked = search(cur.data, q, CANDIDATES);
+  // 1.99?? (privacy controls review DARK-2): a dark feature's card is never a search result, a candidate for Pepe or an allowed command
+  const ranked = search(cur.data && Array.isArray(cur.data.entries) ? { ...cur.data, entries: withoutDarkCards(cur.data.entries) } : cur.data, q, CANDIDATES);
   const results = ranked.slice(0, 5).map((r) => card(r.entry, r.score));
   const best = ranked.length ? ranked[0].score : 0;
   const out = { ok: true, q, results, answer: null, source: "search" };
@@ -732,7 +733,14 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
     res.redirect(301, "/help" + q);
   });
   app.get("/api/help/data", async (req, res) => {
-    try { const c = await current(); res.set("Cache-Control", "public, max-age=300"); res.json({ ok: true, version: c.version, hash: c.hash, data: c.data }); }
+    // (1.99?? privacy controls review DARK-2: without a dark feature's cards, as /help shows them - and never the cards' privacy-text
+    // variants ("pc": unapproved wording until each slice's switch is on); a slice that is on reads its text in, as /help does)
+    try {
+      const c = await current();
+      const pub = (entries) => withPrivacyCopy(withoutDarkCards(entries)).map((e) => { if (!e || !("pc" in e)) return e; const { pc, ...rest } = e; void pc; return rest; });
+      const data = c.data && Array.isArray(c.data.entries) ? { ...c.data, entries: pub(c.data.entries) } : c.data;
+      res.set("Cache-Control", "public, max-age=300"); res.json({ ok: true, version: c.version, hash: c.hash, data });
+    }
     catch (e) { fail(res, e); }
   });
   app.post("/api/help/ask", small, addUser, async (req, res) => {
