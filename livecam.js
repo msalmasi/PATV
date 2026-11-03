@@ -708,25 +708,59 @@ async function start(u, R, login, t = now(), opts = {}) {
       if (!freed || liveCount() >= cfg().max_live) throw refuse("slots_busy");
     }
   }
+  // 1.99?? (privacy controls review RV-4, owner Q8 + Q9: the ghost bypass is "behind the reveal audit log", veiled cams included): a 👻
+  // view that gets past someone's rules writes its rows FIRST, in ONE transaction - livecam_audit, the see-through log (cam_reveal, ref
+  // "ghost:<audit id>:g") and admin_audit - and a failed write refuses it (nothing opened). For a veiled cam always (the S5 path); for a
+  // named one while cam reveals are in effect - with that switch off a named bypass is logged as before (best effort).
+  const strictGhost = bypass != null && !(S && S.viewers.get(uid)) && (!!veil || crEffective(t));
+  let preAudit = null;
+  if (strictGhost) {
+    try { preAudit = await ghostRows(u, R, login, veil ? veil.alias || "someone" : null, bypass, t); }
+    catch (e) { console.error("[livecam] ghost audit:", e && e.message); preAudit = null; }
+    if (!preAudit) throw new Refuse(500, "Couldn't log it - nothing was opened.", "audit");
+  }
   if (!S) {
     S = newSess(R, login, m, t, veil);
     console.log(`[livecam] start room=${R.id} target=${veil ? "-" : login} viewer=${u.username || uid}`);
   }
   let v = S.viewers.get(uid);
   if (!v) {
-    v = { since: t, beat: t, username: u.username || null, readers: new Set(), auditId: null, ghost: isGhost(uid), bypass };
+    v = { since: t, beat: t, username: u.username || null, readers: new Set(), auditId: preAudit, ghost: isGhost(uid), bypass };
     S.viewers.set(uid, v);
-    try {
-      const r = await runQuery("INSERT INTO livecam_audit (room_id, target, viewer_id, viewer_name, started, ghost, bypass, veil) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                               [R.id, login, uid, u.username || null, t, v.ghost ? 1 : 0, bypass, S.veil ? S.veil.alias || "someone" : null]);
-      v.auditId = r && r.id ? Number(r.id) : null;
-    } catch (e) { console.error("[livecam] audit:", e.message); }
+    if (!preAudit) {
+      try {
+        const r = await runQuery("INSERT INTO livecam_audit (room_id, target, viewer_id, viewer_name, started, ghost, bypass, veil) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                 [R.id, login, uid, u.username || null, t, v.ghost ? 1 : 0, bypass, S.veil ? S.veil.alias || "someone" : null]);
+        v.auditId = r && r.id ? Number(r.id) : null;
+      } catch (e) { console.error("[livecam] audit:", e.message); }
+    }
   }
   v.beat = t;
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
   // (1.99?? privacy controls S5: a veiled session's key is its opaque id - never keyOf / the login)
   return { ok: true, key: S.veil ? S.veil.id : k, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t),
            slots: { used: slotsOf(uid, t), max }, kbps: rateOf(S), expires: t + TICKET_MS };
+}
+/** 1.99?? (privacy controls review RV-4): cam reveals in effect (camreveal.js)? Fails closed. */
+function crEffective(t = now()) { try { return require("./camreveal").effective(t) === true; } catch (e) { return false; } }
+/** 1.99?? (privacy controls review RV-4): a 👻 ghost's bypass view - its rows in ONE transaction BEFORE any ticket: livecam_audit (ghost,
+ *  what it got past, the frog name for a veiled cam), seethrough_log (scope cam_reveal, ref "ghost:<audit id>:g") and admin_audit
+ *  (seethrough.cam_reveal). -> the livecam_audit id | throws (the caller refuses the view) */
+async function ghostRows(u, R, login, veilLabel, bypass, t = now()) {
+  const ST = require("./seethrough"), AA = require("./adminaudit");
+  await ST.init(); await AA.init();
+  const uid = String(u.userId);
+  return tx(async () => {
+    const r = await runQuery("INSERT INTO livecam_audit (room_id, target, viewer_id, viewer_name, started, ghost, bypass, veil) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                             [String(R.id), login, uid, u.username || null, t, 1, bypass, veilLabel]);
+    const id = r && r.id ? Number(r.id) : null;
+    if (!id) throw new Error("livecam: no audit row");
+    const st = await ST.log({ userId: uid, role: "ghost", scope: "cam_reveal", roomId: String(R.id), logins: [login], reason: "", ref: "ghost:" + id + ":g" });
+    if (!st) throw new Error("livecam: no see-through row");
+    await AA.record({ userId: uid, username: u.username || null }, "seethrough.cam_reveal", null,
+                    { room: String(R.id), ghost: true, live: true, veiled: veilLabel != null, bypass, audit: id, st }, null);
+    return id;
+  });
 }
 function stateOf(S, t = now()) {
   if (!S) return "none";
