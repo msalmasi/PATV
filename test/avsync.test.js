@@ -88,7 +88,7 @@ test("admin capability + same-site fetch, every save versioned and audited, inva
   assert.equal(audit[0].admin_id, "adm");
   const prior = AV.current(); AV._reset(); await AV.init(); assert.deepEqual(AV.current(), prior, "versioned database row survives process cache reset");
   const page = await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } });
-  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=4/);   // 1.99ahm: 3 - Delay the people list's 🎙 icons; 1.99?? avf: 4 - the mic-sign fallbacks, mic_follow_toggle
+  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=4/);   // 1.99ahm: 3 - Delay the people list's 🎙 icons; 1.99ait avf: 4 - the mic-sign fallbacks, mic_follow_toggle
 });
 
 test("public route requires sign-in/full pad access; mode does not grant access; no identifiers or unheld cams", async () => {
@@ -369,9 +369,9 @@ test("1.99ahm: the admin card shows \"Delay the people list's 🎙 icons\" under
   assert.deepEqual([A.posts[0].cfg.apply_mic_card, A.posts[0].cfg.apply_mic_chat], [false, false]);
 });
 
-// 1.99?? avf (F4, F5): the mic signs' own fallback while the room audio is unmeasured (fallback_ind_rtc_ms / _mp3_ms - the cams keep
+// 1.99ait avf (F4, F5): the mic signs' own fallback while the room audio is unmeasured (fallback_ind_rtc_ms / _mp3_ms - the cams keep
 // fallback_rtc_ms / _mp3_ms) and mic_follow_toggle (true = a viewer's own toggle also holds the mic signs, as before)
-test("1.99?? avf: the mic signs' own fallbacks (2000 / 3000 ms, 0-5000) and mic_follow_toggle (on) - defaults, ranges, a strict boolean, audited, in the viewer's answer; an older stored row reads the defaults", async () => {
+test("1.99ait avf: the mic signs' own fallbacks (2000 / 3000 ms, 0-5000) and mic_follow_toggle (on) - defaults, ranges, a strict boolean, audited, in the viewer's answer; an older stored row reads the defaults", async () => {
   assert.deepEqual([AV.DEFAULTS.fallback_ind_rtc_ms, AV.DEFAULTS.fallback_ind_mp3_ms, AV.DEFAULTS.mic_follow_toggle], [2000, 3000, true]);
   for (const key of ["fallback_ind_rtc_ms", "fallback_ind_mp3_ms"]) {
     assert.deepEqual([AV.FIELDS[key].min, AV.FIELDS[key].max], [0, 5000], key);
@@ -409,10 +409,10 @@ test("1.99?? avf: the mic signs' own fallbacks (2000 / 3000 ms, 0-5000) and mic_
   assert.deepEqual([AV.current().cfg.fallback_ind_rtc_ms, AV.current().cfg.mic_follow_toggle], [2000, true], "reset: the defaults");
 });
 
-// 1.99?? avf review (product): the owner calibrates k_pt_ms / k_re_ms from a pad's ?avsync=1 panel - the card has to say which way
+// 1.99ait avf review (product): the owner calibrates k_pt_ms / k_re_ms from a pad's ?avsync=1 panel - the card has to say which way
 // they move the cams (the first try went the wrong way: +650 for cams that were already late) and that a cam can't be shown sooner
 // than it arrives; the cams' fallbacks say they are the cams' now that the mic signs have their own
-test("1.99?? avf review: the admin card says which way each calibration moves (k_pt_ms, k_re_ms, k_ind_ms) and labels the cams' own fallbacks", async () => {
+test("1.99ait avf review: the admin card says which way each calibration moves (k_pt_ms, k_re_ms, k_ind_ms) and labels the cams' own fallbacks", async () => {
   const data = (await get("/api/admin/pepe/avsync", "adm")).data;
   const C = adminCard(data); for (let i = 0; i < 12; i++) await Promise.resolve();
   const pt = C.labelOf("k_pt_ms"), re = C.labelOf("k_re_ms"), ind = C.labelOf("k_ind_ms");

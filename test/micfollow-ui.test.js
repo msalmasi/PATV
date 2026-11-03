@@ -164,7 +164,7 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.match(gate, /if \(window\.PATVAvSync\) window\.PATVAvSync\.gateProgram\(slug, d\.stage_program \|\| null, showMic\);/);
   assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
   // (wave2 WP-4: av-sync.js?v=3 - it delays the dynamic layout's `ring` like newest / recent; 1.99ahm: v=4 - the On the mic card / chat lines;
-  // v=5 - the people list's 🎙 icons; 1.99ahp v=6 - a stable program's places too; 1.99?? avf v=7 - the toggle shows on / off, the
+  // v=5 - the people list's 🎙 icons; 1.99ahp v=6 - a stable program's places too; 1.99ait avf v=7 - the toggle shows on / off, the
   // mic signs' own fallback, the held room-audio latency, mic_follow_toggle)
   assert.ok(blk.indexOf('av-sync.js?v=7') >= 0 && blk.indexOf('av-sync.js?v=7') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
   assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=7"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");

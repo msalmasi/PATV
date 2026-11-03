@@ -10,7 +10,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 function sandbox(options = {}) {
   let now = 100000, sequence = 0;
-  const timers = new Map(), events = {}, requests = [], storage = new Map(Object.entries(options.stored || {}));   // (1.99?? avf: stored - the viewer's saved toggle)
+  const timers = new Map(), events = {}, requests = [], storage = new Map(Object.entries(options.stored || {}));   // (1.99ait avf: stored - the viewer's saved toggle)
   const config = Object.assign({ ok: true, on: true, dbg: false, audio: { rtc_ms: 1000, mp3_ms: 1000, mix_ms: 700, helper_ms: 270, age_s: 0 },
     cams: { cam1: { src: "passthrough", hold_ms: 200 }, cam2: { src: "reencode", hold_ms: 300 } }, k: { pt: 100, re: -100, ind: 0 },
     fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
@@ -702,9 +702,9 @@ test("1.99ahp stable slots: a stable program's places are delayed with it - an e
   assert.equal(at(shown), "a@2 b@1 c@0", "off: today's (latest places)"); assert.equal(shown.dyn.main, "a");
 });
 
-// 1.99?? avf (F2): the viewer's toggle had one label, "Sync cams to the audio", on or off (only aria-pressed changed, and no CSS
+// 1.99ait avf (F2): the viewer's toggle had one label, "Sync cams to the audio", on or off (only aria-pressed changed, and no CSS
 // styled it), so a click meant to sync turned it off - the owner debugged A/V sync with it off
-test("1.99?? avf (F2): the toggle shows its state - its label says on / off, the on class, a title naming the cams and the mic signs; the debug panel's first line says sync for you ON / OFF", async () => {
+test("1.99ait avf (F2): the toggle shows its state - its label says on / off, the on class, a title naming the cams and the mic signs; the debug panel's first line says sync for you ON / OFF", async () => {
   const s = sandbox({ search: "?avsync=1", config: { dbg: true }, stored: { "patv.avsync.enabled": "0" } });
   s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
   s.tile(); s.media("rtc"); await s.advance(0);
@@ -734,7 +734,7 @@ test("1.99?? avf (F2): the toggle shows its state - its label says on / off, the
   assert.ok(n >= 9, "the new strings are checked: " + n);
 });
 
-test("1.99?? avf (F4): unmeasured, the mic signs use their own fallback (not the cams' 500); the last measured latency is kept 30 s through a lull, then each falls back", async () => {
+test("1.99ait avf (F4): unmeasured, the mic signs use their own fallback (not the cams' 500); the last measured latency is kept 30 s through a lull, then each falls back", async () => {
   const audio = { rtc_ms: 2400, mp3_ms: 1000, mix_ms: 700, helper_ms: 1500, age_s: 0 };
   const s = sandbox({ config: { audio, fallback_ind: { rtc: 2000, mp3: 3000 } } });
   s.api.pad("pad"); const a = s.tile(); s.media("rtc"); await s.advance(0);
@@ -761,7 +761,7 @@ test("1.99?? avf (F4): unmeasured, the mic signs use their own fallback (not the
   const o = sandbox(); o.api.pad("pad"); o.media("rtc"); await o.advance(0); assert.equal(o.api.debug().card_ms, 500);
 });
 
-test("1.99?? avf (F4): turning the toggle on starts the mic signs at their own fallback, then the measured value", async () => {
+test("1.99ait avf (F4): turning the toggle on starts the mic signs at their own fallback, then the measured value", async () => {
   const s = sandbox({ stored: { "patv.avsync.enabled": "0" }, config: { audio: { rtc_ms: 2400, mp3_ms: 1000, mix_ms: 700, helper_ms: 1500, age_s: 0 }, fallback_ind: { rtc: 2000, mp3: 3000 } } });
   s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
   s.media("rtc"); await s.advance(4000);
@@ -771,8 +771,8 @@ test("1.99?? avf (F4): turning the toggle on starts the mic signs at their own f
   await s.advance(2000); assert.equal(s.api.debug().card_ms, 2300, "then measured");
 });
 
-// 1.99?? avf (F5): mic_follow_toggle - an admin setting (true = as before: the viewer's toggle governs the cams AND the mic signs)
-test("1.99?? avf (F5): mic_follow_toggle false - the mic signs are held with the viewer's toggle off (the room audio still measured: rtc + browser - delivery); the toggle holds the cams only", async () => {
+// 1.99ait avf (F5): mic_follow_toggle - an admin setting (true = as before: the viewer's toggle governs the cams AND the mic signs)
+test("1.99ait avf (F5): mic_follow_toggle false - the mic signs are held with the viewer's toggle off (the room audio still measured: rtc + browser - delivery); the toggle holds the cams only", async () => {
   const s = sandbox({ stored: { "patv.avsync.enabled": "0" }, search: "?avsync=1",
     config: { dbg: true, mic_follow_toggle: false, audio: { rtc_ms: 2400, mp3_ms: 1000, mix_ms: 700, helper_ms: 1500, age_s: 0 }, fallback_ind: { rtc: 2000, mp3: 3000 } } });
   s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
@@ -813,10 +813,10 @@ test("1.99?? avf (F5): mic_follow_toggle false - the mic signs are held with the
   assert.equal(button.hidden, false, "the toggle is offered again (it governs the mic signs)"); assert.match(button.title, /cams and the mic signs/);
 });
 
-// 1.99?? avf review (product): the toggle's title and the debug panel's first line say what it holds for THIS viewer - a Firefox
+// 1.99ait avf review (product): the toggle's title and the debug panel's first line say what it holds for THIS viewer - a Firefox
 // or Safari viewer (engine_firefox / engine_safari off: no cam delay) was told it holds the cams, and with mic_follow_toggle off
 // and no mic switch on, "the mic signs are held for everyone" though nothing held them
-test("1.99?? avf review: the toggle's title names only what it holds here - no cams on an engine that isn't enabled; 'held for everyone' only while a mic switch holds them", async () => {
+test("1.99ait avf review: the toggle's title names only what it holds here - no cams on an engine that isn't enabled; 'held for everyone' only while a mic switch holds them", async () => {
   const f = sandbox({ ua: "Firefox/140.0", search: "?avsync=1", config: { dbg: true } });
   f.api.pad("pad"); const fbox = f.element("div"); f.document.body.appendChild(fbox); f.api.decorate(fbox);
   f.media("rtc"); await f.advance(2000);

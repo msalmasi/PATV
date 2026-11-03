@@ -48,7 +48,7 @@
     value = clamp(value, 0, cap); return value > 0 ? value : null;
   }
   function indicatorTarget(input) {
-    // (1.99?? avf F4: the mic signs' own fallback goes up to 5000, like their cap)
+    // (1.99ait avf F4: the mic signs' own fallback goes up to 5000, like their cap)
     var value = !input.fresh || !input.statsOK || number(input.pepe) == null || number(input.browser) == null
       ? bounded(input.fallback, 0, 5000, 0) : input.pepe + input.browser + (number(input.k) || 0) - (number(input.path) || 0);
     return clamp(value, 0, bounded(input.cap, 0, 5000, 3000));
@@ -57,7 +57,7 @@
     var entry = configs[pad];
     return entry && entry.data && Date.now() - entry.at <= 30000 ? entry.data : null;
   }
-  // 1.99?? avf (F4): Pepe reports no room-audio latency (rtc_ms / mp3_ms null) once nobody has been heard for ~5 s, though his
+  // 1.99ait avf (F4): Pepe reports no room-audio latency (rtc_ms / mp3_ms null) once nobody has been heard for ~5 s, though his
   // mixer still delays the voice by the same amount. The last measured value of each mode is kept for up to HOLD_PEPE_MS, so the
   // first grab after a lull - and the cams - keep it instead of stepping to the fallback; after that, the fallback as before.
   var HOLD_PEPE_MS = 30000;
@@ -71,7 +71,7 @@
     return v != null ? v : held && Date.now() - held.at <= HOLD_PEPE_MS ? held.ms : null;
   }
   function heldPepe(pad) { var c = cfgFor(pad), a = c && c.audio || {}; return number(a[sound.mode + '_ms']) == null && pepeOf(pad, a) != null; }
-  // 1.99?? avf (F5): mic_follow_toggle false (an admin setting; true = before) - the mic signs are held for every viewer the
+  // 1.99ait avf (F5): mic_follow_toggle false (an admin setting; true = before) - the mic signs are held for every viewer the
   // switches apply to, whatever their own toggle says; the toggle then holds the cams only
   function micIgnoresToggle(pad) { var c = cfgFor(pad); return !!(c && c.mic_follow_toggle === false); }
   function ageOf(pad) {
@@ -86,7 +86,7 @@
   }
   function inputs(pad) {
     var c = cfgFor(pad) || {}, a = c.audio || {};
-    return { pepe: pepeOf(pad, a), browser: soundStats.browser, fresh: ageOf(pad) <= 30,   // (1.99?? avf F4: pepeOf - the last measured, held)
+    return { pepe: pepeOf(pad, a), browser: soundStats.browser, fresh: ageOf(pad) <= 30,   // (1.99ait avf F4: pepeOf - the last measured, held)
       statsOK: soundStats.ok, fallback: c.fallback && c.fallback[sound.mode], cap: c.cap, k: 0 };
   }
   // 1.99ahm: kind = which switch holds the sign back - 'mic' (the mic stage's tile signs, the default), 'mic_card' (the "On the mic"
@@ -95,10 +95,10 @@
   var MIC_KINDS = ['mic', 'mic_card', 'mic_chat', 'mic_list'];
   function anyMic(pad, ignoreToggle) { return MIC_KINDS.some(function (kind) { return eligible(pad, kind, ignoreToggle); }); }
   function delayFor(pad, ignoreToggle, kind) {
-    if (!eligible(pad, kind || 'mic', ignoreToggle || micIgnoresToggle(pad))) return 0;   // (1.99?? avf F5: mic_follow_toggle)
+    if (!eligible(pad, kind || 'mic', ignoreToggle || micIgnoresToggle(pad))) return 0;   // (1.99ait avf F5: mic_follow_toggle)
     var c = cfgFor(pad), input = inputs(pad);
     input.k = c.k && c.k.ind; input.path = c.ind_path_ms; input.cap = c.cap_ind;
-    // 1.99?? avf (F4): the mic signs' own fallback (fallback_ind_rtc_ms / _mp3_ms) - unmeasured (the first ticks after the audio or
+    // 1.99ait avf (F4): the mic signs' own fallback (fallback_ind_rtc_ms / _mp3_ms) - unmeasured (the first ticks after the audio or
     // the toggle starts, a long lull) the signs need about the whole audio path, the cams far less; an older site: the shared one
     if (c.fallback_ind && number(c.fallback_ind[sound.mode]) != null) input.fallback = c.fallback_ind[sound.mode];
     return indicatorTarget(input);
@@ -174,7 +174,7 @@
     return within(W.fetch('/api/rooms/' + encodeURIComponent(pad) + '/avsync?p=' + encodeURIComponent(paths.join(',')),
       { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
       .then(function (response) { if (!response.ok) { var error = new Error('Unavailable'); error.status = response.status; error.denied = response.status === 401 || response.status === 403; throw error; } return response.json(); }), 5000)
-      .then(function (data) { entry.data = data && data.ok ? data : null; entry.at = Date.now(); noteHeld(entry); })   // (1.99?? avf F4)
+      .then(function (data) { entry.data = data && data.ok ? data : null; entry.at = Date.now(); noteHeld(entry); })   // (1.99ait avf F4)
       .catch(function (error) {
         if (error && error.denied) { entry.data = null; entry.held = null; } /* Other failures cannot keep old settings alive beyond 30 seconds. */
         if (error && error.status === 401) signedOut = true;      // review fix: signed out - no pad is asked again before a reload
@@ -204,7 +204,7 @@
     // Clear ineligible receivers before any asynchronous work, including a pending fetch.
     receivers.forEach(function (entry) { if (!eligible(entry.pad, 'video')) setTarget(entry, null); });
     (sound.playing ? fetchConfig(sound.slug) : Promise.resolve()).then(function () {
-      // 1.99ahm: any of the mic switches (1.99?? avf F5: with mic_follow_toggle false the room audio is sampled for the mic signs
+      // 1.99ahm: any of the mic switches (1.99ait avf F5: with mic_follow_toggle false the room audio is sampled for the mic signs
       // while the viewer's toggle is off too - else they'd sit at the fallback)
       if (generation !== epoch || !anyMic(sound.slug, micIgnoresToggle(sound.slug)) && !eligible(sound.slug, 'video')) return;
       var tasks = [sampleAudio(generation)];
@@ -262,7 +262,7 @@
   }
   function latency(pad, mode) {
     if (!sound.playing || sound.slug !== pad || sound.mode !== mode || !soundStats.ok || ageOf(pad) > 30) return null;
-    var c = cfgFor(pad), p = c && c.audio ? pepeOf(pad, c.audio) : null;   // (1.99?? avf F4: through a lull too)
+    var c = cfgFor(pad), p = c && c.audio ? pepeOf(pad, c.audio) : null;   // (1.99ait avf F4: through a lull too)
     return p == null || number(soundStats.browser) == null ? null : Math.max(0, p + soundStats.browser);
   }
   function modsInstant(pad) { var c = cfgFor(pad); return !!(c && c.mods_instant); }
@@ -438,7 +438,7 @@
     });
     // 1.99ahm: a held chat line is shown once the room audio has caught up to it ("Delay mic grab/drop lines in chat"); the delay is
     // read again each time, so stopping the audio, the switch going off or the viewer's own toggle shows every held line at once
-    // (1.99?? avf F5: the toggle only while mic_follow_toggle is on - the default; off, the toggle holds the cams only)
+    // (1.99ait avf F5: the toggle only while mic_follow_toggle is on - the default; off, the toggle holds the cams only)
     lines = lines.filter(function (line) {
       if (line.el.isConnected === false) { release(line); return false; }      // taken out by the page (privacy, trims): nothing to show
       var at = line.at + delayFor(line.pad, false, 'mic_chat');
@@ -488,7 +488,7 @@
   }
   function debug() {
     var c = cfgFor(sound.slug), a = c && c.audio || {};
-    // (1.99?? avf: + mic_follow_toggle, the mic signs' own fallback, and the held room-audio latency through a lull)
+    // (1.99ait avf: + mic_follow_toggle, the mic signs' own fallback, and the held room-audio latency through a lull)
     return { on: !!(c && c.on), enabled: enabled, playing: sound.playing, mode: sound.mode, engine: browserEngine,
       mic_follow_toggle: !micIgnoresToggle(sound.slug),
       calibration: { pt_ms: c && c.k ? number(c.k.pt) : null, re_ms: c && c.k ? number(c.k.re) : null, ind_ms: c && c.k ? number(c.k.ind) : null,
@@ -504,11 +504,11 @@
         target_ms: number(entry.target), supported: entry.supported, rtt_s: number(entry.rtt), stats: copy(entry.diagnostics),
         playout_delay_extension: !!(entry.pc.remoteDescription && /a=extmap:[^\r\n]*playout-delay/.test(entry.pc.remoteDescription.sdp || '')) }; }) };
   }
-  // 1.99?? avf (F2): the viewer's toggle shows its state - "Sync to the audio: on" / "... off", the `on` class (room-bridge.css
+  // 1.99ait avf (F2): the viewer's toggle shows its state - "Sync to the audio: on" / "... off", the `on` class (room-bridge.css
   // .rb-avsync) and aria-pressed - and its title says what it holds (the cams and the mic signs; the cams only while the mic signs
   // are held for everyone, mic_follow_toggle off). It used to read "Sync cams to the audio" either way, so a click meant to sync
   // turned it off.
-  // 1.99?? avf review: what the toggle holds for this viewer - the cams only where their engine is enabled (a Firefox / Safari viewer
+  // 1.99ait avf review: what the toggle holds for this viewer - the cams only where their engine is enabled (a Firefox / Safari viewer
   // gets no cam delay while engine_firefox / engine_safari are off), and "the mic signs are held for everyone" only while a mic switch
   // holds them (mic_follow_toggle off)
   function holds() {
@@ -527,12 +527,12 @@
     button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   function youLine() {
-    // 1.99?? avf (F2): the debug panel's first line - whether sync applies to this viewer by their own toggle
+    // 1.99ait avf (F2): the debug panel's first line - whether sync applies to this viewer by their own toggle
     var line = enabled ? translate('js.pad.audio.avsync_you_on', 'sync for you: ON (your toggle)') : translate('js.pad.audio.avsync_you_off', 'sync for you: OFF (your toggle)');
     return holds().all ? line + ' · ' + translate('js.pad.audio.avsync_mic_all', 'mic signs: held for everyone') : line;   // (review: only while held)
   }
   function notify() {
-    // (1.99ahm: the viewer's toggle is offered while any of the mic switches holds something back too; 1.99?? avf F5: while they
+    // (1.99ahm: the viewer's toggle is offered while any of the mic switches holds something back too; 1.99ait avf F5: while they
     // follow it - mic_follow_toggle off, it is offered for the cams only)
     var available = !micIgnoresToggle(sound.slug) && MIC_KINDS.some(function (kind) { return delayFor(sound.slug, true, kind) > 0; }) ||
       receivers.some(function (entry) { return targetFor(entry, true) != null; });
@@ -546,7 +546,7 @@
         button.type = 'button'; button.style.minHeight = '44px'; button.addEventListener('click', function () { try { if (W.navigator.clipboard) W.navigator.clipboard.writeText(JSON.stringify(debug(), null, 2)).catch(function () {}); } catch (e) {} });
         panel.appendChild(title); panel.appendChild(button); panel.appendChild(content); D.body.appendChild(panel); debugBox = { panel: panel, content: content };
       }
-      debugBox.panel.hidden = false; debugBox.content.textContent = youLine() + '\n' + JSON.stringify(debug(), null, 2);   // (1.99?? avf F2)
+      debugBox.panel.hidden = false; debugBox.content.textContent = youLine() + '\n' + JSON.stringify(debug(), null, 2);   // (1.99ait avf F2)
     } else if (debugBox) debugBox.panel.hidden = true;
     listeners.slice().forEach(function (listener) { try { listener(); } catch (e) {} });
   }
@@ -558,7 +558,7 @@
   function decorate(box) {
     if (!box || buttons.some(function (item) { return item.box === box; })) return;
     var button = D.createElement('button'); button.type = 'button'; button.hidden = true;
-    button.style.minHeight = '44px'; button.style.minWidth = '44px'; paint(button);   // (1.99?? avf F2: its label, class and title say on / off)
+    button.style.minHeight = '44px'; button.style.minWidth = '44px'; paint(button);   // (1.99ait avf F2: its label, class and title say on / off)
     button.addEventListener('click', function () { setEnabled(!enabled); });
     box.appendChild(button); buttons.push({ box: box, button: button }); notify();
   }

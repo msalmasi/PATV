@@ -95,9 +95,9 @@ test("the settings explain the clamp, the re-encode rate in the budget, and the 
   assert.equal(LC.FIELDS.kbps.max, 2000, "the range is unchanged");
 });
 
-// 1.99?? avf review (bot avf F3): the Stream settings name Pepe's pass-through catch-up (livecam_pt_catchup, a bot setting like the
+// 1.99ait avf review (bot avf F3): the Stream settings name Pepe's pass-through catch-up (livecam_pt_catchup, a bot setting like the
 // mic-stage one above it) - where the owner sets pass-through, so he finds the switch that keeps a stall from staying as cam delay
-test("1.99?? avf review: the settings name Pepe's pass-through catch-up (!livecam passthru catchup on, admins, off by default) and where each relay's hold shows", () => {
+test("1.99ait avf review: the settings name Pepe's pass-through catch-up (!livecam passthru catchup on, admins, off by default) and where each relay's hold shows", () => {
   const text = EJS.replace(/<[^>]+>/g, "");
   assert.ok(text.includes("unless Pepe's pass-through catch-up is on (!livecam passthru catchup on in Camfrog, admins; off by default)"), "the switch, its command and default");
   assert.match(text, /catch-up[^]*Live relay hold/, "where to see whether it worked");

@@ -264,7 +264,7 @@ const grab = (c, u) => ({ k: "mic", c, ts: T0 + c, u });
 const drop = (c, u, ms) => ({ k: "unmic", c, ts: T0 + c, u, ms });
 const say = (c, u, text) => ({ k: "msg", c, ts: T0 + c, u, text });
 
-test("1.99ahm: the rendered pages load the controller (v=5: + the people list's 🎙; 1.99ahp v=6: + stable slots' places; 1.99?? avf v=7: the toggle's on / off, the mic signs' fallback) only while A/V sync applies to the viewer", async () => {
+test("1.99ahm: the rendered pages load the controller (v=5: + the people list's 🎙; 1.99ahp v=6: + stable slots' places; 1.99ait avf v=7: the toggle's on / off, the mic signs' fallback) only while A/V sync applies to the viewer", async () => {
   assert.match(await padHtml(true), /<script src="\/public\/js\/av-sync\.js\?v=7"><\/script>/);
   assert.doesNotMatch(await padHtml(false), /av-sync\.js/);
 });
