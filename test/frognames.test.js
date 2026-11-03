@@ -486,3 +486,18 @@ test("1.99?? the 15 minutes survive a restart: inside the window still 'someone'
   for (const l of ["restart1", "restart2", "restart3", "restart4", "oldrow2"]) assert.ok(!dump.includes(l), "no login: " + l);
   FN._setClock(null);
 });
+
+// ── 1.99?? review fixes (each fails without its fix) ──
+test("1.99?? review fix: the 15 minutes don't end early when NAMED is full - the no-name session's own anchor (named_at) still counts", async () => {
+  FN._reset();
+  const t = Date.UTC(2026, 10, 12, 12);
+  FN.named("Pad.EV", "evicty", t);
+  const a = await FN.sight("Pad.EV", "evicty", { t: t + 5 * MIN });
+  assert.equal(a.alias, null);
+  // 50,001 other named sightings push the oldest entry (theirs) out of the in-memory map
+  for (let i = 0; i < 50001; i++) FN.named("Pad.EV2", "crowd" + i, t + 5 * MIN);
+  const b = await FN.sight("Pad.EV", "evicty", { t: t + 6 * MIN });
+  assert.ok(b.session === a.session && b.alias === null, "+6 min: still someone (was a frog name: " + b.alias + ")");
+  assert.match(String((await FN.sight("Pad.EV", "evicty", { t: t + 16 * MIN })).alias), ALIAS_RE, "then a frog name, as usual");
+  FN._reset();
+});

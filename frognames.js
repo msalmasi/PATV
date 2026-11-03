@@ -237,8 +237,9 @@ const ceilMin = (t) => Math.ceil(t / 60e3) * 60e3;
  *  (the next sighting after the release)? Then that sighting ends it and opens a NAMED session (startSession: every name rule). */
 function gapOver(S, t) {
   if (S.name || S.holding) return false;
-  const at = NAMED.get(S.roomId + "\t" + S.sk);
-  return !(at != null && t - at < NAMED_GAP_MS);
+  // 1.99?? review fix: the row's anchor counts too - NAMED is capped (50,000) and an evicted entry ended the window at once
+  const m = NAMED.get(S.roomId + "\t" + S.sk), at = Math.max(m != null ? m : -Infinity, S.namedAtRow != null ? S.namedAtRow : -Infinity);
+  return !(t - at < NAMED_GAP_MS);
 }
 const LEVELS = new Set(["incognito", "hidden"]);
 /** privacy fix (owner, spec M addendum 3 #1): does a sighting at level `kind` end session S at once? Only incognito -> hidden: the
@@ -306,8 +307,7 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null) {
   if (!aliasLess) {
     const usedA = new Set(open.map((x) => x.adj).filter(Boolean)), usedN = new Set(open.map((x) => x.noun).filter(Boolean));
     const taken = new Set([...open.map((x) => x.name), ...recent.map((x) => x.name)].filter(Boolean));
-    const avoid = new Set((avoidNames || []).map(norm).filter(Boolean));
-    const seed = hmac(secret(), "patv/alias/v1\0", String(roomId), "\0", lower(login), "\0", nonce);
+    const avoid = new Set((avoidNames || []).map(norm).filter(Boolean));    const seed = hmac(secret(), "patv/alias/v1\0", String(roomId), "\0", lower(login), "\0", nonce);
     const got = draw(seed, (a, n, nm) => !usedA.has(a) && !usedN.has(n) && !taken.has(nm) && !avoid.has(norm(nm)));
     let pref;
     if (got) { adj = got.adj; noun = got.noun; name = adj + " " + noun; pref = got.hood; }
