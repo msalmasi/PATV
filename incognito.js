@@ -487,7 +487,11 @@ function register(app, { addUser, isBotToken }) {
       // 1.99?? (privacy controls S6): the "On the website" card (privacystate.js) - only while the privacy switchboard v3 is in effect
       let pv3 = null;
       try { const PS = require("./privacystate"); await PS.init(); pv3 = PS.effective() ? await PS.stateOf(req.user.userId) : null; } catch (e) { pv3 = null; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn, mem, pwOn, pv3 });
+      // 1.99?? (privacy controls S7): the privacy text of S5 (icOn - incognito hides the name, not the cam) and S4 (crvOn - moderators
+      // can view a hidden cam), each only while its switch is on (privacycopy.js); off, the page is exactly as before
+      let icOn = false, crvOn = false;
+      try { const PC = await require("./privacycopy").load(); icOn = !!PC.incogcam; crvOn = !!PC.camreveal; } catch (e) { icOn = crvOn = false; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf, micrecOn, mem, pwOn, pv3, icOn, crvOn });
     } catch (e) { next(e); }
   });
 }

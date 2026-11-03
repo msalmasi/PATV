@@ -639,10 +639,53 @@ function withoutDarkCards(entries) {
   return (entries || []).filter((e) => !(e && PV3_DARK_CARDS.has(e.id)));
 }
 
+// ── 1.99?? (privacy controls S7): Pepe's cards' privacy-controls variants ("pc", bot pepe_privtext) - per slice, the sentences its
+// privacy text changes in that card ({camreveal|incogcam|privstate: {summary?, swap: [[old, new], ...]}}). While a slice's switch is
+// on here (its advert: the switch AND privacy wire v2 - privacycopy.flags), the card reads its text (already the v2 wording -
+// withPrivwireNotes - every slice needs privacy wire v2) with that slice's swaps made, in PC_KEYS order, each old text found exactly
+// once in the text as it stands then; a later slice's summary wins. A slice whose swaps don't fit is left out WHOLE (never half
+// made); Pepe's build refuses such data, so that is an older or hand-edited copy. Every switch off: nothing changes. ──
+const PC_KEYS = ["camreveal", "incogcam", "privstate"];
+const PC_SWAPS_MAX = 12;
+function pcApply(summary, details, pc, active) {
+  const applied = [];
+  if (!pc || typeof pc !== "object" || Array.isArray(pc)) return { summary, details, applied };
+  for (const k of PC_KEYS) {
+    const v = pc[k];
+    if (!active[k] || !v || typeof v !== "object") continue;
+    const sw = v.swap == null ? [] : v.swap;
+    if (!Array.isArray(sw) || sw.length > PC_SWAPS_MAX) continue;
+    let d = String(details || ""), ok = true;
+    for (const p of sw) {
+      if (!Array.isArray(p) || p.length !== 2 || typeof p[0] !== "string" || !p[0] || typeof p[1] !== "string") { ok = false; break; }
+      const i = d.indexOf(p[0]);
+      if (i < 0 || d.indexOf(p[0], i + 1) >= 0) { ok = false; break; }
+      d = d.slice(0, i) + p[1] + d.slice(i + p[0].length);
+    }
+    if (!ok || (v.summary != null && (typeof v.summary !== "string" || !v.summary.trim()))) continue;
+    details = d;
+    if (v.summary) summary = v.summary;
+    applied.push(k);
+  }
+  return { summary, details, applied };
+}
+function withPrivacyCopy(entries) {
+  let active = {};
+  try { active = require("./privacycopy").flags(); } catch (e) { active = {}; }
+  if (!PC_KEYS.some((k) => active[k])) return entries;
+  return (entries || []).map((e) => {
+    if (!e || !e.pc) return e;
+    const hasD = e.details && String(e.details).trim();
+    const r = pcApply(String(e.summary || ""), hasD ? String(e.details) : "", e.pc, active);
+    if (!r.applied.length) return e;
+    return { ...e, summary: clip(r.summary, L.summary), ...(hasD ? { details: clip(r.details, L.details) } : {}) };
+  });
+}
+
 // ── the page model ──
 async function pageModel() {
   const cur = await current();
-  const d = { ...cur.data, entries: withPrivwireNotes(withVoiceNotes(withMicrecNotes(withoutDarkCards(cur.data.entries || [])))) };
+  const d = { ...cur.data, entries: withPrivacyCopy(withPrivwireNotes(withVoiceNotes(withMicrecNotes(withoutDarkCards(cur.data.entries || []))))) };
   const cats = (d.categories || []).map((c) => ({ ...c, entries: (d.entries || []).filter((e) => e.category === c.id) })).filter((c) => c.entries.length);
   // the browser's search index: compact, no details (the filter reads each card's text)
   const index = (d.entries || []).map((e) => ({ id: e.id, title: e.title, commands: e.commands, aliases: e.aliases || [], syntax: e.syntax,
@@ -759,6 +802,6 @@ module.exports = {
   misses, logMiss, online, pageModel, _setClock, _setWait, _reset, HELP_LIMITS, SYNC_BODY_MAX,
   MICREC_NOTES, withMicrecNotes,                                    // mic retention (ops plan 8.8)
   VOICE_NOTE, withVoiceNotes,                                       // WP-1 (design section H)
-  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS, TX_KEPT_NOTE, PV3_DARK_CARDS, withoutDarkCards,    // wave 2 (design section H, behind the Privacy wire v2 switch)
+  PRIVWIRE_NOTES, withPrivwireNotes, PRIVWIRE_TX_CARDS, TX_KEPT_NOTE, PV3_DARK_CARDS, withoutDarkCards, PC_KEYS, pcApply, withPrivacyCopy,   // + S7: the cards' pc variants                                // wave 2 (design section H, behind the Privacy wire v2 switch)
   LIMITS: { USER_BURST, USER_DAY, IP_HOUR, QUEUE_MAX, MISS_SCORE, ANSWER_WAIT },
 };

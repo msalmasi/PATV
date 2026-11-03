@@ -232,9 +232,12 @@ async function camChanged(login, off, via, ts = now()) {
     const u = await require("./incognito").userByLogin(l);
     if (!u) return false;
     const where = via === "chat" ? "with !livecam in chat" : "from Settings → Privacy";
+    // 1.99?? (privacy controls S7, owner Q8 / Q11): while cam reveals are on, the OFF notice says moderators can still view it
+    let rv = "";
+    try { if (require("./camreveal").advert()) rv = " Moderators can still view it for moderation - Pepe tells you when they do."; } catch (e) { rv = ""; }
     await require("./inbox").addSafe(u.userId, off
       ? { kind: "system", title: "📡 Your cam is hidden from the website",
-          body: `Your cam is OFF for the website for your chat name ${l} (${where}): nobody there can watch it live, snap it or clip it. Not you? Turn it back on in Settings → Privacy.`,
+          body: `Your cam is OFF for the website for your chat name ${l} (${where}): nobody there can watch it live, snap it or clip it.${rv} Not you? Turn it back on in Settings → Privacy.`,
           link: "/settings/privacy#web", ref: `pv3:cam:${l}:${Math.floor(Number(ts) || now())}` }
       : { kind: "system", title: "📡 Your cam can be watched on the website again",
           body: `Your cam is ON for the website again for your chat name ${l} (${where}) - who may watch is under Live cam in Settings → Privacy. Not you? Turn it off there.`,

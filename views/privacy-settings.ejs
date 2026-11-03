@@ -78,7 +78,7 @@
       <div class="pv-ca" id="pvWebSubs">
         <p class="ds-meta" id="pvWebForced"<%= hid ? '' : ' hidden' %>><%- t('pv3.forced') %></p>
         <div class="pv-set<%= P.incognito && P.incognito.waiting ? ' pending' : '' %>" id="pvWebIncRow">
-          <div><b><%- t('pv3.name') %></b><p class="ds-meta"><%- t('pv3.name_meta') %></p></div>
+          <div><b><%- t('pv3.name') %></b><p class="ds-meta"><%- locals.icOn ? t('pv3.name_meta_ic') : t('pv3.name_meta') %></p></div>
           <label class="ds-switch"><input type="checkbox" id="pvWebInc" <%= hid || incOn ? 'checked' : '' %> <%= hid || (P.incognito && P.incognito.waiting) ? 'disabled' : '' %> aria-label="<%- t('pv3.name') %>"><span></span></label>
         </div>
         <p class="pv-st" id="pvWebIncSt" role="status" aria-live="polite"></p>
@@ -88,7 +88,7 @@
         </div>
         <p class="pv-st<%= P.tx && P.tx.waiting ? ' wait' : '' %>" id="pvWebTxSt" role="status" aria-live="polite"><%- P.tx && P.tx.waiting ? t('inc.waiting') : '' %></p>
         <div class="pv-set" id="pvWebCamRow">
-          <div><b><%- t('pv3.cam') %></b><p class="ds-meta"><%- t('pv3.cam_meta') %></p></div>
+          <div><b><%- t('pv3.cam') %></b><p class="ds-meta"><%- locals.crvOn ? t('pv3.cam_meta_rv') : t('pv3.cam_meta') %></p></div>
           <label class="ds-switch"><input type="checkbox" id="pvWebCam" <%= hid || camOn ? 'checked' : '' %> <%= hid ? 'disabled' : '' %> aria-label="<%- t('pv3.cam') %>"><span></span></label>
         </div>
         <p class="pv-st" id="pvWebCamSt" role="status" aria-live="polite"></p>
@@ -115,8 +115,8 @@
           back to this English until it is translated, instead of keeping the old promise ("your chat lines aren't shown").
           1.99?? (privacy controls S0): while the Privacy wire v2 switch is on (incognito.js pwOn) the _v2 keys - a random frog name,
           and !bridge hide blacks lines out (the v1 keys said "someone" and "keeps your lines off"); off, the page is as before -%>
-      <li><%- locals.pwOn ? t(st.account ? 'inc.what_web_someone_acct_v2' : 'inc.what_web_someone_v2') : t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
-      <li><%- t('inc.what_media_someone') %></li>
+      <li><%- locals.pwOn && locals.icOn ? (st.account ? t('inc.what_web_someone_acct_v2_ic') : t('inc.what_web_someone_v2_ic')) : locals.pwOn ? t(st.account ? 'inc.what_web_someone_acct_v2' : 'inc.what_web_someone_v2') : t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
+      <li><%- locals.icOn ? t('inc.what_media_someone_ic') : t('inc.what_media_someone') %></li>
       <%# WP-1 (design section H, approved 2026-10-28): true today - not behind any switch %>
       <li><%- t('inc.what_voice') %></li>
       <%# 1.99aft (review): Pepe counts no top word said while incognito (pepe_userstats: the memory switch AND incognito, at count
@@ -220,7 +220,7 @@
     <p class="pv-why"><%- t('lc.what') %></p>
     <ul class="pv-list">
       <li><%- t('lc.what_who') %></li>
-      <li><%- t('lc.what_told') %></li>
+      <li><%- locals.crvOn ? t('lc.what_told_rv') : t('lc.what_told') %></li>
       <li><%- t('lc.what_never') %></li>
     </ul>
     <% if (!lc.linked) { %>
@@ -231,7 +231,7 @@
         <div><b><%- t('lc.switch') %></b><p class="ds-meta"><%- t('lc.identity', { login: lc.login }) %></p></div>
         <label class="ds-switch"><input type="checkbox" id="pvLc" <%= lc.off ? '' : 'checked' %> aria-label="<%- t('lc.switch') %>"><span></span></label>
       </div>
-      <p class="pv-st" id="pvLcSt" role="status" aria-live="polite"><%- lc.off ? t('lc.st_off') : t('lc.st_on') %></p>
+      <p class="pv-st" id="pvLcSt" role="status" aria-live="polite"><%- lc.off ? (locals.crvOn ? t('lc.st_off_rv') : t('lc.st_off')) : t('lc.st_on') %></p><% if (locals.crvOn) { /* 1.99?? (privacy controls S7): privacy-livecam.js says js.lc.st_off when the switch goes off - while cam reveals are on, that's the moderation wording (lc.st_off_rv) */ %><script>(function () { var I = window.PATV_I18N = window.PATV_I18N || { s: {} }; I.s = I.s || {}; I.s['js.lc.st_off'] = <%- JSON.stringify(t('lc.st_off_rv')).replace(/</g, '\\u003c') %>; })();</script><% } %>
       <%# 1.99aar (camaccess.js): who may watch while it's on, asking, the "always" list. Client: privacy-livecam.js %>
       <div class="pv-ca" id="pvCa">
         <div class="pv-set">
@@ -268,7 +268,7 @@
       </div>
       <% } %>
     <% } %>
-    <p class="ds-meta"><%- t('lc.chat') %></p>
+    <p class="ds-meta"><%- locals.icOn ? t('lc.chat_ic') : t('lc.chat') %></p>
   </section>
 
   <%# 1.99yq (camviewers.js): who opened your cam through the website + the people you blocked from it. Client:
@@ -339,7 +339,7 @@
     <p class="pv-why"><%- t('oa.what') %></p>
     <ul class="pv-list">
       <li><%- t('oa.what_told') %></li>
-      <li><%- t('oa.what_never') %></li>
+      <li><%- locals.icOn ? t('oa.what_never_ic') : t('oa.what_never') %></li>
     </ul>
     <div class="pv-set">
       <div><b><%- t('oa.switch') %></b><p class="ds-meta"><%- t('lc.identity', { login: oa.login }) %></p></div>
@@ -358,7 +358,7 @@
     <ul class="pv-list">
       <li><%- t('gh.what_hidden') %></li>
       <li><%- t('gh.what_audit') %></li>
-      <li><%- t('gh.what_consent') %></li>
+      <li><%- t('gh.what_consent') %></li><% if (locals.crvOn) { %><li><%- t('gh.what_reveal') %></li><% } %>
     </ul>
     <div class="pv-set">
       <div><b><%- t('gh.switch') %></b></div>

@@ -365,8 +365,9 @@ test("the store: no module but evidence.js (and its rollback tool / lifecycle ho
                    "evidence_clips: only the store, its rollback tool and the lifecycle / coverage lists");
   const req = files.filter((f) => /require\(\s*["']\.\/evidence["']\s*\)/.test(fs.readFileSync(f, "utf8"))).map(rel).sort();
   // (1.99?? privacy controls S4: + camevidence.js - cam evidence stills / clips keep their files in this store's directory, under its
-  // switch and its holds; it reads nothing of evidence_clips)
-  assert.deepEqual(req, ["accountdelete.js", "adminweb.js", "bridge.js", "camevidence.js", "evidenceexport.js", "padsettings.js", "pepeforget.js", "seethrough.js", "terms.js"].sort(),
+  // switch and its holds; it reads nothing of evidence_clips. S7: + privacycopy.js - the policy copy (evidence.privacyCopy, like
+  // terms.js) for the cam evidence text's switch and date)
+  assert.deepEqual(req, ["accountdelete.js", "adminweb.js", "bridge.js", "camevidence.js", "evidenceexport.js", "padsettings.js", "pepeforget.js", "privacycopy.js", "seethrough.js", "terms.js"].sort(),
                    "require('./evidence'): the advert, the reveal offer, the policy copy, the owner card, the lifecycle hooks, the export's switch (the export and its admin form) and cam evidence's store only");
   const dir = files.filter((f) => /EVIDENCE_DIR/.test(fs.readFileSync(f, "utf8"))).map(rel).sort();
   assert.deepEqual(dir, ["evidence.js", "tools/evidence-purge.js"], "the directory");
