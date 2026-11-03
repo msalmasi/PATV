@@ -1586,7 +1586,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const members = CV.roster(R.members, { canReveal }), mic = CV.roster(R.mic, { canReveal });   // ingest replaces these arrays (never edits them): a snapshot too
   const L = await resolveNames([...items.map((it) => it.u), ...redoItems.map((it) => it.u), ...members, ...mic,
                                 ...(prog ? prog.tiles.filter((x) => !x.cover).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody)
-                                // 1.99?? S1: a !transcripts off bar said named shows that name - and its PATV look (chatlogview.barUser)
+                                // 1.99aht S1: a !transcripts off bar said named shows that name - and its PATV look (chatlogview.barUser)
                                 ...[...items, ...redoItems].map((it) => CV.barUser(it)).filter(Boolean)]);
   const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal });
   const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal }) : [];
@@ -1721,7 +1721,7 @@ function register(app, { isBotToken, addUser }) {
   /** One sync's work and answer (v1 and v2 alike). wave 2: the answer says privwire: 2 only while the switch is on (the advert). */
   async function syncAnswer(body, v2) {
     relay.applyAcks(body.acks);
-    PW.noteTxCap(body.txbar_cap === 1);        // 1.99?? transcripts bar: does this Pepe send them as a bar? (the policy / help text)
+    PW.noteTxCap(body.txbar_cap === 1);        // 1.99aht transcripts bar: does this Pepe send them as a bar? (the policy / help text)
     require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
     // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
     // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
@@ -1742,9 +1742,9 @@ function register(app, { isBotToken, addUser }) {
     const mfc = relay.mfCancelled();               // micfollow: claimed mic-stage stills Pepe must drop (bridge-relay.mfCancelled)
     return { success: true, ...r, jobs, viewers: require("./padmod").viewersFor(liveIds), ...blocks, ...(mfc.length ? { mf_cancel: mfc } : {}),
              ...(PW.isOn() ? { privwire: 2 } : {}),
-             // 1.99?? transcripts bar: this site shows a !transcripts off speaker's 🎙 lines as a blacked-out bar (veil.js) - said only
+             // 1.99aht transcripts bar: this site shows a !transcripts off speaker's 🎙 lines as a blacked-out bar (veil.js) - said only
              // while privacy wire v2 is on; Pepe sends them (masked, v2 only) only after it, and says txbar_cap: 1 (privwire.noteTxCap).
-             // 1.99?? gate: AND the bar's own switch (privwire.txAdvert; /admin/bridge, default OFF - the owner approves the wording first)
+             // 1.99aht gate: AND the bar's own switch (privwire.txAdvert; /admin/bridge, default OFF - the owner approves the wording first)
              ...(PW.txAdvert() ? { txbar: 1 } : {}),
              // wave 2 WP-5 (spec E.3): evidence clips can be made (evidence.js: its switch AND privacy wire v2) - Pepe offers the Camfrog
              // !clipmic evidence path only after this (never said while either is off: the contract fixture runs without it)
@@ -2224,9 +2224,9 @@ async function revealLookup(roomId, c) {
     if (require("./chatlogview").privacyOf(it) === "out" || it.rm_at != null || it.purged) return null;
     const vr = (await getQuery("SELECT 1 FROM bridge_veil WHERE c = ?", [Number(c)]).catch(() => []))[0];
     if (!vr) return null;                                   // its identity row is gone (forget-me): nobody can reveal it any more
-    // (1.99?? transcripts bar: tx = a 🎙 line masked for !transcripts off - the see-through log names that toggle)
+    // (1.99aht transcripts bar: tx = a 🎙 line masked for !transcripts off - the see-through log names that toggle)
     // (review fix TXBAR-ST-2: idv = it also had a frog name - incognito or !bridge hide - so a reveal sees through that toggle too;
-    // 1.99?? S1: = the bar doesn't show its speaker's name now - a frog name, the hidden bar, or "someone" (private since) - chatlogview.barLook)
+    // 1.99aht S1: = the bar doesn't show its speaker's name now - a frog name, the hidden bar, or "someone" (private since) - chatlogview.barLook)
     return { ts: Number(it.ts), vz: it._vz, vw: typeof it._vw === "string" ? it._vw : null,
              ...(it.tm === 1 ? { tx: true, ...(require("./chatlogview").barLook(it) !== "named" ? { idv: true } : {}) } : {}) };
   }
@@ -2243,7 +2243,7 @@ async function revealLookup(roomId, c) {
     const ai = CV.itemOf(r);
     if (CV.privacyOf(ai) === "out") return null;
     return { ts: Number(r.ts), vz: { login: r.v_login, display: r.v_display, kind: r.v_kind }, vw: r.v_words == null ? null : String(r.v_words),
-             ...(ai.k === "tx" && ai.tm === 1 ? { tx: true, ...(CV.barLook(ai) !== "named" ? { idv: true } : {}) } : {}) };   // (1.99?? S1: as above)
+             ...(ai.k === "tx" && ai.tm === 1 ? { tx: true, ...(CV.barLook(ai) !== "named" ? { idv: true } : {}) } : {}) };   // (1.99aht S1: as above)
   } catch (e) { return null; }
 }
 

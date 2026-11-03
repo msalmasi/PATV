@@ -107,7 +107,7 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS evidence_clips_room ON evidence_clips (room_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS evidence_clips_exp ON evidence_clips (expires_at)");
       await runQuery("CREATE INDEX IF NOT EXISTS evidence_clips_subject ON evidence_clips (subject_login)");
-      // 1.99?? transcripts bar review fix (TXBAR-ST-2 / ST-3 / F1): tm = 1 - the turn of a !transcripts off 🎙 bar (its veil is "hidden" for
+      // 1.99aht transcripts bar review fix (TXBAR-ST-2 / ST-3 / F1): tm = 1 - the turn of a !transcripts off 🎙 bar (its veil is "hidden" for
       // every gate, as the bar's): its clip_save row names that toggle (ref ev:<id>:tx), the lists and exports say "transcripts off"
       // instead of passing it off as !bridge hide, and the privacy text describes it while one is kept (privwire.txKept)
       const ecols = new Set((await getQuery("PRAGMA table_info(evidence_clips)")).map((x) => x.name));
@@ -143,7 +143,7 @@ async function setOn(want, user) {
   console.log(`[evidence] evidence clips switched ${on ? "ON" : "OFF"} (${(user && user.username) || "?"})`);
   return state();
 }
-/** 1.99?? transcripts bar review fix (F1): is an evidence clip of a !transcripts off bar's turn (tm) still kept? (privwire.txKept - the
+/** 1.99aht transcripts bar review fix (F1): is an evidence clip of a !transcripts off bar's turn (tm) still kept? (privwire.txKept - the
  *  privacy text keeps describing those bars while one is.) Only this module reads the store. */
 async function anyTxClip() {
   await init();
@@ -528,7 +528,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       const jid = "w" + crypto.randomBytes(8).toString("hex");
       await ST.init(); await AA.init();
       const stId = await tx(async () => {
-        // (1.99?? transcripts bar: ":tx" = the turn of a !transcripts off 🎙 bar - the log says which toggle was seen through)
+        // (1.99aht transcripts bar: ":tx" = the turn of a !transcripts off 🎙 bar - the log says which toggle was seen through)
         const st = await ST.log({ userId: uid, role: rl.role, scope: "clip_preview", roomId: R.id, logins: [login], reason,
                                   ref: "evp:" + jid + (it.tm === 1 ? ":tx" : "") });
         if (!st) throw new Error("evidence: no see-through row");
@@ -648,7 +648,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, noTimers = false }
       let acct = null, rl = null;
       for (const a of accts) { const r = await role(a, room, saidMs); if (r) { acct = a; rl = r; break; } }
       if (!rl) return res.status(403).json({ ok: false, error: "not_entitled" });
-      // (1.99?? transcripts bar review fix TXBAR-ST-2: the turn of a !transcripts off bar - its 🎙 line in the live ring is tm)
+      // (1.99aht transcripts bar review fix TXBAR-ST-2: the turn of a !transcripts off bar - its 🎙 line in the live ring is tm)
       let tm = false;
       try {
         const txId = String(b.tx || ""), R = TX_RE.test(txId) ? require("./bridge")._rooms.get(room) : null;

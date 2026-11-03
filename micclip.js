@@ -106,7 +106,7 @@ function view(c, slug) {
   const live = c.state === "ready" && NOW() - c.done < PREVIEW_TTL;
   const base = "/api/rooms/" + encodeURIComponent(slug) + "/micclip/" + c.id;
   return { ok: true, id: c.id, state: live || c.state !== "ready" ? c.state : "expired", status: c.status || "", secs: c.secs || 0, text: live && !c.txh ? c.text || "" : "",
-           // 1.99?? RV-1: a !transcripts off bar's clip - the card says it goes up without a caption (the speaker's words stay hidden)
+           // 1.99aht RV-1: a !transcripts off bar's clip - the card says it goes up without a caption (the speaker's words stay hidden)
            ...(c.txh ? { words_off: true } : {}),
            // wave 2 (J-7): an incognito turn's clip names its frog name to the page - never the login behind it
            login: c.alias ? null : c.login, ...(c.alias ? { alias: c.alias } : {}), audio: live ? base + "/audio" : null, until: live ? c.done + PREVIEW_TTL : null,
@@ -124,7 +124,7 @@ function vClipAlias(it) {
     return LOGIN_RE.test(String(it._vz.login)) ? it.u.alias : null;
   } catch (e) { return null; }
 }
-/** 1.99?? RV-1 (owner Q6: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): a !transcripts off bar
+/** 1.99aht RV-1 (owner Q6: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): a !transcripts off bar
  *  members may clip - under its speaker's name, or the incognito frog name the bar shows (J-7) - while privacy wire v2 is on:
  *  {login, alias} | null (chatlogview.barClip: the same rule that gives the page the bar's 🎙 id). A !bridge hide bar, a "someone"
  *  bar and anything else: null (the usual refusal). Its clip carries NO words: no preview text, caption or post body (below). */
@@ -223,7 +223,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       // wave 2 (owner J-7): a 🎙 line an INCOGNITO speaker said under a frog name (privacy wire v2, the switch on) may be clipped by
       // anyone - posted under that frog name; who it is stays server-only (the job's target, never on a page or in a log line). A
       // hidden speaker's turn can't be clipped by members (an admin's / the pad owner's evidence clip, after a reveal, goes to the moderation evidence store - never a post); a "someone" line (no frog name) neither
-      // 1.99?? RV-1 (owner Q6): a !transcripts off bar shown under its speaker's name (or their incognito frog name) - its AUDIO may be
+      // 1.99aht RV-1 (owner Q6): a !transcripts off bar shown under its speaker's name (or their incognito frog name) - its AUDIO may be
       // clipped by anyone, never its words (bar: the clip's text stays empty whatever Pepe sends - the preview, the caption, the post)
       const fa = vClipAlias(it);
       const bar = fa ? null : barClipOf(it);
@@ -288,7 +288,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
         fs.mkdirSync(PENDING_DIR, { recursive: true });
         fs.writeFileSync(fileOf(c.id), m4a);
         c.secs = Math.max(1, Math.min(600, Number(b.secs) || 1));
-        c.text = c.txh ? "" : text;                         // (1.99?? RV-1: a !transcripts off bar's clip - never its words, whatever came)
+        c.text = c.txh ? "" : text;                         // (1.99aht RV-1: a !transcripts off bar's clip - never its words, whatever came)
         c.viewerOk = !!b.viewer_ok && b.save !== "no";
         c.cost = Math.max(0, parseInt(b.cost, 10) || 0);
         c.state = "ready"; c.status = "ok"; c.done = NOW();
@@ -387,7 +387,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const f = c ? fileOf(c.id) : null;
     if (!c || c.state !== "ready" || !c.save || String(b.user || "") !== c.username || !f || !fs.existsSync(f)) return res.status(404).json({ ok: false });
     // wave 2 (J-7): Pepe posts an incognito turn under the frog name it was said with (veil + alias; target stays bot-to-site only)
-    // 1.99?? RV-1: a !transcripts off bar's clip - no text, and words_off: 1 (Pepe posts it without a caption whatever else he has)
+    // 1.99aht RV-1: a !transcripts off bar's clip - no text, and words_off: 1 (Pepe posts it without a caption whatever else he has)
     res.json({ ok: true, room: c.roomId, target: c.login, secs: c.secs, text: c.txh ? "" : c.text, data: fs.readFileSync(f).toString("base64"),
                ...(c.alias ? { veil: "incognito", alias: c.alias } : {}), ...(c.txh ? { words_off: 1 } : {}) });
   });

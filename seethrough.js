@@ -222,7 +222,7 @@ async function revealChat({ user, role, roomId, cs, reason = "", lookup }) {
   }
   if (items.length) {
     if (role.role === "admin") await accountLinks(items);
-    // 1.99?? transcripts bar: the log says which toggle was seen through - a 🎙 line masked for !transcripts off gets its own row, scope
+    // 1.99aht transcripts bar: the log says which toggle was seen through - a 🎙 line masked for !transcripts off gets its own row, scope
     // tx_line; every other line chat_line, as before. Both written BEFORE the answer (nothing is shown unlogged)
     // review fix (TXBAR-ST-2): a bar whose speaker ALSO had a frog name (incognito or !bridge hide + !transcripts off) reveals both - who
     // was behind the frog name (chat_line) and what was said (tx_line): a row for each
@@ -352,7 +352,7 @@ function register(app, { addUser, noTimers = false }) {
           if (r.tx === true) txl.push(items[items.length - 1]);
         }
         if (items.length) await toggleUsed(tg.log_id, items.map((o) => o.login));
-        // 1.99?? transcripts bar: a !transcripts off 🎙 line shown while the toggle is on also gets a tx_line row (ref toggle:<its row>), so
+        // 1.99aht transcripts bar: a !transcripts off 🎙 line shown while the toggle is on also gets a tx_line row (ref toggle:<its row>), so
         // the log says that toggle was seen through too - the toggle's own row still counts the batch
         if (txl.length) await log({ userId: req.user.userId, role: ctx.role.role, scope: "tx_line", roomId: ctx.R.id, logins: txl.map((o) => o.login),
                                     reason: req.body.reason, ref: "toggle:" + tg.log_id });

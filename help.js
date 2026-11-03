@@ -566,12 +566,12 @@ const PRIVWIRE_NOTES = {
 const PRIVWIRE_SUMMARY = {
   incognito: "Your own switch: with incognito on, the website shows you under a random frog name instead of your name. It changes what the website shows, not what Pepe remembers - that's !remember off. Also on the website: Settings → Privacy.",
 };
-// 1.99?? transcripts bar (owner 2026-11-02): while the site ALSO shows !transcripts off 🎙 lines as a blacked-out bar (privwire.txBar: the
+// 1.99aht transcripts bar (owner 2026-11-02): while the site ALSO shows !transcripts off 🎙 lines as a blacked-out bar (privwire.txBar: the
 // switch on AND the latest Pepe sends them), Pepe's catalog's v2tx wording replaces the card's (e.v2tx {summary?, details?}); help data
 // from a Pepe without it gets the site's own wording for the transcripts card, and the bridge card's old transcripts clause swapped.
 const PRIVWIRE_TX_CARDS = {
   transcripts: {
-    // (1.99?? S1, owner Q5 / Q6: the name still shows, only the words are blacked out, members can still clip the audio)
+    // (1.99aht S1, owner Q5 / Q6: the name still shows, only the words are blacked out, members can still clip the audio)
     summary: "Your own switch: with !transcripts off, your name still shows on the website, but your mic words are blacked out.",
     details: "When you're on the mic in a room linked to the website, its pad shows what you said as a 🎙 line (an automatic transcript). " +
       "With `!transcripts off`, your name still shows there, but your words are blacked out. Members can still clip the audio, but " +
@@ -581,7 +581,7 @@ const PRIVWIRE_TX_CARDS = {
   },
 };
 const TX_CLAUSE_OLD = "`!transcripts off` keeps your mic transcripts off the website.";
-const TX_CLAUSE_NEW = "`!transcripts off` blacks out only the words of your mic transcripts (your name still shows).";   // (1.99?? S1)
+const TX_CLAUSE_NEW = "`!transcripts off` blacks out only the words of your mic transcripts (your name still shows).";   // (1.99aht S1)
 // Review fix (F1): the bar no longer live (a Pepe without it - a rollback) while bars it made are still kept (privwire.txKept): the
 // transcripts card keeps its wording for NEW mic turns (left out) and adds that the ones already shown as a bar stay bars.
 const TX_KEPT_NOTE = "Mic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators, and a pad's owner in " +

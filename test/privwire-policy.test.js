@@ -61,14 +61,14 @@ test("/help: Pepe's incognito / bridge / transcripts cards get the v2 notes only
     assert.match(out[1].details, /blacked-out bar/);
     assert.match(out[2].details, /never reach the website/);
     assert.equal(out[3], cards[3], "other cards untouched");
-    // 1.99?? transcripts bar: while the bar is live too (privwire.txBar: the switch AND a Pepe that sends it), the transcripts card says
+    // 1.99aht transcripts bar: while the bar is live too (privwire.txBar: the switch AND a Pepe that sends it), the transcripts card says
     // the bar - Pepe's v2tx wording when his data has it, else the site's own; the bridge card's old transcripts clause is swapped
     const tb = PW.txBar;
     PW.txBar = () => true;
     try {
       const bridgeV2 = { id: "bridge", summary: "b", v2: { details: "Hidden people show as a bar. `!transcripts off` keeps your mic transcripts off the website." } };
       const out2 = H.withPrivwireNotes([...cards, bridgeV2, { id: "transcripts", summary: "off", v2tx: { summary: "Pepe's bar words" } }]);
-      // (1.99?? S1, owner Q5 / Q6: the name still shows, only the words are blacked out, members can still clip the audio)
+      // (1.99aht S1, owner Q5 / Q6: the name still shows, only the words are blacked out, members can still clip the audio)
       assert.equal(out2[2].summary, "Your own switch: with !transcripts off, your name still shows on the website, but your mic words are blacked out.");
       assert.ok(out2[2].details.includes("With `!transcripts off`, your name still shows there, but your words are blacked out. Members can still clip " +
                                          "the audio, but never see the words. PATV administrators, and a pad's owner in their own pad, can reveal the " +
@@ -147,11 +147,11 @@ test("WP-5: terms.js dates /privacy by the evidence switch's first ON too (evide
   assert.match(src, /privwire, evidence, policyDates \}\)/);
 });
 
-// 1.99?? transcripts bar (owner 2026-11-02: "If someone has !transcripts off, it should still show in the chat but blocked out like with
+// 1.99aht transcripts bar (owner 2026-11-02: "If someone has !transcripts off, it should still show in the chat but blocked out like with
 // bridge hide."): its sentences show only inside the privacy-wire-v2 branches AND while the bar is live (terms.js locals.txbar =
 // privwire.txBar: the switch on and a Pepe that sends the bar); the change note is dated by policy_text_dates "tx-bar". The owner approves
 // this wording before it ships - these are the exact sentences.
-// 1.99?? S1 (owner answers Q5 / Q6 / Q7, 2026-11-02): the name still shows, only the words are blacked out, members can still clip the
+// 1.99aht S1 (owner answers Q5 / Q6 / Q7, 2026-11-02): the name still shows, only the words are blacked out, members can still clip the
 // audio (never the words), administrators and the pad's owner can reveal the words (logged); earlier mic transcripts stay left out
 const TXB_SENTENCES = [
   " If you type <code>!transcripts off</code>, your name still shows, but the words of your mic transcripts are blacked out. Members can still clip the audio, but never see the words. Administrators and the pad's owner can reveal the words, and every reveal is logged.",
@@ -171,9 +171,9 @@ test("transcripts bar: its sentences only with privacy wire v2 AND the bar live,
   const on = render(now, { privwire: PWON, txbar: { on: true }, policyDates: TXD, chatlog: CLOC });
   for (const s of TXB_SENTENCES) assert.equal(on.split(s).length, 2, "once: " + s.slice(0, 70));
   assert.ok(!on.includes("<code>!transcripts off</code> leaves your mic transcripts out."), "the old chat-history sentence is replaced");
-  // 1.99?? S1: nothing of the txbar build's first wording ("without your name", "can't clip") is left
+  // 1.99aht S1: nothing of the txbar build's first wording ("without your name", "can't clip") is left
   for (const s of ["without your name", "Members can't clip those mic turns", "members can no longer clip"]) assert.ok(!on.includes(s), "gone: " + s);
-  // 1.99?? RV-4: "While it's on, your earlier mic transcripts are left out." read as "while transcripts are on" - gone; the clip point
+  // 1.99aht RV-4: "While it's on, your earlier mic transcripts are left out." read as "while transcripts are on" - gone; the clip point
   // is in section 3 and section 10 too (the same sentence as Pepe's replies)
   assert.ok(!on.includes("While it's on, your earlier mic transcripts"), "RV-4: the misreadable sentence is gone");
   assert.equal(on.split("Members can still clip the audio, but never see the words.").length - 1, 3, "RV-4: sections 3 and 10 and the change note carry the clip point");
@@ -208,7 +208,7 @@ test("transcripts bar: terms.js dates it by policy_text_dates 'tx-bar' while pri
   assert.match(src, /memory, txbar, privwire, evidence, policyDates \}\)/);
 });
 
-// 1.99?? transcripts bar review fix (F1): the bar no longer live (a Pepe without it - a bot rollback, any sync without txbar_cap) while
+// 1.99aht transcripts bar review fix (F1): the bar no longer live (a Pepe without it - a bot rollback, any sync without txbar_cap) while
 // bars it made are still kept and revealable (privwire.txKept): terms.js passes locals.txbar = {kept, off_at, off_day} and the page says
 // new mic transcripts are left out AND the ones already shown as a bar stay bars, with a change note dated by when the bar stopped. The
 // owner approves this wording before it ships - these are the exact sentences.

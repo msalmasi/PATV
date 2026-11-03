@@ -208,7 +208,7 @@ function privacyV2(it, kindOf, txOf) {
   if (!hs.length) return "out";                               // a v2 line always carries its hash: without one, fail closed
   if (it.purged) return null;
   let mask = it.u.veil === "hidden";
-  // 1.99?? transcripts bar: a 🎙 line Pepe sent masked BECAUSE of !transcripts off (tm: 1 - no words in it) stays the bar while the
+  // 1.99aht transcripts bar: a 🎙 line Pepe sent masked BECAUSE of !transcripts off (tm: 1 - no words in it) stays the bar while the
   // sticky set says their transcripts are off; any other 🎙 line of someone with them off now is left out, as before
   const bar = it.k === "tx" && it.tm === 1 && mask;
   for (const x of hs) {
@@ -217,7 +217,7 @@ function privacyV2(it, kindOf, txOf) {
   }
   return mask ? "mask" : "anon";
 }
-// ── 1.99?? S1 (owner Q5, privacy spec 2.3 "Transcripts off": transcripts off covers the WORDS only) ──
+// ── 1.99aht S1 (owner Q5, privacy spec 2.3 "Transcripts off": transcripts off covers the WORDS only) ──
 // A !transcripts off bar (tm 1) is stored as a hidden 🎙 line (veil.js) but shows WHO said it: the person's name, or their frog name if
 // they said it incognito, with a "transcript hidden" tag. Only a bar whose speaker is !bridge hide (then or now) is the one hidden bar.
 const LOGIN_OK = /^[\w.\-]{1,40}$/;              // (a Camfrog login, as veil.js LOGIN_RE)
@@ -245,7 +245,7 @@ function barUser(it) {
   return { login: String(vz.login), display: vz.display ? String(vz.display).slice(0, 80) : String(vz.login) };
 }
 /**
- * 1.99?? RV-1 (owner Q6: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): may members clip this
+ * 1.99aht RV-1 (owner Q6: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): may members clip this
  * !transcripts off bar's mic turn on the website, and as whom? -> {login, alias} | null. Only a bar shown under its speaker's NAME
  * (barLook "named": alias null - the clip names them, as the bar does) or under their INCOGNITO FROG NAME (barLook "incognito" with
  * the frog name it shows: posted under that name, J-7). A "someone" bar (private since, A.1), a !bridge hide bar ("hidden": never a
@@ -339,7 +339,7 @@ function privacyAt(it, kindOf, txOf) {
  *  (or being masked) changes them. */
 const lookOf = (it, p) => (p === "out" ? "out" : p === "mask" ? "masked"
   : p === "anon" || (it && typeof it.ah === "string" && HASH20.test(it.ah)) || (it && it.u && it.u.anon) ? "someone" : "named");
-/** 1.99?? S1: a line's look under a state of the set (kindOf / txOf, as privacyAt) - lookOf, except that a !transcripts off bar shown
+/** 1.99aht S1: a line's look under a state of the set (kindOf / txOf, as privacyAt) - lookOf, except that a !transcripts off bar shown
  *  under its speaker's NAME (barLook "named") looks "named": it moves to a "someone" bar when they go private, and back, like their
  *  named lines (the live tail draws it again - lookStep). */
 function lookAt(it, kindOf, txOf) {
@@ -428,7 +428,7 @@ function namedToAnonLately(it, ms = 3600e3) {
   const r = h ? NAMED_TO_ANON.get(h) : null;
   return !!r && Date.now() - r.at < ms && !(it.k === "tx" && r.tx);
 }
-/** 1.99?? S1: was this !transcripts off bar shown under its speaker's NAME until they went private in the last `ms`? (/history/check
+/** 1.99aht S1: was this !transcripts off bar shown under its speaker's NAME until they went private in the last `ms`? (/history/check
  *  draws it again - "someone" with the tag - as namedToAnonLately does for their named lines.) */
 function barNamedToAnonLately(it, ms = 3600e3) {
   if (!it || it.k !== "tx" || it.tm !== 1 || it.tl !== "tx") return false;
@@ -1087,7 +1087,7 @@ function dress(items, ctx) {
         o.mask = typeof it.mask === "string" && /^[sml]$/.test(it.mask) ? it.mask : maskOf(it.text);
         delete o.text;
       }
-      // 1.99?? S1 (owner Q5): a !transcripts off bar shows WHO said it - only the words are masked - with the "transcript hidden" tag
+      // 1.99aht S1 (owner Q5): a !transcripts off bar shows WHO said it - only the words are masked - with the "transcript hidden" tag
       // (txh): their name (barUser: the page-safe {login, display} a named line has), "someone" (said named, private now - A.1; or no
       // identity at hand), or their incognito frog name. A bar of a !bridge hide speaker (then or now) stays the one hidden bar, no tag
       const bl = p === "mask" ? barLook(it) : null;
@@ -1100,9 +1100,9 @@ function dress(items, ctx) {
         }
       }
       // the 🎙 id only on an incognito frog-name line (owner J-7: anyone may clip it, under the frog name; Pepe salts the id); the hold
-      // only beside a frog name (a "someone" release next to a named grab must not pair up - B.2) - or, 1.99?? S1, beside the name of a
+      // only beside a frog name (a "someone" release next to a named grab must not pair up - B.2) - or, 1.99aht S1, beside the name of a
       // named bar (its grab and drop are named: the same person, shown)
-      // 1.99?? RV-1 (owner Q6): and on a !transcripts off bar members may clip (barClip: under the name or the incognito frog name it
+      // 1.99aht RV-1 (owner Q6): and on a !transcripts off bar members may clip (barClip: under the name or the incognito frog name it
       // shows) - Pepe's SALTED id (never testable against a guess of the words); the 🔊 Clip posts the audio only, no caption
       const bc = o.k === "tx" && o.txh === 1 ? barClip(it) : null;
       const clipBar = !!bc && (bc.alias ? o.u.alias === bc.alias : !!o.u.login && !o.u.anon);
@@ -1695,8 +1695,8 @@ module.exports = {
   privacyVer, hiddenVer, noteGone, pubFloor,          // CL8 fix-up
   privacyOf, speakerHash, isLeftOutLogin, movedLately, // owner change (decision 9: incognito "someone", !bridge hide left out)
   privacyAt, lookOf, lookMove, namedToAnonLately,      // owner-change fix-up (review 2): only a line whose look moves is drawn again
-  barLook, barUser, attachBarNames, barNamedToAnonLately, lookAt,   // 1.99?? S1: a !transcripts off bar shows who said it (the words only masked)
-  barClip,                                            // 1.99?? RV-1: a bar members may clip (the audio, never the words)
+  barLook, barUser, attachBarNames, barNamedToAnonLately, lookAt,   // 1.99aht S1: a !transcripts off bar shows who said it (the words only masked)
+  barClip,                                            // 1.99aht RV-1: a bar members may clip (the audio, never the words)
   tierOf, raiseExp, ensurePremium,                    // CL7: the retention purge (chatlogpurge.js)
   graceOf, lapsedOf, noteFirst, retentionFresh,       // CL7 fix-up
   speakerHashes, kindNow, hubChanged,                 // Train 3 review: every hash a "someone" line could be; the stricter of both stores

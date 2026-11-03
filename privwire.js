@@ -59,7 +59,7 @@ function init() {
         if (v && typeof v === "object") for (const k of COUNT_KEYS) COUNTS[k] = Math.max(COUNTS[k], Math.floor(Number(v[k]) || 0));
         if (v && Number(v.last_at) > 0) COUNTS.last_at = COUNTS.last_at || Number(v.last_at);
       } catch (e) { /* counts start at 0 */ }
-      const s = (await getQuery("SELECT value FROM chatlog_meta WHERE key = 'privwire_txbar'"))[0];   // 1.99?? transcripts bar gate
+      const s = (await getQuery("SELECT value FROM chatlog_meta WHERE key = 'privwire_txbar'"))[0];   // 1.99aht transcripts bar gate
       try { TXSW = cleanSw(s ? JSON.parse(s.value) : null); } catch (e) { TXSW = cleanSw(null); }
       loaded = true;
     })().catch((e) => { ready = null; throw e; });
@@ -112,7 +112,7 @@ async function setOn(want, user) {
   return state();
 }
 
-// ── 1.99?? transcripts bar (owner 2026-11-02): a !transcripts off speaker's 🎙 lines as a blacked-out bar ──
+// ── 1.99aht transcripts bar (owner 2026-11-02): a !transcripts off speaker's 🎙 lines as a blacked-out bar ──
 // The site says txbar: 1 while privacy wire v2 AND its own "!transcripts off bar" switch are on (txAdvert, below; bridge.js syncAnswer);
 // Pepe sends those lines (masked, v2 only) only after that, and only a Pepe that does it says txbar_cap: 1 on his syncs. The text that
 // describes the bar as what happens NOW (privacy.ejs, /help: "live") shows only while ALL are true - both switches on AND the latest
@@ -143,7 +143,7 @@ function noteTxCap(cap) {
     if (!want) await refreshTxKept();                // (review fix F1: the "kept" text from the next request on, not 10 minutes later)
   }).catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));
 }
-// ── 1.99?? transcripts bar GATE: the "!transcripts off bar" switch (/admin/bridge, in the Privacy wire v2 card) ──
+// ── 1.99aht transcripts bar GATE: the "!transcripts off bar" switch (/admin/bridge, in the Privacy wire v2 card) ──
 // Privacy wire v2 was already ON on prod (since 2026-11-02 18:24Z) when the bar was built, so without a switch of its own a deploy of
 // both repos would have made it live at once - before the owner approved its wording. OFF (the default): the site never says txbar: 1,
 // so Pepe keeps leaving a !transcripts off speaker's 🎙 lines out of the website (as before) and his replies, his room notice, /help
@@ -241,7 +241,7 @@ function privacyCopy() {
 
 function register(app, { addUser, noTimers = false }) {
   init().catch((e) => console.error("[privwire] init:", e.message));
-  loadTxCap().then(() => refreshTxKept()).catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));   // 1.99?? transcripts bar
+  loadTxCap().then(() => refreshTxKept()).catch((e) => console.error("[privwire] txcap:", e && e.code ? e.code : "error"));   // 1.99aht transcripts bar
   const SP = require("./siteperms");
   const guard = require("./middleware/authGuard");
   const json = require("express").json({ limit: "2kb" });
@@ -252,7 +252,7 @@ function register(app, { addUser, noTimers = false }) {
     try { await init(); await loadTxCap(); res.json({ ok: true, state: state(), counts: counts(), txbar: txInfo() }); }
     catch (e) { console.error("[privwire] admin:", e.message); res.status(500).json({ ok: false, error: "Something went wrong." }); }
   });
-  // 1.99?? transcripts bar gate: the "!transcripts off bar" switch (the same admins, the same checks as the privacy wire's own)
+  // 1.99aht transcripts bar gate: the "!transcripts off bar" switch (the same admins, the same checks as the privacy wire's own)
   app.post("/api/admin/privwire/txbar", addUser, json, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!can(req)) return res.status(403).json({ ok: false, error: "Site admins only." });
@@ -278,9 +278,9 @@ function register(app, { addUser, noTimers = false }) {
 }
 
 module.exports = { init, isOn, gAt, wasOnAt, lastOnAt, note, counts, state, setOn, saveCounts, privacyCopy, register, _clean: clean,
-                   noteTxCap, txBar, loadTxCap,                                    // 1.99?? transcripts bar
-                   txKept, refreshTxKept, txText, txTextNow, txOff, setTxClipProbe, // 1.99?? transcripts bar review fix (F1)
-                   txSwitch, txAdvert, setTxBarOn, txInfo,                         // 1.99?? transcripts bar gate (its own switch, default OFF)
+                   noteTxCap, txBar, loadTxCap,                                    // 1.99aht transcripts bar
+                   txKept, refreshTxKept, txText, txTextNow, txOff, setTxClipProbe, // 1.99aht transcripts bar review fix (F1)
+                   txSwitch, txAdvert, setTxBarOn, txInfo,                         // 1.99aht transcripts bar gate (its own switch, default OFF)
                    _setClock: (f) => { clock = f || (() => Date.now()); },
                    _reset: () => { STATE = clean(null); for (const k of COUNT_KEYS) COUNTS[k] = 0; COUNTS.last_at = null; ready = null; loaded = false;
                                    TXCAP = { cap: false, at: null }; txcapLoaded = false; TXKEPT = { any: null, at: 0 }; TXSW = cleanSw(null); } };

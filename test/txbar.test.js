@@ -1,4 +1,4 @@
-// 1.99?? transcripts bar (owner 2026-11-02: "If someone has !transcripts off, it should still show in the chat but blocked out like with
+// 1.99aht transcripts bar (owner 2026-11-02: "If someone has !transcripts off, it should still show in the chat but blocked out like with
 // bridge hide. Admins should be able to see through this like the other privacy toggles." + "Should also be clippable by admins like
 // the bridge off."): the site's half, through the REAL routes with the privacy wire v2 ON. Pepe sends a !transcripts off speaker's 🎙
 // line as a v2-only line with priv.tx: true and their words in priv.words (camfrog-bot txbar_test.py; the shared contract's txbar_*
@@ -7,7 +7,7 @@
 //   * the item: stored u {anon, "someone", veil hidden}, a bar, tm: 1 and tl (server-only), no words; the identity + words only in
 //     bridge_veil; a named speaker gets NO frog-name session; an incognito one keeps their incognito frog name (the session isn't
 //     ended); a !bridge hide one gets one bar; a malformed priv.tx is dropped
-//   * 1.99?? S1 (owner Q5 - transcripts off covers the WORDS only): the PAGE shows a named speaker's bar under their NAME (their PATV look
+//   * 1.99aht S1 (owner Q5 - transcripts off covers the WORDS only): the PAGE shows a named speaker's bar under their NAME (their PATV look
 //     too), an incognito one's under their frog name (incognito), each with a "transcript hidden" tag (txh); a !bridge hide one is the one
 //     hidden bar (no tag); a named bar is "someone" (with the tag) once its speaker goes incognito or !bridge hide - live, redrawn in
 //     place, in scrollback and in downloads - and named again after; the name, never the words, reaches every page
@@ -140,7 +140,7 @@ const setup = (async () => {
   for (const s of ["archive", "history", "search", "downloads"]) await CL.setSwitch(s, true, "test");
   await PW.init();
   await PW.setOn(true, { userId: U.adm.userId, username: "adm" });
-  await PW.setTxBarOn(true, { userId: U.adm.userId, username: "adm" });   // 1.99?? gate: the bar's own switch (default off - its own test below)
+  await PW.setTxBarOn(true, { userId: U.adm.userId, username: "adm" });   // 1.99aht gate: the bar's own switch (default off - its own test below)
   await rooms.setOwner(ROOM.id, "own", "test");
   await sync([], { rooms: [{ room: ROOM, members: [ALICE, real(TI, "Tina")], mic: [], count: 2, transcripts: true }] });
   await require(path.join(repo, "padaccess")).setLevel(U.own, { id: ROOM.id }, "public");
@@ -223,9 +223,9 @@ test("the advert and Pepe's cap: txbar: 1 in every answer while the switch is on
   assert.equal(PW.txBar(), true);
 });
 
-// 1.99?? GATE: privacy wire v2 was already ON on prod when the bar was built - without a switch of its own, deploying both repos would
+// 1.99aht GATE: privacy wire v2 was already ON on prod when the bar was built - without a switch of its own, deploying both repos would
 // have made the bar live at once, before the owner approved its wording. The bar has its own switch (/admin/bridge), OFF by default.
-test("1.99?? gate: the bar's own switch is OFF by default - privacy wire v2 alone sends no txbar advert and shows no bar text; an admin turns it on (audited); off again: the advert stops at once", async () => {
+test("1.99aht gate: the bar's own switch is OFF by default - privacy wire v2 alone sends no txbar advert and shows no bar text; an admin turns it on (audited); off again: the advert stops at once", async () => {
   await ready();
   const n0 = (await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'privwire.txbar'"))[0].n;
   await runQuery("DELETE FROM chatlog_meta WHERE key = 'privwire_txbar'");     // (a site that has never had it: the deploy's state)
@@ -295,7 +295,7 @@ test("the stored item: a hidden 🎙 line's shape + tm; identity and words only 
   assert.deepEqual(it.u, { anon: true, display: "someone", veil: "hidden" }, "stored u: 'someone', hidden - no frog name (the page names her: S1)");
   assert.ok(/^[sml]$/.test(it.mask) && !("text" in it) && it.tm === 1, "a bar, tm: 1, no words");
   assert.deepEqual([it.tl, R().feed.find((x) => x.c === C.fr).tl, R().feed.find((x) => x.c === C.hk).tl], ["tx", "incognito", "hidden"],
-                   "1.99?? S1: tl = how each bar's speaker shows");
+                   "1.99aht S1: tl = how each bar's speaker shows");
   assert.equal(it._vz.login, TI);
   assert.equal(it._vz.kind, "hidden", "stored as a hidden line (reveal, evidence, archive, retention)");
   assert.equal(it._vz.tx, 1);
@@ -348,7 +348,7 @@ test("every role's live view (S1): tina's bar under her NAME, frankie's under hi
     const by = new Map(lv.d.feed.map((o) => [o.c, o]));
     const t = by.get(C.tina), f = by.get(C.fr), h = by.get(C.hk);
     assert.ok(t && f && h, "the three bars are shown");
-    // 1.99?? S1 (owner Q5): her name - the page-safe named user any named line has (+ her PATV look) - and the "transcript hidden" tag
+    // 1.99aht S1 (owner Q5): her name - the page-safe named user any named line has (+ her PATV look) - and the "transcript hidden" tag
     const typed = lv.d.feed.find((o) => o.k === "msg" && o.text === "tina typed this line");
     assert.ok(!t.u.anon && t.u.login === TI && !t.u.veil && !t.u.alias, "tina's bar: her name - " + JSON.stringify(t.u));
     assert.deepEqual(t.u, typed.u, "...exactly as on her named typed line (her PATV look too)");
@@ -358,7 +358,7 @@ test("every role's live view (S1): tina's bar under her NAME, frankie's under hi
       assert.ok(/^[sml]$/.test(o.mask) && !("text" in o), "a bar: no words");
       assert.ok(!("tm" in o) && !("tl" in o), "the stamps are server-only");
     }
-    // 1.99?? RV-1 (owner Q6): tina's (named) and frankie's (incognito frog name) bars carry Pepe's salted 🎙 id - members may clip the
+    // 1.99aht RV-1 (owner Q6): tina's (named) and frankie's (incognito frog name) bars carry Pepe's salted 🎙 id - members may clip the
     // audio; hank's (!bridge hide) never does
     assert.deepEqual([t.id, f.id, "id" in h], ["tx-00000000000000b1", "tx-00000000000000b2", false], "the 🎙 id only on the bars members may clip");
     assert.ok(ALIAS_RE.test(f.u.alias || "") && f.u.anon === true && f.u.veil === "incognito" && f.txh === 1,
@@ -371,7 +371,7 @@ test("every role's live view (S1): tina's bar under her NAME, frankie's under hi
   }
 });
 
-test("1.99?? S1: a named bar is 'someone' (with the tag) while its speaker is incognito or !bridge hide - live (redrawn in place), scrollback, downloads - and named again after", async () => {
+test("1.99aht S1: a named bar is 'someone' (with the tag) while its speaker is incognito or !bridge hide - live (redrawn in place), scrollback, downloads - and named again after", async () => {
   await ready();
   const CH = require(path.join(repo, "chatloghist"));
   const named = (o) => !!o && !o.u.anon && o.u.login === TI;
@@ -495,7 +495,7 @@ test("history: read in SQL, a bar for everyone (no words); search never finds it
   const pg = await CH.page(U.mem, SLUG, { limit: 200 });
   const row = (pg.items || []).find((o) => o.c === C.tina);
   assert.ok(row && /^[sml]$/.test(row.mask) && !("text" in row), "a bar in scrollback: " + JSON.stringify(row));
-  assert.ok(!row.u.anon && row.u.login === TI && row.txh === 1, "1.99?? S1: under her name in scrollback too (chat_log_veil), tagged: " + JSON.stringify(row.u));
+  assert.ok(!row.u.anon && row.u.login === TI && row.txh === 1, "1.99aht S1: under her name in scrollback too (chat_log_veil), tagged: " + JSON.stringify(row.u));
   assert.ok(!(pg.items || []).some((o) => o.c === C.before), "her earlier named 🎙 line stays out");
   assert.deepEqual(leaks(JSON.stringify(pg)).filter((x) => x !== TI), []);
   const db = (await getQuery("SELECT text, who FROM chat_log WHERE c = ?", [C.tina]))[0];
@@ -517,7 +517,7 @@ test("history: read in SQL, a bar for everyone (no words); search never finds it
     const f = await call("GET", r.d.url, { user: U.adm });
     assert.equal(f.status, 200);
     assert.deepEqual(leaks(f.text).filter((x) => x !== TI), [], fmt + ": " + leaks(f.text).join(", "));
-    // 1.99?? S1: tina's bar under her name, "[transcript hidden]"; frankie's under his frog name; hank's "[hidden]"
+    // 1.99aht S1: tina's bar under her name, "[transcript hidden]"; frankie's under his frog name; hank's "[hidden]"
     if (fmt === "txt") {
       assert.match(f.text, /^\[\d\d:\d\d\] 🎙 (Tina|tina): “\[transcript hidden\]”$/m, "TXT: tina + [transcript hidden]");
       assert.match(f.text, /^\[\d\d:\d\d\] 🎙 [A-Z][A-Za-z-]+ [A-Z][A-Za-z]+: “\[hidden\]”$/m, "TXT: hank's frog name + [hidden]");
@@ -538,7 +538,7 @@ test("quotes, member clips and moderation evidence: a bar is never quotable; mem
     assert.ok(!Q.shownFeed(R().feed).includes(x), "Pepe's !quote never picks a bar");
     assert.ok(Q.pick(R().feed, { cs: [c] }).error, "nor a website selection");
   }
-  // 1.99?? RV-1: the 🔊 Clip rule (chatlogview.barClip - the same one that hands the page the 🎙 id)
+  // 1.99aht RV-1: the 🔊 Clip rule (chatlogview.barClip - the same one that hands the page the 🎙 id)
   assert.deepEqual(CV.barClip(it), { login: TI, alias: null }, "tina's bar: clippable under her name");
   const fr = R().feed.find((x) => x.c === C.fr);
   assert.deepEqual(CV.barClip(fr), { login: FR, alias: fr.u.alias }, "frankie's bar: clippable under his frog name (J-7)");
@@ -560,11 +560,11 @@ test("quotes, member clips and moderation evidence: a bar is never quotable; mem
   } finally { await EV.setOn(false, { userId: U.adm.userId, username: "adm" }); }
 });
 
-// 1.99?? RV-1 (owner Q6, 2026-11-02: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): the website's
+// 1.99aht RV-1 (owner Q6, 2026-11-02: "transcripts off covers the words only - MEMBERS CAN CLIP THE AUDIO (no caption)"): the website's
 // 🔊 Clip on a bar shown under its speaker's name or incognito frog name - through the real routes, as a member. The clip carries NO
 // words anywhere on the site: not the preview, its page view, the posting action, nor what Pepe fetches back to post (micclipdata) - even
 // when a Pepe answers with words. A !bridge hide bar and a "someone" bar (private since) are refused with the one answer.
-test("1.99?? RV-1: a member clips the audio of a named bar and an incognito frog-name bar on the website - never the words; hidden and 'someone' bars can't be clipped", async () => {
+test("1.99aht RV-1: a member clips the audio of a named bar and an incognito frog-name bar on the website - never the words; hidden and 'someone' bars can't be clipped", async () => {
   await ready();
   const relay = require(path.join(repo, "bridge-relay"));
   const micclip = require(path.join(repo, "micclip"));
@@ -660,8 +660,8 @@ test("1.99?? RV-1: a member clips the audio of a named bar and an incognito frog
   take();
 });
 
-// 1.99?? RV-1: the page's one renderer (chatlog-core.js) and the 🔊 Clip card (chat-clip.js)
-test("1.99?? RV-1: chatlog-core gives a bar with a 🎙 id data-tx (🔊 Clip) - never data-c / data-text / its words; chat-clip says 'without a caption'; both bumped", () => {
+// 1.99aht RV-1: the page's one renderer (chatlog-core.js) and the 🔊 Clip card (chat-clip.js)
+test("1.99aht RV-1: chatlog-core gives a bar with a 🎙 id data-tx (🔊 Clip) - never data-c / data-text / its words; chat-clip says 'without a caption'; both bumped", () => {
   const CLR = require(path.join(repo, "public", "js", "chatlog-core.js"));
   const tEN = function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   const named = { c: 501, k: "tx", ts: Date.now(), id: "tx-00000000000000e1", mask: "m", txh: 1, u: { login: "tinatxoff", display: "Tina" } };
@@ -691,9 +691,9 @@ test("1.99?? RV-1: chatlog-core gives a bar with a 🎙 id data-tx (🔊 Clip) -
   assert.ok(room.includes("/public/js/chatlog-core.js?v=6"), "chatlog-core.js as v=6 (this build's bump - never shipped as v6 before)");
 });
 
-// 1.99?? RV-4: the privacy policy now says "Your mic transcripts from before you turned transcripts off are left out until you turn them
+// 1.99aht RV-4: the privacy policy now says "Your mic transcripts from before you turned transcripts off are left out until you turn them
 // back on." - this is what the site does (Q7): her named 🎙 line from before is left out while her transcripts are off, and back after
-test("1.99?? RV-4 (owner Q7): a speaker's mic transcripts from before !transcripts off are left out while it is set - and back after !transcripts on", async () => {
+test("1.99aht RV-4 (owner Q7): a speaker's mic transcripts from before !transcripts off are left out while it is set - and back after !transcripts on", async () => {
   await ready();
   const before = R().feed.find((x) => x.c === C.before);
   assert.equal(CV.privacyOf(before), "out", "while her transcripts are off: left out");
@@ -715,10 +715,10 @@ test("1.99?? RV-4 (owner Q7): a speaker's mic transcripts from before !transcrip
   assert.equal(CV.privacyOf(before), "out", "off again: left out again");
 });
 
-// 1.99?? S0 check ("tx_off count: Pepe 1, site sticky tx set 0" - privacy spec 2026-11-02, section 5): the site's !transcripts off set is
+// 1.99aht S0 check ("tx_off count: Pepe 1, site sticky tx set 0" - privacy spec 2026-11-02, section 5): the site's !transcripts off set is
 // its OWN table, chatlog_tx_hidden - never a "tx" reason in chatlog_hidden.scopes, which is what that count read (privspec/chat/counts.sql:
 // SELECT ... FROM chatlog_hidden WHERE scopes LIKE '%"tx"%' - always 0). Pepe's tx_hidden_h (sent on every sync) lands there.
-test("1.99?? S0: Pepe's !transcripts off list lands in chatlog_tx_hidden - chatlog_hidden.scopes never holds 'tx' (the S0 count read the wrong table)", async () => {
+test("1.99aht S0: Pepe's !transcripts off list lands in chatlog_tx_hidden - chatlog_hidden.scopes never holds 'tx' (the S0 count read the wrong table)", async () => {
   await ready();
   const n = (await getQuery("SELECT COUNT(*) AS n FROM chatlog_tx_hidden WHERE h IN (?, ?, ?)", [hash(TI), hash(FR), hash(HK)]))[0].n;
   assert.equal(n, 3, "tina, frankie and hank are in the site's sticky !transcripts off set (chatlog_tx_hidden)");
@@ -910,7 +910,7 @@ test("review fix F2: scrollback reads only the bars of a !transcripts off person
 });
 
 test("review fix: pad-evidence.js (the evidence list's ', transcripts off' label) loads as v=3 on the pad page and Pad settings - never a cached v=2", () => {
-  // 1.99?? transcripts bar review: the build changed public/js/pad-evidence.js but kept ?v=2, so a browser holding 1.99agv's copy never
+  // 1.99aht transcripts bar review: the build changed public/js/pad-evidence.js but kept ?v=2, so a browser holding 1.99agv's copy never
   // showed which evidence clips are a !transcripts off bar's turn (1.99agv bumped it to v=2 for its own change)
   for (const f of ["views/room.ejs", "views/padSettings.ejs"]) {
     const src = fs.readFileSync(path.join(repo, f), "utf8");

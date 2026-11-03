@@ -368,7 +368,7 @@
     var tx = k === 'tx', text = str(it.text);
     // wave 2 (D.2): a hidden line is a bar - never its words, never pickable by ✂️ Clip chat / 🔊 Clip / quotes; the speaker's own
     // (self: 1) shows them their words with "only you can see this"
-    // 1.99?? S1: txh = a !transcripts off bar (the server's flag) - its speaker's name or frog name shows, only the words are masked
+    // 1.99aht S1: txh = a !transcripts off bar (the server's flag) - its speaker's name or frog name shows, only the words are masked
     var txh = tx && it.txh === 1;
     var mask = /^[sml]$/.test(String(it.mask || '')) ? String(it.mask) : null, mine = it.self === 1 && (!!veilOf(it.u) || txh);
     if (mask && !mine) text = '';
@@ -379,7 +379,7 @@
       if (rm) { if (it.c) a['data-rmc'] = it.c; a['data-rm'] = rm.by || 'mod'; }
       else if (mask) {
         if (it.c) a['data-vc'] = it.c; if (it.own) a['data-own'] = '1';
-        // 1.99?? RV-1 (owner Q6): a !transcripts off bar members may clip carries its 🎙 id (the server sends one only then) - 🔊 Clip
+        // 1.99aht RV-1 (owner Q6): a !transcripts off bar members may clip carries its 🎙 id (the server sends one only then) - 🔊 Clip
         // reads data-tx; never data-c / data-text (✂️ Clip chat and quotes never pick a bar) and never its words
         if (txh && it.id) a['data-tx'] = it.id;
       }
@@ -392,7 +392,7 @@
       if (it.hold) a['data-hold'] = it.hold;                  // B.3: the live tail places a 🎙 line after its hold's drop
     }
     var body = [nameNode(it.u, mine ? Object.assign({}, ctx, { self: true }) : ctx, h)];
-    // 1.99?? S1 (owner Q5): the bar's TEXT tag, beside the name (never only an icon) - "transcript hidden"
+    // 1.99aht S1 (owner Q5): the bar's TEXT tag, beside the name (never only an icon) - "transcript hidden"
     if (txh && mask) body.push(' ', h('span', { 'class': 'veil-tag veil-tx' }, [_t('js.pad.veil.tx_hidden', 'transcript hidden')]));
     var fl = flairNode(it.u, ctx, h);
     if (fl) body.push(fl, ' ');
@@ -468,7 +468,7 @@
     var k = it.k, body;
     if (k === 'msg' || k === 'tx') {
       var who = label(it.u, ctx) + (it.u && it.u.web && !it.u.anon && !it.u.former ? ' \ud83c\udf10' : '');
-      // wave 2 (D.4, J-9): a hidden line in a download is "[hidden]" for every role - never its words (1.99?? S1: a !transcripts off
+      // wave 2 (D.4, J-9): a hidden line in a download is "[hidden]" for every role - never its words (1.99aht S1: a !transcripts off
       // bar "[transcript hidden]", under the name it shows)
       var said = /^[sml]$/.test(String(it.mask || '')) ? (k === 'tx' && it.txh === 1 ? '[transcript hidden]' : '[hidden]') : str(it.text);
       body = k === 'tx' ? '\ud83c\udf99 ' + who + ': \u201c' + said + '\u201d' : who + ': ' + said;
@@ -496,7 +496,7 @@
     // wave 2 (D.4, J-9): {"masked": true, "mask": "m"} for a hidden line - never its words
     if ((k === 'msg' || k === 'tx') && /^[sml]$/.test(String(it.mask || ''))) {
       o.masked = true; o.mask = String(it.mask);
-      // (1.99?? S1: a !transcripts off bar - only the words are masked)
+      // (1.99aht S1: a !transcripts off bar - only the words are masked)
       if (k === 'tx' && it.txh === 1) o.transcript_hidden = true;
     }
     else if (k === 'msg' || k === 'tx' || k === 'topic') o.text = str(it.text);

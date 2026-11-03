@@ -356,7 +356,7 @@
         body: body,
         primary: { text: postLabel(v.save), disabled: !v.save },
         secondary: _t('js.pad.clip.discard', 'Discard'),
-        // 1.99?? RV-1: words_off = the turn of a !transcripts off bar - posted without a caption (the server never has its words)
+        // 1.99aht RV-1: words_off = the turn of a !transcripts off bar - posted without a caption (the server never has its words)
         note: !v.save ? _t('js.pad.cc.mic_rules', 'The room\'s !clip rules don\'t let you post clips here.')
           : v.words_off ? _t('js.pad.cc.mic_note_nowords', 'Trim it, then post it. It goes up without a caption: the speaker\'s words stay hidden. Whoever is heard in it can remove it.')
           : _t('js.pad.cc.mic_note', 'Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.'),

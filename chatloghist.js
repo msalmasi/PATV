@@ -171,7 +171,7 @@ function hiddenLogins(mode = "history") {
     // is left out (!bridge hide, forget-me) they are left out in SQL too (no who map needed: the hash is the key). Their own cap.
     let nh = 0;
     for (const h of CL.hiddenHashes()) { if (nh >= HIDDEN_SQL_MAX) break; if (CL.isLeftOutHash(h) && !maskableH(h)) { out.add("h:" + h); nh++; } }
-    // 1.99?? transcripts bar: history (once G is set) reads a !transcripts off person's "h:" 🎙 rows Pepe sent as a bar (tm) - the
+    // 1.99aht transcripts bar: history (once G is set) reads a !transcripts off person's "h:" 🎙 rows Pepe sent as a bar (tm) - the
     // projection draws them as bars (chatlogview.privacyV2); search still skips them all in SQL. Review fix (F2): only the bars - their
     // other "h:" 🎙 rows (an older Pepe's, or any with words) are still skipped in SQL (txb: "who NOT IN txb OR d.tm = 1"), so a run of
     // them is never walked against the scan budget (an empty page that still says "more" - CL8)
@@ -191,7 +191,7 @@ function hiddenLogins(mode = "history") {
  * login is read - the projection keeps the stamped ones (d.k3: an incognito person's, "someone grabbed the mic") and leaves out
  * the rest (chatlogview.privacyAt). Newest first for "before", oldest first for "after".
  * Params: [rk, lo, hi, c_tx, c_presence, c_chat, ...out + tx (when nOut + nTx), ...txb (when nTxB), ...out (when nOut), limit].
- * 1.99?? transcripts bar review fix (F2): nTxB more 🎙-only keys whose rows are read only when they are a transcripts bar (d.tm = 1).
+ * 1.99aht transcripts bar review fix (F2): nTxB more 🎙-only keys whose rows are read only when they are a transcripts bar (d.tm = 1).
  */
 function pageSql({ dir = "before", sys = true, keepRemoved = false, approved = true, nOut = 0, nTx = 0, nTxB = 0 } = {}) {
   const qs = (n) => new Array(n).fill("?").join(",");
@@ -255,7 +255,7 @@ async function scan(S, dir, from, need) {
 async function dress(roomId, items, V, viewer, login, acts) {
   if (!items.length) return [];
   const CV = require("./chatlogview"), B = require("./bridge");
-  // 1.99?? S1: an archived !transcripts off bar said named shows that name (who said it, from chat_log_veil) - its PATV look resolved too
+  // 1.99aht S1: an archived !transcripts off bar said named shows that name (who said it, from chat_log_veil) - its PATV look resolved too
   await CV.attachBarNames(items);
   const L = await B.resolveNames([...items.map((it) => it.u), ...items.map((it) => CV.barUser(it))].filter(Boolean));
   let rmNames = null;
@@ -480,7 +480,7 @@ async function check(user, slug, body = {}) {
   // already) - this answer would otherwise pick out, from any c's asked about, exactly the "someone" lines of whoever moved
   let changed = keep.filter((it) => it.rm_at != null || it.purged || red(it.text) || (it.k === "live" && (red(it.who) || red(it.what))) ||
                                      (CV.privacyOf(it) === "anon" && CV.namedToAnonLately(it, MOVED_MS)) ||
-                                     CV.barNamedToAnonLately(it, MOVED_MS));        // (1.99?? S1: a named !transcripts off bar, the same move)
+                                     CV.barNamedToAnonLately(it, MOVED_MS));        // (1.99aht S1: a named !transcripts off bar, the same move)
   if (!G.full) {
     const left = dayLeft(G.uid);
     if (changed.length > left) { for (const it of changed.slice(left)) out.gone.push(Number(it.c)); changed = changed.slice(0, left); }

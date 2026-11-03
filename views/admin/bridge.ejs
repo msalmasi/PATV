@@ -294,7 +294,7 @@
   <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
   <p class="adm-help" id="pwSummary" role="status">Loading…</p>
   <div class="adm-actions"><button type="button" id="pwBtn" disabled>…</button><span id="pwMsg" class="adm-msg" role="status"></span></div>
-  <%# 1.99?? transcripts bar gate (privwire.txAdvert / setTxBarOn): its own switch - ships OFF %>
+  <%# 1.99aht transcripts bar gate (privwire.txAdvert / setTxBarOn): its own switch - ships OFF %>
   <h3 id="pwTxT"><code>!transcripts off</code> bar</h3>
   <p class="adm-help">While this is <b>off</b> (the default) nothing changes, even with privacy wire v2 on: the mic transcripts of someone who typed <code>!transcripts off</code> stay left out of the website, and Pepe's replies, his room notice, /help and the privacy policy say so. Turn it <b>on</b> (privacy wire v2 must be on too) and the site's sync answers say <code>txbar: 1</code>: from Pepe's next batch their 🎙 lines show as a <b>blacked-out bar</b> under their name (their frog name if they're incognito) with a "transcript hidden" tag; members can clip the audio of those mic turns (posted without a caption: never the words); PATV admins, and a pad's owner in their own pad, can reveal the words (logged). Pepe's replies, his room notice, /help and the privacy policy switch to that wording once a Pepe that sends the bar has synced. <b>Turn it on only after the owner has approved that wording.</b> Turning it off: new ones are left out again from Pepe's next batch; bars already shown stay bars, and the policy says so.</p>
   <p class="adm-help" id="pwTxSummary" role="status">Loading…</p>
@@ -325,7 +325,7 @@
       (c.last_at ? ', last ' + when(c.last_at) : '') + (s.on ? '' : ' - while it has never been on, the call count stays 0');
     btn.disabled = false;
     btn.textContent = s.on ? 'Turn off' : 'Turn on';
-    // 1.99?? transcripts bar gate: its own switch (default off); live = privacy wire v2 on + this switch on + a Pepe that sends the bar
+    // 1.99aht transcripts bar gate: its own switch (default off); live = privacy wire v2 on + this switch on + a Pepe that sends the bar
     var t = d.txbar || {};
     txCur = t;
     if (txSum) {

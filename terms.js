@@ -34,7 +34,7 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // VERSION unchanged). Published (and dated) the first time /privacy is served with mic-stage captures switched on (mainstage
 // stagecap_mic), not at boot: while they are off it would describe a feature nobody can use, next to today's incognito bullet.
 // Once published it stays, so a later switch-off still describes the copies that exist.
-// 1.99?? transcripts bar (owner 2026-11-02): "tx-bar" = the !transcripts off blacked-out bar sentences (sections 3 and 10, the change note),
+// 1.99aht transcripts bar (owner 2026-11-02): "tx-bar" = the !transcripts off blacked-out bar sentences (sections 3 and 10, the change note),
 // shown while privacy wire v2 is on AND the latest Pepe sends those 🎙 lines as a bar (privwire.txBar) - dated the first time /privacy
 // is served that way. Review fix (F1): once the bar stops being live (a bot rollback) the bars it made are still kept and revealable,
 // so while any is left the page says THAT instead ("kept": new ones left out, the shown ones stay bars; a change note dated by when
@@ -181,7 +181,7 @@ function register(app, { addUser }) {
       try { micrec = await require("./micrec").privacyCopy(); } catch (e) { micrec = null; }
       try { memory = await require("./memoryoptout").privacyCopy(); } catch (e) { memory = null; }
       try { await require("./privwire").init(); privwire = require("./privwire").privacyCopy(); } catch (e) { privwire = null; }
-      // 1.99?? transcripts bar: its text only inside the privwire branches, only while it is live (privwire.txBar)
+      // 1.99aht transcripts bar: its text only inside the privwire branches, only while it is live (privwire.txBar)
       // (review fix F1: "kept" while the bar isn't live but bars it made are still kept - privwire.txTextNow)
       try {
         const PWm = require("./privwire");

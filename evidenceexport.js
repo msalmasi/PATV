@@ -63,7 +63,7 @@ async function padOf(ref, bySlug) {
 }
 
 /** One line as the file shows it. who = {login, display} (null for Pepe's own topic lines), veil = {kind, alias} | null.
- *  1.99?? transcripts bar review fix (TXBAR-ST-3): tm = a 🎙 line shown as a bar because its speaker turned !transcripts off - stored
+ *  1.99aht transcripts bar review fix (TXBAR-ST-3): tm = a 🎙 line shown as a bar because its speaker turned !transcripts off - stored
  *  and revealed as a hidden line, but labelled transcripts_off (TXT "[hidden, transcripts off]"), never passed off as !bridge hide. */
 function lineOf({ ts, k, who, veil, text, words, unrevealable, tm = false }) {
   const o = { ts: Number(ts), kind: KIND[k] || String(k), login: who && who.login ? String(who.login) : null, display: who && who.display ? String(who.display) : null };
@@ -263,7 +263,7 @@ function register(app, { addUser, bySlug }) {
       await tx(async () => {
         const sts = await ST.logAll({ userId: T.userId, role: "admin", scope: "export_evidence", roomId: T.roomId, logins, reason: T.reason, ref: "exp:" + id });
         if (!sts.length || sts.some((x) => !x)) throw new Error("evidence export: no see-through row");
-        // (1.99?? transcripts bar review fix TXBAR-ST-2: the log says which toggle was seen through - the !transcripts off speakers whose
+        // (1.99aht transcripts bar review fix TXBAR-ST-2: the log says which toggle was seen through - the !transcripts off speakers whose
         // 🎙 bars the file shows get a tx_line row with the same ref)
         if (txOff.length) {
           const txs = await ST.logAll({ userId: T.userId, role: "admin", scope: "tx_line", roomId: T.roomId, logins: [...new Set(txOff)], reason: T.reason, ref: "exp:" + id });
