@@ -627,3 +627,31 @@ test("round 5 (withheld_cover + incognito cams): a veiled WITHHELD card reads th
     await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
   }
 });
+
+test("round 5: the sync answer says wcover: 1 only while micfollow_cfg withheld_cover is on (no privacy wire needed); Pepe reads the same key", async () => {
+  await setup;
+  const sync = () => call("POST", "/api/bridge/sync", { body: { password: "bot", events: [], rooms: [], hidden_h: [] } });
+  await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
+  let r = await sync();
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.d.wcover, undefined, "off: no advert");
+  await MF.setCfg(ADM(), { withheld_cover: true, reason: "test" });
+  try {
+    r = await sync();
+    assert.equal(r.d.wcover, 1, "on: the advert");
+    await PW.setOn(false, { userId: U.adm.userId, username: "adm" });
+    r = await sync();
+    assert.equal(r.d.wcover, 1, "privacy wire off: still said (S3 needs no privacy wire)");
+    assert.equal(require(path.join(repo, "privacycopy")).flags().wcover, true, "the site's own copy flag (/help, /privacy) follows it");
+  } finally {
+    await PW.setOn(true, { userId: U.adm.userId, username: "adm" });
+    await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
+  }
+  r = await sync();
+  assert.equal(r.d.wcover, undefined, "off again: gone");
+  assert.equal(require(path.join(repo, "privacycopy")).flags().wcover, false);
+  if (process.env.PEPE_BOT_DIR) {
+    const bsrc = fs.readFileSync(path.join(process.env.PEPE_BOT_DIR, "pepe_bridge.py"), "utf8");
+    assert.ok(bsrc.includes('rj.get("wcover")') && bsrc.includes("self._br_wc_advert(rj, now)"), "Pepe reads wcover from every sync answer (the same key)");
+  }
+});

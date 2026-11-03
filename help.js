@@ -660,12 +660,13 @@ function withoutDarkCards(entries) {
 }
 
 // ── 1.99aid (privacy controls S7): Pepe's cards' privacy-controls variants ("pc", bot pepe_privtext) - per slice, the sentences its
-// privacy text changes in that card ({camreveal|incogcam|privstate: {summary?, swap: [[old, new], ...]}}). While a slice's switch is
+// privacy text changes in that card ({camreveal|incogcam|privstate|textreveal|wcover: {summary?, swap: [[old, new], ...]}}). While a slice's switch is
 // on here (its advert: the switch AND privacy wire v2 - privacycopy.flags), the card reads its text (already the v2 wording -
 // withPrivwireNotes - every slice needs privacy wire v2) with that slice's swaps made, in PC_KEYS order, each old text found exactly
 // once in the text as it stands then; a later slice's summary wins. A slice whose swaps don't fit is left out WHOLE (never half
-// made); Pepe's build refuses such data, so that is an older or hand-edited copy. Every switch off: nothing changes. ──
-const PC_KEYS = ["camreveal", "incogcam", "privstate", "textreveal"];   // (1.99aid privacy controls S4t: + textreveal, last)
+// made); Pepe's build refuses such data, so that is an older or hand-edited copy. Every switch off: nothing changes. 1.99?? (privacy
+// controls round 5): wcover is S3's cover picture (micfollow_cfg withheld_cover) - it needs no privacy wire, so it may read the v1 text. ──
+const PC_KEYS = ["camreveal", "incogcam", "privstate", "textreveal", "wcover"];   // (1.99aid privacy controls S4t: + textreveal; 1.99?? round 5: + wcover, last)
 const PC_SWAPS_MAX = 12;
 function pcApply(summary, details, pc, active) {
   const applied = [];

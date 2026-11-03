@@ -659,6 +659,83 @@ test("Settings: the mic-stage switch's hint and the unlinked note say 'cover pic
   }
 });
 
+// 1.99?? (privacy controls round 5, spec 6.1 / 6.2 / 6.4): the cover picture in the Settings Live cam card, the /privacy livecam sentence
+// and Pepe's !livecam help card (as /help shows it) - only while withheld_cover is on (privacycopy wcover); and the ghosts in Settings'
+// cam-reveal sentences are PATV administrators or staff (ghost mode is locked to Staff and up), as /privacy says. Off: byte for byte the
+// round-4 head (608655e9)
+const BASE5 = process.env.PRIVM_R5_BASE_REV || "608655e9";
+test("round 5: the cover picture in Settings' Live cam card, /privacy's livecam sentence and the !livecam card only while withheld_cover is on; the ghosts are administrators or staff; off = the round-4 head", async () => {
+  const ejs = require("ejs");
+  const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  const show = (git) => { try { return execFileSync("git", ["-C", repo, "show", `${BASE5}:${git}`], { encoding: "utf8" }).replace(/\r\n/g, "\n"); } catch (e) { return null; } };
+  // ── Settings → Privacy, the Live cam card ──
+  const sfile = path.join(repo, "views", "privacy-settings.ejs");
+  const srender = (src, locals) => ejs.render(src, locals, { filename: sfile });
+  const L = (extra) => Object.assign({ user: "bob", st: { linked: true, login: "bob123", account: false, on: false, updated: null, reported: null, waiting: null, failed: null, log: [] },
+                                       lc: { linked: true, login: "bob123", off: true }, oa: null, gh: null, pf: null, slChat: false, slOk: false, mf: null, micrecOn: false,
+                                       mem: null, pwOn: true, ogBase: "http://test" }, extra || {});
+  const mfL = (wc) => ({ linked: true, login: "bob123", auto: true, spans: [], ...(wc ? { wc: true } : {}) });
+  const snow = fs.readFileSync(sfile, "utf8").replace(/\r\n/g, "\n");
+  const ov = (k) => "I.s['js.lc.st_off'] = " + JSON.stringify(EN[k]);
+  for (const [extra, key] of [[{ mf: mfL(true) }, "lc.st_off_wc"], [{ mf: mfL(true), crvOn: true }, "lc.st_off_rv_wc"], [{ mf: mfL(false), crvOn: true }, "lc.st_off_rv"],
+                              [{ mf: mfL(false) }, "lc.st_off"]]) {
+    const h = srender(snow, L(extra));
+    assert.ok(h.includes(EN[key].replace(/'/g, "&#39;")) || h.includes(EN[key]), JSON.stringify(extra) + ": " + key);
+    assert.equal(h.includes(ov(key)), key !== "lc.st_off", JSON.stringify(extra) + ": the client's OFF line follows (" + key + ")");
+    for (const k of ["lc.st_off", "lc.st_off_wc", "lc.st_off_rv", "lc.st_off_rv_wc"].filter((x) => x !== key)) assert.ok(!h.includes(EN[k]), JSON.stringify(extra) + ": not " + k);
+  }
+  assert.ok(srender(snow, L({ lc: { linked: true, login: "bob123", off: false }, mf: mfL(true) })).includes(ov("lc.st_off_wc")),
+            "on, the cam on now: switching it off in the page says the cover picture too");
+  for (const k of ["lc.st_off_wc", "lc.st_off_rv_wc"]) assert.ok(EN[k].includes("pads' mic stages show your cover picture instead"), k);
+  assert.equal(EN["lc.st_off_wc"], EN["lc.st_off"].replace("snapshots or clips.", "snapshots or clips; pads' mic stages show your cover picture instead."), "lc.st_off_wc = lc.st_off + the cover");
+  assert.equal(EN["lc.st_off_rv_wc"], EN["lc.st_off_rv"].replace("snapshots or clips.", "snapshots or clips; pads' mic stages show your cover picture instead."), "lc.st_off_rv_wc = lc.st_off_rv + the cover");
+  const sbase = show("views/privacy-settings.ejs");
+  if (sbase) {
+    for (const extra of [{}, { mf: mfL(false) }, { crvOn: true }, { mf: mfL(false), crvOn: true }, { lc: { linked: true, login: "bob123", off: false }, mf: mfL(false) },
+                         { lc: { linked: false }, mf: { linked: false, login: null, auto: true, spans: [] } }]) {
+      assert.equal(srender(snow, L(extra)), srender(sbase, L(extra)), "Settings, same HTML as " + BASE5 + ": " + JSON.stringify(extra));
+    }
+  }
+  // ── /privacy, the Live cams sentence ──
+  const pfile = path.join(repo, "views", "privacy.ejs");
+  const pnow = fs.readFileSync(pfile, "utf8").replace(/\r\n/g, "\n");
+  const L0 = { user: null, title: "Privacy Policy", VERSION: "x", UPDATED: "1 November 2026", enforced: false, chatlog: null, hubErasure: null, micrec: null,
+               memory: null, privwire: null, evidence: null, policyDates: {}, ogBase: "http://test" };
+  const prender = (src, v) => ejs.render(src, Object.assign({}, L0, v), { filename: pfile });
+  const IC1 = { on: true, on_at: null, on_day: null };
+  const SENT = "keep your cam off the website: pads' mic stages show your cover picture (or a hooded frog) instead.";
+  for (const ic of [null, IC1]) {
+    const on = prender(pnow, { incogcam: ic, wcover: { on: true } }), off = prender(pnow, { incogcam: ic, wcover: null });
+    assert.ok(on.includes(SENT), (ic ? "incognito cams" : "plain") + ": the cover sentence");
+    assert.ok(!off.includes("cover picture (or a hooded frog)") && off.includes("keep your cam off the website."), (ic ? "incognito cams" : "plain") + ": off - today's sentence");
+  }
+  const pbase = show("views/privacy.ejs");
+  if (pbase) for (const v of [{}, { incogcam: IC1 }, { wcover: null }, { wcover: undefined, incogcam: IC1 }]) assert.equal(prender(pnow, v), prender(pbase, v), "/privacy, same page as " + BASE5 + ": " + JSON.stringify(v));
+  // ── the copy flags and Pepe's !livecam card on /help ──
+  const PCm = require(path.join(repo, "privacycopy")), HELP = require(path.join(repo, "help"));
+  await knobs({ withheld_cover: false });
+  assert.equal((await PCm.load()).wcover, null, "off: no copy");
+  assert.equal(PCm.flags().wcover, false);
+  const card = { id: "livecam", summary: "S", details: "Can you see it? it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage). Yes.",
+                 pc: { wcover: { swap: [["it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage).", "COVER."]] } } };
+  assert.equal(HELP.withPrivacyCopy([card])[0], card, "off: the very same card");
+  await knobs({ withheld_cover: true });
+  try {
+    assert.deepEqual((await PCm.load()).wcover, { on: true, on_at: null, on_day: null }, "on: the copy (/privacy reads it)");
+    assert.equal(PCm.flags().wcover, true);
+    assert.equal(HELP.withPrivacyCopy([card])[0].details, "Can you see it? COVER. Yes.", "on: the wcover slice is made");
+    const bot = process.env.PEPE_BOT_DIR;
+    if (bot && fs.existsSync(path.join(bot, "help", "help-data.json"))) {
+      const data = JSON.parse(fs.readFileSync(path.join(bot, "help", "help-data.json"), "utf8"));
+      const lc = data.entries.find((e) => e.id === "livecam");
+      assert.ok(lc && lc.pc && lc.pc.wcover, "Pepe's !livecam card carries the wcover slice");
+      const got = HELP.withPrivacyCopy([lc])[0];
+      assert.ok(got.details.includes("you show with your cover picture instead - a hooded frog if you're incognito - never your cam"), "/help: the !livecam card says the cover picture");
+      assert.ok(!got.details.includes("it also keeps your cam off pads' automatic mic stages"), "...instead of the old clause");
+    }
+  } finally { await knobs({ withheld_cover: false }); }
+});
+
 // ── the engine (pure) ──
 test("core: 'withheld' is a card state - a candidate and a tile, attributed in speaking(), never a hold / still / warm keep; a running relay or still is let go; opted_out from livecam is the card while cfg withheld_cover is on, a cut while off", () => {
   const C = { ...core.DEFAULTS, cold_open: true, enabled: true, stills: true, warm_keep_s: 180, warm_max: 3 };

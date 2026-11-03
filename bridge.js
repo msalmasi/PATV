@@ -1777,7 +1777,10 @@ function register(app, { isBotToken, addUser }) {
              ...(privstateAdvert() ? { privstate: 1 } : {}),
              // 1.99aid (privacy controls S4t): text reveal roles (textreveal.js: its switch) - Pepe's replies and help cards that name who
              // can reveal hidden text switch to the new wording only after this (never said while it's off)
-             ...(textrevealAdvert() ? { textreveal: 1 } : {}) };
+             ...(textrevealAdvert() ? { textreveal: 1 } : {}),
+             // 1.99?? (privacy controls round 5): S3's cover picture (micfollow_cfg withheld_cover - no privacy wire needed) - Pepe's !livecam
+             // off reply and his !livecam help card say a cam opt-out shows on mic stages with their cover picture only after this
+             ...(wcoverAdvert() ? { wcover: 1 } : {}) };
   }
   // wave 2 WP-2 (spec A.3 handshake): the privacy wire v2 receiver - Pepe's FULL form (real UserRefs + priv, hidden words, hold ids).
   //  * every call is counted FIRST (the dark proof: while the switch has never been on, the counter stays 0 - Pepe never calls);
@@ -2245,6 +2248,7 @@ function incogcamAdvert() { try { return require("./incogcams").advert() === tru
 function camrevealAdvert() { try { return require("./camreveal").advert() === true; } catch (e) { return false; } }
 function privstateAdvert() { try { return require("./privacystate").advert() === true; } catch (e) { return false; } }
 function textrevealAdvert() { try { return require("./textreveal").advert() === true; } catch (e) { return false; } }   // 1.99aid (S4t)
+function wcoverAdvert() { try { return require("./micfollow").withheldCover() === true; } catch (e) { return false; } }   // 1.99?? (round 5)
 
 /** wave 2 WP-2 (spec E.1): who is behind veiled line c of room roomId, for a reveal (seethrough.js checks role and era) -> {ts, vz, vw}
  *  | null. The live item's own (non-enumerable) identity first, else the archive's chat_log_veil row - only for a line of THIS room. */

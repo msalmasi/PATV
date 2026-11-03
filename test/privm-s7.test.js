@@ -107,11 +107,11 @@ const setup = (async () => {
 test("privacycopy: null while each switch is off; on = its advert; dated by its first ON; cam evidence = reveals AND evidence", async () => {
   await setup;
   let c = await PC.load();
-  assert.deepEqual(c, { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null }, "everything off");   // (1.99aid S4t: + textreveal)
-  assert.deepEqual(PC.flags(), { incogcam: false, camreveal: false, privstate: false, textreveal: false });
+  assert.deepEqual(c, { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null, wcover: null }, "everything off");   // (1.99aid S4t: + textreveal)
+  assert.deepEqual(PC.flags(), { incogcam: false, camreveal: false, privstate: false, textreveal: false, wcover: false });   // (1.99?? round 5: + wcover)
   await PW.setOn(true, ADM());
   c = await PC.load();
-  assert.deepEqual(c, { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null }, "privacy wire alone: nothing");
+  assert.deepEqual(c, { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null, wcover: null }, "privacy wire alone: nothing");
   T = D(2026, 11, 4);
   await IC.setOn(true, ADM());
   T = D(2026, 11, 6);
@@ -123,7 +123,7 @@ test("privacycopy: null while each switch is off; on = its advert; dated by its 
   assert.deepEqual(c.camreveal, { on: true, on_at: D(2026, 11, 6), on_day: "6 November 2026" });
   assert.deepEqual(c.pv3, { on: true, on_at: D(2026, 11, 8), on_day: "8 November 2026" });
   assert.equal(c.camevidence, null, "no evidence switch: no evidence text");
-  assert.deepEqual(PC.flags(), { incogcam: true, camreveal: true, privstate: true, textreveal: false });
+  assert.deepEqual(PC.flags(), { incogcam: true, camreveal: true, privstate: true, textreveal: false, wcover: false });
   T = D(2026, 11, 9);
   await EV.setOn(true, ADM());
   c = await PC.load();
@@ -294,7 +294,7 @@ test("help: the cards' pc variants only with a switch on; a slice that doesn't f
   assert.equal(got[1].summary, "y");
   assert.deepEqual(HELP.pcApply("S", "a b", { incogcam: { swap: [["a", "A"]] } }, { incogcam: false }), { summary: "S", details: "a b", applied: [] });
   assert.equal(HELP.pcApply("S", "a a", { incogcam: { swap: [["a", "A"]] } }, { incogcam: true }).applied.length, 0, "an old text found twice: not applied");
-  assert.deepEqual(HELP.PC_KEYS, ["camreveal", "incogcam", "privstate", "textreveal"], "the bot's order (pepe_privtext.PC_KEYS; 1.99aid S4t: + textreveal)");
+  assert.deepEqual(HELP.PC_KEYS, ["camreveal", "incogcam", "privstate", "textreveal", "wcover"], "the bot's order (pepe_privtext.PC_KEYS; 1.99aid S4t: + textreveal; 1.99?? round 5: + wcover)");
   const bot = process.env.PEPE_BOT_DIR;
   if (bot && fs.existsSync(path.join(bot, "help", "help-data.json"))) {
     const data = JSON.parse(fs.readFileSync(path.join(bot, "help", "help-data.json"), "utf8"));

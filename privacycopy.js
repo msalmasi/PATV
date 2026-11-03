@@ -10,6 +10,8 @@
 //               evidence.privacyCopy (the copies exist); dated by the later of the two switches' first ON
 //   pv3         S6 the privacy switchboard v3 (privacystate.js, switch privacy_v3): one switch at a time, !privacy, room lines (Q20)
 //   textreveal  1.99aid S4t text reveal roles (textreveal.js, switch text_reveal_roles): staff and room mods reveal hidden text too
+//   wcover      1.99?? (privacy controls round 5) S3's cover picture (micfollow_cfg withheld_cover - no privacy wire needed): a cam opt-out
+//               shows on mic stages with their cover picture. {on: true} while the knob is on - not dated (the knob keeps no first ON)
 //
 // load() -> {incogcam, camreveal, camevidence, pv3}: each {on, on_at, on_day} or null (off - the text is exactly as before). Used by
 // /privacy (terms.js), /settings/privacy (incognito.js) and, through flags(), /help (help.js). Never throws.
@@ -30,7 +32,8 @@ async function stateOf(file) {
 
 /** The four copies (see the header). */
 async function load() {
-  const out = { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null };
+  const out = { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null, wcover: null };
+  out.wcover = wcoverOn() ? { on: true, on_at: null, on_day: null } : null;   // (1.99?? privacy controls round 5)
   out.incogcam = copyOf(await stateOf("./incogcams"));
   out.textreveal = copyOf(await stateOf("./textreveal"));          // 1.99aid (privacy controls S4t)
   const crs = await stateOf("./camreveal");
@@ -54,7 +57,11 @@ async function load() {
 /** Synchronous: which slices' text is on now (their adverts) - /help's cards (help.js withPrivacyCopy). Fails closed. */
 function flags() {
   const adv = (file) => { try { return require(file).advert() === true; } catch (e) { return false; } };
-  return { incogcam: adv("./incogcams"), camreveal: adv("./camreveal"), privstate: adv("./privacystate"), textreveal: adv("./textreveal") };
+  return { incogcam: adv("./incogcams"), camreveal: adv("./camreveal"), privstate: adv("./privacystate"), textreveal: adv("./textreveal"),
+           wcover: wcoverOn() };   // (1.99?? privacy controls round 5)
 }
+/** 1.99?? (privacy controls round 5): is micfollow_cfg withheld_cover on (S3: a cam opt-out shows on mic stages with their cover picture)?
+ *  Fails closed. */
+function wcoverOn() { try { return require("./micfollow").withheldCover() === true; } catch (e) { return false; } }
 
 module.exports = { load, flags, dayText };
