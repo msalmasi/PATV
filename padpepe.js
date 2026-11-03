@@ -13,7 +13,7 @@
 // Pepe's snapshot says per room what each action costs a member and whether it's switched on (R.pepe:
 // {look|camroast|roast: {on, price, why?}}); the browser shows the price and asks before it sends. Pepe charges it
 // (admins free) - the site never moves PAT here. The answer comes back in the job (padmod-style polling).
-// 1.99?? (privacy controls, round 3 - F2; owner Q4: every cam feature works for an incognito person's cam under the frog name): 👀 / 🔥 on
+// 1.99aid (privacy controls, round 3 - F2; owner Q4: every cam feature works for an incognito person's cam under the frog name): 👀 / 🔥 on
 // a FROG-NAME cam, picked by its opaque id ({action, id} - a people-list entry "v-…" or a mic-stage tile "anon-…", incogcams.refOf: only
 // while incognito cams are in effect, their open frog-name session, on cam) and only while the person's own cam rules let this viewer
 // see it (camviewers.camRefusal, strict - no 👻 bypass). The line Pepe runs is the usual "<cmd> <login>" (the Camfrog room sees what it
@@ -61,7 +61,7 @@ function memberOf(R, login) {
   return (Array.isArray(R && R.members) ? R.members : []).find((m) => m && !m.anon && String(m.login || "").toLowerCase() === l) || null;
 }
 
-/** null = may send, else {status, error}. Pure (tests pin it): the room, the menu, the target. `veiled` (1.99?? round 3 - F2): the target
+/** null = may send, else {status, error}. Pure (tests pin it): the room, the menu, the target. `veiled` (1.99aid round 3 - F2): the target
  *  is a frog-name cam veiledCam already found on cam - no by-login roster check (an incognito person has no named entry). */
 function refusal(R, action, target, { veiled = false } = {}) {
   const menu = (R && R.pepe) || {};
@@ -78,7 +78,7 @@ function refusal(R, action, target, { veiled = false } = {}) {
   return null;              // yourself included: you pay like anyone (Pepe admins are free)
 }
 
-// ── 1.99?? (privacy controls, round 3 - F2): a frog-name cam by its opaque id ──
+// ── 1.99aid (privacy controls, round 3 - F2): a frog-name cam by its opaque id ──
 const VREF_RE = /^(?:v-[A-Za-z0-9_-]{12}|anon-[0-9a-f]{8})$/;
 const UNAVAILABLE = "That cam isn't available right now - nothing was charged.";
 /** A frog-name cam this viewer may act on -> {login, alias, display} (server-only) | null: incognito cams in effect, the person's open
@@ -131,7 +131,7 @@ function register(app, { addUser, bySlug, isLive }) {
     const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "commands").catch(() => null);   // 1.99zf: the commands feature
     if (blk) return bad(res, 403, blk);
     const b = req.body || {};
-    // 1.99?? (privacy controls, round 3 - F2): {action, id} = a frog-name cam by its opaque id - resolved here, never answered
+    // 1.99aid (privacy controls, round 3 - F2): {action, id} = a frog-name cam by its opaque id - resolved here, never answered
     let built, V = null;
     if (b.id != null && b.id !== "") {
       if (!(typeof b.action === "string" && CAM_ACTIONS.has(b.action))) return bad(res, 400, "Pick a person, not Pepe or a room bot.");

@@ -107,7 +107,7 @@ test("before a Pepe with the switch reports: no card, no policy text, requests r
   assert.ok(CL.PRIVATE_ARGS.includes("!remember"));
   assert.equal(CL.isPrivateCmd("!remember off"), true);
   assert.equal(CL.isPrivateCmd("!REMEMBER status"), true);
-  // (1.99?? privacy controls S0: + !livecam after it)
+  // (1.99aid privacy controls S0: + !livecam after it)
   assert.match(fs.readFileSync(path.join(repo, "views", "privacy.ejs"), "utf8"), /<code>!transcripts<\/code>, <code>!remember<\/code>, <code>!livecam<\/code>\)/);
 });
 

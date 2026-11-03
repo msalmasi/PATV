@@ -236,7 +236,7 @@ function register(app, { addUser }) {
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));
   // wave 2 WP-5 review fix (WP5-ACC-1): the Evidence card's export form only while evidence clips can be made (evidence.effective();
   // evidenceexport.js refuses otherwise anyway)
-  // 1.99?? (privacy controls, round 3 - F3): trOn = text reveal roles on (textreveal.js) - the transcripts-bar card names who can reveal
+  // 1.99aid (privacy controls, round 3 - F3): trOn = text reveal roles on (textreveal.js) - the transcripts-bar card names who can reveal
   app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge", async () => ({ evExport: await safe(() => require("./evidence").effective(), false),
     trOn: await safe(() => require("./textreveal").isOn() === true, false) })));
   // wave 3 (design §N.3): + 🧠 Pepe's memory - how many people opted out (never who), admins only

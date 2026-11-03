@@ -259,7 +259,7 @@ test("/stage/admin: the 🎙 Mic follows card - the kill switch for staff, knobs
   assert.match(staff, /id="mfCard"/);
   assert.match(staff, /id="mfKill" checked/);
   assert.doesNotMatch(staff, /id="mfCfg"|id="mfSpans"/);
-  assert.match(staff, /stage-mf-admin\.js\?v=5/);           // (1.99afl: the Health column; 1.99afn: the courtesy-notice counts; wave2 WP-4: kept relays; 1.99?? privacy controls S0: veiled report rows)
+  assert.match(staff, /stage-mf-admin\.js\?v=5/);           // (1.99afl: the Health column; 1.99afn: the courtesy-notice counts; wave2 WP-4: kept relays; 1.99aid privacy controls S0: veiled report rows)
   assert.match(staff, /id="mfReports"/, "⚑ reports to review (staff)");
   const adm = ejs.render(tpl, { user: "a", isAdmin: true, state, mf: mf(true) }, { filename: file });
   assert.match(adm, /id="mfCfg"/);
@@ -795,7 +795,7 @@ test("mfix review: the strip (pad-camstrip.js) and a cam slot on the stage (stag
   const strip = read("public", "js", "pad-camstrip.js");
   assert.match(strip, /ss\.onfail = function \(\) \{ if \(my === t\.gen\) rewatch\(my\); \};/);
   assert.match(strip, /REWATCH_MAX = 4, REWATCH_WIN_MS = 3 \* 60 \* 1000/);
-  assert.match(strip, /function rewatch\(my\) \{[^]*?post\(base \+ '\/beat'[^]*?post\(base, t\.ref\)[^]*?PATVRtc\.watch\(/);   // (1.99?? privacy controls round 3 - F2: t.ref = {login} or a frog cam's {id})
+  assert.match(strip, /function rewatch\(my\) \{[^]*?post\(base \+ '\/beat'[^]*?post\(base, t\.ref\)[^]*?PATVRtc\.watch\(/);   // (1.99aid privacy controls round 3 - F2: t.ref = {login} or a frog cam's {id})
   const room = read("public", "js", "stage-room.js");
   assert.match(room, /ss\.onfail = function \(\) \{ if \(g === my\.gen\) rewatch\(\); \};/);
   assert.match(room, /CAM_REWATCH_MAX = 4/);
@@ -1287,7 +1287,7 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
 test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v13 - 1.99ahq stage cover + privacy controls) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=13"), "pad-reveal.js v2, then stage-mic.js v13");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99?? privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=13"), "pad-reveal.js v2, then stage-mic.js v13");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99aid privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");

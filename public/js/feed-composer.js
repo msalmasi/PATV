@@ -474,7 +474,7 @@
       clearTimeout(camTimer);
       camSay(_t('js.feed.fc.asking', 'Asking Pepe for a snapshot of {name}\'s cam…', { name: who.display }));
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(who.login ? { login: who.login } : { id: who.id }) })   // (1.99?? Q4-B: a frog-name cam by its id)
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(who.login ? { login: who.login } : { id: who.id }) })   // (1.99aid Q4-B: a frog-name cam by its id)
         .then(function (r) { return r.json(); })
         .then(function (d) { if (seq !== camSeq) return; if (!d.ok) return camSay(d.error || _t('js.feed.fc.not_now', 'Not right now.')); camPoll(slug, who, seq, 0); })
         .catch(function () { if (seq === camSeq) camSay(_t('js.feed.fc.unreachable', 'Couldn\'t reach the site.')); });

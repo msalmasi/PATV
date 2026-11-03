@@ -85,7 +85,7 @@ var CAPS = [
   ["chatlog.read_all", "pads", "staff", "privacy"],             // CL6: every pad's full chat history (every read past a pad's public window is logged),
                                                                 //      staff purge, the chat line report queue, the per-login tool, legal holds
   ["chatlog.see_through", "pads", "admin", "privacy"],
-  ["chatlog.reveal_text", "pads", "staff", "privacy"],          // 1.99?? (privacy controls S4t, owner 2026-11-02): Staff reveal hidden text and who is behind
+  ["chatlog.reveal_text", "pads", "staff", "privacy"],          // 1.99aid (privacy controls S4t, owner 2026-11-02): Staff reveal hidden text and who is behind
                                                                 //   a frog name - ONLY while the text_reveal_roles switch is on (textreveal.js); logged, a reason each time          // 1.99afn (incognito spec A.2 / E, owner J-2): reveal who is behind a frog name on
                                                                 //   every pad (analytics now, chat with WP-2) - on demand, each reveal logged
                                                                 //   (seethrough.js); locked: never Staff without a code change and an owner decision
@@ -139,7 +139,7 @@ var CAPS = [
   ["restream.main", "stage", "admin", "ops"],
   ["livecam.admin", "stage", "admin", "ops"],
   ["livecam.end_any", "stage", "staff", null],
-  // 1.99?? (privacy controls S4, owner Q8 2026-11-02): view a cam someone has hidden from the website, for moderation (camreveal.js -
+  // 1.99aid (privacy controls S4, owner Q8 2026-11-02): view a cam someone has hidden from the website, for moderation (camreveal.js -
   // on every pad; the person is told unless the viewer is in 👻 ghost mode; every view is in the see-through log). Locked: who may
   // look past a person's own cam settings is an owner decision, never an /admin/roles edit. Pad owners (their pad) and the room's
   // mods (their room) get the same view through camreveal's roles, not through this key.

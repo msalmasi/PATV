@@ -85,7 +85,7 @@
 // tied to a person's GTF avatar, photo or custom picture through a URL, a cache key, an alt text, a data attribute or an API field.
 // The cache is keyed by the named login only. The GTF image URL is /media/cover/a/<seed~layers>.<hmac>.svg: the seed is no user id
 // (the avatar itself shows as much), the HMAC (SECRET_KEY) makes the URL immutable-cacheable and stops the route from rendering
-// arbitrary input. 1.99?? (privacy controls S3, micfollow_cfg withheld_cover - dark): a cam opt-out (`!livecam off`, "Pads may put my
+// arbitrary input. 1.99aid (privacy controls S3, micfollow_cfg withheld_cover - dark): a cam opt-out (`!livecam off`, "Pads may put my
 // cam on their stage" off, cam access followers / on request) withholds the CAM, not the person - such a mic holder, shown by name,
 // gets this cover on a "cam off" card (micfollow card state "withheld": never a relay, still, warm keep or capture of the cam), once
 // every other stage rule has passed. Incognito + live cam off stays the peek hood and !bridge hide the shadow hood - never a cover

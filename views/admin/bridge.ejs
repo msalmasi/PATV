@@ -358,7 +358,7 @@
 })();
 </script>
 
-<%# 1.99?? (privacy controls S5, incogcams.js; G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5" + section 8): "Incognito cams" - ships OFF %>
+<%# 1.99aid (privacy controls S5, incogcams.js; G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5" + section 8): "Incognito cams" - ships OFF %>
 <section class="adm-card" id="incogcams" aria-labelledby="icT">
   <h2 id="icT">Incognito cams <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">While this is <b>off</b> (the default) nothing changes: an incognito person's cam is never shown on the website. Turn it <b>on</b> (it needs privacy wire v2) and the site's sync answers say <code>incogcam: 1</code>; once Pepe confirms it (his sync says <code>incogcam: 1</code> too), incognito hides only the <b>name</b>: an incognito person who is on cam and hasn't switched live cam off shows their cam under their <b>frog name</b> - the people list's cam icon, ▶ Live, snapshots and 🎬 clips (a saved one names their frog name), ✨ Use in Generate, 📌 pins and 🎬 stage cam slots, Pepe's on-air picks (by the frog entry on this page or the pad's popover - never by a login; the cam's on-air OK as for anyone), the pads' mic stages (a hooded frog when their cam is off or withheld) and mic-stage snaps / clips (the cam under the frog name; such a capture is never kept or posted). The login, PATV avatar, name style and profile never go with it: an opaque id per frog-name session, a WHEP path of its own per session, the frog name in the moderation history and on /admin/pepe/livecams and /stage/admin. Any veil change ends that cam's sessions and tiles. People with <code>!livecam off</code> or <code>!bridge hide</code> stay hidden. A viewer the person's own rules exclude (who-may-watch, a block) gets "That cam isn't available right now." A pin, cam slot or on-air pick runs under that frog-name session only. Turning it off ends every such session at once. Needs the owner's OK on the privacy text first.</p>
@@ -368,7 +368,7 @@
   <% } %>
 </section>
 <script>
-// 1.99?? (privacy controls S5): the Incognito cams card (incogcams.js: GET / POST /api/admin/incogcams {on})
+// 1.99aid (privacy controls S5): the Incognito cams card (incogcams.js: GET / POST /api/admin/incogcams {on})
 (function () {
   'use strict';
   var sum = document.getElementById('icSummary');
@@ -401,7 +401,7 @@
 })();
 </script>
 
-<%# 1.99?? (privacy controls S4t, textreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 22:05Z "yes"): "Text reveal roles" - ships OFF %>
+<%# 1.99aid (privacy controls S4t, textreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 22:05Z "yes"): "Text reveal roles" - ships OFF %>
 <section class="adm-card" id="textreveal" aria-labelledby="trT">
   <h2 id="trT">Text reveal roles <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">While this is <b>off</b> (the default) nothing changes: only PATV admins (anywhere) and a pad's owner (their own pad, lines said while they own it) can reveal who is behind a frog name or read a blacked-out line. Turn it <b>on</b> and PATV staff (<code>chatlog.reveal_text</code>, every pad) and the room's moderators (their own pad) can too - chat lines, the people list, mic-stage tiles and the analytics boards; staff can also reveal who a veiled row of the mic-stage report queue on /stage/admin is about (off: admins only). Every non-admin reveal needs a reason (at least 3 characters), is rate-limited and counted (the admins are told past the daily limits), and every reveal is a see-through row. The privacy policy, /help and Pepe's replies and help cards switch their "who can reveal" sentences with it (the site's sync answer says <code>textreveal: 1</code>). Audio and cam evidence and Pepe's analytics notes stay as they are; the staff report queue's note on a blacked-out line says staff can reveal it on the pad too. Needs the owner's OK on the privacy text first.</p>
@@ -411,7 +411,7 @@
   <% } %>
 </section>
 <script>
-// 1.99?? (privacy controls S4t): the Text reveal roles card (textreveal.js: GET / POST /api/admin/textreveal {on})
+// 1.99aid (privacy controls S4t): the Text reveal roles card (textreveal.js: GET / POST /api/admin/textreveal {on})
 (function () {
   'use strict';
   var sum = document.getElementById('trSummary');
@@ -443,7 +443,7 @@
 })();
 </script>
 
-<%# 1.99?? (privacy controls S4, camreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + section 8): "Cam reveals" - ships OFF %>
+<%# 1.99aid (privacy controls S4, camreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + section 8): "Cam reveals" - ships OFF %>
 <section class="adm-card" id="camreveal" aria-labelledby="crT">
   <h2 id="crT">Cam reveals <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">While this is <b>off</b> (the default) nothing changes. Turn it <b>on</b> (it needs privacy wire v2) and the site's sync answers say <code>camreveal: 1</code>; once Pepe confirms it (his sync says <code>camreveal: 1</code> too), a moderator can view a cam someone has hidden from the website - <code>!livecam off</code>, <code>!bridge hide</code>, incognito while incognito cams are off, private activity, a block or a who-may-watch mode - for moderation: "👁 View cam" on a mic-stage cover, 👁 on a people-list frog entry, "View for moderation" in the ▶ Live popover, and "View a cam by Camfrog login" on /admin/pepe/livecams and under a pad's people list (admins and staff on any pad; a pad's owner and the room's moderators on their own pad, for someone the room lists; also people left out). Who: PATV admins and staff (every pad), a pad's owner (their pad) and the room's moderators (their room). Each view: a reason, only that moderator sees it, 3 minutes (Extend writes a new row), blurred until clicked, no capture controls; Pepe opens it by its exact name and says nothing in the room. Logged in one transaction before anything opens: the see-through log (<code>cam_reveal</code>), livecam_audit, cam_views and admin_audit. The person gets a PM from Pepe and an inbox notice - "Someone moderating &lt;pad&gt; viewed your cam", never who - unless the moderator is in 👻 ghost mode. Admins and the pad's owner can also save a still or a clip as evidence (below; needs evidence clips on too). The pad's own switches stand. Turning it off ends every view at once. Needs the owner's OK on the wording first.</p>
@@ -453,7 +453,7 @@
   <% } %>
 </section>
 <script>
-// 1.99?? (privacy controls S4): the Cam reveals card (camreveal.js: GET / POST /api/admin/camreveal {on})
+// 1.99aid (privacy controls S4): the Cam reveals card (camreveal.js: GET / POST /api/admin/camreveal {on})
 (function () {
   'use strict';
   var sum = document.getElementById('crSummary');
@@ -486,7 +486,7 @@
 })();
 </script>
 
-<%# 1.99?? (privacy controls S6, privacystate.js; G:/ops/privacy-controls-spec-2026-11-02.md section 4 + 5 "S6" + section 8 Q20):
+<%# 1.99aid (privacy controls S6, privacystate.js; G:/ops/privacy-controls-spec-2026-11-02.md section 4 + 5 "S6" + section 8 Q20):
     "Privacy switchboard v3" - ships OFF %>
 <section class="adm-card" id="privacyv3" aria-labelledby="pv3T">
   <h2 id="pv3T">Privacy switchboard v3 <span class="adm-pill admin">admins</span></h2>
@@ -497,7 +497,7 @@
   <% } %>
 </section>
 <script>
-// 1.99?? (privacy controls S6): the Privacy switchboard v3 card (privacystate.js: GET / POST /api/admin/privacyv3 {on})
+// 1.99aid (privacy controls S6): the Privacy switchboard v3 card (privacystate.js: GET / POST /api/admin/privacyv3 {on})
 (function () {
   'use strict';
   var sum = document.getElementById('pv3Summary');
@@ -693,7 +693,7 @@
 </script>
 <% } %>
 
-<%# 1.99?? (privacy controls S4, camevidence.js; owner Q12): evidence stills / clips of a cam viewed for moderation %>
+<%# 1.99aid (privacy controls S4, camevidence.js; owner Q12): evidence stills / clips of a cam viewed for moderation %>
 <% if (_can('chatlog.see_through')) { %>
 <section class="adm-card" id="camevidence" aria-labelledby="ceT">
   <h2 id="ceT">Cam evidence <span class="adm-pill admin">admins</span></h2>
@@ -708,7 +708,7 @@
   </table></div>
 </section>
 <script>
-// 1.99?? (privacy controls S4): the Cam evidence card (camevidence.js: GET /api/evidence/cam, /api/evidence/cam/:id/file, POST .../hold | delete)
+// 1.99aid (privacy controls S4): the Cam evidence card (camevidence.js: GET /api/evidence/cam, /api/evidence/cam/:id/file, POST .../hold | delete)
 (function () {
   'use strict';
   var f = document.getElementById('ceForm'), body = document.getElementById('ceRows'), msg = document.getElementById('ceMsg');

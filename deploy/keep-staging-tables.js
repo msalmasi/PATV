@@ -50,7 +50,7 @@ const LIVE_FEED = ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_v
 // (seethrough.js: which logins an admin revealed) - staging's own. WP-5: + moderation evidence clips (evidence.js: whose voice, when,
 // who saved it - the audio itself sits in each environment's own evidence directory and is never copied)
 // privacy fix (1.99ahc, review F7): + incog_alias_burn (frognames: a switch's no-name window, keyed like incog_alias)
-// 1.99?? (privacy controls S4): + cam_evidence (camevidence.js: whose cam, who saved it - its files sit in each environment's own store)
+// 1.99aid (privacy controls S4): + cam_evidence (camevidence.js: whose cam, who saved it - its files sit in each environment's own store)
 const VEIL = ["incog_alias", "incog_alias_burn", "seethrough_log", "seethrough_toggle", "evidence_clips", "cam_evidence"];
 // (1.99aha owner 11-02: camfrog_roomstats_veiled - Pepe's !bridge hide people, server-only - is NOT listed: like hub_hidden_set the copy keeps
 //  prod's, because it is what masks those people in prod's room notes, copied along with it in camfrog_roomstats; staging's Pepe

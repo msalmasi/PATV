@@ -143,7 +143,7 @@ async function rows(table, where, params, { omit = [], order = null } = {}) {
   return getQuery(sql, params);
 }
 
-/** 1.99?? (privacy controls, review fixes 2 - ID-B): the ACTOR's rows of a frog-name cam (a 🎬 stage cam slot or a 📌 mic-stage pin
+/** 1.99aid (privacy controls, review fixes 2 - ID-B): the ACTOR's rows of a frog-name cam (a 🎬 stage cam slot or a 📌 mic-stage pin
  *  they made by the frog's opaque id) - the login stays out (null) and so does the veil (its frog-name session and ids); a pin keeps
  *  the frog name as frog_name. Rows with no veil are unchanged. (The SUBJECT's own export - login = theirs - keeps them.) */
 const veilOf = (v) => { if (!v) return null; try { return typeof v === "string" ? JSON.parse(v) : v; } catch (e) { return {}; } };
@@ -311,7 +311,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("purchases", "gifts_received", rows("gift_log", "recipient_id = ? AND (anon IS NULL OR anon = 0)", [uid]));
   await put("purchases", "donations", rows("donation_usd_log", "user_id = ?", [uid], { omit: ["session"] }));
   await put("purchases", "crypto_donations", rows("crypto_payments", "user_id = ?", [uid]));
-  // 1.99?? (privacy controls, review fixes 2 - ID-B): a cam slot this account put up of a FROG-NAME cam (opened by the frog's opaque
+  // 1.99aid (privacy controls, review fixes 2 - ID-B): a cam slot this account put up of a FROG-NAME cam (opened by the frog's opaque
   // id) keeps the frog name it ran under (displayname / title) - never the login or the frog-name session behind it (cam_veil)
   await put("purchases", "stage_slots", Promise.resolve(rows("stage_slots", "userId = ?", [uid], { omit: ["stream"] })).then(unveilSlots));
   await put("purchases", "redemptions", rows("user_redemptions", "userId = ?", [uid]));
@@ -335,7 +335,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("security", "chat_sign_ins", rows("chat_signin_log", "user_id = ?", [uid]));
   await put("security", "incognito_log", rows("incognito_log", "user_id = ?", [uid]));
   await put("security", "pepe_memory_log", rows("memory_optout_log", "user_id = ?", [uid]));   // wave 3: 🧠 Pepe's memory (memoryoptout.js)
-  await put("security", "privacy_switch_log", rows("privacy_state_log", "user_id = ?", [uid]));   // 1.99?? (privacy controls S6)
+  await put("security", "privacy_switch_log", rows("privacy_state_log", "user_id = ?", [uid]));   // 1.99aid (privacy controls S6)
   // chat data keyed to the account or the Camfrog login
   if (login) {
     try {
@@ -346,7 +346,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
     await put("chat", "clips_of_you", rows("media", "lower(subject_login) = ?", [login], { omit: ["file"] }));
     await put("chat", "incognito", rows("incognito_state", "login = ?", [login]));
     await put("chat", "pepe_memory", rows("memory_optout_state", "login = ?", [login]));     // wave 3: 🧠 the "don't remember me" switch as Pepe reported it
-    await put("chat", "privacy_switches", rows("privacy_state", "login = ?", [login]));     // 1.99?? (privacy controls S6): bridge / tx as Pepe reported them
+    await put("chat", "privacy_switches", rows("privacy_state", "login = ?", [login]));     // 1.99aid (privacy controls S6): bridge / tx as Pepe reported them
     await put("chat", "stage_leave", rows("stage_leave", "login = ?", [login]));     // stagefix site: the pads keeping your cam off their Stage
     // stagefix final round (stagepin.js): your level for pads' Stages, the pads you said yes / no to, the asks sent to you
     await put("chat", "stage_level", rows("stage_level", "login = ?", [login]));
@@ -365,9 +365,9 @@ async function collect(userId, { at = now(), parts = null } = {}) {
     // mfix: 📌 your cam pinned on a pad's mic stage now (not who pinned it)
     await put("chat", "mic_stage_pins_of_you", rows("micfollow_pins", "login = ?", [login], { omit: ["by_id", "by_name"], order: "at" }));
   }
-  // mfix; 1.99?? (review fixes 2 - ID-B): a pin of a FROG-NAME cam lists the frog name it was pinned under, never the login or veil
+  // mfix; 1.99aid (review fixes 2 - ID-B): a pin of a FROG-NAME cam lists the frog name it was pinned under, never the login or veil
   await put("chat", "mic_stage_pins_you_made", Promise.resolve(rows("micfollow_pins", "by_id = ?", [uid], { omit: ["by_name"], order: "at" })).then(unveilPins));
-  // 1.99?? (privacy controls review ID-2): a report on a VEILED tile (a frog-name cam tile reported by its id, or a person veiled at the
+  // 1.99aid (privacy controls review ID-2): a report on a VEILED tile (a frog-name cam tile reported by its id, or a person veiled at the
   // time) never names its subject here - the server mapped the tile to that login, the reporter never knew it
   await put("chat", "mic_stage_reports_you_made", Promise.resolve(rows("micfollow_reports", "reporter_id = ?", [uid], { omit: ["resolved_by"], order: "at" }))
     .then((rs) => (Array.isArray(rs) ? rs.map((r) => (r && Number(r.veiled) ? Object.assign({}, r, { login: null }) : r)) : rs)));

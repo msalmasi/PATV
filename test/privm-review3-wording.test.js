@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, round 3 - the final verify's F3 wording; G:/ops/privacy-controls-spec-2026-11-02.md section 8 and the
+// 1.99aid (privacy controls, round 3 - the final verify's F3 wording; G:/ops/privacy-controls-spec-2026-11-02.md section 8 and the
 // owner's 22:05Z "yes": staff, pad owners and room mods may reveal text too - S4t, switch text_reveal_roles). Rendered pages, the switches
 // as the views get them:
 //   F3  /privacy section 9's row names who reveals (PATV administrators and staff, pad owners and room moderators) while text reveal roles

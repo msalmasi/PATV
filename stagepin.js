@@ -76,7 +76,7 @@ function init() {
                       status TEXT NOT NULL, answered_at INTEGER, via TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_asks_login ON stage_asks (login, status)");
       await runQuery("CREATE INDEX IF NOT EXISTS stage_asks_slot ON stage_asks (slot_id)");
-      // 1.99?? (privacy controls V-1): an ask for an incognito person's cam - the frog-name session it was asked under (server-only); a
+      // 1.99aid (privacy controls V-1): an ask for an incognito person's cam - the frog-name session it was asked under (server-only); a
       // yes puts it up under THAT session only (mainstage.camOpen veil_sess / micfollow.pinPut veil), never by name
       const cols = (await getQuery("PRAGMA table_info(stage_asks)")).map((c) => c.name);
       if (!cols.includes("veil")) await runQuery("ALTER TABLE stage_asks ADD COLUMN veil TEXT");
@@ -292,7 +292,7 @@ async function answer(id, ans, who = {}, via = "web", t = now()) {
       const actor = a.actor_id ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [a.actor_id]))[0] : null;
       if (actor && (await require("./rooms").canManage(actor, a.room_id))) {
         // mfix: an ask for a 📌 pin on the mic stage pins it there (micfollow.pinPut - the mic stage's own rules on top)
-        // (1.99?? privacy controls V-1: an ask made for a frog-name cam goes up under that frog-name session only - or not at all)
+        // (1.99aid privacy controls V-1: an ask made for a frog-name cam goes up under that frog-name session only - or not at all)
         let r;
         if (a.veil) {
           const IC = require("./incogcams"), B = require("./bridge")._rooms.get(String(a.room_id));

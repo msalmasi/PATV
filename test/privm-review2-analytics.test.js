@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fixes 2 - RV-D; G:/ops/privacy-controls-spec-2026-11-02.md section 8, the owner's "yes" to staff and
+// 1.99aid (privacy controls, review fixes 2 - RV-D; G:/ops/privacy-controls-spec-2026-11-02.md section 8, the owner's "yes" to staff and
 // room mods revealing who is behind a frog name): the room analytics' see-through card while text_reveal_roles is on - worded for the
 // viewer's role (PATV staff, the pad's moderators, the pad's owner, an admin) and saying the reason is REQUIRED for everyone but an
 // admin (the server refuses a reveal without one); off, the card is today's. On the roomstats-frognames.test.js harness.

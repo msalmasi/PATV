@@ -42,10 +42,10 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // 1.99ahx frog names (owner 2026-11-03, "Lets do 2"): "frog-15" = section 10's incognito bullet now saying "someone" lasts 15 minutes after
 // being seen by name, then a frog name (it said "until your next visit") - inside the privacy wire v2 text, so dated the first time /privacy
 // is served with that switch on, and its date counts toward "Last updated" only while the switch is on.
-// 1.99?? (privacy controls S0, spec 4.1): "livecam-never-kept" = !livecam joins section 3's list of privacy settings a pad's chat
+// 1.99aid (privacy controls S0, spec 4.1): "livecam-never-kept" = !livecam joins section 3's list of privacy settings a pad's chat
 // history never keeps (chatlog.PRIVATE_ARGS; additive, VERSION unchanged). That list is shown only while the chat archive's notice
 // is on (chatlog.policy), so the change is dated the first time /privacy is served with it showing - never while nobody can read it.
-// 1.99?? (privacy controls S7, spec section 5 "S7": "PRIVACY_UPDATED moves; no re-accept"): the privacy text of S4 / S5 / S6 is dated
+// 1.99aid (privacy controls S7, spec section 5 "S7": "PRIVACY_UPDATED moves; no re-accept"): the privacy text of S4 / S5 / S6 is dated
 // like wave 2's - by its switch's first ON (privacycopy.js), not by a hand-edited PRIVACY_UPDATED - so "Last updated" moves on the day
 // each switch first goes on, on each server, and never before; VERSION (re-acceptance) doesn't move.
 const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept"];
@@ -185,7 +185,7 @@ function register(app, { addUser }) {
     // wave 2 WP-5 (section H, approved 2026-10-28 / 2026-11-01): the evidence-clip sentence, its section 9 row and its changelog clause
     // from the moment evidence clips can be made (evidence.privacyCopy: its switch AND privacy wire v2), and while any are still kept;
     // null otherwise - the page reads exactly as before. Its first switch-on date joins "Last updated"
-    // 1.99?? (privacy controls S7): the text of S4 (cam reveals + their evidence), S5 (incognito cams) and S6 (the privacy switchboard
+    // 1.99aid (privacy controls S7): the text of S4 (cam reveals + their evidence), S5 (incognito cams) and S6 (the privacy switchboard
     // v3), each while its switch is on (privacycopy.js - like wave 2: null otherwise, the page reads exactly as before); each change
     // note is dated by its switch's first ON, which joins "Last updated". Additive: VERSION (re-acceptance) doesn't move
     let chatlog = null, hubErasure = null, micrec = null, memory = null, privwire = null, evidence = null, policyDates = {}, txbar = null;
@@ -220,7 +220,7 @@ function register(app, { addUser }) {
     }
     // (S7's copies ride res.locals: the view reads them as locals.incogcam / camreveal / camevidence / pv3 - null on /terms)
     Object.assign(res.locals, { incogcam: pcopy.incogcam, camreveal: pcopy.camreveal, camevidence: pcopy.camevidence, pv3: pcopy.pv3,
-                                textreveal: pcopy.textreveal });   // (1.99?? privacy controls S4t)
+                                textreveal: pcopy.textreveal });   // (1.99aid privacy controls S4t)
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));

@@ -1108,7 +1108,7 @@ test("final: client - the level, the asks and the per-pad yes on the card; Ask t
   assert.match(rm, /j\.asked/);
   const pl = fs.readFileSync(path.join(repo, "public", "js", "pad-livecam.js"), "utf8");
   assert.match(pl, /d\.asked/);
-  assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /pad-livecam\.js\?v=12/);   // (1.99?? privacy controls round 3 - F2: a frog-name cam pins to the strip; V-5: the ghost reason; 1.99afl: list_unread; 1.99ahn dead relay: relay_lost; 1.99?? privacy controls S5: a veiled cam by id; S4: View for moderation)
+  assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /pad-livecam\.js\?v=12/);   // (1.99aid privacy controls round 3 - F2: a frog-name cam pins to the strip; V-5: the ghost reason; 1.99afl: list_unread; 1.99ahn dead relay: relay_lost; 1.99aid privacy controls S5: a veiled cam by id; S4: View for moderation)
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const k of ["sl.level", "sl.level_on", "sl.level_off", "sl.level_never", "sl.what_check", "sl.asks_h", "sl.yes_h", "sl.chat_ok",
                    "js.sl.keep", "js.sl.keep_always", "js.sl.allow", "js.pad.strip.stage_asked"]) assert.ok(en[k], k);

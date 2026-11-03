@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, round 3 - the final verify's F4; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q8: pad owners,
+// 1.99aid (privacy controls, round 3 - the final verify's F4; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q8: pad owners,
 // staff and mods can reveal hidden cams too; Q22: a left-out person's cam by login). /privacy said a left-out person's cam can be viewed
 // by "PATV administrators and staff", but the by-login entry needed livecam.admin (Staff: 403 "Admins only."). Now the by-login entry
 // takes the same reveal roles: staff (and admins) on any pad; a pad's owner and the room's mods on their own pad, only for someone the
@@ -256,7 +256,7 @@ test("F4: a pad's owner and the room's mods open a cam by its login on their own
     const b = await call("POST", `/api/rooms/${SLUG}/livecam/reveal/beat`, { user: u, body: { rv: r.d.rv } });
     assert.notEqual(b.d && b.d.why, "lost_right", k + ": the beat keeps it: " + b.text);
     await stopRv(u, r.d.rv);
-    // a login the room doesn't list: refused before any reveal row (Pepe would answer not_on_cam only after the rows). 1.99?? round 4 -
+    // a login the room doesn't list: refused before any reveal row (Pepe would answer not_on_cam only after the rows). 1.99aid round 4 -
     // F4 probing: the try spends the reveal rate and is a see-through miss row (miss:gone:l - privm-review4.test.js)
     clean(); T += 11000; await fresh(); RL._hits.clear();
     const n0 = await stRows(u.userId, "cam:%"), a0 = await auditRows(u.userId), x0 = await stRows(u.userId, "miss:%");

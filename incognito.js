@@ -432,7 +432,7 @@ function register(app, { addUser, isBotToken }) {
     // items only to a site that says "memory" - an older site would take them as incognito reports)
     try {
       const memory = await require("./memoryoptout").sync(b);
-      // 1.99?? (privacy controls S6): Pepe's bridge / tx items and full lists (privacystate.js) - only while its switch's advert is on
+      // 1.99aid (privacy controls S6): Pepe's bridge / tx items and full lists (privacystate.js) - only while its switch's advert is on
       // (Pepe sends them only then; anything else is ignored there). Off: the answer is exactly as before
       const pv = await require("./privacystate").sync(b);
       res.json({ ok: true, ...(await sync(b)), memory, caps: ["memory"], ...(pv && !pv.off ? { privstate: pv } : {}) });
@@ -480,14 +480,14 @@ function register(app, { addUser, isBotToken }) {
       // new wording only while Pepe's latest report has the switch (mem.capable)
       let mem = null;
       try { mem = await require("./memoryoptout").stateOf(req.user.userId); } catch (e) { mem = null; }
-      // 1.99?? (privacy controls S0): the incognito card's wording follows the Privacy wire v2 switch (privwire.js): a random frog name
+      // 1.99aid (privacy controls S0): the incognito card's wording follows the Privacy wire v2 switch (privwire.js): a random frog name
       // and !bridge hide's blacked-out bar while it's on; the v1 wording ("someone", lines kept off) while it's off
       let pwOn = false;
       try { await require("./privwire").init(); pwOn = require("./privwire").isOn() === true; } catch (e) { pwOn = false; }
-      // 1.99?? (privacy controls S6): the "On the website" card (privacystate.js) - only while the privacy switchboard v3 is in effect
+      // 1.99aid (privacy controls S6): the "On the website" card (privacystate.js) - only while the privacy switchboard v3 is in effect
       let pv3 = null;
       try { const PS = require("./privacystate"); await PS.init(); pv3 = PS.effective() ? await PS.stateOf(req.user.userId) : null; } catch (e) { pv3 = null; }
-      // 1.99?? (privacy controls S7): the privacy text of S5 (icOn - incognito hides the name, not the cam) and S4 (crvOn - moderators
+      // 1.99aid (privacy controls S7): the privacy text of S5 (icOn - incognito hides the name, not the cam) and S4 (crvOn - moderators
       // can view a hidden cam), each only while its switch is on (privacycopy.js); off, the page is exactly as before
       let icOn = false, crvOn = false;
       try { const PC = await require("./privacycopy").load(); icOn = !!PC.incogcam; crvOn = !!PC.camreveal; } catch (e) { icOn = crvOn = false; }

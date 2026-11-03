@@ -290,7 +290,7 @@ function camMember(R, login) {
   const low = String(login || "").toLowerCase();
   return (R && Array.isArray(R.members) ? R.members : []).find((m) => m && !m.anon && !m.self && m.login && String(m.login).toLowerCase() === low) || null;
 }
-/** 1.99?? (privacy controls, round 3 - F1; owner Q4 "including AI picture references"): may claimed frog-name frame `c` still be used
+/** 1.99aid (privacy controls, round 3 - F1; owner Q4 "including AI picture references"): may claimed frog-name frame `c` still be used
  *  in bridge room R? camMember never finds an incognito person (it skips anon entries), so a frog cam's reference re-checks the frog-name
  *  session the frame was taken under: incognito cams still in effect, that session still the person's open one (any veil change ends
  *  it - the same rule as their live cam), and live cam not switched off since. Pepe re-checks !likeness / livecam by the login. */
@@ -319,7 +319,7 @@ async function camList(user, padId) {
   if (!R.cams) return { ok: true, cams: [], why: "Cam snapshots aren't switched on in that Camfrog room." };
   const cams = R.members.filter((m) => m && !m.anon && !m.self && m.on_cam === true && m.login)
     .map((m) => ({ login: String(m.login), display: String(m.display || m.login) }));
-  // 1.99?? (privacy controls, review fixes 2 - Q4-B; owner Q4: AI picture references work for an incognito cam under its frog name):
+  // 1.99aid (privacy controls, review fixes 2 - Q4-B; owner Q4: AI picture references work for an incognito cam under its frog name):
   // while incognito cams are in effect, the cams of incognito people whose cam may show (incogcams.pageOnCam) - by their opaque
   // people-list id and frog name, never a login. The snapshot goes by that id (POST /snap {id}); claimCamRef takes its frame as today
   try {
@@ -350,7 +350,7 @@ async function claimCamRef(user, b) {
   if (!R || !R.cams) throw new Refuse(403, "Cam snapshots aren't switched on in that Camfrog room.");
   const s = snapForGen(R.id, b.sid, u.userId);
   if (!s || s.error) throw new Refuse((s && s.status) || 410, (s && s.error) || "That snapshot expired - take a fresh one.");
-  // 1.99?? (privacy controls S5, owner Q4): a frame of an incognito person's cam (taken under their frog name) is a reference under
+  // 1.99aid (privacy controls S5, owner Q4): a frame of an incognito person's cam (taken under their frog name) is a reference under
   // that FROG NAME - only while that frog-name session is still theirs and incognito cams are on (the login stays server-side: the
   // job's ref_cam and Pepe's check; the composer and the job list show the frog name)
   let m = null;
@@ -364,7 +364,7 @@ async function claimCamRef(user, b) {
   const mineNow = [...camRefs.entries()].filter(([, c]) => c.userId === u.userId).sort((x, y) => x[1].ts - y[1].ts);
   while (mineNow.length >= CAMREF_PER_USER) camRefs.delete(mineNow.shift()[0]);
   const id = "c" + crypto.randomBytes(10).toString("hex");
-  // 1.99?? (privacy controls, round 3 - F1): a frog-name frame keeps WHICH frog-name session it was taken under (server-only), so
+  // 1.99aid (privacy controls, round 3 - F1): a frog-name frame keeps WHICH frog-name session it was taken under (server-only), so
   // create() re-checks that session - not a by-login roster entry, which an incognito person never has
   camRefs.set(id, { img: s.img, userId: u.userId, room: R.id, login: String(m.login).toLowerCase(), display: String(m.display || m.login), ts: t,
                     ...(s.vkey ? { veiled: true, vsess: String(s.vkey).slice(2) } : {}) });
@@ -490,7 +490,7 @@ async function start(b) {
     const c = camOf(j);
     out.has_ref = true;
     out.ref_cam = c ? { room: String(c.room || ""), login: String(c.login || "") } : { room: "", login: "" };
-    // 1.99?? (privacy controls, round 3 - F1): a frog-name cam's reference says so, with its frog name - Pepe re-checks the person's
+    // 1.99aid (privacy controls, round 3 - F1): a frog-name cam's reference says so, with its frog name - Pepe re-checks the person's
     // !likeness / livecam choices by the login as for anyone, but words any refusal by the frog name (never their name)
     if (c && c.veiled === true) Object.assign(out.ref_cam, { veiled: true, label: String(c.display || "someone").slice(0, 40) });
     const f = camJobFrames.get(j.id);
@@ -557,7 +557,7 @@ async function tell(j) {
   const what = j.kind === "video" ? "video" : "picture";
   const ok = j.status === "done";
   const title = ok ? `✨ Your AI ${what} is ready` : `✨ Your AI ${what} couldn't be made`;
-  // 1.99?? (privacy controls, round 4): said once - Pepe's refusals already end "(nothing was charged)" / "- nothing was charged" (an AI
+  // 1.99aid (privacy controls, round 4): said once - Pepe's refusals already end "(nothing was charged)" / "- nothing was charged" (an AI
   // picture reference refused by someone's !likeness choice, named or by frog name; a prompt refused) and read "... (nothing was charged).
   // Nothing was charged." here; the same for "refunded"
   const said = String(j.message || "It failed").trim();

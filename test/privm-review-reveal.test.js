@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fixes - the reveal lens): cam reveals, their evidence, the notice and the ghost bypass, on the S4
+// 1.99aid (privacy controls, review fixes - the reveal lens): cam reveals, their evidence, the notice and the ghost bypass, on the S4
 // test's harness (a temp DB with the real bridge ingest on privacy wire v2, frog-name sessions, live cams, the mic stage and the routes):
 //   RV-3  a reveal is listed to its person (!whowatching / the privacy card: "someone moderating <pad>") only once they were TOLD - the
 //         first frame, not a ghost; never before it, never after a failed open (no_video)
@@ -359,7 +359,7 @@ test("RV-4: a 👻 ghost's ▶ Live past a named live-cam-off cam is behind the 
   await GH.set(U.staff.userId, true, { via: "web" });
   try {
     const n0 = await stCount();
-    // 1.99?? (privacy controls V-5): no reason - refused (reason_needed), nothing opened, nothing logged
+    // 1.99aid (privacy controls V-5): no reason - refused (reason_needed), nothing opened, nothing logged
     let nr = null;
     try { await LC.start(STAFF(), R0(), "alicecf", T); } catch (e) { nr = e; }
     assert.ok(nr && nr.code === "reason_needed" && nr.status === 409 && nr.extra && nr.extra.reason_needed === true, "a reason first: " + (nr && nr.code));

@@ -12,15 +12,15 @@
 // The page beats every 15 s while watching (the server drops a slot without beats after 45 s). All text via textContent.
 // mfix review: a connection that drops after it played (Pepe re-opened the relay, its publisher restarted) is watched again
 // while the site still says the cam is connecting / live ("reconnecting…") - a few times, then "the live cam stopped".
-// 1.99?? (privacy controls S4): a moderator (info.reveal: 1 - camreveal.js) whose ▶ Live is refused because the person hid their cam
+// 1.99aid (privacy controls S4): a moderator (info.reveal: 1 - camreveal.js) whose ▶ Live is refused because the person hid their cam
 // gets "👁 View for moderation (logged)" -> window.PATVCamRevealOpen (below: loads cam-reveal.js on first use, then opens it).
 (function () {
   'use strict';
-  /** 1.99?? (privacy controls S4): cam-reveal.js on demand - a page with cam reveals off never loads it. */
+  /** 1.99aid (privacy controls S4): cam-reveal.js on demand - a page with cam reveals off never loads it. */
   window.PATVCamRevealOpen = window.PATVCamRevealOpen || function (o) {
     if (window.PATVCamReveal) return window.PATVCamReveal.open(o);
     var sc = document.createElement('script');
-    sc.src = '/public/js/cam-reveal.js?v=2';   // v2 (1.99?? privacy controls, round 3 - F4): by a typed login
+    sc.src = '/public/js/cam-reveal.js?v=2';   // v2 (1.99aid privacy controls, round 3 - F4): by a typed login
     sc.onload = function () { if (window.PATVCamReveal) window.PATVCamReveal.open(o); };
     document.head.appendChild(sc);
   };
@@ -56,8 +56,8 @@
   function row(box, slug, who, info, opts) {
     opts = opts || {};
     var ctl = { stop: function () {} };
-    // 1.99?? (privacy controls S5): an incognito person's cam under their frog name - asked for by the opaque id of their roster
-    // entry ({id}), never a login; no "ask to watch" for it (Q23). (1.99?? privacy controls V-1: 🎬 Put on stage by its id; round 3 - F2:
+    // 1.99aid (privacy controls S5): an incognito person's cam under their frog name - asked for by the opaque id of their roster
+    // entry ({id}), never a login; no "ask to watch" for it (Q23). (1.99aid privacy controls V-1: 🎬 Put on stage by its id; round 3 - F2:
     // 📌 Pin to strip too - the strip keeps it by its id, under the frog name)
     var veiled = !!who && !who.login && who.veil === 'incognito' && typeof who.id === 'string' && /^v-[A-Za-z0-9_-]{12}$/.test(who.id);
     if (!info || !who || (!who.login && !veiled)) return ctl;
@@ -144,7 +144,7 @@
       var my = ++gen;
       rew = [];
       b.disabled = true; say(_t('js.pad.live.asking', 'Asking Pepe to go live…'));
-      // 1.99?? (privacy controls V-5): a 👻 ghost view past someone's rules needs a reason, like every reveal - asked once the site
+      // 1.99aid (privacy controls V-5): a 👻 ghost view past someone's rules needs a reason, like every reveal - asked once the site
       // says reason_needed, then sent with the same request (logged with the see-through row)
       post(base, typeof reason === 'string' ? Object.assign({}, ref, { reason: reason }) : ref).then(function (d) {
         if (my !== gen) return;
@@ -158,7 +158,7 @@
           b.disabled = false;
           say(why(d && d.code, d && d.error), 'bad');
           if (d && (d.can_ask || d.pending)) askUi(!!d.pending);            // 1.99aar: members / followers / on request - ask the owner
-          modOffer(d && d.code);                                             // 1.99?? (privacy controls S4)
+          modOffer(d && d.code);                                             // 1.99aid (privacy controls S4)
           return;
         }
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { b.disabled = false; post(base + '/stop', ref); return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad'); }
@@ -226,7 +226,7 @@
     // 1.99aar: 🙋 Ask to watch (camaccess.js): the owner is PM'd in Camfrog + told in their inbox; this waits for the answer
     // (up to 10 minutes) and starts the cam by itself on a yes.
     var askB = null, askT = null;
-    // 1.99?? (privacy controls S4): the cam is hidden from this viewer and they may view it for moderation (the server decides again)
+    // 1.99aid (privacy controls S4): the cam is hidden from this viewer and they may view it for moderation (the server decides again)
     var modB = null;
     var NOT_HIDDEN = { signin: 1, off: 1, offline: 1, room_off: 1, not_on_cam: 1, nopepe: 1, viewer_cap: 1, budget: 1, slots_busy: 1, rate: 1, blocked: 1, pad_access: 1, list_unread: 1 };
     function modOffer(code) {

@@ -28,7 +28,7 @@
       var tr = el('tr');
       var a = el('a', r.title || r.room); a.href = '/p/' + encodeURIComponent(r.slug || r.room);
       var td = el('td'); td.appendChild(a); tr.appendChild(td);
-      // 1.99?? (privacy controls S0): a veiled row has no login (the server never sends it) - "someone (veiled)"; an Admin with the
+      // 1.99aid (privacy controls S0): a veiled row has no login (the server never sends it) - "someone (veiled)"; an Admin with the
       // see-through right gets "Reveal (logged)" (a reason, a seethrough_log row, then the login in this cell only)
       if (r.veiled) {
         var who = el('td', r.who || 'someone (veiled)', 'muted');

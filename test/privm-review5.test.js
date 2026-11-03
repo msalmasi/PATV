@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review 5 - the independent review of round 4 and S3; G:/ops/privacy-controls-spec-2026-11-02.md section 5
+// 1.99aid (privacy controls, review 5 - the independent review of round 4 and S3; G:/ops/privacy-controls-spec-2026-11-02.md section 5
 // "S3"). The pure mic-stage engine (micfollow-core.js) on a fake clock, and the English locale file:
 //   opted_out   with micfollow_cfg withheld_cover on, a hold / relay of a mic holder that Pepe refuses "opted_out" (his own opt-out list
 //               can be ahead of the site's: a room line's !livecam off, a sync on its way) is the withheld card - and stays it: no new

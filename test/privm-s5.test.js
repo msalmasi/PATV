@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls S5): INCOGNITO CAMS (G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5"; the owner's answers,
+// 1.99aid (privacy controls S5): INCOGNITO CAMS (G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5"; the owner's answers,
 // section 8: Q3 no migration, Q4 every cam feature works for an incognito person's cam - only the NAME is veiled, Q23 the cam is
 // withheld only from viewers the person's own rules exclude). On a temp DB with the real bridge ingest (privacy wire v2), frog-name
 // sessions, live cams, the mic-stage engine and the snapshot routes:
@@ -430,7 +430,7 @@ test("stage: a proven incognito holder on cam is a CAM tile under the frog name;
   // the tile routes: ✕ / 📌 by login refuse its id; ⚑ by its id hides it for the reporter by its veil
   const ex = await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.own, body: { login: vid, hours: 1 } });
   assert.equal(ex.d.code, "cover", "a by-login ✕ refuses a veiled tile's id: " + ex.text);
-  // (1.99?? privacy controls V-1: 📌 of a veiled tile by its id now pins it under the frog name - test/privm-v1.test.js)
+  // (1.99aid privacy controls V-1: 📌 of a veiled tile by its id now pins it under the frog name - test/privm-v1.test.js)
   const rp = await call("POST", `/api/rooms/${SLUG}/micfollow/report`, { user: U.mem, body: { login: vid, reason: "other" } });
   assert.equal(rp.status, 200, rp.text);
   const hm = MF._hide.get(ROOM.id + "|" + U.mem.userId);
@@ -493,7 +493,7 @@ test("snapshots by id: a job for the login, the frame under its own key; generic
   assert.ok(RL._snaps.has(ROOM.id + "|frankiefettuccine|" + j.vkey) && !RL._snaps.has(ROOM.id + "|frankiefettuccine"), "its own key only");
   const g = await call("GET", `/api/rooms/${SLUG}/snap/${encodeURIComponent(id)}`, { user: U.mem });
   assert.equal(g.d.state, "ok", g.text.slice(0, 200));
-  // (1.99?? privacy controls V-1: 🎬 Clip now works for a veiled cam - by the frog entry's id, never a login; test/privm-v1.test.js)
+  // (1.99aid privacy controls V-1: 🎬 Clip now works for a veiled cam - by the frog entry's id, never a login; test/privm-v1.test.js)
   assert.ok(g.d.clip && !JSON.stringify(g.d.clip).includes("frankiefettuccine"), "🎬 Clip offered, no login: " + JSON.stringify(g.d.clip));
   assert.deepEqual(leaks(g.text), []);
   const gn = await call("GET", `/api/rooms/${SLUG}/snap/frankiefettuccine`, { user: U.mem });
@@ -525,7 +525,7 @@ test("padpepe: the 🐸 Pepe actions refuse a veiled entry (their command line w
   assert.ok(why && why.status === 404, "a veiled person is no target: " + JSON.stringify(why));
 });
 
-// ── 1.99?? (privacy controls S3): micfollow_cfg withheld_cover - incognito + live cam off stays the peek hood (owner Q1) ──
+// ── 1.99aid (privacy controls S3): micfollow_cfg withheld_cover - incognito + live cam off stays the peek hood (owner Q1) ──
 test("S3 (withheld_cover on): incognito + live cam off stays the PEEK hood - a veiled cam tile becomes its frog-name card in place (no relay), a new hold the hooded cover; never the named card, the cover picture or the login", async () => {
   await setup;
   MF._hide.clear();

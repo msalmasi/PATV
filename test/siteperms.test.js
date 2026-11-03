@@ -50,7 +50,7 @@ const GOLDEN = {
   "chatlog.admin": ["admin", true],                                            // CL2: the chat archive's switches (privacy-locked)
   "chatlog.read_all": ["staff", true],                                         // CL6: full chat history (audited), purge, the queue, holds
   "chatlog.see_through": ["admin", true],                                      // 1.99afn: reveal who is behind a frog name (logged), Admin only
-  "chatlog.reveal_text": ["staff", true],                                      // 1.99?? (privacy controls S4t): Staff text reveals - only while text_reveal_roles is on
+  "chatlog.reveal_text": ["staff", true],                                      // 1.99aid (privacy controls S4t): Staff text reveals - only while text_reveal_roles is on
   "feed.admin_page": ["staff", false], "feed.moderate": ["staff", false], "feed.see_hidden": ["staff", true],
   "feed.tags_remove_any": ["staff", false], "feed.limits_exempt": ["staff", false], "feed.config": ["admin", false],
   "feed.automod_global": ["admin", false], "feed.filter_admin": ["admin", false], "feed.pepe_admin": ["admin", false],
@@ -68,7 +68,7 @@ const GOLDEN = {
   "restream.staff": ["staff", false], "restream.main": ["admin", true], "livecam.admin": ["admin", true], "livecam.end_any": ["staff", false],
   "camclip.override": ["admin", false], "ghost.mode": ["staff", true],
   "micfollow.kill": ["staff", true], "micfollow.admin": ["admin", true],     // micfollow: 🎙 mic follows on pad stages
-  "livecam.reveal": ["staff", true],                                         // 1.99?? (privacy controls S4, owner Q8): view a hidden cam, logged
+  "livecam.reveal": ["staff", true],                                         // 1.99aid (privacy controls S4, owner Q8): view a hidden cam, logged
   "soundboards.moderate": ["assistant", false], "soundboards.config": ["admin", true], "voices.view": ["staff", false], "voices.manage": ["admin", true],
   "voiceclone.view": ["staff", true], "voiceclone.decide": ["admin", true], "likeness.view": ["staff", false], "likeness.manage": ["admin", true],
   "pepe.control": ["admin", true], "pepe.rooms_commands_audio": ["admin", true], "pepe.modlog": ["admin", true], "ops.action_ttl": ["admin", true],

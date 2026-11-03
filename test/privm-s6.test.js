@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls S6): THE PRIVACY SWITCHBOARD v3 on the website (G:/ops/privacy-controls-spec-2026-11-02.md section 4.3 +
+// 1.99aid (privacy controls S6): THE PRIVACY SWITCHBOARD v3 on the website (G:/ops/privacy-controls-spec-2026-11-02.md section 4.3 +
 // section 5 "S6"; the owner's answers, section 8 - Q20 a control turns OFF from a room line too, Pepe's side). On a temp DB with the
 // real routes:
 //   switch    privacystate.js: off by default (the routes 404, no advert, Pepe's bridge / tx reports ignored); on only with privacy
@@ -301,7 +301,7 @@ test("page golden: with the switch off the page is byte-identical to the S4 head
   let baseSrc = null;
   try { baseSrc = execFileSync("git", ["-C", repo, "show", `${BASE}:views/privacy-settings.ejs`], { encoding: "utf8" }); } catch (e) { baseSrc = null; }
   if (!baseSrc) return;                                    // no base revision in this checkout
-  // (1.99?? privacy controls, landed on 1.99aht: line endings aside - `git show` gives the blob's LF, a Windows checkout with
+  // (1.99aid privacy controls, landed on 1.99aht: line endings aside - `git show` gives the blob's LF, a Windows checkout with
   // core.autocrlf the working file's CRLF; the page's HTML is what's compared)
   baseSrc = baseSrc.replace(/\r\n/g, "\n");
   const now = fs.readFileSync(path.join(repo, "views", "privacy-settings.ejs"), "utf8").replace(/\r\n/g, "\n");

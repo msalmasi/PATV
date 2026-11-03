@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fixes 2 - Q4-A; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: "every feature works
+// 1.99aid (privacy controls, review fixes 2 - Q4-A; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: "every feature works
 // for an incognito person's cam ... incognito only affects the NAME shown"): a 🎙 mic-stage snap / clip that DRAWS an incognito cam
 // under its frog name is shown in the open like a named cam - `veiled` false, the person only in `vpeople` (server-only, with the
 // frog-name session), never in `people` / `cards`. A frog tile that is NOT drawn (its hood: the viewer is excluded, no frame) still

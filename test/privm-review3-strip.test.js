@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, round 3 - the final verify's F2; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every cam
+// 1.99aid (privacy controls, round 3 - the final verify's F2; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every cam
 // feature works for an incognito person's cam under its frog name): the viewer's "📌 Pin to strip" on a frog-name cam. pad-livecam.js
 // used to drop the strip for a veiled entry (strip: null) - now the popover offers the pin, the strip keeps the cam by its OPAQUE id
 // under the frog name (asks / beats / stops by {id}, remembered as {id, display}, restored by {id}) and never a login; a named cam is

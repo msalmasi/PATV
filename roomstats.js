@@ -558,7 +558,7 @@ async function ownerEraCovers(roomId, userId, t) {
 async function seeThroughRole(user, padId, t = Date.now()) {
   if (!user || !user.userId) return null;
   try { if (await require("./siteperms").canId(user.userId, "chatlog.see_through")) return "admin"; } catch (e) { return null; }
-  // 1.99?? (privacy controls S4t): + "staff" / "mod" (their pad) while text_reveal_roles is on (textreveal.extraRole) - a reason each
+  // 1.99aid (privacy controls S4t): + "staff" / "mod" (their pad) while text_reveal_roles is on (textreveal.extraRole) - a reason each
   // time (seeCtx); Pepe's notes stay admins only (the owner said "admins" there)
   let x = null;
   try { x = await require("./textreveal").extraRole(user, padId); } catch (e) { x = null; }
@@ -904,7 +904,7 @@ function register(app, { isBotToken, addUser }) {
         try {
           const role = await seeThroughRole(req.user, padId);
           const tg = await ST.toggleOf(viewer.userId, SEE_TOGGLE, padId);
-          // (1.99?? review fixes 2 - RV-D: a staff / mod / owner reveal needs a reason while text_reveal_roles is on - the card says so)
+          // (1.99aid review fixes 2 - RV-D: a staff / mod / owner reveal needs a reason while text_reveal_roles is on - the card says so)
           if (role) see = { role, on: !!tg, logId: tg ? tg.log_id : null, ...(role !== "admin" && TRV().isOn() ? { need_reason: true } : {}) };
           else if (tg) await ST.toggleOff({ userId: viewer.userId, scope: SEE_TOGGLE, roomId: padId, why: "lost_right" });
         } catch (e) { console.error("[roomstats] see-through:", e.message); see = null; }
@@ -926,7 +926,7 @@ function register(app, { isBotToken, addUser }) {
   // 1.99afn see-through (owner J-18 adapted: a row, or a toggle that stays on until turned off) - fetch-only POSTs from this site;
   // never a GET: a link can't reveal anything or write a log row
   const NOPE = "Only PATV admins - and a pad's owner, on their own pad once they have owned it for the 90 days the boards cover - can see who is behind a frog name.";
-  const NOPE_TR = "Only PATV admins and staff, the pad's moderators, and a pad's owner on their own pad once they have owned it for the 90 days the boards cover, can see who is behind a frog name.";   // (1.99?? S4t)
+  const NOPE_TR = "Only PATV admins and staff, the pad's moderators, and a pad's owner on their own pad once they have owned it for the 90 days the boards cover, can see who is behind a frog name.";   // (1.99aid S4t)
   const TRV = () => require("./textreveal");
   // needRole = false: turning the toggle OFF. Review fix: that needs neither the right nor the same-origin check - it only ever
   // shows less, and the page it comes from is served with Referrer-Policy: no-referrer, which some browsers answer with
@@ -942,7 +942,7 @@ function register(app, { isBotToken, addUser }) {
     if (!ctx.open) { res.status(403).json({ ok: false, error: NOPE }); return null; }
     ctx.role = await seeThroughRole(req.user, ctx.padId);
     if (needRole && !ctx.role) { res.status(403).json({ ok: false, error: TRV().isOn() ? NOPE_TR : NOPE }); return null; }
-    // (1.99?? privacy controls S4t: a staff / mod / owner reveal or toggle-on while text_reveal_roles is on - a reason first, rate-limited)
+    // (1.99aid privacy controls S4t: a staff / mod / owner reveal or toggle-on while text_reveal_roles is on - a reason first, rate-limited)
     if (needRole && ctx.role !== "admin" && TRV().isOn()) {
       if (!TRV().reasonOk(req.body && req.body.reason)) { TRV().reasonRefusal(res); return null; }
       if (TRV().limitedNonAdmin(String(req.user.userId), 1)) { res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." }); return null; }

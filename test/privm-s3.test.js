@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls S3): LIVE CAM OFF -> A NAMED TILE WITH THE DEFAULT COVER (G:/ops/privacy-controls-spec-2026-11-02.md section 5
+// 1.99aid (privacy controls S3): LIVE CAM OFF -> A NAMED TILE WITH THE DEFAULT COVER (G:/ops/privacy-controls-spec-2026-11-02.md section 5
 // "S3", the 2.2 table, 6.2 wording; the owner's answers, section 8: Q1 incognito + live cam off = the peek hood, Q14 the other cam
 // opt-outs get the same named cover tile). micfollow_cfg withheld_cover (dark, admin-set on /stage/admin). On a temp DB with the real
 // mic-stage engine, livecam, camaccess, stage bans, stageleave, the cover module and the capture engine:

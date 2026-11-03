@@ -73,7 +73,7 @@
 //     live_pages is off by default everywhere and a live page / direct picture also needs Pepe's "live" / "direct" cap (sent only
 //     after his VM-local firewall attestation); a queued direct picture / live page is re-checked against its queuer's current
 //     role (chat: plays within an hour) and gets its checks again at play time (live_deny, the direct picture's type probe).
-//   * 1.99?? (privacy controls V-1, owner Q4 - every cam feature works for an incognito person's cam, incognito changes only the
+//   * 1.99aid (privacy controls V-1, owner Q4 - every cam feature works for an incognito person's cam, incognito changes only the
 //     NAME): an incognito cam goes on air too - picked on /stage/admin (or the pad popover) by its OPAQUE people-list id, never a
 //     login (incogcams.refOf; `!onair cam <login>` of someone who shows veiled still finds no named member - "not_on_cam": a login
 //     typed in Camfrog must never come back labelled with its frog name). The pick runs under that frog-name session (T.veil,
@@ -84,7 +84,7 @@
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
-const IC = () => require("./incogcams");   // 1.99?? (privacy controls V-1)
+const IC = () => require("./incogcams");   // 1.99aid (privacy controls V-1)
 const VREF_RE = /^(anon-[0-9a-f]{8}|v-[A-Za-z0-9_-]{12})$/;
 
 const STAGING = !!process.env.STAGING;
@@ -173,7 +173,7 @@ const WHY = {
   banned: "That streamer is banned from the stage.",
   library: "📼 Plex plays are off for Pepe's main stream (allow_library) - his stream is relayed to Twitch.",
   offline: "That Camfrog room isn't live on the site.",
-  veil_changed: "That cam isn't available right now.",            // 1.99?? (privacy controls V-1): a veiled pick's person changed identity - never why
+  veil_changed: "That cam isn't available right now.",            // 1.99aid (privacy controls V-1): a veiled pick's person changed identity - never why
   room_off: "Cams aren't bridged in that room (!bridge cams on).",
   not_on_cam: "They aren't on cam.",
   livecam_off: "They've switched off live video of their cam.",
@@ -389,7 +389,7 @@ async function camWhyNot(room, login, { optinOk = false, padOk = false, veil = n
   const R = bridge()._rooms.get(String(room || ""));
   if (!R || !bridge().isLive(R)) return "offline";
   if (!R.cams) return "room_off";
-  // 1.99?? (privacy controls V-1): a veiled pick - the person still incognito under ITS frog-name session (incognito cams in effect)
+  // 1.99aid (privacy controls V-1): a veiled pick - the person still incognito under ITS frog-name session (incognito cams in effect)
   if (veil) {
     if (!IC().stillVeiled(R, login, veil.sess)) return "veil_changed";
     const v = IC().entryByLogin(R, login, veil.sess);
@@ -664,7 +664,7 @@ async function actorIdsOf(admin, by) {
 async function setCam(room, login, by, { admin, ask = false, id = null } = {}) {
   await init();
   if (!CFG.enabled) throw refuse("off");
-  // 1.99?? (privacy controls V-1): {id} = an incognito person's cam by its opaque id (the person is resolved here, never answered)
+  // 1.99aid (privacy controls V-1): {id} = an incognito person's cam by its opaque id (the person is resolved here, never answered)
   let vz = null;
   if (typeof id === "string" && VREF_RE.test(id.trim())) {
     const R0 = bridge()._rooms.get(String(room || ""));
@@ -688,13 +688,13 @@ async function setCam(room, login, by, { admin, ask = false, id = null } = {}) {
   const m = vz ? null : camMember(R, login);
   const prev = TARGET;
   await dropPending(prev);
-  // (1.99?? privacy controls V-1: a veiled pick's id, display and label never carry the login - the frog name, and a random id)
+  // (1.99aid privacy controls V-1: a veiled pick's id, display and label never carry the login - the frog name, and a random id)
   const shown = vz ? IC().labelOf(vz) : (m && m.display) || login;
   TARGET = { id: vz ? "c:v" + crypto.randomBytes(6).toString("hex") + ":" + now().toString(36) : "c:" + login + ":" + now().toString(36), kind: "cam", room: R.id,
              login, display: shown, pad: R.id,
              label: `📷 ${shown} (${R.name || R.id})`, by: String(by), at: now(), cam_ok: camOk || null, pad_ok: padOk || null,
              pending: [], actor_ids: actorIds, ...(vz ? { veil: vz } : {}) };
-  // (1.99?? review fixes 2 - ID-C: a frog-name pick's asks are marked veiled - the stored login never shows next to the frog label)
+  // (1.99aid review fixes 2 - ID-C: a frog-name pick's asks are marked veiled - the stored login never shows next to the frog label)
   const vo = vz ? { veiled: true } : {};
   if (!camOk) TARGET.pending.push((await C().ask({ kind: "cam", login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min, ...vo })).id);
   if (!padOk) TARGET.pending.push((await C().ask({ kind: "pad", pad: R.id, login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min, ...vo })).id);
@@ -1245,7 +1245,7 @@ function statusLine() {
 }
 
 // ── views ──
-/** 1.99?? (privacy controls V-1): a pick as the admin views show it - a veiled cam's login and session stay server-side. */
+/** 1.99aid (privacy controls V-1): a pick as the admin views show it - a veiled cam's login and session stay server-side. */
 function shownTarget(T) {
   if (!T) return null;
   if (T.kind !== "cam" || !T.veil) return { ...T };
@@ -1306,7 +1306,7 @@ async function adminView(user) {
     const no = ids.length ? await LC().blockedSet(cams.filter((c) => !c.why).map((c) => c.login), ids) : new Set();
     for (const c of cams) if (!c.why && no.has(c.login)) { c.why = "unavailable"; c.ask = false; }
   } catch (e) { /* no blocks to show */ }
-  // 1.99?? (privacy controls V-1): incognito people on cam whose cam may show (incogcams.pageOnCam) - by their opaque people-list id and
+  // 1.99aid (privacy controls V-1): incognito people on cam whose cam may show (incogcams.pageOnCam) - by their opaque people-list id and
   // frog name, never a login; a block with this admin is the same neutral "unavailable"
   try {
     if (IC().effective(t)) {

@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fixes 2 - RV-D; G:/ops/privacy-controls-spec-2026-11-02.md section 8, the owner's "yes" to staff and
+// 1.99aid (privacy controls, review fixes 2 - RV-D; G:/ops/privacy-controls-spec-2026-11-02.md section 8, the owner's "yes" to staff and
 // room mods revealing blacked-out text): with text_reveal_roles on, a revealed veiled 🎙 line offers "Save as evidence" only to a role
 // evidence.js lets save (an admin, the pad's owner), and a "Show real names" batch counts once against the non-admin limit. On the
 // S4t harness (privm-s4t.test.js).

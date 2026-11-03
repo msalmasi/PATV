@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fixes 2 - the identity lens; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every
+// 1.99aid (privacy controls, review fixes 2 - the identity lens; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every
 // cam feature works for an incognito cam under its frog name, and every place that shows or stores such a capture / pin / slot carries
 // the frog name and opaque ids, never the login). On the V-1 harness (privm-v1.test.js: a temp DB, the real bridge ingest on privacy
 // wire v2, frog-name sessions, live cams, the mic stage, the stage, on-air):

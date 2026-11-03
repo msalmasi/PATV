@@ -1,4 +1,4 @@
-// textreveal.js — 1.99?? (privacy controls S4t, G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 2026-11-02 ~22:05Z: "yes" to
+// textreveal.js — 1.99aid (privacy controls S4t, G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 2026-11-02 ~22:05Z: "yes" to
 // PAD OWNERS, STAFF and room MODS revealing blacked-out TEXT too, like cams, through the reveal audit log). TEXT REVEAL ROLES.
 //
 // Text see-through = who is behind a frog name (chat lines, the people list, mic-stage tiles, the analytics boards) and what a blacked-out

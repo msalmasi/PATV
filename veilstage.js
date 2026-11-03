@@ -66,7 +66,7 @@ function veilSource(u, R) {
 }
 
 /** The live-stage see-through role of `user` ({userId}) on pad `padId`: "admin" | "owner" | null (a check that can't run: null).
- *  1.99?? (privacy controls S4t): + "staff" / "mod" while text_reveal_roles is on (textreveal.extraRole) - a NAME reveal only: the
+ *  1.99aid (privacy controls S4t): + "staff" / "mod" while text_reveal_roles is on (textreveal.extraRole) - a NAME reveal only: the
  *  mic stage's ✕ / lift stay the admin's and the owner's (micfollow.seeManage). */
 async function stageRole(user, padId) {
   if (!user || !user.userId || !padId) return null;
@@ -84,7 +84,7 @@ async function stageRole(user, padId) {
 /** frognames: a session ended -> its cover (if one is up) comes off now. */
 function sessionEnded(ev) {
   try { if (ev && ev.roomId) require("./micfollow").coverSessionEnded(ev.roomId, ev.session); } catch (e) { /* no mic follows */ }
-  // 1.99?? (privacy controls S5): an incognito person's cam sessions under that frog name end with it (livecam.veilEnded) - and their
+  // 1.99aid (privacy controls S5): an incognito person's cam sessions under that frog name end with it (livecam.veilEnded) - and their
   // mic-stage cam tile (micfollow.veilCamEnded): nothing started under one identity carries on under the next
   try { if (ev && ev.roomId) require("./livecam").veilEnded(ev.roomId, ev.session); } catch (e) { /* no live cams */ }
   try { if (ev && ev.roomId) require("./micfollow").veilCamEnded(ev.roomId, ev.session); } catch (e) { /* no mic follows */ }

@@ -1,4 +1,4 @@
-// /settings/privacy - 🌉 "On the website" (1.99?? privacy controls S6; privacystate.js). A master switch "Show me on the website
+// /settings/privacy - 🌉 "On the website" (1.99aid privacy controls S6; privacystate.js). A master switch "Show me on the website
 // (bridge)" (checked = shown; unchecked = !bridge hide) over one switch per website control, each checked = that privacy switch ON:
 // Name (incognito - POST /api/privacy/incognito, incognito.js), Mic transcripts (POST /api/privacy/state {kind: "tx"}), Cam (live cam
 // off - POST /api/privacy/livecam, livecam.js). Bridge and transcripts are Pepe's: a change is a request, and the switch keeps showing

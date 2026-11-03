@@ -84,7 +84,7 @@ async function adminView(limit = 50) {
   const log = await getQuery("SELECT username, on_, via, at FROM ghost_log ORDER BY id DESC LIMIT 30");
   let views = [];
   try {
-    // 1.99?? (privacy controls S4): a ghost's cam REVEAL of a veiled person shows the frog name (or "veiled") - never the login
+    // 1.99aid (privacy controls S4): a ghost's cam REVEAL of a veiled person shows the frog name (or "veiled") - never the login
     views = await getQuery(`SELECT owner, room_id, username, kind, at, bypass, veil FROM cam_views WHERE ghost = 1 ORDER BY id DESC LIMIT ?`, [limit])
       .catch(() => getQuery(`SELECT owner, room_id, username, kind, at, bypass FROM cam_views WHERE ghost = 1 ORDER BY id DESC LIMIT ?`, [limit]));
   } catch (e) { views = []; }

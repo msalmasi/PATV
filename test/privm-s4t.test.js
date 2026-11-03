@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls S4t: TEXT REVEAL ROLES - G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 2026-11-02 ~22:05Z "yes" to
+// 1.99aid (privacy controls S4t: TEXT REVEAL ROLES - G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 2026-11-02 ~22:05Z "yes" to
 // pad owners, staff and room mods revealing blacked-out TEXT too, through the reveal audit log). On a temp DB with the real bridge ingest
 // (privacy wire v2) and the real see-through routes (the veil-site harness):
 //   switch   textreveal.js: off by default; chatlog.admin only; audited; the sync answer's textreveal: 1 only while on

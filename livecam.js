@@ -90,7 +90,7 @@
 // its nomedia first, then RESTART_MS for him to act, START_MS for a restart to come live, BOT_GRACE_MS of lists for the
 // restarted publish - capped at RESTART_CAP_MS after the first nomedia / START_CAP_MS after the hold.
 //
-// 1.99?? (privacy controls S5, G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5" + the owner's answers, section 8):
+// 1.99aid (privacy controls S5, G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5" + the owner's answers, section 8):
 // INCOGNITO CAMS (incogcams.js, the incog_cams switch - dark). Incognito hides the NAME, never the cam (Q4): an incognito person's cam
 // is watched under their FROG NAME, by the opaque id of their frog-name session's roster entry ({id} instead of {login} on start /
 // beat / stop / end). Such a session is VEILED (S.veil {id, sess, alias, hood}): its WHEP path is its own (vpathFor: an HMAC of the
@@ -103,7 +103,7 @@
 // generic "That cam isn't available right now.", never "ask to watch" or a reason. Switch off (or no word from Pepe): exactly as
 // before - a veiled person has no on_cam on the page and start() takes logins only.
 //
-// 1.99?? (privacy controls S4, G:/ops/privacy-controls-spec-2026-11-02.md section 3.2 "The new CAM REVEAL" + the owner's answers,
+// 1.99aid (privacy controls S4, G:/ops/privacy-controls-spec-2026-11-02.md section 3.2 "The new CAM REVEAL" + the owner's answers,
 // section 8): CAM REVEALS (camreveal.js holds the rules - who, which cam, the audit rows, the notice; the cam_reveal switch, dark). A
 // reveal is a session of its own (S.rv): its key is keyOf(room, login) + ":rv:" + sid (so nothing that asks SESS by keyOf - ▶ Live,
 // a stage hold, the mic stage, warm keep, a capture - ever finds it), its WHEP path is RANDOM (never pathFor / vpathFor: a URL ties
@@ -205,7 +205,7 @@ function init() {
       const acols = (await getQuery("PRAGMA table_info(livecam_audit)")).map((c) => c.name);   // 1.99aaf: 👻 ghost views are audited too
       if (!acols.includes("ghost")) await runQuery("ALTER TABLE livecam_audit ADD COLUMN ghost INTEGER NOT NULL DEFAULT 0");
       if (!acols.includes("bypass")) await runQuery("ALTER TABLE livecam_audit ADD COLUMN bypass TEXT");   // 1.99aak: what a ghost got past
-      // 1.99?? (privacy controls S5): a veiled session's row - the frog name it was watched under (admin views show it, never the
+      // 1.99aid (privacy controls S5): a veiled session's row - the frog name it was watched under (admin views show it, never the
       // login; the target column keeps the login server-side for the person's own records and the see-through)
       if (!acols.includes("veil")) await runQuery("ALTER TABLE livecam_audit ADD COLUMN veil TEXT");
       const r = (await getQuery("SELECT v, data, updated_at, updated_by FROM livecam_cfg WHERE id = 1"))[0];
@@ -307,7 +307,7 @@ async function setOptout(login, off, { via = "web", userId = null, ts = now() } 
   if (off) { OPTOUT.add(l); for (const S of [...SESS.values()]) if (S.login === l && !S.rv) ownerClosed(S, "opted_out"); }   // (S4: a reveal got past it)
   else OPTOUT.delete(l);
   runHooks(OPTOUT_HOOKS, [l, !!off], "opt-out");      // micfollow: the mic stage drops them at once too
-  // 1.99?? (privacy controls S6): a real change files one inbox notice while the privacy switchboard v3 is in effect (privacystate.js;
+  // 1.99aid (privacy controls S6): a real change files one inbox notice while the privacy switchboard v3 is in effect (privacystate.js;
   // nothing otherwise) - never waited for
   if (was !== !!off) { try { require("./privacystate").camChanged(l, !!off, via, ts).catch(() => {}); } catch (e) { /* none */ } }
   return true;
@@ -325,14 +325,14 @@ async function optoutState(userId) {
 function pathFor(roomId, login) {
   return PREFIX + crypto.createHmac("sha256", SECRET).update("live-cam-path:" + String(roomId) + "|" + String(login).toLowerCase()).digest("hex").slice(0, 16);
 }
-/** 1.99?? (privacy controls S5): the path of a VEILED cam session - one per frog-name session `sess` (a different HMAC input from
+/** 1.99aid (privacy controls S5): the path of a VEILED cam session - one per frog-name session `sess` (a different HMAC input from
  *  pathFor and from the room audio's): a URL can't tie two frog names together, or one to the person's named cam. */
 function vpathFor(roomId, login, sess) {
   return PREFIX + crypto.createHmac("sha256", SECRET).update("live-cam-vpath:" + String(roomId) + "|" + String(login).toLowerCase() + "|" + String(sess)).digest("hex").slice(0, 16);
 }
 const IC = () => require("./incogcams");
 const icEffective = (t) => { try { return IC().effective(t) === true; } catch (e) { return false; } };
-/** 1.99?? (privacy controls S5): the identity a session runs under ("n" named, "v:<sess>" one frog-name session) - and whether a
+/** 1.99aid (privacy controls S5): the identity a session runs under ("n" named, "v:<sess>" one frog-name session) - and whether a
  *  request for `veil` (null = named) is the same one. */
 const idOfSess = (S) => (S && S.veil ? "v:" + S.veil.sess : "n");
 const sameIdentity = (S, veil) => idOfSess(S) === (veil ? "v:" + veil.sess : "n");
@@ -381,7 +381,7 @@ const MFW_PREFIX = "mfw:";
 const isMfHolder = (h) => /^mfw?:/.test(String(h || ""));
 /** micfollow: a stage viewer who came ONLY through the mic stage (no cam slot): no 👻 ghost bypass, exact relays only. */
 const mfOnlyVia = (v) => !!(v && v.via instanceof Set && v.via.size > 0 && [...v.via].every(isMfHolder));
-/** A new session object (one per room + cam). 1.99?? (privacy controls S5): veil = {id, sess, alias, hood} for an incognito
+/** A new session object (one per room + cam). 1.99aid (privacy controls S5): veil = {id, sess, alias, hood} for an incognito
  *  person's cam under their frog name (its own path - vpathFor), null for a named one. */
 function newSess(R, login, m, t, veil = null) {
   const p = veil ? vpathFor(R.id, login, veil.sess) : pathFor(R.id, login);
@@ -413,7 +413,7 @@ function camForPath(p) {
 /** 1.99??: timing only; an optional room binding keeps server-side clips on their own room's relay. */
 function relayHold(path, roomId) {
   const S = camForPath(path), b = S && S.botInfo;
-  // (1.99?? privacy controls S4: never a reveal's relay - nothing but its moderators' players may lean on it)
+  // (1.99aid privacy controls S4: never a reveal's relay - nothing but its moderators' players may lean on it)
   return !S || S.ended || S.rv || !b || roomId != null && S.roomId !== roomId ? null : { src: b.source, hold_ms: b.hold_ms == null ? null : b.hold_ms };
 }
 /** 1.99??: never reveal whether an unheld cam exists; use the same fresh-slot rule as WHEP auth. */
@@ -476,7 +476,7 @@ function endSession(S, why, t = now()) {
   // micfollow: a relay the mic stage ever held is logged without its login (spec §12 - mic stages relay people who never
   // asked to be watched; the appearance log is their record)
   console.log(`[livecam] end room=${S.roomId} target=${S.mfEver || S.veil || S.rv ? "-" : S.login} why=${why}`);
-  if (S.rv) return;                                   // 1.99?? (privacy controls S4): a reveal is nobody's tile, slot or pin
+  if (S.rv) return;                                   // 1.99aid (privacy controls S4): a reveal is nobody's tile, slot or pin
   runHooks(END_HOOKS, [S, why], "end");               // micfollow: the mic stage's tile follows its relay
 }
 // ── 1.99ahn dead relay (see the header) ──
@@ -523,11 +523,11 @@ function noMedia(S, t, botLive) {
   if (!botLive || !S.botLiveSince || !S.missSince || !syncFresh(t)) return false;
   return missedSince(S) >= (S.liveAt ? LOST_MS : NOMEDIA_MS) && missedSince(S, S.botLiveSince) >= NOMEDIA_MS;
 }
-/** 1.99?? (privacy controls S5): why session S can't go on under its identity any more (null = it can): a veiled one whose frog-name
+/** 1.99aid (privacy controls S5): why session S can't go on under its identity any more (null = it can): a veiled one whose frog-name
  *  session isn't the person's open incognito one now (incognito off, !bridge hide, the session ended, the switch off / Pepe's word
  *  gone); a named one whose person shows veiled in its room now (while incognito cams are effective - before that Pepe ends it). */
 function veilWhy(S, t = now()) {
-  if (!S || S.ended || S.rv) return null;             // (1.99?? privacy controls S4: a reveal got past the veil on purpose)
+  if (!S || S.ended || S.rv) return null;             // (1.99aid privacy controls S4: a reveal got past the veil on purpose)
   const R = bridgeRooms().get(String(S.roomId));
   if (S.veil) {
     if (!icEffective(t)) return "switched_off";
@@ -553,8 +553,8 @@ function veilEnded(roomId, sess, t = now()) {
 }
 function sweep(t = now()) {
   for (const S of [...SESS.values()]) {
-    if (!S.ended) { const vw = veilWhy(S, t); if (vw) endSession(S, vw, t); }   // 1.99?? (privacy controls S5)
-    if (!S.ended && S.rv) revealSweep(S, t);                                     // 1.99?? (privacy controls S4)
+    if (!S.ended) { const vw = veilWhy(S, t); if (vw) endSession(S, vw, t); }   // 1.99aid (privacy controls S5)
+    if (!S.ended && S.rv) revealSweep(S, t);                                     // 1.99aid (privacy controls S4)
     else if (!S.ended) {
       for (const [uid, v] of [...S.viewers.entries()]) if (t - v.beat > BEAT_MS) dropViewer(S, uid, "gone", t);
       if (S.stageViewers) for (const [uid, v] of [...S.stageViewers.entries()]) if (t - v.beat > BEAT_MS) { S.stageViewers.delete(uid); for (const rid of v.readers || []) kickReader(rid); }
@@ -654,7 +654,7 @@ async function start(u, R, login, t = now(), opts = {}) {
   if (!on()) throw refuse("off");
   if (R.livecams === false) throw refuse("room_off");
   if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw refuse("pad_access");
-  // 1.99?? (privacy controls S5): {id} = an incognito person's cam by the opaque id of their frog-name roster entry (incogcams.camOf:
+  // 1.99aid (privacy controls S5): {id} = an incognito person's cam by the opaque id of their frog-name roster entry (incogcams.camOf:
   // the switch and Pepe's word, their open session, on cam) - the login is resolved here, server-side, and never answered
   let veil = null, m = null;
   if (opts && opts.id != null) {
@@ -667,13 +667,13 @@ async function start(u, R, login, t = now(), opts = {}) {
     login = String(login || "").toLowerCase();
     m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
     if (!m || !m.on_cam) throw refuse("not_on_cam");
-    // 1.99?? (privacy controls S5, spec 2.2): a NAMED cam waits while the person shows veiled in this room (a mic hold frozen
+    // 1.99aid (privacy controls S5, spec 2.2): a NAMED cam waits while the person shows veiled in this room (a mic hold frozen
     // veiled at its grab): one face under the frog name and the real name at once would unveil what that hold said
     if (icEffective(t) && IC().veiledPresence(R, login)) throw refuse("unavailable");
   }
   // 1.99aak: staff in 👻 ghost mode get past the owner's opt-out, "private" and blocks (moderation - the user's decision,
   // 2026-10-15); the bypass is audited (livecam_audit / cam_views bypass) and nobody is told. Everyone else: the owner's rules.
-  // 1.99?? (privacy controls S5, owner Q9: the ghost bypass covers veiled cams too). A veiled cam's refusals are ONE generic
+  // 1.99aid (privacy controls S5, owner Q9: the ghost bypass covers veiled cams too). A veiled cam's refusals are ONE generic
   // "unavailable" (Q23): never a reason, a mode or "ask to watch" - they would describe the person behind the frog name
   const ghost = isGhost(u.userId);
   let bypass = null;
@@ -692,7 +692,7 @@ async function start(u, R, login, t = now(), opts = {}) {
   if (!botOk(t)) throw refuse("nopepe");
   let S = SESS.get(k);
   if (S && S.ended) { SESS.delete(k); S = null; }
-  // 1.99?? (privacy controls S5): a session belongs to ONE identity - one started under the other (named vs this frog-name session)
+  // 1.99aid (privacy controls S5): a session belongs to ONE identity - one started under the other (named vs this frog-name session)
   // ends now, everyone on it included (the sweep would end it within seconds anyway)
   if (S && !sameIdentity(S, veil)) { endSession(S, "veil_changed", t); SESS.delete(k); if (BY_PATH.get(S.path) === k) BY_PATH.delete(S.path); S = null; }
   const uid = String(u.userId);
@@ -708,14 +708,14 @@ async function start(u, R, login, t = now(), opts = {}) {
       if (!freed || liveCount() >= cfg().max_live) throw refuse("slots_busy");
     }
   }
-  // 1.99?? (privacy controls review RV-4, owner Q8 + Q9: the ghost bypass is "behind the reveal audit log", veiled cams included): a 👻
+  // 1.99aid (privacy controls review RV-4, owner Q8 + Q9: the ghost bypass is "behind the reveal audit log", veiled cams included): a 👻
   // view that gets past someone's rules writes its rows FIRST, in ONE transaction - livecam_audit, the see-through log (cam_reveal, ref
   // "ghost:<audit id>:g") and admin_audit - and a failed write refuses it (nothing opened). For a veiled cam always (the S5 path); for a
   // named one while cam reveals are in effect - with that switch off a named bypass is logged as before (best effort).
   const strictGhost = bypass != null && !(S && S.viewers.get(uid)) && (!!veil || crEffective(t));
   let preAudit = null;
   if (strictGhost) {
-    // 1.99?? (privacy controls V-5): like every other reveal, a reason first (at least 3 characters, logged with the see-through row).
+    // 1.99aid (privacy controls V-5): like every other reveal, a reason first (at least 3 characters, logged with the see-through row).
     // No reason: refused with reason_needed and nothing opened - the page asks "Why? (logged)" and tries again with it
     const why = cleanReason(opts && opts.reason);
     if (why.length < 3) throw new Refuse(409, "Say why (at least 3 characters) - it's logged.", "reason_needed", { reason_needed: true });
@@ -741,16 +741,16 @@ async function start(u, R, login, t = now(), opts = {}) {
   }
   v.beat = t;
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
-  // (1.99?? privacy controls S5: a veiled session's key is its opaque id - never keyOf / the login)
+  // (1.99aid privacy controls S5: a veiled session's key is its opaque id - never keyOf / the login)
   return { ok: true, key: S.veil ? S.veil.id : k, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t),
            slots: { used: slotsOf(uid, t), max }, kbps: rateOf(S), expires: t + TICKET_MS };
 }
-/** 1.99?? (privacy controls review RV-4): cam reveals in effect (camreveal.js)? Fails closed. */
+/** 1.99aid (privacy controls review RV-4): cam reveals in effect (camreveal.js)? Fails closed. */
 function crEffective(t = now()) { try { return require("./camreveal").effective(t) === true; } catch (e) { return false; } }
-/** 1.99?? (privacy controls review RV-4): a 👻 ghost's bypass view - its rows in ONE transaction BEFORE any ticket: livecam_audit (ghost,
+/** 1.99aid (privacy controls review RV-4): a 👻 ghost's bypass view - its rows in ONE transaction BEFORE any ticket: livecam_audit (ghost,
  *  what it got past, the frog name for a veiled cam), seethrough_log (scope cam_reveal, ref "ghost:<audit id>:g") and admin_audit
  *  (seethrough.cam_reveal). -> the livecam_audit id | throws (the caller refuses the view) */
-/** 1.99?? (privacy controls V-5): a reason as the reveal routes keep it (one line, at most 200 characters). */
+/** 1.99aid (privacy controls V-5): a reason as the reveal routes keep it (one line, at most 200 characters). */
 const cleanReason = (v) => String(v == null ? "" : v).replace(/[ -]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
 async function ghostRows(u, R, login, veilLabel, bypass, t = now(), reason = "") {
   const ST = require("./seethrough"), AA = require("./adminaudit");
@@ -769,7 +769,7 @@ async function ghostRows(u, R, login, veilLabel, bypass, t = now(), reason = "")
   });
 }
 /**
- * 1.99?? (privacy controls, review fixes 2 - RV-A): a 👻 ghost's SNAPSHOT or CLIP of a cam past someone's rules goes the live view's
+ * 1.99aid (privacy controls, review fixes 2 - RV-A): a 👻 ghost's SNAPSHOT or CLIP of a cam past someone's rules goes the live view's
  * way (RV-4 / V-5, owner Q8 + Q9 "behind the reveal audit log"): for a veiled (frog-name) cam always, a named one while cam reveals are
  * in effect - a reason first (409 reason_needed), then its rows in ONE transaction BEFORE any job or frame: the see-through log (scope
  * cam_reveal, ref "ghost-<kind>:<random>:g") and admin_audit (seethrough.cam_reveal). A failed write refuses it (nothing opened). With
@@ -807,7 +807,7 @@ function stateOf(S, t = now()) {
   if (S.ended) return "ended";
   return S.ready && t - S.seenAt <= SYNC_FRESH_MS ? "live" : "connecting";
 }
-/** 1.99?? (privacy controls S5): the session a page names - {id} = a veiled one by its opaque id; a login (or {login}) = a NAMED
+/** 1.99aid (privacy controls S5): the session a page names - {id} = a veiled one by its opaque id; a login (or {login}) = a NAMED
  *  one only (a login never reaches a veiled session: guessing who is behind a frog name and beating that login tells nothing). */
 function sessOf(roomId, ref) {
   if (ref && typeof ref === "object" && ref.id != null) {
@@ -820,13 +820,13 @@ function sessOf(roomId, ref) {
   const S = SESS.get(keyOf(roomId, String(login == null ? "" : login)));
   return S && !S.veil ? S : null;
 }
-/** 1.99?? (privacy controls V-1): the path of `login`'s live session in room `roomId` now - named or veiled (its own per-session path) |
+/** 1.99aid (privacy controls V-1): the path of `login`'s live session in room `roomId` now - named or veiled (its own per-session path) |
  *  null. Server-only (stagemiccap reads a veiled cam tile's relay by it). */
 function sessPath(roomId, login) {
   const S = SESS.get(keyOf(roomId, String(login == null ? "" : login)));
   return S && !S.ended ? S.path : null;
 }
-/** The page's beat: keeps the slot. -> {state, why, viewers}  (ref: a login, or {id} - 1.99?? privacy controls S5) */
+/** The page's beat: keeps the slot. -> {state, why, viewers}  (ref: a login, or {id} - 1.99aid privacy controls S5) */
 function beat(userId, roomId, login, t = now()) {
   const S = sessOf(roomId, login);
   if (!S) return { ok: true, state: "ended", why: "unwatched" };
@@ -852,7 +852,7 @@ function dropViewerOf(login, userId, why = "blocked", t = now()) {
   const l = String(login || "").toLowerCase();
   const ghost = isGhost(userId);                       // 1.99aak: a block doesn't stop staff in 👻 ghost mode (audited) -
   for (const S of SESS.values()) {                     // stagefix: on their personal ▶ Live only; a Stage tile never (DF-43)
-    if (S.ended || S.login !== l || S.rv) continue;    // (1.99?? privacy controls S4: a block doesn't stop a moderation view)
+    if (S.ended || S.login !== l || S.rv) continue;    // (1.99aid privacy controls S4: a block doesn't stop a moderation view)
     if (!ghost && dropViewer(S, String(userId), why, t)) n++;
     // 1.99zc: a stage viewer of that cam, too - through a cam slot or the 🎙 mic stage alike (stagefix DF-43: no ghost on a
     // Stage tile; micfollow §3.5: none on the mic stage either)
@@ -865,7 +865,7 @@ function watchersOf(login, t = now()) {
   const l = String(login || "").toLowerCase(), out = [];
   for (const S of SESS.values()) {
     if (S.ended || S.login !== l) continue;
-    // 1.99?? (privacy controls S4): a moderator viewing it through a reveal - `reveal`: camviewers counts them as "someone moderating
+    // 1.99aid (privacy controls S4): a moderator viewing it through a reveal - `reveal`: camviewers counts them as "someone moderating
     // <pad>", never by name (owner Q11); a 👻 ghost is never counted (isGhost: the live switch, not the one at the start)
     // (review RV-3: only once the person was TOLD - the first frame, not a ghost: before it, or after a failed open, nobody is listed)
     if (S.rv) { for (const [uid, v] of freshViewers(S, t)) if (v.told) out.push({ userId: uid, username: null, room: S.roomId, since: v.since, ghost: isGhost(uid), reveal: true }); continue; }
@@ -890,7 +890,7 @@ function mayEnd(u, R, login) {
   const r = require("./rooms").getCached ? require("./rooms").getCached(String(R.id)) : null;
   return !!(r && r.owner && r.owner.userId && String(r.owner.userId) === String(u.userId));
 }
-/** 1.99?? (privacy controls review ID-6): would ending `login` by its typed name touch a veiled cam - a frog-name session under that
+/** 1.99aid (privacy controls review ID-6): would ending `login` by its typed name touch a veiled cam - a frog-name session under that
  *  login's key, or (incognito cams in effect) the person showing veiled in R now (a cooldown would then refuse their frog-name ▶ Live)? */
 function veiledByLogin(R, login, t = now()) {
   const S = SESS.get(keyOf(R.id, String(login || "").toLowerCase()));
@@ -1047,7 +1047,7 @@ async function stageConsent(R, login, t = now(), { actor = null, mf = false, vei
   if (R.livecams === false) throw refuse("room_off");
   if (!bridgeOk(R.id)) throw refuse("room_off");
   login = String(login || "").toLowerCase();
-  // 1.99?? (privacy controls S5): `veil` = an incognito person's cam under that frog-name session (the mic stage's veiled cam tile):
+  // 1.99aid (privacy controls S5): `veil` = an incognito person's cam under that frog-name session (the mic stage's veiled cam tile):
   // their incognito roster entry of THAT session (incogcams.entryByLogin - the switch and Pepe's word too); a named hold never
   // takes a person who shows veiled here now (a hold frozen veiled - spec 2.2)
   let m;
@@ -1110,7 +1110,7 @@ async function stageHold(R, login, holderId, t = now(), opts = {}) {
   const k = keyOf(R.id, login);
   let S = SESS.get(k);
   if (S && S.ended) { SESS.delete(k); S = null; }
-  // 1.99?? (privacy controls S5): one identity per session - a session of the other one (named / another frog-name session) ends now
+  // 1.99aid (privacy controls S5): one identity per session - a session of the other one (named / another frog-name session) ends now
   const veil = opts.veil && opts.veil.sess != null ? opts.veil : null;
   if (S && !sameIdentity(S, veil)) { endSession(S, "veil_changed", t); SESS.delete(k); if (BY_PATH.get(S.path) === k) BY_PATH.delete(S.path); S = null; }
   if (S && !isMfHolder(H)) {
@@ -1270,7 +1270,7 @@ function stageUnwatch(userId, roomId, login, holderId, t = now()) {
 /** micfollow: is `login`'s cam in this room in its ended-by cooldown (an owner / mod / admin ended its relay)? */
 const cooling = (roomId, login, t = now()) => (COOL.get(keyOf(roomId, String(login || "").toLowerCase())) || 0) > t;
 
-// ── 1.99?? (privacy controls S4): cam reveals (see the header; camreveal.js decides who may and writes the rows) ──
+// ── 1.99aid (privacy controls S4): cam reveals (see the header; camreveal.js decides who may and writes the rows) ──
 const REVEAL_MS = 3 * 60 * 1000;          // a moderator's view lasts this long; "Extend" writes a new row and gives another REVEAL_MS (Q15)
 const RV_KEY = ":rv:";
 const SID_RE = /^[0-9a-f]{12}$/;
@@ -1449,7 +1449,7 @@ async function forBot(body, t = now()) {
   const live = Array.isArray(body.live) ? body.live.slice(0, 50) : [];
   const seen = new Set();
   const exactMoved = [];          // micfollow: relays the mic stage holds whose exact flag changed (the pad steps at once)
-  // 1.99?? (privacy controls S4): Pepe's line about a reveal names it by rv (its sid) - never matched by keyOf (that's ▶ Live's)
+  // 1.99aid (privacy controls S4): Pepe's line about a reveal names it by rv (its sid) - never matched by keyOf (that's ▶ Live's)
   const lineSess = (x) => {
     if (x.rv == null) return SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
     const S = revealSess(str(x.room, 128), str(x.rv, 24));
@@ -1496,7 +1496,7 @@ async function forBot(body, t = now()) {
     // mfix: Pepe says which session it was about (he re-sends a refusal for 30 s): an older one's never ends this one
     if (x.sid != null && str(x.sid, 24) !== S.sid) continue;
     const why = str(x.why, 30);
-    // 1.99?? (privacy controls S4): a reveal Pepe couldn't open ends with his reason (nobody is told: no frame ever came); a passing
+    // 1.99aid (privacy controls S4): a reveal Pepe couldn't open ends with his reason (nobody is told: no frame ever came); a passing
     // one ("cam_unknown" - he is reading the participant list again) only notes it
     if (S.rv) { if (!seen.has(S.key)) { S.botWhy = why; if (TERMINAL.has(why) || why === "opted_out") endSession(S, why, t); } continue; }
     if (x.x === true && why !== "opted_out") {
@@ -1523,7 +1523,7 @@ async function forBot(body, t = now()) {
       if (S.ended) continue;
       const R = rooms.get ? rooms.get(S.roomId) : null;
       if (!R || R.livecams === false || !R.cams) { endSession(S, R ? "room_off" : "offline", t); continue; }
-      // 1.99?? (privacy controls S4): a reveal - opened by its EXACT name, past the person's opt-out (bypass: it's a moderation view),
+      // 1.99aid (privacy controls S4): a reveal - opened by its EXACT name, past the person's opt-out (bypass: it's a moderation view),
       // quiet (no room line, no room mod-log line), never the mic stage's; ghost_only while every moderator on it is a 👻 ghost
       if (S.rv) {
         const rkey = pubKey(S.path);
@@ -1590,7 +1590,7 @@ function noteSync(items, t = now()) {
     seen.add(S.key);
   }
   for (const S of SESS.values()) if (!seen.has(S.key)) { S.ready = false; S.readers = 0; S.seenAt = t; noteMiss(S, false, streak, t); }
-  for (const S of SESS.values()) if (S.rv && !S.ended && S.liveAt) revealNotices(S, t);   // 1.99?? (privacy controls S4): the first frame
+  for (const S of SESS.values()) if (S.rv && !S.ended && S.liveAt) revealNotices(S, t);   // 1.99aid (privacy controls S4): the first frame
 }
 /** 1.99ahn dead relay: Pepe isn't live on this relay now (review F2: botDownAt - when a restart's START_MS starts). */
 function liveEnded(S, t) { if (S.botLiveSince) S.botDownAt = t; S.botLiveSince = 0; }
@@ -1615,7 +1615,7 @@ async function auth(b, action, proto) {
     return sameSecret(cred, pubKey(p)) ? 200 : 403;
   }
   if (action === "read") {
-    if (S.rv) return revealAuth(S, b, p, proto);           // 1.99?? (privacy controls S4): a reveal's own rules
+    if (S.rv) return revealAuth(S, b, p, proto);           // 1.99aid (privacy controls S4): a reveal's own rules
     // 1.99??: only a running mic-stage capture may authenticate a loopback RTSP reader.
     if (action === "read" && proto === "rtsp") return require("./stagemiccap").rtspAuth(b, p);
     if (proto !== "webrtc") return 403;                      // cam HLS and every other protocol remain refused
@@ -1650,7 +1650,7 @@ async function auth(b, action, proto) {
   return 403;
 }
 
-/** 1.99?? (privacy controls S4): a reader of a reveal's path. WebRTC: only a moderator on it (a fresh beat, inside their cap) with a
+/** 1.99aid (privacy controls S4): a reader of a reveal's path. WebRTC: only a moderator on it (a fresh beat, inside their cap) with a
  *  valid ticket for THIS path, who may still see the pad (padFull) and still holds the right (camreveal.stillMay - asked fresh, as on
  *  every beat). RTSP: only a running evidence capture of it (camevidence.rtspAuth - loopback, job-scoped). Nothing else, ever. */
 async function revealAuth(S, b, p, proto) {
@@ -1679,7 +1679,7 @@ function hint(R, userId) {
   if (!userId) return { on: true, signin: true };
   const t = now();
   const watching = [];
-  // (1.99?? privacy controls S5: a veiled session by its opaque id - never the login)
+  // (1.99aid privacy controls S5: a veiled session by its opaque id - never the login)
   for (const S of SESS.values()) if (!S.ended && !S.rv && S.roomId === R.id) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) watching.push(S.veil ? S.veil.id : S.login); }
   return { on: true, slots: { used: slotsOf(userId, t), max: maxSlots(userId) }, watching, sp_max: cfg().viewers_sp,
            ...(isGhost(userId) ? { ghost: true } : {}) };   // 1.99aaf: the 👻 badge on the popover   // 1.99zc: sp_max for the strip's hint
@@ -1696,9 +1696,9 @@ async function adminView() {
   const keptOf = (S) => { try { return require("./micfollow").keptOf(S.roomId, S.login, t); } catch (e) { return null; } };
   const sessions = [...SESS.values()].filter((S) => !S.ended).map((S) => ({
     ...(S.holds && S.holds.has(MFW_PREFIX + S.roomId) ? { warm: true, warm_s: (() => { const k = keptOf(S); return k ? Math.max(0, Math.round((k.until - t) / 1000)) : null; })() } : {}),
-    // 1.99?? (privacy controls S5): a veiled session shows its frog name only - never the login or keyOf (livecam.admin is "ops":
+    // 1.99aid (privacy controls S5): a veiled session shows its frog name only - never the login or keyOf (livecam.admin is "ops":
     // it may be granted to Staff, who never see through a veil - J-2); the End button names it by "v:<opaque id>"
-    // 1.99?? (privacy controls S4): a reveal shows "rv:<sid>" and, for a veiled person, the frog name or "veiled" - never the login (the
+    // 1.99aid (privacy controls S4): a reveal shows "rv:<sid>" and, for a veiled person, the frog name or "veiled" - never the login (the
     // login of a veiled reveal is only in the see-through log, /admin/bridge#seethrough)
     key: S.rv ? "rv:" + S.sid : S.veil ? "v:" + S.veil.id : S.key, room: S.roomId, login: S.veil || (S.rv && S.rv.veiled) ? null : S.login,
     display: S.rv ? (S.rv.veiled ? (S.rv.label || "veiled") + " (veiled)" : S.login) : S.veil ? (S.veil.alias || "someone") + " (incognito)" : S.display,
@@ -1711,8 +1711,8 @@ async function adminView() {
     botState: S.botState, botWhy: S.botWhy, stage: (S.holds ? [...S.holds].find((h) => !isMfHolder(h)) : null) || null, mf: !!S.mf,
     stageViewers: freshStage(S, t).length }));
   const viewers = totalViewers(t);
-  // (1.99?? privacy controls S5: a row watched under a frog name shows that name, never the login)
-  // (1.99?? privacy controls S4: a reveal's row says so - reveal: true - and a veiled person's shows "<frog name or veiled> (veiled)")
+  // (1.99aid privacy controls S5: a row watched under a frog name shows that name, never the login)
+  // (1.99aid privacy controls S4: a reveal's row says so - reveal: true - and a veiled person's shows "<frog name or veiled> (veiled)")
   const recent = (await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason, ghost, veil, bypass FROM livecam_audit ORDER BY id DESC LIMIT 30`))
     .map((r) => {
       const o = { ...r };
@@ -1755,7 +1755,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
     return R;
   };
   const viewHit = guard.limiter({ max: 30, windowMs: 60 * 1000 });
-  /** 1.99?? (privacy controls S5): a request's cam: {id} (a veiled session's opaque id) or the login string. */
+  /** 1.99aid (privacy controls S5): a request's cam: {id} (a veiled session's opaque id) or the login string. */
   const refOf = (b) => (b && b.id != null && b.id !== "" ? { id: String(b.id).slice(0, 40) } : String((b && b.login) || ""));
 
   app.post("/api/rooms/:slug/livecam", addUser, async (req, res) => {
@@ -1771,8 +1771,8 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "livecams");   // 1.99zf: a bridge block on live cams
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "livecams" });
       const b = req.body || {};
-      // (1.99?? privacy controls S5: {id} = an incognito person's cam by its opaque id)
-      // (1.99?? privacy controls V-5: `reason` = the 👻 ghost bypass's "Why? (logged)" - asked only after a reason_needed refusal)
+      // (1.99aid privacy controls S5: {id} = an incognito person's cam by its opaque id)
+      // (1.99aid privacy controls V-5: `reason` = the 👻 ghost bypass's "Why? (logged)" - asked only after a reason_needed refusal)
       const reason = typeof b.reason === "string" ? b.reason.slice(0, 400) : "";
       res.json(b.id != null && b.id !== "" ? await start(u, R, "", now(), { id: String(b.id).slice(0, 40), reason }) : await start(u, R, String(b.login || ""), now(), { reason }));
     } catch (e) { fail(res, e); }
@@ -1789,7 +1789,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       askHit.hit("u:" + u.userId);
       const R = room(req);
       if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw refuse("pad_access");
-      // (1.99?? privacy controls S5: never for a veiled cam - asking would describe the person behind the frog name, Q23)
+      // (1.99aid privacy controls S5: never for a veiled cam - asking would describe the person behind the frog name, Q23)
       if ((req.body || {}).id != null && icEffective()) throw refuse("unavailable");
       const login = String((req.body || {}).login || "").toLowerCase();
       const m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
@@ -1841,7 +1841,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       if (!u) throw refuse("signin");
       const R = bySlug(req.params.slug);
       if (!R) throw refuse("offline");
-      // (1.99?? privacy controls S5: {id} = a veiled session - its login is resolved here and never answered; the moderation
+      // (1.99aid privacy controls S5: {id} = a veiled session - its login is resolved here and never answered; the moderation
       // history names its frog name)
       const ref = refOf(req.body);
       let login, VS = null;
@@ -1852,7 +1852,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       } else login = String(ref || "").toLowerCase();
       if (!LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?", "bad");
       if (!mayEnd(u, R, login)) throw new Refuse(403, "Only the cam's owner, the room's mods and the pad owner can end it.", "forbidden");
-      // 1.99?? (privacy controls review ID-6): a typed login never reaches a VEILED cam - neither its session (same key as a named one)
+      // 1.99aid (privacy controls review ID-6): a typed login never reaches a VEILED cam - neither its session (same key as a named one)
       // nor the login's cooldown (which a frog-name ▶ Live checks too). The answer and the history line are the ones a wrong guess
       // gets, so ending by a guessed login can't confirm who is behind a frog name. Only {id} ends a veiled session.
       let out;
@@ -1904,7 +1904,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
   app.get("/admin/pepe/livecams", addUser, admin(false), async (req, res) => {
     try {
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
-      // (1.99?? privacy controls S4: cr = the by-login reveal card, only while cam reveals are in effect)
+      // (1.99aid privacy controls S4: cr = the by-login reveal card, only while cam reveals are in effect)
       let cr = null;
       try { cr = require("./camreveal").effective() ? { on: true } : null; } catch (e) { cr = null; }
       res.render("admin/pepeLivecams", { user: req.user.username, title: "Admin · Live cams", section: "pepe", isAdmin: true, v: await adminView(), cr });
@@ -1921,7 +1921,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
   app.post("/api/admin/pepe/livecams/end", addUser, admin(true), async (req, res) => {
     if (!fetchOnly(req, res)) return;
     const key = String((req.body || {}).key || "");
-    // (1.99?? privacy controls S5: a veiled session by "v:<opaque id>"; S4: a reveal by "rv:<sid>" - its "<room>|<login>:rv:" key is
+    // (1.99aid privacy controls S5: a veiled session by "v:<opaque id>"; S4: a reveal by "rv:<sid>" - its "<room>|<login>:rv:" key is
     // never accepted, nor shown)
     const S = key.startsWith("v:") ? [...SESS.values()].find((x) => x.veil && x.veil.id === key.slice(2) && !x.ended) || null
       : key.startsWith("rv:") ? [...SESS.values()].find((x) => x.rv && x.sid === key.slice(3) && !x.ended) || null
@@ -1945,8 +1945,8 @@ module.exports = {
   sharedBeyondMf,                                                                                            // mfix
   stageWarm, isMfHolder, MFW_PREFIX,                                                                         // wave2 WP-4 (F.2 warm keep)
   revealStart, revealSess, revealOf, revealOfViewer, revealBeat, revealExtend, revealStop, revealSwitchOff, revealNotices, onRevealNotice,
-  REVEAL_MS,                                                                                                 // 1.99?? (privacy controls S4)
-  ghostCaptureGate, crEffective,                                                                             // 1.99?? (review fixes 2 - RV-A)
+  REVEAL_MS,                                                                                                 // 1.99aid (privacy controls S4)
+  ghostCaptureGate, crEffective,                                                                             // 1.99aid (review fixes 2 - RV-A)
   botMf: () => (BOT && BOT.mf) || 0, botPool: () => (BOT && BOT.pool) || null, enabled: () => cfg().enabled === true, cfg,
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,

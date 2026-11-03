@@ -1,8 +1,8 @@
-// cam-reveal.js — 1.99?? (privacy controls S4): "👁 View cam (logged)" - a moderator views a cam someone has hidden from the website
+// cam-reveal.js — 1.99aid (privacy controls S4): "👁 View cam (logged)" - a moderator views a cam someone has hidden from the website
 // (camreveal.js on the server; livecam.js reveal sessions). Loaded on demand (PATVCamRevealLoad in pad-livecam.js) the first time a
 // page shows a control for it - a page with cam reveals off never loads it.
 //
-//   PATVCamReveal.open({slug, tile | member | login, name, admin?: true})    {slug, ask: true} (1.99?? round 3 - F4): by a typed login
+//   PATVCamReveal.open({slug, tile | member | login, name, admin?: true})    {slug, ask: true} (1.99aid round 3 - F4): by a typed login
 //     1. asks why (at least 3 characters - logged with the view) and says the person is told unless the viewer is in 👻 ghost mode;
 //     2. POST /api/rooms/<slug>/livecam/reveal (admin: /api/admin/pepe/livecams/reveal {room, login}) -> a WebRTC ticket;
 //     3. plays it in a dialog: BLURRED until the viewer clicks it (a shared screen shows nothing by accident), the watermark "Only you
@@ -64,7 +64,7 @@
     document.body.appendChild(ov);
     return { ov: ov, box: box };
   }
-  /** Step 1: why (logged), then the ticket. 1.99?? (privacy controls, round 3 - F4): {slug, ask: true} = "View a cam by Camfrog login" on
+  /** Step 1: why (logged), then the ticket. 1.99aid (privacy controls, round 3 - F4): {slug, ask: true} = "View a cam by Camfrog login" on
    *  the pad page - the moderator types the login too (the by-login entry: someone the people list doesn't show, e.g. left out). */
   function open(o) {
     if (!o || !o.slug && !o.admin) return;

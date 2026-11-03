@@ -1,4 +1,4 @@
-// privacystate.js — 1.99?? (privacy controls S6): the privacy switchboard v3 on the website - Settings → Privacy "On the website"
+// privacystate.js — 1.99aid (privacy controls S6): the privacy switchboard v3 on the website - Settings → Privacy "On the website"
 // (G:/ops/privacy-controls-spec-2026-11-02.md section 4.3 + section 5 "S6"; the owner's answers, section 8 - Q20: a control turns OFF
 // from a room line too, Pepe's side).
 //
@@ -232,7 +232,7 @@ async function camChanged(login, off, via, ts = now()) {
     const u = await require("./incognito").userByLogin(l);
     if (!u) return false;
     const where = via === "chat" ? "with !livecam in chat" : "from Settings → Privacy";
-    // 1.99?? (privacy controls S7, owner Q8 / Q11): while cam reveals are on, the OFF notice says moderators can still view it
+    // 1.99aid (privacy controls S7, owner Q8 / Q11): while cam reveals are on, the OFF notice says moderators can still view it
     let rv = "";
     try { if (require("./camreveal").advert()) rv = " Moderators can still view it for moderation - Pepe tells you when they do."; } catch (e) { rv = ""; }
     await require("./inbox").addSafe(u.userId, off

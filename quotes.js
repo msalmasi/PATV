@@ -92,7 +92,7 @@ const stickyKindH = (h) => { try { return require("./chatlog").hiddenKind(h); } 
  *  Pepe's mixed list; or it is loading), or the archive's set does ("out"; also until it is loaded). HIDDEN is hubhidden's KINDED
  *  set now (never Pepe's raw list), so a hash it holds outside LEFT is incognito: "someone". */
 const leftOutH = (h) => hubLoading() || LEFT.has(h) || stickyKindH(h) === "out";
-// 1.99?? (privacy controls S2, spec 2026-11-02 section 1.2): isHidden split into the owner's two veils (privacyeff.js combines
+// 1.99aid (privacy controls S2, spec 2026-11-02 section 1.2): isHidden split into the owner's two veils (privacyeff.js combines
 // them with the other switches). They never overlap, and isHidden is exactly either (test/privm-s2.test.js, every state):
 //   isBridgeOff  LEFT OUT now - !bridge hide, or anything stricter (forget-me / account deletion / staff removal, a kind the site
 //                can't tell) in either set, and everyone while either set loads (fail closed): the "out" kind. = isLeftOut.
@@ -105,7 +105,7 @@ const isBridgeOff = (login) => !!login && leftOutH(hiddenHash(login));
 const isHidden = (login) => {
   if (!login) return false;
   const h = hiddenHash(login);
-  // the same body as before; = isBridgeOff || isIncognito (1.99?? S2 - LEFT is inside HIDDEN, "out" is a kind)
+  // the same body as before; = isBridgeOff || isIncognito (1.99aid S2 - LEFT is inside HIDDEN, "out" is a kind)
   return hubLoading() || HIDDEN.has(h) || stickyKindH(h) != null;
 };
 /** Left out of quotes now (by login). */
@@ -808,7 +808,7 @@ function register(app, { addUser, isBotToken, bySlug }) {
 
 module.exports = { register, pick, shownFeed, buildLines, bodyOf, shownBody, create, removeMe, anonymise, dropLines, forPosts, quoteOfDay, setHidden, isHidden,
   isLeftOut, isPrivate, lineLeftOut, hiddenHash, limited,
-  isIncognito, isBridgeOff,                                    // 1.99?? (privacy controls S2): isHidden's two halves (privacyeff.js)
+  isIncognito, isBridgeOff,                                    // 1.99aid (privacy controls S2): isHidden's two halves (privacyeff.js)
   // tests (hubhidden's own rules): hubhidden.js's half of isHidden - what its setHidden handed over (or it is loading)
   _hubHidden: (login) => !!login && (hubLoading() || HIDDEN.has(hiddenHash(login))),
   MAX_LINES, SPAN_MAX, Refuse, _setClock, _hits: hits };

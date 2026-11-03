@@ -258,7 +258,7 @@ test("/submit: signed out -> login with next=; signed in -> the open composer wi
   assert.match(formTag(r.text), /data-expanded="1"/); assert.doesNotMatch(formTag(r.text), / hidden /);
   assert.match(r.text, /class="fc-comm" data-empty/, "no pad preselected");
   assert.match(r.text, /name="community" value="plant_based_chatting"/, "the pad picker lists the pads");
-  assert.match(r.text, /feed-composer\.js\?v=19/);   // (1.99?? privacy controls review fixes 2 - Q4-B)
+  assert.match(r.text, /feed-composer\.js\?v=19/);   // (1.99aid privacy controls review fixes 2 - Q4-B)
 });
 
 test("/p/<pad>/submit preselects that pad; signed out -> login next=; unknown pad 404; /submit?pad= -> /p/<pad>/submit", async () => {

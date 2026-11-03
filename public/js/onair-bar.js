@@ -508,7 +508,7 @@
         var id = b.getAttribute('data-slot');
         if (b.hasAttribute('data-embed') && !RIGHTS[id]) { msg('Tick “I have the rights to rebroadcast this” first.'); return; }
         act({ action: 'slot', slot_id: id, rights: !!RIGHTS[id], ask: ask });
-      } else if (b.hasAttribute('data-vid')) {          // (1.99?? privacy controls V-1: an incognito person's cam by its opaque id)
+      } else if (b.hasAttribute('data-vid')) {          // (1.99aid privacy controls V-1: an incognito person's cam by its opaque id)
         act({ action: 'cam', room: b.getAttribute('data-room'), id: b.getAttribute('data-vid'), ask: ask });
       } else if (b.hasAttribute('data-login')) {
         act({ action: 'cam', room: b.getAttribute('data-room'), login: b.getAttribute('data-login'), ask: ask });
@@ -561,7 +561,7 @@
         'data-slot="' + esc(s.id) + '"' + (s.embed ? ' data-embed="1"' : ''), s.why, s.ask, s.embed ? s.id : null, on);
     }).join('');
     var cams = (data.cams || []).map(function (c) {
-      if (c.veiled) {                                    // (1.99?? privacy controls V-1: frog name + opaque id, never a login)
+      if (c.veiled) {                                    // (1.99aid privacy controls V-1: frog name + opaque id, never a login)
         var onV = T && T.kind === 'cam' && T.veiled && T.room === c.room && T.ref_id === c.id;
         return line('📷 ' + esc(c.display) + ' (incognito)', esc(c.roomName), 'data-room="' + esc(c.room) + '" data-vid="' + esc(c.id) + '"', c.why, c.ask, null, onV);
       }

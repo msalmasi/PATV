@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls S7): THE PRIVACY TEXT of slices S4 (cam reveals + their evidence), S5 (incognito cams) and S6 (the
+// 1.99aid (privacy controls S7): THE PRIVACY TEXT of slices S4 (cam reveals + their evidence), S5 (incognito cams) and S6 (the
 // privacy switchboard v3) - G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S7" + section 6, updated for the owner's answers
 // (section 8). Each slice's text ships behind that slice's switch; each change note is dated by its switch's first ON (terms.js
 // "Last updated", like wave 2); no re-acceptance. On a temp DB:
@@ -107,7 +107,7 @@ const setup = (async () => {
 test("privacycopy: null while each switch is off; on = its advert; dated by its first ON; cam evidence = reveals AND evidence", async () => {
   await setup;
   let c = await PC.load();
-  assert.deepEqual(c, { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null }, "everything off");   // (1.99?? S4t: + textreveal)
+  assert.deepEqual(c, { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null }, "everything off");   // (1.99aid S4t: + textreveal)
   assert.deepEqual(PC.flags(), { incogcam: false, camreveal: false, privstate: false, textreveal: false });
   await PW.setOn(true, ADM());
   c = await PC.load();
@@ -294,7 +294,7 @@ test("help: the cards' pc variants only with a switch on; a slice that doesn't f
   assert.equal(got[1].summary, "y");
   assert.deepEqual(HELP.pcApply("S", "a b", { incogcam: { swap: [["a", "A"]] } }, { incogcam: false }), { summary: "S", details: "a b", applied: [] });
   assert.equal(HELP.pcApply("S", "a a", { incogcam: { swap: [["a", "A"]] } }, { incogcam: true }).applied.length, 0, "an old text found twice: not applied");
-  assert.deepEqual(HELP.PC_KEYS, ["camreveal", "incogcam", "privstate", "textreveal"], "the bot's order (pepe_privtext.PC_KEYS; 1.99?? S4t: + textreveal)");
+  assert.deepEqual(HELP.PC_KEYS, ["camreveal", "incogcam", "privstate", "textreveal"], "the bot's order (pepe_privtext.PC_KEYS; 1.99aid S4t: + textreveal)");
   const bot = process.env.PEPE_BOT_DIR;
   if (bot && fs.existsSync(path.join(bot, "help", "help-data.json"))) {
     const data = JSON.parse(fs.readFileSync(path.join(bot, "help", "help-data.json"), "utf8"));
@@ -303,7 +303,7 @@ test("help: the cards' pc variants only with a switch on; a slice that doesn't f
     for (const e of cards) {
       const keys = HELP.PC_KEYS.filter((k) => e.pc[k]);
       const s0 = e.v2 && e.v2.summary ? e.v2.summary : e.summary, d0 = e.v2 && e.v2.details ? e.v2.details : e.details;
-      // 1.99?? (privacy controls, landed on 1.99aht): a card with a v2tx wording (read while the transcripts bar is on) has two bases -
+      // 1.99aid (privacy controls, landed on 1.99aht): a card with a v2tx wording (read while the transcripts bar is on) has two bases -
       // the bot's build_help rule: in each combination every slice applies whole to at least one, and on the other it is whole too or
       // not there at all (none of its old texts in that wording as it stands then); a card without v2tx: whole on its one base
       const vt = e.v2tx && typeof e.v2tx === "object" ? e.v2tx : null;

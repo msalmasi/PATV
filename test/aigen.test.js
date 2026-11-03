@@ -297,7 +297,7 @@ test("a refused or failed generation stores nothing, shows the refund state, and
   assert.equal(n.length, 1, "notice filed (nobody was polling)");
   assert.match(n[0].title, /couldn't be made/);
   assert.equal(n[0].link, "/feed");
-  // 1.99?? (privacy controls, round 4): Pepe's refusal already says it - the notice says it once ("... - nothing was charged." - never a
+  // 1.99aid (privacy controls, round 4): Pepe's refusal already says it - the notice says it once ("... - nothing was charged." - never a
   // second "Nothing was charged.")
   assert.equal(n[0].body, "that prompt contains restricted content - nothing was charged.");
   // a generation that failed after the charge: refunded
@@ -310,7 +310,7 @@ test("a refused or failed generation stores nothing, shows the refund state, and
   assert.equal((await getQuery("SELECT * FROM inbox WHERE ref = ?", ["aigen-" + c2.d.job.id])).length, 0, "no notice while the composer watches");
 });
 
-test("1.99?? round 4: an inbox notice says 'nothing was charged' / 'refunded' once - a cam-reference refusal's '(nothing was charged)' too", async () => {
+test("1.99aid round 4: an inbox notice says 'nothing was charged' / 'refunded' once - a cam-reference refusal's '(nothing was charged)' too", async () => {
   const notice = async (prompt, res) => {
     const c = await post("/api/feed/aigen", U.alice, { kind: "image", prompt, pad: LOUNGE, back: "/feed" });
     await pepe("/api/feed/aigen/start", { id: c.d.job.id });

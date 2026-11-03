@@ -56,7 +56,7 @@
        const hid = !!(P.bridge && P.bridge.on), incOn = !!(P.incognito && P.incognito.on), txOn = !!(P.tx && P.tx.on), camOn = !!(P.livecam && P.livecam.off);
        const pvLog = (r) => r.ev === 'refused' ? t('pv3.log_refused')
          : t((r.ev === 'request' ? 'pv3.log_req_' : 'pv3.log_') + (r.kind === 'tx' ? 'tx' : 'bridge') + (r.on ? '_on' : '_off')); -%>
-  <%# 1.99?? (privacy controls S6, privacystate.js; G:/ops/privacy-controls-spec-2026-11-02.md 4.3): "On the website" - a master bridge
+  <%# 1.99aid (privacy controls S6, privacystate.js; G:/ops/privacy-controls-spec-2026-11-02.md 4.3): "On the website" - a master bridge
       switch over one switch per website control. Only while the privacy switchboard v3 is in effect (its switch + Pepe's word). The
       master shows the BRIDGE (checked = shown; off = !bridge hide); the others show the privacy switch ON (checked = hidden). While the
       bridge is off they show on and greyed (bridge off is an override - the stored switches come back). Client: privacy-web.js %>
@@ -113,7 +113,7 @@
       <li><%- t(memOn ? 'inc.what_memory_v2' : 'inc.what_memory') %></li>
       <%# review 2 fix-up: new keys for the owner's decision-9 change (incognito hides WHO, not WHAT) - every other language falls
           back to this English until it is translated, instead of keeping the old promise ("your chat lines aren't shown").
-          1.99?? (privacy controls S0): while the Privacy wire v2 switch is on (incognito.js pwOn) the _v2 keys - a random frog name,
+          1.99aid (privacy controls S0): while the Privacy wire v2 switch is on (incognito.js pwOn) the _v2 keys - a random frog name,
           and !bridge hide blacks lines out (the v1 keys said "someone" and "keeps your lines off"); off, the page is as before -%>
       <li><%- locals.pwOn && locals.icOn ? (st.account ? t('inc.what_web_someone_acct_v2_ic') : t('inc.what_web_someone_v2_ic')) : locals.pwOn ? t(st.account ? 'inc.what_web_someone_acct_v2' : 'inc.what_web_someone_v2') : t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
       <li><%- locals.icOn ? t('inc.what_media_someone_ic') : t('inc.what_media_someone') %></li>
@@ -225,13 +225,13 @@
     </ul>
     <% if (!lc.linked) { %>
       <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('lc.unlinked') %></div></div>
-      <p class="ds-meta"><%- t(locals.mf && mf.wc ? 'privacy.mf.unlinked_wc' : 'privacy.mf.unlinked') %></p><%# micfollow; 1.99?? (privacy controls S3): mf.wc = cfg withheld_cover on %>
+      <p class="ds-meta"><%- t(locals.mf && mf.wc ? 'privacy.mf.unlinked_wc' : 'privacy.mf.unlinked') %></p><%# micfollow; 1.99aid (privacy controls S3): mf.wc = cfg withheld_cover on %>
     <% } else { %>
       <div class="pv-set" id="pvLcRow">
         <div><b><%- t('lc.switch') %></b><p class="ds-meta"><%- t('lc.identity', { login: lc.login }) %></p></div>
         <label class="ds-switch"><input type="checkbox" id="pvLc" <%= lc.off ? '' : 'checked' %> aria-label="<%- t('lc.switch') %>"><span></span></label>
       </div>
-      <p class="pv-st" id="pvLcSt" role="status" aria-live="polite"><%- lc.off ? (locals.crvOn ? t('lc.st_off_rv') : t('lc.st_off')) : t('lc.st_on') %></p><% if (locals.crvOn) { /* 1.99?? (privacy controls S7): privacy-livecam.js says js.lc.st_off when the switch goes off - while cam reveals are on, that's the moderation wording (lc.st_off_rv) */ %><script>(function () { var I = window.PATV_I18N = window.PATV_I18N || { s: {} }; I.s = I.s || {}; I.s['js.lc.st_off'] = <%- JSON.stringify(t('lc.st_off_rv')).replace(/</g, '\\u003c') %>; })();</script><% } %>
+      <p class="pv-st" id="pvLcSt" role="status" aria-live="polite"><%- lc.off ? (locals.crvOn ? t('lc.st_off_rv') : t('lc.st_off')) : t('lc.st_on') %></p><% if (locals.crvOn) { /* 1.99aid (privacy controls S7): privacy-livecam.js says js.lc.st_off when the switch goes off - while cam reveals are on, that's the moderation wording (lc.st_off_rv) */ %><script>(function () { var I = window.PATV_I18N = window.PATV_I18N || { s: {} }; I.s = I.s || {}; I.s['js.lc.st_off'] = <%- JSON.stringify(t('lc.st_off_rv')).replace(/</g, '\\u003c') %>; })();</script><% } %>
       <%# 1.99aar (camaccess.js): who may watch while it's on, asking, the "always" list. Client: privacy-livecam.js %>
       <div class="pv-ca" id="pvCa">
         <div class="pv-set">
@@ -252,7 +252,7 @@
         <form id="pvCaAdd" class="pv-ca-add"><input type="text" name="target" maxlength="40" placeholder="<%- t('ca.allow_ph') %>" aria-label="<%- t('ca.allow_ph') %>" autocomplete="off"> <button type="submit" class="ds-btn"><%- t('ca.allow_add') %></button></form>
       </div>
       <% if (locals.mf && mf.linked) { %>
-      <%# micfollow: 🎙 the mic stage switch (default on; off keeps ▶ Live but no mic stages - 1.99?? privacy controls S3: while
+      <%# micfollow: 🎙 the mic stage switch (default on; off keeps ▶ Live but no mic stages - 1.99aid privacy controls S3: while
           micfollow_cfg withheld_cover is on (mf.wc), off keeps the cam off them and they show the cover picture) + this person's own mic stages.
           Client: privacy-livecam.js (POST /api/privacy/micfollow {auto}). %>
       <div class="pv-ca" id="pvMf">

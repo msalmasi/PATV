@@ -1016,13 +1016,13 @@ function roster(list, ctx = {}) {
       if (vz && vz.h && kindNow(vz.h) === "out") e.veil = "hidden";
       if (!e.alias) { delete e.hood; delete e.id; }
       if (vz && typeof ctx.canReveal === "function" && ctx.canReveal(u)) e.rv = 1;
-      // 1.99?? (privacy controls S5): an incognito person's cam shows under their frog name (incogcams.pageOnCam: the switch and
+      // 1.99aid (privacy controls S5): an incognito person's cam shows under their frog name (incogcams.pageOnCam: the switch and
       // Pepe's word, on cam, their live cam not switched off) - on_cam on the frog entry, ▶ Live by its opaque id (never a login)
       if (e.veil === "incognito" && e.id && ctx.roomId != null && incogOnCam(u, ctx.roomId)) e.on_cam = true;
-      // 1.99?? (privacy controls S4): a moderator who may view a hidden cam here (ctx.camReveal - camreveal.viewerRole) gets cv: 1 on a
+      // 1.99aid (privacy controls S4): a moderator who may view a hidden cam here (ctx.camReveal - camreveal.viewerRole) gets cv: 1 on a
       // frog entry whose cam is on but withheld - a flag only: the cam is asked for by the entry's id (POST .../livecam/reveal {member})
       if (ctx.camReveal === true && e.id && !e.on_cam && vz && vz.on_cam === true) e.cv = 1;
-      // 1.99?? (privacy controls S4): rvm: 1 - the people list's own Reveal (POST /api/chatlog/reveal {member}, scope roster_line) for a
+      // 1.99aid (privacy controls S4): rvm: 1 - the people list's own Reveal (POST /api/chatlog/reveal {member}, scope roster_line) for a
       // viewer the live stage's rule lets see who it is (ctx.rosterReveal: an Admin, or the pad's owner now); only while cam_reveal is on
       if (ctx.rosterReveal === true && e.id && e.alias) e.rvm = 1;
       out.push(e);
@@ -1037,7 +1037,7 @@ function roster(list, ctx = {}) {
   return out;
 }
 const SOMEONE = Object.freeze({ anon: true, display: "someone" });
-/** 1.99?? (privacy controls S5): incogcams.pageOnCam - false while it can't be asked (fails closed: no cam icon). */
+/** 1.99aid (privacy controls S5): incogcams.pageOnCam - false while it can't be asked (fails closed: no cam icon). */
 function incogOnCam(u, roomId) { try { return require("./incogcams").pageOnCam(u, roomId) === true; } catch (e) { return false; } }
 // 1.99afl (S6 - the incognito spec's rollback floor): the projection BUILDS every object it hands out from the fields its kind may
 // show; it never copies an item (or a roster entry) and deletes the fields it knows about. A field nobody listed here - a server-

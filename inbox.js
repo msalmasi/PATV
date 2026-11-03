@@ -52,7 +52,7 @@ const KINDS = {
   mention:     { icon: "📣", label: "Mentions (@you in posts and comments, your name or words in a Camfrog room)", link: "/settings/mentions" },   // 1.99ii: mentions.js; site-only; 1.99kk: + feed @mentions (feedmentions.js)
   admin:       { icon: "🛠️", label: "Admin", link: null },
   system:      { icon: "🐸", label: "Account notices from Pepe", link: null },
-  // 1.99?? (privacy controls S4): "Someone moderating <pad> viewed your cam" (camreveal.js; Telegram default-on). Listed (prefs, the
+  // 1.99aid (privacy controls S4): "Someone moderating <pad> viewed your cam" (camreveal.js; Telegram default-on). Listed (prefs, the
   // category list) only once cam reveals have ever been switched on - before that the Notices page reads exactly as it did
   privacy:     { icon: "🔒", label: "Privacy (moderation views of your cam)", link: "/settings/privacy", when: () => privacyShown() },
 };

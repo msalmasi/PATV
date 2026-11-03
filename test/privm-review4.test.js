@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, round 4 - the round-3 verify's findings; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q8 / Q12 /
+// 1.99aid (privacy controls, round 4 - the round-3 verify's findings; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q8 / Q12 /
 // Q22). On the reveal review harness (privm-review3-bylogin.test.js, verbatim):
 //   F4 UX       camreveal.start's can_save asks camevidence's own rule for that session: a pad's owner on a session opened by login (admins
 //               only) is never offered "Save still / clip" that camevidence then refuses (403); their other reveals still are

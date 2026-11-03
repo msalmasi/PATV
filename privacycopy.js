@@ -1,4 +1,4 @@
-// privacycopy.js — 1.99?? (privacy controls S7): WHICH privacy text shows (G:/ops/privacy-controls-spec-2026-11-02.md section 5
+// privacycopy.js — 1.99aid (privacy controls S7): WHICH privacy text shows (G:/ops/privacy-controls-spec-2026-11-02.md section 5
 // "S7" + section 6, updated for the owner's answers in section 8). Each slice's text ships behind that slice's switch, like wave 2's
 // (privwire.privacyCopy): it shows while the switch is on - its advert, i.e. the switch AND privacy wire v2, which every one of them
 // needs - and its change note is dated by the switch's FIRST ON (chatlog_meta first_on), which also moves /privacy's "Last updated"
@@ -9,7 +9,7 @@
 //   camevidence S4's evidence stills / clips (camevidence.js - cam reveals AND evidence clips; Q12): also while any is still kept, like
 //               evidence.privacyCopy (the copies exist); dated by the later of the two switches' first ON
 //   pv3         S6 the privacy switchboard v3 (privacystate.js, switch privacy_v3): one switch at a time, !privacy, room lines (Q20)
-//   textreveal  1.99?? S4t text reveal roles (textreveal.js, switch text_reveal_roles): staff and room mods reveal hidden text too
+//   textreveal  1.99aid S4t text reveal roles (textreveal.js, switch text_reveal_roles): staff and room mods reveal hidden text too
 //
 // load() -> {incogcam, camreveal, camevidence, pv3}: each {on, on_at, on_day} or null (off - the text is exactly as before). Used by
 // /privacy (terms.js), /settings/privacy (incognito.js) and, through flags(), /help (help.js). Never throws.
@@ -32,7 +32,7 @@ async function stateOf(file) {
 async function load() {
   const out = { incogcam: null, camreveal: null, camevidence: null, pv3: null, textreveal: null };
   out.incogcam = copyOf(await stateOf("./incogcams"));
-  out.textreveal = copyOf(await stateOf("./textreveal"));          // 1.99?? (privacy controls S4t)
+  out.textreveal = copyOf(await stateOf("./textreveal"));          // 1.99aid (privacy controls S4t)
   const crs = await stateOf("./camreveal");
   out.camreveal = copyOf(crs);
   out.pv3 = copyOf(await stateOf("./privacystate"));

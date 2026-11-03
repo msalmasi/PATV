@@ -1,4 +1,4 @@
-// camevidence.js — 1.99?? (privacy controls S4, owner Q12 2026-11-02: "Saved stills/clips as well, as evidence if required"):
+// camevidence.js — 1.99aid (privacy controls S4, owner Q12 2026-11-02: "Saved stills/clips as well, as evidence if required"):
 // moderation EVIDENCE stills and clips of a cam revealed for moderation (camreveal.js). The WP-5 evidence pattern (evidence.js):
 //   * who: a PATV admin (chatlog.see_through) or the pad's owner (their own pad, now) WHILE they view the reveal (a fresh beat inside
 //     its 3 minutes) - Staff and room mods may view a hidden cam, never keep it;
@@ -64,7 +64,7 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS cam_evidence_room ON cam_evidence (room_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS cam_evidence_exp ON cam_evidence (expires_at)");
       await runQuery("CREATE INDEX IF NOT EXISTS cam_evidence_subject ON cam_evidence (subject_login)");
-      // 1.99?? (privacy controls review RV-2 / ID-7): admin_only = saved from a by-login reveal or of a LEFT-OUT person (Q22: only admins
+      // 1.99aid (privacy controls review RV-2 / ID-7): admin_only = saved from a by-login reveal or of a LEFT-OUT person (Q22: only admins
       // and staff could ever open it - the pad's owner never sees the row or its file); label = the frog name a veiled subject showed under
       // (an owner's list names a veiled subject by that, never the login)
       const cols = (await getQuery("PRAGMA table_info(cam_evidence)")).map((c) => c.name);
@@ -199,7 +199,7 @@ async function store({ buf, kind, S, secs, user, role, reason }) {
   return { id, expires_at: exp };
 }
 
-/** 1.99?? (privacy controls, round 4 - F4 UX): may moderator `role` save evidence of reveal session S (null: the role alone)? -> null (yes) |
+/** 1.99aid (privacy controls, round 4 - F4 UX): may moderator `role` save evidence of reveal session S (null: the role alone)? -> null (yes) |
  *  the refusal. save() and camreveal.start's can_save both ask this, so the player offers "Save still / clip" only where save() allows it
  *  (a pad's owner on a session opened by login was offered it and then refused). */
 function saveRefusal(role, S) {
@@ -250,7 +250,7 @@ async function viewRole(user, roomId) {
   if (await isAdmin(user)) return { role: "admin", since: 0 };
   try { const r = await require("./seethrough").chatRole(user, roomId); return r && r.role === "owner" ? r : null; } catch (e) { return null; }
 }
-/** 1.99?? (privacy controls review RV-1): the Camfrog login(s) linked to this account now (its own cam's evidence is never shown to it as
+/** 1.99aid (privacy controls review RV-1): the Camfrog login(s) linked to this account now (its own cam's evidence is never shown to it as
  *  a pad's owner). A failed read: none (the row filter below still drops admins-only rows). */
 async function ownLogins(user) {
   try {
@@ -258,7 +258,7 @@ async function ownLogins(user) {
     return new Set([r && r.camfrogUsername, user && user.camfrogUsername].map(low).filter(Boolean));
   } catch (e) { return new Set([low(user && user.camfrogUsername)].filter(Boolean)); }
 }
-/** 1.99?? (privacy controls review RV-1 / RV-2): a row a pad's OWNER never gets (list or file): an admins-only row (by login, left out),
+/** 1.99aid (privacy controls review RV-1 / RV-2): a row a pad's OWNER never gets (list or file): an admins-only row (by login, left out),
  *  or one whose subject is the owner themselves (who saved it and why would name the moderator who checked them - Q11, ghost silence). */
 const ownerHides = (r, self) => Number(r && r.admin_only) === 1 || (self instanceof Set && self.has(low(r && r.subject_login)));
 async function lapsed(r, t = now()) { return Number(r.expires_at) <= t && !r.hold_at && !(await EV().heldWhy(r)); }
@@ -449,7 +449,7 @@ function register(app, { addUser, bySlug, noTimers = false }) {
 }
 
 module.exports = { init, on, rtspAuth, save, store, sweep, subjectGone, register, KEEP_MS, CLIP_MIN, CLIP_MAX, CLIP_DEF, ID_RE, Refuse,
-                   saveRefusal, maySave,                                                        // 1.99?? (privacy controls, round 4)
+                   saveRefusal, maySave,                                                        // 1.99aid (privacy controls, round 4)
                    _jobs: JOBS, password,
                    _setDeps: (d) => { deps = Object.assign({}, deps, d || {}); },
                    _setClock: (f) => { clock = f || (() => Date.now()); },

@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, landed on origin/staging 1.99aht transcripts bar): S4t's text reveal roles (switch text_reveal_roles) meet
+// 1.99aid (privacy controls, landed on origin/staging 1.99aht transcripts bar): S4t's text reveal roles (switch text_reveal_roles) meet
 // the transcripts bar's sentences that name who can reveal the words.
 //   /privacy  every transcripts-bar sentence that names who can reveal (section 3, the chat history, the incognito section - live and
 //             "kept") names PATV staff and the room's moderators too, with a reason, while text reveal roles are on; off: byte for byte

@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls V-1 / V-3 / V-5, the first build's verification - G:/ops/privacy-controls-spec-2026-11-02.md section 8:
+// 1.99aid (privacy controls V-1 / V-3 / V-5, the first build's verification - G:/ops/privacy-controls-spec-2026-11-02.md section 8:
 // Q4 "every feature works for an incognito person's cam ... incognito only affects the NAME shown"). On a temp DB with the real bridge
 // ingest (privacy wire v2), frog-name sessions, live cams, the mic-stage engine, the stage, clips and on-air (the S5 harness):
 //   V-3   an incognito holder's first-step hood becomes their cam tile in place (spec 2.2 row 4: one frog, one tile)

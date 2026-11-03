@@ -98,7 +98,7 @@ test("A-tests-ux-05: the pad page has the J-18 toggle (Show real names / Hide ag
 
 test("A-tests-ux-06: the report queue says a hidden line needs an admin (never '(its text is gone)')", () => {
   const src = rd("public", "js", "chatlog-reports.js");
-  // (1.99?? privacy controls round 3 - F3: while text reveal roles are on (L.tr) the note says staff can reveal it on the pad too)
+  // (1.99aid privacy controls round 3 - F3: while text reveal roles are on (L.tr) the note says staff can reveal it on the pad too)
   assert.ok(/L\.needs_admin \? \(L\.tr \? 'Hidden line - reveal it on the pad[^']*'\s*: 'Hidden line - needs an admin/.test(src));
   assert.ok(src.includes("L.link"), "a link to the line for the admin");
 });

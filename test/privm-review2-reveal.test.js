@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fixes 2 - the reveal lens; G:/ops/privacy-controls-spec-2026-11-02.md section 8, Q8 / Q9: every
+// 1.99aid (privacy controls, review fixes 2 - the reveal lens; G:/ops/privacy-controls-spec-2026-11-02.md section 8, Q8 / Q9: every
 // reveal, the ghost bypass included, goes "behind the reveal audit log"). On the reveal review harness (privm-review-reveal.test.js):
 //   RV-A  a 👻 ghost's SNAPSHOT / CLIP past someone's rules (a veiled cam always, a named one while cam reveals are in effect) asks why
 //         first (409 reason_needed) and writes its see-through row before any job; it never reads a frame it didn't ask for; with cam
@@ -358,7 +358,7 @@ test("RV-C: a by-login reveal session of a login the room doesn't list is the ad
     assert.equal(m.d.rv, undefined, "never the admin's session");
     assert.equal(await stRows(U.mod.userId, "cam:%"), n0, "no reveal row");
     assert.equal((await getQuery("SELECT COUNT(*) AS n FROM livecam_audit WHERE viewer_id = ?", [U.mod.userId]))[0].n, la0, "no livecam_audit row");
-    // (1.99?? round 4 - F4 probing: a by-login try by a non-admin spends the reveal rate and a miss is a see-through row, miss:gone:l -
+    // (1.99aid round 4 - F4 probing: a by-login try by a non-admin spends the reveal rate and a miss is a see-through row, miss:gone:l -
     // privm-review4.test.js)
     assert.equal(await stRows(U.mod.userId, "miss:gone:l"), x0 + 1, "the miss is logged");
     assert.equal(RL._hits.has("camreveal|" + U.mod.userId), true, "the try spent the rate");

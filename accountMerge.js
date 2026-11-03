@@ -341,7 +341,7 @@ const RULES = {
   // chatsignin.js (!signin): links, the owner's switch (off wins) and the account's chat sign-in log follow the account
   "chat_signin_tokens.user_id": M(), "chat_signin_log.user_id": M(), "incognito_log.user_id": M(),   // 1.99wa (incognito.js: incognito_state is keyed by chat login)
   "memory_optout_log.user_id": M(),   // wave 3 (memoryoptout.js, design §N): the 🧠 Pepe's memory audit follows the account (its state is keyed by chat login)
-  "privacy_state_log.user_id": M(),   // 1.99?? (privacy controls S6): the "On the website" card's audit follows the account (its state is keyed by chat login)
+  "privacy_state_log.user_id": M(),   // 1.99aid (privacy controls S6): the "On the website" card's audit follows the account (its state is keyed by chat login)
   // 1.99afn (seethrough.js): who revealed a frog name moves with the account (the audit follows the person); an open "Show real names"
   // toggle too - one per (scope, pad): the target's own wins a collision
   "seethrough_log.user_id": M(), "seethrough_toggle.user_id": M({ key: ["scope", "room_id"] }),
@@ -350,11 +350,11 @@ const RULES = {
   "evidence_clips.by_user": M(), "evidence_clips.hold_by": M(),
   "evidence_clips.subject_login": { deny: "the Camfrog login whose voice the clip holds (when it was said) - never re-keyed, like stage_capture_people" },
   "evidence_clips.subject_gone_at": { deny: "a time (the subject used forget-me or deleted their account)" },
-  // 1.99?? (privacy controls S4): camevidence.js - evidence stills / clips of a cam viewed for moderation (the evidence_clips rules)
+  // 1.99aid (privacy controls S4): camevidence.js - evidence stills / clips of a cam viewed for moderation (the evidence_clips rules)
   "cam_evidence.by_user": M(), "cam_evidence.hold_by": M(),
   "cam_evidence.subject_login": { deny: "the Camfrog login whose cam the still / clip shows (when it was saved) - never re-keyed, like evidence_clips" },
   "cam_evidence.subject_gone_at": { deny: "a time (the subject used forget-me or deleted their account)" },
-  "cam_evidence.admin_only": { deny: "1.99?? (privacy controls review RV-2): a flag (saved from a by-login reveal / of a left-out person) - not a user" },
+  "cam_evidence.admin_only": { deny: "1.99aid (privacy controls review RV-2): a flag (saved from a by-login reveal / of a left-out person) - not a user" },
   "chat_signin_prefs.user_id": M({ key: [], merge: { enabled: "MIN" } }),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)

@@ -486,7 +486,7 @@ async function ask({ q, user, ip }) {
   q = String(q == null ? "" : q).replace(/\s+/g, " ").trim();
   if (q.length < Q_MIN || q.length > Q_MAX) throw Object.assign(new Error(`Ask in ${Q_MIN}-${Q_MAX} characters.`), { status: 400 });
   const cur = await current();
-  // 1.99?? (privacy controls review DARK-2): a dark feature's card is never a search result, a candidate for Pepe or an allowed command
+  // 1.99aid (privacy controls review DARK-2): a dark feature's card is never a search result, a candidate for Pepe or an allowed command
   const ranked = search(cur.data && Array.isArray(cur.data.entries) ? { ...cur.data, entries: withoutDarkCards(cur.data.entries) } : cur.data, q, CANDIDATES);
   const results = ranked.slice(0, 5).map((r) => card(r.entry, r.score));
   const best = ranked.length ? ranked[0].score : 0;
@@ -587,7 +587,7 @@ const TX_CLAUSE_NEW = "`!transcripts off` blacks out only the words of your mic 
 // transcripts card keeps its wording for NEW mic turns (left out) and adds that the ones already shown as a bar stay bars.
 const TX_KEPT_NOTE = "Mic turns that already show on the website as a blacked-out bar stay that way: only PATV administrators, and a pad's owner in " +
   "their own pad, can reveal what you said, and every reveal is logged.";
-// 1.99?? (privacy controls, landed on 1.99aht): the transcripts bar's sentences that name who can reveal the words - while text reveal roles
+// 1.99aid (privacy controls, landed on 1.99aht): the transcripts bar's sentences that name who can reveal the words - while text reveal roles
 // are on (textreveal.js, S4t) they name PATV staff and the room's moderators too, with a reason (the same words as Pepe's catalog's pc
 // "textreveal" swap on the v2tx card); off: 1.99aht's words exactly
 const TX_TR_SWAPS = [
@@ -621,7 +621,7 @@ function withPrivwireNotes(entries) {
     const vt = e && e.v2tx && typeof e.v2tx === "object" ? e.v2tx : null;
     const ts = vt && typeof vt.summary === "string" && vt.summary.trim() ? vt.summary.slice(0, L.summary) : null;
     const td = vt && typeof vt.details === "string" && vt.details.trim() ? vt.details.slice(0, L.details) : null;
-    // (1.99?? privacy controls: who can reveal the words - txTr; a Pepe whose v2tx card carries its own pc swap gets the same words)
+    // (1.99aid privacy controls: who can reveal the words - txTr; a Pepe whose v2tx card carries its own pc swap gets the same words)
     if (ts || td) return { ...e, ...(ts ? { summary: ts } : {}), ...(td ? { details: txTr(td) } : {}) };
     if (e && PRIVWIRE_TX_CARDS[e.id]) return { ...e, ...PRIVWIRE_TX_CARDS[e.id], details: txTr(PRIVWIRE_TX_CARDS[e.id].details) };
     if (r && typeof r.details === "string" && r.details.includes(TX_CLAUSE_OLD)) return { ...r, details: r.details.split(TX_CLAUSE_OLD).join(TX_CLAUSE_NEW) };
@@ -642,14 +642,14 @@ function privwireNotes(entries) {
     if (vs || vd) return { ...e, ...(vs ? { summary: vs } : {}), ...(vd ? { details: vd } : {}) };
     let add = e && PRIVWIRE_NOTES[e.id];
     if (!add) return e;
-    // (1.99?? privacy controls S4t: who can reveal, while text reveal roles are on)
+    // (1.99aid privacy controls S4t: who can reveal, while text reveal roles are on)
     try { if (require("./textreveal").isOn()) add = add.replace("PATV administrators and the pad's owner can reveal", "PATV administrators and staff, the pad's owner and the room's moderators can reveal (with a reason)"); } catch (e2) { /* as before */ }
     const base = e.details && String(e.details).trim() ? e.details : e.summary;
     return { ...e, ...(PRIVWIRE_SUMMARY[e.id] ? { summary: PRIVWIRE_SUMMARY[e.id] } : {}), details: String(base || "") + "\n\n" + add };
   });
 }
 
-// ── 1.99?? (privacy controls S6): cards of a dark feature - Pepe's !privacy card shows only while the privacy switchboard v3 is
+// ── 1.99aid (privacy controls S6): cards of a dark feature - Pepe's !privacy card shows only while the privacy switchboard v3 is
 // advertised (privacystate.js); until then /help is exactly as before (Pepe's !help leaves it out the same way) ──
 const PV3_DARK_CARDS = new Set(["privacy"]);
 function withoutDarkCards(entries) {
@@ -659,13 +659,13 @@ function withoutDarkCards(entries) {
   return (entries || []).filter((e) => !(e && PV3_DARK_CARDS.has(e.id)));
 }
 
-// ── 1.99?? (privacy controls S7): Pepe's cards' privacy-controls variants ("pc", bot pepe_privtext) - per slice, the sentences its
+// ── 1.99aid (privacy controls S7): Pepe's cards' privacy-controls variants ("pc", bot pepe_privtext) - per slice, the sentences its
 // privacy text changes in that card ({camreveal|incogcam|privstate: {summary?, swap: [[old, new], ...]}}). While a slice's switch is
 // on here (its advert: the switch AND privacy wire v2 - privacycopy.flags), the card reads its text (already the v2 wording -
 // withPrivwireNotes - every slice needs privacy wire v2) with that slice's swaps made, in PC_KEYS order, each old text found exactly
 // once in the text as it stands then; a later slice's summary wins. A slice whose swaps don't fit is left out WHOLE (never half
 // made); Pepe's build refuses such data, so that is an older or hand-edited copy. Every switch off: nothing changes. ──
-const PC_KEYS = ["camreveal", "incogcam", "privstate", "textreveal"];   // (1.99?? privacy controls S4t: + textreveal, last)
+const PC_KEYS = ["camreveal", "incogcam", "privstate", "textreveal"];   // (1.99aid privacy controls S4t: + textreveal, last)
 const PC_SWAPS_MAX = 12;
 function pcApply(summary, details, pc, active) {
   const applied = [];
@@ -752,7 +752,7 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
     res.redirect(301, "/help" + q);
   });
   app.get("/api/help/data", async (req, res) => {
-    // (1.99?? privacy controls review DARK-2: without a dark feature's cards, as /help shows them - and never the cards' privacy-text
+    // (1.99aid privacy controls review DARK-2: without a dark feature's cards, as /help shows them - and never the cards' privacy-text
     // variants ("pc": unapproved wording until each slice's switch is on); a slice that is on reads its text in, as /help does)
     try {
       const c = await current();

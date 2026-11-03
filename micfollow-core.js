@@ -99,7 +99,7 @@
 // counts them as attributed (the stage isn't dimmed for "someone" while a cover talks); a stage of only covers never
 // becomes the default view (showsSoon: no picture). While cfg covers is off (its kill switch) the engine shows none and
 // takes any cover tile off at once (review B-privacy-ux-4).
-// 1.99?? (privacy controls S3, the cfg switch withheld_cover - dark): "withheld" is a CARD STATE beside off_cam / cam_unknown - a cam
+// 1.99aid (privacy controls S3, the cfg switch withheld_cover - dark): "withheld" is a CARD STATE beside off_cam / cam_unknown - a cam
 // opt-out whose person may otherwise be on the stage (micfollow.eligOf ran every other rule): a candidate, a tile (card "withheld",
 // leaving like a cam-off card after the plain hand-over), attributed in speaking() (a lone holder is no longer "Someone is speaking");
 // never a hold, a cold open, a still or a warm keep (keepFor / keptCheck), and a relay or still it had is let go at once. livecam's
@@ -183,7 +183,7 @@ const FIELDS = Object.freeze({
   // /media/cover/p/<key>.webp - no Discord id / user id in the URL, and the very bytes a snap / clip draws). Off = the photo's own
   // URL, as before (captures still fetch an allowed photo server-side)
   cover_photo_proxy:     { def: true, bool: true },
-  // 1.99?? (privacy controls S3, G:/ops/privacy-controls-spec-2026-11-02.md "S3" + owner Q14): a cam opt-out (!livecam off, "Pads may
+  // 1.99aid (privacy controls S3, G:/ops/privacy-controls-spec-2026-11-02.md "S3" + owner Q14): a cam opt-out (!livecam off, "Pads may
   // put my cam on their stage" off, cam access followers / on request) withholds the CAM, not the person: a mic holder with one is a
   // NAMED card in state "withheld" (their stage cover, "cam off") - never a relay, still, warm keep or capture of the cam - and every
   // other stage rule still applies (micfollow.eligOf). Dark: off = today's CUT (no tile; "Someone is speaking" if alone)
@@ -213,7 +213,7 @@ const PAD_DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(PAD_FIELDS)
  *  livecam.stageConsent refuses a hold for, so the person isn't re-picked every cooldown_s only to be refused again. */
 const CUT = Object.freeze(["not_member", "opted_out", "mf_opted_out", "private", "hidden", "excluded", "banned", "blocked_owner", "unavailable",
   "mode_closed", "ended_by",
-  // 1.99?? (privacy controls S5): the person's identity changed under a tile (incognito on / off, !bridge hide, their frog-name session
+  // 1.99aid (privacy controls S5): the person's identity changed under a tile (incognito on / off, !bridge hide, their frog-name session
   // ended, incognito cams off) - it comes off at once; they come back as a fresh tile (or cover) under the new one (micfollow.eligOf)
   "veil_changed"]);
 const CUT_SET = new Set(CUT);
@@ -253,10 +253,10 @@ const EXACT_WAIT_MS = 60 * 1000;
 /** mfix: the reasons a tile shows a card instead of a picture (the page words each). 1.99afl: + list_unread (the room's list
  *  can't be read - S1b), cam_unknown ("checking their cam…" - S2) and pepe (his cam relay isn't there - S4). */
 const CARD_WHYS = Object.freeze(["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap", "list_unread", "cam_unknown", "pepe",
-  "withheld"]);   // 1.99?? (privacy controls S3): a cam opt-out's named card (cfg withheld_cover) - the page says "cam off"
+  "withheld"]);   // 1.99aid (privacy controls S3): a cam opt-out's named card (cfg withheld_cover) - the page says "cam off"
 /** The site's live relays were full at the moment of a hold (a race, not a failed open): "full", another try after this. */
 const FULL_RETRY_MS = 15 * 1000;
-/** 1.99?? (privacy controls S3, review 5): is tile x a withheld cam's card now? Its elig says "withheld" - or (cfg withheld_cover on) a
+/** 1.99aid (privacy controls S3, review 5): is tile x a withheld cam's card now? Its elig says "withheld" - or (cfg withheld_cover on) a
  *  hold / relay of it was refused "opted_out" (holdDone / sessionEnded set x.whUntil) and the site's own rules still say ok /
  *  cam_unknown: Pepe's own opt-out list can be ahead of the site's (a room line's !livecam off, a sync on its way). Until whUntil no new
  *  hold, cold open or still is asked for (the card stays) - one more try after it, the cadence a CUT's cooldown gave with the switch off,
@@ -626,7 +626,7 @@ function keptCheck(S, I, C, t, A) {
     else if (C.cold_open !== true) why = "cold_off";
     else if (S.pinned && S.pinned.has(l)) why = "pinned";                     // the pin holds the relay now
     else if (e === "off_cam") why = "off_cam";
-    else if (e === "withheld") why = "withheld";                              // (1.99?? S3: a cam opt-out - never kept warm)
+    else if (e === "withheld") why = "withheld";                              // (1.99aid S3: a cam opt-out - never kept warm)
     else if (e !== "ok" && e !== "notice" && e !== "cam_unknown") why = isCut(e) ? e : "elig_" + String(e || "none").slice(0, 20);
     else if (ss.state === "ended" || ss.state === "none" || ss.exact !== true || ss.kept === false) why = "relay";
     else if (shed) why = "shed";
@@ -769,7 +769,7 @@ function trackOthers(S, I, t) {
 /** DF-30 / DF-12: is the mic held right now only by speech nobody can show? -> "someone" | "pepe" | null.
  *  "someone": no proven holder the mic stage may show (ok / off cam) holds it, and someone else - unproven, anonymous, or a
  *  proven holder who is cut / not noticed yet / grab-spamming - has held it >= min_hold_s. "pepe": Pepe alone holds it,
- *  >= min_hold_s. 1.99?? (privacy controls S3): a "withheld" holder (a cam opt-out's named cover card) is shown - attributed. */
+ *  >= min_hold_s. 1.99aid (privacy controls S3): a "withheld" holder (a cam opt-out's named cover card) is shown - attributed. */
 function speaking(S, I, C, t) {
   const minHold = C.min_hold_s * 1000;
   let attributed = false, other = false;
@@ -803,10 +803,10 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
     const e = I.elig.get(x.login);
     const ss = I.sess.get(x.login) || NONE;
     if (Number.isFinite(ss.viewers) && ss.viewers > (x.peak || 0)) x.peak = ss.viewers;
-    // 1.99?? (privacy controls S3): a cam opt-out (cfg withheld_cover) - their named card, never a relay or a still: one on its way or
+    // 1.99aid (privacy controls S3): a cam opt-out (cfg withheld_cover) - their named card, never a relay or a still: one on its way or
     // running is let go now. Never their cam-off / backoff bookkeeping (the cam may well be on; it is only withheld)
-    if (withheldNow(x, e, C, t)) {                           // (1.99?? S3 review 5: + a refusal "opted_out" the site doesn't know yet)
-      // (1.99?? S3 review 5: the site's own rules say withheld - they caught up, so they decide from here: once they say ok again - live cam on
+    if (withheldNow(x, e, C, t)) {                           // (1.99aid S3 review 5: + a refusal "opted_out" the site doesn't know yet)
+      // (1.99aid S3 review 5: the site's own rules say withheld - they caught up, so they decide from here: once they say ok again - live cam on
       // again - the cam comes back at once, not after whUntil)
       if (e === "withheld") x.whUntil = 0;
       if (x.video !== "card" || x.why !== "withheld") {
@@ -870,7 +870,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
   for (const x of order) {
     if (x.cover) continue;                                    // (wave2 WP-4: no live place, cold open or still for a cover)
     const e = I.elig.get(x.login);
-    if (e === "off_cam" || withheldNow(x, e, C, t) || liveish(x) || x.pend) continue;    // (1.99?? S3: withheld - its card, set in a)
+    if (e === "off_cam" || withheldNow(x, e, C, t) || liveish(x) || x.pend) continue;    // (1.99aid S3: withheld - its card, set in a)
     const ss = I.sess.get(x.login) || NONE;
     if (e === "ok" && S.sawOff.has(x.login)) {               // the cam went off and on again: the blocks end
       S.sawOff.delete(x.login); S.backoff.delete(x.login); S.inexact.delete(x.login); S.offcam.delete(x.login);
@@ -980,7 +980,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
  *   holders: [{login, since}]  proven, real holders in grab order,  unproven_n,
  *   others: [{key, since}]  holders nobody can show (unproven, anonymous, account keys, bots),  pepe: since | true | null,
  *   elig: Map(login -> "ok" | "off_cam" | "cam_unknown" (1.99afl: the roster can't say) | "pending" | "notice" (not noticed
- *         notice_lead_s ago) | "withheld" (1.99?? privacy controls S3: a cam opt-out, cfg withheld_cover - a named card, never a
+ *         notice_lead_s ago) | "withheld" (1.99aid privacy controls S3: a cam opt-out, cfg withheld_cover - a named card, never a
  *         relay / still / warm keep) | CUT code)  holders + tiles + kept relays (wave2 WP-4: S.kept's logins),
  *   sess: Map(login -> {state, why, exact, held, kept, mfOnly, viewers})     livecam.mfState,
  *   pad: {layout, max_people, max_live, default_view, keep_recent (minutes)},
@@ -1085,7 +1085,7 @@ function step(S, I, C, t) {
       if (t - s.since < C.min_hold_s * 1000) continue;
       const e = I.elig.get(h.login);
       // cut, not noticed long enough ago, or not known yet (1.99afl: a cam the roster can't classify yet still goes up - as a
-      // "checking their cam…" card, like a "cam off" one did before). 1.99?? (privacy controls S3): a withheld cam goes up as its card
+      // "checking their cam…" card, like a "cam off" one did before). 1.99aid (privacy controls S3): a withheld cam goes up as its card
       if (e !== "ok" && e !== "off_cam" && e !== "cam_unknown" && e !== "withheld") continue;
       if (spamming(S, h.login, t)) continue;
       qualified.push({ login: h.login, since: s.since });
@@ -1102,7 +1102,7 @@ function step(S, I, C, t) {
   // cam went off leaves after the plain hand-over (a "cam off" card isn't worth keeping)
   const minOn = C.min_on_stage_s * 1000;
   const keepMs = Math.max(0, Number(I.pad.keep_recent) || 0) * 60 * 1000;
-  // (1.99?? privacy controls S3: a withheld cam's card leaves like a "cam off" one - after the plain hand-over)
+  // (1.99aid privacy controls S3: a withheld cam's card leaves like a "cam off" one - after the plain hand-over)
   const offCam = (x) => { const e = I.elig.get(x.login); return e === "off_cam" || e === "withheld"; };
   const holdOf = (x) => (clearing ? 0 : offCam(x) ? C.handover_s * 1000 : Math.max(C.handover_s * 1000, keepMs));
   const dueAt = (x, hold) => Math.max(x.relAt + hold, x.addedAt + minOn);
@@ -1221,11 +1221,11 @@ function holdDone(S, login, ok, code, C, t) {
   if (ok) return A;
   const unk = code === "not_on_cam" && camUnknownNow(S, x);
   x.unkHold = 0;
-  // 1.99?? (privacy controls S3): with cfg withheld_cover on, !livecam off stops the cam, not the appearance - livecam's "opted_out"
+  // 1.99aid (privacy controls S3): with cfg withheld_cover on, !livecam off stops the cam, not the appearance - livecam's "opted_out"
   // (stageConsent: the live-video opt-out only) makes the tile its withheld card, never a cut; the next step's elig decides (a CUT
   // there - private, banned, ... - still cuts). No backoff
   if (code === "opted_out" && C && C.withheld_cover === true) {
-    x.whUntil = t + whHoldMs(C);                         // (1.99?? S3 review 5: no new hold until then, whatever the site's rules say - withheldNow)
+    x.whUntil = t + whHoldMs(C);                         // (1.99aid S3 review 5: no new hold until then, whatever the site's rules say - withheldNow)
     setVideo(x, "card", "withheld", t);
     S.v++;
     A.push({ a: "touch", why: "hold_failed" });
@@ -1273,11 +1273,11 @@ function sessionEnded(S, login, why, C, t) {
   const x = tileOf(S, login);
   if (!x) return { cut: null, actions: A };
   why = String(why || "");
-  // 1.99?? (privacy controls S3): with cfg withheld_cover on, a relay that ended "opted_out" (!livecam off) leaves the tile up as its
+  // 1.99aid (privacy controls S3): with cfg withheld_cover on, a relay that ended "opted_out" (!livecam off) leaves the tile up as its
   // withheld card - the cam stops, not the appearance; the next step's elig decides (a CUT there still cuts)
   if (why === "opted_out" && C && C.withheld_cover === true) {
-    x.whUntil = t + whHoldMs(C);                         // (1.99?? S3 review 5: Pepe said opted_out - no new hold until then: withheldNow)
-    // (1.99?? S3 review 5: a still of theirs goes now too - with the switch off the cut took it at once)
+    x.whUntil = t + whHoldMs(C);                         // (1.99aid S3 review 5: Pepe said opted_out - no new hold until then: withheldNow)
+    // (1.99aid S3 review 5: a still of theirs goes now too - with the switch off the cut took it at once)
     if (!liveish(x) && !x.pend && x.video !== "still") return { cut: null, actions: A };
     if (x.video === "still") A.push({ a: "still_stop", login });
     x.pend = false;
@@ -1368,7 +1368,7 @@ function cutNow(S, login, code, t) {
   return A;
 }
 
-/** 1.99?? (privacy controls V-3, spec 2.2 row 4): a veiled speaker's hooded COVER tile (`coverKey`) becomes their CAM tile (`login`)
+/** 1.99aid (privacy controls V-3, spec 2.2 row 4): a veiled speaker's hooded COVER tile (`coverKey`) becomes their CAM tile (`login`)
  *  IN PLACE - the same place, the same time on the stage, no hand-over and no keep_recent "recent" cover beside the cam: one frog,
  *  one tile. Called before a step whose holders carry `login` (micfollow.stepPad: the candidate's cam may show now). A cam tile of
  *  theirs already up (a race): the cover just comes off. Nothing is noted as a cut (no cooldown on either key). -> actions */
@@ -1426,5 +1426,5 @@ module.exports = {
   dynPick,                                                                                                      // wave2 WP-4 (F.3)
   arrange, SHAPE_CELLS, VEILED_GAP,                                                                                        // 1.99ahp stable slots
   COVER_PREFIX, isCoverKey,                                                                                     // wave2 WP-4 (F.4)
-  coverToCam,                                                                                                   // 1.99?? (privacy controls V-3)
+  coverToCam,                                                                                                   // 1.99aid (privacy controls V-3)
 };

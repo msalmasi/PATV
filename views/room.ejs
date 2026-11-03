@@ -635,8 +635,8 @@
   <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=6"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99?? privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=13"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99?? (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker %>
+  <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
+  <script src="/public/js/stage-mic.js?v=13"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
@@ -849,10 +849,10 @@
   <script src="/public/js/chat-clip.js?v=5"></script><%# 1.99aht v5: a !transcripts off bar's 🔊 Clip says it goes up without a caption %>
   <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=3"></script><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
-  <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99?? privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
+  <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99aid privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
-  <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99?? privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
+  <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
   <script src="/public/js/room-mod.js?v=12"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
@@ -930,7 +930,7 @@
       return fetch(url, { method: 'POST', credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
         headers: { 'content-type': 'application/json', 'x-requested-with': 'fetch' }, body: JSON.stringify(body) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) {
-          // 1.99?? (privacy controls S4t): a staff / moderator / owner reveal while text reveal roles are on needs a reason - asked once
+          // 1.99aid (privacy controls S4t): a staff / moderator / owner reveal while text reveal roles are on needs a reason - asked once
           // when the site says so, then the same request again with it (the reason is logged with the see-through row)
           if (r.status === 409 && d && d.code === 'reason_needed' && body && body.reason == null && typeof window.prompt === 'function') {
             var why = window.prompt(_t('js.pad.veil.reveal_why', 'Why are you revealing this? (at least 3 characters - it\'s logged)'), '');
@@ -1242,7 +1242,7 @@
           li.appendChild(n);
           var ic = el('span', 'ic');
           var cam;
-          // 1.99?? (privacy controls S5): an incognito person's cam under their frog name (the server sends on_cam on a frog entry only
+          // 1.99aid (privacy controls S5): an incognito person's cam under their frog name (the server sends on_cam on a frog entry only
           // while incognito cams are on) - the popover asks for it by the entry's opaque id, never a login
           var vcam = !!(r.cams && u.on_cam && u.anon && u.veil === 'incognito' && u.id);
           if ((r.cams && u.on_cam && !u.self && !u.anon && u.login) || vcam) {
@@ -1253,10 +1253,10 @@
           } else {
             cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? _t('js.pad.people.on_cam', 'On cam') : (u.on_cam === false ? _t('js.pad.people.off_cam', 'Off cam') : _t('js.pad.people.cam_unknown', 'Cam unknown'));
           }
-          if (!u.veil || vcam) ic.appendChild(cam);   // wave 2 (A.6): a veiled person never has a cam icon anywhere (1.99?? S5: but an incognito cam shown under its frog name)
-          // 1.99?? (privacy controls S4): a moderator's 👁 on a frog entry whose cam is on but hidden (cv: 1 - camreveal.js), asked for
+          if (!u.veil || vcam) ic.appendChild(cam);   // wave 2 (A.6): a veiled person never has a cam icon anywhere (1.99aid S5: but an incognito cam shown under its frog name)
+          // 1.99aid (privacy controls S4): a moderator's 👁 on a frog entry whose cam is on but hidden (cv: 1 - camreveal.js), asked for
           // by the entry's opaque id; the person is told unless the moderator is in ghost mode, and it's logged
-          // 1.99?? (privacy controls S4): Reveal on a frog entry (rvm: 1 - an admin, or the pad's owner now): who it is, logged
+          // 1.99aid (privacy controls S4): Reveal on a frog entry (rvm: 1 - an admin, or the pad's owner now): who it is, logged
           // (roster_line); shown here only, never kept
           if (u.rvm === 1 && u.anon && u.id) {
             var rvb = el('button', 'veil-reveal rvm', _t('js.pad.veil.reveal', 'Reveal')); rvb.type = 'button';
@@ -1361,7 +1361,7 @@
     // (CL8: sending one while reading back returns to the live chat)
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
       feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; } }) : null;
-    // 1.99?? (privacy controls, round 3 - F4; owner Q8): a moderator who may view hidden cams here (room.livecams.reveal: PATV staff anywhere,
+    // 1.99aid (privacy controls, round 3 - F4; owner Q8): a moderator who may view hidden cams here (room.livecams.reveal: PATV staff anywhere,
     // the pad's owner and the room's mods in their own pad) gets "👁 View a cam by Camfrog login (logged)" under the people list - the
     // by-login entry (camreveal.js: someone this room lists that the list doesn't show, e.g. left out). Made only when it's offered
     var cvLoginP = null;
@@ -1418,11 +1418,11 @@
       // 1.99ez: 🎬 Clip - Pepe records 10 / 20 / 30 s of this cam (camclip.js); a free preview, pay only to save it
       if (s.state === 'ok' && s.img && s.clip) snapClipRow(box, s);
       // 1.99qr: 🐸 Pepe on this cam - 👀 Look / 🔥 Cam roast / 🎤 Roast with their prices, a confirm step, Pepe's answer
-      // (1.99?? privacy controls, round 3 - F2: a frog-name cam too, by its opaque id - 👀 / 🔥 only; padpepe.js and Pepe answer under the
+      // (1.99aid privacy controls, round 3 - F2: a frog-name cam too, by its opaque id - 👀 / 🔥 only; padpepe.js and Pepe answer under the
       // frog name, never the login)
       if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe);
       // 1.99aag: 📺 admins - put this cam on Pepe's OBS (his main stream + his Camfrog cam); onair.js decides (opt-in / owner's OK)
-      // (1.99?? privacy controls V-1: a veiled cam too, by its opaque id - onair-cam.js checks it)
+      // (1.99aid privacy controls V-1: a veiled cam too, by its opaque id - onair-cam.js checks it)
       if (window.PATVOnAirCam && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVOnAirCam.row(box, snapWho);
     }
     var clipTimer = null;
@@ -1499,9 +1499,9 @@
       }
       function ask(reason) {
         b.disabled = true; sel.disabled = true; vid.textContent = ''; say(_t('js.pad.clip.asking', 'Asking Pepe to record…'));
-        // (1.99?? privacy controls V-1: an incognito person's cam is clipped by its opaque id - never a login)
+        // (1.99aid privacy controls V-1: an incognito person's cam is clipped by its opaque id - never a login)
         var body = who.login ? { login: who.login, secs: Number(sel.value) } : { id: who.id, secs: Number(sel.value) };
-        if (typeof reason === 'string') body.reason = reason;      // (1.99?? review fixes 2 - RV-A: a 👻 ghost clip past someone's rules - logged)
+        if (typeof reason === 'string') body.reason = reason;      // (1.99aid review fixes 2 - RV-A: a 👻 ghost clip past someone's rules - logged)
         post('/api/rooms/' + encodeURIComponent(slug) + '/camclip', body).then(function (d) {
           if (!alive()) return;
           if (!d.ok && d.code === 'reason_needed' && typeof reason !== 'string' && typeof window.prompt === 'function') {
@@ -1606,7 +1606,7 @@
       clearTimeout(snapTimer); clearTimeout(saveTimer);
       snapWho = who;
       snapBox(_t('js.pad.snap.asking', 'Asking Pepe to open {name}\'s cam…', { name: label(who) }));
-      // 1.99?? (privacy controls, review fixes 2 - RV-A): a 👻 ghost snapshot past someone's rules asks why first, like ▶ Live (logged)
+      // 1.99aid (privacy controls, review fixes 2 - RV-A): a 👻 ghost snapshot past someone's rules asks why first, like ▶ Live (logged)
       var snapBody = who.login ? { login: who.login } : { id: who.id };
       if (typeof reason === 'string') snapBody.reason = reason;
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(snapBody) })
@@ -1731,7 +1731,7 @@
       safe('compose', function () { renderCompose(d); });
       safe('audio', function () { roomAudio.update(d); });
       safe('strip', function () { if (window.PATVPadStrip) PATVPadStrip.update(liveCams); });   // 1.99zc
-      safe('cvlogin', function () { cvLogin(!!(liveCams && liveCams.reveal === 1)); });       // 1.99?? (privacy controls, round 3 - F4)
+      safe('cvlogin', function () { cvLogin(!!(liveCams && liveCams.reveal === 1)); });       // 1.99aid (privacy controls, round 3 - F4)
       safe('stagemic', function () {
         if (!window.PATVPadStage || !PATVPadStage.setMic) return;
         var showMic = function (p) { PATVPadStage.setMic(p); };

@@ -14,7 +14,7 @@
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   window.PATVOnAirCam = {
     row: function (box, who) {
-      // (1.99?? privacy controls V-1: an incognito person's cam is put on by its opaque people-list id - never a login)
+      // (1.99aid privacy controls V-1: an incognito person's cam is put on by its opaque people-list id - never a login)
       var vid = who && !who.login && who.veil === 'incognito' && typeof who.id === 'string' && /^v-[A-Za-z0-9_-]{12}$/.test(who.id) ? who.id : null;
       if (!box || !who || (!who.login && !vid)) return;
       var ref = vid ? { id: vid } : { login: who.login };

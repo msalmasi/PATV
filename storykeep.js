@@ -195,7 +195,7 @@ async function micCapture(mediaId) {
   if (!cap) return null;
   const people = [], seen = new Set();
   const add = (l, role) => { const x = lc(l); if (x && !seen.has(x)) { seen.add(x); people.push({ login: x, role }); } };
-  // 1.99?? (privacy controls, review fixes 2 - Q4-A): a cam drawn under a FROG NAME (stage_capture_people.veil, incognito cams) is role
+  // 1.99aid (privacy controls, review fixes 2 - Q4-A): a cam drawn under a FROG NAME (stage_capture_people.veil, incognito cams) is role
   // "vcam" - kept like any cam drawn (owner Q4: every cam feature works, incognito changes only the name), checked as a frog-name cam
   // (micPeopleWhy / personState), never named to anyone but its own person
   if (await tableThere("stage_capture_people")) {
@@ -239,7 +239,7 @@ async function micPeopleWhy(mc, actorIds, cache = new Map(), { owners = true } =
   const logins = mc.people.map((p) => p.login);
   // (review fixes 2 - Q4-A: a frog-name cam - still incognito, its own cam rules; stagemiccap.consent's recheck form {sess: null})
   const vcam = new Set(mc.people.filter((p) => p.role === "vcam").map((p) => p.login));
-  // 1.99?? (privacy controls S3): a name card's person (role "card") - stagemiccap.cardConsent: while micfollow_cfg withheld_cover is on,
+  // 1.99aid (privacy controls S3): a name card's person (role "card") - stagemiccap.cardConsent: while micfollow_cfg withheld_cover is on,
   // a cam opt-out withholds the cam only, so a name card asks hidden / private / their cam blocks, never the cam's rules; off = consent
   const card = new Set(mc.people.filter((p) => p.role === "card").map((p) => p.login));
   try {
@@ -995,7 +995,7 @@ function defaultHiddenCheck(login) {
 }
 let hiddenCheck = defaultHiddenCheck;
 function _setHiddenCheck(fn) { hiddenCheck = fn || defaultHiddenCheck; }
-/** 1.99?? (privacy controls, review fixes 2 - Q4-A): for a cam drawn under a FROG NAME (role "vcam") - quotes.isBridgeOff only (left out
+/** 1.99aid (privacy controls, review fixes 2 - Q4-A): for a cam drawn under a FROG NAME (role "vcam") - quotes.isBridgeOff only (left out
  *  now: !bridge hide or stricter), never the incognito half they were drawn under; null while the hidden stores load (as above). */
 function defaultLeftOutCheck(login) {
   try {
@@ -1266,4 +1266,4 @@ module.exports = { SAVE_USER_KINDS, userSaveable, init, register, postToPad, rem
                    onPeoplePrivate, hiddenChanged, sweepHidden, sweepKept, keptOf, keptStates, dropPeopleIfNoCopy, ownersAt, MIC, _setHiddenCheck,
                    _setLeftOutCheck,
                    onPostDeleted, purgeOrphanKeep,            // mic keep review: feedstore.remove / account deletion
-                   _micPeopleWhy: micPeopleWhy };             // 1.99?? (privacy controls S3): tests - the per-person recheck by role
+                   _micPeopleWhy: micPeopleWhy };             // 1.99aid (privacy controls S3): tests - the per-person recheck by role

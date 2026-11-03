@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fix DARK-2): a dark feature's help card (Pepe's !privacy card, help.js PV3_DARK_CARDS) is left out of
+// 1.99aid (privacy controls, review fix DARK-2): a dark feature's help card (Pepe's !privacy card, help.js PV3_DARK_CARDS) is left out of
 // EVERY public help surface until the privacy switchboard v3 is advertised - not only /help's page model: the prompter's search
 // results (and so Pepe's candidates and the commands his answer may name) and the raw /api/help/data.
 //   node --test test/privm-review-help.test.js     (temp DB)

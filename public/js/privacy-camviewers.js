@@ -28,7 +28,7 @@
   function empty(el, text) { el.textContent = ''; el.appendChild(row(text)); }
   function kindsOf(p) {
     var L = { live: _t('js.cv.live', 'live'), snap: _t('js.cv.snap', 'snapshot'), clip: _t('js.cv.clip', 'clip'),
-              reveal: _t('js.cv.reveal', 'moderation view') };   // 1.99?? (privacy controls S4): a moderator's view - never who
+              reveal: _t('js.cv.reveal', 'moderation view') };   // 1.99aid (privacy controls S4): a moderator's view - never who
     return (p.kinds || []).map(function (k) { return L[k] || k; }).join(', ');
   }
   function ago(ms) { return _t('js.cv.ago', '{n} min ago', { n: Math.max(0, Math.round((Date.now() - ms) / 60000)) }); }

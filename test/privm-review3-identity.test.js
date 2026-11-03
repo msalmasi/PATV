@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, round 3 - the final verify's F1 / F2; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every
+// 1.99aid (privacy controls, round 3 - the final verify's F1 / F2; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every
 // cam feature works for an incognito person's cam under its frog name, "including AI picture references"; captures carry the frog name,
 // never the real name or login). On the V-1 harness (privm-review2-identity.test.js, verbatim: a temp DB, the real bridge ingest on
 // privacy wire v2, frog-name sessions, live cams, the mic stage):

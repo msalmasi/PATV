@@ -364,7 +364,7 @@ test("the store: no module but evidence.js (and its rollback tool / lifecycle ho
   assert.deepEqual(table, ["accountMerge.js", "accountdelete.js", "deploy/keep-staging-tables.js", "evidence.js", "loginrekey.js", "padrekey.js", "tools/evidence-purge.js"].sort(),
                    "evidence_clips: only the store, its rollback tool and the lifecycle / coverage lists");
   const req = files.filter((f) => /require\(\s*["']\.\/evidence["']\s*\)/.test(fs.readFileSync(f, "utf8"))).map(rel).sort();
-  // (1.99?? privacy controls S4: + camevidence.js - cam evidence stills / clips keep their files in this store's directory, under its
+  // (1.99aid privacy controls S4: + camevidence.js - cam evidence stills / clips keep their files in this store's directory, under its
   // switch and its holds; it reads nothing of evidence_clips. S7: + privacycopy.js - the policy copy (evidence.privacyCopy, like
   // terms.js) for the cam evidence text's switch and date)
   assert.deepEqual(req, ["accountdelete.js", "adminweb.js", "bridge.js", "camevidence.js", "evidenceexport.js", "padsettings.js", "pepeforget.js", "privacycopy.js", "seethrough.js", "terms.js"].sort(),

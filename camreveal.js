@@ -1,4 +1,4 @@
-// camreveal.js — 1.99?? (privacy controls S4): the CAM REVEAL (G:/ops/privacy-controls-spec-2026-11-02.md section 3.2 "The new CAM
+// camreveal.js — 1.99aid (privacy controls S4): the CAM REVEAL (G:/ops/privacy-controls-spec-2026-11-02.md section 3.2 "The new CAM
 // REVEAL", section 5 "S4", and the owner's answers, section 8 - they override 3.2's defaults: Q8 + Q9 who, Q10 + Q11 the notice,
 // Q12 evidence, Q13 the pad's own switches, Q15 3 minutes + "Extend", Q22 the by-login entry).
 //
@@ -13,7 +13,7 @@
 //   owner  the pad's registered owner NOW (rooms registry) - their own pad
 //   mod    the room's moderators: Pepe's mod caps for the viewer's linked Camfrog login in that room (padmod.capsFor - the same
 //          check the pad's Manage panel and livecam.mayEnd use) - their own room
-// The by-login entry (Q22: someone left out or not listed - /admin/pepe/livecams, and 1.99?? round 3 - F4 the pad page's "View a cam by
+// The by-login entry (Q22: someone left out or not listed - /admin/pepe/livecams, and 1.99aid round 3 - F4 the pad page's "View a cam by
 // Camfrog login" for its moderators): the same reveal roles (owner Q8) - admins and staff on any pad; a pad's owner and the room's mods on
 // their own pad only, and only for someone the room's roster lists now (named, veiled or left out - never a login that isn't there).
 // Audited and rate-limited like every reveal. Saving evidence stills / clips (Q12): admins and the pad's owner only (camevidence.js).
@@ -38,7 +38,7 @@
 //
 // LIMITS: one open reveal per moderator, at least 10 s between reveals, at most 6 per 10 minutes (evidence.js's numbers); one reveal
 // session per person (a second moderator joins it with their own rows and their own notice); the live-cam caps (budget, max_live).
-// 1.99?? (round 4): every by-login try by a non-admin spends that rate, hit or miss, and a miss is a see-through row (ref miss:<code>:l).
+// 1.99aid (round 4): every by-login try by a non-admin spends that rate, hit or miss, and a miss is a see-through row (ref miss:<code>:l).
 // The pad's own switches stand (Q13): no reveal where the bridge, its cams or its live cams are off.
 //
 // THE SWITCH (dark): chatlog_meta 'cam_reveal' {on, at, by, first_on} - /admin/bridge#camreveal (chatlog.admin), audited (admin_audit
@@ -79,7 +79,7 @@ class Refuse extends Error { constructor(status, msg, code) { super(msg); this.s
 const MSG = {
   off: "Viewing hidden cams isn't switched on.",
   forbidden: "Only PATV admins and staff, a pad's owner and the room's moderators can view a hidden cam for moderation.",
-  // (1.99?? round 3 - F4: no longer said - every reveal role may open a cam by its login, a pad's owner / mods in their own pad)
+  // (1.99aid round 3 - F4: no longer said - every reveal role may open a cam by its login, a pad's owner / mods in their own pad)
   forbidden_login: "Only PATV admins and staff, a pad's owner and the room's moderators can open a cam by its Camfrog login.",
   why: "Say why (at least 3 characters) - it's logged.",
   gone: "They aren't here any more.",
@@ -90,7 +90,7 @@ const MSG = {
   offline: "That Camfrog room isn't live right now.",
   room_off: "Live cams aren't on in this Camfrog room.",
   ended: "That moderation view already ended.",
-  held: "Their cam can't be viewed right now.",          // 1.99?? (review fixes 2 - RV-B)
+  held: "Their cam can't be viewed right now.",          // 1.99aid (review fixes 2 - RV-B)
 };
 
 // ── the switch ──
@@ -170,7 +170,7 @@ async function roleCached(userId, R, t = now()) {
   if (ROLE_CACHE.size > 5000) ROLE_CACHE.delete(ROLE_CACHE.keys().next().value);
   return role;
 }
-/** 1.99?? (privacy controls, round 3 - F4): may `role` hold a by-login reveal of `login` in R now? Admins / staff always (Pepe's own roster
+/** 1.99aid (privacy controls, round 3 - F4): may `role` hold a by-login reveal of `login` in R now? Admins / staff always (Pepe's own roster
  *  decides whether they're on cam there); a pad's owner / the room's mods only while R's roster lists them (kindNow: named, veiled - a
  *  left-out person's entry the site keeps but never shows counts too). */
 function byLoginOk(role, R, login) {
@@ -296,7 +296,7 @@ async function start(u, R, b, { byLogin = false } = {}) {
   const reason = clean(b && b.reason, REASON_MAX);
   if (reason.length < REASON_MIN) throw new Refuse(400, MSG.why, "why");
   if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw new Refuse(403, MSG.pad_access, "pad_access");
-  // 1.99?? (privacy controls, round 4 - F4 probing): a by-login try by anyone but an admin - one that opens a cam and one refused below
+  // 1.99aid (privacy controls, round 4 - F4 probing): a by-login try by anyone but an admin - one that opens a cam and one refused below
   // (404 not listed, 409 under a frog name, ...) - spends the reveal rate first, and a refused one is a see-through row (scope cam_reveal,
   // ref "miss:<code>:l", the login typed - read at /admin/bridge#seethrough by admins only; no livecam_audit / cam_views row, nothing to
   // the person), written before the answer: testing typed logins for presence or a frog name is throttled and visible. The answers stay
@@ -331,7 +331,7 @@ async function missRow(u, R, role, b, reason, code) {
 async function startChecked(u, R, b, { byLogin, role, reason, probe, rows }) {
   const sub = subjectOf(R, b, byLogin);
   if (!sub) throw new Refuse(404, MSG.gone, "gone");
-  // 1.99?? (privacy controls, round 3 - F4; owner Q8): the by-login entry takes every reveal role - a pad's owner / the room's mods on their
+  // 1.99aid (privacy controls, round 3 - F4; owner Q8): the by-login entry takes every reveal role - a pad's owner / the room's mods on their
   // own pad (roleOf is per room) and only for someone the room lists now; admins / staff anywhere (Pepe's roster decides on cam) - before
   // any row or rate
   if (byLogin && !byLoginOk(role, R, sub.login)) throw new Refuse(404, MSG.gone, "gone");
@@ -348,7 +348,7 @@ async function startChecked(u, R, b, { byLogin, role, reason, probe, rows }) {
   if (sub.onCam === false) throw new Refuse(400, MSG.not_on_cam, "not_on_cam");
   const why = await withheldWhy(R, sub, u.userId);
   if (!why) throw new Refuse(409, MSG.visible, "visible");
-  // 1.99?? (privacy controls, review fixes 2 - RV-B): a NAMED person whose mic hold still shows a frog name (veiled_hold) - their face
+  // 1.99aid (privacy controls, review fixes 2 - RV-B): a NAMED person whose mic hold still shows a frog name (veiled_hold) - their face
   // next to their login pairs the two, which S5 refuses to everyone (ghosts too). Only a role that may reveal who is behind a frog
   // name (veilstage.stageRole: an Admin, the pad's owner, + staff / room mods while text_reveal_roles is on) gets it; anyone else the
   // neutral refusal - before the rate limit and before any row
@@ -361,7 +361,7 @@ async function startChecked(u, R, b, { byLogin, role, reason, probe, rows }) {
   const mine = LC.revealOfViewer(String(u.userId));
   if (mine && !(mine.roomId === R.id && mine.login === sub.login)) throw new Refuse(409, "Close the cam you're viewing for moderation first.", "one_open");
   const cur = LC.revealOf(R.id, sub.login);
-  // 1.99?? (review fixes 2 - RV-C): an open by-login session a pad role may not hold (round 3 - F4: its person isn't listed in the room)
+  // 1.99aid (review fixes 2 - RV-C): an open by-login session a pad role may not hold (round 3 - F4: its person isn't listed in the room)
   // can't be joined from the pad (MediaMTX and the first beat would end it with lost_right after its rows and its rate were spent): refused
   // first. A pad role may join one of someone the room lists - the same right as opening it by login itself (byLoginOk)
   if (cur && cur.rv && cur.rv.bylogin && !byLoginOk(role, R, sub.login)) throw new Refuse(409, MSG.held, "unavailable");
@@ -377,7 +377,7 @@ async function startChecked(u, R, b, { byLogin, role, reason, probe, rows }) {
     async (sid) => { const a = await writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veiled, byLogin, what: "open" }); rows.wrote = true; return a; });
   console.log(`[camreveal] open room=${R.id} by=${u.userId} as=${role}${ghost ? " ghost" : ""}${byLogin ? " by-login" : ""} why=${why}`);
   // (the player shows the frog name for a veiled person - never the login; the by-login entry shows what the admin typed)
-  // 1.99?? (privacy controls, round 4 - F4 UX): can_save asks camevidence's own rule for THIS session (a session opened by login: admins
+  // 1.99aid (privacy controls, round 4 - F4 UX): can_save asks camevidence's own rule for THIS session (a session opened by login: admins
   // only), so the player never offers a Save that camevidence would refuse
   let canSave = false;
   try { canSave = require("./camevidence").maySave(role, LC.revealSess(R.id, ans.rv)) === true; } catch (e) { canSave = false; }
@@ -396,7 +396,7 @@ async function beat(u, R, sid) {
   if (!(await require("./bridge-relay").padFull(uid, R.id))) return stop("pad_access");
   if (!S.rv.bylogin && leftOut(S.login)) return stop("left_out");
   const kind = kindNow(R, S.login);
-  // (1.99?? round 3 - F4: a pad role's by-login view ends once the room stops listing the person - byLoginOk)
+  // (1.99aid round 3 - F4: a pad role's by-login view ends once the room stops listing the person - byLoginOk)
   if ((!S.rv.bylogin || !SITE_WIDE.has(role)) && kind === "absent") return stop("gone");
   if (!(await withheldWhy(R, { login: S.login, kind }, uid))) return stop("visible");
   return LC.revealBeat(uid, R.id, sid);
@@ -489,7 +489,7 @@ function register(app, { addUser, bySlug, isLive }) {
       if (!effective()) return res.status(404).json(OFF);
       const u = await me(req);
       if (!u) return res.status(401).json({ ok: false, code: "signin", error: "Sign in first." });
-      // (1.99?? round 3 - F4: {login, bylogin: true} = the pad page's "View a cam by Camfrog login" - the by-login entry, start's roles)
+      // (1.99aid round 3 - F4: {login, bylogin: true} = the pad page's "View a cam by Camfrog login" - the by-login entry, start's roles)
       const b = req.body || {};
       if (b.bylogin === true) return res.json(await start(u, liveRoom(req), { login: b.login, reason: b.reason }, { byLogin: true }));
       res.json(await start(u, liveRoom(req), b));
@@ -532,7 +532,7 @@ function register(app, { addUser, bySlug, isLive }) {
     if (R && SID_RE.test(sid)) { try { require("./livecam").revealStop(String(req.user.userId), R.id, sid, "stopped"); } catch (e) { /* gone */ } }
     res.json({ ok: true });
   });
-  // the by-login entry (Q22): /admin/pepe/livecams. {room (pad or id), login, reason}. 1.99?? (privacy controls, round 3 - F4; owner Q8): the
+  // the by-login entry (Q22): /admin/pepe/livecams. {room (pad or id), login, reason}. 1.99aid (privacy controls, round 3 - F4; owner Q8): the
   // reveal roles decide (start: admins / staff anywhere, a pad's owner / mods in their own pad for someone it lists) - not livecam.admin,
   // which only the page itself needs (Staff couldn't use the entry the policy names them for)
   app.post("/api/admin/pepe/livecams/reveal", addUser, json, async (req, res) => {

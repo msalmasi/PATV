@@ -32,7 +32,7 @@ function init() {
                       scope TEXT, decided_at INTEGER, decided_via TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS onair_consent_status ON onair_consent (status, expires)");
       await runQuery(`CREATE TABLE IF NOT EXISTS onair_pad_allow (pad TEXT PRIMARY KEY, owner_id TEXT, at INTEGER NOT NULL)`);
-      // 1.99?? (privacy controls, review fixes 2 - ID-C): 1 = the ask is for a FROG-NAME cam (an incognito person's cam picked by
+      // 1.99aid (privacy controls, review fixes 2 - ID-C): 1 = the ask is for a FROG-NAME cam (an incognito person's cam picked by
       // its opaque id) - its login is kept for Pepe's PM to the cam's owner and their own answer, never shown next to the frog label
       const cols = await getQuery("PRAGMA table_info(onair_consent)");
       if (!cols.some((c) => c.name === "veiled")) await runQuery("ALTER TABLE onair_consent ADD COLUMN veiled INTEGER");
@@ -83,7 +83,7 @@ async function setPadAllow(pad, userId, on) {
 }
 
 // ── requests ──
-// 1.99?? (privacy controls, review fixes 2 - ID-C): a FROG-NAME cam's ask (veiled) carries its login only for whoever may pair the
+// 1.99aid (privacy controls, review fixes 2 - ID-C): a FROG-NAME cam's ask (veiled) carries its login only for whoever may pair the
 // two - the cam's own owner (their own ask) and Pepe (camAsks: he PMs them); everyone else (the pad's owner on a pad ask, Staff in
 // the on-air admin view, the request page) gets login null next to the frog label. A named ask is unchanged.
 const rowView = (r, { withLogin = false } = {}) => r && ({ id: r.id, kind: r.kind, pad: r.pad, login: Number(r.veiled) && !withLogin ? null : r.login,

@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls, review fixes 2 - Q4-A; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every cam feature
+// 1.99aid (privacy controls, review fixes 2 - Q4-A; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner Q4: every cam feature
 // works for an incognito person's cam, incognito changes only the NAME): a 🎙 mic-stage capture in the open that drew an incognito cam
 // under its frog name (stage_capture_people.veil) can be 🔖 saved and 📌 posted - its person is a "vcam" in the durable record, checked
 // as a frog-name cam (still incognito, their cam rules - stagemiccap.consent {sess: null}), told in words about their frog name, given

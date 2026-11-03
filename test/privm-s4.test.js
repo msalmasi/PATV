@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls S4): CAM REVEALS (G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + section 5 "S4"; the owner's answers,
+// 1.99aid (privacy controls S4): CAM REVEALS (G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + section 5 "S4"; the owner's answers,
 // section 8: Q8 admins, staff, pad owners and room mods may reveal; Q9 the ghost bypass covers veiled cams; Q10 / Q11 only cam
 // reveals notify, never naming who; Q12 evidence stills / clips; Q13 the pad's switches stand; Q15 3 minutes + Extend; Q22 by login).
 // On a temp DB with the real bridge ingest (privacy wire v2), frog-name sessions, live cams, the mic-stage engine and the routes:
@@ -254,7 +254,7 @@ test("switch: off by default (every route 404); on only with privacy wire v2; th
 });
 
 // ── who ──
-// (1.99?? privacy controls, round 3 - F4: the by-login entry takes every reveal role - staff without livecam.admin, the pad's owner / mods
+// (1.99aid privacy controls, round 3 - F4: the by-login entry takes every reveal role - staff without livecam.admin, the pad's owner / mods
 // on their own pad for someone it lists; was "admin and staff only" and in practice admins only - privm-review3-bylogin.test.js)
 test("who: a member gets one 403 for anything; a reason is required; admin / staff / owner / mod may; by login: the reveal roles (F4)", async () => {
   await setup;

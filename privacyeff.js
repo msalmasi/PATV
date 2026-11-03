@@ -1,4 +1,4 @@
-// privacyeff.js — ONE answer to "what does the website do with this person right now?" (1.99?? privacy controls S2).
+// privacyeff.js — ONE answer to "what does the website do with this person right now?" (1.99aid privacy controls S2).
 //
 // The owner's model (2026-11-02, G:/ops/privacy-controls-spec-2026-11-02.md sections 1.2 and 8): every website privacy switch does
 // one job and they combine freely. `!bridge hide` is an OVERRIDE, not a setter: it turns every website switch on without changing

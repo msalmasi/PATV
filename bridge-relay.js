@@ -346,7 +346,7 @@ function takeJobs(liveRoomIds, via = "sync") {
     if (j.kind === "cmd" && j.gui) { base.gui = j.gui; if (j.reason) base.reason = j.reason; }
     if (j.kind === "cmd" && j.setting) base.setting = j.setting;
     if (j.kind === "cmd" && j.pepe) base.pepe = j.pepe;   // 1.99qr: a 🐸 Pepe menu action (padpepe.js) - Pepe re-checks line + cam
-    // 1.99?? (privacy controls, round 3 - F2): ... on a frog-name cam - Pepe words what comes back by the frog name (never the login)
+    // 1.99aid (privacy controls, round 3 - F2): ... on a frog-name cam - Pepe words what comes back by the frog name (never the login)
     if (j.kind === "cmd" && j.pepe && j.veil) base.veil = { alias: String(j.veil.alias || "someone").slice(0, 40) };
     if (j.kind === "modinfo") base.target = j.target || "";
     if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
@@ -378,7 +378,7 @@ function applyAcks(acks) {
     const j = a && jobs.get(String(a.id || ""));
     if (!j) continue;
     let replies = (Array.isArray(a.replies) ? a.replies : []).slice(0, CMD_MAX_REPLIES).map(cleanReply).filter(Boolean);
-    // 1.99?? (privacy controls, round 3 - F2): a 🐸 cam action on a frog-name cam (padpepe.js vmask) - Pepe's answer as the website keeps
+    // 1.99aid (privacy controls, round 3 - F2): a 🐸 cam action on a frog-name cam (padpepe.js vmask) - Pepe's answer as the website keeps
     // it names the frog: his replies and his reply line (also the command log's result, cmdLogResult below)
     const vmask = typeof j.vmask === "function" ? j.vmask : null;
     if (vmask) replies = replies.map((x) => vmask(x));
@@ -681,7 +681,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     res.json({ ok: true, mime: j.mime, data });
   });
 
-  // 1.99?? (privacy controls S5, G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5"; owner Q4): an incognito person's cam
+  // 1.99aid (privacy controls S5, G:/ops/privacy-controls-spec-2026-11-02.md section 5 "S5"; owner Q4): an incognito person's cam
   // snapshot under their FROG NAME - asked for by the opaque id of their roster entry ({id}; incogcams.camOf: the switch and Pepe's
   // word, their open frog-name session, on cam). The login is resolved here and never answered: the frame lives under its own key
   // ("<room>|<login>|v:<session>" - never served to a named request, nor a named frame to it), a refusal is the generic one (Q23),
@@ -704,7 +704,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (icOn() && IC().veiledPresence(R, login)) return { error: "They aren't on cam." };
     return { login, vkey: null, veil: null };
   };
-  // 1.99?? (review fixes 2 - RV-A): is this a 👻 ghost who gets past `login`'s rules where that needs the reveal audit log (a veiled cam
+  // 1.99aid (review fixes 2 - RV-A): is this a 👻 ghost who gets past `login`'s rules where that needs the reveal audit log (a veiled cam
   // always, a named one while cam reveals are in effect)? Fails closed (an error = yes: the frame waits for a logged request)
   const ghostPast = async (uid, login, veiled) => {
     try {
@@ -725,9 +725,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (tg.error) return res.status(400).json({ ok: false, error: tg.error });
     const login = tg.login;
     const ref = await CV().camRefusal(login, u.userId);
-    // (1.99?? S5: a veiled cam's refusal is the one generic word - never a reason, a mode or "ask to watch")
+    // (1.99aid S5: a veiled cam's refusal is the one generic word - never a reason, a mode or "ask to watch")
     if (ref) return res.status(ref.status).json(tg.veil ? { ok: false, code: "unavailable", error: CV().UNAVAILABLE } : { ok: false, code: ref.code, error: ref.error });
-    // 1.99?? (privacy controls, review fixes 2 - RV-A): a 👻 ghost past someone's rules (a veiled cam always, a named one while cam
+    // 1.99aid (privacy controls, review fixes 2 - RV-A): a 👻 ghost past someone's rules (a veiled cam always, a named one while cam
     // reveals are in effect) gives a reason first and is logged BEFORE any frame - a shared one, a pending job or a new job - as ▶ Live
     try {
       await require("./livecam").ghostCaptureGate(u, R.id, login, { veilLabel: tg.veil ? tg.veil.alias || "someone" : null, reason: (req.body || {}).reason, kind: "snap" });
@@ -792,7 +792,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       return res.json({ ok: true });
     }
     if (img && j && rule && rule !== "no" && b.viewer_ok) okFor.set(j.userId, cost);
-    // 1.99?? (privacy controls S5): a veiled request's frame under its own key; a frame with no job left (swept) of someone who shows
+    // 1.99aid (privacy controls S5): a veiled request's frame under its own key; a frame with no job left (swept) of someone who shows
     // veiled in the room now is dropped - it may have been taken for their frog name
     // (review DARK-4: only while incognito cams are in effect - with the switch off a late frame is cached exactly as before)
     if (!j && icOn()) {
@@ -815,7 +815,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const R = bySlug(req.params.slug);
     if (!R || !R.cams) return res.status(404).json({ state: "off" });
     if (!(await padFull(req.user.userId, R.id))) return res.status(403).json(PAD_DENIED);
-    // (1.99?? privacy controls S5: "v-..." = a veiled cam's opaque id - its own frame, generic refusals, no 🎬 Clip)
+    // (1.99aid privacy controls S5: "v-..." = a veiled cam's opaque id - its own frame, generic refusals, no 🎬 Clip)
     const p0 = String(req.params.login || "").slice(0, 40);
     let login = p0.toLowerCase(), vkey = null;
     if (/^v-[A-Za-z0-9_-]{12}$/.test(p0) && icOn()) {
@@ -827,7 +827,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const ref = await CV().camRefusal(login, req.user.userId);         // 1.99yq: blocked / switched off since the frame was taken
     if (ref) return res.json({ state: "refused", status: vkey ? CV().UNAVAILABLE : ref.error });
     const s = snaps.get(R.id + "|" + login + (vkey ? "|" + vkey : ""));
-    // 1.99?? (review fixes 2 - RV-A): a 👻 ghost who gets past someone's rules sees a frame only after its own POST gave a reason and was
+    // 1.99aid (review fixes 2 - RV-A): a 👻 ghost who gets past someone's rules sees a frame only after its own POST gave a reason and was
     // logged (it is then one of that frame's viewers) - never by reading a frame someone else asked for
     const askedBy = (uid) => (s && s.viewers && s.viewers.has(uid)) || [...jobs.values()].some((j) => j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id &&
       j.target === login && (j.vkey || null) === vkey && j.state !== "done" && j.viewers && j.viewers.has(uid));
@@ -847,7 +847,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       const gen = s.ok && s.img && s.viewers && s.viewers.has(req.user.userId) ? { sid: s.sid, until: s.ts + SNAP_TTL } : null;
       // 1.99ez: "🎬 Clip" (camclip.js) - the lengths, and why it's greyed out here (null = it isn't)
       let clip = null;
-      // (1.99?? privacy controls V-1: a veiled cam too - its refusals are the one generic word; the clip goes by the entry's id)
+      // (1.99aid privacy controls V-1: a veiled cam too - its refusals are the one generic word; the clip goes by the entry's id)
       if (s.ok && s.img && (!vkey || icOn())) { try { clip = await require("./camclip").clipInfo(R, req.user.userId, login, { veiled: !!vkey }); } catch (e) { clip = null; } }
       return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save, gen, clip,
         img: s.img ? "data:image/jpeg;base64," + s.img.toString("base64") : null });
@@ -870,14 +870,14 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "snapshots" });
     const sid = String((req.body || {}).sid || "").slice(0, 40);
     let s = null, login = "";
-    // (1.99?? privacy controls S5: the frame knows its own login - a veiled one's key carries its session after it)
+    // (1.99aid privacy controls S5: the frame knows its own login - a veiled one's key carries its session after it)
     for (const [k, v] of snaps) if (sid && v.sid === sid && k.startsWith(R.id + "|")) { s = v; login = v.login || k.slice(R.id.length + 1); break; }
     if (!s || !s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return res.status(410).json({ ok: false, error: "That snapshot expired — take a fresh one." });
     if (!s.viewers || !s.viewers.has(u.userId)) return res.status(403).json({ ok: false, error: "That isn't a snapshot you asked for." });
     if (saveRight(s, u.userId) === null) return res.status(403).json({ ok: false, error: "Snaps of them aren't allowed here." });
     const ref = await CV().camRefusal(login, u.userId, { strict: true });   // 1.99aak: a 👻 ghost can't SAVE past the owner's rules
     if (ref) return res.status(ref.status).json(s.vkey ? { ok: false, code: "unavailable", error: CV().UNAVAILABLE } : { ok: false, code: ref.code, error: ref.error });
-    // (1.99?? privacy controls S5: a veiled frame is saved only while that frog-name session is still theirs and incognito cams are on)
+    // (1.99aid privacy controls S5: a veiled frame is saved only while that frog-name session is still theirs and incognito cams are on)
     if (s.vkey) {
       let V = null;
       try { V = icOn() ? IC().entryByLogin(R, login, s.vkey.slice(2)) : null; } catch (e) { V = null; }
@@ -891,10 +891,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const lim = limited("savesnap|" + u.userId, SAVE_GAP, SAVE_BURST, SAVE_WINDOW);
     if (lim) return res.status(429).json({ ok: false, error: lim });
     const fid = "f" + crypto.randomBytes(12).toString("hex");
-    // (1.99?? privacy controls V-1: a veiled frame keeps its frog name - the saved capture's subject, owner Q4 - never the login)
+    // (1.99aid privacy controls V-1: a veiled frame keeps its frog name - the saved capture's subject, owner Q4 - never the login)
     frames.set(fid, { img: s.img, userId: u.userId, username: u.username, roomId: R.id, login, ts: Date.now(), ...(s.vkey ? { veiled: true, label: s.valias || null } : {}) });
     try {
-      // (1.99?? privacy controls S5: a veiled subject is "someone" in the action's label - the viewer's own list never names them.
+      // (1.99aid privacy controls S5: a veiled subject is "someone" in the action's label - the viewer's own list never names them.
       // Review ID-3: nor its args - pepe_actions is the SAVER's row (their Download my data returns it): a veiled frame's action carries
       // no subject login at all; Pepe takes the target from /api/bridge/snapframe, bot to site, by the frame id - micclip's pattern)
       const id = await queueAction(u.userId, { kind: "snap.save", args: [R.id, s.vkey ? "" : login, fid], tag: "snap", label: "!snap " + (s.vkey ? "someone" : login) });
@@ -924,7 +924,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false });
     const f = frames.get(String(b.id || ""));
     if (!f || Date.now() - f.ts > FRAME_TTL || String(b.user || "") !== f.username) return res.status(404).json({ ok: false });
-    // (1.99?? privacy controls V-1: a veiled frame says so, with its frog name as the capture's subject - Pepe never names the login)
+    // (1.99aid privacy controls V-1: a veiled frame says so, with its frog name as the capture's subject - Pepe never names the login)
     res.json({ ok: true, room: f.roomId, target: f.login, data: f.img.toString("base64"),
                ...(f.veiled ? { veiled: true, label: String(f.label || "someone").slice(0, 40) } : {}) });
   });
@@ -1005,7 +1005,7 @@ function snapForGen(roomId, sid, userId) {
       if (require("./livecam").optedOut(login)) return { status: 403, error: CV().MSG.opted_out };
       if (CV().blocked(login, userId)) return { status: 403, error: CV().UNAVAILABLE };
     } catch (e) { /* the modules are there */ }
-    return { login, img: s.img, ts: s.ts, ...(s.vkey ? { vkey: s.vkey } : {}) };   // (1.99?? S5: a veiled frame says so - aigen names the frog)
+    return { login, img: s.img, ts: s.ts, ...(s.vkey ? { vkey: s.vkey } : {}) };   // (1.99aid S5: a veiled frame says so - aigen names the frog)
   }
   return { status: 410, error: "That snapshot expired — take a fresh one." };
 }

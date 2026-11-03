@@ -1326,7 +1326,7 @@ const bridgeOk = (id) => { try { return require("./premium").bridgeAllowed(id); 
 const isLiveShown = (R) => isLive(R) && bridgeOk(R.id);
 const rtcHint = (R) => { try { return require("./roomrtc").hint(R); } catch (e) { return false; } };
 const livecamHint = (R, userId) => { try { return require("./livecam").hint(R, userId); } catch (e) { return null; } };
-/** 1.99?? (privacy controls S4): the ▶ Live hint + reveal: 1 for a moderator (camreveal.viewerRole) - the hint itself unchanged otherwise. */
+/** 1.99aid (privacy controls S4): the ▶ Live hint + reveal: 1 for a moderator (camreveal.viewerRole) - the hint itself unchanged otherwise. */
 const withReveal = (h, role) => (h && role && !h.signin ? { ...h, reveal: 1 } : h);
 // 1.99bi: the room's PATV title (owner-editable, rooms.js) when it has one, else what Pepe calls it
 const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); return (r && r.title) || R.name; } catch (e) { return R.name; } };
@@ -1583,11 +1583,11 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   // frog names here (an admin, or the pad's owner for lines said in their era - never on the homepage panel), rv: 1 flags
   const selfKeys = new Set([userId ? "u:" + String(userId).toLowerCase() : null, login ? String(login).toLowerCase() : null].filter(Boolean));
   let see = null;
-  // (1.99?? privacy controls S4t: the TEXT-reveal role - + staff / room mods while text_reveal_roles is on; off: chatRoleCached exactly)
+  // (1.99aid privacy controls S4t: the TEXT-reveal role - + staff / room mods while text_reveal_roles is on; off: chatRoleCached exactly)
   if (!opts.nonExempt && viewer && viewer.userId) { try { see = await require("./seethrough").textRoleCached(viewer, R.id); } catch (e) { see = null; } }
   const canReveal = see ? (x) => require("./seethrough").mayReveal(see, x && x.ts != null ? Number(x.ts) : Date.now()) : null;
-  // (1.99?? privacy controls S5: roomId - an incognito member's on_cam under their frog name, incogcams.pageOnCam)
-  // (1.99?? privacy controls S4: camReveal - a moderator who may view a hidden cam here gets cv: 1 on a frog entry whose cam is on;
+  // (1.99aid privacy controls S5: roomId - an incognito member's on_cam under their frog name, incogcams.pageOnCam)
+  // (1.99aid privacy controls S4: camReveal - a moderator who may view a hidden cam here gets cv: 1 on a frog entry whose cam is on;
   // null while cam reveals aren't in effect, on the homepage panel and embeds - never asked there)
   let crRole = null, rvm = false;
   if (!opts.nonExempt && viewer && viewer.userId) {
@@ -1597,7 +1597,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   }
   const members = CV.roster(R.members, { canReveal, roomId: R.id, ...(crRole ? { camReveal: true } : {}), ...(rvm ? { rosterReveal: true } : {}) }), mic = CV.roster(R.mic, { canReveal });   // ingest replaces these arrays (never edits them): a snapshot too
   const L = await resolveNames([...items.map((it) => it.u), ...redoItems.map((it) => it.u), ...members, ...mic,
-                                ...(prog ? prog.tiles.filter((x) => !x.cover && !x.veil).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody; 1.99?? S5: nor a veiled cam)
+                                ...(prog ? prog.tiles.filter((x) => !x.cover && !x.veil).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody; 1.99aid S5: nor a veiled cam)
                                 // 1.99aht S1: a !transcripts off bar said named shows that name - and its PATV look (chatlogview.barUser)
                                 ...[...items, ...redoItems].map((it) => CV.barUser(it)).filter(Boolean)]);
   const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal });
@@ -1643,7 +1643,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
             // 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) - null = not here; {slots: {used, max}, watching} for this viewer
-            // (1.99?? privacy controls S4: reveal: 1 for a moderator who may view a hidden cam here - the popover's "View for moderation")
+            // (1.99aid privacy controls S4: reveal: 1 for a moderator who may view a hidden cam here - the popover's "View for moderation")
             livecams: isLive(R) ? withReveal(livecamHint(R, userId), crRole) : null,
             clip: clipSwitch(R.id),       // 1.99fp: the room's !clip switch (true / false / null = unknown) - 🔊 Clip on 🎙 lines
             cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null,
@@ -1683,7 +1683,7 @@ async function stageProgramFor(roomId, userId) {
   let prog;
   try { prog = require("./micfollow").snapshot(roomId); } catch (e) { return null; }
   if (!prog) return null;
-  const L = await resolveNames(prog.tiles.filter((tile) => !tile.cover && !tile.veil).map((tile) => ({ login: tile.login })));   // (wave2 WP-4: a cover names nobody; 1.99?? S5: nor a veiled cam)
+  const L = await resolveNames(prog.tiles.filter((tile) => !tile.cover && !tile.veil).map((tile) => ({ login: tile.login })));   // (wave2 WP-4: a cover names nobody; 1.99aid S5: nor a veiled cam)
   const F = await require("./padflair").byUsername(roomId).catch(() => null);
   return stageProgram(prog, R, userId, L, F, "capture");
 }
@@ -1736,9 +1736,9 @@ function register(app, { isBotToken, addUser }) {
     relay.applyAcks(body.acks);
     PW.noteTxCap(body.txbar_cap === 1);        // 1.99aht transcripts bar: does this Pepe send them as a bar? (the policy / help text)
     require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
-    try { require("./incogcams").noteBot(body); } catch (e) { /* none */ }   // 1.99?? (privacy controls S5): Pepe applies incognito cams?
-    try { require("./camreveal").noteBot(body); } catch (e) { /* none */ }   // 1.99?? (privacy controls S4): Pepe opens cam reveals?
-    try { require("./privacystate").noteBot(body); } catch (e) { /* none */ }   // 1.99?? (privacy controls S6): Pepe runs the switchboard v3?
+    try { require("./incogcams").noteBot(body); } catch (e) { /* none */ }   // 1.99aid (privacy controls S5): Pepe applies incognito cams?
+    try { require("./camreveal").noteBot(body); } catch (e) { /* none */ }   // 1.99aid (privacy controls S4): Pepe opens cam reveals?
+    try { require("./privacystate").noteBot(body); } catch (e) { /* none */ }   // 1.99aid (privacy controls S6): Pepe runs the switchboard v3?
     // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
     // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
     // privacy.shown events, his incognito OFF reports, an older Pepe's drop within one bridge session (no tx_hidden_h: he sends
@@ -1765,17 +1765,17 @@ function register(app, { isBotToken, addUser }) {
              // wave 2 WP-5 (spec E.3): evidence clips can be made (evidence.js: its switch AND privacy wire v2) - Pepe offers the Camfrog
              // !clipmic evidence path only after this (never said while either is off: the contract fixture runs without it)
              ...(evidenceOn() ? { evidence: 1 } : {}),
-             // 1.99?? (privacy controls S5): incognito cams (incogcams.js: its switch AND privacy wire v2) - Pepe shows an incognito
+             // 1.99aid (privacy controls S5): incognito cams (incogcams.js: its switch AND privacy wire v2) - Pepe shows an incognito
              // person's cam under the frog name only after this (never said while either is off)
              ...(incogcamAdvert() ? { incogcam: 1 } : {}),
-             // 1.99?? (privacy controls S4): cam reveals (camreveal.js: its switch AND privacy wire v2) - Pepe opens a reveal want and
+             // 1.99aid (privacy controls S4): cam reveals (camreveal.js: its switch AND privacy wire v2) - Pepe opens a reveal want and
              // sends a veiled member's on_cam only after this (never said while either is off)
              ...(camrevealAdvert() ? { camreveal: 1 } : {}),
-             // 1.99?? (privacy controls S6): the privacy switchboard v3 (privacystate.js: its switch AND privacy wire v2) - Pepe answers
+             // 1.99aid (privacy controls S6): the privacy switchboard v3 (privacystate.js: its switch AND privacy wire v2) - Pepe answers
              // !privacy, lets an unproven room line switch a control on and off for its name, takes the card's actions and reports
              // bridge / tx only after this (never said while either is off)
              ...(privstateAdvert() ? { privstate: 1 } : {}),
-             // 1.99?? (privacy controls S4t): text reveal roles (textreveal.js: its switch) - Pepe's replies and help cards that name who
+             // 1.99aid (privacy controls S4t): text reveal roles (textreveal.js: its switch) - Pepe's replies and help cards that name who
              // can reveal hidden text switch to the new wording only after this (never said while it's off)
              ...(textrevealAdvert() ? { textreveal: 1 } : {}) };
   }
@@ -2244,7 +2244,7 @@ function evidenceOn() { try { return require("./evidence").effective(); } catch 
 function incogcamAdvert() { try { return require("./incogcams").advert() === true; } catch (e) { return false; } }
 function camrevealAdvert() { try { return require("./camreveal").advert() === true; } catch (e) { return false; } }
 function privstateAdvert() { try { return require("./privacystate").advert() === true; } catch (e) { return false; } }
-function textrevealAdvert() { try { return require("./textreveal").advert() === true; } catch (e) { return false; } }   // 1.99?? (S4t)
+function textrevealAdvert() { try { return require("./textreveal").advert() === true; } catch (e) { return false; } }   // 1.99aid (S4t)
 
 /** wave 2 WP-2 (spec E.1): who is behind veiled line c of room roomId, for a reveal (seethrough.js checks role and era) -> {ts, vz, vw}
  *  | null. The live item's own (non-enumerable) identity first, else the archive's chat_log_veil row - only for a line of THIS room. */

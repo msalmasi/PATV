@@ -1,4 +1,4 @@
-// 1.99?? (privacy controls S5 fix): pad-livecam.js's row() asked for a NAMED cam with an undefined body (`var ref = veiled ? {id} : ref`
+// 1.99aid (privacy controls S5 fix): pad-livecam.js's row() asked for a NAMED cam with an undefined body (`var ref = veiled ? {id} : ref`
 // - the hoisted var itself), so ▶ Live, its beat / stop / ask and "🎬 Put on stage" posted {} for everyone on cam by name ("They aren't
 // on cam."), whatever the incog_cams switch said. Run in a sandbox with a fake DOM: a named cam posts {login}, a veiled one {id}.
 //   node --test test/privm-s5-fix.test.js

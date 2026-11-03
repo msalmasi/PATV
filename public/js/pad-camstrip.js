@@ -10,7 +10,7 @@
 //   strip.update(info)         the live view's room.livecams (null = live cams off here) - every poll
 //   strip.add(who) / strip.adopt(who, {sess, stream})    pin a cam (adopt = the popover hands over a cam already playing)
 //   strip.has(key) / strip.full() / strip.focus(key)      key = the login (lower case) - or a frog-name cam's opaque id
-// 1.99?? (privacy controls, round 3 - F2; owner Q4: every cam feature works for an incognito person's cam under the frog name): a
+// 1.99aid (privacy controls, round 3 - F2; owner Q4: every cam feature works for an incognito person's cam under the frog name): a
 //   frog-name cam ({id: "v-…", alias} - the people list's entry, never a login) is pinned by its id: its tile shows the frog name,
 //   asks / beats / stops by {id} and is remembered as {id, display}; once that frog-name session ends the id opens nothing.
 // The page beats every 15 s per tile (the server drops a slot without beats after 45 s). All text via textContent.
@@ -30,7 +30,7 @@
     return window.PATVLiveCam && PATVLiveCam.why ? PATVLiveCam.why(code, msg) : (msg || _t('js.pad.live.err_failed', 'Pepe couldn\'t open their cam live - try again in a bit.'));
   }
   var FROG_RE = /^v-[A-Za-z0-9_-]{12}$/;
-  /** 1.99?? (round 3 - F2): a frog-name cam's opaque id (no login) - else null */
+  /** 1.99aid (round 3 - F2): a frog-name cam's opaque id (no login) - else null */
   function frogId(w) { return w && !w.login && typeof w.id === 'string' && FROG_RE.test(w.id) ? w.id : null; }
   /** a cam's key in the strip: its login (lower case), or a frog-name cam's id (as it is - ids are case-sensitive) */
   function keyOf(w) { if (!w) return null; var f = frogId(w); return f || (typeof w.login === 'string' && w.login ? String(w.login).toLowerCase() : null); }
@@ -81,7 +81,7 @@
       var t = { key: keyOf(who), login: fid ? null : String(who.login).toLowerCase(), id: fid,
                 display: fid ? (who.alias || who.display || _t('js.stage.mf.cover_someone', 'someone')) : (who.display || who.login),
                 state: 'new', gen: 0, sess: null, beat: null };
-      t.ref = fid ? { id: fid } : { login: t.login };          // (1.99?? round 3 - F2: a frog-name cam by its id, never a login)
+      t.ref = fid ? { id: fid } : { login: t.login };          // (1.99aid round 3 - F2: a frog-name cam by its id, never a login)
       var li = el('div', 'cs-tile'); li.setAttribute('role', 'listitem');
       var vw = el('div', 'cs-vid');
       var v = el('video'); v.muted = true; v.autoplay = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('muted', '');

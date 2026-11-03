@@ -938,7 +938,7 @@ async function reportRead(user, c) {
   const anon = p === "anon" || p === "out" || p === "mask" || hidden || String(row.who || "").startsWith("h:");
   await audit(me.userId, { rk: row.rk, who: row.who && !anon ? row.who : null, kind: "history", from: row.ts, to: row.ts, why: "report queue #" + row.c });
   const alias = !row.purged && u.anon && typeof u.alias === "string" && !hidden ? u.alias : null;
-  // 1.99?? (privacy controls, round 3 - F3): while text reveal roles are on, staff may reveal a hidden line on its pad too (with a reason) -
+  // 1.99aid (privacy controls, round 3 - F3): while text reveal roles are on, staff may reveal a hidden line on its pad too (with a reason) -
   // tr: 1 makes the queue's note say so (off: the answer as before)
   let tr = false;
   try { tr = hidden && require("./textreveal").isOn() === true; } catch (e) { tr = false; }

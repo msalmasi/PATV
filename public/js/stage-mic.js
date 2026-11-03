@@ -144,7 +144,7 @@
   // frog on its hood colour, "<frog name or someone> · incognito / hidden", the mic ring - never a cam, a still, ⚑ or 📌. ✕
   // only with ex: 1, Reveal only with rv: 1 (WP-2's window.PATVReveal.tile), "this is you" with self: 1.
   var isCover = function (s) { return !!s && s.kind === 'cover'; };
-  // 1.99?? (privacy controls S5): an incognito person's CAM under their frog name ({kind: "cam", veil: "incognito", hood, id
+  // 1.99aid (privacy controls S5): an incognito person's CAM under their frog name ({kind: "cam", veil: "incognito", hood, id
   // "anon-<8 hex>"}) - live / still like any cam tile, but its cards show the peek hood (never initials or an avatar), its label
   // "<frog name> · incognito"; ✕ and Reveal as on a cover ({tile}, ex / rv only); no 📌
   var isVeiledCam = function (s) { return !!s && s.kind === 'cam' && s.veil === 'incognito'; };
@@ -290,7 +290,7 @@
       var hoodImg = el('img', 'mf-hood'); hoodImg.alt = ''; hoodImg.hidden = true; hoodImg.setAttribute('aria-hidden', 'true');
       var rv = btn('mf-rv', _t('js.stage.mf.reveal', 'Reveal'), _t('js.stage.mf.reveal_aria', 'Reveal who this is (only you see it; it is logged)')); rv.hidden = true;
       var chip = el('span', 'mf-chip'); chip.hidden = true;
-      // 1.99?? (privacy controls S4): "👁 View cam" on a cover whose cam is on but hidden (cv: 1 - a moderator, camreveal.js): the
+      // 1.99aid (privacy controls S4): "👁 View cam" on a cover whose cam is on but hidden (cv: 1 - a moderator, camreveal.js): the
       // cam for this viewer alone, logged (cam-reveal.js, loaded on first use by pad-livecam.js's PATVCamRevealOpen)
       var cvb = btn('mf-rv mf-cv', _t('js.camrv.tile', '👁 View cam'), _t('js.camrv.tile_aria', 'View this hidden cam for moderation (only you see it; it is logged)')); cvb.hidden = true;
       e.appendChild(v); e.appendChild(img); e.appendChild(hoodImg); e.appendChild(card); e.appendChild(label); e.appendChild(chip); e.appendChild(x); e.appendChild(rp); e.appendChild(pn);
@@ -458,7 +458,7 @@
         if (!cover) {
           e.removeAttribute('data-hood'); e.removeAttribute('data-veil');
           hoodImg.hidden = true; rv.hidden = true; chip.hidden = true; cvb.hidden = true; e.classList.remove('revealed');
-          if (!isVeiledCam(s)) { t.revealed = null; t.revealedBy = null; t.autoId = null; }   // (1.99?? S5: a veiled cam keeps its Reveal - apply())
+          if (!isVeiledCam(s)) { t.revealed = null; t.revealedBy = null; t.autoId = null; }   // (1.99aid S5: a veiled cam keeps its Reveal - apply())
           return false;
         }
         if (t.mode === 'live') stopLive(true);
@@ -489,7 +489,7 @@
         x.setAttribute('aria-label', _t('js.stage.mf.exclude_cover_q', 'Keep this veiled speaker off the mic stage'));
         x.hidden = !(P.manage && s.ex === 1);
         rv.hidden = !(s.rv === 1 && window.PATVReveal && typeof window.PATVReveal.tile === 'function') || !!t.revealed;
-        cvb.hidden = !(s.cv === 1 && typeof window.PATVCamRevealOpen === 'function');   // 1.99?? (privacy controls S4)
+        cvb.hidden = !(s.cv === 1 && typeof window.PATVCamRevealOpen === 'function');   // 1.99aid (privacy controls S4)
         var me = s.self === 1;
         chip.hidden = !(me || t.revealed);
         chip.textContent = t.revealed ? _t('js.stage.mf.revealed', '{login} · only you can see this', { login: t.revealed }) : me ? _t('js.stage.mf.cover_self', 'this is you') : '';
@@ -520,7 +520,7 @@
         off.setAttribute('aria-label', _t('js.stage.mf.take_off_aria', 'Take my cam off this pad\'s stage'));
         if (s.newest) { e.setAttribute('aria-current', 'true'); sr.textContent = ', ' + _t('js.stage.mf.newest', 'newest speaker'); }
         else { e.removeAttribute('aria-current'); sr.textContent = ''; }
-        // (1.99?? privacy controls S5: a veiled cam's card picture is its peek hood - never initials, an avatar or a 1.99ahq cover)
+        // (1.99aid privacy controls S5: a veiled cam's card picture is its peek hood - never initials, an avatar or a 1.99ahq cover)
         avTxt.textContent = vc ? '' : initials(s.name);
         if (vc) {
           card.classList.remove('cov');
@@ -671,7 +671,7 @@
         if (!cams.length) { pinList.appendChild(el('li', 'mf-pmsg', _t('js.stage.mf.pin_none', 'Nobody is on cam in the room right now.'))); return; }
         var full = (Array.isArray(d.pins) ? d.pins.length : 0) >= (Number(d.room) || 0);
         cams.forEach(function (c) {
-          // (1.99?? privacy controls V-1: an incognito person's cam is listed by its opaque id + frog name - never a login)
+          // (1.99aid privacy controls V-1: an incognito person's cam is listed by its opaque id + frog name - never a login)
           var key = c && c.veiled === true && typeof c.id === 'string' ? c.id : c && c.login;
           if (!c || typeof key !== 'string') return;
           var shown = String(c.display || (c.veiled ? _t('js.stage.mf.cover_someone', 'someone') : c.login));

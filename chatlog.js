@@ -132,7 +132,7 @@ const REASON_RE = /^(bridge|incognito|list_b|list_i|web|forget|delete|staff|of:[
 const PRIVATE_ARGS = Object.freeze(["!msg", "!message", "!patvmsg", "!verify", "!verifypad", "!joinroom", "!padfine", "!padmove", "!relay", "!tell",
                                     "!incognito", "!forgetme", "!bridge", "!transcripts",
                                     "!remember",     // wave 3 (design §N.3): 🧠 Pepe's memory switch (bot private_args floor too)
-                                    // 1.99?? (privacy controls S0, spec 4.1): 📡 the cam switch - "X: !livecam off" on a pad told
+                                    // 1.99aid (privacy controls S0, spec 4.1): 📡 the cam switch - "X: !livecam off" on a pad told
                                     // everyone whose cam had just gone off the website (bot pepe_privargs.PRIVACY_CMDS too)
                                     "!livecam"]);
 const INDEXABLE_KINDS = ["msg", "tx", "topic"];
@@ -585,7 +585,7 @@ async function setSwitch(name, value, actor = null) {
 // ── commands with private arguments ──
 const CMD_RE = /^![a-z0-9_]{1,40}$/;
 /** Is this chat line a private_args command ("!verify 1234", "/msg bob ...")? First token, case-insensitive. */
-// 1.99?? (privacy controls S6): commands kept out ONLY while their dark feature is on - !privacy is no command at all until Pepe runs
+// 1.99aid (privacy controls S6): commands kept out ONLY while their dark feature is on - !privacy is no command at all until Pepe runs
 // the switchboard v3 (privacystate.js advert), so its line is ordinary chat as today; while it's on it is a privacy command (bot
 // pepe_privargs.PV3_PRIVATE - the same rule)
 const PV3_PRIVATE = Object.freeze(["!privacy"]);
