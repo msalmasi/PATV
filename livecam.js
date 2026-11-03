@@ -19,7 +19,7 @@
 // once). Every new viewer is noted (camviewers.noteView) and Pepe PMs the owner (the notices ride this poll: cv_notify).
 // Caps: viewers_free (1) live cams at once per account, viewers_sp (4) with a Season Pass (premium.hasPass); every viewer
 // counts at their cam's real bitrate against budget_mbps (rateOf: pass-through measured, re-encode the rate Pepe encodes at -
-// 1.99??: bot 1.99aik clamps it to 1/3 bit per pixel per frame - else cfg.kbps); max_live cams publishing at once; Pepe's
+// 1.99ail: bot 1.99aik clamps it to 1/3 bit per pixel per frame - else cfg.kbps); max_live cams publishing at once; Pepe's
 // own pool (the cams his Camfrog keeps open) answers "slots_busy" when it can't make room.
 //
 // Settings (one home: /admin/pepe/livecams, admins; table livecam_cfg, versioned + admin_audit like room audio):
@@ -434,7 +434,7 @@ const freshStage = (S, t = now()) => (S.stageViewers ? [...S.stageViewers.entrie
 function totalViewers(t = now()) { let n = 0; for (const S of SESS.values()) if (!S.ended) n += freshViewers(S, t).length + freshStage(S, t).length; return n; }
 // 1.99aab: each relay counts at its REAL bitrate - a pass-through cam at what Pepe measures coming in (a rolling average of
 // the broadcaster's own stream, ~20-60 kbit/s), a re-encoded one (or one Pepe hasn't reported yet) at cfg.kbps.
-// 1.99??: a re-encoded one at the rate Pepe says he encodes it at (live[].kbps) when he also reports its cap (live[].kbps_cap,
+// 1.99ail: a re-encoded one at the rate Pepe says he encodes it at (live[].kbps) when he also reports its cap (live[].kbps_cap,
 // bot 1.99aik: at most 1/3 bit per pixel per frame - 768 kbit/s for a 320x240 cam at 30 fps, 384 at 15); an older Pepe's
 // re-encode stays at cfg.kbps. rateKind says which: measured (pass-through) / encoded (Pepe's re-encode rate) / configured.
 const MIN_KBPS = 16;
@@ -456,14 +456,14 @@ function usedKbps(t = now(), c = cfg()) {
 }
 /** One more viewer of S (null = a cam not relayed yet, counted at cfg.kbps) fits the bandwidth budget? */
 const fitsBudget = (S, t = now(), c = cfg()) => usedKbps(t, c) + rateOf(S, c) <= c.budget_mbps * 1000;
-/** 1.99??: the site-wide viewer cap right now: the viewers watching (each at their cam's real rate - rateOf) plus the new ones
+/** 1.99ail: the site-wide viewer cap right now: the viewers watching (each at their cam's real rate - rateOf) plus the new ones
  *  the budget left over still takes at cfg.kbps (a cam not relayed yet - fitsBudget(null)). Over the budget (it was lowered, or
  *  the rates rose, while people watch) it is below the viewers watching - with an older Pepe exactly viewerCap(), as before. */
 const viewerCapNow = (t = now(), c = cfg()) =>
   Math.max(0, totalViewers(t) + Math.floor((c.budget_mbps * 1000 - usedKbps(t, c)) / Math.max(1, c.kbps)));
 const liveCount = () => [...SESS.values()].filter((S) => !S.ended).length;
 
-// 1.99??: relays that failed with ffmpeg errors (Pepe's live[].err_first, bot 1.99aik) - their admin row is gone once they end,
+// 1.99ail: relays that failed with ffmpeg errors (Pepe's live[].err_first, bot 1.99aik) - their admin row is gone once they end,
 // so /admin/pepe/livecams lists the last FAILS_MAX of FAILS_KEEP_MS here (memory only, never stored; named as the admin rows are).
 const FAIL_WHYS = new Set(["failed", "spawn_failed", "no_video", "relay_lost"]);
 const FAILS_MAX = 10;
@@ -509,7 +509,7 @@ function endSession(S, why, t = now()) {
   // micfollow: a relay the mic stage ever held is logged without its login (spec §12 - mic stages relay people who never
   // asked to be watched; the appearance log is their record)
   console.log(`[livecam] end room=${S.roomId} target=${S.mfEver || S.veil || S.rv ? "-" : S.login} why=${why}`);
-  noteFailed(S, why, t);                              // 1.99??: a failed relay's ffmpeg errors (the admin page's list)
+  noteFailed(S, why, t);                              // 1.99ail: a failed relay's ffmpeg errors (the admin page's list)
   if (S.rv) return;                                   // 1.99aid (privacy controls S4): a reveal is nobody's tile, slot or pin
   runHooks(END_HOOKS, [S, why], "end");               // micfollow: the mic stage's tile follows its relay
 }
@@ -1459,9 +1459,9 @@ function revealSweep(S, t) {
 
 // ── Pepe ──
 const str = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n);
-/** 1.99??: a kbit/s figure from Pepe's live[] (a number, 0-100000) or null. */
+/** 1.99ail: a kbit/s figure from Pepe's live[] (a number, 0-100000) or null. */
 const kbpsNum = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.min(100000, Math.round(v)) : null);
-/** 1.99?? (lcadm review): Pepe's err_first for the admin page - never a URL or a credential, whatever Pepe sends. Bot 1.99aik masks
+/** 1.99ail (lcadm review): Pepe's err_first for the admin page - never a URL or a credential, whatever Pepe sends. Bot 1.99aik masks
  *  http(s) URLs only and drops lines naming the token; the site also drops any " | " line naming a token / bearer / authorization,
  *  masks every URL (tcp://, udp://, ...) and anything shaped like a publish key (pubKey; this relay's own key by value too),
  *  BEFORE the 200-character cut (a cut key would slip past the mask). null = nothing left. */
@@ -1529,12 +1529,12 @@ async function forBot(body, t = now()) {
                   source: x.source === "passthrough" ? "passthrough" : "reencode", fps: Number(x.fps) || null, fallback: str(x.fallback, 60) || null,
                   hold_ms: typeof x.hold_ms === "number" && Number.isFinite(x.hold_ms) ? Math.round(Math.max(0, Math.min(10000, x.hold_ms))) : null,
                   kbps: Number.isFinite(Number(x.kbps)) && Number(x.kbps) >= 0 ? Math.min(100000, Number(x.kbps)) : null,
-                  // 1.99?? (bot 1.99aik): a re-encode's kbps is the rate it encodes at; kbps_cfg = the setting it started with,
+                  // 1.99ail (bot 1.99aik): a re-encode's kbps is the rate it encodes at; kbps_cfg = the setting it started with,
                   // kbps_cap = that cam's ceiling (1/3 bit per pixel per frame); err_first = ffmpeg's first error lines of
                   // this run (URLs masked by Pepe, and by the site: errText) - staff-only: the admin view, never a pad or a public answer
                   kbps_cfg: kbpsNum(x.kbps_cfg), kbps_cap: kbpsNum(x.kbps_cap), err_first: errText(x.err_first, S),
                   exact: typeof x.exact === "boolean" ? x.exact : null };   // micfollow: opened / verified by its exact name
-    // 1.99??: the relay's last ffmpeg errors stay on its admin row after a restart clears them (Pepe resets err_first per run)
+    // 1.99ail: the relay's last ffmpeg errors stay on its admin row after a restart clears them (Pepe resets err_first per run)
     if (S.botInfo.err_first && !(S.errFirst && S.errFirst.text === S.botInfo.err_first)) S.errFirst = { text: S.botInfo.err_first, at: t };
     if (S.botState === "ended" || S.botState === "stopped") {
       const why = str(x.why, 30);
@@ -1743,7 +1743,7 @@ function hint(R, userId) {
            ...(isGhost(userId) ? { ghost: true } : {}) };   // 1.99aaf: the 👻 badge on the popover   // 1.99zc: sp_max for the strip's hint
 }
 async function ghostView() { try { return await require("./ghost").adminView(); } catch (e) { return null; } }
-/** How /admin/pepe/livecams names a relay (its rows and, 1.99??, its failures list).
+/** How /admin/pepe/livecams names a relay (its rows and, 1.99ail, its failures list).
  *  1.99aid (privacy controls S5): a veiled session shows its frog name only - never the login or keyOf (livecam.admin is "ops":
  *  it may be granted to Staff, who never see through a veil - J-2); the End button names it by "v:<opaque id>"
  *  1.99aid (privacy controls S4): a reveal shows "rv:<sid>" and, for a veiled person, the frog name or "veiled" - never the login (the
@@ -1766,7 +1766,7 @@ async function adminView() {
     ...(S.holds && S.holds.has(MFW_PREFIX + S.roomId) ? { warm: true, warm_s: (() => { const k = keptOf(S); return k ? Math.max(0, Math.round((k.until - t) / 1000)) : null; })() } : {}),
     ...adminWho(S), state: stateOf(S, t), since: S.createdAt, liveAt: S.liveAt || null,   // (1.99aid S4 / S5 naming: adminWho)
     viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since, ghost: !!v.ghost })), readers: S.readers, bot: S.botInfo || null,
-    // 1.99??: rate = measured (pass-through) / encoded (the re-encode rate Pepe reports - bot.kbps_cfg / bot.kbps_cap say if it's
+    // 1.99ail: rate = measured (pass-through) / encoded (the re-encode rate Pepe reports - bot.kbps_cfg / bot.kbps_cap say if it's
     // clamped) / configured (cfg.kbps: an older Pepe or no report yet); err_first = the relay's last ffmpeg errors (staff only)
     kbps: Math.round(rateOf(S, c)), measured: rateKind(S) === "measured", rate: rateKind(S),
     err_first: S.errFirst ? { text: S.errFirst.text, at: S.errFirst.at } : null,
@@ -1792,7 +1792,7 @@ async function adminView() {
            usage: { viewers, viewerCap: viewerCapNow(t, c), mbps: Math.round(usedKbps(t, c) / 100) / 10, budget_mbps: c.budget_mbps, live: sessions.length,
                     max_live: c.max_live, publishMbps: Math.round(sessions.reduce((a, x) => a + x.kbps, 0) / 100) / 10 },
            optouts: OPTOUT.size, camviewers: CV().stats(), ghost: await ghostView(), audit, recent,
-           failed: failsOf(t) };   // 1.99??: relays that failed with ffmpeg errors (staff only)
+           failed: failsOf(t) };   // 1.99ail: relays that failed with ffmpeg errors (staff only)
 }
 
 // ── routes ──
@@ -2017,7 +2017,7 @@ module.exports = {
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
   syncFresh, NOMEDIA_MS, LOST_MS, BOT_GRACE_MS,                                                              // 1.99ahn dead relay
-  rateOf, rateKind, viewerCapNow,                                                                            // 1.99?? (bot 1.99aik kbps)
+  rateOf, rateKind, viewerCapNow,                                                                            // 1.99ail (bot 1.99aik kbps)
   _sessions: SESS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setKick: (fn) => { kickImpl = fn; },

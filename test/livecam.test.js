@@ -157,7 +157,7 @@ test("max live cams and the bandwidth budget", async () => {
   await post("/api/rooms/room-one/livecam/stop", { login: "alice" }, "v2");
 });
 
-// 1.99?? (bot 1.99aik): Pepe clamps a re-encode to 1/3 bit per pixel per frame (768 kbps for a 320x240 cam at 30 fps) and says
+// 1.99ail (bot 1.99aik): Pepe clamps a re-encode to 1/3 bit per pixel per frame (768 kbps for a 320x240 cam at 30 fps) and says
 // so - live[].kbps (what he encodes at), kbps_cfg, kbps_cap - plus err_first (ffmpeg's first error lines, URLs masked)
 test("a re-encoded relay counts at the rate Pepe encodes it at; kbps_cfg / kbps_cap / err_first kept, err_first for staff only", async () => {
   T += 5 * 60 * 1000; LC.sweep();
@@ -222,7 +222,7 @@ test("a re-encoded relay counts at the rate Pepe encodes it at; kbps_cfg / kbps_
   await LC.save(A, { cfg: { budget_mbps: 100, kbps: 300 } });
 });
 
-// 1.99?? (lcadm review): the admin page's numbers with an older Pepe, err_first never a URL or a credential, and a mic-stage relay's
+// 1.99ail (lcadm review): the admin page's numbers with an older Pepe, err_first never a URL or a credential, and a mic-stage relay's
 // failure listed without its login
 test("lcadm review: over budget the cap now is below the viewers watching; err_first masked by the site too; a mic-stage failure has no login", async () => {
   T += 5 * 60 * 1000; LC.sweep();

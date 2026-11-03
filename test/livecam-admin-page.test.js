@@ -1,4 +1,4 @@
-// 1.99?? (bot 1.99aik): /admin/pepe/livecams - the page script (views/admin/pepeLivecams.ejs), run in a vm with a small fake DOM:
+// 1.99ail (bot 1.99aik): /admin/pepe/livecams - the page script (views/admin/pepeLivecams.ejs), run in a vm with a small fake DOM:
 // each cam's Bitrate cell says what it really costs ("768 kbit/s (clamped from 2000)" when Pepe clamped a re-encode to the cam's
 // 1/3 bit per pixel per frame), a relay's ffmpeg errors (err_first) sit on its row, failed relays are listed; and the settings
 // explain the clamp and the mic-stage pass-through.
