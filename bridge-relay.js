@@ -719,7 +719,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     // frame gets Save only where the room lets everyone !snap.
     if (cached && Date.now() - cached.ts < SNAP_TARGET_GAP) {
       if (cached.viewers) cached.viewers.add(u.userId);
-      if (cached.ok) CV().noteView("snap", R.id, login, u);
+      if (cached.ok) CV().noteView("snap", R.id, login, u, undefined, cached.vkey ? cached.valias || "someone" : null);   // (review ID-4)
       return res.json({ ok: true, cached: true });
     }
     for (const j of jobs.values()) {
@@ -780,7 +780,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       valias: j && j.vkey ? j.valias || null : null });
     if (j) { j.state = "done"; j.result = { ok: !!img, msg: clean(b.status, 120) }; }
     // 1.99yq: everyone this frame is shown to opened their cam - Pepe tells the owner (only once there IS a picture)
-    if (img && j && j.viewers) CV().noteViewers("snap", roomId, login, [...j.viewers]);
+    // (review ID-4: a veiled job's row carries its frog name - the 👻 views list shows that, never the login)
+    if (img && j && j.viewers) CV().noteViewers("snap", roomId, login, [...j.viewers], undefined, j.vkey ? j.valias || "someone" : null);
     res.json({ ok: true });
   });
 
@@ -859,8 +860,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const fid = "f" + crypto.randomBytes(12).toString("hex");
     frames.set(fid, { img: s.img, userId: u.userId, username: u.username, roomId: R.id, login, ts: Date.now() });
     try {
-      // (1.99?? privacy controls S5: a veiled subject is "someone" in the action's label - the viewer's own list never names them)
-      const id = await queueAction(u.userId, { kind: "snap.save", args: [R.id, login, fid], tag: "snap", label: "!snap " + (s.vkey ? "someone" : login) });
+      // (1.99?? privacy controls S5: a veiled subject is "someone" in the action's label - the viewer's own list never names them.
+      // Review ID-3: nor its args - pepe_actions is the SAVER's row (their Download my data returns it): a veiled frame's action carries
+      // no subject login at all; Pepe takes the target from /api/bridge/snapframe, bot to site, by the frame id - micclip's pattern)
+      const id = await queueAction(u.userId, { kind: "snap.save", args: [R.id, s.vkey ? "" : login, fid], tag: "snap", label: "!snap " + (s.vkey ? "someone" : login) });
       s.saves.set(u.userId, id);
       console.log(`[bridge-relay] save-snap room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${s.vkey ? "-" : login} action=${id}`);
       res.json({ ok: true, id });

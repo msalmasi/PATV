@@ -1555,7 +1555,8 @@ async function auth(b, action, proto) {
     // micfollow: a viewer who watches ONLY through the mic stage isn't noted one by one (one stage notice instead, OD-3)
     // (noted only when the note really went out: a viewer who later watches the same cam through a cam slot or ▶ Live
     // is still noted then)
-    if (!v.noted && !mfVia) { v.noted = true; CV().noteViewers("live", S.roomId, S.login, [String(c.uid)]); }
+    // (review ID-4: a veiled session's row carries its frog name - the 👻 views list shows that, never the login)
+    if (!v.noted && !mfVia) { v.noted = true; CV().noteViewers("live", S.roomId, S.login, [String(c.uid)], undefined, S.veil ? S.veil.alias || "someone" : null); }
     return 200;
   }
   return 403;

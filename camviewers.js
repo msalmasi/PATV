@@ -166,16 +166,22 @@ function displayOf(u) {
 /**
  * A PATV account opened `owner`'s cam in `roomId` (kind live | snap | clip). Logs it and queues a notice for Pepe.
  * u = {userId, username, displayname?, camfrogUsername?}. Never throws; returns whether a notice was queued.
+ * 1.99?? (privacy controls review ID-4): veil = the frog name a VEILED cam showed under (an incognito cam's ▶ Live / snapshot) - stored
+ * in cam_views.veil, so the 👻 views list (ghost.adminView) shows that, never the login; null = a named cam (the row as before).
  */
-function noteView(kind, roomId, owner, u, t = now()) {
+function noteView(kind, roomId, owner, u, t = now(), veil = null) {
   try {
     const o = low(owner);
     if (!KINDS.has(kind) || !LOGIN_RE.test(o) || !u || !u.userId) return false;
     const uid = String(u.userId);
     if (low(u.camfrogUsername) === o) return false;                    // their own cam
     const ghost = !!deps.isGhost(uid);                                  // 1.99aaf: 👻 staff ghost mode - logged (ghost = 1), nobody told
-    init().then(async () => runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost, bypass) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [o, String(roomId || ""), uid, u.username || null, kind, t, ghost ? 1 : 0, ghost ? await bypassOf(o, uid) : null]))
+    const vl = veil == null ? null : String(veil).replace(/[\u0000-\u001f\u007f<>]/g, " ").trim().slice(0, 60) || "someone";
+    init().then(async () => (vl == null
+      ? runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost, bypass) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [o, String(roomId || ""), uid, u.username || null, kind, t, ghost ? 1 : 0, ghost ? await bypassOf(o, uid) : null])
+      : runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost, bypass, veil) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [o, String(roomId || ""), uid, u.username || null, kind, t, ghost ? 1 : 0, ghost ? await bypassOf(o, uid) : null, vl])))
       .catch((e) => console.error("[camviewers] log:", e.message));
     if (ghost) return false;
     const k = o + "|" + uid;
@@ -202,12 +208,12 @@ function noteView(kind, roomId, owner, u, t = now()) {
   }
 }
 /** noteView for accounts known by id only (a snapshot's viewers when Pepe's frame arrives). Fire and forget. */
-function noteViewers(kind, roomId, owner, userIds, t = now()) {
+function noteViewers(kind, roomId, owner, userIds, t = now(), veil = null) {
   const ids = (userIds || []).map(String).filter(Boolean).slice(0, 50);
   if (!ids.length) return Promise.resolve(0);
   return usersById(ids).then((U) => {
     let n = 0;
-    for (const id of ids) { const u = U.get(id); if (u && noteView(kind, roomId, owner, u, t)) n++; }
+    for (const id of ids) { const u = U.get(id); if (u && noteView(kind, roomId, owner, u, t, veil)) n++; }
     return n;
   }).catch((e) => { console.error("[camviewers] note:", e.message); return 0; });
 }

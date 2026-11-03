@@ -1750,7 +1750,9 @@ async function report(roomId, login, user, reason, t = now()) {
   const qualified = !voided && (await qualifiedReporter(uid));
   // 1.99?? (privacy controls S0): veiled now (a tile reported in the 2 minutes after its person went incognito / hidden, or a pin
   // that ended because of it) - the row is marked, so staff never see this login in the queue (the reporter's answer is the same)
-  const veiled = hiddenLogin(l) ? 1 : 0;
+  // 1.99?? (privacy controls review ID-2): a veiled cam TILE's report is marked too, whatever the veil source says now - the row's
+  // login came from the tile's id (server-side), so the reporter's own Download my data must never get it (accountexport)
+  const veiled = vt0 || hiddenLogin(l) ? 1 : 0;
   await runQuery("INSERT INTO micfollow_reports (room_id, login, reporter_id, reason, at, qualified, state, veiled) VALUES (?, ?, ?, ?, ?, ?, 'open', ?)",
                  [P.roomId, l, uid, why, t, qualified ? 1 : 0, veiled]);
   bump("reports", 1, t, P);

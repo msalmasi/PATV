@@ -345,7 +345,10 @@ async function collect(userId, { at = now(), parts = null } = {}) {
     await put("chat", "mic_stage_pins_of_you", rows("micfollow_pins", "login = ?", [login], { omit: ["by_id", "by_name"], order: "at" }));
   }
   await put("chat", "mic_stage_pins_you_made", rows("micfollow_pins", "by_id = ?", [uid], { omit: ["by_name"], order: "at" }));   // mfix
-  await put("chat", "mic_stage_reports_you_made", rows("micfollow_reports", "reporter_id = ?", [uid], { omit: ["resolved_by"], order: "at" }));
+  // 1.99?? (privacy controls review ID-2): a report on a VEILED tile (a frog-name cam tile reported by its id, or a person veiled at the
+  // time) never names its subject here - the server mapped the tile to that login, the reporter never knew it
+  await put("chat", "mic_stage_reports_you_made", Promise.resolve(rows("micfollow_reports", "reporter_id = ?", [uid], { omit: ["resolved_by"], order: "at" }))
+    .then((rs) => (Array.isArray(rs) ? rs.map((r) => (r && Number(r.veiled) ? Object.assign({}, r, { login: null }) : r)) : rs)));
   // CL2: the pad chat archive (chatlog.js) - your own lines there (your linked Camfrog login or your account's web lines; Approved
   // pads too), your chat-log downloads (metadata) and the reports you filed on chat lines
   // mic retention: with the member's choices, the chat lines and the 🎙 transcript lines ("mic") each follow their own checkbox
