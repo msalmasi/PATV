@@ -64,6 +64,8 @@ const deps = {
   privateLogins: (list) => require("./stories").privateLogins(list),
   // 1.99?? cliplink: may an account with no linked Camfrog name clip on this pad (the pad's switch off, a Pepe that can)?
   accountOk: (roomId) => { try { return require("./cliplink").accountOk(roomId); } catch (e) { return false; } },
+  // 1.99?? cliplink (review fix): ...and does the account meet the account rule (a proven identity, no feed ban, its own name)?
+  accountWhy: (u, R) => require("./cliplink").accountWhy(u, R),
   queueAction: (...a) => require("./actions").queue(...a),
   postToPad: (...a) => require("./storykeep").postToPad(...a),
   makePoster: (row) => require("./media").makePoster(row),
@@ -220,6 +222,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       // 1.99?? cliplink: no linked Camfrog name - only on a pad whose owner switched the link requirement off (cliplink.js)
       const acct = !u.camfrogUsername;
       if (acct && !deps.accountOk(R.id)) return res.status(403).json({ ok: false, error: LINK });
+      // (review fix: the account rule before anything is recorded - Pepe charges before the pad post, which needs the same)
+      const aw = acct ? await deps.accountWhy(u, R) : null;
+      if (aw) return res.status(aw.status).json({ ok: false, code: aw.code, error: aw.error });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       const tx = String((req.body || {}).tx || "");
@@ -348,6 +353,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const u = await me(req);
       // 1.99?? cliplink: an account with no linked Camfrog name posts only while the pad's switch is off (Pepe charges the account)
       if (!u || (!u.camfrogUsername && !deps.accountOk(R.id))) return res.status(403).json({ ok: false, error: LINK });
+      const aw = u.camfrogUsername ? null : await deps.accountWhy(u, R);              // (review fix: the account rule, again at Post)
+      if (aw) return res.status(aw.status).json({ ok: false, code: aw.code, error: aw.error });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired — clip it again." });

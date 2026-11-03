@@ -42,7 +42,7 @@
     }).then(function (d) {
       box.checked = !!d.need_link;
       say(d.need_link ? _t('js.pad.clipset.saved_on', 'Saved: clips from the website need a linked Camfrog name.')
-        : _t('js.pad.clipset.saved_off', 'Saved: any signed-in PATV member can clip here, and the clip is charged to their PATV account.'));
+        : _t('js.pad.clipset.saved_off', 'Saved: members without a linked Camfrog name can clip here too, and the clip is charged to their PATV account.'));
     }).catch(function (e) {
       box.checked = !want;
       say(errText(e && e.code, e && e.message), true);

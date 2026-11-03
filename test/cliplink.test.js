@@ -58,8 +58,10 @@ const ev = (type, data, ts) => ({ op: "event", id: "cl-" + (++seq), ts: new Date
 const u = (login, extra) => Object.assign({ id: login, login, display: login }, extra || {});
 async function mkUser(name, extra = {}) {
   const id = extra.id || "u_" + name;
-  await runQuery(`INSERT INTO users (userId, username, displayname, password, class, points_balance, camfrogUsername, level, created_at, casino_banned)
-                  VALUES (?, ?, ?, 'x', ?, 100000, ?, 5, '2026-01-01 00:00:00', 0)`, [id, name, extra.display || name, extra.class || "pleb", extra.camfrog || null]);
+  // (review fix: `discord` = a proven identity for verified.js - an unlinked clipper needs one, like the relay's account rule)
+  await runQuery(`INSERT INTO users (userId, username, displayname, password, class, points_balance, camfrogUsername, level, created_at, casino_banned, discordId)
+                  VALUES (?, ?, ?, 'x', ?, 100000, ?, ?, '2026-01-01 00:00:00', 0, ?)`,
+                 [id, name, extra.display || name, extra.class || "pleb", extra.camfrog || null, extra.level === undefined ? 5 : extra.level, extra.discord || null]);
   const x = { userId: id, username: name, class: extra.class || "pleb" };
   users.set(id, x);
   return x;
@@ -90,8 +92,12 @@ const setup = (async () => {
   await require(path.join(repo, "inbox")).ready;
   U.own = await mkUser("own", { camfrog: "owncf" });
   U.bob = await mkUser("bob", { camfrog: "bobcf" });
-  U.nolink = await mkUser("nolink", { id: NOLINK_ID, display: "No Link" });
-  U.other = await mkUser("other", { id: OTHER_ID });
+  U.nolink = await mkUser("nolink", { id: NOLINK_ID, display: "No Link", discord: "d-nolink" });
+  U.other = await mkUser("other", { id: OTHER_ID, discord: "d-other" });
+  // review fix: unlinked accounts the account rule refuses - no proven identity (a fresh level-0 account), and a username that is
+  // another member's Camfrog name ("bobcf")
+  U.fresh = await mkUser("fresh", { id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", level: 0 });
+  U.clash = await mkUser("bobcf", { id: "7e6d5c4b-3a2f-4e1d-9c8b-7a6f5e4d3c2b", discord: "d-clash" });
   U.staff = await mkUser("helper", { class: "Staff" });
   U.admin = await mkUser("boss", { class: "Admin", camfrog: "bossfrog" });
   await require(path.join(repo, "funding")).init().catch(() => {});
@@ -163,7 +169,7 @@ test("it renders on the Camfrog room tab, loads its script, and the owner refere
   await ready();
   const r = await call("GET", `/p/${SLUG}/settings?tab=camfrog`, U.own, undefined, { "x-test-user": U.own.userId });
   assert.equal(r.status, 200, r.text.slice(0, 300));
-  for (const want of ['id="padClipSet"', 'id="pclLink"', "/public/js/pad-clip-settings.js?v=1", en["pad.settings.clips.link_label"], en["pad.settings.clips.rules"]]) {
+  for (const want of ['id="padClipSet"', 'id="pclLink"', "/public/js/pad-clip-settings.js?v=2", en["pad.settings.clips.link_label"], en["pad.settings.clips.rules"]]) {
     assert.ok(r.text.includes(want), want);
   }
   assert.match(r.text, /id="pclLink"[^>]*checked/, "ON by default");
@@ -324,6 +330,62 @@ test("🎬 cam clips: 🎬 Clip greys with LINK unless the switch is off; the re
   const v = await get(`/api/rooms/${SLUG}/camclip/${o.d.id}`, U.other);
   assert.deepEqual([v.d.state, v.d.status], ["failed", LINK]);
   await runQuery("UPDATE pepe_actions SET status = 'done' WHERE id = ?", [s.d.id]);
+});
+
+test("review fix: an unlinked clipper meets the account rule (a proven identity, no feed ban, its own name) before Pepe can charge", async () => {
+  await ready();
+  AC._setClip(Date.now());
+  await setLink(false);
+  // the harm: a fresh account (no proven identity, level 0) - the pad post its PAID mic clip becomes is refused afterwards
+  // (feedstore.postRefusal: media needs a proven identity or a level), so Pepe would have charged it for nothing
+  const mid = "ab".repeat(8);
+  assert.equal((await post("/api/media", null, { password: "bot", id: mid, kind: "audio", ct: "audio/mp4", image: M4A.toString("base64"), secs: 6,
+    subject: "carolcf", by: "\u{1f310} fresh", room: ROOM.id, subject_login: "carolcf", by_uid: U.fresh.userId, created: Date.now(),
+    expires: Date.now() + 86400e3 })).status, 200);
+  const pp = await post("/api/bridge/micclip/post", null, { password: "bot", media: mid, by: "u:" + U.fresh.userId, user: "fresh", speakers: ["carolcf"], caption: "x" });
+  assert.equal(pp.status, 403, "the post after the charge is refused for this account - " + pp.text);
+  // ... so the site refuses it first (nothing recorded, nothing queued, nothing charged): 🔊 and 🎬
+  let r = await post(`/api/rooms/${SLUG}/micclip`, U.fresh, { tx: TX });
+  assert.equal(r.status, 403, r.text);
+  assert.ok(/verify your email address/.test(r.d.error), r.d.error);
+  r = await post(`/api/rooms/${SLUG}/camclip`, U.fresh, { login: "subjcf", secs: 10 });
+  assert.equal(r.status, 403, r.text);
+  assert.ok(/verify your email address/.test(r.d.error), r.d.error);
+  // a username that is another member's Camfrog name (the room would hear "clipped by 🌐 bobcf" next to the real bobcf)
+  r = await post(`/api/rooms/${SLUG}/micclip`, U.clash, { tx: TX });
+  assert.equal(r.status, 403, r.text);
+  r = await post(`/api/rooms/${SLUG}/camclip`, U.clash, { login: "subjcf", secs: 10 });
+  assert.equal(r.status, 403, r.text);
+  // banned from this pad's feed after its previews were made: the saves are refused, and so are new requests
+  const m = await post(`/api/rooms/${SLUG}/micclip`, U.other, { tx: TX });
+  assert.equal(m.status, 200, m.text);
+  const c = await post(`/api/rooms/${SLUG}/camclip`, U.other, { login: "subjcf", secs: 10 });
+  assert.equal(c.status, 200, c.text);
+  relay.takeJobs(new Set([ROOM.id]));
+  assert.equal((await post("/api/bridge/micclip", null, { password: "bot", id: m.d.id, state: "ok", target: "carolcf", secs: 6, text: "hi",
+    data: M4A.toString("base64"), save: "on", viewer_ok: true, cost: 500 })).status, 200);
+  assert.equal((await post("/api/bridge/camclip", null, { password: "bot", id: c.d.id, state: "ok", data: MP4.toString("base64"), secs: 10,
+    save: "on", viewer_ok: true, cost: 50000 })).status, 200);
+  const queued = async () => (await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE user_id = ? AND kind IN ('micclip.save', 'camclip.save')", [OTHER_ID]))[0].n;
+  const before = await queued();
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, 'other', 'test', 'own', ?, NULL)", [OTHER_ID, ROOM.id, Date.now()]);
+  try {
+    relay._hits.clear();
+    const ms = await post(`/api/rooms/${SLUG}/micclip/${m.d.id}/save`, U.other, { start: 0, end: 6000 });
+    assert.equal(ms.status, 403, ms.text);
+    const cs = await post(`/api/rooms/${SLUG}/camclip/${c.d.id}/save`, U.other, {});
+    assert.equal(cs.status, 403, cs.text);
+    assert.equal(await queued(), before, "nothing queued for Pepe to charge");
+    micclip._clips.clear(); camclip._clips.clear(); relay._hits.clear();
+    assert.equal((await post(`/api/rooms/${SLUG}/micclip`, U.other, { tx: TX })).status, 403);
+    assert.equal((await post(`/api/rooms/${SLUG}/camclip`, U.other, { login: "subjcf", secs: 10 })).status, 403);
+    // a linked account is exactly as before (its link is its proof; Pepe judges it as its Camfrog name)
+    assert.equal((await post(`/api/rooms/${SLUG}/micclip`, U.bob, { tx: TX })).status, 200);
+  } finally {
+    await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [OTHER_ID]);
+  }
+  micclip._clips.clear(); camclip._clips.clear(); relay._hits.clear();
+  assert.equal((await post(`/api/rooms/${SLUG}/micclip`, U.other, { tx: TX })).status, 200, "the ban lifted: a proven account clips again");
 });
 
 test("the pad page offers 🔊 Clip to an unlinked account only while the switch is off and Pepe can", async () => {

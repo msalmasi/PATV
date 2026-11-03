@@ -31,7 +31,9 @@
 //   * says nothing the short-text guard catches (textguard.js: slurs, threats, doxxing, PAT scams, fake staff)
 // Pepe adds the room's ignore lists, time-outs and his own rate limit. 1.99xa: what it says is NORMAL chat for the account
 // (Pepe logs and remembers it under "u:<userId>" unless the account switched incognito on in Settings -> Privacy). Clips, cam
-// snapshots / saves and typed "!" commands stay chat-login only; a 🐸 Pepe menu action runs as the account (padpepe.js).
+// snapshots / saves and typed "!" commands stay chat-login only; a 🐸 Pepe menu action runs as the account (padpepe.js). 1.99??
+// cliplink: 🔊 / 🎬 clips too, on a pad whose owner switched "Clips from the website need a linked Camfrog name" off - with these
+// same account rules (cliplink.accountWhy; review fix).
 //
 // Blocks (1.99xa, bridgeblocks.js): a room's mods / the pad's owner / Pepe's admins can block an account's web relay into a room
 // (or every room: admins) - its say / clip / "!" lines are refused here with the reason, and Pepe refuses them too (his mirror).

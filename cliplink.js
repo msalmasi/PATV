@@ -6,8 +6,9 @@
 // charge and its refund on failure). The switch is per pad, ON by default (every pad behaves as before until its owner turns it off).
 // Who may change it: rooms.canManage - the pad's owner, site staff and admins. It covers both kinds of clip, the preview and the post.
 //
-// OFF, a signed-in PATV account WITHOUT a linked Camfrog name may preview and post clips on that pad. Pepe acts as the ACCOUNT itself
-// ("u:<userId>", camfrog-bot pepe_acctactor.py / pepe_cliplink.py):
+// OFF, a signed-in PATV account WITHOUT a linked Camfrog name may preview and post clips on that pad - review fix: one that meets the
+// account rule every "Pepe acts as the PATV account" path has (accountWhy: a proven identity, no feed ban, its own name). Pepe acts as
+// the ACCOUNT itself ("u:<userId>", camfrog-bot pepe_acctactor.py / pepe_cliplink.py):
 //   * the !clip role gate treats it as "everyone" (refused while !clip is limited to a role);
 //   * it is never an admin by Camfrog name (site admins keep their site-admin rule, camclip.clipAdmin);
 //   * rate limits key on the PATV account (here: the user id, as for everyone; Pepe: "u:<userId>");
@@ -66,6 +67,35 @@ function capable() { try { return require("./actorcap").clipOn(); } catch (e) { 
 function accountOk(roomId) { return !needLink(roomId) && capable(); }
 /** The pads whose switch is off - for Pepe's bridge sync (clip_acct_rooms). */
 function openRooms() { return loaded ? [...CACHE].slice(0, OPEN_MAX) : []; }
+
+/** 1.99?? cliplink (review fix): why a signed-in account WITH NO linked Camfrog name can't clip in pad R although the switch is off,
+ *  or null. The rules every website path that has Pepe act as a PATV account in a pad's live room already applies
+ *  (bridge-relay.accountRefusal: the relayed line, the 🐸 Pepe menu) - a linked Camfrog name was the proof these replace:
+ *    * a proven identity (verified.js: a verified email, Discord, Twitch, Telegram, Google, Apple or Plex - the anti-throwaway rule);
+ *    * not archived, not casino-restricted, not banned from the whole feed or from THIS pad's feed (the pad owner's ban);
+ *    * a username that isn't another member's linked chat login (the room hears "clipped by 🌐 <username>").
+ *  The pad post a mic clip becomes needs the same (feedstore.postRefusal), and Pepe charges BEFORE he posts - without this check a
+ *  throwaway or a banned account paid for a post that was then refused. Called on the request AND the save. Fails closed.
+ *  -> {status, code, error} | null */
+async function accountWhy(u, R) {
+  try {
+    const A = await require("./feedstore").account(String((u && u.userId) || ""));
+    if (!A || A.archived_at) return { status: 403, code: "account", error: "This account can't clip here." };
+    const V = require("./verified");
+    if (!(await V.verify(A))) return { status: 403, code: "verify", error: "To clip from a pad with your PATV account, " + V.LINK_HINT + "." };
+    if (A.casino_banned) return { status: 403, code: "restricted", error: "Your account is restricted." };
+    const bans = await getQuery("SELECT 1 FROM feed_bans WHERE user_id = ? AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?) LIMIT 1",
+      [A.userId, String((R && R.id) || ""), NOW()]);
+    if (bans.length) return { status: 403, code: "banned", error: "You can't clip in this pad." };
+    if (!(await require("./accountkey").ownsName(A.username, A.userId))) {
+      return { status: 403, code: "name", error: "Your PATV username is another member's Camfrog name, so it can't be used here. " + LINK };
+    }
+    return null;
+  } catch (e) {
+    console.error("[cliplink] account check:", e && e.message);
+    return { status: 500, code: "error", error: "Something went wrong - nothing was sent." };
+  }
+}
 
 /** What the Camfrog tab's card shows (and the GET route answers). */
 function state(roomId) {
@@ -142,5 +172,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, loadCache, register, needLink, capable, accountOk, openRooms, state, save, Refuse, LINK,
+module.exports = { init, loadCache, register, needLink, capable, accountOk, accountWhy, openRooms, state, save, Refuse, LINK,
   _reset: () => { HITS.clear(); }, _setClock: (fn) => { NOW = fn || (() => Date.now()); } };
