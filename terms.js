@@ -39,9 +39,13 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // is served that way. Review fix (F1): once the bar stops being live (a bot rollback) the bars it made are still kept and revealable,
 // so while any is left the page says THAT instead ("kept": new ones left out, the shown ones stay bars; a change note dated by when
 // the bar stopped - privwire.txOff); with none left it reads as wave 2 did, and the tx-bar date no longer counts toward "Last updated".
-const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar"];
+// 1.99?? frog names (owner 2026-11-03, "Lets do 2"): "frog-15" = section 10's incognito bullet now saying "someone" lasts 15 minutes after
+// being seen by name, then a frog name (it said "until your next visit") - inside the privacy wire v2 text, so dated the first time /privacy
+// is served with that switch on, and its date counts toward "Last updated" only while the switch is on.
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
-                         "tx-bar": () => require("./privwire").txBar() === true };
+                         "tx-bar": () => require("./privwire").txBar() === true,
+                         "frog-15": () => require("./privwire").isOn() === true };
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 let datesReady = null;
@@ -197,7 +201,8 @@ function register(app, { addUser }) {
                              [memory && memory.on_at, memory && memory.on_day], [privwire && privwire.g, privwire && privwire.g_day],
                              [evidence && evidence.on_at, evidence && evidence.on_day],
                              [txbar && txbar.kept && txbar.off_at, txbar && txbar.kept && txbar.off_day],   // (review fix F1: the "kept" note)
-                             ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).map(([, d]) => [d.at, d.day])]) {
+                             ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).filter(([k]) => k !== "frog-15" || privwire)
+                               .map(([, d]) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }

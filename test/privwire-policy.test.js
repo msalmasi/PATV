@@ -110,6 +110,21 @@ test("switch on: the approved section H text shows, dated by G; no evidence-clip
   if (both) assert.ok(both.includes("Your mic-ups are also recorded and kept like everyone's"), "the merged capture bullet with mic recordings on");
 });
 
+// 1.99?? frog names (owner 2026-11-03, "Lets do 2"): "someone" lasts 15 minutes after being seen by name, then a frog name - the switch-on
+// page says so (never "until your next visit"), the switch-off page is untouched, and the text is dated ("frog-15", only while on)
+test("1.99?? frog-15: the switch-on incognito bullet says 'someone' for 15 minutes, then a frog name; dated by 'frog-15' only while the switch is on", () => {
+  const now = fs.readFileSync(FILE, "utf8");
+  const PWON = { on: true, g: 1793534400000, g_day: "1 November 2026" };
+  const on = render(now, { privwire: PWON });
+  const NEW = "If you were just seen under your name in a room, you show up as \"someone\" there for 15 minutes, then under a frog name.";
+  assert.equal(on.split(NEW).length, 2, "once, in the incognito bullet");
+  assert.ok(!on.includes("until your next visit"), "never the old rule");
+  assert.ok(!render(now, {}).includes(NEW), "switch off: not there (the page as before)");
+  const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
+  assert.match(src, /"frog-15": \(\) => require\("\.\/privwire"\)\.isOn\(\) === true/);
+  assert.match(src, /filter\(\(\[k\]\) => k !== "frog-15" \|\| privwire\)/);
+});
+
 // wave 2 WP-5: the three insertions, word for word as approved (section H, M addendum 2; the merged bullet M addendum 3) - never reworded.
 // owner 11-02 (M addendum 4, item 5): the sentence and the section 9 row, where they state the 30 days, add "copies in backups are deleted
 // within 30 days after" (the changelog clause is unchanged)
@@ -198,7 +213,7 @@ test("transcripts bar: its sentences only with privacy wire v2 AND the bar live,
 
 test("transcripts bar: terms.js dates it by policy_text_dates 'tx-bar' while privwire.txBar, passes locals.txbar, and its date counts only while shown", () => {
   const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
-  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar"\];/);
+  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15"\];/);
   assert.match(src, /"tx-bar": \(\) => require\("\.\/privwire"\)\.txBar\(\) === true/);
   // (review fix F1: "live" while privwire.txBar, "kept" while it isn't but bars it made are still kept - privwire.txTextNow)
   assert.match(src, /const m = privwire \? await PWm\.txTextNow\(\) : null;/);
