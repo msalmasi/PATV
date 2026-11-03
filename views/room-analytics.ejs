@@ -222,8 +222,10 @@
     <span>🕶 Real names are on for you on this pad until you hide them again. Only you can see them; every page you open while they're on is logged.</span>
     <button type="button" class="ds-btn sm" id="raSeeOff">Hide real names</button>
     <% } else { %>
-    <span>🕶 As <%= a.see.role === 'admin' ? 'a PATV admin' : "this pad's owner" %> you can see who is behind a frog name here - one row (Reveal) or every row until you hide them again. Nothing shows until you ask, and every reveal is logged.</span>
-    <input type="text" id="raSeeWhy" maxlength="120" placeholder="Reason (optional)" aria-label="Reason (optional)" autocomplete="off">
+    <%# 1.99?? (privacy controls, review fixes 2 - RV-D): with text reveal roles on, staff and the pad's moderators get this card too - worded
+        for their role, and the reason is required for everyone but an admin (the server refuses a reveal without one) %>
+    <span>🕶 As <%= a.see.role === 'admin' ? 'a PATV admin' : a.see.role === 'staff' ? 'PATV staff' : a.see.role === 'mod' ? "one of this pad's moderators" : "this pad's owner" %> you can see who is behind a frog name here - one row (Reveal) or every row until you hide them again. Nothing shows until you ask, and every reveal is logged.</span>
+    <input type="text" id="raSeeWhy" maxlength="120" placeholder="<%= a.see.need_reason ? 'Reason (required)' : 'Reason (optional)' %>" aria-label="<%= a.see.need_reason ? 'Reason (required)' : 'Reason (optional)' %>" autocomplete="off"<%= a.see.need_reason ? ' required' : '' %>>
     <button type="button" class="ds-btn sm" id="raSeeOn">Show real names</button>
     <% } %>
     <span id="raSeeMsg" class="muted" role="status"></span>

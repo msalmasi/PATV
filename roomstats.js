@@ -794,7 +794,7 @@ async function forRoom(r, slug, viewer = null, opts = {}) {
     micHidden: mics.hidden,
     // 1.99afn: any private row on the page (the frog-name footnote, the see-through controls); the controls only for a viewer who may
     hasPrivate: [...regs.shown, ...mics.shown].some((p) => p.anon),
-    see: opts.see && (opts.see.on || anyPrivate || (noteMode !== "plain" && nv.hits.length)) ? { role: opts.see.role, on: !!opts.see.on } : null,
+    see: opts.see && (opts.see.on || anyPrivate || (noteMode !== "plain" && nv.hits.length)) ? { role: opts.see.role, on: !!opts.see.on, ...(opts.see.need_reason ? { need_reason: true } : {}) } : null,
     cmds: top.map(([c, n, cat]) => ({ cmd: "!" + c, n: R.fmt(n), pct: Math.max(3, (n / cmax) * 100), color: (CAT[cat] || [0, "#90a4ae"])[1], cat: (CAT[cat] || [cat])[0] })),
     cats: cats.map(([c, n]) => ({ label: (CAT[c] || [c])[0], color: (CAT[c] || [0, "#90a4ae"])[1], n: R.fmt(n), pct: (n / catSum) * 100 })),
     games: gameRows, mod: modRows, modTotal: R.fmt(Object.values(mod90).reduce((a, b) => a + b, 0)),
@@ -904,7 +904,8 @@ function register(app, { isBotToken, addUser }) {
         try {
           const role = await seeThroughRole(req.user, padId);
           const tg = await ST.toggleOf(viewer.userId, SEE_TOGGLE, padId);
-          if (role) see = { role, on: !!tg, logId: tg ? tg.log_id : null };
+          // (1.99?? review fixes 2 - RV-D: a staff / mod / owner reveal needs a reason while text_reveal_roles is on - the card says so)
+          if (role) see = { role, on: !!tg, logId: tg ? tg.log_id : null, ...(role !== "admin" && TRV().isOn() ? { need_reason: true } : {}) };
           else if (tg) await ST.toggleOff({ userId: viewer.userId, scope: SEE_TOGGLE, roomId: padId, why: "lost_right" });
         } catch (e) { console.error("[roomstats] see-through:", e.message); see = null; }
       }

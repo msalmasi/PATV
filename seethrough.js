@@ -300,7 +300,11 @@ function register(app, { addUser, noTimers = false }) {
   };
   // wave 2 WP-5 (spec E.3): a revealed live veiled 🎙 line that can be saved as moderation evidence right now gets ev: 1 - a flag
   // only (evidence.offerable: the evidence switch and privacy wire v2 on, Pepe's 15 minutes); the save itself re-checks everything
-  const evFlags = (R, items) => {
+  // (1.99?? review fixes 2 - RV-D: only for a role evidence.js lets save - chatRole's admin / owner; staff and room mods, who may read
+  // the line with text reveal roles on, are never offered a save evidence.js would refuse)
+  const evFlags = (R, items, role) => {
+    const r = role && typeof role === "object" ? role.role : role;
+    if (r !== "admin" && r !== "owner") return;
     try { const EV = require("./evidence"); for (const o of items || []) if (EV.offerable(R, o.c)) o.ev = 1; } catch (e) { /* no offer */ }
   };
   async function chatCtx(req, res) {
@@ -415,7 +419,8 @@ function register(app, { addUser, noTimers = false }) {
       if (!ctx) return;
       const cs = Array.isArray(req.body.c) ? req.body.c : [req.body.c];
       if (limited(String(req.user.userId), cs.length)) return res.status(429).json({ ok: false, error: "Too many reveals - wait a minute." });
-      if (nonAdminGate(req, res, ctx.role, cs.length, { toggle: req.body.toggle === true })) return;   // (1.99?? S4t)
+      // (1.99?? S4t; review fixes 2 - RV-D: a "Show real names" batch counts once, like the toggle itself - not each of its up to 50 lines)
+      if (nonAdminGate(req, res, ctx.role, req.body.toggle === true ? 1 : cs.length, { toggle: req.body.toggle === true })) return;
       const lookup = (c) => require("./bridge").revealLookup(ctx.R.id, c);
       if (req.body.toggle === true) {
         // the toggle's batch fetch: no new row - the toggle's own row counts it (refused unless the toggle is on)
@@ -434,11 +439,11 @@ function register(app, { addUser, noTimers = false }) {
         // the log says that toggle was seen through too - the toggle's own row still counts the batch
         if (txl.length) await log({ userId: req.user.userId, role: ctx.role.role, scope: "tx_line", roomId: ctx.R.id, logins: txl.map((o) => o.login),
                                     reason: req.body.reason, ref: "toggle:" + tg.log_id });
-        evFlags(ctx.R, items);
+        evFlags(ctx.R, items, ctx.role);
         return res.json({ ok: true, items, refused });
       }
       const out = await revealChat({ user: req.user, role: ctx.role, roomId: ctx.R.id, cs, reason: req.body.reason, lookup });
-      evFlags(ctx.R, out.items);
+      evFlags(ctx.R, out.items, ctx.role);
       res.json({ ok: true, ...out });
     } catch (e) {
       console.error("[seethrough] reveal:", e && e.code ? e.code : "error");
