@@ -208,8 +208,9 @@ function avoidOf(R) {
   }
   return out;
 }
-/** 1.99?? review fix: a veiled person's frog name never reads as their OWN display name either (avoidOf lists named entries only). */
-const ownToo = (avoid, vz) => (vz && typeof vz.display === "string" && vz.display ? avoid.concat(vz.display) : avoid);
+/** 1.99?? review fix: a veiled person's own display name - their frog name never reads like it (frognames ownNames: not equal, no word
+ *  of it; the login is frognames' own). avoidOf lists named entries only. */
+const ownOf = (vz) => (vz && typeof vz.display === "string" && vz.display ? [vz.display] : []);
 /** Per room: hold id -> the name its grab got (a release / its 🎙 line reuse it: the session can't end during a hold). */
 const HOLDS = new Map();
 const HOLDS_MAX = 200;
@@ -267,8 +268,8 @@ async function nameItem(R, it) {
       }
       // (1.99?? review fix: + their own display name - a veiled person isn't in avoidOf's named roster; frognames adds the login.
       // onMic: an item of a mic hold - its grab, 🎙 line or release - never ends the no-name 15 minutes, even when a restart forgot the hold)
-      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: ownToo(avoidOf(R), vz), kind: lvl,
-                                                 frozen, onMic: it.k === "mic" || it.k === "unmic" || !!it.hold });
+      view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), ownNames: ownOf(vz),
+                                                 kind: lvl, frozen, onMic: it.k === "mic" || it.k === "unmic" || !!it.hold });
     }
   } catch (e) { view = null; console.error("[veil] frog name:", e && e.code ? e.code : "error"); }
   let named = view && view.alias ? view : null;
@@ -408,7 +409,8 @@ async function nameSnapshot(R, now) {
     const low = lower(vz.login);
     const kind = personKind.has(low) ? personKind.get(low) : vz.kind;
     let view = null;
-    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: ownToo(avoid, vz), kind, onMic: onMic.has(low) }); } catch (err) { view = null; }
+    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: avoid, ownNames: ownOf(vz), kind,
+                                                onMic: onMic.has(low) }); } catch (err) { view = null; }
     seen.add(low);
     const isMic = (R.mic || []).includes(e);
     if (view && view.alias && !(isMic && (vz.proven !== true || vz.beganNamed === true))) {

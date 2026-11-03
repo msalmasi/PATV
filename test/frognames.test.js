@@ -528,3 +528,34 @@ test("1.99?? review fix: a frog name is never the person's OWN login (a veiled p
   assert.match(String(s.alias), ALIAS_RE);
   assert.notEqual(FN.norm(s.alias), FN.norm(hit.login), hit.login + " got " + s.alias);
 });
+
+test("1.99?? review fix: no word of a frog name is in the person's own login ('midnightrider' never draws 'Midnight ...'), nor contains it", async () => {
+  const crypto = require("crypto");
+  const hm = (k, ...p) => { const h = crypto.createHmac("sha256", k); for (const x of p) h.update(Buffer.isBuffer(x) ? x : Buffer.from(String(x), "utf8")); return h.digest(); };
+  const key = Buffer.from(KEY, "hex");
+  // a (login, nonce) whose first draw's adjective is IN the login, and one whose noun CONTAINS the (short) login
+  const find = (mk, ok) => {
+    for (let j = 0; j < 400; j++) {
+      const nonce = crypto.createHash("sha256").update("own-word-" + j).digest().subarray(0, 16);
+      for (const w of [...FN.ADJ, ...FN.NOUN]) {
+        const login = mk(w);
+        const [a, n] = FN.candidate(hm(key, "patv/alias/v1 ", "Pad.WORD", " ", login, " ", nonce), 0);
+        const name = a + " " + n;
+        if (name.length <= FN.NAME_MAX && !FN.denied(name) && ok(w, a, n)) return { login, nonce, name };
+      }
+    }
+    return null;
+  };
+  const inLogin = find((w) => w.toLowerCase().replace(/[^a-z]/g, "") + "rider", (w, a) => a === w);
+  const inName = find((w) => w.toLowerCase().replace(/[^a-z]/g, "").slice(0, 4), (w, a, n) => n === w && w.length > 4);
+  assert.ok(inLogin && inName, "both cases exist");
+  const orig = crypto.randomBytes;
+  for (const [hit, i] of [[inLogin, 0], [inName, 1]]) {
+    crypto.randomBytes = (n, ...rest) => (n === 16 && !rest.length ? Buffer.from(hit.nonce) : orig(n, ...rest));
+    let s;
+    try { s = await FN.sight("Pad.WORD", hit.login, { t: Date.UTC(2026, 10, 12, 16) + i * 1000, kind: "incognito" }); } finally { crypto.randomBytes = orig; }
+    assert.match(String(s.alias), ALIAS_RE);
+    const words = s.alias.split(" ").map(FN.norm), own = FN.norm(hit.login);
+    assert.ok(!words.some((x) => own.includes(x) || x.includes(own)), hit.login + " got " + s.alias + " (its first draw was " + hit.name + ")");
+  }
+});

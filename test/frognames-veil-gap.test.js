@@ -137,3 +137,14 @@ test("1.99?? review fix: a line said before the frog name took over stays 'someo
   assert.equal(l17.u.alias, frog, "a line after it: the frog name");
   assert.deepEqual(FN.current(room.id, "laggy").alias, frog, "the session is the frog name's");
 });
+
+test("1.99?? review fix: no word of a frog name is in the person's own display name ('The Hopper Fan' never draws '... Hopper')", async () => {
+  const t = Date.UTC(2026, 10, 14, 18);
+  const room = { id: "Word.Room" };
+  const a = firstDraw(room.id, "plainjoe");
+  const display = "The " + a.name.split(" ")[1] + " Fan";
+  await withNonce(a.nonce, () => snapshot(room, [veiled("plainjoe", {}, display)], [], t));
+  const e = entry(room, "plainjoe");
+  assert.ok(e && ALIAS_RE.test(String(e.alias)), "a frog name: " + (e && e.alias));
+  assert.ok(!e.alias.split(" ").some((w) => FN.norm(display).includes(FN.norm(w))), display + " got " + e.alias);
+});

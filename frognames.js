@@ -295,8 +295,9 @@ async function endLevel(S, t, wasIncognito = false) {
 }
 const view = (S) => (S ? { alias: S.name || null, hood: S.name ? S.hood : null, session: S.id } : null);
 /** A new session for (room, login): a name (C.3) unless they were seen named there lately (C.2 - 1.99??: until those 15 minutes are
- *  over, gapOver). avoidNames: the pad's roster. */
-async function startSession(roomId, login, sk, t, avoidNames, kind = null) {
+ *  over, gapOver). avoidNames: the pad's roster. ownNames: the person's own display name(s) - 1.99?? review fix: no word of the name
+ *  is in their login or one of those (nor contains one), so a frog name never reads like the person behind it. */
+async function startSession(roomId, login, sk, t, avoidNames, kind = null, ownNames = []) {
   const open = [...(OPEN.get(roomId) || new Map()).values()];
   const recent = recentOf(roomId).filter((x) => t - x.ended < REUSE_MS);
   RECENT.set(roomId, recent);
@@ -308,10 +309,12 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null) {
     const usedA = new Set(open.map((x) => x.adj).filter(Boolean)), usedN = new Set(open.map((x) => x.noun).filter(Boolean));
     const taken = new Set([...open.map((x) => x.name), ...recent.map((x) => x.name)].filter(Boolean));
     const avoid = new Set((avoidNames || []).map(norm).filter(Boolean));
-    const own = norm(login);                                // 1.99?? review fix: never the person's OWN login (a veiled entry isn't in
-    if (own) avoid.add(own);                                // the roster's avoid list - veil.js adds their own display name)
+    // 1.99?? review fix: never the person's OWN login or display name, nor a word of either ("midnightrider" never draws "Midnight
+    // Toad", "jump" never "Jumper") - a veiled person isn't in the roster's avoid list
+    const own = [login, ...(Array.isArray(ownNames) ? ownNames : [])].map(norm).filter(Boolean);
+    const mine = (w) => { const x = norm(w); return own.some((o) => (x.length >= 3 && o.includes(x)) || (o.length >= 4 && x.includes(o))); };
     const seed = hmac(secret(), "patv/alias/v1\0", String(roomId), "\0", lower(login), "\0", nonce);
-    const got = draw(seed, (a, n, nm) => !usedA.has(a) && !usedN.has(n) && !taken.has(nm) && !avoid.has(norm(nm)));
+    const got = draw(seed, (a, n, nm) => !usedA.has(a) && !usedN.has(n) && !taken.has(nm) && !avoid.has(norm(nm)) && !mine(a) && !mine(n));
     let pref;
     if (got) { adj = got.adj; noun = got.noun; name = adj + " " + noun; pref = got.hood; }
     else { name = fallbackName(taken); pref = candidate(seed, 0)[2]; }
@@ -335,7 +338,8 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null) {
 /**
  * A veiled sighting of `login` in pad `roomId` (a roster entry, a line, a mic grab, a website relay line). Opens a session if
  * none is open (or the open one has ended), else keeps it. opts: {t, active: a line or a mic event (resets the quiet clock),
- * holding: true / false while a mic hold starts / ends, avoidNames: the pad's roster logins + display names, kind: the level of
+ * holding: true / false while a mic hold starts / ends, avoidNames: the pad's roster logins + display names, ownNames: the person's own
+ * display name(s) (1.99?? review fix: no word of a new name is in them or the login), kind: the level of
  * this sighting - "incognito" | "hidden" (privacy fix, M addendum 3 #1: an incognito session sighted "hidden" ends at once, even
  * mid-hold, and the next one is alias-less for 15 minutes), onMic: this sighting itself shows them holding the mic (Pepe's snapshot
  * lists them on it, or an item of a hold - its grab, 🎙 lines, release) - 1.99?? review fix: the no-name 15 minutes never end on it,
@@ -368,7 +372,7 @@ function sight(roomId, login, opts = {}) {
         S = null;
       }
     }
-    if (!S) S = await startSession(room, login, sk, t, opts.avoidNames, kind && !frozen ? kind : carry || kind);
+    if (!S) S = await startSession(room, login, sk, t, opts.avoidNames, kind && !frozen ? kind : carry || kind, opts.ownNames);
     if (prev != null) S.gapPrev = prev;                       // 1.99?? review fix: the no-name session this one took over from
     S.leftAt = null;
     S.lastSeen = t;
