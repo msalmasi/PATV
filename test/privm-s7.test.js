@@ -43,7 +43,7 @@ const EV = require(path.join(repo, "evidence"));
 const PC = require(path.join(repo, "privacycopy"));
 const HELP = require(path.join(repo, "help"));
 const EN = require(path.join(repo, "locales", "en.json"));
-const BASE = process.env.PRIVM_S7_BASE_REV || "b2f60207";
+const BASE = process.env.PRIVM_S7_BASE_REV || "90869346";   // (the S6 head as rebased onto 1.99aht; was b2f60207)
 
 const users = new Map();
 const U = {};
@@ -303,11 +303,26 @@ test("help: the cards' pc variants only with a switch on; a slice that doesn't f
     for (const e of cards) {
       const keys = HELP.PC_KEYS.filter((k) => e.pc[k]);
       const s0 = e.v2 && e.v2.summary ? e.v2.summary : e.summary, d0 = e.v2 && e.v2.details ? e.v2.details : e.details;
+      // 1.99?? (privacy controls, landed on 1.99aht): a card with a v2tx wording (read while the transcripts bar is on) has two bases -
+      // the bot's build_help rule: in each combination every slice applies whole to at least one, and on the other it is whole too or
+      // not there at all (none of its old texts in that wording as it stands then); a card without v2tx: whole on its one base
+      const vt = e.v2tx && typeof e.v2tx === "object" ? e.v2tx : null;
+      const bases = vt ? [[s0, d0], [vt.summary || s0, vt.details || d0]] : [[s0, d0]];
       for (let mask = 1; mask < 1 << keys.length; mask++) {
         const act = Object.fromEntries(keys.map((k, i) => [k, !!(mask >> i & 1)]));
-        const r = HELP.pcApply(s0, d0, e.pc, act);
-        assert.deepEqual(r.applied, keys.filter((k) => act[k]), `${e.id} ${JSON.stringify(act)} applies whole`);
-        assert.ok(r.details.length <= HELP.HELP_LIMITS.details, e.id + " fits");
+        const want = keys.filter((k) => act[k]), hit = new Set();
+        for (const [s, d] of bases) {
+          const r = HELP.pcApply(s, d, e.pc, act);
+          r.applied.forEach((k) => hit.add(k));
+          if (!vt) assert.deepEqual(r.applied, want, `${e.id} ${JSON.stringify(act)} applies whole`);
+          for (const k of want.filter((x) => !r.applied.includes(x))) {
+            const before = Object.fromEntries(keys.map((j) => [j, act[j] && HELP.PC_KEYS.indexOf(j) < HELP.PC_KEYS.indexOf(k)]));
+            const dk = HELP.pcApply(s, d, e.pc, before).details;
+            assert.ok(!(e.pc[k].swap || []).some((p) => dk.includes(p[0])), `${e.id} ${JSON.stringify(act)}: ${k} never half made`);
+          }
+          assert.ok(r.details.length <= HELP.HELP_LIMITS.details, e.id + " fits");
+        }
+        assert.deepEqual(want.filter((k) => hit.has(k)), want, `${e.id} ${JSON.stringify(act)} applies whole to a wording`);
       }
     }
   }

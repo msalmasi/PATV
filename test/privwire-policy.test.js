@@ -213,7 +213,7 @@ test("transcripts bar: its sentences only with privacy wire v2 AND the bar live,
 
 test("transcripts bar: terms.js dates it by policy_text_dates 'tx-bar' while privwire.txBar, passes locals.txbar, and its date counts only while shown", () => {
   const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
-  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15"\];/);
+  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept"\];/);   // (1.99?? privacy controls S0: + livecam-never-kept)
   assert.match(src, /"tx-bar": \(\) => require\("\.\/privwire"\)\.txBar\(\) === true/);
   // (review fix F1: "live" while privwire.txBar, "kept" while it isn't but bars it made are still kept - privwire.txTextNow)
   assert.match(src, /const m = privwire \? await PWm\.txTextNow\(\) : null;/);

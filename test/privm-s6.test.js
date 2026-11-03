@@ -39,7 +39,7 @@ const PS = require(path.join(repo, "privacystate"));
 const INC = require(path.join(repo, "incognito"));
 const CL = require(path.join(repo, "chatlog"));
 const HELP = require(path.join(repo, "help"));
-const BASE = process.env.PRIVM_S6_BASE_REV || "4f33f528";
+const BASE = process.env.PRIVM_S6_BASE_REV || "ba36ab81";   // (the S4 head as rebased onto 1.99aht; was 4f33f528)
 
 const users = new Map();
 const U = {};
@@ -301,7 +301,10 @@ test("page golden: with the switch off the page is byte-identical to the S4 head
   let baseSrc = null;
   try { baseSrc = execFileSync("git", ["-C", repo, "show", `${BASE}:views/privacy-settings.ejs`], { encoding: "utf8" }); } catch (e) { baseSrc = null; }
   if (!baseSrc) return;                                    // no base revision in this checkout
-  const now = fs.readFileSync(path.join(repo, "views", "privacy-settings.ejs"), "utf8");
+  // (1.99?? privacy controls, landed on 1.99aht: line endings aside - `git show` gives the blob's LF, a Windows checkout with
+  // core.autocrlf the working file's CRLF; the page's HTML is what's compared)
+  baseSrc = baseSrc.replace(/\r\n/g, "\n");
+  const now = fs.readFileSync(path.join(repo, "views", "privacy-settings.ejs"), "utf8").replace(/\r\n/g, "\n");
   for (const extra of [{}, { mem: { capable: true, linked: true, login: "bob123", on: false, since: null, reported: null, waiting: null, failed: null, log: [] } },
                        { st: { linked: false, login: null, account: false, on: null, log: [] }, lc: { linked: false } }, { pv3: null }]) {
     assert.equal(render(now, pageLocals(extra)), render(baseSrc, pageLocals(extra)), "same HTML: " + Object.keys(extra).join(","));
