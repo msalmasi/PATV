@@ -408,3 +408,27 @@ test("1.99?? avf: the mic signs' own fallbacks (2000 / 3000 ms, 0-5000) and mic_
   await AV.save(A, { reset: true });
   assert.deepEqual([AV.current().cfg.fallback_ind_rtc_ms, AV.current().cfg.mic_follow_toggle], [2000, true], "reset: the defaults");
 });
+
+// 1.99?? avf review (product): the owner calibrates k_pt_ms / k_re_ms from a pad's ?avsync=1 panel - the card has to say which way
+// they move the cams (the first try went the wrong way: +650 for cams that were already late) and that a cam can't be shown sooner
+// than it arrives; the cams' fallbacks say they are the cams' now that the mic signs have their own
+test("1.99?? avf review: the admin card says which way each calibration moves (k_pt_ms, k_re_ms, k_ind_ms) and labels the cams' own fallbacks", async () => {
+  const data = (await get("/api/admin/pepe/avsync", "adm")).data;
+  const C = adminCard(data); for (let i = 0; i < 12; i++) await Promise.resolve();
+  const pt = C.labelOf("k_pt_ms"), re = C.labelOf("k_re_ms"), ind = C.labelOf("k_ind_ms");
+  assert.ok(pt && re && ind, "drawn");
+  for (const [label, key] of [[pt, "js.admavsync.k_pt_help"], [re, "js.admavsync.k_re_help"], [ind, "js.admavsync.k_ind_help"]]) {
+    assert.ok(typeof C.EN[key] === "string" && C.EN[key].length > 20, key + " in locales/en.json");
+    assert.ok(label.textContent.includes(C.EN[key]), label.textContent);
+  }
+  // + = later (av-sync.js videoTarget / indicatorTarget add k): ahead -> raise, behind -> lower
+  assert.match(C.EN["js.admavsync.k_pt_help"], /ahead of the voice[^.]*raise/i);
+  assert.match(C.EN["js.admavsync.k_pt_help"], /behind[^.]*lower/i);
+  assert.match(C.EN["js.admavsync.k_pt_help"], /pass-through/); assert.match(C.EN["js.admavsync.k_pt_help"], /target_ms/);
+  assert.match(C.EN["js.admavsync.k_pt_help"], /recordings/, "the mic stage's recordings use it too (avsync.serverOffsetMs)");
+  assert.match(C.EN["js.admavsync.k_re_help"], /re-encoded/);
+  assert.match(C.EN["js.admavsync.k_ind_help"], /before you hear[^.]*raise/i);
+  assert.ok(C.labelOf("fallback_rtc_ms").textContent.startsWith("Cam WebRTC fallback delay (ms)"), C.labelOf("fallback_rtc_ms").textContent);
+  assert.ok(C.labelOf("fallback_mp3_ms").textContent.startsWith("Cam MP3 fallback delay (ms)"), C.labelOf("fallback_mp3_ms").textContent);
+  assert.doesNotMatch(C.fields.textContent, /undefined|MISSING/);
+});

@@ -12,7 +12,8 @@
     apply_mic_chat: _t('js.admavsync.apply_mic_chat', 'Delay mic grab/drop lines in chat'),
     apply_mic_list: _t('js.admavsync.apply_mic_list', "Delay the people list's 🎙 icons"),   // 1.99ahm: the people list's 🎙 icons, its own switch
     engine_chromium: 'Enable Chromium video delay', engine_firefox: 'Enable Firefox video delay', engine_safari: 'Enable Safari video delay',
-    fallback_rtc_ms: 'WebRTC fallback delay (ms)', fallback_mp3_ms: 'MP3 fallback delay (ms)',
+    // (1.99?? avf review: "Cam" - the mic signs have their own fallbacks now, below)
+    fallback_rtc_ms: 'Cam WebRTC fallback delay (ms)', fallback_mp3_ms: 'Cam MP3 fallback delay (ms)',
     // 1.99?? avf (F4, F5): the mic signs' own fallback; whether the viewer's toggle holds the mic signs too
     fallback_ind_rtc_ms: _t('js.admavsync.fallback_ind_rtc_ms', 'Mic-sign WebRTC fallback delay (ms)'),
     fallback_ind_mp3_ms: _t('js.admavsync.fallback_ind_mp3_ms', 'Mic-sign MP3 fallback delay (ms)'),
@@ -30,7 +31,11 @@
     apply_mic_list: _t('js.admavsync.apply_mic_list_help', "The 🎙 icons in the people list and its on-mic order, and the homepage's mic chips. Same delay as the mic signs."),   // 1.99ahm
     // 1.99?? avf (F4, F5)
     mic_follow_toggle: _t('js.admavsync.mic_follow_toggle_help', 'On (the default): a viewer who turns their toggle off sees the cams and the mic signs as they come. Off: the mic signs are held for everyone the switches above apply to, whatever their toggle says; the toggle then holds the cams only.'),
-    fallback_ind_rtc_ms: _t('js.admavsync.fallback_ind_help', "The mic signs' delay while the room audio isn't measured yet (the first seconds after it starts, or a long quiet stretch): about the whole audio path. The cams keep their own fallback above.")
+    fallback_ind_rtc_ms: _t('js.admavsync.fallback_ind_help', "The mic signs' delay while the room audio isn't measured yet (the first seconds after it starts, or a long quiet stretch): about the whole audio path. The cams keep their own fallback above."),
+    // 1.99?? avf review: which way each calibration moves (av-sync.js adds it: + = later) - the owner calibrates from a pad's ?avsync=1 panel
+    k_pt_ms: _t('js.admavsync.k_pt_help', "Added to the delay of pass-through cams (Source passthrough in the table below and in a pad's ?avsync=1 panel). Cams ahead of the voice (lips move before you hear the words): raise it. Cams behind: lower it, below 0 if needed - until that cam's target_ms in the panel reads null: a cam can't be shown sooner than it arrives. The mic stage's recordings line their cams up with it too."),
+    k_re_ms: _t('js.admavsync.k_re_help', 'The same for re-encoded cams (Source reencode): ahead of the voice - raise it, behind - lower it.'),
+    k_ind_ms: _t('js.admavsync.k_ind_help', "Added to the mic signs' delay: signs that change before you hear the voice - raise it; after it - lower it.")
   };
   function node(tag, text, cls) { var el = document.createElement(tag); if (text != null) el.textContent = text; if (cls) el.className = cls; return el; }
   function buttons(disabled) { Array.prototype.forEach.call(form.querySelectorAll('button'), function (el) { el.disabled = disabled; }); }
