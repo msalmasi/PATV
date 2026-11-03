@@ -580,7 +580,7 @@ test("automod owner contract matches the shared bot fixture and explicit writabl
     if (row.kind === "bool") assert.ok(PO.OWNER_BOOL.includes(row.id), row.id);
     if (row.kind === "seconds") assert.deepEqual(PO.AUTOMOD_SECONDS[row.id], row);
   }
-  // 1.99??: the contention / leaving-space gates and the repeated-grab / room-report exemptions are admin-only by default
+  // 1.99aib: the contention / leaving-space gates and the repeated-grab / room-report exemptions are admin-only by default
   for (const id of ["automod.enabled", "automod.power.enforce", "automod.fines.enabled", "automod.etiquette.wanted_s", "roomtimeout.expiry",
     "automod.michog.contention", "automod.michog.leaving_space", "automod.exempt.mic_grabs", "automod.exempt.mic_room_report"]) {
     assert.ok(!rows.some((r) => r.id === id), id);
