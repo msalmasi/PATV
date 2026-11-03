@@ -950,6 +950,50 @@ test("round 6: EVERY named tile (a live cam, a card - not only a withheld one) i
   }
 });
 
+// 1.99?? (privacy controls round 6 review): watchOf caches its answer - DM check included - for GATE_MS (30 s) per login|viewer, and nothing
+// dropped it when a DM block was set or lifted: a verified viewer the person had just DM-blocked (either way) kept an "ok" named tile with
+// their cover for up to 30 s, and one just unblocked stayed "isn't available". messages.setBlock now drops both accounts' gates
+test("round 6 review: a DM block (either way) takes a verified viewer's named tile to the letter and 'isn't available' on the very next program, and lifting it gives the tile back at once - not after the 30 s cam-gate cache; nobody else's tile changes", async () => {
+  const SC = require(path.join(repo, "stagecover"));
+  await SC.init();
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES ('alice', 4242, 1)");
+  SC.invalidate();
+  const gtf = SC.gtfUrl(4242, {});
+  const M = require(path.join(repo, "messages"));
+  await M.init();
+  const ALICE = { userId: "u_alice", username: "alice_patv" }, V1 = { userId: "u_v1", username: "viewer1" };
+  const pause = () => new Promise((r) => setTimeout(r, 600));             // (setBlock's own burst guard: 500 ms per blocker)
+  try {
+    await runQuery("DELETE FROM dm_blocks");
+    await reset(); await plainPad();
+    await onStage(["alice"]);
+    assert.equal(tile("alice") && tile("alice").video, "live", "set up: her live tile");
+    const entry = async (uid) => {
+      const s = (await MF.viewFor(MF.snapshot(ROOM.id), R, uid, null, T)).src.find((e) => e.id === "alice");
+      assert.ok(s, uid);
+      return [s.watch, s.avatar || null];
+    };
+    assert.deepEqual(await entry("u_v1"), ["ok", gtf], "a member watches her cam (the gate is cached now)");
+    assert.deepEqual(await entry("u_v3"), ["ok", gtf], "another member too");
+    await M.setBlock(ALICE, "viewer1", true);
+    assert.deepEqual(await entry("u_v1"), ["unavailable", null], "she DM-blocked the viewer: the letter, 'isn't available' - at once, the same clock");
+    assert.deepEqual(await entry("u_v3"), ["ok", gtf], "nobody else changes");
+    await pause();
+    await M.setBlock(ALICE, "viewer1", false);
+    assert.deepEqual(await entry("u_v1"), ["ok", gtf], "lifted: her tile is back at once");
+    await M.setBlock(V1, "alice_patv", true);
+    assert.deepEqual(await entry("u_v1"), ["unavailable", null], "the viewer DM-blocked her: the same, at once");
+    await pause();
+    await M.setBlock(V1, "alice_patv", false);
+    assert.deepEqual(await entry("u_v1"), ["ok", gtf], "lifted: back at once");
+    assert.deepEqual(await entry("u_v3"), ["ok", gtf], "nobody else changes");
+  } finally {
+    await runQuery("DELETE FROM dm_blocks");
+    await runQuery("DELETE FROM cosmetic_avatar_seeds"); SC.invalidate();
+  }
+});
+
 // 1.99?? (privacy controls round 6): the same gap in captures - consent() asked the person's cam blocks (camRefusal) but not a DM block,
 // and cardConsent (withheld_cover on) only the cam blocks: a capture taken before the person DM-blocked the viewer could still be saved
 // or posted by name after. Both now ask the DM block either way (micfollow.dmBlocked, as the viewer's stage program does)

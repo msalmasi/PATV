@@ -2031,6 +2031,14 @@ async function dmBlocked(login, userId) {
       [me, ...ids, me, ...ids])).length > 0;
   } catch (e) { return !/no such table/i.test(String(e && e.message)); }
 }
+/** 1.99?? (privacy controls round 6 review): a DM block between accounts `aId` and `bId` was set or lifted (messages.setBlock). watchOf
+ *  caches its answer - DM check included - for GATE_MS per login|viewer, so a viewer the person had just blocked (either way) kept an
+ *  "ok" named tile with their cover for up to 30 s. The gates cached for either account as the VIEWER go now: the next stage program
+ *  asks the block again. Synchronous; never throws. */
+function dmBlockChanged(aId, bId) {
+  const ids = new Set([String(aId), String(bId)]);
+  try { for (const k of [...GATE.keys()]) if (ids.has(k.slice(k.lastIndexOf("|") + 1))) GATE.delete(k); } catch (e) { /* none */ }
+}
 /** 1.99ahq stage cover review fix (PRIV-2): has this person blocked the viewer - from their cam (camviewers) or in DMs (either way)?
  *  (Not a cam-mode refusal like "members only": those still see the person's cover.) Fails closed. */
 async function personBlocks(login, userId) {
@@ -3246,6 +3254,7 @@ module.exports = {
   vidVeil, pinByVid,                                                              // 1.99aid (privacy controls V-1)
   withheldCover: () => cfg().withheld_cover === true,                            // 1.99aid (privacy controls S3)
   dmBlocked,                                                                      // 1.99?? (privacy controls round 6: stagemiccap's consent)
+  dmBlockChanged,                                                                 // 1.99?? (privacy controls round 6 review: messages.setBlock)
   register, init, cfg, current: () => ({ v: CFG.v, cfg: { ...CFG.cfg } }), onSync, onRoomGone, stepPad, snapshot, viewFor, ownerState, setPad, adminView, setKill, setCfg,
   recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, unexcludeXid, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,
