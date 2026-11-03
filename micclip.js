@@ -23,6 +23,10 @@
 //      also through the capture's own subject rule, several (a merged !clipmic 3) only through this.
 //   Pepe himself (1.99md): his TTS mic-ups get a 🎙 line too (the bot keeps only what its TTS engine said - never
 //      Spotify, stings or jingles), so a 🔊 Clip on his line works the same way, with the speaker "Pepe".
+//   1.99?? cliplink: on a pad whose owner switched "Clips from the website need a linked Camfrog name" OFF (cliplink.js), a signed-in
+//      account WITHOUT a linked Camfrog name may preview and post too (while Pepe can - cliplink.accountOk): its job / action carries
+//      no Camfrog name, and Pepe acts as the PATV account itself ("u:<userId>": the role gate as "everyone", never an admin by Camfrog
+//      name, rate limits on the account, the price charged to - and refunded to - that account). Everything else is the same.
 "use strict";
 const fs = require("fs");
 const os = require("os");
@@ -58,6 +62,8 @@ const deps = {
   clipOffText: (roomId) => { try { return require("./bridge").clipOffText(roomId); } catch (e) { return "Clips are switched off in this room (a mod can type !clip on there)."; } },
   clipAdmin: (R, u) => { try { return require("./camclip").clipAdmin(R, u); } catch (e) { return false; } },
   privateLogins: (list) => require("./stories").privateLogins(list),
+  // 1.99?? cliplink: may an account with no linked Camfrog name clip on this pad (the pad's switch off, a Pepe that can)?
+  accountOk: (roomId) => { try { return require("./cliplink").accountOk(roomId); } catch (e) { return false; } },
   queueAction: (...a) => require("./actions").queue(...a),
   postToPad: (...a) => require("./storykeep").postToPad(...a),
   makePoster: (row) => require("./media").makePoster(row),
@@ -211,7 +217,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
       if (require("./adultgate").refuseJson(req, res, R.id)) return;          // adultgate site: the 18+ gate on this room
-      if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: LINK });
+      // 1.99?? cliplink: no linked Camfrog name - only on a pad whose owner switched the link requirement off (cliplink.js)
+      const acct = !u.camfrogUsername;
+      if (acct && !deps.accountOk(R.id)) return res.status(403).json({ ok: false, error: LINK });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       const tx = String((req.body || {}).tx || "");
@@ -255,11 +263,13 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       }
       const lim = relay.limited("micclip|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
-      const j = relay.newJob({ kind: "micclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, target: login, tx,
-                               viewers: new Set([u.userId]), ...(alias ? { alias } : {}) });
+      // (1.99?? cliplink: `acct` = the clipper has no linked Camfrog name - takeJobs hands it out with clip_acct: 1 only while the pad's
+      // switch is still off; Pepe then acts as the PATV account)
+      const j = relay.newJob({ kind: "micclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", target: login, tx,
+                               viewers: new Set([u.userId]), ...(alias ? { alias } : {}), ...(acct ? { acct: true } : {}) });
       clips.set(j.id, { id: j.id, roomId: R.id, slug: R.slug || String(req.params.slug), tx, login, userId: u.userId, username: u.username, state: "pending", status: "", ts: NOW(), done: 0,
                         secs: 0, text: "", viewerOk: false, cost: 0, save: null, ...(alias ? { alias } : {}), ...(bar ? { txh: true } : {}) });
-      console.log(`[micclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} speaker=${alias ? "(a frog name)" : login} job=${j.id}`);
+      console.log(`[micclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername || "- (PATV account)"} speaker=${alias ? "(a frog name)" : login} job=${j.id}`);
       res.json({ ok: true, id: j.id });
     } catch (e) {
       console.error("[micclip] request:", e);
@@ -336,7 +346,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!x) return;
       const { c, R } = x;
       const u = await me(req);
-      if (!u || !u.camfrogUsername) return res.status(403).json({ ok: false, error: LINK });
+      // 1.99?? cliplink: an account with no linked Camfrog name posts only while the pad's switch is off (Pepe charges the account)
+      if (!u || (!u.camfrogUsername && !deps.accountOk(R.id))) return res.status(403).json({ ok: false, error: LINK });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired — clip it again." });
@@ -404,9 +415,12 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const by = String(b.by || "").toLowerCase();
       // the clipper's account: the PATV account that asked (website), else the one linked to their Camfrog login
       let acct = null;
+      // 1.99?? cliplink: Pepe acted as a PATV account with no linked Camfrog name (`by` = its "u:<userId>") - the account the website
+      // asked for (`user`), checked against that id; never a Camfrog login's fallback, and no Camfrog login is recorded for it
+      const ACCT = /^u:([A-Za-z0-9-]{6,64})$/.exec(by);
       if (b.user) acct = (await getQuery("SELECT userId, camfrogUsername FROM users WHERE username = ?", [String(b.user).slice(0, 60)]))[0] || null;
-      if (acct && String(acct.camfrogUsername || "").toLowerCase() !== by) acct = null;
-      if (!acct && LOGIN_RE.test(by)) {
+      if (acct && (ACCT ? String(acct.userId).toLowerCase() !== ACCT[1] : String(acct.camfrogUsername || "").toLowerCase() !== by)) acct = null;
+      if (!acct && !ACCT && LOGIN_RE.test(by)) {
         acct = (await getQuery(`SELECT userId, camfrogUsername FROM users WHERE lower(camfrogUsername) = ? ORDER BY CASE WHEN username LIKE 'CF%' THEN 1 ELSE 0 END LIMIT 1`, [by]))[0] || null;
       }
       if (!acct) return res.status(409).json({ ok: false, error: "no PATV account for the clipper" });
@@ -423,7 +437,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const alias = typeof b.alias === "string" ? b.alias.replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 60) || null : null;
       await runQuery(`INSERT INTO feed_voices (post_id, room_id, media_id, logins, by_login, created, alias) VALUES (?, ?, ?, ?, ?, ?, ?)
                       ON CONFLICT(post_id) DO UPDATE SET logins = excluded.logins, alias = excluded.alias`,
-                     [r.post.id, row.room || "", row.id, " " + speakers.join(" ") + " ", by, t, alias]);
+                     [r.post.id, row.room || "", row.id, " " + speakers.join(" ") + " ", ACCT ? "" : by, t, alias]);
       console.log(`[micclip] capture ${row.id} -> post ${r.post.id} (${speakers.length} speaker(s))`);
       try { require("./achievements").poke(acct.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🎙️ Hot Mic / 🐸 Frog Quotes
       res.json({ ok: true, url: r.post.url, id: r.post.id, again: !!r.again });

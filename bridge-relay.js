@@ -307,6 +307,9 @@ async function blockedWhy(R, u, feature = "chat") {
   try { return await require("./bridgeblocks").refusal(R.id, u.userId, feature); } catch (e) { return null; }
 }
 
+/** 1.99?? cliplink: may an account with no linked Camfrog name clip in this pad right now (cliplink.accountOk)? Never throws. */
+function clipAcctOk(roomId) { try { return require("./cliplink").accountOk(roomId); } catch (e) { return false; } }
+
 function newJob(fields) {
   const j = Object.assign({ id: "w" + crypto.randomBytes(8).toString("hex"), state: "pending", at: Date.now(), claimed: 0, tries: 0, result: null }, fields);
   jobs.set(j.id, j);
@@ -334,6 +337,11 @@ function takeJobs(liveRoomIds, via = "sync") {
     // micfollow: a mic-stage still is offered only while the mic stage still wants it (Pepe knows nothing of the mic-stage
     // switch, the pad's exclusions, stage bans, private activity or cam access - the site checks them here, last thing)
     if (isMfSnap(j) && !mfStillWanted(j)) { cancelJob(j); continue; }
+    // 1.99?? cliplink: a clip job of an account with NO linked Camfrog name goes out only while its pad's "Clips from the website need a
+    // linked Camfrog name" switch is still off (and Pepe can) - checked now, at hand-out; a pad that switched it back on fails it with
+    // the usual LINK answer (the page shows it). Pepe takes it only with the clip_acct: 1 below AND the pad on his sync list.
+    const clipAcct = j.acct && (j.kind === "micclip" || j.kind === "camclip") && !j.camfrog;
+    if (clipAcct && !clipAcctOk(j.roomId)) { failJob(j, "link", require("./cliplink").LINK); continue; }
     j.state = "claimed"; j.claimed = now; j.tries++;
     if (j.kind === "say") j.via = via;
     notify(j);
@@ -357,6 +365,7 @@ function takeJobs(liveRoomIds, via = "sync") {
     // 1.99aaf: 👻 staff in ghost mode - Pepe keeps them out of the room's mod log (the site audits it: cam_views ghost = 1)
     if ((j.kind === "snap" || j.kind === "camclip") && j.ghost) base.ghost = true;
     if (j.kind === "micclip") { base.target = j.target; base.viewer = j.username; base.tx = j.tx; }   // 1.99fp: 🔊 Clip on a 🎙 line
+    if (clipAcct) base.clip_acct = 1;          // 1.99?? cliplink: the site says the pad's switch is off - act as the PATV account (actor)
     // wave 2 (owner J-7): an incognito turn clipped under its frog name - Pepe posts it as the alias, never the speaker's name
     if (j.kind === "micclip" && j.alias) { base.alias = j.alias; base.veil = "incognito"; }
     // wave 2 WP-5 (spec E.3): an evidence clip of a veiled turn (evidence.js) - offered ONCE; veil_ok = the seethrough_log row the site

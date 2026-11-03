@@ -188,10 +188,15 @@ function register(app, { isBotToken, addUser, noTimers }) {
       const subjectLogin = !anon && /^[\w.\-]{1,40}$/.test(sl) ? sl : null;
       const bl = String(b.by_login || "").trim().replace(/^@/, "").toLowerCase();   // 1.99abh
       const byLogin = /^[\w.\-$]{1,40}$/.test(bl) ? bl : null;
-      await runQuery(`INSERT OR REPLACE INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, subject_login, by_login)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+      // 1.99?? cliplink: a website clip Pepe made for a PATV account with NO linked Camfrog name ("u:<userId>") names that account
+      // (by_uid - never sent for a private requester) - who took it, for the pad post and the capturer's own delete (storykeep.js)
+      const bu = String(b.by_uid || "").trim().toLowerCase();
+      const byUid = !byLogin && /^[a-z0-9-]{6,64}$/.test(bu)
+        ? ((await getQuery("SELECT userId FROM users WHERE lower(userId) = ?", [bu]).catch(() => []))[0] || {}).userId || null : null;
+      await runQuery(`INSERT OR REPLACE INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, subject_login, by_login, by_user_id)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
         [id, kind, ct, file, buf.length, Number(b.secs) || 0, anon ? "" : String(b.subject || "").slice(0, 60),
-         String(b.by || "").slice(0, 60), String(b.room || "").slice(0, 80), Number(b.created) || now, expires, anon ? 1 : 0, subjectLogin, byLogin]);
+         String(b.by || "").slice(0, 60), String(b.room || "").slice(0, 80), Number(b.created) || now, expires, anon ? 1 : 0, subjectLogin, byLogin, byUid]);
       res.json({ success: true, id, expires, url: `/media/${id}` });
       // the poster frame / waveform card, in the ffmpeg queue (an INSERT OR REPLACE re-upload gets a fresh one)
       if (kind === "clip" || kind === "audio") {

@@ -1732,6 +1732,7 @@ function register(app, { isBotToken, addUser }) {
   const PW = require("./privwire");
   PW.init().catch((e) => console.error("[bridge] privacy wire:", e.message));
   /** One sync's work and answer (v1 and v2 alike). wave 2: the answer says privwire: 2 only while the switch is on (the advert). */
+  const clipAcctRooms = () => { try { return require("./cliplink").openRooms(); } catch (e) { return []; } };
   async function syncAnswer(body, v2) {
     relay.applyAcks(body.acks);
     PW.noteTxCap(body.txbar_cap === 1);        // 1.99aht transcripts bar: does this Pepe send them as a bar? (the policy / help text)
@@ -1780,7 +1781,10 @@ function register(app, { isBotToken, addUser }) {
              ...(textrevealAdvert() ? { textreveal: 1 } : {}),
              // 1.99aif (privacy controls round 5): S3's cover picture (micfollow_cfg withheld_cover - no privacy wire needed) - Pepe's !livecam
              // off reply and his !livecam help card say a cam opt-out shows on mic stages with their cover picture only after this
-             ...(wcoverAdvert() ? { wcover: 1 } : {}) };
+             ...(wcoverAdvert() ? { wcover: 1 } : {}),
+             // 1.99?? cliplink: the pads whose "Clips from the website need a linked Camfrog name" switch is OFF (cliplink.js) - Pepe takes a
+             // clip from an account with no chat login only for a room on this list (and a job / action the site marked clip_acct: 1)
+             clip_acct_rooms: clipAcctRooms() };
   }
   // wave 2 WP-2 (spec A.3 handshake): the privacy wire v2 receiver - Pepe's FULL form (real UserRefs + priv, hidden words, hold ids).
   //  * every call is counted FIRST (the dark proof: while the switch has never been on, the counter stays 0 - Pepe never calls);
@@ -2004,6 +2008,7 @@ function register(app, { isBotToken, addUser }) {
   require("./chatlog").register(app, { addUser });                               // CL2: the chat archive (dark) + its /admin/bridge card
   require("./chatlogview").start();                                              // CL3: floors, watermarks, the hidden-names job
   require("./padchat").register(app, { addUser });                               // CL3: the pad's 💬 Chat settings (window, search, downloads, mods)
+  require("./cliplink").register(app, { addUser });                              // 1.99?? cliplink: "Clips from the website need a linked Camfrog name"
   require("./chatlogmod").register(app, { addUser });                            // CL6: ⚑ report / remove / hide / purge a line, the staff tools
   require("./chatloghist").register(app, { addUser });                           // CL8: scrollback - GET /api/rooms/:slug/history (dark)
   require("./chatlogsearch").register(app, { addUser });                         // CL9: 🔍 search - POST /api/rooms/:slug/search (dark)
@@ -2170,6 +2175,8 @@ function register(app, { isBotToken, addUser }) {
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
+      // 1.99?? cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)
+      clipAcct: !!(signedIn && !linked && (() => { try { return require("./cliplink").accountOk(R.id); } catch (e) { return false; } })()),
       // CL3 fix-up: the topic as /live and #rmInit show it - hidden people's names redacted (it was printed raw into #rmTopic,
       // to every viewer and crawler); "" when the names can't be loaded (fails closed)
       room: { id: R.id, name: title, slug, count: adultGate === "ok" ? R.count : null, live: !R.offline && isLive(R), topic: liveOpen && R.topic ? await require("./chatlogview").redactLoaded(R.topic) : "",

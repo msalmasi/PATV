@@ -139,6 +139,7 @@ async function reloadCaches() {
   try { require("./mainstage")._pubCache.clear(); } catch (e) { /* no stage */ }
   try { await require("./premium").loadCache(); } catch (e) { /* not loaded */ }      // 1.99qy: Plus / Prime Time moved with the pad
   try { await require("./chatlog").loadPadCfg(); } catch (e) { /* not loaded */ }      // CL3: the pad's chat settings moved with it
+  try { await require("./cliplink").loadCache(); } catch (e) { /* not loaded */ }      // 1.99?? cliplink: the pad's clip switch (pad_clip_cfg) too
 }
 
 module.exports = { vaultRekeysForPepe, vaultRekeysDone, rekey, padColumns, reloadCaches, ROOM_BOUND, ROOM_COLUMNS, FEED_KV_PREFIXES };

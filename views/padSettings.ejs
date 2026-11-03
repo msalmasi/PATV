@@ -492,6 +492,19 @@
         <p class="msg" id="brMsg" role="status" aria-live="polite"></p>
       <% } %>
     </div>
+    <%# 1.99?? cliplink: 🔊 mic / 🎬 cam clips from the website without a linked Camfrog name (cliplink.js; public/js/pad-clip-settings.js wires it) %>
+    <% if (typeof clips !== 'undefined' && clips) { %>
+    <div class="sb-card ps-card pcs" id="padClipSet" data-slug="<%= slug %>">
+      <h3><%- t('pad.settings.clips.h') %></h3>
+      <div class="ds-row between pcs-row">
+        <div class="pcs-txt"><b id="pclLabel"><%- t('pad.settings.clips.link_label') %></b><p class="ds-meta"><%- t('pad.settings.clips.link_hint') %></p></div>
+        <label class="ds-switch"><input type="checkbox" id="pclLink" aria-labelledby="pclLabel" <%= clips.need_link ? 'checked' : '' %>><span></span></label>
+      </div>
+      <p class="ds-meta pcs-note"><%- t('pad.settings.clips.rules') %></p>
+      <% if (!clips.capable) { %><p class="ds-meta pcs-note" id="pclWaiting"><%- t('pad.settings.clips.waiting') %></p><% } %>
+      <p class="msg" id="pclMsg" role="status" aria-live="polite"></p>
+    </div>
+    <% } %>
   </section>
   <% } %>
 
@@ -623,5 +636,7 @@
 <script src="/public/js/pad-cosmetics.js?v=5" defer></script>
 <% if (typeof flair !== 'undefined' && flair) { %><script src="/public/js/pad-flair.js?v=3" defer></script><% } %>
 <% if (typeof chat !== 'undefined' && chat) { %><link rel="stylesheet" href="/public/css/pad-chatset.css?v=1"><script src="/public/js/pad-chat-settings.js?v=1" defer></script><% } %>
+<%# 1.99?? cliplink: the Camfrog tab's clip switch (its card uses the chat tab's row styles) %>
+<% if (typeof clips !== 'undefined' && clips) { %><% if (!(typeof chat !== 'undefined' && chat)) { %><link rel="stylesheet" href="/public/css/pad-chatset.css?v=1"><% } %><script src="/public/js/pad-clip-settings.js?v=1" defer></script><% } %>
 </body>
 </html>

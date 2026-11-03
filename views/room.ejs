@@ -1332,7 +1332,7 @@
     }
 
     var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug, { showOff: true });   // greyed while the relay is off
-    var chatClip = window.PATVChatClip ? PATVChatClip.init({ feed: feedEl, host: document.getElementById('rmClip'), slug: slug, linked: <%= linked ? 'true' : 'false' %> }) : null;   // 1.99fp
+    var chatClip = window.PATVChatClip ? PATVChatClip.init({ feed: feedEl, host: document.getElementById('rmClip'), slug: slug, linked: <%= linked || (typeof clipAcct !== 'undefined' && clipAcct) ? 'true' : 'false' %> }) : null;   // 1.99fp; 1.99?? cliplink: + an unlinked account on a pad whose switch is off
     // CL6: the ⋯ on each line (public/js/chat-lines.js -> chatlogmod.js) - what it offers comes with each answer (history.acts); a line
     // taken down from here leaves this page at once
     // (CL8: scrollback's older lines get the ⋯ too - they're the archive's; CL9: and the 🔍 search results, made here first)

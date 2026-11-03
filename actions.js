@@ -328,6 +328,13 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     require("./actorcap").note(req.body);        // 1.99wv: a Pepe that acts for accounts says so (actorcap.js)
     await ready;
+    // 1.99?? cliplink: a clip post ("micclip.save" / "camclip.save") of an account with NO linked Camfrog name carries clip_acct: 1 only while
+    // its pad's "Clips from the website need a linked Camfrog name" switch is off right now (cliplink.js) - Pepe then charges the account;
+    // without it he refuses it as before
+    const CL = require("./cliplink");
+    await CL.init().catch(() => {});
+    const clipAcct = (a, args) => ((a.kind === "micclip.save" || a.kind === "camclip.save") && !a.camfrog && CL.accountOk(String((args || [])[0] || ""))
+      ? { clip_acct: 1 } : {});
     // 1.99ne: overdue pending rows expire first (actionttl.js) - never handed out late
     await ttl.sweepTable("pepe_actions").catch((e) => console.error("[actions] ttl sweep:", e.message));
     const now = Date.now();
@@ -371,7 +378,7 @@ function register(app, { isBotToken, addUser }) {
       return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: econ ? !!(o && o.is_owner) : !!a.site_admin,
                is_owner: !!(o && o.is_owner), login: econ ? (o && o.login) || null : a.camfrog || null, idem: a.idem || null,
                user_id: a.user_id, actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null },
-               created: a.created || null, expires_at: ttl.expiresAt("pepe_actions", a) };   // 1.99ne: Pepe won't START it after this
+               created: a.created || null, expires_at: ttl.expiresAt("pepe_actions", a), ...clipAcct(a, args) };   // 1.99ne: Pepe won't START it after this
     }) });
   });
 

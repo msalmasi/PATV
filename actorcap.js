@@ -17,15 +17,22 @@ let seenAt = 0;
 // sender, "u:<userId>" for an account with no chat login), who honours an ACCOUNT's incognito ("privacy.incognito" for
 // "u:<userId>") and enforces !bridge block (bridgeblocks.js). An older Pepe never says it: the site then keeps the old paths.
 let relaySeenAt = 0;
+// 1.99?? cliplink: `clipacct_cap: 1` = a Pepe (camfrog-bot 1.99??+, pepe_cliplink.py) that takes 🔊 mic / 🎬 cam clips from a PATV account
+// with no chat login on a pad whose "Clips from the website need a linked Camfrog name" switch is off (cliplink.js) - acting as
+// "u:<userId>", charged to that account. An older Pepe never says it: the site keeps today's "Link your Camfrog name first".
+let clipSeenAt = 0;
 let clock = () => Date.now();
 
 /** A claim / sync body from Pepe: remember whether he can act for an account. */
 function note(body) {
   if (body && (body.actor_cap === 1 || body.actor_cap === true || body.actor_cap === "1")) seenAt = clock();
   if (body && (body.relay_cap === 1 || body.relay_cap === true || body.relay_cap === "1")) relaySeenAt = clock();
+  if (body && (body.clipacct_cap === 1 || body.clipacct_cap === true || body.clipacct_cap === "1")) clipSeenAt = clock();
 }
 /** 1.99xa: true while a Pepe that treats relay lines as normal chat (and account incognito / bridge blocks) was heard from. */
 function relayOn() { return relaySeenAt > 0 && clock() - relaySeenAt < CAP_TTL_MS; }
+/** 1.99?? cliplink: true while a Pepe that takes clips from accounts with no chat login was heard from (cliplink.accountOk). */
+function clipOn() { return clipSeenAt > 0 && clock() - clipSeenAt < CAP_TTL_MS; }
 /** true while a Pepe that acts for accounts was heard from recently. */
 function on() { return seenAt > 0 && clock() - seenAt < CAP_TTL_MS; }
 
@@ -36,5 +43,6 @@ function actorOf(u, display) {
            display: display ? String(display).slice(0, 40) : null };
 }
 
-module.exports = { note, on, relayOn, actorOf, CAP_TTL_MS, _set: (t) => { seenAt = t; }, _setRelay: (t) => { relaySeenAt = t; },
+module.exports = { note, on, relayOn, clipOn, actorOf, CAP_TTL_MS, _set: (t) => { seenAt = t; }, _setRelay: (t) => { relaySeenAt = t; },
+  _setClip: (t) => { clipSeenAt = t; },
   _setClock: (f) => { clock = f; } };

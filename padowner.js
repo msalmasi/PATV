@@ -171,6 +171,7 @@ const WEB_CAPS = Object.freeze([
   { id: "web_pad_site", area: "feed", route: "POST /api/rooms/:slug/owner/site", where: "/p/{slug}/owner#site" },              // 1.99up
   { id: "web_pad_filter", area: "feed", route: "POST /api/rooms/:slug/owner/filter", where: "/p/{slug}/owner#safety" },        // 1.99ux: feedfilter.js
   { id: "web_chat_history", area: "room", route: "POST /api/rooms/:slug/chat-settings", where: "/p/{slug}/settings?tab=chat" }, // CL3: padchat.js
+  { id: "web_clip_link", area: "room", route: "POST /api/rooms/:slug/clip-settings", where: "/p/{slug}/settings?tab=camfrog" },  // 1.99?? cliplink.js
 ]);
 // 1.99ti: Pepe in / out of the pad's Camfrog room (website action "room.ctl" from the owner; Pepe re-checks owner, Plus, his
 // 5-room cap, his home room and staging). One per CTL_GAP_MS per pad here too.
