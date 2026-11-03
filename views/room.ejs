@@ -526,7 +526,7 @@
 </style>
 <%# CL5: the chat's lines - right after the block they came from, so its rules keep their order in the cascade; <main> carries
     .chatlog (the stylesheet's scope) next to .rm. CL5 fix-up: v=5 - the chat's own --ds-chat-* colours again, the RTL highlight %>
-<link rel="stylesheet" href="/public/css/chatlog.css?v=10">
+<link rel="stylesheet" href="/public/css/chatlog.css?v=11">
 <link rel="stylesheet" href="/public/css/veil.css?v=3"><%# wave 2: frog names, hooded avatars, masked bars (not in chatlog.css: the downloads inline that one) %>
 <%# 1.99es: the pad's look (padlook.js via app.locals): accent -> CSS custom properties on <main> (validated hex only),
     an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
@@ -542,7 +542,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=1"><script src="/public/js/pad-dock.js?v=1"></script><% } %>
+<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=1"><script src="/public/js/pad-dock.js?v=1"></script><script src="/public/js/pad-picker.js?v=1"></script><% } %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
   <%# 1.99tc: the tier intro - 💎 Prime Time Plus gets its own title card, Prime Time the gold sweep (partials/pad-intro.ejs) %>
@@ -846,7 +846,7 @@
       <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
-  <script src="/public/js/chatlog-core.js?v=7"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
+  <script src="/public/js/chatlog-core.js?v=8"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
   <script src="/public/js/pad-history.js?v=3"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=2"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
@@ -944,7 +944,8 @@
     // system lines) until a reload brings the renderer back. Names follow its rules: "someone", "former member", no account key.
     // [CL5 renderer wiring - test/chatlog-page.test.js runs this block]
     var CLR = window.PATVChatlog && typeof window.PATVChatlog.renderItem === 'function' ? window.PATVChatlog : null, H = CLR ? CLR.domH(document) : null;
-    var rctx = { t: _t, lang: document.documentElement.lang || undefined };
+    var rctx = { t: _t, lang: document.documentElement.lang || undefined,
+      cfsticker: function (set, id) { return '/media/cfsticker/' + id + '.webp'; } };
     if (!CLR && window.console) console.error('[pad] chatlog-core.js did not load - plain chat lines until a reload');
     function plainName(u) {
       if (!u || u.anon) return _t('js.pad.someone', 'someone');

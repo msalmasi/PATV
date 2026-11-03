@@ -627,6 +627,7 @@ function feedItem(ev, roomId = null) {
         const wu = cleanUser(w.user, true);
         const wt = cpStr(w.text, INBOUND_MAX);
         const tag = jid ? { _job: jid } : {};
+        // Media metadata belongs to the current viewer projection (chatlogview.dress), never the persisted feed.
         if (wu && !wu.anon && !wu.self && wt) return Object.assign({ k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt }, tag);
         // 1.99acb: Pepe's sender ref didn't pass (a lost ref, a failed label lookup) but the job says who sent it: still THEIR
         // line (their linked login, or their PATV account when they have no chat login) - never Pepe's. Words = Pepe's
@@ -976,6 +977,7 @@ async function ingest(body, opts = {}) {
     R.livecams = typeof s.livecams === "boolean" ? s.livecams : false;   // 1.99yh: !bridge livecams (an older Pepe: no live cams)
     R.snapOn = typeof s.snap === "boolean" ? s.snap : null;   // 1.99cw: the room's !snap switch (null = an older Pepe)
     R.clipOn = typeof s.clip === "boolean" ? s.clip : null;   // 1.99fa: the room's !clip switch (null = an older Pepe)
+    R.stickers = s.stickers === true;                       // 1.99??: absent on older/default bot snapshots = off
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
     R.mod = require("./padmod").cleanModCaps(s.mod);   // 1.99co: Manage-panel caps per watching mod login ({} = none)
     R.pepe = require("./padpepe").cleanMenu(s.pepe);   // 1.99qr: the 🐸 Pepe submenu - {look|camroast|roast: {on, price, why}}
@@ -1634,6 +1636,17 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
   const withTip = (u) => { const x = withPatv(u, L, F); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
+  // 1.99??: picker visibility shares the say route's full access check; no extra account lookup while the Dock/media are off.
+  let cfstickerPicker = false, gifPicker = false;
+  if (userId && require("./paddock").current().cfg.mode !== "off") {
+    const stickersOn = R.stickers === true && require("./cfstickers").enabled(), gifsOn = require("./gifs").available();
+    if (stickersOn || gifsOn) {
+      try {
+        const access = await relay.sayEligibility({ user: viewer }, R);
+        if (access.ok) { cfstickerPicker = stickersOn; gifPicker = gifsOn; }
+      } catch (e) { /* an unavailable eligibility check leaves both picker tabs hidden */ }
+    }
+  }
   return {
     room: { name: R.name, slug: R.slug, topic: CV.redact(R.topic), count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
@@ -1642,6 +1655,8 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             // 1.99ia: switched on but not streaming -> the player says why instead of just "audio relay off"
             audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
+            stickers: R.stickers === true,
+            cfstickerPicker, gifPicker,
             // 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) - null = not here; {slots: {used, max}, watching} for this viewer
             // (1.99aid privacy controls S4: reveal: 1 for a moderator who may view a hidden cam here - the popover's "View for moderation")
             livecams: isLive(R) ? withReveal(livecamHint(R, userId), crRole) : null,

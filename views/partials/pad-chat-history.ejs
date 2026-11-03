@@ -15,7 +15,7 @@
     <div class="hist-bot" id="rmHistBot"></div>
   </div>
 </section>
-<script src="/public/js/chatlog-core.js?v=7"></script>
+<script src="/public/js/chatlog-core.js?v=8"></script>
 <script src="/public/js/pad-history.js?v=3"></script>
 <script src="/public/js/pad-search.js?v=2"></script>
 <script src="/public/js/pad-download.js?v=2"></script>
@@ -29,7 +29,7 @@
   var data = JSON.parse(document.getElementById('rmHistInit').textContent);
   var hist = data && data.history ? data.history : null;
   var CLR = window.PATVChatlog, H = CLR.domH(document);
-  var rctx = { t: _t, lang: document.documentElement.lang || undefined };
+  var rctx = { t: _t, lang: document.documentElement.lang || undefined, cfsticker: function (set, id) { return '/media/cfsticker/' + id + '.webp'; } };
   var scrollEl = document.getElementById('rmScroll'), olderEl = document.getElementById('rmOlder');
   var padHist = null, padSearch = null;
   // CL9: the 🔍 search results get the ⋯ too (made here, before chat-lines.js starts)

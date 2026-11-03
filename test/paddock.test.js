@@ -25,14 +25,14 @@ async function request(method, body, user = "admin", headers = {}) {
 const post = (body, user, headers = { "X-Requested-With": "fetch" }) => request("POST", body, user, headers);
 
 test("rollout defaults off; strict mode validation retains the previous setting", async () => {
-  assert.deepEqual(P.current(), { v: 0, cfg: { mode: "off" } });
+  assert.deepEqual(P.current(), { v: 0, cfg: { mode: "off", cfstickers: false, gifs: false } });
   for (const user of [null, member, staff, admin]) assert.equal(P.viewerOn(user), false);
   for (const value of [null, true, 1, [], {}, "all", "__proto__"]) {
     const result = P.normalize({ mode: value }, { base: { mode: "staff" } });
     assert.equal(result.cfg.mode, "staff"); assert.equal(result.errors.mode, "invalid");
   }
-  assert.deepEqual(P.normalize({}).cfg, { mode: "off" });
-  assert.deepEqual(P.normalize({ mode: " EVERYONE " }).cfg, { mode: "everyone" });
+  assert.deepEqual(P.normalize({}).cfg, { mode: "off", cfstickers: false, gifs: false });
+  assert.deepEqual(P.normalize({ mode: " EVERYONE " }).cfg, { mode: "everyone", cfstickers: false, gifs: false });
   await P.save(admin, { cfg: { mode: "staff" } });
   const before = P.current();
   await assert.rejects(P.save(admin, { cfg: { mode: "bad" } }), e => e.status === 400);
@@ -50,8 +50,20 @@ test("staff audience delegates to pads.manage_any; everyone includes signed-out 
   } finally { SP.can = original; }
   await P.save(admin, { cfg: { mode: "everyone" } });
   for (const user of [null, member, staff, admin]) assert.equal(P.viewerOn(user), true);
-  await P.save(admin, { cfg: { mode: "off" } });
+  await P.save(admin, { cfg: { mode: "off", cfstickers: false, gifs: false } });
   for (const user of [null, member, staff, admin]) assert.equal(P.viewerOn(user), false);
+});
+
+test("media switches default false, accept only booleans, persist and reset together with the audience", async () => {
+  for (const field of ["cfstickers", "gifs"]) {
+    for (const bad of ["true", "false", 1, 0, null, [], {}]) {
+      const result = P.normalize({ [field]: bad }); assert.equal(result.cfg[field], false); assert.equal(result.errors[field], "invalid");
+    }
+  }
+  await P.save({ ...admin, userId: "media-switch-admin" }, { cfg: { mode: "staff", cfstickers: true, gifs: true } });
+  P._reset(); await P.init(); assert.deepEqual(P.current().cfg, { mode: "staff", cfstickers: true, gifs: true });
+  const result = await P.save({ ...admin, userId: "media-switch-admin" }, { reset: true });
+  assert.deepEqual(result.cfg, { mode: "off", cfstickers: false, gifs: false });
 });
 
 test("admin route requires pads.config and same-site fetch; refused requests do not change config", async () => {
@@ -91,7 +103,7 @@ test("save rate limit is per admin and leaves the last accepted state unchanged"
   for (let i = 0; i < 20; i++) assert.equal((await post({ cfg: { mode: i % 2 ? "staff" : "off" } })).status, 200);
   const before = P.current(); assert.equal((await post({ cfg: { mode: "everyone" } })).status, 429);
   assert.deepEqual(P.current(), before);
-  assert.equal((await P.save({ ...admin, userId: "other-admin" }, { cfg: { mode: "off" } })).cfg.mode, "off");
+  assert.equal((await P.save({ ...admin, userId: "other-admin" }, { cfg: { mode: "off", cfstickers: false, gifs: false } })).cfg.mode, "off");
 });
 
 test("an audit failure rolls back the saved row and leaves the per-process audience unchanged", async () => {
@@ -261,14 +273,15 @@ test("admin script loads once, saves the chosen mode, resets explicitly, and sho
   const form = ids.paddockForm, reason = doc.createElement("input"), save = doc.createElement("button"); reason.name = "reason";
   form.appendChild(ids.paddockFields); form.appendChild(reason); form.appendChild(ids.paddockReset); form.appendChild(save);
   Object.defineProperty(form, "elements", { get: () => Object.fromEntries([...form.querySelectorAll("input"), ...form.querySelectorAll("select")].map(n => [n.name, n])) });
-  let mode = "off", failure = null;
-  const view = () => ({ cfg: { mode }, fields: P.FIELDS, audit: [{ at: 1, admin: "<script>fixture</script>", detail: { v: 1 } }] });
+  let mode = "off", cfstickers = false, gifs = false, failure = null;
+  const view = () => ({ cfg: { mode, cfstickers, gifs }, fields: P.FIELDS, audit: [{ at: 1, admin: "<script>fixture</script>", detail: { v: 1 } }] });
   vm.runInNewContext(fs.readFileSync(path.join(repo, "public/js/admin-paddock.js"), "utf8"), {
     window: {}, document: doc, fetch: async (url, init) => {
       calls.push({ url, init });
       if (init.method) {
         if (failure) return { json: async () => ({ ok: false, error: failure }) };
         const body = JSON.parse(init.body); mode = body.reset ? "off" : body.cfg.mode;
+        cfstickers = !body.reset && body.cfg.cfstickers; gifs = !body.reset && body.cfg.gifs;
         return { json: async () => ({ ok: true, view: view() }) };
       }
       return { json: async () => ({ ok: true, ...view() }) };
@@ -276,11 +289,13 @@ test("admin script loads once, saves the chosen mode, resets explicitly, and sho
   });
   await b.flush(); assert.equal(calls.length, 1); assert.equal(calls[0].url, "/api/admin/paddock"); assert.equal(form.elements.mode.value, "off");
   assert.match(ids.paddockAudit.textContent, /<script>fixture<\/script>/, "audit names stay literal text");
-  form.elements.mode.value = "staff"; reason.value = " Staging review "; form.fire("submit"); await b.flush();
+  form.elements.mode.value = "staff"; form.elements.cfstickers.checked = true; form.elements.gifs.checked = true;
+  reason.value = " Staging review "; form.fire("submit"); await b.flush();
   assert.equal(calls[1].init.method, "POST"); assert.equal(calls[1].init.headers["X-Requested-With"], "fetch");
-  assert.deepEqual(JSON.parse(calls[1].init.body), { cfg: { mode: "staff" }, reset: false, reason: "Staging review" });
+  assert.deepEqual(JSON.parse(calls[1].init.body), { cfg: { mode: "staff", cfstickers: true, gifs: true }, reset: false, reason: "Staging review" });
   assert.equal(form.elements.mode.value, "staff"); assert.equal(reason.value, ""); assert.match(ids.paddockMessage.textContent, /Saved.*Reload/);
   ids.paddockReset.fire("click"); await b.flush(); assert.equal(form.elements.mode.value, "off"); assert.equal(JSON.parse(calls[2].init.body).reset, true);
+  assert.equal(form.elements.cfstickers.checked, false); assert.equal(form.elements.gifs.checked, false);
   failure = "rate"; form.elements.mode.value = "everyone"; form.fire("submit"); await b.flush();
   assert.match(ids.paddockMessage.textContent, /Wait a moment/); assert.equal(mode, "off"); assert.equal(save.disabled, false);
 });

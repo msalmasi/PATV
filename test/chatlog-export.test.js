@@ -997,3 +997,23 @@ test("Node 16 and old browsers: chatlogexport.js has no Node 20-only API; pad-do
   const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const m of ui.matchAll(/_t\('([^']+)',\s*'((?:[^'\\]|\\.)*)'/g)) assert.equal(EN[m[1]], m[2].replace(/\\'/g, "'"), m[1]);
 });
+
+test("media lines download as placeholders in HTML, TXT and JSONL without changing the golden fixtures", async () => {
+  await ready();
+  await bridge.ingest({ rooms: [snap(WEB)], events: [
+    ev(WEB, "message", { user: BOB, text: "[cfsticker:1642/123456]" }, at(16, 14, 0)),
+    ev(WEB, "message", { user: PEPE, text: "web credit", web: { user: BOB, text: "[gif:orchard-A_1]" } }, at(16, 14, 1)),
+    ev(WEB, "message", { user: BOB, text: "[gif:room-literal]" }, at(16, 14, 2))
+  ] });
+  await settle();
+  for (const fmt of ["html", "txt", "jsonl"]) {
+    const { f } = await download(U.own, { fmt, range: "custom", from: "2026-10-16", to: "2026-10-16" }, WSLUG);
+    assert.equal(f.status, 200, f.text);
+    assert.match(f.text, /\[sticker\]/); assert.match(f.text, /\[GIF\]/);
+    assert.doesNotMatch(f.text, /\[cfsticker:|\[gif:|orchard-A_1|room-literal|\/media\/cfsticker\/|<img[^>]+class="gif"/);
+    if (fmt === "jsonl") {
+      const lines = f.text.split("\n").filter(Boolean).map(s => JSON.parse(s));
+      assert.equal(lines.filter(l => l.text === "[GIF]").length, 2, "with or without web metadata, the token id never exports");
+    }
+  }
+});

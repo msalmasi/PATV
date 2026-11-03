@@ -120,6 +120,8 @@ const PULL_WAIT_MAX = 10 * 1000;         // Pepe's long-poll (staging's router g
 const CID_RE = /^[A-Za-z0-9_-]{6,40}$/;
 const CODE_RE = /^[a-z_]{2,24}$/;
 const cids = new Map();                  // `${userId}|${cid}` -> job id (idempotent say)
+const mediaSends = new Map();             // an async GIF lookup must not duplicate one client send
+let sayRooms = null;                      // the same room/live/perk gates as the existing relay route
 const pullers = [];                      // Pepe's waiting long-polls: () => void
 let notifyFn = null;                     // (roomId, userId) => void - bridge.js wakes the room's page long-polls
 let lastPull = 0, drainHooked = false, draining = false;
@@ -352,6 +354,7 @@ function takeJobs(liveRoomIds, via = "sync") {
     // 1.99wv (connections audit C): the ACCOUNT behind every job - Pepe acts as `camfrog` when there is one, else as the account
     if (j.userId) { base.user_id = j.userId; base.actor = j.actor || { userId: j.userId, username: j.username || null, login: j.camfrog || null, display: null }; }
     if (j.kind === "say" || j.kind === "cmd") base.text = j.text;
+    if (j.kind === "say" && j.media) base.media = { ...j.media };
     // 1.99co: a pad Manage-panel action (padmod.js) - the site-built line plus what Pepe re-checks / logs
     if (j.kind === "cmd" && j.gui) { base.gui = j.gui; if (j.reason) base.reason = j.reason; }
     if (j.kind === "cmd" && j.setting) base.setting = j.setting;
@@ -504,7 +507,18 @@ async function stickerRefusal(u, raw, out) {
 /** 1.99ye: one say line from member `u` (a users row: userId, username, displayname, camfrogUsername) into live room R.
  *  The /say route and the staging test route both come here. -> {status, body}. `cid` = the page's client id: the same
  *  one again answers with the job it already made (never a second post). */
-async function sayLine(u, R, text, cid, opts = {}) {
+const mediaKind = text => /\[cfsticker\b/i.test(String(text || "")) ? "sticker" : /\[gif\b/i.test(String(text || "")) ? "gif" : null;
+function mediaRefusal(kind) { return { status: 403, body: { ok: false, code: kind, error: kind === "sticker" ? "That sticker isn't available here." : "That GIF isn't available here." } }; }
+function sayLine(u, R, text, cid, opts = {}) {
+  const kind = mediaKind(text), token = kind && require("./public/js/chatlog-core").mediaToken(text);
+  if (kind && !token) return Promise.resolve(mediaRefusal(kind));
+  const flight = kind && u && CID_RE.test(String(cid || "")) ? u.userId + "|" + cid : "";
+  if (flight && mediaSends.has(flight)) return mediaSends.get(flight);
+  const task = sendSayLine(u, R, text, cid, { ...opts, mediaToken: token });
+  if (flight) { mediaSends.set(flight, task); void task.finally(() => mediaSends.delete(flight)).catch(() => {}); }
+  return task;
+}
+async function sendSayLine(u, R, text, cid, opts = {}) {
   cid = CID_RE.test(String(cid || "")) ? String(cid) : "";
   const key = cid ? u.userId + "|" + cid : "";
   if (key && cids.has(key) && jobs.has(cids.get(key))) {
@@ -523,6 +537,25 @@ async function sayLine(u, R, text, cid, opts = {}) {
   }
   const st = await stickerRefusal(u, text, out);           // stkfix B3: packs this account owns; the expanded length
   if (st) return st;
+  let media = null;
+  if (opts.mediaToken) {
+    const token = opts.mediaToken, kind = token.type === "cfsticker" ? "sticker" : "gif";
+    const access = await sayEligibility({ user: opts.viewer || u }, R);
+    if (!access.ok) return access;
+    u = access.u;
+    if (token.type === "cfsticker") {
+      const stickers = require("./cfstickers"); await stickers.init();
+      if (!stickers.enabled() || R.stickers !== true || !stickers.valid(token.set, token.id)) return mediaRefusal(kind);
+      media = { type: "cfsticker", set: Number(token.set), id: Number(token.id) };
+    } else {
+      const gifs = require("./gifs"), gif = await gifs.resolve(token.id);
+      if (!gifs.available() || !gif) return mediaRefusal(kind);
+      const current = await sayEligibility({ user: opts.viewer || u }, R);
+      if (!current.ok) return current;
+      u = current.u;
+      media = { type: "gif", id: token.id, title: gif.title, page: gif.page };
+    }
+  }
   text = out;
   let open = 0;
   for (const j of jobs.values()) if (j.kind === "say" && j.userId === u.userId && j.roomId === R.id && j.state !== "done") open++;
@@ -532,8 +565,22 @@ async function sayLine(u, R, text, cid, opts = {}) {
   const lim = limited("say|" + u.userId, 0, SAY_MINUTE_MAX, 60000);
   if (lim) return { status: 429, body: { ok: false, code: "rate", error: lim } };
   const display = u.camfrogUsername ? await webName(u) : "";
+  // A retry can arrive while a provider lookup or display-name check was in flight.
+  if (media && key && cids.has(key) && jobs.has(cids.get(key))) {
+    const prior = jobs.get(cids.get(key));
+    return { status: 200, body: { ok: true, id: prior.id, cid, dup: true, state: prior.state } };
+  }
+  if (media) {
+    // Distinct picks can finish provider/name work together. No awaits after this final queue check.
+    if (!require("./paddock").viewerOn({ ...opts.viewer, ...u })) return mediaRefusal(media.type === "gif" ? "gif" : "sticker");
+    if (media.type === "gif" ? !require("./gifs").available() : !require("./cfstickers").enabled() || R.stickers !== true || !require("./cfstickers").valid(media.set, media.id))
+      return mediaRefusal(media.type === "gif" ? "gif" : "sticker");
+    let waiting = 0;
+    for (const prior of jobs.values()) if (prior.kind === "say" && prior.userId === u.userId && prior.roomId === R.id && prior.state !== "done") waiting++;
+    if (waiting >= SAY_QUEUE_MAX) return { status: 429, body: { ok: false, code: "queue_full", max: SAY_QUEUE_MAX, error: `You have ${SAY_QUEUE_MAX} messages waiting to go out — give them a second.` } };
+  }
   const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
-                     actor: require("./actorcap").actorOf(u, display), cid: cid || null });
+                     actor: require("./actorcap").actorOf(u, display), cid: cid || null, ...(media ? { media } : {}) });
   if (key) cids.set(key, j.id);
   console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}${opts.test ? " (staging test)" : ""}`);
   if (!opts.test) require("./streaks").note(u.userId, "relay");     // 1.99xi: 🔥 chatting into a pad's room from the web keeps the daily streak
@@ -549,7 +596,30 @@ function roomRefusal(R, flag, isLive, gated) {
   return null;
 }
 
+/** Picker/media access uses the actual say gates without queueing, spending a rate-limit slot or exposing identity. */
+async function sayEligibility(req, room) {
+  if (!req || !req.user || !req.user.userId) return { status: 401, body: { ok: false, code: "signin", error: "Sign in first." } };
+  const u = (await getQuery("SELECT userId,username,displayname,camfrogUsername,class FROM users WHERE userId=?", [req.user.userId]))[0];
+  if (!u) return { status: 401, body: { ok: false, code: "signin", error: "Sign in first." } };
+  if (!require("./paddock").viewerOn({ ...req.user, ...u })) return { status: 403, body: { ok: false, code: "dock", error: "The Room Dock isn't available here." } };
+  const source = sayRooms || { bySlug: s => require("./bridge").bySlug(s), isLive: R => require("./bridge").isLiveShown(R), gated: R => require("./bridge").isLive(R) && !require("./bridge").bridgeOk(R.id) };
+  const R = room && typeof room === "object" ? room : typeof room === "string" ? source.bySlug(room) : null;
+  const refusal = roomRefusal(R, "relay", source.isLive, source.gated);
+  if (refusal) return refusal;
+  if (!(await padFull(u.userId, R.id))) return { status: 403, body: PAD_DENIED };
+  const adult = require("./adultgate"), state = adult.gate({ ...req.user, ...u }, R.id);
+  if (state !== "ok") return { status: adult.statusOf(state), body: adult.refusal(state, "/p/" + encodeURIComponent(R.slug || ""), req.t) };
+  const blocked = await blockedWhy(R, u, "chat");
+  if (blocked) return { status: 403, body: { ok: false, code: "blocked", error: blocked, blocked: true, feature: "chat" } };
+  if (!u.camfrogUsername) {
+    const why = await accountRefusal(u, R, "");
+    if (why) return { status: why.status, body: { ok: false, code: "account", error: why.error } };
+  }
+  return { ok: true, u, R };
+}
+
 function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, liveIds = null }) {
+  sayRooms = { bySlug, isLive, gated };
   const me = async (req) => {
     if (!req.user || !req.user.userId) return null;
     return (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
@@ -570,10 +640,14 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (require("./adultgate").refuseJson(req, res, R.id)) return;
     const body = req.body || {};
     // 1.99ye: too long is refused (with the limit), never cut short silently - the composer counts down to SAY_MAX
-    const text = clean(body.text, SAY_MAX + 1);
-    if (text.startsWith("!")) return runCmd(req, res, u, R, text.slice(0, SAY_MAX));
+    const special = mediaKind(body.text);
+    const text = special ? String(body.text) : clean(body.text, SAY_MAX + 1);
+    if (!special && text.startsWith("!")) return runCmd(req, res, u, R, text.slice(0, SAY_MAX));
+    if (special && !require("./public/js/chatlog-core").mediaToken(text)) {
+      const out = mediaRefusal(special); return res.status(out.status).json(out.body);
+    }
     if (text.length > SAY_MAX) return res.status(400).json({ ok: false, code: "too_long", max: SAY_MAX, error: `That's too long — ${SAY_MAX} characters at most.` });
-    const out = await sayLine(u, R, text, body.cid);
+    const out = await sayLine(u, R, text, body.cid, { viewer: req.user });
     res.status(out.status).json(out.body);
   });
 
@@ -1028,7 +1102,7 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { padFull, PAD_DENIED, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
+module.exports = { padFull, PAD_DENIED, sayEligibility, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
   mfSnap, mfFrame, mfSnapCancel, mfCancelled, SNAP_TARGET_GAP,                             // micfollow
   sayLine, roomRefusal, noteEcho, echoJob, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_PENDING_TTL_SYNC, SAY_CLAIM_TTL,   // 1.99ye
   _cids: cids, _pullers: pullers, _lastPull: () => lastPull,

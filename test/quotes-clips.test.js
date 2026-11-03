@@ -608,3 +608,77 @@ test("CL3 fix-up: a mic clip's caption (the transcript, republished on the pad) 
   assert.match(String(row.title), /someone and someone owe me one/);
   await sync({ events: [{ op: "event", id: "q-zs-" + (++seq), ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash("zedcf"), scope: "bridge" } }], rooms: [] });
 });
+
+test("media-token quote lines use placeholders and masked tokens never enter the quote", async () => {
+  const base = { k: "msg", u: { login: "alicecf", display: "Alice CF" }, ts: Date.now() };
+  const lines = await quotes.buildLines([
+    { ...base, c: 9001, text: "[cfsticker:1642/123456]" },
+    { ...base, c: 9002, text: "[gif:orchard-A_1]" },
+    { ...base, c: 9003, text: "[gif:private-token]", mask: "m" },
+    { ...base, c: 9004, text: "words around [gif:literal]" }
+  ]);
+  assert.deepEqual(lines.map(l => l.text), ["[sticker]", "[GIF]", "words around [gif:literal]"]);
+  assert.deepEqual(lines.map(l => l.c), [9001, 9002, 9004], "the original cursor remains available for later purge propagation");
+  assert.doesNotMatch(quotes.bodyOf(lines), /123456|1642|orchard-A_1|private-token/);
+});
+
+test("the live room advertises stickers only after an explicit true bot snapshot", async () => {
+  for (const value of [undefined, false, true, undefined]) {
+    const snapshot = { room: ROOM, members: [], count: 0 };
+    if (value !== undefined) snapshot.stickers = value;
+    assert.equal((await sync({ rooms: [snapshot], events: [] })).status, 200);
+    const R = bridge.bySlug(SLUG);
+    assert.equal(R.stickers, value === true);
+    assert.equal((await bridge.liveView(R, 0, null, null)).room.stickers, value === true);
+  }
+});
+
+test("live picker availability follows the shared say eligibility and fails closed", async () => {
+  const dock = require(path.join(repo, "paddock")), cf = require(path.join(repo, "cfstickers")), gifs = require(path.join(repo, "gifs"));
+  const old = [dock.current, cf.enabled, gifs.available, relay.sayEligibility];
+  const R = bridge.bySlug(SLUG), before = R.stickers;
+  let calls = 0, allowed = true;
+  try {
+    dock.current = () => ({ cfg: { mode: "everyone" } });
+    cf.enabled = () => true; gifs.available = () => true; R.stickers = true;
+    relay.sayEligibility = async (req, room) => { calls++; assert.equal(req.user, U.alice); assert.equal(room, R); return { ok: allowed }; };
+    const live = () => bridge.liveView(R, 0, U.alice.userId, "alicecf", "alice", true, { viewer: U.alice });
+    let d = await live(); assert.equal(d.room.cfstickerPicker, true); assert.equal(d.room.gifPicker, true);
+    allowed = false; d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false);
+    allowed = true; R.stickers = false; d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, true);
+    relay.sayEligibility = async () => { throw new Error("unavailable"); };
+    d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false);
+    relay.sayEligibility = async () => { throw new Error("off path must not call eligibility"); };
+    dock.current = () => ({ cfg: { mode: "off" } });
+    d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false);
+    assert.equal(calls, 3);
+  } finally {
+    [dock.current, cf.enabled, gifs.available, relay.sayEligibility] = old;
+    R.stickers = before;
+  }
+});
+
+test("GIF metadata is projected after ingest and never retained in the raw feed or its persisted JSON", async () => {
+  const gifs = require(path.join(repo, "gifs")), old = gifs.attach;
+  const text = "[gif:projection-only]";
+  let warm = true;
+  try {
+    gifs.attach = item => {
+      if (warm && item.k === "msg" && item.u && item.u.web && !item.mask && !item.removed && item.text === text)
+        item.gif = { src: "https://static1.klipy.com/temporary-metadata.gif", w: 80, h: 40, title: "Temporary metadata" };
+      return item;
+    };
+    await sync({ rooms: [], events: [ev("message", { user: u("pepe_fixture"), text: "web credit", web: { user: u("alicecf"), text } })] });
+    const R = bridge.bySlug(SLUG), raw = R.feed.find(it => it.text === text);
+    assert.ok(raw && raw.u.web);
+    assert.equal(raw.gif, undefined, "the in-memory feed keeps only the token");
+    const stored = (await getQuery("SELECT data FROM bridge_feed WHERE c = ?", [raw.c]))[0];
+    assert.ok(stored); assert.doesNotMatch(stored.data, /temporary-metadata|Temporary metadata|\"gif\"/);
+    let d = await bridge.liveView(R, 0, U.alice.userId, "alicecf", "alice", true, { viewer: U.alice });
+    assert.equal(d.feed.find(it => it.c === raw.c).gif.title, "Temporary metadata");
+    assert.equal(raw.gif, undefined, "dressing a viewer copy cannot mutate the raw feed");
+    warm = false;
+    d = await bridge.liveView(R, 0, U.alice.userId, "alicecf", "alice", true, { viewer: U.alice });
+    assert.equal(d.feed.find(it => it.c === raw.c).gif, undefined, "a cold projection cannot inherit earlier metadata");
+  } finally { gifs.attach = old; }
+});

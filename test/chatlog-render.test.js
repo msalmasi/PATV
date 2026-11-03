@@ -467,14 +467,14 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   // CL5 fix-up: a renderer that didn't load never takes the page down (test/chatlog-page.test.js runs the page without it)
   assert.match(room, /var CLR = window\.PATVChatlog && typeof window\.PATVChatlog\.renderItem === 'function' \? window\.PATVChatlog : null, H = CLR \? CLR\.domH\(document\) : null;/);
   assert.doesNotMatch(room, /var CLR = window\.PATVChatlog, H = CLR\.domH/, "no unguarded use");
-  assert.match(room, /var rctx = \{ t: _t, lang: document\.documentElement\.lang \|\| undefined \};/);
+  assert.match(room, /var rctx = \{ t: _t, lang: document\.documentElement\.lang \|\| undefined,\s*cfsticker: function \(set, id\) \{ return '\/media\/cfsticker\/' \+ id \+ '\.webp'; \} \};/);
   assert.match(room, /function avatar\(u\) \{ if \(CLR\) return CLR\.avatarNode\(u, rctx, H\);/, "the mic / people lists too");
   assert.equal((room.match(/render: renderLine, ctx: rctx,/g) || []).length, 2, "scrollback's and search's lines too (CL8 / CL9)");
   assert.match(room, /feed: feedEl, line: item,/, "your pending relay lines are built the same way (room-bridge.js)");
   // the script loads before the page's own; the stylesheet right after the block it came from (the cascade keeps its order)
-  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=7"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head)
+  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=8"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head)
   assert.ok(core > 0 && core < init, "chatlog-core.js before the page script");
-  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=10">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
+  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=11">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
   assert.match(room.slice(styleEnd + 8, link), /^\s*<%#[^%]*%>\s*$/, "nothing in between but a comment");
   assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %><%= dockOn_ \? ' rm-dock' : '' %>"/);
@@ -750,4 +750,83 @@ test("CL6: a hidden line as the owner / staff see it (muted, why, data-rmc - nev
   for (const r of [/\.chatlog \.line\.rm \{/, /\.chatlog \.sys\.rm \{/, /\.chatlog \.line \.la-btn \{/, /\.chatlog \.feed-log\.cc-on \.line \.la-btn \{ display: none; \}/,   // CL8: the live log
                    /@media \(hover: none\) \{[^}]*\.chatlog \.line\.la \.line-head, \.chatlog \.line\.la \.line-text \{ padding-inline-end: 50px; \}/]) assert.match(css, r);
   assert.doesNotMatch(css.slice(css.indexOf("CL6")), /#[0-9a-f]{3,6}\b/i, "CL6's rules: ds tokens only");
+});
+
+test("media tokens are exact and their reusable text never exposes identifiers", () => {
+  assert.deepEqual(CL.mediaToken("[cfsticker:1642/123456]"), { type: "cfsticker", set: 1642, id: 123456 });
+  assert.deepEqual(CL.mediaToken("[gif:orchard-A_1]"), { type: "gif", id: "orchard-A_1" });
+  assert.equal(CL.tokenText("[cfsticker:1642/123456]"), "[sticker]");
+  assert.equal(CL.tokenText("[gif:orchard-A_1]"), "[GIF]");
+  for (const s of [" [gif:a]", "[gif:a]\n", "[gif:a] hi", "[gif:a][gif:b]", "[gif:a/b]", "[gif:" + "x".repeat(65) + "]",
+    "[cfsticker:1/2]\n", "[cfsticker:12345678901/2]", "[cfsticker:x/2]", "[sticker:patv/id]", "ordinary words"]) {
+    assert.equal(CL.mediaToken(s), null, s);
+    assert.equal(CL.tokenText(s), s, s);
+  }
+});
+
+test("stickers render from the shared context, keep only placeholder clip text, and never draw in downloads or masks", () => {
+  const it = { k: "msg", c: 901, ts: T0, u: { login: "aster_fable", display: "Aster Fable" }, text: "[cfsticker:1642/123456]" };
+  let requests = 0;
+  const ctx = { offset: 0, cfsticker(set, id) { requests++; assert.equal(set, 1642); return "/media/cfsticker/" + id + ".webp"; } };
+  const html = String(CL.renderItem(it, ctx, CL.htmlH));
+  assert.match(html, /class="cfstk" src="\/media\/cfsticker\/123456\.webp" alt="sticker" width="100" height="100" loading="lazy" decoding="async"/);
+  assert.match(html, /data-text="\[sticker\]"/);
+  assert.doesNotMatch(html, /\[cfsticker:/);
+  assert.equal(requests, 1);
+  const tree = fromRec(CL.renderItem(it, ctx, recH));
+  assert.deepEqual(fromDom(CL.renderItem(it, ctx, CL.domH(fakeDoc()))), tree);
+  assert.deepEqual(fromHtml(html), tree);
+  for (const extra of [{ data: false }, { cfsticker: () => null }, { cfsticker: () => "javascript:bad" }]) {
+    const s = String(CL.renderItem(it, Object.assign({}, ctx, extra), CL.htmlH));
+    assert.match(s, /\[sticker\]/); assert.doesNotMatch(s, /class="cfstk"|\[cfsticker:/);
+  }
+  requests = 0;
+  for (const patch of [{ mask: "m" }, { mask: "m", self: 1, u: { anon: true, veil: "hidden", alias: "Quiet Froglet" } },
+    { removed: { by: "mod" } }, { removed: { purged: true } }]) {
+    const s = String(CL.renderItem(Object.assign({}, it, patch), ctx, CL.htmlH));
+    assert.doesNotMatch(s, /class="cfstk"|\[cfsticker:/);
+  }
+  assert.equal(requests, 0, "private and removed tokens never request a sticker source");
+});
+
+test("GIF images are web messages only; cache misses, masks, removals and every export stay safe", () => {
+  const it = { k: "msg", c: 902, ts: T0, u: { login: "aster_fable", display: "Aster Fable", web: true }, text: "[gif:orchard-A_1]",
+    gif: { src: "https://media.klipy.com/example.gif", w: 320, h: 240, title: "A <b>little</b> wave" } };
+  const html = String(CL.renderItem(it, { offset: 0 }, CL.htmlH));
+  assert.match(html, /class="gif" src="https:\/\/media\.klipy\.com\/example\.gif"/);
+  assert.match(html, /alt="A &lt;b&gt;little&lt;\/b&gt; wave"/);
+  assert.match(html, /via KLIPY/); assert.match(html, /data-text="\[GIF\]"/);
+  assert.doesNotMatch(html, /\[gif:/);
+  for (const patch of [{ gif: null }, { gif: { src: "http://unsafe.invalid/a.gif" } }]) {
+    const s = String(CL.renderItem(Object.assign({}, it, patch), {}, CL.htmlH));
+    assert.match(s, /🎞️ GIF/); assert.doesNotMatch(s, /class="gif"|\[gif:/);
+  }
+  const literal = String(CL.renderItem(Object.assign({}, it, { u: { login: "aster_fable", display: "Aster Fable" } }), {}, CL.htmlH));
+  assert.match(literal, /\[gif:orchard-A_1\]/); assert.doesNotMatch(literal, /class="gif"|via KLIPY/);
+  for (const patch of [{ mask: "m" }, { removed: { by: "mod" } }, { removed: { sealed: true, by: "self" } }]) {
+    const s = String(CL.renderItem(Object.assign({}, it, patch), {}, CL.htmlH));
+    assert.doesNotMatch(s, /class="gif"|media\.klipy|\[gif:/);
+  }
+  const file = String(CL.renderItem(it, { data: false }, CL.htmlH));
+  assert.match(file, /\[GIF\]/); assert.doesNotMatch(file, /class="gif"|media\.klipy|\[gif:/);
+  for (const media of [it, Object.assign({}, it, { gif: null }), Object.assign({}, it, { text: "[cfsticker:1642/123456]" })]) {
+    assert.match(CL.textItem(media, { offset: 0 }), /\[(GIF|sticker)\]/);
+    assert.match(CL.jsonItem(media, { offset: 0 }).text, /^\[(GIF|sticker)\]$/);
+  }
+});
+
+test("failed media images replace themselves with a text placeholder without inline handlers", () => {
+  const doc = fakeDoc(), make = doc.createElement;
+  doc.createElement = tag => {
+    const n = make(tag); n.ownerDocument = doc; n.listeners = {};
+    n.addEventListener = (type, fn) => { n.listeners[type] = fn; };
+    n.appendChild = c => { n.kids.push(c); c.parentNode = n; return c; };
+    n.replaceChild = (next, old) => { n.kids[n.kids.indexOf(old)] = next; next.parentNode = n; old.parentNode = null; };
+    return n;
+  };
+  const it = { k: "msg", ts: T0, text: "[cfsticker:1/2]", u: { display: "Aster Fable" } };
+  const n = CL.renderItem(it, { cfsticker: () => "/media/cfsticker/2.webp" }, CL.domH(doc));
+  const seek = node => node.className === "cfstk" ? node : (node.kids || []).map(seek).find(Boolean);
+  const img = seek(n); assert.ok(img && img.listeners.error); img.listeners.error();
+  const tree = JSON.stringify(fromDom(n)); assert.match(tree, /\[sticker\]/); assert.doesNotMatch(tree, /cfstk|onerror|\/media\/cfsticker/);
 });

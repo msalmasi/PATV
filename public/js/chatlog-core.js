@@ -34,6 +34,7 @@
 //                server's own rule (bridge.js safeImg); downloads pass () => null (a file never loads a picture from anywhere)
 //   avatarCls(u) -> CL10: the name of a rule in a download's own stylesheet that carries this person's picture, or null - a
 //                file embeds each picture ONCE, as a data: URI (.av.av-N), and the line's .av gets that name (no img, no letter)
+//   cfsticker(set,id) -> the site's sticker image URL, or null. Downloads never call it (data:false).
 //   timeTitle(ts) -> the <time>'s tooltip (full date, time and zone: scrollback and downloads). The live chat has none
 //   date(ms)     -> the day in the 📜 "Earlier history opens on {date}" line. Default: day + month - from the offset and
 //                `names` when there is an offset, else Intl in `lang`
@@ -59,6 +60,19 @@
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ESC[c]; }); }
   function str(v) { return v == null ? '' : String(v); }
   function pad2(n) { return ('0' + n).slice(-2); }
+
+  // 1.99??: exact media tokens, shared by the renderer, exports and quote builder. Text around a token stays ordinary text.
+  function mediaToken(text) {
+    if (typeof text !== 'string') return null;
+    var m = /^\[cfsticker:(\d{1,10})\/(\d{1,10})\]$/.exec(text);
+    if (m && m[0] === text) return { type: 'cfsticker', set: Number(m[1]), id: Number(m[2]) };
+    m = /^\[gif:([A-Za-z0-9_-]{1,64})\]$/.exec(text);
+    return m && m[0] === text ? { type: 'gif', id: m[1] } : null;
+  }
+  function tokenText(text) {
+    var token = mediaToken(text);
+    return token ? (token.type === 'cfsticker' ? '[sticker]' : '[GIF]') : str(text);
+  }
 
   // the translator: ctx.t, else the page's __t, else the English default with its {placeholders} filled in
   function interp(d, v) {
@@ -362,6 +376,33 @@
       : rm.by === 'staff' ? _t('js.pad.chat.hidden_staff', 'Hidden by PATV staff') : _t('js.pad.chat.hidden_mod', 'Hidden by a moderator');
     return rm.why ? base + ' \u00b7 ' + rm.why : base;
   }
+  function mediaImage(attrs, fallback, h) {
+    var img = h('img', attrs, []);
+    // DOM-only error recovery: exports never create these images, and no inline event attribute enters HTML.
+    if (img && typeof img.addEventListener === 'function') img.addEventListener('error', function () {
+      if (img.parentNode && img.ownerDocument) img.parentNode.replaceChild(img.ownerDocument.createTextNode(fallback), img);
+    }, { once: true });
+    return img;
+  }
+  function mediaKids(it, ctx, h, token, mask, rm) {
+    if (!token) return null;
+    var _t = tr(ctx), fallback = tokenText(it.text);
+    // Downloads never request media, including a cache-warm web GIF. Removed / masked rows never request it either.
+    if (ctx.data === false || mask || rm) return [fallback];
+    if (token.type === 'cfsticker') {
+      var src = typeof ctx.cfsticker === 'function' ? ctx.cfsticker(token.set, token.id) : null;
+      return src && safeSrc(src) ? [mediaImage({ 'class': 'cfstk', src: src, alt: _t('js.pad.chat.sticker', 'sticker'),
+        width: 100, height: 100, loading: 'lazy', decoding: 'async' }, fallback, h)] : [fallback];
+    }
+    // A GIF token typed in Camfrog is literal text. Only the server's web-line attachment draws remote media.
+    if (!it.u || it.u.web !== true || it.k !== 'msg') return null;
+    var g = it.gif, noGif = _t('js.pad.chat.gif', '🎞️ GIF');
+    if (!g || !safeSrc(g.src) || !/^https:\/\//.test(g.src)) return [noGif];
+    function size(n, d) { n = Number(n); return isFinite(n) && n > 0 ? Math.min(2048, Math.floor(n)) : d; }
+    return [h('span', { 'class': 'gif-media' }, [mediaImage({ 'class': 'gif', src: g.src, alt: str(g.title).slice(0, 80) || noGif,
+      width: size(g.w, 160), height: size(g.h, 120), loading: 'lazy', decoding: 'async' }, noGif, h),
+      h('small', { 'class': 'gif-credit' }, [_t('js.pad.chat.gif_via', 'via KLIPY')])])];
+  }
   /** A chat or mic line. CL6: rm = a hidden line as the owner / staff see it - muted, with why, and data-rmc instead of data-c
    *  (never picked by ✂️ Clip chat / 🔊 Clip); it.own = the viewer's own line (data-own: the ⋯ menu offers Remove). */
   function chatLine(it, ctx, h, rm) {
@@ -386,7 +427,7 @@
       }
       else {
         if (it.c) a['data-c'] = it.c;
-        a['data-k'] = k; a['data-name'] = label(it.u, ctx); a['data-text'] = text;
+        a['data-k'] = k; a['data-name'] = label(it.u, ctx); a['data-text'] = tokenText(text);
         if (tx && it.id) a['data-tx'] = it.id;
         if (it.own) a['data-own'] = '1';
       }
@@ -405,11 +446,12 @@
     var fl = flairNode(it.u, ctx, h);
     if (fl) head.push(fl);
     head.push(timeNode(it.ts, ctx, h));
-    var marks = hlOf(ctx);
+    var marks = hlOf(ctx), media = mediaKids(it, ctx, h, mediaToken(text), mask, rm);
     if (mask && !mine) {
       body.push(h('span', { 'class': 'redact redact-' + mask }, [h('span', { 'class': 'sr-only' },
         [tx ? _t('js.pad.veil.hidden_tx', 'hidden transcript') : _t('js.pad.veil.hidden_msg', 'hidden message')])]));
-    } else if (marks) {
+    } else if (media) body.push.apply(body, media);
+    else if (marks) {
       // CL9: a search hit - the matched words in <mark>s (the same text, in pieces)
       if (tx) body.push('\u201c');
       body.push.apply(body, markKids(text, marks, h));
@@ -479,7 +521,7 @@
       var who = label(it.u, ctx) + (it.u && it.u.web && !it.u.anon && !it.u.former ? ' \ud83c\udf10' : '');
       // wave 2 (D.4, J-9): a hidden line in a download is "[hidden]" for every role - never its words (1.99aht S1: a !transcripts off
       // bar "[transcript hidden]", under the name it shows)
-      var said = /^[sml]$/.test(String(it.mask || '')) ? (k === 'tx' && it.txh === 1 ? '[transcript hidden]' : '[hidden]') : str(it.text);
+      var said = /^[sml]$/.test(String(it.mask || '')) ? (k === 'tx' && it.txh === 1 ? '[transcript hidden]' : '[hidden]') : tokenText(it.text);
       body = k === 'tx' ? '\ud83c\udf99 ' + who + ': \u201c' + said + '\u201d' : who + ': ' + said;
     } else if (k === 'live') body = liveText(it, ctx) + (safeLink(it.link) ? ' <' + linkOf(ctx, it.link) + '>' : '');
     else if (k === 'note') body = noteText(it, ctx);
@@ -508,7 +550,7 @@
       // (1.99aht S1: a !transcripts off bar - only the words are masked)
       if (k === 'tx' && it.txh === 1) o.transcript_hidden = true;
     }
-    else if (k === 'msg' || k === 'tx' || k === 'topic') o.text = str(it.text);
+    else if (k === 'msg' || k === 'tx' || k === 'topic') o.text = k === 'topic' ? str(it.text) : tokenText(it.text);
     else if (k === 'unmic') o.held_ms = Math.max(0, Number(it.ms) || 0);
     else if (k === 'note') o.text = noteText(it, ctx) || '';
     else if (k === 'live') {
@@ -523,7 +565,7 @@
     renderItem: renderItem, avatarNode: avatarNode, nameNode: nameNode, flairNode: flairNode, timeNode: timeNode,
     textItem: textItem, jsonItem: jsonItem, fmtTime: fmtTime, dayLabel: dayLabel, isoOf: isoOf, localIso: localIso,
     label: label, sysText: sysText, liveText: liveText, noteText: noteText, removedNote: removedNote, spanOf: spanOf, chipSpan: chipSpan, dur: dur, hue: hue,
-    markKids: markKids,
+    markKids: markKids, mediaToken: mediaToken, tokenText: tokenText,
     domH: domH, htmlH: htmlH, esc: esc, safeLink: safeLink, safeSrc: safeSrc
   };
 });

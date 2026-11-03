@@ -3,8 +3,9 @@
 const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");
 const guard = require("./middleware/authGuard");
-const FIELDS = Object.freeze({ mode: { def: "off", choices: ["off", "staff", "everyone"] } });
-const DEFAULTS = Object.freeze({ mode: "off" });
+const FIELDS = Object.freeze({ mode: { def: "off", choices: ["off", "staff", "everyone"] },
+  cfstickers: { def: false }, gifs: { def: false } });
+const DEFAULTS = Object.freeze({ mode: "off", cfstickers: false, gifs: false });
 const AUDIT = "paddock_cfg";
 let ready = null, saving = Promise.resolve(), CFG = { v: 0, cfg: { ...DEFAULTS }, at: null };
 let adminHits = guard.limiter({ max: 20, windowMs: 60000 });
@@ -16,7 +17,7 @@ function normalize(input, { base = DEFAULTS } = {}) {
     const old = base[key] == null ? field.def : base[key];
     if (!Object.prototype.hasOwnProperty.call(src, key)) { cfg[key] = old; continue; }
     const value = typeof src[key] === "string" ? src[key].trim().toLowerCase() : src[key];
-    if (field.choices.includes(value)) cfg[key] = value;
+    if (field.choices ? field.choices.includes(value) : typeof value === "boolean") cfg[key] = value;
     else { cfg[key] = old; errors[key] = "invalid"; }
   }
   return { cfg, errors };

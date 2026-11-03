@@ -5,7 +5,8 @@
   var fields = document.getElementById('paddockFields'), msg = document.getElementById('paddockMessage');
   var view = null, busy = false;
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
-  var labels = { mode: _t('js.pad.dock.admin.audience', 'Who gets the Room Dock') };
+  var labels = { mode: _t('js.pad.dock.admin.audience', 'Who gets the Room Dock'),
+    cfstickers: _t('js.pad.dock.admin.cfstickers', 'Camfrog stickers'), gifs: _t('js.pad.dock.admin.gifs', 'KLIPY GIFs') };
   var choices = { off: _t('js.pad.dock.admin.off', 'Off'), staff: _t('js.pad.dock.admin.staff', 'Staff'), everyone: _t('js.pad.dock.admin.everyone', 'Everyone') };
   function node(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function buttons(on) { Array.prototype.forEach.call(form.querySelectorAll('button'), function (b) { b.disabled = on; }); }

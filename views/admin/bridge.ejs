@@ -13,6 +13,7 @@
 <section class="adm-card" id="room-dock" aria-labelledby="paddockTitle">
   <h2 id="paddockTitle"><span class="ds-ic" aria-hidden="true">🧭</span> <%= _dt('js.pad.dock.admin.title', 'Room Dock') %></h2>
   <p class="adm-help"><%= _dt('js.pad.dock.admin.hint', 'A compact Live view for bridged pads. Off by default; reload open pads after changing the audience.') %></p>
+  <p class="adm-help"><%= _dt('js.pad.dock.admin.media_hint', 'Stickers also need the room sticker switch. GIFs need the server key, the approved KLIPY plan and the privacy notice before activation. Both start off.') %></p>
   <% if (_can('pads.config')) { %>
   <form id="paddockForm" class="adm-form">
     <div id="paddockFields"></div>
@@ -24,7 +25,7 @@
     </div>
   </form>
   <ul id="paddockAudit" class="adm-help" aria-label="<%= _dt('js.pad.dock.admin.audit', 'Recent setting changes') %>"></ul>
-  <script src="/public/js/admin-paddock.js?v=1"></script>
+  <script src="/public/js/admin-paddock.js?v=2"></script>
   <% } else { %><p class="adm-help"><%= _dt('js.pad.dock.admin.admins', 'Site admins only.') %></p><% } %>
 </section>
 
