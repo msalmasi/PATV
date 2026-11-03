@@ -572,7 +572,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(off, RTC, name + ": no WebRTC while off");
     const html = await render(on);
     assert.match(html, /webrtc-client\.js\?v=6/, name);   // avsync: register live-cam receivers before attaching the stream
-    assert.match(html, /webrtc\.css\?v=8/, name);   // micfollow: + the 🎙 mic stage layouts; wave2 WP-4: dynamic + cover tiles; 1.99ahq stage cover: 8
+    assert.match(html, /webrtc\.css\?v=9/, name);   // micfollow: + the 🎙 mic stage layouts; wave2 WP-4: dynamic + cover tiles; 1.99ahq stage cover: 8; 1.99ain corner buttons auto-hide: 9
   }
   // review fix: lip sync's controller loads only while its mode applies to the viewer (avsync.viewerOn -> avsyncOn), before
   // the live-cam receivers; while it's off nothing polls /api/rooms/:slug/avsync

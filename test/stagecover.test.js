@@ -514,7 +514,7 @@ test("stage-room.js repaints the mic stage when only a tile's cover picture chan
   assert.match(why, /white-space: normal;[^]*-webkit-line-clamp: 2;/);
   assert.match(css, /\.mf-card\.cv-gtf \.mf-av img, [^{]*\.mf-card\.cv-sticker \.mf-av img \{ image-rendering: pixelated;/);
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
-  assert.match(room, /stage-mic\.js\?v=13/); assert.match(room, /webrtc\.css\?v=8/);   // (stage-mic.js v10: 1.99ahn's v8 + 1.99ahp's v9 + the cover; v13: + privacy controls S5 / S4 / V-1)
+  assert.match(room, /stage-mic\.js\?v=14/); assert.match(room, /webrtc\.css\?v=9/);   // (1.99ain: v14 / v9 - the corner buttons auto-hide)   // (stage-mic.js v10: 1.99ahn's v8 + 1.99ahp's v9 + the cover; v13: + privacy controls S5 / S4 / V-1)
 });
 
 // ── the capture ──
