@@ -655,3 +655,63 @@ test("round 5: the sync answer says wcover: 1 only while micfollow_cfg withheld_
     assert.ok(bsrc.includes('rj.get("wcover")') && bsrc.includes("self._br_wc_advert(rj, now)"), "Pepe reads wcover from every sync answer (the same key)");
   }
 });
+
+// 1.99?? (privacy controls round 6 review): the one courtesy notice to someone staged under a FROG NAME, through the REAL step. stepPad
+// sends it from its veiled-candidate loop and drops a candidate still at its notice gate from P.vnow at once, so courtesyPlan (which
+// runs after the step) read them as named: the PM was queued under the pad OWNER's account (the ID-3 leak class 1.99aid V-1 closed on
+// paper - their Download my data pairs the login with their pad's veiled speaker), and with withheld_cover on a _wh PM said "with your
+// cover picture" / a _wc one "Cover picture instead" to someone the stage shows as a hooded frog. Round 6's own test set P.vnow by hand.
+test("round 6 review: a frog-name candidate's one courtesy notice, through the real step - under Pepe's own account; with withheld_cover on its text says the hooded frog (each cam opt-out, and !livecam off's), never the cover picture", async () => {
+  await setup;
+  await runQuery(`INSERT OR IGNORE INTO users (userId, username, displayname, password, class, points_balance, camfrogUsername, level, created_at)
+                  VALUES ('pepe-bot', 'Pepe', 'Pepe', 'x', 'Bot', 0, NULL, 5, '2026-01-01 00:00:00')`);
+  if (!IC.isOn()) await IC.setOn(true, { userId: U.adm.userId, username: "adm" });
+  MF._hide.clear();
+  let ts = T + 1000;
+  const noop = async () => {};
+  const SET = { none: [noop, noop],
+                livecam: [() => LC.setOptout("frankiefettuccine", true, { via: "web", ts: ++ts }), () => LC.setOptout("frankiefettuccine", false, { via: "web", ts: ++ts })],
+                mf: [() => MF.setOptout("frankiefettuccine", true), () => MF.setOptout("frankiefettuccine", false)],
+                followers: [() => CA.setMode("frankiefettuccine", "followers"), () => CA.setMode("frankiefettuccine", "everyone")],
+                request: [() => CA.setMode("frankiefettuccine", "request"), () => CA.setMode("frankiefettuccine", "everyone")] };
+  const rowOf = async () => (await getQuery("SELECT user_id, args FROM pepe_actions WHERE kind = 'notify' ORDER BY id DESC LIMIT 1"))[0] || null;
+  try {
+    for (const [how, wc] of [["none", false], ["none", true], ["livecam", true], ["mf", true], ["followers", true], ["request", true]]) {
+      const tag = how + (wc ? " (withheld_cover on)" : " (off)");
+      await MF.setCfg(ADM(), { withheld_cover: wc, reason: "test" });
+      await syncAt({ rooms: [v2Room({ mic: false })] });
+      for (let i = 0; i < 40 && pad().state.tiles.length; i++) await stepAt(10);      // (a recent speaker's keep runs out)
+      assert.equal(pad().state.tiles.length, 0, tag + ": set up - an empty stage " + JSON.stringify(pad().state.tiles.map((x) => [x.login, x.video, x.why, !!x.cover])));
+      await runQuery("DELETE FROM pepe_actions WHERE kind = 'notify'");
+      await MF._noticed(ROOM.id, "frankiefettuccine", null);                 // never told
+      const [set, unset] = SET[how];
+      await set();
+      try {
+        await fresh();
+        await syncAt({ rooms: [v2Room({ mic: true })] });
+        let r = null;
+        for (let i = 0; i < 15 && !r; i++) { await stepAt(3); r = await rowOf(); }
+        assert.ok(r, tag + ": told once");
+        const [to, pm] = JSON.parse(r.args);
+        assert.equal(to, "frankiefettuccine", tag + ": the PM goes to her login (Pepe sends it)");
+        assert.equal(String(r.user_id), "pepe-bot", tag + ": queued under Pepe's own account, never the pad owner's (" + r.user_id + ")");
+        assert.ok(pm.length <= 300, tag + ": " + pm.length);
+        if (how !== "none") {
+          assert.match(pm, /Your cam stays off mic stages: you can show in ~2 min as a hooded frog\. https:\/\/publicaccess\.tv\/p\//, tag + ": " + pm);
+          assert.ok(!/cover picture/i.test(pm), tag + ": never the cover picture - " + pm);
+        } else if (wc) {
+          assert.match(pm, /Yours can show in ~2 min\. Hooded frog instead: !livecam off https:\/\/publicaccess\.tv\/p\//, tag + ": " + pm);
+          assert.ok(!/cover picture/i.test(pm), tag + ": never the cover picture - " + pm);
+        } else {
+          assert.match(pm, /Yours can show in ~2 min\. Stop it everywhere: !livecam off https:\/\/publicaccess\.tv\/p\//, tag + ": the ordinary text, as before - " + pm);
+        }
+        assert.deepEqual(leaks(JSON.stringify(await live(U.own))), [], tag + ": the pad owner's page names nobody");
+      } finally { await unset(); }
+    }
+  } finally {
+    await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
+    await syncAt({ rooms: [v2Room({ mic: false })] });
+    for (let i = 0; i < 40 && pad().state.tiles.length; i++) await stepAt(10);
+    await MF._noticed(ROOM.id, "frankiefettuccine", T - D);
+  }
+});

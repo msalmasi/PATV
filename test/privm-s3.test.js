@@ -397,19 +397,24 @@ test("on: the DF-11 notice gate's one courtesy notice says !livecam off stops th
     assert.ok(on.length <= 300, String(on.length));
     // the texts themselves: _wc only while on; the PM fits with the link for ordinary names, like today's
     const T0 = require(path.join(repo, "i18n")).tFor("en");
-    for (const [room0, pad0, slug] of [["Players__Lounge", "Players Lounge", "players-lounge"], ["R".repeat(40), "P".repeat(40), "s".repeat(40)]]) {
-      const s = MF.pmText(T0, "mf.notice.pm_once_wc", room0, pad0, 2, "https://publicaccess.tv/p/" + slug);
-      assert.ok(s.length <= 300 && s.includes("!livecam off"), s);
-      if (room0.length < 16) assert.match(s, /https:\/\/publicaccess\.tv\/p\//, "the link fits with ordinary names");
+    // (1.99?? privacy controls round 6 review: + the frog-name variant "_wc_frog" - "Hooded frog instead: !livecam off", the same limits)
+    for (const key of ["mf.notice.pm_once_wc", "mf.notice.pm_once_wc_frog"]) {
+      for (const [room0, pad0, slug] of [["Players__Lounge", "Players Lounge", "players-lounge"], ["R".repeat(40), "P".repeat(40), "s".repeat(40)]]) {
+        const s = MF.pmText(T0, key, room0, pad0, 2, "https://publicaccess.tv/p/" + slug);
+        assert.ok(s.length <= 300 && s.includes("!livecam off"), s);
+        if (room0.length < 16) assert.match(s, /https:\/\/publicaccess\.tv\/p\//, "the link fits with ordinary names");
+      }
+      // (every locale i18n-sync gives the key keeps the opt-out within 300 characters - pmText sends English otherwise)
+      const I18N = require(path.join(repo, "i18n")), dir = path.join(repo, "locales");
+      for (const f of fs.readdirSync(dir).filter((x) => /^[a-z]{2}(-[A-Z]{2})?\.json$/.test(x))) {
+        if (typeof JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"))[key] !== "string") continue;
+        const s = MF.pmText(I18N.tFor(f.replace(/\.json$/, "")), key, "R".repeat(60), "P".repeat(60), 2, "https://publicaccess.tv/p/" + "s".repeat(60), T0);
+        assert.ok(s.length <= 300 && s.includes("!livecam off"), key + " " + f);
+      }
     }
-    // (every locale i18n-sync gives the key keeps the opt-out within 300 characters - pmText sends English otherwise)
-    const I18N = require(path.join(repo, "i18n")), dir = path.join(repo, "locales");
-    for (const f of fs.readdirSync(dir).filter((x) => /^[a-z]{2}(-[A-Z]{2})?\.json$/.test(x))) {
-      if (typeof JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"))["mf.notice.pm_once_wc"] !== "string") continue;
-      const s = MF.pmText(I18N.tFor(f.replace(/\.json$/, "")), "mf.notice.pm_once_wc", "R".repeat(60), "P".repeat(60), 2, "https://publicaccess.tv/p/" + "s".repeat(60), T0);
-      assert.ok(s.length <= 300 && s.includes("!livecam off"), f);
-    }
-    assert.match(T0("mf.notice.once_body_wc", { room: "R", pad: "P", n: 2 }), /To stop your cam on every pad: Settings → Privacy, or !livecam off - mic stages then show you with your cover picture instead\.$/);
+    assert.match(T0("mf.notice.pm_once_wc_frog", { room: "R", pad: "P", n: 2 }), /Yours can show in ~2 min\. Hooded frog instead: !livecam off$/);
+    // (1.99?? round 6 review: the inbox body is the person's for good - it says both, as the _wh one does)
+    assert.match(T0("mf.notice.once_body_wc", { room: "R", pad: "P", n: 2 }), /To stop your cam on every pad: Settings → Privacy, or !livecam off - mic stages then show you with your cover picture instead, or as a hooded frog while you're incognito\.$/);
     assert.match(T0("mf.notice.once_body", { room: "R", pad: "P", n: 2 }), /To stop it on every pad: Settings → Privacy, or !livecam off\.$/, "today's body unchanged");
   } finally { await knobs({ withheld_cover: false }); }
 });

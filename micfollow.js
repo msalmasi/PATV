@@ -954,7 +954,10 @@ function stepPad(roomId, t = now(), R) {
   for (const c of vcands || []) {
     P.vnow.set(c.login, c.vc);
     const e = R && (!why || why === "stale") ? eligOf(P, R, c.login, t, want) : "pending";
-    if (e === "notice") firstNotice(P, R, c.login, t).catch((er) => console.error("[micfollow] notice:", er.message));
+    // (1.99?? privacy controls round 6 review: the notice is told it goes to someone staged under a frog name NOW - courtesyPlan runs
+    // after this step returns, when P.vnow no longer holds a candidate still at its notice gate (deleted just below), so it read
+    // "named": the PM went under the pad owner's account and a _wh one said "with your cover picture" to a hooded frog)
+    if (e === "notice") firstNotice(P, R, c.login, t, { veiled: true }).catch((er) => console.error("[micfollow] notice:", er.message));
     const up = P.state.tiles.some((x) => !x.cover && x.login === c.login) || P.state.kept.has(c.login);
     if (e === "ok" || e === "cam_unknown" || (up && !core.isCut(e))) {
       holders.push({ login: c.login, since: c.since });
@@ -1170,7 +1173,7 @@ function camWithheld(login, t = now()) {
 /** What `login`, shown on pad P, is sent and how (read before the transaction): the PM (always, unless a real account switched
  *  "stage" PMs off - then the inbox row is the notice, D-8), the silent inbox row (real accounts only: an auto account has nobody
  *  to read it), in the person's own language. kind "once" (the courtesy notice) | "home" (D-3). */
-async function courtesyPlan(P, R, login, kind) {
+async function courtesyPlan(P, R, login, kind, { veiled: vflag = false } = {}) {
   const pad = (() => { try { return ROOMS().getCached(P.roomId); } catch (e) { return null; } })() || {};
   const padTitle = String(pad.title || (R && R.name) || P.roomId).slice(0, 60), roomName = String((R && R.name) || P.roomId).slice(0, 60);
   const link = "/p/" + encodeURIComponent(pad.slug || P.roomId);
@@ -1189,8 +1192,9 @@ async function courtesyPlan(P, R, login, kind) {
   const home = kind === "home";
   // 1.99aid (privacy controls V-1, the ID-3 leak class): a candidate staged under a FROG NAME is told from Pepe's own account - the PM
   // action is the queuing account's row (their action list, their Download my data), and the pad owner's would pair the login with
-  // their pad's veiled speaker
-  const veiled = !!(P.vnow && P.vnow.has(low(login)));
+  // their pad's veiled speaker. (1.99?? privacy controls round 6 review: `veiled` from the step that sent it - firstNotice's caller; P.vnow
+  // alone missed every candidate still at its notice gate, the only ones a courtesy notice goes to)
+  const veiled = vflag === true || !!(P.vnow && P.vnow.has(low(login)));
   // 1.99aid (privacy controls S3, spec 6.2): with cfg withheld_cover on, "!livecam off" stops the CAM on a mic stage, not the person -
   // the one courtesy notice says so ("_wc": they'd show with their cover picture). Off: the texts as before
   const wc = !home && cfg().withheld_cover === true;
@@ -1206,8 +1210,9 @@ async function courtesyPlan(P, R, login, kind) {
     by: !veiled && !wh && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
     // (1.99?? privacy controls round 6: the _wh PM true for its person - their cam stays off mic STAGES (a followers / on-request cam is still
     // watchable by followers / people they granted in the live room), and someone staged under a frog name now shows as a hooded frog,
-    // never "with your cover picture" ("_wh_frog"); the inbox body says both)
-    text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once" + sfx + (wh && veiled ? "_frog" : ""), roomName, padTitle, mins, siteUrl() + link),
+    // never "with your cover picture" ("_wh_frog"); the inbox body says both. Round 6 review: the _wc PM too - for someone staged under a
+    // frog name, !livecam off makes them a hooded frog, not their cover picture ("_wc_frog"); its inbox body now says both)
+    text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once" + sfx + (wc && veiled ? "_frog" : ""), roomName, padTitle, mins, siteUrl() + link),
     link, title: T(home ? "mf.notice.home_title" : wh ? "mf.notice.once_title_wh" : "mf.notice.once_title", { pad: padTitle }),
     body: T(home ? "mf.notice.home_body" : "mf.notice.once_body" + sfx, { room: roomName, pad: padTitle, n: mins }),
   };
@@ -1227,10 +1232,10 @@ async function deliver(plan, login, ref) {
  * at = when they were told. ONE dbUtils.tx holds the courtesy row, the PM and the inbox row: a failure leaves none of them (the
  * caller retries in a minute), and two pads in the same tick send one notice (INSERT OR IGNORE - the second changes nothing).
  */
-async function courtesyOnce(P, R, login, t) {
+async function courtesyOnce(P, R, login, t, opts = {}) {
   const have = await courtesyOf(login);
   if (have) return { ok: true, sent: false, at: Number(have.sent_at) };
-  const plan = await courtesyPlan(P, R, login, "once");
+  const plan = await courtesyPlan(P, R, login, "once", opts);     // (opts.veiled: staged under a frog name - 1.99?? round 6 review)
   const at = now();
   const via = [plan.pm ? "pm" : null, plan.real ? "inbox" : null].filter(Boolean).join("+") || "none";
   const sent = await tx(async () => {
@@ -1248,13 +1253,13 @@ async function courtesyOnce(P, R, login, t) {
 /** DF-11: the person's first qualifying grab on this pad. Told before (any pad): the pad's notice row from that, nothing sent - they
  *  can be picked as soon as notice_lead_s has passed since. Never told: the courtesy notice now (picked notice_lead_s later). A
  *  failure tries again in a minute (they stay unpicked meanwhile). */
-async function firstNotice(P, R, login, t) {
+async function firstNotice(P, R, login, t, opts = {}) {
   const k = P.roomId + "|" + login;
   const n = NOTES.get(k);
   if (!n || n.first || n.busy || (n.retryAt && n.retryAt > t)) return false;
   n.busy = true;
   try {
-    const c = await courtesyOnce(P, R, login, t).catch((e) => { console.error("[micfollow] notice:", e.message); return { ok: false }; });
+    const c = await courtesyOnce(P, R, login, t, opts).catch((e) => { console.error("[micfollow] notice:", e.message); return { ok: false }; });
     if (!c.ok || !c.at) { n.retryAt = now() + 60 * 1000; bump("notice_failed", 1, t, P); return false; }
     if (!c.sent) bump("notices_known", 1, t, P);
     await runQuery(`INSERT INTO micfollow_notices (room_id, login, first_at, last_at) VALUES (?, ?, ?, ?)
