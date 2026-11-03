@@ -20,7 +20,7 @@
   window.PATVCamRevealOpen = window.PATVCamRevealOpen || function (o) {
     if (window.PATVCamReveal) return window.PATVCamReveal.open(o);
     var sc = document.createElement('script');
-    sc.src = '/public/js/cam-reveal.js?v=1';
+    sc.src = '/public/js/cam-reveal.js?v=2';   // v2 (1.99?? privacy controls, round 3 - F4): by a typed login
     sc.onload = function () { if (window.PATVCamReveal) window.PATVCamReveal.open(o); };
     document.head.appendChild(sc);
   };

@@ -180,7 +180,7 @@ test("/privacy: each slice's sentences only with its switch; notes dated by firs
   for (const w of ["PATV administrators and staff (anywhere), a pad's owner (in their own pad) and the room's moderators (in their room)",
                    "They have to give a reason", "for 3 minutes at a time", "never who", "ghost mode", "kept for 180 days",
                    "where its mirror or its cams are off, nobody can view a cam this way",
-                   "only PATV administrators and staff can, and only your cam - never your name or your past lines",
+                   "only PATV administrators and staff - and, while you're in their room, the pad's owner and the room's moderators - can, and only your cam - never your name or your past lines",
                    " or <code>!incognito</code>)"]) assert.ok(html.includes(w), "S4 (Q8 / Q11 / Q13 / Q15 / Q22): " + w);
   assert.ok(!html.includes("except as moderation evidence") && !html.includes("<b>Evidence:</b>"), "no evidence switch: no evidence sentence");
   html = await only({ pv: true }, "pv");

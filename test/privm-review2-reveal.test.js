@@ -5,7 +5,8 @@
 //         reveals off a named one is as before
 //   RV-B  a NAMED person whose mic hold shows a frog name (veiled_hold): only a role that may reveal who is behind a frog name gets
 //         their cam - refused to a mod without one, before any row
-//   RV-C  a by-login reveal session is never joined from a pad - refused before any row or rate
+//   RV-C  a by-login reveal session is never joined from a pad - refused before any row or rate (round 3 - F4: unless the pad role may
+//         hold it itself - the person is listed in the room; privm-review3-bylogin.test.js)
 //   node --test test/privm-review2-reveal.test.js
 "use strict";
 const test = require("node:test");
@@ -342,16 +343,18 @@ test("RV-B: a mod with no name-reveal right can't cam-reveal a NAMED person whos
   } finally { await IC.setOn(false, ADM()); clean(); }
 });
 
-test("RV-C: a by-login reveal session is the admin's alone - a pad mod's reveal of the same cam is refused before any row or rate", async () => {
+test("RV-C: a by-login reveal session of a login the room doesn't list is the admin's alone - a pad mod's reveal is refused before any row or rate", async () => {
   await ready;
   clean(); T += 11000; await fresh(); RL._hits.clear();
-  const a = await call("POST", "/api/admin/pepe/livecams/reveal", { user: U.adm, body: { room: SLUG, login: "alicecf", reason: "report by login" } });
+  // (round 3 - F4: a pad mod may join a by-login session of someone the room LISTS - they may open one by login themselves,
+  // privm-review3-bylogin.test.js; this session is of a login the room has no entry for)
+  const a = await call("POST", "/api/admin/pepe/livecams/reveal", { user: U.adm, body: { room: SLUG, login: "nobodycf", reason: "report by login" } });
   assert.equal(a.status, 200, a.text);
   try {
     const n0 = await stRows(U.mod.userId);
     const la0 = (await getQuery("SELECT COUNT(*) AS n FROM livecam_audit WHERE viewer_id = ?", [U.mod.userId]))[0].n;
-    const m = await call("POST", `/api/rooms/${SLUG}/livecam/reveal`, { user: U.mod, body: { login: "alicecf", reason: "check alice" } });
-    assert.deepEqual([m.status, m.d.code], [409, "unavailable"], m.text);
+    const m = await call("POST", `/api/rooms/${SLUG}/livecam/reveal`, { user: U.mod, body: { login: "nobodycf", bylogin: true, reason: "check them" } });
+    assert.deepEqual([m.status, m.d.code], [404, "gone"], m.text);
     assert.equal(m.d.rv, undefined, "never the admin's session");
     assert.equal(await stRows(U.mod.userId), n0, "no see-through row");
     assert.equal((await getQuery("SELECT COUNT(*) AS n FROM livecam_audit WHERE viewer_id = ?", [U.mod.userId]))[0].n, la0, "no livecam_audit row");

@@ -1361,6 +1361,22 @@
     // (CL8: sending one while reading back returns to the live chat)
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
       feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; } }) : null;
+    // 1.99?? (privacy controls, round 3 - F4; owner Q8): a moderator who may view hidden cams here (room.livecams.reveal: PATV staff anywhere,
+    // the pad's owner and the room's mods in their own pad) gets "👁 View a cam by Camfrog login (logged)" under the people list - the
+    // by-login entry (camreveal.js: someone this room lists that the list doesn't show, e.g. left out). Made only when it's offered
+    var cvLoginP = null;
+    function cvLogin(on) {
+      if (on && !cvLoginP && typeof window.PATVCamRevealOpen === 'function') {
+        var note = document.getElementById('rmListNote');
+        if (!note || !note.parentNode) return;
+        cvLoginP = el('p', 'muted rm-cvlogin'); cvLoginP.style.margin = '8px 0 0';
+        var b = el('button', 'cam cv', _t('js.camrv.login_title', '👁 View a cam by Camfrog login (logged)')); b.type = 'button';
+        b.addEventListener('click', function () { window.PATVCamRevealOpen({ slug: slug, ask: true }); });
+        cvLoginP.appendChild(b);
+        note.parentNode.insertBefore(cvLoginP, note.nextSibling);
+      }
+      if (cvLoginP) cvLoginP.hidden = !on;
+    }
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
     var snapEl = null, snapTimer = null, snapWho = null;
     var liveCtl = null;       // 1.99yh: the popover's live cam (pad-livecam.js) - stopped whenever the popover changes
@@ -1715,6 +1731,7 @@
       safe('compose', function () { renderCompose(d); });
       safe('audio', function () { roomAudio.update(d); });
       safe('strip', function () { if (window.PATVPadStrip) PATVPadStrip.update(liveCams); });   // 1.99zc
+      safe('cvlogin', function () { cvLogin(!!(liveCams && liveCams.reveal === 1)); });       // 1.99?? (privacy controls, round 3 - F4)
       safe('stagemic', function () {
         if (!window.PATVPadStage || !PATVPadStage.setMic) return;
         var showMic = function (p) { PATVPadStage.setMic(p); };

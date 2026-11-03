@@ -254,7 +254,9 @@ test("switch: off by default (every route 404); on only with privacy wire v2; th
 });
 
 // ── who ──
-test("who: a member gets one 403 for anything; a reason is required; admin / staff / owner / mod may; by login: admin and staff only", async () => {
+// (1.99?? privacy controls, round 3 - F4: the by-login entry takes every reveal role - staff without livecam.admin, the pad's owner / mods
+// on their own pad for someone it lists; was "admin and staff only" and in practice admins only - privm-review3-bylogin.test.js)
+test("who: a member gets one 403 for anything; a reason is required; admin / staff / owner / mod may; by login: the reveal roles (F4)", async () => {
   await setup;
   clean(); await fresh();
   const hank = entryOf("hankhidden").id;
@@ -275,9 +277,12 @@ test("who: a member gets one 403 for anything; a reason is required; admin / sta
   }
   clean(); await fresh();
   const by = (u, login) => call("POST", "/api/admin/pepe/livecams/reveal", { user: u, body: { room: SLUG, login, reason: "a report names them" } });
-  assert.equal((await by(U.own, "zeldaforgot")).status, 403, "an owner has no admin page");
+  assert.equal((await by(U.mem, "zeldaforgot")).status, 403, "a member: the one 403");
   const st = await by(U.staff, "zeldaforgot");
-  assert.equal(st.status, 403, "the page needs livecam.admin: " + st.text);
+  assert.equal(st.status, 200, "F4: staff, without livecam.admin: " + st.text);
+  assert.equal(st.d.role, "staff");
+  await call("POST", `/api/rooms/${SLUG}/livecam/reveal/stop`, { user: U.staff, body: { rv: st.d.rv } });
+  clean(); await fresh();
   const ad = await by(U.adm, "zeldaforgot");
   assert.equal(ad.status, 200, "Q22: someone left out, by login: " + ad.text);
   assert.equal(ad.d.slug, SLUG);
@@ -622,7 +627,7 @@ test("the client: cam-reveal.js is loaded on demand, text only, blurred, no capt
   assert.match(js, /filter:blur\(28px\)/);
   assert.match(js, /Only you can see this · logged/);
   const plc = fs.readFileSync(path.join(repo, "public", "js", "pad-livecam.js"), "utf8");
-  assert.match(plc, /sc\.src = '\/public\/js\/cam-reveal\.js\?v=1'/);
+  assert.match(plc, /sc\.src = '\/public\/js\/cam-reveal\.js\?v=2'/);   // (round 3 - F4: v2, by a typed login)
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
   assert.doesNotMatch(room, /cam-reveal\.js/, "never on the pad page by itself (a page with reveals off never loads it)");
   assert.match(room, /u\.cv === 1 && u\.anon && u\.id/);

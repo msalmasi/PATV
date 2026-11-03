@@ -2,7 +2,7 @@
 // (camreveal.js on the server; livecam.js reveal sessions). Loaded on demand (PATVCamRevealLoad in pad-livecam.js) the first time a
 // page shows a control for it - a page with cam reveals off never loads it.
 //
-//   PATVCamReveal.open({slug, tile | member | login, name, admin?: true})
+//   PATVCamReveal.open({slug, tile | member | login, name, admin?: true})    {slug, ask: true} (1.99?? round 3 - F4): by a typed login
 //     1. asks why (at least 3 characters - logged with the view) and says the person is told unless the viewer is in 👻 ghost mode;
 //     2. POST /api/rooms/<slug>/livecam/reveal (admin: /api/admin/pepe/livecams/reveal {room, login}) -> a WebRTC ticket;
 //     3. plays it in a dialog: BLURRED until the viewer clicks it (a shared screen shows nothing by accident), the watermark "Only you
@@ -64,12 +64,19 @@
     document.body.appendChild(ov);
     return { ov: ov, box: box };
   }
-  /** Step 1: why (logged), then the ticket. */
+  /** Step 1: why (logged), then the ticket. 1.99?? (privacy controls, round 3 - F4): {slug, ask: true} = "View a cam by Camfrog login" on
+   *  the pad page - the moderator types the login too (the by-login entry: someone the people list doesn't show, e.g. left out). */
   function open(o) {
     if (!o || !o.slug && !o.admin) return;
     var name = o.name || _t('js.stage.mf.cover_someone', 'someone');
-    var d = overlay(_t('js.camrv.title', '👁 {name} - moderation view', { name: name }));
-    d.box.appendChild(el('p', null, _t('js.camrv.intro', 'Their cam is hidden from the website. You can view it for moderation: only you see it, for 3 minutes, and it\'s logged with your reason.')));
+    var d = overlay(o.ask ? _t('js.camrv.login_title', '👁 View a cam by Camfrog login (logged)') : _t('js.camrv.title', '👁 {name} - moderation view', { name: name }));
+    var who = null;
+    if (o.ask) {
+      d.box.appendChild(el('p', null, _t('js.camrv.login_intro', 'For a report that names a login - someone in this room the people list doesn\'t show you. It shows nothing you didn\'t type: no frog name, no profile. Only you see it, for 3 minutes, and it\'s logged with your reason.')));
+      var wl = el('label', null, _t('js.camrv.login', 'Camfrog login'));
+      who = el('input'); who.type = 'text'; who.maxLength = 40; who.autocomplete = 'off'; who.spellcheck = false;
+      wl.appendChild(who); d.box.appendChild(wl);
+    } else d.box.appendChild(el('p', null, _t('js.camrv.intro', 'Their cam is hidden from the website. You can view it for moderation: only you see it, for 3 minutes, and it\'s logged with your reason.')));
     d.box.appendChild(el('p', null, _t('js.camrv.told', 'They\'re told that someone moderating this pad viewed their cam (never who) - unless you\'re in 👻 ghost mode.')));
     var lab = el('label', null, _t('js.camrv.reason', 'Why? (logged)'));
     var inp = el('input'); inp.type = 'text'; inp.maxLength = 200; inp.autocomplete = 'off';
@@ -82,10 +89,13 @@
     no.addEventListener('click', close);
     go.addEventListener('click', function () {
       var reason = String(inp.value || '').trim();
+      var typed = who ? String(who.value || '').trim().replace(/^@/, '') : '';
+      if (who && !/^[\w.\-]{1,40}$/.test(typed)) { res.className = 'cr-res bad'; res.textContent = _t('js.camrv.need_login', 'Type their Camfrog login.'); return; }
       if (reason.length < 3) { res.className = 'cr-res bad'; res.textContent = _t('js.camrv.need_reason', 'Say why (at least 3 characters) - it\'s logged.'); return; }
       go.disabled = true; res.className = 'cr-res'; res.textContent = _t('js.camrv.asking', 'Asking Pepe to open it…');
       var body = { reason: reason }, url;
       if (o.admin) { url = '/api/admin/pepe/livecams/reveal'; body.room = o.room; body.login = o.login; }
+      else if (who) { url = '/api/rooms/' + encodeURIComponent(o.slug) + '/livecam/reveal'; body.login = typed; body.bylogin = true; name = typed; }
       else {
         url = '/api/rooms/' + encodeURIComponent(o.slug) + '/livecam/reveal';
         if (o.tile) body.tile = o.tile; else if (o.member) body.member = o.member; else body.login = o.login;
@@ -95,7 +105,7 @@
         play(o.admin ? a.slug : o.slug, a, name, reason);
       }).catch(function () { go.disabled = false; res.className = 'cr-res bad'; res.textContent = _t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'); });
     });
-    setTimeout(function () { try { inp.focus(); } catch (e) { /* none */ } }, 0);
+    setTimeout(function () { try { (who || inp).focus(); } catch (e) { /* none */ } }, 0);
   }
   function mmss(ms) { var s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
   /** Step 2: the player. */

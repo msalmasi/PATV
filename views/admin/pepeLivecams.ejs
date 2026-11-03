@@ -77,7 +77,7 @@
 <% if (locals.cr && cr.on) { %>
 <section class="adm-card" id="reveal" aria-labelledby="rvT">
   <h2 id="rvT">👁 View a cam by Camfrog login (logged)</h2>
-  <p class="adm-help">For a report that names a login: someone who isn't on a pad's mic stage or people list - left out (forget-me, an account deletion, a staff removal) or not listed. Pick the room, type the login and why. Only you see it, for 3 minutes (Extend writes a new row); it's in the see-through log (<code>cam_reveal</code>) and they're told someone moderating that pad viewed their cam - unless you're in 👻 ghost mode. It shows nothing you didn't type: no frog name, no profile. Admins and staff only.</p>
+  <p class="adm-help">For a report that names a login: someone who isn't on a pad's mic stage or people list - left out (forget-me, an account deletion, a staff removal) or not listed. Pick the room, type the login and why. Only you see it, for 3 minutes (Extend writes a new row); it's in the see-through log (<code>cam_reveal</code>) and they're told someone moderating that pad viewed their cam - unless you're in 👻 ghost mode. It shows nothing you didn't type: no frog name, no profile. PATV admins and staff, on any pad; a pad's owner and the room's moderators have the same entry on their own pad's page (under the people list), for someone that room lists now. Someone the room lists under a frog name needs a right to reveal who is behind it.</p>
   <form id="rvForm" class="adm-form">
     <label>Room (pad address or room id) <input type="text" name="room" required autocomplete="off"></label>
     <label>Camfrog login <input type="text" name="login" required autocomplete="off" maxlength="40"></label>
@@ -85,7 +85,7 @@
     <div class="adm-actions"><button type="submit">👁 View cam (logged)</button><span id="rvMsg" class="adm-msg" role="status"></span></div>
   </form>
 </section>
-<script src="/public/js/cam-reveal.js?v=1"></script>
+<script src="/public/js/cam-reveal.js?v=2"></script>
 <script>
 (function () {
   'use strict';
