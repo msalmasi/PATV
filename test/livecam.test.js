@@ -157,6 +157,71 @@ test("max live cams and the bandwidth budget", async () => {
   await post("/api/rooms/room-one/livecam/stop", { login: "alice" }, "v2");
 });
 
+// 1.99?? (bot 1.99aik): Pepe clamps a re-encode to 1/3 bit per pixel per frame (768 kbps for a 320x240 cam at 30 fps) and says
+// so - live[].kbps (what he encodes at), kbps_cfg, kbps_cap - plus err_first (ffmpeg's first error lines, URLs masked)
+test("a re-encoded relay counts at the rate Pepe encodes it at; kbps_cfg / kbps_cap / err_first kept, err_first for staff only", async () => {
+  T += 5 * 60 * 1000; LC.sweep();
+  await bot();
+  const A = { class: "Admin", userId: "staff", username: "boss" };
+  await LC.save(A, { cfg: { max_live: 4, budget_mbps: 2, kbps: 2000 } });
+  assert.equal(LC.viewerCap(), 1);
+  assert.equal((await watch("erin", "v1")).d.ok, true);
+  assert.equal((await watch("erin", "sp")).d.code, "budget", "2 x 2000 kbps before Pepe says what he encodes at");
+  const live = (extra) => bot({ live: [Object.assign({ room: R.id, login: "erin", state: "live", source: "reencode", kbps: 768 }, extra || {})] });
+  await live();                                  // an older Pepe: no kbps_cap - his re-encode still counts at cfg.kbps
+  assert.equal((await watch("erin", "sp")).d.code, "budget", "an older Pepe's re-encode counts at cfg.kbps");
+  let row = (await LC.adminView()).sessions.find((x) => x.login === "erin");
+  assert.equal(row.kbps, 2000);
+  assert.equal(row.rate, "configured");
+  const NEW = { kbps_cfg: 2000, kbps_cap: 768, err_first: "" };
+  await live(NEW);
+  const w = await watch("erin", "sp");
+  assert.equal(w.d.ok, true, "2 x 768 kbps fits the 2 Mbps budget");
+  assert.equal(w.d.kbps, 768, "the ticket carries the rate Pepe encodes at");
+  let av = await LC.adminView();
+  row = av.sessions.find((x) => x.login === "erin");
+  assert.equal(row.kbps, 768);
+  assert.equal(row.rate, "encoded");
+  assert.equal(row.measured, false);
+  assert.equal(row.bot.kbps_cfg, 2000);
+  assert.equal(row.bot.kbps_cap, 768);
+  assert.equal(row.outKbps, 1536);
+  assert.equal(row.err_first, null);
+  assert.equal(av.usage.viewerCap, 2, "the viewer cap now: 2 watching, no room left for a new cam at 2000");
+  await LC.save(A, { cfg: { budget_mbps: 4 } });
+  av = await LC.adminView();
+  assert.equal(av.usage.viewerCap, 3, "2 watching at 768 + one more new cam at 2000 in the 2464 kbps left");
+  assert.equal(LC.viewerCap(), 2, "the settings' own figure stays budget / kbps");
+  // err_first: ffmpeg's first errors while Pepe restarts the relay - still on its row once a new run is live
+  const ERR = "[whip @ 0x1] Failed to send packet: Resource temporarily unavailable | Conversion failed!";
+  await live({ ...NEW, state: "backoff", err_first: ERR });
+  const at = T;
+  assert.deepEqual((await LC.adminView()).sessions.find((x) => x.login === "erin").err_first, { text: ERR, at });
+  T += 2000;
+  await live(NEW);
+  assert.deepEqual((await LC.adminView()).sessions.find((x) => x.login === "erin").err_first, { text: ERR, at }, "kept after the restart");
+  // never anywhere public: the pad's hint, a viewer's ticket
+  assert.ok(!JSON.stringify(LC.hint(R, "sp")).includes("Resource temporarily"));
+  assert.ok(!JSON.stringify((await watch("erin", "sp")).d).includes("Resource temporarily"));
+  // Pepe gives up: the relay ends and the failure is listed with its errors; a relay that ends any other way isn't
+  await live({ ...NEW, state: "ended", why: "failed", err_first: ERR });
+  av = await LC.adminView();
+  assert.equal(av.sessions.find((x) => x.login === "erin"), undefined);
+  assert.equal(av.failed.length, 1);
+  assert.equal(av.failed[0].login, "erin");
+  assert.equal(av.failed[0].room, R.id);
+  assert.equal(av.failed[0].why, "failed");
+  assert.equal(av.failed[0].err_first, ERR);
+  assert.equal(av.failed[0].err_at, at);
+  assert.equal((await watch("fay", "sp")).d.ok, true);
+  await bot({ live: [{ room: R.id, login: "fay", state: "live", source: "reencode", kbps: 384, kbps_cfg: 2000, kbps_cap: 384, err_first: "x error" }] });
+  await bot({ live: [{ room: R.id, login: "fay", state: "ended", why: "cam_closed", err_first: "x error" }] });
+  assert.equal((await LC.adminView()).failed.length, 1, "a closed cam isn't a failed relay");
+  T += 25 * 60 * 60 * 1000;
+  assert.deepEqual((await LC.adminView()).failed, [], "kept 24 hours");
+  await LC.save(A, { cfg: { budget_mbps: 100, kbps: 300 } });
+});
+
 test("opt-out: the website switch ends a relay at once and refuses new viewers; Pepe's !livecam writes through", async () => {
   T += 5 * 60 * 1000; LC.sweep();
   await bot();
