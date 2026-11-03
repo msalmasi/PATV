@@ -218,7 +218,7 @@ test("the pages: /admin/pepe/livecams says 'no media' for such a relay; a ▶ Li
   assert.match(js, /case 'unwatched': case 'gone': case 'relay_lost': return _t\('js\.pad\.live\.err_gone'/);
   // review UX-3: a new pad-livecam.js, so a new ?v= - a cached v7 would say "Pepe couldn't open their cam live" for relay_lost
   // (1.99?? privacy controls S5: v9 - a veiled cam by its opaque id; v8's relay_lost stays)
-  assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /<script src="\/public\/js\/pad-livecam\.js\?v=10"><\/script>/);
+  assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /<script src="\/public\/js\/pad-livecam\.js\?v=11"><\/script>/);   // (1.99?? privacy controls V-5: v11)
 });
 
 // ── review fixes ──

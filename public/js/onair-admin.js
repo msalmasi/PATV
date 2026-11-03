@@ -77,6 +77,12 @@
         '</td><td>' + pick('data-oa-slot="' + esc(s.id) + '"', s.why, on, s.ask, s.embed ? s.id : null) + '</td></tr>';
     }).join('') || '<tr><td colspan="3" class="muted">No live slots.</td></tr>';
     $('oaCams').innerHTML = (j.cams || []).map(function (c) {
+      // (1.99?? privacy controls V-1: an incognito person's cam - its frog name and opaque id only, never a login)
+      if (c.veiled) {
+        var onV = T && T.kind === 'cam' && T.veiled && T.room === c.room && T.ref_id === c.id;
+        return '<tr><td>' + esc(c.display) + ' <span class="muted">(incognito)</span></td><td>' + esc(c.roomName) +
+          '</td><td>' + pick('data-oa-room="' + esc(c.room) + '" data-oa-id="' + esc(c.id) + '"', c.why, onV, c.ask) + '</td></tr>';
+      }
       var on = T && T.kind === 'cam' && T.room === c.room && T.login === c.login;
       return '<tr><td>' + esc(c.display) + (c.display !== c.login ? ' <span class="muted">' + esc(c.login) + '</span>' : '') + '</td><td>' + esc(c.roomName) +
         '</td><td>' + pick('data-oa-room="' + esc(c.room) + '" data-oa-login="' + esc(c.login) + '"', c.why, on, c.ask) + '</td></tr>';
@@ -128,6 +134,7 @@
     }
     var ask = b.getAttribute('data-oa-ask') === '1';
     if (b.hasAttribute('data-oa-slot')) { var id = b.getAttribute('data-oa-slot'); return act({ action: 'slot', slot_id: id, rights: !!RIGHTS[id], ask: ask }); }
+    if (b.hasAttribute('data-oa-id')) return act({ action: 'cam', room: b.getAttribute('data-oa-room'), id: b.getAttribute('data-oa-id'), ask: ask });   // (1.99?? V-1)
     if (b.hasAttribute('data-oa-login')) return act({ action: 'cam', room: b.getAttribute('data-oa-room'), login: b.getAttribute('data-oa-login'), ask: ask });
   });
   $('oaCfg').addEventListener('submit', function (e) {

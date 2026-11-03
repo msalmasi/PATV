@@ -715,7 +715,11 @@ async function start(u, R, login, t = now(), opts = {}) {
   const strictGhost = bypass != null && !(S && S.viewers.get(uid)) && (!!veil || crEffective(t));
   let preAudit = null;
   if (strictGhost) {
-    try { preAudit = await ghostRows(u, R, login, veil ? veil.alias || "someone" : null, bypass, t); }
+    // 1.99?? (privacy controls V-5): like every other reveal, a reason first (at least 3 characters, logged with the see-through row).
+    // No reason: refused with reason_needed and nothing opened - the page asks "Why? (logged)" and tries again with it
+    const why = cleanReason(opts && opts.reason);
+    if (why.length < 3) throw new Refuse(409, "Say why (at least 3 characters) - it's logged.", "reason_needed", { reason_needed: true });
+    try { preAudit = await ghostRows(u, R, login, veil ? veil.alias || "someone" : null, bypass, t, why); }
     catch (e) { console.error("[livecam] ghost audit:", e && e.message); preAudit = null; }
     if (!preAudit) throw new Refuse(500, "Couldn't log it - nothing was opened.", "audit");
   }
@@ -746,7 +750,9 @@ function crEffective(t = now()) { try { return require("./camreveal").effective(
 /** 1.99?? (privacy controls review RV-4): a 👻 ghost's bypass view - its rows in ONE transaction BEFORE any ticket: livecam_audit (ghost,
  *  what it got past, the frog name for a veiled cam), seethrough_log (scope cam_reveal, ref "ghost:<audit id>:g") and admin_audit
  *  (seethrough.cam_reveal). -> the livecam_audit id | throws (the caller refuses the view) */
-async function ghostRows(u, R, login, veilLabel, bypass, t = now()) {
+/** 1.99?? (privacy controls V-5): a reason as the reveal routes keep it (one line, at most 200 characters). */
+const cleanReason = (v) => String(v == null ? "" : v).replace(/[ -]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+async function ghostRows(u, R, login, veilLabel, bypass, t = now(), reason = "") {
   const ST = require("./seethrough"), AA = require("./adminaudit");
   await ST.init(); await AA.init();
   const uid = String(u.userId);
@@ -755,10 +761,10 @@ async function ghostRows(u, R, login, veilLabel, bypass, t = now()) {
                              [String(R.id), login, uid, u.username || null, t, 1, bypass, veilLabel]);
     const id = r && r.id ? Number(r.id) : null;
     if (!id) throw new Error("livecam: no audit row");
-    const st = await ST.log({ userId: uid, role: "ghost", scope: "cam_reveal", roomId: String(R.id), logins: [login], reason: "", ref: "ghost:" + id + ":g" });
+    const st = await ST.log({ userId: uid, role: "ghost", scope: "cam_reveal", roomId: String(R.id), logins: [login], reason: cleanReason(reason), ref: "ghost:" + id + ":g" });
     if (!st) throw new Error("livecam: no see-through row");
     await AA.record({ userId: uid, username: u.username || null }, "seethrough.cam_reveal", null,
-                    { room: String(R.id), ghost: true, live: true, veiled: veilLabel != null, bypass, audit: id, st }, null);
+                    { room: String(R.id), ghost: true, live: true, veiled: veilLabel != null, bypass, audit: id, st, reason: cleanReason(reason) }, null);
     return id;
   });
 }
@@ -779,6 +785,12 @@ function sessOf(roomId, ref) {
   const login = ref && typeof ref === "object" ? ref.login : ref;
   const S = SESS.get(keyOf(roomId, String(login == null ? "" : login)));
   return S && !S.veil ? S : null;
+}
+/** 1.99?? (privacy controls V-1): the path of `login`'s live session in room `roomId` now - named or veiled (its own per-session path) |
+ *  null. Server-only (stagemiccap reads a veiled cam tile's relay by it). */
+function sessPath(roomId, login) {
+  const S = SESS.get(keyOf(roomId, String(login == null ? "" : login)));
+  return S && !S.ended ? S.path : null;
 }
 /** The page's beat: keeps the slot. -> {state, why, viewers}  (ref: a login, or {id} - 1.99?? privacy controls S5) */
 function beat(userId, roomId, login, t = now()) {
@@ -1726,7 +1738,9 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "livecams" });
       const b = req.body || {};
       // (1.99?? privacy controls S5: {id} = an incognito person's cam by its opaque id)
-      res.json(b.id != null && b.id !== "" ? await start(u, R, "", now(), { id: String(b.id).slice(0, 40) }) : await start(u, R, String(b.login || "")));
+      // (1.99?? privacy controls V-5: `reason` = the 👻 ghost bypass's "Why? (logged)" - asked only after a reason_needed refusal)
+      const reason = typeof b.reason === "string" ? b.reason.slice(0, 400) : "";
+      res.json(b.id != null && b.id !== "" ? await start(u, R, "", now(), { id: String(b.id).slice(0, 40), reason }) : await start(u, R, String(b.login || ""), now(), { reason }));
     } catch (e) { fail(res, e); }
   });
   // 1.99aar: 🙋 ask the cam's owner to let you watch (their mode is members / followers / on request) + the answer so far
@@ -1887,7 +1901,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
 }
 
 module.exports = {
-  register, init, normalize, save, current, viewerCap, pathFor, vpathFor, sessOf, veilWhy, veilSwitchOff, veilEnded, pubKey, readTicket, checkTicket, camForPath, holdOf, relayHold, start, beat, stop, endBy, mayEnd,
+  register, init, normalize, save, current, viewerCap, pathFor, vpathFor, sessOf, sessPath, veilWhy, veilSwitchOff, veilEnded, pubKey, readTicket, checkTicket, camForPath, holdOf, relayHold, start, beat, stop, endBy, mayEnd,
   forBot, noteSync, auth, hint, adminView, stageConsent, stageHold, stageRelease, stageState, stageWatch, setOptout, optoutState, optedOut, sweep, dropViewerOf, watchersOf,
   kickReader, recheck,                // adultgate site: roomrtc ends WebRTC room listeners through kickReader too
   stageRecheck, stageViewerWhy, directorBlocked, directorBlockedSet, blockedWith, blockedSet, stageOffMeOk,   // stagefix site

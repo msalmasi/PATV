@@ -26,6 +26,13 @@
 // shows for the whole clip). Known divergence, deliberate since handoff 16 (an owner decision to change): a tile the viewer may not
 // watch - members_only / unavailable - shows its name card with the cover and the reason on the page, but a capture draws it BLANK
 // (no name, no cover): a cam the viewer can't watch is never in a capture, not even by name. hidden / blocked tiles: blank on both.
+// 1.99?? (privacy controls V-1, owner Q4): an incognito person's cam tile / 📌 pin is drawn with its CAM (live or still) under its frog-name
+// label ("<frog> · incognito") - the person resolved server-side from the tile's id (micfollow.vidVeil / pinByVid), never the id taken
+// for a login; their consent is their own rules under THAT frog-name session (never the incognito half of `hidden`); otherwise - and in
+// every state with no picture - the peek hood, as before. A capture with such a tile is `veiled` (storykeep never keeps it), its login
+// is recorded server-only as `vpeople` (stage_capture_people.veil - forget-me, account deletion and the block rule keep working; never
+// a card, never "Remove me" / a notice / anything a page shows), and its recheck asks they're still incognito (a capture under their
+// frog name is never published once they show by name).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -65,6 +72,12 @@ let deps = {
   program: (id, u) => require("./bridge").stageProgramFor(id, u),
   camRefusal: (l, u, o) => require("./camviewers").camRefusal(l, u, o),
   hidden: l => require("./quotes").isHidden(l),
+  // 1.99?? (privacy controls V-1): a veiled cam tile / pin -> {login, sess} (server-only), its session's own path, the veil checks
+  vtile: (id, eid, pin) => { const MF = require("./micfollow"); if (pin) { const p = MF.pinByVid(id, eid); return p && p.veil ? { login: p.login, sess: p.veil.sess } : null; } return MF.vidVeil(id, eid); },
+  vpath: (id, l) => require("./livecam").sessPath(id, l),
+  stillVeiled: (R, l, sess) => require("./incogcams").stillVeiled(R, l, sess),
+  personIncognito: l => require("./incogcams").personIncognito(l),
+  veiledPeople: async id => (await require("./dbUtils").getQuery("SELECT login FROM stage_capture_people WHERE capture_id = ? AND veil IS NOT NULL", [id])).map(x => x.login),
   exact: (id, l) => require("./livecam").mfState(id, l).exact === true,
   pin: (id, l) => require("./micfollow").pinOf(id, l),
   camPath: (id, l) => require("./livecam").pathFor(id, l),
@@ -201,10 +214,13 @@ function coverArt(entry) {
   // (wave2 WP-4: a cover without a frog name - today's wire, a C.2 session - is "someone", never " · incognito")
   return { art, label: String(entry.name || "someone") + (valid ? " · " + entry.veil : "") };
 }
-async function consent(login, userId) {
+async function consent(login, userId, veil = null) {
   // review fix: camRefusal treats a failed private-profile lookup as public. The strict lookup throws instead, which refuses here.
+  // 1.99?? (privacy controls V-1): `veil` = a frog-name cam - {R, sess}: still incognito under that session (drawing); {sess: null}: still
+  // incognito at all (recheck - never published once they show by name). Never the incognito half of `hidden`.
   try {
-    return !(await deps.hidden(login)) && !(await deps.privateLogins([login])).has(String(login).toLowerCase()) &&
+    const okVeil = veil ? (veil.sess != null ? deps.stillVeiled(veil.R, login, veil.sess) === true : deps.personIncognito(login) === true) : !(await deps.hidden(login));
+    return okVeil && !(await deps.privateLogins([login])).has(String(login).toLowerCase()) &&
       !(await deps.camRefusal(login, userId, { strict: true }));
   } catch (_) { return false; }
 }
@@ -225,10 +241,33 @@ async function coverFor(e) {
 async function tileFor(e, R, user, { covers = true } = {}) {
   const t = { id: e.id, mode: "blank", newest: !!e.newest, pin: !!e.pin, name: "", source: e };
   if (e.kind === "cover") { const c = coverArt(e); return { ...t, mode: "cover", name: c.label, image: c.art }; }
-  // 1.99?? (privacy controls S5): an incognito person's cam tile (shown live under the frog name on the page) is drawn in a capture as
-  // its peek hood + frog name - never its id taken for a login, never the cam itself in this build (a capture's people / consent /
-  // recheck have no veiled path yet); it makes the capture veiled like a cover (storykeep never keeps it)
-  if (e.kind === "cam" && e.veil === "incognito") { const c = coverArt({ veil: "incognito", hood: e.hood, name: e.name }); return { ...t, mode: "cover", name: c.label, image: c.art }; }
+  // 1.99?? (privacy controls S5 + V-1): an incognito person's cam tile / pin under its frog name - its CAM when the viewer may watch it
+  // and the person's own rules allow it (under that frog-name session), else its peek hood; never its id taken for a login. Either way
+  // the capture is veiled (storykeep never keeps it)
+  if (e.kind === "cam" && e.veil === "incognito") {
+    const c = coverArt({ veil: "incognito", hood: e.hood, name: e.name });
+    const hood = { ...t, mode: "cover", name: c.label, image: c.art };
+    if (e.watch !== "ok") return hood;
+    let v = null;
+    try { v = deps.vtile(R.id, String(e.id || ""), !!e.pin); } catch (_) { v = null; }
+    const vl = v && v.login ? String(v.login).toLowerCase() : "";
+    if (!LOGIN.test(vl) || v.sess == null || !(await consent(vl, user.userId, { R, sess: v.sess }))) return hood;
+    const cam = { ...t, login: vl, vsess: String(v.sess), veiled: true, name: c.label };
+    if (e.video === "live") {
+      let allowed = false;
+      try { allowed = e.pin ? !!deps.pin(R.id, vl) : deps.exact(R.id, vl) === true; } catch (_) { /* hood */ }
+      const p = allowed ? deps.vpath(R.id, vl) : null;
+      if (p) return { ...cam, mode: "live", path: p, image: c.art };
+    } else if (e.video === "still") {
+      try {
+        const s = await deps.still(R.id, vl);
+        if (s && s.state === "ok" && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(s.img) && s.img.length <= 8 * 1024 * 1024) {
+          return { ...cam, mode: "still", image: Buffer.from(s.img.slice(s.img.indexOf(",") + 1), "base64") };
+        }
+      } catch (_) { /* hood */ }
+    }
+    return hood;
+  }
   if (e.kind !== "cam" || (e.watch !== "ok" && e.watch !== "notice")) return t;
   const login = String(e.login || e.id).toLowerCase();
   if (!LOGIN.test(login)) return t;
@@ -299,7 +338,10 @@ async function recheck(capture) {
     await gate(R, u, capture.kind === "clip" ? "clip" : "snap", "pad");
     // mic keep review: the name cards too - someone shown only by name who has gone private / hidden since the preview isn't published
     const shown = [...(await deps.people(capture.id)), ...(await deps.cards(capture.id))];
-    for (const login of shown) if (!(await consent(login, u.userId))) return MSG.revoked;
+    // (1.99?? privacy controls V-1: a cam drawn under a frog name - still incognito, never published once they show by name)
+    let vset = new Set();
+    try { vset = new Set((await deps.veiledPeople(capture.id)).map(l => String(l).toLowerCase())); } catch (_) { vset = new Set(); }
+    for (const login of shown) if (!(await consent(login, u.userId, vset.has(String(login).toLowerCase()) ? { sess: null } : null))) return MSG.revoked;
     return null;
   } catch (_) { return MSG.revoked; }
 }
@@ -612,7 +654,7 @@ async function sample(job) {
         stopTile(job, t, at);
         // mic keep: blanked now (or turned into a cover), or gone from the program while their consent fails (micfollow cuts a person who
         // goes private / hidden / incognito or withdraws) -> not taken in the open. Leaving the mic with consent intact is fine.
-        if (next ? next.mode === "blank" || next.mode === "cover" : !(t.login && (await consent(t.login, user.userId)))) job.veiled = true;
+        if (next ? next.mode === "blank" || next.mode === "cover" : !(t.login && (await consent(t.login, user.userId, t.vsess ? { R: job.R, sess: t.vsess } : null)))) job.veiled = true;
       }
       if (t.stop == null && !!next.newest !== t.lastNewest) { t.rings.push({ at, on: !!next.newest }); t.lastNewest = !!next.newest; }
       // 1.99ahq review fix 3 (FID-2): the cover this tile carries on the viewer's stage now (no picture loaded here - the cut loads it)
@@ -663,17 +705,25 @@ async function snap(job) {
   for (const t of final) if (t.mode === "live") {
     const prior = old.get(t.id);
     if (prior && prior.stop == null && prior.mode === "live" && prior.path === t.path && prior.source.watch === t.source.watch && prior.image) t.image = prior.image;
-    else t.mode = "card";
+    else t.mode = t.veiled ? "cover" : "card";      // (1.99?? privacy controls V-1: a veiled cam without its frame: the hood)
   }
   await renderFrame(p, final, job.R, job.out);
-  const people = [...new Set(final.filter(t => t.login && t.image && (t.mode === "live" || t.mode === "still")).map(t => t.login))];
+  const people = [...new Set(final.filter(t => t.login && !t.veiled && t.image && (t.mode === "live" || t.mode === "still")).map(t => t.login))];
   // mic keep: a snap is its final frame - the logins drawn only as a name card (consent passed: tileFor sets a login only then; a
   // picture that failed to render became a card), and whether everyone in that frame was shown openly
-  const cards = [...new Set(final.filter(t => t.login && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
-  const veiled = final.some(t => t.mode === "cover" || t.mode === "blank") || speaking(p) === "someone";
-  return { secs: 0, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: null };
+  const cards = [...new Set(final.filter(t => t.login && !t.veiled && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
+  // (1.99?? privacy controls V-1: a cam drawn under a frog name - server-only, with its session; the capture is veiled)
+  const vpeople = vpeopleOf(final.filter(t => t.veiled && t.login && t.image && (t.mode === "live" || t.mode === "still")));
+  const veiled = final.some(t => t.mode === "cover" || t.mode === "blank" || t.veiled) || speaking(p) === "someone";
+  return { secs: 0, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: null, ...(vpeople.length ? { vpeople } : {}) };
 }
 
+/** 1.99?? (privacy controls V-1): the veiled cams a capture drew -> [{login, sess}] (one per login). */
+function vpeopleOf(tiles) {
+  const out = [], seen = new Set();
+  for (const t of tiles) if (t && t.login && !seen.has(t.login)) { seen.add(t.login); out.push({ login: t.login, sess: String(t.vsess || "") }); }
+  return out;
+}
 function intervals(changes, end, key = "on") {
   const out = []; changes.forEach((c, i) => { const b = Math.min(end, changes[i + 1] ? changes[i + 1].at : end); if (c[key] && b > c.at) out.push([c.at, b, c[key]]); }); return out;
 }
@@ -798,18 +848,20 @@ async function clip(job, hooks) {
     fs.writeFileSync(path.join(job.dir, "audio-timeline.json"), JSON.stringify(chunks));
     await fm.run(fm.bin("ffmpeg"), composeArgs({ base, tiles: job.tiles, rectangles: rects(job.program, W, H - FOOT), duration, audioFile, audio, speakingFiles, speakingChanges: job.speaking, out: job.out }), { timeoutMs: 90000 });
     if (job.cancelled) throw refuse("failed", 409);
-    const people = [...new Set(job.tiles.filter(t => t.login && (t.file || (t.image && t.mode === "still")) &&
-      Math.min(duration, t.stop == null ? duration : t.stop) > (t.file ? (t.firstAt || 0) + (t.shift || 0) : 0)).map(t => t.login))];
+    const drawn = (t) => t.login && (t.file || (t.image && t.mode === "still")) &&
+      Math.min(duration, t.stop == null ? duration : t.stop) > (t.file ? (t.firstAt || 0) + (t.shift || 0) : 0);
+    const people = [...new Set(job.tiles.filter(t => !t.veiled && drawn(t)).map(t => t.login))];
+    const vpeople = vpeopleOf(job.tiles.filter(t => t.veiled && drawn(t)));   // (1.99?? privacy controls V-1)
     // mic keep: every other consenting tile shows its name (a card, or a live tile's label before its video) - recorded as a card. Not
     // in the open: a cover / blank tile, a tile stopped for privacy (sample), a "Someone is speaking" card, and - only while the clip
     // carries room audio (composeArgs' hasAudio) - a muted stretch or a voice the tiles don't show (noteVoices). Audio dropped whole
     // ("off" / "outdated": no voice at all in the clip) adds nothing private, so such a clip is judged on its pictures alone.
     // Review: "a muted stretch" = one that may hide a hidden / private speaker (audioPlan's private_s), not the lead-in every clip has.
-    const cards = [...new Set(job.tiles.filter(t => t.login && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
+    const cards = [...new Set(job.tiles.filter(t => t.login && !t.veiled && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
     const heard = !audio.reason && audio.segments.length > 0;
-    const veiled = !!job.veiled || job.tiles.some(t => t.mode === "cover" || t.mode === "blank") || job.speaking.some(c => c.kind === "someone") ||
+    const veiled = !!job.veiled || job.tiles.some(t => t.mode === "cover" || t.mode === "blank" || t.veiled) || job.speaking.some(c => c.kind === "someone") ||
       (heard && (audio.private_s > 0 || !!job.unseen));
-    return { secs: duration, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: { reason: audio.reason, muted_s: audio.muted_s } };
+    return { secs: duration, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: { reason: audio.reason, muted_s: audio.muted_s }, ...(vpeople.length ? { vpeople } : {}) };
   } finally { release(); }
 }
 async function start(opts, hooks = {}) {

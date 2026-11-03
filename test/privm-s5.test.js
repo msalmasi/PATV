@@ -430,8 +430,7 @@ test("stage: a proven incognito holder on cam is a CAM tile under the frog name;
   // the tile routes: ✕ / 📌 by login refuse its id; ⚑ by its id hides it for the reporter by its veil
   const ex = await call("POST", `/api/rooms/${SLUG}/micfollow/exclude`, { user: U.own, body: { login: vid, hours: 1 } });
   assert.equal(ex.d.code, "cover", "a by-login ✕ refuses a veiled tile's id: " + ex.text);
-  const pn = await call("POST", `/api/rooms/${SLUG}/micfollow/pin`, { user: U.own, body: { login: vid } });
-  assert.equal(pn.d.code, "cover");
+  // (1.99?? privacy controls V-1: 📌 of a veiled tile by its id now pins it under the frog name - test/privm-v1.test.js)
   const rp = await call("POST", `/api/rooms/${SLUG}/micfollow/report`, { user: U.mem, body: { login: vid, reason: "other" } });
   assert.equal(rp.status, 200, rp.text);
   const hm = MF._hide.get(ROOM.id + "|" + U.mem.userId);
@@ -494,7 +493,8 @@ test("snapshots by id: a job for the login, the frame under its own key; generic
   assert.ok(RL._snaps.has(ROOM.id + "|frankiefettuccine|" + j.vkey) && !RL._snaps.has(ROOM.id + "|frankiefettuccine"), "its own key only");
   const g = await call("GET", `/api/rooms/${SLUG}/snap/${encodeURIComponent(id)}`, { user: U.mem });
   assert.equal(g.d.state, "ok", g.text.slice(0, 200));
-  assert.equal(g.d.clip, null, "no 🎬 Clip in this build");
+  // (1.99?? privacy controls V-1: 🎬 Clip now works for a veiled cam - by the frog entry's id, never a login; test/privm-v1.test.js)
+  assert.ok(g.d.clip && !JSON.stringify(g.d.clip).includes("frankiefettuccine"), "🎬 Clip offered, no login: " + JSON.stringify(g.d.clip));
   assert.deepEqual(leaks(g.text), []);
   const gn = await call("GET", `/api/rooms/${SLUG}/snap/frankiefettuccine`, { user: U.mem });
   assert.notEqual(gn.d.state, "ok", "a named request never sees the veiled frame");

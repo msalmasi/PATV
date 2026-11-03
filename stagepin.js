@@ -76,6 +76,10 @@ function init() {
                       status TEXT NOT NULL, answered_at INTEGER, via TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_asks_login ON stage_asks (login, status)");
       await runQuery("CREATE INDEX IF NOT EXISTS stage_asks_slot ON stage_asks (slot_id)");
+      // 1.99?? (privacy controls V-1): an ask for an incognito person's cam - the frog-name session it was asked under (server-only); a
+      // yes puts it up under THAT session only (mainstage.camOpen veil_sess / micfollow.pinPut veil), never by name
+      const cols = (await getQuery("PRAGMA table_info(stage_asks)")).map((c) => c.name);
+      if (!cols.includes("veil")) await runQuery("ALTER TABLE stage_asks ADD COLUMN veil TEXT");
       await load();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -161,10 +165,10 @@ const chatHint = () => (stageOkOk() ? " Or say !stage ok / !stage no in Camfrog.
 async function newAsk(o, t = now()) {
   const a = { id: crypto.randomBytes(9).toString("base64url"), kind: o.kind, room_id: String(o.roomId), login: low(o.login), user_id: o.userId || null,
               slot_id: o.slotId || null, actor_id: o.actorId ? String(o.actorId) : null, actor_name: o.actorName ? String(o.actorName).slice(0, 60) : null,
-              created: t, expires: t + o.ms, status: "pending" };
-  await runQuery(`INSERT INTO stage_asks (id, kind, room_id, login, user_id, slot_id, actor_id, actor_name, created, expires, status)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-                 [a.id, a.kind, a.room_id, a.login, a.user_id, a.slot_id, a.actor_id, a.actor_name, a.created, a.expires]);
+              created: t, expires: t + o.ms, status: "pending", veil: o.veil != null ? String(o.veil).slice(0, 64) : null };
+  await runQuery(`INSERT INTO stage_asks (id, kind, room_id, login, user_id, slot_id, actor_id, actor_name, created, expires, status, veil)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+                 [a.id, a.kind, a.room_id, a.login, a.user_id, a.slot_id, a.actor_id, a.actor_name, a.created, a.expires, a.veil]);
   return a;
 }
 
@@ -183,12 +187,12 @@ async function pinGate(roomId, login, t = now()) {
 /** Level off: ask `login` whether room `roomId` may put their cam up (`actor` asked). -> the ask | null (they can't be asked)
  *  mfix: target "mic" = a 📌 pin on the pad's mic stage (micfollow.pinPut) - noted as slot_id "mic", so an Allow pins it there. */
 const MIC_TARGET = "mic";
-async function askPin({ roomId, login, actor, display, target = null }, t = now()) {
+async function askPin({ roomId, login, actor, display, target = null, veil = null }, t = now()) {
   await init();
   const r = await reach(login);
   if (!r.userId) return null;                   // "off" is set on the website: no linked account left = nobody to ask
   const a = await newAsk({ kind: "pin", roomId, login, userId: r.userId, actorId: actor && actor.userId, actorName: actor && (actor.username || actor.userId), ms: ASK_MS,
-                           slotId: target === MIC_TARGET ? MIC_TARGET : null }, t);
+                           slotId: target === MIC_TARGET ? MIC_TARGET : null, veil }, t);
   const P = padInfo(roomId);
   await tell(a, { userId: r.userId, title: `${P.title} wants to put your cam on its Stage on PATV`,
                   body: `Allow or No within ${Math.round(ASK_MS / 60000)} minutes in Settings → Privacy - nothing goes up without your OK.` + chatHint() });
@@ -288,8 +292,18 @@ async function answer(id, ans, who = {}, via = "web", t = now()) {
       const actor = a.actor_id ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [a.actor_id]))[0] : null;
       if (actor && (await require("./rooms").canManage(actor, a.room_id))) {
         // mfix: an ask for a 📌 pin on the mic stage pins it there (micfollow.pinPut - the mic stage's own rules on top)
-        const r = a.slot_id === MIC_TARGET ? await require("./micfollow").pinPut(actor, a.room_id, a.login, t, { fromAsk: true })
-          : await MS().camOpen(actor, { room: a.room_id, login: a.login });
+        // (1.99?? privacy controls V-1: an ask made for a frog-name cam goes up under that frog-name session only - or not at all)
+        let r;
+        if (a.veil) {
+          const IC = require("./incogcams"), B = require("./bridge")._rooms.get(String(a.room_id));
+          const V = B && IC.effective() ? IC.entryByLogin(B, a.login, a.veil) : null;
+          if (!V || V.onCam !== true) throw Object.assign(new Error("That cam isn't available right now."), { refuse: true });
+          r = a.slot_id === MIC_TARGET ? await require("./micfollow").pinPut(actor, a.room_id, a.login, t, { fromAsk: true, veil: { sess: V.sess, alias: V.alias, hood: V.hood, id: V.id } })
+            : await MS().camOpen(actor, { room: a.room_id, login: a.login, veil_sess: V.sess });
+        } else {
+          r = a.slot_id === MIC_TARGET ? await require("./micfollow").pinPut(actor, a.room_id, a.login, t, { fromAsk: true })
+            : await MS().camOpen(actor, { room: a.room_id, login: a.login });
+        }
         out.put = !!(r && (r.slot || r.pinned));
       }
     } catch (e) { out.put = false; out.put_error = e && e.refuse ? e.message : null; if (!(e && e.refuse)) console.error("[stagepin] put:", e.message); }

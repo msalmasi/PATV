@@ -3,10 +3,10 @@
 //
 // The owner's rule (11-02): incognito hides the NAME on the website, never the cam. An incognito person whose cam is on in Camfrog
 // and who hasn't switched live cam off (`!livecam off`) shows their cam on the website under their FROG NAME, and every cam feature
-// is meant to work for it (Q4). Built in this slice: the people list's cam icon, ▶ Live, snapshots (+ Save, which Pepe names
-// "someone"), ✨ Use in Generate, the pads' mic stages (live tiles + stills, Reveal / ✕ / ⚑ by the tile's id) and Pepe's side (AI
-// references, on-air picks follow his gate). Not yet (still refused for a veiled cam, a follow-up): 🎬 cam clips, 📌 pins, stage cam
-// slots, the site's on-air picker, and the cam itself in a mic-stage capture (drawn as the peek hood). What never reaches a member or a
+// works for it (Q4): the people list's cam icon, ▶ Live, snapshots and 🎬 clips (+ Save: the frog name is the capture's subject), ✨ Use
+// in Generate, the pads' mic stages (live tiles + stills, Reveal / ✕ / ⚑ by the tile's id), and (1.99?? privacy controls V-1) 📌 pins,
+// 🎬 stage cam slots, the site's on-air picker (Pepe's stream / Twitch, with the cam's own on-air OK) and the cam itself in mic-stage
+// captures - each by an opaque id (refOf), each under ONE frog-name session (stillVeiled; any veil change ends it). What never reaches a member or a
 // signed-out viewer is anything tied to the account (spec 1.2, the veiled-identity rule): the login, the PATV avatar or name
 // style, the stage cover, real initials, a profile link, or the login inside an id, a session key, a WHEP path, an API answer, a
 // capture's subject or a log non-admins read. A cam session belongs to ONE identity: a named one, or one frog-name session (each
@@ -161,6 +161,30 @@ function veiledPresence(R, login) {
   for (const e of [...(R.members || []), ...(R.mic || [])]) if (e && e.anon && e._vz && low(e._vz.login) === l) return true;
   return false;
 }
+/** 1.99?? (privacy controls V-1, owner Q4 - every cam feature works for an incognito cam): a page's OPAQUE reference to an incognito
+ *  person's cam in bridge room R -> {login, id, alias, hood, sess, onCam} (server-only) | null. Either a people-list entry id ("v-…",
+ *  camOf) or a pad mic-stage veiled cam tile id ("anon-…": micfollow.vidVeil - the person and the frog-name session that tile runs
+ *  under, re-checked as their incognito entry of THAT session, on cam). Only while incognito cams are effective. A login is never a
+ *  reference here: guessing who is behind a frog name and posting that login opens nothing (the by-login paths refuse anon entries). */
+function refOf(R, ref, t = now()) {
+  if (!R || !effective(t) || typeof ref !== "string") return null;
+  if (ID_RE.test(ref)) return camOf(R, ref, t);
+  if (!/^anon-[0-9a-f]{8}$/.test(ref)) return null;
+  let tv = null;
+  try { tv = require("./micfollow").vidVeil(R.id, ref); } catch (e) { tv = null; }
+  if (!tv || !tv.login || tv.sess == null) return null;
+  const v = entryByLogin(R, tv.login, tv.sess);
+  return v && v.onCam === true ? v : null;
+}
+/** 1.99?? (privacy controls V-1): is `login` still incognito under frog-name session `sess` in room R (and incognito cams effective)?
+ *  A pin / cam slot / on-air pick / capture that runs under a frog name ends the moment this says no (any veil change). */
+function stillVeiled(R, login, sess, t = now()) {
+  if (!R || sess == null) return false;
+  return identityOf(R, login, t) === "v:" + String(sess);
+}
+/** The frog name a feature shows for an incognito cam ("someone" when the session has none). */
+const labelOf = (v) => (v && typeof v.alias === "string" && v.alias.trim() ? v.alias.trim().slice(0, 40) : "someone");
+
 /** chatlogview.roster: may this veiled roster entry show on_cam to the page? Only an incognito entry with its opaque id (a frog
  *  name), incognito cams effective, on cam, and the person hasn't switched live cam off (a withheld cam has no cam icon - the
  *  person list says nothing about why). Every viewer gets the same entry: the per-viewer gate (Q23) is ▶ Live's. */
@@ -203,5 +227,6 @@ function register(app, { addUser }) {
 
 module.exports = { init, isOn, advert, noteBot, botOn, effective, state, setOn, register, Refuse, BOT_FRESH_MS, ID_RE,
                    personIncognito, sessOpen, entryOf, camOf, entryByLogin, identityOf, veiledPresence, pageOnCam,
+                   refOf, stillVeiled, labelOf,                                                   // 1.99?? (privacy controls V-1)
                    _setClock: (f) => { clock = f || (() => Date.now()); },
                    _reset: () => { STATE = cleanState(null); loaded = false; ready = null; BOT_AT = 0; } };

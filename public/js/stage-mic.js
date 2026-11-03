@@ -671,16 +671,21 @@
         if (!cams.length) { pinList.appendChild(el('li', 'mf-pmsg', _t('js.stage.mf.pin_none', 'Nobody is on cam in the room right now.'))); return; }
         var full = (Array.isArray(d.pins) ? d.pins.length : 0) >= (Number(d.room) || 0);
         cams.forEach(function (c) {
-          if (!c || typeof c.login !== 'string') return;
-          var li = el('li', null), nm = el('span', 'mf-pn-name', String(c.display || c.login)), st = el('span', 'mf-pn-state', pinState(c));
+          // (1.99?? privacy controls V-1: an incognito person's cam is listed by its opaque id + frog name - never a login)
+          var key = c && c.veiled === true && typeof c.id === 'string' ? c.id : c && c.login;
+          if (!c || typeof key !== 'string') return;
+          var shown = String(c.display || (c.veiled ? _t('js.stage.mf.cover_someone', 'someone') : c.login));
+          var li = el('li', null), nm = el('span', 'mf-pn-name', shown), st = el('span', 'mf-pn-state', pinState(c));
           li.appendChild(nm); li.appendChild(st);
           if (c.pinned) {
-            var u = btn('mf-pbtn', _t('js.stage.mf.unpin', 'Unpin'), _t('js.stage.mf.unpin_q', 'Unpin {name}', { name: String(c.display || c.login) }));
-            u.addEventListener('click', function () { u.disabled = true; pinPost(c.login, true); });
+            var u = btn('mf-pbtn', _t('js.stage.mf.unpin', 'Unpin'), _t('js.stage.mf.unpin_q', 'Unpin {name}', { name: shown }));
+            // (a veiled pin is unpinned from its tile's 📌✕ - its pin id isn't the list's id)
+            if (c.veiled) u.hidden = true;
+            u.addEventListener('click', function () { u.disabled = true; pinPost(key, true); });
             li.appendChild(u);
           } else if (!c.blocked && !c.waiting && !full) {
-            var b = btn('mf-pbtn', c.ask ? _t('js.stage.mf.pin_ask', 'Ask to pin') : _t('js.stage.mf.pin', '📌 Pin'), _t('js.stage.mf.pin_q', 'Pin {name} on the mic stage', { name: String(c.display || c.login) }));
-            b.addEventListener('click', function () { b.disabled = true; pinPost(c.login, false); });
+            var b = btn('mf-pbtn', c.ask ? _t('js.stage.mf.pin_ask', 'Ask to pin') : _t('js.stage.mf.pin', '📌 Pin'), _t('js.stage.mf.pin_q', 'Pin {name} on the mic stage', { name: shown }));
+            b.addEventListener('click', function () { b.disabled = true; pinPost(key, false); });
             li.appendChild(b);
           }
           pinList.appendChild(li);

@@ -14,7 +14,10 @@
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   window.PATVOnAirCam = {
     row: function (box, who) {
-      if (!box || !who || !who.login) return;
+      // (1.99?? privacy controls V-1: an incognito person's cam is put on by its opaque people-list id - never a login)
+      var vid = who && !who.login && who.veil === 'incognito' && typeof who.id === 'string' && /^v-[A-Za-z0-9_-]{12}$/.test(who.id) ? who.id : null;
+      if (!box || !who || (!who.login && !vid)) return;
+      var ref = vid ? { id: vid } : { login: who.login };
       var row = el('div', 'row oa-cam');
       var b = el('button', null, '📺 Put on Pepe’s cam'); b.type = 'button';
       b.title = 'Admins: show this cam on Pepe’s main stream and his Camfrog cam (needs the cam owner’s OK)';
@@ -26,7 +29,7 @@
       }
       b.addEventListener('click', function () {
         b.disabled = true; msg.textContent = 'Working…';
-        post({ action: 'cam', room: room, login: who.login }).then(function (j) {
+        post(Object.assign({ action: 'cam', room: room }, ref)).then(function (j) {
           b.disabled = false;
           if (j.ok) return done(j);
           if (j.code === 'no_optin' || j.code === 'pad_private') {
@@ -34,7 +37,7 @@
             var ask = el('button', null, 'Ask them'); ask.type = 'button';
             ask.addEventListener('click', function () {
               ask.disabled = true;
-              post({ action: 'cam', room: room, login: who.login, ask: true }).then(function (k) {
+              post(Object.assign({ action: 'cam', room: room, ask: true }, ref)).then(function (k) {
                 if (k.ok) { ask.remove(); done(k); } else { ask.disabled = false; msg.textContent = k.error || 'Couldn’t ask.'; }
               });
             });

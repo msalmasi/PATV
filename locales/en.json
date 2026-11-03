@@ -11455,6 +11455,7 @@
   "js.gh.saving": "Saving…",
   "js.gh.failed": "Not saved - try again.",
   "js.pad.live.ghost": "👻 ghost - the owner isn't told (logged for admins)",
+  "js.pad.live.ghost_why": "👻 Their cam is hidden from you - a ghost view gets past that and is logged. Why? (at least 3 characters)",
   "js.pad.live.err_unavailable": "That cam isn't available right now.",
   "js.cv.camfrog": "Camfrog: {name}",
   "js.cv.live": "live",

@@ -816,7 +816,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       const gen = s.ok && s.img && s.viewers && s.viewers.has(req.user.userId) ? { sid: s.sid, until: s.ts + SNAP_TTL } : null;
       // 1.99ez: "🎬 Clip" (camclip.js) - the lengths, and why it's greyed out here (null = it isn't)
       let clip = null;
-      if (s.ok && s.img && !vkey) { try { clip = await require("./camclip").clipInfo(R, req.user.userId, login); } catch (e) { clip = null; } }
+      // (1.99?? privacy controls V-1: a veiled cam too - its refusals are the one generic word; the clip goes by the entry's id)
+      if (s.ok && s.img && (!vkey || icOn())) { try { clip = await require("./camclip").clipInfo(R, req.user.userId, login, { veiled: !!vkey }); } catch (e) { clip = null; } }
       return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save, gen, clip,
         img: s.img ? "data:image/jpeg;base64," + s.img.toString("base64") : null });
     }
@@ -859,7 +860,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const lim = limited("savesnap|" + u.userId, SAVE_GAP, SAVE_BURST, SAVE_WINDOW);
     if (lim) return res.status(429).json({ ok: false, error: lim });
     const fid = "f" + crypto.randomBytes(12).toString("hex");
-    frames.set(fid, { img: s.img, userId: u.userId, username: u.username, roomId: R.id, login, ts: Date.now() });
+    // (1.99?? privacy controls V-1: a veiled frame keeps its frog name - the saved capture's subject, owner Q4 - never the login)
+    frames.set(fid, { img: s.img, userId: u.userId, username: u.username, roomId: R.id, login, ts: Date.now(), ...(s.vkey ? { veiled: true, label: s.valias || null } : {}) });
     try {
       // (1.99?? privacy controls S5: a veiled subject is "someone" in the action's label - the viewer's own list never names them.
       // Review ID-3: nor its args - pepe_actions is the SAVER's row (their Download my data returns it): a veiled frame's action carries
@@ -891,7 +893,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false });
     const f = frames.get(String(b.id || ""));
     if (!f || Date.now() - f.ts > FRAME_TTL || String(b.user || "") !== f.username) return res.status(404).json({ ok: false });
-    res.json({ ok: true, room: f.roomId, target: f.login, data: f.img.toString("base64") });
+    // (1.99?? privacy controls V-1: a veiled frame says so, with its frog name as the capture's subject - Pepe never names the login)
+    res.json({ ok: true, room: f.roomId, target: f.login, data: f.img.toString("base64"),
+               ...(f.veiled ? { veiled: true, label: String(f.label || "someone").slice(0, 40) } : {}) });
   });
 }
 

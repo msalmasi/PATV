@@ -63,7 +63,8 @@
     var ref = veiled ? { id: who.id } : { login: who.login };   // (privacy controls S5 fix: a NAMED cam is asked for by its login, as before)
     var key = veiled ? who.id : String(who.login).toLowerCase();
     var nm = veiled ? (who.alias || _t('js.stage.mf.cover_someone', 'someone')) : (who.display || who.login);
-    if (veiled) { opts = Object.assign({}, opts, { strip: null, stage: null }); }
+    // (1.99?? privacy controls V-1: 🎬 Put on stage works for a veiled cam by its id; the viewer's strip stays by login)
+    if (veiled) { opts = Object.assign({}, opts, { strip: null }); }
     var acts = el('div', 'acts livecam'), res = el('div', 'res'), stage = el('div', 'lc-stage');
     res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
     var b = el('button', 'live', _t('js.pad.live.btn', '▶ Live')); b.type = 'button';
@@ -138,14 +139,22 @@
       a.addEventListener('click', function () { var p = ab.querySelector('.rb-play'); if (p) p.click(); a.remove(); });
       return a;
     }
-    function start() {
+    function start(reason) {
       // 1.99zc: no WebRTC here (iOS Lockdown Mode, an old / embedded browser) - say so before taking a slot
       if (!window.RTCPeerConnection) return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad');
       var my = ++gen;
       rew = [];
       b.disabled = true; say(_t('js.pad.live.asking', 'Asking Pepe to go live…'));
-      post(base, ref).then(function (d) {
+      // 1.99?? (privacy controls V-5): a 👻 ghost view past someone's rules needs a reason, like every reveal - asked once the site
+      // says reason_needed, then sent with the same request (logged with the see-through row)
+      post(base, typeof reason === 'string' ? Object.assign({}, ref, { reason: reason }) : ref).then(function (d) {
         if (my !== gen) return;
+        if (d && !d.ok && d.code === 'reason_needed' && typeof reason !== 'string') {
+          b.disabled = false;
+          var r = window.prompt(_t('js.pad.live.ghost_why', '👻 Their cam is hidden from you - a ghost view gets past that and is logged. Why? (at least 3 characters)'), '');
+          if (r != null && String(r).trim().length >= 3) return start(String(r).trim().slice(0, 200));
+          return say(_t('js.camrv.need_reason', 'Say why (at least 3 characters) - it\'s logged.'), 'bad');
+        }
         if (!d || !d.ok) {
           b.disabled = false;
           say(why(d && d.code, d && d.error), 'bad');

@@ -73,10 +73,19 @@
 //     live_pages is off by default everywhere and a live page / direct picture also needs Pepe's "live" / "direct" cap (sent only
 //     after his VM-local firewall attestation); a queued direct picture / live page is re-checked against its queuer's current
 //     role (chat: plays within an hour) and gets its checks again at play time (live_deny, the direct picture's type probe).
+//   * 1.99?? (privacy controls V-1, owner Q4 - every cam feature works for an incognito person's cam, incognito changes only the
+//     NAME): an incognito cam goes on air too - picked on /stage/admin (or the pad popover) by its OPAQUE people-list id, never a
+//     login (incogcams.refOf; `!onair cam <login>` of someone who shows veiled still finds no named member - "not_on_cam": a login
+//     typed in Camfrog must never come back labelled with its frog name). The pick runs under that frog-name session (T.veil,
+//     server-only): its id, label and display are the FROG NAME ("📷 <frog> (<room>)"), onair_log / admin_audit / the admin view
+//     carry "veiled" in place of the login, and any veil change ends it ("veil_changed"). Pepe still gets the login (he opens the cam)
+//     and the frog name as its label. The cam's own on-air OK (opt-in / ask) and every other rule apply as for anyone.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
+const IC = () => require("./incogcams");   // 1.99?? (privacy controls V-1)
+const VREF_RE = /^(anon-[0-9a-f]{8}|v-[A-Za-z0-9_-]{12})$/;
 
 const STAGING = !!process.env.STAGING;
 const LOGIN_RE = /^[\w.\-$]{1,40}$/;
@@ -164,6 +173,7 @@ const WHY = {
   banned: "That streamer is banned from the stage.",
   library: "📼 Plex plays are off for Pepe's main stream (allow_library) - his stream is relayed to Twitch.",
   offline: "That Camfrog room isn't live on the site.",
+  veil_changed: "That cam isn't available right now.",            // 1.99?? (privacy controls V-1): a veiled pick's person changed identity - never why
   room_off: "Cams aren't bridged in that room (!bridge cams on).",
   not_on_cam: "They aren't on cam.",
   livecam_off: "They've switched off live video of their cam.",
@@ -257,7 +267,7 @@ async function log(what, by, T, detail, url) {
   console.log(`[onair] ${what} by=${by}${T ? " " + T.kind + ":" + refOf(T) : ""}${detail ? " " + (typeof detail === "string" ? detail : JSON.stringify(detail)) : ""}`);
 }
 const refOf = (T) => (T.kind === "media" ? "media:" + ((T.media && T.media.mode) || "?") + ":" + mediaRef(T.media)
-  : T.kind === "cam" ? T.room + "|" + T.login : T.direct ? "link:" + (T.embed ? T.embed.p + ":" + T.embed.id : "?") : T.slot_id);
+  : T.kind === "cam" ? T.room + "|" + (T.veil ? "veiled" : T.login) : T.direct ? "link:" + (T.embed ? T.embed.p + ":" + T.embed.id : "?") : T.slot_id);
 const mediaRef = (m) => (!m ? "?" : m.direct ? m.direct.host : m.live ? m.live.host : m.card ? m.card.domain : m.asset ? m.asset.id : "?");
 
 /** Any input -> {cfg, errors} (unknown keys ignored, bad values -> the base value + an error). */
@@ -375,13 +385,20 @@ async function padConsent(pad) {
 function camMember(R, login) {
   return (R.members || []).find((x) => x && !x.anon && String(x.login || "").toLowerCase() === login) || null;
 }
-async function camWhyNot(room, login, { optinOk = false, padOk = false } = {}) {
+async function camWhyNot(room, login, { optinOk = false, padOk = false, veil = null } = {}) {
   const R = bridge()._rooms.get(String(room || ""));
   if (!R || !bridge().isLive(R)) return "offline";
   if (!R.cams) return "room_off";
-  const m = camMember(R, login);
-  if (m && m.self) return "self";
-  if (!m || !m.on_cam || m.bot) return "not_on_cam";
+  // 1.99?? (privacy controls V-1): a veiled pick - the person still incognito under ITS frog-name session (incognito cams in effect)
+  if (veil) {
+    if (!IC().stillVeiled(R, login, veil.sess)) return "veil_changed";
+    const v = IC().entryByLogin(R, login, veil.sess);
+    if (!v || v.onCam !== true) return "not_on_cam";
+  } else {
+    const m = camMember(R, login);
+    if (m && m.self) return "self";
+    if (!m || !m.on_cam || m.bot) return "not_on_cam";
+  }
   try { if (LC().optedOut(login)) return "livecam_off"; } catch (e) { /* no live cams module */ }
   // stagefix fix: private activity is the neutral "unavailable" - the same word as a block between the cam's owner and the admin
   // (setCam / checkTarget / adminView), so neither the refusal nor onair_log says which
@@ -644,12 +661,21 @@ async function actorIdsOf(admin, by) {
   } catch (e) { return []; }
   return [];
 }
-async function setCam(room, login, by, { admin, ask = false } = {}) {
+async function setCam(room, login, by, { admin, ask = false, id = null } = {}) {
   await init();
   if (!CFG.enabled) throw refuse("off");
+  // 1.99?? (privacy controls V-1): {id} = an incognito person's cam by its opaque id (the person is resolved here, never answered)
+  let vz = null;
+  if (typeof id === "string" && VREF_RE.test(id.trim())) {
+    const R0 = bridge()._rooms.get(String(room || ""));
+    const V = R0 ? IC().refOf(R0, id.trim()) : null;
+    if (!V) throw refuse("not_on_cam");
+    login = V.login;
+    vz = { sess: V.sess, alias: V.alias, hood: V.hood, id: V.id };
+  }
   login = String(login || "").toLowerCase().replace(/^@/, "");
   if (!LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?", "bad");
-  const why = await camWhyNot(room, login, { optinOk: true, padOk: true });
+  const why = await camWhyNot(room, login, { optinOk: true, padOk: true, veil: vz });
   if (why) throw refuse(why);
   // stagefix site (D-17, blocks against the director): not when the cam's owner and whoever picks it blocked one another -
   // the neutral "unavailable", never which of them (re-checked every tick while it's on: checkTarget)
@@ -659,12 +685,15 @@ async function setCam(room, login, by, { admin, ask = false } = {}) {
   const camOk = camConsent(login, null, now(), R.id);   // stagefix site: D-9 - a members cam's OK must postdate its mode
   const padOk = await padConsent(R.id);
   if ((!camOk || !padOk) && !ask) throw refuse(!camOk ? "no_optin" : "pad_private");
-  const m = camMember(R, login);
+  const m = vz ? null : camMember(R, login);
   const prev = TARGET;
   await dropPending(prev);
-  TARGET = { id: "c:" + login + ":" + now().toString(36), kind: "cam", room: R.id, login, display: (m && m.display) || login, pad: R.id,
-             label: `📷 ${(m && m.display) || login} (${R.name || R.id})`, by: String(by), at: now(), cam_ok: camOk || null, pad_ok: padOk || null,
-             pending: [], actor_ids: actorIds };
+  // (1.99?? privacy controls V-1: a veiled pick's id, display and label never carry the login - the frog name, and a random id)
+  const shown = vz ? IC().labelOf(vz) : (m && m.display) || login;
+  TARGET = { id: vz ? "c:v" + crypto.randomBytes(6).toString("hex") + ":" + now().toString(36) : "c:" + login + ":" + now().toString(36), kind: "cam", room: R.id,
+             login, display: shown, pad: R.id,
+             label: `📷 ${shown} (${R.name || R.id})`, by: String(by), at: now(), cam_ok: camOk || null, pad_ok: padOk || null,
+             pending: [], actor_ids: actorIds, ...(vz ? { veil: vz } : {}) };
   if (!camOk) TARGET.pending.push((await C().ask({ kind: "cam", login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min })).id);
   if (!padOk) TARGET.pending.push((await C().ask({ kind: "pad", pad: R.id, login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min })).id);
   await persist(by);
@@ -902,7 +931,7 @@ async function checkTarget(t) {
       // members cam, given after its mode was last set: tightening it takes the cam off)
       try { await CA().init(); } catch (e) { /* the default mode (members) applies */ }
       const optinOk = pending || !!camConsent(T.login, T, t);
-      const why = await camWhyNot(T.room, T.login, { optinOk, padOk: true });
+      const why = await camWhyNot(T.room, T.login, { optinOk, padOk: true, veil: T.veil || null });
       if (why) return clear(why, "system");
       // stagefix site: a block between the cam's owner and whoever picked it, made while it's on, takes it off.
       // stagefix final round: a cam put on air before actor_ids existed (saved by an older build) gets them from its `by` now
@@ -1214,8 +1243,15 @@ function statusLine() {
 }
 
 // ── views ──
+/** 1.99?? (privacy controls V-1): a pick as the admin views show it - a veiled cam's login and session stay server-side. */
+function shownTarget(T) {
+  if (!T) return null;
+  if (T.kind !== "cam" || !T.veil) return { ...T };
+  const { veil, ...rest } = T;
+  return { ...rest, login: null, veiled: true, ref_id: veil.id || null };
+}
 function view() {
-  return { v: V, cfg: config(), target: TARGET ? { ...TARGET } : null, overlay: OVERLAY ? { ...OVERLAY } : null,
+  return { v: V, cfg: config(), target: shownTarget(TARGET), overlay: OVERLAY ? { ...OVERLAY } : null,
            pepe: BOT ? { at: BOT.at, online: botOk(), state: BOT.state, caps: BOT.caps || [] } : null };
 }
 /** 1.99acw: the pictures & links part of the admin view - switches, readiness, limits, what this viewer may use, their jobs. */
@@ -1268,6 +1304,27 @@ async function adminView(user) {
     const no = ids.length ? await LC().blockedSet(cams.filter((c) => !c.why).map((c) => c.login), ids) : new Set();
     for (const c of cams) if (!c.why && no.has(c.login)) { c.why = "unavailable"; c.ask = false; }
   } catch (e) { /* no blocks to show */ }
+  // 1.99?? (privacy controls V-1): incognito people on cam whose cam may show (incogcams.pageOnCam) - by their opaque people-list id and
+  // frog name, never a login; a block with this admin is the same neutral "unavailable"
+  try {
+    if (IC().effective(t)) {
+      const ids = await actorIdsOf(user, null);
+      for (const R of bridge()._rooms.values()) {
+        if (!bridge().isLive(R) || cams.length >= 200) continue;
+        for (const e of R.members || []) {
+          if (!e || e.anon !== true || e.veil !== "incognito" || !IC().pageOnCam(e, R.id, t)) continue;
+          const V = IC().camOf(R, e.id, t);
+          if (!V) continue;
+          const vz = { sess: V.sess };
+          let why = await camWhyNot(R.id, V.login, { optinOk: true, padOk: true, veil: vz });
+          if (!why && ids.length && (await LC().blockedWith(V.login, ids))) why = "unavailable";
+          const ask = !why && (!camConsent(V.login, null, t, R.id) || !(await padConsent(R.id)));
+          cams.push({ room: R.id, roomName: R.name || R.id, id: V.id, display: IC().labelOf(V), veiled: true, why, ask });
+          if (cams.length >= 200) break;
+        }
+      }
+    }
+  } catch (e) { /* no veiled cams listed */ }
   const logRows = await getQuery("SELECT at, what, by, kind, ref, label, detail, url FROM onair_log ORDER BY id DESC LIMIT 40");
   const pending = [];
   for (const id of (TARGET && TARGET.pending) || []) { const c = await C().get(id); if (c) pending.push(c); }
@@ -1323,7 +1380,7 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
     const b = req.body || {};
     try {
       if (b.action === "slot") await setSlot(b.slot_id, actor(req), { admin: adm(req), rights: b.rights === true, ask: b.ask === true });
-      else if (b.action === "cam") await setCam(b.room, b.login, actor(req), { admin: adm(req), ask: b.ask === true });
+      else if (b.action === "cam") await setCam(b.room, b.login, actor(req), { admin: adm(req), ask: b.ask === true, id: typeof b.id === "string" ? b.id.slice(0, 40) : null });
       else if (b.action === "embed") await setEmbed(b.url, actor(req), { admin: adm(req), rights: b.rights === true });
       else if (b.action === "queue") {                 // 1.99abj: ⏰ a link for later (at = ms, or null = next up)
         if (b.rights !== true) throw refuse("rights");

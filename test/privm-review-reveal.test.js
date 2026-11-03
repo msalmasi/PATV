@@ -359,15 +359,22 @@ test("RV-4: a 👻 ghost's ▶ Live past a named live-cam-off cam is behind the 
   await GH.set(U.staff.userId, true, { via: "web" });
   try {
     const n0 = await stCount();
-    const a = await LC.start(STAFF(), R0(), "alicecf", T);
+    // 1.99?? (privacy controls V-5): no reason - refused (reason_needed), nothing opened, nothing logged
+    let nr = null;
+    try { await LC.start(STAFF(), R0(), "alicecf", T); } catch (e) { nr = e; }
+    assert.ok(nr && nr.code === "reason_needed" && nr.status === 409 && nr.extra && nr.extra.reason_needed === true, "a reason first: " + (nr && nr.code));
+    assert.equal(await stCount(), n0, "no see-through row without a reason");
+    assert.ok(![...LC._sessions.values()].some((x) => !x.rv && x.login === "alicecf" && !x.ended && x.viewers.has(U.staff.userId)), "nothing opened");
+    const a = await LC.start(STAFF(), R0(), "alicecf", T, { reason: "checking a report" });
     assert.ok(a.ok && a.whep, "opened");
     const S = [...LC._sessions.values()].find((x) => !x.rv && x.login === "alicecf" && !x.ended);
     const v = S.viewers.get(U.staff.userId);
     assert.equal(v.bypass, "opted_out");
     assert.ok(v.auditId, "its livecam_audit row");
     assert.equal(await stCount(), n0 + 1, "a see-through row (cam_reveal, ghost:<id>:g)");
-    const st = (await getQuery("SELECT ref, logins FROM seethrough_log WHERE user_id = ? AND ref LIKE 'ghost:%' ORDER BY id DESC LIMIT 1", [U.staff.userId]))[0];
+    const st = (await getQuery("SELECT ref, logins, reason FROM seethrough_log WHERE user_id = ? AND ref LIKE 'ghost:%' ORDER BY id DESC LIMIT 1", [U.staff.userId]))[0];
     assert.equal(st.ref, "ghost:" + v.auditId + ":g");
+    assert.equal(st.reason, "checking a report", "the reason is logged with it (V-5)");
     assert.deepEqual(JSON.parse(st.logins), ["alicecf"]);
     assert.ok((await getQuery("SELECT 1 FROM admin_audit WHERE action = 'seethrough.cam_reveal' AND admin_id = ?", [U.staff.userId])).length, "admin_audit");
     LC.stop(U.staff.userId, ROOM.id, "alicecf", T);
@@ -375,7 +382,7 @@ test("RV-4: a 👻 ghost's ▶ Live past a named live-cam-off cam is behind the 
     // a failed write refuses it - nothing opened
     await runQuery("ALTER TABLE livecam_audit RENAME TO livecam_audit_x");
     let err = null;
-    try { await LC.start(STAFF(), R0(), "alicecf", T + 1); } catch (e) { err = e; }
+    try { await LC.start(STAFF(), R0(), "alicecf", T + 1, { reason: "checking a report" }); } catch (e) { err = e; }
     finally { await runQuery("ALTER TABLE livecam_audit_x RENAME TO livecam_audit"); }
     assert.ok(err && err.code === "audit" && err.status === 500, "refused: " + (err && (err.code || err.message)));
     assert.ok(![...LC._sessions.values()].some((x) => !x.rv && x.login === "alicecf" && !x.ended && x.viewers.has(U.staff.userId)), "nothing opened");
@@ -407,7 +414,11 @@ test("RV-4: the ghost ▶ Live of an INCOGNITO person's cam with live cam off (S
     const fe = entryOf("frankiefettuccine");
     assert.ok(IC.camOf(R0(), fe.id, T), "the frog's cam by its id");
     const n0 = await stCount();
-    const a = await LC.start(STAFF(), R0(), null, T, { id: fe.id });
+    let nr = null;
+    try { await LC.start(STAFF(), R0(), null, T, { id: fe.id }); } catch (e) { nr = e; }
+    assert.ok(nr && nr.code === "reason_needed", "V-5: a reason first, a veiled cam too: " + (nr && nr.code));
+    assert.equal(await stCount(), n0, "nothing logged without one");
+    const a = await LC.start(STAFF(), R0(), null, T, { id: fe.id, reason: "report check" });
     assert.ok(a.ok, "opened");
     assert.equal(await stCount(), n0 + 1, "a see-through row");
     const la = (await getQuery("SELECT target, ghost, bypass, veil FROM livecam_audit ORDER BY id DESC LIMIT 1"))[0];
@@ -418,7 +429,7 @@ test("RV-4: the ghost ▶ Live of an INCOGNITO person's cam with live cam off (S
     clean();
     await runQuery("ALTER TABLE livecam_audit RENAME TO livecam_audit_x");
     let err = null;
-    try { await LC.start(STAFF(), R0(), null, T + 1, { id: fe.id }); } catch (e) { err = e; }
+    try { await LC.start(STAFF(), R0(), null, T + 1, { id: fe.id, reason: "report check" }); } catch (e) { err = e; }
     finally { await runQuery("ALTER TABLE livecam_audit_x RENAME TO livecam_audit"); }
     assert.ok(err && err.code === "audit", "a failed write refuses it: " + (err && (err.code || err.message)));
   } finally {

@@ -1305,6 +1305,32 @@ function cutNow(S, login, code, t) {
   return A;
 }
 
+/** 1.99?? (privacy controls V-3, spec 2.2 row 4): a veiled speaker's hooded COVER tile (`coverKey`) becomes their CAM tile (`login`)
+ *  IN PLACE - the same place, the same time on the stage, no hand-over and no keep_recent "recent" cover beside the cam: one frog,
+ *  one tile. Called before a step whose holders carry `login` (micfollow.stepPad: the candidate's cam may show now). A cam tile of
+ *  theirs already up (a race): the cover just comes off. Nothing is noted as a cut (no cooldown on either key). -> actions */
+function coverToCam(S, coverKey, login, t) {
+  const A = [];
+  const x = S.tiles.find((y) => y.cover && y.login === coverKey);
+  if (!x || !login || isCoverKey(login)) return A;
+  if (tileOf(S, login)) {
+    S.tiles = S.tiles.filter((y) => y !== x);
+    compact(S);
+  } else {
+    x.login = login;
+    delete x.cover;
+    Object.assign(x, { video: "card", why: null, pend: false, pictured: false, relAt: null, cold: false, vidSince: 0, vidMs: 0, peak: 0, unverifiedAt: 0 });
+    if (S.kept.has(login)) x.kept = true;
+    A.push({ a: "span_open", login });
+  }
+  const s = S.seen.get(coverKey);
+  if (s && !S.seen.has(login)) S.seen.set(login, s);
+  S.seen.delete(coverKey);
+  S.v++;
+  A.push({ a: "touch", why: "change" });
+  return A;
+}
+
 /** The owner's "Clear the stage" (addendum 14.1.2 #3): everyone off now (no hand-over, no card), the program idles and
  *  freezes for freezeMs (nobody new comes on); each person waits the cooldown after it, as after a cut. -> actions */
 function clearStage(S, t, freezeMs) {
@@ -1337,4 +1363,5 @@ module.exports = {
   dynPick,                                                                                                      // wave2 WP-4 (F.3)
   arrange, SHAPE_CELLS, VEILED_GAP,                                                                                        // 1.99ahp stable slots
   COVER_PREFIX, isCoverKey,                                                                                     // wave2 WP-4 (F.4)
+  coverToCam,                                                                                                   // 1.99?? (privacy controls V-3)
 };

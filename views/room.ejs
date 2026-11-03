@@ -636,8 +636,8 @@
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=1"></script><%# wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=12"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99?? (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover %>
-  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
+  <script src="/public/js/stage-mic.js?v=13"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99?? (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker %>
+  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
   <script src="/public/js/share-link.js?v=1" defer></script>
@@ -851,8 +851,8 @@
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
-  <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=1"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
-  <script src="/public/js/pad-livecam.js?v=10"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99?? privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen %>
+  <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
+  <script src="/public/js/pad-livecam.js?v=11"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99?? privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why %>
   <script src="/public/js/room-mod.js?v=12"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
@@ -1398,7 +1398,8 @@
       // (1.99?? privacy controls S5: never on a veiled cam - its command line would name them)
       if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe && snapWho.login) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe);
       // 1.99aag: 📺 admins - put this cam on Pepe's OBS (his main stream + his Camfrog cam); onair.js decides (opt-in / owner's OK)
-      if (window.PATVOnAirCam && snapWho.login) PATVOnAirCam.row(box, snapWho);   // (1.99?? S5: not for a veiled cam in this build)
+      // (1.99?? privacy controls V-1: a veiled cam too, by its opaque id - onair-cam.js checks it)
+      if (window.PATVOnAirCam && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVOnAirCam.row(box, snapWho);
     }
     var clipTimer = null;
     function snapClipRow(box, s) {
@@ -1474,7 +1475,8 @@
       }
       b.addEventListener('click', function () {
         b.disabled = true; sel.disabled = true; vid.textContent = ''; say(_t('js.pad.clip.asking', 'Asking Pepe to record…'));
-        post('/api/rooms/' + encodeURIComponent(slug) + '/camclip', { login: who.login, secs: Number(sel.value) }).then(function (d) {
+        // (1.99?? privacy controls V-1: an incognito person's cam is clipped by its opaque id - never a login)
+        post('/api/rooms/' + encodeURIComponent(slug) + '/camclip', who.login ? { login: who.login, secs: Number(sel.value) } : { id: who.id, secs: Number(sel.value) }).then(function (d) {
           if (!alive()) return;
           if (!d.ok) { if (d.id) return poll(d.id, 0); b.disabled = false; sel.disabled = false; return say(d.error || _t('js.pad.snap.not_now', 'Not right now.'), 'bad'); }
           poll(d.id, 0);

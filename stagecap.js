@@ -109,6 +109,7 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS stage_capture_people (
         capture_id TEXT NOT NULL, login TEXT NOT NULL, PRIMARY KEY (capture_id, login))`);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_capture_people_login ON stage_capture_people (login)");
+      await addColumn("stage_capture_people", "veil", "TEXT");      // 1.99?? (privacy controls V-1): a cam drawn under a frog name (its session)
       // All media deletion paths (including expiry) retire these identities with their capture.
       await runQuery(`CREATE TRIGGER IF NOT EXISTS stage_capture_people_media_deleted AFTER UPDATE OF deleted ON media
         WHEN NEW.deleted != 0 BEGIN DELETE FROM stage_capture_people WHERE capture_id IN
@@ -487,6 +488,12 @@ async function captureMic(u, req, R, kind, secs, surface) {
       if (!result.changes) return false;
       const drawn = new Set((info.people || []).map(l => String(l).toLowerCase()));
       for (const login of drawn) await runQuery("INSERT OR IGNORE INTO stage_capture_people (capture_id, login) VALUES (?, ?)", [id, login]);
+      // 1.99?? (privacy controls V-1): a cam drawn under a FROG NAME - server-only, with the frog-name session it showed under (veil):
+      // forget-me, account deletion and the story block rule find it like any drawn cam; never a card, a notice or "Remove me"
+      for (const v of info.vpeople || []) {
+        const vl = String((v && v.login) || "").toLowerCase();
+        if (vl && !drawn.has(vl)) await runQuery("INSERT OR IGNORE INTO stage_capture_people (capture_id, login, veil) VALUES (?, ?, ?)", [id, vl, String(v.sess || "v").slice(0, 64)]);
+      }
       for (const login of new Set((info.cards || []).map(l => String(l).toLowerCase()))) {
         if (!drawn.has(login)) await runQuery("INSERT OR IGNORE INTO stage_capture_cards (capture_id, login) VALUES (?, ?)", [id, login]);
       }

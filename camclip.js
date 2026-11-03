@@ -28,6 +28,14 @@
 // 1.99yq: the cam owner's switch (!livecam off / Settings → Privacy now covers clips too) and their blocks
 // (camviewers.camRefusal) are checked on the request, the popover's button, every preview read and the save; a finished
 // clip tells the owner (Pepe PMs them, camviewers.noteViewers).
+// 1.99?? (privacy controls V-1, owner Q4 - every cam feature works for an incognito cam, under the frog name): {id} = an incognito
+// person's cam by its opaque people-list id (incogcams.refOf, only while incognito cams are in effect). The clip runs under that
+// frog-name session (c.veil, server-only): the requester's view never carries the login (login: null, veiled: true), every refusal
+// is the one generic "That cam isn't available right now." (Q23; no 👻 bypass - strict), the preview is dropped once the person
+// isn't incognito under that session any more, and the save's website action names NO subject (args [room, "", clip id], label
+// "!clip someone" - the action is the saver's row: their list, their Download my data; review ID-3's rule). Pepe takes the target
+// from /api/bridge/camclipdata (bot token, only while the site advertises incognito cams) with the frog name as the capture's
+// subject (`label`) - never the login, never the subject's profile story.
 "use strict";
 const fs = require("fs");
 const os = require("os");
@@ -49,6 +57,16 @@ const SAVE_GAP = 20 * 1000, SAVE_BURST = 3, SAVE_WINDOW = 10 * 60 * 1000;
 const OPEN_PER_USER = 2;
 const ID_RE = /^w[a-f0-9]{16}$/;
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
+const VID_RE = /^v-[A-Za-z0-9_-]{12}$/;                       // 1.99?? (privacy controls V-1): a people-list entry's opaque id
+const UNAVAILABLE = "That cam isn't available right now.";
+const IC = () => require("./incogcams");
+const icOn = () => { try { return IC().effective() === true; } catch (e) { return false; } };
+/** 1.99?? (privacy controls V-1): may a veiled clip still run / be read / be saved? Incognito cams in effect and the person still incognito
+ *  under the clip's frog-name session. */
+function veilOk(c) {
+  if (!c || !c.veil) return true;
+  try { const R = require("./bridge")._rooms.get(String(c.roomId)); return !!R && IC().stillVeiled(R, c.login, c.veil.sess); } catch (e) { return false; }
+}
 let PENDING_DIR = process.env.CAMCLIP_DIR ? path.resolve(process.env.CAMCLIP_DIR) : path.join(os.tmpdir(), "patv-camclip");
 let NOW = () => Date.now();
 
@@ -110,19 +128,23 @@ function view(c, slug) {
   const live = c.state === "ready" && NOW() - c.done < PREVIEW_TTL;
   const base = "/api/rooms/" + encodeURIComponent(slug) + "/camclip/" + c.id;
   const save = live && c.rule && c.rule !== "no" && c.viewerOk ? { cost: c.cost, id: c.save || null } : null;
-  return { ok: true, id: c.id, state: live || c.state !== "ready" ? c.state : "expired", status: c.status || "", secs: c.secs, login: c.login,
+  // (1.99?? privacy controls V-1: a veiled clip never answers its login)
+  return { ok: true, id: c.id, state: live || c.state !== "ready" ? c.state : "expired", status: c.status || "", secs: c.secs, login: c.veil ? null : c.login,
+           ...(c.veil ? { veiled: true } : {}),
            video: live ? base + "/video" : null, poster: live && c.poster ? base + "/poster" : null, until: live ? c.done + PREVIEW_TTL : null, save,
            saveRule: c.rule || null, ...(c.code ? { code: c.code } : {}) };
 }
 
 /** The popover's "🎬 Clip" for `userId` on `login`'s cam in room R: {secs, def, off: why it's greyed out | null, busy,
  *  hint: a note shown with an enabled button (1.99fb: an admin while !clip is off)}. */
-async function clipInfo(R, userId, login) {
+async function clipInfo(R, userId, login, { veiled = false } = {}) {
   const u = (await getQuery("SELECT camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   let off = null, hint = null;
   if (!u || !u.camfrogUsername) off = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
   else if (deps.snapSwitch(R.id) !== true) off = OFF(R.id);
   else if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) off = CLIP_OFF(R.id);
+  // (1.99?? privacy controls V-1: a veiled cam - the person's own rules strictly, one generic word, never why)
+  else if (veiled) { if ((await deps.privateLogins([login])).has(String(login).toLowerCase()) || (await deps.camRefusal(login, userId, { strict: true }))) off = UNAVAILABLE; }
   else if (!deps.isGhost(userId) && (await deps.privateLogins([login])).has(String(login).toLowerCase())) off = "They keep their activity private, so their cam can't be clipped.";   // 1.99aak: 👻 ghosts get past it (audited)
   else { const ref = await deps.camRefusal(login, userId); if (ref) off = ref.error; }
   const b = busyFor(R.id, String(login).toLowerCase());
@@ -146,8 +168,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const R = bySlug(req.params.slug);
     if (!c || !R || c.roomId !== R.id || !req.user || c.userId !== req.user.userId) { res.status(404).json({ ok: false, error: "No such clip." }); return null; }
     if (!(await relay.padFull(req.user.userId, R.id))) { res.status(403).json(relay.PAD_DENIED); return null; }
-    const ref = await deps.camRefusal(c.login, req.user.userId);   // 1.99yq: blocked / switched off since it was recorded
-    if (ref) { res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error }); return null; }
+    // (1.99?? privacy controls V-1: a veiled clip - gone once its person isn't incognito under that session; refusals generic)
+    if (c.veil && !veilOk(c)) { drop(c); res.status(410).json({ ok: false, error: "That clip expired - record a fresh one." }); return null; }
+    const ref = await deps.camRefusal(c.login, req.user.userId, c.veil ? { strict: true } : undefined);   // 1.99yq: blocked / switched off since it was recorded
+    if (ref) { res.status(ref.status).json(c.veil ? { ok: false, code: "unavailable", error: UNAVAILABLE } : { ok: false, code: ref.code, error: ref.error }); return null; }
     return { c, R };
   };
 
@@ -164,13 +188,23 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
-      const login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
+      let login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
       const secs = SECS.includes(Number((req.body || {}).secs)) ? Number(req.body.secs) : SECS_DEFAULT;
-      const m = LOGIN_RE.test(login) ? (R.members || []).find((x) => !x.anon && String(x.login || "").toLowerCase() === login) : null;
-      if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
-      if (!deps.isGhost(u.userId) && (await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });   // 1.99aak: 👻 ghosts get past it (audited)
-      const ref = await deps.camRefusal(login, u.userId);
-      if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
+      // 1.99?? (privacy controls V-1): {id} = an incognito person's cam by its opaque id - resolved here, never answered
+      const vid = String((req.body || {}).id || "").slice(0, 20);
+      let veil = null;
+      if (VID_RE.test(vid) && icOn()) {
+        const V = IC().refOf(R, vid);
+        if (!V) return res.status(400).json({ ok: false, error: "They aren't on cam." });
+        login = V.login; veil = { sess: V.sess, alias: V.alias, id: V.id };
+        if ((await deps.privateLogins([login])).has(login) || (await deps.camRefusal(login, u.userId, { strict: true }))) return res.status(403).json({ ok: false, code: "unavailable", error: UNAVAILABLE });
+      } else {
+        const m = LOGIN_RE.test(login) ? (R.members || []).find((x) => !x.anon && String(x.login || "").toLowerCase() === login) : null;
+        if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
+        if (!deps.isGhost(u.userId) && (await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });   // 1.99aak: 👻 ghosts get past it (audited)
+        const ref = await deps.camRefusal(login, u.userId);
+        if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
+      }
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
       if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF(R.id), code: "E_FEATURE_OFF" });
       const busy = busyFor(R.id, login);
@@ -183,8 +217,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const j = relay.newJob({ kind: "camclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, target: login, secs,
                                viewers: new Set([u.userId]), ghost: (() => { try { return require("./ghost").isGhost(u.userId); } catch (e) { return false; } })() });
       clips.set(j.id, { id: j.id, roomId: R.id, login, userId: u.userId, username: u.username, secs, state: "pending", status: "", ts: NOW(), done: 0,
-                        poster: null, rule: null, viewerOk: false, cost: 0, save: null });
-      console.log(`[camclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${login} secs=${secs} job=${j.id}`);
+                        poster: null, rule: null, viewerOk: false, cost: 0, save: null, ...(veil ? { veil } : {}) });
+      console.log(`[camclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${veil ? "-" : login} secs=${secs} job=${j.id}`);
       res.json({ ok: true, id: j.id, secs });
     } catch (e) {
       console.error("[camclip] request:", e);
@@ -278,7 +312,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!c.rule || c.rule === "no" || !c.viewerOk) return res.status(403).json({ ok: false, error: "Clips of them can't be saved here." });
       // 1.99aak: a 👻 ghost may record past the owner's rules, never SAVE (publish) past them
       const sref = await deps.camRefusal(c.login, u.userId, { strict: true });
-      if (sref) return res.status(sref.status).json({ ok: false, code: sref.code, error: sref.error });
+      if (sref) return res.status(sref.status).json(c.veil ? { ok: false, code: "unavailable", error: UNAVAILABLE } : { ok: false, code: sref.code, error: sref.error });
       if ((await deps.privateLogins([c.login])).has(String(c.login).toLowerCase())) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
       if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF(R.id), code: "E_FEATURE_OFF" });
@@ -288,10 +322,11 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       }
       const lim = relay.limited("saveclip|" + u.userId, SAVE_GAP, SAVE_BURST, SAVE_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
-      const id = await deps.queueAction(u.userId, { kind: "camclip.save", args: [R.id, c.login, c.id], tag: "clip", label: "!clip " + c.login });
+      // (1.99?? privacy controls V-1: a veiled clip's action names NO subject - Pepe gets the target from camclipdata)
+      const id = await deps.queueAction(u.userId, { kind: "camclip.save", args: [R.id, c.veil ? "" : c.login, c.id], tag: "clip", label: "!clip " + (c.veil ? "someone" : c.login) });
       c.save = id;
       c.done = Math.max(c.done, NOW() - PREVIEW_TTL + 5 * 60 * 1000);   // Pepe has at least 5 more minutes to fetch it
-      console.log(`[camclip] save room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${c.login} clip=${c.id} action=${id}`);
+      console.log(`[camclip] save room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${c.veil ? "-" : c.login} clip=${c.id} action=${id}`);
       res.json({ ok: true, id });
     } catch (e) {
       res.status(e.message === "busy" ? 429 : 500).json({ ok: false, error: e.message === "busy" ? "You already have a few things waiting — give Pepe a moment." : "Something went wrong — nothing was sent." });
@@ -316,7 +351,11 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const c = clips.get(String(b.id || ""));
     const f = c ? fileOf(c.id) : null;
     if (!c || c.state !== "ready" || !c.save || String(b.user || "") !== c.username || !f || !fs.existsSync(f)) return res.status(404).json({ ok: false });
-    res.json({ ok: true, room: c.roomId, target: c.login, secs: c.secs, data: fs.readFileSync(f).toString("base64") });
+    // (1.99?? privacy controls V-1: a veiled clip - only while its person is still incognito under that session; `veiled` + the frog name
+    // as the capture's subject, so Pepe never names (or profile-stories) the login)
+    if (c.veil && !veilOk(c)) return res.status(404).json({ ok: false });
+    res.json({ ok: true, room: c.roomId, target: c.login, secs: c.secs, data: fs.readFileSync(f).toString("base64"),
+               ...(c.veil ? { veiled: true, label: IC().labelOf(c.veil) } : {}) });
   });
 }
 

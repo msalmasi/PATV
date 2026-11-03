@@ -115,7 +115,10 @@
 //                  switch off - CUTs it at once ("veil_changed") with its relay, still and warm keep; the person comes back as a
 //                  fresh tile (or cover) under the new identity. A hold frozen veiled whose person isn't incognito under that
 //                  session any more stays a hood for the rest of the hold (veilCand; livecam keeps their named cam waiting).
-//                  📌 pins of a veiled cam stay refused in this slice (a pin is stored and shown by login - see the S5 notes).
+//                  📌 pins of a veiled cam (1.99?? privacy controls V-1, owner Q4): pinned by the tile's / people-list entry's opaque
+//                  id, held under that frog-name session (livecam's veiled session), shown as {kind: "cam", id: <the pin's own
+//                  "anon-<8 hex>">, name: frog, veil, hood, pin: true}; the login stays in micfollow_pins (server-only, with the
+//                  session in its `veil` column); any veil change ends the pin ("veil_changed").
 //                  Its ⚑ report hides it for the reporter by its veil (never their later named tile), and two reports keep the
 //                  person off as a VEILED exclusion (never a by-name row the owner's list would show). Spans carry the frog name
 //                  (micfollow_spans.veil): /stage/admin shows that, never the login. Switch off: exactly as before.
@@ -250,6 +253,9 @@ function init() {
       await addColumn("micfollow_spans", "veil", "TEXT");
       await runQuery(`CREATE TABLE IF NOT EXISTS micfollow_pins (id TEXT PRIMARY KEY, room_id TEXT NOT NULL, login TEXT NOT NULL, by_id TEXT, by_name TEXT,
                       at INTEGER NOT NULL, went_live INTEGER, UNIQUE (room_id, login))`);
+      // 1.99?? (privacy controls V-1): a pin of an incognito person's cam under their frog name - {sess, alias, hood, id, vid} (JSON;
+      // server-only: the frog-name session it runs under, the people-list id, the pin's own public id). NULL = a named pin, as before
+      await addColumn("micfollow_pins", "veil", "TEXT");
       const r = (await getQuery("SELECT v, data, updated_at, updated_by FROM micfollow_cfg WHERE id = 1"))[0];
       if (r) {
         let d = {};
@@ -267,7 +273,7 @@ function init() {
       for (const p of await getQuery("SELECT * FROM micfollow_pins")) {
         const m = PINS.get(String(p.room_id)) || new Map();
         m.set(low(p.login), { id: String(p.id), roomId: String(p.room_id), login: low(p.login), holder: PIN_PREFIX + p.id, byId: p.by_id || null,
-                              byName: p.by_name || null, at: Number(p.at) || 0, wentLive: Number(p.went_live) || 0 });
+                              byName: p.by_name || null, at: Number(p.at) || 0, wentLive: Number(p.went_live) || 0, veil: pinVeilOf(p.veil) });
         PINS.set(String(p.room_id), m);
       }
       MFOPT = new Set((await getQuery("SELECT login FROM micfollow_optout WHERE off = 1")).map((x) => low(x.login)));
@@ -726,6 +732,20 @@ function vidLogin(roomId, id) {
   for (const [l, v] of P.vids) if (v === id && String((P.ttag && P.ttag.get(l)) || "").startsWith("v:")) return l;
   return null;
 }
+/** 1.99?? (privacy controls V-1): veiled cam tile `id` shown on pad `roomId` now -> {login, sess} (who, under which frog-name session) |
+ *  null. SERVER-ONLY (incogcams.refOf: 📌 pins, cam slots, on-air picks, clips by the tile's id). */
+function vidVeil(roomId, id) {
+  const l = vidLogin(roomId, id);
+  const P = l ? PADS.get(String(roomId)) : null;
+  const tag = P && P.ttag ? String(P.ttag.get(l) || "") : "";
+  return l && tag.startsWith("v:") ? { login: l, sess: tag.slice(2) } : null;
+}
+/** 1.99?? (privacy controls V-1): the people-list id of `login`'s incognito entry under `veil`'s frog-name session in room R (the veiled
+ *  session's key - livecam.veilWhy matches it) | null. */
+function veilIdOf(R, login, veil) {
+  if (veil && veil.id) return String(veil.id);
+  try { const v = R && veil ? IC().entryByLogin(R, login, veil.sess) : null; return v ? v.id : null; } catch (e) { return null; }
+}
 /** 1.99?? (privacy controls S5): the veil a tile of `login` runs under on pad P ({sess, alias, hood} | null = named). */
 function veilOfTile(P, login) {
   const tag = P && P.ttag ? P.ttag.get(login) : undefined;
@@ -736,14 +756,16 @@ function veilOfTile(P, login) {
  *  comes off NOW (with its relay, still and warm keep), like an ended session's cover. -> did one come off */
 function veilCamEnded(roomId, sess, t = now()) {
   const P = PADS.get(String(roomId || ""));
-  if (!P || !loaded || !P.ttag || sess == null) return false;
+  if (!P || !loaded || sess == null) return false;   // (1.99?? V-1: no tile under it - a pin may still be)
   const tag = "v:" + String(sess);
-  const ls = [...P.ttag.entries()].filter(([, v]) => v === tag).map(([l]) => l);
+  const ls = [...(P.ttag || new Map()).entries()].filter(([, v]) => v === tag).map(([l]) => l);
   let n = 0;
   for (const l of ls) {
     // (core.cutNow drops a kept relay too)
     if (core.tileOf(P.state, l) || P.state.kept.has(l)) { apply(P, roomOf(P.roomId), core.cutNow(P.state, l, "veil_changed", t), t); n++; }
   }
+  // 1.99?? (privacy controls V-1): a 📌 pin under that frog-name session comes off now too (spec 2.2: pins end on any veil change)
+  for (const p of pinsOf(P.roomId)) if (p.veil && String(p.veil.sess) === String(sess)) { unpin(P.roomId, p.login, "veil_changed", "system").catch(() => {}); n++; }
   if (n) { bump("veil_changed", n, t, P); stepPad(P.roomId, t); }
   return n > 0;
 }
@@ -762,7 +784,9 @@ function veilCand(v, R) {
   let V = null;
   try { V = IC().entryByLogin(R, v.who.login, sess); } catch (e) { V = null; }
   if (!V || V.login !== low(v.who.login)) return null;
-  return { login: V.login, sess: V.sess, alias: V.alias || v.alias || null, hood: V.hood != null ? V.hood : v.hood != null ? v.hood : null };
+  // (1.99?? privacy controls V-1: + the entry's opaque id - livecam's veiled session is matched by it (veilWhy); without it every veiled
+  // tile's relay ended at its first sweep as "veil_changed", so a veiled cam tile never went live)
+  return { login: V.login, sess: V.sess, alias: V.alias || v.alias || null, hood: V.hood != null ? V.hood : v.hood != null ? v.hood : null, id: V.id };
 }
 function holdersOf(R) {
   const out = [], seen = new Set(), others = [], covers = [], coverSeen = new Set(), vcands = [];
@@ -908,8 +932,12 @@ function stepPad(roomId, t = now(), R) {
     const e = R && (!why || why === "stale") ? eligOf(P, R, c.login, t, want) : "pending";
     if (e === "notice") firstNotice(P, R, c.login, t).catch((er) => console.error("[micfollow] notice:", er.message));
     const up = P.state.tiles.some((x) => !x.cover && x.login === c.login) || P.state.kept.has(c.login);
-    if (e === "ok" || e === "cam_unknown" || (up && !core.isCut(e))) holders.push({ login: c.login, since: c.since });
-    else { P.vnow.delete(c.login); if (!covers.some((x) => x.key === c.cover.key)) covers.push(c.cover); }
+    if (e === "ok" || e === "cam_unknown" || (up && !core.isCut(e))) {
+      holders.push({ login: c.login, since: c.since });
+      // 1.99?? (privacy controls V-3, spec 2.2 row 4): their hooded cover (born while the facts were pending / the notice gate ran)
+      // BECOMES the cam tile in place - never a "recent" hood beside the cam under the same frog name
+      if (P.state.tiles.some((x) => x.cover && x.login === c.cover.key)) apply(P, R, core.coverToCam(P.state, c.cover.key, c.login, t), t);
+    } else { P.vnow.delete(c.login); if (!covers.some((x) => x.key === c.cover.key)) covers.push(c.cover); }
   }
   if (!why || why === "stale") {
     // (wave2 WP-4: + the pad's kept relays - every rule re-runs on them each step; a cover tile never asks eligOf / livecam)
@@ -1026,7 +1054,7 @@ function doHold(P, login, cold, t) {
   // (1.99?? privacy controls S5: a veiled cam tile's relay is a session of its own under the frog name - livecam's own path)
   const veil = veilOfTile(P, login);
   const p = Promise.resolve().then(() => LC().stageHold(R, login, MFH(P.roomId), t, { mf: true, ok: () => wantsCam(P, login, "hold"),
-                                                                                    ...(veil ? { veil: { sess: veil.sess, alias: veil.alias, hood: veil.hood } } : {}) }))
+                                                                                    ...(veil ? { veil: { sess: veil.sess, alias: veil.alias, hood: veil.hood, id: veilIdOf(R, login, veil) } } : {}) }))
     .then(() => done(true, null), (e) => done(false, e && e.refuse ? e.code : "failed"));
   // train2 merge: stagefix's stageConsent made a hold several look-ups longer, so the tests' _idle waits for holds as well
   // (finally: a throw in done() still surfaces as before)
@@ -1100,9 +1128,13 @@ async function courtesyPlan(P, R, login, kind) {
   const T = I18N.tFor(lang);
   const mins = Math.max(2, Math.round(cfg().notice_lead_s / 60));
   const home = kind === "home";
+  // 1.99?? (privacy controls V-1, the ID-3 leak class): a candidate staged under a FROG NAME is told from Pepe's own account - the PM
+  // action is the queuing account's row (their action list, their Download my data), and the pad owner's would pair the login with
+  // their pad's veiled speaker
+  const veiled = !!(P.vnow && P.vnow.has(low(login)));
   return {
     userId: u ? String(u.userId) : null, real, pm: !(real && !pmOk),
-    by: pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
+    by: !veiled && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
     text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once", roomName, padTitle, mins, siteUrl() + link),
     link, title: T(home ? "mf.notice.home_title" : "mf.notice.once_title", { pad: padTitle }),
     body: T(home ? "mf.notice.home_body" : "mf.notice.once_body", { room: roomName, pad: padTitle, n: mins }),
@@ -1445,6 +1477,23 @@ async function unexcludeXid(roomId, xid) {
 }
 // ── 📌 pins (mfix): the pad's owner / site staff pin a cam on the mic stage ──
 const pinOf = (roomId, login) => { const m = PINS.get(String(roomId)); return (m && m.get(low(login))) || null; };
+/** 1.99?? (privacy controls V-1): a stored pin's veil (micfollow_pins.veil JSON) -> {sess, alias, hood, id, vid} | null. */
+function pinVeilOf(raw) {
+  let v = null;
+  try { v = raw ? JSON.parse(raw) : null; } catch (e) { v = null; }
+  if (!v || typeof v !== "object" || !SESS_RE.test(String(v.sess || "")) || !COVER_ID_RE.test(String(v.vid || ""))) return null;
+  return { sess: String(v.sess), alias: typeof v.alias === "string" && v.alias ? v.alias.slice(0, 40) : null,
+           hood: Number.isInteger(v.hood) && v.hood >= 0 && v.hood <= 7 ? v.hood : null, id: typeof v.id === "string" ? v.id.slice(0, 20) : null, vid: String(v.vid) };
+}
+/** 1.99?? (privacy controls V-1): the veiled pin whose public id is `vid` on pad `roomId` (server-only) | null. */
+function pinByVid(roomId, vid) {
+  const m = PINS.get(String(roomId));
+  if (!m || !COVER_ID_RE.test(String(vid || ""))) return null;
+  for (const p of m.values()) if (p.veil && p.veil.vid === vid) return p;
+  return null;
+}
+/** 1.99?? (privacy controls V-1): a page's reference to a veiled cam ("anon-<8 hex>" tile / pin id, "v-<12>" people-list id). */
+const VREF_RE = /^(anon-[0-9a-f]{8}|v-[A-Za-z0-9_-]{12})$/;
 function pinByHolder(holder) {
   for (const m of PINS.values()) for (const p of m.values()) if (p.holder === holder) return p;
   return null;
@@ -1462,12 +1511,17 @@ function pinRoom(P) {
  * -> null | a code. (stageConsent / stageRecheck / stagepin add the cam-slot rules on top.) The owner's own exclusion doesn't
  * stop a pin - they chose this person - but a "reported" hold-out (staff review) or an ended-by cooldown does.
  */
-function pinRule(P, R, login, t, { stale = false } = {}) {
-  if (!stale) {
+function pinRule(P, R, login, t, { stale = false, veil = null } = {}) {
+  // 1.99?? (privacy controls V-1): a veiled pin is judged on the real login under ITS frog-name session - incognito cams in effect and
+  // the person still incognito under that session (any veil change: "veil_changed"), never the incognito half of `hidden`
+  if (veil) {
+    if (!icOn(t) || !R || !IC().stillVeiled(R, login, veil.sess, t)) return "veil_changed";
+    if (!stale) { const v = IC().entryByLogin(R, login, veil.sess); if (!v || v.onCam !== true) return "left_cam"; }
+  } else if (!stale) {
     const m = memberOf(R, login);
     if (!m || m.on_cam !== true) return "left_cam";
   }
-  if (hiddenLogin(login)) return "unavailable";
+  if (!veil && hiddenLogin(login)) return "unavailable";
   if (LC().optedOut(login)) return "opted_out";
   if (MFOPT.has(login)) return "unavailable";                     // their "pads' mic stages may show my cam" switch is off
   const f = FACTS.get(login), b = BANS.get(login + "|" + P.roomId);
@@ -1490,14 +1544,18 @@ const PIN_REFUSE = {
   pending: [503, "Couldn't check their cam's settings - try again in a moment."],
   mode_closed: [403, "Their cam is only for some viewers - it can't go on a stage."],
   ended_by: [403, "Their live cam was ended - try again in a few minutes."],
+  veil_changed: [403, "That cam isn't available right now."],          // 1.99?? (privacy controls V-1): never why
 };
 /**
  * `user` (the pad's owner or site staff - the route checks) pins `login`'s cam on pad `roomId`'s mic stage.
  * -> {pinned: true, pin} | {asked: true, ask} (their level is "off": nothing goes up until they allow it) | throws Refuse
  */
-async function pinPut(user, roomId, login, t = now(), { fromAsk = false } = {}) {
+async function pinPut(user, roomId, login, t = now(), { fromAsk = false, veil = null } = {}) {
   await init();
   const l = low(login);
+  // 1.99?? (privacy controls V-1): veil = {sess, alias, hood, id} - an incognito person's cam by its opaque id (the route resolved it,
+  // incogcams.refOf); the pin runs under that frog-name session and shows only the frog name
+  const vz = veil && veil.sess != null ? { sess: String(veil.sess), alias: veil.alias || null, hood: Number.isInteger(veil.hood) ? veil.hood : null, id: veil.id || null } : null;
   if (!LOGIN_RE.test(l)) throw new Refuse(400, "Whose cam?", "bad");
   const P = padOf(roomId, false);
   if (!P || !P.settings.on) throw new Refuse(409, "Switch mic follows on for this pad first - pins live on its mic stage.", "mf_off");
@@ -1509,7 +1567,7 @@ async function pinPut(user, roomId, login, t = now(), { fromAsk = false } = {}) 
     throw new Refuse(409, room ? `This mic stage can pin ${room} cam${room === 1 ? "" : "s"} at most - unpin one first.` : "This mic stage's layout leaves no room for a pin.", "pins_full");
   }
   await refresh(l, P.roomId, { force: true });                    // private activity, bans, a DM block with the owner - fresh
-  const rule = pinRule(P, R, l, now());
+  const rule = pinRule(P, R, l, now(), { veil: vz });
   if (rule) { const [st, msg] = PIN_REFUSE[rule] || PIN_REFUSE.unavailable; throw new Refuse(st, msg, rule); }
   // their own say over pins (stagepin.js): "never" / a recent "No" -> unavailable; "off" without a yes for this pad -> ask first
   const PIN = require("./stagepin");
@@ -1517,8 +1575,8 @@ async function pinPut(user, roomId, login, t = now(), { fromAsk = false } = {}) 
   if (gate === "never" || gate === "declined" || (gate === "ask" && fromAsk)) throw new Refuse(403, PIN_REFUSE.unavailable[1], "unavailable");
   if (gate === "waiting") throw new Refuse(409, "Already asked - waiting for their OK.", "waiting");
   if (gate === "ask") {
-    const m = await LC().stageConsent(R, l, t, { actor: user });  // every other refusal first: never ask someone who can't go up
-    const a = await PIN.askPin({ roomId: P.roomId, login: l, actor: user, display: m && m.display, target: "mic" }, t);
+    const m = await LC().stageConsent(R, l, t, { actor: user, veil: vz });  // every other refusal first: never ask someone who can't go up
+    const a = await PIN.askPin({ roomId: P.roomId, login: l, actor: user, display: vz ? IC().labelOf(vz) : m && m.display, target: "mic", veil: vz ? vz.sess : null }, t);
     if (!a) throw new Refuse(403, PIN_REFUSE.unavailable[1], "unavailable");
     ROOMS().event(P.roomId, "micfollow", user.username || null, "asked to pin a cam on the mic stage");
     return { asked: true, ask: { id: a.id, expires: a.expires } };
@@ -1528,18 +1586,27 @@ async function pinPut(user, roomId, login, t = now(), { fromAsk = false } = {}) 
   // livecam's stage consent (opt-out, private activity, Take me off this Stage, blocks with the pinner / the pad's owner, stage
   // bans, an ended-by cooldown) and the hold - a manual one: never yielded, opened like a cam slot. Live cams full: the mic
   // stage gives one of its own relays back, like for a cam slot
-  try { await LC().stageHold(R, l, holder, t, { actor: user }); }
+  try { await LC().stageHold(R, l, holder, t, { actor: user, veil: vz }); }
   catch (e) {
     if (!(e && e.refuse && e.code === "slots_busy") || !yieldRelay(t)) throw e;
-    await LC().stageHold(R, l, holder, t, { actor: user });
+    await LC().stageHold(R, l, holder, t, { actor: user, veil: vz });
   }
   // a rule that changed while the hold's awaits ran, a second pin that raced this one: nothing stays up
-  const late = pinRule(P, R, l, now()) || (pinOf(P.roomId, l) ? "pinned" : null) || (pinsOf(P.roomId).length >= pinRoom(P) ? "pins_full" : null) || (P.settings.on ? null : "mf_off");
+  const late = pinRule(P, R, l, now(), { veil: vz }) || (pinOf(P.roomId, l) ? "pinned" : null) || (pinsOf(P.roomId).length >= pinRoom(P) ? "pins_full" : null) || (P.settings.on ? null : "mf_off");
   if (late) { LC().stageRelease(holder); const [st, msg] = PIN_REFUSE[late] || [409, "That cam can't be pinned right now."]; throw new Refuse(st, msg, late); }
-  const pin = { id, roomId: P.roomId, login: l, holder, byId: String(user.userId), byName: String(user.username || "").slice(0, 80) || null, at: t, wentLive: 0 };
+  // (1.99?? privacy controls V-1: a veiled pin's public id - random, never a login or another tile's / pin's id)
+  let pv = null;
+  if (vz) {
+    const taken = new Set([...((P.vids || new Map()).values()), ...[...((P.covers || new Map()).values())].map((c) => c.id)]);
+    for (const q of pinsOf(P.roomId)) if (q.veil) taken.add(q.veil.vid);
+    let vid;
+    do { vid = "anon-" + crypto.randomBytes(4).toString("hex"); } while (taken.has(vid));
+    pv = { ...vz, vid };
+  }
+  const pin = { id, roomId: P.roomId, login: l, holder, byId: String(user.userId), byName: String(user.username || "").slice(0, 80) || null, at: t, wentLive: 0, veil: pv };
   try {
-    await runQuery("INSERT INTO micfollow_pins (id, room_id, login, by_id, by_name, at, went_live) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                   [pin.id, pin.roomId, pin.login, pin.byId, pin.byName, pin.at]);
+    await runQuery("INSERT INTO micfollow_pins (id, room_id, login, by_id, by_name, at, went_live, veil) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+                   [pin.id, pin.roomId, pin.login, pin.byId, pin.byName, pin.at, pv ? JSON.stringify(pv) : null]);
   } catch (e) { LC().stageRelease(holder); throw e; }
   const m = PINS.get(P.roomId) || new Map();
   m.set(l, pin);
@@ -1551,11 +1618,11 @@ async function pinPut(user, roomId, login, t = now(), { fromAsk = false } = {}) 
   const pad = (() => { try { return ROOMS().getCached(P.roomId); } catch (e) { return null; } })() || {};
   try {
     require("./mainstage").camNotify(l, user, `Your cam is pinned on the mic stage of ${String(pad.title || (R && R.name) || "a pad").slice(0, 60)} on PATV`,
-                                     "/p/" + encodeURIComponent(pad.slug || P.roomId)).catch(() => {});
+                                     "/p/" + encodeURIComponent(pad.slug || P.roomId), { veiled: !!pv }).catch(() => {});
   } catch (e) { /* no stage */ }
   stepPad(P.roomId, t);
   try { BR().touch(P.roomId); } catch (e) { /* no bridge */ }
-  return { pinned: true, pin: { login: l, at: t } };
+  return { pinned: true, pin: pv ? { id: pv.vid, at: t } : { login: l, at: t } };   // (1.99?? V-1: a veiled pin by its public id only)
 }
 /** A pin ends (unpinned, the cam went away, a rule says no, mic follows stopped, expired). -> true when there was one */
 async function unpin(roomId, login, reason, by) {
@@ -1602,7 +1669,7 @@ async function pinWhy(pin, t = now()) {
   try { if (!(await getQuery("SELECT 1 AS x FROM micfollow_pins WHERE id = ?", [pin.id])).length) return "gone"; } catch (e) { /* the next check */ }
   const f = FACTS.get(pin.login), b = BANS.get(pin.login + "|" + pin.roomId);
   if (!f || t - f.at > cfg().private_cache_s * 1000 || !b || t - b.at > BAN_MS) refresh(pin.login, pin.roomId);
-  const rule = pinRule(P, R, pin.login, t, { stale: soft });
+  const rule = pinRule(P, R, pin.login, t, { stale: soft, veil: pin.veil || null });
   if (rule && rule !== "pending") return rule;
   const re = await LC().stageRecheck(pin.roomId, pin.login, { actorId: pin.byId }, t);
   if (re) return re;
@@ -1616,7 +1683,7 @@ async function pinWhy(pin, t = now()) {
   if (st.state === "ended" && !pin.retryAt) return st.why || "ended";
   if ((st.state === "ended" || st.state === "none") && pin.retryAt && t < pin.retryAt) return null;
   if ((st.state === "ended" || st.state === "none") && R && !soft) {   // a retry, or the site restarted (sessions live in memory)
-    try { await LC().stageHold(R, pin.login, pin.holder, t, { actor: { userId: pin.byId } }); }
+    try { await LC().stageHold(R, pin.login, pin.holder, t, { actor: { userId: pin.byId }, veil: pin.veil || null }); }
     catch (e) {
       const code = e && e.refuse && e.code ? String(e.code) : "failed";
       return pinRetry(pin, code, t) ? null : code;
@@ -1676,14 +1743,19 @@ async function pinCandidates(roomId, actor) {
   let list = { live: false, livecams: false, cams: [] };
   try { list = await require("./mainstage").camCandidates(roomId, actor); } catch (e) { list = { live: false, livecams: false, cams: [] }; }
   const t = now();
+  // (1.99?? privacy controls V-1: an incognito person's cam is listed by its people-list id and frog name - mainstage.camCandidates
+  // resolves the person server-side (x._login, dropped here) and never answers a login for it)
   const cams = (list.cams || []).map((x) => {
-    const pinned = !!pinOf(roomId, x.login);
+    const l = x.veiled ? low(x._login) : x.login;
+    const pinned = !!pinOf(roomId, l);
     let blocked = x.blocked || null;
-    if (!blocked && (MFOPT.has(x.login) || hiddenLogin(x.login))) blocked = "unavailable";
-    if (!blocked) { const md = modeOf(x.login, t); if (md == null || md === "followers" || md === "request") blocked = "limited"; }
+    if (!blocked && (MFOPT.has(l) || (!x.veiled && hiddenLogin(l)))) blocked = "unavailable";
+    if (!blocked) { const md = modeOf(l, t); if (md == null || md === "followers" || md === "request") blocked = "limited"; }
+    if (x.veiled) return { id: x.id, display: x.display, veiled: true, pinned, blocked, ...(x.ask ? { ask: true, waiting: !!x.waiting } : {}) };
     return { login: x.login, display: x.display, pinned, blocked, ...(x.ask ? { ask: true, waiting: !!x.waiting } : {}) };
   });
-  return { live: !!list.live, room: P ? pinRoom(P) : 0, pins: pinsOf(roomId).map((p) => ({ login: p.login, at: p.at })), cams };
+  return { live: !!list.live, room: P ? pinRoom(P) : 0,
+           pins: pinsOf(roomId).map((p) => (p.veil ? { id: p.veil.vid, veiled: true, at: p.at } : { login: p.login, at: p.at })), cams };
 }
 
 // ── 🧹 Clear the stage + ⚑ reports (addendum 14.1.2 #3; DF-31's thresholds) ──
@@ -1718,8 +1790,11 @@ async function report(roomId, login, user, reason, t = now()) {
   const P = PADS.get(String(roomId));
   // 1.99?? (privacy controls S5): a veiled cam tile's id -> its login (server-side); hidden for the reporter by its veil
   const vl0 = P ? vidLogin(P.roomId, low(login)) : null;
-  const vt0 = vl0 ? veilOfTile(P, vl0) : null;
+  // (1.99?? privacy controls V-1: or a veiled PIN's id - hidden by its veil the same way)
+  const pv0 = !vl0 && P ? pinByVid(P.roomId, low(login)) : null;
+  const vt0 = vl0 ? veilOfTile(P, vl0) : pv0 ? pv0.veil : null;
   if (vl0) login = vl0;
+  else if (pv0) login = pv0.login;
   const l = low(login);
   if (!LOGIN_RE.test(l)) throw new Refuse(400, "Who?", "bad");
   const left = P ? P.state.leftAt.get(l) : null;
@@ -1907,7 +1982,9 @@ function stageEntries(P, t) {
     const st = (() => { try { return LC().stageState(p.holder, t); } catch (e) { return { state: "none" }; } })();
     const s = S.seen.get(p.login);
     return { login: p.login, pos: i, pin: true, since: p.at, hold: s && s.held ? s.since : null,
-             video: st.state === "live" ? "live" : st.state === "connecting" ? "starting" : "card", why: st.state === "live" || st.state === "connecting" ? null : "retry" };
+             video: st.state === "live" ? "live" : st.state === "connecting" ? "starting" : "card", why: st.state === "live" || st.state === "connecting" ? null : "retry",
+             // (1.99?? privacy controls V-1: a veiled pin - its own public id, the frog name, the hood; never the login)
+             ...(p.veil ? { veil: { id: p.veil.vid, alias: p.veil.alias, hood: p.veil.hood } } : {}) };
   });
   let pinNew = null;
   if (!S.speaking) for (const p of pins) if (p.hold != null && (!pinNew || p.hold > pinNew.hold) && (!nw || p.hold > (S.seen.get(nw.login) || {}).since)) pinNew = p;
@@ -2023,7 +2100,8 @@ function snapshot(roomId, t = now()) {
   const ar = slotsOn() ? arrangeOf(P, t, { pins, pinNew, nw }) : null;
   const placeOf = ar ? new Map(ar.slots.map((k, i) => [k, i])) : null;
   const pinPos = (p) => (placeOf ? placeOf.get(p.login) : p.pos), micPos = (x) => (placeOf ? placeOf.get(x.login) : pins.length + x.pos);
-  const tiles = [...pins.map((p) => ({ login: p.login, pos: pinPos(p), pin: true, newest: p === pinNew, since: p.since, video: p.video, why: p.why, ...ring(p.hold != null) })),
+  const tiles = [...pins.map((p) => ({ login: p.login, pos: pinPos(p), pin: true, newest: p === pinNew, since: p.since, video: p.video, why: p.why, ...ring(p.hold != null),
+                                       ...(p.veil ? { veil: p.veil } : {}) })),
                  ...mics.map((x) => (x.cover
                    ? { cover: true, cid: coverOf(x).id, name: coverOf(x).alias || null, hood: coverOf(x).hood, veil: coverOf(x).veil,
                        pos: micPos(x), newest: x === nw, since: x.addedAt, video: "cover", why: null, recent: x.relAt != null, ...ring(x.relAt == null) }
@@ -2104,7 +2182,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
       src.push({ kind: "cam", id: x.veil.id, name: String(x.veil.alias || "someone").slice(0, 40), veil: "incognito", hood: x.veil.hood,
                  avatar: null, nameCss: "", pos: x.pos, newest: x.newest, since: x.since,
                  video: x.video, why: x.video === "card" ? x.why || "full" : null, watch,
-                 ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
+                 ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
                  ...(own && own === x.login ? { mine: true } : {}),
                  ...(await coverFlags(snap.roomId, x.veil.id, userId, t, surface)) });
       continue;
@@ -2161,7 +2239,8 @@ function coverWho(roomId, tileId) {
   const w = P && P.coverWho ? P.coverWho.get(key) : null;
   if (w && LOGIN_RE.test(String(w.login || ""))) return { login: w.login, display: String(w.display || w.login) };
   // 1.99?? (privacy controls S5): a veiled cam tile - the same server-only identity seam (Reveal, ✕, "this is you")
-  const vl = vidLogin(roomId, tileId);
+  const pv = vidLogin(roomId, tileId) ? null : pinByVid(roomId, tileId);   // (1.99?? privacy controls V-1: a veiled pin too)
+  const vl = pv ? pv.login : vidLogin(roomId, tileId);
   if (!vl) return null;
   let display = vl;
   try { const R = roomOf(roomId); const e = R && (R.members || []).find((u) => u && u.anon && u._vz && low(u._vz.login) === vl); if (e && e._vz.display) display = String(e._vz.display); }
@@ -2288,13 +2367,16 @@ function refuseCover(roomId, id) {
 }
 /** 1.99?? (privacy controls S5): a by-login route that never takes a veiled cam tile's id (✕ by name, 📌) - its ✕ posts {tile}. */
 function refuseVeiled(roomId, id) {
-  if (vidLogin(roomId, low(id))) throw new Refuse(400, "That's a veiled speaker - there's no name to act on.", "cover");
+  if (vidLogin(roomId, low(id)) || pinByVid(roomId, low(id))) throw new Refuse(400, "That's a veiled speaker - there's no name to act on.", "cover");
 }
 /** 1.99?? (privacy controls S5): a veiled cam tile's ⚑ hides it for the reporter by its VEIL (never their later named tile). */
 function veilHideKey(veil, roomId, login) {
   const P = PADS.get(String(roomId));
   const tag = P && P.ttag ? P.ttag.get(login) : null;
-  return tag && String(tag).startsWith("v:") ? "~v:" + tag.slice(2) : login;
+  if (tag && String(tag).startsWith("v:")) return "~v:" + tag.slice(2);
+  // (1.99?? privacy controls V-1: a veiled pin - by its frog-name session too)
+  const pin = pinOf(roomId, login);
+  return pin && pin.veil ? "~v:" + pin.veil.sess : login;
 }
 /** mfix: a viewer's own linked Camfrog login (lower case, "" = none), cached 30 s - pages long-poll /live. */
 const OWN = new Map();
@@ -2626,8 +2708,10 @@ function register(app, { addUser, bySlug, isLive }) {
   const manageHit = guard.limiter({ max: 30, windowMs: 60 * 1000 });
   const rate = (lim, key, res) => { const w = lim.blocked(key); if (w) { res.set("Retry-After", String(w)); res.status(429).json({ ok: false, code: "rate", error: "Slow down a little." }); return true; } lim.hit(key); return false; };
   /** The live-cam audience for a mic-stage tile (§4.2), checked at every ticket and beat. -> null | Refuse */
-  const viewerRefusal = async (u, R, login, feature) => {
-    if (hiddenLogin(login)) return new Refuse(403, "That cam isn't available right now.", "unavailable");   // !bridge hide / !incognito
+  const viewerRefusal = async (u, R, login, feature, veil = null) => {
+    // (1.99?? privacy controls V-1: a veiled cam tile / pin - the person under ITS frog-name session, never the incognito half of
+    // `hidden`; S5's tile tickets were refused here for every incognito person)
+    if (veil ? !icOn() || !IC().stillVeiled(roomOf(R.id), login, veil.sess) : hiddenLogin(login)) return new Refuse(403, "That cam isn't available right now.", "unavailable");   // !bridge hide / !incognito
     if (!(await require("./bridge-relay").padFull(u.userId, R.id))) return new Refuse(403, "This pad's live room is for its approved members.", "pad_access");
     if (!bridgeOk(R.id)) return new Refuse(403, "This pad's live chat room comes with 💎 Prime Time Plus.", "prime");
     const blk = await require("./bridgeblocks").refusal(R.id, u.userId, feature);
@@ -2688,13 +2772,27 @@ function register(app, { addUser, bySlug, isLive }) {
           return res.json({ ok: true, state: "ended", why: "gone" });
         }
         const vh = hiddenFor(R.id, u.userId, veilHideKey(null, R.id, vl));
-        let ref1 = vh ? new Refuse(403, "You reported this - it's hidden for you.", "hidden") : await viewerRefusal(u, R, vl, "livecams");
+        const vv = veilOfTile(P1, vl);
+        let ref1 = vh ? new Refuse(403, "You reported this - it's hidden for you.", "hidden") : await viewerRefusal(u, R, vl, "livecams", vv || { sess: "-" });
         // (a "hidden" from a report of their NAMED tile is no answer here - generic, like every other reason)
         if (ref1 && ref1.code !== "blocked" && !(ref1.code === "hidden" && vh)) ref1 = new Refuse(403, "That cam isn't available right now.", "unavailable");
         if (ref1) { LC().stageUnwatch(u.userId, R.id, vl, MFH(R.id)); bump("ticket_refused:" + ref1.code, 1, now(), P1); throw ref1; }
         const r1 = await LC().stageWatch(u, R, MFH(R.id), { login: vl, beatOnly: beat });
         if (!beat) bump("tickets", 1, now(), P1);
         return res.json(r1);
+      }
+      // 1.99?? (privacy controls V-1): a veiled 📌 pin by its own public id - the login stays server-side, refusals are generic (Q23)
+      const pvw = b.pin === true ? pinByVid(R.id, login) : null;
+      if (pvw) {
+        const P2 = PADS.get(R.id);
+        if (stop || !P2 || !P2.settings.on) { LC().stageUnwatch(u.userId, R.id, pvw.login, pvw.holder); return res.json(stop ? { ok: true } : { ok: true, state: "ended", why: "gone" }); }
+        const vh2 = hiddenFor(R.id, u.userId, "~v:" + pvw.veil.sess);
+        let ref2 = vh2 ? new Refuse(403, "You reported this - it's hidden for you.", "hidden") : await viewerRefusal(u, R, pvw.login, "livecams", pvw.veil);
+        if (ref2 && ref2.code !== "blocked" && !(ref2.code === "hidden" && vh2)) ref2 = new Refuse(403, "That cam isn't available right now.", "unavailable");
+        if (ref2) { LC().stageUnwatch(u.userId, R.id, pvw.login, pvw.holder); bump("ticket_refused:" + ref2.code, 1, now(), P2); throw ref2; }
+        const r2 = await LC().stageWatch(u, R, pvw.holder, { beatOnly: beat });
+        if (!beat) bump("tickets", 1, now(), P2);
+        return res.json(r2);
       }
       // mfix: 📌 a pinned cam - held by its pin (opened like a cam slot); the same per-viewer gates as a mic tile
       if (b.pin === true) {
@@ -2891,10 +2989,25 @@ function register(app, { addUser, bySlug, isLive }) {
     try {
       const { u, R } = await owner(req);
       const b = req.body || {};
+      // 1.99?? (privacy controls V-1, owner Q4): 📌 of an incognito person's cam by its opaque id - a veiled tile / pin id ("anon-…") or
+      // a people-list id ("v-…", from the picker); the person is resolved here (incogcams.refOf) and never answered. Only while
+      // incognito cams are in effect - otherwise refused exactly as before (refuseVeiled)
+      const raw = String(b.id != null ? b.id : b.login == null ? "" : b.login).trim();
+      if (VREF_RE.test(raw) && icOn()) {
+        const pvr = pinByVid(R.id, raw);
+        if (b.remove === true) {
+          const was = pvr ? await unpin(R.id, pvr.login, "unpinned", u.username || u.userId) : false;
+          return res.json({ ok: true, unpinned: was });
+        }
+        if (pvr) throw new Refuse(409, "That cam is already pinned.", "pinned");
+        const V = IC().refOf(roomOf(R.id), raw);
+        if (!V) throw new Refuse(409, "That cam isn't available right now.", "unavailable");
+        return res.json({ ok: true, ...(await pinPut(u, R.id, V.login, now(), { veil: { sess: V.sess, alias: V.alias, hood: V.hood, id: V.id } })) });
+      }
       const login = low(b.login);
       if (!LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?", "bad");
       refuseCover(R.id, login);                  // (wave2 WP-4)
-      refuseVeiled(R.id, login);                 // (1.99?? privacy controls S5: 📌 of a veiled cam - refused in this slice)
+      refuseVeiled(R.id, login);                 // (1.99?? privacy controls S5: a veiled id while incognito cams aren't in effect)
       if (b.remove === true) {
         const was = await unpin(R.id, login, "unpinned", u.username || u.userId);
         return res.json({ ok: true, unpinned: was });
@@ -3001,6 +3114,7 @@ function register(app, { addUser, bySlug, isLive }) {
 
 module.exports = {
   vidLogin, veilCamEnded, veilSessOf, veilOfTile,                                // 1.99?? (privacy controls S5)
+  vidVeil, pinByVid,                                                              // 1.99?? (privacy controls V-1)
   register, init, cfg, current: () => ({ v: CFG.v, cfg: { ...CFG.cfg } }), onSync, onRoomGone, stepPad, snapshot, viewFor, ownerState, setPad, adminView, setKill, setCfg,
   recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, unexcludeXid, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,
