@@ -43,7 +43,7 @@ const EV = require(path.join(repo, "evidence"));
 const PC = require(path.join(repo, "privacycopy"));
 const HELP = require(path.join(repo, "help"));
 const EN = require(path.join(repo, "locales", "en.json"));
-const BASE = process.env.PRIVM_S7_BASE_REV || "3a6208c0";   // (the S6 head as rebased onto 1.99ahx; was 90869346 on 1.99aht, b2f60207 before)
+const BASE = process.env.PRIVM_S7_BASE_REV || "4e6d14c9";   // (the S6 head as rebased onto 1.99ahz; was 3a6208c0 on 1.99ahx, 90869346 on 1.99aht, b2f60207 before)
 
 const users = new Map();
 const U = {};
