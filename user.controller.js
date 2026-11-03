@@ -5,7 +5,7 @@ const { issueLogin, clearLogin } = require('./middleware/loginCookie');
 const guard = require('./middleware/authGuard');
 const sqlite3 = require('sqlite3').verbose()
 const { v4: uuidv4 } = require('uuid');
-const sgMail = require('@sendgrid/mail');
+const mailer = require('./mailer');   // 1.99aim: account emails (Resend first, then SendGrid)
 const crypto = require('crypto');
 const { createTables, runQuery, getQuery } = require('./dbUtils');
 const funding = require('./funding');
@@ -21,8 +21,6 @@ const AWS = require('aws-sdk');
 const upload = multer({ dest: 'uploads/' });
 // 1.99vz: the account forms (username, email, password, Camfrog / Twitch / Discord links) live on Settings -> Account
 const ACCOUNT_PAGE = '/settings/account';
-
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // AWS S3 configuration
 const s3 = new AWS.S3({
@@ -209,11 +207,13 @@ async function sendVerificationEmail(email, username, token) {
       html: `Hello <strong>${username}</strong>,<br><br>Please verify your email address by clicking on this link: <a href="${link}">Verify Email</a>.`,
   };
 
+  // 1.99aim: through mailer.js (Resend first, then SendGrid), like the password-reset mail - it used to call SendGrid only,
+  // and a dead SendGrid key (401) lost every verification email; the log line names the providers, never the address
   try {
-      await sgMail.send(msg);
-      console.log('Verification email sent successfully');
+      const via = await mailer.send(msg);
+      console.log(`[auth] verification email sent (${via})`);
   } catch (error) {
-      console.error('Failed to send verification email', error);
+      console.error(`[auth] verification email failed: ${error.message}`);
   }
 }
 
