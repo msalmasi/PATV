@@ -354,6 +354,7 @@ const RULES = {
   "cam_evidence.by_user": M(), "cam_evidence.hold_by": M(),
   "cam_evidence.subject_login": { deny: "the Camfrog login whose cam the still / clip shows (when it was saved) - never re-keyed, like evidence_clips" },
   "cam_evidence.subject_gone_at": { deny: "a time (the subject used forget-me or deleted their account)" },
+  "cam_evidence.admin_only": { deny: "1.99?? (privacy controls review RV-2): a flag (saved from a by-login reveal / of a left-out person) - not a user" },
   "chat_signin_prefs.user_id": M({ key: [], merge: { enabled: "MIN" } }),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)
