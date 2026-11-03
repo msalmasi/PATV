@@ -48,14 +48,32 @@
     value = clamp(value, 0, cap); return value > 0 ? value : null;
   }
   function indicatorTarget(input) {
+    // (1.99?? avf F4: the mic signs' own fallback goes up to 5000, like their cap)
     var value = !input.fresh || !input.statsOK || number(input.pepe) == null || number(input.browser) == null
-      ? bounded(input.fallback, 0, 4000, 0) : input.pepe + input.browser + (number(input.k) || 0) - (number(input.path) || 0);
+      ? bounded(input.fallback, 0, 5000, 0) : input.pepe + input.browser + (number(input.k) || 0) - (number(input.path) || 0);
     return clamp(value, 0, bounded(input.cap, 0, 5000, 3000));
   }
   function cfgFor(pad) {
     var entry = configs[pad];
     return entry && entry.data && Date.now() - entry.at <= 30000 ? entry.data : null;
   }
+  // 1.99?? avf (F4): Pepe reports no room-audio latency (rtc_ms / mp3_ms null) once nobody has been heard for ~5 s, though his
+  // mixer still delays the voice by the same amount. The last measured value of each mode is kept for up to HOLD_PEPE_MS, so the
+  // first grab after a lull - and the cams - keep it instead of stepping to the fallback; after that, the fallback as before.
+  var HOLD_PEPE_MS = 30000;
+  function noteHeld(entry) {
+    var a = entry.data && entry.data.audio; if (!a) return;
+    var at = entry.at - (number(a.age_s) != null ? Math.max(0, a.age_s) * 1000 : 0);
+    ['rtc', 'mp3'].forEach(function (mode) { var v = number(a[mode + '_ms']); if (v != null) (entry.held || (entry.held = {}))[mode] = { ms: v, at: at }; });
+  }
+  function pepeOf(pad, a) {
+    var v = number(a[sound.mode + '_ms']), entry = configs[pad], held = v == null && entry && entry.held && entry.held[sound.mode];
+    return v != null ? v : held && Date.now() - held.at <= HOLD_PEPE_MS ? held.ms : null;
+  }
+  function heldPepe(pad) { var c = cfgFor(pad), a = c && c.audio || {}; return number(a[sound.mode + '_ms']) == null && pepeOf(pad, a) != null; }
+  // 1.99?? avf (F5): mic_follow_toggle false (an admin setting; true = before) - the mic signs are held for every viewer the
+  // switches apply to, whatever their own toggle says; the toggle then holds the cams only
+  function micIgnoresToggle(pad) { var c = cfgFor(pad); return !!(c && c.mic_follow_toggle === false); }
   function ageOf(pad) {
     var entry = configs[pad], audio = entry && entry.data && entry.data.audio;
     return audio && number(audio.age_s) != null ? Math.max(0, audio.age_s + (Date.now() - entry.at) / 1000) : Infinity;
@@ -68,7 +86,7 @@
   }
   function inputs(pad) {
     var c = cfgFor(pad) || {}, a = c.audio || {};
-    return { pepe: number(a[sound.mode + '_ms']), browser: soundStats.browser, fresh: ageOf(pad) <= 30,
+    return { pepe: pepeOf(pad, a), browser: soundStats.browser, fresh: ageOf(pad) <= 30,   // (1.99?? avf F4: pepeOf - the last measured, held)
       statsOK: soundStats.ok, fallback: c.fallback && c.fallback[sound.mode], cap: c.cap, k: 0 };
   }
   // 1.99ahm: kind = which switch holds the sign back - 'mic' (the mic stage's tile signs, the default), 'mic_card' (the "On the mic"
@@ -77,9 +95,12 @@
   var MIC_KINDS = ['mic', 'mic_card', 'mic_chat', 'mic_list'];
   function anyMic(pad, ignoreToggle) { return MIC_KINDS.some(function (kind) { return eligible(pad, kind, ignoreToggle); }); }
   function delayFor(pad, ignoreToggle, kind) {
-    if (!eligible(pad, kind || 'mic', ignoreToggle)) return 0;
+    if (!eligible(pad, kind || 'mic', ignoreToggle || micIgnoresToggle(pad))) return 0;   // (1.99?? avf F5: mic_follow_toggle)
     var c = cfgFor(pad), input = inputs(pad);
     input.k = c.k && c.k.ind; input.path = c.ind_path_ms; input.cap = c.cap_ind;
+    // 1.99?? avf (F4): the mic signs' own fallback (fallback_ind_rtc_ms / _mp3_ms) - unmeasured (the first ticks after the audio or
+    // the toggle starts, a long lull) the signs need about the whole audio path, the cams far less; an older site: the shared one
+    if (c.fallback_ind && number(c.fallback_ind[sound.mode]) != null) input.fallback = c.fallback_ind[sound.mode];
     return indicatorTarget(input);
   }
   function targetFor(entry, ignoreToggle) {
@@ -153,9 +174,9 @@
     return within(W.fetch('/api/rooms/' + encodeURIComponent(pad) + '/avsync?p=' + encodeURIComponent(paths.join(',')),
       { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
       .then(function (response) { if (!response.ok) { var error = new Error('Unavailable'); error.status = response.status; error.denied = response.status === 401 || response.status === 403; throw error; } return response.json(); }), 5000)
-      .then(function (data) { entry.data = data && data.ok ? data : null; entry.at = Date.now(); })
+      .then(function (data) { entry.data = data && data.ok ? data : null; entry.at = Date.now(); noteHeld(entry); })   // (1.99?? avf F4)
       .catch(function (error) {
-        if (error && error.denied) entry.data = null; /* Other failures cannot keep old settings alive beyond 30 seconds. */
+        if (error && error.denied) { entry.data = null; entry.held = null; } /* Other failures cannot keep old settings alive beyond 30 seconds. */
         if (error && error.status === 401) signedOut = true;      // review fix: signed out - no pad is asked again before a reload
         if (error && error.status === 403) entry.denied = true;
       })
@@ -183,7 +204,9 @@
     // Clear ineligible receivers before any asynchronous work, including a pending fetch.
     receivers.forEach(function (entry) { if (!eligible(entry.pad, 'video')) setTarget(entry, null); });
     (sound.playing ? fetchConfig(sound.slug) : Promise.resolve()).then(function () {
-      if (generation !== epoch || !anyMic(sound.slug) && !eligible(sound.slug, 'video')) return;   // 1.99ahm: any of the mic switches
+      // 1.99ahm: any of the mic switches (1.99?? avf F5: with mic_follow_toggle false the room audio is sampled for the mic signs
+      // while the viewer's toggle is off too - else they'd sit at the fallback)
+      if (generation !== epoch || !anyMic(sound.slug, micIgnoresToggle(sound.slug)) && !eligible(sound.slug, 'video')) return;
       var tasks = [sampleAudio(generation)];
       receivers.forEach(function (entry) {
         if (!eligible(entry.pad, 'video')) return;
@@ -239,7 +262,7 @@
   }
   function latency(pad, mode) {
     if (!sound.playing || sound.slug !== pad || sound.mode !== mode || !soundStats.ok || ageOf(pad) > 30) return null;
-    var c = cfgFor(pad), p = c && c.audio && number(c.audio[mode + '_ms']);
+    var c = cfgFor(pad), p = c && c.audio ? pepeOf(pad, c.audio) : null;   // (1.99?? avf F4: through a lull too)
     return p == null || number(soundStats.browser) == null ? null : Math.max(0, p + soundStats.browser);
   }
   function modsInstant(pad) { var c = cfgFor(pad); return !!(c && c.mods_instant); }
@@ -415,6 +438,7 @@
     });
     // 1.99ahm: a held chat line is shown once the room audio has caught up to it ("Delay mic grab/drop lines in chat"); the delay is
     // read again each time, so stopping the audio, the switch going off or the viewer's own toggle shows every held line at once
+    // (1.99?? avf F5: the toggle only while mic_follow_toggle is on - the default; off, the toggle holds the cams only)
     lines = lines.filter(function (line) {
       if (line.el.isConnected === false) { release(line); return false; }      // taken out by the page (privacy, trims): nothing to show
       var at = line.at + delayFor(line.pad, false, 'mic_chat');
@@ -464,11 +488,15 @@
   }
   function debug() {
     var c = cfgFor(sound.slug), a = c && c.audio || {};
+    // (1.99?? avf: + mic_follow_toggle, the mic signs' own fallback, and the held room-audio latency through a lull)
     return { on: !!(c && c.on), enabled: enabled, playing: sound.playing, mode: sound.mode, engine: browserEngine,
+      mic_follow_toggle: !micIgnoresToggle(sound.slug),
       calibration: { pt_ms: c && c.k ? number(c.k.pt) : null, re_ms: c && c.k ? number(c.k.re) : null, ind_ms: c && c.k ? number(c.k.ind) : null,
         ind_path_ms: c ? number(c.ind_path_ms) : null, cap_ms: c ? number(c.cap) : null, cap_ind_ms: c ? number(c.cap_ind) : null,
-        fallback_ms: c && c.fallback ? number(c.fallback[sound.mode]) : null, deadband_ms: c ? number(c.deadband) : null, period_s: c ? number(c.period_s) : null },
-      audio: { pepe_ms: number(a[sound.mode + '_ms']), mix_ms: number(a.mix_ms), helper_ms: number(a.helper_ms), age_s: isFinite(ageOf(sound.slug)) ? ageOf(sound.slug) : null,
+        fallback_ms: c && c.fallback ? number(c.fallback[sound.mode]) : null, fallback_ind_ms: c && c.fallback_ind ? number(c.fallback_ind[sound.mode]) : null,
+        deadband_ms: c ? number(c.deadband) : null, period_s: c ? number(c.period_s) : null },
+      audio: { pepe_ms: number(a[sound.mode + '_ms']), pepe_held_ms: heldPepe(sound.slug) ? pepeOf(sound.slug, a) : null,
+        mix_ms: number(a.mix_ms), helper_ms: number(a.helper_ms), age_s: isFinite(ageOf(sound.slug)) ? ageOf(sound.slug) : null,
         browser_ms: number(soundStats.browser), stats_ok: soundStats.ok, rtt_s: number(soundStats.rtt) }, indicator_ms: delayFor(sound.slug),
       card_ms: delayFor(sound.slug, false, 'mic_card'), chat_ms: delayFor(sound.slug, false, 'mic_chat'), list_ms: delayFor(sound.slug, false, 'mic_list'),   // 1.99ahm
       tiles: receivers.map(function (entry, index) { var cam = c && c.cams && c.cams[entry.path]; return { slot: index + 1, same_pad: entry.pad === sound.slug,
@@ -476,10 +504,31 @@
         target_ms: number(entry.target), supported: entry.supported, rtt_s: number(entry.rtt), stats: copy(entry.diagnostics),
         playout_delay_extension: !!(entry.pc.remoteDescription && /a=extmap:[^\r\n]*playout-delay/.test(entry.pc.remoteDescription.sdp || '')) }; }) };
   }
+  // 1.99?? avf (F2): the viewer's toggle shows its state - "Sync to the audio: on" / "... off", the `on` class (room-bridge.css
+  // .rb-avsync) and aria-pressed - and its title says what it holds (the cams and the mic signs; the cams only while the mic signs
+  // are held for everyone, mic_follow_toggle off). It used to read "Sync cams to the audio" either way, so a click meant to sync
+  // turned it off.
+  function paint(button) {
+    var text = enabled ? translate('js.pad.audio.sync_on', 'Sync to the audio: on') : translate('js.pad.audio.sync_off', 'Sync to the audio: off');
+    var title = micIgnoresToggle(sound.slug)
+      ? translate('js.pad.audio.sync_title_cams', 'Holds the cams back to match the room audio you hear. The mic signs are held for everyone.')
+      : translate('js.pad.audio.sync_title', 'Holds the cams and the mic signs (the On the mic card, the people list, the mic lines in chat and the mic stage) back to match the room audio you hear.');
+    if (button.textContent !== text) button.textContent = text;          // (each tick repaints: only what changed)
+    if (button.title !== title) button.title = title;
+    button.className = 'rb-btn rb-avsync' + (enabled ? ' on' : '');
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  }
+  function youLine() {
+    // 1.99?? avf (F2): the debug panel's first line - whether sync applies to this viewer by their own toggle
+    var line = enabled ? translate('js.pad.audio.avsync_you_on', 'sync for you: ON (your toggle)') : translate('js.pad.audio.avsync_you_off', 'sync for you: OFF (your toggle)');
+    return micIgnoresToggle(sound.slug) ? line + ' · ' + translate('js.pad.audio.avsync_mic_all', 'mic signs: held for everyone') : line;
+  }
   function notify() {
-    // (1.99ahm: the viewer's toggle is offered while any of the mic switches holds something back too)
-    var available = MIC_KINDS.some(function (kind) { return delayFor(sound.slug, true, kind) > 0; }) || receivers.some(function (entry) { return targetFor(entry, true) != null; });
-    buttons = buttons.filter(function (item) { if (item.box.isConnected === false) return false; item.button.hidden = !available; item.button.setAttribute('aria-pressed', enabled ? 'true' : 'false'); return true; });
+    // (1.99ahm: the viewer's toggle is offered while any of the mic switches holds something back too; 1.99?? avf F5: while they
+    // follow it - mic_follow_toggle off, it is offered for the cams only)
+    var available = !micIgnoresToggle(sound.slug) && MIC_KINDS.some(function (kind) { return delayFor(sound.slug, true, kind) > 0; }) ||
+      receivers.some(function (entry) { return targetFor(entry, true) != null; });
+    buttons = buttons.filter(function (item) { if (item.box.isConnected === false) return false; item.button.hidden = !available; paint(item.button); return true; });
     var c = cfgFor(sound.slug), wantsDebug = /(?:^|[?&])avsync=1(?:&|$)/.test(W.location && W.location.search || '');
     if (wantsDebug && c && c.dbg && D.body) {
       if (!debugBox) {
@@ -489,7 +538,7 @@
         button.type = 'button'; button.style.minHeight = '44px'; button.addEventListener('click', function () { try { if (W.navigator.clipboard) W.navigator.clipboard.writeText(JSON.stringify(debug(), null, 2)).catch(function () {}); } catch (e) {} });
         panel.appendChild(title); panel.appendChild(button); panel.appendChild(content); D.body.appendChild(panel); debugBox = { panel: panel, content: content };
       }
-      debugBox.panel.hidden = false; debugBox.content.textContent = JSON.stringify(debug(), null, 2);
+      debugBox.panel.hidden = false; debugBox.content.textContent = youLine() + '\n' + JSON.stringify(debug(), null, 2);   // (1.99?? avf F2)
     } else if (debugBox) debugBox.panel.hidden = true;
     listeners.slice().forEach(function (listener) { try { listener(); } catch (e) {} });
   }
@@ -500,9 +549,9 @@
   }
   function decorate(box) {
     if (!box || buttons.some(function (item) { return item.box === box; })) return;
-    var button = D.createElement('button'); button.type = 'button'; button.className = 'rb-btn'; button.hidden = true;
-    button.style.minHeight = '44px'; button.style.minWidth = '44px'; button.textContent = translate('js.pad.audio.sync_cams', 'Sync cams to the audio');
-    button.setAttribute('aria-pressed', enabled ? 'true' : 'false'); button.addEventListener('click', function () { setEnabled(!enabled); });
+    var button = D.createElement('button'); button.type = 'button'; button.hidden = true;
+    button.style.minHeight = '44px'; button.style.minWidth = '44px'; paint(button);   // (1.99?? avf F2: its label, class and title say on / off)
+    button.addEventListener('click', function () { setEnabled(!enabled); });
     box.appendChild(button); buttons.push({ box: box, button: button }); notify();
   }
   function onChange(callback) { if (typeof callback !== 'function') return function () {}; listeners.push(callback); return function () { listeners = listeners.filter(function (f) { return f !== callback; }); }; }

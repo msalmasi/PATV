@@ -13,6 +13,10 @@
     apply_mic_list: _t('js.admavsync.apply_mic_list', "Delay the people list's 🎙 icons"),   // 1.99ahm: the people list's 🎙 icons, its own switch
     engine_chromium: 'Enable Chromium video delay', engine_firefox: 'Enable Firefox video delay', engine_safari: 'Enable Safari video delay',
     fallback_rtc_ms: 'WebRTC fallback delay (ms)', fallback_mp3_ms: 'MP3 fallback delay (ms)',
+    // 1.99?? avf (F4, F5): the mic signs' own fallback; whether the viewer's toggle holds the mic signs too
+    fallback_ind_rtc_ms: _t('js.admavsync.fallback_ind_rtc_ms', 'Mic-sign WebRTC fallback delay (ms)'),
+    fallback_ind_mp3_ms: _t('js.admavsync.fallback_ind_mp3_ms', 'Mic-sign MP3 fallback delay (ms)'),
+    mic_follow_toggle: _t('js.admavsync.mic_follow_toggle', "Viewers' Sync to the audio toggle also holds the mic signs"),
     k_pt_ms: 'Pass-through calibration (ms)', k_re_ms: 'Re-encode calibration (ms)',
     ind_path_ms: 'Mic-sign delivery time (ms)', k_ind_ms: 'Mic-sign calibration (ms)',
     cap_ms: 'Maximum video delay (ms)', cap_ind_ms: 'Maximum mic-sign delay (ms)', deadband_ms: 'Ignore changes smaller than (ms)',
@@ -23,7 +27,10 @@
     apply_mic: _t('js.admavsync.apply_mic_help', 'The mic stage’s tiles: a new speaker’s tile, the ring and newest highlights, who is speaking and the layout.'),
     apply_mic_card: _t('js.admavsync.apply_mic_card_help', 'The On the mic card beside the chat: people joining or leaving it and its order. Same delay as the mic signs.'),
     apply_mic_chat: _t('js.admavsync.apply_mic_chat_help', 'The chat’s “grabbed the mic” and “dropped the mic” lines: each shows in its place once the audio catches up. Typed chat is never held. Same delay as the mic signs.'),
-    apply_mic_list: _t('js.admavsync.apply_mic_list_help', "The 🎙 icons in the people list and its on-mic order, and the homepage's mic chips. Same delay as the mic signs.")   // 1.99ahm
+    apply_mic_list: _t('js.admavsync.apply_mic_list_help', "The 🎙 icons in the people list and its on-mic order, and the homepage's mic chips. Same delay as the mic signs."),   // 1.99ahm
+    // 1.99?? avf (F4, F5)
+    mic_follow_toggle: _t('js.admavsync.mic_follow_toggle_help', 'On (the default): a viewer who turns their toggle off sees the cams and the mic signs as they come. Off: the mic signs are held for everyone the switches above apply to, whatever their toggle says; the toggle then holds the cams only.'),
+    fallback_ind_rtc_ms: _t('js.admavsync.fallback_ind_help', "The mic signs' delay while the room audio isn't measured yet (the first seconds after it starts, or a long quiet stretch): about the whole audio path. The cams keep their own fallback above.")
   };
   function node(tag, text, cls) { var el = document.createElement(tag); if (text != null) el.textContent = text; if (cls) el.className = cls; return el; }
   function buttons(disabled) { Array.prototype.forEach.call(form.querySelectorAll('button'), function (el) { el.disabled = disabled; }); }

@@ -264,8 +264,8 @@ const grab = (c, u) => ({ k: "mic", c, ts: T0 + c, u });
 const drop = (c, u, ms) => ({ k: "unmic", c, ts: T0 + c, u, ms });
 const say = (c, u, text) => ({ k: "msg", c, ts: T0 + c, u, text });
 
-test("1.99ahm: the rendered pages load the controller (v=5: + the people list's 🎙; 1.99ahp v=6: + stable slots' places) only while A/V sync applies to the viewer", async () => {
-  assert.match(await padHtml(true), /<script src="\/public\/js\/av-sync\.js\?v=6"><\/script>/);
+test("1.99ahm: the rendered pages load the controller (v=5: + the people list's 🎙; 1.99ahp v=6: + stable slots' places; 1.99?? avf v=7: the toggle's on / off, the mic signs' fallback) only while A/V sync applies to the viewer", async () => {
+  assert.match(await padHtml(true), /<script src="\/public\/js\/av-sync\.js\?v=7"><\/script>/);
   assert.doesNotMatch(await padHtml(false), /av-sync\.js/);
 });
 
@@ -472,7 +472,7 @@ async function homeHtml(avsyncOn) {
 }
 async function home({ avsync = true, config = baseConfig() } = {}) {
   const html = await homeHtml(avsync);
-  if (avsync) assert.match(html, /<script src="\/public\/js\/av-sync\.js\?v=6"><\/script>/); else assert.doesNotMatch(html, /av-sync\.js/);
+  if (avsync) assert.match(html, /<script src="\/public\/js\/av-sync\.js\?v=7"><\/script>/); else assert.doesNotMatch(html, /av-sync\.js/);
   const { json, src } = pageScript(html, "lrInit");
   const els = {}; for (const id of ["lrFeed", "lrTopic", "lrCount", "lrLive", "lrLiveTxt", "lrMic", "lrPeople", "lrAudioBox"]) els[id] = {};
   const H = harness({ script: src, json, ids: { init: "lrInit", els }, avsync, config, slug: SLUG });

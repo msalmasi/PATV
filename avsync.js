@@ -15,9 +15,15 @@ const FIELDS = Object.freeze({
   apply_mic_card: { def: false }, apply_mic_chat: { def: false },
   // 1.99ahm: the people list's 🎙 icons and on-mic order (and the homepage's mic chips) - its own switch, the same offset and rules
   apply_mic_list: { def: false },
+  // 1.99?? avf (F5): whether a viewer's own "Sync to the audio" toggle also holds the mic signs (true = as before). false: the mic
+  // signs are held for every viewer the switches apply to, whatever their toggle says; the toggle then holds the cams only
+  mic_follow_toggle: { def: true },
   apply_mp3: { def: true },
   engine_chromium: { def: true }, engine_firefox: { def: false }, engine_safari: { def: false },
   fallback_rtc_ms: { def: 500, min: 0, max: 4000 }, fallback_mp3_ms: { def: 1500, min: 0, max: 4000 },
+  // 1.99?? avf (F4): the mic signs' own fallback while the room audio isn't measured (they need about the whole audio path, the
+  // cams far less - one shared number could not serve both)
+  fallback_ind_rtc_ms: { def: 2000, min: 0, max: 5000 }, fallback_ind_mp3_ms: { def: 3000, min: 0, max: 5000 },
   k_pt_ms: { def: 0, min: -3000, max: 3000 }, k_re_ms: { def: 0, min: -3000, max: 3000 },
   ind_path_ms: { def: 300, min: 0, max: 3000 }, k_ind_ms: { def: 0, min: -3000, max: 3000 },
   cap_ms: { def: 3000, min: 0, max: 4000 }, cap_ind_ms: { def: 3000, min: 0, max: 5000 },
@@ -149,6 +155,7 @@ function answer(roomId, paths, user) {
   }
   return { ok: true, on: viewerOn(user), dbg, audio: roomAudio(roomId), cams,
     k: { pt: c.k_pt_ms, re: c.k_re_ms, ind: c.k_ind_ms }, fallback: { rtc: c.fallback_rtc_ms, mp3: c.fallback_mp3_ms },
+    fallback_ind: { rtc: c.fallback_ind_rtc_ms, mp3: c.fallback_ind_mp3_ms }, mic_follow_toggle: c.mic_follow_toggle,   // 1.99?? avf (F4, F5)
     cap: c.cap_ms, cap_ind: c.cap_ind_ms, deadband: c.deadband_ms, period_s: c.period_s,
     apply: { video: c.apply_video, mic: c.apply_mic, mp3: c.apply_mp3, mic_card: c.apply_mic_card, mic_chat: c.apply_mic_chat,
              mic_list: c.apply_mic_list },   // 1.99ahm: + card / chat / people list

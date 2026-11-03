@@ -88,7 +88,7 @@ test("admin capability + same-site fetch, every save versioned and audited, inva
   assert.equal(audit[0].admin_id, "adm");
   const prior = AV.current(); AV._reset(); await AV.init(); assert.deepEqual(AV.current(), prior, "versioned database row survives process cache reset");
   const page = await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } });
-  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=3/);   // 1.99ahm: 3 - Delay the people list's 🎙 icons
+  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=4/);   // 1.99ahm: 3 - Delay the people list's 🎙 icons; 1.99?? avf: 4 - the mic-sign fallbacks, mic_follow_toggle
 });
 
 test("public route requires sign-in/full pad access; mode does not grant access; no identifiers or unheld cams", async () => {
@@ -367,4 +367,44 @@ test("1.99ahm: the admin card shows \"Delay the people list's 🎙 icons\" under
   box.checked = true; A.form.fire("change"); A.form.fire("submit");
   assert.equal(A.posts.length, 1); assert.equal(A.posts[0].cfg.apply_mic_list, true);
   assert.deepEqual([A.posts[0].cfg.apply_mic_card, A.posts[0].cfg.apply_mic_chat], [false, false]);
+});
+
+// 1.99?? avf (F4, F5): the mic signs' own fallback while the room audio is unmeasured (fallback_ind_rtc_ms / _mp3_ms - the cams keep
+// fallback_rtc_ms / _mp3_ms) and mic_follow_toggle (true = a viewer's own toggle also holds the mic signs, as before)
+test("1.99?? avf: the mic signs' own fallbacks (2000 / 3000 ms, 0-5000) and mic_follow_toggle (on) - defaults, ranges, a strict boolean, audited, in the viewer's answer; an older stored row reads the defaults", async () => {
+  assert.deepEqual([AV.DEFAULTS.fallback_ind_rtc_ms, AV.DEFAULTS.fallback_ind_mp3_ms, AV.DEFAULTS.mic_follow_toggle], [2000, 3000, true]);
+  for (const key of ["fallback_ind_rtc_ms", "fallback_ind_mp3_ms"]) {
+    assert.deepEqual([AV.FIELDS[key].min, AV.FIELDS[key].max], [0, 5000], key);
+    assert.ok(AV.normalize({ [key]: 5001 }).errors[key]); assert.ok(AV.normalize({ [key]: -1 }).errors[key]);
+    assert.equal(AV.normalize({ [key]: "4500" }).cfg[key], 4500); assert.equal(AV.normalize({ [key]: 0 }).cfg[key], 0);
+  }
+  assert.ok(AV.normalize({ mic_follow_toggle: "yes" }).errors.mic_follow_toggle);
+  assert.equal(AV.normalize({ mic_follow_toggle: "false" }).cfg.mic_follow_toggle, false);
+  assert.equal(AV.normalize({ mic_follow_toggle: 1 }).cfg.mic_follow_toggle, true);
+  const A = { userId: "adm-avf", username: "adm-avf", class: "Admin" };
+  const before = await get(publicPath(), "v2");
+  assert.deepEqual([before.data.fallback_ind, before.data.mic_follow_toggle], [{ rtc: 2000, mp3: 3000 }, true], "the defaults reach viewers");
+  const saved = await AV.save(A, { cfg: { mode: "everyone", fallback_ind_rtc_ms: 1800, fallback_ind_mp3_ms: 4500, mic_follow_toggle: false } });
+  assert.deepEqual([saved.changed.fallback_ind_rtc_ms, saved.changed.fallback_ind_mp3_ms, saved.changed.mic_follow_toggle], [[2000, 1800], [3000, 4500], [true, false]]);
+  const audit = await db.getQuery("SELECT detail FROM admin_audit WHERE action = 'avsync_cfg' ORDER BY id DESC LIMIT 1");
+  assert.deepEqual(JSON.parse(audit[0].detail).changed.mic_follow_toggle, [true, false], "audited like the others");
+  const on = await get(publicPath(), "v2");
+  assert.deepEqual(on.data.fallback_ind, { rtc: 1800, mp3: 4500 }); assert.equal(on.data.mic_follow_toggle, false);
+  assert.deepEqual(on.data.fallback, { rtc: 500, mp3: 1500 }, "the cams keep their own fallback");
+  // a row saved before these fields existed: the defaults, everything else as it was
+  await db.runQuery("UPDATE avsync_cfg SET data = ? WHERE id = 1", [JSON.stringify({ mode: "everyone", fallback_rtc_ms: 400, apply_mic_card: true })]);
+  AV._reset(); await AV.init();
+  const c = AV.current().cfg;
+  assert.deepEqual([c.fallback_ind_rtc_ms, c.fallback_ind_mp3_ms, c.mic_follow_toggle, c.fallback_rtc_ms, c.apply_mic_card], [2000, 3000, true, 400, true]);
+  // the admin card draws them with their labels (locales/en.json) and says what they do
+  const data = (await get("/api/admin/pepe/avsync", "adm")).data;
+  const C = adminCard(data); for (let i = 0; i < 12; i++) await Promise.resolve();
+  const follow = C.labelOf("mic_follow_toggle"), rtc = C.labelOf("fallback_ind_rtc_ms"), mp3 = C.labelOf("fallback_ind_mp3_ms");
+  assert.ok(follow && rtc && mp3, "drawn");
+  assert.ok(follow.textContent.includes(" " + C.EN["js.admavsync.mic_follow_toggle"]) && follow.textContent.includes(C.EN["js.admavsync.mic_follow_toggle_help"]), follow.textContent);
+  assert.ok(rtc.textContent.startsWith(C.EN["js.admavsync.fallback_ind_rtc_ms"]) && rtc.textContent.includes("default 2000 · 0–5000") && rtc.textContent.includes(C.EN["js.admavsync.fallback_ind_help"]), rtc.textContent);
+  assert.ok(mp3.textContent.startsWith(C.EN["js.admavsync.fallback_ind_mp3_ms"]) && mp3.textContent.includes("default 3000"), mp3.textContent);
+  assert.doesNotMatch(C.fields.textContent, /undefined|MISSING/);
+  await AV.save(A, { reset: true });
+  assert.deepEqual([AV.current().cfg.fallback_ind_rtc_ms, AV.current().cfg.mic_follow_toggle], [2000, true], "reset: the defaults");
 });

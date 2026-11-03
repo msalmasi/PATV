@@ -6,6 +6,15 @@
 .rb-btn:hover, .rb-btn:focus-visible { border-color: var(--ds-green); }
 .rb-btn:focus-visible, .rb-vol:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
 .rb-btn[disabled] { opacity: .5; cursor: not-allowed; }
+/* 1.99?? avf (F2): the "Sync to the audio" toggle (av-sync.js) shows its state - on: green outline, text and tint; off: the plain
+   button with quieter text. Scoped to .rb-avsync: the play and mute buttons carry aria-pressed too. The site is dark-only (ds.css
+   color-scheme: dark) and the audio box keeps its own dark fill; forced colours (high contrast) get a system-colour outline instead */
+.rb-btn.rb-avsync[aria-pressed="true"], .rb-btn.rb-avsync.on { border-color: var(--ds-green); color: var(--ds-green-2); background: var(--ds-green-bg); }
+.rb-btn.rb-avsync[aria-pressed="false"] { color: var(--ds-text-muted); }
+@media (forced-colors: active) {
+  .rb-btn.rb-avsync[aria-pressed="true"], .rb-btn.rb-avsync.on { border: 2px solid Highlight; color: Highlight; }
+  .rb-btn.rb-avsync[aria-pressed="false"] { border: 1px dashed ButtonText; color: ButtonText; }
+}
 
 .rb-audio { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; background: #0d0d0d; border: 1px solid #1f2a20;
             border-radius: 10px; padding: 6px 8px; font-family: var(--ds-font); color: #ccc; }

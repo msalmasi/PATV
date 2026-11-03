@@ -10,7 +10,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 function sandbox(options = {}) {
   let now = 100000, sequence = 0;
-  const timers = new Map(), events = {}, requests = [], storage = new Map();
+  const timers = new Map(), events = {}, requests = [], storage = new Map(Object.entries(options.stored || {}));   // (1.99?? avf: stored - the viewer's saved toggle)
   const config = Object.assign({ ok: true, on: true, dbg: false, audio: { rtc_ms: 1000, mp3_ms: 1000, mix_ms: 700, helper_ms: 270, age_s: 0 },
     cams: { cam1: { src: "passthrough", hold_ms: 200 }, cam2: { src: "reencode", hold_ms: 300 } }, k: { pt: 100, re: -100, ind: 0 },
     fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
@@ -700,4 +700,115 @@ test("1.99ahp stable slots: a stable program's places are delayed with it - an e
   s.api.gateProgram("pad", off([["a", 0], ["b", 1], ["c", 2]]), cb); await s.advance(700);
   s.api.gateProgram("pad", off([["c", 0], ["b", 1], ["a", 2]]), cb);
   assert.equal(at(shown), "a@2 b@1 c@0", "off: today's (latest places)"); assert.equal(shown.dyn.main, "a");
+});
+
+// 1.99?? avf (F2): the viewer's toggle had one label, "Sync cams to the audio", on or off (only aria-pressed changed, and no CSS
+// styled it), so a click meant to sync turned it off - the owner debugged A/V sync with it off
+test("1.99?? avf (F2): the toggle shows its state - its label says on / off, the on class, a title naming the cams and the mic signs; the debug panel's first line says sync for you ON / OFF", async () => {
+  const s = sandbox({ search: "?avsync=1", config: { dbg: true }, stored: { "patv.avsync.enabled": "0" } });
+  s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  s.tile(); s.media("rtc"); await s.advance(0);
+  const button = box.children[0], classes = () => String(button.className || "").split(/\s+/);
+  const pre = () => s.document.body.children.find((e) => e.tagName === "ASIDE").children[2].textContent, first = () => pre().split("\n")[0];
+  assert.equal(button.hidden, false, "offered");
+  assert.equal(button.textContent, "Sync to the audio: off"); assert.ok(classes().includes("rb-btn") && classes().includes("rb-avsync"));
+  assert.ok(!classes().includes("on")); assert.equal(button.attrs["aria-pressed"], "false");
+  assert.match(button.title, /cams and the mic signs/);
+  assert.equal(first(), "sync for you: OFF (your toggle)");
+  assert.ok(pre().includes("pepe_ms"), "the measurements follow");
+  button.click();
+  assert.equal(button.textContent, "Sync to the audio: on"); assert.ok(classes().includes("on")); assert.equal(button.attrs["aria-pressed"], "true");
+  assert.equal(s.storage.get("patv.avsync.enabled"), "1"); assert.equal(first(), "sync for you: ON (your toggle)");
+  s.event("storage", { key: "patv.avsync.enabled", newValue: "0" });
+  assert.equal(button.textContent, "Sync to the audio: off", "another tab turned it off: this tab's button says so"); assert.ok(!classes().includes("on"));
+  await s.advance(2000); assert.equal(button.textContent, "Sync to the audio: off", "each tick keeps it");
+  // the CSS styles the on state (the attribute and the class) on this button only - the play and mute buttons use aria-pressed too
+  const css = fs.readFileSync(path.join(__dirname, "../public/css/room-bridge.css"), "utf8");
+  assert.match(css, /\.rb-btn\.rb-avsync\[aria-pressed="true"\], \.rb-btn\.rb-avsync\.on \{[^}]*border-color: var\(--ds-green\)[^}]*color: var\(--ds-green-2\)/);
+  assert.match(css, /@media \(forced-colors: active\) \{\s*\.rb-btn\.rb-avsync\[aria-pressed="true"\]/, "high contrast too");
+  assert.doesNotMatch(css, /(^|[,}\s])\.rb-btn\[aria-pressed/, "never every .rb-btn");
+  // every string has its English text in locales/en.json (the other languages sync from it), and the JS fallback is that text
+  const EN = JSON.parse(fs.readFileSync(path.join(__dirname, "../locales/en.json"), "utf8"));
+  let n = 0;
+  for (const m of source.matchAll(/translate\('(js\.[a-z0-9_.]+)', '((?:[^'\\]|\\.)*)'\)/g)) { n++; assert.equal(EN[m[1]], m[2], m[1]); }
+  assert.ok(n >= 9, "the new strings are checked: " + n);
+});
+
+test("1.99?? avf (F4): unmeasured, the mic signs use their own fallback (not the cams' 500); the last measured latency is kept 30 s through a lull, then each falls back", async () => {
+  const audio = { rtc_ms: 2400, mp3_ms: 1000, mix_ms: 700, helper_ms: 1500, age_s: 0 };
+  const s = sandbox({ config: { audio, fallback_ind: { rtc: 2000, mp3: 3000 } } });
+  s.api.pad("pad"); const a = s.tile(); s.media("rtc"); await s.advance(0);
+  const d = () => s.api.debug();
+  assert.deepEqual([d().card_ms, d().indicator_ms, a.rx.writes.at(-1)], [2000, 2000, 500], "first RTC stats have no interval: the mic signs' 2000, the cams' own 500");
+  assert.equal(d().calibration.fallback_ind_ms, 2000);
+  await s.advance(2000);
+  assert.deepEqual([d().card_ms, a.rx.writes.at(-1)], [2300, 2600], "measured: 2400 + 200 - 300; the cam 2400 - 200 + 100 + 200 + 100");
+  s.config.audio.rtc_ms = null;                                   // nobody heard for ~5 s: Pepe reports no latency
+  await s.advance(3000);                                          // +5000: the settings check brings it
+  assert.deepEqual([d().audio.pepe_ms, d().audio.pepe_held_ms], [null, 2400]);
+  assert.deepEqual([d().card_ms, a.rx.writes.at(-1)], [2300, 2600], "the last measured value is kept: the next grab isn't 1.8 s early, the cams don't step");
+  await s.advance(24000); assert.deepEqual([d().card_ms, a.rx.writes.at(-1)], [2300, 2600], "for up to 30 s");
+  await s.advance(3000);                                          // +32000
+  assert.deepEqual([d().card_ms, a.rx.writes.at(-1), d().audio.pepe_held_ms], [2000, 500, null], "then the fallbacks - the mic signs' 2000, the cams' 500");
+  s.config.audio.rtc_ms = 2600; await s.advance(5000); assert.equal(d().card_ms, 2500, "measured again");
+  s.media("rtc"); assert.equal(d().card_ms, 2000, "a new audio connection: the mic signs' fallback until it is measured, not 500");
+  await s.advance(0); assert.equal(d().card_ms, 2000); await s.advance(2000); assert.equal(d().card_ms, 2500);
+  // MP3: its own fallback, up to 5000 (the cap allowing)
+  const m = sandbox({ config: { cap_ind: 5000, fallback_ind: { rtc: 2000, mp3: 4500 } } });
+  m.api.pad("pad"); m.media("mp3", "pad", { ahead: () => null }); await m.advance(0);
+  assert.equal(m.api.debug().card_ms, 4500, "MP3 unmeasured: fallback_ind_mp3_ms");
+  // an older site (no fallback_ind): the shared fallback, as before
+  const o = sandbox(); o.api.pad("pad"); o.media("rtc"); await o.advance(0); assert.equal(o.api.debug().card_ms, 500);
+});
+
+test("1.99?? avf (F4): turning the toggle on starts the mic signs at their own fallback, then the measured value", async () => {
+  const s = sandbox({ stored: { "patv.avsync.enabled": "0" }, config: { audio: { rtc_ms: 2400, mp3_ms: 1000, mix_ms: 700, helper_ms: 1500, age_s: 0 }, fallback_ind: { rtc: 2000, mp3: 3000 } } });
+  s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  s.media("rtc"); await s.advance(4000);
+  assert.deepEqual([s.api.debug().enabled, s.api.debug().card_ms], [false, 0], "off: nothing held");
+  box.children[0].click(); assert.equal(s.api.debug().card_ms, 2000, "on: the mic signs' fallback at once (it was the cams' 500)");
+  await s.advance(0); assert.equal(s.api.debug().card_ms, 2000);
+  await s.advance(2000); assert.equal(s.api.debug().card_ms, 2300, "then measured");
+});
+
+// 1.99?? avf (F5): mic_follow_toggle - an admin setting (true = as before: the viewer's toggle governs the cams AND the mic signs)
+test("1.99?? avf (F5): mic_follow_toggle false - the mic signs are held with the viewer's toggle off (the room audio still measured: rtc + browser - delivery); the toggle holds the cams only", async () => {
+  const s = sandbox({ stored: { "patv.avsync.enabled": "0" }, search: "?avsync=1",
+    config: { dbg: true, mic_follow_toggle: false, audio: { rtc_ms: 2400, mp3_ms: 1000, mix_ms: 700, helper_ms: 1500, age_s: 0 }, fallback_ind: { rtc: 2000, mp3: 3000 } } });
+  s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  s.media("rtc"); await s.advance(0);
+  const d = () => s.api.debug(), signs = () => [d().indicator_ms, d().card_ms, d().chat_ms, d().list_ms];
+  assert.deepEqual(signs(), [2000, 2000, 2000, 2000], "unmeasured: the mic signs' fallback");
+  await s.advance(2000);
+  assert.deepEqual(signs(), [2300, 2300, 2300, 2300], "the room audio is sampled with the toggle off: 2400 + 200 - 300");
+  assert.deepEqual([d().enabled, d().mic_follow_toggle, d().audio.browser_ms], [false, false, 200]);
+  const a = s.tile(); await s.advance(0); assert.equal(a.rx.writes.at(-1), null, "the toggle off: no cam delay");
+  const button = box.children[0];
+  assert.equal(button.hidden, false, "offered for the cams"); assert.equal(button.textContent, "Sync to the audio: off");
+  assert.match(button.title, /^Holds the cams back/); assert.match(button.title, /mic signs are held for everyone/);
+  const panel = s.document.body.children.find((e) => e.tagName === "ASIDE");
+  assert.equal(panel.children[2].textContent.split("\n")[0], "sync for you: OFF (your toggle) · mic signs: held for everyone");
+  // the chat's grab / drop line, the card and the people list wait for the audio
+  const host = s.element("div"); s.document.body.appendChild(host);
+  const line = s.element("div"); host.appendChild(line); line.style.display = "flex";
+  assert.equal(s.api.holdLine("pad", line), true); assert.equal(line.style.display, "none");
+  let shown; const view = (v) => { shown = plain(v); };
+  s.api.micView("pad", roster([]), view); await s.advance(2299);
+  assert.equal(line.style.display, "none");
+  shown = plain(s.api.micView("pad", roster(["a"]), view)); assert.deepEqual([shown.mic.length, shown.members[0].on_mic], [0, false], "a's grab waits");
+  await s.advance(1); assert.equal(line.style.display, "flex", "the line shows once the audio caught up (2300 ms)");
+  await s.advance(2300); assert.deepEqual([shown.mic.map((p) => p.login), shown.members[0].on_mic], [["a"], true]);
+  // on: the cams too; off again: the cams go back, the signs stay held
+  button.click(); await s.advance(2000); assert.equal(a.rx.writes.at(-1), 2600);
+  assert.equal(button.textContent, "Sync to the audio: on");
+  button.click(); assert.equal(a.rx.writes.at(-1), null, "the toggle off releases the cams");
+  assert.deepEqual(signs(), [2300, 2300, 2300, 2300], "... and only the cams");
+  const later = s.element("div"); host.appendChild(later); assert.equal(s.api.holdLine("pad", later), true, "a line is still held");
+  // no cam: nothing left for the toggle to hold - hidden
+  a.pc.close(); await s.advance(2000); assert.equal(button.hidden, true);
+  // the default (true): the toggle releases the signs, as before
+  s.config.mic_follow_toggle = true; await s.advance(5000);
+  assert.deepEqual(signs(), [0, 0, 0, 0], "mic_follow_toggle on: the viewer's toggle off holds nothing");
+  assert.equal(later.style.display, "", "the held line shows at once");
+  assert.equal(button.hidden, false, "the toggle is offered again (it governs the mic signs)"); assert.match(button.title, /cams and the mic signs/);
 });

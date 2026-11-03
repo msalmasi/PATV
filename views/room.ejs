@@ -632,7 +632,7 @@
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
-  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=6"></script><% } %>
+  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=7"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
@@ -841,7 +841,7 @@
   <script src="/public/js/pad-history.js?v=3"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=2"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
-  <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=11">
   <script src="/public/js/room-bridge.js?v=19"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
