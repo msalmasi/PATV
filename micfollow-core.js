@@ -256,6 +256,15 @@ const CARD_WHYS = Object.freeze(["off_cam", "failed", "retry", "full", "cold_off
   "withheld"]);   // 1.99?? (privacy controls S3): a cam opt-out's named card (cfg withheld_cover) - the page says "cam off"
 /** The site's live relays were full at the moment of a hold (a race, not a failed open): "full", another try after this. */
 const FULL_RETRY_MS = 15 * 1000;
+/** 1.99?? (privacy controls S3, review 5): is tile x a withheld cam's card now? Its elig says "withheld" - or (cfg withheld_cover on) a
+ *  hold / relay of it was refused "opted_out" (holdDone / sessionEnded set x.whUntil) and the site's own rules still say ok /
+ *  cam_unknown: Pepe's own opt-out list can be ahead of the site's (a room line's !livecam off, a sync on its way). Until whUntil no new
+ *  hold, cold open or still is asked for (the card stays) - one more try after it, the cadence a CUT's cooldown gave with the switch off,
+ *  never a hold every step. A step whose elig says "withheld" clears whUntil (the site caught up: it decides from then on). */
+const withheldNow = (x, e, C, t) => e === "withheld" ||
+  (!!C && C.withheld_cover === true && (x.whUntil || 0) > t && (e === "ok" || e === "cam_unknown"));
+/** ... how long that refusal holds the card: the consent cut's cooldown (cooldown_s), at least FULL_RETRY_MS. */
+const whHoldMs = (C) => Math.max(FULL_RETRY_MS, (Number(C && C.cooldown_s) || 0) * 1000);
 /** wave2 WP-4 (F.2): a slots_busy this soon after the mic stage evicted a kept relay for the open (Pepe frees the slot on his
  *  next tick, ~1 s) is tried again once, this much later - never a soft failure, a liveBlock or a backoff. */
 const EVICT_WINDOW_MS = 5 * 1000, EVICT_RETRY_MS = 2 * 1000;
@@ -796,7 +805,10 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
     if (Number.isFinite(ss.viewers) && ss.viewers > (x.peak || 0)) x.peak = ss.viewers;
     // 1.99?? (privacy controls S3): a cam opt-out (cfg withheld_cover) - their named card, never a relay or a still: one on its way or
     // running is let go now. Never their cam-off / backoff bookkeeping (the cam may well be on; it is only withheld)
-    if (e === "withheld") {
+    if (withheldNow(x, e, C, t)) {                           // (1.99?? S3 review 5: + a refusal "opted_out" the site doesn't know yet)
+      // (1.99?? S3 review 5: the site's own rules say withheld - they caught up, so they decide from here: once they say ok again - live cam on
+      // again - the cam comes back at once, not after whUntil)
+      if (e === "withheld") x.whUntil = 0;
       if (x.video !== "card" || x.why !== "withheld") {
         if (liveish(x) || x.pend) A.push({ a: "release", login: x.login });
         if (x.video === "still") A.push({ a: "still_stop", login: x.login });
@@ -858,7 +870,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
   for (const x of order) {
     if (x.cover) continue;                                    // (wave2 WP-4: no live place, cold open or still for a cover)
     const e = I.elig.get(x.login);
-    if (e === "off_cam" || e === "withheld" || liveish(x) || x.pend) continue;    // (1.99?? S3: withheld - its card, set in a)
+    if (e === "off_cam" || withheldNow(x, e, C, t) || liveish(x) || x.pend) continue;    // (1.99?? S3: withheld - its card, set in a)
     const ss = I.sess.get(x.login) || NONE;
     if (e === "ok" && S.sawOff.has(x.login)) {               // the cam went off and on again: the blocks end
       S.sawOff.delete(x.login); S.backoff.delete(x.login); S.inexact.delete(x.login); S.offcam.delete(x.login);
@@ -1213,6 +1225,7 @@ function holdDone(S, login, ok, code, C, t) {
   // (stageConsent: the live-video opt-out only) makes the tile its withheld card, never a cut; the next step's elig decides (a CUT
   // there - private, banned, ... - still cuts). No backoff
   if (code === "opted_out" && C && C.withheld_cover === true) {
+    x.whUntil = t + whHoldMs(C);                         // (1.99?? S3 review 5: no new hold until then, whatever the site's rules say - withheldNow)
     setVideo(x, "card", "withheld", t);
     S.v++;
     A.push({ a: "touch", why: "hold_failed" });
@@ -1263,7 +1276,10 @@ function sessionEnded(S, login, why, C, t) {
   // 1.99?? (privacy controls S3): with cfg withheld_cover on, a relay that ended "opted_out" (!livecam off) leaves the tile up as its
   // withheld card - the cam stops, not the appearance; the next step's elig decides (a CUT there still cuts)
   if (why === "opted_out" && C && C.withheld_cover === true) {
-    if (!liveish(x) && !x.pend) return { cut: null, actions: A };
+    x.whUntil = t + whHoldMs(C);                         // (1.99?? S3 review 5: Pepe said opted_out - no new hold until then: withheldNow)
+    // (1.99?? S3 review 5: a still of theirs goes now too - with the switch off the cut took it at once)
+    if (!liveish(x) && !x.pend && x.video !== "still") return { cut: null, actions: A };
+    if (x.video === "still") A.push({ a: "still_stop", login });
     x.pend = false;
     x.unverifiedAt = 0;
     setVideo(x, "card", "withheld", t);
