@@ -99,6 +99,11 @@
 // counts them as attributed (the stage isn't dimmed for "someone" while a cover talks); a stage of only covers never
 // becomes the default view (showsSoon: no picture). While cfg covers is off (its kill switch) the engine shows none and
 // takes any cover tile off at once (review B-privacy-ux-4).
+// 1.99?? (privacy controls S3, the cfg switch withheld_cover - dark): "withheld" is a CARD STATE beside off_cam / cam_unknown - a cam
+// opt-out whose person may otherwise be on the stage (micfollow.eligOf ran every other rule): a candidate, a tile (card "withheld",
+// leaving like a cam-off card after the plain hand-over), attributed in speaking() (a lone holder is no longer "Someone is speaking");
+// never a hold, a cold open, a still or a warm keep (keepFor / keptCheck), and a relay or still it had is let go at once. livecam's
+// "opted_out" (a hold refused, a relay ended) is then that card, never a cut. Switch off: elig never says "withheld" - today exactly.
 // 1.99ahp STABLE SLOTS (owner 2026-11-02): the places the page shows are arrange()'s (micfollow.js arrangeOf, the site knob
 // stable_slots - on): a person keeps their place while they stay on the stage. The engine's own tile order (pos, compact) is
 // unchanged - it is today's order the knob falls back to; a tile that pushed another off carries slotOf (whose place it takes).
@@ -178,6 +183,11 @@ const FIELDS = Object.freeze({
   // /media/cover/p/<key>.webp - no Discord id / user id in the URL, and the very bytes a snap / clip draws). Off = the photo's own
   // URL, as before (captures still fetch an allowed photo server-side)
   cover_photo_proxy:     { def: true, bool: true },
+  // 1.99?? (privacy controls S3, G:/ops/privacy-controls-spec-2026-11-02.md "S3" + owner Q14): a cam opt-out (!livecam off, "Pads may
+  // put my cam on their stage" off, cam access followers / on request) withholds the CAM, not the person: a mic holder with one is a
+  // NAMED card in state "withheld" (their stage cover, "cam off") - never a relay, still, warm keep or capture of the cam - and every
+  // other stage rule still applies (micfollow.eligOf). Dark: off = today's CUT (no tile; "Someone is speaking" if alone)
+  withheld_cover:        { def: false, bool: true },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 
@@ -242,7 +252,8 @@ const LIST_PAUSE_MAX_MS = 5 * 60 * 1000;
 const EXACT_WAIT_MS = 60 * 1000;
 /** mfix: the reasons a tile shows a card instead of a picture (the page words each). 1.99afl: + list_unread (the room's list
  *  can't be read - S1b), cam_unknown ("checking their cam…" - S2) and pepe (his cam relay isn't there - S4). */
-const CARD_WHYS = Object.freeze(["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap", "list_unread", "cam_unknown", "pepe"]);
+const CARD_WHYS = Object.freeze(["off_cam", "failed", "retry", "full", "cold_off", "rate", "relays", "pool", "pad_cap", "list_unread", "cam_unknown", "pepe",
+  "withheld"]);   // 1.99?? (privacy controls S3): a cam opt-out's named card (cfg withheld_cover) - the page says "cam off"
 /** The site's live relays were full at the moment of a hold (a race, not a failed open): "full", another try after this. */
 const FULL_RETRY_MS = 15 * 1000;
 /** wave2 WP-4 (F.2): a slots_busy this soon after the mic stage evicted a kept relay for the open (Pepe frees the slot on his
@@ -606,6 +617,7 @@ function keptCheck(S, I, C, t, A) {
     else if (C.cold_open !== true) why = "cold_off";
     else if (S.pinned && S.pinned.has(l)) why = "pinned";                     // the pin holds the relay now
     else if (e === "off_cam") why = "off_cam";
+    else if (e === "withheld") why = "withheld";                              // (1.99?? S3: a cam opt-out - never kept warm)
     else if (e !== "ok" && e !== "notice" && e !== "cam_unknown") why = isCut(e) ? e : "elig_" + String(e || "none").slice(0, 20);
     else if (ss.state === "ended" || ss.state === "none" || ss.exact !== true || ss.kept === false) why = "relay";
     else if (shed) why = "shed";
@@ -748,7 +760,7 @@ function trackOthers(S, I, t) {
 /** DF-30 / DF-12: is the mic held right now only by speech nobody can show? -> "someone" | "pepe" | null.
  *  "someone": no proven holder the mic stage may show (ok / off cam) holds it, and someone else - unproven, anonymous, or a
  *  proven holder who is cut / not noticed yet / grab-spamming - has held it >= min_hold_s. "pepe": Pepe alone holds it,
- *  >= min_hold_s. */
+ *  >= min_hold_s. 1.99?? (privacy controls S3): a "withheld" holder (a cam opt-out's named cover card) is shown - attributed. */
 function speaking(S, I, C, t) {
   const minHold = C.min_hold_s * 1000;
   let attributed = false, other = false;
@@ -757,7 +769,7 @@ function speaking(S, I, C, t) {
   for (const h of I.holders || []) {
     if (S.pinned && S.pinned.has(h.login)) { attributed = true; continue; }   // mfix: a pinned cam's person: shown, named
     const e = I.elig.get(h.login);
-    if ((e === "ok" || e === "off_cam" || e === "cam_unknown") && !spamming(S, h.login, t)) { attributed = true; continue; }
+    if ((e === "ok" || e === "off_cam" || e === "cam_unknown" || e === "withheld") && !spamming(S, h.login, t)) { attributed = true; continue; }
     if (e === "pending" || e == null) continue;              // a fact fetch on its way (a moment): neither
     const s = S.seen.get(h.login);
     if (s && s.held && t - s.since >= minHold) other = true;
@@ -782,6 +794,19 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
     const e = I.elig.get(x.login);
     const ss = I.sess.get(x.login) || NONE;
     if (Number.isFinite(ss.viewers) && ss.viewers > (x.peak || 0)) x.peak = ss.viewers;
+    // 1.99?? (privacy controls S3): a cam opt-out (cfg withheld_cover) - their named card, never a relay or a still: one on its way or
+    // running is let go now. Never their cam-off / backoff bookkeeping (the cam may well be on; it is only withheld)
+    if (e === "withheld") {
+      if (x.video !== "card" || x.why !== "withheld") {
+        if (liveish(x) || x.pend) A.push({ a: "release", login: x.login });
+        if (x.video === "still") A.push({ a: "still_stop", login: x.login });
+        x.pend = false;
+        x.unverifiedAt = 0;
+        setVideo(x, "card", "withheld", t);
+        changed = true;
+      }
+      continue;
+    }
     if (e === "off_cam") {
       // their cam is off now: a failed-open / inexact / cam-off block ends when it comes back on (§3.4 rule 10)
       if ((S.backoff.get(x.login) || 0) > t || (S.inexact.get(x.login) || 0) > t || S.offcam.has(x.login)) S.sawOff.add(x.login);
@@ -833,7 +858,7 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
   for (const x of order) {
     if (x.cover) continue;                                    // (wave2 WP-4: no live place, cold open or still for a cover)
     const e = I.elig.get(x.login);
-    if (e === "off_cam" || liveish(x) || x.pend) continue;
+    if (e === "off_cam" || e === "withheld" || liveish(x) || x.pend) continue;    // (1.99?? S3: withheld - its card, set in a)
     const ss = I.sess.get(x.login) || NONE;
     if (e === "ok" && S.sawOff.has(x.login)) {               // the cam went off and on again: the blocks end
       S.sawOff.delete(x.login); S.backoff.delete(x.login); S.inexact.delete(x.login); S.offcam.delete(x.login);
@@ -943,7 +968,8 @@ function pictures(S, I, C, t, A, { fresh = true } = {}) {
  *   holders: [{login, since}]  proven, real holders in grab order,  unproven_n,
  *   others: [{key, since}]  holders nobody can show (unproven, anonymous, account keys, bots),  pepe: since | true | null,
  *   elig: Map(login -> "ok" | "off_cam" | "cam_unknown" (1.99afl: the roster can't say) | "pending" | "notice" (not noticed
- *         notice_lead_s ago) | CUT code)  holders + tiles + kept relays (wave2 WP-4: S.kept's logins),
+ *         notice_lead_s ago) | "withheld" (1.99?? privacy controls S3: a cam opt-out, cfg withheld_cover - a named card, never a
+ *         relay / still / warm keep) | CUT code)  holders + tiles + kept relays (wave2 WP-4: S.kept's logins),
  *   sess: Map(login -> {state, why, exact, held, kept, mfOnly, viewers})     livecam.mfState,
  *   pad: {layout, max_people, max_live, default_view, keep_recent (minutes)},
  *   room: {cams, listAt (ms of Pepe's last complete participant-list read, null = none), listFresh (true / false / null)},
@@ -1047,8 +1073,8 @@ function step(S, I, C, t) {
       if (t - s.since < C.min_hold_s * 1000) continue;
       const e = I.elig.get(h.login);
       // cut, not noticed long enough ago, or not known yet (1.99afl: a cam the roster can't classify yet still goes up - as a
-      // "checking their cam…" card, like a "cam off" one did before)
-      if (e !== "ok" && e !== "off_cam" && e !== "cam_unknown") continue;
+      // "checking their cam…" card, like a "cam off" one did before). 1.99?? (privacy controls S3): a withheld cam goes up as its card
+      if (e !== "ok" && e !== "off_cam" && e !== "cam_unknown" && e !== "withheld") continue;
       if (spamming(S, h.login, t)) continue;
       qualified.push({ login: h.login, since: s.since });
     }
@@ -1064,7 +1090,8 @@ function step(S, I, C, t) {
   // cam went off leaves after the plain hand-over (a "cam off" card isn't worth keeping)
   const minOn = C.min_on_stage_s * 1000;
   const keepMs = Math.max(0, Number(I.pad.keep_recent) || 0) * 60 * 1000;
-  const offCam = (x) => I.elig.get(x.login) === "off_cam";
+  // (1.99?? privacy controls S3: a withheld cam's card leaves like a "cam off" one - after the plain hand-over)
+  const offCam = (x) => { const e = I.elig.get(x.login); return e === "off_cam" || e === "withheld"; };
   const holdOf = (x) => (clearing ? 0 : offCam(x) ? C.handover_s * 1000 : Math.max(C.handover_s * 1000, keepMs));
   const dueAt = (x, hold) => Math.max(x.relAt + hold, x.addedAt + minOn);
   let due = S.tiles.filter((x) => x.relAt != null && t >= dueAt(x, holdOf(x)));
@@ -1182,6 +1209,15 @@ function holdDone(S, login, ok, code, C, t) {
   if (ok) return A;
   const unk = code === "not_on_cam" && camUnknownNow(S, x);
   x.unkHold = 0;
+  // 1.99?? (privacy controls S3): with cfg withheld_cover on, !livecam off stops the cam, not the appearance - livecam's "opted_out"
+  // (stageConsent: the live-video opt-out only) makes the tile its withheld card, never a cut; the next step's elig decides (a CUT
+  // there - private, banned, ... - still cuts). No backoff
+  if (code === "opted_out" && C && C.withheld_cover === true) {
+    setVideo(x, "card", "withheld", t);
+    S.v++;
+    A.push({ a: "touch", why: "hold_failed" });
+    return A;
+  }
   if (code === "opted_out" || code === "unavailable" || code === "ended_by") {
     // livecam's own consent check refused it (opted out, private activity, a relay someone ended): a CUT - off now, no
     // card left behind (§4.1). train2 merge: stagefix's stageConsent says "unavailable" - neutral, never which - for private
@@ -1224,6 +1260,17 @@ function sessionEnded(S, login, why, C, t) {
   const x = tileOf(S, login);
   if (!x) return { cut: null, actions: A };
   why = String(why || "");
+  // 1.99?? (privacy controls S3): with cfg withheld_cover on, a relay that ended "opted_out" (!livecam off) leaves the tile up as its
+  // withheld card - the cam stops, not the appearance; the next step's elig decides (a CUT there still cuts)
+  if (why === "opted_out" && C && C.withheld_cover === true) {
+    if (!liveish(x) && !x.pend) return { cut: null, actions: A };
+    x.pend = false;
+    x.unverifiedAt = 0;
+    setVideo(x, "card", "withheld", t);
+    S.v++;
+    A.push({ a: "touch", why: "session_end" });
+    return { cut: null, actions: A };
+  }
   if (why === "opted_out" || why === "ended_by" || why === "ended_by_admin") {
     const code = why === "opted_out" ? "opted_out" : "ended_by";
     removeTile(S, x, "cut:" + code, t, A);

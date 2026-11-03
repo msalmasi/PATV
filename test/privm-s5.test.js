@@ -524,3 +524,52 @@ test("padpepe: the 🐸 Pepe actions refuse a veiled entry (their command line w
   const why = PP.refusal(Rp, "look", "frankiefettuccine");
   assert.ok(why && why.status === 404, "a veiled person is no target: " + JSON.stringify(why));
 });
+
+// ── 1.99?? (privacy controls S3): micfollow_cfg withheld_cover - incognito + live cam off stays the peek hood (owner Q1) ──
+test("S3 (withheld_cover on): incognito + live cam off stays the PEEK hood - a veiled cam tile becomes its frog-name card in place (no relay), a new hold the hooded cover; never the named card, the cover picture or the login", async () => {
+  await setup;
+  MF._hide.clear();
+  const SC = require(path.join(repo, "stagecover"));
+  const asked = [], cov0 = SC.coverOf;
+  SC.coverOf = (l) => { asked.push(String(l)); return cov0(l); };
+  await MF.setCfg(ADM(), { withheld_cover: true, reason: "test" });
+  try {
+    await fresh();
+    await syncAt({ rooms: [v2Room({ mic: true })] });
+    for (let i = 0; i < 15 && !pad().state.tiles.some((x) => !x.cover); i++) await stepAt(3);
+    const x0 = pad().state.tiles.find((x) => !x.cover);
+    assert.ok(x0 && x0.login === "frankiefettuccine", "a veiled cam tile: " + JSON.stringify(pad().state.tiles.map((x) => x.login)));
+    const vid = pad().vids.get("frankiefettuccine");
+    await LC.setOptout("frankiefettuccine", true, { via: "web", ts: T + 30 });
+    await stepAt(1);
+    const x1 = pad().state.tiles.find((x) => x.login === "frankiefettuccine");
+    assert.ok(x1, "no cut - the same tile");
+    assert.deepEqual([x1.video, x1.why], ["card", "withheld"]);
+    assert.equal(pad().vids.get("frankiefettuccine"), vid, "the same public id");
+    assert.ok(![...LC._sessions.values()].some((S) => S.login === "frankiefettuccine" && !S.ended), "no relay of her cam");
+    for (const [k, u] of Object.entries({ mem: U.mem, own: U.own, adm: U.adm })) {
+      const r = await live(u);
+      assert.deepEqual(leaks(r.text), [], k + ": " + leaks(r.text).join(", "));
+      const t = (r.d.stage_program.src || []).find((s) => s.id === vid);
+      assert.ok(t, k + ": her frog-name tile");
+      assert.deepEqual([t.kind, t.veil, t.video, t.why, t.avatar, t.nameCss], ["cam", "incognito", "card", "off_cam", null, ""], k + ": the peek hood's card, 'cam off'");
+      assert.ok(Number.isInteger(t.hood), k + ": its hood");
+      assert.ok(!r.text.includes("/media/cover/"), k + ": no cover picture anywhere");
+    }
+    // she lets go; a new hold with live cam off: the hooded cover (never her named card)
+    await syncAt({ rooms: [v2Room({ mic: false })] });
+    for (let i = 0; i < 20 && pad().state.tiles.length; i++) await stepAt(3);
+    assert.equal(pad().state.tiles.length, 0, "left");
+    await syncAt({ rooms: [v2Room({ mic: true })] });
+    for (let i = 0; i < 10 && !pad().state.tiles.some((x) => x.cover); i++) {
+      await stepAt(3);
+      assert.equal(pad().state.tiles.some((x) => !x.cover), false, "never a cam tile or her named card");
+    }
+    assert.equal(pad().state.tiles.filter((x) => x.cover).length, 1, "the hooded cover");
+    assert.equal(asked.includes("frankiefettuccine"), false, "coverOf never asked about her");
+  } finally {
+    SC.coverOf = cov0;
+    await LC.setOptout("frankiefettuccine", false, { via: "web", ts: T + 31 });
+    await MF.setCfg(ADM(), { withheld_cover: false, reason: "test" });
+  }
+});

@@ -122,6 +122,19 @@
 //                  Its ⚑ report hides it for the reporter by its veil (never their later named tile), and two reports keep the
 //                  person off as a VEILED exclusion (never a by-name row the owner's list would show). Spans carry the frog name
 //                  (micfollow_spans.veil): /stage/admin shows that, never the login. Switch off: exactly as before.
+// 1.99?? (privacy controls S3, spec section 5 "S3" + 2.2 + owner Q1 / Q14; the cfg switch withheld_cover on /stage/admin - dark):
+//   withheld       a cam opt-out - !livecam off, "Pads may put my cam on their stage" off, cam access followers / on request - withholds
+//                  the CAM, not the person. eligOf notes it and runs EVERY later rule (private, excluded, banned, "Take me off this
+//                  Stage", blocked_owner, the DM block, ended_by, the facts, the DF-11 notice gate: each still keeps them off); only
+//                  where it would say ok / off_cam / cam_unknown does it say "withheld" - a NAMED card (micfollow-core) with their stage
+//                  cover (stagecover.coverOf) and "cam off" on the page (never why); never a relay, still, warm keep or a capture of the
+//                  cam; speaking() counts it (a lone livecam-off holder is no longer "Someone is speaking"). livecam's "opted_out" (a
+//                  relay that ended, a hold refused) is then that card, never a cut. The cam's per-viewer gates don't apply to it (no
+//                  cam): only the viewer's report, a bridge block and the person's own blocks (the letter, "isn't available"). A capture
+//                  (stagemiccap) draws the name and cover without the cam's rules (cardConsent) - a name card. 📌 pins stay refused
+//                  (pinRule). Incognito + live cam off: the peek hood under the frog name (a cover, or a veiled cam tile's card) - never
+//                  coverOf; !bridge hide: the shadow hood. The one courtesy notice says !livecam off stops the cam (cover picture
+//                  instead). Switch off: today's CUTs exactly.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -432,7 +445,8 @@ function veilSessOf(P, R, login, t) {
   return cur === want ? want.slice(2) : false;
 }
 /** E(login) in pad P (bridge room R): "ok" | "off_cam" | "pending" (not known yet) | a CUT code. Unknown facts are fetched.
- *  1.99?? (privacy controls S5): a veiled cam tile / candidate is judged on the real login under its frog-name session. */
+ *  1.99?? (privacy controls S5): a veiled cam tile / candidate is judged on the real login under its frog-name session.
+ *  1.99?? (privacy controls S3): + "withheld" (cfg withheld_cover: a cam opt-out who passes every other rule - see eligCore). */
 function eligOf(P, R, login, t, want) {
   const vs = veilSessOf(P, R, login, t);
   if (vs === false) return "veil_changed";
@@ -443,9 +457,16 @@ function eligCore(P, R, login, t, want, vsess) {
   const vm = vsess != null ? IC().entryByLogin(R, login, vsess) : null;
   if (vsess != null ? !vm : !memberOf(R, login)) return "not_member";
   if (vsess == null && hiddenLogin(login)) return "hidden";
-  if (LC().optedOut(login)) return "opted_out";
-  if (MFOPT.has(login)) return "mf_opted_out";
+  // 1.99?? (privacy controls S3, spec "S3" + owner Q14): with cfg withheld_cover on, a cam opt-out - !livecam off, "Pads may put my cam
+  // on their stage" off, cam access followers / on request - withholds the CAM only. NO early return: it is noted here, EVERY later
+  // rule still runs (private, excluded, banned, "Take me off this Stage", blocked_owner, the DM block, ended_by, the facts and the DF-11
+  // notice gate - each still keeps them off), and only where the end would say ok / off_cam / cam_unknown is it "withheld" (a named
+  // card with their stage cover, never their cam). Off: today's CUTs exactly
   const c = cfg();
+  const wc = c.withheld_cover === true;
+  let withheld = false;
+  if (LC().optedOut(login)) { if (!wc) return "opted_out"; withheld = true; }
+  if (MFOPT.has(login)) { if (!wc) return "mf_opted_out"; withheld = true; }
   const f = FACTS.get(login);
   if (!f || t - f.at > c.private_cache_s * 1000) want.add(login);
   if (f && f.priv) return "private";
@@ -464,13 +485,16 @@ function eligCore(P, R, login, t, want, vsess) {
   // stageConsent's block rule; the same neutral "unavailable" (never which)
   if (b && b.blk) return "unavailable";
   const mode = modeOf(login, t);
-  if (mode == null || mode === "followers" || mode === "request") return "mode_closed";
+  // (1.99?? S3: an unknown mode - cam access not loaded - stays the fail-closed CUT; only the person's own followers / request withholds)
+  if (mode == null) return "mode_closed";
+  if (mode === "followers" || mode === "request") { if (!wc) return "mode_closed"; withheld = true; }
   if (LC().cooling(P.roomId, login, t)) return "ended_by";
   const n = NOTES.get(P.roomId + "|" + login);
   if (!n) want.add(login);
   if (!f || !b || !n) return "pending";
   // DF-11: the pad's first notice went out at least notice_lead_s ago (sent at the first qualifying grab: notice_first)
   if (!n.first || t - n.first < c.notice_lead_s * 1000) return "notice";
+  if (withheld) return "withheld";                     // (1.99?? S3: every rule above passed - the named card, never the cam)
   // 1.99afl (S2): Pepe's roster says on cam / not on cam only after a participant-list read - unknown (no on_cam: the list is
   // stale, or they joined after the last read) is "cam_unknown" ("checking their cam…"), never "cam off" and never a blind open
   const on = vsess != null ? vm.onCam : memberOf(R, login).on_cam;
@@ -1132,12 +1156,15 @@ async function courtesyPlan(P, R, login, kind) {
   // action is the queuing account's row (their action list, their Download my data), and the pad owner's would pair the login with
   // their pad's veiled speaker
   const veiled = !!(P.vnow && P.vnow.has(low(login)));
+  // 1.99?? (privacy controls S3, spec 6.2): with cfg withheld_cover on, "!livecam off" stops the CAM on a mic stage, not the person -
+  // the one courtesy notice says so ("_wc": they'd show with their cover picture). Off: the texts as before
+  const wc = !home && cfg().withheld_cover === true;
   return {
     userId: u ? String(u.userId) : null, real, pm: !(real && !pmOk),
     by: !veiled && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
-    text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once", roomName, padTitle, mins, siteUrl() + link),
+    text: pmText(T, home ? "mf.notice.pm_home" : wc ? "mf.notice.pm_once_wc" : "mf.notice.pm_once", roomName, padTitle, mins, siteUrl() + link),
     link, title: T(home ? "mf.notice.home_title" : "mf.notice.once_title", { pad: padTitle }),
-    body: T(home ? "mf.notice.home_body" : "mf.notice.once_body", { room: roomName, pad: padTitle, n: mins }),
+    body: T(home ? "mf.notice.home_body" : wc ? "mf.notice.once_body_wc" : "mf.notice.once_body", { room: roomName, pad: padTitle, n: mins }),
   };
 }
 /** `login`'s courtesy row {sent_at, v, home_at} or null. */
@@ -2192,7 +2219,8 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
       if (watch !== "ok" && watch !== "hidden" && watch !== "blocked") watch = "unavailable";
       src.push({ kind: "cam", id: x.veil.id, name: String(x.veil.alias || "someone").slice(0, 40), veil: "incognito", hood: x.veil.hood,
                  avatar: null, nameCss: "", pos: x.pos, newest: x.newest, since: x.since,
-                 video: x.video, why: x.video === "card" ? x.why || "full" : null, watch,
+                 // (1.99?? S3: a withheld veiled cam is its peek hood like any card state; the page says "cam off" - never why)
+                 video: x.video, why: x.video === "card" ? (x.why === "withheld" ? "off_cam" : x.why || "full") : null, watch,
                  ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
                  ...(own && own === x.login ? { mine: true } : {}),
                  ...(await coverFlags(snap.roomId, x.veil.id, userId, t, surface)) });
@@ -2213,10 +2241,18 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     // 🎙 Stage cover), by default their GTF avatar, then their profile photo, else the letter (avatar null). Only for a tile shown BY
     // NAME (a veiled one is a cover above and never reaches this); none on a tile this viewer reported or is blocked from here, and
     // (review fix PRIV-2) none for a viewer the PERSON blocked - from their cam (camviewers) or in DMs (either way): the letter
-    const cv = watch === "hidden" || watch === "blocked" || (watch === "unavailable" && (await personBlocks(x.login, String(userId)))) ? null : await coverOf(x.login);
+    const pb = watch === "unavailable" && (await personBlocks(x.login, String(userId)));
+    // 1.99?? (privacy controls S3): a WITHHELD cam (cfg withheld_cover: !livecam off, the mic-stage switch off, cam access followers /
+    // request) - their named card with their cover for everyone; there is no cam to gate, so the cam's per-viewer gates (members only,
+    // followers, request) don't apply - only this viewer's report, a bridge block on them and the person's own blocks (the letter,
+    // "isn't available", as for any tile). The page reads "cam off" (why off_cam - never that it is withheld); a capture's program
+    // says "withheld" (stagemiccap draws the name and cover, never asking the cam's rules)
+    const wh = x.video === "card" && x.why === "withheld";
+    if (wh && watch !== "hidden" && watch !== "blocked" && !pb) watch = "ok";
+    const cv = watch === "hidden" || watch === "blocked" || pb ? null : await coverOf(x.login);
     src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: coverUrl(cv), ...(cv ? { ck: cv.k } : {}),
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,
-               video: x.video, why: x.video === "card" ? x.why || "full" : null, watch,
+               video: x.video, why: x.video === "card" ? (wh && surface !== "capture" ? "off_cam" : x.why || "full") : null, watch,
                ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
                ...(own && own === x.login ? { mine: true } : {}) });
   }
@@ -2499,7 +2535,9 @@ async function privacyState(userId, t = now()) {
   await init();
   const r = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0];
   const login = r && r.camfrogUsername ? low(r.camfrogUsername) : null;
-  if (!login || !LOGIN_RE.test(login)) return { linked: false, login: null, auto: true, spans: [] };
+  // 1.99?? (privacy controls S3): wc - cfg withheld_cover is on (Settings says a cam opt-out shows the cover picture instead); only then
+  const wc = cfg().withheld_cover === true ? { wc: true } : {};
+  if (!login || !LOGIN_RE.test(login)) return { linked: false, login: null, auto: true, spans: [], ...wc };
   const rows = await getQuery(`SELECT room_id, started, ended, secs, video_secs, end_reason FROM micfollow_spans WHERE login = ? AND started > ?
                                ORDER BY started DESC LIMIT 20`, [login, t - 30 * 24 * 3600e3]);
   const spans = rows.map((x) => {
@@ -2508,7 +2546,7 @@ async function privacyState(userId, t = now()) {
     return { pad: String(title).slice(0, 60), slug, started: Number(x.started), secs: x.secs == null ? Math.max(0, Math.round((t - Number(x.started)) / 1000)) : Number(x.secs),
              video_secs: Number(x.video_secs) || 0, open: x.ended == null };
   });
-  return { linked: true, login, auto: !MFOPT.has(login), spans };
+  return { linked: true, login, auto: !MFOPT.has(login), spans, ...wc };
 }
 async function setOptout(login, off, userId = null, t = now()) {
   await init();
@@ -3140,6 +3178,7 @@ function register(app, { addUser, bySlug, isLive }) {
 module.exports = {
   vidLogin, veilCamEnded, veilSessOf, veilOfTile,                                // 1.99?? (privacy controls S5)
   vidVeil, pinByVid,                                                              // 1.99?? (privacy controls V-1)
+  withheldCover: () => cfg().withheld_cover === true,                            // 1.99?? (privacy controls S3)
   register, init, cfg, current: () => ({ v: CFG.v, cfg: { ...CFG.cfg } }), onSync, onRoomGone, stepPad, snapshot, viewFor, ownerState, setPad, adminView, setKill, setCfg,
   recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, unexcludeXid, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,

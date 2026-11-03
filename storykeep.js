@@ -239,14 +239,17 @@ async function micPeopleWhy(mc, actorIds, cache = new Map(), { owners = true } =
   const logins = mc.people.map((p) => p.login);
   // (review fixes 2 - Q4-A: a frog-name cam - still incognito, its own cam rules; stagemiccap.consent's recheck form {sess: null})
   const vcam = new Set(mc.people.filter((p) => p.role === "vcam").map((p) => p.login));
+  // 1.99?? (privacy controls S3): a name card's person (role "card") - stagemiccap.cardConsent: while micfollow_cfg withheld_cover is on,
+  // a cam opt-out withholds the cam only, so a name card asks hidden / private / their cam blocks, never the cam's rules; off = consent
+  const card = new Set(mc.people.filter((p) => p.role === "card").map((p) => p.login));
   try {
     const SM = require("./stagemiccap"), SR = require("./storyreact");
     if (!cache.has("srctx")) cache.set("srctx", SR.mkCtx());
     for (const a of actors) {
       for (const l of logins) {
-        const v = vcam.has(l);
-        const k = (v ? "vconsent|" : "consent|") + l + "|" + a;
-        if (!cache.has(k)) cache.set(k, (await (v ? SM.consent(l, a, { sess: null }) : SM.consent(l, a))) === true);
+        const v = vcam.has(l), c = !v && card.has(l);
+        const k = (v ? "vconsent|" : c ? "cconsent|" : "consent|") + l + "|" + a;
+        if (!cache.has(k)) cache.set(k, (await (v ? SM.consent(l, a, { sess: null }) : c ? SM.cardConsent(l, a) : SM.consent(l, a))) === true);
         if (!cache.get(k)) return "person";
       }
       const kb = "block|" + a + "|" + logins.join(",");
@@ -1262,4 +1265,5 @@ module.exports = { SAVE_USER_KINDS, userSaveable, init, register, postToPad, rem
                    // mic keep (handoff 16 follow-up): the cascade + account deletion / export hooks
                    onPeoplePrivate, hiddenChanged, sweepHidden, sweepKept, keptOf, keptStates, dropPeopleIfNoCopy, ownersAt, MIC, _setHiddenCheck,
                    _setLeftOutCheck,
-                   onPostDeleted, purgeOrphanKeep };          // mic keep review: feedstore.remove / account deletion
+                   onPostDeleted, purgeOrphanKeep,            // mic keep review: feedstore.remove / account deletion
+                   _micPeopleWhy: micPeopleWhy };             // 1.99?? (privacy controls S3): tests - the per-person recheck by role

@@ -225,7 +225,7 @@
     </ul>
     <% if (!lc.linked) { %>
       <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('lc.unlinked') %></div></div>
-      <p class="ds-meta"><%- t('privacy.mf.unlinked') %></p><%# micfollow %>
+      <p class="ds-meta"><%- t(locals.mf && mf.wc ? 'privacy.mf.unlinked_wc' : 'privacy.mf.unlinked') %></p><%# micfollow; 1.99?? (privacy controls S3): mf.wc = cfg withheld_cover on %>
     <% } else { %>
       <div class="pv-set" id="pvLcRow">
         <div><b><%- t('lc.switch') %></b><p class="ds-meta"><%- t('lc.identity', { login: lc.login }) %></p></div>
@@ -252,11 +252,12 @@
         <form id="pvCaAdd" class="pv-ca-add"><input type="text" name="target" maxlength="40" placeholder="<%- t('ca.allow_ph') %>" aria-label="<%- t('ca.allow_ph') %>" autocomplete="off"> <button type="submit" class="ds-btn"><%- t('ca.allow_add') %></button></form>
       </div>
       <% if (locals.mf && mf.linked) { %>
-      <%# micfollow: 🎙 the mic stage switch (default on; off keeps ▶ Live but no mic stages) + this person's own mic stages.
+      <%# micfollow: 🎙 the mic stage switch (default on; off keeps ▶ Live but no mic stages - 1.99?? privacy controls S3: while
+          micfollow_cfg withheld_cover is on (mf.wc), off keeps the cam off them and they show the cover picture) + this person's own mic stages.
           Client: privacy-livecam.js (POST /api/privacy/micfollow {auto}). %>
       <div class="pv-ca" id="pvMf">
         <div class="pv-set">
-          <div><b><%- t('privacy.mf.label') %></b><p class="ds-meta"><%- t('privacy.mf.hint') %></p></div>
+          <div><b><%- t('privacy.mf.label') %></b><p class="ds-meta"><%- t(mf.wc ? 'privacy.mf.hint_wc' : 'privacy.mf.hint') %></p></div>
           <label class="ds-switch"><input type="checkbox" id="pvMfSw" <%= mf.auto ? 'checked' : '' %> aria-label="<%- t('privacy.mf.label') %>"><span></span></label>
         </div>
         <p class="pv-st" id="pvMfSt" role="status" aria-live="polite"></p>

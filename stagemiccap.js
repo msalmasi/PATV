@@ -33,6 +33,11 @@
 // is recorded server-only as `vpeople` (stage_capture_people.veil - forget-me, account deletion and the block rule keep working; never
 // a card, never "Remove me" / a notice / anything a page shows), and its recheck asks they're still incognito (a capture under their
 // frog name is never published once they show by name).
+// 1.99?? (privacy controls S3, micfollow_cfg withheld_cover - dark): a WITHHELD cam (!livecam off, the mic-stage switch off, cam access
+// followers / request) is its person's NAME CARD with their cover - drawn without camRefusal (cardConsent: hidden, private and their
+// own cam blocks of the viewer only), never its relay or a still; it counts as a name card (`cards`), so the capture stays postable.
+// While the switch is on every name card takes cardConsent (the samples, the recheck, storykeep's role "card") - a cam opt-out no
+// longer withdraws an appearance by name. Off: consent() everywhere, as before.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -71,6 +76,9 @@ let deps = {
   bridgeOk: id => { try { return require("./premium").bridgeAllowed(String(id)) === true; } catch (_) { return false; } },
   program: (id, u) => require("./bridge").stageProgramFor(id, u),
   camRefusal: (l, u, o) => require("./camviewers").camRefusal(l, u, o),
+  // 1.99?? (privacy controls S3): micfollow_cfg withheld_cover - a cam opt-out is a NAMED card (cardConsent); the person's cam blocks
+  withheldOn: () => { try { return require("./micfollow").withheldCover() === true; } catch (_) { return false; } },
+  camBlocked: async (l, u) => { const C = require("./camviewers"); await C.init(); return C.blocked(l, u) === true; },
   hidden: l => require("./quotes").isHidden(l),
   // 1.99?? (privacy controls V-1): a veiled cam tile / pin -> {login, sess} (server-only), its session's own path, the veil checks
   vtile: (id, eid, pin) => { const MF = require("./micfollow"); if (pin) { const p = MF.pinByVid(id, eid); return p && p.veil ? { login: p.login, sess: p.veil.sess } : null; } return MF.vidVeil(id, eid); },
@@ -224,6 +232,19 @@ async function consent(login, userId, veil = null) {
       !(await deps.camRefusal(login, userId, { strict: true }));
   } catch (_) { return false; }
 }
+/** 1.99?? (privacy controls S3): may `login` be drawn BY NAME only - a name card, no cam - for this viewer? While micfollow_cfg
+ *  withheld_cover is on, a cam opt-out (!livecam off, cam access) withholds the cam, not the person, so a name card asks everything
+ *  consent() does EXCEPT the cam's rules: not hidden, the strict private-profile lookup (fails closed), and not one of the person's own
+ *  cam blocks of this viewer. Off: consent() exactly (today). Used for every name card (a capture's cards, the samples, the recheck
+ *  before a save / post - storykeep's role "card"); a cam drawn always takes consent(). */
+async function cardConsent(login, userId) {
+  if (!deps.withheldOn()) return consent(login, userId);
+  try {
+    if (await deps.hidden(login)) return false;
+    if ((await deps.privateLogins([login])).has(String(login).toLowerCase())) return false;
+    return !(userId != null && (await deps.camBlocked(login, userId)));
+  } catch (_) { return false; }
+}
 /** A named card's stage cover {buf, k} from the program entry's avatar URL - the picture the viewer's own stage shows on that card
  *  (fix 3: a profile photo too - an https URL or the site's /media/cover/p/ proxy; stagecover decides which hosts it may fetch), or
  *  null = the letter. Bounded (COVER_WAIT_MS): a slow picture never holds the capture up. */
@@ -277,6 +298,13 @@ async function tileFor(e, R, user, { covers = true } = {}) {
   // 1.99ahq review fix 3 (FID-1): the picture FIRST, consent after it - consent is the last thing read before a tile is drawn, so
   // someone who goes hidden / private while a slow picture loads (a snap's final frame) is never drawn by name
   const cover = covers ? await coverFor(e) : null;
+  // 1.99?? (privacy controls S3): a WITHHELD cam's card (micfollow card state "withheld" - its program says so on the capture surface
+  // only) while micfollow_cfg withheld_cover is on: the name and the cover, never the cam's rules (cardConsent) and never the cam (no
+  // relay path, no still) - a name card. Off: the program never says "withheld"; anything else as before
+  if (e.video === "card" && e.why === "withheld" && deps.withheldOn()) {
+    if (!(await cardConsent(login, user.userId))) return t;
+    return Object.assign(t, { login, name: String(e.name || login), mode: "card", cover, withheld: true });
+  }
   if (!(await consent(login, user.userId))) return t;
   Object.assign(t, { login, name: String(e.name || login), mode: "card" });
   t.cover = cover;
@@ -337,11 +365,15 @@ async function recheck(capture) {
     const u = await deps.account(capture.user_id), R = await deps.resolveRoom(capture.room_id);
     await gate(R, u, capture.kind === "clip" ? "clip" : "snap", "pad");
     // mic keep review: the name cards too - someone shown only by name who has gone private / hidden since the preview isn't published
-    const shown = [...(await deps.people(capture.id)), ...(await deps.cards(capture.id))];
+    const drawn = await deps.people(capture.id), cards = await deps.cards(capture.id);
     // (1.99?? privacy controls V-1: a cam drawn under a frog name - still incognito, never published once they show by name)
     let vset = new Set();
     try { vset = new Set((await deps.veiledPeople(capture.id)).map(l => String(l).toLowerCase())); } catch (_) { vset = new Set(); }
-    for (const login of shown) if (!(await consent(login, u.userId, vset.has(String(login).toLowerCase()) ? { sess: null } : null))) return MSG.revoked;
+    // (1.99?? privacy controls S3: a name card asks the name-card consent - cardConsent, today's consent while withheld_cover is off)
+    for (const [login, card] of [...drawn.map(l => [l, false]), ...cards.map(l => [l, true])]) {
+      const v = vset.has(String(login).toLowerCase());
+      if (!(await (card && !v ? cardConsent(login, u.userId) : consent(login, u.userId, v ? { sess: null } : null)))) return MSG.revoked;
+    }
     return null;
   } catch (_) { return MSG.revoked; }
 }
@@ -654,7 +686,10 @@ async function sample(job) {
         stopTile(job, t, at);
         // mic keep: blanked now (or turned into a cover), or gone from the program while their consent fails (micfollow cuts a person who
         // goes private / hidden / incognito or withdraws) -> not taken in the open. Leaving the mic with consent intact is fine.
-        if (next ? next.mode === "blank" || next.mode === "cover" : !(t.login && (await consent(t.login, user.userId, t.vsess ? { R: job.R, sess: t.vsess } : null)))) job.veiled = true;
+        // (1.99?? privacy controls S3: a name card that left - the name-card consent, cardConsent: a withheld cam's card leaving the mic
+        // is "leaving with consent intact")
+        if (next ? next.mode === "blank" || next.mode === "cover"
+          : !(t.login && (await (t.mode === "card" && !t.vsess ? cardConsent(t.login, user.userId) : consent(t.login, user.userId, t.vsess ? { R: job.R, sess: t.vsess } : null))))) job.veiled = true;
       }
       if (t.stop == null && !!next.newest !== t.lastNewest) { t.rings.push({ at, on: !!next.newest }); t.lastNewest = !!next.newest; }
       // 1.99ahq review fix 3 (FID-2): the cover this tile carries on the viewer's stage now (no picture loaded here - the cut loads it)
@@ -908,5 +943,6 @@ module.exports = { configure, init, start, gate, cancel, stop: cancel, availabil
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
   slotCells, CELLS, COLS,                     // 1.99ahp stable slots: the cells of a stable program (stage-mic.js has the same)
   consent,                                    // mic keep: storykeep's per-person recheck at save / post (the engine's own rule)
+  cardConsent,                                // 1.99?? (privacy controls S3): ...a name card's (role "card") - no cam rules while withheld_cover is on
   privateLayoutStrict,                        // mic keep review: storykeep's strict profile read (an unreadable layout throws)
-  _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, noteVoices, lastRoster, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
+  _test: { defaults: DEFAULT_DEPS, entries, tileFor, tilesFor, consent, cardConsent, gate, loopback, rtspBase, readerArgs, readerTimeoutMs, spawnReader, snapSlot, password, sample, privateSample, privateLoginsStrict, privateLayoutStrict, noteVoices, lastRoster, jobs: JOBS, snapAt: SNAP_AT, text, intervals, mergeWindows, MSG, W, H } };
