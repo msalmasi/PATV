@@ -473,9 +473,11 @@ async function off(login, roomId = null, t = clock()) {
   }
   return n;
 }
-/** The open session's name of `login` in `roomId` right now, without sighting them (null: none, or a session without a name). */
-function current(roomId, login) {
+/** The open session's name of `login` in `roomId` right now, without sighting them (null: none, or a session without a name). t: the
+ *  time of the item it labels - 1.99?? review fix: from before a frog name took over a no-name session, "someone" and that one (sight) */
+function current(roomId, login, t = null) {
   const S = (OPEN.get(String(roomId || "")) || new Map()).get(skOf(String(roomId || ""), login));
+  if (S && t != null && S.gapPrev != null && Number(t) < S.started) return { alias: null, hood: null, session: S.gapPrev };
   return S ? view(S) : null;
 }
 /** The names in use in a pad (open sessions, and ended in the last 24 h) - for another context that must not repeat them. */

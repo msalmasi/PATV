@@ -133,6 +133,10 @@ test("1.99?? review fix: a line said before the frog name took over stays 'someo
     assert.equal(it.u.id, undefined, w + ": no session id");
     assert.equal(it._vz.sess, before.session, w + ": the no-name session's line");
   }
+  // a leave from before the switch (they left and came back inside the batch; the snapshot lists them): "someone" too
+  const lv = await item(room, "member.leave", "laggy", {}, t + 15 * MIN - 1000);
+  assert.equal(lv.u.alias, undefined, "the leave at +14:59: someone (was " + lv.u.alias + ")");
+  await snapshot(room, [veiled("laggy")], [], t + 16 * MIN + 30e3);
   const l17 = await item(room, "message", "laggy", { text: "said at seventeen" }, t + 17 * MIN);
   assert.equal(l17.u.alias, frog, "a line after it: the frog name");
   assert.deepEqual(FN.current(room.id, "laggy").alias, frog, "the session is the frog name's");

@@ -256,7 +256,7 @@ async function nameItem(R, it) {
       // privacy fix (M addendum 3 #1): a "hidden" leave of someone whose open session is incognito ends it first - the leave never
       // carries the incognito frog name under a hidden veil
       await FN.level(roomId, vz.login, vz.kind, it.ts);
-      view = FN.current(roomId, vz.login);
+      view = FN.current(roomId, vz.login, it.ts);              // (1.99?? review fix: a leave from before a frog name took over: "someone")
       await FN.left(roomId, vz.login, it.ts);
     } else {
       // review R1: a hold's item at the kind its hold already had is the hold's frozen kind (see holdKind); the first one (the grab,
