@@ -712,9 +712,12 @@ async function snap(job) {
   // mic keep: a snap is its final frame - the logins drawn only as a name card (consent passed: tileFor sets a login only then; a
   // picture that failed to render became a card), and whether everyone in that frame was shown openly
   const cards = [...new Set(final.filter(t => t.login && !t.veiled && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
-  // (1.99?? privacy controls V-1: a cam drawn under a frog name - server-only, with its session; the capture is veiled)
+  // (1.99?? privacy controls V-1: a cam drawn under a frog name - server-only, with its session. Review fixes 2 - Q4-A (owner Q4: every
+  // cam feature works for an incognito cam, only the name changes): a frog-name cam DRAWN under its frog name is shown in the open
+  // like a named cam - storykeep keeps it as a "vcam", never naming its person; a veiled tile NOT drawn (its hood) still veils it)
   const vpeople = vpeopleOf(final.filter(t => t.veiled && t.login && t.image && (t.mode === "live" || t.mode === "still")));
-  const veiled = final.some(t => t.mode === "cover" || t.mode === "blank" || t.veiled) || speaking(p) === "someone";
+  const vdrawn = new Set(vpeople.map(v => v.login));
+  const veiled = final.some(t => t.mode === "cover" || t.mode === "blank" || (t.veiled && !vdrawn.has(t.login))) || speaking(p) === "someone";
   return { secs: 0, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: null, ...(vpeople.length ? { vpeople } : {}) };
 }
 
@@ -859,7 +862,10 @@ async function clip(job, hooks) {
     // Review: "a muted stretch" = one that may hide a hidden / private speaker (audioPlan's private_s), not the lead-in every clip has.
     const cards = [...new Set(job.tiles.filter(t => t.login && !t.veiled && t.mode !== "blank" && !people.includes(t.login)).map(t => t.login))];
     const heard = !audio.reason && audio.segments.length > 0;
-    const veiled = !!job.veiled || job.tiles.some(t => t.mode === "cover" || t.mode === "blank" || t.veiled) || job.speaking.some(c => c.kind === "someone") ||
+    // (review fixes 2 - Q4-A: a frog-name cam drawn under its frog name is in the open, as in a snap; one never drawn veils the clip)
+    const vdrawn = new Set(vpeople.map(v => v.login));
+    const veiled = !!job.veiled || job.tiles.some(t => t.mode === "cover" || t.mode === "blank" || (t.veiled && !(t.login && vdrawn.has(t.login) && drawn(t)))) ||
+      job.speaking.some(c => c.kind === "someone") ||
       (heard && (audio.private_s > 0 || !!job.unseen));
     return { secs: duration, bytes: fs.statSync(job.out).size, people, cards, veiled, audio: { reason: audio.reason, muted_s: audio.muted_s }, ...(vpeople.length ? { vpeople } : {}) };
   } finally { release(); }

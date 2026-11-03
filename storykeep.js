@@ -195,7 +195,13 @@ async function micCapture(mediaId) {
   if (!cap) return null;
   const people = [], seen = new Set();
   const add = (l, role) => { const x = lc(l); if (x && !seen.has(x)) { seen.add(x); people.push({ login: x, role }); } };
-  if (await tableThere("stage_capture_people")) for (const r of await getQuery("SELECT login FROM stage_capture_people WHERE capture_id = ?", [cap.id])) add(r.login, "cam");
+  // 1.99?? (privacy controls, review fixes 2 - Q4-A): a cam drawn under a FROG NAME (stage_capture_people.veil, incognito cams) is role
+  // "vcam" - kept like any cam drawn (owner Q4: every cam feature works, incognito changes only the name), checked as a frog-name cam
+  // (micPeopleWhy / personState), never named to anyone but its own person
+  if (await tableThere("stage_capture_people")) {
+    const vcol = (await getQuery("PRAGMA table_info(stage_capture_people)")).some((c) => c.name === "veil");
+    for (const r of await getQuery(`SELECT login${vcol ? ", veil" : ""} FROM stage_capture_people WHERE capture_id = ?`, [cap.id])) add(r.login, r.veil ? "vcam" : "cam");
+  }
   if (await tableThere("stage_capture_cards")) for (const r of await getQuery("SELECT login FROM stage_capture_cards WHERE capture_id = ?", [cap.id])) add(r.login, "card");
   return { cap, capturedAt: Number(cap.created) || 0, people };
 }
@@ -231,13 +237,16 @@ async function micPeopleWhy(mc, actorIds, cache = new Map(), { owners = true } =
   if (!mc) return "error";
   const actors = [...new Set(actorIds.filter(Boolean).map(String))];
   const logins = mc.people.map((p) => p.login);
+  // (review fixes 2 - Q4-A: a frog-name cam - still incognito, its own cam rules; stagemiccap.consent's recheck form {sess: null})
+  const vcam = new Set(mc.people.filter((p) => p.role === "vcam").map((p) => p.login));
   try {
     const SM = require("./stagemiccap"), SR = require("./storyreact");
     if (!cache.has("srctx")) cache.set("srctx", SR.mkCtx());
     for (const a of actors) {
       for (const l of logins) {
-        const k = "consent|" + l + "|" + a;
-        if (!cache.has(k)) cache.set(k, (await SM.consent(l, a)) === true);
+        const v = vcam.has(l);
+        const k = (v ? "vconsent|" : "consent|") + l + "|" + a;
+        if (!cache.has(k)) cache.set(k, (await (v ? SM.consent(l, a, { sess: null }) : SM.consent(l, a))) === true);
         if (!cache.get(k)) return "person";
       }
       const kb = "block|" + a + "|" + logins.join(",");
@@ -618,11 +627,16 @@ async function postToPad(user, captureId, { caption = "", body = "" } = {}) {
 async function noticeShown(captureId, acct, made, what, R) {
   try {
     const kc = await keptCapture(captureId);
-    const tell = new Set(), cache = new Map();
-    for (const p of kc ? kc.people : []) for (const uid of await ownersAt(p.login, kc.capturedAt, cache)) if (uid !== acct.userId) tell.add(uid);
-    for (const uid of tell) {
+    const tell = new Map(), cache = new Map();
+    // (review fixes 2 - Q4-A: someone drawn ONLY under a frog name hears about it in words about their frog name - their own inbox;
+    // the post never names them)
+    for (const p of kc ? kc.people : []) for (const uid of await ownersAt(p.login, kc.capturedAt, cache)) {
+      if (uid !== acct.userId) tell.set(uid, tell.has(uid) ? tell.get(uid) && p.role === "vcam" : p.role === "vcam");
+    }
+    for (const [uid, frog] of tell) {
       await store().notify(uid, { kind: "feed", title: "A capture of you was posted",
-        body: `${acct.displayname || acct.username} posted a ${what.toLowerCase()} that shows you to ${R.title || R.id}. Not OK? Open it and tap "Remove me" - that also deletes every saved copy.`,
+        body: frog ? `${acct.displayname || acct.username} posted a ${what.toLowerCase()} that shows your cam under your frog name to ${R.title || R.id}. Not OK? Open it and tap "Remove me" - that also deletes every saved copy.`
+          : `${acct.displayname || acct.username} posted a ${what.toLowerCase()} that shows you to ${R.title || R.id}. Not OK? Open it and tap "Remove me" - that also deletes every saved copy.`,
         link: made.url, ref: "story-post:" + made.id });
     }
   } catch (e) { console.error("[storykeep] mic post notices:", e.message); }
@@ -668,18 +682,21 @@ async function removeMe(user, postId) {
 /** mic keep: the captures (of `captureIds`) whose kept / posted copy shows `acct` - a durable row's login inside a span in which it
  *  was the account's at captured_at (stagecap.ownSpans, depictedOf's rule: a recycled login's later holder is never shown). Errors
  *  throw (callers grant nothing). -> Set of capture ids */
-async function micShownAs(acct, captureIds) {
+async function micShownAs(acct, captureIds, roles = null) {
   const out = new Set();
   const ids = [...new Set((captureIds || []).map(String))];
   if (!acct || !acct.userId || !ids.length) return out;
-  const rows = await getQuery(`SELECT capture_id, login, captured_at FROM story_keep_people WHERE capture_id IN (${ids.map(() => "?").join(",")})`, ids);
+  const rows = await getQuery(`SELECT capture_id, login, role, captured_at FROM story_keep_people WHERE capture_id IN (${ids.map(() => "?").join(",")})`, ids);
   if (!rows.length) return out;
   let login = acct.camfrogUsername;
   if (login === undefined) { const a = await accountOf(acct); login = a ? a.camfrogUsername : null; }
   const spans = await require("./stagecap").ownSpans(acct.userId, login ? lc(login) : null, NOW());
   for (const r of rows) {
     const at = Number(r.captured_at) || 0;
-    if (spans.some((w) => w.login === lc(r.login) && at > Number(w.from) && at <= Number(w.to))) out.add(r.capture_id);
+    if (spans.some((w) => w.login === lc(r.login) && at > Number(w.from) && at <= Number(w.to))) {
+      out.add(r.capture_id);
+      if (roles) { const k = r.capture_id; if (!roles.has(k)) roles.set(k, new Set()); roles.get(k).add(r.role); }   // (review fixes 2 - Q4-A)
+    }
   }
   return out;
 }
@@ -698,8 +715,11 @@ async function micRemoveMe(acct, sp) {
     return { removed: true, again: true };
   }
   let shown = false;
-  try { shown = (await micShownAs(acct, [sp.capture_id])).has(sp.capture_id); } catch (e) { console.error("[storykeep] mic remove-me (granting nothing):", e.message); }
+  const how = new Map();
+  try { shown = (await micShownAs(acct, [sp.capture_id], how)).has(sp.capture_id); } catch (e) { console.error("[storykeep] mic remove-me (granting nothing):", e.message); }
   if (!shown) throw micRefuse("not_shown");
+  // (review fixes 2 - Q4-A: shown only under a frog name - the poster is told "someone shown in it", never who)
+  const frogOnly = [...(how.get(sp.capture_id) || [])].every((r) => r === "vcam");
   const t = NOW();
   const won = await tx(async () => {
     const u = await runQuery(`UPDATE story_posts SET removed_at = ?, removed_by = 'subject', removed_reason = 'remove-me'
@@ -716,10 +736,10 @@ async function micRemoveMe(acct, sp) {
   const tell = [...new Set([sp.posted_by, sp.author_id].filter((x) => x && x !== acct.userId))];
   for (const uid of tell) {
     await store().notify(uid, { kind: "feed", title: "A capture you posted was removed",
-      body: `${acct.displayname || acct.username} is in it and removed the post${sp.room_title ? " in " + sp.room_title : ""}. Saved copies of it were deleted too.`,
+      body: `${frogOnly ? "Someone shown in it" : (acct.displayname || acct.username) + " is in it and"} removed the post${sp.room_title ? " in " + sp.room_title : ""}. Saved copies of it were deleted too.`,
       link: "/feed", ref: "story-rm:" + sp.post_id });
   }
-  console.log(`[storykeep] mic post ${sp.post_id} removed by someone shown in it (${acct.username}); saved copies dropped`);
+  console.log(`[storykeep] mic post ${sp.post_id} removed by someone shown in it${frogOnly ? "" : " (" + acct.username + ")"}; saved copies dropped`);
   return { removed: true, again: false };
 }
 
@@ -972,6 +992,17 @@ function defaultHiddenCheck(login) {
 }
 let hiddenCheck = defaultHiddenCheck;
 function _setHiddenCheck(fn) { hiddenCheck = fn || defaultHiddenCheck; }
+/** 1.99?? (privacy controls, review fixes 2 - Q4-A): for a cam drawn under a FROG NAME (role "vcam") - quotes.isBridgeOff only (left out
+ *  now: !bridge hide or stricter), never the incognito half they were drawn under; null while the hidden stores load (as above). */
+function defaultLeftOutCheck(login) {
+  try {
+    if (require("./hubhidden").loading()) return null;
+    try { if (!require("./chatlog").hiddenReady()) return null; } catch (e) { /* no chat archive set in this build */ }
+    return !!require("./quotes").isBridgeOff(login);
+  } catch (e) { return null; }
+}
+let leftOutCheck = defaultLeftOutCheck;
+function _setLeftOutCheck(fn) { leftOutCheck = fn || defaultLeftOutCheck; }
 /**
  * One person a kept / posted copy shows (login, captured at `at`) for the cascade: "private" - hidden / incognito now (sure), an
  * account that had the login since `at` was deleted (micrec's marker; reaching a later holder only removes content), or an account
@@ -980,13 +1011,13 @@ function _setHiddenCheck(fn) { hiddenCheck = fn || defaultHiddenCheck; }
  * hidden answer, the gone marker, the candidate accounts and their spans, the current holders) and per account (the profile) is read
  * once per `cache` - a sweep or a Saved page costs one walk per distinct login, not one per row.
  */
-async function personState(login, at, cache = new Map()) {
-  const k = "ps|" + login + "|" + at;
+async function personState(login, at, cache = new Map(), vcam = false) {
+  const k = (vcam ? "vps|" : "ps|") + login + "|" + at;
   if (cache.has(k)) return cache.get(k);
   let st = "ok";
   try {
-    const kh = "hid|" + login;
-    if (!cache.has(kh)) cache.set(kh, hiddenCheck(login));
+    const kh = (vcam ? "leftout|" : "hid|") + login;          // (review fixes 2 - Q4-A; never loginOwners' "lo|" key)
+    if (!cache.has(kh)) cache.set(kh, vcam ? leftOutCheck(login) : hiddenCheck(login));
     const h = cache.get(kh);
     if (h === null) st = "error";
     else if (h) st = "private";
@@ -1011,7 +1042,7 @@ async function keptStates(captureIds = null, cache = new Map()) {
     : await getQuery("SELECT * FROM story_keep_people");
   const out = new Map();
   for (const r of rows) {
-    const st = await personState(lc(r.login), Number(r.captured_at) || 0, cache);
+    const st = await personState(lc(r.login), Number(r.captured_at) || 0, cache, r.role === "vcam");
     const was = out.get(r.capture_id);
     if (st === "private" || was === "private") out.set(r.capture_id, "private");
     else if (st === "error" || was === "error") out.set(r.capture_id, "error");
@@ -1039,12 +1070,15 @@ async function keptOf(userId, login, upto = NOW(), { wide = false } = {}) {
 }
 /** Someone shown went private: every kept / posted copy showing them goes. `logins`: by login (Pepe's /api/media/anon, the hidden
  *  set); `userId`: an account whose profile NOW hides Analytics or Rooms (its spans, wide). Never throws. -> captures taken down */
-async function onPeoplePrivate({ logins = [], userId = null } = {}) {
+async function onPeoplePrivate({ logins = [], userId = null, named = [] } = {}) {
   try {
     await init();
     const caps = new Set();
     const ls = [...new Set((logins || []).map(lc).filter(Boolean))];
     if (ls.length) for (const r of await getQuery(`SELECT DISTINCT capture_id FROM story_keep_people WHERE login IN (${ls.map(() => "?").join(",")})`, ls)) caps.add(r.capture_id);
+    // (review fixes 2 - Q4-A: `named` - only the rows that show them by name, never a frog-name cam row; the hidden sweep's incognito half)
+    const ns = [...new Set((named || []).map(lc).filter(Boolean))];
+    if (ns.length) for (const r of await getQuery(`SELECT DISTINCT capture_id FROM story_keep_people WHERE role <> 'vcam' AND login IN (${ns.map(() => "?").join(",")})`, ns)) caps.add(r.capture_id);
     if (userId && (await layoutHidden(userId))) {             // review fix: the strict read (unreadable: nothing removed here)
       for (const r of await keptOf(userId, undefined, NOW(), { wide: true })) caps.add(r.capture_id);
     }
@@ -1061,8 +1095,15 @@ function hiddenChanged() {
 }
 async function sweepHidden() {
   await init();
-  const ls = (await getQuery("SELECT DISTINCT login FROM story_keep_people")).map((r) => r.login).filter((l) => hiddenCheck(lc(l)) === true);
-  return ls.length ? onPeoplePrivate({ logins: ls }) : 0;
+  // (review fixes 2 - Q4-A: a frog-name cam row goes when its person is LEFT OUT; hidden by incognito alone takes only the named rows)
+  const rows = await getQuery("SELECT DISTINCT login, role FROM story_keep_people");
+  const out = new Set(), named = new Set();
+  for (const r of rows) {
+    const l = lc(r.login);
+    if (r.role === "vcam") { if (leftOutCheck(l) === true) out.add(l); }
+    else if (hiddenCheck(l) === true) named.add(l);
+  }
+  return out.size || named.size ? onPeoplePrivate({ logins: [...out], named: [...named] }) : 0;
 }
 /** The backstop (hourly, register): rows of captures with no copy left go; copies showing someone private now go. Cheap: one pass
  *  over story_keep_people. -> captures taken down. Review fixes, first: saved copies nobody saves any more (any capture, after a grace -
@@ -1220,4 +1261,5 @@ module.exports = { SAVE_USER_KINDS, userSaveable, init, register, postToPad, rem
                    isPadMod, Refuse, _setClock, _setModCheck, _setPersistImpl, defaultPersist,
                    // mic keep (handoff 16 follow-up): the cascade + account deletion / export hooks
                    onPeoplePrivate, hiddenChanged, sweepHidden, sweepKept, keptOf, keptStates, dropPeopleIfNoCopy, ownersAt, MIC, _setHiddenCheck,
+                   _setLeftOutCheck,
                    onPostDeleted, purgeOrphanKeep };          // mic keep review: feedstore.remove / account deletion
