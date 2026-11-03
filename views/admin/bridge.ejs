@@ -393,7 +393,7 @@
   btn.addEventListener('click', function () {
     if (!cur) return;
     var on = !cur.on;
-    if (on && !window.confirm('Turn incognito cams on? Incognito people who are on cam and haven't switched live cam off show their cam on the website under their frog name. Make sure the owner approved the privacy text.')) return;
+    if (on && !window.confirm('Turn incognito cams on? Incognito people who are on cam and haven\'t switched live cam off show their cam on the website under their frog name. Make sure the owner approved the privacy text.')) return;
     btn.disabled = true;
     req({ on: on }).then(function (d) { say('Switched ' + (on ? 'on' : 'off') + '.', true); render(d); }).catch(function (e) { btn.disabled = false; say(e.message, false); });
   });
