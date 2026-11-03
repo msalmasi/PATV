@@ -377,7 +377,7 @@ function gate(what, why, S, G, U, { scope = "", depth = 0, cost = 0, t = NOW() }
 
 // ── who / what he may answer ──
 const MENTION_RE = /(^|[^\w@])@?pepe(?![\w])/i;
-// 1.99??: the bot reads stored Markdown as plain text; only prose can summon it, never a closed code example.
+// 1.99ahz: the bot reads stored Markdown as plain text; only prose can summon it, never a closed code example.
 const plainBody = (row) => row.fmt === "md" ? require("./postmd").plain(row.body || "") : String(row.body || "");
 const mentionBody = (row) => row.fmt === "md" ? require("./postmd").sourceText(row.body || "") : String(row.body || "");
 /** "@pepe", "pepe" as a word, or "@<his username>". */

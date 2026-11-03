@@ -1,4 +1,4 @@
-// 1.99??: Pepe's feed context is readable plain text, selected by stored fmt; code examples never summon him.
+// 1.99ahz: Pepe's feed context is readable plain text, selected by stored fmt; code examples never summon him.
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");

@@ -62,7 +62,7 @@ const PAGE = 20;
 const MAX_PINS = 3;
 const DEFAULTS = Object.freeze({
   enabled: true,
-  feed_markdown: false,              // 1.99??: new posts/comments only; stored fmt survives switch changes
+  feed_markdown: false,              // 1.99ahz: new posts/comments only; stored fmt survives switch changes
   max_image_mb: 10, max_audio_mb: 25, max_video_mb: 100,
   max_audio_secs: 600, max_video_secs: 180,
   user_quota_mb: 500, global_quota_gb: 20, min_free_gb: 8,
@@ -107,7 +107,7 @@ function _setClock(fn) { NOW = fn; }
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
 // 1.99iw: stickers in a post / comment must come from packs the writer owns (stickers.js)
 async function stickerCheck(userId, text, fmt) {
-  // 1.99??: validate only text that can render stickers; code, URL destinations and split tokens stay literal.
+  // 1.99ahz: validate only text that can render stickers; code, URL destinations and split tokens stay literal.
   const used = fmt === "md" ? require("./postmd").sourceText(text) : text;
   try { await require("./stickers").validate(userId, used); } catch (e) { if (e.refuse) throw new Refuse(e.status, e.message); throw e; }
 }
@@ -186,7 +186,7 @@ function init() {
       // wave2 integration review (DARK-1): a J-7 clip posted under a FROG NAME records it (null = a named post) - logins then pairs
       // that frog name with the real speaker, so a prod -> staging refresh blanks them (deploy/keep-staging-tables.js SCRUB)
       await addCol("feed_voices", "alias", "TEXT");
-      // 1.99??: legacy bodies stay plain; no backfill or default reinterprets existing posts/comments.
+      // 1.99ahz: legacy bodies stay plain; no backfill or default reinterprets existing posts/comments.
       await addCol("feed_posts", "fmt", "TEXT");
       await addCol("feed_comments", "fmt", "TEXT");
       await TAGS().init();          // 1.99iq: content tags (feedtags.js)
@@ -511,7 +511,7 @@ const config = () => CONFIG;
 const CTRL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f‪-‮⁦-⁩]/g;
 const cleanLine = (s, n) => String(s == null ? "" : s).replace(CTRL, "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, n);
 const cleanText = (s, n) => String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(CTRL, "").replace(/\n{4,}/g, "\n\n\n").trim().slice(0, n);
-// 1.99??: text-only consumers use a body's stored format, never the current switch or its title.
+// 1.99ahz: text-only consumers use a body's stored format, never the current switch or its title.
 const plainBody = (row) => row.fmt === "md" ? require("./postmd").plain(row.body || "") : row.body || "";
 const newId = (n = 12) => crypto.randomBytes(16).toString("base64url").replace(/[-_]/g, "").slice(0, n).padEnd(n, "x");
 // 1.99ack: was isStaff (Admin / Staff) - now feed.see_hidden / feed.limits_exempt / feed.moderate (siteperms.js) at each check
@@ -1819,7 +1819,7 @@ async function editComment(user, id, body) {
     filt = await FILTER().check(await account(user.userId), roomIds, { kind: "comment", body: text, edit: true, postId: c.post_id, commentId: c.id });
     if (filt && filt.action === "block") throw new Refuse(422, filt.message);
   }
-  // 1.99??: the stored format stays fixed even when feed_markdown has changed since creation.
+  // 1.99ahz: the stored format stays fixed even when feed_markdown has changed since creation.
   await runQuery("UPDATE feed_comments SET body = ?, edited = ? WHERE id = ?", [text, NOW(), c.id]);
   if (filt) await FILTER().record(filt, { kind: "comment", postId: c.post_id, commentId: c.id, authorId: c.author_id }).catch((e) => console.error("[feed] filter record:", e.message));
   // 1.99kk: names added by the edit get their @mention notice (feedmentions.js) - not for an edit the filter hid

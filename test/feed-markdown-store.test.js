@@ -1,4 +1,4 @@
-// 1.99??: stored Markdown is opt-in for new posts/comments; migrations and edits never reinterpret old text.
+// 1.99ahz: stored Markdown is opt-in for new posts/comments; migrations and edits never reinterpret old text.
 // Uses a fresh, temporary SQLite database, including pre-migration post/comment fixtures.
 "use strict";
 const test = require("node:test");
