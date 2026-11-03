@@ -64,6 +64,12 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS cam_evidence_room ON cam_evidence (room_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS cam_evidence_exp ON cam_evidence (expires_at)");
       await runQuery("CREATE INDEX IF NOT EXISTS cam_evidence_subject ON cam_evidence (subject_login)");
+      // 1.99?? (privacy controls review RV-2 / ID-7): admin_only = saved from a by-login reveal or of a LEFT-OUT person (Q22: only admins
+      // and staff could ever open it - the pad's owner never sees the row or its file); label = the frog name a veiled subject showed under
+      // (an owner's list names a veiled subject by that, never the login)
+      const cols = (await getQuery("PRAGMA table_info(cam_evidence)")).map((c) => c.name);
+      if (!cols.includes("admin_only")) await runQuery("ALTER TABLE cam_evidence ADD COLUMN admin_only INTEGER NOT NULL DEFAULT 0");
+      if (!cols.includes("label")) await runQuery("ALTER TABLE cam_evidence ADD COLUMN label TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -174,16 +180,19 @@ async function store({ buf, kind, S, secs, user, role, reason }) {
   fs.renameSync(part, dest);
   const t = now(), exp = t + KEEP_MS, why = clean(reason, REASON_MAX) || null;
   const veil = S.rv && S.rv.veiled ? "veiled" : "named";
+  // (review RV-2: a by-login reveal, or one of a left-out person, is the admins' alone - its evidence too)
+  const adminOnly = S.rv && (S.rv.bylogin || S.rv.why === "left_out") ? 1 : 0;
+  const label = veil === "veiled" ? clean((S.rv && S.rv.label) || "", 60) || null : null;
   const rk = await rkOf(S.roomId);
   try {
     await tx(async () => {
       const st = await ST.log({ userId: String(user.userId), role, scope: "cam_evidence_save", roomId: S.roomId, logins: [S.login], reason: why || "",
                                 ref: "cev:" + id });
       if (!st) throw new Error("camevidence: no see-through row");
-      await runQuery(`INSERT INTO cam_evidence (id, room_id, rk, subject_login, veil, kind, secs, bytes, sha256, file, by_user, role, reason, sid, st_id, created, expires_at)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      await runQuery(`INSERT INTO cam_evidence (id, room_id, rk, subject_login, veil, kind, secs, bytes, sha256, file, by_user, role, reason, sid, st_id, created, expires_at,
+                      admin_only, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                      [id, String(S.roomId), rk, S.login, veil, kind, kind === "clip" ? secs : 0, buf.length, crypto.createHash("sha256").update(buf).digest("hex"), file,
-                      String(user.userId), role, why, S.sid, st, t, exp]);
+                      String(user.userId), role, why, S.sid, st, t, exp, adminOnly, label]);
       await AA.record({ userId: String(user.userId), username: user.username || null }, "evidence.cam_save", null, { id, room: String(S.roomId), kind, role, st }, why);
     });
   } catch (e) { unlinkQuiet(dest); throw e; }
@@ -227,6 +236,17 @@ async function viewRole(user, roomId) {
   if (await isAdmin(user)) return { role: "admin", since: 0 };
   try { const r = await require("./seethrough").chatRole(user, roomId); return r && r.role === "owner" ? r : null; } catch (e) { return null; }
 }
+/** 1.99?? (privacy controls review RV-1): the Camfrog login(s) linked to this account now (its own cam's evidence is never shown to it as
+ *  a pad's owner). A failed read: none (the row filter below still drops admins-only rows). */
+async function ownLogins(user) {
+  try {
+    const r = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(user && user.userId)]))[0];
+    return new Set([r && r.camfrogUsername, user && user.camfrogUsername].map(low).filter(Boolean));
+  } catch (e) { return new Set([low(user && user.camfrogUsername)].filter(Boolean)); }
+}
+/** 1.99?? (privacy controls review RV-1 / RV-2): a row a pad's OWNER never gets (list or file): an admins-only row (by login, left out),
+ *  or one whose subject is the owner themselves (who saved it and why would name the moderator who checked them - Q11, ghost silence). */
+const ownerHides = (r, self) => Number(r && r.admin_only) === 1 || (self instanceof Set && self.has(low(r && r.subject_login)));
 async function lapsed(r, t = now()) { return Number(r.expires_at) <= t && !r.hold_at && !(await EV().heldWhy(r)); }
 const seenOnce = (k, t = now()) => { const at = SEEN.get(k); if (at && t - at < VIEW_LOG_MS) return false; SEEN.delete(k); SEEN.set(k, t); if (SEEN.size > 20000) SEEN.delete(SEEN.keys().next().value); return true; };
 
@@ -314,18 +334,25 @@ function register(app, { addUser, bySlug, noTimers = false }) {
         const r = roomId ? await viewRole(req.user, roomId) : null;
         if (!r) return res.status(403).json({ ok: false, error: "Only PATV admins, and a pad's owner for their own pad, can see cam evidence." });
         rows = await getQuery("SELECT * FROM cam_evidence WHERE room_id = ? AND created >= ? ORDER BY created DESC LIMIT ?", [String(roomId), Number(r.since) || 0, n]);
+        // (review RV-1 / RV-2: never the owner's OWN cam - who saved it and why would name a moderator to the person they checked - and
+        // never an admins-only row: a by-login reveal or a left-out person's)
+        const self = await ownLogins(req.user);
+        rows = rows.filter((x) => !ownerHides(x, self));
       }
       const live = [];
       for (const r of rows) if (!(await lapsed(r))) live.push(r);
       const ids = [...new Set(live.flatMap((r) => [r.by_user, r.hold_by]).filter(Boolean).map(String))];
       const names = new Map(ids.length ? (await getQuery(`SELECT userId, username FROM users WHERE userId IN (${ids.map(() => "?").join(",")})`, ids).catch(() => []))
         .map((x) => [String(x.userId), x.username]) : []);
-      const out = live.map((r) => ({ id: r.id, room_id: r.room_id, subject: r.subject_login, veil: r.veil, kind: r.kind, secs: Number(r.secs) || 0,
+      // (review ID-7: a pad owner's list names a VEILED subject by the frog name it showed under, and one who has asked to be forgotten
+      // since as "someone" - never the login; the see-through row below still records the real logins this list was about)
+      const subjectFor = (r) => (admin ? r.subject_login : r.veil === "veiled" ? r.label || "someone" : r.subject_gone_at != null ? "someone" : r.subject_login);
+      const out = live.map((r) => ({ id: r.id, room_id: r.room_id, subject: subjectFor(r), veil: r.veil, kind: r.kind, secs: Number(r.secs) || 0,
         bytes: Number(r.bytes) || 0, role: r.role, by: names.get(String(r.by_user)) || null, reason: r.reason || "", created: Number(r.created),
         expires_at: Number(r.expires_at), file: "/api/evidence/cam/" + r.id + "/file",
         ...(admin ? { subject_gone: r.subject_gone_at != null, hold: r.hold_at ? { at: Number(r.hold_at), by: names.get(String(r.hold_by)) || null, why: r.hold_why || "" } : null } : {}) }));
       const key = `${req.user.userId}|camlist|${roomId || "*"}|`;
-      const fresh = [...new Set(out.map((o) => low(o.subject)))].filter((s) => seenOnce(key + s));
+      const fresh = [...new Set(live.map((o) => low(o.subject_login)))].filter((s) => seenOnce(key + s));
       if (fresh.length) { await ST.init(); await tx(() => ST.logAll({ userId: String(req.user.userId), role: admin ? "admin" : "owner", scope: "cam_evidence_list", roomId, logins: fresh, ref: "cel:" + out.length })); }
       res.json({ ok: true, on: on(), admin, rows: out });
     } catch (e) { fail(res, "list", e); }
@@ -338,6 +365,7 @@ function register(app, { addUser, bySlug, noTimers = false }) {
       const r = (await getQuery("SELECT * FROM cam_evidence WHERE id = ?", [id]))[0];
       const vr = r ? await viewRole(req.user, r.room_id) : null;
       if (!r || !vr || (vr.role === "owner" && Number(r.created) < Number(vr.since))) return res.status(404).json({ ok: false, error: "No such evidence." });
+      if (vr.role !== "admin" && ownerHides(r, await ownLogins(req.user))) return res.status(404).json({ ok: false, error: "No such evidence." });   // (review RV-1 / RV-2)
       if (await lapsed(r)) return res.status(410).json({ ok: false, error: "Its 30 days are up - it's being deleted." });
       const b = base(false), f = b ? filePath(r.file, b) : null;
       if (!f || !fs.existsSync(f)) return res.status(410).json({ ok: false, error: "Its file is gone." });
