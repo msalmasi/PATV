@@ -337,7 +337,9 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null) {
  * none is open (or the open one has ended), else keeps it. opts: {t, active: a line or a mic event (resets the quiet clock),
  * holding: true / false while a mic hold starts / ends, avoidNames: the pad's roster logins + display names, kind: the level of
  * this sighting - "incognito" | "hidden" (privacy fix, M addendum 3 #1: an incognito session sighted "hidden" ends at once, even
- * mid-hold, and the next one is alias-less for 15 minutes)}.
+ * mid-hold, and the next one is alias-less for 15 minutes), onMic: this sighting itself shows them holding the mic (Pepe's snapshot
+ * lists them on it, or an item of a hold - its grab, 🎙 lines, release) - 1.99?? review fix: the no-name 15 minutes never end on it,
+ * whatever S.holding says (a restart forgets it, and a batch's snapshot is sighted before the batch's grab)}.
  * -> {alias (null = no name: "someone"), hood, session}
  */
 function sight(roomId, login, opts = {}) {
@@ -358,7 +360,7 @@ function sight(roomId, login, opts = {}) {
       const why = endWhy(S, t);
       if (lv) { await endLevel(S, t); S = null; }             // (whatever the clock says too: the switch decides the next name)
       else if (why) { await endSession(S, t, why); S = null; }
-      else if (gapOver(S, t)) {
+      else if (opts.onMic !== true && gapOver(S, t)) {
         // 1.99?? (owner 2026-11-03): "someone" for 15 minutes after their last named sighting, then a frog name - even mid-visit. The
         // new session keeps the person's level when this sighting gives none (or only a hold's frozen one)
         carry = S.kind;

@@ -1,6 +1,8 @@
 // 1.99?? frog names review fixes at the veil layer (owner 2026-11-03, "Lets do 2": "someone" for 15 minutes after the last named
 // sighting in a pad, then a frog name - even mid-visit, never during a mic hold). Each test fails without its fix:
 //   own name     a frog name never reads as the person's own display name (a veiled person isn't in the roster's avoid list)
+//   mic hold     a snapshot that lists them on the mic, or an item of a hold, never ends the 15 minutes - after a restart (which forgets
+//                the hold) and when a batch's snapshot is sighted before the batch's grab
 //   node --test test/frognames-veil-gap.test.js
 "use strict";
 const test = require("node:test");
@@ -71,4 +73,43 @@ test("1.99?? review fix: a frog name never reads as the person's own display nam
   const it = await withNonce(b.nonce, () => item(room, "message", "dispytwo", { text: "hello from dispy two" }, t + 1000, b.name));
   assert.ok(ALIAS_RE.test(String(it.u.alias)), "a frog name: " + it.u.alias);
   assert.notEqual(FN.norm(it.u.alias), FN.norm(b.name), "never their own display name");
+});
+
+test("1.99?? review fix: a mic hold Pepe's snapshot shows (after a restart forgot it, or before the batch's grab) keeps 'someone' - the name comes after the release", async () => {
+  const t = Date.UTC(2026, 10, 14, 14);
+  const room = { id: "Hold.Room" };
+  const hold = "hd-0000aaaa1111";
+  FN.named(room.id, "micky", t);
+  await snapshot(room, [veiled("micky")], [], t + 5 * MIN);
+  assert.equal(entry(room, "micky").alias, undefined, "+5: someone");
+  const grab = await item(room, "mic.grab", "micky", { hold }, t + 10 * MIN);
+  assert.equal(grab.u.alias, undefined, "the grab: someone");
+  await snapshot(room, [veiled("micky", { on_mic: true })], [veiled("micky", { proven: true, since: (t + 10 * MIN) / 1000 })], t + 11 * MIN);
+  // the site restarts mid-hold: the hold is forgotten, the no-name row comes back
+  FN._reset();
+  FN._setClock(() => t + 15 * MIN);
+  try {
+    await snapshot(room, [veiled("micky", { on_mic: true })], [veiled("micky", { proven: true, since: (t + 10 * MIN) / 1000 })], t + 16 * MIN);
+    assert.equal(entry(room, "micky").alias, undefined, "+16 after a restart, still on the mic: someone in the people list (was " + entry(room, "micky").alias + ")");
+    assert.equal(entry(room, "micky", "mic").alias, undefined, "and in the mic list");
+    const tx = await item(room, "x.pepe.transcript", "micky", { id: "tx-0000000000000a01", text: "said on the mic", source: "mic", hold }, t + 17 * MIN);
+    assert.equal(tx.u.alias, undefined, "a 🎙 line of the hold: someone");
+    const rel = await item(room, "mic.release", "micky", { hold, held_ms: 10 * MIN }, t + 20 * MIN);
+    assert.equal(rel.u.alias, undefined, "the release: someone");
+    await snapshot(room, [veiled("micky")], [], t + 20 * MIN + 30e3);
+    assert.match(String(entry(room, "micky").alias), ALIAS_RE, "after the release: a frog name");
+  } finally { FN._setClock(null); }
+  // no restart: the 15 minutes end while the batch's snapshot already lists them on the mic, its grab sighted after it
+  FN.named(room.id, "batchmic", t);
+  await snapshot(room, [veiled("batchmic")], [], t + 5 * MIN);
+  await snapshot(room, [veiled("batchmic", { on_mic: true })], [veiled("batchmic", { proven: true, since: (t + 15 * MIN + 50e3) / 1000 })], t + 16 * MIN);
+  assert.equal(entry(room, "batchmic", "mic").alias, undefined, "the snapshot's mic entry: someone (was " + entry(room, "batchmic", "mic").alias + ")");
+  assert.equal(entry(room, "batchmic").alias, undefined, "the people list: someone");
+  const g2 = await item(room, "mic.grab", "batchmic", { hold: "hd-0000aaaa2222" }, t + 15 * MIN + 50e3);
+  assert.equal(g2.u.alias, undefined, "the grab: someone");
+  await snapshot(room, [veiled("batchmic", { on_mic: true })], [veiled("batchmic", { proven: true, since: (t + 15 * MIN + 50e3) / 1000 })], t + 18 * MIN);
+  assert.equal(entry(room, "batchmic", "mic").alias, undefined, "mid-hold: someone");
+  await item(room, "mic.release", "batchmic", { hold: "hd-0000aaaa2222", held_ms: 3 * MIN }, t + 19 * MIN);
+  await snapshot(room, [veiled("batchmic")], [], t + 19 * MIN + 30e3);
+  assert.match(String(entry(room, "batchmic").alias), ALIAS_RE, "after the release: a frog name");
 });

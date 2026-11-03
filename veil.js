@@ -265,9 +265,10 @@ async function nameItem(R, it) {
         frozen = holdKind(roomId, it.hold) === lvl;
         holdKind(roomId, it.hold, lvl);
       }
-      // (1.99?? review fix: + their own display name - a veiled person isn't in avoidOf's named roster; frognames adds the login)
+      // (1.99?? review fix: + their own display name - a veiled person isn't in avoidOf's named roster; frognames adds the login.
+      // onMic: an item of a mic hold - its grab, 🎙 line or release - never ends the no-name 15 minutes, even when a restart forgot the hold)
       view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: ownToo(avoidOf(R), vz), kind: lvl,
-                                                 frozen });
+                                                 frozen, onMic: it.k === "mic" || it.k === "unmic" || !!it.hold });
     }
   } catch (e) { view = null; console.error("[veil] frog name:", e && e.code ? e.code : "error"); }
   let named = view && view.alias ? view : null;
@@ -388,6 +389,11 @@ async function nameSnapshot(R, now) {
   // entry of a person on the roster is sighted at their roster level (the strictest, if listed twice); a holder not on the roster
   // at their mic entry's.
   const personKind = new Map();
+  // 1.99?? review fix: who this snapshot shows holding the mic (the mic list, or a roster entry's on_mic) - their no-name 15 minutes
+  // never end on it (frognames onMic): a restart forgets the hold, and a batch's snapshot is sighted before the batch's grab
+  const onMic = new Set();
+  for (const e of R.mic || []) if (e && e.anon && e._vz && e._vz.login) onMic.add(lower(e._vz.login));
+  for (const e of R.members || []) if (e && e.anon && e.on_mic === true && e._vz && e._vz.login) onMic.add(lower(e._vz.login));
   for (const e of R.members || []) {
     const vz = e && e.anon && e._vz;
     if (!vz || !vz.login) continue;
@@ -402,7 +408,7 @@ async function nameSnapshot(R, now) {
     const low = lower(vz.login);
     const kind = personKind.has(low) ? personKind.get(low) : vz.kind;
     let view = null;
-    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: ownToo(avoid, vz), kind }); } catch (err) { view = null; }
+    try { view = await FN.sight(R.id, vz.login, { t: now, active: false, avoidNames: ownToo(avoid, vz), kind, onMic: onMic.has(low) }); } catch (err) { view = null; }
     seen.add(low);
     const isMic = (R.mic || []).includes(e);
     if (view && view.alias && !(isMic && (vz.proven !== true || vz.beganNamed === true))) {
