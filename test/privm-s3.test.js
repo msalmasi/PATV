@@ -478,6 +478,20 @@ test("round 5: someone who ALREADY keeps their cam off mic stages (live cam off,
   } finally { await knobs({ withheld_cover: false }); }
 });
 
+// 1.99?? (privacy controls round 5): /privacy says "PATV administrators or staff using ghost mode" everywhere (round 4); Settings' cam-reveal
+// sentences (cam_reveal on: lc.st_off_rv, lc.what_told_rv) match - ghost mode is locked to Staff and up (Admin and Staff, siteperms-core)
+test("round 5: Settings' cam-reveal sentences name PATV administrators or staff as ghosts, never staff alone (as /privacy does)", async () => {
+  const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.ok(EN["lc.st_off_rv"].includes("never who, unless they're PATV administrators or staff using ghost mode."), "lc.st_off_rv");
+  assert.ok(EN["lc.what_told_rv"].includes("(never who), unless they're a PATV administrator or staff member using ghost mode."), "lc.what_told_rv");
+  assert.deepEqual(Object.keys(EN).filter((k) => /staff in (👻 )?ghost mode/.test(EN[k])), [], "en.json: no sentence names only staff as ghosts");
+  const pv = fs.readFileSync(path.join(repo, "views", "privacy.ejs"), "utf8");
+  assert.ok(!/staff in ghost mode/.test(pv) && (pv.match(/PATV administrators or staff using ghost mode/g) || []).length >= 4, "/privacy: administrators or staff (round 4)");
+  const SPC = require(path.join(repo, "siteperms-core"));
+  const g = SPC.CAPS.find((c) => c[0] === "ghost.mode");
+  assert.ok(g && g[2] === "staff", "ghost.mode: Staff and up (" + JSON.stringify(g) + ")");
+});
+
 // ── veiled people never get the cover ──
 test("on: incognito + live cam off is the PEEK hood under the frog name, !bridge hide the SHADOW hood - never their cover (coverOf never asked about them)", async () => {
   const SC = require(path.join(repo, "stagecover"));
