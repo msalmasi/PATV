@@ -2298,9 +2298,14 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     const wh = x.video === "card" && x.why === "withheld";
     // (1.99aif privacy controls round 5 review: a withheld card asks about the person's blocks whatever the cam's gate said - watchOf stops
     // at "members only" before its DM check, so a members-only viewer the person DM-blocked got "ok" and the cover; as on the veiled card)
-    const pb = (watch === "unavailable" || (wh && watch !== "hidden" && watch !== "blocked")) && (await personBlocks(x.login, String(userId)));
-    if (wh && watch !== "hidden" && watch !== "blocked") watch = pb ? "unavailable" : "ok";
-    const cv = watch === "hidden" || watch === "blocked" || pb ? null : await coverOf(x.login);
+    // (1.99?? privacy controls round 6: EVERY named tile, withheld or not - since 1.99ahq a members-only viewer the person DM-blocked (either
+    // way) read "members only" with their cover. Whatever the cam's gate said but "ok" (watchOf asked the blocks then), this viewer's report
+    // or a bridge block on them: a viewer the person blocked, by cam or DM, reads the letter and "isn't available", like every blocked viewer)
+    const open = watch !== "hidden" && watch !== "blocked";
+    const pb = open && (watch !== "ok" || wh) && (await personBlocks(x.login, String(userId)));
+    if (pb) watch = "unavailable";
+    else if (wh && open) watch = "ok";
+    const cv = !open || pb ? null : await coverOf(x.login);
     src.push({ kind: "cam", id: x.login, name: name.slice(0, 40), avatar: coverUrl(cv), ...(cv ? { ck: cv.k } : {}),
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,
                video: x.video, why: x.video === "card" ? (wh && surface !== "capture" ? "off_cam" : x.why || "full") : null, watch,
@@ -3230,6 +3235,7 @@ module.exports = {
   vidLogin, veilCamEnded, veilSessOf, veilOfTile,                                // 1.99aid (privacy controls S5)
   vidVeil, pinByVid,                                                              // 1.99aid (privacy controls V-1)
   withheldCover: () => cfg().withheld_cover === true,                            // 1.99aid (privacy controls S3)
+  dmBlocked,                                                                      // 1.99?? (privacy controls round 6: stagemiccap's consent)
   register, init, cfg, current: () => ({ v: CFG.v, cfg: { ...CFG.cfg } }), onSync, onRoomGone, stepPad, snapshot, viewFor, ownerState, setPad, adminView, setKill, setCfg,
   recheck, recheckUser, yieldRelay, enforceRelays, shed, exclTarget, excludeFor, unexclude, unexcludeXid, clearPad, clearAll, roomsOn, onStillResult, onSessionEnd, onExact,
   onStageLeave, stillWanted, privacyState, setOptout, metrics, statusText, clearStage, report, resolveReports, REPORT_REASONS,

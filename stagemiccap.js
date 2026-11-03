@@ -38,6 +38,10 @@
 // own cam blocks of the viewer only), never its relay or a still; it counts as a name card (`cards`), so the capture stays postable.
 // While the switch is on every name card takes cardConsent (the samples, the recheck, storykeep's role "card") - a cam opt-out no
 // longer withdraws an appearance by name. Off: consent() everywhere, as before.
+// 1.99?? (privacy controls round 6): consent() and cardConsent() also ask a DM block either way between the person and the viewer (the
+// block the viewer's stage program already reads - micfollow.dmBlocked), so a capture taken before the person blocked the viewer in DMs
+// is never saved or posted by name after it (their cam blocks were asked already). A viewer the person blocked, by cam or DM, reads
+// their tile as the letter and "isn't available" (micfollow.viewFor), which a capture draws blank.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -79,6 +83,9 @@ let deps = {
   // 1.99aid (privacy controls S3): micfollow_cfg withheld_cover - a cam opt-out is a NAMED card (cardConsent); the person's cam blocks
   withheldOn: () => { try { return require("./micfollow").withheldCover() === true; } catch (_) { return false; } },
   camBlocked: async (l, u) => { const C = require("./camviewers"); await C.init(); return C.blocked(l, u) === true; },
+  // 1.99?? (privacy controls round 6): a DM block either way between the person and the viewer (micfollow.dmBlocked - the block the
+  // viewer's stage program reads; fails closed)
+  dmBlocked: (l, u) => require("./micfollow").dmBlocked(String(l).toLowerCase(), String(u)),
   hidden: l => require("./quotes").isHidden(l),
   // 1.99aid (privacy controls V-1): a veiled cam tile / pin -> {login, sess} (server-only), its session's own path, the veil checks
   vtile: (id, eid, pin) => { const MF = require("./micfollow"); if (pin) { const p = MF.pinByVid(id, eid); return p && p.veil ? { login: p.login, sess: p.veil.sess } : null; } return MF.vidVeil(id, eid); },
@@ -228,21 +235,24 @@ async function consent(login, userId, veil = null) {
   // incognito at all (recheck - never published once they show by name). Never the incognito half of `hidden`.
   try {
     const okVeil = veil ? (veil.sess != null ? deps.stillVeiled(veil.R, login, veil.sess) === true : deps.personIncognito(login) === true) : !(await deps.hidden(login));
+    // (1.99?? privacy controls round 6: + a DM block either way, as the viewer's stage program reads it - a capture taken before the person
+    // DM-blocked the viewer is never saved or posted by name after; their cam blocks were already camRefusal's)
     return okVeil && !(await deps.privateLogins([login])).has(String(login).toLowerCase()) &&
-      !(await deps.camRefusal(login, userId, { strict: true }));
+      !(await deps.camRefusal(login, userId, { strict: true })) && !(userId != null && (await deps.dmBlocked(login, userId)));
   } catch (_) { return false; }
 }
 /** 1.99aid (privacy controls S3): may `login` be drawn BY NAME only - a name card, no cam - for this viewer? While micfollow_cfg
  *  withheld_cover is on, a cam opt-out (!livecam off, cam access) withholds the cam, not the person, so a name card asks everything
  *  consent() does EXCEPT the cam's rules: not hidden, the strict private-profile lookup (fails closed), and not one of the person's own
- *  cam blocks of this viewer. Off: consent() exactly (today). Used for every name card (a capture's cards, the samples, the recheck
+ *  blocks of this viewer (cam, or DM either way - 1.99?? round 6). Off: consent() exactly (today). Used for every name card (a capture's cards, the samples, the recheck
  *  before a save / post - storykeep's role "card"); a cam drawn always takes consent(). */
 async function cardConsent(login, userId) {
   if (!deps.withheldOn()) return consent(login, userId);
   try {
     if (await deps.hidden(login)) return false;
     if ((await deps.privateLogins([login])).has(String(login).toLowerCase())) return false;
-    return !(userId != null && (await deps.camBlocked(login, userId)));
+    // (1.99?? privacy controls round 6: the person's blocks of this viewer by cam OR DM, either way - as their stage program reads them)
+    return !(userId != null && ((await deps.camBlocked(login, userId)) || (await deps.dmBlocked(login, userId))));
   } catch (_) { return false; }
 }
 /** A named card's stage cover {buf, k} from the program entry's avatar URL - the picture the viewer's own stage shows on that card

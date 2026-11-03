@@ -815,6 +815,86 @@ test("round 5 review: a _wh courtesy PM is queued under Pepe's own account, neve
   } finally { await knobs({ withheld_cover: false }); }
 });
 
+// 1.99?? (privacy controls round 6, the LIVE fix - on prod since 1.99ahq, so it changes the switches-off behaviour, deliberately): a NAMED
+// tile that isn't withheld (a live cam, a card) showed its person's cover to a members-only viewer the person DM-blocked (either way) -
+// viewFor asked the person's blocks only when the cam's gate said "unavailable", and watchOf stops at "members only" before its DM check.
+// Every named tile now: a viewer the person blocked, by cam or DM, reads the letter and "isn't available" (as every blocked viewer does)
+test("round 6: EVERY named tile (a live cam, a card - not only a withheld one) is the letter and 'isn't available' for a members-only viewer the person DM-blocked, either way; with the switches off too; everyone else as before", async () => {
+  const SC = require(path.join(repo, "stagecover"));
+  await SC.init();
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES ('alice', 4242, 1)");
+  SC.invalidate();
+  const gtf = SC.gtfUrl(4242, {});
+  assert.equal(MF.withheldCover(), false, "the switches off (the live behaviour)");
+  try {
+    await reset(); await plainPad();
+    await CA.setMode("alice", "members");                 // (verified members - u_v2 has no linked name, so it isn't one)
+    await onStage(["alice"]);
+    assert.equal(tile("alice") && tile("alice").video, "live", "set up: her live tile");
+    const entry = async (uid, surface) => {
+      const s = (await MF.viewFor(MF.snapshot(ROOM.id), R, uid, null, T, surface)).src.find((e) => e.id === "alice");
+      assert.ok(s, uid);
+      return [s.watch, s.avatar || null];
+    };
+    assert.deepEqual(await entry("u_v2"), ["members_only", gtf], "no block: a members-only viewer reads 'members only' with her cover, as before");
+    assert.deepEqual(await entry("u_v1"), ["ok", gtf], "a member watches her cam, as before");
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_alice', 'u_v2', ?)", [T]);
+    assert.deepEqual(await entry("u_v2"), ["unavailable", null], "a members-only viewer she DM-blocked: the letter, 'isn't available' - never her cover");
+    assert.deepEqual(await entry("u_v2", "capture"), ["unavailable", null], "...on the capture surface too (a capture draws it blank)");
+    assert.deepEqual(await entry("u_v1"), ["ok", gtf], "everyone else as before");
+    await runQuery("DELETE FROM dm_blocks");
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_v2', 'u_alice', ?)", [T]);
+    assert.deepEqual(await entry("u_v2"), ["unavailable", null], "a members-only viewer who DM-blocked her: the same");
+    // her card (not withheld: her relay ends) - the same rule
+    await runQuery("DELETE FROM dm_blocks");
+    for (let i = 0; i < 3 && tile("alice") && tile("alice").video === "live"; i++) { for (const S of [...LC._sessions.values()]) LC._sessions.delete(S.key); EXACT.clear(); await at(3, ["alice"]); }
+    const c = tile("alice");
+    assert.ok(c && c.video !== "live" && c.why !== "withheld", "set up: her named tile without a live cam - " + JSON.stringify(c && [c.video, c.why]));
+    assert.deepEqual(await entry("u_v2"), ["members_only", gtf], "no block: her cover, as before");
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_alice', 'u_v2', ?)", [T]);
+    assert.deepEqual(await entry("u_v2"), ["unavailable", null], "she DM-blocked the members-only viewer: the letter, 'isn't available'");
+  } finally {
+    await runQuery("DELETE FROM dm_blocks");
+    await CA.setMode("alice", "everyone");
+    await runQuery("DELETE FROM cosmetic_avatar_seeds"); SC.invalidate();
+  }
+});
+
+// 1.99?? (privacy controls round 6): the same gap in captures - consent() asked the person's cam blocks (camRefusal) but not a DM block,
+// and cardConsent (withheld_cover on) only the cam blocks: a capture taken before the person DM-blocked the viewer could still be saved
+// or posted by name after. Both now ask the DM block either way (micfollow.dmBlocked, as the viewer's stage program does)
+test("round 6: a capture's consent (the recheck before a save / post, a name card's cardConsent) refuses a person who DM-blocked the viewer, either way - switches off and on", async () => {
+  const SM = require(path.join(repo, "stagemiccap"));
+  const { defaults } = SM._test;
+  let ON = false;
+  SM.configure({ withheldOn: () => ON, camRefusal: async () => null, hidden: () => false, privateLogins: async () => new Set(), camBlocked: async () => false,
+                 account: async () => ({ userId: "u_v1" }), resolveRoom: async () => ({ id: ROOM.id }), config: () => ({ stagecap_mic: true }), killed: () => null,
+                 roomOff: () => null, eligibility: () => null, bridgeOk: () => true, full: async () => true, block: async () => null, clipSwitch: () => true,
+                 people: async () => ["alice"], cards: async () => ["bob"], veiledPeople: async () => [] });
+  const cap = { id: "c" + "1".repeat(20), user_id: "u_v1", room_id: ROOM.id, kind: "snap" };
+  try {
+    await runQuery("DELETE FROM dm_blocks");
+    assert.equal(await SM.consent("alice", "u_v1"), true, "no block: as before");
+    assert.equal(await SM.recheck(cap), null, "no block: postable, as before");
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_alice', 'u_v1', ?)", [T]);
+    assert.equal(await SM.consent("alice", "u_v1"), false, "off: she DM-blocked the viewer - her cam is never drawn / kept for them");
+    assert.equal(await SM.consent("alice", "u_v2"), true, "...anyone else as before");
+    assert.ok(await SM.recheck(cap), "off: the capture of her is no longer postable");
+    await runQuery("DELETE FROM dm_blocks");
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_v1', 'u_bob', ?)", [T]);
+    assert.equal(await SM.cardConsent("bob", "u_v1"), false, "off: cardConsent = consent - the viewer DM-blocked him");
+    assert.ok(await SM.recheck(cap), "off: his name card - not postable");
+    ON = true;
+    assert.equal(await SM.cardConsent("bob", "u_v1"), false, "on: a name card's own rules - a DM block either way refuses it");
+    assert.equal(await SM.cardConsent("bob", "u_v2"), true, "on: anyone else keeps it");
+    assert.ok(await SM.recheck(cap), "on: not postable");
+    await runQuery("DELETE FROM dm_blocks");
+    assert.equal(await SM.cardConsent("bob", "u_v1"), true, "lifted: as before");
+    assert.equal(await SM.recheck(cap), null, "lifted: postable");
+  } finally { await runQuery("DELETE FROM dm_blocks"); SM.configure(defaults); }
+});
+
 // ── the engine (pure) ──
 test("core: 'withheld' is a card state - a candidate and a tile, attributed in speaking(), never a hold / still / warm keep; a running relay or still is let go; opted_out from livecam is the card while cfg withheld_cover is on, a cut while off", () => {
   const C = { ...core.DEFAULTS, cold_open: true, enabled: true, stills: true, warm_keep_s: 180, warm_max: 3 };
