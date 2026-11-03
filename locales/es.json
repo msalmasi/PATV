@@ -10927,6 +10927,7 @@
   "chatfmt.og": "Negrita, cursiva, spoilers, citas, código, enlaces y horas en el chat de PATV, y lo que mostrará cada uno en un chat conectado.",
   "chatfmt.eyebrow": "PATV · AYUDA DE FORMATO",
   "chatfmt.h1": "Dar formato a mensajes, publicaciones y comentarios",
+  "chatfmt.h1_chat": "Dar formato a tus mensajes",
   "chatfmt.lead": "El chat de PATV usa las mismas marcas que Discord. Escríbelas tú mismo o toca {!aa} junto a Enviar para ver la barra de formato.",
   "chatfmt.nav": "En esta página",
   "chatfmt.nav_ref": "Formato del chat",

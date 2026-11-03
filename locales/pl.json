@@ -11104,6 +11104,7 @@
   "chatfmt.og": "Pogrubienie, kursywa, spoilery, cytaty, kod, linki i czas na czacie PATV oraz to, jak każdy z nich wyświetli czat połączony z innymi sieciami.",
   "chatfmt.eyebrow": "PATV · POMOC FORMATOWANIA",
   "chatfmt.h1": "Formatowanie wiadomości, postów i komentarzy",
+  "chatfmt.h1_chat": "Formatowanie wiadomości",
   "chatfmt.lead": "Czat PATV czyta te same znaczniki co Discord. Wpisz je samodzielnie albo dotknij {!aa} obok Wyślij, aby otworzyć pasek formatowania.",
   "chatfmt.nav": "Na tej stronie",
   "chatfmt.nav_ref": "Formatowanie czatu",

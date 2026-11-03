@@ -10927,6 +10927,7 @@
   "chatfmt.og": "Gras, italique, spoilers, citations, code, liens et heures dans le chat de PATV, et ce qu'un chat relié affichera pour chacun.",
   "chatfmt.eyebrow": "PATV · AIDE À LA MISE EN FORME",
   "chatfmt.h1": "Mettre en forme messages, posts et commentaires",
+  "chatfmt.h1_chat": "Mise en forme de tes messages",
   "chatfmt.lead": "Le chat de PATV lit les mêmes marques que Discord. Tape-les toi-même, ou touche {!aa} à côté d'Envoyer pour la barre de mise en forme.",
   "chatfmt.nav": "Sur cette page",
   "chatfmt.nav_ref": "Mise en forme du chat",

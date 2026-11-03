@@ -10708,6 +10708,7 @@
   "chatfmt.og": "PATV 聊天中的粗体、斜体、剧透、引用、代码、链接和时间，以及桥接聊天中各自的显示效果。",
   "chatfmt.eyebrow": "PATV · 格式帮助",
   "chatfmt.h1": "设置消息、帖子和评论的格式",
+  "chatfmt.h1_chat": "设置消息格式",
   "chatfmt.lead": "PATV 聊天使用与 Discord 相同的标记。你可以自己输入，也可以点击发送旁边的{!aa}打开格式工具栏。",
   "chatfmt.nav": "本页内容",
   "chatfmt.nav_ref": "聊天格式",

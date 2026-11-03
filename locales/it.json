@@ -10927,6 +10927,7 @@
   "chatfmt.og": "Grassetto, corsivo, spoiler, citazioni, codice, link e orari nella chat PATV, e cosa mostrerà una chat collegata per ciascuno.",
   "chatfmt.eyebrow": "PATV · AIUTO FORMATTAZIONE",
   "chatfmt.h1": "Formattare messaggi, post e commenti",
+  "chatfmt.h1_chat": "Formattare i tuoi messaggi",
   "chatfmt.lead": "La chat PATV usa gli stessi segni di Discord. Scrivili tu, oppure tocca {!aa} accanto a Invia per la barra di formattazione.",
   "chatfmt.nav": "In questa pagina",
   "chatfmt.nav_ref": "Formattazione in chat",

@@ -10842,6 +10842,7 @@
   "chatfmt.og": "PATV Sohbet’te kalın, italik, spoiler, alıntı, kod, bağlantı ve zamanlar; köprülenmiş bir sohbetin her biri için ne göstereceği.",
   "chatfmt.eyebrow": "PATV · BİÇİMLENDİRME YARDIMI",
   "chatfmt.h1": "Mesajları, gönderileri ve yorumları biçimlendirme",
+  "chatfmt.h1_chat": "Mesajlarını biçimlendirme",
   "chatfmt.lead": "PATV Chat, Discord ile aynı işaretleri okur. Bunları kendin yaz ya da Gönder'in yanındaki {!aa} simgesine dokunarak biçimlendirme çubuğunu aç.",
   "chatfmt.nav": "Bu sayfada",
   "chatfmt.nav_ref": "Sohbet biçimlendirmesi",

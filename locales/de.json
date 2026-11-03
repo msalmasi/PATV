@@ -10840,6 +10840,7 @@
   "chatfmt.og": "Fett, kursiv, Spoiler, Zitate, Code, Links und Zeiten im PATV Chat sowie was verbundene Chats für jedes davon anzeigen.",
   "chatfmt.eyebrow": "PATV · FORMATIERUNGSHILFE",
   "chatfmt.h1": "Nachrichten, Beiträge und Kommentare formatieren",
+  "chatfmt.h1_chat": "Nachrichten formatieren",
   "chatfmt.lead": "Der PATV Chat liest dieselben Zeichen wie Discord. Tippe sie selbst ein oder tippe neben Senden auf {!aa} für die Formatierungsleiste.",
   "chatfmt.nav": "Auf dieser Seite",
   "chatfmt.nav_ref": "Chat-Formatierung",

@@ -10710,6 +10710,7 @@
   "chatfmt.og": "Tebal, miring, spoiler, kutipan, kode, tautan, dan waktu di Chat PATV, serta tampilannya di chat yang terhubung.",
   "chatfmt.eyebrow": "PATV · BANTUAN PEMFORMATAN",
   "chatfmt.h1": "Memformat pesan, postingan dan komentar",
+  "chatfmt.h1_chat": "Memformat pesanmu",
   "chatfmt.lead": "Chat PATV membaca tanda yang sama dengan Discord. Ketik sendiri, atau ketuk {!aa} di samping Kirim untuk bilah pemformatan.",
   "chatfmt.nav": "Di halaman ini",
   "chatfmt.nav_ref": "Pemformatan chat",

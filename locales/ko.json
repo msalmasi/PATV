@@ -10708,6 +10708,7 @@
   "chatfmt.og": "PATV 채팅의 굵게, 기울임, 스포일러, 인용, 코드, 링크, 시간과 연동된 채팅에서 각각 어떻게 보이는지 알려 드려요.",
   "chatfmt.eyebrow": "PATV · 서식 도움말",
   "chatfmt.h1": "메시지, 게시물과 댓글 서식 쓰기",
+  "chatfmt.h1_chat": "메시지 서식 쓰기",
   "chatfmt.lead": "PATV 채팅은 Discord와 같은 표시 기호를 사용해요. 직접 입력하거나 보내기 옆의 {!aa}를 눌러 서식 도구 모음을 이용하세요.",
   "chatfmt.nav": "이 페이지 내용",
   "chatfmt.nav_ref": "채팅 서식",

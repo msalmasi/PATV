@@ -10840,6 +10840,7 @@
   "chatfmt.og": "Vet, cursief, spoilers, citaten, code, links en tijden in PATV Chat, en wat een gekoppelde chat voor elk ervan laat zien.",
   "chatfmt.eyebrow": "PATV · OPMAAKHULP",
   "chatfmt.h1": "Berichten, posts en reacties opmaken",
+  "chatfmt.h1_chat": "Je berichten opmaken",
   "chatfmt.lead": "PATV Chat leest dezelfde tekens als Discord. Typ ze zelf, of tik naast Verzenden op {!aa} voor de opmaakbalk.",
   "chatfmt.nav": "Op deze pagina",
   "chatfmt.nav_ref": "Chatopmaak",
