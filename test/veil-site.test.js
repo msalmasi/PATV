@@ -268,6 +268,33 @@ test("C.2: no frog name within 15 minutes of a named sighting; J-8: a new name a
   assert.notEqual(q2.u.alias, (R.feed.find((it) => it.u && it.u.veil && it._vz && it._vz.login === "frankiefettuccine") || { u: {} }).u.alias, "not frankie's");
 });
 
+test("1.99?? (owner 2026-11-03, cyberbaby2): seen named, then incognito in the room - 'someone' at +5 and +14 minutes, a frog name at +16; the earlier lines stay 'someone'", async () => {
+  await setup;
+  const t0 = Date.now(), M = 60e3;
+  await sync([ev("message", { user: real("cyberbaby2", "cyberbaby2"), text: "cb named line" }, t0)]);
+  const say = (text, at) => sync([ev("message", { user: real("cyberbaby2", "cyberbaby2"), text, priv: priv("incognito", "cyberbaby2") }, at)]);
+  await say("cb at five", t0 + 5 * M);
+  await say("cb at fourteen", t0 + 14 * M);
+  await say("cb at sixteen", t0 + 16 * M);
+  await say("cb at twenty", t0 + 20 * M);
+  const R = bridge._rooms.get(ROOM.id);
+  const line = (text) => R.feed.find((it) => it.text === text);
+  for (const text of ["cb at five", "cb at fourteen"]) {
+    const it = line(text);
+    assert.ok(it && it.u.veil === "incognito" && !it.u.alias && !it.u.id, text + ": someone");
+  }
+  const s16 = line("cb at sixteen"), s20 = line("cb at twenty");
+  assert.ok(s16 && ALIAS_RE.test(s16.u.alias || "") && s16.u.id, "+16 min: a frog name (and its session id)");
+  assert.equal(s20.u.alias, s16.u.alias, "kept from then on");
+  CV._clearCaches();
+  const r = await live(U.mem);
+  assert.equal(r.status, 200);
+  const page = (text) => r.d.feed.find((o) => o.text === text);
+  assert.ok(!JSON.stringify(["cb at five", "cb at fourteen", "cb at sixteen"].map(page)).includes("cyberbaby2"), "never the login on a veiled line");
+  assert.ok(!page("cb at five").u.alias && !page("cb at fourteen").u.alias, "the lines said as 'someone' stay 'someone' on the page");
+  assert.equal(page("cb at sixteen").u.alias, s16.u.alias);
+});
+
 test("B.2: a hold that began named releases as 'someone'; an unproven holder is 'someone'", async () => {
   await setup;
   const hold = "hd-0000aaaa0000";

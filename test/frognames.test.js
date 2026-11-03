@@ -164,10 +164,15 @@ test("sessions: no name right after being seen NAMED in the pad (C.2), a name at
   const s = await FN.sight("Pad.N", "bx", { t: t + 5 * 60e3, active: true });
   assert.equal(s.alias, null, "5 minutes after a named line: no frog name (someone)");
   assert.equal(s.hood, null);
-  assert.equal((await FN.sight("Pad.N", "bx", { t: t + 30 * 60e3 })).alias, null, "the same alias-less session goes on");
+  assert.equal((await FN.sight("Pad.N", "bx", { t: t + 14 * 60e3 })).session, s.session, "the same alias-less session goes on (14 minutes)");
+  // 1.99?? (owner 2026-11-03): once 15 minutes have passed since the named sighting, the next sighting gets a frog name - mid-visit
+  const s1 = await FN.sight("Pad.N", "bx", { t: t + 30 * 60e3 });
+  assert.match(String(s1.alias), /^[A-Z]/, "30 minutes after the named line, still in the room: a frog name");
+  assert.notEqual(s1.session, s.session);
   await FN.left("Pad.N", "bx", t + 31 * 60e3);
   const s2 = await FN.sight("Pad.N", "bx", { t: t + 95 * 60e3, active: true });
   assert.match(String(s2.alias), /^[A-Z]/, "the next appearance (1 h+ away) gets a name");
+  assert.notEqual(s2.alias, s1.alias, "(a new one: never the last 24 h's in this pad)");
   FN.named("Pad.N", "other", t);
   assert.match(String((await FN.sight("Pad.N", "other", { t: t + 16 * 60e3 })).alias), /^[A-Z]/, "16 minutes after: a name");
   // eight people in one pad: no shared adjective, noun or hood
@@ -305,4 +310,179 @@ test("review R1: a FROZEN kind (a mic hold's, as it was when the hold began) nev
   assert.ok(c.session !== a.session && c.alias === null, "a person-level 'hidden' still ends it at once (alias-less next)");
   const d = await FN.sight("Pad.Z", "newfrozen", { t: t + 3000, kind: "hidden", frozen: true });
   assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [d.session]))[0].lvl, "hidden", "a session a frozen sighting opens gets that level");
+});
+
+// ── 1.99?? (owner 2026-11-03, "Lets do 2"): "someone" only for 15 minutes after the last named sighting, then a frog name - even mid-visit ──
+const MIN = 60e3;
+const ALIAS_RE = /^(?:[A-Z][A-Za-z-]+ [A-Z][A-Za-z]+|Mystery Frog \d+)$/;
+
+test("1.99?? cyberbaby2: seen named, incognito on in the room - 'someone' at +5 and +14 minutes, a frog name at +16 (a fresh session under every name rule)", async () => {
+  const t = Date.UTC(2026, 10, 7, 12);
+  const ends = [];
+  const unsub = FN.onEnd((e) => ends.push(e));
+  // the pad: 6 incognito people with frog names, one name used here earlier today, a roster of named people
+  const others = [];
+  for (let i = 0; i < 6; i++) others.push(await FN.sight("Pad.CB", "crowd" + i, { t, kind: "incognito" }));
+  const gone = await FN.sight("Pad.CB", "goneearlier", { t, kind: "incognito" });
+  await FN.off("goneearlier", "Pad.CB", t + 1000);
+  const roster = ["Soggy Bullfrog", "Pixel Toad", "alicecf", "Alice"];
+  FN.named("Pad.CB", "cyberbaby2", t);
+  const a = await FN.sight("Pad.CB", "cyberbaby2", { t: t + 5 * MIN, active: true, kind: "incognito", avoidNames: roster });
+  assert.equal(a.alias, null, "+5 min: someone");
+  assert.equal(a.hood, null);
+  const b = await FN.sight("Pad.CB", "cyberbaby2", { t: t + 14 * MIN, active: true, kind: "incognito", avoidNames: roster });
+  assert.equal(b.session, a.session, "+14 min: the same session");
+  assert.equal(b.alias, null, "+14 min: still someone");
+  const rowA = (await getQuery("SELECT * FROM incog_alias WHERE id = ?", [a.session]))[0];
+  assert.equal(Number(rowA.named_at), t, "the no-name window's anchor is on the open row");
+  const c = await FN.sight("Pad.CB", "cyberbaby2", { t: t + 16 * MIN, active: true, kind: "incognito", avoidNames: roster });
+  assert.match(String(c.alias), ALIAS_RE, "+16 min: a frog name");
+  assert.notEqual(c.session, a.session, "a new session (a new nonce: unlinkable to the no-name one by the key)");
+  assert.ok(Number.isInteger(c.hood) && c.hood >= 0 && c.hood < 8);
+  // every name rule: no word or hood shared with the open sessions, never a roster name, not the pad's last 24 h's, nothing denied
+  const [adj, noun] = c.alias.split(" ");
+  for (const o of others) {
+    assert.ok(!o.alias.split(" ").includes(adj) && !o.alias.split(" ").includes(noun), c.alias + " shares a word with " + o.alias);
+    assert.notEqual(o.hood, c.hood, "a hood nobody open has (7 people, 8 hoods)");
+  }
+  assert.notEqual(c.alias, gone.alias, "never a name used in this pad in the last 24 h");
+  assert.ok(!roster.map(FN.norm).includes(FN.norm(c.alias)), "never a roster name");
+  assert.equal(FN.denied(c.alias), false);
+  assert.deepEqual(ends.filter((e) => e.session === a.session).map((e) => e.why), ["gap"], "the no-name session ended (covers come off)");
+  // the ended row keeps no key and no window; the new one is an ordinary named row at the same level
+  const rowOld = (await getQuery("SELECT * FROM incog_alias WHERE id = ?", [a.session]))[0];
+  assert.ok(rowOld.sk == null && rowOld.nonce == null && rowOld.named_at == null && Number(rowOld.ended) === t + 16 * MIN);
+  const rowNew = (await getQuery("SELECT * FROM incog_alias WHERE id = ?", [c.session]))[0];
+  assert.ok(rowNew.named_at == null && rowNew.nonce != null && rowNew.lvl === "incognito" && rowNew.name === c.alias);
+  assert.ok(!JSON.stringify([rowOld, rowNew]).includes("cyberbaby2"), "no login in the table");
+  assert.deepEqual(await FN.sight("Pad.CB", "cyberbaby2", { t: t + 17 * MIN, kind: "incognito" }), c, "the frog name is kept from then on");
+  unsub();
+});
+
+test("1.99?? a mic hold across the 15-minute mark: still 'someone' while held and at the release - the name comes at the next sighting", async () => {
+  const t = Date.UTC(2026, 10, 8, 12);
+  FN.named("Pad.MH", "holdy", t);
+  const a = await FN.sight("Pad.MH", "holdy", { t: t + 5 * MIN, kind: "incognito" });
+  assert.equal(a.alias, null);
+  assert.equal((await FN.sight("Pad.MH", "holdy", { t: t + 10 * MIN, active: true, holding: true, kind: "incognito" })).session, a.session, "the grab");
+  for (const m of [16, 20, 25]) {
+    const v = await FN.sight("Pad.MH", "holdy", { t: t + m * MIN, kind: "incognito" });
+    assert.ok(v.session === a.session && v.alias === null, "+" + m + " min, mid-hold: still someone");
+  }
+  const rel = await FN.sight("Pad.MH", "holdy", { t: t + 26 * MIN, active: true, holding: false, kind: "incognito" });
+  assert.ok(rel.session === a.session && rel.alias === null, "the release itself keeps it (like the other caps)");
+  const after = await FN.sight("Pad.MH", "holdy", { t: t + 26 * MIN + 30e3, kind: "incognito" });
+  assert.match(String(after.alias), ALIAS_RE, "after the release: a frog name");
+  assert.notEqual(after.session, a.session);
+  // a hold's frozen kind after the release opens the named session at the person's own level, not the hold's
+  FN.named("Pad.MH", "frozenrel", t);
+  const f = await FN.sight("Pad.MH", "frozenrel", { t: t + 5 * MIN, kind: "incognito" });
+  const g = await FN.sight("Pad.MH", "frozenrel", { t: t + 20 * MIN, kind: "hidden", frozen: true });
+  assert.ok(g.session !== f.session && ALIAS_RE.test(String(g.alias)));
+  assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [g.session]))[0].lvl, "incognito", "keeps the person's level");
+});
+
+test("1.99?? seen named AGAIN restarts the 15 minutes (with or without the session ending)", async () => {
+  const t = Date.UTC(2026, 10, 9, 12);
+  // a named sighting while the no-name session stays open (FN.named alone): the same session, a later window
+  FN.named("Pad.NA", "twice", t);
+  const a = await FN.sight("Pad.NA", "twice", { t: t + 5 * MIN });
+  assert.equal(a.alias, null);
+  await FN.named("Pad.NA", "twice", t + 10 * MIN);
+  for (const m of [16, 24]) {
+    const v = await FN.sight("Pad.NA", "twice", { t: t + m * MIN });
+    assert.ok(v.session === a.session && v.alias === null, "+" + m + " min (named again at +10): still someone");
+  }
+  assert.equal(Number((await getQuery("SELECT named_at FROM incog_alias WHERE id = ?", [a.session]))[0].named_at), t + 10 * MIN, "the stored window moved");
+  const b = await FN.sight("Pad.NA", "twice", { t: t + 25 * MIN + 1000 });
+  assert.match(String(b.alias), ALIAS_RE, "15 minutes after the second named sighting: a frog name");
+  // the usual path (veil.namedSeen): named + their session ends; the next veiled sighting is someone again, for 15 more minutes
+  FN.named("Pad.NA", "twice", t + 40 * MIN);
+  await FN.off("twice", "Pad.NA", t + 40 * MIN);
+  const c = await FN.sight("Pad.NA", "twice", { t: t + 45 * MIN });
+  assert.ok(c.alias === null && c.session !== b.session);
+  assert.equal((await FN.sight("Pad.NA", "twice", { t: t + 54 * MIN })).alias, null);
+  assert.match(String((await FN.sight("Pad.NA", "twice", { t: t + 56 * MIN })).alias), ALIAS_RE);
+  // an older named sighting replayed later (a restart's feed replay) never shortens the window
+  FN.named("Pad.NA", "replay", t + 10 * MIN);
+  FN.named("Pad.NA", "replay", t);
+  assert.equal((await FN.sight("Pad.NA", "replay", { t: t + 20 * MIN })).alias, null, "the latest named sighting counts");
+});
+
+test("1.99?? incognito -> hidden still ends the frog name at once; 'someone' for 15 minutes, then a NEW frog name (sight and level paths)", async () => {
+  const t = Date.UTC(2026, 10, 10, 12);
+  const x = await FN.sight("Pad.IH", "switchy", { t, active: true, kind: "incognito" });
+  assert.match(String(x.alias), ALIAS_RE);
+  const y = await FN.sight("Pad.IH", "switchy", { t: t + MIN, kind: "hidden" });
+  assert.ok(y.session !== x.session && y.alias === null, "the switch: ends at once, someone");
+  assert.equal((await FN.sight("Pad.IH", "switchy", { t: t + 15 * MIN, kind: "hidden" })).session, y.session, "14 minutes after the switch: someone");
+  const z = await FN.sight("Pad.IH", "switchy", { t: t + 16 * MIN + 1000, kind: "hidden" });
+  assert.match(String(z.alias), ALIAS_RE, "15 minutes after the switch: a frog name");
+  assert.notEqual(z.alias, x.alias, "never the incognito one again");
+  assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [z.session]))[0].lvl, "hidden");
+  // level(): Pepe's privacy.hidden without a sighting
+  const p = await FN.sight("Pad.IH", "evented2", { t, kind: "incognito" });
+  assert.equal(await FN.level("Pad.IH", "evented2", "hidden", t + 2 * MIN, { wasIncognito: true }), true);
+  const q = await FN.sight("Pad.IH", "evented2", { t: t + 3 * MIN, kind: "hidden" });
+  assert.equal(q.alias, null);
+  assert.equal((await FN.sight("Pad.IH", "evented2", { t: t + 16 * MIN, kind: "hidden" })).alias, null, "14 minutes after the switch");
+  const r = await FN.sight("Pad.IH", "evented2", { t: t + 17 * MIN + 1000, kind: "hidden" });
+  assert.ok(ALIAS_RE.test(String(r.alias)) && r.alias !== p.alias);
+});
+
+test("1.99?? the 15 minutes survive a restart: inside the window still 'someone' (rounded up, never shorter), after it a frog name; a row from before the column counts from its start", async () => {
+  const { runQuery } = require(path.join(repo, "dbUtils"));
+  // inside: the named sighting at :30 s is stored rounded UP to the minute
+  const t = Date.UTC(2026, 10, 11, 12) + 30e3;
+  FN.named("Pad.RS", "restart1", t);
+  const a = await FN.sight("Pad.RS", "restart1", { t: t + 5 * MIN });
+  assert.equal(a.alias, null);
+  FN._reset();
+  FN._setClock(() => t + 10 * MIN);
+  const b = await FN.sight("Pad.RS", "restart1", { t: t + 10 * MIN });
+  assert.ok(b.session === a.session && b.alias === null, "after a restart, inside the window: the same no-name session");
+  assert.equal((await FN.sight("Pad.RS", "restart1", { t: t + 15 * MIN + 10e3 })).alias, null, "rounded up: never shorter after a restart");
+  assert.match(String((await FN.sight("Pad.RS", "restart1", { t: t + 16 * MIN })).alias), ALIAS_RE, "then a frog name");
+  // after: a restart once the 15 minutes are over - the next sighting gets the name
+  const t2 = Date.UTC(2026, 10, 11, 14);
+  FN.named("Pad.RS", "restart2", t2);
+  const c = await FN.sight("Pad.RS", "restart2", { t: t2 + 5 * MIN });
+  assert.equal(c.alias, null);
+  FN._reset();
+  FN._setClock(() => t2 + 20 * MIN);
+  const d = await FN.sight("Pad.RS", "restart2", { t: t2 + 21 * MIN });
+  assert.ok(d.session !== c.session && ALIAS_RE.test(String(d.alias)), "after a restart past the window: a frog name");
+  // a named-again window (stored by named()) survives a restart too
+  const t3 = Date.UTC(2026, 10, 11, 16);
+  FN.named("Pad.RS", "restart3", t3);
+  const e = await FN.sight("Pad.RS", "restart3", { t: t3 + 5 * MIN });
+  await FN.named("Pad.RS", "restart3", t3 + 10 * MIN);
+  FN._reset();
+  FN._setClock(() => t3 + 12 * MIN);
+  assert.equal((await FN.sight("Pad.RS", "restart3", { t: t3 + 16 * MIN })).session, e.session, "named again at +10, restart: someone at +16");
+  assert.match(String((await FN.sight("Pad.RS", "restart3", { t: t3 + 26 * MIN })).alias), ALIAS_RE);
+  // the switch's burn (incognito -> hidden) through a restart: someone inside, a frog name after
+  const t4 = Date.UTC(2026, 10, 11, 18);
+  const f = await FN.sight("Pad.RS", "restart4", { t: t4, kind: "incognito" });
+  const g = await FN.sight("Pad.RS", "restart4", { t: t4 + MIN, kind: "hidden" });
+  assert.ok(f.alias && g.alias === null);
+  FN._reset();
+  FN._setClock(() => t4 + 10 * MIN);
+  assert.equal((await FN.sight("Pad.RS", "restart4", { t: t4 + 10 * MIN, kind: "hidden" })).session, g.session);
+  assert.match(String((await FN.sight("Pad.RS", "restart4", { t: t4 + 17 * MIN, kind: "hidden" })).alias), ALIAS_RE);
+  // a no-name row from before named_at (the deploy): its window counts from the session's start (fails private)
+  const t5 = Date.UTC(2026, 10, 11, 20);
+  FN.named("Pad.RS", "oldrow2", t5);
+  const h = await FN.sight("Pad.RS", "oldrow2", { t: t5 + 5 * MIN });
+  await runQuery("UPDATE incog_alias SET named_at = NULL WHERE id = ?", [h.session]);
+  FN._reset();
+  FN._setClock(() => t5 + 6 * MIN);
+  assert.equal((await FN.sight("Pad.RS", "oldrow2", { t: t5 + 16 * MIN })).alias, null, "15 minutes from its start, not from the lost named sighting");
+  assert.match(String((await FN.sight("Pad.RS", "oldrow2", { t: t5 + 20 * MIN + 1000 })).alias), ALIAS_RE);
+  // the stored anchors: whole minutes, no login
+  const rows = await getQuery("SELECT named_at FROM incog_alias WHERE named_at IS NOT NULL");
+  assert.ok(rows.every((r) => Number(r.named_at) % MIN === 0), "rounded to the minute");
+  const dump = JSON.stringify(await getQuery("SELECT * FROM incog_alias"));
+  for (const l of ["restart1", "restart2", "restart3", "restart4", "oldrow2"]) assert.ok(!dump.includes(l), "no login: " + l);
+  FN._setClock(null);
 });
