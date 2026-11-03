@@ -54,10 +54,13 @@ const rooms = require("./rooms");
 // 1.99tf: every room-scoped Pepe setting the OWNER may change (camfrog-bot pepe_roomowner.OWNER_SPECS - Pepe re-checks each).
 // The page groups them; each is read back from Pepe's own report, never assumed.
 const ONOFF = ["on", "off"];
+// Generated from the bot's explicit owner allow-list; admin-only automod settings never enter this route.
+const AUTOMOD_OWNER = Object.freeze(require("./data/owner-capabilities.json").automod_owner_settings || []);
+const AUTOMOD_SECONDS = Object.freeze(Object.fromEntries(AUTOMOD_OWNER.filter((s) => s.kind === "seconds").map((s) => [s.id, s])));
 const OWNER_BOOL = Object.freeze(["snap", "clip", "challenge", "soundboard", "global_unblock", "greeter", "music", "music_requests",
   "trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino", "say", "voices", "mic_replies", "michog", "votes", "vibe_lock",
   "convo", "captions", "alerts", "dj_talk",                          // 1.99tn: + conversation starters and the audit's room switches
-  "autotopic"]);                                                    // 1.99up: the room's auto-topic
+  "autotopic"].concat(AUTOMOD_OWNER.filter((s) => s.kind === "bool" && s.id !== "michog").map((s) => s.id)));
 // 1.99tn: conversation starters' quiet time (pepe_convo convo_quiet_min, 5-240 min) - the page's choices
 const CONVO_QUIET = Object.freeze([5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240]);
 const VOICE_RE = /^[\w .'\-()]{1,40}$/;
@@ -81,6 +84,9 @@ const OWNER_GROUPS = Object.freeze([
   ["voice", "🗣️", ["room_voice", "tts_language", "captions", "alerts"]],   // 1.99tn; 1.99vc: + the speaking language
   ["games", "🎲", ["trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino"]],
   ["mod", "🛡️", ["global_unblock", "michog", "strikes", "votes", "say_mod"]],
+  ["mic_etiquette", "🤝", AUTOMOD_OWNER.filter((s) => s.id.startsWith("automod.etiquette.")).map((s) => s.id)],
+  ["mic_policing", "🎤", AUTOMOD_OWNER.filter((s) => s.id.startsWith("automod.michog.")).map((s) => s.id)],
+  ["mic_exemptions", "🔈", AUTOMOD_OWNER.filter((s) => s.id.startsWith("automod.exempt.")).map((s) => s.id)],
   ["vibe", "🎭", ["vibe", "roasts", "vibe_lock"]],
 ]);
 const OWNER_ICONS = Object.freeze({ snap: "📸", clip: "📹", challenge: "🎤", soundboard: "🔊", language: "🌐", greeter: "👋", greet_new: "🌱", greet_regulars: "🤝", greeter_note: "📝",
@@ -218,6 +224,9 @@ function cleanOne(s) {
   // 1.99tf: every owner setting Pepe reports (a key he doesn't report stays absent: the page says so, never guesses)
   const ow = o.owner && typeof o.owner === "object" ? o.owner : {};
   const owner = sec(ow, OWNER_BOOL);
+  for (const [k, s] of Object.entries(AUTOMOD_SECONDS)) {
+    if (typeof ow[k] === "number" && Number.isFinite(ow[k]) && ow[k] >= s.min && ow[k] <= s.max) owner[k] = ow[k];
+  }
   const lang = typeof ow.language === "string" ? ow.language.toLowerCase() : "auto";
   owner.language = LANG_RE.test(lang) ? lang : "auto";
   if (OWNER_SETTINGS.chatty.includes(ow.chatty)) owner.chatty = ow.chatty;
@@ -239,6 +248,12 @@ function cleanOne(s) {
     // 1.99up: the auto-topic's master switch + the shortest interval an owner may pick
     autotopic_master: ad.autotopic_master !== false,
     autotopic_min: Number.isInteger(ad.autotopic_min) && ad.autotopic_min >= 5 && ad.autotopic_min <= 180 ? ad.autotopic_min : 30 };
+  admin.automod_defaults = {};
+  for (const [k, s] of Object.entries(AUTOMOD_SECONDS)) {
+    const n = ad.automod_defaults && ad.automod_defaults[k];
+    admin.automod_defaults[k] = typeof n === "number" && Number.isFinite(n) && n >= s.min && n <= s.max ? n : s.default;
+  }
+  admin.wanted_mic_s = typeof ad.wanted_mic_s === "number" && Number.isFinite(ad.wanted_mic_s) && ad.wanted_mic_s >= 0 && ad.wanted_mic_s <= 60 ? ad.wanted_mic_s : 10;
   // 1.99up: the room's topic as Pepe last saw it, the auto-topic's state, the transcriber's language
   const tp = o.topic && typeof o.topic === "object" ? o.topic : null;
   const ms = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : null);
@@ -259,7 +274,7 @@ function cleanOne(s) {
   const masters_off = {};
   if (o.masters_off && typeof o.masters_off === "object" && !Array.isArray(o.masters_off)) {
     for (const [k, v] of Object.entries(o.masters_off).slice(0, 60)) {
-      if (/^(br:)?[a-z_]{1,30}$/.test(k)) masters_off[k] = String(v || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 80);
+      if (/^(br:)?[a-z_]{1,30}$/.test(k) || AUTOMOD_OWNER.some((s) => s.id === k)) masters_off[k] = String(v || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 80);
     }
   }
   const features = sec(o.features, ["say", "ask", "look", "roast", "camroast", "music", "music_queue", "music_play", "shop", "heist", "turf",
@@ -378,7 +393,7 @@ async function pageData(R, viewer) {
     pepe, live, linked: u.camfrogUsername || null, balance: Number(u.points_balance) || 0, recent,
     caps: capabilities(), webCaps: WEB_CAPS, LANGS: pepe && pepe.owner && !LANG_CODES.has(pepe.owner.language)
       ? LANGS.concat([[pepe.owner.language, pepe.owner.language, ""]]) : LANGS,
-    CHOICES, GROUPS: OWNER_GROUPS, ICONS: OWNER_ICONS, readonly: pepe ? readonlyList(pepe) : null, VOICES: voices || [], CONVO_QUIET,
+    CHOICES, GROUPS: OWNER_GROUPS, ICONS: OWNER_ICONS, readonly: pepe ? readonlyList(pepe) : null, VOICES: voices || [], CONVO_QUIET, AUTOMOD_SECONDS,
     plus: camfrog ? await safe(() => require("./premium").isPrimePlus(R.id), false) : false,
     site: await safe(() => require("./padsite").state(R.id)),          // 1.99up: Pepe on the pad's site side (any pad)
     // CL3: the pad chat's history / search / downloads in one row - the settings live in Pad settings › 💬 Chat (one home)
@@ -501,7 +516,10 @@ function register(app, { addUser }) {
     let ok;
     if (key === "language") ok = LANG_CODES.has(value);
     else if (key === "vibe" || key === "roasts") ok = CHOICES[key].includes(value);
-    else if (key === "strikes") {
+    else if (Object.prototype.hasOwnProperty.call(AUTOMOD_SECONDS, key)) {
+      const s = AUTOMOD_SECONDS[key];
+      ok = value === "default" || (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value) && Number.isFinite(Number(value)) && Number(value) >= s.min && Number(value) <= s.max);
+    } else if (key === "strikes") {
       const cur = await settingsFor(R.id).catch(() => null);
       const lo = (cur && cur.admin && cur.admin.strike_min) || 2, hi = (cur && cur.admin && cur.admin.strike_max) || 5;
       ok = value === "default" || (/^\d{1,2}$/.test(value) && +value >= lo && +value <= hi);
@@ -648,5 +666,5 @@ function register(app, { addUser }) {
 
 module.exports = { register, init, storeSettings, settingsFor, soundboardState, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS,
                    padVoices, ownerVoicesForPepe, CONVO_QUIET, AUTOTOPIC_EVERY, cleanTopic, topicProblem, TOPIC_MAX,
-                   OWNER_GROUPS, OWNER_BOOL, cleanNote, readonlyList, myPads, navPads, languages: () => LANGS, choices: () => CHOICES,
+                   OWNER_GROUPS, OWNER_BOOL, AUTOMOD_OWNER, AUTOMOD_SECONDS, cleanNote, readonlyList, myPads, navPads, languages: () => LANGS, choices: () => CHOICES,
                    _reset: () => { CAPS = null; SET_HITS.clear(); TOPIC_HITS.clear(); } };

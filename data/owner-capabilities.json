@@ -269,7 +269,7 @@
    "web": "/p/{slug}/owner#pepe",
    "web_action": "room.owner",
    "setting": "michog_enabled",
-   "howto": "Global unblock (Pepe undoes mic blocks other people make in your room; his own stay), mic-hog policing, how many strikes someone gets before Pepe acts (inside the range Pepe's admins allow, 2-5 by default) and whether people can start community votes (!votekick, !voteblock, !votemod, !timeout).",
+   "howto": "Set mic-hog triggers, courtesy unblocks, mic-quality exemptions, double-click and waiting-gap rules, their timing windows, and strikes within the admins' range (2-5 by default). Global unblock and community votes are also room choices. The master, sanctions, fines and wanted-mic confirmation window stay with admins; served penalties always expire.",
    "owner_only": true,
    "code": [
     "pepe_roomowner.py:_op_web_setting"
@@ -310,7 +310,7 @@
    "web": "/p/{slug}/owner#pepe",
    "web_action": "room.owner",
    "setting": "mic_caption_enabled",
-   "howto": "Show a 🔊 caption of what Pepe says on the mic, let event alerts (heists, games and drops elsewhere) reach your room, and allow the DJ's short spoken drops between songs - each only in your room.",
+   "howto": "Show a 🔊 caption of what Pepe says on the mic and of each soundboard clip as it plays (on unless you switch it off), let event alerts (heists, games and drops elsewhere) reach your room, and allow the DJ's short spoken drops between songs - each only in your room.",
    "owner_only": true,
    "code": [
     "pepe_roomowner.py:_op_web_setting"
@@ -548,12 +548,181 @@
    ]
   }
  ],
+ "automod_owner_settings": [
+  {
+   "id": "michog",
+   "policy": "automod.michog.enabled",
+   "storage": "michog_enabled",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "strikes",
+   "policy": "automod.power.strikes",
+   "storage": "abuse_strike_limit",
+   "kind": "int",
+   "default": 3,
+   "scope": "room",
+   "min": 2,
+   "max": 5,
+   "bounds": "admin"
+  },
+  {
+   "id": "automod.exempt.mic_grabs",
+   "policy": "automod.exempt.mic_grabs",
+   "storage": "automod_exempt_mic_grabs",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.exempt.mic_silent",
+   "policy": "automod.exempt.mic_silent",
+   "storage": "automod_exempt_mic_silent",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.exempt.mic_clipping",
+   "policy": "automod.exempt.mic_clipping",
+   "storage": "automod_exempt_mic_clipping",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.exempt.mic_loud",
+   "policy": "automod.exempt.mic_loud",
+   "storage": "automod_exempt_mic_loud",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.exempt.mic_peak",
+   "policy": "automod.exempt.mic_peak",
+   "storage": "automod_exempt_mic_peak",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.exempt.mic_degraded_finished",
+   "policy": "automod.exempt.mic_degraded_finished",
+   "storage": "automod_exempt_mic_degraded_finished",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.exempt.mic_degraded_live",
+   "policy": "automod.exempt.mic_degraded_live",
+   "storage": "automod_exempt_mic_degraded_live",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.exempt.mic_room_report",
+   "policy": "automod.exempt.mic_room_report",
+   "storage": "automod_exempt_mic_room_report",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.michog.consec",
+   "policy": "automod.michog.consec",
+   "storage": "automod_michog_consec",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.michog.recent",
+   "policy": "automod.michog.recent",
+   "storage": "automod_michog_recent",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.michog.hold",
+   "policy": "automod.michog.hold",
+   "storage": "automod_michog_hold",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.michog.contention",
+   "policy": "automod.michog.contention",
+   "storage": "automod_michog_contention",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.michog.leaving_space",
+   "policy": "automod.michog.leaving_space",
+   "storage": "automod_michog_leaving_space",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.michog.courtesy",
+   "policy": "automod.michog.courtesy",
+   "storage": "automod_michog_courtesy",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.etiquette.doubleclick",
+   "policy": "automod.etiquette.doubleclick",
+   "storage": "automod_etiquette_doubleclick",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.etiquette.wait",
+   "policy": "automod.etiquette.wait",
+   "storage": "automod_etiquette_wait",
+   "kind": "bool",
+   "default": true,
+   "scope": "room"
+  },
+  {
+   "id": "automod.etiquette.doubleclick_s",
+   "policy": "automod.etiquette.doubleclick_s",
+   "storage": "automod_etiquette_doubleclick_s",
+   "kind": "seconds",
+   "default": 3,
+   "scope": "room",
+   "min": 0,
+   "max": 10
+  },
+  {
+   "id": "automod.etiquette.wait_s",
+   "policy": "automod.etiquette.wait_s",
+   "storage": "automod_etiquette_wait_s",
+   "kind": "seconds",
+   "default": 1,
+   "scope": "room",
+   "min": 0,
+   "max": 10
+  }
+ ],
  "admin_only": [
   "Pepe's voice on the mic (!speak, TTS)",
   "the Auto-DJ (!dj) and Spotify itself",
   "turf wars",
   "the casino backend for the room (!casino backend)",
-  "automod rules (!automod) and the anti-abuse switch",
+  "the automod master, power-abuse sanctions, fines and wanted-mic confirmation window",
   "room bots",
   "command prices (pat_costs)",
   "!lookpublic, !ask and roasts",

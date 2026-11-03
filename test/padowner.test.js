@@ -84,6 +84,7 @@ const REPORT = { [PLANT]: { owner: { snap: true, clip: false, challenge: true, l
   features: { say: true, look: false, casino_backend: true, nonsense: "x" }, prices: { look: 10000, roast: 5000, "BAD KEY": 3 }, vibe: { type: "chill", locked: false }, pepe_here: true },
   "bad id <script>": { owner: {} } };
 
+
 test("Pepe's room_settings report is cleaned and stored with the owner-map sync", async () => {
   // before Pepe sent his language list, the select offers auto + the room's current value only
   assert.deepEqual(PO.languages().map((l) => l[0]), ["auto"]);
@@ -567,4 +568,98 @@ test("1.99ada: a recipe value out of range (a bad chat override from a Pepe befo
     assert.ok(!/500%|-10%|200%/.test(t), p + ": no out-of-range percent printed");
   }
   await RV.sync({ on: true, cap: 50000000, rooms: [] });
+});
+
+test("automod owner contract matches the shared bot fixture and explicit writable controls", () => {
+  const fixture = fs.readFileSync(path.join(repo, "ci/fixtures/automod-owner-contract.json"));
+  assert.deepEqual(fs.readFileSync(path.join(repo, "data/owner-capabilities.json")), fixture);
+  const rows = JSON.parse(fixture).automod_owner_settings;
+  assert.equal(rows.length, 20);
+  for (const row of rows) {
+    assert.equal(row.scope, "room");
+    assert.ok(PO.OWNER_GROUPS.some((g) => g[2].includes(row.id)), row.id);
+    if (row.kind === "bool") assert.ok(PO.OWNER_BOOL.includes(row.id), row.id);
+    if (row.kind === "seconds") assert.deepEqual(PO.AUTOMOD_SECONDS[row.id], row);
+  }
+  for (const id of ["automod.enabled", "automod.power.enforce", "automod.fines.enabled", "automod.etiquette.wanted_s", "roomtimeout.expiry"]) {
+    assert.ok(!rows.some((r) => r.id === id), id);
+  }
+});
+
+test("automod controls show reported values, validate decimals and queue only the owned room", async () => {
+  PO._reset();
+  const rep = { owner: {}, admin: { automod: false, automod_defaults: { "automod.etiquette.wait_s": 1.5 }, wanted_mic_s: 12 } };
+  for (const row of PO.AUTOMOD_OWNER) rep.owner[row.id] = row.default;
+  const key = "automod.etiquette.wait_s";
+  rep.owner[key] = 0.75;
+  await PO.storeSettings({ [PLANT]: rep });
+  const p = await page(`/p/${SLUG}/owner`, "owner");
+  assert.equal(p.status, 200);
+  assert.match(p.text, /data-po-set="automod.etiquette.wait_s"[^>]*min="0"[^>]*max="10"[^>]*value="0.75"/);
+  assert.ok(p.text.includes(en["owner.grp_mic_etiquette_why"].replace("{seconds}", "12")));
+  assert.ok(p.text.includes(en["owner.seconds_default"].replace("{n}", "1.5")));
+  assert.ok(p.text.includes(en["owner.mic_rules_admin_off"]));
+  assert.ok(en["owner.set_automod.etiquette.wait_why"].includes("previous turn ended before the intervening speaker began"));
+  assert.ok(!p.text.includes('data-po-set="automod.etiquette.wanted_s"'));
+  for (const row of PO.AUTOMOD_OWNER) {
+    PO._reset();
+    const value = row.kind === "bool" ? "off" : row.kind === "seconds" ? "2.25" : "4";
+    const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: row.id, value, room: "someone_elses_room" });
+    assert.equal(r.status, 200, row.id + JSON.stringify(r.d));
+    assert.deepEqual(JSON.parse((await actions()).pop().args), [PLANT, row.id, value]);
+    await runQuery("UPDATE pepe_actions SET status = 'done'");
+  }
+  for (const value of ["0", "10", "0.25", "default"]) {
+    const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key, value });
+    assert.equal(r.status, 200, value);
+    await runQuery("UPDATE pepe_actions SET status = 'done'");
+  }
+  const before = (await actions()).length;
+  for (const value of ["", " ", "nan", "Infinity", "-1", "10.01", "true", "1e3", "0x1"]) {
+    assert.equal((await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key, value })).status, 400, value);
+  }
+  for (const bad of ["automod.enabled", "automod_abuse_enabled", "automod.fines.base", "automod.etiquette.wanted_s", "automod_etiquette_wanted_s", "roomtimeout.expiry"]) {
+    assert.equal((await post(`/api/rooms/${SLUG}/owner/setting`, "staff", { key: bad, value: "off" })).status, 400, bad);
+  }
+  assert.equal((await post(`/api/rooms/${SLUG}/owner/setting`, "fan", { key, value: "1" })).status, 403);
+  const csrf = await fetch(`${base}/api/rooms/${SLUG}/owner/setting`, { method: "POST", headers: { "content-type": "application/json", "x-test-user": "owner" }, body: JSON.stringify({ key, value: "1" }) });
+  assert.equal(csrf.status, 400);
+  await PO.storeSettings({ [PLANT]: { ...rep, masters_off: { [key]: "Mic rules" } } });
+  assert.equal((await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key, value: "1" })).status, 409);
+  assert.equal((await actions()).length, before);
+  assert.equal(PO.cleanOne({ owner: { [key]: Infinity } }).owner[key], undefined);
+  PO._reset();
+});
+
+test("timing input confirms numerically equivalent values and resets through the normal action", async () => {
+  const key = "automod.etiquette.wait_s", listeners = {}, sent = [], message = {};
+  const input = { type: "number", value: "1", disabled: false, hasAttribute: () => false,
+    getAttribute: () => key, addEventListener: (k, fn) => { listeners[k] = fn; }, checkValidity: () => true };
+  const reset = { getAttribute: () => key, addEventListener: (k, fn) => { listeners.reset = fn; } };
+  const document = { activeElement: null, getElementById: (id) => id === "po" ? { getAttribute: () => "test-room" } : null,
+    querySelectorAll: (sel) => sel === '[data-po-set], [data-po-bridge]' || sel === `[data-po-set="${key}"]` ? [input]
+      : sel === '[data-po-default]' || sel === `[data-po-default="${key}"]` ? [reset]
+      : sel === `[data-po-st="${key}"]` ? [message] : [] };
+  let reported = 2.25;
+  const fetch = async (url, opts) => {
+    let data;
+    if (opts && opts.method === "POST") { sent.push(JSON.parse(opts.body)); data = { ok: true, id: "local-test" }; }
+    else if (url.includes("/action/")) data = { ok: true, status: "done", updated: 100 };
+    else data = { ok: true, pepe: { updated: 200, owner: { [key]: reported } } };
+    return { json: async () => data };
+  };
+  require("node:vm").runInNewContext(fs.readFileSync(path.join(repo, "public/js/pad-owner.js"), "utf8"),
+    { document, window: {}, fetch, setTimeout, setInterval: () => 0 });
+  input.value = "2.250";
+  listeners.change();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sent[0], { key, value: 2.25 });
+  assert.equal(input.value, "2.25");
+  assert.equal(message.textContent, "Pepe confirmed it.");
+  reported = 1;
+  listeners.reset();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sent[1], { key, value: "default" });
+  assert.equal(input.value, "1");
+  assert.equal(message.textContent, "Pepe confirmed it.");
 });

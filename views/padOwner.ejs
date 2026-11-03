@@ -170,6 +170,7 @@
           michog: adm.automod ? '' : t('owner.michog_admin_off'),
           strikes: t('owner.strikes_bounds', { min: adm.strike_min || 2, max: adm.strike_max || 5 }),
         };
+        const amSeconds = (typeof AUTOMOD_SECONDS !== 'undefined' && AUTOMOD_SECONDS) || {};
         // 1.99tn: the room voice - what Pepe actually speaks in here, and why it may differ from the pick
         const pv = pepe.voice || {}, vlist = (typeof VOICES !== 'undefined' && VOICES) || [];
         const vnotes = [];
@@ -205,7 +206,7 @@
       %>
       <% GROUPS.forEach(([g, gic, keys]) => { %>
       <h3 class="ds-h4 po-gh"<% if (g === 'topic') { %> id="topic"<% } %>><%= gic %> <%- t('owner.grp_' + g) %></h3>
-      <p class="ds-meta"><%- t('owner.grp_' + g + '_why') %></p>
+      <p class="ds-meta"><%- t('owner.grp_' + g + '_why', { seconds: adm.wanted_mic_s == null ? 10 : adm.wanted_mic_s }) %><% if (g.indexOf('mic_') === 0 && adm.automod === false) { %> <span class="po-admin"><%- t(g === 'mic_policing' ? 'owner.michog_admin_off' : 'owner.mic_rules_admin_off') %></span><% } %></p>
       <div class="po-sets">
         <% keys.forEach((k) => { const v = ow[k], moff = MOFF[k], known = ((v !== undefined && v !== null) || k === 'topic'), live = known && !moff; %>
         <div class="po-set<%= k === 'greeter_note' || k === 'topic' ? ' po-set-note' : '' %>" data-po-row="<%= k %>">
@@ -250,6 +251,11 @@
           <select class="ds-select po-ctl" data-po-set="<%= k %>" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <% (CHOICES[k] || []).forEach((c) => { %><option value="<%= c %>" <%= v === c ? 'selected' : '' %>><%- c === 'auto' ? t('owner.' + (k === 'vibe' ? 'vt_auto' : 'rm_auto')) : choiceLabel(k, c) %></option><% }) %>
           </select>
+          <% } else if (amSeconds[k]) { %>
+          <div class="po-ctl-btns">
+            <input class="ds-in po-ctl" type="number" data-po-set="<%= k %>" min="<%= amSeconds[k].min %>" max="<%= amSeconds[k].max %>" step="any" value="<%= known ? v : '' %>" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
+            <button type="button" class="ds-btn sm ghost" data-po-default="<%= k %>" <%= live ? '' : 'disabled' %>><%- t('owner.seconds_default', { n: adm.automod_defaults && adm.automod_defaults[k] != null ? adm.automod_defaults[k] : amSeconds[k].default }) %></button>
+          </div>
           <% } else if (k === 'strikes') { %>
           <select class="ds-select po-ctl" data-po-set="strikes" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <option value="default"><%- t('owner.strikes_default', { n: adm.strike_default || 3 }) %></option>
@@ -674,7 +680,7 @@
     <p class="ds-fine"><%- t('owner.generated') %></p>
   </section>
 </main>
-<% if (!guide) { %><script src="/public/js/pad-owner.js?v=4" defer></script><% } %>
+<% if (!guide) { %><script src="/public/js/pad-owner.js?v=5" defer></script><% } %>
 <% if (!guide && locals.site) { %><script src="/public/js/pad-owner-site.js?v=1" defer></script><% } %>
 <% if (!guide && locals.filter) { %><script src="/public/js/pad-owner-filter.js?v=1" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><link rel="stylesheet" href="/public/css/room-mod.css?v=10"><script src="/public/js/room-mod.js?v=12" defer></script><script src="/public/js/pad-owner-mod.js?v=1" defer></script><script src="/public/js/pad-bridge-blocks.js?v=2" defer></script><% } %>

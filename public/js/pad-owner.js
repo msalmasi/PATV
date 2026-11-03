@@ -127,10 +127,11 @@
     Object.keys(p.owner || {}).forEach(function (k) {
       if (pending[k]) return;
       ctls(k).forEach(function (c) {
-        if (c === document.activeElement && c.type === 'text') return;
+        if (c === document.activeElement && (c.type === 'text' || c.type === 'number')) return;
         setVal(c, p.owner[k]);
         c.disabled = !!(p.masters_off && p.masters_off[k]);   // 1.99vc: switched off by PATV admins (value kept)
       });
+      q('[data-po-default="' + k + '"]').forEach(function (b) { b.disabled = !!(p.masters_off && p.masters_off[k]); });
     });
     Object.keys(p.bridge || {}).forEach(function (k) {
       if (pending['br:' + k]) return;
@@ -279,11 +280,20 @@
     if (c.type === 'text') return;                                // the note saves with its button
     c.addEventListener('change', function () {
       if (pending[key]) return;
+      if (c.type === 'number' && (!c.value || !c.checkValidity())) { c.reportValidity(); return; }
       var want = valOf(c), old = shown[key];
+      if (c.type === 'number') want = Number(want);
       var value = c.type === 'checkbox' ? (want ? 'on' : 'off') : want;
       if (key.indexOf('br:') !== 0 && c.type !== 'checkbox' && /^\d+$/.test(String(want)) && key === 'strikes') want = Number(want);
       shown[key] = valOf(c);
       change(key, want, value, old);
+    });
+  });
+  q('[data-po-default]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var key = b.getAttribute('data-po-default'), c = ctls(key)[0];
+      if (!c || c.disabled || pending[key]) return;
+      change(key, 'default', 'default', valOf(c));
     });
   });
   q('[data-po-note]').forEach(function (f) {
