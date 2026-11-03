@@ -537,3 +537,24 @@ test("1.99aij: a Markdown spoiler's words never match a search or show in a snip
     } finally { S.state.posts = true; }
   } finally { await store.setConfig({ feed_markdown: false }, "test"); }
 });
+
+// 1.99aij review: the "[spoiler]" stand-in is not the post's words - a hidden word starting "spoil…" (or, in the LIKE
+// fallback, holding "oil") never matched through it, and a snippet never marks it
+test("1.99aij review: the [spoiler] stand-in never makes a search match nor is marked in a snippet", async () => {
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    const hid = await store.create(U.alice.userId, { community: ROOM_B, title: "Gentian notes", body: "Fernwort review ||spoilers galore||" });
+    const vis = await store.create(U.alice.userId, { community: ROOM_B, title: "Hellebore notes", body: "I spoiled the ending ||zephyrine bloom||" });
+    assert.equal(hid.fmt, "md");
+    const ids = async (q) => (await S.run(q, U.alice, { kind: "posts" })).posts.map((x) => x.id).filter((id) => id === hid.id || id === vis.id);
+    for (const q of ["spoil", "spoiler", "spo"]) assert.ok(!(await ids(q)).includes(hid.id), q + ": only a hidden word starts with it");
+    const R = await S.run("spoil", U.alice, { kind: "posts" });
+    assert.deepEqual(R.posts.map((x) => x.id), [vis.id], "the readable \"spoiled\" still matches");
+    assert.equal(R.posts[0].snip.body, "I \u0001spoiled\u0002 the ending [spoiler]", "the stand-in shows, unmarked");
+    S.state.posts = false;                         // the LIKE fallback: substrings of the stand-in never count either
+    try {
+      assert.deepEqual(await ids("oil"), [vis.id]);
+      assert.deepEqual(await ids("galore"), []);
+    } finally { S.state.posts = true; }
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});

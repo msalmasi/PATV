@@ -291,7 +291,8 @@ async function dropSpoilerMatches(ids, terms) {
       let l = null;
       try { l = r.link_json ? JSON.parse(r.link_json) : null; } catch (e) { l = null; }
       const link = !state.posts ? [r.link_json] : state.json && l ? [l.title, l.domain] : [];
-      const text = [r.title, md.plain(r.body || ""), ...link].filter(Boolean).join(" ");
+      // 1.99aij review: a spoiler is a blank here - its "[spoiler]" stand-in is no readable word ("spoil" never matched a hidden "spoilers")
+      const text = [r.title, md.plain(r.body || "", { spoilerText: " " }), ...link].filter(Boolean).join(" ");
       const words = state.posts ? wordsIn(text).map((x) => x.w) : null;
       const ok = want.every((t) => (words ? words.some((w) => w.startsWith(t)) : fold(text).includes(t)));
       if (!ok) drop.add(r.id);
@@ -299,6 +300,9 @@ async function dropSpoilerMatches(ids, terms) {
   }
   return drop.size ? ids.filter((id) => !drop.has(id)) : ids;
 }
+// 1.99aij review: where a spoiler sits in a snippet's text (postmd.plain spoilerText): not a word, so never a hit; it reads
+// "[spoiler]" in the snippet
+const SPOILER_AT = "\u0003";
 /** A snippet of readable text the way the index cuts one (16 words, \u0001 / \u0002 around each hit); "" when no word hits. */
 function readableSnippet(text, terms, size = 16) {
   const s = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
@@ -312,7 +316,7 @@ function readableSnippet(text, terms, size = 16) {
     out += s.slice(at, x.at) + (hit(x.w) ? "\u0001" + s.slice(x.at, x.end) + "\u0002" : s.slice(x.at, x.end));
     at = x.end;
   }
-  return out + (to < words.length ? "…" : s.slice(at));
+  return (out + (to < words.length ? "…" : s.slice(at))).split(SPOILER_AT).join(require("./postmd").SPOILER);
 }
 
 /**
@@ -342,7 +346,7 @@ async function posts(p, viewer, { sort = "relevance", page = 1, limit = PAGE } =
   const out = pageIds.map((id) => byId.get(id)).filter(Boolean);
   for (const x of out) x.snip = H.snip.get(x.id) || null;
   // 1.99aij: a Markdown post's body snippet is cut from its readable text (a spoiler reads "[spoiler]"), never the index's
-  for (const x of out) if (x.fmt === "md" && x.snip) x.snip = { title: x.snip.title, body: readableSnippet(require("./postmd").plain(x.body || ""), p.terms) };
+  for (const x of out) if (x.fmt === "md" && x.snip) x.snip = { title: x.snip.title, body: readableSnippet(require("./postmd").plain(x.body || "", { spoilerText: SPOILER_AT }), p.terms) };
   // 1.99pv: a gated locked / 18+ post never shows a body snippet (it would leak paid text)
   for (const x of out) if (x.creator && x.creator.gated && x.snip) x.snip = x.creator.r18Gate ? null : { title: x.snip.title, body: "" };
   return { posts: out, total: ids.length, more: ids.length > page * limit, page };

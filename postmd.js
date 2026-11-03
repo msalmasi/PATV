@@ -213,7 +213,7 @@ function blockHtml(nodes, options) {
 
 function inlinePlain(nodes, options) {
   return nodes.map((n) => {
-    if (n.type === "spoiler") return options.spoilers === "show" ? inlinePlain(n.children, options) : SPOILER;
+    if (n.type === "spoiler") return options.spoilers === "show" ? inlinePlain(n.children, options) : typeof options.spoilerText === "string" ? options.spoilerText : SPOILER;
     if (n.type === "code") return options.omitCode ? " " : n.text;
     if (n.type === "link") return inlinePlain(n.children, options) + " (" + n.href + ")";
     return n.children ? inlinePlain(n.children, options) : n.text;
@@ -239,6 +239,8 @@ function render(text, options = {}) { return blockHtml(blocks(source(text).split
 // inbox row and its Telegram alert, og tags and link previews, card labels and slugs, search snippets, Pepe's relays and
 // the context his LLM reads) shows the hidden words, and no cut can land inside them. Only moderation input asks for the
 // words with { spoilers: "show" } (Pepe's automod: a spoiler must not hide what a rule is about).
+// 1.99aij review: { spoilerText } puts other text in SPOILER's place - never the words (search.js: " " to match on, so the
+// stand-in's own "spoiler" is never a hit, and a marker for its snippets).
 function plain(text, options = {}) { return blockPlain(blocks(source(text).split("\n")), options || {}); }
 
 // Text eligible for the ordinary inline pipeline, for mention/ownership/summon checks. Keep leaf

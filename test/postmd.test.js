@@ -189,3 +189,11 @@ test("plain text reads a closed spoiler as [spoiler]; unclosed / escaped / code 
   // the rendered page still hides the words behind the button (unchanged)
   assert.match(md.render("||secret||", options), /<span hidden>secret<\/span>/);
 });
+
+// 1.99aij review: search matches on text where a spoiler is a blank (its stand-in's "spoiler" is no word of the post)
+test("plain text can put other text in a spoiler's place (spoilerText), never its words; show still wins for moderation", () => {
+  assert.equal(md.plain("a ||spoilers b|| c", { spoilerText: " " }), "a   c");
+  assert.equal(md.plain("## ||x|| y\n\n- ||z||", { spoilerText: "\u0003" }), "\u0003 y\n\n\u0003");
+  assert.equal(md.plain("a ||b|| c", { spoilers: "show", spoilerText: " " }), "a b c");
+  assert.equal(md.plain("a ||b|| c", { spoilerText: null }), "a [spoiler] c", "only a string replaces it");
+});
