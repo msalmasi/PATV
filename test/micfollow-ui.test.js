@@ -1294,7 +1294,7 @@ test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v13 - 1.99ahq sta
   assert.ok(/if \(err\.status === 409\) mirror\(\);/.test(tg), "a 409: off");
   assert.ok(/on = !!d\.on;[\s\S]{0,200}mirror\(\);/.test(tg), "the bar's own flip");
   assert.ok(tg.includes("PR.on(function (s) {") && tg.includes("PR.onOffer(function () { if (!bar) draw(); });"), "what the stage learns comes back; a cover offers the bar");
-  for (const v of ["room.ejs", "home.ejs"]) assert.match(read("views", v), /\/public\/css\/veil\.css\?v=2"/, v + ": veil.css v2 (the hood tokens moved)");
+  for (const v of ["room.ejs", "home.ejs"]) assert.match(read("views", v), /\/public\/css\/veil\.css\?v=3"/, v + ": veil.css v3 (1.99aij: dark-only values; v2 moved the hood tokens)");
 });
 
 test("wave2: one frog-name session = one hood - the chat bubble (chatlog-core .hdN over veil.css --hood-N) and the stage cover (stage-mic hood-*-N.svg over webrtc.css .mf-cover[data-hood=N]) use the same index, the same picture and the same colour token", () => {

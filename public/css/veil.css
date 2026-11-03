@@ -5,12 +5,10 @@
 /* (wave 2 WP-4 x WP-2: the 8 hood tokens are the mic stage cover's - webrtc.css .mf-cover[data-hood=N] - in the art's order: charcoal,
    midnight, plum, forest, maroon, teal, mustard, slate = public/img/anon/hood-*-N.svg. One frog-name session has ONE hood index
    (frognames.js), so a person reads as the same hooded frog on the same colour in the chat and on the stage) */
-:root { --redact-a: #2d333b; --redact-b: #22272e; --veil-tag-bg: rgba(110, 118, 129, .18); --veil-tag-ink: #57606a;
+/* 1.99aij: the site is dark-only (ds.css color-scheme: dark, no light theme), so these are the only values. They used to apply only
+   when the computer asked for dark mode; on a light-mode computer the bars (#2d333b on the dark page) nearly vanished and the tag read ~2.3:1 */
+:root { --redact-a: #adbac7; --redact-b: #909dab; --veil-tag-bg: rgba(173, 186, 199, .16); --veil-tag-ink: #adbac7;
         --hood-0: #101113; --hood-1: #0e1120; --hood-2: #190f20; --hood-3: #0d1a14; --hood-4: #1f0d10; --hood-5: #0c1b1f; --hood-6: #231d0c; --hood-7: #16191e; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --redact-a: #adbac7; --redact-b: #909dab; --veil-tag-bg: rgba(173, 186, 199, .16); --veil-tag-ink: #adbac7; }
-}
-:root[data-theme="dark"] { --redact-a: #adbac7; --redact-b: #909dab; --veil-tag-bg: rgba(173, 186, 199, .16); --veil-tag-ink: #adbac7; }
 
 .chatlog .who.veil i { font-weight: 600; }
 .veil-tag { display: inline-block; font-size: 10.5px; font-weight: 600; font-style: normal; line-height: 1.5; padding: 0 6px; border-radius: 999px;
