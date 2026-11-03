@@ -84,7 +84,6 @@ const REPORT = { [PLANT]: { owner: { snap: true, clip: false, challenge: true, l
   features: { say: true, look: false, casino_backend: true, nonsense: "x" }, prices: { look: 10000, roast: 5000, "BAD KEY": 3 }, vibe: { type: "chill", locked: false }, pepe_here: true },
   "bad id <script>": { owner: {} } };
 
-
 test("Pepe's room_settings report is cleaned and stored with the owner-map sync", async () => {
   // before Pepe sent his language list, the select offers auto + the room's current value only
   assert.deepEqual(PO.languages().map((l) => l[0]), ["auto"]);
@@ -574,14 +573,16 @@ test("automod owner contract matches the shared bot fixture and explicit writabl
   const fixture = fs.readFileSync(path.join(repo, "ci/fixtures/automod-owner-contract.json"));
   assert.deepEqual(fs.readFileSync(path.join(repo, "data/owner-capabilities.json")), fixture);
   const rows = JSON.parse(fixture).automod_owner_settings;
-  assert.equal(rows.length, 20);
+  assert.equal(rows.length, 16);
   for (const row of rows) {
     assert.equal(row.scope, "room");
     assert.ok(PO.OWNER_GROUPS.some((g) => g[2].includes(row.id)), row.id);
     if (row.kind === "bool") assert.ok(PO.OWNER_BOOL.includes(row.id), row.id);
     if (row.kind === "seconds") assert.deepEqual(PO.AUTOMOD_SECONDS[row.id], row);
   }
-  for (const id of ["automod.enabled", "automod.power.enforce", "automod.fines.enabled", "automod.etiquette.wanted_s", "roomtimeout.expiry"]) {
+  // 1.99??: the contention / leaving-space gates and the repeated-grab / room-report exemptions are admin-only by default
+  for (const id of ["automod.enabled", "automod.power.enforce", "automod.fines.enabled", "automod.etiquette.wanted_s", "roomtimeout.expiry",
+    "automod.michog.contention", "automod.michog.leaving_space", "automod.exempt.mic_grabs", "automod.exempt.mic_room_report"]) {
     assert.ok(!rows.some((r) => r.id === id), id);
   }
 });
@@ -618,7 +619,8 @@ test("automod controls show reported values, validate decimals and queue only th
   for (const value of ["", " ", "nan", "Infinity", "-1", "10.01", "true", "1e3", "0x1"]) {
     assert.equal((await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key, value })).status, 400, value);
   }
-  for (const bad of ["automod.enabled", "automod_abuse_enabled", "automod.fines.base", "automod.etiquette.wanted_s", "automod_etiquette_wanted_s", "roomtimeout.expiry"]) {
+  for (const bad of ["automod.enabled", "automod_abuse_enabled", "automod.fines.base", "automod.etiquette.wanted_s", "automod_etiquette_wanted_s", "roomtimeout.expiry",
+    "automod.michog.contention", "automod.michog.leaving_space", "automod.exempt.mic_grabs", "automod.exempt.mic_room_report"]) {
     assert.equal((await post(`/api/rooms/${SLUG}/owner/setting`, "staff", { key: bad, value: "off" })).status, 400, bad);
   }
   assert.equal((await post(`/api/rooms/${SLUG}/owner/setting`, "fan", { key, value: "1" })).status, 403);

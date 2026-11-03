@@ -269,7 +269,7 @@
    "web": "/p/{slug}/owner#pepe",
    "web_action": "room.owner",
    "setting": "michog_enabled",
-   "howto": "Set mic-hog triggers, courtesy unblocks, mic-quality exemptions, double-click and waiting-gap rules, their timing windows, and strikes within the admins' range (2-5 by default). Global unblock and community votes are also room choices. The master, sanctions, fines and wanted-mic confirmation window stay with admins; served penalties always expire.",
+   "howto": "Set mic-hog triggers, courtesy unblocks, mic-quality exemptions, double-click and waiting-gap rules, their timing windows, and strikes within the admins' range (2-5 by default). Global unblock and community votes are also room choices. The master, sanctions, fines, the wanted-mic confirmation window and the mic-hog gates stay with admins; served penalties always expire.",
    "owner_only": true,
    "code": [
     "pepe_roomowner.py:_op_web_setting"
@@ -569,14 +569,6 @@
    "bounds": "admin"
   },
   {
-   "id": "automod.exempt.mic_grabs",
-   "policy": "automod.exempt.mic_grabs",
-   "storage": "automod_exempt_mic_grabs",
-   "kind": "bool",
-   "default": true,
-   "scope": "room"
-  },
-  {
    "id": "automod.exempt.mic_silent",
    "policy": "automod.exempt.mic_silent",
    "storage": "automod_exempt_mic_silent",
@@ -625,14 +617,6 @@
    "scope": "room"
   },
   {
-   "id": "automod.exempt.mic_room_report",
-   "policy": "automod.exempt.mic_room_report",
-   "storage": "automod_exempt_mic_room_report",
-   "kind": "bool",
-   "default": true,
-   "scope": "room"
-  },
-  {
    "id": "automod.michog.consec",
    "policy": "automod.michog.consec",
    "storage": "automod_michog_consec",
@@ -652,22 +636,6 @@
    "id": "automod.michog.hold",
    "policy": "automod.michog.hold",
    "storage": "automod_michog_hold",
-   "kind": "bool",
-   "default": true,
-   "scope": "room"
-  },
-  {
-   "id": "automod.michog.contention",
-   "policy": "automod.michog.contention",
-   "storage": "automod_michog_contention",
-   "kind": "bool",
-   "default": true,
-   "scope": "room"
-  },
-  {
-   "id": "automod.michog.leaving_space",
-   "policy": "automod.michog.leaving_space",
-   "storage": "automod_michog_leaving_space",
    "kind": "bool",
    "default": true,
    "scope": "room"
@@ -731,6 +699,7 @@
   "the auto-topic's master switch and the shortest auto-topic interval owners may pick",
   "house ads (!promo) and sponsors",
   "the mic slots and the transcriber's global rules (auto-detect allow-list, per-person languages)",
-  "the master switches that turn a command or feature off everywhere (your setting is kept)"
+  "the master switches that turn a command or feature off everywhere (your setting is kept)",
+  "the mic-hog contention and leaving-space checks, and the repeated-grab and room-report mic exemptions"
  ]
 }
