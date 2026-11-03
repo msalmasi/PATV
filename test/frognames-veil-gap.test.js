@@ -3,6 +3,7 @@
 //   own name     a frog name never reads as the person's own display name (a veiled person isn't in the roster's avoid list)
 //   mic hold     a snapshot that lists them on the mic, or an item of a hold, never ends the 15 minutes - after a restart (which forgets
 //                the hold) and when a batch's snapshot is sighted before the batch's grab
+//   early lines  a line said before the frog name took over (sighted after the batch's snapshot, or a backlog) stays "someone"
 //   node --test test/frognames-veil-gap.test.js
 "use strict";
 const test = require("node:test");
@@ -112,4 +113,27 @@ test("1.99?? review fix: a mic hold Pepe's snapshot shows (after a restart forgo
   await item(room, "mic.release", "batchmic", { hold: "hd-0000aaaa2222", held_ms: 3 * MIN }, t + 19 * MIN);
   await snapshot(room, [veiled("batchmic")], [], t + 19 * MIN + 30e3);
   assert.match(String(entry(room, "batchmic").alias), ALIAS_RE, "after the release: a frog name");
+});
+
+test("1.99?? review fix: a line said before the frog name took over stays 'someone' (sighted after its batch's snapshot, or a backlog)", async () => {
+  const t = Date.UTC(2026, 10, 14, 16);
+  const room = { id: "Early.Room" };
+  FN.named(room.id, "laggy", t);
+  await snapshot(room, [veiled("laggy")], [], t + 5 * MIN);
+  const before = FN.current(room.id, "laggy");
+  assert.ok(before && before.alias === null);
+  // one batch after an outage: the snapshot (now = +16) is sighted first, then the lines said meanwhile, in order
+  await snapshot(room, [veiled("laggy")], [], t + 16 * MIN);
+  const frog = entry(room, "laggy").alias;
+  assert.match(String(frog), ALIAS_RE, "the people list: a frog name from now on");
+  const l8 = await item(room, "message", "laggy", { text: "said at eight" }, t + 8 * MIN);
+  const l15 = await item(room, "message", "laggy", { text: "said just before fifteen" }, t + 15 * MIN - 2000);
+  for (const [it, w] of [[l8, "+8"], [l15, "+14:58"]]) {
+    assert.equal(it.u.alias, undefined, w + ": someone (was " + it.u.alias + ")");
+    assert.equal(it.u.id, undefined, w + ": no session id");
+    assert.equal(it._vz.sess, before.session, w + ": the no-name session's line");
+  }
+  const l17 = await item(room, "message", "laggy", { text: "said at seventeen" }, t + 17 * MIN);
+  assert.equal(l17.u.alias, frog, "a line after it: the frog name");
+  assert.deepEqual(FN.current(room.id, "laggy").alias, frog, "the session is the frog name's");
 });

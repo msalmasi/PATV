@@ -354,7 +354,7 @@ function sight(roomId, login, opts = {}) {
     // session on level and never changes its level; it only gives a session it opens its level
     const frozen = opts.frozen === true;
     let S = (OPEN.get(room) || new Map()).get(sk) || null;
-    let carry = null;
+    let carry = null, prev = null;
     if (S) {
       const lv = !frozen && levelEnds(S, kind);
       const why = endWhy(S, t);
@@ -363,12 +363,13 @@ function sight(roomId, login, opts = {}) {
       else if (opts.onMic !== true && gapOver(S, t)) {
         // 1.99?? (owner 2026-11-03): "someone" for 15 minutes after their last named sighting, then a frog name - even mid-visit. The
         // new session keeps the person's level when this sighting gives none (or only a hold's frozen one)
-        carry = S.kind;
+        carry = S.kind; prev = S.id;
         await endSession(S, t, "gap");
         S = null;
       }
     }
     if (!S) S = await startSession(room, login, sk, t, opts.avoidNames, kind && !frozen ? kind : carry || kind);
+    if (prev != null) S.gapPrev = prev;                       // 1.99?? review fix: the no-name session this one took over from
     S.leftAt = null;
     S.lastSeen = t;
     if (opts.active) S.lastActive = t;
@@ -381,6 +382,9 @@ function sight(roomId, login, opts = {}) {
       S.wroteAt = t;
       await runQuery("UPDATE incog_alias SET last_seen = ?, last_active = ?, left_at = NULL WHERE id = ?", [S.lastSeen, S.lastActive, S.id]);
     }
+    // 1.99?? review fix: a sighting from BEFORE the frog name took over (a batch's line sighted after its snapshot ended the no-name session
+    // at "now", or a backlog after an outage) keeps "someone" and that session - a line said inside the 15 minutes never gets the name
+    if (S.gapPrev != null && t < S.started) return { alias: null, hood: null, session: S.gapPrev };
     return view(S);
   });
 }
