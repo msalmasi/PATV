@@ -938,8 +938,12 @@ async function reportRead(user, c) {
   const anon = p === "anon" || p === "out" || p === "mask" || hidden || String(row.who || "").startsWith("h:");
   await audit(me.userId, { rk: row.rk, who: row.who && !anon ? row.who : null, kind: "history", from: row.ts, to: row.ts, why: "report queue #" + row.c });
   const alias = !row.purged && u.anon && typeof u.alias === "string" && !hidden ? u.alias : null;
+  // 1.99?? (privacy controls, round 3 - F3): while text reveal roles are on, staff may reveal a hidden line on its pad too (with a reason) -
+  // tr: 1 makes the queue's note say so (off: the answer as before)
+  let tr = false;
+  try { tr = hidden && require("./textreveal").isOn() === true; } catch (e) { tr = false; }
   return { c: Number(row.c), k: row.k, ts: Number(row.ts), text: row.purged || hidden ? null : row.text, purged: !!row.purged,
-           ...(hidden ? { masked: true, needs_admin: true, link: lineLink(row.room_id, row.c) } : {}),
+           ...(hidden ? { masked: true, needs_admin: true, link: lineLink(row.room_id, row.c) } : {}), ...(tr ? { tr: 1 } : {}),
            name: row.purged ? null : anon || hidden ? (alias || "someone") : (u.display || row.who || null), anon: !row.purged && (anon || hidden),
            login: row.purged || anon || !row.who || String(row.who).startsWith("u:") ? null : row.who,
            removed: row.rm_at != null ? { at: Number(row.rm_at), by: String(row.rm_by || "").replace(/:.*/, ""), why: row.rm_why || "" } : null };

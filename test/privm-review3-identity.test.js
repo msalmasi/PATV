@@ -395,3 +395,34 @@ test("F2: refused by its id with one word that names nobody - 🎤 roast, incogn
   assert.equal(byLogin.status, 404, byLogin.text);
 });
 
+// ── F3 (S4t wording): the staff report queue's note on a blacked-out line names staff too while text reveal roles are on ──
+test("F3: a reported hidden line - 'needs an admin' while text reveal roles are off; tr: 1 (staff can reveal it on the pad, with a reason) while on", async () => {
+  await v1ready;
+  await freshRoom();
+  const TRV = require(path.join(repo, "textreveal"));
+  const CM = require(path.join(repo, "chatlogmod"));
+  await TRV.init();
+  const hank = Object.assign(real("hankhidden", "Hank Hide"), { priv: priv("hidden", "hankhidden") });
+  await syncAt({ events: [ev("message", { user: hank, text: "words hank said for round three" })] });
+  let row = null;
+  for (let i = 0; i < 30 && !row; i++) { await settle(30); row = (await getQuery("SELECT c, rk FROM chat_log WHERE text = ? ORDER BY c DESC LIMIT 1", ["words hank said for round three"]))[0] || null; }
+  assert.ok(row, "the hidden line is in the archive");
+  await runQuery("INSERT INTO chatlog_reports (c, rk, reporter, reason, note, state, created) VALUES (?, ?, ?, 'spam', '', 'open', ?)", [row.c, row.rk, U.mem.userId, Date.now()]);
+  const staff = { userId: U.staff.userId, username: "helper", class: "Staff" };
+  const off = await CM.reportRead(staff, row.c);
+  assert.equal(off.needs_admin, true, JSON.stringify(off));
+  assert.equal("tr" in off, false, "switch off: the answer as before");
+  await TRV.setOn(true, ADM());
+  try {
+    const on = await CM.reportRead(staff, row.c);
+    assert.equal(on.needs_admin, true);
+    assert.equal(on.tr, 1, "switch on: staff may reveal it on the pad too");
+    assert.equal(on.text, null, "never the words here");
+    assert.deepEqual(named(JSON.stringify(on)).concat(JSON.stringify(on).includes("hankhidden") ? ["hankhidden"] : []), []);
+  } finally { await TRV.setOn(false, ADM()); }
+  // the queue's words follow tr
+  const js = fs.readFileSync(path.join(repo, "public", "js", "chatlog-reports.js"), "utf8");
+  assert.match(js, /L\.tr \? 'Hidden line - reveal it on the pad \(PATV admins, and staff with a reason; every reveal is logged\)'/);
+  assert.match(js, /'Hidden line - needs an admin \(an admin can reveal it on the pad; every reveal is logged\)'/, "switch off: as before");
+  assert.match(fs.readFileSync(path.join(repo, "views", "feedAdmin.ejs"), "utf8"), /chatlog-reports\.js\?v=[3-9]/);
+});
