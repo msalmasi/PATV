@@ -290,6 +290,18 @@ function camMember(R, login) {
   const low = String(login || "").toLowerCase();
   return (R && Array.isArray(R.members) ? R.members : []).find((m) => m && !m.anon && !m.self && m.login && String(m.login).toLowerCase() === low) || null;
 }
+/** 1.99?? (privacy controls, round 3 - F1; owner Q4 "including AI picture references"): may claimed frog-name frame `c` still be used
+ *  in bridge room R? camMember never finds an incognito person (it skips anon entries), so a frog cam's reference re-checks the frog-name
+ *  session the frame was taken under: incognito cams still in effect, that session still the person's open one (any veil change ends
+ *  it - the same rule as their live cam), and live cam not switched off since. Pepe re-checks !likeness / livecam by the login. */
+function veiledRefOk(R, c) {
+  if (!R || !c || c.veiled !== true || c.vsess == null) return false;
+  try {
+    const IC = require("./incogcams");
+    if (!IC.effective() || !IC.entryByLogin(R, c.login, c.vsess)) return false;
+    return require("./livecam").optedOut(c.login) !== true;
+  } catch (e) { return false; }
+}
 /** The people on cam in the pad's Camfrog room -> {ok, slug, room, cams: [{login, display}], why}. */
 // adultgate site: who's on cam in an 18+ pad's room is its live room's - the 18+ gate on that pad (switch on); off: nothing
 function adultCheck(user, padId) {
@@ -352,7 +364,10 @@ async function claimCamRef(user, b) {
   const mineNow = [...camRefs.entries()].filter(([, c]) => c.userId === u.userId).sort((x, y) => x[1].ts - y[1].ts);
   while (mineNow.length >= CAMREF_PER_USER) camRefs.delete(mineNow.shift()[0]);
   const id = "c" + crypto.randomBytes(10).toString("hex");
-  camRefs.set(id, { img: s.img, userId: u.userId, room: R.id, login: String(m.login).toLowerCase(), display: String(m.display || m.login), ts: t });
+  // 1.99?? (privacy controls, round 3 - F1): a frog-name frame keeps WHICH frog-name session it was taken under (server-only), so
+  // create() re-checks that session - not a by-login roster entry, which an incognito person never has
+  camRefs.set(id, { img: s.img, userId: u.userId, room: R.id, login: String(m.login).toLowerCase(), display: String(m.display || m.login), ts: t,
+                    ...(s.vkey ? { veiled: true, vsess: String(s.vkey).slice(2) } : {}) });
   console.log(`[aigen] cam ref ${id} by ${u.username}: ${s.vkey ? "-" : m.login} in ${R.id}`);
   return { ok: true, id, display: String(m.display || m.login), room: R.id, until: t + CAMREF_TTL };
 }
@@ -399,7 +414,7 @@ async function create(user, b, { queue, audit } = {}) {
     if (!c || c.userId !== u.userId || NOW() - c.ts > CAMREF_TTL) throw new Refuse(410, "That cam snapshot expired - take a fresh one.");
     if (camfrogRoomOf(pad) !== c.room) throw new Refuse(400, "That cam snapshot is from another pad's Camfrog room - pick that pad, or a cam here.");
     const R = bridgeRoom(c.room);
-    if (!R || !R.cams || !camMember(R, c.login)) throw new Refuse(403, "Their cam can't be used any more.");
+    if (!R || !R.cams || !(c.veiled ? veiledRefOk(R, c) : camMember(R, c.login))) throw new Refuse(403, "Their cam can't be used any more.");
     cam = c;
   }
   const prices = await pricesFor(pad);
@@ -412,7 +427,7 @@ async function create(user, b, { queue, audit } = {}) {
   await runQuery(`INSERT INTO feed_aigen_jobs (id, user_id, username, camfrog, kind, prompt, pad, room, price, status, back, created, ref_att, ref_cam)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
                  [id, u.userId, u.username, u.camfrogUsername || null, kind, prompt, pad, camfrogRoomOf(pad), price, back, t, ref,
-                  cam ? JSON.stringify({ room: cam.room, login: cam.login, display: cam.display }) : null]);
+                  cam ? JSON.stringify({ room: cam.room, login: cam.login, display: cam.display, ...(cam.veiled ? { veiled: true } : {}) }) : null]);
   if (cam) camJobFrames.set(id, { img: cam.img, ts: t });            // private to this job; /start hands it over once
   try {
     const aid = await (queue || require("./actions").queue)(u.userId, { kind: "aigen", args: [id], tag: "aigen", label: `✨ generate ${kind}: ${prompt}`.slice(0, 200), idem: b.idem });
@@ -425,7 +440,7 @@ async function create(user, b, { queue, audit } = {}) {
     throw e;
   }
   if (audit) await audit({ kind: "aigen", id, event: "generate", user: u }).catch(() => {});
-  console.log(`[aigen] ${id} ${kind} by ${u.username} pad=${pad || "-"} price=${price}${ref ? " ref=" + ref : ""}${cam ? " cam=" + cam.login : ""}`);
+  console.log(`[aigen] ${id} ${kind} by ${u.username} pad=${pad || "-"} price=${price}${ref ? " ref=" + ref : ""}${cam ? " cam=" + (cam.veiled ? "-" : cam.login) : ""}`);
   return view(await job(id), null);
 }
 
@@ -475,6 +490,9 @@ async function start(b) {
     const c = camOf(j);
     out.has_ref = true;
     out.ref_cam = c ? { room: String(c.room || ""), login: String(c.login || "") } : { room: "", login: "" };
+    // 1.99?? (privacy controls, round 3 - F1): a frog-name cam's reference says so, with its frog name - Pepe re-checks the person's
+    // !likeness / livecam choices by the login as for anyone, but words any refusal by the frog name (never their name)
+    if (c && c.veiled === true) Object.assign(out.ref_cam, { veiled: true, label: String(c.display || "someone").slice(0, 40) });
     const f = camJobFrames.get(j.id);
     camJobFrames.delete(j.id);
     if (f && f.img) out.ref = { data: f.img.toString("base64"), mime: "image/jpeg" };
@@ -870,6 +888,6 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
 
 module.exports = { register, init, create, discard, setPromptShown, start, progress, chunk, result, setPrices, sweep, mine, pricesFor, refusal, view,
                    refPriceFor, roomStart, roomGenOn, setRoomGen, optedOut, setOptOut, DEFAULT_SURCHARGE, ROOM_PEPE_PER_DAY, REF_MAX_PX,
-                   camfrogRoomOf, normPad, _setClock, _setRoomCmds, KINDS, camList, claimCamRef, camMember, _setBridge, CAMREF_TTL,
+                   camfrogRoomOf, normPad, _setClock, _setRoomCmds, KINDS, camList, claimCamRef, camMember, veiledRefOk, _setBridge, CAMREF_TTL,
                    _camRefs: camRefs, _camJobFrames: camJobFrames, DEFAULT_PRICES, MAX_OPEN, MAX_OPEN_VIDEO, QUEUE_TTL, RUN_TTL, PROMPT_MAX, ETA, Refuse,
                    POLICY, EXPLICIT_TERMS, explicitTerm };
