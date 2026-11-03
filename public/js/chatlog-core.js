@@ -254,7 +254,7 @@
       // speaker themself (self view). Without a name (C.2 / B.2): "someone" + the tag
       var al = veilAlias(u), tag = h('span', { 'class': 'veil-tag veil-' + vl }, [vl === 'hidden' ? _t('js.pad.veil.hidden', 'hidden') : _t('js.pad.veil.incognito', 'incognito')]);
       var nm = al ? h('i', null, [ctx && ctx.self ? _t('js.pad.veil.self', 'you, as {name}', { name: al }) : al]) : _t('js.pad.someone', 'someone');
-      return h('span', { 'class': 'who veil' }, [nm, ' ', tag]);
+      return h('span', { 'class': 'who veil', title: ctx && ctx.lineHead ? (al || _t('js.pad.someone', 'someone')) : null }, [nm, ' ', tag]);
     }
     if (!u || u.anon) return h('span', { 'class': 'who' }, [_t('js.pad.someone', 'someone')]);
     if (u.former) return h('span', { 'class': 'who' }, [_t('js.pad.chat.former', 'former member')]);
@@ -262,6 +262,7 @@
     var a = { 'class': 'who' + (style ? ' cx-name' : ''), style: style };
     if (u.self) a.title = 'Pepe';
     else if (u.display && u.login && !u.acct && !ACCT_KEY.test(String(u.login)) && String(u.display).toLowerCase() !== String(u.login).toLowerCase()) a.title = u.login;
+    if (ctx && ctx.lineHead && !a.title) a.title = shownName(u, ctx);
     if (u.patv) { a.href = linkOf(ctx, '/u/' + encodeURIComponent(u.patv.username)); a.rel = relOf(ctx); }
     var n = h(u.patv ? 'a' : 'span', a, [shownName(u, ctx)]);
     if (!u.web) return n;
@@ -391,29 +392,37 @@
       }
       if (it.hold) a['data-hold'] = it.hold;                  // B.3: the live tail places a 🎙 line after its hold's drop
     }
-    var body = [nameNode(it.u, mine ? Object.assign({}, ctx, { self: true }) : ctx, h)];
+    // The head keeps a reserved line for badges and the clock; words and privacy / moderation notes stay together below.
+    // Only names in this compact head need an extra tooltip (the shared roster / mic name nodes stay as they were).
+    var nameCtx = Object.assign({}, ctx, { lineHead: true });
+    if (mine) nameCtx.self = true;
+    var head = [nameNode(it.u, nameCtx, h)], body = [];
     // 1.99aht S1 (owner Q5): the bar's TEXT tag, beside the name (never only an icon) - "transcript hidden"
-    if (txh && mask) body.push(' ', h('span', { 'class': 'veil-tag veil-tx' }, [_t('js.pad.veil.tx_hidden', 'transcript hidden')]));
+    if (txh && mask) {
+      var txTag = _t('js.pad.veil.tx_hidden', 'transcript hidden');
+      head.push(h('span', { 'class': 'veil-tag veil-tx', title: txTag }, [txTag]));
+    }
     var fl = flairNode(it.u, ctx, h);
-    if (fl) body.push(fl, ' ');
+    if (fl) head.push(fl);
+    head.push(timeNode(it.ts, ctx, h));
     var marks = hlOf(ctx);
     if (mask && !mine) {
       body.push(h('span', { 'class': 'redact redact-' + mask }, [h('span', { 'class': 'sr-only' },
-        [tx ? _t('js.pad.veil.hidden_tx', 'hidden transcript') : _t('js.pad.veil.hidden_msg', 'hidden message')])]), timeNode(it.ts, ctx, h));
+        [tx ? _t('js.pad.veil.hidden_tx', 'hidden transcript') : _t('js.pad.veil.hidden_msg', 'hidden message')])]));
     } else if (marks) {
       // CL9: a search hit - the matched words in <mark>s (the same text, in pieces)
       if (tx) body.push('\u201c');
       body.push.apply(body, markKids(text, marks, h));
       if (tx) body.push('\u201d');
-      body.push(timeNode(it.ts, ctx, h));
-    } else body.push(tx ? '\u201c' + text + '\u201d' : text, timeNode(it.ts, ctx, h));
+    } else body.push(tx ? '\u201c' + text + '\u201d' : text);
     // B.3: when a \ud83c\udf99 line was said, and how long its turn ran ("said 11:53:41")
     if (tx && Number(it.at) > 0) body.push(h('span', { 'class': 'said' }, [_t('js.pad.veil.said', 'said {time}', { time: fmtTime(Number(it.at), ctx) })]));
     if (mine) body.push(h('span', { 'class': 'veil-self' }, [_t('js.pad.veil.only_you', 'only you can see this')]));
     // E.2: a viewer who may see through frog names here (an admin, the pad's owner in their era) gets a Reveal control - a flag only
     if (it.rv === 1 && it.c && ctx.data !== false) body.push(h('button', { type: 'button', 'class': 'veil-reveal', 'data-reveal': it.c }, [_t('js.pad.veil.reveal', 'Reveal')]));
     if (rm) body.push(h('span', { 'class': 'rm-note' }, [removedNote(rm, ctx)]));
-    return h('div', a, [avatarNode(it.u, ctx, h), h('div', { 'class': 'body' }, body)]);
+    return h('div', a, [avatarNode(it.u, ctx, h), h('div', { 'class': 'body' },
+      [h('div', { 'class': 'line-head' }, head), h('div', { 'class': 'line-text' }, body)])]);
   }
 
   /** One chat item as the pad chat shows it - the live markup (.line / .line.tx / .line.pepe / .sys / .sys.topic / .sys.live /

@@ -708,15 +708,15 @@ test("the highlights: prefix-aware, accents folded, phrases, merged; the rendere
   assert.ok(!plain.includes("<mark>"));
   const hl = String(CORE.renderItem(it, { offset: 0, hl: [[0, 5], [6, 11]] }, CORE.htmlH));
   assert.equal(hl.replace(/<\/?mark>/g, ""), plain, "the same line, with marks");
-  assert.match(hl, /<mark>movie<\/mark> <mark>night<\/mark><time/);
+  assert.match(hl, /<div class="line-text"><mark>movie<\/mark> <mark>night<\/mark><\/div>/);
   assert.match(hl, /data-text="movie night"/);
   const tx = String(CORE.renderItem(Object.assign({}, it, { k: "tx" }), { offset: 0, hl: [[6, 11]] }, CORE.htmlH));
-  assert.match(tx, /\u201cmovie <mark>night<\/mark>\u201d<time/);
+  assert.match(tx, /<div class="line-text">\u201cmovie <mark>night<\/mark>\u201d<\/div>/);
   const tp = String(CORE.renderItem({ k: "topic", c: 6, ts: it.ts, text: "movie night at nine" }, { offset: 0, hl: [[0, 5]] }, CORE.htmlH));
   assert.equal(tp, '<div class="sys topic">📌 topic: <mark>movie</mark> night at nine · 21:04</div>');
   // bad ranges are ignored, out-of-range ones clipped
   assert.equal(String(CORE.renderItem(it, { offset: 0, hl: [["x", 2], [9, 3]] }, CORE.htmlH)), plain);
-  assert.match(String(CORE.renderItem(it, { offset: 0, hl: [[6, 99]] }, CORE.htmlH)), /movie <mark>night<\/mark><time/);
+  assert.match(String(CORE.renderItem(it, { offset: 0, hl: [[6, 99]] }, CORE.htmlH)), /<div class="line-text">movie <mark>night<\/mark><\/div>/);
 });
 
 test("the pad page: the 🔍 button and pad-search.js; history.find for a signed-in member only; plain ES5 in the browser module", async () => {

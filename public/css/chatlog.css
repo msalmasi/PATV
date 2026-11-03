@@ -7,16 +7,27 @@
    chat looks as it did; moving it onto the standard palette is one block in ds.css (an owner call). Logical properties: in an
    RTL page (<html dir="rtl">) the 🎙 bar, the system lines' indent and the scroller's padding sit at the start (right) side, next
    to the avatar, as they do on the left in LTR (before CL5 they stayed on the left, away from it); the highlight's bar (a
-   box-shadow, which has no logical form) flips with them. The name / time gaps are the one physical pair - see .who below. */
+   box-shadow, which has no logical form) flips with them. The line head's flex gap works in either direction. */
 .chatlog .feed { height: min(62vh, 640px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; padding-inline-end: 4px; scroll-behavior: smooth; }
 .chatlog .line { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 5px 6px; border-radius: 8px; align-items: start; }
 .chatlog .line:hover { background: var(--ds-chat-hover); }
 .chatlog .line .body { min-width: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
-/* CL5 fix-up: the name / time gaps stay PHYSICAL, as room.ejs had them. They sit between inline runs, whose order follows the
-   CONTENT's direction, not the page's: in an RTL page, a Latin name + Latin text still run left to right, so a logical gap
-   (margin-inline-end = the left) landed outside the name and "Bob the newest line" read "Bobthe newest line" */
-.chatlog .line .who { font-weight: bold; margin-right: 6px; }
-.chatlog .line .when { color: var(--ds-text-faint); font-size: 11px; margin-left: 4px; white-space: nowrap; }
+/* A reserved head for name, badges and time: late flair never shifts the words down. The flair gives way first, then the
+   name; the clock stays at the inline end, independently of a Latin or Arabic name's own text direction. */
+.chatlog .line .line-head { display: flex; align-items: center; gap: 6px; height: 18px; min-height: 18px; line-height: 18px; }
+.chatlog .line .who { font-weight: bold; }
+.chatlog .line-head > .who, .chatlog .line-head > .who-web { flex: 0 40 auto; min-width: 8ch; }
+.chatlog .line-head .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatlog .line-head .who-web, .chatlog .line-head .who.veil { display: flex; align-items: center; gap: 3px; }
+.chatlog .line-head .who-web > .who, .chatlog .line-head .who.veil > i { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatlog .line-head .web-mark, .chatlog .line-head .veil-tag { flex: none; }
+.chatlog .line-head > .ufl { flex: 0 1000 auto; min-width: 2.7em; box-sizing: content-box; margin: 0; padding-inline: 2px; gap: 2px; }
+/* A transcript tag keeps its full accessible text/title, but yields after the name and flair reach their minimums. */
+.chatlog .line-head > .veil-tx { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatlog .line .when { flex: none; margin-inline-start: auto; color: var(--ds-text-faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chatlog .line .line-text { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+/* The outbox and mic-clip decorator append to .body, after .line-text. Their controls belong below the words. */
+.chatlog .line .body > .rb-st, .chatlog .line .body > .mc-btn { display: block; width: fit-content; max-width: 100%; margin-inline: 0; }
 .chatlog .line.pepe { background: var(--ds-chat-pepe-bg); }
 .chatlog .line.hl { background: var(--ds-chat-hl-bg); box-shadow: inset 3px 0 0 var(--ds-chat-hl-bar); }   /* 1.99ii: the line a 📣 mention alert points at */
 [dir="rtl"] .chatlog .line.hl { box-shadow: inset -3px 0 0 var(--ds-chat-hl-bar); }
@@ -37,6 +48,8 @@
 /* CL6: the ⋯ on a line (public/js/chat-lines.js: ⚑ Report, 🗑 Remove my line, 🙈 Hide, ⛔ Delete for good) - shown on hover /
    keyboard focus; on touch screens it is always there, with room kept for it */
 .chatlog .line.la { position: relative; }
+/* The menu is taller than the 18px head, so its space also protects the first text line. */
+.chatlog .line.la .line-head, .chatlog .line.la .line-text { padding-inline-end: 36px; }
 .chatlog .line .la-btn { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; min-width: 30px; height: 26px; padding: 0 6px;
                          border-radius: var(--ds-r-sm); border: 1px solid var(--ds-line); background: var(--ds-surface-3); color: var(--ds-text-2);
                          font: inherit; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; }
@@ -45,7 +58,7 @@
 .chatlog .line .la-btn:focus-visible { opacity: 1; outline: none; box-shadow: var(--ds-focus-ring); }
 .chatlog .feed-log.cc-on .line .la-btn { display: none; }      /* ✂️ Clip chat is picking lines (CL8: the live log, inside the scroller) */
 @media (hover: none) {
-  .chatlog .line.la { padding-inline-end: 50px; }
+  .chatlog .line.la .line-head, .chatlog .line.la .line-text { padding-inline-end: 50px; }
   .chatlog .line .la-btn { opacity: .75; min-width: 44px; height: 32px; }
 }
 /* CL6: a hidden line as the pad's owner and staff see it (its text for 30 days), and a purged one */

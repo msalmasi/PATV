@@ -1,5 +1,5 @@
 // CL5: one renderer for the pad chat (public/js/chatlog-core.js + public/css/chatlog.css, chat-history spec §3.7).
-//   * no visible change: for every fixture line the shared renderer builds the DOM tree the pad page's inline renderer built
+//   * phase 1a changes only the chat head/text layout: every fixture keeps the content and attributes the inline renderer built
 //     (that renderer, frozen from git d6263ec9, is test/fixtures/chatlog/legacy-room-item.js) - in English and in a
 //     translated catalog - and the mic / people lists' avatars and names, the 📜 chip's spans and the clock are the same;
 //   * h-tree parity without a DOM: the same line through a recording h, the DOM h and the server's HTML h, compared as trees;
@@ -172,14 +172,31 @@ const PEOPLE = [PB, { login: "bob", display: "Bob", on_cam: true, src: "seen" },
   { anon: true, display: "someone" }, { former: true }, { login: "pepefrog", display: "PepeFrog", self: true },
   { login: "u:ABC-123456", display: "Mae", acct: true, web: true, patv: { username: "mae", avatar: null, style: "" } }, null];
 
+// Phase 1a's two rows deliberately replace the old inline body. Fold only that layout back for the legacy content check;
+// the tests below inspect the new head and text independently, including every privacy / moderation attribute.
+function legacyLineShape(n, old) {
+  if (!n || !n.a.class.split(" ").includes("line")) return n;
+  n = JSON.parse(JSON.stringify(n));
+  const body = n.k[1], [head, text] = body.k;
+  assert.equal(head.a.class, "line-head");
+  assert.equal(text.a.class, "line-text");
+  const names = head.k.slice(0, -1), name = names[0];
+  const oldName = old.k[1].k[0];
+  const named = name.a.class === "who-web" ? name.k[0] : name;
+  const oldNamed = oldName.a.class === "who-web" ? oldName.k[0] : oldName;
+  if (!("title" in oldNamed.a)) delete named.a.title; // new full-name tooltip for a compact, ellipsized head
+  body.k = mergeKids(names.concat(names.length > 1 ? [" "] : [], text.k, [head.k[head.k.length - 1]]));
+  return n;
+}
+
 for (const [lang, t] of [["en", tEN], ["de", tDE]]) {
-  test(`no visible change (${lang}): every fixture line is the DOM the inline renderer built`, () => {
+  test(`line content parity (${lang}): only the chat head/text layout changes; system lines stay identical`, () => {
     const doc = fakeDoc(lang);
     const old = legacy(doc, t), ctx = { t, lang: doc.documentElement.lang || undefined }, H = CL.domH(doc);
     let shown = 0;
     for (const it of FIX) {
       const a = fromDom(old.item(it)), b = fromDom(CL.renderItem(it, ctx, H));
-      assert.deepEqual(b, a, `c=${it.c} k=${it.k}`);
+      assert.deepEqual(legacyLineShape(b, a), a, `c=${it.c} k=${it.k}`);
       if (a) shown++;
     }
     assert.equal(shown, FIX.length - 2, "every fixture but the two unknown kinds is a line");
@@ -193,6 +210,70 @@ for (const [lang, t] of [["en", tEN], ["de", tDE]]) {
     for (const s of [60, 90, 900, 3600, 7200, 86400, 172800, 7 * 86400, 30 * 86400, 3650 * 86400]) assert.equal(CL.chipSpan(s, ctx), old.chipSpan(s), "chip " + s);
   });
 }
+
+test("phase 1a: names, web mark, flair and time share the head; message and search words stay below", () => {
+  const ctx = { t: tEN, offset: 0 }, H = CL.htmlH;
+  const u = Object.assign({}, PB, { web: true });
+  const base = { k: "msg", c: 700, ts: T0, u, text: "hello room", own: 1, hold: "h-7" };
+  for (const k of ["msg", "tx"]) {
+    const it = Object.assign({}, base, { k }, k === "tx" ? { id: "tx-7", at: T0 - 60000 } : {});
+    const n = fromHtml(String(CL.renderItem(it, Object.assign({}, ctx, { hl: [[0, 5]] }), H)));
+    assert.deepEqual(n.a, Object.assign({ class: k === "tx" ? "line tx" : "line",
+      "data-c": "700", "data-hold": "h-7", "data-k": k, "data-name": "Plantbaked", "data-own": "1", "data-text": "hello room" },
+      k === "tx" ? { "data-tx": "tx-7", title: "Said on the mic (auto-transcribed)" } : {}));
+    const body = n.k[1], [head, text] = body.k;
+    assert.equal(body.a.class, "body"); assert.equal(body.k.length, 2);
+    assert.equal(head.a.class, "line-head"); assert.equal(text.a.class, "line-text");
+    assert.deepEqual(head.k.map((x) => x.a.class), ["who-web", "ufl", "when"]);
+    assert.equal(head.k[0].k[0].a.class, "who cx-name");
+    assert.equal(head.k[0].k[0].a.href, "/u/pb");
+    assert.equal(head.k[0].k[0].a.title, "leafy1111", "the existing login tooltip wins");
+    assert.equal(head.k[0].k[1].a.class, "web-mark");
+    assert.equal(head.k[1].k[1].k[0], FLAIR.name);
+    assert.equal(head.k[2].t, "time");
+    assert.equal(head.k[2].k[0], "01:04");
+    assert.equal(text.k.some((x) => x && x.t === "time"), false);
+    if (k === "msg") assert.deepEqual(text.k, [{ t: "mark", a: {}, k: ["hello"] }, " room"]);
+    else assert.deepEqual(text.k, ["“", { t: "mark", a: {}, k: ["hello"] }, " room”", { t: "span", a: { class: "said" }, k: ["said 01:03"] }]);
+  }
+  const full = "An unusually long unlinked name";
+  assert.match(String(CL.renderItem({ k: "msg", ts: T0, u: { login: full, display: full }, text: "hi" }, ctx, H)),
+    /class="who" title="An unusually long unlinked name">An unusually long unlinked name/);
+});
+
+test("phase 1a: masked and removed lines preserve outer privacy attributes and the order of their text notes", () => {
+  const ctx = { t: tEN, offset: 0 }, H = CL.htmlH;
+  const u = { anon: true, veil: "hidden", alias: "Soggy Bullfrog", hood: 3 };
+  const base = { k: "tx", c: 701, ts: T0, at: T0 - 60000, id: "tx-private", hold: "hold-private", u,
+    text: "never show this", mask: "m", own: 1, rv: 1 };
+  const masked = fromHtml(String(CL.renderItem(base, ctx, H)));
+  assert.deepEqual(masked.a, { class: "line tx veiled masked", "data-vc": "701", "data-own": "1", "data-hold": "hold-private", title: "Said on the mic (auto-transcribed)" });
+  const [head, text] = masked.k[1].k;
+  assert.deepEqual(head.k.map((x) => x.a.class), ["who veil", "when"]);
+  assert.equal(head.k[0].k[0].k[0], "Soggy Bullfrog");
+  assert.equal(head.k[0].k[2].a.class, "veil-tag veil-hidden");
+  assert.deepEqual(text.k.map((x) => x.a.class), ["redact redact-m", "said", "veil-reveal"]);
+  assert.doesNotMatch(String(CL.renderItem(base, ctx, H)), /never show this|tx-private|data-c=|data-text=|data-name=/);
+  const hiddenTx = Object.assign({}, base, { txh: 1, u: Object.assign({}, PB, { web: true }) });
+  const txNode = fromHtml(String(CL.renderItem(hiddenTx, ctx, H)));
+  assert.deepEqual(txNode.k[1].k[0].k.map((x) => x.a.class), ["who-web", "veil-tag veil-tx", "ufl", "when"]);
+  assert.equal(txNode.a["data-tx"], "tx-private", "only the server-authorized transcript bar keeps an audio clip id");
+  assert.equal(txNode.k[1].k[0].k[1].k[0], "transcript hidden");
+  assert.equal(txNode.k[1].k[0].k[1].a.title, "transcript hidden", "a narrow tag keeps the full tooltip");
+  const self = Object.assign({}, base, { self: 1 });
+  const own = fromHtml(String(CL.renderItem(self, ctx, H)));
+  assert.deepEqual(own.a, masked.a, "own words remain unclippable while masked");
+  assert.equal(own.k[1].k[0].k[0].k[0].k[0], "you, as Soggy Bullfrog");
+  assert.deepEqual(own.k[1].k[1].k.map((x) => typeof x === "string" ? x : x.a.class),
+    ["“never show this”", "said", "veil-self", "veil-reveal"]);
+  const removed = fromHtml(String(CL.renderItem(Object.assign({}, self, { removed: { by: "mod", who: "helper", why: "spam" } }), ctx, H)));
+  assert.deepEqual(removed.a, { class: "line tx rm veiled masked", "data-rmc": "701", "data-rm": "mod", "data-hold": "hold-private", title: "Said on the mic (auto-transcribed)" });
+  assert.deepEqual(removed.k[1].k[1].k.map((x) => typeof x === "string" ? x : x.a.class),
+    ["“never show this”", "said", "veil-self", "veil-reveal", "rm-note"]);
+  assert.equal(removed.k[1].k[1].k[4].k[0], "Hidden by @helper · spam");
+  const file = String(CL.renderItem(base, Object.assign({}, ctx, { data: false }), H));
+  assert.doesNotMatch(file, /data-|veil-reveal|never show this/);
+});
 
 test("h-tree parity without a DOM: a recording h, the DOM h and the server's HTML h build the same tree", () => {
   const doc = fakeDoc("en"), ctx = { t: tEN, lang: "en" };
@@ -391,9 +472,9 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.equal((room.match(/render: renderLine, ctx: rctx,/g) || []).length, 2, "scrollback's and search's lines too (CL8 / CL9)");
   assert.match(room, /feed: feedEl, line: item,/, "your pending relay lines are built the same way (room-bridge.js)");
   // the script loads before the page's own; the stylesheet right after the block it came from (the cascade keeps its order)
-  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=6"></script>'), init = room.indexOf('<script id="rmInit"');   // CL5 fix-up: v=4; 1.99aht S1: v=6 (the bar's "transcript hidden" tag)
+  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=7"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head)
   assert.ok(core > 0 && core < init, "chatlog-core.js before the page script");
-  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=9">');   // CL10: v=8 (the download dialog's rules); CL10 fix-up: v=9 (a time beside each date)
+  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=10">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
   assert.match(room.slice(styleEnd + 8, link), /^\s*<%#[^%]*%>\s*$/, "nothing in between but a comment");
   assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %>"/);
@@ -419,11 +500,18 @@ test("chatlog.css: the moved rules, ds tokens only, logical properties, cx-shift
   const ds = rd("public", "css", "ds.css");
   const defined = new Set([...ds.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
   for (const m of code.matchAll(/var\((--[a-z0-9-]+)/g)) assert.ok(defined.has(m[1]), "token defined in ds.css: " + m[1]);
-  // logical properties (RTL) - but for the name / time gaps (CL5 fix-up): they sit between inline runs that follow the CONTENT's
-  // direction, so they keep room.ejs's physical sides (a logical gap fell outside a Latin name in an RTL page)
-  const gaps = [".chatlog .line .who { font-weight: bold; margin-right: 6px; }", ".chatlog .line .when { color: var(--ds-text-faint); font-size: 11px; margin-left: 4px; white-space: nowrap; }"];
-  for (const g of gaps) assert.ok(code.includes(g), g);
-  assert.doesNotMatch(gaps.reduce((s, g) => s.replace(g, ""), code), /(margin|padding|border)-(left|right)\s*:/, "logical properties (RTL)");
+  // The head uses flex gap, so name/time no longer need physical gaps for mixed-direction text.
+  assert.doesNotMatch(code, /(margin|padding|border)-(left|right)\s*:/, "logical properties (RTL)");
+  assert.match(code, /\.chatlog \.line \.line-head \{[^}]*display: flex;[^}]*gap: 6px;[^}]*height: 18px;[^}]*min-height: 18px;[^}]*line-height: 18px;/);
+  assert.match(code, /\.chatlog \.line-head > \.ufl \{[^}]*flex: 0 1000 auto;[^}]*min-width: 2\.7em;[^}]*margin: 0;/);
+  assert.match(code, /\.chatlog \.line-head > \.veil-tx \{ flex: 0 1 auto; min-width: 3em;[^}]*text-overflow: ellipsis;/);
+  assert.match(code, /\.chatlog \.line-head > \.who, \.chatlog \.line-head > \.who-web \{ flex: 0 40 auto; min-width: 8ch;/);
+  assert.match(code, /\.chatlog \.line-head \.who \{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/);
+  assert.match(code, /\.chatlog \.line \.when \{[^}]*flex: none;[^}]*margin-inline-start: auto;[^}]*color: var\(--ds-text-faint\);[^}]*font-size: 11px;[^}]*font-variant-numeric: tabular-nums;/);
+  assert.match(code, /\.chatlog \.line \.line-text \{ font-size: 14px; line-height: 1\.45; overflow-wrap: anywhere;/);
+  assert.match(code, /\.chatlog \.line\.la \.line-head, \.chatlog \.line\.la \.line-text \{ padding-inline-end: 36px;/);
+  assert.match(code, /@media \(hover: none\) \{\s*\.chatlog \.line\.la \.line-head, \.chatlog \.line\.la \.line-text \{ padding-inline-end: 50px;/);
+  assert.match(code, /\.chatlog \.line \.body > \.rb-st, \.chatlog \.line \.body > \.mc-btn \{ display: block;[^}]*margin-inline: 0;/);
   const rules = code.replace(/@keyframes[^{]+\{(?:[^{}]*\{[^}]*\})*[^}]*\}/g, "");
   for (const m of rules.matchAll(/(^|[{}])\s*([^{}@]+)\{/g)) {
     // CL5 fix-up: [dir="rtl"] .chatlog … = the design system's RTL override pattern (docs/design-system.md §9)
@@ -517,7 +605,7 @@ test("CL5 fix-up: the deliberate differences from the old inline renderer - each
   for (const ts of [NaN, "not a time", undefined]) {
     assert.throws(() => old.item({ k: "msg", c: 3, ts, u: { login: "bob", display: "Bob" }, text: "x" }), RangeError);
     const n = fromDom(CL.renderItem({ k: "msg", c: 3, ts, u: { login: "bob", display: "Bob" }, text: "x" }, ctx, H));
-    const time = n.k[1].k.find((k) => k && k.t === "time");
+    const time = n.k[1].k[0].k.find((k) => k && k.t === "time");
     assert.ok(time && !("datetime" in time.a), "no datetime");
   }
   // 5. an account key "u:<id>": the old one showed it (the name, a tooltip on your own pending line); now never
@@ -660,6 +748,6 @@ test("CL6: a hidden line as the owner / staff see it (muted, why, data-rmc - nev
                    "js.pad.chat.hidden_staff"]) assert.ok(EN[k], k);
   const css = rd("public", "css", "chatlog.css");
   for (const r of [/\.chatlog \.line\.rm \{/, /\.chatlog \.sys\.rm \{/, /\.chatlog \.line \.la-btn \{/, /\.chatlog \.feed-log\.cc-on \.line \.la-btn \{ display: none; \}/,   // CL8: the live log
-                   /@media \(hover: none\) \{[^}]*\.chatlog \.line\.la \{ padding-inline-end: 50px; \}/]) assert.match(css, r);
+                   /@media \(hover: none\) \{[^}]*\.chatlog \.line\.la \.line-head, \.chatlog \.line\.la \.line-text \{ padding-inline-end: 50px; \}/]) assert.match(css, r);
   assert.doesNotMatch(css.slice(css.indexOf("CL6")), /#[0-9a-f]{3,6}\b/i, "CL6's rules: ds tokens only");
 });
