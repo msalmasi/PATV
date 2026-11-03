@@ -574,7 +574,7 @@ test("S3 (withheld_cover on): incognito + live cam off stays the PEEK hood - a v
   }
 });
 
-// ── 1.99?? (privacy controls round 5, the round-4 verify's low finding): withheld_cover AND incognito cams - a veiled cam whose person
+// ── 1.99aif (privacy controls round 5, the round-4 verify's low finding): withheld_cover AND incognito cams - a veiled cam whose person
 // sets cam access to followers / on request becomes its WITHHELD peek-hood card; that card must read the same to every viewer who may
 // see the tile at all (the named withheld card already does), or "cam off" vs "isn't available" tells a viewer whether the frog is
 // someone they follow / granted. A viewer the person blocked and one who reported the tile keep today's treatment ──

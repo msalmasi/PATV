@@ -221,7 +221,7 @@ function register(app, { addUser }) {
     // (S7's copies ride res.locals: the view reads them as locals.incogcam / camreveal / camevidence / pv3 - null on /terms)
     Object.assign(res.locals, { incogcam: pcopy.incogcam, camreveal: pcopy.camreveal, camevidence: pcopy.camevidence, pv3: pcopy.pv3,
                                 textreveal: pcopy.textreveal,      // (1.99aid privacy controls S4t)
-                                wcover: pcopy.wcover });           // (1.99?? privacy controls round 5: S3's cover picture, micfollow_cfg withheld_cover)
+                                wcover: pcopy.wcover });           // (1.99aif privacy controls round 5: S3's cover picture, micfollow_cfg withheld_cover)
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));

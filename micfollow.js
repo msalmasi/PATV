@@ -1110,7 +1110,7 @@ const HOME_NOTICE_V = 2;       // D-3: told with an older text -> one short PM t
 const PM_MAX = 300;            // a Camfrog PM is cut at 300 characters
 const siteUrl = () => process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
 const OPT_OUT = "!livecam off";
-// 1.99?? (privacy controls round 5): a PM whose person already keeps their cam off mic stages (the _wh texts) has no "!livecam off" to
+// 1.99aif (privacy controls round 5): a PM whose person already keeps their cam off mic stages (the _wh texts) has no "!livecam off" to
 // carry - it says their cam stays off and they show with their cover picture; only the length is checked, and the last resort keeps
 // its last sentence (that is what it says)
 const PM_NEED = { "mf.notice.pm_once_wh": null };
@@ -1137,7 +1137,7 @@ function pmText(T, key, room, pad, n, url, Ten = null) {
   const tail = s.slice(s.lastIndexOf(OPT_OUT));
   return s.slice(0, PM_MAX - tail.length - 2).trimEnd() + "… " + tail;
 }
-/** 1.99?? (privacy controls round 5): pmText for a PM_NEED key - the same shortening (names, then the link, then English), with no
+/** 1.99aif (privacy controls round 5): pmText for a PM_NEED key - the same shortening (names, then the link, then English), with no
  *  command it must carry; the very last resort keeps the last sentence and cuts the middle. */
 function pmTextPlain(T, key, room, pad, n, url, Ten = null) {
   const fits = (s) => s.length <= PM_MAX;
@@ -1156,7 +1156,7 @@ function pmTextPlain(T, key, room, pad, n, url, Ten = null) {
   const tail = cut > 0 ? s.slice(cut + 2) : "";
   return tail && tail.length < PM_MAX - 40 ? s.slice(0, PM_MAX - tail.length - 2).trimEnd() + "… " + tail : s.slice(0, PM_MAX - 1).trimEnd() + "…";
 }
-/** 1.99?? (privacy controls round 5): does `login` keep their cam off mic stages themselves - !livecam off, "Pads may put my cam on their
+/** 1.99aif (privacy controls round 5): does `login` keep their cam off mic stages themselves - !livecam off, "Pads may put my cam on their
  *  stage" off, or cam access followers / on request (the cam opt-outs eligCore withholds with cfg withheld_cover on)? Fails to false
  *  (they are told with the ordinary text, which says how to stop the cam). */
 function camWithheld(login, t = now()) {
@@ -1193,14 +1193,14 @@ async function courtesyPlan(P, R, login, kind) {
   // 1.99aid (privacy controls S3, spec 6.2): with cfg withheld_cover on, "!livecam off" stops the CAM on a mic stage, not the person -
   // the one courtesy notice says so ("_wc": they'd show with their cover picture). Off: the texts as before
   const wc = !home && cfg().withheld_cover === true;
-  // 1.99?? (privacy controls round 5): ...and someone who ALREADY keeps their cam off mic stages (camWithheld: !livecam off, the mic-stage
+  // 1.99aif (privacy controls round 5): ...and someone who ALREADY keeps their cam off mic stages (camWithheld: !livecam off, the mic-stage
   // switch off, cam access followers / on request) is told what the stage will show of them - their cover picture, never their cam
   // ("_wh": one PM, one inbox row, its own title) - not that their cam can show
   const wh = wc && camWithheld(login);
   const sfx = wh ? "_wh" : wc ? "_wc" : "";
   return {
     userId: u ? String(u.userId) : null, real, pm: !(real && !pmOk),
-    // (1.99?? privacy controls round 5 review: a _wh PM - its text says the person keeps their cam off mic stages - goes under Pepe's own
+    // (1.99aif privacy controls round 5 review: a _wh PM - its text says the person keeps their cam off mic stages - goes under Pepe's own
     // account too: the pad owner's action rows (their Download my data) would pair the login with that private setting)
     by: !veiled && !wh && pad.owner && pad.owner.userId ? String(pad.owner.userId) : PEPE_ACCOUNT,   // like camNotify; a house pad: Pepe's own
     text: pmText(T, home ? "mf.notice.pm_home" : "mf.notice.pm_once" + sfx, roomName, padTitle, mins, siteUrl() + link),
@@ -2257,7 +2257,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
       // (watchOf without the room: its hide is by LOGIN - a report of their named tile must never mark this one)
       let watch = hiddenFor(snap.roomId, String(userId), veilHideKey(x.veil, snap.roomId, x.login), t) ? "hidden" : await watchOf(x.login, String(userId), t, null);
       if (watch === "ok" && x.video === "still" && (await blockedHere(snap.roomId, String(userId), t, "snapshots"))) watch = "blocked";
-      // 1.99?? (privacy controls round 5): a WITHHELD veiled cam (cfg withheld_cover + incognito cams: an incognito cam opt-out) is its
+      // 1.99aif (privacy controls round 5): a WITHHELD veiled cam (cfg withheld_cover + incognito cams: an incognito cam opt-out) is its
       // peek-hood card - there is no cam to gate, so the cam's per-viewer gates (followers, on request, members only) must not show
       // through: a follower or someone they granted would read "cam off" and everyone else "isn't available", which tells a viewer
       // whether the frog is someone they follow. Every viewer reads the same, as on the named withheld card - but this viewer's own
@@ -2296,7 +2296,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
     // "isn't available", as for any tile). The page reads "cam off" (why off_cam - never that it is withheld); a capture's program
     // says "withheld" (stagemiccap draws the name and cover, never asking the cam's rules)
     const wh = x.video === "card" && x.why === "withheld";
-    // (1.99?? privacy controls round 5 review: a withheld card asks about the person's blocks whatever the cam's gate said - watchOf stops
+    // (1.99aif privacy controls round 5 review: a withheld card asks about the person's blocks whatever the cam's gate said - watchOf stops
     // at "members only" before its DM check, so a members-only viewer the person DM-blocked got "ok" and the cover; as on the veiled card)
     const pb = (watch === "unavailable" || (wh && watch !== "hidden" && watch !== "blocked")) && (await personBlocks(x.login, String(userId)));
     if (wh && watch !== "hidden" && watch !== "blocked") watch = pb ? "unavailable" : "ok";

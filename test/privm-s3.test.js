@@ -373,7 +373,7 @@ test("on: every other stage rule still keeps a live-cam-off holder OFF - private
 
 test("on: the DF-11 notice gate's one courtesy notice says !livecam off stops the CAM (cover picture instead), fits 300 characters with the link; off: today's text", async () => {
   const pm = async () => (await getQuery("SELECT args FROM pepe_actions WHERE kind = 'notify' ORDER BY id DESC LIMIT 1")).map((r) => JSON.parse(r.args)[1])[0];
-  // (1.99?? privacy controls round 5: someone who has live cam off when they're told gets the _wh text - test "round 5: someone who
+  // (1.99aif privacy controls round 5: someone who has live cam off when they're told gets the _wh text - test "round 5: someone who
   // ALREADY keeps their cam off" below; this one is about everyone else: their cam can show, so the notice says how to stop it)
   const told = async (on, opt = true) => {
     await knobs({ withheld_cover: on });
@@ -414,7 +414,7 @@ test("on: the DF-11 notice gate's one courtesy notice says !livecam off stops th
   } finally { await knobs({ withheld_cover: false }); }
 });
 
-// 1.99?? (privacy controls round 5, the round-4 review): with withheld_cover on, a cam opt-out passes the DF-11 notice gate, so they
+// 1.99aif (privacy controls round 5, the round-4 review): with withheld_cover on, a cam opt-out passes the DF-11 notice gate, so they
 // get the one courtesy notice - which said their cam can show and ended "Cover picture instead: !livecam off". Someone who ALREADY keeps
 // their cam off mic stages gets wording that fits: the stage shows them with their cover picture, never their cam (_wh; one PM, one
 // inbox row). Everyone else, and the switch off, as before
@@ -478,7 +478,7 @@ test("round 5: someone who ALREADY keeps their cam off mic stages (live cam off,
   } finally { await knobs({ withheld_cover: false }); }
 });
 
-// 1.99?? (privacy controls round 5): /privacy says "PATV administrators or staff using ghost mode" everywhere (round 4); Settings' cam-reveal
+// 1.99aif (privacy controls round 5): /privacy says "PATV administrators or staff using ghost mode" everywhere (round 4); Settings' cam-reveal
 // sentences (cam_reveal on: lc.st_off_rv, lc.what_told_rv) match - ghost mode is locked to Staff and up (Admin and Staff, siteperms-core)
 test("round 5: Settings' cam-reveal sentences name PATV administrators or staff as ghosts, never staff alone (as /privacy does)", async () => {
   const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
@@ -659,7 +659,7 @@ test("Settings: the mic-stage switch's hint and the unlinked note say 'cover pic
   }
 });
 
-// 1.99?? (privacy controls round 5, spec 6.1 / 6.2 / 6.4): the cover picture in the Settings Live cam card, the /privacy livecam sentence
+// 1.99aif (privacy controls round 5, spec 6.1 / 6.2 / 6.4): the cover picture in the Settings Live cam card, the /privacy livecam sentence
 // and Pepe's !livecam help card (as /help shows it) - only while withheld_cover is on (privacycopy wcover); and the ghosts in Settings'
 // cam-reveal sentences are PATV administrators or staff (ghost mode is locked to Staff and up), as /privacy says. Off: byte for byte the
 // round-4 head (608655e9)
@@ -736,7 +736,7 @@ test("round 5: the cover picture in Settings' Live cam card, /privacy's livecam 
   } finally { await knobs({ withheld_cover: false }); }
 });
 
-// 1.99?? (privacy controls round 5 review): the NAMED withheld card answers the person's own blocks (cam or DM, either way) for EVERY viewer
+// 1.99aif (privacy controls round 5 review): the NAMED withheld card answers the person's own blocks (cam or DM, either way) for EVERY viewer
 // - the letter and "isn't available" - as round 5's veiled withheld card does. watchOf stops at the cam's members-only gate before its DM
 // check, so a members-only viewer the person DM-blocked used to get "ok" and their cover picture (only a viewer the gate refused as
 // "unavailable" was asked about blocks). Off: no withheld card at all
@@ -777,7 +777,7 @@ test("round 5 review: a named WITHHELD card is the letter and 'isn't available' 
   }
 });
 
-// 1.99?? (privacy controls round 5 review): the _wh courtesy PM says the person already keeps their cam off mic stages (!livecam off, the
+// 1.99aif (privacy controls round 5 review): the _wh courtesy PM says the person already keeps their cam off mic stages (!livecam off, the
 // mic-stage switch off, cam access followers / on request). It is queued like any courtesy PM - under the pad owner's account, whose
 // action rows (their Download my data) carry its text and the login - so the owner could read a member's private cam settings there.
 // A _wh PM goes under Pepe's own account (as a veiled candidate's does); everyone else's as before
