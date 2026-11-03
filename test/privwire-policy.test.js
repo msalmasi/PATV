@@ -110,9 +110,9 @@ test("switch on: the approved section H text shows, dated by G; no evidence-clip
   if (both) assert.ok(both.includes("Your mic-ups are also recorded and kept like everyone's"), "the merged capture bullet with mic recordings on");
 });
 
-// 1.99?? frog names (owner 2026-11-03, "Lets do 2"): "someone" lasts 15 minutes after being seen by name, then a frog name - the switch-on
+// 1.99ahx frog names (owner 2026-11-03, "Lets do 2"): "someone" lasts 15 minutes after being seen by name, then a frog name - the switch-on
 // page says so (never "until your next visit"), the switch-off page is untouched, and the text is dated ("frog-15", only while on)
-test("1.99?? frog-15: the switch-on incognito bullet says 'someone' for 15 minutes, then a frog name; dated by 'frog-15' only while the switch is on", () => {
+test("1.99ahx frog-15: the switch-on incognito bullet says 'someone' for 15 minutes, then a frog name; dated by 'frog-15' only while the switch is on", () => {
   const now = fs.readFileSync(FILE, "utf8");
   const PWON = { on: true, g: 1793534400000, g_day: "1 November 2026" };
   const on = render(now, { privwire: PWON });

@@ -208,7 +208,7 @@ function avoidOf(R) {
   }
   return out;
 }
-/** 1.99?? review fix: a veiled person's own display name - their frog name never reads like it (frognames ownNames: not equal, no word
+/** 1.99ahx review fix: a veiled person's own display name - their frog name never reads like it (frognames ownNames: not equal, no word
  *  of it; the login is frognames' own). avoidOf lists named entries only. */
 const ownOf = (vz) => (vz && typeof vz.display === "string" && vz.display ? [vz.display] : []);
 /** Per room: hold id -> the name its grab got (a release / its 🎙 line reuse it: the session can't end during a hold). */
@@ -256,7 +256,7 @@ async function nameItem(R, it) {
       // privacy fix (M addendum 3 #1): a "hidden" leave of someone whose open session is incognito ends it first - the leave never
       // carries the incognito frog name under a hidden veil
       await FN.level(roomId, vz.login, vz.kind, it.ts);
-      view = FN.current(roomId, vz.login, it.ts);              // (1.99?? review fix: a leave from before a frog name took over: "someone")
+      view = FN.current(roomId, vz.login, it.ts);              // (1.99ahx review fix: a leave from before a frog name took over: "someone")
       await FN.left(roomId, vz.login, it.ts);
     } else {
       // review R1: a hold's item at the kind its hold already had is the hold's frozen kind (see holdKind); the first one (the grab,
@@ -266,7 +266,7 @@ async function nameItem(R, it) {
         frozen = holdKind(roomId, it.hold) === lvl;
         holdKind(roomId, it.hold, lvl);
       }
-      // (1.99?? review fix: + their own display name - a veiled person isn't in avoidOf's named roster; frognames adds the login.
+      // (1.99ahx review fix: + their own display name - a veiled person isn't in avoidOf's named roster; frognames adds the login.
       // onMic: an item of a mic hold - its grab, 🎙 line or release - never ends the no-name 15 minutes, even when a restart forgot the hold)
       view = await FN.sight(roomId, vz.login, { t: it.ts, active: !!v2.active, holding: v2.holding, avoidNames: avoidOf(R), ownNames: ownOf(vz),
                                                  kind: lvl, frozen, onMic: it.k === "mic" || it.k === "unmic" || !!it.hold });
@@ -390,7 +390,7 @@ async function nameSnapshot(R, now) {
   // entry of a person on the roster is sighted at their roster level (the strictest, if listed twice); a holder not on the roster
   // at their mic entry's.
   const personKind = new Map();
-  // 1.99?? review fix: who this snapshot shows holding the mic (the mic list, or a roster entry's on_mic) - their no-name 15 minutes
+  // 1.99ahx review fix: who this snapshot shows holding the mic (the mic list, or a roster entry's on_mic) - their no-name 15 minutes
   // never end on it (frognames onMic): a restart forgets the hold, and a batch's snapshot is sighted before the batch's grab
   const onMic = new Set();
   for (const e of R.mic || []) if (e && e.anon && e._vz && e._vz.login) onMic.add(lower(e._vz.login));

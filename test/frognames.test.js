@@ -165,7 +165,7 @@ test("sessions: no name right after being seen NAMED in the pad (C.2), a name at
   assert.equal(s.alias, null, "5 minutes after a named line: no frog name (someone)");
   assert.equal(s.hood, null);
   assert.equal((await FN.sight("Pad.N", "bx", { t: t + 14 * 60e3 })).session, s.session, "the same alias-less session goes on (14 minutes)");
-  // 1.99?? (owner 2026-11-03): once 15 minutes have passed since the named sighting, the next sighting gets a frog name - mid-visit
+  // 1.99ahx (owner 2026-11-03): once 15 minutes have passed since the named sighting, the next sighting gets a frog name - mid-visit
   const s1 = await FN.sight("Pad.N", "bx", { t: t + 30 * 60e3 });
   assert.match(String(s1.alias), /^[A-Z]/, "30 minutes after the named line, still in the room: a frog name");
   assert.notEqual(s1.session, s.session);
@@ -312,11 +312,11 @@ test("review R1: a FROZEN kind (a mic hold's, as it was when the hold began) nev
   assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [d.session]))[0].lvl, "hidden", "a session a frozen sighting opens gets that level");
 });
 
-// ── 1.99?? (owner 2026-11-03, "Lets do 2"): "someone" only for 15 minutes after the last named sighting, then a frog name - even mid-visit ──
+// ── 1.99ahx (owner 2026-11-03, "Lets do 2"): "someone" only for 15 minutes after the last named sighting, then a frog name - even mid-visit ──
 const MIN = 60e3;
 const ALIAS_RE = /^(?:[A-Z][A-Za-z-]+ [A-Z][A-Za-z]+|Mystery Frog \d+)$/;
 
-test("1.99?? cyberbaby2: seen named, incognito on in the room - 'someone' at +5 and +14 minutes, a frog name at +16 (a fresh session under every name rule)", async () => {
+test("1.99ahx cyberbaby2: seen named, incognito on in the room - 'someone' at +5 and +14 minutes, a frog name at +16 (a fresh session under every name rule)", async () => {
   const t = Date.UTC(2026, 10, 7, 12);
   const ends = [];
   const unsub = FN.onEnd((e) => ends.push(e));
@@ -359,7 +359,7 @@ test("1.99?? cyberbaby2: seen named, incognito on in the room - 'someone' at +5 
   unsub();
 });
 
-test("1.99?? a mic hold across the 15-minute mark: still 'someone' while held and at the release - the name comes at the next sighting", async () => {
+test("1.99ahx a mic hold across the 15-minute mark: still 'someone' while held and at the release - the name comes at the next sighting", async () => {
   const t = Date.UTC(2026, 10, 8, 12);
   FN.named("Pad.MH", "holdy", t);
   const a = await FN.sight("Pad.MH", "holdy", { t: t + 5 * MIN, kind: "incognito" });
@@ -382,7 +382,7 @@ test("1.99?? a mic hold across the 15-minute mark: still 'someone' while held an
   assert.equal((await getQuery("SELECT lvl FROM incog_alias WHERE id = ?", [g.session]))[0].lvl, "incognito", "keeps the person's level");
 });
 
-test("1.99?? seen named AGAIN restarts the 15 minutes (with or without the session ending)", async () => {
+test("1.99ahx seen named AGAIN restarts the 15 minutes (with or without the session ending)", async () => {
   const t = Date.UTC(2026, 10, 9, 12);
   // a named sighting while the no-name session stays open (FN.named alone): the same session, a later window
   FN.named("Pad.NA", "twice", t);
@@ -409,7 +409,7 @@ test("1.99?? seen named AGAIN restarts the 15 minutes (with or without the sessi
   assert.equal((await FN.sight("Pad.NA", "replay", { t: t + 20 * MIN })).alias, null, "the latest named sighting counts");
 });
 
-test("1.99?? incognito -> hidden still ends the frog name at once; 'someone' for 15 minutes, then a NEW frog name (sight and level paths)", async () => {
+test("1.99ahx incognito -> hidden still ends the frog name at once; 'someone' for 15 minutes, then a NEW frog name (sight and level paths)", async () => {
   const t = Date.UTC(2026, 10, 10, 12);
   const x = await FN.sight("Pad.IH", "switchy", { t, active: true, kind: "incognito" });
   assert.match(String(x.alias), ALIAS_RE);
@@ -430,7 +430,7 @@ test("1.99?? incognito -> hidden still ends the frog name at once; 'someone' for
   assert.ok(ALIAS_RE.test(String(r.alias)) && r.alias !== p.alias);
 });
 
-test("1.99?? the 15 minutes survive a restart: inside the window still 'someone' (rounded up, never shorter), after it a frog name; a row from before the column counts from its start", async () => {
+test("1.99ahx the 15 minutes survive a restart: inside the window still 'someone' (rounded up, never shorter), after it a frog name; a row from before the column counts from its start", async () => {
   const { runQuery } = require(path.join(repo, "dbUtils"));
   // inside: the named sighting at :30 s is stored rounded UP to the minute
   const t = Date.UTC(2026, 10, 11, 12) + 30e3;
@@ -487,8 +487,8 @@ test("1.99?? the 15 minutes survive a restart: inside the window still 'someone'
   FN._setClock(null);
 });
 
-// ── 1.99?? review fixes (each fails without its fix) ──
-test("1.99?? review fix: the 15 minutes don't end early when NAMED is full - the no-name session's own anchor (named_at) still counts", async () => {
+// ── 1.99ahx review fixes (each fails without its fix) ──
+test("1.99ahx review fix: the 15 minutes don't end early when NAMED is full - the no-name session's own anchor (named_at) still counts", async () => {
   FN._reset();
   const t = Date.UTC(2026, 10, 12, 12);
   FN.named("Pad.EV", "evicty", t);
@@ -502,7 +502,7 @@ test("1.99?? review fix: the 15 minutes don't end early when NAMED is full - the
   FN._reset();
 });
 
-test("1.99?? review fix: a frog name is never the person's OWN login (a veiled person isn't in the roster's avoid list)", async () => {
+test("1.99ahx review fix: a frog name is never the person's OWN login (a veiled person isn't in the roster's avoid list)", async () => {
   // find a (login, nonce) whose first draw IS that login: "analoghopper" -> "Analog Hopper" style
   const crypto = require("crypto");
   const hm = (k, ...p) => { const h = crypto.createHmac("sha256", k); for (const x of p) h.update(Buffer.isBuffer(x) ? x : Buffer.from(String(x), "utf8")); return h.digest(); };
@@ -529,7 +529,7 @@ test("1.99?? review fix: a frog name is never the person's OWN login (a veiled p
   assert.notEqual(FN.norm(s.alias), FN.norm(hit.login), hit.login + " got " + s.alias);
 });
 
-test("1.99?? review fix: no word of a frog name is in the person's own login ('midnightrider' never draws 'Midnight ...'), nor contains it", async () => {
+test("1.99ahx review fix: no word of a frog name is in the person's own login ('midnightrider' never draws 'Midnight ...'), nor contains it", async () => {
   const crypto = require("crypto");
   const hm = (k, ...p) => { const h = crypto.createHmac("sha256", k); for (const x of p) h.update(Buffer.isBuffer(x) ? x : Buffer.from(String(x), "utf8")); return h.digest(); };
   const key = Buffer.from(KEY, "hex");

@@ -39,7 +39,7 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // is served that way. Review fix (F1): once the bar stops being live (a bot rollback) the bars it made are still kept and revealable,
 // so while any is left the page says THAT instead ("kept": new ones left out, the shown ones stay bars; a change note dated by when
 // the bar stopped - privwire.txOff); with none left it reads as wave 2 did, and the tx-bar date no longer counts toward "Last updated".
-// 1.99?? frog names (owner 2026-11-03, "Lets do 2"): "frog-15" = section 10's incognito bullet now saying "someone" lasts 15 minutes after
+// 1.99ahx frog names (owner 2026-11-03, "Lets do 2"): "frog-15" = section 10's incognito bullet now saying "someone" lasts 15 minutes after
 // being seen by name, then a frog name (it said "until your next visit") - inside the privacy wire v2 text, so dated the first time /privacy
 // is served with that switch on, and its date counts toward "Last updated" only while the switch is on.
 const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15"];

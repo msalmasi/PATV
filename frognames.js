@@ -31,7 +31,7 @@
 //                               used again in the same pad for 24 h, no two open sessions in a pad share a word or a hood
 //                               (up to 8), a name never equals anyone's login / display name there, and a person seen NAMED in
 //                               that pad less than 15 minutes ago gets a session with NO name ("someone") - so switching a
-//                               veil on in the room never puts a frog name right after their real one (C.2). 1.99?? (owner
+//                               veil on in the room never puts a frog name right after their real one (C.2). 1.99ahx (owner
 //                               2026-11-03, "Lets do 2"): that no-name session lasts only until 15 minutes have passed since they
 //                               were last seen named there - the next veiled sighting after that ends it and starts a NAMED
 //                               session (a fresh name and nonce, every rule above), even mid-visit; never during a mic hold (the
@@ -193,7 +193,7 @@ function sessInit() {
       // from before this column), so an incognito -> hidden switch ends it after a restart too
       const cols = (await getQuery("SELECT name FROM pragma_table_info('incog_alias')")).map((r) => r.name);
       if (!cols.includes("lvl")) await runQuery("ALTER TABLE incog_alias ADD COLUMN lvl TEXT");
-      // 1.99?? (owner 2026-11-03): a no-name session's anchor - when its person was last seen named in the pad (or the switch's burn),
+      // 1.99ahx (owner 2026-11-03): a no-name session's anchor - when its person was last seen named in the pad (or the switch's burn),
       // rounded UP to the minute - so its 15 minutes survive a restart. Only on an open no-name row; wiped with sk / nonce at the end
       if (!cols.includes("named_at")) await runQuery("ALTER TABLE incog_alias ADD COLUMN named_at INTEGER");
       // privacy fix (1.99ahc, review F7): an incognito -> hidden switch's no-name window (endLevel's burn), kept across a restart -
@@ -211,7 +211,7 @@ function sessInit() {
       for (const r of await getQuery("SELECT * FROM incog_alias WHERE ended IS NULL AND sk IS NOT NULL")) {
         const S = rowSession(r);
         roomOpen(S.roomId).set(S.sk, S);
-        // 1.99??: a no-name session's window comes back from its row - a row from before named_at counts from its start (fails
+        // 1.99ahx: a no-name session's window comes back from its row - a row from before named_at counts from its start (fails
         // private: the named sighting was before it)
         if (!S.name) {
           const k = S.roomId + "\t" + S.sk, at = S.namedAtRow != null ? S.namedAtRow : S.started;
@@ -231,13 +231,13 @@ function rowSession(r) {
            lastActive: Number(r.last_active) || 0, leftAt: r.left_at == null ? null : Number(r.left_at), holding: false, wroteAt: 0,
            kind: LEVELS.has(r.lvl) ? r.lvl : null, namedAtRow: r.named_at == null ? null : Number(r.named_at) };
 }
-/** 1.99??: a time rounded UP to the minute (a stored window is never shorter, and never joinable to an exact line / end time) */
+/** 1.99ahx: a time rounded UP to the minute (a stored window is never shorter, and never joinable to an exact line / end time) */
 const ceilMin = (t) => Math.ceil(t / 60e3) * 60e3;
-/** 1.99?? (owner 2026-11-03): has no-name session S's 15 minutes run out - not seen named in its pad for NAMED_GAP_MS, and no mic hold
+/** 1.99ahx (owner 2026-11-03): has no-name session S's 15 minutes run out - not seen named in its pad for NAMED_GAP_MS, and no mic hold
  *  (the next sighting after the release)? Then that sighting ends it and opens a NAMED session (startSession: every name rule). */
 function gapOver(S, t) {
   if (S.name || S.holding) return false;
-  // 1.99?? review fix: the row's anchor counts too - NAMED is capped (50,000) and an evicted entry ended the window at once
+  // 1.99ahx review fix: the row's anchor counts too - NAMED is capped (50,000) and an evicted entry ended the window at once
   const m = NAMED.get(S.roomId + "\t" + S.sk), at = Math.max(m != null ? m : -Infinity, S.namedAtRow != null ? S.namedAtRow : -Infinity);
   return !(t - at < NAMED_GAP_MS);
 }
@@ -294,8 +294,8 @@ async function endLevel(S, t, wasIncognito = false) {
   }
 }
 const view = (S) => (S ? { alias: S.name || null, hood: S.name ? S.hood : null, session: S.id } : null);
-/** A new session for (room, login): a name (C.3) unless they were seen named there lately (C.2 - 1.99??: until those 15 minutes are
- *  over, gapOver). avoidNames: the pad's roster. ownNames: the person's own display name(s) - 1.99?? review fix: no word of the name
+/** A new session for (room, login): a name (C.3) unless they were seen named there lately (C.2 - 1.99ahx: until those 15 minutes are
+ *  over, gapOver). avoidNames: the pad's roster. ownNames: the person's own display name(s) - 1.99ahx review fix: no word of the name
  *  is in their login or one of those (nor contains one), so a frog name never reads like the person behind it. */
 async function startSession(roomId, login, sk, t, avoidNames, kind = null, ownNames = []) {
   const open = [...(OPEN.get(roomId) || new Map()).values()];
@@ -309,7 +309,7 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null, ownNa
     const usedA = new Set(open.map((x) => x.adj).filter(Boolean)), usedN = new Set(open.map((x) => x.noun).filter(Boolean));
     const taken = new Set([...open.map((x) => x.name), ...recent.map((x) => x.name)].filter(Boolean));
     const avoid = new Set((avoidNames || []).map(norm).filter(Boolean));
-    // 1.99?? review fix: never the person's OWN login or display name, nor a word of either ("midnightrider" never draws "Midnight
+    // 1.99ahx review fix: never the person's OWN login or display name, nor a word of either ("midnightrider" never draws "Midnight
     // Toad", "jump" never "Jumper") - a veiled person isn't in the roster's avoid list
     const own = [login, ...(Array.isArray(ownNames) ? ownNames : [])].map(norm).filter(Boolean);
     const mine = (w) => { const x = norm(w); return own.some((o) => (x.length >= 3 && o.includes(x)) || (o.length >= 4 && x.includes(o))); };
@@ -327,7 +327,7 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null, ownNa
     }
   }
   const lvl = LEVELS.has(kind) ? kind : null;
-  const namedAtRow = aliasLess ? ceilMin(namedAt) : null;   // 1.99??: the no-name window's anchor, kept across a restart
+  const namedAtRow = aliasLess ? ceilMin(namedAt) : null;   // 1.99ahx: the no-name window's anchor, kept across a restart
   const r = await runQuery(`INSERT INTO incog_alias (room_id, sk, nonce, adj, noun, name, hood, started, last_seen, last_active, lvl, named_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                            [roomId, sk, nonce, adj, noun, name, hood, t, t, t, lvl, namedAtRow]);
   const S = { id: Number(r && r.id), roomId, sk, adj, noun, name, hood, started: t, lastSeen: t, lastActive: t, leftAt: null, holding: false, wroteAt: t,
@@ -339,10 +339,10 @@ async function startSession(roomId, login, sk, t, avoidNames, kind = null, ownNa
  * A veiled sighting of `login` in pad `roomId` (a roster entry, a line, a mic grab, a website relay line). Opens a session if
  * none is open (or the open one has ended), else keeps it. opts: {t, active: a line or a mic event (resets the quiet clock),
  * holding: true / false while a mic hold starts / ends, avoidNames: the pad's roster logins + display names, ownNames: the person's own
- * display name(s) (1.99?? review fix: no word of a new name is in them or the login), kind: the level of
+ * display name(s) (1.99ahx review fix: no word of a new name is in them or the login), kind: the level of
  * this sighting - "incognito" | "hidden" (privacy fix, M addendum 3 #1: an incognito session sighted "hidden" ends at once, even
  * mid-hold, and the next one is alias-less for 15 minutes), onMic: this sighting itself shows them holding the mic (Pepe's snapshot
- * lists them on it, or an item of a hold - its grab, 🎙 lines, release) - 1.99?? review fix: the no-name 15 minutes never end on it,
+ * lists them on it, or an item of a hold - its grab, 🎙 lines, release) - 1.99ahx review fix: the no-name 15 minutes never end on it,
  * whatever S.holding says (a restart forgets it, and a batch's snapshot is sighted before the batch's grab)}.
  * -> {alias (null = no name: "someone"), hood, session}
  */
@@ -365,7 +365,7 @@ function sight(roomId, login, opts = {}) {
       if (lv) { await endLevel(S, t); S = null; }             // (whatever the clock says too: the switch decides the next name)
       else if (why) { await endSession(S, t, why); S = null; }
       else if (opts.onMic !== true && gapOver(S, t)) {
-        // 1.99?? (owner 2026-11-03): "someone" for 15 minutes after their last named sighting, then a frog name - even mid-visit. The
+        // 1.99ahx (owner 2026-11-03): "someone" for 15 minutes after their last named sighting, then a frog name - even mid-visit. The
         // new session keeps the person's level when this sighting gives none (or only a hold's frozen one)
         carry = S.kind; prev = S.id;
         await endSession(S, t, "gap");
@@ -373,7 +373,7 @@ function sight(roomId, login, opts = {}) {
       }
     }
     if (!S) S = await startSession(room, login, sk, t, opts.avoidNames, kind && !frozen ? kind : carry || kind, opts.ownNames);
-    if (prev != null) S.gapPrev = prev;                       // 1.99?? review fix: the no-name session this one took over from
+    if (prev != null) S.gapPrev = prev;                       // 1.99ahx review fix: the no-name session this one took over from
     S.leftAt = null;
     S.lastSeen = t;
     if (opts.active) S.lastActive = t;
@@ -386,7 +386,7 @@ function sight(roomId, login, opts = {}) {
       S.wroteAt = t;
       await runQuery("UPDATE incog_alias SET last_seen = ?, last_active = ?, left_at = NULL WHERE id = ?", [S.lastSeen, S.lastActive, S.id]);
     }
-    // 1.99?? review fix: a sighting from BEFORE the frog name took over (a batch's line sighted after its snapshot ended the no-name session
+    // 1.99ahx review fix: a sighting from BEFORE the frog name took over (a batch's line sighted after its snapshot ended the no-name session
     // at "now", or a backlog after an outage) keeps "someone" and that session - a line said inside the 15 minutes never gets the name
     if (S.gapPrev != null && t < S.started) return { alias: null, hood: null, session: S.gapPrev };
     return view(S);
@@ -410,16 +410,16 @@ function level(roomId, login, kind, t = clock(), opts = {}) {
     return false;
   });
 }
-/** `login` was seen NAMED in pad `roomId` (C.2: a veiled sighting less than 15 minutes later opens a session without a name; 1.99??:
+/** `login` was seen NAMED in pad `roomId` (C.2: a veiled sighting less than 15 minutes later opens a session without a name; 1.99ahx:
  *  an open no-name session's 15 minutes start again). -> a promise when that session's stored window was moved (never rejects) */
 function named(roomId, login, t = clock()) {
   const room = String(roomId || "");
   if (!room || !lower(login)) return;
   const sk = skOf(room, login), k = room + "\t" + sk;
-  const prev = NAMED.get(k), last = prev >= t ? prev : t;   // 1.99??: the latest wins (a replay of older lines never shortens it)
+  const prev = NAMED.get(k), last = prev >= t ? prev : t;   // 1.99ahx: the latest wins (a replay of older lines never shortens it)
   NAMED.set(k, last);
   if (NAMED.size > 50000) NAMED.delete(NAMED.keys().next().value);
-  // 1.99??: their open no-name session (the caller usually ends it right after - namedSeen) keeps the new window across a restart
+  // 1.99ahx: their open no-name session (the caller usually ends it right after - namedSeen) keeps the new window across a restart
   const S = (OPEN.get(room) || new Map()).get(sk);
   const at = ceilMin(last);
   if (!S || S.name || !Number.isFinite(at) || S.namedAtRow >= at) return;
@@ -474,7 +474,7 @@ async function off(login, roomId = null, t = clock()) {
   return n;
 }
 /** The open session's name of `login` in `roomId` right now, without sighting them (null: none, or a session without a name). t: the
- *  time of the item it labels - 1.99?? review fix: from before a frog name took over a no-name session, "someone" and that one (sight) */
+ *  time of the item it labels - 1.99ahx review fix: from before a frog name took over a no-name session, "someone" and that one (sight) */
 function current(roomId, login, t = null) {
   const S = (OPEN.get(String(roomId || "")) || new Map()).get(skOf(String(roomId || ""), login));
   if (S && t != null && S.gapPrev != null && Number(t) < S.started) return { alias: null, hood: null, session: S.gapPrev };

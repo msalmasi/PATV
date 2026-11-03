@@ -268,7 +268,7 @@ test("C.2: no frog name within 15 minutes of a named sighting; J-8: a new name a
   assert.notEqual(q2.u.alias, (R.feed.find((it) => it.u && it.u.veil && it._vz && it._vz.login === "frankiefettuccine") || { u: {} }).u.alias, "not frankie's");
 });
 
-test("1.99?? (owner 2026-11-03, cyberbaby2): seen named, then incognito in the room - 'someone' at +5 and +14 minutes, a frog name at +16; the earlier lines stay 'someone'", async () => {
+test("1.99ahx (owner 2026-11-03, cyberbaby2): seen named, then incognito in the room - 'someone' at +5 and +14 minutes, a frog name at +16; the earlier lines stay 'someone'", async () => {
   await setup;
   const t0 = Date.now(), M = 60e3;
   await sync([ev("message", { user: real("cyberbaby2", "cyberbaby2"), text: "cb named line" }, t0)]);

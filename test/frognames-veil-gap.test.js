@@ -1,4 +1,4 @@
-// 1.99?? frog names review fixes at the veil layer (owner 2026-11-03, "Lets do 2": "someone" for 15 minutes after the last named
+// 1.99ahx frog names review fixes at the veil layer (owner 2026-11-03, "Lets do 2": "someone" for 15 minutes after the last named
 // sighting in a pad, then a frog name - even mid-visit, never during a mic hold). Each test fails without its fix:
 //   own name     a frog name never reads as the person's own display name (a veiled person isn't in the roster's avoid list)
 //   mic hold     a snapshot that lists them on the mic, or an item of a hold, never ends the 15 minutes - after a restart (which forgets
@@ -60,7 +60,7 @@ async function withNonce(nonce, fn) {
   try { return await fn(); } finally { crypto.randomBytes = orig; }
 }
 
-test("1.99?? review fix: a frog name never reads as the person's own display name (roster and feed sightings)", async () => {
+test("1.99ahx review fix: a frog name never reads as the person's own display name (roster and feed sightings)", async () => {
   const t = Date.UTC(2026, 10, 14, 12);
   // the roster: their display name IS the name their session's nonce would draw first
   const a = firstDraw("Own.Room", "dispyone");
@@ -76,7 +76,7 @@ test("1.99?? review fix: a frog name never reads as the person's own display nam
   assert.notEqual(FN.norm(it.u.alias), FN.norm(b.name), "never their own display name");
 });
 
-test("1.99?? review fix: a mic hold Pepe's snapshot shows (after a restart forgot it, or before the batch's grab) keeps 'someone' - the name comes after the release", async () => {
+test("1.99ahx review fix: a mic hold Pepe's snapshot shows (after a restart forgot it, or before the batch's grab) keeps 'someone' - the name comes after the release", async () => {
   const t = Date.UTC(2026, 10, 14, 14);
   const room = { id: "Hold.Room" };
   const hold = "hd-0000aaaa1111";
@@ -115,7 +115,7 @@ test("1.99?? review fix: a mic hold Pepe's snapshot shows (after a restart forgo
   assert.match(String(entry(room, "batchmic").alias), ALIAS_RE, "after the release: a frog name");
 });
 
-test("1.99?? review fix: a line said before the frog name took over stays 'someone' (sighted after its batch's snapshot, or a backlog)", async () => {
+test("1.99ahx review fix: a line said before the frog name took over stays 'someone' (sighted after its batch's snapshot, or a backlog)", async () => {
   const t = Date.UTC(2026, 10, 14, 16);
   const room = { id: "Early.Room" };
   FN.named(room.id, "laggy", t);
@@ -142,7 +142,7 @@ test("1.99?? review fix: a line said before the frog name took over stays 'someo
   assert.deepEqual(FN.current(room.id, "laggy").alias, frog, "the session is the frog name's");
 });
 
-test("1.99?? review fix: no word of a frog name is in the person's own display name ('The Hopper Fan' never draws '... Hopper')", async () => {
+test("1.99ahx review fix: no word of a frog name is in the person's own display name ('The Hopper Fan' never draws '... Hopper')", async () => {
   const t = Date.UTC(2026, 10, 14, 18);
   const room = { id: "Word.Room" };
   const a = firstDraw(room.id, "plainjoe");
