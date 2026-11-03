@@ -42,7 +42,9 @@
 //                  owner, or "Take me off this Stage" on this pad, is the neutral CUT "unavailable" - the rules
 //                  livecam.stageConsent refuses a hold for, so they aren't re-picked every cooldown_s.
 //   bans           a site ban of a linked account (a whole-site or this pad's feed ban, an archived account) or Pepe's own
-//                  refusal of the login (feed_restricted: red list, a recent kick / ban here) cut like a stage ban.
+//                  refusal of the login (feed_restricted: the red list, ignored) cut like a stage ban. 1.99aio (owner 11-03:
+//                  "kicks are frequent and don't necessarily mean an issue with the user being on mic stage"): Pepe's 30-min
+//                  "moderated in this room recently" refusal (a kick / ban / punish) no longer cuts - it still stops relays.
 //   Clear / report the owner's 🧹 Clear the stage (everyone off, frozen); ⚑ on each tile for viewers: the reporter's view
 //                  hides at once; two distinct qualified reporters (engagement.qualified, not each other's alts) within
 //                  report_window_s cut the person and keep them off this pad's mic stage report_out_h, pending staff
@@ -514,8 +516,9 @@ function padAdult(roomId) {
   try { const p = ROOMS().getCached(roomId); return !!(p && p.adult); } catch (e) { return false; }
 }
 /** A site ban of one of the linked accounts (a whole-site or this pad's feed ban, an archived account) or Pepe's own
- *  refusal of the login (feed_restricted: the red list, a recent kick / ban - this room or everywhere). A missing table =
- *  no such ban; any other failure fails closed. */
+ *  refusal of the login (feed_restricted: the red list, ignored - this room or everywhere), but not his recent-moderation
+ *  refusal (MOD_RECENT, 1.99aio). A missing table = no such ban; any other failure fails closed. */
+const MOD_RECENT = "you were moderated in this room recently";     // pepe_rooms._ro_restricted's reason for a recent kick / ban
 async function siteBanned(login, ids, roomId, t) {
   const q = async (sql, args) => {
     try { return await getQuery(sql, args); } catch (e) { if (/no such (table|column)/i.test(String(e && e.message))) return []; throw e; }
@@ -526,7 +529,8 @@ async function siteBanned(login, ids, roomId, t) {
       if ((await q(`SELECT 1 AS x FROM feed_bans WHERE user_id IN (${ph}) AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?) LIMIT 1`, [...ids, roomId, t])).length) return true;
       if ((await q(`SELECT 1 AS x FROM users WHERE userId IN (${ph}) AND archived_at IS NOT NULL LIMIT 1`, ids)).length) return true;
     }
-    return (await q("SELECT 1 AS x FROM feed_restricted WHERE login = ? AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?) LIMIT 1", [login, roomId, t])).length > 0;
+    return (await q("SELECT 1 AS x FROM feed_restricted WHERE login = ? AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?) AND COALESCE(reason, '') <> ? LIMIT 1",
+                    [login, roomId, t, MOD_RECENT])).length > 0;
   } catch (e) { console.error("[micfollow] site bans:", e.message); return true; }
 }
 /** Fetch "private activity" + stage bans for a login (linked accounts), then step the pad. Fails closed on private.

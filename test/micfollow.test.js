@@ -1127,7 +1127,9 @@ test("42. site bans (14.1.2 #6): a whole-site / this pad's feed ban, an archived
     ["a site-wide feed ban", "alice", () => runQuery("INSERT INTO feed_bans (user_id, room_id, at, until) VALUES ('u_alice', '', ?, NULL)", [T]), () => runQuery("DELETE FROM feed_bans")],
     ["this pad's ban", "alice", () => runQuery("INSERT INTO feed_bans (user_id, room_id, at, until) VALUES ('u_alice', ?, ?, ?)", [ROOM.id, T, T + 3600e3]), () => runQuery("DELETE FROM feed_bans")],
     ["an archived account", "fay", () => runQuery("UPDATE users SET archived_at = ? WHERE userId = 'u_fay'", [T]), () => runQuery("UPDATE users SET archived_at = NULL WHERE userId = 'u_fay'")],
-    ["Pepe's red list / a recent kick (feed_restricted)", "dana", () => runQuery("INSERT INTO feed_restricted (login, room_id, reason, until) VALUES ('dana', ?, 'kicked', NULL)", [ROOM.id]),
+    ["Pepe's red list (feed_restricted)", "dana", () => runQuery("INSERT INTO feed_restricted (login, room_id, reason, until) VALUES ('dana', '', 'you''re suspended right now', ?)", [T + 3600e3]),
+      () => runQuery("DELETE FROM feed_restricted")],
+    ["Pepe ignoring them here (feed_restricted)", "dana", () => runQuery("INSERT INTO feed_restricted (login, room_id, reason, until) VALUES ('dana', ?, 'Pepe isn''t taking requests from you', NULL)", [ROOM.id]),
       () => runQuery("DELETE FROM feed_restricted")],
   ];
   for (const [name, who, ban, unban] of cases) {
@@ -1143,6 +1145,24 @@ test("42. site bans (14.1.2 #6): a whole-site / this pad's feed ban, an archived
   }
   // a feed ban takes them off at once (feedstore.ban -> micfollow.recheckUser)
   assert.match(fs.readFileSync(path.join(repo, "feedstore.js"), "utf8"), /require\("\.\/micfollow"\)\.recheckUser\(u\.userId\)/);
+});
+
+test("42b. 1.99aio (owner 11-03): Pepe's 30-min recent-moderation refusal (a kick here) doesn't take them off the mic stage", async () => {
+  await reset(); await plainPad();
+  await runQuery("CREATE TABLE IF NOT EXISTS feed_restricted (login TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', reason TEXT, until INTEGER, PRIMARY KEY (login, room_id))");
+  try {
+    await onStage(["dana", "bob"]);
+    assert.equal(tileOn("dana"), true, "set up");
+    // pepe_rooms._ro_restricted's row for a kick in this room, and the roomless one a mod entry without a room makes
+    for (const room of [ROOM.id, ""]) {
+      await runQuery("DELETE FROM feed_restricted");
+      await runQuery("INSERT INTO feed_restricted (login, room_id, reason, until) VALUES ('dana', ?, 'you were moderated in this room recently', ?)", [room, T + 1800e3]);
+      await MF.recheck("dana", { refresh: true });
+      assert.equal(tileOn("dana"), true, "a recent kick (room '" + room + "') keeps them on");
+    }
+  } finally {
+    await runQuery("DELETE FROM feed_restricted");
+  }
 });
 
 test("43. 18+ pads (14.1.2 #8): mic follows can't be switched on; a pad marked 18+ while it runs stops at once", async () => {
