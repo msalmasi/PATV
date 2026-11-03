@@ -348,3 +348,35 @@ test("R4 F4 UX: a pad owner's by-login reveal offers no Save - camevidence refus
   await stopRv(U.staff, s.d.rv); clean();
 });
 
+// ───────────────────── round 4: the words ─────────────────────
+const ejs = require("ejs");
+const TERMS = require(path.join(repo, "terms"));
+const PFN = path.join(repo, "views", "privacy.ejs");
+const stripTags = (h) => h.replace(/<[^>]+>/g, "").replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&");
+function privacyPage(extra) {
+  const L0 = { user: null, title: "Privacy Policy", VERSION: TERMS.VERSION, UPDATED: TERMS.PRIVACY_UPDATED, enforced: false, chatlog: null,
+               hubErasure: null, micrec: null, memory: null, privwire: { on: true, g: D, g_day: "28 October 2026" }, evidence: null,
+               policyDates: {}, ogBase: "http://test" };
+  return ejs.render(fs.readFileSync(PFN, "utf8"), Object.assign(L0, extra || {}), { filename: PFN });
+}
+const GHOST_WHO = "unless they're PATV administrators or staff using ghost mode";
+
+test("R4 wording: /privacy says who can use ghost mode the same way in every sentence - administrators or staff (ghost.mode: Staff and up, locked)", () => {
+  const SPC = require(path.join(repo, "siteperms-core"));
+  assert.ok(SPC.capOf("ghost.mode").locked, "ghost.mode can't be moved");
+  assert.deepEqual(["Admin", "Staff", "Assistant", "pleb"].map((c) => SPC.check(null, c, "ghost.mode")), [true, true, false, false], "admins and staff - nobody else");
+  const cr = { on: true, on_day: "2 November 2026", on_at: Date.UTC(2026, 10, 2, 12) };
+  for (const textreveal of [null, { on: true }]) {
+    const raw = privacyPage({ camreveal: cr, textreveal });
+    const page = stripTags(raw);
+    assert.ok(!page.includes("unless they're PATV staff using ghost mode"), "never just 'staff' (text reveal roles " + !!textreveal + ")");
+    const li = (re) => { const m = re.exec(raw); return m ? stripTags(m[0]) : ""; };
+    const see = li(/<li><b>Who can see through it:<\/b>[\s\S]*?<\/li>/), mod = li(/<li id="cam-moderation">[\s\S]*?<\/li>/);
+    assert.ok(see.includes(GHOST_WHO), "'Who can see through it': " + see);
+    assert.ok(mod.includes(GHOST_WHO), "'Moderation views of a hidden cam': " + mod.slice(0, 200));
+    assert.equal(page.split(GHOST_WHO).length - 1, 4, "the intro, section 3, section 9's bullet and the dated note - all four the same");
+  }
+  // cam reveals off: none of these sentences
+  assert.ok(!stripTags(privacyPage({})).includes("using ghost mode"), "cam reveals off: no such sentence");
+});
+
