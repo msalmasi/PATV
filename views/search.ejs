@@ -93,7 +93,9 @@
                const pad_ = p.rooms[0] || null;
                const sn_ = p.snip || null;
                const titleHtml_ = sn_ && sn_.title && /\u0001/.test(sn_.title) ? snippetHtml(sn_.title) : fx.esc(lab_.text);
-               const bodyHtml_ = sn_ && sn_.body && /\u0001/.test(sn_.body) ? snippetHtml(sn_.body) : (p.body ? fx.esc(p.body.length > 180 ? p.body.slice(0, 177) + '…' : p.body) : ''); %>
+               // 1.99aij: the excerpt is the post's readable text (fx.plainBody: a Markdown spoiler reads "[spoiler]")
+               const pb_ = fx.plainBody(p);
+               const bodyHtml_ = sn_ && sn_.body && /\u0001/.test(sn_.body) ? snippetHtml(sn_.body) : (pb_ ? fx.esc(pb_.length > 180 ? pb_.slice(0, 177) + '…' : pb_) : ''); %>
             <li class="sr-post<%= p.nsfw ? ' is-nsfw' : '' %>">
               <% if (thUrl_) { %><a class="sr-th" href="<%= p.url %>" tabindex="-1" aria-hidden="true"><img src="<%= thUrl_ %>" alt="" loading="lazy"></a><% } %>
               <div class="sr-pt">

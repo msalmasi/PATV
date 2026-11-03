@@ -507,3 +507,33 @@ test("the feed's ?tag= page: a fixed link preview (the tag is in the tab title, 
   assert.match(tags, /og:image" content="http:\/\/test\/og\/page\.png\?t=Tagged%20posts&amp;e=\d+&amp;s=[A-Za-z0-9_-]{32}"/);
   assert.match(r.text, /<title>#propagation — /, "the tab title is unchanged");
 });
+
+// 1.99aij (owner 2026-11-03): the index holds a Markdown post as typed, spoiler included - its words never match or show
+test("1.99aij: a Markdown spoiler's words never match a search or show in a snippet or excerpt; the readable words do", async () => {
+  await store.setConfig({ feed_markdown: true }, "test");
+  try {
+    const p = await store.create(U.alice.userId, { community: ROOM_B, title: "Quillwort finale", body: "The quillwort ||zephyrine bloom|| ending, then **xanthic** leaves." });
+    await store.create(U.alice.userId, { community: ROOM_B, title: "Xyloid notes", body: "||zephyrine petals|| and more" });
+    const lit = await store.create(U.alice.userId, { community: ROOM_B, title: "Literal marks", body: "typed ||zephyrine|| here", fmt: "plain" });
+    assert.equal(p.fmt, "md"); assert.equal(lit.fmt, null);
+    let R = await S.run("zephyrine", U.alice, { kind: "posts" });
+    assert.deepEqual(R.posts.map((x) => x.id), [lit.id], "only the plain post, whose || are just characters");
+    assert.equal(R.counts.posts, 1);
+    assert.equal((await S.run("quillwort bloom", U.alice)).posts.length, 0, "every term must be readable");
+    R = await S.run("xanthic", U.alice, { kind: "posts" });
+    assert.deepEqual(R.posts.map((x) => x.id), [p.id]);
+    assert.equal(R.posts[0].snip.body, "The quillwort [spoiler] ending, then \u0001xanthic\u0002 leaves.");
+    // a title-only hit falls back to the readable excerpt
+    let r = await get("/search?q=xyloid&type=posts", U.alice);
+    assert.equal(r.status, 200);
+    assert.match(r.text, /<p class="sr-snip">\[spoiler\] and more<\/p>/);
+    r = await get("/search?q=quillwort&type=posts", U.alice);
+    assert.match(r.text, /<mark>quillwort<\/mark> \[spoiler\] ending/);
+    for (const q of ["quillwort", "xyloid", "xanthic"]) assert.doesNotMatch((await get("/search?q=" + q, U.alice)).text, /zephyrine|bloom|petals/, q);
+    S.state.posts = false;                         // the LIKE fallback drops them the same way
+    try {
+      assert.deepEqual((await S.run("zephyrine", U.alice, { kind: "posts" })).posts.map((x) => x.id), [lit.id]);
+      assert.deepEqual((await S.run("xanthic", U.alice, { kind: "posts" })).posts.map((x) => x.id), [p.id]);
+    } finally { S.state.posts = true; }
+  } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});

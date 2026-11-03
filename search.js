@@ -5,7 +5,8 @@
 //   search_posts  fts5(post_id UNINDEXED, title, body, extra)   unicode61 (diacritics folded); extra = the link card's
 //                 title + domain. Kept in sync by triggers on feed_posts (insert / update of title, body, link_json /
 //                 delete); every post row is indexed, crossposts too (their own title) - visibility is decided at
-//                 query time, never by the index.
+//                 query time, never by the index. 1.99aij: a stored-Markdown post's spoiler words are in it too, but never
+//                 match or show (dropSpoilerMatches, readableSnippet: its readable text, where a spoiler reads "[spoiler]").
 // A rebuild job re-fills it when its row count drifts from feed_posts (at start, then every REBUILD_MS) - so a missed
 // trigger, a restore or a hand edit heals by itself. Before the triggers are made, a self-test writes and removes a row;
 // if FTS5 isn't there, NO trigger is made and posts fall back to LIKE over feed_posts, so a missing feature can never
@@ -268,6 +269,52 @@ async function dropHiddenMatches(ids, terms, base) {
   return drop.size ? ids.filter((id) => !drop.has(id)) : ids;
 }
 
+// ── 1.99aij: Markdown spoilers. The index holds a body as typed (the triggers are SQL), so the words of a stored-Markdown
+// post's spoiler (||text||) are in it. An "md" post matches only when every term is in its readable text (its title,
+// postmd.plain body - a spoiler reads "[spoiler]" - and its link card), and its body snippet is cut from that text, never
+// from the index. A plain post has no spoilers: untouched. ──
+const fold = (s) => String(s == null ? "" : s).normalize("NFKD").replace(/\p{M}+/gu, "").toLowerCase();
+function wordsIn(s) {
+  const out = [], re = /[\p{L}\p{N}]+/gu;
+  let m;
+  while ((m = re.exec(s))) out.push({ w: fold(m[0]), at: m.index, end: m.index + m[0].length });
+  return out;
+}
+/** ids minus the Markdown posts whose match needed a spoiler's words (the index's prefix terms; the LIKE fallback's substrings). */
+async function dropSpoilerMatches(ids, terms) {
+  if (!ids.length || !terms.length) return ids;
+  const md = require("./postmd"), want = terms.map(fold), drop = new Set();
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const rows = await getQuery(`SELECT id, title, body, link_json FROM feed_posts WHERE fmt = 'md' AND id IN (${chunk.map(() => "?").join(",")})`, chunk);
+    for (const r of rows) {
+      let l = null;
+      try { l = r.link_json ? JSON.parse(r.link_json) : null; } catch (e) { l = null; }
+      const link = !state.posts ? [r.link_json] : state.json && l ? [l.title, l.domain] : [];
+      const text = [r.title, md.plain(r.body || ""), ...link].filter(Boolean).join(" ");
+      const words = state.posts ? wordsIn(text).map((x) => x.w) : null;
+      const ok = want.every((t) => (words ? words.some((w) => w.startsWith(t)) : fold(text).includes(t)));
+      if (!ok) drop.add(r.id);
+    }
+  }
+  return drop.size ? ids.filter((id) => !drop.has(id)) : ids;
+}
+/** A snippet of readable text the way the index cuts one (16 words, \u0001 / \u0002 around each hit); "" when no word hits. */
+function readableSnippet(text, terms, size = 16) {
+  const s = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+  const want = terms.map(fold), hit = (w) => want.some((t) => w.startsWith(t));
+  const words = wordsIn(s), first = words.findIndex((x) => hit(x.w));
+  if (first < 0) return "";
+  const from = Math.max(0, Math.min(first - 4, words.length - size)), to = Math.min(words.length, from + size);
+  let out = from > 0 ? "…" : "", at = from > 0 ? words[from].at : 0;
+  for (let i = from; i < to; i++) {
+    const x = words[i];
+    out += s.slice(at, x.at) + (hit(x.w) ? "\u0001" + s.slice(x.at, x.end) + "\u0002" : s.slice(x.at, x.end));
+    at = x.end;
+  }
+  return out + (to < words.length ? "…" : s.slice(at));
+}
+
 /**
  * Posts the viewer may see. sort: relevance (the index's rank) | new | top. A "#tag" query lists that tag's posts.
  * -> {posts (decorated, with .snip), total (visible matches, up to CANDIDATES), more, page}
@@ -287,12 +334,15 @@ async function posts(p, viewer, { sort = "relevance", page = 1, limit = PAGE } =
   const order = sort === "new" ? "new" : sort === "top" ? "top" : "new";
   const vis = await store.list({ ...base, ids: H.ids, idsOnly: true, sort: order, top: "all", limit: CANDIDATES });
   let ids = await dropHiddenMatches(vis.ids, p.terms, base);      // 1.99ade: no matches on text this viewer can't read
+  ids = await dropSpoilerMatches(ids, p.terms);                   // 1.99aij: nor on a Markdown spoiler's words
   if (sort === "relevance") { const rank = new Map(H.ids.map((id, i) => [id, i])); ids = ids.slice().sort((a, b) => rank.get(a) - rank.get(b)); }
   const pageIds = ids.slice((page - 1) * limit, page * limit);
   const L = pageIds.length ? await store.list({ ...base, ids: pageIds, sort: "new", top: "all", limit: pageIds.length }) : { posts: [] };
   const byId = new Map(L.posts.map((x) => [x.id, x]));
   const out = pageIds.map((id) => byId.get(id)).filter(Boolean);
   for (const x of out) x.snip = H.snip.get(x.id) || null;
+  // 1.99aij: a Markdown post's body snippet is cut from its readable text (a spoiler reads "[spoiler]"), never the index's
+  for (const x of out) if (x.fmt === "md" && x.snip) x.snip = { title: x.snip.title, body: readableSnippet(require("./postmd").plain(x.body || ""), p.terms) };
   // 1.99pv: a gated locked / 18+ post never shows a body snippet (it would leak paid text)
   for (const x of out) if (x.creator && x.creator.gated && x.snip) x.snip = x.creator.r18Gate ? null : { title: x.snip.title, body: "" };
   return { posts: out, total: ids.length, more: ids.length > page * limit, page };
