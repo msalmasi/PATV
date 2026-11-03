@@ -69,6 +69,35 @@ test("events, scenes, sessions", async () => {
   assert.equal(f.heist.summary.phase, "cancelled");
 });
 
+test("settlement and item cues preserve order and the existing summary", async () => {
+  const summary = sum("midnight-contract", "running", 2);
+  await H.push({ kind: "round", summary, events: [{ event: "heist", data: { action: "round", job: "casino", round: 2 } }] });
+  const before = await H.live(0);
+  const settlement = { action: "settlement", round: 2, reason: "round", ov: { style: "flat", q: "auto" },
+    players: [{ name: "alice", seed: 12, round_earned: 100, round_shared: 20, round_lost: 0,
+      carrying: 120, banked: 0, xp: 3, items: [], status: "saved" },
+      { name: "someone 1", seed: 0, round_earned: 0, round_shared: 0, round_lost: 20,
+        carrying: 0, banked: 80, xp: 2, items: [], status: "pinched" }],
+    totals: { carrying: 120, banked: 80, lost: 20 } };
+  const cue = { action: "item_use", id: "r2-1", item: "lawyer", round: 2,
+    owner: { name: "someone 1", seed: 0 }, target: { name: "someone 1", seed: 0 },
+    outcome: "recovered", amount: 80, scope: "self", trigger: "pinch" };
+  await H.push({ kind: "settlement", summary: null, events: [
+    { event: "heist", data: { action: "rolls", round: 2, rolls: [] } },
+    { event: "heist", data: settlement }, { event: "heist", data: cue },
+    { event: "heist", data: { action: "unrecognized-observation" } },
+    { event: "heist", data: { action: "timer", kind: "bail", secs: 12 } }
+  ] });
+  const incremental = await H.live(before.last);
+  assert.deepEqual(incremental.events.map(e => e.data.action), ["rolls", "settlement", "item_use", "timer"]);
+  assert.deepEqual(incremental.events[1].data, settlement);
+  assert.deepEqual(incremental.events[2].data, cue);
+  assert.deepEqual(incremental.heist.summary, before.heist.summary, "null summary leaves the last summary in place");
+  const reconnect = await H.live(0);
+  assert.deepEqual(reconnect.events.map(e => e.data.action), ["round", "rolls", "settlement", "item_use", "timer"],
+    "new observations stay with their scene on a first poll");
+});
+
 test("overlay upload: sha-checked, served same-origin, bot token", async () => {
   const html = "<!DOCTYPE html><html><body>overlay</body></html>";
   const sha = crypto.createHash("sha256").update(html).digest("hex");
