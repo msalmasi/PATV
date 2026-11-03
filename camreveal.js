@@ -38,6 +38,7 @@
 //
 // LIMITS: one open reveal per moderator, at least 10 s between reveals, at most 6 per 10 minutes (evidence.js's numbers); one reveal
 // session per person (a second moderator joins it with their own rows and their own notice); the live-cam caps (budget, max_live).
+// 1.99?? (round 4): every by-login try by a non-admin spends that rate, hit or miss, and a miss is a see-through row (ref miss:<code>:l).
 // The pad's own switches stand (Q13): no reveal where the bridge, its cams or its live cams are off.
 //
 // THE SWITCH (dark): chatlog_meta 'cam_reveal' {on, at, by, first_on} - /admin/bridge#camreveal (chatlog.admin), audited (admin_audit
@@ -296,6 +297,39 @@ async function start(u, R, b, { byLogin = false } = {}) {
   const reason = clean(b && b.reason, REASON_MAX);
   if (reason.length < REASON_MIN) throw new Refuse(400, MSG.why, "why");
   if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw new Refuse(403, MSG.pad_access, "pad_access");
+  // 1.99?? (privacy controls, round 4 - F4 probing): a by-login try by anyone but an admin - one that opens a cam and one refused below
+  // (404 not listed, 409 under a frog name, ...) - spends the reveal rate first, and a refused one is a see-through row (scope cam_reveal,
+  // ref "miss:<code>:l", the login typed - read at /admin/bridge#seethrough by admins only; no livecam_audit / cam_views row, nothing to
+  // the person), written before the answer: testing typed logins for presence or a frog name is throttled and visible. The answers stay
+  // exactly as they were
+  const probe = byLogin && role !== "admin";
+  if (probe) {
+    const lim = require("./bridge-relay").limited("camreveal|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
+    if (lim) throw new Refuse(429, lim, "rate");
+  }
+  const rows = { wrote: false };
+  try {
+    return await startChecked(u, R, b, { byLogin, role, reason, probe, rows });
+  } catch (e) {
+    if (probe && !rows.wrote && e && e.refuse) await missRow(u, R, role, b, reason, e.code);
+    throw e;
+  }
+}
+/** The see-through row of a refused by-login try (start's probe). A failed write: 500, never the refusal unlogged. */
+async function missRow(u, R, role, b, reason, code) {
+  const l = low(b && b.login);
+  try {
+    const ST = require("./seethrough");
+    await ST.init();
+    await ST.log({ userId: String(u.userId), role, scope: "cam_reveal", roomId: R.id, logins: LOGIN_RE.test(l) ? [l] : [], reason,
+                   ref: "miss:" + clean(code || "refused", 20) + ":l" });
+  } catch (e) {
+    console.error("[camreveal] miss row:", e.message);
+    throw new Refuse(500, "Couldn't log it - nothing was opened.", "audit");
+  }
+  console.log(`[camreveal] by-login miss room=${R.id} by=${u.userId} as=${role} code=${code || "-"}`);
+}
+async function startChecked(u, R, b, { byLogin, role, reason, probe, rows }) {
   const sub = subjectOf(R, b, byLogin);
   if (!sub) throw new Refuse(404, MSG.gone, "gone");
   // 1.99?? (privacy controls, round 3 - F4; owner Q8): the by-login entry takes every reveal role - a pad's owner / the room's mods on their
@@ -332,7 +366,8 @@ async function start(u, R, b, { byLogin = false } = {}) {
   // can't be joined from the pad (MediaMTX and the first beat would end it with lost_right after its rows and its rate were spent): refused
   // first. A pad role may join one of someone the room lists - the same right as opening it by login itself (byLoginOk)
   if (cur && cur.rv && cur.rv.bylogin && !byLoginOk(role, R, sub.login)) throw new Refuse(409, MSG.held, "unavailable");
-  if (!(cur && cur.viewers.has(String(u.userId)))) {                             // (a re-open of the one they're on isn't a new reveal)
+  // (a re-open of the one they're on isn't a new reveal; a by-login try by a non-admin spent it already - start's probe)
+  if (!probe && !(cur && cur.viewers.has(String(u.userId)))) {
     const lim = require("./bridge-relay").limited("camreveal|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
     if (lim) throw new Refuse(429, lim, "rate");
   }
@@ -340,7 +375,7 @@ async function start(u, R, b, { byLogin = false } = {}) {
   const veiled = sub.kind !== "named" || why === "left_out";
   const label = veiled ? (sub.alias || "veiled") : sub.login;
   const ans = await LC.revealStart(u, R, sub.login, { why, label, veiled, bylogin: byLogin, role },
-    (sid) => writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veiled, byLogin, what: "open" }));
+    async (sid) => { const a = await writeRows({ u, R, sub, role, reason, why, sid, ghost, label, veiled, byLogin, what: "open" }); rows.wrote = true; return a; });
   console.log(`[camreveal] open room=${R.id} by=${u.userId} as=${role}${ghost ? " ghost" : ""}${byLogin ? " by-login" : ""} why=${why}`);
   // (the player shows the frog name for a veiled person - never the login; the by-login entry shows what the admin typed)
   return { ...ans, name: byLogin || !veiled ? sub.login : sub.alias || null, veiled: veiled && !byLogin, can_save: SAVERS.has(role) && evidenceOn(), role };

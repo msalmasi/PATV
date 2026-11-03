@@ -256,14 +256,16 @@ test("F4: a pad's owner and the room's mods open a cam by its login on their own
     const b = await call("POST", `/api/rooms/${SLUG}/livecam/reveal/beat`, { user: u, body: { rv: r.d.rv } });
     assert.notEqual(b.d && b.d.why, "lost_right", k + ": the beat keeps it: " + b.text);
     await stopRv(u, r.d.rv);
-    // a login the room doesn't list: refused before any row or rate (Pepe would answer not_on_cam only after the rows)
+    // a login the room doesn't list: refused before any reveal row (Pepe would answer not_on_cam only after the rows). 1.99?? round 4 -
+    // F4 probing: the try spends the reveal rate and is a see-through miss row (miss:gone:l - privm-review4.test.js)
     clean(); T += 11000; await fresh(); RL._hits.clear();
-    const n0 = await stRows(u.userId), a0 = await auditRows(u.userId);
+    const n0 = await stRows(u.userId, "cam:%"), a0 = await auditRows(u.userId), x0 = await stRows(u.userId, "miss:%");
     const x = await byPad(u, "nobodycf");
     assert.deepEqual([x.status, x.d.code], [404, "gone"], k + ": " + x.text);
-    assert.equal(await stRows(u.userId), n0, k + ": no see-through row");
+    assert.equal(await stRows(u.userId, "cam:%"), n0, k + ": no reveal row");
     assert.equal(await auditRows(u.userId), a0, k + ": no livecam_audit row");
-    assert.equal(RL._hits.has("camreveal|" + u.userId), false, k + ": no rate spent");
+    assert.equal(await stRows(u.userId, "miss:%"), x0 + 1, k + ": a miss row (round 4)");
+    assert.equal(RL._hits.has("camreveal|" + u.userId), true, k + ": the rate is spent (round 4)");
   }
   // staff / admins: a login the room doesn't list is Pepe's to answer (as for admins before)
   clean(); T += 11000; await fresh(); RL._hits.clear();
@@ -277,11 +279,11 @@ test("F4: by login, someone the room lists under a FROG NAME needs a right to re
   const TRV2 = require(path.join(repo, "textreveal"));
   await TRV2.init();
   clean(); T += 11000; await fresh(); RL._hits.clear();
-  const n0 = await stRows(U.mod.userId);
+  const n0 = await stRows(U.mod.userId, "cam:%");
   const m = await byPad(U.mod, "frankiefettuccine");             // (incognito; incognito cams off here: withheld)
   assert.deepEqual([m.status, m.d.code], [409, "unavailable"], m.text);
   assert.equal(m.text.includes("frankie") || m.text.includes("Frankie"), false, "the refusal names nobody");
-  assert.equal(await stRows(U.mod.userId), n0, "no row");
+  assert.equal(await stRows(U.mod.userId, "cam:%"), n0, "no reveal row (round 4: a miss row - privm-review4.test.js)");
   const s = await byAdmin(U.staff, "hankhidden");
   assert.deepEqual([s.status, s.d.code], [409, "unavailable"], "staff without a name-reveal right: the same - " + s.text);
   // the pad's owner may reveal names: the cam opens by the login they typed
@@ -317,12 +319,12 @@ test("F4 + RV-C: a pad mod may join a by-login session of someone the room lists
   const b = await byAdmin(U.adm, "nobodycf", "report by login");
   assert.equal(b.status, 200, b.text);
   try {
-    const n0 = await stRows(U.mod.userId);
+    const n0 = await stRows(U.mod.userId, "cam:%");
     const m = await byPad(U.mod, "nobodycf");
     assert.deepEqual([m.status, m.d.code], [404, "gone"], m.text);
     assert.equal(m.d.rv, undefined, "never the admin's session");
-    assert.equal(await stRows(U.mod.userId), n0, "no see-through row");
-    assert.equal(RL._hits.has("camreveal|" + U.mod.userId), false, "no rate spent");
+    assert.equal(await stRows(U.mod.userId, "cam:%"), n0, "no reveal row");
+    assert.equal(RL._hits.has("camreveal|" + U.mod.userId), true, "the try spent the rate (round 4 - F4 probing)");
     assert.equal(await CR.stillMay(U.mod.userId, LC.revealSess(ROOM.id, b.d.rv)), false, "MediaMTX refuses a mod on it");
   } finally { await stopRv(U.adm, b.d.rv); clean(); }
 });

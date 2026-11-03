@@ -343,7 +343,7 @@ test("RV-B: a mod with no name-reveal right can't cam-reveal a NAMED person whos
   } finally { await IC.setOn(false, ADM()); clean(); }
 });
 
-test("RV-C: a by-login reveal session of a login the room doesn't list is the admin's alone - a pad mod's reveal is refused before any row or rate", async () => {
+test("RV-C: a by-login reveal session of a login the room doesn't list is the admin's alone - a pad mod's reveal is refused before any reveal row", async () => {
   await ready;
   clean(); T += 11000; await fresh(); RL._hits.clear();
   // (round 3 - F4: a pad mod may join a by-login session of someone the room LISTS - they may open one by login themselves,
@@ -351,13 +351,16 @@ test("RV-C: a by-login reveal session of a login the room doesn't list is the ad
   const a = await call("POST", "/api/admin/pepe/livecams/reveal", { user: U.adm, body: { room: SLUG, login: "nobodycf", reason: "report by login" } });
   assert.equal(a.status, 200, a.text);
   try {
-    const n0 = await stRows(U.mod.userId);
+    const n0 = await stRows(U.mod.userId, "cam:%"), x0 = await stRows(U.mod.userId, "miss:gone:l");
     const la0 = (await getQuery("SELECT COUNT(*) AS n FROM livecam_audit WHERE viewer_id = ?", [U.mod.userId]))[0].n;
     const m = await call("POST", `/api/rooms/${SLUG}/livecam/reveal`, { user: U.mod, body: { login: "nobodycf", bylogin: true, reason: "check them" } });
     assert.deepEqual([m.status, m.d.code], [404, "gone"], m.text);
     assert.equal(m.d.rv, undefined, "never the admin's session");
-    assert.equal(await stRows(U.mod.userId), n0, "no see-through row");
+    assert.equal(await stRows(U.mod.userId, "cam:%"), n0, "no reveal row");
     assert.equal((await getQuery("SELECT COUNT(*) AS n FROM livecam_audit WHERE viewer_id = ?", [U.mod.userId]))[0].n, la0, "no livecam_audit row");
-    assert.equal(RL._hits.has("camreveal|" + U.mod.userId), false, "no rate spent");
+    // (1.99?? round 4 - F4 probing: a by-login try by a non-admin spends the reveal rate and a miss is a see-through row, miss:gone:l -
+    // privm-review4.test.js)
+    assert.equal(await stRows(U.mod.userId, "miss:gone:l"), x0 + 1, "the miss is logged");
+    assert.equal(RL._hits.has("camreveal|" + U.mod.userId), true, "the try spent the rate");
   } finally { if (a.d && a.d.rv) await stopRv(U.adm, a.d.rv); clean(); }
 });
