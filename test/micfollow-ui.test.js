@@ -166,9 +166,9 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
   // (wave2 WP-4: av-sync.js?v=3 - it delays the dynamic layout's `ring` like newest / recent; 1.99ahm: v=4 - the On the mic card / chat lines;
   // v=5 - the people list's 🎙 icons; 1.99ahp v=6 - a stable program's places too; 1.99ait avf v=7 - the toggle shows on / off, the
-  // mic signs' own fallback, the held room-audio latency, mic_follow_toggle)
-  assert.ok(blk.indexOf('av-sync.js?v=7') >= 0 && blk.indexOf('av-sync.js?v=7') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
-  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=7"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
+  // mic signs' own fallback, the held room-audio latency, mic_follow_toggle; Room Dock v=8 - a PiP window's own visibility)
+  assert.ok(blk.indexOf('av-sync.js?v=8') >= 0 && blk.indexOf('av-sync.js?v=8') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
+  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=8"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
   assert.doesNotMatch(read("views", "home.ejs"), /stage-mic|setMic/, "the homepage never renders the mic stage");
 });
@@ -1289,7 +1289,7 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
 test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v13 - 1.99ahq stage cover + privacy controls) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=15"), "pad-reveal.js v2, then stage-mic.js v15 (1.99ain: corner buttons auto-hide)");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99aid privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=15"), "pad-reveal.js v2, then stage-mic.js v15 (Room Dock: a PiP window's own visibility; v14 was 1.99ain's auto-hiding corner buttons)");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99aid privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");
