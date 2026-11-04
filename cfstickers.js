@@ -52,6 +52,10 @@ async function syncList(items) {
     });
     const old = CACHE; CACHE = next;
     for (const row of old.values()) if (row.file && (!next.has(row.id) || next.get(row.id).file !== row.file)) remove(row.file);
+    // 1.99?? dock: while cfstickers is off the site keeps the list (ids, sets, descriptions - served nowhere) but asks Pepe for no
+    // art, so no Camfrog sticker picture reaches the site's disk before the owner switches it on; the first sync after that
+    // (Pepe's 10-minute tick) asks for every picture
+    if (!enabled()) return { need: [] };
     return { need: [...next.values()].filter(r => !r.file || !fs.existsSync(filePath(r.file) || "")).map(r => r.id) };
   });
 }
@@ -70,6 +74,7 @@ async function encode(png) {
   } catch (_) { throw new Refuse(415, "picture"); }
 }
 async function syncPics(items) {
+  if (!enabled()) throw new Refuse(403, "off");             // 1.99?? dock: no Camfrog art on the site while cfstickers is off
   if (!Array.isArray(items) || items.length > MAX_PICS) throw new Refuse(400, "pictures");
   return serial(async () => {
     await init(); const seen = new Set(), updates = [], made = [];
@@ -115,6 +120,7 @@ function register(app, { isBotToken, addUser }) {
   });
   app.get("/media/cfsticker/:id.webp", async (req, res) => {
     try {
+      if (!enabled()) return res.status(404).end();          // 1.99?? dock: nothing served while cfstickers is off (a line shows "[sticker]")
       await init(); const row = CACHE.get(idOf(req.params.id)), file = row && filePath(row.file);
       if (!file) return res.status(404).end();
       const headers = { "Content-Type": "image/webp", "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff",

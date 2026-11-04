@@ -90,6 +90,26 @@ test("parser accepts a legitimate >100KB body below700KB; media route is public 
   assert.match(source, /req\.path === "\/api\/bridge\/cfstickers" \|\|/);
 });
 
+// 1.99?? dock: Pepe's sync runs from the moment the bot ships, whatever the switches say - with cfstickers off the site keeps the
+// list but takes no art and serves none (the owner's question 3: Camfrog art on the site)
+test("1.99?? dock: cfstickers off - the list is kept but needs no pictures, pictures are refused, the media route serves nothing; on - the next sync asks for them", async () => {
+  await CF.syncPics([{ id: 421, png: png.toString("base64") }]);
+  assert.equal((await fetch(base + "/media/cfsticker/421.webp")).status, 200, "on: served");
+  await flags({ cfstickers: false });
+  assert.equal((await fetch(base + "/media/cfsticker/421.webp")).status, 404, "off: nothing served, even art already on disk");
+  const listed = await sync({ op: "list", items: [{ id: 421, set: 1642, desc: "Fixture wave" }, { id: 422, set: 1642, desc: "Fixture new" }] });
+  assert.equal(listed.status, 200); assert.deepEqual(listed.data.need, [], "off: no pictures asked for");
+  assert.equal(CF.valid(1642, 422), true, "the list itself is kept");
+  const pics = await sync({ op: "pics", items: [{ id: 422, png: png.toString("base64") }] });
+  assert.equal(pics.status, 403); assert.equal(pics.data.code, "off");
+  assert.equal((await db.getQuery("SELECT file FROM cf_stickers WHERE id=422"))[0].file, null, "no file recorded");
+  await assert.rejects(CF.syncPics([{ id: 422, png: png.toString("base64") }]), e => e.status === 403);
+  assert.equal((await catalog()).data.code, "sticker", "the picker stays closed");
+  await flags({ cfstickers: true });
+  assert.deepEqual((await sync({ op: "list", items: [{ id: 421, set: 1642, desc: "Fixture wave" }, { id: 422, set: 1642, desc: "Fixture new" }] })).data.need, [422], "on: the next sync asks for what is missing");
+  assert.equal((await fetch(base + "/media/cfsticker/421.webp")).status, 200);
+});
+
 test("full catalog replacement revokes missing and wrong-set pairs and asks for a fresh image after a set change", async () => {
   await CF.syncPics([{ id: 421, png: png.toString("base64") }]);
   const old = (await db.getQuery("SELECT file FROM cf_stickers WHERE id=421"))[0].file;
