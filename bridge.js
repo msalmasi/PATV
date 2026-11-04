@@ -2037,7 +2037,7 @@ function register(app, { isBotToken, addUser }) {
     // 1.99ajd roompm: ?rpm=<the last private answer the page has> (pad-roompm.js) - this viewer's own private answers on this pad
     const rpm = typeof req.query.rpm === "string" && /^\d{1,16}$/.test(req.query.rpm) ? Number(req.query.rpm) : null;
     const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1",
-                               { viewer: signed ? req.user : null, jc, rs, program: true, rpm, padPage });
+                               { viewer: signed ? req.user : null, jc, rs, rpm, program: true, padPage });
     res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     res.json(lp ? Object.assign(out, { lp: true }) : out);
   });
@@ -2246,7 +2246,7 @@ function register(app, { isBotToken, addUser }) {
     const bridgeLocked = !R.offline && !siteOnly && !bridgeOk(R.id);
     // CL3: the viewer's floors on this pad (#rmInit carries the page's signed join cursor, `jc`)
     const initial = liveOpen && !R.offline && !bridgeLocked ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null, true,
-                                                                             { viewer: signedIn ? req.user : null, program: true, rpm: 0, padPage: true }) : null;
+                                                                             { viewer: signedIn ? req.user : null, padPage: true, program: true, rpm: 0 }) : null;
     // 1.99ajd roompm: a page that carries this viewer's private answers is theirs alone - never kept by a cache
     if (initial && initial.rpm && initial.rpm.rows && initial.rpm.rows.length) res.set("Cache-Control", "private, no-store");
     // CL8: a Camfrog pad whose room is offline still shows its 📜 chat history (read-only, chatloghist.js) to signed-in viewers who
