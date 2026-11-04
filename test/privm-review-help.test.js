@@ -27,6 +27,7 @@ const ADM = { userId: "u_adm", username: "adm", class: "Admin" };
 /** Pepe's data with his !privacy card in it (a card shaped like the bundled incognito card). */
 function pepeData() {
   const d = JSON.parse(JSON.stringify(BUNDLED));
+  d.entries = d.entries.filter((e) => e.id !== "privacy");   // 1.99?? dock: the bundled copy (synced from the bot) has the real card - this one stands in for it
   const inc = d.entries.find((e) => e.id === "incognito");
   inc.pc = { incogcam: { swap: [["Your own switch", "UNAPPROVED WORDING"]] } };   // a card's privacy-text variant (bot pepe_privtext)
   d.entries.push(Object.assign({}, inc, { pc: undefined, id: "privacy", title: "!privacy", commands: ["!privacy"], aliases: [], syntax: ["!privacy"],

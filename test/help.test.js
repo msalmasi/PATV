@@ -648,7 +648,10 @@ test("GET /help renders every card with deep-link ids, copy buttons and the ask 
   const r = await req("GET", "/help");
   assert.equal(r.status, 200);
   const cur = await HELP.current();
-  for (const e of cur.data.entries) assert.ok(r.text.includes(`id="cmd-${e.id}"`), e.id);
+  // (1.99?? dock: the bundled copy, synced from the bot, now carries Pepe's !privacy card - a dark card /help leaves out until the
+  // privacy switchboard v3 is advertised; privm-review-help.test.js covers it)
+  for (const e of HELP.withoutDarkCards(cur.data.entries)) assert.ok(r.text.includes(`id="cmd-${e.id}"`), e.id);
+  for (const id of HELP.PV3_DARK_CARDS) assert.ok(!r.text.includes(`id="cmd-${id}"`), id + ": dark, not on the page");
   assert.match(r.text, /id="askForm"/);
   assert.match(r.text, /class="cp" data-copy="!spin"/);
   assert.match(r.text, /id="cat-markets"/);
@@ -658,7 +661,7 @@ test("GET /help renders every card with deep-link ids, copy buttons and the ask 
   const idx = /<script type="application\/json" id="helpIdx">([\s\S]*?)<\/script>/.exec(r.text);
   assert.ok(idx, "search index embedded");
   const list = JSON.parse(idx[1]);
-  assert.equal(list.length, cur.data.entries.length);
+  assert.equal(list.length, HELP.withoutDarkCards(cur.data.entries).length);
   assert.ok(!idx[1].includes("</"), "no </ inside the inline JSON");
   const q = await req("GET", "/help?q=" + encodeURIComponent('"><script>'));
   assert.ok(!q.text.includes('"><script>'), "?q= is escaped");

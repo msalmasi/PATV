@@ -263,6 +263,37 @@
    "v2": {
     "summary": "Your own switch: with incognito on, the website shows you under a random frog name instead of your name. It changes what the website shows, not what Pepe remembers - that's !remember off. Also on the website: Settings → Privacy.",
     "details": "Your own switch: with incognito **on**, the website shows you under a random **frog name** (like \"Soggy Bullfrog\") instead of your name - a new one each time you come back to a pad after an hour or more away (and at least once a day), and a different one in each pad. If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. **Off by default.** Incognito changes what the website shows, **not what Pepe remembers**: to stop Pepe remembering what you say, use `!remember off` (or \"Pepe's memory\" in Settings → Privacy). Turning it on works from a PM or the room; turning it **off** works by **PM** only (a room line can't prove who typed it). The reply always comes back privately.\n\nWhile it's on you're private on the website - incognito hides **who** you are, not what you say: on the live room view your lines, joins, leaves and mic grabs show under your frog name (no name, avatar or looks), captures of your cam are private (anyone can clip your mic turns like everyone's - the clip shows your frog name), nobody can quote you by name or use your cam in AI pictures, and your top words aren't recorded in your profile analytics. Your voice is still heard in the website's room audio unless the pad owner turns audio off. PATV administrators and the pad's owner can reveal who is behind a frog name, for moderation; every reveal is logged. Bridged rooms' chat can be kept on the pad per its tier and settings; your lines there show under the frog name you had when you said them (older lines keep showing as \"someone\"). To have what you say blacked out too, use `!bridge hide`.\n\nThe same switch is on the website at [/settings/privacy](/settings/privacy) (Settings → Privacy) for a linked chat account - a change in either place shows in the other. **Make Pepe forget you:** `!forgetme now` says what goes, then `!forgetme confirm` (within 2 minutes) deletes everything he remembers about you (what he learned, your nicknames and links, your mic history) AND your private conversations with him - Camfrog PMs, Message Pepe on the website and the Telegram chat. Public room chat, transcripts and captures stay (the room's record). Same as Settings → Privacy → Make Pepe forget me. Keep it that way? Yes unless you say otherwise: Pepe's memory of you is switched off from then on (`!remember on`, by PM, lets him remember you again) - or type `!forgetme confirm remember` instead to let him start learning about you again."
+   },
+   "pc": {
+    "incogcam": {
+     "summary": "Your own switch: with incognito on, the website shows you under a random frog name instead of your name - your name only, not your cam (!livecam). Not what Pepe remembers either - that's !remember off. Also: Settings → Privacy.",
+     "swap": [
+      [
+       "captures of your cam are private (anyone can clip your mic turns like everyone's - the clip shows your frog name), nobody can quote you by name or use your cam in AI pictures, and your top words aren't recorded in your profile analytics.",
+       "anyone can clip your mic turns like everyone's (the clip shows your frog name), nobody can quote you by name, and your top words aren't recorded in your profile analytics."
+      ],
+      [
+       "Your voice is still heard in the website's room audio unless the pad owner turns audio off.",
+       "Incognito hides your name, **not your cam**: if your cam is on the website (see `!livecam`), members can watch it and use it like any cam there - always under your frog name, never your name, and captures of it never land on your profile. `!livecam off` hides it. Your voice is still heard in the website's room audio unless the pad owner turns audio off."
+      ]
+     ]
+    },
+    "privstate": {
+     "swap": [
+      [
+       "Turning it on works from a PM or the room; turning it **off** works by **PM** only (a room line can't prove who typed it).",
+       "It works from a PM or the room, **on and off** - but a room line Pepe can't tie to your Camfrog login covers only the name you typed it under, and nothing changes in your website settings until he can (a PM always covers your login). `!privacy` (by PM) shows all your website switches."
+      ]
+     ]
+    },
+    "textreveal": {
+     "swap": [
+      [
+       "PATV administrators and the pad's owner can reveal who is behind a frog name, for moderation;",
+       "PATV administrators and staff, the pad's owner (in their own pad) and the room's moderators can reveal who is behind a frog name, for moderation, each time with a reason;"
+      ]
+     ]
+    }
    }
   },
   {
@@ -294,6 +325,31 @@
    ],
    "web": {
     "label": "Pepe's memory switch",
+    "url": "/settings/privacy"
+   }
+  },
+  {
+   "id": "privacy",
+   "title": "!privacy",
+   "category": "start",
+   "role": "everyone",
+   "commands": [
+    "!privacy"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!privacy"
+   ],
+   "summary": "Your website privacy switches in one private answer: your name, chat, mic transcripts, cam and voice on the website - and Pepe's memory.",
+   "details": "`!privacy` shows what the website shows about you right now, in one private answer: your name (or a random frog name with `!incognito`), your chat lines, your 🎙 mic transcripts (`!transcripts off`), your cam (`!livecam off`) and your voice - and whether Pepe remembers you (`!remember`). `!bridge hide` turns every website switch on at once; `!bridge show` puts your own switches back as they were.\n\nEach switch works from a PM or a room line, on and off. A room line Pepe can't tie to your Camfrog login covers only the name you typed it under, and nothing changes in your website settings until he can - a PM always covers your login. `!privacy` itself answers by PM only (or for a room line Pepe can tie to your login), so nobody sees your settings by showing your name. The same switches are on the website at [/settings/privacy](/settings/privacy) (Settings → Privacy → On the website).",
+   "examples": [],
+   "keywords": [
+    "privacy settings",
+    "my privacy",
+    "what does the website show"
+   ],
+   "web": {
+    "label": "Your privacy switches",
     "url": "/settings/privacy"
    }
   },
@@ -831,7 +887,7 @@
     "!ask [question]"
    ],
    "summary": "Ask the AI anything.",
-   "details": "Ask the AI anything. Uses web search, room data, mic transcripts, and memory for context. Can also check balances, spin the wheel, and more via natural language. When optional tool selection is enabled, spin requests only suggest `!spin`; send that command yourself to start the paid spin. This also applies if tool selection is uncertain or unavailable. The normal `!ask` cost still applies; unused picture and voice extras are refunded for a text-only confirmation. **Cost: 1,000 PAT**\n**Pictures** : include an image link (`!ask what breed is this https://i.imgur.com/…`) and Pepe looks at it; ask about someone's cam (\"what's on tux's cam?\") and he opens it. Each picture adds the vision surcharge; one that won't load is refunded.",
+   "details": "Ask the AI anything. Uses web search, room data, mic transcripts, and memory for context. Can also check balances and levels via natural language. It never spins the wheel: ask it to and Pepe answers as usual, then tells you to type `!spin` yourself. When optional tool selection is enabled, spin requests only suggest `!spin`; send that command yourself to start the paid spin. This also applies if tool selection is uncertain or unavailable. The normal `!ask` cost still applies; unused picture and voice extras are refunded for a text-only confirmation. **Cost: 1,000 PAT**\n**Pictures** : include an image link (`!ask what breed is this https://i.imgur.com/…`) and Pepe looks at it; ask about someone's cam (\"what's on tux's cam?\") and he opens it. Each picture adds the vision surcharge; one that won't load is refunded.",
    "examples": [
     "!ask what breed is this https://i.imgur.com/…"
    ],
@@ -1103,7 +1159,7 @@
     "!bridge [hide|show]"
    ],
    "summary": "Is this room live on its PATV pad?",
-   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` leaves you out of the website: \"someone\" in the room view, and your lines aren't shown. `!incognito on` hides who you are, not what you say: your lines show as \"someone\" (no name, avatar or looks). Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; `!bridge hide` also leaves your past lines there out, `!incognito` shows them as \"someone\"; `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`.",
+   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` leaves you out of the website: \"someone\" in the room view, and your lines aren't shown. `!incognito on` hides who you are, not what you say: your lines show as \"someone\" (no name, avatar or looks). Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; `!bridge hide` also leaves your past lines there out, `!incognito` shows them as \"someone\"; `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`.",
    "examples": [
     "!bridge hide",
     "!incognito on",
@@ -1112,10 +1168,44 @@
    ],
    "keywords": [],
    "v2": {
-    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
+    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
    },
    "v2tx": {
-    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` blacks out only the words of your mic transcripts (your name still shows). `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
+    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` blacks out only the words of your mic transcripts (your name still shows). `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
+   },
+   "pc": {
+    "camreveal": {
+     "swap": [
+      [
+       "PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged.",
+       "PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; PATV staff, the pad's owner and the room's mods can also view a cam you've hidden from the website - Pepe tells you when they do (never who), unless they're PATV administrators or staff using ghost mode. Every reveal is logged."
+      ]
+     ]
+    },
+    "privstate": {
+     "swap": [
+      [
+       "`!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar.",
+       "`!bridge hide` turns on **every website privacy switch at once**: a random frog name, your messages and mic transcripts only as a blacked-out bar, and your cam hidden; `!bridge show` puts your own switches back as they were (`!privacy` shows them)."
+      ],
+      [
+       "`!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login.",
+       "`!bridge hide` and `!bridge show` typed in a room cover the name the line shows (a room line can't prove who typed it) - PM them to cover your login."
+      ],
+      [
+       "`!transcripts`, `!remember` - and Pepe's answers to them)",
+       "`!transcripts`, `!livecam`, `!remember`, `!privacy` - and Pepe's answers to them)"
+      ]
+     ]
+    },
+    "textreveal": {
+     "swap": [
+      [
+       "PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation;",
+       "PATV administrators and staff, the pad's owner (in their own pad) and the room's moderators can reveal who is behind a frog name and read hidden lines, for moderation, each time with a reason;"
+      ]
+     ]
+    }
    }
   },
   {
@@ -1151,6 +1241,24 @@
    "v2tx": {
     "summary": "Your own switch: with !transcripts off, your name still shows on the website, but your mic words are blacked out.",
     "details": "When you're on the mic in a room linked to the website, its pad shows what you said as a 🎙 line (an automatic transcript). With `!transcripts off`, your name still shows there, but your words are blacked out. Members can still clip the audio, but never see the words. PATV administrators, and a pad's owner in their own pad, can reveal the words. Every reveal is logged. Turning transcripts back on doesn't uncover the words from while they were off. **On by default.** Works by **PM** to Pepe only (`!transcripts off`, `!transcripts on`, `!transcripts` for your setting) - a room line can't prove who typed it - and the answer comes back privately. Pepe's own recording and the admins' `!transcript` switch don't change. Your chat lines aren't affected: `!bridge hide` shows them as a blacked-out bar, `!incognito` under a frog name; your mic grabs and drops are still shown (under your frog name if you're incognito or hidden)."
+   },
+   "pc": {
+    "privstate": {
+     "swap": [
+      [
+       "Works by **PM** to Pepe only (`!transcripts off`, `!transcripts on`, `!transcripts` for your setting) - a room line can't prove who typed it - and the answer comes back privately.",
+       "`!transcripts off` and `!transcripts on` work from a PM or the room - a room line Pepe can't tie to your Camfrog login covers only the name you typed it under, and your website setting changes once he can; `!transcripts` on its own (by PM) shows your setting. The answer comes back privately."
+      ]
+     ]
+    },
+    "textreveal": {
+     "swap": [
+      [
+       "PATV administrators, and a pad's owner in their own pad, can reveal the words.",
+       "PATV administrators and staff, the pad's owner (in their own pad) and the room's moderators can reveal the words, each time with a reason."
+      ]
+     ]
+    }
    }
   },
   {
@@ -1168,7 +1276,7 @@
     "!livecam ask on|off"
    ],
    "summary": "Can people on the website see your cam (live, snapshots, clips) - and who?",
-   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage). `!livecam on` allows it again. While it's on, choose who: `!livecam members` (verified members: a linked Camfrog name or a verified account - the default), `!livecam everyone` (any signed-in member), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`) - it also lets the room's pad show whoever holds the mic on its stage (a pad setting, off by default).",
+   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage). `!livecam on` allows it again. While it's on, choose who: `!livecam members` (verified members: a linked Camfrog name or a verified account - the default), `!livecam everyone` (any signed-in member), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`) - it also lets the room's pad show whoever holds the mic on its stage (a pad setting, off by default). Admins also: `!livecam passthru` shows how pass-through (cams sent on untouched) is set - its source, kill switch and catch-up; `!livecam passthru catchup on|off` (off by default) lets such a cam catch up after a stall - its late frames go out at once, a brief skip - instead of keeping the stall as extra delay behind the room audio.",
    "examples": [
     "!livecam off",
     "!livecam followers",
@@ -1176,7 +1284,33 @@
     "!livecam ask off",
     "!bridge livecams off"
    ],
-   "keywords": []
+   "keywords": [],
+   "pc": {
+    "camreveal": {
+     "swap": [
+      [
+       "`!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once;",
+       "`!livecam off` keeps your cam off the website - no live video, snapshots or clips, and any live relay stops at once (moderators - PATV staff, the pad's owner and the room's mods - can still view it for moderation; Pepe tells you when they do, never who, unless they're PATV administrators or staff using ghost mode);"
+      ]
+     ]
+    },
+    "incogcam": {
+     "swap": [
+      [
+       "`!bridge hide` and `!incognito on` keep your cam off the website too.",
+       "`!bridge hide` keeps your cam off the website too; `!incognito on` hides only your name - your cam shows under your frog name."
+      ]
+     ]
+    },
+    "wcover": {
+     "swap": [
+      [
+       "it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage).",
+       "on pads' automatic mic stages (a pad can show whoever holds the mic on its own stage) you show with your cover picture instead - a hooded frog if you're incognito - never your cam."
+      ]
+     ]
+    }
+   }
   },
   {
    "id": "camok",
@@ -1224,11 +1358,11 @@
     "!onair queue · !onair unqueue <id|all>",
     "!onair image <link> [caption] [for 30s] [corner] [direct] rights",
     "!onair link <link> [live] [with sound] [for 60s] rights",
-    "!onair setup [irl|embed|audio|media]",
+    "!onair setup [irl|embed|audio|media|voicesplit|sources]",
     "!onair yes|always|no"
    ],
    "summary": "May admins put your cam on Pepe's main stream?",
-   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). YouTube / Twitch embed slots need `rights` at the end (`!onair <pad|user> rights`) to confirm you may rebroadcast them; `!onair setup embed` adds their browser source once. A slot on an Approved-only pad or a cam without an opt-in waits for its owner's OK: the owner gets an instant request, and a cam owner answers Pepe's PM with `!onair yes` (this time), `!onair always` or `!onair no`. The operator's own IRL feed always wins. Staff (Pepe's staff role) can run it too. A YouTube / Twitch link goes on directly: `!onair <link> rights`. **Later:** `!onair queue <link> rights` plays it after what's on now; `!onair at 9pm <link> rights` (or `21:30`, `9:30pm tomorrow` - New York time) or `!onair in 45m <link> rights` puts it on at that time, replacing whatever is on; `!onair queue` lists them, `!onair unqueue <id|all>` cancels. A link ends with its video, so the next one starts. **Sound in Camfrog:** `!onair setup audio` (once) points OBS's monitoring at Pepe's mic cable; with 🎤 Pick's sound on Pepe's mic on /stage/admin, rooms with `!mic onair on` hear the pick while Pepe holds the mic. Managed on /stage/admin (kill switch, log); staff also have 📺 Play content here (with ⏰ Queue) under Pepe's player. **Pictures and links:** `!onair image <link> rights` puts a picture on Pepe's stream - publicaccess.tv fetches it, checks it and shows it from there (anything not clearly safe is refused, never shown). Add a caption (in quotes if it has option words in it), `for 2m` (up to 10 min; 30 s by default), `corner` (or `tl` `tr` `bl` `br`) to show it in a corner over whatever is on, or `full`. `!onair link <link> rights` shows the page as a card (title, picture, site); `!onair link <link> live rights` shows the page itself (muted unless `with sound`, up to 10 min). `direct` (a picture straight from its site, not safety-checked, up to 2 min) and `live` are for Pepe's staff and up only - the picture's or page's site then sees Pepe's address. They queue like links: `!onair queue image <link> rights`, `!onair at 9pm link <link> rights`. `!onair off corner` clears just the corner, and `!onair off block` (or `!onair off corner block`) also blocks what was shown - its picture is deleted and it can never go on again; `!onair setup media` adds the corner scene and sources to Pepe's OBS once.",
+   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). YouTube / Twitch embed slots need `rights` at the end (`!onair <pad|user> rights`) to confirm you may rebroadcast them; `!onair setup embed` adds their browser source once. A slot on an Approved-only pad or a cam without an opt-in waits for its owner's OK: the owner gets an instant request, and a cam owner answers Pepe's PM with `!onair yes` (this time), `!onair always` or `!onair no`. The operator's own IRL feed always wins. Staff (Pepe's staff role) can run it too. A YouTube / Twitch link goes on directly: `!onair <link> rights`. **Later:** `!onair queue <link> rights` plays it after what's on now; `!onair at 9pm <link> rights` (or `21:30`, `9:30pm tomorrow` - New York time) or `!onair in 45m <link> rights` puts it on at that time, replacing whatever is on; `!onair queue` lists them, `!onair unqueue <id|all>` cancels. A link ends with its video, so the next one starts. **Sound in Camfrog:** `!onair setup audio` (once) points OBS's monitoring at Pepe's mic cable; with 🎤 Pick's sound on Pepe's mic on /stage/admin, rooms with `!mic onair on` hear the pick while Pepe holds the mic. Managed on /stage/admin (kill switch, log); staff also have 📺 Play content here (with ⏰ Queue) under Pepe's player. **Pictures and links:** `!onair image <link> rights` puts a picture on Pepe's stream - publicaccess.tv fetches it, checks it and shows it from there (anything not clearly safe is refused, never shown). Add a caption (in quotes if it has option words in it), `for 2m` (up to 10 min; 30 s by default), `corner` (or `tl` `tr` `bl` `br`) to show it in a corner over whatever is on, or `full`. `!onair link <link> rights` shows the page as a card (title, picture, site); `!onair link <link> live rights` shows the page itself (muted unless `with sound`, up to 10 min). `direct` (a picture straight from its site, not safety-checked, up to 2 min) and `live` are for Pepe's staff and up only - the picture's or page's site then sees Pepe's address. They queue like links: `!onair queue image <link> rights`, `!onair at 9pm link <link> rights`. `!onair off corner` clears just the corner, and `!onair off block` (or `!onair off corner block`) also blocks what was shown - its picture is deleted and it can never go on again; `!onair setup media` adds the corner scene and sources to Pepe's OBS once. **Pepe's voice off his stage:** his voice now gets its own output device instead: `!mic device voice aux` (Voicemeeter). `!onair setup voicesplit` still shows the old OBS plan and changes nothing, but `apply` is refused. `status` compares OBS with an earlier apply, and `remove` undoes one. **Stage sources:** `!onair setup sources IRL BB (Nikky), IRL (NDI)` (exact OBS names) makes other OBS sources work like the IRL feed. While one is live on screen, its sound goes to Pepe's mic, and it counts for `!mic onair`. `off` clears them.",
    "examples": [
     "!onair me on",
     "!onair https://youtu.be/dQw4w9WgXcQ rights",
@@ -1237,7 +1371,17 @@
     "!onair link https://example.com/news rights",
     "!onair off"
    ],
-   "keywords": []
+   "keywords": [],
+   "pc": {
+    "incogcam": {
+     "swap": [
+      [
+       "`!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it)",
+       "`!livecam off` and `!bridge hide` always keep your cam off it; `!incognito on` doesn't - it hides only your name)"
+      ]
+     ]
+    }
+   }
   },
   {
    "id": "twitch",
@@ -1279,7 +1423,17 @@
    "examples": [
     "!whowatching"
    ],
-   "keywords": []
+   "keywords": [],
+   "pc": {
+    "camreveal": {
+     "swap": [
+      [
+       "Only about your own cam; admins can name anyone.",
+       "A moderator who viewed a cam you hid from the website shows as \"someone moderating <pad>\" - never who (and not at all while they're in ghost mode). Only about your own cam; admins can name anyone."
+      ]
+     ]
+    }
+   }
   },
   {
    "id": "blockviewer",
@@ -1304,7 +1458,17 @@
     "!unblockviewer creep42",
     "!blockviewer"
    ],
-   "keywords": []
+   "keywords": [],
+   "pc": {
+    "camreveal": {
+     "swap": [
+      [
+       "To keep your cam off the website for everyone: `!livecam off`.",
+       "A block doesn't stop moderators (PATV staff, the pad's owner and the room's mods) viewing your cam for moderation - Pepe tells you when they do. To keep your cam off the website for everyone else: `!livecam off`."
+      ]
+     ]
+    }
+   }
   },
   {
    "id": "ghost",
@@ -1326,7 +1490,17 @@
     "!ghost on",
     "!ghost off"
    ],
-   "keywords": []
+   "keywords": [],
+   "pc": {
+    "camreveal": {
+     "swap": [
+      [
+       "Only accounts whose PATV class is Admin or Staff can switch it on;",
+       "It also keeps **👁 View cam** quiet - viewing for moderation a cam its owner hid from the website (live cam off, `!bridge hide`, a frog name's withheld cam): the owner isn't told while you're in ghost mode (otherwise Pepe tells them someone moderating the pad viewed it, never who). Only accounts whose PATV class is Admin or Staff can switch it on;"
+      ]
+     ]
+    }
+   }
   },
   {
    "id": "bridge-block",
@@ -6232,12 +6406,20 @@
    "syntax": [
     "!mic status",
     "device",
-    "test"
+    "test",
+    "!mic device voice <name|aux|off>",
+    "!mic device music <name|vaio|off>",
+    "!mic device dj stage|voice",
+    "!mic device tail <ms>",
+    "!mic device vmcheck · vmfix",
+    "!mic test voice|music"
    ],
    "summary": "status shows everything at once — hold mode, whether the audio pipeline is armed, whether Pepe holds a slot, who else is on the mic, any lock or force-block, and the output device.",
-   "details": "**status** shows everything at once — hold mode, whether the audio pipeline is armed, whether Pepe holds a slot, who else is on the mic, any lock or force-block, and the output device. **device <name>** sets that output device by substring (e.g. `!mic device CABLE Input`); with no name it just tells you the current one. **test** plays a tone to it, grabbing the mic if needed — the quickest way to check the audio path end to end.",
+   "details": "**status** shows everything at once — hold mode, whether the audio pipeline is armed, whether Pepe holds a slot, who else is on the mic, any lock or force-block, and the output device. **device <name>** sets that output device by substring (e.g. `!mic device CABLE Input`). **test** plays a tone to it, grabbing the mic if needed — the quickest way to check the audio path end to end.\n**Pepe's voice on its own device** (Voicemeeter): `!mic device` shows every device. `!mic device voice aux` plays his voice clips (`!say` and his other spoken lines, chatty, greetings, spoken alerts, relayed web clips, the soundboard) into Voicemeeter's AUX input. Camfrog still hears him through Voicemeeter, and his stage stream doesn't. `!mic device music vaio` does the same for the bottle anthem, which then goes with Spotify. Pepe refuses, and saves nothing, when the device isn't there, is the main one or isn't one of Voicemeeter's inputs. He also refuses while Camfrog's microphone isn't `Voicemeeter Out B1` (still `CABLE Output`, or another Voicemeeter bus - he checks the routing to B1 only) or Voicemeeter isn't running. He reads Voicemeeter's routing (read only) and refuses a device whose input doesn't reach B1 unmuted or is also sent back into the cable; the rest of the routing (hardware input 1, the other inputs, the A buses) is shown with warnings. When Voicemeeter's routing can't be read, the device is saved and the reply says so. If the device fails to open, the clip plays on the main device instead (logged, shown in `!mic device`, and the admins are told once each time it starts happening). While a Voicemeeter device is set, Pepe checks every minute that Voicemeeter runs, its routing (hardware input 1 is `CABLE Output`, the moved inputs reach B1) and Camfrog's microphone, and tells the admins once when a problem starts and once when it's over; `!mic device` shows the last check. `!mic device vmcheck` reads Voicemeeter's layout (read only) and compares it with Pepe's: hardware input 1 is `CABLE Output`; it, `Voicemeeter Input` and the AUX input go to B1 only; B1 is unmuted at 0 dB; nothing is on A1-A3. `!mic device vmfix` (owners and admins) applies that layout - only what differs, and a gain only ever back to 0 dB - starting Voicemeeter if none runs at all (never a second one), then re-reads and reports. If Camfrog's microphone goes back to `CABLE Output`, his clips go back to the main device by themselves (Camfrog hears that) and the admins are told. If Voicemeeter stops - or its routing, as last read, keeps the moved input from B1 - while Camfrog's mic is Voicemeeter's, his clips stay on their device with no fallback, because the main device would only put him on the stage: while Voicemeeter is stopped, Camfrog hears nothing from Pepe at all (its mic is Voicemeeter's). The admins are told once. `off` puts it back. While a voice device is set, **DJ talk** (DJ drops, patter, sponsor reads) stays on the stage with the music it talks over and off the website's room audio; `!mic device dj voice` moves it with his voice. With no voice device set, DJ talk goes with his voice as before. `!mic device tail <ms>` (0-2000) holds the mic longer after a moved clip; 0 = auto (the default): 250 ms after a clip that played on a Voicemeeter device, which buffers about 200 ms - an explicit value wins. `!mic test voice` / `music` plays the tone on that device. Pepe never listens to (records or transcribes through his loopback) a Voicemeeter device or his voice / music device: a `listen_device` setting that names one is refused (the reason is in the log and in `!mic device`), and with none set he listens to the default output's loopback. Ships **off**: everything plays into the main device.",
    "examples": [
-    "!mic device CABLE Input"
+    "!mic device CABLE Input",
+    "!mic device voice aux",
+    "!mic device dj stage"
    ],
    "keywords": [],
    "webchat": true
@@ -6295,7 +6477,7 @@
     "!mic regrab fast|normal"
    ],
    "summary": "alerts switches the alert sound channel on or off for this room — the full alert controls are under !alerts.",
-   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something with sound is on air on his OBS - a stream or 📼 Plex slot, a YouTube / Twitch link (`!onair`), or the IRL feed while it's on screen; never a Camfrog cam (no sound) - so the room hears it - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room. **regrab fast** (per room): when the room's mic timer drops Pepe while he's holding the mic on purpose (the jukebox, an on-air pick, hold mode) he takes it straight back - about a second later - instead of waiting for his next check. A human blocking his mic still keeps him off.",
+   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something with sound is on air on his OBS - a stream or 📼 Plex slot, a YouTube / Twitch link (`!onair`), or the IRL feed and the stage sources (`!onair setup sources`) while they're on screen; never a Camfrog cam (no sound) - so the room hears it - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room. **regrab fast** (per room): when the room's mic timer drops Pepe while he's holding the mic on purpose (the jukebox, an on-air pick, hold mode) he takes it straight back - about a second later - instead of waiting for his next check. A human blocking his mic still keeps him off.",
    "examples": [
     "!mic onair on"
    ],
@@ -6573,7 +6755,7 @@
   },
   {
    "id": "netaudio",
-   "title": "!netaudio [on · off]",
+   "title": "!netaudio [on · off · micups]",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6583,14 +6765,19 @@
    "syntax": [
     "!netaudio",
     "on",
-    "off"
+    "off",
+    "!netaudio micups [on · off · status]",
+    "!netaudio micups gain <dB>",
+    "!netaudio micups offset <ms>"
    ],
    "summary": "Transcribe every room Pepe is in at once, from each room's own audio.",
-   "details": "Camfrog plays all of Pepe's rooms through one mixed sound stream, which is why `!audioroom` normally has to pick one room. With **net audio** on, Pepe takes each room's voice straight from that room's own audio connection instead, so mic-ups in every room are recorded and transcribed separately, each tagged with its room (and with the person who was actually talking when he can tell). `!clip` sound, mic clips and the website's room audio work per room too. While it is on, the old speaker capture (the loopback) is closed completely; `!audioroom all` then unmutes every room. `!netaudio` shows the state (rooms found, speakers, decode errors, the transcription queue, whether the loopback is open); `on` / `off` switch it. `off` reopens the loopback and, if an `!audioroom` room is set, makes that the one audible room again. Ships **off**.",
+   "details": "Camfrog plays all of Pepe's rooms through one mixed sound stream, which is why `!audioroom` normally has to pick one room. With **net audio** on, Pepe takes each room's voice straight from that room's own audio connection instead, so mic-ups in every room are recorded and transcribed separately, each tagged with its room (and with the person who was actually talking when he can tell). `!clip` sound, mic clips and the website's room audio work per room too. While it is on, the old speaker capture (the loopback) is closed completely; `!audioroom all` then unmutes every room. `!netaudio` shows the state (rooms found, speakers, decode errors, the transcription queue, whether the loopback is open); `on` / `off` switch it. `off` reopens the loopback and, if an `!audioroom` room is set, makes that the one audible room again. Ships **off**.\n**Pepe's own mic-ups on the website:** Camfrog never sends Pepe his own voice back, so the website's room audio carries every chatter but him. `!netaudio micups on` adds his voice mic-ups (`!say` and his other spoken lines, chatty, relayed web clips, the soundboard) to the room audio of each bridged room where he holds the mic, at the other chatters' timing. He never grabs the mic for it, and his voice is never transcribed, recorded or clipped as a chatter there. Alert stings, the bottle-service anthem, music and on-air sound stay off it (the website hears those on his stage stream). So does DJ talk (drops, patter, sponsor reads), which stays on the stage with the music unless `!mic device dj voice`. Until his voice has its own device (`!mic device voice aux`), his stage stream carries it too, and the status says so. A private note he reads out never goes on it. A clip from someone who hides from the website (`!bridge hide`) is marked like their own mic-up. When he loses the mic mid-clip, the room's copy stops there too. `gain` (-24 to +12 dB) sets his level, and `offset` (0-2000 ms, default 250) sets where his clips land. `!netaudio micups` shows the state, the clip counts and both levels for tuning. Needs net audio on. Ships **off**.",
    "examples": [
     "!netaudio",
     "!netaudio on",
-    "!netaudio off"
+    "!netaudio off",
+    "!netaudio micups on",
+    "!netaudio micups gain -3"
    ],
    "keywords": []
   },
@@ -8271,6 +8458,7 @@
   "!forgetme",
   "!incognito",
   "!joinroom",
+  "!livecam",
   "!message",
   "!msg",
   "!padfine",
@@ -8306,5 +8494,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "3dd623019a49c00a"
+ "hash": "18d38151a0b7cce7"
 }
