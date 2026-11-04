@@ -293,3 +293,27 @@ test("1.99aiw dock: review - a GIF search is a POST: the words never ride in a U
   assert.equal(calls.length, 1, "a non-string query reaches no provider");
 });
 
+// 1.99?? dockfu (D4): the route's own express.json({ limit: "4kb" }) never applied - index.js's global JSON parser (100 kB) ran first
+// and the route's parser then saw an already-read body. index.js now skips /api/gifs/search like the other self-parsing routes. The
+// global middleware here is index.js's OWN skip rule, read from its source, so a path dropped from that list fails this test.
+test("1.99?? dockfu: a search body over 4 kB is refused behind index.js's global JSON parser; a normal one still searches", async () => {
+  const source = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  const use = source.split(/\r?\n|\r/).find(l => l.startsWith("app.use((req, res, next) => (req.path === \"/api/media\"") && l.includes("express.json()(req, res, next)"));
+  assert.ok(use, "index.js's global JSON parser line");
+  assert.match(use, /req\.path === "\/api\/gifs\/search" \|\|/);
+  const skip = [...use.matchAll(/req\.path === "([^"]+)"/g)].map(m => m[1]), prefixes = [...use.matchAll(/req\.path\.startsWith\("([^"]+)"\)/g)].map(m => m[1]);
+  assert.ok(skip.includes("/api/gifs/search") && skip.length > 20 && prefixes.includes("/internal/"));
+  const app = express(), addUser = (req, res, next) => { req.user = req.get("x-test-user") ? { userId: req.get("x-test-user") } : null; next(); };
+  app.use((req, res, next) => (skip.includes(req.path) || prefixes.some(p => req.path.startsWith(p)) ? next() : express.json()(req, res, next)));
+  relay.register(app, { addUser, isBotToken: t => t === "fixture-bot", bySlug: slug => slug === room.slug ? room : null, isLive: () => live, gated: () => gated });
+  G.register(app, { addUser });
+  const srv = await new Promise(resolve => { const x = app.listen(0, "127.0.0.1", () => resolve(x)); });
+  try {
+    const url = "http://127.0.0.1:" + srv.address().port + "/api/gifs/search";
+    const post = body => realFetch(url, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+    const big = await post({ pad: room.slug, q: "wave", pad_note: "x".repeat(5000) });
+    assert.equal(big.status, 413, "a body over 4 kB never reaches the search"); assert.equal(calls.length, 0, "no provider request");
+    const ok = await post({ pad: room.slug, q: "wave" });
+    assert.equal(ok.status, 200); assert.equal(calls.length, 1);
+  } finally { srv.close(); }
+});

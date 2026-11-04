@@ -636,28 +636,48 @@ test("the live room advertises stickers only after an explicit true bot snapshot
   }
 });
 
+// 1.99?? dockfu (D4): the eligibility is cached per viewer and room for ELIG_TTL_MS (30 s) - every /live long-poll used to ask it again.
+// The test runs on the cache's injectable clock (bridge._eligClock), not wall time: within the TTL the answer is reused; past it, or
+// at once when the viewer's link, the Dock mode or the !bridge block list changes, it is asked again; a check that throws is never kept.
 test("live picker availability follows the shared say eligibility and fails closed", async () => {
   const dock = require(path.join(repo, "paddock")), cf = require(path.join(repo, "cfstickers")), gifs = require(path.join(repo, "gifs"));
-  const old = [dock.current, cf.enabled, gifs.available, relay.sayEligibility];
-  const R = bridge.bySlug(SLUG), before = R.stickers;
-  let calls = 0, allowed = true;
+  const BB = require(path.join(repo, "bridgeblocks"));
+  const old = [dock.current, cf.enabled, gifs.available, relay.sayEligibility, BB.version];
+  const R = bridge.bySlug(SLUG), before = R.stickers, TTL = bridge.ELIG_TTL_MS;
+  let calls = 0, allowed = true, now = 5e12, mode = "everyone", bver = "v1";
+  assert.equal(TTL, 30000);
+  bridge._eligReset(); bridge._eligClock(() => now);
   try {
-    dock.current = () => ({ cfg: { mode: "everyone" } });
+    dock.current = () => ({ cfg: { mode } });
+    BB.version = () => bver;
     cf.enabled = () => true; gifs.available = () => true; R.stickers = true;
     relay.sayEligibility = async (req, room) => { calls++; assert.equal(req.user, U.alice); assert.equal(room, R); return { ok: allowed }; };
-    const live = () => bridge.liveView(R, 0, U.alice.userId, "alicecf", "alice", true, { viewer: U.alice });
-    let d = await live(); assert.equal(d.room.cfstickerPicker, true); assert.equal(d.room.gifPicker, true);
-    allowed = false; d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false);
-    allowed = true; R.stickers = false; d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, true);
-    relay.sayEligibility = async () => { throw new Error("unavailable"); };
+    const live = (login = "alicecf") => bridge.liveView(R, 0, U.alice.userId, login, "alice", true, { viewer: U.alice });
+    let d = await live(); assert.equal(d.room.cfstickerPicker, true); assert.equal(d.room.gifPicker, true); assert.equal(calls, 1);
+    // within the TTL the answer is reused - no second check, even though it would now say no
+    allowed = false; now += TTL - 1; d = await live(); assert.equal(d.room.cfstickerPicker, true); assert.equal(calls, 1, "cached within 30 s");
+    // past the TTL it is asked again
+    now += 1; d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false); assert.equal(calls, 2);
+    // the switches are read fresh every time (only the eligibility is cached)
+    allowed = true; now += TTL; R.stickers = false; d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, true); assert.equal(calls, 3);
+    R.stickers = true; d = await live(); assert.equal(d.room.cfstickerPicker, true); assert.equal(calls, 3);
+    // what changes the answer at once: a new linked login, the Dock mode, a !bridge block / unblock (the list's version)
+    allowed = false;
+    d = await live("other-frog"); assert.equal(d.room.cfstickerPicker, false); assert.equal(calls, 4, "a link change is a fresh check");
+    allowed = true; mode = "staff"; d = await live(); assert.equal(d.room.gifPicker, true); assert.equal(calls, 5, "a Dock mode change is a fresh check");
+    allowed = false; bver = "v2"; d = await live(); assert.equal(d.room.gifPicker, false); assert.equal(calls, 6, "a block list change is a fresh check");
+    // a check that throws fails closed and is never kept
+    now += TTL; relay.sayEligibility = async () => { calls++; throw new Error("unavailable"); };
     d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false);
+    d = await live(); assert.equal(calls, 8, "a thrown check is asked again");
     relay.sayEligibility = async () => { throw new Error("off path must not call eligibility"); };
-    dock.current = () => ({ cfg: { mode: "off" } });
+    mode = "off";
     d = await live(); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false);
-    assert.equal(calls, 3);
+    // signed out: never asked
+    mode = "everyone"; d = await bridge.liveView(R, 0, null, null); assert.equal(d.room.cfstickerPicker, false); assert.equal(d.room.gifPicker, false);
   } finally {
-    [dock.current, cf.enabled, gifs.available, relay.sayEligibility] = old;
-    R.stickers = before;
+    [dock.current, cf.enabled, gifs.available, relay.sayEligibility, BB.version] = old;
+    R.stickers = before; bridge._eligClock(null); bridge._eligReset();
   }
 });
 

@@ -881,6 +881,30 @@ function audioRecheck() {
 }
 
 /**
+ * 1.99?? dockfu (D4): the picker's eligibility (bridge-relay.sayEligibility - a users read, the pad-access, 18+ gate and !bridge block
+ * checks) cached per viewer and room for ELIG_TTL_MS. It ran on EVERY /live answer of every signed-in viewer (each long-poll wake)
+ * once a media switch was on. It only decides whether the picker's tabs show - every send still runs the full check (sendSayLine) -
+ * so a short staleness is harmless, and the key holds what should change it at once: the viewer's linked Camfrog login (a !verify /
+ * an unlink), their class (a role change; req.user's), the Room Dock mode and the !bridge block list's version (bridgeblocks bumps it
+ * on every block / unblock). Only a real answer is kept (a check that throws is asked again next time). Bounded (oldest first).
+ */
+const ELIG_TTL_MS = 30000, ELIG_MAX = 5000, ELIG = new Map();
+let eligClock = () => Date.now();
+async function pickerEligible(viewer, R, login) {
+  let bv = "";
+  try { bv = require("./bridgeblocks").version(); } catch (e) { bv = ""; }
+  const key = [viewer && viewer.userId, R.id, String(login || "").toLowerCase(), (viewer && viewer.class) || "",
+               require("./paddock").current().cfg.mode, bv].join("\u0001");
+  const t = eligClock(), hit = ELIG.get(key);
+  if (hit && t - hit.at >= 0 && t - hit.at < ELIG_TTL_MS) return hit.ok;
+  const access = await relay.sayEligibility({ user: viewer }, R);
+  const ok = !!(access && access.ok);
+  ELIG.delete(key); ELIG.set(key, { at: t, ok });
+  for (const [k, v] of ELIG) { if (ELIG.size <= ELIG_MAX && t - v.at < ELIG_TTL_MS) break; ELIG.delete(k); }
+  return ok;
+}
+
+/**
  * 1.99?? dockfu (D3): the media mark. A chat line draws as a Camfrog sticker or a GIF (chatlog-core mediaOf) only with it.md, and only
  * the server sets it, here, for a line whose words are exactly one media token AND that came through a real media path:
  *  - a relayed Room Dock pick: the line's own say job (its web.job, matched in the job's room - bridge-relay.echoJob) carried that
@@ -1671,8 +1695,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     const stickersOn = R.stickers === true && require("./cfstickers").enabled(), gifsOn = require("./gifs").available();
     if (stickersOn || gifsOn) {
       try {
-        const access = await relay.sayEligibility({ user: viewer }, R);
-        if (access.ok) { cfstickerPicker = stickersOn; gifPicker = gifsOn; }
+        if (await pickerEligible(viewer, R, login)) { cfstickerPicker = stickersOn; gifPicker = gifsOn; }
       } catch (e) { /* an unavailable eligibility check leaves both picker tabs hidden */ }
     }
   }
@@ -2361,7 +2384,8 @@ async function forgetVeiled(logins) {
   return { feed: n, rooms: r.rooms };
 }
 
-module.exports = { revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99?? dockfu (D4)
+  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)
