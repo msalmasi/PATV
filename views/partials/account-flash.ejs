@@ -17,8 +17,11 @@
   const verifyMsgText = (errStr || succStr).replace(/!verify \w+.*/, '').trim();
 %>
   <% if (verifyInfo) { %>
-    <div class="verify-box">
-      <div class="verify-header">⚠ <%- t('settings.verify.header') %></div>
+    <%# 1.99?? quick1: the code shows at the top of the page, but the link form is further down (#connections) - the page now
+        comes back to the top (user.controller: no #connections hash when a code is issued), brings the box into view (smooth
+        unless reduced motion) and moves focus to it; a polite live region reads the code out once. %>
+    <div class="verify-box" id="cf-verify" tabindex="-1" role="region" aria-labelledby="cfVerifyH">
+      <div class="verify-header" id="cfVerifyH">⚠ <%- t('settings.verify.header') %></div>
       <div class="verify-msg"><%= verifyMsgText %></div>
       <div class="verify-instructions"><%- t('settings.verify.instructions') %></div>
       <div class="verify-code-wrap">
@@ -26,7 +29,39 @@
         <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent=this.dataset.copied; setTimeout(()=>this.textContent=this.dataset.copy,2000);" data-copied="<%- t('settings.verify.copied') %>" data-copy="<%- t('settings.verify.copy') %>"><%- t('settings.verify.copy') %></button>
       </div>
       <div class="verify-expires">⏱ <%- t('settings.verify.expires') %></div>
+      <p class="verify-sr" id="cfVerifyLive" role="status" aria-live="polite" data-say="<%- t('settings.verify.announce', { code: verifyInfo.code }) %>"></p>
     </div>
+    <script>
+      (function () {
+        var box = document.getElementById('cf-verify');
+        if (!box) return;
+        var reduce = false;
+        try { reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+        function seen() {
+          var r = box.getBoundingClientRect(), h = window.innerHeight || document.documentElement.clientHeight;
+          return r.top >= 0 && r.bottom <= h;
+        }
+        function go() {
+          if (!seen()) {
+            try { box.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' }); } catch (e) { box.scrollIntoView(); }
+          }
+          try { box.focus({ preventScroll: true }); } catch (e) { box.focus(); }
+          var live = document.getElementById('cfVerifyLive');
+          if (live && !live.textContent) setTimeout(function () { live.textContent = live.getAttribute('data-say') || ''; }, 150);
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+        // the browser's own jump to an address's #hash (an old #connections link) lands after load and drops focus, and a
+        // late layout shift can push the box out again: once more just after load - focus only back if nothing has it
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            // instant here: a smooth scroll this late is cut short by the browser's own fragment scroll
+            if (!seen()) { try { box.scrollIntoView({ behavior: 'auto', block: 'center' }); } catch (e) { box.scrollIntoView(); } }
+            var a = document.activeElement;
+            if (!a || a === document.body || a === document.documentElement) { try { box.focus({ preventScroll: true }); } catch (e) {} }
+          }, 120);
+        });
+      })();
+    </script>
   <% } else { %>
     <% if (errStr) { %><div class="ds-note danger msg err" role="alert"><%= errStr %></div><% } %>
     <% if (succStr) { %><div class="ds-note ok msg ok" role="status"><%= succStr %></div><% } %>

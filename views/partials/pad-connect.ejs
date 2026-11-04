@@ -30,7 +30,10 @@
       <p class="muted"><%- t('pad.conn.disc_first', { platform: PL_ }) %></p>
     <% } else if (CF_ && (CF_.status === 'pending' || CF_.status === 'review')) { %>
       <p><%- t('pad.conn.connecting', { name: CF_.external_name }) %></p>
-      <p class="pcn-code"><code id="pcnCode"><%= CF_.code %></code> <button type="button" class="btn-s ghost" data-pcn="copy"><%- t('pad.conn.copy') %></button> <small class="muted"><%- t('pad.conn.valid_until', { date: dt_(CF_.code_expires) }) %></small></p>
+      <%# 1.99?? quick1: right after "Get a code" the page comes back here (#pcnCamfrog) and pad-connect.js brings this into view,
+          focuses it and reads the code out (pcnCodeLive) %>
+      <p class="pcn-code" id="pcnCodeBox" tabindex="-1"><code id="pcnCode"><%= CF_.code %></code> <button type="button" class="btn-s ghost" data-pcn="copy"><%- t('pad.conn.copy') %></button> <small class="muted"><%- t('pad.conn.valid_until', { date: dt_(CF_.code_expires) }) %></small></p>
+      <p class="pcn-sr" id="pcnCodeLive" role="status" aria-live="polite" data-say="<%- t('pad.conn.code_announce', { code: CF_.code }) %>"></p>
       <ol class="pcn-steps">
         <li><%- t('pad.conn.step_topic', { code: '<code>' + t.esc(CF_.code) + '</code>' }) %></li>
         <li><%- t('pad.conn.step_cmd', { cmd: '<code>!verifypad ' + t.esc(CF_.code) + '</code>' }) %><%- CF_.status === 'review' ? t('pad.conn.review_done') : '' %>.</li>
@@ -89,5 +92,9 @@
   .pcn .pcn-steps { margin: 6px 0; padding-left: 20px; line-height: 1.6; }
   .pcn .pcn-danger summary { cursor: pointer; color: #ef9a9a; margin: 6px 0; }
   .pcn .btn.danger { background: #5a1a1a; border-color: #8a2a2a; color: #fff; }
+  /* 1.99?? quick1: the code takes focus right after "Get a code" (pad-connect.js) */
+  .pcn .pcn-code { scroll-margin: 16px; border-radius: 10px; }
+  .pcn .pcn-code:focus { outline: 2px solid var(--ds-gold, #e5b80b); outline-offset: 4px; }
+  .pcn .pcn-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 </style>
-<script src="/public/js/pad-connect.js?v=1" defer></script>
+<script src="/public/js/pad-connect.js?v=2" defer></script>

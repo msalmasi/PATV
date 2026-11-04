@@ -707,6 +707,10 @@ async function updateCamfrogUsername(req, res) {
     } else {
       req.flash('success', `Verify ownership of "${camfrogUsername}" to complete the link. !verify ${code}`);
     }
+    // 1.99?? quick1: the code box is at the TOP of the page (partials/account-flash.ejs) - the address points at it, not at
+    // #connections further down where it couldn't be seen (even with scripts off); its script brings it into view and
+    // moves focus to it
+    return res.redirect(ACCOUNT_PAGE + '#cf-verify');
   } catch (err) {
     console.error('[CF-LINK] Initiate error:', err);
     req.flash('error', 'Failed to initiate Camfrog link.');
