@@ -148,7 +148,7 @@
 .chatlog .cldl .cldl-date { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-px); flex: 1 1 150px; min-width: 0; font-size: 12.5px;
                             color: var(--ds-text-muted); cursor: default; }   /* label above its field (not .la-reasons' two columns) */
 .chatlog .cldl-date .ds-in { min-width: 0; }
-/* 1.99??: bridged media uses the same text row in live chat, scrollback and search. Exports contain text placeholders. */
+/* 1.99aiw: bridged media uses the same text row in live chat, scrollback and search. Exports contain text placeholders. */
 .chatlog .cfstk { display: block; max-inline-size: 100px; max-block-size: 100px; object-fit: contain; border-radius: var(--ds-r-sm); }
 .chatlog .gif-media { display: inline-flex; flex-direction: column; max-inline-size: 100%; gap: var(--ds-sp-1); }
 .chatlog img.gif { display: block; max-inline-size: min(280px, 100%); max-block-size: 240px; object-fit: contain; border-radius: var(--ds-r-sm); }

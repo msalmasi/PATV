@@ -1,5 +1,5 @@
 /* Room Dock: the existing pad components, scoped to this opt-in layout. */
-/* 1.99?? review: no overflow: hidden here (the body hands it to the viewport) - a window shorter than the floor (a phone held
+/* 1.99aiw review: no overflow: hidden here (the body hands it to the viewport) - a window shorter than the floor (a phone held
    sideways) scrolls to the composer, as /messages' body.dm-page does; only sideways overflow is cut */
 body.pad-dock-live { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 520px; overflow-x: hidden; }
 body.pad-dock-live > header { flex: none; }
@@ -12,14 +12,14 @@ main.rm.rm-dock .crumb { flex: none; font-size: var(--ds-fs-xs); }
 main.rm.rm-dock #padPanel-live { min-block-size: 0; min-inline-size: 0; }
 body.pad-dock-live main.rm.rm-dock #padPanel-live { display: flex; flex-direction: column; flex: 1 1 0; gap: var(--ds-sp-2); }
 main.rm.rm-dock .rmd-drawer { flex: none; min-inline-size: 0; display: grid; gap: var(--ds-sp-2); }
-/* 1.99?? review: no background here - the header keeps today's tint (.rm .hero; .rm.pad-acc .hero = the pad's accent, spec D.4) */
+/* 1.99aiw review: no background here - the header keeps today's tint (.rm .hero; .rm.pad-acc .hero = the pad's accent, spec D.4) */
 main.rm.rm-dock #rmHero { padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); }
 main.rm.rm-dock #rmHero .hd { gap: var(--ds-sp-2); }
 main.rm.rm-dock #rmHero .hd-id { display: flex; align-items: center; gap: var(--ds-sp-2); }
 main.rm.rm-dock #rmHero h1 { flex: 1 1 auto; min-inline-size: 0; }
 main.rm.rm-dock #rmHero .hd-st { flex: none; }
 main.rm.rm-dock #rmHero .rm-av { width: 32px; height: 32px; border-radius: var(--ds-r-sm); }
-/* 1.99?? review: the banner fills the header, so it sits UNDER padfx's effect layer (.pfx-l, z 0: embers, snow, pixel, the Prime
+/* 1.99aiw review: the banner fills the header, so it sits UNDER padfx's effect layer (.pfx-l, z 0: embers, snow, pixel, the Prime
    Time rings) - at padfx's z 1 it hid them all. A negative z needs the header to be a stacking context: above --ds-z-sticky, so
    the ⋯ menu inside it still opens over the stage overlay and the floating chat (and stays below the navbar and every sheet). */
 main.rm.rm-dock #rmHero.has-bn { position: relative; padding-block: var(--ds-sp-2); z-index: calc(var(--ds-z-sticky) + var(--ds-z-raised)); }
@@ -78,7 +78,7 @@ main.rm.rm-dock .rmd-id .rm-av { width: 32px; height: 32px; border-radius: var(-
 main.rm.rm-dock .rmd-id-name { display: flex; align-items: center; gap: var(--ds-sp-2); flex: 1 1 auto; min-inline-size: 0; overflow: hidden; }
 main.rm.rm-dock .rmd-id-name > .rm-nm { min-inline-size: min(8ch, 100%); text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); font-weight: 700; }
 main.rm.rm-dock .rmd-id-name > .pfx-bs { flex: 0 1 auto; }
-main.rm.rm-dock .rmd-id > .rmd-id-banner { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; z-index: calc(-1 * var(--ds-z-raised)); }   /* 1.99??: under the frame layer (see #rmHero) */
+main.rm.rm-dock .rmd-id > .rmd-id-banner { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; z-index: calc(-1 * var(--ds-z-raised)); }   /* 1.99aiw: under the frame layer (see #rmHero) */
 main.rm.rm-dock .rmd-id-banner img { inline-size: 100%; block-size: 100%; object-fit: cover; object-position: 50% var(--pad-banner-y, 50%); display: block; }
 main.rm.rm-dock .rmd-id-banner::after { content: ""; position: absolute; inset: 0; background: var(--ds-media-panel); }
 main.rm.rm-dock .rmd-id > .rmd-id-content { position: relative; z-index: var(--ds-z-raised); }
@@ -193,18 +193,18 @@ main.rm.rm-dock #rmAudioBox .rb-audio { padding: var(--ds-sp-1); border: 0; bord
 main.rm.rm-dock #rmAudioBox .rb-state { flex: 0 1 auto; font: 500 var(--ds-fs-xs)/var(--ds-lh-xs) var(--ds-font); letter-spacing: normal; }
 main.rm.rm-dock .rmd-composer :is(.rb-play, .rb-mute, .rb-btn, .rb-talk, .rb-send) { min-block-size: 36px; }
 main.rm.rm-dock #rmAudioBox .rb-vol { margin-inline: 0 var(--ds-sp-1); flex: 0 1 84px; inline-size: 84px; }
-/* 1.99?? review: 1.99ait's "Sync to the audio: on / off" toggle (av-sync.js appends it to this row) is an emoji icon button here - as
+/* 1.99aiw review: 1.99ait's "Sync to the audio: on / off" toggle (av-sync.js appends it to this row) is an emoji icon button here - as
    a text button it wrapped the one-line audio row (a 4-line button on phones) and squeezed the chat. Its words stay its accessible
    name (font-size 0, never hidden); the on state is room-bridge.css's pressed accent outline; the tooltip is av-sync's title. */
 main.rm.rm-dock #rmAudioBox .rb-avsync { flex: none; font-size: 0; white-space: nowrap; overflow: hidden; padding-inline: 0; }
 main.rm.rm-dock #rmAudioBox .rb-avsync::before { content: "⏱️"; font-size: var(--ds-fs-sm); line-height: 1; }
-main.rm.rm-dock .rmd-holders { display: flex; align-items: center; gap: var(--ds-sp-1); flex: 1 1 96px; min-inline-size: 0; overflow-x: auto; }   /* 1.99?? review: 96px (was 140) keeps the row on one line at ~800px with the A/V sync toggle; it still grows */
+main.rm.rm-dock .rmd-holders { display: flex; align-items: center; gap: var(--ds-sp-1); flex: 1 1 96px; min-inline-size: 0; overflow-x: auto; }   /* 1.99aiw review: 96px (was 140) keeps the row on one line at ~800px with the A/V sync toggle; it still grows */
 main.rm.rm-dock .rmd-holders > * { flex: none; max-inline-size: 180px; min-block-size: 32px; }
 main.rm.rm-dock .rmd-holders .rmd-person { max-inline-size: 100%; }
 main.rm.rm-dock .rmd-holders .rmd-person-name { flex: 0 1 auto; }
 main.rm.rm-dock .rmd-holders .av { inline-size: 24px; block-size: 24px; }
 main.rm.rm-dock .rmd-holders .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 1.99?? dock: review - privacy (spec K): a veiled holder keeps its text tag ("incognito" / "hidden") in the narrow chip - only the
+/* 1.99aiw dock: review - privacy (spec K): a veiled holder keeps its text tag ("incognito" / "hidden") in the narrow chip - only the
    frog name gives way, as in the chat's line head (chatlog.css); a clipped tag leaves an italic frog name that reads like a real one */
 main.rm.rm-dock .rmd-holders .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
 main.rm.rm-dock .rmd-holders .who.veil > i { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

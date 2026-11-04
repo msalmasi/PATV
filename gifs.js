@@ -18,7 +18,7 @@ const cache = new Map(), pending = new Map(), retried = new Map(), hits = new Ma
 let clock = () => Date.now();
 class Refuse extends Error { constructor(status, code) { super(code); this.status = status; this.refuse = true; } }
 const key = () => String(process.env.KLIPY_API_KEY || "").trim(); // call-time only; never retained/logged/exported
-// 1.99?? dock: review - the Room Dock off is the kill switch too: no KLIPY request and no KLIPY media in a line while it is off
+// 1.99aiw dock: review - the Room Dock off is the kill switch too: no KLIPY request and no KLIPY media in a line while it is off
 const available = () => { const c = require("./paddock").current().cfg; return c.mode !== "off" && c.gifs === true && !!key(); };
 function safeUrl(value, hosts) {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f\\]/.test(value)) return null;
@@ -55,7 +55,7 @@ function prune() {
   for (const [id, at] of retried) if (now - at >= LOOKUP_RETRY_MS) retried.delete(id);
   for (const [id, entry] of hits) if (now - entry.at >= WINDOW_MS) hits.delete(id);
 }
-// 1.99?? dock: `filtered` = the id came back from a contentfilter=high search / featured answer (only those can be sent)
+// 1.99aiw dock: `filtered` = the id came back from a contentfilter=high search / featured answer (only those can be sent)
 function remember(item, filtered) {
   prune(); const old = cache.get(item.id); cache.delete(item.id);
   cache.set(item.id, { at: clock(), item: clone(item), filtered: !!filtered || !!(old && old.filtered) });
@@ -101,12 +101,12 @@ async function search(q) {
   const params = { contentfilter: CONTENT_FILTER, media_filter: "tinygif,gif", limit: 20 };
   if (q) params.q = q;
   const items = await request(q ? "search" : "featured", params), out = [];
-  // 1.99?? dock: review - Pepe says the title in the Camfrog room; the rating filter rates the picture, not the uploader's title,
+  // 1.99aiw dock: review - Pepe says the title in the Camfrog room; the rating filter rates the picture, not the uploader's title,
   // so a title the text guard refuses (textguard.js) is never offered - and never becomes sendable
   for (const raw of items.slice(0, 50)) { const item = normalize(raw); if (item && !require("./textguard").bad(item.title)) { remember(item, true); out.push(clone(item)); } }
   return out;
 }
-/** 1.99?? dock: the GIF a say line may post - only an id a filtered (contentfilter=high) search / featured answer gave in the
+/** 1.99aiw dock: the GIF a say line may post - only an id a filtered (contentfilter=high) search / featured answer gave in the
  *  cache's 24 h. Never the Posts lookup (resolve), which has no rating filter: a hand-made "[gif:<id>]" could otherwise put any
  *  GIF in the chat for everyone, and distinct bogus ids could spend the global lookup budget. Synchronous: no provider request. */
 function picked(id) {
@@ -125,7 +125,7 @@ function resolve(id) {
   // the high-rated search/trending picker and owner-configured KLIPY filtering are the discovery controls.
   const task = request("posts", { ids: id, media_filter: "tinygif,gif" }).then(items => {
     const item = items.map(normalize).find(x => x && x.id === id);
-    if (item) remember(item, false);           // (1.99?? dock: rendering metadata only - never makes the id sendable)
+    if (item) remember(item, false);           // (1.99aiw dock: rendering metadata only - never makes the id sendable)
     return item || null;
   }).catch(() => null).finally(() => pending.delete(id));
   pending.set(id, task); return task;
@@ -142,14 +142,14 @@ function attach(item) {
   return item;
 }
 function register(app, { addUser }) {
-  // 1.99?? dock: review - privacy: POST {q, pad}, never a GET - what people look for (often a name) never sits in a URL, so it stays
+  // 1.99aiw dock: review - privacy: POST {q, pad}, never a GET - what people look for (often a name) never sits in a URL, so it stays
   // out of nginx's and Cloudflare's request logs (spec O.1: q is never logged), as the pad chat's own search does (chatlogsearch.js)
   app.post("/api/gifs/search", addUser, require("express").json({ limit: "4kb" }), async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, code: "security", error: "GIF search unavailable." });
     try {
       const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
-      // 1.99?? dock: review - a slug only: a pad object ({id, relay, ...}) is what sayEligibility would take as the room itself
+      // 1.99aiw dock: review - a slug only: a pad object ({id, relay, ...}) is what sayEligibility would take as the room itself
       const pad = typeof body.pad === "string" ? body.pad : "";
       const access = await require("./bridge-relay").sayEligibility(req, pad);
       if (!access.ok) return res.status(access.status).json(access.body);

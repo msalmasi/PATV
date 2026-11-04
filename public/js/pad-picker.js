@@ -31,7 +31,7 @@
       if (o.relay._send(token)) closeToInput();
       else note(t('queue', 'Your messages are still on their way. Try again in a moment.'));
     }
-    // 1.99?? dock: review - `post` = a JSON body (the GIF search: its words never ride in a URL, which request logs keep)
+    // 1.99aiw dock: review - `post` = a JSON body (the GIF search: its words never ride in a URL, which request logs keep)
     function request(url, g, show, post) {
       note(t('loading', 'Loading…'));
       var init = { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } };

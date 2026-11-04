@@ -61,7 +61,7 @@
   function str(v) { return v == null ? '' : String(v); }
   function pad2(n) { return ('0' + n).slice(-2); }
 
-  // 1.99??: exact media tokens, shared by the renderer, exports and quote builder. Text around a token stays ordinary text.
+  // 1.99aiw: exact media tokens, shared by the renderer, exports and quote builder. Text around a token stays ordinary text.
   function mediaToken(text) {
     if (typeof text !== 'string') return null;
     var m = /^\[cfsticker:(\d{1,10})\/(\d{1,10})\]$/.exec(text);

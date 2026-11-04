@@ -233,7 +233,7 @@ test('stage status stays outside the aside and its schedule never leaves the pad
   assert.equal(h.doc.getElementById('rmSched')===schedule,true);assert.equal(schedule.parentNode===status,true);assert.equal(h.pipDoc.querySelector('#rmSched'),null);
   assert.equal(h.calls.focus,1);assert.match(h.pipDoc.querySelector('.rmd-toast').textContent,/pad tab/);h.controller.destroy();
 });
-// 1.99?? dock review: drawMic runs on every /live answer (and on lip-sync redraws) - the holder chips are rebuilt only when the
+// 1.99aiw dock review: drawMic runs on every /live answer (and on lip-sync redraws) - the holder chips are rebuilt only when the
 // holders change, like the On the mic card (a rebuild restarted animated name styles and dropped keyboard focus on a chip)
 test('holder chips are redrawn only when the holders change',()=>{
   const h=harness(),list=F.initial().mic,box=h.doc.querySelector('.rmd-holders'),first=box.children[0],calls=h.calls.avatar;
@@ -242,7 +242,7 @@ test('holder chips are redrawn only when the holders change',()=>{
   h.controller.mic(list.slice(0,1));assert.ok(box.children[0]!==first,'rebuilt');assert.equal(box.children.length,1);
   h.controller.mic([]);assert.equal(box.hidden,true);
 });
-// 1.99?? dock review: each float added a window resize listener that outlived its panel (one more per float / redock)
+// 1.99aiw dock review: each float added a window resize listener that outlived its panel (one more per float / redock)
 test('floating the chat again and again leaves no stale window listeners',()=>{
   const h=harness(),count=()=>(h.win.listeners.resize||[]).length,base=count();
   for(let i=0;i<4;i++){h.button('Float chat').click();assert.ok(h.chat.closest('.rmd-float'));h.controller.redock();}

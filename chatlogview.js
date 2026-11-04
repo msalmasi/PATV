@@ -1160,7 +1160,7 @@ function dress(items, ctx) {
         o.removed = { at: Number(it.rm_at), by, why: it.rm_why ? String(it.rm_why).slice(0, 200) : "", ...(who ? { who: String(who) } : {}) };
       }
     }
-    out.push(require("./gifs").attach(o));                  // 1.99??: cache-only, after the complete privacy/removal projection
+    out.push(require("./gifs").attach(o));                  // 1.99aiw: cache-only, after the complete privacy/removal projection
   }
   return out;
 }

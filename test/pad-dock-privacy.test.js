@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? dock: review - privacy (the Room Dock spec K, "in every view"): what the Dock's own surfaces must keep for veiled people.
+// 1.99aiw dock: review - privacy (the Room Dock spec K, "in every view"): what the Dock's own surfaces must keep for veiled people.
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path");
 const repo = path.resolve(__dirname, "..");
 const read = p => fs.readFileSync(path.join(repo, p), "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -15,7 +15,7 @@ const has = (decls, prop, value) => new RegExp("(^|;)\\s*" + prop + "\\s*:\\s*" 
 // node is "<i>Soggy Bullfrog</i> <span class=veil-tag>incognito</span>": clipped as one run, the TEXT tag goes first, leaving an
 // italic frog name that reads like a real Camfrog name (a real display name may look like one - chatlog-core ALIAS_RE). As in the
 // chat's line head (chatlog.css), only the frog name gives way; the tag ("incognito" / "hidden") always shows.
-test("1.99?? dock: review - a veiled mic holder's chip keeps its incognito / hidden tag; only the frog name ellipsizes", () => {
+test("1.99aiw dock: review - a veiled mic holder's chip keeps its incognito / hidden tag; only the frog name ellipsizes", () => {
   const css = read("public/css/pad-dock.css");
   const veil = rules(css, "main.rm.rm-dock .rmd-holders .who.veil");
   assert.ok(has(veil, "display", "(inline-)?flex"), "the veiled name lays out its parts");

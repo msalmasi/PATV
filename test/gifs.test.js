@@ -16,7 +16,7 @@ async function request(url, { user = "linked", body, extraHeaders = {} } = {}) {
   const r = await realFetch(base + url, { method: body === undefined ? "GET" : "POST", headers: { ...headers(user), ...extraHeaders }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   return { status: r.status, headers: r.headers, data: await r.json() };
 }
-// 1.99?? dock: review - a GIF search is a POST {q, pad} (gifs.js): the words never sit in a URL (nginx / Cloudflare request logs)
+// 1.99aiw dock: review - a GIF search is a POST {q, pad} (gifs.js): the words never sit in a URL (nginx / Cloudflare request logs)
 const search = (q = "", opts = {}) => request("/api/gifs/search", { ...opts, body: { pad: room.slug, q } });
 const say = (text, cid) => request("/api/rooms/" + room.slug + "/say", { body: { text, cid } });
 test.before(async () => {
@@ -154,7 +154,7 @@ test("attach is synchronous/cache-only; only named web message tokens get metada
   await flags({ gifs: true }); delete process.env.KLIPY_API_KEY; assert.equal(G.attach({ ...input }).gif, undefined);
 });
 
-// (1.99?? dock: a send reads only the filtered search / featured cache - gifs.picked - so the picker's answer comes first; the
+// (1.99aiw dock: a send reads only the filtered search / featured cache - gifs.picked - so the picker's answer comes first; the
 // concurrent cid retries now race on the say route's own awaits, not on a provider lookup)
 test("exact GIF creates media job; concurrent cid retries enqueue only once", async () => {
   await G.search("");                      // the picker's featured answer (contentfilter=high) - the only way an id becomes sendable
@@ -165,7 +165,7 @@ test("exact GIF creates media job; concurrent cid retries enqueue only once", as
   assert.equal(jobs[0].text, "[gif:gif_fixture_1]"); assert.equal(jobs[0].cid, "gif-lookup-cid"); assert.equal(calls.length, 1, "the search only - a send asks KLIPY nothing");
 });
 
-test("1.99?? dock: an id only the unfiltered Posts lookup returned (the render path) is never sendable; a filtered answer makes it sendable for the cache's 24 h", async () => {
+test("1.99aiw dock: an id only the unfiltered Posts lookup returned (the render path) is never sendable; a filtered answer makes it sendable for the cache's 24 h", async () => {
   await G.resolve("gif_fixture_1");        // Posts has no rating filter: metadata for drawing a line, nothing more
   assert.ok(G.peek("gif_fixture_1")); assert.equal(G.picked("gif_fixture_1"), null);
   const before = calls.length;
@@ -186,9 +186,9 @@ test("mixed/malformed/unknown tokens return gif refusal without jobs", async () 
   assert.equal(relay._jobs.size, 0);
 });
 
-// 1.99?? dock: only a token's own opening ("[gif:" / "[cfsticker:", any case) makes a line a media send. The package's /\[gif\b/i
+// 1.99aiw dock: only a token's own opening ("[gif:" / "[cfsticker:", any case) makes a line a media send. The package's /\[gif\b/i
 // refused every line that merely mentioned "[GIF]" - for everyone, Dock on or off - so a dark ship changed ordinary chat
-test("1.99?? dock: every switch off - words that mention [GIF] / [gif] / [cfsticker] relay as text; a token inside text or one cleaned into shape never does", async () => {
+test("1.99aiw dock: every switch off - words that mention [GIF] / [gif] / [cfsticker] relay as text; a token inside text or one cleaned into shape never does", async () => {
   await flags({ mode: "off", gifs: false, cfstickers: false });
   const plain = ["[GIF] lol", "[gif] that one", "look [gifs] [cfsticker] [Sticker]", "a [Gif] and [CFSTICKER] mention"];
   for (const [i, text] of plain.entries()) {
@@ -208,7 +208,7 @@ test("1.99?? dock: every switch off - words that mention [GIF] / [gif] / [cfstic
 });
 
 test("concurrent distinct GIF picks cannot overfill the shared five-message queue", async () => {
-  await G.search("");                      // (1.99?? dock: sends read the filtered cache only)
+  await G.search("");                      // (1.99aiw dock: sends read the filtered cache only)
   const sends = Array.from({ length: 6 }, (_, i) => say("[gif:gif_fixture_1]", "concurrent-" + i));
   const results = await Promise.all(sends);
   assert.equal(results.filter(x => x.status === 200).length, 5);
@@ -220,7 +220,7 @@ test("a gate or key revoked during provider work prevents response/job delivery"
   provider = async () => { padAllowed = false; return response([fixture()]); };
   assert.equal((await search()).data.code, "pad_access");
   padAllowed = true; G._reset(); G._clock(() => now);
-  // (1.99?? dock: a send no longer waits on the provider - a block in place before it refuses it, with no lookup)
+  // (1.99aiw dock: a send no longer waits on the provider - a block in place before it refuses it, with no lookup)
   provider = async () => response([fixture()]); await G.search(""); const before = calls.length; blocked = "new block";
   assert.equal((await say("[gif:gif_fixture_1]", "new-block-cid")).data.code, "blocked"); assert.equal(relay._jobs.size, 0); assert.equal(calls.length, before);
   blocked = null; G._reset(); provider = async () => { process.env.KLIPY_API_KEY = "fixture-rotated"; return response([fixture()]); };
@@ -235,9 +235,9 @@ test("oversized or malformed upstream bodies return generic errors and do not fi
   assert.equal(G.peek("gif_fixture_1"), null);
 });
 
-// 1.99?? dock: review - qs parses ?pad[id]=..&pad[relay]=1 into an object, and sayEligibility takes an object as the room itself
+// 1.99aiw dock: review - qs parses ?pad[id]=..&pad[relay]=1 into an object, and sayEligibility takes an object as the room itself
 // (its internal callers pass R): a hand-built pad must never stand in for the real one (its live / relay flags are the caller's)
-test("1.99?? dock: review - the search's pad is a slug: a client-built pad object never stands in for the room", async () => {
+test("1.99aiw dock: review - the search's pad is a slug: a client-built pad object never stands in for the room", async () => {
   room.relay = false;
   const forged = await request("/api/gifs/search", { body: { q: "x", pad: { id: room.id, slug: room.slug, relay: 1, updated: 99999999999999 } } });
   room.relay = true;
@@ -246,9 +246,9 @@ test("1.99?? dock: review - the search's pad is a slug: a client-built pad objec
   assert.notEqual(listed.status, 200); assert.equal(calls.length, 0);
 });
 
-// 1.99?? dock: review - the Room Dock off is the kill switch: no KLIPY request (server lookups) and no KLIPY media in a line
+// 1.99aiw dock: review - the Room Dock off is the kill switch: no KLIPY request (server lookups) and no KLIPY media in a line
 // (viewers' browsers), even while the gifs switch and the key are still set
-test("1.99?? dock: review - with the Room Dock off nothing reaches KLIPY, even with gifs on and a key", async () => {
+test("1.99aiw dock: review - with the Room Dock off nothing reaches KLIPY, even with gifs on and a key", async () => {
   await G.search("");                      // warm while on: a filtered, cached answer
   const before = calls.length;
   await flags({ mode: "off", gifs: true });
@@ -262,10 +262,10 @@ test("1.99?? dock: review - with the Room Dock off nothing reaches KLIPY, even w
   await flags({ mode: "staff" }); assert.equal(G.available(), true);
 });
 
-// 1.99?? dock: review - Pepe says a GIF's title in the Camfrog room ("🌐 name (web): 🎞️ <title>"); KLIPY's rating filter rates the
+// 1.99aiw dock: review - Pepe says a GIF's title in the Camfrog room ("🌐 name (web): 🎞️ <title>"); KLIPY's rating filter rates the
 // picture, not the uploader's title, so a title the text guard refuses (textguard.js: what a line Pepe says may not contain) is
 // never offered or sendable
-test("1.99?? dock: review - a GIF whose title trips the text guard is never offered or sendable", async () => {
+test("1.99aiw dock: review - a GIF whose title trips the text guard is never offered or sendable", async () => {
   provider = async () => response([{ ...fixture("bad_title"), title: "kys lol" }, fixture("ok_title")]);
   const out = await search("x"); assert.equal(out.status, 200);
   assert.deepEqual(out.data.map(x => x.id), ["ok_title"]);
@@ -273,9 +273,9 @@ test("1.99?? dock: review - a GIF whose title trips the text guard is never offe
   assert.equal((await say("[gif:bad_title]", "bad-title")).data.code, "gif"); assert.equal(relay._jobs.size, 0);
 });
 
-// 1.99?? dock: review - privacy: what people look for (often a name) is never logged (spec O.1). A GET puts it in the URL, and the URL
+// 1.99aiw dock: review - privacy: what people look for (often a name) is never logged (spec O.1). A GET puts it in the URL, and the URL
 // is in nginx's and Cloudflare's request logs; the pad chat's own search is a POST for the same reason (chatlogsearch.js)
-test("1.99?? dock: review - a GIF search is a POST: the words never ride in a URL", async () => {
+test("1.99aiw dock: review - a GIF search is a POST: the words never ride in a URL", async () => {
   const viaUrl = await realFetch(base + "/api/gifs/search?pad=" + room.slug + "&q=private%20words", { headers: headers() });
   assert.notEqual(viaUrl.status, 200, "no GET search"); assert.equal(calls.length, 0, "no provider request from a URL query");
   const posted = await search("private words"); assert.equal(posted.status, 200);

@@ -507,7 +507,7 @@ async function stickerRefusal(u, raw, out) {
 /** 1.99ye: one say line from member `u` (a users row: userId, username, displayname, camfrogUsername) into live room R.
  *  The /say route and the staging test route both come here. -> {status, body}. `cid` = the page's client id: the same
  *  one again answers with the job it already made (never a second post). */
-// 1.99?? dock: only a token's own opening - "[cfsticker:" / "[gif:" (any case) - makes a line a media send: an exact token
+// 1.99aiw dock: only a token's own opening - "[cfsticker:" / "[gif:" (any case) - makes a line a media send: an exact token
 // (chatlog-core mediaToken) is a sticker / GIF pick, anything else that opens one is refused (never relayed as text that could
 // later read as a token). Ordinary words that merely mention "[GIF]" or "[gif]" relay as text, as before the Room Dock (the old
 // /\[gif\b/i test refused them for everyone, Dock on or off). sayLine checks the cleaned text again.
@@ -552,7 +552,7 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       if (!stickers.enabled() || R.stickers !== true || !stickers.valid(token.set, token.id)) return mediaRefusal(kind);
       media = { type: "cfsticker", set: Number(token.set), id: Number(token.id) };
     } else {
-      // 1.99?? dock: only a GIF a filtered (contentfilter=high) search / featured answer gave - gifs.picked reads the cache, never
+      // 1.99aiw dock: only a GIF a filtered (contentfilter=high) search / featured answer gave - gifs.picked reads the cache, never
       // the unfiltered Posts lookup, so a hand-made "[gif:<id>]" can't post an unrated GIF (and no provider request runs here)
       const gifs = require("./gifs"), gif = gifs.picked(token.id);
       if (!gifs.available() || !gif) return mediaRefusal(kind);

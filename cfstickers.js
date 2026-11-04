@@ -7,7 +7,7 @@ const MAX_INPUT_PIXELS = 16e6, FILE_RE = /^[a-f0-9]{32}\.webp$/, ID_RE = /^[1-9]
 let ready = null, writing = Promise.resolve(), CACHE = new Map(), DIR = null;
 class Refuse extends Error { constructor(status, code) { super(code); this.status = status; this.refuse = true; } }
 const idOf = value => (typeof value === "number" && Number.isSafeInteger(value) || typeof value === "string") && ID_RE.test(String(value)) ? Number(value) : null;
-// 1.99?? dock: review - 240 CODE POINTS, as Pepe cuts them (Python len), never half a surrogate pair: counting UTF-16 units
+// 1.99aiw dock: review - 240 CODE POINTS, as Pepe cuts them (Python len), never half a surrogate pair: counting UTF-16 units
 // refused Pepe's whole atomic list over one long description with an emoji
 const DESC_MAX = 240, points = value => Array.from(String(value));
 const plain = value => points(String(value == null ? "" : value).replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim()).slice(0, DESC_MAX).join("").trim();
@@ -36,7 +36,7 @@ function get(set, id) {
   return { id: row.id, set: row.set_id, desc: row.descr, src: row.file ? "/media/cfsticker/" + row.id + ".webp" : null };
 }
 const valid = (set, id) => !!get(set, id);
-// 1.99?? dock: review - the picker's list is built once per catalog change (GEN) or minute, not with a synchronous fs.existsSync
+// 1.99aiw dock: review - the picker's list is built once per catalog change (GEN) or minute, not with a synchronous fs.existsSync
 // per sticker (up to MAX_CATALOG) on the event loop for every signed-in GET of /api/rooms/:slug/cfstickers (no rate limit)
 const CATALOG_TTL_MS = 60000;
 let GEN = 0, LISTED = null;
@@ -58,7 +58,7 @@ async function syncList(items) {
   return serial(async () => {
     await init(); const next = new Map(), at = Date.now();
     for (const row of rows.values()) { const old = CACHE.get(row.id); next.set(row.id, { ...row, file: old && old.set_id === row.set_id ? old.file : null, updated: at }); }
-    // 1.99?? dock: review - Pepe re-sends the same list every 10 minutes, switches on or off: an unchanged list writes nothing (it
+    // 1.99aiw dock: review - Pepe re-sends the same list every 10 minutes, switches on or off: an unchanged list writes nothing (it
     // was a DELETE + up to 10000 INSERTs holding the write gate, and a fresh picker list, every time)
     const same = next.size === CACHE.size && [...next.values()].every(r => { const o = CACHE.get(r.id); return !!o && o.set_id === r.set_id && o.descr === r.descr && o.file === r.file; });
     if (same) return { need: enabled() ? [...CACHE.values()].filter(r => !r.file || !fs.existsSync(filePath(r.file) || "")).map(r => r.id) : [] };
@@ -68,7 +68,7 @@ async function syncList(items) {
     });
     const old = CACHE; CACHE = next; GEN++;
     for (const row of old.values()) if (row.file && (!next.has(row.id) || next.get(row.id).file !== row.file)) remove(row.file);
-    // 1.99?? dock: while cfstickers is off the site keeps the list (ids, sets, descriptions - served nowhere) but asks Pepe for no
+    // 1.99aiw dock: while cfstickers is off the site keeps the list (ids, sets, descriptions - served nowhere) but asks Pepe for no
     // art, so no Camfrog sticker picture reaches the site's disk before the owner switches it on; the first sync after that
     // (Pepe's 10-minute tick) asks for every picture
     if (!enabled()) return { need: [] };
@@ -90,7 +90,7 @@ async function encode(png) {
   } catch (_) { throw new Refuse(415, "picture"); }
 }
 async function syncPics(items) {
-  if (!enabled()) throw new Refuse(403, "off");             // 1.99?? dock: no Camfrog art on the site while cfstickers is off
+  if (!enabled()) throw new Refuse(403, "off");             // 1.99aiw dock: no Camfrog art on the site while cfstickers is off
   if (!Array.isArray(items) || items.length > MAX_PICS) throw new Refuse(400, "pictures");
   return serial(async () => {
     await init(); const seen = new Set(), updates = [], made = [];
@@ -137,7 +137,7 @@ function register(app, { isBotToken, addUser }) {
   });
   app.get("/media/cfsticker/:id.webp", async (req, res) => {
     try {
-      if (!enabled()) return res.status(404).end();          // 1.99?? dock: nothing served while cfstickers is off (a line shows "[sticker]")
+      if (!enabled()) return res.status(404).end();          // 1.99aiw dock: nothing served while cfstickers is off (a line shows "[sticker]")
       await init(); const row = CACHE.get(idOf(req.params.id)), file = row && filePath(row.file);
       if (!file) return res.status(404).end();
       const headers = { "Content-Type": "image/webp", "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff",

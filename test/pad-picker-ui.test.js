@@ -48,7 +48,7 @@ test("GIF searches are explicit, capped, branded and use only validated thumbnai
     {id:"gif_bad",title:"Bad host",preview:{src:"https://static.klipy.com.evil.invalid/bad.gif"}},
     {id:"gif_credentials",title:"Credentials",preview:{src:"https://u:p@static.klipy.com/bad.gif"}}
   ]));await flush();assert.equal(h.calls.requests.length,1);
-  // 1.99?? dock: review - privacy: a POST {q, pad}, never the words in the URL (nginx / Cloudflare request logs)
+  // 1.99aiw dock: review - privacy: a POST {q, pad}, never the words in the URL (nginx / Cloudflare request logs)
   assert.equal(h.calls.requests[0].url,"/api/gifs/search");assert.equal(h.calls.requests[0].opts.method,"POST");
   assert.equal(h.calls.requests[0].opts.headers["X-Requested-With"],"fetch");assert.equal(h.calls.requests[0].opts.headers["Content-Type"],"application/json");
   assert.deepEqual(JSON.parse(h.calls.requests[0].opts.body),{q:"",pad:"night-orchard"});

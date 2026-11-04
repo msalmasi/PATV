@@ -195,7 +195,7 @@
         host.style.insetInlineEnd = 'auto'; host.style.insetBlockEnd = 'auto';
       });
       on(handle, 'pointerup', function () { start = null; clamp(); }); on(W, 'resize', clamp);
-      // 1.99?? review: the panel's window listener goes with the panel (redock), not one more per float
+      // 1.99aiw review: the panel's window listener goes with the panel (redock), not one more per float
       return function () { W.removeEventListener('resize', clamp, false); listeners = listeners.filter(function (x) { return x[2] !== clamp; }); };
     }
     function floatChat() {
@@ -320,7 +320,7 @@
     function mic(list) {
       holders = Array.isArray(list) ? list : []; if (!holderBox || !o.person) return;
       var max = W.matchMedia && W.matchMedia('(max-width: 760px)').matches ? 1 : 2;
-      // 1.99?? review: drawMic calls this on every /live answer (and on lip-sync redraws); like the On the mic card, redraw only
+      // 1.99aiw review: drawMic calls this on every /live answer (and on lip-sync redraws); like the On the mic card, redraw only
       // when the holders change - a rebuild restarted animated name styles and dropped keyboard focus on a chip
       var key = null;
       try { key = JSON.stringify(holders) + '|' + max + '|' + (o.signed ? 1 : 0) + (o.mod && o.mod.active && o.mod.active() ? 1 : 0); } catch (e) { key = null; }

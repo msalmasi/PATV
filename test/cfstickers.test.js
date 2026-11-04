@@ -90,9 +90,9 @@ test("parser accepts a legitimate >100KB body below700KB; media route is public 
   assert.match(source, /req\.path === "\/api\/bridge\/cfstickers" \|\|/);
 });
 
-// 1.99?? dock: Pepe's sync runs from the moment the bot ships, whatever the switches say - with cfstickers off the site keeps the
+// 1.99aiw dock: Pepe's sync runs from the moment the bot ships, whatever the switches say - with cfstickers off the site keeps the
 // list but takes no art and serves none (the owner's question 3: Camfrog art on the site)
-test("1.99?? dock: cfstickers off - the list is kept but needs no pictures, pictures are refused, the media route serves nothing; on - the next sync asks for them", async () => {
+test("1.99aiw dock: cfstickers off - the list is kept but needs no pictures, pictures are refused, the media route serves nothing; on - the next sync asks for them", async () => {
   await CF.syncPics([{ id: 421, png: png.toString("base64") }]);
   assert.equal((await fetch(base + "/media/cfsticker/421.webp")).status, 200, "on: served");
   await flags({ cfstickers: false });
@@ -173,10 +173,10 @@ test("stickers share text queue and per-minute limits", async () => {
   assert.equal((await say("[cfsticker:1642/421]", "minute-full")).data.code, "rate");
 });
 
-// 1.99?? dock: review - Pepe cuts a description at 240 code points (Python len); the site counted UTF-16 units, so one long
+// 1.99aiw dock: review - Pepe cuts a description at 240 code points (Python len); the site counted UTF-16 units, so one long
 // description with an emoji (two units) refused Pepe's WHOLE atomic list on every 10-minute sync, and the stored cut could end
 // in half a surrogate pair
-test("1.99?? dock: review - a 240-code-point description with an emoji is accepted whole; longer is still refused", async () => {
+test("1.99aiw dock: review - a 240-code-point description with an emoji is accepted whole; longer is still refused", async () => {
   const desc = "x".repeat(238) + "\u{1F600}\u{1F438}";            // 240 code points, 242 UTF-16 units
   const out = await sync({ op: "list", items: [{ id: 421, set: 1642, desc }] });
   assert.equal(out.status, 200, JSON.stringify(out.data));
@@ -185,9 +185,9 @@ test("1.99?? dock: review - a 240-code-point description with an emoji is accept
   assert.equal((await sync({ op: "list", items: [{ id: 421, set: 1642, desc: desc + "x" }] })).status, 400);
 });
 
-// 1.99?? dock: review - the picker's GET ran a synchronous fs.existsSync per catalog sticker (up to 10000) on the event loop for
+// 1.99aiw dock: review - the picker's GET ran a synchronous fs.existsSync per catalog sticker (up to 10000) on the event loop for
 // every signed-in request, with no rate limit: a few clients could stall the site. The list is built once per catalog change
-test("1.99?? dock: review - the picker's catalog is built once per change, not with a file check per sticker per request", async () => {
+test("1.99aiw dock: review - the picker's catalog is built once per change, not with a file check per sticker per request", async () => {
   assert.equal((await sync({ op: "pics", items: [{ id: 421, png: png.toString("base64") }] })).status, 200);
   const real = fs.existsSync; let stats = 0;
   fs.existsSync = (...args) => { stats++; return real(...args); };
@@ -203,9 +203,9 @@ test("1.99?? dock: review - the picker's catalog is built once per change, not w
   } finally { fs.existsSync = real; }
 });
 
-// 1.99?? dock: review - Pepe re-sends the whole list every 10 minutes (switches on or off). An unchanged list rewrote every row
+// 1.99aiw dock: review - Pepe re-sends the whole list every 10 minutes (switches on or off). An unchanged list rewrote every row
 // (DELETE + up to 10000 INSERTs in one write transaction, holding the site's write gate) and invalidated the picker's list each time
-test("1.99?? dock: review - an unchanged catalog list writes nothing", async () => {
+test("1.99aiw dock: review - an unchanged catalog list writes nothing", async () => {
   const items = [{ id: 421, set: 1642, desc: "Same frog" }, { id: 422, set: 1642, desc: "Other frog" }];
   await CF.syncList(items);
   const before = (await db.getQuery("SELECT MAX(updated) AS u, COUNT(*) AS n FROM cf_stickers"))[0];

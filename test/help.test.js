@@ -648,7 +648,7 @@ test("GET /help renders every card with deep-link ids, copy buttons and the ask 
   const r = await req("GET", "/help");
   assert.equal(r.status, 200);
   const cur = await HELP.current();
-  // (1.99?? dock: the bundled copy, synced from the bot, now carries Pepe's !privacy card - a dark card /help leaves out until the
+  // (1.99aiw dock: the bundled copy, synced from the bot, now carries Pepe's !privacy card - a dark card /help leaves out until the
   // privacy switchboard v3 is advertised; privm-review-help.test.js covers it)
   for (const e of HELP.withoutDarkCards(cur.data.entries)) assert.ok(r.text.includes(`id="cmd-${e.id}"`), e.id);
   for (const id of HELP.PV3_DARK_CARDS) assert.ok(!r.text.includes(`id="cmd-${id}"`), id + ": dark, not on the page");

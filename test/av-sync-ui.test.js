@@ -16,7 +16,7 @@ function sandbox(options = {}) {
     fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
     apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true, mic_list: true }, engines: { chromium: true, firefox: false, safari: false }, ind_path_ms: 300, mods_instant: false }, options.config || {});
   function element(tag) {
-    const cls = new Set();   // (1.99?? dock: a real classList - the toggle adds / removes only its own classes)
+    const cls = new Set();   // (1.99aiw dock: a real classList - the toggle adds / removes only its own classes)
     const e = { tagName: tag.toUpperCase(), style: {}, attrs: {}, children: [], parentNode: null, hidden: false, textContent: "", events: {},
       classList: { add: (...c) => c.forEach(v => cls.add(v)), remove: (...c) => c.forEach(v => cls.delete(v)), contains: c => cls.has(c) },
       get className() { return [...cls].join(" "); }, set className(v) { cls.clear(); String(v).split(/\s+/).filter(Boolean).forEach(c => cls.add(c)); },
@@ -752,7 +752,7 @@ test("1.99ait avf (F2): the toggle shows its state - its label says on / off, th
   await s.advance(2000); assert.equal(button.textContent, "Sync to the audio: off", "each tick keeps it");
   // the CSS styles the on state (the attribute and the class) on this button only - the play and mute buttons use aria-pressed too
   const css = fs.readFileSync(path.join(__dirname, "../public/css/room-bridge.css"), "utf8");
-  // (1.99?? dock: the accent tokens - the same green outside the Room Dock, the pad accent inside it)
+  // (1.99aiw dock: the accent tokens - the same green outside the Room Dock, the pad accent inside it)
   assert.match(css, /\.rb-btn\.rb-avsync\[aria-pressed="true"\], \.rb-btn\.rb-avsync\.on \{[^}]*border-color: var\(--ds-ac\)[^}]*color: var\(--ds-ac-2\)[^}]*background: var\(--ds-ac-bg\)/);
   assert.match(css, /@media \(forced-colors: active\) \{\s*\.rb-btn\.rb-avsync\[aria-pressed="true"\]/, "high contrast too");
   assert.doesNotMatch(css, /(^|[,}\s])\.rb-btn\[aria-pressed/, "never every .rb-btn");
@@ -763,9 +763,9 @@ test("1.99ait avf (F2): the toggle shows its state - its label says on / off, th
   assert.ok(n >= 9, "the new strings are checked: " + n);
 });
 
-// 1.99?? dock: the Room Dock adds ds-btn classes to the audio row's buttons (pad-dock.js) - each repaint of the toggle used to rewrite
+// 1.99aiw dock: the Room Dock adds ds-btn classes to the audio row's buttons (pad-dock.js) - each repaint of the toggle used to rewrite
 // className and wipe them; and room-bridge.css keeps no fixed green, so the Dock's pad accent reaches every widget rule
-test("1.99?? dock: the toggle's repaints keep classes another script added (the Dock's ds-btn); room-bridge.css reads only the accent tokens", async () => {
+test("1.99aiw dock: the toggle's repaints keep classes another script added (the Dock's ds-btn); room-bridge.css reads only the accent tokens", async () => {
   const s = sandbox({ search: "?avsync=1", stored: { "patv.avsync.enabled": "0" } });
   s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
   s.tile(); s.media("rtc"); await s.advance(0);

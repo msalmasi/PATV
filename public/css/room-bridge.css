@@ -9,7 +9,7 @@
 /* 1.99ait avf (F2): the "Sync to the audio" toggle (av-sync.js) shows its state - on: green outline, text and tint; off: the plain
    button with quieter text. Scoped to .rb-avsync: the play and mute buttons carry aria-pressed too. The site is dark-only (ds.css
    color-scheme: dark) and the audio box keeps its own dark fill; forced colours (high contrast) get a system-colour outline instead.
-   1.99?? dock: the accent tokens (--ds-ac* = the same PATV green on the pad page and the homepage; the Room Dock points them at the
+   1.99aiw dock: the accent tokens (--ds-ac* = the same PATV green on the pad page and the homepage; the Room Dock points them at the
    pad accent, like the rest of this file's composer rules) */
 .rb-btn.rb-avsync[aria-pressed="true"], .rb-btn.rb-avsync.on { border-color: var(--ds-ac); color: var(--ds-ac-2); background: var(--ds-ac-bg); }
 .rb-btn.rb-avsync[aria-pressed="false"] { color: var(--ds-text-muted); }

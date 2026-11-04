@@ -977,7 +977,7 @@ async function ingest(body, opts = {}) {
     R.livecams = typeof s.livecams === "boolean" ? s.livecams : false;   // 1.99yh: !bridge livecams (an older Pepe: no live cams)
     R.snapOn = typeof s.snap === "boolean" ? s.snap : null;   // 1.99cw: the room's !snap switch (null = an older Pepe)
     R.clipOn = typeof s.clip === "boolean" ? s.clip : null;   // 1.99fa: the room's !clip switch (null = an older Pepe)
-    R.stickers = s.stickers === true;                       // 1.99??: absent on older/default bot snapshots = off
+    R.stickers = s.stickers === true;                       // 1.99aiw: absent on older/default bot snapshots = off
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
     R.mod = require("./padmod").cleanModCaps(s.mod);   // 1.99co: Manage-panel caps per watching mod login ({} = none)
     R.pepe = require("./padpepe").cleanMenu(s.pepe);   // 1.99qr: the 🐸 Pepe submenu - {look|camroast|roast: {on, price, why}}
@@ -1636,7 +1636,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
   const withTip = (u) => { const x = withPatv(u, L, F); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
-  // 1.99??: picker visibility shares the say route's full access check; no extra account lookup while the Dock/media are off.
+  // 1.99aiw: picker visibility shares the say route's full access check; no extra account lookup while the Dock/media are off.
   let cfstickerPicker = false, gifPicker = false;
   if (userId && require("./paddock").current().cfg.mode !== "off") {
     const stickersOn = R.stickers === true && require("./cfstickers").enabled(), gifsOn = require("./gifs").available();

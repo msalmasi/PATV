@@ -109,7 +109,7 @@ test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is 
   for(const r of rules) {
     for(const sel of r.selector.split(/,\s*(?=main\.|body\.)/))assert.match(sel,/^(main\.rm\.rm-dock|body\.pad-dock-live)/,sel);
     assert.doesNotMatch(r.body,/#[0-9a-f]{3,8}\b|--ds-green|(?:margin|padding)-(?:left|right)\s*:|(?:^|;)\s*(?:left|right)\s*:|text-align:\s*(?:left|right)/i);
-    // 1.99?? review: a calc() of --ds-z-* tokens (the banner under the frame layer) is a token value too
+    // 1.99aiw review: a calc() of --ds-z-* tokens (the banner under the frame layer) is a token value too
     for(const m of r.body.matchAll(/z-index\s*:\s*([^;]+)/g))assert.match(m[1].trim(),/^(?:var\(--ds-z-[\w-]+\)|calc\(\s*(?:-1\s*\*\s*)?var\(--ds-z-[\w-]+\)(?:\s*\+\s*var\(--ds-z-[\w-]+\))?\s*\))$/);
   }
   const tokens=["--ds-ac","--ds-ac-2","--ds-ac-bg","--ds-ac-line","--ds-on-ac","--ds-focus","--ds-focus-ring","--ds-glow"];
@@ -122,7 +122,7 @@ test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is 
   for(const token of ["--ds-media-bg","--ds-media-chip","--ds-media-panel"])assert.match(read("public/css/ds.css"),new RegExp(token+":"));
 });
 
-// 1.99?? dock review: the banner fills the compact header / identity box, so it must paint UNDER padfx's effect layer
+// 1.99aiw dock review: the banner fills the compact header / identity box, so it must paint UNDER padfx's effect layer
 // (.pfx-l, z-index 0) - at padfx's own z-index 1 it covered the embers / snow / matrix / pride / pixel and Prime Time rings
 // entirely - and the header keeps today's accent tint (.rm.pad-acc .hero) instead of a flat surface (spec D.4).
 test("pad frames draw over the banner and the header keeps its accent tint", () => {
@@ -138,7 +138,7 @@ test("pad frames draw over the banner and the header keeps its accent tint", () 
   assert.equal(decl("main.rm.rm-dock #rmHero","background"),null,"no flat background over .rm.pad-acc .hero's tint");
 });
 
-// 1.99?? dock review: 1.99ait's "Sync to the audio: on / off" toggle (av-sync.js decorate() appends it to the audio row) was a text
+// 1.99aiw dock review: 1.99ait's "Sync to the audio: on / off" toggle (av-sync.js decorate() appends it to the audio row) was a text
 // button inside the Dock's one-line audio row: it wrapped the row onto two lines (and to a 4-line button on phones), squeezing the
 // chat scroller. In the Dock it is an emoji icon button; its words stay its accessible name (font-size 0 - never display:none or
 // visibility:hidden), its state is the pressed accent outline.
@@ -151,7 +151,7 @@ test("the A/V sync toggle is a compact icon button in the Dock's audio row", () 
   assert.match(icon,/content\s*:\s*"[^"]+"/);assert.match(icon,/font-size\s*:\s*var\(--ds-fs-/);
 });
 
-// 1.99?? dock review: body.pad-dock-live has a floor (min-block-size 520px, 440px on phones) like /messages' body.dm-page, but it
+// 1.99aiw dock review: body.pad-dock-live has a floor (min-block-size 520px, 440px on phones) like /messages' body.dm-page, but it
 // also had overflow: hidden, which the body hands to the viewport: in a window shorter than the floor (a phone held sideways,
 // 812x375) the page could not be scrolled and the composer (input, Hold to talk, Send) sat below the fold, out of reach
 test("a window shorter than the Live frame's floor can still scroll to the composer", () => {
