@@ -16,7 +16,10 @@ function sandbox(options = {}) {
     fallback: { rtc: 500, mp3: 1500 }, cap: 3000, cap_ind: 3000, deadband: 40, period_s: 2,
     apply: { video: true, mic: true, mp3: true, mic_card: true, mic_chat: true, mic_list: true }, engines: { chromium: true, firefox: false, safari: false }, ind_path_ms: 300, mods_instant: false }, options.config || {});
   function element(tag) {
+    const cls = new Set();   // (1.99?? dock: a real classList - the toggle adds / removes only its own classes)
     const e = { tagName: tag.toUpperCase(), style: {}, attrs: {}, children: [], parentNode: null, hidden: false, textContent: "", events: {},
+      classList: { add: (...c) => c.forEach(v => cls.add(v)), remove: (...c) => c.forEach(v => cls.delete(v)), contains: c => cls.has(c) },
+      get className() { return [...cls].join(" "); }, set className(v) { cls.clear(); String(v).split(/\s+/).filter(Boolean).forEach(c => cls.add(c)); },
       setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
       addEventListener(k, fn) { (this.events[k] ||= []).push(fn); },
       appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
@@ -749,7 +752,8 @@ test("1.99ait avf (F2): the toggle shows its state - its label says on / off, th
   await s.advance(2000); assert.equal(button.textContent, "Sync to the audio: off", "each tick keeps it");
   // the CSS styles the on state (the attribute and the class) on this button only - the play and mute buttons use aria-pressed too
   const css = fs.readFileSync(path.join(__dirname, "../public/css/room-bridge.css"), "utf8");
-  assert.match(css, /\.rb-btn\.rb-avsync\[aria-pressed="true"\], \.rb-btn\.rb-avsync\.on \{[^}]*border-color: var\(--ds-green\)[^}]*color: var\(--ds-green-2\)/);
+  // (1.99?? dock: the accent tokens - the same green outside the Room Dock, the pad accent inside it)
+  assert.match(css, /\.rb-btn\.rb-avsync\[aria-pressed="true"\], \.rb-btn\.rb-avsync\.on \{[^}]*border-color: var\(--ds-ac\)[^}]*color: var\(--ds-ac-2\)[^}]*background: var\(--ds-ac-bg\)/);
   assert.match(css, /@media \(forced-colors: active\) \{\s*\.rb-btn\.rb-avsync\[aria-pressed="true"\]/, "high contrast too");
   assert.doesNotMatch(css, /(^|[,}\s])\.rb-btn\[aria-pressed/, "never every .rb-btn");
   // every string has its English text in locales/en.json (the other languages sync from it), and the JS fallback is that text
@@ -757,6 +761,24 @@ test("1.99ait avf (F2): the toggle shows its state - its label says on / off, th
   let n = 0;
   for (const m of source.matchAll(/translate\('(js\.[a-z0-9_.]+)', '((?:[^'\\]|\\.)*)'\)/g)) { n++; assert.equal(EN[m[1]], m[2], m[1]); }
   assert.ok(n >= 9, "the new strings are checked: " + n);
+});
+
+// 1.99?? dock: the Room Dock adds ds-btn classes to the audio row's buttons (pad-dock.js) - each repaint of the toggle used to rewrite
+// className and wipe them; and room-bridge.css keeps no fixed green, so the Dock's pad accent reaches every widget rule
+test("1.99?? dock: the toggle's repaints keep classes another script added (the Dock's ds-btn); room-bridge.css reads only the accent tokens", async () => {
+  const s = sandbox({ search: "?avsync=1", stored: { "patv.avsync.enabled": "0" } });
+  s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  s.tile(); s.media("rtc"); await s.advance(0);
+  const button = box.children[0], classes = () => String(button.className || "").split(/\s+/).filter(Boolean);
+  button.classList.add("ds-btn", "quiet", "sm");
+  await s.advance(2000);
+  assert.deepEqual(classes().sort(), ["ds-btn", "quiet", "rb-avsync", "rb-btn", "sm"], "a tick keeps the Dock's classes");
+  button.click();
+  assert.ok(classes().includes("on") && classes().includes("ds-btn"), "on: + on, the Dock's classes stay");
+  button.click(); await s.advance(2000);
+  assert.ok(!classes().includes("on") && classes().includes("ds-btn") && classes().includes("rb-avsync"), "off again: on goes, the rest stay");
+  const css = fs.readFileSync(path.join(__dirname, "../public/css/room-bridge.css"), "utf8");
+  assert.doesNotMatch(css, /--ds-green/, "no fixed green left in room-bridge.css");
 });
 
 test("1.99ait avf (F4): unmeasured, the mic signs use their own fallback (not the cams' 500); the last measured latency is kept 30 s through a lull, then each falls back", async () => {

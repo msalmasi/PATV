@@ -554,7 +554,10 @@
       : translate('js.pad.audio.sync_title', 'Holds the cams and the mic signs (the On the mic card, the people list, the mic lines in chat and the mic stage) back to match the room audio you hear.');
     if (button.textContent !== text) button.textContent = text;          // (each tick repaints: only what changed)
     if (button.title !== title) button.title = title;
-    button.className = 'rb-btn rb-avsync' + (enabled ? ' on' : '');
+    // 1.99?? dock: add / remove only our own classes - the Room Dock adds its ds-btn classes to the audio row's buttons, and a
+    // className rewrite on every tick wiped them
+    if (button.classList) { button.classList.add('rb-btn', 'rb-avsync'); if (enabled) button.classList.add('on'); else button.classList.remove('on'); }
+    else button.className = 'rb-btn rb-avsync' + (enabled ? ' on' : '');
     button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   function youLine() {
