@@ -4,6 +4,7 @@
 //     or sends another account's (rpm.w, a per-account tag that is only ever sent to that account) - never one account's answers
 //     under another's sign-in; a page put in the back/forward cache drops them too
 //   * the de-duplication of re-sent acks keeps no private text (only keyed digests) and nothing older than the rows' TTL
+//   * a deleted account's rows don't come back from a late ack of a command it typed before it went
 //   node --test test/roompm-review-privacy.test.js      (a scratch database; no network)
 "use strict";
 const test = require("node:test");
@@ -59,6 +60,22 @@ test("re-sent ack de-duplication keeps no private text, and nothing older than t
     assert.equal(e2.rows.length, 1, "the day-old row went");
     assert.equal([...e2.seen.keys ? e2.seen.keys() : e2.seen].length, 1, "and so did its de-dup key");
   } finally { RPM._setClock(null); }
+});
+
+test("a deleted account's rows don't come back from a late ack of a command it typed before it went", () => {
+  RPM._reset();
+  const j = typed("j9", "u7");
+  RPM.noteJob(j);
+  assert.ok(RPM.fromAck({ id: "j9", ok: true, ts: Math.floor(Date.now() / 1000), replies: ["Spinning the wheel for PAT 5000"] }, j));
+  assert.ok(RPM.forgetUser("u7") >= 1);
+  // bridge-relay still holds the job (JOB_TTL): Pepe's wheel result comes in after the deletion
+  assert.equal(RPM.fromAck({ id: "j9", ok: true, ts: Math.floor(Date.now() / 1000), replies: ["You won PAT 2,500 " + SECRET], late: true }, j), null);
+  assert.equal(RPM.fromAck({ id: "j9", ok: true, ts: Math.floor(Date.now() / 1000), replies: ["You won PAT 2,600 " + SECRET], late: true }, null), null);
+  assert.equal(RPM.addLocal("u7", "Pm.Room", "You can run 3 commands here", "!commands"), 0);
+  assert.deepEqual(RPM.since("u7", "Pm.Room", 0).rows, []);
+  assert.doesNotMatch(deep([...RPM._store]), new RegExp(SECRET));
+  // another account is unaffected
+  assert.ok(RPM.fromAck({ id: "j10", ok: true, ts: Math.floor(Date.now() / 1000), replies: ["hello"] }, typed("j10", "u8")));
 });
 
 // ── the page (pad-roompm.js on its own, in a small fake DOM) ──

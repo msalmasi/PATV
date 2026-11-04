@@ -40,6 +40,7 @@ let clock = () => Date.now();
 const now = () => clock();
 const store = new Map();                 // `${userId}|${roomId}` -> {rows: [{id, ts, at, text, cmd}], hits: [ms], seen: Map(digest -> ms)}
 const origins = new Map();               // job id -> {userId, roomId, cmd, at}
+const gone = new Map();                  // review: digest(deleted account) -> ms - for ORIGIN_TTL its old jobs' late acks add nothing
 let lastId = 0, total = 0;
 const stats = { added: 0, dup: 0, rate: 0, evicted: 0, local: 0 };
 let STATE = { on: true, at: null, by: null };
@@ -48,6 +49,7 @@ let ready = null, loaded = false;
 // outside it, and a restart (which forgets every row anyway) changes them
 const SALT = crypto.randomBytes(16);
 const digest = (s, n = 22) => crypto.createHmac("sha256", SALT).update(String(s)).digest("base64url").slice(0, n);
+const goneKey = (uid) => digest("g|" + String(uid));
 
 // ── the switch ──
 function cleanState(o) {
@@ -126,6 +128,7 @@ function drop(k) {
   stats.evicted++;
 }
 function add(userId, roomId, text, ts, cmd, dupKey) {
+  if (gone.size && gone.has(goneKey(userId))) return 0;      // review: a deleted account (forgetUser)
   const t = cleanText(text);
   if (!t) return 0;
   const e = entry(userId, roomId, true);
@@ -153,7 +156,7 @@ function add(userId, roomId, text, ts, cmd, dupKey) {
 
 /** runCmd made typed-command job `j`: remember whose it is for late acks after bridge-relay forgot the job (JOB_TTL). */
 function noteJob(j) {
-  if (!typedJob(j)) return;
+  if (!typedJob(j) || (gone.size && gone.has(goneKey(j.userId)))) return;
   origins.set(String(j.id), { userId: String(j.userId), roomId: String(j.roomId), cmd: cmdOf(j.text), at: now() });
   while (origins.size > MAX_ORIGINS) origins.delete(origins.keys().next().value);
 }
@@ -209,10 +212,14 @@ function view(userId, roomId, afterId, pepe = null) {
   return { on: 1, w: digest("w|" + userId, 16), v: s.v, u: pepe || null, rows: s.rows };
 }
 
-/** Forget an account's rows everywhere (accountdelete.js). -> rows dropped */
+/** Forget an account's rows everywhere (accountdelete.js). -> rows dropped. review (privacy): and none come back - bridge-relay still
+ *  holds the account's jobs for JOB_TTL (and Pepe may answer one of them for hours: a game it started), so the account is marked
+ *  gone for ORIGIN_TTL (a digest of its id, never the id) and add() takes nothing for it. */
 function forgetUser(uid) {
   const p = String(uid || "") + "|";
   if (p === "|") return 0;
+  gone.delete(goneKey(uid)); gone.set(goneKey(uid), now());
+  while (gone.size > MAX_ORIGINS) gone.delete(gone.keys().next().value);
   let n = 0;
   for (const [k, e] of [...store]) if (k.startsWith(p)) { n += e.rows.length; total -= e.rows.length; store.delete(k); }
   for (const [id, o] of [...origins]) if (o.userId === String(uid)) origins.delete(id);
@@ -231,6 +238,7 @@ function sweep() {
     if (!e.rows.length && !e.hits.length) store.delete(k);
   }
   for (const [id, o] of [...origins]) if (t - o.at > ORIGIN_TTL) origins.delete(id);
+  for (const [g, at] of [...gone]) if (t - at > ORIGIN_TTL) gone.delete(g);
 }
 setInterval(() => { try { sweep(); } catch (e) { /* never breaks the site */ } }, SWEEP_MS).unref();
 
@@ -262,4 +270,4 @@ module.exports = { init, on, state, setOn, typedJob, noteJob, fromAck, addLocal,
                    KEEP, TTL, TEXT_MAX, RATE, MAX_KEYS, MAX_ROWS,
                    _sweep: sweep, _store: store, _origins: origins,
                    _setClock: (f) => { clock = f || (() => Date.now()); },
-                   _reset: () => { clearAll(); lastId = 0; for (const k of Object.keys(stats)) stats[k] = 0; } };
+                   _reset: () => { clearAll(); gone.clear(); lastId = 0; for (const k of Object.keys(stats)) stats[k] = 0; } };
