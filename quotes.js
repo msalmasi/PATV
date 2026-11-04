@@ -291,7 +291,7 @@ async function buildLines(items) {
     // CL6: c = the line's feed cursor, so a staff purge of that line reaches this copy (dropLines); never shown
     lines.push({ k: it.k === "tx" ? "tx" : "msg", login: hidden ? null : login, ...(h ? { h } : {}), ...(hs.length ? { hs } : {}),
                  name: hidden ? "someone" : String(u.display || it.u.display || login).slice(0, 40),
-                 text: cpCut(require("./public/js/chatlog-core").tokenText(it.text), LINE_MAX), ts: Number(it.ts) || 0, ...(it.u.self && !hidden ? { pepe: true } : {}), ...(Number(it.c) > 0 ? { c: Number(it.c) } : {}) });
+                 text: cpCut(require("./public/js/chatlog-core").itemText(it), LINE_MAX), ts: Number(it.ts) || 0, ...(it.u.self && !hidden ? { pepe: true } : {}), ...(Number(it.c) > 0 ? { c: Number(it.c) } : {}) });
   }
   const red = redactor(hiddenNames);
   for (const l of lines) l.text = CV.redact(red(l.text));

@@ -140,16 +140,24 @@ test("background lookups are globally bounded and never accept invalid IDs", asy
   assert.equal(calls.length, G.LOOKUP_LIMIT);
 });
 
-test("attach is synchronous/cache-only; only named web message tokens get metadata and privacy bars never fetch", async () => {
+// 1.99?? dockfu: what gets metadata is a line with the server's GIF mark (md: "gif" - bridge.js mediaMark, D3); a "[gif:x]" typed in
+// Camfrog has none. D2 (owner answer 6): a veiled sender's marked GIF (incognito frog name / "someone") gets it like anyone's
+test("attach is synchronous/cache-only; only marked GIF lines get metadata (veiled ones too) and privacy bars never fetch", async () => {
   let finish; provider = () => new Promise(resolve => { finish = resolve; });
-  const input = { k: "msg", u: { web: true }, text: "[gif:gif_fixture_1]" }, same = G.attach(input);
+  const input = { k: "msg", u: { web: true }, text: "[gif:gif_fixture_1]", md: "gif" }, same = G.attach(input);
   assert.equal(same === input, true); assert.equal(same.gif, undefined); assert.equal(typeof same.then, "undefined"); assert.equal(calls.length, 1);
-  for (const item of [{ ...input, u: { web: false } }, { ...input, u: { web: true, anon: true } }, { ...input, mask: "m" }, { ...input, removed: { at: 1 } }, { ...input, k: "tx" }, { ...input, text: "prefix [gif:other]" }]) {
+  for (const item of [{ ...input, md: undefined }, { ...input, md: "cfsticker" }, { ...input, u: { web: true }, md: undefined }, { ...input, mask: "m" },
+    { ...input, removed: { at: 1 } }, { ...input, k: "tx" }, { ...input, text: "prefix [gif:other]" }]) {
     item.gif = { src: "stale" }; G.attach(item); assert.equal(item.gif, undefined);
   }
   assert.equal(calls.length, 1);
   finish(response([fixture()])); await G.resolve("gif_fixture_1");
   assert.deepEqual(G.attach({ ...input }).gif, { src: fixture().media_formats.gif.url, w: 320, h: 160, title: "Fixture wave" });
+  const want = { src: fixture().media_formats.gif.url, w: 320, h: 160, title: "Fixture wave" };
+  for (const u of [{ anon: true, veil: "incognito", alias: "Misty Froglet", hood: 2 }, { anon: true, display: "someone" }])
+    assert.deepEqual(G.attach({ ...input, u }).gif, want, "a veiled sender's marked GIF draws like anyone's");
+  const literal = { k: "msg", u: { login: "fixture-frog", display: "Frog" }, text: "[gif:gif_fixture_1]" };
+  assert.equal(G.attach(literal).gif, undefined, "the same token typed in Camfrog (no mark) never draws, even with warm metadata");
   await flags({ gifs: false }); assert.equal(G.attach({ ...input }).gif, undefined, "off suppresses new remote loads even with warm metadata");
   await flags({ gifs: true }); delete process.env.KLIPY_API_KEY; assert.equal(G.attach({ ...input }).gif, undefined);
 });
@@ -284,3 +292,4 @@ test("1.99aiw dock: review - a GIF search is a POST: the words never ride in a U
   assert.equal((await request("/api/gifs/search", { body: { pad: room.slug, q: { x: 1 } } })).data.code, "query");
   assert.equal(calls.length, 1, "a non-string query reaches no provider");
 });
+

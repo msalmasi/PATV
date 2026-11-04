@@ -69,10 +69,22 @@
     m = /^\[gif:([A-Za-z0-9_-]{1,64})\]$/.exec(text);
     return m && m[0] === text ? { type: 'gif', id: m[1] } : null;
   }
-  function tokenText(text) {
-    var token = mediaToken(text);
-    return token ? (token.type === 'cfsticker' ? '[sticker]' : '[GIF]') : str(text);
+  // 1.99?? dockfu (D3): a line is a sticker / GIF only with the SERVER's mark - it.md ("cfsticker" / "gif"), which bridge.js
+  // (mediaMark) sets on a line that came through a real sticker / GIF path: Pepe's room-sticker inject, or a relayed Dock pick whose
+  // say job carried that very token. Never from the words alone: a "[cfsticker:1/2]" / "[gif:x]" typed in Camfrog (or said on the
+  // mic) stays plain text everywhere - the line, ✂️ Clip chat, quotes, the TXT / JSONL downloads. The mark is not text (nobody can
+  // type it) and never appears in an export.
+  function mediaOf(it) {
+    if (!it || it.k !== 'msg' || (it.md !== 'cfsticker' && it.md !== 'gif')) return null;
+    var token = mediaToken(it.text);
+    return token && token.type === it.md ? token : null;
   }
+  /** The reusable text of a line's words: "[sticker]" / "[GIF]" for a marked media line, else the words as they are. */
+  function tokenText(text, md) {
+    var token = md ? mediaToken(text) : null;
+    return token && token.type === md ? (token.type === 'cfsticker' ? '[sticker]' : '[GIF]') : str(text);
+  }
+  function itemText(it) { return it && mediaOf(it) ? tokenText(it.text, it.md) : str(it && it.text); }
 
   // the translator: ctx.t, else the page's __t, else the English default with its {placeholders} filled in
   function interp(d, v) {
@@ -386,7 +398,7 @@
   }
   function mediaKids(it, ctx, h, token, mask, rm) {
     if (!token) return null;
-    var _t = tr(ctx), fallback = tokenText(it.text);
+    var _t = tr(ctx), fallback = itemText(it);
     // Downloads never request media, including a cache-warm web GIF. Removed / masked rows never request it either.
     if (ctx.data === false || mask || rm) return [fallback];
     if (token.type === 'cfsticker') {
@@ -394,8 +406,9 @@
       return src && safeSrc(src) ? [mediaImage({ 'class': 'cfstk', src: src, alt: _t('js.pad.chat.sticker', 'sticker'),
         width: 100, height: 100, loading: 'lazy', decoding: 'async' }, fallback, h)] : [fallback];
     }
-    // A GIF token typed in Camfrog is literal text. Only the server's web-line attachment draws remote media.
-    if (!it.u || it.u.web !== true || it.k !== 'msg') return null;
+    // Only the server's mark makes a GIF line (mediaOf; a token typed in Camfrog never gets one), and only its cache attachment
+    // (gifs.attach) draws remote media. 1.99?? dockfu (D2, owner answer 6): a veiled sender's (incognito / !bridge hide frog name, or
+    // "someone") GIF draws like anyone's - the picture and its credit say nothing about who sent it; the name stays the veil's
     var g = it.gif, noGif = _t('js.pad.chat.gif', '🎞️ GIF');
     if (!g || !safeSrc(g.src) || !/^https:\/\//.test(g.src)) return [noGif];
     function size(n, d) { n = Number(n); return isFinite(n) && n > 0 ? Math.min(2048, Math.floor(n)) : d; }
@@ -427,7 +440,7 @@
       }
       else {
         if (it.c) a['data-c'] = it.c;
-        a['data-k'] = k; a['data-name'] = label(it.u, ctx); a['data-text'] = tokenText(text);
+        a['data-k'] = k; a['data-name'] = label(it.u, ctx); a['data-text'] = mediaOf(it) ? itemText(it) : text;
         if (tx && it.id) a['data-tx'] = it.id;
         if (it.own) a['data-own'] = '1';
       }
@@ -446,7 +459,7 @@
     var fl = flairNode(it.u, ctx, h);
     if (fl) head.push(fl);
     head.push(timeNode(it.ts, ctx, h));
-    var marks = hlOf(ctx), media = mediaKids(it, ctx, h, mediaToken(text), mask, rm);
+    var marks = hlOf(ctx), media = mediaKids(it, ctx, h, mediaOf(it), mask, rm);
     if (mask && !mine) {
       body.push(h('span', { 'class': 'redact redact-' + mask }, [h('span', { 'class': 'sr-only' },
         [tx ? _t('js.pad.veil.hidden_tx', 'hidden transcript') : _t('js.pad.veil.hidden_msg', 'hidden message')])]));
@@ -521,7 +534,7 @@
       var who = label(it.u, ctx) + (it.u && it.u.web && !it.u.anon && !it.u.former ? ' \ud83c\udf10' : '');
       // wave 2 (D.4, J-9): a hidden line in a download is "[hidden]" for every role - never its words (1.99aht S1: a !transcripts off
       // bar "[transcript hidden]", under the name it shows)
-      var said = /^[sml]$/.test(String(it.mask || '')) ? (k === 'tx' && it.txh === 1 ? '[transcript hidden]' : '[hidden]') : tokenText(it.text);
+      var said = /^[sml]$/.test(String(it.mask || '')) ? (k === 'tx' && it.txh === 1 ? '[transcript hidden]' : '[hidden]') : itemText(it);
       body = k === 'tx' ? '\ud83c\udf99 ' + who + ': \u201c' + said + '\u201d' : who + ': ' + said;
     } else if (k === 'live') body = liveText(it, ctx) + (safeLink(it.link) ? ' <' + linkOf(ctx, it.link) + '>' : '');
     else if (k === 'note') body = noteText(it, ctx);
@@ -550,7 +563,7 @@
       // (1.99aht S1: a !transcripts off bar - only the words are masked)
       if (k === 'tx' && it.txh === 1) o.transcript_hidden = true;
     }
-    else if (k === 'msg' || k === 'tx' || k === 'topic') o.text = k === 'topic' ? str(it.text) : tokenText(it.text);
+    else if (k === 'msg' || k === 'tx' || k === 'topic') o.text = k === 'topic' ? str(it.text) : itemText(it);
     else if (k === 'unmic') o.held_ms = Math.max(0, Number(it.ms) || 0);
     else if (k === 'note') o.text = noteText(it, ctx) || '';
     else if (k === 'live') {
@@ -565,7 +578,7 @@
     renderItem: renderItem, avatarNode: avatarNode, nameNode: nameNode, flairNode: flairNode, timeNode: timeNode,
     textItem: textItem, jsonItem: jsonItem, fmtTime: fmtTime, dayLabel: dayLabel, isoOf: isoOf, localIso: localIso,
     label: label, sysText: sysText, liveText: liveText, noteText: noteText, removedNote: removedNote, spanOf: spanOf, chipSpan: chipSpan, dur: dur, hue: hue,
-    markKids: markKids, mediaToken: mediaToken, tokenText: tokenText,
+    markKids: markKids, mediaToken: mediaToken, tokenText: tokenText, mediaOf: mediaOf, itemText: itemText,
     domH: domH, htmlH: htmlH, esc: esc, safeLink: safeLink, safeSrc: safeSrc
   };
 });

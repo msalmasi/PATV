@@ -463,7 +463,11 @@ function echoJob(jobId, roomId = null) {
   const j = jobs.get(String(jobId || ""));
   if (!j || j.kind !== "say" || (roomId && j.roomId !== roomId)) return null;
   return { id: j.id, userId: j.userId || "", username: j.username || "", camfrog: j.camfrog || "", display: j.display || "",
-           sendFailed: !!(j.result && !j.result.ok && j.result.code === "send_failed") };
+           sendFailed: !!(j.result && !j.result.ok && j.result.code === "send_failed"),
+           // 1.99?? dockfu (D3): the sticker / GIF this say job carried (sendSayLine's validated media) - bridge.js mediaMark marks its
+           // echo by it; null for an ordinary line
+           media: j.media && typeof j.media === "object" ? (j.media.type === "gif" ? { type: "gif", id: String(j.media.id) }
+             : { type: "cfsticker", set: Number(j.media.set), id: Number(j.media.id) }) : null };
 }
 
 /** This user's recent relay jobs in a room (for the composer's status line). 1.99ye: a say carries its client id

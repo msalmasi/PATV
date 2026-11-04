@@ -998,22 +998,35 @@ test("Node 16 and old browsers: chatlogexport.js has no Node 20-only API; pad-do
   for (const m of ui.matchAll(/_t\('([^']+)',\s*'((?:[^'\\]|\\.)*)'/g)) assert.equal(EN[m[1]], m[2].replace(/\\'/g, "'"), m[1]);
 });
 
+// 1.99?? dockfu (D3): only lines that came through a real media path are media - Pepe's room-sticker inject (data.media) and a relayed
+// pick whose own say job carried that token. Both download as "[sticker]" / "[GIF]" (never the ids); the SAME tokens typed in the room
+// (no mark) download as the words they are.
 test("media lines download as placeholders in HTML, TXT and JSONL without changing the golden fixtures", async () => {
   await ready();
-  await bridge.ingest({ rooms: [snap(WEB)], events: [
-    ev(WEB, "message", { user: BOB, text: "[cfsticker:1642/123456]" }, at(16, 14, 0)),
-    ev(WEB, "message", { user: PEPE, text: "web credit", web: { user: BOB, text: "[gif:orchard-A_1]" } }, at(16, 14, 1)),
-    ev(WEB, "message", { user: BOB, text: "[gif:room-literal]" }, at(16, 14, 2))
-  ] });
+  const relay = require(path.join(repo, "bridge-relay")), jid = "w" + "0123456789abcdef";
+  relay._jobs.set(jid, { id: jid, kind: "say", roomId: WEB.id, userId: "u-bob", username: "bob", camfrog: "bobcf", display: "", text: "[gif:orchard-A_1]",
+                         state: "sent", at: Date.now(), media: { type: "gif", id: "orchard-A_1", title: "Orchard", page: "" } });
+  try {
+    await bridge.ingest({ rooms: [snap(WEB)], events: [
+      ev(WEB, "message", { user: BOB, text: "[cfsticker:1642/123456]", media: "cfsticker" }, at(16, 14, 0)),
+      ev(WEB, "message", { user: PEPE, text: "web credit", web: { user: BOB, text: "[gif:orchard-A_1]", job: jid } }, at(16, 14, 1)),
+      ev(WEB, "message", { user: BOB, text: "[gif:room-literal]" }, at(16, 14, 2)),
+      ev(WEB, "message", { user: BOB, text: "[cfsticker:7/8]" }, at(16, 14, 3))
+    ] });
+  } finally { relay._jobs.delete(jid); }
   await settle();
   for (const fmt of ["html", "txt", "jsonl"]) {
     const { f } = await download(U.own, { fmt, range: "custom", from: "2026-10-16", to: "2026-10-16" }, WSLUG);
     assert.equal(f.status, 200, f.text);
     assert.match(f.text, /\[sticker\]/); assert.match(f.text, /\[GIF\]/);
-    assert.doesNotMatch(f.text, /\[cfsticker:|\[gif:|orchard-A_1|room-literal|\/media\/cfsticker\/|<img[^>]+class="gif"/);
+    assert.doesNotMatch(f.text, /\[cfsticker:1642|123456|orchard-A_1|\/media\/cfsticker\/|<img[^>]+class="(?:gif|cfstk)"/);
+    assert.ok(f.text.includes("[gif:room-literal]") && f.text.includes("[cfsticker:7/8]"), fmt + ": typed tokens download as typed");
+    assert.doesNotMatch(f.text, /"md"|\bmd:/, fmt + ": the mark itself never exports");
     if (fmt === "jsonl") {
       const lines = f.text.split("\n").filter(Boolean).map(s => JSON.parse(s));
-      assert.equal(lines.filter(l => l.text === "[GIF]").length, 2, "with or without web metadata, the token id never exports");
+      assert.equal(lines.filter(l => l.text === "[GIF]").length, 1, "the relayed pick is a GIF; its token id never exports");
+      assert.equal(lines.filter(l => l.text === "[sticker]").length, 1, "Pepe's sticker inject is a sticker");
+      assert.equal(lines.filter(l => l.text === "[gif:room-literal]" || l.text === "[cfsticker:7/8]").length, 2);
     }
   }
 });

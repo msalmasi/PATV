@@ -130,11 +130,14 @@ function resolve(id) {
   }).catch(() => null).finally(() => pending.delete(id));
   pending.set(id, task); return task;
 }
+// 1.99?? dockfu: the line must carry the server's GIF mark (D3: bridge.js mediaMark - a relayed pick's own say job; a "[gif:x]" typed
+// in Camfrog has none) - and that is all: D2 (owner answer 6) a veiled sender's GIF (incognito frog name, "someone") gets its picture
+// like anyone's (no web mark or name rides with it). Never on a masked bar or a removed line.
 function attach(item) {
   if (!item || typeof item !== "object") return item;
   delete item.gif;
-  if (!available() || item.k !== "msg" || !item.u || item.u.web !== true || item.u.anon || item.mask || item.removed) return item;
-  const token = require("./public/js/chatlog-core").mediaToken(item.text);
+  if (!available() || item.k !== "msg" || item.md !== "gif" || item.mask || item.removed) return item;
+  const token = require("./public/js/chatlog-core").mediaOf(item);
   if (!token || token.type !== "gif") return item;
   const value = peek(token.id);
   if (value) item.gif = { ...value.media, title: value.title };

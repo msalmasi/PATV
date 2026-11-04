@@ -651,7 +651,10 @@
     function optNode(it) {
       var u = meU || { display: _t('js.pad.relay.you', 'you'), login: '', web: true };
       var n = null;
-      try { n = mkLine ? mkLine({ k: 'msg', u: u, text: it.text, ts: it.at }) : null; } catch (e) { n = null; }
+      // 1.99?? dockfu (D3): the sender's own pending preview of an exact sticker / GIF token draws as one (the server sends exactly such
+      // a line as a media pick - sayLine - or refuses it); room lines draw media only with the server's mark (chatlog-core mediaOf)
+      var CLm = window.PATVChatlog, tok = CLm && CLm.mediaToken ? CLm.mediaToken(it.text) : null;
+      try { n = mkLine ? mkLine(tok ? { k: 'msg', u: u, text: it.text, ts: it.at, md: tok.type } : { k: 'msg', u: u, text: it.text, ts: it.at }) : null; } catch (e) { n = null; }
       if (!n) { n = el('div', 'rb-optline'); n.appendChild(el('b', null, u.display || '')); n.appendChild(document.createTextNode(' ' + it.text)); }
       n.classList.add('rb-opt'); n.setAttribute('data-cid', it.cid);
       n.removeAttribute('data-c'); n.removeAttribute('data-k');      // not a room line (yet): no ✂️ Clip / quote on it

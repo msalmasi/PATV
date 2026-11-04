@@ -880,6 +880,34 @@ function audioRecheck() {
   return n;
 }
 
+/**
+ * 1.99?? dockfu (D3): the media mark. A chat line draws as a Camfrog sticker or a GIF (chatlog-core mediaOf) only with it.md, and only
+ * the server sets it, here, for a line whose words are exactly one media token AND that came through a real media path:
+ *  - a relayed Room Dock pick: the line's own say job (its web.job, matched in the job's room - bridge-relay.echoJob) carried that
+ *    very token (sayLine validated it: the catalog sticker / the filtered GIF). Named, incognito frog name or "someone" alike (D2:
+ *    a veiled sender's GIF draws like anyone's; the mark says nothing about who sent it);
+ *  - Pepe's room-sticker inject (pepe_sticker.py, !bridge stickers on): his event data says media: "cfsticker" - set only for a
+ *    sticker PACKET he saw in the room, never for typed words.
+ * Anything else - a token typed in Camfrog, said on the mic, a job that is gone or was for other words - stays plain text. Any md an
+ * item arrived with is dropped first (nothing upstream may set it). The mark is page data (chatlogview OUT_KIND), never export text.
+ */
+function mediaMark(it, ev, roomId) {
+  if (!it || typeof it !== "object") return it;
+  delete it.md;
+  if (it.k !== "msg" || typeof it.text !== "string" || (it.u && it.u.self)) return it;
+  const token = require("./public/js/chatlog-core").mediaToken(it.text);
+  if (!token) return it;
+  if (it._job) {
+    const J = relay.echoJob(it._job, roomId), m = J && J.media;
+    const same = !!m && m.type === token.type && (token.type === "gif" ? m.id === token.id : Number(m.set) === token.set && Number(m.id) === token.id);
+    if (same) it.md = token.type;
+    return it;
+  }
+  const d = ev && ev.data && typeof ev.data === "object" ? ev.data : null;
+  if (token.type === "cfsticker" && d && d.media === "cfsticker" && d.self !== true && !d.web) it.md = "cfsticker";
+  return it;
+}
+
 let lastFrontTick = 0;
 /** wave 2 WP-2: one event of a privacy-wire-v2 sync -> a feed item. A veiled person's event (a priv block) becomes a page-safe veiled
  *  item (veil.veiledItem: frog name later, real identity non-enumerable); anything else is today's item (feedItem) plus the page-safe
@@ -1046,6 +1074,7 @@ async function ingest(body, opts = {}) {
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = v2 ? feedItemV2(ev, R.id) : feedItem(ev, R.id);
     if (!it) continue;
+    mediaMark(it, ev, R.id);                                 // 1.99?? dockfu (D3): a sticker / GIF only through a real media path
     if ((it.k === "mic" || it.k === "unmic") && it.u && it.u.anon && !it.ah) k3Hold(R.id, it, kinded, now, leaving);   // 1.99afl (B.1, above)
     // (review 2 fix-up's "so far in its order": whether this batch un-hid the speaker BEFORE this event, decided now)
     const named = (it.k === "msg" || it.k === "tx") && it.u && !it.u.anon && !it.u.self && it.u.login ? CV.hashOf(it.u.login) : null;

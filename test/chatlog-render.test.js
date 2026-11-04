@@ -472,7 +472,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.equal((room.match(/render: renderLine, ctx: rctx,/g) || []).length, 2, "scrollback's and search's lines too (CL8 / CL9)");
   assert.match(room, /feed: feedEl, line: item,/, "your pending relay lines are built the same way (room-bridge.js)");
   // the script loads before the page's own; the stylesheet right after the block it came from (the cascade keeps its order)
-  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=8"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head)
+  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=9"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99?? dockfu: v=9 (media drawn only with the server's mark)
   assert.ok(core > 0 && core < init, "chatlog-core.js before the page script");
   const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=11">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
@@ -755,17 +755,47 @@ test("CL6: a hidden line as the owner / staff see it (muted, why, data-rmc - nev
 test("media tokens are exact and their reusable text never exposes identifiers", () => {
   assert.deepEqual(CL.mediaToken("[cfsticker:1642/123456]"), { type: "cfsticker", set: 1642, id: 123456 });
   assert.deepEqual(CL.mediaToken("[gif:orchard-A_1]"), { type: "gif", id: "orchard-A_1" });
-  assert.equal(CL.tokenText("[cfsticker:1642/123456]"), "[sticker]");
-  assert.equal(CL.tokenText("[gif:orchard-A_1]"), "[GIF]");
+  // 1.99?? dockfu (D3): the placeholder text needs the server's mark (md) of the same kind - without it a token is just its words
+  assert.equal(CL.tokenText("[cfsticker:1642/123456]", "cfsticker"), "[sticker]");
+  assert.equal(CL.tokenText("[gif:orchard-A_1]", "gif"), "[GIF]");
+  for (const [t, md] of [["[cfsticker:1642/123456]", undefined], ["[gif:orchard-A_1]", undefined], ["[cfsticker:1642/123456]", "gif"],
+    ["[gif:orchard-A_1]", "cfsticker"], ["[gif:orchard-A_1]", "sticker"], ["[gif:orchard-A_1]", true]]) assert.equal(CL.tokenText(t, md), t, t + " " + md);
   for (const s of [" [gif:a]", "[gif:a]\n", "[gif:a] hi", "[gif:a][gif:b]", "[gif:a/b]", "[gif:" + "x".repeat(65) + "]",
     "[cfsticker:1/2]\n", "[cfsticker:12345678901/2]", "[cfsticker:x/2]", "[sticker:patv/id]", "ordinary words"]) {
     assert.equal(CL.mediaToken(s), null, s);
-    assert.equal(CL.tokenText(s), s, s);
+    assert.equal(CL.tokenText(s, "gif"), s, s); assert.equal(CL.tokenText(s, "cfsticker"), s, s);
   }
+  // the mark rides only on a chat line whose words are exactly a token of that kind
+  assert.deepEqual(CL.mediaOf({ k: "msg", text: "[gif:a]", md: "gif" }), { type: "gif", id: "a" });
+  for (const it of [{ k: "msg", text: "[gif:a]" }, { k: "msg", text: "[gif:a]", md: "cfsticker" }, { k: "tx", text: "[gif:a]", md: "gif" },
+    { k: "msg", text: "[gif:a] hi", md: "gif" }, { k: "topic", text: "[cfsticker:1/2]", md: "cfsticker" }, null]) assert.equal(CL.mediaOf(it), null, JSON.stringify(it));
+});
+
+// 1.99?? dockfu (D3): "[cfsticker:N/M]" / "[gif:x]" TYPED in Camfrog (or said on the mic) has no server mark: it is plain text in the
+// line, its ✂️ Clip text, the TXT / JSONL downloads and the HTML file - and never requests a picture (before: any exact token drew)
+test("a typed media token without the server's mark stays plain text everywhere", () => {
+  let requests = 0;
+  const ctx = { offset: 0, cfsticker() { requests++; return "/media/cfsticker/2.webp"; } };
+  for (const k of ["msg", "tx"]) for (const text of ["[cfsticker:1642/123456]", "[gif:orchard-A_1]"]) {
+    const it = { k, c: 950, ts: T0, u: { login: "aster_fable", display: "Aster Fable", web: true }, text,
+      gif: { src: "https://static1.klipy.com/x.gif", w: 10, h: 10, title: "x" } };
+    const html = String(CL.renderItem(it, ctx, CL.htmlH));
+    assert.ok(html.includes(k === "tx" ? "\u201c" + text + "\u201d" : text), k + " " + text + ": the words show as typed");
+    assert.ok(html.includes('data-text="' + text + '"'), "clip text is the words");
+    assert.doesNotMatch(html, /class="cfstk"|class="gif"|via KLIPY|\[sticker\]|\[GIF\]|🎞️ GIF/);
+    assert.ok(CL.textItem(it, { offset: 0 }).includes(text), "TXT keeps the words");
+    assert.equal(CL.jsonItem(it, { offset: 0 }).text, text, "JSONL keeps the words");
+    assert.ok(String(CL.renderItem(it, { data: false }, CL.htmlH)).includes(text), "the HTML file keeps the words");
+    // a mark of the other kind, or any mark on a mic line, never draws either
+    const wrong = Object.assign({}, it, { md: text.startsWith("[gif") ? "cfsticker" : "gif" });
+    assert.doesNotMatch(String(CL.renderItem(wrong, ctx, CL.htmlH)), /class="cfstk"|class="gif"/);
+    if (k === "tx") assert.doesNotMatch(String(CL.renderItem(Object.assign({}, it, { md: text.startsWith("[gif") ? "gif" : "cfsticker" }), ctx, CL.htmlH)), /class="cfstk"|class="gif"/);
+  }
+  assert.equal(requests, 0, "an unmarked token never requests a sticker picture");
 });
 
 test("stickers render from the shared context, keep only placeholder clip text, and never draw in downloads or masks", () => {
-  const it = { k: "msg", c: 901, ts: T0, u: { login: "aster_fable", display: "Aster Fable" }, text: "[cfsticker:1642/123456]" };
+  const it = { k: "msg", c: 901, ts: T0, u: { login: "aster_fable", display: "Aster Fable" }, text: "[cfsticker:1642/123456]", md: "cfsticker" };
   let requests = 0;
   const ctx = { offset: 0, cfsticker(set, id) { requests++; assert.equal(set, 1642); return "/media/cfsticker/" + id + ".webp"; } };
   const html = String(CL.renderItem(it, ctx, CL.htmlH));
@@ -789,8 +819,8 @@ test("stickers render from the shared context, keep only placeholder clip text, 
   assert.equal(requests, 0, "private and removed tokens never request a sticker source");
 });
 
-test("GIF images are web messages only; cache misses, masks, removals and every export stay safe", () => {
-  const it = { k: "msg", c: 902, ts: T0, u: { login: "aster_fable", display: "Aster Fable", web: true }, text: "[gif:orchard-A_1]",
+test("GIF images are marked lines only; cache misses, masks, removals and every export stay safe", () => {
+  const it = { k: "msg", c: 902, ts: T0, u: { login: "aster_fable", display: "Aster Fable", web: true }, text: "[gif:orchard-A_1]", md: "gif",
     gif: { src: "https://media.klipy.com/example.gif", w: 320, h: 240, title: "A <b>little</b> wave" } };
   const html = String(CL.renderItem(it, { offset: 0 }, CL.htmlH));
   assert.match(html, /class="gif" src="https:\/\/media\.klipy\.com\/example\.gif"/);
@@ -801,7 +831,8 @@ test("GIF images are web messages only; cache misses, masks, removals and every 
     const s = String(CL.renderItem(Object.assign({}, it, patch), {}, CL.htmlH));
     assert.match(s, /🎞️ GIF/); assert.doesNotMatch(s, /class="gif"|\[gif:/);
   }
-  const literal = String(CL.renderItem(Object.assign({}, it, { u: { login: "aster_fable", display: "Aster Fable" } }), {}, CL.htmlH));
+  // 1.99?? dockfu (D3): what decides is the server's mark, not the web flag - an unmarked token (typed in Camfrog) is its words
+  const literal = String(CL.renderItem(Object.assign({}, it, { md: undefined }), {}, CL.htmlH));
   assert.match(literal, /\[gif:orchard-A_1\]/); assert.doesNotMatch(literal, /class="gif"|via KLIPY/);
   for (const patch of [{ mask: "m" }, { removed: { by: "mod" } }, { removed: { sealed: true, by: "self" } }]) {
     const s = String(CL.renderItem(Object.assign({}, it, patch), {}, CL.htmlH));
@@ -809,7 +840,7 @@ test("GIF images are web messages only; cache misses, masks, removals and every 
   }
   const file = String(CL.renderItem(it, { data: false }, CL.htmlH));
   assert.match(file, /\[GIF\]/); assert.doesNotMatch(file, /class="gif"|media\.klipy|\[gif:/);
-  for (const media of [it, Object.assign({}, it, { gif: null }), Object.assign({}, it, { text: "[cfsticker:1642/123456]" })]) {
+  for (const media of [it, Object.assign({}, it, { gif: null }), Object.assign({}, it, { text: "[cfsticker:1642/123456]", md: "cfsticker" })]) {
     assert.match(CL.textItem(media, { offset: 0 }), /\[(GIF|sticker)\]/);
     assert.match(CL.jsonItem(media, { offset: 0 }).text, /^\[(GIF|sticker)\]$/);
   }
@@ -824,9 +855,43 @@ test("failed media images replace themselves with a text placeholder without inl
     n.replaceChild = (next, old) => { n.kids[n.kids.indexOf(old)] = next; next.parentNode = n; old.parentNode = null; };
     return n;
   };
-  const it = { k: "msg", ts: T0, text: "[cfsticker:1/2]", u: { display: "Aster Fable" } };
+  const it = { k: "msg", ts: T0, text: "[cfsticker:1/2]", md: "cfsticker", u: { display: "Aster Fable" } };
   const n = CL.renderItem(it, { cfsticker: () => "/media/cfsticker/2.webp" }, CL.domH(doc));
   const seek = node => node.className === "cfstk" ? node : (node.kids || []).map(seek).find(Boolean);
   const img = seek(n); assert.ok(img && img.listeners.error); img.listeners.error();
   const tree = JSON.stringify(fromDom(n)); assert.match(tree, /\[sticker\]/); assert.doesNotMatch(tree, /cfstk|onerror|\/media\/cfsticker/);
+});
+
+// 1.99?? dockfu (D2, owner answer 6 "just have it send the gif like other users"): a veiled web sender's GIF - an incognito frog name
+// or "someone" (the veil drops the web mark) - draws as the GIF, not as "[gif:<id>]", and the head stays exactly the veil's: the
+// frog name / "someone" + its tag, no 🌐 web mark, no profile link, no login anywhere in the line. A hidden (!bridge hide) line is
+// still its bar: no picture, no token, nothing that says it was a GIF.
+test("a veiled sender's GIF draws like anyone's; the veil is unchanged and a hidden bar stays a bar", () => {
+  const gif = { src: "https://static1.klipy.com/fixture/full.gif", w: 320, h: 160, title: "Fixture wave" };
+  const veils = {
+    incognito: { anon: true, veil: "incognito", alias: "Misty Froglet", hood: 2, display: "someone" },
+    someone: { anon: true, display: "someone" }
+  };
+  for (const [kind, u] of Object.entries(veils)) {
+    const it = { k: "msg", c: 960, ts: T0, u, text: "[gif:fixture_1]", md: "gif", gif };
+    const html = String(CL.renderItem(it, { offset: 0 }, CL.htmlH));
+    assert.match(html, /class="gif" src="https:\/\/static1\.klipy\.com\/fixture\/full\.gif"/, kind + ": the GIF draws");
+    assert.match(html, /via KLIPY/); assert.match(html, /data-text="\[GIF\]"/);
+    assert.doesNotMatch(html, /\[gif:|fixture_1/, kind + ": never the raw token or its id");
+    assert.doesNotMatch(html, /web-mark|who-web|href=|🌐|aster|data-u=/, kind + ": no web mark, link or identity");
+    const n = fromHtml(html), head = n.k[1].k[0];
+    assert.equal(head.a.class, "line-head");
+    if (kind === "incognito") { assert.equal(head.k[0].a.class, "who veil"); assert.equal(head.k[0].k[0].k[0], "Misty Froglet"); assert.match(html, /veil-tag veil-incognito/); }
+    else { assert.equal(head.k[0].a.class, "who"); assert.equal(head.k[0].k[0], "someone"); }
+    // the same line without the gif metadata (a cold cache) is the neutral placeholder, never the token
+    const cold = String(CL.renderItem(Object.assign({}, it, { gif: undefined }), { offset: 0 }, CL.htmlH));
+    assert.match(cold, /🎞️ GIF/); assert.doesNotMatch(cold, /\[gif:|class="gif"/);
+    // downloads: "[GIF]" under the veil's name, never marked web
+    assert.match(CL.textItem(it, { offset: 0 }), /: \[GIF\]$/); assert.equal(CL.jsonItem(it, { offset: 0 }).text, "[GIF]");
+    assert.equal(CL.jsonItem(it, { offset: 0 }).author.web, false, kind + ": the JSONL never marks the veiled sender as web");
+  }
+  // hidden (!bridge hide): the masked bar - no words reach the page (dress drops text and the mark), and even a stray mark draws nothing
+  const bar = { k: "msg", c: 961, ts: T0, u: { anon: true, veil: "hidden", alias: "Moonlit Bullfrog", hood: 3 }, mask: "s", md: "gif", gif };
+  const html = String(CL.renderItem(bar, { offset: 0 }, CL.htmlH));
+  assert.match(html, /redact redact-s/); assert.doesNotMatch(html, /class="gif"|via KLIPY|\[GIF\]|🎞️/);
 });

@@ -611,14 +611,17 @@ test("CL3 fix-up: a mic clip's caption (the transcript, republished on the pad) 
 
 test("media-token quote lines use placeholders and masked tokens never enter the quote", async () => {
   const base = { k: "msg", u: { login: "alicecf", display: "Alice CF" }, ts: Date.now() };
+  // 1.99?? dockfu (D3): a placeholder only for a line with the server's media mark; the same token TYPED (no mark) quotes as typed
   const lines = await quotes.buildLines([
-    { ...base, c: 9001, text: "[cfsticker:1642/123456]" },
-    { ...base, c: 9002, text: "[gif:orchard-A_1]" },
-    { ...base, c: 9003, text: "[gif:private-token]", mask: "m" },
-    { ...base, c: 9004, text: "words around [gif:literal]" }
+    { ...base, c: 9001, text: "[cfsticker:1642/123456]", md: "cfsticker" },
+    { ...base, c: 9002, text: "[gif:orchard-A_1]", md: "gif" },
+    { ...base, c: 9003, text: "[gif:private-token]", mask: "m", md: "gif" },
+    { ...base, c: 9004, text: "words around [gif:literal]" },
+    { ...base, c: 9005, text: "[cfsticker:7/8]" },
+    { ...base, c: 9006, text: "[gif:typed-in-camfrog]", md: "cfsticker" }
   ]);
-  assert.deepEqual(lines.map(l => l.text), ["[sticker]", "[GIF]", "words around [gif:literal]"]);
-  assert.deepEqual(lines.map(l => l.c), [9001, 9002, 9004], "the original cursor remains available for later purge propagation");
+  assert.deepEqual(lines.map(l => l.text), ["[sticker]", "[GIF]", "words around [gif:literal]", "[cfsticker:7/8]", "[gif:typed-in-camfrog]"]);
+  assert.deepEqual(lines.map(l => l.c), [9001, 9002, 9004, 9005, 9006], "the original cursor remains available for later purge propagation");
   assert.doesNotMatch(quotes.bodyOf(lines), /123456|1642|orchard-A_1|private-token/);
 });
 
