@@ -39,6 +39,10 @@
 //   story_hides  user_id + capture_id (PK), created - captures the member hid from their own story
 //   media        (media.js) + subject_login; source "user" rows are member uploads
 //   feed_attachments + purpose ('story' for a story upload: the 30 s cap; NULL = a post upload)
+// Story Studio (dark by default): feed_attachments.edit holds a versioned crop/trim/overlay declaration. The upload
+// pipeline composes it once, then create() rechecks the destination, declared words and sticker ownership before
+// claiming the result. story_text holds accessible words; story_mentions holds removable PATV account chips.
+// Mentions never change a person's story, bridge identity or pad access. Only the final composed file is published.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -52,6 +56,13 @@ const WINDOW_MS = 24 * 3600 * 1000;
 const STORY_MAX_SECS = 30;
 const STORY_MAX_IMAGE_MB = 10, STORY_MAX_VIDEO_MB = 60;
 const STORY_PER_DAY = 20, STORY_GAP_MS = 10 * 1000;
+const STORY_W = 1080, STORY_H = 1920;                  // Edited pictures and the transparent browser overlay.
+const STORY_VIDEO_W = 720, STORY_VIDEO_H = 1280;        // Stored portrait H.264 output.
+const STORY_SRC_MAX_SECS = 180, STORY_SRC_VIDEO_MB = 100; // Edited sources, also bounded by the feed's caps.
+const OVERLAY_MAX_MB = 2;                              // A re-encoded PNG layer, counted with its source.
+const STORY_TEXTS_MAX = 3, STORY_TEXT_LEN = 120;         // Declared text layers; length is Unicode code points.
+const STORY_STICKERS_MAX = 10;                         // Owned PATV sticker layers, not Camfrog art.
+const STORY_MENTIONS_MAX = 5;                          // Removable account chips, never overlay pixels.
 const CID_RE = /^[a-f0-9]{8,32}$/i;
 const UID_RE = /^[A-Za-z0-9_.:\-]{1,80}$/;
 let NOW = () => Date.now();
@@ -61,6 +72,7 @@ class Refuse extends Error { constructor(status, msg) { super(msg); this.status 
 
 const store = () => require("./feedstore");
 const fm = () => require("./feedmedia");
+const studioOn = () => !!store().config().story_studio;
 const exempt = (u) => SP.can(u, "feed.limits_exempt");   // 1.99ack (siteperms.js; was isStaff)
 const lc = (s) => String(s || "").trim().toLowerCase();
 
@@ -77,6 +89,9 @@ function init() {
       if (!pcols.has("capture_reacts")) await runQuery("ALTER TABLE story_prefs ADD COLUMN capture_reacts INTEGER NOT NULL DEFAULT 1").catch(() => {});
       const cols = new Set((await getQuery("PRAGMA table_info(feed_attachments)")).map((c) => c.name));
       if (!cols.has("purpose")) await runQuery("ALTER TABLE feed_attachments ADD COLUMN purpose TEXT").catch(() => {});
+      if (!cols.has("edit")) await runQuery("ALTER TABLE feed_attachments ADD COLUMN edit TEXT").catch(() => {});
+      await runQuery("CREATE TABLE IF NOT EXISTS story_text (story_id TEXT PRIMARY KEY, text TEXT NOT NULL, created INTEGER)");
+      await runQuery("CREATE TABLE IF NOT EXISTS story_mentions (story_id TEXT NOT NULL, user_id TEXT NOT NULL, x REAL, y REAL, created INTEGER, removed_at INTEGER, PRIMARY KEY (story_id, user_id))");
       await runQuery("CREATE INDEX IF NOT EXISTS media_subject_login ON media (subject_login)").catch(() => {});
     })().catch((e) => { console.error("[userstories] init:", e.message); ready = null; throw e; });
   }
@@ -260,6 +275,7 @@ async function people(viewer, uids, { seen = null } = {}) {
     if (signed) {
       try { await require("./storykeep").annotate(viewer, items); } catch (e) { console.error("[userstories] annotate:", e.message); }
       await annotate(viewer, items);
+      await annotateStudio(viewer, items);
       out.push({ ...base, seen: upto, cover: cv ? (cv.kind === "photo" ? cv.src : cv.poster) : null, items: items.map(({ room: _r, ...x }) => x) });
     } else out.push({ ...base, unseen: true, cover: null });
   }
@@ -307,10 +323,28 @@ async function targets(user, { include = null } = {}) {
   const out = [{ id: "u/" + u.username, title: "Your profile", label: "u/" + u.username, profile: true }];
   for (const c of await S.communities(u, { include })) {
     if (!c.canPost) continue;
-    if ((await S.roomSettings(c.id)).approval && !(await rooms.canManage(u, c.id))) continue;
+    if (!(await approvalAllowed(u, c.id))) continue;
     out.push({ id: c.id, title: c.title, label: "p/" + c.slug, slug: c.slug });
   }
-  return { refusal: null, pads: out, caps: { secs: STORY_MAX_SECS, imageMb: STORY_MAX_IMAGE_MB, videoMb: STORY_MAX_VIDEO_MB, perDay: STORY_PER_DAY } };
+  const answer = { refusal: null, pads: out, caps: { secs: STORY_MAX_SECS, imageMb: STORY_MAX_IMAGE_MB, videoMb: STORY_MAX_VIDEO_MB, perDay: STORY_PER_DAY } };
+  if (studioOn()) {
+    const PL = require("./padlook"); await PL.init();
+    const person = await personInfo(u.userId);
+    for (const target of out) {
+      if (target.profile) target.look = { avatar: person && person.avatar || null, accent: null, ink: null };
+      else {
+        const L = PL.look(target.id);
+        target.look = L && (L.avatar || L.banner || L.accent) ? { avatar: L.avatar, accent: L.accent, ink: L.ink } : null;
+        target.href = require("./pads").padHref(rooms.getCached(target.id) || { id: target.id, slug: target.slug });
+      }
+    }
+    const C = S.config();
+    Object.assign(answer.caps, { srcSecs: Math.min(STORY_SRC_MAX_SECS, C.max_video_secs), srcVideoMb: Math.min(STORY_SRC_VIDEO_MB, C.max_video_mb),
+      overlayMb: OVERLAY_MAX_MB, textsMax: STORY_TEXTS_MAX, textLen: STORY_TEXT_LEN, stickersMax: STORY_STICKERS_MAX,
+      mentionsMax: STORY_MENTIONS_MAX, studio: true });
+    answer.as = u.displayname || u.username;
+  }
+  return answer;
 }
 
 async function resolvePad(u, pad) {
@@ -329,22 +363,77 @@ async function resolvePad(u, pad) {
 }
 
 const gaps = new Map();
-/** Post upload `attachment` (a ready story upload of the member's) as a 24 h story. -> {id, room, href, expires} */
-async function create(user, { attachment, pad, nsfw } = {}) {
+async function approvalAllowed(u, rid) {
+  return rooms.isProfile(rid) || !(await store().roomSettings(rid)).approval || await rooms.canManage(u, rid);
+}
+/** Shared posting rules, in the existing order, used before uploading an edit and before publishing any story. */
+async function postCheck(user, pad) {
   await init();
-  const S = store();
-  const u = user && user.userId ? await S.account(user.userId) : null;
+  const S = store(), u = user && user.userId ? await S.account(user.userId) : null;
   if (!u) throw new Refuse(401, "Sign in first.");
-  const R = await resolvePad(u, pad);
-  const rid = R.id;
-  // the account rules + this pad's bans and Pepe's refusals, then the pad's own who-can-post rules
+  const R = await resolvePad(u, pad), rid = R.id;
   const ref = await S.postRefusal(u, [rid], { media: true });
   if (ref) throw new Refuse(ref.status, ref.message);
   const why = await S.roomPostRefusal(u, rid);
   if (why) throw new Refuse(why.status, why.message);
-  if (!rooms.isProfile(rid) && (await S.roomSettings(rid)).approval && !(await rooms.canManage(u, rid))) {
-    throw new Refuse(403, `${R.title || rid} approves posts first, so stories there are for its owner.`);
+  if (!(await approvalAllowed(u, rid))) throw new Refuse(403, `${R.title || rid} approves posts first, so stories there are for its owner.`);
+  return { u, R };
+}
+async function rateCheck(u, t = NOW()) {
+  if (exempt(u)) return;
+  const n = (await getQuery("SELECT COUNT(*) AS n FROM media WHERE source = 'user' AND by_user_id = ? AND created > ?", [u.userId, t - WINDOW_MS]))[0].n;
+  if (n >= STORY_PER_DAY) throw new Refuse(429, `You can post ${STORY_PER_DAY} stories a day.`);
+  const last = gaps.get(u.userId) || 0;
+  if (t - last < STORY_GAP_MS) throw new Refuse(429, `Slow down - try again in ${Math.ceil((STORY_GAP_MS - (t - last)) / 1000)}s.`);
+}
+async function checkWordsAndStickers(u, rid, edit, dup) {
+  const verdict = await require("./feedfilter").check(u, [rid], { kind: "post", body: edit.text.join("\n"), dup });
+  if (verdict && verdict.action === "block") throw new Refuse(422, verdict.message || "This pad's content filter doesn't allow those words.");
+  if (verdict && verdict.action === "hide") throw new Refuse(422, "This pad's content filter doesn't allow those words in a story - change them and try again.");
+  // Stories have no feed post id: flags and self-harm hits do not create a report or a care notice.
+  await require("./stickers").validate(u.userId, edit.stickers.map(s => `[sticker:${s.pack}/${s.sticker}]`).join(" "));
+}
+/** Read-only preflight: takes neither the posting gap nor the overlay; the source processor claims the latter. */
+async function preflight(user, edit) {
+  if (!studioOn()) throw new Refuse(423, "Story Studio isn't switched on.");
+  const { u, R } = await postCheck(user, edit.pad);
+  await rateCheck(u);
+  await checkWordsAndStickers(u, R.id, edit, true);
+  if (edit.overlay) await require("./storycompose").overlayCheck(u.userId, edit.overlay);
+  return { u, R };
+}
+async function cleanMentions(u, raw) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > STORY_MENTIONS_MAX) throw new Refuse(400, `Choose up to ${STORY_MENTIONS_MAX} people to mention.`);
+  const names = new Map();
+  for (const value of raw) {
+    if (!value || typeof value.username !== "string" || !value.username.trim() || value.username.length > 64 ||
+        !Number.isFinite(value.x) || !Number.isFinite(value.y)) throw new Refuse(400, "Choose a person and a position for each mention.");
+    const name = lc(value.username);
+    if (!names.has(name)) names.set(name, { name, x: Math.min(0.95, Math.max(0.05, value.x)), y: Math.min(0.95, Math.max(0.05, value.y)) });
   }
+  const known = new Map((await require("./feedmentions").accounts([...names.keys()])).map(a => [lc(a.username), a]));
+  return [...names.values()].map(value => {
+    const account = known.get(value.name);
+    if (!account || account.archived_at) throw new Refuse(400, `@${value.name} isn't available for a story mention.`);
+    if (account.userId === u.userId) throw new Refuse(400, `You can't mention yourself (@${value.name}) in a story.`);
+    if (store().isPepe(account)) throw new Refuse(400, `@${value.name} can't be mentioned in a story.`);
+    return { userId: account.userId, x: value.x, y: value.y };
+  });
+}
+function editAlt(edit) {
+  const cat = require("./stickers").CAT;
+  return Array.from(edit.text.concat(edit.stickers.map(s => {
+    const entry = cat.byId[s.pack] && cat.byId[s.pack].byId[s.sticker];
+    return entry ? entry.name + " sticker" : "sticker";
+  })).join(" · ")).slice(0, 300).join("");
+}
+/** Post upload `attachment` (a ready story upload of the member's) as a 24 h story. -> {id, room, href, expires} */
+async function create(user, { attachment, pad, nsfw, mentions } = {}) {
+  await init();
+  const S = store();
+  const { u, R } = await postCheck(user, pad);
+  const rid = R.id;
   // the upload: mine, a finished STORY upload (picture or video), not used yet
   const aid = String(attachment || "");
   if (!/^[a-f0-9]{24}$/.test(aid)) throw new Refuse(400, "Upload a picture or a video first.");
@@ -359,12 +448,16 @@ async function create(user, { attachment, pad, nsfw } = {}) {
   if (!src || !fs.existsSync(src)) throw new Refuse(410, "That upload's file is gone - upload it again.");
   // rate: STORY_PER_DAY a day, one every STORY_GAP_MS (staff exempt)
   const t = NOW();
-  if (!exempt(u)) {
-    const n = (await getQuery("SELECT COUNT(*) AS n FROM media WHERE source = 'user' AND by_user_id = ? AND created > ?", [u.userId, t - WINDOW_MS]))[0].n;
-    if (n >= STORY_PER_DAY) throw new Refuse(429, `You can post ${STORY_PER_DAY} stories a day.`);
-    const last = gaps.get(u.userId) || 0;
-    if (t - last < STORY_GAP_MS) throw new Refuse(429, `Slow down - try again in ${Math.ceil((STORY_GAP_MS - (t - last)) / 1000)}s.`);
+  await rateCheck(u, t);
+  const studio = studioOn();
+  let edit = null;
+  if (a.edit) {
+    if (!studio) throw new Refuse(423, "Story Studio isn't switched on.");
+    try { edit = require("./storycompose").cleanEdit(JSON.parse(a.edit), { kind: a.kind }); }
+    catch (e) { if (e.refuse) throw e; throw new Refuse(400, "That story edit isn't valid."); }
+    await checkWordsAndStickers(u, rid, edit, false);
   }
+  const chips = studio ? await cleanMentions(u, mentions) : [];
   // the safety check
   let verdict;
   try {
@@ -392,20 +485,89 @@ async function create(user, { attachment, pad, nsfw } = {}) {
                     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, 0, 0, 'user', ?, ?)`,
                    [id, video ? "clip" : "photo", video ? "video/mp4" : "image/webp", file, bytes, video ? Number(a.secs) || 0 : 0,
                     String(u.displayname || u.username).slice(0, 60), rid, t, t + WINDOW_MS, isNsfw ? 1 : 0, u.userId]);
+    if (edit) await runQuery("INSERT INTO story_text (story_id,text,created) VALUES (?,?,?)", [id, editAlt(edit), t]);
+    for (const chip of chips) await runQuery("INSERT INTO story_mentions (story_id,user_id,x,y,created) VALUES (?,?,?,?,?)", [id, chip.userId, chip.x, chip.y, t]);
     if (video && !media.hasPoster({ id, kind: "clip" })) media.makePoster({ id, kind: "clip", file, secs: Number(a.secs) || 0 }).catch(() => {});
   } catch (e) {
     for (const f of [path.join(media.DIR, file), media.posterFile(id)]) { try { fs.unlinkSync(f); } catch (_) { /* none */ } }
     await runQuery("DELETE FROM media WHERE id = ?", [id]).catch(() => {});
-    console.error("[userstories] create:", e);
+    await runQuery("DELETE FROM story_text WHERE story_id = ?", [id]).catch(() => {});
+    await runQuery("DELETE FROM story_mentions WHERE story_id = ?", [id]).catch(() => {});
+    console.error("[userstories] create failed:", id);
     throw new Refuse(500, "That story couldn't be saved - try again.");
   }
   await require("./storyreact").selfUp(u.userId, id);   // storyreact site: only with POLICY.autoSelfUp (D-5 alternative; off)
-  console.log(`[userstories] ${u.username} posted a ${video ? "video" : "picture"} story ${id} to ${rid}`);
-  return { id, room: rid, href: rooms.isProfile(rid) ? "/u/" + encodeURIComponent(u.username) : require("./pads").padHref(R), expires: t + WINDOW_MS };
+  console.log(`[userstories] account=${u.userId} story=${id} pad=${rid}`);
+  const result = { id, room: rid, href: rooms.isProfile(rid) ? "/u/" + encodeURIComponent(u.username) : require("./pads").padHref(R), expires: t + WINDOW_MS };
+  if (studio) {
+    try {
+      const row = (await getQuery("SELECT * FROM media WHERE id = ?", [id]))[0];
+      await require("./feedmentions").notifyStory({ author: u, storyId: id, row, userIds: chips.map(c => c.userId), text: edit ? edit.text.join("\n") : "" });
+    } catch (_) { console.error("[userstories] story notice unavailable:", id); }
+    // Publishing already succeeded. A transient viewer lookup cannot turn it into a retry/duplicate post.
+    let circle = null;
+    try { circle = rooms.isProfile(rid) ? await personStory(user, u.userId) : (await require("./stories").forViewer(user, { room: rid }))[0] || null; }
+    catch (_) { /* the editor can use its success toast without a local circle */ }
+    Object.assign(result, { circle, item: circle && (circle.items || []).find(item => item.id === id) || null, scope: rid });
+  }
+  return result;
+}
+
+/** Adds accessible words to member stories and removable account chips only to signed-in viewers. */
+async function annotateStudio(viewer, items) {
+  for (const item of items) if (item.source === "user") { delete item.alt; delete item.mentions; }
+  if (!studioOn()) return items;
+  await init();
+  const signed = !!(viewer && viewer.userId), ids = items.filter(c => c.source === "user").map(c => c.id);
+  if (!ids.length) return items;
+  const texts = new Map(), chips = new Map(), now = NOW();
+  const cols = signed ? new Set((await getQuery("PRAGMA table_info(users)")).map(c => c.name)) : null;
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400), marks = part.map(() => "?").join(",");
+    const rows = await getQuery(`SELECT m.id,t.text FROM media m LEFT JOIN story_text t ON t.story_id=m.id
+      WHERE m.id IN (${marks}) AND m.source='user' AND m.deleted=0 AND m.expires>? AND m.created>?`, [...part, now, now - WINDOW_MS]);
+    for (const row of rows) texts.set(row.id, row.text || "");
+    if (signed) {
+      const found = await getQuery(`SELECT sm.story_id,sm.user_id,sm.x,sm.y,u.username,u.displayname FROM story_mentions sm
+        JOIN media m ON m.id=sm.story_id JOIN users u ON u.userId=sm.user_id
+        WHERE sm.story_id IN (${marks}) AND sm.removed_at IS NULL AND m.source='user' AND m.deleted=0 AND m.expires>? AND m.created>?
+        ${cols.has("archived_at") ? "AND COALESCE(u.archived_at,0)=0" : ""}`, [...part, now, now - WINDOW_MS]);
+      for (const row of found) {
+        if (!chips.has(row.story_id)) chips.set(row.story_id, []);
+        chips.get(row.story_id).push({ u: row.username, d: row.displayname || null, x: row.x, y: row.y, mine: row.user_id === viewer.userId });
+      }
+    }
+  }
+  for (const item of items) if (texts.has(item.id)) {
+    item.alt = texts.get(item.id);
+    if (signed) item.mentions = chips.get(item.id) || [];
+  }
+  return items;
+}
+async function unmention(user, id) {
+  const SR = require("./storyreact");
+  if (!studioOn()) throw new Refuse(423, "Story Studio isn't switched on.");
+  await init();
+  const found = await SR.storyFor(user, id);
+  const mine = found && (await getQuery("SELECT removed_at FROM story_mentions WHERE story_id=? AND user_id=?", [found.row.id, user.userId]))[0];
+  if (!mine) throw new Refuse(404, SR.GONE);
+  const r = await runQuery("UPDATE story_mentions SET removed_at=? WHERE story_id=? AND user_id=? AND removed_at IS NULL", [NOW(), found.row.id, user.userId]);
+  return { removed: !!r.changes };
+}
+async function sweep() {
+  await init();
+  const cut = NOW() - WINDOW_MS - 7 * 86400e3, result = {};
+  for (const table of ["story_mentions", "story_text"]) {
+    const r = await runQuery(`DELETE FROM ${table} WHERE NOT EXISTS (SELECT 1 FROM media m WHERE m.id=${table}.story_id AND m.deleted=0 AND m.created>?)`, [cut]);
+    result[table] = r.changes || 0;
+  }
+  return result;
 }
 
 // ── routes ──
-function register(app, { addUser }) {
+function register(app, { addUser, noTimers = false }) {
+  app.locals.storyStudioOn = studioOn;
+  if (!noTimers) { const timer = setInterval(() => sweep().catch(() => {}), 3600e3); if (timer.unref) timer.unref(); }
   const guard = require("./middleware/authGuard");
   const json = (req, res, next) => {
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });
@@ -429,6 +591,9 @@ function register(app, { addUser }) {
   });
   app.post("/api/stories/:id/delete", addUser, json, async (req, res) => {
     try { await require("./stagecap").remove(req.user, req.params.id); res.json({ ok: true }); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/stories/:id/unmention", addUser, json, async (req, res) => {
+    try { res.json({ ok: true, ...(await unmention(req.user, req.params.id)) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/stories/:id/hide", addUser, json, async (req, res) => {
     try { res.json({ ok: true, ...(await hide(req.user, req.params.id)) }); } catch (e) { fail(res, e); }
@@ -454,4 +619,7 @@ function register(app, { addUser }) {
 }
 
 module.exports = { init, register, create, targets, people, personStory, personRows, profileUploaders, prefs, setPrefs, hide, unhide, isSubject, isPrivate,
-                   annotate, setSafetyCheck, Refuse, _setClock, STORY_MAX_SECS, STORY_MAX_IMAGE_MB, STORY_MAX_VIDEO_MB, STORY_PER_DAY, STORY_GAP_MS, WINDOW_MS };
+                   annotate, annotateStudio, preflight, postCheck, rateCheck, unmention, sweep, studioOn, setSafetyCheck, Refuse, _setClock,
+                   STORY_MAX_SECS, STORY_MAX_IMAGE_MB, STORY_MAX_VIDEO_MB, STORY_PER_DAY, STORY_GAP_MS, WINDOW_MS,
+                   STORY_W, STORY_H, STORY_VIDEO_W, STORY_VIDEO_H, STORY_SRC_MAX_SECS, STORY_SRC_VIDEO_MB, OVERLAY_MAX_MB,
+                   STORY_TEXTS_MAX, STORY_TEXT_LEN, STORY_STICKERS_MAX, STORY_MENTIONS_MAX };

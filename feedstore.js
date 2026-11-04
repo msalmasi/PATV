@@ -88,6 +88,7 @@ const DEFAULTS = Object.freeze({
   // start by replying to snaps / clips of people (0 = off) and the tips a day one sender may send one person on cam / stage
   story_votes: true, story_tips: true, story_replies: true, story_quick_reacts: true, story_block_hide: true,
   story_tips_per_hour: 30, story_capture_new_convos_per_day: 10, story_capture_tips_per_person_per_day: 10,
+  story_studio: false,               // Story Studio's edited uploads, mentions and editor; additive and off by default.
 });
 const INT_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "number");
 const BOOL_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "boolean");
@@ -1190,8 +1191,8 @@ async function create(userId, input, deps = {}) {
   let atts = [];
   if (attIds.length) {
     atts = await getQuery(`SELECT * FROM feed_attachments WHERE id IN (${attIds.map(() => "?").join(",")})`, attIds);
-    // (1.99acw: an on-air upload - purpose "onair" - is for Pepe's stream only, never a post)
-    if (atts.length !== attIds.length || atts.some((a) => a.owner_id !== u.userId || a.post_id || a.kind === "preview" || a.purpose === "onair")) {
+    // On-air uploads and Story Studio overlays are private inputs, never post attachments.
+    if (atts.length !== attIds.length || atts.some((a) => a.owner_id !== u.userId || a.post_id || a.kind === "preview" || a.purpose === "onair" || a.purpose === "story_ovl")) {
       throw new Refuse(400, "One of those files isn't yours or is already posted.");
     }
     if (atts.some((a) => a.state !== "ready")) throw new Refuse(409, "A file is still processing - wait for it to finish.");

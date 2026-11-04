@@ -315,3 +315,37 @@ test("users without a browser cost nothing: no queue work, no rows", async () =>
   assert.equal((await rowsOf("nobrowser")).length, 0);
   assert.ok(!W._subsUsers.has("u_nobrowser"));
 });
+
+test("a story mention queues once and sends a content-free story push through the real notice hook", async () => {
+  const FM = require(path.join(repo, "feedmentions")), media = require(path.join(repo, "media"));
+  await media.ready;
+  await mkUser("willow_sender", { display: "Willow Story" });
+  await mkUser("lotus_reader");
+  await browserFor("lotus_reader"); await W.sweep(T);
+  FM._setClock(() => T); FM._reset();
+  const id = "121212121212121212121212", file = id + ".webp";
+  fs.writeFileSync(path.join(media.DIR, file), "local story placeholder");
+  const row = { id, file, kind: "photo", source: "user", by_user_id: U.willow_sender.userId, room: "plant_based_chatting", created: T, expires: T + 86400e3, deleted: 0 };
+  const args = { author: { ...U.willow_sender, displayname: "Willow Story" }, storyId: id, row, userIds: [U.lotus_reader.userId], text: "STORY-PRIVATE-WORDS" };
+  await store.setConfig({ story_studio: true }, "test");
+  try {
+    assert.deepEqual(await FM.notifyStory(args), ["lotus_reader"]);
+    assert.deepEqual(await FM.notifyStory(args), []);
+    await idle();
+    const rows = await rowsOf("lotus_reader");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].ctx, "story");
+    assert.equal(rows[0].room_id, null);
+    assert.equal(rows[0].tag, "mention:feed");
+    assert.equal(rows[0].src_key, "smention:" + id + ":" + U.lotus_reader.userId);
+    assert.equal(rows[0].url, "/media/" + id);
+    SENT.length = 0; tick(16e3); await W.drain();
+    const sent = SENT.filter(s => s.url === B.lotus_reader.endpoint);
+    assert.equal(sent.length, 1);
+    const raw = open(sent[0].opts.body, B.lotus_reader), payload = JSON.parse(raw);
+    assert.equal(payload.t, "You were mentioned in a story");
+    assert.equal(payload.u, "/media/" + id);
+    assert.doesNotMatch(raw, /STORY-PRIVATE-WORDS|willow_sender|Willow Story|lotus_reader/);
+    assert.doesNotMatch(JSON.stringify(rows[0]), /STORY-PRIVATE-WORDS|Willow Story/);
+  } finally { FM._setClock(null); await store.setConfig({ story_studio: false }, "test"); }
+});

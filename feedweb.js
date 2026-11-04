@@ -616,7 +616,7 @@ function register(app, { addUser, isBotToken }) {
     }
   });
 
-  // ── uploads (chunked) ──
+  // ── uploads (chunked): Story Studio declares an edit and a private overlay; only the composed file is a story ──
   app.post("/api/feed/uploads", addUser, guard(false), async (req, res) => {
     try {
       await store.init();
@@ -627,10 +627,16 @@ function register(app, { addUser, isBotToken }) {
       const size = Math.floor(Number(b.size));
       if (!kind) return res.status(400).json({ ok: false, error: "Only pictures, audio and video." });
       // 1.99ez: a story upload (userstories.js) - a picture or a video only, smaller caps, the 30 s cap at processing
-      const story = b.purpose === "story";
+      const story = b.purpose === "story", overlay = b.purpose === "story_ovl";
+      const hasEdit = Object.prototype.hasOwnProperty.call(b, "edit");
+      if (hasEdit && !story) return res.status(400).json({ ok: false, error: "Only a story can have an edit." });
+      if ((hasEdit || overlay) && !C.story_studio) return res.status(423).json({ ok: false, error: "Story Studio isn't switched on." });
       if (story && kind === "audio") return res.status(400).json({ ok: false, error: "Stories are a picture or a short video." });
-      const US = story ? require("./userstories") : null;
-      if (US) await US.init();
+      if (overlay && kind !== "image") return res.status(400).json({ ok: false, error: "The overlay must be a PNG picture." });
+      // The purpose/edit columns also let the quota queries omit overlays after the Studio is switched off.
+      const US = require("./userstories");
+      await US.init();
+      const edit = hasEdit ? require("./storycompose").cleanEdit(b.edit, { kind }) : null;
       // 1.99acw: a picture for Pepe's stream (onairmedia.ingestUpload consumes it): on-air operators only, pictures only, the
       // on-air size cap; never attachable to a post (feedstore), never prefetched for the feed's image check (the broadcast check
       // runs when it's used)
@@ -638,20 +644,24 @@ function register(app, { addUser, isBotToken }) {
       if (onair && !SP.can(u, "onair.operate")) return res.status(403).json({ ok: false, error: "Site staff only." });
       if (onair && kind !== "image") return res.status(400).json({ ok: false, error: "Only a picture can go on Pepe's stream." });
       const OA = onair ? require("./onair") : null;
-      if (OA) { await OA.init(); await require("./userstories").init(); }      // (userstories adds feed_attachments.purpose)
+      if (OA) await OA.init();
       const capMb = onair ? OA.config().max_image_mb
-        : story ? Math.min(kind === "image" ? US.STORY_MAX_IMAGE_MB : US.STORY_MAX_VIDEO_MB, kind === "image" ? C.max_image_mb : C.max_video_mb)
+        : overlay ? Math.min(US.OVERLAY_MAX_MB, C.max_image_mb)
+        : story ? Math.min(kind === "image" ? US.STORY_MAX_IMAGE_MB : edit ? US.STORY_SRC_VIDEO_MB : US.STORY_MAX_VIDEO_MB, kind === "image" ? C.max_image_mb : C.max_video_mb)
         : { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb }[kind] * spMult(u.userId);   // 1.99iv: a Season Pass multiplies it
       if (!Number.isFinite(size) || size < 12) return res.status(400).json({ ok: false, error: "That file is empty." });
       if (size > capMb * 1024 * 1024) return res.status(413).json({ ok: false, error: `${kind === "image" ? "Pictures" : kind === "audio" ? "Audio files" : "Videos"} can be up to ${capMb} MB.` });
       const refusal = await store.postRefusal(u, [], { media: true });
       if (refusal) return res.status(refusal.status).json({ ok: false, error: refusal.message });
+      if (edit) await US.preflight(u, edit);
       const t = Date.now();
       if (!SP.can(u, "feed.limits_exempt")) {
-        const recent = await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND created > ?", [u.userId, t - 3600e3]);
-        if (recent[0].n >= C.uploads_per_hour) return res.status(429).json({ ok: false, error: "You've uploaded a lot this hour - try again later." });
-        const day = await getQuery("SELECT COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND created > ?", [u.userId, t - 86400e3]);
-        if (day[0].b + size > C.upload_mb_per_day * spMult(u.userId) * 1024 * 1024) return res.status(429).json({ ok: false, error: "You've hit today's upload allowance." });
+        if (!overlay) {
+          const recent = await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND COALESCE(purpose, '') != 'story_ovl' AND created > ?", [u.userId, t - 3600e3]);
+          if (recent[0].n >= C.uploads_per_hour) return res.status(429).json({ ok: false, error: "You've uploaded a lot this hour - try again later." });
+          const day = await getQuery("SELECT COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND COALESCE(purpose, '') != 'story_ovl' AND created > ?", [u.userId, t - 86400e3]);
+          if (day[0].b + size > C.upload_mb_per_day * spMult(u.userId) * 1024 * 1024) return res.status(429).json({ ok: false, error: "You've hit today's upload allowance." });
+        }
         const open = await getQuery("SELECT COUNT(*) AS n FROM feed_attachments WHERE owner_id = ? AND state IN ('uploading','processing')", [u.userId]);
         if (open[0].n >= 4) return res.status(429).json({ ok: false, error: "Finish the uploads you have going first." });
         if ((await store.usedBytes(u.userId)) + size > C.user_quota_mb * spMult(u.userId) * 1024 * 1024) {
@@ -663,9 +673,9 @@ function register(app, { addUser, isBotToken }) {
         return res.status(507).json({ ok: false, error: "The feed's storage is full right now - try again later." });
       }
       const id = require("crypto").randomBytes(12).toString("hex");
-      if (story || onair) {
-        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received, purpose) VALUES (?, ?, ?, 'uploading', ?, ?, 0, ?)`,
-                       [id, u.userId, kind, t, size, onair ? "onair" : "story"]);
+      if (story || onair || overlay) {
+        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received, purpose, edit) VALUES (?, ?, ?, 'uploading', ?, ?, 0, ?, ?)`,
+                       [id, u.userId, kind, t, size, onair ? "onair" : overlay ? "story_ovl" : "story", edit ? JSON.stringify(edit) : null]);
       } else {
         await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received) VALUES (?, ?, ?, 'uploading', ?, ?, 0)`,
                        [id, u.userId, kind, t, size]);
@@ -691,6 +701,11 @@ function register(app, { addUser, isBotToken }) {
       }
       if (off === 0) {
         const sn = media.sniff(buf);
+        if (a.purpose === "story_ovl" && sn.fmt !== "png") {
+          const msg = "The overlay must be a PNG picture.";
+          await failUpload(a, msg);
+          return res.status(415).json({ ok: false, error: msg });
+        }
         const ok = !sn.bad && (sn.kind === a.kind || (sn.kind === "av" && (a.kind === "video" || a.kind === "audio")));
         if (!ok) {
           const msg = sn.bad || `That file isn't ${a.kind === "image" ? "a picture" : a.kind === "audio" ? "audio" : "a video"}.`;
@@ -726,6 +741,7 @@ function register(app, { addUser, isBotToken }) {
 
   async function processUpload(a) {
     const tmp = media.tmpPath(a.id);
+    let out = null, saved = false;
     try {
       const head = Buffer.alloc(64);
       const fd = fs.openSync(tmp, "r");
@@ -734,28 +750,37 @@ function register(app, { addUser, isBotToken }) {
       const sn = media.sniff(head);                       // again, on the assembled file
       if (sn.bad) throw new media.MediaError(sn.bad);
       let C = store.config();
+      const edited = a.purpose === "story" && !!a.edit, overlay = a.purpose === "story_ovl";
+      if ((edited || overlay) && !C.story_studio) throw new media.MediaError("Story Studio isn't switched on.");
+      if (overlay && sn.fmt !== "png") throw new media.MediaError("The overlay must be a PNG picture.");
       // 1.99ez: story uploads - video up to userstories.STORY_MAX_SECS; never audio
-      if (a.purpose === "story") {
+      if (a.purpose === "story" && !edited) {
         C = { ...C, max_video_secs: Math.min(C.max_video_secs, require("./userstories").STORY_MAX_SECS) };
         if (sn.kind === "audio") throw new media.MediaError("Stories are a picture or a short video.");
       }
-      const out = sn.kind === "image" ? await media.processImage(tmp, sn.fmt)
+      out = edited ? await require("./storycompose").process(tmp, sn, a, C)
+        : sn.kind === "image" ? await media.processImage(tmp, sn.fmt)
         : await media.processAv(tmp, { ...sn, kind: sn.kind === "av" ? a.kind : sn.kind }, C);
       if (a.kind === "image" && out.kind !== "image") throw new media.MediaError("That file isn't a picture.");
       if (a.kind !== "image" && out.kind === "image") throw new media.MediaError("That file is a picture, not " + a.kind + ".");
-      await runQuery(`UPDATE feed_attachments SET state = 'ready', kind = ?, ct = ?, file = ?, thumb = ?, poster = ?, w = ?, h = ?, secs = ?, bytes = ?, error = NULL
+      if (overlay && (out.w !== require("./userstories").STORY_W || out.h !== require("./userstories").STORY_H))
+        throw new media.MediaError("The overlay must be 1080 × 1920.");
+      const result = await runQuery(`UPDATE feed_attachments SET state = 'ready', kind = ?, ct = ?, file = ?, thumb = ?, poster = ?, w = ?, h = ?, secs = ?, bytes = ?, error = NULL
                       WHERE id = ? AND state = 'processing'`, [out.kind, out.ct, out.file, out.thumb, out.poster, out.w, out.h, out.secs, out.bytes, a.id]);
+      if (!result.changes) return; // Discard won while composing: finally removes every generated file.
+      saved = true;
       // 1.99fc: start the image safety classification now (only while it's switched on), so the post / story finds it ready
-      // (1.99acw: not an on-air picture - its own broadcast check runs when it goes on air)
-      if ((out.kind === "image" || out.kind === "video") && a.purpose !== "onair") {
+      // On-air pictures have their own check; a Studio overlay is only a layer, and its composite is checked instead.
+      if ((out.kind === "image" || out.kind === "video") && a.purpose !== "onair" && !overlay) {
         require("./imagesafety").prefetch({ surface: a.purpose === "story" ? "story" : "feed", kind: out.kind, file: media.filePath(out.file),
                                             poster: out.poster ? media.filePath(out.poster) : null, secs: out.secs }).catch(() => {});
       }
     } catch (e) {
       const msg = e && e.refuse ? e.message : "That file couldn't be processed.";
       if (!(e && e.refuse)) console.error("[feed] process", a.id, e);
-      await runQuery("UPDATE feed_attachments SET state = 'failed', error = ? WHERE id = ?", [msg.slice(0, 300), a.id]);
+      await runQuery("UPDATE feed_attachments SET state = 'failed', error = ? WHERE id = ? AND state = 'processing'", [msg.slice(0, 300), a.id]);
     } finally {
+      if (out && !saved) media.removeFiles([out.file, out.thumb, out.poster].filter(Boolean));
       try { fs.unlinkSync(tmp); } catch (e) { /* none */ }
     }
   }
@@ -771,9 +796,12 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/feed/uploads/:id/discard", addUser, guard(false), async (req, res) => {
     const a = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [String(req.params.id)]))[0];
     if (!a || a.owner_id !== req.user.userId || a.post_id) return res.status(404).json({ ok: false });
-    media.removeFiles([a.file, a.thumb, a.poster].filter(Boolean));
+    // Stop the processor's ready write before reading its files. It may have completed since the first SELECT.
+    const changed = await runQuery("UPDATE feed_attachments SET state = 'deleted' WHERE id = ? AND owner_id = ? AND post_id IS NULL", [a.id, req.user.userId]);
+    if (!changed.changes) return res.status(404).json({ ok: false });
+    const current = (await getQuery("SELECT file, thumb, poster FROM feed_attachments WHERE id = ?", [a.id]))[0];
+    if (current) media.removeFiles([current.file, current.thumb, current.poster].filter(Boolean));
     try { fs.unlinkSync(media.tmpPath(a.id)); } catch (e) { /* none */ }
-    await runQuery("UPDATE feed_attachments SET state = 'deleted' WHERE id = ?", [a.id]);
     res.json({ ok: true });
   });
 

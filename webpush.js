@@ -39,7 +39,7 @@
 //                   pushes to prod's members, whatever keys staging has). At most SUBS_MAX per account (the oldest
 //                   COALESCE(last_ok, updated) goes).
 //   webpush_outbox  one row per push decided: exactly the S5 push/intent fields {acct = user_id, kind, pad = room_id,
-//                   src_key (UNIQUE per user: the dedupe), url} + tag (the device collapse tag), ctx (post | comment),
+//                   src_key (UNIQUE per user: the dedupe), url} + tag (the device collapse tag), ctx (post | comment | story),
 //                   check_ref (the read-cancel test: dm:<conv>:<msg> | inbox:<ref>), only_sub (test pushes), due_at,
 //                   created, sent_at (set when the sender claims it - outcome "sending" - and again when it is done, whatever
 //                   the outcome), tries, outcome (sending | sent | read | off | cap | nodevice | failed | late | gone),
@@ -454,6 +454,7 @@ function render(row, lang) {
   let title, body = plain(T("push.generic.open"));
   if (row.kind === "dm") title = plain(T("push.generic.dm"));
   else if (row.kind === "mention" && row.ctx === "comment") title = plain(T("push.generic.mention_comment"));
+  else if (row.kind === "mention" && row.ctx === "story") title = plain(T("push.generic.mention_story"));
   else if (row.kind === "mention" && row.ctx === "post") title = plain(T("push.generic.mention_post"));
   else if (row.kind === "mention" || row.kind === "keyword") {
     const pad = padTitle(row.room_id);
@@ -513,7 +514,7 @@ function onDm(userId, m) {
 /**
  * mentions.js / feedmentions.js: a 🔔 mention notice was just stored for `userId`.
  * {kind: mention | keyword, roomId (null for the feed), url, srcKey (the notice's ref), at (the line's time), speaker
- *  (the line's chat login), ctx (post | comment: the feed), padName (the bridge's name for the room)}
+ *  (the line's chat login), ctx (post | comment | story), padName (the bridge's name for the room)}
  */
 function onMention(userId, o) {
   try {
@@ -568,7 +569,7 @@ async function queueMention(uid, o) {
     if (o.speaker && (await speakerBlocked(uid, o.speaker))) { bump("blocked", kind); return false; }
   }
   return insert(uid, g.cfg, g.t, { kind, room_id: roomId, src_key: ref, url: safeLink(o.url) || (roomId ? "/p" : "/feed"),
-                                   tag: roomId ? `${kind}:${roomId}` : "mention:feed", ctx: roomId ? null : o.ctx === "comment" ? "comment" : "post",
+                                   tag: roomId ? `${kind}:${roomId}` : "mention:feed", ctx: roomId ? null : o.ctx === "story" ? "story" : o.ctx === "comment" ? "comment" : "post",
                                    check_ref: "inbox:" + ref, due_at: g.t + g.cfg[`webpush_grace_${kind}_s`] * 1000 });
 }
 /** Does `uid` block (DMs, messages.js dm_blocks) the account behind this chat login? A web-relay line's login is u:<userId>. */

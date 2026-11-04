@@ -1037,3 +1037,14 @@ test(".env.example lists the VAPID keys (commented, no values) and points at the
   for (const k of ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"]) assert.match(env, new RegExp("^# " + k + "=$", "m"), k);
   assert.match(env, /node tools\/vapid-keys\.js --env \.env --subject mailto:/);
 });
+
+test("story mention payloads use their own generic title and never include incidental story fields", () => {
+  const row = { kind: "mention", ctx: "story", room_id: null, url: "/media/abababababababababababab", tag: "mention:feed", created: T,
+    title: "PRIVATE-PERSON", body: "PRIVATE-STORY-WORDS", username: "hidden_fixture_name" };
+  const payload = W.render(row, "en");
+  assert.equal(payload.t, "You were mentioned in a story");
+  assert.equal(payload.b, "Open PATV to see it.");
+  assert.equal(payload.u, row.url);
+  assert.equal(payload.tag, "mention:feed");
+  assert.doesNotMatch(JSON.stringify(payload), /PRIVATE-|hidden_fixture_name/);
+});

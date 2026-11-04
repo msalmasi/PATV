@@ -17,6 +17,7 @@ process.chdir(tmp);
 delete process.env.STAGING;
 process.env.SECRET_KEY = "test-secret";
 process.env.FEED_DIR = path.join(tmp, "feedfiles");
+process.env.MEDIA_DIR = path.join(tmp, "storyfiles");
 const express = require("express");
 const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const rooms = require(path.join(repo, "rooms"));
@@ -296,4 +297,105 @@ test("1.99aij: a Markdown spoiler never reaches the post page's og tags, title o
     assert.equal(web.fx.markdownOn(), false);
     assert.doesNotMatch(await editForm(), /help\/formatting/);
   } finally { await store.setConfig({ feed_markdown: false }, "test"); }
+});
+
+// Story Studio: real visibility and notice rules, with local placeholder files (the notice never decodes media).
+let storySerial = 0;
+async function storyRow(author, room = ROOM_B) {
+  const media = require(path.join(repo, "media")); await media.ready;
+  const id = (++storySerial).toString(16).padStart(24, "0"), file = id + ".webp", now = Date.now();
+  fs.writeFileSync(path.join(media.DIR, file), "local story fixture");
+  return { id, file, kind: "photo", source: "user", by_user_id: author.userId, room, created: now, expires: now + 86400e3, deleted: 0 };
+}
+const storyNotice = (author, row, people, text = "A quiet pond") => FM.notifyStory({ author, storyId: row.id, row, userIds: people.map(p => p.userId), text });
+
+test("story notices: studio-off silence, fresh accounts, no self/archived/Pepe, one inbox ref and content-free push", async () => {
+  const author = await mkUser("sprout_story", { display: "Sprout Story" });
+  author.displayname = "Sprout Story";
+  const target = await mkUser("moss_recipient"), archived = await mkUser("wilted_tag");
+  await runQuery("UPDATE users SET archived_at=1 WHERE userId=?", [archived.userId]);
+  await runQuery("INSERT OR IGNORE INTO users (userId,username,password,class) VALUES ('pepe-bot','studio_bot_fixture','x','Bot')");
+  const row = await storyRow(author), push = require(path.join(repo, "webpush")), prior = push.onMention, sent = [];
+  push.onMention = (id, payload) => sent.push({ id, payload });
+  try {
+    await store.setConfig({ story_studio: false }, "test");
+    assert.deepEqual(await storyNotice(author, row, [target]), []);
+    assert.equal((await notices(target)).length, 0);
+    await store.setConfig({ story_studio: true }, "test");
+    const text = "THE-STORY-WORDS ".repeat(30);
+    const people = [target, target, author, archived, { userId: "pepe-bot" }, { userId: "unknown-fixture" }];
+    assert.deepEqual(await storyNotice(author, row, people, text), [target.username]);
+    const n = await notices(target);
+    assert.equal(n.length, 1);
+    assert.equal(n[0].title, "💬 Sprout Story mentioned you in a story");
+    assert.ok(n[0].body.startsWith("THE-STORY-WORDS") && n[0].body.length <= 300);
+    assert.equal(n[0].link, "/media/" + row.id);
+    assert.equal(n[0].ref, "smention:" + row.id + ":" + target.userId);
+    assert.deepEqual(sent, [{ id: target.userId, payload: { kind: "mention", roomId: null, ctx: "story", url: n[0].link, srcKey: n[0].ref } }]);
+    assert.deepEqual(await storyNotice(author, row, people, text), []);
+    assert.equal(sent.length, 1, "a repeated notice does not queue a second push");
+    for (const denied of [author, archived, { userId: "pepe-bot" }]) assert.equal((await notices(denied)).length, 0);
+    const looked = await FM.accounts([archived.username]);
+    assert.equal(looked[0].archived_at, 1, "exported accounts retains archive state for the posting validator");
+  } finally { push.onMention = prior; await store.setConfig({ story_studio: false }, "test"); }
+});
+
+test("story notices respect both block directions, preferences, Approved and adult gates, and gone stories", async () => {
+  const author = await mkUser("fern_story"), target = await mkUser("reed_reader");
+  const row = await storyRow(author), adult = require(path.join(repo, "adultgate"));
+  await store.setConfig({ story_studio: true }, "test");
+  try {
+    for (const [a, b] of [[author, target], [target, author]]) {
+      await runQuery("INSERT INTO dm_blocks (blocker_id,blocked_id,created_at) VALUES (?,?,1)", [a.userId, b.userId]);
+      assert.deepEqual(await storyNotice(author, row, [target]), []);
+      await runQuery("DELETE FROM dm_blocks WHERE blocker_id=? AND blocked_id=?", [a.userId, b.userId]);
+    }
+    await MN.save(target.userId, { enabled: false, names: true, words: [], quiet: null, feed: false });
+    assert.deepEqual(await storyNotice(author, row, [target]), []);
+    await MN.save(target.userId, { enabled: false, names: true, words: [], quiet: null, feed: true });
+    await MN.mute(target.userId, 60);
+    assert.deepEqual(await storyNotice(author, row, [target]), []);
+    await MN.mute(target.userId, 0);
+    assert.deepEqual(await storyNotice(author, { ...row, room: ROOM_S }, [target]), [], "Approved pad outsider");
+    await rooms.setPage(ROOM_B, { adult: true }, "test");
+    await adult.setEnabled(true, U.owner, "fixture");
+    assert.deepEqual(await storyNotice(author, row, [target]), [], "unconfirmed adult viewer");
+    await adult.setEnabled(false, U.owner, "fixture");
+    await rooms.setPage(ROOM_B, { adult: false }, "test");
+    assert.deepEqual(await storyNotice(author, { ...row, deleted: 1 }, [target]), []);
+    assert.deepEqual(await storyNotice(author, { ...row, expires: Date.now() - 1 }, [target]), []);
+    assert.deepEqual(await storyNotice(author, row, [target]), [target.username], "the same visible story is allowed once gates clear");
+  } finally {
+    await adult.setEnabled(false, U.owner, "fixture"); await rooms.setPage(ROOM_B, { adult: false }, "test");
+    await store.setConfig({ story_studio: false }, "test");
+  }
+});
+
+test("feed and story mentions share the pair budget", async () => {
+  const author = await mkUser("clover_story"), target = await mkUser("dusk_reader"), row = await storyRow(author);
+  await store.setConfig({ story_studio: true }, "test");
+  try {
+    for (let i = 0; i < FM.PAIR_HOUR; i++) await store.create(author.userId, { community: ROOM_B, body: "Hello @" + target.username + " " + i });
+    assert.equal((await notices(target)).length, FM.PAIR_HOUR);
+    assert.deepEqual(await storyNotice(author, row, [target]), []);
+    assert.equal((await notices(target)).length, FM.PAIR_HOUR, "a story cannot bypass five feed mentions of the same pair");
+    FM._reset();
+    assert.deepEqual(await storyNotice(author, row, [target]), [target.username]);
+    for (let i = 0; i < FM.PAIR_HOUR; i++) await store.create(author.userId, { community: ROOM_B, body: "Again @" + target.username + " " + i });
+    assert.equal((await notices(target)).length, 2 * FM.PAIR_HOUR, "the story also consumes the shared budget");
+  } finally { await store.setConfig({ story_studio: false }, "test"); }
+});
+
+test("a story notice failure cannot fail the post or log its words/account names", async () => {
+  const author = await mkUser("hazel_story"), target = await mkUser("ripple_reader"), row = await storyRow(author);
+  const react = require(path.join(repo, "storyreact")), prior = react.visibleTo, errors = [], log = console.error;
+  await store.setConfig({ story_studio: true }, "test");
+  react.visibleTo = async () => { throw new Error("PRIVATE-WORDS " + target.username); };
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    assert.deepEqual(await storyNotice(author, row, [target], "PRIVATE-WORDS"), []);
+    assert.equal((await notices(target)).length, 0);
+    assert.equal(errors.length, 1);
+    assert.doesNotMatch(errors[0], /PRIVATE-WORDS|ripple_reader/);
+  } finally { react.visibleTo = prior; console.error = log; await store.setConfig({ story_studio: false }, "test"); }
 });

@@ -28,6 +28,7 @@
 // pad's id) is a member's profile uploads + the captures of them (unless they turned that off, went private or hid
 // one). The homepage / /feed strip gets a person circle for each member with a profile upload (and the viewer's own);
 // the Following tab's strip leads with the people the viewer follows (forViewer {people}).
+// Story Studio adds accessible words and removable PATV mention chips after the existing story visibility rules.
 //
 // storyreact site (storyreact.js): ▲▼ votes, 💸 tips and ↩ replies (a DM) on each story - forViewer puts `react` on every
 // item (signed out, a Public pad's read-only counts) - and, while the feed config's story_block_hide is on, a signed-in
@@ -191,6 +192,7 @@ async function forViewer(viewer, { room = null, people = null } = {}) {
   if (signed) { try { await require("./storykeep").annotate(viewer, items); } catch (e) { console.error("[stories] annotate:", e.message); } }
   // 1.99ez: 🗑 on members' own story uploads (the uploader, the pad's owner / mods, staff)
   if (signed) { try { await require("./userstories").annotate(viewer, items); } catch (e) { console.error("[stories] annotate (user):", e.message); } }
+  await require("./userstories").annotateStudio(viewer, items);
   // storyreact site: ▲▼ / 💸 / ↩ on each story (it.react); signed out: a Public pad's read-only counts
   if (signed) await SR.annotate(viewer, items);
   else await SR.counts(items.filter((c) => PA.isPublic(c.room) && PA.adultGate(null, c.room) === "ok"));

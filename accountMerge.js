@@ -391,6 +391,8 @@ const RULES = {
   "story_prefs.user_id": M({ key: [], merge: { capture_reacts: "MIN" } }), "story_hides.user_id": M({ key: ["capture_id"] }),
   // 💬 story reactions (storyreact.js): one vote per account per story (folded), tips + DM story references follow the account
   "story_votes.user_id": M({ key: ["story_id"] }),
+  // 1.99?? Story Studio: mentions follow the account; a removed mention stays removed after a merge.
+  "story_mentions.user_id": M({ key: ["story_id"], merge: { created: "MIN", removed_at: "MAX" } }),
   "story_tips.sender_id": M(), "story_tips.recipient_id": M(),
   "dm_story_refs.sender_id": M(), "dm_story_refs.author_id": M(),
   "dm_story_refs.author_name": { deny: NAME },

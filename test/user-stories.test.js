@@ -536,3 +536,440 @@ test("media upload stores the subject's login (never for an anon subject)", asyn
                                        subject: "x", subject_login: "subjcf", anon: true, by: "x", room: ROOM });
   assert.equal((await getQuery("SELECT subject_login FROM media WHERE id = 'abcdef0123456780'"))[0].subject_login, null);
 });
+
+// Story Studio's real chunked-upload routes; all pictures are generated for this test.
+async function studioChunk(id, u, bytes) {
+  const r = await fetch(base + "/api/feed/uploads/" + id + "?offset=0", {
+    method: "PUT", headers: { ...H(u), "content-type": "application/octet-stream" }, body: bytes
+  });
+  return { status: r.status, d: await r.json() };
+}
+async function studioUpload(bytes, u, purpose = "story_ovl", extra = {}) {
+  const started = await post("/api/feed/uploads", u, { kind: "image", size: bytes.length, purpose, ...extra });
+  assert.equal(started.status, 200, JSON.stringify(started.d));
+  const chunked = await studioChunk(started.d.id, u, bytes);
+  assert.equal(chunked.status, 200, JSON.stringify(chunked.d));
+  return started.d.id;
+}
+async function studioFinished(id, u) {
+  const r = await post("/api/feed/uploads/" + id + "/finish", u);
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  for (let n = 0; n < 400; n++) {
+    const row = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [id]))[0];
+    if (row.state !== "processing") return row;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  throw new Error("Studio upload did not finish");
+}
+
+test("Studio uploads are dark; config persists and the admin checkbox exists", async () => {
+  const saved = { ...store.config() };
+  const u = await mkUser("studioglassfern", { camfrog: "cfstudioglassfern" });
+  try {
+    assert.equal(store.DEFAULTS.story_studio, false);
+    await store.setConfig({ story_studio: false }, "test");
+    const edit = { v: 1, pad: "profile", fit: "fit", text: [], stickers: [] };
+    let r = await post("/api/feed/uploads", u, { kind: "image", size: 100, purpose: "story", edit });
+    assert.equal(r.status, 423); assert.equal(r.d.error, "Story Studio isn't switched on.");
+    r = await post("/api/feed/uploads", u, { kind: "image", size: 100, purpose: "story_ovl" });
+    assert.equal(r.status, 423);
+    r = await post("/api/feed/uploads", u, { kind: "image", size: 100, edit });
+    assert.equal(r.status, 400, "an edit cannot silently become a normal post upload");
+    await store.setConfig({ story_studio: true }, "test");
+    assert.equal(JSON.parse((await getQuery("SELECT value FROM feed_kv WHERE key = 'config'"))[0].value).story_studio, true);
+    assert.match(fs.readFileSync(path.join(repo, "views/feedAdmin.ejs"), "utf8"), /name="story_studio"/);
+  } finally { await store.setConfig(saved, "test"); }
+});
+
+test("Studio overlays require PNG on the first chunk, image kind and the overlay size cap", async () => {
+  const saved = { ...store.config() };
+  const u = await mkUser("studioamberlattice", { camfrog: "cfstudioamberlattice" });
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    let r = await post("/api/feed/uploads", u, { kind: "video", size: 100, purpose: "story_ovl" });
+    assert.equal(r.status, 400);
+    r = await post("/api/feed/uploads", u, { kind: "image", size: 2 * 1024 * 1024 + 1, purpose: "story_ovl" });
+    assert.equal(r.status, 413);
+    for (const bytes of [jpg, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), Buffer.from("<!doctype html><html>not an overlay</html>")]) {
+      r = await post("/api/feed/uploads", u, { kind: "image", size: bytes.length, purpose: "story_ovl" });
+      assert.equal(r.status, 200);
+      const chunk = await studioChunk(r.d.id, u, bytes);
+      assert.equal(chunk.status, 415); assert.equal(chunk.d.error, "The overlay must be a PNG picture.");
+      const row = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [r.d.id]))[0];
+      assert.equal(row.received, 0); assert.equal(row.state, "failed");
+      assert.equal(fs.existsSync(fmedia.tmpPath(row.id)), false);
+    }
+  } finally { await store.setConfig(saved, "test"); }
+});
+
+test("Studio overlays retain alpha, are private, never prefetch, and cannot become post attachments", async () => {
+  const saved = { ...store.config() }, safety = require(path.join(repo, "imagesafety"));
+  const originalPrefetch = safety.prefetch, seen = [];
+  const u = await mkUser("studiomossprism", { camfrog: "cfstudiomossprism" });
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    safety.prefetch = async value => { seen.push(value); };
+    const png = await sharp({ create: { width: 1080, height: 1920, channels: 4, background: { r: 220, g: 30, b: 90, alpha: 0.25 } } }).png().toBuffer();
+    const id = await studioUpload(png, u), row = await studioFinished(id, u);
+    assert.equal(row.state, "ready", row.error); assert.equal(row.w, 1080); assert.equal(row.h, 1920);
+    const file = fmedia.filePath(row.file), info = await sharp(file).metadata();
+    assert.equal(info.format, "webp"); assert.equal(info.hasAlpha, true);
+    assert.equal(info.exif, undefined); assert.equal(info.xmp, undefined); assert.equal(info.icc, undefined);
+    const pixel = await sharp(file).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
+    assert.ok(pixel[3] >= 62 && pixel[3] <= 66, "transparent overlay alpha is retained");
+    assert.equal(seen.length, 0);
+    assert.equal((await get("/media/f/" + row.file, null)).status, 404);
+    assert.equal((await get("/media/f/" + row.file, U.stranger)).status, 404);
+    assert.equal((await get("/media/f/" + row.file, u)).status, 200);
+    await assert.rejects(() => store.create(u.userId, { body: "A generated story layer", rooms: [ROOM], attachments: [id] }), /One of those files isn't yours or is already posted/);
+  } finally { safety.prefetch = originalPrefetch; await store.setConfig(saved, "test"); }
+});
+
+test("Studio rejects the wrong overlay dimensions and removes the generated files", async () => {
+  const saved = { ...store.config() }, original = fmedia.processImage, generated = [];
+  const u = await mkUser("studiopebblearc", { camfrog: "cfstudiopebblearc" });
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    fmedia.processImage = async (...args) => { const out = await original(...args); generated.push(out); return out; };
+    const png = await sharp({ create: { width: 1080, height: 1919, channels: 4, background: { r: 1, g: 2, b: 3, alpha: 0 } } }).png().toBuffer();
+    const id = await studioUpload(png, u), row = await studioFinished(id, u);
+    assert.equal(row.state, "failed"); assert.equal(row.error, "The overlay must be 1080 × 1920.");
+    assert.equal(fs.existsSync(fmedia.tmpPath(id)), false);
+    assert.ok(generated.length);
+    for (const out of generated) for (const name of [out.file, out.thumb, out.poster].filter(Boolean)) assert.equal(fs.existsSync(fmedia.filePath(name)), false);
+  } finally { fmedia.processImage = original; await store.setConfig(saved, "test"); }
+});
+
+test("Studio overlay uploads do not consume hourly or daily allowance but still occupy open-upload slots", async () => {
+  const saved = { ...store.config() };
+  const u = await mkUser("studiolilacmesh", { camfrog: "cfstudiolilacmesh" });
+  try {
+    await store.setConfig({ story_studio: true, uploads_per_hour: 1, upload_mb_per_day: 10 }, "test");
+    for (let n = 0; n < 6; n++) {
+      const id = await upload(u, { purpose: "story_ovl" });
+      await runQuery("UPDATE feed_attachments SET size_declared = ? WHERE id = ?", [2 * 1024 * 1024, id]);
+    }
+    let r = await post("/api/feed/uploads", u, { kind: "image", size: 100 });
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    await post("/api/feed/uploads/" + r.d.id + "/discard", u);
+    r = await post("/api/feed/uploads", u, { kind: "image", size: 100 });
+    assert.equal(r.status, 429); assert.match(r.d.error, /this hour/);
+    const ids = [];
+    for (let n = 0; n < 4; n++) {
+      r = await post("/api/feed/uploads", u, { kind: "image", size: 100, purpose: "story_ovl" });
+      assert.equal(r.status, 200, JSON.stringify(r.d)); ids.push(r.d.id);
+    }
+    r = await post("/api/feed/uploads", u, { kind: "image", size: 100, purpose: "story_ovl" });
+    assert.equal(r.status, 429); assert.match(r.d.error, /Finish the uploads/);
+    for (const id of ids) await post("/api/feed/uploads/" + id + "/discard", u);
+  } finally { await store.setConfig(saved, "test"); }
+});
+
+test("Studio records normalized edits and uses the source video cap without a Season Pass multiplier", async () => {
+  const saved = { ...store.config() };
+  const u = await mkUser("studioquartzpetal", { camfrog: "cfstudioquartzpetal" });
+  try {
+    await store.setConfig({ story_studio: true, max_video_mb: 100 }, "test");
+    const edit = { v: 1, pad: "profile", fit: "fit", trim: { start: 5, end: 35 }, text: [], stickers: [] };
+    let r = await post("/api/feed/uploads", u, { kind: "video", size: 61 * 1024 * 1024, purpose: "story", edit });
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    const id = r.d.id, row = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [id]))[0];
+    assert.equal(row.purpose, "story"); assert.deepEqual(JSON.parse(row.edit), require(path.join(repo, "storycompose")).cleanEdit(edit, { kind: "video" }));
+    await post("/api/feed/uploads/" + id + "/discard", u);
+    r = await post("/api/feed/uploads", u, { kind: "video", size: 101 * 1024 * 1024, purpose: "story", edit });
+    assert.equal(r.status, 413);
+    await store.setConfig({ max_video_mb: 80 }, "test");
+    r = await post("/api/feed/uploads", u, { kind: "video", size: 81 * 1024 * 1024, purpose: "story", edit });
+    assert.equal(r.status, 413, "the feed cap is still authoritative");
+  } finally { await store.setConfig(saved, "test"); }
+});
+
+test("discard during processing removes returned files, preserves deleted state and skips safety prefetch", async () => {
+  const saved = { ...store.config() }, safety = require(path.join(repo, "imagesafety"));
+  const image = fmedia.processImage, prefetch = safety.prefetch, compose = require(path.join(repo, "storycompose")), processEdit = compose.process;
+  const u = await mkUser("studiomarblemist", { camfrog: "cfstudiomarblemist" });
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    let prefetches = 0; safety.prefetch = async () => { prefetches++; };
+    for (const edited of [false, true]) {
+      let entered, release, output;
+      const started = new Promise(resolve => { entered = resolve; }), waiting = new Promise(resolve => { release = resolve; });
+      const delayed = async tmpPath => {
+        output = await image(tmpPath, "jpeg"); entered(); await waiting; return output;
+      };
+      if (edited) compose.process = delayed; else fmedia.processImage = delayed;
+      const extra = edited ? { edit: { v: 1, pad: "profile", fit: "fit", text: [], stickers: [] } } : {};
+      const id = await studioUpload(jpg, u, edited ? "story" : null, extra);
+      const r = await post("/api/feed/uploads/" + id + "/finish", u); assert.equal(r.status, 200);
+      await started;
+      assert.equal((await post("/api/feed/uploads/" + id + "/discard", u)).status, 200);
+      release();
+      for (let n = 0; n < 100 && fs.existsSync(fmedia.filePath(output.file)); n++) await new Promise(resolve => setTimeout(resolve, 10));
+      const row = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [id]))[0];
+      assert.equal(row.state, "deleted"); assert.equal(prefetches, 0); assert.equal(fs.existsSync(fmedia.tmpPath(id)), false);
+      for (const name of [output.file, output.thumb, output.poster].filter(Boolean)) assert.equal(fs.existsSync(fmedia.filePath(name)), false);
+      fmedia.processImage = image; compose.process = processEdit;
+    }
+  } finally { fmedia.processImage = image; compose.process = processEdit; safety.prefetch = prefetch; await store.setConfig(saved, "test"); }
+});
+
+test("discard removes files when processing finishes after its initial read but before deletion", { timeout: 10000 }, async () => {
+  const saved = { ...store.config() }, safety = require(path.join(repo, "imagesafety"));
+  const { db } = require(path.join(repo, "dbUtils")), all = db.all;
+  const image = fmedia.processImage, prefetch = safety.prefetch, compose = require(path.join(repo, "storycompose")), processEdit = compose.process;
+  const u = await mkUser("studiobirchlanding", { camfrog: "cfstudiobirchlanding" });
+  let release;
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    for (const edited of [false, true]) {
+      let entered, completed, output, snapshot;
+      const started = new Promise(resolve => { entered = resolve; });
+      const waiting = new Promise(resolve => { release = resolve; });
+      const ready = new Promise(resolve => { completed = resolve; });
+      safety.prefetch = async () => { completed(); };
+      const delayed = async tmpPath => { output = await image(tmpPath, "jpeg"); entered(); await waiting; return output; };
+      if (edited) compose.process = delayed; else fmedia.processImage = delayed;
+      const extra = edited ? { edit: { v: 1, pad: "profile", fit: "fit", text: [], stickers: [] } } : {};
+      const id = await studioUpload(jpg, u, edited ? "story" : null, extra);
+      assert.equal((await post("/api/feed/uploads/" + id + "/finish", u)).status, 200);
+      await started;
+      assert.equal((await post("/api/feed/uploads/" + id + "/discard", U.stranger)).status, 404);
+      // Hold the discard's stale SELECT result until the real processor has written ready and kept its files.
+      let armed = true;
+      db.all = function (sql, params, callback) {
+        if (armed && sql === "SELECT * FROM feed_attachments WHERE id = ?" && params[0] === id) {
+          armed = false;
+          return all.call(this, sql, params, (error, rows) => {
+            if (error) return callback(error, rows);
+            snapshot = rows[0]; release();
+            ready.then(() => callback(null, rows));
+          });
+        }
+        return all.call(this, sql, params, callback);
+      };
+      assert.equal((await post("/api/feed/uploads/" + id + "/discard", u)).status, 200);
+      db.all = all;
+      assert.equal(snapshot.state, "processing"); assert.equal(snapshot.file, null);
+      const row = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [id]))[0];
+      assert.equal(row.state, "deleted"); assert.equal(fs.existsSync(fmedia.tmpPath(id)), false);
+      for (const name of [output.file, output.thumb, output.poster].filter(Boolean)) assert.equal(fs.existsSync(fmedia.filePath(name)), false);
+      fmedia.processImage = image; compose.process = processEdit;
+    }
+  } finally {
+    db.all = all; if (release) release();
+    fmedia.processImage = image; compose.process = processEdit; safety.prefetch = prefetch;
+    await store.setConfig(saved, "test");
+  }
+});
+
+// Story Studio's posting gate, accessible metadata and removable PATV account mentions.
+function studioEdit(pad = "profile", text = [], stickers = []) { return { v: 1, pad, fit: "fit", text, stickers }; }
+
+test("account merges keep removed story mentions removed on either side and move distinct stories", { timeout: 30000 }, async () => {
+  // Exercise the real merge with its full schema in an isolated child, without changing this API harness's users.
+  const mergeDir = fs.mkdtempSync(path.join(tmp, "studio-mentions-merge-"));
+  const child = await require("util").promisify(require("child_process").execFile)(process.execPath, ["-e", `
+    const path = require("path"), assert = require("node:assert/strict"), repo = process.argv[1];
+    const sqlite3 = require(path.join(repo, "node_modules/sqlite3"));
+    const { scanSource, schemaSql } = require(path.join(repo, "test/fixtures/schemascan"));
+    (async () => {
+      const schema = new sqlite3.Database("myapp.db");
+      const exec = sql => new Promise((resolve, reject) => schema.exec(sql, error => error ? reject(error) : resolve()));
+      await exec(schemaSql());
+      for (const [, table] of scanSource(repo)) for (const sql of table.creates) await exec(sql).catch(() => {});
+      await new Promise((resolve, reject) => schema.close(error => error ? reject(error) : resolve()));
+      const { runQuery, getQuery, tx } = require(path.join(repo, "dbUtils"));
+      const AM = require(path.join(repo, "accountMerge"));
+      const from = "studio-merge-old", to = "studio-merge-new", third = "studio-merge-other";
+      for (const id of [from, to, third]) await runQuery("INSERT INTO users (userId, username, password) VALUES (?, ?, 'x')", [id, id]);
+      const input = [
+        ["a-from-removed", from, 100, 300], ["a-from-removed", to, 200, null],
+        ["b-to-removed", from, 400, null], ["b-to-removed", to, 150, 450],
+        ["c-both-removed", from, 170, 500], ["c-both-removed", to, 160, 480],
+        ["d-both-visible", from, 210, null], ["d-both-visible", to, 220, null],
+        ["e-distinct-visible", from, 230, null], ["f-distinct-removed", from, 240, 600],
+        ["g-target-only", to, 250, null], ["a-from-removed", third, 260, null]
+      ];
+      for (const [story, user, created, removed] of input) await runQuery(
+        "INSERT INTO story_mentions (story_id, user_id, x, y, created, removed_at) VALUES (?, ?, 0.4, 0.6, ?, ?)",
+        [story, user, created, removed]);
+      const result = await tx(() => AM.moveUserRows(from, to));
+      assert.deepEqual(result.unclassified, []);
+      assert.equal(result.folded["story_mentions.user_id"], 4);
+      assert.equal(result.moved["story_mentions.user_id"], 2);
+      assert.deepEqual(await getQuery("SELECT story_id, created, removed_at FROM story_mentions WHERE user_id=? ORDER BY story_id", [to]), [
+        { story_id: "a-from-removed", created: 100, removed_at: 300 },
+        { story_id: "b-to-removed", created: 150, removed_at: 450 },
+        { story_id: "c-both-removed", created: 160, removed_at: 500 },
+        { story_id: "d-both-visible", created: 210, removed_at: null },
+        { story_id: "e-distinct-visible", created: 230, removed_at: null },
+        { story_id: "f-distinct-removed", created: 240, removed_at: 600 },
+        { story_id: "g-target-only", created: 250, removed_at: null }
+      ]);
+      assert.deepEqual(await getQuery("SELECT * FROM story_mentions WHERE user_id=?", [from]), []);
+      assert.deepEqual(await getQuery("SELECT created, removed_at FROM story_mentions WHERE user_id=?", [third]), [{ created: 260, removed_at: null }]);
+      console.log("Story mention collisions and distinct moves verified.");
+      process.exit(0);
+    })().catch(error => { console.error(error); process.exit(1); });
+  `, repo], { cwd: mergeDir, timeout: 25000, windowsHide: true, maxBuffer: 1024 * 1024 });
+  assert.match(child.stdout, /Story mention collisions and distinct moves verified\./);
+});
+async function editedUpload(u, edit) {
+  const id = await upload(u);
+  await runQuery("UPDATE feed_attachments SET edit=? WHERE id=?", [JSON.stringify(edit), id]);
+  return id;
+}
+
+test("Studio off keeps the old targets and post answers, ignoring mentions", async () => {
+  const saved = { ...store.config() }, u = await mkUser("orchardcanvas", { display: "Orchard Canvas" });
+  try {
+    await store.setConfig({ story_studio: false }, "test");
+    const answer = await US.targets(u);
+    assert.deepEqual(Object.keys(answer).sort(), ["caps", "pads", "refusal"]);
+    assert.deepEqual(answer.caps, { secs: 30, imageMb: 10, videoMb: 60, perDay: 20 });
+    assert.deepEqual(answer.pads[0], { id: "u/orchardcanvas", title: "Your profile", label: "u/orchardcanvas", profile: true });
+    for (const p of answer.pads) { assert.equal(p.look, undefined); assert.equal(p.href, undefined); }
+    const result = await US.create(u, { attachment: await upload(u), pad: "profile", mentions: [{ username: "missing_account" }] });
+    assert.deepEqual(Object.keys(result).sort(), ["expires", "href", "id", "room"]);
+    assert.deepEqual(await getQuery("SELECT * FROM story_mentions WHERE story_id=?", [result.id]), []);
+    const items = [{ id: result.id, source: "user", alt: "stale", mentions: [{ u: "stale" }] }];
+    await US.annotateStudio(u, items);
+    assert.equal(items[0].alt, undefined); assert.equal(items[0].mentions, undefined);
+  } finally { await store.setConfig(saved, "test"); }
+});
+
+test("Studio targets add the real pad look and caps without changing eligible destinations", async () => {
+  const saved = { ...store.config() }, u = await mkUser("coppercanvas", { display: "Copper Canvas" });
+  const PL = require(path.join(repo, "padlook")); await PL.init();
+  const rid = "studio_copper_pad";
+  await rooms.addRoom(rid, "Copper Garden", "test"); await rooms.setOwner(rid, u.username, "test");
+  await PL.setStyle(rid, { accent: "#75bdda" }, "test");
+  await PL.setImage(rid, "avatar", jpg, { userId: u.userId, actor: "test" });
+  await runQuery("UPDATE users SET avatar='/uploads/copper.webp' WHERE userId=?", [u.userId]);
+  try {
+    await store.setConfig({ story_studio: false }, "test");
+    const off = await US.targets(u, { include: rid });
+    await store.setConfig({ story_studio: true }, "test");
+    const on = await US.targets(u, { include: rid });
+    assert.deepEqual(on.pads.map(p => p.id), off.pads.map(p => p.id));
+    const L = PL.look(rid), p = on.pads.find(p => p.id === rid);
+    assert.deepEqual(p.look, { avatar: L.avatar, accent: L.accent, ink: L.ink });
+    assert.equal(p.href, require(path.join(repo, "pads")).padHref(await rooms.get(rid)));
+    assert.deepEqual(on.pads[0].look, { avatar: "/uploads/copper.webp", accent: null, ink: null });
+    assert.equal(on.as, "Copper Canvas");
+    for (const [k, v] of Object.entries({ srcSecs: 180, srcVideoMb: 100, overlayMb: 2, textsMax: 3, textLen: 120, stickersMax: 10, mentionsMax: 5, studio: true })) assert.equal(on.caps[k], v, k);
+    const plain = on.pads.find(p => p.id === ROOM); if (plain) assert.equal(plain.look, null);
+  } finally { await store.setConfig(saved, "test"); }
+});
+
+test("Studio preflight and create share pad rules and read-only rate checks", async () => {
+  const saved = { ...store.config() }, u = await mkUser("mistcanvas");
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    for (const mode of ["approval", "approved", "ban", "other-profile"]) {
+      const pad = mode === "other-profile" ? "u/subby" : ROOM;
+      if (mode === "approval") await store.kvSet("room:" + ROOM, JSON.stringify({ approval: true }));
+      if (mode === "approved") await store.kvSet("room:" + ROOM, JSON.stringify({ who: "approved" }));
+      if (mode === "ban") await store.ban(U.admin, u.username, { room: ROOM, reason: "fixture" });
+      const a = await upload(u), captureError = async fn => { try { await fn(); return null; } catch (e) { return { status: e.status, message: e.message }; } };
+      const pre = await captureError(() => US.preflight(u, studioEdit(pad)));
+      const final = await captureError(() => US.create(u, { attachment: a, pad }));
+      assert.ok(pre, mode); assert.deepEqual(final, pre, mode);
+      assert.equal((await getQuery("SELECT state FROM feed_attachments WHERE id=?", [a]))[0].state, "ready");
+      await store.kvSet("room:" + ROOM, JSON.stringify({}));
+      if (mode === "ban") await store.unban(U.admin, u.userId, ROOM);
+    }
+    await US.preflight(u, studioEdit()); await US.preflight(u, studioEdit());
+    await US.create(u, { attachment: await upload(u), pad: "profile" });
+    await assert.rejects(US.preflight(u, studioEdit()), e => e.status === 429 && /Slow down/.test(e.message));
+  } finally { await store.kvSet("room:" + ROOM, JSON.stringify({})); await store.setConfig(saved, "test"); }
+});
+
+test("Studio final-pad words and sticker ownership recheck before claim; filter flags make no report", async () => {
+  const saved = { ...store.config() }, u = await mkUser("ripplecanvas"), filter = require(path.join(repo, "feedfilter"));
+  const oldCheck = filter.check, seen = []; let action = "allow";
+  filter.check = async (account, ids, opts) => { seen.push({ ids, opts }); return { action, message: "Filter refusal." }; };
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    const edit = studioEdit("profile", ["One more little scene"]), id = await editedUpload(u, edit);
+    await US.preflight(u, edit);
+    for (const value of ["block", "hide"]) {
+      action = value;
+      await assert.rejects(US.create(u, { attachment: id, pad: ROOM }), e => e.status === 422 && (value !== "hide" || (!/is hidden/i.test(e.message) && /change them/.test(e.message))));
+      assert.equal((await getQuery("SELECT state FROM feed_attachments WHERE id=?", [id]))[0].state, "ready");
+      assert.deepEqual(seen.at(-1).ids, [ROOM]); assert.equal(seen.at(-1).opts.dup, false);
+    }
+    action = "flag";
+    const before = (await getQuery("SELECT COUNT(*) n FROM feed_reports"))[0].n;
+    const result = await US.create(u, { attachment: id, pad: ROOM });
+    assert.equal((await getQuery("SELECT COUNT(*) n FROM feed_reports"))[0].n, before);
+    assert.equal(result.item.alt, "One more little scene");
+    const owned = require(path.join(repo, "stickers"));
+    const pack = owned.catalog().find(p => p.price > 0 && p.stickers.length);
+    assert.ok(pack);
+    const other = await mkUser("starlitcanvas"), paidEdit = studioEdit("profile", [], [{ pack: pack.id, sticker: pack.stickers[0].id }]);
+    await assert.rejects(US.preflight(other, paidEdit), /sticker pack|Prime|Pass/i);
+    const aid = await editedUpload(other, paidEdit);
+    await assert.rejects(US.create(other, { attachment: aid, pad: "profile" }), /sticker pack|Prime|Pass/i);
+    assert.equal((await getQuery("SELECT state FROM feed_attachments WHERE id=?", [aid]))[0].state, "ready");
+  } finally { filter.check = oldCheck; await store.setConfig(saved, "test"); }
+});
+
+test("Studio duplicate text is counted once per upload, not again at posting", async () => {
+  const saved = { ...store.config() }, filter = require(path.join(repo, "feedfilter")), u = await mkUser("plumcanvas");
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    await filter.setGlobal(U.admin, { enabled: true });
+    await filter.setScope(U.owner, ROOM, "on", true);
+    await filter.setScope(U.owner, ROOM, "act_spam", "block"); filter._reset();
+    const edit = studioEdit(ROOM, ["A small evening in the garden"]);
+    for (let i = 0; i < 2; i++) {
+      US._setClock(() => Date.now() + i * 11000);
+      await US.preflight(u, edit);
+      await US.create(u, { attachment: await editedUpload(u, edit), pad: ROOM });
+    }
+    await assert.rejects(US.preflight(await store.account(u.userId), edit), e => e.status === 429 || e.status === 422);
+  } finally { await filter.setScope(U.owner, ROOM, "on", false); filter._reset(); await store.setConfig(saved, "test"); }
+});
+
+test("Studio mentions validate before claim, collapse duplicates, and support removable live chips", async () => {
+  const saved = { ...store.config() }, author = await mkUser("cedarcanvas"), target = await mkUser("birchreader", { display: "Birch Reader" });
+  const outsider = await mkUser("cloudreader"), archived = await mkUser("oldpetalreader");
+  const cols = (await getQuery("PRAGMA table_info(users)")).map(c => c.name);
+  if (!cols.includes("archived_at")) await runQuery("ALTER TABLE users ADD COLUMN archived_at INTEGER");
+  await runQuery("UPDATE users SET archived_at=1 WHERE userId=?", [archived.userId]);
+  await runQuery("INSERT OR IGNORE INTO users (userId,username,password,class,level) VALUES ('pepe-bot','studiohelper','x','pleb',5)");
+  const PA = require(path.join(repo, "padaccess")), R = await rooms.get(ROOM); await PA.setLevel(U.owner, R, "public");
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    const aid = await editedUpload(author, studioEdit(ROOM, ["Garden after rain"]));
+    for (const username of ["unknownpetalreader", archived.username, author.username, "studiohelper"]) {
+      const r = await post("/api/stories/mine", author, { attachment: aid, pad: ROOM, mentions: [{ username, x: 0.5, y: 0.5 }] });
+      assert.equal(r.status, 400, username); assert.ok(r.d.error.includes("@" + username));
+      assert.equal((await getQuery("SELECT state FROM feed_attachments WHERE id=?", [aid]))[0].state, "ready");
+    }
+    const tooMany = Array.from({ length: 6 }, (_, i) => ({ username: "reader" + i, x: 0.5, y: 0.5 }));
+    assert.equal((await post("/api/stories/mine", author, { attachment: aid, pad: ROOM, mentions: tooMany })).status, 400);
+    const result = await US.create(author, { attachment: aid, pad: ROOM, mentions: [{ username: target.username, x: -1, y: 2 }, { username: target.username.toUpperCase(), x: 0.5, y: 0.5 }] });
+    assert.equal(result.scope, ROOM); assert.equal(result.item.alt, "Garden after rain");
+    assert.deepEqual(result.circle, (await stories.forViewer(author, { room: ROOM }))[0]);
+    assert.deepEqual(result.item.mentions, [{ u: target.username, d: "Birch Reader", x: 0.05, y: 0.95, mine: false }]);
+    const mine = (await stories.forViewer(target, { room: ROOM }))[0].items.find(i => i.id === result.id);
+    assert.equal(mine.mentions[0].mine, true);
+    const anon = (await stories.forViewer(null, { room: ROOM }))[0].items.find(i => i.id === result.id);
+    assert.equal(anon.alt, "Garden after rain"); assert.equal(anon.mentions, undefined);
+    assert.equal((await post("/api/stories/" + result.id + "/unmention", outsider)).status, 404);
+    let removed = await post("/api/stories/" + result.id + "/unmention", target);
+    assert.equal(removed.status, 200); assert.equal(removed.d.removed, true);
+    removed = await post("/api/stories/" + result.id + "/unmention", target); assert.equal(removed.status, 200); assert.equal(removed.d.removed, false);
+    await US.annotateStudio(target, [mine]); assert.deepEqual(mine.mentions, []);
+    const profile = await US.create(outsider, { attachment: await upload(outsider), pad: "profile", mentions: [{ username: target.username, x: 0.5, y: 0.5 }] });
+    assert.equal(profile.scope, "user:" + outsider.userId); assert.deepEqual(profile.circle, await US.personStory(outsider, outsider.userId));
+    await runQuery("UPDATE users SET archived_at=1 WHERE userId=?", [target.userId]);
+    assert.deepEqual((await US.personStory(outsider, outsider.userId)).items[0].mentions, []);
+    await runQuery("UPDATE media SET deleted=1 WHERE id=?", [result.id]);
+    await US.annotateStudio(target, [mine]); assert.equal(mine.alt, undefined); assert.equal(mine.mentions, undefined);
+    await US.sweep(); assert.deepEqual(await getQuery("SELECT * FROM story_text WHERE story_id=?", [result.id]), []);
+    assert.deepEqual(await getQuery("SELECT * FROM story_mentions WHERE story_id=?", [result.id]), []);
+  } finally { await PA.setLevel(U.owner, R, "members"); await store.setConfig(saved, "test"); }
+});

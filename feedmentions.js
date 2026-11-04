@@ -1,4 +1,4 @@
-// feedmentions.js — @username mentions and #hashtags in feed posts AND comments (1.99kk).
+// feedmentions.js — @username mentions and #hashtags in feed posts AND comments (1.99kk), plus story mention notices.
 //
 // ONE code path for both (feedweb.linkify -> padText calls inlineRefs; feedstore.create / edit / comment / editComment
 // call notify), so a post body and a comment behave the same:
@@ -30,6 +30,8 @@
 //
 // Autocomplete: GET /api/mentions/suggest?q=<prefix> (signed in, same-site fetch, SUGGEST_PER_MIN a minute) ->
 // [{username, display}] (live accounts, username or display name starting with q); public/js/mention-complete.js.
+// Story mentions reuse these account/block/preference/rate rules; storyreact.visibleTo is their visibility gate.
+// The inbox ref deduplicates each story/person, and Web Push receives only the story context and link, never its words.
 "use strict";
 const { getQuery } = require("./dbUtils");
 
@@ -194,6 +196,44 @@ async function notify(opts = {}) {
   }
 }
 
+/** Tell accounts mentioned in a new member story. Uses the same hourly budgets as posts/comments. Never throws. */
+async function notifyStory(opts = {}) {
+  try {
+    const store = require("./feedstore"), author = opts.author || {}, row = opts.row;
+    const storyId = String(opts.storyId || "");
+    if (!store.config().story_studio || !author.userId || !storyId || !row || String(row.id) !== storyId) return [];
+    const ids = [...new Set((Array.isArray(opts.userIds) ? opts.userIds : []).filter(id => typeof id === "string" && id))].slice(0, MAX_NAMES);
+    if (!ids.length) return [];
+    const names = await getQuery(`SELECT LOWER(username) AS name FROM users WHERE userId IN (${ids.map(() => "?").join(",")})`, ids);
+    const recipients = await accounts(names.map(a => a.name).filter(Boolean));
+    const mentions = require("./mentions"), inbox = require("./inbox"), stories = require("./storyreact");
+    const who = snip(author.displayname || author.username || "someone", 40), link = "/media/" + encodeURIComponent(storyId);
+    const t = NOW(), out = [];
+    for (const a of recipients) {
+      if (a.userId === author.userId || a.archived_at || store.isPepe(a)) continue;
+      if (await blockedEither(author.userId, a.userId)) continue;
+      if (!(await stories.visibleTo(a, row))) continue;
+      if (!(await mentions.feedAllowed(a.userId, t))) continue;
+      if (!under("a|" + author.userId, AUTHOR_HOUR, t) || !under("p|" + author.userId + "|" + a.userId, PAIR_HOUR, t) || !under("r|" + a.userId, RECIPIENT_HOUR, t)) continue;
+      const ref = `smention:${storyId}:${a.userId}`;
+      const stored = await inbox.addSafe(a.userId, {
+        kind: "mention", title: `💬 ${who} mentioned you in a story`, body: snip(opts.text, 300), link, ref,
+      });
+      if (!stored) continue;
+      try {
+        require("./webpush").onMention(a.userId, { kind: "mention", roomId: null, ctx: "story", url: link, srcKey: ref });
+      } catch (e) { /* never fails the notice */ }
+      take("a|" + author.userId, t); take("p|" + author.userId + "|" + a.userId, t); take("r|" + a.userId, t);
+      out.push(a.username);
+    }
+    return out;
+  } catch (e) {
+    // Provider/database errors can contain words or account names; a notice failure must reveal neither.
+    console.error("[feedmentions] story notice failed");
+    return [];
+  }
+}
+
 // ── autocomplete ──
 const likeEsc = (s) => s.replace(/[\\%_]/g, (c) => "\\" + c);
 async function suggest(q, viewer = null) {
@@ -231,5 +271,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { names, hashtags, inlineRefs, notify, suggest, register, MENTION_RE, TAG_RE, MAX_NAMES, PAIR_HOUR, AUTHOR_HOUR, RECIPIENT_HOUR,
+module.exports = { names, hashtags, inlineRefs, notify, notifyStory, accounts, suggest, register, MENTION_RE, TAG_RE, MAX_NAMES, PAIR_HOUR, AUTHOR_HOUR, RECIPIENT_HOUR,
                    _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => hits.clear() };
