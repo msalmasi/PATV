@@ -188,6 +188,13 @@ const FIELDS = Object.freeze({
   // NAMED card in state "withheld" (their stage cover, "cam off") - never a relay, still, warm keep or capture of the cam - and every
   // other stage rule still applies (micfollow.eligOf). Dark: off = today's CUT (no tile; "Someone is speaking" if alone)
   withheld_cover:        { def: false, bool: true },
+  // 1.99?? mfproof (owner report 2026-11-04: brocklee258 / ritchiecuh - his mic grabs "someone", no cover, "Someone else is speaking"):
+  // PRIVATE ACTIVITY (the profile's Analytics section or its Rooms panel hidden - stories.privateLogins) as a cam opt-out on the S3
+  // withheld path, not a hard cut: a proven, linked, private-activity holder is their NAMED card with their stage cover (never their
+  // cam), after every other rule and the DF-11 notice gate, like !livecam off. Only together with withheld_cover (the card exists only
+  // there). Dark: off = today's "private" CUT exactly (privacy-controls spec Q14 default "private activity stays off the stage" - the
+  // owner decides). Pins, ▶ Live, cam slots, captures (stagemiccap.cardConsent), clips, on-air and search stay as strict as before
+  private_cover:         { def: false, bool: true },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 

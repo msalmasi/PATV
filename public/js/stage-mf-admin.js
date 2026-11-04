@@ -78,6 +78,9 @@
     parts.push(fk.length ? 'failed 1 h: ' + fk.sort().map(function (k) { return k + ' ' + f[k]; }).join(', ') : 'no failures 1 h');
     var c = p.cards || {}, ck = Object.keys(c);
     if (ck.length) parts.push('cards: ' + ck.sort().map(function (k) { return k + ' ' + c[k]; }).join(', '));
+    // 1.99?? mfproof: (admins) the mic holders the stage can't show now, by reason - counts only, never who
+    var u = p.unshown || {}, uk = Object.keys(u);
+    if (uk.length) parts.push('not shown on the mic: ' + uk.sort().map(function (k) { return k + ' ' + u[k]; }).join(', '));
     return parts.join(' · ');
   }
   function paintPads() {

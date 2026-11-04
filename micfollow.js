@@ -137,6 +137,13 @@
 //                  (pinRule). Incognito + live cam off: the peek hood under the frog name (a cover, or a veiled cam tile's card) - never
 //                  coverOf; !bridge hide: the shadow hood. The one courtesy notice says !livecam off stops the cam (cover picture
 //                  instead). Switch off: today's CUTs exactly.
+// 1.99?? mfproof (owner report 2026-11-04: brocklee258, Camfrog login ritchiecuh - proven by Pepe, named in the chat and transcripts, but
+//   his mic grabs "someone", no cover, "Someone else is speaking": his profile's Analytics section is hidden = private activity, a CUT):
+//   private_cover  cfg (dark, /stage/admin, only with withheld_cover on): private activity withholds the CAM, not the person - eligCore
+//                  notes it like !livecam off, every later rule still runs, the end is "withheld" (the named card + stage cover; the
+//                  _wh courtesy notice, from Pepe's own account). Pins (pinRule), ▶ Live / cam slots (livecam), captures (stagemiccap
+//                  .cardConsent - still blanked, the room's audio muted), clips, on-air and search stay as strict. Off: the CUT.
+//   unshown        /stage/admin pad health (admins): the holders the stage can't show now, by reason - counts only (unshownOf).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -471,7 +478,10 @@ function eligCore(P, R, login, t, want, vsess) {
   if (MFOPT.has(login)) { if (!wc) return "mf_opted_out"; withheld = true; }
   const f = FACTS.get(login);
   if (!f || t - f.at > c.private_cache_s * 1000) want.add(login);
-  if (f && f.priv) return "private";
+  // 1.99?? mfproof: with cfg private_cover on too (dark), private activity withholds the CAM only, like the cam opt-outs above - noted
+  // here, EVERY later rule still runs (excluded, banned, "Take me off this Stage", blocked_owner, the DM block, mode_closed, ended_by,
+  // the facts and the DF-11 notice gate), and only where the end would say ok / off_cam / cam_unknown is it "withheld". Off: the CUT
+  if (f && f.priv) { if (!(wc && c.private_cover === true)) return "private"; withheld = true; }
   // (1.99aid S5: a veiled cam only by a VEILED ✕ - a by-name / by-account row never changes how a veiled speaker shows: no oracle)
   if (vsess != null ? veilExcluded(P.roomId, login, t) : excluded(P.roomId, login, t, f ? f.userIds : null)) return "excluded";
   const b = BANS.get(login + "|" + P.roomId);
@@ -992,6 +1002,7 @@ function stepPad(roomId, t = now(), R) {
                   pins: why ? [] : [...(PINS.get(P.roomId) || new Map()).keys()],    // mfix: 📌 the pad's pinned cams
                   covers: why ? [] : covers.map((c) => ({ key: c.key, since: c.since })) };   // wave2 WP-4 (F.4): keys only
   if (!why) { bump("holders_seen", holders.length + unproven, t, P); bump("proven", holders.length, t, P); bump("unproven", unproven, t, P); if (covers.length) bump("covers_seen", covers.length, t, P); }
+  P.unshown = unshownOf(P, why, holders, elig, unproven, others);   // 1.99?? mfproof: /stage/admin pad health (counts only, admins)
   const r = core.step(P.state, input, cfg(), t);
   apply(P, R, r.actions, t);
   syncCovers(P, R, covers);                      // wave2 WP-4 (F.4): each cover tile's public id + hood
@@ -1001,6 +1012,26 @@ function stepPad(roomId, t = now(), R) {
   return r;
 }
 
+/** 1.99?? mfproof (owner report 2026-11-04 - a mic holder named in the chat shown as "someone" on the stage): the people holding the mic
+ *  in pad P right now whom its stage can't show, by reason - {code: n}: "unproven" (Pepe can't prove the login), "anonymous" (an entry
+ *  with no usable login), and each proven holder's CUT ("private", "opted_out", "mode_closed", "excluded", "banned", ...), "pending" (a
+ *  fact still being read) or "notice" (the DF-11 lead time). COUNTS ONLY - never a login - and never a frog-name holder's reason (it
+ *  would pair the frog with a setting); a holder the stage shows (ok, cam_unknown, off_cam, withheld) isn't counted. {} while the pad
+ *  doesn't run. /stage/admin's pad health shows it to admins, so the next "someone" report can be read off the page. */
+function unshownOf(P, why, holders, elig, unproven, others) {
+  const out = {};
+  if (why && why !== "stale") return out;
+  const add = (k, n = 1) => { if (n > 0) out[k] = (out[k] || 0) + n; };
+  add("unproven", unproven);
+  add("anonymous", Math.max(0, ((others || []).length) - unproven));
+  for (const h of holders || []) {
+    if (P.vnow && P.vnow.has(h.login)) continue;
+    const e = elig.get(h.login);
+    if (e == null || (!core.isCut(e) && e !== "pending" && e !== "notice")) continue;
+    add(e);
+  }
+  return out;
+}
 /** Carry out the engine's actions. */
 function apply(P, R, actions, t) {
   let touch = null, add = 0, rem = 0, cut = 0;
@@ -1174,6 +1205,11 @@ function camWithheld(login, t = now()) {
   const l = low(login);
   try { if (LC().optedOut(l)) return true; } catch (e) { /* no live cams */ }
   if (MFOPT.has(l)) return true;
+  // 1.99?? mfproof: private activity is such an opt-out while cfg withheld_cover AND private_cover are on (eligCore) - the _wh text
+  // ("your cam stays off mic stages: ... your cover picture") under Pepe's own account, never the pad owner's (that would pair the
+  // login with a private setting in the owner's action rows)
+  const f = FACTS.get(l), c = cfg();
+  if (f && f.priv && c.withheld_cover === true && c.private_cover === true) return true;
   const mode = modeOf(l, t);
   return mode === "followers" || mode === "request";
 }
@@ -2752,7 +2788,8 @@ async function adminView(user, t = now()) {
                 pins: pinsOf(P.roomId).length, keep_recent: P.settings.keep_recent,                                                   // mfix
                 kept: S.kept ? S.kept.size : 0,                                                                                       // wave2 WP-4 (F.2)
                 covers: S.tiles.filter((x) => x.cover).length,                                                                        // wave2 WP-4 (F.4)
-                ...health(P, roomOf(P.roomId), t) });                                                                                 // 1.99afl (S3)
+                ...health(P, roomOf(P.roomId), t),                                                                                    // 1.99afl (S3)
+                ...(admin ? { unshown: { ...(P.unshown || {}) } } : {}) });                     // 1.99?? mfproof: holders it can't show, by reason (counts)
   }
   let audit = [];
   try { audit = await require("./adminaudit").recent(AUDIT, 15); } catch (e) { audit = []; }
@@ -3260,6 +3297,8 @@ module.exports = {
   vidLogin, veilCamEnded, veilSessOf, veilOfTile,                                // 1.99aid (privacy controls S5)
   vidVeil, pinByVid,                                                              // 1.99aid (privacy controls V-1)
   withheldCover: () => cfg().withheld_cover === true,                            // 1.99aid (privacy controls S3)
+  // 1.99?? mfproof: private activity is a named cover card (both switches on) rather than kept off the stage
+  privateCover: () => cfg().withheld_cover === true && cfg().private_cover === true,
   dmBlocked,                                                                      // 1.99aih (privacy controls round 6: stagemiccap's consent)
   dmBlockChanged,                                                                 // 1.99aih (privacy controls round 6 review: messages.setBlock)
   register, init, cfg, current: () => ({ v: CFG.v, cfg: { ...CFG.cfg } }), onSync, onRoomGone, stepPad, snapshot, viewFor, ownerState, setPad, adminView, setKill, setCfg,
