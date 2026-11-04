@@ -6315,6 +6315,8 @@
   "js.plexq.l_add": "추가함",
   "js.plexq.l_remove": "삭제함",
   "js.plexq.l_move": "옮김",
+  "js.plexq.l_qnext": "다음에 추가함",
+  "js.plexq.l_pepe": "Pepe에게 물어봄 -",
   "js.plexq.starting": "시작하는 중…",
   "js.plexq.between": "다음 제목 시작 중…",
   "js.plexq.by": "{name} 님이 시작함",

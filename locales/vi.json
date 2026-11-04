@@ -6315,6 +6315,8 @@
   "js.plexq.l_add": "đã thêm",
   "js.plexq.l_remove": "đã xóa",
   "js.plexq.l_move": "đã di chuyển",
+  "js.plexq.l_qnext": "đã thêm vào tiếp theo",
+  "js.plexq.l_pepe": "đã hỏi Pepe -",
   "js.plexq.starting": "Đang bắt đầu…",
   "js.plexq.between": "tựa tiếp theo đang bắt đầu…",
   "js.plexq.by": "được bắt đầu bởi {name}",

@@ -6408,6 +6408,8 @@
   "js.plexq.l_add": "जोड़ा",
   "js.plexq.l_remove": "हटाया",
   "js.plexq.l_move": "स्थानांतरित किया",
+  "js.plexq.l_qnext": "अगला जोड़ा",
+  "js.plexq.l_pepe": "Pepe से पूछा -",
   "js.plexq.starting": "शुरू हो रहा है…",
   "js.plexq.between": "अगला शीर्षक शुरू हो रहा है…",
   "js.plexq.by": "{name} ने शुरू किया",

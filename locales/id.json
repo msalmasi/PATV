@@ -6315,6 +6315,8 @@
   "js.plexq.l_add": "ditambahkan",
   "js.plexq.l_remove": "dihapus",
   "js.plexq.l_move": "dipindahkan",
+  "js.plexq.l_qnext": "ditambahkan berikutnya",
+  "js.plexq.l_pepe": "bertanya ke Pepe -",
   "js.plexq.starting": "Memulai…",
   "js.plexq.between": "judul berikutnya sedang dimulai…",
   "js.plexq.by": "dimulai oleh {name}",

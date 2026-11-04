@@ -6316,6 +6316,8 @@
   "js.plexq.l_add": "เพิ่มแล้ว",
   "js.plexq.l_remove": "นำออกแล้ว",
   "js.plexq.l_move": "ย้ายแล้ว",
+  "js.plexq.l_qnext": "เพิ่มเป็นถัดไปแล้ว",
+  "js.plexq.l_pepe": "ถาม Pepe -",
   "js.plexq.starting": "กำลังเริ่ม…",
   "js.plexq.between": "เรื่องถัดไปกำลังเริ่ม…",
   "js.plexq.by": "เริ่มโดย {name}",

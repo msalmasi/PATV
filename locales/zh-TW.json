@@ -6315,6 +6315,8 @@
   "js.plexq.l_add": "加入了",
   "js.plexq.l_remove": "移除了",
   "js.plexq.l_move": "移動了",
+  "js.plexq.l_qnext": "排到下一部了",
+  "js.plexq.l_pepe": "問了 Pepe -",
   "js.plexq.starting": "開始中…",
   "js.plexq.between": "下一部即將開始…",
   "js.plexq.by": "由 {name} 開始",

@@ -6594,6 +6594,8 @@
   "js.plexq.l_add": "додано",
   "js.plexq.l_remove": "видалено",
   "js.plexq.l_move": "переміщено",
+  "js.plexq.l_qnext": "додано наступним",
+  "js.plexq.l_pepe": "запитав Pepe -",
   "js.plexq.starting": "Запускаємо…",
   "js.plexq.between": "наступна назва запускається…",
   "js.plexq.by": "запустив {name}",

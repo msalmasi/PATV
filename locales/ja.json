@@ -6315,6 +6315,8 @@
   "js.plexq.l_add": "追加しました",
   "js.plexq.l_remove": "削除しました",
   "js.plexq.l_move": "移動しました",
+  "js.plexq.l_qnext": "次に追加しました",
+  "js.plexq.l_pepe": "Pepeに聞きました -",
   "js.plexq.starting": "開始中…",
   "js.plexq.between": "次のタイトルを開始中…",
   "js.plexq.by": "{name}が開始",

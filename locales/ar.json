@@ -6780,6 +6780,8 @@
   "js.plexq.l_add": "أضاف",
   "js.plexq.l_remove": "أزال",
   "js.plexq.l_move": "نقل",
+  "js.plexq.l_qnext": "أضاف كالتالي",
+  "js.plexq.l_pepe": "سأل Pepe -",
   "js.plexq.starting": "جارٍ البدء…",
   "js.plexq.between": "بدء العنوان التالي…",
   "js.plexq.by": "بدأه {name}",

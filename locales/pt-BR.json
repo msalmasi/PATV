@@ -6456,6 +6456,8 @@
   "js.plexq.l_add": "adicionou",
   "js.plexq.l_remove": "removeu",
   "js.plexq.l_move": "moveu",
+  "js.plexq.l_qnext": "adicionou em seguida",
+  "js.plexq.l_pepe": "perguntou ao Pepe -",
   "js.plexq.starting": "Iniciando…",
   "js.plexq.between": "próximo título começando…",
   "js.plexq.by": "iniciado por {name}",

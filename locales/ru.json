@@ -6594,6 +6594,8 @@
   "js.plexq.l_add": "добавил",
   "js.plexq.l_remove": "удалил",
   "js.plexq.l_move": "переместил",
+  "js.plexq.l_qnext": "добавил следующим",
+  "js.plexq.l_pepe": "спросил Pepe -",
   "js.plexq.starting": "Запускаем…",
   "js.plexq.between": "следующий тайтл запускается…",
   "js.plexq.by": "запустил {name}",

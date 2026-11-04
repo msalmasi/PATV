@@ -6408,6 +6408,8 @@
   "js.plexq.l_add": "toegevoegd",
   "js.plexq.l_remove": "verwijderd",
   "js.plexq.l_move": "verplaatst",
+  "js.plexq.l_qnext": "volgende toegevoegd",
+  "js.plexq.l_pepe": "vroeg Pepe -",
   "js.plexq.starting": "Starten…",
   "js.plexq.between": "volgende titel start…",
   "js.plexq.by": "gestart door {name}",

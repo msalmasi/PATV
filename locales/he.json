@@ -6501,6 +6501,8 @@
   "js.plexq.l_add": "הוסיף",
   "js.plexq.l_remove": "הסיר",
   "js.plexq.l_move": "הזיז",
+  "js.plexq.l_qnext": "הוסיף הבא",
+  "js.plexq.l_pepe": "שאל את Pepe -",
   "js.plexq.starting": "מתחיל…",
   "js.plexq.between": "הכותר הבא מתחיל…",
   "js.plexq.by": "התחיל על ידי {name}",

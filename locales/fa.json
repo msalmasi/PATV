@@ -6406,6 +6406,8 @@
   "js.plexq.l_add": "اضافه شد",
   "js.plexq.l_remove": "حذف شد",
   "js.plexq.l_move": "جابه‌جا شد",
+  "js.plexq.l_qnext": "بعدی اضافه شد",
+  "js.plexq.l_pepe": "از Pepe پرسید -",
   "js.plexq.starting": "در حال شروع…",
   "js.plexq.between": "عنوان بعدی در حال شروع…",
   "js.plexq.by": "شروع‌شده توسط {name}",

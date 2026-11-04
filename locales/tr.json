@@ -6410,6 +6410,8 @@
   "js.plexq.l_add": "eklendi",
   "js.plexq.l_remove": "kaldırıldı",
   "js.plexq.l_move": "taşındı",
+  "js.plexq.l_qnext": "sonraki olarak eklendi",
+  "js.plexq.l_pepe": "Pepe'ye sordu -",
   "js.plexq.starting": "Başlıyor…",
   "js.plexq.between": "sonraki başlık başlıyor…",
   "js.plexq.by": "{name} tarafından başlatıldı",
