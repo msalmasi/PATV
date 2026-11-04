@@ -197,6 +197,11 @@ main.rm.rm-dock .rmd-holders .rmd-person { max-inline-size: 100%; }
 main.rm.rm-dock .rmd-holders .rmd-person-name { flex: 0 1 auto; }
 main.rm.rm-dock .rmd-holders .av { inline-size: 24px; block-size: 24px; }
 main.rm.rm-dock .rmd-holders .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 1.99?? dock: review - privacy (spec K): a veiled holder keeps its text tag ("incognito" / "hidden") in the narrow chip - only the
+   frog name gives way, as in the chat's line head (chatlog.css); a clipped tag leaves an italic frog name that reads like a real one */
+main.rm.rm-dock .rmd-holders .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
+main.rm.rm-dock .rmd-holders .who.veil > i { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-holders .who.veil > .veil-tag { flex: none; }
 main.rm.rm-dock .rmd-input-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; }
 main.rm.rm-dock .rmd-input-row #rmRelay,
 main.rm.rm-dock .rmd-input-row .rb-say:not(.hide),
