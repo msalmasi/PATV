@@ -54,8 +54,10 @@ function prune() {
   for (const [id, at] of retried) if (now - at >= LOOKUP_RETRY_MS) retried.delete(id);
   for (const [id, entry] of hits) if (now - entry.at >= WINDOW_MS) hits.delete(id);
 }
-function remember(item) {
-  prune(); cache.delete(item.id); cache.set(item.id, { at: clock(), item: clone(item) });
+// 1.99?? dock: `filtered` = the id came back from a contentfilter=high search / featured answer (only those can be sent)
+function remember(item, filtered) {
+  prune(); const old = cache.get(item.id); cache.delete(item.id);
+  cache.set(item.id, { at: clock(), item: clone(item), filtered: !!filtered || !!(old && old.filtered) });
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 function peek(id) {
@@ -98,8 +100,16 @@ async function search(q) {
   const params = { contentfilter: CONTENT_FILTER, media_filter: "tinygif,gif", limit: 20 };
   if (q) params.q = q;
   const items = await request(q ? "search" : "featured", params), out = [];
-  for (const raw of items.slice(0, 50)) { const item = normalize(raw); if (item) { remember(item); out.push(clone(item)); } }
+  for (const raw of items.slice(0, 50)) { const item = normalize(raw); if (item) { remember(item, true); out.push(clone(item)); } }
   return out;
+}
+/** 1.99?? dock: the GIF a say line may post - only an id a filtered (contentfilter=high) search / featured answer gave in the
+ *  cache's 24 h. Never the Posts lookup (resolve), which has no rating filter: a hand-made "[gif:<id>]" could otherwise put any
+ *  GIF in the chat for everyone, and distinct bogus ids could spend the global lookup budget. Synchronous: no provider request. */
+function picked(id) {
+  if (typeof id !== "string" || !ID_RE.test(id) || !available()) return null;
+  const entry = cache.get(id);
+  return entry && entry.filtered === true ? peek(id) : null;
 }
 function resolve(id) {
   if (typeof id !== "string" || !ID_RE.test(id) || !available()) return Promise.resolve(null);
@@ -112,7 +122,7 @@ function resolve(id) {
   // the high-rated search/trending picker and owner-configured KLIPY filtering are the discovery controls.
   const task = request("posts", { ids: id, media_filter: "tinygif,gif" }).then(items => {
     const item = items.map(normalize).find(x => x && x.id === id);
-    if (item) remember(item);
+    if (item) remember(item, false);           // (1.99?? dock: rendering metadata only - never makes the id sendable)
     return item || null;
   }).catch(() => null).finally(() => pending.delete(id));
   pending.set(id, task); return task;
@@ -148,6 +158,6 @@ function register(app, { addUser }) {
     } catch (e) { res.status(e && e.refuse ? e.status : 503).json({ ok: false, code: e && e.refuse ? e.message : "unavailable", error: "GIF search unavailable." }); }
   });
 }
-module.exports = { available, normalize, peek, resolve, search, attach, register, KLIPY_API_BASE, MEDIA_HOSTS, PAGE_HOSTS, CONTENT_FILTER,
+module.exports = { available, normalize, peek, picked, resolve, search, attach, register, KLIPY_API_BASE, MEDIA_HOSTS, PAGE_HOSTS, CONTENT_FILTER,
   CACHE_TTL_MS, CACHE_MAX, SEARCH_LIMIT, LOOKUP_LIMIT, LOOKUP_RETRY_MS, RESPONSE_MAX_BYTES,
   _reset: () => { cache.clear(); pending.clear(); retried.clear(); hits.clear(); clock = () => Date.now(); }, _clock: fn => { clock = fn; } };

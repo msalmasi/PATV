@@ -153,16 +153,29 @@ test("attach is synchronous/cache-only; only named web message tokens get metada
   await flags({ gifs: true }); delete process.env.KLIPY_API_KEY; assert.equal(G.attach({ ...input }).gif, undefined);
 });
 
-test("exact GIF creates media job; concurrent cid retries during lookup enqueue only once", async () => {
-  let finish; provider = () => new Promise(resolve => { finish = resolve; });
-  const a = say("[gif:gif_fixture_1]", "gif-lookup-cid");
-  for (let i = 0; i < 50 && !finish; i++) await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(typeof finish, "function");
-  const b = say("[gif:gif_fixture_1]", "gif-lookup-cid"); finish(response([fixture()]));
-  const results = await Promise.all([a, b]); assert.equal(results[0].status, 200, JSON.stringify(results[0].data)); assert.equal(results[1].data.id, results[0].data.id);
+// (1.99?? dock: a send reads only the filtered search / featured cache - gifs.picked - so the picker's answer comes first; the
+// concurrent cid retries now race on the say route's own awaits, not on a provider lookup)
+test("exact GIF creates media job; concurrent cid retries enqueue only once", async () => {
+  await G.search("");                      // the picker's featured answer (contentfilter=high) - the only way an id becomes sendable
+  const results = await Promise.all([say("[gif:gif_fixture_1]", "gif-lookup-cid"), say("[gif:gif_fixture_1]", "gif-lookup-cid")]);
+  assert.equal(results[0].status, 200, JSON.stringify(results[0].data)); assert.equal(results[1].data.id, results[0].data.id);
   const jobs = relay.takeJobs(new Set([room.id])); assert.equal(jobs.length, 1);
   assert.deepEqual(jobs[0].media, { type: "gif", id: "gif_fixture_1", title: "Fixture wave", page: "https://klipy.com/gifs/fixture-wave" });
-  assert.equal(jobs[0].text, "[gif:gif_fixture_1]"); assert.equal(jobs[0].cid, "gif-lookup-cid"); assert.equal(calls.length, 1);
+  assert.equal(jobs[0].text, "[gif:gif_fixture_1]"); assert.equal(jobs[0].cid, "gif-lookup-cid"); assert.equal(calls.length, 1, "the search only - a send asks KLIPY nothing");
+});
+
+test("1.99?? dock: an id only the unfiltered Posts lookup returned (the render path) is never sendable; a filtered answer makes it sendable for the cache's 24 h", async () => {
+  await G.resolve("gif_fixture_1");        // Posts has no rating filter: metadata for drawing a line, nothing more
+  assert.ok(G.peek("gif_fixture_1")); assert.equal(G.picked("gif_fixture_1"), null);
+  const before = calls.length;
+  assert.equal((await say("[gif:gif_fixture_1]", "posts-only")).data.code, "gif"); assert.equal(relay._jobs.size, 0);
+  assert.equal((await say("[gif:never_seen]", "never-seen")).data.code, "gif"); assert.equal(calls.length, before, "a send never looks an id up");
+  await G.search("fixture"); assert.ok(G.picked("gif_fixture_1"));
+  await G.resolve("gif_fixture_1"); assert.ok(G.picked("gif_fixture_1"), "a later lookup keeps a filtered id sendable");
+  assert.equal((await say("[gif:gif_fixture_1]", "after-search")).status, 200);
+  await flags({ gifs: false }); assert.equal(G.picked("gif_fixture_1"), null, "off: nothing is sendable");
+  await flags({ gifs: true }); assert.ok(G.picked("gif_fixture_1"));
+  now += G.CACHE_TTL_MS; assert.equal(G.picked("gif_fixture_1"), null, "past the cache's 24 h: search again");
 });
 
 test("mixed/malformed/unknown tokens return gif refusal without jobs", async () => {
@@ -194,10 +207,8 @@ test("1.99?? dock: every switch off - words that mention [GIF] / [gif] / [cfstic
 });
 
 test("concurrent distinct GIF picks cannot overfill the shared five-message queue", async () => {
-  let finish; provider = () => new Promise(resolve => { finish = resolve; });
+  await G.search("");                      // (1.99?? dock: sends read the filtered cache only)
   const sends = Array.from({ length: 6 }, (_, i) => say("[gif:gif_fixture_1]", "concurrent-" + i));
-  for (let i = 0; i < 50 && !finish; i++) await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(typeof finish, "function"); finish(response([fixture()]));
   const results = await Promise.all(sends);
   assert.equal(results.filter(x => x.status === 200).length, 5);
   assert.equal(results.filter(x => x.data.code === "queue_full").length, 1);
@@ -208,8 +219,9 @@ test("a gate or key revoked during provider work prevents response/job delivery"
   provider = async () => { padAllowed = false; return response([fixture()]); };
   assert.equal((await search()).data.code, "pad_access");
   padAllowed = true; G._reset(); G._clock(() => now);
-  provider = async () => { blocked = "new block"; return response([fixture()]); };
-  assert.equal((await say("[gif:gif_fixture_1]", "new-block-cid")).data.code, "blocked"); assert.equal(relay._jobs.size, 0);
+  // (1.99?? dock: a send no longer waits on the provider - a block in place before it refuses it, with no lookup)
+  provider = async () => response([fixture()]); await G.search(""); const before = calls.length; blocked = "new block";
+  assert.equal((await say("[gif:gif_fixture_1]", "new-block-cid")).data.code, "blocked"); assert.equal(relay._jobs.size, 0); assert.equal(calls.length, before);
   blocked = null; G._reset(); provider = async () => { process.env.KLIPY_API_KEY = "fixture-rotated"; return response([fixture()]); };
   assert.equal((await search()).status, 503); assert.equal(G.peek("gif_fixture_1"), null);
 });

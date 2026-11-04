@@ -552,11 +552,10 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       if (!stickers.enabled() || R.stickers !== true || !stickers.valid(token.set, token.id)) return mediaRefusal(kind);
       media = { type: "cfsticker", set: Number(token.set), id: Number(token.id) };
     } else {
-      const gifs = require("./gifs"), gif = await gifs.resolve(token.id);
+      // 1.99?? dock: only a GIF a filtered (contentfilter=high) search / featured answer gave - gifs.picked reads the cache, never
+      // the unfiltered Posts lookup, so a hand-made "[gif:<id>]" can't post an unrated GIF (and no provider request runs here)
+      const gifs = require("./gifs"), gif = gifs.picked(token.id);
       if (!gifs.available() || !gif) return mediaRefusal(kind);
-      const current = await sayEligibility({ user: opts.viewer || u }, R);
-      if (!current.ok) return current;
-      u = current.u;
       media = { type: "gif", id: token.id, title: gif.title, page: gif.page };
     }
   }
