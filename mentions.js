@@ -340,9 +340,11 @@ async function chatMentions(line, t) {
   if (it.k !== "msg" || !it.text || u.self || u.bot) return done;
   if (u.anon && !u.alias) return done;                     // "someone" lines never alert
   if (it.mask) return done;                                // a hidden bar has no words to mention anyone with
-  const S = await senderOf(it);
+  // (the targets first: most lines name nobody - then nothing else is looked up)
   let targets = Array.isArray(it._mnIds) && it._mnIds.length ? it._mnIds.slice(0, 10) : [];
-  if (!targets.length && !u.web) targets = await typedTargets(it.text);
+  if (!targets.length && !u.web && String(it.text).includes("@")) targets = await typedTargets(it.text);
+  if (!targets.length) return done;
+  const S = await senderOf(it);
   const inbox = require("./inbox");
   for (const T0 of targets) {
     let T = T0;
