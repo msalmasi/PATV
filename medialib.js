@@ -637,7 +637,9 @@ async function padState(user, room) {
     const nxt = q ? q.items[q.pos + 1] : null;
     library = { title: s ? s.title : cur ? fmtTitle(cur) : null, queue: !!q, starter_is_you: !!(user && user.userId && starter === user.userId),
                 by: q ? q.username : p.username || (s && s.by_user) || null, per_hour: q ? Number(q.per_hour) || 0 : null,
-                next: nxt ? fmtTitle(nxt) : null, state: s ? s.state : "waiting" };
+                next: nxt ? fmtTitle(nxt) : null, state: s ? s.state : "waiting",
+                // 1.99?? plexchat review: may THIS speaker queue a title on it (mediaqueue.mayGrow - one rule)? Pepe says no up front
+                can_add: q ? !!(await require("./mediaqueue").mayGrow(user, q)) : false };
   }
   const open = await safeQuery(`SELECT id, source FROM stage_slots WHERE room_id = ? AND status IN ${OPEN_STATES}`, [R.id]);
   const RS = await rooms.stageSettings(R.id).catch(() => null);

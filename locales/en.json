@@ -6301,6 +6301,8 @@
   "js.plexq.l_add": "added",
   "js.plexq.l_remove": "removed",
   "js.plexq.l_move": "moved",
+  "js.plexq.l_qnext": "added next",
+  "js.plexq.l_pepe": "asked Pepe -",
   "js.plexq.starting": "Starting…",
   "js.plexq.between": "next title starting…",
   "js.plexq.by": "started by {name}",

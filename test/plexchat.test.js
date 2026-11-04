@@ -281,29 +281,48 @@ test("controls: a stranger gets control_denied; the starter pauses / resumes / s
   await stopAll();
 });
 
-test("a season on the stage (one queue); 'queue next': the starter yes, someone else on a paid queue not_starter, a free queue's controllers yes", async () => {
+test("a season on the stage (one queue); 'queue next': the starter yes, someone else not_starter (the pad owner too), a library admin on a free queue yes", async () => {
   // free (member): the US season 2
   let r = await call({ op: "play", as: asL(U.alice), room: LOUNGE, key: "203", scope: "season" });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.deepEqual([r.queue, r.items, r.title], [true, 3, "The Office (US) — S2E1 The Dundies"]);
   r = await call({ op: "play", as: asL(U.bob), room: LOUNGE, key: "100", scope: "title", mode: "next" });
   assert.deepEqual([r.ok, r.code], [false, "not_starter"], "not theirs and they can't control it");
+  // 1.99?? review: a controller who isn't the starter (the pad's owner) may NOT grow a member's free queue (a free play past every cap)
   r = await call({ op: "play", as: asL(U.owner), room: LOUNGE, key: "100", scope: "title", mode: "next" });
-  assert.equal(r.ok, true, "a FREE queue: the pad owner (a controller) may add - nobody is billed");
+  assert.deepEqual([r.ok, r.code], [false, "not_starter"], "a FREE queue: the pad owner may control it but not add to it");
+  let st = await call({ op: "search", as: asL(U.owner), room: LOUNGE, q: "heat" });
+  assert.deepEqual([st.state.library.queue, st.state.library.can_add], [true, false], "padState says so (Pepe refuses up front)");
+  st = await call({ op: "search", as: asL(U.alice), room: LOUNGE, q: "heat" });
+  assert.deepEqual([st.state.library.can_add, st.rows[0].next_cost], [true, 0], "the starter may; on a free queue it adds nothing");
+  r = await call({ op: "play", as: { user_id: U.admin.userId }, room: LOUNGE, key: "100", scope: "title", mode: "next" });
+  assert.equal(r.ok, true, "a library admin may add to a FREE queue - nobody is billed");
   r = await call({ op: "play", as: asL(U.alice), room: LOUNGE, key: "105", scope: "title", mode: "next" });
   assert.deepEqual([r.ok, r.queued, r.title], [true, true, "Spirited Away (2001)"]);
-  const q = await Q.activeFor(LOUNGE);
+  let q = await Q.activeFor(LOUNGE);
   assert.deepEqual(q.items.map((x) => x.key), ["203", "105", "100", "204", "205"], "each lands right after what's on");
+  r = await call({ op: "play", as: asL(U.alice), room: LOUNGE, key: "301", scope: "season", mode: "next" });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  q = await Q.activeFor(LOUNGE);
+  assert.deepEqual(q.items.map((x) => x.key).slice(0, 3), ["203", "301", "302"], "a season queued next is the whole season, not just its first episode");
   await stopAll();
-  // paid (bob): the estimate first, then only bob may add
+  // paid (bob): the estimate first, then only bob may add - and what it adds to HIS bill is confirmed
   r = await call({ op: "play", as: asL(U.bob), room: SECOND, key: "201", scope: "season" });
   assert.deepEqual([r.ok, r.code, r.estimate], [false, "estimate", 50000]);
   r = await call({ op: "play", as: asL(U.bob), room: SECOND, key: "201", scope: "season", estimate: 50000 });
   assert.equal(r.ok, true, JSON.stringify(r));
   r = await call({ op: "play", as: { user_id: U.admin.userId }, room: SECOND, key: "100", scope: "title", mode: "next" });
   assert.deepEqual([r.ok, r.code], [false, "not_starter"], "never on someone else's PAT - not even a library admin (a controller)");
+  st = await call({ op: "search", as: asL(U.bob), room: SECOND, q: "spirited" });
+  const cost = st.rows[0].next_cost;
+  assert.ok(cost > 0 && st.state.library.can_add, "the starter sees what it adds: " + cost);
   r = await call({ op: "play", as: asL(U.bob), room: SECOND, key: "105", scope: "title", mode: "next" });
-  assert.equal(r.ok, true);
+  assert.deepEqual([r.ok, r.code, r.estimate], [false, "estimate", cost], "a paid queue: no confirmed figure -> estimate (400)");
+  r = await call({ op: "play", as: asL(U.bob), room: SECOND, key: "105", scope: "title", mode: "next", estimate: cost - 1 });
+  assert.deepEqual([r.ok, r.code, r.estimate], [false, "estimate", cost], "a different one -> estimate (409) with the right figure");
+  r = await call({ op: "play", as: asL(U.bob), room: SECOND, key: "105", scope: "title", mode: "next", estimate: cost });
+  assert.deepEqual([r.ok, r.cost], [true, cost]);
+  // ⏭ on a paid queue's last title never grows it (the starter's bill stays what they confirmed)
   await stopAll();
 });
 
@@ -324,6 +343,20 @@ test("⏭ past the last title of an episode queue plays the show's next episode 
   await stopAll();
 });
 
+test("⏭ on a PAID queue's last episode: last_title (it never grows the starter's bill); a paid single episode starts with its estimate", async () => {
+  let st = await call({ op: "search", as: asL(U.bob), room: LOUNGE, q: "the office", season: 1, episode: 2 });
+  const row = st.rows[0];
+  assert.deepEqual([row.type, row.key, row.price, row.estimate], ["episode", "202", 50000, 50000], "an episode row carries its estimate");
+  let r = await call({ op: "play", as: asL(U.bob), room: LOUNGE, key: "202", scope: "episode", price: row.price });
+  assert.deepEqual([r.ok, r.code], [false, "estimate"], "price alone isn't enough for a one-title queue");
+  r = await call({ op: "play", as: asL(U.bob), room: LOUNGE, key: "202", scope: "episode", price: row.price, estimate: row.estimate });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  r = await call({ op: "control", as: asL(U.bob), room: LOUNGE, action: "next" });
+  assert.deepEqual([r.ok, r.code], [false, "last_title"], "a paid queue isn't grown by ⏭");
+  assert.equal((await Q.activeFor(LOUNGE)).items.length, 1);
+  await stopAll();
+});
+
 test("continue: the speaker's next episode from their last 14 days", async () => {
   const r = await call({ op: "continue", as: asL(U.alice), room: LOUNGE });
   assert.equal(r.ok, true);
@@ -333,6 +366,8 @@ test("continue: the speaker's next episode from their last 14 days", async () =>
   assert.equal(r2.row.key, "204", "the newest play left in the window is 203 -> 204");
   const r3 = await call({ op: "continue", as: asL(U.dave), room: LOUNGE });
   assert.equal(r3.row, null);
+  const r4 = await call({ op: "continue", as: asL(U.bob), room: LOUNGE });
+  assert.ok(r4.row && r4.row.price === 50000 && r4.row.estimate === 50000, "a paid next episode carries price + estimate: " + JSON.stringify(r4.row));
 });
 
 test("Pepe's cam: non-staff onair_staff; allow_library off; busy -> onair_busy with what's on; next -> a ⏰ row; replace; IRL -> queued", async () => {
@@ -433,9 +468,49 @@ test("the rate limit: 30 ops a minute per account, then rate", async () => {
     const r = await call({ op: "np", as: asL(U.dave), room: LOUNGE });
     assert.deepEqual([r.ok, r.code], [false, "rate"]);
     assert.equal((await call({ op: "np", as: asL(U.bob), room: LOUNGE })).ok, true, "per account");
+    // 1.99?? review: an unlinked login is limited BEFORE the lookup (it used to cost a lookup + a "link" line on every line)
+    for (let i = 0; i < PC.RATE_MAX; i++) assert.equal((await call({ op: "np", as: { login: "nobody" }, room: LOUNGE })).code, "link");
+    assert.equal((await call({ op: "np", as: { login: "NOBODY" }, room: LOUNGE })).code, "rate", "the 31st: rate, no lookup");
+    assert.equal(PC.asKey({ login: "Nobody" }), "l:nobody");
+    assert.equal(PC.asKey({ user_id: "u9" }), "u:u9");
     T += 61 * 1000;
     assert.equal((await call({ op: "np", as: asL(U.dave), room: LOUNGE })).ok, true, "a minute later");
   } finally { PC._setClock(null); PC._hits.clear(); }
+});
+
+test("a crash is never a refusal: code error, a generic line (1.99?? review: SQLITE_BUSY's text went to the room)", () => {
+  const busy = Object.assign(new Error("SQLITE_BUSY: database is locked"), { code: "SQLITE_BUSY" });
+  assert.equal(PC.codeOf(busy), "error");
+  assert.deepEqual([PC.failBody(busy).code, PC.failBody(busy).error], ["error", "Something went wrong."]);
+  const reset = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+  assert.equal(PC.codeOf(reset), "error");
+  assert.equal(PC.codeOf(new TypeError("x is undefined")), "error");
+  assert.equal(PC.codeOf(Object.assign(new Error("fetch failed"), { status: 503 })), "encoder_down");
+  assert.equal(PC.codeOf(new L.Refuse(409, "x", { code: "brand_new" })), "brand_new", "a refusal's own newer code rides along");
+});
+
+test("the 18+ check fails closed; the audit trail says a play came through Pepe (and how)", async () => {
+  const orig = PA.adultGate;
+  PA.adultGate = () => { throw new Error("boom"); };
+  try {
+    const r = await call({ op: "search", as: asL(U.alice), room: LOUNGE, q: "matrix" });
+    assert.deepEqual([r.ok, r.code], [false, "pad"], "the gate can't be asked -> no such pad");
+  } finally { PA.adultGate = orig; }
+  const r = await call({ op: "play", as: asL(U.alice), room: LOUNGE, key: "100", scope: "title", via: "room" });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const log = await getQuery("SELECT * FROM media_controls WHERE room_id = ? AND action = 'pepe' ORDER BY id DESC LIMIT 1", [LOUNGE]);
+  assert.ok(log[0] && log[0].user_id === U.alice.userId && /^room chat as alice: play 100 -> The Matrix \(1999\)/.test(log[0].detail), JSON.stringify(log[0]));
+  await call({ op: "control", as: { user_id: U.alice.userId }, room: LOUNGE, action: "pause", via: "web" });
+  const log2 = await getQuery("SELECT * FROM media_controls WHERE room_id = ? AND action = 'pepe' ORDER BY id DESC LIMIT 1", [LOUNGE]);
+  assert.match(log2[0].detail, /^web chat: pause/);
+  await stopAll();
+  await runQuery("UPDATE media_plays SET ts = 0 WHERE user_id = ?", [U.alice.userId]);   // (her daily cap: the tests after this one)
+});
+
+test("a type hint ('the fargo movie') ranks that kind first", () => {
+  const film = { type: "movie", title: "Fargo", year: 1996 }, show = { type: "show", title: "Fargo", year: 2014 };
+  assert.ok(PC.score(film, "fargo", { hint: "movie" }) > PC.score(show, "fargo", { hint: "movie" }));
+  assert.ok(PC.score(show, "fargo", { hint: "show" }) > PC.score(film, "fargo", { hint: "show" }));
 });
 
 test("codes: every refusal maps to a stable code (aliases, the shop's 402, status fallbacks)", () => {

@@ -733,12 +733,31 @@ async function needQueue(user, room) {
 const canControl = (user, q) => I().mayControl(user, q.room_id, q.user_id);
 
 // ── 1.99?? plexchat: growing a running queue (Pepe's "queue the matrix next", ⏭ past the last episode) ──
-/** May `user` add titles to queue `q`? Its STARTER (the queue bills them as each title plays), or anyone who may control a
- *  FREE queue (per_hour 0 - nobody is billed). Never adds to a paid queue on someone else's PAT. */
+/** May `user` add titles to queue `q`? Its STARTER (the queue bills them as each title plays), or a library admin on a FREE
+ *  queue (per_hour 0 - nobody is billed). Never on someone else's PAT. 1.99?? plexchat review: the pad's owner / site staff (other
+ *  controllers) no longer may - a non-member could play any title free behind a member's free queue, counted on nobody's cap. */
 async function mayGrow(user, q) {
   if (!user || !user.userId || !q) return false;
   if (q.user_id && q.user_id === user.userId) return true;
-  return !(Number(q.per_hour) > 0) && !!(await canControl(user, q));
+  return !(Number(q.per_hour) > 0) && !!I().isLibAdmin(user);
+}
+/** What adding `secs` of titles after what's on adds to a running queue's bill (its per-hour rate, started hours on top of what's
+ *  paid - view()'s est_left before / after). 0 on a free queue. s = the pad's session (or null). */
+function addCost(q, s, secs) {
+  if (!q || !(Number(q.per_hour) > 0)) return 0;
+  const mine = s && Number(s.queue_id) === Number(q.id) ? s : null;
+  const cur = q.items[q.pos] || null;
+  const curFull = mine ? Math.max(0, (mine.duration || 0) - (mine.ep_offset || 0)) : cur ? cur.duration : 0;
+  const base = q.played_sec + curFull + totalSec(q.items.slice(q.pos + 1));
+  const before = Math.max(0, Math.ceil(base / 3600) - q.paid_hours);
+  const after = Math.max(0, Math.ceil((base + Math.max(0, Number(secs) || 0)) / 3600) - q.paid_hours);
+  return Math.max(0, after - before) * q.per_hour;
+}
+/** 1.99?? plexchat: what `secs` of titles would add to the pad's running queue (null: no queue) - Pepe's "queue it next" price. */
+async function addCostFor(roomId, secs) {
+  const q = await activeFor(roomId);
+  if (!q) return null;
+  return addCost(q, await I().session(roomId), secs);
 }
 /** The show's next episode after `cur` (Plex's allLeaves in watching order, specials skipped unless `cur` is one) -> a slim
  *  title, or null (a movie, the last episode, an older mediactl without show_key). */
@@ -756,10 +775,12 @@ async function nextEpisodeOf(cur) {
 }
 /**
  * "Play this next" on a pad's running 📼 queue: `keys` go right after the title on now (pos + 1). Only for whoever the queue
- * bills (its starter) or on a free queue (mayGrow) - anyone else gets code not_starter. The queue's limits (titles, hours) apply.
- * -> {ok, added, items, next (the first added title's name)}
+ * bills (its starter) or a library admin on a free queue (mayGrow) - anyone else gets code not_starter. The queue's limits
+ * (titles, hours) apply. 1.99?? plexchat review: on a PAID queue what it adds to the bill (addCost) must be the figure the starter
+ * said yes to - `opts.estimate` (400 when missing, 409 with the new figure when it changed), like a queue's start.
+ * -> {ok, added, items, next (the first added title's name), cost}
  */
-async function addNext(user, room, keys) {
+async function addNext(user, room, keys, opts = {}) {
   await L().init();
   if (!user || !user.userId) throw refuse(401, "Sign in first.", { code: "signin" });
   await I().mustAccess(user);
@@ -772,7 +793,9 @@ async function addNext(user, room, keys) {
       throw refuse(403, `${q.username || "Someone"}'s queue is playing - when it ends, ask again (or they can add it).`, { code: "not_starter", by: q.username || null });
     }
     const S = conf.get();
-    const add = await build({ keys }, { ...S, library_queue_max_items: 200, library_queue_max_hours: 24 });
+    // opts.scope (season / season_rest / series_from) with ONE episode key: that run of the show, as a queue's start builds it
+    const one = Array.isArray(keys) && keys.length === 1 && opts && ["season", "season_rest", "series_from"].includes(opts.scope);
+    const add = await build(one ? { key: String(keys[0]), scope: opts.scope } : { keys }, { ...S, library_queue_max_items: 200, library_queue_max_hours: 24 });
     const room_ = S.library_queue_max_items - q.items.length;
     if (room_ <= 0) throw refuse(409, `A queue holds at most ${S.library_queue_max_items} titles.`, { code: "queue_full" });
     const s = await I().session(R.id);
@@ -784,12 +807,18 @@ async function addNext(user, room, keys) {
       put.push(it); left += it.duration;
     }
     if (!put.length) throw refuse(409, `A queue holds at most ${S.library_queue_max_hours} hours.`, { code: "queue_full" });
+    const cost = addCost(q, s, totalSec(put));
+    if (cost > 0) {
+      const est = opts && opts.estimate;
+      if (est == null || est === "") throw refuse(400, `That adds about ${I().fmtPat(cost)} PAT to the queue as it plays - confirm it to add it.`, { estimate: cost, code: "estimate" });
+      if (Math.floor(Number(est)) !== cost) throw refuse(409, `It adds about ${I().fmtPat(cost)} PAT now - confirm it again.`, { estimate: cost, code: "estimate" });
+    }
     q.items.splice(q.pos + 1, 0, ...put);
     const slot = await stage.getSlot(q.slot_id);
     if (slot) await stage.libraryExtend(q.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + left) / 60) + I().SLACK_MIN).catch(() => {});
     await saveItems(q);
     await I().logControl(user, R.id, "queue_next", `${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: q.id });
-    return { ok: true, added: put.length, items: q.items.length, next: fmtTitle(put[0]), queue_id: q.id };
+    return { ok: true, added: put.length, items: q.items.length, next: fmtTitle(put[0]), queue_id: q.id, cost };
   });
 }
 
@@ -799,9 +828,11 @@ async function step(user, room, dir) {
     const q = await activeFor(R.id);
     if (!q || !(await canControl(user, q))) throw refuse(404, "There's no queue playing on this pad.", { code: "nothing_on" });
     const to = q.pos + dir;
-    // 1.99?? plexchat: ⏭ on the last title, when it's an episode, plays the show's next one (appended first) - only for
-    // whoever the queue bills (its starter) or on a free queue (nobody else's PAT is ever spent by it)
-    if (to >= q.items.length && dir > 0 && q.items.length < (conf.get().library_queue_max_items || 60) && (await mayGrow(user, q))) {
+    // 1.99?? plexchat: ⏭ on the last title, when it's an episode, plays the show's next one (appended first) - only on a FREE
+    // queue (1.99?? review: a paid one would grow its starter's bill past the estimate they confirmed) and only for its starter or
+    // a library admin (mayGrow)
+    if (to >= q.items.length && dir > 0 && !(Number(q.per_hour) > 0) && q.items.length < (conf.get().library_queue_max_items || 60)
+        && (await mayGrow(user, q))) {
       const nxt = await nextEpisodeOf(q.items[q.pos]).catch(() => null);
       if (nxt) {
         q.items.push(nxt);
@@ -932,6 +963,6 @@ function routes(app, { J, me, timers = true }) {
   app.post("/api/medialib/queue/edit", ...J(async (req) => edit(me(req), (req.body || {}).room, req.body || {})));
 }
 
-module.exports = { start, startFor, bookFor, addNext, mayGrow, nextEpisodeOf, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
+module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostFor, nextEpisodeOf, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
                    buildQueue, capQueue, totalSec, estimate, hoursNeeded, pickTracks, prefsFrom, sortEps, slim, SCOPES, _setClock,
                    _fast: (on) => { fastOn = !!on; } };

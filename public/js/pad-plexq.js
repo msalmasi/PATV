@@ -33,7 +33,9 @@
   }
   var ACTIONS = { pause: _t('js.plexq.l_pause', 'paused'), resume: _t('js.plexq.l_resume', 'resumed'), seek: _t('js.plexq.l_seek', 'jumped'),
                   next: _t('js.plexq.l_next', 'skipped to'), prev: _t('js.plexq.l_prev', 'went back to'), stop: _t('js.plexq.l_stop', 'stopped'),
-                  queue_add: _t('js.plexq.l_add', 'added'), queue_remove: _t('js.plexq.l_remove', 'removed'), queue_move: _t('js.plexq.l_move', 'moved') };
+                  queue_add: _t('js.plexq.l_add', 'added'), queue_remove: _t('js.plexq.l_remove', 'removed'), queue_move: _t('js.plexq.l_move', 'moved'),
+                  // 1.99?? plexchat: added right after what's on / asked Pepe in chat (plexchat.js's audit row)
+                  queue_next: _t('js.plexq.l_qnext', 'added next'), pepe: _t('js.plexq.l_pepe', 'asked Pepe -') };
   var last = null, base = null, poller = null, ticker = null, dragging = false, busy = false;
   // the position now: the server's, moved on locally while it plays
   function pos() {

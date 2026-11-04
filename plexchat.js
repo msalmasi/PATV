@@ -79,22 +79,31 @@ async function resolve(as) {
 const ALIAS = { full: "queue_full", library: "onair_library_off", staff_only: "onair_staff", when: "bad", embed_bad: "bad", owner: "onair_staff",
                 gone: "not_found", adult: "pad", pad_private: "pad" };
 const num = (s) => Number(String(s || "").replace(/[^\d]/g, "")) || 0;
+// 1.99?? plexchat review: only a REFUSAL (a Refuse / Fail - e.refuse) carries a code and its words to the room; anything else is a
+// crash (SQLITE_BUSY, ECONNRESET, a TypeError ...) - code "error", a generic line, and its stack in the log - never its message
 function codeOf(e) {
   if (!e) return "error";
+  const refusal = !!(e.refuse || e instanceof Fail);
   const c = e.code || (e.extra && e.extra.code);
-  if (c && typeof c === "string") return ALIAS[c] || (CODES.includes(c) ? c : c.slice(0, 30));
+  if (refusal && c && typeof c === "string") {
+    const k = ALIAS[c] || c;
+    if (CODES.includes(k)) return k;
+    if (/^[a-z][a-z_]{1,29}$/.test(k)) return k;                       // a refusal's own (newer) code: Pepe falls back to its words
+  }
   const msg = String(e.message || "");
+  if (!refusal) return e.status === 503 || e.status === 502 ? "encoder_down" : "error";
   if (e.status === 402) return "pat";
   if (e.status === 401) return "signin";
   if (/No such pad/i.test(msg)) return "pad";
   if (/Not in the Plex library/i.test(msg)) return "not_found";
   if (e.status === 503 || e.status === 502) return "encoder_down";
-  return e.refuse || (e.status && e.status < 500) ? "bad" : "error";
+  return e.status && e.status >= 500 ? "error" : "bad";
 }
 function failBody(e) {
   const code = codeOf(e);
   const x = { ...(e && e.extra ? e.extra : {}) };
-  const out = { ok: false, code, error: String((e && e.message) || "Something went wrong.").slice(0, 300) };
+  const refusal = !!(e && (e.refuse || e instanceof Fail));
+  const out = { ok: false, code, error: refusal && code !== "error" ? String(e.message || "Something went wrong.").slice(0, 300) : "Something went wrong." };
   for (const k of ["price", "estimate", "cap", "max", "busy", "max_minutes", "by"]) if (x[k] != null) out[k] = x[k];
   if (e && e.price != null && out.price == null) out.price = e.price;
   if (e && e.label) out.label = String(e.label).slice(0, 120);
@@ -120,10 +129,16 @@ async function padOf(room) {
 async function seeOrFail(user, R) {
   const stage = require("./mainstage");
   if (!(await stage.seesPad(user, R.id))) throw new Fail("pad", "No such pad.", 404);
+  let gate = null;
   try {
     await PA().init();
-    if (PA().adultGate(user, R.id) !== "ok") throw new Fail("pad", "No such pad.", 404);
-  } catch (e) { if (e instanceof Fail) throw e; }
+    gate = PA().adultGate(user, R.id);
+  } catch (e) {
+    // 1.99?? plexchat review: the 18+ check FAILS CLOSED - if it can't be asked, the pad reads as no such pad
+    console.error("[plexchat] the 18+ gate couldn't be checked:", e && e.message ? e.message : e);
+    gate = null;
+  }
+  if (gate !== "ok") throw new Fail("pad", "No such pad.", 404);
 }
 /** Pepe's cam from chat: Staff (onair.operate), on-air on, allow_library - the same order onair.libraryFor checks them in. */
 async function camOrFail(user) {
@@ -137,7 +152,7 @@ async function camOrFail(user) {
 const slim = (r) => {
   const o = {};
   for (const k of ["key", "type", "title", "year", "show", "season", "episode", "duration", "items", "total_sec", "price", "estimate", "scope",
-                   "label", "exact", "first_title", "leafs"]) if (r[k] !== undefined && r[k] !== null) o[k] = r[k];
+                   "label", "exact", "first_title", "leafs", "next_cost"]) if (r[k] !== undefined && r[k] !== null) o[k] = r[k];
   return o;
 };
 const labelOf = (it) => (it.type === "episode" && it.show
@@ -158,6 +173,9 @@ function score(it, q, want) {
   if (want.year) s += Number(it.year) === want.year ? 30 : -40;
   if (want.season != null || want.episode != null) s += it.type === "show" ? 25 : it.type === "episode" ? 10 : -30;
   else if (it.type === "episode" && norm(it.title) !== n) s -= 20;
+  // 1.99?? plexchat review: "the fargo movie" / "the office show" - what the person called it
+  if (want.hint === "movie") s += it.type === "movie" ? 15 : -15;
+  else if (want.hint === "show") s += it.type === "movie" ? -15 : 15;
   return s;
 }
 
@@ -171,7 +189,8 @@ async function opSearch(user, b) {
   const A = await ML()._q.mustAccess(user);
   const q = clean(b.q, 100);
   if (q.length < 2) throw new Fail("bad", "Say a title.", 400);
-  const want = { year: intOr(b.year, 1880, 2100), season: intOr(b.season, 0, 200), episode: intOr(b.episode, 0, 2000) };
+  const want = { year: intOr(b.year, 1880, 2100), season: intOr(b.season, 0, 200), episode: intOr(b.episode, 0, 2000),
+                 hint: b.hint === "movie" || b.hint === "show" ? b.hint : null };
   const S = conf().get();
   const per = A.free ? 0 : Math.max(0, Math.floor(Number(S.library_price) || 0));
   const found = (await ML().search(user, q)).filter((x) => x && ["movie", "show", "episode"].includes(x.type));
@@ -187,7 +206,7 @@ async function opSearch(user, b) {
     } else if (it.type === "episode") {
       rows.push(slim({ key: String(it.key), type: "episode", title: it.title, show: it.show, season: it.season, episode: it.episode, year: it.year,
                        duration: it.duration, scope: "episode", exact: exact && want.episode == null, price: per ? ML().priceFor(it.duration, 0, S).price : 0,
-                       label: labelOf(it) }));
+                       estimate: per ? MQ().estimate(per, it.duration) : 0, label: labelOf(it) }));
     } else if (it.type === "show") {
       if (shows >= 3) continue;                                          // each show costs a lookup: the best few only
       shows++;
@@ -209,11 +228,19 @@ async function opSearch(user, b) {
         if (!e) continue;
         rows.push(slim({ key: String(e.key), type: "episode", title: e.title, show: e.show || it.title, season: e.season, episode: e.episode, year: it.year,
                          duration: e.duration, scope: "episode", exact, price: per ? ML().priceFor(e.duration, 0, S).price : 0,
-                         label: labelOf({ ...e, show: e.show || it.title }) }));
+                         estimate: per ? MQ().estimate(per, e.duration) : 0, label: labelOf({ ...e, show: e.show || it.title }) }));
       }
     }
   }
   const state = await ML().padState(user, R.id).catch(() => null);
+  // 1.99?? plexchat review: the pad's running 📼 queue that this speaker may add to (its starter): what each row would ADD to that
+  // queue's bill (its own per-hour rate, on top of what's paid) - "queue it next" confirms that figure, not a standalone price
+  if (target === "stage" && state && state.library && state.library.queue && state.library.can_add) {
+    for (const row of rows) {
+      const secs = row.type === "season" ? row.total_sec : row.duration;
+      row.next_cost = (await MQ().addCostFor(R.id, secs || 0).catch(() => null)) || 0;
+    }
+  }
   return { ok: true, rows, free: !!A.free, how: A.how || null, per_hour: per, state, target, pad: { id: R.id, title: R.title || R.id } };
 }
 
@@ -235,8 +262,10 @@ async function opPlay(user, b, ctx) {
   const R = await padOf(b.room);
   await seeOrFail(user, R);
   if (b.mode === "next") {
-    const r = await MQ().addNext(user, R.id, [key]);
-    return { ok: true, target: "stage", queued: true, title: r.next, added: r.added, pad: { id: R.id, title: R.title || R.id } };
+    // on a paid queue: what it adds to the starter's bill, as the starter said yes to it (400 / 409 estimate otherwise)
+    const est = b.estimate == null || b.estimate === "" ? undefined : Math.floor(Number(b.estimate));
+    const r = await MQ().addNext(user, R.id, [key], { estimate: est, scope: scope === "title" || scope === "episode" ? null : scope });
+    return { ok: true, target: "stage", queued: true, title: r.next, added: r.added, cost: r.cost || 0, pad: { id: R.id, title: R.title || R.id } };
   }
   const S = conf().get();
   if (scope === "title" || (scope === "episode" && S.library_queue === false)) {
@@ -313,7 +342,8 @@ async function opContinue(user, b) {
   const S = conf().get();
   const per = A.free ? 0 : Math.max(0, Math.floor(Number(S.library_price) || 0));
   return { ok: true, row: slim({ key: nxt.key, type: "episode", title: nxt.title, show: nxt.show, season: nxt.season, episode: nxt.episode, duration: nxt.duration,
-                                 scope: "episode", exact: true, price: per ? ML().priceFor(nxt.duration, 0, S).price : 0, label: labelOf(nxt) }),
+                                 scope: "episode", exact: true, price: per ? ML().priceFor(nxt.duration, 0, S).price : 0,
+                                 estimate: per ? MQ().estimate(per, nxt.duration) : 0, label: labelOf(nxt) }),
            free: !!A.free, state: await ML().padState(user, R.id).catch(() => null) };
 }
 
@@ -324,6 +354,19 @@ async function opRpm(user, b) {
   if (!text) throw new Fail("bad", "Nothing to say.", 400);
   require("./bridge-relay").roomPmLocal(user.userId, R.id, text, "plex");
   return { ok: true };
+}
+
+// ── the audit trail (1.99?? plexchat review) ──
+/** A play / a control through Pepe -> one media_controls row ("pepe", e.g. "room chat as alice: play 100 -> The Matrix (1999)"): the
+ *  pad's "Who did what" list and the site's records say it came from chat, and which login / account asked. Never blocks. */
+async function audit(user, b, ctx, op, r) {
+  try {
+    const room = b.target === "cam" ? rooms().HOUSE_ROOM : (r.pad && r.pad.id) || b.room;
+    const how = (ctx.via === "web" ? "web chat" : "room chat") + (ctx.login ? " as " + clean(ctx.login, 40) : "");
+    const what = op === "play" ? `${b.target === "cam" ? "cam " : ""}${b.mode === "next" ? "next " : ""}play ${clean(b.key, 12)}${r.title ? " -> " + clean(r.title, 80) : ""}`
+      : `${clean(b.action, 12)}${b.value != null ? " " + clean(b.value, 12) : ""}`;
+    await ML().logControl(user, String(room || ""), "pepe", `${how}: ${what}`.slice(0, 160));
+  } catch (e) { /* the log never blocks a play */ }
 }
 
 // ── the route ──
@@ -337,12 +380,21 @@ function rateOk(userId, t = now()) {
   return true;
 }
 
+/** The speaker as Pepe named it (before any lookup): "u:<id>" | "l:<login>" | "?" - the first rate limit's key. */
+function asKey(as) {
+  const a = as && typeof as === "object" ? as : {};
+  if (a.user_id != null && String(a.user_id).trim()) return "u:" + String(a.user_id).trim().slice(0, 80);
+  if (a.login != null && String(a.login).trim()) return "l:" + String(a.login).trim().toLowerCase().slice(0, 40);
+  return "?";
+}
+
 /** One bot request (already authenticated) -> the answer body (never throws). */
 async function handle(b = {}) {
   const op = String(b.op || "");
   try {
     if (!OPS.has(op)) throw new Fail("bad", "Unknown op.", 400);
     const via = b.via === "web" ? "web" : "room";
+    if (!rateOk(asKey(b.as))) throw new Fail("rate", "Too many Plex requests - give it a minute.", 429);
     const user = await resolve(b.as);
     if (!rateOk(user.userId)) throw new Fail("rate", "Too many Plex requests - give it a minute.", 429);
     const ctx = { via, login: b.as && b.as.login ? String(b.as.login) : null };
@@ -353,6 +405,7 @@ async function handle(b = {}) {
     else if (op === "np") r = await opNp(user, b);
     else if (op === "continue") r = await opContinue(user, b);
     else r = await opRpm(user, b);
+    if ((op === "play" || op === "control") && r && r.ok) await audit(user, b, ctx, op, r);
     console.log(`[plexchat] ${via} ${user.username}: ${op}${b.action ? " " + clean(b.action, 12) : ""}${b.key ? " " + clean(b.key, 12) : ""} -> ok`);
     return { ...r, user: { username: user.username } };
   } catch (e) {
@@ -373,5 +426,5 @@ function register(app, { isBotToken } = {}) {
   });
 }
 
-module.exports = { register, handle, resolve, codeOf, failBody, score, norm, CODES, RATE_MAX,
+module.exports = { register, handle, resolve, codeOf, failBody, score, norm, asKey, CODES, RATE_MAX,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); }, _hits: hits };
