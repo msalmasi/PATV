@@ -201,6 +201,6 @@ test("review: sign-in is gated where the account is known (staff / exempt pass a
     assert.ok(routes.some((r) => r[0].test(p)), p + " is covered");
   }
   assert.match(fs.readFileSync(path.join(repo, "user.controller.js"), "utf8"), /a network ban \(netban\.js\) refuses a new account here, on the form with its message/);
-  assert.equal((idx.match(/const nbWhy_ = await require\("\.\/netban"\)\.newAccountRefusal\(req\);\n\s+if \(nbWhy_\) return oauthFail\(req, res, nbWhy_\);/g) || []).length, 2, "Twitch + Discord: before the account is made");
+  assert.equal((idx.match(/const nbWhy_ = await require\("\.\/netban"\)\.newAccountRefusal\(req\);\r?\n\s+if \(nbWhy_\) return oauthFail\(req, res, nbWhy_\);/g) || []).length, 2, "Twitch + Discord: before the account is made");
   assert.match(fs.readFileSync(path.join(repo, "netban.js"), "utf8"), /app\.post\("\/api\/admin\/nets"/, "the look is a POST (the reason never in a URL)");
 });

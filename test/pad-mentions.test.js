@@ -245,7 +245,7 @@ test("review: the people list notes only lines that went out under the person's 
   assert.deepEqual((await W.forRoom(R, { userId: "fo-1", username: "plantbaked" })).map((e) => [e.display, e.act]), [["bobweb", 0]]);
   // the relay notes only a NAMED echo (bridge.js says so), never Pepe's ack alone
   const src = fs.readFileSync(path.join(repo, "bridge-relay.js"), "utf8");
-  assert.match(src, /function notePosted\(j, named = false\) \{\n\s+if \(!named \|\|/);
+  assert.match(src, /function notePosted\(j, named = false\) \{\r?\n\s+if \(!named \|\|/);
   assert.doesNotMatch(src, /if \(a\.ok\) notePosted\(j\)/);
   assert.match(fs.readFileSync(path.join(repo, "bridge.js"), "utf8"), /relay\.noteEcho\(echoOf, it\.c, R\.id, !!\(it\.k === "msg" && it\.u && !it\.u\.anon && !it\.u\.self && !it\.ah && !it\.mask && !it\._vz\)\)/);
   W._setClock(null);
