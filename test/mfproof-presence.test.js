@@ -116,7 +116,12 @@ test("default = today's CL3 mask: his join / mic / unmic / leave lines are 'some
   const mine = linesOf(out, "ritchiecuh");
   assert.deepEqual(mine.map((it) => it.k + ":" + whoOf(it)), ["join:someone", "mic:someone", "tx:ritchiecuh", "unmic:someone", "msg:ritchiecuh", "leave:someone"]);
   const tx = mine.find((it) => it.k === "tx"), msg = mine.find((it) => it.k === "msg");
-  for (const it of [tx, msg]) assert.equal(it.u.display, "brocklee258", it.k + ": shown under his PATV name (bridge.withPatv, lower(camfrogUsername) = ritchiecuh)");
+  // (verify, rebased on 1.99ajn padppl: the impersonation guard - cfnames.clashOf - keeps the Camfrog name "ritchiecuh" on his lines once
+  // it knows "brocklee258" is a Camfrog login Pepe has seen (the auto account's camfrogUsername); the line still links HIS account)
+  for (const it of [tx, msg]) {
+    assert.equal(it.u.patv && it.u.patv.username, "brocklee258", it.k + ": his PATV account (bridge.withPatv, lower(camfrogUsername) = ritchiecuh)");
+    assert.ok(["brocklee258", "ritchiecuh"].includes(it.u.display), it.k + ": his PATV name, or his Camfrog name under the clash guard - " + it.u.display);
+  }
   assert.ok(!JSON.stringify(out).includes("CFsa1p1bz8"), "the auto account whose camfrogUsername is 'brocklee258' never shows for him");
   for (const it of mine.filter((x) => x.u.anon)) assert.ok(!JSON.stringify(it).includes("ritchiecuh") && !JSON.stringify(it).includes("brocklee258"), it.k + ": no name anywhere in it");
   assert.ok(out.members.some((u) => u && u.login === "ritchiecuh"), "the people list names him (no private-activity check - CV.roster)");
@@ -144,7 +149,12 @@ test("the switch: /api/admin/privact is chatlog.admin only, a same-site fetch, a
     const out = await live();
     const mine = linesOf(out, "ritchiecuh");
     assert.deepEqual(mine.map((it) => it.k + ":" + whoOf(it)), ["join:ritchiecuh", "mic:ritchiecuh", "tx:ritchiecuh", "unmic:ritchiecuh", "msg:ritchiecuh", "leave:ritchiecuh"]);
-    for (const it of mine) assert.equal(it.u.display, "brocklee258", it.k + ": under his PATV name");
+    // (verify: named exactly like his chat line - the same account link and the same shown name, whatever the 1.99ajn clash guard picks)
+    const said = mine.find((it) => it.k === "msg");
+    for (const it of mine) {
+      assert.equal(it.u.patv && it.u.patv.username, "brocklee258", it.k + ": his PATV account");
+      assert.equal(it.u.display, said.u.display, it.k + ": the name his chat line shows");
+    }
     // never anyone else's rules: the !bridge hide person stays left out, the purge / former member rules stand
     await bridge.ingest({ events: [{ op: "event", id: "mp-hd-" + (++seq), ts: new Date().toISOString(), type: "privacy.hidden", data: { h: hash("shycf"), scope: "bridge" } }],
                           rooms: [], hidden_h: [hash("shycf")] });
