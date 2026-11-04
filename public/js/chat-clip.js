@@ -176,6 +176,7 @@
     }
     function preview(cs) {
       var me = q, key = cs.join(',');
+      if (!me) return;                                                   // (1.99?? dockpol fix: the card closed before it asked)
       me.failed = null;
       api(api0 + '/quote', { cs: cs, preview: true }).then(function (d) {
         if (q !== me || me.key !== key || me.posting) return;            // a newer pick, Discard or a post won
@@ -479,7 +480,8 @@
       canQuote: function () { return !!room && linked; },
       canMic: function () { return !!(linked && canMic); },
       quoteOne: function (r, opener) {
-        if (!r || !r.hasAttribute || !r.hasAttribute('data-c') || r.hasAttribute('data-vc') || !room) return;
+        // (1.99?? dockpol fix (review): only a line of the live log - the card reads its picks from there; a scrollback / search line isn't)
+        if (!r || !r.hasAttribute || !r.hasAttribute('data-c') || r.hasAttribute('data-vc') || !room || !feed.contains(r)) return;
         if (on) setOn(false);
         if (q) closeQuote();
         lines().forEach(function (x) { x.classList.remove('cc-sel'); });

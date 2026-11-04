@@ -32,11 +32,12 @@
   // 1.99ajf dockclean (owner point 17): the Apps sheet - the room's games and tools, each only when Pepe offers it here (d.room.cmds).
   // A tile puts the command into the composer (a trailing space where it takes a name / amount: the name autocomplete opens) and
   // never sends by itself.
-  // (1.99?? dockpol (owner item 26): 💲 Showdown STARTS the price game - !guess only joins a running one. The tile inserts '!pricegame', the
-  // web relay's allowed name for the same handler (its 6th field: the name the tile shows); !guess stays typeable)
+  // (1.99?? dockpol (owner item 26): 💲 Showdown STARTS the price game - !guess only joins a running one. The tile inserts '!showdown' where
+  // Pepe's web relay offers it, else '!pricegame', the relay's allowed name for the same handler - and shows the one it inserts (appList);
+  // !guess stays typeable)
   var APPS = [['!spin', '🎡', 'spin', 'Spin', 0], ['!heist', '💰', 'heist', 'Heist', 1], ['!duel', '⚔️', 'duel', 'Duel', 1], ['!brawl', '🥊', 'brawl', 'Brawl', 1],
     ['!arena', '🏟️', 'arena', 'Arena', 1], ['!bj', '🃏', 'bj', 'Blackjack', 1], ['!holdem', '♠️', 'holdem', 'Hold’em', 1], ['!pictionary', '🎨', 'pictionary', 'Pictionary', 0],
-    ['!trivia', '❓', 'trivia', 'Trivia', 0], ['!pricegame', '💲', 'showdown', 'Showdown', 0, '!showdown'], ['!bingo', '🎱', 'bingo', 'Bingo', 0], ['!lotto', '🎟️', 'lotto', 'Lotto', 1]];
+    ['!trivia', '❓', 'trivia', 'Trivia', 0], ['!pricegame', '💲', 'showdown', 'Showdown', 0], ['!bingo', '🎱', 'bingo', 'Bingo', 0], ['!lotto', '🎟️', 'lotto', 'Lotto', 1]];
   // 1.99?? dockpol (owner item 29): 🎧 DJ - Pepe's music commands as tiles (each only when Pepe offers it here); a tile INSERTS, never sends.
   // [command, icon, key, words, trailing space]; STAFF ones only for Pepe's admins / owners of this room (data.mod - Pepe refuses others anyway)
   var DJ_APPS = [['!find', '🔎', 'dj_find', 'Find a song', 1], ['!play', '➕', 'dj_play', 'Request a song', 1], ['!np', '🎵', 'dj_np', 'Now playing', 0],
@@ -69,7 +70,7 @@
     var pendTimer = null, aliveTimer = null, handTimer = null, bringing = false, resumedInClick = false, gone_ = false, lastSlow = false;
     var autoTimer = null, toastTimer = null, observers = [], selected = null, stageRevision = 0, videoPipSource = null, overBar = false;
     var toolBtns = {}, peopleInput = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null, setTopicBtn = null;
-    var fullBtn = null, stageMoreBtn = null, showStageBtn = null, sizeSeg = null, toastHost = null, talkLogins = {};
+    var fullBtn = null, stageMoreBtn = null, showStageBtn = null, sizeSeg = null, sizeBtn = null, toastHost = null, talkLogins = {};
     // 1.99?? dockpol (owner item 13): how the last layer was opened - a pointer (mouse / touch) or the keyboard
     var ptrAt = 0, keyAt = 0;
     function byPointer() { return ptrAt > keyAt && Date.now() - ptrAt < 2000; }
@@ -117,19 +118,33 @@
     // never over the composer; at most 2; role=status, polite). A command's state updates its own toast in place (waiting -> done after
     // 3 s, a refusal with its reason after 8 s); a sticky one stays until ✕. Hover or focus holds the timer. Memory only: nothing beyond
     // what the command list under the composer showed. The reveal notice (item 2) and Copied (item 6) use it too.
-    var toasts = [];
+    var toasts = [], toastSr = null, srTimer = null;
     // (the log's "New messages ↓" pill steps up over the stack - never under a notice)
+    // (1.99?? dockpol fix (review): and the log makes room for the stack - its end padding grows by the stack's height, so a log at its
+    // newest line still shows that line above a notice (room.ejs's pin re-pins when the box changes); a reader who scrolled up isn't moved)
     function paintToastH() {
-      var j = node('rmJump'); if (!j || !toastHost) return;
-      var hgt = toasts.length ? toastHost.offsetHeight || 0 : 0; j.style.marginBlockEnd = hgt ? hgt + 4 + 'px' : '';
+      var j = node('rmJump'), sc = node('rmScroll'); if (!toastHost) return;
+      var hgt = toasts.length ? toastHost.offsetHeight || 0 : 0;
+      if (j) j.style.marginBlockEnd = hgt ? hgt + 4 + 'px' : '';
+      if (sc && sc.closest && sc.closest('.rmd-log') === toastHost.parentNode) sc.style.paddingBlockEnd = hgt ? hgt + 12 + 'px' : '';
     }
+    // (1.99?? dockpol fix (review): the stack is in the chat card from the start, and what a screen reader hears is a separate polite live
+    // region that only ever holds the notice's words - a region inserted with its first notice often isn't announced, and the ✕'s "Dismiss"
+    // was read with every one)
     function toastBox() {
       var log = chat && chat.querySelector('.rmd-log'); if (!log) return null;
       if (!toastHost || toastHost.parentNode !== log) {
-        toastHost = el('div', 'rmd-toasts', null, log.ownerDocument); toastHost.setAttribute('role', 'status'); toastHost.setAttribute('aria-live', 'polite');
+        toastHost = el('div', 'rmd-toasts', null, log.ownerDocument);
         log.appendChild(toastHost);
+        toastSr = el('div', 'ds-sr-only rmd-toasts-sr', null, log.ownerDocument); toastSr.setAttribute('role', 'status'); toastSr.setAttribute('aria-live', 'polite');
+        log.appendChild(toastSr);
       }
       return toastHost;
+    }
+    function announce(text) {
+      if (!toastSr) return;
+      clearTimeout(srTimer); toastSr.textContent = '';
+      srTimer = setTimeout(function () { if (toastSr) toastSr.textContent = String(text || ''); }, 60);   // (cleared first: the same words twice are read twice)
     }
     function dropToast(rec) {
       clearTimeout(rec.timer); rec.timer = null;
@@ -155,12 +170,17 @@
         var hold = function (yes) { return function () { rec.held = yes; if (yes) { clearTimeout(rec.timer); rec.timer = null; } else armToast(rec); }; };
         on(rec.node, 'pointerenter', hold(true)); on(rec.node, 'pointerleave', hold(false)); on(rec.node, 'focusin', hold(true)); on(rec.node, 'focusout', hold(false));
         host.appendChild(rec.node); toasts.push(rec);
-        while (toasts.length > 2) { var old = toasts.filter(function (x) { return !x.sticky && x !== rec; })[0] || toasts[0]; dropToast(old); }
       }
+      var was = rec.words.textContent;
       rec.words.textContent = String(text || '');
       rec.sticky = !!opts.sticky; rec.ms = opts.ms || 4000;
       rec.node.classList.toggle('rmd-ct-bad', !!opts.bad); rec.node.classList.toggle('rmd-ct-sticky', rec.sticky);
+      // (1.99?? dockpol fix (review): at most two passing notices; a STICKY one - Pepe's private answer while room PM is off - is never pushed
+      // out by newer ones (it is content: it goes only with its ✕); the stack scrolls when they pile up, pad-dock.css)
+      var passing = toasts.filter(function (x) { return !x.sticky && x !== rec; });
+      while (passing.length > (rec.sticky ? 2 : 1)) dropToast(passing.shift());
       armToast(rec); paintToastH();
+      if (was !== rec.words.textContent) announce(rec.words.textContent);
       return rec;
     }
     // a command from this composer (room-bridge.js opts.onCmd: {id, text, st, ok, replies}) - Pepe's private answers are content: with the
@@ -225,8 +245,9 @@
       var words = noIcon(title), lead = String(title || '').slice(0, String(title || '').length - words.length).trim();
       box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', words || title); box.tabIndex = -1;
       var head = el('div', 'ds-modal-h rmd-sheet-h', null, doc), h2 = el('h2', null, null, doc);
+      // (1.99?? dockpol fix (review): the words are their own box - centred with the icon and the ✕ by their ink, not the pixel font's line box)
       if (lead) { var hi = el('span', 'ds-ic', lead, doc); hi.setAttribute('aria-hidden', 'true'); h2.appendChild(hi); h2.appendChild(doc.createTextNode(' ')); }
-      h2.appendChild(doc.createTextNode(words || title)); head.appendChild(h2);
+      h2.appendChild(el('span', 'rmd-sheet-t', words || title, doc)); head.appendChild(h2);
       head.appendChild(iconBtn('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm rmd-sheet-x', doc));
       box.appendChild(head); host.appendChild(box); place.appendChild(host);
       layer = { host: host, box: box, head: head, opener: opener || doc.activeElement, byPointer: ptr };
@@ -280,7 +301,14 @@
         var ic0 = el('span', 'ds-ic', icon, doc); ic0.setAttribute('aria-hidden', 'true'); b.appendChild(ic0); b.appendChild(el('span', 'rmd-label', t(key, label, opts.vars), doc));
         if (fn) on(b, 'click', function (e) { fn(opener || b, e); });
       } else {
-        b = button(icon, key, label, function (bb, e) { if (!opts.keep) closeLayer(false); if (fn) fn(opener || b, e); }, 'ds-menu-item', doc, opts.vars);
+        // (1.99?? dockpol fix (review): an item that acts in place - Show real names, a cam size, Copy - gives focus back to the menu's opener
+        // instead of dropping it on <body>; one that opens a sheet, a dialog or a page keeps whatever it focused)
+        b = button(icon, key, label, function (bb, e) {
+          var ptr = !!(e && e.detail > 0);
+          if (!opts.keep) closeLayer(false); if (fn) fn(opener || b, e);
+          var back = function () { var a = doc.activeElement; if (!opts.keep && !layer && opener && opener.isConnected && (!a || a === doc.body || !a.isConnected)) quietFocus(opener, ptr); };
+          back(); setTimeout(back, 0);
+        }, 'ds-menu-item', doc, opts.vars);
       }
       b.setAttribute('role', opts.role || 'menuitem');
       if (opts.role === 'menuitemcheckbox' || opts.role === 'menuitemradio') b.setAttribute('aria-checked', String(!!opts.checked));
@@ -550,8 +578,11 @@
         current.moves.push(movable(n, main, camTile ? t('cam_pip', 'This cam is in picture-in-picture.') : t('stage_pip', 'The player is in picture-in-picture.')));
         on(win, 'pagehide', redock); on(doc, 'visibilitychange', changed); changed();
         // (a popped cam that ends - closed, or the strip let it go - takes its window with it)
+        // (1.99?? dockpol fix (review): ...and so does one whose session ENDED in place - the strip keeps that tile, "off" with ↻ Retry, which
+        // is the strip's to offer: the window closes and the tile goes back to it)
         if (camTile && W.MutationObserver) {
-          try { var gone = new W.MutationObserver(function () { if (pip === win && !main.contains(n)) { gone.disconnect(); redock(); } }); gone.observe(main, { childList: true, subtree: true }); observers.push(gone); } catch (e) { /* no observer across windows */ }
+          var ended = function () { var ov = n.querySelector('.cs-over'), rt = ov && ov.querySelector('button'); return !n.querySelector('.cs-badge.on') && !!ov && !ov.hidden && !!rt && !rt.hidden; };
+          try { var gone = new W.MutationObserver(function () { if (pip === win && (!main.contains(n) || ended())) { gone.disconnect(); redock(); } }); gone.observe(main, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] }); observers.push(gone); } catch (e) { /* no observer across windows */ }
         }
       }).catch(function () { pipPending = false; toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); });
     }
@@ -627,6 +658,10 @@
     function paintPinSize() {
       if (!sizeSeg) return; var now = pinSize();
       each(sizeSeg.querySelectorAll('button'), function (b) { var on = b.getAttribute('data-size') === now; b.setAttribute('aria-checked', String(on)); b.tabIndex = on ? 0 : -1; });
+      if (sizeBtn) {
+        var p = PIN_SIZES.filter(function (x) { return x[0] === now; })[0] || PIN_SIZES[0], label = t('cam_size_now', 'Cam size: {size}', { size: t('layout_' + p[0], p[2]) });
+        sizeBtn.querySelector('.rmd-label').textContent = p[1]; sizeBtn.title = label; sizeBtn.setAttribute('aria-label', label);
+      }
     }
     function buildSizeSeg() {
       if (!strip || sizeSeg) return;
@@ -644,7 +679,17 @@
         sizeSeg.appendChild(b);
       });
       strip.appendChild(sizeSeg);
+      // (1.99?? dockpol fix (review): a phone's cam row is 64px - four 44px radios don't fit beside it, so there it is ONE button showing
+      // the size, opening the same four as a menu; pad-dock.css shows one or the other)
+      sizeBtn = button('', 'cam_size', 'Cam size', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } sizeMenu(b); }, 'ds-btn quiet sm rmd-pin-menu');
+      sizeBtn.setAttribute('aria-haspopup', 'menu'); sizeBtn.setAttribute('aria-expanded', 'false');
+      strip.appendChild(sizeBtn);
       pinSize(store(PIN_KEY) || 'small');
+    }
+    function sizeMenu(opener) {
+      var box = menu(opener, t('cam_size', 'Cam size')), now = pinSize();
+      PIN_SIZES.forEach(function (p) { menuItem(box, p[1], 'layout_' + p[0], p[2], function () { pinSize(p[0]); }, { role: 'menuitemradio', checked: now === p[0] }); });
+      finishMenu(box, opener);
     }
     function decorateCams() {
       if (!strip) return;
@@ -695,7 +740,7 @@
         chip._login = u && !u.veil && !u.anon && u.login ? String(u.login).toLowerCase() : null;
         holderBox.appendChild(chip); personLine(chip, u);
       });
-      paintTalking();
+      paintTalking(); fitSoon(holderBox);
       if (holders.length > max) {
         var more = button('', 'more_holders', 'More people on the mic', participants, 'ds-btn quiet sm rmd-holder-more');
         more.querySelector('.rmd-label').textContent = '+' + (holders.length - max); more.title = t('plus_on_mic', '+{n} on mic', { n: holders.length - max }); holderBox.appendChild(more);
@@ -703,6 +748,39 @@
       holderBox.hidden = !holders.length;
       if (nowBox) nowBox.classList.toggle('rmd-has-holders', !!holders.length);
       paintNow();
+    }
+    // 1.99?? dockpol fix (review, items 20 / 21): a flair shows its words WHOLE where they fit - or, where they would be cut to a letter or two
+    // ("💚 S", "📼 P" - Plex or Plus?), its emoji alone in a 22px disc (the name in its title and for screen readers). People rows, the
+    // holder chips and the line heads; again when their box changes width (one pass per frame, measured before anything is changed).
+    var FLAIR_SEL = '#rmPeople .nm > .ufl, .rmd-holders .rmd-person-name > .ufl, .rmd-log .line-head > .ufl', fitQ = null, fitW = [];
+    function fitSoon(n) {
+      var first = !fitQ; fitQ = fitQ || [];
+      if (fitQ.indexOf(n || D) < 0) fitQ.push(n || D);
+      if (first) (W.requestAnimationFrame || setTimeout)(function () { var q = fitQ; fitQ = null; if (!dead) fitFlairs(q.indexOf(D) >= 0 ? [D] : q); });
+    }
+    function fitFlairs(scopes) {
+      var list = [];
+      scopes.forEach(function (s) {
+        if (!s || !s.querySelectorAll) return;
+        if (s.matches && s.matches(FLAIR_SEL)) list.push(s);
+        each(s.querySelectorAll(FLAIR_SEL), function (f) { list.push(f); });
+      });
+      var words = list.map(function (f) { f.classList.remove('rmd-ufl-e', 'rmd-ufl-off'); var n = null; each(f.children, function (c) { if (c.classList.contains('ufl-n')) n = c; }); return n; });
+      var cut = words.map(function (n) {
+        if (!n || !n.getClientRects().length) return false;              // (no words, or a narrow line's rule already hides them)
+        var cw = n.clientWidth, sw = n.scrollWidth;
+        return sw > cw + 1 && (sw < 72 || cw < 48);                     // (a short word - Plus, Plex, Supporter - whole or not at all)
+      });
+      list.forEach(function (f, i) { if (cut[i]) f.classList.add('rmd-ufl-e'); });
+      // (a holder chip in the bottom bar: the SPEAKER's name first - where even the emoji would cut it ("Aster …"), the flair steps out)
+      var hold = list.filter(function (f) { return f.parentNode && f.parentNode.closest && f.parentNode.closest('.rmd-holders'); });
+      var off = hold.map(function (f) { var w = f.parentNode.querySelector('.who'); return !!(w && w.getClientRects().length && w.scrollWidth > w.clientWidth + 1); });
+      hold.forEach(function (f, i) { if (off[i]) f.classList.add('rmd-ufl-off'); });
+    }
+    function fitOnResize(n) {
+      if (!n || !W.ResizeObserver) return;
+      var ro = new W.ResizeObserver(function () { var w = n.clientWidth, i = fitW.indexOf(n); if (i >= 0 && fitW[i + 1] === w) return; if (i >= 0) fitW[i + 1] = w; else fitW.push(n, w); fitSoon(n); });
+      ro.observe(n); observers.push(ro);
     }
     /** the mic stage's program as the viewer gets it (A/V-gated, the same one the stage draws): who is talking NOW (src[].ring) */
     function talking(p) {
@@ -774,7 +852,15 @@
       o.relay.insert(c + (space ? ' ' : ''), { replace: true }); var input = o.relay.getInput(); if (input) { input.focus(); input.dispatchEvent(new W.CustomEvent('input', { bubbles: true })); }
     }
     function dj() { var n = node('rdj'); return n && !n.classList.contains('hide') ? n : null; }
-    function appList() { return APPS.filter(function (a) { return hasCmd(a[0]); }); }
+    // (1.99?? dockpol fix (review, item 26): the 💲 Showdown tile shows the command it puts in the composer - '!showdown' once Pepe's web relay
+    // offers that name (it lists exactly what it lets through), until then '!pricegame', the same game's allowed alias)
+    function appList() {
+      return APPS.map(function (a) {
+        if (a[2] !== 'showdown') return hasCmd(a[0]) ? a : null;
+        var c = hasCmd('!showdown') ? '!showdown' : hasCmd('!pricegame') ? '!pricegame' : null;
+        return c ? [c, a[1], a[2], a[3], a[4]] : null;
+      }).filter(Boolean);
+    }
     function musicOn() { return ['!find', '!play', '!np', '!skip'].some(hasCmd); }
     // Pepe's admins / owners of this room (his roles for this viewer's login, data.mod) - Pepe still refuses anyone else
     function djStaff() { var m = data && data.mod; return !!(m && (m.admin === true || (Array.isArray(m.roles) && m.roles.some(function (r) { return r === 'admin' || r === 'owner'; })))); }
@@ -843,7 +929,8 @@
     }
     function soundboard(opener) {
       var sb = node('rmSb'); if (!sb) return;
-      var box = sheet(t('soundboard', 'Soundboard'), opener), mark = D.createComment('soundboard dock'); sb.parentNode.insertBefore(mark, sb); box.appendChild(sb);
+      // (1.99?? dockpol fix: titled as the rest - its icon, then its words)
+      var box = sheet(t('soundboard_title', '🔊 Soundboard'), opener), mark = D.createComment('soundboard dock'); sb.parentNode.insertBefore(mark, sb); box.appendChild(sb);
       layer.restore = function () { if (mark.parentNode) { mark.parentNode.insertBefore(sb, mark); mark.remove(); } };
       var toggle = sb.querySelector('.sbd-toggle'); if (toggle && toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
     }
@@ -996,9 +1083,13 @@
       var f = formFoot(form, doc, '📊', 'poll_go', 'Start poll'); box.appendChild(form);
       on(form, 'submit', function (e) {
         e.preventDefault();
-        var question = oneLine(q.value).replace(/\?+$/, ''), list = [];
-        each(opts.children, function (i) { var v = oneLine(i.value).replace(/,/g, ' ').replace(/\s+/g, ' ').trim(); if (v) list.push(v); });
+        // (1.99?? dockpol fix (review): Pepe reads the question up to its FIRST "?" and splits the options at commas - so a "?" inside the
+        // question or a comma inside an option is said, not silently changed)
+        var question = oneLine(q.value).replace(/\?+$/, ''), list = [], comma = null;
+        each(opts.children, function (i) { var v = oneLine(i.value); if (v.indexOf(',') >= 0 && !comma) comma = i; if (v) list.push(v); });
         if (!question) { f.err.textContent = t('poll_need_q', 'Write the question.'); q.focus(); return; }
+        if (question.indexOf('?') >= 0) { f.err.textContent = t('poll_one_q', 'Use one question mark, at the end of the question.'); q.focus(); return; }
+        if (comma) { f.err.textContent = t('poll_no_comma', 'An option can’t have a comma in it - Pepe splits the options at commas.'); comma.focus(); return; }
         if (list.length < 2) { f.err.textContent = t('poll_need_opts', 'Give it at least two options.'); return; }
         var line = '!poll ' + question + '? ' + list.join(', ');
         if (line.length > CMD_MAX) { f.err.textContent = t('form_long', 'That is too long for one chat line - shorten it a little.'); return; }
@@ -1033,7 +1124,8 @@
       }
       presets.forEach(function (n) { var b = el('button', 'ds-btn quiet sm', fmtN(n), doc); b.type = 'button'; on(b, 'click', function () { amt.value = fmtN(n); sure = null; paint(); amt.focus(); }); row.appendChild(b); });
       on(amt, 'input', function () { sure = null; paint(); });
-      form.appendChild(row); form.appendChild(formRow(doc, t('stake_custom', 'Stake in PAT'), amt)); paint();
+      // (1.99?? dockpol fix (review): the presets under their own field - above it they read as the previous field's)
+      form.appendChild(formRow(doc, t('stake_custom', 'Stake in PAT'), amt)); form.appendChild(row); paint();
       /** -> the amount once it may go (null: not yet - the field says why) */
       return function check(err) {
         var n = parseAmount(amt.value);
@@ -1049,10 +1141,14 @@
       form.appendChild(formRow(doc, t('wager_who', 'Against'), who));
       var terms = textField(doc, 160, t('wager_terms_ph', 'e.g. the Bills win tonight'));
       var f = { err: null, go: null }, foot = null;
-      var judge = personSelect(doc, people, t('wager_no_judge', 'No judge'));
+      // (1.99?? dockpol fix (review): every wager needs a judge - Pepe refuses one without (pepe_wager.py) - so the judge is required and
+      // Pepe himself, his AI judge, is the first choice; or someone in the room other than the two of you)
+      var judge = personSelect(doc, people, t('wager_pick_judge', 'Pick a judge'));
+      var pj = el('option', null, t('wager_judge_pepe', '🐸 Pepe (AI judge)'), doc); pj.value = 'pepe';
+      judge.insertBefore(pj, judge.children[1] || null); judge.value = 'pepe';
       var holder = el('div', null, null, doc); form.appendChild(holder);
       form.appendChild(formRow(doc, t('wager_terms', 'What you’re betting on'), terms));
-      form.appendChild(formRow(doc, t('wager_judge', 'Judge (optional)'), judge));
+      form.appendChild(formRow(doc, t('wager_judge', 'Judge'), judge));
       form.appendChild(el('p', 'ds-fine', t('wager_note', 'Your stake is held until they accept; refunded if they decline or it expires. Minimum 1,000 PAT.'), doc));
       foot = formFoot(form, doc, '🤝', 'wager_go', 'Offer wager'); f = foot;
       var tmp = el('div', null, null, doc), check = stakeField(doc, tmp, f.go, 'wager_go', 'Offer wager', [1000, 10000, 50000], 10000);
@@ -1064,10 +1160,11 @@
         var w = who.value, what = oneLine(terms.value), j = judge.value;
         if (!w) { f.err.textContent = t('wager_need_who', 'Pick who the wager is with.'); who.focus(); return; }
         if (!what) { f.err.textContent = t('wager_need_terms', 'Say what you’re betting on.'); terms.focus(); return; }
-        if (j && j.toLowerCase() === w.toLowerCase()) { f.err.textContent = t('wager_judge_self', 'The judge can’t be the person you bet against.'); return; }
+        if (!j) { f.err.textContent = t('wager_need_judge', 'Pick a judge - Pepe, or someone other than the two of you.'); judge.focus(); return; }
+        if (j.toLowerCase() === w.toLowerCase()) { f.err.textContent = t('wager_judge_self', 'The judge can’t be the person you bet against.'); return; }
         var n = check(f.err); if (!n) return;
         if (n < 1000) { f.err.textContent = t('wager_min', 'The smallest wager is 1,000 PAT.'); return; }
-        var line = '!wager @' + w + ' ' + n + ' ' + what + (j ? ' judge @' + j : '');
+        var line = '!wager @' + w + ' ' + n + ' ' + what + ' judge @' + j;
         if (line.length > CMD_MAX) { f.err.textContent = t('form_long', 'That is too long for one chat line - shorten it a little.'); return; }
         if (!hasCmd('!wager')) { closeLayer(); return; }
         o.relay.sendCmd(line); closeLayer();
@@ -1128,6 +1225,10 @@
       var note = node('rmListNote'), n0 = node('rmPplN');
       // (1.99?? dockpol (owner item 19): one line - IN THE CHAT ROOM [n]; the count is a badge, the freshness note the heading's tooltip)
       if (n0) n0.classList.add('rmd-count');
+      // (1.99?? dockpol fix (review, item 19): a column too narrow for IN THE CHAT ROOM says IN THE ROOM - never "IN THE CHAT RO…"; pad-dock.css
+      // picks one by the card's width, the long words stay the heading's name)
+      var ht = node('pplH') && node('pplH').querySelector('.ht');
+      if (ht && !(ht.nextElementSibling && ht.nextElementSibling.classList.contains('rmd-ht-s'))) { var hs = el('span', 'ht rmd-ht-s', t('people_short', 'In the room')); hs.setAttribute('aria-hidden', 'true'); ht.parentNode.insertBefore(hs, ht.nextSibling); ht.classList.add('rmd-ht-l'); }
       peopleInput = el('input', 'ds-in rmd-find'); peopleInput.type = 'search'; peopleInput.placeholder = t('find', '🔍 Find someone…'); peopleInput.setAttribute('aria-label', t('find_aria', 'Find someone'));
       peopleInput.setAttribute('aria-controls', 'rmPeople');
       on(peopleInput, 'input', filterPeople);
@@ -1582,6 +1683,9 @@
       var ov = el('div', 'rmd-ov');
       ovTop = el('div', 'rmd-ov-top'); ovBot = el('div', 'rmd-ov-bot');
       var pv = o.preview || {};
+      // (1.99?? dockpol fix (review, item 9): while a phone's navbar has stepped aside, ☰ before the pad chip is the visible way back -
+      // pad-dock.css shows it only then; its words stay its name)
+      if (mode === 'pad') ovTop.appendChild(iconBtn('☰', 'site_menu', 'Site menu', function () { setNav(false); var f = navHeader && navHeader.querySelector('a[href], button'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } } }, 'ds-btn quiet sm rmd-nav-back'));
       // (1.99ajh dockpop P2: on the homepage the pad chip is a LINK to the pad - its menu is the pad page's)
       ovTop.appendChild(mode === 'preview' ? padLink() : padChip());
       // (1.99ajh dockpop review: the homepage's "Next up" is its own piece - a second line on a phone, never squeezing the pad chip)
@@ -2056,10 +2160,17 @@
     // stay exactly as they are (the same nodes, position, scroll, draft, outbox, poll and room audio - the float is a child of <main>,
     // outside the hidden Live panel); only a fullscreen view goes back
     function tabChanged(tab) {
+      var fa = D.activeElement, heroFocus = !!(fa && fa.closest && fa.closest('#rmHero, #padTabs'));
       var live = tab === 'live'; D.body.classList.toggle('pad-dock-live', live);
       // (1.99?? dockpol (owner item 11): Feed / About in the same frame as Live - no footer, the same width; body.rmd-dock-pad marks it)
       D.body.classList.add('rmd-dock-pad');
       if (!live) { closeLayer(false); if (current && current.kind === 'full') redock(); }
+      // (1.99?? dockpol fix (review): Home / ← to Live on the tab bar - that bar isn't on Live, so focus goes to the stage's pad chip, whose
+      // menu has Feed and About, instead of falling to <body>)
+      else if (heroFocus) setTimeout(function () {
+        var a = D.activeElement; if (a && a !== D.body && a.isConnected && a.getClientRects().length) return;
+        var c = stage && stage.querySelector('.rmd-ov-top .rmd-chip'); if (c) { try { c.focus({ preventScroll: true }); } catch (e) { c.focus(); } }
+      }, 0);
     }
     // Feed / About: one slim header row - [pad identity] [● Live · Feed · About] [Follow] [▾ pad menu] (owner point 4)
     // 1.99?? dockpol (owner item 11): ONE slim 44px card - [the pad chip ▾ (the same component and menu as on Live)] … [Live · Feed · About]
@@ -2098,18 +2209,31 @@
       D.body.classList.toggle('rmd-nav-off', off);
     }
     function navSync() { var okNow = navOk(); D.body.classList.toggle('rmd-nav-auto', okNow); if (!okNow) setNav(false); }
+    // (1.99?? dockpol fix (review): only the READER's scrolling counts - never the log's own jump to its newest line (room.ejs toBottom
+    // marks it: scroll.__rmdProg) or a scroll the box's height change caused (the navbar's own 180 ms step, a toast, a sheet), which had the
+    // two fighting: the navbar flickered and the log snapped back. And the common case: a reader AT the newest line can't scroll toward newer,
+    // so a swipe up there (the finger moving up 32px) hides it too. While it is off, ☰ on the stage's top bar brings it back.)
     function navAuto() {
       each(D.body.children, function (n) { if (!navHeader && n.tagName === 'HEADER') navHeader = n; });
       var scroll = node('rmScroll'); if (!navHeader || !scroll) return;
-      var userAt = 0, lastTop = null, acc = 0, swipe = null;
+      var userAt = 0, lastTop = null, lastCh = -1, acc = 0, swipe = null, drag = null;
       ['wheel', 'touchstart', 'touchmove', 'keydown'].forEach(function (k) { scroll.addEventListener(k, function () { userAt = Date.now(); }, { passive: true }); });
       on(scroll, 'scroll', function () {
-        var top = scroll.scrollTop, d = lastTop == null ? 0 : top - lastTop; lastTop = top;
+        var top = scroll.scrollTop, ch = scroll.clientHeight, d = lastTop == null ? 0 : top - lastTop; lastTop = top;
+        if (scroll.__rmdProg != null && Math.abs(top - scroll.__rmdProg) < 1) { acc = 0; lastCh = ch; return; }   // (the log's own jump to its end)
+        if (ch !== lastCh) { lastCh = ch; acc = 0; return; }                                               // (the box changed height)
         if (!navOk() || Date.now() - userAt > 1500 || !d) return;
         if ((d > 0) !== (acc > 0)) acc = 0;
         acc += d;
         if (acc >= 24) { acc = 0; setNav(true); } else if (acc <= -48) { acc = 0; setNav(false); }
       });
+      // (the finger moving up on a log that is at its newest line: nothing to scroll, the same wish - more room for the chat)
+      scroll.addEventListener('touchstart', function (e) { var p = e.touches && e.touches.length === 1 ? e.touches[0] : null; drag = p ? { y: p.clientY } : null; }, { passive: true });
+      scroll.addEventListener('touchmove', function (e) {
+        var p = e.touches && e.touches[0]; if (!drag || !p || !navOk() || navOff) return;
+        if (drag.y - p.clientY >= 32 && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= 2) { drag = null; setNav(true); }
+      }, { passive: true });
+      scroll.addEventListener('touchend', function () { drag = null; }, { passive: true });
       var input = o.relay && o.relay.getInput && o.relay.getInput();
       if (input) on(input, 'focus', function () { setNav(true); });
       on(navHeader, 'focusin', function () { setNav(false); });
@@ -2131,10 +2255,13 @@
       // 1.99ajh dockpop: the window is the chat card alone (no stage, header, strip or tabs); the homepage has no pad header, strip or tabs
       if (mode === 'pad') buildHeader();
       if (stage && mode !== 'popout') buildStage();
-      if (chat) buildChatHead();
+      if (chat) { buildChatHead(); toastBox(); }
       decoratePeople();
       if (strip && mode === 'pad') { observe(strip, decorateCams); decorateCams(); }
       decorateComposer(); attachDoc(D);
+      // (1.99?? dockpol fix: the flairs' fit - when the people list, the audio bar or the log change width, and for each new line)
+      fitOnResize(node('rmPeople')); fitOnResize(node('rmAudioBox')); fitOnResize(node('rmScroll'));
+      [node('rmFeed'), node('rmOlder')].forEach(function (box) { observe(box, function (ms) { ms.forEach(function (m) { each(m.addedNodes, function (x) { if (x.nodeType === 1) fitSoon(x); }); }); }, { childList: true }); });
       on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
       if (mode === 'pad') on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
       on(W, 'pagehide', function () {
@@ -2175,7 +2302,7 @@
     if (D.readyState === 'loading') on(D, 'DOMContentLoaded', start); else start();
     return {
       update: update, mic: mic, personLine: personLine, visible: visible, redock: redock, stageChanged: stageChanged,
-      pvp: pvp, pvpFor: pvpFor, peopleDrawn: function () { filterPeople(); paintInfo(); }, participants: participants,
+      pvp: pvp, pvpFor: pvpFor, peopleDrawn: function () { filterPeople(); paintInfo(); fitSoon(node('rmPeople')); }, participants: participants,
       // 1.99ajh dockpop
       floating: function () { return !!(current && current.kind === 'float'); },
       popped: function () { return popped; }, popWindow: popWindow, canWindow: canWindow, bringBack: bringBack,

@@ -546,7 +546,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=6"><script src="/public/js/dock-link.js?v=1"></script><script src="/public/js/pad-dock.js?v=7"></script><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99?? dockpol: css v6, js v7, picker v3 %>
+<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=7"><script src="/public/js/dock-link.js?v=1"></script><script src="/public/js/pad-dock.js?v=7"></script><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99?? dockpol: css v7, js v7, picker v3 %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %><%= chatOnly_ ? ' rmd-popout' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <%# 1.99ajf dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
   <% if (!dockOn_) { %><div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div><% } %>
@@ -872,8 +872,8 @@
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
-  <script src="/public/js/chat-clip.js?v=6"></script><%# 1.99aht v5: a !transcripts off bar's 🔊 Clip says it goes up without a caption; 1.99?? dockpol v6: quoteOne / micOne %>
-  <% if (signedIn || dockOn_) { %><script src="/public/js/chat-lines.js?v=4"></script><% } %><% if (signedIn) { %><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete); 1.99?? dockpol v4: in the Dock for everyone - 📋 Copy text, ✂️ / 🔊 clip one message, a tap opens it on touch %>
+  <script src="/public/js/chat-clip.js?v=7"></script><%# 1.99aht v5: a !transcripts off bar's 🔊 Clip says it goes up without a caption; 1.99?? dockpol v6: quoteOne / micOne %>
+  <% if (signedIn || dockOn_) { %><script src="/public/js/chat-lines.js?v=5"></script><% } %><% if (signedIn) { %><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete); 1.99?? dockpol v4: in the Dock for everyone - 📋 Copy text, ✂️ / 🔊 clip one message, a tap opens it on touch %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
   <link rel="stylesheet" href="/public/css/person-sheet.css?v=2"><%# 1.99ajn padppl: the 🚫 Block / ⛔ Ban sheets, folded lines, mention chips, idle 🌐 rows %>
   <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99aid privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
@@ -1226,10 +1226,12 @@
     })();
 
     function nearBottom() { return scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 80; }
-    function toBottom() { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; jump.style.display = 'none'; pinned = true; }
+    // (1.99?? dockpol fix: the position this put the log at is marked on the scroller - its scroll event is ours, not the reader's: the
+    // pin below and the navbar's auto-hide, pad-dock.js navAuto, both skip it)
+    function toBottom() { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; scrollEl.__rmdProg = scrollEl.scrollTop; jump.style.display = 'none'; pinned = true; }
     // 1.99?? dockpol (owner items 3, 12): ONE stick-to-the-end state for the Dock's log. It starts pinned and only the READER's own scrolling
-    // changes it (a scroll at the same box height, within a moment of their wheel / touch / key - the box settling, a reveal growing the
-    // lines, a 🔊 pill, a chip, an image or a font never unpins it); while pinned, anything that grows the log keeps its newest line in
+    // changes it (a scroll at the same box height away from the end - the box settling, a reveal growing the lines, a 🔊 pill, a chip,
+    // an image or a font never unpins it; see the observer below); while pinned, anything that grows the log keeps its newest line in
     // view (the observer below). A reader who scrolled up more than 80px is never moved.
     var pinned = true;
     function stickNow() { return dockMode ? pinned || nearBottom() : nearBottom(); }
@@ -1363,14 +1365,21 @@
     // 1.99?? dockpol (owner items 3, 12): ...and when its CONTENT grows after it was drawn (the reveal batch swapping a bar for the words and
     // adding its chips, chat-clip.js's 🔊 pills, the ⋯ menus, room PM rows, stickers / GIFs, a late font) - the box, the live log and the
     // older lines are all watched; one re-pin per frame while pinned
+    // (1.99?? dockpol fix (review): the log moving AWAY from its end by anything but us - the reader's wheel / touch / keys, and also Tab
+    // into the log, find-in-page, a screen reader's cursor or a script's scrollIntoView - unpins it at once; reaching the end (or coming
+    // back within 80px of it) pins it again. Ignored: our own toBottom (its mark), a scroll caused by the box changing height (the navbar
+    // stepping aside, a toast, the cards settling) and the end's own bounce (2px).)
     (function () {
-      var userAt = 0, lastCh = -1, queued = false;
-      ['wheel', 'touchstart', 'touchmove', 'keydown', 'pointerdown'].forEach(function (k) { scrollEl.addEventListener(k, function () { userAt = Date.now(); }, { passive: true }); });
+      var lastCh = -1, lastTop = scrollEl.scrollTop, queued = false;
       scrollEl.addEventListener('scroll', function () {
-        var ch = scrollEl.clientHeight;
-        if (ch !== lastCh) { lastCh = ch; if (nearBottom()) pinned = true; return; }     // (the box changed: not the reader)
-        if (nearBottom()) pinned = true;
-        else if (Date.now() - userAt < 1500) pinned = false;
+        var ch = scrollEl.clientHeight, top = scrollEl.scrollTop, d = top - lastTop; lastTop = top;
+        if (scrollEl.__rmdProg != null && Math.abs(top - scrollEl.__rmdProg) < 1) { scrollEl.__rmdProg = null; lastCh = ch; pinned = true; return; }
+        // (the box changed: not the reader - and no re-pin either: a reader flicking back while the navbar steps in was pulled to the end)
+        if (ch !== lastCh) { lastCh = ch; return; }
+        var dist = scrollEl.scrollHeight - top - ch;
+        if (dist <= 2) pinned = true;
+        else if (d < 0) pinned = false;
+        else if (d > 0 && nearBottom()) pinned = true;
       });
       if (!window.ResizeObserver) return;
       var ro = new ResizeObserver(function () {

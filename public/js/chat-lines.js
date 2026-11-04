@@ -85,7 +85,8 @@
       var out = [];
       if (!dock || own(n) || !n.classList.contains('line')) return out;
       if (n.hasAttribute('data-text') && !n.hasAttribute('data-vc') && String(n.getAttribute('data-text') || '').trim()) out.push({ id: 'copy', label: _t('js.pad.chat.copy', '📋 Copy text') });
-      if (n.hasAttribute('data-c') && !n.hasAttribute('data-vc') && clipCan('canQuote')) out.push({ id: 'clip1', label: _t('js.pad.chat.clip_one', '✂️ Clip this message') });
+      // (1.99?? dockpol fix (review): a line of the LIVE log only - the clip card follows the live picks; scrollback / search lines aren't in it)
+      if (n.hasAttribute('data-c') && !n.hasAttribute('data-vc') && feed && feed.contains(n) && clipCan('canQuote')) out.push({ id: 'clip1', label: _t('js.pad.chat.clip_one', '✂️ Clip this message') });
       if (n.classList.contains('tx') && n.getAttribute('data-tx') && clipCan('canMic')) out.push({ id: 'clipmic', label: _t('js.pad.chat.clip_audio', '🔊 Clip the audio') });
       return out;
     }
@@ -152,7 +153,8 @@
       items.forEach(function (it) {
         var mi = el('button', 'ds-menu-item' + (it.danger ? ' danger' : ''), it.label);
         mi.type = 'button'; mi.setAttribute('role', 'menuitem'); mi.tabIndex = -1;
-        mi.addEventListener('click', function (e) { e.preventDefault(); closeMenu(false); run(it.id, n, b); });
+        // (1.99?? dockpol fix (review): 📋 Copy acts in place - focus goes back to the line's ⋯ when the menu came from it, not to <body>)
+        mi.addEventListener('click', function (e) { e.preventDefault(); closeMenu(it.id === 'copy' && !sheet && b !== n); run(it.id, n, b); });
         p.appendChild(mi);
       });
       scope.appendChild(p);

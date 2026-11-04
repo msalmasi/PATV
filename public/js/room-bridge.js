@@ -442,7 +442,7 @@
       if (lagging && state.textContent === _t('js.pad.audio.live', 'LIVE')) setState(_t('js.pad.audio.catching_up', 'LIVE · catching up…'), 'wait');
       else if (!lagging && state.textContent === _t('js.pad.audio.catching_up', 'LIVE · catching up…')) setState(_t('js.pad.audio.live', 'LIVE'), 'live');
     }
-    setInterval(edge, 500);
+    var edgeTimer = setInterval(edge, 500);
     box.rbEdge = edge;                          // tests drive it directly
     paint();
     var me = {
@@ -502,6 +502,9 @@
         start(); return true;
       },
       isPlaying: function () { return playing; },
+      // 1.99?? dockpol fix (review): the homepage swapping to a new front pad lets this player go - stopped, its 500 ms edge timer cleared and
+      // out of the page's one-room-at-a-time list (each swap used to leave one behind)
+      destroy: function () { if (playing) stop(); clearInterval(edgeTimer); var i = shared.players.indexOf(me); if (i >= 0) shared.players.splice(i, 1); listeners.length = 0; },
       duck: function (on) { if (arguments.length) { duckOn = !!on; applyVolume(); } return duckOn; },
       setRecording: function (on) { recording = !!on; applyVolume(); },
       onChange: function (f) { listeners.push(f); },

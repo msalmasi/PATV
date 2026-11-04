@@ -54,7 +54,11 @@ test("items 3, 12 (room.ejs): one pinned state - the reader's own scroll unpins,
   assert.match(room, /nearBottom: stickNow, toBottom: toBottom/, "room PM rows");
   assert.match(room, /\[scrollEl, feedEl, olderEl\]\.forEach\(function \(n\) \{ if \(n\) ro\.observe\(n\); \}\);/, "the box AND its content are watched");
   assert.match(room, /if \(pinned && scrollEl\.clientHeight && !wantLine && !\(padHist && \(padHist\.reading\(\) \|\| padHist\.detached\(\)\)\)\) toBottom\(\);/);
-  assert.match(room, /else if \(Date\.now\(\) - userAt < 1500\) pinned = false;/, "only a scroll the reader made unpins");
+  // (1.99?? dockpol fix (review): ANY scroll away from the end that isn't ours (toBottom's mark) or the box's own height change unpins - Tab into
+  // the log, find-in-page, a screen reader, scrollIntoView too; the end's 2px bounce never does)
+  assert.match(room, /scrollEl\.__rmdProg = scrollEl\.scrollTop;/, "toBottom marks its own scroll");
+  assert.match(room, /if \(scrollEl\.__rmdProg != null && Math\.abs\(top - scrollEl\.__rmdProg\) < 1\) \{ scrollEl\.__rmdProg = null; lastCh = ch; pinned = true; return; \}/);
+  assert.match(room, /if \(dist <= 2\) pinned = true;\s*else if \(d < 0\) pinned = false;/, "away from the end unpins");
   assert.match(room, /jump\.style\.display = 'block'; pinned = false;/, "a ?line= deep link is never pulled to the end");
 });
 
@@ -81,7 +85,16 @@ test("item 22: a command's toast updates in place; Pepe's private answers stay c
   h.button("Dismiss", sticky[0]).click(); assert.equal(notes().length, 0);
   for (let i = 0; i < 4; i++) h.controller.cmd({ id: "x" + i, text: "!np", st: "waiting for Pepe…", ok: null, replies: [] });
   assert.equal(notes().length, 2, "at most two");
-  const host = h.doc.querySelector(".rmd-toasts"); assert.equal(host.getAttribute("role"), "status"); assert.equal(host.getAttribute("aria-live"), "polite");
+  // (1.99?? dockpol fix (review): the visible stack is no live region - a separate polite one, there from the start, gets only the words)
+  const host = h.doc.querySelector(".rmd-toasts"); assert.equal(host.getAttribute("role"), null);
+  const sr = h.doc.querySelector(".rmd-log > .rmd-toasts-sr"); assert.equal(sr.getAttribute("role"), "status"); assert.equal(sr.getAttribute("aria-live"), "polite");
+  h.tick(); assert.match(sr.textContent, /› !np · waiting for Pepe…/); assert.doesNotMatch(sr.textContent, /Dismiss/);
+  // a sticky private answer is never pushed out by newer notices
+  h.tick(); for (const n of notes()) h.button("Dismiss", n).click();
+  h.controller.cmd({ id: "s1", text: "!bal", st: "", ok: true, replies: ["Your balance: 5 PAT"] });
+  for (let i = 0; i < 5; i++) h.controller.cmd({ id: "y" + i, text: "!np", st: "waiting for Pepe…", ok: null, replies: [] });
+  assert.equal(notes().filter((n) => n.classList.contains("rmd-ct-sticky")).length, 1, "the private answer stays");
+  assert.equal(notes().filter((n) => !n.classList.contains("rmd-ct-sticky")).length, 2, "two passing notices beside it");
 });
 test("item 22 (room-bridge.js): opts.onCmd hears new and changed command rows, never ones finished before the page; the list is hidden", async () => {
   const doc = new Document(), win = { document: doc, addEventListener() {}, navigator: {} };
@@ -211,8 +224,11 @@ test("items 26, 27: 💲 Showdown starts the price game (!pricegame); no 😀 to
   h.button("Cancel", pop).click(); assert.equal(h.calls.send.length, 0);
   spin.click(); h.button("Spin", menuOf(h.doc)).click(); assert.deepEqual(h.calls.send, ["!spin"]);
   h.button("Chat apps").click(); const apps = h.doc.querySelector(".rmd-layer");
-  const sd = h.button("Showdown (!showdown), free", apps); assert.doesNotMatch(apps.textContent, /Guess/);
+  // (1.99?? dockpol fix (review): the tile shows the command it inserts - !pricegame until Pepe's relay offers !showdown itself)
+  const sd = h.button("Showdown (!pricegame), free", apps); assert.doesNotMatch(apps.textContent, /Guess|!showdown/);
   sd.click(); assert.equal(h.input.value, "!pricegame", "the web relay's name for the same game (never sent)"); assert.equal(h.calls.send.length, 1);
+  const d2 = F.initial(); d2.room.cmds = Object.assign({}, d2.room.cmds, { "!showdown": 0, "!pricegame": 0 }); h.controller.update(d2);
+  h.button("Chat apps").click(); const sd2 = h.button("Showdown (!showdown), free", h.doc.querySelector(".rmd-layer")); sd2.click(); assert.equal(h.input.value, "!showdown");
   const d = F.initial(); d.room.cmds = { "!pricegame": 0 }; h.controller.update(d); assert.equal(tools.querySelector('[data-rmd-tool="spin"]').hidden, true);
 });
 test("item 27: one sheet header - the title's emoji is its icon, ✕ an icon-only Close; specific titles", () => {
@@ -244,15 +260,24 @@ test("item 30: ＋ › Create - a poll / wager / bounty form sends the typed com
   const mk = m.querySelectorAll("a").find((a) => /Market/.test(a.textContent)); assert.equal(mk.getAttribute("href"), "/markets?pad=night-orchard"); assert.equal(mk.target, "_blank");
   h.button("Poll…", m).click();
   let sheet = h.doc.querySelector(".rmd-layer"), ins = sheet.querySelectorAll("input");
-  ins[0].value = "Pizza or tacos?"; ins[1].value = "Pizza"; ins[2].value = "Tacos, obviously";
-  sheet.querySelector("form").dispatchEvent(new Event("submit")); assert.deepEqual(h.calls.send, ["!poll Pizza or tacos? Pizza, Tacos  obviously".replace("  ", " ")]);
+  // (1.99?? dockpol fix (review): Pepe reads the question to its FIRST "?" and splits options at commas - both are said, never changed)
+  ins[0].value = "Pizza or tacos? Or neither"; ins[1].value = "Pizza"; ins[2].value = "Tacos obviously";
+  sheet.querySelector("form").dispatchEvent(new Event("submit")); assert.equal(h.calls.send.length, 0); assert.match(sheet.textContent, /one question mark/);
+  ins[0].value = "Pizza or tacos?"; ins[2].value = "Tacos, obviously";
+  sheet.querySelector("form").dispatchEvent(new Event("submit")); assert.equal(h.calls.send.length, 0); assert.match(sheet.textContent, /comma/);
+  ins[2].value = "Tacos obviously";
+  sheet.querySelector("form").dispatchEvent(new Event("submit")); assert.deepEqual(h.calls.send, ["!poll Pizza or tacos? Pizza, Tacos obviously"]);
   h.button("Add to the chat").click(); h.button("Wager…", menuOf(h.doc)).click();
   sheet = h.doc.querySelector(".rmd-layer");
   const [who, judge] = sheet.querySelectorAll("select"), texts = sheet.querySelectorAll("input");
   const people = F.initial().members.filter((u) => u && !u.veil && !u.anon && !u.self && u.login);
   assert.deepEqual(who.children.slice(1).map((o) => o.value), people.map((u) => u.login), "named Camfrog members only");
-  who.value = people[0].login; texts[0].value = "2m"; texts[1].value = "the Bills win"; judge.value = people[1].login;
+  // (1.99?? dockpol fix (review): a judge is required - Pepe (his AI judge) is the first choice and the default)
+  assert.equal(judge.value, "pepe"); assert.equal(judge.children[1].value, "pepe");
+  who.value = people[0].login; texts[0].value = "2m"; texts[1].value = "the Bills win"; judge.value = "";
   const form = sheet.querySelector("form"); form.dispatchEvent(new Event("submit"));
+  assert.equal(h.calls.send.length, 1, "no judge: nothing sent"); assert.match(sheet.textContent, /Pick a judge/);
+  judge.value = people[1].login; form.dispatchEvent(new Event("submit"));
   assert.equal(h.calls.send.length, 1, "a million or more: press again"); assert.match(sheet.textContent, /press again/);
   form.dispatchEvent(new Event("submit")); assert.equal(h.calls.send[1], "!wager @" + people[0].login + " 2000000 the Bills win judge @" + people[1].login);
   h.button("Add to the chat").click(); h.button("Bounty…", menuOf(h.doc)).click();

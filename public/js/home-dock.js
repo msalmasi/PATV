@@ -182,6 +182,9 @@
     }
     function stageMic(d) {
       if (!I.micStage || !sw || !sw.setMic || !C || !C.onStage) return;
+      // (1.99?? dockpol fix (review): after a swap to a front pad whose mic stage this viewer may see, the page may not have its script yet -
+      // it is loaded once, and the latest answer drawn when it arrives)
+      if (!W.PATVStageMic) { if (I.micJs && !micScript) { micScript = D.createElement('script'); micScript.src = I.micJs; micScript.async = true; micScript.onload = function () { try { if (cur && cur.redrawMic) cur.redrawMic(); } catch (e) { /* the next answer draws it */ } }; D.head.appendChild(micScript); } return; }
       var show = function (p) { if (dead) return; sw.setMic(p); if (dock && dock.talking) dock.talking(p); };
       var prog = micProgram(d && d.stage_program || null);
       if (W.PATVAvSync && W.PATVAvSync.gateProgram) W.PATVAvSync.gateProgram(slug, prog, show); else show(prog);
@@ -330,10 +333,13 @@
     function handle(audio, relay, ptt, stop) {
       return {
         front: I.front ? I.front.slug : '', slug: slug, dock: function () { return dock; },
+        redrawMic: function () { if (!dead && latest) stageMic(latest); },
+        // (1.99?? dockpol fix (review): focus alone isn't "busy" - the log a viewer clicked, a button, or the composer just after a send (empty
+        // and not typed in for 15 s) let the swap happen; a draft, a field being typed in, an open sheet / menu or holding to talk don't)
         busy: function () {
-          var input = relay && relay.getInput ? relay.getInput() : null, hmd = $('hmDock');
+          var input = relay && relay.getInput ? relay.getInput() : null, hmd = $('hmDock'), a = D.activeElement;
           if (input && String(input.value || '').trim()) return true;
-          if (hmd && D.activeElement && hmd.contains(D.activeElement) && D.activeElement !== D.body) return true;
+          if (hmd && a && a !== D.body && hmd.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && Date.now() - typedAt < 15000) return true;
           if (D.querySelector('.rmd-menu, .rmd-layer, .pm-pop')) return true;
           var talk = $('rmPtt') && $('rmPtt').querySelector('.rb-talk[aria-pressed="true"]'); if (talk) return true;
           return !!(dock && dock.popped && dock.popped());
@@ -343,6 +349,7 @@
           dead = true;
           if (stop) stop();
           try { if (audio && audio.pause) audio.pause(); } catch (e) { /* stopped */ }
+          try { if (audio && audio.destroy) audio.destroy(); } catch (e) { /* gone */ }   // (1.99?? dockpol fix: its timer and its place in the page's player list go too)
           try { if (relay && relay.destroy) relay.destroy(); } catch (e) { /* gone */ }
           try { if (ptt && ptt.destroy) ptt.destroy(); } catch (e) { /* gone */ }
           try { if (sw && sw.destroy) sw.destroy(); } catch (e) { /* gone */ }
@@ -355,6 +362,9 @@
 
   // ── 1.99?? dockpol (owner H6): the front pad changed - fetch its block (GET /?dock=1: the same gates as the page; a viewer who may not see the
   // new front gets whatever the server renders for them) and swap it in while the viewer is idle; busy, a chip on the stage's top bar offers it ──
+  var typedAt = 0, micScript = null;
+  D.addEventListener('keydown', function (e) { var a = e.target; if (a && a.closest && a.closest('#hmDock')) typedAt = Date.now(); }, true);
+  D.addEventListener('input', function (e) { var a = e.target; if (a && a.closest && a.closest('#hmDock')) typedAt = Date.now(); }, true);
   var cur = boot(parse($('hmdInit'))), pendingFront = null, swapping = false, chip = null, skipSlug = null;
   function frontChanged(f) {
     if (f.slug === skipSlug) return;                  // (the server rendered another block for this viewer last time: not again and again)
