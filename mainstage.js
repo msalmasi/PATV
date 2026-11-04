@@ -1930,8 +1930,11 @@ async function unban(userId, actor) {
 async function roomBan(roomId, who, reason, actor) {
   await init();
   const w = String(who || "").trim();
-  let u = (await getQuery("SELECT userId, username FROM users WHERE LOWER(username) = LOWER(?)", [w]))[0];
-  if (!u) u = await rooms.findUser(w);
+  // 1.99?? padppl: targets.js - "u:<id>", "@name", "cf:<login>" exact; a bare name that means two people (a PATV username = another
+  // account's Camfrog login) is a 409 with the choices, never a guess (it was: the username silently won)
+  const T = await require("./targets").resolve(w, { allowLogin: false });
+  if (T.ambiguous) { const e = new Refuse(409, T.error); e.choices = T.choices; throw e; }
+  const u = T.userId ? { userId: T.userId, username: T.username } : null;
   if (!u) throw new Refuse(404, "No such user.");
   const RS = await rooms.stageSettings(roomId);
   if (RS.owner && RS.owner.userId === u.userId) throw new Refuse(400, "That's the pad's owner.");

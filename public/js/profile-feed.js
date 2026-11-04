@@ -49,7 +49,7 @@
     var who = f.elements.user.value.trim().replace(/^@|^u\//, '');
     if (!who) { err.textContent = _t('js.profile.type_username', 'Type a username.'); return; }
     err.textContent = '';
-    slug().then(function (s) { return api('/api/feed/ban', { user: who, room: s, days: parseInt(f.elements.days.value, 10) || 0, reason: 'blocked from commenting on a profile' }); })
+    slug().then(function (s) { return api('/api/feed/ban', { user: '@' + who, room: s, days: parseInt(f.elements.days.value, 10) || 0, reason: 'blocked from commenting on a profile' }); })
       .then(function () { location.hash = 'profile-settings'; location.reload(); })
       .catch(function (e) { err.textContent = e.message; });
   });

@@ -120,7 +120,18 @@ function register(app, { addUser }) {
     if (!(await adminOf(req))) return deny(req, res);
     res.set("Cache-Control", "no-store");
     try {
-      const u = await findUser(req.query.u);
+      // 1.99?? padppl: a bare name that is one account's username AND another account's Camfrog login asks which (targets.js choices) -
+      // u:<id>, @name and cf:<login> pick one exactly
+      const q = String(req.query.u == null ? "" : req.query.u).trim();
+      if (q && !/^(u:|@|cf:|\u{1f310})/iu.test(q)) {
+        const T = await require("./targets").resolve(q, { allowLogin: false });
+        if (T.ambiguous) return res.status(409).json({ ok: false, code: "ambiguous", error: T.error, choices: T.choices });
+      }
+      let u = null;
+      if (/^(u:|@|cf:|\u{1f310})/iu.test(q)) {
+        const T = await require("./targets").resolve(q, { allowLogin: false });
+        u = T.userId ? await findUser(T.userId) : null;
+      } else u = await findUser(q);
       if (!u) return res.status(404).json({ ok: false, error: "No such member." });
       const S = require("./sessions");
       res.json({ ok: true, user: { userId: u.userId, username: u.username, display: u.displayname, class: u.class, camfrog: u.camfrogUsername,

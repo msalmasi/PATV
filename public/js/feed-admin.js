@@ -35,7 +35,7 @@
     else if (act === 'nsfw') api('/api/feed/posts/' + id + '/admin', { nsfw: /^Mark/.test(b.textContent) }).then(done, oops);
     else if (act === 'ban') {
       var days = window.prompt('Ban ' + b.getAttribute('data-user') + ' from posting on the feed for how many days? (0 = forever)', '7');
-      if (days !== null) api('/api/feed/ban', { user: b.getAttribute('data-user'), days: days, reason: 'reported post' }).then(done, oops);
+      if (days !== null) api('/api/feed/ban', { user: '@' + b.getAttribute('data-user'), days: days, reason: 'reported post' }).then(done, oops);
     } else if (act === 'unban') api('/api/feed/unban', { userId: b.getAttribute('data-uid'), room: b.getAttribute('data-room') || '' }).then(done, oops);
     // 1.99cc: outcomes on a report target (post / comment) or a reported account; "tell" = inbox notice to the reporters
     else if (/^[ru]-/.test(act)) {
