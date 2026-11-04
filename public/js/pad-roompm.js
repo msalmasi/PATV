@@ -9,6 +9,9 @@
 // downloads only take lines with those), and _c = 0 (refilter / dropRemoved / redoLines skip it). While the site has them on
 // (rpm.on = 1) the page's root gets `rpm-on`, and the composer's "Your commands" list (room-bridge.js) stops repeating the answers as
 // 🔒 rows (roompm.css) - it still says "› !spin" and how it went. No `rpm` in an answer (an older site, signed out) = off.
+// review (privacy): a shared computer never shows one account's private answers to anyone else - an answer with no block (signed out
+// in another tab), {on: 0} (switched off) or another account's tag (rpm.w: someone else signed in under this open page) takes every
+// private line off the page and asks again from the start; so does a page going into the back/forward cache (pagehide, persisted).
 //
 // Placement: by time among the chat's lines (Pepe's clock: an answer's ts is the end of the second Pepe sent it in - after his room echo
 // of the command), never below your own lines still on their way (they stay last). An answer usually reaches the site before the echo
@@ -26,7 +29,7 @@
     o = o || {};
     var feed = o.feed, line = o.line, root = o.root || null;
     if (!feed || typeof line !== 'function') return null;
-    var cursor = 0, nodes = [], have = {}, haveList = [], isOn = false;
+    var cursor = 0, nodes = [], have = {}, haveList = [], isOn = false, who = null;
     if (root) {
       try { root.style.setProperty('--rpm-cmd-done', JSON.stringify(_t('js.pad.rpm.cmd_done', 'answered privately in the chat'))); } catch (e) { /* old browser */ }
     }
@@ -34,6 +37,15 @@
       isOn = !!on;
       if (root) root.classList.toggle('rpm-on', isOn);
     }
+    // review (privacy): every private line off the page (the ones it tracks, and any other in the chat), and ask from the start
+    function clear() {
+      nodes.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+      Array.prototype.slice.call(feed.childNodes || []).forEach(function (n) { if (n && n._rpm && n.parentNode) n.parentNode.removeChild(n); });
+      nodes = []; have = {}; haveList = []; cursor = 0;
+    }
+    try {
+      if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('pagehide', function (e) { if (e && e.persisted) clear(); });
+    } catch (e) { /* no back/forward cache events */ }
     function hist() { try { return typeof o.hist === 'function' ? o.hist() : null; } catch (e) { return null; } }
     // one of the page's own lines, ordered by time (it carries _ts) - not a pending line of yours, not a private one
     function timed(n) { return !!(n && n.nodeType === 1 && n._ts > 0 && !n._rpm && !(n.classList && n.classList.contains('rb-opt'))); }
@@ -93,18 +105,27 @@
     function update(d) {
       if (!d) return;
       var R = d.rpm;
-      if (!R || typeof R !== 'object' || R.on !== 1) { setOn(false); return; }
+      // signed out / switched off: nothing private stays on the page (review: a shared computer)
+      if (!R || typeof R !== 'object' || R.on !== 1) { setOn(false); if (nodes.length || cursor) clear(); who = null; return; }
       setOn(true);
+      // another account under this open page (it signed in in another tab): the first one's lines go; this answer only carried the
+      // new account's rows newer than the old cursor, so the next one is asked from the start (rows already drawn aren't drawn twice)
+      var fresh = false;
+      if (R.w != null) {
+        var w = String(R.w);
+        if (who !== null && w !== who) { clear(); fresh = true; }
+        who = w;
+      }
       var rows = Array.isArray(R.rows) ? R.rows : [], add = [];
       rows.forEach(function (r) {
         var id = Number(r && r.id) || 0;
-        if (id > cursor) cursor = id;
+        if (id > cursor && !fresh) cursor = id;
         if (!id || have[id]) return;
         have[id] = 1; haveList.push(id);
         add.push(r);
       });
       while (haveList.length > 500) delete have[haveList.shift()];
-      if (Number(R.v) > cursor) cursor = Number(R.v);
+      if (!fresh && Number(R.v) > cursor) cursor = Number(R.v);
       nodes = nodes.filter(function (n) { return n.parentNode === feed; });
       if (add.length) {
         var h = hist(), stick = typeof o.nearBottom === 'function' ? !!o.nearBottom() : false;

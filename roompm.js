@@ -23,6 +23,7 @@
 // The switch: chatlog_meta 'roompm' {on, at, by} - /admin/bridge "Pepe's private answers in pad chat" (admins, audited roompm.switch).
 // A missing row = ON (the owner asked for it). Off: no rows, and /live says rpm: {on: 0} (the page shows the command list's 🔒 lines again).
 "use strict";
+const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const KEEP = 20;                         // rows per (account, pad) - the last few commands (help, balance, a spin and its result)
@@ -42,6 +43,10 @@ let lastId = 0, total = 0;
 const stats = { added: 0, dup: 0, rate: 0, evicted: 0, local: 0 };
 let STATE = { on: true, at: null, by: null };
 let ready = null, loaded = false;
+// review (privacy): a key made in this process only - the viewer tag `w` (view) and the re-sent ack digests (add) mean nothing
+// outside it, and a restart (which forgets every row anyway) changes them
+const SALT = crypto.randomBytes(16);
+const digest = (s, n = 22) => crypto.createHmac("sha256", SALT).update(String(s)).digest("base64url").slice(0, n);
 
 // ── the switch ──
 function cleanState(o) {
@@ -196,7 +201,9 @@ const latest = (userId, roomId) => since(userId, roomId, Number.MAX_SAFE_INTEGER
 function view(userId, roomId, afterId, pepe = null) {
   if (!on()) return { on: 0 };
   const s = since(userId, roomId, afterId);
-  return { on: 1, v: s.v, u: pepe || null, rows: s.rows };
+  // w (review, privacy): this account's tag - only ever in its own answers; the page drops what it shows when the tag changes (someone
+  // else signed in under an open page on a shared computer). Never the account id.
+  return { on: 1, w: digest("w|" + userId, 16), v: s.v, u: pepe || null, rows: s.rows };
 }
 
 /** Forget an account's rows everywhere (accountdelete.js). -> rows dropped */
