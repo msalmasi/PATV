@@ -110,7 +110,7 @@ test('the stage ⋯: hide the stage to its slim bar, pop out, pinned cams ▸ la
   const h=harness();
   h.menuPick('Stage options','Hide stage');assert.equal(h.root.classList.contains('rmd-stage-hidden'),true);const mini=h.doc.getElementById('rmdMini');assert.equal(mini.hidden,false);assert.ok(mini.querySelector('.rmd-chip'));
   h.button('Show stage').click();assert.equal(h.root.classList.contains('rmd-stage-hidden'),false);
-  h.menuPick('Stage options','Picture-in-picture');assert.match(h.doc.querySelector('.rmd-toast').textContent,/unavailable/);assert.equal(h.stage.querySelector('video').ownerDocument,h.doc);
+  h.menuPick('Stage options','Picture-in-picture');assert.match(h.doc.querySelector('.rmd-toast').textContent,/Picture-in-picture isn’t available/);assert.equal(h.stage.querySelector('video').ownerDocument,h.doc);
   h.button('Stage options').click();h.button('Pinned cams',menuOf(h.doc)).click();const m=menuOf(h.doc);assert.ok(m,'the submenu replaces the list');h.button('Grid',m).click();assert.equal(h.strip.getAttribute('data-rmd-layout'),'grid');
 });
 test('the overlay\'s Snap and Clip proxy the capture row; Clip asks for the length first and then starts it',()=>{
@@ -479,11 +479,24 @@ test('closing the window with its own ✕ restores the tab (pagehide: pop-closed
   other.resume();for(let i=0;i<4;i++)b.flush();assert.equal(third.playing,false,'audio-on: one room is never heard twice');
   w2.controller.destroy();tab2.controller.destroy();
 });
-test('a sign-out page\'s session message and another account\'s tag make every Dock window re-check at once',()=>{
-  const b=bus();let n=0;const tab=harness({bus:b,opts:{room:'Dock.Equipped',vt:'tag-1',recheck:()=>n++}});
-  const S=new tab.win.BroadcastChannel('patv-dock');S.postMessage({v:1,t:'session'});b.flush();assert.equal(n,1,'session');
-  const x=harness({bus:b,opts:{room:'Other.Pad',vt:'tag-2'}});for(let i=0;i<3;i++)b.flush();assert.ok(n>=2,'a foreign tag (any room)');
-  assert.equal(tab.root.classList.contains('rmd-popped'),false);x.controller.destroy();
+test('a sign-out page\'s session message makes every Dock page re-check at once; another account\'s tag only the chat WINDOW (review: load)',()=>{
+  const b=bus();let n=0,w=0;const tab=harness({bus:b,opts:{room:'Dock.Equipped',vt:'tag-1',recheck:()=>n++}});
+  const win=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Win.Pad',vt:'tag-1',recheck:()=>w++}});for(let i=0;i<3;i++)b.flush();
+  const S=new tab.win.BroadcastChannel('patv-dock');S.postMessage({v:1,t:'session'});b.flush();assert.equal(n,1,'session: the tab');assert.ok(w>=1,'session: the window');
+  n=0;w=0;
+  const x=harness({bus:b,opts:{room:'Other.Pad',vt:'tag-2'}});for(let i=0;i<3;i++)b.flush();
+  assert.ok(w>=1,'a foreign tag (any room): the window re-checks');assert.equal(n,0,'a pad tab compares nothing, so it never re-polls on a foreign tag (it did on every heartbeat)');
+  // a window of THIS pad under another tag (this tab is the stale one), its heartbeats again and again: the tab stays quiet and unpopped
+  const w2=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'tag-2'}});
+  for(let i=0;i<5;i++){w2.tick();b.flush();}assert.equal(n,0);
+  assert.equal(tab.root.classList.contains('rmd-popped'),false);x.controller.destroy();win.controller.destroy();w2.controller.destroy();
+});
+test('review: a tab waiting for the window it opened, when that window announces itself under ANOTHER account, stops waiting and says reload',()=>{
+  const b=bus();const tab=harness({bus:b,fine:true,open:true,opts:{room:'Dock.Equipped',vt:''}});
+  tab.menuPick('Chat options','Chat in its own window');assert.equal(tab.root.classList.contains('rmd-popped'),true,'pending');
+  const win=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'tag-new'}});for(let i=0;i<3;i++)b.flush();
+  assert.equal(tab.root.classList.contains('rmd-popped'),false);assert.match(tab.doc.querySelector('.rmd-toast').textContent,/Reload this page/);
+  win.controller.destroy();
 });
 test('the window (popout mode): the chat card alone - the pad chip is a link to the pad in a new tab; no stage overlay, header, strip or Float',()=>{
   const w=harness({opts:{mode:'popout',room:'Dock.Equipped',vt:'t',padHref:'/p/night-orchard'}});
@@ -523,4 +536,77 @@ test('one meaning per icon: the Dock\'s menu items and buttons never use one emo
   for(const [k,v] of Object.entries({float:'🪟',win:'↗️',pip:'🖼️',hide:'🔽',show:'🔼',full:'🖥️',open:'›',down:'▾'}))assert.equal(IC[k],v,k);
   assert.match(s,/what === 'play' \? '▶️' : what === 'cut' \? '✂️'/,'▶️ Play content here, ✂️ Cut');
   assert.doesNotMatch(s,/'🗗'|Pop out chat|Pop out player/,'no second pop-out icon or word');
+});
+// ══ 1.99?? dockpop review fixes ══
+test('review: a tap on ➖ / ➕ never pins the floating chat (its phone gutter stays); focus lands on the chat ⋯ when it comes back',()=>{
+  const h=harness({feed:false});
+  h.menuPick('Chat options','Float chat');const fl=h.doc.querySelector('.rmd-float');
+  const minB=fl.querySelector('.rmd-float-min'),bar=fl.querySelector('.rmd-viewbar');
+  minB.dispatchEvent(new Event('pointerdown',{bubbles:true,button:0}));bar.dispatchEvent(new Event('pointerup',{bubbles:true}));minB.click();
+  bar.dispatchEvent(new Event('pointerup',{bubbles:true}));minB.click();
+  assert.equal(fl.style.insetInlineStart,undefined,'no inline insets after Minimize / Expand');assert.equal(fl.getAttribute('style'),null);
+  h.win.dispatchEvent(new Event('resize'));assert.equal(fl.style.insetInlineStart,undefined,'a resize of a never-dragged float pins nothing either');
+  // Escape from inside the float: back in place, focus on the chat ⋯ (it fell to <body>)
+  h.input.focus();h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));
+  assert.equal(h.chat.closest('.rmd-float'),null);assert.equal(h.doc.activeElement,h.chatH.querySelector('.rmd-chat-more'));
+});
+test('review: ↗️ leaves this tab\'s focus on the bar\'s ↩️ Bring it back',()=>{
+  const h=harness({fine:true,open:true,opts:{room:'Dock.Equipped',vt:'t'}});h.menuPick('Chat options','Chat in its own window');
+  assert.equal(h.doc.activeElement,h.doc.querySelector('.rmd-popbar-back'));
+});
+test('review: in the chat\'s own window a link opens in a new tab (noopener), never in the window; Sign in comes back to the window',()=>{
+  const w=harness({opts:{mode:'popout',room:'Dock.Equipped',vt:'t',padHref:'/p/night-orchard'}});
+  w.win.URL=URL;w.win.location={href:'https://publicaccess.tv/p/night-orchard/chat',origin:'https://publicaccess.tv',pathname:'/p/night-orchard/chat'};
+  const link=(href,attrs)=>{const a=w.make('a',null,null,w.chat);a.setAttribute('href',href);for(const [k,v] of Object.entries(attrs||{}))a.setAttribute(k,v);const e=new Event('click',{bubbles:true});a.dispatchEvent(e);return{a,e};};
+  const prof=link('/u/aster-fable');assert.equal(prof.a.getAttribute('target'),'_blank');assert.equal(prof.a.getAttribute('rel'),'noopener');assert.equal(prof.e.defaultPrevented,false,'the browser opens it');
+  const ext=link('https://example.com/x');assert.equal(ext.a.getAttribute('target'),'_blank');assert.equal(ext.a.getAttribute('rel'),'noopener noreferrer','leaving the site: no referrer either');
+  const own=link('https://elsewhere.test/y',{target:'_blank'});assert.equal(own.a.getAttribute('rel'),'noopener','a link with its own target gets noopener');
+  const sign=link('/login?next=%2Fp%2Fnight-orchard');assert.equal(sign.a.getAttribute('target'),null,'Sign in stays in the window');assert.equal(sign.a.getAttribute('href'),'/login?next=%2Fp%2Fnight-orchard%2Fchat','and comes back to it');
+  for(const href of ['#rmFeed','javascript:void 0','mailto:x@example.com','/p/night-orchard/chat'])assert.equal(link(href).a.getAttribute('target'),null,href+' stays');
+  const mod=w.make('a',null,null,w.chat);mod.setAttribute('href','/u/x');mod.dispatchEvent(new Event('click',{bubbles:true,ctrlKey:true}));assert.equal(mod.getAttribute('target'),null,'a modified click is the browser\'s own');
+  // the pad page itself is unchanged
+  const p=harness();p.win.URL=URL;p.win.location={href:'https://publicaccess.tv/p/night-orchard',origin:'https://publicaccess.tv',pathname:'/p/night-orchard'};
+  const pa=p.make('a',null,null,p.chat);pa.setAttribute('href','/u/aster-fable');pa.dispatchEvent(new Event('click',{bubbles:true}));assert.equal(pa.getAttribute('target'),null);
+});
+test('review: playing the popped room HERE (the homepage\'s Top Pads 🎧) brings this page\'s chat card back, and that window\'s heartbeats no longer pop it',()=>{
+  const b=bus(),a={playing:false,listeners:[],isPlaying(){return a.playing;},playingSlug(){return a.playing?'night-orchard':null;},pause(){a.playing=false;return true;},resume(){a.playing=true;a.listeners.forEach(f=>f('night-orchard'));return true;},onChange(f){a.listeners.push(f);}};
+  const popped=[];const home=harness({bus:b,opts:{mode:'preview',room:'Dock.Equipped',vt:'t',preview:{},audio:a,onPopped:v=>popped.push(v)}});
+  const win=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'t'}});for(let i=0;i<4;i++)b.flush();
+  assert.equal(home.root.classList.contains('rmd-popped'),true);
+  a.resume();for(let i=0;i<4;i++)b.flush();
+  assert.equal(home.root.classList.contains('rmd-popped'),false,'the card is back with its audio bar');assert.deepEqual(popped,[true,false]);
+  assert.ok(b.types().includes('audio-on'),'the window paused (one room is never heard twice)');
+  for(let i=0;i<3;i++){win.tick();b.flush();}assert.equal(home.root.classList.contains('rmd-popped'),false,'its heartbeats leave it alone');
+  const w2=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'t'}});for(let i=0;i<4;i++)b.flush();
+  assert.equal(home.root.classList.contains('rmd-popped'),true,'a NEW window pops it again');w2.controller.destroy();
+});
+test('review: a reloading window that was playing marks it for itself; the tab keeps the window it holds (Show it stays)',()=>{
+  const b=bus(),wa={playing:true,isPlaying(){return wa.playing;},playingSlug(){return wa.playing?'night-orchard':null;},pause(){wa.playing=false;return true;},resume(){wa.playing=true;return true;},onChange(){}};
+  const tab=harness({bus:b,fine:true,open:true,opts:{room:'Dock.Equipped',vt:'t'}});tab.menuPick('Chat options','Chat in its own window');
+  const win=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'t',audio:wa}});const ss=new Map();win.win.sessionStorage={setItem:(k,v)=>ss.set(k,v),removeItem:k=>ss.delete(k),getItem:k=>ss.get(k)||null};
+  for(let i=0;i<4;i++)b.flush();
+  win.win.dispatchEvent(new Event('pagehide'));for(let i=0;i<4;i++)b.flush();
+  assert.equal(ss.get('patv.dock.listen.night-orchard'),'1','room.ejs plays it again after the reload');
+  assert.equal(tab.root.classList.contains('rmd-popped'),false,'the tab restores for the moment');
+  const again=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'t'}});for(let i=0;i<4;i++)b.flush();
+  assert.equal(tab.root.classList.contains('rmd-popped'),true);assert.equal(tab.button('Show it').hidden,false,'Show it: the same window is still ours');
+  again.controller.destroy();
+});
+test('review: the homepage\'s slim off-air bar - no Go live of its own (Your show and the navbar have it), "Next up" its own piece; About has a title and ✕',()=>{
+  const p=harness({fine:true,open:true,opts:{mode:'preview',room:'Dock.Equipped',chatUrl:'/p/night-orchard/chat',padHref:'/p/night-orchard',preview:{goLive:'/stage?room=night-orchard',nextUp:'Next up: Willow Fable · 9:00 PM EST',about:'Relayed from the pad\'s room.'}}});
+  assert.equal(p.stage.querySelector('.rmd-golive'),null);
+  const slim=p.stage.querySelector('.rmd-slim-t');assert.equal(slim.querySelector('.rmd-slim-a').textContent,'Nothing on stage right now');assert.equal(slim.querySelector('.rmd-slim-b').textContent,'Next up: Willow Fable · 9:00 PM EST');
+  p.menuPick('Chat options','About this chat');const ab=p.doc.querySelector('.rmd-menu.rmd-about');assert.match(ab.querySelector('.rmd-about-h').textContent,/About this chat/);
+  ab.querySelector('.rmd-about-h button').click();assert.equal(p.doc.querySelector('.rmd-menu'),null,'✕ closes it');
+  const tease=harness({fine:true,open:true,opts:{mode:'preview',room:'Dock.Equipped',chatUrl:null,slug:'night-orchard',preview:{}}});
+  assert.equal(tease.controller.canWindow(),false,'the sign-in tease: no ↗️ (the route would send the pop-up to the gate page)');
+});
+test('review: a window signed IN under offers Reload on its card; one name each for float / window / picture-in-picture; a proxied sub line loses its emoji',()=>{
+  const w=harness({closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:null}});w.controller.gone('pop_signed_in','You signed in in another tab, so this chat window is closed. Reload it to see the chat as yourself.');
+  const card=w.root.querySelector('.rmd-gone');assert.match(card.textContent,/signed in in another tab/);assert.ok(w.button('Reload',card));assert.ok(w.button('Close this window',card));
+  const s=require('fs').readFileSync(require('path').join(__dirname,'..','public','js','pad-dock.js'),'utf8');
+  assert.doesNotMatch(s,/'Pop-out is unavailable|popped-out window|Chat is in a floating window/,'one name for each: float, window, picture-in-picture');
+  const h=harness({schedule:true});h.doc.getElementById('rmSlotsTxt').textContent='🎬 1/2 slots in use';
+  h.button('Pad menu: Night Orchard').click();const gl=h.doc.querySelector('.rmd-menu').querySelectorAll('a').find(a=>a.textContent.includes('Go live here'));
+  assert.equal(gl.querySelector('.rmd-sub').textContent,'1/2 slots in use','🎬 is Clip in the Dock');
 });

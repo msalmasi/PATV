@@ -36,8 +36,9 @@ const LEGACY = [/id="lrInit"/, /id="stTabs"/, /id="lrFeed"/, /id="stSlate"/, /id
 
 test("home.js: the Dock follows paddock.viewerOn (off = today's homepage, 'staff' = staff only) and the page gets the viewer tag", () => {
   const src = rd("home.js");
-  assert.match(src, /padDockOn: require\("\.\/paddock"\)\.viewerOn\(req\.user\),/);
-  assert.match(src, /vt: me \? require\("\.\/roompm"\)\.tag\(me\.userId\) : null,/);
+  assert.match(src, /const padDockOn_ = require\("\.\/paddock"\)\.viewerOn\(req\.user\), vt_ = me && padDockOn_ \? require\("\.\/roompm"\)\.tag\(me\.userId\) : null;/);
+  assert.match(src, /padDockOn: padDockOn_,\s+vt: vt_,/, "review: the viewer tag only for the Room Dock");
+  assert.match(src, /if \(vt_\) res\.set\("Cache-Control", "private"\);/, "and such a page is never kept by a shared cache");
   const ejsSrc = rd("views", "home.ejs");
   assert.match(ejsSrc, /const homeDock_ = !!locals\.padDockOn && roomGate_ === 'ok' && !hubChat_;/, "the 18+ gate and hub pads keep today's homepage");
   const PD = require(path.join(repo, "paddock")), SP = require(path.join(repo, "siteperms"));
@@ -124,8 +125,10 @@ function homePage(opts = {}) {
   if (opts.linked) { const c = mk("div", "rmCompose", chat, "compose hide"); mk("div", "rmRelay", c); mk("div", "rmPtt", c); }
   const ppl = mk("section", "rmPplCard", dock); mk("small", "rmPplN", ppl); mk("ul", "rmPeople", ppl);
   const initial = F.initial();
+  if (opts.tops) { const side = mk("div", "stageSide", main), tp = mk("section", null, side, "box tp"), ol = mk("ol", null, tp, "rooms-mini");
+    for (const slug of opts.tops) { const li = mk("li", null, ol), a = mk("a", null, li); a.setAttribute("href", "/p/" + slug); mk("span", null, a, "v"); const b = mk("button", null, li, "tp-ls"); b.setAttribute("data-listen", slug); } }
   const init = mk("script", "hmdInit", doc.body); init.textContent = JSON.stringify({ front: { id: "Alpha", slug: "alpha", title: "Alpha" }, chat: { id: "Alpha", slug: "alpha", name: "Alpha", onStage: true },
-    initial, vt: "tag-1", signed: true, linked: !!opts.linked, user: "viewer", stage: { slots: [], pepeOn: true, pepeHere: true, manage: false }, goLive: "/stage?room=alpha", staff: null, nextUp: null });
+    initial: opts.tease ? null : initial, vt: "tag-1", signed: true, linked: !!opts.linked, user: "viewer", stage: { slots: [], pepeOn: true, pepeHere: true, manage: false }, goLive: "/stage?room=alpha", staff: null, nextUp: null });
   const calls = { urls: [], dock: null, audio: null, switcher: null, timers: [] };
   const audio = { update() {}, onChange() {}, pause() { calls.paused = (calls.paused || 0) + 1; return true; }, isPlaying: () => false, playingSlug: () => null };
   win.PATVStage = { capture: () => ({ update() {}, reload() {} }), switcher: (o) => { calls.switcher = o; return {}; } };
@@ -165,4 +168,28 @@ test("home-dock.js: while the pad's chat is in its own window the card stops pol
   P.calls.dock.onPopped(false);
   assert.equal(P.calls.urls.length, n + 1, "polled at once");
   assert.match(P.calls.urls.at(-1), /after=0&wait=1/, "from a fresh view (cursor 0)");
+});
+// ── 1.99?? dockpop review ──
+test("review: the Dock is the first block under the navbar (above the stories and Your show); Dock off keeps today's order", async () => {
+  const story = { rooms: [], caps: [], room: null, signed: true, compose: true };
+  const on = await renderHome({ me: ME(true), username: "viewer", padDockOn: true, story });
+  assert.ok(on.indexOf('id="hmDock"') < on.indexOf('class="card hm-stories"'), "the Dock before the stories");
+  assert.ok(on.indexOf('class="card hm-stories"') < on.indexOf('id="stageShow"') && on.indexOf('id="stageShow"') < on.indexOf('class="hmd-side" id="stageSide"'), "then Your show, then the side widgets in the stage's old place");
+  const off = await renderHome({ me: ME(true), username: "viewer", padDockOn: false, story });
+  assert.ok(off.indexOf('class="card hm-stories"') < off.indexOf('id="stageShow"') && off.indexOf('id="stageShow"') < off.indexOf('id="stage"'), "Dock off: stories, Your show, the stage");
+  // a linked viewer's ℹ️ About this chat doesn't say "read-only" (they have a composer here)
+  assert.match(on, /<template id="hmdAbout">[^<]*What you send here goes into the room as you/);
+  assert.match(await renderHome({ me: ME(false), username: "viewer", padDockOn: true }), /<template id="hmdAbout">[^<]*read-only/);
+});
+test("review: the sign-in tease gets no ↗️; the chat's own pad in Top Pads keeps its rank and link, not its count, mic line or 🎧", () => {
+  const P = homePage({ linked: true });
+  assert.equal(P.calls.dock.chatUrl, "/p/alpha/chat");
+  const T = homePage({ linked: false, tease: true });
+  assert.equal(T.calls.dock.chatUrl, null, "no roomLive (the tease): no window to open");
+  const R = homePage({ linked: true, tops: ["alpha", "beta"] });
+  const rows = R.doc.querySelectorAll("#stageSide .tp li");
+  assert.equal(rows[0].classList.contains("hmd-here"), true); assert.match(rows[0].textContent, /In the chat above/);
+  assert.equal(rows[1].classList.contains("hmd-here"), false, "another pad's row is unchanged");
+  const css = rd("public", "css", "home-dock.css");
+  assert.match(css, /main\.hm\.rmd-home \.tp li\.hmd-here :is\(\.v, \.tp-ls, \.np\) \{ display: none; \}/);
 });

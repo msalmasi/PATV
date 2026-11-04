@@ -12517,9 +12517,17 @@
   "js.pad.dock.pip_stage": "Picture-in-picture",
   "js.pad.dock.front_settings": "Front page settings",
   "js.pad.dock.pepe_panel": "Pepe control panel",
-  "js.pad.dock.golive_short": "Go live",
   "js.pad.dock.chat_about": "About this chat",
   "js.home.dock.next_up": "Next up: {name} · {time}",
   "pad.chat.window_title": "{name} · chat",
-  "home.dock.aria": "{name} live"
+  "home.dock.aria": "{name} live",
+  "js.pad.dock.chat_floating": "Chat is floating over the page.",
+  "js.pad.dock.stage_pip": "The player is in picture-in-picture.",
+  "js.pad.dock.pip_unavailable": "Picture-in-picture isn’t available for this player.",
+  "js.pad.dock.pop_stale": "The chat window opened for the account you’re signed in with now. Reload this page to match it.",
+  "js.pad.dock.pop_unavail": "This chat isn’t available to you any more, so this window is closed.",
+  "js.pad.dock.pop_signed_in": "You signed in in another tab, so this chat window is closed. Reload it to see the chat as yourself.",
+  "js.pad.dock.pop_reload": "Reload",
+  "js.home.dock.tp_here": "↑ In the chat above",
+  "home.dock.about_linked": "Live from the pad's chat room (Camfrog). What you send here goes into the room as you (web). 🎙 lines are what people said on the mic (auto-transcribed). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as {!q}someone{!q}."
 }

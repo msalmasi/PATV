@@ -9,7 +9,9 @@ body.pad-dock-live { display: flex; flex-direction: column; block-size: 100vh; b
 body.pad-dock-live > header { flex: none; }
 body.pad-dock-live > main.rm.rm-dock { flex: 1 1 0; min-block-size: 0; }
 body.pad-dock-live .site-foot { display: none; }
-main.rm.rm-dock { inline-size: 100%; min-inline-size: 0; gap: var(--ds-sp-2); padding-block: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
+main.rm.rm-dock { inline-size: 100%; min-inline-size: 0; gap: var(--ds-sp-2); }
+/* (1.99?? dockpop review: the homepage keeps its own page gutters - .hm's padding - around every card, the Dock included) */
+main.rm.rm-dock:not(.rmd-home) { padding-block: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
 body.pad-dock-live > main.rm.rm-dock { display: flex; flex-direction: column; }
 main.rm.rm-dock [hidden] { display: none !important; }
 main.rm.rm-dock #padPanel-live { min-block-size: 0; min-inline-size: 0; }
@@ -66,6 +68,7 @@ main.rm.rm-dock.pad-acc .rmd-layer,
 main.rm.rm-dock.pad-acc .rmd-menu,
 main.rm.rm-dock.pad-acc .rmd-mini,
 main.rm.rm-dock.pad-acc.rmd-home :is(#rmStage, #rmChat:not(.rmd-other)),
+main.rm.rm-dock.pad-acc.rmd-home #hmDock:not(:has(> #rmChat.rmd-other)) > .rmd-popbar,
 main.rm.rm-dock.pad-acc.rmd-popout #rmChat,
 main.rm.rm-dock.pad-acc[data-rmd-pip] {
   --ds-ac: var(--pad-accent);
@@ -260,6 +263,10 @@ main.rm.rm-dock .veil-banner > .veil-reveal { flex: none; margin-inline-start: a
 /* the log, and its "New messages ↓" pill at the bottom centre of the log (owner point 31) */
 main.rm.rm-dock .rmd-log { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; min-inline-size: 0; }
 main.rm.rm-dock #rmScroll { flex: 1 1 0; min-block-size: 0; max-block-size: none; block-size: auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+/* 1.99?? dockpop review: the scroller is the containing block of what is positioned in it (a room PM line's sr-only label stretched the
+   whole window page, which then scrolled as one); and its lines sit at the BOTTOM, next to the audio bar and the composer, while few */
+main.rm.rm-dock #rmScroll { position: relative; display: flex; flex-direction: column; }
+main.rm.rm-dock #rmScroll::before { content: ""; flex: 1 1 auto; }   /* (takes the free space above the lines - none once they overflow) */
 main.rm.rm-dock .rmd-log > #rmJump { position: absolute; inset-block-end: var(--ds-sp-2); inset-inline: 0; margin-inline: auto; inline-size: max-content; max-inline-size: calc(100% - 16px); z-index: var(--ds-z-raised);
   min-block-size: 32px; padding: 0 var(--ds-sp-3); border: 0; border-radius: var(--ds-r-pill); font: 600 var(--ds-fs-meta)/32px var(--ds-font); box-shadow: var(--ds-e-2); }
 /* compact lines (owner point 10): 4px 6px, 28px avatars, 2px apart; the 🔊 Clip pill at the end of the words */
@@ -459,7 +466,7 @@ body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-why { marg
 @media (max-width: 760px) {
   body.pad-dock-live { min-block-size: 440px; }
   body.pad-dock-live main.rm.rm-dock { --rmd-log-min: 112px; }
-  main.rm.rm-dock { gap: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
+  main.rm.rm-dock:not(.rmd-home) { gap: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
   /* the stage: 16:9 of its width or 36% of the panel, + a 64px row while cams are pinned */
   main.rm.rm-dock #rmStage { grid-template-columns: minmax(0, 1fr); block-size: calc(min(56.25cqi, 36cqb) + var(--rmd-pin-row)); max-block-size: none; min-block-size: calc(90px + var(--rmd-pin-row)); }
   main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-strip-w: 0px; --rmd-pin-row: 68px; }
@@ -592,6 +599,11 @@ main.rm.rm-dock .rmd-holders .who.veil > .veil-tag { flex: 0 10000 auto; min-inl
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > i { flex: 1 1 auto; min-inline-size: min(9ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > .veil-tag { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* (1.99?? dockpop review: in the people column a frog name and its tag that don't fit on one line take two - the tag under the name, in
+   full - rather than cutting the tag to "in…" or "h"; the name keeps the line) */
+main.rm.rm-dock #rmPeople .nm:has(> .who.veil) { flex-wrap: wrap; row-gap: 0; align-content: center; line-height: 1.25; }
+main.rm.rm-dock #rmPeople .nm:has(> .who.veil) > .who.veil > i { flex-grow: 0; }   /* (the tag right after the name on one line - never pushed to the row end) */
+main.rm.rm-dock #rmPeople .nm:has(> .who.veil) > .who.veil > .veil-tag { font-size: var(--ds-fs-chip); }
 main.rm.rm-dock .rb-ac.rb-ac-names .rb-ac-n { flex: 1 1 auto; min-inline-size: min(9ch, 100%); }
 main.rm.rm-dock .rb-ac.rb-ac-names .rb-ac-t { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; }
 @container (max-width: 320px) {
@@ -619,7 +631,9 @@ main.rm.rm-dock #rmScroll .line-head > :is(.who, .who-web) { flex-shrink: 1; }
 main.rm.rm-dock #rmScroll .line-head > .ufl { flex-shrink: 100000; }   /* (the name gives way only after the flair) */
 @container (max-width: 360px) {
   main.rm.rm-dock #rmScroll .line-head > .ufl > .ufl-n { display: none; }
-  main.rm.rm-dock #rmScroll .line-head > .ufl { min-width: 0; padding-inline: 3px; }
+  /* (1.99?? dockpop review: the flair never goes below its own emoji - a 9px sliver over the time; a veil tag's words give way first) */
+  main.rm.rm-dock #rmScroll .line-head > .ufl { min-width: calc(1em + 6px); padding-inline: 3px; }
+  main.rm.rm-dock #rmScroll .line-head > .veil-tx { flex-shrink: 100; min-width: 2ch; }
 }
 /* the person menu over a Dock sheet (Participants); its header shows the flair, its ✕ is visible */
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop { z-index: calc(var(--ds-z-modal) + var(--ds-z-sticky)); }
@@ -668,16 +682,19 @@ main.rm.rm-dock .rmd-cam-box > .ds-eyebrow { margin: var(--ds-sp-1) 0 0; }
 main.rm.rm-dock .rmd-cam-box > :is(.res, .lc-stage, div:not([class])):empty { display: none; }   /* (an empty status line takes no gap) */
 /* the chat floating: the stage takes the freed height, the chat's place is one slim line - and at 1024px and wider the people column
    stays, beside the stage, as tall as the Live view */
-main.rm.rm-dock.rmd-chat-out #rmStage { flex: 1 1 0; block-size: auto; max-block-size: none; }
+/* (1.99?? dockpop review: up to the stage's natural 16:9 - grown past it, a 2-up mic stage became two portrait tiles with the picture
+   letterboxed in the middle; the rest of the height stays empty below the slim line) */
+main.rm.rm-dock.rmd-chat-out #rmStage { flex: 1 1 0; block-size: auto; max-block-size: calc((100cqi - var(--rmd-strip-w)) * 0.5625 + var(--rmd-pin-row)); }
 main.rm.rm-dock.rmd-chat-out .rmd-body { flex: 0 0 auto; }
 @media (min-width: 1024px) {
-  body.pad-dock-live main.rm.rm-dock.rmd-chat-out #padPanel-live { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 20vw, 300px); grid-template-rows: minmax(0, 1fr) auto; }
+  body.pad-dock-live main.rm.rm-dock.rmd-chat-out #padPanel-live { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 20vw, 300px); grid-template-rows: auto auto minmax(0, 1fr); }
   main.rm.rm-dock.rmd-chat-out #padPanel-live > * { grid-column: 1; }
-  main.rm.rm-dock.rmd-chat-out #padPanel-live > :is(#rmStage, #rmdMini) { grid-row: 1; align-self: stretch; }
-  main.rm.rm-dock.rmd-chat-out #padPanel-live > #rmdMini { align-self: start; }
+  /* (the stage's 16:9 of the column beside the people, or the height there is - less the slim line under it) */
+  main.rm.rm-dock.rmd-chat-out #padPanel-live > #rmStage { grid-row: 1; block-size: min(calc((100cqi - clamp(240px, 20vw, 300px) - var(--ds-sp-2) - var(--rmd-strip-w)) * 0.5625), calc(100cqb - 56px)); max-block-size: none; }
+  main.rm.rm-dock.rmd-chat-out #padPanel-live > #rmdMini { grid-row: 1; align-self: start; }
   main.rm.rm-dock.rmd-chat-out .rmd-body { display: contents; }
   main.rm.rm-dock.rmd-chat-out .rmd-body > .rm-main { grid-column: 1; grid-row: 2; }
-  main.rm.rm-dock.rmd-chat-out .rmd-body > .side { grid-column: 2; grid-row: 1 / 3; }
+  main.rm.rm-dock.rmd-chat-out .rmd-body > .side { grid-column: 2; grid-row: 1 / 4; }
 }
 main.rm.rm-dock .rmd-placeholder.rmd-ph-float { padding: var(--ds-sp-2) var(--ds-sp-3); text-align: start; font-size: var(--ds-fs-meta); }
 main.rm.rm-dock .rmd-float .rmd-viewbar { min-block-size: 36px; padding-block: var(--ds-sp-1); border-block-end: 1px solid var(--ds-line); }
@@ -700,6 +717,12 @@ main.rm.rm-dock .rmd-float.rmd-min > #rmChat { display: none; }
 main.rm.rm-dock .rmd-float.rmd-min > .rmd-viewbar { min-block-size: 42px; padding-block: 0; border-block-end: 0; cursor: default; touch-action: auto; }
 main.rm.rm-dock .rmd-float.rmd-min .rmd-float-t { display: inline-flex; }
 main.rm.rm-dock .rmd-float.rmd-min .rmd-grip { display: none; }
+/* (1.99?? dockpop review: the 240px bar fits [💬 Chat •][➕][↩️] - Bring it back is its icon there (its words stay its name), the words
+   give way before the new-lines dot, which never leaves) */
+main.rm.rm-dock .rmd-float.rmd-min .rmd-float-t { flex: 0 1 auto; overflow: hidden; }
+main.rm.rm-dock .rmd-float-tl { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+main.rm.rm-dock .rmd-float.rmd-min [data-rmd-back] { inline-size: 36px; min-inline-size: 36px; padding-inline: 0; justify-content: center; }
+main.rm.rm-dock .rmd-float.rmd-min [data-rmd-back] > .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 760px) {
   main.rm.rm-dock .rmd-float.rmd-min { inset-inline: var(--ds-sp-2); inset-block-end: var(--ds-sp-2); inline-size: auto; }
 }
@@ -723,11 +746,13 @@ main.rm.rm-dock a.rmd-chip-link:has(> .rmd-chip-plain) { padding-inline-end: var
 main.rm.rm-dock #chatH > .rmd-chip-chat { flex: 0 0 auto; max-inline-size: 60%; block-size: 28px; font-family: var(--ds-font); letter-spacing: normal; text-transform: none; }
 main.rm.rm-dock #chatH > .rmd-chip-chat .pfx-bs { display: none; }   /* (the window's heading: the pad's name before its badges) */
 main.rm.rm-dock #chatH > .rmd-chip-chat .rm-av { width: 18px; height: 18px; }
-main.rm.rm-dock #chatH > .rmd-room-link { flex: 0 1 auto; min-inline-size: 0; max-inline-size: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+main.rm.rm-dock #chatH > .rmd-room-link { flex: 0 0 auto; min-inline-size: 0; max-inline-size: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: 500 var(--ds-fs-meta)/1 var(--ds-font); letter-spacing: normal; text-transform: none; color: var(--ds-ac-2); }
+/* (1.99?? dockpop review: the 📡 room link is the one sign the chat isn't the stage's pad - the topic gives way first) */
+main.rm.rm-dock #chatH:has(> .rmd-room-link) .rmd-topic-line { flex: 1 1 0; }
 
 /* the pad's chat in its own window (/p/<slug>/chat): a 100dvh column - the chat card fills it; phone rules apply in a narrow window */
-body.rmd-pop { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 320px; margin: 0; overflow-x: hidden; background: var(--ds-bg); }
+body.rmd-pop { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 320px; margin: 0; overflow: hidden; background: var(--ds-bg); }
 body.rmd-pop > main.rm.rm-dock.rmd-popout { flex: 1 1 0; min-block-size: 0; display: flex; flex-direction: column; gap: var(--ds-sp-1h); inline-size: 100%; max-inline-size: 100%; margin: 0; padding: var(--ds-sp-1h); }
 main.rm.rm-dock.rmd-popout #padPanel-live { display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; gap: var(--ds-sp-1h); }
 main.rm.rm-dock.rmd-popout .rm-live,
@@ -741,3 +766,29 @@ main.rm.rm-dock .rmd-gone > p { margin: 0; max-inline-size: 42ch; }
 /* the staff's 🟣 Twitch relay switch (twitch-btn.js: top-left by its own inline style) would sit on the overlay's pad chip - in the Dock
    it takes the stage's top-end corner */
 main.rm.rm-dock #rmStage .player > .twbtn { inset-block-start: var(--ds-sp-2) !important; inset-inline-start: auto !important; inset-inline-end: var(--ds-sp-2) !important; }
+main.rm.rm-dock .rmd-gone-acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+
+/* ── 1.99?? dockpop review (the visual / function reviews of the dockpop build) ── */
+/* the person menu on a phone (and in the chat's own window): a full-width bottom sheet over a scrim, like the chat ⋯ / audio / people
+   sheets - not a 320px card pinned to one corner with the page showing beside it */
+@media (max-width: 760px) {
+  /* (logical insets with !important win over room-mod.js's inline left / top: one logical property group) */
+  body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm { position: fixed; inset-inline: var(--ds-sp-2) !important; inset-block-start: auto !important;
+    inset-block-end: calc(var(--ds-sp-2) + env(safe-area-inset-bottom, 0px)) !important; inline-size: auto; max-inline-size: none; max-block-size: 70dvh;
+    box-shadow: 0 0 0 100vmax var(--ds-scrim), var(--ds-e-4); }
+}
+/* a Dock notice while the chat floats goes to the top of the page - the bottom is the floating chat's */
+body.rmd-afloat > .ds-toasts { inset-block-end: auto; inset-block-start: calc(58px + var(--ds-sp-2)); }
+/* the bottom audio bar in a narrow chat card (the homepage's, a narrow window's): the holder chip is its avatar (names: 👥), the volume
+   shorter - nothing slides under 🔊 */
+main.rm.rm-dock #rmAudioBox { container-type: inline-size; }
+@container (max-width: 320px) {
+  main.rm.rm-dock .rmd-holders .rmd-holder .rmd-person-name { display: none; }
+  main.rm.rm-dock .rmd-holders > .rmd-holder { min-inline-size: 0; }
+  main.rm.rm-dock #rmAudioBox .rb-vol { inline-size: 56px; }
+}
+/* the chat's own window, very narrow: the topic leaves the header row (the pad chip and the controls stay); the tool row scrolls rather
+   than cutting its last icon at the card's edge */
+@media (max-width: 360px) { body.rmd-pop main.rm.rm-dock .rmd-topic-line { display: none; } }
+body.rmd-pop main.rm.rm-dock .rmd-tools { overflow-x: auto; scrollbar-width: none; }
+main.rm.rm-dock .rmd-about-h { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); padding: var(--ds-sp-1) var(--ds-sp-1) 0 var(--ds-sp-2); font-size: var(--ds-fs-sm); color: var(--ds-text-strong); }

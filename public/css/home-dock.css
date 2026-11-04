@@ -1,10 +1,12 @@
 /* home-dock.css - 1.99?? dockpop (owner P2): the homepage's Room Dock (views/home.ejs homeDock_, public/js/home-dock.js). The stage and
    the room card are ONE block, #hmDock: the pad Dock's stage card (the video + its auto-hiding overlay) beside / above its slim chat card,
    styled by pad-dock.css (main.rm.rm-dock) - this file only lays the block out on the homepage and gives the two cards the base rules the
-   pad page's own stylesheet gives them there (room.ejs .rm …). The homepage scrolls normally (no body.pad-dock-live). */
+   pad page's own stylesheet gives them there (room.ejs .rm …). The homepage scrolls normally (no body.pad-dock-live).
+   1.99?? dockpop review: #hmDock is the first block under the navbar (views/home.ejs), inside the page's own gutters (.hm's padding). */
 main.hm.rmd-home { gap: var(--cardgap, var(--ds-sp-4)); }
 main.hm.rmd-home #hmDock { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 400px); grid-template-rows: minmax(420px, auto); gap: var(--ds-sp-2); align-items: start; min-inline-size: 0; }
-main.hm.rmd-home #hmDock > #rmStage { grid-column: 1; grid-row: 1; align-self: start; }
+/* (the stage card stretches to the row - the chat's 420px floor on a 1024px screen - with the picture contained: the two cards end level) */
+main.hm.rmd-home #hmDock > #rmStage { grid-column: 1; grid-row: 1; align-self: stretch; }
 main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 2; grid-row: 1; }
 main.hm.rmd-home #hmDock > #rmChat { align-self: stretch; contain: size; min-block-size: 420px; }
 main.hm.rmd-home #hmDock > .rmd-popbar { align-self: start; }
@@ -17,19 +19,25 @@ main.rm.rm-dock.rmd-home #rmStage { block-size: auto; aspect-ratio: 16 / 9; max-
 main.rm.rm-dock.rmd-home #rmStage .player .wrap { position: absolute; inset: 0; }
 main.rm.rm-dock.rmd-home #rmStage .player .video-js { inline-size: 100%; block-size: 100%; }
 main.rm.rm-dock.rmd-home #rmStage .stabs { margin: 0; }
-/* off air: the 44px slim bar [pad chip ›] Nothing on stage right now · Next up … [🎥 Go live] (+ ⋯ for staff); the chat takes the width */
+/* off air: the 44px slim bar [pad chip ›] Nothing on stage right now · Next up … (+ ⋯ for staff); the chat takes the width */
 main.rm.rm-dock.rmd-home #rmStage.is-off { aspect-ratio: auto; }
 main.rm.rm-dock.rmd-home #rmStage.is-off .player { display: none; }
 main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: none; }
 main.rm.rm-dock.rmd-home.rmd-staff #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: inline-flex; }
-main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-bot > .rmd-golive { display: inline-flex; }
-main.rm.rm-dock.rmd-home #rmStage .rmd-ov-bot > .rmd-golive { display: none; text-decoration: none; }
-main.rm.rm-dock.rmd-home #rmStage .rmd-golive > .rmd-label { position: static; inline-size: auto; block-size: auto; clip-path: none; }
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmStage { align-self: start; }
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
+/* (1.99?? dockpop review: the pad chip keeps its name - the words give way, "Next up" first) */
+main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-top > .rmd-chip { flex: 0 0 auto; min-inline-size: min(12ch, 50%); max-inline-size: 55%; }
+main.rm.rm-dock.rmd-home #rmStage .rmd-slim-t > * { min-inline-size: 0; }
+main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-slim-t { display: flex; align-items: baseline; }
+main.rm.rm-dock.rmd-home #rmStage .rmd-slim-a { flex: 0 0 auto; }
+main.rm.rm-dock.rmd-home #rmStage .rmd-slim-sep { flex: none; white-space: pre; }
+main.rm.rm-dock.rmd-home #rmStage .rmd-slim-b { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the chat in its own window: the stage takes the width, the 44px bar goes under it */
 main.hm.rmd-home.rmd-popped #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+main.hm.rmd-home.rmd-popped #hmDock > #rmStage { align-self: start; }
 main.hm.rmd-home.rmd-popped #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
 
 /* the chat card - the pad page's base card rules (room.ejs .rm .card / h2 / .topic / .compose) on the homepage */
@@ -41,33 +49,51 @@ main.rm.rm-dock.rmd-home #rmChat .feed { block-size: auto; }
 main.rm.rm-dock.rmd-home #rmChat .compose { display: grid; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; }
 main.rm.rm-dock.rmd-home #rmChat .rmd-tease { display: grid; gap: var(--ds-sp-2); align-content: center; justify-items: start; flex: 1 1 auto; padding: var(--ds-sp-3); }
 main.rm.rm-dock.rmd-home #rmChat .rmd-tease > p { margin: 0; }
+/* (1.99?? dockpop review: the sign-in tease is as tall as its words - no empty card above it) */
+main.hm.rmd-home #hmDock > #rmChat:has(> .rmd-tease) { contain: none; block-size: auto; min-block-size: 0; align-self: start; }
 main.rm.rm-dock.rmd-home #rmChat .jump { display: none; }
 main.rm.rm-dock.rmd-home #rmAudioBox .rb-vol { inline-size: 72px; }
-/* the one-row composer: [Message …][🎙️ Hold to talk][Send] - no ＋, no tool row */
+/* the one-row composer: [Message …][🎙️ Hold to talk][Send] - no ＋, no tool row; 🎙️ is its icon in this narrow card (its words stay its
+   accessible name), so the input keeps the room */
 main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim .rb-say-in { padding-inline-start: var(--ds-sp-2); }
 main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim { grid-template-columns: 0 minmax(0, 1fr) auto auto; }
-/* the people sheet (👥): avatar, name + flair, veil tag, 🎙 - no cam or ⋯ here */
+main.rm.rm-dock.rmd-home .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; justify-content: center; }
+main.rm.rm-dock.rmd-home .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; }
+main.rm.rm-dock.rmd-home .rmd-composer .rb-talk[aria-pressed="true"]::before { content: "⏺"; }
+/* the people sheet (👥): avatar, name + flair, veil tag, 🎙 - no cam or ⋯ here: ONE fixed 24px trailing column on every row, so the 🎙
+   discs line up at the row's end */
 main.rm.rm-dock.rmd-home #rmPeople { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; overflow-x: hidden; }
-main.rm.rm-dock.rmd-home #rmPeople > li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: var(--ds-sp-2); align-items: center; padding: 2px var(--ds-sp-1); border-radius: var(--ds-r-md); font-size: var(--ds-fs-sm); }
-main.rm.rm-dock.rmd-home #rmPeople .ic:empty { display: none; }
+main.rm.rm-dock.rmd-home #rmPeople > li { display: grid; grid-template-columns: 28px minmax(0, 1fr) 24px; gap: var(--ds-sp-2); align-items: center; padding: 2px var(--ds-sp-1); border-radius: var(--ds-r-md); font-size: var(--ds-fs-sm); }
+main.rm.rm-dock.rmd-home #rmPeople .ic { grid-column: 3; grid-template-columns: 24px; }
+main.rm.rm-dock.rmd-home #rmPeople .ic > .rmd-mic { grid-column: 1; }
 main.rm.rm-dock.rmd-home #rmPplCard > h2 { margin: 0; }
 /* the 📡 link to the chat's pad (only when it isn't the stage's pad) */
 main.rm.rm-dock.rmd-home #chatH > .rmd-room-link { text-decoration: none; }
+/* Top Pads: the chat's own pad keeps its rank and link - its count, mic line and 🎧 are the chat card's above */
+main.hm.rmd-home .tp li.hmd-here :is(.v, .tp-ls, .np) { display: none; }
+main.hm.rmd-home .tp li.hmd-here .hmd-here-t { flex: none; margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); white-space: nowrap; }
 
-/* the side widgets (the coin-op wheel, the featured table, Top Pads), a row under the Dock */
+/* the side widgets (the coin-op wheel, the featured table, Top Pads), a row in the stage's old place */
 main.hm.rmd-home .hmd-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--gap, var(--ds-sp-3)); align-items: start; min-inline-size: 0; }
 main.hm.rmd-home .hmd-side > * { margin: 0; min-inline-size: 0; }
 
 @media (min-width: 761px) and (max-width: 1023px) {
   main.hm.rmd-home #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
   main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
   main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: 60dvh; }
 }
 @media (max-width: 760px) {
   main.hm.rmd-home #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
   main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
   main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: clamp(360px, 62dvh, 520px); min-block-size: 0; }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: none; }
+  /* the slim off-air bar on a phone: "Next up" is a second line under "Nothing on stage right now" (the pad chip keeps its name) */
+  main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-slim-t { flex-direction: column; align-items: flex-start; line-height: 1.25; }
+  main.rm.rm-dock.rmd-home #rmStage .rmd-slim-sep { display: none; }
+  main.rm.rm-dock.rmd-home #rmStage .rmd-slim-a { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  main.rm.rm-dock.rmd-home #rmStage .rmd-slim-b { max-inline-size: 100%; font-size: var(--ds-fs-xs); }
 }
 @media (prefers-reduced-motion: reduce) { main.hm.rmd-home #hmDock * { scroll-behavior: auto; } }

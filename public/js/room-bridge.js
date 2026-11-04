@@ -703,7 +703,14 @@
     }
 
     // ── 1.99ye: the outbox ──
+    // 1.99?? dockpop review (privacy): a Room Dock page says which account it was made for (opts.vt, the viewer tag) - the site refuses a
+    // line or command for another account (409 account: this browser signed in as someone else since), opts.onAccount() hears it.
+    // destroy() (the chat window wiping itself) ends the outbox: nothing queued is ever posted after it, as whoever is signed in then.
+    var dead = false;
     function post(body) {
+      if (dead) return Promise.reject(new Error('closed'));
+      var vt = typeof opts.vt === 'function' ? opts.vt() : opts.vt;
+      if (typeof vt === 'string' && vt) body.vt = vt;
       return fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin',
         headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
         .then(function (r) { return r.json().then(function (d) { return { s: r.status, d: d }; }, function () { return { s: r.status, d: null }; }); });
@@ -790,14 +797,16 @@
       clearTimeout(retryTimer); retryTimer = setTimeout(pump, backoff);
     }
     // One POST at a time, in order: the site queues them in the order it gets them.
+    function account(x) { if (x && x.s === 409 && x.d && x.d.code === 'account' && typeof opts.onAccount === 'function') { try { opts.onAccount(); } catch (e) { /* the page's own */ } } }
     function pump() {
-      if (busy) return;
+      if (busy || dead) return;
       var it = null;
       for (var i = 0; i < outbox.length; i++) if (outbox[i].st === 'queue') { it = outbox[i]; break; }
       if (!it) return;
       busy = true; it.st = 'posting';
       post({ text: it.text, cid: it.cid }).then(function (x) {
         busy = false;
+        if (dead) return;
         if (outbox.indexOf(it) < 0) { pump(); return; }                  // deleted meanwhile
         var d = x.d;
         if (!d || x.s >= 500) { offlineRetry(it); return; }
@@ -806,14 +815,17 @@
         else if (d.code === 'queue_full') { it.st = 'queue'; paint(it); clearTimeout(retryTimer); retryTimer = setTimeout(pump, 1500); return; }
         else if (x.s === 401) fail(it, _t('js.pad.relay.signed_out', 'you\'re signed out — sign in again'), 'signin');
         else fail(it, d.error || _t('js.pad.relay.refused', 'refused'), d.code);
+        account(x);
         pump();
-      }, function () { busy = false; if (outbox.indexOf(it) >= 0) offlineRetry(it); else pump(); });
+      }, function () { busy = false; if (dead) return; if (outbox.indexOf(it) >= 0) offlineRetry(it); else pump(); });
     }
-    window.addEventListener('online', function () { if (outbox.some(function (x) { return x.st === 'queue'; })) { clearTimeout(retryTimer); backoff = 0; pump(); } });
+    window.addEventListener('online', function () { if (dead) return; if (outbox.some(function (x) { return x.st === 'queue'; })) { clearTimeout(retryTimer); backoff = 0; pump(); } });
     window.addEventListener('beforeunload', function (e) {
+      if (dead) return;
       if (outbox.some(function (x) { return x.st === 'queue' || x.st === 'posting'; })) { e.preventDefault(); e.returnValue = ''; }
     });
     function sendChat(text) {
+      if (dead) return false;
       if (waiting() >= SAY_QUEUE) {
         showNote(_t('js.pad.relay.queue_full', 'Wait a moment — {n} messages are already on their way.', { n: SAY_QUEUE }));
         return false;
@@ -826,13 +838,17 @@
     }
     // A "!" command: sent at once (no optimistic line - its answer shows in your command list); never locks the box.
     function sendCmd(text) {
+      if (dead) return;
       post({ text: text }).then(function (x) {
+        if (dead) return;                                                // (an answer for a page that wiped itself shows nothing)
         var d = x.d || {};
         if (d.ok && d.local) { local.push({ at: Date.now(), text: text, st: '', ok: true, replies: [d.reply || ''] }); local = local.slice(-2); renderFeed(lastJs); return; }
         if (d.ok) return;
         local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: d.error || _t('js.pad.relay.refused', 'refused') }), ok: false, replies: [] });
         local = local.slice(-2); renderFeed(lastJs);
+        account(x);
       }, function () {
+        if (dead) return;
         local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.unreachable', 'couldn\'t reach the site'), ok: false, replies: [] });
         local = local.slice(-2); renderFeed(lastJs);
       });
@@ -840,6 +856,7 @@
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      if (dead) return;
       closeAc();
       var text = inp.value.trim(); if (!text) return;
       if (text.charAt(0) === '!') { inp.value = ''; sendCmd(text); }
@@ -930,6 +947,12 @@
         if (feedEl) outbox.forEach(function (it) { if (it.node && it.node.parentNode !== feedEl) feedEl.appendChild(it.node); });
       },
       pending: function () { return outbox.slice(); },
+      // 1.99?? dockpop review: the chat window wiped itself - the outbox empties, its retry timer and 'online' retry stop, answers still on
+      // their way are dropped, and nothing more is sent from this composer
+      destroy: function () {
+        dead = true; clearTimeout(retryTimer); clearTimeout(noteTimer); retryTimer = null;
+        outbox.slice().forEach(drop); outbox.length = 0; local = []; inp.value = ''; inp.disabled = true; btn.disabled = true; closeAc();
+      },
       // Dock tools use the same command path / input and counter as typing; no second network path.
       sendCmd: sendCmd,
       getInput: function () { return inp; },
@@ -1039,7 +1062,9 @@
       if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* onstop still runs */ } }
       if (stream) release();
     }
+    var gone = false;       // 1.99?? dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
     function send(chunks, mimeType, secs) {
+      if (gone) return;
       if (secs < 0.7) { txt.textContent = _t('js.pad.ptt.too_short', 'too short — hold the button while you talk'); return; }
       var blob = new Blob(chunks, { type: (mimeType || 'audio/webm').split(';')[0] });
       txt.textContent = _t('js.pad.ptt.sending', 'sending {n}s…', { n: secs.toFixed(0) });
@@ -1049,6 +1074,7 @@
         .catch(function () { txt.textContent = _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); });
     }
     function start() {
+      if (gone) return;
       if (rec && rec.state === 'recording') return stop();
       if (opening) return;                       // a second press while the browser is still opening the mic
       opening = true; pressAt = Date.now();
@@ -1103,6 +1129,7 @@
     btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); upAt = 1; start(); } });
     return {
       adopt: adopt,
+      destroy: function () { gone = true; stop(); box.classList.add('hide'); },
       listMics: listMics,      // 1.99ajf dockclean: Audio settings re-reads the device names after it asked for them
       onRecording: function (fn) {
         if (typeof fn !== 'function') return function () {};

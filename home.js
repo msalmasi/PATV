@@ -304,6 +304,9 @@ function register(app, { addUser, xpForNextLevel }) {
       const banner = await require("./banner").pick({ lotto: S.lotto, lang: res.locals.lang || "en" }).catch((e) => { console.error("[home] banner:", e.message); return null; });
       res.locals.og = { title: "Public Access TV", description: "Pads with live stages, feeds and chat rooms, Pepe the frog, PAT games, markets and more.",
                         image: res.locals.ogBase + require("./og").pageUrl("Public Access TV"), url: res.locals.ogBase + "/" };
+      // 1.99?? dockpop review: the viewer tag only for the Room Dock, and a page that carries it is this viewer's alone (no shared cache)
+      const padDockOn_ = require("./paddock").viewerOn(req.user), vt_ = me && padDockOn_ ? require("./roompm").tag(me.userId) : null;
+      if (vt_) res.set("Cache-Control", "private");
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, roomGate, stage, top, tops, boostMark: require("./boostmark").boostMark,
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
@@ -311,8 +314,8 @@ function register(app, { addUser, xpForNextLevel }) {
         avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
         // 1.99?? dockpop (owner P2): the homepage's Room Dock - the pad page's mode for this viewer ('staff' = staff only; 'off' = today's
         // homepage byte for byte), and the viewer tag its chat window protocol keys on (dock-link.js; never the account id)
-        padDockOn: require("./paddock").viewerOn(req.user),
-        vt: me ? require("./roompm").tag(me.userId) : null,
+        padDockOn: padDockOn_,
+        vt: vt_,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals

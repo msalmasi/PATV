@@ -19,8 +19,16 @@
   // 1.99ajc dockfu (owner decision 6): the controls are EMOJI icons; each button keeps its words as its accessible name and tooltip.
   // 1.99?? dockpop (owner: no icon with two meanings): 🪟 floats the chat in the page, ↗️ opens it in its own window, 🖼️ is the stage's
   // picture-in-picture, 🔽 / 🔼 hide / show the stage, 🖥️ is fullscreen (one toggle), › opens a page (the homepage's pad chip)
-  var IC = { hide: '🔽', show: '🔼', full: '🖥️', float: '🪟', win: '↗️', pip: '🖼️', back: '↩️', more: '⋯', down: '▾', open: '›', min: '➖', max: '➕' };
+  // (1.99?? dockpop review: 📽️ Watch on my stage - 📺 is the pad's Prime Time item in the pad menu)
+  var IC = { hide: '🔽', show: '🔼', full: '🖥️', float: '🪟', win: '↗️', pip: '🖼️', back: '↩️', more: '⋯', down: '▾', open: '›', min: '➖', max: '➕', watch: '📽️' };
   var POP_GEO = 'patv.dock.popwin', ALIVE_MS = 5000, DEAD_MS = 15000, SLOW_DEAD_MS = 90000, PENDING_MS = 6000, HANDOFF_MS = 3000;
+  // (1.99?? dockpop review: a pad tab answers every heartbeat - "Back in the pad tab" only while one did within 12 s; LISTEN = the window
+  // was playing the room when it reloaded: it picks it up again)
+  var TAB_FRESH_MS = 12000, LISTEN_KEY = 'patv.dock.listen.', FOCUS_GAP_MS = 15000;
+  // the icons the Dock's own controls use (a proxied menu item that brings one of them shows • instead: one meaning per icon)
+  var DOCK_ICONS = Object.keys(IC).map(function (k) { return IC[k].replace(/\uFE0F/g, ''); }).concat(['📸', '🎬', '✂', '▶', '🎦', '⬇', '📅', '📜', '🔍', '👥', '🎚', '💬', '📌', '🎥', '🗓', '🎫', '🚀']);
+  /** a proxied label's leading emoji (the Dock draws its own icon): "🎬 1/2 slots in use" -> "1/2 slots in use" */
+  function noIcon(s) { try { return String(s || '').replace(/^(?:\p{Extended_Pictographic}\uFE0F?\s*)+/u, ''); } catch (e) { return String(s || ''); } }
   // 1.99ajf dockclean (owner point 17): the Apps sheet - the room's games and tools, each only when Pepe offers it here (d.room.cmds).
   // A tile puts the command into the composer (a trailing space where it takes a name / amount: the name autocomplete opens) and
   // never sends by itself.
@@ -288,6 +296,7 @@
       var start = null;
       function clamp() {
         if (skip && skip()) return;
+        if (!host.style.insetInlineStart && !host.style.insetBlockStart) return;   // (never dragged: the stylesheet keeps it in view)
         var r = host.getBoundingClientRect(), maxX = Math.max(0, W.innerWidth - r.width), maxY = Math.max(58, W.innerHeight - r.height);
         var x = Math.max(0, Math.min(maxX, r.left)), y = Math.max(58, Math.min(maxY, r.top));
         host.style.insetInlineStart = (D.documentElement.dir === 'rtl' ? W.innerWidth - x - r.width : x) + 'px';
@@ -305,7 +314,9 @@
         host.style.insetBlockStart = Math.max(58, Math.min(W.innerHeight - host.offsetHeight, start.top + e.clientY - start.y)) + 'px';
         host.style.insetInlineEnd = 'auto'; host.style.insetBlockEnd = 'auto';
       });
-      on(handle, 'pointerup', function () { start = null; clamp(); }); on(W, 'resize', clamp);
+      // (1.99?? dockpop review: only a drag that started pins the panel - a tap on ➖ / ↩️ in the bar used to clamp it to inline insets,
+      // and on a phone the float lost its 8px gutter after Minimize / Expand)
+      on(handle, 'pointerup', function () { if (!start) return; start = null; clamp(); }); on(W, 'resize', clamp);
       // 1.99aiw review: the panel's window listener goes with the panel (redock), not one more per float
       return function () { W.removeEventListener('resize', clamp, false); listeners = listeners.filter(function (x) { return x[2] !== clamp; }); };
     }
@@ -317,6 +328,8 @@
     function floatBack() {
       var onLive = !panel || !panel.hidden; redock();
       if (!onLive) { var lt = tabButton('live'); if (lt) lt.click(); }
+      // (1.99?? dockpop review: focus lands on the chat's ⋯ - the menu item that floated it is gone, and Escape left it on <body>)
+      if (chatMore && chatMore.isConnected) chatMore.focus();
     }
     function floatChat() {
       if (!chat || popped) return; redock();
@@ -331,7 +344,7 @@
       var back = button(IC.back, 'redock', 'Bring it back', floatBack, 'ds-btn quiet sm'); back.setAttribute('data-rmd-back', ''); head.appendChild(back);
       host.appendChild(head);
       current = { kind: 'float', host: host, moves: [], focus: D.activeElement };
-      var away = movable(chat, host, t('chat_away', 'Chat is in a floating window.')); away.mark.classList.add('rmd-ph-float');
+      var away = movable(chat, host, t('chat_floating', 'Chat is floating over the page.')); away.mark.classList.add('rmd-ph-float');
       var awayBtn = away.mark.querySelector('button'); if (awayBtn) awayBtn.hidden = true;     // (the floating window's own ↩ is the one way back)
       current.moves.push(away);
       var undrag = drag(host, head, function () { return host.classList.contains('rmd-min'); }), feedObs = null, wasEnd = true, saved = null;
@@ -402,9 +415,9 @@
               return;
             }
             videoPipSource = nativeSource;
-          }).catch(function () { pipPending = false; if (nativeGeneration === popGeneration) toast(t('pop_unavailable', 'Pop-out is unavailable for this player.')); }); }
-          catch (e) { pipPending = false; toast(t('pop_unavailable', 'Pop-out is unavailable for this player.')); }
-        } else toast(t('pop_unavailable', 'Pop-out is unavailable for this player.'));
+          }).catch(function () { pipPending = false; if (nativeGeneration === popGeneration) toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); }); }
+          catch (e) { pipPending = false; toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); }
+        } else toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.'));
         return;
       }
       pipPending = true;
@@ -422,9 +435,9 @@
         doc.body.appendChild(main); viewbar(main); attachDoc(doc);
         main.appendChild(el('p', 'rmd-surface-hint', t('pip_hint', 'More actions are available in the pad tab.'), doc));
         current = { kind: 'pip', host: main, moves: [], focus: D.activeElement };
-        current.moves.push(movable(n, main, t('stage_pop', 'The player is in a popped-out window.')));
+        current.moves.push(movable(n, main, t('stage_pip', 'The player is in picture-in-picture.')));
         on(win, 'pagehide', redock); on(doc, 'visibilitychange', changed); changed();
-      }).catch(function () { pipPending = false; toast(t('pop_unavailable', 'Pop-out is unavailable for this player.')); });
+      }).catch(function () { pipPending = false; toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); });
     }
     function hideStage(onOff, focus) {
       if (!stage) return; if (current) redock();
@@ -459,7 +472,7 @@
     // (pad-dock.css); ✕ Close and the failure overlay's ↻ Retry / ▶ Tap to play are the strip's own buttons.
     function tileMenu(tile, opener) {
       var box = menu(opener, t('cam_menu', 'Cam options'));
-      menuItem(box, '📺', 'watch_cam', 'Watch on my stage', function () { watchCam(tile); });
+      menuItem(box, IC.watch, 'watch_cam', 'Watch on my stage', function () { watchCam(tile); });
       menuItem(box, IC.full, 'fullscreen', 'Fullscreen', function () { full(tile); });
       var who = tileWho(tile);
       if (who && o.openCam) menuItem(box, '📷', 'cam_options', 'Cam options…', function () { external(function () { if (opener && opener.isConnected) opener.focus(); o.openCam(who); }); });
@@ -850,6 +863,7 @@
     function decorateAudio() {
       var audioHost = node('rmAudioBox'); if (!audioHost || !chat) return;
       if (compose && compose.parentNode === chat) chat.insertBefore(audioHost, compose);   // room audio stays usable in the composer's signed-out / link-first states
+      else if (audioHost.parentNode === chat) chat.appendChild(audioHost);   // (1.99?? dockpop review: no composer - read-only on the homepage - it is still the BOTTOM bar)
       var row = audioHost.querySelector('.rb-audio'); if (!row || row.__rmd) return;
       row.__rmd = true; row.classList.add('rmd-bar');
       playBtn = row.querySelector('.rb-play');
@@ -951,9 +965,10 @@
         var here = go.querySelector('.stage-acts a.sact.primary'), book = go.querySelector('.stage-acts a.sact[href*="whenSet"]');
         var boost = node('rmBoostBtn'), boostLink = go.querySelector('.stage-acts a.sact.boost'), slots = node('rmSlotsTxt');
         if (here || book || boost || boostLink) menuGroup(box, 'g_stage', 'Stage');
-        if (here) menuItem(box, '🎥', 'golive', 'Go live here', null, { href: here.getAttribute('href'), sub: txt(slots) });
+        // (1.99?? dockpop review: a sub line's own emoji goes - "🎬 1/2 slots in use" said 🎬, which is Clip in the Dock)
+        if (here) menuItem(box, '🎥', 'golive', 'Go live here', null, { href: here.getAttribute('href'), sub: noIcon(txt(slots)) });
         if (book) menuItem(box, '🎫', 'book', 'Book a slot', null, { href: book.getAttribute('href') });
-        if (boost && !inPip()) menuItem(box, '🚀', 'boost', 'Boost this pad…', function () { boostSheet(opener); }, { sub: shown(node('rmBoostTxt')) ? txt(node('rmBoostTxt')).replace(/^·\s*/, '') : '' });
+        if (boost && !inPip()) menuItem(box, '🚀', 'boost', 'Boost this pad…', function () { boostSheet(opener); }, { sub: shown(node('rmBoostTxt')) ? noIcon(txt(node('rmBoostTxt')).replace(/^·\s*/, '')) : '' });
         else if (boostLink) menuItem(box, '🚀', 'boost', 'Boost this pad…', null, { href: boostLink.getAttribute('href') });
       }
       var more = node('rmMore'), items = more ? more.querySelectorAll('.hd-menu [role="menuitem"]') : [];
@@ -963,6 +978,7 @@
         extra.forEach(function (it) {
           var label = txt(it), ic = '•', m = /^(\p{Extended_Pictographic}\uFE0F?)\s*/u.exec(label);
           if (m) { ic = m[1]; label = label.slice(m[0].length); }
+          if (DOCK_ICONS.indexOf(ic.replace(/\uFE0F/g, '')) >= 0) ic = '•';     // (1.99?? dockpop review: never a Dock control's icon for another thing)
           var b = menuItem(box, ic, 'raw', label, function () { if (it.tagName === 'A' && !it.hasAttribute('data-pad-tab')) return; clickOf(it)(); }, it.tagName === 'A' && !it.hasAttribute('data-pad-tab') ? { href: it.getAttribute('href') } : null);
           b.querySelector('.rmd-label').textContent = label; b.title = label; b.setAttribute('aria-label', label);
         });
@@ -1208,7 +1224,10 @@
       var pv = o.preview || {};
       // (1.99?? dockpop P2: on the homepage the pad chip is a LINK to the pad - its menu is the pad page's)
       ovTop.appendChild(mode === 'preview' ? padLink() : padChip());
-      slimText = el('span', 'rmd-slim-t', t('nothing_on', 'Nothing on stage right now') + (mode === 'preview' && pv.nextUp ? ' · ' + pv.nextUp : '')); ovTop.appendChild(slimText);
+      // (1.99?? dockpop review: the homepage's "Next up" is its own piece - a second line on a phone, never squeezing the pad chip)
+      slimText = el('span', 'rmd-slim-t'); slimText.appendChild(el('span', 'rmd-slim-a', t('nothing_on', 'Nothing on stage right now')));
+      if (mode === 'preview' && pv.nextUp) { var sep = el('span', 'rmd-slim-sep', ' · '); sep.setAttribute('aria-hidden', 'true'); slimText.appendChild(sep); slimText.appendChild(el('span', 'rmd-slim-b', pv.nextUp)); }
+      ovTop.appendChild(slimText);
       srcHost = el('span', 'rmd-src-host'); ovBot.appendChild(srcHost);
       ovBot.appendChild(el('span', 'rmd-ov-gap'));
       snapBtn = iconBtn('📸', 'snap', 'Snap', function () { var b = capButton('snap'); if (b && !b.disabled) external(function () { b.click(); }); });
@@ -1219,13 +1238,9 @@
       var more = iconBtn(IC.more, 'stage_menu', 'Stage options', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } stageMenu(b); });
       more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.classList.add('rmd-stage-more'); stageMoreBtn = more;
       [snapBtn, clipBtn, fullBtn, more].forEach(function (b) { ovBot.appendChild(b); });
-      if (mode === 'preview' && pv.goLive) {
-        // the homepage's slim off-air bar: [pad chip ›] Nothing on stage right now · Next up … [🎥 Go live] (+ ⋯ for staff)
-        var gl = el('a', 'ds-btn quiet sm rmd-golive'); gl.setAttribute('href', pv.goLive);
-        var gi = el('span', 'ds-ic', '🎥'); gi.setAttribute('aria-hidden', 'true'); gl.appendChild(gi); gl.appendChild(el('span', 'rmd-label', t('golive_short', 'Go live')));
-        ovBot.insertBefore(gl, snapBtn);
-        if (pv.staff) root.classList.add('rmd-staff');
-      }
+      // the homepage's slim off-air bar: [pad chip ›] Nothing on stage right now · Next up … (+ ⋯ for staff). (1.99?? dockpop review: no
+      // 🎥 Go live of its own - the Your show card and the navbar already have the same link; on air it is the stage ⋯'s Go live here)
+      if (mode === 'preview' && pv.staff) root.classList.add('rmd-staff');
       ov.appendChild(ovTop); ov.appendChild(ovBot);
       srcBox = node('rmTabs'); if (srcBox) { srcBox.classList.add('rmd-tabs-src'); ov.appendChild(srcBox); }
       stage.insertBefore(ov, stage.firstChild);
@@ -1286,14 +1301,19 @@
         hi.querySelector('.rmd-label').textContent = t('hist_info', 'Visitors read: {span} · how it works', { span: txt(hist).replace(/^📜\s*/, '') });
         hi.title = hist.title || ''; hi.setAttribute('aria-label', hi.querySelector('.rmd-label').textContent);
       }
-      // (the window: only while a pad tab of this pad and account has announced itself - it closes the window, that tab restores)
-      if (mode === 'popout' && link && tabSeen && Date.now() - tabSeen < DEAD_MS) menuItem(box, IC.back, 'pop_back', 'Back in the pad tab', backToTab);
+      // (the window: only while a pad tab of this pad and account has announced itself - it closes the window, that tab restores.
+      // 1.99?? dockpop review: a popped tab answers every heartbeat, and says tab-gone when it leaves - so a tab that went to Hold'em
+      // is no "pad tab" here a moment later)
+      if (mode === 'popout' && link && tabFresh()) menuItem(box, IC.back, 'pop_back', 'Back in the pad tab', backToTab);
       finishMenu(box, opener);
     }
     // ℹ️ About this chat (the homepage): today's read-only note - a string, or a <template> the page rendered it into (its <code> tags)
     function aboutChat() {
       var a = o.preview && o.preview.about; if (!a) return;
       var p = menu(chatMore, t('chat_about', 'About this chat')); p.setAttribute('role', 'dialog'); p.classList.add('rmd-about');
+      // (1.99?? dockpop review: a title and ✕ - on a phone it is a bottom sheet, far from the ⋯ that opened it)
+      var head = el('div', 'rmd-about-h', null, p.ownerDocument); head.appendChild(el('b', null, t('chat_about', 'About this chat'), p.ownerDocument));
+      head.appendChild(iconBtn('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm', p.ownerDocument)); p.appendChild(head);
       var body = el('p', 'rmd-topic-full', null, p.ownerDocument);
       if (typeof a === 'string') body.textContent = a; else if (a.content) body.appendChild(a.content.cloneNode(true)); else body.textContent = txt(a);
       p.appendChild(body); finishMenu(p, chatMore);
@@ -1356,8 +1376,11 @@
     // ══ 1.99?? dockpop (owner P1): the chat in its OWN window - /p/<slug>/chat, opened from the chat ⋯ (desktop: a second window can sit
     // beside the page; phones get the float), kept running while this tab goes anywhere (Hold'em, other pads, the feed) ══
     function roomKey() { return W.PATVDockLink ? W.PATVDockLink.roomKey(o.room) : String(o.room == null ? '' : o.room).replace(/[^A-Za-z0-9_-]/g, '_'); }
-    function chatUrl() { return o.chatUrl || (o.slug ? '/p/' + encodeURIComponent(o.slug) + '/chat' : null); }
+    function chatUrl() { return o.chatUrl !== undefined ? o.chatUrl || null : o.slug ? '/p/' + encodeURIComponent(o.slug) + '/chat' : null; }
+    function tabFresh() { return !!(tabSeen && Date.now() - tabSeen < TAB_FRESH_MS); }
     function canWindow() {
+      // (1.99?? dockpop review: the homepage passes no chatUrl when its card is the sign-in tease - the route would only send a pop-up to
+      // the pad's gate page)
       if (mode === 'popout' || !chatUrl() || typeof W.open !== 'function') return false;
       var fine = false; try { fine = !!(W.matchMedia && W.matchMedia('(hover: hover) and (pointer: fine)').matches); } catch (e) { fine = false; }
       return fine && (W.innerWidth || 0) > 760;
@@ -1395,6 +1418,9 @@
       }
       popWin = w;
       enterPopped(true);
+      // (1.99?? dockpop review: this tab's focus goes to the bar's ↩️ - the menu item that opened the window is gone; focus() in a
+      // background window never raises it over the new one)
+      var back = popBar && popBar.querySelector('.rmd-popbar-back'); if (back && back.isConnected) { try { back.focus(); } catch (e) { /* gone */ } }
       clearTimeout(pendTimer);
       pendTimer = setTimeout(function () { if (popped && popPending) { leavePopped(null); toast(t('pop_failed', 'The chat window didn’t open.')); } }, PENDING_MS);
     }
@@ -1435,21 +1461,29 @@
     function leavePopped(m) {
       clearTimeout(pendTimer); clearTimeout(handTimer); clearTimeout(aliveTimer); aliveTimer = null;
       if (!popped) return;
-      var wasBringing = bringing, resumed = resumedInClick;
+      var wasBringing = bringing, resumed = resumedInClick, opener = !!popWin;
       popped = false; popPending = false; bringing = false; resumedInClick = false;
       root.classList.remove('rmd-popped'); if (popBar && popBar.parentNode) popBar.remove();
       each(root.querySelectorAll('[data-rmd-showchat]'), function (b) { b.hidden = false; });
+      // (1.99?? dockpop review: the window we hold stays ours while it is open - a reloading window comes straight back, and Show it with it)
       if (popWin && popWin.closed) popWin = null;
+      // the window's draft and room audio come back to ONE place: the tab the hand-over names (the one whose Bring it back asked), or for a
+      // window closed by its own ✕ the tab that opened it, else a visible tab - two pad tabs of this pad never both get the draft (1.99??
+      // dockpop review: the same words could be sent twice)
+      var mine = !!m && (m.to ? m.to === (link && link.id) || (m.to === '*' && opener) : m.t === 'pop-closed' && (opener || !D.hidden));
       var input = inputNode();
-      if (m && m.draft && input && !input.value) setDraft(input, m.draft);
+      // (a tab that kept words of its own - it wasn't the one that handed its draft over - keeps them, the window's follow: nothing typed is lost)
+      if (m && m.draft && mine && input) {
+        var have = String(input.value || '');
+        if (!have.trim()) setDraft(input, m.draft);
+        else if (have.indexOf(m.draft) < 0) setDraft(input, (have.replace(/\s+$/, '') + ' ' + m.draft).slice(0, Number(input.maxLength) > 0 ? Number(input.maxLength) : 300));
+      }
       if (o.onPopped) { try { o.onPopped(false); } catch (e) { /* the page's own */ } }
       changed();
-      // the room audio comes back here when the window was playing it: in the Bring it back click itself (resumedInClick), else for the
-      // tab the hand-over names / the tab that opened the window / a visible tab (a blocked autoplay shows "tap ▶ to resume")
-      var mine = m && (m.to ? m.to === (link && link.id) || (m.to === '*' && !!popWin) : m.t === 'pop-closed' && !D.hidden);
+      // the room audio comes back here when the window was playing it: in the Bring it back click itself (resumedInClick), else for
+      // that one tab (a blocked autoplay shows "tap ▶ to resume")
       if (m && m.audio && !resumed && mine && o.audio && o.audio.resume) { try { o.audio.resume(); } catch (e) { /* blocked */ } }
       if (wasBringing && input) input.focus();
-      popWin = null;
     }
     function watchAlive() {
       clearTimeout(aliveTimer);
@@ -1474,12 +1508,17 @@
     /** the pad tab / homepage side of the channel */
     function tabMsg(m) {
       if (m.t === 'pop-open' || m.t === 'pop-alive') {
-        lastAlive = Date.now(); lastAudio = m.audio ? 1 : 0; lastSlow = !!m.slow;
+        // (1.99?? dockpop review: the viewer played this room HERE while its window was open - this page stopped being popped for that
+        // window, so its heartbeats no longer pop it again; a new window - another id - does)
+        if (m.t === 'pop-open') detached = null;
+        if (detached && m.id === detached) return;
+        winId = m.id; lastAlive = Date.now(); lastAudio = m.audio ? 1 : 0; lastSlow = !!m.slow;
         if (popped && popPending) { popPending = false; clearTimeout(pendTimer); }
         if (!popped) enterPopped(false);
         if (mode === 'pad') link.send('tab-here');
-        if (m.t === 'pop-open') {
-          // a tab's unsent words go to the new window (it puts them in its empty input); this tab's copy is cleared
+        if (m.t === 'pop-open' && popWin) {
+          // the opener's unsent words go to the new window (it puts them in its empty input); this tab's copy is cleared (1.99?? dockpop
+          // review: only the tab that opened it - a second pad tab of this pad keeps its own words, hidden with its chat card)
           var input = inputNode();
           if (input && input.value.trim()) { link.send('draft', { draft: input.value }); setDraft(input, ''); }
         }
@@ -1487,11 +1526,16 @@
       } else if (m.t === 'pop-closed' || m.t === 'handoff') leavePopped(m);
       else if (m.t === 'audio-on') { if (playingHere()) o.audio.pause(); }
     }
+    /** this page's room audio started for the popped room (the homepage's Top Pads 🎧): its own chat card comes back, with its audio bar -
+     *  the window keeps running (it paused on audio-on) */
+    var detached = null, winId = null;
+    function detach() { if (!popped || bringing || popPending) return; detached = winId; leavePopped(null); }
     /** the window's side of the channel */
     var handed = false, beatTimer = null, leaving = false;
     function popMsg(m) {
       if (m.t === 'who') link.send('pop-alive', { audio: playingHere(), slow: D.hidden });
       else if (m.t === 'tab-here') tabSeen = Date.now();
+      else if (m.t === 'tab-gone') tabSeen = 0;           // (1.99?? dockpop review: the pad tab went elsewhere - Hold'em, another pad)
       else if (m.t === 'pop-close-req') handOff(m.id);
       else if (m.t === 'draft') { var input = inputNode(); if (input && !input.value && m.draft) setDraft(input, m.draft); }
       else if (m.t === 'pop-open') {
@@ -1518,12 +1562,23 @@
       beatTimer = setTimeout(function () { beatTimer = null; if (gone_ || !link || leaving) return; link.send('pop-alive', { audio: playingHere(), slow: D.hidden }); beat(); }, ALIVE_MS);
     }
     function recheck() { if (o.recheck) { try { o.recheck(); } catch (e) { /* the page's own */ } } }
+    /** another viewer tag on the channel. 1.99?? dockpop review (load): only the WINDOW re-checks (it must never show another account's
+     *  chat; it compares vt on every answer). A pad tab or the homepage compares nothing, so a stale one heard every window heartbeat as
+     *  "foreign" and re-polled every 5 s - they re-check on 'session' only. A tab still waiting for the window it just opened, when that
+     *  window announces itself under another account (this tab was made for an older sign-in), stops waiting and says so. */
+    function tabForeign(m) {
+      if (popPending && m.t === 'pop-open' && m.room === roomKey()) { leavePopped(null); toast(t('pop_stale', 'The chat window opened for the account you’re signed in with now. Reload this page to match it.')); }
+    }
     function openLink() {
       if (!W.PATVDockLink || o.room == null || o.room === '') return;
       link = W.PATVDockLink.open({ room: roomKey(), tag: o.vt || '', role: mode === 'popout' ? 'pop' : mode === 'preview' ? 'home' : 'tab',
-        onMsg: mode === 'popout' ? popMsg : tabMsg, onForeign: recheck, onSession: recheck });
+        onMsg: mode === 'popout' ? popMsg : tabMsg, onForeign: mode === 'popout' ? recheck : tabForeign, onSession: recheck });
       // one room is never heard twice: whoever starts it tells the others
-      if (o.audio && o.audio.onChange) o.audio.onChange(function (now) { if (now && now === o.slug && link && !gone_) link.send('audio-on'); });
+      if (o.audio && o.audio.onChange) o.audio.onChange(function (now) {
+        if (!now || now !== o.slug || !link || gone_) return;
+        link.send('audio-on');
+        if (mode !== 'popout' && popped) detach();
+      });
       if (mode === 'popout') { link.send('pop-open', { audio: playingHere() }); beat(); }
       else { if (mode === 'pad') link.send('tab-here'); link.send('who'); }
     }
@@ -1545,9 +1600,31 @@
       var old = root.querySelector('.rmd-gone'); if (old) old.remove();
       var card = el('section', 'card rmd-gone'); card.setAttribute('role', 'alert');
       card.appendChild(el('p', null, t(key, fallback)));
-      card.appendChild(button('✕', 'pop_close', 'Close this window', function () { try { W.close(); } catch (e) { /* not ours */ } }, 'ds-btn primary'));
+      // (1.99?? dockpop review: signed IN in another tab - the window can show the chat as that account, but only when the viewer asks)
+      var row = el('div', 'rmd-gone-acts'); card.appendChild(row);
+      row.appendChild(button('✕', 'pop_close', 'Close this window', function () { try { W.close(); } catch (e) { /* not ours */ } }, 'ds-btn primary'));
+      if (key === 'pop_signed_in') row.appendChild(button('🔄', 'pop_reload', 'Reload', function () { try { W.location.reload(); } catch (e) { /* gone */ } }, 'ds-btn'));
       if (chat && chat.parentNode) { chat.parentNode.insertBefore(card, chat); chat.hidden = true; } else root.appendChild(card);
       var b = card.querySelector('button'); if (b) b.focus();
+    }
+    /** 1.99?? dockpop review: in the chat's own window a link never takes the window away from the chat (a profile, /privacy, the packs,
+     *  a web user's page - and the chat ended, its tab restored): it opens in a new tab (noopener; noreferrer when it leaves the site).
+     *  Sign in stays HERE and comes back to this window (?next= the window), and so do this window's own links. A modified click is the
+     *  browser's own; a click a page script already handled (defaultPrevented) is left alone. */
+    function popLink(e) {
+      if (!e || e.defaultPrevented || e.button > 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || a.hasAttribute('download')) return;
+      var href = a.getAttribute('href') || '';
+      if (!href || href.charAt(0) === '#' || /^(?:javascript|mailto|tel|sms):/i.test(href)) return;
+      var here = W.location || {}, u = null;
+      try { u = new W.URL(href, here.href); } catch (x) { return; }
+      var same = u.origin === here.origin;
+      if (same && u.pathname === '/login') { a.setAttribute('href', '/login?next=' + encodeURIComponent(here.pathname)); a.removeAttribute('target'); return; }
+      if (same && u.pathname === here.pathname) return;
+      var rel = String(a.getAttribute('rel') || '');
+      if (a.getAttribute('target') && a.getAttribute('target') !== '_self') { if (!/\bnoopener\b/.test(rel)) a.setAttribute('rel', (rel + ' noopener').trim()); return; }
+      a.setAttribute('target', '_blank'); a.setAttribute('rel', same ? 'noopener' : 'noopener noreferrer');
     }
     // ── the pad chip as a LINK (the window's chat header, the homepage's stage card): the pad's identity + › ──
     function padLink(cls) {
@@ -1627,13 +1704,19 @@
       on(W, 'pagehide', function () {
         leaving = true;
         if (mode === 'popout' && link && !handed && !gone_) {
-          var input = inputNode();
-          link.send('pop-closed', { audio: playingHere(), draft: input ? input.value : '' });
+          var input = inputNode(), audio = playingHere();
+          link.send('pop-closed', { audio: audio, draft: input ? input.value : '' });
+          // (1.99?? dockpop review: a window that RELOADS was playing the room - it picks it up again, room.ejs reads this; the tab it
+          // restored for a moment pauses again on the new pop-open. The window's own sessionStorage: it dies with the window)
+          try { if (audio) W.sessionStorage.setItem(LISTEN_KEY + o.slug, '1'); else W.sessionStorage.removeItem(LISTEN_KEY + o.slug); } catch (e) { /* private mode */ }
         }
+        // (1.99?? dockpop review: a pad tab that leaves - for Hold'em, another pad - is no "pad tab" for the window's ↩️ any more)
+        if (mode === 'pad' && link) link.send('tab-gone');
         saveGeometry();
         redock(); if (pip) pip.close();
       });
       if (mode === 'popout') {
+        on(D, 'click', popLink, true);
         var geoTimer = null;
         on(W, 'resize', function () { clearTimeout(geoTimer); geoTimer = setTimeout(saveGeometry, 400); });
         // (going hidden - minimized, another window over it: one beat now that says the next ones may be slow)

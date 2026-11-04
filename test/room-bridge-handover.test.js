@@ -65,3 +65,48 @@ test("listen(): one notification per start (not two), another pad's audio, resum
   p.pause(); assert.equal(p.playingSlug(), null);
   assert.equal(p.resume(), true); assert.equal(p.playingSlug(), "front", "resume() plays this player's own pad");
 });
+
+// ── 1.99?? dockpop review (privacy): the relay says which account its page was made for, and the chat window's wipe ends it ──
+function loadNet() {
+  const posts = [], winL = {}, timers = [];
+  let answer = { s: 200, d: { ok: true, id: "j1" } };
+  const win = { addEventListener(t, f) { (winL[t] ||= []).push(f); } };
+  const ctx = { window: win, document: { createElement: fakeEl, addEventListener() {}, hidden: false }, navigator: {},
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, requestAnimationFrame: () => 0, cancelAnimationFrame() {}, console,
+    fetch: (url, o) => { posts.push({ url: String(url), body: JSON.parse(o.body) }); const a = answer; return Promise.resolve({ status: a.s, json: () => Promise.resolve(a.d) }); } };
+  win.document = ctx.document; win.fetch = ctx.fetch;
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "room-bridge.js"), "utf8"), ctx);
+  return { R: win.PATVRoom, posts, winL, timers, set: (a) => { answer = a; } };
+}
+const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };
+
+test("review: a Dock page's lines and commands carry its viewer tag; a 409 'account' answer calls onAccount; pages without one send none", async () => {
+  const N = loadNet(); let acct = 0;
+  const r = N.R.relay(fakeEl("div"), "night-orchard", { vt: "tag-A", onAccount: () => acct++ });
+  r.sendCmd("!bal"); await settle();
+  assert.equal(N.posts[0].url, "/api/rooms/night-orchard/say");
+  assert.deepEqual(N.posts[0].body, { text: "!bal", vt: "tag-A" });
+  N.set({ s: 409, d: { ok: false, code: "account", error: "This page was opened for another account - reload it to chat as you." } });
+  r.sendCmd("!bal"); await settle();
+  assert.equal(acct, 1, "the window re-checks who is signed in");
+  const plain = N.R.relay(fakeEl("div"), "night-orchard", {});
+  plain.sendCmd("!bal"); await settle();
+  assert.equal("vt" in N.posts.at(-1).body, false, "no tag: unchanged");
+});
+
+test("review: destroy() - nothing queued or typed is ever posted after the chat window wiped itself; a clip being recorded is not uploaded", async () => {
+  const N = loadNet();
+  const r = N.R.relay(fakeEl("div"), "night-orchard", { vt: "tag-A" });
+  r.destroy();
+  const n = N.posts.length;
+  r.sendCmd("!bal"); assert.equal(r._send("hello"), false); await settle();
+  for (const f of N.winL.online || []) f({});
+  for (const f of N.timers.splice(0)) f();
+  await settle();
+  assert.equal(N.posts.length, n, "no post after destroy (command, line, retry timer, 'online')");
+  assert.equal(r.pending().length, 0, "the outbox is empty");
+  const p = N.R.ptt(fakeEl("div"), "night-orchard");
+  assert.equal(typeof p.destroy, "function");
+  p.destroy(); assert.equal(N.posts.length, n);
+});

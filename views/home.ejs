@@ -468,19 +468,9 @@
 </style>
 
 <main class="hm ds-page<%= homeDock_ ? ' rm rm-dock rmd-home' + (hLK_ && hLK_.accent ? ' pad-acc' : '') : '' %>"<%- homeDock_ && hLK_ && hLK_.vars ? ' style="' + t.esc(hLK_.vars) + '"' : '' %>>
-  <% if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
-
-  <!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
-  <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
-    <div class="gl-txt">
-      <h3 id="gsH"><%- t('home.show.title') %></h3>
-      <p><%- t('home.show.blurb') %></p>
-    </div>
-    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a><a class="btn" href="/p"><%- t('home.pads') %></a></div>
-  </section>
-
-  <!-- ───── main stage ───── -->
 <%_ if (homeDock_) { _%>
+  <%# 1.99?? dockpop review: the Dock is the FIRST thing under the navbar - its video and chat at a glance on a laptop (it sat under the
+      stories and Your show cards, which pushed the stage's controls and the composer below the fold) %>
   <section class="rmd-hm" id="hmDock" aria-label="<%- t('home.dock.aria', { name: frontInfo ? frontInfo.title : t('home.stage.main_stage') }) %>">
     <%_ if (frontInfo) { _%>
     <template id="rmdId"><%- include('partials/pad-dock-id', { room: { id: frontInfo.id, name: frontInfo.title }, LK_: hLK_, PFX_: hFX_, avHtml_: hAV_, bnSrc_: hBN_, bnLook_: !!hBN_ }) %></template>
@@ -520,10 +510,25 @@
       <%_ } _%>
     </section>
     <div class="rmd-hm-ppl"><section class="card rm-ppl chatlog" id="rmPplCard" aria-labelledby="pplH"><h2 id="pplH"><span class="ht"><%- t('pad.people.h') %></span> <small id="rmPplN"></small></h2><ul class="people" id="rmPeople"></ul></section></div>
-    <template id="hmdAbout"><%- t('home.room.note', { q: '"' }) %></template>
+    <%# (1.99?? dockpop review: a linked viewer has a composer here - their note doesn't say "read-only") %>
+    <template id="hmdAbout"><%- t(me && me.camfrogUsername ? 'home.dock.about_linked' : 'home.room.note', { q: '"' }) %></template>
     <%_ } _%>
   </section>
-  <%# the stage's side widgets (the coin-op wheel, the featured table, Top Pads) - the same markup and ids, a row under the Dock %>
+<%_ } _%>
+  <% if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
+
+  <!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
+  <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
+    <div class="gl-txt">
+      <h3 id="gsH"><%- t('home.show.title') %></h3>
+      <p><%- t('home.show.blurb') %></p>
+    </div>
+    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a><a class="btn" href="/p"><%- t('home.pads') %></a></div>
+  </section>
+
+  <!-- ───── main stage ───── -->
+<%_ if (homeDock_) { _%>
+  <%# the stage's side widgets (the coin-op wheel, the featured table, Top Pads) - the same markup and ids, a row in the stage's old place %>
   <div class="hmd-side" id="stageSide">
 <%_ } else { _%>
   <section class="stage <%= live ? 'live' : 'off' %>" id="stage" aria-labelledby="stTtl">

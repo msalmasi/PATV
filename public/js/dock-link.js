@@ -7,11 +7,12 @@
 // Messages carry NO chat content: the only text is the viewer's own unsent draft (draft / handoff / pop-closed), and only between windows
 // of the same tag. A receiver hears its own room and tag only; another tag is a re-check trigger (onForeign: someone else signed in under
 // this browser, or this window is the stale one) - except 'audio-on', which reaches every window of the room (one room is never heard
-// twice). 'session' (views/partials/chat-sweep.ejs: the first page after a sign-out) has no room or tag. Plain ES5, no dependencies.
+// twice). 'session' (views/partials/chat-sweep.ejs: the first page after a sign-out) has no room or tag. 'tab-gone' (review): a pad tab
+// leaving (pagehide) - its window no longer offers "Back in the pad tab". Plain ES5, no dependencies.
 (function (W) {
   'use strict';
   var NAME = 'patv-dock', KEY = 'patv.dock.msg', MAX_DRAFT = 300;
-  var TYPES = { 'pop-open': 1, 'pop-alive': 1, 'pop-closed': 1, who: 1, 'tab-here': 1, 'pop-close-req': 1, handoff: 1, draft: 1, 'audio-on': 1, session: 1 };
+  var TYPES = { 'pop-open': 1, 'pop-alive': 1, 'pop-closed': 1, who: 1, 'tab-here': 1, 'tab-gone': 1, 'pop-close-req': 1, handoff: 1, draft: 1, 'audio-on': 1, session: 1 };
   var TEXT = { 'pop-closed': 1, handoff: 1, draft: 1 };     // the only messages that may carry the viewer's own unsent draft
   function rid() {
     try { var a = new Uint32Array(2); W.crypto.getRandomValues(a); return a[0].toString(36) + a[1].toString(36); }

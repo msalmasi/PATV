@@ -245,3 +245,17 @@ test("the pad page's long-poll: held while nothing changes, answered when the vi
   const got = await held2;
   assert.ok(got.feed.some((x) => x.text === "hi from the room"), "a room line answers it");
 });
+
+test("1.99?? dockpop review: a line or command from a page made for ANOTHER account (its viewer tag) is refused (409 account), never sent", async () => {
+  reset();
+  const RPM = require(path.join(repo, "roompm"));
+  const mine = await post("/api/rooms/" + SLUG + "/say", "u1", { text: "hello as me", cid: "cVTOK00001", vt: RPM.tag("u1") });
+  assert.equal(mine.status, 200, JSON.stringify(mine.d));
+  const stale = await post("/api/rooms/" + SLUG + "/say", "u2", { text: "typed by alice's page", cid: "cVTBAD0001", vt: RPM.tag("u1") });
+  assert.equal(stale.status, 409); assert.equal(stale.d.code, "account");
+  const cmd = await post("/api/rooms/" + SLUG + "/say", "u2", { text: "!bal", vt: RPM.tag("u1") });
+  assert.equal(cmd.status, 409, "a command too");
+  assert.equal(sayJobs("cVTBAD0001").length, 0, "nothing queued for Pepe");
+  const none = await post("/api/rooms/" + SLUG + "/say", "u2", { text: "a page without a tag", cid: "cVTNONE001" });
+  assert.equal(none.status, 200, "pages without a tag are unchanged");
+});

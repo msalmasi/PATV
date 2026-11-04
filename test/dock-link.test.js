@@ -148,19 +148,43 @@ function tabAndWindow(extra = {}) {
 }
 test("a window announces itself: its pad tab goes popped (the chat hidden in place, the 44px bar), answers tab-here, and hands over its draft", () => {
   const b = bus();
-  const tab = harness({ bus: b, fine: true, opts: { room: "Dock.Equipped", vt: "tag-1" } });
-  tab.input.value = "half a thought"; flushAll(b);
+  const tab = harness({ bus: b, fine: true, open: true, opts: { room: "Dock.Equipped", vt: "tag-1" } });
+  const second = harness({ bus: b, fine: true, opts: { room: "Dock.Equipped", vt: "tag-1" } });     // another pad tab of this pad
+  tab.input.value = "half a thought"; second.input.value = "words in the other tab"; flushAll(b);
+  tab.menuPick("Chat options", "Chat in its own window");                                         // (this tab opens - and holds - the window)
   const win = harness({ bus: b, closeWin: true, opts: { mode: "popout", room: "Dock.Equipped", vt: "tag-1" } });
   flushAll(b);
   assert.equal(tab.root.classList.contains("rmd-popped"), true);
   assert.equal(tab.chat.parentNode.querySelector(".rmd-popbar") !== null, true);
   assert.equal(tab.doc.getElementById("rmFeed"), tab.feed, "hidden in place - never moved");
   assert.equal(tab.root.classList.contains("rmd-chat-out"), true, "the stage takes the freed height");
-  assert.equal(win.input.value, "half a thought", "the tab's unsent words go to the new window");
+  assert.equal(win.input.value, "half a thought", "the opener's unsent words go to the new window");
   assert.equal(tab.input.value, "", "and leave the tab");
+  assert.equal(second.root.classList.contains("rmd-popped"), true, "the other tab is popped too");
+  assert.equal(second.input.value, "words in the other tab", "review: a second pad tab keeps its own words (they were lost)");
   assert.ok(b.types().includes("tab-here"));
   win.button("Chat options").click();
   assert.ok(win.doc.querySelector(".rmd-menu").textContent.includes("Back in the pad tab"), "the window offers the way back while its tab is there");
+  win.doc.dispatchEvent(new (require("./fixtures/pad-dock/dom.cjs").Event)("keydown", { key: "Escape" }));
+  // review: the tabs leave (Hold'em) - tab-gone: the window no longer offers it
+  tab.win.dispatchEvent(new (require("./fixtures/pad-dock/dom.cjs").Event)("pagehide")); second.win.dispatchEvent(new (require("./fixtures/pad-dock/dom.cjs").Event)("pagehide"));
+  flushAll(b);
+  assert.ok(b.types().includes("tab-gone"));
+  win.button("Chat options").click();
+  assert.equal(win.doc.querySelector(".rmd-menu").textContent.includes("Back in the pad tab"), false, "no pad tab any more");
+});
+test("review: Bring it back from one of two pad tabs - the window's draft and audio go to THAT tab only", () => {
+  const b = bus();
+  const tab = harness({ bus: b, fine: true, opts: { room: "Dock.Equipped", vt: "tag-1" } });
+  const other = harness({ bus: b, fine: true, opts: { room: "Dock.Equipped", vt: "tag-1" } });
+  const win = harness({ bus: b, closeWin: true, opts: { mode: "popout", room: "Dock.Equipped", vt: "tag-1" } });
+  flushAll(b);
+  assert.equal(tab.root.classList.contains("rmd-popped"), true); assert.equal(other.root.classList.contains("rmd-popped"), true);
+  win.input.value = "the window's draft";
+  other.button("Bring it back").click(); flushAll(b);
+  assert.equal(other.input.value, "the window's draft", "the tab that asked gets it");
+  assert.equal(tab.input.value, "", "the other tab does not (the same words could have been sent twice)");
+  assert.equal(tab.root.classList.contains("rmd-popped"), false, "both restore: the window closed");
 });
 test("the newest window wins; another account's tag or room leaves a tab alone", () => {
   const b = bus();
@@ -175,7 +199,7 @@ test("the newest window wins; another account's tag or room leaves a tab alone",
   assert.equal(w2.root.querySelector(".rmd-gone"), null, "the newest one stays");
   assert.equal(tab.root.classList.contains("rmd-popped"), true);
   assert.equal(other.root.classList.contains("rmd-popped"), false, "another account's tab is never popped by this window");
-  assert.ok(other.calls.rechecks >= 1, "it re-checks who is signed in instead");
+  assert.equal(other.calls.rechecks, undefined, "review (load): and never re-polls on its heartbeats - only a 'session' message re-checks a tab");
 });
 test("a popped tab restores itself after 15 s without a heartbeat (a crashed window); a live one keeps it popped", () => {
   const { b, tab, win } = tabAndWindow();

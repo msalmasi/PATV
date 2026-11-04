@@ -115,7 +115,8 @@ test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is 
   assert.ok(rules.length>10);
   for(const r of rules) {
     // (1.99?? dockpop: + the chat window's body, and the person menu's Dock look while the chat floats off Live or is in its own window)
-    for(const sel of r.selector.split(/,\s*(?=main\.|body[.:])/))assert.match(sel,/^(main\.rm\.rm-dock|body\.pad-dock-live|body\.rmd-pop|body:is\(\.pad-dock-live, \.rmd-afloat, \.rmd-pop\))/,sel);
+    // (1.99?? dockpop review: + body.rmd-afloat - a Dock notice moves to the top while the chat floats)
+    for(const sel of r.selector.split(/,\s*(?=main\.|body[.:])/))assert.match(sel,/^(main\.rm\.rm-dock|body\.pad-dock-live|body\.rmd-pop|body\.rmd-afloat|body:is\(\.pad-dock-live, \.rmd-afloat, \.rmd-pop\))/,sel);
     assert.doesNotMatch(r.body,/#[0-9a-f]{3,8}\b|--ds-green|(?:margin|padding)-(?:left|right)\s*:|(?:^|;)\s*(?:left|right)\s*:|text-align:\s*(?:left|right)/i);
     // 1.99aiw review: a calc() of --ds-z-* tokens (the banner under the frame layer) is a token value too
     for(const m of r.body.matchAll(/z-index\s*:\s*([^;]+)/g))assert.match(m[1].trim(),/^(?:var\(--ds-z-[\w-]+\)|calc\(\s*(?:-1\s*\*\s*)?var\(--ds-z-[\w-]+\)(?:\s*\+\s*var\(--ds-z-[\w-]+\))?\s*\))$/);

@@ -240,18 +240,21 @@ async function runWindow(html, viewer) {
   const main = new FEl("main", doc); main.className = "ds-page rm chatlog rm-dock rmd-popout";
   doc.querySelector = (s) => (s === "main.rm" ? main : null); doc.querySelectorAll = () => [];
   const byId = {};
-  const ids = ["rmFeed", "rmJump", "rmScroll", "rmOlder", "rmMic", "rmPeople", "rmPplN", "rmListNote", "rmTopic", "rmAudioBox", "rmCompose", "rmRelay", "rmStatus", "rmChat", "rmClip", "rmMod", "rmHistTop", "rmHistBot", "rmHistJump", "rmSearchBtn", "rmHist"];
+  const ids = ["rmFeed", "rmJump", "rmScroll", "rmOlder", "rmMic", "rmPeople", "rmPplN", "rmListNote", "rmTopic", "rmAudioBox", "rmCompose", "rmRelay", "rmPtt", "rmStatus", "rmChat", "rmClip", "rmMod", "rmHistTop", "rmHistBot", "rmHistJump", "rmSearchBtn", "rmHist"];
   doc.getElementById = (id) => { if (id === "rmInit") { const e = new FEl("script", doc); e.textContent = json; return e; } if (!ids.includes(id)) return null; if (!byId[id]) { byId[id] = new FEl("div", doc); byId[id].id = id; main.appendChild(byId[id]); } return byId[id]; };
-  const timers = [], urls = [], errors = [], winListeners = {};
-  let answer = null, status = 200, paused = 0;
+  const timers = [], urls = [], errors = [], winListeners = {}, goneKeys = [], destroyed = { relay: 0, ptt: 0 };
+  let answer = null, status = 200, paused = 0, relayOpts = null;
+  // (1.99?? dockpop review: a Room Dock that records the card the window asks for; the relay / push-to-talk know destroy())
+  const dock = new Proxy({}, { get: (t, k) => (k === "gone" ? (key) => { goneKeys.push(key || "pop_gone"); } : k === "visible" || k === "floating" || k === "popped" ? () => false : () => undefined) });
   const win = {
     document: doc, location: { search: "", href: "/p/x/chat", pathname: "/p/x/chat", hash: "" }, navigator: { userAgent: "test" }, history: { replaceState() {} },
     console: { error: (...a) => errors.push(a.map(String).join(" ")), log() {}, warn() {} },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
     matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener: (t, fn) => { (winListeners[t] = winListeners[t] || []).push(fn); }, removeEventListener() {},
     fetch: (url) => { urls.push(String(url)); const a = answer, s = status; return Promise.resolve({ status: s, ok: s === 200, json: () => Promise.resolve(a) }); },
-    PATVRoom: { audio: () => ({ update() {}, pause() { paused++; return true; }, isPlaying: () => true }), ptt: () => ({ update() {} }),
-      relay: () => ({ anchor: () => null, update() {}, refetch: () => 0, reset() {}, wantsMe: () => false, getInput: () => null }) },
+    PATVRoom: { audio: () => ({ update() {}, pause() { paused++; return true; }, isPlaying: () => true }), ptt: () => ({ update() {}, destroy() { destroyed.ptt++; } }),
+      relay: (h, s, o) => { relayOpts = o; return { anchor: () => null, update() {}, refetch: () => 0, reset() {}, wantsMe: () => false, getInput: () => null, destroy() { destroyed.relay++; } }; } },
+    PATVPadDock: { init: () => dock },
     JSON, Math, Date, String, Number, Array, Object, RegExp, Error, encodeURIComponent, decodeURIComponent, isNaN, isFinite, parseInt,
   };
   win.window = win;
@@ -265,7 +268,7 @@ async function runWindow(html, viewer) {
     const t = timers.pop(); assert.ok(t, "a poll is scheduled");
     t.fn(); for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
   }
-  return { feed, doc, main, urls, errors, timers, poll, win, paused: () => paused, people: doc.getElementById("rmPeople") };
+  return { feed, doc, main, urls, errors, timers, poll, win, paused: () => paused, people: doc.getElementById("rmPeople"), goneKeys, destroyed, relayOpts: () => relayOpts, listeners: winListeners };
 }
 test("the window's script: another account's answer (vt) or a 401 wipes every line, room PM row and person, stops the poll, never navigates", async () => {
   RPM.addLocal(U.viewer.userId, CHAT, "Your balance: 99 PAT", "!bal");
@@ -287,9 +290,54 @@ test("the window's script: another account's answer (vt) or a 401 wipes every li
     assert.equal(P.timers.length, 0, what + ": no poll scheduled any more");
     assert.equal(P.win.location.href, "/p/x/chat", what + ": no navigation (never /login)");
     assert.ok(P.paused() >= 1, what + ": the room audio stopped");
-    (P.win.window.addEventListener, P.win);
+    assert.equal(P.destroyed.relay, 1, what + ": review - the relay's outbox ends first (nothing queued goes out as another account)");
+    assert.equal(P.destroyed.ptt, 1, what + ": and a clip being recorded is never uploaded");
+    assert.deepEqual(P.goneKeys, ["pop_gone"], what + ": 'You signed out or switched accounts'");
     assert.deepEqual(P.errors, [], what);
   }
+});
+test("review: the window's reason is the real one - 403 = not available to you any more; a signed-out window rides out a 401 (a restart), signs in -> Reload", async () => {
+  const html = (await get("/p/" + SLUG + "/chat", U.viewer)).text;
+  const live = (await get("/api/rooms/" + SLUG + "/live?pad=1&pop=1&rpm=0&after=0", U.viewer)).d;
+  const P = await runWindow(html, U.viewer);
+  assert.equal(P.relayOpts().vt, RPM.tag(U.viewer.userId), "the relay sends the window's viewer tag");
+  await P.poll({ error: "This pad is for approved members." }, 403);
+  assert.deepEqual(P.goneKeys, ["pop_unavail"], "a 403: 'This chat isn't available to you any more'");
+  assert.equal(P.feed.childNodes.length, 0, "and it is wiped all the same");
+  const outHtml = (await get("/p/" + SLUG + "/chat", null)).text;
+  const outLive = (await get("/api/rooms/" + SLUG + "/live?pad=1&pop=1&after=0", null)).d;
+  const Q = await runWindow(outHtml, null);
+  for (let i = 0; i < 3; i++) { await Q.poll({ error: "Sign in to watch the room." }, 401); assert.deepEqual(Q.goneKeys, [], "a signed-out window's 401 #" + (i + 1) + ": a retry"); }
+  assert.ok(Q.feed.childNodes.length >= 1, "its (public) lines stay meanwhile");
+  await Q.poll(Object.assign({}, outLive, { feed: [], lp: true }));
+  assert.deepEqual(Q.goneKeys, [], "the room is back: nothing happened");
+  await Q.poll(Object.assign({}, outLive, { vt: RPM.tag(U.viewer.userId), lp: true }));
+  assert.deepEqual(Q.goneKeys, ["pop_signed_in"], "signed IN in another tab: its own card (with Reload)");
+  const R2 = await runWindow(outHtml, null);
+  for (let i = 0; i < 4; i++) await R2.poll({ error: "Sign in to watch the room." }, 401);
+  assert.deepEqual(R2.goneKeys, ["pop_unavail"], "four 401s in a row: the chat isn't available here any more");
+  // a focus re-checks only after the window was away 15 s or more (clicking between Hold'em and the chat cost one view each time)
+  const F = await runWindow(html, U.viewer), now0 = Date.now(), realNow = Date.now;
+  try {
+    let t = now0; Date.now = () => t;
+    const n = F.urls.length;
+    (F.listeners.blur || []).forEach((f) => f({})); t += 3000; (F.listeners.focus || []).forEach((f) => f({}));
+    assert.equal(F.urls.length, n, "away 3 s: no re-check");
+    (F.listeners.blur || []).forEach((f) => f({})); t += 20000; (F.listeners.focus || []).forEach((f) => f({}));
+    assert.equal(F.urls.length, n + 1, "away 20 s: one re-check");
+    assert.doesNotMatch(F.urls.at(-1), /wait=1/, "at once, not a long-poll");
+  } finally { Date.now = realNow; }
+});
+test("review: the pad page prints the viewer tag only for the Room Dock, and such a page is private to its viewer", async () => {
+  const on = await get("/p/" + SLUG, U.other);   // (an account with no room PM rows here: those make it private, no-store)
+  assert.match(on.text, new RegExp('var pageVt = "' + RPM.tag(U.other.userId) + '", chatOnly = false;'));
+  assert.match(String(on.headers.get("cache-control")), /private/);
+  await mode("off");
+  try {
+    const off = await get("/p/" + SLUG, U.other);
+    assert.doesNotMatch(off.text, /var pageVt = "/, "Dock off: no tag in the page");
+    assert.equal(off.headers.get("cache-control"), null, "Dock off: the pad page's headers as before");
+  } finally { await mode("everyone"); }
 });
 test("the homepage's Room Dock follows the same switch: off = today's homepage, 'staff' = staff only, 'everyone' = all", async () => {
   const dockOf = async (u) => { const r = await get("/", u); assert.equal(r.status, 200, r.text.slice(0, 200)); return /id="hmDock"/.test(r.text) ? "dock" : /class="hm ds-page"/.test(r.text) ? "legacy" : "?"; };

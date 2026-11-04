@@ -876,7 +876,7 @@
   <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=3"></script><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
   <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99aid privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
-<% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
+<% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=2" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream); 1.99?? dockpop v2: stop() (the chat window's wipe) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
   <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
   <script src="/public/js/room-mod.js?v=14"></script>
@@ -890,6 +890,10 @@
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     if (window.PATVAvSync) window.PATVAvSync.pad(slug);
     var data = JSON.parse(document.getElementById('rmInit').textContent);
+    // 1.99?? dockpop: the viewer tag (roompm.tag) this page was made for - the chat window wipes itself when an answer is anyone else's
+    // (gone() below); recheck() polls at once (another Dock window saw another account, a sign-out page said so, the window got focus).
+    // (review: printed only for the Room Dock - it is the Dock windows' key, nothing else reads it)
+    var pageVt = <%- dockOn_ ? JSON.stringify(locals.vt || null).replace(/</g, '\\u003c') : 'null' %>, chatOnly = <%= chatOnly_ ? 'true' : 'false' %>;
     // 1.99ajf dockclean review: the LATEST /live answer (apply() keeps it) - the people list's 🌐 rows, the name autocomplete and the person
     // menu's roster match read the room as it is now (a veil, an Incognito switch or someone leaving reaches them at once)
     var liveData = data;
@@ -1534,6 +1538,9 @@
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
       feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; }
       <% if (dockOn_) { %>, people: acPeople, avatar: avatar,
+      // 1.99?? dockpop review (privacy): every line and command says which account this page was made for - the site refuses one for
+      // another account (this browser signed in as someone else since: 409), and the window re-checks at once
+      vt: pageVt, onAccount: function () { recheck(); },
       placeholder: <%- !linked && locals.acctActor && signedIn && user
         ? "_t('js.pad.dock.placeholder_web', 'Message as 🌐 {name} (web)…', { name: " + JSON.stringify(String(user)).replace(/</g, '\\u003c') + " })"
         : "_t('js.pad.dock.placeholder', 'Message {room}…', { room: " + JSON.stringify(String(room.camfrogName || room.name)).replace(/</g, '\\u003c') + " })" %><% } %> }) : null;
@@ -2006,10 +2013,7 @@
     // gets its answer late) or a poll failed. A/V sync then shows the pad's mic signs, card and grab / drop lines as they are now
     // (PATVAvSync.caughtUp) - the room audio passed those events long ago - instead of one offset after they came in
     var behind = false;
-    // 1.99?? dockpop: the viewer tag (roompm.tag) this page was made for - the chat window wipes itself when an answer is anyone else's
-    // (gone() below); recheck() polls at once (another Dock window saw another account, a sign-out page said so, the window got focus)
-    var pageVt = <%- JSON.stringify(locals.vt || null).replace(/</g, '\\u003c') %>, chatOnly = <%= chatOnly_ ? 'true' : 'false' %>;
-    var pollCtl = null, again = false, dead = false, quick = false;
+    var pollCtl = null, again = false, dead = false, quick = false, authMiss = 0;
     function poll() {
       timer = null;
       if (dead || !roomVisible() || inflight) return;
@@ -2025,12 +2029,22 @@
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/live' + q, pollCtl ? { credentials: 'same-origin', cache: 'no-store', signal: pollCtl.signal } : { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) {
           // (the window never goes to /login: it closes - a sign-out in another tab must not turn it into someone else's chat)
-          if (chatOnly && (r.status === 401 || r.status === 403)) { gone(); throw new Error('signed out'); }
+          // 1.99?? dockpop review: the reason it gives is the real one - a signed-in window's 401 is a sign-out (signed in, an unknown room
+          // is a 404); a 403 is this pad's chat no longer open to this account (members only now, the bridge perk, the 18+ gate); a
+          // signed-OUT window's 401 can be a room Pepe hasn't registered again yet after a restart - it shows nothing private, so it
+          // retries like any failure and closes only after four in a row
+          if (chatOnly && r.status === 401 && pageVt) { gone(); throw new Error('signed out'); }
+          if (chatOnly && r.status === 403) { gone('pop_unavail', 'This chat isn’t available to you any more, so this window is closed.'); throw new Error('no access'); }
+          if (chatOnly && r.status === 401) { if (++authMiss >= 4) { gone('pop_unavail', 'This chat isn’t available to you any more, so this window is closed.'); } throw new Error('HTTP 401'); }
           if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); } if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (d) {
           if (dead) return;
-          if (chatOnly && !d.reinit && !d.gone && (d.vt || null) !== pageVt) { gone(); return; }
-          fails = 0; setStatus('');
+          // (1.99?? dockpop review: signed IN in another tab under a signed-out window - its card says so and offers a reload)
+          if (chatOnly && !d.reinit && !d.gone && (d.vt || null) !== pageVt) {
+            if (pageVt) gone(); else gone('pop_signed_in', 'You signed in in another tab, so this chat window is closed. Reload it to see the chat as yourself.');
+            return;
+          }
+          authMiss = 0; fails = 0; setStatus('');
           // CL3: the join cursor ran out (24 h) - load the view again, like a fresh page (nothing earlier than its floors)
           if (d.reinit) {
             jcTok = null; cursor = 0; haveC = {}; haveList = []; maxC = 0; feedEl.textContent = ''; resetNext = true; lp.ok = true;
@@ -2063,6 +2077,12 @@
     function gone(key, fallback) {
       if (dead) return; dead = true;
       clearTimeout(timer); timer = null; try { if (pollCtl) pollCtl.abort(); } catch (e) { /* done */ }
+      // (1.99?? dockpop review, privacy: FIRST nothing more goes out - a line still in the outbox (a retry, the queue_full wait) would have
+      // been posted with whatever login this browser holds now; a push-to-talk clip being recorded is dropped, never uploaded; the 📺
+      // on-air consent prompt stops asking - it would poll and prompt as the new account inside a dead window)
+      safe('gone-relay', function () { if (roomRelay && roomRelay.destroy) roomRelay.destroy(); });
+      safe('gone-ptt', function () { if (roomPtt && roomPtt.destroy) roomPtt.destroy(); });
+      safe('gone-oac', function () { if (window.PATVOnairConsent && PATVOnairConsent.stop) PATVOnairConsent.stop(); var oac = document.getElementById('oacPromptOn'); if (oac) oac.remove(); });   // (its deferred script, not run yet, then never starts)
       safe('gone-audio', function () { if (roomAudio && roomAudio.pause) roomAudio.pause(); });
       safe('gone-rpm', function () { if (roomPm) roomPm.update({}); });            // (its own clear: no rpm block)
       safe('gone-cam', function () { snapClose(); });
@@ -2102,11 +2122,18 @@
     <% if (chatOnly_) { %>
     // 1.99?? dockpop: the window - #listen (the pad tab was playing the room when it opened this) plays it here (a blocked autoplay says
     // "tap ▶ to resume"); a focus or a page brought back re-checks who is signed in at once (one from the back/forward cache reloads)
-    if (location.hash === '#listen') {
+    // (1.99?? dockpop review: also a reload of a window that was playing - pad-dock.js leaves this window's own sessionStorage mark)
+    var keepListening = false;
+    try { keepListening = sessionStorage.getItem('patv.dock.listen.' + slug) === '1'; sessionStorage.removeItem('patv.dock.listen.' + slug); } catch (e) { keepListening = false; }
+    if (location.hash === '#listen' || keepListening) {
       safe('listen', function () { if (roomAudio.resume) roomAudio.resume(); });
-      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* old browser */ }
+      if (location.hash === '#listen') { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* old browser */ } }
     }
-    window.addEventListener('focus', function () { recheck(); });
+    // (1.99?? dockpop review, load: a focus re-checks only after the window was away 15 s or more - clicking between Hold'em and the chat
+    // cost one full view each time; a sign-out page, another account's Dock page and every answer's vt still catch a switch at once)
+    var blurAt = Date.now(), focusCheckAt = 0;
+    window.addEventListener('blur', function () { blurAt = Date.now(); });
+    window.addEventListener('focus', function () { var now = Date.now(); if (now - blurAt < 15000 || now - focusCheckAt < 15000) return; focusCheckAt = now; recheck(); });
     window.addEventListener('pageshow', function (e) { if (e && e.persisted) location.reload(); });
     <% } else if (dockOn_) { %>
     window.addEventListener('pageshow', function (e) { if (e && e.persisted) recheck(); });

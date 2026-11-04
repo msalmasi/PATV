@@ -2332,12 +2332,16 @@ function register(app, { isBotToken, addUser }) {
     const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: adultGate === "ok" ? R.count : 0, members: initial ? initial.members : null,
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest,
       lineLive: !!hubChat });
+    // 1.99?? dockpop review: a page that carries the viewer tag (a stable per-account key) is this viewer's alone - never kept by a shared
+    // cache (a stricter header set above stays)
+    const dockOn_ = require("./paddock").viewerOn(req.user), vt_ = signedIn && dockOn_ ? require("./roompm").tag(req.user.userId) : null;
+    if (vt_ && !res.get("Cache-Control")) res.set("Cache-Control", "private");
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
-      padDockOn: require("./paddock").viewerOn(req.user),
-      vt: signedIn ? require("./roompm").tag(req.user.userId) : null,   // 1.99?? dockpop: the viewer tag the Dock's windows compare (dock-link.js)
+      padDockOn: dockOn_,
+      vt: vt_,   // 1.99?? dockpop: the viewer tag the Dock's windows compare (dock-link.js) - only for the Room Dock (review)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       // 1.99aiq cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)

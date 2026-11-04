@@ -69,7 +69,10 @@
 
   // 3) the pad page prompt (owners / staff online)
   if (!document.getElementById('oacPromptOn')) return;
-  var shown = {}, card = null;
+  var shown = {}, card = null, stopped = false, iv = null;
+  // 1.99?? dockpop review: the pad's chat in its own window stops asking when it wipes itself (a sign-out or another account in this
+  // browser - it must never poll or prompt as the new account inside that dead window)
+  window.PATVOnairConsent = { stop: function () { stopped = true; clearInterval(iv); if (card) card.remove(); card = null; } };
   function prompt(a) {
     if (card) card.remove();
     card = el('div', 'oac-pop');
@@ -83,12 +86,12 @@
     document.body.appendChild(card);
   }
   function poll() {
-    if (document.hidden) return;
+    if (document.hidden || stopped) return;
     fetch('/api/onair/consent/mine', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
       var a = j && j.asks && j.asks[0];
-      if (a && !shown[a.id]) { shown[a.id] = 1; prompt(a); }
+      if (!stopped && a && !shown[a.id]) { shown[a.id] = 1; prompt(a); }
     }).catch(function () { /* next time */ });
   }
   poll();
-  setInterval(poll, 20000);
+  iv = setInterval(poll, 20000);
 })();
