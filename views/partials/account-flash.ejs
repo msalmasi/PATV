@@ -29,7 +29,7 @@
         <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent=this.dataset.copied; setTimeout(()=>this.textContent=this.dataset.copy,2000);" data-copied="<%- t('settings.verify.copied') %>" data-copy="<%- t('settings.verify.copy') %>"><%- t('settings.verify.copy') %></button>
       </div>
       <div class="verify-expires">⏱ <%- t('settings.verify.expires') %></div>
-      <p class="verify-sr" id="cfVerifyLive" role="status" aria-live="polite" data-say="<%- t('settings.verify.announce', { code: verifyInfo.code }) %>"></p>
+      <p class="verify-sr" id="cfVerifyLive" role="status" aria-live="polite" data-say="<%= t('settings.verify.announce', { code: verifyInfo.code }) %>"></p>
     </div>
     <script>
       (function () {

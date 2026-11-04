@@ -152,7 +152,7 @@ test("its script: into view (smooth / instant with reduced motion), focus withou
 test("a pad's room code: shown focusable with a live region; after 'Get a code' the page really reloads to it and reveals it", async () => {
   const view = fs.readFileSync(path.join(repo, "views", "partials", "pad-connect.ejs"), "utf8");
   assert.match(view, /<p class="pcn-code" id="pcnCodeBox" tabindex="-1"><code id="pcnCode"><%= CF_\.code %><\/code>/);
-  assert.match(view, /id="pcnCodeLive" role="status" aria-live="polite" data-say="<%- t\('pad\.conn\.code_announce', \{ code: CF_\.code \}\) %>"/);
+  assert.match(view, /id="pcnCodeLive" role="status" aria-live="polite" data-say="<%= t\('pad\.conn\.code_announce', \{ code: CF_\.code \}\) %>"/);
   assert.match(view, /pad-connect\.js\?v=2/, "cache-buster moved with the script");
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   assert.equal(en["pad.conn.code_announce"], "Your room verification code is {code}. Put it in the room's topic, or type !verifypad {code} in the room.");

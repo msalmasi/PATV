@@ -33,7 +33,7 @@
       <%# 1.99?? quick1: right after "Get a code" the page comes back here (#pcnCamfrog) and pad-connect.js brings this into view,
           focuses it and reads the code out (pcnCodeLive) %>
       <p class="pcn-code" id="pcnCodeBox" tabindex="-1"><code id="pcnCode"><%= CF_.code %></code> <button type="button" class="btn-s ghost" data-pcn="copy"><%- t('pad.conn.copy') %></button> <small class="muted"><%- t('pad.conn.valid_until', { date: dt_(CF_.code_expires) }) %></small></p>
-      <p class="pcn-sr" id="pcnCodeLive" role="status" aria-live="polite" data-say="<%- t('pad.conn.code_announce', { code: CF_.code }) %>"></p>
+      <p class="pcn-sr" id="pcnCodeLive" role="status" aria-live="polite" data-say="<%= t('pad.conn.code_announce', { code: CF_.code }) %>"></p>
       <ol class="pcn-steps">
         <li><%- t('pad.conn.step_topic', { code: '<code>' + t.esc(CF_.code) + '</code>' }) %></li>
         <li><%- t('pad.conn.step_cmd', { cmd: '<code>!verifypad ' + t.esc(CF_.code) + '</code>' }) %><%- CF_.status === 'review' ? t('pad.conn.review_done') : '' %>.</li>

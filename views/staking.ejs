@@ -421,7 +421,7 @@
       </div>
     <% } %>
     <div class="forms">
-      <form method="post" action="/act" id="stakeForm" data-full="<%- t('staking.room.sel_full') %>" data-capped="<%- t('staking.room.sel_capped') %>"><%- hidden('stash') %>
+      <form method="post" action="/act" id="stakeForm" data-full="<%= t('staking.room.sel_full') %>" data-capped="<%= t('staking.room.sel_capped') %>"><%- hidden('stash') %>
         <b><span class="ds-ic" aria-hidden="true">📥</span> Stake</b>
         <input type="hidden" name="a0" value="stake">
         <select name="a1" aria-label="Stash"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner_name || m.owner %>/<%= m.name %></option><% }) %></select>
