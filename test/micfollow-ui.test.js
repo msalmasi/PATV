@@ -1013,7 +1013,7 @@ test("wave2 WP-4 stage-room.js (?v=18): the mic stage repaints when only the dyn
     assert.equal(x.rendered.length, before + 1, "repainted after " + f.toString());
     last = p;
   }
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=20/, v);   // (1.99ahq stage cover: v=19; 1.99ajq dockpol: v=20 - destroy() for the homepage's front-pad swap)
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=21/, v);   // (1.99ahq stage cover: v=19; 1.99ajq dockpol: v=20 - destroy() for the homepage's front-pad swap)
 });
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.4): cover tiles on the page ──

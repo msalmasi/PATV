@@ -102,27 +102,52 @@
               : (w === 'later' ? _t('js.stage.q_free_at', 'Book a free {m}-minute slot at {when}?', { m: m, when: when(body.start_at) }) : _t('js.stage.q_free_now', 'Book a free {m}-minute slot now?', { m: m })));
     if (!confirm(q)) return;
     $('bookBtn').disabled = true; $('bookMsg').textContent = _t('js.stage.booking', 'Booking…');
-    post(url, body).then(function (j) {
+    post(url, body).then(function (j) { booked(j, w, body, mode); })
+      .catch(function () { $('bookBtn').disabled = false; $('bookMsg').textContent = _t('js.stage.e_net', 'Could not reach the server.'); });
+  });
+  // 1.99?? golive: "You already have a stage slot" names it (j.have) - your video still playing on this pad is REPLACED in one step
+  // (the server ends it and books the new link; nothing changes if the new one can't be booked); anything else says where it is
+  function replaceOffer(j, body, mode) {
+    var h = j.have || {};
+    if (!(h.replaceable && mode === 'embed' && h.id)) {
+      $('bookMsg').textContent = (j.error || _t('js.stage.e_book', 'Could not book.')) + ' ' + (h.same_pad === false
+        ? _t('js.stage.have_other_pad', 'It\'s on another pad - end it there first.') : _t('js.stage.have_slot_end', 'End it under “Your slot” first.'));
+      return;
+    }
+    var what = h.title || h.label || _t('js.stage.your_video', 'your video');
+    if (!confirm(_t('js.stage.q_replace', 'You\'re already playing {what} on this pad. Replace it with this video? The old one stops now and the new one plays in its place.', { what: what }))) {
+      $('bookMsg').textContent = _t('js.stage.replace_no', 'Your video is still on. End it under “Your slot”, or book again and choose OK to replace it.');
+      return;
+    }
+    var rb = {};
+    for (var k in body) if (k !== 'start_at') rb[k] = body[k];
+    rb.replace = h.id;
+    $('bookBtn').disabled = true; $('bookMsg').textContent = _t('js.stage.replacing', 'Replacing your video…');
+    post('/api/stage/book', rb).then(function (j2) { booked(j2, 'now', rb, mode, true); })
+      .catch(function () { $('bookBtn').disabled = false; $('bookMsg').textContent = _t('js.stage.e_net', 'Could not reach the server.'); });
+  }
+  function booked(j, w, body, mode, again) {
       $('bookBtn').disabled = false;
       if (!j.ok) {
+        if (j.code === 'have_slot' && !again) return replaceOffer(j, body, mode);
         $('bookMsg').textContent = j.error || _t('js.stage.e_book', 'Could not book.');
         if (/queue/i.test(j.error || '') && w === 'now') { setRadio('when', 'queue'); formCalc(); }
         return;
       }
-      if (w === 'queue') $('bookMsg').textContent = _t('js.stage.queued', 'You\'re #{n} in the queue - we\'ll tell you (inbox + Pepe) when you\'re up.', { n: j.position });
+      if (again) $('bookMsg').textContent = _t('js.stage.replaced', 'Replaced - your new video is on.');
+      else if (w === 'queue') $('bookMsg').textContent = _t('js.stage.queued', 'You\'re #{n} in the queue - we\'ll tell you (inbox + Pepe) when you\'re up.', { n: j.position });
       else if (j.slot && (j.slot.status === 'requested')) $('bookMsg').textContent = _t('js.stage.requested', 'Requested - the pad\'s owner approves it. Your hold comes back if they don\'t.');
       else if (j.slot && j.slot.status === 'scheduled') $('bookMsg').textContent = _t('js.stage.booked', 'Booked for {when}. Your key works from a few minutes before.', { when: when(j.slot.start_at) });
       else $('bookMsg').textContent = '';
       if (j.key && j.slot) { try { sessionStorage.setItem(KEY_STORE + j.slot.id, j.key); } catch (x) {} }
       refresh();
-    }).catch(function () { $('bookBtn').disabled = false; $('bookMsg').textContent = _t('js.stage.e_net', 'Could not reach the server.'); });
-  });
+  }
 
   // ── status ──
   var REASONS = { owner_ended: _t('js.stage.r_owner_ended', 'you ended it'), time_up: _t('js.stage.r_time_up', 'your time ran out'), never_live: _t('js.stage.r_never_live', 'it never went live, so you got everything back'),
     idle: _t('js.stage.r_idle', 'the stream was off air too long'), cut: _t('js.stage.r_cut', 'it was cut back to Pepe'), banned: _t('js.stage.r_banned', 'an admin or the pad owner cut it'), deadline: _t('js.stage.r_deadline', 'it reached its deadline'),
     restart: _t('js.stage.r_restart', 'it timed out while the site restarted'), cancelled: _t('js.stage.r_cancelled', 'you cancelled it'), denied: _t('js.stage.r_denied', 'the pad owner declined it'), not_approved: _t('js.stage.r_not_approved', 'it wasn\'t approved in time'),
-    no_room: _t('js.stage.r_no_room', 'no slot was free at its start') };
+    no_room: _t('js.stage.r_no_room', 'no slot was free at its start'), replaced: _t('js.stage.r_replaced', 'a new video replaced it') };
   // stagefix site: a 🎬 cam slot (someone's Camfrog cam you put on a pad's Stage) ends with "cam_<why>"; the person's own choices
   // (private activity, Take me off this Stage, a block) are all "cam_unavailable" - never which
   function reasonOf(r) {

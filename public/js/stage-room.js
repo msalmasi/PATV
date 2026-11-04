@@ -45,14 +45,22 @@
   var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
   var CAM_REWATCH_MAX = 4, CAM_REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a cam slot's re-watches after a dropped connection
   var YT_ID = /^[A-Za-z0-9_-]{11}$/, YT_CH = /^UC[A-Za-z0-9_-]{22}$/, TW_LOGIN = /^[A-Za-z0-9_]{3,25}$/, TW_VOD = /^[0-9]{5,12}$/;
-  function embedUrl(e) {
+  // 1.99?? golive: `at` (whole seconds into the slot) starts a YouTube video / Twitch VOD there - a stage is a broadcast: a viewer
+  // who opens the page late, or whose player is rebuilt (the 🎙 mic stage came and went, a reload), joins where everyone else is
+  // instead of the video starting over from 0 (owner 2026-11-04: "it just replayed the last video"). Live streams have no `at`.
+  var EMBED_SEEK_MIN_S = 5;
+  function embedUrl(e, at) {
     if (!e) return null;
     var host = /^[a-z0-9.-]+$/i.test(location.hostname) ? location.hostname : 'publicaccess.tv';
     var q = 'autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1';
-    if (e.p === 'youtube' && (e.t === 'video' || e.t === 'live') && YT_ID.test(e.id)) return 'https://www.youtube-nocookie.com/embed/' + e.id + '?' + q;
+    var sec = Math.floor(Number(at) || 0), seek = sec >= EMBED_SEEK_MIN_S;
+    if (e.p === 'youtube' && (e.t === 'video' || e.t === 'live') && YT_ID.test(e.id)) return 'https://www.youtube-nocookie.com/embed/' + e.id + '?' + q + (seek && e.t === 'video' ? '&start=' + sec : '');
     if (e.p === 'youtube' && e.t === 'channel' && YT_CH.test(e.id)) return 'https://www.youtube-nocookie.com/embed/live_stream?channel=' + e.id + '&' + q;
     if (e.p === 'twitch' && e.t === 'channel' && TW_LOGIN.test(e.id)) return 'https://player.twitch.tv/?channel=' + e.id + '&parent=' + host + '&autoplay=true&muted=true';
-    if (e.p === 'twitch' && e.t === 'vod' && TW_VOD.test(e.id)) return 'https://player.twitch.tv/?video=v' + e.id + '&parent=' + host + '&autoplay=true&muted=true';
+    if (e.p === 'twitch' && e.t === 'vod' && TW_VOD.test(e.id)) {
+      return 'https://player.twitch.tv/?video=v' + e.id + '&parent=' + host + '&autoplay=true&muted=true' +
+             (seek ? '&time=' + Math.floor(sec / 3600) + 'h' + Math.floor(sec % 3600 / 60) + 'm' + (sec % 60) + 's' : '');
+    }
     return null;
   }
   // 1.99fv: Pepe's stage source from the server (bridge.stage().pepe_src) - only known shapes get through
@@ -185,15 +193,19 @@
       else view = f ? 'slot:' + f.id : 'pepe';
     }
     pickDefault();
-    function setEmbed(e) {
+    // 1.99?? golive: `since` (a slot's start, server ms) -> the player starts where the broadcast is (embedUrl's `at`). The iframe
+    // is keyed by the video itself, so a poll never rebuilds it; the position only counts when it IS (re)built.
+    var skew = 0;                                   // server clock - this one (from the poll's `now`)
+    function setEmbed(e, since) {
       var url = embedUrl(e);
       if (!o.embedHost) return;
       if (!url) { o.embedHost.innerHTML = ''; o.embedHost.classList.add('hide'); embedFor = null; return; }
       if (embedFor === url) return;
       embedFor = url;
+      var at = Number(since) > 0 ? (Date.now() + skew - Number(since)) / 1000 : 0;
       o.embedHost.innerHTML = '';
       var f = document.createElement('iframe');
-      f.src = url; f.title = _t('js.stage.room.video_title', 'Stage video'); f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      f.src = embedUrl(e, at) || url; f.title = _t('js.stage.room.video_title', 'Stage video'); f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
       f.setAttribute('allowfullscreen', ''); f.referrerPolicy = 'strict-origin-when-cross-origin';
       f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
       o.embedHost.appendChild(f);
@@ -218,7 +230,7 @@
         player.stop(); setEmbed(null); camShow(s);
         o.onAir && o.onAir(true, s.title || null);
       } else if (s && s.embed) {
-        player.stop(); setEmbed(s.embed);
+        player.stop(); setEmbed(s.embed, s.since);
         o.onAir && o.onAir(true, (s.title ? s.title + ' · ' : '') + _t('js.stage.room.from', 'from {platform}', { platform: s.embed.p === 'youtube' ? 'YouTube' : 'Twitch' }));
       } else if (s) {
         setEmbed(null);
@@ -349,6 +361,7 @@
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         if (dead) return;
         var was = cur(), wasF = featured();
+        if (Number(g.now) > 0) skew = Number(g.now) - Date.now();                   // 1.99?? golive: where a video slot is (setEmbed)
         pepeOn = !!g.active;
         pepeWhep = typeof g.whep === 'string' && g.whep ? g.whep : null;            // 1.99fd: ⚡ for Pepe's WHIP stream
         if (typeof g.pepe_here === 'boolean') pepeHere = g.pepe_here;
