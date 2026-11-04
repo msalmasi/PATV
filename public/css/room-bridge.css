@@ -61,9 +61,10 @@
 /* 1.99?? dockclean (Room Dock, owner point 30): the name list - avatar, name, the login when it differs, the 🌐 / incognito tag; 44px rows on touch */
 .rb-ac.rb-ac-names .rb-ac-it { justify-content: flex-start; align-items: center; gap: 8px; min-height: 36px; }
 .rb-ac.rb-ac-names .av { width: 24px; height: 24px; font-size: 11px; flex: none; }
-.rb-ac-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.rb-ac-l { color: var(--ds-text-muted, #9a9a9a); font-size: 12px; white-space: nowrap; }
-.rb-ac-t { margin-inline-start: auto; color: var(--ds-text-muted, #9a9a9a); font-size: 11px; white-space: nowrap; }
+/* (1.99?? dockclean review: the name keeps its room - the login gives way first; the 🌐 / incognito tag sits by the name like the login) */
+.rb-ac-n { flex: 0 1 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.rb-ac-l { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ds-text-muted, #9a9a9a); font-size: 12px; white-space: nowrap; }
+.rb-ac-t { flex: none; padding: 0 6px; border-radius: 999px; background: var(--ds-surface-2, #222); color: var(--ds-text-muted, #9a9a9a); font-size: 11px; line-height: 16px; white-space: nowrap; }
 @media (pointer: coarse) { .rb-ac.rb-ac-names .rb-ac-it { min-height: 44px; } }
 .rb-hint { color: #6f8f72; font-size: 12px; margin-top: 4px; }
 .rb-cmdfeed { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }

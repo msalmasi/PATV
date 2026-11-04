@@ -563,6 +563,14 @@
     // 1.99?? dockclean (owner point 30): opts.people() = the names this page knows (room.ejs acPeople: {value, name, login, tag, u}) -
     // after "@" or in a "!command " line's second word the list offers them (Tab / Enter / a tap accepts); opts.avatar(u) draws one
     var people = typeof opts.people === 'function' ? opts.people : null, avatarOf = typeof opts.avatar === 'function' ? opts.avatar : null, acName = null;
+    // 1.99?? dockclean review: the commands whose first word is a PERSON (Pepe's help catalogue: "!duel [user]", "!look [user]"…) - only
+    // these open the name list in their second word (a free-text "!say he…" or an amount never does), and there only named Camfrog
+    // members complete (their login: what Pepe looks people up by). 🌐 web users and frog names complete after "@" only.
+    var NAME_CMDS = ['!time', '!roast', '!seen', '!lastseen', '!relay', '!camok', '!camno', '!whowatching', '!blockviewer', '!unblockviewer', '!micstats',
+      '!replay', '!look', '!duel', '!brawl', '!impression', '!tip', '!sheet', '!gear', '!snap', '!clip', '!autoclip', '!opencam', '!djban', '!djunban',
+      '!votekick', '!voteblock', '!votedemod', '!timeout', '!untimeout', '!watchlist', '!ignore', '!strike', '!casinoban', '!casinounban',
+      '!fine', '!kick', '!ban', '!unban', '!punish', '!unpunish', '!blockmic', '!unblockmic', '!admin', '!mod', '!friend', '!unrole', '!role', '!patv',
+      '!msg', '!message', '!creator', '!subscribe'];
 
     function fmtPrice(n) { return n > 0 ? Number(n).toLocaleString('en-US') + ' PAT' : ''; }
     function closeAc() { list.classList.add('hide'); list.classList.remove('rb-ac-names'); list.textContent = ''; acItems = []; acIdx = -1; acName = null; inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); }
@@ -573,7 +581,7 @@
       var m = /(^|\s)@([^\s@]{0,40})$/.exec(before);
       if (m) return { at: true, start: pos - m[2].length - 1, end: pos, q: m[2] };
       m = /^(![A-Za-z0-9_]{1,30})\s+([^\s]{0,40})$/.exec(before);
-      if (m && m[1].toLowerCase() !== '!commands') return { at: false, start: pos - m[2].length, end: pos, q: m[2] };
+      if (m && NAME_CMDS.indexOf(m[1].toLowerCase()) >= 0) return { at: false, start: pos - m[2].length, end: pos, q: m[2] };
       return null;
     }
     function takeName(p, c) {
@@ -586,6 +594,7 @@
       var q = c.q.toLowerCase(), pre = [], mid = [];
       var all = []; try { all = people() || []; } catch (e) { all = []; }
       all.forEach(function (p) {
+        if (!c.at && !p.cmd) return;
         var hay = [p.name, p.value, p.login].filter(Boolean).map(function (x) { return String(x).toLowerCase(); });
         // (a name's start, or a word's start inside it - "fa" finds Aster Fable and quill-fable - comes before a match mid-word)
         if (!q || hay.some(function (h) { var i = h.indexOf(q); return i === 0 || (i > 0 && /[\s_.-]/.test(h.charAt(i - 1))); })) pre.push(p);
@@ -605,7 +614,8 @@
         li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });
         list.appendChild(li); acItems.push(li);
       });
-      acIdx = -1; list.classList.remove('hide'); inp.setAttribute('aria-expanded', 'true'); paintAc();
+      // (1.99?? dockclean review: the first row is picked from the start - it shows what Tab / Enter will take)
+      acIdx = 0; list.classList.remove('hide'); inp.setAttribute('aria-expanded', 'true'); paintAc();
     }
     function paintAc() {
       acItems.forEach(function (li, i) {

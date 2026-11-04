@@ -1699,10 +1699,11 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
   const withTip = (u) => { const x = withPatv(u, L, F); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
-  // 1.99?? dockclean (owner point 32): the 🌐 web users on this pad's live chat (padweb.js) - the pad page's own /live only, while the
+  // 1.99?? dockclean (owner point 32): the 🌐 web users on this pad's live chat (padweb.js) - the pad page's own /live only (opts.padPage:
+  // its first render and its ?pad=1 polls - not the homepage panel or the owner / settings pages that poll the same route), while the
   // Room Dock is on; PATV names only (no chat login, no account id); a viewer's own entry says me: true and has no tip
   let web = null;
-  if (opts && opts.program && userId && require("./paddock").current().cfg.mode !== "off") {
+  if (opts && opts.padPage && userId && require("./paddock").current().cfg.mode !== "off") {
     const lc = (x) => String(x || "").toLowerCase();
     const tipOf = (name) => (!me || (me.username && lc(name) === lc(me.username)) || (pepe && lc(name) === pepe) ? null : { to: String(name), href: "/u/" + encodeURIComponent(String(name)) + "/tip" });
     try { web = await require("./padweb").forRoom(R, me, tipOf); } catch (e) { web = []; }
@@ -2014,8 +2015,10 @@ function register(app, { isBotToken, addUser }) {
     const login = signed ? await pm.linkedLogin(req.user.userId) : null;
     if (login) pm.noteViewer(R.id, login);
     // 1.99?? dockclean (owner point 32): a signed-in member with this pad's live chat open is a 🌐 web user on its people list for 90 s
-    // (padweb.js: memory only, never logged; Incognito / !bridge hide keep them off it)
-    if (signed) require("./padweb").note(R.id, req.user, login);
+    // (padweb.js: memory only, never logged; Incognito / !bridge hide / private activity / ghost mode keep them off it). Only the pad
+    // page's own polls (?pad=1) - the homepage panel and the owner / settings pages poll this route too (1.99?? dockclean review)
+    const padPage = req.query.pad === "1";
+    if (signed && padPage) require("./padweb").note(R.id, req.user, login);
     // 1.99ye: ?wait=1 - a long-poll (waitForChange); the answer says lp: true so the page asks again at once
     const lp = req.query.wait === "1";
     if (lp) {
@@ -2034,7 +2037,7 @@ function register(app, { isBotToken, addUser }) {
     // 1.99ajd roompm: ?rpm=<the last private answer the page has> (pad-roompm.js) - this viewer's own private answers on this pad
     const rpm = typeof req.query.rpm === "string" && /^\d{1,16}$/.test(req.query.rpm) ? Number(req.query.rpm) : null;
     const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1",
-                               { viewer: signed ? req.user : null, jc, rs, program: true, rpm });
+                               { viewer: signed ? req.user : null, jc, rs, program: true, rpm, padPage });
     res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     res.json(lp ? Object.assign(out, { lp: true }) : out);
   });
@@ -2243,7 +2246,7 @@ function register(app, { isBotToken, addUser }) {
     const bridgeLocked = !R.offline && !siteOnly && !bridgeOk(R.id);
     // CL3: the viewer's floors on this pad (#rmInit carries the page's signed join cursor, `jc`)
     const initial = liveOpen && !R.offline && !bridgeLocked ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null, true,
-                                                                             { viewer: signedIn ? req.user : null, program: true, rpm: 0 }) : null;
+                                                                             { viewer: signedIn ? req.user : null, program: true, rpm: 0, padPage: true }) : null;
     // 1.99ajd roompm: a page that carries this viewer's private answers is theirs alone - never kept by a cache
     if (initial && initial.rpm && initial.rpm.rows && initial.rpm.rows.length) res.set("Cache-Control", "private, no-store");
     // CL8: a Camfrog pad whose room is offline still shows its 📜 chat history (read-only, chatloghist.js) to signed-in viewers who
