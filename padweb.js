@@ -21,7 +21,7 @@
 // 1.99ajf dockclean review: only the pad page's own polls note anyone (bridge.js ?pad=1), not the homepage panel or the owner pages.
 // The privacy page (/privacy#rooms) says so: Incognito, or keeping your room activity private, keeps you off the list.
 //
-// 1.99?? padppl (owner: "Website users in the people list can be anyone that posted in the last hour. But we should differentiate them
+// 1.99ajn padppl (owner: "Website users in the people list can be anyone that posted in the last hour. But we should differentiate them
 // from people who actually had the pad's chat open in the last 90s. Like active/inactive."): a second in-memory map - who POSTED in
 // this pad's chat from the website in the last POST_TTL_MS (1 hour; bridge-relay.js notes a say job once Pepe sent it or its line came
 // back, from any page - the homepage Dock included), at most MAX_PER_ROOM per room, forgotten on a restart. forRoom lists the union:
@@ -38,7 +38,7 @@ const { getQuery } = require("./dbUtils");
 const TTL_MS = 90 * 1000, MAX_PER_ROOM = 100, INCOG_CACHE_MS = 30 * 1000, POST_TTL_MS = 60 * 60 * 1000;
 let clock = () => Date.now();
 const rooms = new Map();            // roomId -> Map(userId -> {userId, username, login, at})
-const posted = new Map();           // roomId -> Map(userId -> {userId, username, login, at}) - 1.99?? padppl: posted in the last hour
+const posted = new Map();           // roomId -> Map(userId -> {userId, username, login, at}) - 1.99ajn padppl: posted in the last hour
 const incogCache = new Map();       // chat key -> {on, at}
 const privCache = new Map();        // userId -> {on, at}: their room activity is private (profile)
 const blockCache = new Map();       // viewer userId -> {set, at}: the ids blocked either way with them
@@ -55,7 +55,7 @@ function note(roomId, user, login) {
   m.set(id, { userId: id, username: String(user.username), login: login ? String(login).toLowerCase() : null, at: now });
   while (m.size > MAX_PER_ROOM) m.delete(m.keys().next().value);
 }
-/** 1.99?? padppl: this account's line from the website reached pad room roomId's chat (bridge-relay: Pepe sent it / its echo came). */
+/** 1.99ajn padppl: this account's line from the website reached pad room roomId's chat (bridge-relay: Pepe sent it / its echo came). */
 function notePost(roomId, user, login, at = clock()) {
   if (!roomId || !user || !user.userId || !user.username) return;
   let m = posted.get(roomId);
@@ -65,7 +65,7 @@ function notePost(roomId, user, login, at = clock()) {
   m.set(id, { userId: id, username: String(user.username), login: login ? String(login).toLowerCase() : null, at: Number(at) || clock() });
   while (m.size > MAX_PER_ROOM) m.delete(m.keys().next().value);
 }
-/** 1.99?? padppl review fix: notePost only for a line that went out under the person's NAME - nobody hides that key now (the sticky
+/** 1.99ajn padppl review fix: notePost only for a line that went out under the person's NAME - nobody hides that key now (the sticky
  *  hidden sets: incognito, !bridge hide, forget-me...) and Incognito is off (a FRESH read - never the 30 s cache, a switch just
  *  flipped counts). Fails closed (a failed check notes nothing). Never throws. */
 async function notePostNamed(roomId, user, login, at = clock()) {
@@ -132,7 +132,7 @@ async function blocksOf(viewerId) {
   let set = null;
   try {
     set = await require("./messages").cardBlocks(k);
-    // 1.99?? padppl: + whoever blocked this viewer's Camfrog login by name before it had an account (a named block, like dm_blocks).
+    // 1.99ajn padppl: + whoever blocked this viewer's Camfrog login by name before it had an account (a named block, like dm_blocks).
     // Never a frog-name block: THE VEIL RULE - it never changes what the blocked person sees (blocks.js)
     for (const id of await require("./blocks").loginBlockersOf(k)) set.add(String(id));
   } catch (e) { set = null; }
@@ -145,7 +145,7 @@ async function blocksOf(viewerId) {
  */
 async function forRoom(R, me = null, tipOf = null) {
   if (!R || !R.id) return [];
-  // 1.99?? padppl: the open ones (act 1) and, after them, who posted in the last hour without the chat open now (act 0)
+  // 1.99ajn padppl: the open ones (act 1) and, after them, who posted in the last hour without the chat open now (act 0)
   const t = clock();
   const open = sweep(R.id, t), openIds = new Set(open.map((v) => v.userId));
   const list = [...open.map((v) => Object.assign({}, v, { act: 1 })),
@@ -166,7 +166,7 @@ async function forRoom(R, me = null, tipOf = null) {
       if (v.login && await incognitoOn("u:" + v.userId)) continue;
       if (await privateOn(v)) continue;
       const e = { web: true, display: v.username, patv: { username: v.username }, act: v.act };
-      // 1.99?? padppl: a web name that is a Camfrog login this account isn't linked to - the "not the Camfrog user" tag (cfnames.js)
+      // 1.99ajn padppl: a web name that is a Camfrog login this account isn't linked to - the "not the Camfrog user" tag (cfnames.js)
       try { const cl = require("./cfnames").clashOf(v.userId, v.username, v.username, v.login); if (cl) e.clash = cl; } catch (err) { /* no tag */ }
       if (!v.act) e.ago = v.ago;
       if (self) e.me = true;

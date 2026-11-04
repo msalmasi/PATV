@@ -1,4 +1,4 @@
-// targets.js - 1.99?? padppl: the ONE resolver for a TYPED moderation name (owner, 2026-11-04: "Someone created a PATV username that's the
+// targets.js - 1.99ajn padppl: the ONE resolver for a TYPED moderation name (owner, 2026-11-04: "Someone created a PATV username that's the
 // same username as a Camfrog user (tricon) in order to harass. So when I try to ban 'tricon' from the bridge, it autoresolved to Tricon's
 // PATV username."). Before this, four resolvers disagreed: bridgeblocks.resolveTarget tried the chat login first, rooms.findUser and
 // accountsadmin.findUser the username first, mainstage.ban the username only - so the same word hit different people, and nobody was

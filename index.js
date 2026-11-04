@@ -228,7 +228,7 @@ app.use(express.urlencoded({ extended: true }));   // (form bodies only: the hub
 const botkeys = require("./botkeys");
 app.use(botkeys.middleware);
 botkeys.start();
-// 1.99?? padppl: 🌐⛔ network bans (netban.js - DARK until an admin switches them on): ONE gate in front of the write routes they cover -
+// 1.99ajn padppl: 🌐⛔ network bans (netban.js - DARK until an admin switches them on): ONE gate in front of the write routes they cover -
 // feed posts / comments / edits / crossposts / uploads / AI generations, stories (and their replies / tips), DMs (send, uploads, groups,
 // adding people, renaming), and a pad's chat / commands / clips / snapshots / 🐸 Pepe actions / gifts / stage cam and booking from the
 // website, plus /api/stage/book and its queue. Pad-scope bans apply to the pad the request is FOR: the /api/rooms/:slug in the path, the
@@ -703,7 +703,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           await oauthLink.linkRewards({ userId: existingTwitchEmail[0].userId, provider: "twitch", providerId: twitchUser.id, priorFlag: prior ? prior.twitchBonus : 1 });
           currentUser = existingTwitchEmail[0];
         } else {
-          // 1.99?? padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
+          // 1.99ajn padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
           const nbWhy_ = await require("./netban").newAccountRefusal(req);
           if (nbWhy_) return oauthFail(req, res, nbWhy_);
           //create a new user
@@ -757,7 +757,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
     }
   } catch (error) {
     console.error("Failed to authenticate with Twitch:", error && error.message);
-    if (!res.headersSent) oauthFail(req, res, error && error.code === "network" ? error.message : "Twitch sign-in didn't work. Please try again.");   // 1.99?? padppl: a network ban's own words
+    if (!res.headersSent) oauthFail(req, res, error && error.code === "network" ? error.message : "Twitch sign-in didn't work. Please try again.");   // 1.99ajn padppl: a network ban's own words
   }
 });
 
@@ -995,7 +995,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           require("./requestroles").kick(existingDiscordEmail[0].userId);   // 1.99la
           currentUser = existingDiscordEmail[0];
         } else {
-          // 1.99?? padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
+          // 1.99ajn padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
           const nbWhy_ = await require("./netban").newAccountRefusal(req);
           if (nbWhy_) return oauthFail(req, res, nbWhy_);
           // Create a new user
@@ -1052,7 +1052,7 @@ app.get("/auth/discord/callback", async (req, res) => {
     }
   } catch (error) {
     console.error("Failed to authenticate with Discord:", error && error.message);
-    if (!res.headersSent) oauthFail(req, res, error && error.code === "network" ? error.message : "Discord sign-in didn't work. Please try again.");   // 1.99?? padppl: a network ban's own words
+    if (!res.headersSent) oauthFail(req, res, error && error.code === "network" ? error.message : "Discord sign-in didn't work. Please try again.");   // 1.99ajn padppl: a network ban's own words
   }
 });
 
@@ -1420,9 +1420,9 @@ require("./banner").register(app, { addUser, isBotToken });        // 1.99kk: th
 require("./telegram").register(app, { isBotToken, addUser });   // 1.99kn: Telegram link + alerts + access tiers (/settings/telegram); the bot runs in Pepe
 require("./opsalerts").register(app, { isBotToken });   // 1.99aai: POST /api/ops/alert - VPS watchdogs (loopback + bot token) -> admins' inbox + Telegram outbox
 require("./settingshub").register(app, { addUser });   // 1.99vz: the /settings hub - one map of every account / preference page
-require("./blocks").register(app, { addUser });        // 1.99?? padppl: 🚫 Block from the person menu / profile / /settings/blocked (blocks.js)
-require("./cfnames").register(app, { addUser });       // 1.99?? padppl: the impersonation guard's admin list (/admin/users#nameclash)
-require("./netban").register(app, { addUser });        // 1.99?? padppl: 🌐⛔ network bans - admin routes (/api/admin/netbans, /api/admin/nets/:userId)
+require("./blocks").register(app, { addUser });        // 1.99ajn padppl: 🚫 Block from the person menu / profile / /settings/blocked (blocks.js)
+require("./cfnames").register(app, { addUser });       // 1.99ajn padppl: the impersonation guard's admin list (/admin/users#nameclash)
+require("./netban").register(app, { addUser });        // 1.99ajn padppl: 🌐⛔ network bans - admin routes (/api/admin/netbans, /api/admin/nets/:userId)
 require("./webpush").register(app, { addUser });   // 1.99acd: 🔔 Web Push (QW-1) - browser notifications for DMs + mentions, /admin/push (OFF by default; /sw.js is mounted at the top)
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./casino/routes").register(app, { isBotToken, addUser });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md)
@@ -1759,7 +1759,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         })().catch(() => null),
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
         canSeeHistory: !preview && !!req.user && (req.user.username === user.username || SP.can(req.user, "history.lookup")),
-        // 1.99?? padppl: 🚫 Block / ✅ Unblock in ⋯ More (blocks.js) - a signed-in visitor only, never on Pepe's profile; `blocked` = the
+        // 1.99ajn padppl: 🚫 Block / ✅ Unblock in ⋯ More (blocks.js) - a signed-in visitor only, never on Pepe's profile; `blocked` = the
         // VISITOR blocked them (never "they blocked you")
         profileBlock: await (async () => {
           if (!req.user || !req.user.userId || isOwner || preview) return null;
@@ -2602,7 +2602,7 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
     if (await usernames.reservedFor(name, user.userId)) {
       return res.status(409).json({ ok: false, error: "that username belonged to another account - pick another" });
     }
-    // 1.99?? padppl: never another Camfrog user's login (cfnames.js) - their own linked login is fine
+    // 1.99ajn padppl: never another Camfrog user's login (cfnames.js) - their own linked login is fine
     const clash = await require("./cfnames").nameRefusal(name, user.userId).catch(() => null);
     if (clash) return res.status(409).json({ ok: false, error: "that name belongs to another Camfrog user - pick another" });
     await usernames.ensure();
@@ -2705,7 +2705,7 @@ app.post('/api/users/camfrog/register', async (req, res) => {
     await welcome.enroll(userId, "camfrog", null, null, typeof req.body.identity === "string" ? req.body.identity.slice(0, 60) : null);
     await oauthLink.safeBadge(userId, 'fresh_meat');
     await inbox.attachPendingSafe(userId, camfrogUsername);   // notices Pepe sent before the account existed
-    // 1.99?? padppl (review fix): blocks / website bans / frog-name gifts made on this login before it had an account follow it onto
+    // 1.99ajn padppl (review fix): blocks / website bans / frog-name gifts made on this login before it had an account follow it onto
     // the account Pepe just made, as on a !verify link (never throws)
     const cfl_ = String(camfrogUsername || "").toLowerCase();
     if (cfl_) {

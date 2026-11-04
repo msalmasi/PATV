@@ -228,7 +228,7 @@ test("/privacy golden: every S7 switch off -> byte for byte the S6 head's page",
                     { incogcam: null, camreveal: null, camevidence: null, pv3: null, privwire: PWC }];
   for (const v of variants) {
     const loc = Object.assign({}, L0, v);
-    // (1.99?? padppl: minus its always-current additions, test/fixtures/padppl-privacy.js)
+    // (1.99ajn padppl: minus its always-current additions, test/fixtures/padppl-privacy.js)
     assert.equal(require("./fixtures/padppl-privacy").before(ejs.render(now, loc, { filename: fn })), ejs.render(baseSrc, loc, { filename: fn }), "same page: " + Object.keys(v).join(","));
   }
 });

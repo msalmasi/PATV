@@ -1,4 +1,4 @@
-/* person-sheet.css - 1.99?? padppl: the 🚫 Block (block-sheet.js), ⛔ Ban / ↩️ Lift (pad-ban-sheet.js) and 🎁 Gift (gift-sheet.js) sheets - the
+/* person-sheet.css - 1.99ajn padppl: the 🚫 Block (block-sheet.js), ⛔ Ban / ↩️ Lift (pad-ban-sheet.js) and 🎁 Gift (gift-sheet.js) sheets - the
    💸 Tip sheet's look (room-mod.css .pm-dlg: gold-tinted border, a header with the emoji title and ✕, a divider, a bottom sheet on phones),
    design-system tokens only; plus folded lines, mention chips and the idle 🌐 rows. No layout change to anything else on the page. */
 .psh { padding: 0; border: 1px solid #3a3420; border-radius: 14px; background: var(--ds-surface, #121212);
@@ -71,7 +71,7 @@
 .line .blk-fold { font-size: 12px; color: var(--ds-text-muted, #9a9a9a); font-style: italic; }
 .line .blk-fold button { margin-left: 6px; font: inherit; font-style: normal; font-size: 12px; background: none; border: 0; color: var(--ds-ac-2, #81c784);
                          text-decoration: underline; cursor: pointer; padding: 0; }
-/* 1.99?? padppl: the people list's INACTIVE 🌐 rows (posted in the last hour, chat not open now) - dimmed, with a visible "23m" (a title
+/* 1.99ajn padppl: the people list's INACTIVE 🌐 rows (posted in the last hour, chat not open now) - dimmed, with a visible "23m" (a title
    never reaches a touch screen); the "not the Camfrog user" tag stays at full strength */
 .rmd-web.is-idle > :not(.nm), .rmd-web.is-idle .nm > :not(.who-web):not(.web-ago), .rmd-web.is-idle .who-web > :not(.clash-tag) { opacity: .55; }
 .rmd-web .web-ago { margin-left: 4px; font-size: 11px; color: var(--ds-text-muted, #9a9a9a); white-space: nowrap; font-variant-numeric: tabular-nums; }

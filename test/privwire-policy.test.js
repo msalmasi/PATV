@@ -23,7 +23,7 @@ const BASE = { user: null, title: "Privacy Policy", VERSION: "x", UPDATED: "1 No
                micrec: null, memory: null, policyDates: {} };
 const MEMORY = { on_day: "29 October 2026", on_at: 1793200000000 };
 const DATES = { "wp1-voice": { at: 1793100000000, day: "28 October 2026" }, "mic-stage-keep": { at: 1793534400000, day: "1 November 2026" } };
-// 1.99?? padppl: section 6's "Blocking someone" paragraph is the current text for everyone (blocks.js - not behind a switch; dated by
+// 1.99ajn padppl: section 6's "Blocking someone" paragraph is the current text for everyone (blocks.js - not behind a switch; dated by
 // terms.js "blocks-2"): the one addition to the switch-off page, taken out before comparing with the old commit
 const PADPPL = (page) => page.replace(/[ \t]*<p id="blocking">[\s\S]*?<\/p>\r?\n/, "");
 const render = (src, extra) => ejs.render(lf(src), Object.assign({}, BASE, extra), { filename: FILE });
@@ -217,7 +217,7 @@ test("transcripts bar: its sentences only with privacy wire v2 AND the bar live,
 
 test("transcripts bar: terms.js dates it by policy_text_dates 'tx-bar' while privwire.txBar, passes locals.txbar, and its date counts only while shown", () => {
   const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
-  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions", "gift-inbox"\];/);   // (1.99aid privacy controls S0: + livecam-never-kept; 1.99aih round 6: + stage-cover; 1.99?? padppl: + rooms-web-2, net-bans, blocks-2, chat-mentions)
+  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions", "gift-inbox"\];/);   // (1.99aid privacy controls S0: + livecam-never-kept; 1.99aih round 6: + stage-cover; 1.99ajn padppl: + rooms-web-2, net-bans, blocks-2, chat-mentions)
   assert.match(src, /"tx-bar": \(\) => require\("\.\/privwire"\)\.txBar\(\) === true/);
   // (review fix F1: "live" while privwire.txBar, "kept" while it isn't but bars it made are still kept - privwire.txTextNow)
   assert.match(src, /const m = privwire \? await PWm\.txTextNow\(\) : null;/);

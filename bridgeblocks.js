@@ -99,7 +99,7 @@ async function hasArchived() {
 }
 
 /**
- * Who a mod means (1.99?? padppl: targets.js - the one typed-name resolver): "u:<id>", "@name" / "🌐name" (a PATV username only),
+ * Who a mod means (1.99ajn padppl: targets.js - the one typed-name resolver): "u:<id>", "@name" / "🌐name" (a PATV username only),
  * "cf:<login>" (a Camfrog login only), or a bare name - which must mean ONE person: a PATV username that is ANOTHER account's linked
  * Camfrog login (the tricon case) comes back {ambiguous, choices, error} for the caller to answer 409 with, never a guess.
  * -> {userId, username, login} | {ambiguous, choices, error} | {error}
@@ -110,7 +110,7 @@ async function resolveTarget(raw) {
   if (!r.userId) return { error: "That Camfrog login isn't linked to a PATV account." };
   return { userId: r.userId, username: r.username, login: r.login || null };
 }
-/** 1.99?? padppl: the answer for a target that didn't resolve - 409 + the choices when the name means two people. */
+/** 1.99ajn padppl: the answer for a target that didn't resolve - 409 + the choices when the name means two people. */
 function targetFail(res, target) {
   res.status(target.ambiguous ? 409 : 404).json(Object.assign({ ok: false, error: target.error }, target.ambiguous ? { code: "ambiguous", choices: target.choices } : {}));
 }
@@ -134,12 +134,12 @@ async function active(roomId, userId, feature = "all", t = now()) {
   try {
     const PB = require("./padbans");
     const login = await PB.loginOfCached(userId);
-    // 1.99?? padppl review fix: a website ban on this account's Camfrog login made before it had an account (padbans.js pad_login_bans) -
+    // 1.99ajn padppl review fix: a website ban on this account's Camfrog login made before it had an account (padbans.js pad_login_bans) -
     // enforced by the login, however the account came to be linked (a !verify, an account Pepe made, a merge)
     const lb = login ? await PB.loginActive(roomId, login) : null;
     if (lb) return { room: lb.room_id, global: lb.room_id === "", userId: String(userId), feature: "all", username: null, reason: lb.reason || "", by: lb.by_name || "", via: "web",
                      created: Number(lb.at) || 0, until: lb.until == null ? null : Number(lb.until) };
-    // 1.99?? padppl: a ban on this person's FROG NAME (padbans.js veil_bans) - THE VEIL RULE: only while they are under a frog name NOW
+    // 1.99ajn padppl: a ban on this person's FROG NAME (padbans.js veil_bans) - THE VEIL RULE: only while they are under a frog name NOW
     // (veiledNow), never their named activity; it reads like a room block, never says it was a veil ban
     const v = await PB.veilActive(roomId, userId, { login });
     if (v && (await PB.veiledNow(userId, login))) return { room: v.room_id, global: v.room_id === "", userId: String(userId), feature: "all", username: null, reason: v.reason || "", by: "", via: "web",

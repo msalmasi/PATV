@@ -220,7 +220,7 @@ test("room mentions: your name -> a mention push, your word -> an alert-word pus
   assert.ok(!sp.t.includes("Secret") && !sp.b.includes("Secret"), "the text never names an Approved pad (the link still opens it)");
 });
 
-test("room mentions: a late bridge line -> the notice, no push; a blocked speaker (1.99?? padppl: blocks.js) or muted -> neither (upstream)", async () => {
+test("room mentions: a late bridge line -> the notice, no push; a blocked speaker (1.99ajn padppl: blocks.js) or muted -> neither (upstream)", async () => {
   const notices = async () => (await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = 'u_bob' AND kind = 'mention'"))[0].n;
   M._sent.clear();
   tick(61e3);
@@ -229,7 +229,7 @@ test("room mentions: a late bridge line -> the notice, no push; a blocked speake
   await idle();
   assert.equal(await notices(), n0 + 1, "the 🔔 notice is filed");
   assert.equal((await rowsOf("bob")).length, r0, "a backlog line: no push");
-  // bob blocked carol's account (DMs): 1.99?? padppl - never an alert from someone blocked either way (blocks.js): no notice, no push
+  // bob blocked carol's account (DMs): 1.99ajn padppl - never an alert from someone blocked either way (blocks.js): no notice, no push
   await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_bob', 'u_carol', 1)");
   try { require(path.join(repo, "blocks")).changed("u_bob", "u_carol"); } catch (e) { /* no cache yet */ }
   M._sent.clear();

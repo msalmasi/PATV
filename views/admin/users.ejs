@@ -83,7 +83,7 @@
   </section>
   <% } %>
 
-  <%# 1.99?? padppl: the impersonation guard (cfnames.js) - accounts whose username / display name is (or looks like) a Camfrog login they
+  <%# 1.99ajn padppl: the impersonation guard (cfnames.js) - accounts whose username / display name is (or looks like) a Camfrog login they
       aren't linked to. Review fixes: logins and names in a monospace face (tricon vs trlcon), each entry one tidy row %>
   <% if (_can('accounts.name_clash')) { %>
   <section class="adm-card sfty" id="nameclash" aria-labelledby="nameclashT">
@@ -94,7 +94,7 @@
   </section>
   <% } %>
 
-  <%# 1.99?? padppl: network bans (netban.js) - dark until switched on; keyed codes only, every look logged. Review fixes: one list row per
+  <%# 1.99ajn padppl: network bans (netban.js) - dark until switched on; keyed codes only, every look logged. Review fixes: one list row per
       account ban, a way to let ONE account through (never only lifting the ban), "which bans hit this account", the look by POST (the
       reason never sits in a URL), the forms apart, labels as written (no capitals on u:&lt;id&gt;) %>
   <% if (_can('safety.net_bans')) { %>

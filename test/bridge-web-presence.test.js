@@ -40,7 +40,7 @@ test("a signed-in viewer is listed by PATV name only - no login, no account id; 
   const tipOf = (n) => ({ to: n, href: "/u/" + n + "/tip" });
   const list = await W.forRoom(R, { userId: "id-viewer", username: "viewer" }, tipOf);
   assert.deepEqual(list.map((e) => e.display), ["viewer", "quill"], "yourself first, then by name");
-  // (1.99?? padppl: act 1 = the pad's chat is open now - ACTIVE)
+  // (1.99ajn padppl: act 1 = the pad's chat is open now - ACTIVE)
   assert.deepEqual(JSON.parse(JSON.stringify(list[1])), { web: true, display: "quill", patv: { username: "quill" }, act: 1, tip: { to: "quill", href: "/u/quill/tip" } });
   assert.equal(list[0].me, true); assert.equal(list[0].tip, undefined);
   const wire = JSON.stringify(list); assert.doesNotMatch(wire, /id-quill|id-viewer|quill_cf|userId|login/);

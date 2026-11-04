@@ -35,7 +35,7 @@
 //   POST /api/mentions               save {enabled, names, words: [{phrase, room}], quiet: {from, to, tz} | null}
 //   POST /api/mentions/mute          {minutes} (0 = unmute)
 //
-// 1.99?? padppl (owner point 25, "We should also have chat mention alerts"): @MENTIONS in a pad's chat alert the person named - ON by
+// 1.99ajn padppl (owner point 25, "We should also have chat mention alerts"): @MENTIONS in a pad's chat alert the person named - ON by
 // default (mention_prefs.chat, separate from the opt-in keyword alerts above, which stay as they are):
 //   (a) a web line's structured mentions (the composer's picks, bridge-relay mentionRefs: exact accounts, server-only _mnIds)
 //   (b) a Camfrog-typed "@token": the account linked to that login, or a PATV username when that is unambiguous and not a clash
@@ -70,7 +70,7 @@ function init() {
       try { await runQuery("ALTER TABLE mention_prefs ADD COLUMN feed INTEGER NOT NULL DEFAULT 1"); } catch (e) { /* already there */ }
       await runQuery(`CREATE TABLE IF NOT EXISTS mention_words (user_id TEXT NOT NULL, phrase TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (user_id, phrase, room_id))`);
-      // 1.99?? padppl: pad chat @mentions (default ON) + per-pad mutes
+      // 1.99ajn padppl: pad chat @mentions (default ON) + per-pad mutes
       if (!(await getQuery("PRAGMA table_info(mention_prefs)")).some((c) => c.name === "chat")) {
         try { await runQuery("ALTER TABLE mention_prefs ADD COLUMN chat INTEGER NOT NULL DEFAULT 1"); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
       }
@@ -181,7 +181,7 @@ async function save(userId, { enabled, names, words, quiet, feed, chat } = {}, k
   const cur = await prefsRow(userId);
   // feed: undefined keeps what's stored (default on)
   const fd = feed === undefined || feed === null ? (cur && cur.feed === 0 ? 0 : 1) : feed === false ? 0 : 1;
-  const ch = chat === undefined || chat === null ? (cur && cur.chat === 0 ? 0 : 1) : chat === false ? 0 : 1;    // 1.99?? padppl
+  const ch = chat === undefined || chat === null ? (cur && cur.chat === 0 ? 0 : 1) : chat === false ? 0 : 1;    // 1.99ajn padppl
   await runQuery(`INSERT INTO mention_prefs (user_id, enabled, names, quiet_from, quiet_to, tz, muted_until, updated, feed, chat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(user_id) DO UPDATE SET enabled = excluded.enabled, names = excluded.names, quiet_from = excluded.quiet_from,
                   quiet_to = excluded.quiet_to, tz = COALESCE(excluded.tz, mention_prefs.tz), updated = excluded.updated, feed = excluded.feed, chat = excluded.chat`,
@@ -246,7 +246,7 @@ function allow(userId, roomId, t) {
   return true;
 }
 
-// ── 1.99?? padppl: pad chat @mentions ──
+// ── 1.99ajn padppl: pad chat @mentions ──
 const padMuteCache = new Map();          // "userId|roomId" -> {on, at}
 async function padMuted(userId, roomId) {
   if (!userId || !roomId) return false;
@@ -445,19 +445,19 @@ async function drain() {
     while (queue.length) {
       const batch = queue.splice(0, 50);
       let IDX;
-      try { IDX = await index(); } catch (e) { console.error("[mentions] index:", e.message); IDX = { users: [] }; }   // (1.99?? padppl: the @mention path runs without keyword users)
+      try { IDX = await index(); } catch (e) { console.error("[mentions] index:", e.message); IDX = { users: [] }; }   // (1.99ajn padppl: the @mention path runs without keyword users)
       const inbox = require("./inbox");
       for (const line of batch) {
         // the owner's decision-9 change: hidden people's names redacted as the pad shows them (fails closed: "" - no match, no
         // text - when the hidden names can't be loaded)
         try { line.red = await require("./chatlogview").redactLoaded(String(line.it && line.it.text || "")); } catch (e) { line.red = ""; }
-        // 1.99?? padppl: @mentions first (on by default); whoever they alerted isn't alerted again by a keyword for the same line
+        // 1.99ajn padppl: @mentions first (on by default); whoever they alerted isn't alerted again by a keyword for the same line
         let done = new Set();
         try { done = await chatMentions(line, NOW()); } catch (e) { console.error("[mentions] chat:", e.message); }
         let S = null;
         for (const m of matchLine(IDX, line, NOW())) {
           if (done.has(String(m.user.userId))) continue;
-          // 1.99?? padppl: never from someone blocked either way (blocks.js) - the keyword path too
+          // 1.99ajn padppl: never from someone blocked either way (blocks.js) - the keyword path too
           if (!S) { try { S = await senderOf(line.it); } catch (e) { S = { userId: null, login: null }; } }
           try { if (await require("./blocks").towards(S.userId, m.user.userId, { fromLogin: S.login })) continue; } catch (e) { console.error("[mentions] block check:", e.message); continue; }
           const n = noticeFor(line, m.word);
@@ -535,7 +535,7 @@ function register(app, { addUser }) {
   app.post("/api/mentions/mute", addUser, guard(true), async (req, res) => {
     try { res.json({ ok: true, ...(await mute(req.user.userId, (req.body || {}).minutes)) }); } catch (e) { fail(res, e); }
   });
-  // 1.99?? padppl: the chat ⋯'s "Mute mentions from this pad" (and the settings page's list)
+  // 1.99ajn padppl: the chat ⋯'s "Mute mentions from this pad" (and the settings page's list)
   app.post("/api/mentions/pad", addUser, guard(true), async (req, res) => {
     try {
       const b = req.body || {};

@@ -67,7 +67,7 @@ test("the page's candidates keep the veils: frog names only for incognito people
   assert.match(fn, /if \(u\.anon && !veil\) return;/, "hidden (!bridge hide) and someone are never offered");
   assert.match(fn, /var value = veil \? String\(u\.alias\)/, "an incognito person completes to the frog name");
   assert.match(fn, /\/\^u:\/i\.test\(value\)/, "never an account key");
-  // (1.99?? padppl, owner point 24: "@" inserts the name the person SHOWS as - atValue - never the login; the row's second line is the PATV
+  // (1.99ajn padppl, owner point 24: "@" inserts the name the person SHOWS as - atValue - never the login; the row's second line is the PATV
   // @username when it differs, else the Camfrog login only for named Camfrog members; ref = exactly who, never for a hidden person)
   assert.match(fn, /var sub = un && un\.toLowerCase\(\) !== String\(shown\)\.toLowerCase\(\) \? '@' \+ un : \(!veil && !u\.web && lg && !\/\^u:\/i\.test\(lg\)/, "the login sub-label only for named Camfrog members");
   assert.match(fn, /atValue: veil \? String\(u\.alias\) : String\(shown \|\| value\)/, "@ completes to the shown name (a frog name stays a frog name)");

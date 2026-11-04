@@ -1,4 +1,4 @@
-// 1.99?? padppl: the "tricon" name collision (owner, 2026-11-04) - the regression, ported from the spec fixture.
+// 1.99ajn padppl: the "tricon" name collision (owner, 2026-11-04) - the regression, ported from the spec fixture.
 //
 // Someone made a PATV account whose USERNAME is a Camfrog user's login ("tricon") to harass him; the owner's `!bridge block tricon`
 // landed on the REAL Tricon. Now:

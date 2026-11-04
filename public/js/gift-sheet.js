@@ -1,4 +1,4 @@
-// gift-sheet.js - 1.99?? padppl: 🎁 "Send a gift" to a frog name (veilgift.js) from the person menu (room-mod.js). The shared sheet
+// gift-sheet.js - 1.99ajn padppl: 🎁 "Send a gift" to a frog name (veilgift.js) from the person menu (room-mod.js). The shared sheet
 // (block-sheet.js PATVSheet - the 💸 Tip sheet's look): the preset amounts, what happens (a private gift inbox; we never tell the sender
 // who it is or whether they accepted - but an unaccepted gift comes back on day 30, so they can tell then), one confirm. POST
 // /api/rooms/:slug/gift {ref, amount, key} - the ref is the row / line clicked, never a name. textContent only.

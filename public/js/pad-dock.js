@@ -509,7 +509,7 @@
     }
     function visible() { return !D.hidden || !!(pip && !pip.closed && !pip.document.hidden); }
     function personLine(n, u, it) {
-      // 1.99?? padppl: a veiled chat line (a frog name, not the viewer's own) opens the person menu too - by its row c (🚫 Block, bans)
+      // 1.99ajn padppl: a veiled chat line (a frog name, not the viewer's own) opens the person menu too - by its row c (🚫 Block, bans)
       var vc = u && u.anon && (u.veil === 'incognito' || u.veil === 'hidden') && it && it.c && it.self !== 1 && !it.mask && o.signed ? Number(it.c) : 0;
       if (!vc && (!n || !u || u.veil || u.anon || u.self || !u.login)) return;
       if (!n || !o.openPerson || !n.querySelector || !(o.signed || o.mod && o.mod.active && o.mod.active())) return;
@@ -1304,7 +1304,7 @@
         hi.querySelector('.rmd-label').textContent = t('hist_info', 'Visitors read: {span} · how it works', { span: txt(hist).replace(/^📜\s*/, '') });
         hi.title = hist.title || ''; hi.setAttribute('aria-label', hi.querySelector('.rmd-label').textContent);
       }
-      // 1.99?? padppl: 🔔 the page's mention items (room.ejs mentionItems: "Sound when I'm mentioned", "Mute mentions from this pad") - a hook
+      // 1.99ajn padppl: 🔔 the page's mention items (room.ejs mentionItems: "Sound when I'm mentioned", "Mute mentions from this pad") - a hook
       // only; each item is {icon, label, run, checked?}
       if (o.mentionItems) {
         var mis = []; try { mis = o.mentionItems() || []; } catch (e) { mis = []; }

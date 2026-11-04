@@ -595,7 +595,7 @@
       if (m && NAME_CMDS.indexOf(m[1].toLowerCase()) >= 0) return { at: false, start: pos - m[2].length, end: pos, q: m[2] };
       return null;
     }
-    // 1.99?? padppl (owner point 24): "@" inserts the name the person shows as on PATV (p.atValue - never their Camfrog login) and remembers
+    // 1.99ajn padppl (owner point 24): "@" inserts the name the person shows as on PATV (p.atValue - never their Camfrog login) and remembers
     // exactly who it was (p.ref, personref.js) for the say POST's `mentions` - at most 10; the server keeps only those still in the text
     var mnPicked = [];
     function takeName(p, c) {
@@ -626,7 +626,7 @@
         var nm = el('span', 'rb-ac-n', p.name || p.value); li.appendChild(nm);
         if (p.login) li.appendChild(el('span', 'rb-ac-l', p.login));
         if (p.tag) { var tg = el('span', 'rb-ac-t', p.tag); tg.title = p.tag; li.appendChild(tg); }   // (1.99ajh dockpop: its full word when it shortens)
-        // 1.99?? padppl review fix: a 🌐 name that is (or looks like) a Camfrog login it isn't linked to says so here - where the wrong person
+        // 1.99ajn padppl review fix: a 🌐 name that is (or looks like) a Camfrog login it isn't linked to says so here - where the wrong person
         // would get mentioned
         if (p.clash) { var ct = el('span', 'clash-tag', window.__t ? __t('js.pad.chat.clash', 'not the Camfrog user') : 'not the Camfrog user');
           ct.title = window.__t ? __t('js.pad.chat.clash_title', 'This is a PATV web account. It is not the Camfrog user called {login}.', { login: String(p.clash) }) : 'Not the Camfrog user ' + p.clash; li.appendChild(ct); }
@@ -840,7 +840,7 @@
         return false;
       }
       var it = { cid: newCid(), text: text, at: Date.now(), st: 'queue', mine: true };
-      // 1.99?? padppl: the picked @mentions still in these words (the server checks again and resolves each ref exactly)
+      // 1.99ajn padppl: the picked @mentions still in these words (the server checks again and resolves each ref exactly)
       var lowT = String(text).toLowerCase(), mn = mnPicked.filter(function (m) { return lowT.indexOf('@' + m.n.toLowerCase()) >= 0; });
       if (mn.length) it.mn = mn;
       mnPicked = [];

@@ -592,7 +592,7 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
   const bans = await getQuery("SELECT room_id, reason, until FROM feed_bans WHERE user_id = ? AND (until IS NULL OR until > ?)", [u.userId, t]);
   const globalBan = bans.find((b) => b.room_id === "");
   if (globalBan) return { status: 403, message: "You can't post on the feed" + (globalBan.until ? ` until ${new Date(globalBan.until).toUTCString()}` : "") + "." };
-  // 1.99?? padppl: a website ban on this account's Camfrog login made before it had an account (padbans.js pad_login_bans, whole pad /
+  // 1.99ajn padppl: a website ban on this account's Camfrog login made before it had an account (padbans.js pad_login_bans, whole pad /
   // site) - review fix: enforced by the login however the account came to be linked. (A ban on a FROG NAME never refuses a post: posts
   // are named - padbans.js THE VEIL RULE.)
   try {
@@ -2156,7 +2156,7 @@ async function userReportAction(user, { userId, action, tell = true, days = 0, r
 async function ban(user, target, { room = "", reason = "", days = 0, untilMs = undefined, via = "form" } = {}) {
   const roomId = String(room || "");
   if (roomId ? !(await rooms.canManage(user, roomId)) : !SP.can(user, "feed.moderate")) throw new Refuse(403, roomId ? "Only this pad's owner can do that." : "Admins only.");
-  // 1.99?? padppl: the typed name goes through targets.js (the one moderation resolver) - "u:<id>" exactly, "@name" a PATV username,
+  // 1.99ajn padppl: the typed name goes through targets.js (the one moderation resolver) - "u:<id>" exactly, "@name" a PATV username,
   // "cf:<login>" a linked login; a bare name that means two people (a PATV username = another account's Camfrog login) is a 409 with the
   // choices, never a guess (it was rooms.findUser: the username silently won)
   const r = await require("./targets").resolve(target, { allowLogin: false });
@@ -2165,7 +2165,7 @@ async function ban(user, target, { room = "", reason = "", days = 0, untilMs = u
   const u = { userId: r.userId, username: r.username };
   if (roomId && rooms.isProfile(roomId) && u.userId === roomId.slice(rooms.PROFILE_PREFIX.length)) throw new Refuse(400, "That's you.");   // 1.99df
   const until = untilMs !== undefined ? (untilMs == null ? null : Math.floor(Number(untilMs))) : Number(days) > 0 ? NOW() + Math.min(3650, Number(days)) * 86400e3 : null;
-  // 1.99?? padppl: an upsert (was INSERT OR REPLACE) - the row's other columns a later build adds are kept on a re-ban
+  // 1.99ajn padppl: an upsert (was INSERT OR REPLACE) - the row's other columns a later build adds are kept on a re-ban
   await runQuery(`INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(user_id, room_id) DO UPDATE SET username = excluded.username, reason = excluded.reason, by = excluded.by, at = excluded.at,
                     until = excluded.until`,
@@ -2186,7 +2186,7 @@ async function unban(user, userId, room = "", { via = "form" } = {}) {
   if (roomId ? !(await rooms.canManage(user, roomId)) : !SP.can(user, "feed.moderate")) throw new Refuse(403, "Not allowed.");
   const cur = (await getQuery("SELECT username FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]))[0];
   await runQuery("DELETE FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]);
-  // 1.99?? padppl: an unban is audited too (it never was) - the pad's event log and admin_audit
+  // 1.99ajn padppl: an unban is audited too (it never was) - the pad's event log and admin_audit
   if (cur) {
     if (roomId) { try { await rooms.event(roomId, "feed-unban", user.username, String(cur.username || userId)); } catch (e) { /* no registry */ } }
     try {

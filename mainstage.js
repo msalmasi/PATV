@@ -549,7 +549,7 @@ async function isBanned(userId, roomId) {
   await init();
   if ((await getQuery("SELECT 1 AS b FROM stage_bans WHERE userId = ?", [userId])).length) return true;
   if (roomId && (await getQuery("SELECT 1 AS b FROM stage_room_bans WHERE userId = ? AND room_id = ?", [userId, roomId])).length) return true;
-  // 1.99?? padppl: a NAMED whole-pad ban (feed_bans for this pad or the whole site, or one on their Camfrog login from before it had an
+  // 1.99ajn padppl: a NAMED whole-pad ban (feed_bans for this pad or the whole site, or one on their Camfrog login from before it had an
   // account) stops booking its stage too. Review fix (HIGH): NEVER a ban on their frog name - isBanned also ends live stage streams and
   // takes named mic-stage tiles (publish auth, WHIP, micfollow), so a frog-name ban here would show a moderator who the frog is
   // (padbans.js THE VEIL RULE)
@@ -1935,7 +1935,7 @@ async function unban(userId, actor) {
 async function roomBan(roomId, who, reason, actor) {
   await init();
   const w = String(who || "").trim();
-  // 1.99?? padppl: targets.js - "u:<id>", "@name", "cf:<login>" exact; a bare name that means two people (a PATV username = another
+  // 1.99ajn padppl: targets.js - "u:<id>", "@name", "cf:<login>" exact; a bare name that means two people (a PATV username = another
   // account's Camfrog login) is a 409 with the choices, never a guess (it was: the username silently won)
   const T = await require("./targets").resolve(w, { allowLogin: false });
   if (T.ambiguous) { const e = new Refuse(409, T.error); e.choices = T.choices; throw e; }

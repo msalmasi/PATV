@@ -1,4 +1,4 @@
-// cfnames.js - 1.99?? padppl: the IMPERSONATION GUARD (owner: someone made a PATV account named like a Camfrog user - "tricon" - to
+// cfnames.js - 1.99ajn padppl: the IMPERSONATION GUARD (owner: someone made a PATV account named like a Camfrog user - "tricon" - to
 // harass him). A PATV username is free text with a charset rule; nothing stopped one from taking a Camfrog login Pepe has seen, and the
 // only check was at relay time (accountkey.ownsName - only against a LINKED login, and most Camfrog users never link).
 //

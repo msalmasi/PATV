@@ -1,4 +1,4 @@
-// 1.99?? padppl: 🎁 gifts to frog names (veilgift.js) - a private gift inbox, built so a gift can NOT unmask anyone.
+// 1.99ajn padppl: 🎁 gifts to frog names (veilgift.js) - a private gift inbox, built so a gift can NOT unmask anyone.
 //   - dark: refused while the switch is off
 //   - the sender's answer is the SAME (keys, label, amount, balance) whoever is behind the frog name: an account, a Camfrog login with no
 //     account, a recipient who blocked them, a capped recipient, nobody - the differences are only server-side (pending vs withheld)

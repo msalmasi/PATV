@@ -324,7 +324,7 @@
       <% } else if (!previewing) { %>
         <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'actions' }) %><% } %>
         <% if ((locals.creatorProfile || {}).active) { %><a class="btn primary" href="/creators/<%= enc %>"><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('cr.links.subscribe') %></a><% } %>
-        <%# 1.99?? padppl review fix: no 💸 Tip for someone the visitor blocked (the site refuses it anyway; the pad menu hides it too) %>
+        <%# 1.99ajn padppl review fix: no 💸 Tip for someone the visitor blocked (the site refuses it anyway; the pad menu hides it too) %>
         <% if (!(locals.profileBlock && locals.profileBlock.blocked)) { %><a class="btn<%= soc ? '' : ' primary' %>" href="/u/<%= enc %>/tip" title="<%- t('profile.tip_title', { name: displayname || usernameProfile }) %>"><span class="ds-ic" aria-hidden="true">💸</span> <%- t('profile.tip') %></a><% } %>
       <% } %>
       <details class="pf-more" data-pf-more>
@@ -349,7 +349,7 @@
             <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %><a role="menuitem" href="/history?user=<%= enc %>">📜 <%- t('profile.menu.pat_history') %></a><% } %>
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open><span class="ds-ic" aria-hidden="true">🎮</span> <%- t('profile.gtf.avatar') %></button><% } %>
             <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'menu' }) %><% } %>
-            <%# 1.99?? padppl: 🚫 Block / ✅ Unblock (blocks.js, the same block as the DM header's) - signed-in visitors, never on Pepe %>
+            <%# 1.99ajn padppl: 🚫 Block / ✅ Unblock (blocks.js, the same block as the DM header's) - signed-in visitors, never on Pepe %>
             <% const pb_ = locals.profileBlock; if (pb_) { %><% if (!soc) { %><hr><% } %><button type="button" role="menuitem" class="pf-report" data-block-ref="<%= JSON.stringify({ k: 'user', v: usernameProfile }) %>" data-block-name="@<%= usernameProfile %>" data-block-who="<%= t('js.block.kind_account', { name: usernameProfile }) + (locals.camfrog ? ' · ' + t('js.block.kind_login', { login: locals.camfrog }) : '') %>" data-block-on="<%= pb_.blocked ? '0' : '1' %>"><%- pb_.blocked ? t('profile.menu.unblock', { name: t.esc(usernameProfile) }) : t('profile.menu.block', { name: t.esc(usernameProfile) }) %></button><% } %>
           <% } %>
           <% if (typeof viewerIsAdmin !== 'undefined' && viewerIsAdmin) { %><hr><a role="menuitem" href="/admin/comps?user=<%= enc %>">🎁 <%- t('profile.menu.comp') %></a><% } %>
@@ -359,7 +359,7 @@
     <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
   </section>
   <% if (locals.profileBlock && locals.profileBlock.blocked) { %>
-    <%# 1.99?? padppl: the visitor blocked this person - said once, with the way back %>
+    <%# 1.99ajn padppl: the visitor blocked this person - said once, with the way back %>
     <div class="pf-bar" role="status"><span>🚫 <%- t('profile.blocked_bar', { name: t.esc(usernameProfile) }) %></span>
       <span class="btns"><button type="button" class="btn" data-block-ref="<%= JSON.stringify({ k: 'user', v: usernameProfile }) %>" data-block-name="@<%= usernameProfile %>" data-block-on="0"><%- t('profile.unblock') %></button></span></div>
   <% } %>

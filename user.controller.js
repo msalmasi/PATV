@@ -80,12 +80,12 @@ async function registerUser(req, res) {
   const ip = guard.clientIp(req);
   const wait = registerLimit.blocked(ip);
   if (wait) return back(req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.`);
-  // 1.99?? padppl (review fix): a network ban (netban.js) refuses a new account here, on the form with its message (it was a bare 403 page)
+  // 1.99ajn padppl (review fix): a network ban (netban.js) refuses a new account here, on the form with its message (it was a bare 403 page)
   try { const NB = require("./netban"); if (NB.isOn()) { const why = await NB.refusal(req, {}); if (why) return back(why); } } catch (e) { /* fail open */ }
 
   let problem;
   if ((problem = guard.checkUsername(username, req))) return back(problem, "username");
-  // 1.99?? padppl: never a Camfrog login Pepe has seen (cfnames.js - the impersonation guard; link that login first to take it)
+  // 1.99ajn padppl: never a Camfrog login Pepe has seen (cfnames.js - the impersonation guard; link that login first to take it)
   if ((problem = await require("./cfnames").nameRefusal(username, null, req).catch(() => null))) return back(problem, "username");
   if ((problem = guard.checkEmail(email, req))) return back(problem, "email");
   if ((problem = guard.checkPassword(password, username, req))) return back(problem, "password");
@@ -113,7 +113,7 @@ async function registerUser(req, res) {
       throw e;
     }
     registerLimit.hit(ip);
-    try { require("./netban").note(userId, req, "signup").catch(() => {}); } catch (e) { /* 1.99?? padppl: netban.js */ }
+    try { require("./netban").note(userId, req, "signup").catch(() => {}); } catch (e) { /* 1.99ajn padppl: netban.js */ }
     console.log(`[auth] new account ${username} (${userId})`);
     // 1.99cc: the form says "By creating an account you agree to the Terms" - record which version, and when
     // 1.99cf: only while the Terms are enforced (the form shows that line only then); otherwise they're asked on their first post
@@ -171,7 +171,7 @@ function normaliseUsername(raw) {
 // name2... (cut to fit USERNAME_MAX characters), else user#### - free in ANY letter case (the register form and
 // /api/users/username check case-insensitively too).
 async function generateUniqueUsername(baseUsername) {
-  // 1.99?? padppl: a Camfrog login Pepe has seen counts as taken (cfnames.js) - the picker silently moves to the next free candidate
+  // 1.99ajn padppl: a Camfrog login Pepe has seen counts as taken (cfnames.js) - the picker silently moves to the next free candidate
   const taken = async (u) => (await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [u])).length > 0
     || !!(await require("./cfnames").nameRefusal(u, null).catch(() => null));
   const base = normaliseUsername(baseUsername);
@@ -253,9 +253,9 @@ async function createSsoAccount(req, res, { username, email, emailVerified, prov
   const wait = registerLimit.blocked(ip);
   if (wait) return { error: req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.` };
   username = String(username == null ? "" : username).trim();
-  const problem = guard.checkUsername(username, req) || (await require("./cfnames").nameRefusal(username, null, req).catch(() => null));   // 1.99?? padppl
+  const problem = guard.checkUsername(username, req) || (await require("./cfnames").nameRefusal(username, null, req).catch(() => null));   // 1.99ajn padppl
   if (problem) return { error: problem, field: "username" };
-  // 1.99?? padppl: a network ban (netban.js) refuses a new account from that network before it exists
+  // 1.99ajn padppl: a network ban (netban.js) refuses a new account from that network before it exists
   try { const NB = require("./netban"); if (NB.isOn()) { const why = await NB.refusal(req, {}); if (why) return { error: why }; } } catch (e) { /* fail open */ }
   if ((await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [username])).length)
     return { error: req.t ? req.t('auth.err.username_taken') : "That username is taken. Try another one.", field: "username" };
@@ -329,7 +329,7 @@ async function loginUser(req, res) {
     if (body.link_sso && /^[a-z]{2,16}$/.test(String(body.link_sso))) await require("./ssolinks").linkPendingTo(req, user, String(body.link_sso)).catch((e) => console.error("[auth] sso link after sign-in:", e.message));
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
-    // 1.99?? padppl (review fix): a network ban's refusal (sessions.signIn, netban.js) is shown as itself on the form - it never names an address
+    // 1.99ajn padppl (review fix): a network ban's refusal (sessions.signIn, netban.js) is shown as itself on the form - it never names an address
     if (err && err.code === "network") return back(err.message);
     console.error("[auth] login error:", err && err.message);
     return back(req.t ? req.t('auth.err.login_failed') : "Something went wrong signing you in. Please try again.");
@@ -343,7 +343,7 @@ async function updateUsername(req, res) {
   const editPage = ACCOUNT_PAGE + '#account';
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
   const problem = guard.checkUsername(username, req)   // 1.99ui: in the member's language
-    || (await require('./cfnames').nameRefusal(username, userId, req).catch(() => null));   // 1.99?? padppl: not a Camfrog login that isn't yours
+    || (await require('./cfnames').nameRefusal(username, userId, req).catch(() => null));   // 1.99ajn padppl: not a Camfrog login that isn't yours
   if (problem) {
     req.flash('error', problem);
     return res.redirect(editPage);
@@ -539,7 +539,7 @@ async function completeCamfrogLink(userId, camfrogUsername) {
       return _completeCamfrogLinkLocked(userId, camfrogUsername);
     });
     if (out !== RETRY) {
-      // 1.99?? padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
+      // 1.99ajn padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
       try { await require("./blocks").linked(userId, cfLower); } catch (e) { /* blocks.js logs */ }
       try { await require("./padbans").linked(userId, cfLower); } catch (e) { /* padbans.js logs */ }
       try { await require("./veilgift").linked(userId, cfLower); } catch (e) { /* veilgift.js logs */ }

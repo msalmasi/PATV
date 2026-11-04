@@ -56,7 +56,7 @@ async function transferPat(senderUsername, recipientUsername, rawAmount, note = 
   if (!sender || !recipient) {
     return { ok: false, status: 404, msg: "One or both users not found" };
   }
-  // 1.99?? padppl: a NAMED block (blocks.js: dm_blocks either way, or the recipient's block on the sender's Camfrog login) refuses every
+  // 1.99ajn padppl: a NAMED block (blocks.js: dm_blocks either way, or the recipient's block on the sender's Camfrog login) refuses every
   // tip - the tip page, the pad's tip modal, Pepe's !tip (chattip), post and story tips. Nothing moves. Never a frog-name block (THE VEIL
   // RULE: a tip is a named action). The words never say a block exists (review fix: Pepe says a !tip refusal in the room).
   if (await require("./blocks").towards(sender.userId, recipient.userId).catch(() => false)) {

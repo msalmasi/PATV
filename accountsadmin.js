@@ -120,7 +120,7 @@ function register(app, { addUser }) {
     if (!(await adminOf(req))) return deny(req, res);
     res.set("Cache-Control", "no-store");
     try {
-      // 1.99?? padppl: a bare name that is one account's username AND another account's Camfrog login asks which (targets.js choices) -
+      // 1.99ajn padppl: a bare name that is one account's username AND another account's Camfrog login asks which (targets.js choices) -
       // u:<id>, @name and cf:<login> pick one exactly
       const q = String(req.query.u == null ? "" : req.query.u).trim();
       if (q && !/^(u:|@|cf:|\u{1f310})/iu.test(q)) {

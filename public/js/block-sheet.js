@@ -1,4 +1,4 @@
-// block-sheet.js - 1.99?? padppl: the 🚫 Block / ✅ Unblock confirm sheet (blocks.js). One modal <dialog> (the browser keeps focus inside
+// block-sheet.js - 1.99ajn padppl: the 🚫 Block / ✅ Unblock confirm sheet (blocks.js). One modal <dialog> (the browser keeps focus inside
 // it; Esc / ✕ / Cancel close it and focus goes back to what opened it), used by the person menu (room-mod.js - the pad chat, the chat
 // window, the casino tables' shared menu), the profile's ⋯ More and /settings/blocked. It POSTs /api/blocks {ref, on, slug} - the ref
 // is exactly what was clicked (personref.js), never a typed name. Everything user-visible goes in via textContent.

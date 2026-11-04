@@ -1047,7 +1047,7 @@ const OUT_COMMON = Object.freeze(["c", "ts", "k"]);
 // wave 2 WP-2: + mask (a hidden line's bar - never its words), hold (B.3: the mic hold a line belongs to), at (when a 🎙 line was
 // said). dress takes them out again where they would link a "someone" line to a person (see dress)
 const OUT_KIND = Object.freeze({
-  // (1.99?? padppl: msg + mn = a web line's @mentions, bridge-relay mentionRefs)
+  // (1.99ajn padppl: msg + mn = a web line's @mentions, bridge-relay mentionRefs)
   msg: Object.freeze(["text", "mask", "md", "stk", "mn"]), tx: Object.freeze(["text", "id", "mask", "hold", "at"]), topic: Object.freeze(["text"]),
   join: Object.freeze([]), leave: Object.freeze([]), mic: Object.freeze(["hold"]), unmic: Object.freeze(["ms", "hold"]),
   live: Object.freeze(["who", "pad", "what", "link", "np"]),          // 🎥 bridge.liveNotice
@@ -1166,7 +1166,7 @@ function dress(items, ctx) {
     // a sealed / purged line or anything whose words a viewer doesn't get (a bar must not say "this was a sticker")
     if (o.md !== undefined && !(typeof o.text === "string" && o.k === "msg" && mediaMarked(o))) delete o.md;
     if (o.stk !== undefined && o.md !== "sticker") delete o.stk;      // 1.99ajf dockclean: a 🧸 PATV sticker's key only beside its mark
-    // 1.99?? padppl: a mention entry only while "@" + its name is still in the words this viewer gets (a hidden person's name is "someone"
+    // 1.99ajn padppl: a mention entry only while "@" + its name is still in the words this viewer gets (a hidden person's name is "someone"
     // after redact: its entry goes too), built from its own fields (never anything else the stored entry might carry)
     if (o.mn !== undefined) {
       const lt = typeof o.text === "string" ? o.text.toLowerCase() : "";

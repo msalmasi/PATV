@@ -525,7 +525,7 @@ test("tip menu (room-mod.js): a light ⋯ for every signed-in viewer; mods keep 
   const ids = (xs) => xs.map((x) => x.id);
   const alice = { login: "alicecf", display: "Alice", patv: { username: "alice" }, tip: { to: "alice", href: "/u/alice/tip" } };
   const stranger = { login: "strangercf", display: "Stranger", tip: { off: "not linked to PATV yet" } };
-  // 1.99?? padppl: + 🚫 Block (the viewer's own block; ✅ Unblock and no Tip once they blocked them)
+  // 1.99ajn padppl: + 🚫 Block (the viewer's own block; ✅ Unblock and no Tip once they blocked them)
   assert.deepEqual(ids(MI(null, alice, { signed: true, cam: true })), ["profile", "cam", "tip", "block"]);
   assert.deepEqual(ids(MI(null, alice, { signed: true, cam: true, blk: { l: ["alicecf"], u: [] } })), ["profile", "cam", "unblock"], "blocked: Unblock, no Tip");
   const tip = MI(null, alice, { signed: true }).find((x) => x.id === "tip");
@@ -538,7 +538,7 @@ test("tip menu (room-mod.js): a light ⋯ for every signed-in viewer; mods keep 
   assert.deepEqual(ids(MI(null, { login: "membercf", display: "Someone" }, { signed: true })), ["block"], "someone else with no tip target: just Block");
   assert.deepEqual(MI(null, { login: "pepefrog", self: true }, { signed: true }), [], "Pepe");
   assert.deepEqual(MI(null, { anon: true }, { signed: true }), [], "anonymous");
-  // 1.99?? padppl: a frog name - only 🚫 Block, by its opaque id (or the line it said), never a Unblock, never for signed-out viewers
+  // 1.99ajn padppl: a frog name - only 🚫 Block, by its opaque id (or the line it said), never a Unblock, never for signed-out viewers
   assert.deepEqual(MI(null, { anon: true, veil: "incognito", alias: "Soggy Bullfrog", id: "v-abcdefabcdef" }, { signed: true }).map((x) => [x.id, x.ref, x.veil]),
                    [["block", { k: "veil", id: "v-abcdefabcdef" }, true]]);
   assert.deepEqual(MI(null, { anon: true, veil: "incognito", alias: "Soggy Bullfrog", id: "v-abcdefabcdef" }, { signed: true, c: 77 })[0].ref, { k: "line", c: 77 });

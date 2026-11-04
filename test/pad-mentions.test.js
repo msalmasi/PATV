@@ -1,4 +1,4 @@
-// 1.99?? padppl: @mentions in a pad's chat (owner points 24 + 25) and the people list's active / inactive web users (padweb.js).
+// 1.99ajn padppl: @mentions in a pad's chat (owner points 24 + 25) and the people list's active / inactive web users (padweb.js).
 //   - the composer's picks ride as {n, ref}: kept only where "@n" is in the words and n is one of that person's names (no pinning a name on
 //     someone else); a frog name's entry names nobody; the line's mn is dressed per viewer (gone with the words, gone for a hidden person)
 //   - chips in the person's look; a line naming the viewer is .is-mention
@@ -52,7 +52,7 @@ test("the say POST's mentions: kept only where '@n' is in the words and n is tha
   // (mentionRefs is internal: exercise it through the job a say makes - here directly with the same inputs)
   const src = fs.readFileSync(path.join(repo, "bridge-relay.js"), "utf8");
   assert.match(src, /const mn = opts\.mentions \? await mentionRefs\(opts\.mentions, text, R\) : null;/);
-  const fn = new Function("require", "clean", src.slice(src.indexOf("async function mentionRefs"), src.indexOf("/** 1.99?? padppl: why a web command")) + "; return mentionRefs;")(
+  const fn = new Function("require", "clean", src.slice(src.indexOf("async function mentionRefs"), src.indexOf("/** 1.99ajn padppl: why a web command")) + "; return mentionRefs;")(
     (m) => require(path.join(repo, m)), (s, n) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, n));
   const r = await fn([{ n: "plantbaked", ref: { k: "login", v: "foamy1111" } }, { n: "Soggy Bullfrog", ref: { k: "veil", id: "v-soggy000001" } },
                       { n: "Alice", ref: { k: "login", v: "foamy1111" } },            // a name pinned on someone else: dropped
@@ -183,7 +183,7 @@ test("people list: posted in the last hour = act 0 (dimmed, 'ago'), the chat ope
   W._setClock(null);
 });
 
-// ── 1.99?? padppl review fixes ──
+// ── 1.99ajn padppl review fixes ──
 test("review: a NAMED block never silences a frog-named line's alert (it would say the frog is that suspect); a frog-name block never silences named lines", async () => {
   await runQuery("DELETE FROM veil_blocks");
   // alice blocks the suspect sneaky BY NAME, then 🐸 Soggy Bullfrog (sneaky, veiled) @mentions her: the alert still comes, under the frog name

@@ -1,4 +1,4 @@
-// veilgift.js - 1.99?? padppl (owner point 23, "tip incognito / hidden users from the bridge and have it autoresolve" + his follow-up:
+// veilgift.js - 1.99ajn padppl (owner point 23, "tip incognito / hidden users from the bridge and have it autoresolve" + his follow-up:
 // "tipping veiled users can be used to reveal them / unmask them, so maybe we think about how best to do that"): 🎁 a GIFT to a frog
 // name goes into the recipient's PRIVATE GIFT INBOX, never straight to a balance. DARK behind the `on` switch (/admin/users#gifts).
 //

@@ -275,7 +275,7 @@ async function isFresh(req, within = FRESH_MS) {
  */
 async function signIn(req, res, user, method, opts = {}) {
   const { issueLogin } = require("./middleware/loginCookie");
-  // 1.99?? padppl: a network ban (netban.js - dark until switched on) refuses EVERY sign-in from that network before anything is issued;
+  // 1.99ajn padppl: a network ban (netban.js - dark until switched on) refuses EVERY sign-in from that network before anything is issued;
   // the caller shows the message (it never names an address). Staff and a ban's exempt accounts pass.
   if (req) {
     const NB = require("./netban");
@@ -366,7 +366,7 @@ function touchSeen(row, req, t) {
   if (p.country) row.country = p.country;
   runQuery("UPDATE sessions SET last_seen = ?, expires = ?, ip = COALESCE(?, ip), country = COALESCE(?, country) WHERE id = ? AND revoked_at IS NULL",
            [t, row.expires, p.ip, p.country, row.id]).catch((e) => console.error("[sessions] last_seen:", e.message));
-  // 1.99?? padppl: the same 5-minute touch notes the network's keyed code for network bans (netban.js; only while switched on)
+  // 1.99ajn padppl: the same 5-minute touch notes the network's keyed code for network bans (netban.js; only while switched on)
   try { const NB = require("./netban"); if (NB.isOn() && row.user_id) NB.note(row.user_id, req, "session").catch(() => {}); } catch (e) { /* never blocks */ }
 }
 

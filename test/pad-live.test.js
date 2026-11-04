@@ -181,7 +181,7 @@ test("player: 0.75 s cushion; catch-up to the live edge only on a real backlog (
   assert.match(js, /setInterval\(edge, 500\)/);
   assert.match(js, /isTypeSupported\('audio\/mpeg'\)/, "MSE where the browser can, plain stream URL otherwise (iOS)");
   for (const v of ["home.ejs", "room.ejs"]) {
-    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=26/, v + " loads the new player");   // (1.99?? padppl: v25; v26 review: the clash tag in the @ list)
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=26/, v + " loads the new player");   // (1.99ajn padppl: v25; v26 review: the clash tag in the @ list)
   }
 });
 

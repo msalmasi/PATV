@@ -1,4 +1,4 @@
-// personref.js - 1.99?? padppl: WHO a person menu means, resolved EXACTLY from what the viewer clicked - never by re-reading a
+// personref.js - 1.99ajn padppl: WHO a person menu means, resolved EXACTLY from what the viewer clicked - never by re-reading a
 // typed name. The page sends the reference its row / line carries; each kind resolves only as itself (no fallback to another kind):
 //
 //   {k: "login", v}        a Camfrog login from a roster row or a named line -> that login + its LIVE linked account (the
@@ -43,7 +43,7 @@ async function accountById(id) {
   return (await getQuery(`SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?${await live()}`, [String(id || "")]))[0] || null;
 }
 async function accountByUsername(name) {
-  // (1.99?? padppl verify: a legacy pair of usernames that differ only in case - the exact spelling the row carried wins, as sign-in does)
+  // (1.99ajn padppl verify: a legacy pair of usernames that differ only in case - the exact spelling the row carried wins, as sign-in does)
   const v = String(name == null ? "" : name).trim();
   return (await getQuery(`SELECT userId, username, displayname, camfrogUsername FROM users WHERE lower(username) = ?${await live()} ORDER BY (username = ?) DESC LIMIT 1`,
     [low(v), v]))[0] || null;
@@ -96,7 +96,7 @@ async function resolve(raw, { R = null } = {}) {
     const who = await ofVz(e._vz);
     return { kind: "veil", ...who, label: String(e.alias || "someone").slice(0, 60), hood: e.hood || null, veil: true };
   }
-  // a veiled line - ALWAYS through bridge.revealLookup (1.99?? padppl review fix: its rules - a line taken down, its speaker left out by
+  // a veiled line - ALWAYS through bridge.revealLookup (1.99ajn padppl review fix: its rules - a line taken down, its speaker left out by
   // forget-me / deletion / a staff removal, its identity row gone - apply to the live item too, never the raw in-memory _vz)
   const it = (R.feed || []).find((x) => x && Number(x.c) === ref.c);
   let vz = null;
@@ -114,7 +114,7 @@ function pageSafe(p) {
   return { kind: p.kind, username: p.username || null, login: p.login || null, label: p.label, veil: false };
 }
 
-/** 1.99?? padppl review fix: may `viewer` ({userId, class}) point at a veiled row / line of pad R (its full access - a private pad's
+/** 1.99ajn padppl review fix: may `viewer` ({userId, class}) point at a veiled row / line of pad R (its full access - a private pad's
  *  frog names stay out of reach of people who can't see it)? Named refs need no pad. Fails closed. */
 async function padOk(raw, viewer, R) {
   const ref = clean(raw);

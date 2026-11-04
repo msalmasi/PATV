@@ -1,4 +1,4 @@
-// blocks.js - 1.99?? padppl (owner: "we need a way for users to block other users from the user submenu (both in chat and on profile).
+// blocks.js - 1.99ajn padppl (owner: "we need a way for users to block other users from the user submenu (both in chat and on profile).
 // Right now you can only do it from DMs."): ONE block, wherever it is made. The DM block (messages.js dm_blocks) stays THE block - the
 // person menu (pad chat, the chat window, the casino tables' shared menu), the profile's ⋯ More and /settings/blocked write the same
 // row the DM header does, so a block means the same everywhere it already applies. Two more kinds for people the menu can show but
@@ -19,7 +19,7 @@
 //   (mentions.js)  17 pad chat lines of people YOU blocked folded for you (one direction, named lines only; liveView `blk`)  18 gifts to
 //   frog names between you withheld (veilgift)
 //
-// THE VEIL RULE (1.99?? padppl review fix - "who, not what"): a block on a FROG NAME acts ONLY on what that person does UNDER A FROG
+// THE VEIL RULE (1.99ajn padppl review fix - "who, not what"): a block on a FROG NAME acts ONLY on what that person does UNDER A FROG
 // NAME: their @mentions from frog-named lines don't alert the blocker (whatever frog name they use next). It never touches anything
 // they do under their own name (DMs, tips, gifts, challenges, the people list, alerts from their named lines) and changes NOTHING the
 // blocker sees - so the blocker can't test a suspect ("DM me" / "tip me" / "mention me" and watch what fails) and can't match a frog
@@ -92,7 +92,7 @@ async function veilBlocked(fromId, toId, { fromLogin = null } = {}) {
   return !!(await getQuery(`SELECT 1 FROM veil_blocks WHERE blocker_id = ? AND (${fromId ? "blocked_id = ?" : "0"} ${login ? "OR blocked_login = ?" : ""}) LIMIT 1`,
     [String(toId), ...(fromId ? [String(fromId)] : []), ...(login ? [login] : [])]))[0];
 }
-/** The NAMED-block checks only (dm_blocks either way, `to`'s login block on `from`) - the 1.99?? padppl review's name for what the
+/** The NAMED-block checks only (dm_blocks either way, `to`'s login block on `from`) - the 1.99ajn padppl review's name for what the
  *  DM refusal asks besides dm_blocks. Kept as hiddenTowards for its callers. */
 const hiddenTowards = loginBlocked;
 /**
@@ -286,7 +286,7 @@ function register(app, { addUser, bySlug = null }) {
       const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!me) return res.status(401).json({ ok: false, error: "Sign in first." });
       const R = roomOf(b.slug);
-      // (1.99?? padppl review fix: a frog name's row / line only in a pad this viewer may see - the same answer as a line that's gone)
+      // (1.99ajn padppl review fix: a frog name's row / line only in a pad this viewer may see - the same answer as a line that's gone)
       if (!(await PR.padOk(b.ref, me, R))) return res.status(404).json({ ok: false, error: "That line isn't here any more." });
       res.json(await set(me, b.ref, b.on !== false, { R }));
     } catch (e) { fail(res, e); }

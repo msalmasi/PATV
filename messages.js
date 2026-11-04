@@ -404,7 +404,7 @@ async function refusal(sender, recipient, conv = null, opts = {}) {
   const b = await blocked(sender.userId, recipient.userId);
   if (b.some((x) => x.blocker_id === sender.userId)) return new Refuse(403, `You've blocked ${nm}. Unblock them to send a message.`, "you_blocked");
   if (b.length) return new Refuse(403, `You can't message ${nm}.`, "blocked");
-  // 1.99?? padppl: a block the recipient made on this sender's Camfrog login before it had an account - the same generic text. Never a
+  // 1.99ajn padppl: a block the recipient made on this sender's Camfrog login before it had an account - the same generic text. Never a
   // frog-name block (blocks.js THE VEIL RULE: a DM is a named action - a frog-name block that refused it would unmask the frog)
   if (await require("./blocks").loginBlocked(sender.userId, recipient.userId).catch(() => false)) return new Refuse(403, `You can't message ${nm}.`, "blocked");
   if (recipient.userId === PEPE_ID) return null;          // no "who can message me" / new-account rule for the bot (his price + limits cover it)
@@ -1105,7 +1105,7 @@ async function setBlock(user, username, on = true) {
   if (!other) throw new Refuse(404, "No such person.");
   return setBlockById(user, other.userId, on, other);
 }
-/** 1.99?? padppl: the same block by account id (the person menu / profile / settings - blocks.js resolves WHO exactly, never by a
+/** 1.99ajn padppl: the same block by account id (the person menu / profile / settings - blocks.js resolves WHO exactly, never by a
  *  typed name). Same side effects as the DM header's block. */
 async function setBlockById(user, otherId, on = true, other = null) {
   await init();
@@ -1124,7 +1124,7 @@ async function setBlockById(user, otherId, on = true, other = null) {
   // 1.99aih (privacy controls round 6 review): a pad's mic stage reads DM blocks through a cam-gate cache (micfollow watchOf, 30 s) -
   // dropped for both accounts now, so a viewer just blocked (either way) never keeps that person's cover or "ok" tile meanwhile
   try { require("./micfollow").dmBlockChanged(user.userId, other.userId); } catch (e) { /* no mic follows */ }
-  try { require("./blocks").changed(user.userId, other.userId); } catch (e) { /* 1.99?? padppl: the blocks cache */ }
+  try { require("./blocks").changed(user.userId, other.userId); } catch (e) { /* 1.99ajn padppl: the blocks cache */ }
   return { blocked: !!on, user: { username: other.username, display: display(other) } };
 }
 async function blockList(userId) {

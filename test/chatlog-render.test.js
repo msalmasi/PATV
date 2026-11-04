@@ -463,7 +463,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   for (const gone of ["function flairEl(", "function noteText(", "function spanOf(", "function hue(", "'line' + (it.k === 'tx'", "el('div', 'sys note'", "d.style.background = 'hsl("]) {
     assert.ok(!room.includes(gone), "inline copy gone: " + gone);
   }
-  assert.match(room, /function item\(it\) \{\s*var n = CLR \? CLR\.renderItem\(it, rctx, H\) : plainItem\(it\); if \(n && typeof roomDock !== 'undefined' && roomDock\) roomDock\.personLine\(n, it && it\.u, it\);[\s\S]*?return n;\s*\}/, "the Dock attaches actions to the shared renderer's existing node (1.99?? padppl: + the line, for a veiled line's 🚫 Block)");
+  assert.match(room, /function item\(it\) \{\s*var n = CLR \? CLR\.renderItem\(it, rctx, H\) : plainItem\(it\); if \(n && typeof roomDock !== 'undefined' && roomDock\) roomDock\.personLine\(n, it && it\.u, it\);[\s\S]*?return n;\s*\}/, "the Dock attaches actions to the shared renderer's existing node (1.99ajn padppl: + the line, for a veiled line's 🚫 Block)");
   // CL5 fix-up: a renderer that didn't load never takes the page down (test/chatlog-page.test.js runs the page without it)
   assert.match(room, /var CLR = window\.PATVChatlog && typeof window\.PATVChatlog\.renderItem === 'function' \? window\.PATVChatlog : null, H = CLR \? CLR\.domH\(document\) : null;/);
   assert.doesNotMatch(room, /var CLR = window\.PATVChatlog, H = CLR\.domH/, "no unguarded use");

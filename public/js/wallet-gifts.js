@@ -1,4 +1,4 @@
-// wallet-gifts.js - 1.99?? padppl: the wallet's 🎁 Gifts card (veilgift.js) - gifts sent to you while you were under a frog name. Nothing
+// wallet-gifts.js - 1.99ajn padppl: the wallet's 🎁 Gifts card (veilgift.js) - gifts sent to you while you were under a frog name. Nothing
 // is credited until you accept one (Accept / Accept all); Decline sends it back (on its due day). Accepting adds it to your balance,
 // which shows on your profile and the rankings - the card says so. GET /api/gifts; POST /api/gifts/:id/accept|decline, /accept-all.
 // Review fixes: each gift is its own row with its buttons on the right; Decline is a quiet outline button, never a second green one.

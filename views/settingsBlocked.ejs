@@ -1,5 +1,5 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
-<%# /settings/blocked - 1.99?? padppl: 🚫 everyone you blocked, every kind (blocks.js list): accounts (the DM block), Camfrog logins with no
+<%# /settings/blocked - 1.99ajn padppl: 🚫 everyone you blocked, every kind (blocks.js list): accounts (the DM block), Camfrog logins with no
     PATV account yet, and frog names (only their label, the pad and the day - never who is behind one). Each row unblocks through the
     same sheet as the person menu (block-sheet.js). Locals: user, blocks {named, logins, veils}. %>
 <%- include('layout', { title: t('settings.blocked.title'), user: user }) %>

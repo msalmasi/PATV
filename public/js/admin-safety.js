@@ -1,4 +1,4 @@
-// admin-safety.js - 1.99?? padppl: Users & Accounts → 👥 "Named like a Camfrog user" (cfnames.js: GET/POST /api/admin/nameclash - rename /
+// admin-safety.js - 1.99ajn padppl: Users & Accounts → 👥 "Named like a Camfrog user" (cfnames.js: GET/POST /api/admin/nameclash - rename /
 // mark OK / open the profile) and 🌐⛔ "Network bans" (netban.js: the switch, ban an account's recent networks / an IP / a range, who
 // shares an account's networks - names only - and which bans hit it, with "let them through"; every look logged with the reason).
 // Review fixes: rows with their buttons on the right; logins in a monospace face; the look is a POST (the reason never sits in a URL);

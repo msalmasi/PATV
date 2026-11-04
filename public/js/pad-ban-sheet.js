@@ -1,4 +1,4 @@
-// pad-ban-sheet.js - 1.99?? padppl: the WEBSITE's bans from the person menu (padbans.js). The menu items (P.banItems, used by room-mod.js
+// pad-ban-sheet.js - 1.99ajn padppl: the WEBSITE's bans from the person menu (padbans.js). The menu items (P.banItems, used by room-mod.js
 // menuItems for viewers the live view gave `wmod`) and the confirm sheet (block-sheet.js PATVSheet - the 💸 Tip sheet's look, textContent
 // only). The sheet first asks the server WHO the clicked row / line is (POST .../ban/preview {ref}) and says the identity's KIND - "PATV
 // account @x", "Camfrog login y", "The person behind 🐸 Soggy Bullfrog · identity hidden from you" - never re-reading a typed name. Then:

@@ -101,8 +101,8 @@ var CAPS = [
   ["feed.pepe_admin", "feed", "admin", null],
   ["feed.admin_lock", "feed", "admin", "padlock"],              // set / pass a pad's admin lock (automod, filter, Pepe on the feed)
   ["feed.abuse_details", "feed", "admin", "privacy"],
-  ["safety.net_bans", "feed", "admin", "privacy"],              // 1.99?? padppl: network bans + who shares an account's networks (netban.js; every look logged)
-  ["accounts.name_clash", "feed", "admin", null],               // 1.99?? padppl: accounts named like a Camfrog user they aren't (cfnames.js)
+  ["safety.net_bans", "feed", "admin", "privacy"],              // 1.99ajn padppl: network bans + who shares an account's networks (netban.js; every look logged)
+  ["accounts.name_clash", "feed", "admin", null],               // 1.99ajn padppl: accounts named like a Camfrog user they aren't (cfnames.js)
   ["feed.automod_csam_reverse", "feed", "staff", "safety"],
   ["takedown.handle", "feed", "staff", "safety"],
   ["imagesafety.admin", "feed", "admin", "privacy"],

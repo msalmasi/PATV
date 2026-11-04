@@ -1,4 +1,4 @@
-// 1.99?? padppl: 🚫 Block from the person menu / profile / settings (blocks.js) and the website's bans from the person menu (padbans.js).
+// 1.99ajn padppl: 🚫 Block from the person menu / profile / settings (blocks.js) and the website's bans from the person menu (padbans.js).
 //
 // Blocks - ONE block (the DM block, dm_blocks) wherever it is made; + login blocks (an unlinked Camfrog login) and frog-name blocks:
 //   - the ref is exactly what was clicked (personref.js): a Camfrog login -> its LINKED account, a 🌐 row -> that PATV username (the
@@ -313,7 +313,7 @@ test("a Camfrog login with no PATV account: pad_login_bans, the mic stage reads 
   assert.equal(await PB.loginActive(ROOM, "futurecf"), null, "the login row is gone");
 });
 
-// ── 1.99?? padppl review fixes ──
+// ── 1.99ajn padppl review fixes ──
 test("review: the merged list - a bridge-only mod sees bridge rows only, staff see site-wide frog-name / login bans, nobody gets a veil's identity; one row per pad ban; Lift by id", async () => {
   // a pad ban (its bridge block comes with it) + a site-wide frog-name ban by staff
   await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "tricon" }, scope: "pad", dur: "1d", reason: "owner's reason" });

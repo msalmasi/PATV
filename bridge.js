@@ -1155,7 +1155,7 @@ async function ingest(body, opts = {}) {
     if (it.k === "tx" && it.id && dup.tx.has(R.id + "\t" + it.id)) continue;                     // CL2: ...already archived
     const echoOf = it._job || null;
     delete it._job;
-    // 1.99?? padppl: the say job's @mentions ride on its room line - page-safe `mn` (stored, dressed, drawn as chips) and the server-only
+    // 1.99ajn padppl: the say job's @mentions ride on its room line - page-safe `mn` (stored, dressed, drawn as chips) and the server-only
     // resolution (non-enumerable _mnIds: never serialised) for the mention alerts (mentions.js)
     if (echoOf && it.k === "msg") {
       const MJ = relay.echoJob(echoOf, R.id);
@@ -1178,7 +1178,7 @@ async function ingest(body, opts = {}) {
     newItems.push([R.id, it]);
     const mid = ev.data && typeof ev.data.message_id === "string" ? ev.data.message_id : null;   // CL2: Pepe's PCP message id
     archive.push({ roomId: R.id, it, eid: evId || null, mid: it.k === "msg" ? mid : null });
-    // 1.99ye: the sender's pending line becomes this one (1.99acb: same room only). 1.99?? padppl review fix: `named` = the room's line
+    // 1.99ye: the sender's pending line becomes this one (1.99acb: same room only). 1.99ajn padppl review fix: `named` = the room's line
     // shows its sender by name (not a frog name, "someone" or a hidden bar) - only then does the people list say they posted (padweb.js)
     if (echoOf) relay.noteEcho(echoOf, it.c, R.id, !!(it.k === "msg" && it.u && !it.u.anon && !it.u.self && !it.ah && !it.mask && !it._vz));
   }
@@ -1371,7 +1371,7 @@ const avatarOf = (raw) => require("./userlook").avatarOf(raw);
  *  account (+ `patv` for the profile link / avatar / name colour), else the Camfrog display name,
  *  else the login. `login` stays (the tooltip); `cf` = the Camfrog display name when it isn't the
  *  login. Pepe himself keeps the name Pepe gave. Anonymised users pass through untouched. */
-/** 1.99?? padppl: a line's @mention entries in each person's look - name style (cosmetics) and this pad's flair (F) - frog names plain.
+/** 1.99ajn padppl: a line's @mention entries in each person's look - name style (cosmetics) and this pad's flair (F) - frog names plain.
  *  The live view, the pad's history / search (chatloghist.js) and the chat download (chatlogexport.js) all use it (review fix: the
  *  history and search chips had no cosmetics). */
 function mnLook(mn, F = null) {
@@ -1400,7 +1400,7 @@ function withPatv(u, C, F = null) {
   const fl = F && acc.username ? F.get(String(acc.username).toLowerCase()) : null;
   if (fl) out.patv.flair = require("./padflair").plain(fl);
   if (!u.self) {
-    // 1.99?? padppl (the impersonation guard, cfnames.js): a linked login's PATV display name that is ANOTHER Camfrog login Pepe has seen is
+    // 1.99ajn padppl (the impersonation guard, cfnames.js): a linked login's PATV display name that is ANOTHER Camfrog login Pepe has seen is
     // never shown - the line keeps the Camfrog name (bridge-relay.webName's rule for the room side); a web account (no login) whose name
     // is one keeps its name with `clash` = that login (the page's "not the Camfrog user" tag)
     const d = str(acc.display, 40) || out.display;
@@ -1723,7 +1723,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const shape = (it) => {
     if (!it.u) return it;
     const o = { ...it, u: withPatv(it.u, L, F) };
-    // 1.99?? padppl: @mention chips in each person's look (name style, this pad's flair) - frog names plain
+    // 1.99ajn padppl: @mention chips in each person's look (name style, this pad's flair) - frog names plain
     if (Array.isArray(o.mn) && o.mn.length) o.mn = mnLook(o.mn, F);
     const j = myC.get(it.c);
     if (j) { o.job = j.id; if (j.cid) o.cid = j.cid; }
@@ -1746,11 +1746,11 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     const tipOf = (name) => (!me || (me.username && lc(name) === lc(me.username)) || (pepe && lc(name) === pepe) ? null : { to: String(name), href: "/u/" + encodeURIComponent(String(name)) + "/tip" });
     try { web = await require("./padweb").forRoom(R, me, tipOf); } catch (e) { web = []; }
   }
-  // 1.99?? padppl: the viewer's OWN blocks (blocks.js pageList: the logins / PATV usernames they blocked by name - never a frog name,
+  // 1.99ajn padppl: the viewer's OWN blocks (blocks.js pageList: the logins / PATV usernames they blocked by name - never a frog name,
   // never who blocked them) - the person menu says ✅ Unblock for them and their named lines fold for this viewer only
   let blk = null;
   if (userId) { try { blk = await require("./blocks").pageList(userId); } catch (e) { blk = null; } }
-  // 1.99?? padppl: what website bans this viewer may make here (padbans.js wmod: bridge / pad / site / nets) and, for them only, which
+  // 1.99ajn padppl: what website bans this viewer may make here (padbans.js wmod: bridge / pad / site / nets) and, for them only, which
   // NAMED people are banned now (wban by PATV username: {b: bridge until, p: pad until; -1 = permanent}) - never on a veiled entry
   let wmod = null, wbm = null;
   if (userId && !opts.nonExempt) {
@@ -1798,8 +1798,8 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     ...(web ? { web: wbm ? web.map(withBan) : web } : {}),
     ...(blk ? { blk } : {}),
     ...(wmod ? { wmod } : {}),
-    ...(userId && (() => { try { return require("./veilgift").isOn(); } catch (e) { return false; } })() ? { gifts: 1 } : {}),   // 1.99?? padppl: 🎁 on a frog name's menu
-    ...(userId && withMe ? { mnMuted: await require("./mentions").padMuted(userId, R.id).catch(() => false) } : {}),   // 1.99?? padppl
+    ...(userId && (() => { try { return require("./veilgift").isOn(); } catch (e) { return false; } })() ? { gifts: 1 } : {}),   // 1.99ajn padppl: 🎁 on a frog name's menu
+    ...(userId && withMe ? { mnMuted: await require("./mentions").padMuted(userId, R.id).catch(() => false) } : {}),   // 1.99ajn padppl
     mic: mic.map((u) => withTip(pageMic(u))),          // micfollow: proven / since never reach pages
     feed, cursor: at.cursor,
     ...(opts && opts.program ? { stage_program: await stageProgram(prog, R, userId, L, F) } : {}),
@@ -2153,8 +2153,8 @@ function register(app, { isBotToken, addUser }) {
   relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown, gated: (R) => isLive(R) && !bridgeOk(R.id),
                         liveIds: () => new Set([...rooms.values()].filter(isLive).map((R) => R.id)) });
   require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });
-  require("./padbans").register(app, { addUser, bySlug });       // 1.99?? padppl: the website's bans from the person menu (padbans.js)
-  require("./veilgift").register(app, { addUser, bySlug });      // 1.99?? padppl: 🎁 gifts to frog names - a private inbox (veilgift.js, dark)      // 1.99xa: !bridge block - web senders blocked per room / everywhere
+  require("./padbans").register(app, { addUser, bySlug });       // 1.99ajn padppl: the website's bans from the person menu (padbans.js)
+  require("./veilgift").register(app, { addUser, bySlug });      // 1.99ajn padppl: 🎁 gifts to frog names - a private inbox (veilgift.js, dark)      // 1.99xa: !bridge block - web senders blocked per room / everywhere
   require("./pepemodlog").register(app, { isBotToken, addUser, bySlug });        // 1.99zf: Pepe's mod log per room (owner panel moderation history)
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover

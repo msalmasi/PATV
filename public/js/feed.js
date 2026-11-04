@@ -196,7 +196,7 @@
       if (d === null) return;
       var days = parseInt(d, 10); if (!(days >= 0)) { alert(_t('js.feed.ban.days', 'Type a number of days (0 = permanently).')); return; }
       var reason = window.prompt(_t('js.feed.ban.reason', 'Reason (optional):'), '') || '';
-      api('/api/feed/ban', { user: '@' + b.getAttribute('data-user'), room: b.getAttribute('data-slug'), days: days, reason: reason })   // (1.99?? padppl: '@' = this PATV account exactly - targets.js)
+      api('/api/feed/ban', { user: '@' + b.getAttribute('data-user'), room: b.getAttribute('data-slug'), days: days, reason: reason })   // (1.99ajn padppl: '@' = this PATV account exactly - targets.js)
         .then(function () { alert(days ? (profBlock ? (days === 1 ? _t('js.feed.ban.done_profile_1', 'Blocked from commenting on your profile for 1 day.') : _t('js.feed.ban.done_profile_days', 'Blocked from commenting on your profile for {n} days.', { n: days }))
                          : (days === 1 ? _t('js.feed.ban.done_pad_1', 'Banned from this pad for 1 day.') : _t('js.feed.ban.done_pad_days', 'Banned from this pad for {n} days.', { n: days })))
           : (profBlock ? _t('js.feed.ban.done_profile', 'Blocked from commenting on your profile permanently.') : _t('js.feed.ban.done_pad', 'Banned from this pad permanently.'))); }).catch(function (e) { alert(e.message); });

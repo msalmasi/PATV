@@ -114,7 +114,7 @@ async function hub(user, ctx = {}) {
     ...(memOn ? [E("memory", "🧠", "/settings/privacy#memory", memSt)] : []),
     E("livecam", "📡", "/settings/privacy#livecam", lcSt),
     E("likeness", "🪞", "/settings/likeness", lkVals ? st("n_of_on", { count: lkVals.filter(Boolean).length, total: lkVals.length }) : null),
-    // 1.99?? padppl: 🚫 everyone you blocked (blocks.js) - from the person menu, profiles or DMs; the count of every kind
+    // 1.99ajn padppl: 🚫 everyone you blocked (blocks.js) - from the person menu, profiles or DMs; the count of every kind
     E("blocked", "🚫", "/settings/blocked", blk === null ? null : st("blocked_n", { count: blk })),
     E("voice", "🗣️", "/voices/mine"),
     E("clone", "🎙️", "/voices/clone"),

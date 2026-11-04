@@ -225,7 +225,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
     await put("holdings", "stash_memberships", rows("stash_members", `lower(login) IN ${IN}`, ks.map((k) => k.toLowerCase())));
   }
   await put("holdings", "stash_moves", rows("stash_moves", "user_id = ?", [uid]));
-  // (1.99?? padppl review fix: never a 🎁 gift-to-a-frog-name hold - its state / done_at would tell the sender whether and when the frog
+  // (1.99ajn padppl review fix: never a 🎁 gift-to-a-frog-name hold - its state / done_at would tell the sender whether and when the frog
   // accepted it; their "gifts_sent" below says what they may know)
   await put("holdings", "escrow_holds", rows("escrow_holds", "user_id = ? AND COALESCE(kind, '') <> 'VGF'", [uid], { omit: ["cp"] }));
   await put("holdings", "market_orders", rows("market_orders", "user_id = ?", [uid]));
@@ -280,10 +280,10 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   }
   await put("messages", "settings", rows("dm_prefs", "user_id = ?", [uid]));
   await put("messages", "your_blocks", rows("dm_blocks", "blocker_id = ?", [uid]));
-  // 1.99?? padppl: blocks on Camfrog logins and on frog names (blocks.js) - a frog-name block as its label, pad and day only (never who)
+  // 1.99ajn padppl: blocks on Camfrog logins and on frog names (blocks.js) - a frog-name block as its label, pad and day only (never who)
   await put("messages", "your_login_blocks", rows("login_blocks", "blocker_id = ?", [uid]));
   await put("messages", "your_frog_name_blocks", rows("veil_blocks", "blocker_id = ?", [uid], { omit: ["blocked_id", "blocked_login", "blocker_id"] }));
-  // 1.99?? padppl 🎁 gifts to frog names (veilgift.js): what you sent - the frog name, amount and day only (never who, never whether it
+  // 1.99ajn padppl 🎁 gifts to frog names (veilgift.js): what you sent - the frog name, amount and day only (never who, never whether it
   // was accepted); what was sent to you - everything about it but the sender's id (their name is in your history once you accept)
   await put("wallet", "gifts_sent", rows("veil_gifts", "from_user = ?", [uid], { omit: ["to_user", "to_login", "state", "hold_id", "decided_at", "settled_at", "key", "from_user", "room_id", "due_at"] }));
   await put("wallet", "gifts_received", rows("veil_gifts", "to_user = ?", [uid], { omit: ["from_user", "to_login", "hold_id", "key"] }));

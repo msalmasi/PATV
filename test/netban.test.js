@@ -1,4 +1,4 @@
-// 1.99?? padppl: network bans (netban.js) - dark until switched on; keyed codes, never addresses; enforced at sign-up, sign-in and posting.
+// 1.99ajn padppl: network bans (netban.js) - dark until switched on; keyed codes, never addresses; enforced at sign-up, sign-in and posting.
 //   - OFF (the default): nothing recorded, nothing refused
 //   - the code: HMAC keyed from SECRET_KEY (HKDF), IPv4 as is, IPv6 by its /64; only the trusted proxy's headers count, never a direct socket
 //   - "this account's recent networks" catches the NEXT account from the same network (sign-up, sign-in, posting), site-wide or one pad
@@ -155,7 +155,7 @@ test("retention: codes go 90 days after their last use; the switch off stops rec
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM net_seen"))[0].n, 0);
 });
 
-// ── 1.99?? padppl review fixes ──
+// ── 1.99ajn padppl review fixes ──
 test("review: one /64 is ONE code however it is spelled, and a compressed zero run never leaks interface bits into it", async () => {
   assert.equal(NB.netOf("2001:db8:1::5"), "2001:db8:1:0::/64");
   assert.equal(NB.netOf("2001:db8:1:0:abcd::5"), "2001:db8:1:0::/64");

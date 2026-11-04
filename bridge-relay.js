@@ -314,7 +314,7 @@ async function blockedWhy(R, u, feature = "chat") {
 }
 
 /**
- * 1.99?? padppl: the say POST's mentions [{n, ref}] -> {page: [{n, username, login, veil}] (page-safe, rides on the room line),
+ * 1.99ajn padppl: the say POST's mentions [{n, ref}] -> {page: [{n, username, login, veil}] (page-safe, rides on the room line),
  * ids: [{userId, login, veil, label, n}] (server-only: the alerts)} - an entry only when "@n" is in the text and n is one of that person's
  * names (their PATV display name or username, their Camfrog login, or - for a frog name - exactly that frog name). A veil's page entry
  * names nobody.
@@ -339,7 +339,7 @@ async function mentionRefs(list, text, R) {
   return { page, ids };
 }
 
-/** 1.99?? padppl: why a web command that names a person (!duel / !brawl / !tip <login>) is refused because of a block, or null. */
+/** 1.99ajn padppl: why a web command that names a person (!duel / !brawl / !tip <login>) is refused because of a block, or null. */
 const PERSON_CMDS = new Set(["!duel", "!brawl", "!tip", "!challenge"]);
 async function challengeBlocked(u, c, text) {
   if (!PERSON_CMDS.has(c)) return null;
@@ -445,7 +445,7 @@ function roomPmLocal(userId, roomId, text, cmd) {
   } catch (e) { /* a private row can't break the relay */ }
 }
 
-/** 1.99?? padppl: a say job's line came back from the room AS A NAMED LINE (bridge.js ingest says `named`) - its sender "posted in this
+/** 1.99ajn padppl: a say job's line came back from the room AS A NAMED LINE (bridge.js ingest says `named`) - its sender "posted in this
  *  pad's chat" (padweb.notePostNamed, the people list's dimmed 🌐 rows). Review fix (no unmasking): never for a line that went out under
  *  a frog name or as a hidden bar, and never from Pepe's ack alone (it can't say how the line looked). Once per job; never throws. */
 function notePosted(j, named = false) {
@@ -522,7 +522,7 @@ function noteEcho(jobId, c, roomId = null, named = false) {
   if (j.result && !j.result.ok && j.result.code === "send_failed") return false;
   j.echoC = c; j.echoAt = Date.now();
   if (j.state !== "done" || !j.result || !j.result.ok) { j.state = "done"; j.doneAt = j.echoAt; j.result = { ok: true, msg: "sent" }; }
-  notePosted(j, named);              // 1.99?? padppl: the people list's "posted in the last hour" - a NAMED echo only (padweb.js)
+  notePosted(j, named);              // 1.99ajn padppl: the people list's "posted in the last hour" - a NAMED echo only (padweb.js)
   noteLatency(j);
   notify(j);
   return true;
@@ -542,7 +542,7 @@ function echoJob(jobId, roomId = null) {
              : { type: "cfsticker", set: Number(j.media.set), id: Number(j.media.id) }) : null,
            // 1.99ajf dockclean: the 🧸 PATV sticker this say job was (sendSayLine) - {pack, id, alt: the words Pepe posts} | null
            stk: j.stk && typeof j.stk === "object" ? { pack: String(j.stk.pack), id: String(j.stk.id), alt: String(j.stk.alt) } : null,
-           // 1.99?? padppl: its @mentions - page-safe (mn) and the server-only resolution for the alerts (mnIds)
+           // 1.99ajn padppl: its @mentions - page-safe (mn) and the server-only resolution for the alerts (mnIds)
            mn: Array.isArray(j.mn) ? j.mn.map((m) => Object.assign({}, m)) : null, mnIds: Array.isArray(j.mnIds) ? j.mnIds : null };
 }
 
@@ -648,7 +648,7 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
     if (tk.length === 1 && text === `[sticker:${tk[0].pack}/${tk[0].sticker}]` && out !== text) stk = { pack: tk[0].pack, id: tk[0].sticker, alt: out };
   }
   text = out;
-  // 1.99?? padppl (owner point 24): the @mentions the composer picked - kept only where "@" + the name is still in the words Pepe will post,
+  // 1.99ajn padppl (owner point 24): the @mentions the composer picked - kept only where "@" + the name is still in the words Pepe will post,
   // each resolved EXACTLY by its ref (personref.js), the name checked against who it is (a name can't be pinned on someone else)
   const mn = opts.mentions ? await mentionRefs(opts.mentions, text, R) : null;
   let open = 0;
@@ -809,7 +809,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
       return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
     }
-    // 1.99?? padppl: a web !duel / !brawl / !tip naming someone blocked either way (or who blocked this account's frog name / login) is
+    // 1.99ajn padppl: a web !duel / !brawl / !tip naming someone blocked either way (or who blocked this account's frog name / login) is
     // refused here, before Pepe sees it - blocks.js; the same text whichever side blocked
     const blkCmd = await challengeBlocked(u, c, text);
     if (blkCmd) return res.status(403).json({ ok: false, code: "blocked_person", error: blkCmd });

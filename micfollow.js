@@ -529,7 +529,7 @@ async function siteBanned(login, ids, roomId, t) {
       if ((await q(`SELECT 1 AS x FROM feed_bans WHERE user_id IN (${ph}) AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?) LIMIT 1`, [...ids, roomId, t])).length) return true;
       if ((await q(`SELECT 1 AS x FROM users WHERE userId IN (${ph}) AND archived_at IS NOT NULL LIMIT 1`, ids)).length) return true;
     }
-    // 1.99?? padppl: a NAMED website ban on a Camfrog login with no PATV account (padbans.js pad_login_bans, whole pad / site)
+    // 1.99ajn padppl: a NAMED website ban on a Camfrog login with no PATV account (padbans.js pad_login_bans, whole pad / site)
     if ((await q("SELECT 1 AS x FROM pad_login_bans WHERE login = ? AND (room_id = ? OR room_id = '') AND scope IN ('pad', 'site') AND (until IS NULL OR until > ?) LIMIT 1",
                  [String(login || "").toLowerCase(), roomId, t])).length) return true;
     return (await q("SELECT 1 AS x FROM feed_restricted WHERE login = ? AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?) AND COALESCE(reason, '') <> ? LIMIT 1",

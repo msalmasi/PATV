@@ -345,7 +345,7 @@ test("1.99za compact header: identity (avatar + name + badges, the chat-room pil
 test("people list: the name stays the profile link; ⋯ for mods and (1.99fu) every signed-in viewer, next to the cam icon, opening the menu", async () => {
   const html = await renderRoom({});
   const js = html.slice(html.indexOf("function renderRoom(d)"), html.indexOf("function listNote"));
-  // (1.99?? padppl: + a veiled entry with a frog name gets the ⋯ too - for 🚫 Block)
+  // (1.99ajn padppl: + a veiled entry with a frog name gets the ⋯ too - for 🚫 Block)
   assert.match(html, /function wantsMore\(u\) \{\s*if \(u && u\.anon\) return !!\(roomMod && signedIn && !u\.self && \(u\.veil === 'incognito' \|\| u\.veil === 'hidden'\) && u\.id && u\.alias\);[^\n]*\n\s*return !!\(roomMod && \(roomMod\.active\(\) \|\| signedIn\) && u && !u\.self && !u\.anon && \(u\.login \|\| \(roomDock && u\.web && u\.patv && u\.patv\.username\)\)\);\s*\}/);
   assert.match(html, /roomMod\.menu\(u, mg, \{ cam: canCam/);
   assert.match(html, /collapsible: true, signed: true/, "the menu knows the viewer is signed in");

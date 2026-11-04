@@ -1,4 +1,4 @@
-// padbans.js - 1.99?? padppl (owner, 2026-11-04: "I need a way to ban users from the bridge from their user-sub menu. Also to ban users
+// padbans.js - 1.99ajn padppl (owner, 2026-11-04: "I need a way to ban users from the bridge from their user-sub menu. Also to ban users
 // from the pad generally (feed etc.)"): the WEBSITE's bans, from the person menu, on the EXACT identity of the row / line clicked
 // (personref.js - a web account by its id, a Camfrog login by its login, a veiled line by its server-side identity) - never by
 // re-resolving a typed name. It writes only the EXISTING stores, so every reader keeps working:
@@ -9,7 +9,7 @@
 //   a Camfrog login with NO PATV account   pad_login_bans (login, room_id, scope) - copied onto the account when that login links
 //   a VEILED person (incognito / hidden)   veil_bans (room_id, scope, user_id, login, label) - see THE VEIL RULE
 //
-// THE VEIL RULE (no unmasking - 1.99?? padppl review fix, "who, not what"): a veil ban is a row of its own (never the named row - a later
+// THE VEIL RULE (no unmasking - 1.99ajn padppl review fix, "who, not what"): a veil ban is a row of its own (never the named row - a later
 // named ban of a suspect can't overwrite it and make the 🐸 entry vanish) and it acts ONLY while that person is UNDER A FROG NAME on the
 // website (veiledNow: Incognito on, or hidden) - it refuses their website bridge in that pad (bridgeblocks.active: chat, commands, clips,
 // cams), whatever frog name they use. It never touches anything they do under their own name (feed posts, stories, stage booking, a

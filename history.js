@@ -32,7 +32,7 @@ const RULES = [
   [/^wheel prize shortfall$/i, "wheel", "🎡", () => `Wheel prize top-up`],
   [/^tip sent$/i, "tips", "💸", (a, m, r) => r.cp ? `Tipped` : `Tipped someone`, ""],
   [/^tip received$/i, "tips", "💰", (a, m, r) => r.cp ? `Tip from` : `Tip from someone`, ""],
-  // 1.99?? padppl 🎁 gifts to frog names (veilgift.js): the sender's row never names anyone (its note is the frog name); the recipient's
+  // 1.99ajn padppl 🎁 gifts to frog names (veilgift.js): the sender's row never names anyone (its note is the frog name); the recipient's
   // names the sender (their own history only); never paired with each other (the old tips' pairing reads tip rows only)
   [/^gift sent$/i, "tips", "🎁", () => `Gift to a frog name`, ""],
   [/^gift accepted$/i, "tips", "🎁", (a, m, r) => r.cp ? `Gift from` : `Gift accepted`, ""],

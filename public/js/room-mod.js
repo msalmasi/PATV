@@ -106,7 +106,7 @@
 
   function tr(k, d, v) { return window.__t ? __t(k, d, v) : String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); }
   var lc = function (v) { return String(v == null ? '' : v).toLowerCase(); };
-  /** 1.99?? padppl: the exact reference of a named person (personref.js kinds), or null. */
+  /** 1.99ajn padppl: the exact reference of a named person (personref.js kinds), or null. */
   function blockRef(u) {
     if (!u || u.anon) return null;
     var l = String(u.login || '');
@@ -129,7 +129,7 @@
     return !!(u.me || (x.meName && u.patv && u.patv.username && lc(u.patv.username) === lc(x.meName))
       || (x.meLogin && u.login && lc(u.login) === lc(x.meLogin)));
   }
-  /** 1.99?? padppl review fix: the block sheet's identity line for a NAMED person - which one this is when names collide (the tricon case):
+  /** 1.99ajn padppl review fix: the block sheet's identity line for a NAMED person - which one this is when names collide (the tricon case):
    *  "PATV account @x · Camfrog login y", and "not the Camfrog user" when a web name clashes. Never for a veil. */
   function whoLine(u) {
     if (!u || u.anon) return null;
@@ -162,22 +162,22 @@
   //   - 1.99ajf dockclean: a 🌐 web user from the pad's people list (no login on the page, only their PATV name): View profile and 💸 Tip,
   //     nothing else (no cam, no moderation, no duel); ⚔️ Duel… / 🥊 Brawl… (x.pvp: the Dock checked that the viewer has a linked chat
   //     login, Pepe offers the command here and the person is a named Camfrog member who isn't the viewer) - Pepe's escrow decides the rest
-  //   - 1.99?? padppl: 🚫 Block… / ✅ Unblock (signed in; never yourself, Pepe or bots) - the ref is exactly what was clicked
+  //   - 1.99ajn padppl: 🚫 Block… / ✅ Unblock (signed in; never yourself, Pepe or bots) - the ref is exactly what was clicked
   //     (blockRef: a named login, a web line's account key, a 🌐 row's PATV name; a veiled row by its opaque id, a veiled line by
   //     its row c - the server finds who it is and never says). x.blk = the viewer's OWN named blocks (liveView blk) + this page's
   //     changes since: someone you blocked shows ✅ Unblock and no 💸 Tip / ⚔️ Duel / 🥊 Brawl. A veiled entry never shows Unblock
   //     (that would link frog sessions) - unblocking a frog name is in Settings → Blocked people.
-  //   - 1.99?? padppl: the website's own bans (P.banItems, pad-ban-sheet.js) for viewers the live view gave `wmod`
+  //   - 1.99ajn padppl: the website's own bans (P.banItems, pad-ban-sheet.js) for viewers the live view gave `wmod`
   function menuItems(caps, u, x) {
     x = x || {};
     if (!u || u.self) return [];
     if (u.anon) {
-      // 1.99?? padppl: a veiled person (incognito / hidden): only 🚫 Block (+ the ban items for web moderators)
+      // 1.99ajn padppl: a veiled person (incognito / hidden): only 🚫 Block (+ the ban items for web moderators)
       if (!x.signed || !(u.veil === 'incognito' || u.veil === 'hidden')) return [];
       var vref = x.c ? { k: 'line', c: Number(x.c) } : u.id ? { k: 'veil', id: String(u.id) } : null;
       if (!vref) return [];
       var vo = [{ kind: 'block', id: 'block', group: 'safety', label: '🚫 ' + tr('js.block.menu', 'Block…'), ref: vref, veil: true, danger: true }];
-      // 1.99?? padppl: 🎁 a gift to the frog name (veilgift.js - a private gift inbox; only while the live view says gifts are on)
+      // 1.99ajn padppl: 🎁 a gift to the frog name (veilgift.js - a private gift inbox; only while the live view says gifts are on)
       if (x.gifts) vo.unshift({ kind: 'gift', id: 'gift', group: 'who', label: '🎁 ' + tr('js.gift.menu', 'Send a gift…'), ref: vref, veil: true });
       if (P.banItems) P.banItems(vo, u, x, vref, true);
       return vo;
@@ -625,7 +625,7 @@
     // caps.actions (menuItems), runs them through the same run() / confirm step as the dialog, and the
     // server re-checks everything (/api/rooms/<slug>/mod: caps for this login, action allowed, self rules).
     var pop = null;
-    var localBlk = {};                   // 1.99?? padppl: this page's block / unblock answers (ref key -> blocked) until the next poll says so
+    var localBlk = {};                   // 1.99ajn padppl: this page's block / unblock answers (ref key -> blocked) until the next poll says so
     function closeMenu(refocus) {
       if (!pop) return;
       var p = pop; pop = null;
@@ -640,7 +640,7 @@
     }
     function place(p, anchor) {
       if (!anchor || !anchor.getBoundingClientRect || !anchor.isConnected) return;
-      // (1.99?? padppl review fix: never taller than the window - it scrolls inside itself - measured at its real width)
+      // (1.99ajn padppl review fix: never taller than the window - it scrolls inside itself - measured at its real width)
       var vw = document.documentElement.clientWidth, vh = window.innerHeight;
       p.style.maxHeight = Math.max(160, vh - 16) + 'px';
       var r = anchor.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
@@ -680,7 +680,7 @@
       function focusItem(i) { var bs = menuEls(); if (bs.length) bs[(i + bs.length) % bs.length].focus(); }
       function backToList() { conf.classList.add('hide'); list.classList.remove('hide'); conf.textContent = ''; place(p, anchor); focusItem(0); }
       var lastGroup = null, saidCf = false;
-      // 1.99?? padppl review fix: the website's own bans and Pepe's Camfrog-room actions each under a heading, so "⛔ Website ban…" and
+      // 1.99ajn padppl review fix: the website's own bans and Pepe's Camfrog-room actions each under a heading, so "⛔ Website ban…" and
       // "🔨 Ban…" can't be mistaken for one another
       var hasWeb = items.some(function (it) { return it.group === 'ban'; });
       items.forEach(function (it) {
@@ -716,7 +716,7 @@
             return;
           }
           if (it.kind === 'more') { closeMenu(false); open(u); return; }
-          // 1.99?? padppl: 🚫 Block / ✅ Unblock - the confirm sheet (block-sheet.js); the menu remembers the answer until the next poll
+          // 1.99ajn padppl: 🚫 Block / ✅ Unblock - the confirm sheet (block-sheet.js); the menu remembers the answer until the next poll
           if (it.kind === 'block') {
             closeMenu(false);
             if (!window.PATVBlockSheet) return;
@@ -724,13 +724,13 @@
               onDone: function (a) { if (!it.veil) localBlk[refKey(it.ref)] = !!a.blocked; if (typeof opts.onBlock === 'function') opts.onBlock(a); } });
             return;
           }
-          // 1.99?? padppl: 🎁 a gift to a frog name - the gift sheet (gift-sheet.js)
+          // 1.99ajn padppl: 🎁 a gift to a frog name - the gift sheet (gift-sheet.js)
           if (it.kind === 'gift') {
             closeMenu(false);
             if (window.PATVGiftSheet) window.PATVGiftSheet.open({ ref: it.ref, slug: slug, name: who, anchor: anchor });
             return;
           }
-          // 1.99?? padppl: 🌐🚫 / ⛔ / 🛑 the website's bans and their Lift - the ban sheet (pad-ban-sheet.js)
+          // 1.99ajn padppl: 🌐🚫 / ⛔ / 🛑 the website's bans and their Lift - the ban sheet (pad-ban-sheet.js)
           if (it.kind === 'ban') {
             closeMenu(false);
             if (window.PATVBanSheet) window.PATVBanSheet.open({ ref: it.ref, slug: slug, scope: it.scope, lift: !!it.lift, wban: it.wban || null, name: who, veil: !!it.veil, anchor: anchor });
@@ -926,7 +926,7 @@
       open: open,
       menu: menu,                          // 1.99dx: the roster's ⋯ popover
       closeMenu: closeMenu,
-      // 1.99?? padppl: place the open menu again (the Dock widens it after menu() - room.ejs decorates it, then calls this)
+      // 1.99ajn padppl: place the open menu again (the Dock widens it after menu() - room.ejs decorates it, then calls this)
       relayout: function () { if (pop && pop._anchor) place(pop, pop._anchor); },
     };
   }

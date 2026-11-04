@@ -1,4 +1,4 @@
-// pad-bans.js - 1.99?? padppl: the pad owner page's "⛔ Banned & blocked from the website" list (padbans.js GET /api/rooms/:slug/bans) - ONE
+// pad-bans.js - 1.99ajn padppl: the pad owner page's "⛔ Banned & blocked from the website" list (padbans.js GET /api/rooms/:slug/bans) - ONE
 // merged list of the website bridge blocks, whole-pad bans (one row with the bridge block made with them), bans on Camfrog logins with no
 // PATV account and bans on frog names (shown as "🐸 label · identity hidden"), each with Lift. Staff also see the site-wide frog-name and
 // login bans. Bans are made from the person menu on the pad (pad-ban-sheet.js); the old card's add-by-name form above still works and

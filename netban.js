@@ -1,4 +1,4 @@
-// netban.js - 1.99?? padppl (owner: "We also need IP based types of bans for this type of thing" - the harasser's NEXT account): network
+// netban.js - 1.99ajn padppl (owner: "We also need IP based types of bans for this type of thing" - the harasser's NEXT account): network
 // bans, site-side. DARK until an admin turns the switch on (/admin/users#netbans, SP safety.net_bans): nothing is recorded before then, so
 // nothing is stored before the privacy page says so (its "net-bans" text is switched on the same flag - terms.js).
 //
