@@ -290,5 +290,5 @@ test("Pad settings -> Feed shows the switch (Camfrog pads); the profile settings
   const pp = fs.readFileSync(path.join(repo, "views", "partials", "profile-posts.ejs"), "utf8");
   assert.match(pp, /data-pp-roomgen/);
   assert.match(pp, /t\('profile\.posts\.roomgen'\)/);   // i18n: the label's text is checked rendered in profile-posts.test.js
-  assert.match(pp, /profile-feed\.js\?v=2/);
+  assert.match(pp, /profile-feed\.js\?v=3/);   // (1.99?? padppl: v3 - the profile's ban names the PATV account exactly, @name)
 });
