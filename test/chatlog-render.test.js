@@ -463,7 +463,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   for (const gone of ["function flairEl(", "function noteText(", "function spanOf(", "function hue(", "'line' + (it.k === 'tx'", "el('div', 'sys note'", "d.style.background = 'hsl("]) {
     assert.ok(!room.includes(gone), "inline copy gone: " + gone);
   }
-  assert.match(room, /function item\(it\) \{ var n = CLR \? CLR\.renderItem\(it, rctx, H\) : plainItem\(it\); if \(n && typeof roomDock !== 'undefined' && roomDock\) roomDock\.personLine\(n, it && it\.u\); return n; \}/, "the Dock attaches actions to the shared renderer's existing node");
+  assert.match(room, /function item\(it\) \{\s*var n = CLR \? CLR\.renderItem\(it, rctx, H\) : plainItem\(it\); if \(n && typeof roomDock !== 'undefined' && roomDock\) roomDock\.personLine\(n, it && it\.u\);[\s\S]*?return n;\s*\}/, "the Dock attaches actions to the shared renderer's existing node");
   // CL5 fix-up: a renderer that didn't load never takes the page down (test/chatlog-page.test.js runs the page without it)
   assert.match(room, /var CLR = window\.PATVChatlog && typeof window\.PATVChatlog\.renderItem === 'function' \? window\.PATVChatlog : null, H = CLR \? CLR\.domH\(document\) : null;/);
   assert.doesNotMatch(room, /var CLR = window\.PATVChatlog, H = CLR\.domH/, "no unguarded use");
@@ -472,9 +472,9 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.equal((room.match(/render: renderLine, ctx: rctx,/g) || []).length, 2, "scrollback's and search's lines too (CL8 / CL9)");
   assert.match(room, /feed: feedEl, line: item,/, "your pending relay lines are built the same way (room-bridge.js)");
   // the script loads before the page's own; the stylesheet right after the block it came from (the cascade keeps its order)
-  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=9"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99ajc dockfu: v=9 (media drawn only with the server's mark)
+  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=10"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99ajc dockfu: v=9 (media drawn only with the server's mark)
   assert.ok(core > 0 && core < init, "chatlog-core.js before the page script");
-  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=11">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
+  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
   assert.match(room.slice(styleEnd + 8, link), /^\s*<%#[^%]*%>\s*$/, "nothing in between but a comment");
   assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %><%= dockOn_ \? ' rm-dock' : '' %>"/);
@@ -502,7 +502,7 @@ test("chatlog.css: the moved rules, ds tokens only, logical properties, cx-shift
   for (const m of code.matchAll(/var\((--[a-z0-9-]+)/g)) assert.ok(defined.has(m[1]), "token defined in ds.css: " + m[1]);
   // The head uses flex gap, so name/time no longer need physical gaps for mixed-direction text.
   assert.doesNotMatch(code, /(margin|padding|border)-(left|right)\s*:/, "logical properties (RTL)");
-  assert.match(code, /\.chatlog \.line \.line-head \{[^}]*display: flex;[^}]*gap: 6px;[^}]*height: 18px;[^}]*min-height: 18px;[^}]*line-height: 18px;/);
+  assert.match(code, /\.chatlog \.line \.line-head \{[^}]*display: flex;[^}]*gap: 6px;[^}]*height: 20px;[^}]*min-height: 20px;[^}]*line-height: 20px;/);
   assert.match(code, /\.chatlog \.line-head > \.ufl \{[^}]*flex: 0 1000 auto;[^}]*min-width: 2\.7em;[^}]*margin: 0;/);
   assert.match(code, /\.chatlog \.line-head > \.veil-tx \{ flex: 0 1 auto; min-width: 3em;[^}]*text-overflow: ellipsis;/);
   assert.match(code, /\.chatlog \.line-head > \.who, \.chatlog \.line-head > \.who-web \{ flex: 0 40 auto; min-width: 8ch;/);

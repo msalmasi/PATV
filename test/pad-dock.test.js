@@ -36,7 +36,14 @@ test("Dock keeps one shell, every bound live id and the original tab panels", as
   for(const id of ["rmFeed","rmScroll","rmOlder","rmHistTop","rmHistBot","rmJump","rmClip","rmCompose","rmRelay","rmPtt","rmSb","rmAudioBox","rmTopic","rmStatus","rmHist","rmHistJump","rmSearchBtn","rmMoreBtn","rmMic","rmMicCard","rmPeople","rmPplCard","rmPplN","rmListNote","rmMod","rmStage","rmStageH","rmStPill","rmStPillTxt","rmStReconnect","rmStUnmute","rmEmbed","rmOffTxt","rmTabs","rmVideo","rmCap","rmStrip","rmChat","rmGoLive","rmSlotsTxt","rmBoostBtn","rmBoostBox","rmBoostMsg","rmPlexQ","rmLiveStat","rmStDot","rmCount","rmInit","rmHero","rmTitle","rmMore","rmLive","rmLiveTxt","padTabs","padLaunch","padFeedDot","padFeedNew","oacPromptOn","oaCamRoom"])
     assert.equal((html.match(new RegExp('\\bid="'+id+'"','g'))||[]).length,1,id+" exists once");
   for(const panel of ["live","feed","about"]) assert.match(html,new RegExp('id="padPanel-'+panel+'"'));
-  assert.match(html,/id="rmdDrawer"/); assert.match(html,/id="rmdBar"/);
+  // 1.99?? dockclean (owner points 1, 33): no phone pad bar / drawer and no crumb; the Live panel keeps an sr-only h1 with the pad's name;
+  // the story strip opens the Feed tab, the launchpad card ends About, the Latest posts card is not on Live
+  assert.doesNotMatch(html,/id="rmd(?:Drawer|Bar)"/);assert.doesNotMatch(html,/class="crumb"/);
+  assert.match(section(html,"padPanel-live"),/<h1 class="ds-sr-only">Night Orchard<\/h1>/);
+  const feedAt=html.indexOf('id="padPanel-feed"'),aboutAt=html.indexOf('id="padPanel-about"');
+  assert.ok(html.indexOf('class="card rm-story"')>feedAt&&html.indexOf('class="card rm-story"')<aboutAt,"the story strip is the Feed tab's first card");
+  assert.ok(html.indexOf('id="padLaunch"')>aboutAt,"the launchpad card is in About");
+  assert.match(await F.render({padDockOn:false}),/class="crumb"/,"the legacy page keeps its crumb");
 });
 
 test("the standard navbar is the Pads navbar signed in and out",async()=>{
@@ -138,19 +145,6 @@ test("pad frames draw over the banner and the header keeps its accent tint", () 
   assert.equal(decl("main.rm.rm-dock #rmHero","background"),null,"no flat background over .rm.pad-acc .hero's tint");
 });
 
-// 1.99aiw dock review: 1.99ait's "Sync to the audio: on / off" toggle (av-sync.js decorate() appends it to the audio row) was a text
-// button inside the Dock's one-line audio row: it wrapped the row onto two lines (and to a 4-line button on phones), squeezing the
-// chat scroller. In the Dock it is an emoji icon button; its words stay its accessible name (font-size 0 - never display:none or
-// visibility:hidden), its state is the pressed accent outline.
-test("the A/V sync toggle is a compact icon button in the Dock's audio row", () => {
-  const css=read("public/css/pad-dock.css").replace(/\/\*[\s\S]*?\*\//g,"");
-  const body=sel=>{const out=[];const re=/([^{}]+)\{([^{}]*)\}/g;let m;while((m=re.exec(css)))if(m[1].split(",").map(s=>s.trim()).includes(sel))out.push(m[2]);return out.join(";");};
-  const btn=body("main.rm.rm-dock #rmAudioBox .rb-avsync"),icon=body("main.rm.rm-dock #rmAudioBox .rb-avsync::before");
-  assert.match(btn,/font-size\s*:\s*0\b/);assert.match(btn,/white-space\s*:\s*nowrap/);
-  assert.doesNotMatch(btn,/display\s*:\s*none|visibility\s*:\s*hidden/);
-  assert.match(icon,/content\s*:\s*"[^"]+"/);assert.match(icon,/font-size\s*:\s*var\(--ds-fs-/);
-});
-
 // 1.99aiw dock review: body.pad-dock-live has a floor (min-block-size 520px, 440px on phones) like /messages' body.dm-page, but it
 // also had overflow: hidden, which the body hands to the viewport: in a window shorter than the floor (a phone held sideways,
 // 812x375) the page could not be scrolled and the composer (input, Hold to talk, Send) sat below the fold, out of reach
@@ -228,31 +222,38 @@ test("dockfu: review - the header's text plates add no width (their margin is a 
     assert.match(String(declOf(rules,sel,"box-shadow")),/^0 0 0 var\(--ds-sp-1\) var\(--ds-media-panel\)$/,sel);
 });
 
-// (c) a readable chat on a short window: the log keeps a floor that reaches the Live panel's flex column (the chat card's and the
-// body's content-based minimum; the side column size-contained), so the stage gives way first, the cam strip folds to its compact row
-// when the panel is short, and only then the page scrolls. The browser evidence (EVIDENCE: 800x900 / 1280x800 with two cams, phones)
-// measured the log at 120 / 112px with the room-audio row and composer making 251-253px.
-test("dockfu: the chat keeps a readable floor on short windows - the stage and the cam strip give way first", () => {
+// (c) a readable chat on a short window, after the clean-up: the stage card shrinks first (flex 0 1 auto, its own floor) and the log keeps
+// a floor that reaches the Live panel's flex column (the chat card's and the body's content-based minimum; the people column is
+// size-contained). The pinned cams are inside the stage card, so there is no separate strip to fold.
+test("dockfu: the chat keeps a readable floor on short windows - the stage gives way first", () => {
   const rules=dockRules(),P="body.pad-dock-live main.rm.rm-dock #padPanel-live";
   assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock","--rmd-log-min"),"120px");
   assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock","--rmd-log-min","@media (max-width: 760px)"),"112px");
-  assert.equal(declOf(rules,P+" #rmScroll","min-block-size"),"var(--rmd-log-min)");
+  assert.equal(declOf(rules,P+" .rmd-log","min-block-size"),"var(--rmd-log-min)");
   assert.equal(declOf(rules,P+" #rmChat","min-block-size"),"auto");
   assert.equal(declOf(rules,P+" .rmd-body","min-block-size"),"auto");
-  assert.equal(declOf(rules,P+" .rmd-body > .side","contain"),"size","the side column's lists never count toward the floor");
+  assert.equal(declOf(rules,P+" .rmd-body > .side","contain"),"size","the people column's list never counts toward the floor");
   assert.equal(declOf(rules,P,"container"),"rmd-live / size");
-  // the stage is the shrinkable one (with its own floor); the strip's compact form is a container query on the panel's height
-  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","flex"),"0 1 32%");
-  const cq="@container rmd-live (max-height: 720px)";
-  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmStrip .cs-vid","block-size",cq),"64px");
-  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-select","display",cq),"block");
-  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-layout","display",cq),"none");
-  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmLiveStat","display","@media (min-width: 761px) @container rmd-live (max-height: 600px)"),"none");
-  // a stage the floor shrank keeps its controls inside it (the overlay scrolls in the stage's box, never over the strip / chat)
-  assert.equal(declOf(rules,P+" #rmStage > .rmd-stage-overlay","max-block-size"),"100%");
-  assert.equal(declOf(rules,P+" #rmStage > .rmd-stage-overlay","overflow-y"),"auto");
-  // the floating / fullscreen / PiP chats keep their own sizes: the floor is scoped to the docked panel
+  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","flex"),"0 1 auto");
+  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","block-size"),"clamp(140px, 36cqb, 560px)");
+  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","min-block-size"),"96px");
+  assert.match(String(declOf(rules,"main.rm.rm-dock #rmStage","block-size","@media (max-width: 760px)")),/min\(56\.25cqi, 36cqb\)/,"phones: 16:9 of the width or 36% of the panel");
   for(const r of rules)if(/--rmd-log-min\)/.test(r.body))assert.ok(r.selector.startsWith(P),r.selector);
+});
+
+// 1.99?? dockclean (owner points 9, 19, 24): the bottom bar is a 3-column grid - [▶ / ❚❚] [the now zone: eq + holders, or the state]
+// [🔊 · volume · 🎚️] - and holds nothing else: the ⚡ live / standard pill, Jump to live, duck and A/V sync are Audio settings. The state
+// text is hidden in normal playback (the eq is the live signal) and while holders show.
+test("dockclean: the bottom bar is play · now · a fixed right cluster; mode, jump, duck and A/V sync live in Audio settings", () => {
+  const rules=dockRules(),S="main.rm.rm-dock #rmAudioBox";
+  const raw=(sel,prop)=>{const r=rules.find(x=>!x.at&&x.selector===sel);const m=r&&new RegExp("(?:^|;)\\s*"+prop+"\\s*:\\s*([^;]+)").exec(r.body);return m?m[1].trim():null;};
+  assert.equal(declOf(rules,S+" .rb-audio.rmd-bar","display"),"grid");
+  assert.equal(declOf(rules,S+" .rb-audio.rmd-bar","grid-template-columns"),"36px minmax(0, 1fr) auto");
+  assert.equal(raw(S+" .rmd-bar > :not(.rb-play, .rmd-now, .rmd-right)","display"),"none");
+  assert.equal(raw("main.rm.rm-dock .rmd-now :is(.rb-state.live, .rb-state:empty)","display"),"none");
+  assert.equal(declOf(rules,"main.rm.rm-dock .rmd-now.rmd-has-holders .rb-state","display"),"none");
+  assert.equal(declOf(rules,"main.rm.rm-dock .rmd-right","flex"),"none","the right cluster never moves");
+  assert.equal(declOf(rules,"main.rm.rm-dock .rmd-now","min-inline-size"),"0");
 });
 
 // (f) the pad-accent focus ring stays (owner-approved exception): the mapping still points --ds-focus at the pad's accent

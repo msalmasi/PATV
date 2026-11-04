@@ -58,6 +58,13 @@
 .rb-ac-it.on, .rb-ac-it:hover { background: #1e3a22; }
 .rb-ac-c { font-family: ui-monospace, Consolas, monospace; color: #9be7a1; overflow: hidden; text-overflow: ellipsis; }
 .rb-ac-p { color: #ffd54f; font-size: 12px; white-space: nowrap; }
+/* 1.99?? dockclean (Room Dock, owner point 30): the name list - avatar, name, the login when it differs, the 🌐 / incognito tag; 44px rows on touch */
+.rb-ac.rb-ac-names .rb-ac-it { justify-content: flex-start; align-items: center; gap: 8px; min-height: 36px; }
+.rb-ac.rb-ac-names .av { width: 24px; height: 24px; font-size: 11px; flex: none; }
+.rb-ac-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.rb-ac-l { color: var(--ds-text-muted, #9a9a9a); font-size: 12px; white-space: nowrap; }
+.rb-ac-t { margin-inline-start: auto; color: var(--ds-text-muted, #9a9a9a); font-size: 11px; white-space: nowrap; }
+@media (pointer: coarse) { .rb-ac.rb-ac-names .rb-ac-it { min-height: 44px; } }
 .rb-hint { color: #6f8f72; font-size: 12px; margin-top: 4px; }
 .rb-cmdfeed { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
 .rb-cmd { background: #0d0d0d; border: 1px solid #1f2a20; border-radius: 8px; padding: 6px 8px; font-size: 12.5px; color: #bbb;

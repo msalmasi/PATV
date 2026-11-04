@@ -117,9 +117,18 @@
   //     unless you're a Pepe admin (SELF_LIFT; the server + Pepe refuse it too); "unban" is left out for people IN the room;
   //     disabled while web moderation is off in the room; destructive ones flagged (they get a confirm step)
   //   - "More…" (the full Manage dialog: strikes history, roles) whenever there are moderation actions
+  //   - 1.99?? dockclean: a 🌐 web user from the pad's people list (no login on the page, only their PATV name): View profile and 💸 Tip,
+  //     nothing else (no cam, no moderation, no duel); ⚔️ Duel… / 🥊 Brawl… (x.pvp: the Dock checked that the viewer has a linked chat
+  //     login, Pepe offers the command here and the person is a named Camfrog member who isn't the viewer) - Pepe's escrow decides the rest
   function menuItems(caps, u, x) {
     x = x || {};
-    if (!u || u.anon || u.self || !u.login) return [];
+    if (!u || u.anon || u.self) return [];
+    if (!u.login) {
+      if (!(u.web && u.patv && u.patv.username) || !x.signed || u.me) return [];
+      var w = [{ kind: 'link', id: 'profile', group: 'who', label: '👤 View profile', href: '/u/' + encodeURIComponent(u.patv.username) }];
+      if (u.tip && u.tip.to && u.tip.href && !u.bot) w.push({ kind: 'tip', id: 'tip', group: 'who', label: '💸 Tip', to: u.tip.to, href: u.tip.href, title: 'Tip ' + u.tip.to + ' PAT' });
+      return w;
+    }
     var mod = !!(caps && Array.isArray(caps.actions));
     if (!mod && !x.signed) return [];
     var out = [];
@@ -128,6 +137,10 @@
     if ((x.signed || mod) && u.tip && !u.bot) {
       if (u.tip.to && u.tip.href) out.push({ kind: 'tip', id: 'tip', group: 'who', label: '💸 Tip', to: u.tip.to, href: u.tip.href, title: 'Tip ' + u.tip.to + ' PAT' });
       else if (u.tip.off) out.push({ kind: 'off', id: 'tip', group: 'who', label: '💸 Tip', disabled: true, note: u.tip.off, title: "Can't tip: " + u.tip.off });
+    }
+    if (x.pvp && x.signed && !u.bot && !u.web && !u.acct && !/^u:/i.test(u.login)) {
+      if (x.pvp.duel) out.push({ kind: 'pvp', id: 'duel', group: 'who', label: '⚔️ ' + (window.__t ? __t('js.pad.dock.duel', 'Duel…') : 'Duel…') });
+      if (x.pvp.brawl) out.push({ kind: 'pvp', id: 'brawl', group: 'who', label: '🥊 ' + (window.__t ? __t('js.pad.dock.brawl', 'Brawl…') : 'Brawl…') });
     }
     // 1.99qr: 🐸 Pepe ▸ - the paid people-commands (pad-pepe.js / padpepe.js): signed-in viewers, while Pepe offers them here
     if ((x.signed || mod) && x.pepe && P.pepe && !u.bot && P.pepe.items(x.pepe, u).length) {
@@ -573,11 +586,11 @@
       extra = extra || {};
       if (pop && pop._login === u.login) { closeMenu(true); return; }      // the same ⋯ again: toggle shut
       closeMenu(false);
-      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed, pepe: room && room.pepe });
+      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed, pepe: room && room.pepe, pvp: extra.pvp || null });
       if (!items.length) return;
       var who = u.display || u.login;
       var p = el('div', 'pm-pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Actions for ' + who);
-      p._anchor = anchor; p._login = u.login;
+      p._anchor = anchor; p._login = u.login || ('web:' + (u.patv && u.patv.username || ''));
       p._mod = items.some(function (it) { return it.kind === 'act' || it.kind === 'more'; });     // 1.99fu: closes when caps go
       var hd = el('div', 'pm-pop-h');
       var nm = el('div', 'pm-pop-n'); nm.appendChild(el('b', null, who));
@@ -622,6 +635,7 @@
             return;
           }
           if (it.kind === 'more') { closeMenu(false); open(u); return; }
+          if (it.kind === 'pvp') { closeMenu(false); if (extra.pvp && extra.pvp.run) extra.pvp.run(it.id); return; }
           // 1.99qr: 🐸 Pepe ▸ - the submenu replaces the list (← back); a pick shows its price + confirm in the popover
           if (it.kind === 'pepe') { pepeSub(); return; }
           if (!A[it.id].confirm) {

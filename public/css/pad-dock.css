@@ -1,60 +1,65 @@
 /* Room Dock: the existing pad components, scoped to this opt-in layout. */
+/* 1.99?? dockclean (hand-off 18 clean-up, the owner's targets 172 / 173): the Live view is ONE stage card (the video, the pinned cams
+   inside it, an auto-hiding overlay), the chat card (one slim header row, the log, the bottom audio bar, the composer box) and, at
+   1024px and wider, the people column as tall as the chat. No crumb, pad header, tab bar, status rows or side cards on Live - every
+   other control lives in one menu (pad-dock.js). Feed and About keep a slim header row. */
 /* 1.99aiw review: no overflow: hidden here (the body hands it to the viewport) - a window shorter than the floor (a phone held
    sideways) scrolls to the composer, as /messages' body.dm-page does; only sideways overflow is cut */
 body.pad-dock-live { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 520px; overflow-x: hidden; }
 body.pad-dock-live > header { flex: none; }
-/* 1.99ajc dockfu (the lead's design call a): the Live frame keeps the page's own max width (.rm / .ds-page, as on Feed and About) and
-   centres in it (.ds-page's margin-inline: auto + inline-size: 100% below) - it no longer runs edge to edge on a wide screen */
 body.pad-dock-live > main.rm.rm-dock { flex: 1 1 0; min-block-size: 0; }
 body.pad-dock-live .site-foot { display: none; }
-main.rm.rm-dock { inline-size: 100%; min-inline-size: 0; gap: var(--ds-sp-2); padding-block: var(--ds-sp-2) var(--ds-sp-3); padding-inline: var(--ds-gutter); }
+main.rm.rm-dock { inline-size: 100%; min-inline-size: 0; gap: var(--ds-sp-2); padding-block: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
 body.pad-dock-live > main.rm.rm-dock { display: flex; flex-direction: column; }
 main.rm.rm-dock [hidden] { display: none !important; }
-main.rm.rm-dock .crumb { flex: none; font-size: var(--ds-fs-xs); }
 main.rm.rm-dock #padPanel-live { min-block-size: 0; min-inline-size: 0; }
 body.pad-dock-live main.rm.rm-dock #padPanel-live { display: flex; flex-direction: column; flex: 1 1 0; gap: var(--ds-sp-2); }
-main.rm.rm-dock .rmd-drawer { flex: none; min-inline-size: 0; display: grid; gap: var(--ds-sp-2); }
+/* (owner points 1-7, 23, 25, 27, 33): on Live these are menu entries, not rows */
+body.pad-dock-live main.rm.rm-dock :is(#rmHero, #padTabs, #rmLiveStat, .crumb) { display: none; }
+main.rm.rm-dock #padPanel-live > :is(#rmGoLive, .oab-row, #rdj) { display: none; }
+main.rm.rm-dock .rm-live > .side > :not(#rmPplCard) { display: none; }
+main.rm.rm-dock :is(#rmMicCard, .rm-cvlogin) { display: none; }
+
+/* ── Feed / About: one slim header row - [pad identity] [● Live · Feed · About] [Follow] [▾] (owner point 4) ── */
 /* 1.99aiw review: no background here - the header keeps today's tint (.rm .hero; .rm.pad-acc .hero = the pad's accent, spec D.4) */
 main.rm.rm-dock #rmHero { padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); }
-main.rm.rm-dock #rmHero .hd { gap: var(--ds-sp-2); }
-main.rm.rm-dock #rmHero .hd-id { display: flex; align-items: center; gap: var(--ds-sp-2); }
-main.rm.rm-dock #rmHero h1 { flex: 1 1 auto; min-inline-size: 0; }
+main.rm.rm-dock #rmHero .hd { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2); }
+main.rm.rm-dock #rmHero .hd-id { display: flex; align-items: center; gap: var(--ds-sp-2); flex: 1 1 200px; min-inline-size: 0; }
+main.rm.rm-dock #rmHero h1 { flex: 1 1 auto; min-inline-size: 0; font-size: var(--ds-fs-h3); }
 main.rm.rm-dock #rmHero .hd-st { flex: none; }
+main.rm.rm-dock #rmHero .hd-st > :is(#rmLive, .hd-about) { display: none; }
 main.rm.rm-dock #rmHero .rm-av { width: 32px; height: 32px; border-radius: var(--ds-r-sm); }
-/* 1.99aiw review: the banner fills the header, so it sits UNDER padfx's effect layer (.pfx-l, z 0: embers, snow, pixel, the Prime
-   Time rings) - at padfx's z 1 it hid them all. A negative z needs the header to be a stacking context: above --ds-z-sticky, so
-   the ⋯ menu inside it still opens over the stage overlay and the floating chat (and stays below the navbar and every sheet). */
+main.rm.rm-dock #rmHero .hd-acts { flex: none; gap: var(--ds-sp-1h); padding-block-start: 0; }
+main.rm.rm-dock #rmHero .hd-acts > :is(.po-link, .ps-link, #rmMore) { display: none; }
+main.rm.rm-dock #rmHero :is(.hd-fc, .hd-fcs) { display: none; }
+main.rm.rm-dock #padTabs.rmd-seg { position: static; flex: none; order: 2; margin: 0; padding: 3px; gap: 2px; min-inline-size: 0; overflow-x: auto; background: var(--ds-sunken); }
+main.rm.rm-dock #padTabs.rmd-seg .ptab { flex: none; min-inline-size: 0; min-block-size: 26px; padding: 0 var(--ds-sp-3); font-size: var(--ds-fs-meta); border: 0; border-radius: var(--ds-r-pill); }
+main.rm.rm-dock #rmHero .hd-acts { order: 3; }
+/* 1.99aiw review: the banner fills the header, so it sits UNDER padfx's effect layer (.pfx-l, z 0). A negative z needs the header to be
+   a stacking context: above --ds-z-sticky, so its menus still open over the stage. */
 main.rm.rm-dock #rmHero.has-bn { position: relative; padding-block: var(--ds-sp-2); z-index: calc(var(--ds-z-sticky) + var(--ds-z-raised)); }
 main.rm.rm-dock #rmHero .hero-bn { position: absolute; inset: 0; block-size: 100%; margin: 0; border-radius: inherit; z-index: calc(-1 * var(--ds-z-raised)); }
-/* 1.99ajc dockfu (design call b): the pad's banner shows through the Dock header - a 60% scrim (it was --ds-media-panel's 88%: about
-   12% of the banner showed). Readability no longer rests on the scrim alone: every piece of header text without an opaque pill of
-   its own (the name + badges, About, the follower count, a Following button) sits on a --ds-media-panel plate, so over even a white
-   banner its backdrop is darker than the page's #0d0d0d - the floor padlook.js's 4.5:1 accent guard is measured on (so the pad's
-   accent, the default green and the muted greys all keep 4.5:1; test/pad-dock.test.js does the sums). Same for the compact identity. */
+/* 1.99ajc dockfu (design call b): the pad's banner shows through a 60% scrim; every piece of header text without an opaque pill of its
+   own sits on a --ds-media-panel plate (test/pad-dock.test.js does the 4.5:1 sums). Same for the compact identity (the pad chip). */
 main.rm.rm-dock #rmHero .hero-bn::after,
 main.rm.rm-dock .rmd-id-banner::after { background: color-mix(in srgb, var(--ds-media-bg) 60%, transparent); }
 main.rm.rm-dock #rmHero.has-bn :is(.hd-nm, a.hd-about, .hd-fc, .hd-fcs, .fw-btn.on),
 main.rm.rm-dock .rmd-id:has(> .rmd-id-banner) .rmd-id-name { background-color: var(--ds-media-panel); border-radius: var(--ds-r-sm); }
-/* (the name's plate hugs the name + badges; its margin is a spread shadow, not padding - pad-chipfit.js fits the badges into this
-   box's clientWidth, which padding would widen) */
+/* (the plates' margin is a spread shadow, never padding - pad-chipfit.js fits the badges into the box's clientWidth) */
 main.rm.rm-dock #rmHero.has-bn .hd-nm,
 main.rm.rm-dock .rmd-id:has(> .rmd-id-banner) .rmd-id-name { flex: 0 1 auto; box-shadow: 0 0 0 var(--ds-sp-1) var(--ds-media-panel); }
-/* 1.99ajc dockfu: review - About's and the follower count's plate margins are spread shadows too: as padding they took 24px from the
-   header's name box, and pad-chipfit.js lets the badges use all but the name's 8ch floor (the name went into its ellipsis at 800px) */
 main.rm.rm-dock #rmHero.has-bn a.hd-about,
 main.rm.rm-dock #rmHero.has-bn .hd-fc { box-shadow: 0 0 0 var(--ds-sp-1) var(--ds-media-panel); }
 main.rm.rm-dock #rmHero.has-bn .hd { margin-block-start: 0; position: relative; z-index: var(--ds-z-raised); }
-main.rm.rm-dock #rmHero h1 { font-size: var(--ds-fs-h3); }
-main.rm.rm-dock #padTabs { margin: 0; min-inline-size: 0; padding: var(--ds-sp-1); border-radius: var(--ds-r-lg); }
-main.rm.rm-dock #padTabs .ptab { min-block-size: 36px; padding-inline: var(--ds-sp-3); font-size: var(--ds-fs-meta); }
-main.rm.rm-dock .rmd-padbar { display: none; flex: none; min-inline-size: 0; gap: var(--ds-sp-2); align-items: center; }
-main.rm.rm-dock .rmd-padbar > button { min-block-size: 44px; }
+/* Feed: the story strip opens it ("Around the pad", owner point 27) */
+main.rm.rm-dock #padPanel-feed > .rm-story { margin-block: 0 var(--ds-sp-2); padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); overflow: hidden; }
+main.rm.rm-dock #padPanel-feed > .rm-story :is(.ss-row, .ss-strip, ul) { overflow-x: auto; overscroll-behavior-inline: contain; }
 
 /* Shared pad-accent mapping: hand-off 19 compares these exact eight declarations. */
 main.rm.rm-dock.pad-acc #rmHero,
-main.rm.rm-dock.pad-acc .rmd-padbar,
 main.rm.rm-dock.pad-acc #padTabs,
 main.rm.rm-dock.pad-acc #padPanel-live,
+main.rm.rm-dock.pad-acc .rmd-chip,
 main.rm.rm-dock.pad-acc .rmd-float,
 main.rm.rm-dock.pad-acc .rmd-fullscreen,
 main.rm.rm-dock.pad-acc .rmd-layer,
@@ -70,31 +75,28 @@ main.rm.rm-dock.pad-acc[data-rmd-pip] {
   --ds-focus-ring: 0 0 0 2px var(--ds-bg), 0 0 0 4px var(--ds-focus);
   --ds-glow: 0 0 10px var(--ds-ac);
 }
-main.rm.rm-dock :is(#rmHero, #padTabs, #padPanel-live, .rmd-float, .rmd-fullscreen, .rmd-layer, .rmd-menu, .rmd-mini) a:not(.ds-btn) { color: var(--ds-ac-2); }
+main.rm.rm-dock :is(#rmHero, #padTabs, #padPanel-live, .rmd-float, .rmd-fullscreen, .rmd-layer, .rmd-menu, .rmd-mini) a:not(.ds-btn, .ds-menu-item) { color: var(--ds-ac-2); }
 main.rm.rm-dock[data-rmd-pip] a:not(.ds-btn) { color: var(--ds-ac-2); }
 main.rm.rm-dock :is(#padTabs .ptab[aria-selected="true"], #rmTabs .stab[aria-selected="true"]) { color: var(--ds-text-strong); background: var(--ds-ac-bg); border-color: var(--ds-ac-line); }
-main.rm.rm-dock :is(#padPanel-live, .rmd-float, .rmd-fullscreen, .rmd-layer, .rmd-menu, .rmd-mini, #rmdBar) :is(button, a, input, select, textarea):focus-visible { outline-color: var(--ds-focus); }
-main.rm.rm-dock :is(.rb-ac, .rb-audio.on, .rmd-padbar, .rmd-float) { border-color: var(--ds-ac-line); }
-main.rm.rm-dock :is(.rb-ac-it.on, .rb-ac-it:hover, .ic button.cam:hover, .ic button.cam:focus-visible, .mic .holder) { background: var(--ds-ac-bg); border-color: var(--ds-ac-line); }
+main.rm.rm-dock :is(#padPanel-live, .rmd-float, .rmd-fullscreen, .rmd-layer, .rmd-menu, .rmd-mini, #rmHero) :is(button, a, input, select, textarea):focus-visible { outline-color: var(--ds-focus); }
+main.rm.rm-dock :is(.rb-ac, .rmd-float) { border-color: var(--ds-ac-line); }
+main.rm.rm-dock :is(.rb-ac-it.on, .rb-ac-it:hover, .ic button.cam:hover, .ic button.cam:focus-visible) { background: var(--ds-ac-bg); border-color: var(--ds-ac-line); }
 main.rm.rm-dock :is(.rb-ac-c, .rb-cmd-t, .rb-hint) { color: var(--ds-ac-2); }
 main.rm.rm-dock .eq i { background: var(--ds-ac); }
-main.rm.rm-dock #rmStageH .btn { background: var(--ds-ac); border-color: var(--ds-ac); color: var(--ds-on-ac) !important; }
 main.rm.rm-dock #rmJump { background: var(--ds-ac); color: var(--ds-on-ac); }
-main.rm.rm-dock #rmHero :is(.ibtn:hover, .ibtn:focus-visible, .hd-more[open] > summary) { border-color: var(--ds-ac); }
-main.rm.rm-dock #rmHero .hd-menu :is(a, button):is(:hover, :focus-visible) { background: var(--ds-ac-bg); }
 main.rm.rm-dock #rmPlexQ { border-color: var(--ds-ac-line); background: var(--ds-ac-bg); }
 main.rm.rm-dock #rmPlexQ .pq-scrub { accent-color: var(--ds-ac); }
 main.rm.rm-dock #rmPlexQ .pq-bar span { background: var(--ds-ac); }
-main.rm.rm-dock :is(#rmGoLive, .rmd-layer) .rs .srow:not(.live) .when { color: var(--ds-ac-2); }
-main.rm.rm-dock :is(#rmGoLive, .rmd-layer) .rs .srow.mine { box-shadow: inset 3px 0 0 var(--ds-ac); }
-main.rm.rm-dock :is(#rmGoLive, .rmd-layer) .rs .tg.you { background: var(--ds-ac-bg); color: var(--ds-ac-2); border-color: var(--ds-ac-line); }
+main.rm.rm-dock .rmd-layer .rs .srow:not(.live) .when { color: var(--ds-ac-2); }
+main.rm.rm-dock .rmd-layer .rs .srow.mine { box-shadow: inset 3px 0 0 var(--ds-ac); }
+main.rm.rm-dock .rmd-layer .rs .tg.you { background: var(--ds-ac-bg); color: var(--ds-ac-2); border-color: var(--ds-ac-line); }
 
 /* Identity frames contain only identity; view controls are their siblings. */
 main.rm.rm-dock .rmd-id { position: relative; display: flex; min-inline-size: 0; max-inline-size: 100%; border-radius: var(--ds-r-lg); padding: var(--ds-sp-2) var(--ds-sp-3); isolation: isolate; background: var(--ds-surface); }
 main.rm.rm-dock .rmd-id-content { display: flex; align-items: center; gap: var(--ds-sp-2); min-inline-size: 0; inline-size: 100%; }
 main.rm.rm-dock .rmd-id .rm-av { width: 32px; height: 32px; border-radius: var(--ds-r-sm); }
 main.rm.rm-dock .rmd-id-name { display: flex; align-items: center; gap: var(--ds-sp-2); flex: 1 1 auto; min-inline-size: 0; overflow: hidden; }
-main.rm.rm-dock .rmd-id-name > .rm-nm { min-inline-size: min(8ch, 100%); text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); font-weight: 700; }
+main.rm.rm-dock .rmd-id-name > .rm-nm { min-inline-size: min(8ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); font-weight: 700; }
 main.rm.rm-dock .rmd-id-name > .pfx-bs { flex: 0 1 auto; }
 main.rm.rm-dock .rmd-id > .rmd-id-banner { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; z-index: calc(-1 * var(--ds-z-raised)); }   /* 1.99aiw: under the frame layer (see #rmHero) */
 main.rm.rm-dock .rmd-id-banner img { inline-size: 100%; block-size: 100%; object-fit: cover; object-position: 50% var(--pad-banner-y, 50%); display: block; }
@@ -103,187 +105,303 @@ main.rm.rm-dock .rmd-id > .rmd-id-content { position: relative; z-index: var(--d
 main.rm.rm-dock .rmd-viewbar { display: flex; align-items: center; gap: var(--ds-sp-2); padding: var(--ds-sp-2); min-inline-size: 0; flex: none; }
 main.rm.rm-dock .rmd-viewbar > .rmd-id { flex: 1 1 auto; }
 main.rm.rm-dock .rmd-viewbar > button { flex: none; }
-main.rm.rm-dock .rmd-icon { inline-size: 40px; min-inline-size: 40px; padding-inline: var(--ds-sp-1); }
-main.rm.rm-dock .rmd-icon > .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main.rm.rm-dock .rmd-icon { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding-inline: 0; justify-content: center; }
+main.rm.rm-dock :is(.rmd-icon, .rmd-chat-h .rmd-ppl-btn) > .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main.rm.rm-dock .rmd-icon > .ds-ic { margin: 0; font-size: var(--ds-fs-sm); line-height: 1; }
 
-/* The stage, then personal cams, then chat and its room list. */
-main.rm.rm-dock #rmLiveStat { margin: 0; flex: none; font-size: var(--ds-fs-xs); }
-main.rm.rm-dock #rmStage { position: relative; isolation: isolate; display: flex; flex-direction: column; flex: 0 1 32%; min-block-size: 116px; max-block-size: 32%; padding: 0; margin: 0; border-radius: var(--ds-r-lg); background: var(--ds-media-bg); }
-main.rm.rm-dock.rmd-stage-hidden #rmStage,
-main.rm.rm-dock.rmd-stage-hidden .rmd-local-player,
-main.rm.rm-dock.rmd-local-cam #rmStage { display: none; }
-main.rm.rm-dock #rmStage .player { position: relative; isolation: isolate; flex: 1 1 auto; min-block-size: 0; inline-size: 100%; max-inline-size: none; aspect-ratio: 16 / 9; background: var(--ds-media-bg); border-radius: inherit; overflow: hidden; }
-main.rm.rm-dock #rmStage #rmVideo { block-size: 100%; min-block-size: 0; aspect-ratio: auto; padding: 0; border-radius: inherit; }
+/* ── the pad chip (owner point 2): a 32px pill with the pad's identity and ▾ - it opens the pad menu ── */
+main.rm.rm-dock .rmd-chip { display: inline-flex; align-items: center; gap: var(--ds-sp-1); flex: 0 1 auto; max-inline-size: 60%; min-inline-size: 0; block-size: 32px; padding: 0 var(--ds-sp-2) 0 0;
+  border: 1px solid var(--ds-ac-line); border-radius: var(--ds-r-pill); background: var(--ds-media-panel); color: var(--ds-text-strong); font: inherit; cursor: pointer; overflow: hidden; isolation: isolate; }
+main.rm.rm-dock .rmd-chip > .rmd-id { flex: 0 1 auto; block-size: 100%; padding: 0 var(--ds-sp-1) 0 var(--ds-sp-1h); border-radius: inherit; background: transparent; align-items: center; }
+main.rm.rm-dock .rmd-chip .rm-av { width: 20px; height: 20px; border-radius: var(--ds-r-xs); }
+main.rm.rm-dock .rmd-chip .rmd-id-content { gap: var(--ds-sp-1h); }
+main.rm.rm-dock .rmd-chip .rmd-id-name { gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-chip .rmd-id-name > .rm-nm { font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-chip .rmd-id-name > .pfx-bs { min-inline-size: 0; overflow: hidden; }
+main.rm.rm-dock .rmd-chip-v { flex: none; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); line-height: 1; }
+main.rm.rm-dock .rmd-chip:is(:hover, :focus-visible, [aria-expanded="true"]) { border-color: var(--ds-ac); }
+main.rm.rm-dock .rmd-chip-head { max-inline-size: none; block-size: 32px; padding: 0 var(--ds-sp-2); background: var(--ds-surface); }
+
+/* ── the stage card: the video + the pinned cams (owner point 28) in ONE card, sized for the chat below (layout) ── */
+body.pad-dock-live main.rm.rm-dock #padPanel-live { container: rmd-live / size; }
+main.rm.rm-dock #rmStage { --rmd-strip-w: 0px; --rmd-pin-row: 0px; position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) var(--rmd-strip-w); grid-template-rows: minmax(0, 1fr) var(--rmd-pin-row);
+  flex: 0 1 auto; block-size: clamp(140px, 36cqb, 560px); max-block-size: calc((100cqi - var(--rmd-strip-w)) * 0.5625); min-block-size: 96px;
+  margin: 0; padding: 0; border: 0; border-radius: var(--ds-r-lg); background: var(--ds-media-bg); overflow: hidden; }
+main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-strip-w: clamp(132px, 14cqi, 200px); }
+main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="large"]:not([hidden])) { --rmd-strip-w: clamp(180px, 22cqi, 300px); }
+main.rm.rm-dock.rmd-stage-hidden #rmStage { display: none; }
+/* (the legacy card hides itself while off air with nothing to pick - in the Dock it is the slim bar instead) */
+main.rm.rm-dock #rmStage.is-off:not(:has(.stabs > *)) { display: grid; }
+main.rm.rm-dock #rmStage > :is(#rmStageH, .off-air) { display: none; }
+main.rm.rm-dock #rmStage .player { grid-area: 1 / 1; position: relative; isolation: isolate; inline-size: 100%; max-inline-size: none; block-size: 100%; min-block-size: 0; margin: 0; aspect-ratio: auto; border: 0; border-radius: 0; background: var(--ds-media-bg); overflow: hidden; }
+main.rm.rm-dock #rmStage #rmVideo { block-size: 100%; min-block-size: 0; aspect-ratio: auto; padding: 0; }
 main.rm.rm-dock #rmStage :is(.video-js, .vjs-tech, #rmEmbed, #rmEmbed iframe) { inline-size: 100%; block-size: 100%; }
 main.rm.rm-dock #rmStage video { object-fit: contain; background: var(--ds-media-bg); }
-main.rm.rm-dock #rmStageH { display: flex; align-items: center; margin: 0; gap: var(--ds-sp-2); padding: var(--ds-sp-2); font-size: var(--ds-fs-eyebrow); }
-main.rm.rm-dock .rmd-stage-overlay #rmStageH { padding: 0; }
-main.rm.rm-dock .rmd-stage-overlay #rmStageH > span:first-child { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-main.rm.rm-dock #rmTabs { display: flex; flex-wrap: nowrap; overflow-x: auto; min-inline-size: 0; gap: var(--ds-sp-1); margin: 0; }
-main.rm.rm-dock #rmTabs .stab { flex: none; min-block-size: 36px; }
-main.rm.rm-dock .rmd-stage-overlay { position: absolute; inset-block-start: 0; inset-inline: 0; z-index: var(--ds-z-raised); display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1); background: var(--ds-media-panel); padding: var(--ds-sp-2); border-radius: var(--ds-r-lg) var(--ds-r-lg) 0 0; opacity: 0; pointer-events: none; transition: opacity var(--ds-dur-1) var(--ds-ease); }
-main.rm.rm-dock .rmd-stage-overlay > .rmd-id { flex: 1 1 160px; padding: var(--ds-sp-1); }
-main.rm.rm-dock .rmd-stage-overlay #rmTabs { flex: 1 1 100%; }
-main.rm.rm-dock #rmStage.rmd-controls-on .rmd-stage-overlay { opacity: 1; pointer-events: auto; }
-main.rm.rm-dock #rmStage:focus-within .rmd-stage-overlay { opacity: 1; pointer-events: auto; }
+/* the mic stage's own bar (⋯ Manage, 🧹 Clear, ⚑ Report) is the stage ⋯'s entries; its tiles use the whole box (owner point 5) */
+main.rm.rm-dock .player .mf-stage .mf-bar { display: none; }
+main.rm.rm-dock .player .mf-stage.barred :is(.mf-grid, .mf-neutral) { inset-block-start: 0; }
+main.rm.rm-dock .player .mf-stage:has(.mf-bmsg:not(:empty)) .mf-bar { display: flex; inset-block: auto var(--ds-sp-12); inset-inline: 0; block-size: auto; justify-content: center; background: transparent; pointer-events: none; }
+main.rm.rm-dock .player .mf-stage .mf-bar > :is(.mf-mbtn, .mf-clear, .mf-rbtn) { display: none !important; }
+main.rm.rm-dock .player .mf-stage .mf-bmsg { padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-panel); font-size: var(--ds-fs-xs); }
+main.rm.rm-dock .lowlat { display: none !important; }
+/* Snap / Clip are the overlay's buttons (owner point 7); the capture's own row stays only for its notices */
+main.rm.rm-dock #rmCap { position: absolute; inset-block-end: var(--ds-sp-12); inset-inline: 0; z-index: var(--ds-z-sticky); display: flex; justify-content: center; margin: 0; padding: 0; pointer-events: none; }
+main.rm.rm-dock #rmCap > :not(.stcap-toast) { display: none; }
+main.rm.rm-dock #rmCap .stcap-toast { pointer-events: auto; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-panel); font-size: var(--ds-fs-xs); }
+
+/* ── the auto-hiding overlay (owner point 6): top = the pad chip; bottom = source … 📸 🎬 🖥️ ⋯ ── */
+main.rm.rm-dock .rmd-ov { grid-area: 1 / 1; z-index: var(--ds-z-raised); display: flex; flex-direction: column; justify-content: space-between; min-block-size: 0; min-inline-size: 0; pointer-events: none; }
+main.rm.rm-dock .rmd-ov > .rmd-tabs-src { display: none; }
+main.rm.rm-dock :is(.rmd-ov-top, .rmd-ov-bot) { display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; padding: var(--ds-sp-2); opacity: 0; pointer-events: none; transition: opacity var(--ds-dur-2) var(--ds-ease); }
+main.rm.rm-dock .rmd-ov-bot { min-block-size: 44px; padding-block: var(--ds-sp-1); background: linear-gradient(to top, color-mix(in srgb, var(--ds-media-bg) 60%, transparent), transparent); }
+main.rm.rm-dock #rmStage:is(.rmd-controls-on, :focus-within) :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; pointer-events: auto; }
 main.rm.rm-dock #rmStage:is(.rmd-controls-on, :focus-within) { z-index: var(--ds-z-sticky); }
-main.rm.rm-dock .rmd-stage-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-1); }
-main.rm.rm-dock #rmCap { margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2); flex: none; font-size: var(--ds-fs-xs); }
-main.rm.rm-dock #rmGoLive { flex: none; margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-lg); }
-main.rm.rm-dock #rmGoLive .stage-bar { gap: var(--ds-sp-2); }
-main.rm.rm-dock .rmd-side #rmGoLive .stage-bar { display: grid; }
-main.rm.rm-dock .rmd-side #rmGoLive .stage-acts { flex-wrap: wrap; }
-main.rm.rm-dock .rmd-side #rmGoLive .sact { flex: 1 1 auto; }
-main.rm.rm-dock .rmd-stage-status { display: flex; flex: none; align-items: center; gap: var(--ds-sp-3); min-inline-size: 0; font-size: var(--ds-fs-xs); line-height: var(--ds-lh-xs); overflow-x: auto; white-space: nowrap; }
-main.rm.rm-dock .rmd-stage-status > .slots { flex: none; }
-main.rm.rm-dock .rmd-stage-status #rmSched { flex: 1 1 auto; min-inline-size: 0; display: block; margin: 0; padding: 0; border: 0; }
-main.rm.rm-dock .rmd-stage-status .scols { display: block; }
-main.rm.rm-dock .rmd-stage-status .scols > div:first-child { display: flex; align-items: center; gap: var(--ds-sp-2); }
-main.rm.rm-dock .rmd-stage-status :is(.scols > div:not(:first-child), .note, .tags, .when) { display: none; }
-main.rm.rm-dock .rmd-stage-status h3 { flex: none; margin: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); letter-spacing: normal; text-transform: none; }
-main.rm.rm-dock .rmd-stage-status #rsLive { display: flex; gap: var(--ds-sp-3); min-inline-size: 0; overflow-x: auto; }
-main.rm.rm-dock .rmd-stage-status #rsLive > li { display: inline-flex; flex: none; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: var(--ds-fs-xs); }
-main.rm.rm-dock .rmd-layer .rs .scols { grid-template-columns: minmax(0, 1fr); }
-main.rm.rm-dock #rmStrip { position: relative; isolation: isolate; flex: none; min-block-size: 0; margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-lg); }
-main.rm.rm-dock #rmStrip .cs-title { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-main.rm.rm-dock #rmStrip .cs-head { justify-content: space-between; flex-wrap: nowrap; gap: var(--ds-sp-1); }
-main.rm.rm-dock #rmStrip .cs-acts { flex-wrap: nowrap; gap: var(--ds-sp-1); }
-main.rm.rm-dock #rmStrip .cs-row { display: flex; overflow-x: auto; gap: var(--ds-sp-2); margin-block-start: var(--ds-sp-1); padding-block-end: var(--ds-sp-1); }
-main.rm.rm-dock #rmStrip .cs-tile { position: relative; flex: 0 0 144px; min-inline-size: 0; display: block; }
-main.rm.rm-dock #rmStrip .cs-name { position: absolute; inset-inline: 0; inset-block-end: 0; background: var(--ds-media-panel); padding: var(--ds-sp-1); border-radius: 0 0 var(--ds-r-md) var(--ds-r-md); pointer-events: none; }
-main.rm.rm-dock #rmStrip .rmd-cam-tools { position: absolute; inset-inline-start: var(--ds-sp-1); inset-block-end: var(--ds-sp-5); z-index: var(--ds-z-raised); border-radius: var(--ds-r-pill); background: var(--ds-media-panel); opacity: 0; pointer-events: none; }
-main.rm.rm-dock #rmStrip .cs-tile:is(:hover, :focus-within) .rmd-cam-tools { opacity: 1; pointer-events: auto; }
-main.rm.rm-dock #rmStrip[data-rmd-layout="large"] .cs-tile,
-main.rm.rm-dock #rmStrip.rmd-cams-large .cs-tile { flex-basis: 176px; }
-main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row,
-main.rm.rm-dock #rmStrip.rmd-cams-grid .cs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); max-block-size: 200px; overflow-y: auto; }
-main.rm.rm-dock :is(#rmStrip, .rmd-full-media) .cs-vid { isolation: isolate; aspect-ratio: 4 / 3; background: var(--ds-media-bg); border-radius: var(--ds-r-md); }
-main.rm.rm-dock :is(#rmStrip, .rmd-full-media) video { object-fit: contain; }
-main.rm.rm-dock .cs-name { font-size: var(--ds-fs-xs); }
-main.rm.rm-dock .cs-ic { min-inline-size: 36px; min-block-size: 36px; background: var(--ds-media-chip); }
-main.rm.rm-dock .rmd-body { flex: 1 1 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(200px, 22vw, 260px); align-items: stretch; min-block-size: 0; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-ov-gap { flex: 1 1 auto; }
+main.rm.rm-dock .rmd-ov-bot .ds-btn { flex: none; background: var(--ds-media-chip); border-color: transparent; color: var(--ds-text-strong); }
+main.rm.rm-dock .rmd-ov-bot .ds-btn:is(:hover, :focus-visible, [aria-expanded="true"]) { border-color: var(--ds-ac); }
+main.rm.rm-dock .rmd-ov-bot .ds-btn[aria-disabled="true"] { opacity: .5; }
+main.rm.rm-dock .rmd-src-host { display: flex; min-inline-size: 0; flex: 0 1 auto; }
+main.rm.rm-dock .rmd-src { display: inline-flex; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; max-inline-size: 100%; min-block-size: 32px; padding-inline: var(--ds-sp-2h); border-radius: var(--ds-r-pill); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-src > .rmd-label,
+main.rm.rm-dock .rmd-src-one { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-src-one { padding: var(--ds-sp-1) var(--ds-sp-2h); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); }
+main.rm.rm-dock .rmd-dot { flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--ds-text-faint); }
+main.rm.rm-dock .rmd-dot.rmd-on { background: var(--ds-live); }
+main.rm.rm-dock .rmd-slim-t { display: none; flex: 1 1 auto; min-inline-size: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* nothing on stage: a 44px slim bar [pad chip ▾] Nothing on stage right now … [⋯] (layout) */
+main.rm.rm-dock #rmStage.is-off:not(:has(> #rmStrip:not([hidden]))) { block-size: auto; min-block-size: 44px; max-block-size: none; grid-template-rows: auto; background: var(--ds-surface); }
+main.rm.rm-dock #rmStage.is-off { grid-template-rows: auto minmax(0, 1fr) var(--rmd-pin-row); }
+main.rm.rm-dock #rmStage.is-off .rmd-ov { flex-direction: row; align-items: center; }
+main.rm.rm-dock #rmStage.is-off :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; pointer-events: auto; background: none; }
+main.rm.rm-dock #rmStage.is-off .rmd-ov-top { flex: 1 1 auto; }
+main.rm.rm-dock #rmStage.is-off .rmd-slim-t { display: block; }
+main.rm.rm-dock #rmStage.is-off .rmd-ov-bot > :not(.rmd-stage-more, .rmd-src-host) { display: none; }
+main.rm.rm-dock .rmd-mini { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; min-inline-size: 0; min-block-size: 44px; padding: var(--ds-sp-1) var(--ds-sp-2); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); }
+main.rm.rm-dock .rmd-mini .rmd-slim-t { display: block; }
+main.rm.rm-dock .rmd-mini > button:not(.rmd-chip) { flex: none; }
+
+/* ── the pinned cams, inside the stage card (owner point 28): a column at the inline end, a 64px row on phones ── */
+main.rm.rm-dock #rmStage > #rmStrip { grid-area: 1 / 2; position: relative; isolation: isolate; z-index: var(--ds-z-raised); min-block-size: 0; min-inline-size: 0; margin: 0; padding: var(--ds-sp-1); border: 0; border-radius: 0; background: var(--ds-media-bg); overflow-y: auto; overscroll-behavior: contain; }
+main.rm.rm-dock #rmStrip .cs-head { display: none; }
+main.rm.rm-dock #rmStrip .cs-row { display: flex; flex-direction: column; gap: var(--ds-sp-1); margin: 0; padding: 0; }
+main.rm.rm-dock #rmStrip .cs-tile { position: relative; flex: none; min-inline-size: 0; display: block; }
+main.rm.rm-dock #rmStrip .cs-tile.big { grid-column: auto; }
+main.rm.rm-dock :is(#rmStrip, .rmd-full-media, .rmd-local-player) .cs-vid { isolation: isolate; aspect-ratio: 4 / 3; max-block-size: none; border: 0; background: var(--ds-media-bg); border-radius: var(--ds-r-sm); }
+main.rm.rm-dock :is(#rmStrip, .rmd-full-media, .rmd-local-player) video { object-fit: contain; cursor: pointer; }
+main.rm.rm-dock #rmStrip .cs-name { position: absolute; inset-inline: 0; inset-block-end: 0; z-index: var(--ds-z-raised); padding: var(--ds-sp-1) var(--ds-sp-1h); border-radius: 0 0 var(--ds-r-sm) var(--ds-r-sm);
+  background: color-mix(in srgb, var(--ds-media-bg) 60%, transparent); color: var(--ds-text-strong); font-size: var(--ds-fs-xs); line-height: 1.3; pointer-events: none; }
+main.rm.rm-dock #rmStrip :is(.cs-big, .cs-x, .cs-badge.on) { display: none; }
+main.rm.rm-dock #rmStrip .cs-badge { inset-block-start: var(--ds-sp-1); inset-inline-start: var(--ds-sp-1); padding: 0 var(--ds-sp-1h); font-size: var(--ds-fs-chip); }
+main.rm.rm-dock #rmStrip .cs-note { margin: var(--ds-sp-1) 0 0; font-size: var(--ds-fs-chip); }
+main.rm.rm-dock .rmd-tile-more { position: absolute; inset-block-start: var(--ds-sp-1); inset-inline-end: var(--ds-sp-1); z-index: calc(var(--ds-z-raised) + var(--ds-z-raised)); inline-size: 28px; min-inline-size: 28px; min-block-size: 28px; block-size: 28px;
+  border: 0; border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); opacity: 0; }
+main.rm.rm-dock .cs-tile:is(:hover, :focus-within) .rmd-tile-more,
+main.rm.rm-dock .rmd-tile-more[aria-expanded="true"] { opacity: 1; }
+/* 📌 Pinned cams ▸ Grid: the pins take the main area */
+main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { grid-area: 1 / 1 / 2 / 3; }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: start; }
+main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="grid"]:not([hidden])) .player { visibility: hidden; }
+/* a pinned cam on the viewer's own stage: the main area of the same card */
+main.rm.rm-dock .rmd-local-player { grid-area: 1 / 1; position: relative; display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; padding: 0; background: var(--ds-media-bg); }
+main.rm.rm-dock.rmd-local-cam #rmStage .player { visibility: hidden; }
+main.rm.rm-dock .rmd-local-player > .rmd-viewbar { position: absolute; inset-block-start: 0; inset-inline: 0; z-index: calc(var(--ds-z-raised) + var(--ds-z-raised)); padding: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-local-player > .rmd-viewbar > .rmd-id { display: none; }
+main.rm.rm-dock .rmd-local-player > .rmd-viewbar > .ds-btn { background: var(--ds-media-chip); border-color: transparent; }
+main.rm.rm-dock .rmd-local-player .cs-tile { display: flex; flex-direction: column; min-block-size: 0; flex: 1 1 auto; position: relative; }
+main.rm.rm-dock .rmd-local-player .cs-vid { min-block-size: 0; flex: 1 1 auto; aspect-ratio: auto; border-radius: 0; }
+main.rm.rm-dock .rmd-local-player :is(.cs-big, .cs-badge.on) { display: none; }
+main.rm.rm-dock .rmd-local-player .cs-name { position: absolute; inset-inline-start: var(--ds-sp-2); inset-block-end: var(--ds-sp-2); padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); }
+
+/* ── the chat row: [chat card] [people column, 1024px and wider - as tall as the chat] ── */
+main.rm.rm-dock .rmd-body { flex: 1 1 0; display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; min-block-size: 0; gap: var(--ds-sp-2); }
 main.rm.rm-dock .rmd-body > .rm-main { display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; }
-main.rm.rm-dock .rmd-body > .side,
-main.rm.rm-dock .rmd-side { display: flex; flex-direction: column; gap: var(--ds-sp-2); min-block-size: 0; min-inline-size: 0; overflow-y: auto; overscroll-behavior: contain; }
-main.rm.rm-dock #rmChat { display: flex; flex-direction: column; position: relative; flex: 1 1 0; min-block-size: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); }
-/* 1.99ajc dockfu (design call c): a readable chat on a short window (800x900 with cams pinned, a phone). The log keeps a floor
-   (--rmd-log-min; with the room-audio row and the composer that is well over 220px in every composer state) and the floor reaches
-   the Live panel's flex column: the chat card's content-based minimum (min-block-size: auto) holds it, the body's grid row takes it
-   (the side column is size-contained, so its long lists never count - it scrolls as before), and the panel then shrinks the stage
-   first (down to its own floor), the cam strip folds to its one-row compact form once the panel is short (the container query
-   below), and only past all that does the page scroll (body.pad-dock-live's floor). Floating / fullscreen / PiP chats keep theirs. */
+main.rm.rm-dock .rmd-body > .side { display: none; min-block-size: 0; min-inline-size: 0; }
+@media (min-width: 1024px) {
+  main.rm.rm-dock .rmd-body { grid-template-columns: minmax(0, 1fr) clamp(240px, 20vw, 300px); }
+  main.rm.rm-dock .rmd-body > .side { display: flex; flex-direction: column; overflow: hidden; }
+  main.rm.rm-dock #chatH .rmd-ppl-btn { display: none; }
+}
+main.rm.rm-dock #rmChat { display: flex; flex-direction: column; position: relative; flex: 1 1 0; min-block-size: 0; margin: 0; padding: var(--ds-sp-1) var(--ds-sp-3) var(--ds-sp-2); border-radius: var(--ds-r-lg); }
+/* 1.99ajc dockfu (design call c): a readable chat on a short window - the log keeps a floor and the floor reaches the Live panel's
+   flex column (the chat's and the body's content-based minimum; the people column is size-contained), so the stage gives way first */
 body.pad-dock-live main.rm.rm-dock { --rmd-log-min: 120px; }
-body.pad-dock-live main.rm.rm-dock #padPanel-live { container: rmd-live / size; }
 body.pad-dock-live main.rm.rm-dock #padPanel-live .rmd-body { min-block-size: auto; }
 body.pad-dock-live main.rm.rm-dock #padPanel-live .rmd-body > .side { contain: size; }
 body.pad-dock-live main.rm.rm-dock #padPanel-live #rmChat { min-block-size: auto; }
-body.pad-dock-live main.rm.rm-dock #padPanel-live #rmScroll { min-block-size: var(--rmd-log-min); }
-/* (a stage the floor shrank keeps its controls inside it: the overlay scrolls in the stage's box instead of spilling over the cam
-   strip and the chat's heading; a full-size stage, fullscreen and PiP never need to) */
-body.pad-dock-live main.rm.rm-dock #padPanel-live #rmStage > .rmd-stage-overlay { max-block-size: 100%; overflow-y: auto; overscroll-behavior: contain; }
-/* (a desktop Live panel this short - 1280x800 with cams pinned - also drops the room-count line, which the people card repeats, and
-   lets the stage go down to the 96px a short window gives it; a phone keeps the line: its people card is in a sheet) */
-@media (min-width: 761px) {
-  @container rmd-live (max-height: 600px) {
-    body.pad-dock-live main.rm.rm-dock #rmLiveStat { display: none; }
-    body.pad-dock-live main.rm.rm-dock #padPanel-live > :is(#rmStage, .rmd-local-player) { min-block-size: 96px; }
-  }
-}
-main.rm.rm-dock #chatH { flex: none; align-items: center; flex-wrap: wrap; margin-block-end: var(--ds-sp-1); gap: var(--ds-sp-1); }
-main.rm.rm-dock #chatH > .rmd-chat-tools { margin-block: 0; margin-inline-start: auto; }
-main.rm.rm-dock #chatH > :is(.hist-chip, .hist-jump) { order: 2; }
-main.rm.rm-dock #chatH > .rmd-chat-tools { order: 3; }
-main.rm.rm-dock #chatH .hist-jump { min-block-size: 36px; min-inline-size: 36px; }
-main.rm.rm-dock #rmTopic { flex: none; margin-block: 0 var(--ds-sp-1); font-size: var(--ds-fs-meta); color: var(--ds-chat-topic); }
-main.rm.rm-dock .rmd-topic-line { display: flex; align-items: center; gap: var(--ds-sp-1); flex: none; min-inline-size: 0; font: 400 var(--ds-fs-meta)/var(--ds-lh-sm) var(--ds-font); letter-spacing: normal; text-transform: none; }
-main.rm.rm-dock #chatH > .rmd-topic-line { flex: 1 1 160px; order: 1; }
-main.rm.rm-dock .rmd-topic-line #rmTopic { flex: 1 1 auto; min-inline-size: 0; margin-block: 0 var(--ds-sp-1); }
-main.rm.rm-dock .rmd-topic-line > button { flex: none; }
+body.pad-dock-live main.rm.rm-dock #padPanel-live .rmd-log { min-block-size: var(--rmd-log-min); }
+/* the header: [CHAT] [topic …] [status] [👥 n] [🔍] [⋯] in one 40px row (owner points 8, 18) */
+main.rm.rm-dock #chatH { flex: none; display: flex; align-items: center; justify-content: flex-start; flex-wrap: nowrap; gap: var(--ds-sp-1h); min-block-size: 40px; margin: 0; }
+main.rm.rm-dock #chatH > :is(#rmHist, #rmHistJump, #rmMoreBtn) { display: none !important; }
+main.rm.rm-dock #chatH > #rmStatus { flex: none; margin: 0; }
+main.rm.rm-dock #chatH > #rmStatus:empty { display: none; }
+main.rm.rm-dock #chatH > :is(.rmd-ppl-btn, #rmSearchBtn, .rmd-chat-more) { flex: none; margin: 0; }
+main.rm.rm-dock #chatH > #rmSearchBtn { min-block-size: 36px; min-inline-size: 36px; }
+main.rm.rm-dock .rmd-ppl-btn { gap: var(--ds-sp-1); min-block-size: 36px; padding-inline: var(--ds-sp-2); font-family: var(--ds-font); letter-spacing: normal; }
+main.rm.rm-dock .rmd-ppl-btn .rmd-count { font: 500 var(--ds-fs-meta)/1 var(--ds-font); color: var(--ds-text); font-variant-numeric: tabular-nums; }
+main.rm.rm-dock .rmd-topic-line { display: flex; align-items: center; flex: 1 1 auto; min-inline-size: 0; font: 400 var(--ds-fs-meta)/var(--ds-lh-sm) var(--ds-font); letter-spacing: normal; text-transform: none; }
+main.rm.rm-dock .rmd-topic-line #rmTopic { display: block; flex: 0 1 auto; min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-line-clamp: none; font-size: var(--ds-fs-meta); color: var(--ds-chat-topic); }
 main.rm.rm-dock #rmTopic[role="button"] { cursor: pointer; border-radius: var(--ds-r-xs); }
+main.rm.rm-dock #rmTopic[role="button"]:hover { color: var(--ds-text); }
+main.rm.rm-dock .rmd-topic-full { margin: 0; padding: var(--ds-sp-2); max-inline-size: 320px; font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }
+/* the reveal banner stays (reveals are audited), as one 28px line with Hide again at its end */
+main.rm.rm-dock .veil-banner { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; min-block-size: 28px; margin: 0 0 var(--ds-sp-1); padding: 2px var(--ds-sp-2); font-size: var(--ds-fs-xs); line-height: 1.3; white-space: nowrap; overflow: hidden; }
+main.rm.rm-dock .veil-banner > .veil-reveal { flex: none; margin-inline-start: auto; }
+/* the log, and its "New messages ↓" pill at the bottom centre of the log (owner point 31) */
+main.rm.rm-dock .rmd-log { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; min-inline-size: 0; }
 main.rm.rm-dock #rmScroll { flex: 1 1 0; min-block-size: 0; max-block-size: none; block-size: auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-main.rm.rm-dock #rmJump { position: absolute; inset-inline-start: var(--ds-sp-3); inset-block-end: var(--ds-sp-12); z-index: var(--ds-z-raised); }
-main.rm.rm-dock :is(#rmPplCard, #rmMicCard, #rmMod, .rm-story) { padding: var(--ds-sp-2); border-radius: var(--ds-r-lg); flex: none; }
-main.rm.rm-dock #rmPeople { max-block-size: none; overflow: visible; }
-main.rm.rm-dock #rmPeople > li { min-block-size: 40px; }
-main.rm.rm-dock #rmMicCard { display: block; }
-main.rm.rm-dock .rmd-chat-tools,
-main.rm.rm-dock .rmd-composer-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--ds-sp-1); flex: none; }
-main.rm.rm-dock .rmd-chat-tools { margin-block-end: var(--ds-sp-1); }
-main.rm.rm-dock .rmd-chat-tools .rmd-label,
-main.rm.rm-dock .rmd-composer-tools .rmd-label,
-main.rm.rm-dock .rmd-extras .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-main.rm.rm-dock .rmd-chat-tools button { min-inline-size: 36px; padding-inline: var(--ds-sp-2); }
-main.rm.rm-dock .rmd-composer-tools { justify-content: flex-start; }
-main.rm.rm-dock .rmd-strip-layout { margin: 0; flex: none; }
-main.rm.rm-dock .rmd-strip-select { display: none; }
-main.rm.rm-dock .rmd-cam-tools { display: flex; align-items: center; gap: var(--ds-sp-1); }
-main.rm.rm-dock .rmd-cam-tools .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
-main.rm.rm-dock .rmd-local-player { flex: 0 1 32%; max-block-size: 32%; min-block-size: 116px; display: flex; flex-direction: column; padding: 0; background: var(--ds-media-bg); border-radius: var(--ds-r-lg); }
-main.rm.rm-dock .rmd-local-player .cs-tile { display: flex; flex-direction: column; min-block-size: 0; flex: 1 1 auto; }
-main.rm.rm-dock .rmd-local-player .cs-vid { min-block-size: 0; flex: 1 1 auto; }
+main.rm.rm-dock .rmd-log > #rmJump { position: absolute; inset-block-end: var(--ds-sp-2); inset-inline: 0; margin-inline: auto; inline-size: max-content; max-inline-size: calc(100% - 16px); z-index: var(--ds-z-raised);
+  min-block-size: 32px; padding: 0 var(--ds-sp-3); border: 0; border-radius: var(--ds-r-pill); font: 600 var(--ds-fs-meta)/32px var(--ds-font); box-shadow: var(--ds-e-2); }
+/* compact lines (owner point 10): 4px 6px, 28px avatars, 2px apart; the 🔊 Clip pill at the end of the words */
+main.rm.rm-dock #rmScroll .line { padding: var(--ds-sp-1) var(--ds-sp-1h); }
+main.rm.rm-dock #rmScroll .line .body:has(> .mc-btn) { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--ds-sp-1h); }
+main.rm.rm-dock #rmScroll .line .body:has(> .mc-btn) > * { flex: 1 1 100%; min-inline-size: 0; }
+main.rm.rm-dock #rmScroll .line .body:has(> .mc-btn) > .line-text { flex: 0 1 auto; }
+main.rm.rm-dock #rmScroll .line .body > .mc-btn { display: inline-flex; flex: none; margin: 0; }
+
+/* ── the people column / sheet (owner points 26, 29, 32) ── */
+main.rm.rm-dock #rmPplCard { display: flex; flex-direction: column; flex: 1 1 auto; min-block-size: 0; margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2) var(--ds-sp-2); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock #pplH { flex: none; display: flex; align-items: center; justify-content: flex-start; gap: var(--ds-sp-1h); min-block-size: 40px; margin: 0; }
+main.rm.rm-dock #rmPplN { font: 500 var(--ds-fs-meta)/1 var(--ds-font); color: var(--ds-text-muted); font-variant-numeric: tabular-nums; }
+main.rm.rm-dock .rmd-info { margin-inline-start: auto; font-size: var(--ds-fs-xs); cursor: help; letter-spacing: normal; border-radius: var(--ds-r-xs); }
+main.rm.rm-dock .rmd-find { flex: none; min-block-size: 36px; margin-block-end: var(--ds-sp-1); padding-block: var(--ds-sp-1); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock #rmPeople { flex: 1 1 auto; min-block-size: 0; max-block-size: none; overflow-y: auto; overscroll-behavior: contain; gap: 2px; align-content: start; }
+main.rm.rm-dock #rmPeople > li { min-block-size: 36px; padding: 2px var(--ds-sp-1); gap: var(--ds-sp-2); }
+main.rm.rm-dock #rmPeople > li.rmd-seen { opacity: .62; }
+main.rm.rm-dock #rmPeople .nm { display: flex; align-items: center; gap: var(--ds-sp-1); flex-wrap: nowrap; min-inline-size: 0; overflow: hidden; white-space: nowrap; }
+main.rm.rm-dock #rmPeople .nm > :is(.who, .who-web) { flex: 0 1 auto; min-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock #rmPeople .nm > .ufl { flex: 0 1000 auto; min-inline-size: 2.4em; margin-inline: 0; }
+main.rm.rm-dock #rmPeople .ic { gap: 2px; }
+main.rm.rm-dock #rmPeople .ic > .rmd-mic { border-radius: 50%; background: var(--ds-ac-bg); box-shadow: inset 0 0 0 1px var(--ds-ac-line); }
+main.rm.rm-dock #rmPeople .ic > .pm-mg { opacity: 0; }
+main.rm.rm-dock #rmPeople > li:is(:hover, :focus-within) .ic > .pm-mg,
+main.rm.rm-dock #rmPeople .ic > .pm-mg[aria-expanded="true"] { opacity: 1; }
+main.rm.rm-dock #rmPeople > li.rmd-web .ic:empty { display: none; }
+main.rm.rm-dock .rmd-layer #rmPplCard { flex: none; padding: 0; background: none; border: 0; box-shadow: none; }
+main.rm.rm-dock .rmd-layer #rmPplCard > #pplH { display: none; }
+main.rm.rm-dock .rmd-info-h { margin-inline-start: var(--ds-sp-2); font-family: var(--ds-font); font-size: var(--ds-fs-xs); vertical-align: middle; }
+main.rm.rm-dock .rmd-layer #rmPeople { max-block-size: min(60dvh, 520px); }
 main.rm.rm-dock .rmd-person { display: inline-flex; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; }
 main.rm.rm-dock .rmd-person > .av { flex: none; }
 main.rm.rm-dock .rmd-person-name { display: inline-flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; }
-main.rm.rm-dock #rmPeople .nm { display: flex; align-items: center; gap: var(--ds-sp-1); flex-wrap: wrap; }
-main.rm.rm-dock #rmPeople .nm > .ufl { margin-inline: 0; }
 
-/* One composer: existing audio, relay and recording nodes retain their handlers. */
-main.rm.rm-dock .rmd-composer { position: relative; flex: none; min-inline-size: 0; border-block-start: 1px solid var(--ds-line); margin-block-start: var(--ds-sp-1); padding-block-start: var(--ds-sp-1); display: grid; gap: var(--ds-sp-1); }
+/* ── the bottom audio bar (owner points 19, 24): [▶ / ❚❚] [now: eq + holders, or the state] [🔊 volume 🎚️ - never moves] ── */
 main.rm.rm-dock #rmAudioBox { margin: 0; flex: none; }
-main.rm.rm-dock #rmAudioBox .rb-audio { padding: var(--ds-sp-1); border: 0; border-radius: 0; background: transparent; gap: var(--ds-sp-1) var(--ds-sp-2); }
-main.rm.rm-dock #rmAudioBox .rb-state { flex: 0 1 auto; font: 500 var(--ds-fs-xs)/var(--ds-lh-xs) var(--ds-font); letter-spacing: normal; }
-main.rm.rm-dock .rmd-composer :is(.rb-play, .rb-mute, .rb-btn, .rb-talk, .rb-send) { min-block-size: 36px; }
-main.rm.rm-dock #rmAudioBox .rb-vol { margin-inline: 0 var(--ds-sp-1); flex: 0 1 84px; inline-size: 84px; }
-/* 1.99aiw review: 1.99ait's "Sync to the audio: on / off" toggle (av-sync.js appends it to this row) is an emoji icon button here - as
-   a text button it wrapped the one-line audio row (a 4-line button on phones) and squeezed the chat. Its words stay its accessible
-   name (font-size 0, never hidden); the on state is room-bridge.css's pressed accent outline; the tooltip is av-sync's title. */
-main.rm.rm-dock #rmAudioBox .rb-avsync { flex: none; font-size: 0; white-space: nowrap; overflow: hidden; padding-inline: 0; }
-main.rm.rm-dock #rmAudioBox .rb-avsync::before { content: "⏱️"; font-size: var(--ds-fs-sm); line-height: 1; }
-main.rm.rm-dock .rmd-holders { display: flex; align-items: center; gap: var(--ds-sp-1); flex: 1 1 96px; min-inline-size: 0; overflow-x: auto; }   /* 1.99aiw review: 96px (was 140) keeps the row on one line at ~800px with the A/V sync toggle; it still grows */
-main.rm.rm-dock .rmd-holders > * { flex: none; max-inline-size: 180px; min-block-size: 32px; }
+main.rm.rm-dock #rmAudioBox .rb-audio.rmd-bar { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: var(--ds-sp-2); min-block-size: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+main.rm.rm-dock #rmAudioBox .rb-audio.rmd-bar.hide { display: none; }
+main.rm.rm-dock #rmAudioBox .rmd-bar > :not(.rb-play, .rmd-now, .rmd-right) { display: none; }
+main.rm.rm-dock #rmAudioBox .rb-play { position: relative; inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; justify-content: center; }
+main.rm.rm-dock #rmAudioBox .rb-play.rmd-note::after { content: ""; position: absolute; inset-block-start: 4px; inset-inline-end: 4px; inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--ds-gold); }
+main.rm.rm-dock .rmd-now { display: flex; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; overflow: hidden; }
+main.rm.rm-dock .rmd-now > .rb-meter { flex: none; }
+main.rm.rm-dock .rmd-now .rb-state { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--ds-fs-xs)/var(--ds-lh-xs) var(--ds-font); letter-spacing: normal; }
+/* (owner point 24: the eq meter is the "live" signal - no ● LIVE, no ⚡ live; the latency is in Audio settings) */
+main.rm.rm-dock .rmd-now :is(.rb-state.live, .rb-state:empty) { display: none; }
+main.rm.rm-dock .rmd-now.rmd-has-holders .rb-state { display: none; }
+main.rm.rm-dock .rmd-right { display: flex; align-items: center; gap: var(--ds-sp-1); flex: none; }
+main.rm.rm-dock .rmd-right .rb-mute { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; justify-content: center; }
+main.rm.rm-dock #rmAudioBox .rb-vol { flex: none; inline-size: 96px; margin: 0; }
+main.rm.rm-dock .rmd-holders { display: flex; align-items: center; gap: var(--ds-sp-1); flex: 0 1 auto; min-inline-size: 0; overflow: hidden; }
+main.rm.rm-dock .rmd-holders > * { flex: 0 1 auto; min-inline-size: 0; max-inline-size: 180px; min-block-size: 28px; }
+main.rm.rm-dock .rmd-holders > .rmd-holder { display: inline-flex; align-items: center; min-inline-size: min(9ch, 100%); }
 main.rm.rm-dock .rmd-holders .rmd-person { max-inline-size: 100%; }
-main.rm.rm-dock .rmd-holders .rmd-person-name { flex: 0 1 auto; }
-main.rm.rm-dock .rmd-holders .av { inline-size: 24px; block-size: 24px; }
-main.rm.rm-dock .rmd-holders .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 1.99aiw dock: review - privacy (spec K): a veiled holder keeps its text tag ("incognito" / "hidden") in the narrow chip - only the
-   frog name gives way, as in the chat's line head (chatlog.css); a clipped tag leaves an italic frog name that reads like a real one */
+main.rm.rm-dock .rmd-holders .rmd-person-name { flex: 0 1 auto; min-inline-size: 0; }
+main.rm.rm-dock .rmd-holders .av { inline-size: 22px; block-size: 22px; font-size: var(--ds-fs-chip); }
+main.rm.rm-dock .rmd-holders .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-holders > .rmd-holder-more { flex: none; min-block-size: 28px; padding-inline: var(--ds-sp-2); font-size: var(--ds-fs-xs); }
+main.rm.rm-dock .rmd-holders > .rmd-holder-more > .rmd-label { position: static; inline-size: auto; block-size: auto; clip-path: none; }
+/* 1.99aiw dock: review - privacy (spec K): a veiled holder keeps its text tag ("incognito" / "hidden") in the narrow chip */
 main.rm.rm-dock .rmd-holders .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
 main.rm.rm-dock .rmd-holders .who.veil > i { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 main.rm.rm-dock .rmd-holders .who.veil > .veil-tag { flex: none; }
-main.rm.rm-dock .rmd-input-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; }
+
+/* ── the composer box (owner point 10): row 1 [＋][Message…][🎙️][Send], row 2 the tool row; the status line under the box ── */
+main.rm.rm-dock .rmd-composer { position: relative; flex: none; min-inline-size: 0; display: grid; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; }
+main.rm.rm-dock .rmd-composer > p.muted { margin: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-sunken); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-input-row { position: relative; isolation: isolate; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-rows: 48px auto; column-gap: var(--ds-sp-1h); align-items: center; min-inline-size: 0; }
+main.rm.rm-dock .rmd-input-row::before { content: ""; grid-row: 1 / 3; grid-column: 1 / -1; align-self: stretch; z-index: calc(-1 * var(--ds-z-raised)); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-sunken); }
+main.rm.rm-dock .rmd-input-row:focus-within::before { border-color: var(--ds-ac-line); }
 main.rm.rm-dock .rmd-input-row #rmRelay,
 main.rm.rm-dock .rmd-input-row .rb-say:not(.hide),
 main.rm.rm-dock .rmd-input-row #rmPtt,
 main.rm.rm-dock .rmd-input-row .rb-ptt:not(.hide) { display: contents; }
-main.rm.rm-dock .rmd-input-row .rmd-extras { grid-row: 1; grid-column: 1; padding-inline: var(--ds-sp-2); }
-main.rm.rm-dock .rmd-input-row .rb-say-in { grid-row: 1; grid-column: 2; }
+main.rm.rm-dock .rmd-input-row .rmd-extras { grid-row: 1; grid-column: 1; margin-inline-start: var(--ds-sp-1); inline-size: 40px; min-inline-size: 40px; min-block-size: 40px; font-size: var(--ds-fs-h3); }
+main.rm.rm-dock .rmd-input-row .rb-say-in { grid-row: 1; grid-column: 2; position: relative; min-inline-size: 0; }
 main.rm.rm-dock .rmd-input-row .rb-talk { grid-row: 1; grid-column: 3; }
-main.rm.rm-dock .rmd-input-row .rb-send { grid-row: 1; grid-column: 4; }
-main.rm.rm-dock .rmd-input-row .rb-count { grid-column: 2 / -1; justify-self: end; }
-main.rm.rm-dock .rmd-input-row .rb-micsel { grid-column: 2 / -1; inline-size: min(100%, 260px); }
-main.rm.rm-dock .rmd-input-row :is(.rb-ptt-txt, .rb-mine, .rb-note, .rb-offline, .rb-hint, .rb-cmdfeed) { grid-column: 1 / -1; }
-main.rm.rm-dock .rmd-composer .rb-say input { min-block-size: 40px; border-radius: var(--ds-r-md); background: var(--ds-sunken); color: var(--ds-text); }
-main.rm.rm-dock .rmd-composer .rb-say input:focus { border-color: var(--ds-ac); box-shadow: var(--ds-focus-ring); }
+main.rm.rm-dock .rmd-input-row .rb-send { grid-row: 1; grid-column: 4; margin-inline-end: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-input-row .rmd-tools { grid-row: 2; grid-column: 1 / -1; }
+main.rm.rm-dock .rmd-input-row :is(.rb-count, .rb-ptt-txt, .rb-mine, .rb-note, .rb-offline, .rb-cmdfeed) { grid-column: 1 / -1; min-block-size: 18px; font-size: var(--ds-fs-xs); line-height: 18px; color: var(--ds-text-muted); }
+main.rm.rm-dock .rmd-input-row .rb-count { justify-self: end; }
+main.rm.rm-dock .rmd-input-row :is(.rb-hint, .rb-ptt-idle, .rb-micsel, .rb-sr) { display: none; }
+main.rm.rm-dock .rmd-input-row :is(.rb-mine, .rb-cmdfeed, .rb-ptt-txt):empty { display: none; }
+main.rm.rm-dock .rmd-input-row .rb-cmdfeed { max-block-size: 96px; overflow-y: auto; margin: 0; }
+main.rm.rm-dock .rmd-composer .rb-say input { min-block-size: 40px; padding: 0 var(--ds-sp-1); border: 0; border-radius: var(--ds-r-sm); background: transparent; color: var(--ds-text); box-shadow: none; font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-composer .rb-say input:focus { outline: none; box-shadow: none; }
+main.rm.rm-dock .rmd-composer :is(.rb-talk, .rb-send) { min-block-size: 40px; }
+/* 🎙️ Hold to talk: accent-tinted; its words stay its accessible name (font-size 0) under 1024px, where it is the icon */
 main.rm.rm-dock .rmd-composer .rb-talk { white-space: nowrap; padding-inline: var(--ds-sp-3); color: var(--ds-ac-2); border-color: var(--ds-ac-line); background: var(--ds-ac-bg); }
 main.rm.rm-dock .rmd-composer .rb-talk[aria-pressed="true"] { color: var(--ds-text-strong); border-color: var(--ds-live); background: var(--ds-live); }
-main.rm.rm-dock .rmd-composer #rmCompose { margin: 0; padding: 0; border: 0; }
-main.rm.rm-dock .rmd-composer :is(.rb-hint, .rb-ptt-idle) { display: none; }
-main.rm.rm-dock .rmd-composer :is(.rb-mine, .rb-cmdfeed):empty { display: none; }
-main.rm.rm-dock .rmd-composer #rmSb { display: none; }
+main.rm.rm-dock .rmd-composer .rb-send { padding-inline: var(--ds-sp-3); }
+main.rm.rm-dock .rmd-tools { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(40px, 1fr); align-items: center; min-block-size: 40px; padding: 0 var(--ds-sp-1); border-block-start: 1px solid var(--ds-line-soft); }
+main.rm.rm-dock .rmd-tools .rmd-tool { justify-self: center; inline-size: 40px; min-inline-size: 40px; min-block-size: 36px; border-color: transparent; background: transparent; }
+main.rm.rm-dock .rmd-tools .rmd-tool > .ds-ic { font-size: var(--ds-fs-lead); }
+main.rm.rm-dock .rmd-tools .rmd-tool:is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--ds-hover); }
 main.rm.rm-dock #rmClip .cc-bar:not(:has(.cc-toggle.on)) { display: none; }
-main.rm.rm-dock .rmd-composer :is(.rb-ptt-txt, .rb-mine, .rb-note, .rb-hint) { font-size: var(--ds-fs-xs); }
-main.rm.rm-dock .rmd-composer .rb-cmdfeed { max-block-size: 120px; overflow-y: auto; }
-main.rm.rm-dock .rmd-composer .rb-ptt { gap: var(--ds-sp-1); }
-main.rm.rm-dock .rmd-extras { flex: none; min-inline-size: 40px; min-block-size: 40px; }
-main.rm.rm-dock .rmd-menu { max-block-size: min(60vh, 420px); overflow-y: auto; min-inline-size: 220px; }
+main.rm.rm-dock .rmd-composer #rmSb { display: none; }
+
+/* ── menus and sheets ── */
+main.rm.rm-dock .rmd-menu.ds-pop { position: fixed; z-index: var(--ds-z-pop); min-inline-size: 220px; max-inline-size: min(340px, calc(100vw - 16px)); max-block-size: min(70dvh, 520px); overflow-y: auto; }
+main.rm.rm-dock .rmd-menu.ds-pop.rmd-pop-sheet { inset-inline: var(--ds-sp-2); inset-block-end: var(--ds-sp-2); max-inline-size: none; max-block-size: 70dvh; }
+main.rm.rm-dock .rmd-menu .ds-menu-item { gap: var(--ds-sp-2); min-block-size: 40px; text-decoration: none; }
+main.rm.rm-dock .rmd-menu .ds-menu-item > .ds-ic { inline-size: 20px; flex: none; text-align: center; }
+main.rm.rm-dock .rmd-menu .ds-menu-item > .rmd-label { flex: 1 1 auto; min-inline-size: 0; }
+main.rm.rm-dock .rmd-menu .ds-menu-item > .rmd-sub { flex: none; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+main.rm.rm-dock .rmd-menu .ds-menu-item[aria-checked="true"]::after { content: "✓"; flex: none; color: var(--ds-ac-2); }
+main.rm.rm-dock .rmd-menu .ds-menu-item:disabled { opacity: .5; cursor: not-allowed; }
+main.rm.rm-dock .rmd-menu-g { margin: var(--ds-sp-2) 0 0; padding: var(--ds-sp-1) var(--ds-sp-2h) 2px; border-block-start: 1px solid var(--ds-line); }
+main.rm.rm-dock .rmd-menu-note { margin: var(--ds-sp-1) var(--ds-sp-2h); }
+main.rm.rm-dock .rmd-padmenu-h { display: grid; gap: var(--ds-sp-2); padding: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-padmenu-h .hd-follow { display: flex; align-items: center; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-padmenu-h .hd-fc { display: inline; font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+main.rm.rm-dock .rmd-audio-pop { display: grid; gap: var(--ds-sp-2); padding: var(--ds-sp-3); min-inline-size: 280px; }
+main.rm.rm-dock .rmd-audio-st { margin: 0; font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
+main.rm.rm-dock .rmd-switch-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: var(--ds-sp-2); min-block-size: 40px; font-size: var(--ds-fs-sm); cursor: pointer; }
+main.rm.rm-dock .rmd-switch-row.off { opacity: .55; cursor: not-allowed; }
+main.rm.rm-dock .rmd-switch-row > .rmd-sub { grid-column: 2 / -1; font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+main.rm.rm-dock .rmd-mic { display: grid; gap: var(--ds-sp-1); font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-mic-l { display: inline-flex; align-items: center; gap: var(--ds-sp-1); color: var(--ds-text); }
 main.rm.rm-dock .rmd-layer { z-index: var(--ds-z-modal); }
 main.rm.rm-dock .rmd-layer .ds-modal { max-inline-size: 520px; inline-size: 100%; max-block-size: 85dvh; overflow-y: auto; }
-main.rm.rm-dock .rmd-tts { display: grid; gap: var(--ds-sp-3); }
-main.rm.rm-dock .rmd-menu.ds-pop { inset-inline-start: var(--ds-sp-3); inset-block-end: var(--ds-sp-12); }
+main.rm.rm-dock :is(.rmd-tts, .rmd-pvp) { display: grid; gap: var(--ds-sp-3); }
+main.rm.rm-dock .rmd-voice-row { display: flex; gap: var(--ds-sp-2); align-items: center; }
+main.rm.rm-dock .rmd-voice-row > select { flex: 1 1 auto; min-inline-size: 0; }
+main.rm.rm-dock .rmd-presets { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-err { margin: 0; color: var(--ds-danger); font-size: var(--ds-fs-xs); }
+main.rm.rm-dock .rmd-err:empty { display: none; }
+main.rm.rm-dock .rmd-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-app { display: grid; justify-items: center; gap: 2px; min-block-size: 84px; padding: var(--ds-sp-2); border-radius: var(--ds-r-md); text-align: center; white-space: normal; }
+main.rm.rm-dock .rmd-app > .ds-ic { font-size: var(--ds-fs-h2); }
+main.rm.rm-dock .rmd-app-n { font-weight: 600; font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-app-p { color: var(--ds-text-muted); font-size: var(--ds-fs-chip); }
+main.rm.rm-dock .rmd-apps-h { margin: var(--ds-sp-1) 0 0; }
+main.rm.rm-dock .rmd-apps-f { margin: 0; }
+main.rm.rm-dock .rmd-tip-list { display: grid; gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-tip-list > button { justify-content: flex-start; }
+main.rm.rm-dock .rmd-in-sheet { margin: 0; }
+
+/* ── 1.99?? dockclean (owner point 11): the camera popup as design 159 - a sheet / modal with a 4:3 preview and three sections ── */
+main.rm.rm-dock .snap.rmd-cam { position: fixed; inset: 0; z-index: var(--ds-z-modal); display: grid; place-items: center; padding: var(--ds-sp-4); margin: 0; max-inline-size: none; inline-size: auto; border: 0; border-radius: 0; background: var(--ds-scrim); box-shadow: none; }
+main.rm.rm-dock .snap.rmd-cam > .rmd-cam-box { display: grid; gap: var(--ds-sp-3); inline-size: min(100%, 520px); max-block-size: calc(100dvh - 32px); overflow-y: auto; padding: var(--ds-sp-4); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: var(--ds-surface-2); box-shadow: var(--ds-e-4); }
+main.rm.rm-dock .rmd-cam-box > .row:first-child { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); font-size: var(--ds-fs-h3); }
+main.rm.rm-dock .rmd-cam-box > img,
+main.rm.rm-dock .rmd-cam-box .lc-vid,
+main.rm.rm-dock .rmd-cam-box video { inline-size: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--ds-r-lg); background: var(--ds-media-bg); }
+main.rm.rm-dock .rmd-cam-sec { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-cam-sec > :is(.acts, .row) { display: contents; }
+main.rm.rm-dock .rmd-cam-sec :is(button, a) { min-block-size: 40px; }
+main.rm.rm-dock .rmd-cam-more { display: grid; gap: 2px; }
+main.rm.rm-dock .rmd-cam-more :is(button, a) { justify-content: flex-start; inline-size: 100%; text-align: start; }
 
 /* Same nodes, alternative viewing surfaces. */
-main.rm.rm-dock .rmd-mini { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; min-inline-size: 0; padding: var(--ds-sp-1); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); }
-main.rm.rm-dock .rmd-mini .rmd-id { flex: 1 1 auto; }
 main.rm.rm-dock .rmd-float { position: fixed; inset-inline-end: var(--ds-sp-4); inset-block-end: var(--ds-sp-4); inline-size: min(560px, calc(100vw - 32px)); block-size: min(620px, calc(100dvh - 120px)); min-block-size: 260px; display: flex; flex-direction: column; background: var(--ds-surface); border: 1px solid var(--ds-ac-line); border-radius: var(--ds-r-lg); box-shadow: var(--ds-e-4); z-index: var(--ds-z-sticky); }
 main.rm.rm-dock .rmd-float .rmd-viewbar { cursor: move; touch-action: none; }
 main.rm.rm-dock .rmd-float #rmChat { min-block-size: 0; }
@@ -291,109 +409,93 @@ main.rm.rm-dock .rmd-fullscreen { position: relative; display: flex; flex-direct
 main.rm.rm-dock .rmd-fullscreen::backdrop { background: var(--ds-media-bg); }
 main.rm.rm-dock .rmd-fullscreen .rmd-viewbar { position: absolute; inset-block-start: 0; inset-inline: 0; z-index: var(--ds-z-raised); background: var(--ds-media-panel); }
 main.rm.rm-dock .rmd-full-media { isolation: isolate; flex: 1 1 0; min-block-size: 0; display: flex; align-items: stretch; justify-content: center; }
-main.rm.rm-dock .rmd-full-media #rmStage { flex: 1 1 auto; min-block-size: 0; max-block-size: none; inline-size: 100%; }
+main.rm.rm-dock .rmd-full-media #rmStage { flex: 1 1 auto; min-block-size: 0; max-block-size: none; block-size: auto; inline-size: 100%; border-radius: 0; }
 main.rm.rm-dock .rmd-full-media .cs-tile { inline-size: 100%; min-block-size: 0; display: flex; flex-direction: column; }
-main.rm.rm-dock .rmd-full-media .cs-vid { flex: 1 1 auto; min-block-size: 0; inline-size: 100%; }
+main.rm.rm-dock .rmd-full-media .cs-vid { flex: 1 1 auto; min-block-size: 0; inline-size: 100%; aspect-ratio: auto; }
 main.rm.rm-dock .rmd-overlay { position: absolute; inset-inline-end: var(--ds-sp-3); inset-block-start: calc(var(--ds-sp-8) + var(--ds-sp-8)); inset-block-end: var(--ds-sp-3); display: flex; inline-size: min(440px, 42%); z-index: var(--ds-z-raised); }
 main.rm.rm-dock .rmd-overlay #rmChat { background: var(--ds-media-panel); backdrop-filter: blur(6px); }
 main.rm.rm-dock .rmd-overlay :is(.rmd-composer, .rb-audio) { background: transparent; }
-main.rm.rm-dock :is(.rmd-overlay, .rmd-stage-overlay, .rmd-full-media, .rmd-local-player) :is(.rmd-person-name, .line-head, .cs-name, .mf-name),
-main.rm.rm-dock[data-rmd-pip] :is(.rmd-person-name, .line-head, .cs-name, .mf-name) { background-color: var(--ds-media-panel); border-radius: var(--ds-r-xs); padding-inline: var(--ds-sp-1); }
+main.rm.rm-dock :is(.rmd-overlay, .rmd-full-media, .rmd-local-player) :is(.rmd-person-name, .line-head, .mf-name),
+main.rm.rm-dock[data-rmd-pip] :is(.rmd-person-name, .line-head, .mf-name) { background-color: var(--ds-media-panel); border-radius: var(--ds-r-xs); padding-inline: var(--ds-sp-1); }
 main.rm.rm-dock .rmd-placeholder { padding: var(--ds-sp-3); color: var(--ds-text-muted); border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-lg); text-align: center; }
 body.pad-dock-live main.rm.rm-dock[data-rmd-pip] { display: flex; flex-direction: column; inline-size: 100%; max-inline-size: none; block-size: 100%; padding: var(--ds-sp-2); gap: var(--ds-sp-2); }
-main.rm.rm-dock[data-rmd-pip] #rmStage { flex: 1 1 0; min-block-size: 0; max-block-size: none; }
+main.rm.rm-dock[data-rmd-pip] #rmStage { flex: 1 1 0; block-size: auto; min-block-size: 0; max-block-size: none; }
 main.rm.rm-dock[data-rmd-pip] #rmChat { flex: 1 1 0; }
 main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white-space: nowrap; }
 
+/* ── 1.99?? dockclean (owner point 35): the person menu (appended to <body>, outside <main>) - one header row: avatar · name · ✕ ── */
+body.pad-dock-live .pm-pop.rmd-pm { inline-size: clamp(260px, calc(100vw - 16px), 320px); padding: var(--ds-sp-1); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-h { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--ds-sp-2); align-items: center; min-inline-size: 0; }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n > .rmd-person { display: contents; }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .av { grid-column: 1; grid-row: 1 / span 2; inline-size: 32px; block-size: 32px; font-size: var(--ds-fs-meta); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .rmd-person-name { grid-column: 2; display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .rmd-person-name :is(.who, .who-web) { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 700; }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n > .pm-login { grid-column: 2; font-size: var(--ds-fs-chip); color: var(--ds-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.pad-dock-live .pm-pop.rmd-pm .pm-x { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; border-color: transparent; background: transparent; }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-l { display: grid; gap: 0; padding-block: var(--ds-sp-1); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-i { display: flex; align-items: center; gap: var(--ds-sp-2); min-block-size: 40px; padding: 0 var(--ds-sp-3); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-sep { margin-block: var(--ds-sp-1); border-block-start: 1px solid var(--ds-line); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-why { margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-chip); }
+
+@media (max-width: 1023px) {
+  main.rm.rm-dock #rmChat { padding-inline: var(--ds-sp-2); }
+  /* 🎙️ Hold to talk is its icon (the words stay its accessible name) */
+  main.rm.rm-dock .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; justify-content: center; }
+  main.rm.rm-dock .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; }
+  main.rm.rm-dock .rmd-composer .rb-talk[aria-pressed="true"]::before { content: "⏺"; }
+}
 @media (max-width: 760px) {
   body.pad-dock-live { min-block-size: 440px; }
-  body.pad-dock-live main.rm.rm-dock { --rmd-log-min: 112px; }   /* 1.99ajc dockfu: + the 141px audio row and composer = 253px */
-  main.rm.rm-dock { padding-inline: var(--ds-gutter); gap: var(--ds-sp-1); }
-  main.rm.rm-dock .rmd-padbar { display: flex; }
-  main.rm.rm-dock .rmd-padbar > .rmd-id { flex: 1 1 auto; }
-  main.rm.rm-dock:not(.rmd-drawer-open) .rmd-drawer { display: none; }
-  main.rm.rm-dock #rmHero { padding: var(--ds-sp-2); }
-  main.rm.rm-dock .rmd-body { grid-template-columns: minmax(0, 1fr); }
-  main.rm.rm-dock .rmd-body > .side { display: none; }
-  main.rm.rm-dock .rmd-side { max-block-size: 75dvh; }
-  main.rm.rm-dock #rmStage { min-block-size: 90px; }
-  main.rm.rm-dock #rmLiveStat { font-size: var(--ds-fs-chip); }
-  main.rm.rm-dock #rmChat { padding: var(--ds-sp-1h) var(--ds-sp-2); }
-  main.rm.rm-dock #chatH > .rmd-topic-line { flex-basis: 100%; order: 4; }
-  main.rm.rm-dock #rmGoLive .stage-acts { gap: var(--ds-sp-1); }
-  main.rm.rm-dock .rmd-holders { flex-basis: 64px; }
-  main.rm.rm-dock .rmd-composer .rb-ptt-txt { font-size: var(--ds-fs-chip); }
-  main.rm.rm-dock #rmAudioBox .rmd-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
-  main.rm.rm-dock #rmAudioBox .rb-audio { flex-wrap: nowrap; gap: var(--ds-sp-1); }
-  main.rm.rm-dock #rmAudioBox .rb-state { display: none; }
-  main.rm.rm-dock #rmAudioBox .rb-mode { display: none; }
-  main.rm.rm-dock #rmAudioBox .rb-vol { inline-size: 60px; flex-basis: 60px; }
-  main.rm.rm-dock .rmd-input-row { flex-wrap: nowrap; gap: var(--ds-sp-1); }
-  main.rm.rm-dock .rmd-input-row .rb-talk { padding-inline: var(--ds-sp-2); font-size: var(--ds-fs-xs); }
+  body.pad-dock-live main.rm.rm-dock { --rmd-log-min: 112px; }
+  main.rm.rm-dock { gap: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
+  /* the stage: 16:9 of its width or 36% of the panel, + a 64px row while cams are pinned */
+  main.rm.rm-dock #rmStage { grid-template-columns: minmax(0, 1fr); block-size: calc(min(56.25cqi, 36cqb) + var(--rmd-pin-row)); max-block-size: none; min-block-size: calc(90px + var(--rmd-pin-row)); }
+  main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-strip-w: 0px; --rmd-pin-row: 68px; }
+  main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="large"]:not([hidden])) { --rmd-strip-w: 0px; --rmd-pin-row: 96px; }
+  main.rm.rm-dock #rmStage > #rmStrip { grid-area: 2 / 1; overflow-x: auto; overflow-y: hidden; padding: var(--ds-sp-1) var(--ds-sp-1) 0; }
+  main.rm.rm-dock #rmStrip .cs-row { flex-direction: row; block-size: 100%; }
+  main.rm.rm-dock #rmStrip .cs-tile { inline-size: auto; block-size: 100%; }
+  main.rm.rm-dock #rmStrip .cs-vid { block-size: 100%; inline-size: auto; }
+  main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { grid-area: 1 / 1 / 3 / 2; }
+  main.rm.rm-dock #rmStrip .cs-name { padding: 1px var(--ds-sp-1); font-size: var(--ds-fs-chip); }
+  main.rm.rm-dock .rmd-chip { max-inline-size: 70%; }
+  main.rm.rm-dock #rmChat { padding: var(--ds-sp-1) var(--ds-sp-2) var(--ds-sp-2); }
+  main.rm.rm-dock #rmAudioBox .rb-vol { inline-size: 72px; }
   main.rm.rm-dock .rmd-input-row .rb-send { padding-inline: var(--ds-sp-2); }
-  main.rm.rm-dock .rmd-float { inset-inline: var(--ds-gutter); inline-size: auto; }
+  main.rm.rm-dock #rmHero .hd-id { flex-basis: 100%; }
+  main.rm.rm-dock #padTabs.rmd-seg { order: 4; flex: 1 1 100%; }
+  main.rm.rm-dock #padTabs.rmd-seg .ptab { flex: 1 1 0; justify-content: center; }
+  main.rm.rm-dock .rmd-float { inset-inline: var(--ds-sp-2); inline-size: auto; }
   main.rm.rm-dock .rmd-overlay { inline-size: min(440px, calc(100% - 16px)); inset-inline: var(--ds-sp-2); inset-block-start: 45%; }
   main.rm.rm-dock .rmd-viewbar { flex-wrap: wrap; }
-}
-@media (pointer: coarse) {
-  main.rm.rm-dock :is(.rmd-stage-tools, .rmd-viewbar, .rmd-padbar, .rmd-input-row) button,
-  main.rm.rm-dock :is(.cs-ic, .rmd-cam-tools button, .rmd-strip-select, #chatH .hist-jump, #rmTabs .stab, #padTabs .ptab) { min-block-size: 44px; min-inline-size: 40px; }
-  main.rm.rm-dock .rmd-icon { inline-size: 44px; min-inline-size: 44px; }
-}
-@media (hover: none) {
-  main.rm.rm-dock #rmStrip .rmd-cam-tools { opacity: 1; pointer-events: auto; }
-  main.rm.rm-dock .cs-ic { opacity: 1; }
-}
-@media (max-height: 720px) {
-  body.pad-dock-live main.rm.rm-dock { gap: var(--ds-sp-1); padding-block: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock #padPanel-live { gap: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock :is(.crumb, #rmLiveStat) { display: none; }
-  body.pad-dock-live main.rm.rm-dock .rmd-drawer { gap: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock #rmHero { padding-block: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock #padTabs .ptab { min-block-size: 32px; }
-  body.pad-dock-live main.rm.rm-dock #padPanel-live > :is(#rmStage, .rmd-local-player) { flex: 0 1 104px; min-block-size: 104px; max-block-size: 104px; }
-  body.pad-dock-live main.rm.rm-dock #rmChat { padding-block: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock .rmd-composer-tools { display: none; }
-  body.pad-dock-live main.rm.rm-dock #rmAudioBox :is(.rb-state, .rb-mode) { display: none; }
-  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rb-audio { flex-wrap: nowrap; }
-  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rmd-holders { flex-basis: 64px; }
-}
-/* 1.99ajc dockfu (design call c): the compact cam strip (one row of 64px tiles, the layout picker as a select) whenever the Live panel
-   is short - a short window (these rules were in the max-height: 720px block above) and also a taller one where pinned cams and
-   the chat's floor would otherwise push the composer off screen (800x900, 1280x800 with cams) */
-@container rmd-live (max-height: 720px) {
-  body.pad-dock-live main.rm.rm-dock #rmStrip { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--ds-sp-2); align-items: center; padding-block: 0; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-head { flex-direction: row; justify-content: center; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-layout { display: none; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-select { display: block; inline-size: 78px; min-inline-size: 0; min-block-size: 44px; padding-inline: var(--ds-sp-1); font-size: var(--ds-fs-xs); }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-row { margin-block: 0; padding-block: 0; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-tile { flex-basis: 140px; display: grid; grid-template-columns: minmax(0, 1fr) 40px; align-items: center; gap: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock #rmStrip[data-rmd-layout="large"] .cs-tile { flex-basis: 176px; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-vid { grid-column: 1; grid-row: 1; block-size: 64px; aspect-ratio: auto; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .cs-name { inset-inline-end: 44px; inset-block-end: var(--ds-sp-1h); padding-block: 0; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-cam-tools { position: static; grid-column: 2; grid-row: 1; display: grid; gap: var(--ds-sp-1); background: transparent; opacity: 1; pointer-events: auto; }
-  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-cam-tools button { padding-inline: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-block-size: 80px; }
-}
-@media (min-width: 761px) and (max-height: 640px) {
-  body.pad-dock-live main.rm.rm-dock .rmd-drawer { grid-template-columns: minmax(0, 1fr) 210px; align-items: center; }
-  body.pad-dock-live main.rm.rm-dock #rmHero .hd-id { flex-basis: 0; }
-  body.pad-dock-live main.rm.rm-dock #rmHero .hd-fc { display: none; }
-  body.pad-dock-live main.rm.rm-dock #padTabs .ptab { padding-block: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock #padPanel-live > :is(#rmStage, .rmd-local-player) { flex-basis: 96px; min-block-size: 96px; max-block-size: 96px; }
+  main.rm.rm-dock .snap.rmd-cam { place-items: end stretch; padding: 0; }
+  main.rm.rm-dock .snap.rmd-cam > .rmd-cam-box { inline-size: 100%; max-block-size: 88dvh; border-end-start-radius: 0; border-end-end-radius: 0; padding-block-end: calc(var(--ds-sp-5) + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 760px) {
-  body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-select,
   main.rm.rm-dock .rmd-composer .rb-say input,
   main.rm.rm-dock .rmd-composer .rb-micsel,
-  main.rm.rm-dock .rmd-tts input { font-size: var(--ds-fs-lead); }
+  main.rm.rm-dock :is(.rmd-tts, .rmd-pvp, .rmd-audio-pop) :is(input, select),
+  main.rm.rm-dock .rmd-find { font-size: var(--ds-fs-lead); }
+}
+@media (pointer: coarse) {
+  main.rm.rm-dock :is(.rmd-ov-bot, .rmd-viewbar, .rmd-input-row, .rmd-mini, .rmd-right) button,
+  main.rm.rm-dock :is(#chatH > button, .rmd-tools .rmd-tool, #padTabs .ptab) { min-block-size: 44px; min-inline-size: 44px; }
+  main.rm.rm-dock .rmd-icon { inline-size: 44px; min-inline-size: 44px; }
+  main.rm.rm-dock .rmd-tile-more { inline-size: 32px; min-inline-size: 32px; min-block-size: 32px; block-size: 32px; }
+  main.rm.rm-dock .rmd-menu .ds-menu-item { min-block-size: 44px; }
+  main.rm.rm-dock .rmd-chip { block-size: 36px; }
+}
+@media (hover: none) {
+  main.rm.rm-dock :is(.rmd-tile-more, #rmPeople .ic > .pm-mg) { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  main.rm.rm-dock :is(.rmd-stage-overlay, .rmd-drawer, .rmd-float) { transition: none; animation: none; }
+  main.rm.rm-dock :is(.rmd-ov-top, .rmd-ov-bot, .rmd-float) { transition: none; animation: none; }
 }
 @media (forced-colors: active) {
-  main.rm.rm-dock :is(.rmd-overlay #rmChat, .rmd-stage-overlay, .rmd-viewbar, .rmd-mini, .rmd-menu) { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
+  main.rm.rm-dock :is(.rmd-overlay #rmChat, .rmd-ov-top, .rmd-ov-bot, .rmd-viewbar, .rmd-mini, .rmd-menu, .rmd-chip) { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
+  main.rm.rm-dock .rmd-input-row::before { border-color: CanvasText; }
   main.rm.rm-dock .cx-name,
   body.pad-dock-live .pm-pop.chatlog .cx-name { color: CanvasText !important; -webkit-text-fill-color: CanvasText !important; background: none !important; animation: none !important; forced-color-adjust: auto; }
-  main.rm.rm-dock :is(.rmd-drawer-toggle, .rmd-holder, .rmd-cam-tools button):focus-visible { outline: 2px solid Highlight; }
+  main.rm.rm-dock :is(.rmd-chip, .rmd-holder, .rmd-tile-more):focus-visible { outline: 2px solid Highlight; }
 }

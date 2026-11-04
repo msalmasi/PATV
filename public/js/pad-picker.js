@@ -1,4 +1,8 @@
 // Dock-only composer extras. The existing relay owns sends, client ids and retries.
+// 1.99?? dockclean: the tool row opens this sheet on a tab (o.tab: 'patv' | 'stickers' | 'gifs' | 'emoji'). 🧸 PATV = the site's own
+// sticker packs (GET /api/stickers: the packs this account owns or has as a perk, in the viewer's language); a pick sends exactly
+// '[sticker:<pack>/<id>]' through the relay (the server checks the pack and relays '[sticker: Name]' into Camfrog). Emoji insert
+// at the caret and the sheet stays open. voices() = the site's voice catalogue (GET /api/voices) for the Dock's 🗣️ Say it sheet.
 (function (W) {
   'use strict';
   var tr = typeof W.__t === 'function' ? W.__t : function (k, d, v) {
@@ -7,6 +11,15 @@
   function t(k, d, v) { return tr('js.pad.picker.' + k, d, v); }
   var EMOJI = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '🙂', '🙃', '😉', '😍', '🥰', '😘', '😎', '🤔', '🤨', '😐', '🙄', '😏', '😴', '😢', '😭', '😤', '😡', '🤯', '😱', '🥳', '🤗', '🫡', '🤫', '🤭', '🫠', '🥹', '💀', '👻', '👀', '💚', '❤️', '💜', '💙', '💛', '💔', '✨', '⭐', '🔥', '💯', '🎉', '🎊', '👏', '🙌', '👍', '👎', '🤝', '🙏', '💪', '👋', '✌️', '🤘', '🫶', '🤷', '🤦', '🐸', '🐈', '🐕', '🦊', '🐼', '🦋', '🌻', '🌈', '🌙', '☀️', '🍿', '🍕', '☕', '🎵', '🎶', '🎤', '🎬', '🎮', '🎲', '🎁', '🏆'];
   function available(data, o) { return !!(o && o.signed && o.relay && data && data.room && data.room.relay); }
+  var voiceList = null;
+  function voices() {
+    if (voiceList) return voiceList;
+    voiceList = W.fetch('/api/voices', { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
+      .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
+      .then(function (d) { return d && Array.isArray(d.voices) ? d.voices : []; })
+      .catch(function (e) { voiceList = null; throw e; });
+    return voiceList;
+  }
   function open(o) {
     if (!o || !available(o.data, o) || !o.sheet || !o.relay.getInput || !o.relay._send) return null;
     var box = o.sheet(t('title', 'Add to the chat'), o.opener), doc = box.ownerDocument;
@@ -59,6 +72,33 @@
       var n = el('span', null, label); n.style.whiteSpace = 'normal'; n.style.overflowWrap = 'anywhere'; n.style.inlineSize = '100%';
       n.style.fontSize = 'var(--ds-fs-xs)'; n.style.display = '-webkit-box'; n.style.webkitBoxOrient = 'vertical'; n.style.webkitLineClamp = '2'; n.style.overflow = 'hidden'; parent.appendChild(n);
     }
+    // 🧸 the site's sticker packs: the ones this account owns or may use right now (perk packs in season)
+    function patv(g) {
+      note(t('loading', 'Loading…'));
+      W.fetch('/api/stickers', { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
+        .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
+        .then(function (d) {
+          if (!connected(g)) return;
+          var packs = d && Array.isArray(d.packs) ? d.packs.filter(function (p) { return p && p.owned && /^[a-z0-9]{1,32}$/.test(String(p.id)) && Array.isArray(p.stickers); }) : [];
+          note('');
+          if (!packs.length) {
+            var empty = el('p', 'ds-note', t('patv_none', 'No sticker packs yet · ')); var a = el('a', null, t('patv_get', 'Get packs ›')); a.href = '/cosmetics?tab=stickers';
+            empty.appendChild(a); body.appendChild(empty); return;
+          }
+          packs.forEach(function (p) {
+            var h = el('p', 'ds-eyebrow', (p.emoji ? p.emoji + ' ' : '') + String(p.name || p.id)); h.style.margin = 'var(--ds-sp-2) 0 var(--ds-sp-1)'; body.appendChild(h);
+            var items = grid(); items.style.gridTemplateColumns = 'repeat(auto-fill, minmax(72px, 1fr))';
+            p.stickers.forEach(function (st) {
+              if (!st || !/^[a-z0-9]{1,32}$/.test(String(st.id)) || st.url !== '/public/stickers/' + p.id + '/' + st.id + '.svg') return;
+              var name = String(st.name || t('sticker', 'Sticker')).slice(0, 80);
+              var b = button('', function () { send('[sticker:' + p.id + '/' + st.id + ']'); }); b.title = name; b.setAttribute('aria-label', t('send_sticker', 'Send sticker: {name}', { name: name }));
+              b.style.minBlockSize = '72px'; b.style.padding = 'var(--ds-sp-1)';
+              var img = el('img'); img.src = st.url; img.alt = name; img.loading = 'lazy'; img.decoding = 'async'; img.width = 64; img.height = 64; img.style.imageRendering = 'pixelated';
+              b.appendChild(img); items.appendChild(b);
+            });
+          });
+        }).catch(function () { if (connected(g)) note(t('unavailable', 'Could not load this right now. Try again.')); });
+    }
     function stickers(g) {
       request('/api/rooms/' + encodeURIComponent(o.slug) + '/cfstickers', g, function (rows) {
         var items = grid();
@@ -103,7 +143,8 @@
       EMOJI.forEach(function (value) {
         var b = button(value, function () {
           if (!box.isConnected || !o.relay.insert) return;
-          if (o.relay.insert(value)) closeToInput(); else note(t('full', 'The message is full. Remove some text to add an emoji.'));
+          if (!o.relay.insert(value)) note(t('full', 'The message is full. Remove some text to add an emoji.'));
+          else { var input = o.relay.getInput(); if (input && W.matchMedia && W.matchMedia('(pointer: fine)').matches) b.focus(); }   // (the sheet stays open for more)
         }); b.style.fontSize = '24px'; b.style.minBlockSize = '44px'; b.style.padding = 'var(--ds-sp-1)';
         b.setAttribute('aria-label', t('insert', 'Insert {emoji}', { emoji: value })); items.appendChild(b);
       });
@@ -112,7 +153,7 @@
       active = tab; generation++; body.textContent = ''; note('');
       tabs.forEach(function (x) { x.button.setAttribute('aria-selected', String(x === tab)); x.button.setAttribute('aria-pressed', String(x === tab)); x.button.tabIndex = x === tab ? 0 : -1; });
       body.setAttribute('aria-label', tab.label);
-      if (tab.id === 'stickers') stickers(generation); else if (tab.id === 'gifs') gifs(); else emoji();
+      if (tab.id === 'patv') patv(generation); else if (tab.id === 'stickers') stickers(generation); else if (tab.id === 'gifs') gifs(); else emoji();
       if (focus) tab.button.focus();
     }
     function add(id, icon, label) {
@@ -126,11 +167,15 @@
         select(tabs[next], true);
       }); tab.button = b; tabs.push(tab); tabBar.appendChild(b);
     }
-    if (room.cfstickerPicker === true) add('stickers', '🏷️', t('stickers', 'Stickers'));
+    add('patv', '🧸', t('patv', 'PATV'));
+    if (room.cfstickerPicker === true) add('stickers', '🏷️', t('camfrog', 'Camfrog'));
     if (room.gifPicker === true) add('gifs', '🎞️', t('gifs', 'GIFs'));
     add('emoji', '😀', t('emoji', 'Emoji'));
-    select(tabs[0], false);
+    // (no tab asked for: the first one that loads nothing on its own - the 🧸 PATV catalogue loads only when asked for)
+    var want = tabs.filter(function (x) { return x.id === o.tab; })[0] || tabs.filter(function (x) { return x.id !== 'patv'; })[0];
+    select(want || tabs[0], false);
+    // focus goes back to the composer when the sheet closes (the Dock's layer returns it to the opener otherwise)
     return { box: box, tabs: tabs, current: function () { return active.id; } };
   }
-  W.PATVPadPicker = { available: available, open: open };
+  W.PATVPadPicker = { available: available, open: open, voices: voices };
 })(window);

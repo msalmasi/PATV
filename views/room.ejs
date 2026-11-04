@@ -526,7 +526,7 @@
 </style>
 <%# CL5: the chat's lines - right after the block they came from, so its rules keep their order in the cascade; <main> carries
     .chatlog (the stylesheet's scope) next to .rm. CL5 fix-up: v=5 - the chat's own --ds-chat-* colours again, the RTL highlight %>
-<link rel="stylesheet" href="/public/css/chatlog.css?v=11">
+<link rel="stylesheet" href="/public/css/chatlog.css?v=12">
 <link rel="stylesheet" href="/public/css/veil.css?v=3"><%# wave 2: frog names, hooded avatars, masked bars (not in chatlog.css: the downloads inline that one) %>
 <%# 1.99es: the pad's look (padlook.js via app.locals): accent -> CSS custom properties on <main> (validated hex only),
     an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
@@ -542,9 +542,10 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=2"><script src="/public/js/pad-dock.js?v=2"></script><script src="/public/js/pad-picker.js?v=1"></script><% } %>
+<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=3"><script src="/public/js/pad-dock.js?v=3"></script><script src="/public/js/pad-picker.js?v=2"></script><% } %><%# 1.99?? dockclean: v3 / v2 %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
-  <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
+  <%# 1.99?? dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
+  <% if (!dockOn_) { %><div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div><% } %>
   <%# 1.99tc: the tier intro - 💎 Prime Time Plus gets its own title card, Prime Time the gold sweep (partials/pad-intro.ejs) %>
   <% const introTier_ = typeof premiumPadPerks === 'function' ? (premiumPadPerks(room.id).tier || null) : (primeOn_ ? 'prime_time' : null); %>
   <%- include('partials/pad-intro', { introTier: introTier_ || (primeOn_ ? 'prime_time' : null), introPad: room.slug }) %>
@@ -563,10 +564,10 @@
      const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
      const psTitle_ = t('pad.hdr.settings_tip') + (queue_ ? ' · ' + t('pad.hdr.n_waiting_mod', { n: queue_ }) : '') + (pending_ ? ' · ' + t('pad.hdr.n_to_approve', { n: pending_ }) : '');
      const bnSrc_ = (LK_ && LK_.banner) || room.banner || '', bnLook_ = !!(LK_ && LK_.banner); %>
+  <%# 1.99?? dockclean (owner points 1, 2): no phone pad bar or drawer - on Live the pad's identity is the stage card's pad chip
+      (this template, pad-dock.js); the header below shows on Feed and About only, as one slim row %>
   <% if (dockOn_) { %>
   <template id="rmdId"><%- include('partials/pad-dock-id', { room, LK_, PFX_, avHtml_, bnSrc_, bnLook_ }) %></template>
-  <div class="rmd-padbar" id="rmdBar"></div>
-  <div class="rmd-drawer" id="rmdDrawer">
   <% } %>
   <section class="hero hero-c<%= bnSrc_ ? ' has-bn' : '' %><%= PFX_ && PFX_.cls ? ' ' + PFX_.cls : '' %>" id="rmHero" aria-labelledby="rmTitle"><%- PFX_ ? PFX_.layer : '' %>
     <% if (bnSrc_) { %><div class="hero-bn" aria-hidden="true"><img src="<%= bnSrc_ %>" alt="" decoding="async"<%- bnLook_ ? '' : ' loading="lazy" referrerpolicy="no-referrer"' %>></div><% } %>
@@ -615,8 +616,8 @@
     <%# 1.99ti put an "Owner" tab here too; 1.99wk: gone - the header's 👑 button is THE owner-panel link (old ?tab=owner /
         #owner links go there: bridge.js redirects the query, pad-tabs.js the fragment) %>
   </nav>
-  <% if (dockOn_) { %></div><% } %>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
+  <% if (dockOn_) { %><h1 class="ds-sr-only"><%= room.name %></h1><% } %>
   <%# 1.99ja: a Twitch pad plays its channel (padconnect.js twitchOf; the player URL is built by stageembed.js from the checked login) %>
   <% const TWP_ = typeof twitch !== 'undefined' && twitch && twitch.login && twitch.player ? twitch.player : null; %>
   <% if (TWP_) { %>
@@ -840,18 +841,19 @@
         <ul class="people" id="rmPeople"></ul>
         <p class="muted" id="rmListNote" style="margin:8px 0 0"></p>
       </section>
-      <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
+      <%# 1.99?? dockclean (owner point 27): the Dock shows no Latest posts on Live - the Feed tab is the posts %>
+      <% if ((feed_ || latest_.length) && !dockOn_) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
       <%# 1.99co: the Manage room panel - filled and shown by public/js/room-mod.js only when Pepe says this viewer
           moderates the room. 1.99za: last in the column (was first) %>
       <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
-  <script src="/public/js/chatlog-core.js?v=9"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
+  <script src="/public/js/chatlog-core.js?v=10"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
   <script src="/public/js/pad-history.js?v=3"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
-  <script src="/public/js/pad-download.js?v=2"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
-  <link rel="stylesheet" href="/public/css/room-bridge.css?v=12">
-  <script src="/public/js/room-bridge.js?v=21"></script>
+  <script src="/public/js/pad-download.js?v=3"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=13">
+  <script src="/public/js/room-bridge.js?v=22"></script>
   <link rel="stylesheet" href="/public/css/roompm.css?v=1"><script src="/public/js/pad-roompm.js?v=1"></script><%# 1.99ajd roompm: Pepe's private answers in the chat (PATVRoomPm) %>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
@@ -863,7 +865,7 @@
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
   <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
-  <script src="/public/js/room-mod.js?v=12"></script>
+  <script src="/public/js/room-mod.js?v=13"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
@@ -894,30 +896,63 @@
     function moreBtn(u, canCam, onMic) {
       var mg = el('button', 'pm-mg', '⋯'); mg.type = 'button';
       mg.title = _t('js.pad.people.actions', 'Actions for {name}', { name: label(u) }); mg.setAttribute('aria-label', mg.title);
-      mg.setAttribute('aria-haspopup', 'menu'); mg.setAttribute('data-login', u.login);
+      mg.setAttribute('aria-haspopup', 'menu'); mg.setAttribute('data-login', u.login || ('web:' + (u.patv && u.patv.username || '')));
       mg.addEventListener('click', function () {
         if (roomDock) openPerson(u, mg, !!onMic, canCam);
         else roomMod.menu(u, mg, { cam: canCam ? function () { snapOpen(u); } : null, mic: !!onMic });
       });
       return mg;
     }
-    function wantsMore(u) { return !!(roomMod && (roomMod.active() || signedIn) && u && !u.self && !u.anon && u.login); }
+    function wantsMore(u) { return !!(roomMod && (roomMod.active() || signedIn) && u && !u.self && !u.anon && (u.login || (roomDock && u.web && u.patv && u.patv.username))); }
     function person(u) {
       var n = el('span', 'rmd-person'), who = el('span', 'rmd-person-name');
       n.appendChild(avatar(u)); who.appendChild(name(u));
       n.appendChild(who); return n;
     }
+    // 1.99?? dockclean (owner point 14): a menu opened from a chat LINE gets the line's person, which carries no 💸 tip (only roster
+    // entries get bridge.js tipFor) - it is matched against the latest roster (members, mic, web users) by login, or by PATV name for a
+    // web line, and takes that entry's tip / on_cam / patv. No match (they left, a web line): a linked PATV name that isn't this viewer
+    // gets the tip page's link (the tip POST and pad-tip.js's review step check everything again). Veiled / anonymous / Pepe: no menu.
+    var meName = <%- JSON.stringify(signedIn && user ? String(user) : '').replace(/</g, '\\u003c') %>;
+    function rosterMatch(u) {
+      var low = function (x) { return String(x || '').toLowerCase(); }, key = low(u && u.login), pv = low(u && u.patv && u.patv.username), hit = null;
+      [data && data.mic, data && data.members, data && data.web].forEach(function (list) {
+        (list || []).forEach(function (m) {
+          if (hit || !m || m.veil || m.anon) return;
+          if ((key && !/^u:/.test(key) && low(m.login) === key) || (pv && !m.login && m.patv && low(m.patv.username) === pv)) hit = m;
+        });
+      });
+      return hit;
+    }
+    function personFor(u) {
+      if (!roomDock || !u || u.veil || u.anon || u.self) return u;
+      var m = rosterMatch(u), x = Object.assign({}, u);
+      if (m) { if (m.tip) x.tip = m.tip; if (m.on_cam != null) x.on_cam = m.on_cam; if (m.patv) x.patv = Object.assign({}, x.patv || {}, m.patv); if (m.me) x.me = true; }
+      else if (!x.tip && x.patv && x.patv.username && !x.bot && signedIn && String(x.patv.username).toLowerCase() !== meName.toLowerCase()) {
+        x.tip = { to: String(x.patv.username), href: '/u/' + encodeURIComponent(String(x.patv.username)) + '/tip' };
+      }
+      if (x.me) delete x.tip;
+      return x;
+    }
     function openPerson(u, anchor, onMic, canCam) {
       if (!wantsMore(u) || u.veil) return;
-      if (canCam == null) canCam = !!(micRoom && micRoom.cams && u.on_cam);
-      roomMod.menu(u, anchor, { cam: canCam ? function () { snapOpen(u); } : null, mic: !!onMic });
+      u = personFor(u);
+      if (canCam == null) canCam = !!(micRoom && micRoom.cams && u.on_cam && !u.web);
+      var pv = roomDock && roomDock.pvpFor ? roomDock.pvpFor(u) : null;
+      roomMod.menu(u, anchor, { cam: canCam ? function () { snapOpen(u); } : null, mic: !!onMic,
+        pvp: pv ? { duel: pv.duel, brawl: pv.brawl, run: function (kind) { roomDock.pvp(u, kind, anchor); } } : null });
       if (roomDock) {
         var menus = document.querySelectorAll('.pm-pop');
         Array.prototype.forEach.call(menus, function (menu) {
           if (menu._anchor !== anchor) return;
-          menu.classList.add('chatlog');
+          menu.classList.add('chatlog', 'rmd-pm');
           var title = menu.querySelector('.pm-pop-n');
-          if (title) { title.textContent = ''; title.appendChild(person(u)); }
+          if (title) {
+            title.textContent = ''; title.appendChild(person(u));
+            // the login as a second line only when it differs from the name everyone sees (never an account key)
+            var lg = String(u.login || ''), shownName = label(u);
+            if (lg && !/^u:/i.test(lg) && !u.acct && lg.toLowerCase() !== String(shownName).toLowerCase()) title.appendChild(el('small', 'pm-login', lg));
+          }
         });
       }
     }
@@ -968,7 +1003,12 @@
       if (CLR) return CLR.chipSpan(s, rctx);
       return s % 3600 === 0 ? _t('js.pad.chat.chip_h', '{n} h', { n: s / 3600 }) : _t('js.pad.chat.chip_min', '{n} min', { n: Math.max(1, Math.round(s / 60)) });
     }
-    function item(it) { var n = CLR ? CLR.renderItem(it, rctx, H) : plainItem(it); if (n && typeof roomDock !== 'undefined' && roomDock) roomDock.personLine(n, it && it.u); return n; }
+    var recentSpeakers = [];      // 1.99?? dockclean: the composer's name autocomplete (acPeople) - the last 30 people who spoke here
+    function item(it) {
+      var n = CLR ? CLR.renderItem(it, rctx, H) : plainItem(it); if (n && typeof roomDock !== 'undefined' && roomDock) roomDock.personLine(n, it && it.u);
+      if (it && (it.k === 'msg' || it.k === 'tx') && it.u && !it.u.self && !it.mask) { recentSpeakers.push(it.u); if (recentSpeakers.length > 30) recentSpeakers.shift(); }
+      return n;
+    }
     function renderLine(it, ctx) { var n = CLR ? CLR.renderItem(it, ctx, H) : plainItem(it); if (n && typeof roomDock !== 'undefined' && roomDock) roomDock.personLine(n, it && it.u); return n; }   // scrollback's and search's lines
     // [end of the CL5 renderer wiring]
     // wave 2 (spec E.1 / E.2): Reveal - only an admin, or the pad's owner on lines said in their era, gets the control (rv: 1); one
@@ -1277,7 +1317,9 @@
     // the people list (1.99ahm: its 🎙 icons and on-mic order as this viewer hears them - see renderRoom); r = the room of the last answer
     function drawPeople(members) {
       var r = micRoom || {};
-      var pk = JSON.stringify(members) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
+      // 1.99?? dockclean (owner point 32): 🌐 web users on the pad's chat (bridge.js liveView web: no login, no account id) after the room
+      var web = roomDock && data && Array.isArray(data.web) ? data.web : [];
+      var pk = JSON.stringify(members) + JSON.stringify(web) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
       if (pk !== lastPeople) {
         lastPeople = pk;
         var ul = roomEl('rmPeople'); ul.textContent = '';
@@ -1289,7 +1331,10 @@
           var li = el('li'); li.appendChild(avatar(u));
           var n = el('span', 'nm'); n.appendChild(name(u));
           if (roomDock && CLR && !u.veil) { var flair = CLR.flairNode(u, rctx, H); if (flair) n.appendChild(flair); }
-          if (u.src === 'seen') n.appendChild(el('small', null, _t('js.pad.people.recently', 'recently')));
+          if (u.src === 'seen' && !roomDock) n.appendChild(el('small', null, _t('js.pad.people.recently', 'recently')));
+          // 1.99?? dockclean (owner point 26): a recently-seen row is muted with a tooltip instead of the word
+          if (u.src === 'seen' && roomDock) { li.classList.add('rmd-seen'); li.title = _t('js.pad.dock.seen', 'Seen in the last 15 min'); }
+          if (roomDock && u.on_mic) li.classList.add('rmd-on-mic');
           li.appendChild(n);
           var ic = el('span', 'ic');
           var cam;
@@ -1304,7 +1349,7 @@
           } else {
             cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? _t('js.pad.people.on_cam', 'On cam') : (u.on_cam === false ? _t('js.pad.people.off_cam', 'Off cam') : _t('js.pad.people.cam_unknown', 'Cam unknown'));
           }
-          if (!u.veil || vcam) ic.appendChild(cam);   // wave 2 (A.6): a veiled person never has a cam icon anywhere (1.99aid S5: but an incognito cam shown under its frog name)
+          if ((!u.veil || vcam) && !(roomDock && cam.tagName !== 'BUTTON' && !u.on_cam)) ic.appendChild(cam);   // (dockclean: no greyed icons) wave 2 (A.6): a veiled person never has a cam icon anywhere (1.99aid S5: but an incognito cam shown under its frog name)
           // 1.99aid (privacy controls S4): a moderator's 👁 on a frog entry whose cam is on but hidden (cv: 1 - camreveal.js), asked for
           // by the entry's opaque id; the person is told unless the moderator is in ghost mode, and it's logged
           // 1.99aid (privacy controls S4): Reveal on a frog entry (rvm: 1 - an admin, or the pad's owner now): who it is, logged
@@ -1334,11 +1379,22 @@
           // itself stays the link to the person's profile. 1.99fu: every signed-in viewer gets the ⋯ too - the light
           // menu (View profile / Open cam / 💸 Tip); mods keep their moderation actions in it.
           if (wantsMore(u)) ic.appendChild(moreBtn(u, !!(r.cams && u.on_cam), false));
-          var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? _t('js.pad.people.on_mic', 'On the mic') : _t('js.pad.people.not_on_mic', 'Not on the mic'); ic.appendChild(m);
+          var m = el('span', u.on_mic ? 'rmd-mic' : 'off', '🎙️'); m.title = u.on_mic ? _t('js.pad.people.on_mic', 'On the mic') : _t('js.pad.people.not_on_mic', 'Not on the mic');
+          if (!roomDock) ic.appendChild(m); else if (u.on_mic) ic.insertBefore(m, ic.firstChild);
           li.appendChild(ic); ul.appendChild(li);
         });
-        roomEl('rmPplN').textContent = members.length ? '(' + members.length + ')' : '';
+        web.forEach(function (u) {
+          if (!u || !u.web || !u.display) return;
+          var li = el('li', 'rmd-web'); li.appendChild(avatar(u));
+          var n = el('span', 'nm'); n.appendChild(name(u)); li.appendChild(n);
+          var ic = el('span', 'ic');
+          if (!u.me && wantsMore(u)) ic.appendChild(moreBtn(u, false, false));
+          li.appendChild(ic); ul.appendChild(li);
+        });
+        var total = members.length + web.length;
+        roomEl('rmPplN').textContent = total ? (roomDock ? String(total) : '(' + total + ')') : '';
       }
+      if (roomDock && roomDock.peopleDrawn) roomDock.peopleDrawn();
     }
     // the "On the mic" card: who holds the mic (1.99ahm: as this viewer hears it - see renderRoom); r = the room of the last answer
     var micRoom = null;
@@ -1383,7 +1439,7 @@
       return _t('js.pad.people.list_none', 'Pepe can\'t read this room\'s participant list right now — showing people seen arriving or active in the last {ttl}.', { ttl: ttl });
     }
 
-    var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug, { showOff: true });   // greyed while the relay is off
+    var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug, { showOff: true<% if (dockOn_) { %>, idle: _t('js.pad.dock.listen', '▶ Listen to the room')<% } %> });   // greyed while the relay is off (dockclean: the idle words)
     var chatClip = window.PATVChatClip ? PATVChatClip.init({ feed: feedEl, host: document.getElementById('rmClip'), slug: slug, linked: <%= linked || (typeof clipAcct !== 'undefined' && clipAcct) ? 'true' : 'false' %> }) : null;   // 1.99fp; 1.99aiq cliplink: + an unlinked account on a pad whose switch is off
     // CL6: the ⋯ on each line (public/js/chat-lines.js -> chatlogmod.js) - what it offers comes with each answer (history.acts); a line
     // taken down from here leaves this page at once
@@ -1411,8 +1467,33 @@
       tz: dlBtn.getAttribute('data-tz') || '', signin: '/login?next=' + encodeURIComponent('/p/' + slug) }) : null;
     // 1.99ye: your messages show in the chat at once (sending… / ✓ sent / not sent · Retry), built with this page's line style
     // (CL8: sending one while reading back returns to the live chat)
+    // 1.99?? dockclean (owner point 30): names for the composer's autocomplete - mic holders, the Camfrog room, 🌐 web users, then recent
+    // speakers, from this page's own /live data. A named member completes to their LOGIN (what commands need); a web user to the PATV name
+    // their web lines show; an incognito person only to their frog name; a hidden (!bridge hide) one, Pepe and "someone" never
+    function acPeople() {
+      var out = [], seen = {};
+      function add(u, recent) {
+        if (!u || u.self || u.bot || u.me) return;
+        var veil = u.veil === 'incognito' && u.anon && u.alias ? 'incognito' : null;
+        if (u.anon && !veil) return;
+        var value = veil ? String(u.alias) : u.web && !u.login ? String(u.patv && u.patv.username || u.display || '') : String(u.login || '');
+        if (!value || /^u:/i.test(value)) { if (u.web && u.patv && u.patv.username) value = String(u.patv.username); else return; }
+        var k = value.toLowerCase(); if (seen[k]) return; seen[k] = 1;
+        var shown = label(u);
+        out.push({ value: value, name: shown, login: !veil && !u.web && u.login && String(u.login).toLowerCase() !== String(shown).toLowerCase() ? String(u.login) : '', tag: veil ? _t('js.pad.veil.incognito', 'incognito') : u.web ? '🌐' : '', u: u, recent: !!recent });
+      }
+      (data && data.mic || []).forEach(function (u) { add(u); });
+      (data && data.members || []).forEach(function (u) { add(u); });
+      (data && data.web || []).forEach(function (u) { add(u); });
+      recentSpeakers.slice().reverse().forEach(function (u) { add(u, true); });
+      return out;
+    }
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
-      feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; } }) : null;
+      feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; }
+      <% if (dockOn_) { %>, people: acPeople, avatar: avatar,
+      placeholder: <%- !linked && locals.acctActor && signedIn && user
+        ? "_t('js.pad.dock.placeholder_web', 'Message as 🌐 {name} (web)…', { name: " + JSON.stringify(String(user)).replace(/</g, '\\u003c') + " })"
+        : "_t('js.pad.dock.placeholder', 'Message {room}…', { room: " + JSON.stringify(String(room.camfrogName || room.name)).replace(/</g, '\\u003c') + " })" %><% } %> }) : null;
     // 1.99ajd roompm: Pepe's private answers to your typed commands, in this chat, only for you (pad-roompm.js; rpm in /live)
     var roomPm = window.PATVRoomPm ? PATVRoomPm.init({ feed: feedEl, line: item, nearBottom: nearBottom, toBottom: toBottom, root: document.querySelector('main.rm'),
       anchor: function () { return roomRelay && roomRelay.anchor ? roomRelay.anchor() : null; }, hist: function () { return padHist; } }) : null;
@@ -1437,48 +1518,72 @@
     var liveCtl = null;       // 1.99yh: the popover's live cam (pad-livecam.js) - stopped whenever the popover changes
     function liveStop() { if (liveCtl) { liveCtl.stop(); liveCtl = null; } }
     function snapClose() { liveStop(); clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(clipTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
+    // 1.99?? dockclean (owner point 11): in the Dock the popover is design 159's camera sheet - '{name}'s cam' ✕, the 4:3 preview, its
+    // status line, [▶ Live] [📌 Pin] [↻ Refresh], CAPTURE & CREATE, MORE - the same rows (and their server checks), re-parented
+    var camDock = <%= dockOn_ ? 'true' : 'false' %>;
     function snapBox(text) {
       liveStop();
       if (!snapEl) {
-        snapEl = el('div', 'snap'); snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', _t('js.pad.snap.aria', 'Cam snapshot'));
+        snapEl = el('div', 'snap' + (camDock ? ' rmd-cam' : ''));
+        if (!camDock) { snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', _t('js.pad.snap.aria', 'Cam snapshot')); }
+        else snapEl.addEventListener('click', function (e) { if (e.target === snapEl) snapClose(); });
         document.querySelector('.rm').appendChild(snapEl);
       }
       snapEl.textContent = '';
       snapEl.classList.remove('lc-on');
-      var top = el('div', 'row'); top.appendChild(el('b', null, '📷 ' + label(snapWho)));
-      var x = el('button', null, _t('js.pad.snap.close', 'Close')); x.type = 'button'; x.addEventListener('click', snapClose); top.appendChild(x);
-      snapEl.appendChild(top);
-      if (text) snapEl.appendChild(el('div', 'muted', text));
-      return snapEl;
+      var host = snapEl;
+      if (camDock) {
+        host = el('div', 'rmd-cam-box'); host.setAttribute('role', 'dialog'); host.setAttribute('aria-modal', 'true');
+        host.setAttribute('aria-label', _t('js.pad.snap.alt', '{name}\'s cam', { name: label(snapWho) })); snapEl.appendChild(host);
+      }
+      var top = el('div', 'row'); top.appendChild(el('b', null, camDock ? _t('js.pad.snap.alt', '{name}\'s cam', { name: label(snapWho) }) : '📷 ' + label(snapWho)));
+      var x = el('button', camDock ? 'ds-btn ghost sm' : null, camDock ? '✕' : _t('js.pad.snap.close', 'Close')); x.type = 'button'; x.addEventListener('click', snapClose); top.appendChild(x);
+      if (camDock) { x.setAttribute('aria-label', _t('js.pad.snap.close', 'Close')); x.title = _t('js.pad.snap.close', 'Close'); }
+      host.appendChild(top);
+      if (text) host.appendChild(el('div', 'muted', text));
+      if (camDock && (!document.activeElement || !host.contains(document.activeElement))) setTimeout(function () { if (x.isConnected) x.focus(); }, 0);
+      return host;
     }
     function snapShow(s) {
       var box = snapBox(s.state === 'ok' ? null : (s.status || _t('js.pad.snap.no_picture', 'No picture.')));
+      var groups = { live: [], cap: [], more: [] };
+      function put(kind, fn) { var before = box.children.length; fn(); if (camDock) groups[kind] = groups[kind].concat(Array.prototype.slice.call(box.children, before)); }
       if (s.state === 'ok' && s.img) {
         var im = el('img'); im.alt = _t('js.pad.snap.alt', '{name}\'s cam', { name: label(snapWho) }); im.src = s.img; box.appendChild(im);
       }
       var row = el('div', 'row');
       var t = new Date(s.ts || Date.now());
-      row.appendChild(el('span', null, _t('js.pad.snap.taken', 'taken {time}', { time: ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) })));
-      var rf = el('button', null, _t('js.pad.snap.refresh', 'Refresh')); rf.type = 'button'; rf.addEventListener('click', function () { snapOpen(snapWho, true); }); row.appendChild(rf);
+      var takenTxt = _t('js.pad.snap.taken', 'taken {time}', { time: ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) });
+      row.appendChild(el('span', null, camDock ? '● ' + _t('js.pad.dock.cam_still', 'Still preview') + ' · ' + takenTxt : takenTxt));
+      var rf = el('button', null, camDock ? _t('js.pad.dock.cam_refresh', '↻ Refresh') : _t('js.pad.snap.refresh', 'Refresh')); rf.type = 'button'; rf.addEventListener('click', function () { snapOpen(snapWho, true); }); row.appendChild(rf);
       box.appendChild(row);
       // 1.99yh: 📡 ▶ Live - the cam live over WebRTC, only when the viewer asks (livecam.js decides who may)
-      if (liveCams && window.PATVLiveCam) liveCtl = PATVLiveCam.row(box, slug, snapWho, liveCams, { audioHost: roomEl('rmAudioBox'),
-        strip: window.PATVPadStrip || null, onPin: snapClose, stage: <%= manage_ ? 'true' : 'false' %> ? { slug: slug } : null });   // 1.99zc: 📌 strip / 🎬 stage
+      put('live', function () { if (liveCams && window.PATVLiveCam) liveCtl = PATVLiveCam.row(box, slug, snapWho, liveCams, { audioHost: roomEl('rmAudioBox'),
+        strip: window.PATVPadStrip || null, onPin: snapClose, stage: <%= manage_ ? 'true' : 'false' %> ? { slug: slug } : null }); });   // 1.99zc: 📌 strip / 🎬 stage
       // Save snap (1.99ap): only when the !snap rules let this viewer snap them (the server decides;
       // `save` is null otherwise, and then there's no Download either).
-      if (s.state === 'ok' && s.img && s.save) snapSaveRow(box, s);
+      put('cap', function () { if (s.state === 'ok' && s.img && s.save) snapSaveRow(box, s); });
       // 1.99dr: "✨ Use in Generate" - this frame as the composer's AI reference picture (aigen.js claimCamRef:
       // priced like chat's -cam, the person's opt-out and the room's switches re-checked, never stored)
-      if (s.state === 'ok' && s.img && s.gen) snapGenRow(box, s);
+      put('cap', function () { if (s.state === 'ok' && s.img && s.gen) snapGenRow(box, s); });
       // 1.99ez: 🎬 Clip - Pepe records 10 / 20 / 30 s of this cam (camclip.js); a free preview, pay only to save it
-      if (s.state === 'ok' && s.img && s.clip) snapClipRow(box, s);
+      put('cap', function () { if (s.state === 'ok' && s.img && s.clip) snapClipRow(box, s); });
       // 1.99qr: 🐸 Pepe on this cam - 👀 Look / 🔥 Cam roast / 🎤 Roast with their prices, a confirm step, Pepe's answer
       // (1.99aid privacy controls, round 3 - F2: a frog-name cam too, by its opaque id - 👀 / 🔥 only; padpepe.js and Pepe answer under the
       // frog name, never the login)
-      if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe);
+      put('more', function () { if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe); });
       // 1.99aag: 📺 admins - put this cam on Pepe's OBS (his main stream + his Camfrog cam); onair.js decides (opt-in / owner's OK)
       // (1.99aid privacy controls V-1: a veiled cam too, by its opaque id - onair-cam.js checks it)
-      if (window.PATVOnAirCam && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVOnAirCam.row(box, snapWho);
+      put('more', function () { if (window.PATVOnAirCam && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVOnAirCam.row(box, snapWho); });
+      if (camDock) {
+        row.classList.add('rmd-cam-st');
+        var prim = el('div', 'rmd-cam-sec'); groups.live.forEach(function (n) { prim.appendChild(n); }); prim.appendChild(rf); box.appendChild(prim);
+        [['cap', _t('js.pad.dock.cam_capture', 'Capture & create'), 'rmd-cam-sec'], ['more', _t('js.pad.dock.cam_more', 'More'), 'rmd-cam-more']].forEach(function (g) {
+          if (!groups[g[0]].length) return;
+          box.appendChild(el('p', 'ds-eyebrow', g[1]));
+          var sec = el('div', g[2]); groups[g[0]].forEach(function (n) { sec.appendChild(n); }); box.appendChild(sec);
+        });
+      }
     }
     var clipTimer = null;
     function snapClipRow(box, s) {
@@ -1857,6 +1962,7 @@
       slug: slug, signed: signedIn, linked: <%= linked ? 'true' : 'false' %>, user: <%- JSON.stringify(signedIn && user ? user : null).replace(/</g, '\\u003c') %>,
       nodes: roomNodes, root: document.querySelector('main.rm'), relay: roomRelay, audio: roomAudio, ptt: roomPtt, mod: roomMod,
       person: person, openPerson: openPerson, openTopic: openTopic, canTopic: canTopic, stage: window.PATVPadStage,
+      download: padDl, openCam: function (who) { snapOpen(who); },   // 1.99?? dockclean: the chat ⋯'s ⬇ items, a pinned cam's Cam options
       wake: function () { if (!roomVisible()) { behind = true; return; } schedule(); }
     });
     <% } %>
@@ -1865,15 +1971,18 @@
   </script>
 <% } %>
   <%# 1.99za: the story strip (fresh captures) - was between the header and the tabs on every tab; now the end of Live %>
-  <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length) || (dockOn_ && feed_.viewer))) { %>
-    <section class="card rm-story" aria-label="<%- t('pad.story.aria') %>"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: t('pad.story.fresh'), next: '/p/' + encodeURIComponent(room.slug) }) %></section>
-  <% } %>
+  <% const storyOn_ = !!(feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length) || (dockOn_ && feed_.viewer)));
+     const storyHtml_ = storyOn_ ? '<section class="card rm-story" aria-label="' + t('pad.story.aria') + '">' + include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: t('pad.story.fresh'), next: '/p/' + encodeURIComponent(room.slug) }) + '</section>' : ''; %>
+  <%# 1.99?? dockclean (owner point 27): in the Dock the story strip opens the Feed tab ("Around the pad") and the launchpad card ends
+      About - the Live view is the stage and the chat only %>
+  <% if (!dockOn_) { %><%- storyHtml_ %><% } %>
   <%# 1.99aae: 🚀 the launchpad card (pad-launch.js fills it; hidden unless this pad is on the launchpad) - the very
       end of Live (was between the header and the tabs on every tab) %>
-  <section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section>
+  <% if (!dockOn_) { %><section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section><% } %>
   </section>
 <% if (feed_) { %>
   <section class="ppanel" id="padPanel-feed" role="tabpanel" aria-labelledby="padTab-feed"<%= tabOn_('feed') ? '' : ' hidden' %>>
+    <% if (dockOn_) { %><%- storyHtml_ %><% } %>
     <div class="fcol"><%- include('partials/room-feed', { feed: feed_, fx, embeds, host, room, noStory: true, noRules: true }) %></div>
   </section>
 <% } %>
@@ -1958,6 +2067,7 @@
       </ol>
     </section>
     <% } %>
+    <% if (dockOn_) { %><section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section><% } %>
   </section>
   <script src="/public/js/pad-tabs.js?v=9"></script>
   <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=5" defer></script><% } %>

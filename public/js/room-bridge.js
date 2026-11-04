@@ -99,7 +99,9 @@
     var box = el('div', 'rb-audio hide');
     box.setAttribute('role', 'group'); box.setAttribute('aria-label', _t('js.pad.audio.room_audio', 'Room audio'));
     var play = el('button', 'rb-btn rb-play', '▶'); play.type = 'button'; play.setAttribute('aria-label', _t('js.pad.audio.listen', 'Listen live'));
-    var state = el('span', 'rb-state', _t('js.pad.audio.room_audio', 'Room audio'));
+    // 1.99?? dockclean: opts.idle = the words while nobody plays it (the Room Dock: "▶ Listen to the room")
+    var IDLE = opts && opts.idle ? String(opts.idle) : _t('js.pad.audio.room_audio', 'Room audio');
+    var state = el('span', 'rb-state', IDLE);
     var modeEl = el('span', 'rb-mode hide');        // 1.99il: "⚡ live" (WebRTC) / "standard" (the MP3 relay)
     var meter = el('span', 'rb-meter'); meter.setAttribute('aria-hidden', 'true');
     var bars = [el('i'), el('i'), el('i'), el('i'), el('i')]; bars.forEach(function (b) { meter.appendChild(b); });
@@ -388,7 +390,7 @@
       startGen++; rtcClose(); setMode(null);
       mseStop();
       au.pause(); au.removeAttribute('src'); au.load();
-      jump.classList.add('hide'); paint(); setState(msg || (curName ? _t('js.pad.audio.named_audio', '{name} · audio', { name: curName }) : _t('js.pad.audio.room_audio', 'Room audio')), '');
+      jump.classList.add('hide'); paint(); setState(msg || (curName ? _t('js.pad.audio.named_audio', '{name} · audio', { name: curName }) : IDLE), '');
       notify();
     }
     var listeners = [];
@@ -506,7 +508,7 @@
         play.title = on ? '' : (d && d.room && d.room.live === false ? _t('js.pad.audio.title_offline', 'The pad\'s chat room isn\'t live right now') : _t('js.pad.audio.title_relay_off', 'The room\'s audio relay is off (an admin turns it on with !bridge audio on)'));
         if (!on) { if (was) stop(); setState('🔇 ' + why, ''); }
         else if (store('patvRoomAudio') === '1') setState(_t('js.pad.audio.resume_listening', '▶ to resume listening'), '');
-        else setState(_t('js.pad.audio.room_audio', 'Room audio'), '');
+        else setState(IDLE, '');
       },
     };
   }
@@ -558,10 +560,53 @@
     // 1.99ye: the outbox - {cid, text, at, st: queue|posting|wait|sent|failed, id, off, why, code, node, stEl, settled}
     var outbox = [], meU = null, busy = false, backoff = 0, retryTimer = null, noteTimer = null;
     var optimistic = !!feedEl;
+    // 1.99?? dockclean (owner point 30): opts.people() = the names this page knows (room.ejs acPeople: {value, name, login, tag, u}) -
+    // after "@" or in a "!command " line's second word the list offers them (Tab / Enter / a tap accepts); opts.avatar(u) draws one
+    var people = typeof opts.people === 'function' ? opts.people : null, avatarOf = typeof opts.avatar === 'function' ? opts.avatar : null, acName = null;
 
     function fmtPrice(n) { return n > 0 ? Number(n).toLocaleString('en-US') + ' PAT' : ''; }
-    function closeAc() { list.classList.add('hide'); list.textContent = ''; acItems = []; acIdx = -1; inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); }
+    function closeAc() { list.classList.add('hide'); list.classList.remove('rb-ac-names'); list.textContent = ''; acItems = []; acIdx = -1; acName = null; inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); }
     function pick(c) { inp.value = c + ' '; closeAc(); inp.focus(); }
+    function nameCtx() {
+      if (!people) return null;
+      var pos = typeof inp.selectionStart === 'number' && inp.selectionStart !== null ? inp.selectionStart : inp.value.length, before = inp.value.slice(0, pos);
+      var m = /(^|\s)@([^\s@]{0,40})$/.exec(before);
+      if (m) return { at: true, start: pos - m[2].length - 1, end: pos, q: m[2] };
+      m = /^(![A-Za-z0-9_]{1,30})\s+([^\s]{0,40})$/.exec(before);
+      if (m && m[1].toLowerCase() !== '!commands') return { at: false, start: pos - m[2].length, end: pos, q: m[2] };
+      return null;
+    }
+    function takeName(p, c) {
+      var val = (c.at ? '@' : '') + p.value, rest = inp.value.slice(c.end);
+      inp.value = inp.value.slice(0, c.start) + val + (/^\s/.test(rest) ? '' : ' ') + rest;
+      var at = c.start + val.length + 1; if (inp.setSelectionRange) inp.setSelectionRange(at, at);
+      closeAc(); paintCount(); inp.focus();
+    }
+    function openNames(c) {
+      var q = c.q.toLowerCase(), pre = [], mid = [];
+      var all = []; try { all = people() || []; } catch (e) { all = []; }
+      all.forEach(function (p) {
+        var hay = [p.name, p.value, p.login].filter(Boolean).map(function (x) { return String(x).toLowerCase(); });
+        // (a name's start, or a word's start inside it - "fa" finds Aster Fable and quill-fable - comes before a match mid-word)
+        if (!q || hay.some(function (h) { var i = h.indexOf(q); return i === 0 || (i > 0 && /[\s_.-]/.test(h.charAt(i - 1))); })) pre.push(p);
+        else if (hay.some(function (h) { return h.indexOf(q) > 0; })) mid.push(p);
+      });
+      var rows = pre.concat(mid).slice(0, 8);
+      list.textContent = ''; acItems = [];
+      if (!rows.length || (rows.length === 1 && String(rows[0].value).toLowerCase() === q)) { closeAc(); return; }
+      acName = c; list.classList.add('rb-ac-names');
+      rows.forEach(function (p, i) {
+        var li = el('li', 'rb-ac-it rb-ac-p'); li.id = list.id + '-' + i; li.setAttribute('role', 'option');
+        if (avatarOf && p.u) { try { var av = avatarOf(p.u); if (av) li.appendChild(av); } catch (e) { /* no picture */ } }
+        var nm = el('span', 'rb-ac-n', p.name || p.value); li.appendChild(nm);
+        if (p.login) li.appendChild(el('span', 'rb-ac-l', p.login));
+        if (p.tag) li.appendChild(el('span', 'rb-ac-t', p.tag));
+        li._pick = function () { takeName(p, c); };
+        li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });
+        list.appendChild(li); acItems.push(li);
+      });
+      acIdx = -1; list.classList.remove('hide'); inp.setAttribute('aria-expanded', 'true'); paintAc();
+    }
     function paintAc() {
       acItems.forEach(function (li, i) {
         var on = i === acIdx; li.classList.toggle('on', on); li.setAttribute('aria-selected', on ? 'true' : 'false');
@@ -569,7 +614,8 @@
       });
     }
     function openAc() {
-      var v = inp.value;
+      var v = inp.value, nc = nameCtx();
+      if (nc) { openNames(nc); return; }
       if (!cmds || v.charAt(0) !== '!' || /\s/.test(v)) { closeAc(); return; }
       var q = v.toLowerCase();
       var names = Object.keys(cmds).concat(['!commands']).filter(function (c) { return c.indexOf(q) === 0; }).sort();
@@ -582,6 +628,7 @@
         li.appendChild(el('span', 'rb-ac-c', c));
         var p = c === '!commands' ? _t('js.pad.relay.list_all', 'list them all') : fmtPrice(cmds[c]);
         if (p) li.appendChild(el('span', 'rb-ac-p', p));
+        li._pick = function () { pick(c); };
         li.addEventListener('mousedown', function (e) { e.preventDefault(); pick(c); });
         list.appendChild(li); acItems.push(li);
       });
@@ -595,6 +642,7 @@
       count.title = _t('js.pad.relay.chars_title', 'A Camfrog chat line holds {max} characters from the website', { max: SAY_MAX });
     }
     inp.addEventListener('input', function () { openAc(); paintCount(); });
+    inp.addEventListener('click', function () { if (people && nameCtx()) openAc(); });
     inp.addEventListener('blur', function () { setTimeout(closeAc, 100); });
     inp.addEventListener('keydown', function (e) {
       // ↑ in an empty box: take back your last failed message to fix it (Camfrog can't edit a line once it's sent)
@@ -603,10 +651,15 @@
           if (outbox[i].st === 'failed') { e.preventDefault(); inp.value = outbox[i].text; drop(outbox[i]); paintCount(); return; }
         }
       }
+      // 1.99?? dockclean: Tab in a name position with the list closed completes in place (one match, or opens the list)
+      if (e.key === 'Tab' && !e.shiftKey && (list.classList.contains('hide') || !acItems.length)) {
+        var nc = nameCtx(); if (nc && nc.q) { openNames(nc); if (acItems.length === 1) { e.preventDefault(); acItems[0]._pick(); return; } if (acItems.length) { e.preventDefault(); acIdx = 0; paintAc(); } return; }
+      }
       if (list.classList.contains('hide') || !acItems.length) return;
       if (e.key === 'ArrowDown') { e.preventDefault(); acIdx = (acIdx + 1) % acItems.length; paintAc(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); acIdx = acIdx <= 0 ? acItems.length - 1 : acIdx - 1; paintAc(); }
-      else if ((e.key === 'Enter' || e.key === 'Tab') && acIdx >= 0) { e.preventDefault(); pick(acItems[acIdx].firstChild.textContent); }
+      else if (e.key === 'Tab' && !e.shiftKey && acName) { e.preventDefault(); acItems[acIdx >= 0 ? acIdx : 0]._pick(); }
+      else if ((e.key === 'Enter' || e.key === 'Tab') && acIdx >= 0) { e.preventDefault(); acItems[acIdx]._pick(); }
       else if (e.key === 'Escape') { closeAc(); }
     });
 
@@ -828,7 +881,7 @@
         form.classList.toggle('hide', !(d && d.room && d.room.relay));
         cmds = d && d.room && d.room.cmds ? d.room.cmds : null;
         hint.classList.toggle('hide', !(cmds && d.room.relay));
-        inp.placeholder = cmds ? _t('js.pad.relay.placeholder_cmds', 'Say something, or type ! for commands — relayed as “🌐 you (web)”') : _t('js.pad.relay.placeholder', 'Say something — Pepe relays it as “🌐 you (web)”');
+        inp.placeholder = opts.placeholder ? String(opts.placeholder) : cmds ? _t('js.pad.relay.placeholder_cmds', 'Say something, or type ! for commands — relayed as “🌐 you (web)”') : _t('js.pad.relay.placeholder', 'Say something — Pepe relays it as “🌐 you (web)”');
         if (d && d.me) meU = d.me;
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         lastJs = js;
@@ -1029,6 +1082,7 @@
     btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); upAt = 1; start(); } });
     return {
       adopt: adopt,
+      listMics: listMics,      // 1.99?? dockclean: Audio settings re-reads the device names after it asked for them
       onRecording: function (fn) {
         if (typeof fn !== 'function') return function () {};
         recordListeners.push(fn); fn(recording);

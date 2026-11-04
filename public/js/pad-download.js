@@ -294,7 +294,8 @@
       if (!ok) { closeMenu(false); closeDlg(); }
     }
     update();
-    return { update: update, open: openDialog, close: function () { closeMenu(false); closeDlg(); }, _items: items };
+    // 1.99?? dockclean: the Room Dock builds these items into its own chat ⋯ (items / run) - no second popover there
+    return { update: update, open: openDialog, close: function () { closeMenu(false); closeDlg(); }, _items: items, items: items, run: run };
   }
   window.PATVPadDownload = { init: init };
 })();

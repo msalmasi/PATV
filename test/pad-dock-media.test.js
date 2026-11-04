@@ -117,6 +117,32 @@ test("a relayed pick is media only when its own say job carried that very token"
   assert.equal(webLine("[gif:orchard_A1]")._job, undefined, "(the job id itself stays server-only, as before)");
 });
 
+// 1.99?? dockclean (owner point 21): a 🧸 PATV sticker sent from the Dock. Pepe posts its readable stand-in ("[sticker: Name]" -
+// stickers.fallbackText), and the echo of THAT say job is marked md "sticker" + stk "<pack>/<id>"; the same words typed (or a job for
+// other words) stay text. The renderer draws the site's own art; the reusable text (quotes, ✂️ Clip chat, downloads) is the stand-in.
+test("dockclean: a PATV sticker's echo is marked by its own say job, drawn as the pack's art, and reads as its stand-in everywhere else", async () => {
+  const alt = "[sticker: Who's talking?]";
+  const mine = job(alt); relay._jobs.get(mine).stk = { pack: "miclife", id: "who", alt };
+  const other = job("[sticker: Not this one]"); relay._jobs.get(other).stk = { pack: "miclife", id: "hi", alt: "[sticker: Hi]" };
+  const web = (text, jid) => ev("message", { user: PEPE, text: "🌐 Bob (web): " + text, self: true, web: { user: BOB, text, job: jid } });
+  await sync1([web(alt, mine), web("[sticker: Not this one]", other), ev("message", { user: ALICE, text: alt, md: "sticker", stk: "miclife/who" })]);
+  const marked = line((x) => x.u && x.u.web && x.text === alt);
+  assert.equal(marked.md, "sticker"); assert.equal(marked.stk, "miclife/who");
+  const plain = line((x) => x.u && x.u.web && x.text === "[sticker: Not this one]"); assert.equal(plain.md, undefined); assert.equal(plain.stk, undefined);
+  const typed = line((x) => x.u && !x.u.web && x.text === alt); assert.equal(typed.md, undefined, "typed words never mark themselves"); assert.equal(typed.stk, undefined);
+  const C = require(path.join(repo, "public/js/chatlog-core"));
+  assert.deepEqual({ ...C.mediaOf(marked) }, { type: "sticker", pack: "miclife", id: "who", alt: "Who's talking?" });
+  assert.equal(C.mediaOf({ k: "msg", text: alt, md: "sticker", stk: "../x" }), null, "a bad key draws nothing");
+  const html = String(C.renderItem(marked, { t: null, data: true }, C.htmlH));
+  assert.match(html, /<img class="pstk" src="\/public\/stickers\/miclife\/who\.svg" alt="Who&#39;s talking\?"/);
+  assert.match(html, /data-text="\[sticker: Who&#39;s talking\?\]"/, "quotes / ✂️ Clip chat read the stand-in");
+  assert.ok(String(C.textItem(marked, {})).includes(alt), "the TXT download writes the stand-in");
+  const bar = String(C.renderItem({ ...marked, mask: "m" }, { t: null, data: true }, C.htmlH)); assert.doesNotMatch(bar, /pstk|miclife/, "a bar draws no sticker");
+  // the projection keeps the key only beside its mark
+  const CV = require(path.join(repo, "chatlogview"));
+  assert.ok(CV.OUT_KIND.msg.includes("stk"));
+});
+
 test("D2: a veiled sender's GIF / sticker is marked like anyone's (v1 someone, v2 incognito); a hidden sender's line stays a bar", async () => {
   const anonUser = () => ({ id: "anon-" + crypto.randomBytes(4).toString("hex"), display: "someone", anonymous: true });
   // privacy wire v1: an incognito sender's relayed line arrives anonymised ("someone") with its job

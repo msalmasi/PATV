@@ -688,7 +688,7 @@ test("1.99aht RV-1: chatlog-core gives a bar with a 🎙 id data-tx (🔊 Clip) 
   assert.equal(en["js.pad.cc.mic_note_nowords"], "Trim it, then post it. It goes up without a caption: the speaker's words stay hidden. Whoever is heard in it can remove it.");
   const room = fs.readFileSync(path.join(repo, "views/room.ejs"), "utf8");
   assert.ok(room.includes("/public/js/chat-clip.js?v=5") && !/chat-clip\.js\?v=[1-4]\b/.test(room), "chat-clip.js loads as v=5");
-  assert.ok(room.includes("/public/js/chatlog-core.js?v=9"), "chatlog-core.js as v=9 (1.99ajc dockfu: media drawn only with the server's mark)");
+  assert.ok(room.includes("/public/js/chatlog-core.js?v=10"), "chatlog-core.js as v=10 (1.99?? dockclean: PATV stickers, no repeated said time)");
 });
 
 // 1.99aht RV-4: the privacy policy now says "Your mic transcripts from before you turned transcripts off are left out until you turn them

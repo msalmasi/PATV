@@ -165,7 +165,9 @@ test("launchpad: the card is the last thing in the Live tab (after Manage room a
   assert.match(live, /<section class="card pad-launch" id="padLaunch" data-slug="plant_based_chatting" aria-label="[^"]+" hidden><\/section>\s*<\/section>\s*(<section class="ppanel|$)/, "the panel's last element");
   const src = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
   assert.ok(src.indexOf('id="padLaunch"') > src.indexOf('class="card rm-story"'), "after the story strip too");
-  assert.equal((src.match(/id="padLaunch"/g) || []).length, 1);
+  // 1.99?? dockclean: one per layout - the end of Live on the legacy page, the end of About in the Room Dock (never both on one page)
+  assert.equal((src.match(/id="padLaunch"/g) || []).length, 2);
+  assert.equal((html.match(/id="padLaunch"/g) || []).length, 1);
   assert.match(html, /pad-launch\.js\?v=\d+/, "its script still loads");
 });
 
