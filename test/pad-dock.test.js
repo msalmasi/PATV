@@ -137,3 +137,16 @@ test("pad frames draw over the banner and the header keeps its accent tint", () 
   assert.match(String(decl("main.rm.rm-dock #rmHero.has-bn","z-index")),/^calc\(\s*var\(--ds-z-sticky\)\s*\+\s*var\(--ds-z-raised\)\s*\)$/);
   assert.equal(decl("main.rm.rm-dock #rmHero","background"),null,"no flat background over .rm.pad-acc .hero's tint");
 });
+
+// 1.99?? dock review: 1.99ait's "Sync to the audio: on / off" toggle (av-sync.js decorate() appends it to the audio row) was a text
+// button inside the Dock's one-line audio row: it wrapped the row onto two lines (and to a 4-line button on phones), squeezing the
+// chat scroller. In the Dock it is an emoji icon button; its words stay its accessible name (font-size 0 - never display:none or
+// visibility:hidden), its state is the pressed accent outline.
+test("the A/V sync toggle is a compact icon button in the Dock's audio row", () => {
+  const css=read("public/css/pad-dock.css").replace(/\/\*[\s\S]*?\*\//g,"");
+  const body=sel=>{const out=[];const re=/([^{}]+)\{([^{}]*)\}/g;let m;while((m=re.exec(css)))if(m[1].split(",").map(s=>s.trim()).includes(sel))out.push(m[2]);return out.join(";");};
+  const btn=body("main.rm.rm-dock #rmAudioBox .rb-avsync"),icon=body("main.rm.rm-dock #rmAudioBox .rb-avsync::before");
+  assert.match(btn,/font-size\s*:\s*0\b/);assert.match(btn,/white-space\s*:\s*nowrap/);
+  assert.doesNotMatch(btn,/display\s*:\s*none|visibility\s*:\s*hidden/);
+  assert.match(icon,/content\s*:\s*"[^"]+"/);assert.match(icon,/font-size\s*:\s*var\(--ds-fs-/);
+});
