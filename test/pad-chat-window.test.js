@@ -95,6 +95,7 @@ test.before(async () => {
   PA.register(app, { addUser });
   require(path.join(repo, "roomsweb")).register(app, { addUser, isBotToken: () => false });
   bridge.register(app, { addUser, isBotToken: () => false });
+  require(path.join(repo, "home")).register(app, { addUser, xpForNextLevel: () => 100 });   // (the homepage's Room Dock follows the same switch)
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
 });
@@ -289,4 +290,19 @@ test("the window's script: another account's answer (vt) or a 401 wipes every li
     (P.win.window.addEventListener, P.win);
     assert.deepEqual(P.errors, [], what);
   }
+});
+test("the homepage's Room Dock follows the same switch: off = today's homepage, 'staff' = staff only, 'everyone' = all", async () => {
+  const dockOf = async (u) => { const r = await get("/", u); assert.equal(r.status, 200, r.text.slice(0, 200)); return /id="hmDock"/.test(r.text) ? "dock" : /class="hm ds-page"/.test(r.text) ? "legacy" : "?"; };
+  try {
+    await mode("off");
+    for (const u of [null, U.viewer, U.staff]) assert.equal(await dockOf(u), "legacy", "off");
+    await mode("staff");
+    assert.equal(await dockOf(U.viewer), "legacy", "'staff' - a viewer"); assert.equal(await dockOf(null), "legacy", "'staff' - signed out");
+    assert.equal(await dockOf(U.staff), "dock", "'staff' - staff");
+    await mode("everyone");
+    for (const u of [null, U.viewer, U.staff]) assert.equal(await dockOf(u), "dock", "everyone");
+    const h = (await get("/", U.viewer)).text;
+    const init = JSON.parse(/<script id="hmdInit" type="application\/json">([\s\S]*?)<\/script>/.exec(h)[1]);   // (JSON.parse reads the page's \u003c escapes itself)
+    assert.equal(init.vt, RPM.tag(U.viewer.userId), "the homepage's viewer tag");
+  } finally { await mode("everyone"); }
 });
