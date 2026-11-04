@@ -490,6 +490,7 @@ const RULES = {
   "net_ban_exempt.user_id": M({ key: ["ban_id"] }),
   "net_views.admin_id": { keep: "the network view log names who looked (2 years)" }, "net_views.subject_id": { keep: "the network view log names whose data was looked at" },
   "netban_config.actor": { deny: NAME },
+  "veil_gifts.from_user": M(), "veil_gifts.to_user": M(), "veil_gifts.to_login": { deny: NAME }, "veilgift_config.actor": { deny: NAME },   // 1.99?? padppl
   "dm_prefs.user_id": M({ key: [] }), "dm_prefs.who": { deny: "a setting ('everyone' / 'following' / 'nobody')" },
   "dm_alerts.user_id": M({ key: ["conversation_id"], merge: { pending: "SUM", first_at: "MIN", last_msg_id: "MAX", last_alert_at: "MAX" } }),
   "dm_reports.sender_id": M(), "dm_reports.reporter_id": M({ key: ["message_id"] }), "dm_reports.resolved_by": M(),

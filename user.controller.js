@@ -538,6 +538,7 @@ async function completeCamfrogLink(userId, camfrogUsername) {
       // 1.99?? padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
       try { await require("./blocks").linked(userId, cfLower); } catch (e) { /* blocks.js logs */ }
       try { await require("./padbans").linked(userId, cfLower); } catch (e) { /* padbans.js logs */ }
+      try { await require("./veilgift").linked(userId, cfLower); } catch (e) { /* veilgift.js logs */ }
       return out;
     }
   }

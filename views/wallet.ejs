@@ -221,6 +221,18 @@
   </div></nav>
 
   <!-- ───────── Recent activity · send / tip · give ───────── -->
+  <%# 1.99?? padppl: 🎁 gifts sent to you under a frog name (veilgift.js) - hidden until there are any (wallet-gifts.js) %>
+  <section class="sec" id="gifts" aria-labelledby="giftsH" hidden>
+    <div class="sec-h"><h2 id="giftsH" class="ds-pixel-h">🎁 <%- t('wallet.gifts.h') %></h2></div>
+    <div class="card">
+      <p class="info"><%- t('wallet.gifts.why') %></p>
+      <ul id="giftsList" style="list-style:none;margin:0;padding:0;display:grid;gap:8px"></ul>
+      <p><button type="button" class="btn" id="giftsAll" hidden><%- t('wallet.gifts.all') %></button></p>
+      <p class="info" id="giftsMsg" role="status" aria-live="polite"></p>
+    </div>
+    <script src="/public/js/wallet-gifts.js?v=1" defer></script>
+  </section>
+
   <section class="sec" id="activity" aria-labelledby="actH">
     <div class="two">
       <div class="card">

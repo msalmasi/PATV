@@ -39,6 +39,7 @@ const KINDS = {
   lotto:       { icon: "🎟️", label: "Lotto", link: "/lotto" },
   raffle:      { icon: "🎫", label: "Raffles (wins, draws, refunds)", link: "/raffles" },   // 1.99xk: raffles.js
   tip:         { icon: "💸", label: "Tips", link: "/history" },
+  gift:        { icon: "🎁", label: "Gifts sent to you under a frog name (yours to accept)", link: "/wallet#gifts" },   // 1.99?? padppl: veilgift.js
   achievement: { icon: "🏅", label: "Achievements", link: "/achievements" },
   stage:       { icon: "📺", label: "Stage & streaming", link: "/stage" },
   media:       { icon: "🎬", label: "Movie & show requests, Plex invites", link: "/requests" },   // 1.99ji: mediarequests.js / mediainvites.js

@@ -281,6 +281,10 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   // 1.99?? padppl: blocks on Camfrog logins and on frog names (blocks.js) - a frog-name block as its label, pad and day only (never who)
   await put("messages", "your_login_blocks", rows("login_blocks", "blocker_id = ?", [uid]));
   await put("messages", "your_frog_name_blocks", rows("veil_blocks", "blocker_id = ?", [uid], { omit: ["blocked_id", "blocked_login", "blocker_id"] }));
+  // 1.99?? padppl 🎁 gifts to frog names (veilgift.js): what you sent - the frog name, amount and day only (never who, never whether it
+  // was accepted); what was sent to you - everything about it but the sender's id (their name is in your history once you accept)
+  await put("wallet", "gifts_sent", rows("veil_gifts", "from_user = ?", [uid], { omit: ["to_user", "to_login", "state", "hold_id", "decided_at", "settled_at", "key", "from_user", "room_id", "due_at"] }));
+  await put("wallet", "gifts_received", rows("veil_gifts", "to_user = ?", [uid], { omit: ["from_user", "to_login", "hold_id", "key"] }));
   // storyreact site: which of your messages were story replies - metadata only (never the story's id or whose it was)
   await put("messages", "story_replies", rows("dm_story_refs", "sender_id = ?", [uid], { omit: ["story_id", "author_id", "author_name"] }));
   // notices + preferences

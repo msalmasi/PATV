@@ -1789,6 +1789,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     ...(web ? { web: wbm ? web.map(withBan) : web } : {}),
     ...(blk ? { blk } : {}),
     ...(wmod ? { wmod } : {}),
+    ...(userId && (() => { try { return require("./veilgift").isOn(); } catch (e) { return false; } })() ? { gifts: 1 } : {}),   // 1.99?? padppl: 🎁 on a frog name's menu
     ...(userId && withMe ? { mnMuted: await require("./mentions").padMuted(userId, R.id).catch(() => false) } : {}),   // 1.99?? padppl
     mic: mic.map((u) => withTip(pageMic(u))),          // micfollow: proven / since never reach pages
     feed, cursor: at.cursor,
@@ -2143,7 +2144,8 @@ function register(app, { isBotToken, addUser }) {
   relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown, gated: (R) => isLive(R) && !bridgeOk(R.id),
                         liveIds: () => new Set([...rooms.values()].filter(isLive).map((R) => R.id)) });
   require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });
-  require("./padbans").register(app, { addUser, bySlug });       // 1.99?? padppl: the website's bans from the person menu (padbans.js)      // 1.99xa: !bridge block - web senders blocked per room / everywhere
+  require("./padbans").register(app, { addUser, bySlug });       // 1.99?? padppl: the website's bans from the person menu (padbans.js)
+  require("./veilgift").register(app, { addUser, bySlug });      // 1.99?? padppl: 🎁 gifts to frog names - a private inbox (veilgift.js, dark)      // 1.99xa: !bridge block - web senders blocked per room / everywhere
   require("./pepemodlog").register(app, { isBotToken, addUser, bySlug });        // 1.99zf: Pepe's mod log per room (owner panel moderation history)
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover

@@ -165,6 +165,8 @@
       var vref = x.c ? { k: 'line', c: Number(x.c) } : u.id ? { k: 'veil', id: String(u.id) } : null;
       if (!vref) return [];
       var vo = [{ kind: 'block', id: 'block', group: 'safety', label: '🚫 ' + tr('js.block.menu', 'Block…'), ref: vref, veil: true, danger: true }];
+      // 1.99?? padppl: 🎁 a gift to the frog name (veilgift.js - a private gift inbox; only while the live view says gifts are on)
+      if (x.gifts) vo.unshift({ kind: 'gift', id: 'gift', group: 'who', label: '🎁 ' + tr('js.gift.menu', 'Send a gift…'), ref: vref, veil: true });
       if (P.banItems) P.banItems(vo, u, x, vref, true);
       return vo;
     }
@@ -641,7 +643,8 @@
       var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed, pepe: room && room.pepe, pvp: extra.pvp || null,
         blk: typeof opts.blk === 'function' ? opts.blk() : null, local: localBlk, c: extra.c || null, meName: opts.me || null,
         meLogin: typeof opts.meLogin === 'function' ? opts.meLogin() : null,
-        wmod: typeof opts.wmod === 'function' ? opts.wmod() : null, wban: extra.wban || u.wban || null, slug: slug });
+        wmod: typeof opts.wmod === 'function' ? opts.wmod() : null, wban: extra.wban || u.wban || null, slug: slug,
+        gifts: typeof opts.gifts === 'function' ? !!opts.gifts() : false });
       if (!items.length) return;
       var who = u.anon ? (u.alias || u.display || 'someone') : (u.display || u.login);
       var p = el('div', 'pm-pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Actions for ' + who);
@@ -697,6 +700,12 @@
             if (!window.PATVBlockSheet) return;
             window.PATVBlockSheet.open({ ref: it.ref, slug: slug, name: who, veil: !!it.veil, on: it.id === 'block', anchor: anchor,
               onDone: function (a) { if (!it.veil) localBlk[refKey(it.ref)] = !!a.blocked; if (typeof opts.onBlock === 'function') opts.onBlock(a); } });
+            return;
+          }
+          // 1.99?? padppl: 🎁 a gift to a frog name - the gift sheet (gift-sheet.js)
+          if (it.kind === 'gift') {
+            closeMenu(false);
+            if (window.PATVGiftSheet) window.PATVGiftSheet.open({ ref: it.ref, slug: slug, name: who, anchor: anchor });
             return;
           }
           // 1.99?? padppl: 🌐🚫 / ⛔ / 🛑 the website's bans and their Lift - the ban sheet (pad-ban-sheet.js)
