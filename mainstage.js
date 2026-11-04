@@ -179,7 +179,7 @@ let clock = () => Date.now();
 const now = () => clock();
 
 class Refuse extends Error {
-  // 1.99ajj plexchat: an optional stable code (libraryOpen's - Pepe's chat words it in the room's language)
+  // 1.99?? plexchat: an optional stable code (libraryOpen's - Pepe's chat words it in the room's language)
   constructor(status, message, code) { super(message); this.status = status; this.refuse = true; if (code) this.code = code; }
 }
 

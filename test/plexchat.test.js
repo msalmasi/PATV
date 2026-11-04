@@ -1,4 +1,4 @@
-// Offline tests for 1.99ajj 📼 PLEX FROM CHAT (plexchat.js - Pepe's POST /api/medialib/bot), end to end against the REAL
+// Offline tests for 1.99?? 📼 PLEX FROM CHAT (plexchat.js - Pepe's POST /api/medialib/bot), end to end against the REAL
 // media-control service (deploy/mediactl) with a mocked Plex (movies + two shows) and a fake ffmpeg, on a temp DB:
 // the bot token, speaker resolution (linked login / CF auto account / no account / user_id / archived), access (off, member
 // free, paid price 400 / 409), the pad's visibility (Approved, 18+), preflight (own slot, cap, busy pad, encoder busy), search

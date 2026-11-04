@@ -604,7 +604,7 @@ const MODE_ICON = { image: "🖼", card: "🔗", live: "🌐" };
 
 // 1.99aao: staff pick a 📼 Plex title from the player bar: it plays on Pepe's own pad (medialib's normal path - its access
 // rules, encoder cap and log) and that slot goes on air at once; allow_library still decides whether Plex may go on air.
-// 1.99ajj plexchat: + `price` (the price the person confirmed - medialib.play checks it like /stage does) and `mode` (Pepe's chat;
+// 1.99?? plexchat: + `price` (the price the person confirmed - medialib.play checks it like /stage does) and `mode` (Pepe's chat;
 // the player bar passes none and keeps replacing what's on, as before):
 //   "now"      only while nothing is on Pepe's main stream - else refused onair_busy, with what's on (its label)
 //   "replace"  the player bar's way: whatever is on is replaced (logged "replaced")
@@ -629,7 +629,7 @@ async function setLibrary(key, by, { admin, user, price, mode } = {}) {
     throw e;
   }
 }
-// ── 1.99ajj plexchat: 📼 Plex on Pepe's cam from chat (plexchat.js) ──
+// ── 1.99?? plexchat: 📼 Plex on Pepe's cam from chat (plexchat.js) ──
 const LIBRARY_WAIT_MS = 3 * 3600 * 1000;      // a queued 📼 title still waiting after this long is missed, never played late
 const LIBRARY_MAX_QUEUED = 3;
 /** The operator's IRL feed is live on Pepe's OBS (it wins: nothing replaces it). */
@@ -933,10 +933,10 @@ async function exposedOwnerWhy(r, t) {
 async function queueTick(t = now()) {
   const r = await Q().due({ idleMain: !TARGET, idleCorner: !OVERLAY, enabled: CFG.enabled, mediaOk: botMediaOk("image", t), liveOk: botMediaOk("live", t),
                             directOk: botMediaOk("image", t, true), liveMain: isLiveMedia(TARGET), liveCorner: isLiveMedia(OVERLAY),
-                            irl: irlLive(t), libraryOk: !!CFG.allow_library, libraryWaitMs: LIBRARY_WAIT_MS }, t);   // 1.99ajj plexchat
+                            irl: irlLive(t), libraryOk: !!CFG.allow_library, libraryWaitMs: LIBRARY_WAIT_MS }, t);   // 1.99?? plexchat
   if (!r) return;
   try {
-    if (r.kind === "library") {                    // 1.99ajj plexchat: a 📼 title queued from chat (its owner re-checked now)
+    if (r.kind === "library") {                    // 1.99?? plexchat: a 📼 title queued from chat (its owner re-checked now)
       if (await playQueuedLibrary(r, t)) await Q().mark(r.id, "played", null, t);
       return;
     }

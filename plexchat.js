@@ -1,4 +1,4 @@
-// plexchat.js — 1.99ajj: 📼 PLEX FROM CHAT. Pepe's one bot route for "pepe play the matrix" / "!plex alien -cam" in a Camfrog room
+// plexchat.js — 1.99??: 📼 PLEX FROM CHAT. Pepe's one bot route for "pepe play the matrix" / "!plex alien -cam" in a Camfrog room
 // or a pad's web chat: search the library, start a title / an episode / a season on the pad's stage, queue it behind what's on,
 // put it on Pepe's main stream (staff), the controls, what's playing.
 //
@@ -254,10 +254,11 @@ async function opControl(user, b) {
   await seeOrFail(user, R);
   const action = String(b.action || "");
   const clock_ = ML()._q.clock;
+  const pad = { id: R.id, title: R.title || R.id };
   const s = await ML()._q.session(R.id);
-  if (action === "pause") { const r = await ML().pause(user, R.id); return { ok: true, action, at: clock_(r.position || 0) }; }
-  if (action === "resume") { await ML().resume(user, R.id); return { ok: true, action }; }
-  if (action === "stop") { await ML().stop(user, R.id, "stopped"); return { ok: true, action }; }
+  if (action === "pause") { const r = await ML().pause(user, R.id); return { ok: true, action, at: clock_(r.position || 0), pad }; }
+  if (action === "resume") { await ML().resume(user, R.id); return { ok: true, action, pad }; }
+  if (action === "stop") { await ML().stop(user, R.id, "stopped"); return { ok: true, action, pad }; }
   if (action === "seek" || action === "seek_rel") {
     if (!s) throw new Fail("nothing_on", "Nothing from the library is playing on this pad.", 404);
     const v = Math.floor(Number(b.value));
@@ -265,7 +266,7 @@ async function opControl(user, b) {
     const here = Math.max(0, Number(s.position) || 0) + (s.state === "playing" ? Math.max(0, (now() - Number(s.updated || now())) / 1000) : 0);
     const to = Math.max(0, Math.min(action === "seek" ? v : Math.round(here + v), Math.max(0, (Number(s.duration) || 0) - 30)));
     const r = await ML().seek(user, R.id, to);
-    return { ok: true, action, from: clock_(here), to: clock_(r.position != null ? r.position : to) };
+    return { ok: true, action, from: clock_(here), to: clock_(r.position != null ? r.position : to), pad };
   }
   if (action === "next" || action === "prev") {
     const q = await MQ().activeFor(R.id);
@@ -274,7 +275,7 @@ async function opControl(user, b) {
       throw new Fail("nothing_on", "Nothing from the library is playing on this pad.", 404);
     }
     const r = action === "next" ? await MQ().next(user, R.id) : await MQ().prev(user, R.id);
-    return { ok: true, action, title: r.title || null, ended: !!r.ended };
+    return { ok: true, action, title: r.title || null, ended: !!r.ended, pad };
   }
   throw new Fail("bad", "Bad control.", 400);
 }

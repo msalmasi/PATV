@@ -1384,6 +1384,56 @@
    }
   },
   {
+   "id": "plex",
+   "title": "!plex <title> · !watch",
+   "category": "stage",
+   "role": "everyone",
+   "commands": [
+    "!plex",
+    "!watch"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!plex <title> [year]",
+    "!plex <show> s2e5 · !plex <show> season 2",
+    "!watch <title>",
+    "!plex yes · !plex no · !plex <1-5>",
+    "!plex next | prev | pause | resume | stop | np",
+    "!plex skip +10 · !plex skip -2 · !plex seek 1:02:30",
+    "!plex queue <title>",
+    "!plex <title> -cam · !plex cam <title>",
+    "!plex on|off · !plex nl on|off"
+   ],
+   "summary": "Put a movie or a show from the Plex library on this pad's stage - just ask Pepe (\"pepe play the matrix\") and he checks with YOU before anything plays.",
+   "details": "Say it in plain words - `pepe play the matrix`, `pepe can we watch the office season 2`, `pepe put on the next episode` - or type `!plex <title>` (`!watch` works too). Pepe looks it up in the Plex library and answers with the best match (title, year or episode, length, price) or a short numbered list, then waits about a minute for **your** answer: `yes`, a number (`2`, `the 1979 one`) or `no`. Nobody else can confirm your pick, and nothing plays until you do. It starts on this room's pad stage under your PATV account, with the same rules as publicaccess.tv/stage's 📼 Play from Plex: Plex members play free (a few a day), everyone else pays PAT per started hour (taken when it starts, refunded if it never gets on), one library stream per pad. A season plays back to back as one queue. **While it plays:** `pepe pause` / `resume` / `skip ahead 5 minutes` / `next episode` / `stop` (`!plex next`, `!plex skip +10`, `!plex seek 1:02:30`, `!plex stop`) for whoever started it, the pad's owner and admins; `pepe what's playing?` / `!plex np` for anyone. `!plex queue <title>` (or `pepe queue the matrix next`) puts a title right after what's on - in your own queue, or a free one. **Pepe's cam:** staff can add `-cam` (or say `pepe put alien on your cam`) to play it on Pepe's main stream instead (publicaccess.tv, Twitch, his Camfrog cam) when Plex on air is allowed; if something is on, say `replace` or `next`. You need a PATV account linked to your chat name (`!signup` is free); from the pad's web chat it runs as your account. Room mods: `!plex on|off` for the whole feature here, `!plex nl on|off` for the plain-words asks.",
+   "examples": [
+    "pepe play the matrix",
+    "!plex the office s2e5",
+    "!plex alien 1979",
+    "!plex yes",
+    "!plex skip +10",
+    "!plex np",
+    "!plex alien -cam"
+   ],
+   "keywords": [
+    "plex",
+    "movie",
+    "film",
+    "tv show",
+    "episode",
+    "watch",
+    "stream a movie",
+    "play a movie",
+    "library",
+    "stage"
+   ],
+   "web": {
+    "label": "📼 Play from Plex",
+    "url": "/stage"
+   },
+   "webchat": true
+  },
+  {
    "id": "twitch",
    "title": "!twitch on|off|status",
    "category": "admin",
@@ -8494,5 +8544,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "bc4b0a4e5779b66a"
+ "hash": "c803a99cd144ff88"
 }

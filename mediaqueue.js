@@ -554,14 +554,14 @@ async function start(user, b = {}) {
   if (!R) throw refuse(404, "No such pad.", { code: "pad" });
   return withLock(R.id, () => launch(user, A, R, b, null));
 }
-/** 1.99ajj plexchat: the pad's visibility (seesPad) then start() - the ONE entry point (the /stage route, Pepe's chat, the Room Dock). */
+/** 1.99?? plexchat: the pad's visibility (seesPad) then start() - the ONE entry point (the /stage route, Pepe's chat, the Room Dock). */
 async function startFor(user, b = {}) {
   const body = { ...(b || {}) };
   const R = await I().roomOf(body.room);
   if (body.room && R && !(await stage.seesPad(user && user.userId ? user : null, R.id))) throw refuse(404, "No such pad.", { code: "pad" });
   return start(user, body);
 }
-/** 1.99ajj plexchat: the same for a booking (Go-live's "Later"). */
+/** 1.99?? plexchat: the same for a booking (Go-live's "Later"). */
 async function bookFor(user, b = {}) {
   const body = { ...(b || {}) };
   const R = await I().roomOf(body.room);
@@ -732,7 +732,7 @@ async function needQueue(user, room) {
 // 1.99lw: the starter, the library admins, the pad's owner (+ site staff) - medialib.mayControl
 const canControl = (user, q) => I().mayControl(user, q.room_id, q.user_id);
 
-// ── 1.99ajj plexchat: growing a running queue (Pepe's "queue the matrix next", ⏭ past the last episode) ──
+// ── 1.99?? plexchat: growing a running queue (Pepe's "queue the matrix next", ⏭ past the last episode) ──
 /** May `user` add titles to queue `q`? Its STARTER (the queue bills them as each title plays), or anyone who may control a
  *  FREE queue (per_hour 0 - nobody is billed). Never adds to a paid queue on someone else's PAT. */
 async function mayGrow(user, q) {
@@ -799,7 +799,7 @@ async function step(user, room, dir) {
     const q = await activeFor(R.id);
     if (!q || !(await canControl(user, q))) throw refuse(404, "There's no queue playing on this pad.", { code: "nothing_on" });
     const to = q.pos + dir;
-    // 1.99ajj plexchat: ⏭ on the last title, when it's an episode, plays the show's next one (appended first) - only for
+    // 1.99?? plexchat: ⏭ on the last title, when it's an episode, plays the show's next one (appended first) - only for
     // whoever the queue bills (its starter) or on a free queue (nobody else's PAT is ever spent by it)
     if (to >= q.items.length && dir > 0 && q.items.length < (conf.get().library_queue_max_items || 60) && (await mayGrow(user, q))) {
       const nxt = await nextEpisodeOf(q.items[q.pos]).catch(() => null);
@@ -923,7 +923,7 @@ async function views({ all = false, userId = null, recent = false } = {}) {
 function routes(app, { J, me, timers = true }) {
   if (timers) fastOn = true;
   app.post("/api/medialib/queue/preview", ...J(async (req) => preview(me(req), req.body || {})));
-  // 1.99ajj plexchat: the pad check lives in startFor / bookFor (one rule source: these routes, Pepe's chat, the Room Dock)
+  // 1.99?? plexchat: the pad check lives in startFor / bookFor (one rule source: these routes, Pepe's chat, the Room Dock)
   app.post("/api/medialib/queue/start", ...J(async (req) => startFor(me(req), req.body || {})));
   // 1.99lw: book a 📼 slot for later (one title or a queue), sized to its runtime
   app.post("/api/medialib/book", ...J(async (req) => bookFor(me(req), req.body || {})));
