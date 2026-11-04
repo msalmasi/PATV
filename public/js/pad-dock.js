@@ -17,12 +17,12 @@
   function shown(n) { return !!(n && n.isConnected && !n.hidden && !(n.classList && n.classList.contains('hide')) && !(n.closest && n.closest('[hidden]'))); }
   function fmtN(n) { return Number(n).toLocaleString('en-US'); }
   // 1.99ajc dockfu (owner decision 6): the controls are EMOJI icons; each button keeps its words as its accessible name and tooltip.
-  // 1.99?? dockpop (owner: no icon with two meanings): 🪟 floats the chat in the page, ↗️ opens it in its own window, 🖼️ is the stage's
+  // 1.99ajh dockpop (owner: no icon with two meanings): 🪟 floats the chat in the page, ↗️ opens it in its own window, 🖼️ is the stage's
   // picture-in-picture, 🔽 / 🔼 hide / show the stage, 🖥️ is fullscreen (one toggle), › opens a page (the homepage's pad chip)
-  // (1.99?? dockpop review: 📽️ Watch on my stage - 📺 is the pad's Prime Time item in the pad menu)
+  // (1.99ajh dockpop review: 📽️ Watch on my stage - 📺 is the pad's Prime Time item in the pad menu)
   var IC = { hide: '🔽', show: '🔼', full: '🖥️', float: '🪟', win: '↗️', pip: '🖼️', back: '↩️', more: '⋯', down: '▾', open: '›', min: '➖', max: '➕', watch: '📽️' };
   var POP_GEO = 'patv.dock.popwin', ALIVE_MS = 5000, DEAD_MS = 15000, SLOW_DEAD_MS = 90000, PENDING_MS = 6000, HANDOFF_MS = 3000;
-  // (1.99?? dockpop review: a pad tab answers every heartbeat - "Back in the pad tab" only while one did within 12 s; LISTEN = the window
+  // (1.99ajh dockpop review: a pad tab answers every heartbeat - "Back in the pad tab" only while one did within 12 s; LISTEN = the window
   // was playing the room when it reloaded: it picks it up again)
   var TAB_FRESH_MS = 12000, LISTEN_KEY = 'patv.dock.listen.', FOCUS_GAP_MS = 15000;
   // the icons the Dock's own controls use (a proxied menu item that brings one of them shows • instead: one meaning per icon)
@@ -49,12 +49,12 @@
     o = o || {};
     var root = o.root || D.querySelector('main.rm.rm-dock');
     if (!root) return null;
-    // 1.99?? dockpop: 'pad' (the pad page), 'popout' (the pad's chat in its own window, /p/<slug>/chat) or 'preview' (the homepage)
+    // 1.99ajh dockpop: 'pad' (the pad page), 'popout' (the pad's chat in its own window, /p/<slug>/chat) or 'preview' (the homepage)
     var mode = o.mode === 'popout' || o.mode === 'preview' ? o.mode : 'pad';
     var nodes = o.nodes || {}, dead = false, ready = false, data = null, holders = [], listeners = [];
     var stage, chat, strip, compose, side, panel, template, holderBox, extras, toolRow, ovTop, ovBot, srcHost, srcBox, snapBtn, clipBtn, playBtn, nowBox;
     var current = null, layer = null, pip = null, pipPending = false, popGeneration = 0, localCam = null, stageHidden = false;
-    // 1.99?? dockpop: the chat in its own window - popped (this page's chat card is hidden in place while a window for this pad and account
+    // 1.99ajh dockpop: the chat in its own window - popped (this page's chat card is hidden in place while a window for this pad and account
     // is open), the window we opened (only while we hold it), the dock-link channel and its timers
     var popped = false, popPending = false, popWin = null, link = null, lastAlive = 0, lastAudio = 0, tabSeen = 0, popBar = null;
     var pendTimer = null, aliveTimer = null, handTimer = null, bringing = false, resumedInClick = false, gone_ = false, lastSlow = false;
@@ -111,7 +111,7 @@
       if (o.wake) o.wake();
       if (W.PATVChipFit && W.PATVChipFit.run) W.PATVChipFit.run();
       paintFull();
-      // (1.99?? dockpop: the stage takes the freed height while the chat floats or is in its own window; body.rmd-afloat keeps a person
+      // (1.99ajh dockpop: the stage takes the freed height while the chat floats or is in its own window; body.rmd-afloat keeps a person
       // menu opened from the floating chat in its Dock look on Feed / About)
       var afloat = !!(current && current.kind === 'float');
       if (root) root.classList.toggle('rmd-chat-out', afloat || popped);
@@ -239,7 +239,7 @@
           if (items.length) items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (at + (e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length].focus();
         }
       } else if (e.key === 'Escape' && current && current.kind === 'float' && current.host.contains(doc.activeElement)) {
-        // (1.99?? dockpop: only from inside the float - an Escape anywhere else on Feed / About never pulls the chat back)
+        // (1.99ajh dockpop: only from inside the float - an Escape anywhere else on Feed / About never pulls the chat back)
         e.preventDefault(); floatBack();
       }
     }
@@ -314,13 +314,13 @@
         host.style.insetBlockStart = Math.max(58, Math.min(W.innerHeight - host.offsetHeight, start.top + e.clientY - start.y)) + 'px';
         host.style.insetInlineEnd = 'auto'; host.style.insetBlockEnd = 'auto';
       });
-      // (1.99?? dockpop review: only a drag that started pins the panel - a tap on ➖ / ↩️ in the bar used to clamp it to inline insets,
+      // (1.99ajh dockpop review: only a drag that started pins the panel - a tap on ➖ / ↩️ in the bar used to clamp it to inline insets,
       // and on a phone the float lost its 8px gutter after Minimize / Expand)
       on(handle, 'pointerup', function () { if (!start) return; start = null; clamp(); }); on(W, 'resize', clamp);
       // 1.99aiw review: the panel's window listener goes with the panel (redock), not one more per float
       return function () { W.removeEventListener('resize', clamp, false); listeners = listeners.filter(function (x) { return x[2] !== clamp; }); };
     }
-    // 1.99?? dockpop (owner P1): the floating chat stays over Feed and About (tabChanged no longer redocks it). Its bar:
+    // 1.99ajh dockpop (owner P1): the floating chat stays over Feed and About (tabChanged no longer redocks it). Its bar:
     // [⠿][💬 Chat + a new-lines dot, while minimized][…][➖ Minimize | ➕ Expand][↩️ Bring it back] - ↩️ on Feed / About also shows Live,
     // the chat's docked place (it would vanish into the hidden panel with the audio still playing). Minimized it is the 44px bar alone:
     // #rmChat stays in it (display: none), so the audio keeps playing and the lines keep coming, with no remount.
@@ -328,7 +328,7 @@
     function floatBack() {
       var onLive = !panel || !panel.hidden; redock();
       if (!onLive) { var lt = tabButton('live'); if (lt) lt.click(); }
-      // (1.99?? dockpop review: focus lands on the chat's ⋯ - the menu item that floated it is gone, and Escape left it on <body>)
+      // (1.99ajh dockpop review: focus lands on the chat's ⋯ - the menu item that floated it is gone, and Escape left it on <body>)
       if (chatMore && chatMore.isConnected) chatMore.focus();
     }
     function floatChat() {
@@ -388,14 +388,14 @@
         toggle.querySelector('.rmd-label').textContent = overlay.hidden ? t('show_chat', 'Show chat') : t('hide_chat', 'Hide chat'); changed();
       });
       toggle.setAttribute('aria-pressed', 'false'); toggle.setAttribute('data-rmd-showchat', '');
-      if (popped || !chat) toggle.hidden = true;     // (1.99?? dockpop: the chat is in its own window - nothing to show here)
+      if (popped || !chat) toggle.hidden = true;     // (1.99ajh dockpop: the chat is in its own window - nothing to show here)
       head.appendChild(toggle); changed();
       if (!host.requestFullscreen) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); return; }
       try { Promise.resolve(host.requestFullscreen()).catch(function () { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); }); }
       catch (e) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); }
     }
     function stageMedia() { return localCam ? localCam.host : stage; }
-    // 1.99?? dockpop: 🖼️ Picture-in-picture is the STAGE's only (Document PiP where the browser has it, else the video's own PiP for the
+    // 1.99ajh dockpop: 🖼️ Picture-in-picture is the STAGE's only (Document PiP where the browser has it, else the video's own PiP for the
     // pad's stream or Pepe's - never the 🎙 mic stage). The chat's Document PiP is gone: it closed with its opener, so it couldn't follow
     // the viewer around the site - ↗️ Chat in its own window does (popWindow). A PiP survives Live / Feed / About; it closes on pagehide.
     function pop(n) {
@@ -523,7 +523,7 @@
     function narrow() { return !!(W.matchMedia && W.matchMedia('(max-width: 1023px)').matches); }
     function mic(list) {
       holders = Array.isArray(list) ? list : []; if (!holderBox || !o.person) return;
-      var max = narrow() || mode !== 'pad' ? 1 : 2;      // (1.99?? dockpop: the homepage's and the window's chat cards are narrow)
+      var max = narrow() || mode !== 'pad' ? 1 : 2;      // (1.99ajh dockpop: the homepage's and the window's chat cards are narrow)
       // 1.99aiw review: redraw only when the holders change - a rebuild restarted animated name styles and dropped keyboard focus
       var key = null;
       try { key = JSON.stringify(holders) + '|' + max + '|' + (o.signed ? 1 : 0) + (o.mod && o.mod.active && o.mod.active() ? 1 : 0); } catch (e) { key = null; }
@@ -790,7 +790,7 @@
       var n = node('rmPplN'); if (n) n.textContent = String(peopleCount());
       if (pplBtn) {
         var c = pplBtn.querySelector('.rmd-count'); if (c) c.textContent = String(peopleCount()); pplBtn.setAttribute('aria-label', t('participants_n', 'In the room · {n}', { n: peopleCount() }));
-        // (1.99?? dockpop: the homepage's sign-in tease has no people to show)
+        // (1.99ajh dockpop: the homepage's sign-in tease has no people to show)
         if (mode === 'preview') pplBtn.hidden = !(data && Array.isArray(data.members) && data.members.length);
       }
     }
@@ -863,7 +863,7 @@
     function decorateAudio() {
       var audioHost = node('rmAudioBox'); if (!audioHost || !chat) return;
       if (compose && compose.parentNode === chat) chat.insertBefore(audioHost, compose);   // room audio stays usable in the composer's signed-out / link-first states
-      else if (audioHost.parentNode === chat) chat.appendChild(audioHost);   // (1.99?? dockpop review: no composer - read-only on the homepage - it is still the BOTTOM bar)
+      else if (audioHost.parentNode === chat) chat.appendChild(audioHost);   // (1.99ajh dockpop review: no composer - read-only on the homepage - it is still the BOTTOM bar)
       var row = audioHost.querySelector('.rb-audio'); if (!row || row.__rmd) return;
       row.__rmd = true; row.classList.add('rmd-bar');
       playBtn = row.querySelector('.rb-play');
@@ -890,7 +890,7 @@
       if (input) {
         input.classList.add('ds-in'); var form = input.closest('form'), wrap = input.closest('.rb-say-in');
         var relayHost = node('rmRelay'); relayHost.parentNode.insertBefore(row, relayHost); row.appendChild(relayHost);
-        // (1.99?? dockpop P2: the homepage's composer is one row - [Message …][🎙️ Hold to talk][Send], no ＋ and no tool row)
+        // (1.99ajh dockpop P2: the homepage's composer is one row - [Message …][🎙️ Hold to talk][Send], no ＋ and no tool row)
         if (mode !== 'preview') {
           extras = iconBtn('＋', 'extras', 'Add to the chat', function () { if (layer && layer.opener === extras) { closeLayer(); return; } openExtras(extras); }, 'ds-btn ghost rmd-extras');
           extras.setAttribute('aria-haspopup', 'menu'); extras.setAttribute('aria-expanded', 'false'); form.insertBefore(extras, wrap);
@@ -965,7 +965,7 @@
         var here = go.querySelector('.stage-acts a.sact.primary'), book = go.querySelector('.stage-acts a.sact[href*="whenSet"]');
         var boost = node('rmBoostBtn'), boostLink = go.querySelector('.stage-acts a.sact.boost'), slots = node('rmSlotsTxt');
         if (here || book || boost || boostLink) menuGroup(box, 'g_stage', 'Stage');
-        // (1.99?? dockpop review: a sub line's own emoji goes - "🎬 1/2 slots in use" said 🎬, which is Clip in the Dock)
+        // (1.99ajh dockpop review: a sub line's own emoji goes - "🎬 1/2 slots in use" said 🎬, which is Clip in the Dock)
         if (here) menuItem(box, '🎥', 'golive', 'Go live here', null, { href: here.getAttribute('href'), sub: noIcon(txt(slots)) });
         if (book) menuItem(box, '🎫', 'book', 'Book a slot', null, { href: book.getAttribute('href') });
         if (boost && !inPip()) menuItem(box, '🚀', 'boost', 'Boost this pad…', function () { boostSheet(opener); }, { sub: shown(node('rmBoostTxt')) ? noIcon(txt(node('rmBoostTxt')).replace(/^·\s*/, '')) : '' });
@@ -978,7 +978,7 @@
         extra.forEach(function (it) {
           var label = txt(it), ic = '•', m = /^(\p{Extended_Pictographic}\uFE0F?)\s*/u.exec(label);
           if (m) { ic = m[1]; label = label.slice(m[0].length); }
-          if (DOCK_ICONS.indexOf(ic.replace(/\uFE0F/g, '')) >= 0) ic = '•';     // (1.99?? dockpop review: never a Dock control's icon for another thing)
+          if (DOCK_ICONS.indexOf(ic.replace(/\uFE0F/g, '')) >= 0) ic = '•';     // (1.99ajh dockpop review: never a Dock control's icon for another thing)
           var b = menuItem(box, ic, 'raw', label, function () { if (it.tagName === 'A' && !it.hasAttribute('data-pad-tab')) return; clickOf(it)(); }, it.tagName === 'A' && !it.hasAttribute('data-pad-tab') ? { href: it.getAttribute('href') } : null);
           b.querySelector('.rmd-label').textContent = label; b.title = label; b.setAttribute('aria-label', label);
         });
@@ -1158,7 +1158,7 @@
       });
       return oab.length;
     }
-    // 1.99?? dockpop (P2): the homepage stage's ⋯ - 🎥 Go live here, and for staff the on-air bar, ⚙️ Front page settings and 🐸 Pepe's panel
+    // 1.99ajh dockpop (P2): the homepage stage's ⋯ - 🎥 Go live here, and for staff the on-air bar, ⚙️ Front page settings and 🐸 Pepe's panel
     function previewItems(box) {
       var pv = o.preview || {};
       if (pv.goLive) menuItem(box, '🎥', 'golive', 'Go live here', null, { href: pv.goLive });
@@ -1222,9 +1222,9 @@
       var ov = el('div', 'rmd-ov');
       ovTop = el('div', 'rmd-ov-top'); ovBot = el('div', 'rmd-ov-bot');
       var pv = o.preview || {};
-      // (1.99?? dockpop P2: on the homepage the pad chip is a LINK to the pad - its menu is the pad page's)
+      // (1.99ajh dockpop P2: on the homepage the pad chip is a LINK to the pad - its menu is the pad page's)
       ovTop.appendChild(mode === 'preview' ? padLink() : padChip());
-      // (1.99?? dockpop review: the homepage's "Next up" is its own piece - a second line on a phone, never squeezing the pad chip)
+      // (1.99ajh dockpop review: the homepage's "Next up" is its own piece - a second line on a phone, never squeezing the pad chip)
       slimText = el('span', 'rmd-slim-t'); slimText.appendChild(el('span', 'rmd-slim-a', t('nothing_on', 'Nothing on stage right now')));
       if (mode === 'preview' && pv.nextUp) { var sep = el('span', 'rmd-slim-sep', ' · '); sep.setAttribute('aria-hidden', 'true'); slimText.appendChild(sep); slimText.appendChild(el('span', 'rmd-slim-b', pv.nextUp)); }
       ovTop.appendChild(slimText);
@@ -1238,7 +1238,7 @@
       var more = iconBtn(IC.more, 'stage_menu', 'Stage options', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } stageMenu(b); });
       more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.classList.add('rmd-stage-more'); stageMoreBtn = more;
       [snapBtn, clipBtn, fullBtn, more].forEach(function (b) { ovBot.appendChild(b); });
-      // the homepage's slim off-air bar: [pad chip ›] Nothing on stage right now · Next up … (+ ⋯ for staff). (1.99?? dockpop review: no
+      // the homepage's slim off-air bar: [pad chip ›] Nothing on stage right now · Next up … (+ ⋯ for staff). (1.99ajh dockpop review: no
       // 🎥 Go live of its own - the Your show card and the navbar already have the same link; on air it is the stage ⋯'s Go live here)
       if (mode === 'preview' && pv.staff) root.classList.add('rmd-staff');
       ov.appendChild(ovTop); ov.appendChild(ovBot);
@@ -1302,7 +1302,7 @@
         hi.title = hist.title || ''; hi.setAttribute('aria-label', hi.querySelector('.rmd-label').textContent);
       }
       // (the window: only while a pad tab of this pad and account has announced itself - it closes the window, that tab restores.
-      // 1.99?? dockpop review: a popped tab answers every heartbeat, and says tab-gone when it leaves - so a tab that went to Hold'em
+      // 1.99ajh dockpop review: a popped tab answers every heartbeat, and says tab-gone when it leaves - so a tab that went to Hold'em
       // is no "pad tab" here a moment later)
       if (mode === 'popout' && link && tabFresh()) menuItem(box, IC.back, 'pop_back', 'Back in the pad tab', backToTab);
       finishMenu(box, opener);
@@ -1311,7 +1311,7 @@
     function aboutChat() {
       var a = o.preview && o.preview.about; if (!a) return;
       var p = menu(chatMore, t('chat_about', 'About this chat')); p.setAttribute('role', 'dialog'); p.classList.add('rmd-about');
-      // (1.99?? dockpop review: a title and ✕ - on a phone it is a bottom sheet, far from the ⋯ that opened it)
+      // (1.99ajh dockpop review: a title and ✕ - on a phone it is a bottom sheet, far from the ⋯ that opened it)
       var head = el('div', 'rmd-about-h', null, p.ownerDocument); head.appendChild(el('b', null, t('chat_about', 'About this chat'), p.ownerDocument));
       head.appendChild(iconBtn('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm', p.ownerDocument)); p.appendChild(head);
       var body = el('p', 'rmd-topic-full', null, p.ownerDocument);
@@ -1344,7 +1344,7 @@
       Array.prototype.slice.call(h.childNodes).forEach(function (n) {
         if (n.nodeType === 3 && String(n.textContent).trim()) { h.insertBefore(el('span', 'rmd-chat-t', String(n.textContent).trim()), n); n.remove(); }
       });
-      // 1.99?? dockpop: in its own window the chat's heading is the pad chip (a link to the pad, in a new tab); on the homepage a 📡 link to
+      // 1.99ajh dockpop: in its own window the chat's heading is the pad chip (a link to the pad, in a new tab); on the homepage a 📡 link to
       // the chat's pad follows CHAT when that pad isn't the stage's
       var word = h.querySelector('.rmd-chat-t');
       if (mode === 'popout' && word) word.replaceWith(padLink('rmd-chip-chat'));
@@ -1373,13 +1373,13 @@
       }
     }
 
-    // ══ 1.99?? dockpop (owner P1): the chat in its OWN window - /p/<slug>/chat, opened from the chat ⋯ (desktop: a second window can sit
+    // ══ 1.99ajh dockpop (owner P1): the chat in its OWN window - /p/<slug>/chat, opened from the chat ⋯ (desktop: a second window can sit
     // beside the page; phones get the float), kept running while this tab goes anywhere (Hold'em, other pads, the feed) ══
     function roomKey() { return W.PATVDockLink ? W.PATVDockLink.roomKey(o.room) : String(o.room == null ? '' : o.room).replace(/[^A-Za-z0-9_-]/g, '_'); }
     function chatUrl() { return o.chatUrl !== undefined ? o.chatUrl || null : o.slug ? '/p/' + encodeURIComponent(o.slug) + '/chat' : null; }
     function tabFresh() { return !!(tabSeen && Date.now() - tabSeen < TAB_FRESH_MS); }
     function canWindow() {
-      // (1.99?? dockpop review: the homepage passes no chatUrl when its card is the sign-in tease - the route would only send a pop-up to
+      // (1.99ajh dockpop review: the homepage passes no chatUrl when its card is the sign-in tease - the route would only send a pop-up to
       // the pad's gate page)
       if (mode === 'popout' || !chatUrl() || typeof W.open !== 'function') return false;
       var fine = false; try { fine = !!(W.matchMedia && W.matchMedia('(hover: hover) and (pointer: fine)').matches); } catch (e) { fine = false; }
@@ -1418,7 +1418,7 @@
       }
       popWin = w;
       enterPopped(true);
-      // (1.99?? dockpop review: this tab's focus goes to the bar's ↩️ - the menu item that opened the window is gone; focus() in a
+      // (1.99ajh dockpop review: this tab's focus goes to the bar's ↩️ - the menu item that opened the window is gone; focus() in a
       // background window never raises it over the new one)
       var back = popBar && popBar.querySelector('.rmd-popbar-back'); if (back && back.isConnected) { try { back.focus(); } catch (e) { /* gone */ } }
       clearTimeout(pendTimer);
@@ -1465,10 +1465,10 @@
       popped = false; popPending = false; bringing = false; resumedInClick = false;
       root.classList.remove('rmd-popped'); if (popBar && popBar.parentNode) popBar.remove();
       each(root.querySelectorAll('[data-rmd-showchat]'), function (b) { b.hidden = false; });
-      // (1.99?? dockpop review: the window we hold stays ours while it is open - a reloading window comes straight back, and Show it with it)
+      // (1.99ajh dockpop review: the window we hold stays ours while it is open - a reloading window comes straight back, and Show it with it)
       if (popWin && popWin.closed) popWin = null;
       // the window's draft and room audio come back to ONE place: the tab the hand-over names (the one whose Bring it back asked), or for a
-      // window closed by its own ✕ the tab that opened it, else a visible tab - two pad tabs of this pad never both get the draft (1.99??
+      // window closed by its own ✕ the tab that opened it, else a visible tab - two pad tabs of this pad never both get the draft (1.99ajh
       // dockpop review: the same words could be sent twice)
       var mine = !!m && (m.to ? m.to === (link && link.id) || (m.to === '*' && opener) : m.t === 'pop-closed' && (opener || !D.hidden));
       var input = inputNode();
@@ -1508,7 +1508,7 @@
     /** the pad tab / homepage side of the channel */
     function tabMsg(m) {
       if (m.t === 'pop-open' || m.t === 'pop-alive') {
-        // (1.99?? dockpop review: the viewer played this room HERE while its window was open - this page stopped being popped for that
+        // (1.99ajh dockpop review: the viewer played this room HERE while its window was open - this page stopped being popped for that
         // window, so its heartbeats no longer pop it again; a new window - another id - does)
         if (m.t === 'pop-open') detached = null;
         if (detached && m.id === detached) return;
@@ -1517,7 +1517,7 @@
         if (!popped) enterPopped(false);
         if (mode === 'pad') link.send('tab-here');
         if (m.t === 'pop-open' && popWin) {
-          // the opener's unsent words go to the new window (it puts them in its empty input); this tab's copy is cleared (1.99?? dockpop
+          // the opener's unsent words go to the new window (it puts them in its empty input); this tab's copy is cleared (1.99ajh dockpop
           // review: only the tab that opened it - a second pad tab of this pad keeps its own words, hidden with its chat card)
           var input = inputNode();
           if (input && input.value.trim()) { link.send('draft', { draft: input.value }); setDraft(input, ''); }
@@ -1535,7 +1535,7 @@
     function popMsg(m) {
       if (m.t === 'who') link.send('pop-alive', { audio: playingHere(), slow: D.hidden });
       else if (m.t === 'tab-here') tabSeen = Date.now();
-      else if (m.t === 'tab-gone') tabSeen = 0;           // (1.99?? dockpop review: the pad tab went elsewhere - Hold'em, another pad)
+      else if (m.t === 'tab-gone') tabSeen = 0;           // (1.99ajh dockpop review: the pad tab went elsewhere - Hold'em, another pad)
       else if (m.t === 'pop-close-req') handOff(m.id);
       else if (m.t === 'draft') { var input = inputNode(); if (input && !input.value && m.draft) setDraft(input, m.draft); }
       else if (m.t === 'pop-open') {
@@ -1562,7 +1562,7 @@
       beatTimer = setTimeout(function () { beatTimer = null; if (gone_ || !link || leaving) return; link.send('pop-alive', { audio: playingHere(), slow: D.hidden }); beat(); }, ALIVE_MS);
     }
     function recheck() { if (o.recheck) { try { o.recheck(); } catch (e) { /* the page's own */ } } }
-    /** another viewer tag on the channel. 1.99?? dockpop review (load): only the WINDOW re-checks (it must never show another account's
+    /** another viewer tag on the channel. 1.99ajh dockpop review (load): only the WINDOW re-checks (it must never show another account's
      *  chat; it compares vt on every answer). A pad tab or the homepage compares nothing, so a stale one heard every window heartbeat as
      *  "foreign" and re-polled every 5 s - they re-check on 'session' only. A tab still waiting for the window it just opened, when that
      *  window announces itself under another account (this tab was made for an older sign-in), stops waiting and says so. */
@@ -1600,14 +1600,14 @@
       var old = root.querySelector('.rmd-gone'); if (old) old.remove();
       var card = el('section', 'card rmd-gone'); card.setAttribute('role', 'alert');
       card.appendChild(el('p', null, t(key, fallback)));
-      // (1.99?? dockpop review: signed IN in another tab - the window can show the chat as that account, but only when the viewer asks)
+      // (1.99ajh dockpop review: signed IN in another tab - the window can show the chat as that account, but only when the viewer asks)
       var row = el('div', 'rmd-gone-acts'); card.appendChild(row);
       row.appendChild(button('✕', 'pop_close', 'Close this window', function () { try { W.close(); } catch (e) { /* not ours */ } }, 'ds-btn primary'));
       if (key === 'pop_signed_in') row.appendChild(button('🔄', 'pop_reload', 'Reload', function () { try { W.location.reload(); } catch (e) { /* gone */ } }, 'ds-btn'));
       if (chat && chat.parentNode) { chat.parentNode.insertBefore(card, chat); chat.hidden = true; } else root.appendChild(card);
       var b = card.querySelector('button'); if (b) b.focus();
     }
-    /** 1.99?? dockpop review: in the chat's own window a link never takes the window away from the chat (a profile, /privacy, the packs,
+    /** 1.99ajh dockpop review: in the chat's own window a link never takes the window away from the chat (a profile, /privacy, the packs,
      *  a web user's page - and the chat ended, its tab restored): it opens in a new tab (noopener; noreferrer when it leaves the site).
      *  Sign in stays HERE and comes back to this window (?next= the window), and so do this window's own links. A modified click is the
      *  browser's own; a click a page script already handled (defaultPrevented) is left alone. */
@@ -1669,7 +1669,7 @@
         videoPipSource = null; if (D.pictureInPictureElement && D.exitPictureInPicture) Promise.resolve(D.exitPictureInPicture()).catch(function () {});
       }
     }
-    // 1.99?? dockpop (owner P1): Live / Feed / About - the 100dvh frame follows the tab; a floating chat and a stage in picture-in-picture
+    // 1.99ajh dockpop (owner P1): Live / Feed / About - the 100dvh frame follows the tab; a floating chat and a stage in picture-in-picture
     // stay exactly as they are (the same nodes, position, scroll, draft, outbox, poll and room audio - the float is a child of <main>,
     // outside the hidden Live panel); only a fullscreen view goes back
     function tabChanged(tab) {
@@ -1689,7 +1689,7 @@
       ready = true; stage = node('rmStage'); chat = node('rmChat'); strip = node('rmStrip'); compose = node('rmCompose');
       panel = node('padPanel-live'); template = node('rmdId');
       side = root.querySelector('.rm-live > .side'); if (side) side.classList.add('rmd-side');
-      // 1.99?? dockpop: the window is the chat card alone (no stage, header, strip or tabs); the homepage has no pad header, strip or tabs
+      // 1.99ajh dockpop: the window is the chat card alone (no stage, header, strip or tabs); the homepage has no pad header, strip or tabs
       if (mode === 'pad') buildHeader();
       if (stage && mode !== 'popout') buildStage();
       if (chat) buildChatHead();
@@ -1706,11 +1706,11 @@
         if (mode === 'popout' && link && !handed && !gone_) {
           var input = inputNode(), audio = playingHere();
           link.send('pop-closed', { audio: audio, draft: input ? input.value : '' });
-          // (1.99?? dockpop review: a window that RELOADS was playing the room - it picks it up again, room.ejs reads this; the tab it
+          // (1.99ajh dockpop review: a window that RELOADS was playing the room - it picks it up again, room.ejs reads this; the tab it
           // restored for a moment pauses again on the new pop-open. The window's own sessionStorage: it dies with the window)
           try { if (audio) W.sessionStorage.setItem(LISTEN_KEY + o.slug, '1'); else W.sessionStorage.removeItem(LISTEN_KEY + o.slug); } catch (e) { /* private mode */ }
         }
-        // (1.99?? dockpop review: a pad tab that leaves - for Hold'em, another pad - is no "pad tab" for the window's ↩️ any more)
+        // (1.99ajh dockpop review: a pad tab that leaves - for Hold'em, another pad - is no "pad tab" for the window's ↩️ any more)
         if (mode === 'pad' && link) link.send('tab-gone');
         saveGeometry();
         redock(); if (pip) pip.close();
@@ -1731,7 +1731,7 @@
     return {
       update: update, mic: mic, personLine: personLine, visible: visible, redock: redock, stageChanged: stageChanged,
       pvp: pvp, pvpFor: pvpFor, peopleDrawn: function () { filterPeople(); paintInfo(); }, participants: participants,
-      // 1.99?? dockpop
+      // 1.99ajh dockpop
       floating: function () { return !!(current && current.kind === 'float'); },
       popped: function () { return popped; }, popWindow: popWindow, canWindow: canWindow, bringBack: bringBack,
       gone: function (key, fallback) { goneCard(key || 'pop_gone', fallback || 'You signed out or switched accounts in another tab, so this chat window is closed.'); },

@@ -2036,7 +2036,7 @@ function register(app, { isBotToken, addUser }) {
     const rs = typeof req.query.rs === "string" && /^\d{1,16}$/.test(req.query.rs) ? Number(req.query.rs) : null;
     // 1.99ajd roompm: ?rpm=<the last private answer the page has> (pad-roompm.js) - this viewer's own private answers on this pad
     const rpm = typeof req.query.rpm === "string" && /^\d{1,16}$/.test(req.query.rpm) ? Number(req.query.rpm) : null;
-    // 1.99?? dockpop (owner P1): ?pop=1 - the pad's chat in its own window (/p/:slug/chat): no mic-stage program (it has no stage - a
+    // 1.99ajh dockpop (owner P1): ?pop=1 - the pad's chat in its own window (/p/:slug/chat): no mic-stage program (it has no stage - a
     // cheaper answer) and, signed in, the viewer tag `vt` (roompm.tag) the window compares - another account's answer under an open
     // window wipes it (a shared computer, a sign-out or an account switch in another tab). Every other caller's answer is unchanged
     const pop = req.query.pop === "1";
@@ -2189,7 +2189,7 @@ function register(app, { isBotToken, addUser }) {
   // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header
   // (follow, owner, p/<slug>), the stage + schedule, the live Camfrog room when one backs it (chat, people,
   // mic, DJ booth) and the pad's feed. Any of a pad's slugs works; a room id redirects to the slug.
-  // 1.99?? dockpop (owner P1: "have chat persist as you navigate the site ... playing holdem and having chat on the side"): the pad's
+  // 1.99ajh dockpop (owner P1: "have chat persist as you navigate the site ... playing holdem and having chat on the side"): the pad's
   // chat in its OWN window - the Room Dock's chat card only (room.ejs chatOnly), opened from the pad's / the homepage's chat ⋯ and kept
   // open while the main tab goes anywhere. Only where the pad page's Live chat is: a bridged Camfrog pad that is live here, its bridge
   // perk, this viewer's members-tier access (padaccess.full: the 18+ gate included) and the Room Dock for this viewer (paddock: 'staff'
@@ -2332,7 +2332,7 @@ function register(app, { isBotToken, addUser }) {
     const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: adultGate === "ok" ? R.count : 0, members: initial ? initial.members : null,
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest,
       lineLive: !!hubChat });
-    // 1.99?? dockpop review: a page that carries the viewer tag (a stable per-account key) is this viewer's alone - never kept by a shared
+    // 1.99ajh dockpop review: a page that carries the viewer tag (a stable per-account key) is this viewer's alone - never kept by a shared
     // cache (a stricter header set above stays)
     const dockOn_ = require("./paddock").viewerOn(req.user), vt_ = signedIn && dockOn_ ? require("./roompm").tag(req.user.userId) : null;
     if (vt_ && !res.get("Cache-Control")) res.set("Cache-Control", "private");
@@ -2341,7 +2341,7 @@ function register(app, { isBotToken, addUser }) {
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       padDockOn: dockOn_,
-      vt: vt_,   // 1.99?? dockpop: the viewer tag the Dock's windows compare (dock-link.js) - only for the Room Dock (review)
+      vt: vt_,   // 1.99ajh dockpop: the viewer tag the Dock's windows compare (dock-link.js) - only for the Room Dock (review)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       // 1.99aiq cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)

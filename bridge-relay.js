@@ -678,7 +678,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     // adultgate site: someone the 18+ gate keeps from reading the room doesn't talk into it either (lines and ! commands)
     if (require("./adultgate").refuseJson(req, res, R.id)) return;
     const body = req.body || {};
-    // 1.99?? dockpop review (privacy): a Room Dock page sends the viewer tag it was made for (vt, roompm.tag) - a line or command from a page
+    // 1.99ajh dockpop review (privacy): a Room Dock page sends the viewer tag it was made for (vt, roompm.tag) - a line or command from a page
     // made for ANOTHER account (this browser signed in as someone else since, e.g. under a long-open chat window) is refused, never sent
     // as the account signed in now. Pages without a tag (the Dock off, older pages) are unchanged.
     if (typeof body.vt === "string" && body.vt && body.vt !== require("./roompm").tag(u.userId))

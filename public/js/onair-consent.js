@@ -70,7 +70,7 @@
   // 3) the pad page prompt (owners / staff online)
   if (!document.getElementById('oacPromptOn')) return;
   var shown = {}, card = null, stopped = false, iv = null;
-  // 1.99?? dockpop review: the pad's chat in its own window stops asking when it wipes itself (a sign-out or another account in this
+  // 1.99ajh dockpop review: the pad's chat in its own window stops asking when it wipes itself (a sign-out or another account in this
   // browser - it must never poll or prompt as the new account inside that dead window)
   window.PATVOnairConsent = { stop: function () { stopped = true; clearInterval(iv); if (card) card.remove(); card = null; } };
   function prompt(a) {

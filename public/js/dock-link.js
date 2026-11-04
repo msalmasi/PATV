@@ -1,4 +1,4 @@
-// dock-link.js - 1.99?? dockpop (owner P1): the Room Dock's windows talk to each other in this browser only - a pad tab, the pad's chat
+// dock-link.js - 1.99ajh dockpop (owner P1): the Room Dock's windows talk to each other in this browser only - a pad tab, the pad's chat
 // in its own window (/p/<slug>/chat) and the homepage's Dock. One BroadcastChannel ('patv-dock'); without it a localStorage 'storage'
 // event (written, then removed at once); with neither nothing is coordinated and every page just works on its own.
 //   PATVDockLink.open({ room, tag, role: 'tab' | 'pop' | 'home', onMsg, onForeign, onSession }) -> { id, ok, send(type, extra), close() }

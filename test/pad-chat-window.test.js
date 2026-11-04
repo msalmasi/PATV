@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? dockpop (owner P1: "have chat persist as you navigate the pad tabs, or even the site ... playing holdem and having chat on the
+// 1.99ajh dockpop (owner P1: "have chat persist as you navigate the pad tabs, or even the site ... playing holdem and having chat on the
 // side"): GET /p/:slug/chat - the pad's chat in its OWN window (bridge.js; views/room.ejs chatOnly + views/partials/popout-head.ejs).
 //   * only where the pad page's Live chat is (a live bridged Camfrog pad, its bridge perk, padaccess.full, the 18+ gate, the Room Dock for
 //     this viewer) - anything else is a 302 to the pad page; never cached, indexed or framed
@@ -244,7 +244,7 @@ async function runWindow(html, viewer) {
   doc.getElementById = (id) => { if (id === "rmInit") { const e = new FEl("script", doc); e.textContent = json; return e; } if (!ids.includes(id)) return null; if (!byId[id]) { byId[id] = new FEl("div", doc); byId[id].id = id; main.appendChild(byId[id]); } return byId[id]; };
   const timers = [], urls = [], errors = [], winListeners = {}, goneKeys = [], destroyed = { relay: 0, ptt: 0 };
   let answer = null, status = 200, paused = 0, relayOpts = null;
-  // (1.99?? dockpop review: a Room Dock that records the card the window asks for; the relay / push-to-talk know destroy())
+  // (1.99ajh dockpop review: a Room Dock that records the card the window asks for; the relay / push-to-talk know destroy())
   const dock = new Proxy({}, { get: (t, k) => (k === "gone" ? (key) => { goneKeys.push(key || "pop_gone"); } : k === "visible" || k === "floating" || k === "popped" ? () => false : () => undefined) });
   const win = {
     document: doc, location: { search: "", href: "/p/x/chat", pathname: "/p/x/chat", hash: "" }, navigator: { userAgent: "test" }, history: { replaceState() {} },

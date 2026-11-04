@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? dockpop: public/js/room-bridge.js PATVRoom.audio's hand-over hooks - the pad tab, the pad's chat in its own window and the homepage
+// 1.99ajh dockpop: public/js/room-bridge.js PATVRoom.audio's hand-over hooks - the pad tab, the pad's chat in its own window and the homepage
 // pass the room audio between them. pause() stops it but keeps "resume listening" (patvRoomAudio stays 1); resume() plays this player's
 // own pad when it is idle and the relay is on; isPlaying() asks; start() now tells the onChange listeners too (the Dock broadcasts
 // audio-on; Top Pads' 🎧 row lights when the Dock's player starts) - listen() no longer tells them twice.
@@ -66,7 +66,7 @@ test("listen(): one notification per start (not two), another pad's audio, resum
   assert.equal(p.resume(), true); assert.equal(p.playingSlug(), "front", "resume() plays this player's own pad");
 });
 
-// ── 1.99?? dockpop review (privacy): the relay says which account its page was made for, and the chat window's wipe ends it ──
+// ── 1.99ajh dockpop review (privacy): the relay says which account its page was made for, and the chat window's wipe ends it ──
 function loadNet() {
   const posts = [], winL = {}, timers = [];
   let answer = { s: 200, d: { ok: true, id: "j1" } };

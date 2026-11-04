@@ -350,7 +350,7 @@
           rtcClose();
           startMp3();
         });
-        notify();       // 1.99?? dockpop: a start is news too (the Dock tells its other windows; the Top Pads 🎧 row lights)
+        notify();       // 1.99ajh dockpop: a start is news too (the Dock tells its other windows; the Top Pads 🎧 row lights)
         return;
       }
       startMp3();
@@ -487,12 +487,12 @@
         if (cur !== s) rtcHint = null;                 // another pad: the site's ticket decides
         cur = s; curName = s === home ? null : (name || s);
         box.classList.remove('hide'); enable(true); play.title = '';
-        start();                                       // (1.99?? dockpop: start() tells the listeners now)
+        start();                                       // (1.99ajh dockpop: start() tells the listeners now)
         if (curName) setState(_t('js.pad.audio.connecting_to', 'connecting to {name}…', { name: curName }), 'wait');
         return true;
       },
       playingSlug: function () { return playing ? cur : null; },
-      // 1.99?? dockpop: the chat window and the pad tab / homepage hand the room audio between them - pause() stops it without
+      // 1.99ajh dockpop: the chat window and the pad tab / homepage hand the room audio between them - pause() stops it without
       // forgetting that this viewer listens (patvRoomAudio stays 1: "▶ to resume listening"), resume() plays this player's own pad
       // again when it is idle and the relay is on (-> whether it started), isPlaying() asks
       pause: function () { if (!playing) return false; stop(); return true; },
@@ -620,7 +620,7 @@
         if (avatarOf && p.u) { try { var av = avatarOf(p.u); if (av) li.appendChild(av); } catch (e) { /* no picture */ } }
         var nm = el('span', 'rb-ac-n', p.name || p.value); li.appendChild(nm);
         if (p.login) li.appendChild(el('span', 'rb-ac-l', p.login));
-        if (p.tag) { var tg = el('span', 'rb-ac-t', p.tag); tg.title = p.tag; li.appendChild(tg); }   // (1.99?? dockpop: its full word when it shortens)
+        if (p.tag) { var tg = el('span', 'rb-ac-t', p.tag); tg.title = p.tag; li.appendChild(tg); }   // (1.99ajh dockpop: its full word when it shortens)
         li._pick = function () { takeName(p, c); };
         li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });
         list.appendChild(li); acItems.push(li);
@@ -703,7 +703,7 @@
     }
 
     // ── 1.99ye: the outbox ──
-    // 1.99?? dockpop review (privacy): a Room Dock page says which account it was made for (opts.vt, the viewer tag) - the site refuses a
+    // 1.99ajh dockpop review (privacy): a Room Dock page says which account it was made for (opts.vt, the viewer tag) - the site refuses a
     // line or command for another account (409 account: this browser signed in as someone else since), opts.onAccount() hears it.
     // destroy() (the chat window wiping itself) ends the outbox: nothing queued is ever posted after it, as whoever is signed in then.
     var dead = false;
@@ -947,7 +947,7 @@
         if (feedEl) outbox.forEach(function (it) { if (it.node && it.node.parentNode !== feedEl) feedEl.appendChild(it.node); });
       },
       pending: function () { return outbox.slice(); },
-      // 1.99?? dockpop review: the chat window wiped itself - the outbox empties, its retry timer and 'online' retry stop, answers still on
+      // 1.99ajh dockpop review: the chat window wiped itself - the outbox empties, its retry timer and 'online' retry stop, answers still on
       // their way are dropped, and nothing more is sent from this composer
       destroy: function () {
         dead = true; clearTimeout(retryTimer); clearTimeout(noteTimer); retryTimer = null;
@@ -1062,7 +1062,7 @@
       if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* onstop still runs */ } }
       if (stream) release();
     }
-    var gone = false;       // 1.99?? dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
+    var gone = false;       // 1.99ajh dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
     function send(chunks, mimeType, secs) {
       if (gone) return;
       if (secs < 0.7) { txt.textContent = _t('js.pad.ptt.too_short', 'too short — hold the button while you talk'); return; }

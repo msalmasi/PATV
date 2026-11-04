@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview mode"): the
+// 1.99ajh dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview mode"): the
 // homepage's Room Dock (views/home.ejs homeDock_, public/js/home-dock.js, public/js/pad-dock.js 'preview' mode, public/css/home-dock.css).
 //   * the gate: home.js padDockOn = paddock.viewerOn (off -> today's homepage, 'staff' -> staff only) + the panel's 18+ gate + not a hub pad
 //   * Dock off: none of the Dock's markers, every legacy one (the byte-for-byte diff against the base is in the commit message)
@@ -169,7 +169,7 @@ test("home-dock.js: while the pad's chat is in its own window the card stops pol
   assert.equal(P.calls.urls.length, n + 1, "polled at once");
   assert.match(P.calls.urls.at(-1), /after=0&wait=1/, "from a fresh view (cursor 0)");
 });
-// ── 1.99?? dockpop review ──
+// ── 1.99ajh dockpop review ──
 test("review: the Dock is the first block under the navbar (above the stories and Your show); Dock off keeps today's order", async () => {
   const story = { rooms: [], caps: [], room: null, signed: true, compose: true };
   const on = await renderHome({ me: ME(true), username: "viewer", padDockOn: true, story });

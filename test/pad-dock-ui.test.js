@@ -27,7 +27,7 @@ test('float, fullscreen and redock move the same feed and preserve privacy marku
   h.button('Fullscreen',h.stage).click();await flush();assert.ok(h.root.contains(h.doc.fullscreenElement));h.button('Show chat').click();assert.ok(h.chat.closest('.rmd-overlay'));assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.feed.outerHTML,before);assert.equal(h.chat.contains(story),false);
   h.button('Show chat').click();assert.equal(h.chat.closest('.rmd-overlay'),null);h.controller.redock();assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.doc.querySelectorAll('#rmPtt').length,1);
 });
-// 1.99?? dockpop: 🖼️ Picture-in-picture is the STAGE's - the chat's Document PiP is gone (it closed with its opener; ↗️ Chat in its own
+// 1.99ajh dockpop: 🖼️ Picture-in-picture is the STAGE's - the chat's Document PiP is gone (it closed with its opener; ↗️ Chat in its own
 // window follows the viewer around the site instead)
 test('stage picture-in-picture adopts the stage, the exact pad identity and all stylesheets; close restores it; the chat has no Document PiP',async()=>{
   const h=harness({pip:true}),stage=h.stage,styles=h.doc.querySelectorAll('link[rel="stylesheet"],style').length,before=h.feed.outerHTML;
@@ -42,7 +42,7 @@ test('topmost foreign dialogs own Escape and focus before the floating Dock',()=
   const h=harness();h.menuPick('Chat options','Float chat');const float=h.chat.closest('.rmd-float');
   const modal=h.make('div',null,null,h.doc.body);modal.setAttribute('aria-modal','true');const field=h.make('input',null,null,modal);field.focus();
   h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),float);assert.equal(h.doc.activeElement,field);
-  // (1.99?? dockpop: Escape redocks only from inside the float - elsewhere on the page it never pulls the chat back)
+  // (1.99ajh dockpop: Escape redocks only from inside the float - elsewhere on the page it never pulls the chat back)
   modal.remove();h.doc.activeElement=h.doc.body;h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),float,'Escape outside the float');
   h.input.focus();h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),null,'Escape inside the float redocks');
 });
@@ -137,7 +137,7 @@ test('fullscreen body-attached controls leave fullscreen before replay; a contro
 test('a disabled text relay cannot hide a separately enabled mic relay',()=>{
   const h=harness(),form=h.input.closest('form');form.classList.add('hide');assert.equal(h.ptt.closest('.hide'),null);assert.equal(h.ptt.closest('form'),null);assert.equal(h.ptt.getClientRects().length,1);assert.equal(h.doc.querySelectorAll('#rmPtt').length,1);
 });
-// 1.99?? dockpop (owner P1): the floating chat and a stage in picture-in-picture stay as they are across Live / Feed / About - the same
+// 1.99ajh dockpop (owner P1): the floating chat and a stage in picture-in-picture stay as they are across Live / Feed / About - the same
 // nodes, scroll position, draft and audio box; only a fullscreen view goes back. Escape elsewhere does nothing; ↩️ on Feed shows Live.
 const tabTo=(h,tab)=>{h.panel.hidden=tab!=='live';h.doc.dispatchEvent(new Event('patv:padtab',{detail:{tab}}));};
 test('a tab switch keeps the float and a stage PiP (same feed, scroll, draft, audio); fullscreen still redocks; Bring it back on Feed shows Live',async()=>{
@@ -288,7 +288,7 @@ test('privacy updates dismiss the original person menu without dismissing it on 
   assert.equal(closed,3);assert.equal(menu.isConnected,false);h.controller.destroy();
 });
 test('a pending native video PiP request cannot survive a source change or a redock',async()=>{
-  // (1.99?? dockpop: leaving Live no longer closes it - a PiP survives Live / Feed / About)
+  // (1.99ajh dockpop: leaving Live no longer closes it - a PiP survives Live / Feed / About)
   for(const change of ['source','redock','leave-live']){
     let selection={stream:'fixture-own-stream',embed:false},resolve,exits=0;
     const h=harness({opts:{stage:{selection:()=>selection,view:()=>selection.stream}}}),video=h.stage.querySelector('video');
@@ -420,7 +420,7 @@ test('Escape closes a Dock sheet first, then redocks the floating chat',()=>{
   assert.equal(h.doc.querySelectorAll('#rmFeed').length,1);
 });
 
-// ══ 1.99?? dockpop (owner P1 / P2): the chat in its own window, the popped tab, the window itself, the homepage's preview mode ══
+// ══ 1.99ajh dockpop (owner P1 / P2): the chat in its own window, the popped tab, the window itself, the homepage's preview mode ══
 const items=(h,label,within)=>{h.button(label,within).click();const m=menuOf((within&&within.ownerDocument)||h.doc)||menuOf(h.doc);const out=m?m.querySelectorAll('[role]').filter(b=>/^menuitem/.test(b.getAttribute('role'))).map(b=>b.getAttribute('aria-label')||(b.querySelector('.rmd-label')||b).textContent):[];h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));return out;};
 const audioStub=(h)=>{const a={playing:false,paused:0,resumed:0,listeners:[],isPlaying(){return a.playing;},playingSlug(){return a.playing?'night-orchard':null;},pause(){a.paused++;const was=a.playing;a.playing=false;return was;},resume(){a.resumed++;a.playing=true;a.listeners.forEach(f=>f('night-orchard'));return true;},onChange(f){a.listeners.push(f);}};return a;};
 test('chat ⋯ per mode and pointer: Float + ↗️ on a desktop pad, Float only on touch / narrow; no Document PiP item; the window has ↩️, no Float',()=>{
@@ -537,7 +537,7 @@ test('one meaning per icon: the Dock\'s menu items and buttons never use one emo
   assert.match(s,/what === 'play' \? '▶️' : what === 'cut' \? '✂️'/,'▶️ Play content here, ✂️ Cut');
   assert.doesNotMatch(s,/'🗗'|Pop out chat|Pop out player/,'no second pop-out icon or word');
 });
-// ══ 1.99?? dockpop review fixes ══
+// ══ 1.99ajh dockpop review fixes ══
 test('review: a tap on ➖ / ➕ never pins the floating chat (its phone gutter stays); focus lands on the chat ⋯ when it comes back',()=>{
   const h=harness({feed:false});
   h.menuPick('Chat options','Float chat');const fl=h.doc.querySelector('.rmd-float');

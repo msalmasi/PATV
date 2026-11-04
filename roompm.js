@@ -50,7 +50,7 @@ let ready = null, loaded = false;
 const SALT = crypto.randomBytes(16);
 const digest = (s, n = 22) => crypto.createHmac("sha256", SALT).update(String(s)).digest("base64url").slice(0, n);
 const goneKey = (uid) => digest("g|" + String(uid));
-/** 1.99?? dockpop (owner P1): the viewer tag the Room Dock's windows compare (public/js/dock-link.js; the chat window's vt, ?pop=1 answers) -
+/** 1.99ajh dockpop (owner P1): the viewer tag the Room Dock's windows compare (public/js/dock-link.js; the chat window's vt, ?pop=1 answers) -
  *  this account's key in its own pages and answers only, never the account id. Keyed by the site's secret, not SALT: rpm.w changes on every
  *  restart (deploys), and a tag that changed would close every open chat window as "you signed out". null signed out. */
 function tag(userId) {

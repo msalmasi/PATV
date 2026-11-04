@@ -477,7 +477,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
   assert.match(room.slice(styleEnd + 8, link), /^\s*<%#[^%]*%>\s*$/, "nothing in between but a comment");
-  assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %><%= dockOn_ \? ' rm-dock' : '' %><%= chatOnly_ \? ' rmd-popout' : '' %>"/);   // (1.99?? dockpop: + the chat window)
+  assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %><%= dockOn_ \? ' rm-dock' : '' %><%= chatOnly_ \? ' rmd-popout' : '' %>"/);   // (1.99ajh dockpop: + the chat window)
   // the moved rules left the page's style block, and their legacy hex values with them (the reduced-motion transition rule
   // still names .line among the controls it calms)
   const block = room.slice(room.indexOf("<style>"), styleEnd).replace(".rm .ptab, .rm .ibtn, .rm .btn, .rm .line { transition: none; }", "");
@@ -487,7 +487,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.match(block, /\.rm \.rm-chat \.topic \{ color: var\(--ds-chat-topic\);/);
   // ds.css carries the chat's tokens: a cached v=2 without them would leave the lines colourless, so the layout asks for v=3
   assert.match(rd("views", "layout.ejs"), /<link rel="stylesheet" href="\/public\/css\/ds\.css\?v=4">/);
-  // home.ejs is left alone in v1 (its own markup and keys) - 1.99?? dockpop: except its Room Dock (the owner's P2: the pad Dock's
+  // home.ejs is left alone in v1 (its own markup and keys) - 1.99ajh dockpop: except its Room Dock (the owner's P2: the pad Dock's
   // chat card on the homepage, public/js/home-dock.js draws its lines with chatlog-core) - chatlog.css only inside that branch, and
   // today's widget (Dock off) still has its own renderer
   const home = rd("views", "home.ejs"), dockCss = home.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');

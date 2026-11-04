@@ -10,7 +10,7 @@ body.pad-dock-live > header { flex: none; }
 body.pad-dock-live > main.rm.rm-dock { flex: 1 1 0; min-block-size: 0; }
 body.pad-dock-live .site-foot { display: none; }
 main.rm.rm-dock { inline-size: 100%; min-inline-size: 0; gap: var(--ds-sp-2); }
-/* (1.99?? dockpop review: the homepage keeps its own page gutters - .hm's padding - around every card, the Dock included) */
+/* (1.99ajh dockpop review: the homepage keeps its own page gutters - .hm's padding - around every card, the Dock included) */
 main.rm.rm-dock:not(.rmd-home) { padding-block: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
 body.pad-dock-live > main.rm.rm-dock { display: flex; flex-direction: column; }
 main.rm.rm-dock [hidden] { display: none !important; }
@@ -263,7 +263,7 @@ main.rm.rm-dock .veil-banner > .veil-reveal { flex: none; margin-inline-start: a
 /* the log, and its "New messages ↓" pill at the bottom centre of the log (owner point 31) */
 main.rm.rm-dock .rmd-log { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; min-inline-size: 0; }
 main.rm.rm-dock #rmScroll { flex: 1 1 0; min-block-size: 0; max-block-size: none; block-size: auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-/* 1.99?? dockpop review: the scroller is the containing block of what is positioned in it (a room PM line's sr-only label stretched the
+/* 1.99ajh dockpop review: the scroller is the containing block of what is positioned in it (a room PM line's sr-only label stretched the
    whole window page, which then scrolled as one); and its lines sit at the BOTTOM, next to the audio bar and the composer, while few */
 main.rm.rm-dock #rmScroll { position: relative; display: flex; flex-direction: column; }
 main.rm.rm-dock #rmScroll::before { content: ""; flex: 1 1 auto; }   /* (takes the free space above the lines - none once they overflow) */
@@ -545,7 +545,7 @@ main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { z-index: var(--ds-
 }
 @media (max-width: 760px) {
   main.rm.rm-dock #rmStrip .rmd-tile-more { inset-block-start: 2px; inset-inline-end: 2px; inline-size: 24px; min-inline-size: 24px; block-size: 24px; min-block-size: 24px; font-size: var(--ds-fs-xs); }
-  /* 1.99?? dockpop (polish): on an 85px tile the ⋯ is a bare 14px glyph (no disc, a shadow for contrast) in a 32px see-through hit area at
+  /* 1.99ajh dockpop (polish): on an 85px tile the ⋯ is a bare 14px glyph (no disc, a shadow for contrast) in a 32px see-through hit area at
      the tile's top-end corner - shown only with the stage overlay or keyboard focus, and it takes taps only once the overlay is armed */
   /* (#rmStage > #rmStrip: above the older hover / coarse rules' :is() specificity) */
   main.rm.rm-dock #rmStage > #rmStrip .rmd-tile-more { inset-block-start: 0; inset-inline-end: 0; inline-size: 32px; min-inline-size: 32px; block-size: 32px; min-block-size: 32px;
@@ -589,7 +589,7 @@ main.rm.rm-dock #rmPeople .nm > .ufl { flex: 0 100000 auto; min-inline-size: cal
 main.rm.rm-dock #rmPeople .nm > .who.veil { display: contents; }   /* (its frog name and tag are the row's own items) */
 main.rm.rm-dock #rmPeople .nm > .who.veil > i { flex: 0 1 auto; min-inline-size: 3ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 main.rm.rm-dock #rmPeople .nm > .who.veil > .veil-tag { flex: none; }
-/* 1.99?? dockpop (polish): the frog NAME has priority - the incognito / hidden tag shortens first ("incog…", its full word in its title),
+/* 1.99ajh dockpop (polish): the frog NAME has priority - the incognito / hidden tag shortens first ("incog…", its full word in its title),
    in the people column / sheet, the holder chips, the person menu's header and the name autocomplete (a 10000:1 shrink: the name gives
    way only once the tag is at its 2ch floor - a frog name is never shown without its tag) */
 main.rm.rm-dock #rmPeople .nm > .who.veil > i,
@@ -599,7 +599,7 @@ main.rm.rm-dock .rmd-holders .who.veil > .veil-tag { flex: 0 10000 auto; min-inl
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > i { flex: 1 1 auto; min-inline-size: min(9ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > .veil-tag { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* (1.99?? dockpop review: in the people column a frog name and its tag that don't fit on one line take two - the tag under the name, in
+/* (1.99ajh dockpop review: in the people column a frog name and its tag that don't fit on one line take two - the tag under the name, in
    full - rather than cutting the tag to "in…" or "h"; the name keeps the line) */
 main.rm.rm-dock #rmPeople .nm:has(> .who.veil) { flex-wrap: wrap; row-gap: 0; align-content: center; line-height: 1.25; }
 main.rm.rm-dock #rmPeople .nm:has(> .who.veil) > .who.veil > i { flex-grow: 0; }   /* (the tag right after the name on one line - never pushed to the row end) */
@@ -631,7 +631,7 @@ main.rm.rm-dock #rmScroll .line-head > :is(.who, .who-web) { flex-shrink: 1; }
 main.rm.rm-dock #rmScroll .line-head > .ufl { flex-shrink: 100000; }   /* (the name gives way only after the flair) */
 @container (max-width: 360px) {
   main.rm.rm-dock #rmScroll .line-head > .ufl > .ufl-n { display: none; }
-  /* (1.99?? dockpop review: the flair never goes below its own emoji - a 9px sliver over the time; a veil tag's words give way first) */
+  /* (1.99ajh dockpop review: the flair never goes below its own emoji - a 9px sliver over the time; a veil tag's words give way first) */
   main.rm.rm-dock #rmScroll .line-head > .ufl { min-width: calc(1em + 6px); padding-inline: 3px; }
   main.rm.rm-dock #rmScroll .line-head > .veil-tx { flex-shrink: 100; min-width: 2ch; }
 }
@@ -682,7 +682,7 @@ main.rm.rm-dock .rmd-cam-box > .ds-eyebrow { margin: var(--ds-sp-1) 0 0; }
 main.rm.rm-dock .rmd-cam-box > :is(.res, .lc-stage, div:not([class])):empty { display: none; }   /* (an empty status line takes no gap) */
 /* the chat floating: the stage takes the freed height, the chat's place is one slim line - and at 1024px and wider the people column
    stays, beside the stage, as tall as the Live view */
-/* (1.99?? dockpop review: up to the stage's natural 16:9 - grown past it, a 2-up mic stage became two portrait tiles with the picture
+/* (1.99ajh dockpop review: up to the stage's natural 16:9 - grown past it, a 2-up mic stage became two portrait tiles with the picture
    letterboxed in the middle; the rest of the height stays empty below the slim line) */
 main.rm.rm-dock.rmd-chat-out #rmStage { flex: 1 1 0; block-size: auto; max-block-size: calc((100cqi - var(--rmd-strip-w)) * 0.5625 + var(--rmd-pin-row)); }
 main.rm.rm-dock.rmd-chat-out .rmd-body { flex: 0 0 auto; }
@@ -707,7 +707,7 @@ main.rm.rm-dock .rmd-grip { color: var(--ds-text-faint); font-size: var(--ds-fs-
   main.rm.rm-dock .rmd-chip > .rmd-id { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 }
 
-/* ══ 1.99?? dockpop (owner P1 / P2): the floating chat across Live / Feed / About, the chat in its own window, the homepage's Dock ══ */
+/* ══ 1.99ajh dockpop (owner P1 / P2): the floating chat across Live / Feed / About, the chat in its own window, the homepage's Dock ══ */
 /* the floating chat's bar: [⠿][💬 Chat + new-lines dot - while minimized][…][➖ / ➕][↩️] */
 main.rm.rm-dock .rmd-float-t { display: none; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; font: 700 var(--ds-fs-meta)/1 var(--ds-font); color: var(--ds-text-strong); white-space: nowrap; }
 main.rm.rm-dock .rmd-float-t > .ds-ic { font-size: var(--ds-fs-sm); }
@@ -717,7 +717,7 @@ main.rm.rm-dock .rmd-float.rmd-min > #rmChat { display: none; }
 main.rm.rm-dock .rmd-float.rmd-min > .rmd-viewbar { min-block-size: 42px; padding-block: 0; border-block-end: 0; cursor: default; touch-action: auto; }
 main.rm.rm-dock .rmd-float.rmd-min .rmd-float-t { display: inline-flex; }
 main.rm.rm-dock .rmd-float.rmd-min .rmd-grip { display: none; }
-/* (1.99?? dockpop review: the 240px bar fits [💬 Chat •][➕][↩️] - Bring it back is its icon there (its words stay its name), the words
+/* (1.99ajh dockpop review: the 240px bar fits [💬 Chat •][➕][↩️] - Bring it back is its icon there (its words stay its name), the words
    give way before the new-lines dot, which never leaves) */
 main.rm.rm-dock .rmd-float.rmd-min .rmd-float-t { flex: 0 1 auto; overflow: hidden; }
 main.rm.rm-dock .rmd-float-tl { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -748,7 +748,7 @@ main.rm.rm-dock #chatH > .rmd-chip-chat .pfx-bs { display: none; }   /* (the win
 main.rm.rm-dock #chatH > .rmd-chip-chat .rm-av { width: 18px; height: 18px; }
 main.rm.rm-dock #chatH > .rmd-room-link { flex: 0 0 auto; min-inline-size: 0; max-inline-size: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: 500 var(--ds-fs-meta)/1 var(--ds-font); letter-spacing: normal; text-transform: none; color: var(--ds-ac-2); }
-/* (1.99?? dockpop review: the 📡 room link is the one sign the chat isn't the stage's pad - the topic gives way first) */
+/* (1.99ajh dockpop review: the 📡 room link is the one sign the chat isn't the stage's pad - the topic gives way first) */
 main.rm.rm-dock #chatH:has(> .rmd-room-link) .rmd-topic-line { flex: 1 1 0; }
 
 /* the pad's chat in its own window (/p/<slug>/chat): a 100dvh column - the chat card fills it; phone rules apply in a narrow window */
@@ -768,7 +768,7 @@ main.rm.rm-dock .rmd-gone > p { margin: 0; max-inline-size: 42ch; }
 main.rm.rm-dock #rmStage .player > .twbtn { inset-block-start: var(--ds-sp-2) !important; inset-inline-start: auto !important; inset-inline-end: var(--ds-sp-2) !important; }
 main.rm.rm-dock .rmd-gone-acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
 
-/* ── 1.99?? dockpop review (the visual / function reviews of the dockpop build) ── */
+/* ── 1.99ajh dockpop review (the visual / function reviews of the dockpop build) ── */
 /* the person menu on a phone (and in the chat's own window): a full-width bottom sheet over a scrim, like the chat ⋯ / audio / people
    sheets - not a 320px card pinned to one corner with the page showing beside it */
 @media (max-width: 760px) {

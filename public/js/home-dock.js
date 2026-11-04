@@ -1,4 +1,4 @@
-// home-dock.js - 1.99?? dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview
+// home-dock.js - 1.99ajh dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview
 // mode"): the homepage's Room Dock (views/home.ejs while homeDock_). ONE stage card - the FRONT pad's stage (Pepe's stream + its slots,
 // public/js/stage-room.js) under the pad Dock's auto-hiding overlay - and ONE slim chat card - the panel pad's live chat as the pad Dock
 // draws it (public/js/chatlog-core.js lines, the bottom audio bar, a one-row composer for linked viewers), both decorated by
@@ -38,7 +38,7 @@
   }
   function nextUpText() {
     var n = I.nextUp; if (!n || !n.at) return '';
-    // (1.99?? dockpop review: the site's own clock - localtime.js, the viewer's saved zone with its label - as today's off-air slate showed it)
+    // (1.99ajh dockpop review: the site's own clock - localtime.js, the viewer's saved zone with its label - as today's off-air slate showed it)
     var time = '';
     try { time = W.PATVTime && W.PATVTime.format ? W.PATVTime.format(n.at, 'time') : new Date(n.at).toLocaleTimeString(D.documentElement.lang || undefined, { hour: 'numeric', minute: '2-digit' }); } catch (e) { time = ''; }
     return _t('js.home.dock.next_up', 'Next up: {name} · {time}', { name: n.name + (n.title ? ' — ' + n.title : ''), time: time });
@@ -90,7 +90,7 @@
   }
   function nearBottom() { return scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80; }
   function toBottom() { scroll.style.scrollBehavior = 'auto'; scroll.scrollTop = scroll.scrollHeight; scroll.style.scrollBehavior = ''; if (jump) jump.style.display = 'none'; }
-  // (1.99?? dockpop review: the viewer tag rides every line - the site refuses one from a page made for another account)
+  // (1.99ajh dockpop review: the viewer tag rides every line - the site refuses one from a page made for another account)
   var relayHost = $('rmRelay'), roomRelay = relayHost ? W.PATVRoom.relay(relayHost, slug, { feed: feed, line: line, scroller: scroll, onBottom: function () { if (jump) jump.style.display = 'none'; },
     people: acPeople, avatar: avatar, placeholder: _t('js.pad.dock.placeholder', 'Message {room}…', { room: C.name }), vt: I.vt || null }) : null;
   var pttHost = $('rmPtt'), roomPtt = pttHost ? W.PATVRoom.ptt(pttHost, slug) : null, compose = $('rmCompose');
@@ -245,7 +245,7 @@
   startDock(roomRelay, roomAudio, roomPtt);
   if (I.initial) apply(I.initial);
   timer = setTimeout(poll, 300);
-  // 1.99?? dockpop review (owner: nothing shown twice): the chat's own pad in Top Pads keeps its rank and link, but not the count, the mic
+  // 1.99ajh dockpop review (owner: nothing shown twice): the chat's own pad in Top Pads keeps its rank and link, but not the count, the mic
   // line or 🎧 - the chat card above has them (its 👥, its audio bar and holders)
   try {
     Array.prototype.forEach.call(D.querySelectorAll('#stageSide .tp li'), function (li) {
@@ -263,7 +263,7 @@
       mode: 'preview', root: root, slug: C ? C.slug : frontSlug, room: C ? C.id : null, vt: I.vt || null,
       signed: !!I.signed, linked: !!I.linked, user: I.user || null, relay: relay, audio: audio, ptt: ptt, person: person,
       padHref: frontSlug ? '/p/' + encodeURIComponent(frontSlug) : '/p', padName: I.front ? I.front.title : '',
-      // (1.99?? dockpop review: no ↗️ for the sign-in tease - the route would only send the pop-up to the pad's gate page)
+      // (1.99ajh dockpop review: no ↗️ for the sign-in tease - the route would only send the pop-up to the pad's gate page)
       chatUrl: C && I.initial ? '/p/' + encodeURIComponent(C.slug) + '/chat' : null,
       preview: { goLive: I.goLive || null, staff: staff, nextUp: nextUpText(), about: about || null,
                  roomLink: C && !C.onStage ? { href: '/p/' + encodeURIComponent(C.slug), name: C.name } : null },

@@ -4,7 +4,7 @@
     marker, so the next signed-out page tries again; a blocked delete counts only once it succeeds. No databases() (Firefox
     before 126): nothing to list, the marker goes. The marker's value is never read (it is always "1"). Static: nothing
     from the request is printed here. ES5, no widget.
-    1.99?? dockpop: first, every open Room Dock window of this browser is told to re-check who is signed in ({t: 'session'} on
+    1.99ajh dockpop: first, every open Room Dock window of this browser is told to re-check who is signed in ({t: 'session'} on
     'patv-dock', public/js/dock-link.js - no data): a pad's chat in its own window closes at once instead of after its long-poll. %>
 <script>(function () {
   try { var m = { v: 1, t: 'session' }; if (window.BroadcastChannel) { var c = new BroadcastChannel('patv-dock'); c.postMessage(m); c.close(); } else { localStorage.setItem('patv.dock.msg', JSON.stringify(m)); localStorage.removeItem('patv.dock.msg'); } } catch (e) {}

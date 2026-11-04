@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? dockpop (owner P1): public/js/dock-link.js - the Room Dock's windows talk in this browser only (a pad tab, the pad's chat in its
+// 1.99ajh dockpop (owner P1): public/js/dock-link.js - the Room Dock's windows talk in this browser only (a pad tab, the pad's chat in its
 // own window, the homepage). BroadcastChannel 'patv-dock', a localStorage 'storage' fallback; messages carry no chat text (only the
 // viewer's own draft, only between windows of the same viewer tag); other rooms are ignored, another tag is a re-check trigger, the
 // sign-out page's {t: 'session'} too. And the window protocol end to end, on the pad Dock's harness: newest window wins, one window per

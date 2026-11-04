@@ -246,7 +246,7 @@ test("the pad page's long-poll: held while nothing changes, answered when the vi
   assert.ok(got.feed.some((x) => x.text === "hi from the room"), "a room line answers it");
 });
 
-test("1.99?? dockpop review: a line or command from a page made for ANOTHER account (its viewer tag) is refused (409 account), never sent", async () => {
+test("1.99ajh dockpop review: a line or command from a page made for ANOTHER account (its viewer tag) is refused (409 account), never sent", async () => {
   reset();
   const RPM = require(path.join(repo, "roompm"));
   const mine = await post("/api/rooms/" + SLUG + "/say", "u1", { text: "hello as me", cid: "cVTOK00001", vt: RPM.tag("u1") });

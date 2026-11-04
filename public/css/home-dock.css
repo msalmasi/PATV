@@ -1,8 +1,8 @@
-/* home-dock.css - 1.99?? dockpop (owner P2): the homepage's Room Dock (views/home.ejs homeDock_, public/js/home-dock.js). The stage and
+/* home-dock.css - 1.99ajh dockpop (owner P2): the homepage's Room Dock (views/home.ejs homeDock_, public/js/home-dock.js). The stage and
    the room card are ONE block, #hmDock: the pad Dock's stage card (the video + its auto-hiding overlay) beside / above its slim chat card,
    styled by pad-dock.css (main.rm.rm-dock) - this file only lays the block out on the homepage and gives the two cards the base rules the
    pad page's own stylesheet gives them there (room.ejs .rm …). The homepage scrolls normally (no body.pad-dock-live).
-   1.99?? dockpop review: #hmDock is the first block under the navbar (views/home.ejs), inside the page's own gutters (.hm's padding). */
+   1.99ajh dockpop review: #hmDock is the first block under the navbar (views/home.ejs), inside the page's own gutters (.hm's padding). */
 main.hm.rmd-home { gap: var(--cardgap, var(--ds-sp-4)); }
 main.hm.rmd-home #hmDock { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 400px); grid-template-rows: minmax(420px, auto); gap: var(--ds-sp-2); align-items: start; min-inline-size: 0; }
 /* (the stage card stretches to the row - the chat's 420px floor on a 1024px screen - with the picture contained: the two cards end level) */
@@ -28,7 +28,7 @@ main.hm.rmd-home #hmDock:has(> #rmStage.is-off) { grid-template-columns: minmax(
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmStage { align-self: start; }
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
-/* (1.99?? dockpop review: the pad chip keeps its name - the words give way, "Next up" first) */
+/* (1.99ajh dockpop review: the pad chip keeps its name - the words give way, "Next up" first) */
 main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-top > .rmd-chip { flex: 0 0 auto; min-inline-size: min(12ch, 50%); max-inline-size: 55%; }
 main.rm.rm-dock.rmd-home #rmStage .rmd-slim-t > * { min-inline-size: 0; }
 main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-slim-t { display: flex; align-items: baseline; }
@@ -49,7 +49,7 @@ main.rm.rm-dock.rmd-home #rmChat .feed { block-size: auto; }
 main.rm.rm-dock.rmd-home #rmChat .compose { display: grid; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; }
 main.rm.rm-dock.rmd-home #rmChat .rmd-tease { display: grid; gap: var(--ds-sp-2); align-content: center; justify-items: start; flex: 1 1 auto; padding: var(--ds-sp-3); }
 main.rm.rm-dock.rmd-home #rmChat .rmd-tease > p { margin: 0; }
-/* (1.99?? dockpop review: the sign-in tease is as tall as its words - no empty card above it) */
+/* (1.99ajh dockpop review: the sign-in tease is as tall as its words - no empty card above it) */
 main.hm.rmd-home #hmDock > #rmChat:has(> .rmd-tease) { contain: none; block-size: auto; min-block-size: 0; align-self: start; }
 main.rm.rm-dock.rmd-home #rmChat .jump { display: none; }
 main.rm.rm-dock.rmd-home #rmAudioBox .rb-vol { inline-size: 72px; }

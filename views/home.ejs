@@ -59,7 +59,7 @@
     { href: '/feed', ic: '📝', t: t('home.todo.feed'), s: null },
     { href: '/rankings', ic: '🏆', t: t('home.todo.rankings'), s: null },
   ];
-  // 1.99?? dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview mode"):
+  // 1.99ajh dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview mode"):
   // the Room Dock for this viewer (home.js padDockOn = paddock.viewerOn: 'staff' = staff only), the panel's pad past the 18+ gate and
   // not a chat-hub pad. Otherwise - Dock off included - today's homepage, byte for byte (the slurping tags below print nothing then).
   // The stage + the room card become ONE block (#hmDock: the pad Dock's stage card and chat card, public/js/pad-dock.js 'preview'
@@ -469,7 +469,7 @@
 
 <main class="hm ds-page<%= homeDock_ ? ' rm rm-dock rmd-home' + (hLK_ && hLK_.accent ? ' pad-acc' : '') : '' %>"<%- homeDock_ && hLK_ && hLK_.vars ? ' style="' + t.esc(hLK_.vars) + '"' : '' %>>
 <%_ if (homeDock_) { _%>
-  <%# 1.99?? dockpop review: the Dock is the FIRST thing under the navbar - its video and chat at a glance on a laptop (it sat under the
+  <%# 1.99ajh dockpop review: the Dock is the FIRST thing under the navbar - its video and chat at a glance on a laptop (it sat under the
       stories and Your show cards, which pushed the stage's controls and the composer below the fold) %>
   <section class="rmd-hm" id="hmDock" aria-label="<%- t('home.dock.aria', { name: frontInfo ? frontInfo.title : t('home.stage.main_stage') }) %>">
     <%_ if (frontInfo) { _%>
@@ -510,7 +510,7 @@
       <%_ } _%>
     </section>
     <div class="rmd-hm-ppl"><section class="card rm-ppl chatlog" id="rmPplCard" aria-labelledby="pplH"><h2 id="pplH"><span class="ht"><%- t('pad.people.h') %></span> <small id="rmPplN"></small></h2><ul class="people" id="rmPeople"></ul></section></div>
-    <%# (1.99?? dockpop review: a linked viewer has a composer here - their note doesn't say "read-only") %>
+    <%# (1.99ajh dockpop review: a linked viewer has a composer here - their note doesn't say "read-only") %>
     <template id="hmdAbout"><%- t(me && me.camfrogUsername ? 'home.dock.about_linked' : 'home.room.note', { q: '"' }) %></template>
     <%_ } _%>
   </section>
