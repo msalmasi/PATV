@@ -10,14 +10,18 @@ main.rm.rm-dock .crumb { flex: none; font-size: var(--ds-fs-xs); }
 main.rm.rm-dock #padPanel-live { min-block-size: 0; min-inline-size: 0; }
 body.pad-dock-live main.rm.rm-dock #padPanel-live { display: flex; flex-direction: column; flex: 1 1 0; gap: var(--ds-sp-2); }
 main.rm.rm-dock .rmd-drawer { flex: none; min-inline-size: 0; display: grid; gap: var(--ds-sp-2); }
-main.rm.rm-dock #rmHero { padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); background: var(--ds-surface); }
+/* 1.99?? review: no background here - the header keeps today's tint (.rm .hero; .rm.pad-acc .hero = the pad's accent, spec D.4) */
+main.rm.rm-dock #rmHero { padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); }
 main.rm.rm-dock #rmHero .hd { gap: var(--ds-sp-2); }
 main.rm.rm-dock #rmHero .hd-id { display: flex; align-items: center; gap: var(--ds-sp-2); }
 main.rm.rm-dock #rmHero h1 { flex: 1 1 auto; min-inline-size: 0; }
 main.rm.rm-dock #rmHero .hd-st { flex: none; }
 main.rm.rm-dock #rmHero .rm-av { width: 32px; height: 32px; border-radius: var(--ds-r-sm); }
-main.rm.rm-dock #rmHero.has-bn { position: relative; padding-block: var(--ds-sp-2); }
-main.rm.rm-dock #rmHero .hero-bn { position: absolute; inset: 0; block-size: 100%; margin: 0; border-radius: inherit; }
+/* 1.99?? review: the banner fills the header, so it sits UNDER padfx's effect layer (.pfx-l, z 0: embers, snow, pixel, the Prime
+   Time rings) - at padfx's z 1 it hid them all. A negative z needs the header to be a stacking context: above --ds-z-sticky, so
+   the ⋯ menu inside it still opens over the stage overlay and the floating chat (and stays below the navbar and every sheet). */
+main.rm.rm-dock #rmHero.has-bn { position: relative; padding-block: var(--ds-sp-2); z-index: calc(var(--ds-z-sticky) + var(--ds-z-raised)); }
+main.rm.rm-dock #rmHero .hero-bn { position: absolute; inset: 0; block-size: 100%; margin: 0; border-radius: inherit; z-index: calc(-1 * var(--ds-z-raised)); }
 main.rm.rm-dock #rmHero .hero-bn::after { background: var(--ds-media-panel); }
 main.rm.rm-dock #rmHero.has-bn .hd { margin-block-start: 0; position: relative; z-index: var(--ds-z-raised); }
 main.rm.rm-dock #rmHero h1 { font-size: var(--ds-fs-h3); }
@@ -72,7 +76,7 @@ main.rm.rm-dock .rmd-id .rm-av { width: 32px; height: 32px; border-radius: var(-
 main.rm.rm-dock .rmd-id-name { display: flex; align-items: center; gap: var(--ds-sp-2); flex: 1 1 auto; min-inline-size: 0; overflow: hidden; }
 main.rm.rm-dock .rmd-id-name > .rm-nm { min-inline-size: min(8ch, 100%); text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); font-weight: 700; }
 main.rm.rm-dock .rmd-id-name > .pfx-bs { flex: 0 1 auto; }
-main.rm.rm-dock .rmd-id > .rmd-id-banner { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }
+main.rm.rm-dock .rmd-id > .rmd-id-banner { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; z-index: calc(-1 * var(--ds-z-raised)); }   /* 1.99??: under the frame layer (see #rmHero) */
 main.rm.rm-dock .rmd-id-banner img { inline-size: 100%; block-size: 100%; object-fit: cover; object-position: 50% var(--pad-banner-y, 50%); display: block; }
 main.rm.rm-dock .rmd-id-banner::after { content: ""; position: absolute; inset: 0; background: var(--ds-media-panel); }
 main.rm.rm-dock .rmd-id > .rmd-id-content { position: relative; z-index: var(--ds-z-raised); }

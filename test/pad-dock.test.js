@@ -109,7 +109,8 @@ test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is 
   for(const r of rules) {
     for(const sel of r.selector.split(/,\s*(?=main\.|body\.)/))assert.match(sel,/^(main\.rm\.rm-dock|body\.pad-dock-live)/,sel);
     assert.doesNotMatch(r.body,/#[0-9a-f]{3,8}\b|--ds-green|(?:margin|padding)-(?:left|right)\s*:|(?:^|;)\s*(?:left|right)\s*:|text-align:\s*(?:left|right)/i);
-    for(const m of r.body.matchAll(/z-index\s*:\s*([^;]+)/g))assert.match(m[1],/^var\(--ds-z-/);
+    // 1.99?? review: a calc() of --ds-z-* tokens (the banner under the frame layer) is a token value too
+    for(const m of r.body.matchAll(/z-index\s*:\s*([^;]+)/g))assert.match(m[1].trim(),/^(?:var\(--ds-z-[\w-]+\)|calc\(\s*(?:-1\s*\*\s*)?var\(--ds-z-[\w-]+\)(?:\s*\+\s*var\(--ds-z-[\w-]+\))?\s*\))$/);
   }
   const tokens=["--ds-ac","--ds-ac-2","--ds-ac-bg","--ds-ac-line","--ds-on-ac","--ds-focus","--ds-focus-ring","--ds-glow"];
   const mapping=rules.filter(r=>r.body.includes("--ds-ac:"));assert.equal(mapping.length,1);
@@ -119,4 +120,20 @@ test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is 
   assert.match(css,/forced-colors:\s*active/);assert.doesNotMatch(css,/@import|header[^{}]*height:\s*\d+px/);
   const js=read("public/js/pad-dock.js");assert.doesNotMatch(js,/\bfetch\s*\(|XMLHttpRequest|pfx-f-|pfx-g-|pfx-b|--pad-accent|setProperty|\/cosmetics|\bPALETTE\b|maxBadges|MAX_BADGES|story-compose|story-studio|patvStoryStudio/);
   for(const token of ["--ds-media-bg","--ds-media-chip","--ds-media-panel"])assert.match(read("public/css/ds.css"),new RegExp(token+":"));
+});
+
+// 1.99?? dock review: the banner fills the compact header / identity box, so it must paint UNDER padfx's effect layer
+// (.pfx-l, z-index 0) - at padfx's own z-index 1 it covered the embers / snow / matrix / pride / pixel and Prime Time rings
+// entirely - and the header keeps today's accent tint (.rm.pad-acc .hero) instead of a flat surface (spec D.4).
+test("pad frames draw over the banner and the header keeps its accent tint", () => {
+  const css=read("public/css/pad-dock.css").replace(/\/\*[\s\S]*?\*\//g,"");
+  const rules=[];function parse(s){let at=0;while(at<s.length){const open=s.indexOf("{",at);if(open<0)break;let d=1,end=open+1;while(end<s.length&&d){if(s[end]==="{")d++;if(s[end]==="}")d--;end++;}const selector=s.slice(at,open).trim(),body=s.slice(open+1,end-1);if(!selector.startsWith("@")&&selector)rules.push({selector,body});at=end;}}parse(css);
+  const decl=(sel,prop)=>{let v=null;for(const r of rules)if(r.selector.split(/,\s*/).includes(sel)){const m=new RegExp("(?:^|;)\\s*"+prop+"\\s*:\\s*([^;]+)").exec(r.body);if(m)v=m[1].trim();}return v;};
+  const negative=v=>/^calc\(\s*-1\s*\*\s*var\(--ds-z-[\w-]+\)\s*\)$/.test(String(v));
+  assert.ok(negative(decl("main.rm.rm-dock #rmHero .hero-bn","z-index")),"header banner under the frame layer");
+  assert.ok(negative(decl("main.rm.rm-dock .rmd-id > .rmd-id-banner","z-index")),"compact identity banner under the frame layer");
+  assert.equal(decl("main.rm.rm-dock .rmd-id","isolation"),"isolate");
+  // the banner header is its own stacking context, above the stage overlay and floating chat (--ds-z-sticky), so its ⋯ menu still opens over them
+  assert.match(String(decl("main.rm.rm-dock #rmHero.has-bn","z-index")),/^calc\(\s*var\(--ds-z-sticky\)\s*\+\s*var\(--ds-z-raised\)\s*\)$/);
+  assert.equal(decl("main.rm.rm-dock #rmHero","background"),null,"no flat background over .rm.pad-acc .hero's tint");
 });
