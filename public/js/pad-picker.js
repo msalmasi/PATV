@@ -31,9 +31,12 @@
       if (o.relay._send(token)) closeToInput();
       else note(t('queue', 'Your messages are still on their way. Try again in a moment.'));
     }
-    function request(url, g, show) {
+    // 1.99?? dock: review - `post` = a JSON body (the GIF search: its words never ride in a URL, which request logs keep)
+    function request(url, g, show, post) {
       note(t('loading', 'Loading…'));
-      W.fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
+      var init = { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } };
+      if (post) { init.method = 'POST'; init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(post); }
+      W.fetch(url, init)
         .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
         .then(function (rows) {
           if (!connected(g)) return;
@@ -80,7 +83,7 @@
       var results = el('div'); body.appendChild(results);
       function load() {
         var g = ++generation, query = search.value.slice(0, 50); results.textContent = '';
-        request('/api/gifs/search?q=' + encodeURIComponent(query) + '&pad=' + encodeURIComponent(o.slug), g, function (rows) {
+        request('/api/gifs/search', g, function (rows) {
           var items = el('div', 'rmp-grid'); items.style.display = 'grid'; items.style.gridTemplateColumns = 'repeat(auto-fill, minmax(100px, 1fr))'; items.style.gap = 'var(--ds-sp-2)'; results.appendChild(items);
           rows.forEach(function (r) {
             if (!r || !/^[A-Za-z0-9_-]{1,64}$/.test(String(r.id)) || !r.preview || !safeGif(r.preview.src)) return;
@@ -91,7 +94,7 @@
           });
           results.appendChild(el('p', 'ds-fine', t('credit', 'via KLIPY')));
           if (!items.children.length) note(t('empty', 'Nothing here yet.'));
-        });
+        }, { q: query, pad: o.slug });
       }
       form.addEventListener('submit', function (e) { e.preventDefault(); load(); }); load();
     }

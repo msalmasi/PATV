@@ -16,7 +16,8 @@ async function request(url, { user = "linked", body, extraHeaders = {} } = {}) {
   const r = await realFetch(base + url, { method: body === undefined ? "GET" : "POST", headers: { ...headers(user), ...extraHeaders }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   return { status: r.status, headers: r.headers, data: await r.json() };
 }
-const search = (q = "", opts) => request("/api/gifs/search?pad=" + room.slug + "&q=" + encodeURIComponent(q), opts);
+// 1.99?? dock: review - a GIF search is a POST {q, pad} (gifs.js): the words never sit in a URL (nginx / Cloudflare request logs)
+const search = (q = "", opts = {}) => request("/api/gifs/search", { ...opts, body: { pad: room.slug, q } });
 const say = (text, cid) => request("/api/rooms/" + room.slug + "/say", { body: { text, cid } });
 test.before(async () => {
   await db.runQuery("CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT, displayname TEXT, camfrogUsername TEXT, class TEXT)");
@@ -90,7 +91,7 @@ test("same-site fetch, query length, sign-in and every existing say gate are req
   assert.equal((await search("", { extraHeaders: { Origin: "https://foreign.invalid" } })).data.code, "security");
   assert.equal((await search("", { extraHeaders: { "X-Requested-With": "wrong" } })).data.code, "security");
   assert.equal((await search("x".repeat(51))).data.code, "query"); assert.equal((await search("", { user: null })).status, 401);
-  assert.equal((await request("/api/gifs/search?pad=unbridged")).data.code, "offline");
+  assert.equal((await request("/api/gifs/search", { body: { pad: "unbridged" } })).data.code, "offline");
   live = false; assert.equal((await search()).data.code, "offline"); live = true;
   gated = true; assert.equal((await search()).data.code, "gated"); gated = false;
   room.relay = false; assert.equal((await search()).data.code, "relay_off"); room.relay = true;
@@ -238,10 +239,10 @@ test("oversized or malformed upstream bodies return generic errors and do not fi
 // (its internal callers pass R): a hand-built pad must never stand in for the real one (its live / relay flags are the caller's)
 test("1.99?? dock: review - the search's pad is a slug: a client-built pad object never stands in for the room", async () => {
   room.relay = false;
-  const forged = await request("/api/gifs/search?q=x&pad[id]=" + room.id + "&pad[slug]=" + room.slug + "&pad[relay]=1&pad[updated]=99999999999999");
+  const forged = await request("/api/gifs/search", { body: { q: "x", pad: { id: room.id, slug: room.slug, relay: 1, updated: 99999999999999 } } });
   room.relay = true;
   assert.notEqual(forged.status, 200, JSON.stringify(forged.data)); assert.equal(calls.length, 0, "no provider request");
-  const listed = await request("/api/gifs/search?q=x&pad[]=" + room.slug);
+  const listed = await request("/api/gifs/search", { body: { q: "x", pad: [room.slug] } });
   assert.notEqual(listed.status, 200); assert.equal(calls.length, 0);
 });
 
@@ -270,4 +271,16 @@ test("1.99?? dock: review - a GIF whose title trips the text guard is never offe
   assert.deepEqual(out.data.map(x => x.id), ["ok_title"]);
   assert.equal(G.picked("bad_title"), null); assert.ok(G.picked("ok_title"));
   assert.equal((await say("[gif:bad_title]", "bad-title")).data.code, "gif"); assert.equal(relay._jobs.size, 0);
+});
+
+// 1.99?? dock: review - privacy: what people look for (often a name) is never logged (spec O.1). A GET puts it in the URL, and the URL
+// is in nginx's and Cloudflare's request logs; the pad chat's own search is a POST for the same reason (chatlogsearch.js)
+test("1.99?? dock: review - a GIF search is a POST: the words never ride in a URL", async () => {
+  const viaUrl = await realFetch(base + "/api/gifs/search?pad=" + room.slug + "&q=private%20words", { headers: headers() });
+  assert.notEqual(viaUrl.status, 200, "no GET search"); assert.equal(calls.length, 0, "no provider request from a URL query");
+  const posted = await search("private words"); assert.equal(posted.status, 200);
+  assert.equal(calls.length, 1); assert.equal(calls[0].url.searchParams.get("q"), "private words");
+  assert.equal((await request("/api/gifs/search", { body: { pad: room.slug, q: ["x"] } })).data.code, "query");
+  assert.equal((await request("/api/gifs/search", { body: { pad: room.slug, q: { x: 1 } } })).data.code, "query");
+  assert.equal(calls.length, 1, "a non-string query reaches no provider");
 });

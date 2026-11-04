@@ -142,16 +142,19 @@ function attach(item) {
   return item;
 }
 function register(app, { addUser }) {
-  app.get("/api/gifs/search", addUser, async (req, res) => {
+  // 1.99?? dock: review - privacy: POST {q, pad}, never a GET - what people look for (often a name) never sits in a URL, so it stays
+  // out of nginx's and Cloudflare's request logs (spec O.1: q is never logged), as the pad chat's own search does (chatlogsearch.js)
+  app.post("/api/gifs/search", addUser, require("express").json({ limit: "4kb" }), async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, code: "security", error: "GIF search unavailable." });
     try {
-      // 1.99?? dock: review - a slug only: qs makes ?pad[id]=..&pad[relay]=1 an object, which sayEligibility would take as the room
-      const pad = typeof req.query.pad === "string" ? req.query.pad : "";
+      const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+      // 1.99?? dock: review - a slug only: a pad object ({id, relay, ...}) is what sayEligibility would take as the room itself
+      const pad = typeof body.pad === "string" ? body.pad : "";
       const access = await require("./bridge-relay").sayEligibility(req, pad);
       if (!access.ok) return res.status(access.status).json(access.body);
       if (!available()) throw new Refuse(403, "gif");
-      const q = req.query.q == null ? "" : req.query.q;
+      const q = body.q == null ? "" : body.q;
       if (typeof q !== "string" || q.length > 50) throw new Refuse(400, "query");
       if (!hit("search:" + access.u.userId, SEARCH_LIMIT)) throw new Refuse(429, "rate");
       const result = await search(q);

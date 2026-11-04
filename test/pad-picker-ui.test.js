@@ -47,11 +47,15 @@ test("GIF searches are explicit, capped, branded and use only validated thumbnai
     {id:"gif_safe",title:"<img onerror=alert(1)>",preview:{src:"https://static.klipy.com/safe.gif"}},
     {id:"gif_bad",title:"Bad host",preview:{src:"https://static.klipy.com.evil.invalid/bad.gif"}},
     {id:"gif_credentials",title:"Credentials",preview:{src:"https://u:p@static.klipy.com/bad.gif"}}
-  ]));await flush();assert.equal(h.calls.requests.length,1);assert.match(h.calls.requests[0].url,/q=&pad=night-orchard$/);
+  ]));await flush();assert.equal(h.calls.requests.length,1);
+  // 1.99?? dock: review - privacy: a POST {q, pad}, never the words in the URL (nginx / Cloudflare request logs)
+  assert.equal(h.calls.requests[0].url,"/api/gifs/search");assert.equal(h.calls.requests[0].opts.method,"POST");
+  assert.equal(h.calls.requests[0].opts.headers["X-Requested-With"],"fetch");assert.equal(h.calls.requests[0].opts.headers["Content-Type"],"application/json");
+  assert.deepEqual(JSON.parse(h.calls.requests[0].opts.body),{q:"",pad:"night-orchard"});
   const input=h.sheet.querySelector("input");assert.equal(input.placeholder,"Search KLIPY");assert.equal(input.maxLength,50);
   input.value="a".repeat(60);input.dispatchEvent(new Event("input"));assert.equal(h.calls.requests.length,1,"typing does not issue repeated searches");
   h.sheet.querySelector("form").dispatchEvent(new Event("submit"));await flush();
-  assert.equal(new URL(h.calls.requests[1].url,"https://example.invalid").searchParams.get("q").length,50);
+  assert.equal(h.calls.requests[1].url,"/api/gifs/search");assert.equal(JSON.parse(h.calls.requests[1].opts.body).q.length,50);
   const rows=h.sheet.querySelectorAll(".rmp-grid button");assert.equal(rows.length,1);assert.equal(rows[0].querySelectorAll("img").length,1);assert.match(h.sheet.outerHTML,/&lt;img onerror/);assert.match(h.sheet.textContent,/via KLIPY/);
   rows[0].click();assert.deepEqual(h.calls.send,["[gif:gif_safe]"]);assert.equal(h.calls.closed,1);
 });
