@@ -542,7 +542,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=1"><script src="/public/js/pad-dock.js?v=1"></script><script src="/public/js/pad-picker.js?v=1"></script><% } %>
+<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=2"><script src="/public/js/pad-dock.js?v=2"></script><script src="/public/js/pad-picker.js?v=1"></script><% } %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
   <%# 1.99tc: the tier intro - 💎 Prime Time Plus gets its own title card, Prime Time the gold sweep (partials/pad-intro.ejs) %>

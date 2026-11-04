@@ -3,7 +3,9 @@
    sideways) scrolls to the composer, as /messages' body.dm-page does; only sideways overflow is cut */
 body.pad-dock-live { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 520px; overflow-x: hidden; }
 body.pad-dock-live > header { flex: none; }
-body.pad-dock-live > main.rm.rm-dock { flex: 1 1 0; min-block-size: 0; max-inline-size: none; }
+/* 1.99?? dockfu (the lead's design call a): the Live frame keeps the page's own max width (.rm / .ds-page, as on Feed and About) and
+   centres in it (.ds-page's margin-inline: auto + inline-size: 100% below) - it no longer runs edge to edge on a wide screen */
+body.pad-dock-live > main.rm.rm-dock { flex: 1 1 0; min-block-size: 0; }
 body.pad-dock-live .site-foot { display: none; }
 main.rm.rm-dock { inline-size: 100%; min-inline-size: 0; gap: var(--ds-sp-2); padding-block: var(--ds-sp-2) var(--ds-sp-3); padding-inline: var(--ds-gutter); }
 body.pad-dock-live > main.rm.rm-dock { display: flex; flex-direction: column; }
@@ -24,7 +26,20 @@ main.rm.rm-dock #rmHero .rm-av { width: 32px; height: 32px; border-radius: var(-
    the ⋯ menu inside it still opens over the stage overlay and the floating chat (and stays below the navbar and every sheet). */
 main.rm.rm-dock #rmHero.has-bn { position: relative; padding-block: var(--ds-sp-2); z-index: calc(var(--ds-z-sticky) + var(--ds-z-raised)); }
 main.rm.rm-dock #rmHero .hero-bn { position: absolute; inset: 0; block-size: 100%; margin: 0; border-radius: inherit; z-index: calc(-1 * var(--ds-z-raised)); }
-main.rm.rm-dock #rmHero .hero-bn::after { background: var(--ds-media-panel); }
+/* 1.99?? dockfu (design call b): the pad's banner shows through the Dock header - a 60% scrim (it was --ds-media-panel's 88%: about
+   12% of the banner showed). Readability no longer rests on the scrim alone: every piece of header text without an opaque pill of
+   its own (the name + badges, About, the follower count, a Following button) sits on a --ds-media-panel plate, so over even a white
+   banner its backdrop is darker than the page's #0d0d0d - the floor padlook.js's 4.5:1 accent guard is measured on (so the pad's
+   accent, the default green and the muted greys all keep 4.5:1; test/pad-dock.test.js does the sums). Same for the compact identity. */
+main.rm.rm-dock #rmHero .hero-bn::after,
+main.rm.rm-dock .rmd-id-banner::after { background: color-mix(in srgb, var(--ds-media-bg) 60%, transparent); }
+main.rm.rm-dock #rmHero.has-bn :is(.hd-nm, a.hd-about, .hd-fc, .hd-fcs, .fw-btn.on),
+main.rm.rm-dock .rmd-id:has(> .rmd-id-banner) .rmd-id-name { background-color: var(--ds-media-panel); border-radius: var(--ds-r-sm); }
+/* (the name's plate hugs the name + badges; its margin is a spread shadow, not padding - pad-chipfit.js fits the badges into this
+   box's clientWidth, which padding would widen) */
+main.rm.rm-dock #rmHero.has-bn .hd-nm,
+main.rm.rm-dock .rmd-id:has(> .rmd-id-banner) .rmd-id-name { flex: 0 1 auto; box-shadow: 0 0 0 var(--ds-sp-1) var(--ds-media-panel); }
+main.rm.rm-dock #rmHero.has-bn :is(a.hd-about, .hd-fc) { padding: var(--ds-sp-1) var(--ds-sp-2); }
 main.rm.rm-dock #rmHero.has-bn .hd { margin-block-start: 0; position: relative; z-index: var(--ds-z-raised); }
 main.rm.rm-dock #rmHero h1 { font-size: var(--ds-fs-h3); }
 main.rm.rm-dock #padTabs { margin: 0; min-inline-size: 0; padding: var(--ds-sp-1); border-radius: var(--ds-r-lg); }
@@ -80,7 +95,7 @@ main.rm.rm-dock .rmd-id-name > .rm-nm { min-inline-size: min(8ch, 100%); text-ov
 main.rm.rm-dock .rmd-id-name > .pfx-bs { flex: 0 1 auto; }
 main.rm.rm-dock .rmd-id > .rmd-id-banner { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; z-index: calc(-1 * var(--ds-z-raised)); }   /* 1.99aiw: under the frame layer (see #rmHero) */
 main.rm.rm-dock .rmd-id-banner img { inline-size: 100%; block-size: 100%; object-fit: cover; object-position: 50% var(--pad-banner-y, 50%); display: block; }
-main.rm.rm-dock .rmd-id-banner::after { content: ""; position: absolute; inset: 0; background: var(--ds-media-panel); }
+main.rm.rm-dock .rmd-id-banner::after { content: ""; position: absolute; inset: 0; }   /* (its 60% scrim: with #rmHero's, above) */
 main.rm.rm-dock .rmd-id > .rmd-id-content { position: relative; z-index: var(--ds-z-raised); }
 main.rm.rm-dock .rmd-viewbar { display: flex; align-items: center; gap: var(--ds-sp-2); padding: var(--ds-sp-2); min-inline-size: 0; flex: none; }
 main.rm.rm-dock .rmd-viewbar > .rmd-id { flex: 1 1 auto; }
@@ -148,6 +163,29 @@ main.rm.rm-dock .rmd-body > .rm-main { display: flex; flex-direction: column; mi
 main.rm.rm-dock .rmd-body > .side,
 main.rm.rm-dock .rmd-side { display: flex; flex-direction: column; gap: var(--ds-sp-2); min-block-size: 0; min-inline-size: 0; overflow-y: auto; overscroll-behavior: contain; }
 main.rm.rm-dock #rmChat { display: flex; flex-direction: column; position: relative; flex: 1 1 0; min-block-size: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border-radius: var(--ds-r-lg); }
+/* 1.99?? dockfu (design call c): a readable chat on a short window (800x900 with cams pinned, a phone). The log keeps a floor
+   (--rmd-log-min; with the room-audio row and the composer that is well over 220px in every composer state) and the floor reaches
+   the Live panel's flex column: the chat card's content-based minimum (min-block-size: auto) holds it, the body's grid row takes it
+   (the side column is size-contained, so its long lists never count - it scrolls as before), and the panel then shrinks the stage
+   first (down to its own floor), the cam strip folds to its one-row compact form once the panel is short (the container query
+   below), and only past all that does the page scroll (body.pad-dock-live's floor). Floating / fullscreen / PiP chats keep theirs. */
+body.pad-dock-live main.rm.rm-dock { --rmd-log-min: 120px; }
+body.pad-dock-live main.rm.rm-dock #padPanel-live { container: rmd-live / size; }
+body.pad-dock-live main.rm.rm-dock #padPanel-live .rmd-body { min-block-size: auto; }
+body.pad-dock-live main.rm.rm-dock #padPanel-live .rmd-body > .side { contain: size; }
+body.pad-dock-live main.rm.rm-dock #padPanel-live #rmChat { min-block-size: auto; }
+body.pad-dock-live main.rm.rm-dock #padPanel-live #rmScroll { min-block-size: var(--rmd-log-min); }
+/* (a stage the floor shrank keeps its controls inside it: the overlay scrolls in the stage's box instead of spilling over the cam
+   strip and the chat's heading; a full-size stage, fullscreen and PiP never need to) */
+body.pad-dock-live main.rm.rm-dock #padPanel-live #rmStage > .rmd-stage-overlay { max-block-size: 100%; overflow-y: auto; overscroll-behavior: contain; }
+/* (a desktop Live panel this short - 1280x800 with cams pinned - also drops the room-count line, which the people card repeats, and
+   lets the stage go down to the 96px a short window gives it; a phone keeps the line: its people card is in a sheet) */
+@media (min-width: 761px) {
+  @container rmd-live (max-height: 600px) {
+    body.pad-dock-live main.rm.rm-dock #rmLiveStat { display: none; }
+    body.pad-dock-live main.rm.rm-dock #padPanel-live > :is(#rmStage, .rmd-local-player) { min-block-size: 96px; }
+  }
+}
 main.rm.rm-dock #chatH { flex: none; align-items: center; flex-wrap: wrap; margin-block-end: var(--ds-sp-1); gap: var(--ds-sp-1); }
 main.rm.rm-dock #chatH > .rmd-chat-tools { margin-block: 0; margin-inline-start: auto; }
 main.rm.rm-dock #chatH > :is(.hist-chip, .hist-jump) { order: 2; }
@@ -266,6 +304,7 @@ main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white
 
 @media (max-width: 760px) {
   body.pad-dock-live { min-block-size: 440px; }
+  body.pad-dock-live main.rm.rm-dock { --rmd-log-min: 112px; }   /* 1.99?? dockfu: + the 141px audio row and composer = 253px */
   main.rm.rm-dock { padding-inline: var(--ds-gutter); gap: var(--ds-sp-1); }
   main.rm.rm-dock .rmd-padbar { display: flex; }
   main.rm.rm-dock .rmd-padbar > .rmd-id { flex: 1 1 auto; }
@@ -310,6 +349,16 @@ main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white
   body.pad-dock-live main.rm.rm-dock #rmHero { padding-block: var(--ds-sp-1); }
   body.pad-dock-live main.rm.rm-dock #padTabs .ptab { min-block-size: 32px; }
   body.pad-dock-live main.rm.rm-dock #padPanel-live > :is(#rmStage, .rmd-local-player) { flex: 0 1 104px; min-block-size: 104px; max-block-size: 104px; }
+  body.pad-dock-live main.rm.rm-dock #rmChat { padding-block: var(--ds-sp-1); }
+  body.pad-dock-live main.rm.rm-dock .rmd-composer-tools { display: none; }
+  body.pad-dock-live main.rm.rm-dock #rmAudioBox :is(.rb-state, .rb-mode) { display: none; }
+  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rb-audio { flex-wrap: nowrap; }
+  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rmd-holders { flex-basis: 64px; }
+}
+/* 1.99?? dockfu (design call c): the compact cam strip (one row of 64px tiles, the layout picker as a select) whenever the Live panel
+   is short - a short window (these rules were in the max-height: 720px block above) and also a taller one where pinned cams and
+   the chat's floor would otherwise push the composer off screen (800x900, 1280x800 with cams) */
+@container rmd-live (max-height: 720px) {
   body.pad-dock-live main.rm.rm-dock #rmStrip { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--ds-sp-2); align-items: center; padding-block: 0; }
   body.pad-dock-live main.rm.rm-dock #rmStrip .cs-head { flex-direction: row; justify-content: center; }
   body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-layout { display: none; }
@@ -322,11 +371,6 @@ main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white
   body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-cam-tools { position: static; grid-column: 2; grid-row: 1; display: grid; gap: var(--ds-sp-1); background: transparent; opacity: 1; pointer-events: auto; }
   body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-cam-tools button { padding-inline: var(--ds-sp-1); }
   body.pad-dock-live main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-block-size: 80px; }
-  body.pad-dock-live main.rm.rm-dock #rmChat { padding-block: var(--ds-sp-1); }
-  body.pad-dock-live main.rm.rm-dock .rmd-composer-tools { display: none; }
-  body.pad-dock-live main.rm.rm-dock #rmAudioBox :is(.rb-state, .rb-mode) { display: none; }
-  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rb-audio { flex-wrap: nowrap; }
-  body.pad-dock-live main.rm.rm-dock #rmAudioBox .rmd-holders { flex-basis: 64px; }
 }
 @media (min-width: 761px) and (max-height: 640px) {
   body.pad-dock-live main.rm.rm-dock .rmd-drawer { grid-template-columns: minmax(0, 1fr) 210px; align-items: center; }

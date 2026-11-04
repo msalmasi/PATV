@@ -249,3 +249,36 @@ test('floating the chat again and again leaves no stale window listeners',()=>{
   assert.equal(count(),base,'resize listeners after 4 floats');
   h.button('Float chat').click();assert.equal(count(),base+1);h.controller.redock();assert.equal(count(),base);
 });
+
+// 1.99?? dockfu (owner decision 6, the lead's design call d): the view controls are emoji icons - 🔽 hide the stage / open the phone
+// drawer (🔼 folds it), 🖥️ fullscreen, 🪟 pop out / float, ↩️ bring it back - never the text symbols they were (▁ ⌄ ⛶ ↗ 🗗 ↩). The
+// emoji sits in an aria-hidden .ds-ic; the words stay the button's accessible name and tooltip.
+test('view controls are emoji icons with their words as accessible names',()=>{
+  const h=harness({pip:true}),icon=b=>b.querySelector('.ds-ic');
+  const want={'Hide stage':'🔽','Fullscreen':'🖥️','Pop out player':'🪟','Float chat':'🪟','Pop out chat':'🪟','Pad header and tabs':'🔽'};
+  for(const [label,emoji] of Object.entries(want)){
+    const b=h.button(label);assert.equal(icon(b).textContent,emoji,label);assert.equal(icon(b).getAttribute('aria-hidden'),'true',label);
+    assert.equal(b.getAttribute('aria-label'),label);assert.equal(b.title,label);assert.equal(b.querySelector('.rmd-label').textContent,label);
+  }
+  const old=/[\u2581\u2304\u26f6\u2197\u{1F5D7}]|\u21a9(?!\ufe0f)/u;
+  const all=()=>h.doc.querySelectorAll('button').map(b=>icon(b)?icon(b).textContent:'').join(' ');
+  assert.doesNotMatch(all(),old,'no text-symbol icon at rest');
+  // the drawer handle: 🔽 opens, 🔼 folds back (aria-expanded carries the state)
+  const handle=h.button('Pad header and tabs');handle.click();assert.equal(icon(handle).textContent,'🔼');assert.equal(handle.getAttribute('aria-expanded'),'true');
+  handle.click();assert.equal(icon(handle).textContent,'🔽');assert.equal(handle.getAttribute('aria-expanded'),'false');
+  // the surfaces' own controls: ↩️ bring it back (viewbar + the placeholder left behind), 🖥️ on a cam tile, ↩️ return a cam
+  h.button('Float chat').click();const back=h.root.querySelectorAll('button').filter(b=>b.getAttribute('aria-label')==='Bring it back');
+  assert.ok(back.length>=2);for(const b of back)assert.equal(icon(b).textContent,'↩️');assert.doesNotMatch(all(),old,'no text-symbol icon while floating');
+  h.controller.redock();h.button('Watch on my stage').click();assert.equal(icon(h.button('Return cam to strip')).textContent,'↩️');
+  for(const b of h.doc.querySelectorAll('.rmd-local-player button'))if(b.getAttribute('aria-label')==='Fullscreen')assert.equal(icon(b).textContent,'🖥️');
+  assert.doesNotMatch(all(),old,'no text-symbol icon on a local cam');
+});
+// 1.99?? dockfu (design call e): Escape still redocks - the floating chat comes home and focus returns to what opened it; a Dock sheet
+// open over it takes the first Escape (it closes), the next one redocks
+test('Escape closes a Dock sheet first, then redocks the floating chat',()=>{
+  const h=harness(),opener=h.button('Float chat');opener.focus();opener.click();assert.ok(h.chat.closest('.rmd-float'));
+  h.button('Pepe says it').click();assert.ok(h.doc.querySelector('.rmd-tts'));
+  h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.doc.querySelector('.rmd-tts'),null,'the sheet closes');assert.ok(h.chat.closest('.rmd-float'),'the chat still floats');
+  h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),null,'Escape redocks');
+  assert.equal(h.doc.querySelectorAll('#rmFeed').length,1);assert.equal(h.doc.activeElement,opener,'focus goes back to the opener');
+});

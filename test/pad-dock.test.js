@@ -164,3 +164,90 @@ test("a window shorter than the Live frame's floor can still scroll to the compo
   }
   assert.ok(floor,"the frame keeps its floor");
 });
+
+// ── 1.99?? dockfu: the lead's design calls (hand-off 18 follow-ups, D1) ──
+const dockRules=()=>{const css=read("public/css/pad-dock.css").replace(/\/\*[\s\S]*?\*\//g,"");const rules=[];
+  (function parse(s,at){let i=0;while(i<s.length){const open=s.indexOf("{",i);if(open<0)break;let d=1,end=open+1;while(end<s.length&&d){if(s[end]==="{")d++;if(s[end]==="}")d--;end++;}
+    const selector=s.slice(i,open).trim(),body=s.slice(open+1,end-1);if(selector.startsWith("@"))parse(body,(at?at+" ":"")+selector);else if(selector)rules.push({selector,body,at:at||""});i=end;}})(css,"");
+  return rules;};
+const declOf=(rules,sel,prop,at="")=>{let v=null;for(const r of rules)if(r.at===at&&r.selector.split(/,\s*/).includes(sel)){const m=new RegExp("(?:^|;)\\s*"+prop+"\\s*:\\s*([^;]+)").exec(r.body);if(m)v=m[1].trim();}return v;};
+
+// (a) the Live frame keeps the page's own max width (.rm / .ds-page) and centres in it - not edge to edge on a wide screen
+test("dockfu: the Live frame follows the page width; only the Picture-in-Picture window runs full width", () => {
+  const rules=dockRules();
+  // (the frame = a rule on main.rm.rm-dock itself; a player inside it may of course fill its own box)
+  for(const r of rules)for(const sel of r.selector.split(/,\s*/))if(/main\.rm\.rm-dock(?:\[[^\]]+\])?$/.test(sel)&&/max-inline-size\s*:\s*none|max-width\s*:\s*none/.test(r.body))
+    assert.match(sel,/\[data-rmd-pip\]$/,sel+" may not lift the page width");
+  assert.equal(declOf(rules,"main.rm.rm-dock","inline-size"),"100%","fills up to the page's max width");
+  assert.match(read("public/css/ds.css"),/\.ds-page \{[^}]*max-width: var\(--ds-w\);[^}]*margin-inline: auto;/);
+  assert.match(read("views/room.ejs"),/<main class="ds-page rm chatlog/);
+});
+
+// (b) the banner shows through the Dock header: a 50-60% scrim (was .88), and every piece of header text without an opaque pill of its
+// own sits on a --ds-media-panel plate. The sums: over the worst banner (pure white) the plate's backdrop is at least as dark as the
+// page's #0d0d0d - the floor padlook's 4.5:1 accent guard is measured on - so every accent a pad can have (each preset, a custom one the
+// guard lifted to its 4.5:1 minimum) and the default green keep 4.5:1, as do the text greys. Both accent cases: a pad with a look (its
+// accent) and one without (the design system's green).
+test("dockfu: the banner shows through a lighter scrim and the header text keeps 4.5:1 in both accent cases", () => {
+  const rules=dockRules(),PL=seed.PL,ds=read("public/css/ds.css");
+  const scrim=declOf(rules,"main.rm.rm-dock #rmHero .hero-bn::after","background");
+  assert.equal(declOf(rules,"main.rm.rm-dock .rmd-id-banner::after","background"),scrim,"the compact identity uses the same scrim");
+  const m=/^color-mix\(in srgb, var\(--ds-media-bg\) (\d+)%, transparent\)$/.exec(String(scrim));assert.ok(m,String(scrim));
+  const a=Number(m[1])/100;assert.ok(a>=0.5&&a<=0.6,"scrim "+a+" (the lead's call: about .5-.6)");
+  assert.equal(/--ds-media-bg:\s*(#[0-9a-f]{3,6})/i.exec(ds)[1],"#000");
+  const plateA=Number(/--ds-media-panel:\s*rgba\(0,\s*0,\s*0,\s*([.\d]+)\)/.exec(ds)[1]);
+  const plates=["main.rm.rm-dock #rmHero.has-bn .hd-nm","main.rm.rm-dock #rmHero.has-bn a.hd-about","main.rm.rm-dock #rmHero.has-bn .hd-fc","main.rm.rm-dock #rmHero.has-bn .hd-fcs","main.rm.rm-dock #rmHero.has-bn .fw-btn.on","main.rm.rm-dock .rmd-id:has(> .rmd-id-banner) .rmd-id-name"];
+  const plateRule=rules.find(r=>/background-color\s*:\s*var\(--ds-media-panel\)/.test(r.body)&&r.selector.includes("#rmHero.has-bn :is("));
+  assert.ok(plateRule,"the header's text plates");
+  for(const p of ["hd-nm","a.hd-about","hd-fc","hd-fcs","fw-btn.on"])assert.ok(plateRule.selector.includes(p),p);
+  assert.ok(plateRule.selector.includes(".rmd-id:has(> .rmd-id-banner) .rmd-id-name"));assert.ok(plates.length);
+  // the name's plate margin is a spread shadow, never padding (pad-chipfit.js fits the badges into the box's clientWidth)
+  assert.match(String(declOf(rules,"main.rm.rm-dock #rmHero.has-bn .hd-nm","box-shadow")),/^0 0 0 var\(--ds-sp-1\) var\(--ds-media-panel\)$/);
+  assert.equal(declOf(rules,"main.rm.rm-dock #rmHero.has-bn .hd-nm","padding"),null);
+  // worst case: a pure white banner -> under the scrim, then under the plate (sRGB compositing, as browsers do)
+  const hex=v=>"#"+[v,v,v].map(x=>Math.round(x).toString(16).padStart(2,"0")).join("");
+  const under=255*(1-a),plate=hex(under*(1-plateA)),bare=hex(under);
+  assert.ok(PL.luminance(plate)<=PL.luminance(PL.BG)+1e-9,"the plate's worst backdrop "+plate+" is no lighter than "+PL.BG);
+  const tok=n=>PL.normHex(new RegExp(n+":\\s*(#[0-9a-f]{3,6})\\b","i").exec(ds)[1]);
+  const texts={"--ds-text-strong":tok("--ds-text-strong"),"--ds-text":tok("--ds-text"),"--ds-text-muted":tok("--ds-text-muted"),"--ds-green-2 (no look)":tok("--ds-green-2")};
+  for(const p of PL.PALETTE)texts["preset "+p.id]=p.hex;
+  for(const dark of ["#101030","#3a0000","#002a10","#202020"]){const g=PL.guardAccent(dark);assert.ok(g.ratio>=4.5);texts["guarded "+dark+" -> "+g.hex]=g.hex;}
+  for(const [name,c] of Object.entries(texts))assert.ok(PL.contrast(c,plate)>=4.5,name+" on "+plate+": "+PL.contrast(c,plate).toFixed(2));
+  // without a plate only the strong white would pass over a white banner - which is why every text piece has one
+  assert.ok(PL.contrast(texts["--ds-text-strong"],bare)>=4.5);assert.ok(PL.contrast(texts["--ds-text-muted"],bare)<4.5);
+});
+
+// (c) a readable chat on a short window: the log keeps a floor that reaches the Live panel's flex column (the chat card's and the
+// body's content-based minimum; the side column size-contained), so the stage gives way first, the cam strip folds to its compact row
+// when the panel is short, and only then the page scrolls. The browser evidence (EVIDENCE: 800x900 / 1280x800 with two cams, phones)
+// measured the log at 120 / 112px with the room-audio row and composer making 251-253px.
+test("dockfu: the chat keeps a readable floor on short windows - the stage and the cam strip give way first", () => {
+  const rules=dockRules(),P="body.pad-dock-live main.rm.rm-dock #padPanel-live";
+  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock","--rmd-log-min"),"120px");
+  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock","--rmd-log-min","@media (max-width: 760px)"),"112px");
+  assert.equal(declOf(rules,P+" #rmScroll","min-block-size"),"var(--rmd-log-min)");
+  assert.equal(declOf(rules,P+" #rmChat","min-block-size"),"auto");
+  assert.equal(declOf(rules,P+" .rmd-body","min-block-size"),"auto");
+  assert.equal(declOf(rules,P+" .rmd-body > .side","contain"),"size","the side column's lists never count toward the floor");
+  assert.equal(declOf(rules,P,"container"),"rmd-live / size");
+  // the stage is the shrinkable one (with its own floor); the strip's compact form is a container query on the panel's height
+  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","flex"),"0 1 32%");
+  const cq="@container rmd-live (max-height: 720px)";
+  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmStrip .cs-vid","block-size",cq),"64px");
+  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-select","display",cq),"block");
+  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmStrip .rmd-strip-layout","display",cq),"none");
+  assert.equal(declOf(rules,"body.pad-dock-live main.rm.rm-dock #rmLiveStat","display","@media (min-width: 761px) @container rmd-live (max-height: 600px)"),"none");
+  // a stage the floor shrank keeps its controls inside it (the overlay scrolls in the stage's box, never over the strip / chat)
+  assert.equal(declOf(rules,P+" #rmStage > .rmd-stage-overlay","max-block-size"),"100%");
+  assert.equal(declOf(rules,P+" #rmStage > .rmd-stage-overlay","overflow-y"),"auto");
+  // the floating / fullscreen / PiP chats keep their own sizes: the floor is scoped to the docked panel
+  for(const r of rules)if(/--rmd-log-min\)/.test(r.body))assert.ok(r.selector.startsWith(P),r.selector);
+});
+
+// (f) the pad-accent focus ring stays (owner-approved exception): the mapping still points --ds-focus at the pad's accent
+test("dockfu: the pad-accent focus ring stays", () => {
+  const rules=dockRules(),mapping=rules.filter(r=>r.body.includes("--ds-ac:"));
+  assert.equal(mapping.length,1);assert.match(mapping[0].body,/--ds-focus:\s*var\(--pad-accent\)/);
+  assert.match(mapping[0].body,/--ds-focus-ring:\s*0 0 0 2px var\(--ds-bg\), 0 0 0 4px var\(--ds-focus\)/);
+  assert.match(read("docs/design-system.md"),/owner approved/i);
+});

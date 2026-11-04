@@ -7,6 +7,10 @@
   function t(k, fallback, v) { return tr('js.pad.dock.' + k, fallback, v); }
   function el(tag, cls, text, doc) { var n = (doc || D).createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function each(nodes, fn) { Array.prototype.forEach.call(nodes || [], fn); }
+  // 1.99?? dockfu (owner decision 6, the lead's design call d): the view controls are EMOJI icons (the design system's rule), not
+  // text symbols (▁ ⌄ ⛶ ↗ 🗗 ↩): 🔽 hide the stage / open the phone drawer (🔼 folds it back), 🖥️ fullscreen, 🪟 pop out or float,
+  // ↩️ bring it back. Each button keeps its words as its accessible name and tooltip (button() below).
+  var IC = { hide: '🔽', fold: '🔼', full: '🖥️', pop: '🪟', back: '↩️' };
   function init(o) {
     o = o || {};
     var root = o.root || D.querySelector('main.rm.rm-dock');
@@ -144,7 +148,7 @@
     function movable(n, destination, label) {
       var mark = el('div', 'rmd-placeholder', null, n.ownerDocument);
       mark.appendChild(el('span', null, label));
-      mark.appendChild(button('↩', 'redock', 'Bring it back', redock));
+      mark.appendChild(button(IC.back, 'redock', 'Bring it back', redock));
       n.parentNode.insertBefore(mark, n); destination.appendChild(n);
       return { node: n, mark: mark };
     }
@@ -172,7 +176,7 @@
     }
     function viewbar(host, close) {
       var v = el('div', 'rmd-viewbar', null, host.ownerDocument); identity(v);
-      v.appendChild(button('↩', 'redock', 'Bring it back', close || redock, 'ds-btn quiet sm', host.ownerDocument)); host.appendChild(v); return v;
+      v.appendChild(button(IC.back, 'redock', 'Bring it back', close || redock, 'ds-btn quiet sm', host.ownerDocument)); host.appendChild(v); return v;
     }
     function drag(host, handle) {
       var start = null;
@@ -286,12 +290,12 @@
       redock(); returnCam(); hideStage(false);
       var host = el('section', 'rmd-local-player cam-strip'); stage.parentNode.insertBefore(host, stage);
       var head = viewbar(host, returnCam);
-      head.appendChild(button('⛶', 'fullscreen', 'Fullscreen', function () { full(host); }));
-      head.appendChild(button('▁', 'hide_stage', 'Hide stage', function () { hideStage(true); }, 'ds-btn quiet sm rmd-icon'));
-      head.appendChild(button('↗', 'pop_stage', 'Pop out player', function () { pop(host, false); }, 'ds-btn quiet sm rmd-icon'));
+      head.appendChild(button(IC.full, 'fullscreen', 'Fullscreen', function () { full(host); }));
+      head.appendChild(button(IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true); }, 'ds-btn quiet sm rmd-icon'));
+      head.appendChild(button(IC.pop, 'pop_stage', 'Pop out player', function () { pop(host, false); }, 'ds-btn quiet sm rmd-icon'));
       localCam = { host: host, move: movable(tile, host, t('cam_stage', 'This cam is on your stage.')) };
       // This placeholder returns the local swap rather than redocking an unrelated surface.
-      var rb = localCam.move.mark.querySelector('button'); rb.replaceWith(button('↩', 'return_cam', 'Return cam to strip', returnCam));
+      var rb = localCam.move.mark.querySelector('button'); rb.replaceWith(button(IC.back, 'return_cam', 'Return cam to strip', returnCam));
       var close = tile.querySelector('.cs-x'); if (close) on(close, 'click', function () { setTimeout(function () { if (localCam && localCam.move.node === tile && !tile.parentNode) returnCam(); }, 0); });
       root.classList.add('rmd-local-cam'); changed();
     }
@@ -301,7 +305,7 @@
         if (tile.querySelector('.rmd-cam-tools')) return;
         var bar = el('div', 'rmd-cam-tools');
         bar.appendChild(button('📺', 'watch_cam', 'Watch on my stage', function () { watchCam(tile); }));
-        bar.appendChild(button('⛶', 'fullscreen', 'Fullscreen', function () { full(tile); })); tile.appendChild(bar);
+        bar.appendChild(button(IC.full, 'fullscreen', 'Fullscreen', function () { full(tile); })); tile.appendChild(bar);
       });
     }
     function visible() { return !D.hidden || !!(pip && !pip.closed && !pip.document.hidden); }
@@ -506,9 +510,12 @@
       }
       if (bar && drawer) {
         identity(bar);
-        var handle = button('⌄', 'drawer', 'Pad header and tabs', function () { fold(!root.classList.contains('rmd-drawer-open')); }, 'ds-btn quiet rmd-drawer-toggle rmd-icon');
+        var handle = button(IC.hide, 'drawer', 'Pad header and tabs', function () { fold(!root.classList.contains('rmd-drawer-open')); }, 'ds-btn quiet rmd-drawer-toggle rmd-icon');
         handle.setAttribute('aria-controls', 'rmdDrawer'); handle.setAttribute('aria-expanded', 'false'); bar.appendChild(handle);
-        function fold(open) { root.classList.toggle('rmd-drawer-open', open); handle.setAttribute('aria-expanded', String(open)); }
+        function fold(open) {
+          root.classList.toggle('rmd-drawer-open', open); handle.setAttribute('aria-expanded', String(open));
+          var ic = handle.querySelector('.ds-ic'); if (ic) ic.textContent = open ? IC.fold : IC.hide;   // 1.99?? dockfu: 🔽 opens, 🔼 folds
+        }
         on(bar, 'touchstart', function (e) { lastTouch = e.touches[0].clientY; }, false);
         on(bar, 'touchend', function (e) { if (lastTouch != null && e.changedTouches[0].clientY - lastTouch > 30) fold(true); lastTouch = null; });
         on(bar, 'wheel', function (e) { if (e.deltaY < -10) fold(true); });
@@ -516,9 +523,9 @@
       if (stage) {
         var overlay = el('div', 'rmd-stage-overlay'); identity(overlay);
         tools = el('div', 'rmd-stage-tools');
-        tools.appendChild(button('▁', 'hide_stage', 'Hide stage', function () { hideStage(true); }));
-        tools.appendChild(button('⛶', 'fullscreen', 'Fullscreen', function () { full(stageMedia()); }));
-        tools.appendChild(button('↗', 'pop_stage', 'Pop out player', function () { pop(stageMedia(), false); }));
+        tools.appendChild(button(IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true); }));
+        tools.appendChild(button(IC.full, 'fullscreen', 'Fullscreen', function () { full(stageMedia()); }));
+        tools.appendChild(button(IC.pop, 'pop_stage', 'Pop out player', function () { pop(stageMedia(), false); }));
         if (scheduleButton) tools.appendChild(scheduleButton);
         if (node('rmGoLive') && side) tools.appendChild(button('🎬', 'stage_actions', 'Stage options', function (b) {
           participants(b, function () { var go = node('rmGoLive'); if (go.scrollIntoView) go.scrollIntoView({ block: 'nearest' }); var action = go.querySelector('button,a'); if (action) action.focus(); });
@@ -536,8 +543,8 @@
       if (chat) {
         var head = el('div', 'rmd-chat-tools');
         if (side) head.appendChild(button('👥', 'participants', 'Participants', participants));
-        head.appendChild(button('↗', 'float_chat', 'Float chat', floatChat));
-        head.appendChild(button('🗗', 'pop_chat', 'Pop out chat', function () { pop(chat, true); }));
+        head.appendChild(button(IC.pop, 'float_chat', 'Float chat', floatChat));
+        head.appendChild(button(IC.pop, 'pop_chat', 'Pop out chat', function () { pop(chat, true); }));
         each(head.children, function (b) { b.classList.add('rmd-icon'); });
         var chatHeading = node('chatH'); if (chatHeading) chatHeading.appendChild(head); else chat.insertBefore(head, chat.firstChild);
         var topic = node('rmTopic'); if (topic && o.openTopic) {
