@@ -172,6 +172,27 @@ test("mixed/malformed/unknown tokens return gif refusal without jobs", async () 
   assert.equal(relay._jobs.size, 0);
 });
 
+// 1.99?? dock: only a token's own opening ("[gif:" / "[cfsticker:", any case) makes a line a media send. The package's /\[gif\b/i
+// refused every line that merely mentioned "[GIF]" - for everyone, Dock on or off - so a dark ship changed ordinary chat
+test("1.99?? dock: every switch off - words that mention [GIF] / [gif] / [cfsticker] relay as text; a token inside text or one cleaned into shape never does", async () => {
+  await flags({ mode: "off", gifs: false, cfstickers: false });
+  const plain = ["[GIF] lol", "[gif] that one", "look [gifs] [cfsticker] [Sticker]", "a [Gif] and [CFSTICKER] mention"];
+  for (const [i, text] of plain.entries()) {
+    const out = await say(text, "plain-" + i); assert.equal(out.status, 200, text + ": " + JSON.stringify(out.data));
+  }
+  const jobs = relay.takeJobs(new Set([room.id]));
+  assert.deepEqual(jobs.map(j => j.text), plain); assert.ok(jobs.every(j => j.media === undefined), "plain say jobs, no media");
+  relay._jobs.clear(); relay._cids.clear(); relay._hits.clear();
+  for (const text of ["hi [gif:abc]", "[GIF:abc] hi", "[gif:abc", "[gif: funny]"]) assert.equal((await say(text)).data.code, "gif", text);
+  for (const text of ["hi [cfsticker:1/2]", "[CfSticker:1/2]"]) assert.equal((await say(text)).data.code, "sticker", text);
+  assert.equal((await say("[gif:abc]")).data.code, "dock", "an exact token is a pick - never relayed as text while the Dock is off");
+  // markup the say route cleans out cannot turn a line into a token that skips the media gates (sayLine checks the cleaned text)
+  assert.equal((await say("[gi<b>f:abc]")).data.code, "dock");
+  assert.equal((await say("x [gi<b>f:abc]")).data.code, "gif");
+  assert.equal(relay._jobs.size, 0, "none of these queued");
+  assert.equal(calls.length, 0, "no provider request");
+});
+
 test("concurrent distinct GIF picks cannot overfill the shared five-message queue", async () => {
   let finish; provider = () => new Promise(resolve => { finish = resolve; });
   const sends = Array.from({ length: 6 }, (_, i) => say("[gif:gif_fixture_1]", "concurrent-" + i));

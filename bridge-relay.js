@@ -507,7 +507,11 @@ async function stickerRefusal(u, raw, out) {
 /** 1.99ye: one say line from member `u` (a users row: userId, username, displayname, camfrogUsername) into live room R.
  *  The /say route and the staging test route both come here. -> {status, body}. `cid` = the page's client id: the same
  *  one again answers with the job it already made (never a second post). */
-const mediaKind = text => /\[cfsticker\b/i.test(String(text || "")) ? "sticker" : /\[gif\b/i.test(String(text || "")) ? "gif" : null;
+// 1.99?? dock: only a token's own opening - "[cfsticker:" / "[gif:" (any case) - makes a line a media send: an exact token
+// (chatlog-core mediaToken) is a sticker / GIF pick, anything else that opens one is refused (never relayed as text that could
+// later read as a token). Ordinary words that merely mention "[GIF]" or "[gif]" relay as text, as before the Room Dock (the old
+// /\[gif\b/i test refused them for everyone, Dock on or off). sayLine checks the cleaned text again.
+const mediaKind = text => /\[cfsticker:/i.test(String(text || "")) ? "sticker" : /\[gif:/i.test(String(text || "")) ? "gif" : null;
 function mediaRefusal(kind) { return { status: 403, body: { ok: false, code: kind, error: kind === "sticker" ? "That sticker isn't available here." : "That GIF isn't available here." } }; }
 function sayLine(u, R, text, cid, opts = {}) {
   const kind = mediaKind(text), token = kind && require("./public/js/chatlog-core").mediaToken(text);
