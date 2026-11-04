@@ -26,6 +26,7 @@
     if (!o.id) return null;
     if (m.audio != null) o.audio = m.audio === true || m.audio === 1 ? 1 : 0;
     if (m.t === 'handoff' && typeof m.to === 'string') o.to = m.to.slice(0, 40);      // (the tab that asked for it, or '*')
+    if ((m.t === 'pop-alive' || m.t === 'pop-open') && m.slow) o.slow = 1;            // (a hidden window: the browser slows its timers)
     if (TEXT[m.t] && typeof m.draft === 'string') o.draft = m.draft.slice(0, MAX_DRAFT);
     return o;
   }
@@ -65,6 +66,7 @@
       var m = { v: 1, t: t, room: room, tag: tag, id: id, at: Date.now() };
       if (extra && extra.audio != null) m.audio = extra.audio ? 1 : 0;
       if (t === 'handoff' && extra && extra.to) m.to = String(extra.to).slice(0, 40);
+      if ((t === 'pop-alive' || t === 'pop-open') && extra && extra.slow) m.slow = 1;
       if (TEXT[t] && extra && typeof extra.draft === 'string' && extra.draft) m.draft = extra.draft.slice(0, MAX_DRAFT);
       return post(bc, m);
     }

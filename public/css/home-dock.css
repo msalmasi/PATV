@@ -28,6 +28,9 @@ main.rm.rm-dock.rmd-home #rmStage .rmd-golive > .rmd-label { position: static; i
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
 main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
+/* the chat in its own window: the stage takes the width, the 44px bar goes under it */
+main.hm.rmd-home.rmd-popped #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+main.hm.rmd-home.rmd-popped #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
 
 /* the chat card - the pad page's base card rules (room.ejs .rm .card / h2 / .topic / .compose) on the homepage */
 main.rm.rm-dock.rmd-home #rmChat { background: var(--ds-surface); border: 1px solid var(--ds-line); }

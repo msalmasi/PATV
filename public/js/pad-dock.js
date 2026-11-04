@@ -20,7 +20,7 @@
   // 1.99?? dockpop (owner: no icon with two meanings): 🪟 floats the chat in the page, ↗️ opens it in its own window, 🖼️ is the stage's
   // picture-in-picture, 🔽 / 🔼 hide / show the stage, 🖥️ is fullscreen (one toggle), › opens a page (the homepage's pad chip)
   var IC = { hide: '🔽', show: '🔼', full: '🖥️', float: '🪟', win: '↗️', pip: '🖼️', back: '↩️', more: '⋯', down: '▾', open: '›', min: '➖', max: '➕' };
-  var POP_GEO = 'patv.dock.popwin', ALIVE_MS = 5000, DEAD_MS = 15000, PENDING_MS = 6000, HANDOFF_MS = 3000;
+  var POP_GEO = 'patv.dock.popwin', ALIVE_MS = 5000, DEAD_MS = 15000, SLOW_DEAD_MS = 90000, PENDING_MS = 6000, HANDOFF_MS = 3000;
   // 1.99ajf dockclean (owner point 17): the Apps sheet - the room's games and tools, each only when Pepe offers it here (d.room.cmds).
   // A tile puts the command into the composer (a trailing space where it takes a name / amount: the name autocomplete opens) and
   // never sends by itself.
@@ -49,7 +49,7 @@
     // 1.99?? dockpop: the chat in its own window - popped (this page's chat card is hidden in place while a window for this pad and account
     // is open), the window we opened (only while we hold it), the dock-link channel and its timers
     var popped = false, popPending = false, popWin = null, link = null, lastAlive = 0, lastAudio = 0, tabSeen = 0, popBar = null;
-    var pendTimer = null, aliveTimer = null, handTimer = null, bringing = false, resumedInClick = false, gone_ = false;
+    var pendTimer = null, aliveTimer = null, handTimer = null, bringing = false, resumedInClick = false, gone_ = false, lastSlow = false;
     var autoTimer = null, toastTimer = null, observers = [], selected = null, stageRevision = 0, videoPipSource = null, overBar = false;
     var toolBtns = {}, peopleInput = null, infoMark = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null;
     var fullBtn = null, stageMoreBtn = null, showStageBtn = null;
@@ -1457,7 +1457,8 @@
         aliveTimer = null; if (!popped) return;
         paintPopBar();
         // a crashed / killed window: no heartbeat for 15 s (a window still being opened has its own 6 s wait)
-        if (!popPending && Date.now() - lastAlive > DEAD_MS) { leavePopped(null); return; }
+        // (a minimized / hidden window beats at the browser's pace - up to once a minute: it said so, and gets 90 s)
+        if (!popPending && Date.now() - lastAlive > (lastSlow ? SLOW_DEAD_MS : DEAD_MS)) { leavePopped(null); return; }
         aliveTimer = setTimeout(tick, ALIVE_MS);
       }, ALIVE_MS);
     }
@@ -1473,7 +1474,7 @@
     /** the pad tab / homepage side of the channel */
     function tabMsg(m) {
       if (m.t === 'pop-open' || m.t === 'pop-alive') {
-        lastAlive = Date.now(); lastAudio = m.audio ? 1 : 0;
+        lastAlive = Date.now(); lastAudio = m.audio ? 1 : 0; lastSlow = !!m.slow;
         if (popped && popPending) { popPending = false; clearTimeout(pendTimer); }
         if (!popped) enterPopped(false);
         if (mode === 'pad') link.send('tab-here');
@@ -1487,9 +1488,9 @@
       else if (m.t === 'audio-on') { if (playingHere()) o.audio.pause(); }
     }
     /** the window's side of the channel */
-    var handed = false, beatTimer = null;
+    var handed = false, beatTimer = null, leaving = false;
     function popMsg(m) {
-      if (m.t === 'who') link.send('pop-alive', { audio: playingHere() });
+      if (m.t === 'who') link.send('pop-alive', { audio: playingHere(), slow: D.hidden });
       else if (m.t === 'tab-here') tabSeen = Date.now();
       else if (m.t === 'pop-close-req') handOff(m.id);
       else if (m.t === 'draft') { var input = inputNode(); if (input && !input.value && m.draft) setDraft(input, m.draft); }
@@ -1514,7 +1515,7 @@
     }
     function beat() {
       clearTimeout(beatTimer);
-      beatTimer = setTimeout(function () { beatTimer = null; if (gone_ || !link) return; link.send('pop-alive', { audio: playingHere() }); beat(); }, ALIVE_MS);
+      beatTimer = setTimeout(function () { beatTimer = null; if (gone_ || !link || leaving) return; link.send('pop-alive', { audio: playingHere(), slow: D.hidden }); beat(); }, ALIVE_MS);
     }
     function recheck() { if (o.recheck) { try { o.recheck(); } catch (e) { /* the page's own */ } } }
     function openLink() {
@@ -1624,6 +1625,7 @@
       on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
       if (mode === 'pad') on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
       on(W, 'pagehide', function () {
+        leaving = true;
         if (mode === 'popout' && link && !handed && !gone_) {
           var input = inputNode();
           link.send('pop-closed', { audio: playingHere(), draft: input ? input.value : '' });
@@ -1634,6 +1636,9 @@
       if (mode === 'popout') {
         var geoTimer = null;
         on(W, 'resize', function () { clearTimeout(geoTimer); geoTimer = setTimeout(saveGeometry, 400); });
+        // (going hidden - minimized, another window over it: one beat now that says the next ones may be slow)
+        // (never after pagehide: a closing window's last word is pop-closed)
+        on(D, 'visibilitychange', function () { if (link && !gone_ && !handed && !leaving) link.send('pop-alive', { audio: playingHere(), slow: D.hidden }); });
       }
       openLink();
       if (mode === 'pad') tabChanged(panel && !panel.hidden ? 'live' : 'feed');

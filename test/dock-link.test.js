@@ -80,7 +80,7 @@ test("the only text is the viewer's own draft - on draft / handoff / pop-closed,
   assert.equal(other.msg.length, 0); assert.equal(other.foreign.length, 3);
   for (const f of other.foreign) assert.equal(f.draft, undefined, "another tag's trigger never carries the draft");
   // nothing on the channel is chat content: no lines, names, logins or account ids - the envelope, the audio flag, the draft, the hand-over's target
-  for (const s of B.sent) for (const k of Object.keys(s)) assert.ok(["v", "t", "room", "tag", "id", "at", "audio", "draft", "to"].includes(k), k);
+  for (const s of B.sent) for (const k of Object.keys(s)) assert.ok(["v", "t", "room", "tag", "id", "at", "audio", "draft", "to", "slow"].includes(k), k);
   // a forged message from elsewhere on the channel: only known types and fields get through
   const raw = new (B.chans.values().next().value.constructor)("patv-dock");
   raw.postMessage({ v: 1, t: "pop-open", room: "R", tag: "t1", id: "forged", text: "a chat line", login: "someone", feed: [1, 2] });
@@ -189,5 +189,19 @@ test("a popped tab restores itself after 15 s without a heartbeat (a crashed win
     now += 16000; tab.tick(); tab.tick(); tab.tick();
     assert.equal(tab.root.classList.contains("rmd-popped"), false, "no pop-alive for 15 s: restored");
     assert.equal(tab.chat.parentNode.querySelector(".rmd-popbar"), null);
+  } finally { Date.now = realNow; }
+});
+test("a hidden (minimized) window says its beats may be slow: its tab waits 90 s before it restores, not 15 s", () => {
+  const { b, tab, win } = tabAndWindow();
+  const realNow = Date.now; let now = realNow();
+  try {
+    Date.now = () => now;
+    win.doc.hidden = true; win.doc.dispatchEvent(new (require("./fixtures/pad-dock/dom.cjs").Event)("visibilitychange"));
+    flushAll(b);
+    assert.ok(b.sent.some((x) => x.m.t === "pop-alive" && x.m.slow === 1), "the beat says slow");
+    now += 40000; tab.tick(); tab.tick();
+    assert.equal(tab.root.classList.contains("rmd-popped"), true, "40 s without a beat from a hidden window: still popped");
+    now += 60000; tab.tick(); tab.tick();
+    assert.equal(tab.root.classList.contains("rmd-popped"), false, "100 s: restored");
   } finally { Date.now = realNow; }
 });

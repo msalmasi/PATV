@@ -738,3 +738,6 @@ main.rm.rm-dock.rmd-popout .rmd-log { min-block-size: 96px; }
 main.rm.rm-dock:is(.rmd-popout, .rmd-home) #chatH .rmd-ppl-btn { display: inline-flex; }
 main.rm.rm-dock .rmd-gone { display: grid; gap: var(--ds-sp-3); justify-items: start; align-content: center; flex: 1 1 auto; margin: 0; padding: var(--ds-sp-5); border-radius: var(--ds-r-lg); font-size: var(--ds-fs-sm); }
 main.rm.rm-dock .rmd-gone > p { margin: 0; max-inline-size: 42ch; }
+/* the staff's 🟣 Twitch relay switch (twitch-btn.js: top-left by its own inline style) would sit on the overlay's pad chip - in the Dock
+   it takes the stage's top-end corner */
+main.rm.rm-dock #rmStage .player > .twbtn { inset-block-start: var(--ds-sp-2) !important; inset-inline-start: auto !important; inset-inline-end: var(--ds-sp-2) !important; }
