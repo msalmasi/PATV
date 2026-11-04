@@ -182,3 +182,71 @@ test("people list: posted in the last hour = act 0 (dimmed, 'ago'), the chat ope
   assert.deepEqual(await W.forRoom(R, { userId: "fo-1", username: "plantbaked" }), []);
   W._setClock(null);
 });
+
+// ── 1.99?? padppl review fixes ──
+test("review: a NAMED block never silences a frog-named line's alert (it would say the frog is that suspect); a frog-name block never silences named lines", async () => {
+  await runQuery("DELETE FROM veil_blocks");
+  // alice blocks the suspect sneaky BY NAME, then 🐸 Soggy Bullfrog (sneaky, veiled) @mentions her: the alert still comes, under the frog name
+  await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('al-1', 'sn-1', 1)");
+  require(path.join(repo, "blocks")).changed("al-1", "sn-1");
+  M._sent.clear(); T += 120e3;
+  const before = (await notices("al-1")).length;
+  const fl = line({ u: { anon: true, display: "someone", veil: "incognito", alias: "Soggy Bullfrog", id: "v-soggy000001" }, text: "@alicecf hi there" });
+  V.hide(fl.it, "_vz", { login: "sneakcf", display: "sneakcf", kind: "incognito" });
+  M.onLines([fl]); await M._idle();
+  const n = await notices("al-1");
+  assert.equal(n.length, before + 1, "a named block of a suspect must not tell her the frog is him");
+  assert.match(n[n.length - 1].title, /🐸 Soggy Bullfrog/);
+  await runQuery("DELETE FROM dm_blocks");
+  require(path.join(repo, "blocks")).changed("al-1", "sn-1");
+  // a frog-name block on him: his NAMED line still alerts her (THE VEIL RULE - never his named actions)
+  await runQuery("INSERT INTO veil_blocks (blocker_id, blocked_id, blocked_login, label, room_id, created) VALUES ('al-1', 'sn-1', 'sneakcf', 'Soggy Bullfrog', ?, 1)", [ROOM]);
+  M._sent.clear(); T += 120e3;
+  M.onLines([line({ u: { login: "sneakcf", display: "sneaky" }, text: "@alicecf named now" })]); await M._idle();
+  assert.equal((await notices("al-1")).length, before + 2);
+  await runQuery("DELETE FROM veil_blocks");
+});
+
+test("review: a NAMED line of someone the site keeps hidden never alerts (no name in a notice the pad wouldn't show); a hand-typed @ on a web line alerts", async () => {
+  const CL = require(path.join(repo, "chatlog")), CV = require(path.join(repo, "chatlogview"));
+  await CL.noteSync({ list: [CL.hash("hiddencf")] });
+  assert.equal(CV.isHiddenLogin("hiddencf") || require(path.join(repo, "quotes")).isHidden("hiddencf"), true, "precondition: hiddencf is in the sticky set");
+  M._sent.clear(); T += 120e3;
+  const before = (await notices("fo-1")).length;
+  M.onLines([line({ u: { login: "hiddencf", display: "Hidden Person" }, text: "@foamy1111 psst" })]); await M._idle();
+  assert.equal((await notices("fo-1")).length, before, "never '💬 Hidden Person mentioned you'");
+  // a web line with no picked mention but a hand-typed "@foamy1111": the bell agrees with the page's highlight
+  M._sent.clear(); T += 120e3;
+  const L = line({ u: { login: "alicecf", display: "Alice", web: true }, text: "typed by hand @foamy1111" });
+  Object.defineProperty(L.it, "_sender", { value: { userId: "al-1", login: "alicecf" } });
+  M.onLines([L]); await M._idle();
+  assert.equal((await notices("fo-1")).length, before + 1);
+  // a PICKED "@Alice Long" never reads as a hand-typed "@Alice" (someone else)
+  M._sent.clear(); T += 120e3;
+  const L2 = line({ u: { login: "foamy1111", display: "plantbaked", web: true }, text: "@Alice Long hello", mn: [{ n: "Alice Long", username: null, login: null, veil: 1 }] });
+  Object.defineProperty(L2.it, "_mnIds", { value: [{ userId: null, login: null, veil: true, label: "Alice Long", n: "Alice Long" }] });
+  Object.defineProperty(L2.it, "_sender", { value: { userId: "fo-1", login: "foamy1111" } });
+  const ab = (await notices("al-1")).length;
+  M.onLines([L2]); await M._idle();
+  assert.equal((await notices("al-1")).length, ab, "the blanked pick is not alicep's @Alice");
+});
+
+test("review: the people list notes only lines that went out under the person's NAME - never while incognito or hidden", async () => {
+  W._reset();
+  let now = T; W._setClock(() => now);
+  await runQuery(`CREATE TABLE IF NOT EXISTS incognito_state (login TEXT PRIMARY KEY, "on" INTEGER, updated INTEGER, reported INTEGER)`);
+  await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated) VALUES ('u:bo-1', 1, 1)`);
+  assert.equal(await W.notePostNamed(ROOM, { userId: "bo-1", username: "bobweb" }, null, now - 5 * 60e3), false, "incognito when it went out: never noted");
+  await runQuery(`DELETE FROM incognito_state`);
+  // ...so turning incognito off later never puts a name next to "posted 5 min ago" (and the frog line said then)
+  assert.deepEqual(await W.forRoom(R, { userId: "fo-1", username: "plantbaked" }), []);
+  assert.equal(await W.notePostNamed(ROOM, { userId: "bo-1", username: "bobweb" }, "hiddencf", now - 4 * 60e3), false, "a hidden login: never");
+  assert.equal(await W.notePostNamed(ROOM, { userId: "bo-1", username: "bobweb" }, null, now - 3 * 60e3), true, "named: noted");
+  assert.deepEqual((await W.forRoom(R, { userId: "fo-1", username: "plantbaked" })).map((e) => [e.display, e.act]), [["bobweb", 0]]);
+  // the relay notes only a NAMED echo (bridge.js says so), never Pepe's ack alone
+  const src = fs.readFileSync(path.join(repo, "bridge-relay.js"), "utf8");
+  assert.match(src, /function notePosted\(j, named = false\) \{\n\s+if \(!named \|\|/);
+  assert.doesNotMatch(src, /if \(a\.ok\) notePosted\(j\)/);
+  assert.match(fs.readFileSync(path.join(repo, "bridge.js"), "utf8"), /relay\.noteEcho\(echoOf, it\.c, R\.id, !!\(it\.k === "msg" && it\.u && !it\.u\.anon && !it\.u\.self && !it\.ah && !it\.mask && !it\._vz\)\)/);
+  W._setClock(null);
+});

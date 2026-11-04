@@ -154,3 +154,53 @@ test("retention: codes go 90 days after their last use; the switch off stops rec
   await NB.note("har-0001", req("198.51.100.7"), "signin");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM net_seen"))[0].n, 0);
 });
+
+// ── 1.99?? padppl review fixes ──
+test("review: one /64 is ONE code however it is spelled, and a compressed zero run never leaks interface bits into it", async () => {
+  assert.equal(NB.netOf("2001:db8:1::5"), "2001:db8:1:0::/64");
+  assert.equal(NB.netOf("2001:db8:1:0:abcd::5"), "2001:db8:1:0::/64");
+  assert.equal(NB.netHash("2001:db8:1::5"), NB.netHash("2001:db8:1:0:abcd::5"), "the reviewer's pair: one network");
+  assert.equal(NB.netOf("2001:db8::1:2:3:4"), "2001:db8:0:0::/64", "only the first half - the privacy-address bits are dropped");
+  assert.equal(NB.netHash("2001:db8::1:2:3:4"), NB.netHash("2001:db8::9:9:9:9"), "a harasser rotating privacy addresses stays on one code");
+  assert.equal(NB.netOf("[2001:DB8:1::5]"), "2001:db8:1:0::/64");
+  assert.equal(NB.netOf("::ffff:198.51.100.7"), "198.51.100.7", "a v4-mapped address is its IPv4");
+  assert.equal(NB.netOf("nonsense"), null);
+});
+
+test("review: a member caught on a shared network is let through (exempt) without lifting the ban; 'which bans hit them'; one row per account ban", async () => {
+  await NB.setOn(ADM, true);
+  await NB.note("har-0001", req("203.0.113.9"), "signin");
+  await NB.note("har-0001", req("203.0.113.10"), "signin");
+  await NB.note("mom-0001", req("203.0.113.9"), "signin");
+  const r = await NB.banAccountNets(ADM, "har-0001", { scope: "site", reason: "again", days: 7 });
+  assert.ok(r.networks >= 2);
+  const list = (await NB.listBans(ADM)).filter((b) => b.kind === "account" && b.reason === "again");
+  assert.equal(list.length, 1, "an account's networks are ONE row");
+  assert.ok(list[0].ids.length >= 2 && list[0].n === list[0].ids.length);
+  assert.equal(await NB.refusal(req("203.0.113.9"), { user: U.mom }), NB.REFUSAL);
+  await assert.rejects(NB.hitting(ADM, "mom-0001", ""), (e) => e.status === 400, "a reason every time");
+  const hit = await NB.hitting(ADM, "mom-0001", "support ticket 7");
+  assert.ok(hit.length >= 1 && hit.every((b) => b.from === "tricon"));
+  assert.doesNotMatch(JSON.stringify(hit), /[0-9a-f]{32}|203\.0/, "never a code or an address");
+  const ex = await NB.exempt(ADM, "mom-0001", [], "support ticket 7");
+  assert.ok(ex.n >= 1);
+  assert.equal(await NB.refusal(req("203.0.113.9"), { user: U.mom }), null, "let through");
+  assert.equal(await NB.refusal(req("203.0.113.9"), { user: U.har2 }), NB.REFUSAL, "the ban still stands for everyone else");
+  assert.equal((await NB.hitting(ADM, "mom-0001", "check")).length, 0);
+  await NB.lift(ADM, list[0].ids);
+  assert.equal(await NB.refusal(req("203.0.113.10"), {}), null, "the whole row lifted at once");
+});
+
+test("review: sign-in is gated where the account is known (staff / exempt pass a password form); sign-up refused before the account exists", () => {
+  const idx = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  const gate = idx.slice(idx.indexOf("const NB_ROUTES_ = ["), idx.indexOf("app.use(async (req, res, next) => {", idx.indexOf("const NB_ROUTES_ = [")));
+  assert.doesNotMatch(gate, /\/login|\/register/, "no /login or /register in the write-route gate");
+  for (const p of ["/api/feed/posts", "/api/feed/posts/p1/comments", "/api/feed/comments/c1/edit", "/api/stories/s1/reply", "/api/messages/uploads", "/api/messages/groups",
+                   "/api/messages/c/x/rename", "/api/rooms/drama/camclip", "/api/rooms/drama/micclip", "/api/rooms/drama/pepe", "/api/rooms/drama/stage/cam", "/api/stage/book", "/api/feed/aigen/start"]) {
+    const routes = new Function("return " + gate.slice(gate.indexOf("["), gate.lastIndexOf("]") + 1))();
+    assert.ok(routes.some((r) => r[0].test(p)), p + " is covered");
+  }
+  assert.match(fs.readFileSync(path.join(repo, "user.controller.js"), "utf8"), /a network ban \(netban\.js\) refuses a new account here, on the form with its message/);
+  assert.equal((idx.match(/const nbWhy_ = await require\("\.\/netban"\)\.newAccountRefusal\(req\);\n\s+if \(nbWhy_\) return oauthFail\(req, res, nbWhy_\);/g) || []).length, 2, "Twitch + Discord: before the account is made");
+  assert.match(fs.readFileSync(path.join(repo, "netban.js"), "utf8"), /app\.post\("\/api\/admin\/nets"/, "the look is a POST (the reason never in a URL)");
+});

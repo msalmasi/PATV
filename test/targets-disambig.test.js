@@ -139,3 +139,18 @@ test("6. the chat line renderer draws the tag with its explanation (textContent-
   const html = String(CR.renderItem({ k: "msg", c: 1, ts: Date.now(), text: "hi", u: { login: "u:har-0001", display: "tricon", web: true, acct: true, clash: "tricon", patv: { username: "tricon" } } }, {}, CR.htmlH));
   assert.match(html, /<span class="clash-tag" title="This is a PATV web account\. It is not the Camfrog user called tricon\.">not the Camfrog user<\/span>/);
 });
+
+test("7. review: look-alikes of a seen login are refused / tagged too ('Тricon', 'tric0n', 'tricon_'); never against the account's own login; Mark OK by username reaches pad lines", async () => {
+  await CF.rebuild();
+  for (const n of ["tric0n", "tricon_", "TRICON.", "neverIinked"]) assert.match(await CF.nameRefusal(n, null), /belongs to a Camfrog user/, n);
+  assert.equal(await CF.nameRefusal("Tricon_", "real-0001"), null, "the real Tricon's own login, dressed up, is still his");
+  assert.equal(await CF.nameRefusal("triconfan", null), null, "a different name passes");
+  assert.equal(CF.clashOf("x-1", "\u0422ricon", "\u0422ricon", null), "tricon", "a Cyrillic capital Te passes for T");
+  assert.equal(CF.clashOf("real-0001", "TriconOG", "Tricon", "tricon"), null, "the real Tricon is never tagged");
+  // an admin's Mark OK reaches a linked account's display name on pad lines too (bridge.withPatv knows the username, not the id)
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('fan-0001', 'tricon_fan', 'tric0n', 'x', 'triconfancf')");
+  await CF.rebuild();
+  assert.equal(CF.clashOf(null, "tricon_fan", "tric0n", "triconfancf", { onlyShown: true }), "tricon");
+  await CF.markOk({ userId: "adm", username: "boss" }, "fan-0001", "tricon");
+  assert.equal(CF.clashOf(null, "tricon_fan", "tric0n", "triconfancf", { onlyShown: true }), null, "marked OK: no tag on the pad either");
+});

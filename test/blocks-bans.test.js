@@ -3,12 +3,14 @@
 // Blocks - ONE block (the DM block, dm_blocks) wherever it is made; + login blocks (an unlinked Camfrog login) and frog-name blocks:
 //   - the ref is exactly what was clicked (personref.js): a Camfrog login -> its LINKED account, a 🌐 row -> that PATV username (the
 //     tricon case: the two never mix), a web line's account key, a veiled roster entry / line -> the hidden person, never said
-//   - effects: tips refused (tips.transferPat: every tip path), web !duel / !brawl / !tip refused, DMs refused with the generic text for a
-//     frog-name block, the blocker missing from the blocked person's people list; NOTHING changes in what the blocker sees for a veil
+//   - effects of a NAMED block: tips refused (tips.transferPat: every tip path - words that never say a block exists), web !duel / !brawl /
+//     !tip refused. A FROG-NAME block (review fix, THE VEIL RULE) acts only on what they do under a frog name (their frog-named @mentions
+//     don't alert the blocker) - never their named DMs / tips / people list - and NOTHING changes in what the blocker sees
 //   - the same answer whoever is behind a frog name (an account, an unlinked login, nobody); "That's you" only to yourself
 //   - a login block becomes a named block when the login links; the settings list shows frog names by label only
 // Bans - on the exact identity, into the existing stores; a veil ban is its own row (a named re-ban never overwrites it), refuses only
-//   (bridgeblocks.active / feedstore.postRefusal / mainstage.isBanned), has no visible effect, lists as "🐸 label · identity hidden";
+//   their website bridge and only while they are under a frog name (review fix: never mainstage.isBanned / postRefusal - no visible
+//   effect, no active test), lists as "🐸 label · identity hidden"; a named ban on someone of higher rank is refused;
 //   who may: bridge = owner / staff / a room mod with kick, pad = owner / staff, site = staff; a login with no account waits in
 //   pad_login_bans and lands on the account when it links
 //   node --test test/blocks-bans.test.js
@@ -62,6 +64,10 @@ test.before(async () => {
   const line = { k: "msg", c: 501, ts: Date.now(), u: { anon: true, display: "someone", veil: "incognito", alias: "Soggy Bullfrog", id: "v-soggy000001" }, text: "hello" };
   V.hide(line, "_vz", { login: "sneakcf", display: "sneakcf", kind: "incognito" });
   LR.feed = [line];
+  // (review fix: a veiled line resolves ONLY through bridge.revealLookup - its forget-me / take-down / identity-row rules; this fixture's
+  // room isn't in bridge.js, so its lookup answers for LR's line the way the live room's would)
+  const BR = require(path.join(repo, "bridge")), realReveal = BR.revealLookup;
+  BR.revealLookup = async (rid, c) => { const it = LR.feed.find((x) => Number(x.c) === Number(c)); return rid === ROOM && it && it._vz && !it.rm_at ? { ts: it.ts, vz: it._vz } : realReveal(rid, c); };
   LR.mod = { modlogin: { actions: ["kick", "ban"], on: true, roles: ["moderator"] } };
   await BB.init(); await B.init(); await PB.init();
   await require(path.join(repo, "feedstore")).init();
@@ -109,7 +115,7 @@ test("blocks: the effects - tips refused (both ways), web !duel / !tip refused, 
   await post("/api/blocks", "bob", { ref: { k: "login", v: "alicecf" }, on: true });
   const tips = require(path.join(repo, "tips"));
   const t1 = await tips.transferPat("alicep", "bobweb", 10);
-  assert.equal(t1.ok, false); assert.equal(t1.status, 403); assert.match(t1.msg, /You can't tip bobweb\./);
+  assert.equal(t1.ok, false); assert.equal(t1.status, 403); assert.equal(t1.msg, "That tip didn't go through.", "never says a block exists (Pepe says it in the room)");
   const t2 = await tips.transferPat("bobweb", "alicep", 10);
   assert.equal(t2.ok, false, "either way");
   const relay = require(path.join(repo, "bridge-relay"));
@@ -133,15 +139,16 @@ test("blocks on a frog name: the account behind it, never said; the same answer 
     assert.equal(x.d.label, label);
     assert.doesNotMatch(JSON.stringify(x.d), /sneak|nolink|snk-/);
   }
-  // stored by the hidden person, effective on them: no tip, no DM, and alice is off sneaky's people list
-  assert.equal(await B.towards("snk-0001", "ali-0001"), true);
-  assert.equal(await B.hiddenTowards("snk-0001", "ali-0001"), true);
+  // stored by the hidden person, effective ONLY on what they do under a frog name (THE VEIL RULE, review fix): their frog-named @mentions
+  assert.equal(await B.towards("snk-0001", "ali-0001", { veiled: true }), true, "a frog-named line of theirs doesn't alert alice");
+  assert.equal(await B.towards("snk-0001", "ali-0001"), false, "never their NAMED actions - alice can't test a suspect with a DM / tip / mention");
+  assert.equal(await B.hiddenTowards("snk-0001", "ali-0001"), false);
   assert.equal(await B.towards("ali-0001", "snk-0001"), false, "THE VEIL RULE: a frog-name block never changes the blocker's own actions");
+  assert.equal(await B.towards("ali-0001", "snk-0001", { veiled: true }), false);
   const M = require(path.join(repo, "messages"));
   await M.init();
-  const why = await M.refusal(await M.account("snk-0001"), await M.account("ali-0001"));
-  assert.match(why.message, /^You can't message alicep\.$/, "the generic text, like any other refusal");
-  assert.ok((await B.veilBlockersOf("snk-0001")).has("ali-0001"), "the people list leaves alice out for sneaky");
+  assert.equal(await M.refusal(await M.account("snk-0001"), await M.account("ali-0001")), null, "a named DM is not refused by a frog-name block");
+  assert.ok(!(await B.loginBlockersOf("snk-0001")).has("ali-0001"), "and sneaky's people list is unchanged");
   // ...but NOTHING changes for alice: her own page list never names a veil, nor does the menu ever offer Unblock on one
   assert.equal(await B.pageList("ali-0001"), null);
   // the settings list: labels, pads and days only
@@ -151,13 +158,13 @@ test("blocks on a frog name: the account behind it, never said; the same answer 
   // a login that links later: the veil learns the account
   await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('nol-0001', 'nolinker', 'nolinker', 'x', 'nolinkcf')");
   await B.linked("nol-0001", "nolinkcf");
-  assert.equal(await B.towards("nol-0001", "ali-0001"), true);
+  assert.equal(await B.towards("nol-0001", "ali-0001", { veiled: true }), true);
   // yourself
   const me = await post("/api/blocks", "sneak", { ref: { k: "veil", id: "v-soggy000001" }, slug: SLUG, on: true });
   assert.equal(me.status, 400); assert.equal(me.d.error, "That's you.");
   // unblock one from the settings list
   for (const v of L.d.veils) await post("/api/blocks", "alice", { ref: { k: "vb", id: v.id }, on: false });
-  assert.equal(await B.towards("snk-0001", "ali-0001"), false);
+  assert.equal(await B.towards("snk-0001", "ali-0001", { veiled: true }), false);
 });
 
 test("blocks on an unlinked Camfrog login become a named block when that login links an account", async () => {
@@ -179,15 +186,16 @@ test("the person menu (room-mod.js): Block / Unblock, the ban items for web mode
   const alice = { login: "alicecf", display: "Alice", patv: { username: "alicep" } };
   const wmod = { bridge: true, pad: true, site: false };
   assert.deepEqual(ids(MI(null, alice, { signed: true })), ["profile", "block"]);
-  assert.deepEqual(ids(MI(null, alice, { signed: true, wmod, slug: "p" })), ["profile", "block", "ban_bridge", "ban_pad"]);
-  assert.deepEqual(ids(MI(null, Object.assign({ wban: { b: -1, p: 0 } }, alice), { signed: true, wmod, slug: "p" })), ["profile", "block", "lift_bridge", "ban_pad"]);
-  assert.deepEqual(MI(null, alice, { signed: true, wmod, slug: "p" }).find((x) => x.id === "ban_pad").ref, { k: "login", v: "alicecf" }, "the exact login");
+  // (review fix: ONE "⛔ Website ban…" - the sheet picks where - and ONE "↩️ Lift website ban…", never four look-alikes beside 🔨 Ban…)
+  assert.deepEqual(ids(MI(null, alice, { signed: true, wmod, slug: "p" })), ["profile", "block", "ban"]);
+  assert.deepEqual(ids(MI(null, Object.assign({ wban: { b: -1, p: 0 } }, alice), { signed: true, wmod, slug: "p" })), ["profile", "block", "ban", "lift"]);
+  assert.deepEqual(MI(null, alice, { signed: true, wmod, slug: "p" }).find((x) => x.id === "ban").ref, { k: "login", v: "alicecf" }, "the exact login");
   // a 🌐 web row: by its PATV username; a web line: by its account key
   assert.deepEqual(MI(null, { web: true, display: "tricon", patv: { username: "tricon" } }, { signed: true }).find((x) => x.id === "block").ref, { k: "user", v: "tricon" });
   assert.deepEqual(MI(null, { login: "u:har-0001", acct: true, web: true, display: "tricon", patv: { username: "tricon" } }, { signed: true }).find((x) => x.id === "block").ref, { k: "acct", v: "u:har-0001" });
   // a veil: Block + bans, by its id; never a Lift (no wban on veils)
   const v = MI(null, { anon: true, veil: "incognito", alias: "Soggy Bullfrog", id: "v-soggy000001", wban: { b: -1 } }, { signed: true, wmod, slug: "p" });
-  assert.deepEqual(ids(v), ["block", "ban_bridge", "ban_pad"]);
+  assert.deepEqual(ids(v), ["block", "ban"]);
   assert.ok(v.every((x) => x.veil === true));
   // never Pepe, bots or yourself
   assert.deepEqual(MI(null, { login: "pepe", self: true }, { signed: true, wmod, slug: "p" }), []);
@@ -207,6 +215,8 @@ test("bans from the person menu: the EXACT identity, into the existing stores; w
   pv = await post(`/api/rooms/${SLUG}/ban/preview`, "owner", { ref: { k: "veil", id: "v-soggy000001" } });
   assert.deepEqual(pv.d.who, { kind: "veil", title: "The person behind 🐸 Soggy Bullfrog", sub: "identity hidden from you" });
   assert.doesNotMatch(JSON.stringify(pv.d), /sneak/);
+  assert.deepEqual(pv.d.scopes, ["bridge"], "a frog name: this pad's website chat (\"pad\" is the same thing for a veil)");
+  pv = await post(`/api/rooms/${SLUG}/ban/preview`, "owner", { ref: { k: "user", v: "tricon" } });
   assert.deepEqual(pv.d.scopes, ["bridge", "pad"], "the owner: bridge + pad, not site");
   // a pad ban on the harasser's 🌐 row: feed_bans + an 'all' bridge block, both on har-0001 only
   let r = await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "tricon" }, scope: "pad", dur: "1d", reason: "harassment" });
@@ -226,6 +236,17 @@ test("bans from the person menu: the EXACT identity, into the existing stores; w
   assert.equal((await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "tricon" }, scope: "site", dur: "1h" })).status, 403);
   assert.equal((await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "tricon" }, scope: "pad", dur: "perm" })).status, 400, "permanent needs a reason");
   assert.equal((await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "padowner" }, scope: "bridge", dur: "1h" })).status, 400, "That's you");
+  // rank (review fix): a pad owner can't ban PATV staff, a room mod can't ban the pad's owner or another room mod
+  let rk = await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "staffer" }, scope: "bridge", dur: "1h" });
+  assert.equal(rk.status, 403); assert.match(rk.d.error, /PATV staff/);
+  rk = await post(`/api/rooms/${SLUG}/ban`, "mod", { ref: { k: "user", v: "padowner" }, scope: "bridge", dur: "1h" });
+  assert.equal(rk.status, 403); assert.match(rk.d.error, /pad's owner/);
+  LR.mod.alicecf = { actions: ["kick"], on: true };
+  rk = await post(`/api/rooms/${SLUG}/ban`, "mod", { ref: { k: "login", v: "alicecf" }, scope: "bridge", dur: "1h" });
+  assert.equal(rk.status, 403, "a fellow room mod"); delete LR.mod.alicecf;
+  // a frog name's ban is never refused for rank - that answer would say who it is
+  assert.equal((await post(`/api/rooms/${SLUG}/ban`, "mod", { ref: { k: "veil", id: "v-soggy000001" }, scope: "bridge", dur: "1h" })).status, 200);
+  await runQuery("DELETE FROM veil_bans");
   await post(`/api/rooms/${SLUG}/unban`, "owner", { ref: { k: "user", v: "tricon" }, scope: "bridge" });
   // the audit names the real identity; the room event too (a named one)
   const au = await getQuery("SELECT action, target_id FROM admin_audit WHERE action IN ('pad_ban','pad_unban') ORDER BY at");
@@ -236,14 +257,24 @@ test("a veil ban: its own row, refusals only, no visible effect; a named re-ban 
   let r = await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "veil", id: "v-soggy000001" }, scope: "pad", dur: "7d", reason: "spam" });
   assert.equal(r.status, 200);
   assert.doesNotMatch(JSON.stringify(r.d), /sneak/);
-  // refusals: the web bridge (bridgeblocks.active - every relay path asks it), posting in the pad, booking its stage
+  assert.equal(r.d.scope, "bridge", "stored as this pad's website chat");
+  // THE VEIL RULE (review fix): under their OWN name nothing changes - their web bridge, posts, stage booking, a live stage stream and the
+  // mic stage (mainstage.isBanned) - so a moderator can't watch who goes quiet, or ask a suspect to post, to learn who the frog is
+  await require(path.join(repo, "incognito")).init();
+  await runQuery(`DELETE FROM incognito_state`);
+  PB._reset();
+  assert.equal(await PB.veiledNow("snk-0001", "sneakcf"), false);
+  assert.equal(await BB.active(ROOM, "snk-0001"), null, "named: not refused");
+  const FS = require(path.join(repo, "feedstore"));
+  assert.equal(await FS.postRefusal(Object.assign(await FS.account("snk-0001"), {}), [ROOM]), null, "a post is named: never refused by it");
+  assert.equal(await require(path.join(repo, "mainstage")).isBanned("snk-0001", ROOM), false, "never the stage / mic-stage reader (it ends streams, takes tiles)");
+  // under a frog name again (Incognito on): their website bridge here is refused, in words that never say it was a frog-name ban
+  await runQuery(`INSERT INTO incognito_state (login, "on", updated) VALUES ('sneakcf', 1, ?)`, [Date.now()]);
   const a = await BB.active(ROOM, "snk-0001");
   assert.ok(a && a.feature === "all");
   assert.match(BB.refusalText(a), /^A mod of this room blocked you from talking in it from the website until .* \(spam\)\.$/);
-  const FS = require(path.join(repo, "feedstore"));
-  const pr = await FS.postRefusal(Object.assign(await FS.account("snk-0001"), {}), [ROOM]);
-  assert.ok(pr && pr.status === 403);
-  assert.equal(await require(path.join(repo, "mainstage")).isBanned("snk-0001", ROOM), true);
+  assert.equal(await require(path.join(repo, "mainstage")).isBanned("snk-0001", ROOM), false, "still never the stage");
+  await runQuery(`DELETE FROM incognito_state`);
   // no visible effect: nothing in feed_bans / bridge_blocks (the readers that hide posts, end stage slots, take tiles)
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM feed_bans WHERE user_id = 'snk-0001'"))[0].n, 0);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM bridge_blocks WHERE user_id = 'snk-0001'"))[0].n, 0);
@@ -280,4 +311,67 @@ test("a Camfrog login with no PATV account: pad_login_bans, the mic stage reads 
   assert.ok(await BB.active(ROOM, "fut-0001"), "the bridge block is on the account now");
   assert.ok((await getQuery("SELECT 1 FROM feed_bans WHERE user_id = 'fut-0001' AND room_id = ?", [ROOM]))[0], "and the pad ban");
   assert.equal(await PB.loginActive(ROOM, "futurecf"), null, "the login row is gone");
+});
+
+// ── 1.99?? padppl review fixes ──
+test("review: the merged list - a bridge-only mod sees bridge rows only, staff see site-wide frog-name / login bans, nobody gets a veil's identity; one row per pad ban; Lift by id", async () => {
+  // a pad ban (its bridge block comes with it) + a site-wide frog-name ban by staff
+  await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "tricon" }, scope: "pad", dur: "1d", reason: "owner's reason" });
+  assert.equal((await post(`/api/rooms/${SLUG}/ban`, "staff", { ref: { k: "veil", id: "v-soggy000001" }, scope: "site", dur: "1d", reason: "x" })).status, 200);
+  const own = await get(`/api/rooms/${SLUG}/bans`, "owner");
+  const harRows = own.d.bans.filter((b) => b.userId === "har-0001");
+  assert.deepEqual(harRows.map((b) => b.scope), ["pad"], "a pad ban and the bridge block made with it are ONE row");
+  assert.ok(!own.d.bans.some((b) => b.site), "the owner doesn't see staff's site-wide rows");
+  assert.ok(!own.d.bans.some((b) => "real" in b), "never the real identity, even for see-through holders");
+  const mod = await get(`/api/rooms/${SLUG}/bans`, "mod");
+  assert.ok(!mod.d.bans.some((b) => b.reason === "owner's reason"), "a bridge-only mod never sees the owner's pad ban and its reason");
+  const st = await get(`/api/rooms/${SLUG}/bans`, "staff");
+  const sv = st.d.bans.find((b) => b.kind === "veil" && b.site);
+  assert.ok(sv, "staff see the site-wide frog-name ban here - and can lift it");
+  assert.doesNotMatch(JSON.stringify(sv), /sneak|snk-/);
+  assert.equal((await post(`/api/rooms/${SLUG}/unban`, "owner", { entry: sv.entry })).status, 403, "not the owner's to lift");
+  assert.equal((await post(`/api/rooms/${SLUG}/unban`, "staff", { entry: sv.entry })).status, 200);
+  // the live view's flags: by the account's CURRENT username (a rename keeps them); never an admin's global block
+  await runQuery("UPDATE users SET username = 'tricon_renamed' WHERE userId = 'har-0001'");
+  PB._reset();
+  let wb = await PB.wbanMap(ROOM);
+  assert.ok(wb.get("tricon_renamed") && wb.get("tricon_renamed").p, "still flagged after the rename");
+  await BB.block({ roomId: "", target: { userId: "real-0001", username: "TriconOG" }, feature: "all", until: null, reason: "global", by: { userId: "adm", name: "boss", via: "admin" } });
+  PB._reset(); wb = await PB.wbanMap(ROOM);
+  assert.ok(!wb.has("triconog"), "an admin's site-wide block is no Lift the pad's menu can't do");
+  await BB.unblock({ roomId: "", target: { userId: "real-0001", username: "TriconOG" }, feature: null, by: { name: "boss" } });
+  // Lift by the account's id - the rename doesn't break it; lifting the pad ban lifts the bridge block made with it
+  const row = (await get(`/api/rooms/${SLUG}/bans`, "owner")).d.bans.find((b) => b.userId === "har-0001");
+  assert.equal(row.username, "tricon_renamed");
+  assert.equal((await post(`/api/rooms/${SLUG}/unban`, "owner", { ref: { k: "acct", v: "u:har-0001" }, scope: "pad" })).status, 200);
+  assert.equal(await BB.active(ROOM, "har-0001"), null);
+  await runQuery("UPDATE users SET username = 'tricon' WHERE userId = 'har-0001'");
+  // the Lift sheet's preview says what is lifted (end, reason, who) - a bridge-only mod never gets a pad ban's reason
+  await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "tricon" }, scope: "pad", dur: "7d", reason: "owner's reason" });
+  let pv = await post(`/api/rooms/${SLUG}/ban/preview`, "owner", { ref: { k: "user", v: "tricon" } });
+  assert.equal(pv.d.current.pad.reason, "owner's reason"); assert.equal(pv.d.current.bridge, null, "its own bridge block is part of the pad ban");
+  pv = await post(`/api/rooms/${SLUG}/ban/preview`, "mod", { ref: { k: "user", v: "tricon" } });
+  assert.equal(pv.d.current.pad, null);
+  await post(`/api/rooms/${SLUG}/unban`, "owner", { ref: { k: "acct", v: "u:har-0001" }, scope: "pad" });
+  // the Camfrog-room note only for a login, and only for a viewer Pepe gives 🔨 Ban…
+  assert.equal((await post(`/api/rooms/${SLUG}/ban/preview`, "owner", { ref: { k: "user", v: "tricon" } })).d.room, false, "a 🌐 web row: no Camfrog ban to point at");
+});
+
+test("review: a frog name's row / line only in a pad the viewer may see; account deletion keeps pepe_dm_jobs and covers the new tables", async () => {
+  const PR = require(path.join(repo, "personref"));
+  const PA = require(path.join(repo, "padaccess"));
+  const real = PA.full;
+  PA.full = () => false;                                   // a private pad this viewer can't see
+  try {
+    assert.equal(await PR.padOk({ k: "line", c: 501 }, U.alice, { id: ROOM }), false);
+    const r = await post("/api/blocks", "alice", { ref: { k: "line", c: 501 }, slug: SLUG, on: true });
+    assert.equal(r.status, 404); assert.equal(r.d.error, "That line isn't here any more.", "the same answer as a line that's gone");
+    assert.equal((await post(`/api/rooms/${SLUG}/ban/preview`, "owner", { ref: { k: "veil", id: "v-soggy000001" } })).status, 404);
+    assert.equal(await PR.padOk({ k: "login", v: "alicecf" }, U.alice, null), true, "named refs need no pad");
+  } finally { PA.full = real; }
+  const del = fs.readFileSync(path.join(repo, "accountdelete.js"), "utf8");
+  assert.match(del, /^\s*\["pepe_dm_jobs", "user_id", "uid"\],$/m, "pepe_dm_jobs is deleted again (it had been commented out)");
+  for (const t of ["login_blocks", "veil_blocks", "mention_pad_mutes", "name_clash_ok", "net_seen", "veil_bans"]) assert.ok(del.includes('["' + t + '", "'), t);
+  // the in-memory line resolves through bridge.revealLookup's rules only (never the raw _vz)
+  assert.doesNotMatch(fs.readFileSync(path.join(repo, "personref.js"), "utf8"), /let vz = it && it\._vz/);
 });

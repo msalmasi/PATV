@@ -76,7 +76,9 @@ test("the SAME answer whoever is behind the frog name - an account, a login with
   assert.ok(tx.every((r) => r[1] === "gift sent" && r[0] === "ali-1" && r[3] == null), JSON.stringify(tx));
   assert.deepEqual(tx.map((r) => r[4]), ["🐸 Soggy Bullfrog", "🐸 Muddy Toad", "🐸 Quiet Newt"], "the note is the frog name only");
   assert.ok(!tx.some((r) => /tip/.test(r[1])), "never a tip row (tip jar, 'you and X', tip achievements, tip volume read only those)");
-  // the recipient's private notice names the sender and the frog name; the blocker got nothing
+  // the recipient's private notice names the sender and the frog name; the blocker got nothing (review fix: the notice goes out after
+  // the answer, never awaited - so the answer's timing is the same for every recipient)
+  await new Promise((r) => setTimeout(r, 100));
   const n = await getQuery("SELECT user_id, title FROM inbox WHERE kind = 'gift'");
   assert.deepEqual(n.map((x) => x.user_id), ["snk-1"]);
   assert.match(n[0].title, /^🎁 @alice sent you a gift of 1,000 PAT while you were 🐸 Soggy Bullfrog in /);
@@ -127,4 +129,19 @@ test("limits: per sender an hour / a day / PAT a day - and yourself is the one t
   await runQuery("UPDATE users SET points_balance = 1000000 WHERE userId = 'ali-1'");
   for (let i = 0; i < VG.HOUR_MAX; i++) await VG.send(U.alice, R, { k: "veil", id: "v-muddy000001" }, 100, "lim" + i);
   await assert.rejects(VG.send(U.alice, R, { k: "veil", id: "v-muddy000001" }, 100, "lim-x"), (e) => e.status === 429);
+});
+
+test("review: the sender's own data never tells them whether / when a frog accepted - no VGF hold in their export, never a delete blocker", async () => {
+  // (the gift's escrow hold is the SENDER's row: its state / done_at moved when sneaky accepted above)
+  assert.ok((await getQuery("SELECT COUNT(*) AS n FROM escrow_holds WHERE user_id = 'ali-1' AND kind = 'VGF'"))[0].n >= 1);
+  const ex = fs.readFileSync(path.join(repo, "accountexport.js"), "utf8");
+  assert.match(ex, /rows\("escrow_holds", "user_id = \? AND COALESCE\(kind, ''\) <> 'VGF'", \[uid\], \{ omit: \["cp"\] \}\)/);
+  const { getQuery: gq } = require(path.join(repo, "dbUtils"));
+  const shown = await gq("SELECT kind, state FROM escrow_holds WHERE user_id = ? AND COALESCE(kind, '') <> 'VGF'", ["ali-1"]);
+  assert.equal(shown.length, 0, "what the export's escrow_holds would hold for alice: nothing about her gifts");
+  const del = fs.readFileSync(path.join(repo, "accountdelete.js"), "utf8");
+  assert.match(del, /SELECT 1 FROM escrow_holds WHERE user_id = \? AND state = 'held' AND COALESCE\(kind, ''\) <> 'VGF' LIMIT 1/, "a pending gift never blocks deleting");
+  // and the texts say what the day-30 refund does tell them
+  assert.match(JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"))["js.gift.body"], /we never tell you who it is or whether they accepted\. A gift that isn't accepted within 30 days comes back to you\./);
+  assert.match(JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"))["wallet.gifts.why"], /We never tell them whether you accepted, but a gift that comes back tells them it wasn't\./);
 });
