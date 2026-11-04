@@ -43,7 +43,10 @@ async function accountById(id) {
   return (await getQuery(`SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?${await live()}`, [String(id || "")]))[0] || null;
 }
 async function accountByUsername(name) {
-  return (await getQuery(`SELECT userId, username, displayname, camfrogUsername FROM users WHERE lower(username) = ?${await live()} LIMIT 1`, [low(name)]))[0] || null;
+  // (1.99?? padppl verify: a legacy pair of usernames that differ only in case - the exact spelling the row carried wins, as sign-in does)
+  const v = String(name == null ? "" : name).trim();
+  return (await getQuery(`SELECT userId, username, displayname, camfrogUsername FROM users WHERE lower(username) = ?${await live()} ORDER BY (username = ?) DESC LIMIT 1`,
+    [low(v), v]))[0] || null;
 }
 const disp = (r) => { try { return require("./displaynames").usable(r.displayname) || r.username; } catch (e) { return r.displayname || r.username; } };
 const acctOut = (r, kind = "account", extra = {}) => ({ kind, userId: String(r.userId), username: r.username, login: r.camfrogUsername || null,

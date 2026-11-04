@@ -154,3 +154,11 @@ test("7. review: look-alikes of a seen login are refused / tagged too ('Тricon'
   await CF.markOk({ userId: "adm", username: "boss" }, "fan-0001", "tricon");
   assert.equal(CF.clashOf(null, "tricon_fan", "tric0n", "triconfancf", { onlyShown: true }), null, "marked OK: no tag on the pad either");
 });
+
+test("8. verify: a legacy pair of usernames that differ only in case - a person-menu ref lands on the exact spelling it carried", async () => {
+  const PR = require(path.join(repo, "personref"));
+  await runQuery("INSERT INTO users (userId, username, displayname, password) VALUES ('cas-0001', 'CaseyQ', 'Casey', 'x'), ('cas-0002', 'caseyq', 'casey', 'x')");
+  assert.equal((await PR.resolve({ k: "user", v: "caseyq" })).userId, "cas-0002");
+  assert.equal((await PR.resolve({ k: "user", v: "CaseyQ" })).userId, "cas-0001");
+  assert.equal((await PR.accountByUsername("CASEYQ")).userId.startsWith("cas-000"), true, "no exact spelling: still one of them, as before");
+});
