@@ -32,12 +32,13 @@ const TEXT_MAX = 800;                    // = Pepe's RPM_LINE_MAX
 const RATE = 30, RATE_WINDOW = 60 * 1000;
 const MAX_KEYS = 5000, MAX_ROWS = 10000;
 const ORIGIN_TTL = 24 * 3600 * 1000, MAX_ORIGINS = 20000;
-const SEEN_KEEP = 200;                   // ack content keys remembered per (account, pad): a re-sent ack adds nothing
+const SEEN_KEEP = 200;                   // ack content keys remembered per (account, pad): a re-sent ack adds nothing (review: digests only,
+                                         // never past TTL - the words live in the rows alone)
 const SWEEP_MS = 60 * 1000;
 
 let clock = () => Date.now();
 const now = () => clock();
-const store = new Map();                 // `${userId}|${roomId}` -> {rows: [{id, ts, at, text, cmd}], hits: [ms], seen: Set, seenList: []}
+const store = new Map();                 // `${userId}|${roomId}` -> {rows: [{id, ts, at, text, cmd}], hits: [ms], seen: Map(digest -> ms)}
 const origins = new Map();               // job id -> {userId, roomId, cmd, at}
 let lastId = 0, total = 0;
 const stats = { added: 0, dup: 0, rate: 0, evicted: 0, local: 0 };
@@ -111,7 +112,7 @@ function entry(userId, roomId, make) {
   const k = keyOf(userId, roomId);
   let e = store.get(k);
   if (!e && make) {
-    e = { rows: [], hits: [], seen: new Set(), seenList: [] };
+    e = { rows: [], hits: [], seen: new Map() };
     store.set(k, e);
     while (store.size > MAX_KEYS) drop(store.keys().next().value);
   }
@@ -129,9 +130,11 @@ function add(userId, roomId, text, ts, cmd, dupKey) {
   if (!t) return 0;
   const e = entry(userId, roomId, true);
   if (dupKey) {
-    if (e.seen.has(dupKey)) { stats.dup++; return 0; }
-    e.seen.add(dupKey); e.seenList.push(dupKey);
-    while (e.seenList.length > SEEN_KEEP) e.seen.delete(e.seenList.shift());
+    // review (privacy): the key holds the reply's words - only its digest is kept, and only as long as a row is (sweep)
+    const dk = digest("d|" + dupKey);
+    if (e.seen.has(dk)) { stats.dup++; return 0; }
+    e.seen.set(dk, now());
+    while (e.seen.size > SEEN_KEEP) e.seen.delete(e.seen.keys().next().value);
   }
   const at = now();
   e.hits = e.hits.filter((h) => at - h < RATE_WINDOW);
@@ -224,6 +227,7 @@ function sweep() {
     total -= e.rows.length - keep.length;
     e.rows = keep;
     e.hits = e.hits.filter((h) => t - h < RATE_WINDOW);
+    for (const [dk, at] of [...e.seen]) if (t - at >= TTL) e.seen.delete(dk);
     if (!e.rows.length && !e.hits.length) store.delete(k);
   }
   for (const [id, o] of [...origins]) if (t - o.at > ORIGIN_TTL) origins.delete(id);

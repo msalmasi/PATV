@@ -3,6 +3,7 @@
 //   * a shared computer: the page drops what it shows when the site stops sending this viewer's block (signed out, switched off)
 //     or sends another account's (rpm.w, a per-account tag that is only ever sent to that account) - never one account's answers
 //     under another's sign-in; a page put in the back/forward cache drops them too
+//   * the de-duplication of re-sent acks keeps no private text (only keyed digests) and nothing older than the rows' TTL
 //   node --test test/roompm-review-privacy.test.js      (a scratch database; no network)
 "use strict";
 const test = require("node:test");
@@ -36,6 +37,28 @@ test("rpm.w: a tag of the viewer's own account - the same for its every answer, 
   assert.equal(a1.w, a2.w, "one account: one tag (every pad, every cursor)");
   assert.notEqual(a1.w, b.w, "another account: another tag");
   assert.ok(!a1.w.includes("u1"), "not the account id");
+});
+
+test("re-sent ack de-duplication keeps no private text, and nothing older than the rows' TTL", () => {
+  RPM._reset();
+  let t = Date.now();
+  RPM._setClock(() => t);
+  try {
+    assert.ok(RPM.fromAck({ id: "j1", ok: true, ts: Math.floor(t / 1000), replies: ["Your balance: PAT 9,999 " + SECRET] }, typed("j1", "u1")));
+    assert.equal(RPM.fromAck({ id: "j1", ok: true, ts: Math.floor(t / 1000), replies: ["Your balance: PAT 9,999 " + SECRET] }, typed("j1", "u1")), null,
+      "a re-sent ack still adds nothing");
+    const e = RPM._store.get("u1|Pm.Room");
+    assert.ok(e && e.rows.length === 1);
+    const kept = deep(Object.assign({}, e, { rows: undefined }));
+    assert.doesNotMatch(kept, new RegExp(SECRET), "the de-dup memory holds digests, never the words");
+    // a day on, with a newer row keeping the entry alive: the old row's de-dup key is gone with it
+    t += RPM.TTL + 1000;
+    assert.ok(RPM.fromAck({ id: "j2", ok: true, ts: Math.floor(t / 1000), replies: ["usage: !topic <text>"] }, typed("j2", "u1")));
+    RPM._sweep();
+    const e2 = RPM._store.get("u1|Pm.Room");
+    assert.equal(e2.rows.length, 1, "the day-old row went");
+    assert.equal([...e2.seen.keys ? e2.seen.keys() : e2.seen].length, 1, "and so did its de-dup key");
+  } finally { RPM._setClock(null); }
 });
 
 // ── the page (pad-roompm.js on its own, in a small fake DOM) ──
