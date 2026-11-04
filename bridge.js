@@ -2222,7 +2222,10 @@ function register(app, { isBotToken, addUser }) {
     } catch (e) { slots = []; }
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
     const here = roomId ? pepeIn(roomId) : null;
-    res.json({ ...stage(), slots, front, pepe_here: here !== false });
+    // 1.99?? golive: + the server's clock - the page starts a video slot where the broadcast is (stage-room.js setEmbed)
+    let t = Date.now();
+    try { t = require("./mainstage").clockNow(); } catch (e) { t = Date.now(); }
+    res.json({ ...stage(), slots, front, pepe_here: here !== false, now: t });
   });
 
   // 1.99bi: the guide - every room, what's on its stage now and what's booked next. 1.99ck: the Pads at /p
