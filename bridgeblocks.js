@@ -140,16 +140,23 @@ async function active(roomId, userId, feature = "all", t = now()) {
     if (lb) return { room: lb.room_id, global: lb.room_id === "", userId: String(userId), feature: "all", username: null, reason: lb.reason || "", by: lb.by_name || "", via: "web",
                      created: Number(lb.at) || 0, until: lb.until == null ? null : Number(lb.until) };
     // 1.99ajn padppl: a ban on this person's FROG NAME (padbans.js veil_bans) - THE VEIL RULE: only while they are under a frog name NOW
-    // (veiledNow), never their named activity; it reads like a room block, never says it was a veil ban
+    // (veiledNow), never their named activity. 1.99?? padppl rework (owner: "blocking ANY frog name the person uses (essentially blocking
+    // the person from using incognito in that pad)"): it is THE PERSON's INCOGNITO BAN - by their account (and linked login), so every
+    // frog name they use there, now and later - and it says just that: "You can't post incognito on this pad right now." (incog: no
+    // moderator's reason, no end time, nothing about how the moderator saw them)
     const v = await PB.veilActive(roomId, userId, { login });
-    if (v && (await PB.veiledNow(userId, login))) return { room: v.room_id, global: v.room_id === "", userId: String(userId), feature: "all", username: null, reason: v.reason || "", by: "", via: "web",
-                                                          created: Number(v.created) || 0, until: v.until == null ? null : Number(v.until) };
+    if (v && (await PB.veiledNow(userId, login))) return { room: v.room_id, global: v.room_id === "", userId: String(userId), feature: "all", username: null, reason: "", by: "", via: "web",
+                                                          created: Number(v.created) || 0, until: v.until == null ? null : Number(v.until), incog: true };
   } catch (e) { /* no padbans */ }
   return null;
 }
 
+/** 1.99?? padppl rework: what an incognito ban (a frog-name ban, padbans.js) says to the person - plain, whatever the feature. */
+const INCOG_REFUSAL = "You can't post incognito on this pad right now.";
+
 /** The refusal text for one block (rowOut) when `feature` was asked for. */
 function refusalText(b, feature = "all") {
+  if (b && b.incog) return INCOG_REFUSAL;
   const f = featureOf(feature) || "all";
   const what = WHAT[b.feature === "all" ? f : b.feature] || WHAT.all;
   const when = b.until ? " until " + new Date(b.until).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
@@ -422,5 +429,5 @@ function register(app, { isBotToken, addUser, bySlug }) {
 }
 
 module.exports = { init, register, resolveTarget, targetFail, active, refusal, refusalText, block, unblock, list, mirror, forSync, forUser, untilFrom, parseHours,
-  FEATURES, featureOf,
+  FEATURES, featureOf, INCOG_REFUSAL,
   version: () => ver, _setClock: (f) => { clock = f; } };

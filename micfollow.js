@@ -2370,7 +2370,10 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
                nameCss: patv && patv.style ? patv.style : "", pos: x.pos, newest: x.newest, since: x.since,
                video: x.video, why: x.video === "card" ? (wh && surface !== "capture" ? "off_cam" : x.why || "full") : null, watch,
                ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
-               ...(own && own === x.login ? { mine: true } : {}) });
+               ...(own && own === x.login ? { mine: true } : {}),
+               // 1.99?? padppl rework: a PATV name that is another Camfrog login Pepe has seen is shown WITH the "not the Camfrog user" tag
+               // (bridge.withPatv's u.clash - the chat and people lists say the same), never swapped for the login
+               ...(patv && u && u.clash ? { clash: String(u.clash).slice(0, 40) } : {}) });
   }
   // wave2 WP-4 (F.3): the dynamic template over THIS viewer's entries (a tile they reported stays a cell: "hidden for you")
   if (snap.dyn && src.length) {

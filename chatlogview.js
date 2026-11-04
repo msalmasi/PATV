@@ -292,6 +292,24 @@ async function attachBarNames(items) {
   } catch (e) { /* no identity at hand: "someone" with the tag */ }
   return items;
 }
+/** 1.99?? padppl rework (blocks.js veil blocks): who is behind the archived FROG-NAMED lines among `items` (raw rows: a u.alias, a row id),
+ *  from chat_log_veil - Map(c -> {login}) for dress's ctx.veilOf, so a viewer's frog-name blocks fold those lines in history and search
+ *  as on the live chat. SERVER-ONLY (never serialised: dress turns it into vb: 1 at most). One read per call; never throws. */
+const VEIL_KEY = /^(?:[\w.\-]{1,40}|u:[A-Za-z0-9_-]{1,64})$/i;
+async function veilWho(items) {
+  const out = new Map();
+  const cs = [...new Set((Array.isArray(items) ? items : []).filter((it) => it && !it._vz && it.u && it.u.alias && Number(it.c) > 0).map((it) => Number(it.c)))];
+  if (!cs.length) return out;
+  try {
+    for (let i = 0; i < cs.length; i += 400) {
+      const part = cs.slice(i, i + 400);
+      for (const r of await roQuery(`SELECT c, login FROM chat_log_veil WHERE c IN (${part.map(() => "?").join(",")})`, part)) {
+        if (VEIL_KEY.test(String(r.login || ""))) out.set(Number(r.c), { login: String(r.login).toLowerCase() });
+      }
+    }
+  } catch (e) { /* nothing folds - never an error */ }
+  return out;
+}
 /** privacyOf against a given state of the set: kindOf(h) -> "out" | "anon" | null, txOf(h) -> !transcripts off. The owner-change
  *  fix-up: the live tail asks it with the set as it was BEFORE a change (chatlog's ch.prev) to tell which lines' look moved. */
 function privacyAt(it, kindOf, txOf) {
@@ -1131,6 +1149,10 @@ function dress(items, ctx) {
         const w = typeof it._vw === "string" ? it._vw : typeof vz.words === "string" ? vz.words : null;
         if (p === "mask" && w) o.text = w;
       } else if (vz && typeof ctx.canReveal === "function" && ctx.canReveal(it)) o.rv = 1;
+      // 1.99?? padppl rework (blocks.js): a FROG-NAMED line (never a hidden bar, never "someone") of a person this viewer blocked under a
+      // frog name - any frog name, any pad - is folded for them (vb: 1; chatlog-core folds it). ctx.vbKeys = blocks.veilKeysOf(viewer):
+      // server-only keys; the page only ever gets the flag
+      if (vz && o.self !== 1 && p !== "mask" && o.u && o.u.alias && ctx.vbKeys && ctx.vbKeys.size && ctx.vbKeys.has(String(vz.login || "").toLowerCase())) o.vb = 1;
     } else if ((p === "anon" || p === "out") && !it.purged) {
       o.u = Object.assign({}, SOMEONE);
       if (o.k === "tx") delete o.id;
@@ -1727,6 +1749,7 @@ module.exports = {
   privacyAt, lookOf, lookMove, namedToAnonLately,      // owner-change fix-up (review 2): only a line whose look moves is drawn again
   barLook, barUser, attachBarNames, barNamedToAnonLately, lookAt,   // 1.99aht S1: a !transcripts off bar shows who said it (the words only masked)
   barClip,                                            // 1.99aht RV-1: a bar members may clip (the audio, never the words)
+  veilWho,                                            // 1.99?? padppl rework: archived frog lines' identities for a viewer's frog-name blocks (server-only)
   tierOf, raiseExp, ensurePremium,                    // CL7: the retention purge (chatlogpurge.js)
   graceOf, lapsedOf, noteFirst, retentionFresh,       // CL7 fix-up
   speakerHashes, kindNow, hubChanged,                 // Train 3 review: every hash a "someone" line could be; the stricter of both stores

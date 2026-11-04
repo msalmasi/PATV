@@ -348,8 +348,17 @@ async function challengeBlocked(u, c, text) {
   if (!/^[\w.\-]{1,40}$/.test(who)) return null;
   try {
     const acct = await require("./personref").linkedAccount(who);
+    if (!acct) return null;
     const B = require("./blocks");
-    const hit = acct ? await B.towards(u.userId, acct.userId) : false;
+    let hit = await B.towards(u.userId, acct.userId);
+    // 1.99?? padppl rework (blocks.js): while the sender is under a frog name on the website (padbans.veiledNow), a frog-name block by the
+    // person they aim at refuses it too - an incognito harasser can't duel / tip the person who blocked their frog name, whatever frog
+    // name they use now. The person aimed at never sees a refused command, so this tells them nothing; named commands are untouched.
+    if (!hit) {
+      const PB = require("./padbans");
+      const login = u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : await PB.loginOfCached(u.userId);
+      if (await PB.veiledNow(u.userId, login)) hit = await B.towards(u.userId, acct.userId, { veiled: true, fromLogin: login });
+    }
     if (!hit) return null;
     return c === "!tip" ? `You can't tip ${who}.` : `You can't challenge ${who}.`;
   } catch (e) { return null; }

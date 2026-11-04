@@ -326,6 +326,7 @@ function register(app, { addUser, authView }) {
       catch (e) { console.error(`[sso] link new account (${p.provider}):`, e && e.message); }
       await UC().finishLogin(req, res, r.user, `${p.provider} sign-up`);
       req.flash("success", tr(req, "auth.sso.welcome", `Welcome to PATV, ${r.user.username}! Your ${P.label} account is linked.`, { name: r.user.username, provider: P.label }));
+      if (r.hint) req.flash("success", r.hint);          // 1.99?? padppl rework: "Is <name> your Camfrog name? Link it in Settings…" (cfnames.nameHint)
       return res.redirect(home(r.user, p.next));
     } catch (e) {
       console.error("[sso] create:", e && e.message);

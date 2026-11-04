@@ -741,6 +741,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           await oauthLink.safeBadge(newUser.userId, 'twitch-user');
           // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
           await welcome.enroll(newUser.userId, "twitch", req, res);
+          await require("./cfnames").hintAfter(req, newUser.userId, newUser.username);   // 1.99?? padppl rework: "Is <name> your Camfrog name?…"
           await runQuery(
             "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [1, newUser.userId]
@@ -1037,6 +1038,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           await oauthLink.safeBadge(newUser.userId, 'discord-user');
           // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
           await welcome.enroll(newUser.userId, "discord", req, res);
+          await require("./cfnames").hintAfter(req, newUser.userId, newUser.username);   // 1.99?? padppl rework: "Is <name> your Camfrog name?…"
           await runQuery(
             "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [1, newUser.userId]
@@ -1421,7 +1423,7 @@ require("./telegram").register(app, { isBotToken, addUser });   // 1.99kn: Teleg
 require("./opsalerts").register(app, { isBotToken });   // 1.99aai: POST /api/ops/alert - VPS watchdogs (loopback + bot token) -> admins' inbox + Telegram outbox
 require("./settingshub").register(app, { addUser });   // 1.99vz: the /settings hub - one map of every account / preference page
 require("./blocks").register(app, { addUser });        // 1.99ajn padppl: 🚫 Block from the person menu / profile / /settings/blocked (blocks.js)
-require("./cfnames").register(app, { addUser });       // 1.99ajn padppl: the impersonation guard's admin list (/admin/users#nameclash)
+require("./cfnames").register(app, { addUser });       // 1.99ajn padppl: the Camfrog-name tag's admin list (/admin/users#nameclash)
 require("./netban").register(app, { addUser });        // 1.99ajn padppl: 🌐⛔ network bans - admin routes (/api/admin/netbans, /api/admin/nets/:userId)
 require("./webpush").register(app, { addUser });   // 1.99acd: 🔔 Web Push (QW-1) - browser notifications for DMs + mentions, /admin/push (OFF by default; /sw.js is mounted at the top)
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
@@ -2608,9 +2610,7 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
     if (await usernames.reservedFor(name, user.userId)) {
       return res.status(409).json({ ok: false, error: "that username belonged to another account - pick another" });
     }
-    // 1.99ajn padppl: never another Camfrog user's login (cfnames.js) - their own linked login is fine
-    const clash = await require("./cfnames").nameRefusal(name, user.userId).catch(() => null);
-    if (clash) return res.status(409).json({ ok: false, error: "that name belongs to another Camfrog user - pick another" });
+    // (1.99?? padppl rework, owner: a name Pepe has seen on Camfrog is never refused - here neither; the pad tags a clash, cfnames.clashOf)
     await usernames.ensure();
     await require("./dbUtils").tx(async () => {
       await runQuery("UPDATE users SET username = ? WHERE userId = ?", [name, user.userId]);

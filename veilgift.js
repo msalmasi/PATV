@@ -91,6 +91,14 @@ async function send(me, R, ref, rawAmount, key = null) {
   if (!p.userId && !p.login) state = "withheld";
   else if (p.userId) {
     try { if (await require("./blocks").towards(me.userId, p.userId)) state = "withheld"; } catch (e) { state = "withheld"; }
+    // 1.99?? padppl rework (blocks.js): a sender who is under a frog name right now, and whom the recipient blocked under a frog name
+    // (any frog name), is withheld too - the same answer, the same padded time (MIN_MS), so it tells the sender nothing
+    if (state === "pending") {
+      try {
+        const PB = require("./padbans"), login = me.camfrogUsername ? String(me.camfrogUsername).toLowerCase() : await PB.loginOfCached(me.userId);
+        if ((await PB.veiledNow(me.userId, login)) && (await require("./blocks").towards(me.userId, p.userId, { veiled: true, fromLogin: login }))) state = "withheld";
+      } catch (e) { state = "withheld"; }
+    }
     if (state === "pending") {
       const got = (await getQuery("SELECT COUNT(*) AS n FROM veil_gifts WHERE to_user = ? AND created > ?", [String(p.userId), t - 86400e3]))[0];
       if (Number(got && got.n) >= RECIPIENT_DAY_MAX) state = "withheld";

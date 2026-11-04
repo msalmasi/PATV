@@ -18,6 +18,15 @@
 // thing for a frog name (stored as bridge); staff can make it site-wide. Lists show it as "🐸 <label> · identity hidden", the room event
 // names only the label, admin_audit the real identity (admins only). The live view never flags a veiled entry as banned (wban), so a
 // new frog session can't be matched to an old ban. If the person comes back under their own name and misbehaves, ban that name.
+// 1.99?? padppl rework (owner 2026-11-04, on bans "narrowed to the one frog name": "This could lead to incognito harrassment no? Maybe this
+// could work by blocking ANY frog name the person uses (essentially blocking the person from using incognito in that pad)"): a frog-name
+// ban IS that - an INCOGNITO BAN on the person behind it, resolved on the server by their account (and linked login), so it covers every
+// frog name they use in that pad, now and later. While it lasts, their website chat / commands / clips / cams there under a frog name are
+// refused with a plain "You can't post incognito on this pad right now." (bridgeblocks.INCOG_REFUSAL - no reason, no end, nothing that
+// names how the moderator saw them); under their own name nothing changes unless they are banned by name too. The moderator never
+// learns who it is: the answer is the same for anyone behind the frog name (the moderator's own frog name included), the list shows
+// "🐸 <the frog name it was made on> (identity hidden) - incognito ban". Durations, reasons (seen by the pad's mods and staff, never by
+// the person), audit and Lift as for every website ban.
 // Rank (review fix): a NAMED ban is refused on the pad's owner (unless staff ban) and on PATV staff of the same rank or above; a frog
 // name's ban is never refused for rank (that answer would say who it is) - it only ever stops frog-named website chat.
 //
@@ -129,7 +138,8 @@ function identity(p) {
 function refusalPreview(scope, until, reason) {
   const when = until ? " until " + new Date(until).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
   const why = reason ? " (" + reason + ")" : "";
-  if (scope === "bridge" || scope === "veil") return "A mod of this room blocked you from talking in it from the website" + when + why + ".";
+  if (scope === "veil") return require("./bridgeblocks").INCOG_REFUSAL;          // 1.99?? padppl rework: the incognito ban's plain words
+  if (scope === "bridge") return "A mod of this room blocked you from talking in it from the website" + when + why + ".";
   if (scope === "pad") return "You can't post in this pad" + when + why + ".";
   return "You can't post on the feed" + when + why + ".";
 }
@@ -151,6 +161,8 @@ async function audit(me, action, p, detail, reason) {
   } catch (e) { console.error("[padbans] audit:", e.message); }
 }
 const eventName = (p) => (p.veil ? `🐸 ${p.label} (identity hidden)` : p.userId ? "@" + p.username : "Camfrog login " + p.login);
+// 1.99?? padppl rework: how a frog-name ban (an incognito ban) is listed - the frog name it was made on, never who
+const veilWho = (label) => `🐸 ${label || "someone"} (identity hidden) - incognito ban`;
 
 /** May `me` use `scope` here? (throws) */
 async function need(me, R, live, scope) {
@@ -243,8 +255,8 @@ async function ban(me, R, live, { ref, scope, dur, reason, nets = false, exempt 
   } else if (p.veil) {
     await runQuery(`INSERT INTO veil_bans (room_id, scope, user_id, login, label, until, reason, by_id, by_name, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [room, scope, p.userId || null, p.login || null, String(p.label || "someone").slice(0, 60), until, why || null, by.userId, by.name, now()]);
-    if (room) await require("./rooms").event(room, "pad-ban", me.username, `${eventName(p)} - ${scope}${until ? " until " + new Date(until).toISOString() : " (permanent)"}${why ? " - " + why : ""}`);
-    await audit(me, "pad_ban", p, { room: room || "*", scope, until, via, veil: true, label: p.label }, why);
+    if (room) await require("./rooms").event(room, "pad-ban", me.username, `${eventName(p)} - incognito ban${until ? " until " + new Date(until).toISOString() : " (permanent)"}${why ? " - " + why : ""}`);
+    await audit(me, "pad_ban", p, { room: room || "*", scope, until, via, veil: true, incognito: true, label: p.label }, why);
   } else if (!p.userId) {
     await runQuery(`INSERT INTO pad_login_bans (login, room_id, scope, until, reason, by_id, by_name, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(login, room_id, scope) DO UPDATE SET until = excluded.until, reason = excluded.reason, by_id = excluded.by_id,
@@ -289,8 +301,8 @@ async function unban(me, R, live, { ref = null, entry = null, scope = null, feat
     await need(me, R, live, row.scope);
     await runQuery("DELETE FROM veil_bans WHERE id = ?", [id]);
     const p = { veil: true, label: row.label, userId: row.user_id, login: row.login };
-    if (row.room_id) await require("./rooms").event(row.room_id, "pad-unban", me.username, `${eventName(p)} - ${row.scope}`);
-    await audit(me, "pad_unban", p, { room: row.room_id || "*", scope: row.scope, via, veil: true }, null);
+    if (row.room_id) await require("./rooms").event(row.room_id, "pad-unban", me.username, `${eventName(p)} - incognito ban`);
+    await audit(me, "pad_unban", p, { room: row.room_id || "*", scope: row.scope, via, veil: true, incognito: true }, null);
     return { ok: true };
   }
   if (e.startsWith("login:")) {
@@ -377,7 +389,7 @@ async function list(R, { w = { bridge: true, pad: true, site: false } } = {}) {
   for (const b of await getQuery(`SELECT * FROM veil_bans WHERE room_id IN (${ph}) AND (until IS NULL OR until > ?) ORDER BY created DESC LIMIT 300`, [...rooms, t])) {
     const sc = b.scope === "pad" ? "bridge" : b.scope;
     if (!ok(sc)) continue;
-    out.push({ kind: "veil", scope: sc, who: `🐸 ${b.label || "someone"} · identity hidden`, entry: "veil:" + b.id, until: b.until == null ? null : Number(b.until),
+    out.push({ kind: "veil", scope: sc, who: veilWho(b.label), incog: 1, entry: "veil:" + b.id, until: b.until == null ? null : Number(b.until),
                reason: b.reason || "", by: b.by_name || "", at: Number(b.created), ...(b.room_id === "" ? { site: true } : {}) });
   }
   return out.sort((a, b) => b.at - a.at);

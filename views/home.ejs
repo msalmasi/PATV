@@ -80,7 +80,7 @@
      micStage: !!locals.homeMic,     // 1.99ajq dockpol (owner H5): the front pad's mic stage for this viewer (home.js homeMic)
      // (1.99ajq dockpol fix (review): a block swapped in for a front pad whose mic stage this viewer may see loads its script then - the page
      // only included it when the FIRST render had it)
-     micJs: locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg() ? '/public/js/stage-mic.js?v=15' : null };
+     micJs: locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg() ? '/public/js/stage-mic.js?v=16' : null };
 %><% if (locals.dockFragment) { %><%- homeDock_ ? include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) : '' %><% if (homeDock_) { %><script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script><% } %><% } else { %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
@@ -108,7 +108,7 @@
 <link rel="stylesheet" href="/public/css/pad-dock.css?v=7">
 <link rel="stylesheet" href="/public/css/home-dock.css?v=3">
 <%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
-<script src="/public/js/stage-mic.js?v=15"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access %>
+<script src="/public/js/stage-mic.js?v=16"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99?? padppl rework): the "not the Camfrog user" tag on a tile %>
 <%_ } _%>
 <%_ } _%>
 <style>
@@ -902,7 +902,7 @@
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
-<script src="/public/js/room-bridge.js?v=27"></script>
+<script src="/public/js/room-bridge.js?v=28"></script><%# v28 (1.99?? padppl rework): the clash tag's explanation for a linked login %>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -1155,11 +1155,11 @@
 </script>
 <% } %>
 <%_ if (homeDock_) { _%>
-<script src="/public/js/chatlog-core.js?v=12"></script>
+<script src="/public/js/chatlog-core.js?v=13"></script>
 <script src="/public/js/dock-link.js?v=1"></script>
 <script src="/public/js/pad-dock.js?v=7"></script>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
-<link rel="stylesheet" href="/public/css/person-sheet.css?v=2"><script src="/public/js/block-sheet.js?v=2"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
+<link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
 <script src="/public/js/home-dock.js?v=3"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage %>
 <%_ } _%>
 <% if (tpListen_) { %>

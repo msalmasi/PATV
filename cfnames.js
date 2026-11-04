@@ -1,16 +1,21 @@
-// cfnames.js - 1.99ajn padppl: the IMPERSONATION GUARD (owner: someone made a PATV account named like a Camfrog user - "tricon" - to
-// harass him). A PATV username is free text with a charset rule; nothing stopped one from taking a Camfrog login Pepe has seen, and the
-// only check was at relay time (accountkey.ownsName - only against a LINKED login, and most Camfrog users never link).
+// cfnames.js - 1.99ajn padppl: the CAMFROG-NAME TAG (owner: someone made a PATV account named like a Camfrog user - "tricon" - to
+// harass him). A PATV username is free text with a charset rule, and the only check was at relay time (accountkey.ownsName - only
+// against a LINKED login, and most Camfrog users never link).
+// 1.99?? padppl rework (owner 2026-11-04, on the guard that refused such names: "Wouldn't this prevent people legit creating a PATV
+// account with their own username? Or a common username he saw on CF? I don't like this part."): NOBODY is refused a name because Pepe
+// has seen it on Camfrog - sign-up, rename, Pepe's rename and every OAuth / SSO account creation take it. What stays: the "not the
+// Camfrog user" tag wherever such a name shows, the typed-name disambiguation (targets.js, the 409 "which one"), the admin list.
 //
 //   seen(name)           has Pepe seen this Camfrog login? A Set rebuilt every 10 minutes (and on each userstats sync) from
 //                        camfrog_userstats.login, users.camfrogUsername (CF auto accounts included) and the live rosters - plus, on a miss,
 //                        one indexed probe of the chat archive's chat_log.who / chat_log_veil.login (chatlogdb.read; fails quiet)
-//   nameRefusal(n, uid)  why account `uid` (null = a new one) may NOT take username `n`: a seen login that isn't this account's own linked
-//                        login. CF auto accounts are exempt (they ARE the login). Logins are already public in Camfrog rooms, so the refusal
-//                        reveals nothing new.
+//   nameHint(n, uid)     a gentle, NON-BLOCKING hint after a sign-up / rename whose name is a login Pepe has seen (and isn't the account's
+//                        own linked login): "Is <name> your Camfrog name? Link it in Settings so people know it's you." - the same words
+//                        whether or not someone else has that login linked (it says nothing about who has it). hintAfter() flashes it.
 //   clashOf(acc, login)  the Camfrog login an account's SHOWN name (username or display name) equals but isn't linked to, or null - the
 //                        page's "not the Camfrog user" tag (u.clash) and the /admin/users#nameclash list
-// Display names stay free text; bridge.withPatv shows a linked account's PATV display name only when it doesn't clash (see there).
+// Display names stay free text; bridge.withPatv SHOWS a clashing name with the tag (1.99?? rework: a linked login's display name too - it
+// used to be replaced by the login).
 // Review fix (LOOK-ALIKES): a name also clashes when it only LOOKS like a seen login - skeleton(): Unicode compatibility forms folded,
 // Cyrillic / Greek letters that look Latin mapped to them, 0 -> o, 1 / I / i / | -> l, rn -> m, vv -> w, and the separators at either end
 // dropped ("Тricon", "tric0n", "tricon_", "trlcon" all read as "tricon"). An exact match is checked first; a look-alike never counts against
@@ -20,7 +25,9 @@
 const { getQuery, runQuery } = require("./dbUtils");
 
 const REBUILD_MS = 10 * 60 * 1000, PROBE_TTL = 10 * 60 * 1000, LOGIN_RE = /^[\w.\-]{1,40}$/;
-const REFUSAL = "That name belongs to a Camfrog user. If it's yours, link your Camfrog account first (type !verify in a room with Pepe), then you can take it.";
+// (1.99?? rework: only the ADMIN rename tool still refuses a seen login - it exists to end a clash, never to make another one)
+const REFUSAL = "That name is a Camfrog login Pepe has seen - pick another, or Mark OK instead.";
+const HINT = "Is {name} your Camfrog name? Link it in Settings so people know it's you.";
 let clock = () => Date.now();
 const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
 let SET = new Set(), SKEL = new Map(), builtAt = 0, building = null;
@@ -121,20 +128,44 @@ async function linkedLoginOf(userId) {
 }
 const isAuto = (name) => { try { return require("./autoaccount").isAutoName(name, { anyCase: true }); } catch (e) { return /^cf/i.test(String(name || "")); } };
 
-/** Why account `userId` (null = a new account) may not take PATV username `name` - null = it may. */
-async function nameRefusal(name, userId = null, req = null) {
+/** 1.99?? padppl rework: why the ADMIN rename tool (adminRename) won't give account `userId` the name `name` - a seen login (or a look-alike
+ *  of one) that isn't the account's own linked login and isn't marked OK - or null. Never asked for a sign-up, a rename, Pepe's rename or
+ *  an OAuth / SSO account: those take any free name. */
+async function adminNameRefusal(name, userId = null) {
   const l = low(name);
   if (!LOGIN_RE.test(l) || isAuto(name)) return null;
   const own = userId ? await linkedLoginOf(userId) : null;
   let hit = (await seen(l)) ? l : null;
   if (hit && own === hit) return null;                                         // their own linked login
-  if (!hit) {                                                                  // review fix: a look-alike of a seen login
+  if (!hit) {                                                                  // a look-alike of a seen login
     if (stale()) { try { await rebuild(); } catch (e) { /* keep the old set */ } }
     hit = lookAlike(name, own);
   }
   if (!hit) return null;
   if (userId && okMarks.get(String(userId) + "|" + hit)) return null;          // an admin marked it OK
-  return req && req.t && req.t.has && req.t.has("auth.err.username_camfrog") ? req.t("auth.err.username_camfrog") : REFUSAL;
+  return REFUSAL;
+}
+
+/** 1.99?? padppl rework: the gentle hint for an account that just took PATV username `name` (sign-up, rename, an OAuth / SSO account) -
+ *  only when `name` is EXACTLY a Camfrog login Pepe has seen and not the account's own linked login; never says whether that login is
+ *  linked to anyone. -> the hint's words | null. Never throws. */
+async function nameHint(name, userId = null, req = null) {
+  try {
+    const l = low(name);
+    if (!LOGIN_RE.test(l) || isAuto(name)) return null;
+    if (!(await seen(l))) return null;
+    if (userId && (await linkedLoginOf(userId)) === l) return null;            // it IS their linked login - nothing to link
+    const v = { name: String(name).trim() };
+    return req && req.t && req.t.has && req.t.has("auth.hint.camfrog_name") ? req.t("auth.hint.camfrog_name", v) : HINT.replace("{name}", v.name);
+  } catch (e) { return null; }
+}
+/** nameHint, flashed as a note for the next page (connect-flash "success" - the welcome line's list). Never throws, never blocks. */
+async function hintAfter(req, userId, name) {
+  try {
+    const h = await nameHint(name, userId, req);
+    if (h && req && typeof req.flash === "function") req.flash("success", h);
+    return h;
+  } catch (e) { return null; }
 }
 
 /** The Camfrog login `shown` (an account's username or display name) equals while that account isn't linked to it - or null. Sync:
@@ -188,7 +219,7 @@ async function markOk(me, userId, name) {
 async function adminRename(me, userId, newName) {
   const guard = require("./middleware/authGuard");
   const name = String(newName || "").trim();
-  const bad = guard.checkUsername(name) || (await nameRefusal(name, userId));
+  const bad = guard.checkUsername(name) || (await adminNameRefusal(name, userId));
   if (bad) { const e = new Error(bad); e.status = 400; throw e; }
   if ((await getQuery("SELECT 1 FROM users WHERE lower(username) = lower(?) AND userId != ?", [name, String(userId)])).length) { const e = new Error("That username is taken."); e.status = 409; throw e; }
   const U = require("./usernames");
@@ -234,5 +265,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, seen, noteLogins, nameRefusal, clashOf, lookAlike, skeleton, clashes, markOk, adminRename, rebuild, REFUSAL,
+module.exports = { init, register, seen, noteLogins, nameHint, hintAfter, adminNameRefusal, clashOf, lookAlike, skeleton, clashes, markOk, adminRename, rebuild, REFUSAL, HINT,
   _setClock: (f) => { clock = f; }, _reset: () => { SET = new Set(); SKEL = new Map(); builtAt = 0; probes.clear(); okMarks.clear(); }, _add: (l) => noteLogins([l]) };

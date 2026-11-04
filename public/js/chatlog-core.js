@@ -43,6 +43,8 @@
 //                those parts of a chat / 🎙 line's or a topic's text go in <mark>s. Omitted = no marks (every other caller)
 //   blk          1.99-padppl: the viewer's OWN named blocks {l: [logins], u: [PATV usernames]} (bridge.js liveView blk) - a NAMED
 //                chat / 🎙 line of someone in it is folded ("A line from someone you blocked · Show"); never a veiled line or a bar
+//   it.vb        1.99-padppl rework: the server's flag on a FROG-NAMED line whose person this viewer blocked under a frog name (any frog
+//                name - blocks.js veilKeysOf / chatlogview.dress): folded the same way; never on a bar
 //   me           1.99-padppl: {username, login, display} - the viewer: a line that @mentions them gets .is-mention, its chip .mention-me
 //   it.mn        1.99-padppl: the server's mentions on a web line [{n, username, login, veil, style, flair}] - each "@n" in the
 //                text becomes a .mention chip in that person's name style (a frog name: plain)
@@ -305,12 +307,17 @@
     if (ctx && ctx.lineHead && !a.title) a.title = shownName(u, ctx);
     if (u.patv) { a.href = linkOf(ctx, '/u/' + encodeURIComponent(u.patv.username)); a.rel = relOf(ctx); }
     var n = h(u.patv ? 'a' : 'span', a, [shownName(u, ctx)]);
-    if (!u.web) return n;
+    // 1.99-padppl: a PATV name that equals a Camfrog login it isn't linked to (cfnames.js, u.clash) says so. 1.99-padppl rework: a LINKED
+    // login's clashing display name too (bridge.withPatv shows it now - it used to put the login in its place), in the chat, the people and
+    // mic lists and the person menu alike
+    var ct = u.clash ? h('span', { 'class': 'clash-tag', title: u.web || ACCT_KEY.test(String(u.login || ''))
+      ? _t('js.pad.chat.clash_title', 'This is a PATV web account. It is not the Camfrog user called {login}.', { login: String(u.clash) })
+      : _t('js.pad.chat.clash_title_cf', 'This is their PATV display name. They are not the Camfrog user called {login}.', { login: String(u.clash) }) },
+      [_t('js.pad.chat.clash', 'not the Camfrog user')]) : null;
+    if (!u.web) return ct ? h('span', { 'class': 'who-clash' }, [n, ct]) : n;
     // 1.99xa: a line they sent from the website (Pepe relayed it) - their own chat, marked so the room can tell
-    // 1.99-padppl: a web account whose shown name equals a Camfrog login it isn't linked to (cfnames.js, u.clash) says so
     var wk = [n, h('span', { 'class': 'web-mark', title: _t('js.pad.chat.web', 'Sent from the website') }, ['\u00a0\ud83c\udf10'])];
-    if (u.clash) wk.push(h('span', { 'class': 'clash-tag', title: _t('js.pad.chat.clash_title', 'This is a PATV web account. It is not the Camfrog user called {login}.', { login: String(u.clash) }) },
-      [_t('js.pad.chat.clash', 'not the Camfrog user')]));
+    if (ct) wk.push(ct);
     return h('span', { 'class': 'who-web' }, wk);
   }
   /** 1.99ir: their flair in this pad (padflair.js) - text only, colours must be strict hex. */
@@ -502,8 +509,9 @@
     var txh = tx && it.txh === 1;
     var mask = /^[sml]$/.test(String(it.mask || '')) ? String(it.mask) : null, mine = it.self === 1 && (!!veilOf(it.u) || txh);
     if (mask && !mine) text = '';
-    // 1.99-padppl: folded for a viewer who blocked this NAMED speaker (one direction - the viewer's own list; never a veil or a bar)
-    var folded = !rm && !mask && blockedOf(ctx.blk, it.u);
+    // 1.99-padppl: folded for a viewer who blocked this NAMED speaker (one direction - the viewer's own list; never a veil or a bar).
+    // 1.99-padppl rework: and a FROG-NAMED line the server flagged vb (the viewer blocked that person under a frog name - any frog name)
+    var folded = !rm && !mask && (blockedOf(ctx.blk, it.u) || (it.vb === 1 && !!veilOf(it.u) && it.self !== 1));
     var mentionMe = !rm && !mask && !folded && lineMentionsMe(it, ctx);
     var a = { 'class': 'line' + (tx ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : '') + (rm ? ' rm' : '') + (veilOf(it.u) ? ' veiled' : '') + (mask ? ' masked' : '')
       + (folded ? ' is-blocked-fold' : '') + (mentionMe ? ' is-mention' : '') };

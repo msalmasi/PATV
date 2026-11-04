@@ -9,6 +9,9 @@
 //
 // Review fixes: ONE "⛔ Website ban…" menu item (the sheet picks the scope) and ONE "↩️ Lift website ban…" - not four look-alike items next
 // to Pepe's 🔨 Ban…; one Close when the preview fails; the Camfrog-room note only for a login, and only for a viewer Pepe gives 🔨 Ban…
+// 1.99?? padppl rework (owner: a frog-name ban should cover ANY frog name the person uses): on a frog name the item is "⛔ Incognito ban…" -
+// the person behind it can't post incognito in this pad (every frog name, now and later), whoever it is; they see only "You can't post
+// incognito on this pad right now." (never the reason or the end), so the reason box says who reads it.
 //
 //   PATVRoom.banItems(out, u, x, ref, veil)       PATVBanSheet.open({ ref, slug, scope?, lift?, wban?, name, veil?, anchor? })
 (function (W, D) {
@@ -26,7 +29,7 @@
   P.banItems = function (out, u, x, ref, veil) {
     var w = x && x.wmod; if (!w || !ref || !x.slug || !(w.bridge || w.pad || w.site)) return;
     var wb = veil ? null : (x.wban || (u && u.wban) || null);
-    out.push({ kind: 'ban', id: 'ban', group: 'ban', label: '⛔ ' + _t('js.ban.menu', 'Website ban…'), ref: ref, scope: 'bridge', veil: !!veil, danger: true });
+    out.push({ kind: 'ban', id: 'ban', group: 'ban', label: '⛔ ' + (veil ? _t('js.ban.menu_veil', 'Incognito ban…') : _t('js.ban.menu', 'Website ban…')), ref: ref, scope: 'bridge', veil: !!veil, danger: true });
     if (wb && (wb.b || wb.p)) out.push({ kind: 'ban', id: 'lift', group: 'ban', label: '↩️ ' + _t('js.ban.menu_lift', 'Lift website ban…'), ref: ref, lift: true, wban: wb });
   };
 
@@ -34,8 +37,8 @@
     bridge: function () { return [_t('js.ban.scope_bridge', 'Website bridge only'), _t('js.ban.scope_bridge_sub', 'Chat, commands, clips and cams from the website')]; },
     pad: function () { return [_t('js.ban.scope_pad', 'Whole pad'), _t('js.ban.scope_pad_sub', 'Feed posts, comments, stories, stage and chat')]; },
     site: function () { return [_t('js.ban.scope_site', 'Whole site'), _t('js.ban.scope_site_sub', 'PATV staff: everywhere, and they are signed out')]; },
-    vbridge: function () { return [_t('js.ban.scope_veil', 'This pad\'s website chat'), _t('js.ban.scope_veil_sub', 'While they\'re under a frog name - chat, commands, clips and cams. Never what they do under their own name, so it can\'t show who they are.')]; },
-    vsite: function () { return [_t('js.ban.scope_veil_site', 'Every pad\'s website chat'), _t('js.ban.scope_veil_site_sub', 'PATV staff: while they\'re under a frog name, anywhere')]; }
+    vbridge: function () { return [_t('js.ban.scope_veil', 'Posting incognito in this pad'), _t('js.ban.scope_veil_sub', 'Every frog name they use here, now and later - chat, commands, clips and cams from the website. What they do under their own name doesn\'t change, and you never learn who it is.')]; },
+    vsite: function () { return [_t('js.ban.scope_veil_site', 'Posting incognito in every pad'), _t('js.ban.scope_veil_site_sub', 'PATV staff: every frog name they use, in every pad')]; }
   };
   var DURS = [['1h', function () { return _t('js.ban.dur_1h', '1 hour'); }], ['1d', function () { return _t('js.ban.dur_1d', '1 day'); }],
               ['7d', function () { return _t('js.ban.dur_7d', '7 days'); }], ['perm', function () { return _t('js.ban.dur_perm', 'Permanent'); }]];
@@ -127,7 +130,7 @@
       S.body.appendChild(chips);
       // why (review fix: "needed for a permanent ban" is said under the box - a disabled button's tooltip never reaches a touch screen)
       var fld = el('div', 'psh-fld');
-      var rl = el('label', 'psh-k', _t('js.ban.reason', 'Reason (they see it)')); rl.htmlFor = S.id + 'W';
+      var rl = el('label', 'psh-k', pv.veil ? _t('js.ban.reason_veil', 'Reason (only this pad\'s mods and PATV staff see it)') : _t('js.ban.reason', 'Reason (they see it)')); rl.htmlFor = S.id + 'W';
       var why = el('input'); why.type = 'text'; why.id = S.id + 'W'; why.maxLength = 120; why.autocomplete = 'off';
       var need = el('p', 'psh-need', ''); need.id = S.id + 'N'; why.setAttribute('aria-describedby', need.id);
       why.addEventListener('input', paint);
@@ -161,7 +164,7 @@
         var UNTIL = { '1h': _t('js.ban.until_1h', 'an hour from now'), '1d': _t('js.ban.until_1d', 'this time tomorrow'), '7d': _t('js.ban.until_7d', '7 days from now') };
         r = r.replace(/ until [^(.]+UTC/, dur === 'perm' ? '' : ' until ' + UNTIL[dur]);
         var w = why.value.replace(/\s+/g, ' ').trim();
-        if (w) r = r.replace(/\.$/, ' (' + w + ').');
+        if (w && !pv.veil) r = r.replace(/\.$/, ' (' + w + ').');   // (1.99?? padppl rework: an incognito ban never shows them the reason)
         see.textContent = r;
         var blocked = dur === 'perm' && !w;
         B.go.disabled = blocked;

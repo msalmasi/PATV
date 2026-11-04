@@ -26,8 +26,20 @@
 // to a name. The other way round too: a NAMED block never suppresses an alert from a frog-named line (a named block of a suspect +
 // a missing alert from 🐸V would say V is that suspect). Residual (privacy page): a frog-name block follows the person to their next
 // frog name, so a missing alert can tell the blocker two frog names are the same person - never who.
+// 1.99?? padppl rework (owner 2026-11-04, "blocking ANY frog name the person uses" - an incognito harasser just takes the next frog name):
+// a frog-name block HIDES THAT PERSON'S VEILED ACTIVITY FROM THE BLOCKER, under ANY frog name, in ANY pad - by their account / login,
+// resolved on the server:
+//   - their frog-named chat / 🎙 lines are folded for the blocker (veilKeysOf -> chatlogview.dress `vb: 1` on the live feed, history and
+//     search; chatlog-core folds them like a named block's) - never a "someone" line or a hidden bar (those carry no frog name; folding
+//     "someone" right after a named exit would link the two)
+//   - their frog-named @mentions don't alert the blocker (mentions.js)
+//   - while they are under a frog name (padbans.veiledNow), their web !duel / !brawl / !tip / !challenge aimed at the blocker are refused
+//     (bridge-relay.challengeBlocked) and a 🎁 gift they send the blocker's frog name is withheld (veilgift.js)
+// What they do under their OWN name is untouched (so it never unmasks), and a named block still never acts on frog-named lines. The
+// accepted residual, stated on the sheet and the privacy page: folding / a refusal can show the blocker that two frog names are the same
+// person - never who.
 // Every answer to a veil block is the same whoever is behind it (an account, an unlinked login, nobody), apart from "That's you".
-// Menus never say "they blocked you"; only "you blocked them" (blk), and never on a veiled entry.
+// Menus never say "they blocked you"; only "you blocked them" (blk), and never on a veiled entry (Unblock is in Settings → Blocked people).
 //
 // Routes: POST /api/blocks {ref, on, slug?} (ref = personref.js, or {k:'vb', id} / {k:'lb', v} from the settings list)
 //         GET  /api/blocks            the viewer's blocks (veils by label only)
@@ -64,7 +76,8 @@ function init() {
 
 // ── the cache of "who did this viewer block" (their own list, for menus and folding) ──
 const cache = new Map();          // userId -> {at, v}
-function changed(...ids) { for (const id of ids) if (id) cache.delete(String(id)); }
+const vcache = new Map();         // 1.99?? padppl rework: userId -> {at, v: Set of the keys behind the frog names they blocked} (server-only)
+function changed(...ids) { for (const id of ids) if (id) { cache.delete(String(id)); vcache.delete(String(id)); } }
 
 /** Named dm_blocks either way between two accounts. */
 async function either(a, b) {
@@ -136,6 +149,34 @@ async function pageList(viewerId) {
   const b = await blockedBy(viewerId);
   if (!b.users.size && !b.logins.size) return null;
   return { l: [...b.logins].sort(), u: [...b.users].sort() };
+}
+/**
+ * 1.99?? padppl rework: the SERVER-ONLY keys of everyone `viewerId` blocked under a frog name - lowercased Camfrog logins and "u:<id>"
+ * account keys (a frog line's identity, _vz.login / chat_log_veil.login, is one of these), the account's CURRENT linked login included, so
+ * a person who links / relinks stays covered. Never the viewer's own keys. Cached CACHE_MS. It never leaves the server: pages only get
+ * `vb: 1` on a frog-named line (chatlogview.dress). -> Set (empty when none)
+ */
+async function veilKeysOf(viewerId) {
+  if (!viewerId) return new Set();
+  const k = String(viewerId), c = vcache.get(k);
+  if (c && now() - c.at < CACHE_MS) return c.v;
+  await init();
+  const v = new Set();
+  const rows = await getQuery(`SELECT b.blocked_id AS id, b.blocked_login AS login, u.camfrogUsername AS cf FROM veil_blocks b
+                               LEFT JOIN users u ON u.userId = b.blocked_id WHERE b.blocker_id = ? LIMIT 2000`, [k]);
+  for (const r of rows) {
+    if (r.id) v.add("u:" + low(r.id));
+    if (r.login && LOGIN_RE.test(low(r.login))) v.add(low(r.login));
+    if (r.cf && LOGIN_RE.test(low(r.cf))) v.add(low(r.cf));
+  }
+  if (v.size) {
+    v.delete("u:" + low(k));
+    const mine = await loginOf(k);
+    if (mine) v.delete(mine);
+  }
+  vcache.set(k, { at: now(), v });
+  if (vcache.size > 5000) vcache.delete(vcache.keys().next().value);
+  return v;
 }
 
 class Refuse extends Error { constructor(status, msg, code) { super(msg); this.status = status; this.code = code || null; } }
@@ -236,7 +277,7 @@ async function linked(userId, login) {
       await runQuery("DELETE FROM login_blocks WHERE login = ?", [l]);
       await runQuery("UPDATE veil_blocks SET blocked_id = ? WHERE blocked_login = ? AND blocked_id IS NULL", [String(userId), l]);
     });
-    cache.clear();
+    cache.clear(); vcache.clear();
   } catch (e) { console.error("[blocks] link:", e.message); }
 }
 
@@ -247,7 +288,7 @@ async function forget(userId) {
     await runQuery("DELETE FROM login_blocks WHERE blocker_id = ?", [String(userId)]);
     await runQuery("DELETE FROM veil_blocks WHERE blocker_id = ?", [String(userId)]);
     await runQuery("UPDATE veil_blocks SET blocked_id = NULL WHERE blocked_id = ?", [String(userId)]);
-    cache.clear();
+    cache.clear(); vcache.clear();
   } catch (e) { console.error("[blocks] forget:", e.message); }
 }
 async function merge(fromId, toId) {
@@ -257,7 +298,7 @@ async function merge(fromId, toId) {
     await runQuery("DELETE FROM login_blocks WHERE blocker_id = ?", [String(fromId)]);
     await runQuery("UPDATE veil_blocks SET blocker_id = ? WHERE blocker_id = ?", [String(toId), String(fromId)]);
     await runQuery("UPDATE veil_blocks SET blocked_id = ? WHERE blocked_id = ?", [String(toId), String(fromId)]);
-    cache.clear();
+    cache.clear(); vcache.clear();
   } catch (e) { console.error("[blocks] merge:", e.message); }
 }
 /** The blocker's own export: labels and logins, never who is behind a frog name. */
@@ -306,4 +347,4 @@ function register(app, { addUser, bySlug = null }) {
 }
 
 module.exports = { init, register, set, list, either, towards, hiddenTowards, loginBlocked, veilBlocked, loginBlockersOf, blockedBy, pageList, linked, forget, merge, exportFor,
-  changed, Refuse, _setClock: (f) => { clock = f; cache.clear(); }, _reset: () => { cache.clear(); hits.clear(); } };
+  changed, veilKeysOf, Refuse, _setClock: (f) => { clock = f; cache.clear(); vcache.clear(); }, _reset: () => { cache.clear(); vcache.clear(); hits.clear(); } };

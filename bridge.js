@@ -1400,16 +1400,20 @@ function withPatv(u, C, F = null) {
   const fl = F && acc.username ? F.get(String(acc.username).toLowerCase()) : null;
   if (fl) out.patv.flair = require("./padflair").plain(fl);
   if (!u.self) {
-    // 1.99ajn padppl (the impersonation guard, cfnames.js): a linked login's PATV display name that is ANOTHER Camfrog login Pepe has seen is
-    // never shown - the line keeps the Camfrog name (bridge-relay.webName's rule for the room side); a web account (no login) whose name
-    // is one keeps its name with `clash` = that login (the page's "not the Camfrog user" tag)
+    // 1.99ajn padppl (cfnames.js): a PATV name that is ANOTHER Camfrog login Pepe has seen carries `clash` = that login (the page's "not the
+    // Camfrog user" tag). 1.99?? padppl rework (owner: "I don't like this part" - the hard guard): a LINKED login's clashing PATV display
+    // name is SHOWN with the tag, the same as a web account's - it used to be replaced by the login (PATV brocklee258, linked to login
+    // ritchiecuh, showed as "ritchiecuh" because "brocklee258" is also a login Pepe has seen). Every surface that names people through
+    // here gets it alike: chat and 🎙 transcript lines, the people and mic lists, the person-menu header, the @ list, the mic stage
+    // (micfollow viewFor), history / search / downloads. The ROOM side is bridge-relay.webName's older rule (never another ACCOUNT's
+    // linked login or username - Camfrog can't show a tag), unchanged.
     const d = str(acc.display, 40) || out.display;
     let cl = null;
     // (review fix: the account's id / username go along, so an admin's "Mark OK" applies here too; a linked login is judged by its display name)
     const web_ = ACCT_RE.test(login);
     try { cl = require("./cfnames").clashOf(web_ ? login.slice(2) : null, acc.username, d, web_ ? null : login, { onlyShown: !web_ }); } catch (e) { cl = null; }
-    if (!(cl && !ACCT_RE.test(login))) out.display = d;
-    if (cl && ACCT_RE.test(login)) out.clash = cl;
+    out.display = d;
+    if (cl) out.clash = cl;
   }
   return out;
 }
@@ -1701,8 +1705,12 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
                                 ...(prog ? prog.tiles.filter((x) => !x.cover && !x.veil).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody; 1.99aid S5: nor a veiled cam)
                                 // 1.99aht S1: a !transcripts off bar said named shows that name - and its PATV look (chatlogview.barUser)
                                 ...[...items, ...redoItems].map((it) => CV.barUser(it)).filter(Boolean)]);
-  const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal });
-  const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal }) : [];
+  // 1.99?? padppl rework (blocks.js): the frog-named lines of people this viewer blocked under a frog name - whatever frog name, any pad -
+  // come folded (vb: 1); the keys stay here
+  let vbKeys = null;
+  if (userId) { try { const vk = await require("./blocks").veilKeysOf(userId); if (vk && vk.size) vbKeys = vk; } catch (e) { vbKeys = null; } }
+  const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal, vbKeys });
+  const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)), selfKeys, canReveal, vbKeys }) : [];
   if (V.audit) {
     const below = dressed.filter((it) => it.ts < CV.pubFloor(V, it.k));     // CL8 fix-up: presence's public 24 h too
     if (below.length) CV.auditRead(V, R.id, "history", below[0].ts, below[below.length - 1].ts).catch(() => {});

@@ -197,6 +197,7 @@ function register(app, { addUser, authView } = {}) {
       catch (e) { console.error("[plexsso] link new account:", e && e.message); }
       await UC().finishLogin(req, res, r.user, "plex sign-up");
       req.flash("success", tr(req, "auth.plex.welcome", `Welcome to PATV, ${r.user.username}! Your Plex account is linked.`, { name: r.user.username }));
+      if (r.hint) req.flash("success", r.hint);          // 1.99?? padppl rework: "Is <name> your Camfrog name? Link it in Settings…" (cfnames.nameHint)
       return res.redirect(home(r.user, p.next));
     } catch (e) {
       console.error("[plexsso] create:", e && e.message);

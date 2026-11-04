@@ -88,6 +88,18 @@
 main.rm.rm-dock #rmPeople .nm:has(.clash-tag) { flex-wrap: wrap; white-space: normal; overflow: visible; }
 main.rm.rm-dock #rmPeople .nm > .who-web:has(> .clash-tag) { display: flex; flex-wrap: wrap; align-items: center; column-gap: 2px; row-gap: 1px; white-space: normal; overflow: visible; min-inline-size: 0; }
 main.rm.rm-dock #rmPeople .nm > .who-web > .clash-tag { margin-left: 0; }
+/* 1.99?? padppl rework: a LINKED Camfrog user's clashing PATV display name is shown with the tag too (chatlog-core .who-clash = the name +
+   the tag) - laid out like .who-web: in a line's head, the people list and the person menu's header */
+.chatlog .line-head > .who-clash { flex: 0 40 auto; min-width: 8ch; display: flex; align-items: center; gap: 3px; }
+.chatlog .line-head .who-clash > .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatlog .line-head .who-clash > .clash-tag { margin-left: 0; flex: none; }
+main.rm.rm-dock #rmPeople .nm > .who-clash { display: flex; flex-wrap: wrap; align-items: center; column-gap: 2px; row-gap: 1px; flex: 0 1 auto; min-inline-size: 4ch; white-space: normal; overflow: visible; }
+main.rm.rm-dock #rmPeople .nm > .who-clash > .who { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock #rmPeople .nm > .who-clash > .clash-tag { margin-left: 0; }
+.pm-pop .pm-pop-n .rmd-person-name .who-clash { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; min-inline-size: 0; }
+/* ... and on a mic-stage tile's label (stage-mic.js .mf-clash) - sized for the label, gone while hidden */
+.player .mf-tile .mf-clash { flex: none; margin: 0; font-size: 10px; line-height: 1.5; padding: 0 5px; }
+.player .mf-tile .mf-clash[hidden] { display: none; }
 /* the composer's @ list: the tag after a clashing 🌐 name */
 .rb-ac .clash-tag, .rmd-ac .clash-tag { margin-left: 6px; }
 /* Windows high contrast: the picked choice, the line that names you and its chip stay visible */

@@ -515,7 +515,7 @@ test("stage-room.js repaints the mic stage when only a tile's cover picture chan
   assert.match(why, /white-space: normal;[^]*-webkit-line-clamp: 2;/);
   assert.match(css, /\.mf-card\.cv-gtf \.mf-av img, [^{]*\.mf-card\.cv-sticker \.mf-av img \{ image-rendering: pixelated;/);
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
-  assert.match(room, /stage-mic\.js\?v=15/); assert.match(room, /webrtc\.css\?v=9/);   // Dock: v15 follows the owning document's visibility; webrtc.css stays unchanged.
+  assert.match(room, /stage-mic\.js\?v=16/); assert.match(room, /webrtc\.css\?v=9/);   // Dock: v15 follows the owning document's visibility; v16 (1.99?? padppl rework): the clash tag on a tile; webrtc.css stays unchanged.
 });
 
 // ── the capture ──

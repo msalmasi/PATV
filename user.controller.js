@@ -85,8 +85,7 @@ async function registerUser(req, res) {
 
   let problem;
   if ((problem = guard.checkUsername(username, req))) return back(problem, "username");
-  // 1.99ajn padppl: never a Camfrog login Pepe has seen (cfnames.js - the impersonation guard; link that login first to take it)
-  if ((problem = await require("./cfnames").nameRefusal(username, null, req).catch(() => null))) return back(problem, "username");
+  // (1.99?? padppl rework, owner: a name Pepe has seen on Camfrog is never refused - a gentle hint after the account exists, cfnames.nameHint)
   if ((problem = guard.checkEmail(email, req))) return back(problem, "email");
   if ((problem = guard.checkPassword(password, username, req))) return back(problem, "password");
   if (typeof confirm === "string" && confirm !== password) return back(req.t ? req.t('auth.err.mismatch') : "Those passwords don't match.", "confirm_password");
@@ -139,6 +138,7 @@ async function registerUser(req, res) {
     // Signed straight in (same 90-day login as a normal sign-in; 1.99wj: a server-side session, sessions.js)
     await require("./sessions").signIn(req, res, { userId, username, class: "pleb" }, next && next.startsWith("/claim/") ? "claim" : "password", { signup: true });
     req.flash("success", req.t ? req.t('auth.welcome', { name: username }) : `Welcome to PATV, ${username}! Check your email to verify your address.`);
+    await require("./cfnames").hintAfter(req, userId, username);   // 1.99?? padppl rework: "Is <name> your Camfrog name? Link it in Settings…"
     return res.redirect(next || `/u/${encodeURIComponent(username)}/wheel`);
   } catch (error) {
     console.error(`[auth] registration error: ${error && error.message}`);
@@ -171,9 +171,9 @@ function normaliseUsername(raw) {
 // name2... (cut to fit USERNAME_MAX characters), else user#### - free in ANY letter case (the register form and
 // /api/users/username check case-insensitively too).
 async function generateUniqueUsername(baseUsername) {
-  // 1.99ajn padppl: a Camfrog login Pepe has seen counts as taken (cfnames.js) - the picker silently moves to the next free candidate
-  const taken = async (u) => (await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [u])).length > 0
-    || !!(await require("./cfnames").nameRefusal(u, null).catch(() => null));
+  // (1.99?? padppl rework: a Camfrog login Pepe has seen is a name like any other - someone signing in with Twitch / Discord as their own
+  // Camfrog name gets it; only another PATV account's username counts as taken)
+  const taken = async (u) => (await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [u])).length > 0;
   const base = normaliseUsername(baseUsername);
   if (base) {
     if (!(await taken(base))) return base;
@@ -253,7 +253,7 @@ async function createSsoAccount(req, res, { username, email, emailVerified, prov
   const wait = registerLimit.blocked(ip);
   if (wait) return { error: req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.` };
   username = String(username == null ? "" : username).trim();
-  const problem = guard.checkUsername(username, req) || (await require("./cfnames").nameRefusal(username, null, req).catch(() => null));   // 1.99ajn padppl
+  const problem = guard.checkUsername(username, req);   // (1.99?? padppl rework: a Camfrog login Pepe has seen is never refused - see hint below)
   if (problem) return { error: problem, field: "username" };
   // 1.99ajn padppl: a network ban (netban.js) refuses a new account from that network before it exists
   try { const NB = require("./netban"); if (NB.isOn()) { const why = await NB.refusal(req, {}); if (why) return { error: why }; } } catch (e) { /* fail open */ }
@@ -283,7 +283,9 @@ async function createSsoAccount(req, res, { username, email, emailVerified, prov
     catch (e) { console.error("[auth] verification setup failed:", e.message); }
   }
   try { await awardBadge(userId, "fresh_meat"); } catch (e) { console.error("[auth] fresh_meat badge:", e.message); }
-  return { user: { userId, username, class: "pleb" } };
+  // 1.99?? padppl rework: the gentle "Is <name> your Camfrog name?" hint (cfnames.nameHint) - the caller flashes it AFTER its welcome line
+  const hint = await require("./cfnames").nameHint(username, userId, req);
+  return { user: { userId, username, class: "pleb" }, ...(hint ? { hint } : {}) };
 }
 
 // Function to handle user login. Username (any case) or email; never logs the password.
@@ -342,8 +344,7 @@ async function updateUsername(req, res) {
   const userId = req.user.userId;
   const editPage = ACCOUNT_PAGE + '#account';
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
-  const problem = guard.checkUsername(username, req)   // 1.99ui: in the member's language
-    || (await require('./cfnames').nameRefusal(username, userId, req).catch(() => null));   // 1.99ajn padppl: not a Camfrog login that isn't yours
+  const problem = guard.checkUsername(username, req);   // 1.99ui: in the member's language (1.99?? padppl rework: a seen Camfrog login is fine)
   if (problem) {
     req.flash('error', problem);
     return res.redirect(editPage);
@@ -372,6 +373,7 @@ async function updateUsername(req, res) {
               await usernames.record(userId, was ? was.username : req.user.username, username, 'rename:web');
           });
           req.flash('success', 'Username changed.');
+          await require('./cfnames').hintAfter(req, userId, username);   // 1.99?? padppl rework: the gentle "your Camfrog name?" hint
           // 1.99wj: this device signs in again with the new name - its session ends on the server too (sessions.js)
           if (req.loginSession) await require('./sessions').revoke(req.loginSession.userId, req.loginSession.id, 'username changed').catch(() => {});
           clearLogin(res);
