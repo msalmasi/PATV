@@ -202,3 +202,20 @@ test("1.99?? dock: review - the picker's catalog is built once per change, not w
     assert.deepEqual((await catalog()).data, [], "a sticker gone from the list is gone from the picker at once");
   } finally { fs.existsSync = real; }
 });
+
+// 1.99?? dock: review - Pepe re-sends the whole list every 10 minutes (switches on or off). An unchanged list rewrote every row
+// (DELETE + up to 10000 INSERTs in one write transaction, holding the site's write gate) and invalidated the picker's list each time
+test("1.99?? dock: review - an unchanged catalog list writes nothing", async () => {
+  const items = [{ id: 421, set: 1642, desc: "Same frog" }, { id: 422, set: 1642, desc: "Other frog" }];
+  await CF.syncList(items);
+  const before = (await db.getQuery("SELECT MAX(updated) AS u, COUNT(*) AS n FROM cf_stickers"))[0];
+  await new Promise(resolve => setTimeout(resolve, 15));
+  const again = await CF.syncList(items.map(item => ({ ...item })));
+  const after = (await db.getQuery("SELECT MAX(updated) AS u, COUNT(*) AS n FROM cf_stickers"))[0];
+  assert.equal(after.n, 2); assert.equal(after.u, before.u, "no rewrite for the same list");
+  assert.ok(Array.isArray(again.need));
+  await new Promise(resolve => setTimeout(resolve, 15));
+  await CF.syncList([{ id: 421, set: 1642, desc: "Renamed frog" }, items[1]]);
+  const changed = (await db.getQuery("SELECT descr, updated FROM cf_stickers WHERE id = 421"))[0];
+  assert.equal(changed.descr, "Renamed frog"); assert.ok(changed.updated > before.u, "a changed list is written");
+});

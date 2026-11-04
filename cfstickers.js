@@ -58,6 +58,10 @@ async function syncList(items) {
   return serial(async () => {
     await init(); const next = new Map(), at = Date.now();
     for (const row of rows.values()) { const old = CACHE.get(row.id); next.set(row.id, { ...row, file: old && old.set_id === row.set_id ? old.file : null, updated: at }); }
+    // 1.99?? dock: review - Pepe re-sends the same list every 10 minutes, switches on or off: an unchanged list writes nothing (it
+    // was a DELETE + up to 10000 INSERTs holding the write gate, and a fresh picker list, every time)
+    const same = next.size === CACHE.size && [...next.values()].every(r => { const o = CACHE.get(r.id); return !!o && o.set_id === r.set_id && o.descr === r.descr && o.file === r.file; });
+    if (same) return { need: enabled() ? [...CACHE.values()].filter(r => !r.file || !fs.existsSync(filePath(r.file) || "")).map(r => r.id) : [] };
     await tx(async () => {
       await runQuery("DELETE FROM cf_stickers");
       for (const row of next.values()) await runQuery("INSERT INTO cf_stickers (id,set_id,descr,file,updated) VALUES (?,?,?,?,?)", [row.id, row.set_id, row.descr, row.file, at]);
