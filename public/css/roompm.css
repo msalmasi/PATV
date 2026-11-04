@@ -1,0 +1,8 @@
+/* 1.99?? roompm (pad-roompm.js): Pepe's private answers in the pad's chat - one of his lines with a dashed edge and a chip, only for
+   the account that typed the command. While they're on (main.rm.rpm-on), the composer's "Your commands" list stops repeating them as
+   🔒 rows and says where the answer went instead. */
+.chatlog .line.rpm { border-inline-start: 2px dashed var(--ds-text-faint, #8888); padding-inline-start: 6px; }
+.chatlog .line.rpm .rpm-chip { display: inline-block; font-size: 11px; font-style: normal; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+                               border: 1px dashed var(--ds-text-faint, #8888); color: var(--ds-text-faint, inherit); white-space: nowrap; }
+.rpm-on .rb-cmdfeed .rb-cmd-r { display: none; }
+.rpm-on .rb-cmdfeed .rb-cmd:has(> .rb-cmd-r) .rb-cmd-h::after { content: var(--rpm-cmd-done, "\2193"); color: var(--ds-text-muted); }

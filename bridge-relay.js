@@ -46,7 +46,8 @@
 // anything not on it plus its own deny-list copy, rate-limits per account, and requires JSON +
 // X-Requested-With (no cross-site form can send that). Pepe echoes the line in the room as
 // "🌐 <name> (web): !cmd ..."; replies he would have PM'd come back in the ack and show only in
-// that user's own relay feed. Every command is written to bridge_cmd_log (account, Camfrog login,
+// that user's own relay feed (1.99?? roompm: and on the pad page as private lines of the pad's chat, only for that account -
+// roompm.js, roomPm() below). Every command is written to bridge_cmd_log (account, Camfrog login,
 // room, command, result) - admins read it at /api/bridge/cmdlog. "!commands" is answered here.
 //
 // 1.99ye: the web chat feels native.
@@ -164,7 +165,8 @@ function commandsText(cmds) {
   if (!list.length) return "Commands from the website aren't on in this Camfrog room.";
   const paid = list.filter((c) => cmds[c] > 0).map((c) => `${c} (${cmds[c].toLocaleString("en-US")} PAT)`);
   return `You can run ${list.length} commands here as your Camfrog name - same permissions and prices as in the room: ` +
-    list.join(" ") + (paid.length ? `. Paid: ${paid.join(", ")} (admins free).` : ".");
+    list.join(" ") + (paid.length ? `. Paid: ${paid.join(", ")} (admins free).` : ".") +
+    " Pepe's private answers show in this chat, only to you.";      // 1.99?? roompm
 }
 
 const cmdLogReady = runQuery(`CREATE TABLE IF NOT EXISTS bridge_cmd_log (
@@ -387,9 +389,24 @@ function takeJobs(liveRoomIds, via = "sync") {
   return out;
 }
 
+/** 1.99?? roompm: a typed command's private answers become private rows of its account's pad chat (roompm.js) - before the job
+ *  lookup: a late ack after the job's JOB_TTL still finds its account and pad. The account's page long-polls wake (only theirs). */
+function roomPm(a, j) {
+  try {
+    const r = require("./roompm").fromAck(a, j || null);
+    if (r && r.n && notifyFn) notifyFn(r.roomId, r.userId);
+  } catch (e) { /* a private row can't break the relay */ }
+}
+function roomPmLocal(userId, roomId, text, cmd) {
+  try {
+    if (require("./roompm").addLocal(userId, roomId, text, cmd) && notifyFn) notifyFn(roomId, userId);
+  } catch (e) { /* a private row can't break the relay */ }
+}
+
 function applyAcks(acks) {
   for (const a of Array.isArray(acks) ? acks.slice(0, 100) : []) {
     const j = a && jobs.get(String(a.id || ""));
+    if (a && typeof a === "object") roomPm(a, j);
     if (!j) continue;
     let replies = (Array.isArray(a.replies) ? a.replies : []).slice(0, CMD_MAX_REPLIES).map(cleanReply).filter(Boolean);
     // 1.99aid (privacy controls, round 3 - F2): a 🐸 cam action on a frog-name cam (padpepe.js vmask) - Pepe's answer as the website keeps
@@ -399,6 +416,9 @@ function applyAcks(acks) {
     if (a.late) {
       // a reply that came after the command finished (Pepe answered from a thread / timer)
       if (j.result) j.result.replies = (j.result.replies || []).concat(replies).slice(-CMD_MAX_REPLIES);
+      // 1.99?? roompm: one that came ahead of the command's own result (an older Pepe's race) waits for it instead of being dropped
+      else j.lateReplies = (j.lateReplies || []).concat(replies).slice(-CMD_MAX_REPLIES);
+      notify(j);          // 1.99?? roompm: the page hears of it now (it used to wait for the next unrelated answer, up to 20 s)
       continue;
     }
     const st = (j.kind === "clip" || isSoundboard(j)) && PROGRESS[a.state] ? a.state : "done";
@@ -424,7 +444,8 @@ function applyAcks(acks) {
     }
     notify(j);
     if (j.kind === "cmd") {
-      j.result.replies = replies;
+      j.result.replies = j.lateReplies ? replies.concat(j.lateReplies).slice(-CMD_MAX_REPLIES) : replies;   // (1.99?? roompm)
+      j.lateReplies = null;
       if (st === "done") cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
       // 1.99pg: a Manage-panel room-role change goes in the pad's event log (settings hub audit list) with Pepe's answer
       if (typeof j.gui === "string" && j.gui.startsWith("role_")) {
@@ -627,6 +648,7 @@ async function sayEligibility(req, room) {
 
 function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, liveIds = null }) {
   sayRooms = { bySlug, isLive, gated };
+  require("./roompm").register(app, { addUser });       // 1.99?? roompm: the switch (/api/admin/roompm) + reads it now
   const me = async (req) => {
     if (!req.user || !req.user.userId) return null;
     return (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
@@ -702,7 +724,11 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") return res.status(400).json({ ok: false, error: "Bad request." });
     const c = cmdName(text);
     const cmds = R.cmds || {};
-    if (c === "!commands") return res.json({ ok: true, local: true, reply: commandsText(cmds), cmds });
+    if (c === "!commands") {
+      const reply = commandsText(cmds);
+      roomPmLocal(u.userId, R.id, reply, "!commands");      // 1.99?? roompm: in the pad's chat, only to them (the page hides the 🔒 copy)
+      return res.json({ ok: true, local: true, reply, cmds });
+    }
     if (!Object.keys(cmds).length) return res.status(403).json({ ok: false, error: "Commands from the website aren't on in this Camfrog room." });
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Typed commands run as a chat name - link a chat account first (Settings \u2192 Account \u2192 Connections). The \ud83d\udc38 Pepe menu works with your PATV account." });
     const feat = c === "!sb" ? "soundboard" : "commands";  // 1.99zf: the pad soundboard's buttons are "!sb <id>" lines
@@ -720,6 +746,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const lim = limited("cmd|" + u.userId, CMD_GAP, CMD_BURST, CMD_WINDOW);
     if (lim) return res.status(429).json({ ok: false, error: lim });
     const j = newJob({ kind: "cmd", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, text });
+    try { require("./roompm").noteJob(j); } catch (e) { /* 1.99?? roompm: whose late answers these are, past JOB_TTL */ }
     console.log(`[bridge-relay] cmd room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} cmd=${c} job=${j.id}`);
     cmdLog({ userId: u.userId, username: u.username, camfrog: u.camfrogUsername, room: R.id, command: text, job: j.id, status: "pending", result: "" });
     res.json({ ok: true, id: j.id, cmd: true });

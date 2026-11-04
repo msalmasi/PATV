@@ -463,6 +463,49 @@
 })();
 </script>
 
+<%# 1.99?? roompm (roompm.js; the owner 2026-11-04): Pepe's private answers in pad chat ("room PMs") - ON unless switched off here %>
+<section class="adm-card" id="roompm" aria-labelledby="rpmT">
+  <h2 id="rpmT">Pepe's private answers in pad chat <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">When someone types a <code>!</code> command in a pad's chat on the website and Pepe answers privately (<code>-p</code>, a chat spin's "spinning…" and its result, a private usage line), the answer shows in that pad's chat as one of Pepe's lines marked "only you can see this · from Pepe" - only to that account (all its tabs and the pop-out), never to anyone else, never in the pad's chat log, history, search, downloads, quotes, transcripts, Telegram or overlays. The site keeps the last 20 per account per pad for 24 hours, in memory only (a restart or deploy clears them; deleting the account clears theirs). Off: they show only in the composer's "Your commands" list (🔒), as before, and every kept one is cleared. On by default.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="rpmSummary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="rpmBtn" disabled>…</button><span id="rpmMsg" class="adm-msg" role="status"></span></div>
+  <% } %>
+</section>
+<script>
+// 1.99?? roompm: the private-answers card (roompm.js: GET / POST /api/admin/roompm {on})
+(function () {
+  'use strict';
+  var sum = document.getElementById('rpmSummary');
+  if (!sum) return;
+  var btn = document.getElementById('rpmBtn'), msg = document.getElementById('rpmMsg'), cur = null;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(data) {
+    return fetch('/api/admin/roompm', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function render(d) {
+    var s = d.state || {};
+    cur = s;
+    sum.textContent = 'Private answers in pad chat are ' + (s.on ? 'ON' : 'off (the 🔒 command list only)') +
+      ' · held now: ' + (s.rows || 0) + ' for ' + (s.keys || 0) + ' account/pad pairs' +
+      (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '');
+    btn.disabled = false;
+    btn.textContent = s.on ? 'Turn off' : 'Turn on';
+  }
+  btn.addEventListener('click', function () {
+    if (!cur) return;
+    var on = !cur.on;
+    if (!on && !window.confirm('Turn private answers in pad chat off? Every one kept now is cleared, and they show only in the composer\'s command list again.')) return;
+    btn.disabled = true;
+    req({ on: on }).then(function (d) { say('Switched ' + (on ? 'on' : 'off') + '.', true); render(d); }).catch(function (e) { btn.disabled = false; say(e.message, false); });
+  });
+  req().then(render).catch(function (e) { sum.textContent = e.message; });
+})();
+</script>
+
 <%# 1.99aid (privacy controls S4, camreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md 3.2 + section 8): "Cam reveals" - ships OFF %>
 <section class="adm-card" id="camreveal" aria-labelledby="crT">
   <h2 id="crT">Cam reveals <span class="adm-pill admin">admins</span></h2>

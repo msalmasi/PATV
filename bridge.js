@@ -1609,6 +1609,10 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   // the same sync hit it every time the sender's page was waiting; a cold name cache let any line slip past any viewer.
   const raw = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
   const at = { cursor, ver: R.ver || 0, mver: userId ? mineVer.get(userId) || 0 : 0, mine: userId ? relay.mineFor(userId, R.id) : [], rs: RING_SEQ };
+  // 1.99?? roompm: Pepe's private answers to this viewer's own typed commands on this pad (roompm.js) - only when the page asks
+  // (?rpm=<last id>: the pad page), only for the signed-in account itself; read in the same snapshot as `mine`
+  let rpmAt = null;
+  if (userId && opts && opts.rpm != null) { try { rpmAt = require("./roompm").view(userId, R.id, opts.rpm); } catch (e) { rpmAt = { on: 0 }; } }
   // micfollow: the pad's 🎙 mic stage, a snapshot too (only the pad page's own /live asks: opts.program)
   let prog = null;
   if (opts && opts.program) { try { prog = require("./micfollow").snapshot(R.id); } catch (e) { prog = null; } }
@@ -1733,7 +1737,14 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     ...(removedRing.length ? { removed: removedRing } : {}),
     ...(redo.length ? { redo } : {}),
     rs: at.rs,                                  // review 2 fix-up: the ring sequence this answer covers (the page sends it back: ?rs=)
+    ...(rpmAt ? { rpm: rpmPepe(rpmAt, members, L, F) } : {}),      // 1.99?? roompm
   };
+}
+/** 1.99?? roompm: the `rpm` block with Pepe's look for its lines (his roster entry, dressed like his feed lines). */
+function rpmPepe(block, members, L, F) {
+  if (!block || block.on !== 1) return block || { on: 0 };
+  const p = (members || []).find((m) => m && m.self && !m.anon);
+  return Object.assign({}, block, { u: p ? withPatv({ login: p.login, display: p.display, self: true }, L, F) : null });
 }
 /** micfollow: the pad's mic stage for this viewer (null = off on this pad); names like the "On the mic" card. */
 async function stageProgram(prog, R, userId, L, F, surface = "pad") {
@@ -2002,8 +2013,10 @@ function register(app, { isBotToken, addUser }) {
     const jc = typeof req.query.jc === "string" ? req.query.jc.slice(0, 80) : null;
     // review 2 fix-up: the last ring sequence the page got (?rs=) - only newer `removed` / `redo` entries come back
     const rs = typeof req.query.rs === "string" && /^\d{1,16}$/.test(req.query.rs) ? Number(req.query.rs) : null;
+    // 1.99?? roompm: ?rpm=<the last private answer the page has> (pad-roompm.js) - this viewer's own private answers on this pad
+    const rpm = typeof req.query.rpm === "string" && /^\d{1,16}$/.test(req.query.rpm) ? Number(req.query.rpm) : null;
     const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1",
-                               { viewer: signed ? req.user : null, jc, rs, program: true });
+                               { viewer: signed ? req.user : null, jc, rs, program: true, rpm });
     res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     res.json(lp ? Object.assign(out, { lp: true }) : out);
   });
@@ -2212,7 +2225,9 @@ function register(app, { isBotToken, addUser }) {
     const bridgeLocked = !R.offline && !siteOnly && !bridgeOk(R.id);
     // CL3: the viewer's floors on this pad (#rmInit carries the page's signed join cursor, `jc`)
     const initial = liveOpen && !R.offline && !bridgeLocked ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null, true,
-                                                                             { viewer: signedIn ? req.user : null, program: true }) : null;
+                                                                             { viewer: signedIn ? req.user : null, program: true, rpm: 0 }) : null;
+    // 1.99?? roompm: a page that carries this viewer's private answers is theirs alone - never kept by a cache
+    if (initial && initial.rpm && initial.rpm.rows && initial.rpm.rows.length) res.set("Cache-Control", "private, no-store");
     // CL8: a Camfrog pad whose room is offline still shows its 📜 chat history (read-only, chatloghist.js) to signed-in viewers who
     // may scroll back - and so does a pad without the 💎 bridge perk, for its owner and staff (decision 24). null while
     // chatlog.history is off, for anyone else, or when the archive holds nothing of this room.
