@@ -71,6 +71,8 @@ const KICK_ACTIONS = ["kick", "ban"];    // "kick or more" in Pepe's live caps =
 const NAME_MIN = 3, NAMES_PER = 8, NAMES_PEOPLE_MAX = 400, NAMES_REFRESH_MS = 6 * 3600e3;
 const AUD = Object.freeze({ public: "p", members: "m", approved: "a" });
 const PRESENCE = new Set(["join", "leave", "mic", "unmic"]);
+// 1.99?? mfproof: does the CL3 private-activity presence mask apply (privact.js 'privact_presence'; any failure = the mask)?
+const privactMasked = () => { try { return require("./privact").masked() !== false; } catch (e) { return true; } };
 const TIER_RANK = Object.freeze({ standard: 0, prime: 1, unlimited: 2 });
 const SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
 // common words a hidden person's display name is never redacted as (a collision is counted on /admin/bridge, never redacted)
@@ -1140,7 +1142,8 @@ function dress(items, ctx) {
     else if (u) {
       const e = u.login ? lookup(u) : undefined;
       if (/^u:/i.test(String(u.login || "")) && e && e.acc === null) o.u = { former: true };
-      else if (PRESENCE.has(o.k) && e && e.acc && e.priv) o.u = { anon: true, display: "someone" };
+      // (1.99?? mfproof: unless privact.js's switch names them - mask true by default and until loaded: today's rule)
+      else if (PRESENCE.has(o.k) && e && e.acc && e.priv && privactMasked()) o.u = { anon: true, display: "someone" };
       else o.u = pick(u, OUT_U);
     }
     if (typeof o.text === "string") o.text = redact(o.text);

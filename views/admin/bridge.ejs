@@ -421,6 +421,48 @@
 })();
 </script>
 
+<%# 1.99?? mfproof (privact.js; owner report 2026-11-04): "Private-activity presence lines" - the default is today's mask %>
+<section class="adm-card" id="privact" aria-labelledby="paT">
+  <h2 id="paT">Private-activity presence lines <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Someone whose PATV profile hides its <b>Analytics</b> section (or that section's <b>Rooms</b> panel) keeps their room activity private. While these lines are <b>masked</b> (the default) a pad's chat shows that person's joins, leaves, mic grabs and drops as "someone" - live, in scrollback and history, in search answers and in downloads - while their chat lines and 🎙 transcripts stay under their name, and the people list and the 🎙 list on the pad name them too. <b>Stop masking</b> and those four kinds of line show their name like their chat lines do. Nothing else changes: chat search still skips their lines, the pad's web-viewer list still leaves them out, and their cam stays off ▶ Live, snaps, clips and (unless <code>private_cover</code> is on at /stage/admin) the mic stage. Incognito, <code>!bridge hide</code> and <code>!transcripts off</code> are never affected. Needs the owner's OK first.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="paSummary" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="paBtn" disabled>…</button><span id="paMsg" class="adm-msg" role="status"></span></div>
+  <% } %>
+</section>
+<script>
+// 1.99?? mfproof: the Private-activity presence lines card (privact.js: GET / POST /api/admin/privact {mask})
+(function () {
+  'use strict';
+  var sum = document.getElementById('paSummary');
+  if (!sum) return;
+  var btn = document.getElementById('paBtn'), msg = document.getElementById('paMsg'), cur = null;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(data) {
+    return fetch('/api/admin/privact', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function render(d) {
+    var s = d.state || {};
+    cur = s;
+    sum.textContent = 'Private-activity presence lines are ' + (s.mask !== false ? 'MASKED ("someone" - the default)' : 'NAMED') +
+      (s.at ? ' · last change ' + when(s.at) + (s.by ? ' by ' + s.by : '') : '');
+    btn.disabled = false;
+    btn.textContent = s.mask !== false ? 'Stop masking' : 'Mask again';
+  }
+  btn.addEventListener('click', function () {
+    if (!cur) return;
+    var mask = cur.mask === false;
+    if (!mask && !window.confirm('Name private-activity people in their joins, leaves and mic lines on every pad? Make sure the owner approved it.')) return;
+    btn.disabled = true;
+    req({ mask: mask }).then(function (d) { say(mask ? 'Masked again.' : 'Now named.', true); render(d); }).catch(function (e) { btn.disabled = false; say(e.message, false); });
+  });
+  req().then(render).catch(function (e) { sum.textContent = e.message; });
+})();
+</script>
+
 <%# 1.99aid (privacy controls S4t, textreveal.js; G:/ops/privacy-controls-spec-2026-11-02.md section 8, owner 22:05Z "yes"): "Text reveal roles" - ships OFF %>
 <section class="adm-card" id="textreveal" aria-labelledby="trT">
   <h2 id="trT">Text reveal roles <span class="adm-pill admin">admins</span></h2>
