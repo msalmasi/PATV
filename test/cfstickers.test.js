@@ -172,3 +172,15 @@ test("stickers share text queue and per-minute limits", async () => {
   }
   assert.equal((await say("[cfsticker:1642/421]", "minute-full")).data.code, "rate");
 });
+
+// 1.99?? dock: review - Pepe cuts a description at 240 code points (Python len); the site counted UTF-16 units, so one long
+// description with an emoji (two units) refused Pepe's WHOLE atomic list on every 10-minute sync, and the stored cut could end
+// in half a surrogate pair
+test("1.99?? dock: review - a 240-code-point description with an emoji is accepted whole; longer is still refused", async () => {
+  const desc = "x".repeat(238) + "\u{1F600}\u{1F438}";            // 240 code points, 242 UTF-16 units
+  const out = await sync({ op: "list", items: [{ id: 421, set: 1642, desc }] });
+  assert.equal(out.status, 200, JSON.stringify(out.data));
+  assert.equal(CF.get(1642, 421).desc, desc);
+  assert.doesNotMatch(CF.get(1642, 421).desc, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/, "no half surrogate pair");
+  assert.equal((await sync({ op: "list", items: [{ id: 421, set: 1642, desc: desc + "x" }] })).status, 400);
+});

@@ -7,7 +7,10 @@ const MAX_INPUT_PIXELS = 16e6, FILE_RE = /^[a-f0-9]{32}\.webp$/, ID_RE = /^[1-9]
 let ready = null, writing = Promise.resolve(), CACHE = new Map(), DIR = null;
 class Refuse extends Error { constructor(status, code) { super(code); this.status = status; this.refuse = true; } }
 const idOf = value => (typeof value === "number" && Number.isSafeInteger(value) || typeof value === "string") && ID_RE.test(String(value)) ? Number(value) : null;
-const plain = value => String(value == null ? "" : value).replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim().slice(0, 240);
+// 1.99?? dock: review - 240 CODE POINTS, as Pepe cuts them (Python len), never half a surrogate pair: counting UTF-16 units
+// refused Pepe's whole atomic list over one long description with an emoji
+const DESC_MAX = 240, points = value => Array.from(String(value));
+const plain = value => points(String(value == null ? "" : value).replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim()).slice(0, DESC_MAX).join("").trim();
 function pickDir() {
   if (process.env.CFSTICKER_DIR) return path.resolve(process.env.CFSTICKER_DIR);
   if (process.platform === "linux") {
@@ -40,7 +43,7 @@ async function syncList(items) {
   const rows = new Map();
   for (const item of items) {
     const id = idOf(item && item.id), set = idOf(item && item.set);
-    if (!id || !set || rows.has(id) || typeof item.desc !== "string" || item.desc.length > 240) throw new Refuse(400, "sticker");
+    if (!id || !set || rows.has(id) || typeof item.desc !== "string" || item.desc.length > DESC_MAX * 2 || points(item.desc).length > DESC_MAX) throw new Refuse(400, "sticker");
     rows.set(id, { id, set_id: set, descr: plain(item.desc) });
   }
   return serial(async () => {
