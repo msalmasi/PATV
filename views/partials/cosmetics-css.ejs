@@ -14,6 +14,8 @@
   .cx-host { position: relative; }
   .cx-host > :not(.cx-frame):not(.cx-fx):not(.cx-banner) { position: relative; z-index: 2; }
   .cx-frame { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 3; box-sizing: border-box; }
+  /* 1.99ajm: an open menu inside a framed card (the profile's ⋯ More, the tip page's) goes above the frame, not under its border */
+  .cx-host > :not(.cx-frame):not(.cx-fx):not(.cx-banner):has(details[open]) { z-index: 4; }
   .cx-frame-pulse { animation: cx-pulse 2.6s ease-in-out infinite alternate; }
   .cx-frame-hue { animation: cx-hue 6s linear infinite; }
   .cx-banner { grid-column: 1 / -1; justify-self: stretch; align-self: start; height: 92px; margin: -18px -20px 0; border-radius: 14px 14px 0 0; position: relative; z-index: 1; }
