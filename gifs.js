@@ -18,7 +18,8 @@ const cache = new Map(), pending = new Map(), retried = new Map(), hits = new Ma
 let clock = () => Date.now();
 class Refuse extends Error { constructor(status, code) { super(code); this.status = status; this.refuse = true; } }
 const key = () => String(process.env.KLIPY_API_KEY || "").trim(); // call-time only; never retained/logged/exported
-const available = () => require("./paddock").current().cfg.gifs === true && !!key();
+// 1.99?? dock: review - the Room Dock off is the kill switch too: no KLIPY request and no KLIPY media in a line while it is off
+const available = () => { const c = require("./paddock").current().cfg; return c.mode !== "off" && c.gifs === true && !!key(); };
 function safeUrl(value, hosts) {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f\\]/.test(value)) return null;
   try {
@@ -100,7 +101,9 @@ async function search(q) {
   const params = { contentfilter: CONTENT_FILTER, media_filter: "tinygif,gif", limit: 20 };
   if (q) params.q = q;
   const items = await request(q ? "search" : "featured", params), out = [];
-  for (const raw of items.slice(0, 50)) { const item = normalize(raw); if (item) { remember(item, true); out.push(clone(item)); } }
+  // 1.99?? dock: review - Pepe says the title in the Camfrog room; the rating filter rates the picture, not the uploader's title,
+  // so a title the text guard refuses (textguard.js) is never offered - and never becomes sendable
+  for (const raw of items.slice(0, 50)) { const item = normalize(raw); if (item && !require("./textguard").bad(item.title)) { remember(item, true); out.push(clone(item)); } }
   return out;
 }
 /** 1.99?? dock: the GIF a say line may post - only an id a filtered (contentfilter=high) search / featured answer gave in the
@@ -143,7 +146,9 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "no-store");
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, code: "security", error: "GIF search unavailable." });
     try {
-      const access = await require("./bridge-relay").sayEligibility(req, req.query.pad);
+      // 1.99?? dock: review - a slug only: qs makes ?pad[id]=..&pad[relay]=1 an object, which sayEligibility would take as the room
+      const pad = typeof req.query.pad === "string" ? req.query.pad : "";
+      const access = await require("./bridge-relay").sayEligibility(req, pad);
       if (!access.ok) return res.status(access.status).json(access.body);
       if (!available()) throw new Refuse(403, "gif");
       const q = req.query.q == null ? "" : req.query.q;
@@ -151,7 +156,7 @@ function register(app, { addUser }) {
       if (!hit("search:" + access.u.userId, SEARCH_LIMIT)) throw new Refuse(429, "rate");
       const result = await search(q);
       // Permissions/switches may change during the provider request.
-      const current = await require("./bridge-relay").sayEligibility(req, req.query.pad);
+      const current = await require("./bridge-relay").sayEligibility(req, pad);
       if (!current.ok) return res.status(current.status).json(current.body);
       if (!available()) throw new Refuse(403, "gif");
       res.json(result);

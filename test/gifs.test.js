@@ -233,3 +233,41 @@ test("oversized or malformed upstream bodies return generic errors and do not fi
   provider = async () => new Response("<html>upstream unavailable</html>"); assert.equal((await search()).status, 503);
   assert.equal(G.peek("gif_fixture_1"), null);
 });
+
+// 1.99?? dock: review - qs parses ?pad[id]=..&pad[relay]=1 into an object, and sayEligibility takes an object as the room itself
+// (its internal callers pass R): a hand-built pad must never stand in for the real one (its live / relay flags are the caller's)
+test("1.99?? dock: review - the search's pad is a slug: a client-built pad object never stands in for the room", async () => {
+  room.relay = false;
+  const forged = await request("/api/gifs/search?q=x&pad[id]=" + room.id + "&pad[slug]=" + room.slug + "&pad[relay]=1&pad[updated]=99999999999999");
+  room.relay = true;
+  assert.notEqual(forged.status, 200, JSON.stringify(forged.data)); assert.equal(calls.length, 0, "no provider request");
+  const listed = await request("/api/gifs/search?q=x&pad[]=" + room.slug);
+  assert.notEqual(listed.status, 200); assert.equal(calls.length, 0);
+});
+
+// 1.99?? dock: review - the Room Dock off is the kill switch: no KLIPY request (server lookups) and no KLIPY media in a line
+// (viewers' browsers), even while the gifs switch and the key are still set
+test("1.99?? dock: review - with the Room Dock off nothing reaches KLIPY, even with gifs on and a key", async () => {
+  await G.search("");                      // warm while on: a filtered, cached answer
+  const before = calls.length;
+  await flags({ mode: "off", gifs: true });
+  assert.equal(G.available(), false);
+  const warm = G.attach({ k: "msg", u: { web: true }, text: "[gif:gif_fixture_1]" });
+  assert.equal(warm.gif, undefined, "no remote media in a line while the Dock is off");
+  const cold = G.attach({ k: "msg", u: { web: true }, text: "[gif:cold_id]" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(cold.gif, undefined); assert.equal(await G.resolve("cold_id"), null); assert.equal(G.picked("gif_fixture_1"), null);
+  assert.equal(calls.length, before, "no Posts lookup while the Dock is off");
+  await flags({ mode: "staff" }); assert.equal(G.available(), true);
+});
+
+// 1.99?? dock: review - Pepe says a GIF's title in the Camfrog room ("🌐 name (web): 🎞️ <title>"); KLIPY's rating filter rates the
+// picture, not the uploader's title, so a title the text guard refuses (textguard.js: what a line Pepe says may not contain) is
+// never offered or sendable
+test("1.99?? dock: review - a GIF whose title trips the text guard is never offered or sendable", async () => {
+  provider = async () => response([{ ...fixture("bad_title"), title: "kys lol" }, fixture("ok_title")]);
+  const out = await search("x"); assert.equal(out.status, 200);
+  assert.deepEqual(out.data.map(x => x.id), ["ok_title"]);
+  assert.equal(G.picked("bad_title"), null); assert.ok(G.picked("ok_title"));
+  assert.equal((await say("[gif:bad_title]", "bad-title")).data.code, "gif"); assert.equal(relay._jobs.size, 0);
+});
