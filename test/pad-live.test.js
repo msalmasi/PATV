@@ -155,7 +155,7 @@ test("home: Top Pads rows get a 🎧 - enabled when the pad's audio relay is on 
   assert.match(btn("c"), /disabled/);
   assert.match(btn("c"), /sign in to listen/);
   assert.match(html, /<div id="tpAudioBox"><\/div>/);
-  assert.match(html, /room-bridge\.js\?v=21/, "the player script loads for the 🎧 even without the room widget");   // v=17: soundboard progress through the shared relay; v=19: lip sync review fix (stall grace); v=21: 1.99?? dockfu (the sender's media preview is marked)
+  assert.match(html, /room-bridge\.js\?v=21/, "the player script loads for the 🎧 even without the room widget");   // v=17: soundboard progress through the shared relay; v=19: lip sync review fix (stall grace); v=21: 1.99ajc dockfu (the sender's media preview is marked)
   assert.match(html, /get\(\)\.listen\(b\.getAttribute\('data-listen'\)/);
   const none = await renderHome({ tops: tops.map((t) => Object.assign({}, t, { audio: false })) });
   assert.doesNotMatch(none, /room-bridge\.js/, "nothing to listen to and no room widget: no player script");

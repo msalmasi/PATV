@@ -472,7 +472,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.equal((room.match(/render: renderLine, ctx: rctx,/g) || []).length, 2, "scrollback's and search's lines too (CL8 / CL9)");
   assert.match(room, /feed: feedEl, line: item,/, "your pending relay lines are built the same way (room-bridge.js)");
   // the script loads before the page's own; the stylesheet right after the block it came from (the cascade keeps its order)
-  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=9"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99?? dockfu: v=9 (media drawn only with the server's mark)
+  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=9"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99ajc dockfu: v=9 (media drawn only with the server's mark)
   assert.ok(core > 0 && core < init, "chatlog-core.js before the page script");
   const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=11">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
@@ -755,7 +755,7 @@ test("CL6: a hidden line as the owner / staff see it (muted, why, data-rmc - nev
 test("media tokens are exact and their reusable text never exposes identifiers", () => {
   assert.deepEqual(CL.mediaToken("[cfsticker:1642/123456]"), { type: "cfsticker", set: 1642, id: 123456 });
   assert.deepEqual(CL.mediaToken("[gif:orchard-A_1]"), { type: "gif", id: "orchard-A_1" });
-  // 1.99?? dockfu (D3): the placeholder text needs the server's mark (md) of the same kind - without it a token is just its words
+  // 1.99ajc dockfu (D3): the placeholder text needs the server's mark (md) of the same kind - without it a token is just its words
   assert.equal(CL.tokenText("[cfsticker:1642/123456]", "cfsticker"), "[sticker]");
   assert.equal(CL.tokenText("[gif:orchard-A_1]", "gif"), "[GIF]");
   for (const [t, md] of [["[cfsticker:1642/123456]", undefined], ["[gif:orchard-A_1]", undefined], ["[cfsticker:1642/123456]", "gif"],
@@ -771,7 +771,7 @@ test("media tokens are exact and their reusable text never exposes identifiers",
     { k: "msg", text: "[gif:a] hi", md: "gif" }, { k: "topic", text: "[cfsticker:1/2]", md: "cfsticker" }, null]) assert.equal(CL.mediaOf(it), null, JSON.stringify(it));
 });
 
-// 1.99?? dockfu (D3): "[cfsticker:N/M]" / "[gif:x]" TYPED in Camfrog (or said on the mic) has no server mark: it is plain text in the
+// 1.99ajc dockfu (D3): "[cfsticker:N/M]" / "[gif:x]" TYPED in Camfrog (or said on the mic) has no server mark: it is plain text in the
 // line, its ✂️ Clip text, the TXT / JSONL downloads and the HTML file - and never requests a picture (before: any exact token drew)
 test("a typed media token without the server's mark stays plain text everywhere", () => {
   let requests = 0;
@@ -831,7 +831,7 @@ test("GIF images are marked lines only; cache misses, masks, removals and every 
     const s = String(CL.renderItem(Object.assign({}, it, patch), {}, CL.htmlH));
     assert.match(s, /🎞️ GIF/); assert.doesNotMatch(s, /class="gif"|\[gif:/);
   }
-  // 1.99?? dockfu (D3): what decides is the server's mark, not the web flag - an unmarked token (typed in Camfrog) is its words
+  // 1.99ajc dockfu (D3): what decides is the server's mark, not the web flag - an unmarked token (typed in Camfrog) is its words
   const literal = String(CL.renderItem(Object.assign({}, it, { md: undefined }), {}, CL.htmlH));
   assert.match(literal, /\[gif:orchard-A_1\]/); assert.doesNotMatch(literal, /class="gif"|via KLIPY/);
   for (const patch of [{ mask: "m" }, { removed: { by: "mod" } }, { removed: { sealed: true, by: "self" } }]) {
@@ -862,7 +862,7 @@ test("failed media images replace themselves with a text placeholder without inl
   const tree = JSON.stringify(fromDom(n)); assert.match(tree, /\[sticker\]/); assert.doesNotMatch(tree, /cfstk|onerror|\/media\/cfsticker/);
 });
 
-// 1.99?? dockfu (D2, owner answer 6 "just have it send the gif like other users"): a veiled web sender's GIF - an incognito frog name
+// 1.99ajc dockfu (D2, owner answer 6 "just have it send the gif like other users"): a veiled web sender's GIF - an incognito frog name
 // or "someone" (the veil drops the web mark) - draws as the GIF, not as "[gif:<id>]", and the head stays exactly the veil's: the
 // frog name / "someone" + its tag, no 🌐 web mark, no profile link, no login anywhere in the line. A hidden (!bridge hide) line is
 // still its bar: no picture, no token, nothing that says it was a GIF.

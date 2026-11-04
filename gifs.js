@@ -130,7 +130,7 @@ function resolve(id) {
   }).catch(() => null).finally(() => pending.delete(id));
   pending.set(id, task); return task;
 }
-// 1.99?? dockfu: the line must carry the server's GIF mark (D3: bridge.js mediaMark - a relayed pick's own say job; a "[gif:x]" typed
+// 1.99ajc dockfu: the line must carry the server's GIF mark (D3: bridge.js mediaMark - a relayed pick's own say job; a "[gif:x]" typed
 // in Camfrog has none) - and that is all: D2 (owner answer 6) a veiled sender's GIF (incognito frog name, "someone") gets its picture
 // like anyone's (no web mark or name rides with it). Never on a masked bar or a removed line.
 function attach(item) {
@@ -144,7 +144,7 @@ function attach(item) {
   else void resolve(token.id); // cache-only render path; one throttled/in-flight lookup per id
   return item;
 }
-// 1.99?? dockfu: review - the search body's 4 kB limit, whichever path spelling reached the route. Express (not strict, not case
+// 1.99ajc dockfu: review - the search body's 4 kB limit, whichever path spelling reached the route. Express (not strict, not case
 // sensitive) routes /api/gifs/search/ and /API/GIFS/SEARCH here too, but index.js's skip list compares req.path exactly, so its
 // global (100 kB) parser read those first and express.json below saw an already-read body. A body another parser took is kept only
 // with a Content-Length within the limit.

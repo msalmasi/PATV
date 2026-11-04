@@ -165,7 +165,7 @@ test("a window shorter than the Live frame's floor can still scroll to the compo
   assert.ok(floor,"the frame keeps its floor");
 });
 
-// ── 1.99?? dockfu: the lead's design calls (hand-off 18 follow-ups, D1) ──
+// ── 1.99ajc dockfu: the lead's design calls (hand-off 18 follow-ups, D1) ──
 const dockRules=()=>{const css=read("public/css/pad-dock.css").replace(/\/\*[\s\S]*?\*\//g,"");const rules=[];
   (function parse(s,at){let i=0;while(i<s.length){const open=s.indexOf("{",i);if(open<0)break;let d=1,end=open+1;while(end<s.length&&d){if(s[end]==="{")d++;if(s[end]==="}")d--;end++;}
     const selector=s.slice(i,open).trim(),body=s.slice(open+1,end-1);if(selector.startsWith("@"))parse(body,(at?at+" ":"")+selector);else if(selector)rules.push({selector,body,at:at||""});i=end;}})(css,"");
@@ -216,7 +216,7 @@ test("dockfu: the banner shows through a lighter scrim and the header text keeps
   // without a plate only the strong white would pass over a white banner - which is why every text piece has one
   assert.ok(PL.contrast(texts["--ds-text-strong"],bare)>=4.5);assert.ok(PL.contrast(texts["--ds-text-muted"],bare)<4.5);
 });
-// 1.99?? dockfu: review - the plates leave the header's layout as it was. Padding on About and the follower count widened the
+// 1.99ajc dockfu: review - the plates leave the header's layout as it was. Padding on About and the follower count widened the
 // header's right side by 24px, and pad-chipfit.js lets the badges use everything but the name's 8ch floor - so at 800x900 the pad's
 // name went into its ellipsis ("Night Orc…", full before) and a Prime Time Plus pad's to 84 of 115px at 1280-1440. Their plate
 // margin is a spread shadow, as the name's is (browser check: the names are full again where they were).

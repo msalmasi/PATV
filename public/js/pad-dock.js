@@ -7,7 +7,7 @@
   function t(k, fallback, v) { return tr('js.pad.dock.' + k, fallback, v); }
   function el(tag, cls, text, doc) { var n = (doc || D).createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function each(nodes, fn) { Array.prototype.forEach.call(nodes || [], fn); }
-  // 1.99?? dockfu (owner decision 6, the lead's design call d): the view controls are EMOJI icons (the design system's rule), not
+  // 1.99ajc dockfu (owner decision 6, the lead's design call d): the view controls are EMOJI icons (the design system's rule), not
   // text symbols (▁ ⌄ ⛶ ↗ 🗗 ↩): 🔽 hide the stage / open the phone drawer (🔼 folds it back), 🖥️ fullscreen, 🪟 pop out or float,
   // ↩️ bring it back. Each button keeps its words as its accessible name and tooltip (button() below).
   var IC = { hide: '🔽', fold: '🔼', full: '🖥️', pop: '🪟', back: '↩️' };
@@ -514,7 +514,7 @@
         handle.setAttribute('aria-controls', 'rmdDrawer'); handle.setAttribute('aria-expanded', 'false'); bar.appendChild(handle);
         function fold(open) {
           root.classList.toggle('rmd-drawer-open', open); handle.setAttribute('aria-expanded', String(open));
-          var ic = handle.querySelector('.ds-ic'); if (ic) ic.textContent = open ? IC.fold : IC.hide;   // 1.99?? dockfu: 🔽 opens, 🔼 folds
+          var ic = handle.querySelector('.ds-ic'); if (ic) ic.textContent = open ? IC.fold : IC.hide;   // 1.99ajc dockfu: 🔽 opens, 🔼 folds
         }
         on(bar, 'touchstart', function (e) { lastTouch = e.touches[0].clientY; }, false);
         on(bar, 'touchend', function (e) { if (lastTouch != null && e.changedTouches[0].clientY - lastTouch > 30) fold(true); lastTouch = null; });

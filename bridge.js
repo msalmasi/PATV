@@ -881,7 +881,7 @@ function audioRecheck() {
 }
 
 /**
- * 1.99?? dockfu (D4): the picker's eligibility (bridge-relay.sayEligibility - a users read, the pad-access, 18+ gate and !bridge block
+ * 1.99ajc dockfu (D4): the picker's eligibility (bridge-relay.sayEligibility - a users read, the pad-access, 18+ gate and !bridge block
  * checks) cached per viewer and room for ELIG_TTL_MS. It ran on EVERY /live answer of every signed-in viewer (each long-poll wake)
  * once a media switch was on. It only decides whether the picker's tabs show - every send still runs the full check (sendSayLine) -
  * so a short staleness is harmless, and the key holds what should change it at once: the viewer's linked Camfrog login (a !verify /
@@ -905,7 +905,7 @@ async function pickerEligible(viewer, R, login) {
 }
 
 /**
- * 1.99?? dockfu (D3): the media mark. A chat line draws as a Camfrog sticker or a GIF (chatlog-core mediaOf) only with it.md, and only
+ * 1.99ajc dockfu (D3): the media mark. A chat line draws as a Camfrog sticker or a GIF (chatlog-core mediaOf) only with it.md, and only
  * the server sets it, here, for a line whose words are exactly one media token AND that came through a real media path:
  *  - a relayed Room Dock pick: the line's own say job (its web.job, matched in the job's room - bridge-relay.echoJob) carried that
  *    very token (sayLine validated it: the catalog sticker / the filtered GIF). Named, incognito frog name or "someone" alike (D2:
@@ -1098,7 +1098,7 @@ async function ingest(body, opts = {}) {
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = v2 ? feedItemV2(ev, R.id) : feedItem(ev, R.id);
     if (!it) continue;
-    mediaMark(it, ev, R.id);                                 // 1.99?? dockfu (D3): a sticker / GIF only through a real media path
+    mediaMark(it, ev, R.id);                                 // 1.99ajc dockfu (D3): a sticker / GIF only through a real media path
     if ((it.k === "mic" || it.k === "unmic") && it.u && it.u.anon && !it.ah) k3Hold(R.id, it, kinded, now, leaving);   // 1.99afl (B.1, above)
     // (review 2 fix-up's "so far in its order": whether this batch un-hid the speaker BEFORE this event, decided now)
     const named = (it.k === "msg" || it.k === "tx") && it.u && !it.u.anon && !it.u.self && it.u.login ? CV.hashOf(it.u.login) : null;
@@ -2384,7 +2384,7 @@ async function forgetVeiled(logins) {
   return { feed: n, rooms: r.rooms };
 }
 
-module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99?? dockfu (D4)
+module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99ajc dockfu (D4)
   revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,

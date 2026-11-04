@@ -611,7 +611,7 @@ test("CL3 fix-up: a mic clip's caption (the transcript, republished on the pad) 
 
 test("media-token quote lines use placeholders and masked tokens never enter the quote", async () => {
   const base = { k: "msg", u: { login: "alicecf", display: "Alice CF" }, ts: Date.now() };
-  // 1.99?? dockfu (D3): a placeholder only for a line with the server's media mark; the same token TYPED (no mark) quotes as typed
+  // 1.99ajc dockfu (D3): a placeholder only for a line with the server's media mark; the same token TYPED (no mark) quotes as typed
   const lines = await quotes.buildLines([
     { ...base, c: 9001, text: "[cfsticker:1642/123456]", md: "cfsticker" },
     { ...base, c: 9002, text: "[gif:orchard-A_1]", md: "gif" },
@@ -636,7 +636,7 @@ test("the live room advertises stickers only after an explicit true bot snapshot
   }
 });
 
-// 1.99?? dockfu (D4): the eligibility is cached per viewer and room for ELIG_TTL_MS (30 s) - every /live long-poll used to ask it again.
+// 1.99ajc dockfu (D4): the eligibility is cached per viewer and room for ELIG_TTL_MS (30 s) - every /live long-poll used to ask it again.
 // The test runs on the cache's injectable clock (bridge._eligClock), not wall time: within the TTL the answer is reused; past it, or
 // at once when the viewer's link, the Dock mode or the !bridge block list changes, it is asked again; a check that throws is never kept.
 test("live picker availability follows the shared say eligibility and fails closed", async () => {
@@ -681,9 +681,9 @@ test("live picker availability follows the shared say eligibility and fails clos
   }
 });
 
-// 1.99?? dockfu: review - the cache never hands one viewer's (or one room's) answer to another: alice may, bob and alice-elsewhere may
+// 1.99ajc dockfu: review - the cache never hands one viewer's (or one room's) answer to another: alice may, bob and alice-elsewhere may
 // not, all inside one TTL, each asked once.
-test("1.99?? dockfu: review - live picker eligibility is cached per viewer and per room, never shared", async () => {
+test("1.99ajc dockfu: review - live picker eligibility is cached per viewer and per room, never shared", async () => {
   const dock = require(path.join(repo, "paddock")), cf = require(path.join(repo, "cfstickers")), gifs = require(path.join(repo, "gifs"));
   const old = [dock.current, cf.enabled, gifs.available, relay.sayEligibility];
   const R = bridge.bySlug(SLUG), before = R.stickers, R2 = { ...R, id: "Quote.Elsewhere", slug: "quote-elsewhere" };

@@ -140,7 +140,7 @@ test("background lookups are globally bounded and never accept invalid IDs", asy
   assert.equal(calls.length, G.LOOKUP_LIMIT);
 });
 
-// 1.99?? dockfu: what gets metadata is a line with the server's GIF mark (md: "gif" - bridge.js mediaMark, D3); a "[gif:x]" typed in
+// 1.99ajc dockfu: what gets metadata is a line with the server's GIF mark (md: "gif" - bridge.js mediaMark, D3); a "[gif:x]" typed in
 // Camfrog has none. D2 (owner answer 6): a veiled sender's marked GIF (incognito frog name / "someone") gets it like anyone's
 test("attach is synchronous/cache-only; only marked GIF lines get metadata (veiled ones too) and privacy bars never fetch", async () => {
   let finish; provider = () => new Promise(resolve => { finish = resolve; });
@@ -293,10 +293,10 @@ test("1.99aiw dock: review - a GIF search is a POST: the words never ride in a U
   assert.equal(calls.length, 1, "a non-string query reaches no provider");
 });
 
-// 1.99?? dockfu (D4): the route's own express.json({ limit: "4kb" }) never applied - index.js's global JSON parser (100 kB) ran first
+// 1.99ajc dockfu (D4): the route's own express.json({ limit: "4kb" }) never applied - index.js's global JSON parser (100 kB) ran first
 // and the route's parser then saw an already-read body. index.js now skips /api/gifs/search like the other self-parsing routes. The
 // global middleware here is index.js's OWN skip rule, read from its source, so a path dropped from that list fails this test.
-test("1.99?? dockfu: a search body over 4 kB is refused behind index.js's global JSON parser; a normal one still searches", async () => {
+test("1.99ajc dockfu: a search body over 4 kB is refused behind index.js's global JSON parser; a normal one still searches", async () => {
   const source = fs.readFileSync(path.join(repo, "index.js"), "utf8");
   const use = source.split(/\r?\n|\r/).find(l => l.startsWith("app.use((req, res, next) => (req.path === \"/api/media\"") && l.includes("express.json()(req, res, next)"));
   assert.ok(use, "index.js's global JSON parser line");
@@ -318,10 +318,10 @@ test("1.99?? dockfu: a search body over 4 kB is refused behind index.js's global
   } finally { srv.close(); }
 });
 
-// 1.99?? dockfu: review - Express (4.x, not strict, not case sensitive) also routes POST /api/gifs/search/ and /API/GIFS/SEARCH to the
+// 1.99ajc dockfu: review - Express (4.x, not strict, not case sensitive) also routes POST /api/gifs/search/ and /API/GIFS/SEARCH to the
 // search, but index.js's skip list compares req.path exactly: those spellings went through its global 100 kB parser first and the
 // route's own 4 kB parser then saw an already-read body. The limit holds whichever spelling reached the route.
-test("1.99?? dockfu: review - the 4 kB search limit holds for every path spelling Express routes to the search", async () => {
+test("1.99ajc dockfu: review - the 4 kB search limit holds for every path spelling Express routes to the search", async () => {
   const source = fs.readFileSync(path.join(repo, "index.js"), "utf8");
   const use = source.split(/\r?\n|\r/).find(l => l.startsWith("app.use((req, res, next) => (req.path === \"/api/media\"") && l.includes("express.json()(req, res, next)"));
   const skip = [...use.matchAll(/req\.path === "([^"]+)"/g)].map(m => m[1]), prefixes = [...use.matchAll(/req\.path\.startsWith\("([^"]+)"\)/g)].map(m => m[1]);
@@ -342,9 +342,9 @@ test("1.99?? dockfu: review - the 4 kB search limit holds for every path spellin
   } finally { srv.close(); }
 });
 
-// 1.99?? dockfu: review - index.js's global express.urlencoded (100 kB, no skip list) also read a form body for the canonical path,
+// 1.99ajc dockfu: review - index.js's global express.urlencoded (100 kB, no skip list) also read a form body for the canonical path,
 // and the search took pad / q from it: a form body over 4 kB is refused too.
-test("1.99?? dockfu: review - a form body over 4 kB behind index.js's global urlencoded parser is refused too", async () => {
+test("1.99ajc dockfu: review - a form body over 4 kB behind index.js's global urlencoded parser is refused too", async () => {
   const app = express(), addUser = (req, res, next) => { req.user = req.get("x-test-user") ? { userId: req.get("x-test-user") } : null; next(); };
   app.use(express.urlencoded({ extended: true }));            // index.js: after the JSON skip rule, for every path
   G.register(app, { addUser });

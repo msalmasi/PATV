@@ -651,7 +651,7 @@
     function optNode(it) {
       var u = meU || { display: _t('js.pad.relay.you', 'you'), login: '', web: true };
       var n = null;
-      // 1.99?? dockfu (D3): the sender's own pending preview of an exact sticker / GIF token draws as one (the server sends exactly such
+      // 1.99ajc dockfu (D3): the sender's own pending preview of an exact sticker / GIF token draws as one (the server sends exactly such
       // a line as a media pick - sayLine - or refuses it); room lines draw media only with the server's mark (chatlog-core mediaOf)
       var CLm = window.PATVChatlog, tok = CLm && CLm.mediaToken ? CLm.mediaToken(it.text) : null;
       try { n = mkLine ? mkLine(tok ? { k: 'msg', u: u, text: it.text, ts: it.at, md: tok.type } : { k: 'msg', u: u, text: it.text, ts: it.at }) : null; } catch (e) { n = null; }

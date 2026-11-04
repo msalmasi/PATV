@@ -1,4 +1,4 @@
-// 1.99?? dockfu (Room Dock follow-ups D2 + D3, hand-off 18): the media mark, end to end through the real ingest and the viewer projection.
+// 1.99ajc dockfu (Room Dock follow-ups D2 + D3, hand-off 18): the media mark, end to end through the real ingest and the viewer projection.
 //   D3: a chat line is a Camfrog sticker / a GIF only with the mark the SERVER adds (it.md - bridge.js mediaMark) to a line that came
 //       through a real media path: Pepe's room-sticker inject (his event says media: "cfsticker") or a relayed Room Dock pick whose own
 //       say job carried that very token. The same words TYPED in Camfrog (or a job for other words, or a gone job, or an md an event
@@ -174,7 +174,7 @@ test("the mark is archived with the line and comes back in scrollback, never as 
   assert.equal(JSON.parse(stored.data).md, "cfsticker", "the live feed keeps it across a restart");
 });
 
-// 1.99?? dockfu: review (privacy) - the mark says what a line's words were (a sticker / a GIF). A purge takes the words (text NULL,
+// 1.99ajc dockfu: review (privacy) - the mark says what a line's words were (a sticker / a GIF). A purge takes the words (text NULL,
 // d.u blanked, the 🎙 id); the archived row must not keep "this was a GIF" behind either, for a named or a veiled sender alike
 test("a purged media line keeps no media mark in the archive", async () => {
   await settle(200);

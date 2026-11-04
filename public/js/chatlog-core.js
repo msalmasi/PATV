@@ -69,7 +69,7 @@
     m = /^\[gif:([A-Za-z0-9_-]{1,64})\]$/.exec(text);
     return m && m[0] === text ? { type: 'gif', id: m[1] } : null;
   }
-  // 1.99?? dockfu (D3): a line is a sticker / GIF only with the SERVER's mark - it.md ("cfsticker" / "gif"), which bridge.js
+  // 1.99ajc dockfu (D3): a line is a sticker / GIF only with the SERVER's mark - it.md ("cfsticker" / "gif"), which bridge.js
   // (mediaMark) sets on a line that came through a real sticker / GIF path: Pepe's room-sticker inject, or a relayed Dock pick whose
   // say job carried that very token. Never from the words alone: a "[cfsticker:1/2]" / "[gif:x]" typed in Camfrog (or said on the
   // mic) stays plain text everywhere - the line, ✂️ Clip chat, quotes, the TXT / JSONL downloads. The mark is not text (nobody can
@@ -407,7 +407,7 @@
         width: 100, height: 100, loading: 'lazy', decoding: 'async' }, fallback, h)] : [fallback];
     }
     // Only the server's mark makes a GIF line (mediaOf; a token typed in Camfrog never gets one), and only its cache attachment
-    // (gifs.attach) draws remote media. 1.99?? dockfu (D2, owner answer 6): a veiled sender's (incognito / !bridge hide frog name, or
+    // (gifs.attach) draws remote media. 1.99ajc dockfu (D2, owner answer 6): a veiled sender's (incognito / !bridge hide frog name, or
     // "someone") GIF draws like anyone's - the picture and its credit say nothing about who sent it; the name stays the veil's
     var g = it.gif, noGif = _t('js.pad.chat.gif', '🎞️ GIF');
     if (!g || !safeSrc(g.src) || !/^https:\/\//.test(g.src)) return [noGif];

@@ -1161,7 +1161,7 @@ function dress(items, ctx) {
         o.removed = { at: Number(it.rm_at), by, why: it.rm_why ? String(it.rm_why).slice(0, 200) : "", ...(who ? { who: String(who) } : {}) };
       }
     }
-    // 1.99?? dockfu (D3): the server's media mark (bridge.js mediaMark) rides only beside the words it marks - never on a masked bar,
+    // 1.99ajc dockfu (D3): the server's media mark (bridge.js mediaMark) rides only beside the words it marks - never on a masked bar,
     // a sealed / purged line or anything whose words a viewer doesn't get (a bar must not say "this was a sticker")
     if (o.md !== undefined && !(typeof o.text === "string" && o.k === "msg" && mediaMarked(o))) delete o.md;
     out.push(require("./gifs").attach(o));                  // 1.99aiw: cache-only, after the complete privacy/removal projection

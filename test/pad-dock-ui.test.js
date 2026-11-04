@@ -250,7 +250,7 @@ test('floating the chat again and again leaves no stale window listeners',()=>{
   h.button('Float chat').click();assert.equal(count(),base+1);h.controller.redock();assert.equal(count(),base);
 });
 
-// 1.99?? dockfu (owner decision 6, the lead's design call d): the view controls are emoji icons - 🔽 hide the stage / open the phone
+// 1.99ajc dockfu (owner decision 6, the lead's design call d): the view controls are emoji icons - 🔽 hide the stage / open the phone
 // drawer (🔼 folds it), 🖥️ fullscreen, 🪟 pop out / float, ↩️ bring it back - never the text symbols they were (▁ ⌄ ⛶ ↗ 🗗 ↩). The
 // emoji sits in an aria-hidden .ds-ic; the words stay the button's accessible name and tooltip.
 test('view controls are emoji icons with their words as accessible names',()=>{
@@ -273,7 +273,7 @@ test('view controls are emoji icons with their words as accessible names',()=>{
   for(const b of h.doc.querySelectorAll('.rmd-local-player button'))if(b.getAttribute('aria-label')==='Fullscreen')assert.equal(icon(b).textContent,'🖥️');
   assert.doesNotMatch(all(),old,'no text-symbol icon on a local cam');
 });
-// 1.99?? dockfu (design call e): Escape still redocks - the floating chat comes home and focus returns to what opened it; a Dock sheet
+// 1.99ajc dockfu (design call e): Escape still redocks - the floating chat comes home and focus returns to what opened it; a Dock sheet
 // open over it takes the first Escape (it closes), the next one redocks
 test('Escape closes a Dock sheet first, then redocks the floating chat',()=>{
   const h=harness(),opener=h.button('Float chat');opener.focus();opener.click();assert.ok(h.chat.closest('.rmd-float'));

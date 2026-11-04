@@ -998,7 +998,7 @@ test("Node 16 and old browsers: chatlogexport.js has no Node 20-only API; pad-do
   for (const m of ui.matchAll(/_t\('([^']+)',\s*'((?:[^'\\]|\\.)*)'/g)) assert.equal(EN[m[1]], m[2].replace(/\\'/g, "'"), m[1]);
 });
 
-// 1.99?? dockfu (D3): only lines that came through a real media path are media - Pepe's room-sticker inject (data.media) and a relayed
+// 1.99ajc dockfu (D3): only lines that came through a real media path are media - Pepe's room-sticker inject (data.media) and a relayed
 // pick whose own say job carried that token. Both download as "[sticker]" / "[GIF]" (never the ids); the SAME tokens typed in the room
 // (no mark) download as the words they are.
 test("media lines download as placeholders in HTML, TXT and JSONL without changing the golden fixtures", async () => {
