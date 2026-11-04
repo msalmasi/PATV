@@ -309,6 +309,10 @@ function register(app, { addUser, xpForNextLevel }) {
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
         roomOnStage: roomOnStage_, stageAdmin, frontInfo, pepeHere,
         avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
+        // 1.99?? dockpop (owner P2): the homepage's Room Dock - the pad page's mode for this viewer ('staff' = staff only; 'off' = today's
+        // homepage byte for byte), and the viewer tag its chat window protocol keys on (dock-link.js; never the account id)
+        padDockOn: require("./paddock").viewerOn(req.user),
+        vt: me ? require("./roompm").tag(me.userId) : null,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals

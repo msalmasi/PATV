@@ -487,9 +487,13 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.match(block, /\.rm \.rm-chat \.topic \{ color: var\(--ds-chat-topic\);/);
   // ds.css carries the chat's tokens: a cached v=2 without them would leave the lines colourless, so the layout asks for v=3
   assert.match(rd("views", "layout.ejs"), /<link rel="stylesheet" href="\/public\/css\/ds\.css\?v=4">/);
-  // home.ejs is left alone in v1 (its own markup and keys)
-  assert.ok(!rd("views", "home.ejs").includes("PATVChatlog"));
-  assert.ok(!rd("views", "home.ejs").includes("chatlog.css"));
+  // home.ejs is left alone in v1 (its own markup and keys) - 1.99?? dockpop: except its Room Dock (the owner's P2: the pad Dock's
+  // chat card on the homepage, public/js/home-dock.js draws its lines with chatlog-core) - chatlog.css only inside that branch, and
+  // today's widget (Dock off) still has its own renderer
+  const home = rd("views", "home.ejs"), dockCss = home.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');
+  assert.ok(!home.includes("PATVChatlog"));
+  assert.equal(home.split("chatlog.css").length, 2, "linked once");
+  assert.match(home.slice(home.lastIndexOf("<%_ if (homeDock_) { _%>", dockCss), dockCss), /^<%_ if \(homeDock_\) \{ _%>\s*$/, "only in the Dock branch");
 });
 
 test("chatlog.css: the moved rules, ds tokens only, logical properties, cx-shift and reduced motion", () => {

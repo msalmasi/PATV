@@ -1,0 +1,70 @@
+/* home-dock.css - 1.99?? dockpop (owner P2): the homepage's Room Dock (views/home.ejs homeDock_, public/js/home-dock.js). The stage and
+   the room card are ONE block, #hmDock: the pad Dock's stage card (the video + its auto-hiding overlay) beside / above its slim chat card,
+   styled by pad-dock.css (main.rm.rm-dock) - this file only lays the block out on the homepage and gives the two cards the base rules the
+   pad page's own stylesheet gives them there (room.ejs .rm …). The homepage scrolls normally (no body.pad-dock-live). */
+main.hm.rmd-home { gap: var(--cardgap, var(--ds-sp-4)); }
+main.hm.rmd-home #hmDock { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 400px); grid-template-rows: minmax(420px, auto); gap: var(--ds-sp-2); align-items: start; min-inline-size: 0; }
+main.hm.rmd-home #hmDock > #rmStage { grid-column: 1; grid-row: 1; align-self: start; }
+main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 2; grid-row: 1; }
+main.hm.rmd-home #hmDock > #rmChat { align-self: stretch; contain: size; min-block-size: 420px; }
+main.hm.rmd-home #hmDock > .rmd-popbar { align-self: start; }
+main.hm.rmd-home #hmDock > .rmd-hm-ppl { display: none; }
+main.hm.rmd-home #hmDock:not(:has(> #rmChat)) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+
+/* the stage card: 16:9 of its width, at most min(560px, the window less the navbar and a little), the video contained */
+main.rm.rm-dock.rmd-home #rmStage { block-size: auto; aspect-ratio: 16 / 9; max-block-size: min(560px, calc(100dvh - 140px)); min-block-size: 0; inline-size: 100%;
+  border: 1px solid var(--ds-line); background: var(--ds-media-bg); }
+main.rm.rm-dock.rmd-home #rmStage .player .wrap { position: absolute; inset: 0; }
+main.rm.rm-dock.rmd-home #rmStage .player .video-js { inline-size: 100%; block-size: 100%; }
+main.rm.rm-dock.rmd-home #rmStage .stabs { margin: 0; }
+/* off air: the 44px slim bar [pad chip ›] Nothing on stage right now · Next up … [🎥 Go live] (+ ⋯ for staff); the chat takes the width */
+main.rm.rm-dock.rmd-home #rmStage.is-off { aspect-ratio: auto; }
+main.rm.rm-dock.rmd-home #rmStage.is-off .player { display: none; }
+main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: none; }
+main.rm.rm-dock.rmd-home.rmd-staff #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: inline-flex; }
+main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-bot > .rmd-golive { display: inline-flex; }
+main.rm.rm-dock.rmd-home #rmStage .rmd-ov-bot > .rmd-golive { display: none; text-decoration: none; }
+main.rm.rm-dock.rmd-home #rmStage .rmd-golive > .rmd-label { position: static; inline-size: auto; block-size: auto; clip-path: none; }
+main.hm.rmd-home #hmDock:has(> #rmStage.is-off) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
+main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
+
+/* the chat card - the pad page's base card rules (room.ejs .rm .card / h2 / .topic / .compose) on the homepage */
+main.rm.rm-dock.rmd-home #rmChat { background: var(--ds-surface); border: 1px solid var(--ds-line); }
+main.rm.rm-dock.rmd-home #rmChat > h2 { margin: 0; letter-spacing: .1em; text-transform: uppercase; color: var(--ds-gold); font-family: var(--ds-font-pixel); font-size: 10px; line-height: 1.6; }
+main.rm.rm-dock.rmd-home #rmChat > h2 small { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; color: var(--ds-text-muted); font-size: 12px; }
+main.rm.rm-dock.rmd-home #rmTopic:empty { display: none; }
+main.rm.rm-dock.rmd-home #rmChat .feed { block-size: auto; }
+main.rm.rm-dock.rmd-home #rmChat .compose { display: grid; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; }
+main.rm.rm-dock.rmd-home #rmChat .rmd-tease { display: grid; gap: var(--ds-sp-2); align-content: center; justify-items: start; flex: 1 1 auto; padding: var(--ds-sp-3); }
+main.rm.rm-dock.rmd-home #rmChat .rmd-tease > p { margin: 0; }
+main.rm.rm-dock.rmd-home #rmChat .jump { display: none; }
+main.rm.rm-dock.rmd-home #rmAudioBox .rb-vol { inline-size: 72px; }
+/* the one-row composer: [Message …][🎙️ Hold to talk][Send] - no ＋, no tool row */
+main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim .rb-say-in { padding-inline-start: var(--ds-sp-2); }
+main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim { grid-template-columns: 0 minmax(0, 1fr) auto auto; }
+/* the people sheet (👥): avatar, name + flair, veil tag, 🎙 - no cam or ⋯ here */
+main.rm.rm-dock.rmd-home #rmPeople { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; overflow-x: hidden; }
+main.rm.rm-dock.rmd-home #rmPeople > li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: var(--ds-sp-2); align-items: center; padding: 2px var(--ds-sp-1); border-radius: var(--ds-r-md); font-size: var(--ds-fs-sm); }
+main.rm.rm-dock.rmd-home #rmPeople .ic:empty { display: none; }
+main.rm.rm-dock.rmd-home #rmPplCard > h2 { margin: 0; }
+/* the 📡 link to the chat's pad (only when it isn't the stage's pad) */
+main.rm.rm-dock.rmd-home #chatH > .rmd-room-link { text-decoration: none; }
+
+/* the side widgets (the coin-op wheel, the featured table, Top Pads), a row under the Dock */
+main.hm.rmd-home .hmd-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--gap, var(--ds-sp-3)); align-items: start; min-inline-size: 0; }
+main.hm.rmd-home .hmd-side > * { margin: 0; min-inline-size: 0; }
+
+@media (min-width: 761px) and (max-width: 1023px) {
+  main.hm.rmd-home #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
+  main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
+  main.rm.rm-dock.rmd-home #rmStage { max-block-size: 60dvh; }
+}
+@media (max-width: 760px) {
+  main.hm.rmd-home #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
+  main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: clamp(360px, 62dvh, 520px); min-block-size: 0; }
+  main.rm.rm-dock.rmd-home #rmStage { max-block-size: none; }
+}
+@media (prefers-reduced-motion: reduce) { main.hm.rmd-home #hmDock * { scroll-behavior: auto; } }

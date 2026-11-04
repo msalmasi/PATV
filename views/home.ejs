@@ -59,6 +59,16 @@
     { href: '/feed', ic: '📝', t: t('home.todo.feed'), s: null },
     { href: '/rankings', ic: '🏆', t: t('home.todo.rankings'), s: null },
   ];
+  // 1.99?? dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview mode"):
+  // the Room Dock for this viewer (home.js padDockOn = paddock.viewerOn: 'staff' = staff only), the panel's pad past the 18+ gate and
+  // not a chat-hub pad. Otherwise - Dock off included - today's homepage, byte for byte (the slurping tags below print nothing then).
+  // The stage + the room card become ONE block (#hmDock: the pad Dock's stage card and chat card, public/js/pad-dock.js 'preview'
+  // mode + public/js/home-dock.js), in the FRONT pad's look (padlook / padcosmetics, the same template as the pad page's chip).
+  const homeDock_ = !!locals.padDockOn && roomGate_ === 'ok' && !hubChat_;
+  const hLK_ = homeDock_ && frontInfo && typeof padLook === 'function' ? padLook(frontInfo.id) : null;
+  const hFX_ = homeDock_ && frontInfo ? PFX_(frontInfo.id) : null;
+  const hAV_ = homeDock_ && frontInfo ? PAV_(frontInfo.id, { cls: 'rm-av', fallback: '' }) : '';
+  const hBN_ = hLK_ && hLK_.banner ? hLK_.banner : '';
 %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
@@ -78,6 +88,14 @@
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw4">
 <%- include('partials/cosmetics-css') %>
+<%_ if (homeDock_) { _%>
+<link rel="stylesheet" href="/public/css/chatlog.css?v=12">
+<link rel="stylesheet" href="/public/css/flair.css?v=4">
+<link rel="stylesheet" href="/public/css/veil.css?v=3">
+<link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
+<link rel="stylesheet" href="/public/css/pad-dock.css?v=5">
+<link rel="stylesheet" href="/public/css/home-dock.css?v=1">
+<%_ } _%>
 <style>
   /* G6 polish: main.hm.ds-page (ds width / gutters / font / focus); the old private palette now points at the ds tokens
      (lime retired -> green, var(--ds-gold) -> --ds-gold), cards are surface / line / 16 / 16, buttons are ds-btn sized pills with
@@ -449,7 +467,7 @@
   .hm .hm-stories .ss-row { padding: 4px 0 8px; }
 </style>
 
-<main class="hm ds-page">
+<main class="hm ds-page<%= homeDock_ ? ' rm rm-dock rmd-home' + (hLK_ && hLK_.accent ? ' pad-acc' : '') : '' %>"<%- homeDock_ && hLK_ && hLK_.vars ? ' style="' + t.esc(hLK_.vars) + '"' : '' %>>
   <% if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
 
   <!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
@@ -462,6 +480,52 @@
   </section>
 
   <!-- ───── main stage ───── -->
+<%_ if (homeDock_) { _%>
+  <section class="rmd-hm" id="hmDock" aria-label="<%- t('home.dock.aria', { name: frontInfo ? frontInfo.title : t('home.stage.main_stage') }) %>">
+    <%_ if (frontInfo) { _%>
+    <template id="rmdId"><%- include('partials/pad-dock-id', { room: { id: frontInfo.id, name: frontInfo.title }, LK_: hLK_, PFX_: hFX_, avHtml_: hAV_, bnSrc_: hBN_, bnLook_: !!hBN_ }) %></template>
+    <%_ } _%>
+    <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-label="<%- t('home.stage.main_stage') %>">
+      <div class="stabs" id="rmTabs" role="tablist" aria-label="<%- t('home.stage.tabs_aria') %>"></div>
+      <div class="player">
+        <div class="wrap" id="rmVideo"></div>
+        <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> <%- t('home.stage.reconnecting') %></div>
+        <button type="button" class="unmute hide" id="rmStUnmute" aria-label="<%- t('home.stage.unmute') %>"><img src="/public/img/mute-icon.png" alt=""></button>
+        <div class="embed hide" id="rmEmbed"></div>
+      </div>
+      <div class="stcap hide" id="rmCap" aria-label="<%- t('home.stage.cap_aria') %>"></div>
+    </section>
+    <%_ if (room) { _%>
+    <%# the chat card: the chatlog scope is on the card (never on <main>: the me card's .who keeps its own look) %>
+    <section class="card rm-chat chatlog<%= roomOnStage ? '' : ' rmd-other' %>" id="rmChat" aria-labelledby="chatH">
+      <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small></h2>
+      <div class="topic" id="rmTopic"><%= room.topic || '' %></div>
+      <%_ if (me || roomLive) { _%>
+      <div class="rm-audio" id="rmAudioBox"></div>
+      <div class="rmd-log">
+        <div class="feed" id="rmScroll" role="region" tabindex="0" aria-label="<%- t('home.room.feed_aria') %>">
+          <div id="rmFeed" class="feed-log" role="log" aria-live="polite" aria-relevant="additions" aria-label="<%- t('home.room.feed_aria') %>"><p class="muted"><%- t('home.room.loading') %></p></div>
+        </div>
+        <button class="jump" id="rmJump" type="button"><%- t('pad.chat.new') %></button>
+      </div>
+      <%_ if (me && me.camfrogUsername) { _%>
+      <div class="compose hide" id="rmCompose"><div id="rmRelay"></div><div id="rmPtt"></div></div>
+      <%_ } _%>
+      <%_ } else { _%>
+      <div class="tease rmd-tease">
+        <b><%- t('home.room.tease_title') %></b>
+        <p class="muted"><%- t('home.room.n_in_camfrog', { n: room.count }) %><%- room.micCount ? ' · ' + t('home.n_on_mic', { n: room.micCount }) : '' %>. <%- t('home.room.tease_blurb') %></p>
+        <a class="btn primary" href="/login"><%- t('home.sign_in') %></a>
+      </div>
+      <%_ } _%>
+    </section>
+    <div class="rmd-hm-ppl"><section class="card rm-ppl chatlog" id="rmPplCard" aria-labelledby="pplH"><h2 id="pplH"><span class="ht"><%- t('pad.people.h') %></span> <small id="rmPplN"></small></h2><ul class="people" id="rmPeople"></ul></section></div>
+    <template id="hmdAbout"><%- t('home.room.note', { q: '"' }) %></template>
+    <%_ } _%>
+  </section>
+  <%# the stage's side widgets (the coin-op wheel, the featured table, Top Pads) - the same markup and ids, a row under the Dock %>
+  <div class="hmd-side" id="stageSide">
+<%_ } else { _%>
   <section class="stage <%= live ? 'live' : 'off' %>" id="stage" aria-labelledby="stTtl">
     <div class="bar">
       <span class="ttl" id="stTtl"><%- t('home.stage.title') %></span>
@@ -500,6 +564,7 @@
       </div>
       <%# 1.99eo: the stage widgets sit in the side column on and off air (they used to move to an off-air strip) %>
       <div class="stage-side" id="stageSide">
+<%_ } _%>
       <div class="aw aw-hm" id="wheelBox">
         <% if (me) { %>
         <div class="aw-coinop" id="coinop">
@@ -552,9 +617,13 @@
           <div id="tpAudioBox"></div>
         </section>
       <% } %>
+<%_ if (homeDock_) { _%>
+  </div>
+<%_ } else { _%>
       </div>
     </div>
   </section>
+<%_ } _%>
 
   <!-- ───── you ───── -->
   <% if (me) { %>
@@ -594,7 +663,7 @@
 
   <!-- ───── room + live now ───── -->
   <div class="main">
-    <% if (room) { %>
+    <% if (room && !homeDock_) { %>
     <section class="card lr-card" aria-labelledby="lrH">
       <h2 id="lrH"><span><span class="ds-ic" aria-hidden="true">📡</span> <%- roomOnStage ? t('home.room.on_stage') + ' ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'chat' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif" title="<%- t('home.room.pill_title') %>"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%- room.live ? t('home.room.active') : t('home.room.offline') %></span></span></span>
         <a href="/p/<%= encodeURIComponent(room.slug) %>"><%- t('home.room.open') %></a></h2>
@@ -715,6 +784,7 @@
     function tick30() { tick(); if (!npFirst) npRefresh(); npFirst = false; }
     tick30(); setInterval(tick30, 30000);
 
+<%_ if (!homeDock_) { _%>
     // 1.99eo: the stage keeps one layout on and off air; .live / .off on #stage swaps the off-air slate
     // (#stSlate, in the player's box) for the player - the switcher's 10 s poll of /api/stage calls onAir
     var stageEl = document.getElementById('stage');
@@ -743,6 +813,7 @@
       api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
       onAir: function (on, sub) { setPill(on, sub || (on ? _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now'))); }
     });
+<%_ } _%>
 
     // ── NOW SPINNING / LAST SPIN on the stage wheel, in the spinner's name colour ──
     function spinLine(sp) {
@@ -839,7 +910,7 @@
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
 <script src="/public/js/room-bridge.js?v=24"></script>
 <% } %>
-<% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_) { %>
+<% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
 <script>
   // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).
@@ -1089,6 +1160,20 @@
   })();
 </script>
 <% } %>
+<%_ if (homeDock_) { _%>
+<%_ const hmdInit_ = { front: frontInfo ? { id: frontInfo.id, slug: frontInfo.slug, title: frontInfo.title } : null,
+     chat: room ? { id: room.id, slug: room.slug, name: room.name, onStage: !!roomOnStage } : null, initial: room && (me || roomLive) ? roomLive : null,
+     vt: typeof vt !== 'undefined' ? vt || null : null, signed: !!me, linked: !!(me && me.camfrogUsername), user: me ? me.username : null,
+     stage: { slots: paid, pepeOn: !!st.active, pepeHere: pepeHere_, pepeWhep: st.whep || null, pepeSrc: st.pepe_src || null, manage: !!staff },
+     goLive: '/stage' + (frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : ''),
+     staff: stageAdmin ? { front: '/pads/admin#front', pepe: stageAdmin.admin ? '/admin/pepe#control' : null } : null,
+     nextUp: nextUp_ ? { name: nextUp_.display, title: nextUp_.title || null, at: Number(nextUp_.start_at) } : null }; _%>
+<script src="/public/js/chatlog-core.js?v=10"></script>
+<script src="/public/js/dock-link.js?v=1"></script>
+<script src="/public/js/pad-dock.js?v=5"></script>
+<script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/home-dock.js?v=1"></script>
+<%_ } _%>
 <% if (tpListen_) { %>
 <script>
   // 1.99hm: 🎧 on Top Pads - listen to a pad from the homepage. Plays through the room widget's player when
