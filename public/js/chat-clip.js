@@ -168,7 +168,9 @@
     // the card: Clip N lines -> the server's preview -> Post / Discard; it follows the picks while it's open
     function closeQuote(focusTo) {
       if (q) clearTimeout(q.timer);
+      var one = !!(q && q.one);
       q = null;
+      if (one && !on) lines().forEach(function (r) { r.classList.remove('cc-sel'); });   // (one message's clip: closing it clears its pick)
       paint();
       qc.close(focusTo);
     }
@@ -471,6 +473,26 @@
         if (!canMic && was) Array.prototype.forEach.call(feed.querySelectorAll('.mc-btn'), function (b) { b.remove(); });
       },
       _tap: tap, _picked: picked,
+      // 1.99?? dockpol (owner item 7): one message from its line menu (chat-lines.js) - the same card as "Clip N lines" with that line as the
+      // pick (the server's preview, title, profile, price, "someone" rules, the owner's approval and every refusal unchanged); and that 🎙
+      // line's audio clip, exactly as its 🔊 pill
+      canQuote: function () { return !!room && linked; },
+      canMic: function () { return !!(linked && canMic); },
+      quoteOne: function (r, opener) {
+        if (!r || !r.hasAttribute || !r.hasAttribute('data-c') || r.hasAttribute('data-vc') || !room) return;
+        if (on) setOn(false);
+        if (q) closeQuote();
+        lines().forEach(function (x) { x.classList.remove('cc-sel'); });
+        r.classList.add('cc-sel'); anchor = r;
+        var cs = csOf([r]);
+        q = { key: cs.join(','), shown: false, all: false, one: true };
+        qc.open(opener && opener.isConnected ? opener : go, function () { closeQuote(opener && opener.isConnected ? opener : null); });
+        paint();
+        qc.status(_t('js.pad.cc.building', 'Building your clip…'));
+        preview(cs);
+        if (qc.el.scrollIntoView) qc.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      },
+      micOne: function (r, opener) { var tx = r && r.getAttribute && r.getAttribute('data-tx'); if (tx && linked && canMic && !on) micClip(tx, opener); },
     };
   }
   window.PATVChatClip = { init: init };

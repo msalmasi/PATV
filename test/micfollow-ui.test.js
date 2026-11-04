@@ -161,7 +161,8 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.equal((room.match(/stage-mic\.js/g) || []).length, 1);
   assert.equal((room.match(/PATVPadStage\.setMic\(/g) || []).length, 1);
   const gate = room.slice(room.indexOf("safe('stagemic'"), room.indexOf("safe('feed'"));
-  assert.match(gate, /var showMic = function \(p\) \{ PATVPadStage\.setMic\(p\); \};/);
+  // (1.99?? dockpol (owner item 5): the same gated program also rings the talking holder's chip in the Dock's bottom bar)
+  assert.match(gate, /var showMic = function \(p\) \{ PATVPadStage\.setMic\(p\); if \(roomDock && roomDock\.talking\) roomDock\.talking\(p\); \};/);
   assert.match(gate, /if \(window\.PATVAvSync\) window\.PATVAvSync\.gateProgram\(slug, d\.stage_program \|\| null, showMic\);/);
   assert.match(gate, /else showMic\(d\.stage_program \|\| null\);/);
   // (wave2 WP-4: av-sync.js?v=3 - it delays the dynamic layout's `ring` like newest / recent; 1.99ahm: v=4 - the On the mic card / chat lines;
@@ -170,7 +171,12 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   assert.ok(blk.indexOf('av-sync.js?v=8') >= 0 && blk.indexOf('av-sync.js?v=8') < blk.indexOf('webrtc-client.js?v=6'), 'controller loads before live-cam receivers');
   assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=8"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
-  assert.doesNotMatch(read("views", "home.ejs"), /stage-mic|setMic/, "the homepage never renders the mic stage");
+  // (1.99?? dockpol (owner H5): the homepage renders the front pad's mic stage ONLY for a signed-in viewer with access - home.js homeMic, its
+  // script only then and only with WebRTC; home-dock.js hands each gated program to setMic only while I.micStage)
+  const home = read("views", "home.ejs");
+  assert.equal((home.match(/stage-mic\.js/g) || []).length, 1, "one stage-mic.js include");
+  assert.match(home, /<%_ if \(locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\)\) \{ _%>\s*<script src="\/public\/js\/stage-mic\.js\?v=15"><\/script>/, "only for the viewer it is for, with WebRTC");
+  assert.match(read("public", "js", "home-dock.js"), /if \(!I\.micStage \|\| !sw \|\| !sw\.setMic \|\| !C \|\| !C\.onStage\) return;/, "setMic only while the page says so");
 });
 
 function switcher(opts, withMic = true) {
@@ -1003,7 +1009,7 @@ test("wave2 WP-4 stage-room.js (?v=18): the mic stage repaints when only the dyn
     assert.equal(x.rendered.length, before + 1, "repainted after " + f.toString());
     last = p;
   }
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=19/, v);   // (1.99ahq stage cover: v=19)
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=20/, v);   // (1.99ahq stage cover: v=19; 1.99?? dockpol: v=20 - destroy() for the homepage's front-pad swap)
 });
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.4): cover tiles on the page ──

@@ -149,7 +149,9 @@ test("home-dock.js: the lines as the pad Dock draws them but never with Reveal; 
   assert.equal(P.feed.querySelectorAll(".veil-reveal").length, 0, "no Reveal on the homepage, ever");
   assert.equal(P.feed.querySelectorAll("[data-reveal]").length, 0);
   assert.ok(P.feed.querySelectorAll(".redact").length >= 1, "a hidden line is still its masked bar");
-  assert.equal(P.win.PATVHomeAudio, P.calls.audio, "the Top Pads 🎧 play through the Dock's player");
+  // (1.99?? dockpol (owner H6): a stable object that speaks to the booted block's player - a front-pad swap brings a new one)
+  const ha = P.win.PATVHomeAudio; assert.ok(ha && typeof ha.listen === "function" && typeof ha.onChange === "function", "the Top Pads 🎧 play through the Dock's player");
+  assert.equal(ha.isPlaying(), false); ha.pause(); assert.equal(P.calls.paused, 1, "it IS the Dock's player underneath");
   assert.equal(P.calls.dock.mode, "preview"); assert.equal(P.calls.dock.vt, "tag-1"); assert.equal(P.calls.dock.room, "Alpha");
   assert.equal(P.calls.dock.chatUrl, "/p/alpha/chat"); assert.equal(P.calls.dock.padHref, "/p/alpha");
   assert.equal(P.calls.switcher.api, "/api/stage"); assert.ok(P.calls.switcher.wrap === P.doc.getElementById("rmVideo"), "the pad Dock's stage ids");
@@ -170,11 +172,18 @@ test("home-dock.js: while the pad's chat is in its own window the card stops pol
   assert.match(P.calls.urls.at(-1), /after=0&wait=1/, "from a fresh view (cursor 0)");
 });
 // ── 1.99ajh dockpop review ──
-test("review: the Dock is the first block under the navbar (above the stories and Your show); Dock off keeps today's order", async () => {
+// (1.99?? dockpol (owner H1, H3, H4): the slim Stories card first, then ONE grid - #hmDock + #stageSide (the coin-op strip and Top Pads beside
+// the stage and chat) - then Your show, only signed in)
+test("review: the Stories card, then the Dock grid (stage, chat, coin-op, Top Pads), then Your show signed in; Dock off keeps today's order", async () => {
   const story = { rooms: [], caps: [], room: null, signed: true, compose: true };
   const on = await renderHome({ me: ME(true), username: "viewer", padDockOn: true, story });
-  assert.ok(on.indexOf('id="hmDock"') < on.indexOf('class="card hm-stories"'), "the Dock before the stories");
-  assert.ok(on.indexOf('class="card hm-stories"') < on.indexOf('id="stageShow"') && on.indexOf('id="stageShow"') < on.indexOf('class="hmd-side" id="stageSide"'), "then Your show, then the side widgets in the stage's old place");
+  assert.ok(on.indexOf('class="card hm-stories rmd-stories"') < on.indexOf('id="hmdGrid"'), "the stories first");
+  assert.ok(on.indexOf('id="hmdGrid"') < on.indexOf('id="hmDock"') && on.indexOf('id="hmDock"') < on.indexOf('class="hmd-side" id="stageSide"'), "the Dock, then the side widgets, in one grid");
+  assert.ok(on.indexOf('class="hmd-side" id="stageSide"') < on.indexOf('id="stageShow"'), "Your show after the grid");
+  assert.equal((on.match(/class="card hm-stories/g) || []).length, 1, "one stories card");
+  assert.match(on, /<h2 class="ss-h">Stories <small>last 24 h<\/small>|class="ss-h"[^>]*>Stories <small>last 24 h/, "a slim eyebrow heading");
+  const out = await renderHome({ padDockOn: true, story: { rooms: [], caps: [], room: null, signed: false } });
+  assert.doesNotMatch(out, /id="stageShow"/, "owner H3: no Your show card until signed in (the navbar has Go live)");
   const off = await renderHome({ me: ME(true), username: "viewer", padDockOn: false, story });
   assert.ok(off.indexOf('class="card hm-stories"') < off.indexOf('id="stageShow"') && off.indexOf('id="stageShow"') < off.indexOf('id="stage"'), "Dock off: stories, Your show, the stage");
   // a linked viewer's ℹ️ About this chat doesn't say "read-only" (they have a composer here)

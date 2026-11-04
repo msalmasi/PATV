@@ -32,9 +32,18 @@
   // 1.99ajf dockclean (owner point 17): the Apps sheet - the room's games and tools, each only when Pepe offers it here (d.room.cmds).
   // A tile puts the command into the composer (a trailing space where it takes a name / amount: the name autocomplete opens) and
   // never sends by itself.
+  // (1.99?? dockpol (owner item 26): 💲 Showdown STARTS the price game - !guess only joins a running one. The tile inserts '!pricegame', the
+  // web relay's allowed name for the same handler (its 6th field: the name the tile shows); !guess stays typeable)
   var APPS = [['!spin', '🎡', 'spin', 'Spin', 0], ['!heist', '💰', 'heist', 'Heist', 1], ['!duel', '⚔️', 'duel', 'Duel', 1], ['!brawl', '🥊', 'brawl', 'Brawl', 1],
     ['!arena', '🏟️', 'arena', 'Arena', 1], ['!bj', '🃏', 'bj', 'Blackjack', 1], ['!holdem', '♠️', 'holdem', 'Hold’em', 1], ['!pictionary', '🎨', 'pictionary', 'Pictionary', 0],
-    ['!trivia', '❓', 'trivia', 'Trivia', 0], ['!guess', '🔢', 'guess', 'Guess', 1], ['!bingo', '🎱', 'bingo', 'Bingo', 0], ['!lotto', '🎟️', 'lotto', 'Lotto', 1]];
+    ['!trivia', '❓', 'trivia', 'Trivia', 0], ['!pricegame', '💲', 'showdown', 'Showdown', 0, '!showdown'], ['!bingo', '🎱', 'bingo', 'Bingo', 0], ['!lotto', '🎟️', 'lotto', 'Lotto', 1]];
+  // 1.99?? dockpol (owner item 29): 🎧 DJ - Pepe's music commands as tiles (each only when Pepe offers it here); a tile INSERTS, never sends.
+  // [command, icon, key, words, trailing space]; STAFF ones only for Pepe's admins / owners of this room (data.mod - Pepe refuses others anyway)
+  var DJ_APPS = [['!find', '🔎', 'dj_find', 'Find a song', 1], ['!play', '➕', 'dj_play', 'Request a song', 1], ['!np', '🎵', 'dj_np', 'Now playing', 0],
+    ['!upnext', '📜', 'dj_upnext', 'Up next', 0], ['!skip', '⏭️', 'dj_skip', 'Vote skip', 0], ['!pause', '⏸️', 'dj_pause', 'Vote pause', 0],
+    ['!resume', '▶️', 'dj_resume', 'Resume', 0], ['!remove', '↩️', 'dj_remove', 'Remove my last', 0]];
+  var DJ_STAFF = [['!dj', '🤖', 'dj_on', 'Auto-DJ on', 0, '!dj on'], ['!dj', '🛑', 'dj_off', 'Auto-DJ off', 0, '!dj off'], ['!shuffle', '🔀', 'dj_shuffle', 'Shuffle', 0],
+    ['!repeat', '🔁', 'dj_repeat', 'Repeat', 0], ['!vol', '🔊', 'dj_vol', 'Volume', 1]];
   var HIDE_MS = 2500, VOICE_KEY = 'patv.dock.voice';
   function store(k, v) { try { if (v === undefined) return W.localStorage.getItem(k); W.localStorage.setItem(k, String(v)); } catch (e) { return null; } return null; }
   function priceText(p) { return p === 0 ? t('free', 'free') : typeof p === 'number' && p > 0 ? t('price', '{n} PAT', { n: fmtN(p) }) : ''; }
@@ -59,8 +68,11 @@
     var popped = false, popPending = false, popWin = null, link = null, lastAlive = 0, lastAudio = 0, tabSeen = 0, popBar = null;
     var pendTimer = null, aliveTimer = null, handTimer = null, bringing = false, resumedInClick = false, gone_ = false, lastSlow = false;
     var autoTimer = null, toastTimer = null, observers = [], selected = null, stageRevision = 0, videoPipSource = null, overBar = false;
-    var toolBtns = {}, peopleInput = null, infoMark = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null;
-    var fullBtn = null, stageMoreBtn = null, showStageBtn = null;
+    var toolBtns = {}, peopleInput = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null, setTopicBtn = null;
+    var fullBtn = null, stageMoreBtn = null, showStageBtn = null, sizeSeg = null, toastHost = null, talkLogins = {};
+    // 1.99?? dockpol (owner item 13): how the last layer was opened - a pointer (mouse / touch) or the keyboard
+    var ptrAt = 0, keyAt = 0;
+    function byPointer() { return ptrAt > keyAt && Date.now() - ptrAt < 2000; }
     function node(id) { return nodes[id] || (nodes[id] = D.getElementById(id)); }
     function on(n, type, fn, capture) { if (!n) return; n.addEventListener(type, fn, !!capture); if (n === W || n.nodeType === 9) listeners.push([n, type, fn, !!capture]); }
     function observe(n, fn, opts) { if (!n || !W.MutationObserver) return; var m = new W.MutationObserver(fn); m.observe(n, opts || { childList: true, subtree: true }); observers.push(m); }
@@ -101,6 +113,66 @@
       var n = el('div', 'ds-toast rmd-toast', message, parent.ownerDocument); stack.appendChild(n);
       clearTimeout(toastTimer); toastTimer = setTimeout(function () { n.remove(); }, 4200);
     }
+    // 1.99?? dockpol (owner item 22): the CHAT card's notices - a small stack at the bottom of the log (above the audio bar, under the menus,
+    // never over the composer; at most 2; role=status, polite). A command's state updates its own toast in place (waiting -> done after
+    // 3 s, a refusal with its reason after 8 s); a sticky one stays until ✕. Hover or focus holds the timer. Memory only: nothing beyond
+    // what the command list under the composer showed. The reveal notice (item 2) and Copied (item 6) use it too.
+    var toasts = [];
+    // (the log's "New messages ↓" pill steps up over the stack - never under a notice)
+    function paintToastH() {
+      var j = node('rmJump'); if (!j || !toastHost) return;
+      var hgt = toasts.length ? toastHost.offsetHeight || 0 : 0; j.style.marginBlockEnd = hgt ? hgt + 4 + 'px' : '';
+    }
+    function toastBox() {
+      var log = chat && chat.querySelector('.rmd-log'); if (!log) return null;
+      if (!toastHost || toastHost.parentNode !== log) {
+        toastHost = el('div', 'rmd-toasts', null, log.ownerDocument); toastHost.setAttribute('role', 'status'); toastHost.setAttribute('aria-live', 'polite');
+        log.appendChild(toastHost);
+      }
+      return toastHost;
+    }
+    function dropToast(rec) {
+      clearTimeout(rec.timer); rec.timer = null;
+      var i = toasts.indexOf(rec); if (i >= 0) toasts.splice(i, 1);
+      var had = rec.node.contains(rec.node.ownerDocument.activeElement);
+      if (rec.node.parentNode) rec.node.remove();
+      if (had && o.relay && o.relay.getInput) { var inp = o.relay.getInput(); if (inp && inp.isConnected) { try { inp.focus({ preventScroll: true }); } catch (e) { inp.focus(); } } }
+      paintToastH();
+    }
+    function armToast(rec) {
+      clearTimeout(rec.timer); rec.timer = null;
+      if (rec.sticky || rec.held || !(rec.ms > 0)) return;
+      rec.timer = setTimeout(function () { dropToast(rec); }, rec.ms);
+    }
+    function chatToast(text, opts) {
+      opts = opts || {};
+      var host = toastBox(); if (!host) { toast(text); return null; }
+      var doc = host.ownerDocument, rec = opts.id ? toasts.filter(function (x) { return x.id === opts.id; })[0] : null;
+      if (!rec) {
+        rec = { id: opts.id || null, timer: null, held: false, node: el('div', 'rmd-ct', null, doc) };
+        rec.words = el('span', 'rmd-ct-t', null, doc); rec.node.appendChild(rec.words);
+        rec.node.appendChild(iconBtn('✕', 'dismiss', 'Dismiss', function () { dropToast(rec); }, 'ds-btn ghost sm rmd-ct-x', doc));
+        var hold = function (yes) { return function () { rec.held = yes; if (yes) { clearTimeout(rec.timer); rec.timer = null; } else armToast(rec); }; };
+        on(rec.node, 'pointerenter', hold(true)); on(rec.node, 'pointerleave', hold(false)); on(rec.node, 'focusin', hold(true)); on(rec.node, 'focusout', hold(false));
+        host.appendChild(rec.node); toasts.push(rec);
+        while (toasts.length > 2) { var old = toasts.filter(function (x) { return !x.sticky && x !== rec; })[0] || toasts[0]; dropToast(old); }
+      }
+      rec.words.textContent = String(text || '');
+      rec.sticky = !!opts.sticky; rec.ms = opts.ms || 4000;
+      rec.node.classList.toggle('rmd-ct-bad', !!opts.bad); rec.node.classList.toggle('rmd-ct-sticky', rec.sticky);
+      armToast(rec); paintToastH();
+      return rec;
+    }
+    // a command from this composer (room-bridge.js opts.onCmd: {id, text, st, ok, replies}) - Pepe's private answers are content: with the
+    // site's room PM on (main.rpm-on) they are lines in the log already (no toast repeats them); with it off each one is a sticky toast
+    function cmdToast(row) {
+      if (!row || !row.text) return;
+      var rpmOn = root.classList.contains('rpm-on'), replies = Array.isArray(row.replies) ? row.replies.filter(Boolean) : [];
+      var pending = row.ok == null && /…$/.test(String(row.st || ''));
+      var st = row.st || (replies.length ? (rpmOn ? t('cmd_private', 'answered privately in the chat') : '') : t('cmd_done', 'done'));
+      chatToast('› ' + row.text + (st ? ' · ' + st : ''), { id: 'cmd:' + row.id, ms: row.ok === false ? 8000 : pending ? 30000 : 3000, bad: row.ok === false });
+      if (!rpmOn) replies.forEach(function (r, i) { chatToast('🔒 ' + r, { id: 'cmd:' + row.id + ':r' + i, sticky: true }); });
+    }
     function changed() {
       ['rmVideo', 'rmPtt', 'rmFeed'].forEach(function (id) {
         var n = node(id); if (!n) return;
@@ -129,21 +201,43 @@
       if (old.restore) old.restore();
       old.host.remove();
       if (old.opener && old.opener.getAttribute && old.opener.getAttribute('aria-haspopup')) old.opener.setAttribute('aria-expanded', 'false');
-      if (focus !== false && old.opener && old.opener.isConnected) old.opener.focus();
+      if (focus !== false && old.opener && old.opener.isConnected) quietFocus(old.opener, old.byPointer);
       if (old.overlay) showTools();
+    }
+    // 1.99?? dockpol (owner item 13): a layer a pointer opened gives focus back to its opener WITHOUT the focus ring (data-rmd-quiet: the
+    // ring would sit around a tapped tool after its sheet closed - outside the button, over the row's rule); the next key or a blur takes
+    // the mark off, so a keyboard user's ring comes back at once. A keyboard-opened layer returns focus with the ring, as before.
+    function quietFocus(n, quiet) {
+      if (quiet && n.setAttribute) {
+        n.setAttribute('data-rmd-quiet', '');
+        var off = function () { n.removeAttribute('data-rmd-quiet'); n.removeEventListener('keydown', off); n.removeEventListener('blur', off); };
+        n.addEventListener('keydown', off); n.addEventListener('blur', off);
+      }
+      try { n.focus({ preventScroll: true }); } catch (e) { n.focus(); }
     }
     function sheet(title, opener, menuLike) {
       closeLayer(false);
-      var place = activeRoot(), doc = place.ownerDocument;
+      var place = activeRoot(), doc = place.ownerDocument, ptr = byPointer();
       var host = el('div', 'rmd-layer ds-scrim sheet', null, doc);
       var box = el('section', menuLike ? 'ds-modal rmd-menu' : 'ds-modal', null, doc);
-      box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', title);
-      var head = el('div', 'ds-modal-h', null, doc); head.appendChild(el('h2', null, title, doc));
-      head.appendChild(button('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm', doc));
+      // (1.99?? dockpol (owner item 27): one sheet header everywhere - the title on one line, ✕ an icon-only 36px button, both centred; a
+      // title's leading emoji is its icon - aria-hidden, the words are the dialog's name)
+      var words = noIcon(title), lead = String(title || '').slice(0, String(title || '').length - words.length).trim();
+      box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', words || title); box.tabIndex = -1;
+      var head = el('div', 'ds-modal-h rmd-sheet-h', null, doc), h2 = el('h2', null, null, doc);
+      if (lead) { var hi = el('span', 'ds-ic', lead, doc); hi.setAttribute('aria-hidden', 'true'); h2.appendChild(hi); h2.appendChild(doc.createTextNode(' ')); }
+      h2.appendChild(doc.createTextNode(words || title)); head.appendChild(h2);
+      head.appendChild(iconBtn('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm rmd-sheet-x', doc));
       box.appendChild(head); host.appendChild(box); place.appendChild(host);
-      layer = { host: host, box: box, head: head, opener: opener || doc.activeElement };
+      layer = { host: host, box: box, head: head, opener: opener || doc.activeElement, byPointer: ptr };
       on(host, 'click', function (e) { if (e.target === host && !foreignModal(doc)) closeLayer(); });
-      setTimeout(function () { if (layer && layer.host === host) { var a = focusable(box); if (a[0]) a[0].focus(); } }, 0);
+      // (a pointer-opened sheet starts on its box - or its main field - never on ✕ with a ring; Tab still goes to the first control)
+      setTimeout(function () {
+        if (!layer || layer.host !== host) return;
+        var a = focusable(box), field = box.querySelector('input[type="search"], input[type="text"], textarea');
+        if (ptr) { if (field && !field.hidden && field.getClientRects().length && box.contains(doc.activeElement) === false) field.focus(); else if (!box.contains(doc.activeElement)) { try { box.focus({ preventScroll: true }); } catch (e) { box.focus(); } } }
+        else if (a[0] && !box.contains(doc.activeElement)) a[0].focus();
+      }, 0);
       return box;
     }
     /** a Dock sheet holding an existing node (moved in, put back where it was on close) */
@@ -161,7 +255,7 @@
       closeLayer(false);
       var place = activeRoot(), doc = place.ownerDocument, box = el('div', 'rmd-menu ds-pop', null, doc);
       box.setAttribute('role', 'menu'); box.setAttribute('aria-label', label || t('extras', 'Add to the chat'));
-      place.appendChild(box); layer = { host: box, box: box, opener: opener, kind: 'menu' };
+      place.appendChild(box); layer = { host: box, box: box, opener: opener, kind: 'menu', byPointer: byPointer() };
       if (opener && opener.closest && opener.closest('.rmd-ov')) layer.overlay = true;
       return box;
     }
@@ -249,6 +343,7 @@
       var a = focusable(layer.box); if (a[0]) a[0].focus();
     }
     function attachDoc(doc) {
+      on(doc, 'pointerdown', function () { ptrAt = Date.now(); }, true); on(doc, 'keydown', function () { keyAt = Date.now(); }, true);
       on(doc, 'keydown', keydown); on(doc, 'focusin', trap); on(doc, 'click', routeExternal, true);
       on(doc, 'click', function (e) { if (!proxying && layer && layer.host.classList.contains('ds-pop') && e.target.isConnected !== false && !layer.host.contains(e.target) && e.target !== layer.opener && !(layer.opener && layer.opener.contains(e.target))) closeLayer(false); });
     }
@@ -398,9 +493,26 @@
     // 1.99ajh dockpop: 🖼️ Picture-in-picture is the STAGE's only (Document PiP where the browser has it, else the video's own PiP for the
     // pad's stream or Pepe's - never the 🎙 mic stage). The chat's Document PiP is gone: it closed with its opener, so it couldn't follow
     // the viewer around the site - ↗️ Chat in its own window does (popWindow). A PiP survives Live / Feed / About; it closes on pagehide.
+    // 1.99?? dockpol (owner item 17): a pinned cam pops out too (its tile ⋯) - with Document PiP the SAME tile node (its video, its WHEP
+    // session, its frog-name label) moves to the window, no new ticket or slot; without it, that tile's own <video> goes picture-in-picture
+    // and the tile stays in the strip. One at a time (a new pop replaces the old); the cam ending or ✕ closes it.
+    function camPipApi(tile) {
+      var v = tile && tile.querySelector && tile.querySelector('video');
+      return !!((W.documentPictureInPicture && W.documentPictureInPicture.requestWindow) || (v && (v.requestPictureInPicture || v.webkitSetPresentationMode)));
+    }
+    function popVideo(v) {
+      if (!v) { toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); return; }
+      try {
+        if (v.requestPictureInPicture) Promise.resolve(v.requestPictureInPicture()).catch(function () { toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); });
+        else if (v.webkitSetPresentationMode) v.webkitSetPresentationMode('picture-in-picture');
+        else toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.'));
+      } catch (e) { toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); }
+    }
     function pop(n) {
       if (!n || pipPending) return;
       redock();
+      var camTile = !!(n.classList && n.classList.contains('cs-tile'));
+      if (camTile && (!W.documentPictureInPicture || !W.documentPictureInPicture.requestWindow)) { popVideo(n.querySelector('video')); return; }
       if (!W.documentPictureInPicture || !W.documentPictureInPicture.requestWindow) {
         var sel = o.stage && o.stage.selection ? o.stage.selection() : null;
         var video = stage && stage.querySelector('video');
@@ -435,8 +547,12 @@
         doc.body.appendChild(main); viewbar(main); attachDoc(doc);
         main.appendChild(el('p', 'rmd-surface-hint', t('pip_hint', 'More actions are available in the pad tab.'), doc));
         current = { kind: 'pip', host: main, moves: [], focus: D.activeElement };
-        current.moves.push(movable(n, main, t('stage_pip', 'The player is in picture-in-picture.')));
+        current.moves.push(movable(n, main, camTile ? t('cam_pip', 'This cam is in picture-in-picture.') : t('stage_pip', 'The player is in picture-in-picture.')));
         on(win, 'pagehide', redock); on(doc, 'visibilitychange', changed); changed();
+        // (a popped cam that ends - closed, or the strip let it go - takes its window with it)
+        if (camTile && W.MutationObserver) {
+          try { var gone = new W.MutationObserver(function () { if (pip === win && !main.contains(n)) { gone.disconnect(); redock(); } }); gone.observe(main, { childList: true, subtree: true }); observers.push(gone); } catch (e) { /* no observer across windows */ }
+        }
       }).catch(function () { pipPending = false; toast(t('pip_unavailable', 'Picture-in-picture isn’t available for this player.')); });
     }
     function hideStage(onOff, focus) {
@@ -474,6 +590,7 @@
       var box = menu(opener, t('cam_menu', 'Cam options'));
       menuItem(box, IC.watch, 'watch_cam', 'Watch on my stage', function () { watchCam(tile); });
       menuItem(box, IC.full, 'fullscreen', 'Fullscreen', function () { full(tile); });
+      if (camPipApi(tile)) menuItem(box, IC.pip, 'pop_cam', 'Pop out (picture-in-picture)', function () { pop(tile); });
       var who = tileWho(tile);
       if (who && o.openCam) menuItem(box, '📷', 'cam_options', 'Cam options…', function () { external(function () { if (opener && opener.isConnected) opener.focus(); o.openCam(who); }); });
       var x = tile.querySelector('.cs-x');
@@ -495,8 +612,43 @@
       });
       return hit;
     }
+    // 1.99?? dockpol (owner item 15): the cam strip's size is a visible control again - [S][M][L][▦] at the end of the cam row, while cams
+    // are pinned - and the choice is remembered for this viewer (localStorage; default Small). Stage ⋯ › Pinned cams mirrors it.
+    var PIN_SIZES = [['small', 'S', 'Small'], ['medium', 'M', 'Medium'], ['large', 'L', 'Large'], ['grid', '▦', 'Grid']], PIN_KEY = 'patv.dock.pins';
+    function pinSize(v) {
+      if (v === undefined) { var s = strip && strip.getAttribute('data-rmd-layout'); return s || 'small'; }
+      if (!PIN_SIZES.some(function (p) { return p[0] === v; })) v = 'small';
+      if (strip) strip.setAttribute('data-rmd-layout', v);
+      root.setAttribute('data-rmd-pins', v);
+      store(PIN_KEY, v);
+      paintPinSize();
+      return v;
+    }
+    function paintPinSize() {
+      if (!sizeSeg) return; var now = pinSize();
+      each(sizeSeg.querySelectorAll('button'), function (b) { var on = b.getAttribute('data-size') === now; b.setAttribute('aria-checked', String(on)); b.tabIndex = on ? 0 : -1; });
+    }
+    function buildSizeSeg() {
+      if (!strip || sizeSeg) return;
+      sizeSeg = el('div', 'ds-seg rmd-pin-size'); sizeSeg.setAttribute('role', 'radiogroup'); sizeSeg.setAttribute('aria-label', t('cam_size', 'Cam size'));
+      PIN_SIZES.forEach(function (p, i) {
+        var b = el('button', 'ds-tab rmd-pin-sz', p[1]); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('data-size', p[0]);
+        var label = t('layout_' + p[0], p[2]); b.setAttribute('aria-label', label); b.title = label;
+        on(b, 'click', function () { pinSize(p[0]); });
+        on(b, 'keydown', function (e) {
+          var k = e.key, d = k === 'ArrowRight' || k === 'ArrowDown' ? 1 : k === 'ArrowLeft' || k === 'ArrowUp' ? -1 : 0; if (!d) return;
+          if (D.documentElement.dir === 'rtl' && (k === 'ArrowRight' || k === 'ArrowLeft')) d = -d;
+          e.preventDefault(); var n = PIN_SIZES[(i + d + PIN_SIZES.length) % PIN_SIZES.length][0]; pinSize(n);
+          var nb = sizeSeg.querySelector('[data-size="' + n + '"]'); if (nb) nb.focus();
+        });
+        sizeSeg.appendChild(b);
+      });
+      strip.appendChild(sizeSeg);
+      pinSize(store(PIN_KEY) || 'small');
+    }
     function decorateCams() {
       if (!strip) return;
+      buildSizeSeg();
       each(strip.querySelectorAll('.cs-tile'), function (tile) {
         if (tile.querySelector('.rmd-tile-more')) return;
         var more = iconBtn(IC.more, 'cam_menu', 'Cam options', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } tileMenu(tile, b); }, 'ds-btn quiet sm rmd-tile-more');
@@ -533,10 +685,17 @@
       if (key !== null && key === holderKey) return;
       holderKey = key;
       holderBox.textContent = '';
+      // 1.99?? dockpol (owner items 5, 21): a holder chip is [🎙][avatar][name + flair] at every width (the 🎙 is the "on the mic" sign phones
+      // lost with the On the mic card; the bar's eq meter is off on iOS and while paused); the flair shows whole when there is room, and
+      // talking() rings the avatar of the one the mic stage says is talking now. Veiled holders: a static 🎙, no flair, never a ring.
       holders.slice(0, max).forEach(function (u) {
-        var chip = el('span', 'rmd-holder'); var content = o.person(u); if (content) chip.appendChild(content);
+        var chip = el('span', 'rmd-holder'), b = el('span', 'rmd-mic-b', '🎙'); b.setAttribute('aria-hidden', 'true'); chip.appendChild(b);
+        var content = o.person(u, { flair: !(u && (u.veil || u.anon)) }); if (content) chip.appendChild(content);
+        chip.appendChild(el('span', 'ds-sr-only', ' ' + t('on_mic_aria', 'on the mic')));
+        chip._login = u && !u.veil && !u.anon && u.login ? String(u.login).toLowerCase() : null;
         holderBox.appendChild(chip); personLine(chip, u);
       });
+      paintTalking();
       if (holders.length > max) {
         var more = button('', 'more_holders', 'More people on the mic', participants, 'ds-btn quiet sm rmd-holder-more');
         more.querySelector('.rmd-label').textContent = '+' + (holders.length - max); more.title = t('plus_on_mic', '+{n} on mic', { n: holders.length - max }); holderBox.appendChild(more);
@@ -545,13 +704,23 @@
       if (nowBox) nowBox.classList.toggle('rmd-has-holders', !!holders.length);
       paintNow();
     }
+    /** the mic stage's program as the viewer gets it (A/V-gated, the same one the stage draws): who is talking NOW (src[].ring) */
+    function talking(p) {
+      var now = {};
+      (p && Array.isArray(p.src) ? p.src : []).forEach(function (s) { if (s && s.ring && s.login && s.kind !== 'cover' && !s.veil) now[String(s.login).toLowerCase()] = 1; });
+      talkLogins = now; paintTalking();
+    }
+    function paintTalking() {
+      if (!holderBox) return;
+      each(holderBox.children, function (c) { if (c.classList && c.classList.contains('rmd-holder')) c.classList.toggle('rmd-talking', !!(c._login && talkLogins[c._login])); });
+    }
     function cmds() { return data && data.room && data.room.cmds || {}; }
     function hasCmd(k) { return !!o.linked && Object.prototype.hasOwnProperty.call(cmds(), k); }
 
     // ── 🗣️ Say it (owner point 13: a voice selector; the voices are the site's own GET /api/voices, loaded by pad-picker.js) ──
     function tts(opener) {
       if (!hasCmd('!say') || !o.relay || !o.relay.sendCmd) return;
-      var box = sheet(t('tts', 'Pepe says it'), opener), doc = box.ownerDocument;
+      var box = sheet(t('tts_title', '🗣️ Pepe says it'), opener), doc = box.ownerDocument;
       layer.kind = 'tts'; layer.price = cmds()['!say'];
       var form = el('form', 'rmd-tts', null, doc), lab = el('label', 'ds-label', t('tts_words', 'What should Pepe say?'), doc);
       var inp = el('input', 'ds-in', null, doc); inp.type = 'text'; inp.maxLength = 295; inp.required = true;
@@ -606,31 +775,71 @@
     }
     function dj() { var n = node('rdj'); return n && !n.classList.contains('hide') ? n : null; }
     function appList() { return APPS.filter(function (a) { return hasCmd(a[0]); }); }
+    function musicOn() { return ['!find', '!play', '!np', '!skip'].some(hasCmd); }
+    // Pepe's admins / owners of this room (his roles for this viewer's login, data.mod) - Pepe still refuses anyone else
+    function djStaff() { var m = data && data.mod; return !!(m && (m.admin === true || (Array.isArray(m.roles) && m.roles.some(function (r) { return r === 'admin' || r === 'owner'; })))); }
+    /** an app tile: icon, name, the command (+ price) - a tap puts the command in the composer and never sends */
+    function appTile(grid, a, doc, after) {
+      var b = el('button', 'ds-btn quiet rmd-app', null, doc); b.type = 'button';
+      var ic = el('span', 'ds-ic', a[1], doc); ic.setAttribute('aria-hidden', 'true'); b.appendChild(ic);
+      var name = t(a[2].indexOf('dj_') === 0 ? a[2] : 'app_' + a[2], a[3]), shownCmd = a[5] || a[0];
+      b.appendChild(el('span', 'rmd-app-n', name, doc));
+      var p = priceText(cmds()[a[0]]); b.appendChild(el('small', 'rmd-app-p', shownCmd + (p ? ' · ' + p : ''), doc));
+      b.setAttribute('aria-label', name + ' (' + shownCmd + ')' + (p ? ', ' + p : ''));
+      on(b, 'click', function () { closeLayer(false); insertCmd(a[2].indexOf('dj_') === 0 && a[5] ? a[5] : a[0], !!a[4]); if (after) after(); });
+      grid.appendChild(b); return b;
+    }
     function apps(opener) {
-      var box = sheet(t('apps', 'Chat apps'), opener), doc = box.ownerDocument;
+      var box = sheet(t('apps_title', '⚡ Chat apps'), opener), doc = box.ownerDocument;
       layer.kind = 'apps';
       var list = appList();
       if (list.length) {
         box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('apps_games', 'Games'), doc));
         var grid = el('div', 'rmd-apps', null, doc);
-        list.forEach(function (a) {
-          var b = el('button', 'ds-btn quiet rmd-app', null, doc); b.type = 'button';
-          var ic = el('span', 'ds-ic', a[1], doc); ic.setAttribute('aria-hidden', 'true'); b.appendChild(ic);
-          b.appendChild(el('span', 'rmd-app-n', t('app_' + a[2], a[3]), doc));
-          var p = priceText(cmds()[a[0]]); b.appendChild(el('small', 'rmd-app-p', a[0] + (p ? ' · ' + p : ''), doc));
-          b.setAttribute('aria-label', t('app_' + a[2], a[3]) + ' (' + a[0] + ')' + (p ? ', ' + p : ''));
-          on(b, 'click', function () { closeLayer(false); insertCmd(a[0], !!a[4]); }); grid.appendChild(b);
-        });
+        list.forEach(function (a) { appTile(grid, a, doc); });
         box.appendChild(grid);
       }
-      var booth = dj();
-      if (booth && !inPip()) {
-        box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('apps_room', 'Room'), doc));
+      // (1.99?? dockpol (owner item 29): ONE 🎧 DJ tile - the booth and Pepe's music commands live in its sheet; one icon, one meaning)
+      if ((musicOn() || dj()) && !inPip()) {
+        box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('apps_music', 'Music'), doc));
         var g2 = el('div', 'rmd-apps', null, doc), b2 = el('button', 'ds-btn quiet rmd-app', null, doc); b2.type = 'button';
-        var ic2 = el('span', 'ds-ic', '🎧', doc); ic2.setAttribute('aria-hidden', 'true'); b2.appendChild(ic2); b2.appendChild(el('span', 'rmd-app-n', t('app_dj', 'DJ booth'), doc));
-        on(b2, 'click', function () { nodeSheet(t('app_dj', 'DJ booth'), booth, opener, 'dj'); }); g2.appendChild(b2); box.appendChild(g2);
+        var ic2 = el('span', 'ds-ic', '🎧', doc); ic2.setAttribute('aria-hidden', 'true'); b2.appendChild(ic2); b2.appendChild(el('span', 'rmd-app-n', t('app_dj_tile', 'DJ'), doc));
+        b2.appendChild(el('small', 'rmd-app-p', t('app_dj_sub', 'songs, queue, skip'), doc));
+        b2.setAttribute('aria-label', t('app_dj_tile', 'DJ'));
+        on(b2, 'click', function () { djSheet(opener); }); g2.appendChild(b2); box.appendChild(g2);
       }
       box.appendChild(el('p', 'ds-fine rmd-apps-f', t('apps_more', 'Type ! in the chat for every command'), doc));
+    }
+    function djSheet(opener) {
+      var box = sheet(t('dj_title', '🎧 DJ'), opener), doc = box.ownerDocument, booth = dj();
+      layer.kind = 'dj';
+      var back = button('‹', 'dj_back', 'Back to chat apps', function () { apps(opener); }, 'ds-btn quiet sm rmd-sheet-back', doc);
+      back.querySelector('.rmd-label').textContent = t('dj_back_short', 'Chat apps');
+      box.insertBefore(back, layer.head.nextSibling);
+      if (booth) {
+        var mark = booth.ownerDocument.createComment('dock dj'); booth.parentNode.insertBefore(mark, booth); box.appendChild(booth); booth.classList.add('rmd-in-sheet');
+        layer.restore = function () { booth.classList.remove('rmd-in-sheet'); if (mark.parentNode) { mark.parentNode.insertBefore(booth, mark); mark.remove(); } };
+      } else box.appendChild(el('p', 'ds-fine rmd-dj-idle', t('dj_idle', 'No music in this room right now'), doc));
+      var list = DJ_APPS.filter(function (a) { return hasCmd(a[0]); });
+      if (list.length) { var grid = el('div', 'rmd-apps', null, doc); list.forEach(function (a) { appTile(grid, a, doc); }); box.appendChild(grid); }
+      var staffList = djStaff() ? DJ_STAFF.filter(function (a) { return hasCmd(a[0]); }) : [];
+      if (staffList.length) {
+        box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('g_staff', 'Staff'), doc));
+        var g3 = el('div', 'rmd-apps', null, doc); staffList.forEach(function (a) { appTile(g3, a, doc); }); box.appendChild(g3);
+      }
+    }
+    // ── 🎡 Spin (owner item 27): the tool row's own spin - one explicit press, through the relay's command path and Pepe's rules ──
+    function spinPop(opener) {
+      if (!hasCmd('!spin') || !o.relay || !o.relay.sendCmd) return;
+      var box = menu(opener, t('spin_title', 'Spin the wheel')), doc = box.ownerDocument;
+      box.classList.add('rmd-confirm'); box.setAttribute('role', 'dialog'); layer.kind = 'spin';
+      var p = priceText(cmds()['!spin']);
+      box.appendChild(el('p', 'rmd-confirm-t', t('spin_confirm', 'Spin the wheel') + (p ? ' · ' + p : ''), doc));
+      var row = el('div', 'rmd-confirm-acts', null, doc);
+      row.appendChild(button('', 'cancel', 'Cancel', function () { closeLayer(); }, 'ds-btn quiet sm', doc));
+      row.appendChild(button('🎡', 'spin_go', 'Spin', function () { if (!hasCmd('!spin')) { closeLayer(); return; } o.relay.sendCmd('!spin'); closeLayer(); }, 'ds-btn primary sm', doc));
+      box.appendChild(row);
+      finishMenu(box, opener);
     }
     function soundboard(opener) {
       var sb = node('rmSb'); if (!sb) return;
@@ -651,7 +860,7 @@
     }
     function tip(opener) {
       if (!o.signed || !W.PATVRoom || !W.PATVRoom.tipModal) return;
-      var box = sheet(t('tip_who', 'Who would you like to tip?'), opener), doc = box.ownerDocument;
+      var box = sheet(t('tip_title', '💸 Tip someone'), opener), doc = box.ownerDocument;
       layer.kind = 'tip';
       var list = el('div', 'rmd-tip-list', null, doc), none = el('p', null, t('tip_none', 'No eligible recipients are in the room.'), doc), drawn = null;
       var find = el('input', 'ds-in rmd-find', null, doc); find.type = 'search'; find.placeholder = t('find', '🔍 Find someone…'); find.setAttribute('aria-label', t('find_aria', 'Find someone'));
@@ -744,7 +953,150 @@
       var story = root.querySelector('.rm-story button.ss-add[data-pad]');
       if (story && !inPip()) menuItem(box, '📲', 'story', 'Add to your story', function () { external(function () { story.click(); }); });
       if (o.relay && o.relay.getInput && data && data.room && data.room.cmds) menuItem(box, '❔', 'commands', 'Commands', function () { insertCmd('!', false); });
+      // 1.99?? dockpol (owner item 30): CREATE - each only where Pepe offers its command here (hasCmd: linked viewers). Poll / Wager / Bounty
+      // are small forms that send the chat command through the relay after an explicit press (exactly as typing it: Pepe's escrow, fees,
+      // minimums and refusals apply); a market opens the site's own create form (its close-time bounds and judge rules live there)
+      var canSend = !!(o.relay && o.relay.sendCmd) && !inPip();
+      var create = [canSend && hasCmd('!poll'), canSend && hasCmd('!wager') && wagerPeople().length > 0, canSend && hasCmd('!bounty'), hasCmd('!market') && !!o.slug];
+      if (create.some(Boolean)) menuGroup(box, 'g_create', 'Create');
+      if (create[0]) menuItem(box, '📊', 'create_poll', 'Poll…', function () { pollSheet(opener); });
+      if (create[1]) menuItem(box, '🤝', 'create_wager', 'Wager…', function () { wagerSheet(opener); });
+      if (create[2]) menuItem(box, '🎯', 'create_bounty', 'Bounty…', function () { bountySheet(opener); });
+      if (create[3]) {
+        var mk = menuItem(box, '📈', 'create_market', 'Market ↗', null, { href: '/markets?pad=' + encodeURIComponent(o.slug) });
+        mk.target = '_blank'; mk.rel = 'noopener'; on(mk, 'click', function () { closeLayer(false); });
+      }
       finishMenu(box, opener);
+    }
+    // ── the Create forms (owner item 30): they build the same line a person would type; the relay sends it, Pepe does the rest ──
+    var CMD_MAX = 300;
+    function formRow(doc, label, field) { var l = el('label', 'ds-label rmd-form-l', label, doc); l.appendChild(field); return l; }
+    function textField(doc, max, ph) { var i = el('input', 'ds-in', null, doc); i.type = 'text'; i.maxLength = max; if (ph) i.placeholder = ph; i.autocomplete = 'off'; return i; }
+    function formFoot(form, doc, icon, key, label) {
+      var err = el('p', 'rmd-err', null, doc); err.setAttribute('role', 'status'); form.appendChild(err);
+      var actions = el('div', 'ds-modal-f', null, doc);
+      actions.appendChild(button('', 'cancel', 'Cancel', function () { closeLayer(); }, 'ds-btn quiet', doc));
+      var go = button(icon, key, label, null, 'ds-btn primary', doc); go.type = 'submit'; actions.appendChild(go); form.appendChild(actions);
+      return { err: err, go: go };
+    }
+    function oneLine(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+    function pollSheet(opener) {
+      if (!hasCmd('!poll')) return;
+      var box = sheet(t('poll_title', '📊 Start a poll'), opener), doc = box.ownerDocument; layer.kind = 'create';
+      var form = el('form', 'rmd-form', null, doc), q = textField(doc, 200, t('poll_q_ph', 'What should the room decide?'));
+      form.appendChild(formRow(doc, t('poll_q', 'Question'), q));
+      var opts = el('div', 'rmd-form-opts', null, doc); form.appendChild(opts);
+      function addOpt() {
+        if (opts.children.length >= 8) return null;
+        var i = textField(doc, 100, t('poll_opt_n', 'Option {n}', { n: opts.children.length + 1 })); i.setAttribute('aria-label', t('poll_opt_n', 'Option {n}', { n: opts.children.length + 1 }));
+        opts.appendChild(i); more.hidden = opts.children.length >= 8; return i;
+      }
+      var more = button('', 'poll_add', '+ Add option', function () { var i = addOpt(); if (i) i.focus(); }, 'ds-btn quiet sm rmd-form-add', doc);
+      addOpt(); addOpt(); form.appendChild(more);
+      var f = formFoot(form, doc, '📊', 'poll_go', 'Start poll'); box.appendChild(form);
+      on(form, 'submit', function (e) {
+        e.preventDefault();
+        var question = oneLine(q.value).replace(/\?+$/, ''), list = [];
+        each(opts.children, function (i) { var v = oneLine(i.value).replace(/,/g, ' ').replace(/\s+/g, ' ').trim(); if (v) list.push(v); });
+        if (!question) { f.err.textContent = t('poll_need_q', 'Write the question.'); q.focus(); return; }
+        if (list.length < 2) { f.err.textContent = t('poll_need_opts', 'Give it at least two options.'); return; }
+        var line = '!poll ' + question + '? ' + list.join(', ');
+        if (line.length > CMD_MAX) { f.err.textContent = t('form_long', 'That is too long for one chat line - shorten it a little.'); return; }
+        if (!hasCmd('!poll')) { closeLayer(); return; }
+        o.relay.sendCmd(line); closeLayer();
+      });
+      setTimeout(function () { if (q.isConnected) q.focus(); }, 0);
+    }
+    /** named Camfrog members a wager can name (never a frog name, a web user, Pepe or the viewer) */
+    function wagerPeople() {
+      var me = data && data.me && data.me.login ? String(data.me.login).toLowerCase() : null, seen = {}, out = [];
+      (data && data.members || []).forEach(function (u) {
+        if (!u || u.veil || u.anon || u.self || u.bot || u.me || u.web || u.acct || !u.login || /^u:/i.test(String(u.login))) return;
+        var k = String(u.login).toLowerCase(); if (k === me || seen[k]) return; seen[k] = 1; out.push(u);
+      });
+      return out;
+    }
+    function personSelect(doc, list, none) {
+      var s = el('select', 'ds-select', null, doc), z = el('option', null, none, doc); z.value = ''; s.appendChild(z);
+      list.forEach(function (u) { var op = el('option', null, String(u.display || u.login) + (u.display && String(u.display).toLowerCase() !== String(u.login).toLowerCase() ? ' (' + u.login + ')' : ''), doc); op.value = String(u.login); s.appendChild(op); });
+      return s;
+    }
+    /** an amount field + presets; the primary button says the amount, and a million or more asks once more (as the duel sheet) */
+    function stakeField(doc, form, go, verbKey, verb, presets, start) {
+      var row = el('div', 'rmd-presets', null, doc), amt = el('input', 'ds-in', null, doc), sure = null;
+      row.setAttribute('role', 'group'); row.setAttribute('aria-label', t('stake', 'Stake'));
+      amt.type = 'text'; amt.inputMode = 'numeric'; amt.value = fmtN(start); amt.setAttribute('aria-label', t('stake_custom', 'Stake in PAT'));
+      function paint() {
+        var n = parseAmount(amt.value), l = go.querySelector('.rmd-label'); sure = sure === n ? sure : null;
+        l.textContent = n ? (sure ? t('stake_sure', 'Yes, stake {n} PAT', { n: fmtN(n) }) : t(verbKey + '_n', verb + ' · {n} PAT', { n: fmtN(n) })) : t(verbKey, verb);
+        go.setAttribute('aria-label', l.textContent); go.title = l.textContent;
+      }
+      presets.forEach(function (n) { var b = el('button', 'ds-btn quiet sm', fmtN(n), doc); b.type = 'button'; on(b, 'click', function () { amt.value = fmtN(n); sure = null; paint(); amt.focus(); }); row.appendChild(b); });
+      on(amt, 'input', function () { sure = null; paint(); });
+      form.appendChild(row); form.appendChild(formRow(doc, t('stake_custom', 'Stake in PAT'), amt)); paint();
+      /** -> the amount once it may go (null: not yet - the field says why) */
+      return function check(err) {
+        var n = parseAmount(amt.value);
+        if (!n) { err.textContent = t('stake_bad', 'Type an amount of PAT, like 5,000 or 5k.'); amt.focus(); return null; }
+        if (n >= 1e6 && sure !== n) { sure = n; paint(); err.textContent = t('stake_big', 'That is {n} PAT - press again to send it.', { n: fmtN(n) }); return null; }
+        return n;
+      };
+    }
+    function wagerSheet(opener) {
+      var people = wagerPeople(); if (!hasCmd('!wager') || !people.length) return;
+      var box = sheet(t('wager_title', '🤝 Offer a wager'), opener), doc = box.ownerDocument; layer.kind = 'create';
+      var form = el('form', 'rmd-form', null, doc), who = personSelect(doc, people, t('wager_pick', 'Pick someone in the room'));
+      form.appendChild(formRow(doc, t('wager_who', 'Against'), who));
+      var terms = textField(doc, 160, t('wager_terms_ph', 'e.g. the Bills win tonight'));
+      var f = { err: null, go: null }, foot = null;
+      var judge = personSelect(doc, people, t('wager_no_judge', 'No judge'));
+      var holder = el('div', null, null, doc); form.appendChild(holder);
+      form.appendChild(formRow(doc, t('wager_terms', 'What you’re betting on'), terms));
+      form.appendChild(formRow(doc, t('wager_judge', 'Judge (optional)'), judge));
+      form.appendChild(el('p', 'ds-fine', t('wager_note', 'Your stake is held until they accept; refunded if they decline or it expires. Minimum 1,000 PAT.'), doc));
+      foot = formFoot(form, doc, '🤝', 'wager_go', 'Offer wager'); f = foot;
+      var tmp = el('div', null, null, doc), check = stakeField(doc, tmp, f.go, 'wager_go', 'Offer wager', [1000, 10000, 50000], 10000);
+      while (tmp.firstChild) holder.appendChild(tmp.firstChild);
+      box.appendChild(form);
+      setTimeout(function () { if (who.isConnected) who.focus(); }, 0);      // (who first - the sheet's own first focus would take the stake)
+      on(form, 'submit', function (e) {
+        e.preventDefault(); f.err.textContent = '';
+        var w = who.value, what = oneLine(terms.value), j = judge.value;
+        if (!w) { f.err.textContent = t('wager_need_who', 'Pick who the wager is with.'); who.focus(); return; }
+        if (!what) { f.err.textContent = t('wager_need_terms', 'Say what you’re betting on.'); terms.focus(); return; }
+        if (j && j.toLowerCase() === w.toLowerCase()) { f.err.textContent = t('wager_judge_self', 'The judge can’t be the person you bet against.'); return; }
+        var n = check(f.err); if (!n) return;
+        if (n < 1000) { f.err.textContent = t('wager_min', 'The smallest wager is 1,000 PAT.'); return; }
+        var line = '!wager @' + w + ' ' + n + ' ' + what + (j ? ' judge @' + j : '');
+        if (line.length > CMD_MAX) { f.err.textContent = t('form_long', 'That is too long for one chat line - shorten it a little.'); return; }
+        if (!hasCmd('!wager')) { closeLayer(); return; }
+        o.relay.sendCmd(line); closeLayer();
+      });
+    }
+    function bountySheet(opener) {
+      if (!hasCmd('!bounty')) return;
+      var box = sheet(t('bounty_title', '🎯 Post a bounty'), opener), doc = box.ownerDocument; layer.kind = 'create';
+      var form = el('form', 'rmd-form', null, doc), what = textField(doc, 160, t('bounty_what_ph', 'e.g. someone sings the whole song on the mic'));
+      form.appendChild(formRow(doc, t('bounty_what', 'What has to happen'), what));
+      var holder = el('div', null, null, doc); form.appendChild(holder);
+      var by = el('select', 'ds-select', null, doc);
+      [['', t('bounty_by_none', 'No deadline')], ['1d', t('bounty_by_1d', 'Within a day')], ['2d', t('bounty_by_2d', 'Within 2 days')], ['7d', t('bounty_by_7d', 'Within a week')]].forEach(function (x) { var op = el('option', null, x[1], doc); op.value = x[0]; by.appendChild(op); });
+      form.appendChild(formRow(doc, t('bounty_by', 'Deadline'), by));
+      form.appendChild(el('p', 'ds-fine', t('bounty_note', 'The reward is held until someone claims it; Pepe’s bounty rules apply.'), doc));
+      var f = formFoot(form, doc, '🎯', 'bounty_go', 'Post bounty');
+      var tmp = el('div', null, null, doc), check = stakeField(doc, tmp, f.go, 'bounty_go', 'Post bounty', [1000, 5000, 25000], 5000);
+      while (tmp.firstChild) holder.appendChild(tmp.firstChild);
+      box.appendChild(form);
+      on(form, 'submit', function (e) {
+        e.preventDefault(); f.err.textContent = '';
+        var w = oneLine(what.value); if (!w) { f.err.textContent = t('bounty_need', 'Say what has to happen.'); what.focus(); return; }
+        var n = check(f.err); if (!n) return;
+        var line = '!bounty ' + w + ' ' + n + (by.value ? ' by ' + by.value : '');
+        if (line.length > CMD_MAX) { f.err.textContent = t('form_long', 'That is too long for one chat line - shorten it a little.'); return; }
+        if (!hasCmd('!bounty')) { closeLayer(); return; }
+        o.relay.sendCmd(line); closeLayer();
+      });
+      setTimeout(function () { if (what.isConnected) what.focus(); }, 0);
     }
     // ── 👥 Participants (owner point 29): ONLY the people card ──
     function participants(opener, after) {
@@ -754,11 +1106,9 @@
         var box = sheet(t('participants_n', 'In the room · {n}', { n: peopleCount() }), opener);
         layer.kind = 'participants';
         var mark = D.createComment('people dock'); card.parentNode.insertBefore(mark, card); box.appendChild(card); card.classList.add('rmd-side-open');
-        // (the freshness note's ℹ️ by the title: its words are the title's description - the sheet opens on ✕, not on the note)
-        if (infoMark && !infoMark.hidden && layer.head) {
-          var i2 = infoMark.cloneNode(true), h2 = layer.head.querySelector('h2'); i2.classList.add('rmd-info-h'); i2.setAttribute('tabindex', '-1'); i2.removeAttribute('role'); i2.setAttribute('aria-hidden', 'true'); h2.appendChild(i2);
-          try { h2.setAttribute('aria-description', infoMark.title || ''); } catch (e) { /* older engines */ }
-        }
+        // (1.99?? dockpol (owner item 19): the freshness note is the title's tooltip and description - no ℹ️ to wrap or tap)
+        var note = txt(node('rmListNote')), h2 = layer.head && layer.head.querySelector('h2');
+        if (h2 && note) { h2.title = note; try { h2.setAttribute('aria-description', note); } catch (e) { /* older engines */ } }
         layer.restore = function () { card.classList.remove('rmd-side-open'); if (mark.parentNode) { mark.parentNode.insertBefore(card, mark); mark.remove(); } };
         if (typeof after === 'function') after();
       });
@@ -775,9 +1125,9 @@
     function decoratePeople() {
       var card = node('rmPplCard'); if (!card || card.__rmd) return;
       card.__rmd = true; card.classList.add('rmd-people');
-      var h = node('pplH'), note = node('rmListNote');
-      infoMark = el('span', 'rmd-info', 'ℹ️'); infoMark.tabIndex = 0; infoMark.setAttribute('role', 'note');
-      if (h) h.appendChild(infoMark);
+      var note = node('rmListNote'), n0 = node('rmPplN');
+      // (1.99?? dockpol (owner item 19): one line - IN THE CHAT ROOM [n]; the count is a badge, the freshness note the heading's tooltip)
+      if (n0) n0.classList.add('rmd-count');
       peopleInput = el('input', 'ds-in rmd-find'); peopleInput.type = 'search'; peopleInput.placeholder = t('find', '🔍 Find someone…'); peopleInput.setAttribute('aria-label', t('find_aria', 'Find someone'));
       peopleInput.setAttribute('aria-controls', 'rmPeople');
       on(peopleInput, 'input', filterPeople);
@@ -786,13 +1136,13 @@
       paintInfo();
     }
     function paintInfo() {
-      var note = node('rmListNote'), s = txt(note);
-      if (!infoMark) return;
-      infoMark.hidden = !s; infoMark.title = s; infoMark.setAttribute('aria-label', s || t('list_note', 'About this list'));
-      try { infoMark.setAttribute('aria-description', s); } catch (e) { /* older engines */ }
-      var n = node('rmPplN'); if (n) n.textContent = String(peopleCount());
+      var note = node('rmListNote'), s = txt(note), h = node('pplH');
+      if (!peopleInput) return;
+      var n = node('rmPplN'); if (n) { n.textContent = String(peopleCount()); n.title = s; }
+      if (h) { if (s) h.title = s; else h.removeAttribute('title'); try { if (s) h.setAttribute('aria-description', s); else h.removeAttribute('aria-description'); } catch (e) { /* older engines */ } }
       if (pplBtn) {
         var c = pplBtn.querySelector('.rmd-count'); if (c) c.textContent = String(peopleCount()); pplBtn.setAttribute('aria-label', t('participants_n', 'In the room · {n}', { n: peopleCount() }));
+        pplBtn.title = s ? t('participants_n', 'In the room · {n}', { n: peopleCount() }) + ' - ' + s : t('participants_n', 'In the room · {n}', { n: peopleCount() });
         // (1.99ajh dockpop: the homepage's sign-in tease has no people to show)
         if (mode === 'preview') pplBtn.hidden = !(data && Array.isArray(data.members) && data.members.length);
       }
@@ -913,7 +1263,9 @@
       tool('tip', '💸', 'tip', 'Tip', tip);
       tool('gif', '🎞️', 'gifs', 'GIFs', function (b) { picker('gifs', b); });
       tool('stickers', '🧸', 'stickers', 'Stickers', function (b) { picker('patv', b); });
-      tool('emoji', '😀', 'emoji', 'Emoji', function (b) { picker('emoji', b); });
+      // (1.99?? dockpol (owner item 27): no 😀 - 🧸's sheet has the Emoji tab; a 🎡 Spin with a confirm in its place)
+      var spinB = tool('spin', '🎡', 'spin_tool', 'Spin the wheel', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } spinPop(b); });
+      spinB.setAttribute('aria-haspopup', 'dialog'); spinB.setAttribute('aria-expanded', 'false');
       tool('apps', '⚡', 'apps', 'Chat apps', apps);
       tool('sb', '🔊', 'soundboard', 'Soundboard', soundboard);
       var say = tool('tts', '🗣️', 'tts', 'Pepe says it', tts); say.setAttribute('data-rmd-tts', '');
@@ -923,8 +1275,8 @@
     function paintTools() {
       if (!toolRow) return;
       var room = data && data.room || {}, relayOn = !!(o.relay && room.relay), pick = !!(W.PATVPadPicker && W.PATVPadPicker.available && W.PATVPadPicker.available(data, o));
-      var show = { tip: !!o.signed && !inPip(), gif: pick && room.gifPicker === true, stickers: pick && relayOn, emoji: pick && relayOn,
-        apps: !!(appList().length || dj()), sb: !!(o.linked && node('rmSb')), tts: hasCmd('!say') };
+      var show = { tip: !!o.signed && !inPip(), gif: pick && room.gifPicker === true, stickers: pick && relayOn, spin: hasCmd('!spin') && !!(o.relay && o.relay.sendCmd),
+        apps: !!(appList().length || dj() || musicOn()), sb: !!(o.linked && node('rmSb')), tts: hasCmd('!say') };
       Object.keys(toolBtns).forEach(function (k) { toolBtns[k].hidden = !show[k]; });
       toolRow.hidden = !Object.keys(show).some(function (k) { return show[k]; });
     }
@@ -946,6 +1298,11 @@
     function padMenu(opener) {
       var box = menu(opener, t('pad_menu_label', 'Pad menu')), doc = box.ownerDocument;
       box.classList.add('rmd-padmenu');
+      // (1.99?? dockpol (owner item 9): while the navbar has stepped aside on a phone, the way back to it is the first item here)
+      if (navOff && navHeader) menuItem(box, '☰', 'site_menu', 'Site menu', function () {
+        setNav(false);
+        var f = navHeader.querySelector('a[href], button'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } }
+      });
       // (1.99ajf dockclean review: the chip that opened this menu already shows the pad's banner, look and badges - the header is the
       // name as words and Follow, not a second identity plate)
       var head = el('div', 'rmd-padmenu-h', null, doc), hn = node('rmTitle') && node('rmTitle').querySelector('.rm-nm');
@@ -1175,9 +1532,9 @@
     function pinsMenu(box, opener) {
       box.textContent = '';
       menuItem(box, '←', 'back', 'Back', function () { closeLayer(false); stageMenu(opener); });
-      var now = strip.getAttribute('data-rmd-layout') || 'small';
-      [['small', 'Small'], ['large', 'Large'], ['grid', 'Grid']].forEach(function (p) {
-        menuItem(box, p[0] === 'grid' ? '▦' : p[0] === 'large' ? '⬛' : '▪️', 'layout_' + p[0], p[1], function () { strip.setAttribute('data-rmd-layout', p[0]); root.setAttribute('data-rmd-pins', p[0]); }, { role: 'menuitemradio', checked: now === p[0] });
+      var now = pinSize();
+      [['small', 'Small', '▪️'], ['medium', 'Medium', '◾'], ['large', 'Large', '⬛'], ['grid', 'Grid', '▦']].forEach(function (p) {
+        menuItem(box, p[2], 'layout_' + p[0], p[1], function () { pinSize(p[0]); }, { role: 'menuitemradio', checked: now === p[0] });
       });
       var clear = strip.querySelector('.cs-clear');
       if (clear) menuItem(box, '✕', 'close_all', 'Close all', function () { external(function () { clear.click(); }); });
@@ -1289,6 +1646,12 @@
         finishMenu(box, opener); return;
       }
       var jump = node('rmHistJump'); if (jump && !jump.hidden) menuItem(box, '📅', 'jump_date', 'Jump to a date', function () { external(function () { jump.click(); }); });
+      // 1.99?? dockpol (owner item 2): the pad's ONE "Show real names" switch (room.ejs roomReveal - the same POST /api/chatlog/seethrough,
+      // the same audit rows and reason prompt), offered exactly when the old banner was; a notice says it once when it changes
+      var rv = o.reveal;
+      if (rv && rv.offered && rv.offered()) {
+        menuItem(box, '🪪', 'show_real_names', 'Show real names', function () { rv.flip(); }, { role: 'menuitemcheckbox', checked: rv.state() === true, sub: t('real_names_sub', 'every reveal is logged'), disabled: !!(rv.busy && rv.busy()) });
+      }
       var dl = o.download;
       if (dl && dl.items) dl.items().forEach(function (it) {
         var mi = menuItem(box, '⬇', 'raw', it.label.replace(/^⬇\s*/, ''), function () { dl.run(it.id, chatMore); });
@@ -1337,7 +1700,10 @@
     function paintTopic() {
       var topic = node('rmTopic'); if (!topic || !topicRow) return;
       var s = txt(topic), can = !!(o.canTopic && o.canTopic());
-      topicRow.hidden = !s && !can;
+      // (1.99?? dockpol (owner item 14): no topic - an editor sees a muted ✏️ Set a topic that opens the same editor; everyone else nothing)
+      topicRow.hidden = false;          // (an empty row is the spacer that keeps the buttons at the end)
+      topic.hidden = !s;
+      if (setTopicBtn) setTopicBtn.hidden = !!s || !can;
       topic.title = s;
       if (can) { topic.setAttribute('role', 'button'); topic.tabIndex = 0; topic.setAttribute('aria-label', t('topic_edit', 'Edit topic: {topic}', { topic: s || '—' })); }
       else if (s) { topic.setAttribute('role', 'button'); topic.tabIndex = 0; topic.setAttribute('aria-label', t('topic_read', 'Topic: {topic}', { topic: s })); }
@@ -1353,8 +1719,9 @@
       var h = node('chatH'); if (!h) return;
       h.classList.add('rmd-chat-h');
       // (1.99ajf dockclean review: the heading's words in their own box that never shrinks - a bare text node broke "CHAT" letter by letter)
+      // (1.99?? dockpol (owner item 14): no visible "CHAT" - the row is the topic and its buttons; the word stays the section's name, sr-only)
       Array.prototype.slice.call(h.childNodes).forEach(function (n) {
-        if (n.nodeType === 3 && String(n.textContent).trim()) { h.insertBefore(el('span', 'rmd-chat-t', String(n.textContent).trim()), n); n.remove(); }
+        if (n.nodeType === 3 && String(n.textContent).trim()) { h.insertBefore(el('span', 'rmd-chat-t ds-sr-only', String(n.textContent).trim()), n); n.remove(); }
       });
       // 1.99ajh dockpop: in its own window the chat's heading is the pad chip (a link to the pad, in a new tab); on the homepage a 📡 link to
       // the chat's pad follows CHAT when that pad isn't the stage's
@@ -1367,6 +1734,10 @@
       var topic = node('rmTopic');
       if (topic) {
         topicRow = el('span', 'rmd-topic-line'); topicRow.appendChild(topic);
+        if (mode !== 'preview') {
+          setTopicBtn = button('✏️', 'set_topic', 'Set a topic', function () { if (o.canTopic && o.canTopic()) manageRoom(setTopicBtn, o.openTopic); }, 'ds-btn quiet sm rmd-set-topic');
+          setTopicBtn.hidden = true; topicRow.appendChild(setTopicBtn);
+        }
         var status = node('rmStatus'); h.insertBefore(topicRow, status || null);
         on(topic, 'click', topicClick); on(topic, 'keydown', topicClick);
       }
@@ -1686,15 +2057,71 @@
     // outside the hidden Live panel); only a fullscreen view goes back
     function tabChanged(tab) {
       var live = tab === 'live'; D.body.classList.toggle('pad-dock-live', live);
+      // (1.99?? dockpol (owner item 11): Feed / About in the same frame as Live - no footer, the same width; body.rmd-dock-pad marks it)
+      D.body.classList.add('rmd-dock-pad');
       if (!live) { closeLayer(false); if (current && current.kind === 'full') redock(); }
     }
     // Feed / About: one slim header row - [pad identity] [● Live · Feed · About] [Follow] [▾ pad menu] (owner point 4)
+    // 1.99?? dockpol (owner item 11): ONE slim 44px card - [the pad chip ▾ (the same component and menu as on Live)] … [Live · Feed · About]
+    // [Follow]; the header's own identity row is the page's h1 for screen readers only. A tab switch starts at the page's top, inside a
+    // short cross-fade where the browser has view transitions (none under reduced motion) - pad-tabs.js asks W.PATVPadSwitch.
     function buildHeader() {
       var hero = node('rmHero'), tabsNav = node('padTabs'), hd = hero && hero.querySelector('.hd');
       if (!hd || !tabsNav) return;
+      hero.classList.add('rmd-slimhead');
       tabsNav.classList.add('ds-seg', 'rmd-seg');
+      each(tabsNav.querySelectorAll('.ptab'), function (b) { var w = txt(b); if (w && !b.getAttribute('aria-label')) b.setAttribute('aria-label', w); });
       var acts = hd.querySelector('.hd-acts'); hd.insertBefore(tabsNav, acts || null);
-      if (acts) acts.appendChild(padChip('rmd-chip-head', true));
+      hd.insertBefore(padChip('rmd-chip-head'), hd.firstChild);
+      W.PATVPadSwitch = function (fn) {
+        try { W.scrollTo(0, 0); } catch (e) { /* old engine */ }
+        var reduce = false; try { reduce = !!(W.matchMedia && W.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { reduce = false; }
+        if (!reduce && D.startViewTransition) { try { D.startViewTransition(fn); return; } catch (e) { /* run it plain */ } }
+        fn();
+      };
+    }
+    // ── 1.99?? dockpol (owner item 9): the navbar steps aside on a phone's Live view - the reader scrolling the chat toward newer lines
+    // (24px of their own scrolling) or typing hides it; scrolling back 48px, a swipe down on the stage, a tap on the stage with its overlay
+    // up, or focus in the navbar brings it back. Never while one of its menus is open, never in fullscreen / picture-in-picture / the
+    // floating chat. It stays in the DOM and the tab order (no hidden / inert): always reachable; the pad menu says ☰ Site menu meanwhile. ──
+    var navHeader = null, navOff = false;
+    function navOk() {
+      var mq = false; try { mq = !!(W.matchMedia && W.matchMedia('(max-width: 760px)').matches); } catch (e) { mq = false; }
+      return mq && D.body.classList.contains('pad-dock-live') && !(current && (current.kind === 'full' || current.kind === 'float')) && !inPip();
+    }
+    function navBusy() { return !!(navHeader && navHeader.querySelector('[aria-expanded="true"], details[open], .open, .show')); }
+    function setNav(off) {
+      off = !!off && navOk() && !navBusy();
+      if (off === navOff) return;
+      navOff = off;
+      if (navHeader) navHeader.style.marginBlockStart = off ? -(navHeader.offsetHeight || 58) + 'px' : '';   // (its own height: the Dock takes it)
+      D.body.classList.toggle('rmd-nav-off', off);
+    }
+    function navSync() { var okNow = navOk(); D.body.classList.toggle('rmd-nav-auto', okNow); if (!okNow) setNav(false); }
+    function navAuto() {
+      each(D.body.children, function (n) { if (!navHeader && n.tagName === 'HEADER') navHeader = n; });
+      var scroll = node('rmScroll'); if (!navHeader || !scroll) return;
+      var userAt = 0, lastTop = null, acc = 0, swipe = null;
+      ['wheel', 'touchstart', 'touchmove', 'keydown'].forEach(function (k) { scroll.addEventListener(k, function () { userAt = Date.now(); }, { passive: true }); });
+      on(scroll, 'scroll', function () {
+        var top = scroll.scrollTop, d = lastTop == null ? 0 : top - lastTop; lastTop = top;
+        if (!navOk() || Date.now() - userAt > 1500 || !d) return;
+        if ((d > 0) !== (acc > 0)) acc = 0;
+        acc += d;
+        if (acc >= 24) { acc = 0; setNav(true); } else if (acc <= -48) { acc = 0; setNav(false); }
+      });
+      var input = o.relay && o.relay.getInput && o.relay.getInput();
+      if (input) on(input, 'focus', function () { setNav(true); });
+      on(navHeader, 'focusin', function () { setNav(false); });
+      if (stage) {
+        on(stage, 'pointerdown', function (e) {
+          if (stage.classList.contains('rmd-controls-on') && !(e.target.closest && e.target.closest('button,a,input,select'))) setNav(false);
+        }, true);
+        // (touch events, not pointer ones: a vertical swipe makes the browser cancel the pointer stream)
+        stage.addEventListener('touchstart', function (e) { var p = e.touches && e.touches[0]; swipe = p ? { y: p.clientY, at: Date.now() } : null; }, { passive: true });
+        stage.addEventListener('touchend', function (e) { var p = e.changedTouches && e.changedTouches[0]; if (swipe && p && p.clientY - swipe.y >= 32 && Date.now() - swipe.at < 1200) setNav(false); swipe = null; }, { passive: true });
+      }
+      on(W, 'resize', navSync); on(D, 'patv:padtab', navSync); navSync();
     }
     function start() {
       if (ready || dead) return;
@@ -1706,10 +2133,7 @@
       if (stage && mode !== 'popout') buildStage();
       if (chat) buildChatHead();
       decoratePeople();
-      if (strip && mode === 'pad') {
-        strip.setAttribute('data-rmd-layout', 'small');
-        observe(strip, decorateCams); decorateCams();
-      }
+      if (strip && mode === 'pad') { observe(strip, decorateCams); decorateCams(); }
       decorateComposer(); attachDoc(D);
       on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
       if (mode === 'pad') on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
@@ -1737,7 +2161,16 @@
       }
       openLink();
       if (mode === 'pad') tabChanged(panel && !panel.hidden ? 'live' : 'feed');
+      if (o.reveal && o.reveal.onChange) o.reveal.onChange(revealNote);
+      if (mode === 'pad') navAuto();
       update(data);
+    }
+    // the reveal switch's one notice (owner item 2): on - the audited words for 5 s; off - 3 s; on after a reload - once; a failure - 8 s
+    function revealNote(ev) {
+      if (!ev) return;
+      if (ev.type === 'on') chatToast(tr('js.pad.veil.toast_on', 'Showing who’s behind frog names on this pad - every reveal is logged.'), { id: 'veil', ms: 5000 });
+      else if (ev.type === 'off') chatToast(tr('js.pad.veil.toast_off', 'Frog names are hidden again.'), { id: 'veil', ms: 3000 });
+      else if (ev.type === 'error') chatToast(ev.text || tr('js.pad.veil.toast_err', 'Couldn’t change it - try again.'), { id: 'veil', ms: 8000, bad: true });
     }
     if (D.readyState === 'loading') on(D, 'DOMContentLoaded', start); else start();
     return {
@@ -1748,7 +2181,9 @@
       popped: function () { return popped; }, popWindow: popWindow, canWindow: canWindow, bringBack: bringBack,
       gone: function (key, fallback) { goneCard(key || 'pop_gone', fallback || 'You signed out or switched accounts in another tab, so this chat window is closed.'); },
       retitle: retitle,
-      destroy: function () { dead = true; stopLink(); redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); }); clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat'); }
+      // 1.99?? dockpol: the chat card's notices, a composer command's state (room-bridge.js onCmd), who the mic stage says is talking
+      toast: function (text, opts) { return chatToast(text, opts); }, cmd: cmdToast, talking: talking,
+      destroy: function () { dead = true; stopLink(); redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); }); clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat', 'rmd-dock-pad', 'rmd-nav-auto', 'rmd-nav-off'); if (W.PATVPadSwitch && mode === 'pad') W.PATVPadSwitch = null; }
     };
   }
   W.PATVPadDock = { init: init };

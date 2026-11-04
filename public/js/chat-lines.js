@@ -74,8 +74,23 @@
     // (wave 2, review fix A-tests-ux-03: a MASKED line carries data-vc - kept out of the ✂️ / 🔊 pickers, which read data-c - and still
     // gets its ⋯: Report, its speaker's Remove my line, a moderator's Hide / Delete; the server checks each by the cursor)
     function cOf(n) { return n.getAttribute('data-c') || n.getAttribute('data-rmc') || n.getAttribute('data-vc'); }
-    function itemsFor(n) {
+    // 1.99?? dockpol (owner items 6, 7): o.dock - the Room Dock's menu also has 📋 Copy text (everyone: a line's own words, never a masked
+    // bar's) and ✂️ Clip this message / 🔊 Clip the audio (chat-clip.js's own flows: the server preview, the confirm card, its rules), so
+    // a line gets a menu even with no history.acts (signed out: Copy only). o.tapOpen - on touch a tap on the line opens it (no ⋯ beside
+    // the words; the ⋯ stays for screen readers). Desktop keeps the hover ⋯ with the same items.
+    var dock = !!o.dock, clip = o.clip || null, tapOpen = !!o.tapOpen;
+    function clipCan(k) { try { return !!(clip && typeof clip[k] === 'function' && clip[k]()); } catch (e) { return false; } }
+    function own(n) { return n.classList.contains('rpm') || n.classList.contains('rb-opt') || n.hasAttribute('data-rpm'); }
+    function extras(n) {
       var out = [];
+      if (!dock || own(n) || !n.classList.contains('line')) return out;
+      if (n.hasAttribute('data-text') && !n.hasAttribute('data-vc') && String(n.getAttribute('data-text') || '').trim()) out.push({ id: 'copy', label: _t('js.pad.chat.copy', '📋 Copy text') });
+      if (n.hasAttribute('data-c') && !n.hasAttribute('data-vc') && clipCan('canQuote')) out.push({ id: 'clip1', label: _t('js.pad.chat.clip_one', '✂️ Clip this message') });
+      if (n.classList.contains('tx') && n.getAttribute('data-tx') && clipCan('canMic')) out.push({ id: 'clipmic', label: _t('js.pad.chat.clip_audio', '🔊 Clip the audio') });
+      return out;
+    }
+    function itemsFor(n) {
+      var out = extras(n);
       if (!acts) return out;
       var rm = n.getAttribute('data-rm');
       if (n.hasAttribute('data-rmc')) {
@@ -84,6 +99,7 @@
         if (acts.purge && rm !== 'purged') out.push({ id: 'purge', label: _t('js.pad.chat.purge', '⛔ Delete for good…'), danger: true });
         return out;
       }
+      if (dock && own(n)) return out;
       if (n.getAttribute('data-own') === '1') out.push({ id: 'remove', label: _t('js.pad.chat.remove_mine', '🗑 Remove my line') });
       else if (acts.report) out.push({ id: 'report', label: _t('js.pad.chat.report', '⚑ Report…') });
       if (acts.hide) out.push({ id: 'hide', label: _t('js.pad.chat.hide', '🙈 Hide line…') });
@@ -91,7 +107,7 @@
       return out;
     }
     function decorate(nodes) {
-      if (!acts) return;
+      if (!acts && !dock) return;
       nodes.forEach(function (n) {
         if (!n || n.nodeType !== 1 || !n.classList.contains('line') && !n.hasAttribute('data-rmc')) return;
         if (!cOf(n) || n.querySelector('.la-btn') || !itemsFor(n).length) return;
@@ -102,6 +118,7 @@
         b.setAttribute('aria-haspopup', 'menu');
         b.setAttribute('aria-expanded', 'false');
         b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); if (pop && pop._btn === b) closeMenu(true); else openMenu(n, b); });
+        if (dock && tapOpen) b.classList.add('la-tap');
         n.classList.add('la');
         n.appendChild(b);
       });
@@ -114,6 +131,7 @@
     function closeMenu(refocus) {
       if (!pop) return;
       var p = pop; pop = null;
+      if (p._line) p._line.removeAttribute('data-la-open');
       document.removeEventListener('pointerdown', p._outside, true);
       document.removeEventListener('keydown', p._keys, true);
       window.removeEventListener('resize', p._shut);
@@ -122,11 +140,11 @@
       if (p._btn) p._btn.setAttribute('aria-expanded', 'false');
       if (refocus && p._btn && p._btn.isConnected) p._btn.focus();
     }
-    function openMenu(n, b) {
+    function openMenu(n, b, sheet) {
       closeMenu(false);
       var items = itemsFor(n);
       if (!items.length) return;
-      var p = el('div', 'ds-pop la-pop');
+      var p = el('div', 'ds-pop la-pop' + (sheet ? ' la-sheet' : ''));
       p.setAttribute('role', 'menu');
       p.setAttribute('aria-label', _t('js.pad.chat.acts', 'Actions for this line'));
       p.style.position = 'fixed';
@@ -138,13 +156,17 @@
         p.appendChild(mi);
       });
       scope.appendChild(p);
-      var r = b.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
-      var vw = document.documentElement.clientWidth, vh = window.innerHeight;
-      var top = r.bottom + 6;
-      if (top + h > vh - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
-      p.style.left = Math.max(8, Math.min(r.right - w, vw - w - 8)) + 'px';
-      p.style.top = Math.max(8, top) + 'px';
+      // (a phone's tap menu is a bottom sheet - pad-dock.css .la-pop.la-sheet - with its line marked while it is open)
+      if (!sheet) {
+        var r = b.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+        var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+        var top = r.bottom + 6;
+        if (top + h > vh - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+        p.style.left = Math.max(8, Math.min(r.right - w, vw - w - 8)) + 'px';
+        p.style.top = Math.max(8, top) + 'px';
+      }
       b.setAttribute('aria-expanded', 'true');
+      if (dock) { p._line = n; n.setAttribute('data-la-open', ''); }
       pop = p;
       function els() { return Array.prototype.slice.call(p.querySelectorAll('[role="menuitem"]')); }
       function focusAt(i) { var bs = els(); if (bs.length) bs[(i + bs.length) % bs.length].focus(); }
@@ -158,7 +180,7 @@
         else if (e.key === 'Home') { e.preventDefault(); focusAt(0); }
         else if (e.key === 'End') { e.preventDefault(); focusAt(-1); }
       };
-      p._outside = function (e) { if (pop === p && !p.contains(e.target) && e.target !== b) closeMenu(false); };
+      p._outside = function (e) { if (pop === p && !p.contains(e.target) && e.target !== b) { if (p._line && p._line.contains(e.target)) { shutLine = p._line; shutAt = Date.now(); } closeMenu(false); } };
       p._shut = function () { closeMenu(false); };
       document.addEventListener('keydown', p._keys, true);
       document.addEventListener('pointerdown', p._outside, true);
@@ -238,7 +260,17 @@
       ['minor', function () { return _t('js.pad.chat.report_minor', 'Involves a minor'); }, function () { return _t('js.pad.chat.report_minor_hint', 'It’s hidden at once and goes straight to PATV’s admins.'); }],
       ['copyright', function () { return _t('js.pad.chat.report_copyright', 'Copyright'); }, function () { return _t('js.pad.chat.report_copyright_hint', 'Goes to PATV’s admins only.'); }],
     ];
+    function copyText(n) {
+      var text = String(n.getAttribute('data-text') || '');
+      function done() { try { if (typeof o.toast === 'function') o.toast(_t('js.pad.chat.copied', 'Copied')); else toast(_t('js.pad.chat.copied', 'Copied'), 'ok'); } catch (e) { /* no notice */ } }
+      var nav = window.navigator || {};
+      if (nav.clipboard && nav.clipboard.writeText) { Promise.resolve(nav.clipboard.writeText(text)).then(done, function () { toast(_t('js.pad.chat.copy_failed', 'Couldn’t copy it.'), 'danger'); }); return; }
+      try { window.prompt(_t('js.pad.chat.copy_prompt', 'Copy the text:'), text); } catch (e) { /* no prompt */ }
+    }
     function run(id, n, b) {
+      if (id === 'copy') { copyText(n); return; }
+      if (id === 'clip1') { if (clip && clip.quoteOne) clip.quoteOne(n, b); return; }
+      if (id === 'clipmic') { if (clip && clip.micOne) clip.micOne(n, b); return; }
       var c = cOf(n);
       if (!c) return;
       if (id === 'report') {
@@ -301,13 +333,31 @@
       }
     }
 
+    // the tap (touch, in the Dock): a tap on a line opens its menu - not on its links, buttons, name, pictures or fields, not while ✂️ Clip
+    // chat is picking lines, not when the tap ended a text selection
+    var shutLine = null, shutAt = 0;
+    function coarse() { try { return !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches); } catch (e) { return false; } }
+    function onTap(e) {
+      if (!tapOpen || !coarse() || e.defaultPrevented) return;
+      var t = e.target; if (!t || !t.closest) return;
+      var n = t.closest('.line'); if (!n || !boxes.some(function (bx) { return bx.contains(n); })) return;
+      if (t.closest('a, button, .who, [role="button"], img, video, input, select, textarea, .mc-btn, .rb-st')) return;
+      if (feed.classList.contains('cc-on')) return;
+      try { var sel = window.getSelection && window.getSelection(); if (sel && String(sel).trim()) return; } catch (x) { /* no selection API */ }
+      if (!itemsFor(n).length) return;
+      if (pop && pop._line === n) { closeMenu(false); return; }
+      if (shutLine === n && Date.now() - shutAt < 600) { shutLine = null; return; }      // (the same tap closed its menu)
+      openMenu(n, n.querySelector('.la-btn') || n, (window.innerWidth || 0) <= 760);
+    }
+    if (tapOpen) boxes.forEach(function (bx) { bx.addEventListener('click', onTap); });
     var mo = new MutationObserver(function (ms) {
-      if (!acts) return;
+      if (!acts && !dock) return;
       var add = [];
       ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, function (x) { if (x.nodeType === 1) add.push(x); }); });
       if (add.length) decorate(add);
     });
     boxes.forEach(function (b) { mo.observe(b, { childList: true }); });
+    if (dock) decorate(all('.line, [data-rmc]'));            // (1.99?? dockpol: the lines already there - acts may never change from null)
 
     return {
       /** Each live answer: what this viewer may do here (history.acts). */
@@ -318,8 +368,10 @@
         actsKey = key; acts = a;
         closeMenu(false);
         strip();
-        if (acts) decorate(all('.line, [data-rmc]'));
+        if (acts || dock) decorate(all('.line, [data-rmc]'));
       },
+      /** 1.99?? dockpol: what chat-clip.js allows changed (its room arrived) - lines that had no item get their ⋯ now */
+      refresh: function () { if (dock) decorate(all('.line, [data-rmc]')); },
       _items: itemsFor, _run: run,
     };
   }

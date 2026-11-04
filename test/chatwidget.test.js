@@ -623,7 +623,7 @@ test("/p/<slug> of a hub pad: <patv-chat> on the Live tab; a ?line= link opens L
   assert.match(r.text, /id="padTab-live"[^>]*aria-selected="true"[^>]*>\s*<span class="pdot"[^>]*><\/span>Live<\/button>/, "labelled Live, selected");
   assert.match(livePanel(await get("/p/hub-pad?tab=feed", U.fan).then((x) => x.text)), / hidden>$/, "?tab=feed still opens the Feed");
   assert.equal(tabsInit(r.text).lineLive, true, "the browser gets lineLive too (pad-tabs.js)");
-  assert.match(r.text, /pad-tabs\.js\?v=9/, "cache-busted");
+  assert.match(r.text, /pad-tabs\.js\?v=10/, "cache-busted");   // 1.99?? dockpol: v10 (the Dock wraps a tab switch)
   const deep = await get("/p/hub-pad?line=42", U.fan);
   assert.match(deep.text, /<patv-chat [^>]*line="42"/);
   assert.doesNotMatch(livePanel(deep.text), / hidden>$/, "?line= opens Live, where the line is");

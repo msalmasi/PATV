@@ -1802,7 +1802,8 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     ...(userId && withMe ? { mnMuted: await require("./mentions").padMuted(userId, R.id).catch(() => false) } : {}),   // 1.99ajn padppl
     mic: mic.map((u) => withTip(pageMic(u))),          // micfollow: proven / since never reach pages
     feed, cursor: at.cursor,
-    ...(opts && opts.program ? { stage_program: await stageProgram(prog, R, userId, L, F) } : {}),
+    // (1.99?? dockpol (owner H5): the homepage's mic stage asks with ?home=1 - the "capture" surface: no cover's Reveal / ✕ / View cam flags)
+    ...(opts && opts.program ? { stage_program: await stageProgram(prog, R, userId, L, F, opts.surface === "capture" ? "capture" : "pad") } : {}),
     // CL3: the pad's chat-history settings as this viewer gets them (the 📜 / 🔍 chip, an open page re-filters on a change);
     // a fresh view hands the page its signed join cursor; `removed` = lines the page may hold whose speaker is hidden now
     history: acts ? Object.assign(CV.historyBlock(V), { acts }) : CV.historyBlock(V),
@@ -2097,8 +2098,11 @@ function register(app, { isBotToken, addUser }) {
     // cheaper answer) and, signed in, the viewer tag `vt` (roompm.tag) the window compares - another account's answer under an open
     // window wipes it (a shared computer, a sign-out or an account switch in another tab). Every other caller's answer is unchanged
     const pop = req.query.pop === "1";
+    // 1.99?? dockpol (owner H5): ?home=1 - the homepage Dock's poll (its mic-follows stage, for a signed-in viewer with access): the same
+    // program as the pad page's, drawn without any cover's Reveal / ✕ / View cam (the homepage never offers them)
+    const home = req.query.home === "1";
     const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1",
-                               { viewer: signed ? req.user : null, jc, rs, rpm, program: !pop, padPage });
+                               { viewer: signed ? req.user : null, jc, rs, rpm, program: !pop, padPage, surface: home ? "capture" : "pad" });
     if (pop && signed && !out.reinit) out.vt = require("./roompm").tag(req.user.userId);
     res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     res.json(lp ? Object.assign(out, { lp: true }) : out);

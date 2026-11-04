@@ -1,6 +1,6 @@
 <!-- views/home.ejs — the functional homepage (home.js). Explainers live on /about. -->
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
-<%- include('layout', { title: 'Public Access Television', user: username }) %>
+<%- locals.dockFragment ? '' : include('layout', { title: 'Public Access Television', user: username }) %>
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const short = (n) => { n = Number(n) || 0; const a = Math.abs(n);
@@ -69,7 +69,16 @@
   const hFX_ = homeDock_ && frontInfo ? PFX_(frontInfo.id) : null;
   const hAV_ = homeDock_ && frontInfo ? PAV_(frontInfo.id, { cls: 'rm-av', fallback: '' }) : '';
   const hBN_ = hLK_ && hLK_.banner ? hLK_.banner : '';
-%>
+  // 1.99?? dockpol: the Dock's init (views/partials/home-dock.ejs + public/js/home-dock.js) - for the page and for GET /?dock=1 (owner H6)
+  const hmdInit_ = !homeDock_ ? null : { front: frontInfo ? { id: frontInfo.id, slug: frontInfo.slug, title: frontInfo.title } : null,
+     chat: room ? { id: room.id, slug: room.slug, name: room.name, onStage: !!roomOnStage } : null, initial: room && (me || roomLive) ? roomLive : null,
+     vt: typeof vt !== 'undefined' ? vt || null : null, signed: !!me, linked: !!(me && me.camfrogUsername), user: me ? me.username : null,
+     stage: { slots: paid, pepeOn: !!st.active, pepeHere: pepeHere_, pepeWhep: st.whep || null, pepeSrc: st.pepe_src || null, manage: !!staff },
+     goLive: '/stage' + (frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : ''),
+     staff: stageAdmin ? { front: '/pads/admin#front', pepe: stageAdmin.admin ? '/admin/pepe#control' : null } : null,
+     nextUp: nextUp_ ? { name: nextUp_.display, title: nextUp_.title || null, at: Number(nextUp_.start_at) } : null,
+     micStage: !!locals.homeMic };   // 1.99?? dockpol (owner H5): the front pad's mic stage for this viewer (home.js homeMic)
+%><% if (locals.dockFragment) { %><%- homeDock_ ? include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) : '' %><% if (homeDock_) { %><script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script><% } %><% } else { %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="/public/js/stage-player.js?v=9"></script>
@@ -79,7 +88,7 @@
 <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
 <script src="/public/js/webrtc-client.js?v=6"></script>
 <script src="/public/js/stage-lowlat.js?v=2"></script>
-<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
+<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=20"></script>
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
@@ -93,8 +102,11 @@
 <link rel="stylesheet" href="/public/css/flair.css?v=4">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-<link rel="stylesheet" href="/public/css/pad-dock.css?v=5">
-<link rel="stylesheet" href="/public/css/home-dock.css?v=1">
+<link rel="stylesheet" href="/public/css/pad-dock.css?v=6">
+<link rel="stylesheet" href="/public/css/home-dock.css?v=2">
+<%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
+<script src="/public/js/stage-mic.js?v=15"></script><%# 1.99?? dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access %>
+<%_ } _%>
 <%_ } _%>
 <style>
   /* G6 polish: main.hm.ds-page (ds width / gutters / font / focus); the old private palette now points at the ds tokens
@@ -471,60 +483,23 @@
 <%_ if (homeDock_) { _%>
   <%# 1.99ajh dockpop review: the Dock is the FIRST thing under the navbar - its video and chat at a glance on a laptop (it sat under the
       stories and Your show cards, which pushed the stage's controls and the composer below the fold) %>
-  <section class="rmd-hm" id="hmDock" aria-label="<%- t('home.dock.aria', { name: frontInfo ? frontInfo.title : t('home.stage.main_stage') }) %>">
-    <%_ if (frontInfo) { _%>
-    <template id="rmdId"><%- include('partials/pad-dock-id', { room: { id: frontInfo.id, name: frontInfo.title }, LK_: hLK_, PFX_: hFX_, avHtml_: hAV_, bnSrc_: hBN_, bnLook_: !!hBN_ }) %></template>
-    <%_ } _%>
-    <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-label="<%- t('home.stage.main_stage') %>">
-      <div class="stabs" id="rmTabs" role="tablist" aria-label="<%- t('home.stage.tabs_aria') %>"></div>
-      <div class="player">
-        <div class="wrap" id="rmVideo"></div>
-        <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> <%- t('home.stage.reconnecting') %></div>
-        <button type="button" class="unmute hide" id="rmStUnmute" aria-label="<%- t('home.stage.unmute') %>"><img src="/public/img/mute-icon.png" alt=""></button>
-        <div class="embed hide" id="rmEmbed"></div>
-      </div>
-      <div class="stcap hide" id="rmCap" aria-label="<%- t('home.stage.cap_aria') %>"></div>
-    </section>
-    <%_ if (room) { _%>
-    <%# the chat card: the chatlog scope is on the card (never on <main>: the me card's .who keeps its own look) %>
-    <section class="card rm-chat chatlog<%= roomOnStage ? '' : ' rmd-other' %>" id="rmChat" aria-labelledby="chatH">
-      <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small></h2>
-      <div class="topic" id="rmTopic"><%= room.topic || '' %></div>
-      <%_ if (me || roomLive) { _%>
-      <div class="rm-audio" id="rmAudioBox"></div>
-      <div class="rmd-log">
-        <div class="feed" id="rmScroll" role="region" tabindex="0" aria-label="<%- t('home.room.feed_aria') %>">
-          <div id="rmFeed" class="feed-log" role="log" aria-live="polite" aria-relevant="additions" aria-label="<%- t('home.room.feed_aria') %>"><p class="muted"><%- t('home.room.loading') %></p></div>
-        </div>
-        <button class="jump" id="rmJump" type="button"><%- t('pad.chat.new') %></button>
-      </div>
-      <%_ if (me && me.camfrogUsername) { _%>
-      <div class="compose hide" id="rmCompose"><div id="rmRelay"></div><div id="rmPtt"></div></div>
-      <%_ } _%>
-      <%_ } else { _%>
-      <div class="tease rmd-tease">
-        <b><%- t('home.room.tease_title') %></b>
-        <p class="muted"><%- t('home.room.n_in_camfrog', { n: room.count }) %><%- room.micCount ? ' · ' + t('home.n_on_mic', { n: room.micCount }) : '' %>. <%- t('home.room.tease_blurb') %></p>
-        <a class="btn primary" href="/login"><%- t('home.sign_in') %></a>
-      </div>
-      <%_ } _%>
-    </section>
-    <div class="rmd-hm-ppl"><section class="card rm-ppl chatlog" id="rmPplCard" aria-labelledby="pplH"><h2 id="pplH"><span class="ht"><%- t('pad.people.h') %></span> <small id="rmPplN"></small></h2><ul class="people" id="rmPeople"></ul></section></div>
-    <%# (1.99ajh dockpop review: a linked viewer has a composer here - their note doesn't say "read-only") %>
-    <template id="hmdAbout"><%- t(me && me.camfrogUsername ? 'home.dock.about_linked' : 'home.room.note', { q: '"' }) %></template>
-    <%_ } _%>
-  </section>
+  <%# 1.99?? dockpol (owner H1): the stories first - a slim card under the navbar; then the Dock grid (owner H4): [stage | chat] then
+      [the coin-op strip | Top Pads] - #hmDock (views/partials/home-dock.ejs) and #stageSide are display: contents inside it, so the
+      front pad's block can be swapped alone (H6) and the wheel keeps its own nodes %>
+  <%_ if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { _%><div class="card hm-stories rmd-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.dock.stories'), next: '/' }) %></div><%_ } _%>
+  <div class="hmd-grid" id="hmdGrid">
+  <%- include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) %>
 <%_ } _%>
-  <% if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
+  <% if (!homeDock_ && typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
 
-  <!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
+  <% if (!homeDock_) { %><!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
   <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
     <div class="gl-txt">
       <h3 id="gsH"><%- t('home.show.title') %></h3>
       <p><%- t('home.show.blurb') %></p>
     </div>
     <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a><a class="btn" href="/p"><%- t('home.pads') %></a></div>
-  </section>
+  </section><% } %>
 
   <!-- ───── main stage ───── -->
 <%_ if (homeDock_) { _%>
@@ -624,6 +599,17 @@
       <% } %>
 <%_ if (homeDock_) { _%>
   </div>
+  </div>
+  <%# 1.99?? dockpol (owner H3): "Your show on PATV" only for a signed-in viewer, after the Dock (signed out: the navbar's Go live) %>
+  <%_ if (me) { _%>
+  <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
+    <div class="gl-txt">
+      <h3 id="gsH"><%- t('home.show.title') %></h3>
+      <p><%- t('home.show.blurb') %></p>
+    </div>
+    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a><a class="btn" href="/p"><%- t('home.pads') %></a></div>
+  </section>
+  <%_ } _%>
 <%_ } else { _%>
       </div>
     </div>
@@ -913,7 +899,7 @@
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
-<script src="/public/js/room-bridge.js?v=26"></script>
+<script src="/public/js/room-bridge.js?v=27"></script>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -1166,19 +1152,12 @@
 </script>
 <% } %>
 <%_ if (homeDock_) { _%>
-<%_ const hmdInit_ = { front: frontInfo ? { id: frontInfo.id, slug: frontInfo.slug, title: frontInfo.title } : null,
-     chat: room ? { id: room.id, slug: room.slug, name: room.name, onStage: !!roomOnStage } : null, initial: room && (me || roomLive) ? roomLive : null,
-     vt: typeof vt !== 'undefined' ? vt || null : null, signed: !!me, linked: !!(me && me.camfrogUsername), user: me ? me.username : null,
-     stage: { slots: paid, pepeOn: !!st.active, pepeHere: pepeHere_, pepeWhep: st.whep || null, pepeSrc: st.pepe_src || null, manage: !!staff },
-     goLive: '/stage' + (frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : ''),
-     staff: stageAdmin ? { front: '/pads/admin#front', pepe: stageAdmin.admin ? '/admin/pepe#control' : null } : null,
-     nextUp: nextUp_ ? { name: nextUp_.display, title: nextUp_.title || null, at: Number(nextUp_.start_at) } : null }; _%>
 <script src="/public/js/chatlog-core.js?v=12"></script>
 <script src="/public/js/dock-link.js?v=1"></script>
-<script src="/public/js/pad-dock.js?v=6"></script>
+<script src="/public/js/pad-dock.js?v=7"></script>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=2"><script src="/public/js/block-sheet.js?v=2"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
-<script src="/public/js/home-dock.js?v=2"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines %>
+<script src="/public/js/home-dock.js?v=3"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99?? dockpol): boot / teardown, the front pad swap, the mic stage %>
 <%_ } _%>
 <% if (tpListen_) { %>
 <script>
@@ -1213,4 +1192,5 @@
     if (window.PATVHomeAudio) get();          // the room widget's own ▶ lights its row too
   })();
 </script>
+<% } %>
 <% } %>

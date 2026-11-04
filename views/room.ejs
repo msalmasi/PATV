@@ -546,7 +546,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=5"><script src="/public/js/dock-link.js?v=1"></script><script src="/public/js/pad-dock.js?v=6"></script><script src="/public/js/pad-picker.js?v=2"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel) %>
+<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=6"><script src="/public/js/dock-link.js?v=1"></script><script src="/public/js/pad-dock.js?v=7"></script><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99?? dockpol: css v6, js v7, picker v3 %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %><%= chatOnly_ ? ' rmd-popout' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <%# 1.99ajf dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
   <% if (!dockOn_) { %><div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div><% } %>
@@ -656,7 +656,7 @@
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
   <script src="/public/js/stage-mic.js?v=15"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker %>
-  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=19"></script>
+  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=20"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
   <script src="/public/js/share-link.js?v=1" defer></script>
@@ -867,13 +867,13 @@
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=4"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-  <script src="/public/js/room-bridge.js?v=26"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99ajn padppl): @mentions insert the PATV name + carry who; v26 (review): the "not the Camfrog user" tag in the @ list %>
+  <script src="/public/js/room-bridge.js?v=27"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99ajn padppl): @mentions insert the PATV name + carry who; v26 (review): the "not the Camfrog user" tag in the @ list; v27 (1.99?? dockpol): opts.onCmd (command toasts) %>
   <link rel="stylesheet" href="/public/css/roompm.css?v=1"><script src="/public/js/pad-roompm.js?v=1"></script><%# 1.99ajd roompm: Pepe's private answers in the chat (PATVRoomPm) %>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
-  <script src="/public/js/chat-clip.js?v=5"></script><%# 1.99aht v5: a !transcripts off bar's 🔊 Clip says it goes up without a caption %>
-  <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=3"></script><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
+  <script src="/public/js/chat-clip.js?v=6"></script><%# 1.99aht v5: a !transcripts off bar's 🔊 Clip says it goes up without a caption; 1.99?? dockpol v6: quoteOne / micOne %>
+  <% if (signedIn || dockOn_) { %><script src="/public/js/chat-lines.js?v=4"></script><% } %><% if (signedIn) { %><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete); 1.99?? dockpol v4: in the Dock for everyone - 📋 Copy text, ✂️ / 🔊 clip one message, a tap opens it on touch %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
   <link rel="stylesheet" href="/public/css/person-sheet.css?v=2"><%# 1.99ajn padppl: the 🚫 Block / ⛔ Ban sheets, folded lines, mention chips, idle 🌐 rows %>
   <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99aid privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
@@ -896,6 +896,7 @@
     // (gone() below); recheck() polls at once (another Dock window saw another account, a sign-out page said so, the window got focus).
     // (review: printed only for the Room Dock - it is the Dock windows' key, nothing else reads it)
     var pageVt = <%- dockOn_ ? JSON.stringify(locals.vt || null).replace(/</g, '\\u003c') : 'null' %>, chatOnly = <%= chatOnly_ ? 'true' : 'false' %>;
+    var dockMode = <%= dockOn_ ? 'true' : 'false' %>;       // 1.99?? dockpol: the Room Dock draws this page (its own reveal switch, log pinning)
     // 1.99ajf dockclean review: the LATEST /live answer (apply() keeps it) - the people list's 🌐 rows, the name autocomplete and the person
     // menu's roster match read the room as it is now (a veil, an Incognito switch or someone leaving reaches them at once)
     var liveData = data;
@@ -934,9 +935,11 @@
       if (u && u.anon) return !!(roomMod && signedIn && !u.self && (u.veil === 'incognito' || u.veil === 'hidden') && u.id && u.alias);   // 1.99ajn padppl: 🚫 Block a frog name
       return !!(roomMod && (roomMod.active() || signedIn) && u && !u.self && !u.anon && (u.login || (roomDock && u.web && u.patv && u.patv.username)));
     }
-    function person(u) {
+    // (1.99?? dockpol (owner item 21): opts.flair - the holder chips show the speaker's flair too; never for a veiled person)
+    function person(u, opts) {
       var n = el('span', 'rmd-person'), who = el('span', 'rmd-person-name');
       n.appendChild(avatar(u)); who.appendChild(name(u));
+      if (opts && opts.flair && CLR && u && !u.veil && !u.anon) { var fl = CLR.flairNode(u, rctx, H); if (fl) who.appendChild(fl); }
       n.appendChild(who); return n;
     }
     // 1.99ajf dockclean (owner point 14): a menu opened from a chat LINE gets the line's person, which carries no 💸 tip (only roster
@@ -1132,15 +1135,28 @@
     // wave 2 (J-18 x the mic stage): ONE toggle per pad for its chat lines AND its stage's cover tiles - its state is mirrored into
     // window.PATVReveal (pad-reveal.js; the mic stage reveals rv covers while it's on and hides them on "Hide again"), what the stage
     // learns (a cover's first ask: on / 409 off) comes back here, and a cover with Reveal offers this bar even with no such line
+    // 1.99?? dockpol (owner item 2): in the Room Dock there is no banner - the switch is the chat ⋯'s "Show real names" (roomReveal below:
+    // offered exactly when the banner was, the same flip(), POST, audit rows and reason prompt) and one notice in the chat card says it
+    // when it changes; the per-line "login · only you can see this" chips stay the per-line disclosure. The legacy view keeps the banner.
+    var roomReveal = null;
     (function () {
       if (!feedEl || !window.fetch || !window.MutationObserver || !scrollEl || !scrollEl.parentNode) return;
-      var on = null, bar = null, busy = false, undo = [], timer = null;
+      var on = null, bar = null, busy = false, undo = [], timer = null, offered = false, hear = [];
       var PR = window.PATVReveal && typeof window.PATVReveal.setState === 'function' ? window.PATVReveal : null;
       function mirror() { if (PR) PR.setState(on); }
+      function emit(type, text) { hear.forEach(function (f) { try { f({ type: type, on: on, text: text || '' }); } catch (e) { /* a listener's own */ } }); }
+      function fail(err) {
+        var msg = _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: err.message });
+        if (dockMode) emit('error', msg); else if (bar) bar.appendChild(el('span', 'veil-chip veil-err', msg));
+      }
+      roomReveal = { offered: function () { return offered; }, state: function () { return on; }, busy: function () { return busy; },
+        flip: function () { flip(); }, onChange: function (f) { if (typeof f === 'function') hear.push(f); } };
       // (review fix MC-1: a Reveal still waiting is one with a cursor - WP-5's "Save as evidence" button wears .veil-reveal's look
       // but has none, and counting it sent an empty batch after every chat line and disabled it while that ran)
       function pending() { return Array.prototype.slice.call(feedEl.querySelectorAll('.veil-reveal[data-reveal]:not([disabled])')); }
       function draw() {
+        offered = true;
+        if (dockMode) { emit('state'); return; }
         if (!bar) { bar = el('div', 'veil-banner'); bar.setAttribute('role', 'status'); scrollEl.parentNode.insertBefore(bar, scrollEl); }
         bar.textContent = '';
         var btn = el('button', 'veil-reveal', on ? _t('js.pad.veil.st_hide', 'Hide again') : _t('js.pad.veil.st_show', 'Show real names'));
@@ -1161,11 +1177,13 @@
         bs.forEach(function (b) { b.disabled = true; });
         busy = true;
         stPost('/api/chatlog/reveal', { room: slug, c: cs, toggle: true }).then(function (d) {
+          var was = on;
           busy = false; on = true; mirror();
           var by = {};
           (d.items || []).forEach(function (o) { by[o.c] = o; });
           bs.forEach(function (b) { var o = by[Number(b.getAttribute('data-reveal'))]; if (o) undo.push(applyReveal(b, o)); else b.disabled = false; });
           draw();
+          if (dockMode && was === null) emit('on');           // (on after a reload: said once per page load)
           if (pending().length && (d.items || []).length) soon();
         }).catch(function (err) {
           busy = false;
@@ -1173,7 +1191,7 @@
           on = false;                        // (409: it's off; anything else: shown as off - never retried on every new line)
           if (err.status === 409) mirror();
           draw();
-          if (err.status !== 409 && bar) bar.appendChild(el('span', 'veil-chip veil-err', _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: err.message })));
+          if (err.status !== 409) fail(err);
         });
       }
       function soon() { if (!timer) timer = setTimeout(batch, 300); }
@@ -1185,8 +1203,9 @@
           if (!on) { undo.splice(0).forEach(function (f) { try { f(); } catch (e) { /* gone */ } }); }
           mirror();
           draw();
+          if (dockMode) emit(on ? 'on' : 'off');
           if (on) soon();
-        }).catch(function (err) { busy = false; draw(); bar.appendChild(el('span', 'veil-chip veil-err', _t('js.pad.veil.reveal_err', 'Couldn’t reveal it: {error}', { error: err.message }))); });
+        }).catch(function (err) { busy = false; draw(); fail(err); });
       }
       if (PR) {
         PR.on(function (s) {
@@ -1207,7 +1226,13 @@
     })();
 
     function nearBottom() { return scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 80; }
-    function toBottom() { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
+    function toBottom() { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; jump.style.display = 'none'; pinned = true; }
+    // 1.99?? dockpol (owner items 3, 12): ONE stick-to-the-end state for the Dock's log. It starts pinned and only the READER's own scrolling
+    // changes it (a scroll at the same box height, within a moment of their wheel / touch / key - the box settling, a reveal growing the
+    // lines, a 🔊 pill, a chip, an image or a font never unpins it); while pinned, anything that grows the log keeps its newest line in
+    // view (the observer below). A reader who scrolled up more than 80px is never moved.
+    var pinned = true;
+    function stickNow() { return dockMode ? pinned || nearBottom() : nearBottom(); }
     // 1.99ii: ?line=<cursor> (a 📣 mention alert, mentions.js) - that chat line, highlighted and scrolled to, while
     // it is still in the live chat (the room keeps its last 200 items). CL8: older than that, scrollback loads the history
     // around it (pad-history.js -> /history?around=), at any age inside this viewer's view
@@ -1221,7 +1246,7 @@
       scrollEl.style.scrollBehavior = 'auto';
       scrollEl.scrollTop += n.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top - scrollEl.clientHeight / 3;
       scrollEl.style.scrollBehavior = '';
-      jump.style.display = 'block';
+      jump.style.display = 'block'; pinned = false;              // (1.99?? dockpol: the linked line stays where it was put)
       return true;
     }
     // CL8: the deep link isn't in the live tail - the history around it (one message for every line this viewer can't see)
@@ -1243,7 +1268,7 @@
     // site takes out (`removed`) just goes. A reader at the bottom stays at the bottom when it shows. Review fix (T3): nor the lines of a
     // backlog answer (noHold - see `behind` by poll()): the audio passed them long ago.
     function revealHeld(n, show) {
-      var stick = nearBottom(), detached = !!(padHist && padHist.detached()), reading = !!(padHist && padHist.reading());
+      var stick = stickNow(), detached = !!(padHist && padHist.detached()), reading = !!(padHist && padHist.reading());
       show();
       if (detached) return;
       if (stick) toBottom(); else if (!reading) jump.style.display = 'block';
@@ -1264,7 +1289,7 @@
         if (first && wantLine) lineFromHistory();
         return;
       }
-      var stick = first || nearBottom();
+      var stick = first || stickNow();
       // CL8: reading back (older lines above, or a jump / deep link) - see pad-history.js
       var reading = !!(padHist && padHist.reading()), detached = !!(padHist && padHist.detached()), added = 0, held = [];
       if (feedEl.firstChild && feedEl.firstChild.tagName === 'P') feedEl.removeChild(feedEl.firstChild);
@@ -1323,6 +1348,7 @@
     }
     function trimLive() { var n = 0; while (feedEl.childNodes.length > 300) { feedEl.removeChild(feedEl.firstChild); n++; } return n > 0; }
     jump.addEventListener('click', function () {
+      pinned = true;
       if (padHist && padHist.reading()) { padHist.backToLive(); return; }
       scrollEl.scrollTop = scrollEl.scrollHeight; jump.style.display = 'none';
     });
@@ -1334,13 +1360,27 @@
     <% if (dockOn_) { %>
     // 1.99ajf dockclean review: the Dock's cards settle after the first lines are drawn (the stage's size, pinned cams, a float or a
     // fullscreen coming back) - a log that was at its newest line stays there when its box changes size
+    // 1.99?? dockpol (owner items 3, 12): ...and when its CONTENT grows after it was drawn (the reveal batch swapping a bar for the words and
+    // adding its chips, chat-clip.js's 🔊 pills, the ⋯ menus, room PM rows, stickers / GIFs, a late font) - the box, the live log and the
+    // older lines are all watched; one re-pin per frame while pinned
     (function () {
+      var userAt = 0, lastCh = -1, queued = false;
+      ['wheel', 'touchstart', 'touchmove', 'keydown', 'pointerdown'].forEach(function (k) { scrollEl.addEventListener(k, function () { userAt = Date.now(); }, { passive: true }); });
+      scrollEl.addEventListener('scroll', function () {
+        var ch = scrollEl.clientHeight;
+        if (ch !== lastCh) { lastCh = ch; if (nearBottom()) pinned = true; return; }     // (the box changed: not the reader)
+        if (nearBottom()) pinned = true;
+        else if (Date.now() - userAt < 1500) pinned = false;
+      });
       if (!window.ResizeObserver) return;
-      var atEnd = true;
-      scrollEl.addEventListener('scroll', function () { atEnd = nearBottom(); });
-      new ResizeObserver(function () {
-        if (atEnd && scrollEl.clientHeight && !wantLine && !(padHist && (padHist.reading() || padHist.detached()))) toBottom();
-      }).observe(scrollEl);
+      var ro = new ResizeObserver(function () {
+        if (queued) return; queued = true;
+        (window.requestAnimationFrame || setTimeout)(function () {
+          queued = false;
+          if (pinned && scrollEl.clientHeight && !wantLine && !(padHist && (padHist.reading() || padHist.detached()))) toBottom();
+        });
+      });
+      [scrollEl, feedEl, olderEl].forEach(function (n) { if (n) ro.observe(n); });
     })();
     <% } %>
     // 1.99dx: the chat fills in while its tab is hidden (no height to scroll) - land on the newest line when it shows
@@ -1521,9 +1561,13 @@
     // CL6: the ⋯ on each line (public/js/chat-lines.js -> chatlogmod.js) - what it offers comes with each answer (history.acts); a line
     // taken down from here leaves this page at once
     // (CL8: scrollback's older lines get the ⋯ too - they're the archive's; CL9: and the 🔍 search results, made here first)
+    // 1.99?? dockpol (owner items 6, 7): in the Dock the menu also offers 📋 Copy text and one message's ✂️ / 🔊 clip (chat-clip.js's own
+    // flows), every line that has an item gets it (signed out: Copy), and on touch a tap on the line opens it (no ⋯ beside the words)
     var searchHits = el('div', 'srch-hits');
     var chatLines = window.PATVChatLines ? PATVChatLines.init({ feed: feedEl, more: [olderEl, searchHits], scroller: scrollEl, slug: slug, jc: function () { return jcTok; },
-                                                                onGone: function (c) { dropRemoved([c]); } }) : null;
+                                                                onGone: function (c) { dropRemoved([c]); },
+                                                                dock: dockMode, tapOpen: dockMode, clip: chatClip,
+                                                                toast: function (s) { if (roomDock && roomDock.toast) roomDock.toast(s, { ms: 2500 }); } }) : null;
     // CL8: scrollback - older lines above the live log, 📅 jump to a date, ?line= deep links past the live tail (pad-history.js ->
     // GET /api/rooms/:slug/history); only while the history block says this viewer may scroll back (hist.scroll)
     var padHist = window.PATVPadHistory ? PATVPadHistory.init({
@@ -1579,6 +1623,9 @@
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
       feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; }
       <% if (dockOn_) { %>, people: acPeople, avatar: avatar,
+      // 1.99?? dockpol (owner item 22): a command's acknowledgement is a toast in the chat card that goes away by itself (the list under the
+      // composer is off); Pepe's private answers stay content - room PM lines in the log, or (room PM off) a toast that stays until ✕
+      onCmd: function (row) { if (roomDock && roomDock.cmd) roomDock.cmd(row); },
       // 1.99ajh dockpop review (privacy): every line and command says which account this page was made for - the site refuses one for
       // another account (this browser signed in as someone else since: 409), and the window re-checks at once
       vt: pageVt, onAccount: function () { recheck(); },
@@ -1586,7 +1633,7 @@
         ? "_t('js.pad.dock.placeholder_web', 'Message as 🌐 {name} (web)…', { name: " + JSON.stringify(String(user)).replace(/</g, '\\u003c') + " })"
         : "_t('js.pad.dock.placeholder', 'Message {room}…', { room: " + JSON.stringify(String(room.camfrogName || room.name)).replace(/</g, '\\u003c') + " })" %><% } %> }) : null;
     // 1.99ajd roompm: Pepe's private answers to your typed commands, in this chat, only for you (pad-roompm.js; rpm in /live)
-    var roomPm = window.PATVRoomPm ? PATVRoomPm.init({ feed: feedEl, line: item, nearBottom: nearBottom, toBottom: toBottom, root: document.querySelector('main.rm'),
+    var roomPm = window.PATVRoomPm ? PATVRoomPm.init({ feed: feedEl, line: item, nearBottom: stickNow, toBottom: toBottom, root: document.querySelector('main.rm'),
       anchor: function () { return roomRelay && roomRelay.anchor ? roomRelay.anchor() : null; }, hist: function () { return padHist; } }) : null;
     // 1.99aid (privacy controls, round 3 - F4; owner Q8): a moderator who may view hidden cams here (room.livecams.reveal: PATV staff anywhere,
     // the pad's owner and the room's mods in their own pad) gets "👁 View a cam by Camfrog login (logged)" under the people list - the
@@ -2066,13 +2113,19 @@
       safe('cvlogin', function () { cvLogin(!!(liveCams && liveCams.reveal === 1)); });       // 1.99aid (privacy controls, round 3 - F4)
       safe('stagemic', function () {
         if (!window.PATVPadStage || !PATVPadStage.setMic) return;
-        var showMic = function (p) { PATVPadStage.setMic(p); };
+        // (1.99?? dockpol (owner item 5): the same A/V-gated program rings the talking holder's chip in the bottom bar)
+        var showMic = function (p) { PATVPadStage.setMic(p); if (roomDock && roomDock.talking) roomDock.talking(p); };
         if (window.PATVAvSync) window.PATVAvSync.gateProgram(slug, d.stage_program || null, showMic);
         else showMic(d.stage_program || null);
       });   // micfollow: 🎙 On the mic; privacy and management still apply immediately
       safe('feed', function () { addFeed(d.feed, first, late); });      // 1.99ahm: (T3) a backlog's grab / drop lines are not held
       safe('rpm', function () { if (roomPm) roomPm.update(d); });        // 1.99ajd roompm: after the lines (an answer goes below its echo)
-      safe('clip', function () { if (chatClip) chatClip.update(d); });
+      safe('clip', function () {
+        var was = chatClip && chatClip.canQuote ? String(chatClip.canQuote()) + chatClip.canMic() : '';
+        if (chatClip) chatClip.update(d);
+        // (1.99?? dockpol: what this viewer may clip changed - the line menus pick it up)
+        if (chatLines && chatLines.refresh && chatClip && chatClip.canQuote && String(chatClip.canQuote()) + chatClip.canMic() !== was) chatLines.refresh();
+      });
       cursor = Math.max(cursor, d.cursor);
       // 1.99acb: your room line the site named but this answer didn't carry - ask again from just before it (once per line)
       var miss = roomRelay && roomRelay.refetch ? roomRelay.refetch() : 0;
@@ -2191,6 +2244,7 @@
       mentionItems: signedIn ? mentionItems : null,     // 1.99ajn padppl: 🔔 the chat ⋯'s mention items
       person: person, openPerson: openPerson, openTopic: openTopic, canTopic: canTopic, stage: window.PATVPadStage,
       download: padDl, openCam: function (who) { snapOpen(who); },   // 1.99ajf dockclean: the chat ⋯'s ⬇ items, a pinned cam's Cam options
+      reveal: roomReveal,                                              // 1.99?? dockpol (owner item 2): the chat ⋯'s Show real names
       wake: function () { if (!roomVisible()) { behind = true; return; } schedule(); }
     });
     <% } %>
@@ -2317,7 +2371,7 @@
     <% } %>
     <% if (dockOn_) { %><section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section><% } %>
   </section>
-  <script src="/public/js/pad-tabs.js?v=9"></script>
+  <script src="/public/js/pad-tabs.js?v=10"></script>
   <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=5" defer></script><% } %>
   <% if (typeof roomVault !== 'undefined' && roomVault) { %><script src="/public/js/pad-vault.js?v=2" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>

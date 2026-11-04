@@ -567,7 +567,7 @@
     var feed = el('ul', 'rb-cmdfeed'); feed.setAttribute('aria-live', 'polite'); feed.setAttribute('aria-label', _t('js.pad.relay.your_commands', 'Your commands'));
     form.appendChild(lab); form.appendChild(wrap); form.appendChild(count); form.appendChild(btn);
     host.appendChild(offBar); host.appendChild(form); host.appendChild(note); host.appendChild(hint); host.appendChild(mine); host.appendChild(feed);
-    var last = '', lastJs = [], cmds = null, local = [], acIdx = -1, acItems = [];
+    var last = '', lastJs = [], cmds = null, local = [], acIdx = -1, acItems = [], localSeq = 0;
     // 1.99ye: the outbox - {cid, text, at, st: queue|posting|wait|sent|failed, id, off, why, code, node, stEl, settled}
     var outbox = [], meU = null, busy = false, backoff = 0, retryTimer = null, noteTimer = null;
     var optimistic = !!feedEl;
@@ -693,13 +693,29 @@
       else if (e.key === 'Escape') { closeAc(); }
     });
 
+    // 1.99?? dockpol (owner item 22): opts.onCmd(row) - the Room Dock shows each command's state as a toast that goes away by itself
+    // ({id, text, st, ok, replies}: called when a row appears or changes); the list under the composer is then hidden. The rows a page
+    // had before it loaded are noted, never re-announced.
+    var onCmd = typeof opts.onCmd === 'function' ? opts.onCmd : null, cmdSeen = null;
+    if (onCmd) { feed.hidden = true; feed.classList.add('hide'); }
     function renderFeed(js) {
       feed.textContent = '';
       var rows = local.concat(js.filter(function (x) { return x.kind === 'cmd'; }).map(function (j) {
         var sb = /^!(?:sb|soundboard)(?:\s|$)/i.test(j.text || '');
         var st = sb ? clipStatus(j) : j.state !== 'done' ? _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') : (j.ok ? (j.replies && j.replies.length ? '' : (j.msg || _t('js.pad.relay.done', 'done'))) : _t('js.pad.relay.not_run', 'not run — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') }));
-        return { at: j.at, text: j.text, st: st, ok: j.state === 'done' ? j.ok : null, replies: j.replies || [] };
+        return { id: j.id != null ? 'j' + j.id : 'a' + j.at, at: j.at, text: j.text, st: st, ok: j.state === 'done' ? j.ok : null, replies: j.replies || [] };
       })).sort(function (a, b) { return a.at - b.at; }).slice(-4);
+      if (onCmd) {
+        var first = cmdSeen === null; if (first) cmdSeen = {};
+        rows.forEach(function (r) {
+          var id = r.id || 'a' + r.at, sig = JSON.stringify([r.st, r.ok, r.replies]);
+          if (cmdSeen[id] === sig) return;
+          cmdSeen[id] = sig;
+          if (first && r.ok != null) return;                  // (done before this page: not news; one still waiting shows, and so will its answer)
+          try { onCmd({ id: id, text: r.text, st: r.st, ok: r.ok, replies: r.replies.slice() }); } catch (e) { /* the page's own */ }
+        });
+        return;
+      }
       rows.forEach(function (r) {
         var li = el('li', 'rb-cmd' + (r.ok === false ? ' bad' : ''));
         var head = el('div', 'rb-cmd-h');
@@ -855,14 +871,14 @@
       post({ text: text }).then(function (x) {
         if (dead) return;                                                // (an answer for a page that wiped itself shows nothing)
         var d = x.d || {};
-        if (d.ok && d.local) { local.push({ at: Date.now(), text: text, st: '', ok: true, replies: [d.reply || ''] }); local = local.slice(-2); renderFeed(lastJs); return; }
+        if (d.ok && d.local) { local.push({ id: 'l' + (++localSeq), at: Date.now(), text: text, st: '', ok: true, replies: [d.reply || ''] }); local = local.slice(-2); renderFeed(lastJs); return; }
         if (d.ok) return;
-        local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: d.error || _t('js.pad.relay.refused', 'refused') }), ok: false, replies: [] });
+        local.push({ id: 'l' + (++localSeq), at: Date.now(), text: text, st: _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: d.error || _t('js.pad.relay.refused', 'refused') }), ok: false, replies: [] });
         local = local.slice(-2); renderFeed(lastJs);
         account(x);
       }, function () {
         if (dead) return;
-        local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.unreachable', 'couldn\'t reach the site'), ok: false, replies: [] });
+        local.push({ id: 'l' + (++localSeq), at: Date.now(), text: text, st: _t('js.pad.relay.unreachable', 'couldn\'t reach the site'), ok: false, replies: [] });
         local = local.slice(-2); renderFeed(lastJs);
       });
     }

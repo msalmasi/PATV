@@ -10,8 +10,10 @@ test('Live framing follows the actual tab; no pad bar or drawer, the identity is
   const h=harness();assert.equal(h.doc.body.classList.contains('pad-dock-live'),true);
   assert.equal(h.doc.getElementById('rmdBar'),null);assert.equal(h.doc.getElementById('rmdDrawer'),null);
   const chip=h.stage.querySelector('.rmd-ov-top .rmd-chip');assert.ok(chip,'the pad chip sits in the overlay\'s top bar');assert.match(chip.textContent,/Night Orchard/);assert.equal(chip.getAttribute('aria-haspopup'),'menu');
-  // Feed / About: the tabs are a segment inside the header's one row, with the pad menu's ▾ at its end
-  assert.equal(h.tabsNav.parentNode===h.hero.querySelector('.hd'),true);assert.ok(h.tabsNav.classList.contains('ds-seg'));assert.ok(h.hero.querySelector('.hd-acts .rmd-chip-head'));
+  // Feed / About: the tabs are a segment inside the header's one row; 1.99?? dockpol (owner item 11): the row STARTS with the same pad chip
+  // (identity + ▾, the pad menu) as Live's stage card, and the header's own identity row is the page's h1 for screen readers only
+  assert.equal(h.tabsNav.parentNode===h.hero.querySelector('.hd'),true);assert.ok(h.tabsNav.classList.contains('ds-seg'));
+  const headChip=h.hero.querySelector('.hd > .rmd-chip-head');assert.ok(headChip);assert.equal(h.hero.querySelector('.hd').firstChild===headChip,true);assert.match(headChip.textContent,/Night Orchard/);assert.ok(h.hero.classList.contains('rmd-slimhead'));
   for(const tab of ['feed','about','live']){h.doc.dispatchEvent(new Event('patv:padtab',{detail:{tab}}));assert.equal(h.doc.body.classList.contains('pad-dock-live'),tab==='live');}
   h.controller.destroy();assert.equal(h.doc.body.classList.contains('pad-dock-live'),false);assert.equal(harness({feed:true}).doc.body.classList.contains('pad-dock-live'),false);
 });
@@ -268,10 +270,13 @@ test('Participants holds ONLY the people card; a person menu or camera popup ope
   }
   h.controller.destroy();
 });
-test('the people card: a find field filters by the name shown, the freshness note becomes an ℹ️, the count includes web users',()=>{
+// (1.99?? dockpol (owner item 19): no ℹ️ that wraps onto a line of its own - the freshness note is the heading's and the count badge's tooltip)
+test('the people card: a find field filters by the name shown, the freshness note is the heading\'s tooltip (no ℹ️), the count includes web users',()=>{
   const h=harness(),find=h.ppl.querySelector('.rmd-find');assert.ok(find);find.value='wil';find.dispatchEvent(new Event('input'));
   assert.deepEqual(h.doc.getElementById('rmPeople').children.map(li=>li.hidden),[true,false,true]);
-  const info=h.ppl.querySelector('.rmd-info');assert.match(info.title,/participant list/);assert.ok(h.doc.getElementById('rmListNote').classList.contains('ds-sr-only'));
+  assert.equal(h.ppl.querySelector('.rmd-info'),null,'no ℹ️');const pplH=h.doc.getElementById('pplH');assert.match(pplH.title,/participant list/);assert.match(pplH.getAttribute('aria-description'),/participant list/);
+  assert.ok(h.doc.getElementById('rmPplN').classList.contains('rmd-count'),'the count is a badge');assert.match(h.doc.getElementById('rmPplN').title,/participant list/);
+  assert.ok(h.doc.getElementById('rmListNote').classList.contains('ds-sr-only'));
   const d=F.initial();d.web=[{web:true,display:'quill-fable',patv:{username:'quill-fable'}}];h.controller.update(d);assert.equal(h.doc.getElementById('rmPplN').textContent,'7');
 });
 test('privacy updates dismiss the original person menu without dismissing it on ordinary polls',()=>{
@@ -526,7 +531,9 @@ test('the homepage (preview mode): the pad chip is a LINK, the stage ⋯ by role
 test('one meaning per icon: the Dock\'s menu items and buttons never use one emoji for two different things',()=>{
   const s=require('fs').readFileSync(require('path').join(__dirname,'..','public','js','pad-dock.js'),'utf8');
   const IC={};for(const m of /var IC = \{([^}]*)\}/.exec(s)[1].matchAll(/(\w+): '([^']*)'/g))IC[m[1]]=m[2];
-  const SAME=[['close','close_cam','close_all','pop_close'],['redock','return_cam','pop_back'],['cam_menu','stage_menu','chat_menu'],['about','chat_about'],['settings','front_settings'],['clip','clip_secs','clip_stage']];
+  // (1.99?? dockpol: ✕ also dismisses a chat notice; 🖼️ pops a pinned cam out too; a Create item and its form's send button share their icon)
+  const SAME=[['close','close_cam','close_all','pop_close','dismiss'],['redock','return_cam','pop_back'],['cam_menu','stage_menu','chat_menu'],['about','chat_about'],['settings','front_settings'],['clip','clip_secs','clip_stage'],
+    ['pip_stage','pop_cam'],['create_poll','poll_go'],['create_wager','wager_go'],['create_bounty','bounty_go']];
   const group=k=>{const g=SAME.find(x=>x.includes(k));return g?g[0]:k;},by={};
   for(const m of s.matchAll(/\b(?:menuItem|iconBtn|button|tool)\(\s*(?:[a-z]+,\s*)?(IC\.\w+|'[^']*')\s*,\s*'(\w+)'/g)){
     let ic=m[1].startsWith('IC.')?IC[m[1].slice(3)]:m[1].slice(1,-1);ic=String(ic||'').replace(/️/g,'');if(!ic||ic==='•'||m[2]==='raw')continue;

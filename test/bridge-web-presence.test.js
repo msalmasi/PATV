@@ -95,7 +95,7 @@ test("bridge.js: only the pad page's own /live polls (?pad=1) note signed-in vie
   assert.ok(route.indexOf("padaccess\").full(req.user, R.id)") < route.indexOf('require("./padweb").note('), "noted after the members-tier check");
   assert.ok(route.indexOf("bridgeOk(R.id)") < route.indexOf('require("./padweb").note('), "and after the Prime Time Plus bridge check");
   assert.match(route, /const padPage = req\.query\.pad === "1";\s*if \(signed && padPage\) require\("\.\/padweb"\)\.note\(/, "the homepage panel / owner / settings polls are not noted");
-  assert.match(route, /program: !pop, padPage \}\);/);   // (1.99ajh dockpop: ?pop=1, the chat window, has no mic-stage program)
+  assert.match(route, /program: !pop, padPage, surface: home \? "capture" : "pad" \}\);/);   // (1.99ajh dockpop: ?pop=1, the chat window, has no mic-stage program)
   assert.match(src, /if \(opts && opts\.padPage && userId && require\("\.\/paddock"\)\.current\(\)\.cfg\.mode !== "off"\) \{/);
   // (1.99ajh dockpop: a re-check asks once without &wait=1 - the long-poll and the re-check both carry pad=1)
   assert.match(fs.readFileSync(path.join(repo, "views/room.ejs"), "utf8"), /var wait = quick \? '' : '&wait=1'; quick = false;[\s\S]{0,600}'\?after=' \+ cursor \+ wait \+ '&pad=1'/, "the pad page asks with pad=1");

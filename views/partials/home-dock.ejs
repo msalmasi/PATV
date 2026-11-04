@@ -1,0 +1,48 @@
+<%# 1.99?? dockpol (owner H6): the homepage's Room Dock block - its stage card and its chat card - as views/home.ejs renders it, and alone for
+    GET /?dock=1 (home.js), so an open homepage can swap to the CURRENT front pad (public/js/home-dock.js). Locals: the home view's own
+    (t, frontInfo, the front pad's look hLK_ / hFX_ / hAV_ / hBN_, live, room, roomOnStage, me, roomLive). data-rmd-acc / data-rmd-vars = the
+    front pad's accent, for a swapped-in block (the page's <main> carries it on a first render). %>
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+  <section class="rmd-hm" id="hmDock" aria-label="<%- t('home.dock.aria', { name: frontInfo ? frontInfo.title : t('home.stage.main_stage') }) %>" data-rmd-acc="<%= hLK_ && hLK_.accent ? 1 : 0 %>" data-rmd-vars="<%= hLK_ && hLK_.vars ? hLK_.vars : '' %>">
+    <%_ if (frontInfo) { _%>
+    <template id="rmdId"><%- include('pad-dock-id', { room: { id: frontInfo.id, name: frontInfo.title }, LK_: hLK_, PFX_: hFX_, avHtml_: hAV_, bnSrc_: hBN_, bnLook_: !!hBN_ }) %></template>
+    <%_ } _%>
+    <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-label="<%- t('home.stage.main_stage') %>">
+      <div class="stabs" id="rmTabs" role="tablist" aria-label="<%- t('home.stage.tabs_aria') %>"></div>
+      <div class="player">
+        <div class="wrap" id="rmVideo"></div>
+        <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> <%- t('home.stage.reconnecting') %></div>
+        <button type="button" class="unmute hide" id="rmStUnmute" aria-label="<%- t('home.stage.unmute') %>"><img src="/public/img/mute-icon.png" alt=""></button>
+        <div class="embed hide" id="rmEmbed"></div>
+      </div>
+      <div class="stcap hide" id="rmCap" aria-label="<%- t('home.stage.cap_aria') %>"></div>
+    </section>
+    <%_ if (room) { _%>
+    <%# the chat card: the chatlog scope is on the card (never on <main>: the me card's .who keeps its own look) %>
+    <section class="card rm-chat chatlog<%= roomOnStage ? '' : ' rmd-other' %>" id="rmChat" aria-labelledby="chatH">
+      <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small></h2>
+      <div class="topic" id="rmTopic"><%= room.topic || '' %></div>
+      <%_ if (me || roomLive) { _%>
+      <div class="rm-audio" id="rmAudioBox"></div>
+      <div class="rmd-log">
+        <div class="feed" id="rmScroll" role="region" tabindex="0" aria-label="<%- t('home.room.feed_aria') %>">
+          <div id="rmFeed" class="feed-log" role="log" aria-live="polite" aria-relevant="additions" aria-label="<%- t('home.room.feed_aria') %>"><p class="muted"><%- t('home.room.loading') %></p></div>
+        </div>
+        <button class="jump" id="rmJump" type="button"><%- t('pad.chat.new') %></button>
+      </div>
+      <%_ if (me && me.camfrogUsername) { _%>
+      <div class="compose hide" id="rmCompose"><div id="rmRelay"></div><div id="rmPtt"></div></div>
+      <%_ } _%>
+      <%_ } else { _%>
+      <div class="tease rmd-tease">
+        <b><%- t('home.room.tease_title') %></b>
+        <p class="muted"><%- t('home.room.n_in_camfrog', { n: room.count }) %><%- room.micCount ? ' · ' + t('home.n_on_mic', { n: room.micCount }) : '' %>. <%- t('home.room.tease_blurb') %></p>
+        <a class="btn primary" href="/login"><%- t('home.sign_in') %></a>
+      </div>
+      <%_ } _%>
+    </section>
+    <div class="rmd-hm-ppl"><section class="card rm-ppl chatlog" id="rmPplCard" aria-labelledby="pplH"><h2 id="pplH"><span class="ht"><%- t('pad.people.h') %></span> <small id="rmPplN"></small></h2><ul class="people" id="rmPeople"></ul></section></div>
+    <%# (1.99ajh dockpop review: a linked viewer has a composer here - their note doesn't say "read-only") %>
+    <template id="hmdAbout"><%- t(me && me.camfrogUsername ? 'home.dock.about_linked' : 'home.room.note', { q: '"' }) %></template>
+    <%_ } _%>
+  </section>

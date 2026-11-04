@@ -116,7 +116,7 @@ test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is 
   for(const r of rules) {
     // (1.99ajh dockpop: + the chat window's body, and the person menu's Dock look while the chat floats off Live or is in its own window)
     // (1.99ajh dockpop review: + body.rmd-afloat - a Dock notice moves to the top while the chat floats)
-    for(const sel of r.selector.split(/,\s*(?=main\.|body[.:])/))assert.match(sel,/^(main\.rm\.rm-dock|body\.pad-dock-live|body\.rmd-pop|body\.rmd-afloat|body:is\(\.pad-dock-live, \.rmd-afloat, \.rmd-pop\))/,sel);
+    for(const sel of r.selector.split(/,\s*(?=main\.|body[.:])/))assert.match(sel,/^(main\.rm\.rm-dock|body\.pad-dock-live|body\.rmd-pop|body\.rmd-afloat|body\.rmd-dock-pad|body:is\(\.pad-dock-live, \.rmd-afloat, \.rmd-pop\))/,sel);   // (1.99?? dockpol: + body.rmd-dock-pad - the pad page's Feed / About in the Dock: no footer)
     assert.doesNotMatch(r.body,/#[0-9a-f]{3,8}\b|--ds-green|(?:margin|padding)-(?:left|right)\s*:|(?:^|;)\s*(?:left|right)\s*:|text-align:\s*(?:left|right)/i);
     // 1.99aiw review: a calc() of --ds-z-* tokens (the banner under the frame layer) is a token value too
     for(const m of r.body.matchAll(/z-index\s*:\s*([^;]+)/g))assert.match(m[1].trim(),/^(?:var\(--ds-z-[\w-]+\)|calc\(\s*(?:-1\s*\*\s*)?var\(--ds-z-[\w-]+\)(?:\s*\+\s*var\(--ds-z-[\w-]+\))?\s*\))$/);
@@ -237,8 +237,9 @@ test("dockfu: the chat keeps a readable floor on short windows - the stage gives
   assert.equal(declOf(rules,P+" .rmd-body > .side","contain"),"size","the people column's list never counts toward the floor");
   assert.equal(declOf(rules,P,"container"),"rmd-live / size");
   assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","flex"),"0 1 auto");
-  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","block-size"),"clamp(140px, 36cqb, 560px)");
-  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","min-block-size"),"96px");
+  // (1.99?? dockpol (owner item 16): + the pinned cams' row under the video at every width - --rmd-pin-row, 0 without pins)
+  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","block-size"),"calc(clamp(140px, 36cqb, 560px) + var(--rmd-pin-row))");
+  assert.equal(declOf(rules,"main.rm.rm-dock #rmStage","min-block-size"),"calc(96px + var(--rmd-pin-row))");
   assert.match(String(declOf(rules,"main.rm.rm-dock #rmStage","block-size","@media (max-width: 760px)")),/min\(56\.25cqi, 36cqb\)/,"phones: 16:9 of the width or 36% of the panel");
   for(const r of rules)if(/--rmd-log-min\)/.test(r.body))assert.ok(r.selector.startsWith(P),r.selector);
 });

@@ -687,7 +687,7 @@ test("1.99aht RV-1: chatlog-core gives a bar with a 🎙 id data-tx (🔊 Clip) 
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"));
   assert.equal(en["js.pad.cc.mic_note_nowords"], "Trim it, then post it. It goes up without a caption: the speaker's words stay hidden. Whoever is heard in it can remove it.");
   const room = fs.readFileSync(path.join(repo, "views/room.ejs"), "utf8");
-  assert.ok(room.includes("/public/js/chat-clip.js?v=5") && !/chat-clip\.js\?v=[1-4]\b/.test(room), "chat-clip.js loads as v=5");
+  assert.ok(room.includes("/public/js/chat-clip.js?v=6") && !/chat-clip\.js\?v=[1-5]\b/.test(room), "chat-clip.js loads as v=6");   // 1.99?? dockpol: v6 (one message's clip from its line menu)
   assert.ok(room.includes("/public/js/chatlog-core.js?v=12"), "chatlog-core.js as v=12 (1.99ajn padppl: folded lines of people you blocked, @mention chips, the clash tag; v12 review: the chip's flair as its emoji)");
 });
 

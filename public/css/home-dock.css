@@ -2,32 +2,41 @@
    the room card are ONE block, #hmDock: the pad Dock's stage card (the video + its auto-hiding overlay) beside / above its slim chat card,
    styled by pad-dock.css (main.rm.rm-dock) - this file only lays the block out on the homepage and gives the two cards the base rules the
    pad page's own stylesheet gives them there (room.ejs .rm …). The homepage scrolls normally (no body.pad-dock-live).
-   1.99ajh dockpop review: #hmDock is the first block under the navbar (views/home.ejs), inside the page's own gutters (.hm's padding). */
+   1.99?? dockpol (the owner's 2026-11-04 tweaks): the slim Stories card first (H1), then ONE grid (.hmd-grid) - #hmDock (views/partials/
+   home-dock.ejs: swapped alone when the front pad changes, H6) and #stageSide are display: contents in it - [stage | chat] then [the coin-op
+   strip under the stage | Top Pads under the chat] (H4); phones: stage, chat, coin-op, Top Pads. Heights in svh (H7): the mobile URL bar
+   collapsing never grows the chat card. */
 main.hm.rmd-home { gap: var(--cardgap, var(--ds-sp-4)); }
-main.hm.rmd-home #hmDock { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 400px); grid-template-rows: minmax(420px, auto); gap: var(--ds-sp-2); align-items: start; min-inline-size: 0; }
+main.hm.rmd-home .hmd-grid { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 400px); grid-template-rows: minmax(420px, auto) auto auto;
+  grid-template-areas: "stage chat" "coin tops" "coin feat"; gap: var(--ds-sp-2); align-items: start; min-inline-size: 0; }
+main.hm.rmd-home .hmd-grid > :is(#hmDock, #stageSide) { display: contents; }
 /* (the stage card stretches to the row - the chat's 420px floor on a 1024px screen - with the picture contained: the two cards end level) */
-main.hm.rmd-home #hmDock > #rmStage { grid-column: 1; grid-row: 1; align-self: stretch; }
-main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 2; grid-row: 1; }
+main.hm.rmd-home #hmDock > #rmStage { grid-area: stage; align-self: stretch; }
+main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-area: chat; }
 main.hm.rmd-home #hmDock > #rmChat { align-self: stretch; contain: size; min-block-size: 420px; }
 main.hm.rmd-home #hmDock > .rmd-popbar { align-self: start; }
 main.hm.rmd-home #hmDock > .rmd-hm-ppl { display: none; }
-main.hm.rmd-home #hmDock:not(:has(> #rmChat)) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+main.hm.rmd-home #stageSide > #wheelBox { grid-area: coin; margin: 0; min-inline-size: 0; }
+main.hm.rmd-home #stageSide > .tp { grid-area: tops; margin: 0; min-inline-size: 0; }
+main.hm.rmd-home #stageSide > a.box { grid-area: feat; margin: 0; min-inline-size: 0; }
+main.hm.rmd-home .hmd-grid:not(:has(#rmChat)) { grid-template-areas: "stage stage" "coin tops" "coin feat"; grid-template-rows: auto auto auto; }
 
 /* the stage card: 16:9 of its width, at most min(560px, the window less the navbar and a little), the video contained */
-main.rm.rm-dock.rmd-home #rmStage { block-size: auto; aspect-ratio: 16 / 9; max-block-size: min(560px, calc(100dvh - 140px)); min-block-size: 0; inline-size: 100%;
+main.rm.rm-dock.rmd-home #rmStage { block-size: auto; aspect-ratio: 16 / 9; max-block-size: min(560px, calc(100vh - 140px)); max-block-size: min(560px, calc(100svh - 140px)); min-block-size: 0; inline-size: 100%;
   border: 1px solid var(--ds-line); background: var(--ds-media-bg); }
 main.rm.rm-dock.rmd-home #rmStage .player .wrap { position: absolute; inset: 0; }
 main.rm.rm-dock.rmd-home #rmStage .player .video-js { inline-size: 100%; block-size: 100%; }
 main.rm.rm-dock.rmd-home #rmStage .stabs { margin: 0; }
+/* (owner H6) "📡 Now on the front page: {pad} · Switch" while the viewer is busy here */
+main.rm.rm-dock.rmd-home #rmStage .rmd-front-chip { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto; background: var(--ds-media-panel); border-color: var(--ds-ac-line); color: var(--ds-text-strong); }
 /* off air: the 44px slim bar [pad chip ›] Nothing on stage right now · Next up … (+ ⋯ for staff); the chat takes the width */
 main.rm.rm-dock.rmd-home #rmStage.is-off { aspect-ratio: auto; }
 main.rm.rm-dock.rmd-home #rmStage.is-off .player { display: none; }
 main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: none; }
 main.rm.rm-dock.rmd-home.rmd-staff #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: inline-flex; }
-main.hm.rmd-home #hmDock:has(> #rmStage.is-off) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
-main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmStage { align-self: start; }
-main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
-main.hm.rmd-home #hmDock:has(> #rmStage.is-off) > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
+main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) { grid-template-areas: "stage stage" "chat chat" "coin tops" "coin feat"; grid-template-rows: auto auto auto auto; }
+main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) #hmDock > #rmStage { align-self: start; }
+main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
 /* (1.99ajh dockpop review: the pad chip keeps its name - the words give way, "Next up" first) */
 main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-top > .rmd-chip { flex: 0 0 auto; min-inline-size: min(12ch, 50%); max-inline-size: 55%; }
 main.rm.rm-dock.rmd-home #rmStage .rmd-slim-t > * { min-inline-size: 0; }
@@ -36,13 +45,13 @@ main.rm.rm-dock.rmd-home #rmStage .rmd-slim-a { flex: 0 0 auto; }
 main.rm.rm-dock.rmd-home #rmStage .rmd-slim-sep { flex: none; white-space: pre; }
 main.rm.rm-dock.rmd-home #rmStage .rmd-slim-b { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the chat in its own window: the stage takes the width, the 44px bar goes under it */
-main.hm.rmd-home.rmd-popped #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage stage" "chat chat" "coin tops" "coin feat"; grid-template-rows: auto auto auto auto; }
 main.hm.rmd-home.rmd-popped #hmDock > #rmStage { align-self: start; }
-main.hm.rmd-home.rmd-popped #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
 
-/* the chat card - the pad page's base card rules (room.ejs .rm .card / h2 / .topic / .compose) on the homepage */
+/* the chat card - the pad page's base card rules (room.ejs .rm .card / .topic / .compose) on the homepage; its header is the pad Dock's one
+   row (pad-dock.css #chatH: the topic and its buttons - no pixel "CHAT" word, 1.99?? dockpol item 14) */
 main.rm.rm-dock.rmd-home #rmChat { background: var(--ds-surface); border: 1px solid var(--ds-line); }
-main.rm.rm-dock.rmd-home #rmChat > h2 { margin: 0; letter-spacing: .1em; text-transform: uppercase; color: var(--ds-gold); font-family: var(--ds-font-pixel); font-size: 10px; line-height: 1.6; }
+main.rm.rm-dock.rmd-home #rmChat > h2 { margin: 0 0 var(--ds-sp-1); color: var(--ds-text); font: 400 var(--ds-fs-meta)/1.4 var(--ds-font); letter-spacing: normal; text-transform: none; }
 main.rm.rm-dock.rmd-home #rmChat > h2 small { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; color: var(--ds-text-muted); font-size: 12px; }
 main.rm.rm-dock.rmd-home #rmTopic:empty { display: none; }
 main.rm.rm-dock.rmd-home #rmChat .feed { block-size: auto; }
@@ -54,11 +63,11 @@ main.hm.rmd-home #hmDock > #rmChat:has(> .rmd-tease) { contain: none; block-size
 main.rm.rm-dock.rmd-home #rmChat .jump { display: none; }
 main.rm.rm-dock.rmd-home #rmAudioBox .rb-vol { inline-size: 72px; }
 /* the one-row composer: [Message …][🎙️ Hold to talk][Send] - no ＋, no tool row; 🎙️ is its icon in this narrow card (its words stay its
-   accessible name), so the input keeps the room */
+   accessible name), so the input keeps the room; (1.99?? dockpol H2 / item 10: centred - no flex gap around the zero-size words) */
 main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim .rb-say-in { padding-inline-start: var(--ds-sp-2); }
 main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim { grid-template-columns: 0 minmax(0, 1fr) auto auto; }
-main.rm.rm-dock.rmd-home .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; justify-content: center; }
-main.rm.rm-dock.rmd-home .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; }
+main.rm.rm-dock.rmd-home .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; gap: 0; justify-content: center; place-items: center; }
+main.rm.rm-dock.rmd-home .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; display: block; }
 main.rm.rm-dock.rmd-home .rmd-composer .rb-talk[aria-pressed="true"]::before { content: "⏺"; }
 /* the people sheet (👥): avatar, name + flair, veil tag, 🎙 - no cam or ⋯ here: ONE fixed 24px trailing column on every row, so the 🎙
    discs line up at the row's end */
@@ -78,27 +87,72 @@ main.rm.rm-dock.rmd-home #chatH > .rmd-room-link { text-decoration: none; }
 main.hm.rmd-home .tp li.hmd-here :is(.v, .tp-ls, .np) { display: none; }
 main.hm.rmd-home .tp li.hmd-here .hmd-here-t { flex: none; margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); white-space: nowrap; }
 
-/* the side widgets (the coin-op wheel, the featured table, Top Pads), a row in the stage's old place */
-main.hm.rmd-home .hmd-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--gap, var(--ds-sp-3)); align-items: start; min-inline-size: 0; }
-main.hm.rmd-home .hmd-side > * { margin: 0; min-inline-size: 0; }
+/* (owner H1) the Stories card first: a slim card - the heading an inline gold eyebrow ("STORIES · last 24 h"), one row of 56px circles */
+main.hm.rmd-home .hm-stories.rmd-stories { padding: var(--ds-sp-2) var(--ds-sp-3); }
+main.hm.rmd-home .rmd-stories .ss { margin: 0; }
+main.hm.rmd-home .rmd-stories .ss-h { justify-content: flex-start; min-block-size: 0; margin: 0 0 var(--ds-sp-1); font: 400 10px/1.6 var(--ds-font-pixel); letter-spacing: .1em; text-transform: uppercase; color: var(--ds-gold); align-items: baseline; }
+main.hm.rmd-home .rmd-stories .ss-h small { font: 400 var(--ds-fs-xs)/1 var(--ds-font); letter-spacing: normal; text-transform: none; color: var(--ds-text-muted); }
+main.hm.rmd-home .rmd-stories .ss-row { gap: var(--ds-sp-2); padding: 0 2px; flex-wrap: nowrap; }
+main.hm.rmd-home .rmd-stories .ss-c { inline-size: 60px; gap: 3px; font-size: 11px; }
+main.hm.rmd-home .rmd-stories .ss-ring { inline-size: 56px; block-size: 56px; padding: 2px; }
+main.hm.rmd-home .rmd-stories .ss-n { max-inline-size: 60px; }
+
+/* (owner H4) the coin-op as ONE strip under the stage (the same markup and ids): [CREDIT 00][5000 PAT plate + slot][INSERT COIN][status …]
+   [SOUND][My wheel] - at most 96px tall, the stage column's width */
+main.hm.rmd-home #wheelBox.aw.aw-hm { max-inline-size: none; font-size: 16px; }
+main.hm.rmd-home #wheelBox .aw-coinop { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; grid-template-areas: "credit door btn now tools" "credit door btn status tools";
+  align-items: center; column-gap: var(--ds-sp-3); row-gap: 0; max-block-size: 96px; padding: var(--ds-sp-2) var(--ds-sp-3); box-sizing: border-box; overflow: visible; }
+main.hm.rmd-home #wheelBox .aw-hm-row { display: contents; }
+main.hm.rmd-home #wheelBox .aw-credit { grid-area: credit; inline-size: auto; flex-direction: column; gap: 2px; padding: 4px 8px; font-size: 18px; letter-spacing: 1px; }
+main.hm.rmd-home #wheelBox .aw-credit > span:first-child { font-size: 9px; letter-spacing: 1px; }
+main.hm.rmd-home #wheelBox .aw-door { grid-area: door; display: flex; align-items: center; gap: var(--ds-sp-2); inline-size: auto; padding: 4px 8px; }
+main.hm.rmd-home #wheelBox .aw-plate { padding: 4px 6px; gap: 1px; }
+main.hm.rmd-home #wheelBox .aw-plate .p { font-size: 12px; }
+main.hm.rmd-home #wheelBox .aw-plate .u { font-size: 8px; letter-spacing: 2px; }
+main.hm.rmd-home #wheelBox .aw-plate .ins { font-size: 7px; margin-block-start: 1px; }
+main.hm.rmd-home #wheelBox .aw-slot-area { block-size: 40px; inline-size: 76px; margin: 0; }
+main.hm.rmd-home #wheelBox .aw-slot { inline-size: 64px; block-size: 18px; bottom: 8px; }
+main.hm.rmd-home #wheelBox .aw-coinbtn { grid-area: btn; gap: 2px; }
+main.hm.rmd-home #wheelBox .aw-coinbtn .aw-coin { --s: 48px; }
+main.hm.rmd-home #wheelBox .aw-coinbtn .cap { font-size: 7px; }
+main.hm.rmd-home #wheelBox .aw-now { grid-area: now; align-self: end; text-align: start; min-block-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.hm.rmd-home #wheelBox .aw-now .amt { display: inline; }
+main.hm.rmd-home #wheelBox .aw-status { grid-area: status; align-self: start; min-block-size: 0; inline-size: auto; text-align: start; font-size: 15px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.hm.rmd-home #wheelBox .aw-tools { grid-area: tools; inline-size: auto; flex-direction: column; gap: 4px; }
+main.hm.rmd-home #wheelBox .aw-tool { min-block-size: 28px; font-size: 8px; padding-inline: 8px; white-space: nowrap; }
+/* Top Pads under the chat: a compact list - five 32px rows (the "now playing" lines are the pad pages') */
+main.hm.rmd-home #stageSide > .tp { padding: var(--ds-sp-2) var(--ds-sp-3); }
+main.hm.rmd-home #stageSide > .tp > h2 { min-block-size: 24px; margin: 0 0 var(--ds-sp-1); }
+main.hm.rmd-home #stageSide > .tp .rooms-mini > li { min-block-size: 32px; padding-block: 2px; }
+main.hm.rmd-home #stageSide > .tp .np { display: none; }
+main.hm.rmd-home #stageSide > a.box { display: block; padding: var(--ds-sp-2) var(--ds-sp-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 var(--ds-sp-2) 0 0; font-size: var(--ds-fs-meta); }
 
 @media (min-width: 761px) and (max-width: 1023px) {
-  main.hm.rmd-home #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: "stage stage" "chat chat" "coin tops" "feat feat"; }
   main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
-  main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
   main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
-  main.rm.rm-dock.rmd-home #rmStage { max-block-size: 60dvh; }
+  main.rm.rm-dock.rmd-home #rmStage { max-block-size: 60vh; max-block-size: 60svh; }
+  main.hm.rmd-home #wheelBox .aw-coinop { grid-template-columns: auto auto minmax(0, 1fr); grid-template-areas: "credit door btn" "status status tools"; max-block-size: none; row-gap: var(--ds-sp-1); }
+  main.hm.rmd-home #wheelBox .aw-now { display: none; }
+  main.hm.rmd-home #wheelBox .aw-tools { flex-direction: row; justify-self: end; }
 }
 @media (max-width: 760px) {
-  main.hm.rmd-home #hmDock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "stage" "chat" "coin" "tops" "feat"; }
   main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
-  main.hm.rmd-home #hmDock > :is(#rmChat, .rmd-popbar) { grid-column: 1; grid-row: 2; }
-  main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: clamp(360px, 62dvh, 520px); min-block-size: 0; }
+  main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: clamp(360px, 62vh, 520px); block-size: clamp(360px, 62svh, 520px); min-block-size: 0; }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: none; }
   /* the slim off-air bar on a phone: "Next up" is a second line under "Nothing on stage right now" (the pad chip keeps its name) */
   main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-slim-t { flex-direction: column; align-items: flex-start; line-height: 1.25; }
   main.rm.rm-dock.rmd-home #rmStage .rmd-slim-sep { display: none; }
   main.rm.rm-dock.rmd-home #rmStage .rmd-slim-a { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   main.rm.rm-dock.rmd-home #rmStage .rmd-slim-b { max-inline-size: 100%; font-size: var(--ds-fs-xs); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off), main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage" "chat" "coin" "tops" "feat"; }
+  /* the coin-op strip wraps to two rows at most: [credit][plate + slot][coin] over [status][tools] */
+  main.hm.rmd-home #wheelBox .aw-coinop { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "credit door btn" "status status tools"; max-block-size: none; row-gap: var(--ds-sp-1); column-gap: var(--ds-sp-2); }
+  main.hm.rmd-home #wheelBox .aw-now { display: none; }
+  main.hm.rmd-home #wheelBox .aw-door { justify-content: center; }
+  main.hm.rmd-home #wheelBox .aw-tools { flex-direction: row; justify-self: end; }
+  main.hm.rmd-home #wheelBox .aw-status { font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { main.hm.rmd-home #hmDock * { scroll-behavior: auto; } }

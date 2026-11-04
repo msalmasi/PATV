@@ -246,14 +246,21 @@
       try { doc.dispatchEvent(new CustomEvent('patv:padtab', { detail: { tab: t } })); } catch (e) { /* IE */ }
     }
 
+    // 1.99?? dockpol (owner item 11): the Room Dock wraps a switch the viewer makes (root.PATVPadSwitch: the page's top first, a short
+    // cross-fade where the browser has view transitions); everywhere else - and every other caller - it switches as before
+    function go(t, opts) {
+      var sw = root.PATVPadSwitch;
+      if (typeof sw === 'function' && t !== current) { try { sw(function () { show(t, opts); }); return; } catch (e) { /* plain */ } }
+      show(t, opts);
+    }
     btns.forEach(function (b, i) {
-      b.addEventListener('click', function () { show(b.getAttribute('data-tab'), { remember: true, url: true }); });
+      b.addEventListener('click', function () { go(b.getAttribute('data-tab'), { remember: true, url: true }); });
       b.addEventListener('keydown', function (e) {
         var j = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? btns.length - 1 : null;
         if (j == null) return;
         e.preventDefault();
         j = (j + btns.length) % btns.length;
-        show(btns[j].getAttribute('data-tab'), { remember: true, url: true, focus: true });
+        go(btns[j].getAttribute('data-tab'), { remember: true, url: true, focus: true });
       });
     });
     // any link / button with data-pad-tab="feed" switches (the Live tab's "Open feed ›", the header chips)

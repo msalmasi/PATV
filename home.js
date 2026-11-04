@@ -225,6 +225,10 @@ async function nextSlot(roomId, t = Date.now()) {
 
 function register(app, { addUser, xpForNextLevel }) {
   app.get("/", addUser, async (req, res) => {
+    // 1.99?? dockpol (owner H6): GET /?dock=1 - the homepage's Room Dock block alone (#hmDock + its init) for the CURRENT front pad, so an
+    // open homepage can follow a front-page change; the same handler, gates and rules as the page (padaccess, the 18+ gate, the live view),
+    // this viewer's alone (private, never stored)
+    const frag = req.query.dock === "1";
     try {
       const username = req.user ? req.user.username : null;
       let me = null;
@@ -282,7 +286,7 @@ function register(app, { addUser, xpForNextLevel }) {
       const isStaff = SP.can(me, "stage.admin");
       // 1.99xs: staff only get a link line now (the picker is on /pads/admin#front, Pepe's panel on /admin/pepe#control)
       const stageAdmin = isStaff ? { front: reg.frontSetting(), admin: SP.can(me, "pepe.control") } : null;
-      const mine = me ? await personal(me, S) : null;
+      const mine = me && !frag ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
       // 1.99fu: signed-out visitors too when the room's pad is Public (padaccess.full)
       // CL3: the viewer goes along - the pad's chat-history floors and each line's own access level apply (never exempt here)
@@ -297,16 +301,24 @@ function register(app, { addUser, xpForNextLevel }) {
       if (room) await require("./chatwidget").forPad(req, res, { roomId: room.id, slug: room.slug, mode: "compact" });
       const roomOnStage_ = !!(onStage && room && room.id === onStage.id);
       // 1.99bz: the story strip (a circle per room with captures from the last 24 h); visitors get the circles only
-      const storyRooms = await require("./stories").forViewer(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] stories:", e.message); return []; });
+      const storyRooms = frag ? [] : await require("./stories").forViewer(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] stories:", e.message); return []; });
       // 1.99ci: "Hot on PATV" - the top 5 hot posts across every community (no NSFW for signed-out visitors)
-      const hot = await require("./feedweb").hotMini(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] hot:", e.message); return null; });
+      const hot = frag ? null : await require("./feedweb").hotMini(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] hot:", e.message); return null; });
       // 1.99kk: the banner slot (banner.js) - a paid booking for today, else a house promo (Pepeball with its live jackpot, ...)
-      const banner = await require("./banner").pick({ lotto: S.lotto, lang: res.locals.lang || "en" }).catch((e) => { console.error("[home] banner:", e.message); return null; });
+      const banner = frag ? null : await require("./banner").pick({ lotto: S.lotto, lang: res.locals.lang || "en" }).catch((e) => { console.error("[home] banner:", e.message); return null; });
       res.locals.og = { title: "Public Access TV", description: "Pads with live stages, feeds and chat rooms, Pepe the frog, PAT games, markets and more.",
                         image: res.locals.ogBase + require("./og").pageUrl("Public Access TV"), url: res.locals.ogBase + "/" };
       // 1.99ajh dockpop review: the viewer tag only for the Room Dock, and a page that carries it is this viewer's alone (no shared cache)
       const padDockOn_ = require("./paddock").viewerOn(req.user), vt_ = me && padDockOn_ ? require("./roompm").tag(me.userId) : null;
       if (vt_) res.set("Cache-Control", "private");
+      // 1.99?? dockpol (owner H5): the homepage stage shows the front pad's 🎙 mic-follows stage ONLY to a signed-in viewer who may see that pad
+      // (its live chat is this card - padaccess.full, past the 18+ gate); everyone else gets Pepe's stream or the pad's permitted slots, never a
+      // teaser of a pad they can't see. A featured slot still wins over it, as on the pad page (stage-room.js pickDefault).
+      const homeMic_ = !!(me && padDockOn_ && roomOnStage_ && roomLive && roomGate === "ok" && PA.full(viewer, front.id));
+      if (frag) {
+        if (!padDockOn_) return res.status(404).set("Cache-Control", "no-store").send("");
+        res.set("Cache-Control", "private, no-store"); res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+      }
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, roomGate, stage, top, tops, boostMark: require("./boostmark").boostMark,
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
@@ -316,6 +328,7 @@ function register(app, { addUser, xpForNextLevel }) {
         // homepage byte for byte), and the viewer tag its chat window protocol keys on (dock-link.js; never the account id)
         padDockOn: padDockOn_,
         vt: vt_,
+        homeMic: homeMic_, dockFragment: frag,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals

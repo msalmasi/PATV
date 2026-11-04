@@ -129,11 +129,15 @@ main.rm.rm-dock .rmd-chip-head { max-inline-size: none; block-size: 32px; paddin
 
 /* ── the stage card: the video + the pinned cams (owner point 28) in ONE card, sized for the chat below (layout) ── */
 body.pad-dock-live main.rm.rm-dock #padPanel-live { container: rmd-live / size; }
-main.rm.rm-dock #rmStage { --rmd-strip-w: 0px; --rmd-pin-row: 0px; position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) var(--rmd-strip-w); grid-template-rows: minmax(0, 1fr) var(--rmd-pin-row);
-  flex: 0 1 auto; block-size: clamp(140px, 36cqb, 560px); max-block-size: calc((100cqi - var(--rmd-strip-w)) * 0.5625); min-block-size: 96px;
+/* (1.99?? dockpol (owner items 15, 16): the pinned cams are a ROW under the video at every width - never a column beside it; the card is
+   the video's height + the row's (--rmd-pin-row: S / M / L), --rmd-strip-w stays 0) */
+main.rm.rm-dock #rmStage { --rmd-strip-w: 0px; --rmd-pin-row: 0px; position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) var(--rmd-pin-row);
+  flex: 0 1 auto; block-size: calc(clamp(140px, 36cqb, 560px) + var(--rmd-pin-row)); max-block-size: calc(100cqi * 0.5625 + var(--rmd-pin-row)); min-block-size: calc(96px + var(--rmd-pin-row));
   margin: 0; padding: 0; border: 0; border-radius: var(--ds-r-lg); background: var(--ds-media-bg); overflow: hidden; }
-main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-strip-w: clamp(132px, 14cqi, 200px); }
-main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="large"]:not([hidden])) { --rmd-strip-w: clamp(180px, 22cqi, 300px); }
+main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-pin-row: 96px; }
+main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="medium"]:not([hidden])) { --rmd-pin-row: 144px; }
+main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="large"]:not([hidden])) { --rmd-pin-row: 216px; }
+main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="grid"]:not([hidden])) { --rmd-pin-row: 0px; }
 main.rm.rm-dock.rmd-stage-hidden #rmStage { display: none; }
 /* (the legacy card hides itself while off air with nothing to pick - in the Dock it is the slim bar instead) */
 main.rm.rm-dock #rmStage.is-off:not(:has(.stabs > *)) { display: grid; }
@@ -193,10 +197,14 @@ main.rm.rm-dock .rmd-mini .rmd-slim-t { display: block; }
 main.rm.rm-dock .rmd-mini > button:not(.rmd-chip) { flex: none; }
 
 /* ── the pinned cams, inside the stage card (owner point 28): a column at the inline end, a 64px row on phones ── */
-main.rm.rm-dock #rmStage > #rmStrip { grid-area: 1 / 2; position: relative; isolation: isolate; z-index: var(--ds-z-raised); min-block-size: 0; min-inline-size: 0; margin: 0; padding: var(--ds-sp-1); border: 0; border-radius: 0; background: var(--ds-media-bg); overflow-y: auto; overscroll-behavior: contain; }
+main.rm.rm-dock #rmStage > #rmStrip { grid-area: 2 / 1; position: relative; isolation: isolate; z-index: var(--ds-z-raised); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--ds-sp-1);
+  min-block-size: 0; min-inline-size: 0; margin: 0; padding: var(--ds-sp-1) var(--ds-sp-1) 0; border: 0; border-radius: 0; background: var(--ds-media-bg); overflow: hidden; }
 main.rm.rm-dock #rmStrip .cs-head { display: none; }
-main.rm.rm-dock #rmStrip .cs-row { display: flex; flex-direction: column; gap: var(--ds-sp-1); margin: 0; padding: 0; }
-main.rm.rm-dock #rmStrip .cs-tile { position: relative; flex: none; min-inline-size: 0; display: block; }
+main.rm.rm-dock #rmStrip .cs-row { grid-column: 1; grid-row: 1; display: flex; flex-direction: row; gap: var(--ds-sp-1); block-size: 100%; min-inline-size: 0; margin: 0; padding: 0 0 var(--ds-sp-1);
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; scrollbar-width: thin; }
+main.rm.rm-dock #rmStrip .cs-note { grid-column: 1 / -1; }
+main.rm.rm-dock #rmStrip .cs-tile { position: relative; flex: none; min-inline-size: 0; display: block; inline-size: auto; block-size: 100%; }
+main.rm.rm-dock #rmStrip .cs-vid { block-size: 100%; inline-size: auto; }
 main.rm.rm-dock #rmStrip .cs-tile.big { grid-column: auto; }
 main.rm.rm-dock :is(#rmStrip, .rmd-full-media, .rmd-local-player) .cs-vid { isolation: isolate; aspect-ratio: 4 / 3; max-block-size: none; border: 0; background: var(--ds-media-bg); border-radius: var(--ds-r-sm); }
 main.rm.rm-dock :is(#rmStrip, .rmd-full-media, .rmd-local-player) video { object-fit: contain; cursor: pointer; }
@@ -210,8 +218,10 @@ main.rm.rm-dock .rmd-tile-more { position: absolute; inset-block-start: var(--ds
 main.rm.rm-dock .cs-tile:is(:hover, :focus-within) .rmd-tile-more,
 main.rm.rm-dock .rmd-tile-more[aria-expanded="true"] { opacity: 1; }
 /* 📌 Pinned cams ▸ Grid: the pins take the main area */
-main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { grid-area: 1 / 1 / 2 / 3; }
-main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: start; }
+main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { grid-area: 1 / 1 / 3 / 2; align-items: stretch; }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: start; overflow-x: hidden; overflow-y: auto; }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-tile { block-size: auto; }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-vid { inline-size: 100%; block-size: auto; }
 main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="grid"]:not([hidden])) .player { visibility: hidden; }
 /* a pinned cam on the viewer's own stage: the main area of the same card */
 main.rm.rm-dock .rmd-local-player { grid-area: 1 / 1; position: relative; display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; padding: 0; background: var(--ds-media-bg); }
@@ -255,11 +265,7 @@ main.rm.rm-dock .rmd-topic-line #rmTopic { display: block; flex: 0 1 auto; min-i
 main.rm.rm-dock #rmTopic[role="button"] { cursor: pointer; border-radius: var(--ds-r-xs); }
 main.rm.rm-dock #rmTopic[role="button"]:hover { color: var(--ds-text); }
 main.rm.rm-dock .rmd-topic-full { margin: 0; padding: var(--ds-sp-2); max-inline-size: 320px; font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }
-/* the reveal banner stays (reveals are audited), as one 28px line with Hide again at its end */
-main.rm.rm-dock .veil-banner { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; min-block-size: 28px; margin: 0 0 var(--ds-sp-1); padding: 2px var(--ds-sp-2); font-size: var(--ds-fs-xs); line-height: 1.3; white-space: nowrap; overflow: hidden; }
-/* (1.99ajf dockclean review: the words give way - Hide again, the off switch of an audited reveal, never leaves the screen) */
-main.rm.rm-dock .veil-banner > .veil-st { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
-main.rm.rm-dock .veil-banner > .veil-reveal { flex: none; margin-inline-start: auto; }
+/* (1.99?? dockpol (owner item 2): no reveal banner in the Dock - the chat ⋯'s Show real names and one notice; room.ejs draws none) */
 /* the log, and its "New messages ↓" pill at the bottom centre of the log (owner point 31) */
 main.rm.rm-dock .rmd-log { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; min-inline-size: 0; }
 main.rm.rm-dock #rmScroll { flex: 1 1 0; min-block-size: 0; max-block-size: none; block-size: auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
@@ -318,8 +324,8 @@ main.rm.rm-dock .rmd-now.rmd-has-holders .rb-state { display: none; }
 main.rm.rm-dock .rmd-right { display: flex; align-items: center; gap: var(--ds-sp-1); flex: none; }
 main.rm.rm-dock .rmd-right .rb-mute { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; justify-content: center; }
 main.rm.rm-dock #rmAudioBox .rb-vol { flex: none; inline-size: 96px; margin: 0; }
-main.rm.rm-dock .rmd-holders { display: flex; align-items: center; gap: var(--ds-sp-1); flex: 0 1 auto; min-inline-size: 0; overflow: hidden; }
-main.rm.rm-dock .rmd-holders > * { flex: 0 1 auto; min-inline-size: 0; max-inline-size: 180px; min-block-size: 28px; }
+main.rm.rm-dock .rmd-holders { display: flex; align-items: center; gap: var(--ds-sp-1); flex: 1 1 auto; min-inline-size: 0; overflow: hidden; }
+main.rm.rm-dock .rmd-holders > * { flex: 0 1 auto; min-inline-size: 0; max-inline-size: min(60%, 240px); min-block-size: 28px; }
 main.rm.rm-dock .rmd-holders > .rmd-holder { display: inline-flex; align-items: center; min-inline-size: min(9ch, 100%); }
 main.rm.rm-dock .rmd-holders .rmd-person { max-inline-size: 100%; }
 main.rm.rm-dock .rmd-holders .rmd-person-name { flex: 0 1 auto; min-inline-size: 0; }
@@ -362,7 +368,7 @@ main.rm.rm-dock .rmd-composer .rb-send { padding-inline: var(--ds-sp-3); }
 main.rm.rm-dock .rmd-tools { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(40px, 1fr); align-items: center; min-block-size: 40px; padding: 0 var(--ds-sp-1); border-block-start: 1px solid var(--ds-line-soft); }
 main.rm.rm-dock .rmd-tools .rmd-tool { justify-self: center; inline-size: 40px; min-inline-size: 40px; min-block-size: 36px; border-color: transparent; background: transparent; }
 main.rm.rm-dock .rmd-tools .rmd-tool > .ds-ic { font-size: var(--ds-fs-lead); }
-main.rm.rm-dock .rmd-tools .rmd-tool:is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--ds-hover); }
+main.rm.rm-dock .rmd-tools .rmd-tool[aria-expanded="true"] { background: var(--ds-hover); }
 main.rm.rm-dock #rmClip .cc-bar:not(:has(.cc-toggle.on)) { display: none; }
 main.rm.rm-dock .rmd-composer #rmSb { display: none; }
 
@@ -459,8 +465,8 @@ body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-why { marg
 @media (max-width: 1023px) {
   main.rm.rm-dock #rmChat { padding-inline: var(--ds-sp-2); }
   /* 🎙️ Hold to talk is its icon (the words stay its accessible name) */
-  main.rm.rm-dock .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; justify-content: center; }
-  main.rm.rm-dock .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; }
+  main.rm.rm-dock .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; gap: 0; justify-content: center; place-items: center; }
+  main.rm.rm-dock .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; display: block; }
   main.rm.rm-dock .rmd-composer .rb-talk[aria-pressed="true"]::before { content: "⏺"; }
 }
 @media (max-width: 760px) {
@@ -469,13 +475,10 @@ body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-why { marg
   main.rm.rm-dock:not(.rmd-home) { gap: var(--ds-sp-2); padding-inline: var(--ds-sp-2); }
   /* the stage: 16:9 of its width or 36% of the panel, + a 64px row while cams are pinned */
   main.rm.rm-dock #rmStage { grid-template-columns: minmax(0, 1fr); block-size: calc(min(56.25cqi, 36cqb) + var(--rmd-pin-row)); max-block-size: none; min-block-size: calc(90px + var(--rmd-pin-row)); }
-  main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-strip-w: 0px; --rmd-pin-row: 68px; }
-  main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="large"]:not([hidden])) { --rmd-strip-w: 0px; --rmd-pin-row: 96px; }
-  main.rm.rm-dock #rmStage > #rmStrip { grid-area: 2 / 1; overflow-x: auto; overflow-y: hidden; padding: var(--ds-sp-1) var(--ds-sp-1) 0; }
-  main.rm.rm-dock #rmStrip .cs-row { flex-direction: row; block-size: 100%; }
-  main.rm.rm-dock #rmStrip .cs-tile { inline-size: auto; block-size: 100%; }
-  main.rm.rm-dock #rmStrip .cs-vid { block-size: 100%; inline-size: auto; }
-  main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { grid-area: 1 / 1 / 3 / 2; }
+  main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-pin-row: 64px; }
+  main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="medium"]:not([hidden])) { --rmd-pin-row: 96px; }
+  main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="large"]:not([hidden])) { --rmd-pin-row: 128px; }
+  main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="grid"]:not([hidden])) { --rmd-pin-row: 0px; }
   main.rm.rm-dock #rmStrip .cs-name { padding: 1px var(--ds-sp-1); font-size: var(--ds-fs-chip); }
   main.rm.rm-dock .rmd-chip { max-inline-size: 70%; }
   main.rm.rm-dock #rmChat { padding: var(--ds-sp-1) var(--ds-sp-2) var(--ds-sp-2); }
@@ -527,8 +530,6 @@ main.rm.rm-dock #chatH > .rmd-chat-t { flex: none; white-space: nowrap; }
 main.rm.rm-dock #rmStage .player .mf-tile :is(.mf-label, .mf-card .mf-why) { transition: transform var(--ds-dur-2) var(--ds-ease); }
 main.rm.rm-dock #rmStage.rmd-controls-on .player .mf-tile :is(.mf-label, .mf-card .mf-why) { transform: translateY(-40px); }
 main.rm.rm-dock #rmStage.rmd-controls-on .player .mf-stage:has(.mf-bmsg:not(:empty)) .mf-bar { inset-block-end: calc(var(--ds-sp-12) + 40px); }
-/* the tiles' corner tools (⚑ / ✕ / 📌) sit below the top bar's pad chip while it shows */
-main.rm.rm-dock #rmStage.rmd-controls-on .player .mf-tile .mf-x { inset-block-start: 48px; }
 /* staff: 📺 Play content here's own row is not a stray grid cell - its bar is the stage ⋯'s Staff items, its panel a sheet over the
    Live view (position: fixed inside the Live panel, above the chat while it is open) */
 main.rm.rm-dock #rmStage > .oab-row { display: contents; }
@@ -571,15 +572,10 @@ main.rm.rm-dock .rmd-chip .rmd-id-content > .rmd-chip-v { margin-inline-start: v
 /* icon buttons are bare (design 158): no border or fill until hover / focus, one radius; Send (and 🎙 Hold to talk) stay filled */
 main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play) {
   border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--ds-r-md); }
-main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play):is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--ds-hover); }
+main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play)[aria-expanded="true"] { background: var(--ds-hover); }
 main.rm.rm-dock #rmAudioBox .rb-play { color: var(--ds-ac-2); font-size: var(--ds-fs-lead); }
 /* paused: no "live" eq dots */
 main.rm.rm-dock #rmAudioBox .rb-audio:not(.on) .rb-meter { display: none; }
-/* the reveal banner on a phone: two short lines rather than cut words */
-@media (max-width: 600px) {
-  main.rm.rm-dock .veil-banner { white-space: normal; }
-  main.rm.rm-dock .veil-banner > .veil-st { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-}
 /* the people column / sheet: one 36px line, [avatar][name + flair][🎙][📷][⋯] - three fixed slots so the icons line up in columns;
    the flair gives way first (to its emoji alone in a narrow row), then the name */
 main.rm.rm-dock #rmPeople > li { container-type: inline-size; grid-template-columns: 28px minmax(0, 1fr) auto; column-gap: var(--ds-sp-1); }
@@ -606,10 +602,6 @@ main.rm.rm-dock #rmPeople .nm:has(> .who.veil) > .who.veil > i { flex-grow: 0; }
 main.rm.rm-dock #rmPeople .nm:has(> .who.veil) > .who.veil > .veil-tag { font-size: var(--ds-fs-chip); }
 main.rm.rm-dock .rb-ac.rb-ac-names .rb-ac-n { flex: 1 1 auto; min-inline-size: min(9ch, 100%); }
 main.rm.rm-dock .rb-ac.rb-ac-names .rb-ac-t { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; }
-@container (max-width: 320px) {
-  main.rm.rm-dock #rmPeople .nm > .ufl > .ufl-n { display: none; }
-  main.rm.rm-dock #rmPeople .nm > .ufl { padding-inline: 4px; }
-}
 main.rm.rm-dock #rmPeople .ic { display: grid; grid-template-columns: repeat(3, 24px); grid-template-rows: 26px; gap: 2px; }
 main.rm.rm-dock #rmPeople .ic > * { grid-row: 1; inline-size: 24px; block-size: 26px; margin: 0; border: 0; border-radius: var(--ds-r-sm); background: transparent; box-shadow: none; }
 main.rm.rm-dock #rmPeople .ic > .rmd-mic { grid-column: 1; background: var(--ds-ac-bg); box-shadow: none; }
@@ -684,13 +676,13 @@ main.rm.rm-dock .rmd-cam-box > :is(.res, .lc-stage, div:not([class])):empty { di
    stays, beside the stage, as tall as the Live view */
 /* (1.99ajh dockpop review: up to the stage's natural 16:9 - grown past it, a 2-up mic stage became two portrait tiles with the picture
    letterboxed in the middle; the rest of the height stays empty below the slim line) */
-main.rm.rm-dock.rmd-chat-out #rmStage { flex: 1 1 0; block-size: auto; max-block-size: calc((100cqi - var(--rmd-strip-w)) * 0.5625 + var(--rmd-pin-row)); }
+main.rm.rm-dock.rmd-chat-out #rmStage { flex: 1 1 0; block-size: auto; max-block-size: calc(100cqi * 0.5625 + var(--rmd-pin-row)); }
 main.rm.rm-dock.rmd-chat-out .rmd-body { flex: 0 0 auto; }
 @media (min-width: 1024px) {
   body.pad-dock-live main.rm.rm-dock.rmd-chat-out #padPanel-live { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 20vw, 300px); grid-template-rows: auto auto minmax(0, 1fr); }
   main.rm.rm-dock.rmd-chat-out #padPanel-live > * { grid-column: 1; }
   /* (the stage's 16:9 of the column beside the people, or the height there is - less the slim line under it) */
-  main.rm.rm-dock.rmd-chat-out #padPanel-live > #rmStage { grid-row: 1; block-size: min(calc((100cqi - clamp(240px, 20vw, 300px) - var(--ds-sp-2) - var(--rmd-strip-w)) * 0.5625), calc(100cqb - 56px)); max-block-size: none; }
+  main.rm.rm-dock.rmd-chat-out #padPanel-live > #rmStage { grid-row: 1; block-size: min(calc((100cqi - clamp(240px, 20vw, 300px) - var(--ds-sp-2)) * 0.5625 + var(--rmd-pin-row)), calc(100cqb - 56px)); max-block-size: none; }
   main.rm.rm-dock.rmd-chat-out #padPanel-live > #rmdMini { grid-row: 1; align-self: start; }
   main.rm.rm-dock.rmd-chat-out .rmd-body { display: contents; }
   main.rm.rm-dock.rmd-chat-out .rmd-body > .rm-main { grid-column: 1; grid-row: 2; }
@@ -792,3 +784,216 @@ main.rm.rm-dock #rmAudioBox { container-type: inline-size; }
 @media (max-width: 360px) { body.rmd-pop main.rm.rm-dock .rmd-topic-line { display: none; } }
 body.rmd-pop main.rm.rm-dock .rmd-tools { overflow-x: auto; scrollbar-width: none; }
 main.rm.rm-dock .rmd-about-h { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); padding: var(--ds-sp-1) var(--ds-sp-1) 0 var(--ds-sp-2); font-size: var(--ds-fs-sm); color: var(--ds-text-strong); }
+
+/* ══ 1.99?? dockpol (the owner's 2026-11-04 tweaks: "much closer to what I want") ══ */
+/* (item 8) a rule where the chat's lines end and the bottom bar begins - the newest line never sits on it (pad page, window, homepage) */
+main.rm.rm-dock #rmAudioBox { border-block-start: 1px solid var(--ds-line-soft); padding-block-start: var(--ds-sp-1); }
+main.rm.rm-dock #rmScroll { padding-block-end: var(--ds-sp-1); }
+/* (item 3) a revealed line's chip and "Save as evidence" stay at the end of its words - no row of their own (less late growth) */
+main.rm.rm-dock .rmd-log .line .line-text :is(.veil-chip, .ev-save) { display: inline-flex; align-items: center; vertical-align: baseline; margin-block: 0; margin-inline: var(--ds-sp-1h) 0; line-height: 1.4; }
+
+/* (item 14) the chat header: [topic …] [status] [👥 n] [🔍] [⋯] - no CHAT word; 36px square buttons (44px on touch), centred icons; a rule
+   under it, then the log */
+main.rm.rm-dock #chatH { min-block-size: 44px; margin-block-end: var(--ds-sp-1); border-block-end: 1px solid var(--ds-line-soft); gap: var(--ds-sp-1); }
+main.rm.rm-dock #chatH > :is(.rmd-ppl-btn, .rmd-chat-more),
+main.rm.rm-dock #chatH > #rmSearchBtn { display: inline-grid; grid-auto-flow: column; place-items: center; place-content: center; min-block-size: 36px; min-inline-size: 36px; padding-block: 0; line-height: 1; }
+main.rm.rm-dock #chatH > .rmd-chat-more,
+main.rm.rm-dock #chatH > #rmSearchBtn { inline-size: 36px; padding-inline: 0; }
+main.rm.rm-dock #chatH .ds-ic { display: block; line-height: 1; margin: 0; }
+main.rm.rm-dock #chatH > .rmd-ppl-btn { gap: var(--ds-sp-1); padding-inline: var(--ds-sp-1h); }
+main.rm.rm-dock .rmd-topic-line { gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-set-topic { flex: 0 1 auto; min-inline-size: 0; min-block-size: 28px; padding-inline: var(--ds-sp-2); color: var(--ds-text-muted); font-size: var(--ds-fs-meta); border-color: transparent; background: transparent; }
+main.rm.rm-dock .rmd-set-topic > .rmd-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* (items 14, 19) the count badge - the 👥 button's number and the people column's - one pill, centred with its icon / label */
+main.rm.rm-dock :is(#chatH .rmd-count, #pplH > #rmPplN.rmd-count) { display: inline-grid; place-items: center; min-inline-size: 20px; min-block-size: 20px; padding: 0 var(--ds-sp-1h); border-radius: var(--ds-r-pill);
+  background: var(--ds-ac-bg); color: var(--ds-text-strong); font: 700 12px/20px var(--ds-font); font-variant-numeric: tabular-nums; letter-spacing: normal; text-transform: none; box-sizing: border-box; }
+main.rm.rm-dock #pplH > #rmPplN.rmd-count { flex: none; font-size: 13px; cursor: help; }
+main.rm.rm-dock #pplH > #rmPplN.rmd-count:empty { display: none; }
+/* (item 19) IN THE CHAT ROOM [n] on ONE line at every width: the label gives way first; the freshness note is the tooltip */
+main.rm.rm-dock #pplH { flex-wrap: nowrap; cursor: help; }
+main.rm.rm-dock #pplH > .ht { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* (item 13) a focus ring that fits its button: icon buttons in the Dock draw it inside; a control focused back after a pointer closed its
+   layer shows none (data-rmd-quiet - the next key or a blur takes it off); hover fills only where there is a hover */
+main.rm.rm-dock :is(.rmd-tools .rmd-tool, #chatH > button, .rmd-right button, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play, .rmd-ov-bot .ds-btn):focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ds-focus); border-radius: var(--ds-r-md); }
+main.rm.rm-dock [data-rmd-quiet]:focus-visible,
+main.rm.rm-dock [data-rmd-quiet]:focus { outline: none; box-shadow: none; }
+@media (hover: hover) {
+  main.rm.rm-dock .rmd-tools .rmd-tool:hover,
+  main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play):hover { background: var(--ds-hover); }
+}
+@media (pointer: coarse) {
+  main.rm.rm-dock .rmd-tools { min-block-size: 44px; }
+  main.rm.rm-dock #chatH > .rmd-chat-more,
+  main.rm.rm-dock #chatH > #rmSearchBtn { inline-size: 44px; }
+}
+
+/* (item 27) ONE sheet header everywhere: the title on one line, ✕ an icon-only 36px button, both centred in a 44px row */
+main.rm.rm-dock .rmd-layer .ds-modal-h.rmd-sheet-h { display: grid; grid-template-columns: minmax(0, 1fr) 36px; align-items: center; gap: var(--ds-sp-2); min-block-size: 44px; margin: 0 0 var(--ds-sp-2); padding: 0; }
+main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 { display: block; margin: 0; min-inline-size: 0; text-align: start; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 > .ds-ic { margin-inline-end: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-layer .rmd-sheet-h > .rmd-sheet-x { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; justify-content: center; justify-self: end; }
+main.rm.rm-dock .rmd-layer .ds-modal:focus { outline: none; }
+main.rm.rm-dock .rmd-sheet-back { justify-self: start; margin-block-end: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-about-h { min-block-size: 44px; padding-block: 0; }
+/* the 🎡 Spin confirm (a small popover; a bottom sheet on a phone) */
+main.rm.rm-dock .rmd-menu.rmd-confirm { display: grid; gap: var(--ds-sp-3); padding: var(--ds-sp-3); min-inline-size: 240px; }
+main.rm.rm-dock .rmd-confirm-t { margin: 0; font-size: var(--ds-fs-sm); color: var(--ds-text-strong); }
+main.rm.rm-dock .rmd-confirm-acts { display: flex; justify-content: flex-end; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-dj-idle { margin: 0 0 var(--ds-sp-2); color: var(--ds-text-muted); }
+/* (item 30) the Create forms */
+main.rm.rm-dock .rmd-form { display: grid; gap: var(--ds-sp-3); }
+main.rm.rm-dock .rmd-form-l { display: grid; gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-form-opts { display: grid; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-form-add { justify-self: start; }
+main.rm.rm-dock .rmd-form .ds-fine { margin: 0; }
+@media (max-width: 760px) { main.rm.rm-dock .rmd-form :is(input, select) { font-size: var(--ds-fs-lead); } }
+
+/* (item 22) the chat card's notices: at the bottom of the log, above the audio bar and below the menus, at most two */
+main.rm.rm-dock .rmd-log > .rmd-toasts { position: absolute; inset-inline: var(--ds-sp-2); inset-block-end: var(--ds-sp-2); z-index: var(--ds-z-sticky); display: flex; flex-direction: column; align-items: center; gap: var(--ds-sp-1); pointer-events: none; }
+main.rm.rm-dock .rmd-log > .rmd-toasts:empty { display: none; }
+main.rm.rm-dock .rmd-ct { pointer-events: auto; display: flex; align-items: center; gap: var(--ds-sp-1); max-inline-size: 100%; min-block-size: 32px; padding-block: 2px; padding-inline: var(--ds-sp-3) 2px;
+  border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-lg); background: var(--ds-surface-3); color: var(--ds-text); box-shadow: var(--ds-e-2); font-size: var(--ds-fs-meta); line-height: 1.35;
+  transition: opacity var(--ds-dur-2) var(--ds-ease), transform var(--ds-dur-2) var(--ds-ease); }
+@starting-style { main.rm.rm-dock .rmd-ct { opacity: 0; transform: translateY(6px); } }
+main.rm.rm-dock .rmd-ct-t { flex: 0 1 auto; min-inline-size: 0; overflow-wrap: anywhere; }
+main.rm.rm-dock .rmd-ct-x { flex: none; inline-size: 28px; min-inline-size: 28px; min-block-size: 28px; padding: 0; justify-content: center; border-color: transparent; background: transparent; }
+main.rm.rm-dock .rmd-ct.rmd-ct-bad { border-color: var(--ds-danger-line); }
+main.rm.rm-dock .rmd-ct.rmd-ct-sticky { border-style: dashed; }
+@media (prefers-reduced-motion: reduce) { main.rm.rm-dock .rmd-ct { transition: none; } }
+@media (forced-colors: active) { main.rm.rm-dock .rmd-ct { border: 1px solid CanvasText; background: Canvas; color: CanvasText; } }
+/* (the composer's own command list stays off in the Dock - its rows are the toasts above) */
+main.rm.rm-dock .rmd-input-row .rb-cmdfeed { display: none; }
+
+/* (item 4) the mic stage's tile tools: ONE group in each tile's top-end corner - [Reveal][👁 View cam][🙈 Take me off][📌 ⚑ / ✕] - 28px pills
+   (32px on touch), hidden until the tile is hovered or focused, tapped (.mf-tools, 4 s) or the stage overlay is up */
+main.rm.rm-dock #rmStage .player .mf-tile { display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: flex-end; align-items: flex-start; gap: var(--ds-sp-1); padding: var(--ds-sp-1h); box-sizing: border-box; }
+main.rm.rm-dock #rmStage .player .mf-tile > :is(.mf-x, .mf-rv, .mf-off) { position: relative; inset: auto; z-index: var(--ds-z-sticky); flex: none; display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-1);
+  min-inline-size: 28px; min-block-size: 28px; block-size: 28px; margin: 0; padding: 0 var(--ds-sp-2h); border: 1px solid transparent; border-radius: var(--ds-r-pill); background: var(--ds-media-panel); color: var(--ds-text-strong);
+  font: 600 12px/1 var(--ds-font); white-space: nowrap; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity var(--ds-dur-2) var(--ds-ease); }
+main.rm.rm-dock #rmStage .player .mf-tile > .mf-x { inline-size: 28px; padding: 0; }
+main.rm.rm-dock #rmStage .player .mf-tile > .mf-rv { order: 1; }
+main.rm.rm-dock #rmStage .player .mf-tile > .mf-cv { order: 2; }
+main.rm.rm-dock #rmStage .player .mf-tile > .mf-off { order: 3; }
+main.rm.rm-dock #rmStage .player .mf-tile > .mf-pn { order: 4; }
+main.rm.rm-dock #rmStage .player .mf-tile > .mf-x:not(.mf-pn) { order: 5; }
+main.rm.rm-dock #rmStage .player .mf-tile > :is(.mf-x, .mf-rv, .mf-off)[hidden] { display: none !important; }
+main.rm.rm-dock #rmStage .player .mf-tile:is(:hover, :focus-within, .mf-tools) > :is(.mf-x, .mf-rv, .mf-off),
+main.rm.rm-dock #rmStage.rmd-controls-on .player .mf-tile > :is(.mf-x, .mf-rv, .mf-off) { opacity: 1; pointer-events: auto; }
+main.rm.rm-dock #rmStage .player .mf-tile > :is(.mf-x, .mf-rv, .mf-off):focus-visible { opacity: 1; pointer-events: auto; outline: none; box-shadow: inset 0 0 0 2px var(--ds-focus); }
+@media (pointer: coarse) { main.rm.rm-dock #rmStage .player .mf-tile > :is(.mf-x, .mf-rv, .mf-off) { min-inline-size: 32px; min-block-size: 32px; block-size: 32px; } main.rm.rm-dock #rmStage .player .mf-tile > .mf-x { inline-size: 32px; } }
+@media (prefers-reduced-motion: reduce) { main.rm.rm-dock #rmStage .player .mf-tile > :is(.mf-x, .mf-rv, .mf-off) { transition: none; } }
+@media (forced-colors: active) { main.rm.rm-dock #rmStage .player .mf-tile > :is(.mf-x, .mf-rv, .mf-off) { border-color: ButtonText; } }
+/* (on a dynamic stage's small side cells, where ✕ is in ⋯ Manage, Reveal and View cam are a 24px icon chip - their words stay their names) */
+main.rm.rm-dock #rmStage .player .mf-stage.narrow:is([data-dyn="d6"], [data-dyn="d7"], [data-dyn="d8"], [data-dyn="d9"]) .mf-tile:not(.main) > .mf-rv { inline-size: 24px; min-inline-size: 24px; min-block-size: 24px; block-size: 24px; padding: 0; font-size: 0; }
+main.rm.rm-dock #rmStage .player .mf-stage.narrow:is([data-dyn="d6"], [data-dyn="d7"], [data-dyn="d8"], [data-dyn="d9"]) .mf-tile:not(.main) > .mf-rv::before { content: "🪪"; font-size: 12px; line-height: 1; }
+main.rm.rm-dock #rmStage .player .mf-stage.narrow:is([data-dyn="d6"], [data-dyn="d7"], [data-dyn="d8"], [data-dyn="d9"]) .mf-tile:not(.main) > .mf-rv.mf-cv::before { content: "👁"; }
+
+/* (item 15) the cam size control at the end of the cam row: [S][M][L][▦] (44px targets on touch); in Grid it floats at the bottom end */
+main.rm.rm-dock #rmStrip > .rmd-pin-size { grid-column: 2; grid-row: 1; align-self: center; padding: 2px; gap: 2px; background: var(--ds-media-panel); border-color: transparent; }
+main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz { min-block-size: 24px; min-inline-size: 24px; padding: 0 var(--ds-sp-1h); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz[aria-checked="true"] { background: var(--ds-ac-bg); color: var(--ds-text-strong); }
+main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ds-focus); }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] > .rmd-pin-size { position: absolute; inset-block-end: var(--ds-sp-1h); inset-inline-end: var(--ds-sp-1h); z-index: var(--ds-z-sticky); }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] { display: block; }
+main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { block-size: 100%; }
+@media (pointer: coarse) { main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz { min-block-size: 44px; min-inline-size: 36px; } }
+@media (max-width: 760px) { main.rm.rm-dock #rmStrip > .rmd-pin-size { flex-direction: column; padding: 1px; } main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz { min-block-size: 14px; min-inline-size: 28px; font-size: 10px; } }
+main.rm.rm-dock #rmStrip > .rmd-placeholder { flex: none; align-self: center; padding: var(--ds-sp-1) var(--ds-sp-2); font-size: var(--ds-fs-xs); }
+
+/* (items 5, 21) a holder chip: [🎙][avatar][name + flair] - the 🎙 at every width; a ring on the avatar of the one talking now (static under
+   reduced motion); the flair gives way first (to its emoji), then the name */
+main.rm.rm-dock .rmd-holders > .rmd-holder { gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-holder > .rmd-mic-b { flex: none; display: inline-grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 50%; background: var(--ds-ac-bg); box-shadow: inset 0 0 0 1px var(--ds-ac-line); font-size: 10px; line-height: 1; }
+main.rm.rm-dock .rmd-holder > .rmd-person { flex: 0 1 auto; min-inline-size: 0; }
+main.rm.rm-dock .rmd-holder.rmd-talking .av { box-shadow: 0 0 0 2px var(--ds-surface), 0 0 0 4px var(--ds-ac); }
+main.rm.rm-dock .rmd-holder.rmd-talking > .rmd-mic-b { background: var(--ds-ac); color: var(--ds-on-ac); }
+main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl { flex: 0 100000 auto; }
+main.rm.rm-dock .rmd-holders .rmd-person-name > :is(.who, .who-web) { flex: 0 1 auto; min-inline-size: 4ch; }
+@media (min-width: 1024px) { main.rm.rm-dock .rmd-holders > * { max-inline-size: min(45%, 320px); } }
+@container (max-width: 320px) { main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl { display: none; } }
+
+/* (item 20) ONE flair geometry in the Dock - chat line heads, people rows, holder chips, the person menu: an 18px pill, 6px sides, the
+   emoji centred; alone (its words hidden) a 22px disc */
+main.rm.rm-dock .rmd-log .line-head > .ufl,
+main.rm.rm-dock #rmPeople .nm > .ufl,
+main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl,
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl {
+  display: inline-flex; align-items: center; gap: var(--ds-sp-1); block-size: 18px; margin: 0; padding: 0 var(--ds-sp-1h); box-sizing: border-box; border-radius: var(--ds-r-pill); font: 600 11px/18px var(--ds-font); overflow: hidden; vertical-align: middle; }
+main.rm.rm-dock :is(.rmd-log .line-head, #rmPeople .nm, .rmd-holders .rmd-person-name) > .ufl > .ufl-e,
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl > .ufl-e { display: block; flex: none; font-size: 12px; line-height: 1; }
+main.rm.rm-dock :is(.rmd-log .line-head, #rmPeople .nm, .rmd-holders .rmd-person-name) > .ufl > .ufl-n,
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl > .ufl-n { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-log .line-head > .ufl { flex: 0 100000 auto; min-inline-size: calc(12px + 2ch + 16px); }
+/* (the people rows: the label shows whenever it fits - it shrinks before the name, down to its emoji + 2ch) */
+main.rm.rm-dock #rmPeople .nm > .ufl { flex: 0 100000 auto; min-inline-size: calc(12px + 2ch + 16px); }
+@container (max-width: 360px) {
+  main.rm.rm-dock #rmScroll .line-head > .ufl { inline-size: 22px; min-inline-size: 22px; min-width: 22px; padding: 0; justify-content: center; }
+}
+
+/* (item 28) the person menu's header: [avatar][name + flair / veil tag, and the login only when it differs][✕] on ONE row, centred */
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-h { display: grid; grid-template-columns: minmax(0, 1fr) 36px; align-items: center; padding: var(--ds-sp-2h) var(--ds-sp-3); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n { grid-template-columns: 32px minmax(0, 1fr); grid-template-rows: auto; align-items: center; align-content: center; min-block-size: 36px; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .av { grid-row: 1 / -1; align-self: center; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n:has(> .pm-login) { grid-template-rows: auto auto; row-gap: 0; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n:has(> .pm-login) .rmd-person-name { align-self: end; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n > .pm-login { align-self: start; line-height: 1.3; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name { line-height: 1.3; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { justify-self: end; align-self: center; display: inline-grid; place-items: center; }
+
+/* (items 6, 7) touch: no ⋯ beside a line's words - a tap on the line opens its menu (the ⋯ stays for screen readers and appears for a
+   keyboard), and the 🔊 pill is in that menu; lines aren't text-selectable here; the open line is marked; a phone's menu is a bottom sheet */
+@media (hover: none) and (pointer: coarse) {
+  main.rm.rm-dock .rmd-log .line.la:has(> .la-btn.la-tap) :is(.line-head, .line-text) { padding-inline-end: 0; }
+  main.rm.rm-dock .rmd-log .line > .la-btn.la-tap { position: absolute; inline-size: 1px; min-inline-size: 0; block-size: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; opacity: 0; }
+  main.rm.rm-dock .rmd-log .line > .la-btn.la-tap:focus-visible { inline-size: auto; min-inline-size: 44px; block-size: 32px; clip-path: none; opacity: 1; }
+  main.rm.rm-dock .rmd-log .line { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer; }
+  main.rm.rm-dock .rmd-log .line .body > .mc-btn { display: none; }
+  main.rm.rm-dock .rmd-log .line .body:has(> .mc-btn) { display: block; }
+}
+main.rm.rm-dock .rmd-log .line[data-la-open] { background: var(--ds-hover); border-radius: var(--ds-r-sm); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .chatlog.la-host .la-pop.la-sheet { position: fixed; inset-inline: var(--ds-sp-2); inset-block-start: auto; inset-block-end: calc(var(--ds-sp-2) + env(safe-area-inset-bottom, 0px)); z-index: var(--ds-z-pop);
+  max-inline-size: none; max-block-size: 70dvh; overflow-y: auto; padding: var(--ds-sp-1); box-shadow: 0 0 0 100vmax var(--ds-scrim), var(--ds-e-4); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .chatlog.la-host .la-pop.la-sheet .ds-menu-item { min-block-size: 44px; }
+
+/* (item 9) a phone's Live view: the navbar steps aside (its own height as a negative margin, pad-dock.js) and comes back on a scroll back,
+   a swipe down on the stage or focus - it stays in the DOM and the tab order */
+body.pad-dock-live.rmd-nav-auto > header { transition: margin-block-start 180ms var(--ds-ease); }
+body.pad-dock-live.rmd-nav-off > header { box-shadow: none !important; }
+@media (prefers-reduced-motion: reduce) { body.pad-dock-live.rmd-nav-auto > header { transition: none; } }
+
+/* (item 11) Feed / About in Live's frame: the same width and gutters, no footer, and ONE 44px slim header card - [pad chip ▾] …
+   [Live · Feed · About] [Follow]; under 420px the Feed / About tabs are their icons (their words stay their names) */
+main.rm.rm-dock:not(.rmd-home):not(.rmd-popout) { --ds-w: min(1600px, 100%); max-inline-size: min(1600px, 100%); }
+body.rmd-dock-pad .site-foot { display: none; }
+main.rm.rm-dock #rmHero.rmd-slimhead { min-block-size: 44px; padding: var(--ds-sp-1) var(--ds-sp-1h); }
+main.rm.rm-dock #rmHero.rmd-slimhead > .hero-bn { display: none; }
+main.rm.rm-dock #rmHero.rmd-slimhead .hd { flex-wrap: nowrap; gap: var(--ds-sp-2); min-block-size: 36px; }
+main.rm.rm-dock #rmHero.rmd-slimhead .hd-id { display: block; position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main.rm.rm-dock #rmHero.rmd-slimhead .hd > .rmd-chip-head { order: 1; flex: 0 1 auto; min-inline-size: 0; max-inline-size: 55%; block-size: 32px; padding: 0; background: transparent; }
+main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg { order: 2; flex: none; margin-inline-start: auto; }
+main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg .ptab { min-block-size: 26px; }
+main.rm.rm-dock #rmHero.rmd-slimhead .hd-acts { display: flex; order: 3; flex: none; }
+main.rm.rm-dock #rmHero.rmd-slimhead .hd-acts > .hd-follow .hd-fcs { display: none; }
+@media (max-width: 760px) {
+  main.rm.rm-dock #rmHero.rmd-slimhead .hd-id { flex-basis: auto; }
+  main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg { order: 2; flex: none; }
+  main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg .ptab { flex: none; padding-inline: var(--ds-sp-2); }
+  main.rm.rm-dock #rmHero.rmd-slimhead .hd-acts { order: 3; }
+}
+@media (max-width: 420px) {
+  main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg .ptab:is([data-tab="feed"], [data-tab="about"]) { font-size: 0; gap: 0; padding-inline: var(--ds-sp-2); }
+  main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg .ptab[data-tab="feed"]::before { content: "📰"; font-size: 14px; line-height: 1; }
+  main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg .ptab[data-tab="about"]::before { content: "ℹ️"; font-size: 14px; line-height: 1; }
+  main.rm.rm-dock #rmHero.rmd-slimhead #padTabs.rmd-seg .ptab .pnew { font-size: 10px; }
+  main.rm.rm-dock #rmHero.rmd-slimhead .hd > .rmd-chip-head { max-inline-size: 48%; }
+}
+/* (the 👥 button stays the narrow cards' - 1024px and wider the pad page has its people column) */
+@media (min-width: 1024px) { main.rm.rm-dock:not(.rmd-popout):not(.rmd-home) #chatH > .rmd-ppl-btn { display: none; } }
+/* (a holder chip on a phone: the name first - the flair is its emoji there) */
+@container (max-width: 400px) { main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl { inline-size: 22px; min-inline-size: 22px; padding: 0; justify-content: center; } main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl > .ufl-n { display: none; } }
+main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl { min-inline-size: 22px; }
+@media (max-width: 1023px) { main.rm.rm-dock .rmd-holders > * { max-inline-size: min(calc(100% - 40px), 240px); } }
+/* (one holder in the bar - the narrow cards draw one, the homepage's and the window's: it may take the zone, less a "+N") */
+main.rm.rm-dock .rmd-holders:not(:has(> .rmd-holder ~ .rmd-holder)) > .rmd-holder { max-inline-size: min(calc(100% - 40px), 320px); }
+@container (max-width: 400px) { main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl { display: none; } }

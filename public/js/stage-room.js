@@ -202,6 +202,7 @@
     // 1.99fv: the embed an admin put on Pepe's stage (null = his own stream). Re-checked like a slot's.
     function pepeEmbed() { return !ownPepe && pepeSrc && pepeSrc.mode === 'embed' && embedUrl(pepeSrc.embed) ? pepeSrc.embed : null; }
     function show() {
+      if (dead) return;
       if (view === 'mic' && !micShown()) pickDefault();
       var s = cur();
       if (view !== 'mic') micStop();
@@ -342,8 +343,11 @@
         })
         .catch(function () { b.disabled = false; alert(_t('js.stage.room.e_net', 'Could not reach the server.')); });
     }
+    var dead = false;
     function poll() {
+      if (dead) return Promise.resolve();
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
+        if (dead) return;
         var was = cur(), wasF = featured();
         pepeOn = !!g.active;
         pepeWhep = typeof g.whep === 'string' && g.whep ? g.whep : null;            // 1.99fd: ⚡ for Pepe's WHIP stream
@@ -359,7 +363,7 @@
         show();
       }).catch(function () {});
     }
-    setInterval(poll, 10000);
+    var pollTimer = setInterval(poll, 10000);
     // economy E-0: verified watch-minutes. Every 30 s a signed-in viewer's page says what it is showing
     // (HLS streams only - embeds can't be verified), whether the tab is visible and the video is playing,
     // and where the playhead is. The server credits only consecutive beats from one session per account
@@ -405,7 +409,7 @@
         m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override, m.pins_room, !!m.dyn_ok] : null]);
     }
     function setMic(p) {
-      if (!window.PATVStageMic) return;                     // WebRTC off: no mic stage on this page
+      if (!window.PATVStageMic || dead) return;             // WebRTC off: no mic stage on this page
       var wasDef = micDefault();
       mic = p && typeof p === 'object' ? p : null;
       var sig = sigOf(mic);
@@ -450,7 +454,14 @@
         if (o.onShow) o.onShow(selection());
       }
     }
-    return { poll: poll, show: show, view: function () { return view; }, selection: selection, setMic: setMic };
+    // 1.99?? dockpol (owner H6): the homepage swaps to a new front pad - this switcher stops for good (its polls, beats, player, mic stage, cam)
+    function destroy() {
+      dead = true; clearInterval(pollTimer); if (beats) { clearInterval(beats); beats = null; }
+      if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; }
+      try { micStop(); } catch (e) { /* gone */ } try { camStop(); } catch (e) { /* gone */ }
+      try { player.stop(); } catch (e) { /* gone */ } try { setEmbed(null); } catch (e) { /* gone */ }
+    }
+    return { poll: poll, show: show, view: function () { return view; }, selection: selection, setMic: setMic, destroy: destroy };
   }
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.switcher = switcher;
