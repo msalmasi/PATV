@@ -615,6 +615,75 @@ test("the earned backfill: knows which went first; refuses an apply without --be
   await C.setMeta("staking_fix", fx2);
 });
 
+test("1.99?? quick1: a stake into a vault at its staker limit is refused BEFORE any PAT moves - why, what still has room; paused says so", async () => {
+  const SR = require(path.join(repo, "capital", "stakeroom"));
+  const keep = await V.load();
+  const d = JSON.parse(JSON.stringify(keep));
+  const k = await V.ctx();
+  const p = V.prices(d, k);
+  // the prod shape (11-04): stakers own ~92% of the Bank - the protocol's shares become a staker's (same NAV, same price)
+  const tot = Number(d.v.bank.total);
+  const moveBank = Number(d.v.bank.holders.protocol) - 0.08 * tot;
+  d.v.bank.holders.protocol = Number(d.v.bank.holders.protocol) - moveBank;
+  d.v.bank.holders.s777 = Number(d.v.bank.holders.s777 || 0) + moveBank;
+  // ...and the House with room for about 30,000: stakers' value = (NAV - 30,000) / 2 at smax 0.5
+  const hNav = V.nav("house", k), hNow = V.stakerValue(d, "house", p);
+  const moveHouse = ((hNav - 30000) / 2 - hNow) / p.house;
+  d.v.house.holders.protocol = Number(d.v.house.holders.protocol) - moveHouse;
+  d.v.house.holders.s777 = Number(d.v.house.holders.s777 || 0) + moveHouse;
+  d.queue = Object.fromEntries(Object.entries(d.queue).filter(([, q]) => q.state !== "pending"));
+  await V.store(d);
+  try {
+    const vf0 = await P.balance("vaultfloat"), sb0 = (await S.get("1")).balance, n0 = Object.keys((await V.load()).queue).length;
+    const full = await op("vaults", "stake", ANN, { stash: "1", vault: "bank", amount: 5000 }, "stake-full-001");
+    assert.equal(full.body.ok, false);
+    assert.equal(full.body.code, "full");
+    assert.match(full.body.error, /^🏦 The 🏦 Bank vault is full right now: stakers may own at most 50% of a vault, and they already own 92% of it\. Nothing moved - your PAT stays in ann\/nest\. 🤖 Auto still takes stakes/);
+    assert.match(full.body.error, /there's no date for that\.$/);
+    const capped = await op("vaults", "stake", ANN, { stash: "1", vault: "house", amount: 50000 }, "stake-capd-001");
+    assert.equal(capped.body.code, "capped", JSON.stringify(capped.body));
+    const fit = SR.fitOf(hNav, V.stakerValue(await V.load(), "house", V.prices(await V.load(), await V.ctx())), 0.5);
+    assert.ok(Math.abs(capped.body.fit - 30000) <= 2 && capped.body.fit === fit, `room for about 30,000 (${capped.body.fit})`);
+    assert.match(capped.body.error, new RegExp(`House vault only has room for about PAT ${fit.toLocaleString("en-US")} right now .* stake PAT ${fit.toLocaleString("en-US")} or less\\.`));
+    assert.equal(await P.balance("vaultfloat"), vf0, "no PAT moved into the float");
+    assert.equal((await S.get("1")).balance, sb0, "the stash still has it");
+    assert.equal(Object.keys((await V.load()).queue).length, n0, "nothing queued");
+    // the website form says the same (actions.js -> service.stashForm), and so does Pepe (he relays `error`)
+    assert.match(await SVC.stashForm("u1", ["stake", "nest", "5000", "bank"]), /^🏦 The 🏦 Bank vault is full right now/);
+    // what fits still goes in; Auto (vault_auto_staker_cap off) still takes stakes
+    const ok1 = await op("vaults", "stake", ANN, { stash: "1", vault: "house", amount: fit }, "stake-fits-001");
+    assert.equal(ok1.body.ok, true, JSON.stringify(ok1.body));
+    const ok2 = await op("vaults", "stake", ANN, { stash: "1", vault: "auto", amount: 5000 }, "stake-auto-001");
+    assert.equal(ok2.body.ok, true, JSON.stringify(ok2.body));
+    // the room the first stake took is gone for the next one (a queued deposit counts)
+    assert.equal((await op("vaults", "stake", ANN, { stash: "1", vault: "house", amount: 5000 }, "stake-full-002")).body.code, "full");
+    // Auto under the limit with every vault full: staking is full
+    await V.store(Object.assign(await V.load(), { v: (() => { const x = JSON.parse(JSON.stringify(d.v)); const m = Number(x.mm.holders.protocol) - 0.05 * Number(x.mm.total); x.mm.holders.protocol -= m; x.mm.holders.s777 = Number(x.mm.holders.s777 || 0) + m; return x; })() }));
+    await SVC.putConfig({ auto_staker_cap: 1 });
+    const af = await op("vaults", "stake", ANN, { stash: "1", vault: "auto", amount: 5000 }, "stake-auto-002");
+    assert.equal(af.body.code, "full", JSON.stringify(af.body));
+    assert.match(af.body.error, /^🏦 Staking is full right now: every vault is at its staker limit .* so 🤖 Auto can't take stakes either\. Nothing moved/);
+    await SVC.putConfig({ auto_staker_cap: 0 });
+    // switched off: "paused", not "launching"
+    await SVC.putConfig({ vaults_enabled: 0 });
+    const pz = await op("vaults", "stake", ANN, { stash: "1", vault: "auto", amount: 5000 }, "stake-paus-001");
+    assert.equal(pz.body.code, "paused");
+    assert.equal(pz.body.error, SR.PAUSED);
+  } finally {
+    await SVC.putConfig({ vaults_enabled: 1, auto_staker_cap: 0 });
+    // the two stakes that went in (the only pending ones - the queue was emptied of pending items above) come back out of
+    // the float to the stash, and the book is put back (net zero for the rollback's supply check)
+    const now = await V.load();
+    for (const q of Object.values(now.queue)) {
+      if (q.state === "pending" && q.held) {
+        await C.tx(async () => { await V.transfer(`${q.id}-undo`, "vaultfloat", `stash:${q.stash}`, Math.trunc(q.amount), "test undo"); });
+      }
+    }
+    keep.seq = Math.max(Number(keep.seq), Number(now.seq));
+    await V.store(keep);
+  }
+});
+
 test("rollback: the pots go back to Pepe under one key, everything is handed back, the supply total doesn't move", async () => {
   const s0 = (await supply()).total;
   const potSum = Number((await getQuery("SELECT COALESCE(SUM(balance),0) AS t FROM pools WHERE key LIKE 'market:%'"))[0].t);

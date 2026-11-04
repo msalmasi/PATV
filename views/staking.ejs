@@ -68,6 +68,16 @@
   .sk button.alt:hover { border-color: var(--ds-gold); filter: none; }
   .sk .hint { margin: 0; }
   .sk .act-box { margin: var(--ds-sp-3) 0; }
+  /* 1.99?? quick1: the room each vault has for a stake (capital/stakeroom.js) */
+  .sk .sk-room { margin-top: var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-4); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: var(--ds-surface); }
+  .sk .sk-room.shut { border-color: var(--ds-warn-ink, #d9a400); }
+  .sk .sk-room-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0; font-size: var(--ds-fs-meta); }
+  .sk .sk-room .rv b { color: var(--ds-ok); font-weight: 700; }
+  .sk .sk-room .rv.full b { color: var(--ds-warn-ink, #d9a400); }
+  .sk .sk-room .info { margin: var(--ds-sp-2) 0 0; }
+  .sk .sk-why { margin: 0; min-height: 0; color: var(--ds-warn-ink, #d9a400); font-size: var(--ds-fs-meta); }
+  .sk .sk-why:empty { display: none; }
+  .sk select option:disabled { color: #777; }
   @media (max-width: 760px) { .sk input[type=text], .sk select { font-size: 16px; } }
   @media (prefers-reduced-motion: reduce) { .sk button { transition: none; } }
 </style>
@@ -387,16 +397,66 @@
       <p class="info"><%- t('staking.mine.week_help') %></p>
     <% } %>
 
+    <% /* 1.99?? quick1 (capital/stakeroom.js, staking.js `room`): the room each vault has for a stake right now, before you
+          submit - a full vault's option is disabled with the reason, a too-big amount says how much fits; the server
+          refuses the same stakes (nothing moves) and Pepe's chat reply says the same */
+       const RM = locals.room || null;
+       const skPaused = s.enabled === false;
+       const rFit = (k) => !RM ? null : k === 'auto' ? RM.auto.fit : (RM.vaults[k] || {}).fit;
+       const rFull = (k) => skPaused || (!!RM && (k === 'auto' ? !!RM.auto.full : !!(RM.vaults[k] || {}).full));
+       const rOpenAny = !skPaused && (!RM || RM.anyOpen);
+       const rDefault = (!rFull('auto') && 'auto') || ['bank', 'house', 'mm'].find((k) => !rFull(k)) || 'auto';
+       const rName = (k) => V[k].icon + ' ' + V[k].name;
+       const rCell = (k) => rFull(k) ? t('staking.room.full') : rFit(k) == null ? t('staking.room.open') : t('staking.room.about', { n: fmt(rFit(k)) });
+       const rShares = RM ? ['bank', 'house', 'mm'].map((k) => t('staking.room.share', { vault: V[k].name, p: pct(RM.vaults[k].share, 0) })).join(', ') : '';
+       const rAnyFull = !!RM && ['bank', 'house', 'mm'].some((k) => rFull(k)); %>
+    <% if (RM || skPaused) { %>
+      <div class="sk-room<%= rOpenAny ? '' : ' shut' %>" id="stakeRoom">
+        <p class="sk-room-row"><b><%- t('staking.room.h') %></b>
+          <% KEYS.forEach((k) => { %><span class="rv<%= rFull(k) ? ' full' : '' %>"><%= rName(k) %> <b><%- rCell(k) %></b></span><% }) %></p>
+        <% if (skPaused) { %><p class="info"><%- t('staking.room.paused') %></p>
+        <% } else if (!rOpenAny) { %><p class="info"><%- t('staking.room.limit', { p: pct(RM.smax, 0), shares: rShares }) %> <%- t('staking.room.all_full') %></p>
+        <% } else if (rAnyFull) { %><p class="info"><%- t('staking.room.why', { p: pct(RM.smax, 0), shares: rShares }) %><%- RM.auto.fit == null && !rFull('auto') ? ' ' + t('staking.room.auto_open') : '' %></p>
+        <% } else { %><p class="info"><%- t('staking.room.why_open', { p: pct(RM.smax, 0), shares: rShares }) %></p><% } %>
+      </div>
+    <% } %>
     <div class="forms">
-      <form method="post" action="/act"><%- hidden('stash') %>
+      <form method="post" action="/act" id="stakeForm" data-full="<%- t('staking.room.sel_full') %>" data-capped="<%- t('staking.room.sel_capped') %>"><%- hidden('stash') %>
         <b><span class="ds-ic" aria-hidden="true">📥</span> Stake</b>
         <input type="hidden" name="a0" value="stake">
-        <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner_name || m.owner %>/<%= m.name %></option><% }) %></select>
-        <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
-        <%- vaultSelect('auto') %>
-        <button type="submit">Stake</button>
+        <select name="a1" aria-label="Stash"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner_name || m.owner %>/<%= m.name %></option><% }) %></select>
+        <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" aria-label="Amount" required aria-describedby="stakeWhy">
+        <select name="a3" aria-label="Vault" aria-describedby="stakeWhy"><% KEYS.forEach((k) => { %><option value="<%= k %>" data-name="<%= rName(k) %>" data-fit="<%= rFit(k) == null ? '' : rFit(k) %>"<%= k === rDefault ? ' selected' : '' %><%= rFull(k) ? ' disabled' : '' %>><%= rName(k) %><%- rFull(k) ? ' — ' + t('staking.room.full') : rFit(k) != null ? ' (' + t('staking.room.about', { n: fmt(rFit(k)) }) + ')' : '' %></option><% }) %></select>
+        <p class="sk-why" id="stakeWhy" role="status" aria-live="polite"><%- skPaused ? t('staking.room.paused') : !rOpenAny ? t('staking.room.all_full') : '' %></p>
+        <button type="submit"<%= rOpenAny ? '' : ' disabled' %>>Stake</button>
         <span class="info">Moves PAT from the stash into the vault at the next daily cut-off, at that day's share price.</span>
       </form>
+      <script>
+        (function () {
+          // 1.99?? quick1: the reason a stake can't go in, before it's sent (the server checks again)
+          var f = document.getElementById('stakeForm');
+          if (!f) return;
+          var sel = f.querySelector('select[name="a3"]'), amt = f.querySelector('input[name="a2"]'), btn = f.querySelector('button[type="submit"]'), why = document.getElementById('stakeWhy');
+          if (!sel || !amt || !btn || !why || btn.disabled) return;
+          function parse(v) {
+            var m = String(v || '').trim().toLowerCase().replace(/,/g, '').match(/^(\d+)([km]?)$/);
+            return m ? Number(m[1]) * (m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : 1) : null;
+          }
+          function upd() {
+            var o = sel.options[sel.selectedIndex], msg = '';
+            if (o) {
+              var name = o.getAttribute('data-name') || o.value, fit = o.getAttribute('data-fit'), n = parse(amt.value);
+              if (o.disabled) msg = (f.getAttribute('data-full') || '').replace('{vault}', name);
+              else if (fit !== '' && fit != null && n != null && n > Number(fit)) msg = (f.getAttribute('data-capped') || '').replace('{vault}', name).replace('{n}', Number(fit).toLocaleString('en-US'));
+            }
+            why.textContent = msg;
+            btn.disabled = !!msg;
+          }
+          sel.addEventListener('change', upd);
+          amt.addEventListener('input', upd);
+          upd();
+        })();
+      </script>
       <form method="post" action="/act"><%- hidden('stash') %>
         <b><span class="ds-ic" aria-hidden="true">📤</span> Unstake</b>
         <input type="hidden" name="a0" value="unstake">

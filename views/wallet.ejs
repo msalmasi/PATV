@@ -290,6 +290,12 @@
       </div>
       <span class="info"><%- t('wallet.stash.stake_info') %></span>
     </details>
+    <% /* 1.99?? quick1 (capital/stakeroom.js): which vaults take a NEW stake right now - a full one refuses it before any PAT moves */
+       const SRm_ = locals.stakeRoom || null;
+       if (SRm_ && myStashes.length && (SRm_.auto.full || ['bank', 'house', 'mm'].some((k) => SRm_.vaults[k].full))) {
+         const cell_ = (k) => { const r_ = k === 'auto' ? SRm_.auto : SRm_.vaults[k]; return VN[k] + ' <b>' + (r_.full ? t('staking.room.full') : r_.fit == null ? t('staking.room.open') : t('staking.room.about', { n: fmt(r_.fit) })) + '</b>'; }; %>
+      <p class="ds-note warn stake-room" role="note"><%- t('staking.room.h') %> <%- VK.map(cell_).join(' · ') %> <a href="/staking#stakeRoom"><%- t('wallet.stash.room_why') %></a></p>
+    <% } %>
     <% if (!myStashes.length) { %><p class="info"><%- t('wallet.stash.none') %></p><% } %>
     <div class="grid">
     <% myStashes.forEach((s) => { %>

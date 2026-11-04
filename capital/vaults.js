@@ -47,6 +47,7 @@
 "use strict";
 const C = require("./core");
 const X = require("./lmsr");
+const SR = require("./stakeroom");   // 1.99?? quick1: the room for a stake, in plain words
 
 const VAULTS = ["bank", "house", "mm"];
 const AUTO = "auto", PROTOCOL = "protocol";
@@ -206,9 +207,43 @@ async function transfer(tid, src, dst, amount, why) {
 }
 
 // ── requests ──
+/** 1.99?? quick1 (capital/stakeroom.js): the room every vault has for a stake right now - the stakers' value and NAV at
+ *  this moment, less the deposits already queued ahead (they run first at the cut-off). -> stakeroom.roomOf */
+function roomNow(d, k, p, c) {
+  const ahead = { bank: 0, house: 0, mm: 0 };
+  const w = autoCapOn(c) ? autoTargets(d, c) : null;
+  for (const q of Object.values(d.queue || {})) {
+    if (q.kind !== "deposit" || q.state !== "pending" || !q.held) continue;
+    if (VAULTS.includes(q.vault)) ahead[q.vault] += Math.trunc(Number(q.amount) || 0);
+    else if (q.vault === AUTO && w) for (const v of VAULTS) ahead[v] += Math.trunc((Number(q.amount) || 0) * w[v]);
+  }
+  return SR.roomOf({ nav: Object.fromEntries(VAULTS.map((v) => [v, nav(v, k)])),
+                     staked: Object.fromEntries(VAULTS.map((v) => [v, stakerValue(d, v, p)])),
+                     smax: Number(c.staker_max), autoCap: autoCapOn(c), ahead, minMove: Number(c.min_move) });
+}
+/** Why a deposit of `amt` into `vault` can't go in now (stakeroom.refusal: full / capped, said plainly) or null. For Auto
+ *  under the staker limit, what the cut-off's split would place at today's numbers decides (autoCappedLegs). */
+function stakeRefusal(d, k, p, c, vault, amt, stashRef) {
+  const room = roomNow(d, k, p, c);
+  let placed = null;
+  if (vault === AUTO && autoCapOn(c)) {
+    const w = autoTargets(d, c);
+    const legs = VAULTS.map((v) => [v, Math.trunc(amt * w[v])]);
+    legs[0][1] += amt - legs.reduce((s, x) => s + x[1], 0);
+    const navs = Object.fromEntries(VAULTS.map((v) => [v, nav(v, k)]));
+    const staked = Object.fromEntries(VAULTS.map((v) => [v, stakerValue(d, v, p)]));
+    placed = autoCappedLegs(legs, navs, staked, Number(c.staker_max)).reduce((s, x) => s + x[1], 0);
+  }
+  return SR.refusal(room, vault, amt, { stash: stashRef, placed });
+}
+
 async function request(actor, a, t) {
   const c = await C.cfg();
-  if (!(await live())) return { ok: false, code: "not_live", error: "🏦 vaults are launching — try again in a few minutes." };
+  if (!(await live())) {
+    // 1.99?? quick1: switched off is "paused", said plainly - "launching" only while the book isn't set up yet
+    if (!Number(c.vaults_enabled) && (await C.live())) return { ok: false, code: "paused", error: SR.PAUSED };
+    return { ok: false, code: "not_live", error: "🏦 vaults are launching — try again in a few minutes." };
+  }
   const S = require("../stashes");
   const s = await S.get(a.stash);
   if (!s || s.closed) return { ok: false, code: "no_stash", error: "that stash doesn't exist (or is closed)." };
@@ -228,6 +263,11 @@ async function request(actor, a, t) {
   if (kind === "deposit") {
     const amt = Math.trunc(Number(a.amount) || 0);
     if (amt < Number(c.min_move)) return { ok: false, code: "min", error: `stake at least PAT ${fmt(c.min_move)}.` };
+    // 1.99?? quick1: a vault at its staker limit used to take the stake and refund all of it at the cut-off - silently,
+    // as far as the member could tell. Now it is refused here, before any PAT moves, with why and what still has room.
+    const k0 = await ctx();
+    const full = stakeRefusal(d, k0, prices(d, k0), c, vault, amt, `${s.owner_name}/${s.name}`);
+    if (full) return Object.assign({ ok: false }, full);
     if (amt > S.free(s)) return { ok: false, code: "insufficient", error: `${s.owner_name}/${s.name} only has PAT ${fmt(S.free(s))} free.` };
     item.amount = amt;
     item.tid_hold = `${qid}-hold`;
@@ -1445,6 +1485,8 @@ async function publish() {
     heist_log: Array.isArray(c.heist_log) ? c.heist_log.slice(-30) : [], heist_settings: c.heist_settings || null,
     bank_cash: k.cash.bank, mm_cash: k.cash.mm,
     settings: { ceil: Number(c.ceil_apr), floor: Number(c.floor_apr), topup: !!Number(c.topup), staker_max: Number(c.staker_max),
+                // 1.99?? quick1: the smallest stake + staking switched on (stakeroom.fromSnap / the page's paused note)
+                min_move: Number(c.min_move), enabled: !!Number(c.vaults_enabled),
                 bank_min: Number(c.auto_bank_min), house_max: Number(c.auto_house_max), mm_max: Number(c.auto_mm_max),
                 cushion: cushionCfg(c).on, cushion_days: cushionCfg(c).days, bonus_cap: await bonusCap(c),
                 // P2.2 / P2.1: Auto deposits under the staker limit; the weekly payout time-weighted (this week has a PAT-days bucket)
@@ -1527,6 +1569,6 @@ module.exports = { VAULTS, AUTO, PROTOCOL, CASH, LABEL, SITE_KEYS, load, store, 
                    // staking fix plan (2026-10-19)
                    skim, giveBack, ceilingStep, ceilingCap, ceilingOn, ceilingOffStep, ceilingDay, cushionCfg, cushionShares, cushionHorizon, nonProtocolShares, stakerIndex, audit,
                    AUDIT, CUSHION_SLACK, CUSHION_KEEP_DAYS, CUSHION_MAX_DAYS, PD_KEEP, PD_SLACK, LATE_MONDAY, lookThrough, accruePatDays, patDaysNow, pdPartial, pdWhole, pdFirstWeek, lastSettled, settledFrom,
-                   lateMonday, settlesAt, autoCapOn, stakerRoom, capAutoLegs, autoCappedLegs,
+                   lateMonday, settlesAt, autoCapOn, stakerRoom, capAutoLegs, autoCappedLegs, roomNow, stakeRefusal,
                    stakerApr, stakerSoFar, waterfallFrom, wfRowD2, WEIGHTINGS, paidByStash, bonusCap, addCost, backfillCost, queueWhole, impliedHoldings, holdingOf, replayCeiling, REPLAY_CEIL,
                    PAID_VIA, CORR_VIA, publicRecord, wfView, WF_KEEP, _wfForget: () => { WF_MEMO.clear(); wfErrAt = 0; } };

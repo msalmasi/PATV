@@ -127,6 +127,8 @@ function clean(body) {
       cushion: s.cushion === true || s.cushion === 1, cushion_days: numOrNull(s.cushion_days), bonus_cap: numOrNull(s.bonus_cap),
       // P2.2 / P2.1 (2026-10-19): Auto deposits under the staker limit; the weekly payout shared by PAT-days
       auto_staker_cap: s.auto_staker_cap === true || s.auto_staker_cap === 1, weighted: s.weighted === true || s.weighted === 1,
+      // 1.99?? quick1: the smallest stake and staking switched on (null / true from an older snapshot) - capital/stakeroom.js
+      min_move: numOrNull(s.min_move), enabled: s.enabled === false || s.enabled === 0 ? false : true,
     },
     epochs: (Array.isArray(body.epochs) ? body.epochs : []).slice(-120).map((e) => ({
       ts: secs(e.ts), price: pick(e.price, ALL), nav: pick(e.nav, VAULTS), staked: pick(e.staked, VAULTS), flows: cleanFlows(e.flows),
@@ -347,8 +349,12 @@ function register(app, { isBotToken, addUser }) {
       }
 
       // the view gets only the viewer's own stashes (mine): every other stash's holdings, cost, payouts and PAT-days stay out
+      // 1.99?? quick1: the room each vault has for a stake (capital/stakeroom.js) - the form says it before you submit
+      // (computed here from the whole queue, before it is stripped from what the view gets)
+      let room = null;
+      try { room = require("./capital/stakeroom").fromSnap(snap); } catch (e) { room = null; }
       res.render("staking", {
-        ...base, snap: Object.assign({}, snap, { positions: {}, queue: [] }), mine, pnl,
+        ...base, snap: Object.assign({}, snap, { positions: {}, queue: [] }), mine, pnl, room,
         chart: chart(snap.epochs || []),
         rev: [revenue(snap.epochs || [], 7), revenue(snap.epochs || [], 30)].filter(Boolean),
         pending: (snap.queue || []).filter((q) => !/^(done|failed|cancel)/i.test(q.state || "")),
