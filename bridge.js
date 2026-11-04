@@ -1874,6 +1874,42 @@ function bySlug(slug) {
   return null;
 }
 
+/** 1.99?? casino2: the live bridged pad of a Camfrog room id (Pepe is bridging it now and it is that room's current entry), or null -
+ *  the casino tables' people / pads (casino/people.js) ask this instead of reaching into the room map. */
+function liveBridged(roomId) {
+  const R = roomId ? rooms.get(String(roomId)) : null;
+  return R && !R.offline && isLive(R) && bridgeOk(R.id) ? R : null;
+}
+/** 1.99?? casino2: the gate of a pad's chat window (GET /p/:slug/chat, factored out of it): a bridged Camfrog pad live here, its bridge
+ *  perk, this viewer's members-tier access (padaccess.full: the 18+ gate included) and the Room Dock for this viewer. -> {ok, R, info,
+ *  slug, platform}; ok false = the pad page renders the right gate. The casino tables' 💬 Chat offers a pad only where this says ok. */
+async function chatGate(user, rawSlug) {
+  await load();
+  const reg = require("./rooms"), pads = require("./pads");
+  const raw = String(rawSlug || "").slice(0, 128);
+  const R = bySlug(raw);
+  const info = R ? await reg.get(R.id).catch(() => null) : await require("./roomsweb").resolveRoom(raw).catch(() => null);
+  const slug = info ? pads.padSlug(info) : R ? R.slug : raw.toLowerCase();
+  const no = { ok: false, R: null, info, slug, platform: null };
+  const live = R && rooms.get(R.id) === R ? R : null;           // (a registered pad Pepe isn't bridging has no live chat)
+  if (!live || live.offline) return no;
+  const platform = (info && info.platform) || reg.platformOf(live.id);
+  if (platform !== "camfrog" || !bridgeOk(live.id)) return no;
+  const PA = require("./padaccess");
+  await PA.init();
+  if (!PA.full(user, live.id) || PA.adultGate(user, live.id) !== "ok") return no;
+  if (!require("./paddock").viewerOn(user)) return no;
+  return { ok: true, R: live, info, slug, platform };
+}
+/** 1.99?? casino2: the chat window's EMBED variant (a casino table's 💬 Chat panel frames it): ?embed=1 asked by a same-origin frame.
+ *  Sec-Fetch-Dest iframe (or absent: an older browser) and Sec-Fetch-Site same-origin (or absent). Anything else - a top-level
+ *  ?embed=1 included - is the plain window, never framed. */
+function chatEmbedAsked(req) {
+  if (!req || !req.query || req.query.embed !== "1") return false;
+  const dest = String(req.get("Sec-Fetch-Dest") || ""), site = String(req.get("Sec-Fetch-Site") || "");
+  return (dest === "" || dest === "iframe") && (site === "" || site === "same-origin");
+}
+
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   load();
@@ -2270,25 +2306,19 @@ function register(app, { isBotToken, addUser }) {
   // = staff only). Anything else goes to the pad page, which renders the right gate. The lines, room PM rows, veils, Reveal, presence
   // (?pad=1: this IS the pad's live chat) and every send rule are the pad page's own, checked again by each route. Headers: never
   // cached (rows are per viewer), never indexed, never framed (it has a composer and money actions - pad pages send no frame header).
+  // 1.99?? casino2: ?embed=1 from a same-origin frame (chatEmbedAsked) = the casino tables' 💬 Chat panel - the same page and every
+  // rule above; only its frame headers differ (SAMEORIGIN / frame-ancestors 'self', for that variant alone - the window stays DENY)
   app.get("/p/:slug/chat", addUser, async (req, res) => {
-    res.set({ "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow, noarchive", "X-Frame-Options": "DENY",
-              "Content-Security-Policy": "frame-ancestors 'none'", "Referrer-Policy": "same-origin" });
-    await load();
+    const embed = chatEmbedAsked(req);
+    res.set({ "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow, noarchive", "X-Frame-Options": embed ? "SAMEORIGIN" : "DENY",
+              "Content-Security-Policy": embed ? "frame-ancestors 'self'" : "frame-ancestors 'none'", "Referrer-Policy": "same-origin" });
     const signedIn = !!(req.user && req.user.userId);
-    const reg = require("./rooms"), pads = require("./pads");
-    const raw = String(req.params.slug || "").slice(0, 128);
-    const R = bySlug(raw);
-    const info = R ? await reg.get(R.id).catch(() => null) : await require("./roomsweb").resolveRoom(raw).catch(() => null);
-    const slug = info ? pads.padSlug(info) : R ? R.slug : raw.toLowerCase();
-    const toPad = () => res.redirect(302, "/p/" + encodeURIComponent(slug));
-    const live = R && rooms.get(R.id) === R ? R : null;           // (a registered pad Pepe isn't bridging has no live chat)
-    if (!live || live.offline) return toPad();
-    const platform = (info && info.platform) || reg.platformOf(live.id);
-    if (platform !== "camfrog" || !bridgeOk(live.id)) return toPad();
+    const reg = require("./rooms");
     const PA = require("./padaccess");
-    await PA.init();
-    if (!PA.full(req.user, live.id) || PA.adultGate(req.user, live.id) !== "ok") return toPad();
-    if (!require("./paddock").viewerOn(req.user)) return toPad();
+    const gate = await chatGate(req.user, req.params.slug);
+    const slug = gate.slug, info = gate.info, platform = gate.platform, live = gate.R;
+    const toPad = () => res.redirect(302, "/p/" + encodeURIComponent(slug));
+    if (!gate.ok) return toPad();
     let linked = false, login = null;
     if (signedIn) {
       try { login = ((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername || null; } catch (e) { login = null; }
@@ -2300,7 +2330,7 @@ function register(app, { isBotToken, addUser }) {
     const initial = await liveView(live, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null, true,
                                    { viewer: signedIn ? req.user : null, padPage: true, rpm: 0, program: false });
     res.render("room", {
-      chatOnly: true,
+      chatOnly: true, embed,
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen: true, adultGate: "ok",
       access: { level: PA.levelOf(live.id), info: PA.INFO[PA.levelOf(live.id)] },
       onairAdmin: SP.can(req.user, "onair.operate"),
@@ -2388,6 +2418,18 @@ function register(app, { isBotToken, addUser }) {
     // chatlog.history is off, for anyone else, or when the archive holds nothing of this room.
     const chatHistory = signedIn && liveOpen && !siteOnly && (R.offline || bridgeLocked) ? await require("./chatloghist").offlineCard(R.id, req.user) : null;
     const roomStage = await require("./mainstage").roomStage(R.id, req.user);
+    // 1.99?? casino2 (owner: "Did we ever get the ability for users to start a Plex play from the room?"): the Room Dock's 📼 Play from
+    // Plex sheet (plex-play.js, the flow /stage runs) - /stage's own rules (medialib.goLiveInfo: Plex members, the override list, staff,
+    // the price), for a signed-in viewer who may see this pad's live room, while the Dock is theirs; medialib decides again on every play.
+    // onair: staff who run Pepe's on-air (onair.operate) may also put it on his stream - not on the pad that already shows his stream.
+    let plexPlay = null;
+    if (signedIn && liveOpen && adultGate === "ok" && require("./paddock").viewerOn(req.user)) {
+      try {
+        const g = await require("./medialib").goLiveInfo(req.user);
+        if (g && g.show && g.ok) plexPlay = { free: !!g.free, member: !!g.member, admin: !!g.admin, price_per_hour: g.price_per_hour || 0, daily_cap: g.daily_cap == null ? null : g.daily_cap,
+                                              quality: g.quality, queue: !!g.queue, onair: SP.can(req.user, "onair.operate") && !(pepeIn(R.id) && stage().active) };
+      } catch (e) { plexPlay = null; }
+    }
     const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
     const here = pepeIn(R.id), st = stage();
     const latest = feed ? await padLatest(R.id, req.user, feed) : [];
@@ -2415,6 +2457,7 @@ function register(app, { isBotToken, addUser }) {
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       padDockOn: dockOn_,
+      plexPlay,      // 1.99?? casino2: the Dock's 📼 Play from Plex (null = not offered)
       vt: vt_,   // 1.99ajh dockpop: the viewer tag the Dock's windows compare (dock-link.js) - only for the Room Dock (review)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
@@ -2563,5 +2606,6 @@ module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === 
   revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
+  chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99?? casino2 (casino/people.js, the chat embed)
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)
   cursorNow: () => cursor };          // CL8: the newest feed cursor (the history answer's `cursor`)

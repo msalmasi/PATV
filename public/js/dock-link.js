@@ -8,7 +8,8 @@
 // of the same tag. A receiver hears its own room and tag only; another tag is a re-check trigger (onForeign: someone else signed in under
 // this browser, or this window is the stale one) - except 'audio-on', which reaches every window of the room (one room is never heard
 // twice). 'session' (views/partials/chat-sweep.ejs: the first page after a sign-out) has no room or tag. 'tab-gone' (review): a pad tab
-// leaving (pagehide) - its window no longer offers "Back in the pad tab". Plain ES5, no dependencies.
+// leaving (pagehide) - its window no longer offers "Back in the pad tab". 1.99?? casino2 (v2): pop-open / pop-alive may say embed: 1 -
+// the "window" is the chat framed beside a casino table (casino-chat.js), so a popped pad tab says where it is. Plain ES5, no dependencies.
 (function (W) {
   'use strict';
   var NAME = 'patv-dock', KEY = 'patv.dock.msg', MAX_DRAFT = 300;
@@ -28,6 +29,7 @@
     if (m.audio != null) o.audio = m.audio === true || m.audio === 1 ? 1 : 0;
     if (m.t === 'handoff' && typeof m.to === 'string') o.to = m.to.slice(0, 40);      // (the tab that asked for it, or '*')
     if ((m.t === 'pop-alive' || m.t === 'pop-open') && m.slow) o.slow = 1;            // (a hidden window: the browser slows its timers)
+    if ((m.t === 'pop-alive' || m.t === 'pop-open') && m.embed) o.embed = 1;          // (1.99?? casino2 v2: a frame beside a casino table)
     if (TEXT[m.t] && typeof m.draft === 'string') o.draft = m.draft.slice(0, MAX_DRAFT);
     return o;
   }
@@ -68,6 +70,7 @@
       if (extra && extra.audio != null) m.audio = extra.audio ? 1 : 0;
       if (t === 'handoff' && extra && extra.to) m.to = String(extra.to).slice(0, 40);
       if ((t === 'pop-alive' || t === 'pop-open') && extra && extra.slow) m.slow = 1;
+      if ((t === 'pop-alive' || t === 'pop-open') && extra && extra.embed) m.embed = 1;
       if (TEXT[t] && extra && typeof extra.draft === 'string' && extra.draft) m.draft = extra.draft.slice(0, MAX_DRAFT);
       return post(bc, m);
     }

@@ -257,14 +257,14 @@
       <div class="px hide" id="plexPanel" data-free="<%= px.free ? 1 : 0 %>" data-member="<%= px.member ? 1 : 0 %>" data-per-hour="<%= px.price_per_hour %>" data-quality="<%= px.quality %>"
            data-cap="<%= px.daily_cap || '' %>" data-pause="<%= px.pause_max_min %>" data-queue="<%= px.queue ? 1 : 0 %>">
         <p class="pxnote"><span class="ds-ic" aria-hidden="true">⚖️</span> <%- t('stage.px.rights') %></p>
-        <p class="muted" id="plexInfo" aria-live="polite"></p>
-        <form id="plexSearch" class="row" autocomplete="off" role="search">
+        <p class="muted" id="plexInfo" data-px="info" aria-live="polite"></p>
+        <form id="plexSearch" data-px="search" class="row" autocomplete="off" role="search">
           <input type="search" name="q" minlength="2" maxlength="100" placeholder="<%- t('stage.px.search_ph') %>" aria-label="<%- t('stage.px.search_aria') %>">
           <button type="submit" class="btn"><%- t('stage.px.search') %></button>
         </form>
-        <div id="plexResults" class="px-grid"></div>
-        <div id="plexPick" class="px-pick hide"></div>
-        <p class="msg" id="plexMsg" role="status" aria-live="polite"></p>
+        <div id="plexResults" data-px="results" class="px-grid"></div>
+        <div id="plexPick" data-px="pick" class="px-pick hide"></div>
+        <p class="msg" id="plexMsg" data-px="msg" role="status" aria-live="polite"></p>
         <p class="muted"><% if (px.member) { %><%- t('stage.px.note_member', { n: px.daily_cap }) %><% } else if (px.free) { %><%- t('stage.px.note_admin') %><% } else { %><%- t('stage.px.note_price', { price: fmt(px.price_per_hour), n: px.daily_cap }) %>
           <%- t('stage.px.note_join', { link: '<a href="/subscriptions">' + t('stage.px.note_join_link') + '</a>' }) %><% } %>
           <%- t('stage.px.note_slot', { min: px.pause_max_min }) %><% if (px.queue) { %> <%- t(px.free ? 'stage.px.note_queue_free' : 'stage.px.note_queue_paid', { hours: px.queue_max_hours }) %><% } %></p>
@@ -276,7 +276,7 @@
 </main>
 <script src="/public/js/share-link.js?v=1" defer></script>
 <script src="/public/js/stage-book.js?v=14" defer></script>
-<% if (me && px && px.show) { %><script src="/public/js/stage-plex.js?v=3" defer></script>
+<% if (me && px && px.show) { %><script src="/public/js/plex-play.js?v=1" defer></script><script src="/public/js/stage-plex.js?v=4" defer></script><%# 1.99?? casino2: the flow is plex-play.js (shared with the Room Dock) %>
 <script>
   // 1.99kp: /stage?mode=plex (the /plex hub's "Play from Plex") picks the 📼 choice once the page's scripts are up
   document.addEventListener('DOMContentLoaded', function () {

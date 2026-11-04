@@ -105,7 +105,7 @@
 <link rel="stylesheet" href="/public/css/flair.css?v=4">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-<link rel="stylesheet" href="/public/css/pad-dock.css?v=7">
+<link rel="stylesheet" href="/public/css/pad-dock.css?v=8"><%# 1.99ajq dockpol: v7; 1.99?? casino2: v8 (the chat beside a casino table, 📼 Play from Plex) %>
 <link rel="stylesheet" href="/public/css/home-dock.css?v=3">
 <%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
 <script src="/public/js/stage-mic.js?v=16"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99?? padppl rework): the "not the Camfrog user" tag on a tile %>
@@ -1156,8 +1156,8 @@
 <% } %>
 <%_ if (homeDock_) { _%>
 <script src="/public/js/chatlog-core.js?v=13"></script>
-<script src="/public/js/dock-link.js?v=1"></script>
-<script src="/public/js/pad-dock.js?v=7"></script>
+<script src="/public/js/dock-link.js?v=2"></script>
+<script src="/public/js/pad-dock.js?v=8"></script>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
 <script src="/public/js/home-dock.js?v=3"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage %>

@@ -125,8 +125,9 @@
         const tags = [s.host ? `<span class="tag gold">👑 ${esc(T("host", "host"))}</span>` : "", s.via === "room" ? `<span class="tag blue">🐸 ${esc(T("camfrog", "Camfrog"))}</span>` : "",
                       s.autobet ? `<span class="tag">${esc(T("auto", "auto"))}</span>` : "", s.insured ? `<span class="tag green">${esc(T("insured", "insured"))}</span>` : "",
                       s.leaving ? `<span class="tag red">${esc(T("leaving", "leaving"))}</span>` : ""].join("");
-        whoHTML = CZ.avatarHTML(s) + `<span class="plate"><span class="nm">${esc(s.name)}${mine ? " · " + esc(T("you", "you")) : ""}</span>` +
-                  (tags ? `<span class="tags">${tags}</span>` : "") + "</span>";
+        // (1.99?? casino2: the avatar + plate open the person menu - CZ.seatWho makes them a button when that seat has one)
+        whoHTML = CZ.seatWho(s, CZ.avatarHTML(s) + `<span class="plate"><span class="nm">${esc(s.name)}${mine ? " · " + esc(T("you", "you")) : ""}</span>` +
+                  (tags ? `<span class="tags">${tags}</span>` : "") + "</span>");
       } else {
         const can = CZ.signed && me && !me.seat && !me.pending && open;
         whoHTML = can ? `<button type="button" class="sitbtn" data-sit="1"><span class="av" aria-hidden="true">+</span><span class="plate">${esc(T("open_seat_bet", "Open seat: bet to sit"))}</span></button>`
@@ -193,6 +194,8 @@
 
     dock(t, me, betting);
     if (me && me.my_turn && !prevTurn) CZ.announce(T("your_turn_sr", "Your turn. Hit, stand, or more."));
+    // 1.99?? casino2: your turn starts / ends -> the phone's chat sheet makes room for the action dock (casino-chat.js)
+    if (!!(me && me.my_turn) !== prevTurn) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn) } }));
     prevTurn = !!(me && me.my_turn);
     first = false;
   }

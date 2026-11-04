@@ -546,7 +546,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=7"><script src="/public/js/dock-link.js?v=1"></script><script src="/public/js/pad-dock.js?v=7"></script><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99ajq dockpol: css v7, js v7, picker v3 %>
+<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=8"><script src="/public/js/dock-link.js?v=2"></script><script src="/public/js/pad-dock.js?v=8"></script><% if (locals.plexPlay && !chatOnly_) { %><script src="/public/js/plex-play.js?v=1"></script><% } %><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99ajq dockpol: css v7, js v7, picker v3; 1.99?? casino2: css v8 / dock-link v2 / js v8 (the chat beside a casino table, 📼 Play from Plex) %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %><%= chatOnly_ ? ' rmd-popout' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <%# 1.99ajf dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
   <% if (!dockOn_) { %><div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div><% } %>
@@ -1000,9 +1000,10 @@
           // (1.99ajf dockclean review: with their pad flair, which gives way first - as in the chat line and the people list)
           var fl = CLR && !u.veil && !u.anon ? CLR.flairNode(u, rctx, H) : null, nmBox = title.querySelector('.rmd-person-name');
           if (fl && nmBox) nmBox.appendChild(fl);
-          // the login as a second line only when it differs from the name everyone sees (never an account key, never a frog name's)
+          // the login as a second line only when it differs from the name everyone sees (never an account key, never a frog name's);
+          // 1.99?? casino2: .two = the avatar spans both lines only when there are two (the header's alignment)
           var lg = String(u.login || ''), shownName = label(u);
-          if (!u.anon && lg && !/^u:/i.test(lg) && !u.acct && lg.toLowerCase() !== String(shownName).toLowerCase()) title.appendChild(el('small', 'pm-login', lg));
+          if (!u.anon && lg && !/^u:/i.test(lg) && !u.acct && lg.toLowerCase() !== String(shownName).toLowerCase()) { title.appendChild(el('small', 'pm-login', lg)); title.classList.add('two'); }
         }
       });
       if (roomMod && roomMod.relayout) roomMod.relayout();
@@ -2247,6 +2248,8 @@
     <% if (dockOn_) { %>
     if (window.PATVPadDock) roomDock = PATVPadDock.init({
       mode: chatOnly ? 'popout' : 'pad', vt: pageVt, room: <%- JSON.stringify(String(room.id)).replace(/</g, '\\u003c') %>,   // 1.99ajh dockpop: the window channel
+      embed: <%= locals.embed ? 'true' : 'false' %>,   // 1.99?? casino2: framed beside a casino table (bridge.js ?embed=1; pad-dock.js checks the frame's parent)
+      plexPlay: <%- !chatOnly_ && locals.plexPlay ? JSON.stringify(locals.plexPlay).replace(/</g, '\\u003c') : 'null' %>, padTitle: <%- JSON.stringify(String(room.name || '')).replace(/</g, '\\u003c') %>,   // 1.99?? casino2: 📼 Play from Plex in the Dock
       padHref: '/p/' + encodeURIComponent(slug), toBottom: toBottom, recheck: recheck, onRetire: function (key, fallback) { gone(key, fallback); },
       slug: slug, signed: signedIn, linked: <%= linked ? 'true' : 'false' %>, user: <%- JSON.stringify(signedIn && user ? user : null).replace(/</g, '\\u003c') %>,
       nodes: roomNodes, root: document.querySelector('main.rm'), relay: roomRelay, audio: roomAudio, ptt: roomPtt, mod: roomMod,

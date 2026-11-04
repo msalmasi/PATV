@@ -1,0 +1,444 @@
+// plex-play.js — 1.99?? casino2 (owner 2026-11-04: "Did we ever get the ability for users to start a Plex play from the room?"): "📼 Play from
+// Plex" - search the library, pick a movie / an episode (or a show's queue), the scope / start point / quality / audio / subtitles, see the
+// price, confirm, play now or (on /stage) book it for later. FACTORED out of stage-plex.js (1.99jn / 1.99lr / 1.99lw - the code below is
+// that flow, unchanged but for where it finds its parts) so /stage's Go-live panel and the Room Dock's 📼 sheet (pad-dock.js) run ONE copy;
+// the server (medialib.js / mediaqueue.js) decides everything again: access, slot rules, the pad's limit, the price, the daily caps.
+//   PATVPlexPlay.mount(host, opts) -> { info(), drawPrice(), noteQueues(j), myQueue() }
+//     host: the panel; its parts are [data-px=info|search|results|pick|msg] (stageBook.ejs marks them; build() makes them)
+//     opts: { roomId(), roomTitle(), balance() (text), free, member, perHour, quality, queues, days, later (the 'When' row - /stage
+//             only), listId, onStarted(answer), pollNow() }
+//   PATVPlexPlay.build(host, {rights, note}) - the parts, for a host that has none (the Dock's sheet)
+//   PATVPlexPlay.util - the helpers stage-plex.js shares (api, hms, parseTime, day, label, noticeText, fmt, esc)
+// Every string goes through __t (js.plex.*).
+(function () {
+  'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+  var LANG = (window.PATV_I18N && window.PATV_I18N.lang) || 'en';
+  var fmt = function (n) { var x = Math.round(Number(n) || 0); try { return x.toLocaleString(LANG === 'en' ? 'en-US' : LANG); } catch (e) { return x.toLocaleString('en-US'); } };
+  var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  function hms(sec) {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
+  }
+  function parseTime(v) {
+    var p = String(v || '').trim().split(':').map(Number);
+    if (!p.length || p.some(function (n) { return !isFinite(n) || n < 0; })) return null;
+    var t = 0;
+    for (var i = 0; i < p.length; i++) t = t * 60 + p[i];
+    return Math.floor(t);
+  }
+  function day(ms) { try { return new Date(ms).toLocaleDateString(LANG === 'en' ? undefined : LANG); } catch (e) { return new Date(ms).toLocaleDateString(); } }
+  // -> resolves the JSON; rejects with an Error carrying .data (the JSON: error, price…)
+  function api(method, url, body) {
+    var o = { method: method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
+    if (body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(body); }
+    return fetch(url, o).then(function (r) {
+      return r.json().catch(function () { return { ok: false, error: _t('js.stage.e_server', 'Server error ({status})', { status: r.status }) }; }).then(function (j) {
+        if (!r.ok || j.ok === false) { var e = new Error(j.error || ('HTTP ' + r.status)); e.data = j; throw e; }
+        return j;
+      });
+    });
+  }
+  // 1.99lr: a title as a queue lists it
+  function label(it) {
+    if (!it) return '';
+    return it.type === 'episode' && it.show ? it.show + ' — S' + (it.season == null ? 0 : it.season) + 'E' + (it.episode == null ? 0 : it.episode) + ' ' + (it.title || '')
+      : (it.title || '') + (it.year ? ' (' + it.year + ')' : '');
+  }
+  function noticeText(q) {
+    if (!q || !q.notice) return '';
+    if (q.notice === 'out_of_pat') return _t('js.plex.qn_out_of_pat', '📼 Your queue ended: you’re out of PAT - top up to keep watching.');
+    if (q.notice === 'failed') return _t('js.plex.qn_failed', '📼 Your queue ended: several titles in a row didn’t play.');
+    if (q.notice === 'no_encoder') return _t('js.plex.qn_no_encoder', '📼 Your queue ended: no library stream came free in time.');
+    return '';
+  }
+
+  function parts(host) {
+    var q = function (k) { return host.querySelector('[data-px="' + k + '"]'); };
+    return { info: q('info'), search: q('search'), results: q('results'), pick: q('pick'), msg: q('msg') };
+  }
+  /** the panel's parts for a host that has none (the Room Dock's sheet): the rights line, the info line, search, results, the pick, the message */
+  function build(host, o) {
+    o = o || {};
+    host.innerHTML = '<p class="pxnote"><span class="ds-ic" aria-hidden="true">⚖️</span> ' + esc(o.rights || _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.')) + '</p>' +
+      '<p class="muted" data-px="info" aria-live="polite"></p>' +
+      '<form data-px="search" class="row" autocomplete="off" role="search"><input type="search" name="q" minlength="2" maxlength="100" placeholder="' +
+      esc(_t('js.plex.search_ph', 'Search Plex: a movie, a show…')) + '" aria-label="' + esc(_t('js.plex.search_aria', 'Search the Plex library')) + '">' +
+      '<button type="submit" class="btn">' + esc(_t('js.plex.search', 'Search')) + '</button></form>' +
+      '<div data-px="results" class="px-grid"></div><div data-px="pick" class="px-pick hide"></div>' +
+      (o.onair ? '<label class="px-onair"><input type="checkbox" data-px="onair"> ' + esc(_t('js.plex.onair_too', '📺 Also put it on Pepe’s stream')) + '</label>' : '') +
+      '<p class="msg" data-px="msg" role="status" aria-live="polite"></p>' + (o.note ? '<p class="muted px-foot"></p>' : '');
+    if (o.note) host.querySelector('.px-foot').textContent = o.note;
+    return host;
+  }
+
+  function mount(host, opts) {
+    opts = opts || {};
+    var P = parts(host);
+    if (!P.search || !P.results || !P.pick || !P.msg) return null;
+    var myQueue = null;            // my running queue (from /api/medialib/mine), or null
+    var balNow = null;
+    var bal = function () { try { return opts.balance ? String(opts.balance()) : balNow != null ? fmt(balNow) : '?'; } catch (e) { return '?'; } };
+    // (the Dock's sheet: your balance from the site, as the 💸 Tip modal reads it - /stage passes its own)
+    if (!opts.balance && opts.me) {
+      fetch('/api/u/' + encodeURIComponent(opts.me) + '/balance', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && typeof j.balance === 'number') { balNow = Math.floor(j.balance); drawPrice(); } })
+        .catch(function () { /* stays '?' */ });
+    }
+    // 1.99?? casino2: staff who run Pepe's on-air may put the new play on his stream too (onair.js: allow_library, the IRL feed wins,
+    // audited) - its slot goes on air once it's live (a few seconds); "not live yet" is asked again for about a minute
+    var onairBox = host.querySelector('[data-px="onair"]');
+    var pageStarted = opts.onStarted;
+    opts = Object.assign({}, opts, { onStarted: function (j) {
+      if (onairBox && onairBox.checked && j && j.slot && j.slot.id) toPepe(j.slot.id, 0);
+      if (pageStarted) pageStarted(j);
+    } });
+    var FREE = !!opts.free;
+    var MEMBER = !!opts.member;
+    var PER_HOUR = Number(opts.perHour) || 0;
+    var QUALITY = Number(opts.quality) || 720;
+    var QUEUES = !!opts.queues;
+    var picked = null, quote = null, qPrev = null, qTimer = null, qSeq = 0;
+    var say = function (t, good) { P.msg.textContent = t || ''; P.msg.style.color = good ? '#9ccc65' : ''; };
+    // the same rule as the server (medialib.priceFor): per started hour of what's left from the start point, >= 1 h
+    var hoursAt = function (dur, off) { return Math.max(1, Math.ceil(Math.max(0, (Number(dur) || 0) - Math.max(0, off || 0)) / 3600)); };
+    var priceAt = function (dur, off) { return FREE || !PER_HOUR ? 0 : PER_HOUR * hoursAt(dur, off); };
+    var info = function () {
+      api('GET', '/api/medialib/mine?room=' + encodeURIComponent(opts.roomId())).then(function (j) {
+        var bits = [];
+        if (j.streams && j.streams.max) bits.push(_t('js.plex.streams_used', '📼 {used} of {max} library streams in use right now', { used: j.streams.used, max: j.streams.max }));
+        if (j.daily_left != null) bits.push(_t('js.plex.plays_left', '{left} of {cap} plays left today', { left: j.daily_left, cap: j.daily_cap }));
+        if (j.access && j.access.until) bits.push(_t('js.plex.access_until', 'your Plex access runs until {date}', { date: day(j.access.until) }));
+        noteQueues(j);
+        var ended = (j.queues || []).filter(function (q) { return q.state === 'ended' && q.notice; })[0];
+        P.info.textContent = (ended ? noticeText(ended) + ' ' : '') + bits.join(' · ');
+      }).catch(function (e) { P.info.textContent = e.message; });
+    };
+    var card = function (it) {
+      var sub = it.type === 'episode' ? (esc(it.show) + ' · S' + it.season + 'E' + it.episode)
+        : it.type === 'show' ? esc(_t('js.plex.show', 'Show')) + (it.leafs ? ' · ' + esc(_t('js.plex.episodes', '{count} episodes', { count: it.leafs })) : '')
+        : (it.year || esc(_t('js.plex.movie', 'Movie')));
+      return '<button type="button" class="px-it" data-key="' + esc(it.key) + '">' +
+        (it.poster ? '<img loading="lazy" alt="" src="/api/medialib/poster/' + encodeURIComponent(it.key) + '">' : '<span class="px-ph"></span>') +
+        '<b>' + esc(it.title) + '</b><small>' + sub + (it.duration ? ' · ' + hms(it.duration) : '') + '</small></button>';
+    };
+    P.search.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var q = P.search.q.value.trim();
+      if (q.length < 2) { say(_t('js.plex.type_2', 'Type at least 2 characters.')); return; }
+      say(_t('js.plex.searching', 'Searching…'), true);
+      P.pick.classList.add('hide');
+      api('GET', '/api/medialib/search?q=' + encodeURIComponent(q)).then(function (j) {
+        P.results.innerHTML = (j.results || []).map(card).join('') || '<p class="muted">' + esc(_t('js.plex.nothing', 'Nothing found.')) + '</p>';
+        say('');
+      }).catch(function (e) { say(e.message); });
+    });
+    P.results.addEventListener('click', function (ev) {
+      var b = ev.target.closest('.px-it');
+      if (b) openItem(b.getAttribute('data-key'));
+    });
+    P.pick.addEventListener('click', function (ev) {
+      var ep = ev.target.closest('[data-ep]');
+      if (ep) { openItem(ep.getAttribute('data-ep')); return; }
+      var all = ev.target.closest('[data-series]');
+      if (all) { openItem(all.getAttribute('data-series'), 'series_from'); return; }
+      var add = ev.target.closest('[data-add]');
+      if (add) { addToList(add); return; }
+      var go = ev.target.closest('[data-play]');
+      if (go) play(go);
+    });
+    P.pick.addEventListener('input', function (ev) { if (ev.target.hasAttribute('data-o')) drawPrice(); });
+    P.pick.addEventListener('change', function (ev) {
+      if (ev.target.hasAttribute('data-when')) { var at = P.pick.querySelector('[data-at]'); if (at) at.classList.toggle('hide', ev.target.value !== 'later'); }
+      if (ev.target.hasAttribute('data-scope') || ev.target.hasAttribute('data-when') || ev.target.hasAttribute('data-at')) drawPrice();
+    });
+    var scope = function () { var s = P.pick.querySelector('[data-scope]'); return s ? s.value : 'episode'; };
+    // 1.99lw: ▶ now, or 📅 book a slot for later (sized to the runtime)
+    var when = function () { var s = P.pick.querySelector('[data-when]'); return s ? s.value : 'now'; };
+    var atMs = function () { var a = P.pick.querySelector('[data-at]'); var t = a && a.value ? new Date(a.value).getTime() : NaN; return isFinite(t) ? t : null; };
+    var atLocal = function (d) { var p = function (n) { return String(n).padStart(2, '0'); }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+    var whenRow = function () {
+      if (!opts.later) return '';
+      var d = new Date(Date.now() + 20 * 60000); d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+      var days = Number(opts.days) || 14;
+      return '<label>' + esc(_t('js.plex.b_when', 'When')) + ' <select data-when><option value="now">' + esc(_t('js.plex.b_now', 'Now')) + '</option><option value="later">' +
+        esc(_t('js.plex.b_later', 'Later (book a slot)')) + '</option></select></label>' +
+        '<input type="datetime-local" class="hide" data-at value="' + atLocal(d) + '" min="' + atLocal(new Date()) + '" max="' + atLocal(new Date(Date.now() + days * 86400000)) + '" aria-label="' + esc(_t('js.plex.b_at', 'Start time')) + '">';
+    };
+    var whenTxt = function (ms) { try { return new Date(ms).toLocaleString(LANG === 'en' ? undefined : LANG, { weekday: 'short', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }); } catch (e) { return new Date(ms).toLocaleString(); } };
+    var playLabel = function (price, n) {
+      return n > 1 ? (price ? _t('js.plex.q_play_on_for', '▶ Play {n} titles on {pad} (about {price} PAT)', { n: n, pad: opts.roomTitle(), price: fmt(price) })
+                            : _t('js.plex.q_play_on', '▶ Play {n} titles on {pad}', { n: n, pad: opts.roomTitle() }))
+        : price ? _t('js.plex.play_on_for', '▶ Play on {pad} for {price} PAT', { pad: opts.roomTitle(), price: fmt(price) })
+                : _t('js.plex.play_on', '▶ Play on {pad}', { pad: opts.roomTitle() });
+    };
+    var drawPrice = function () {
+      if (!picked || !P.pick.querySelector('[data-o]')) return;
+      var off = parseTime(P.pick.querySelector('[data-o]').value) || 0;
+      var pr = P.pick.querySelector('[data-price]'), btn = P.pick.querySelector('[data-play]');
+      qPrev = null;
+      if (scope() !== 'episode' || when() === 'later') {
+        // 1.99lr: a queue - the server builds it and prices it
+        var seq = ++qSeq;
+        pr.innerHTML = '<span class="muted">' + esc(_t('js.plex.loading', 'Loading…')) + '</span>';
+        clearTimeout(qTimer);
+        qTimer = setTimeout(function () {
+          api('POST', '/api/medialib/queue/preview', { key: picked.key, scope: scope(), offset: off, room: opts.roomId(), when: when() }).then(function (j) {
+            if (seq !== qSeq) return;
+            qPrev = j;
+            var head = esc(_t('js.plex.q_titles', '{count} titles', { count: j.items.length })) + ' · ' + hms(j.total_sec);
+            var first = j.items[0], last = j.items[j.items.length - 1];
+            var span = first && last && first !== last ? ' <span class="muted">(' + esc(label(first)) + ' → ' + esc(label(last)) + ')</span>' : '';
+            pr.innerHTML = '<div>' + head + span + '</div>' + (j.estimate
+              ? '<div>' + esc(_t('js.plex.q_estimate', 'About')) + ' <b>' + fmt(j.estimate) + ' PAT</b> <span class="muted">· ' +
+                esc(_t('js.plex.q_as_it_plays', 'charged as it plays, {per} per started hour: {first} PAT when it starts · you have {bal}',
+                       { per: fmt(j.per_hour), first: fmt(j.first_charge), bal: bal() })) + '</span></div>'
+              : '<div><b>' + esc(_t('js.plex.free', 'Free')) + '</b> <span class="muted">' + esc(MEMBER ? _t('js.plex.free_member', '(Plex member)') : _t('js.plex.free_admin', '(site admin)')) +
+                ' · ' + esc(_t('js.plex.q_one_play', 'the whole queue counts as one play')) + '</span></div>') +
+              (j.truncated ? '<div class="muted">' + esc(_t('js.plex.q_cut', 'Cut to fit: a queue holds at most {hours} hours and {max} titles.', { hours: j.max_hours, max: j.max_items })) + '</div>' : '') +
+              (j.slot_minutes ? '<div class="muted">' + esc(_t('js.plex.b_slot', '📅 A {min}-minute slot: the runtime plus a few minutes. It starts by itself at that time; the price rules are the same, charged as it plays.', { min: j.slot_minutes })) + '</div>' : '');
+            var at = atMs();
+            btn.textContent = when() === 'later' ? (at ? _t('js.plex.b_book_for', '📅 Book it for {time}', { time: whenTxt(at) }) : _t('js.plex.b_pick', 'Pick a start time')) : playLabel(j.estimate, j.items.length);
+          }).catch(function (e) { if (seq === qSeq) pr.textContent = e.message; });
+        }, 250);
+        return;
+      }
+      quote = priceAt(picked.duration, off);
+      var hours = hoursAt(picked.duration, off);
+      var balTxt = bal();
+      pr.innerHTML = quote
+        ? esc(_t('js.plex.price', 'Price:')) + ' <b>' + fmt(quote) + ' PAT</b> <span class="muted">· ' +
+          esc(_t('js.plex.price_detail', '{count} started hours × {per} · you have {bal}', { count: hours, per: fmt(PER_HOUR), bal: balTxt })) + '</span>'
+        : '<b>' + esc(_t('js.plex.free', 'Free')) + '</b> <span class="muted">' + esc(MEMBER ? _t('js.plex.free_member', '(Plex member)') : _t('js.plex.free_admin', '(site admin)')) + '</span>';
+      btn.textContent = playLabel(quote, 1);
+    };
+    var addBtn = function (key) {
+      return QUEUES ? '<button type="button" class="btn" data-add="' + esc(key) + '">' + esc(myQueue ? _t('js.plex.q_add_running', '+ Add to the queue that’s playing') : _t('js.plex.q_add', '+ My list')) + '</button>' : '';
+    };
+    var openItem = function (key, wantScope) {
+      say(_t('js.plex.loading', 'Loading…'), true);
+      api('GET', '/api/medialib/item/' + encodeURIComponent(key)).then(function (j) {
+        var it = j.item;
+        picked = it;
+        var h = '<div><b>' + esc(it.type === 'episode' ? it.show + ' · S' + it.season + 'E' + it.episode + ' · ' + it.title : it.title) + '</b>' +
+                (it.year ? ' (' + it.year + ')' : '') + (it.duration ? ' <span class="muted">· ' + hms(it.duration) + '</span>' : '') + '</div>';
+        if (it.summary) h += '<p class="muted" style="margin:0">' + esc(it.summary) + '</p>';
+        if (it.type === 'show') {
+          var eps = (it.episodes || []).slice().sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
+          var main = eps.filter(function (e) { return e.season !== 0; });
+          var firstEp = main[0] || eps[0];
+          if (QUEUES && firstEp) {
+            h += '<div class="row"><button type="button" class="btn primary" data-series="' + esc(firstEp.key) + '">' +
+                 esc(_t('js.plex.q_series', '▶ The whole series ({count} episodes)', { count: (main.length || eps.length) })) + '</button>' +
+                 addBtn(it.key) + '</div>';
+          }
+          h += '<div class="px-eps">' + (it.episodes || []).map(function (e) {
+            return '<button type="button" class="btn" data-ep="' + esc(e.key) + '">S' + e.season + 'E' + e.episode + ' · ' + esc(e.title) + (e.duration ? ' <span class="muted">' + hms(e.duration) + '</span>' : '') + '</button>';
+          }).join('') + '</div>';
+        } else {
+          var q = [1080, 720, 480].map(function (v) { return '<option value="' + v + '"' + (v === QUALITY ? ' selected' : '') + '>' + v + 'p</option>'; }).join('');
+          var au = (it.audio || []).map(function (a) { return '<option value="' + a.index + '"' + (a['default'] ? ' selected' : '') + '>' + esc(a.label) + '</option>'; }).join('');
+          var su = '<option value="">' + esc(_t('js.plex.none', 'None')) + '</option>' + (it.subs || []).filter(function (s) { return s.burnable; }).map(function (s) {
+            return '<option value="' + s.index + '">' + esc(s.label) + (s.forced ? ' ' + esc(_t('js.plex.forced', '(forced)')) : '') + '</option>';
+          }).join('');
+          // 1.99lr: what to play from this episode
+          var sc = '';
+          if (QUEUES && it.type === 'episode') {
+            var scopes = [['episode', _t('js.plex.q_this', 'Just this episode')]];
+            if (it.show_key) {
+              scopes.push(['season_rest', _t('js.plex.q_season_rest', 'The rest of season {n}, from here', { n: it.season })]);
+              scopes.push(['season', _t('js.plex.q_season', 'All of season {n}', { n: it.season })]);
+              scopes.push(['series_from', _t('js.plex.q_series_from', 'The series from here')]);
+            }
+            sc = '<label>' + esc(_t('js.plex.q_what', 'Play')) + ' <select data-scope>' + scopes.map(function (o) {
+              return '<option value="' + o[0] + '"' + (o[0] === (wantScope || 'episode') ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+            }).join('') + '</select></label>';
+          }
+          h += '<div class="row">' + sc +
+            '<label>' + esc(_t('js.plex.quality', 'Quality')) + ' <select data-q>' + q + '</select></label>' +
+            (au ? '<label>' + esc(_t('js.plex.audio', 'Audio')) + ' <select data-a>' + au + '</select></label>' : '') +
+            '<label>' + esc(_t('js.plex.subs', 'Subtitles (burnt in)')) + ' <select data-s>' + su + '</select></label>' +
+            '<label>' + esc(_t('js.plex.start_at', 'Start at')) + ' <input type="text" data-o value="0:00" inputmode="numeric" aria-label="' + esc(_t('js.plex.start_aria', 'Start at (h:mm:ss)')) + '"></label>' +
+            '</div><div class="row">' + whenRow() + '</div>' +
+            (sc ? '<p class="muted" style="margin:0">' + esc(_t('js.plex.q_tracks', 'The next episodes keep your quality, audio language and subtitle language.')) + '</p>' : '') +
+            (it.hdr ? '<p class="muted" style="margin:0">' + esc(_t('js.plex.hdr', 'HDR: shown in SDR, at up to 720p.')) + '</p>' : '') +
+            '<div class="px-price" data-price></div>' +
+            '<div class="row"><button type="button" class="btn primary" data-play>' + esc(_t('js.plex.play', '▶ Play')) + '</button>' + addBtn(it.key) + '</div>';
+        }
+        P.pick.innerHTML = h;
+        P.pick.classList.remove('hide');
+        drawPrice();
+        say('');
+        P.pick.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }).catch(function (e) { say(e.message); });
+    };
+    var started = function (j) {
+      info();
+      if (opts.onStarted) { try { opts.onStarted(j || {}); } catch (e) { /* the page's own */ } }
+    };
+    // 1.99lr: start a queue (an episode + scope, or my list's keys): confirm the estimate, then it's charged as it plays
+    var startQueue = function (btn, body, pv, confirmedEst) {
+      var go = function (pv) {
+        var n = pv.items.length, est = confirmedEst != null ? confirmedEst : pv.estimate;
+        var msg = _t('js.plex.q_confirm', 'Play {n} titles ({time}) back to back on {pad}’s stage?', { n: n, time: hms(pv.total_sec), pad: opts.roomTitle() }) + '\n\n' +
+          (est ? _t('js.plex.q_confirm_cost', 'About {price} PAT in all, charged as it plays: {first} PAT now, the rest as each new hour starts (only what actually plays). If you run out, it stops after the title that’s on.', { price: fmt(est), first: fmt(pv.first_charge) }) + '\n\n' : '') +
+          _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
+        if (!confirm(msg)) return;
+        if (est) body.estimate = est;
+        btn.disabled = true;
+        say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
+        api('POST', '/api/medialib/queue/start', body).then(function (j) {
+          say(_t('js.plex.q_started', '▶ {title} is starting on {pad} - {n} titles queued.', { title: j.title, pad: opts.roomTitle(), n: j.items }) +
+              (j.price ? ' ' + _t('js.plex.paid', '{price} PAT paid.', { price: fmt(j.price) }) : ''), true);
+          if (body.keys) { list = []; saveList(); drawList(); }
+          started(j);
+        }).catch(function (e) {
+          if (e.data && e.data.estimate && e.data.estimate !== est) {
+            say(e.message);
+            btn.disabled = false;
+            startQueue(btn, body, Object.assign({}, pv, { estimate: e.data.estimate }), e.data.estimate);
+            return;
+          }
+          say(e.message);
+        }).then(function () { btn.disabled = false; });
+      };
+      if (pv) { go(pv); return; }
+      api('POST', '/api/medialib/queue/preview', body).then(go).catch(function (e) { say(e.message); });
+    };
+    // 1.99lw: book a 📼 slot for later
+    var bookIt = function (btn, body, pv, confirmedEst) {
+      var at = atMs();
+      if (!at || at < Date.now() + 90 * 1000) { say(_t('js.plex.b_future', 'Pick a start time at least a couple of minutes from now.')); return; }
+      if (!pv) { say(_t('js.plex.loading', 'Loading…'), true); return; }
+      var est = confirmedEst != null ? confirmedEst : pv.estimate;
+      var msg = _t('js.plex.b_confirm', 'Book a {min}-minute slot on {pad}’s stage for {time} ({n} titles)?', { min: pv.slot_minutes, pad: opts.roomTitle(), time: whenTxt(at), n: pv.items.length }) + '\n\n' +
+        (est ? _t('js.plex.b_confirm_cost', 'Nothing is taken now. When it starts it costs about {price} PAT, charged as it plays; if you don’t have enough then, it doesn’t start.', { price: fmt(est) }) + '\n\n' : '') +
+        _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
+      if (!confirm(msg)) return;
+      body.start_at = at;
+      if (est) body.estimate = est;
+      btn.disabled = true;
+      api('POST', '/api/medialib/book', body).then(function (j) {
+        say((j.status === 'requested' ? _t('js.plex.b_requested', '📅 Asked the pad’s owner for {time} ({min} min) - you’ll get a notice when they answer.', { time: whenTxt(j.slot.start_at), min: j.minutes })
+                                      : _t('js.plex.b_booked', '📅 Booked for {time} ({min} min). It starts by itself - it’s in your upcoming slots.', { time: whenTxt(j.slot.start_at), min: j.minutes })), true);
+        if (window.PATVStageRefresh) window.PATVStageRefresh();
+      }).catch(function (e) {
+        if (e.data && e.data.estimate && e.data.estimate !== est) { say(e.message); btn.disabled = false; bookIt(btn, body, Object.assign({}, pv, { estimate: e.data.estimate }), e.data.estimate); return; }
+        say(e.message);
+      }).then(function () { btn.disabled = false; });
+    };
+    var play = function (btn, confirmed) {
+      if (!picked) return;
+      var pk = P.pick;
+      var off = parseTime(pk.querySelector('[data-o]').value);
+      if (off == null) { say(_t('js.plex.time_fmt', 'Type the start time like 1:02:30.')); return; }
+      var a = pk.querySelector('[data-a]'), s = pk.querySelector('[data-s]');
+      var body = { room: opts.roomId(), key: picked.key, quality: Number(pk.querySelector('[data-q]').value), offset: off,
+                   audio: a ? a.value : null, sub: s && s.value !== '' ? s.value : null };
+      if (when() === 'later') { body.scope = scope(); bookIt(btn, body, qPrev); return; }
+      if (scope() !== 'episode') { body.scope = scope(); startQueue(btn, body, qPrev); return; }
+      var price = confirmed != null ? confirmed : priceAt(picked.duration, off);
+      var what = (picked.type === 'episode' ? picked.show + ' S' + picked.season + 'E' + picked.episode : picked.title);
+      var q = off ? _t('js.plex.q_play_from', 'Play “{what}” on {pad}’s stage from {time}?', { what: what, pad: opts.roomTitle(), time: hms(off) })
+                  : _t('js.plex.q_play', 'Play “{what}” on {pad}’s stage?', { what: what, pad: opts.roomTitle() });
+      if (!confirm(q + '\n\n' + (price ? _t('js.plex.q_cost', 'It costs {price} PAT, taken now. If it never gets on the stage, it all comes back.', { price: fmt(price) }) + '\n\n' : '') +
+                   _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.'))) return;
+      if (price) body.price = price;
+      btn.disabled = true;
+      say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
+      api('POST', '/api/medialib/play', body).then(function (j) {
+        say(_t('js.plex.started', '▶ {title} is starting on {pad} - it shows on the stage within a few seconds.', { title: j.title, pad: opts.roomTitle() }) +
+            (j.price ? ' ' + _t('js.plex.paid', '{price} PAT paid.', { price: fmt(j.price) }) : ''), true);
+        started(j);
+      }).catch(function (e) {
+        // the price moved (or wasn't confirmed): show the server's and ask again
+        if (e.data && e.data.price && e.data.price !== price) {
+          say(e.message);
+          btn.disabled = false;
+          quote = e.data.price;
+          play(btn, e.data.price);
+          return;
+        }
+        say(e.message);
+      }).then(function () { btn.disabled = false; });
+    };
+
+    // ── 1.99lr: my list (a hand-made queue; kept in this tab) ──
+    var list = [];
+    try { list = JSON.parse(sessionStorage.getItem('patv.plexList') || '[]') || []; } catch (e) { list = []; }
+    var saveList = function () { try { sessionStorage.setItem('patv.plexList', JSON.stringify(list)); } catch (e) { /* private mode */ } };
+    var listBox = document.createElement('div');
+    listBox.className = 'px-list hide';
+    if (opts.listId) listBox.id = opts.listId;
+    P.pick.parentNode.insertBefore(listBox, P.msg);
+    var drawList = function () {
+      listBox.classList.toggle('hide', !list.length || !QUEUES);
+      if (!list.length) { listBox.innerHTML = ''; return; }
+      var tot = list.reduce(function (t, x) { return t + (Number(x.duration) || 0); }, 0);
+      listBox.innerHTML = '<div class="px-lh"><b>' + esc(_t('js.plex.q_my_list', '📋 My list')) + '</b> <span class="muted">· ' +
+        esc(_t('js.plex.q_titles', '{count} titles', { count: list.length })) + (tot ? ' · ' + hms(tot) : '') + '</span></div>' +
+        '<ol>' + list.map(function (x, i) {
+          return '<li><span>' + esc(x.label) + '</span><span class="px-ctl">' +
+            '<button type="button" class="btn sm" data-lup="' + i + '" aria-label="' + esc(_t('js.plex.q_up', 'Move up')) + '"' + (i ? '' : ' disabled') + '>↑</button>' +
+            '<button type="button" class="btn sm" data-ldown="' + i + '" aria-label="' + esc(_t('js.plex.q_down', 'Move down')) + '"' + (i < list.length - 1 ? '' : ' disabled') + '>↓</button>' +
+            '<button type="button" class="btn sm" data-lrm="' + i + '" aria-label="' + esc(_t('js.plex.q_remove', 'Remove')) + '">✕</button></span></li>';
+        }).join('') + '</ol>' +
+        '<div class="row"><button type="button" class="btn primary" data-lplay>' + esc(_t('js.plex.q_play_list', '▶ Play my list')) + '</button>' +
+        '<button type="button" class="btn" data-lclear>' + esc(_t('js.plex.q_clear', 'Clear')) + '</button></div>';
+    };
+    var addToList = function (btn) {
+      var key = btn.getAttribute('data-add');
+      var it = picked && String(picked.key) === key ? picked : null;
+      var entry = { key: key, label: it ? (it.type === 'show' ? it.title + ' · ' + _t('js.plex.q_whole_series', 'whole series') : label(it)) : key,
+                    duration: it && it.type !== 'show' ? it.duration : null };
+      if (myQueue) {
+        btn.disabled = true;
+        api('POST', '/api/medialib/queue/edit', { room: myQueue.room, op: 'add', keys: [key] }).then(function (j) {
+          say(_t('js.plex.q_added_running', 'Added to the queue that’s playing ({n} titles now).', { n: j.items }), true);
+          if (opts.pollNow) opts.pollNow();
+        }).catch(function (e) { say(e.message); }).then(function () { btn.disabled = false; });
+        return;
+      }
+      list.push(entry);
+      saveList(); drawList();
+      say(_t('js.plex.q_added', 'Added to my list.'), true);
+    };
+    listBox.addEventListener('click', function (ev) {
+      var b = ev.target.closest('button');
+      if (!b) return;
+      var i;
+      if (b.hasAttribute('data-lup')) { i = +b.getAttribute('data-lup'); list.splice(i - 1, 0, list.splice(i, 1)[0]); }
+      else if (b.hasAttribute('data-ldown')) { i = +b.getAttribute('data-ldown'); list.splice(i + 1, 0, list.splice(i, 1)[0]); }
+      else if (b.hasAttribute('data-lrm')) { list.splice(+b.getAttribute('data-lrm'), 1); }
+      else if (b.hasAttribute('data-lclear')) { list = []; }
+      else if (b.hasAttribute('data-lplay')) { startQueue(b, { room: opts.roomId(), keys: list.map(function (x) { return x.key; }), quality: QUALITY }); return; }
+      saveList(); drawList();
+    });
+    drawList();
+    var noteQueues = function (j) {
+      var was = myQueue;
+      myQueue = (j.queues || []).filter(function (q) { return q.state === 'active'; })[0] || null;
+      if (!!was !== !!myQueue) {
+        // the "+" buttons say where they add to
+        host.querySelectorAll('[data-add]').forEach(function (b) {
+          b.textContent = myQueue ? _t('js.plex.q_add_running', '+ Add to the queue that’s playing') : _t('js.plex.q_add', '+ My list');
+        });
+      }
+    };
+    function toPepe(id, n) {
+      fetch('/api/stage/admin/onair', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'slot', slot_id: id }) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (j) {
+          if (j && j.ok) { say(_t('js.plex.onair_on', '📺 It’s on Pepe’s stream too.'), true); return; }
+          if (j && j.code === 'not_live' && n < 15) { setTimeout(function () { toPepe(id, n + 1); }, 4000); return; }
+          say(_t('js.plex.onair_fail', '📺 Not on Pepe’s stream: {why}', { why: (j && j.error) || '?' }));
+        }).catch(function () { say(_t('js.plex.onair_fail', '📺 Not on Pepe’s stream: {why}', { why: '?' })); });
+    }
+    return { info: info, drawPrice: drawPrice, noteQueues: noteQueues, myQueue: function () { return myQueue; } };
+  }
+
+  window.PATVPlexPlay = { mount: mount, build: build,
+    util: { api: api, hms: hms, parseTime: parseTime, day: day, label: label, noticeText: noticeText, fmt: fmt, esc: esc } };
+})();

@@ -118,7 +118,7 @@ test("the window: the Dock's chat card alone, the site's head, never cached / in
     assert.equal((h.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, id);
   for (const id of ["rmStage", "padTabs", "rmHero", "rmGoLive", "rmStrip", "padPanel-feed", "padPanel-about", "siteFootTpl", "padLaunch"]) assert.doesNotMatch(h, new RegExp('id="' + id + '"'), id);
   assert.doesNotMatch(h, /class="navbar"|<script src="[^"]*\/(?:pad-tabs|stage-room|stage-player|stage-mic|pad-camstrip|pad-launch)\.js|patv_chat_sweep|\/api\/u\/[^'"]+\/profile/);
-  assert.match(h, /<script src="\/public\/js\/dock-link\.js\?v=1"><\/script><script src="\/public\/js\/pad-dock\.js\?v=7"><\/script>/);   // (1.99ajn padppl: v6 - a veiled line opens the person menu; the chat ⋯ mention items; 1.99ajq dockpol: v7)
+  assert.match(h, /<script src="\/public\/js\/dock-link\.js\?v=2"><\/script><script src="\/public\/js\/pad-dock\.js\?v=8"><\/script>/);   // (1.99ajn padppl: v6 - a veiled line opens the person menu; the chat ⋯ mention items; 1.99ajq dockpol: v7; 1.99?? casino2: dock-link v2 + pad-dock v8 - the chat beside a casino table)
   assert.match(h, /var pageVt = "([^"]+)", chatOnly = true;/);
   assert.equal(/var pageVt = "([^"]+)"/.exec(h)[1], RPM.tag(U.viewer.userId), "the window's viewer tag is roompm.tag");
   assert.notEqual(RPM.tag(U.viewer.userId), U.viewer.userId); assert.doesNotMatch(h, new RegExp('pageVt = "' + U.viewer.userId));
@@ -353,4 +353,59 @@ test("the homepage's Room Dock follows the same switch: off = today's homepage, 
     const init = JSON.parse(/<script id="hmdInit" type="application\/json">([\s\S]*?)<\/script>/.exec(h)[1]);   // (JSON.parse reads the page's \u003c escapes itself)
     assert.equal(init.vt, RPM.tag(U.viewer.userId), "the homepage's viewer tag");
   } finally { await mode("everyone"); }
+});
+
+// ── 1.99?? casino2: the EMBED variant (a casino table's 💬 Chat panel frames the window) ──
+async function getH(url, u, headers) {
+  const r = await fetch(base + url, { headers: Object.assign(H(u), headers || {}), redirect: "manual" });
+  return { status: r.status, headers: r.headers, text: await r.text() };
+}
+test("casino2: ?embed=1 from a same-origin frame is the same page with SAMEORIGIN / frame-ancestors 'self'; every other request stays DENY / 'none'", async () => {
+  const FRAME = { "sec-fetch-dest": "iframe", "sec-fetch-site": "same-origin" };
+  const ok = await getH("/p/" + SLUG + "/chat?embed=1", U.viewer, FRAME);
+  assert.equal(ok.status, 200, ok.text.slice(0, 200));
+  assert.equal(ok.headers.get("x-frame-options"), "SAMEORIGIN");
+  assert.equal(ok.headers.get("content-security-policy"), "frame-ancestors 'self'");
+  for (const k of ["cache-control", "x-robots-tag", "referrer-policy"]) assert.equal(ok.headers.get(k), SAME[k], "the other headers stay: " + k);
+  assert.match(ok.text, /embed: true,/, "the Dock is told it is framed (pad-dock.js checks the parent itself)");
+  assert.equal((ok.text.match(/id="rmFeed"/g) || []).length, 1, "the same one chat");
+  // an older browser that sends no Sec-Fetch-* headers
+  const old = await getH("/p/" + SLUG + "/chat?embed=1", U.viewer, {});
+  assert.equal(old.headers.get("x-frame-options"), "SAMEORIGIN");
+  // never framed: a top-level ?embed=1, a cross-site frame, the plain window
+  const cases = [["top-level ?embed=1", "?embed=1", { "sec-fetch-dest": "document", "sec-fetch-site": "none" }],
+                 ["a cross-site frame", "?embed=1", { "sec-fetch-dest": "iframe", "sec-fetch-site": "cross-site" }],
+                 ["a same-site (another subdomain) frame", "?embed=1", { "sec-fetch-dest": "iframe", "sec-fetch-site": "same-site" }],
+                 ["the plain window, framed", "", FRAME], ["embed=2", "?embed=2", FRAME]];
+  for (const [what, qs, hd] of cases) {
+    const r = await getH("/p/" + SLUG + "/chat" + qs, U.viewer, hd);
+    assert.equal(r.status, 200, what); headersOk(r, what);
+    assert.match(r.text, /embed: false,/, what);
+  }
+  // the gates are the window's own: an embed that isn't the viewer's chat is a 302 with the DENY headers... the frame shows the pad page
+  const no = await getH("/p/" + MSLUG + "/chat?embed=1", null, FRAME);
+  assert.equal(no.status, 302); assert.equal(no.headers.get("location"), "/p/" + MSLUG);
+});
+
+test("casino2: bridge.chatGate = the window's gate (the casino's 💬 Chat asks it); liveBridged = a live bridged pad or null", async () => {
+  assert.equal((await bridge.chatGate(U.viewer, SLUG)).ok, true);
+  assert.equal((await bridge.chatGate(U.viewer, SLUG)).slug, SLUG);
+  assert.equal((await bridge.chatGate(null, MSLUG)).ok, false, "members-tier, signed out");
+  assert.equal((await bridge.chatGate(U.viewer, MSLUG)).ok, true);
+  assert.equal((await bridge.chatGate(U.viewer, OSLUG)).ok, false, "not bridged");
+  assert.equal((await bridge.chatGate(U.viewer, "no-such-pad")).ok, false);
+  await mode("off");
+  try { assert.equal((await bridge.chatGate(U.viewer, SLUG)).ok, false, "the Room Dock off"); } finally { await mode("everyone"); }
+  assert.equal(bridge.liveBridged(CHAT).id, CHAT);
+  assert.equal(bridge.liveBridged(OFFLINE), null);
+  assert.equal(bridge.liveBridged("Nope.Pad"), null);
+});
+
+test("casino2: a chat beside a casino table and a pad tab of the same pad are ONE 🌐 web user (presence counts the account, /privacy#rooms-web)", async () => {
+  const W = require(path.join(repo, "padweb"));
+  W._reset();
+  await get("/api/rooms/" + SLUG + "/live?after=0&pad=1", U.unlinked);              // the pad tab
+  await get("/api/rooms/" + SLUG + "/live?after=0&pad=1&pop=1", U.unlinked);        // the frame beside the table (the window's poll)
+  const noted = W.sweep(CHAT);         // (what forRoom lists from, before its privacy filters - test/bridge-web-presence.test.js has those)
+  assert.equal(noted.filter((x) => x.userId === U.unlinked.userId).length, 1, "one entry for the account, whichever surfaces poll");
 });

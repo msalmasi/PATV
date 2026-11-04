@@ -25,6 +25,10 @@
   // (1.99ajh dockpop review: a pad tab answers every heartbeat - "Back in the pad tab" only while one did within 12 s; LISTEN = the window
   // was playing the room when it reloaded: it picks it up again)
   var TAB_FRESH_MS = 12000, LISTEN_KEY = 'patv.dock.listen.', FOCUS_GAP_MS = 15000;
+  // 1.99?? casino2 (owner point 18: "docking chat doesn't stay active between page switches (like going to holdem)"): the chat that
+  // floats on a pad page FOLLOWS to that pad's casino table in the same tab (sessionStorage: this tab only, a noopener tab never gets
+  // it) - casino-chat.js reads it there, at most 2 minutes later. EMBED_PATH = the only pages that may frame the chat (casino tables).
+  var FOLLOW_KEY = 'patv.chat.follow', EMBED_PATH = /^\/casino\/(?:blackjack|holdem)\/t\/[0-9a-f]{10}$/;
   // the icons the Dock's own controls use (a proxied menu item that brings one of them shows • instead: one meaning per icon)
   var DOCK_ICONS = Object.keys(IC).map(function (k) { return IC[k].replace(/\uFE0F/g, ''); }).concat(['📸', '🎬', '✂', '▶', '🎦', '⬇', '📅', '📜', '🔍', '👥', '🎚', '💬', '📌', '🎥', '🗓', '🎫', '🚀']);
   /** a proxied label's leading emoji (the Dock draws its own icon): "🎬 1/2 slots in use" -> "1/2 slots in use" */
@@ -61,12 +65,20 @@
     if (!root) return null;
     // 1.99ajh dockpop: 'pad' (the pad page), 'popout' (the pad's chat in its own window, /p/<slug>/chat) or 'preview' (the homepage)
     var mode = o.mode === 'popout' || o.mode === 'preview' ? o.mode : 'pad';
+    // 1.99?? casino2: the chat window FRAMED beside a casino table (casino-chat.js frames /p/<slug>/chat?embed=1): the window's role on the
+    // channel (a pad tab of this pad goes popped, the newest window or frame wins), but ✕, the hand-over and a retire talk to the table page
+    // (postMessage, same origin, no chat content) instead of closing a window. Framed by anything but a casino table page: the plain window.
+    function embedParent() {
+      try { var P = W.parent; return P && P !== W && P.location.origin === W.location.origin && EMBED_PATH.test(P.location.pathname) ? P : null; } catch (e) { return null; }
+    }
+    var embed = mode === 'popout' && !!o.embed && !!embedParent();
+    function toParent(m) { var P = embedParent(); if (!P) return; try { P.postMessage(m, W.location.origin); } catch (e) { /* gone */ } }
     var nodes = o.nodes || {}, dead = false, ready = false, data = null, holders = [], listeners = [];
     var stage, chat, strip, compose, side, panel, template, holderBox, extras, toolRow, ovTop, ovBot, srcHost, srcBox, snapBtn, clipBtn, playBtn, nowBox;
     var current = null, layer = null, pip = null, pipPending = false, popGeneration = 0, localCam = null, stageHidden = false;
     // 1.99ajh dockpop: the chat in its own window - popped (this page's chat card is hidden in place while a window for this pad and account
     // is open), the window we opened (only while we hold it), the dock-link channel and its timers
-    var popped = false, popPending = false, popWin = null, link = null, lastAlive = 0, lastAudio = 0, tabSeen = 0, popBar = null;
+    var popped = false, popPending = false, popWin = null, link = null, lastAlive = 0, lastAudio = 0, tabSeen = 0, popBar = null, lastEmbed = false;
     var pendTimer = null, aliveTimer = null, handTimer = null, bringing = false, resumedInClick = false, gone_ = false, lastSlow = false;
     var autoTimer = null, toastTimer = null, observers = [], selected = null, stageRevision = 0, videoPipSource = null, overBar = false;
     var toolBtns = {}, peopleInput = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null, setTopicBtn = null;
@@ -1599,6 +1611,8 @@
       var sched = node('rmSched'), upnext = node('rmGoLive') && node('rmGoLive').querySelector('.upnext');
       if (sched || upnext) menuItem(box, '🗓️', 'schedule', 'Stage schedule…', function () { scheduleSheet(opener); });
       var plex = node('rmPlexQ'); if (plex && !plex.hidden) menuItem(box, '📼', 'plex', 'Plex queue & controls…', function () { external(function () { nodeSheet(t('plex', 'Plex queue & controls…').replace(/…$/, ''), plex, opener, 'plex'); }); });
+      // 1.99?? casino2: start a play from the room (users the /stage rules allow; staff keep ▶️ Play content here below)
+      if (o.plexPlay && W.PATVPlexPlay && mode === 'pad') menuItem(box, '📼', 'plex_play', 'Play from Plex…', function () { plexSheet(opener); });
       var mbtn = stage && stage.querySelector('.mf-mbtn'), clear = stage && stage.querySelector('.mf-clear'), rep = stage && stage.querySelector('.mf-rbtn');
       if (rep && !rep.hidden) menuItem(box, '⚑', 'mf_report', 'Report someone on the mic stage…', function () { external(function () { rep.click(); }); });
       if ((mbtn && !mbtn.hidden) || (clear && !clear.hidden)) menuGroup(box, 'g_managers', 'Managers');
@@ -1606,6 +1620,29 @@
       if (clear && !clear.hidden) menuItem(box, '🧹', 'mf_clear', 'Clear the stage', function () { external(function () { clear.click(); }); }, { disabled: clear.disabled });
       staffItems(box);
       finishMenu(box, opener);
+    }
+    // 1.99?? casino2 (owner: "Did we ever get the ability for users to start a Plex play from the room?"): 📼 Play from Plex… - the flow
+    // /stage runs (plex-play.js) in a Dock sheet, for THIS pad: search, pick, scope, start point, quality, audio, subtitles, the price and
+    // its confirm. The server has the last word (medialib / mediaqueue: Plex members, the override list, staff, the pad's slot rules and
+    // limit, the daily caps, the encoder); a refusal shows in the sheet. Book it for later stays on /stage (linked). After a start the stage
+    // picks the slot up and 📼 Plex queue & controls… shows it. o.plexPlay = bridge.js's goLiveInfo answer (null = not offered).
+    function plexSheet(opener) {
+      var pp = o.plexPlay; if (!pp || !W.PATVPlexPlay) return;
+      external(function () {
+        var box = sheet(t('plex_play', 'Play from Plex…').replace(/…$/, ''), opener), doc = box.ownerDocument;
+        layer.kind = 'plexplay';
+        var wrap = el('div', 'rmd-plex', null, doc); box.appendChild(wrap);
+        var why = pp.member ? t('plex_member', 'Plex members play free (a few plays a day).') : pp.free ? t('plex_free', 'Free for you.')
+          : t('plex_paid', '{n} PAT per started hour - held until it’s on the stage, refunded if it never gets there.', { n: fmtN(pp.price_per_hour || 0) });
+        W.PATVPlexPlay.build(wrap, { onair: !!pp.onair, note: why });
+        var later = el('a', 'rmd-plex-later', t('plex_later', 'Book it for later on the stage page ›'), doc); later.setAttribute('href', '/stage?mode=plex');
+        wrap.appendChild(later);
+        var flow = W.PATVPlexPlay.mount(wrap, { roomId: function () { return String(o.room == null ? '' : o.room); }, roomTitle: function () { return o.padTitle || o.slug || ''; },
+          me: o.user || null, free: !!pp.free, member: !!pp.member, perHour: pp.price_per_hour || 0, quality: pp.quality || 720, queues: !!pp.queue, later: false,
+          onStarted: function () { if (o.wake) o.wake(); } });
+        if (flow) flow.info();
+        var q = wrap.querySelector('input[type=search]'); if (q) setTimeout(function () { if (q.isConnected) q.focus(); }, 0);   // (after the sheet's own focus)
+      });
     }
     // the staff's on-air bar (onair-bar.js: ▶️ Play content here, ✂️ Cut), proxied - its own buttons, checks and confirms
     function staffItems(box) {
@@ -1888,7 +1925,7 @@
       return { w: w, h: h, x: x, y: y };
     }
     function saveGeometry() {
-      if (mode !== 'popout') return;
+      if (mode !== 'popout' || embed) return;
       try { store(POP_GEO, JSON.stringify({ w: W.innerWidth, h: W.innerHeight, x: W.screenX, y: W.screenY })); } catch (e) { /* private window */ }
     }
     /** ↗️ Chat in its own window - in the click (a pop-up needs the gesture); a blocked one floats the chat here instead */
@@ -1924,6 +1961,9 @@
     function paintPopBar() {
       if (popWin && popWin.closed) popWin = null;
       var s = popBar && popBar.querySelector('.rmd-popbar-show'); if (s) s.hidden = !popWin;
+      // 1.99?? casino2: the chat is in a frame beside a casino table (another tab, or this one before it came here)
+      var tx = popBar && popBar.querySelector('.rmd-popbar-t');
+      if (tx) tx.textContent = lastEmbed && !popWin ? t('popped_embed', 'Chat is open beside a casino table') : t('popped', 'Chat is open in its own window');
     }
     /** POPPED: a window for this pad and account is open - this chat card is hidden IN PLACE (still fed by this page's own poll, so Bring it
      *  back is instant), a 44px bar takes its spot, the stage takes the freed height, and this page's room audio pauses (never heard twice) */
@@ -1999,7 +2039,7 @@
         // window, so its heartbeats no longer pop it again; a new window - another id - does)
         if (m.t === 'pop-open') detached = null;
         if (detached && m.id === detached) return;
-        winId = m.id; lastAlive = Date.now(); lastAudio = m.audio ? 1 : 0; lastSlow = !!m.slow;
+        winId = m.id; lastAlive = Date.now(); lastAudio = m.audio ? 1 : 0; lastSlow = !!m.slow; lastEmbed = !!m.embed;
         if (popped && popPending) { popPending = false; clearTimeout(pendTimer); }
         if (!popped) enterPopped(false);
         if (mode === 'pad') link.send('tab-here');
@@ -2020,7 +2060,7 @@
     /** the window's side of the channel */
     var handed = false, beatTimer = null, leaving = false;
     function popMsg(m) {
-      if (m.t === 'who') link.send('pop-alive', { audio: playingHere(), slow: D.hidden });
+      if (m.t === 'who') link.send('pop-alive', { audio: playingHere(), slow: D.hidden, embed: embed });
       else if (m.t === 'tab-here') tabSeen = Date.now();
       else if (m.t === 'tab-gone') tabSeen = 0;           // (1.99ajh dockpop review: the pad tab went elsewhere - Hold'em, another pad)
       else if (m.t === 'pop-close-req') handOff(m.id);
@@ -2028,7 +2068,8 @@
       else if (m.t === 'pop-open') {
         // a newer window for this pad and account: the newest wins (two windows would poll twice and play the room twice)
         if (playingHere()) o.audio.pause();
-        retire('pop_moved', 'This chat is open in a newer window.');
+        if (m.embed) retire('pop_moved_embed', 'This chat is open beside a casino table.');    // 1.99?? casino2
+        else retire('pop_moved', 'This chat is open in a newer window.');
       } else if (m.t === 'audio-on') { if (playingHere()) o.audio.pause(); }
     }
     function handOff(to) {
@@ -2037,6 +2078,7 @@
       if (audio) o.audio.pause();
       if (link) link.send('handoff', { draft: draft, audio: audio, to: to || '*' });
       saveGeometry();
+      if (embed) { toParent({ t: 'patv-chat:closed', why: 'handoff' }); return; }   // 1.99?? casino2: the table page removes the frame
       try { W.close(); } catch (e) { /* not a window this site opened */ }
       setTimeout(function () { if (!W.closed) retire('pop_back_done', 'The chat is back in the pad tab.'); }, 400);
     }
@@ -2046,7 +2088,7 @@
     }
     function beat() {
       clearTimeout(beatTimer);
-      beatTimer = setTimeout(function () { beatTimer = null; if (gone_ || !link || leaving) return; link.send('pop-alive', { audio: playingHere(), slow: D.hidden }); beat(); }, ALIVE_MS);
+      beatTimer = setTimeout(function () { beatTimer = null; if (gone_ || !link || leaving) return; link.send('pop-alive', { audio: playingHere(), slow: D.hidden, embed: embed }); beat(); }, ALIVE_MS);
     }
     function recheck() { if (o.recheck) { try { o.recheck(); } catch (e) { /* the page's own */ } } }
     /** another viewer tag on the channel. 1.99ajh dockpop review (load): only the WINDOW re-checks (it must never show another account's
@@ -2066,13 +2108,32 @@
         link.send('audio-on');
         if (mode !== 'popout' && popped) detach();
       });
-      if (mode === 'popout') { link.send('pop-open', { audio: playingHere() }); beat(); }
+      if (mode === 'popout') { link.send('pop-open', { audio: playingHere(), embed: embed }); beat(); }
       else { if (mode === 'pad') link.send('tab-here'); link.send('who'); }
+    }
+    function noteFollow() {
+      if (mode !== 'pad' || popped || gone_ || !(current && current.kind === 'float')) return;
+      try { W.sessionStorage.setItem(FOLLOW_KEY, JSON.stringify({ room: roomKey(), slug: String(o.slug || ''), at: Date.now(), audio: playingHere() ? 1 : 0 })); } catch (e) { /* private mode */ }
+    }
+    /** 1.99?? casino2: the frame's side of the table page's postMessage bridge - same origin and the parent window only; nothing of the
+     *  chat crosses it (ready / closed / retired / new / audio go up; pvp / focus come down, and pvp re-checks like the person menu) */
+    function embedMsg(e) {
+      var P = embedParent();
+      if (!P || !e || e.source !== P || e.origin !== W.location.origin) return;
+      var m = e.data; if (!m || typeof m !== 'object' || typeof m.t !== 'string') return;
+      if (m.t === 'patv-chat:focus') { var i = inputNode(); if (i) { try { i.focus(); } catch (x) { /* gone */ } } return; }
+      if (m.t === 'patv-chat:pvp' && (m.kind === 'duel' || m.kind === 'brawl') && typeof m.login === 'string') {
+        var low = m.login.toLowerCase().slice(0, 64), who = null;
+        each((data && data.members) || [], function (x) { if (!who && x && !x.veil && !x.anon && String(x.login || '').toLowerCase() === low) who = x; });
+        if (who && pvpFor(who) && pvpFor(who)[m.kind]) pvp(who, m.kind, inputNode());
+        else toast(t('pvp_absent', 'They aren’t in the room right now, so no challenge was sent.'));
+      }
     }
     function stopLink() { clearTimeout(beatTimer); clearTimeout(aliveTimer); clearTimeout(pendTimer); clearTimeout(handTimer); if (link) { link.close(); link = null; } }
     /** the window is done (signed out / another account / a newer window): every Dock layer closes and one card says why */
     function retire(key, fallback) {
       if (gone_) return;
+      if (embed) toParent({ t: 'patv-chat:retired', key: String(key || '') });   // 1.99?? casino2: the table page shows why / Bring it here
       // (the page stops its poll and audio and wipes what it shows, then asks for the card - roomDock.gone)
       if (o.onRetire) { try { o.onRetire(key, fallback); } catch (e) { /* the page's own */ } }
       if (!gone_) goneCard(key, fallback);
@@ -2080,7 +2141,7 @@
     function goneCard(key, fallback) {
       // (the pad tab this window popped comes back at once - no draft, no audio: this window shows nothing any more; not when a newer
       // window took over - the tab stays popped for that one)
-      if (mode === 'popout' && link && !handed && !gone_ && key !== 'pop_moved') link.send('pop-closed', { audio: false });
+      if (mode === 'popout' && link && !handed && !gone_ && key !== 'pop_moved' && key !== 'pop_moved_embed') link.send('pop-closed', { audio: false });
       gone_ = true;
       closeLayer(false); redock(); stopLink();
       if (o.mod && o.mod.closeMenu) { try { o.mod.closeMenu(false); } catch (e) { /* none open */ } }
@@ -2089,7 +2150,8 @@
       card.appendChild(el('p', null, t(key, fallback)));
       // (1.99ajh dockpop review: signed IN in another tab - the window can show the chat as that account, but only when the viewer asks)
       var row = el('div', 'rmd-gone-acts'); card.appendChild(row);
-      row.appendChild(button('✕', 'pop_close', 'Close this window', function () { try { W.close(); } catch (e) { /* not ours */ } }, 'ds-btn primary'));
+      if (embed) row.appendChild(button('✕', 'embed_close', 'Close the chat', function () { toParent({ t: 'patv-chat:closed', why: String(key || '') }); }, 'ds-btn primary'));
+      else row.appendChild(button('✕', 'pop_close', 'Close this window', function () { try { W.close(); } catch (e) { /* not ours */ } }, 'ds-btn primary'));
       if (key === 'pop_signed_in') row.appendChild(button('🔄', 'pop_reload', 'Reload', function () { try { W.location.reload(); } catch (e) { /* gone */ } }, 'ds-btn'));
       if (chat && chat.parentNode) { chat.parentNode.insertBefore(card, chat); chat.hidden = true; } else root.appendChild(card);
       var b = card.querySelector('button'); if (b) b.focus();
@@ -2107,6 +2169,9 @@
       var here = W.location || {}, u = null;
       try { u = new W.URL(href, here.href); } catch (x) { return; }
       var same = u.origin === here.origin;
+      // 1.99?? casino2: beside a casino table, sign in and the casino's own pages take the whole tab (the table page, not the frame)
+      if (embed && same && u.pathname === '/login') { var tp = embedParent(); a.setAttribute('href', '/login?next=' + encodeURIComponent(tp ? tp.location.pathname : '/')); a.setAttribute('target', '_top'); return; }
+      if (embed && same && /^\/casino(?:\/|$)/.test(u.pathname)) { a.setAttribute('target', '_top'); return; }
       if (same && u.pathname === '/login') { a.setAttribute('href', '/login?next=' + encodeURIComponent(here.pathname)); a.removeAttribute('target'); return; }
       if (same && u.pathname === here.pathname) return;
       var rel = String(a.getAttribute('rel') || '');
@@ -2264,7 +2329,20 @@
       [node('rmFeed'), node('rmOlder')].forEach(function (box) { observe(box, function (ms) { ms.forEach(function (m) { each(m.addedNodes, function (x) { if (x.nodeType === 1) fitSoon(x); }); }); }, { childList: true }); });
       on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
       if (mode === 'pad') on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
+      if (mode === 'pad') {
+        // 1.99?? casino2 (owner point 18): a floating chat follows this tab to the pad's casino table (casino-chat.js) - written when the
+        // tab leaves while it floats (minimized too) and isn't in its own window (that window already follows), and on a click of a
+        // casino link (in case pagehide comes late); this page's own chat is here, so an old mark goes
+        try { W.sessionStorage.removeItem(FOLLOW_KEY); } catch (e) { /* private mode */ }
+        on(D, 'click', function (e) {
+          var a = e && e.target && e.target.closest ? e.target.closest('a[href]') : null;
+          if (!a) return;
+          var u = null; try { u = new W.URL(a.getAttribute('href'), W.location.href); } catch (x) { return; }
+          if (u.origin === W.location.origin && /^\/casino(?:\/|$)/.test(u.pathname)) noteFollow();
+        }, true);
+      }
       on(W, 'pagehide', function () {
+        if (mode === 'pad') noteFollow();
         leaving = true;
         if (mode === 'popout' && link && !handed && !gone_) {
           var input = inputNode(), audio = playingHere();
@@ -2284,13 +2362,22 @@
         on(W, 'resize', function () { clearTimeout(geoTimer); geoTimer = setTimeout(saveGeometry, 400); });
         // (going hidden - minimized, another window over it: one beat now that says the next ones may be slow)
         // (never after pagehide: a closing window's last word is pop-closed)
-        on(D, 'visibilitychange', function () { if (link && !gone_ && !handed && !leaving) link.send('pop-alive', { audio: playingHere(), slow: D.hidden }); });
+        on(D, 'visibilitychange', function () { if (link && !gone_ && !handed && !leaving) link.send('pop-alive', { audio: playingHere(), slow: D.hidden, embed: embed }); });
       }
       openLink();
       if (mode === 'pad') tabChanged(panel && !panel.hidden ? 'live' : 'feed');
       if (o.reveal && o.reveal.onChange) o.reveal.onChange(revealNote);
       if (mode === 'pad') navAuto();
       update(data);
+      if (embed) {
+        on(W, 'message', embedMsg);
+        // (new lines while the table page has the chat minimized: a dot there - a count of nothing, no words)
+        var feedE = node('rmFeed'), newTm = null;
+        if (feedE && W.MutationObserver) observe(feedE, function () { if (newTm) return; newTm = setTimeout(function () { newTm = null; toParent({ t: 'patv-chat:new' }); }, 400); }, { childList: true });
+        if (o.audio && o.audio.onChange) o.audio.onChange(function () { toParent({ t: 'patv-chat:audio', on: playingHere() }); });
+        D.body.classList.add('rmd-embed');
+        toParent({ t: 'patv-chat:ready' });
+      }
     }
     // the reveal switch's one notice (owner item 2): on - the audited words for 5 s; off - 3 s; on after a reload - once; a failure - 8 s
     function revealNote(ev) {
@@ -2306,6 +2393,7 @@
       // 1.99ajh dockpop
       floating: function () { return !!(current && current.kind === 'float'); },
       popped: function () { return popped; }, popWindow: popWindow, canWindow: canWindow, bringBack: bringBack,
+      embedded: function () { return embed; },      // 1.99?? casino2
       gone: function (key, fallback) { goneCard(key || 'pop_gone', fallback || 'You signed out or switched accounts in another tab, so this chat window is closed.'); },
       retitle: retitle,
       // 1.99ajq dockpol: the chat card's notices, a composer command's state (room-bridge.js onCmd), who the mic stage says is talking

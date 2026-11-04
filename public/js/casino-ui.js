@@ -16,6 +16,7 @@
   const game = root.dataset.game === "holdem" ? "holdem" : "bj";
   const tableId = root.dataset.table || "";
   const signed = !!root.dataset.signed;
+  const meName = root.dataset.user || "";        // 1.99?? casino2: your PATV name (the 💸 Tip modal's balance line)
 
   async function post(url, body) {
     const r = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
@@ -487,6 +488,157 @@
     document.addEventListener("visibilitychange", () => { clearInterval(tm); tm = setInterval(lobby, document.hidden ? 15000 : 4000); if (!document.hidden) lobby(); });
   }
 
+  // ── 1.99?? casino2 (owner: "casino tables need clickable names with the usual tipping etc."): a seat's avatar + name open the Room
+  // Dock's person menu (room-mod.js PATVRoom.mod: 👤 profile, 💸 Tip with its confirm step, ⚔️ Duel / 🥊 Brawl, moderation only where
+  // Pepe gives YOU powers in that pad - the server and Pepe re-check every action). The seats come from GET /api/casino/t/:id/people
+  // (signed in; /pads for everyone - the 💬 Chat's list, casino-chat.js): asked when the seats or the rooms change and on a click with
+  // an answer older than 30 s, never by the 1 s poll. Veiled seats (hidden on the bridge) stay plain text, as on a pad; your own seat
+  // too. Pepe (the dealer, or a seat that is his account) has his own small menu: profile, fairness, history, his stream.
+  const PEOPLE_FRESH_MS = 30000;
+  const ppl = { sig: null, at: 0, d: null, busy: null };
+  let lastView = null;
+  const peopleSig = (t) => [(t.seats || []).map((x) => x.seat).join(","), (t.rooms || []).map((r) => r.id).join(","),
+                            (t.adverts || []).map((r) => r.id).join(","), t.status].join("|");
+  function loadPeople() {
+    if (ppl.busy) return ppl.busy;
+    ppl.busy = fetch(`/api/casino/t/${tableId}/${signed ? "people" : "pads"}`, { credentials: "same-origin", cache: "no-store" })
+      .then((r) => r.json()).then((j) => {
+        if (j && j.ok) { ppl.d = j; ppl.at = Date.now(); document.dispatchEvent(new CustomEvent("cz:people", { detail: j })); }
+        return ppl.d;
+      }).catch(() => ppl.d).then((d) => { ppl.busy = null; return d; });
+    return ppl.busy;
+  }
+  function peopleSync(d) {
+    lastView = d;
+    if (!d || !d.table) return;
+    const sig = peopleSig(d.table);
+    if (sig !== ppl.sig) { ppl.sig = sig; loadPeople(); }
+  }
+  const personOf = (seat) => (ppl.d && ppl.d.seats && seat ? ppl.d.seats[seat] || null : null);
+  /** a seat's avatar + plate as a button (the person menu), or as they are (signed out, your own seat, veiled, not known yet) */
+  function seatWho(s, inner) {
+    const p = s && personOf(s.seat);
+    if (!signed || !p || p.me || p.veil || !(p.bot || (p.patv && p.patv.username))) return inner;
+    return `<button type="button" class="cz-who" data-seat="${esc(s.seat)}" aria-haspopup="menu" aria-label="${esc(T("who_actions", "Actions for {name}", { name: s.name }))}">${inner}</button>`;
+  }
+  const mods = new Map();          // pad slug ('' = no pad) -> a PATVRoom.mod instance whose Manage panel never shows
+  function modFor(slug) {
+    if (!window.PATVRoom || !window.PATVRoom.mod) return null;
+    let m = mods.get(slug);
+    if (!m) {
+      const wrap = document.createElement("div"); wrap.hidden = true; wrap.className = "cz-pm-host";   // (update() toggles the section, never this)
+      const host = document.createElement("section"); wrap.appendChild(host); document.body.appendChild(wrap);
+      m = window.PATVRoom.mod(host, slug, { signed: true, me: meName || null, dms: true });
+      mods.set(slug, m);
+    }
+    return m;
+  }
+  /** the menu's header as the Dock draws it: avatar · name (· the login as a second line when it differs) */
+  function headerLike(menu, u) {
+    menu.classList.add("rmd-pm", "cz-pmp");
+    const title = menu.querySelector(".pm-pop-n");
+    if (!title) return;
+    title.textContent = "";
+    title.classList.remove("two");
+    const row = document.createElement("span"); row.className = "rmd-person";
+    row.innerHTML = avatarHTML({ name: u.display || u.login || "?", avatar: u.avatar || null });
+    const nm = document.createElement("span"); nm.className = "rmd-person-name";
+    const b = document.createElement("b"); b.className = "who"; b.textContent = u.display || u.login || ""; nm.appendChild(b);
+    row.appendChild(nm); title.appendChild(row);
+    if (u.login && String(u.login).toLowerCase() !== String(u.display || "").toLowerCase()) {
+      const sm = document.createElement("small"); sm.className = "pm-login"; sm.textContent = u.login; title.appendChild(sm); title.classList.add("two");
+    }
+  }
+  async function personMenu(seat, anchor) {
+    if (!ppl.d || Date.now() - ppl.at > PEOPLE_FRESH_MS) await loadPeople();
+    const p = personOf(seat);
+    if (!p || p.me || p.veil) return;
+    if (p.bot) { pepeMenu(anchor); return; }
+    const s = lastView && lastView.table ? (lastView.table.seats || []).find((x) => x.seat === seat) : null;
+    const pad = p.pad || null, slug = pad ? pad.slug : "";
+    const m = modFor(slug);
+    if (!m) return;
+    m.update({ mod: (pad && pad.mod) || null, room: null });
+    const u = { login: p.login || null, display: p.display, patv: p.patv || null, tip: p.tip || null, web: !p.login, avatar: s ? s.avatar : null };
+    const pv = pad && pad.pvp && p.login ? { duel: !!pad.pvp.duel, brawl: !!pad.pvp.brawl,
+      run: (kind) => { if (window.CZChat && window.CZChat.pvp) window.CZChat.pvp(slug, kind, p.login); } } : null;
+    closePepe();
+    m.menu(u, anchor, { pvp: pv });
+    document.querySelectorAll(".pm-pop").forEach((menu) => { if (menu._anchor === anchor) headerLike(menu, u); });
+  }
+
+  // Pepe's own menu (the same look): 👤 profile, 🛡️ fairness (the next commitment + the last proof), 📜 history, 📺 his stream
+  let pepePop = null;
+  function closePepe(refocus) {
+    if (!pepePop) return;
+    const p = pepePop; pepePop = null;
+    document.removeEventListener("pointerdown", p._outside, true);
+    document.removeEventListener("keydown", p._keys, true);
+    p.remove();
+    if (refocus && p._anchor && p._anchor.isConnected) p._anchor.focus();
+  }
+  function pepeMenu(anchor) {
+    if (pepePop && pepePop._anchor === anchor) { closePepe(true); return; }
+    closePepe(false);
+    const t = (lastView && lastView.table) || {}, pe = (ppl.d && ppl.d.pepe) || {};
+    const p = document.createElement("div");
+    p.className = "pm-pop rmd-pm cz-pmp cz-pepe"; p.setAttribute("role", "dialog");
+    p.setAttribute("aria-label", T("pepe_menu", "Pepe"));
+    p._anchor = anchor;
+    const hd = document.createElement("div"); hd.className = "pm-pop-h";
+    const nm = document.createElement("div"); nm.className = "pm-pop-n"; hd.appendChild(nm);
+    const x = document.createElement("button"); x.type = "button"; x.className = "pm-btn pm-x"; x.textContent = "×"; x.setAttribute("aria-label", T("close", "Close"));
+    x.addEventListener("click", () => closePepe(true)); hd.appendChild(x);
+    p.appendChild(hd);
+    const list = document.createElement("div"); list.className = "pm-pop-l"; list.setAttribute("role", "menu"); list.setAttribute("aria-label", T("pepe_menu", "Pepe"));
+    const item = (label, href, fn, why) => {
+      const b = document.createElement(href ? "a" : "button"); b.className = "pm-pop-i"; b.setAttribute("role", "menuitem"); b.tabIndex = -1;
+      b.textContent = label;
+      if (href) b.href = href; else { b.type = "button"; b.addEventListener("click", (e) => { e.preventDefault(); closePepe(false); fn(); }); }
+      if (why) { const w = document.createElement("small"); w.className = "pm-pop-why"; w.textContent = why; b.appendChild(w); }
+      list.appendChild(b);
+    };
+    if (pe.username) item("👤 " + T("pepe_profile", "Pepe's profile"), "/u/" + encodeURIComponent(pe.username));
+    const proof = t.last_revealed || t.last_hand_revealed || null;
+    item("🛡️ " + T("pepe_fair", "Fairness"), proof ? `/casino/fair/${t.id || tableId}/${proof}` : null, proof ? null : () => { const h = $("cz-histbtn"); if (h) h.click(); },
+         t.commitment ? T("pepe_fair_next", "next {c}…", { c: String(t.commitment).slice(0, 10) }) : null);
+    item("📜 " + T("pepe_history", "Hand history"), null, () => { const h = $("cz-histbtn"); if (h) h.click(); });
+    if (t.on_stream && pe.pad) item("📺 " + T("pepe_stream", "On Pepe's stream"), pe.pad);
+    p.appendChild(list);
+    nm.innerHTML = '<span class="rmd-person">' + avatarHTML({ name: "Pepe", avatar: "/public/img/pepe.png" }) + '<span class="rmd-person-name"><b class="who">Pepe</b></span></span>';
+    nm.appendChild(Object.assign(document.createElement("small"), { className: "pm-login", textContent: T("pepe_role", "the dealer · provably fair") }));
+    nm.classList.add("two");
+    document.body.appendChild(p);
+    pepePop = p;
+    const r = anchor.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight, vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    let top = r.bottom + 6;
+    if (top + h > vh - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+    p.style.left = (Math.max(8, Math.min(r.left, vw - w - 8)) + window.scrollX) + "px";
+    p.style.top = (top + window.scrollY) + "px";
+    const items = () => Array.from(list.querySelectorAll('[role="menuitem"]'));
+    p._keys = (e) => {
+      if (pepePop !== p) return;
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePepe(true); return; }
+      if (!p.contains(document.activeElement)) return;
+      const bs = items(), i = bs.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") { e.preventDefault(); bs[(i + 1) % bs.length].focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); bs[(i - 1 + bs.length) % bs.length].focus(); }
+    };
+    p._outside = (e) => { if (pepePop === p && !p.contains(e.target) && !anchor.contains(e.target)) closePepe(false); };
+    document.addEventListener("keydown", p._keys, true);
+    document.addEventListener("pointerdown", p._outside, true);
+    const first = items()[0]; if (first) first.focus();
+  }
+  if (tableId) {
+    document.body.classList.add("cz-pm");          // (pad-dock.css: the person menu in the Dock's look on the table pages)
+    document.addEventListener("click", (e) => {
+      const b = e.target && e.target.closest ? e.target.closest(".cz-who") : null;
+      if (!b || !root.contains(b)) return;
+      e.preventDefault();
+      if (b.hasAttribute("data-pepe")) pepeMenu(b); else personMenu(b.getAttribute("data-seat"), b);
+    });
+  }
+
   /** the table loop: poll the table's state about once a second (slower in a background tab); render() draws it */
   function startTable(render) {
     $("cz-table").hidden = false;
@@ -508,6 +660,7 @@
         const d = await r.json();
         if (!d.ok) return;
         setSkew(d.now);
+        peopleSync(d);                 // 1.99?? casino2 (before render: a seat drawn now knows whether it is a button)
         render(d);
         hostTools(d);
         fairness(d.table);
@@ -545,5 +698,7 @@
 
   window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG,
                 armClock, totalFor, pop, net, openSheet, closeSheet, loadHistory, wireHost, startTable, startLobby, actor, streetName, game, tableId, signed,
-                skew: () => skew };
+                skew: () => skew,
+                // 1.99?? casino2: the person menu (seatWho wraps a seat's avatar + plate), the table's pads / people (casino-chat.js)
+                seatWho, personMenu, pepeMenu, people: () => ppl.d, loadPeople, view: () => lastView, me: meName };
 })();

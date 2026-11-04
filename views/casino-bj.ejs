@@ -5,6 +5,9 @@
     action buttons with a countdown ring tied to the server's deadline, deal / flip animations and payout pops, a history sheet,
     spectators, and the host's push-to-room / Pepe's-stream tools. Drawn by public/js/casino-ui.js + casinobj.js. %>
 <%- include('partials/casino-css') %>
+<%# 1.99?? casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
+<link rel="stylesheet" href="/public/css/room-mod.css?v=10">
+<link rel="stylesheet" href="/public/css/pad-dock.css?v=8">
 <style>
   .felt.bj { padding: 18px 16px 64px; border-radius: 28px 28px 50% 50% / 28px 28px 22% 22%; min-height: 470px; }
   .bj-shoe { position: absolute; top: 20px; inset-inline-end: 26px; width: 44px; height: 58px; border-radius: 8px; transform: rotate(8deg);
@@ -70,7 +73,7 @@
     .chipbtn { width: 52px; height: 52px; }
   }
 </style>
-<main class="ds-page flow cz" id="cb" data-game="bj" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>">
+<main class="ds-page flow cz" id="cb" data-game="bj" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>" data-user="<%= signedIn && user ? user : '' %>">
   <%- include('partials/casino-top', { t, game: 'bj', tableId }) %>
   <% if (!tableId) { %><%- include('partials/casino-lobby', { t, game: 'bj', bjOn: locals.bjOn, hmOn: locals.hmOn }) %><% } else { %>
   <section id="cz-table" hidden>
@@ -78,7 +81,8 @@
     <div class="felt bj" id="cz-felt">
       <div class="bj-shoe" aria-hidden="true"></div>
       <div class="bj-dealer">
-        <div class="who"><span class="av" aria-hidden="true"><img src="/public/img/pepe.png" alt=""></span><span class="felt-lbl"><%- t('casino.dealer') %></span><span class="val" id="cz-dval"></span></div>
+        <%# 1.99?? casino2: Pepe the dealer opens his menu (profile, fairness, history, his stream - casino-ui.js pepeMenu) %>
+        <div class="who"><button type="button" class="cz-who" data-pepe="1" aria-haspopup="menu" aria-label="<%- t('casino.pepe_actions') %>"><span class="av" aria-hidden="true"><img src="/public/img/pepe.png" alt=""></span><span class="felt-lbl"><%- t('casino.dealer') %></span></button><span class="val" id="cz-dval"></span></div>
         <span class="cards fan" id="cz-dealer" role="group" aria-label="<%- t('casino.dealer_cards') %>"></span>
       </div>
       <p class="bj-rules"><%- t('casino.bj_felt') %></p>
@@ -141,8 +145,10 @@
     </div>
   </section>
   <%- include('partials/casino-sheets', { t }) %>
+  <%- include('partials/casino-chat', { t }) %>
   <% } %>
 </main>
-<script src="/public/js/casino-ui.js?v=5"></script>
+<% if (tableId) { %><script src="/public/js/room-mod.js?v=14"></script><script src="/public/js/pad-tip.js?v=1"></script><% } %>
+<script src="/public/js/casino-ui.js?v=6"></script>
 <script src="/public/js/patamount.js?v=1"></script>
-<script src="/public/js/casinobj.js?v=7"></script>
+<script src="/public/js/casinobj.js?v=8"></script>

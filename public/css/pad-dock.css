@@ -450,19 +450,23 @@ main.rm.rm-dock[data-rmd-pip] #rmChat { flex: 1 1 0; }
 main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white-space: nowrap; }
 
 /* ── 1.99ajf dockclean (owner point 35): the person menu (appended to <body>, outside <main>) - one header row: avatar · name · ✕ ── */
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm { inline-size: clamp(260px, calc(100vw - 16px), 320px); padding: var(--ds-sp-1); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-h { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--ds-sp-2); align-items: center; min-inline-size: 0; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n > .rmd-person { display: contents; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .av { grid-column: 1; grid-row: 1 / span 2; inline-size: 32px; block-size: 32px; font-size: var(--ds-fs-meta); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name { grid-column: 2; display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name :is(.who, .who-web) { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 700; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n > .pm-login { grid-column: 2; font-size: var(--ds-fs-chip); color: var(--ds-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; border-color: transparent; background: transparent; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-l { display: grid; gap: 0; padding-block: var(--ds-sp-1); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-i { display: flex; align-items: center; gap: var(--ds-sp-2); min-block-size: 40px; padding: 0 var(--ds-sp-3); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-sep { margin-block: var(--ds-sp-1); border-block-start: 1px solid var(--ds-line); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-why { margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-chip); }
+/* (1.99?? casino2: body.cz-pm = a casino table page - its seats open this same menu, so every .pm-pop rule here lists it; selectors only) */
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm { inline-size: clamp(260px, calc(100vw - 16px), 320px); padding: var(--ds-sp-1); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-h { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--ds-sp-2); align-items: center; min-inline-size: 0; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n > .rmd-person { display: contents; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .av { grid-column: 1; grid-row: 1; inline-size: 32px; block-size: 32px; font-size: var(--ds-fs-meta); }
+/* (1.99?? casino2, the owner's "the user and avatar are not aligned": the avatar spans two rows only when the login line is there -
+   with the name alone, an empty implicit second row took part of the avatar's 32px and the name sat ~8px above the avatar's middle) */
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n:is(.two, :has(> .pm-login)) .av { grid-row: 1 / span 2; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name { grid-column: 2; display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name :is(.who, .who-web) { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 700; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n > .pm-login { grid-column: 2; font-size: var(--ds-fs-chip); color: var(--ds-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-x { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; border-color: transparent; background: transparent; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-l { display: grid; gap: 0; padding-block: var(--ds-sp-1); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-i { display: flex; align-items: center; gap: var(--ds-sp-2); min-block-size: 40px; padding: 0 var(--ds-sp-3); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-sep { margin-block: var(--ds-sp-1); border-block-start: 1px solid var(--ds-line); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-why { margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-chip); }
 
 @media (max-width: 1023px) {
   main.rm.rm-dock #rmChat { padding-inline: var(--ds-sp-2); }
@@ -519,7 +523,7 @@ body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-why { marg
   main.rm.rm-dock :is(.rmd-overlay #rmChat, .rmd-viewbar, .rmd-mini, .rmd-menu) { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
   main.rm.rm-dock .rmd-input-row::before { border-color: CanvasText; }
   main.rm.rm-dock .cx-name,
-  body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.chatlog .cx-name { color: CanvasText !important; -webkit-text-fill-color: CanvasText !important; background: none !important; animation: none !important; forced-color-adjust: auto; }
+  body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.chatlog .cx-name { color: CanvasText !important; -webkit-text-fill-color: CanvasText !important; background: none !important; animation: none !important; forced-color-adjust: auto; }
   main.rm.rm-dock :is(.rmd-chip, .rmd-holder, .rmd-tile-more):focus-visible { outline: 2px solid Highlight; }
 }
 
@@ -594,9 +598,9 @@ main.rm.rm-dock #rmPeople .nm > .who.veil > i,
 main.rm.rm-dock .rmd-holders .who.veil > i { flex: 1 1 auto; min-inline-size: min(9ch, 100%); }
 main.rm.rm-dock #rmPeople .nm > .who.veil > .veil-tag,
 main.rm.rm-dock .rmd-holders .who.veil > .veil-tag { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > i { flex: 1 1 auto; min-inline-size: min(9ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > .veil-tag { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .who.veil > i { flex: 1 1 auto; min-inline-size: min(9ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .who.veil > .veil-tag { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* (1.99ajh dockpop review: in the people column a frog name and its tag that don't fit on one line take two - the tag under the name, in
    full - rather than cutting the tag to "in…" or "h"; the name keeps the line) */
 main.rm.rm-dock #rmPeople .nm:has(> .who.veil) { flex-wrap: wrap; row-gap: 0; align-content: center; line-height: 1.25; }
@@ -630,10 +634,10 @@ main.rm.rm-dock #rmScroll .line-head > .ufl { flex-shrink: 100000; }   /* (the n
   main.rm.rm-dock #rmScroll .line-head > .veil-tx { flex-shrink: 100; min-width: 2ch; }
 }
 /* the person menu over a Dock sheet (Participants); its header shows the flair, its ✕ is visible */
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop { z-index: calc(var(--ds-z-modal) + var(--ds-z-sticky)); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl { flex: 0 1000 auto; min-inline-size: calc(1em + 10px); margin: 0; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { color: var(--ds-text-muted); font-size: 18px; line-height: 1; border-radius: var(--ds-r-md); }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x:is(:hover, :focus-visible) { color: var(--ds-text); background: var(--ds-hover); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop { z-index: calc(var(--ds-z-modal) + var(--ds-z-sticky)); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl { flex: 0 1000 auto; min-inline-size: calc(1em + 10px); margin: 0; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-x { color: var(--ds-text-muted); font-size: 18px; line-height: 1; border-radius: var(--ds-r-md); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-x:is(:hover, :focus-visible) { color: var(--ds-text); background: var(--ds-hover); }
 /* the pad menu's header: the pad's name as words + Follow (the chip above it already shows the banner and badges) */
 main.rm.rm-dock .rmd-padmenu-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1) var(--ds-sp-2); padding: var(--ds-sp-1) var(--ds-sp-2h) var(--ds-sp-2); border-block-end: 1px solid var(--ds-line); margin-block-end: var(--ds-sp-1); }
 main.rm.rm-dock .rmd-padmenu-n { flex: 1 1 100%; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); color: var(--ds-text-strong); }
@@ -767,7 +771,7 @@ main.rm.rm-dock .rmd-gone-acts { display: flex; flex-wrap: wrap; gap: var(--ds-s
    sheets - not a 320px card pinned to one corner with the page showing beside it */
 @media (max-width: 760px) {
   /* (logical insets with !important win over room-mod.js's inline left / top: one logical property group) */
-  body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm { position: fixed; inset-inline: var(--ds-sp-2) !important; inset-block-start: auto !important;
+  body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm { position: fixed; inset-inline: var(--ds-sp-2) !important; inset-block-start: auto !important;
     inset-block-end: calc(var(--ds-sp-2) + env(safe-area-inset-bottom, 0px)) !important; inline-size: auto; max-inline-size: none; max-block-size: 70dvh;
     box-shadow: 0 0 0 100vmax var(--ds-scrim), var(--ds-e-4); }
 }
@@ -1089,3 +1093,33 @@ body.pad-dock-live.rmd-nav-off main.rm.rm-dock .rmd-ov-top > .rmd-nav-back { dis
   main.rm.rm-dock .rmd-log .line[data-la-open] { outline: 2px solid Highlight; outline-offset: -2px; }
   main.rm.rm-dock .rmd-holder > .rmd-mic-b { border: 1px solid CanvasText; }
 }
+
+/* ── 1.99?? casino2: 📼 Play from Plex in a Dock sheet (pad-dock.js plexSheet; plex-play.js - the flow /stage runs) ── */
+main.rm.rm-dock .rmd-plex { display: grid; gap: var(--ds-sp-2h); min-inline-size: 0; padding: var(--ds-sp-1) var(--ds-sp-3) var(--ds-sp-3); font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-plex .hide { display: none; }
+main.rm.rm-dock .rmd-plex .pxnote { margin: 0; font-size: var(--ds-fs-meta); color: var(--ds-gold-text); }
+main.rm.rm-dock .rmd-plex :is(.muted, .px-foot) { margin: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-plex .msg { margin: 0; min-block-size: 1.2em; }
+main.rm.rm-dock .rmd-plex :is(form.row, .px-pick .row, .px-list .row) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-plex form.row input { flex: 1 1 180px; min-inline-size: 0; min-block-size: 40px; padding: 0 var(--ds-sp-2h); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-sunken); color: var(--ds-text); font: inherit; }
+/* (room.ejs's .rm .btn is the pad's green call to action, its ink !important: in the sheet the other buttons are quiet, so ▶ Play stands out) */
+main.rm.rm-dock .rmd-plex .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-1); min-block-size: 40px; padding: 0 var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-surface-2); color: var(--ds-text) !important; font: inherit; font-weight: 400; cursor: pointer; text-align: start; }
+main.rm.rm-dock .rmd-plex .btn.primary { border-color: transparent; background: var(--ds-ac); color: var(--ds-on-ac) !important; font-weight: 700; }
+main.rm.rm-dock .rmd-plex .btn.sm { min-block-size: 30px; padding: 0 var(--ds-sp-2); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-plex .btn:is(:hover, :focus-visible) { border-color: var(--ds-ac-line); }
+main.rm.rm-dock .rmd-plex .btn:disabled { opacity: .5; cursor: default; }
+main.rm.rm-dock .rmd-plex .px-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-plex .px-it { display: grid; gap: var(--ds-sp-1); min-inline-size: 0; padding: var(--ds-sp-1h); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-surface-2); color: var(--ds-text); font: inherit; text-align: start; cursor: pointer; }
+main.rm.rm-dock .rmd-plex .px-it:is(:hover, :focus-visible) { border-color: var(--ds-ac-line); }
+main.rm.rm-dock .rmd-plex :is(.px-it img, .px-ph) { display: block; inline-size: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--ds-r-sm); background: var(--ds-sunken); }
+main.rm.rm-dock .rmd-plex .px-it b { font-size: var(--ds-fs-meta); line-height: 1.3; overflow-wrap: anywhere; }
+main.rm.rm-dock .rmd-plex .px-it small { color: var(--ds-text-muted); font-size: var(--ds-fs-chip); }
+main.rm.rm-dock .rmd-plex :is(.px-pick, .px-list) { display: grid; gap: var(--ds-sp-2); min-inline-size: 0; padding: var(--ds-sp-2h) var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock .rmd-plex .px-pick label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1h); color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-plex .px-pick :is(select, input[type=text], input[type=datetime-local]) { max-inline-size: 100%; min-block-size: 36px; border: 1px solid var(--ds-line); border-radius: var(--ds-r-sm); background: var(--ds-sunken); color: var(--ds-text); font: inherit; }
+main.rm.rm-dock .rmd-plex .px-eps { display: grid; gap: var(--ds-sp-1); max-block-size: 240px; overflow: auto; }
+main.rm.rm-dock .rmd-plex .px-price b { color: var(--ds-ok); }
+main.rm.rm-dock .rmd-plex .px-list ol { display: grid; gap: var(--ds-sp-1); max-block-size: 240px; margin: 0; padding-inline-start: var(--ds-sp-5); overflow: auto; }
+main.rm.rm-dock .rmd-plex .px-ctl { display: inline-flex; gap: var(--ds-sp-1); vertical-align: middle; }
+main.rm.rm-dock .rmd-plex .px-onair { display: flex; align-items: center; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-plex .rmd-plex-later { justify-self: start; font-size: var(--ds-fs-meta); }

@@ -11,6 +11,8 @@
 //   POST /api/casino/t/:id/stream           {on, override?}  Pepe's stream: one table at a time, FIFO queue, admin override
 //   GET  /casino/fair/:id/:round + /api/casino/fair/:id/:round    the fairness proof of a round / hand
 //   GET  /api/casino/t/:id/history          (D10) a table's last revealed rounds: the felt's public summary + proof link
+//   GET  /api/casino/t/:id/people           1.99?? casino2: the seats for the person menu + the table's pads (signed in; casino/people.js)
+//   GET  /api/casino/t/:id/pads             1.99?? casino2: the table's pads alone (its 💬 Chat; anyone)
 //   (D10) GET /api/casino/t/:id also adds each seat's `avatar` and `watching` (web spectators); the lobby adds me.balance /
 //   me.high_roller and each row's latest `proof`; app.locals.casinoOn(game) gates the navbar links on the site flags.
 //   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables / bj_front / hm_front (site Admin, or the bot token)
@@ -186,6 +188,37 @@ function register(app, { isBotToken, addUser }) {
     for (let i = 0; i < seats.length && i < keys.length; i++) seats[i].avatar = await avatarOf(keys[i]);
     out.watching = noteViewer(T, req);
     res.json(out);
+  });
+
+  // 1.99?? casino2: the seats as the person menu needs them + the table's pads (casino/people.js) - asked when the seats or the rooms
+  // change and on a click with an old answer, never by the 1-2 s poll. Seats are for signed-in viewers; the pads (the 💬 Chat) for all.
+  const people = require("./people");
+  app.get("/api/casino/t/:id/people", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+    if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
+    if (!people.rateOk("u:" + req.user.userId)) return res.status(429).json({ ok: false, error: "Slow down." });
+    await svc.boot();
+    const T = svc.getTable(req.params.id);
+    if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    try {
+      const pads = await people.padsFor(T, req.user);
+      res.json({ ok: true, pepe: await people.pepeInfo(), pads, seats: await people.seatsFor(T, req.user, pads) });
+    } catch (e) {
+      console.error("[casino] people:", e);
+      res.status(500).json({ ok: false, error: "Couldn't load the table's people." });
+    }
+  });
+  app.get("/api/casino/t/:id/pads", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
+    const key = req.user && req.user.userId ? "u:" + req.user.userId : "ip:" + (svc.ipHash(clientIp(req)) || "?");
+    if (!people.rateOk("p" + key)) return res.status(429).json({ ok: false, error: "Slow down." });
+    await svc.boot();
+    const T = svc.getTable(req.params.id);
+    if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    try { res.json({ ok: true, pads: await people.padsFor(T, req.user || null) }); }
+    catch (e) { console.error("[casino] pads:", e); res.status(500).json({ ok: false, pads: [] }); }
   });
 
   app.get("/api/casino/t/:id/history", async (req, res) => {
