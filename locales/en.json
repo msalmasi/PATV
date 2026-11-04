@@ -12604,7 +12604,7 @@
   "js.pad.mention.mute": "Mute mentions from this pad",
   "profile.menu.block": "🚫 Block @{name}",
   "profile.menu.unblock": "✅ Unblock @{name}",
-  "profile.blocked_bar": "You blocked @{name}. They can't message, tip or mention-alert you, and you won't see each other on pads' people lists.",
+  "profile.blocked_bar": "You blocked @{name}. They can't message, tip or mention-alert you, you won't see each other among the 🌐 website people on pads, and their pad-chat lines are folded for you.",
   "profile.unblock": "Unblock",
   "settings.blocked.title": "Blocked people",
   "settings.blocked.eyebrow": "Privacy &amp; safety",
