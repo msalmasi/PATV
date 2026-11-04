@@ -1143,7 +1143,9 @@ function dress(items, ctx) {
       const e = u.login ? lookup(u) : undefined;
       if (/^u:/i.test(String(u.login || "")) && e && e.acc === null) o.u = { former: true };
       // (1.99?? mfproof: unless privact.js's switch names them - mask true by default and until loaded: today's rule)
-      else if (PRESENCE.has(o.k) && e && e.acc && e.priv && privactMasked()) o.u = { anon: true, display: "someone" };
+      // (1.99?? mfproof verify: a masked line never carries its hold id either - Pepe's v2 hold id is on the person's NAMED 🎙 transcript of
+      // the same hold, so "someone grabbed the mic" + data-hold paired straight back to the name in history, as the anon branch above says)
+      else if (PRESENCE.has(o.k) && e && e.acc && e.priv && privactMasked()) { o.u = { anon: true, display: "someone" }; delete o.hold; }
       else o.u = pick(u, OUT_U);
     }
     if (typeof o.text === "string") o.text = redact(o.text);

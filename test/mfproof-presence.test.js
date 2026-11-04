@@ -167,6 +167,28 @@ test("the switch: /api/admin/privact is chatlog.admin only, a same-site fetch, a
   assert.deepEqual(back.map((it) => it.k + ":" + whoOf(it)), ["join:someone", "mic:someone", "tx:ritchiecuh", "unmic:someone", "msg:ritchiecuh", "leave:someone"], "masked again: today's");
 });
 
+test("verify: a masked presence line never carries its hold id (Pepe's v2 hold id is on his NAMED transcript of the same hold - it paired 'someone' back to him); mask off: named lines keep it", async () => {
+  await setup;
+  const acc = { userId: U.him.userId, username: "brocklee258" };
+  const H = "hd-0123456789abcdef";
+  const u = { login: "ritchiecuh", display: "ritchiecuh" };
+  const items = [{ c: 60, k: "mic", ts: Date.now(), u, hold: H }, { c: 61, k: "tx", ts: Date.now(), u, text: "ritchie on the mic", id: "tx-00000000000000b1", hold: H },
+                 { c: 62, k: "unmic", ts: Date.now(), u, ms: 9000, hold: H }];
+  const ctx = { view: null, lookup: () => ({ acc, priv: true, at: Date.now() }) };
+  assert.equal(PA.masked(), true);
+  const m = CV.dress(items, ctx);
+  assert.deepEqual(m.map((it) => it.k + ":" + (it.u.anon ? "someone" : it.u.login) + ":" + (it.hold || "-")),
+                   ["mic:someone:-", "tx:ritchiecuh:" + H, "unmic:someone:-"], "masked: no hold beside 'someone' (nothing pairs it with the named 🎙 line)");
+  for (const it of m.filter((x) => x.u.anon)) assert.ok(!JSON.stringify(it).includes(H), it.k);
+  // not private: today's named lines with their hold, untouched
+  assert.deepEqual(CV.dress(items, { view: null, lookup: () => ({ acc, priv: false }) }).map((it) => it.hold), [H, H, H]);
+  await PA.setMask(false, { userId: U.adm.userId, username: "admin" });
+  try {
+    assert.deepEqual(CV.dress(items, ctx).map((it) => it.k + ":" + it.u.login + ":" + it.hold), ["mic:ritchiecuh:" + H, "tx:ritchiecuh:" + H, "unmic:ritchiecuh:" + H],
+                     "named (mask off): the hold pairs named lines, as for anyone");
+  } finally { await PA.setMask(true, { userId: U.adm.userId, username: "admin" }); }
+});
+
 test("stored and fails closed: the row survives a restart; an unloaded or unreadable switch is the mask; the module failing is the mask", async () => {
   await setup;
   await PA.setMask(false, { userId: U.adm.userId, username: "admin" });
