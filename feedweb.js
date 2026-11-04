@@ -302,7 +302,8 @@ function register(app, { addUser, isBotToken }) {
   const fail = (res, e) => {
     const st = e && e.status && e.status < 500 ? e.status : 500;
     if (st === 500) console.error("[feed]", e);
-    res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message });
+    res.status(st).json(Object.assign({ ok: false, error: st === 500 ? "Something went wrong." : e.message },
+      st === 409 && Array.isArray(e.choices) ? { code: "ambiguous", choices: e.choices } : {}));   // 1.99?? padppl: targets.js
   };
   const viewOpts = (req) => ({ host: req.hostname || "publicaccess.tv" });
 

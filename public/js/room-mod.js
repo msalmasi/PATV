@@ -104,6 +104,36 @@
     return s;
   }
 
+  function tr(k, d, v) { return window.__t ? __t(k, d, v) : String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); }
+  var lc = function (v) { return String(v == null ? '' : v).toLowerCase(); };
+  /** 1.99?? padppl: the exact reference of a named person (personref.js kinds), or null. */
+  function blockRef(u) {
+    if (!u || u.anon) return null;
+    var l = String(u.login || '');
+    if (l && /^u:/i.test(l)) return { k: 'acct', v: l };
+    if (l && !u.acct) return { k: 'login', v: l };
+    if (u.web && u.patv && u.patv.username) return { k: 'user', v: String(u.patv.username) };
+    return null;
+  }
+  function refKey(r) { return r ? r.k + ':' + lc(r.v != null ? r.v : r.id != null ? r.id : r.c) : ''; }
+  /** Did the viewer block this named person (their own list from the live view, then this page's own changes)? */
+  function blockedNow(u, x, r) {
+    var k = refKey(r);
+    if (x.local && Object.prototype.hasOwnProperty.call(x.local, k)) return !!x.local[k];
+    var b = x.blk; if (!b) return false;
+    if (u.login && !/^u:/i.test(u.login) && (b.l || []).indexOf(lc(u.login)) >= 0) return true;
+    if (u.patv && u.patv.username && (b.u || []).indexOf(lc(u.patv.username)) >= 0) return true;
+    return false;
+  }
+  function isMine(u, x) {
+    return !!(u.me || (x.meName && u.patv && u.patv.username && lc(u.patv.username) === lc(x.meName))
+      || (x.meLogin && u.login && lc(u.login) === lc(x.meLogin)));
+  }
+  function blockItem(r, blocked) {
+    return blocked ? { kind: 'block', id: 'unblock', group: 'safety', label: '✅ ' + tr('js.block.menu_un', 'Unblock'), ref: r, veil: false }
+      : { kind: 'block', id: 'block', group: 'safety', label: '🚫 ' + tr('js.block.menu', 'Block…'), ref: r, veil: false, danger: true };
+  }
+
   // What the roster's ⋯ menu offers for user u (1.99dx). Pure, so tests can pin the gating:
   //   - nothing for anonymous / Pepe / no login; 1.99fu: without caps (Pepe gave this viewer no mod powers here) a
   //     signed-in viewer (x.signed) still gets the light menu below, a signed-out one nothing
@@ -120,13 +150,32 @@
   //   - 1.99ajf dockclean: a 🌐 web user from the pad's people list (no login on the page, only their PATV name): View profile and 💸 Tip,
   //     nothing else (no cam, no moderation, no duel); ⚔️ Duel… / 🥊 Brawl… (x.pvp: the Dock checked that the viewer has a linked chat
   //     login, Pepe offers the command here and the person is a named Camfrog member who isn't the viewer) - Pepe's escrow decides the rest
+  //   - 1.99?? padppl: 🚫 Block… / ✅ Unblock (signed in; never yourself, Pepe or bots) - the ref is exactly what was clicked
+  //     (blockRef: a named login, a web line's account key, a 🌐 row's PATV name; a veiled row by its opaque id, a veiled line by
+  //     its row c - the server finds who it is and never says). x.blk = the viewer's OWN named blocks (liveView blk) + this page's
+  //     changes since: someone you blocked shows ✅ Unblock and no 💸 Tip / ⚔️ Duel / 🥊 Brawl. A veiled entry never shows Unblock
+  //     (that would link frog sessions) - unblocking a frog name is in Settings → Blocked people.
+  //   - 1.99?? padppl: the website's own bans (P.banItems, pad-ban-sheet.js) for viewers the live view gave `wmod`
   function menuItems(caps, u, x) {
     x = x || {};
-    if (!u || u.anon || u.self) return [];
+    if (!u || u.self) return [];
+    if (u.anon) {
+      // 1.99?? padppl: a veiled person (incognito / hidden): only 🚫 Block (+ the ban items for web moderators)
+      if (!x.signed || !(u.veil === 'incognito' || u.veil === 'hidden')) return [];
+      var vref = x.c ? { k: 'line', c: Number(x.c) } : u.id ? { k: 'veil', id: String(u.id) } : null;
+      if (!vref) return [];
+      var vo = [{ kind: 'block', id: 'block', group: 'safety', label: '🚫 ' + tr('js.block.menu', 'Block…'), ref: vref, veil: true, danger: true }];
+      if (P.banItems) P.banItems(vo, u, x, vref, true);
+      return vo;
+    }
+    var bref = blockRef(u), blkd = bref ? blockedNow(u, x, bref) : false;
+    var mine = isMine(u, x);
     if (!u.login) {
       if (!(u.web && u.patv && u.patv.username) || !x.signed || u.me) return [];
       var w = [{ kind: 'link', id: 'profile', group: 'who', label: '👤 View profile', href: '/u/' + encodeURIComponent(u.patv.username) }];
-      if (u.tip && u.tip.to && u.tip.href && !u.bot) w.push({ kind: 'tip', id: 'tip', group: 'who', label: '💸 Tip', to: u.tip.to, href: u.tip.href, title: 'Tip ' + u.tip.to + ' PAT' });
+      if (!blkd && u.tip && u.tip.to && u.tip.href && !u.bot) w.push({ kind: 'tip', id: 'tip', group: 'who', label: '💸 Tip', to: u.tip.to, href: u.tip.href, title: 'Tip ' + u.tip.to + ' PAT' });
+      if (bref && !u.bot && !mine) w.push(blockItem(bref, blkd));
+      if (P.banItems && !u.bot && !mine) P.banItems(w, u, x, bref, false);
       return w;
     }
     var mod = !!(caps && Array.isArray(caps.actions));
@@ -134,11 +183,11 @@
     var out = [];
     if (u.patv && u.patv.username) out.push({ kind: 'link', id: 'profile', group: 'who', label: '👤 View profile', href: '/u/' + encodeURIComponent(u.patv.username) });
     if (x.cam) out.push({ kind: 'cam', id: 'cam', group: 'who', label: '📷 Open cam' });
-    if ((x.signed || mod) && u.tip && !u.bot) {
+    if ((x.signed || mod) && u.tip && !u.bot && !blkd) {
       if (u.tip.to && u.tip.href) out.push({ kind: 'tip', id: 'tip', group: 'who', label: '💸 Tip', to: u.tip.to, href: u.tip.href, title: 'Tip ' + u.tip.to + ' PAT' });
       else if (u.tip.off) out.push({ kind: 'off', id: 'tip', group: 'who', label: '💸 Tip', disabled: true, note: u.tip.off, title: "Can't tip: " + u.tip.off });
     }
-    if (x.pvp && x.signed && !u.bot && !u.web && !u.acct && !/^u:/i.test(u.login)) {
+    if (x.pvp && x.signed && !u.bot && !u.web && !u.acct && !/^u:/i.test(u.login) && !blkd) {
       if (x.pvp.duel) out.push({ kind: 'pvp', id: 'duel', group: 'who', label: '⚔️ ' + (window.__t ? __t('js.pad.dock.duel', 'Duel…') : 'Duel…') });
       if (x.pvp.brawl) out.push({ kind: 'pvp', id: 'brawl', group: 'who', label: '🥊 ' + (window.__t ? __t('js.pad.dock.brawl', 'Brawl…') : 'Brawl…') });
     }
@@ -146,6 +195,8 @@
     if ((x.signed || mod) && x.pepe && P.pepe && !u.bot && P.pepe.items(x.pepe, u).length) {
       out.push({ kind: 'pepe', id: 'pepe', group: 'pepe', label: '🐸 ' + (window.__t ? __t('js.pad.pepe.menu', 'Pepe') : 'Pepe') + ' ▸' });
     }
+    if (x.signed && bref && !u.bot && !mine && !isMe(caps, u)) out.push(blockItem(bref, blkd));
+    if (P.banItems && !u.bot && !mine && !isMe(caps, u)) P.banItems(out, u, x, bref, false);
     if (!mod) return out;
     var me = isMe(caps, u);
     var n = 0;
@@ -560,6 +611,7 @@
     // caps.actions (menuItems), runs them through the same run() / confirm step as the dialog, and the
     // server re-checks everything (/api/rooms/<slug>/mod: caps for this login, action allowed, self rules).
     var pop = null;
+    var localBlk = {};                   // 1.99?? padppl: this page's block / unblock answers (ref key -> blocked) until the next poll says so
     function closeMenu(refocus) {
       if (!pop) return;
       var p = pop; pop = null;
@@ -586,11 +638,14 @@
       extra = extra || {};
       if (pop && pop._login === u.login) { closeMenu(true); return; }      // the same ⋯ again: toggle shut
       closeMenu(false);
-      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed, pepe: room && room.pepe, pvp: extra.pvp || null });
+      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed, pepe: room && room.pepe, pvp: extra.pvp || null,
+        blk: typeof opts.blk === 'function' ? opts.blk() : null, local: localBlk, c: extra.c || null, meName: opts.me || null,
+        meLogin: typeof opts.meLogin === 'function' ? opts.meLogin() : null,
+        wmod: typeof opts.wmod === 'function' ? opts.wmod() : null, wban: extra.wban || u.wban || null, slug: slug });
       if (!items.length) return;
-      var who = u.display || u.login;
+      var who = u.anon ? (u.alias || u.display || 'someone') : (u.display || u.login);
       var p = el('div', 'pm-pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Actions for ' + who);
-      p._anchor = anchor; p._login = u.login || ('web:' + (u.patv && u.patv.username || ''));
+      p._anchor = anchor; p._login = u.login || (u.anon ? 'veil:' + (extra.c || u.id || '') : 'web:' + (u.patv && u.patv.username || ''));
       p._mod = items.some(function (it) { return it.kind === 'act' || it.kind === 'more'; });     // 1.99fu: closes when caps go
       var hd = el('div', 'pm-pop-h');
       var nm = el('div', 'pm-pop-n'); nm.appendChild(el('b', null, who));
@@ -636,6 +691,20 @@
             return;
           }
           if (it.kind === 'more') { closeMenu(false); open(u); return; }
+          // 1.99?? padppl: 🚫 Block / ✅ Unblock - the confirm sheet (block-sheet.js); the menu remembers the answer until the next poll
+          if (it.kind === 'block') {
+            closeMenu(false);
+            if (!window.PATVBlockSheet) return;
+            window.PATVBlockSheet.open({ ref: it.ref, slug: slug, name: who, veil: !!it.veil, on: it.id === 'block', anchor: anchor,
+              onDone: function (a) { if (!it.veil) localBlk[refKey(it.ref)] = !!a.blocked; if (typeof opts.onBlock === 'function') opts.onBlock(a); } });
+            return;
+          }
+          // 1.99?? padppl: 🌐🚫 / ⛔ / 🛑 the website's bans and their Lift - the ban sheet (pad-ban-sheet.js)
+          if (it.kind === 'ban') {
+            closeMenu(false);
+            if (window.PATVBanSheet) window.PATVBanSheet.open({ ref: it.ref, slug: slug, scope: it.scope, lift: !!it.lift, name: who, veil: !!it.veil, anchor: anchor });
+            return;
+          }
           if (it.kind === 'pvp') { closeMenu(false); if (extra.pvp && extra.pvp.run) extra.pvp.run(it.id); return; }
           // 1.99qr: 🐸 Pepe ▸ - the submenu replaces the list (← back); a pick shows its price + confirm in the popover
           if (it.kind === 'pepe') { pepeSub(); return; }
@@ -832,5 +901,6 @@
   P.mod = mod;
   P._modPreview = preview;
   P._modMenuItems = menuItems;
+  P._modBlockRef = blockRef;
   P._modSelfQ = function (a) { return SELF_Q[a] || null; };
 })();

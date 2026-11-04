@@ -108,11 +108,14 @@ async function hub(user, ctx = {}) {
   const mem = await safe(() => require("./memoryoptout").stateOf(uid));
   const memOn = !!(mem && mem.capable);
   const memSt = !memOn ? null : !mem.linked ? st("not_linked") : mem.waiting ? st("waiting") : mem.on === null ? null : mem.on ? st("off") : st("on", null, "ok");
+  const blk = await safe(async () => { const L = await require("./blocks").list(uid); return L.named.length + L.logins.length + L.veils.length; });
   const privacy = [
     E("incognito", "🕶️", "/settings/privacy", incSt, memOn ? { desc: "sethub.d.incognito_v2" } : null),
     ...(memOn ? [E("memory", "🧠", "/settings/privacy#memory", memSt)] : []),
     E("livecam", "📡", "/settings/privacy#livecam", lcSt),
     E("likeness", "🪞", "/settings/likeness", lkVals ? st("n_of_on", { count: lkVals.filter(Boolean).length, total: lkVals.length }) : null),
+    // 1.99?? padppl: 🚫 everyone you blocked (blocks.js) - from the person menu, profiles or DMs; the count of every kind
+    E("blocked", "🚫", "/settings/blocked", blk === null ? null : st("blocked_n", { count: blk })),
     E("voice", "🗣️", "/voices/mine"),
     E("clone", "🎙️", "/voices/clone"),
     E("policy", "📄", "/privacy"),

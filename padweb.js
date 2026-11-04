@@ -20,12 +20,22 @@
 //   * a failed check (the database busy): left out.
 // 1.99ajf dockclean review: only the pad page's own polls note anyone (bridge.js ?pad=1), not the homepage panel or the owner pages.
 // The privacy page (/privacy#rooms) says so: Incognito, or keeping your room activity private, keeps you off the list.
+//
+// 1.99?? padppl (owner: "Website users in the people list can be anyone that posted in the last hour. But we should differentiate them
+// from people who actually had the pad's chat open in the last 90s. Like active/inactive."): a second in-memory map - who POSTED in
+// this pad's chat from the website in the last POST_TTL_MS (1 hour; bridge-relay.js notes a say job once Pepe sent it or its line came
+// back, from any page - the homepage Dock included), at most MAX_PER_ROOM per room, forgotten on a restart. forRoom lists the union:
+//   act: 1          the pad's chat is open (the pad page or its chat window polled in the last 90 s) - ACTIVE
+//   act: 0, ago: n  posted n minutes ago, chat not open now - INACTIVE (the page dims it)
+// EVERY exclusion below runs the same for both kinds. Also left out (padppl blocks): someone who blocked the viewer by a frog name or
+// by the viewer's login (blocks.js veilBlockersOf) - the veil rule: the blocked person doesn't see the blocker.
 "use strict";
 const { getQuery } = require("./dbUtils");
 
-const TTL_MS = 90 * 1000, MAX_PER_ROOM = 100, INCOG_CACHE_MS = 30 * 1000;
+const TTL_MS = 90 * 1000, MAX_PER_ROOM = 100, INCOG_CACHE_MS = 30 * 1000, POST_TTL_MS = 60 * 60 * 1000;
 let clock = () => Date.now();
 const rooms = new Map();            // roomId -> Map(userId -> {userId, username, login, at})
+const posted = new Map();           // roomId -> Map(userId -> {userId, username, login, at}) - 1.99?? padppl: posted in the last hour
 const incogCache = new Map();       // chat key -> {on, at}
 const privCache = new Map();        // userId -> {on, at}: their room activity is private (profile)
 const blockCache = new Map();       // viewer userId -> {set, at}: the ids blocked either way with them
@@ -42,10 +52,26 @@ function note(roomId, user, login) {
   m.set(id, { userId: id, username: String(user.username), login: login ? String(login).toLowerCase() : null, at: now });
   while (m.size > MAX_PER_ROOM) m.delete(m.keys().next().value);
 }
+/** 1.99?? padppl: this account's line from the website reached pad room roomId's chat (bridge-relay: Pepe sent it / its echo came). */
+function notePost(roomId, user, login, at = clock()) {
+  if (!roomId || !user || !user.userId || !user.username) return;
+  let m = posted.get(roomId);
+  if (!m) { m = new Map(); posted.set(roomId, m); }
+  const id = String(user.userId);
+  m.delete(id);
+  m.set(id, { userId: id, username: String(user.username), login: login ? String(login).toLowerCase() : null, at: Number(at) || clock() });
+  while (m.size > MAX_PER_ROOM) m.delete(m.keys().next().value);
+}
 function sweep(roomId, now = clock()) {
   const m = rooms.get(roomId); if (!m) return [];
   for (const [k, v] of m) if (now - v.at > TTL_MS) m.delete(k);
   if (!m.size) { rooms.delete(roomId); return []; }
+  return [...m.values()];
+}
+function sweepPosted(roomId, now = clock()) {
+  const m = posted.get(roomId); if (!m) return [];
+  for (const [k, v] of m) if (now - v.at > POST_TTL_MS) m.delete(k);
+  if (!m.size) { posted.delete(roomId); return []; }
   return [...m.values()];
 }
 async function incognitoOn(key) {
@@ -86,7 +112,11 @@ async function blocksOf(viewerId) {
   const now = clock(), k = String(viewerId), c = blockCache.get(k);
   if (c && now - c.at < INCOG_CACHE_MS) return c.set;
   let set = null;
-  try { set = await require("./messages").cardBlocks(k); } catch (e) { set = null; }
+  try {
+    set = await require("./messages").cardBlocks(k);
+    // 1.99?? padppl: + whoever blocked this viewer by a frog name / login (they stay off the viewer's list - the veil rule)
+    for (const id of await require("./blocks").veilBlockersOf(k)) set.add(String(id));
+  } catch (e) { set = null; }
   keep(blockCache, k, { set, at: now });
   return set;
 }
@@ -96,12 +126,16 @@ async function blocksOf(viewerId) {
  */
 async function forRoom(R, me = null, tipOf = null) {
   if (!R || !R.id) return [];
-  const list = sweep(R.id);
+  // 1.99?? padppl: the open ones (act 1) and, after them, who posted in the last hour without the chat open now (act 0)
+  const t = clock();
+  const open = sweep(R.id, t), openIds = new Set(open.map((v) => v.userId));
+  const list = [...open.map((v) => Object.assign({}, v, { act: 1 })),
+                ...sweepPosted(R.id, t).filter((v) => !openIds.has(v.userId)).map((v) => Object.assign({}, v, { act: 0, ago: Math.max(1, Math.round((t - v.at) / 60000)) }))];
   if (!list.length) return [];
   const inRoom = new Set((R.members || []).filter((m) => m && m.login && !m.anon).map((m) => String(m.login).toLowerCase()));
   const blocks = await blocksOf(me && me.userId);
   const out = [];
-  for (const v of list.slice().reverse()) {                // the newest first
+  for (const v of list) {
     try {
       if (v.login && inRoom.has(v.login)) continue;
       const self = !!(me && me.userId && String(me.userId) === v.userId);
@@ -112,14 +146,19 @@ async function forRoom(R, me = null, tipOf = null) {
       if (await incognitoOn(key)) continue;
       if (v.login && await incognitoOn("u:" + v.userId)) continue;
       if (await privateOn(v)) continue;
-      const e = { web: true, display: v.username, patv: { username: v.username } };
+      const e = { web: true, display: v.username, patv: { username: v.username }, act: v.act };
+      // 1.99?? padppl: a web name that is a Camfrog login this account isn't linked to - the "not the Camfrog user" tag (cfnames.js)
+      try { const cl = require("./cfnames").clashOf(v.userId, v.username, v.username, v.login); if (cl) e.clash = cl; } catch (err) { /* no tag */ }
+      if (!v.act) e.ago = v.ago;
       if (self) e.me = true;
       else if (tipOf) { const t = tipOf(v.username); if (t) e.tip = t; }
       out.push(e);
     } catch (err) { /* a failed check leaves that account out */ }
   }
-  return out.sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0) || a.display.localeCompare(b.display));
+  // yourself first, then ACTIVE (chat open) before INACTIVE (posted only), then by name
+  return out.sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0) || (b.act || 0) - (a.act || 0) || a.display.localeCompare(b.display));
 }
 
-module.exports = { note, forRoom, sweep, TTL_MS, MAX_PER_ROOM,
-  _setClock: (f) => { clock = f || (() => Date.now()); }, _reset: () => { rooms.clear(); incogCache.clear(); privCache.clear(); blockCache.clear(); } };
+module.exports = { note, notePost, forRoom, sweep, sweepPosted, TTL_MS, POST_TTL_MS, MAX_PER_ROOM,
+  _setClock: (f) => { clock = f || (() => Date.now()); },
+  _reset: () => { rooms.clear(); posted.clear(); incogCache.clear(); privCache.clear(); blockCache.clear(); } };

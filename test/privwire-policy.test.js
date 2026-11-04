@@ -23,6 +23,9 @@ const BASE = { user: null, title: "Privacy Policy", VERSION: "x", UPDATED: "1 No
                micrec: null, memory: null, policyDates: {} };
 const MEMORY = { on_day: "29 October 2026", on_at: 1793200000000 };
 const DATES = { "wp1-voice": { at: 1793100000000, day: "28 October 2026" }, "mic-stage-keep": { at: 1793534400000, day: "1 November 2026" } };
+// 1.99?? padppl: section 6's "Blocking someone" paragraph is the current text for everyone (blocks.js - not behind a switch; dated by
+// terms.js "blocks-2"): the one addition to the switch-off page, taken out before comparing with the old commit
+const PADPPL = (page) => page.replace(/[ \t]*<p id="blocking">[\s\S]*?<\/p>\r?\n/, "");
 const render = (src, extra) => ejs.render(lf(src), Object.assign({}, BASE, extra), { filename: FILE });
 
 // mic keep wording fix (owner-approved 2026-11-02): the two sentences added to the Mic-stage snaps and clips paragraph - the only
@@ -36,14 +39,15 @@ test("switch off: the privacy page is byte for byte today's prod one (plain, wit
   // mic-stage captures off (prod and staging today: only wp1-voice is dated) - byte for byte
   for (const extra of [{}, { memory: MEMORY }, { privwire: null }, { policyDates: { "wp1-voice": DATES["wp1-voice"] } },
                        { policyDates: { "wp1-voice": DATES["wp1-voice"] }, memory: MEMORY, privwire: null }]) {
-    assert.equal(render(now, extra), render(old.stdout, extra), "identical with " + JSON.stringify(extra));
+    assert.equal(render(now, extra).split('<p id="blocking">').length, 2, "the blocking paragraph, once");
+    assert.equal(PADPPL(render(now, extra)), render(old.stdout, extra), "identical with " + JSON.stringify(extra));
   }
   // the mic-stage paragraph published: identical but for the wording fix's two sentences, each once, inside that paragraph
   for (const extra of [{ policyDates: DATES }, { policyDates: DATES, memory: MEMORY, privwire: null }]) {
     const page = render(now, extra);
     const para = (page.match(/<p id="mic-stage-captures">[\s\S]*?<\/p>/) || [""])[0];
     for (const s of MSK_FIX) assert.equal(page.split(s).length, 2, "once: " + s), assert.ok(para.includes(s), "in the paragraph: " + s);
-    assert.equal(MSK_FIX.reduce((x, s) => x.replace(s, ""), page), render(old.stdout, extra), "nothing else changed with " + JSON.stringify(extra));
+    assert.equal(MSK_FIX.reduce((x, s) => x.replace(s, ""), PADPPL(page)), render(old.stdout, extra), "nothing else changed with " + JSON.stringify(extra));
   }
 });
 
@@ -213,7 +217,7 @@ test("transcripts bar: its sentences only with privacy wire v2 AND the bar live,
 
 test("transcripts bar: terms.js dates it by policy_text_dates 'tx-bar' while privwire.txBar, passes locals.txbar, and its date counts only while shown", () => {
   const src = fs.readFileSync(path.join(repo, "terms.js"), "utf8");
-  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover"\];/);   // (1.99aid privacy controls S0: + livecam-never-kept; 1.99aih round 6: + stage-cover)
+  assert.match(src, /const TEXT_DATES = \["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions"\];/);   // (1.99aid privacy controls S0: + livecam-never-kept; 1.99aih round 6: + stage-cover; 1.99?? padppl: + rooms-web-2, net-bans, blocks-2, chat-mentions)
   assert.match(src, /"tx-bar": \(\) => require\("\.\/privwire"\)\.txBar\(\) === true/);
   // (review fix F1: "live" while privwire.txBar, "kept" while it isn't but bars it made are still kept - privwire.txTextNow)
   assert.match(src, /const m = privwire \? await PWm\.txTextNow\(\) : null;/);

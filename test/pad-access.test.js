@@ -525,20 +525,28 @@ test("tip menu (room-mod.js): a light ⋯ for every signed-in viewer; mods keep 
   const ids = (xs) => xs.map((x) => x.id);
   const alice = { login: "alicecf", display: "Alice", patv: { username: "alice" }, tip: { to: "alice", href: "/u/alice/tip" } };
   const stranger = { login: "strangercf", display: "Stranger", tip: { off: "not linked to PATV yet" } };
-  assert.deepEqual(ids(MI(null, alice, { signed: true, cam: true })), ["profile", "cam", "tip"]);
+  // 1.99?? padppl: + 🚫 Block (the viewer's own block; ✅ Unblock and no Tip once they blocked them)
+  assert.deepEqual(ids(MI(null, alice, { signed: true, cam: true })), ["profile", "cam", "tip", "block"]);
+  assert.deepEqual(ids(MI(null, alice, { signed: true, cam: true, blk: { l: ["alicecf"], u: [] } })), ["profile", "cam", "unblock"], "blocked: Unblock, no Tip");
   const tip = MI(null, alice, { signed: true }).find((x) => x.id === "tip");
   // 1.99il: the Tip opens the modal on the pad (pad-tip.js); the tip page stays as the fallback href
   assert.equal(tip.kind, "tip"); assert.equal(tip.to, "alice"); assert.equal(tip.href, "/u/alice/tip");
   const off = MI(null, stranger, { signed: true }).find((x) => x.id === "tip");
   assert.equal(off.kind, "off"); assert.equal(off.disabled, true); assert.equal(off.note, "not linked to PATV yet");
   assert.deepEqual(MI(null, alice, { signed: false, cam: true }), [], "signed out: no menu");
-  assert.deepEqual(MI(null, { login: "membercf", display: "Me" }, { signed: true }), [], "no tip target (yourself): nothing to show");
+  assert.deepEqual(MI(null, { login: "membercf", display: "Me" }, { signed: true, meLogin: "MemberCF" }), [], "no tip target (yourself): nothing to show");
+  assert.deepEqual(ids(MI(null, { login: "membercf", display: "Someone" }, { signed: true })), ["block"], "someone else with no tip target: just Block");
   assert.deepEqual(MI(null, { login: "pepefrog", self: true }, { signed: true }), [], "Pepe");
   assert.deepEqual(MI(null, { anon: true }, { signed: true }), [], "anonymous");
+  // 1.99?? padppl: a frog name - only 🚫 Block, by its opaque id (or the line it said), never a Unblock, never for signed-out viewers
+  assert.deepEqual(MI(null, { anon: true, veil: "incognito", alias: "Soggy Bullfrog", id: "v-abcdefabcdef" }, { signed: true }).map((x) => [x.id, x.ref, x.veil]),
+                   [["block", { k: "veil", id: "v-abcdefabcdef" }, true]]);
+  assert.deepEqual(MI(null, { anon: true, veil: "incognito", alias: "Soggy Bullfrog", id: "v-abcdefabcdef" }, { signed: true, c: 77 })[0].ref, { k: "line", c: 77 });
+  assert.deepEqual(MI(null, { anon: true, veil: "incognito", alias: "Soggy Bullfrog", id: "v-abcdefabcdef" }, { signed: false }), []);
   assert.ok(!ids(MI(null, { login: "botcf", bot: true, tip: { to: "x", href: "/u/x/tip" } }, { signed: true })).includes("tip"), "bots: never");
   const caps = { actions: ["kick", "djban"], on: true, login: "modcf" };
-  assert.deepEqual(ids(MI(caps, alice, { signed: true, inRoom: true })), ["profile", "tip", "kick", "djban", "more"], "mods: tip + their actions");
-  assert.deepEqual(ids(MI(caps, { ...alice, login: "modcf" }, { signed: true })), ["profile", "tip", "kick", "djban", "more"], "1.99os: a mod's own row has their actions too");
+  assert.deepEqual(ids(MI(caps, alice, { signed: true, inRoom: true })), ["profile", "tip", "block", "kick", "djban", "more"], "mods: tip + Block + their actions");
+  assert.deepEqual(ids(MI(caps, { ...alice, login: "modcf" }, { signed: true })), ["profile", "tip", "kick", "djban", "more"], "1.99os: a mod's own row has their actions too (never Block yourself)");
   // the page wires it: the ⋯ shows for signed-in viewers, on both lists, and the tip opens the modal
   const src = fs.readFileSync(path.join(repo, "public", "js", "room-mod.js"), "utf8");
   assert.match(src, /if \(P\.tipModal\) P\.tipModal\(\{ to: it\.to, display: u\.display \|\| u\.login, slug: slug, me: opts\.me \|\| null \}\);/);

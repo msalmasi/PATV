@@ -40,7 +40,8 @@ test("a signed-in viewer is listed by PATV name only - no login, no account id; 
   const tipOf = (n) => ({ to: n, href: "/u/" + n + "/tip" });
   const list = await W.forRoom(R, { userId: "id-viewer", username: "viewer" }, tipOf);
   assert.deepEqual(list.map((e) => e.display), ["viewer", "quill"], "yourself first, then by name");
-  assert.deepEqual(JSON.parse(JSON.stringify(list[1])), { web: true, display: "quill", patv: { username: "quill" }, tip: { to: "quill", href: "/u/quill/tip" } });
+  // (1.99?? padppl: act 1 = the pad's chat is open now - ACTIVE)
+  assert.deepEqual(JSON.parse(JSON.stringify(list[1])), { web: true, display: "quill", patv: { username: "quill" }, act: 1, tip: { to: "quill", href: "/u/quill/tip" } });
   assert.equal(list[0].me, true); assert.equal(list[0].tip, undefined);
   const wire = JSON.stringify(list); assert.doesNotMatch(wire, /id-quill|id-viewer|quill_cf|userId|login/);
 });
@@ -99,6 +100,6 @@ test("bridge.js: only the pad page's own /live polls (?pad=1) note signed-in vie
   // (1.99ajh dockpop: a re-check asks once without &wait=1 - the long-poll and the re-check both carry pad=1)
   assert.match(fs.readFileSync(path.join(repo, "views/room.ejs"), "utf8"), /var wait = quick \? '' : '&wait=1'; quick = false;[\s\S]{0,600}'\?after=' \+ cursor \+ wait \+ '&pad=1'/, "the pad page asks with pad=1");
   for (const f of ["views/home.ejs", "public/js/pad-owner-mod.js", "public/js/pad-settings.js"]) assert.doesNotMatch(fs.readFileSync(path.join(repo, f), "utf8"), /pad=1/, f + " never asks to be listed");
-  assert.match(fs.readFileSync(path.join(repo, "views/privacy.ejs"), "utf8"), /<% if \(locals\.padweb\) \{[^%]*%>\s*<p id="rooms-web">[\s\S]*?Incognito, or keeping your room activity private on your profile, keeps you off it[\s\S]*?<\/p><% \} %>/, "the privacy page says so while the Room Dock is on");
+  assert.match(fs.readFileSync(path.join(repo, "views/privacy.ejs"), "utf8"), /<% if \(locals\.padweb\) \{[^%]*%>\s*<p id="rooms-web">[\s\S]*?members who posted in its chat from the website in the last hour appear dimmed\. Incognito, keeping your room activity private on your profile, or a block \(either way\) keeps you off it[\s\S]*?<\/p><% \} %>/, "the privacy page says so while the Room Dock is on");
   assert.match(fs.readFileSync(path.join(repo, "terms.js"), "utf8"), /res\.locals\.padweb = require\("\.\/paddock"\)\.current\(\)\.cfg\.mode !== "off"/);
 });

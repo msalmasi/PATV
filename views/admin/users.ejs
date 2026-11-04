@@ -83,6 +83,43 @@
   </section>
   <% } %>
 
+  <%# 1.99?? padppl: the impersonation guard (cfnames.js) - accounts whose username / display name is a Camfrog login they aren't linked to %>
+  <% if (_can('accounts.name_clash')) { %>
+  <section class="adm-card" id="nameclash" aria-labelledby="nameclashT">
+    <h2 id="nameclashT"><span class="ds-ic" aria-hidden="true">👥</span> Named like a Camfrog user <span class="adm-pill admin">admins</span> <span class="adm-pill" id="ncCount" aria-label="accounts listed">?</span></h2>
+    <p class="adm-help">PATV accounts whose username or display name is a Camfrog login Pepe has seen, but which aren't linked to that login (someone may be posing as them - the "tricon" case). New sign-ups and renames can't take such a name any more; these are older. On the pads such an account shows "not the Camfrog user" beside its 🌐. <b>Rename</b> tells them why; <b>Mark OK</b> when it's the same person who hasn't linked yet. Every change is in the admin audit (<code>name_clash</code>).</p>
+    <div class="adm-actions"><button type="button" id="ncLoad" class="adm-btn ghost">Load the list</button></div>
+    <ul id="ncList" class="adm-help" style="margin:0;padding-left:18px;display:grid;gap:8px"></ul>
+  </section>
+  <% } %>
+
+  <%# 1.99?? padppl: network bans (netban.js) - dark until switched on; keyed codes only, every look logged %>
+  <% if (_can('safety.net_bans')) { %>
+  <section class="adm-card" id="netbans" aria-labelledby="netbansT">
+    <h2 id="netbansT"><span class="ds-ic" aria-hidden="true">🌐⛔</span> Network bans <span class="adm-pill admin">admins</span></h2>
+    <p class="adm-help">Stops sign-ups, sign-ins and posting from a network (the harasser's next account). The site keeps a one-way keyed code of each member's network - never the address - for 90 days after its last use, only while this is on. A ban never tells anyone an address. Staff pass every network ban. Every ban, lift and look is logged (<code>net_ban</code>, the view log).</p>
+    <label class="ck"><input type="checkbox" id="nbOn"> Network bans on (recording starts)</label>
+    <div id="nbForms" hidden>
+      <form id="nbForm" class="adm-form" autocomplete="off">
+        <label for="nbKind">Ban<select id="nbKind"><option value="account">an account's networks (last 30 days)</option><option value="ip">one IP (stored only as its code)</option><option value="range">an IP range (IPv4 /8-/31, IPv6 /32-/63)</option></select></label>
+        <label for="nbValue">Who / what (u:&lt;id&gt;, @name, cf:&lt;login&gt;, an IP or a range)<input type="text" id="nbValue" maxlength="80" required></label>
+        <label for="nbDays">For<select id="nbDays"><option value="1">1 day</option><option value="7" selected>7 days</option><option value="30">30 days</option><option value="0">permanent</option></select></label>
+        <label for="nbReason">Reason (for the log)<input type="text" id="nbReason" maxlength="120"></label>
+        <div class="adm-actions"><button type="submit">Ban</button></div>
+      </form>
+      <form id="nsForm" class="adm-form" autocomplete="off">
+        <label for="nsWho">Who shares an account's networks (u:&lt;id&gt;, @name, cf:&lt;login&gt;)<input type="text" id="nsWho" maxlength="70" required></label>
+        <label for="nsWhy">Why you're looking (logged)<input type="text" id="nsWhy" maxlength="120" required></label>
+        <div class="adm-actions"><button type="submit" class="adm-btn ghost">Look</button></div>
+        <ul id="nsOut" class="adm-help" style="margin:0;padding-left:18px"></ul>
+      </form>
+    </div>
+    <span id="nbMsg" class="adm-msg" role="status"></span>
+    <ul id="nbList" class="adm-help" style="margin:0;padding-left:18px"></ul>
+  </section>
+  <% } %>
+  <% if (_can('accounts.name_clash') || _can('safety.net_bans')) { %><script src="/public/js/admin-safety.js?v=1" defer></script><% } %>
+
   <section class="adm-card" id="merges" aria-labelledby="mergesT">
     <h2 id="mergesT">Account merges</h2>
     <p class="adm-help">Merges happen on their own: linking a Camfrog name (<code>!verify</code>) folds Pepe's auto-made account into the real one, and a Twitch/Discord sign-in that belongs to another account offers the member a merge. Duplicate and alt merges by hand are a server script (dry run first), not a button here.</p>

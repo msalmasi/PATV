@@ -228,6 +228,31 @@ app.use(express.urlencoded({ extended: true }));   // (form bodies only: the hub
 const botkeys = require("./botkeys");
 app.use(botkeys.middleware);
 botkeys.start();
+// 1.99?? padppl: 🌐⛔ network bans (netban.js - DARK until an admin switches them on): ONE gate in front of the write routes they cover -
+// sign-up and sign-in forms, feed posts / comments / uploads, stories, DMs, and a pad's chat / clips / snapshots / stage booking from
+// the website (pad-scope bans: that pad only). Staff pass; bot-token routes are never matched; the answer never names an address. A
+// request that passes notes the network for its account (net_seen: a keyed code, never the address).
+app.use(async (req, res, next) => {
+  if (req.method !== "POST") return next();
+  const NB = require("./netban");
+  if (!NB.isOn()) return next();
+  const p = req.path;
+  let roomSlug = null, kind = null, m;
+  if (p === "/register" || p === "/login") kind = "gate";
+  else if (/^\/api\/feed\/(posts|uploads)(\/|$)/.test(p)) { kind = "post"; roomSlug = req.body && typeof req.body.room === "string" ? req.body.room : null; }
+  else if (/^\/api\/stories\/(mine|upload)/.test(p) || p === "/api/messages/send") kind = "post";
+  else if ((m = /^\/api\/rooms\/([^/]+)\/(say|clip|snap|snap\/save|stage\/book|book)$/.exec(p))) { kind = "say"; try { roomSlug = decodeURIComponent(m[1]); } catch (e) { roomSlug = null; } }
+  if (!kind) return next();
+  try {
+    await new Promise((r) => addUser(req, res, r));
+    let roomId = null;
+    if (roomSlug) { const R = await require("./roomsweb").resolveRoom(String(roomSlug).slice(0, 128)).catch(() => null); roomId = R ? R.id : null; }
+    const why = await NB.refusal(req, { roomId, user: req.user || null });
+    if (why) return kind === "gate" ? res.status(403).type("text/plain").send(why) : res.status(403).json({ ok: false, code: "network", error: why });
+    if (req.user && req.user.userId && kind !== "gate") NB.note(req.user.userId, req, kind).catch(() => {});
+  } catch (e) { /* fail open: every other check still runs */ }
+  next();
+});
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
 const userstats = require("./userstats");
@@ -1369,6 +1394,9 @@ require("./banner").register(app, { addUser, isBotToken });        // 1.99kk: th
 require("./telegram").register(app, { isBotToken, addUser });   // 1.99kn: Telegram link + alerts + access tiers (/settings/telegram); the bot runs in Pepe
 require("./opsalerts").register(app, { isBotToken });   // 1.99aai: POST /api/ops/alert - VPS watchdogs (loopback + bot token) -> admins' inbox + Telegram outbox
 require("./settingshub").register(app, { addUser });   // 1.99vz: the /settings hub - one map of every account / preference page
+require("./blocks").register(app, { addUser });        // 1.99?? padppl: 🚫 Block from the person menu / profile / /settings/blocked (blocks.js)
+require("./cfnames").register(app, { addUser });       // 1.99?? padppl: the impersonation guard's admin list (/admin/users#nameclash)
+require("./netban").register(app, { addUser });        // 1.99?? padppl: 🌐⛔ network bans - admin routes (/api/admin/netbans, /api/admin/nets/:userId)
 require("./webpush").register(app, { addUser });   // 1.99acd: 🔔 Web Push (QW-1) - browser notifications for DMs + mentions, /admin/push (OFF by default; /sw.js is mounted at the top)
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./casino/routes").register(app, { isBotToken, addUser });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md)
@@ -1705,6 +1733,14 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         })().catch(() => null),
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
         canSeeHistory: !preview && !!req.user && (req.user.username === user.username || SP.can(req.user, "history.lookup")),
+        // 1.99?? padppl: 🚫 Block / ✅ Unblock in ⋯ More (blocks.js) - a signed-in visitor only, never on Pepe's profile; `blocked` = the
+        // VISITOR blocked them (never "they blocked you")
+        profileBlock: await (async () => {
+          if (!req.user || !req.user.userId || isOwner || preview) return null;
+          if (String(user.userId) === String(require("./feedstore").PEPE_ID)) return null;
+          const B = require("./blocks");
+          return { blocked: (await B.blockedBy(req.user.userId)).ids.has(String(user.userId)) };
+        })().catch(() => null),
         heistSheet: await gtf.sheetFor(user.camfrogUsername),
         gtf: gtf.LINKS,
         camfrog: user.camfrogUsername || null,
@@ -2540,6 +2576,9 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
     if (await usernames.reservedFor(name, user.userId)) {
       return res.status(409).json({ ok: false, error: "that username belonged to another account - pick another" });
     }
+    // 1.99?? padppl: never another Camfrog user's login (cfnames.js) - their own linked login is fine
+    const clash = await require("./cfnames").nameRefusal(name, user.userId).catch(() => null);
+    if (clash) return res.status(409).json({ ok: false, error: "that name belongs to another Camfrog user - pick another" });
     await usernames.ensure();
     await require("./dbUtils").tx(async () => {
       await runQuery("UPDATE users SET username = ? WHERE userId = ?", [name, user.userId]);

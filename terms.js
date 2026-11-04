@@ -52,8 +52,15 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // section 3's privacy-wire paragraph, its Mic-stage snaps and clips paragraph and the Live cams bullets, 1.99aif round 5 and round 6),
 // shown only while that knob is on - dated the first time /privacy is served with it on (the knob keeps no first ON of its own), and
 // its date counts toward "Last updated" only while the knob is on (like frog-15)
-const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover"];
+// 1.99?? padppl (owner 2026-11-04, "Yes" to bumping UPDATED): "rooms-web-2" = section 3's people-list sentence with the dimmed "posted in
+// the last hour" rows (shown while the Room Dock is on - dated its first serve that way, counts only while it shows); "net-bans" = section
+// 4's network-code paragraph (netban.js, shown and dated only while network bans are on); "blocks-2" = section 6's paragraph on what a
+// block does (the person menu, profiles, frog names); "chat-mentions" = pad chat @mentions alert you by default, and incognito lines can
+// alert the person they name under the frog name (section 10's promise changes) - both always shown, dated their first serve.
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
+                         "rooms-web-2": () => require("./paddock").current().cfg.mode !== "off",
+                         "net-bans": () => require("./netban").isOn() === true,
                          "tx-bar": () => require("./privwire").txBar() === true,
                          "frog-15": () => require("./privwire").isOn() === true,
                          "livecam-never-kept": () => { const c = require("./chatlog").cfg(); return !!(c && c.notice && c.notice_at); },
@@ -86,6 +93,9 @@ async function textDates() {
     return out;
   } catch (e) { return {}; }
 }
+
+const padwebOn = () => { try { return require("./paddock").current().cfg.mode !== "off"; } catch (e) { return false; } };
+const netbanOn = () => { try { return require("./netban").isOn() === true; } catch (e) { return false; } };
 
 let ready = null;
 function init() {
@@ -220,6 +230,7 @@ function register(app, { addUser }) {
                              [txbar && txbar.kept && txbar.off_at, txbar && txbar.kept && txbar.off_day],   // (review fix F1: the "kept" note)
                              ...Object.values(pcopy).map((c) => [c && c.on_at, c && c.on_day]),
                              ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).filter(([k]) => k !== "frog-15" || privwire).filter(([k]) => k !== "stage-cover" || pcopy.wcover)
+                               .filter(([k]) => k !== "rooms-web-2" || padwebOn()).filter(([k]) => k !== "net-bans" || netbanOn())   // (1.99?? padppl)
                                .map(([, d]) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
@@ -229,6 +240,7 @@ function register(app, { addUser }) {
                                 wcover: pcopy.wcover });           // (1.99aif privacy controls round 5: S3's cover picture, micfollow_cfg withheld_cover)
     // 1.99ajf dockclean (Room Dock clean-up, owner point 32): the web-users-on-a-pad sentence, while the Room Dock (which lists them) is on
     try { res.locals.padweb = require("./paddock").current().cfg.mode !== "off"; } catch (e) { res.locals.padweb = false; }
+    res.locals.netban = netbanOn();                                  // 1.99?? padppl: section 4's network codes, only while network bans are on
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));

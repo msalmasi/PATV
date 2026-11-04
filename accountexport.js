@@ -278,6 +278,9 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   }
   await put("messages", "settings", rows("dm_prefs", "user_id = ?", [uid]));
   await put("messages", "your_blocks", rows("dm_blocks", "blocker_id = ?", [uid]));
+  // 1.99?? padppl: blocks on Camfrog logins and on frog names (blocks.js) - a frog-name block as its label, pad and day only (never who)
+  await put("messages", "your_login_blocks", rows("login_blocks", "blocker_id = ?", [uid]));
+  await put("messages", "your_frog_name_blocks", rows("veil_blocks", "blocker_id = ?", [uid], { omit: ["blocked_id", "blocked_login", "blocker_id"] }));
   // storyreact site: which of your messages were story replies - metadata only (never the story's id or whose it was)
   await put("messages", "story_replies", rows("dm_story_refs", "sender_id = ?", [uid], { omit: ["story_id", "author_id", "author_name"] }));
   // notices + preferences

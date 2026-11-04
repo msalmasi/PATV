@@ -313,6 +313,48 @@ async function blockedWhy(R, u, feature = "chat") {
   try { return await require("./bridgeblocks").refusal(R.id, u.userId, feature); } catch (e) { return null; }
 }
 
+/**
+ * 1.99?? padppl: the say POST's mentions [{n, ref}] -> {page: [{n, username, login, veil}] (page-safe, rides on the room line),
+ * ids: [{userId, login, veil, label, n}] (server-only: the alerts)} - an entry only when "@n" is in the text and n is one of that person's
+ * names (their PATV display name or username, their Camfrog login, or - for a frog name - exactly that frog name). A veil's page entry
+ * names nobody.
+ */
+async function mentionRefs(list, text, R) {
+  const PR = require("./personref"), low = String(text || "").toLowerCase(), page = [], ids = [], seen = new Set();
+  for (const m of (Array.isArray(list) ? list : []).slice(0, 10)) {
+    const n = clean(m && m.n, 40);
+    if (!n || n.length < 2 || !low.includes("@" + n.toLowerCase())) continue;
+    let p = null;
+    try { p = await PR.resolve(m.ref, { R }); } catch (e) { p = null; }
+    if (!p || p.error) continue;
+    const nl = n.toLowerCase();
+    const names = p.veil ? [p.label] : [p.label, p.username, p.login];
+    if (!names.some((x) => x && String(x).toLowerCase() === nl)) continue;
+    const key = p.userId ? "u:" + p.userId : p.login ? "l:" + p.login : "v:" + nl;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    page.push(p.veil ? { n, username: null, login: null, veil: 1 } : { n, username: p.username || null, login: p.login || null, veil: 0 });
+    ids.push({ userId: p.userId || null, login: p.login || null, veil: !!p.veil, label: p.label || n, n });
+  }
+  return { page, ids };
+}
+
+/** 1.99?? padppl: why a web command that names a person (!duel / !brawl / !tip <login>) is refused because of a block, or null. */
+const PERSON_CMDS = new Set(["!duel", "!brawl", "!tip", "!challenge"]);
+async function challengeBlocked(u, c, text) {
+  if (!PERSON_CMDS.has(c)) return null;
+  const parts = String(text || "").trim().split(/\s+/);
+  const who = String(parts[1] || "").replace(/^@/, "");
+  if (!/^[\w.\-]{1,40}$/.test(who)) return null;
+  try {
+    const acct = await require("./personref").linkedAccount(who);
+    const B = require("./blocks");
+    const hit = acct ? await B.towards(u.userId, acct.userId) : false;
+    if (!hit) return null;
+    return c === "!tip" ? `You can't tip ${who}.` : `You can't challenge ${who}.`;
+  } catch (e) { return null; }
+}
+
 /** 1.99aiq cliplink: may an account with no linked Camfrog name clip in this pad right now (cliplink.accountOk)? Never throws. */
 function clipAcctOk(roomId) { try { return require("./cliplink").accountOk(roomId); } catch (e) { return false; } }
 
@@ -403,6 +445,13 @@ function roomPmLocal(userId, roomId, text, cmd) {
   } catch (e) { /* a private row can't break the relay */ }
 }
 
+/** 1.99?? padppl: a say job's line reached the room - its sender "posted in this pad's chat" (padweb.notePost, the people list's dimmed
+ *  🌐 rows). Once per job; never throws. */
+function notePosted(j) {
+  if (!j || j.kind !== "say" || j.postNoted || !j.userId || !j.username) return;
+  j.postNoted = true;
+  try { require("./padweb").notePost(j.roomId, { userId: j.userId, username: j.username }, j.camfrog || null); } catch (e) { /* the list only */ }
+}
 function applyAcks(acks) {
   for (const a of Array.isArray(acks) ? acks.slice(0, 100) : []) {
     const j = a && jobs.get(String(a.id || ""));
@@ -437,6 +486,7 @@ function applyAcks(acks) {
     if (st === "done") j.doneAt = Date.now();
     if (j.kind === "say") {
       j.ackAt = Date.now();
+      if (a.ok) notePosted(j);           // 1.99?? padppl: the people list's "posted in the last hour" (padweb.js)
       // Pepe's own clock: how long the line waited in his say lane (pacing) and in his send queue
       const t = a.t && typeof a.t === "object" ? a.t : null;
       const ms = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(600000, Math.round(Number(v)))) : null);
@@ -472,6 +522,7 @@ function noteEcho(jobId, c, roomId = null) {
   if (j.result && !j.result.ok && j.result.code === "send_failed") return false;
   j.echoC = c; j.echoAt = Date.now();
   if (j.state !== "done" || !j.result || !j.result.ok) { j.state = "done"; j.doneAt = j.echoAt; j.result = { ok: true, msg: "sent" }; }
+  notePosted(j);
   noteLatency(j);
   notify(j);
   return true;
@@ -490,7 +541,9 @@ function echoJob(jobId, roomId = null) {
            media: j.media && typeof j.media === "object" ? (j.media.type === "gif" ? { type: "gif", id: String(j.media.id) }
              : { type: "cfsticker", set: Number(j.media.set), id: Number(j.media.id) }) : null,
            // 1.99ajf dockclean: the 🧸 PATV sticker this say job was (sendSayLine) - {pack, id, alt: the words Pepe posts} | null
-           stk: j.stk && typeof j.stk === "object" ? { pack: String(j.stk.pack), id: String(j.stk.id), alt: String(j.stk.alt) } : null };
+           stk: j.stk && typeof j.stk === "object" ? { pack: String(j.stk.pack), id: String(j.stk.id), alt: String(j.stk.alt) } : null,
+           // 1.99?? padppl: its @mentions - page-safe (mn) and the server-only resolution for the alerts (mnIds)
+           mn: Array.isArray(j.mn) ? j.mn.map((m) => Object.assign({}, m)) : null, mnIds: Array.isArray(j.mnIds) ? j.mnIds : null };
 }
 
 /** This user's recent relay jobs in a room (for the composer's status line). 1.99ye: a say carries its client id
@@ -595,6 +648,9 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
     if (tk.length === 1 && text === `[sticker:${tk[0].pack}/${tk[0].sticker}]` && out !== text) stk = { pack: tk[0].pack, id: tk[0].sticker, alt: out };
   }
   text = out;
+  // 1.99?? padppl (owner point 24): the @mentions the composer picked - kept only where "@" + the name is still in the words Pepe will post,
+  // each resolved EXACTLY by its ref (personref.js), the name checked against who it is (a name can't be pinned on someone else)
+  const mn = opts.mentions ? await mentionRefs(opts.mentions, text, R) : null;
   let open = 0;
   for (const j of jobs.values()) if (j.kind === "say" && j.userId === u.userId && j.roomId === R.id && j.state !== "done") open++;
   if (open >= SAY_QUEUE_MAX) {
@@ -618,7 +674,8 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
     if (waiting >= SAY_QUEUE_MAX) return { status: 429, body: { ok: false, code: "queue_full", max: SAY_QUEUE_MAX, error: `You have ${SAY_QUEUE_MAX} messages waiting to go out — give them a second.` } };
   }
   const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
-                     actor: require("./actorcap").actorOf(u, display), cid: cid || null, ...(media ? { media } : {}), ...(stk ? { stk } : {}) });
+                     actor: require("./actorcap").actorOf(u, display), cid: cid || null, ...(media ? { media } : {}), ...(stk ? { stk } : {}),
+                     ...(mn && mn.page.length ? { mn: mn.page, mnIds: mn.ids } : {}) });
   if (key) cids.set(key, j.id);
   console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}${opts.test ? " (staging test)" : ""}`);
   if (!opts.test) require("./streaks").note(u.userId, "relay");     // 1.99xi: 🔥 chatting into a pad's room from the web keeps the daily streak
@@ -691,7 +748,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       const out = mediaRefusal(special); return res.status(out.status).json(out.body);
     }
     if (text.length > SAY_MAX) return res.status(400).json({ ok: false, code: "too_long", max: SAY_MAX, error: `That's too long — ${SAY_MAX} characters at most.` });
-    const out = await sayLine(u, R, text, body.cid, { viewer: req.user });
+    const out = await sayLine(u, R, text, body.cid, { viewer: req.user, mentions: Array.isArray(body.mentions) ? body.mentions.slice(0, 10) : null });
     res.status(out.status).json(out.body);
   });
 
@@ -752,6 +809,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
       return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
     }
+    // 1.99?? padppl: a web !duel / !brawl / !tip naming someone blocked either way (or who blocked this account's frog name / login) is
+    // refused here, before Pepe sees it - blocks.js; the same text whichever side blocked
+    const blkCmd = await challengeBlocked(u, c, text);
+    if (blkCmd) return res.status(403).json({ ok: false, code: "blocked_person", error: blkCmd });
     // stkfix B3: a command line's stickers follow the say rule (packs this account owns, 12 at most, the length written out),
     // and Camfrog gets "[sticker: Name]" (B2) - never a raw token, never one from a pack this account doesn't own
     const out = require("./stickers").fallbackText(text);
@@ -1151,7 +1212,7 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { padFull, PAD_DENIED, sayEligibility, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
+module.exports = { challengeBlocked, padFull, PAD_DENIED, sayEligibility, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
   roomPmLocal,                                                                              // 1.99ajk plexchat: Pepe's private answers to a web speaker
 
   mfSnap, mfFrame, mfSnapCancel, mfCancelled, SNAP_TARGET_GAP,                             // micfollow

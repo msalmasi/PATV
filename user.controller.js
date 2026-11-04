@@ -83,6 +83,8 @@ async function registerUser(req, res) {
 
   let problem;
   if ((problem = guard.checkUsername(username, req))) return back(problem, "username");
+  // 1.99?? padppl: never a Camfrog login Pepe has seen (cfnames.js - the impersonation guard; link that login first to take it)
+  if ((problem = await require("./cfnames").nameRefusal(username, null, req).catch(() => null))) return back(problem, "username");
   if ((problem = guard.checkEmail(email, req))) return back(problem, "email");
   if ((problem = guard.checkPassword(password, username, req))) return back(problem, "password");
   if (typeof confirm === "string" && confirm !== password) return back(req.t ? req.t('auth.err.mismatch') : "Those passwords don't match.", "confirm_password");
@@ -109,6 +111,7 @@ async function registerUser(req, res) {
       throw e;
     }
     registerLimit.hit(ip);
+    try { require("./netban").note(userId, req, "signup").catch(() => {}); } catch (e) { /* 1.99?? padppl: netban.js */ }
     console.log(`[auth] new account ${username} (${userId})`);
     // 1.99cc: the form says "By creating an account you agree to the Terms" - record which version, and when
     // 1.99cf: only while the Terms are enforced (the form shows that line only then); otherwise they're asked on their first post
@@ -166,7 +169,9 @@ function normaliseUsername(raw) {
 // name2... (cut to fit USERNAME_MAX characters), else user#### - free in ANY letter case (the register form and
 // /api/users/username check case-insensitively too).
 async function generateUniqueUsername(baseUsername) {
-  const taken = async (u) => (await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [u])).length > 0;
+  // 1.99?? padppl: a Camfrog login Pepe has seen counts as taken (cfnames.js) - the picker silently moves to the next free candidate
+  const taken = async (u) => (await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [u])).length > 0
+    || !!(await require("./cfnames").nameRefusal(u, null).catch(() => null));
   const base = normaliseUsername(baseUsername);
   if (base) {
     if (!(await taken(base))) return base;
@@ -246,8 +251,10 @@ async function createSsoAccount(req, res, { username, email, emailVerified, prov
   const wait = registerLimit.blocked(ip);
   if (wait) return { error: req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.` };
   username = String(username == null ? "" : username).trim();
-  const problem = guard.checkUsername(username, req);
+  const problem = guard.checkUsername(username, req) || (await require("./cfnames").nameRefusal(username, null, req).catch(() => null));   // 1.99?? padppl
   if (problem) return { error: problem, field: "username" };
+  // 1.99?? padppl: a network ban (netban.js) refuses a new account from that network before it exists
+  try { const NB = require("./netban"); if (NB.isOn()) { const why = await NB.refusal(req, {}); if (why) return { error: why }; } } catch (e) { /* fail open */ }
   if ((await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [username])).length)
     return { error: req.t ? req.t('auth.err.username_taken') : "That username is taken. Try another one.", field: "username" };
   let mail = String(email == null ? "" : email).trim();
@@ -331,7 +338,8 @@ async function updateUsername(req, res) {
   const userId = req.user.userId;
   const editPage = ACCOUNT_PAGE + '#account';
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
-  const problem = guard.checkUsername(username, req);   // 1.99ui: in the member's language
+  const problem = guard.checkUsername(username, req)   // 1.99ui: in the member's language
+    || (await require('./cfnames').nameRefusal(username, userId, req).catch(() => null));   // 1.99?? padppl: not a Camfrog login that isn't yours
   if (problem) {
     req.flash('error', problem);
     return res.redirect(editPage);
@@ -526,7 +534,12 @@ async function completeCamfrogLink(userId, camfrogUsername) {
       if (attempt < 5 && (await idsOnName()).join("\n") !== ids.join("\n")) return RETRY;
       return _completeCamfrogLinkLocked(userId, camfrogUsername);
     });
-    if (out !== RETRY) return out;
+    if (out !== RETRY) {
+      // 1.99?? padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
+      try { await require("./blocks").linked(userId, cfLower); } catch (e) { /* blocks.js logs */ }
+      try { await require("./padbans").linked(userId, cfLower); } catch (e) { /* padbans.js logs */ }
+      return out;
+    }
   }
 }
 async function _completeCamfrogLinkLocked(userId, camfrogUsername) {

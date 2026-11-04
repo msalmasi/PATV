@@ -41,6 +41,11 @@
 //   data         false = no data-c / data-k / data-name / data-text / data-tx (the live page's ✂️ Clip / quotes read them)
 //   hl           CL9: [[start, end], ...] - the search's matches in this line's text (chatlogsearch.js, over the projected text):
 //                those parts of a chat / 🎙 line's or a topic's text go in <mark>s. Omitted = no marks (every other caller)
+//   blk          1.99-padppl: the viewer's OWN named blocks {l: [logins], u: [PATV usernames]} (bridge.js liveView blk) - a NAMED
+//                chat / 🎙 line of someone in it is folded ("A line from someone you blocked · Show"); never a veiled line or a bar
+//   me           1.99-padppl: {username, login, display} - the viewer: a line that @mentions them gets .is-mention, its chip .mention-me
+//   it.mn        1.99-padppl: the server's mentions on a web line [{n, username, login, veil, style, flair}] - each "@n" in the
+//                text becomes a .mention chip in that person's name style (a frog name: plain)
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(root);
   else root.PATVChatlog = factory(root);
@@ -302,7 +307,11 @@
     var n = h(u.patv ? 'a' : 'span', a, [shownName(u, ctx)]);
     if (!u.web) return n;
     // 1.99xa: a line they sent from the website (Pepe relayed it) - their own chat, marked so the room can tell
-    return h('span', { 'class': 'who-web' }, [n, h('span', { 'class': 'web-mark', title: _t('js.pad.chat.web', 'Sent from the website') }, ['\u00a0\ud83c\udf10'])]);
+    // 1.99-padppl: a web account whose shown name equals a Camfrog login it isn't linked to (cfnames.js, u.clash) says so
+    var wk = [n, h('span', { 'class': 'web-mark', title: _t('js.pad.chat.web', 'Sent from the website') }, ['\u00a0\ud83c\udf10'])];
+    if (u.clash) wk.push(h('span', { 'class': 'clash-tag', title: _t('js.pad.chat.clash_title', 'This is a PATV web account. It is not the Camfrog user called {login}.', { login: String(u.clash) }) },
+      [_t('js.pad.chat.clash', 'not the Camfrog user')]));
+    return h('span', { 'class': 'who-web' }, wk);
   }
   /** 1.99ir: their flair in this pad (padflair.js) - text only, colours must be strict hex. */
   function flairNode(u, ctx, h) {
@@ -432,6 +441,55 @@
   }
   /** A chat or mic line. CL6: rm = a hidden line as the owner / staff see it - muted, with why, and data-rmc instead of data-c
    *  (never picked by ✂️ Clip chat / 🔊 Clip); it.own = the viewer's own line (data-own: the ⋯ menu offers Remove). */
+  /** 1.99-padppl: is named person u in the viewer's own block list (ctx.blk)? Never a veil, Pepe or a former member. */
+  function blockedOf(b, u) {
+    if (!b || !u || u.anon || u.self || u.former || veilOf(u)) return false;
+    var l = String(u.login || '').toLowerCase(), n = u.patv && u.patv.username ? String(u.patv.username).toLowerCase() : '';
+    return (!!l && !ACCT_KEY.test(l) && isArr(b.l) && b.l.indexOf(l) >= 0) || (!!n && isArr(b.u) && b.u.indexOf(n) >= 0);
+  }
+  /** 1.99-padppl: does mention entry m (or the text) name the viewer (ctx.me)? */
+  function mentionsMe(m, me) {
+    if (!me || !m || m.veil) return false;
+    var lo = function (v) { return String(v || '').toLowerCase(); };
+    return (!!m.username && !!me.username && lo(m.username) === lo(me.username)) || (!!m.login && !!me.login && lo(m.login) === lo(me.login));
+  }
+  function lineMentionsMe(it, ctx) {
+    var me = ctx && ctx.me; if (!me || !it || it.self === 1 || (it.u && it.u.self)) return false;
+    if (isArr(it.mn)) for (var i = 0; i < it.mn.length; i++) if (mentionsMe(it.mn[i], me)) return true;
+    var t = ' ' + String(it.text || '').toLowerCase() + ' ';
+    var names = [me.username, me.login, me.display];
+    for (var j = 0; j < names.length; j++) {
+      var nm = String(names[j] || '').toLowerCase();
+      if (nm && nm.length >= 2 && new RegExp('(^|[^\\w@])@' + nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w.\\-])').test(t)) return true;
+    }
+    return false;
+  }
+  /** 1.99-padppl: the words with each "@n" of it.mn as a .mention chip (the person's name style; a frog name plain). */
+  function mentionKids(text, mn, ctx, h) {
+    if (!isArr(mn) || !mn.length || !text) return null;
+    var out = [], pos = 0, found = false, low = text.toLowerCase();
+    var list = mn.slice(0, 10).filter(function (m) { return m && m.n; });
+    while (pos < text.length) {
+      var best = -1, bm = null;
+      for (var i = 0; i < list.length; i++) {
+        var at = low.indexOf('@' + String(list[i].n).toLowerCase(), pos);
+        if (at >= 0 && (best < 0 || at < best)) { best = at; bm = list[i]; }
+      }
+      if (best < 0) break;
+      if (best > pos) out.push(text.slice(pos, best));
+      var len = 1 + String(bm.n).length, shown = text.slice(best, best + len);
+      var st = !bm.veil && bm.style ? String(bm.style) : null;
+      var a = { 'class': 'mention' + (st ? ' cx-name' : '') + (mentionsMe(bm, ctx.me) ? ' mention-me' : ''), style: st };
+      if (!bm.veil) a.title = (bm.username ? '@' + bm.username : '') + (bm.login && (!bm.username || String(bm.login).toLowerCase() !== String(bm.username).toLowerCase()) ? (bm.username ? ' · ' : '') + 'Camfrog: ' + bm.login : '');
+      var kids = [shown];
+      if (!bm.veil && bm.flair && bm.flair.name) { var fl = flairNode({ patv: { flair: bm.flair } }, ctx, h); if (fl) kids.push(fl); }
+      out.push(!bm.veil && bm.username ? h('a', Object.assign(a, { href: linkOf(ctx, '/u/' + encodeURIComponent(bm.username)), rel: relOf(ctx) }), kids) : h('span', a, kids));
+      pos = best + len; found = true;
+    }
+    if (!found) return null;
+    if (pos < text.length) out.push(text.slice(pos));
+    return out;
+  }
   function chatLine(it, ctx, h, rm) {
     var _t = tr(ctx), k = it.k;
     var tx = k === 'tx', text = str(it.text);
@@ -441,7 +499,11 @@
     var txh = tx && it.txh === 1;
     var mask = /^[sml]$/.test(String(it.mask || '')) ? String(it.mask) : null, mine = it.self === 1 && (!!veilOf(it.u) || txh);
     if (mask && !mine) text = '';
-    var a = { 'class': 'line' + (tx ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : '') + (rm ? ' rm' : '') + (veilOf(it.u) ? ' veiled' : '') + (mask ? ' masked' : '') };
+    // 1.99-padppl: folded for a viewer who blocked this NAMED speaker (one direction - the viewer's own list; never a veil or a bar)
+    var folded = !rm && !mask && blockedOf(ctx.blk, it.u);
+    var mentionMe = !rm && !mask && !folded && lineMentionsMe(it, ctx);
+    var a = { 'class': 'line' + (tx ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : '') + (rm ? ' rm' : '') + (veilOf(it.u) ? ' veiled' : '') + (mask ? ' masked' : '')
+      + (folded ? ' is-blocked-fold' : '') + (mentionMe ? ' is-mention' : '') };
     if (tx) a.title = _t('js.pad.chat.tx', 'Said on the mic (auto-transcribed)');
     // 1.99fp: what ✂️ Clip chat / 🔊 Clip read (public/js/chat-clip.js) - the server re-reads its own copy by id
     if (ctx.data !== false) {
@@ -483,7 +545,11 @@
       if (tx) body.push('\u201c');
       body.push.apply(body, markKids(text, marks, h));
       if (tx) body.push('\u201d');
-    } else body.push(tx ? '\u201c' + text + '\u201d' : text);
+    } else {
+      var mk = !tx && !rm ? mentionKids(text, it.mn, ctx, h) : null;      // 1.99-padppl: @mention chips
+      if (mk) body.push.apply(body, mk);
+      else body.push(tx ? '\u201c' + text + '\u201d' : text);
+    }
     // B.3: when a \ud83c\udf99 line was said, and how long its turn ran ("said 11:53:41")
     // 1.99ajf dockclean (owner point 33x): not when it repeats the line's own time at the head
     if (tx && Number(it.at) > 0 && fmtTime(Number(it.at), ctx) !== fmtTime(it.ts, ctx)) body.push(h('span', { 'class': 'said' }, [_t('js.pad.veil.said', 'said {time}', { time: fmtTime(Number(it.at), ctx) })]));
@@ -491,6 +557,11 @@
     // E.2: a viewer who may see through frog names here (an admin, the pad's owner in their era) gets a Reveal control - a flag only
     if (it.rv === 1 && it.c && ctx.data !== false) body.push(h('button', { type: 'button', 'class': 'veil-reveal', 'data-reveal': it.c }, [_t('js.pad.veil.reveal', 'Reveal')]));
     if (rm) body.push(h('span', { 'class': 'rm-note' }, [removedNote(rm, ctx)]));
+    if (folded) {
+      body = [h('span', { 'class': 'blk-fold' }, [_t('js.pad.chat.blocked_line', 'A line from someone you blocked'), ' ',
+                h('button', { type: 'button', 'class': 'blk-show', 'data-blk-show': '1' }, [_t('js.pad.chat.blocked_show', 'Show')])]),
+              h('span', { 'class': 'blk-body', hidden: true }, body)];
+    }
     return h('div', a, [avatarNode(it.u, ctx, h), h('div', { 'class': 'body' },
       [h('div', { 'class': 'line-head' }, head), h('div', { 'class': 'line-text' }, body)])]);
   }
@@ -594,6 +665,7 @@
     textItem: textItem, jsonItem: jsonItem, fmtTime: fmtTime, dayLabel: dayLabel, isoOf: isoOf, localIso: localIso,
     label: label, sysText: sysText, liveText: liveText, noteText: noteText, removedNote: removedNote, spanOf: spanOf, chipSpan: chipSpan, dur: dur, hue: hue,
     markKids: markKids, mediaToken: mediaToken, tokenText: tokenText, mediaOf: mediaOf, itemText: itemText,
-    domH: domH, htmlH: htmlH, esc: esc, safeLink: safeLink, safeSrc: safeSrc
+    domH: domH, htmlH: htmlH, esc: esc, safeLink: safeLink, safeSrc: safeSrc,
+    blockedOf: blockedOf, lineMentionsMe: lineMentionsMe, mentionKids: mentionKids
   };
 });

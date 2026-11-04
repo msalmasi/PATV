@@ -404,6 +404,8 @@ async function refusal(sender, recipient, conv = null, opts = {}) {
   const b = await blocked(sender.userId, recipient.userId);
   if (b.some((x) => x.blocker_id === sender.userId)) return new Refuse(403, `You've blocked ${nm}. Unblock them to send a message.`, "you_blocked");
   if (b.length) return new Refuse(403, `You can't message ${nm}.`, "blocked");
+  // 1.99?? padppl: a block the recipient made on a frog name (or an unlinked Camfrog login) that is this sender - the same generic text
+  if (await require("./blocks").hiddenTowards(sender.userId, recipient.userId).catch(() => false)) return new Refuse(403, `You can't message ${nm}.`, "blocked");
   if (recipient.userId === PEPE_ID) return null;          // no "who can message me" / new-account rule for the bot (his price + limits cover it)
   if (conv && await hasWritten(conv.id, recipient.userId)) return null;            // they wrote to you: replies are always fine
   const P = await prefs(recipient.userId);
@@ -1100,6 +1102,14 @@ async function setBlock(user, username, on = true) {
   await init();
   const other = await byUsername(username);
   if (!other) throw new Refuse(404, "No such person.");
+  return setBlockById(user, other.userId, on, other);
+}
+/** 1.99?? padppl: the same block by account id (the person menu / profile / settings - blocks.js resolves WHO exactly, never by a
+ *  typed name). Same side effects as the DM header's block. */
+async function setBlockById(user, otherId, on = true, other = null) {
+  await init();
+  other = other || await account(String(otherId || ""));
+  if (!other || other.archived_at) throw new Refuse(404, "No such person.");
   if (other.userId === user.userId) throw new Refuse(400, "You can't block yourself.");
   if (burst("block|" + user.userId, 500)) throw new Refuse(429, "Easy there.");
   if (on) {
@@ -1113,6 +1123,7 @@ async function setBlock(user, username, on = true) {
   // 1.99aih (privacy controls round 6 review): a pad's mic stage reads DM blocks through a cam-gate cache (micfollow watchOf, 30 s) -
   // dropped for both accounts now, so a viewer just blocked (either way) never keeps that person's cover or "ok" tile meanwhile
   try { require("./micfollow").dmBlockChanged(user.userId, other.userId); } catch (e) { /* no mic follows */ }
+  try { require("./blocks").changed(user.userId, other.userId); } catch (e) { /* 1.99?? padppl: the blocks cache */ }
   return { blocked: !!on, user: { username: other.username, display: display(other) } };
 }
 async function blockList(userId) {
@@ -2156,7 +2167,7 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { init, register, sse, navCount, send, list, history, header, check, markRead, deleteMessage, clear, setBlock, blockList,
-                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, realLinked, relayCopy, RELAY, RELAY_GONE_MS, VIA, _relayCode: relayCode, _relayGoneHash: relayGoneHash,
+                   prefs, setPrefs, setBlockById, refusal, report, fromCamfrog, linkedAccount, realLinked, relayCopy, RELAY, RELAY_GONE_MS, VIA, _relayCode: relayCode, _relayGoneHash: relayGoneHash,
                    CFPM, dmKey, cfKey, cfLoginOf, cfLoginSummary, cfLoginForget, pepeClaim, pepeReply, pepeNote, pepeMedia, pepeFlag, PEPE_ID,
                    PEPE_MEDIA_WINDOW_MS, PEPE_MEDIA_MAX_BYTES, PEPE_MEDIA_FETCHES, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
                    createGroup, addMembers, leaveGroup, removeMember, renameGroup, setMute,

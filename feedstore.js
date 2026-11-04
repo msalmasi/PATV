@@ -592,6 +592,15 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
   const bans = await getQuery("SELECT room_id, reason, until FROM feed_bans WHERE user_id = ? AND (until IS NULL OR until > ?)", [u.userId, t]);
   const globalBan = bans.find((b) => b.room_id === "");
   if (globalBan) return { status: 403, message: "You can't post on the feed" + (globalBan.until ? ` until ${new Date(globalBan.until).toUTCString()}` : "") + "." };
+  // 1.99?? padppl: a ban on this person's frog name (padbans.js) - refuses posting only, says nothing about why it applies
+  try {
+    const PB = require("./padbans");
+    const site = await PB.veilActive("", u.userId, { scopes: ["site"] });
+    if (site) return { status: 403, message: "You can't post on the feed" + (site.until ? ` until ${new Date(Number(site.until)).toUTCString()}` : "") + "." };
+    for (const rid of roomIds) {
+      if (rid && (await PB.veilActive(rid, u.userId, { scopes: ["pad"] }))) { const R = rooms.getCached(rid); return { status: 403, message: `You can't post in ${R ? R.title : rid}.` }; }
+    }
+  } catch (e) { /* no padbans */ }
   for (const rid of roomIds) {
     if (rid && bans.find((b) => b.room_id === rid)) {
       const R = rooms.getCached(rid);
@@ -2139,26 +2148,47 @@ async function userReportAction(user, { userId, action, tell = true, days = 0, r
 }
 
 // ── feed bans (site staff: whole feed or a room; room owners: their room) ──
-async function ban(user, target, { room = "", reason = "", days = 0 } = {}) {
+async function ban(user, target, { room = "", reason = "", days = 0, untilMs = undefined, via = "form" } = {}) {
   const roomId = String(room || "");
   if (roomId ? !(await rooms.canManage(user, roomId)) : !SP.can(user, "feed.moderate")) throw new Refuse(403, roomId ? "Only this pad's owner can do that." : "Admins only.");
-  const u = await rooms.findUser(target);
-  if (!u) throw new Refuse(404, `No single PATV account named "${String(target).slice(0, 40)}".`);
+  // 1.99?? padppl: the typed name goes through targets.js (the one moderation resolver) - "u:<id>" exactly, "@name" a PATV username,
+  // "cf:<login>" a linked login; a bare name that means two people (a PATV username = another account's Camfrog login) is a 409 with the
+  // choices, never a guess (it was rooms.findUser: the username silently won)
+  const r = await require("./targets").resolve(target, { allowLogin: false });
+  if (r.ambiguous) { const e = new Refuse(409, r.error); e.choices = r.choices; throw e; }
+  if (r.error || !r.userId) throw new Refuse(404, `No single PATV account named "${String(target).slice(0, 40)}".`);
+  const u = { userId: r.userId, username: r.username };
   if (roomId && rooms.isProfile(roomId) && u.userId === roomId.slice(rooms.PROFILE_PREFIX.length)) throw new Refuse(400, "That's you.");   // 1.99df
-  const until = Number(days) > 0 ? NOW() + Math.min(3650, Number(days)) * 86400e3 : null;
-  await runQuery("INSERT OR REPLACE INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  const until = untilMs !== undefined ? (untilMs == null ? null : Math.floor(Number(untilMs))) : Number(days) > 0 ? NOW() + Math.min(3650, Number(days)) * 86400e3 : null;
+  // 1.99?? padppl: an upsert (was INSERT OR REPLACE) - the row's other columns a later build adds are kept on a re-ban
+  await runQuery(`INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(user_id, room_id) DO UPDATE SET username = excluded.username, reason = excluded.reason, by = excluded.by, at = excluded.at,
+                    until = excluded.until`,
                  [u.userId, roomId, u.username, cleanLine(reason, 200) || null, user.username, NOW(), until]);
   if (roomId) await rooms.event(roomId, "feed-ban", user.username, `${u.username}${until ? " until " + new Date(until).toISOString() : ""}`);
+  try {
+    await require("./adminaudit").record({ userId: user.userId, username: user.username }, "pad_ban", { userId: u.userId, username: u.username },
+      { room: roomId || "*", scope: roomId ? "pad" : "site", until, via }, cleanLine(reason, 200) || null);
+  } catch (e) { console.error("[feed] ban audit:", e.message); }
   // 1.99wj: a site-wide ban by staff also signs the account out everywhere (sessions.js); a pad owner's ban doesn't
   if (!roomId) { try { await require("./sessions").revokeAll(u.userId, { why: "ban" }); } catch (e) { console.error("[feed] ban sign-out:", e.message); } }
   // micfollow: a site / pad ban of a linked account takes them off the 🎙 mic stage at once (never blocks the ban)
   try { require("./micfollow").recheckUser(u.userId).catch((e) => console.error("[feed] micfollow:", e.message)); } catch (e) { /* no mic follows */ }
   return { userId: u.userId, username: u.username, until };
 }
-async function unban(user, userId, room = "") {
+async function unban(user, userId, room = "", { via = "form" } = {}) {
   const roomId = String(room || "");
   if (roomId ? !(await rooms.canManage(user, roomId)) : !SP.can(user, "feed.moderate")) throw new Refuse(403, "Not allowed.");
+  const cur = (await getQuery("SELECT username FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]))[0];
   await runQuery("DELETE FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]);
+  // 1.99?? padppl: an unban is audited too (it never was) - the pad's event log and admin_audit
+  if (cur) {
+    if (roomId) { try { await rooms.event(roomId, "feed-unban", user.username, String(cur.username || userId)); } catch (e) { /* no registry */ } }
+    try {
+      await require("./adminaudit").record({ userId: user.userId, username: user.username }, "pad_unban", { userId: String(userId), username: cur.username || null },
+        { room: roomId || "*", scope: roomId ? "pad" : "site", via }, null);
+    } catch (e) { console.error("[feed] unban audit:", e.message); }
+  }
   return true;
 }
 async function bans(room = null) {

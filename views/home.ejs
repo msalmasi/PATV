@@ -913,7 +913,7 @@
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
-<script src="/public/js/room-bridge.js?v=24"></script>
+<script src="/public/js/room-bridge.js?v=25"></script>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -1173,9 +1173,9 @@
      goLive: '/stage' + (frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : ''),
      staff: stageAdmin ? { front: '/pads/admin#front', pepe: stageAdmin.admin ? '/admin/pepe#control' : null } : null,
      nextUp: nextUp_ ? { name: nextUp_.display, title: nextUp_.title || null, at: Number(nextUp_.start_at) } : null }; _%>
-<script src="/public/js/chatlog-core.js?v=10"></script>
+<script src="/public/js/chatlog-core.js?v=11"></script>
 <script src="/public/js/dock-link.js?v=1"></script>
-<script src="/public/js/pad-dock.js?v=5"></script>
+<script src="/public/js/pad-dock.js?v=6"></script>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/home-dock.js?v=1"></script>
 <%_ } _%>

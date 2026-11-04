@@ -1155,6 +1155,16 @@ async function ingest(body, opts = {}) {
     if (it.k === "tx" && it.id && dup.tx.has(R.id + "\t" + it.id)) continue;                     // CL2: ...already archived
     const echoOf = it._job || null;
     delete it._job;
+    // 1.99?? padppl: the say job's @mentions ride on its room line - page-safe `mn` (stored, dressed, drawn as chips) and the server-only
+    // resolution (non-enumerable _mnIds: never serialised) for the mention alerts (mentions.js)
+    if (echoOf && it.k === "msg") {
+      const MJ = relay.echoJob(echoOf, R.id);
+      if (MJ && Array.isArray(MJ.mn) && MJ.mn.length) {
+        it.mn = MJ.mn;
+        Object.defineProperty(it, "_mnIds", { value: MJ.mnIds || [], enumerable: false, writable: true, configurable: true });
+      }
+      if (MJ && MJ.userId) Object.defineProperty(it, "_sender", { value: { userId: MJ.userId, login: MJ.camfrog || null }, enumerable: false, writable: true, configurable: true });
+    }
     it.c = ++cursor;
     it.aud = audNow(R.id);                                // CL3: the pad's access level when it was said (never widened)
     if (it.u && !it.u.anon && it.u.login) CV.noteWho(it.u.login, it.u.display);   // CL3: the hidden-names job's login map
@@ -1374,7 +1384,16 @@ function withPatv(u, C, F = null) {
   // 1.99ir: their flair in this pad (padflair.js; F = the pad's flairs by lowercased username)
   const fl = F && acc.username ? F.get(String(acc.username).toLowerCase()) : null;
   if (fl) out.patv.flair = require("./padflair").plain(fl);
-  if (!u.self) out.display = str(acc.display, 40) || out.display;
+  if (!u.self) {
+    // 1.99?? padppl (the impersonation guard, cfnames.js): a linked login's PATV display name that is ANOTHER Camfrog login Pepe has seen is
+    // never shown - the line keeps the Camfrog name (bridge-relay.webName's rule for the room side); a web account (no login) whose name
+    // is one keeps its name with `clash` = that login (the page's "not the Camfrog user" tag)
+    const d = str(acc.display, 40) || out.display;
+    let cl = null;
+    try { cl = require("./cfnames").clashOf(null, ACCT_RE.test(login) ? acc.username : null, d, ACCT_RE.test(login) ? null : login); } catch (e) { cl = null; }
+    if (!(cl && !ACCT_RE.test(login))) out.display = d;
+    if (cl && ACCT_RE.test(login)) out.clash = cl;
+  }
   return out;
 }
 
@@ -1687,6 +1706,16 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const shape = (it) => {
     if (!it.u) return it;
     const o = { ...it, u: withPatv(it.u, L, F) };
+    // 1.99?? padppl: @mention chips in each person's look (name style, this pad's flair) - frog names plain
+    if (Array.isArray(o.mn) && o.mn.length) {
+      o.mn = o.mn.map((m) => {
+        if (!m || m.veil || !m.username) return m;
+        const x = { ...m, style: cosmetics.nameStyle(m.username) || "" };
+        const fl = F ? F.get(String(m.username).toLowerCase()) : null;
+        if (fl) x.flair = require("./padflair").plain(fl);
+        return x;
+      });
+    }
     const j = myC.get(it.c);
     if (j) { o.job = j.id; if (j.cid) o.cid = j.cid; }
     if (own.size && (it.k === "msg" || it.k === "tx") &&
@@ -1708,6 +1737,21 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     const tipOf = (name) => (!me || (me.username && lc(name) === lc(me.username)) || (pepe && lc(name) === pepe) ? null : { to: String(name), href: "/u/" + encodeURIComponent(String(name)) + "/tip" });
     try { web = await require("./padweb").forRoom(R, me, tipOf); } catch (e) { web = []; }
   }
+  // 1.99?? padppl: the viewer's OWN blocks (blocks.js pageList: the logins / PATV usernames they blocked by name - never a frog name,
+  // never who blocked them) - the person menu says ✅ Unblock for them and their named lines fold for this viewer only
+  let blk = null;
+  if (userId) { try { blk = await require("./blocks").pageList(userId); } catch (e) { blk = null; } }
+  // 1.99?? padppl: what website bans this viewer may make here (padbans.js wmod: bridge / pad / site / nets) and, for them only, which
+  // NAMED people are banned now (wban by PATV username: {b: bridge until, p: pad until; -1 = permanent}) - never on a veiled entry
+  let wmod = null, wbm = null;
+  if (userId && !opts.nonExempt) {
+    try { wmod = await require("./padbans").wmodById(userId, { id: R.id }, R); if (wmod) wbm = await require("./padbans").wbanMap(R.id); } catch (e) { wmod = null; wbm = null; }
+  }
+  const withBan = (x) => {
+    if (!wbm || !x || x.anon || !x.patv || !x.patv.username) return x;
+    const b = wbm.get(String(x.patv.username).toLowerCase());
+    return b && (b.b || b.p) ? { ...x, wban: b } : x;
+  };
   // 1.99aiw: picker visibility shares the say route's full access check; no extra account lookup while the Dock/media are off.
   let cfstickerPicker = false, gifPicker = false;
   if (userId && require("./paddock").current().cfg.mode !== "off") {
@@ -1741,8 +1785,11 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     ...(userId && withMe ? { me: await meFor(userId) } : {}),
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
-    members: members.map(withTip),
-    ...(web ? { web } : {}),
+    members: members.map((u) => withBan(withTip(u))),
+    ...(web ? { web: wbm ? web.map(withBan) : web } : {}),
+    ...(blk ? { blk } : {}),
+    ...(wmod ? { wmod } : {}),
+    ...(userId && withMe ? { mnMuted: await require("./mentions").padMuted(userId, R.id).catch(() => false) } : {}),   // 1.99?? padppl
     mic: mic.map((u) => withTip(pageMic(u))),          // micfollow: proven / since never reach pages
     feed, cursor: at.cursor,
     ...(opts && opts.program ? { stage_program: await stageProgram(prog, R, userId, L, F) } : {}),
@@ -2095,7 +2142,8 @@ function register(app, { isBotToken, addUser }) {
   // 1.99ye: gated = live but without the 💎 bridge perk (a say is refused with that reason); liveIds = Pepe's long-poll
   relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown, gated: (R) => isLive(R) && !bridgeOk(R.id),
                         liveIds: () => new Set([...rooms.values()].filter(isLive).map((R) => R.id)) });
-  require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });      // 1.99xa: !bridge block - web senders blocked per room / everywhere
+  require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });
+  require("./padbans").register(app, { addUser, bySlug });       // 1.99?? padppl: the website's bans from the person menu (padbans.js)      // 1.99xa: !bridge block - web senders blocked per room / everywhere
   require("./pepemodlog").register(app, { isBotToken, addUser, bySlug });        // 1.99zf: Pepe's mod log per room (owner panel moderation history)
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover

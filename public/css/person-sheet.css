@@ -1,0 +1,53 @@
+/* person-sheet.css - 1.99?? padppl: the 🚫 Block sheet (block-sheet.js) and the ⛔ Ban sheet (pad-ban-sheet.js) - one modal look,
+   site tokens with dark fallbacks; no layout change to anything else on the page. */
+.psh { padding: 0; border: 1px solid var(--ds-line-strong, #3a3a3a); border-radius: 14px; background: var(--ds-surface, #131313); color: var(--ds-text, #eee);
+       width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+.psh::backdrop { background: rgba(0, 0, 0, .62); }
+.psh-in { display: grid; gap: 12px; padding: 18px 18px 16px; }
+.psh-t { margin: 0; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+.psh-sub { margin: -6px 0 0; font-size: 13px; color: var(--ds-text-muted, #aaa); overflow-wrap: anywhere; }
+.psh-p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ds-text, #ddd); }
+.psh-hint { margin: 0; font-size: 12px; color: var(--ds-text-muted, #999); }
+.psh-k { font-size: 11px; color: var(--ds-text-muted, #999); text-transform: uppercase; letter-spacing: .08em; margin: 0; }
+.psh-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.psh-btn { min-height: 36px; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--ds-line-strong, #3a3a3a); background: #1b1b1b; color: inherit;
+           font: inherit; font-size: 14px; cursor: pointer; }
+.psh-btn:hover { background: #232323; }
+.psh-btn:focus-visible, .psh input:focus-visible, .psh textarea:focus-visible { outline: 2px solid var(--ds-focus, #8ab4ff); outline-offset: 2px; }
+.psh-btn.danger { border-color: #7a2222; background: #2a1010; color: #ffd0d0; }
+.psh-btn.danger:hover { background: #3a1515; }
+.psh-btn.go { border-color: #2f6b3a; background: #12301a; color: #d8f5dd; }
+.psh-btn[disabled] { opacity: .55; cursor: default; }
+.psh-out { margin: 0; font-size: 13px; min-height: 1em; overflow-wrap: anywhere; }
+.psh-out.ok { color: #b9e8c0; } .psh-out.bad { color: #ffb4b4; }
+.psh-opts { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
+.psh-opt { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; padding: 8px 10px; border: 1px solid #2a2a2a; border-radius: 10px;
+           font-size: 14px; cursor: pointer; }
+.psh-opt:has(input:checked) { border-color: #6b5a20; background: #1d1a0f; }
+.psh-opt small { display: block; color: var(--ds-text-muted, #999); font-size: 12px; }
+.psh-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.psh-chip { position: relative; }
+.psh-chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.psh-chip span { display: inline-block; padding: 5px 12px; border-radius: 999px; border: 1px solid #333; font-size: 13px; }
+.psh-chip input:checked + span { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }
+.psh-chip input:focus-visible + span { outline: 2px solid var(--ds-focus, #8ab4ff); outline-offset: 2px; }
+.psh textarea, .psh input[type=text] { width: 100%; box-sizing: border-box; background: #0d0d0d; color: #eee; border: 1px solid var(--ds-line-strong, #3a3a3a);
+           border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 14px; }
+.psh-kind { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; color: #ccc; margin-right: 6px; }
+.psh-refuse { margin: 0; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px dashed #444; color: #ccc; background: #151515; }
+.psh-choices { display: grid; gap: 6px; }
+@media (max-width: 420px) { .psh-in { padding: 14px; } .psh-row .psh-btn { flex: 1 1 auto; } }
+/* the folded line of someone you blocked (chatlog-core.js) and the 🚫 / ✅ menu items */
+.line.is-blocked-fold { opacity: .75; }
+.line .blk-fold { font-size: 12px; color: var(--ds-text-muted, #999); font-style: italic; }
+.line .blk-fold button { margin-left: 6px; font: inherit; font-style: normal; font-size: 12px; background: none; border: 0; color: var(--ds-link, #9cc3ff);
+                         text-decoration: underline; cursor: pointer; padding: 0; }
+/* 1.99?? padppl: the people list's INACTIVE 🌐 rows (posted in the last hour, chat not open now) */
+.rmd-web.is-idle { opacity: .55; }
+/* the "not the Camfrog user" tag beside a 🌐 name that equals a Camfrog login */
+.clash-tag { display: inline-block; margin-left: 4px; font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid #6b3a1a; color: #f4c08a;
+             background: #24160c; white-space: nowrap; vertical-align: middle; }
+/* a chat line that @mentions you, and a mention chip */
+.line.is-mention { box-shadow: inset 3px 0 0 #d6b44a; background: rgba(214, 180, 74, .08); }
+.mention { font-weight: 600; border-radius: 4px; padding: 0 2px; background: rgba(140, 170, 255, .12); }
+.mention.mention-me { background: rgba(214, 180, 74, .22); }

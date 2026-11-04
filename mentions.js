@@ -34,6 +34,19 @@
 //   GET  /api/mentions               {prefs, words, names, rooms}
 //   POST /api/mentions               save {enabled, names, words: [{phrase, room}], quiet: {from, to, tz} | null}
 //   POST /api/mentions/mute          {minutes} (0 = unmute)
+//
+// 1.99?? padppl (owner point 25, "We should also have chat mention alerts"): @MENTIONS in a pad's chat alert the person named - ON by
+// default (mention_prefs.chat, separate from the opt-in keyword alerts above, which stay as they are):
+//   (a) a web line's structured mentions (the composer's picks, bridge-relay mentionRefs: exact accounts, server-only _mnIds)
+//   (b) a Camfrog-typed "@token": the account linked to that login, or a PATV username when that is unambiguous and not a clash
+// Rules (one notice per line per person; the ref mention:<room>:<c> is shared with the keyword path): not your own line, padaccess.full,
+// your mute / quiet hours, mention_pad_mutes (the chat ⋯'s "Mute mentions from this pad"), the rate limit above, and NEVER from someone
+// blocked either way or whom you blocked under a frog name / login (blocks.js - the keyword path checks it too now). A frog-named
+// (incognito) line alerts under its FROG NAME ("💬 🐸 Soggy Bullfrog mentioned you"; its real identity is used only for the own-line,
+// block and rate checks); a hidden bar or a "someone" line never alerts; a mention OF a frog name alerts that person privately
+// ("... mentioned you (as 🐸 ...)"). Telegram follows the existing kind "mention" (only people who linked it and kept it on).
+//   mention_prefs.chat   (0/1, default 1)       mention_pad_mutes   user_id, room_id, until (NULL = until unmuted)
+//   POST /api/mentions/pad   {slug, mute}        GET/POST /api/mentions gain `chat`
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -57,6 +70,11 @@ function init() {
       try { await runQuery("ALTER TABLE mention_prefs ADD COLUMN feed INTEGER NOT NULL DEFAULT 1"); } catch (e) { /* already there */ }
       await runQuery(`CREATE TABLE IF NOT EXISTS mention_words (user_id TEXT NOT NULL, phrase TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (user_id, phrase, room_id))`);
+      // 1.99?? padppl: pad chat @mentions (default ON) + per-pad mutes
+      if (!(await getQuery("PRAGMA table_info(mention_prefs)")).some((c) => c.name === "chat")) {
+        try { await runQuery("ALTER TABLE mention_prefs ADD COLUMN chat INTEGER NOT NULL DEFAULT 1"); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+      }
+      await runQuery("CREATE TABLE IF NOT EXISTS mention_pad_mutes (user_id TEXT NOT NULL, room_id TEXT NOT NULL, until INTEGER, PRIMARY KEY (user_id, room_id))");
     })().catch((e) => { console.error("[mentions] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -128,7 +146,7 @@ async function get(userId) {
   const acc = await accountOf(userId);
   const t = NOW();
   return {
-    prefs: { enabled: !!(r && r.enabled), names: r ? !!r.names : true, feed: r ? r.feed !== 0 : true,
+    prefs: { enabled: !!(r && r.enabled), names: r ? !!r.names : true, feed: r ? r.feed !== 0 : true, chat: r ? r.chat !== 0 : true,
              quiet: r && r.quiet_from != null && r.quiet_to != null ? { from: r.quiet_from, to: r.quiet_to, tz: r.tz || "UTC" } : null,
              tz: (r && r.tz) || null, mutedUntil: r && r.muted_until > t ? r.muted_until : null },
     words: words.map((w) => ({ phrase: w.phrase, room: w.room_id || "" })),
@@ -138,7 +156,7 @@ async function get(userId) {
 }
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
 /** Save the whole settings form. words: [{phrase, room}] (room '' = every room; unknown rooms are refused). */
-async function save(userId, { enabled, names, words, quiet, feed } = {}, knownRooms = null) {
+async function save(userId, { enabled, names, words, quiet, feed, chat } = {}, knownRooms = null) {
   await init();
   const list = [], seen = new Set();
   for (const w of (Array.isArray(words) ? words : []).slice(0, 100)) {
@@ -163,10 +181,11 @@ async function save(userId, { enabled, names, words, quiet, feed } = {}, knownRo
   const cur = await prefsRow(userId);
   // feed: undefined keeps what's stored (default on)
   const fd = feed === undefined || feed === null ? (cur && cur.feed === 0 ? 0 : 1) : feed === false ? 0 : 1;
-  await runQuery(`INSERT INTO mention_prefs (user_id, enabled, names, quiet_from, quiet_to, tz, muted_until, updated, feed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const ch = chat === undefined || chat === null ? (cur && cur.chat === 0 ? 0 : 1) : chat === false ? 0 : 1;    // 1.99?? padppl
+  await runQuery(`INSERT INTO mention_prefs (user_id, enabled, names, quiet_from, quiet_to, tz, muted_until, updated, feed, chat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(user_id) DO UPDATE SET enabled = excluded.enabled, names = excluded.names, quiet_from = excluded.quiet_from,
-                  quiet_to = excluded.quiet_to, tz = COALESCE(excluded.tz, mention_prefs.tz), updated = excluded.updated, feed = excluded.feed`,
-                 [userId, enabled ? 1 : 0, names === false ? 0 : 1, qf, qt, tz, cur ? cur.muted_until : null, NOW(), fd]);
+                  quiet_to = excluded.quiet_to, tz = COALESCE(excluded.tz, mention_prefs.tz), updated = excluded.updated, feed = excluded.feed, chat = excluded.chat`,
+                 [userId, enabled ? 1 : 0, names === false ? 0 : 1, qf, qt, tz, cur ? cur.muted_until : null, NOW(), fd, ch]);
   await runQuery("DELETE FROM mention_words WHERE user_id = ?", [userId]);
   for (const w of list) await runQuery("INSERT OR IGNORE INTO mention_words (user_id, phrase, room_id) VALUES (?, ?, ?)", [userId, w.phrase, w.room]);
   invalidate();
@@ -227,6 +246,121 @@ function allow(userId, roomId, t) {
   return true;
 }
 
+// ── 1.99?? padppl: pad chat @mentions ──
+const padMuteCache = new Map();          // "userId|roomId" -> {on, at}
+async function padMuted(userId, roomId) {
+  if (!userId || !roomId) return false;
+  const k = userId + "|" + roomId, c = padMuteCache.get(k), t = NOW();
+  if (c && t - c.at < 30000) return c.on;
+  await init();
+  const r = (await getQuery("SELECT until FROM mention_pad_mutes WHERE user_id = ? AND room_id = ?", [String(userId), String(roomId)]))[0];
+  const on = !!(r && (r.until == null || Number(r.until) > t));
+  padMuteCache.set(k, { on, at: t });
+  if (padMuteCache.size > 20000) padMuteCache.clear();
+  return on;
+}
+async function setPadMute(userId, roomId, mute) {
+  await init();
+  if (mute) await runQuery("INSERT INTO mention_pad_mutes (user_id, room_id, until) VALUES (?, ?, NULL) ON CONFLICT(user_id, room_id) DO UPDATE SET until = NULL", [String(userId), String(roomId)]);
+  else await runQuery("DELETE FROM mention_pad_mutes WHERE user_id = ? AND room_id = ?", [String(userId), String(roomId)]);
+  padMuteCache.delete(userId + "|" + roomId);
+  return !!mute;
+}
+async function padMutes(userId) {
+  await init();
+  return (await getQuery("SELECT room_id, until FROM mention_pad_mutes WHERE user_id = ? AND (until IS NULL OR until > ?)", [String(userId), NOW()])).map((r) => r.room_id);
+}
+const TOKEN_RE = /(?:^|[^\w@])@([\w.\-]{2,40})/g;
+/** The accounts a Camfrog-typed line names with "@token": the linked login first, else an unambiguous, non-clashing PATV username. */
+async function typedTargets(text) {
+  const out = [], seen = new Set();
+  for (const m of String(text || "").matchAll(TOKEN_RE)) {
+    const tok = m[1].replace(/[.\-]+$/, "");
+    if (tok.length < 2 || seen.has(tok.toLowerCase())) continue;
+    seen.add(tok.toLowerCase());
+    const PR = require("./personref");
+    let acc = await PR.linkedAccount(tok).catch(() => null), login = acc ? tok.toLowerCase() : null;
+    if (!acc) {
+      const T = await require("./targets").resolve("@" + tok, { allowLogin: false }).catch(() => ({ error: 1 }));
+      if (T && !T.error && T.userId) {
+        const bare = await require("./targets").resolve(tok, { allowLogin: true }).catch(() => ({ error: 1 }));
+        let clash = null;
+        try { clash = require("./cfnames").clashOf(T.userId, T.username, T.username, T.login); } catch (e) { clash = null; }
+        if (bare && !bare.ambiguous && !clash) acc = { userId: T.userId, username: T.username, camfrogUsername: T.login };
+      }
+    }
+    if (acc) out.push({ userId: String(acc.userId), login: login || (acc.camfrogUsername ? String(acc.camfrogUsername).toLowerCase() : null), veil: false, label: tok, n: tok });
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+/** Who said line `it` (server-side): {userId, login, veilLabel, named} - a frog name's real identity never leaves this module. */
+async function senderOf(it) {
+  const u = it.u || {};
+  let userId = it._sender && it._sender.userId ? String(it._sender.userId) : null, login = it._sender && it._sender.login ? String(it._sender.login).toLowerCase() : null;
+  const vz = it._vz && it._vz.login ? String(it._vz.login) : null;
+  if (!userId && !login) {
+    const l = vz || (u.anon ? null : String(u.login || ""));
+    if (l) {
+      const m = /^u:([A-Za-z0-9-]{6,64})$/i.exec(l);
+      if (m) userId = m[1];
+      else { login = l.toLowerCase(); const a = await require("./personref").linkedAccount(l).catch(() => null); if (a) userId = String(a.userId); }
+    }
+  }
+  const veilLabel = u.anon ? (u.alias ? String(u.alias) : null) : null;
+  return { userId, login, veilLabel, named: !u.anon };
+}
+/** May this @mention alert `T` ({userId, login}) - the chat switch, pad, mutes, quiet hours, pad mute, blocks, rate. */
+async function chatAllowed(T, line, S, t) {
+  if (!T.userId) return false;
+  if ((S.userId && S.userId === T.userId) || (S.login && T.login && S.login === T.login)) return false;        // your own line
+  const r = await prefsRow(T.userId);
+  if (r && r.chat === 0) return false;
+  if (r && r.muted_until && r.muted_until > t) return false;
+  if (r && r.quiet_from != null && r.quiet_to != null && inQuiet(t, r.quiet_from, r.quiet_to, r.tz)) return false;
+  if (await padMuted(T.userId, line.roomId)) return false;
+  const acc = await accountOf(T.userId);
+  if (!acc || acc.archived_at) return false;
+  try { if (!require("./padaccess").full({ userId: acc.userId, class: acc.class }, line.roomId)) return false; } catch (e) { return false; }
+  try { if (await require("./blocks").towards(S.userId, T.userId, { fromLogin: S.login })) return false; } catch (e) { return false; }
+  return allow(T.userId, line.roomId, t);
+}
+function chatNotice(line, S, T) {
+  const it = line.it, u = it.u || {};
+  const who = S.veilLabel ? "🐸 " + snip(S.veilLabel, 40) : snip(u.display || u.login || "someone", 40);
+  const room = snip(line.name || line.slug || "a room", 60);
+  const as = T.veil ? ` (as 🐸 ${snip(T.label, 40)})` : "";
+  const link = line.slug ? `/p/${encodeURIComponent(line.slug)}?tab=live&line=${Number(it.c) || 0}` : "/p";
+  return { kind: "mention", title: `💬 ${who} mentioned you${as} in ${room}`, body: `${who}: ${snip(typeof line.red === "string" ? line.red : it.text, 300)}`, link,
+           ref: `mention:${line.roomId}:${Number(it.c) || it.ts || ""}` };
+}
+/** The @mention alerts of one line; returns the user ids alerted (the keyword path skips them). */
+async function chatMentions(line, t) {
+  const it = line.it || {}, u = it.u || {}, done = new Set();
+  if (it.k !== "msg" || !it.text || u.self || u.bot) return done;
+  if (u.anon && !u.alias) return done;                     // "someone" lines never alert
+  if (it.mask) return done;                                // a hidden bar has no words to mention anyone with
+  const S = await senderOf(it);
+  let targets = Array.isArray(it._mnIds) && it._mnIds.length ? it._mnIds.slice(0, 10) : [];
+  if (!targets.length && !u.web) targets = await typedTargets(it.text);
+  const inbox = require("./inbox");
+  for (const T0 of targets) {
+    let T = T0;
+    if (!T.userId && T.login) { const a = await require("./personref").linkedAccount(T.login).catch(() => null); if (a) T = { ...T0, userId: String(a.userId) }; }
+    if (!T.userId || done.has(T.userId)) continue;
+    if (!(await chatAllowed(T, line, S, t))) continue;
+    const n = chatNotice(line, S, T);
+    if (await inbox.addSafe(T.userId, n)) {
+      done.add(T.userId);
+      try {
+        require("./webpush").onMention(T.userId, { kind: "mention", roomId: line.roomId, url: n.link, srcKey: n.ref, at: Number(it.ts) || 0,
+                                                   speaker: S.named ? u.login : null, padName: line.name || null });
+      } catch (e) { /* never fails the alert */ }
+    }
+  }
+  return done;
+}
+
 /** Who should be alerted for one chat line -> [{user, word}] (pure apart from the rate limit). */
 function matchLine(IDX, line, t) {
   const it = line.it || {};
@@ -285,14 +419,21 @@ async function drain() {
     while (queue.length) {
       const batch = queue.splice(0, 50);
       let IDX;
-      try { IDX = await index(); } catch (e) { console.error("[mentions] index:", e.message); break; }
-      if (!IDX.users.length) continue;
+      try { IDX = await index(); } catch (e) { console.error("[mentions] index:", e.message); IDX = { users: [] }; }   // (1.99?? padppl: the @mention path runs without keyword users)
       const inbox = require("./inbox");
       for (const line of batch) {
         // the owner's decision-9 change: hidden people's names redacted as the pad shows them (fails closed: "" - no match, no
         // text - when the hidden names can't be loaded)
         try { line.red = await require("./chatlogview").redactLoaded(String(line.it && line.it.text || "")); } catch (e) { line.red = ""; }
+        // 1.99?? padppl: @mentions first (on by default); whoever they alerted isn't alerted again by a keyword for the same line
+        let done = new Set();
+        try { done = await chatMentions(line, NOW()); } catch (e) { console.error("[mentions] chat:", e.message); }
+        let S = null;
         for (const m of matchLine(IDX, line, NOW())) {
+          if (done.has(String(m.user.userId))) continue;
+          // 1.99?? padppl: never from someone blocked either way (blocks.js) - the keyword path too
+          if (!S) { try { S = await senderOf(line.it); } catch (e) { S = { userId: null, login: null }; } }
+          try { if (await require("./blocks").towards(S.userId, m.user.userId, { fromLogin: S.login })) continue; } catch (e) { continue; }
           const n = noticeFor(line, m.word);
           if (await inbox.addSafe(m.user.userId, n)) {
             // 1.99acd: the browser notification (webpush.js) - content-free; late lines and blocked speakers stay inbox-only there
@@ -361,11 +502,21 @@ function register(app, { addUser }) {
       const b = req.body || {};
       const known = new Set((await rooms(req.user)).map((r) => r.id));
       res.json({ ok: true, ...(await save(req.user.userId, { enabled: !!b.enabled, names: b.names !== false, words: b.words, quiet: b.quiet || null,
-                                                             feed: b.feed === undefined ? undefined : b.feed !== false }, known)) });
+                                                             feed: b.feed === undefined ? undefined : b.feed !== false,
+                                                             chat: b.chat === undefined ? undefined : b.chat !== false }, known)) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/mentions/mute", addUser, guard(true), async (req, res) => {
     try { res.json({ ok: true, ...(await mute(req.user.userId, (req.body || {}).minutes)) }); } catch (e) { fail(res, e); }
+  });
+  // 1.99?? padppl: the chat ⋯'s "Mute mentions from this pad" (and the settings page's list)
+  app.post("/api/mentions/pad", addUser, guard(true), async (req, res) => {
+    try {
+      const b = req.body || {};
+      const R = await require("./roomsweb").resolveRoom(String(b.slug || b.room || "").slice(0, 128));
+      if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
+      res.json({ ok: true, muted: await setPadMute(req.user.userId, R.id, b.mute !== false) });
+    } catch (e) { fail(res, e); }
   });
 }
 
@@ -382,5 +533,5 @@ async function feedAllowed(userId, t = NOW()) {
   return true;
 }
 
-module.exports = { init, register, get, save, mute, feedAllowed, onLines, matchLine, noticeFor, matcher, inQuiet, minuteOfDay, ownNames, index, invalidate,
+module.exports = { init, register, get, save, mute, feedAllowed, onLines, padMuted, setPadMute, padMutes, chatMentions, typedTargets, matchLine, noticeFor, matcher, inQuiet, minuteOfDay, ownNames, index, invalidate,
                    WORDS_MAX, ROOM_GAP_MS, HOUR_MAX, _setClock, _idle, _sent: sent, Refuse };

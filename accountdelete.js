@@ -468,7 +468,8 @@ const DELETE_ROWS = [
   // 1.99aid (privacy controls S6): the "On the website" card's audit and the linked login's bridge / tx state as Pepe reported it
   ["privacy_state_log", "user_id", "uid"], ["privacy_state", "login", "login"],
   ["inbox", "user_id", "uid"], ["inbox_prefs", "user_id", "uid"], ["inbox_pending", "camfrog", "login"],
-  ["dm_prefs", "user_id", "uid"], ["dm_alerts", "user_id", "uid"], ["dm_blocks", "blocker_id", "uid"], ["dm_blocks", "blocked_id", "uid"], ["pepe_dm_jobs", "user_id", "uid"],
+  ["dm_prefs", "user_id", "uid"], ["dm_alerts", "user_id", "uid"], ["dm_blocks", "blocker_id", "uid"], ["dm_blocks", "blocked_id", "uid"],
+  ["login_blocks", "blocker_id", "uid"], ["veil_blocks", "blocker_id", "uid"], ["veil_blocks", "blocked_id", "uid"],   // 1.99?? padppl (blocks.js) ["pepe_dm_jobs", "user_id", "uid"],
   ["mention_prefs", "user_id", "uid"], ["mention_words", "user_id", "uid"], ["follow_prefs", "user_id", "uid"], ["golive_prefs", "user_id", "uid"],
   ["follows", "follower", "uid"], ["user_language", "userId", "uid"], ["user_timezone", "userId", "uid"], ["profile_layout", "user_id", "uid"],
   ["user_badge_showcase", "user_id", "uid"], ["story_prefs", "user_id", "uid"], ["story_hides", "user_id", "uid"], ["story_saves", "user_id", "uid"],

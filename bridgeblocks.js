@@ -99,30 +99,20 @@ async function hasArchived() {
 }
 
 /**
- * Who a mod means: "🌐name" (a PATV username), "u:<userId>", a linked chat login, or a PATV username.
- * -> {userId, username, login} | {error}. A bare name tries the chat login first (what the room sees), then the username.
+ * Who a mod means (1.99?? padppl: targets.js - the one typed-name resolver): "u:<id>", "@name" / "🌐name" (a PATV username only),
+ * "cf:<login>" (a Camfrog login only), or a bare name - which must mean ONE person: a PATV username that is ANOTHER account's linked
+ * Camfrog login (the tricon case) comes back {ambiguous, choices, error} for the caller to answer 409 with, never a guess.
+ * -> {userId, username, login} | {ambiguous, choices, error} | {error}
  */
 async function resolveTarget(raw) {
-  let s = String(raw == null ? "" : raw).trim().replace(/^@/, "");
-  if (!s) return { error: "Who? Give a name." };
-  const live = (await hasArchived()) ? "AND archived_at IS NULL" : "";
-  const pick = (r) => (r ? { userId: String(r.userId), username: r.username, login: r.camfrogUsername || null } : null);
-  const m = ACCT_RE.exec(s);
-  if (m) {
-    const r = (await getQuery(`SELECT userId, username, camfrogUsername FROM users WHERE userId = ? ${live}`, [m[1]]))[0];
-    return pick(r) || { error: "No PATV account has that id." };
-  }
-  let webOnly = false;
-  if (s.startsWith(WEB_MARK)) { s = s.slice(WEB_MARK.length).trim(); webOnly = true; }
-  s = s.replace(/^@/, "");
-  if (!NAME_RE.test(s)) return { error: "That isn't a name." };
-  const low = s.toLowerCase();
-  if (!webOnly) {
-    const r = (await getQuery(`SELECT userId, username, camfrogUsername FROM users WHERE lower(camfrogUsername) = ? ${live} LIMIT 2`, [low]));
-    if (r.length === 1) return pick(r[0]);
-  }
-  const r = (await getQuery(`SELECT userId, username, camfrogUsername FROM users WHERE lower(username) = ? ${live} LIMIT 1`, [low]))[0];
-  return pick(r) || { error: `No PATV account called ${s}.` };
+  const r = await require("./targets").resolve(raw, { allowLogin: false });
+  if (r.error) return r;
+  if (!r.userId) return { error: "That Camfrog login isn't linked to a PATV account." };
+  return { userId: r.userId, username: r.username, login: r.login || null };
+}
+/** 1.99?? padppl: the answer for a target that didn't resolve - 409 + the choices when the name means two people. */
+function targetFail(res, target) {
+  res.status(target.ambiguous ? 409 : 404).json(Object.assign({ ok: false, error: target.error }, target.ambiguous ? { code: "ambiguous", choices: target.choices } : {}));
 }
 
 const rowOut = (r) => r && ({ room: r.room_id, global: r.room_id === "", userId: r.user_id, feature: r.feature || "all", username: r.username, reason: r.reason || "",
@@ -140,7 +130,15 @@ async function active(roomId, userId, feature = "all", t = now()) {
                                ${f === "all" ? "" : "AND feature IN ('all', ?)"}`, args);
   const rank = (x) => (x.room_id !== "" ? 0 : 2) + ((x.feature || "all") === f ? 0 : 1);
   rows.sort((a, b) => rank(a) - rank(b));
-  return rows[0] ? rowOut(rows[0]) : null;
+  if (rows[0]) return rowOut(rows[0]);
+  // 1.99?? padppl: a ban on this person's FROG NAME (padbans.js veil_bans - bridge / pad / site scope) refuses the web bridge too; it
+  // reads like a room block, never says it was a veil ban
+  try {
+    const v = await require("./padbans").veilActive(roomId, userId);
+    if (v) return { room: v.room_id, global: v.room_id === "", userId: String(userId), feature: "all", username: null, reason: v.reason || "", by: "", via: "web",
+                    created: Number(v.created) || 0, until: v.until == null ? null : Number(v.until) };
+  } catch (e) { /* no padbans */ }
+  return null;
 }
 
 /** The refusal text for one block (rowOut) when `feature` was asked for. */
@@ -302,7 +300,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
       if (op === "list") return res.json({ ok: true, blocks: await list(room || null, { withGlobal: true }), v: ver });
       if (op !== "block" && op !== "unblock") return bad(res, 400, "op must be block, unblock or list");
       const target = await resolveTarget(b.target);
-      if (target.error) return bad(res, 404, target.error);
+      if (target.error) return targetFail(res, target);
       const by = { userId: null, name: "chat:" + clean(b.by, 40), via: "chat" };
       try {
         const byAcc = (await getQuery("SELECT userId, username FROM users WHERE lower(camfrogUsername) = ? LIMIT 1", [clean(b.by, 40).toLowerCase()]))[0];
@@ -351,7 +349,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
       const c = await padCtx(req, res, true); if (!c) return;
       const b = req.body || {};
       const target = await resolveTarget(b.target);
-      if (target.error) return bad(res, 404, target.error);
+      if (target.error) return targetFail(res, target);
       const by = { userId: String(c.me.userId), name: c.me.username, via: "web" };
       const feat = b.feature == null || b.feature === "" ? null : featureOf(b.feature);       // 1.99zf: one feature, or all
       if (b.feature != null && b.feature !== "" && !feat) return bad(res, 400, "That isn't a bridge feature.");
@@ -379,7 +377,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
       if (!(await admin(req, res, false))) return;
       if (req.query.target != null) {        // 1.99zf: one account's restrictions (/admin/users#bridgebans)
         const target = await resolveTarget(req.query.target);
-        if (target.error) return bad(res, 404, target.error);
+        if (target.error) return targetFail(res, target);
         return res.json({ ok: true, target, features: ["all", ...FEATURES], blocks: await forUser(target.userId) });
       }
       res.json({ ok: true, blocks: await list(null), features: ["all", ...FEATURES] });
@@ -392,7 +390,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
       const b = req.body || {};
       const room = String(b.room || "").trim().slice(0, 128);
       const target = await resolveTarget(b.target);
-      if (target.error) return bad(res, 404, target.error);
+      if (target.error) return targetFail(res, target);
       const by = { userId: String(me.userId), name: me.username, via: "admin" };
       // 1.99zf: `features` = several at once (the per-account toggles); `feature` one; neither = "all" (unblock: every one)
       let feats = Array.isArray(b.features) ? b.features : b.feature != null && b.feature !== "" ? [b.feature] : null;
@@ -416,6 +414,6 @@ function register(app, { isBotToken, addUser, bySlug }) {
   });
 }
 
-module.exports = { init, register, resolveTarget, active, refusal, refusalText, block, unblock, list, mirror, forSync, forUser, untilFrom, parseHours,
+module.exports = { init, register, resolveTarget, targetFail, active, refusal, refusalText, block, unblock, list, mirror, forSync, forUser, untilFrom, parseHours,
   FEATURES, featureOf,
   version: () => ver, _setClock: (f) => { clock = f; } };

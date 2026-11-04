@@ -476,6 +476,9 @@ const RULES = {
   "messages.sender_id": M(), "messages.deleted_by": M(),
   "dm_member_adds.adder_id": M(), "dm_member_adds.user_id": M(),
   "dm_blocks.blocker_id": M({ key: ["blocked_id"] }), "dm_blocks.blocked_id": M({ key: ["blocker_id"] }),
+  // 1.99?? padppl (blocks.js): a block on an unlinked Camfrog login (one per blocker + login) and on a frog name (stored by the person)
+  "login_blocks.blocker_id": M({ key: ["login"] }), "login_blocks.login": { deny: NAME },
+  "veil_blocks.blocker_id": M(), "veil_blocks.blocked_id": M(), "veil_blocks.blocked_login": { deny: NAME },
   "dm_prefs.user_id": M({ key: [] }), "dm_prefs.who": { deny: "a setting ('everyone' / 'following' / 'nobody')" },
   "dm_alerts.user_id": M({ key: ["conversation_id"], merge: { pending: "SUM", first_at: "MIN", last_msg_id: "MAX", last_alert_at: "MAX" } }),
   "dm_reports.sender_id": M(), "dm_reports.reporter_id": M({ key: ["message_id"] }), "dm_reports.resolved_by": M(),

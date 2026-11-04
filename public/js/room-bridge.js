@@ -595,8 +595,13 @@
       if (m && NAME_CMDS.indexOf(m[1].toLowerCase()) >= 0) return { at: false, start: pos - m[2].length, end: pos, q: m[2] };
       return null;
     }
+    // 1.99?? padppl (owner point 24): "@" inserts the name the person shows as on PATV (p.atValue - never their Camfrog login) and remembers
+    // exactly who it was (p.ref, personref.js) for the say POST's `mentions` - at most 10; the server keeps only those still in the text
+    var mnPicked = [];
     function takeName(p, c) {
-      var val = (c.at ? '@' : '') + p.value, rest = inp.value.slice(c.end);
+      var shown = c.at && p.atValue ? String(p.atValue) : p.value;
+      if (c.at && p.ref) { mnPicked = mnPicked.filter(function (m) { return m.n.toLowerCase() !== shown.toLowerCase(); }); mnPicked.push({ n: shown, ref: p.ref }); if (mnPicked.length > 10) mnPicked.shift(); }
+      var val = (c.at ? '@' : '') + shown, rest = inp.value.slice(c.end);
       inp.value = inp.value.slice(0, c.start) + val + (/^\s/.test(rest) ? '' : ' ') + rest;
       var at = c.start + val.length + 1; if (inp.setSelectionRange) inp.setSelectionRange(at, at);
       closeAc(); paintCount(); inp.focus();
@@ -804,7 +809,7 @@
       for (var i = 0; i < outbox.length; i++) if (outbox[i].st === 'queue') { it = outbox[i]; break; }
       if (!it) return;
       busy = true; it.st = 'posting';
-      post({ text: it.text, cid: it.cid }).then(function (x) {
+      post(it.mn ? { text: it.text, cid: it.cid, mentions: it.mn } : { text: it.text, cid: it.cid }).then(function (x) {
         busy = false;
         if (dead) return;
         if (outbox.indexOf(it) < 0) { pump(); return; }                  // deleted meanwhile
@@ -831,6 +836,10 @@
         return false;
       }
       var it = { cid: newCid(), text: text, at: Date.now(), st: 'queue', mine: true };
+      // 1.99?? padppl: the picked @mentions still in these words (the server checks again and resolves each ref exactly)
+      var lowT = String(text).toLowerCase(), mn = mnPicked.filter(function (m) { return lowT.indexOf('@' + m.n.toLowerCase()) >= 0; });
+      if (mn.length) it.mn = mn;
+      mnPicked = [];
       outbox.push(it);
       place(it);
       pump();

@@ -508,13 +508,16 @@
       root.classList.toggle('rmd-has-pins', !!strip.querySelector('.cs-tile'));
     }
     function visible() { return !D.hidden || !!(pip && !pip.closed && !pip.document.hidden); }
-    function personLine(n, u) {
-      if (!n || !u || u.veil || u.anon || u.self || !u.login || !o.openPerson || !n.querySelector || !(o.signed || o.mod && o.mod.active && o.mod.active())) return;
+    function personLine(n, u, it) {
+      // 1.99?? padppl: a veiled chat line (a frog name, not the viewer's own) opens the person menu too - by its row c (🚫 Block, bans)
+      var vc = u && u.anon && (u.veil === 'incognito' || u.veil === 'hidden') && it && it.c && it.self !== 1 && !it.mask && o.signed ? Number(it.c) : 0;
+      if (!vc && (!n || !u || u.veil || u.anon || u.self || !u.login)) return;
+      if (!n || !o.openPerson || !n.querySelector || !(o.signed || o.mod && o.mod.active && o.mod.active())) return;
       var who = n.querySelector('.who'); if (!who || who.__rmdPerson) return;
       who.__rmdPerson = true;
       function open(e) {
         if (e && (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button > 0)) return;
-        if (e) e.preventDefault(); external(function () { o.openPerson(u, who, false); });
+        if (e) e.preventDefault(); external(function () { o.openPerson(u, who, false, undefined, vc || (it && it.c) || null); });
       }
       if (who.tagName !== 'A') { who.tabIndex = 0; who.setAttribute('role', 'button'); }
       on(who, 'click', open); on(who, 'keydown', function (e) { if (e.key === 'Enter' || (e.key === ' ' && who.tagName !== 'A')) open(e); });
@@ -1300,6 +1303,15 @@
         var hi = menuItem(box, '📜', 'raw', '', null, { href: hist.getAttribute('href') });
         hi.querySelector('.rmd-label').textContent = t('hist_info', 'Visitors read: {span} · how it works', { span: txt(hist).replace(/^📜\s*/, '') });
         hi.title = hist.title || ''; hi.setAttribute('aria-label', hi.querySelector('.rmd-label').textContent);
+      }
+      // 1.99?? padppl: 🔔 the page's mention items (room.ejs mentionItems: "Sound when I'm mentioned", "Mute mentions from this pad") - a hook
+      // only; each item is {icon, label, run, checked?}
+      if (o.mentionItems) {
+        var mis = []; try { mis = o.mentionItems() || []; } catch (e) { mis = []; }
+        mis.forEach(function (x) {
+          var mi = menuItem(box, x.icon, 'raw', '', x.run, typeof x.checked === 'boolean' ? { role: 'menuitemcheckbox', checked: x.checked } : null);
+          var lb = mi.querySelector('.rmd-label'); if (lb) lb.textContent = x.label;
+        });
       }
       // (the window: only while a pad tab of this pad and account has announced itself - it closes the window, that tab restores.
       // 1.99ajh dockpop review: a popped tab answers every heartbeat, and says tab-gone when it leaves - so a tab that went to Hold'em

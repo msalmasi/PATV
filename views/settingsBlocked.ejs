@@ -1,0 +1,58 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /settings/blocked - 1.99?? padppl: 🚫 everyone you blocked, every kind (blocks.js list): accounts (the DM block), Camfrog logins with no
+    PATV account yet, and frog names (only their label, the pad and the day - never who is behind one). Each row unblocks through the
+    same sheet as the person menu (block-sheet.js). Locals: user, blocks {named, logins, veils}. %>
+<%- include('layout', { title: t('settings.blocked.title'), user: user }) %>
+<link rel="stylesheet" href="/public/css/person-sheet.css?v=1">
+<style>
+  .sb .ds-card { display: grid; gap: var(--ds-sp-2h, 10px); }
+  .sb ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .sb li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--ds-line, #2a2a2a); border-radius: 10px; min-width: 0; }
+  .sb li .nm { min-width: 0; overflow-wrap: anywhere; }
+  .sb li small { display: block; color: var(--ds-text-muted, #999); font-size: 12px; }
+  .sb .empty, .sb .mut { margin: 0; color: var(--ds-text-muted, #999); font-size: 14px; }
+  .sb button.un { flex: none; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ds-line-strong, #3a3a3a); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  .sb button.un:focus-visible { outline: 2px solid var(--ds-focus, #8ab4ff); outline-offset: 2px; }
+</style>
+<% const day_ = (ms) => { try { return new Date(Number(ms) || 0).toISOString().slice(0, 10); } catch (e) { return ''; } }; %>
+<main class="ds-page mid sb">
+  <a class="ds-back" href="/settings">← <%- t('sethub.back') %></a>
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🚫</span> <%- t('settings.blocked.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('settings.blocked.h1') %></h1>
+    <p class="ds-lead"><%- t('settings.blocked.lede') %></p>
+  </div>
+
+  <section class="ds-card lg" id="blocked-people" aria-labelledby="sbPeople">
+    <h2 class="ds-h2" id="sbPeople"><%- t('settings.blocked.people') %></h2>
+    <% if (!blocks.named.length && !blocks.logins.length) { %><p class="empty"><%- t('settings.blocked.none') %></p><% } else { %>
+    <ul>
+      <% blocks.named.forEach((b) => { %>
+        <li><span class="nm"><a href="/u/<%= encodeURIComponent(b.username) %>">@<%= b.username %></a><% if (b.display && b.display !== b.username) { %> · <%= b.display %><% } %><small><%- t('settings.blocked.since', { day: day_(b.at) }) %></small></span>
+          <button type="button" class="un" data-block-ref="<%= JSON.stringify({ k: 'user', v: b.username }) %>" data-block-name="@<%= b.username %>" data-block-on="0"><%- t('settings.blocked.unblock') %></button></li>
+      <% }) %>
+      <% blocks.logins.forEach((b) => { %>
+        <li><span class="nm"><%= b.login %><small><%- t('settings.blocked.login_note', { day: day_(b.at) }) %></small></span>
+          <button type="button" class="un" data-block-ref="<%= JSON.stringify({ k: 'lb', v: b.login }) %>" data-block-name="<%= b.login %>" data-block-on="0"><%- t('settings.blocked.unblock') %></button></li>
+      <% }) %>
+    </ul>
+    <% } %>
+  </section>
+
+  <section class="ds-card lg" id="blocked-frogs" aria-labelledby="sbFrogs">
+    <h2 class="ds-h2" id="sbFrogs"><%- t('settings.blocked.frogs') %></h2>
+    <p class="mut"><%- t('settings.blocked.frogs_note') %></p>
+    <% if (!blocks.veils.length) { %><p class="empty"><%- t('settings.blocked.frogs_none') %></p><% } else { %>
+    <ul>
+      <% blocks.veils.forEach((b) => { %>
+        <li><span class="nm">🐸 <%= b.label %><small><%= b.pad ? b.pad.title + ' · ' : '' %><%= day_(b.at) %></small></span>
+          <button type="button" class="un" data-block-ref="<%= JSON.stringify({ k: 'vb', id: b.id }) %>" data-block-name="<%= b.label %>" data-block-veil="1" data-block-on="0"><%- t('settings.blocked.unblock') %></button></li>
+      <% }) %>
+    </ul>
+    <% } %>
+  </section>
+  <p class="mut"><%- t('settings.blocked.where') %></p>
+</main>
+<script src="/public/js/block-sheet.js?v=1" defer></script>
+</body>
+</html>
