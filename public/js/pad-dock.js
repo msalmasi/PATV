@@ -158,6 +158,7 @@
       closeLayer(false);
       if (!current) return;
       var old = current; current = null;
+      if (old.cleanup) old.cleanup();
       if (old.kind === 'full' && D.fullscreenElement && D.exitFullscreen) { try { Promise.resolve(D.exitFullscreen()).catch(function () {}); } catch (e) {} }
       (old.moves || []).slice().reverse().forEach(restore);
       if (old.host) old.host.remove();
@@ -194,12 +195,14 @@
         host.style.insetInlineEnd = 'auto'; host.style.insetBlockEnd = 'auto';
       });
       on(handle, 'pointerup', function () { start = null; clamp(); }); on(W, 'resize', clamp);
+      // 1.99?? review: the panel's window listener goes with the panel (redock), not one more per float
+      return function () { W.removeEventListener('resize', clamp, false); listeners = listeners.filter(function (x) { return x[2] !== clamp; }); };
     }
     function floatChat() {
       if (!chat) return; redock();
       var host = el('section', 'rmd-float'); root.appendChild(host);
       var head = viewbar(host); current = { kind: 'float', host: host, moves: [], focus: D.activeElement };
-      current.moves.push(movable(chat, host, t('chat_away', 'Chat is in a floating window.'))); drag(host, head); changed();
+      current.moves.push(movable(chat, host, t('chat_away', 'Chat is in a floating window.'))); current.cleanup = drag(host, head); changed();
     }
     function full(n) {
       redock(); if (!n) return;
@@ -313,10 +316,17 @@
       if (who.tagName !== 'A') { who.tabIndex = 0; who.setAttribute('role', 'button'); }
       on(who, 'click', open); on(who, 'keydown', function (e) { if (e.key === 'Enter' || (e.key === ' ' && who.tagName !== 'A')) open(e); });
     }
+    var holderKey = null;
     function mic(list) {
       holders = Array.isArray(list) ? list : []; if (!holderBox || !o.person) return;
-      holderBox.textContent = '';
       var max = W.matchMedia && W.matchMedia('(max-width: 760px)').matches ? 1 : 2;
+      // 1.99?? review: drawMic calls this on every /live answer (and on lip-sync redraws); like the On the mic card, redraw only
+      // when the holders change - a rebuild restarted animated name styles and dropped keyboard focus on a chip
+      var key = null;
+      try { key = JSON.stringify(holders) + '|' + max + '|' + (o.signed ? 1 : 0) + (o.mod && o.mod.active && o.mod.active() ? 1 : 0); } catch (e) { key = null; }
+      if (key !== null && key === holderKey) return;
+      holderKey = key;
+      holderBox.textContent = '';
       holders.slice(0, max).forEach(function (u) {
         var chip = el('span', 'rmd-holder'); var content = o.person(u); if (content) chip.appendChild(content);
         holderBox.appendChild(chip); personLine(chip, u);
