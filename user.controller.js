@@ -80,6 +80,8 @@ async function registerUser(req, res) {
   const ip = guard.clientIp(req);
   const wait = registerLimit.blocked(ip);
   if (wait) return back(req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.`);
+  // 1.99?? padppl (review fix): a network ban (netban.js) refuses a new account here, on the form with its message (it was a bare 403 page)
+  try { const NB = require("./netban"); if (NB.isOn()) { const why = await NB.refusal(req, {}); if (why) return back(why); } } catch (e) { /* fail open */ }
 
   let problem;
   if ((problem = guard.checkUsername(username, req))) return back(problem, "username");
@@ -327,6 +329,8 @@ async function loginUser(req, res) {
     if (body.link_sso && /^[a-z]{2,16}$/.test(String(body.link_sso))) await require("./ssolinks").linkPendingTo(req, user, String(body.link_sso)).catch((e) => console.error("[auth] sso link after sign-in:", e.message));
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
+    // 1.99?? padppl (review fix): a network ban's refusal (sessions.signIn, netban.js) is shown as itself on the form - it never names an address
+    if (err && err.code === "network") return back(err.message);
     console.error("[auth] login error:", err && err.message);
     return back(req.t ? req.t('auth.err.login_failed') : "Something went wrong signing you in. Please try again.");
   }

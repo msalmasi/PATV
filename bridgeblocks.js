@@ -131,12 +131,19 @@ async function active(roomId, userId, feature = "all", t = now()) {
   const rank = (x) => (x.room_id !== "" ? 0 : 2) + ((x.feature || "all") === f ? 0 : 1);
   rows.sort((a, b) => rank(a) - rank(b));
   if (rows[0]) return rowOut(rows[0]);
-  // 1.99?? padppl: a ban on this person's FROG NAME (padbans.js veil_bans - bridge / pad / site scope) refuses the web bridge too; it
-  // reads like a room block, never says it was a veil ban
   try {
-    const v = await require("./padbans").veilActive(roomId, userId);
-    if (v) return { room: v.room_id, global: v.room_id === "", userId: String(userId), feature: "all", username: null, reason: v.reason || "", by: "", via: "web",
-                    created: Number(v.created) || 0, until: v.until == null ? null : Number(v.until) };
+    const PB = require("./padbans");
+    const login = await PB.loginOfCached(userId);
+    // 1.99?? padppl review fix: a website ban on this account's Camfrog login made before it had an account (padbans.js pad_login_bans) -
+    // enforced by the login, however the account came to be linked (a !verify, an account Pepe made, a merge)
+    const lb = login ? await PB.loginActive(roomId, login) : null;
+    if (lb) return { room: lb.room_id, global: lb.room_id === "", userId: String(userId), feature: "all", username: null, reason: lb.reason || "", by: lb.by_name || "", via: "web",
+                     created: Number(lb.at) || 0, until: lb.until == null ? null : Number(lb.until) };
+    // 1.99?? padppl: a ban on this person's FROG NAME (padbans.js veil_bans) - THE VEIL RULE: only while they are under a frog name NOW
+    // (veiledNow), never their named activity; it reads like a room block, never says it was a veil ban
+    const v = await PB.veilActive(roomId, userId, { login });
+    if (v && (await PB.veiledNow(userId, login))) return { room: v.room_id, global: v.room_id === "", userId: String(userId), feature: "all", username: null, reason: v.reason || "", by: "", via: "web",
+                                                          created: Number(v.created) || 0, until: v.until == null ? null : Number(v.until) };
   } catch (e) { /* no padbans */ }
   return null;
 }

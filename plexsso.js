@@ -158,6 +158,7 @@ function register(app, { addUser, authView } = {}) {
       req.session.plexPending = { ...who, at: clock(), next: st.next || "" };
       return res.redirect("/auth/plex/new");
     } catch (e) {
+      if (e && e.code === "network") { req.flash("error", e.message); return res.redirect("/login"); }   // 1.99?? padppl: a network ban's own words
       console.error("[plexsso] callback:", e && e.message);
       return fail(req, res, "auth.plex.failed", "Plex sign-in didn't work. Please try again.");
     }

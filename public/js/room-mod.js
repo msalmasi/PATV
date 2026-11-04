@@ -129,6 +129,18 @@
     return !!(u.me || (x.meName && u.patv && u.patv.username && lc(u.patv.username) === lc(x.meName))
       || (x.meLogin && u.login && lc(u.login) === lc(x.meLogin)));
   }
+  /** 1.99?? padppl review fix: the block sheet's identity line for a NAMED person - which one this is when names collide (the tricon case):
+   *  "PATV account @x · Camfrog login y", and "not the Camfrog user" when a web name clashes. Never for a veil. */
+  function whoLine(u) {
+    if (!u || u.anon) return null;
+    var un = u.patv && u.patv.username ? String(u.patv.username) : '', lg = String(u.login || '');
+    var parts = [];
+    if (un) parts.push(tr('js.block.kind_account', 'PATV account @{name}', { name: un }));
+    if (lg && !/^u:/i.test(lg) && !u.acct) parts.push(tr('js.block.kind_login', 'Camfrog login {login}', { login: lg }));
+    else if (un && u.web) parts.push(tr('js.block.kind_web', '🌐 web, no Camfrog link'));
+    if (u.clash) parts.push(tr('js.block.kind_clash', 'not the Camfrog user {login}', { login: String(u.clash) }));
+    return parts.length ? parts.join(' · ') : null;
+  }
   function blockItem(r, blocked) {
     return blocked ? { kind: 'block', id: 'unblock', group: 'safety', label: '✅ ' + tr('js.block.menu_un', 'Unblock'), ref: r, veil: false }
       : { kind: 'block', id: 'block', group: 'safety', label: '🚫 ' + tr('js.block.menu', 'Block…'), ref: r, veil: false, danger: true };
@@ -628,11 +640,14 @@
     }
     function place(p, anchor) {
       if (!anchor || !anchor.getBoundingClientRect || !anchor.isConnected) return;
-      var r = anchor.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+      // (1.99?? padppl review fix: never taller than the window - it scrolls inside itself - measured at its real width)
       var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+      p.style.maxHeight = Math.max(160, vh - 16) + 'px';
+      var r = anchor.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
       var left = Math.max(8, Math.min(r.right - w, vw - w - 8));
       var top = r.bottom + 6;
       if (top + h > vh - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+      else if (top + h > vh - 8) top = Math.max(8, vh - h - 8);          // (neither below nor above: as low as it fits)
       p.style.left = (left + window.scrollX) + 'px';
       p.style.top = (top + window.scrollY) + 'px';
     }
@@ -664,9 +679,16 @@
       function menuEls() { return Array.prototype.filter.call(list.querySelectorAll('[role="menuitem"]'), function (b) { return !b.disabled; }); }
       function focusItem(i) { var bs = menuEls(); if (bs.length) bs[(i + bs.length) % bs.length].focus(); }
       function backToList() { conf.classList.add('hide'); list.classList.remove('hide'); conf.textContent = ''; place(p, anchor); focusItem(0); }
-      var lastGroup = null;
+      var lastGroup = null, saidCf = false;
+      // 1.99?? padppl review fix: the website's own bans and Pepe's Camfrog-room actions each under a heading, so "⛔ Website ban…" and
+      // "🔨 Ban…" can't be mistaken for one another
+      var hasWeb = items.some(function (it) { return it.group === 'ban'; });
       items.forEach(function (it) {
-        if (lastGroup !== null && it.group !== lastGroup) { var sep = el('div', 'pm-pop-sep'); sep.setAttribute('role', 'separator'); list.appendChild(sep); }
+        var head = null;
+        if (it.group !== lastGroup && it.group === 'ban') head = tr('js.pad.menu.h_web', 'Website');
+        else if (hasWeb && !saidCf && it.kind === 'act' && it.group !== lastGroup) { head = tr('js.pad.menu.h_room', 'Camfrog room'); saidCf = true; }
+        if (head) { var gh = el('div', 'pm-pop-gh', head); gh.setAttribute('role', 'presentation'); list.appendChild(gh); }
+        else if (lastGroup !== null && it.group !== lastGroup) { var sep = el('div', 'pm-pop-sep'); sep.setAttribute('role', 'separator'); list.appendChild(sep); }
         lastGroup = it.group;
         var b;
         if (it.kind === 'link') {
@@ -698,7 +720,7 @@
           if (it.kind === 'block') {
             closeMenu(false);
             if (!window.PATVBlockSheet) return;
-            window.PATVBlockSheet.open({ ref: it.ref, slug: slug, name: who, veil: !!it.veil, on: it.id === 'block', anchor: anchor,
+            window.PATVBlockSheet.open({ ref: it.ref, slug: slug, name: who, veil: !!it.veil, on: it.id === 'block', anchor: anchor, who: it.veil ? null : whoLine(u),
               onDone: function (a) { if (!it.veil) localBlk[refKey(it.ref)] = !!a.blocked; if (typeof opts.onBlock === 'function') opts.onBlock(a); } });
             return;
           }
@@ -711,7 +733,7 @@
           // 1.99?? padppl: 🌐🚫 / ⛔ / 🛑 the website's bans and their Lift - the ban sheet (pad-ban-sheet.js)
           if (it.kind === 'ban') {
             closeMenu(false);
-            if (window.PATVBanSheet) window.PATVBanSheet.open({ ref: it.ref, slug: slug, scope: it.scope, lift: !!it.lift, name: who, veil: !!it.veil, anchor: anchor });
+            if (window.PATVBanSheet) window.PATVBanSheet.open({ ref: it.ref, slug: slug, scope: it.scope, lift: !!it.lift, wban: it.wban || null, name: who, veil: !!it.veil, anchor: anchor });
             return;
           }
           if (it.kind === 'pvp') { closeMenu(false); if (extra.pvp && extra.pvp.run) extra.pvp.run(it.id); return; }
@@ -904,6 +926,8 @@
       open: open,
       menu: menu,                          // 1.99dx: the roster's ⋯ popover
       closeMenu: closeMenu,
+      // 1.99?? padppl: place the open menu again (the Dock widens it after menu() - room.ejs decorates it, then calls this)
+      relayout: function () { if (pop && pop._anchor) place(pop, pop._anchor); },
     };
   }
 

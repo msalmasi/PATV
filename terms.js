@@ -61,7 +61,7 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions", "gift-inbox"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
                          "rooms-web-2": () => require("./paddock").current().cfg.mode !== "off",
-                         "net-bans": () => require("./netban").isOn() === true,
+                         "net-bans": () => require("./netban").hasDataNow() === true,     // (review fix: while ANY code is stored, switch or not)
                          "gift-inbox": () => require("./veilgift").isOn() === true,
                          "tx-bar": () => require("./privwire").txBar() === true,
                          "frog-15": () => require("./privwire").isOn() === true,
@@ -97,7 +97,8 @@ async function textDates() {
 }
 
 const padwebOn = () => { try { return require("./paddock").current().cfg.mode !== "off"; } catch (e) { return false; } };
-const netbanOn = () => { try { return require("./netban").isOn() === true; } catch (e) { return false; } };
+// (1.99?? padppl review fix: section 4's network-code paragraph shows while network bans are on OR any code is still stored - netban.hasData)
+const netbanOn = () => { try { const NB = require("./netban"); NB.hasData().catch(() => {}); return NB.hasDataNow() === true; } catch (e) { return false; } };
 const giftsOn = () => { try { return require("./veilgift").isOn() === true; } catch (e) { return false; } };
 
 let ready = null;

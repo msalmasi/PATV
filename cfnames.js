@@ -11,6 +11,11 @@
 //   clashOf(acc, login)  the Camfrog login an account's SHOWN name (username or display name) equals but isn't linked to, or null - the
 //                        page's "not the Camfrog user" tag (u.clash) and the /admin/users#nameclash list
 // Display names stay free text; bridge.withPatv shows a linked account's PATV display name only when it doesn't clash (see there).
+// Review fix (LOOK-ALIKES): a name also clashes when it only LOOKS like a seen login - skeleton(): Unicode compatibility forms folded,
+// Cyrillic / Greek letters that look Latin mapped to them, 0 -> o, 1 / I / i / | -> l, rn -> m, vv -> w, and the separators at either end
+// dropped ("Тricon", "tric0n", "tricon_", "trlcon" all read as "tricon"). An exact match is checked first; a look-alike never counts against
+// the account's OWN linked login (Tricon showing "Tricon" is fine). Admin "Mark OK" marks are kept by account id AND username, so they
+// apply to a linked account's display name on pad lines too (bridge.withPatv knows the username, not the id).
 "use strict";
 const { getQuery, runQuery } = require("./dbUtils");
 
@@ -18,7 +23,27 @@ const REBUILD_MS = 10 * 60 * 1000, PROBE_TTL = 10 * 60 * 1000, LOGIN_RE = /^[\w.
 const REFUSAL = "That name belongs to a Camfrog user. If it's yours, link your Camfrog account first (type !verify in a room with Pepe), then you can take it.";
 let clock = () => Date.now();
 const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
-let SET = new Set(), builtAt = 0, building = null;
+let SET = new Set(), SKEL = new Map(), builtAt = 0, building = null;
+// the look-alike folding (see the header) - a small table, enough for the letters people use to pass for a Latin name
+const CONF = { "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0443": "y", "\u0445": "x", "\u0456": "i", "\u0458": "j",
+  "\u0455": "s", "\u04bb": "h", "\u0501": "d", "\u0261": "g", "\u0442": "t", "\u043a": "k", "\u043c": "m", "\u043d": "h", "\u0432": "b", "\u0433": "r",
+  "\u03bf": "o", "\u03b1": "a", "\u03b5": "e", "\u03b9": "i", "\u03ba": "k", "\u03bd": "v", "\u03c1": "p", "\u03c4": "t", "\u03c5": "u", "\u03c7": "x" };
+const SK_MEMO = new Map();
+function skeleton(v) {
+  const raw = String(v == null ? "" : v);
+  const m = SK_MEMO.get(raw);
+  if (m !== undefined) return m;
+  const out = skel(raw);
+  SK_MEMO.set(raw, out);
+  if (SK_MEMO.size > 20000) SK_MEMO.clear();
+  return out;
+}
+function skel(raw) {
+  let x = raw.normalize("NFKC").toLowerCase();
+  x = Array.from(x).map((ch) => CONF[ch] || ch).join("");
+  x = x.replace(/0/g, "o").replace(/[1i|!]/g, "l").replace(/rn/g, "m").replace(/vv/g, "w").replace(/^[._\-]+|[._\-]+$/g, "");
+  return x;
+}
 const probes = new Map();                 // name -> {hit, at}
 const okMarks = new Map();                // "userId|name" -> true (name_clash_ok)
 
@@ -38,8 +63,16 @@ async function rebuild() {
         for (const u of [...(R.members || []), ...(R.mic || [])]) if (u && !u.anon && u.login && !/^u:/i.test(u.login)) add(u.login);
       }
     } catch (e) { /* no bridge */ }
-    try { await init(); okMarks.clear(); for (const r of await getQuery("SELECT user_id, name FROM name_clash_ok")) okMarks.set(r.user_id + "|" + low(r.name), true); } catch (e) { /* none */ }
-    SET = s; builtAt = clock();
+    try {
+      await init(); okMarks.clear();
+      for (const r of await getQuery("SELECT o.user_id, o.name, u.username FROM name_clash_ok o LEFT JOIN users u ON u.userId = o.user_id")) {
+        okMarks.set(r.user_id + "|" + low(r.name), true);
+        if (r.username) okMarks.set("@" + low(r.username) + "|" + low(r.name), true);
+      }
+    } catch (e) { /* none */ }
+    const k = new Map();
+    for (const l of s) { const sk = skeleton(l); if (!sk) continue; const a = k.get(sk); if (a) { if (a.length < 8) a.push(l); } else k.set(sk, [l]); }
+    SET = s; SKEL = k; builtAt = clock();
   })().finally(() => { building = null; });
   return building;
 }
@@ -63,7 +96,23 @@ async function seen(name) {
   return hit;
 }
 /** A live roster just listed these logins (bridge.js ingest) - they count as seen at once. */
-function noteLogins(logins) { for (const v of logins || []) { const l = low(v); if (LOGIN_RE.test(l)) SET.add(l); } }
+function noteLogins(logins) {
+  for (const v of logins || []) {
+    const l = low(v); if (!LOGIN_RE.test(l) || SET.has(l)) continue;
+    SET.add(l);
+    const sk = skeleton(l), a = SKEL.get(sk); if (a) { if (a.length < 8 && !a.includes(l)) a.push(l); } else if (sk) SKEL.set(sk, [l]);
+  }
+}
+/** A seen login that `name` only LOOKS like (never `own`, never one whose look `own` shares) - or null. Sync, from the cached set. */
+function lookAlike(name, own = null) {
+  const sk = skeleton(name);
+  if (!sk) return null;
+  const o = low(own);
+  if (o && skeleton(o) === sk) return null;                     // their own login's look (Tricon showing "Tricon")
+  const a = SKEL.get(sk);
+  return a ? a.find((l) => l !== o) || null : null;
+}
+const okMarked = (userId, username, l) => !!(okMarks.get(String(userId || "") + "|" + l) || (username && okMarks.get("@" + low(username) + "|" + l)));
 
 async function linkedLoginOf(userId) {
   if (!userId) return null;
@@ -76,22 +125,35 @@ const isAuto = (name) => { try { return require("./autoaccount").isAutoName(name
 async function nameRefusal(name, userId = null, req = null) {
   const l = low(name);
   if (!LOGIN_RE.test(l) || isAuto(name)) return null;
-  if (!(await seen(l))) return null;
-  if (userId && (await linkedLoginOf(userId)) === l) return null;              // their own linked login
-  if (userId && okMarks.get(String(userId) + "|" + l)) return null;            // an admin marked it OK
+  const own = userId ? await linkedLoginOf(userId) : null;
+  let hit = (await seen(l)) ? l : null;
+  if (hit && own === hit) return null;                                         // their own linked login
+  if (!hit) {                                                                  // review fix: a look-alike of a seen login
+    if (stale()) { try { await rebuild(); } catch (e) { /* keep the old set */ } }
+    hit = lookAlike(name, own);
+  }
+  if (!hit) return null;
+  if (userId && okMarks.get(String(userId) + "|" + hit)) return null;          // an admin marked it OK
   return req && req.t && req.t.has && req.t.has("auth.err.username_camfrog") ? req.t("auth.err.username_camfrog") : REFUSAL;
 }
 
 /** The Camfrog login `shown` (an account's username or display name) equals while that account isn't linked to it - or null. Sync:
  *  reads the cached set (callers on the hot path); a stale set still answers. */
-function clashOf(userId, username, shown, ownLogin) {
+function clashOf(userId, username, shown, ownLogin, { onlyShown = false } = {}) {
   const own = low(ownLogin);
-  for (const v of [shown, username]) {
-    const l = low(v);
-    if (!l || !LOGIN_RE.test(l) || l === own || isAuto(v)) continue;
-    if (SET.has(l) && !okMarks.get(String(userId || "") + "|" + l)) return l;
-  }
   if (stale()) rebuild().catch(() => {});
+  const names = onlyShown ? [shown] : [shown, username];
+  for (const v of names) {
+    const l = low(v);
+    if (!l || l === own || isAuto(v)) continue;
+    if (LOGIN_RE.test(l) && SET.has(l) && !okMarked(userId, username, l)) return l;
+  }
+  // review fix: a name that only LOOKS like a seen login ("Тricon", "tric0n", "tricon_") - never against their own login's look
+  for (const v of names) {
+    if (!v || isAuto(v) || low(v) === own) continue;
+    const la = lookAlike(v, own);
+    if (la && !okMarked(userId, username, la)) return la;
+  }
   return null;
 }
 
@@ -118,6 +180,7 @@ async function markOk(me, userId, name) {
   await init();
   await runQuery("INSERT OR IGNORE INTO name_clash_ok (user_id, name, by_id, at) VALUES (?, ?, ?, ?)", [String(userId), low(name), String(me.userId), clock()]);
   okMarks.set(String(userId) + "|" + low(name), true);
+  try { const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [String(userId)]))[0]; if (u && u.username) okMarks.set("@" + low(u.username) + "|" + low(name), true); } catch (e) { /* by id then */ }
   await require("./adminaudit").record({ userId: me.userId, username: me.username }, "name_clash", { userId: String(userId), username: null }, { op: "ok", name: low(name) }, null);
 }
 
@@ -145,10 +208,14 @@ async function adminRename(me, userId, newName) {
 }
 
 function register(app, { addUser }) {
-  init().catch((e) => console.error("[cfnames] init:", e.message));
+  // (review fix: the seen set is built at start, so the first polls after a restart already carry the "not the Camfrog user" tags)
+  init().then(() => rebuild()).catch((e) => console.error("[cfnames] init:", e.message));
   const SP = require("./siteperms"), guard = require("./middleware/authGuard");
   const meOf = async (req) => (req.user && req.user.userId ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0] : null);
-  const fail = (res, e) => res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong." });
+  const fail = (res, e) => {
+    if (!(e && e.status)) console.error("[cfnames]", e);                // (review fix: a 500 leaves a log line)
+    res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong." });
+  };
   app.get("/api/admin/nameclash", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try { const me = await meOf(req); if (!SP.can(me, "accounts.name_clash")) return res.status(403).json({ ok: false, error: "Admins only." }); res.json({ ok: true, list: await clashes() }); }
@@ -167,5 +234,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, seen, noteLogins, nameRefusal, clashOf, clashes, markOk, adminRename, rebuild, REFUSAL,
-  _setClock: (f) => { clock = f; }, _reset: () => { SET = new Set(); builtAt = 0; probes.clear(); okMarks.clear(); }, _add: (l) => SET.add(low(l)) };
+module.exports = { init, register, seen, noteLogins, nameRefusal, clashOf, lookAlike, skeleton, clashes, markOk, adminRename, rebuild, REFUSAL,
+  _setClock: (f) => { clock = f; }, _reset: () => { SET = new Set(); SKEL = new Map(); builtAt = 0; probes.clear(); okMarks.clear(); }, _add: (l) => noteLogins([l]) };

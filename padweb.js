@@ -27,8 +27,11 @@
 // back, from any page - the homepage Dock included), at most MAX_PER_ROOM per room, forgotten on a restart. forRoom lists the union:
 //   act: 1          the pad's chat is open (the pad page or its chat window polled in the last 90 s) - ACTIVE
 //   act: 0, ago: n  posted n minutes ago, chat not open now - INACTIVE (the page dims it)
-// EVERY exclusion below runs the same for both kinds. Also left out (padppl blocks): someone who blocked the viewer by a frog name or
-// by the viewer's login (blocks.js veilBlockersOf) - the veil rule: the blocked person doesn't see the blocker.
+// EVERY exclusion below runs the same for both kinds. Also left out (padppl blocks): someone who blocked the viewer's Camfrog login by
+// name before it had an account (blocks.js loginBlockersOf - a named block, like dm_blocks). Review fix (no unmasking): only a line that
+// went out UNDER THE PERSON'S NAME notes them (bridge.js ingest -> bridge-relay notePosted -> notePostNamed: the room's own echo was a
+// named line, and they weren't incognito / hidden when it came) - a frog-named line or a hidden bar never does, so turning incognito off
+// later can't put a name next to "posted 10 min ago" and the frog line said then.
 "use strict";
 const { getQuery } = require("./dbUtils");
 
@@ -61,6 +64,21 @@ function notePost(roomId, user, login, at = clock()) {
   m.delete(id);
   m.set(id, { userId: id, username: String(user.username), login: login ? String(login).toLowerCase() : null, at: Number(at) || clock() });
   while (m.size > MAX_PER_ROOM) m.delete(m.keys().next().value);
+}
+/** 1.99?? padppl review fix: notePost only for a line that went out under the person's NAME - nobody hides that key now (the sticky
+ *  hidden sets: incognito, !bridge hide, forget-me...) and Incognito is off (a FRESH read - never the 30 s cache, a switch just
+ *  flipped counts). Fails closed (a failed check notes nothing). Never throws. */
+async function notePostNamed(roomId, user, login, at = clock()) {
+  try {
+    if (!roomId || !user || !user.userId || !user.username) return false;
+    const id = String(user.userId), l = login ? String(login).toLowerCase() : null;
+    const keys = [...(l ? [l] : []), "u:" + id];
+    if (keys.some((k) => hiddenKey(k))) return false;
+    const rows = await getQuery(`SELECT "on" AS "on" FROM incognito_state WHERE login IN (${keys.map(() => "?").join(",")})`, keys);
+    if (rows.some((r) => r && Number(r.on) === 1)) return false;
+    notePost(roomId, user, l, at);
+    return true;
+  } catch (e) { return false; }
 }
 function sweep(roomId, now = clock()) {
   const m = rooms.get(roomId); if (!m) return [];
@@ -114,8 +132,9 @@ async function blocksOf(viewerId) {
   let set = null;
   try {
     set = await require("./messages").cardBlocks(k);
-    // 1.99?? padppl: + whoever blocked this viewer by a frog name / login (they stay off the viewer's list - the veil rule)
-    for (const id of await require("./blocks").veilBlockersOf(k)) set.add(String(id));
+    // 1.99?? padppl: + whoever blocked this viewer's Camfrog login by name before it had an account (a named block, like dm_blocks).
+    // Never a frog-name block: THE VEIL RULE - it never changes what the blocked person sees (blocks.js)
+    for (const id of await require("./blocks").loginBlockersOf(k)) set.add(String(id));
   } catch (e) { set = null; }
   keep(blockCache, k, { set, at: now });
   return set;
@@ -159,6 +178,6 @@ async function forRoom(R, me = null, tipOf = null) {
   return out.sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0) || (b.act || 0) - (a.act || 0) || a.display.localeCompare(b.display));
 }
 
-module.exports = { note, notePost, forRoom, sweep, sweepPosted, TTL_MS, POST_TTL_MS, MAX_PER_ROOM,
+module.exports = { note, notePost, notePostNamed, forRoom, sweep, sweepPosted, TTL_MS, POST_TTL_MS, MAX_PER_ROOM,
   _setClock: (f) => { clock = f || (() => Date.now()); },
   _reset: () => { rooms.clear(); posted.clear(); incogCache.clear(); privCache.clear(); blockCache.clear(); } };

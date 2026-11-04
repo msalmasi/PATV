@@ -1,58 +1,101 @@
-/* person-sheet.css - 1.99?? padppl: the 🚫 Block sheet (block-sheet.js) and the ⛔ Ban sheet (pad-ban-sheet.js) - one modal look,
-   site tokens with dark fallbacks; no layout change to anything else on the page. */
-.psh { padding: 0; border: 1px solid var(--ds-line-strong, #3a3a3a); border-radius: 14px; background: var(--ds-surface, #131313); color: var(--ds-text, #eee);
-       width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
-.psh::backdrop { background: rgba(0, 0, 0, .62); }
-.psh-in { display: grid; gap: 12px; padding: 18px 18px 16px; }
-.psh-t { margin: 0; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
-.psh-sub { margin: -6px 0 0; font-size: 13px; color: var(--ds-text-muted, #aaa); overflow-wrap: anywhere; }
-.psh-p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ds-text, #ddd); }
-.psh-hint { margin: 0; font-size: 12px; color: var(--ds-text-muted, #999); }
-.psh-k { font-size: 11px; color: var(--ds-text-muted, #999); text-transform: uppercase; letter-spacing: .08em; margin: 0; }
-.psh-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.psh-btn { min-height: 36px; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--ds-line-strong, #3a3a3a); background: #1b1b1b; color: inherit;
-           font: inherit; font-size: 14px; cursor: pointer; }
-.psh-btn:hover { background: #232323; }
-.psh-btn:focus-visible, .psh input:focus-visible, .psh textarea:focus-visible { outline: 2px solid var(--ds-focus, #8ab4ff); outline-offset: 2px; }
-.psh-btn.danger { border-color: #7a2222; background: #2a1010; color: #ffd0d0; }
-.psh-btn.danger:hover { background: #3a1515; }
-.psh-btn.go { border-color: #2f6b3a; background: #12301a; color: #d8f5dd; }
-.psh-btn[disabled] { opacity: .55; cursor: default; }
-.psh-out { margin: 0; font-size: 13px; min-height: 1em; overflow-wrap: anywhere; }
-.psh-out.ok { color: #b9e8c0; } .psh-out.bad { color: #ffb4b4; }
-.psh-opts { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
-.psh-opt { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; padding: 8px 10px; border: 1px solid #2a2a2a; border-radius: 10px;
+/* person-sheet.css - 1.99?? padppl: the 🚫 Block (block-sheet.js), ⛔ Ban / ↩️ Lift (pad-ban-sheet.js) and 🎁 Gift (gift-sheet.js) sheets - the
+   💸 Tip sheet's look (room-mod.css .pm-dlg: gold-tinted border, a header with the emoji title and ✕, a divider, a bottom sheet on phones),
+   design-system tokens only; plus folded lines, mention chips and the idle 🌐 rows. No layout change to anything else on the page. */
+.psh { padding: 0; border: 1px solid #3a3420; border-radius: 14px; background: var(--ds-surface, #121212);
+       color: var(--ds-text, #e6e6e6); width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 48px); font-family: var(--ds-font, system-ui, sans-serif);
+       box-shadow: 0 18px 60px rgba(0, 0, 0, .7); }
+.psh::backdrop { background: var(--ds-scrim, rgba(0, 0, 0, .62)); }
+.psh-in { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: calc(100vh - 48px); }
+.psh-h { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 14px 16px 10px; border-bottom: 1px solid var(--ds-line, #262626); }
+.psh-t { margin: 0; font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; min-width: 0; color: var(--ds-text-strong, #fff); }
+.psh-x { appearance: none; min-height: 30px; padding: 2px 10px; border-radius: 8px; border: 1px solid var(--ds-line-strong, #333); background: var(--ds-surface-2, #18181b);
+         color: var(--ds-text, #e6e6e6); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }
+.psh-x:hover, .psh-x:focus-visible { border-color: var(--ds-gold-line, #6b5a20); }
+.psh-b { overflow-y: auto; padding: 12px 16px 16px; display: grid; gap: 10px; align-content: start; }
+.psh-sub { margin: 0; font-size: 13px; color: var(--ds-text-muted, #9a9a9a); overflow-wrap: anywhere; }
+.psh-p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ds-text, #e6e6e6); }
+.psh-hint { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ds-text-muted, #9a9a9a); }
+.psh-k { font-size: 12px; color: var(--ds-text-muted, #9a9a9a); letter-spacing: .04em; margin: 4px 0 0; font-weight: bold; }
+.psh-fld { display: grid; gap: 6px; }
+.psh-fld .psh-k { margin: 0; }
+.psh-need { margin: 0; font-size: 12px; color: var(--ds-text-muted, #9a9a9a); min-height: 0; }
+.psh-need:empty { display: none; }
+.psh-need.bad { color: var(--ds-warn, #f2c46d); }
+.psh-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.psh-btn { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px; padding: 6px 14px; border-radius: 8px;
+           border: 1px solid var(--ds-line-strong, #333); background: var(--ds-surface-2, #18181b); color: var(--ds-text, #e6e6e6); font: inherit; font-size: 14px; cursor: pointer; }
+.psh-btn:hover { border-color: var(--ds-gold-line, #6b5a20); }
+.psh-btn:focus-visible, .psh-x:focus-visible, .psh input:focus-visible, .psh textarea:focus-visible { outline: 2px solid var(--ds-gold, #ffcf40); outline-offset: 2px; }
+.psh-btn.danger { border-color: var(--ds-danger-line, #7a3a3a); background: var(--ds-danger-fill, #5a2a2a); color: var(--ds-danger-ink, #f6c6c6); font-weight: bold; }
+.psh-btn.go { border-color: var(--ds-green, #4caf50); background: var(--ds-green, #4caf50); color: var(--ds-on-ac, #04150a); font-weight: bold; }
+.psh-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.psh-out { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.psh-out:empty { display: none; }
+.psh-out.ok { color: var(--ds-ok, #81c784); } .psh-out.bad { color: var(--ds-danger, #ffb3b3); }
+.psh-opts { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.psh-opts legend { padding: 0; margin-bottom: 6px; }
+.psh-opt { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; padding: 8px 10px; border: 1px solid var(--ds-line, #262626); border-radius: 10px;
            font-size: 14px; cursor: pointer; }
-.psh-opt:has(input:checked) { border-color: #6b5a20; background: #1d1a0f; }
-.psh-opt small { display: block; color: var(--ds-text-muted, #999); font-size: 12px; }
+.psh-opt:has(input:checked) { border-color: var(--ds-gold-line, #6b5a20); background: var(--ds-gold-bg, rgba(255, 215, 64, .08)); }
+.psh-opt small, .psh-ck small { display: block; color: var(--ds-text-muted, #9a9a9a); font-size: 12px; }
 .psh-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .psh-chip { position: relative; }
 .psh-chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.psh-chip span { display: inline-block; padding: 5px 12px; border-radius: 999px; border: 1px solid #333; font-size: 13px; }
-.psh-chip input:checked + span { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }
-.psh-chip input:focus-visible + span { outline: 2px solid var(--ds-focus, #8ab4ff); outline-offset: 2px; }
-.psh textarea, .psh input[type=text] { width: 100%; box-sizing: border-box; background: #0d0d0d; color: #eee; border: 1px solid var(--ds-line-strong, #3a3a3a);
-           border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 14px; }
-.psh-kind { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; color: #ccc; margin-right: 6px; }
-.psh-refuse { margin: 0; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px dashed #444; color: #ccc; background: #151515; }
-.psh-choices { display: grid; gap: 6px; }
-@media (max-width: 420px) { .psh-in { padding: 14px; } .psh-row .psh-btn { flex: 1 1 auto; } }
-/* the folded line of someone you blocked (chatlog-core.js) and the 🚫 / ✅ menu items */
+.psh-chip span { display: inline-block; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--ds-line-strong, #333); font-size: 13px; white-space: nowrap; }
+.psh-chip input:checked + span { border-color: var(--ds-gold-line, #6b5a20); background: var(--ds-gold-bg, rgba(255, 215, 64, .08)); color: var(--ds-gold-text, #ffe082); font-weight: bold; }
+.psh-chip input:focus-visible + span { outline: 2px solid var(--ds-gold, #ffcf40); outline-offset: 2px; }
+/* the gift amounts: an even grid, never one chip alone on a line */
+.psh-amounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
+.psh-amounts .psh-chip span { display: block; text-align: center; }
+.psh textarea, .psh input[type=text] { width: 100%; box-sizing: border-box; background: var(--ds-sunken, #0c0c0c); color: var(--ds-text, #e6e6e6); border: 1px solid var(--ds-line-strong, #333);
+           border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; margin: 0; }
+/* the admins' networks box - its own panel, not another "where" choice */
+.psh-nets { display: grid; gap: 6px; padding: 10px; border-radius: 10px; border: 1px dashed var(--ds-line-strong, #333); background: var(--ds-sunken, #0c0c0c); }
+.psh-ck { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: 14px; cursor: pointer; }
+.psh-ck.sm { font-size: 13px; align-items: center; }
+.psh-ex { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.psh-mono { font-family: var(--ds-font-mono, ui-monospace, monospace); }
+.psh-refuse { margin: 0; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px dashed var(--ds-line-strong, #333); color: var(--ds-text-2, #cfcfcf); background: var(--ds-sunken, #0c0c0c); }
+.psh .psh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* phones: a bottom sheet, like the 💸 Tip sheet and the Dock's own sheets */
+@media (max-width: 520px) {
+  .psh { width: 100vw; max-width: 100vw; max-height: 92vh; margin: auto 0 0; border-radius: 14px 14px 0 0; border-bottom: 0; }
+  .psh-in { max-height: 92vh; }
+  .psh-row .psh-btn { flex: 1 1 auto; }
+}
+/* the person menu's group headings (room-mod.js: "Website" / "Camfrog room") */
+.pm-pop-gh { margin: 6px 6px 2px; padding-top: 6px; border-top: 1px solid var(--ds-line, #262626); font-size: 11px; font-weight: bold; letter-spacing: .06em;
+             text-transform: uppercase; color: var(--ds-text-muted, #9a9a9a); }
+/* the folded line of someone you blocked (chatlog-core.js) */
 .line.is-blocked-fold { opacity: .75; }
-.line .blk-fold { font-size: 12px; color: var(--ds-text-muted, #999); font-style: italic; }
-.line .blk-fold button { margin-left: 6px; font: inherit; font-style: normal; font-size: 12px; background: none; border: 0; color: var(--ds-link, #9cc3ff);
+.line .blk-fold { font-size: 12px; color: var(--ds-text-muted, #9a9a9a); font-style: italic; }
+.line .blk-fold button { margin-left: 6px; font: inherit; font-style: normal; font-size: 12px; background: none; border: 0; color: var(--ds-ac-2, #81c784);
                          text-decoration: underline; cursor: pointer; padding: 0; }
-/* 1.99?? padppl: the people list's INACTIVE 🌐 rows (posted in the last hour, chat not open now) */
-.rmd-web.is-idle { opacity: .55; }
+/* 1.99?? padppl: the people list's INACTIVE 🌐 rows (posted in the last hour, chat not open now) - dimmed, with a visible "23m" (a title
+   never reaches a touch screen); the "not the Camfrog user" tag stays at full strength */
+.rmd-web.is-idle > :not(.nm), .rmd-web.is-idle .nm > :not(.who-web):not(.web-ago), .rmd-web.is-idle .who-web > :not(.clash-tag) { opacity: .55; }
+.rmd-web .web-ago { margin-left: 4px; font-size: 11px; color: var(--ds-text-muted, #9a9a9a); white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* the "not the Camfrog user" tag beside a 🌐 name that equals a Camfrog login */
-.clash-tag { display: inline-block; margin-left: 4px; font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid #6b3a1a; color: #f4c08a;
-             background: #24160c; white-space: nowrap; vertical-align: middle; }
-/* a chat line that @mentions you, and a mention chip */
-.line.is-mention { box-shadow: inset 3px 0 0 #d6b44a; background: rgba(214, 180, 74, .08); }
-.mention { font-weight: 600; border-radius: 4px; padding: 0 2px; background: rgba(140, 170, 255, .12); }
-.mention.mention-me { background: rgba(214, 180, 74, .22); }
+.clash-tag { display: inline-block; margin-left: 4px; font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--ds-warn-line, #6b531e);
+             color: var(--ds-warn, #f2c46d); background: var(--ds-warn-bg, rgba(224, 160, 48, .10)); white-space: nowrap; vertical-align: middle; }
+/* a chat line that @mentions you, and a mention chip (kept on one line; its flair as the emoji only) */
+.line.is-mention { box-shadow: inset 3px 0 0 var(--ds-gold, #ffcf40); background: var(--ds-gold-bg, rgba(255, 215, 64, .08)); }
+.mention { font-weight: 600; border-radius: 4px; padding: 0 2px; background: rgba(140, 170, 255, .12); white-space: nowrap; display: inline-block; max-width: 100%;
+           overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; text-decoration: none; }
+.mention.mention-me { background: rgba(255, 207, 64, .22); }
+.mention .mn-fl { margin-left: 2px; font-weight: normal; }
 /* the people list: a 🌐 row named like a Camfrog user keeps its "not the Camfrog user" tag in view - it wraps under the name */
 main.rm.rm-dock #rmPeople .nm:has(.clash-tag) { flex-wrap: wrap; white-space: normal; overflow: visible; }
 main.rm.rm-dock #rmPeople .nm > .who-web:has(> .clash-tag) { display: flex; flex-wrap: wrap; align-items: center; column-gap: 2px; row-gap: 1px; white-space: normal; overflow: visible; min-inline-size: 0; }
 main.rm.rm-dock #rmPeople .nm > .who-web > .clash-tag { margin-left: 0; }
-.psh .psh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* the composer's @ list: the tag after a clashing 🌐 name */
+.rb-ac .clash-tag, .rmd-ac .clash-tag { margin-left: 6px; }
+/* Windows high contrast: the picked choice, the line that names you and its chip stay visible */
+@media (forced-colors: active) {
+  .psh { border: 1px solid CanvasText; }
+  .psh-chip input:checked + span, .psh-opt:has(input:checked) { outline: 2px solid Highlight; outline-offset: 1px; forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .line.is-mention { border-inline-start: 3px solid Highlight; box-shadow: none; }
+  .mention { outline: 1px solid CanvasText; }
+  .mention.mention-me { outline: 2px solid Highlight; }
+  .clash-tag { border-color: CanvasText; }
+}

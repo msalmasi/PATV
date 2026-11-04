@@ -81,7 +81,13 @@
       if (!value || /^u:/i.test(value)) return;
       var k = value.toLowerCase(); if (seen[k]) return; seen[k] = 1;
       var shown = label(u), cmd = !veil && !u.web && !u.acct && !!u.login && !/^u:/i.test(String(u.login));
-      out.push({ value: value, name: shown, login: !veil && u.login && String(u.login).toLowerCase() !== String(shown).toLowerCase() ? String(u.login) : '', tag: veil ? _t('js.pad.veil.incognito', 'incognito') : '', u: u, recent: !!rec, cmd: cmd });
+      // 1.99?? padppl review fix (owner point 24, here too): after "@" the name the person SHOWS as on PATV (a frog name stays a frog name),
+      // never their Camfrog login (that's for commands: `value`), with `ref` = exactly who it is - the same as the pad page (room.ejs acPeople)
+      var lg = String(u.login || ''), un = !veil && u.patv && u.patv.username ? String(u.patv.username) : '';
+      var ref = veil ? (u.id ? { k: 'veil', id: String(u.id) } : null) : lg && !u.acct ? { k: 'login', v: lg } : un ? { k: 'user', v: un } : null;
+      var sub = un && un.toLowerCase() !== String(shown).toLowerCase() ? '@' + un : (!veil && lg && lg.toLowerCase() !== String(shown).toLowerCase() ? lg : '');
+      out.push({ value: value, atValue: veil ? String(u.alias) : String(shown || value), ref: ref, name: shown, login: sub, tag: veil ? _t('js.pad.veil.incognito', 'incognito') : '',
+                 u: u, recent: !!rec, cmd: cmd, clash: !veil && u.clash ? String(u.clash) : null });
     }
     (latest && latest.mic || []).forEach(function (u) { add(u); });
     (latest && latest.members || []).forEach(function (u) { add(u); });
@@ -146,6 +152,10 @@
   function apply(d, late) {
     if (!d) return;
     latest = d;
+    // 1.99?? padppl review fix: the viewer's own blocks (their named lines fold) and who they are (lines that @mention them are marked) -
+    // as on the pad page (chatlog-core.js ctx.blk / ctx.me)
+    rctx.blk = d.blk || null;
+    if (d.me && d.me.patv) rctx.me = { username: d.me.patv.username, login: /^u:/i.test(String(d.me.login || '')) ? null : d.me.login, display: d.me.display };
     var near = !started || nearBottom();
     if (started && d.cursor < cursor) { started = false; cursor = 0; }
     if (d.jc) { jcTok = d.jc; jcAt = Number(String(d.jc).split('.')[1]) || jcAt; }

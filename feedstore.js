@@ -592,13 +592,18 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
   const bans = await getQuery("SELECT room_id, reason, until FROM feed_bans WHERE user_id = ? AND (until IS NULL OR until > ?)", [u.userId, t]);
   const globalBan = bans.find((b) => b.room_id === "");
   if (globalBan) return { status: 403, message: "You can't post on the feed" + (globalBan.until ? ` until ${new Date(globalBan.until).toUTCString()}` : "") + "." };
-  // 1.99?? padppl: a ban on this person's frog name (padbans.js) - refuses posting only, says nothing about why it applies
+  // 1.99?? padppl: a website ban on this account's Camfrog login made before it had an account (padbans.js pad_login_bans, whole pad /
+  // site) - review fix: enforced by the login however the account came to be linked. (A ban on a FROG NAME never refuses a post: posts
+  // are named - padbans.js THE VEIL RULE.)
   try {
     const PB = require("./padbans");
-    const site = await PB.veilActive("", u.userId, { scopes: ["site"] });
-    if (site) return { status: 403, message: "You can't post on the feed" + (site.until ? ` until ${new Date(Number(site.until)).toUTCString()}` : "") + "." };
-    for (const rid of roomIds) {
-      if (rid && (await PB.veilActive(rid, u.userId, { scopes: ["pad"] }))) { const R = rooms.getCached(rid); return { status: 403, message: `You can't post in ${R ? R.title : rid}.` }; }
+    const login = await PB.loginOfCached(u.userId);
+    if (login) {
+      const site = await PB.loginActive("", login, ["site"]);
+      if (site) return { status: 403, message: "You can't post on the feed" + (site.until ? ` until ${new Date(Number(site.until)).toUTCString()}` : "") + "." };
+      for (const rid of roomIds) {
+        if (rid && (await PB.loginActive(rid, login, ["pad"]))) { const R = rooms.getCached(rid); return { status: 403, message: `You can't post in ${R ? R.title : rid}.` }; }
+      }
     }
   } catch (e) { /* no padbans */ }
   for (const rid of roomIds) {

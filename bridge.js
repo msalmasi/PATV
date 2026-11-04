@@ -1178,7 +1178,9 @@ async function ingest(body, opts = {}) {
     newItems.push([R.id, it]);
     const mid = ev.data && typeof ev.data.message_id === "string" ? ev.data.message_id : null;   // CL2: Pepe's PCP message id
     archive.push({ roomId: R.id, it, eid: evId || null, mid: it.k === "msg" ? mid : null });
-    if (echoOf) relay.noteEcho(echoOf, it.c, R.id);    // 1.99ye: the sender's pending line becomes this one (1.99acb: same room only)
+    // 1.99ye: the sender's pending line becomes this one (1.99acb: same room only). 1.99?? padppl review fix: `named` = the room's line
+    // shows its sender by name (not a frog name, "someone" or a hidden bar) - only then does the people list say they posted (padweb.js)
+    if (echoOf) relay.noteEcho(echoOf, it.c, R.id, !!(it.k === "msg" && it.u && !it.u.anon && !it.u.self && !it.ah && !it.mask && !it._vz));
   }
   for (const [rid, it] of newItems) {
     const { c, ...rest } = it;                      // (own enumerable fields only: a veiled item's _vz / _vw / _v2 never ride)
@@ -1369,6 +1371,19 @@ const avatarOf = (raw) => require("./userlook").avatarOf(raw);
  *  account (+ `patv` for the profile link / avatar / name colour), else the Camfrog display name,
  *  else the login. `login` stays (the tooltip); `cf` = the Camfrog display name when it isn't the
  *  login. Pepe himself keeps the name Pepe gave. Anonymised users pass through untouched. */
+/** 1.99?? padppl: a line's @mention entries in each person's look - name style (cosmetics) and this pad's flair (F) - frog names plain.
+ *  The live view, the pad's history / search (chatloghist.js) and the chat download (chatlogexport.js) all use it (review fix: the
+ *  history and search chips had no cosmetics). */
+function mnLook(mn, F = null) {
+  if (!Array.isArray(mn)) return mn;
+  return mn.map((m) => {
+    if (!m || m.veil || !m.username) return m;
+    const x = { ...m, style: cosmetics.nameStyle(m.username) || "" };
+    const fl = F ? F.get(String(m.username).toLowerCase()) : null;
+    if (fl) x.flair = require("./padflair").plain(fl);
+    return x;
+  });
+}
 function withPatv(u, C, F = null) {
   if (!u || u.anon || u.former) return u;        // CL3: "former member" (a web member whose account is gone) carries no name
   const login = String(u.login || "");
@@ -1390,7 +1405,9 @@ function withPatv(u, C, F = null) {
     // is one keeps its name with `clash` = that login (the page's "not the Camfrog user" tag)
     const d = str(acc.display, 40) || out.display;
     let cl = null;
-    try { cl = require("./cfnames").clashOf(null, ACCT_RE.test(login) ? acc.username : null, d, ACCT_RE.test(login) ? null : login); } catch (e) { cl = null; }
+    // (review fix: the account's id / username go along, so an admin's "Mark OK" applies here too; a linked login is judged by its display name)
+    const web_ = ACCT_RE.test(login);
+    try { cl = require("./cfnames").clashOf(web_ ? login.slice(2) : null, acc.username, d, web_ ? null : login, { onlyShown: !web_ }); } catch (e) { cl = null; }
     if (!(cl && !ACCT_RE.test(login))) out.display = d;
     if (cl && ACCT_RE.test(login)) out.clash = cl;
   }
@@ -1707,15 +1724,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     if (!it.u) return it;
     const o = { ...it, u: withPatv(it.u, L, F) };
     // 1.99?? padppl: @mention chips in each person's look (name style, this pad's flair) - frog names plain
-    if (Array.isArray(o.mn) && o.mn.length) {
-      o.mn = o.mn.map((m) => {
-        if (!m || m.veil || !m.username) return m;
-        const x = { ...m, style: cosmetics.nameStyle(m.username) || "" };
-        const fl = F ? F.get(String(m.username).toLowerCase()) : null;
-        if (fl) x.flair = require("./padflair").plain(fl);
-        return x;
-      });
-    }
+    if (Array.isArray(o.mn) && o.mn.length) o.mn = mnLook(o.mn, F);
     const j = myC.get(it.c);
     if (j) { o.job = j.id; if (j.cid) o.cid = j.cid; }
     if (own.size && (it.k === "msg" || it.k === "tx") &&
@@ -2537,7 +2546,7 @@ async function forgetVeiled(logins) {
 
 module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99ajc dockfu (D4)
   revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
-  liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
+  liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)
   cursorNow: () => cursor };          // CL8: the newest feed cursor (the history answer's `cursor`)

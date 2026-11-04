@@ -862,12 +862,12 @@
       <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
-  <script src="/public/js/chatlog-core.js?v=11"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
+  <script src="/public/js/chatlog-core.js?v=12"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
   <script src="/public/js/pad-history.js?v=4"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=4"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-  <script src="/public/js/room-bridge.js?v=25"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99?? padppl): @mentions insert the PATV name + carry who %>
+  <script src="/public/js/room-bridge.js?v=26"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99?? padppl): @mentions insert the PATV name + carry who; v26 (review): the "not the Camfrog user" tag in the @ list %>
   <link rel="stylesheet" href="/public/css/roompm.css?v=1"><script src="/public/js/pad-roompm.js?v=1"></script><%# 1.99ajd roompm: Pepe's private answers in the chat (PATVRoomPm) %>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
@@ -875,13 +875,13 @@
   <script src="/public/js/chat-clip.js?v=5"></script><%# 1.99aht v5: a !transcripts off bar's 🔊 Clip says it goes up without a caption %>
   <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=3"></script><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
-  <link rel="stylesheet" href="/public/css/person-sheet.css?v=1"><%# 1.99?? padppl: the 🚫 Block / ⛔ Ban sheets, folded lines, mention chips, idle 🌐 rows %>
+  <link rel="stylesheet" href="/public/css/person-sheet.css?v=2"><%# 1.99?? padppl: the 🚫 Block / ⛔ Ban sheets, folded lines, mention chips, idle 🌐 rows %>
   <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99aid privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=2" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream); 1.99ajh dockpop v2: stop() (the chat window's wipe) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
   <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
-  <script src="/public/js/room-mod.js?v=15"></script><%# v15 (1.99?? padppl): 🚫 Block / ✅ Unblock + the website's bans in the person menu %>
-  <% if (signedIn) { %><script src="/public/js/block-sheet.js?v=1"></script><script src="/public/js/pad-ban-sheet.js?v=1"></script><script src="/public/js/gift-sheet.js?v=1"></script><% } %>
+  <script src="/public/js/room-mod.js?v=16"></script><%# v15 (1.99?? padppl): 🚫 Block / ✅ Unblock + the website's bans in the person menu; v16 (review): one Website ban item, group headings, never taller than the window %>
+  <% if (signedIn) { %><script src="/public/js/block-sheet.js?v=2"></script><script src="/public/js/pad-ban-sheet.js?v=2"></script><script src="/public/js/gift-sheet.js?v=2"></script><% } %>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
@@ -972,6 +972,7 @@
       if (u && u.anon && (u.veil === 'incognito' || u.veil === 'hidden')) {
         if (!roomMod || !signedIn || u.self || !(c || (u.id && u.alias))) return;
         roomMod.menu(u, anchor, { c: c || null });
+        decorateMenu(u, anchor);           // (1.99?? padppl review fix: the frog avatar, frog name and its tag - the same header as every menu)
         return;
       }
       if (!wantsMore(u) || u.veil) return;
@@ -980,23 +981,28 @@
       var pv = roomDock && roomDock.pvpFor ? roomDock.pvpFor(u) : null;
       roomMod.menu(u, anchor, { cam: canCam ? function () { snapOpen(u); } : null, mic: !!onMic, c: c || null,
         pvp: pv ? { duel: pv.duel, brawl: pv.brawl, run: function (kind) { roomDock.pvp(u, kind, anchor); } } : null });
-      if (roomDock) {
-        var menus = document.querySelectorAll('.pm-pop');
-        Array.prototype.forEach.call(menus, function (menu) {
-          if (menu._anchor !== anchor) return;
-          menu.classList.add('chatlog', 'rmd-pm');
-          var title = menu.querySelector('.pm-pop-n');
-          if (title) {
-            title.textContent = ''; title.appendChild(person(u));
-            // (1.99ajf dockclean review: with their pad flair, which gives way first - as in the chat line and the people list)
-            var fl = CLR && !u.veil && !u.anon ? CLR.flairNode(u, rctx, H) : null, nmBox = title.querySelector('.rmd-person-name');
-            if (fl && nmBox) nmBox.appendChild(fl);
-            // the login as a second line only when it differs from the name everyone sees (never an account key)
-            var lg = String(u.login || ''), shownName = label(u);
-            if (lg && !/^u:/i.test(lg) && !u.acct && lg.toLowerCase() !== String(shownName).toLowerCase()) title.appendChild(el('small', 'pm-login', lg));
-          }
-        });
-      }
+      decorateMenu(u, anchor);
+    }
+    // the Dock's look for the menu just opened from `anchor` (1.99ajf dockclean): the person (avatar + name, a frog name's tag) as its
+    // header, their pad flair, the login as a second line; then placed again at its Dock width (1.99?? padppl review fix)
+    function decorateMenu(u, anchor) {
+      if (!roomDock) return;
+      var menus = document.querySelectorAll('.pm-pop');
+      Array.prototype.forEach.call(menus, function (menu) {
+        if (menu._anchor !== anchor) return;
+        menu.classList.add('chatlog', 'rmd-pm');
+        var title = menu.querySelector('.pm-pop-n');
+        if (title) {
+          title.textContent = ''; title.appendChild(person(u));
+          // (1.99ajf dockclean review: with their pad flair, which gives way first - as in the chat line and the people list)
+          var fl = CLR && !u.veil && !u.anon ? CLR.flairNode(u, rctx, H) : null, nmBox = title.querySelector('.rmd-person-name');
+          if (fl && nmBox) nmBox.appendChild(fl);
+          // the login as a second line only when it differs from the name everyone sees (never an account key, never a frog name's)
+          var lg = String(u.login || ''), shownName = label(u);
+          if (!u.anon && lg && !/^u:/i.test(lg) && !u.acct && lg.toLowerCase() !== String(shownName).toLowerCase()) title.appendChild(el('small', 'pm-login', lg));
+        }
+      });
+      if (roomMod && roomMod.relayout) roomMod.relayout();
     }
     function canTopic() {
       var panel = roomEl('rmMod'), section = panel && panel.querySelector('.pm-topic');
@@ -1456,6 +1462,8 @@
             li.setAttribute('aria-label', label(u) + ' · ' + _t('js.pad.people.inactive', 'inactive') + ' · ' + li.title);
           }
           var n = el('span', 'nm'); n.appendChild(name(u)); li.appendChild(n);
+          // (review fix: the "posted 23 min ago" shows as a short visible label too - a title never reaches a touch screen)
+          if (idle) { var ago = el('span', 'web-ago', _t('js.pad.people.web_ago', '{n}m', { n: Math.max(1, Number(u.ago) || 1) })); ago.setAttribute('aria-hidden', 'true'); n.appendChild(ago); }
           var ic = el('span', 'ic');
           if (!u.me && wantsMore(u)) ic.appendChild(moreBtn(u, false, false));
           li.appendChild(ic); ul.appendChild(li);
@@ -1559,7 +1567,8 @@
           : /^u:/i.test(lg) ? { k: 'acct', v: lg } : lg && !u.acct ? { k: 'login', v: lg } : u.patv && u.patv.username ? { k: 'user', v: String(u.patv.username) } : null;
         var un = !veil && u.patv && u.patv.username ? String(u.patv.username) : '';
         var sub = un && un.toLowerCase() !== String(shown).toLowerCase() ? '@' + un : (!veil && !u.web && lg && !/^u:/i.test(lg) && lg.toLowerCase() !== String(shown).toLowerCase() ? lg : '');
-        out.push({ value: value, atValue: veil ? String(u.alias) : String(shown || value), ref: ref, name: shown, login: sub, tag: veil ? _t('js.pad.veil.incognito', 'incognito') : u.web ? '🌐' : '', u: u, recent: !!recent, cmd: cmd });
+        out.push({ value: value, atValue: veil ? String(u.alias) : String(shown || value), ref: ref, name: shown, login: sub, tag: veil ? _t('js.pad.veil.incognito', 'incognito') : u.web ? '🌐' : '', u: u, recent: !!recent, cmd: cmd,
+                   clash: !veil && u.clash ? String(u.clash) : null });   // (1.99?? padppl review fix: the "not the Camfrog user" tag in the list too)
       }
       (liveData && liveData.mic || []).forEach(function (u) { add(u); });
       (liveData && liveData.members || []).forEach(function (u) { add(u); });

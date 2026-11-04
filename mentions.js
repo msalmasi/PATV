@@ -322,7 +322,9 @@ async function chatAllowed(T, line, S, t) {
   const acc = await accountOf(T.userId);
   if (!acc || acc.archived_at) return false;
   try { if (!require("./padaccess").full({ userId: acc.userId, class: acc.class }, line.roomId)) return false; } catch (e) { return false; }
-  try { if (await require("./blocks").towards(S.userId, T.userId, { fromLogin: S.login })) return false; } catch (e) { return false; }
+  // blocks.js THE VEIL RULE (review fix): a frog-named line asks only T's frog-name blocks; a named line only the named blocks - a named
+  // block of a suspect must never silence 🐸V's mention (that would say V is the suspect), and a frog-name block never touches named lines
+  try { if (await require("./blocks").towards(S.userId, T.userId, { fromLogin: S.login, veiled: !!S.veilLabel })) return false; } catch (e) { return false; }
   return allow(T.userId, line.roomId, t);
 }
 function chatNotice(line, S, T) {
@@ -340,9 +342,31 @@ async function chatMentions(line, t) {
   if (it.k !== "msg" || !it.text || u.self || u.bot) return done;
   if (u.anon && !u.alias) return done;                     // "someone" lines never alert
   if (it.mask) return done;                                // a hidden bar has no words to mention anyone with
-  // (the targets first: most lines name nobody - then nothing else is looked up)
+  // review fix (HIGH): a NAMED line of someone the site keeps hidden (matchLine's rule: the sticky sets - incognito "private since",
+  // !bridge hide, forget-me, staff removal, deletion) never alerts - the pad shows them as "someone" or not at all, so a notice must not
+  // name them. (A frog-named line alerts under its frog name - that's what the pad shows.)
+  if (!u.anon) {
+    const speaker = String(u.login || "").toLowerCase();
+    if (!speaker) return done;
+    let hidden = false;
+    try { hidden = require("./quotes").isHidden(speaker); } catch (e) { hidden = true; }
+    try { hidden = hidden || require("./chatlogview").isHiddenLogin(speaker); } catch (e) { hidden = true; }
+    if (hidden) return done;
+  }
+  // (the targets first: most lines name nobody - then nothing else is looked up). Picked mentions (_mnIds) first, then "@token"s typed
+  // by hand - on a web line too (review fix: the page highlights a hand-typed "@you", so the bell agrees), never a name already picked
   let targets = Array.isArray(it._mnIds) && it._mnIds.length ? it._mnIds.slice(0, 10) : [];
-  if (!targets.length && !u.web && String(it.text).includes("@")) targets = await typedTargets(it.text);
+  if (targets.length < 10 && String(it.text).includes("@")) {
+    const picked = new Set(targets.map((x) => String(x.n || "").toLowerCase()));
+    // (a picked "@Juniper Fable" is blanked first, so its "@Juniper" never reads as a hand-typed @juniper - someone else)
+    let rest = String(it.text);
+    for (const n of picked) if (n) rest = rest.replace(new RegExp("@" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), (s) => " ".repeat(s.length));
+    for (const x of await typedTargets(rest)) {
+      if (targets.length >= 10) break;
+      if (picked.has(String(x.n || "").toLowerCase()) || targets.some((y) => y.userId && x.userId && String(y.userId) === String(x.userId))) continue;
+      targets.push(x);
+    }
+  }
   if (!targets.length) return done;
   const S = await senderOf(it);
   const inbox = require("./inbox");

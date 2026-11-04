@@ -12,7 +12,10 @@
 //     shows "Gift from @x"), Decline, Accept all; nothing is credited, announced or counted until they accept, at a time of their choosing
 //   - every gift not accepted by due_at (30 days) goes back to the sender on the daily run (refundInTx: "gift returned") - the one bit the
 //     sender can learn (accepted or not), on a fixed day that carries no timing (R2)
-//   - the sender only ever sees the frog name: receipt, history ("🎁 Gift to a frog name", note "🐸 label"), export (label, amount, day)
+//   - the sender only ever sees the frog name: receipt, history ("🎁 Gift to a frog name", note "🐸 label"), export (label, amount, day).
+//     Review fix: the gift's escrow hold is the SENDER's row, and its state / done_at would say whether and when it was accepted - so a
+//     VGF hold is left out of the sender's data export (accountexport.js) and never blocks deleting their account (accountdelete.js; a
+//     deleted sender's unaccepted gift goes to the House on its due day). Pepe's escrow view never lists service kinds (PEPE_SQL).
 //   - NOTHING public: no Pepe line, no chat line, no tip jar / "you and X" / tip achievements / tip_people / social graph / tip volume /
 //     streaks / achievement feed (none of them read the new ledger types: 'gift sent', 'gift accepted', 'gift returned'; checkWeb and
 //     streaks are never called); the admins see the real parties (veil_gifts, admin only)
@@ -110,7 +113,9 @@ async function send(me, R, ref, rawAmount, key = null) {
     if (e && e.code === "E_INSUFFICIENT_PAT") throw new Refuse(402, "You don't have that much PAT.", "funds");
     throw e;
   }
-  if (state === "pending" && p.userId) await notify(p.userId, me, label, amount, R);
+  // (review fix: the notice goes out AFTER the answer's fixed wait is measured - never awaited - so a real, unblocked recipient doesn't
+  // answer slower than an unlinked login or a withheld gift)
+  if (state === "pending" && p.userId) notify(p.userId, me, label, amount, R).catch(() => {});
   return pad(t0, { ok: true, label, amount, balance: await balanceOf(me.userId) });
 }
 async function pad(t0, out) { const d = MIN_MS - (now() - t0); if (d > 0 && clock === defaultClock) await sleep(d); return out; }
@@ -207,10 +212,14 @@ async function setOn(me, on) {
 function register(app, { addUser, bySlug = null }) {
   init().catch((e) => console.error("[veilgift] init:", e.message));
   const t = setInterval(() => { settleDue().catch(() => {}); }, 6 * 3600e3); if (t.unref) t.unref();
+  const t0 = setTimeout(() => { settleDue().catch(() => {}); }, 120 * 1000); if (t0.unref) t0.unref();   // (review fix: soon after a start too)
   const guard = require("./middleware/authGuard");
   const meOf = async (req) => (req.user && req.user.userId ? (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] : null);
   const writeOk = (req) => req.is("application/json") && req.get("X-Requested-With") === "fetch" && guard.sameSite(req);
-  const fail = (res, e) => res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong - nothing was sent." });
+  const fail = (res, e) => {
+    if (!(e && e.status)) console.error("[veilgift]", e);           // (review fix: a 500 leaves a log line)
+    res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong - nothing was sent." });
+  };
   app.post("/api/rooms/:slug/gift", addUser, express.json({ limit: "2kb" }), async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!writeOk(req)) return res.status(400).json({ ok: false, error: "Bad request." });
@@ -219,6 +228,8 @@ function register(app, { addUser, bySlug = null }) {
       const R = (bySlug || ((s) => require("./bridge").bySlug(s)))(String(req.params.slug).slice(0, 128));
       if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
       const b = req.body || {};
+      // (review fix: a frog name's row / line only in a pad this sender may see - the same answer as a line that's gone)
+      if (!(await require("./personref").padOk(b.ref, me, R))) return res.status(404).json({ ok: false, error: "That line isn't here any more." });
       res.json(await send(me, R, b.ref, b.amount, b.key));
     } catch (e) { fail(res, e); }
   });

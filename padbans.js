@@ -9,12 +9,17 @@
 //   a Camfrog login with NO PATV account   pad_login_bans (login, room_id, scope) - copied onto the account when that login links
 //   a VEILED person (incognito / hidden)   veil_bans (room_id, scope, user_id, login, label) - see THE VEIL RULE
 //
-// THE VEIL RULE (no unmasking): a veil ban is a row of its own (never the named row - a later named ban of a suspect can't overwrite it
-// and make the 🐸 entry vanish), it only REFUSES new actions (bridgeblocks.active / feedstore.postRefusal / mainstage.isBanned ask it) and
-// never has a visible effect (it doesn't hide posts, end stage slots or take tiles - only named bans do, and they never read veil_bans),
-// lists show it as "🐸 <label> · identity hidden", the room event names only the label, admin_audit the real identity (admins only).
-// The live view never flags a veiled entry as banned (wban), so a new frog session can't be matched to an old ban. Residual: the
-// person's NAMED web activity in that pad is refused too, so a moderator watching who goes quiet could guess (spec text).
+// THE VEIL RULE (no unmasking - 1.99?? padppl review fix, "who, not what"): a veil ban is a row of its own (never the named row - a later
+// named ban of a suspect can't overwrite it and make the 🐸 entry vanish) and it acts ONLY while that person is UNDER A FROG NAME on the
+// website (veiledNow: Incognito on, or hidden) - it refuses their website bridge in that pad (bridgeblocks.active: chat, commands, clips,
+// cams), whatever frog name they use. It never touches anything they do under their own name (feed posts, stories, stage booking, a
+// live stage stream, the mic stage - mainstage.isBanned and postRefusal never read it) and has no visible effect at all, so a moderator
+// can't watch who goes quiet, or ask a suspect to post and see it fail, to learn who the frog is. "Whole pad" and "bridge" are the same
+// thing for a frog name (stored as bridge); staff can make it site-wide. Lists show it as "🐸 <label> · identity hidden", the room event
+// names only the label, admin_audit the real identity (admins only). The live view never flags a veiled entry as banned (wban), so a
+// new frog session can't be matched to an old ban. If the person comes back under their own name and misbehaves, ban that name.
+// Rank (review fix): a NAMED ban is refused on the pad's owner (unless staff ban) and on PATV staff of the same rank or above; a frog
+// name's ban is never refused for rank (that answer would say who it is) - it only ever stops frog-named website chat.
 //
 // Who may (the existing rules): bridge = the pad's owner / staff (rooms.canManage) or a room mod by Pepe's kick cap (bridgeblocks'
 // padCtx rule); pad = rooms.canManage; site = SP feed.moderate (Staff); networks (netban.js) = SP safety.net_bans (Admins).
@@ -91,17 +96,21 @@ async function wmodById(userId, R, live = null) {
 
 // ── the live view's flags on NAMED entries (never veiled ones) ──
 const wbanCache = new Map();
-/** Map(lowercased PATV username -> {b: until|0 (a bridge 'all' block here or everywhere), p: until|0 (a pad ban here)}). */
+/** Map(lowercased CURRENT PATV username -> {b: until|0 (a bridge 'all' block in THIS pad), p: until|0 (a pad ban here)}). Review fixes:
+ *  keyed by the account's username now (a rename keeps the flag), and only this pad's own rows - an admin's site-wide block is neither
+ *  shown to the pad's mods nor offered as a Lift that can't lift it. */
 async function wbanMap(roomId) {
   const c = wbanCache.get(roomId);
   if (c && now() - c.at < WBAN_TTL) return c.m;
   const m = new Map(), t = now();
   const put = (name, k, until) => { if (!name) return; const e = m.get(low(name)) || { b: 0, p: 0 }; e[k] = until == null ? -1 : Number(until); m.set(low(name), e); };
   try {
-    for (const r of await getQuery("SELECT username, until FROM bridge_blocks WHERE (room_id = ? OR room_id = '') AND feature = 'all' AND (until IS NULL OR until > ?) LIMIT 2000", [roomId, t])) put(r.username, "b", r.until);
+    for (const r of await getQuery(`SELECT COALESCE(u.username, b.username) AS username, b.until FROM bridge_blocks b LEFT JOIN users u ON u.userId = b.user_id
+                                    WHERE b.room_id = ? AND b.feature = 'all' AND (b.until IS NULL OR b.until > ?) LIMIT 2000`, [roomId, t])) put(r.username, "b", r.until);
   } catch (e) { /* no table yet */ }
   try {
-    for (const r of await getQuery("SELECT username, until FROM feed_bans WHERE room_id = ? AND (until IS NULL OR until > ?) LIMIT 2000", [roomId, t])) put(r.username, "p", r.until);
+    for (const r of await getQuery(`SELECT COALESCE(u.username, f.username) AS username, f.until FROM feed_bans f LEFT JOIN users u ON u.userId = f.user_id
+                                    WHERE f.room_id = ? AND (f.until IS NULL OR f.until > ?) LIMIT 2000`, [roomId, t])) put(r.username, "p", r.until);
   } catch (e) { /* no table yet */ }
   wbanCache.set(roomId, { at: t, m });
   if (wbanCache.size > 500) wbanCache.delete(wbanCache.keys().next().value);
@@ -120,7 +129,7 @@ function identity(p) {
 function refusalPreview(scope, until, reason) {
   const when = until ? " until " + new Date(until).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
   const why = reason ? " (" + reason + ")" : "";
-  if (scope === "bridge") return "A mod of this room blocked you from talking in it from the website" + when + why + ".";
+  if (scope === "bridge" || scope === "veil") return "A mod of this room blocked you from talking in it from the website" + when + why + ".";
   if (scope === "pad") return "You can't post in this pad" + when + why + ".";
   return "You can't post on the feed" + when + why + ".";
 }
@@ -150,11 +159,61 @@ async function need(me, R, live, scope) {
   return w;
 }
 
+/** Review fix (rank): why `me` may not ban NAMED account `p` here, or null. The pad's owner only by staff; PATV staff / admins only by
+ *  someone of a higher class; a room mod (Pepe's kick cap) not by a fellow room mod (only the owner / staff). Never asked for a veil. */
+async function rankRefusal(me, R, live, p) {
+  if (!p || !p.userId || p.veil) return null;
+  const core = require("./siteperms-core");
+  const t = (await getQuery("SELECT userId, class, camfrogUsername FROM users WHERE userId = ?", [String(p.userId)]))[0];
+  if (!t) return null;
+  const mine = core.classRank(me), theirs = core.classRank(t);
+  if (theirs > 0 && theirs >= mine) return "You can't ban PATV staff of your rank or above.";
+  let owner = null;
+  try { const r = await require("./rooms").get(R.id); owner = r && r.owner ? String(r.owner.userId) : null; } catch (e) { owner = null; }
+  if (owner && owner === String(p.userId) && !mine) return "That's the pad's owner.";
+  // a room mod by Pepe's caps (not the owner / staff) can't ban another room mod
+  let manager = false;
+  try { manager = await require("./rooms").canManage(me, R.id); } catch (e) { manager = false; }
+  if (!manager && live && t.camfrogUsername) {
+    try { const c = require("./padmod").capsFor(live, t.camfrogUsername); if (c && Array.isArray(c.actions) && c.actions.includes("kick")) return "You can't ban another of this room's mods - ask the pad's owner."; } catch (e) { /* no caps */ }
+  }
+  return null;
+}
+
+// ── who is under a frog name right now (THE VEIL RULE) ──
+const loginCache = new Map();
+/** The account's linked Camfrog login (lowercased) | null - cached 60 s (the refusal readers ask it on every write). */
+async function loginOfCached(userId) {
+  if (!userId) return null;
+  const k = String(userId), c = loginCache.get(k);
+  if (c && now() - c.at < 60e3) return c.v;
+  let v = null;
+  try { const r = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [k]))[0]; v = r && r.camfrogUsername ? low(r.camfrogUsername) : null; } catch (e) { v = null; }
+  loginCache.set(k, { at: now(), v });
+  if (loginCache.size > 5000) loginCache.delete(loginCache.keys().next().value);
+  return v;
+}
+/** Is this person under a frog name on the website NOW (privacyeff: incognito or hidden - the sticky sets; plus a FRESH read of the
+ *  website Incognito switch)? A source that can't be read counts as yes (a veil ban then refuses - never a visible effect). */
+async function veiledNow(userId, login = null) {
+  const keys = [...(login ? [low(login)] : []), ...(userId ? ["u:" + String(userId)] : [])];
+  if (!keys.length) return false;
+  try {
+    const PE = require("./privacyeff");
+    if (keys.some((k) => { const e = PE.eff(k); return !!(e && (e.name || e.out)); })) return true;
+  } catch (e) { return true; }
+  try {
+    const rows = await getQuery(`SELECT "on" AS "on" FROM incognito_state WHERE login IN (${keys.map(() => "?").join(",")})`, keys);
+    if (rows.some((r) => r && Number(r.on) === 1)) return true;
+  } catch (e) { /* no incognito table yet */ }
+  return false;
+}
+
 /**
  * Ban the person `ref` points at. me = the moderator's users row; R = the pad (registry: {id}); live = the live room (bridge.bySlug).
  * -> {ok, who: {kind, title, sub}, scope, until}
  */
-async function ban(me, R, live, { ref, scope, dur, reason, nets = false, via = "person-menu" } = {}) {
+async function ban(me, R, live, { ref, scope, dur, reason, nets = false, exempt = [], via = "person-menu" } = {}) {
   await init();
   if (!SCOPES.includes(scope)) throw new Refuse(400, "Pick where: the website bridge, the whole pad or the whole site.");
   if (!Object.prototype.hasOwnProperty.call(DUR, dur)) throw new Refuse(400, "Pick how long: 1 hour, 1 day, 7 days or permanent.");
@@ -165,12 +224,23 @@ async function ban(me, R, live, { ref, scope, dur, reason, nets = false, via = "
   if (limited(me.userId)) throw new Refuse(429, "That's a lot of bans - wait a few minutes.");
   const p = await PR.resolve(ref, { R: live });
   if (p.error) throw new Refuse(404, p.error);
-  if ((p.userId && String(p.userId) === String(me.userId)) || (p.login && me.camfrogUsername && p.login === low(me.camfrogUsername))) throw new Refuse(400, "That's you.");
-  if (p.userId && String(p.userId) === String(require("./feedstore").PEPE_ID)) throw new Refuse(400, "Pepe can't be banned.");
+  if (p.veil) {
+    // THE VEIL RULE: a frog name's ban is the same for every scope a pad can give (its website chat while they're a frog) - "pad" is
+    // stored as "bridge"; and "That's you" / "Pepe" are never answered for a veil (the same answer whoever is behind it)
+    if (scope === "pad") scope = "bridge";
+  } else {
+    if ((p.userId && String(p.userId) === String(me.userId)) || (p.login && me.camfrogUsername && p.login === low(me.camfrogUsername))) throw new Refuse(400, "That's you.");
+    if (p.userId && String(p.userId) === String(require("./feedstore").PEPE_ID)) throw new Refuse(400, "Pepe can't be banned.");
+    const rk = await rankRefusal(me, R, live, p);
+    if (rk) throw new Refuse(403, rk);
+  }
   const until = DUR[dur] == null ? null : now() + DUR[dur];
   const room = scope === "site" ? "" : String(R.id);
   const by = { userId: String(me.userId), name: me.username, via: "web" };
-  if (p.veil) {
+  const selfVeil = p.veil && ((p.userId && String(p.userId) === String(me.userId)) || (p.login && me.camfrogUsername && p.login === low(me.camfrogUsername)));
+  if (selfVeil) {
+    /* the moderator's own frog name: nothing to store - and the same answer as anyone else's */
+  } else if (p.veil) {
     await runQuery(`INSERT INTO veil_bans (room_id, scope, user_id, login, label, until, reason, by_id, by_name, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [room, scope, p.userId || null, p.login || null, String(p.label || "someone").slice(0, 60), until, why || null, by.userId, by.name, now()]);
     if (room) await require("./rooms").event(room, "pad-ban", me.username, `${eventName(p)} - ${scope}${until ? " until " + new Date(until).toISOString() : " (permanent)"}${why ? " - " + why : ""}`);
@@ -194,16 +264,21 @@ async function ban(me, R, live, { ref, scope, dur, reason, nets = false, via = "
       await audit(me, "pad_ban", p, { room, scope, until, via }, why);
     }
   }
-  if (nets && p.userId) {
-    try { await require("./netban").banAccountNets(me, p.userId, { scope: scope === "site" ? "site" : "pad", roomId: room || null, reason: why, via }); }
+  let netsOut = null;
+  if (nets && p.userId && !p.veil) {
+    // (review fix: the networks are blocked for as long as the ban, at most 7 days - a network is often shared; the sheet says so - and
+    // the accounts the admin ticked as "let them through" go on the ban's exempt list)
+    const netDays = dur === "1h" || dur === "1d" ? 1 : 7;
+    try { netsOut = await require("./netban").banAccountNets(me, p.userId, { scope: scope === "site" ? "site" : "pad", roomId: room || null, reason: why, via, days: netDays,
+                                                                            exempt: Array.isArray(exempt) ? exempt.slice(0, 50).map(String) : [] }); }
     catch (e) { if (!(e && e.status)) console.error("[padbans] nets:", e.message); else throw e; }
   }
   dropCaches(room || null);
-  return { ok: true, who: identity(p), scope, until };
+  return { ok: true, who: identity(p), scope, until, ...(netsOut ? { nets: { networks: netsOut.networks, until: netsOut.until } } : {}) };
 }
 
 /** Lift a ban: by the person (named / login: ref + scope) or by a list entry (`entry` = "veil:<id>" | "login:<login>:<scope>"). */
-async function unban(me, R, live, { ref = null, entry = null, scope = null, via = "person-menu" } = {}) {
+async function unban(me, R, live, { ref = null, entry = null, scope = null, feature = null, via = "person-menu" } = {}) {
   await init();
   if (limited(me.userId)) throw new Refuse(429, "That's a lot of changes - wait a few minutes.");
   const e = String(entry || "");
@@ -240,7 +315,16 @@ async function unban(me, R, live, { ref = null, entry = null, scope = null, via 
   } else {
     const target = { userId: p.userId, username: p.username };
     const by = { userId: String(me.userId), name: me.username, via: "web" };
-    if (scope === "bridge" || scope === "pad") await require("./bridgeblocks").unblock({ roomId: room, target, feature: null, by });
+    // (one feature's block from the list by its feature; the person menu's Lift = the "all" block)
+    if (scope === "bridge") await require("./bridgeblocks").unblock({ roomId: room, target, feature: feature ? String(feature).slice(0, 20) : "all", by });
+    if (scope === "pad") {
+      // review fix: lifting a whole-pad ban lifts the bridge block made WITH it (the same end) - never a separate one a mod made, nor
+      // one feature's block
+      const fb = (await getQuery("SELECT until FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(p.userId), room]).catch(() => []))[0];
+      const bb = (await getQuery("SELECT until FROM bridge_blocks WHERE user_id = ? AND room_id = ? AND feature = 'all'", [String(p.userId), room]).catch(() => []))[0];
+      const same = fb && bb && ((fb.until == null && bb.until == null) || (fb.until != null && bb.until != null && Math.abs(Number(fb.until) - Number(bb.until)) < 5000));
+      if (same || (!fb && bb)) await require("./bridgeblocks").unblock({ roomId: room, target, feature: "all", by });
+    }
     if (scope === "pad" || scope === "site") await require("./feedstore").unban(me, p.userId, room, { via });
     if (scope === "bridge") await audit(me, "pad_unban", p, { room, scope, via }, null);
   }
@@ -248,25 +332,53 @@ async function unban(me, R, live, { ref = null, entry = null, scope = null, via 
   return { ok: true, who: identity(p) };
 }
 
-/** One merged list for the pad: named bridge blocks, pad bans, login bans and veil bans (veils by label only). */
-async function list(R, { seeVeils = false } = {}) {
+/**
+ * One merged list for the pad: named bridge blocks, pad bans, login bans and veil bans (veils by label only - review fix: never the
+ * real identity, even for see-through holders; Reveal on a line is the logged way). w = the viewer's wmod (review fixes): a room mod who
+ * may only block from the bridge sees bridge rows only (not the owner's pad bans and their reasons); a viewer who may ban site-wide (staff)
+ * also sees the site-wide frog-name and login bans (room_id '') so they can be lifted. A pad ban and the bridge block made with it are ONE
+ * row. Named rows carry the account id (the Lift button's exact ref - a rename doesn't break it).
+ */
+async function list(R, { w = { bridge: true, pad: true, site: false } } = {}) {
   await init();
   const t = now(), out = [];
-  for (const b of await require("./bridgeblocks").list(R.id, { withGlobal: false })) {
-    out.push({ kind: "account", scope: b.feature === "all" ? "bridge" : "bridge:" + b.feature, who: "@" + (b.username || b.userId), username: b.username,
-               until: b.until, reason: b.reason, by: b.by, at: b.created });
-  }
+  const ok = (scope) => (String(scope || "").split(":")[0] === "bridge" ? !!(w.bridge || w.pad) : scope === "site" ? !!w.site : !!w.pad);
+  const cur = new Map();
+  try {
+    for (const r of await getQuery("SELECT userId, username FROM users WHERE userId IN (SELECT user_id FROM feed_bans WHERE room_id = ? UNION SELECT user_id FROM bridge_blocks WHERE room_id = ?) LIMIT 1000",
+      [String(R.id), String(R.id)])) cur.set(String(r.userId), r.username);
+  } catch (e) { /* the stored names then */ }
+  const nameOf = (id, stored) => cur.get(String(id)) || stored || String(id);
+  const pads = new Map();
   try {
     for (const b of await getQuery("SELECT * FROM feed_bans WHERE room_id = ? AND (until IS NULL OR until > ?) ORDER BY at DESC LIMIT 300", [String(R.id), t])) {
-      out.push({ kind: "account", scope: "pad", who: "@" + (b.username || b.user_id), username: b.username, userId: b.user_id, until: b.until == null ? null : Number(b.until), reason: b.reason || "", by: b.by || "", at: Number(b.at) || 0 });
+      const row = { kind: "account", scope: "pad", who: "@" + nameOf(b.user_id, b.username), username: nameOf(b.user_id, b.username), userId: String(b.user_id),
+                    until: b.until == null ? null : Number(b.until), reason: b.reason || "", by: b.by || "", at: Number(b.at) || 0 };
+      pads.set(String(b.user_id), row);
+      if (ok("pad")) out.push(row);
     }
   } catch (e) { /* no feed yet */ }
-  for (const b of await getQuery("SELECT * FROM pad_login_bans WHERE room_id = ? AND (until IS NULL OR until > ?) ORDER BY at DESC LIMIT 300", [String(R.id), t])) {
-    out.push({ kind: "login", scope: b.scope, who: "Camfrog login " + b.login, entry: `login:${b.login}:${b.scope}`, until: b.until == null ? null : Number(b.until), reason: b.reason || "", by: b.by_name || "", at: Number(b.at) });
+  for (const b of await require("./bridgeblocks").list(R.id, { withGlobal: false })) {
+    const pb = pads.get(String(b.userId));
+    const sameAsPad = pb && (b.feature || "all") === "all" && ((pb.until == null && b.until == null) || (pb.until != null && b.until != null && Math.abs(pb.until - b.until) < 5000));
+    if (sameAsPad && ok("pad")) continue;                    // (the pad ban's own bridge block: one row)
+    const scope = b.feature === "all" ? "bridge" : "bridge:" + b.feature;
+    if (!ok(scope)) continue;
+    // (a bridge-only mod sees the bridge half of the owner's pad ban - never the owner's reason)
+    out.push({ kind: "account", scope, who: "@" + nameOf(b.userId, b.username), username: nameOf(b.userId, b.username), userId: String(b.userId),
+               until: b.until, reason: sameAsPad ? "" : b.reason, by: b.by, at: b.created });
   }
-  for (const b of await getQuery("SELECT * FROM veil_bans WHERE room_id = ? AND (until IS NULL OR until > ?) ORDER BY created DESC LIMIT 300", [String(R.id), t])) {
-    out.push({ kind: "veil", scope: b.scope, who: `🐸 ${b.label || "someone"} · identity hidden`, entry: "veil:" + b.id, until: b.until == null ? null : Number(b.until),
-               reason: b.reason || "", by: b.by_name || "", at: Number(b.created), ...(seeVeils ? { real: b.user_id || (b.login ? "cf:" + b.login : null) } : {}) });
+  const rooms = w.site ? [String(R.id), ""] : [String(R.id)];
+  const ph = rooms.map(() => "?").join(",");
+  for (const b of await getQuery(`SELECT * FROM pad_login_bans WHERE room_id IN (${ph}) AND (until IS NULL OR until > ?) ORDER BY at DESC LIMIT 300`, [...rooms, t])) {
+    if (!ok(b.scope)) continue;
+    out.push({ kind: "login", scope: b.scope, who: "Camfrog login " + b.login, entry: `login:${b.login}:${b.scope}`, until: b.until == null ? null : Number(b.until), reason: b.reason || "", by: b.by_name || "", at: Number(b.at), ...(b.room_id === "" ? { site: true } : {}) });
+  }
+  for (const b of await getQuery(`SELECT * FROM veil_bans WHERE room_id IN (${ph}) AND (until IS NULL OR until > ?) ORDER BY created DESC LIMIT 300`, [...rooms, t])) {
+    const sc = b.scope === "pad" ? "bridge" : b.scope;
+    if (!ok(sc)) continue;
+    out.push({ kind: "veil", scope: sc, who: `🐸 ${b.label || "someone"} · identity hidden`, entry: "veil:" + b.id, until: b.until == null ? null : Number(b.until),
+               reason: b.reason || "", by: b.by_name || "", at: Number(b.created), ...(b.room_id === "" ? { site: true } : {}) });
   }
   return out.sort((a, b) => b.at - a.at);
 }
@@ -316,7 +428,7 @@ async function linked(userId, login) {
       await runQuery("DELETE FROM pad_login_bans WHERE login = ?", [l]);
       await runQuery("UPDATE veil_bans SET user_id = ? WHERE login = ? AND user_id IS NULL", [String(userId), l]);
     });
-    dropCaches(null);
+    dropCaches(null); loginCache.clear();
   } catch (e) { console.error("[padbans] link:", e.message); }
 }
 
@@ -333,6 +445,7 @@ async function sweep() {
 function register(app, { addUser, bySlug = null }) {
   init().catch((e) => console.error("[padbans] init:", e.message));
   const t = setInterval(sweep, 6 * 3600e3); if (t.unref) t.unref();
+  const t0 = setTimeout(sweep, 90 * 1000); if (t0.unref) t0.unref();       // (review fix: also soon after a start - deploys come often)
   const guard = require("./middleware/authGuard");
   const liveOf = (slug) => { try { return (bySlug || ((s) => require("./bridge").bySlug(s)))(String(slug)); } catch (e) { return null; } };
   const fail = (res, e) => {
@@ -355,7 +468,7 @@ function register(app, { addUser, bySlug = null }) {
       const c = await ctx(req, res, false); if (!c) return;
       const w = await wmodFor(c.me, c.R, c.live);
       if (!w || !(w.bridge || w.pad || w.site)) return res.status(403).json({ ok: false, error: "Only this room's mods, the pad's owner and staff can see that." });
-      res.json({ ok: true, bans: await list(c.R, { seeVeils: SP.can(c.me, "chatlog.see_through") }), wmod: w });
+      res.json({ ok: true, bans: await list(c.R, { w }), wmod: w });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/:slug/ban/preview", addUser, express.json({ limit: "2kb" }), async (req, res) => {
@@ -363,13 +476,34 @@ function register(app, { addUser, bySlug = null }) {
       const c = await ctx(req, res, true); if (!c) return;
       const w = await wmodFor(c.me, c.R, c.live);
       if (!w) return res.status(403).json({ ok: false, error: "Only this room's mods, the pad's owner and staff can do that." });
+      if (!(await PR.padOk((req.body || {}).ref, c.me, c.R))) return res.status(404).json({ ok: false, error: "That line isn't here any more." });
       const p = await PR.resolve((req.body || {}).ref, { R: c.live });
       if (p.error) return res.status(404).json({ ok: false, error: p.error });
-      const scopes = SCOPES.filter((s) => w[s]);
-      const out = { ok: true, who: identity(p), scopes, nets: null,
-        refusal: Object.fromEntries(scopes.map((s) => [s, refusalPreview(s, now() + DUR["1d"], "")])), room: !!c.live };
+      // (a frog name: "bridge" stands for this pad - its website chat while they're a frog; THE VEIL RULE)
+      const scopes = SCOPES.filter((s) => w[s] && !(p.veil && s === "pad"));
+      if (p.veil && !scopes.includes("bridge") && w.pad) scopes.unshift("bridge");
+      // review fix: the "use 🔨 Ban… for the Camfrog room" note only for a Camfrog login, and only for a viewer Pepe gives that power here
+      let roomBan = false;
+      if (c.live && p.login && !p.veil && c.me.camfrogUsername) {
+        try { const caps = require("./padmod").capsFor(c.live, c.me.camfrogUsername); roomBan = !!(caps && Array.isArray(caps.actions) && caps.actions.includes("ban")); } catch (e) { roomBan = false; }
+      }
+      const out = { ok: true, who: identity(p), scopes, nets: null, veil: !!p.veil,
+        refusal: Object.fromEntries(scopes.map((s) => [s, refusalPreview(p.veil ? "veil" : s, now() + DUR["1d"], "")])), room: roomBan };
       if (w.nets && p.userId && !p.veil) {
-        try { out.nets = await require("./netban").shared(c.me, p.userId, { reason: "ban sheet" }); } catch (e) { out.nets = null; }
+        try { out.nets = await require("./netban").shared(c.me, p.userId, { reason: "ban sheet", accounts: true }); } catch (e) { out.nets = null; }
+      }
+      // (review fix: the Lift sheet says what is lifted - this pad's own website ban(s) on a NAMED account: end, reason, who; a pad ban's
+      // own bridge block is part of it; a bridge-only mod never sees the pad ban's reason)
+      if (p.userId && !p.veil) {
+        const room = String(c.R.id), t = now();
+        const bb = (await getQuery("SELECT until, reason, blocker_name FROM bridge_blocks WHERE room_id = ? AND user_id = ? AND feature = 'all' AND (until IS NULL OR until > ?)", [room, String(p.userId), t]).catch(() => []))[0];
+        const fb = (await getQuery("SELECT until, reason, by FROM feed_bans WHERE room_id = ? AND user_id = ? AND (until IS NULL OR until > ?)", [room, String(p.userId), t]).catch(() => []))[0];
+        const sameEnd = (a, b) => (a.until == null && b.until == null) || (a.until != null && b.until != null && Math.abs(Number(a.until) - Number(b.until)) < 5000);
+        const partOfPad = !!(fb && bb && sameEnd(fb, bb));
+        out.current = {
+          pad: fb && w.pad ? { until: fb.until == null ? null : Number(fb.until), reason: fb.reason || "", by: fb.by || "" } : null,
+          bridge: bb && !(partOfPad && w.pad) ? { until: bb.until == null ? null : Number(bb.until), reason: partOfPad ? "" : bb.reason || "", by: bb.blocker_name || "" } : null,
+        };
       }
       res.json(out);
     } catch (e) { fail(res, e); }
@@ -378,17 +512,19 @@ function register(app, { addUser, bySlug = null }) {
     try {
       const c = await ctx(req, res, true); if (!c) return;
       const b = req.body || {};
-      res.json(await ban(c.me, c.R, c.live, { ref: b.ref, scope: String(b.scope || ""), dur: String(b.dur || ""), reason: b.reason, nets: b.nets === true }));
+      if (!(await PR.padOk(b.ref, c.me, c.R))) return res.status(404).json({ ok: false, error: "That line isn't here any more." });
+      res.json(await ban(c.me, c.R, c.live, { ref: b.ref, scope: String(b.scope || ""), dur: String(b.dur || ""), reason: b.reason, nets: b.nets === true,
+                                              exempt: Array.isArray(b.exempt) ? b.exempt : [] }));
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/:slug/unban", addUser, express.json({ limit: "2kb" }), async (req, res) => {
     try {
       const c = await ctx(req, res, true); if (!c) return;
       const b = req.body || {};
-      res.json(await unban(c.me, c.R, c.live, { ref: b.ref || null, entry: b.entry || null, scope: b.scope ? String(b.scope) : null }));
+      res.json(await unban(c.me, c.R, c.live, { ref: b.ref || null, entry: b.entry || null, scope: b.scope ? String(b.scope) : null, feature: b.feature ? String(b.feature) : null }));
     } catch (e) { fail(res, e); }
   });
 }
 
-module.exports = { init, register, ban, unban, list, wmodFor, wmodById, wbanMap, veilActive, loginActive, linked, sweep, identity, refusalPreview, DUR, SCOPES,
-  Refuse, _setClock: (f) => { clock = f; wmodCache.clear(); wbanCache.clear(); }, _reset: () => { hits.clear(); wmodCache.clear(); wbanCache.clear(); } };
+module.exports = { init, register, ban, unban, list, wmodFor, wmodById, wbanMap, veilActive, loginActive, veiledNow, loginOfCached, rankRefusal, linked, sweep, identity, refusalPreview, DUR, SCOPES,
+  Refuse, _setClock: (f) => { clock = f; wmodCache.clear(); wbanCache.clear(); loginCache.clear(); }, _reset: () => { hits.clear(); wmodCache.clear(); wbanCache.clear(); loginCache.clear(); } };

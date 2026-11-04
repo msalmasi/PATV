@@ -225,7 +225,9 @@ async function collect(userId, { at = now(), parts = null } = {}) {
     await put("holdings", "stash_memberships", rows("stash_members", `lower(login) IN ${IN}`, ks.map((k) => k.toLowerCase())));
   }
   await put("holdings", "stash_moves", rows("stash_moves", "user_id = ?", [uid]));
-  await put("holdings", "escrow_holds", rows("escrow_holds", "user_id = ?", [uid], { omit: ["cp"] }));
+  // (1.99?? padppl review fix: never a 🎁 gift-to-a-frog-name hold - its state / done_at would tell the sender whether and when the frog
+  // accepted it; their "gifts_sent" below says what they may know)
+  await put("holdings", "escrow_holds", rows("escrow_holds", "user_id = ? AND COALESCE(kind, '') <> 'VGF'", [uid], { omit: ["cp"] }));
   await put("holdings", "market_orders", rows("market_orders", "user_id = ?", [uid]));
   await put("holdings", "lotto_tickets", rows("lotto_tickets", "userId = ?", [uid]));
   await put("holdings", "chat_rewards_waiting", rows("auto_escrow", "user_id = ?", [uid]));

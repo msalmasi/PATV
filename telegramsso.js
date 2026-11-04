@@ -112,6 +112,7 @@ function register(app, { addUser }) {
         username: v.user.handle || v.user.name, name: v.user.name, email: null, email_verified: false }, next);
       return done(path, true);
     } catch (e) {
+      if (e && e.code === "network") { req.flash("error", e.message); return done("/login", false); }   // 1.99?? padppl: a network ban's own words
       console.error("[tgsso] callback:", e && e.message);
       return fail("auth.tg.failed", "Telegram sign-in didn't work. Please try again.");
     }

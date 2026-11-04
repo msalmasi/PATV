@@ -11,16 +11,21 @@
 //                 label, room_id, created                     resolved on the server from the line / roster entry clicked; the blocker
 //                                                             only ever sees the label
 //
-// Where a block takes effect (named = dm_blocks, both directions unless said):
+// Where a NAMED block takes effect (dm_blocks / login_blocks, both directions unless said):
 //   1 DMs (generic refusal)  2 DM post cards  3 feed @mention notices  4 shop gifts / comps  5 post tips  6 story tips / replies /
 //   visibility  7 go-live alerts  8 mention web push  9 likeness commands  10 mic stage / live cams  11 chat search  12 the 🌐 people
 //   list  13 profile stories - and, NEW here: 14 every tip (tips.transferPat: the tip page, the pad tip modal, Pepe's !tip via
-//   chattip)  15 web !duel / !brawl / !tip naming them (bridge-relay runCmd)  16 pad chat @mention alerts (mentions.js)  17 pad chat
-//   lines of people YOU blocked folded for you (one direction, named lines only; liveView `blk`)  18 veiled gifts withheld (veilgift)
+//   chattip)  15 web !duel / !brawl / !tip naming them (bridge-relay runCmd)  16 pad chat @mention alerts from their NAMED lines
+//   (mentions.js)  17 pad chat lines of people YOU blocked folded for you (one direction, named lines only; liveView `blk`)  18 gifts to
+//   frog names between you withheld (veilgift)
 //
-// THE VEIL RULE: a block on a frog name changes only what the blocked person can do TO the blocker (DMs, tips, gifts, mention alerts,
-// web challenges, the blocker missing from the blocked person's people list). It changes NOTHING the blocker sees (no folding, no
-// tile, list or search change) and never their own actions - any of those would let the blocker link frog sessions or test suspects.
+// THE VEIL RULE (1.99?? padppl review fix - "who, not what"): a block on a FROG NAME acts ONLY on what that person does UNDER A FROG
+// NAME: their @mentions from frog-named lines don't alert the blocker (whatever frog name they use next). It never touches anything
+// they do under their own name (DMs, tips, gifts, challenges, the people list, alerts from their named lines) and changes NOTHING the
+// blocker sees - so the blocker can't test a suspect ("DM me" / "tip me" / "mention me" and watch what fails) and can't match a frog
+// to a name. The other way round too: a NAMED block never suppresses an alert from a frog-named line (a named block of a suspect +
+// a missing alert from 🐸V would say V is that suspect). Residual (privacy page): a frog-name block follows the person to their next
+// frog name, so a missing alert can tell the blocker two frog names are the same person - never who.
 // Every answer to a veil block is the same whoever is behind it (an account, an unlinked login, nobody), apart from "That's you".
 // Menus never say "they blocked you"; only "you blocked them" (blk), and never on a veiled entry.
 //
@@ -72,32 +77,43 @@ async function loginOf(userId) {
   try { const r = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0]; return r && r.camfrogUsername ? low(r.camfrogUsername) : null; }
   catch (e) { return null; }
 }
-/** Has `to` blocked `from` by a frog name or by an unlinked login (the kinds only the blocker's side knows about)? */
-async function hiddenTowards(fromId, toId, { fromLogin = null } = {}) {
+/** Has `to` blocked `from`'s Camfrog login while it had no PATV account (login_blocks - a NAMED block the DM table can't hold)? */
+async function loginBlocked(fromId, toId, { fromLogin = null } = {}) {
   if (!toId) return false;
   await init();
   const login = fromLogin ? low(fromLogin) : fromId ? await loginOf(fromId) : null;
-  const v = (await getQuery(`SELECT 1 FROM veil_blocks WHERE blocker_id = ? AND (${fromId ? "blocked_id = ?" : "0"} ${login ? "OR blocked_login = ?" : ""}) LIMIT 1`,
-    [String(toId), ...(fromId ? [String(fromId)] : []), ...(login ? [login] : [])]))[0];
-  if (v) return true;
-  if (login && (await getQuery("SELECT 1 FROM login_blocks WHERE blocker_id = ? AND login = ? LIMIT 1", [String(toId), login]))[0]) return true;
-  return false;
+  return !!(login && (await getQuery("SELECT 1 FROM login_blocks WHERE blocker_id = ? AND login = ? LIMIT 1", [String(toId), login]))[0]);
 }
-/** May `from` NOT do something TO `to` (tip, gift, challenge, mention-alert, message)? Named blocks either way, or `to`'s veil /
- *  login block on `from`. */
+/** Has `to` blocked `from` under a frog name (veil_blocks, by the account or the login behind it)? Only frog-named actions ask this. */
+async function veilBlocked(fromId, toId, { fromLogin = null } = {}) {
+  if (!toId || (!fromId && !fromLogin)) return false;
+  await init();
+  const login = fromLogin ? low(fromLogin) : fromId ? await loginOf(fromId) : null;
+  return !!(await getQuery(`SELECT 1 FROM veil_blocks WHERE blocker_id = ? AND (${fromId ? "blocked_id = ?" : "0"} ${login ? "OR blocked_login = ?" : ""}) LIMIT 1`,
+    [String(toId), ...(fromId ? [String(fromId)] : []), ...(login ? [login] : [])]))[0];
+}
+/** The NAMED-block checks only (dm_blocks either way, `to`'s login block on `from`) - the 1.99?? padppl review's name for what the
+ *  DM refusal asks besides dm_blocks. Kept as hiddenTowards for its callers. */
+const hiddenTowards = loginBlocked;
+/**
+ * May `from` NOT do something TO `to` (tip, gift, challenge, message, a mention alert)? THE VEIL RULE decides which blocks count:
+ *   veiled: false (default) - `from` acts under their OWN name: named blocks either way, or `to`'s login block on `from`.
+ *   veiled: true            - `from` acts under a FROG NAME (a frog-named chat line): only `to`'s frog-name blocks on them.
+ */
 async function towards(fromId, toId, opts = {}) {
   if (!toId || (fromId && String(fromId) === String(toId))) return false;
+  if (opts.veiled) return veilBlocked(fromId, toId, opts);
   if (fromId && (await either(fromId, toId))) return true;
-  return hiddenTowards(fromId, toId, opts);
+  return loginBlocked(fromId, toId, opts);
 }
-/** The ids of accounts that blocked `userId` by a frog name or by login (the people list leaves them out for `userId`). */
-async function veilBlockersOf(userId) {
+/** The ids of accounts that blocked `userId`'s Camfrog login by name before it had an account (the people list leaves them out for
+ *  `userId`, as dm_blocks do). Never frog-name blocks - THE VEIL RULE: those never change what the blocked person sees. */
+async function loginBlockersOf(userId) {
   if (!userId) return new Set();
   await init();
   const login = await loginOf(userId);
-  const rows = await getQuery(`SELECT blocker_id FROM veil_blocks WHERE blocked_id = ? ${login ? "OR blocked_login = ?" : ""}
-                               ${login ? "UNION SELECT blocker_id FROM login_blocks WHERE login = ?" : ""}`, [String(userId), ...(login ? [login, login] : [])]);
-  return new Set(rows.map((r) => String(r.blocker_id)));
+  if (!login) return new Set();
+  return new Set((await getQuery("SELECT blocker_id FROM login_blocks WHERE login = ?", [login])).map((r) => String(r.blocker_id)));
 }
 /** Who `viewerId` blocked by name: {ids, users (lowercased usernames), logins (lowercased)} - cached CACHE_MS. Never veils. */
 async function blockedBy(viewerId) {
@@ -197,7 +213,8 @@ async function list(userId) {
   const veils = [];
   for (const r of await getQuery("SELECT id, label, room_id, created FROM veil_blocks WHERE blocker_id = ? ORDER BY created DESC LIMIT 500", [me])) {
     let pad = null;
-    try { const room = r.room_id ? require("./rooms").getCached(r.room_id) : null; pad = room ? { title: room.title || room.slug || r.room_id, slug: room.slug || null } : null; } catch (e) { pad = null; }
+    // (review fix: never the raw room id as a title - no cached title = "a pad")
+    try { const room = r.room_id ? require("./rooms").getCached(r.room_id) : null; pad = room ? { title: room.title || room.name || null, slug: room.slug || null } : null; } catch (e) { pad = null; }
     veils.push({ id: Number(r.id), label: r.label || "someone", pad, at: Number(r.created) });
   }
   return { named, logins, veils };
@@ -266,9 +283,12 @@ function register(app, { addUser, bySlug = null }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     try {
       const b = req.body || {};
-      const me = (await getQuery("SELECT userId, username, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
+      const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!me) return res.status(401).json({ ok: false, error: "Sign in first." });
-      res.json(await set(me, b.ref, b.on !== false, { R: roomOf(b.slug) }));
+      const R = roomOf(b.slug);
+      // (1.99?? padppl review fix: a frog name's row / line only in a pad this viewer may see - the same answer as a line that's gone)
+      if (!(await PR.padOk(b.ref, me, R))) return res.status(404).json({ ok: false, error: "That line isn't here any more." });
+      res.json(await set(me, b.ref, b.on !== false, { R }));
     } catch (e) { fail(res, e); }
   });
   app.get("/api/blocks", addUser, async (req, res) => {
@@ -285,5 +305,5 @@ function register(app, { addUser, bySlug = null }) {
   });
 }
 
-module.exports = { init, register, set, list, either, towards, hiddenTowards, veilBlockersOf, blockedBy, pageList, linked, forget, merge, exportFor,
+module.exports = { init, register, set, list, either, towards, hiddenTowards, loginBlocked, veilBlocked, loginBlockersOf, blockedBy, pageList, linked, forget, merge, exportFor,
   changed, Refuse, _setClock: (f) => { clock = f; cache.clear(); }, _reset: () => { cache.clear(); hits.clear(); } };

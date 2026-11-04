@@ -626,6 +626,10 @@
         var nm = el('span', 'rb-ac-n', p.name || p.value); li.appendChild(nm);
         if (p.login) li.appendChild(el('span', 'rb-ac-l', p.login));
         if (p.tag) { var tg = el('span', 'rb-ac-t', p.tag); tg.title = p.tag; li.appendChild(tg); }   // (1.99ajh dockpop: its full word when it shortens)
+        // 1.99?? padppl review fix: a 🌐 name that is (or looks like) a Camfrog login it isn't linked to says so here - where the wrong person
+        // would get mentioned
+        if (p.clash) { var ct = el('span', 'clash-tag', window.__t ? __t('js.pad.chat.clash', 'not the Camfrog user') : 'not the Camfrog user');
+          ct.title = window.__t ? __t('js.pad.chat.clash_title', 'This is a PATV web account. It is not the Camfrog user called {login}.', { login: String(p.clash) }) : 'Not the Camfrog user ' + p.clash; li.appendChild(ct); }
         li._pick = function () { takeName(p, c); };
         li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });
         list.appendChild(li); acItems.push(li);

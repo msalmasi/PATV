@@ -232,7 +232,9 @@ async function blockers(userId, { now: t = now() } = {}) {
   if (sp.block) B("hold:stash", HOLD.stash[0], HOLD.stash[1]);
   if (sp.auto.some((s) => Number(s.balance) > 0)) S("stash", "The PAT in your stashes goes with your balance (to the PAT Routing destination)");
   // site-native things in flight
-  if ((await q("escrow_holds", ["user_id", "state"], "SELECT 1 FROM escrow_holds WHERE user_id = ? AND state = 'held' LIMIT 1", [uid])).length) B("hold:escrow hold", HOLD["escrow hold"][0], "/wallet");
+  // (1.99?? padppl review fix: never a 🎁 gift-to-a-frog-name hold - it can't be cancelled, and the blocker coming and going would tell the
+  // sender when the frog accepted it; a deleted sender's unaccepted gift goes to the House on its due day - veilgift.js)
+  if ((await q("escrow_holds", ["user_id", "state", "kind"], "SELECT 1 FROM escrow_holds WHERE user_id = ? AND state = 'held' AND COALESCE(kind, '') <> 'VGF' LIMIT 1", [uid])).length) B("hold:escrow hold", HOLD["escrow hold"][0], "/wallet");
   if ((await q("lotto_tickets", ["userId", "draw"], `SELECT 1 FROM lotto_tickets t JOIN lotto_draws d ON d.draw = t.draw WHERE t.userId = ? AND d.state IN ('selling','closed','drawn') LIMIT 1`, [uid]).catch(() => [])).length) B("hold:lotto ticket", HOLD["lotto ticket"][0], "/lotto");
   if ((await q("heist_market_listings", ["seller_id", "status"], "SELECT 1 FROM heist_market_listings WHERE (seller_id = ? OR buyer_id = ? OR holder_id = ?) AND status IN ('open','listed','pending','sold_pending','held') LIMIT 1", [uid, uid, uid])).length) B("heist", "A heist market listing that's still open - cancel it", "/gtf/market");
   if ((await q("stage_queue", ["userId", "status"], "SELECT 1 FROM stage_queue WHERE userId = ? AND status IN ('queued','waiting','pending','scheduled') LIMIT 1", [uid])).length) B("stagequeue", "A stage booking in the queue - cancel it", "/stage");
@@ -469,7 +471,12 @@ const DELETE_ROWS = [
   ["privacy_state_log", "user_id", "uid"], ["privacy_state", "login", "login"],
   ["inbox", "user_id", "uid"], ["inbox_prefs", "user_id", "uid"], ["inbox_pending", "camfrog", "login"],
   ["dm_prefs", "user_id", "uid"], ["dm_alerts", "user_id", "uid"], ["dm_blocks", "blocker_id", "uid"], ["dm_blocks", "blocked_id", "uid"],
-  ["login_blocks", "blocker_id", "uid"], ["veil_blocks", "blocker_id", "uid"], ["veil_blocks", "blocked_id", "uid"],   // 1.99?? padppl (blocks.js) ["pepe_dm_jobs", "user_id", "uid"],
+  ["pepe_dm_jobs", "user_id", "uid"],
+  // 1.99?? padppl: blocks on Camfrog logins / frog names (blocks.js), pad @mention mutes (mentions.js), the impersonation guard's OK
+  // marks (cfnames.js), network codes (netban.js) and bans on their frog name (padbans.js) - review fix: the pepe_dm_jobs entry above
+  // had been commented out by this line
+  ["login_blocks", "blocker_id", "uid"], ["veil_blocks", "blocker_id", "uid"], ["veil_blocks", "blocked_id", "uid"],
+  ["mention_pad_mutes", "user_id", "uid"], ["name_clash_ok", "user_id", "uid"], ["net_seen", "user_id", "uid"], ["veil_bans", "user_id", "uid"],
   ["mention_prefs", "user_id", "uid"], ["mention_words", "user_id", "uid"], ["follow_prefs", "user_id", "uid"], ["golive_prefs", "user_id", "uid"],
   ["follows", "follower", "uid"], ["user_language", "userId", "uid"], ["user_timezone", "userId", "uid"], ["profile_layout", "user_id", "uid"],
   ["user_badge_showcase", "user_id", "uid"], ["story_prefs", "user_id", "uid"], ["story_hides", "user_id", "uid"], ["story_saves", "user_id", "uid"],

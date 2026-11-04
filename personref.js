@@ -93,12 +93,11 @@ async function resolve(raw, { R = null } = {}) {
     const who = await ofVz(e._vz);
     return { kind: "veil", ...who, label: String(e.alias || "someone").slice(0, 60), hood: e.hood || null, veil: true };
   }
-  // a veiled line
+  // a veiled line - ALWAYS through bridge.revealLookup (1.99?? padppl review fix: its rules - a line taken down, its speaker left out by
+  // forget-me / deletion / a staff removal, its identity row gone - apply to the live item too, never the raw in-memory _vz)
   const it = (R.feed || []).find((x) => x && Number(x.c) === ref.c);
-  let vz = it && it._vz ? it._vz : null;
-  if (!vz) {
-    try { const r = await require("./bridge").revealLookup(R.id, ref.c); vz = r && r.vz ? r.vz : null; } catch (e) { vz = null; }
-  }
+  let vz = null;
+  try { const r = await require("./bridge").revealLookup(R.id, ref.c); vz = r && r.vz ? r.vz : null; } catch (e) { vz = null; }
   if (!vz) return { error: "That line isn't here any more." };
   const who = await ofVz(vz);
   const label = it && it.u && it.u.alias ? String(it.u.alias).slice(0, 60) : "someone";
@@ -112,4 +111,13 @@ function pageSafe(p) {
   return { kind: p.kind, username: p.username || null, login: p.login || null, label: p.label, veil: false };
 }
 
-module.exports = { resolve, clean, pageSafe, linkedAccount, accountById, accountByUsername, ofVz, LOGIN_RE, ACCT_RE, VEIL_ID_RE };
+/** 1.99?? padppl review fix: may `viewer` ({userId, class}) point at a veiled row / line of pad R (its full access - a private pad's
+ *  frog names stay out of reach of people who can't see it)? Named refs need no pad. Fails closed. */
+async function padOk(raw, viewer, R) {
+  const ref = clean(raw);
+  if (!ref || (ref.k !== "veil" && ref.k !== "line")) return true;
+  if (!R || !R.id || !viewer || !viewer.userId) return false;
+  try { const PA = require("./padaccess"); if (PA.init) await PA.init(); return !!PA.full({ userId: viewer.userId, class: viewer.class }, R.id); } catch (e) { return false; }
+}
+
+module.exports = { resolve, clean, pageSafe, padOk, linkedAccount, accountById, accountByUsername, ofVz, LOGIN_RE, ACCT_RE, VEIL_ID_RE };

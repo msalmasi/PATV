@@ -675,7 +675,8 @@ async function dressPage(kept, P, M, F) {
   await CV.attachBarNames(kept);
   await namesInto([...kept.filter((it) => CV.privacyOf(it) == null).map((it) => it.u), ...kept.map((it) => CV.barUser(it))].filter(Boolean), M);
   const dressed = CV.dress(kept, { view: P.V, lookup: (u) => M.get(B.nameKey(u.login)) });
-  return dressed.map((it) => (it.u ? Object.assign({}, it, { u: B.withPatv(it.u, M, F) }) : it));
+  // (1.99?? padppl review fix: mention chips in each person's look too - bridge.mnLook)
+  return dressed.map((it) => (it.u ? Object.assign({}, it, { u: B.withPatv(it.u, M, F) }, Array.isArray(it.mn) && it.mn.length && B.mnLook ? { mn: B.mnLook(it.mn, F) } : {}) : it));
 }
 
 // ── the limits (in the database: they survive a restart) ──

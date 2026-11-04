@@ -482,7 +482,10 @@
       var a = { 'class': 'mention' + (st ? ' cx-name' : '') + (mentionsMe(bm, ctx.me) ? ' mention-me' : ''), style: st };
       if (!bm.veil) a.title = (bm.username ? '@' + bm.username : '') + (bm.login && (!bm.username || String(bm.login).toLowerCase() !== String(bm.username).toLowerCase()) ? (bm.username ? ' · ' : '') + 'Camfrog: ' + bm.login : '');
       var kids = [shown];
-      if (!bm.veil && bm.flair && bm.flair.name) { var fl = flairNode({ patv: { flair: bm.flair } }, ctx, h); if (fl) kids.push(fl); }
+      // (review fix: the flair as its emoji only, its name as the tooltip - a whole flair pill mid-sentence was cut off and split the chip)
+      if (!bm.veil && bm.flair && bm.flair.emoji) {
+        kids.push(h('span', { 'class': 'mn-fl', title: bm.flair.name ? String(bm.flair.name) : null, 'aria-label': bm.flair.name ? String(bm.flair.name) : null }, [String(bm.flair.emoji).slice(0, 8)]));
+      }
       out.push(!bm.veil && bm.username ? h('a', Object.assign(a, { href: linkOf(ctx, '/u/' + encodeURIComponent(bm.username)), rel: relOf(ctx) }), kids) : h('span', a, kids));
       pos = best + len; found = true;
     }

@@ -445,12 +445,13 @@ function roomPmLocal(userId, roomId, text, cmd) {
   } catch (e) { /* a private row can't break the relay */ }
 }
 
-/** 1.99?? padppl: a say job's line reached the room - its sender "posted in this pad's chat" (padweb.notePost, the people list's dimmed
- *  🌐 rows). Once per job; never throws. */
-function notePosted(j) {
-  if (!j || j.kind !== "say" || j.postNoted || !j.userId || !j.username) return;
+/** 1.99?? padppl: a say job's line came back from the room AS A NAMED LINE (bridge.js ingest says `named`) - its sender "posted in this
+ *  pad's chat" (padweb.notePostNamed, the people list's dimmed 🌐 rows). Review fix (no unmasking): never for a line that went out under
+ *  a frog name or as a hidden bar, and never from Pepe's ack alone (it can't say how the line looked). Once per job; never throws. */
+function notePosted(j, named = false) {
+  if (!named || !j || j.kind !== "say" || j.postNoted || !j.userId || !j.username) return;
   j.postNoted = true;
-  try { require("./padweb").notePost(j.roomId, { userId: j.userId, username: j.username }, j.camfrog || null); } catch (e) { /* the list only */ }
+  try { require("./padweb").notePostNamed(j.roomId, { userId: j.userId, username: j.username }, j.camfrog || null).catch(() => {}); } catch (e) { /* the list only */ }
 }
 function applyAcks(acks) {
   for (const a of Array.isArray(acks) ? acks.slice(0, 100) : []) {
@@ -486,7 +487,6 @@ function applyAcks(acks) {
     if (st === "done") j.doneAt = Date.now();
     if (j.kind === "say") {
       j.ackAt = Date.now();
-      if (a.ok) notePosted(j);           // 1.99?? padppl: the people list's "posted in the last hour" (padweb.js)
       // Pepe's own clock: how long the line waited in his say lane (pacing) and in his send queue
       const t = a.t && typeof a.t === "object" ? a.t : null;
       const ms = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(600000, Math.round(Number(v)))) : null);
@@ -512,7 +512,7 @@ function applyAcks(acks) {
  *  1.99acb: `roomId` = the room the line came from - a line in ANOTHER room never settles the job (the sender's page would
  *  drop its pending line for a row that isn't in its chat; logged). An echo proves the line reached the room, so it settles a
  *  timed-out say (unconfirmed / nopepe) as sent - but never one Pepe himself acked as never sent (send_failed). */
-function noteEcho(jobId, c, roomId = null) {
+function noteEcho(jobId, c, roomId = null, named = false) {
   const j = jobs.get(String(jobId || ""));
   if (!j || j.kind !== "say" || j.echoC) return false;
   if (roomId && j.roomId !== roomId) {
@@ -522,7 +522,7 @@ function noteEcho(jobId, c, roomId = null) {
   if (j.result && !j.result.ok && j.result.code === "send_failed") return false;
   j.echoC = c; j.echoAt = Date.now();
   if (j.state !== "done" || !j.result || !j.result.ok) { j.state = "done"; j.doneAt = j.echoAt; j.result = { ok: true, msg: "sent" }; }
-  notePosted(j);
+  notePosted(j, named);              // 1.99?? padppl: the people list's "posted in the last hour" - a NAMED echo only (padweb.js)
   noteLatency(j);
   notify(j);
   return true;

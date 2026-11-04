@@ -21,7 +21,13 @@
 // snapshots from the website, feed posts / comments / stories, DMs; pad-scope bans in that pad only (its chat, posts, stage booking).
 // Exempt: Staff and above (SP feed.moderate), a ban's exempt list, bot-token routes (never asked), a direct socket. The refusal never
 // mentions an address: "That isn't available from your network right now. If you think this is a mistake, write to support."
-// Admin routes: GET /api/admin/nets/:userId?reason= (other accounts sharing its networks - names, never codes), GET/POST /api/admin/netbans.
+// Sign-in is checked inside sessions.signIn only (review fix: it knows the account, so staff and exempt accounts pass a password form
+// too); sign-up inside each account creator, before the account exists.
+// Admin routes: POST /api/admin/nets {who, reason, op?: "hitting"} (other accounts sharing its networks - names, never codes; or the bans
+// hitting that account), GET/POST /api/admin/netbans (switch, lift {ids}, account, exempt {target, ids?}, ip, range).
+// Review fixes: a false positive on a shared network is fixed by letting that account through (exempt), never only by lifting the ban;
+// the privacy page's paragraph shows while ANY code is stored (hasData), not only while the switch is on; sweeps also run soon after a
+// start; account deletion deletes the account's net_seen rows (accountdelete.js DELETE_ROWS).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -65,7 +71,18 @@ function key() {
   KEY = Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secret, "utf8"), Buffer.from("patv-net-v1"), Buffer.from("net-hash"), 32));
   return KEY;
 }
-function netOf(ip) { try { return require("./contentaudit").netOf(ip); } catch (e) { return null; } }
+/** The network an address belongs to: IPv4 as is, IPv6 by its /64 - review fix: parsed (ip6 below), so every spelling of one /64
+ *  ("2001:db8:1::5", "2001:db8:1:0:abcd::5") is ONE network and a compressed zero run never leaks interface bits into it. */
+function netOf(ip) {
+  let s = String(ip == null ? "" : ip).trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (s.startsWith("::ffff:") && ip4(s.slice(7)) != null) s = s.slice(7);
+  const v4 = ip4(s);
+  if (v4 != null) return s.split(".").map(Number).join(".");
+  const v6 = ip6(s);
+  if (v6 == null) return null;
+  const top = (v6 >> 64n).toString(16).padStart(16, "0");
+  return top.match(/.{4}/g).map((x) => x.replace(/^0+(?=.)/, "")).join(":") + "::/64";
+}
 function netHash(ip) {
   const n = netOf(ip);
   if (!n) return null;
@@ -110,8 +127,10 @@ async function reload() {
       const s = exempt.get(Number(e.ban_id)) || new Set(); s.add(String(e.user_id)); exempt.set(Number(e.ban_id), s);
     }
   }
-  BANS = { hashes, cidrs, exempt, at: t };
+  BANS = { hashes, cidrs, exempt, at: t, pad: rows.some((r) => r.scope === "pad") };
 }
+/** Is any active ban pad-scope (then the gate looks up which pads a request is for)? From memory. */
+const hasPadBans = () => !!BANS.pad;
 async function fresh() { await init(); if (now() - BANS.at > REFRESH_MS) await reload(); }
 
 // ── ranges ──
@@ -150,7 +169,7 @@ const staffExempt = (u) => { try { return !!(u && SP.can(u, "feed.moderate")); }
  * Why this request is refused by a network ban (null = it isn't). scope "site" (sign-up / sign-in / anything) or "pad" (roomId: that
  * pad's bans AND the site's). user = the account acting (null at sign-up) - Staff and a ban's exempt accounts pass.
  */
-async function refusal(req, { roomId = null, user = null } = {}) {
+async function refusal(req, { roomId = null, roomIds = null, user = null } = {}) {
   try {
     await fresh();
     if (!BANS.hashes.size && !BANS.cidrs.length) return null;
@@ -158,12 +177,19 @@ async function refusal(req, { roomId = null, user = null } = {}) {
     const n = reqNet(req);
     if (!n) return null;
     const t = now(), uid = user && user.userId ? String(user.userId) : null;
-    const hit = (b) => (b.until == null || b.until > t) && (b.scope === "site" || (roomId && b.room === String(roomId)))
+    const pads = new Set([...(roomId ? [String(roomId)] : []), ...(Array.isArray(roomIds) ? roomIds.map(String) : [])]);
+    const hit = (b) => (b.until == null || b.until > t) && (b.scope === "site" || (b.room && pads.has(b.room)))
       && !(uid && BANS.exempt.has(b.id) && BANS.exempt.get(b.id).has(uid));
     if ((BANS.hashes.get(n.hash) || []).some(hit)) return REFUSAL;
     if (BANS.cidrs.some((b) => hit(b) && inCidr(n.ip, b.cidr))) return REFUSAL;
     return null;
   } catch (e) { console.error("[netban] refusal:", e.message); return null; }
+}
+
+/** A NEW account from this request's network (every web account creator asks before it inserts the row): the refusal | null. */
+async function newAccountRefusal(req) {
+  if (!ON) return null;
+  try { return await refusal(req, {}); } catch (e) { return null; }
 }
 
 // ── admin side ──
@@ -173,20 +199,54 @@ async function logView(me, subjectId, reason) {
 const needAdmin = (me) => { if (!SP.can(me, "safety.net_bans")) { const e = new Error("Admins only."); e.status = 403; throw e; } };
 
 /** How many networks this account used lately and how many OTHER accounts share them (a count only; logged). */
-async function shared(me, userId, { reason = "" } = {}) {
+async function shared(me, userId, { reason = "", accounts = false } = {}) {
   needAdmin(me);
   await init();
   if (!ON) return { on: false, networks: 0, shared: 0 };
   const since = now() - SEEN_DAYS * 86400e3;
   const nets = await getQuery("SELECT net_hash FROM net_seen WHERE user_id = ? AND last_at > ?", [String(userId), now() - RECENT_DAYS * 86400e3]);
-  let others = 0;
+  let others = 0, list = [];
   if (nets.length) {
-    const r = (await getQuery(`SELECT COUNT(DISTINCT user_id) AS n FROM net_seen WHERE net_hash IN (${nets.map(() => "?").join(",")}) AND user_id != ? AND last_at > ?`,
+    const ph = nets.map(() => "?").join(",");
+    const r = (await getQuery(`SELECT COUNT(DISTINCT user_id) AS n FROM net_seen WHERE net_hash IN (${ph}) AND user_id != ? AND last_at > ?`,
       [...nets.map((x) => x.net_hash), String(userId), since]))[0];
     others = Number(r && r.n) || 0;
+    // (review fix: the ban sheet's "let them through" boxes - the other accounts by NAME, at most 10, never a code or an address)
+    if (accounts && others) {
+      list = (await getQuery(`SELECT s.user_id, MAX(s.last_at) AS last, u.username FROM net_seen s LEFT JOIN users u ON u.userId = s.user_id
+                              WHERE s.net_hash IN (${ph}) AND s.user_id != ? AND s.last_at > ? GROUP BY s.user_id ORDER BY last DESC LIMIT 10`,
+        [...nets.map((x) => x.net_hash), String(userId), since])).filter((x) => x.username).map((x) => ({ userId: String(x.user_id), username: x.username }));
+    }
   }
   await logView(me, userId, reason || "ban sheet");
-  return { on: true, networks: nets.length, shared: others };
+  return { on: true, networks: nets.length, shared: others, ...(accounts ? { accounts: list } : {}) };
+}
+/** Review fix (a false positive on a shared network): the active bans that would refuse account `userId` from the networks it used
+ *  lately - [{id, scope, room, until, from}] (never a code), logged as a view. */
+async function hitting(me, userId, reason) {
+  needAdmin(me);
+  await init();
+  if (!String(reason || "").trim()) { const e = new Error("Say why you're looking."); e.status = 400; throw e; }
+  const nets = await getQuery("SELECT net_hash FROM net_seen WHERE user_id = ? AND last_at > ?", [String(userId), now() - SEEN_DAYS * 86400e3]);
+  let rows = [];
+  if (nets.length) {
+    rows = await getQuery(`SELECT b.id, b.scope, b.room_id, b.until, b.from_user, u.username AS from_name, b.created FROM net_bans b LEFT JOIN users u ON u.userId = b.from_user
+                           WHERE b.net_hash IN (${nets.map(() => "?").join(",")}) AND b.lifted_at IS NULL AND (b.until IS NULL OR b.until > ?)
+                           AND b.id NOT IN (SELECT ban_id FROM net_ban_exempt WHERE user_id = ?) LIMIT 200`, [...nets.map((x) => x.net_hash), now(), String(userId)]);
+  }
+  await logView(me, userId, reason);
+  return rows.map((r) => ({ id: Number(r.id), scope: r.scope, room: r.room_id || null, until: r.until == null ? null : Number(r.until), from: r.from_name || null }));
+}
+/** Let account `userId` through ban(s) `ids` (or every ban hitting it now, when ids is empty) - the remedy short of lifting the ban. */
+async function exempt(me, userId, ids = [], reason = "") {
+  needAdmin(me);
+  await init();
+  let list = (Array.isArray(ids) ? ids : []).map((x) => Math.floor(Number(x))).filter((x) => x > 0).slice(0, 200);
+  if (!list.length) list = (await hitting(me, userId, reason || "exempt")).map((b) => b.id);
+  await tx(async () => { for (const id of list) await runQuery("INSERT OR IGNORE INTO net_ban_exempt (ban_id, user_id) VALUES (?, ?)", [id, String(userId)]); });
+  await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", { userId: String(userId), username: null }, { op: "exempt", ids: list }, String(reason || "").slice(0, 200) || null);
+  await reload();
+  return { ok: true, n: list.length };
 }
 /** The other accounts sharing this account's networks in the last 90 days - names only, never codes or addresses (logged). */
 async function sharedDetail(me, userId, reason) {
@@ -243,20 +303,44 @@ async function banTyped(me, { ip = null, cidr = null, scope = "site", roomId = n
 async function lift(me, id) {
   needAdmin(me);
   await init();
-  await runQuery("UPDATE net_bans SET lifted_at = ?, lifted_by = ? WHERE id = ? AND lifted_at IS NULL", [now(), me.username, Math.floor(Number(id))]);
-  await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", null, { op: "lift", id: Math.floor(Number(id)) }, null);
+  // (review fix: an account's networks are ONE ban in the list - `id` may be several ids)
+  const ids = (Array.isArray(id) ? id : [id]).map((x) => Math.floor(Number(x))).filter((x) => x > 0).slice(0, 200);
+  await tx(async () => { for (const x of ids) await runQuery("UPDATE net_bans SET lifted_at = ?, lifted_by = ? WHERE id = ? AND lifted_at IS NULL", [now(), me.username, x]); });
+  await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", null, { op: "lift", ids }, null);
   await reload();
   return { ok: true };
 }
-/** The active bans for the admin list: what kind, scope, until, reason, who - never a code. A range shows its rule. */
+/** The active bans for the admin list: what kind, scope, until, reason, who - never a code. A range shows its rule. Review fix: one
+ *  account's networks banned together are ONE row (ids: every network's ban, n: how many networks, exempt: how many let through). */
 async function listBans(me) {
   needAdmin(me);
   await init();
-  const rows = await getQuery(`SELECT b.id, b.cidr, b.scope, b.room_id, b.until, b.reason, b.by_name, b.created, u.username AS from_name FROM net_bans b
-                               LEFT JOIN users u ON u.userId = b.from_user WHERE b.lifted_at IS NULL AND (b.until IS NULL OR b.until > ?) ORDER BY b.created DESC LIMIT 500`, [now()]);
-  return rows.map((r) => ({ id: Number(r.id), kind: r.cidr ? "range" : r.from_name ? "account" : "ip", rule: r.cidr || null, from: r.from_name || null, scope: r.scope, room: r.room_id || null,
-                            until: r.until == null ? null : Number(r.until), reason: r.reason || "", by: r.by_name || "", at: Number(r.created) }));
+  const rows = await getQuery(`SELECT b.id, b.cidr, b.scope, b.room_id, b.until, b.reason, b.by_name, b.created, b.from_user, u.username AS from_name,
+                               (SELECT COUNT(*) FROM net_ban_exempt e WHERE e.ban_id = b.id) AS ex FROM net_bans b
+                               LEFT JOIN users u ON u.userId = b.from_user WHERE b.lifted_at IS NULL AND (b.until IS NULL OR b.until > ?) ORDER BY b.created DESC LIMIT 2000`, [now()]);
+  const out = [], groups = new Map();
+  for (const r of rows) {
+    const base = { kind: r.cidr ? "range" : r.from_user ? "account" : "ip", rule: r.cidr || null, from: r.from_name || null, scope: r.scope, room: r.room_id || null,
+                   until: r.until == null ? null : Number(r.until), reason: r.reason || "", by: r.by_name || "", at: Number(r.created) };
+    if (base.kind !== "account") { out.push(Object.assign({ id: Number(r.id), ids: [Number(r.id)], n: 1, exempt: Number(r.ex) || 0 }, base)); continue; }
+    const k = [r.from_user, r.scope, r.room_id || "", r.until == null ? "p" : Math.round(Number(r.until) / 60000), r.by_name || ""].join("|");
+    let g = groups.get(k);
+    if (!g) { g = Object.assign({ id: Number(r.id), ids: [], n: 0, exempt: 0 }, base); groups.set(k, g); out.push(g); }
+    g.ids.push(Number(r.id)); g.n++; g.exempt = Math.max(g.exempt, Number(r.ex) || 0);
+  }
+  return out.slice(0, 500);
 }
+/** Is any network data stored (codes or bans)? The privacy page says what is kept while there is any, switch or not (review fix). */
+let dataAt = 0, dataV = false;
+async function hasData() {
+  if (ON) return true;
+  if (now() - dataAt < 60e3) return dataV;
+  try { await init(); dataV = !!(await getQuery("SELECT 1 AS x FROM net_seen LIMIT 1"))[0] || !!(await getQuery("SELECT 1 AS x FROM net_bans WHERE lifted_at IS NULL LIMIT 1"))[0]; }
+  catch (e) { dataV = false; }
+  dataAt = now();
+  return dataV;
+}
+const hasDataNow = () => ON || dataV;
 async function setOn(me, on) {
   needAdmin(me);
   await init();
@@ -293,22 +377,34 @@ function guardWrite(roomOf = null, userOf = (req) => req.user || null) {
 }
 
 function register(app, { addUser }) {
-  init().catch((e) => console.error("[netban] init:", e.message));
+  init().then(() => hasData()).catch((e) => console.error("[netban] init:", e.message));
   const t = setInterval(sweep, 24 * 3600e3); if (t.unref) t.unref();
+  const t0 = setTimeout(sweep, 150 * 1000); if (t0.unref) t0.unref();      // (review fix: soon after a start too - deploys come often)
   const guard = require("./middleware/authGuard");
-  const fail = (res, e) => res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong." });
+  const fail = (res, e) => {
+    if (!(e && e.status)) console.error("[netban]", e);                 // (review fix: a 500 leaves a log line)
+    res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong." });
+  };
   const meOf = async (req) => (req.user && req.user.userId ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0] : null);
   const writeOk = (req) => req.is("application/json") && req.get("X-Requested-With") === "fetch" && guard.sameSite(req);
-  app.get("/api/admin/nets/:who", addUser, async (req, res) => {
+  const who = async (raw) => {
+    // u:<id> | @name | cf:<login> | a bare name (targets.js: one person, or 409 with the choices)
+    const T = await require("./targets").resolve(String(raw || ""), { allowLogin: false });
+    if (T.ambiguous) { const e = new Error(T.error); e.status = 409; e.choices = T.choices; throw e; }
+    if (T.error || !T.userId) { const e = new Error(T.error || "No such account."); e.status = 404; throw e; }
+    return T;
+  };
+  const failWho = (res, e) => (e && e.choices ? res.status(409).json({ ok: false, code: "ambiguous", error: e.message, choices: e.choices }) : fail(res, e));
+  // (review fix: a POST - the free-text reason never sits in a URL, so it never lands in an access log)
+  app.post("/api/admin/nets", addUser, require("express").json({ limit: "2kb" }), async (req, res) => {
     res.set("Cache-Control", "no-store");
+    if (!writeOk(req)) return res.status(400).json({ ok: false, error: "Bad request." });
     try {
       const me = await meOf(req); needAdmin(me);
-      // u:<id> | @name | cf:<login> | a bare name (targets.js: one person, or 409 with the choices)
-      const T = await require("./targets").resolve(String(req.params.who || ""), { allowLogin: false });
-      if (T.ambiguous) return res.status(409).json({ ok: false, code: "ambiguous", error: T.error, choices: T.choices });
-      if (T.error || !T.userId) return res.status(404).json({ ok: false, error: T.error || "No such account." });
-      res.json({ ok: true, ...(await sharedDetail(me, T.userId, req.query.reason)) });
-    } catch (e) { fail(res, e); }
+      const b = req.body || {}, T = await who(b.who);
+      if (b.op === "hitting") return res.json({ ok: true, username: T.username, bans: await hitting(me, T.userId, b.reason) });
+      res.json({ ok: true, username: T.username, ...(await sharedDetail(me, T.userId, b.reason)) });
+    } catch (e) { failWho(res, e); }
   });
   app.get("/api/admin/netbans", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -320,19 +416,19 @@ function register(app, { addUser }) {
     try {
       const me = await meOf(req), b = req.body || {};
       if (b.op === "switch") return res.json({ ok: true, ...(await setOn(me, b.on === true)) });
-      if (b.op === "lift") return res.json(await lift(me, b.id));
+      if (b.op === "lift") return res.json(await lift(me, Array.isArray(b.ids) ? b.ids : b.id));
       if (b.op === "account") {
-        const T = await require("./targets").resolve(String(b.target || ""), { allowLogin: false });
-        if (T.ambiguous) return res.status(409).json({ ok: false, code: "ambiguous", error: T.error, choices: T.choices });
-        if (T.error || !T.userId) return res.status(404).json({ ok: false, error: T.error || "No such account." });
+        const T = await who(b.target);
         return res.json(await banAccountNets(me, T.userId, { scope: b.scope, roomId: b.room || null, reason: b.reason, days: b.days, exempt: Array.isArray(b.exempt) ? b.exempt.slice(0, 50) : [] }));
       }
+      // (review fix: let one account through - every ban hitting it now, or the ones named - without lifting the ban for everyone)
+      if (b.op === "exempt") { const T = await who(b.target); return res.json(Object.assign({ username: T.username }, await exempt(me, T.userId, Array.isArray(b.ids) ? b.ids : [], b.reason))); }
       if (b.op === "ip" || b.op === "range") return res.json(await banTyped(me, { ip: b.op === "ip" ? b.value : null, cidr: b.op === "range" ? b.value : null, scope: b.scope, roomId: b.room || null, reason: b.reason, days: b.days }));
-      res.status(400).json({ ok: false, error: "switch, lift, account, ip or range" });
-    } catch (e) { fail(res, e); }
+      res.status(400).json({ ok: false, error: "switch, lift, account, exempt, ip or range" });
+    } catch (e) { failWho(res, e); }
   });
 }
 
-module.exports = { init, register, note, refusal, guardWrite, netHash, reqNet, parseCidr, inCidr, shared, sharedDetail, banAccountNets, banTyped, lift, listBans, setOn,
-  isOn, sweep, forget, reload, REFUSAL, KIND,
+module.exports = { init, register, note, refusal, newAccountRefusal, guardWrite, netHash, netOf, reqNet, parseCidr, inCidr, shared, sharedDetail, hitting, exempt, banAccountNets, banTyped, lift, listBans, setOn,
+  isOn, hasData, hasDataNow, hasPadBans, sweep, forget, reload, REFUSAL, KIND,
   _setClock: (f) => { clock = f; }, _setOn: (v) => { ON = !!v; }, _resetKey: () => { KEY = null; } };

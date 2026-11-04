@@ -270,6 +270,7 @@ async function dress(roomId, items, V, viewer, login, acts) {
   return dressed.map((it) => {
     if (!it.u) return it;
     const o = Object.assign({}, it, { u: B.withPatv(it.u, L, F) });
+    if (Array.isArray(o.mn) && o.mn.length && B.mnLook) o.mn = B.mnLook(o.mn, F);     // 1.99?? padppl review fix: mention chips' looks here too
     if (own.size && (it.k === "msg" || it.k === "tx") && !it.removed &&
         ((it.u.login && own.has(String(it.u.login).toLowerCase())) || (it._sh && ownH.has(it._sh)))) o.own = 1;
     return o;

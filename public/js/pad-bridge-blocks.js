@@ -47,7 +47,7 @@
   function load() {
     fetch(url, { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
-      .then(function (d) { draw(d.blocks || []); })
+      .then(function (d) { draw(d.blocks || []); try { document.dispatchEvent(new CustomEvent('patv:bans-changed')); } catch (e) { /* old engine */ } })   // 1.99?? padppl: the merged list (pad-bans.js) reloads
       .catch(function (e) { say(e.message, true); });
   }
   form.addEventListener('submit', function (e) {

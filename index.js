@@ -229,27 +229,47 @@ const botkeys = require("./botkeys");
 app.use(botkeys.middleware);
 botkeys.start();
 // 1.99?? padppl: 🌐⛔ network bans (netban.js - DARK until an admin switches them on): ONE gate in front of the write routes they cover -
-// sign-up and sign-in forms, feed posts / comments / uploads, stories, DMs, and a pad's chat / clips / snapshots / stage booking from
-// the website (pad-scope bans: that pad only). Staff pass; bot-token routes are never matched; the answer never names an address. A
-// request that passes notes the network for its account (net_seen: a keyed code, never the address).
+// feed posts / comments / edits / crossposts / uploads / AI generations, stories (and their replies / tips), DMs (send, uploads, groups,
+// adding people, renaming), and a pad's chat / commands / clips / snapshots / 🐸 Pepe actions / gifts / stage cam and booking from the
+// website, plus /api/stage/book and its queue. Pad-scope bans apply to the pad the request is FOR: the /api/rooms/:slug in the path, the
+// post's own pads (a comment, an edit, a crosspost) or the body's community / rooms / pads / room / pad. Staff and a ban's exempt accounts
+// pass; bot-token routes are never matched; the answer never names an address. Review fixes: sign-in is NOT gated here - sessions.signIn
+// knows the account (staff / exempt pass a password form too) - and sign-up is refused inside each account creator, before it exists.
+// A request that passes notes the network for its account (net_seen: a keyed code, never the address).
+const NB_ROUTES_ = [
+  [/^\/api\/feed\/(posts|uploads|aigen)(\/|$)/, "post"], [/^\/api\/feed\/comments\/[^/]+\/edit$/, "post"],
+  [/^\/api\/stories\/(mine|upload|[^/]+\/(reply|post|tip))(\/|$)/, "post"],
+  [/^\/api\/messages\/(send|uploads|groups)(\/|$)/, "post"], [/^\/api\/messages\/c\/[^/]+\/(rename|members)$/, "post"],
+  [/^\/api\/rooms\/[^/]+\/(say|cmd|clip|snap|snapframe|camclip|micclip|pepe|gift|book|stage\/book|stage\/cam|feed\/aigen-room)(\/|$)/, "say"],
+  [/^\/api\/stage\/(book|queue)$/, "say"],
+];
 app.use(async (req, res, next) => {
   if (req.method !== "POST") return next();
   const NB = require("./netban");
   if (!NB.isOn()) return next();
-  const p = req.path;
-  let roomSlug = null, kind = null, m;
-  if (p === "/register" || p === "/login") kind = "gate";
-  else if (/^\/api\/feed\/(posts|uploads)(\/|$)/.test(p)) { kind = "post"; roomSlug = req.body && typeof req.body.room === "string" ? req.body.room : null; }
-  else if (/^\/api\/stories\/(mine|upload)/.test(p) || p === "/api/messages/send") kind = "post";
-  else if ((m = /^\/api\/rooms\/([^/]+)\/(say|clip|snap|snap\/save|stage\/book|book)$/.exec(p))) { kind = "say"; try { roomSlug = decodeURIComponent(m[1]); } catch (e) { roomSlug = null; } }
-  if (!kind) return next();
+  const p = req.path, hit = NB_ROUTES_.find((r) => r[0].test(p));
+  if (!hit) return next();
+  const kind = hit[1];
   try {
     await new Promise((r) => addUser(req, res, r));
-    let roomId = null;
-    if (roomSlug) { const R = await require("./roomsweb").resolveRoom(String(roomSlug).slice(0, 128)).catch(() => null); roomId = R ? R.id : null; }
-    const why = await NB.refusal(req, { roomId, user: req.user || null });
-    if (why) return kind === "gate" ? res.status(403).type("text/plain").send(why) : res.status(403).json({ ok: false, code: "network", error: why });
-    if (req.user && req.user.userId && kind !== "gate") NB.note(req.user.userId, req, kind).catch(() => {});
+    // the pads this request is for (only looked up when some ban is pad-scope)
+    const roomIds = [];
+    if (NB.hasPadBans()) {
+      const RW = require("./roomsweb"), b = req.body && typeof req.body === "object" ? req.body : {};
+      const slugs = [];
+      let m;
+      if ((m = /^\/api\/rooms\/([^/]+)\//.exec(p))) { try { slugs.push(decodeURIComponent(m[1])); } catch (e) { /* bad slug */ } }
+      for (const k of ["community", "room", "pad"]) if (typeof b[k] === "string" && b[k]) slugs.push(b[k]);
+      for (const k of ["rooms", "pads", "communities"]) if (Array.isArray(b[k])) for (const x of b[k].slice(0, 10)) if (typeof x === "string" && x) slugs.push(x);
+      for (const s of slugs.slice(0, 12)) { const R = await RW.resolveRoom(String(s).slice(0, 128)).catch(() => null); if (R && R.id) roomIds.push(String(R.id)); }
+      let postId = null;
+      if ((m = /^\/api\/feed\/posts\/([^/]+)\//.exec(p))) postId = m[1];
+      else if ((m = /^\/api\/feed\/comments\/([^/]+)\/edit$/.exec(p))) postId = ((await getQuery("SELECT post_id FROM feed_comments WHERE id = ?", [m[1]]).catch(() => []))[0] || {}).post_id || null;
+      if (postId) for (const r of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? LIMIT 20", [String(postId)]).catch(() => [])) roomIds.push(String(r.room_id));
+    }
+    const why = await NB.refusal(req, { roomIds, user: req.user || null });
+    if (why) return res.status(403).json({ ok: false, code: "network", error: why });
+    if (req.user && req.user.userId) NB.note(req.user.userId, req, kind).catch(() => {});
   } catch (e) { /* fail open: every other check still runs */ }
   next();
 });
@@ -683,6 +703,9 @@ app.get("/auth/twitch/callback", async (req, res) => {
           await oauthLink.linkRewards({ userId: existingTwitchEmail[0].userId, provider: "twitch", providerId: twitchUser.id, priorFlag: prior ? prior.twitchBonus : 1 });
           currentUser = existingTwitchEmail[0];
         } else {
+          // 1.99?? padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
+          const nbWhy_ = await require("./netban").newAccountRefusal(req);
+          if (nbWhy_) return oauthFail(req, res, nbWhy_);
           //create a new user
           const newUserUsername = await generateUniqueUsername(twitchUser.display_name);
           const password = Math.random().toString(36).substring(2, 15);
@@ -734,7 +757,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
     }
   } catch (error) {
     console.error("Failed to authenticate with Twitch:", error && error.message);
-    if (!res.headersSent) oauthFail(req, res, "Twitch sign-in didn't work. Please try again.");
+    if (!res.headersSent) oauthFail(req, res, error && error.code === "network" ? error.message : "Twitch sign-in didn't work. Please try again.");   // 1.99?? padppl: a network ban's own words
   }
 });
 
@@ -972,6 +995,9 @@ app.get("/auth/discord/callback", async (req, res) => {
           require("./requestroles").kick(existingDiscordEmail[0].userId);   // 1.99la
           currentUser = existingDiscordEmail[0];
         } else {
+          // 1.99?? padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
+          const nbWhy_ = await require("./netban").newAccountRefusal(req);
+          if (nbWhy_) return oauthFail(req, res, nbWhy_);
           // Create a new user
           const password = Math.random().toString(36).substring(2, 15);
           const hashedPassword = await bcrypt.hash(password, 12);
@@ -1026,7 +1052,7 @@ app.get("/auth/discord/callback", async (req, res) => {
     }
   } catch (error) {
     console.error("Failed to authenticate with Discord:", error && error.message);
-    if (!res.headersSent) oauthFail(req, res, "Discord sign-in didn't work. Please try again.");
+    if (!res.headersSent) oauthFail(req, res, error && error.code === "network" ? error.message : "Discord sign-in didn't work. Please try again.");   // 1.99?? padppl: a network ban's own words
   }
 });
 
@@ -2679,6 +2705,14 @@ app.post('/api/users/camfrog/register', async (req, res) => {
     await welcome.enroll(userId, "camfrog", null, null, typeof req.body.identity === "string" ? req.body.identity.slice(0, 60) : null);
     await oauthLink.safeBadge(userId, 'fresh_meat');
     await inbox.attachPendingSafe(userId, camfrogUsername);   // notices Pepe sent before the account existed
+    // 1.99?? padppl (review fix): blocks / website bans / frog-name gifts made on this login before it had an account follow it onto
+    // the account Pepe just made, as on a !verify link (never throws)
+    const cfl_ = String(camfrogUsername || "").toLowerCase();
+    if (cfl_) {
+      try { await require("./blocks").linked(userId, cfl_); } catch (e) { /* blocks.js logs */ }
+      try { await require("./padbans").linked(userId, cfl_); } catch (e) { /* padbans.js logs */ }
+      try { await require("./veilgift").linked(userId, cfl_); } catch (e) { /* veilgift.js logs */ }
+    }
     res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: 0 } });
   } catch (error) {
     console.error('Error creating Camfrog user:', error.message);

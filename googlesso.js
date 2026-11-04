@@ -218,6 +218,7 @@ function register(app, { addUser }) {
       if (req.user && req.user.username) return res.redirect(editPage(req.user));
       return res.redirect(await sso.signInOrPark(req, res, w, st.next));
     } catch (e) {
+      if (e && e.code === "network") { req.flash("error", e.message); return res.redirect(back || "/login"); }   // 1.99?? padppl: a network ban's own words
       console.error("[googlesso] callback:", e && e.message);
       return fail(req, res, "auth.google.failed", "Google sign-in didn't work. Please try again.", back);
     }

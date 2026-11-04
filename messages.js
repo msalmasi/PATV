@@ -404,8 +404,9 @@ async function refusal(sender, recipient, conv = null, opts = {}) {
   const b = await blocked(sender.userId, recipient.userId);
   if (b.some((x) => x.blocker_id === sender.userId)) return new Refuse(403, `You've blocked ${nm}. Unblock them to send a message.`, "you_blocked");
   if (b.length) return new Refuse(403, `You can't message ${nm}.`, "blocked");
-  // 1.99?? padppl: a block the recipient made on a frog name (or an unlinked Camfrog login) that is this sender - the same generic text
-  if (await require("./blocks").hiddenTowards(sender.userId, recipient.userId).catch(() => false)) return new Refuse(403, `You can't message ${nm}.`, "blocked");
+  // 1.99?? padppl: a block the recipient made on this sender's Camfrog login before it had an account - the same generic text. Never a
+  // frog-name block (blocks.js THE VEIL RULE: a DM is a named action - a frog-name block that refused it would unmask the frog)
+  if (await require("./blocks").loginBlocked(sender.userId, recipient.userId).catch(() => false)) return new Refuse(403, `You can't message ${nm}.`, "blocked");
   if (recipient.userId === PEPE_ID) return null;          // no "who can message me" / new-account rule for the bot (his price + limits cover it)
   if (conv && await hasWritten(conv.id, recipient.userId)) return null;            // they wrote to you: replies are always fine
   const P = await prefs(recipient.userId);

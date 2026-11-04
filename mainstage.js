@@ -549,13 +549,18 @@ async function isBanned(userId, roomId) {
   await init();
   if ((await getQuery("SELECT 1 AS b FROM stage_bans WHERE userId = ?", [userId])).length) return true;
   if (roomId && (await getQuery("SELECT 1 AS b FROM stage_room_bans WHERE userId = ? AND room_id = ?", [userId, roomId])).length) return true;
-  // 1.99?? padppl: a whole-pad ban (feed_bans for this pad or the whole site) stops booking its stage too; and a ban on their frog name
-  // (padbans.js - a refusal only, never a visible effect)
+  // 1.99?? padppl: a NAMED whole-pad ban (feed_bans for this pad or the whole site, or one on their Camfrog login from before it had an
+  // account) stops booking its stage too. Review fix (HIGH): NEVER a ban on their frog name - isBanned also ends live stage streams and
+  // takes named mic-stage tiles (publish auth, WHIP, micfollow), so a frog-name ban here would show a moderator who the frog is
+  // (padbans.js THE VEIL RULE)
   try {
     if ((await getQuery("SELECT 1 AS b FROM feed_bans WHERE user_id = ? AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?) LIMIT 1",
       [String(userId), String(roomId || ""), Date.now()])).length) return true;
   } catch (e) { /* no feed yet */ }
-  try { if (await require("./padbans").veilActive(roomId || "", userId, { scopes: ["pad", "site"] })) return true; } catch (e) { /* no padbans */ }
+  try {
+    const PB = require("./padbans"), login = await PB.loginOfCached(userId);
+    if (login && (await PB.loginActive(roomId || "", login, ["pad", "site"]))) return true;
+  } catch (e) { /* no padbans */ }
   return false;
 }
 // the bookings that overlap [a, b) (open ones by their projected end, scheduled ones by theirs)
