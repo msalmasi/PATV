@@ -681,6 +681,31 @@ test("live picker availability follows the shared say eligibility and fails clos
   }
 });
 
+// 1.99?? dockfu: review - the cache never hands one viewer's (or one room's) answer to another: alice may, bob and alice-elsewhere may
+// not, all inside one TTL, each asked once.
+test("1.99?? dockfu: review - live picker eligibility is cached per viewer and per room, never shared", async () => {
+  const dock = require(path.join(repo, "paddock")), cf = require(path.join(repo, "cfstickers")), gifs = require(path.join(repo, "gifs"));
+  const old = [dock.current, cf.enabled, gifs.available, relay.sayEligibility];
+  const R = bridge.bySlug(SLUG), before = R.stickers, R2 = { ...R, id: "Quote.Elsewhere", slug: "quote-elsewhere" };
+  const asked = [];
+  bridge._eligReset(); bridge._eligClock(() => 7e12);
+  try {
+    dock.current = () => ({ cfg: { mode: "everyone" } });
+    cf.enabled = () => true; gifs.available = () => true; R.stickers = true; R2.stickers = true;
+    relay.sayEligibility = async (req, room) => { asked.push(req.user.userId + "@" + room.id); return { ok: req.user === U.alice && room === R }; };
+    const live = (who, login, room = R) => bridge.liveView(room, 0, who.userId, login, who.username, true, { viewer: who });
+    assert.equal((await live(U.alice, "alicecf")).room.gifPicker, true);
+    assert.equal((await live(U.bob, "bobcf")).room.gifPicker, false, "bob never gets alice's answer");
+    assert.equal((await live(U.alice, "alicecf", R2)).room.gifPicker, false, "nor does another room");
+    assert.equal((await live(U.alice, "alicecf")).room.gifPicker, true);
+    assert.equal((await live(U.bob, "bobcf")).room.gifPicker, false);
+    assert.deepEqual(asked, [U.alice.userId + "@" + R.id, U.bob.userId + "@" + R.id, U.alice.userId + "@" + R2.id], "one check each");
+  } finally {
+    [dock.current, cf.enabled, gifs.available, relay.sayEligibility] = old;
+    R.stickers = before; bridge._eligClock(null); bridge._eligReset();
+  }
+});
+
 test("GIF metadata is projected after ingest and never retained in the raw feed or its persisted JSON", async () => {
   const gifs = require(path.join(repo, "gifs")), old = gifs.attach;
   const text = "[gif:projection-only]";
