@@ -224,18 +224,19 @@ test("whitelist: the Monday daily's release is post-move - excused only on the e
     assert.deepEqual(SCH.applyWhitelist(["week.id: x"], c, "inputs").excused, [], `week.*: ${why}`);
   }
   assert.deepEqual(SCH.applyWhitelist(["fed_loans[0].outstanding: site 1 / pepe 0"], ctx, "inputs").blocking.length, 1, "any other input blocks");
-  // the whitelist's inventory: every entry names its proving test, and that test is in this file
-  const src = fs.readFileSync(__filename, "utf8");
+  // the whitelist's inventory: every entry names its proving test, and that test is in its file (this one - PO-4's derived dual
+  // read entry: test/policy-derived.test.js)
   for (const w of SCH.WHITELIST) {
-    const m = /^test\/policy-boundary\.test\.js: (.+)$/.exec(w.test);
-    assert.ok(m && src.includes(`test(${JSON.stringify(m[1])}`), `${w.on} ${w.engine} ${w.field}: ${w.test}`);
+    const m = /^test\/(policy-boundary|policy-derived)\.test\.js: (.+)$/.exec(w.test);
+    const src = m ? fs.readFileSync(path.join(__dirname, `${m[1]}.test.js`), "utf8") : "";
+    assert.ok(m && src.includes(`test(${JSON.stringify(m[2])}`), `${w.on} ${w.engine} ${w.field}: ${w.test}`);
     assert.ok(w.when, `${w.on} ${w.engine} ${w.field}: has a condition`);
   }
   assert.deepEqual(SCH.WHITELIST.map((w) => `${w.on}:${w.engine}:${w.kind}:${w.field}`),
                    ["plan:treasury:daily:release", "plan:treasury:daily:release (week not filled yet)", "inputs:treasury:daily:week.*",
                     "inputs:treasury:daily:week.share / week.release_per_day (week not filled yet)", "inputs:monetary:monetary:week.*",
                     "inputs:monetary:monetary:week.share / week.release_per_day (week not filled yet)", "inputs:monetary:monetary:rows / days / skip",
-                    "decision:monetary:monetary:guarantee"], "a new entry needs its own test (D-15)");
+                    "decision:monetary:monetary:guarantee", "plan:derived:derived:flows"], "a new entry needs its own test (D-15)");
 });
 
 test("the Monday monetary day: the guarantee decision and the week record are post-move; a mismatched decision blocks", async () => {

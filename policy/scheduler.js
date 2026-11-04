@@ -53,6 +53,13 @@
 //                                                                site ran and every effect Pepe hasn't applied (idempotent)
 //   /api/policy/admin/test-clock {at}   STAGING only: the scheduler's clock jumps to `at` (s) - nothing else moves
 //   /api/policy/admin/tick {at, tag, engines}  STAGING only: one pass at `at` with period ids "<id>-<tag>" (the rehearsal)
+// PO-4 (1.99??), SHADOW ONLY - nothing here moves PAT or changes a decision. THE DERIVED DUAL READ (derivedPass): once a day after
+// the 04:00 runs (from 04:30 UTC and the day's capital cut-off) the state Pepe derives and pushes with his capital config (the
+// vault targets, the Fed loan room, the credit terms, the flows; capital_meta "cfg") is compared with the site's own derivation
+// (policy/derived.js) at his push's instant - one row a day, policy_sims "shadow:derived:D<date>" (the shadow-report shape; the
+// WHITELIST's "flows" entry: display only). THE WEEKLY AUDIT (digestPass): policy/digest.js audits Pepe's settled epoch (via
+// "shadow", compared with his own wf-audit / wf-digest notices, policy_epoch_audit) - and once the treasury runs here, retries the
+// site's own audit / digest of a settled week whose notices aren't recorded as sent.
 // Admin (signed in, class Admin): GET /api/admin/policy · POST /api/admin/policy/mode {engine, mode, note} (off / dry / shadow)
 // · POST /api/admin/policy/pause {engine|"all", pause, note, nonce, password} (PO-1: a Pepe owner + the password step-up).
 "use strict";
@@ -160,6 +167,13 @@ const WHITELIST = [
     when: (ctx) => /^guarantee: site waits for the epoch \/ pepe true$/.test(ctx.d),
     why: "the Monday guarantee needs this week's epoch done: Pepe ran it a moment earlier, the site sees it only when his journal push lands (the site's own gate - the guarantee on, the treasury live, the epoch's day - is checked)",
     test: "test/policy-boundary.test.js: the Monday monetary day: the guarantee decision and the week record are post-move; a mismatched decision blocks" },
+  // PO-4 (1.99??): the derived dual read's one excused field - Pepe's `flows` comes from HIS vault flow ledger (only the moves he
+  // makes, tagged with flow / caller-frame names, mostly {}), which the site can only rebuild best-effort (policy/derived.js
+  // siteLedger); the capital cut-off copies it into the epoch record for /staking and no PAT path reads it
+  { on: "plan", engine: "derived", kind: "derived", field: "flows", match: /^flows(\.|$)/, mode: "shadow",
+    when: (ctx) => ctx.kind === "derived",
+    why: "display only: the cut-off copies it into the epoch record for /staking; no PAT path reads it",
+    test: "test/policy-derived.test.js: flows is display-only" },
 ];
 
 // ── what is due ──
@@ -597,7 +611,190 @@ async function pass(nowS, { tag = null, only = null } = {}) {
     await passes[e](nowS, info, engs[e], out);
   }
   if (out.some((x) => !/^(dry|shadow|live) burn D/.test(x) && !/^(dry|shadow) /.test(x))) await recordSupply();
+  // PO-4: the derived dual read and the weekly audit (shadow; they never throw, never move PAT) - while the treasury engine is on.
+  // Their rows are read from view() (derived, epoch_audits), never from this pass's list of what the ENGINES ran / planned
+  if (engs.treasury.mode !== "off") {
+    await derivedPass(nowS, info);
+    await digestPass(nowS, info, engs.treasury);
+  }
   return out;
+}
+
+// ── PO-4: the derived dual read (shadow) ──
+const DERIVED_START_S = 1800;          // from 04:30 UTC: after the day's 04:00 runs
+const DERIVED_PUSH_FRESH_S = 600;      // only a push at most this old (Pepe pushes every 300 s, right after refreshing his mirror)
+const DERIVED_MAX_ATTEMPTS = 24;       // a day's attempts at most
+const FUNDING_FRESH_MS = 600000;       // the funding sync's fedloan_room / week_start: compared only when this fresh
+const derivedDone = new Set();         // the days this process saw final (no query on each 15 s pass)
+let realClock = () => Date.now() / 1000;  // the real clock (capital pushes are stamped with it; tests set it)
+const realS = () => realClock();
+/** Pepe's copy of the derived state - his capital push as capital/service putConfig cleaned it (capital_meta "cfg"). */
+function pepeDerived(push) {
+  const p = push || {};
+  return { targets: p.targets === undefined ? null : p.targets, fl_room: p.fl_room === undefined ? null : p.fl_room,
+           flash_room: p.flash && p.flash.room !== undefined ? p.flash.room : null,
+           credit: p.credit && typeof p.credit === "object" ? require("../credit").cleanWeights(p.credit) : null,
+           flows: p.flows === undefined ? null : p.flows };
+}
+const siteDerived = (v) => ({ targets: v.targets, fl_room: v.fl_room, flash_room: v.flash_room, credit: require("../credit").cleanWeights(v.credit), flows: v.flows });
+/** The row of a derived day (policy_sims "shadow:derived:<D>"), written only while it isn't final (ok IS NULL). */
+async function putDerived(D, f) {
+  const { runQuery } = require("../dbUtils");
+  const t = Date.now();
+  await runQuery(`INSERT INTO policy_sims (key, mode, engine, period, site_inputs, site_plan, pepe_plan, total_diff, whitelisted, blocking, truncated, ok, boundary_ts,
+                    created, updated) VALUES (?, 'shadow', 'derived', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(key) DO UPDATE SET site_inputs = excluded.site_inputs, site_plan = excluded.site_plan, pepe_plan = excluded.pepe_plan,
+                    total_diff = excluded.total_diff, whitelisted = excluded.whitelisted, blocking = excluded.blocking, truncated = excluded.truncated,
+                    ok = excluded.ok, boundary_ts = excluded.boundary_ts, updated = excluded.updated WHERE policy_sims.ok IS NULL`,
+                 [`shadow:derived:${D}`, D, JSON.stringify(f.site_inputs), JSON.stringify(f.site_plan === undefined ? null : f.site_plan),
+                  JSON.stringify(f.pepe_plan === undefined ? null : f.pepe_plan), JSON.stringify(f.total_diff || []),
+                  JSON.stringify({ plan: f.whitelisted || [] }), JSON.stringify({ plan: f.blocking || [] }), f.truncated ? 1 : 0,
+                  f.ok === undefined ? null : f.ok, f.boundary_ts === undefined ? null : f.boundary_ts, t, t]);
+}
+async function derivedRow(D) {
+  const { getQuery } = require("../dbUtils");
+  const r = (await getQuery("SELECT * FROM policy_sims WHERE key = ?", [`shadow:derived:${D}`]))[0];
+  return r ? Object.assign(r, { site_inputs: C.parse(r.site_inputs, {}) || {}, site_plan: C.parse(r.site_plan, null), pepe_plan: C.parse(r.pepe_plan, null),
+                               total_diff: C.parse(r.total_diff, []), whitelisted: C.parse(r.whitelisted, {}), blocking: C.parse(r.blocking, {}) }) : null;
+}
+/** One attempt: the site's derivation at Pepe's push instant vs his push -> the attempt (never throws: a gather error - e.g. the
+ *  economy settings E_CFG_MISSING - is a blocking attempt with no fingerprint). */
+async function derivedAttempt(push) {
+  const D = require("./derived");
+  const at = Number(push.at);
+  let inputs, values;
+  try {
+    inputs = await D.gather(at);
+    values = D.derive(inputs);
+  } catch (e) {
+    const why = `${e.code || "error"}: ${String(e.message || e).slice(0, 160)}`;
+    return { push_at: at, error: why, blocking: [`gather: ${why}`], excused: [], list: [`gather: ${why}`], n: 1, truncated: false, fp: null, funding: null };
+  }
+  const site = siteDerived(values), pepe = pepeDerived(push);
+  const a = Object.assign({}, site), b = Object.assign({}, pepe);
+  // the funding sync's copy of the Fed loan room and the budget week (pepe_monetary._mo_site_state) - only while it is fresh
+  let funding = "stale - not compared";
+  try {
+    const F = require("../funding");
+    const m = F.state.monetary;
+    if (m && typeof m === "object" && realS() * 1000 - Number(F.state.syncedAt || 0) <= FUNDING_FRESH_MS) {
+      a.funding = { fedloan_room: values.fl_room, week_start: Math.trunc(E.weekStart(at, S.hourOf(inputs.consts))) };
+      b.funding = { fedloan_room: m.fedloan_room === undefined ? null : m.fedloan_room, week_start: m.week_start === undefined ? null : m.week_start };
+      funding = "compared";
+    }
+  } catch (e) { funding = "stale - not compared"; }
+  const d = diffCapped(a, b);
+  const w = applyWhitelist(d.list, { engine: "derived", kind: "derived", mode: "shadow" }, "plan");
+  return { push_at: at, site, pepe, list: d.list, n: d.n, truncated: d.truncated, excused: w.excused, blocking: w.blocking, funding,
+           fp: D.fingerprint(values, inputs), summary: D.inputsSummary(inputs), values };
+}
+const attemptRec = (x) => Object.assign({ push_at: x.push_at, n: x.n || 0, blocking: (x.blocking || []).slice(0, 5), fp: x.fp }, x.error ? { error: x.error } : {});
+/**
+ * PO-4: the day's derived dual read (see the header). The period D = info.did (tagged "D...-<tag>" under /api/policy/admin/tick);
+ * eligible from the day's start + DERIVED_START_S and, untagged, once the day's capital cut-off ran (the share book's newest epoch
+ * at or after the day's start - a tagged tick skips it: the capital cut-off runs on the real clock). Skipped while a staging test
+ * clock is set and the pass has no tag (a clock jump never uses up a real day's row). A push is compared once: received after
+ * the eligibility moment (real clock) and at most DERIVED_PUSH_FRESH_S old. Final: a clean attempt (ok 1); the same blocking list
+ * AND site fingerprint twice in a row (ok 0, "stable difference"); DERIVED_MAX_ATTEMPTS unclean; the day's end (the last attempt,
+ * or "no fresh capital push"). A final row is never rewritten. Never throws; moves nothing. -> "derived <D> ..." | null
+ */
+async function derivedPass(nowS, info) {
+  try {
+    if (C._testOffset() !== 0 && !info.sfx) return null;
+    // the day before: final at its end (untagged only)
+    if (!info.sfx) {
+      const P = E.dayId(info.db - 86400, info.hour);
+      if (!derivedDone.has(P)) {
+        const r = await derivedRow(P);
+        if (r && (r.ok === null || r.ok === undefined)) {
+          const si = r.site_inputs || {};
+          const none = !(si.attempts || []).length;
+          const why = none ? "no fresh capital push" : "no clean attempt by the day's end";
+          await putDerived(P, { site_inputs: Object.assign({}, si, { final: why }), site_plan: r.site_plan, pepe_plan: r.pepe_plan, total_diff: r.total_diff,
+                                whitelisted: (r.whitelisted || {}).plan, blocking: none ? [why] : (r.blocking || {}).plan, truncated: !!r.truncated, ok: 0,
+                                boundary_ts: r.boundary_ts });
+          console.warn(`[policy] derived ${P}: NOT clean (${why})`);
+        }
+        derivedDone.add(P);                                          // a past day: closed now, or never had a row (nothing more to do)
+      }
+    }
+    const Dd = info.did;
+    if (derivedDone.has(Dd)) return null;
+    if (nowS < info.db + DERIVED_START_S) return null;
+    let eligible = info.db + DERIVED_START_S;
+    if (!info.sfx) {
+      const book = await require("../capital/vaults").load();
+      const last = book.epochs.length ? Number(book.epochs[book.epochs.length - 1].ts) : 0;
+      if (!(last >= info.db)) return null;                              // the day's capital cut-off hasn't run
+      eligible = Math.max(eligible, last);
+    }
+    let row = await derivedRow(Dd);
+    if (row && row.ok !== null && row.ok !== undefined) { derivedDone.add(Dd); return null; }
+    if (!row) {
+      // the day's row, created at its first eligible pass (a tagged rehearsal: the real moment it started)
+      await putDerived(Dd, { site_inputs: { attempts: [], eligible_real: info.sfx ? realS() : eligible } });
+      row = await derivedRow(Dd);
+    }
+    const si = row.site_inputs || {};
+    const attempts = Array.isArray(si.attempts) ? si.attempts : [];
+    const push = (await require("../capital/core").meta("cfg")) || null;
+    const at = push ? Number(push.at) : NaN;
+    const since = Number(si.eligible_real || eligible);
+    if (!push || !Number.isFinite(at) || at <= since || realS() - at > DERIVED_PUSH_FRESH_S) return null;
+    if (attempts.some((x) => Number(x.push_at) === at)) return null;              // this push was compared already
+    const x = await derivedAttempt(push);
+    const clean = !x.blocking.length && !x.truncated;
+    const prev = attempts[attempts.length - 1] || null;
+    const stable = !clean && !x.error && !!prev && !!prev.fp && prev.fp === x.fp && JSON.stringify(prev.blocking) === JSON.stringify(x.blocking.slice(0, 5));
+    const n = attempts.length + 1;
+    let ok = null, final = null;
+    const list = attempts.map((a) => Object.assign({}, a));
+    if (clean) {
+      ok = 1;
+      for (const a of list) if (a.fp !== x.fp && !a.note) a.note = "state moved between push and read";
+    } else if (stable) { ok = 0; final = "stable difference"; } else if (n >= DERIVED_MAX_ATTEMPTS) { ok = 0; final = `${n} attempts, none clean`; }
+    list.push(attemptRec(x));
+    await putDerived(Dd, { site_inputs: Object.assign({ eligible_real: since, asof: at, push_at: at, fp: x.fp, inputs: x.summary || null, funding: x.funding || null,
+                                                       attempts: list }, final ? { final } : {}),
+                           site_plan: x.site || null, pepe_plan: x.pepe || null, total_diff: x.list, whitelisted: x.excused, blocking: x.blocking,
+                           truncated: x.truncated, ok, boundary_ts: at });
+    // capital_meta "derived" (the plan's name): the last attempt's values - display only, nothing reads them for a decision
+    const v = x.values || null;
+    await require("./derived").note({ day: Dd, at: Date.now(), asof: at, push_at: at, fp: x.fp,
+                                      values: v ? { targets: v.targets, fl_room: v.fl_room, credit: v.credit, flows: v.flows, diag: v.diag } : null });
+    if (ok !== null) derivedDone.add(Dd);
+    const msg = `derived ${Dd}: ${clean ? "clean" : "NOT clean"} (attempt ${n}${x.excused.length ? `, ${x.excused.length} whitelisted` : ""}${final ? `, ${final}` : ""})`;
+    if (clean) log(msg); else console.warn(`[policy] ${msg}: ${x.blocking.slice(0, 4).join(" | ")}`);
+    return msg;
+  } catch (e) {
+    console.error("[policy] derived dual read:", e.message);
+    return null;
+  }
+}
+/** PO-4: the weekly audit - shadow (Pepe's settled record of this week and the last, compared with his notices; it sends nothing)
+ *  or, once the treasury is live here, the retry of the site's own audit / digest. Same test-clock rule as derivedPass. */
+async function digestPass(nowS, info, eng) {
+  try {
+    if (C._testOffset() !== 0 && !info.sfx) return null;
+    const DG = require("./digest");
+    const out = [];
+    if (eng.mode === "live") {
+      if (info.sfx) return null;
+      for (const eid of await DG.retryLive()) out.push(`staking digest ${eid}`);
+      return out;
+    }
+    const base = E.epochId(nowS, info.hour);
+    for (const eid of [info.eid, (prevEpochId(base) || "") + info.sfx]) {
+      if (!/^W\d{4}-\d{2}-\d{2}/.test(eid)) continue;
+      if (DG.isFinal(eid)) continue;
+      const st = await DG.shadowAudit(eid, realS());
+      if (st === "final") out.push(`shadow audit ${eid} final`);
+    }
+    return out;
+  } catch (e) {
+    console.error("[policy] weekly audit:", e.message);
+    return null;
+  }
 }
 
 let running = false;
@@ -886,6 +1083,27 @@ async function cutover(b) {
   if (b.cfg) await C.putCfg(b.cfg);
   const h = b.handover && typeof b.handover === "object" ? b.handover : {};
   const handed = [];
+  // PO-4 (1.99??, additive): a treasury week Pepe ran keeps his /staking record - the row of his current capital push for that epoch
+  // (per-vault totals) and when it was settled - so the readers (capital/vaults.js wfView) keep the weeks before the cutover once
+  // PO-10 retires the push. Best effort: no push = today's result; it never fails the cutover
+  let pub = { rows: [], settled: [] };
+  try {
+    const cp = (await require("../capital/core").meta("cfg")) || {};
+    const V = require("../capital/vaults");
+    pub = { rows: V.waterfallFrom({ waterfall: Array.isArray(cp.waterfall) ? cp.waterfall : [] }), settled: V.settledFrom(Array.isArray(cp.wf_settled) ? cp.wf_settled : []) };
+  } catch (e) { console.error("[policy] cutover: the weekly records:", e.message); }
+  const handedResult = (e, period, p) => {
+    const res = p.result || { incentives_after: p.incentives_after ?? null, boundary: p.boundary ?? null };
+    if (e !== "treasury" || !/^W/.test(period) || p.result) return res;
+    try {
+      const out = Object.assign({}, res);
+      const row = pub.rows.find((r) => r.epoch === period);
+      const st = pub.settled.find((r) => r.epoch === period);
+      if (row) out.public = row;
+      if (st && st.done) out.done_s = st.done;
+      return out;
+    } catch (x) { return res; }
+  };
   const { tx } = require("../dbUtils");
   await tx(async () => {
     for (const e of engines) {
@@ -896,7 +1114,7 @@ async function cutover(b) {
         const r = await C.run(e, period);
         if (isDone(r)) continue;
         await C.putRun(e, period, { state: "handed", via: "pepe", boundary: p.boundary === undefined ? null : Number(p.boundary),
-                                    result: p.result || { incentives_after: p.incentives_after ?? null, boundary: p.boundary ?? null } });
+                                    result: handedResult(e, period, p) });
         handed.push(`${e}:${period}`);
       }
       const armed = x.armed_at !== undefined && x.armed_at !== null ? Number(x.armed_at) : C.nowS();
@@ -1045,7 +1263,20 @@ async function view() {
            missed: await getQuery("SELECT key, engine, period, error, created FROM policy_runs WHERE state = 'missed' ORDER BY created DESC LIMIT 20"),
            whitelist: WHITELIST.map((w) => ({ on: w.on || "plan", engine: w.engine, kind: w.kind, field: w.field, mode: w.mode || null, monday: !!w.monday,
                                               why: w.why, test: w.test })),
-           sims: (await getQuery("SELECT key, mode, engine, period, ok, boundary_ts, updated FROM policy_sims ORDER BY updated DESC LIMIT 30")) };
+           sims: (await getQuery("SELECT key, mode, engine, period, ok, boundary_ts, updated FROM policy_sims ORDER BY updated DESC LIMIT 30")),
+           // PO-4: the derived dual read (the last 14 days) and the weekly audits
+           derived: await derivedView(), epoch_audits: await require("./digest").recent(8).catch(() => []) };
+}
+/** PO-4: the derived dual read's rows (newest first, 14 days) -> {latest, rows} */
+async function derivedView() {
+  const { getQuery } = require("../dbUtils");
+  const rows = (await getQuery("SELECT period, ok, blocking, whitelisted, site_inputs, boundary_ts, updated FROM policy_sims WHERE engine = 'derived' ORDER BY period DESC LIMIT 14"))
+    .map((r) => {
+      const si = C.parse(r.site_inputs, {}) || {};
+      return { period: r.period, ok: r.ok === null ? null : !!r.ok, blocking: (C.parse(r.blocking, {}) || {}).plan || [], whitelisted: (C.parse(r.whitelisted, {}) || {}).plan || [],
+               attempts: (si.attempts || []).length, final: si.final || null, push_at: r.boundary_ts, updated: r.updated };
+    });
+  return { latest: rows[0] || null, rows };
 }
 async function botState() {
   await C.init();
@@ -1162,6 +1393,7 @@ function register(app, { isBotToken, addUser }) {
 
 module.exports = { register, pass, loop, boundary, report, cutover, rollback, setPause, view, botState, diff, diffCapped, applyWhitelist, decisionDiff, planOf, kindOf,
                    clockInfo, cutoffPending, cutoffWait, monetaryGuarantee, burnWindow, WHITELIST, DIFF_CAP, LATE_GRACE_S, OVERDUE_ALERT_S, BURN_SETTLE_S, BURN_BACKFILL_DAYS,
-                   MISSED_DAYS, MISSED_WEEKS, prevEpochId, inputDiff,
+                   MISSED_DAYS, MISSED_WEEKS, prevEpochId, inputDiff, derivedPass, digestPass, derivedView, pepeDerived, DERIVED_START_S, DERIVED_PUSH_FRESH_S,
+                   DERIVED_MAX_ATTEMPTS, FUNDING_FRESH_MS, _setRealClock: (fn) => { realClock = fn || (() => Date.now() / 1000); },
                    // tests: forget what THIS process remembers (the waits logged, the sweeps done, the seen marks written) - a "restart"
-                   _resetPassClock: () => { waitLogged.clear(); overdueSeen.clear(); swept.clear(); seenDone.clear(); } };
+                   _resetPassClock: () => { waitLogged.clear(); overdueSeen.clear(); swept.clear(); seenDone.clear(); derivedDone.clear(); require("./digest")._forget(); } };

@@ -525,8 +525,9 @@ test("PO-1 pause: a paused live engine runs nothing (its due periods missed 'pau
   assert.deepEqual(v.whitelist.map((w) => `${w.on} ${w.engine} ${w.field}`),
                    ["plan treasury release", "plan treasury release (week not filled yet)", "inputs treasury week.*",
                     "inputs treasury week.share / week.release_per_day (week not filled yet)", "inputs monetary week.*",
-                    "inputs monetary week.share / week.release_per_day (week not filled yet)", "inputs monetary rows / days / skip", "decision monetary guarantee"]);
-  assert.ok(v.whitelist.every((w) => /^test\/policy-boundary\.test\.js: /.test(w.test)), "each entry names its proving test");
+                    "inputs monetary week.share / week.release_per_day (week not filled yet)", "inputs monetary rows / days / skip", "decision monetary guarantee",
+                    "plan derived flows"]);                       // PO-4: the derived dual read's display-only flows
+  assert.ok(v.whitelist.every((w) => /^test\/policy-(boundary|derived)\.test\.js: /.test(w.test)), "each entry names its proving test");
   assert.equal(v.engines.find((e) => e.engine === "treasury").paused, false);
 });
 

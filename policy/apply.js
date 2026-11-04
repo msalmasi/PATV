@@ -2,7 +2,9 @@
 //
 //   runTreasuryEpoch   pepe_treasury._tr_run + _tr_redeem_remote + _tr_finish: plan, the bank-lent sample, the protocol's
 //                      shares redeemed on the capital share book (capital_ops key "vaults:proto-wf-<epoch>-<vault>" - the
-//                      key Pepe's own booking uses), then every leg (stakers' stashes, Fed loans first, the Fed, incentives)
+//                      key Pepe's own booking uses), then every leg (stakers' stashes, Fed loans first, the Fed, incentives);
+//                      PO-4: the P3.1 base read before / after the legs (result.p31), and after the commit the payout notices
+//                      and the week's audit + digest to the Pepe owners (policy/digest.js afterEpoch - notices only)
 //   runTreasuryDaily   pepe_treasury._tr_daily + _tr_daily_finish: overflows (Fed loans first), the floors
 //   runMonetary        pepe_monetary._mo_daily + _mo_daily_finish + the activity payouts: the Fed's floor / issuance mints
 //                      (journaled, capped), the guarantee, the ceiling release (to the burn reserve or incentives), then the
@@ -189,6 +191,9 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
     for (const [v, x] of Object.entries(plan.vaults)) {
       if (x.surplus > 0) redeemed[v] = -(await protocolBook(v, -x.surplus, `wf-${eid}-${v}`));
     }
+    // PO-4 (1.99??): the fix-plan P3.1 conservation base (policy/digest.js p31Base: the House + the weekly pools + the stash legs
+    // that landed) read before and after the legs - a read only, kept on the result for the weekly audit; it moves nothing
+    const p31Before = await p31Now(plan, []);
     const doneLegs = [];
     for (const leg of plan.legs) {
       await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why, acc);
@@ -200,6 +205,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
       doneLegs.push(leg.tid);
     }
     const after = await base();
+    const p31After = await p31Now(plan, doneLegs);
     const incAfter = await P.balance("incentives");
     if (E.epochId(nowS, E.C(inputs).hour()) === eid) {               // _tr_finish: the week being settled is this week
       await C.effect(`week_share:${eid}`, { engine: "treasury", period: eid, kind: "week_share",
@@ -209,7 +215,8 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
     const wal = acc.to_wallet ? { to_wallet: acc.to_wallet } : {};
     if (late) wal.late = late;
     const result = Object.assign({ boundary: plan.boundary, totals: plan.totals, release_per_day: plan.release_per_day, incentives_after: incAfter,
-                     pools_before: before, pools_after: after, conserved, shares_redeemed: redeemed, done_legs: doneLegs, actor, via }, wal);
+                     pools_before: before, pools_after: after, conserved, shares_redeemed: redeemed, done_legs: doneLegs, actor, via,
+                     p31: { before: p31Before, after: p31After } }, wal);
     // the owner's D2 monitoring on the record, as Pepe's own records carry it (pepe_treasury._tr_track = engines.trackOf): what a
     // 25% cap would have paid, how each vault was weighted, the cap the plan applied and whether it was D2's safeguard (fallback).
     // Monitoring only: like Pepe (try / except around _tr_track, "[TREASURY] epoch <eid>: track: ..."), an error here is logged
@@ -232,7 +239,15 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
   });
   // staking fix plan P0.1 (Pepe's _tr_notify_stakers): one notice per paid stash, after the settlement committed
   if (res && res.ok && !res.already && res.plan) await notifyStakers(eid, res.plan, res.track, res.capIn).catch((e) => console.error("[policy] payout notices:", e.message));
+  // PO-4 (1.99??): the week's audit (problems only) + digest to the Pepe owners, once (policy/digest.js; notices only - never PAT)
+  if (res && res.ok && !res.already && res.plan) await require("./digest").afterEpoch(eid, res).catch((e) => console.error("[policy] staking audit / digest:", e.message));
   return res;
+}
+/** PO-4: the P3.1 base now (in the caller's transaction): the House + reserve / incentives / bank / mm + `plan`'s stash legs in `done`. */
+async function p31Now(plan, done) {
+  const bal = { jackpot: await require("../capital/core").houseBalance() };
+  for (const k of require("./digest").TR_WEEKLY_POOLS) bal[k] = await P.balance(k);
+  return require("./digest").p31Base(bal, { legs: plan.legs || [], done_legs: done }, null);
 }
 
 const VLABEL = { house: "🎰 House", bank: "🏦 Bank", mm: "📈 Market maker" };
@@ -297,6 +312,9 @@ async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site", l
     const before = await base();
     const acc = { to_wallet: 0 };                                    // PO-0b (a): closed stashes' credits paid to wallets
     await bankSample("treasury", did, null, nowS);
+    // PO-4 (1.99??): the fix-plan P3.1 conservation base (policy/digest.js p31Base: the House + the weekly pools + the stash legs
+    // that landed) read before and after the legs - a read only, kept on the result for the weekly audit; it moves nothing
+    const p31Before = await p31Now(plan, []);
     const doneLegs = [];
     for (const leg of plan.legs) {
       await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why, acc);
