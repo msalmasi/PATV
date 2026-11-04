@@ -78,6 +78,24 @@ test("a deleted account's rows don't come back from a late ack of a command it t
   assert.ok(RPM.fromAck({ id: "j10", ok: true, ts: Math.floor(Date.now() / 1000), replies: ["hello"] }, typed("j10", "u8")));
 });
 
+test("a hidden person's name in a private answer is 'someone' when it's served (the site's own redaction too - an older Pepe)", () => {
+  RPM._reset();
+  const CV = require(path.join(repo, "chatlogview"));
+  const was = CV.redact;
+  // the site's hidden-name redaction (chatlogview: the sticky hidden set's names) - here: one person hidden now
+  CV.redact = (s) => (typeof s === "string" ? s.replace(/(?<![\w])@?(?:bobhidden|Bobby Tables)(?![\w])/gi, "someone") : s);
+  try {
+    assert.ok(RPM.fromAck({ id: "j20", ok: true, ts: Math.floor(Date.now() / 1000), replies: ["bobhidden was last seen 2 min ago (Bobby Tables)"] },
+      typed("j20", "u1")));
+    const v = RPM.view("u1", "Pm.Room", 0);
+    assert.equal(v.rows.length, 1);
+    assert.equal(v.rows[0].text, "someone was last seen 2 min ago (someone)");
+    assert.doesNotMatch(JSON.stringify(v), /bobhidden|Bobby Tables/);
+  } finally { CV.redact = was; }
+  // un-hidden since: the name shows again (redacted when served, not when kept)
+  assert.equal(RPM.view("u1", "Pm.Room", 0).rows[0].text, "bobhidden was last seen 2 min ago (Bobby Tables)");
+});
+
 // ── the page (pad-roompm.js on its own, in a small fake DOM) ──
 class El {
   constructor(tag) { this.nodeType = 1; this.tagName = String(tag).toUpperCase(); this.attrs = {}; this.childNodes = []; this.parentNode = null; this._cls = []; this.style = { setProperty() {} }; }

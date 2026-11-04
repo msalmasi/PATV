@@ -207,9 +207,17 @@ const latest = (userId, roomId) => since(userId, roomId, Number.MAX_SAFE_INTEGER
 function view(userId, roomId, afterId, pepe = null) {
   if (!on()) return { on: 0 };
   const s = since(userId, roomId, afterId);
+  // review (privacy): served through the site's own hidden-name redaction too (chatlogview - the topic's): Pepe redacts opted-out
+  // people's names before an answer leaves him, but an older Pepe didn't, and someone may have been hidden since the row came
+  let red = (t) => t;
+  try {
+    const CV = require("./chatlogview");
+    if (typeof CV.redact === "function") red = (t) => CV.redact(t);
+  } catch (e) { /* no chat views: Pepe's own redaction only */ }
+  const rows = s.rows.map((r) => { let t = r.text; try { t = red(t); } catch (e) { /* as kept */ } return Object.assign({}, r, { text: t }); });
   // w (review, privacy): this account's tag - only ever in its own answers; the page drops what it shows when the tag changes (someone
   // else signed in under an open page on a shared computer). Never the account id.
-  return { on: 1, w: digest("w|" + userId, 16), v: s.v, u: pepe || null, rows: s.rows };
+  return { on: 1, w: digest("w|" + userId, 16), v: s.v, u: pepe || null, rows };
 }
 
 /** Forget an account's rows everywhere (accountdelete.js). -> rows dropped. review (privacy): and none come back - bridge-relay still
