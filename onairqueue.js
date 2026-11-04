@@ -98,8 +98,11 @@ function fmt(ms, tz = TZ) {
 }
 
 // ── the queue ──
+// 1.99ajj plexchat: + kind "library" - a 📼 Plex title for Pepe's main stream, queued from chat (onair.queueLibrary): next-up only,
+// waits while the operator's IRL feed is live, missed after LIBRARY wait (3 h); spec {key, title, duration, price}, owner {userId}
+const SPEC_KINDS = new Set(["media", "library"]);
 function specOf(r) {
-  if (r.kind !== "media" || !r.spec) return null;
+  if (!SPEC_KINDS.has(r.kind) || !r.spec) return null;
   try { const s = typeof r.spec === "string" ? JSON.parse(r.spec) : r.spec; return s && typeof s === "object" ? s : null; } catch (e) { return null; }
 }
 function ownerOf(r) {
@@ -110,9 +113,9 @@ const shape = (r) => {
   const spec = specOf(r);
   return { id: r.id, at: r.at == null ? null : Number(r.at), url: r.url, label: r.label, by: r.by, created: Number(r.created),
            status: r.status, done_at: r.done_at == null ? null : Number(r.done_at), why: r.why || null,
-           kind: r.kind === "media" ? "media" : "embed", lane: spec && spec.lane === "corner" ? "corner" : "main", mode: spec ? spec.mode || null : null,
+           kind: SPEC_KINDS.has(r.kind) ? r.kind : "embed", lane: spec && spec.lane === "corner" ? "corner" : "main", mode: spec ? spec.mode || null : null,
            direct: !!(spec && spec.direct),
-           ...(r.kind === "media" ? { spec, owner: ownerOf(r) } : {}) };
+           ...(SPEC_KINDS.has(r.kind) ? { spec, owner: ownerOf(r) } : {}) };
 };
 /** 1.99acw: a time for the queue -> the ms (null = next up). Throws QueueError (passed / more than two weeks ahead). */
 function checkAt(at, t = now()) {
@@ -138,7 +141,12 @@ async function recent(n = 10) {
 async function add({ url, at = null, by, kind = "embed", spec = null, label = null, owner = null }, t = now()) {
   await init();
   let e = null, rowUrl, rowLabel;
-  if (kind === "media") {
+  if (kind === "library") {
+    if (!spec || typeof spec !== "object" || !/^\d{1,12}$/.test(String(spec.key || ""))) throw new QueueError("That can't be queued.", "bad");
+    if (at != null) throw new QueueError("A Plex title goes in as next up only.", "bad");
+    rowUrl = "plex:" + String(spec.key);
+    rowLabel = String(label || "📼 ?").slice(0, 160);
+  } else if (kind === "media") {
     if (!spec || typeof spec !== "object" || !["image", "card", "live"].includes(spec.mode)) throw new QueueError("That can't be queued.", "bad");
     rowUrl = String(url || (spec.direct && spec.direct.url) || (spec.live && spec.live.url) || (spec.card && spec.card.url) || spec.src ||
                     "upload:" + ((spec.asset && spec.asset.id) || "?")).slice(0, 2048);
@@ -152,12 +160,16 @@ async function add({ url, at = null, by, kind = "embed", spec = null, label = nu
   at = checkAt(at, t);
   const n = (await getQuery("SELECT COUNT(*) AS n FROM onair_queue WHERE status = 'waiting'"))[0];
   if (n && Number(n.n) >= MAX_WAITING) throw new QueueError(`The on-air queue is full (${MAX_WAITING}) - cancel one first.`, "full");
-  const own = kind === "media" && owner && typeof owner === "object"
+  const own = SPEC_KINDS.has(kind) && owner && typeof owner === "object"
     ? JSON.stringify({ via: owner.via === "web" ? "web" : "chat", ...(owner.userId ? { userId: String(owner.userId).slice(0, 80) } : {}),
-                       ...(owner.login ? { login: String(owner.login).toLowerCase().slice(0, 40) } : {}) }) : null;
+                       ...(owner.login ? { login: String(owner.login).toLowerCase().slice(0, 40) } : {}),
+                       ...(owner.username ? { username: String(owner.username).slice(0, 60) } : {}) }) : null;
   const row = { id: crypto.randomBytes(3).toString("hex"), at, url: rowUrl, label: rowLabel,
-                by: String(by || "?").slice(0, 80), created: t, status: "waiting", kind: kind === "media" ? "media" : null,
-                spec: kind === "media" ? JSON.stringify(spec) : null, owner: own };
+                by: String(by || "?").slice(0, 80), created: t, status: "waiting", kind: SPEC_KINDS.has(kind) ? kind : null,
+                spec: SPEC_KINDS.has(kind) ? JSON.stringify(kind === "library"
+                  ? { key: String(spec.key), title: String(spec.title || "").slice(0, 160), duration: Math.max(0, Math.round(Number(spec.duration) || 0)),
+                      price: Math.max(0, Math.floor(Number(spec.price) || 0)) }
+                  : spec) : null, owner: own };
   await runQuery("INSERT INTO onair_queue (id, at, url, label, by, created, status, kind, spec, owner) VALUES (?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)",
     [row.id, row.at, row.url, row.label, row.by, row.created, row.kind, row.spec, row.owner]);
   return shape(row);
@@ -181,10 +193,19 @@ async function cancel(which, by, t = now()) {
  *  1.99acw: {idleMain (= the old `idle`), idleCorner, enabled, mediaOk, liveOk} - media rows wait while Pepe can't show them.
  *  1.99acw review: + directOk (Pepe's "direct" cap) and liveMain / liveCorner (that lane shows a live page now): a live page
  *  waits while the OTHER lane shows one (only one at a time - it used to be picked, refused "live_busy" and marked failed). */
-async function due({ idle, idleMain = idle, idleCorner = false, enabled, mediaOk = false, liveOk = false, directOk = false, liveMain = false, liveCorner = false }, t = now()) {
+async function due({ idle, idleMain = idle, idleCorner = false, enabled, mediaOk = false, liveOk = false, directOk = false, liveMain = false, liveCorner = false,
+                     irl = false, libraryOk = true, libraryWaitMs = 3 * 3600 * 1000 }, t = now()) {
   const rows = await list();
   const otherLive = (r) => (r.lane === "corner" ? liveMain : liveCorner);
-  const can = (r) => r.kind !== "media" || (mediaOk && (r.mode !== "live" || (liveOk && !otherLive(r))) && (!r.direct || directOk));
+  // 1.99ajj plexchat: a 📼 row waits while the IRL feed is live (it wins), and is missed after libraryWaitMs (or once Plex on
+  // Pepe's stream is switched off - allow_library)
+  for (const r of rows) {
+    if (r.kind !== "library") continue;
+    if (!libraryOk) await mark(r.id, "missed", "Plex on Pepe's stream was switched off", t);
+    else if (t - r.created > libraryWaitMs) await mark(r.id, "missed", "waited too long", t);
+  }
+  const can = (r) => (r.kind === "library" ? libraryOk && !irl && t - r.created <= libraryWaitMs
+    : r.kind !== "media" || (mediaOk && (r.mode !== "live" || (liveOk && !otherLive(r))) && (!r.direct || directOk)));
   const whyNot = (r) => (!mediaOk ? "Pepe couldn't show pictures" : r.mode === "live" && !liveOk ? "Pepe couldn't show live pages"
     : r.mode === "live" && otherLive(r) ? "a live page was on in the other spot" : r.direct && !directOk ? "Pepe couldn't show direct pictures" : "couldn't start in time");
   for (const r of rows) {

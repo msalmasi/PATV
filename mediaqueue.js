@@ -218,7 +218,7 @@ async function preview(user, b = {}) {
   const A = await I().mustAccess(user);
   const S = conf.get();
   const single = !Array.isArray(b.keys) && (!b.scope || b.scope === "episode");
-  if (S.library_queue === false && !(single && b.when === "later")) throw refuse(403, "Queues are switched off right now.");
+  if (S.library_queue === false && !(single && b.when === "later")) throw refuse(403, "Queues are switched off right now.", { code: "queue_off" });
   const later = b.when === "later";
   const q = await build(b, S, await padCapSec(b.room, later));
   const first = q.items[0];
@@ -549,10 +549,24 @@ async function start(user, b = {}) {
   await L().init();
   const A = await I().mustAccess(user);
   const S = conf.get();
-  if (S.library_queue === false) throw refuse(403, "Queues are switched off right now.");
+  if (S.library_queue === false) throw refuse(403, "Queues are switched off right now.", { code: "queue_off" });
   const R = await I().roomOf(b.room);
-  if (!R) throw refuse(404, "No such pad.");
+  if (!R) throw refuse(404, "No such pad.", { code: "pad" });
   return withLock(R.id, () => launch(user, A, R, b, null));
+}
+/** 1.99ajj plexchat: the pad's visibility (seesPad) then start() - the ONE entry point (the /stage route, Pepe's chat, the Room Dock). */
+async function startFor(user, b = {}) {
+  const body = { ...(b || {}) };
+  const R = await I().roomOf(body.room);
+  if (body.room && R && !(await stage.seesPad(user && user.userId ? user : null, R.id))) throw refuse(404, "No such pad.", { code: "pad" });
+  return start(user, body);
+}
+/** 1.99ajj plexchat: the same for a booking (Go-live's "Later"). */
+async function bookFor(user, b = {}) {
+  const body = { ...(b || {}) };
+  const R = await I().roomOf(body.room);
+  if (body.room && R && !(await stage.seesPad(user && user.userId ? user : null, R.id))) throw refuse(404, "No such pad.", { code: "pad" });
+  return book(user, body);
 }
 /**
  * (inside the pad's lock) Build, check, open the slot - or, for a booking, open ITS slot (mainstage.libraryActivate) -
@@ -565,12 +579,12 @@ async function launch(user, A, R, b, booked) {
     const built = await build(b, S, await padCapSec(R.id, !!booked));
     const pv = priceView(A, S, built.total_sec);
     if (pv.estimate > 0 && !booked) {
-      if (b.estimate == null || b.estimate === "") throw refuse(400, `This queue costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to start.`, { estimate: pv.estimate });
-      if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate });
+      if (b.estimate == null || b.estimate === "") throw refuse(400, `This queue costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to start.`, { estimate: pv.estimate, code: "estimate" });
+      if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate, code: "estimate" });
     }
     if (!I().isLibAdmin(user) || pv.per_hour > 0) await I().needEncoder();
     const first = built.first && String(built.first.key) === built.items[0].key ? built.first : await I().fetchItem(built.items[0].key);
-    if (!first || !["movie", "episode"].includes(first.type) || !first.file) throw refuse(400, "The first title has no playable file.");
+    if (!first || !["movie", "episode"].includes(first.type) || !first.file) throw refuse(400, "The first title has no playable file.", { code: "bad" });
     const o = {
       quality: [1080, 720, 480].includes(Number(b.quality)) ? Number(b.quality) : S.library_quality,
       audio: b.audio !== undefined && b.audio !== null && b.audio !== "" && (first.audio || []).some((a) => a.index === Number(b.audio)) ? Number(b.audio) : null,
@@ -707,25 +721,99 @@ async function watchBookings() {
 // ── controls ──
 async function needQueue(user, room) {
   await L().init();
-  if (!user || !user.userId) throw refuse(401, "Sign in first.");
+  if (!user || !user.userId) throw refuse(401, "Sign in first.", { code: "signin" });
   const R = await I().roomOf(room);
-  if (!R) throw refuse(404, "No such pad.");
+  if (!R) throw refuse(404, "No such pad.", { code: "pad" });
   const q = await activeFor(R.id);
-  if (!q) throw refuse(404, "There's no queue playing on this pad.");
-  if (!(await canControl(user, q))) throw refuse(403, I().CONTROL_DENIED);
+  if (!q) throw refuse(404, "There's no queue playing on this pad.", { code: "nothing_on" });
+  if (!(await canControl(user, q))) throw refuse(403, I().CONTROL_DENIED, { code: "control_denied" });
   return { R, q };
 }
 // 1.99lw: the starter, the library admins, the pad's owner (+ site staff) - medialib.mayControl
 const canControl = (user, q) => I().mayControl(user, q.room_id, q.user_id);
 
+// ── 1.99ajj plexchat: growing a running queue (Pepe's "queue the matrix next", ⏭ past the last episode) ──
+/** May `user` add titles to queue `q`? Its STARTER (the queue bills them as each title plays), or anyone who may control a
+ *  FREE queue (per_hour 0 - nobody is billed). Never adds to a paid queue on someone else's PAT. */
+async function mayGrow(user, q) {
+  if (!user || !user.userId || !q) return false;
+  if (q.user_id && q.user_id === user.userId) return true;
+  return !(Number(q.per_hour) > 0) && !!(await canControl(user, q));
+}
+/** The show's next episode after `cur` (Plex's allLeaves in watching order, specials skipped unless `cur` is one) -> a slim
+ *  title, or null (a movie, the last episode, an older mediactl without show_key). */
+async function nextEpisodeOf(cur) {
+  if (!cur || cur.type !== "episode" || !validKey(cur.key)) return null;
+  const it = await I().fetchItem(cur.key);
+  if (!it || !it.show_key) return null;
+  const show = await I().fetchItem(it.show_key);
+  const eps = sortEps((show && show.episodes) || []);
+  const i = eps.findIndex((e) => String(e.key) === String(cur.key));
+  if (i < 0) return null;
+  const special = (num(eps[i].season) || 0) === 0;
+  const after = eps.slice(i + 1).filter((e) => special || (num(e.season) || 0) !== 0);
+  return after.length ? slim(after[0]) : null;
+}
+/**
+ * "Play this next" on a pad's running 📼 queue: `keys` go right after the title on now (pos + 1). Only for whoever the queue
+ * bills (its starter) or on a free queue (mayGrow) - anyone else gets code not_starter. The queue's limits (titles, hours) apply.
+ * -> {ok, added, items, next (the first added title's name)}
+ */
+async function addNext(user, room, keys) {
+  await L().init();
+  if (!user || !user.userId) throw refuse(401, "Sign in first.", { code: "signin" });
+  await I().mustAccess(user);
+  const R = await I().roomOf(room);
+  if (!R) throw refuse(404, "No such pad.", { code: "pad" });
+  return withLock(R.id, async () => {
+    const q = await activeFor(R.id);
+    if (!q) throw refuse(404, "There's no queue playing on this pad.", { code: "nothing_on" });
+    if (!(await mayGrow(user, q))) {
+      throw refuse(403, `${q.username || "Someone"}'s queue is playing - when it ends, ask again (or they can add it).`, { code: "not_starter", by: q.username || null });
+    }
+    const S = conf.get();
+    const add = await build({ keys }, { ...S, library_queue_max_items: 200, library_queue_max_hours: 24 });
+    const room_ = S.library_queue_max_items - q.items.length;
+    if (room_ <= 0) throw refuse(409, `A queue holds at most ${S.library_queue_max_items} titles.`, { code: "queue_full" });
+    const s = await I().session(R.id);
+    const curLeft = s ? Math.max(0, (s.duration || 0) - (s.position || 0)) : 0;
+    let left = curLeft + totalSec(q.items.slice(q.pos + 1));
+    const put = [];
+    for (const it of add.items.slice(0, room_)) {
+      if (left + it.duration > S.library_queue_max_hours * 3600) break;
+      put.push(it); left += it.duration;
+    }
+    if (!put.length) throw refuse(409, `A queue holds at most ${S.library_queue_max_hours} hours.`, { code: "queue_full" });
+    q.items.splice(q.pos + 1, 0, ...put);
+    const slot = await stage.getSlot(q.slot_id);
+    if (slot) await stage.libraryExtend(q.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + left) / 60) + I().SLACK_MIN).catch(() => {});
+    await saveItems(q);
+    await I().logControl(user, R.id, "queue_next", `${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: q.id });
+    return { ok: true, added: put.length, items: q.items.length, next: fmtTitle(put[0]), queue_id: q.id };
+  });
+}
+
 async function step(user, room, dir) {
   const { R } = await needQueue(user, room);
   return withLock(R.id, async () => {
     const q = await activeFor(R.id);
-    if (!q || !(await canControl(user, q))) throw refuse(404, "There's no queue playing on this pad.");
+    if (!q || !(await canControl(user, q))) throw refuse(404, "There's no queue playing on this pad.", { code: "nothing_on" });
     const to = q.pos + dir;
-    if (to >= q.items.length) throw refuse(409, "That's the last title - ⏹ Stop ends the queue.");
-    if (to < 0) throw refuse(409, "That's the first title.");
+    // 1.99ajj plexchat: ⏭ on the last title, when it's an episode, plays the show's next one (appended first) - only for
+    // whoever the queue bills (its starter) or on a free queue (nobody else's PAT is ever spent by it)
+    if (to >= q.items.length && dir > 0 && q.items.length < (conf.get().library_queue_max_items || 60) && (await mayGrow(user, q))) {
+      const nxt = await nextEpisodeOf(q.items[q.pos]).catch(() => null);
+      if (nxt) {
+        q.items.push(nxt);
+        await saveItems(q);
+        const s0 = await I().session(R.id);
+        const left = (s0 ? Math.max(0, (s0.duration || 0) - (s0.position || 0)) : 0) + nxt.duration;
+        const slot = await stage.getSlot(q.slot_id);
+        if (slot) await stage.libraryExtend(q.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + left) / 60) + I().SLACK_MIN).catch(() => {});
+      }
+    }
+    if (to >= q.items.length) throw refuse(409, "That's the last title - ⏹ Stop ends the queue.", { code: "last_title" });
+    if (to < 0) throw refuse(409, "That's the first title.", { code: "first_title" });
     const s = await I().session(R.id);
     let r;
     if (s && Number(s.queue_id) === Number(q.id)) {
@@ -771,7 +859,7 @@ async function edit(user, room, b = {}) {
     } else if (b.op === "add") {
       const add = await build({ keys: b.keys }, { ...S, library_queue_max_items: 200, library_queue_max_hours: 24 });
       const room_ = S.library_queue_max_items - q.items.length;
-      if (room_ <= 0) throw refuse(409, `A queue holds at most ${S.library_queue_max_items} titles.`);
+      if (room_ <= 0) throw refuse(409, `A queue holds at most ${S.library_queue_max_items} titles.`, { code: "queue_full" });
       const s = await I().session(R.id);
       const curLeft = s ? Math.max(0, (s.duration || 0) - (s.position || 0)) : 0;
       let left = curLeft + totalSec(q.items.slice(q.pos + 1));
@@ -780,7 +868,7 @@ async function edit(user, room, b = {}) {
         if (left + it.duration > S.library_queue_max_hours * 3600) break;
         q.items.push(it); left += it.duration; added++;
       }
-      if (!added) throw refuse(409, `A queue holds at most ${S.library_queue_max_hours} hours.`);
+      if (!added) throw refuse(409, `A queue holds at most ${S.library_queue_max_hours} hours.`, { code: "queue_full" });
       const slot = await stage.getSlot(q.slot_id);
       if (slot) await stage.libraryExtend(q.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + left) / 60) + I().SLACK_MIN).catch(() => {});
       await saveItems(q);
@@ -835,24 +923,15 @@ async function views({ all = false, userId = null, recent = false } = {}) {
 function routes(app, { J, me, timers = true }) {
   if (timers) fastOn = true;
   app.post("/api/medialib/queue/preview", ...J(async (req) => preview(me(req), req.body || {})));
-  app.post("/api/medialib/queue/start", ...J(async (req) => {
-    const b = { ...(req.body || {}) };
-    const R = await I().roomOf(b.room);
-    if (b.room && R && !(await stage.seesPad(req.user, R.id))) throw refuse(404, "No such pad.");
-    return start(me(req), b);
-  }));
+  // 1.99ajj plexchat: the pad check lives in startFor / bookFor (one rule source: these routes, Pepe's chat, the Room Dock)
+  app.post("/api/medialib/queue/start", ...J(async (req) => startFor(me(req), req.body || {})));
   // 1.99lw: book a 📼 slot for later (one title or a queue), sized to its runtime
-  app.post("/api/medialib/book", ...J(async (req) => {
-    const b = { ...(req.body || {}) };
-    const R = await I().roomOf(b.room);
-    if (b.room && R && !(await stage.seesPad(req.user, R.id))) throw refuse(404, "No such pad.");
-    return book(me(req), b);
-  }));
+  app.post("/api/medialib/book", ...J(async (req) => bookFor(me(req), req.body || {})));
   app.post("/api/medialib/queue/next", ...J(async (req) => next(me(req), (req.body || {}).room)));
   app.post("/api/medialib/queue/prev", ...J(async (req) => prev(me(req), (req.body || {}).room)));
   app.post("/api/medialib/queue/edit", ...J(async (req) => edit(me(req), (req.body || {}).room, req.body || {})));
 }
 
-module.exports = { start, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
+module.exports = { start, startFor, bookFor, addNext, mayGrow, nextEpisodeOf, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
                    buildQueue, capQueue, totalSec, estimate, hoursNeeded, pickTracks, prefsFrom, sortEps, slim, SCOPES, _setClock,
                    _fast: (on) => { fastOn = !!on; } };

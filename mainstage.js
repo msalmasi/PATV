@@ -179,7 +179,8 @@ let clock = () => Date.now();
 const now = () => clock();
 
 class Refuse extends Error {
-  constructor(status, message) { super(message); this.status = status; this.refuse = true; }
+  // 1.99ajj plexchat: an optional stable code (libraryOpen's - Pepe's chat words it in the room's language)
+  constructor(status, message, code) { super(message); this.status = status; this.refuse = true; if (code) this.code = code; }
 }
 
 // ── storage ──
@@ -699,10 +700,10 @@ async function libraryOpen(user, opts = {}) {
   const t = now();
   await tx(async () => {
     const open = await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [roomId]);
-    if (open.some((s) => s.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library - stop it first.");
+    if (open.some((s) => s.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library - stop it first.", "busy_library");
     const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
-    if (all[0].n >= C.max_concurrent) throw new Refuse(409, `The site already has ${all[0].n} streams open (the most at once) - end one first.`);
-    if (open.length >= RS.slot_count) throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this pad are taken.` : "This pad's stage slot is taken - end it first.");
+    if (all[0].n >= C.max_concurrent) throw new Refuse(409, `The site already has ${all[0].n} streams open (the most at once) - end one first.`, "site_full");
+    if (open.length >= RS.slot_count) throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this pad are taken.` : "This pad's stage slot is taken - end it first.", "slot_taken");
     const u = (await getQuery("SELECT username, displayname FROM users WHERE userId = ?", [user.userId]))[0];
     if (!u) throw new Refuse(404, "Couldn't find your account.");
     const stream = STREAM_PREFIX + crypto.randomBytes(8).toString("hex");

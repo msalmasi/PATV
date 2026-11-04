@@ -604,18 +604,87 @@ const MODE_ICON = { image: "🖼", card: "🔗", live: "🌐" };
 
 // 1.99aao: staff pick a 📼 Plex title from the player bar: it plays on Pepe's own pad (medialib's normal path - its access
 // rules, encoder cap and log) and that slot goes on air at once; allow_library still decides whether Plex may go on air.
-async function setLibrary(key, by, { admin, user } = {}) {
+// 1.99ajj plexchat: + `price` (the price the person confirmed - medialib.play checks it like /stage does) and `mode` (Pepe's chat;
+// the player bar passes none and keeps replacing what's on, as before):
+//   "now"      only while nothing is on Pepe's main stream - else refused onair_busy, with what's on (its label)
+//   "replace"  the player bar's way: whatever is on is replaced (logged "replaced")
+//   "next"     a ⏰ next-up row (onairqueue kind "library") that plays when the main lane is free and the IRL feed isn't live
+// While the operator's IRL feed is live, a chat pick ("now" / "replace") is queued as next instead (IRL is never replaced):
+// -> {queued: true, irl: true, ...}.
+async function setLibrary(key, by, { admin, user, price, mode } = {}) {
   await init();
   if (!CFG.enabled) throw refuse("off");
   if (!CFG.allow_library) throw refuse("library");
   if (!user) throw new Refuse(403, "Site staff only.", "staff_only");
-  const r = await require("./medialib").play(user, { room: rooms().HOUSE_ROOM, key: String(key || "") });
+  if (mode) {
+    const irl = irlLive();
+    if (mode === "now" && TARGET && !irl) throw onairBusy();
+    if (mode === "next" || irl) return queueLibrary(key, by, { admin, user, price, irl });
+  }
+  const r = await require("./medialib").play(user, { room: rooms().HOUSE_ROOM, key: String(key || ""), ...(price != null ? { price } : {}) });
   try {
     return await setSlot(r.slot.id, by, { admin, ask: false, starting: true, waitMs: 3 * 60 * 1000 });
   } catch (e) {
     await require("./medialib").stop(user, rooms().HOUSE_ROOM, "onair_failed").catch(() => {});
     throw e;
   }
+}
+// ── 1.99ajj plexchat: 📼 Plex on Pepe's cam from chat (plexchat.js) ──
+const LIBRARY_WAIT_MS = 3 * 3600 * 1000;      // a queued 📼 title still waiting after this long is missed, never played late
+const LIBRARY_MAX_QUEUED = 3;
+/** The operator's IRL feed is live on Pepe's OBS (it wins: nothing replaces it). */
+function irlLive(t = now()) { return !!(BOT && BOT.state && BOT.state.irl && botOk(t)); }
+function onairBusy() {
+  const e = new Refuse(409, `Pepe's main stream is showing ${TARGET ? TARGET.label : "something"} right now.`, "onair_busy");
+  e.label = TARGET ? String(TARGET.label || "").slice(0, 120) : null;
+  return e;
+}
+/** A ⏰ next-up 📼 row for Pepe's main stream: the title is checked now (access, the price the person confirmed), played later
+ *  under its owner by queueTick (who must still run on-air, still have access, at the same price). */
+async function queueLibrary(key, by, { admin, user, price, irl = false } = {}) {
+  const ML = require("./medialib");
+  const it = await ML.item(user, String(key || ""));
+  if (!it || !["movie", "episode"].includes(it.type)) throw new Refuse(400, "Pick a movie or an episode.", "bad");
+  const cost = it.pricing ? Number(it.pricing.price) || 0 : 0;
+  if (cost > 0) {
+    if (price == null || price === "") throw Object.assign(new Refuse(400, `This costs ${ML._q.fmtPat(cost)} PAT - confirm the price to play it.`, "price"), { price: cost });
+    if (Math.floor(Number(price)) !== cost) throw Object.assign(new Refuse(409, `The price is ${ML._q.fmtPat(cost)} PAT now - confirm it again.`, "price"), { price: cost });
+  }
+  const waiting = (await Q().list()).filter((r) => r.kind === "library");
+  if (waiting.length >= LIBRARY_MAX_QUEUED) throw new Refuse(409, `${LIBRARY_MAX_QUEUED} Plex titles are already waiting for Pepe's stream - try again later.`, "queue_full");
+  const title = ML.fmtTitle(it);
+  const row = await Q().add({ kind: "library", spec: { key: String(it.key), title, duration: Number(it.duration) || 0, price: cost },
+                              label: "📼 " + title, by, owner: { via: String(by || "").startsWith("web:") ? "web" : "chat", userId: user.userId,
+                                                                  username: user.username || null } });
+  await log("queued", by, null, { id: row.id, label: row.label, kind: "library", irl: irl || undefined });
+  if (admin) await audit(admin, "queue", null, { id: row.id, label: row.label, kind: "library" });
+  const ahead = (await Q().list()).filter((r) => r.at == null && r.id !== row.id && r.created <= row.created).length;
+  return { ok: true, queued: true, irl: !!irl, id: row.id, label: row.label, title, ahead, on_air: TARGET ? TARGET.label : null };
+}
+/**
+ * plexchat.js: a 📼 title on Pepe's main stream for a RESOLVED account asking from chat. The site decides: onair.operate (Staff),
+ * on-air switched on, allow_library (Pepe's stream is relayed to Twitch); then setLibrary (medialib's rules on Pepe's own pad).
+ * by = "pepe:<login>" | "web:<username>". opts {price, mode: now | next | replace}.
+ */
+async function libraryFor(account, key, by, { price, mode = "now" } = {}) {
+  await init();
+  if (!account || !account.userId || !SP.can(account, "onair.operate")) throw new Refuse(403, "Only staff can put things on Pepe's stream.", "onair_staff");
+  if (!CFG.enabled) throw new Refuse(409, WHY.off, "onair_off");
+  if (!CFG.allow_library) throw new Refuse(409, WHY.library, "onair_library_off");
+  if (!botOk()) throw new Refuse(409, WHY.pepe_away, "pepe_away");
+  const m = ["now", "next", "replace"].includes(mode) ? mode : "now";
+  return setLibrary(key, by, { admin: { userId: account.userId, username: account.username }, user: account, price, mode: m });
+}
+/** queueTick: a due 📼 row - its owner must still run on-air and have access at the same price (a changed price = missed). */
+async function playQueuedLibrary(r, t) {
+  const spec = r.spec || {}, o = r.owner || {};
+  const u = o.userId ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [String(o.userId)]))[0] : null;
+  if (!u || !SP.can(u, "onair.operate")) throw new Refuse(403, "Not played: the person who queued it can't run Pepe's stream any more.", "owner");
+  const it = await require("./medialib").item(u, String(spec.key || ""));
+  const cost = it && it.pricing ? Number(it.pricing.price) || 0 : 0;
+  if (cost !== (Number(spec.price) || 0)) { await Q().mark(r.id, "missed", "price changed", t); return false; }
+  await setLibrary(spec.key, "queue:" + r.by, { admin: { userId: u.userId, username: u.username }, user: u, price: cost > 0 ? cost : undefined });
+  return true;
 }
 // 1.99aaq: staff stream straight onto Pepe's stream from their own OBS (RTMP / WHIP) or the browser: a slot on Pepe's own
 // pad (the stage's normal booking - its limits, publish auth and Cut) that is the on-air pick from the start and goes out
@@ -863,9 +932,14 @@ async function exposedOwnerWhy(r, t) {
 }
 async function queueTick(t = now()) {
   const r = await Q().due({ idleMain: !TARGET, idleCorner: !OVERLAY, enabled: CFG.enabled, mediaOk: botMediaOk("image", t), liveOk: botMediaOk("live", t),
-                            directOk: botMediaOk("image", t, true), liveMain: isLiveMedia(TARGET), liveCorner: isLiveMedia(OVERLAY) }, t);
+                            directOk: botMediaOk("image", t, true), liveMain: isLiveMedia(TARGET), liveCorner: isLiveMedia(OVERLAY),
+                            irl: irlLive(t), libraryOk: !!CFG.allow_library, libraryWaitMs: LIBRARY_WAIT_MS }, t);   // 1.99ajj plexchat
   if (!r) return;
   try {
+    if (r.kind === "library") {                    // 1.99ajj plexchat: a 📼 title queued from chat (its owner re-checked now)
+      if (await playQueuedLibrary(r, t)) await Q().mark(r.id, "played", null, t);
+      return;
+    }
     if (r.kind === "media") {
       const owner = await exposedOwnerWhy(r, t);
       if (owner) throw new Refuse(403, "Not played: " + owner + ".", "owner");
@@ -1513,7 +1587,7 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
 }
 
 module.exports = {
-  register, init, forBot, botCommand, botQueue, isLink, setSlot, setCam, setEmbed, setLibrary, setGoLive, clear, saveConfig, check, adminView, view, config, clean, setOptin, optinState, optedIn,
+  register, init, forBot, botCommand, botQueue, isLink, setSlot, setCam, setEmbed, setLibrary, libraryFor, irlLive, LIBRARY_WAIT_MS, setGoLive, clear, saveConfig, check, adminView, view, config, clean, setOptin, optinState, optedIn,
   slotWhyNot, camWhyNot, resolveSlot, Refuse, DEFAULTS, WHY, LIVE_GRACE_MS, EMBED_GRACE_MS, onConsentChange, embedForToken, embedState, playerToken,
   // 1.99acw: pictures / cards / live pages
   mediaActive, mediaRefusal, setMedia, startMedia, botMedia, botOverlay, showToken, mediaForToken, showState, showCsp, mediaSweep, sanitizeState, BOT_FRESH_MS,

@@ -79,7 +79,7 @@ function pinnedSocket(u, pin, timeout) {
 /** -> {status, json} (or {status, body, type} with raw). Throws {status: 502/503} when it can't be reached. */
 async function call(method, pathQ, body = null, { raw = false, timeout = 15000 } = {}) {
   const base = env("MEDIACTL_URL").replace(/\/+$/, ""), secret = env("MEDIACTL_SECRET");
-  if (!base || secret.length < 32) throw new Refuse(503, "The media-control service isn't configured.");
+  if (!base || secret.length < 32) throw new Refuse(503, "The media-control service isn't configured.", { code: "encoder_down" });
   const u = new URL(base + pathQ);
   const data = body == null ? "" : JSON.stringify(body);
   const headers = { ...signHeaders(secret, method, u.pathname + u.search, data), Accept: "application/json" };
@@ -256,7 +256,8 @@ async function freeToday(userId, t = Date.now()) {
 }
 async function mustAccess(user) {
   const A = await access(user);
-  if (!A.ok) throw new Refuse(A.why === "signin" ? 401 : 403, A.message, A.hint ? { hint: A.hint } : null);
+  // 1.99ajj plexchat: + a stable code (signin | off) for Pepe's chat answers (plexchat.js) - the browser's text is unchanged
+  if (!A.ok) throw new Refuse(A.why === "signin" ? 401 : 403, A.message, { ...(A.hint ? { hint: A.hint } : {}), code: A.why === "signin" ? "signin" : "off" });
   return A;
 }
 // the admins (library_allow) control every library stream; anyone else only the ones they started
@@ -330,7 +331,7 @@ const roomOf = async (v) => {
 async function search(user, q) {
   await mustAccess(user);
   q = String(q || "").trim().slice(0, 100);
-  if (q.length < 2) throw new Refuse(400, "Type at least 2 characters.");
+  if (q.length < 2) throw new Refuse(400, "Type at least 2 characters.", { code: "bad" });
   return (await must("GET", `/search?q=${encodeURIComponent(q)}&limit=24`)).results || [];
 }
 async function fetchItem(key) {
@@ -396,11 +397,11 @@ async function play(user, b = {}) {
   // a carried play (a resume on a fresh slot) was allowed when it started; anything else asks now
   const A = carry ? { ok: true, free: true, how: carry.access || "carried" } : await mustAccess(user);
   const R = await roomOf(b.room);
-  if (!R) throw new Refuse(404, "No such pad.");
+  if (!R) throw new Refuse(404, "No such pad.", { code: "pad" });
   const paidRules = !A.free || (!isLibAdmin(user) && !carry);
   await preflight(user, A, R, { carry: !!carry });
   const it = await fetchItem(b.key);
-  if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw new Refuse(400, "Pick a movie or an episode.");
+  if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw new Refuse(400, "Pick a movie or an episode.", { code: "bad" });
   const S = conf.get();
   const o = {
     offset: Math.max(0, Math.min(Math.floor(Number(b.offset) || 0), Math.max(0, (it.duration || 0) - 30))),
@@ -412,13 +413,13 @@ async function play(user, b = {}) {
   if (!carry) {
     const lim = await stage.limitsFor(R.id);
     const left = Math.max(0, (it.duration || 0) - o.offset);
-    if (left > lim.library_max * 60) throw new Refuse(400, `Slots on this pad run at most ${lim.library_max} minutes - start further in, or pick something shorter.`, { max_minutes: lim.library_max });
+    if (left > lim.library_max * 60) throw new Refuse(400, `Slots on this pad run at most ${lim.library_max} minutes - start further in, or pick something shorter.`, { max_minutes: lim.library_max, code: "too_long" });
   }
   // the price: what the user saw and confirmed must be what we charge
   const q = carry || A.free ? { price: 0, hours: 0, per_hour: 0 } : priceFor(it.duration, o.offset, S);
   if (q.price > 0) {
-    if (b.price == null || b.price === "") throw new Refuse(400, `This costs ${fmtPat(q.price)} PAT - confirm the price to play it.`, { price: q.price });
-    if (Math.floor(Number(b.price)) !== q.price) throw new Refuse(409, `The price is ${fmtPat(q.price)} PAT now - confirm it again.`, { price: q.price });
+    if (b.price == null || b.price === "") throw new Refuse(400, `This costs ${fmtPat(q.price)} PAT - confirm the price to play it.`, { price: q.price, code: "price" });
+    if (Math.floor(Number(b.price)) !== q.price) throw new Refuse(409, `The price is ${fmtPat(q.price)} PAT now - confirm it again.`, { price: q.price, code: "price" });
   }
   // a free encoder before anyone pays (MEDIACTL_MAX_STREAMS); mediactl still has the last word
   if (paidRules || q.price > 0) await needEncoder();
@@ -463,20 +464,23 @@ async function play(user, b = {}) {
  * between titles too); a Plex user takes the pad under the ordinary stage-slot rules + the daily cap (a queue = one play).
  */
 async function preflight(user, A, R, { carry = false } = {}) {
-  if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.");
-  if ((await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state IN ('active','starting')", [R.id])).length) {
-    throw new Refuse(409, "This pad is already playing a queue from the library - stop it first.");
+  // 1.99ajj plexchat: each refusal carries a stable code (plexchat.js words it in the room's language); the texts are unchanged.
+  // A pad whose 📼 queue is on reads busy_queue (a queue's title has a session too): Pepe can offer "queue it next" for that one
+  const queued = (await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state IN ('active','starting')", [R.id])).length > 0;
+  if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.", { code: queued ? "busy_queue" : "busy_library" });
+  if (queued) {
+    throw new Refuse(409, "This pad is already playing a queue from the library - stop it first.", { code: "busy_queue" });
   }
   if (isLibAdmin(user) || carry) return;
-  if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.");
-  if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.");
+  if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.", { code: "pad" });
+  if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.", { code: "banned" });
   const mine = await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]);
-  if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.");
+  if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.", { code: "has_slot" });
   const S0 = conf.get();
   const member = isMemberHow(A.how);
   const cap = member ? S0.library_free_daily_cap : S0.library_daily_cap;
   const used = member ? await freeToday(user.userId) : !A.free ? await paidToday(user.userId) : 0;
-  if ((member || !A.free) && used >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.");
+  if ((member || !A.free) && used >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.", { code: "cap", cap });
 }
 // streams in use: mediactl's playing ones + 1.99lr the 📼 queues between two titles (a queue holds its encoder)
 async function busyOf(live) {
@@ -489,9 +493,9 @@ async function busyOf(live) {
 /** A free encoder (MEDIACTL_MAX_STREAMS) before anyone pays; mediactl still has the last word. */
 async function needEncoder() {
   const live = await streamsNow();
-  if (live === null) throw new Refuse(503, "The Plex player can't be reached right now - try again in a bit.");
+  if (live === null) throw new Refuse(503, "The Plex player can't be reached right now - try again in a bit.", { code: "encoder_down" });
   const busy = await busyOf(live);
-  if (live.max && busy >= live.max) throw new Refuse(429, `Every library stream is in use (${busy} of ${live.max}) - try again when one ends.`);
+  if (live.max && busy >= live.max) throw new Refuse(429, `Every library stream is in use (${busy} of ${live.max}) - try again when one ends.`, { code: "encoder_busy", busy, max: live.max });
   return live;
 }
 
@@ -521,13 +525,16 @@ const clock = (sec) => { sec = Math.max(0, Math.floor(Number(sec) || 0)); const 
 
 async function needSession(user, room) {
   await init();
-  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.", { code: "signin" });
   const R = await roomOf(room);
-  if (!R) throw new Refuse(404, "No such pad.");
+  if (!R) throw new Refuse(404, "No such pad.", { code: "pad" });
   const s = await session(R.id);
-  if (!s) throw new Refuse(404, "Nothing from the library is playing on this pad.");
+  if (!s) throw new Refuse(404, "Nothing from the library is playing on this pad.", { code: "nothing_on" });
   const p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [s.play_id]))[0] || {};
-  if (!(await mayControl(user, R.id, p.user_id))) throw new Refuse(403, conf.on.library() || isLibAdmin(user) ? CONTROL_DENIED : "Playing from Plex isn't open right now.");
+  if (!(await mayControl(user, R.id, p.user_id))) {
+    const open = conf.on.library() || isLibAdmin(user);
+    throw new Refuse(403, open ? CONTROL_DENIED : "Playing from Plex isn't open right now.", { code: open ? "control_denied" : "off" });
+  }
   return { R, s, p };
 }
 
@@ -548,7 +555,7 @@ async function stop(user, room, reason = "stopped") {
 
 async function pause(user, room) {
   const { R, s } = await needSession(user, room);
-  if (s.state !== "playing") throw new Refuse(409, "It isn't playing.");
+  if (s.state !== "playing") throw new Refuse(409, "It isn't playing.", { code: "not_playing" });
   const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/pause`, {});
   await runQuery("UPDATE media_sessions SET state = 'paused', position = ?, updated = ? WHERE room_id = ?", [r.stream ? r.stream.position : s.position, Date.now(), R.id]);
   await logControl(user, R.id, "pause", "at " + clock(r.stream ? r.stream.position : s.position), { play_id: s.play_id, queue_id: s.queue_id || null });
@@ -599,6 +606,52 @@ async function restart(user, room, offset, how) {
   }
 }
 const play_ = (u, b) => play(u, b);
+/**
+ * 1.99ajj plexchat: the ONE entry point for a member's play (the /stage ▶ route, Pepe's chat - plexchat.js - and the Room Dock):
+ * the pad's visibility (seesPad - an Approved pad they aren't inside reads as no such pad) first, then play() with every rule.
+ * `b._carry` is internal (a resume on a fresh slot) and never taken from a request.
+ */
+async function playFor(user, b = {}) {
+  const body = { ...(b || {}) };
+  delete body._carry;
+  const R = await roomOf(body.room);
+  if (body.room && R && !(await stage.seesPad(user && user.userId ? user : null, R.id))) throw new Refuse(404, "No such pad.", { code: "pad" });
+  return play(user, body);
+}
+/**
+ * 1.99ajj plexchat: what a pad's stage looks like to `user` right now, for Pepe's chat answer (side-effect free: reads only).
+ * -> null (no such pad) | {room, library: {title, queue, starter_is_you, by, per_hour, next} | null, slot_taken, own_slot,
+ *    daily_left, free, how}. Titles only - never a file.
+ */
+async function padState(user, room) {
+  await init();
+  const R = await roomOf(room);
+  if (!R) return null;
+  const s = await session(R.id);
+  const q = await require("./mediaqueue").activeFor(R.id);
+  let library = null;
+  if (s || q) {
+    const p = s ? (await getQuery("SELECT user_id, username FROM media_plays WHERE id = ?", [s.play_id]))[0] || {} : {};
+    const starter = q ? q.user_id : p.user_id;
+    const cur = q ? q.items[q.pos] : null;
+    const nxt = q ? q.items[q.pos + 1] : null;
+    library = { title: s ? s.title : cur ? fmtTitle(cur) : null, queue: !!q, starter_is_you: !!(user && user.userId && starter === user.userId),
+                by: q ? q.username : p.username || (s && s.by_user) || null, per_hour: q ? Number(q.per_hour) || 0 : null,
+                next: nxt ? fmtTitle(nxt) : null, state: s ? s.state : "waiting" };
+  }
+  const open = await safeQuery(`SELECT id, source FROM stage_slots WHERE room_id = ? AND status IN ${OPEN_STATES}`, [R.id]);
+  const RS = await rooms.stageSettings(R.id).catch(() => null);
+  const slots = Math.max(1, Number(RS && RS.slot_count) || 1);
+  const own = user && user.userId ? await safeQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]) : [];
+  const A = await access(user);
+  const S = conf.get();
+  const member = isMemberHow(A.how);
+  let daily_left = null;
+  if (A.ok && member) daily_left = Math.max(0, S.library_free_daily_cap - (await freeToday(user.userId)));
+  else if (A.ok && !A.free) daily_left = Math.max(0, S.library_daily_cap - (await paidToday(user.userId)));
+  return { room: R.id, title: R.title || R.id, library, slot_taken: open.length >= slots, own_slot: own.length > 0, daily_left,
+           free: !!A.free, how: A.how || null, ok: !!A.ok };
+}
 const resume = (user, room) => restart(user, room, null, "resume");
 const seek = (user, room, offset) => restart(user, room, offset, "seek");
 
@@ -820,13 +873,8 @@ function register(app, { addUser, noTimers } = {}) {
       res.send(r.body);
     } catch (e) { res.status(e.status === 403 ? 403 : 404).end(); }
   });
-  app.post("/api/medialib/play", ...J(async (req) => {
-    const b = { ...(req.body || {}) };
-    delete b._carry;                                                   // internal only
-    const R = await roomOf(b.room);
-    if (b.room && R && !(await stage.seesPad(req.user, R.id))) throw new Refuse(404, "No such pad.");
-    return play(me(req), b);
-  }));
+  // 1.99ajj plexchat: the pad check lives in playFor now (one rule source: this route, Pepe's chat and the Room Dock)
+  app.post("/api/medialib/play", ...J(async (req) => playFor(me(req), req.body || {})));
   app.post("/api/medialib/stop", ...J(async (req) => stop(me(req), (req.body || {}).room)));
   app.post("/api/medialib/pause", ...J(async (req) => pause(me(req), (req.body || {}).room)));
   app.post("/api/medialib/resume", ...J(async (req) => resume(me(req), (req.body || {}).room)));
@@ -840,7 +888,7 @@ function register(app, { addUser, noTimers } = {}) {
   require("./mediaqueue").routes(app, { J, me, timers: !noTimers });
 }
 
-module.exports = { init, register, play, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday, freeToday,
+module.exports = { init, register, play, playFor, padState, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday, freeToday,
                    // 1.99lr: for mediaqueue.js
                    player, mayControl, logControl,
                    _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat,
