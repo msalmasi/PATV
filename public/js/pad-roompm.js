@@ -124,8 +124,12 @@
 
     return {
       update: update,
-      /** what the page adds to its /live long-poll: the last private answer it has */
-      query: function () { return '&rpm=' + cursor; },
+      /** what the page adds to its /live long-poll: the last private answer it has. The page cleared its chat (a fresh view once its
+       *  join cursor ran out): what it had been shown comes back with the next answer. */
+      query: function () {
+        if (nodes.length && !feed.childNodes.length) { nodes = []; have = {}; haveList = []; cursor = 0; }
+        return '&rpm=' + cursor;
+      },
       on: function () { return isOn; },
       _nodes: function () { return nodes.slice(); }
     };

@@ -265,5 +265,14 @@ test("a chat with nothing said yet: the private answer replaces the placeholder"
   assert.equal(feed.childNodes[0].getAttribute("data-text"), null);
   assert.equal(bottom, 1, "a reader at the bottom stays there");
   assert.equal(pm.query(), "&rpm=5");
+  // the page cleared its chat (a fresh view after its join cursor ran out): the rows it had come back with the next answer
+  feed.textContent = "";
+  assert.equal(pm.query(), "&rpm=0");
+  pm.update({ rpm: { on: 1, v: 5, rows: [{ id: 5, ts: Date.now(), text: "hi", cmd: "!help" }] } });
+  assert.equal(feed.childNodes.length, 1, "drawn again");
+  // ... but a live log that merely trimmed its oldest lines (300) never brings them back
+  pm.update({ rpm: { on: 1, v: 6, rows: [{ id: 6, ts: Date.now(), text: "two", cmd: "!help" }] } });
+  feed.removeChild(feed.childNodes[0]);
+  assert.equal(pm.query(), "&rpm=6");
   void src;
 });
