@@ -1,4 +1,4 @@
-// 1.99?? roompm: the pad page's REAL script (views/room.ejs rendered with ejs) + public/js/chatlog-core.js + public/js/pad-roompm.js in
+// 1.99ajd roompm: the pad page's REAL script (views/room.ejs rendered with ejs) + public/js/chatlog-core.js + public/js/pad-roompm.js in
 // a small fake DOM (test/chatlog-page.test.js's): Pepe's private answers to your typed commands are lines of the pad's chat -
 //   * one of Pepe's lines (.line.pepe) with .rpm, "only you can see this · from Pepe" and a screen-reader prefix; never pickable (no
 //     data-c / data-text / data-name / data-k anywhere in it, _c = 0)

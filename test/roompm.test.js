@@ -1,4 +1,4 @@
-// 1.99?? roompm: Pepe's private answers in a pad's chat ("room PMs", roompm.js + bridge-relay.js + bridge.js liveView). The owner,
+// 1.99ajd roompm: Pepe's private answers in a pad's chat ("room PMs", roompm.js + bridge-relay.js + bridge.js liveView). The owner,
 // 2026-11-04: "if i do !spin in the bridge, i don't get the acknowledgement or results if pepe is set to send them via PM".
 //   - a TYPED command's private answers (the job's ack replies, final and late) become rows of THAT account in THAT pad - only its own
 //     /live answers carry them (?rpm=), never another account's, another pad's, a signed-out view, the homepage panel or an embed

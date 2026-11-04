@@ -896,7 +896,7 @@ async function execute(userId, { force = false } = {}) {
     catch (e) { console.error("[acctdel] remove public lines:", e.message); }
   }
   try { await require("./accountexport").removeAll(uid); } catch (e) { /* none */ }
-  try { require("./roompm").forgetUser(uid); } catch (e) { /* 1.99?? roompm: Pepe's private answers in pad chat (memory only) */ }
+  try { require("./roompm").forgetUser(uid); } catch (e) { /* 1.99ajd roompm: Pepe's private answers in pad chat (memory only) */ }
   // mic keep review: saved copies they were the last to save (their story_saves rows went in step 5) - purged now; a failure here is
   // the hourly sweep's (storykeep.sweepKept purges orphaned copies after a grace)
   for (const id of savedCaps) {

@@ -852,7 +852,7 @@
   <script src="/public/js/pad-download.js?v=2"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=12">
   <script src="/public/js/room-bridge.js?v=21"></script>
-  <link rel="stylesheet" href="/public/css/roompm.css?v=1"><script src="/public/js/pad-roompm.js?v=1"></script><%# 1.99?? roompm: Pepe's private answers in the chat (PATVRoomPm) %>
+  <link rel="stylesheet" href="/public/css/roompm.css?v=1"><script src="/public/js/pad-roompm.js?v=1"></script><%# 1.99ajd roompm: Pepe's private answers in the chat (PATVRoomPm) %>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
@@ -1413,7 +1413,7 @@
     // (CL8: sending one while reading back returns to the live chat)
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
       feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; } }) : null;
-    // 1.99?? roompm: Pepe's private answers to your typed commands, in this chat, only for you (pad-roompm.js; rpm in /live)
+    // 1.99ajd roompm: Pepe's private answers to your typed commands, in this chat, only for you (pad-roompm.js; rpm in /live)
     var roomPm = window.PATVRoomPm ? PATVRoomPm.init({ feed: feedEl, line: item, nearBottom: nearBottom, toBottom: toBottom, root: document.querySelector('main.rm'),
       anchor: function () { return roomRelay && roomRelay.anchor ? roomRelay.anchor() : null; }, hist: function () { return padHist; } }) : null;
     // 1.99aid (privacy controls, round 3 - F4; owner Q8): a moderator who may view hidden cams here (room.livecams.reveal: PATV staff anywhere,
@@ -1795,7 +1795,7 @@
         else showMic(d.stage_program || null);
       });   // micfollow: 🎙 On the mic; privacy and management still apply immediately
       safe('feed', function () { addFeed(d.feed, first, late); });      // 1.99ahm: (T3) a backlog's grab / drop lines are not held
-      safe('rpm', function () { if (roomPm) roomPm.update(d); });        // 1.99?? roompm: after the lines (an answer goes below its echo)
+      safe('rpm', function () { if (roomPm) roomPm.update(d); });        // 1.99ajd roompm: after the lines (an answer goes below its echo)
       safe('clip', function () { if (chatClip) chatClip.update(d); });
       cursor = Math.max(cursor, d.cursor);
       // 1.99acb: your room line the site named but this answer didn't carry - ask again from just before it (once per line)
@@ -1818,7 +1818,7 @@
       inflight = true;
       var q = '?after=' + cursor + '&wait=1' + (lp.v != null ? '&v=' + lp.v : '') + (lp.mv != null ? '&mv=' + lp.mv : '') + (lp.rs != null ? '&rs=' + lp.rs : '') +
         (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '') + (jcTok ? '&jc=' + encodeURIComponent(jcTok) : '') +
-        (roomPm ? roomPm.query() : '');                                  // 1.99?? roompm
+        (roomPm ? roomPm.query() : '');                                  // 1.99ajd roompm
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/live' + q, { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); } if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (d) {

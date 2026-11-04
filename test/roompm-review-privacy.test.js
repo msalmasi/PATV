@@ -1,4 +1,4 @@
-// 1.99?? roompm: review (privacy) - Pepe's private answers in a pad's chat must reach ONLY their account, and nothing of them may
+// 1.99ajd roompm: review (privacy) - Pepe's private answers in a pad's chat must reach ONLY their account, and nothing of them may
 // outlive what the owner was promised (24 h, gone with the account):
 //   * a shared computer: the page drops what it shows when the site stops sending this viewer's block (signed out, switched off)
 //     or sends another account's (rpm.w, a per-account tag that is only ever sent to that account) - never one account's answers

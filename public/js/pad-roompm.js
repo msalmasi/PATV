@@ -1,4 +1,4 @@
-// pad-roompm.js — 1.99?? roompm: Pepe's private answers in the pad's chat ("room PMs", roompm.js on the site).
+// pad-roompm.js — 1.99ajd roompm: Pepe's private answers in the pad's chat ("room PMs", roompm.js on the site).
 //
 // A "!" command you type in the pad's chat box that Pepe answers privately (-p, a chat spin's "spinning..." and its result, a private
 // usage line, the site's own !commands) shows here as one of Pepe's lines with a dashed edge and "only you can see this · from Pepe".

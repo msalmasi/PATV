@@ -1,4 +1,4 @@
-// roompm.js — 1.99?? roompm: Pepe's private answers in a pad's chat ("room PMs"), shown ONLY to the account that typed the command.
+// roompm.js — 1.99ajd roompm: Pepe's private answers in a pad's chat ("room PMs"), shown ONLY to the account that typed the command.
 //
 // The owner, 2026-11-04: "if i do !spin in the bridge, i don't get the acknowledgement or results if pepe is set to send them via PM.
 // So we need some type of equivalent notion of a 'room PM' that only you can see on the bridge, that Pepe can use for this."

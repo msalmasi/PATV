@@ -463,7 +463,7 @@
 })();
 </script>
 
-<%# 1.99?? roompm (roompm.js; the owner 2026-11-04): Pepe's private answers in pad chat ("room PMs") - ON unless switched off here %>
+<%# 1.99ajd roompm (roompm.js; the owner 2026-11-04): Pepe's private answers in pad chat ("room PMs") - ON unless switched off here %>
 <section class="adm-card" id="roompm" aria-labelledby="rpmT">
   <h2 id="rpmT">Pepe's private answers in pad chat <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">When someone types a <code>!</code> command in a pad's chat on the website and Pepe answers privately (<code>-p</code>, a chat spin's "spinning…" and its result, a private usage line), the answer shows in that pad's chat as one of Pepe's lines marked "only you can see this · from Pepe" - only to that account (all its tabs and the pop-out), never to anyone else, never in the pad's chat log, history, search, downloads, quotes, transcripts, Telegram or overlays. The site keeps the last 20 per account per pad for 24 hours, in memory only (a restart or deploy clears them; deleting the account clears theirs). Off: they show only in the composer's "Your commands" list (🔒), as before, and every kept one is cleared. On by default.</p>
@@ -473,7 +473,7 @@
   <% } %>
 </section>
 <script>
-// 1.99?? roompm: the private-answers card (roompm.js: GET / POST /api/admin/roompm {on})
+// 1.99ajd roompm: the private-answers card (roompm.js: GET / POST /api/admin/roompm {on})
 (function () {
   'use strict';
   var sum = document.getElementById('rpmSummary');
