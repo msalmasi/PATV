@@ -5,9 +5,11 @@
 //   - every typed moderation name goes through targets.js: a bare name that means two people is a 409 with the choices (Pepe's room
 //     reply prints the error text), cf:<login> / @name / 🌐name / u:<id> are exact
 //   - bridge blocks (Pepe, the owner page, admins) and feed / pad bans (feedstore.ban) agree on who a name is
-//   - the impersonation guard (cfnames.js): a new account or a rename can't take a Camfrog login Pepe has seen unless it is that
-//     account's own linked login; the OAuth username picker skips such names; existing clashes are listed for admins; the pad shows a
-//     linked login's clashing display name as the login, and a web account's as "not the Camfrog user"
+//   - the Camfrog-name tag (cfnames.js). 1.99?? padppl rework (owner: "Wouldn't this prevent people legit creating a PATV account with
+//     their own username? ... I don't like this part."): NOBODY is refused a name Pepe has seen on Camfrog - sign-up, rename, Pepe's
+//     rename, the OAuth / SSO username pickers all take it; a gentle hint follows ("Is <name> your Camfrog name? Link it in Settings so
+//     people know it's you." - the same words whether or not someone else has that login linked). Existing clashes are listed for admins;
+//     the pad SHOWS a clashing name with "not the Camfrog user" - a web account's and (rework) a linked login's display name alike
 //   node --test test/targets-disambig.test.js
 "use strict";
 const test = require("node:test");
@@ -101,51 +103,112 @@ test("3. every resolver agrees: bridge blocks and feed / pad bans give the same 
   assert.deepEqual(a.map((x) => x.action), ["pad_ban", "pad_unban"]);
 });
 
-test("4. the name guard: a new account or a rename can't take a Camfrog login Pepe has seen - unless it's their own linked login", async () => {
-  assert.equal(guard.checkUsername("tricon"), null, "the charset rule alone still allows it");
-  assert.match(await CF.nameRefusal("tricon", null), /belongs to a Camfrog user/, "a linked login");
-  assert.match(await CF.nameRefusal("NeverLinked", null), /belongs to a Camfrog user/, "a login Pepe has seen that nobody linked");
-  assert.equal(await CF.nameRefusal("tricon", "real-0001"), null, "the real Tricon may take his own login as a username");
-  assert.equal(await CF.nameRefusal("brandnewname", null), null);
-  assert.equal(await CF.nameRefusal("CFauto123", null), null, "CF auto accounts are exempt");
-  // the OAuth picker moves to the next free candidate
+test("4. rework: nobody is refused a name Pepe has seen on Camfrog - a gentle hint instead, the same words whoever has that login", async () => {
+  assert.equal(guard.checkUsername("tricon"), null, "the charset rule alone allows it");
+  assert.equal(CF.nameRefusal, undefined, "the sign-up / rename guard is gone (owner: \"I don't like this part\")");
+  const HINT = (n) => `Is ${n} your Camfrog name? Link it in Settings so people know it's you.`;
+  // the SAME words for a login someone else has linked (tricon -> TriconOG) and for one nobody linked - it says nothing about who has it
+  assert.equal(await CF.nameHint("tricon", null), HINT("tricon"));
+  assert.equal(await CF.nameHint("NeverLinked", null), HINT("NeverLinked"));
+  assert.equal(await CF.nameHint("tricon", "har-0001"), HINT("tricon"), "the harasser's account (linked to trlcon): the same hint, never 'taken'");
+  assert.equal(await CF.nameHint("tricon", "real-0001"), null, "his own linked login: nothing to link");
+  assert.equal(await CF.nameHint("brandnewname", null), null, "a name Pepe never saw: no hint");
+  assert.equal(await CF.nameHint("CFauto123", null), null, "CF auto accounts are the login itself");
+  assert.equal(await CF.nameHint("tric0n", null), null, "only an exact login - a look-alike gets the tag on the pad, not a hint");
+  // translated when the page has the string
+  const tr = Object.assign((k, v) => `T:${k}:${v.name}`, { has: (k) => k === "auth.hint.camfrog_name" });
+  assert.equal(await CF.nameHint("tricon", null, { t: tr }), "T:auth.hint.camfrog_name:tricon");
+  // hintAfter: a note for the next page (the welcome line's flash list), never an error, never blocking
+  const fl = [];
+  const req = { flash: (k, v) => fl.push([k, v]) };
+  assert.equal(await CF.hintAfter(req, null, "NeverLinked"), HINT("NeverLinked"));
+  assert.equal(await CF.hintAfter(req, null, "brandnewname"), null);
+  assert.deepEqual(fl, [["success", HINT("NeverLinked")]]);
+  assert.equal(await CF.hintAfter({}, null, "tricon"), HINT("tricon"), "no flash on the request: still no throw");
+  // the OAuth / SSO username picker takes a seen login as it is (someone signing up with Twitch as their own Camfrog name)
   const UC = require(path.join(repo, "user.controller"));
-  const picked = await UC.generateUniqueUsername("NeverLinked");
-  assert.notEqual(picked.toLowerCase(), "neverlinked");
-  assert.match(picked, /^neverlinked\d+$/i);
+  assert.equal(await UC.generateUniqueUsername("NeverLinked"), "NeverLinked");
+  assert.match(await UC.generateUniqueUsername("tricon"), /^tricon\d+$/, "only another PATV account's username counts as taken");
+  // every account-creating / renaming path: no refusal, the hint instead
+  const src = (f) => fs.readFileSync(path.join(repo, f), "utf8");
+  for (const f of ["user.controller.js", "index.js", "plexsso.js", "ssolinks.js", "cfnames.js"]) assert.doesNotMatch(src(f), /nameRefusal\(/, f);
+  const uc = src("user.controller.js");
+  assert.match(uc, /req\.t\('auth\.welcome'[^\n]*\r?\n\s*await require\("\.\/cfnames"\)\.hintAfter\(req, userId, username\);/, "sign-up: the hint after the welcome line");
+  assert.match(uc, /req\.flash\('success', 'Username changed\.'\);\r?\n\s*await require\('\.\/cfnames'\)\.hintAfter\(req, userId, username\);/, "rename");
+  assert.match(uc, /const hint = await require\("\.\/cfnames"\)\.nameHint\(username, userId, req\);\r?\n\s*return \{ user: \{ userId, username, class: "pleb" \}, \.\.\.\(hint \? \{ hint \} : \{\}\) \};/, "SSO accounts hand it back");
+  for (const f of ["plexsso.js", "ssolinks.js"]) assert.match(src(f), /if \(r\.hint\) req\.flash\("success", r\.hint\);/, f + ": after its welcome line");
+  assert.equal((src("index.js").match(/require\("\.\/cfnames"\)\.hintAfter\(req, newUser\.userId, newUser\.username\);/g) || []).length, 2, "Twitch and Discord accounts");
+  assert.doesNotMatch(src("index.js"), /that name belongs to another Camfrog user/, "Pepe's rename: no 409 for a seen name");
+  // the admin rename tool (it exists to END a clash) still won't make a new one
+  assert.match(await CF.adminNameRefusal("NeverLinked", "har-0002"), /Camfrog login Pepe has seen/);
+  assert.equal(await CF.adminNameRefusal("tricon", "real-0001"), null, "his own login");
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["auth.hint.camfrog_name"], "Is {name} your Camfrog name? Link it in Settings so people know it's you.");
 });
 
-test("5. existing clashes: listed for admins; the pad shows a clashing linked display name as the login and tags a web account", async () => {
+test("5. existing clashes: listed for admins; the pad SHOWS a clashing name with the tag - a web account's and (rework) a linked login's display name", async () => {
   await CF.rebuild();
   const list = await CF.clashes();
   const ids = list.map((x) => x.userId).sort();
   assert.deepEqual(ids, ["har-0001", "har-0002"], "both harasser accounts - never the real Tricon");
   const h1 = list.find((x) => x.userId === "har-0001");
   assert.equal(h1.login, "tricon"); assert.equal(h1.loginOwner, "TriconOG"); assert.equal(h1.by, "username");
-  // bridge.withPatv: the harasser's lines from his alt login 'trlcon' would show his PATV display name 'tricon' - now the login
   const B = require(path.join(repo, "bridge"));
   const C = await B.resolveNames([{ login: "trlcon" }, { login: "tricon" }, { login: "u:har-0002" }]);
-  assert.equal(B.withPatv({ login: "trlcon", display: "trlcon" }, C).display, "trlcon", "never shown as 'tricon'");
-  assert.equal(B.withPatv({ login: "tricon", display: "tricon" }, C).display, "Tricon", "the real one keeps his PATV display name");
+  // 1.99?? rework: the harasser's lines from his alt login 'trlcon' show his PATV display name 'tricon' WITH the tag (it used to be the login)
+  const hl = B.withPatv({ login: "trlcon", display: "trlcon" }, C);
+  assert.equal(hl.display, "tricon"); assert.equal(hl.clash, "tricon", "shown, tagged 'not the Camfrog user'");
+  assert.equal(hl.login, "trlcon", "the login stays (the name's tooltip)");
+  const rl = B.withPatv({ login: "tricon", display: "tricon" }, C);
+  assert.equal(rl.display, "Tricon", "the real one keeps his PATV display name"); assert.equal(rl.clash, undefined, "and is never tagged");
   const w = B.withPatv({ login: "u:har-0002", display: "tricon2", acct: true, web: true }, C);
   assert.equal(w.clash, "tricon", "a web account named like a Camfrog user carries the tag");
+  // the owner's real case: PATV brocklee258, linked to login ritchiecuh, display name "brocklee258" - also a login Pepe has seen (maybe his
+  // own alt, through a CF auto account) - shows as "brocklee258" + the tag, never as "ritchiecuh"
+  await runQuery("INSERT INTO camfrog_userstats (login, data, updated) VALUES ('brocklee258', '{}', 1)");
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('brk-0001', 'brocklee258', 'brocklee258', 'x', 'ritchiecuh')");
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('cfa-0001', 'CFsa1p1bz8', 'brocklee258', 'x', 'brocklee258')");
+  await CF.rebuild();
+  const C2 = await B.resolveNames([{ login: "ritchiecuh" }, { login: "brocklee258" }]);
+  const bk = B.withPatv({ login: "ritchiecuh", display: "ritchiecuh" }, C2);
+  assert.equal(bk.display, "brocklee258"); assert.equal(bk.clash, "brocklee258"); assert.equal(bk.patv.username, "brocklee258");
+  assert.equal(B.withPatv({ login: "brocklee258", display: "brocklee258" }, C2).clash, undefined, "the Camfrog login itself is never tagged");
+  // every list that names people through withPatv says the same: the people list / mic list entries, the person menu, the @ list
+  assert.equal(B.withPatv({ login: "ritchiecuh", display: "ritchiecuh", on_mic: true }, C2).display, "brocklee258");
+  // an admin's Mark OK (it is his own alt): no tag on pad lines either - the name stays
+  await CF.markOk({ userId: "adm", username: "boss" }, "brk-0001", "brocklee258");
+  assert.equal(B.withPatv({ login: "ritchiecuh", display: "ritchiecuh" }, C2).clash, undefined, "marked OK");
+  assert.equal(B.withPatv({ login: "ritchiecuh", display: "ritchiecuh" }, C2).display, "brocklee258");
   // an admin marks one OK (same person who hasn't linked yet): no tag, no list entry
   await CF.markOk({ userId: "adm", username: "boss" }, "har-0002", "tricon");
   assert.ok(!(await CF.clashes()).some((x) => x.userId === "har-0002"));
+  // the mic stage gets the tag from the same place (micfollow viewFor: the tile's name + clash), and draws it (stage-mic.js)
+  const mf = fs.readFileSync(path.join(repo, "micfollow.js"), "utf8");
+  assert.match(mf, /\.\.\.\(patv && u && u\.clash \? \{ clash: String\(u\.clash\)\.slice\(0, 40\) \} : \{\}\)/);
+  const sm = fs.readFileSync(path.join(repo, "public", "js", "stage-mic.js"), "utf8");
+  assert.match(sm, /clashTag\.hidden = !\(s\.clash && !vc\);/); assert.match(sm, /tag\.textContent = ''; clashTag\.hidden = true;/, "never on a veiled cover");
 });
 
-test("6. the chat line renderer draws the tag with its explanation (textContent-safe)", () => {
+test("6. the chat line renderer draws the tag with its explanation (textContent-safe) - a web line and (rework) a linked login's line", () => {
   const CR = require(path.join(repo, "public", "js", "chatlog-core"));
   const html = String(CR.renderItem({ k: "msg", c: 1, ts: Date.now(), text: "hi", u: { login: "u:har-0001", display: "tricon", web: true, acct: true, clash: "tricon", patv: { username: "tricon" } } }, {}, CR.htmlH));
   assert.match(html, /<span class="clash-tag" title="This is a PATV web account\. It is not the Camfrog user called tricon\.">not the Camfrog user<\/span>/);
+  const cf = String(CR.renderItem({ k: "msg", c: 2, ts: Date.now(), text: "yo", u: { login: "ritchiecuh", display: "brocklee258", clash: "brocklee258", patv: { username: "brocklee258" } } }, {}, CR.htmlH));
+  assert.match(cf, /<span class="who-clash"><a class="who"[^>]*>brocklee258<\/a><span class="clash-tag" title="This is their PATV display name\. They are not the Camfrog user called brocklee258\.">not the Camfrog user<\/span><\/span>/);
+  assert.match(cf, /<a class="who"[^>]*title="ritchiecuh"/, "the login is still the name's tooltip");
+  const plain = String(CR.renderItem({ k: "msg", c: 3, ts: Date.now(), text: "yo", u: { login: "alicecf", display: "Alice", patv: { username: "alicep" } } }, {}, CR.htmlH));
+  assert.doesNotMatch(plain, /who-clash|clash-tag/, "no clash: the name as before");
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["js.pad.chat.clash_title_cf"], "This is their PATV display name. They are not the Camfrog user called {login}.");
 });
 
-test("7. review: look-alikes of a seen login are refused / tagged too ('Тricon', 'tric0n', 'tricon_'); never against the account's own login; Mark OK by username reaches pad lines", async () => {
+test("7. review: look-alikes of a seen login are tagged ('Тricon', 'tric0n', 'tricon_'); never against the account's own login; Mark OK by username reaches pad lines", async () => {
   await CF.rebuild();
-  for (const n of ["tric0n", "tricon_", "TRICON.", "neverIinked"]) assert.match(await CF.nameRefusal(n, null), /belongs to a Camfrog user/, n);
-  assert.equal(await CF.nameRefusal("Tricon_", "real-0001"), null, "the real Tricon's own login, dressed up, is still his");
-  assert.equal(await CF.nameRefusal("triconfan", null), null, "a different name passes");
-  assert.equal(CF.clashOf("x-1", "\u0422ricon", "\u0422ricon", null), "tricon", "a Cyrillic capital Te passes for T");
+  for (const n of ["tric0n", "tricon_", "TRICON.", "neverIinked"]) assert.ok(CF.clashOf("x-2", n, n, null), n + " is tagged");
+  for (const n of ["tric0n", "tricon_", "TRICON.", "neverIinked"]) assert.match(await CF.adminNameRefusal(n, null), /Camfrog login Pepe has seen/, n + ": the admin rename tool won't make a new clash");
+  assert.equal(CF.clashOf("real-0001", "Tricon_", "Tricon_", "tricon"), null, "the real Tricon's own login, dressed up, is still his");
+  assert.equal(CF.clashOf("x-3", "triconfan", "triconfan", null), null, "a different name passes");
+  assert.equal(CF.clashOf("x-1", "Тricon", "Тricon", null), "tricon", "a Cyrillic capital Te passes for T");
   assert.equal(CF.clashOf("real-0001", "TriconOG", "Tricon", "tricon"), null, "the real Tricon is never tagged");
   // an admin's Mark OK reaches a linked account's display name on pad lines too (bridge.withPatv knows the username, not the id)
   await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('fan-0001', 'tricon_fan', 'tric0n', 'x', 'triconfancf')");

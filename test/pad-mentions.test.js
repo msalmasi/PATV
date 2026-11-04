@@ -149,6 +149,21 @@ test("veils: a frog-named line alerts under the FROG NAME; a mention OF a frog n
   V.hide(fl2.it, "_vz", { login: "sneakcf", display: "sneakcf", kind: "incognito" });
   M.onLines([fl2]); await M._idle();
   assert.equal((await notices("al-1")).length, 1);
+  // 1.99?? padppl rework: whatever frog name he takes next (another session, another pad) - still silent for her
+  M._sent.clear(); T += 120e3;
+  const fl3 = Object.assign(line({ u: { anon: true, display: "someone", veil: "incognito", alias: "Leafy Newt", id: "v-leafy0000001" }, text: "@alicecf new frog" }), { roomId: "other_room", slug: "other-room", name: "Other Room" });
+  V.hide(fl3.it, "_vz", { login: "sneakcf", display: "sneakcf", kind: "incognito" });
+  M.onLines([fl3]); await M._idle();
+  assert.equal((await notices("al-1")).length, 1, "a new frog name, another pad: no alert either");
+  // (the control: the same line once she unblocks him does alert - so it was the block)
+  await runQuery("DELETE FROM veil_blocks WHERE blocker_id = 'al-1'"); require(path.join(repo, "blocks")).changed("al-1");
+  M._sent.clear(); T += 120e3;
+  const fl4 = Object.assign(line({ u: { anon: true, display: "someone", veil: "incognito", alias: "Leafy Newt", id: "v-leafy0000001" }, text: "@alicecf control" }), { roomId: "other_room", slug: "other-room", name: "Other Room" });
+  V.hide(fl4.it, "_vz", { login: "sneakcf", display: "sneakcf", kind: "incognito" });
+  M.onLines([fl4]); await M._idle();
+  assert.equal((await notices("al-1")).length, 2, "the control alerts");
+  await runQuery("INSERT INTO veil_blocks (blocker_id, blocked_id, blocked_login, label, room_id, created) VALUES ('al-1', 'sn-1', 'sneakcf', 'Soggy Bullfrog', ?, 1)", [ROOM]);
+  require(path.join(repo, "blocks")).changed("al-1");
 });
 
 test("a typed @ that is a PATV name clashing with a Camfrog login never alerts (the tricon case); the real login does", async () => {

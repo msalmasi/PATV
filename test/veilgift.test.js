@@ -145,3 +145,34 @@ test("review: the sender's own data never tells them whether / when a frog accep
   assert.match(JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"))["js.gift.body"], /we never tell you who it is or whether they accepted\. A gift that isn't accepted within 30 days comes back to you\./);
   assert.match(JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"))["wallet.gifts.why"], /We never tell them whether you accepted, but a gift that comes back tells them it wasn't\./);
 });
+
+// 1.99?? padppl rework (owner: a frog-name block covers ANY frog name the person uses): a sender who is under a frog name right now, whom the
+// recipient blocked under a frog name, is withheld - silently, the same answer; under their own name the gift goes through as before
+test("rework: a frog-name block withholds the gifts its person sends while they're incognito - the same answer; named sends untouched", async () => {
+  T += 2 * 86400e3;                                          // (a fresh day for alice's limits)
+  await require(path.join(repo, "incognito")).init();
+  const CL = require(path.join(repo, "chatlog"));
+  await CL.init(); await CL.noteSync({ list: [] });                  // (the hidden set loaded - it fails closed until then)
+  await runQuery(`DELETE FROM incognito_state`);
+  require(path.join(repo, "padbans"))._reset();
+  // sneaky (behind 🐸 Soggy Bullfrog) blocked alice under one of HER frog names - stored by her account / login
+  await runQuery("INSERT INTO veil_blocks (blocker_id, blocked_id, blocked_login, label, room_id, created) VALUES ('snk-1', 'ali-1', 'alicecf', 'Leafy Newt', ?, 1)", [R.id]);
+  require(path.join(repo, "blocks")).changed("snk-1", "ali-1");
+  const pendingOf = async (key) => (await getQuery("SELECT state FROM veil_gifts WHERE key = ?", ["vg:ali-1:" + key]))[0].state;
+  // alice under her own name: the gift goes in as before (named activity is untouched)
+  const named = await VG.send(U.alice, R, { k: "veil", id: "v-soggy000001" }, 100, "rw-named");
+  assert.equal(await pendingOf("rw-named"), "pending");
+  // alice incognito now (a frog name of her own, whatever it is): withheld - never shown to sneaky, back to her on the due day
+  await runQuery(`INSERT INTO incognito_state (login, "on", updated) VALUES ('alicecf', 1, ?)`, [T]);
+  require(path.join(repo, "padbans"))._reset();
+  const veiled = await VG.send(U.alice, R, { k: "veil", id: "v-soggy000001" }, 100, "rw-veiled");
+  assert.equal(await pendingOf("rw-veiled"), "withheld");
+  assert.deepEqual(Object.keys(veiled).sort(), Object.keys(named).sort(), "the same answer");
+  assert.equal(veiled.label, named.label); assert.equal(veiled.amount, named.amount);
+  // someone sneaky never blocked, incognito too: not withheld
+  const other = await VG.send(U.alice, R, { k: "veil", id: "v-muddy000001" }, 100, "rw-other");
+  assert.equal(await pendingOf("rw-other"), "pending");
+  assert.ok(other.ok);
+  await runQuery(`DELETE FROM incognito_state`);
+  await runQuery("DELETE FROM veil_blocks");
+});

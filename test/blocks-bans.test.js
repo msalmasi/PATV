@@ -4,13 +4,17 @@
 //   - the ref is exactly what was clicked (personref.js): a Camfrog login -> its LINKED account, a 🌐 row -> that PATV username (the
 //     tricon case: the two never mix), a web line's account key, a veiled roster entry / line -> the hidden person, never said
 //   - effects of a NAMED block: tips refused (tips.transferPat: every tip path - words that never say a block exists), web !duel / !brawl /
-//     !tip refused. A FROG-NAME block (review fix, THE VEIL RULE) acts only on what they do under a frog name (their frog-named @mentions
-//     don't alert the blocker) - never their named DMs / tips / people list - and NOTHING changes in what the blocker sees
+//     !tip refused. A FROG-NAME block (review fix, THE VEIL RULE) acts only on what they do under a frog name - never their named DMs /
+//     tips / people list. 1.99?? padppl rework (owner: "blocking ANY frog name the person uses"): it hides their VEILED activity from the
+//     blocker under any frog name, in any pad - their frog-named lines folded (vb), their frog-named @mentions silent, their web
+//     challenges / tips and gifts while incognito refused / withheld - named activity untouched (no unmasking)
 //   - the same answer whoever is behind a frog name (an account, an unlinked login, nobody); "That's you" only to yourself
 //   - a login block becomes a named block when the login links; the settings list shows frog names by label only
 // Bans - on the exact identity, into the existing stores; a veil ban is its own row (a named re-ban never overwrites it), refuses only
 //   their website bridge and only while they are under a frog name (review fix: never mainstage.isBanned / postRefusal - no visible
-//   effect, no active test), lists as "🐸 label · identity hidden"; a named ban on someone of higher rank is refused;
+//   effect, no active test). 1.99?? rework: it is the person's INCOGNITO BAN in that pad - every frog name they use there, now and later,
+//   "You can't post incognito on this pad right now." - listed as "🐸 label (identity hidden) - incognito ban"; a named ban on someone of
+//   higher rank is refused;
 //   who may: bridge = owner / staff / a room mod with kick, pad = owner / staff, site = staff; a login with no account waits in
 //   pad_login_bans and lands on the account when it links
 //   node --test test/blocks-bans.test.js
@@ -268,11 +272,13 @@ test("a veil ban: its own row, refusals only, no visible effect; a named re-ban 
   const FS = require(path.join(repo, "feedstore"));
   assert.equal(await FS.postRefusal(Object.assign(await FS.account("snk-0001"), {}), [ROOM]), null, "a post is named: never refused by it");
   assert.equal(await require(path.join(repo, "mainstage")).isBanned("snk-0001", ROOM), false, "never the stage / mic-stage reader (it ends streams, takes tiles)");
-  // under a frog name again (Incognito on): their website bridge here is refused, in words that never say it was a frog-name ban
+  // under a frog name again (Incognito on): their website bridge here is refused - 1.99?? rework: an INCOGNITO ban, in plain words (no
+  // moderator's reason, no end time)
   await runQuery(`INSERT INTO incognito_state (login, "on", updated) VALUES ('sneakcf', 1, ?)`, [Date.now()]);
   const a = await BB.active(ROOM, "snk-0001");
-  assert.ok(a && a.feature === "all");
-  assert.match(BB.refusalText(a), /^A mod of this room blocked you from talking in it from the website until .* \(spam\)\.$/);
+  assert.ok(a && a.feature === "all" && a.incog === true);
+  assert.equal(BB.refusalText(a), "You can't post incognito on this pad right now.");
+  assert.equal(a.reason, "", "the moderator's reason never reaches them");
   assert.equal(await require(path.join(repo, "mainstage")).isBanned("snk-0001", ROOM), false, "still never the stage");
   await runQuery(`DELETE FROM incognito_state`);
   // no visible effect: nothing in feed_bans / bridge_blocks (the readers that hide posts, end stage slots, take tiles)
@@ -283,11 +289,12 @@ test("a veil ban: its own row, refusals only, no visible effect; a named re-ban 
   const L = await get(`/api/rooms/${SLUG}/bans`, "owner");
   const vrow = L.d.bans.find((x) => x.kind === "veil");
   assert.ok(vrow, "still listed");
-  assert.equal(vrow.who, "🐸 Soggy Bullfrog · identity hidden");
+  assert.equal(vrow.who, "🐸 Soggy Bullfrog (identity hidden) - incognito ban");
+  assert.equal(vrow.incog, 1);
   assert.doesNotMatch(JSON.stringify(vrow), /sneak|snk-/, "the pad's owner never sees who it is");
   // the room event names only the label; the audit the real identity
   const ev = await getQuery("SELECT detail FROM room_events WHERE room_id = ? AND what = 'pad-ban'", [ROOM]);
-  assert.ok(ev.some((e) => /🐸 Soggy Bullfrog \(identity hidden\)/.test(e.detail)));
+  assert.ok(ev.some((e) => /🐸 Soggy Bullfrog \(identity hidden\) - incognito ban until /.test(e.detail)));
   assert.ok(!ev.some((e) => /sneak/.test(e.detail)));
   const au = await getQuery("SELECT target_id, detail FROM admin_audit WHERE action = 'pad_ban' AND detail LIKE '%veil%'");
   assert.ok(au.some((x) => x.target_id === "snk-0001"));
@@ -374,4 +381,172 @@ test("review: a frog name's row / line only in a pad the viewer may see; account
   for (const t of ["login_blocks", "veil_blocks", "mention_pad_mutes", "name_clash_ok", "net_seen", "veil_bans"]) assert.ok(del.includes('["' + t + '", "'), t);
   // the in-memory line resolves through bridge.revealLookup's rules only (never the raw _vz)
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "personref.js"), "utf8"), /let vz = it && it\._vz/);
+});
+
+// ── 1.99?? padppl rework (owner 2026-11-04: "Maybe this could work by blocking ANY frog name the person uses (essentially blocking the person
+// from using incognito in that pad), not just a particular frog name they used.") ──
+const INCOG = "You can't post incognito on this pad right now.";
+const incogOn = async (login) => { await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated) VALUES (?, 1, ?)`, [login, Date.now()]); PB._reset(); };
+const incogOff = async () => { await runQuery(`DELETE FROM incognito_state`); PB._reset(); };
+
+test("rework: an INCOGNITO ban - the person behind the frog name can't post incognito in this pad under ANY frog name, now and later; named untouched; plain words; nobody learns who", async () => {
+  await require(path.join(repo, "incognito")).init();
+  await incogOff();
+  await runQuery("DELETE FROM veil_bans");
+  // the moderator's answers are the same for the person behind 🐸 Soggy Bullfrog (an account), 🐸 Muddy Toad (a login with no account) and
+  // the moderator's OWN frog name (nothing is stored for that one - and it doesn't say so)
+  LR.members.push(veiled("Damp Peeper", "v-damp00000001", "modlogin"));
+  const ans = [];
+  for (const id of ["v-soggy000001", "v-muddy0000001", "v-damp00000001"]) {
+    const r = await post(`/api/rooms/${SLUG}/ban`, "mod", { ref: { k: "veil", id }, scope: "bridge", dur: "1d", reason: "harassing alice" });
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.doesNotMatch(JSON.stringify(r.d), /sneak|nolink|modlogin|snk-|mod-0001/, "never who it is");
+    ans.push(r.d);
+  }
+  const shape = (d) => JSON.stringify({ keys: Object.keys(d).sort(), who: { kind: d.who.kind, sub: d.who.sub }, scope: d.scope, wk: Object.keys(d.who).sort() });
+  assert.equal(shape(ans[0]), shape(ans[1])); assert.equal(shape(ans[0]), shape(ans[2]), "the moderator's own frog name: the same answer");
+  assert.ok(ans.every((d) => d.until > Date.now() + 23 * 3600e3), "the same length");
+  // the preview tells the moderator the plain words the person will see
+  const pv = await post(`/api/rooms/${SLUG}/ban/preview`, "mod", { ref: { k: "veil", id: "v-soggy000001" } });
+  assert.equal(pv.d.refusal.bridge, INCOG);
+  // under their OWN name nothing changes
+  assert.equal(await BB.active(ROOM, "snk-0001"), null, "named: untouched");
+  // incognito again - and a NEW frog session with a NEW frog name (a harasser rotating frog names): still refused, in plain words
+  await incogOn("sneakcf");
+  LR.members.push(veiled("Leafy Newt", "v-leafy0000001", "sneakcf"));
+  for (const f of ["chat", "commands", "clips", "snapshots", "voice", "livecams"]) {
+    const why = await BB.refusal(ROOM, "snk-0001", f);
+    assert.equal(why, INCOG, f);
+  }
+  assert.doesNotMatch(await BB.refusal(ROOM, "snk-0001", "chat"), /harassing|until|UTC|mod/, "no reason, no end, no moderator");
+  // the website's say route refuses it with those words (bridge-relay: the !bridge block check runs first)
+  const relay = require(path.join(repo, "bridge-relay"));
+  const say = await relay.sayLine({ userId: "snk-0001", username: "sneaky", displayname: "sneaky", camfrogUsername: "sneakcf" }, LR, "hi again", "cid-rw-1");
+  assert.equal(say.status, 403); assert.equal(say.body.error, INCOG); assert.equal(say.body.code, "blocked");
+  // and later: another day, another frog name - the ban follows the PERSON (their account and their linked login)
+  LR.members.push(veiled("Mossy Croaker", "v-mossy0000001", "sneakcf"));
+  assert.equal(await BB.refusal(ROOM, "snk-0001", "chat"), INCOG);
+  // only in THIS pad
+  assert.equal(await BB.active("another_room", "snk-0001"), null, "another pad: untouched");
+  // the person behind Muddy Toad (their login linked an account earlier in this file): by that account, every frog name of theirs
+  await incogOn("nolinkcf");
+  assert.equal(await BB.refusal(ROOM, "nol-0001", "chat"), INCOG);
+  await incogOff();
+  assert.equal(await BB.active(ROOM, "snk-0001"), null, "incognito off: they can post under their own name");
+  // the pad's list: the frog name it was made on, "identity hidden", "incognito ban" - never who, never the moderator's own frog
+  const L = await get(`/api/rooms/${SLUG}/bans`, "owner");
+  const rows = L.d.bans.filter((x) => x.kind === "veil");
+  assert.deepEqual(rows.map((x) => x.who).sort(), ["🐸 Muddy Toad (identity hidden) - incognito ban", "🐸 Soggy Bullfrog (identity hidden) - incognito ban"]);
+  assert.ok(rows.every((x) => x.incog === 1 && x.reason === "harassing alice"), "the reason is for the pad's mods");
+  assert.doesNotMatch(JSON.stringify(L.d), /sneak|nolink|snk-|nol-|Damp Peeper/);
+  // the room event: the label and "incognito ban"; the audit: the real identity (admins only)
+  const ev = await getQuery("SELECT detail FROM room_events WHERE room_id = ? AND what = 'pad-ban' AND detail LIKE '%incognito ban%'", [ROOM]);
+  assert.ok(ev.some((e) => /^🐸 Soggy Bullfrog \(identity hidden\) - incognito ban until /.test(e.detail)));
+  assert.ok(!ev.some((e) => /sneak|nolink/.test(e.detail)));
+  const au = await getQuery("SELECT target_id, detail FROM admin_audit WHERE action = 'pad_ban' AND detail LIKE '%incognito%'");
+  assert.ok(au.some((x) => x.target_id === "snk-0001"));
+  // lift: by the list entry, as any website ban
+  for (const r of rows) assert.equal((await post(`/api/rooms/${SLUG}/unban`, "owner", { entry: r.entry })).status, 200);
+  await incogOn("sneakcf");
+  assert.equal(await BB.active(ROOM, "snk-0001"), null, "lifted");
+  await incogOff();
+  LR.members = LR.members.filter((m) => !["v-damp00000001", "v-leafy0000001", "v-mossy0000001"].includes(m.id));
+});
+
+test("rework: a FROG-NAME block hides that person's veiled activity from the blocker - under ANY frog name, in any pad: folded lines, no @mention alert, no challenge / tip; named activity untouched", async () => {
+  await runQuery("DELETE FROM veil_blocks"); B._reset();
+  await incogOff();
+  const r = await post("/api/blocks", "alice", { ref: { k: "veil", id: "v-soggy000001" }, slug: SLUG, on: true });
+  assert.equal(r.status, 200);
+  // server-side only: the keys behind the frog names she blocked; the blocked person's own view learns nothing
+  const keys = await B.veilKeysOf("ali-0001");
+  assert.ok(keys.has("sneakcf") && keys.has("u:snk-0001"));
+  assert.ok(!keys.has("alicecf") && !keys.has("u:ali-0001"), "never her own keys");
+  assert.equal((await B.veilKeysOf("snk-0001")).size, 0);
+  const pl = await B.pageList("ali-0001");
+  assert.ok(!pl || (!pl.l.includes("sneakcf") && !pl.u.includes("sneaky")), "the page's own (named) list never names the person behind a frog name");
+  // lines: dress (the live feed, history and search all dress through it)
+  const CL = require(path.join(repo, "chatlog")), CV = require(path.join(repo, "chatlogview"));
+  await CL.init(); await CV.init(); await CL.noteSync({ list: [] });
+  const T0 = Date.now();
+  const frogLine = (c, alias, login, extra = {}) => {
+    const it = Object.assign({ k: "msg", c, ts: T0 + c, u: { anon: true, display: "someone", veil: "incognito", alias, id: "v-line" + c }, text: "psst " + c, ah: CV.hashOf(login) }, extra);
+    V.hide(it, "_vz", { login, display: login, kind: "incognito" });
+    return it;
+  };
+  const items = [
+    frogLine(9001, "Leafy Newt", "sneakcf"),                                      // a NEW frog name (another session, another pad): the same person
+    frogLine(9002, "Muddy Toad", "nolinkcf"),                                     // somebody else's frog name
+    frogLine(9003, "Mossy Croaker", "sneakcf", { k: "tx", id: "tx-9003" }),       // their 🎙 line under a third frog name
+    Object.assign(frogLine(9004, "Leafy Newt", "sneakcf"), { mask: "s", u: { anon: true, display: "someone", veil: "hidden", alias: "Leafy Newt", id: "v-l4" } }),   // a hidden bar
+    { k: "msg", c: 9005, ts: T0 + 5, u: { login: "sneakcf", display: "sneaky" }, text: "named" },        // their NAMED line
+    { k: "msg", c: 9006, ts: T0 + 6, u: { anon: true, display: "someone" }, ah: CV.hashOf("sneakcf"), text: "someone" },   // "someone"
+  ];
+  const vbKeys = await B.veilKeysOf("ali-0001");
+  const out = CV.dress(items, { lookup: () => undefined, vbKeys });
+  const by = (c) => out.find((o) => Number(o.c) === c) || {};
+  assert.equal(by(9001).vb, 1, "a new frog name of the same person: folded for her");
+  assert.equal(by(9003).vb, 1, "and their 🎙 line under yet another frog name");
+  assert.equal(by(9002).vb, undefined, "someone else's frog name: never");
+  assert.equal(by(9004).vb, undefined, "a hidden bar: never (no words, no frog name to fold)");
+  assert.equal(by(9005).vb, undefined, "their NAMED line: untouched (a frog-name block never unmasks)");
+  assert.equal(by(9006).vb, undefined, "a 'someone' line: never (it follows a named exit - folding it would link the two)");
+  assert.doesNotMatch(JSON.stringify(out.filter((o) => o.u && o.u.anon)), /sneakcf|snk-|nolink/, "only the flag reaches the page");
+  // anyone else (bob blocked nobody): nothing folds; alice with no keys: nothing either
+  assert.ok(!CV.dress(items, { lookup: () => undefined, vbKeys: await B.veilKeysOf("bob-0001") }).some((o) => o.vb));
+  // the page folds it like a named block's line ("A line from someone you blocked · Show")
+  const CR = require(path.join(repo, "public", "js", "chatlog-core"));
+  const f1 = String(CR.renderItem(by(9001), {}, CR.htmlH)), f2 = String(CR.renderItem(by(9002), {}, CR.htmlH));
+  assert.match(f1, /is-blocked-fold/); assert.match(f1, /A line from someone you blocked/); assert.match(f1, /Leafy Newt/, "the frog name stays on the line");
+  assert.doesNotMatch(f2, /is-blocked-fold/);
+  // history / search: an archived frog line's identity comes from chat_log_veil, read only for a viewer with such a block
+  await runQuery("INSERT OR REPLACE INTO chat_log_veil (c, login, display, kind, at) VALUES (9101, 'sneakcf', 'sneakcf', 'incognito', 1), (9102, 'nolinkcf', 'nolinkcf', 'incognito', 1)");
+  const arch = [9101, 9102].map((c) => ({ k: "msg", c, ts: T0 + c, u: { anon: true, display: "someone", veil: "incognito", alias: c === 9101 ? "Pond Skipper" : "Muddy Toad", id: "v-a" + c }, text: "old", ah: CV.hashOf(c === 9101 ? "sneakcf" : "nolinkcf") }));
+  const H = await require(path.join(repo, "chatloghist")).dress(ROOM, arch, null, { userId: "ali-0001" }, "alicecf", null);
+  assert.equal(H.find((o) => o.c === 9101).vb, 1, "history: folded under the archived frog name too");
+  assert.equal(H.find((o) => o.c === 9102).vb, undefined);
+  const H2 = await require(path.join(repo, "chatloghist")).dress(ROOM, arch, null, { userId: "bob-0001" }, null, null);
+  assert.ok(!H2.some((o) => o.vb), "nobody else");
+  // web challenges / tips aimed at her WHILE they're incognito: refused, whatever frog name; under their own name: untouched
+  const relay = require(path.join(repo, "bridge-relay"));
+  const sneaky = { userId: "snk-0001", camfrogUsername: "sneakcf" };
+  assert.equal(await relay.challengeBlocked(sneaky, "!duel", "!duel alicecf 100"), null, "named: untouched");
+  await incogOn("sneakcf");
+  assert.equal(await relay.challengeBlocked(sneaky, "!duel", "!duel alicecf 100"), "You can't challenge alicecf.");
+  assert.equal(await relay.challengeBlocked(sneaky, "!brawl", "!brawl @alicecf"), "You can't challenge alicecf.");
+  assert.equal(await relay.challengeBlocked(sneaky, "!tip", "!tip alicecf 50"), "You can't tip alicecf.");
+  assert.equal(await relay.challengeBlocked(sneaky, "!duel", "!duel bobcf 100"), null, "only the person who blocked them");
+  assert.equal(await relay.challengeBlocked({ userId: "ali-0001", camfrogUsername: "alicecf" }, "!duel", "!duel sneakcf 100"), null, "never the blocker's own actions");
+  // @mentions: their frog-named lines never alert her, whatever frog name (mentions.js asks towards(..., { veiled: true }))
+  assert.equal(await B.towards("snk-0001", "ali-0001", { veiled: true, fromLogin: "sneakcf" }), true);
+  assert.equal(await B.towards("snk-0001", "ali-0001", { fromLogin: "sneakcf" }), false, "a named @mention still alerts her");
+  await incogOff();
+  // the blocker's list: the frog name at block time, identity hidden
+  const L = await get("/api/blocks", "alice");
+  assert.deepEqual(L.d.veils.map((v) => v.label), ["Soggy Bullfrog"]);
+  assert.doesNotMatch(JSON.stringify(L.d), /sneak|snk-/);
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["settings.blocked.frog_row"], "🐸 {name} (identity hidden)");
+  assert.equal(en["js.block.veil_note"], "Blocking can show you that two frog names are the same person - never who.", "the accepted residual, said on the sheet");
+  assert.match(fs.readFileSync(path.join(repo, "views", "settingsBlocked.ejs"), "utf8"), /t\('settings\.blocked\.frog_row', \{ name: b\.label \}\)/);
+  // Unblock from Settings: nothing folds any more
+  await post("/api/blocks", "alice", { ref: { k: "vb", id: L.d.veils[0].id }, on: false });
+  assert.equal((await B.veilKeysOf("ali-0001")).size, 0);
+  assert.ok(!CV.dress(items, { lookup: () => undefined, vbKeys: await B.veilKeysOf("ali-0001") }).some((o) => o.vb));
+});
+
+test("rework: the live view passes the viewer's frog-name block keys to dress; the sheets / menu say what an incognito ban and a frog-name block do", () => {
+  const br = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
+  assert.match(br, /const vk = await require\("\.\/blocks"\)\.veilKeysOf\(userId\); if \(vk && vk\.size\) vbKeys = vk;/);
+  assert.match(br, /CV\.dress\(items, \{ view: V, lookup: \(u\) => L\.get\(nameKey\(u\.login\)\), selfKeys, canReveal, vbKeys \}\)/);
+  const win = { __t: null };
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "room-mod.js"), "utf8"), { window: win });
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "pad-ban-sheet.js"), "utf8"), { window: win, document: {} });
+  const v = JSON.parse(JSON.stringify(win.PATVRoom._modMenuItems(null, { anon: true, veil: "incognito", alias: "Soggy Bullfrog", id: "v-soggy000001" }, { signed: true, wmod: { bridge: true, pad: true }, slug: "p" })));
+  assert.equal(v.find((x) => x.id === "ban").label, "⛔ Incognito ban…");
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["js.ban.menu_veil"], "Incognito ban…");
+  assert.match(en["js.ban.scope_veil_sub"], /Every frog name they use here, now and later/);
+  assert.match(en["js.block.veil_body"], /^Whatever frog name they use, in any pad: their lines are folded for you/);
+  assert.match(en["js.block.veil_body"], /what they do under their own name doesn't change/);
 });
