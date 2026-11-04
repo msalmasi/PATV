@@ -98,7 +98,7 @@ function fmt(ms, tz = TZ) {
 }
 
 // ── the queue ──
-// 1.99?? plexchat: + kind "library" - a 📼 Plex title for Pepe's main stream, queued from chat (onair.queueLibrary): next-up only,
+// 1.99ajk plexchat: + kind "library" - a 📼 Plex title for Pepe's main stream, queued from chat (onair.queueLibrary): next-up only,
 // waits while the operator's IRL feed is live, missed after LIBRARY wait (3 h); spec {key, title, duration, price}, owner {userId}
 const SPEC_KINDS = new Set(["media", "library"]);
 function specOf(r) {
@@ -197,7 +197,7 @@ async function due({ idle, idleMain = idle, idleCorner = false, enabled, mediaOk
                      irl = false, libraryOk = true, libraryWaitMs = 3 * 3600 * 1000 }, t = now()) {
   const rows = await list();
   const otherLive = (r) => (r.lane === "corner" ? liveMain : liveCorner);
-  // 1.99?? plexchat: a 📼 row waits while the IRL feed is live (it wins), and is missed after libraryWaitMs (or once Plex on
+  // 1.99ajk plexchat: a 📼 row waits while the IRL feed is live (it wins), and is missed after libraryWaitMs (or once Plex on
   // Pepe's stream is switched off - allow_library)
   for (const r of rows) {
     if (r.kind !== "library") continue;

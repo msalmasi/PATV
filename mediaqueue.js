@@ -554,14 +554,14 @@ async function start(user, b = {}) {
   if (!R) throw refuse(404, "No such pad.", { code: "pad" });
   return withLock(R.id, () => launch(user, A, R, b, null));
 }
-/** 1.99?? plexchat: the pad's visibility (seesPad) then start() - the ONE entry point (the /stage route, Pepe's chat, the Room Dock). */
+/** 1.99ajk plexchat: the pad's visibility (seesPad) then start() - the ONE entry point (the /stage route, Pepe's chat, the Room Dock). */
 async function startFor(user, b = {}) {
   const body = { ...(b || {}) };
   const R = await I().roomOf(body.room);
   if (body.room && R && !(await stage.seesPad(user && user.userId ? user : null, R.id))) throw refuse(404, "No such pad.", { code: "pad" });
   return start(user, body);
 }
-/** 1.99?? plexchat: the same for a booking (Go-live's "Later"). */
+/** 1.99ajk plexchat: the same for a booking (Go-live's "Later"). */
 async function bookFor(user, b = {}) {
   const body = { ...(b || {}) };
   const R = await I().roomOf(body.room);
@@ -732,9 +732,9 @@ async function needQueue(user, room) {
 // 1.99lw: the starter, the library admins, the pad's owner (+ site staff) - medialib.mayControl
 const canControl = (user, q) => I().mayControl(user, q.room_id, q.user_id);
 
-// ── 1.99?? plexchat: growing a running queue (Pepe's "queue the matrix next", ⏭ past the last episode) ──
+// ── 1.99ajk plexchat: growing a running queue (Pepe's "queue the matrix next", ⏭ past the last episode) ──
 /** May `user` add titles to queue `q`? Its STARTER (the queue bills them as each title plays), or a library admin on a FREE
- *  queue (per_hour 0 - nobody is billed). Never on someone else's PAT. 1.99?? plexchat review: the pad's owner / site staff (other
+ *  queue (per_hour 0 - nobody is billed). Never on someone else's PAT. 1.99ajk plexchat review: the pad's owner / site staff (other
  *  controllers) no longer may - a non-member could play any title free behind a member's free queue, counted on nobody's cap. */
 async function mayGrow(user, q) {
   if (!user || !user.userId || !q) return false;
@@ -753,7 +753,7 @@ function addCost(q, s, secs) {
   const after = Math.max(0, Math.ceil((base + Math.max(0, Number(secs) || 0)) / 3600) - q.paid_hours);
   return Math.max(0, after - before) * q.per_hour;
 }
-/** 1.99?? plexchat: what `secs` of titles would add to the pad's running queue (null: no queue) - Pepe's "queue it next" price. */
+/** 1.99ajk plexchat: what `secs` of titles would add to the pad's running queue (null: no queue) - Pepe's "queue it next" price. */
 async function addCostFor(roomId, secs) {
   const q = await activeFor(roomId);
   if (!q) return null;
@@ -776,7 +776,7 @@ async function nextEpisodeOf(cur) {
 /**
  * "Play this next" on a pad's running 📼 queue: `keys` go right after the title on now (pos + 1). Only for whoever the queue
  * bills (its starter) or a library admin on a free queue (mayGrow) - anyone else gets code not_starter. The queue's limits
- * (titles, hours) apply. 1.99?? plexchat review: on a PAID queue what it adds to the bill (addCost) must be the figure the starter
+ * (titles, hours) apply. 1.99ajk plexchat review: on a PAID queue what it adds to the bill (addCost) must be the figure the starter
  * said yes to - `opts.estimate` (400 when missing, 409 with the new figure when it changed), like a queue's start.
  * -> {ok, added, items, next (the first added title's name), cost}
  */
@@ -828,8 +828,8 @@ async function step(user, room, dir) {
     const q = await activeFor(R.id);
     if (!q || !(await canControl(user, q))) throw refuse(404, "There's no queue playing on this pad.", { code: "nothing_on" });
     const to = q.pos + dir;
-    // 1.99?? plexchat: ⏭ on the last title, when it's an episode, plays the show's next one (appended first) - only on a FREE
-    // queue (1.99?? review: a paid one would grow its starter's bill past the estimate they confirmed) and only for its starter or
+    // 1.99ajk plexchat: ⏭ on the last title, when it's an episode, plays the show's next one (appended first) - only on a FREE
+    // queue (1.99ajk review: a paid one would grow its starter's bill past the estimate they confirmed) and only for its starter or
     // a library admin (mayGrow)
     if (to >= q.items.length && dir > 0 && !(Number(q.per_hour) > 0) && q.items.length < (conf.get().library_queue_max_items || 60)
         && (await mayGrow(user, q))) {
@@ -954,7 +954,7 @@ async function views({ all = false, userId = null, recent = false } = {}) {
 function routes(app, { J, me, timers = true }) {
   if (timers) fastOn = true;
   app.post("/api/medialib/queue/preview", ...J(async (req) => preview(me(req), req.body || {})));
-  // 1.99?? plexchat: the pad check lives in startFor / bookFor (one rule source: these routes, Pepe's chat, the Room Dock)
+  // 1.99ajk plexchat: the pad check lives in startFor / bookFor (one rule source: these routes, Pepe's chat, the Room Dock)
   app.post("/api/medialib/queue/start", ...J(async (req) => startFor(me(req), req.body || {})));
   // 1.99lw: book a 📼 slot for later (one title or a queue), sized to its runtime
   app.post("/api/medialib/book", ...J(async (req) => bookFor(me(req), req.body || {})));

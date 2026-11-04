@@ -1,4 +1,4 @@
-// plexchat.js — 1.99??: 📼 PLEX FROM CHAT. Pepe's one bot route for "pepe play the matrix" / "!plex alien -cam" in a Camfrog room
+// plexchat.js — 1.99ajk: 📼 PLEX FROM CHAT. Pepe's one bot route for "pepe play the matrix" / "!plex alien -cam" in a Camfrog room
 // or a pad's web chat: search the library, start a title / an episode / a season on the pad's stage, queue it behind what's on,
 // put it on Pepe's main stream (staff), the controls, what's playing.
 //
@@ -79,7 +79,7 @@ async function resolve(as) {
 const ALIAS = { full: "queue_full", library: "onair_library_off", staff_only: "onair_staff", when: "bad", embed_bad: "bad", owner: "onair_staff",
                 gone: "not_found", adult: "pad", pad_private: "pad" };
 const num = (s) => Number(String(s || "").replace(/[^\d]/g, "")) || 0;
-// 1.99?? plexchat review: only a REFUSAL (a Refuse / Fail - e.refuse) carries a code and its words to the room; anything else is a
+// 1.99ajk plexchat review: only a REFUSAL (a Refuse / Fail - e.refuse) carries a code and its words to the room; anything else is a
 // crash (SQLITE_BUSY, ECONNRESET, a TypeError ...) - code "error", a generic line, and its stack in the log - never its message
 function codeOf(e) {
   if (!e) return "error";
@@ -134,7 +134,7 @@ async function seeOrFail(user, R) {
     await PA().init();
     gate = PA().adultGate(user, R.id);
   } catch (e) {
-    // 1.99?? plexchat review: the 18+ check FAILS CLOSED - if it can't be asked, the pad reads as no such pad
+    // 1.99ajk plexchat review: the 18+ check FAILS CLOSED - if it can't be asked, the pad reads as no such pad
     console.error("[plexchat] the 18+ gate couldn't be checked:", e && e.message ? e.message : e);
     gate = null;
   }
@@ -173,7 +173,7 @@ function score(it, q, want) {
   if (want.year) s += Number(it.year) === want.year ? 30 : -40;
   if (want.season != null || want.episode != null) s += it.type === "show" ? 25 : it.type === "episode" ? 10 : -30;
   else if (it.type === "episode" && norm(it.title) !== n) s -= 20;
-  // 1.99?? plexchat review: "the fargo movie" / "the office show" - what the person called it
+  // 1.99ajk plexchat review: "the fargo movie" / "the office show" - what the person called it
   if (want.hint === "movie") s += it.type === "movie" ? 15 : -15;
   else if (want.hint === "show") s += it.type === "movie" ? -15 : 15;
   return s;
@@ -233,7 +233,7 @@ async function opSearch(user, b) {
     }
   }
   const state = await ML().padState(user, R.id).catch(() => null);
-  // 1.99?? plexchat review: the pad's running 📼 queue that this speaker may add to (its starter): what each row would ADD to that
+  // 1.99ajk plexchat review: the pad's running 📼 queue that this speaker may add to (its starter): what each row would ADD to that
   // queue's bill (its own per-hour rate, on top of what's paid) - "queue it next" confirms that figure, not a standalone price
   if (target === "stage" && state && state.library && state.library.queue && state.library.can_add) {
     for (const row of rows) {
@@ -356,7 +356,7 @@ async function opRpm(user, b) {
   return { ok: true };
 }
 
-// ── the audit trail (1.99?? plexchat review) ──
+// ── the audit trail (1.99ajk plexchat review) ──
 /** A play / a control through Pepe -> one media_controls row ("pepe", e.g. "room chat as alice: play 100 -> The Matrix (1999)"): the
  *  pad's "Who did what" list and the site's records say it came from chat, and which login / account asked. Never blocks. */
 async function audit(user, b, ctx, op, r) {

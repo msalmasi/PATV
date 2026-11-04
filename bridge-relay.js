@@ -1152,7 +1152,7 @@ function saveRight(s, userId) {
 }
 
 module.exports = { padFull, PAD_DENIED, sayEligibility, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
-  roomPmLocal,                                                                              // 1.99?? plexchat: Pepe's private answers to a web speaker
+  roomPmLocal,                                                                              // 1.99ajk plexchat: Pepe's private answers to a web speaker
 
   mfSnap, mfFrame, mfSnapCancel, mfCancelled, SNAP_TARGET_GAP,                             // micfollow
   sayLine, roomRefusal, noteEcho, echoJob, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_PENDING_TTL_SYNC, SAY_CLAIM_TTL,   // 1.99ye

@@ -256,7 +256,7 @@ async function freeToday(userId, t = Date.now()) {
 }
 async function mustAccess(user) {
   const A = await access(user);
-  // 1.99?? plexchat: + a stable code (signin | off) for Pepe's chat answers (plexchat.js) - the browser's text is unchanged
+  // 1.99ajk plexchat: + a stable code (signin | off) for Pepe's chat answers (plexchat.js) - the browser's text is unchanged
   if (!A.ok) throw new Refuse(A.why === "signin" ? 401 : 403, A.message, { ...(A.hint ? { hint: A.hint } : {}), code: A.why === "signin" ? "signin" : "off" });
   return A;
 }
@@ -464,7 +464,7 @@ async function play(user, b = {}) {
  * between titles too); a Plex user takes the pad under the ordinary stage-slot rules + the daily cap (a queue = one play).
  */
 async function preflight(user, A, R, { carry = false } = {}) {
-  // 1.99?? plexchat: each refusal carries a stable code (plexchat.js words it in the room's language); the texts are unchanged.
+  // 1.99ajk plexchat: each refusal carries a stable code (plexchat.js words it in the room's language); the texts are unchanged.
   // A pad whose 📼 queue is on reads busy_queue (a queue's title has a session too): Pepe can offer "queue it next" for that one
   const queued = (await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state IN ('active','starting')", [R.id])).length > 0;
   if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.", { code: queued ? "busy_queue" : "busy_library" });
@@ -607,7 +607,7 @@ async function restart(user, room, offset, how) {
 }
 const play_ = (u, b) => play(u, b);
 /**
- * 1.99?? plexchat: the ONE entry point for a member's play (the /stage ▶ route, Pepe's chat - plexchat.js - and the Room Dock):
+ * 1.99ajk plexchat: the ONE entry point for a member's play (the /stage ▶ route, Pepe's chat - plexchat.js - and the Room Dock):
  * the pad's visibility (seesPad - an Approved pad they aren't inside reads as no such pad) first, then play() with every rule.
  * `b._carry` is internal (a resume on a fresh slot) and never taken from a request.
  */
@@ -619,7 +619,7 @@ async function playFor(user, b = {}) {
   return play(user, body);
 }
 /**
- * 1.99?? plexchat: what a pad's stage looks like to `user` right now, for Pepe's chat answer (side-effect free: reads only).
+ * 1.99ajk plexchat: what a pad's stage looks like to `user` right now, for Pepe's chat answer (side-effect free: reads only).
  * -> null (no such pad) | {room, library: {title, queue, starter_is_you, by, per_hour, next} | null, slot_taken, own_slot,
  *    daily_left, free, how}. Titles only - never a file.
  */
@@ -638,7 +638,7 @@ async function padState(user, room) {
     library = { title: s ? s.title : cur ? fmtTitle(cur) : null, queue: !!q, starter_is_you: !!(user && user.userId && starter === user.userId),
                 by: q ? q.username : p.username || (s && s.by_user) || null, per_hour: q ? Number(q.per_hour) || 0 : null,
                 next: nxt ? fmtTitle(nxt) : null, state: s ? s.state : "waiting",
-                // 1.99?? plexchat review: may THIS speaker queue a title on it (mediaqueue.mayGrow - one rule)? Pepe says no up front
+                // 1.99ajk plexchat review: may THIS speaker queue a title on it (mediaqueue.mayGrow - one rule)? Pepe says no up front
                 can_add: q ? !!(await require("./mediaqueue").mayGrow(user, q)) : false };
   }
   const open = await safeQuery(`SELECT id, source FROM stage_slots WHERE room_id = ? AND status IN ${OPEN_STATES}`, [R.id]);
@@ -875,7 +875,7 @@ function register(app, { addUser, noTimers } = {}) {
       res.send(r.body);
     } catch (e) { res.status(e.status === 403 ? 403 : 404).end(); }
   });
-  // 1.99?? plexchat: the pad check lives in playFor now (one rule source: this route, Pepe's chat and the Room Dock)
+  // 1.99ajk plexchat: the pad check lives in playFor now (one rule source: this route, Pepe's chat and the Room Dock)
   app.post("/api/medialib/play", ...J(async (req) => playFor(me(req), req.body || {})));
   app.post("/api/medialib/stop", ...J(async (req) => stop(me(req), (req.body || {}).room)));
   app.post("/api/medialib/pause", ...J(async (req) => pause(me(req), (req.body || {}).room)));

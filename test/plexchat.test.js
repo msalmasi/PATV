@@ -1,4 +1,4 @@
-// Offline tests for 1.99?? 📼 PLEX FROM CHAT (plexchat.js - Pepe's POST /api/medialib/bot), end to end against the REAL
+// Offline tests for 1.99ajk 📼 PLEX FROM CHAT (plexchat.js - Pepe's POST /api/medialib/bot), end to end against the REAL
 // media-control service (deploy/mediactl) with a mocked Plex (movies + two shows) and a fake ffmpeg, on a temp DB:
 // the bot token, speaker resolution (linked login / CF auto account / no account / user_id / archived), access (off, member
 // free, paid price 400 / 409), the pad's visibility (Approved, 18+), preflight (own slot, cap, busy pad, encoder busy), search
@@ -288,7 +288,7 @@ test("a season on the stage (one queue); 'queue next': the starter yes, someone 
   assert.deepEqual([r.queue, r.items, r.title], [true, 3, "The Office (US) — S2E1 The Dundies"]);
   r = await call({ op: "play", as: asL(U.bob), room: LOUNGE, key: "100", scope: "title", mode: "next" });
   assert.deepEqual([r.ok, r.code], [false, "not_starter"], "not theirs and they can't control it");
-  // 1.99?? review: a controller who isn't the starter (the pad's owner) may NOT grow a member's free queue (a free play past every cap)
+  // 1.99ajk review: a controller who isn't the starter (the pad's owner) may NOT grow a member's free queue (a free play past every cap)
   r = await call({ op: "play", as: asL(U.owner), room: LOUNGE, key: "100", scope: "title", mode: "next" });
   assert.deepEqual([r.ok, r.code], [false, "not_starter"], "a FREE queue: the pad owner may control it but not add to it");
   let st = await call({ op: "search", as: asL(U.owner), room: LOUNGE, q: "heat" });
@@ -468,7 +468,7 @@ test("the rate limit: 30 ops a minute per account, then rate", async () => {
     const r = await call({ op: "np", as: asL(U.dave), room: LOUNGE });
     assert.deepEqual([r.ok, r.code], [false, "rate"]);
     assert.equal((await call({ op: "np", as: asL(U.bob), room: LOUNGE })).ok, true, "per account");
-    // 1.99?? review: an unlinked login is limited BEFORE the lookup (it used to cost a lookup + a "link" line on every line)
+    // 1.99ajk review: an unlinked login is limited BEFORE the lookup (it used to cost a lookup + a "link" line on every line)
     for (let i = 0; i < PC.RATE_MAX; i++) assert.equal((await call({ op: "np", as: { login: "nobody" }, room: LOUNGE })).code, "link");
     assert.equal((await call({ op: "np", as: { login: "NOBODY" }, room: LOUNGE })).code, "rate", "the 31st: rate, no lookup");
     assert.equal(PC.asKey({ login: "Nobody" }), "l:nobody");
@@ -478,7 +478,7 @@ test("the rate limit: 30 ops a minute per account, then rate", async () => {
   } finally { PC._setClock(null); PC._hits.clear(); }
 });
 
-test("a crash is never a refusal: code error, a generic line (1.99?? review: SQLITE_BUSY's text went to the room)", () => {
+test("a crash is never a refusal: code error, a generic line (1.99ajk review: SQLITE_BUSY's text went to the room)", () => {
   const busy = Object.assign(new Error("SQLITE_BUSY: database is locked"), { code: "SQLITE_BUSY" });
   assert.equal(PC.codeOf(busy), "error");
   assert.deepEqual([PC.failBody(busy).code, PC.failBody(busy).error], ["error", "Something went wrong."]);
