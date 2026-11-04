@@ -39,7 +39,10 @@ main.rm.rm-dock .rmd-id:has(> .rmd-id-banner) .rmd-id-name { background-color: v
    box's clientWidth, which padding would widen) */
 main.rm.rm-dock #rmHero.has-bn .hd-nm,
 main.rm.rm-dock .rmd-id:has(> .rmd-id-banner) .rmd-id-name { flex: 0 1 auto; box-shadow: 0 0 0 var(--ds-sp-1) var(--ds-media-panel); }
-main.rm.rm-dock #rmHero.has-bn :is(a.hd-about, .hd-fc) { padding: var(--ds-sp-1) var(--ds-sp-2); }
+/* 1.99?? dockfu: review - About's and the follower count's plate margins are spread shadows too: as padding they took 24px from the
+   header's name box, and pad-chipfit.js lets the badges use all but the name's 8ch floor (the name went into its ellipsis at 800px) */
+main.rm.rm-dock #rmHero.has-bn a.hd-about,
+main.rm.rm-dock #rmHero.has-bn .hd-fc { box-shadow: 0 0 0 var(--ds-sp-1) var(--ds-media-panel); }
 main.rm.rm-dock #rmHero.has-bn .hd { margin-block-start: 0; position: relative; z-index: var(--ds-z-raised); }
 main.rm.rm-dock #rmHero h1 { font-size: var(--ds-fs-h3); }
 main.rm.rm-dock #padTabs { margin: 0; min-inline-size: 0; padding: var(--ds-sp-1); border-radius: var(--ds-r-lg); }

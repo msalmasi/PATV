@@ -216,6 +216,17 @@ test("dockfu: the banner shows through a lighter scrim and the header text keeps
   // without a plate only the strong white would pass over a white banner - which is why every text piece has one
   assert.ok(PL.contrast(texts["--ds-text-strong"],bare)>=4.5);assert.ok(PL.contrast(texts["--ds-text-muted"],bare)<4.5);
 });
+// 1.99?? dockfu: review - the plates leave the header's layout as it was. Padding on About and the follower count widened the
+// header's right side by 24px, and pad-chipfit.js lets the badges use everything but the name's 8ch floor - so at 800x900 the pad's
+// name went into its ellipsis ("Night Orc…", full before) and a Prime Time Plus pad's to 84 of 115px at 1280-1440. Their plate
+// margin is a spread shadow, as the name's is (browser check: the names are full again where they were).
+test("dockfu: review - the header's text plates add no width (their margin is a spread shadow, never padding)", () => {
+  const rules=dockRules(),pieces=["hd-nm","a.hd-about","hd-fc","hd-fcs","fw-btn.on"];
+  for(const r of rules)if(!r.at&&r.selector.includes("#rmHero.has-bn")&&pieces.some(p=>r.selector.includes(p)))
+    assert.doesNotMatch(r.body,/(?:^|;)\s*(?:padding|padding-inline|padding-left|padding-right|margin|margin-inline|margin-left|margin-right)\s*:/,r.selector+" adds width");
+  for(const sel of ["main.rm.rm-dock #rmHero.has-bn a.hd-about","main.rm.rm-dock #rmHero.has-bn .hd-fc"])
+    assert.match(String(declOf(rules,sel,"box-shadow")),/^0 0 0 var\(--ds-sp-1\) var\(--ds-media-panel\)$/,sel);
+});
 
 // (c) a readable chat on a short window: the log keeps a floor that reaches the Live panel's flex column (the chat card's and the
 // body's content-based minimum; the side column size-contained), so the stage gives way first, the cam strip folds to its compact row
