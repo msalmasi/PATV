@@ -990,7 +990,10 @@
     }
     function overlayHot() {
       var doc = stage.ownerDocument;
-      return overBar || (ovTop && (ovTop.contains(doc.activeElement) || ovBot.contains(doc.activeElement))) || !!(layer && layer.overlay);
+      // (keyboard focus keeps it up; a mouse click that left focus on a button doesn't pin it)
+      var a = doc.activeElement, kb = false;
+      try { kb = !!(a && a.matches && a.matches(':focus-visible')); } catch (e) { kb = true; }
+      return overBar || (kb && ovTop && (ovTop.contains(a) || ovBot.contains(a))) || !!(layer && layer.overlay);
     }
     function showTools() {
       if (!stage) return;

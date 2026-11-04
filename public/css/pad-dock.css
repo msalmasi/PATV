@@ -154,8 +154,10 @@ main.rm.rm-dock .rmd-ov { grid-area: 1 / 1; z-index: var(--ds-z-raised); display
 main.rm.rm-dock .rmd-ov > .rmd-tabs-src { display: none; }
 main.rm.rm-dock :is(.rmd-ov-top, .rmd-ov-bot) { display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; padding: var(--ds-sp-2); opacity: 0; pointer-events: none; transition: opacity var(--ds-dur-2) var(--ds-ease); }
 main.rm.rm-dock .rmd-ov-bot { min-block-size: 44px; padding-block: var(--ds-sp-1); background: linear-gradient(to top, color-mix(in srgb, var(--ds-media-bg) 60%, transparent), transparent); }
-main.rm.rm-dock #rmStage:is(.rmd-controls-on, :focus-within) :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; pointer-events: auto; }
-main.rm.rm-dock #rmStage:is(.rmd-controls-on, :focus-within) { z-index: var(--ds-z-sticky); }
+main.rm.rm-dock #rmStage.rmd-controls-on :is(.rmd-ov-top, .rmd-ov-bot),
+main.rm.rm-dock #rmStage:has(.rmd-ov :focus-visible) :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; pointer-events: auto; }
+main.rm.rm-dock #rmStage.rmd-controls-on,
+main.rm.rm-dock #rmStage:has(.rmd-ov :focus-visible) { z-index: var(--ds-z-sticky); }
 main.rm.rm-dock .rmd-ov-gap { flex: 1 1 auto; }
 main.rm.rm-dock .rmd-ov-bot .ds-btn { flex: none; background: var(--ds-media-chip); border-color: transparent; color: var(--ds-text-strong); }
 main.rm.rm-dock .rmd-ov-bot .ds-btn:is(:hover, :focus-visible, [aria-expanded="true"]) { border-color: var(--ds-ac); }
