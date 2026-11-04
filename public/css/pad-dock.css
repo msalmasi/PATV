@@ -1123,3 +1123,17 @@ main.rm.rm-dock .rmd-plex .px-list ol { display: grid; gap: var(--ds-sp-1); max-
 main.rm.rm-dock .rmd-plex .px-ctl { display: inline-flex; gap: var(--ds-sp-1); vertical-align: middle; }
 main.rm.rm-dock .rmd-plex .px-onair { display: flex; align-items: center; gap: var(--ds-sp-2); }
 main.rm.rm-dock .rmd-plex .rmd-plex-later { justify-self: start; font-size: var(--ds-fs-meta); }
+/* 1.99?? casino2 review: the Plex sheet's title and ✕ stay in view while its search + pick scroll (this sheet only); the picked result is
+   marked; the price confirm is a row above the button (plex-play.js inlineConfirm); "Start at" fits its row */
+main.rm.rm-dock .rmd-layer .ds-modal:has(> .rmd-plex) > .ds-modal-h { position: sticky; inset-block-start: calc(-1 * var(--ds-sp-5)); z-index: var(--ds-z-raised); margin-block-start: calc(-1 * var(--ds-sp-5)); padding-block: var(--ds-sp-5) var(--ds-sp-2); background: var(--ds-surface-3); }
+main.rm.rm-dock .rmd-plex .px-it.on { border-color: var(--ds-ac); box-shadow: 0 0 0 1px var(--ds-ac); }
+main.rm.rm-dock .rmd-plex .px-pick input[data-o] { inline-size: 7.5em; }
+main.rm.rm-dock .rmd-plex .px-pick label:has(> input[data-o]) { flex-wrap: nowrap; }
+main.rm.rm-dock .rmd-plex .px-ask { display: grid; gap: var(--ds-sp-1h); padding: var(--ds-sp-2h); border: 1px solid var(--ds-ac-line); border-radius: var(--ds-r-md); background: var(--ds-sunken); }
+main.rm.rm-dock .rmd-plex .px-ask p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-plex .px-ask p.px-ask-q { color: var(--ds-text); font-size: var(--ds-fs-sm); font-weight: 700; }
+/* 1.99?? casino2 review: beside a casino table (body.rmd-embed) the table's panel names the pad and links it - the chat's own pad chip goes,
+   the topic gets the row */
+body.rmd-pop.rmd-embed main.rm.rm-dock #chatH > .rmd-chip-chat { display: none; }
+/* (review: a narrow chat window / frame ends its composer's placeholder with an ellipsis - "Message Night Orchar…", not a cut letter) */
+body.rmd-pop main.rm.rm-dock .rmd-input-row input.ds-in { text-overflow: ellipsis; }

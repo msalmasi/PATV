@@ -6,7 +6,9 @@
 //   PATVPlexPlay.mount(host, opts) -> { info(), drawPrice(), noteQueues(j), myQueue() }
 //     host: the panel; its parts are [data-px=info|search|results|pick|msg] (stageBook.ejs marks them; build() makes them)
 //     opts: { roomId(), roomTitle(), balance() (text), free, member, perHour, quality, queues, days, later (the 'When' row - /stage
-//             only), listId, onStarted(answer), pollNow() }
+//             only), listId, onStarted(answer), pollNow(), inlineConfirm (the Dock: the price confirm is a row in the sheet above the
+//             button, like the Dock's other confirms - /stage keeps the browser's confirm) }
+//     review: the 📺 on-air box sits in the pick, above ▶ Play; the picked result is marked; after a start the button says so and stays off
 //   PATVPlexPlay.build(host, {rights, note}) - the parts, for a host that has none (the Dock's sheet)
 //   PATVPlexPlay.util - the helpers stage-plex.js shares (api, hms, parseTime, day, label, noticeText, fmt, esc)
 // Every string goes through __t (js.plex.*).
@@ -89,6 +91,8 @@
     // 1.99?? casino2: staff who run Pepe's on-air may put the new play on his stream too (onair.js: allow_library, the IRL feed wins,
     // audited) - its slot goes on air once it's live (a few seconds); "not live yet" is asked again for about a minute
     var onairBox = host.querySelector('[data-px="onair"]');
+    var onairLbl = onairBox ? onairBox.closest('label') : null;
+    if (onairLbl && onairLbl.parentNode) onairLbl.parentNode.removeChild(onairLbl);   // (it goes into the pick, above ▶ Play - placeOnair)
     var pageStarted = opts.onStarted;
     opts = Object.assign({}, opts, { onStarted: function (j) {
       if (onairBox && onairBox.checked && j && j.slot && j.slot.id) toPepe(j.slot.id, 0);
@@ -101,6 +105,44 @@
     var QUEUES = !!opts.queues;
     var picked = null, quote = null, qPrev = null, qTimer = null, qSeq = 0;
     var say = function (t, good) { P.msg.textContent = t || ''; P.msg.style.color = good ? '#9ccc65' : ''; };
+    // review: the Dock's confirm is a row in the sheet (above the button that asked), never the browser's dialog; /stage keeps the browser's
+    var askBox = null;
+    var closeAsk = function (refocus) {
+      if (!askBox) return;
+      var b = askBox; askBox = null;
+      var opener = b._opener;
+      if (b.parentNode) b.parentNode.removeChild(b);
+      if (opener) { opener.hidden = false; if (refocus && opener.isConnected) opener.focus(); }
+    };
+    var ask = function (msg, yesLabel, btn, yes) {
+      if (!opts.inlineConfirm) { if (confirm(msg)) yes(); return; }
+      closeAsk(false);
+      var box = document.createElement('div');
+      box.className = 'px-ask'; box.setAttribute('role', 'group'); box.setAttribute('aria-label', _t('js.plex.ask_aria', 'Confirm'));
+      String(msg).split('\n\n').forEach(function (line, i) { var p = document.createElement('p'); p.textContent = line; if (i === 0) p.className = 'px-ask-q'; box.appendChild(p); });
+      var row = document.createElement('div'); row.className = 'row';
+      var ok = document.createElement('button'); ok.type = 'button'; ok.className = 'btn primary'; ok.textContent = yesLabel;
+      var no = document.createElement('button'); no.type = 'button'; no.className = 'btn'; no.textContent = _t('js.plex.ask_no', 'Cancel');
+      ok.addEventListener('click', function () { closeAsk(false); yes(); });
+      no.addEventListener('click', function () { closeAsk(true); });
+      row.appendChild(ok); row.appendChild(no); box.appendChild(row);
+      box._opener = btn || null;
+      var at = btn && btn.closest ? btn.closest('.row') : null;
+      if (at && at.parentNode) at.parentNode.insertBefore(box, at); else P.pick.appendChild(box);
+      if (btn) btn.hidden = true;          // (one way forward at a time: the confirm's own button)
+      askBox = box;
+      ok.focus();
+      if (box.scrollIntoView) box.scrollIntoView({ block: 'nearest' });
+    };
+    /** after a start: the button says so and stays off (another pick starts over) */
+    var done = function (btn) { if (!btn) return; btn.disabled = true; btn.setAttribute('data-done', '1'); btn.textContent = _t('js.plex.started_btn', '✓ Started'); };
+    var placeOnair = function () {
+      if (!onairLbl) return;
+      var go = P.pick.querySelector('[data-play], [data-series]');
+      var row = go && go.closest ? go.closest('.row') : null;
+      if (row && row.parentNode) row.parentNode.insertBefore(onairLbl, row);
+      else if (onairLbl.parentNode) onairLbl.parentNode.removeChild(onairLbl);
+    };
     // the same rule as the server (medialib.priceFor): per started hour of what's left from the start point, >= 1 h
     var hoursAt = function (dur, off) { return Math.max(1, Math.ceil(Math.max(0, (Number(dur) || 0) - Math.max(0, off || 0)) / 3600)); };
     var priceAt = function (dur, off) { return FREE || !PER_HOUR ? 0 : PER_HOUR * hoursAt(dur, off); };
@@ -175,6 +217,7 @@
     };
     var drawPrice = function () {
       if (!picked || !P.pick.querySelector('[data-o]')) return;
+      var b0 = P.pick.querySelector('[data-play]'); if (b0 && b0.hasAttribute('data-done')) return;   // (started: it says so)
       var off = parseTime(P.pick.querySelector('[data-o]').value) || 0;
       var pr = P.pick.querySelector('[data-price]'), btn = P.pick.querySelector('[data-play]');
       qPrev = null;
@@ -218,9 +261,15 @@
     };
     var openItem = function (key, wantScope) {
       say(_t('js.plex.loading', 'Loading…'), true);
+      closeAsk(false);
       api('GET', '/api/medialib/item/' + encodeURIComponent(key)).then(function (j) {
         var it = j.item;
         picked = it;
+        // (review: the picked result is marked - a show's episode keeps its show marked)
+        Array.prototype.forEach.call(P.results.querySelectorAll('.px-it'), function (b) {
+          var on = b.getAttribute('data-key') === String(key) || (it.show_key && b.getAttribute('data-key') === String(it.show_key));
+          b.classList.toggle('on', !!on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
         var h = '<div><b>' + esc(it.type === 'episode' ? it.show + ' · S' + it.season + 'E' + it.episode + ' · ' + it.title : it.title) + '</b>' +
                 (it.year ? ' (' + it.year + ')' : '') + (it.duration ? ' <span class="muted">· ' + hms(it.duration) + '</span>' : '') + '</div>';
         if (it.summary) h += '<p class="muted" style="margin:0">' + esc(it.summary) + '</p>';
@@ -266,8 +315,10 @@
             '<div class="px-price" data-price></div>' +
             '<div class="row"><button type="button" class="btn primary" data-play>' + esc(_t('js.plex.play', '▶ Play')) + '</button>' + addBtn(it.key) + '</div>';
         }
+        if (onairLbl && onairLbl.parentNode) onairLbl.parentNode.removeChild(onairLbl);   // (kept across picks: its tick stays)
         P.pick.innerHTML = h;
         P.pick.classList.remove('hide');
+        placeOnair();
         drawPrice();
         say('');
         P.pick.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -284,14 +335,17 @@
         var msg = _t('js.plex.q_confirm', 'Play {n} titles ({time}) back to back on {pad}’s stage?', { n: n, time: hms(pv.total_sec), pad: opts.roomTitle() }) + '\n\n' +
           (est ? _t('js.plex.q_confirm_cost', 'About {price} PAT in all, charged as it plays: {first} PAT now, the rest as each new hour starts (only what actually plays). If you run out, it stops after the title that’s on.', { price: fmt(est), first: fmt(pv.first_charge) }) + '\n\n' : '') +
           _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
-        if (!confirm(msg)) return;
+        ask(msg, _t('js.plex.ask_play', 'Yes, play it'), btn, function () {
         if (est) body.estimate = est;
         btn.disabled = true;
+        var ok = false;
         say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
         api('POST', '/api/medialib/queue/start', body).then(function (j) {
+          ok = true;
           say(_t('js.plex.q_started', '▶ {title} is starting on {pad} - {n} titles queued.', { title: j.title, pad: opts.roomTitle(), n: j.items }) +
               (j.price ? ' ' + _t('js.plex.paid', '{price} PAT paid.', { price: fmt(j.price) }) : ''), true);
           if (body.keys) { list = []; saveList(); drawList(); }
+          else done(btn);
           started(j);
         }).catch(function (e) {
           if (e.data && e.data.estimate && e.data.estimate !== est) {
@@ -301,7 +355,8 @@
             return;
           }
           say(e.message);
-        }).then(function () { btn.disabled = false; });
+        }).then(function () { if (!ok || body.keys) btn.disabled = false; });
+        });
       };
       if (pv) { go(pv); return; }
       api('POST', '/api/medialib/queue/preview', body).then(go).catch(function (e) { say(e.message); });
@@ -315,7 +370,7 @@
       var msg = _t('js.plex.b_confirm', 'Book a {min}-minute slot on {pad}’s stage for {time} ({n} titles)?', { min: pv.slot_minutes, pad: opts.roomTitle(), time: whenTxt(at), n: pv.items.length }) + '\n\n' +
         (est ? _t('js.plex.b_confirm_cost', 'Nothing is taken now. When it starts it costs about {price} PAT, charged as it plays; if you don’t have enough then, it doesn’t start.', { price: fmt(est) }) + '\n\n' : '') +
         _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
-      if (!confirm(msg)) return;
+      ask(msg, _t('js.plex.ask_book', 'Yes, book it'), btn, function () {
       body.start_at = at;
       if (est) body.estimate = est;
       btn.disabled = true;
@@ -327,6 +382,7 @@
         if (e.data && e.data.estimate && e.data.estimate !== est) { say(e.message); btn.disabled = false; bookIt(btn, body, Object.assign({}, pv, { estimate: e.data.estimate }), e.data.estimate); return; }
         say(e.message);
       }).then(function () { btn.disabled = false; });
+      });
     };
     var play = function (btn, confirmed) {
       if (!picked) return;
@@ -342,14 +398,18 @@
       var what = (picked.type === 'episode' ? picked.show + ' S' + picked.season + 'E' + picked.episode : picked.title);
       var q = off ? _t('js.plex.q_play_from', 'Play “{what}” on {pad}’s stage from {time}?', { what: what, pad: opts.roomTitle(), time: hms(off) })
                   : _t('js.plex.q_play', 'Play “{what}” on {pad}’s stage?', { what: what, pad: opts.roomTitle() });
-      if (!confirm(q + '\n\n' + (price ? _t('js.plex.q_cost', 'It costs {price} PAT, taken now. If it never gets on the stage, it all comes back.', { price: fmt(price) }) + '\n\n' : '') +
-                   _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.'))) return;
+      var msg = q + '\n\n' + (price ? _t('js.plex.q_cost', 'It costs {price} PAT, taken now. If it never gets on the stage, it all comes back.', { price: fmt(price) }) + '\n\n' : '') +
+                _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
+      ask(msg, price ? _t('js.plex.ask_pay', 'Yes, play it for {price} PAT', { price: fmt(price) }) : _t('js.plex.ask_play', 'Yes, play it'), btn, function () {
       if (price) body.price = price;
       btn.disabled = true;
+      var ok = false;
       say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
       api('POST', '/api/medialib/play', body).then(function (j) {
+        ok = true;
         say(_t('js.plex.started', '▶ {title} is starting on {pad} - it shows on the stage within a few seconds.', { title: j.title, pad: opts.roomTitle() }) +
             (j.price ? ' ' + _t('js.plex.paid', '{price} PAT paid.', { price: fmt(j.price) }) : ''), true);
+        done(btn);
         started(j);
       }).catch(function (e) {
         // the price moved (or wasn't confirmed): show the server's and ask again
@@ -361,7 +421,8 @@
           return;
         }
         say(e.message);
-      }).then(function () { btn.disabled = false; });
+      }).then(function () { if (!ok) btn.disabled = false; });
+      });
     };
 
     // ── 1.99lr: my list (a hand-made queue; kept in this tab) ──
@@ -431,9 +492,10 @@
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'slot', slot_id: id }) })
         .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
         .then(function (j) {
-          if (j && j.ok) { say(_t('js.plex.onair_on', '📺 It’s on Pepe’s stream too.'), true); return; }
+          var was = P.msg.textContent ? P.msg.textContent + ' ' : '';      // (review: after the started line, not instead of it)
+          if (j && j.ok) { say(was + _t('js.plex.onair_on', '📺 It’s on Pepe’s stream too.'), true); return; }
           if (j && j.code === 'not_live' && n < 15) { setTimeout(function () { toPepe(id, n + 1); }, 4000); return; }
-          say(_t('js.plex.onair_fail', '📺 Not on Pepe’s stream: {why}', { why: (j && j.error) || '?' }));
+          say(was + _t('js.plex.onair_fail', '📺 Not on Pepe’s stream: {why}', { why: (j && j.error) || '?' }));
         }).catch(function () { say(_t('js.plex.onair_fail', '📺 Not on Pepe’s stream: {why}', { why: '?' })); });
     }
     return { info: info, drawPrice: drawPrice, noteQueues: noteQueues, myQueue: function () { return myQueue; } };

@@ -1,12 +1,14 @@
 "use strict";
 // 1.99?? casino2 (owner 2026-11-04: "Poker table / casino tables need clickable names with the usual tipping etc." + a chat from the
 // tables): GET /api/casino/t/:id/people and /pads (casino/people.js).
-//   * people: signed in only (401), private no-store, 20 a minute per account; never part of the 1 s poll
+//   * people: signed in only (401), private no-store, 30 a minute per account; never part of the 1 s poll
 //   * a veiled seat (hidden on the bridge now: the seat's login, a web seat's linked login or its account key; incognito on) is {veil: true}
 //     and nothing else - no account, no login, no tip; a failing / loading hidden check fails closed
 //   * a web seat: its PATV name + tip only, never a Camfrog login (1.99ajf); your own seat {me}; Pepe's account {bot}
-//   * a room seat: its login only while it is a NAMED member of a live pad the table plays in or advertises in, with that pad's mod caps
+//   * a room seat: its login only while it is a NAMED member of a live pad the table plays in or advertises in AND THE VIEWER MAY OPEN
+//     (padaccess.full + the 18+ gate - review F1: an Approved / 18+ pad never says who is in its room now), with that pad's mod caps
 //     for THIS viewer (padmod.viewMod - only a linked viewer Pepe gives powers) and pvp only when the room's web commands offer it
+//   * incognito is looked up by the lower-case login (review F3: a mixed-case link is veiled too)
 //   * tip = bridge.tipFor's rule: never yourself, never Pepe
 //   * pads: the rooms the table plays in (home first), then its adverts - live bridged pads only, chat = the chat window's own gate
 //   node --test test/casino-people.test.js
@@ -71,6 +73,8 @@ test.before(async () => {
   U.gone = await mkUser("gone", { camfrog: "gonecf" });            // a room player no longer in the room
   U.unlinked = await mkUser("webonly");
   U.admin = await mkUser("boss", { class: "Admin", camfrog: "bossfrog" });
+  U.adv = await mkUser("advp", { camfrog: "advcf" });               // a room player sitting in the ADVERT pad's room
+  U.mixed = await mkUser("mixed", { camfrog: "MixedCF" });          // a mixed-case link (incognito_state is keyed lower-case)
   await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('pepe-bot', 'pepe', 'Pepe', 'x', 'pepefrog')");
   users.set("pepe-bot", { userId: "pepe-bot", username: "pepe" });
   await rooms.init();
@@ -86,11 +90,12 @@ test.before(async () => {
   await mode("everyone");
   await svc.boot({ tick: false });
   const T = { id: TID, game: "bj", status: "open", room: HOME, rooms: [HOME], adverts: [ADV, GONE], host: { uid: U.fern.userId, name: "fern" },
-    eng: { seats: [U.viewer.userId, U.willow.userId, U.fern.userId, U.fernlinked.userId, U.hid.userId, U.gone.userId, "pepe-bot"], names: { [U.willow.userId]: "Willow W" } },
+    eng: { seats: [U.viewer.userId, U.willow.userId, U.fern.userId, U.fernlinked.userId, U.hid.userId, U.gone.userId, "pepe-bot", U.adv.userId, U.mixed.userId], names: { [U.willow.userId]: "Willow W" } },
     players: { [U.viewer.userId]: { name: "viewer", via: "web" }, [U.willow.userId]: { name: "Willow W", via: "room", camfrog: "willowcf", room: HOME },
                [U.fern.userId]: { name: "fern", via: "web" }, [U.fernlinked.userId]: { name: "fernlinked", via: "web" },
                [U.hid.userId]: { name: "Hid", via: "room", camfrog: "hidcf", room: HOME }, [U.gone.userId]: { name: "gone", via: "room", camfrog: "gonecf", room: HOME },
-               "pepe-bot": { name: "Pepe", via: "room", camfrog: "pepefrog", room: HOME } } };
+               "pepe-bot": { name: "Pepe", via: "room", camfrog: "pepefrog", room: HOME },
+               [U.adv.userId]: { name: "Adv", via: "room", camfrog: "advcf", room: ADV }, [U.mixed.userId]: { name: "Mixed", via: "web" } } };
   svc.S.tables.set(TID, T);
   Q.isHidden = (k) => { if (S.fail) throw new Error("set loading"); return S.hidden.has(k); };
   CV.isHiddenLogin = (k) => S.hidden.has("cv:" + k);
@@ -155,6 +160,31 @@ test("people: a room seat named in a live pad of the table gets its login, that 
   assert.equal(g.login, undefined); assert.equal(g.pad, undefined); assert.equal(g.web, true); assert.deepEqual(g.tip, { to: "gone", href: "/u/gone/tip" });
 });
 
+test("people: a room seat in a pad the viewer may NOT open (Approved advert pad) is a web seat there - no login, no pad, no ⚔️ (review F1)", async () => {
+  const RA = bridge._rooms.get(ADV);
+  RA.members = RA.members.concat([{ login: "advcf", display: "Adv" }]);          // (Adv sits in the advert pad's live room)
+  const open = seatOf((await get("/api/casino/t/" + TID + "/people", U.viewer)).d, U.adv);
+  assert.equal(open.login, "advcf", "a Public advert pad: named as before");
+  assert.equal(open.pad.slug, (await rooms.get(ADV)).slug);
+  await runQuery("UPDATE pad_access SET level = 'approved' WHERE room_id = ?", [ADV]);
+  PA._reset(); await PA.init(); people._reset();
+  try {
+    const d = (await get("/api/casino/t/" + TID + "/people", U.viewer)).d;
+    const a = seatOf(d, U.adv);
+    assert.equal(a.login, undefined, "the locked pad's live room isn't told");
+    assert.equal(a.pad, undefined, "no pad block (no ⚔️ Duel, no mod caps) from a pad the viewer can't open");
+    assert.equal(a.web, true); assert.deepEqual(a.tip, { to: "advp", href: "/u/advp/tip" }, "profile + tip, as a web seat");
+    assert.doesNotMatch(JSON.stringify(d.seats), /advcf/);
+    assert.equal(d.pads.find((x) => x.room === ADV).chat, false, "(its chat isn't offered either)");
+    assert.equal(seatOf(d, U.willow).login, "willowcf", "the home pad (Public) as before");
+    const staff = seatOf((await get("/api/casino/t/" + TID + "/people", U.admin)).d, U.adv);
+    assert.equal(staff.login, "advcf", "site staff are inside every Approved pad");
+  } finally {
+    await runQuery("UPDATE pad_access SET level = 'public' WHERE room_id = ?", [ADV]);
+    PA._reset(); await PA.init();
+  }
+});
+
 test("people: veiled seats are {veil: true} and nothing else - the seat's login, a web seat's linked login, the account key, incognito; fail closed", async () => {
   S.hidden.add("hidcf");                                              // quotes.isHidden (the site's one rule)
   S.hidden.add("cv:fernlinkedcf");                                    // chatlogview.isHiddenLogin: a web seat's LINKED login
@@ -162,6 +192,11 @@ test("people: veiled seats are {veil: true} and nothing else - the seat's login,
   try {
     const d = (await get("/api/casino/t/" + TID + "/people", U.viewer)).d;
     for (const u of [U.hid, U.fernlinked, U.fern]) assert.deepEqual(seatOf(d, u), { veil: true }, u.username);
+    // review F3: incognito by a mixed-case linked login ('MixedCF' -> incognito_state 'mixedcf'), before the sticky set has them
+    assert.equal(seatOf(d, U.mixed).veil, undefined, "(not incognito yet)");
+    await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated, reported) VALUES ('mixedcf', 1, 1, 1)`);
+    require(path.join(repo, "padweb"))._reset();
+    assert.deepEqual(seatOf((await get("/api/casino/t/" + TID + "/people", U.viewer)).d, U.mixed), { veil: true }, "a mixed-case login's incognito veils the seat");
     assert.doesNotMatch(JSON.stringify(d), /hidcf|"hid"|fernlinked|"fern"/, "nothing about them on the wire");
     assert.equal(seatOf(d, U.willow).login, "willowcf", "others as before");
     S.fail = true;
@@ -182,13 +217,14 @@ test("pads: the rooms it plays in (home first), then its adverts - live bridged 
   finally { await mode("everyone"); }
 });
 
-test("rate limits: 20 a minute per account (people) / per account or address (pads); never part of the table poll", async () => {
-  for (let i = 0; i < 20; i++) assert.equal((await get("/api/casino/t/" + TID + "/people", U.viewer)).status, 200);
+test("rate limits: 30 a minute per account (people) / per account or address (pads); never part of the table poll", async () => {
+  for (let i = 0; i < 30; i++) assert.equal((await get("/api/casino/t/" + TID + "/people", U.viewer)).status, 200);
   assert.equal((await get("/api/casino/t/" + TID + "/people", U.viewer)).status, 429);
   assert.equal((await get("/api/casino/t/" + TID + "/people", U.willow)).status, 200, "per account");
   const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8");
   assert.match(ui, /if \(sig !== ppl\.sig\) \{ ppl\.sig = sig; loadPeople\(\); \}/, "asked when the seats / rooms change");
-  assert.match(ui, /Date\.now\(\) - ppl\.at > PEOPLE_FRESH_MS\) await loadPeople\(\)/, "and on a click with an old answer");
+  assert.match(ui, /Date\.now\(\) - ppl\.at > PEOPLE_CLICK_MS\) await loadPeople\(\)/, "and on a click with an answer older than a few seconds (review F4)");
+  assert.match(ui, /const PEOPLE_CLICK_MS = 5000;/);
 });
 
 test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel are wired, with their scripts and cache-busters", () => {

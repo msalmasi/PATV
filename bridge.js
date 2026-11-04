@@ -1910,6 +1910,21 @@ function chatEmbedAsked(req) {
   return (dest === "" || dest === "iframe") && (site === "" || site === "same-origin");
 }
 
+/** 1.99?? casino2 review F7: the chat embed's "not open to you here" card - framed by this site only (the embed's headers), no chat, no
+ *  account data; it tells the casino table page (same origin, its parent only) to take the panel down and ask for its pads again */
+function embedClosed(req, res, slug) {
+  let t = (k, d) => d;
+  try { const T = res.locals && res.locals.i18nT; if (typeof T === "function") t = (k, d) => { const v = T(k); return v && v !== k ? v : d; }; } catch (e) { /* English */ }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  res.set({ "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'", "X-Frame-Options": "SAMEORIGIN" });
+  res.status(200).type("html").send("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    "<meta name=\"robots\" content=\"noindex\"><title>" + esc(t("pad.embed.closed_title", "Chat")) + "</title><style>body{margin:0;padding:16px;font:14px/1.45 system-ui,sans-serif;" +
+    "background:#111;color:#ddd}a{color:#ffd740}</style></head><body><p>" + esc(t("pad.embed.closed", "This pad's chat isn't open to you here right now.")) + "</p>" +
+    "<p><a href=\"/p/" + encodeURIComponent(slug) + "\" target=\"_top\">" + esc(t("pad.embed.closed_pad", "Go to the pad")) + "</a></p>" +
+    "<script>try{if(parent!==window&&parent.location.origin===location.origin&&/^\\/casino\\/(?:blackjack|holdem)\\/t\\/[0-9a-f]{10}$/.test(parent.location.pathname))" +
+    "parent.postMessage({t:'patv-chat:closed',why:'gate'},location.origin)}catch(e){}</script></body></html>");
+}
+
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   load();
@@ -2318,7 +2333,9 @@ function register(app, { isBotToken, addUser }) {
     const gate = await chatGate(req.user, req.params.slug);
     const slug = gate.slug, info = gate.info, platform = gate.platform, live = gate.R;
     const toPad = () => res.redirect(302, "/p/" + encodeURIComponent(slug));
-    if (!gate.ok) return toPad();
+    // 1.99?? casino2 review F7: the embed whose gate says no (the pad went offline, signed out in another tab, the Room Dock changed) answers
+    // a small card that tells the table page (patv-chat:closed, why 'gate') - never a redirect, which drew the whole pad page in the panel
+    if (!gate.ok) return embed ? embedClosed(req, res, slug) : toPad();
     let linked = false, login = null;
     if (signedIn) {
       try { login = ((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername || null; } catch (e) { login = null; }
@@ -2422,8 +2439,10 @@ function register(app, { isBotToken, addUser }) {
     // Plex sheet (plex-play.js, the flow /stage runs) - /stage's own rules (medialib.goLiveInfo: Plex members, the override list, staff,
     // the price), for a signed-in viewer who may see this pad's live room, while the Dock is theirs; medialib decides again on every play.
     // onair: staff who run Pepe's on-air (onair.operate) may also put it on his stream - not on the pad that already shows his stream.
+    // (review F9: only on a pad whose stage can take a library slot at all - the main stage on and the pad has slots)
     let plexPlay = null;
-    if (signedIn && liveOpen && adultGate === "ok" && require("./paddock").viewerOn(req.user)) {
+    const stageTakes = !!(roomStage && roomStage.enabled && roomStage.room && Number(roomStage.room.slot_count) > 0);
+    if (signedIn && liveOpen && adultGate === "ok" && stageTakes && require("./paddock").viewerOn(req.user)) {
       try {
         const g = await require("./medialib").goLiveInfo(req.user);
         if (g && g.show && g.ok) plexPlay = { free: !!g.free, member: !!g.member, admin: !!g.admin, price_per_hour: g.price_per_hour || 0, daily_cap: g.daily_cap == null ? null : g.daily_cap,

@@ -133,6 +133,9 @@ function register(app, { isBotToken, addUser }) {
       return res.redirect(svc.frontPath(st, game));
     }
     const title = game === "holdem" ? "Texas Hold'em" : "Blackjack";
+    // 1.99?? casino2 review F8: the tables carry the 💸 Tip modal and the person menu's moderation confirms now - never framed by another
+    // site (nothing frames them; Pepe's OBS board is its own view; the table's 💬 Chat frame is the other way round)
+    res.set({ "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'" });
     res.locals.og = { title: `${title} with Pepe — publicaccess.tv`,
                       description: game === "holdem" ? "No-Limit Hold'em on the web with your PAT — no Camfrog needed, or play the same table from a Camfrog room."
                                                      : "Pepe deals blackjack on the web: sit down with your PAT, no Camfrog needed — or play the same table from a Camfrog room.",

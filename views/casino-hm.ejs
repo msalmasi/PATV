@@ -9,6 +9,7 @@
 <%# 1.99?? casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
 <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
 <link rel="stylesheet" href="/public/css/pad-dock.css?v=8">
+<link rel="stylesheet" href="/public/css/flair.css?v=4"><%# (the person menu header's pad flair chip) %>
 <style>
   .hm-wrap { position: relative; padding: 64px 64px 104px; }
   .felt.hm { position: relative; aspect-ratio: 2.15 / 1; border-radius: 999px; padding: 0; }
@@ -87,6 +88,28 @@
     .dock-row.raise { gap: 6px; }
   }
   @media (max-width: 420px) { .hm-wrap { padding: 56px 30px 96px; } .board { --cw: 36px; } .hm-seat { width: 68px; } }
+  /* 1.99?? casino2 review: the felt narrowed by the docked 💬 Chat (1100-1365px: about 540-850px wide) keeps its landscape oval with the
+     seats, cards and plates a size down - the viewport queries above never see that narrowing (plates covered the flop) */
+  @media (min-width: 1100px) and (max-width: 1365px) {
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-wrap { padding: 54px 48px 92px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .felt.hm { aspect-ratio: 1.8 / 1; }   /* (a little taller: the top seats' tags clear the board) */
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-logo { display: none; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-center { width: 58%; gap: 4px; top: 50%; }
+    body.cz-chat-dock:not(.cz-chat-mini) .board { --cw: 40px; gap: 4px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat { width: 96px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat .av { width: 40px; height: 40px; font-size: 15px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat .hole { --cw: 22px; margin-bottom: -8px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat.me .hole { --cw: 32px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat .plate { padding: 3px 6px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat .plate .nm { max-width: 86px; font-size: 11.5px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat .plate .sub { font-size: 11px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-seat .tag { font-size: 9px; padding: 1px 4px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .pot .main { padding: 4px 12px; font-size: 14px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-center .felt-msg { margin: 0; font-size: 14px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-center .felt-msg small { font-size: 12px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .hm-center .clock { width: 36px; height: 36px; font-size: 13px; }
+    body.cz-chat-dock:not(.cz-chat-mini) .mine { --cw: 44px; }
+  }
 </style>
 <main class="ds-page flow cz" id="cb" data-game="holdem" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>" data-user="<%= signedIn && user ? user : '' %>">
   <%- include('partials/casino-top', { t, game: 'holdem', tableId }) %>

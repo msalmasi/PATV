@@ -232,6 +232,7 @@
       var old = layer; layer = null;
       if (old.restore) old.restore();
       old.host.remove();
+      if (embed && old.box && old.box.classList.contains('ds-modal')) toParent({ t: 'patv-chat:tall', on: false });   // 1.99?? casino2 review
       if (old.opener && old.opener.getAttribute && old.opener.getAttribute('aria-haspopup')) old.opener.setAttribute('aria-expanded', 'false');
       if (focus !== false && old.opener && old.opener.isConnected) quietFocus(old.opener, old.byPointer);
       if (old.overlay) showTools();
@@ -263,6 +264,8 @@
       head.appendChild(iconBtn('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm rmd-sheet-x', doc));
       box.appendChild(head); host.appendChild(box); place.appendChild(host);
       layer = { host: host, box: box, head: head, opener: opener || doc.activeElement, byPointer: ptr };
+      // 1.99?? casino2 review: beside a casino table a sheet asks the table page for the height (a phone's chat sheet clipped ⚔️ Duel's stake)
+      if (embed) toParent({ t: 'patv-chat:tall', on: true });
       on(host, 'click', function (e) { if (e.target === host && !foreignModal(doc)) closeLayer(); });
       // (a pointer-opened sheet starts on its box - or its main field - never on ✕ with a ring; Tab still goes to the first control)
       setTimeout(function () {
@@ -1633,12 +1636,13 @@
         layer.kind = 'plexplay';
         var wrap = el('div', 'rmd-plex', null, doc); box.appendChild(wrap);
         var why = pp.member ? t('plex_member', 'Plex members play free (a few plays a day).') : pp.free ? t('plex_free', 'Free for you.')
-          : t('plex_paid', '{n} PAT per started hour - held until it’s on the stage, refunded if it never gets there.', { n: fmtN(pp.price_per_hour || 0) });
+          : t('plex_paid', '{n} PAT per started hour, taken when you start it - if it never gets on the stage, it all comes back.', { n: fmtN(pp.price_per_hour || 0) });
         W.PATVPlexPlay.build(wrap, { onair: !!pp.onair, note: why });
         var later = el('a', 'rmd-plex-later', t('plex_later', 'Book it for later on the stage page ›'), doc); later.setAttribute('href', '/stage?mode=plex');
         wrap.appendChild(later);
         var flow = W.PATVPlexPlay.mount(wrap, { roomId: function () { return String(o.room == null ? '' : o.room); }, roomTitle: function () { return o.padTitle || o.slug || ''; },
           me: o.user || null, free: !!pp.free, member: !!pp.member, perHour: pp.price_per_hour || 0, quality: pp.quality || 720, queues: !!pp.queue, later: false,
+          inlineConfirm: true,      // (review: the price confirm is a row in the sheet, like the Dock's other confirms - never the browser's dialog)
           onStarted: function () { if (o.wake) o.wake(); } });
         if (flow) flow.info();
         var q = wrap.querySelector('input[type=search]'); if (q) setTimeout(function () { if (q.isConnected) q.focus(); }, 0);   // (after the sheet's own focus)

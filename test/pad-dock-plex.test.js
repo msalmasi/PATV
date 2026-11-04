@@ -45,8 +45,10 @@ test("it opens the shared flow in a Dock sheet for THIS pad - the price note, Bo
   assert.equal(box.getAttribute("aria-label"), "Play from Plex");
   assert.ok(box.querySelector(".rmd-plex"), "the flow's host");
   assert.equal(s.built[0].onair, false);
-  assert.match(s.built[0].note, /50,000 PAT per started hour - held until it’s on the stage, refunded if it never gets there\./);
+  // (review: the same words as the confirm - "taken now ... it all comes back" - not "held / refunded")
+  assert.match(s.built[0].note, /50,000 PAT per started hour, taken when you start it - if it never gets on the stage, it all comes back\./);
   const o = s.mounted[0];
+  assert.equal(o.inlineConfirm, true, "review: the Dock's price confirm is a row in the sheet, never the browser's dialog");
   assert.equal(o.roomId(), "Dock.Equipped"); assert.equal(o.roomTitle(), "Night Orchard"); assert.equal(o.me, "viewer-fable");
   assert.equal(o.later, false, "book for later stays on /stage"); assert.equal(o.perHour, 50000); assert.equal(o.queues, true); assert.equal(o.free, false);
   assert.equal(s.info, 1, "the streams / plays-left line is asked at once");
@@ -60,7 +62,9 @@ test("it opens the shared flow in a Dock sheet for THIS pad - the price note, Bo
 
 test("the server side: bridge.js offers it by medialib.goLiveInfo (show && ok) for a signed-in viewer of the live room, the on-air option for staff off Pepe's pad", () => {
   const src = read("bridge.js");
-  assert.match(src, /if \(signedIn && liveOpen && adultGate === "ok" && require\("\.\/paddock"\)\.viewerOn\(req\.user\)\) \{/);
+  // review F9: only where the pad's stage can take a library slot (the main stage on, slots on the pad)
+  assert.match(src, /const stageTakes = !!\(roomStage && roomStage\.enabled && roomStage\.room && Number\(roomStage\.room\.slot_count\) > 0\);/);
+  assert.match(src, /if \(signedIn && liveOpen && adultGate === "ok" && stageTakes && require\("\.\/paddock"\)\.viewerOn\(req\.user\)\) \{/);
   assert.match(src, /const g = await require\("\.\/medialib"\)\.goLiveInfo\(req\.user\);\s*if \(g && g\.show && g\.ok\) plexPlay = /);
   assert.match(src, /onair: SP\.can\(req\.user, "onair\.operate"\) && !\(pepeIn\(R\.id\) && stage\(\)\.active\)/);
   const room = read("views", "room.ejs");
@@ -72,6 +76,13 @@ test("the server side: bridge.js offers it by medialib.goLiveInfo (show && ok) f
   assert.match(flow, /body: JSON\.stringify\(\{ action: 'slot', slot_id: id \}\)/);
   assert.match(flow, /j\.code === 'not_live' && n < 15/, "a slot not live yet is asked again for about a minute");
   for (const k of ["info", "search", "results", "pick", "msg"]) assert.match(flow, new RegExp('data-px="' + k + '"'));
+  // review: an inline confirm where asked (the Dock), confirm() on /stage; the on-air box goes into the pick above ▶ Play; done state
+  assert.match(flow, /var ask = function \(msg, yesLabel, btn, yes\) \{\s*if \(!opts\.inlineConfirm\) \{ if \(confirm\(msg\)\) yes\(\); return; \}/);
+  assert.equal((flow.match(/confirm\(/g) || []).length, 1, "the browser's confirm only behind ask()");
+  assert.match(flow, /if \(row && row\.parentNode\) row\.parentNode\.insertBefore\(onairLbl, row\);/);
+  assert.match(flow, /btn\.textContent = _t\('js\.plex\.started_btn', '✓ Started'\)/);
+  assert.match(flow, /b\.classList\.toggle\('on', !!on\); b\.setAttribute\('aria-pressed', on \? 'true' : 'false'\);/);
+  assert.match(read("public", "css", "pad-dock.css"), /\.rmd-layer \.ds-modal:has\(> \.rmd-plex\) > \.ds-modal-h \{ position: sticky; inset-block-start: calc\(-1 \* var\(--ds-sp-5\)\);[^}]*background: var\(--ds-surface-3\); \}/, "the sheet's title and ✕ stay in view (over the modal's top padding, opaque)");
   assert.match(read("public", "js", "stage-plex.js"), /window\.PATVPlexPlay\.mount\(panel, \{/);
   // staff: ▶️ Play content here stays the proxied on-air bar (where Pepe's stream is the stage: stage-room.js)
   assert.match(read("public", "js", "stage-room.js"), /if \(window\.PATVOnAirBar && pepeHere\) window\.PATVOnAirBar\.sync/);

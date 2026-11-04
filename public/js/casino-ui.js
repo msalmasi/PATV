@@ -492,9 +492,12 @@
   // Dock's person menu (room-mod.js PATVRoom.mod: 👤 profile, 💸 Tip with its confirm step, ⚔️ Duel / 🥊 Brawl, moderation only where
   // Pepe gives YOU powers in that pad - the server and Pepe re-check every action). The seats come from GET /api/casino/t/:id/people
   // (signed in; /pads for everyone - the 💬 Chat's list, casino-chat.js): asked when the seats or the rooms change and on a click with
-  // an answer older than 30 s, never by the 1 s poll. Veiled seats (hidden on the bridge) stay plain text, as on a pad; your own seat
-  // too. Pepe (the dealer, or a seat that is his account) has his own small menu: profile, fairness, history, his stream.
+  // an answer older than PEOPLE_CLICK_MS (review F4: someone who just went incognito never gets a menu from a 30-s-old answer; a failed
+  // ask opens nothing from an answer older than PEOPLE_FRESH_MS), never by the 1 s poll. Veiled seats (hidden on the bridge) stay plain
+  // text, as on a pad; your own seat too. Pepe (the dealer, or a seat that is his account) has his own small menu: profile, fairness,
+  // history, his stream.
   const PEOPLE_FRESH_MS = 30000;
+  const PEOPLE_CLICK_MS = 5000;
   const ppl = { sig: null, at: 0, d: null, busy: null };
   let lastView = null;
   const peopleSig = (t) => [(t.seats || []).map((x) => x.seat).join(","), (t.rooms || []).map((r) => r.id).join(","),
@@ -533,7 +536,10 @@
     }
     return m;
   }
-  /** the menu's header as the Dock draws it: avatar · name (· the login as a second line when it differs) */
+  // (the Dock's letter bubble colour: chatlog-core.js hue() of the login)
+  const hue = (x) => { let h = 0; const s0 = String(x || ""); for (let i = 0; i < s0.length; i++) h = (h * 31 + s0.charCodeAt(i)) % 360; return h; };
+  /** the menu's header as the Dock draws it: avatar · name in their cosmetic style · their pad flair (· the login as a second line when
+   *  it differs) - review: the same person reads the same in the Dock and on a table */
   function headerLike(menu, u) {
     menu.classList.add("rmd-pm", "cz-pmp");
     const title = menu.querySelector(".pm-pop-n");
@@ -541,16 +547,32 @@
     title.textContent = "";
     title.classList.remove("two");
     const row = document.createElement("span"); row.className = "rmd-person";
-    row.innerHTML = avatarHTML({ name: u.display || u.login || "?", avatar: u.avatar || null });
+    const shown = u.display || u.login || "?";
+    row.innerHTML = avatarHTML({ name: shown, avatar: u.avatar || null });
+    const av = row.querySelector(".av");
+    if (av && !u.avatar) av.style.background = "hsl(" + hue(u.login || (u.patv && u.patv.username) || shown) + ",55%,62%)";
     const nm = document.createElement("span"); nm.className = "rmd-person-name";
-    const b = document.createElement("b"); b.className = "who"; b.textContent = u.display || u.login || ""; nm.appendChild(b);
+    const b = document.createElement("b"); b.className = "who"; b.textContent = u.display || u.login || "";
+    const st = u.patv && typeof u.patv.style === "string" ? u.patv.style : "";
+    if (st) { b.classList.add("cx-name"); b.setAttribute("style", st); }
+    nm.appendChild(b);
+    const f = u.patv && u.patv.flair;
+    if (f && f.name) {
+      const fl = document.createElement("span"); fl.className = "ufl"; fl.title = T("who_flair", "Pad flair: {name}", { name: f.name });
+      if (/^#[0-9a-f]{6}$/.test(f.color || "")) fl.style.setProperty("--fl", f.color);
+      if (/^#[0-9a-f]{6}$/.test(f.ink || "")) fl.style.setProperty("--fli", f.ink);
+      if (f.emoji) { const e = document.createElement("span"); e.className = "ufl-e"; e.textContent = f.emoji; fl.appendChild(e); }
+      const n = document.createElement("span"); n.className = "ufl-n"; n.textContent = f.name; fl.appendChild(n);
+      nm.appendChild(fl);
+    }
     row.appendChild(nm); title.appendChild(row);
     if (u.login && String(u.login).toLowerCase() !== String(u.display || "").toLowerCase()) {
       const sm = document.createElement("small"); sm.className = "pm-login"; sm.textContent = u.login; title.appendChild(sm); title.classList.add("two");
     }
   }
   async function personMenu(seat, anchor) {
-    if (!ppl.d || Date.now() - ppl.at > PEOPLE_FRESH_MS) await loadPeople();
+    if (!ppl.d || Date.now() - ppl.at > PEOPLE_CLICK_MS) await loadPeople();
+    if (!ppl.d || Date.now() - ppl.at > PEOPLE_FRESH_MS) { toast(T("who_retry", "Couldn't load that player just now - try again."), true); return; }
     const p = personOf(seat);
     if (!p || p.me || p.veil) return;
     if (p.bot) { pepeMenu(anchor); return; }
@@ -606,7 +628,7 @@
     if (t.on_stream && pe.pad) item("📺 " + T("pepe_stream", "On Pepe's stream"), pe.pad);
     p.appendChild(list);
     nm.innerHTML = '<span class="rmd-person">' + avatarHTML({ name: "Pepe", avatar: "/public/img/pepe.png" }) + '<span class="rmd-person-name"><b class="who">Pepe</b></span></span>';
-    nm.appendChild(Object.assign(document.createElement("small"), { className: "pm-login", textContent: T("pepe_role", "the dealer · provably fair") }));
+    nm.appendChild(Object.assign(document.createElement("small"), { className: "pm-login cz-pm-role", textContent: T("pepe_role", "the dealer · provably fair") }));
     nm.classList.add("two");
     document.body.appendChild(p);
     pepePop = p;

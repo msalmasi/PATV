@@ -13,7 +13,7 @@
   const SEATS = 6;
   const ref = {};
   const act = CZ.actor(ref);
-  let last = null, stake = 0, drawnRound = null, popRound = null, first = true, revealAt = 0, revealTm = null, prevTurn = false, focusBet = location.hash === "#bet";
+  let last = null, stake = 0, drawnRound = null, popRound = null, first = true, revealAt = 0, revealTm = null, prevTurn = false, prevAct = false, focusBet = location.hash === "#bet";
 
   const OUT = (o) => ({ blackjack: T("o_bj", "Blackjack"), win: T("o_win", "Win"), lose: T("o_lose", "Lose"), push: T("o_push", "Push"),
                         bust: T("o_bust", "Bust") }[o] || o);
@@ -194,8 +194,12 @@
 
     dock(t, me, betting);
     if (me && me.my_turn && !prevTurn) CZ.announce(T("your_turn_sr", "Your turn. Hit, stand, or more."));
-    // 1.99?? casino2: your turn starts / ends -> the phone's chat sheet makes room for the action dock (casino-chat.js)
-    if (!!(me && me.my_turn) !== prevTurn) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn) } }));
+    // 1.99?? casino2: the table needs you (your turn, insurance, or your seat's bet while the betting window runs - review: the phone's
+    // chat sheet covered the chips) starts / ends -> the chat's sheet / float makes room for the action dock (casino-chat.js)
+    const actNow = !!(me && open && (me.my_turn || me.can_insure ||
+      (t.phase === "betting" && t.bet_deadline && me.seat && !(me.bet > 0) && !me.pending && !me.banned && !(t.high_stakes && !me.high_roller))));
+    if (actNow !== prevAct) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn), act: actNow } }));
+    prevAct = actNow;
     prevTurn = !!(me && me.my_turn);
     first = false;
   }

@@ -8,8 +8,9 @@
 // pad tab, a chat window and this frame: the newest wins (a newer window says so here: "Chat is open in its own window · Bring it here").
 //   desktop (>= 1100px): docked at the inline end, 360px - the felt keeps its shape and shrinks
 //   761-1099px:           a 340px float, with Minimize
-//   phones (<= 760px):    a non-modal bottom sheet (about half the screen; minimized = a 44px bar with a new-lines dot) that makes room for
-//                         the action dock while it's your turn and comes back after your move
+//   phones (<= 760px):    a non-modal bottom sheet (60% of the screen; minimized = a 44px bar with a new-lines dot)
+// The float and the sheet make room for the action dock while the table needs you (your turn, a Blackjack bet, insurance) and come back
+// after; a sheet opened in the chat (⚔️ Duel's stake) makes the panel taller while it's open; a chat in its own window leaves the bar.
 // ✕ removes the frame (its poll, audio and presence end with it); room audio is the chat's own ▶ bar and never autoplays, except that a
 // chat that came along playing (below) plays here too (a blocked autoplay asks for a tap, as in the window).
 // "The chat follows": a pad page whose chat floats leaves sessionStorage 'patv.chat.follow' {room, slug, at, audio} when the tab goes
@@ -35,6 +36,9 @@
   };
   const roomKey = (id) => String(id == null ? "" : id).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100);   // = dock-link.js roomKey
   let pads = [], cur = null, frame = null, ready = false, queue = [], mini = false, autoMini = false, audioOn = false, retired = false;
+  // review fixes: act = the table needs you now (your turn, a Blackjack bet before the deadline, insurance - cz:state from casinohm /
+  // casinobj); tall = a sheet is open in the chat (⚔️ Duel's stake...) and needs the height
+  let act = false, tall = false;
   // the follow mark is read once, at load (and dropped: a reload doesn't re-open a chat closed meanwhile)
   let follow = null;
   try { follow = JSON.parse(ss.get(FOLLOW) || "null"); } catch (e) { follow = null; }
@@ -49,13 +53,17 @@
     const cl = document.body.classList;
     cl.toggle("cz-chat-on", on);
     for (const k of ["dock", "float", "sheet"]) cl.toggle("cz-chat-" + k, on && m === k);
-    cl.toggle("cz-chat-mini", on && mini);
+    // (review: a chat that moved to its own window collapses to its bar - Bring it here - and a docked table gets its width back)
+    cl.toggle("cz-chat-mini", on && (mini || retired));
+    cl.toggle("cz-chat-retired", on && retired);
+    cl.toggle("cz-chat-act", on && act);
+    cl.toggle("cz-chat-tall", on && tall && !retired);
     panel.hidden = !on;
     // (↗️ its own window: a desktop thing, as in the Dock - a phone keeps the sheet)
     let fine = false; try { fine = !!(window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches); } catch (e) { fine = false; }
     $p(".cz-chat-win").hidden = m === "sheet" || !fine;
     placeTop();
-    btn.setAttribute("aria-expanded", on && !mini ? "true" : "false");
+    btn.setAttribute("aria-expanded", on && !mini && !retired ? "true" : "false");
   }
   // (docked: from under the site's header - it scrolls away - to the bottom of the window)
   const nav = document.querySelector(".navbar");
@@ -75,8 +83,16 @@
   function send(m) { if (ready) post(m); else queue.push(m); }
   function teardown() {
     if (frame) { const f = frame; frame = null; f.remove(); }
-    ready = false; queue = []; audioOn = false; retired = false;
+    ready = false; queue = []; audioOn = false; retired = false; tall = false;
     bar.hidden = true; dot.hidden = true;
+  }
+  /** the panel's title: the pad's name, a link to the pad (a new tab - the table stays; the frame's own pad chip is left out, embed CSS) */
+  function paintTitle(pad) {
+    titleEl.textContent = "";
+    const a = document.createElement("a");
+    a.href = "/p/" + encodeURIComponent(pad.slug); a.target = "_blank"; a.rel = "noopener";
+    a.textContent = pad.name; a.title = T("chat_open_pad", "Open the pad: {pad}", { pad: pad.name });
+    titleEl.appendChild(a);
   }
   function mount(pad, o) {
     teardown();
@@ -94,7 +110,7 @@
     if (cur && cur.slug === pad.slug && (frame || retired)) { if (retired) mount(pad, o); setMini(false); return; }
     cur = pad;
     ss.set(PICK, pad.slug);
-    titleEl.textContent = pad.name;
+    paintTitle(pad);
     $p(".cz-chat-pick").hidden = chatPads().length < 2;
     mini = false; autoMini = false;
     mount(pad, o);
@@ -122,8 +138,10 @@
     const m = document.createElement("div"); m.className = "pm-pop rmd-pm cz-chat-menu"; m.setAttribute("role", "menu"); m.setAttribute("aria-label", T("chat_which", "Which pad's chat?"));
     const roleTxt = { home: T("chat_role_home", "plays here"), pushed: T("chat_role_pushed", "plays here"), advert: T("chat_role_advert", "advertised here") };
     list.forEach((p) => {
-      const b = document.createElement("button"); b.type = "button"; b.className = "pm-pop-i"; b.setAttribute("role", "menuitem");
-      b.textContent = "💬 " + p.name;
+      // (review: the pad open here is marked - a radio group)
+      const b = document.createElement("button"); b.type = "button"; b.className = "pm-pop-i"; b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", cur && cur.slug === p.slug ? "true" : "false");
+      b.textContent = (cur && cur.slug === p.slug ? "✓ " : "💬 ") + p.name;
       const w = document.createElement("small"); w.className = "pm-pop-why"; w.textContent = roleTxt[p.role] || ""; b.appendChild(w);
       b.addEventListener("click", () => { m.remove(); open(p); });
       m.appendChild(b);
@@ -157,6 +175,7 @@
     retired = true;
     bar.hidden = false;
     bar.querySelector(".cz-chat-bar-t").textContent = text;
+    layout();
   }
   window.addEventListener("message", (e) => {
     if (!frame || e.origin !== location.origin || e.source !== frame.contentWindow) return;
@@ -165,8 +184,14 @@
     if (m.t === "patv-chat:ready") { ready = true; const q = queue; queue = []; q.forEach(post); }
     else if (m.t === "patv-chat:closed") {
       if (m.why === "handoff") { close(); CZ.toast(T("chat_back_tab", "The chat went back to the pad tab.")); }
-      else close();
-    } else if (m.t === "patv-chat:retired") {
+      else if (m.why === "gate") {
+        // (review F7: the pad's chat isn't open to you any more - offline, signed out elsewhere, the Dock changed; the frame answered a
+        // small card, never the pad page) - the table's pads are asked again
+        close(); CZ.toast(T("chat_none", "That pad's chat isn't open to you here."), true);
+        if (CZ.loadPeople) CZ.loadPeople();
+      } else close();
+    } else if (m.t === "patv-chat:tall") { tall = !!m.on; if (tall && mini) { autoMini = false; setMini(false); } else layout(); }
+    else if (m.t === "patv-chat:retired") {
       if (m.key === "pop_moved") showBar(T("chat_in_window", "Chat is open in its own window"));
       else if (m.key === "pop_moved_embed") showBar(T("chat_elsewhere", "Chat is open beside another casino table"));
       // (signed out / no access any more: the frame shows its own card and ✕)
@@ -193,12 +218,17 @@
   bar.querySelector("button").addEventListener("click", () => { if (cur) { retired = false; mount(cur); setMini(false); } });
   $p(".cz-chat-h").addEventListener("dblclick", () => { if (mode() !== "dock") setMini(!mini); });
   window.addEventListener("resize", () => { if (cur) layout(); });
-  // a phone: the sheet makes room for the action dock on your turn, and comes back after your move (unless you opened it meanwhile)
+  // the sheet (phones) and the float (761-1099px) make room for the action dock while the table needs you - your turn, a Blackjack bet
+  // before the deadline, insurance (review: the float covered Raise / All-in, the sheet the Blackjack chips) - and come back after (unless
+  // you opened it meanwhile); a phone's sticky dock also rides above a sheet you open while it needs you (cz-chat-act)
   document.addEventListener("cz:state", (e) => {
-    if (!cur || mode() !== "sheet") return;
-    const myTurn = !!(e.detail && e.detail.myTurn);
-    if (myTurn && !mini) { autoMini = true; setMini(true); }
-    else if (!myTurn && autoMini) { autoMini = false; setMini(false); }
+    const d = e.detail || {};
+    act = !!(d.act != null ? d.act : d.myTurn);
+    if (!cur) return;
+    if (mode() === "dock" || retired) { layout(); return; }
+    if (act && !mini) { autoMini = true; setMini(true); }
+    else if (!act && autoMini) { autoMini = false; setMini(false); }
+    else layout();
   });
   function onPeople(d) {
     pads = (d && Array.isArray(d.pads)) ? d.pads : [];
@@ -207,7 +237,11 @@
     if (follow) {
       const f = follow; follow = null;
       const p = chatPads().find((x) => x.slug === f.slug || roomKey(x.room) === f.room);
-      if (p && !cur) { open(p, { audio: !!f.audio }); CZ.toast(T("chat_came", "Your chat came along · ✕ closes it")); }
+      if (p && !cur) {
+        open(p, { audio: !!f.audio }); CZ.toast(T("chat_came", "Your chat came along · ✕ closes it"));
+        // (review: it came along while the table needs you - it starts minimized beside the action dock and opens after your move)
+        if (act && mode() !== "dock") { autoMini = true; setMini(true); }
+      }
     }
   }
   document.addEventListener("cz:people", (e) => onPeople(e.detail));

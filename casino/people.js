@@ -17,15 +17,18 @@
 //                                             else: no account, no login, no tip (fails closed while the hidden sets load)
 //   * {display, web: true, patv, tip?}        a web seat - its PATV name only (1.99ajf: a PATV name never maps to a Camfrog login)
 //   * {display, patv, tip?, login?, pad?}     a room seat: its login ONLY when it is a NAMED member of a live bridged pad the table plays in
-//                                             or advertises in (its own room first), with pad = {slug, member: true, mod, pvp}: mod =
+//                                             or advertises in (its own room first) THAT THE VIEWER MAY OPEN (padaccess.full + the 18+
+//                                             gate - the roster's own gate: who is in an Approved / 18+ pad's room now is never told to
+//                                             someone outside it), with pad = {slug, member: true, mod, pvp}: mod =
 //                                             padmod.viewMod(R, viewer's login) (Pepe's powers for this viewer there - the server and Pepe
 //                                             re-check every action), pvp = {duel, brawl} when the viewer is linked and the room's web
 //                                             commands offer them (the chat's pvpFor re-checks, Pepe's escrow decides)
-// tip = bridge.tipFor's rule: never yourself, never Pepe; {to, href: /u/<name>/tip}.
+// tip = bridge.tipFor's rule: never yourself, never Pepe; {to, href: /u/<name>/tip}. patv = {username, style?, flair?}: their name's
+// cosmetic style (cosmetics.nameStyle) and, on a pad seat, their flair in that pad (padflair) - the Dock's header shows both.
 "use strict";
 const { getQuery } = require("../dbUtils");
 
-const RATE_N = 20, RATE_MS = 60 * 1000;
+const RATE_N = 30, RATE_MS = 60 * 1000;     // (a click with an answer older than a few seconds asks again - casino-ui.js)
 const hits = new Map();               // key -> [ms]
 let clock = () => Date.now();
 function rateOk(key) {
@@ -40,8 +43,10 @@ const lc = (s) => String(s == null ? "" : s).toLowerCase();
 const B = () => require("../bridge");
 const svc = () => require("./service");
 
-/** hidden on the bridge now (padweb's rule: quotes.isHidden + chatlogview.isHiddenLogin + hubhidden; fails closed), or incognito on */
-async function veiled(key) {
+/** hidden on the bridge now (padweb's rule: quotes.isHidden + chatlogview.isHiddenLogin + hubhidden; fails closed), or incognito on
+ *  (incognito_state is keyed by the lower-case login - padweb.note / incognito.js - so the key is lowered here) */
+async function veiled(key0) {
+  const key = lc(key0);
   if (!key) return false;
   const W = require("../padweb");
   try { if (W.hiddenKey(key)) return true; } catch (e) { return true; }
@@ -88,6 +93,22 @@ async function seatsFor(T, user, pads) {
   const meRow = user && user.userId ? byId.get(String(user.userId)) || null : null;
   const me = meRow ? { userId: String(meRow.userId), username: meRow.username, login: meRow.camfrogUsername || null } : null;
   const padBy = new Map((pads || []).map((p) => [p.room, p]));
+  // 1.99?? casino2 review: a pad's room is told only to a viewer who may open it (padaccess.full + the 18+ gate, as the roster) -
+  // an Approved advert pad or an 18+ pad never says who is in its live room now, nor offers ⚔️ Duel there
+  const PA = require("../padaccess");
+  try { await PA.init(); } catch (e) { /* the gate below fails closed */ }
+  const opens = new Map();
+  const mayOpen = (rid) => {
+    if (!opens.has(rid)) { let ok = false; try { ok = !!PA.full(user || null, rid) && PA.adultGate(user || null, rid) === "ok"; } catch (e) { ok = false; } opens.set(rid, ok); }
+    return opens.get(rid);
+  };
+  const styleOf = (name) => { try { return require("../cosmetics").nameStyle(name) || ""; } catch (e) { return ""; } };
+  const flairs = new Map();
+  const flairOf = async (rid, name) => {
+    if (!flairs.has(rid)) flairs.set(rid, await require("../padflair").byUsername(rid).catch(() => null));
+    const F = flairs.get(rid), fl = F && name ? F.get(lc(name)) : null;
+    try { return fl ? require("../padflair").plain(fl) : null; } catch (e) { return null; }
+  };
   for (const k of keys) {
     const hash = S.uidHash(k), p = (T.players || {})[k] || {}, row = byId.get(String(k)) || {};
     const display = String((e.names && e.names[k]) || p.name || row.displayname || row.username || "?").slice(0, 60);
@@ -101,6 +122,8 @@ async function seatsFor(T, user, pads) {
     const person = { display };
     if (row.username) {
       person.patv = { username: row.username };
+      const st = styleOf(row.username);
+      if (st) person.patv.style = st;
       const tip = tipOf(row.username, me, pepe);
       if (tip) person.tip = tip;
     }
@@ -109,7 +132,7 @@ async function seatsFor(T, user, pads) {
     const order = Array.from(new Set([p.room, ...(pads || []).map((x) => x.room)].filter(Boolean)));
     for (const rid of order) {
       const R = B().liveBridged(rid), pad = padBy.get(rid);
-      if (!R || !pad) continue;
+      if (!R || !pad || !mayOpen(rid)) continue;
       const named = (R.members || []).some((m) => m && m.login && !m.anon && !m.veil && lc(m.login) === lc(login));
       if (!named) continue;
       person.login = login;
@@ -120,6 +143,7 @@ async function seatsFor(T, user, pads) {
       let mod = null;
       try { mod = mine ? require("../padmod").viewMod(R, mine) : null; } catch (e3) { mod = null; }
       person.pad = { slug: pad.slug, member: true, mod, pvp };
+      if (person.patv) { const fl = await flairOf(rid, row.username); if (fl) person.patv.flair = fl; }
       break;
     }
     if (!person.login) person.web = true;          // (not in a pad of this table right now: profile + tip, as for a web seat)

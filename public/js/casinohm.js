@@ -190,8 +190,8 @@
 
     dock(t, me, inHand);
     if (me && me.my_turn && !prevTurn) { CZ.announce(T("your_turn_sr_hm", "Your turn. {n} to call.", { n: fmt(t.turn ? t.turn.to_call : 0) })); raiseTouched = false; }
-    // 1.99?? casino2: your turn starts / ends -> the phone's chat sheet makes room for the action dock (casino-chat.js)
-    if (!!(me && me.my_turn) !== prevTurn) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn) } }));
+    // 1.99?? casino2: your turn starts / ends -> the chat's sheet / float makes room for the action dock (casino-chat.js)
+    if (!!(me && me.my_turn) !== prevTurn) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn), act: !!(me && me.my_turn) } }));
     prevTurn = !!(me && me.my_turn);
     if (wantSit && me && open) { wantSit = false; if (!me.seat && t.seats.length < t.max_seats && !hrLocked) openBuy("sit"); }
     first = false;

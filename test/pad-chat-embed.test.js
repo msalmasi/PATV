@@ -133,6 +133,23 @@ test("the table page's ⚔️ Duel reaches the frame's stake sheet for a named m
   assert.match(fr.doc.querySelector(".rmd-toast").textContent, /aren’t in the room right now/, "a command the room doesn't offer: no sheet");
 });
 
+test("review: a sheet opened in the frame asks the table page for the height (tall on), and gives it back when it closes (tall off)", () => {
+  const f = framed(TABLE);
+  const fr = harness({ win: f.setup, opts: embedOpts({ vt: null }), data: (d) => { d.room.cmds["!duel"] = 0; } });
+  const tall = () => f.parent.posted.filter((x) => x.m.t === "patv-chat:tall").map((x) => x.m.on);
+  fr.win.dispatchEvent(new Event("message", { data: { t: "patv-chat:pvp", kind: "duel", login: "willow_fable" }, origin: ORIGIN, source: f.parent }));
+  assert.ok(fr.doc.querySelector(".rmd-layer form.rmd-pvp"));
+  assert.deepEqual(tall(), [true], "the stake sheet: tall");
+  fr.doc.querySelector(".rmd-layer .ds-modal-h button").click();
+  assert.equal(fr.doc.querySelector(".rmd-layer"), null);
+  assert.deepEqual(tall(), [true, false], "closed: back");
+  // a plain window (not framed) never posts
+  const g = framed("/p/night-orchard");
+  const w = harness({ win: g.setup, opts: embedOpts({ vt: null }), data: (d) => { d.room.cmds["!duel"] = 0; } });
+  assert.equal(w.controller.embedded(), false);
+  assert.equal(g.parent.posted.length, 0);
+});
+
 test("the follow mark: a FLOATING pad chat leaves it when the tab goes (and on a casino link); docked or popped it doesn't; a pad page drops an old one", () => {
   const f = framed("/");
   const pad = harness({ fine: true, win: (w) => { f.setup(w); w.location = { origin: ORIGIN, href: ORIGIN + "/p/night-orchard", pathname: "/p/night-orchard" }; w.sessionStorage.setItem("patv.chat.follow", "old"); w.parent = w; }, opts: { room: "Dock.Equipped" } });
@@ -246,4 +263,82 @@ test("casino-chat: ✕ removes the frame; a retire to its own window shows Bring
   p.btn.dispatchEvent(new Event("click"));
   p.panel.querySelector(".cz-chat-x").dispatchEvent(new Event("click"));
   assert.equal(p.frame(), null, "✕: the frame is removed"); assert.equal(p.doc.body.classList.contains("cz-chat-on"), false);
+});
+
+test("casino-chat review: the float and the sheet make room while the table needs you (act), docked never; tall grows it; retired collapses", () => {
+  for (const [width, kind] of [[900, "float"], [390, "sheet"]]) {
+    const p = tablePage({ width });
+    p.people(PADS);
+    p.btn.dispatchEvent(new Event("click"));
+    assert.equal(p.doc.body.classList.contains("cz-chat-" + kind), true, kind);
+    p.doc.dispatchEvent(new Event("cz:state", { detail: { myTurn: false, act: true } }));
+    assert.equal(p.doc.body.classList.contains("cz-chat-mini"), true, kind + ": a Blackjack bet / your turn - minimized (the float covered Raise / All-in)");
+    assert.equal(p.doc.body.classList.contains("cz-chat-act"), true);
+    p.doc.dispatchEvent(new Event("cz:state", { detail: { myTurn: false, act: false } }));
+    assert.equal(p.doc.body.classList.contains("cz-chat-mini"), false, kind + ": back after");
+    // a sheet in the chat (⚔️ Duel's stake): taller, and un-minimized
+    const f = p.frame(); f.contentWindow = { postMessage() {} };
+    const say = (data) => p.win.dispatch("message", { data, source: f.contentWindow, origin: ORIGIN });
+    p.panel.querySelector(".cz-chat-min").dispatchEvent(new Event("click"));
+    assert.equal(p.doc.body.classList.contains("cz-chat-mini"), true);
+    say({ t: "patv-chat:tall", on: true });
+    assert.equal(p.doc.body.classList.contains("cz-chat-tall"), true); assert.equal(p.doc.body.classList.contains("cz-chat-mini"), false);
+    say({ t: "patv-chat:tall", on: false });
+    assert.equal(p.doc.body.classList.contains("cz-chat-tall"), false);
+  }
+  const d = tablePage({ width: 1280 });
+  d.people(PADS);
+  d.btn.dispatchEvent(new Event("click"));
+  assert.equal(d.doc.body.classList.contains("cz-chat-dock"), true);
+  d.doc.dispatchEvent(new Event("cz:state", { detail: { act: true } }));
+  assert.equal(d.doc.body.classList.contains("cz-chat-mini"), false, "docked beside the table: it covers nothing");
+  const f = d.frame(); f.contentWindow = { postMessage() {} };
+  d.win.dispatch("message", { data: { t: "patv-chat:retired", key: "pop_moved" }, source: f.contentWindow, origin: ORIGIN });
+  assert.equal(d.doc.body.classList.contains("cz-chat-retired"), true);
+  assert.equal(d.doc.body.classList.contains("cz-chat-mini"), true, "retired: the bar alone - the table gets its width back");
+  assert.equal(d.panel.querySelector(".cz-chat-bar").hidden, false);
+  assert.equal(d.btn.getAttribute("aria-expanded"), "false");
+  d.panel.querySelector(".cz-chat-bar button").dispatchEvent(new Event("click"));
+  assert.equal(d.doc.body.classList.contains("cz-chat-retired"), false); assert.equal(d.doc.body.classList.contains("cz-chat-mini"), false);
+  assert.equal(d.btn.getAttribute("aria-expanded"), "true");
+  // the panel's title is a link to the pad (the frame's own pad chip is left out - pad-dock.css body.rmd-embed)
+  const a = d.panel.querySelector(".cz-chat-n a");
+  assert.equal(a.href, "/p/night-orchard"); assert.equal(a.target, "_blank"); assert.equal(a.rel, "noopener");
+  assert.match(fs.readFileSync(path.join(repo, "public", "css", "pad-dock.css"), "utf8"), /body\.rmd-pop\.rmd-embed main\.rm\.rm-dock #chatH > \.rmd-chip-chat \{ display: none; \}/);
+});
+
+test("casino-chat review F7: the frame's 'not open to you' card closes the panel, says so and asks for the pads again; a chat that came along on your turn starts minimized", () => {
+  const p = tablePage({ width: 900 });
+  let asked = 0; p.win.CZ.loadPeople = () => { asked++; };
+  p.people(PADS);
+  p.btn.dispatchEvent(new Event("click"));
+  const f = p.frame(); f.contentWindow = { postMessage() {} };
+  p.win.dispatch("message", { data: { t: "patv-chat:closed", why: "gate" }, source: f.contentWindow, origin: ORIGIN });
+  assert.equal(p.frame(), null); assert.equal(p.panel.hidden, true);
+  assert.deepEqual(p.toasts, ["That pad's chat isn't open to you here."]);
+  assert.equal(asked, 1, "the table's pads are asked again");
+  const q = tablePage({ width: 390, follow: { room: "Dock_Equipped", slug: "night-orchard", at: Date.now() - 1000 } });
+  q.doc.dispatchEvent(new Event("cz:state", { detail: { myTurn: true, act: true } }));
+  q.people(PADS);
+  assert.ok(q.frame(), "it came along");
+  assert.equal(q.doc.body.classList.contains("cz-chat-mini"), true, "...minimized beside the action dock");
+  q.doc.dispatchEvent(new Event("cz:state", { detail: { myTurn: false, act: false } }));
+  assert.equal(q.doc.body.classList.contains("cz-chat-mini"), false, "...and opens after your move");
+});
+
+test("casino review: the table pages emit act for a Blackjack bet / insurance, the docked felt draws a size down, Pepe's role line isn't a login", () => {
+  const bj = fs.readFileSync(path.join(repo, "public", "js", "casinobj.js"), "utf8");
+  assert.match(bj, /const actNow = !!\(me && open && \(me\.my_turn \|\| me\.can_insure \|\|\s*\(t\.phase === "betting" && t\.bet_deadline && me\.seat && !\(me\.bet > 0\)/);
+  assert.match(bj, /detail: \{ myTurn: !!\(me && me\.my_turn\), act: actNow \}/);
+  assert.match(fs.readFileSync(path.join(repo, "public", "js", "casinohm.js"), "utf8"), /detail: \{ myTurn: !!\(me && me\.my_turn\), act: !!\(me && me\.my_turn\) \}/);
+  const hm = fs.readFileSync(path.join(repo, "views", "casino-hm.ejs"), "utf8");
+  assert.match(hm, /@media \(min-width: 1100px\) and \(max-width: 1365px\) \{\s*body\.cz-chat-dock:not\(\.cz-chat-mini\) \.hm-wrap/);
+  const cc = fs.readFileSync(path.join(repo, "views", "partials", "casino-chat.ejs"), "utf8");
+  assert.match(cc, /body\.cz-chat-dock:not\(\.cz-chat-mini\) main\.cz \{ margin-inline-start: max\(var\(--ds-sp-3, 12px\), calc\(\(100% - var\(--czc-w\) - 1120px\) \/ 2\)\); margin-inline-end: auto;/, "centred left of the panel");
+  assert.match(cc, /body\.cz-chat-dock:not\(\.cz-chat-mini\) \.site-foot \{ margin-inline-end: var\(--czc-w\); \}/);
+  assert.match(cc, /body\.cz-chat-sheet\.cz-chat-act:not\(\.cz-chat-mini\) \.cz \.dock \{ inset-block-end: calc\(var\(--czc-sheet\) \+ var\(--ds-sp-2, 8px\)\); \}/);
+  assert.match(fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8"), /className: "pm-login cz-pm-role"/);
+  for (const f of ["casino-hm.ejs", "casino-bj.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", f), "utf8"), /flair\.css\?v=4/, f);
+  // F8: the table pages are never framed by another site
+  assert.match(fs.readFileSync(path.join(repo, "casino", "routes.js"), "utf8"), /res\.set\(\{ "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'" \}\);/);
 });

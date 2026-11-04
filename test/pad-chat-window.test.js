@@ -382,9 +382,23 @@ test("casino2: ?embed=1 from a same-origin frame is the same page with SAMEORIGI
     assert.equal(r.status, 200, what); headersOk(r, what);
     assert.match(r.text, /embed: false,/, what);
   }
-  // the gates are the window's own: an embed that isn't the viewer's chat is a 302 with the DENY headers... the frame shows the pad page
+  // the gates are the window's own. Review F7: an EMBED that isn't the viewer's chat answers a small card (never the pad page drawn inside
+  // the table's panel): no chat, nothing about the room, it tells the casino table page (its parent, same origin, a table path) to close
   const no = await getH("/p/" + MSLUG + "/chat?embed=1", null, FRAME);
-  assert.equal(no.status, 302); assert.equal(no.headers.get("location"), "/p/" + MSLUG);
+  assert.equal(no.status, 200);
+  assert.equal(no.headers.get("x-frame-options"), "SAMEORIGIN");
+  assert.equal(no.headers.get("content-security-policy"), "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'");
+  assert.equal(no.headers.get("cache-control"), "private, no-store");
+  assert.doesNotMatch(no.text, /rmFeed|rmInit|chatOnly|id="rm/, "no chat, no room data");
+  assert.match(no.text, /parent\.postMessage\(\{t:'patv-chat:closed',why:'gate'\},location\.origin\)/);
+  assert.ok(no.text.includes("/^\\/casino\\/(?:blackjack|holdem)\\/t\\/[0-9a-f]{10}$/.test(parent.location.pathname)"), "only a casino table page is told");
+  assert.match(no.text, new RegExp('href="/p/' + MSLUG + '" target="_top"'));
+  assert.doesNotThrow(() => new Function(no.text.match(/<script>([\s\S]*?)<\/script>/)[1]), "the card's script parses");
+  // ...and the plain window (not an embed) still goes to the pad page, which renders the right gate
+  const plain = await getH("/p/" + MSLUG + "/chat", null, {});
+  assert.equal(plain.status, 302); assert.equal(plain.headers.get("location"), "/p/" + MSLUG);
+  const top = await getH("/p/" + MSLUG + "/chat?embed=1", null, { "sec-fetch-dest": "document", "sec-fetch-site": "none" });
+  assert.equal(top.status, 302, "a top-level ?embed=1 is the plain window");
 });
 
 test("casino2: bridge.chatGate = the window's gate (the casino's 💬 Chat asks it); liveBridged = a live bridged pad or null", async () => {
