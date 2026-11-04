@@ -30,6 +30,11 @@
 // --since (default: the last 4) to yesterday: the mirror diff CHECKED and empty that day (gate 1), and the dual read RECORDED for
 // every daily reader that day - capital.cutoff (capital live), policy.source (an engine on), funding.monetary (Pepe pushing) - with
 // no difference (gate 2). A difference today fails too. For H1: --since=2026-10-30.
+// PO-4 (1.99??): the derived dual read (policy_sims engine 'derived', one row a day: Pepe's pushed targets / fl_room / credit / flows
+// vs the site's policy/derived.js) and the weekly shadow audit (policy_epoch_audit: the site's audit + digest of Pepe's settled
+// week vs his own notices) - status lines and the H2a gate-5 preflight lines ("derived dual read recorded every day", "derived
+// dual read clean since <day>", "shadow audit = Pepe's"); "last W" and the staking readers' source follow policy_runs once the
+// treasury engine is live. Every read is guarded by its table (a database without policy_epoch_audit still works).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -117,8 +122,15 @@ async function gather(opts = {}) {
   out.missed7 = await q("SELECT key, engine, period, error, created FROM policy_runs WHERE state = 'missed' AND created >= ? ORDER BY created", [Date.now() - 7 * 86400e3], "policy_runs");
   // the shadow comparisons of the last 14 days: clean (ok = 1), compared against a boundary snapshot (PO-1) or not
   const scols = (await has("policy_sims")) ? new Set((await getQuery("PRAGMA table_info(policy_sims)")).map((c) => c.name)) : new Set();
+  // (the engines' rows only - PO-4's derived dual read has its own lines below)
   out.shadow14 = await q(`SELECT key, engine, period, ok, ${scols.has("boundary_ts") ? "boundary_ts" : "NULL AS boundary_ts"}, pepe_plan IS NOT NULL AS reported, updated
-                          FROM policy_sims WHERE mode = 'shadow' AND updated >= ? ORDER BY updated`, [Date.now() - 14 * 86400e3], "policy_sims");
+                          FROM policy_sims WHERE mode = 'shadow' AND engine IN ('treasury', 'monetary', 'burn') AND updated >= ? ORDER BY updated`,
+                         [Date.now() - 14 * 86400e3], "policy_sims");
+  // PO-4: the derived dual read (every row: one a day) and the weekly audits
+  out.derived = (await q("SELECT period, ok, blocking, site_plan, site_inputs, updated FROM policy_sims WHERE engine = 'derived' ORDER BY period", [], "policy_sims"))
+    .map((r) => { const si = parse(r.site_inputs, {}) || {}; return { period: r.period, ok: r.ok, blocking: (parse(r.blocking, {}) || {}).plan || [], site: parse(r.site_plan, null),
+                                                                        attempts: (si.attempts || []).length, final: si.final || null, updated: r.updated }; });
+  out.epochAudits = await q("SELECT eid, via, state, audit_match, digest_match, audit_sent_at, digest_sent_at, updated FROM policy_epoch_audit ORDER BY eid", [], "policy_epoch_audit");
   const push = await meta("policy_meta", "cfg");
   out.push = push ? { age_s: push.at ? Math.round(Date.now() / 1000 - Number(push.at)) : null, bot_version: push.bot_version || "",
                       flags: push.flags || {}, hour: (push.consts || {}).VAULT_EPOCH_UTC_HOUR } : null;
@@ -156,6 +168,13 @@ async function gather(opts = {}) {
   const ccfg = await meta("capital_meta", "cfg");
   const wf = ccfg && Array.isArray(ccfg.waterfall) ? ccfg.waterfall.slice().sort((a, b) => Number(a.boundary || 0) - Number(b.boundary || 0)) : [];
   out.lastW = wf.length ? wf[wf.length - 1] : null;
+  // PO-4: once the treasury engine is live, the weekly records are the site's (policy_runs; capital/vaults.js wfView)
+  out.readers = out.engines.treasury && out.engines.treasury.mode === "live" ? "policy_runs" : "capital push";
+  if (out.readers === "policy_runs") {
+    const r = (await q("SELECT period, state, via, done, boundary FROM policy_runs WHERE engine = 'treasury' AND period LIKE 'W%' AND state IN ('done', 'handed') ORDER BY boundary DESC, created DESC LIMIT 1",
+                       [], "policy_runs"))[0];
+    out.lastW = r ? { epoch: r.period, state: "done", via: r.via, done: r.done ? Number(r.done) / 1000 : null, source: "policy_runs" } : null;
+  }
   // PO-2: the policy config store (cfgspec is a pure module - no database)
   const SPEC = require(path.join(__dirname, "..", "policy", "cfgspec"));
   out.features = {};
@@ -174,7 +193,7 @@ async function gather(opts = {}) {
   out.dualDiffs = await q("SELECT day, consumer, key, push, site, n FROM policy_cfg_dualread WHERE day >= ? ORDER BY last_ts DESC LIMIT 20", [since], "policy_cfg_dualread");
   // review of PO-2: the evidence window (every day in it must carry its evidence)
   const ev = evidenceDays(opts.since);
-  out.evidence = { from: ev.from, today: ev.today, days: ev.days,
+  out.evidence = { from: ev.from, today: ev.today, days: ev.days, since: opts.since || null,
                    mirror: Object.fromEntries([...ev.days, ev.today].map((d) => [d, days[d] || null])),
                    dual: await q("SELECT day, consumer, checks, diffs FROM policy_cfg_dualcheck WHERE day >= ? ORDER BY day, consumer", [ev.from], "policy_cfg_dualcheck") };
   return out;
@@ -201,7 +220,21 @@ function printStatus(s) {
   console.log(`owners   ${s.owners.join(", ") || "(none)"}`);
   for (const p of s.rolesPending) console.log(`pending  owner change ${p.login}: ${p.was || "none"} -> ${p.role || "none"} (${ago(p.updated)}) - confirm on /admin/roles#pending`);
   for (const c of s.claims) console.log(`claims   ${c.kind.padEnd(10)} ${c.n} unsettled, ${c.t} PAT, oldest ${c.oldest || "-"}`);
-  if (s.lastW) console.log(`last W   ${s.lastW.epoch} state=${s.lastW.state || "?"} done=${s.lastW.done ? new Date(Number(s.lastW.done) * 1000).toISOString().slice(0, 16) : "-"}`);
+  if (s.lastW) console.log(`last W   ${s.lastW.epoch} state=${s.lastW.state || "?"} done=${s.lastW.done ? new Date(Number(s.lastW.done) * 1000).toISOString().slice(0, 16) : "-"}${s.lastW.source ? " (policy_runs, via " + s.lastW.via + ")" : ""}`);
+  // PO-4: the derived dual read of the last 7 days and the weekly audits
+  const fmtN = (n) => (n === null || n === undefined ? "?" : Number(n).toLocaleString("en-US"));
+  for (const d of (s.derived || []).slice(-7)) {
+    const v = d.site || {};
+    const t = v.targets || {};
+    console.log(`derived  ${d.period} ${d.ok === null || d.ok === undefined ? "pending" : Number(d.ok) ? "clean" : "NOT clean"} (bank ${fmtN(t.bank)} · house ${fmtN(t.house)} · mm ${fmtN(t.mm)} · fl_room ${fmtN(v.fl_room)}) attempts ${d.attempts}` +
+                (d.ok !== null && d.ok !== undefined && Number(d.ok) === 0 ? ` - ${(d.blocking || []).slice(0, 3).join(" | ") || d.final || "?"}` : ""));
+  }
+  const mk = (m, pending) => (m === null || m === undefined ? (pending ? "pending" : "-") : Number(m) ? "✓" : "✗");
+  for (const a of (s.epochAudits || []).slice(-4)) {
+    const pend = a.state !== "final";
+    console.log(`audit    ${a.eid} ${a.via}: audit = Pepe's ${a.via === "shadow" ? mk(a.audit_match, pend) : "-"} · digest = Pepe's ${a.via === "shadow" ? mk(a.digest_match, pend) : "-"}` +
+                (a.via === "site" ? ` · sent: audit ${a.audit_sent_at ? ago(a.audit_sent_at) : "no"}, digest ${a.digest_sent_at ? ago(a.digest_sent_at) : "no"}` : ""));
+  }
   console.log(`stashes  ${s.closedNoAccount.length} closed stash(es) with no account to pay${s.closedNoAccount.length ? ": " + s.closedNoAccount.map((x) => `${x.id} (${x.owner})`).join(", ") : ""}`);
   for (const r of s.refusedWf) console.log(`refused  ${r.key} (stash ${r.stash_id || "?"}, ${ago(r.ts)}): ${(parse(r.result, {}) || {}).code || (parse(r.result, {}) || {}).error || "?"}`);
   for (const [f, r] of Object.entries(s.features)) {
@@ -250,7 +283,8 @@ function preflight(s) {
   add(unclean.length ? "WARN" : "PASS", "shadow periods clean (14 days, D-15)",
       unclean.length ? unclean.slice(-12).map((x) => `${x.engine}:${x.period}${x.boundary_ts == null ? " (no boundary snapshot)" : ""}`).join(", ")
                      : `${s.shadow14.filter((x) => Number(x.reported)).length} compared, all clean`);
-  add("INFO", "last W record", s.lastW ? `${s.lastW.epoch} ${s.lastW.state || "?"} (notified / audit / digest_sent: Pepe's half)` : "none pushed");
+  add("INFO", "last W record", s.lastW ? `${s.lastW.epoch} ${s.lastW.state || "?"}${s.lastW.source ? " (policy_runs)" : " (notified / audit / digest_sent: Pepe's half)"}` : "none pushed");
+  for (const r of derivedChecks(s)) add(r.level, r.check, r.detail);
   add("INFO", "Pepe's half", "!econ policy status: pvault unsure/outbox, corrections unsure/paying, pools outbox/uncertain/inbox, policy outbox + dead letters, capital outbox, the last W record");
   // PO-2: the config store
   if (!s.cfg.store) add("FAIL", "config store", "policy_cfg isn't there - a site before PO-2");
@@ -261,6 +295,50 @@ function preflight(s) {
   const returning = Object.entries(s.features).filter(([, r]) => r.return_sha);
   add(returning.length ? "FAIL" : "PASS", "no feature being handed back", returning.map(([f]) => f).join(", ") || "none");
   for (const r of evidenceChecks(s)) add(r.level, r.check, r.detail);
+  return out;
+}
+/** PO-4: the derived dual read + the weekly shadow audit (H2a gate 5: "PO-4's derived dual read clean on a Monday and the shadow
+ *  audit = Pepe's"). -> [{level, check, detail}] */
+function derivedChecks(s, now = Date.now()) {
+  const out = [];
+  const add = (level, check, detail) => out.push({ level, check, detail });
+  const rows = (s.derived || []).filter((r) => /^D\d{4}-\d{2}-\d{2}$/.test(String(r.period)));      // the real days (a tagged rehearsal aside)
+  const yesterday = utcDay(now - DAY_MS);
+  if (!rows.length) add("INFO", "derived dual read recorded every day", "not running yet (no shadow:derived row)");
+  else {
+    const since = s.evidence && s.evidence.since ? s.evidence.since : null;
+    let from = since && /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : rows[0].period.slice(1);
+    const have = new Set(rows.map((r) => r.period.slice(1)));
+    const days = [];
+    for (let t = Date.parse(from + "T00:00:00Z"); utcDay(t) <= yesterday && days.length < 120; t += DAY_MS) days.push(utcDay(t));
+    const missing = days.filter((d) => !have.has(d));
+    const span = days.length ? `${days[0]}..${days[days.length - 1]}` : `(from ${from})`;
+    add(missing.length ? "FAIL" : days.length ? "PASS" : "INFO", `derived dual read recorded every day ${span}`,
+        missing.length ? `no row: ${missing.slice(0, 14).join(", ")}${missing.length > 14 ? ` (+${missing.length - 14})` : ""}` : days.length ? `${days.length} day(s)` : "no complete day yet");
+    const fin = rows.filter((r) => r.ok !== null && r.ok !== undefined);
+    if (!fin.length) add("INFO", "derived dual read clean", "no final row yet");
+    else {
+      const last = fin[fin.length - 1];
+      if (!Number(last.ok)) add("FAIL", `derived dual read clean since -`, `${last.period} not clean: ${(last.blocking || []).slice(0, 6).join(" | ") || last.final || "?"}`);
+      else {
+        let i = fin.length - 1;
+        while (i > 0 && Number(fin[i - 1].ok)) i--;
+        const streak = fin.slice(i);
+        const mondays = streak.map((r) => r.period.slice(1)).filter((d) => new Date(d + "T00:00:00Z").getUTCDay() === 1);
+        add("PASS", `derived dual read clean since ${streak[0].period.slice(1)}`, `${streak.length} day(s) in a row, Mondays: ${mondays.join(", ") || "none yet"}`);
+      }
+    }
+  }
+  const sh = (s.epochAudits || []).filter((a) => a.via === "shadow");
+  if (!sh.length) add("INFO", "shadow audit = Pepe's", "no shadow audit yet (it runs 10 min after Pepe settles a week)");
+  else {
+    const a = sh[sh.length - 1];
+    const am = a.audit_match, dm = a.digest_match;
+    const is = (m, v) => m !== null && m !== undefined && Number(m) === v;          // null = not compared yet
+    const lvl = is(am, 0) || is(dm, 0) ? "FAIL" : is(am, 1) && is(dm, 1) && a.state === "final" ? "PASS" : "WARN";
+    add(lvl, `shadow audit = Pepe's (${a.eid})`, `audit ${am === null || am === undefined ? "pending" : Number(am) ? "= Pepe's" : "differs"} · digest ${dm === null || dm === undefined ? "pending" : Number(dm) ? "= Pepe's" : "differs"} (${a.state})`);
+  }
+  add("INFO", "staking readers", s.readers === "policy_runs" ? "policy_runs (the treasury runs on the site)" : "Pepe's capital push (the treasury isn't live here)");
   return out;
 }
 /** Review of PO-2: the H1 evidence gates (plan section 4) - no evidence is a FAIL, never a PASS. -> [{level, check, detail}] */
@@ -382,4 +460,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error(e.message); process.exit(1); });
-module.exports = { gather, preflight, printStatus, evidenceChecks, evidenceDays, versionOf, siteVersion };
+module.exports = { gather, preflight, printStatus, evidenceChecks, evidenceDays, versionOf, siteVersion, derivedChecks };

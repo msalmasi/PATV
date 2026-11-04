@@ -551,3 +551,98 @@ What changed in Pepe's half, and what the H1 owner needs to know:
   seconds (S2 and S4 are killed).
 - **The shared contract fixture** `policycfg-contract.json` is regenerated (its pushes, rollback and export carry the new
   `skip`) and re-pinned in both repos.
+
+### 14.7 PO-4: the derived state, the weekly audit and digest, the readers on `policy_runs` (shadow; 1.99??)
+
+PO-4 moves no PAT and changes no live decision. It derives what Pepe still pushes, compares it with his push once a day, audits
+his settled week the way he does, and gets the staking readers ready to read the site's own records after H2a. Nothing reads a
+derived value for a decision until H2a: the loans desk's `cfgAge() > 7200` refusals (capital/reserve.js) and the vaults' two
+(capital/vaults.js) stay as they are.
+
+**What is compared, and when (the derived dual read, policy/scheduler.js `derivedPass`).**
+- Pepe's copy: his capital push as stored (`capital_meta` `cfg`): `targets` (bank / house / mm), `fl_room`, `flash.room`,
+  `credit` (both sides through credit.js `cleanWeights`) and `flows`. While the funding sync is at most 10 minutes old, its
+  `monetary.fedloan_room` and `week_start` too; otherwise the row says `funding: "stale - not compared"`.
+- The site's copy: policy/derived.js `derive(gather(push.at))`, from the site's own tables at Pepe's push instant. The settings
+  come from `policy_cfg` (site-owned since H1), the two v1 keys from the config snapshot, and only the loan terms
+  (`rloan_base`, `rloan_per_level`) from capital/core `cfg`. The capital book gives the Bank's cash and NAV and the Market maker's
+  seeds. The bank-lent samples are the `econ_treasury` doc plus the site's `bank_lent` effects. The loans come from the Fed's own
+  journal (`fed_records`). `since` is the book's newest cut-off. It never reads a target, `fl_room`, `credit` or `flows` from a
+  push.
+- When: once a day per policy day `D<date>`, from 04:30 UTC and after that day's capital cut-off, on a push not used before,
+  received after that moment and at most 600 s old. Pepe pushes every 300 s, so the first attempt normally lands by about 04:35.
+- A tagged tick (`/api/policy/admin/tick` with `tag`) writes `D<date>-<tag>` and skips the cut-off condition, because the capital
+  cut-off runs on the real clock. With a test clock set, an untagged pass writes nothing.
+
+**The flows whitelist** (the one new `WHITELIST` entry: plan / derived / derived / `flows`). Pepe's `flows` comes from his own vault
+flow ledger. That ledger holds only the moves he makes himself, tagged with flow names or his caller's frame name, and is mostly
+`{}`. The site rebuilds it best-effort (`siteLedger`), but the cut-off only copies it into the epoch record for /staking, and no
+PAT path reads it. `test/policy-derived.test.js: flows is display-only` proves this two ways: a source scan, and two cut-offs whose
+flows differ writing the same money rows. So a flows difference is excused, and every other difference blocks.
+
+**When a row is final** (policy_sims `shadow:derived:<D>`, mode `shadow`, engine `derived`, the shadow-report shape: site_inputs
+{asof, push_at, fp, the inputs summary, funding, attempts}, site_plan, pepe_plan, total_diff, whitelisted / blocking {plan},
+truncated, ok; boundary_ts = the push's time).
+- A clean attempt is final with `ok = 1`.
+- The same blocking list AND the same site fingerprint (sha256 of the site's values + inputs) twice in a row is final with
+  `ok = 0` and `final: "stable difference"`.
+- Any other unclean attempt is retried on the next fresh push, at most 24 a day. A gather error (e.g. `E_CFG_MISSING`) is an
+  unclean attempt with no fingerprint, so it is never "stable".
+- An unclean attempt whose fingerprint differs from the final clean one is noted `state moved between push and read`.
+- At the day's end the next day's first pass closes it: `ok = 0` with `final: "no clean attempt by the day's end"`, or
+  `"no fresh capital push"` when nothing was compared all day.
+- A final row is never rewritten. `capital_meta` `derived` keeps the last attempt's values for display.
+
+**The weekly audit and digest (policy/digest.js, table `policy_epoch_audit`).**
+- SHADOW (now, `via = shadow`): from 10 minutes after Pepe's push says the week is done (`wf_settled`), the site rebuilds his
+  record from its own rows:
+  - his plan and inputs: policy_sims `shadow:treasury:<eid>`;
+  - the legs that landed: stash / pool moves `<tid>:in`, House `vl:<tid>:in`;
+  - the refused stash legs: a `refused` stash move plus its `<tid>:back`;
+  - the notices: inbox / inbox_pending `wf:<eid>:s<id>`;
+  - the track: engines.trackOf on his inputs.
+
+  It then renders the audit notice and digest Pepe would send and compares them with his own rows, `wf-audit:<eid>` and
+  `wf-digest:<eid>`. The audit matches when the title is exact and the problems are equal as a multiset, with a cut last item
+  compared as a prefix. The digest matches when the text is exact after his trailing replay-audit line is split off. The row is
+  final once both of his rows are seen, or 2 hours after his done (a row still missing means he sent none). It sends nothing.
+  Pepe's P3.1 sums (`conserved`, `pools_before/after`) are not pushed, so they are `na`. They are info only and not in his notice.
+- LIVE (dormant until the treasury engine runs here; the first one is Mon 11-23): after `runTreasuryEpoch` commits, the audit
+  notice (problems only) and the digest (when `track.pool > 0`) go to every Pepe-owner account's inbox. They carry Pepe's title
+  and text, link /admin/economy, and refs `wf-audit:<eid>` / `wf-digest:<eid>`, plus `opsalerts` source `staking-digest`. Each
+  is sent once, claimed through `audit_sent_at` / `digest_sent_at`. The scheduler retries a site-run week without them for 7
+  days. The epoch's result also carries `p31 {before, after}`: the P3.1 base read before and after the legs, equal when
+  conserved. The replay-audit line stays Pepe's until PO-8 (the site's digest has none).
+
+**Readers on `policy_runs`** (capital/vaults.js `wfView` / `publicRecord`). While the treasury engine isn't live, every reader gets
+Pepe's push object unchanged: lateMonday, publish (/staking's list, staking_state), lastSettled / patDaysNow, and capital/watch
+weekly / trackCap / adminData. Once it is live they get the treasury's weekly rows of `policy_runs` instead:
+- a site-run row is rendered in Pepe's `_tr_public_records` shape;
+- a handed row is the push row that the cutover now keeps (`result.public`, `done_s`);
+- a tagged run is dropped from the list but counted by lastSettled.
+
+This works with no capital push at all.
+
+**The H2a gate-5 reading (Mon 11-09, or 11-16).**
+- `node tools/policy-backend.js preflight` should show these two lines PASS:
+  - "derived dual read clean since <day>", with "N days in a row, Mondays: ..." including the Monday;
+  - "shadow audit = Pepe's (W2026-11-09)".
+- `sqlite3 -readonly myapp.db "SELECT key, ok, blocking FROM policy_sims WHERE engine='derived' ORDER BY period"`
+- `sqlite3 -readonly myapp.db "SELECT eid, via, audit_match, digest_match FROM policy_epoch_audit"`
+
+"Recorded every day" must PASS from the first row. The engines' "shadow periods clean" line counts only treasury, monetary and
+burn.
+
+**Staging: a test-clock Monday** (the first real Monday comes after the prod deadline). The site runs PO-4 and PepeBeta is
+unchanged.
+1. Clear the clock: `POST /api/policy/admin/test-clock {at: null}`. The next real 04:00Z, then 04:35Z and one capital push, gives
+   `shadow:derived:D<date>` with ok = 1.
+2. Rehearsal tag `p4a`:
+   1. `POST /api/policy/admin/test-clock {at: <Mon 2026-11-09 04:06Z>}`.
+   2. PepeBeta: `C:\PATV\policy-inject.json` `{"action": "run", "engine": "epoch", "at": <Mon 04:05Z>, "tag": "p4a"}`, then wait
+      for `policy-inject.result.json` ok. That runs the real legs, the boundary handshake, his report, notices, audit and digest.
+   3. `POST /api/policy/admin/tick {at: <Mon 04:31Z>, tag: "p4a"}`.
+   4. After 10 minutes or more (his next capital push and his notices), tick again.
+   5. Expect `shadow:derived:D2026-11-09-p4a` ok = 1 and `policy_epoch_audit` `W2026-11-09-p4a` via shadow with audit_match = 1
+      and digest_match = 1. Both sides show the same "legs took N min" problem, because the run's `at` is simulated.
+3. Clear the clock again.
