@@ -3,8 +3,11 @@
     account.ts rule; never patv-device) - then the marker. A failed or unfinished delete (or a refused databases()) keeps the
     marker, so the next signed-out page tries again; a blocked delete counts only once it succeeds. No databases() (Firefox
     before 126): nothing to list, the marker goes. The marker's value is never read (it is always "1"). Static: nothing
-    from the request is printed here. ES5, no widget. %>
+    from the request is printed here. ES5, no widget.
+    1.99?? dockpop: first, every open Room Dock window of this browser is told to re-check who is signed in ({t: 'session'} on
+    'patv-dock', public/js/dock-link.js - no data): a pad's chat in its own window closes at once instead of after its long-poll. %>
 <script>(function () {
+  try { var m = { v: 1, t: 'session' }; if (window.BroadcastChannel) { var c = new BroadcastChannel('patv-dock'); c.postMessage(m); c.close(); } else { localStorage.setItem('patv.dock.msg', JSON.stringify(m)); localStorage.removeItem('patv.dock.msg'); } } catch (e) {}
   try {
     if (!/(?:^|;\s*)patv_chat_sweep=[^;]/.test(document.cookie || '')) return;
     var ACCT = /^patv-chat:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

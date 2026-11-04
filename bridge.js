@@ -2036,8 +2036,13 @@ function register(app, { isBotToken, addUser }) {
     const rs = typeof req.query.rs === "string" && /^\d{1,16}$/.test(req.query.rs) ? Number(req.query.rs) : null;
     // 1.99ajd roompm: ?rpm=<the last private answer the page has> (pad-roompm.js) - this viewer's own private answers on this pad
     const rpm = typeof req.query.rpm === "string" && /^\d{1,16}$/.test(req.query.rpm) ? Number(req.query.rpm) : null;
+    // 1.99?? dockpop (owner P1): ?pop=1 - the pad's chat in its own window (/p/:slug/chat): no mic-stage program (it has no stage - a
+    // cheaper answer) and, signed in, the viewer tag `vt` (roompm.tag) the window compares - another account's answer under an open
+    // window wipes it (a shared computer, a sign-out or an account switch in another tab). Every other caller's answer is unchanged
+    const pop = req.query.pop === "1";
     const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1",
-                               { viewer: signed ? req.user : null, jc, rs, rpm, program: true, padPage });
+                               { viewer: signed ? req.user : null, jc, rs, rpm, program: !pop, padPage });
+    if (pop && signed && !out.reinit) out.vt = require("./roompm").tag(req.user.userId);
     res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     res.json(lp ? Object.assign(out, { lp: true }) : out);
   });
@@ -2184,6 +2189,61 @@ function register(app, { isBotToken, addUser }) {
   // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header
   // (follow, owner, p/<slug>), the stage + schedule, the live Camfrog room when one backs it (chat, people,
   // mic, DJ booth) and the pad's feed. Any of a pad's slugs works; a room id redirects to the slug.
+  // 1.99?? dockpop (owner P1: "have chat persist as you navigate the site ... playing holdem and having chat on the side"): the pad's
+  // chat in its OWN window - the Room Dock's chat card only (room.ejs chatOnly), opened from the pad's / the homepage's chat ⋯ and kept
+  // open while the main tab goes anywhere. Only where the pad page's Live chat is: a bridged Camfrog pad that is live here, its bridge
+  // perk, this viewer's members-tier access (padaccess.full: the 18+ gate included) and the Room Dock for this viewer (paddock: 'staff'
+  // = staff only). Anything else goes to the pad page, which renders the right gate. The lines, room PM rows, veils, Reveal, presence
+  // (?pad=1: this IS the pad's live chat) and every send rule are the pad page's own, checked again by each route. Headers: never
+  // cached (rows are per viewer), never indexed, never framed (it has a composer and money actions - pad pages send no frame header).
+  app.get("/p/:slug/chat", addUser, async (req, res) => {
+    res.set({ "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow, noarchive", "X-Frame-Options": "DENY",
+              "Content-Security-Policy": "frame-ancestors 'none'", "Referrer-Policy": "same-origin" });
+    await load();
+    const signedIn = !!(req.user && req.user.userId);
+    const reg = require("./rooms"), pads = require("./pads");
+    const raw = String(req.params.slug || "").slice(0, 128);
+    const R = bySlug(raw);
+    const info = R ? await reg.get(R.id).catch(() => null) : await require("./roomsweb").resolveRoom(raw).catch(() => null);
+    const slug = info ? pads.padSlug(info) : R ? R.slug : raw.toLowerCase();
+    const toPad = () => res.redirect(302, "/p/" + encodeURIComponent(slug));
+    const live = R && rooms.get(R.id) === R ? R : null;           // (a registered pad Pepe isn't bridging has no live chat)
+    if (!live || live.offline) return toPad();
+    const platform = (info && info.platform) || reg.platformOf(live.id);
+    if (platform !== "camfrog" || !bridgeOk(live.id)) return toPad();
+    const PA = require("./padaccess");
+    await PA.init();
+    if (!PA.full(req.user, live.id) || PA.adultGate(req.user, live.id) !== "ok") return toPad();
+    if (!require("./paddock").viewerOn(req.user)) return toPad();
+    let linked = false, login = null;
+    if (signedIn) {
+      try { login = ((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername || null; } catch (e) { login = null; }
+      linked = !!login;
+      if (login) require("./padmod").noteViewer(live.id, login);
+    }
+    const title = (info && info.title) || live.name;
+    const manage = await reg.canManage(req.user, live.id).catch(() => false);
+    const initial = await liveView(live, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null, true,
+                                   { viewer: signedIn ? req.user : null, padPage: true, rpm: 0, program: false });
+    res.render("room", {
+      chatOnly: true,
+      user: req.user ? req.user.username : null, signedIn, linked, liveOpen: true, adultGate: "ok",
+      access: { level: PA.levelOf(live.id), info: PA.INFO[PA.levelOf(live.id)] },
+      onairAdmin: SP.can(req.user, "onair.operate"),
+      padDockOn: true,
+      vt: signedIn ? require("./roompm").tag(req.user.userId) : null,
+      avsyncOn: require("./avsync").viewerOn(req.user),
+      acctActor: !!(signedIn && !linked && require("./actorcap").on()),
+      clipAcct: !!(signedIn && !linked && (() => { try { return require("./cliplink").accountOk(live.id); } catch (e) { return false; } })()),
+      room: { id: live.id, name: title, slug, count: live.count, live: isLive(live), topic: live.topic ? await require("./chatlogview").redactLoaded(live.topic) : "",
+              bridged: true, siteOnly: false, platform, description: info ? info.description : "", banner: info ? info.banner : "",
+              owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
+              house: !!(info && info.house), camfrogName: live.name || (info && info.id), adult: !!(info && info.adult), bridgeLocked: false },
+      initial, manage,
+      dms: reg.hasRoute(app, "/messages"),
+    });
+  });
+
   app.get("/p/:slug", addUser, async (req, res) => {
     await load();
     const signedIn = !!(req.user && req.user.userId);
@@ -2277,6 +2337,7 @@ function register(app, { isBotToken, addUser }) {
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       padDockOn: require("./paddock").viewerOn(req.user),
+      vt: signedIn ? require("./roompm").tag(req.user.userId) : null,   // 1.99?? dockpop: the viewer tag the Dock's windows compare (dock-link.js)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       // 1.99aiq cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)

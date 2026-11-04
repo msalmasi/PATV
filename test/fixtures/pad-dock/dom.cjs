@@ -100,11 +100,24 @@ function harness(extra={}){
     openCam:who=>calls.cam.push(who),download:{items:()=>[{id:'dl',label:'⬇ Download chat log…'}],run:id=>calls.dl.push(id)}};
   Object.assign(opts,extra.opts||{});win.PATVRoom={tipModal:o=>calls.tip.push(o)};win.PATVChipFit={run:()=>calls.fit++};if(extra.picker)win.PATVPadPicker=extra.picker;
   let pipDoc,pipWin,resolvePip;if(extra.pip){win.documentPictureInPicture={requestWindow:()=>{pipDoc=new Document();pipWin=new Target();Object.assign(pipWin,{document:pipDoc,closed:false,close(){if(this.closed)return;this.closed=true;this.dispatchEvent(new Event('pagehide'));}});pipDoc.defaultView=pipWin;return extra.deferPiP?new Promise(resolve=>{resolvePip=()=>resolve(pipWin);}):Promise.resolve(pipWin);}};}
-  const timers=new Map();let seq=0;const sandbox={window:win,document:doc,setTimeout:f=>{timers.set(++seq,f);return seq;},clearTimeout:i=>timers.delete(i),Promise,JSON};vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../../public/js/pad-dock.js'),'utf8'),sandbox);
+  // 1.99?? dockpop: the Dock's windows - a fake BroadcastChannel on a shared bus (extra.bus: two harnesses = two windows), a stubbed
+  // window.open (extra.open: 'blocked' returns null), the pointer media query (extra.fine), an optional MutationObserver (extra.mo)
+  if(extra.bus){const bus=extra.bus;win.BroadcastChannel=class extends Target{constructor(name){super();this.name=name;this.closed=false;bus.members.add(this);}postMessage(m){bus.sent.push({from:this,m:JSON.parse(JSON.stringify(m))});bus.queue.push({from:this,m:JSON.parse(JSON.stringify(m))});}close(){this.closed=true;bus.members.delete(this);}};}
+  if(extra.fine!==undefined){win.matchMedia=q=>({matches:/hover: hover/.test(q)?!!extra.fine:false});win.innerWidth=extra.width||1440;}
+  if(extra.open){calls.open=[];win.open=(url,name,features)=>{calls.open.push({url,name,features});if(extra.open==='blocked')return null;const w=new Target();Object.assign(w,{closed:false,focus(){calls.wfocus=(calls.wfocus||0)+1;},close(){this.closed=true;}});calls.win=w;return w;};}
+  const mos=[];if(extra.mo){win.MutationObserver=class{constructor(f){this.f=f;this.t=null;mos.push(this);}observe(t){this.t=t;}disconnect(){this.t=null;}};}
+  if(extra.audio){Object.assign(opts.audio,extra.audio);}
+  if(extra.closeWin){win.close=()=>{calls.closed=(calls.closed||0)+1;win.closed=true;};}
+  const timers=new Map();let seq=0;const sandbox={window:win,document:doc,setTimeout:f=>{timers.set(++seq,f);return seq;},clearTimeout:i=>timers.delete(i),Promise,JSON,Date};
+  if(extra.bus)vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../../public/js/dock-link.js'),'utf8'),sandbox);
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../../public/js/pad-dock.js'),'utf8'),sandbox);
   const controller=win.PATVPadDock.init(opts);const first=F.initial();if(extra.data)extra.data(first);controller.update(first);controller.mic(first.mic);
   const button=(label,within=doc)=>{const b=within.querySelectorAll('button,a').find(n=>n.getAttribute('aria-label')===label||n.textContent===label);if(!b)throw Error('No button '+label);return b;};
   // open one of the Dock's menus by its opener's label and click an item in it
   const menuPick=(opener,item,within=doc)=>{button(opener,within).click();const m=within.querySelector('.rmd-menu');if(!m)throw Error('No menu for '+opener);button(item,m).click();return m;};
-  return{doc,win,root,header,hero,tabsNav,panel,stage,strip,tile,chat,chatH,feed,compose,input,send,ptt,sb,side,ppl,story,controller,calls,make,timers,Event,button,menuPick,resolvePip(){resolvePip();},get pipDoc(){return pipDoc;},get pipWin(){return pipWin;},tick(){for(const [i,f]of [...timers]){timers.delete(i);f();}}};
+  return{doc,win,root,header,hero,tabsNav,panel,stage,strip,tile,chat,chatH,feed,compose,input,send,ptt,sb,side,ppl,story,controller,calls,make,timers,Event,button,menuPick,resolvePip(){resolvePip();},get pipDoc(){return pipDoc;},get pipWin(){return pipWin;},tick(){for(const [i,f]of [...timers]){timers.delete(i);f();}},
+    mutate(target){for(const m of mos)if(m.t&&(m.t===target||m.t.contains&&m.t.contains(target)))m.f([]);}};
 }
-module.exports={harness,Event,Document,Element};
+/** 1.99?? dockpop: a shared fake BroadcastChannel bus - flush() delivers what was posted (each message to every OTHER channel of its name) */
+function bus(){const b={members:new Set(),queue:[],sent:[],flush(){let n=0;while(b.queue.length&&n<500){n++;const {from,m}=b.queue.shift();for(const c of [...b.members])if(c!==from&&c.name===from.name&&!c.closed)c.dispatchEvent(new Event('message',{data:JSON.parse(JSON.stringify(m))}));}return n;},types(){return b.sent.map(x=>x.m.t);}};return b;}
+module.exports={harness,bus,Event,Document,Element};

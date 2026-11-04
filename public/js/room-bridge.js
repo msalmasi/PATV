@@ -350,9 +350,11 @@
           rtcClose();
           startMp3();
         });
+        notify();       // 1.99?? dockpop: a start is news too (the Dock tells its other windows; the Top Pads 🎧 row lights)
         return;
       }
       startMp3();
+      notify();
     }
     function startMp3() {
       clearInterval(waitTimer); startedAt = 0;
@@ -485,12 +487,21 @@
         if (cur !== s) rtcHint = null;                 // another pad: the site's ticket decides
         cur = s; curName = s === home ? null : (name || s);
         box.classList.remove('hide'); enable(true); play.title = '';
-        start();
+        start();                                       // (1.99?? dockpop: start() tells the listeners now)
         if (curName) setState(_t('js.pad.audio.connecting_to', 'connecting to {name}…', { name: curName }), 'wait');
-        notify();
         return true;
       },
       playingSlug: function () { return playing ? cur : null; },
+      // 1.99?? dockpop: the chat window and the pad tab / homepage hand the room audio between them - pause() stops it without
+      // forgetting that this viewer listens (patvRoomAudio stays 1: "▶ to resume listening"), resume() plays this player's own pad
+      // again when it is idle and the relay is on (-> whether it started), isPlaying() asks
+      pause: function () { if (!playing) return false; stop(); return true; },
+      resume: function () {
+        if (playing || !available) return false;
+        if (cur !== home) { cur = home; curName = null; }
+        start(); return true;
+      },
+      isPlaying: function () { return playing; },
       duck: function (on) { if (arguments.length) { duckOn = !!on; applyVolume(); } return duckOn; },
       setRecording: function (on) { recording = !!on; applyVolume(); },
       onChange: function (f) { listeners.push(f); },
@@ -609,7 +620,7 @@
         if (avatarOf && p.u) { try { var av = avatarOf(p.u); if (av) li.appendChild(av); } catch (e) { /* no picture */ } }
         var nm = el('span', 'rb-ac-n', p.name || p.value); li.appendChild(nm);
         if (p.login) li.appendChild(el('span', 'rb-ac-l', p.login));
-        if (p.tag) li.appendChild(el('span', 'rb-ac-t', p.tag));
+        if (p.tag) { var tg = el('span', 'rb-ac-t', p.tag); tg.title = p.tag; li.appendChild(tg); }   // (1.99?? dockpop: its full word when it shortens)
         li._pick = function () { takeName(p, c); };
         li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });
         list.appendChild(li); acItems.push(li);

@@ -17,7 +17,10 @@
   function shown(n) { return !!(n && n.isConnected && !n.hidden && !(n.classList && n.classList.contains('hide')) && !(n.closest && n.closest('[hidden]'))); }
   function fmtN(n) { return Number(n).toLocaleString('en-US'); }
   // 1.99ajc dockfu (owner decision 6): the controls are EMOJI icons; each button keeps its words as its accessible name and tooltip.
-  var IC = { hide: '🔽', full: '🖥️', pop: '🪟', back: '↩️', more: '⋯', down: '▾' };
+  // 1.99?? dockpop (owner: no icon with two meanings): 🪟 floats the chat in the page, ↗️ opens it in its own window, 🖼️ is the stage's
+  // picture-in-picture, 🔽 / 🔼 hide / show the stage, 🖥️ is fullscreen (one toggle), › opens a page (the homepage's pad chip)
+  var IC = { hide: '🔽', show: '🔼', full: '🖥️', float: '🪟', win: '↗️', pip: '🖼️', back: '↩️', more: '⋯', down: '▾', open: '›', min: '➖', max: '➕' };
+  var POP_GEO = 'patv.dock.popwin', ALIVE_MS = 5000, DEAD_MS = 15000, PENDING_MS = 6000, HANDOFF_MS = 3000;
   // 1.99ajf dockclean (owner point 17): the Apps sheet - the room's games and tools, each only when Pepe offers it here (d.room.cmds).
   // A tile puts the command into the composer (a trailing space where it takes a name / amount: the name autocomplete opens) and
   // never sends by itself.
@@ -38,9 +41,15 @@
     o = o || {};
     var root = o.root || D.querySelector('main.rm.rm-dock');
     if (!root) return null;
+    // 1.99?? dockpop: 'pad' (the pad page), 'popout' (the pad's chat in its own window, /p/<slug>/chat) or 'preview' (the homepage)
+    var mode = o.mode === 'popout' || o.mode === 'preview' ? o.mode : 'pad';
     var nodes = o.nodes || {}, dead = false, ready = false, data = null, holders = [], listeners = [];
     var stage, chat, strip, compose, side, panel, template, holderBox, extras, toolRow, ovTop, ovBot, srcHost, srcBox, snapBtn, clipBtn, playBtn, nowBox;
     var current = null, layer = null, pip = null, pipPending = false, popGeneration = 0, localCam = null, stageHidden = false;
+    // 1.99?? dockpop: the chat in its own window - popped (this page's chat card is hidden in place while a window for this pad and account
+    // is open), the window we opened (only while we hold it), the dock-link channel and its timers
+    var popped = false, popPending = false, popWin = null, link = null, lastAlive = 0, lastAudio = 0, tabSeen = 0, popBar = null;
+    var pendTimer = null, aliveTimer = null, handTimer = null, bringing = false, resumedInClick = false, gone_ = false;
     var autoTimer = null, toastTimer = null, observers = [], selected = null, stageRevision = 0, videoPipSource = null, overBar = false;
     var toolBtns = {}, peopleInput = null, infoMark = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null;
     var fullBtn = null, stageMoreBtn = null, showStageBtn = null;
@@ -94,7 +103,11 @@
       if (o.wake) o.wake();
       if (W.PATVChipFit && W.PATVChipFit.run) W.PATVChipFit.run();
       paintFull();
-      if (root) root.classList.toggle('rmd-chat-out', !!(current && current.kind === 'float'));
+      // (1.99?? dockpop: the stage takes the freed height while the chat floats or is in its own window; body.rmd-afloat keeps a person
+      // menu opened from the floating chat in its Dock look on Feed / About)
+      var afloat = !!(current && current.kind === 'float');
+      if (root) root.classList.toggle('rmd-chat-out', afloat || popped);
+      D.body.classList.toggle('rmd-afloat', afloat);
     }
     function stageFull() { return !!(current && current.kind === 'full' && stage && current.host.contains(stage)); }
     function paintFull() {
@@ -217,7 +230,10 @@
           var items = focusable(layer.box), at = items.indexOf(doc.activeElement); e.preventDefault();
           if (items.length) items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (at + (e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length].focus();
         }
-      } else if (e.key === 'Escape' && current && current.kind === 'float') { e.preventDefault(); redock(); }
+      } else if (e.key === 'Escape' && current && current.kind === 'float' && current.host.contains(doc.activeElement)) {
+        // (1.99?? dockpop: only from inside the float - an Escape anywhere else on Feed / About never pulls the chat back)
+        e.preventDefault(); floatBack();
+      }
     }
     function trap(e) {
       if (!layer || layer.host.ownerDocument !== e.currentTarget || foreignModal(e.currentTarget) || layer.host.contains(e.target) || overSheet(e.currentTarget, e.target)) return;
@@ -268,16 +284,17 @@
       var b = button(IC.back, 'redock', 'Bring it back', close || redock, 'ds-btn quiet sm', host.ownerDocument); b.setAttribute('data-rmd-back', '');
       v.appendChild(b); host.appendChild(v); return v;
     }
-    function drag(host, handle) {
+    function drag(host, handle, skip) {
       var start = null;
       function clamp() {
+        if (skip && skip()) return;
         var r = host.getBoundingClientRect(), maxX = Math.max(0, W.innerWidth - r.width), maxY = Math.max(58, W.innerHeight - r.height);
         var x = Math.max(0, Math.min(maxX, r.left)), y = Math.max(58, Math.min(maxY, r.top));
         host.style.insetInlineStart = (D.documentElement.dir === 'rtl' ? W.innerWidth - x - r.width : x) + 'px';
         host.style.insetBlockStart = y + 'px'; host.style.insetInlineEnd = 'auto'; host.style.insetBlockEnd = 'auto';
       }
       on(handle, 'pointerdown', function (e) {
-        if (e.button !== 0 || e.target.closest('button,a,input')) return;
+        if (e.button !== 0 || e.target.closest('button,a,input') || (skip && skip())) return;
         var r = host.getBoundingClientRect(); start = { x: e.clientX, y: e.clientY, left: r.left, top: r.top, width: r.width };
         if (handle.setPointerCapture) handle.setPointerCapture(e.pointerId); e.preventDefault();
       });
@@ -292,13 +309,50 @@
       // 1.99aiw review: the panel's window listener goes with the panel (redock), not one more per float
       return function () { W.removeEventListener('resize', clamp, false); listeners = listeners.filter(function (x) { return x[2] !== clamp; }); };
     }
+    // 1.99?? dockpop (owner P1): the floating chat stays over Feed and About (tabChanged no longer redocks it). Its bar:
+    // [⠿][💬 Chat + a new-lines dot, while minimized][…][➖ Minimize | ➕ Expand][↩️ Bring it back] - ↩️ on Feed / About also shows Live,
+    // the chat's docked place (it would vanish into the hidden panel with the audio still playing). Minimized it is the 44px bar alone:
+    // #rmChat stays in it (display: none), so the audio keeps playing and the lines keep coming, with no remount.
+    var floatMin = false;
+    function floatBack() {
+      var onLive = !panel || !panel.hidden; redock();
+      if (!onLive) { var lt = tabButton('live'); if (lt) lt.click(); }
+    }
     function floatChat() {
-      if (!chat) return; redock();
+      if (!chat || popped) return; redock();
       var host = el('section', 'rmd-float'); root.appendChild(host);
-      var head = viewbar(host, null, true); current = { kind: 'float', host: host, moves: [], focus: D.activeElement };
+      var head = el('div', 'rmd-viewbar'), g = el('span', 'rmd-grip', '⠿'); g.setAttribute('aria-hidden', 'true'); head.appendChild(g);
+      var title = el('span', 'rmd-float-t'), ti = el('span', 'ds-ic', '💬'); ti.setAttribute('aria-hidden', 'true'); title.appendChild(ti);
+      title.appendChild(el('span', 'rmd-float-tl', t('float_bar', 'Chat')));
+      var dot = el('span', 'rmd-float-dot'); dot.hidden = true; dot.setAttribute('aria-label', t('float_new', 'New lines')); dot.setAttribute('role', 'img'); title.appendChild(dot);
+      head.appendChild(title); head.appendChild(el('span', 'rmd-ov-gap'));
+      var minBtn = iconBtn(IC.min, 'float_min', 'Minimize', function () { setMin(!host.classList.contains('rmd-min')); }, 'ds-btn quiet sm rmd-float-min');
+      head.appendChild(minBtn);
+      var back = button(IC.back, 'redock', 'Bring it back', floatBack, 'ds-btn quiet sm'); back.setAttribute('data-rmd-back', ''); head.appendChild(back);
+      host.appendChild(head);
+      current = { kind: 'float', host: host, moves: [], focus: D.activeElement };
       var away = movable(chat, host, t('chat_away', 'Chat is in a floating window.')); away.mark.classList.add('rmd-ph-float');
       var awayBtn = away.mark.querySelector('button'); if (awayBtn) awayBtn.hidden = true;     // (the floating window's own ↩ is the one way back)
-      current.moves.push(away); current.cleanup = drag(host, head); changed();
+      current.moves.push(away);
+      var undrag = drag(host, head, function () { return host.classList.contains('rmd-min'); }), feedObs = null, wasEnd = true, saved = null;
+      var feedN = node('rmFeed'), scrollN = node('rmScroll');
+      if (feedN && W.MutationObserver) { feedObs = new W.MutationObserver(function () { if (host.classList.contains('rmd-min')) dot.hidden = false; }); feedObs.observe(feedN, { childList: true }); }
+      function setMin(on) {
+        on = !!on; floatMin = on;
+        if (on && scrollN) wasEnd = scrollN.scrollHeight - scrollN.scrollTop - scrollN.clientHeight < 80;
+        if (on) { saved = host.getAttribute('style'); host.removeAttribute('style'); }      // (minimized: the bar's own corner, pad-dock.css)
+        else if (saved != null) { host.setAttribute('style', saved); saved = null; }
+        host.classList.toggle('rmd-min', on);
+        var label = on ? t('float_max', 'Expand') : t('float_min', 'Minimize');
+        minBtn.querySelector('.ds-ic').textContent = on ? IC.max : IC.min; minBtn.querySelector('.rmd-label').textContent = label;
+        minBtn.title = label; minBtn.setAttribute('aria-label', label); minBtn.setAttribute('aria-expanded', String(!on));
+        if (!on) { dot.hidden = true; if (wasEnd && typeof o.toBottom === 'function') o.toBottom(); }
+        changed();
+      }
+      minBtn.setAttribute('aria-expanded', 'true');
+      current.cleanup = function () { undrag(); if (feedObs) feedObs.disconnect(); };
+      current.setMin = setMin;
+      if (floatMin) setMin(true); else changed();
     }
     function full(n) {
       redock(); if (!n) return;
@@ -320,17 +374,21 @@
         }
         toggle.querySelector('.rmd-label').textContent = overlay.hidden ? t('show_chat', 'Show chat') : t('hide_chat', 'Hide chat'); changed();
       });
-      toggle.setAttribute('aria-pressed', 'false'); head.appendChild(toggle); changed();
+      toggle.setAttribute('aria-pressed', 'false'); toggle.setAttribute('data-rmd-showchat', '');
+      if (popped || !chat) toggle.hidden = true;     // (1.99?? dockpop: the chat is in its own window - nothing to show here)
+      head.appendChild(toggle); changed();
       if (!host.requestFullscreen) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); return; }
       try { Promise.resolve(host.requestFullscreen()).catch(function () { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); }); }
       catch (e) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); }
     }
     function stageMedia() { return localCam ? localCam.host : stage; }
-    function pop(n, isChat) {
+    // 1.99?? dockpop: 🖼️ Picture-in-picture is the STAGE's only (Document PiP where the browser has it, else the video's own PiP for the
+    // pad's stream or Pepe's - never the 🎙 mic stage). The chat's Document PiP is gone: it closed with its opener, so it couldn't follow
+    // the viewer around the site - ↗️ Chat in its own window does (popWindow). A PiP survives Live / Feed / About; it closes on pagehide.
+    function pop(n) {
       if (!n || pipPending) return;
       redock();
       if (!W.documentPictureInPicture || !W.documentPictureInPicture.requestWindow) {
-        if (isChat) { floatChat(); return; }
         var sel = o.stage && o.stage.selection ? o.stage.selection() : null;
         var video = stage && stage.querySelector('video');
         if (!localCam && sel && !sel.embed && sel.stream !== 'mic' && !(o.stage && o.stage.view && o.stage.view() === 'mic') && video && video.requestPictureInPicture) {
@@ -339,7 +397,7 @@
           try { Promise.resolve(video.requestPictureInPicture()).then(function () {
             pipPending = false;
             var now = o.stage && o.stage.selection ? o.stage.selection() : selected;
-            if (dead || nativeGeneration !== popGeneration || nativeRevision !== stageRevision || nativeSource !== JSON.stringify(now) || localCam || panel && panel.hidden) {
+            if (dead || nativeGeneration !== popGeneration || nativeRevision !== stageRevision || nativeSource !== JSON.stringify(now) || localCam) {
               if (D.pictureInPictureElement === video && D.exitPictureInPicture) Promise.resolve(D.exitPictureInPicture()).catch(function () {});
               return;
             }
@@ -351,9 +409,9 @@
       }
       pipPending = true;
       var requestGeneration = ++popGeneration;
-      W.documentPictureInPicture.requestWindow({ width: isChat ? 520 : 760, height: isChat ? 680 : 520 }).then(function (win) {
+      W.documentPictureInPicture.requestWindow({ width: 760, height: 520 }).then(function (win) {
         pipPending = false;
-        if (dead || requestGeneration !== popGeneration || panel && panel.hidden) { win.close(); return; }
+        if (dead || requestGeneration !== popGeneration) { win.close(); return; }
         redock(); pip = win;
         var doc = win.document; doc.title = D.title; doc.documentElement.lang = D.documentElement.lang; doc.documentElement.dir = D.documentElement.dir;
         each(D.querySelectorAll('link[rel="stylesheet"],style'), function (s) {
@@ -364,7 +422,7 @@
         doc.body.appendChild(main); viewbar(main); attachDoc(doc);
         main.appendChild(el('p', 'rmd-surface-hint', t('pip_hint', 'More actions are available in the pad tab.'), doc));
         current = { kind: 'pip', host: main, moves: [], focus: D.activeElement };
-        current.moves.push(movable(n, main, isChat ? t('chat_pop', 'Chat is in a popped-out window.') : t('stage_pop', 'The player is in a popped-out window.')));
+        current.moves.push(movable(n, main, t('stage_pop', 'The player is in a popped-out window.')));
         on(win, 'pagehide', redock); on(doc, 'visibilitychange', changed); changed();
       }).catch(function () { pipPending = false; toast(t('pop_unavailable', 'Pop-out is unavailable for this player.')); });
     }
@@ -389,7 +447,7 @@
       var head = viewbar(host, returnCam);
       head.appendChild(iconBtn(IC.full, 'fullscreen', 'Fullscreen', function () { full(host); }));
       head.appendChild(iconBtn(IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true, true); }));
-      head.appendChild(iconBtn(IC.pop, 'pop_stage', 'Pop out player', function () { pop(host, false); }));
+      head.appendChild(iconBtn(IC.pip, 'pip_stage', 'Picture-in-picture', function () { pop(host); }));
       localCam = { host: host, move: movable(tile, host, t('cam_stage', 'This cam is on your stage.')) };
       // This placeholder returns the local swap rather than redocking an unrelated surface.
       var rb = localCam.move.mark.querySelector('button'); rb.replaceWith(button(IC.back, 'return_cam', 'Return cam to strip', returnCam));
@@ -452,7 +510,7 @@
     function narrow() { return !!(W.matchMedia && W.matchMedia('(max-width: 1023px)').matches); }
     function mic(list) {
       holders = Array.isArray(list) ? list : []; if (!holderBox || !o.person) return;
-      var max = narrow() ? 1 : 2;
+      var max = narrow() || mode !== 'pad' ? 1 : 2;      // (1.99?? dockpop: the homepage's and the window's chat cards are narrow)
       // 1.99aiw review: redraw only when the holders change - a rebuild restarted animated name styles and dropped keyboard focus
       var key = null;
       try { key = JSON.stringify(holders) + '|' + max + '|' + (o.signed ? 1 : 0) + (o.mod && o.mod.active && o.mod.active() ? 1 : 0); } catch (e) { key = null; }
@@ -666,9 +724,9 @@
     function openExtras(opener) {
       var box = menu(opener);
       var clip = node('rmClip'), cb = clip && clip.querySelector('button');
-      if (cb && !cb.hidden && !cb.disabled) menuItem(box, '✂️', 'clip', 'Clip this chat', function () { external(function () { cb.click(); }); });
+      if (cb && !cb.hidden && !cb.disabled) menuItem(box, '🎬', 'clip', 'Clip this chat', function () { external(function () { cb.click(); }); });
       var story = root.querySelector('.rm-story button.ss-add[data-pad]');
-      if (story && !inPip()) menuItem(box, '📸', 'story', 'Add to your story', function () { external(function () { story.click(); }); });
+      if (story && !inPip()) menuItem(box, '📲', 'story', 'Add to your story', function () { external(function () { story.click(); }); });
       if (o.relay && o.relay.getInput && data && data.room && data.room.cmds) menuItem(box, '❔', 'commands', 'Commands', function () { insertCmd('!', false); });
       finishMenu(box, opener);
     }
@@ -717,7 +775,11 @@
       infoMark.hidden = !s; infoMark.title = s; infoMark.setAttribute('aria-label', s || t('list_note', 'About this list'));
       try { infoMark.setAttribute('aria-description', s); } catch (e) { /* older engines */ }
       var n = node('rmPplN'); if (n) n.textContent = String(peopleCount());
-      if (pplBtn) { var c = pplBtn.querySelector('.rmd-count'); if (c) c.textContent = String(peopleCount()); pplBtn.setAttribute('aria-label', t('participants_n', 'In the room · {n}', { n: peopleCount() })); }
+      if (pplBtn) {
+        var c = pplBtn.querySelector('.rmd-count'); if (c) c.textContent = String(peopleCount()); pplBtn.setAttribute('aria-label', t('participants_n', 'In the room · {n}', { n: peopleCount() }));
+        // (1.99?? dockpop: the homepage's sign-in tease has no people to show)
+        if (mode === 'preview') pplBtn.hidden = !(data && Array.isArray(data.members) && data.members.length);
+      }
     }
 
     // ── the bottom audio bar (owner points 19, 24): [▶ / ❚❚] [the now zone] [🔊 · volume · 🎚️] ──
@@ -805,16 +867,20 @@
     }
     // ── the composer box (owner point 10): row 1 [＋][input][🎙️][Send], row 2 the tool row; the status line under the box ──
     function decorateComposer() {
-      if (!compose || !chat) return;
-      compose.classList.add('rmd-composer');
+      if (!chat) return;
       decorateAudio();
+      if (!compose) return;
+      compose.classList.add('rmd-composer');
       var input = o.relay && o.relay.getInput && o.relay.getInput();
-      var row = el('div', 'rmd-input-row');
+      var row = el('div', 'rmd-input-row' + (mode === 'preview' ? ' rmd-input-slim' : ''));
       if (input) {
         input.classList.add('ds-in'); var form = input.closest('form'), wrap = input.closest('.rb-say-in');
         var relayHost = node('rmRelay'); relayHost.parentNode.insertBefore(row, relayHost); row.appendChild(relayHost);
-        extras = iconBtn('＋', 'extras', 'Add to the chat', function () { if (layer && layer.opener === extras) { closeLayer(); return; } openExtras(extras); }, 'ds-btn ghost rmd-extras');
-        extras.setAttribute('aria-haspopup', 'menu'); extras.setAttribute('aria-expanded', 'false'); form.insertBefore(extras, wrap);
+        // (1.99?? dockpop P2: the homepage's composer is one row - [Message …][🎙️ Hold to talk][Send], no ＋ and no tool row)
+        if (mode !== 'preview') {
+          extras = iconBtn('＋', 'extras', 'Add to the chat', function () { if (layer && layer.opener === extras) { closeLayer(); return; } openExtras(extras); }, 'ds-btn ghost rmd-extras');
+          extras.setAttribute('aria-haspopup', 'menu'); extras.setAttribute('aria-expanded', 'false'); form.insertBefore(extras, wrap);
+        }
         var send = form.querySelector('.rb-send'); if (send) send.classList.add('ds-btn', 'primary');
         var hint = el('span', 'ds-sr-only', t('input_hint', 'Type ! for commands; Pepe relays your words into the room as you (web).')); hint.id = 'rmdInputHint'; row.appendChild(hint);
         input.setAttribute('aria-describedby', 'rmdInputHint');
@@ -824,7 +890,7 @@
       // box and still submits its form through the form attribute; Enter in the input submits as before)
       var sendBtn = input && input.closest('form') && input.closest('form').querySelector('.rb-send');
       if (sendBtn && ptt) { var sf = input.closest('form'); if (!sf.id) sf.id = 'rmdSayForm'; sendBtn.setAttribute('form', sf.id); row.insertBefore(sendBtn, ptt.nextSibling); }
-      if (!input && !ptt) return;
+      if ((!input && !ptt) || mode === 'preview') return;
       toolRow = el('div', 'rmd-tools'); toolRow.setAttribute('role', 'toolbar'); toolRow.setAttribute('aria-label', t('tools', 'Chat tools'));
       function tool(id, icon, key, label, fn) { var b = iconBtn(icon, key, label, function (x) { fn(x); }, 'ds-btn ghost rmd-tool'); b.setAttribute('data-rmd-tool', id); toolRow.appendChild(b); toolBtns[id] = b; return b; }
       tool('tip', '💸', 'tip', 'Tip', tip);
@@ -886,7 +952,7 @@
         var boost = node('rmBoostBtn'), boostLink = go.querySelector('.stage-acts a.sact.boost'), slots = node('rmSlotsTxt');
         if (here || book || boost || boostLink) menuGroup(box, 'g_stage', 'Stage');
         if (here) menuItem(box, '🎥', 'golive', 'Go live here', null, { href: here.getAttribute('href'), sub: txt(slots) });
-        if (book) menuItem(box, '📅', 'book', 'Book a slot', null, { href: book.getAttribute('href') });
+        if (book) menuItem(box, '🎫', 'book', 'Book a slot', null, { href: book.getAttribute('href') });
         if (boost && !inPip()) menuItem(box, '🚀', 'boost', 'Boost this pad…', function () { boostSheet(opener); }, { sub: shown(node('rmBoostTxt')) ? txt(node('rmBoostTxt')).replace(/^·\s*/, '') : '' });
         else if (boostLink) menuItem(box, '🚀', 'boost', 'Boost this pad…', null, { href: boostLink.getAttribute('href') });
       }
@@ -1049,27 +1115,43 @@
       var box = menu(opener, t('stage_menu', 'Stage options'));
       var ll = lowlat();
       if (ll) menuItem(box, '⚡', 'lowlat', 'Low latency', function () { ll.click(); }, { role: 'menuitemcheckbox', checked: ll.getAttribute('aria-pressed') === 'true', tip: ll.title });
-      menuItem(box, IC.pop, 'pop_stage', 'Pop out player', function () { pop(stageMedia(), false); });
+      menuItem(box, IC.pip, 'pip_stage', 'Picture-in-picture', function () { pop(stageMedia()); });
+      if (mode === 'preview') { previewItems(box); finishMenu(box, opener); return; }
       menuItem(box, IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true, true); });
       if (strip && strip.querySelector('.cs-tile')) menuItem(box, '📌', 'pins', 'Pinned cams', function () { pinsMenu(box, opener); }, { keep: true, sub: '▸' });
       var sched = node('rmSched'), upnext = node('rmGoLive') && node('rmGoLive').querySelector('.upnext');
-      if (sched || upnext) menuItem(box, '📅', 'schedule', 'Stage schedule…', function () { scheduleSheet(opener); });
+      if (sched || upnext) menuItem(box, '🗓️', 'schedule', 'Stage schedule…', function () { scheduleSheet(opener); });
       var plex = node('rmPlexQ'); if (plex && !plex.hidden) menuItem(box, '📼', 'plex', 'Plex queue & controls…', function () { external(function () { nodeSheet(t('plex', 'Plex queue & controls…').replace(/…$/, ''), plex, opener, 'plex'); }); });
       var mbtn = stage && stage.querySelector('.mf-mbtn'), clear = stage && stage.querySelector('.mf-clear'), rep = stage && stage.querySelector('.mf-rbtn');
       if (rep && !rep.hidden) menuItem(box, '⚑', 'mf_report', 'Report someone on the mic stage…', function () { external(function () { rep.click(); }); });
       if ((mbtn && !mbtn.hidden) || (clear && !clear.hidden)) menuGroup(box, 'g_managers', 'Managers');
-      if (mbtn && !mbtn.hidden) menuItem(box, '🎚️', 'mf_manage', 'Manage the mic stage…', function () { micPanel(opener, mbtn); });
+      if (mbtn && !mbtn.hidden) menuItem(box, '🎛️', 'mf_manage', 'Manage the mic stage…', function () { micPanel(opener, mbtn); });
       if (clear && !clear.hidden) menuItem(box, '🧹', 'mf_clear', 'Clear the stage', function () { external(function () { clear.click(); }); }, { disabled: clear.disabled });
-      var oab = root.querySelectorAll('.oab button[data-oab]');
-      if (oab.length) {
-        menuGroup(box, 'g_staff', 'Staff');
-        each(oab, function (b) {
-          var label = b.getAttribute('aria-label') || txt(b), what = b.getAttribute('data-oab');
-          var it = menuItem(box, what === 'play' ? '📺' : what === 'cut' ? '✂️' : '•', 'raw', label, function () { external(function () { b.click(); }); }, { disabled: b.disabled, tip: b.title });
-          it.querySelector('.rmd-label').textContent = label.replace(/^📺\s*|^✂\s*/, ''); it.setAttribute('aria-label', label);
-        });
-      }
+      staffItems(box);
       finishMenu(box, opener);
+    }
+    // the staff's on-air bar (onair-bar.js: ▶️ Play content here, ✂️ Cut), proxied - its own buttons, checks and confirms
+    function staffItems(box) {
+      var oab = root.querySelectorAll('.oab button[data-oab]');
+      if (!oab.length) return 0;
+      menuGroup(box, 'g_staff', 'Staff');
+      each(oab, function (b) {
+        var label = b.getAttribute('aria-label') || txt(b), what = b.getAttribute('data-oab');
+        var it = menuItem(box, what === 'play' ? '▶️' : what === 'cut' ? '✂️' : '•', 'raw', label, function () { external(function () { b.click(); }); }, { disabled: b.disabled, tip: b.title });
+        it.querySelector('.rmd-label').textContent = label.replace(/^📺\s*|^✂\s*/, ''); it.setAttribute('aria-label', label.replace(/^📺\s*|^✂\s*/, ''));
+      });
+      return oab.length;
+    }
+    // 1.99?? dockpop (P2): the homepage stage's ⋯ - 🎥 Go live here, and for staff the on-air bar, ⚙️ Front page settings and 🐸 Pepe's panel
+    function previewItems(box) {
+      var pv = o.preview || {};
+      if (pv.goLive) menuItem(box, '🎥', 'golive', 'Go live here', null, { href: pv.goLive });
+      var n = staffItems(box);
+      if (pv.staff && (pv.staff.front || pv.staff.pepe)) {
+        if (!n) menuGroup(box, 'g_staff', 'Staff');
+        if (pv.staff.front) menuItem(box, '⚙️', 'front_settings', 'Front page settings', null, { href: pv.staff.front });
+        if (pv.staff.pepe) menuItem(box, '🐸', 'pepe_panel', 'Pepe control panel', null, { href: pv.staff.pepe });
+      }
     }
     function pinsMenu(box, opener) {
       box.textContent = '';
@@ -1123,8 +1205,10 @@
     function buildStage() {
       var ov = el('div', 'rmd-ov');
       ovTop = el('div', 'rmd-ov-top'); ovBot = el('div', 'rmd-ov-bot');
-      ovTop.appendChild(padChip());
-      slimText = el('span', 'rmd-slim-t', t('nothing_on', 'Nothing on stage right now')); ovTop.appendChild(slimText);
+      var pv = o.preview || {};
+      // (1.99?? dockpop P2: on the homepage the pad chip is a LINK to the pad - its menu is the pad page's)
+      ovTop.appendChild(mode === 'preview' ? padLink() : padChip());
+      slimText = el('span', 'rmd-slim-t', t('nothing_on', 'Nothing on stage right now') + (mode === 'preview' && pv.nextUp ? ' · ' + pv.nextUp : '')); ovTop.appendChild(slimText);
       srcHost = el('span', 'rmd-src-host'); ovBot.appendChild(srcHost);
       ovBot.appendChild(el('span', 'rmd-ov-gap'));
       snapBtn = iconBtn('📸', 'snap', 'Snap', function () { var b = capButton('snap'); if (b && !b.disabled) external(function () { b.click(); }); });
@@ -1135,17 +1219,27 @@
       var more = iconBtn(IC.more, 'stage_menu', 'Stage options', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } stageMenu(b); });
       more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.classList.add('rmd-stage-more'); stageMoreBtn = more;
       [snapBtn, clipBtn, fullBtn, more].forEach(function (b) { ovBot.appendChild(b); });
+      if (mode === 'preview' && pv.goLive) {
+        // the homepage's slim off-air bar: [pad chip ›] Nothing on stage right now · Next up … [🎥 Go live] (+ ⋯ for staff)
+        var gl = el('a', 'ds-btn quiet sm rmd-golive'); gl.setAttribute('href', pv.goLive);
+        var gi = el('span', 'ds-ic', '🎥'); gi.setAttribute('aria-hidden', 'true'); gl.appendChild(gi); gl.appendChild(el('span', 'rmd-label', t('golive_short', 'Go live')));
+        ovBot.insertBefore(gl, snapBtn);
+        if (pv.staff) root.classList.add('rmd-staff');
+      }
       ov.appendChild(ovTop); ov.appendChild(ovBot);
       srcBox = node('rmTabs'); if (srcBox) { srcBox.classList.add('rmd-tabs-src'); ov.appendChild(srcBox); }
       stage.insertBefore(ov, stage.firstChild);
       [ovTop, ovBot].forEach(function (bar) { on(bar, 'pointerenter', function () { overBar = true; }); on(bar, 'pointerleave', function () { overBar = false; showTools(); }); });
-      // the stage hidden: a slim bar [pad chip ▾] Stage hidden … [📺 Show stage]
+      // the stage hidden: a slim bar [pad chip ▾] Stage hidden … [🔼 Show stage]
       // (1.99ajf dockclean review: no "Stage hidden" words beside 📺 Show stage - they said the same thing and squeezed the pad's name)
-      var mini = el('div', 'rmd-mini'); mini.id = 'rmdMini'; mini.hidden = true; mini.appendChild(padChip('rmd-chip-mini'));
-      mini.appendChild(el('span', 'rmd-ov-gap'));
-      showStageBtn = button('📺', 'restore_stage', 'Show stage', function () { hideStage(false, true); });
-      mini.appendChild(showStageBtn);
-      stage.parentNode.insertBefore(mini, stage);
+      // (the homepage has no Hide stage, so no slim bar for it either)
+      if (mode !== 'preview') {
+        var mini = el('div', 'rmd-mini'); mini.id = 'rmdMini'; mini.hidden = true; mini.appendChild(padChip('rmd-chip-mini'));
+        mini.appendChild(el('span', 'rmd-ov-gap'));
+        showStageBtn = button(IC.show, 'restore_stage', 'Show stage', function () { hideStage(false, true); });
+        mini.appendChild(showStageBtn);
+        stage.parentNode.insertBefore(mini, stage);
+      }
       on(stage, 'pointermove', function (e) { if (e.pointerType !== 'touch') showTools(); });
       on(stage, 'pointerdown', function (e) {
         if (e.pointerType === 'touch') {
@@ -1167,23 +1261,42 @@
     }
 
     // ── the chat card's one header row (owner points 8, 18) ──
+    // the chat ⋯ - pad: 📅 · ⬇ · 🪟 Float chat · ↗️ Chat in its own window · 📜; the window: 📅 · ⬇ · 📜 · ↩️ Back in the pad tab;
+    // the homepage: ↗️ · ℹ️ About this chat (it never had history or search)
     function chatMenu(opener) {
       var box = menu(opener, t('chat_menu', 'Chat options'));
+      if (mode === 'preview') {
+        if (canWindow()) menuItem(box, IC.win, 'chat_window', 'Chat in its own window', function () { popWindow(); }, { tip: t('chat_window_tip', 'Opens the chat in its own window, which stays open while you browse the site') });
+        if (o.preview && o.preview.about) menuItem(box, 'ℹ️', 'chat_about', 'About this chat', aboutChat, { keep: true });
+        finishMenu(box, opener); return;
+      }
       var jump = node('rmHistJump'); if (jump && !jump.hidden) menuItem(box, '📅', 'jump_date', 'Jump to a date', function () { external(function () { jump.click(); }); });
       var dl = o.download;
       if (dl && dl.items) dl.items().forEach(function (it) {
         var mi = menuItem(box, '⬇', 'raw', it.label.replace(/^⬇\s*/, ''), function () { dl.run(it.id, chatMore); });
         mi.querySelector('.rmd-label').textContent = it.label.replace(/^⬇\s*/, '');
       });
-      menuItem(box, IC.pop, 'float_chat', 'Float chat', floatChat);
-      if (W.documentPictureInPicture && W.documentPictureInPicture.requestWindow) menuItem(box, '🗗', 'pop_chat', 'Pop out chat', function () { pop(chat, true); });
+      if (mode === 'pad') {
+        menuItem(box, IC.float, 'float_chat', 'Float chat', floatChat);
+        if (canWindow()) menuItem(box, IC.win, 'chat_window', 'Chat in its own window', function () { popWindow(); }, { tip: t('chat_window_tip', 'Opens the chat in its own window, which stays open while you browse the site') });
+      }
       var hist = node('rmHist');
       if (hist && !hist.hidden && hist.getAttribute('href')) {
         var hi = menuItem(box, '📜', 'raw', '', null, { href: hist.getAttribute('href') });
         hi.querySelector('.rmd-label').textContent = t('hist_info', 'Visitors read: {span} · how it works', { span: txt(hist).replace(/^📜\s*/, '') });
         hi.title = hist.title || ''; hi.setAttribute('aria-label', hi.querySelector('.rmd-label').textContent);
       }
+      // (the window: only while a pad tab of this pad and account has announced itself - it closes the window, that tab restores)
+      if (mode === 'popout' && link && tabSeen && Date.now() - tabSeen < DEAD_MS) menuItem(box, IC.back, 'pop_back', 'Back in the pad tab', backToTab);
       finishMenu(box, opener);
+    }
+    // ℹ️ About this chat (the homepage): today's read-only note - a string, or a <template> the page rendered it into (its <code> tags)
+    function aboutChat() {
+      var a = o.preview && o.preview.about; if (!a) return;
+      var p = menu(chatMore, t('chat_about', 'About this chat')); p.setAttribute('role', 'dialog'); p.classList.add('rmd-about');
+      var body = el('p', 'rmd-topic-full', null, p.ownerDocument);
+      if (typeof a === 'string') body.textContent = a; else if (a.content) body.appendChild(a.content.cloneNode(true)); else body.textContent = txt(a);
+      p.appendChild(body); finishMenu(p, chatMore);
     }
     function topicPop(opener, text) {
       var box = menu(opener, t('topic_full', 'Topic')); box.setAttribute('role', 'dialog');
@@ -1211,6 +1324,14 @@
       Array.prototype.slice.call(h.childNodes).forEach(function (n) {
         if (n.nodeType === 3 && String(n.textContent).trim()) { h.insertBefore(el('span', 'rmd-chat-t', String(n.textContent).trim()), n); n.remove(); }
       });
+      // 1.99?? dockpop: in its own window the chat's heading is the pad chip (a link to the pad, in a new tab); on the homepage a 📡 link to
+      // the chat's pad follows CHAT when that pad isn't the stage's
+      var word = h.querySelector('.rmd-chat-t');
+      if (mode === 'popout' && word) word.replaceWith(padLink('rmd-chip-chat'));
+      if (mode === 'preview' && o.preview && o.preview.roomLink && word) {
+        var rl = el('a', 'rmd-room-link', '📡 ' + o.preview.roomLink.name); rl.setAttribute('href', o.preview.roomLink.href);
+        rl.title = o.preview.roomLink.name; word.parentNode.insertBefore(rl, word.nextSibling);
+      }
       var topic = node('rmTopic');
       if (topic) {
         topicRow = el('span', 'rmd-topic-line'); topicRow.appendChild(topic);
@@ -1230,6 +1351,221 @@
       if (scroll && jump && !scroll.parentNode.classList.contains('rmd-log')) {
         var log = el('div', 'rmd-log'); scroll.parentNode.insertBefore(log, scroll); log.appendChild(scroll); log.appendChild(jump);
       }
+    }
+
+    // ══ 1.99?? dockpop (owner P1): the chat in its OWN window - /p/<slug>/chat, opened from the chat ⋯ (desktop: a second window can sit
+    // beside the page; phones get the float), kept running while this tab goes anywhere (Hold'em, other pads, the feed) ══
+    function roomKey() { return W.PATVDockLink ? W.PATVDockLink.roomKey(o.room) : String(o.room == null ? '' : o.room).replace(/[^A-Za-z0-9_-]/g, '_'); }
+    function chatUrl() { return o.chatUrl || (o.slug ? '/p/' + encodeURIComponent(o.slug) + '/chat' : null); }
+    function canWindow() {
+      if (mode === 'popout' || !chatUrl() || typeof W.open !== 'function') return false;
+      var fine = false; try { fine = !!(W.matchMedia && W.matchMedia('(hover: hover) and (pointer: fine)').matches); } catch (e) { fine = false; }
+      return fine && (W.innerWidth || 0) > 760;
+    }
+    function playingHere() { return !!(o.audio && o.audio.isPlaying && o.audio.isPlaying() && (!o.audio.playingSlug || o.audio.playingSlug() === o.slug)); }
+    function inputNode() { var i = o.relay && o.relay.getInput && o.relay.getInput(); return i && i.isConnected ? i : null; }
+    function setDraft(i, text) { i.value = text; try { i.dispatchEvent(new W.CustomEvent('input', { bubbles: true })); } catch (e) { /* no listeners */ } }
+    function num(v, d) { v = Number(v); return isFinite(v) && v !== 0 ? v : d; }
+    /** where the window opens: where it was last (patv.dock.popwin), else 420 wide at this window's inline-end edge */
+    function geometry() {
+      var g = null; try { g = JSON.parse(store(POP_GEO) || 'null'); } catch (e) { g = null; }
+      if (!g || typeof g !== 'object') g = {};
+      var sc = W.screen || {}, aw = num(sc.availWidth, 1280), ah = num(sc.availHeight, 800), al = Number(sc.availLeft) || 0, at = Number(sc.availTop) || 0;
+      var w = Math.max(360, Math.min(640, Math.round(num(g.w, 420)))), h = Math.max(320, Math.min(ah, Math.round(num(g.h, Math.min(760, ah - 80)))));
+      var x = typeof g.x === 'number' && isFinite(g.x) ? g.x : (Number(W.screenX) || 0) + num(W.outerWidth, aw) - w - 24;
+      var y = typeof g.y === 'number' && isFinite(g.y) ? g.y : (Number(W.screenY) || 0) + 80;
+      x = Math.max(al, Math.min(al + aw - w, Math.round(x))); y = Math.max(at, Math.min(at + ah - h, Math.round(y)));
+      return { w: w, h: h, x: x, y: y };
+    }
+    function saveGeometry() {
+      if (mode !== 'popout') return;
+      try { store(POP_GEO, JSON.stringify({ w: W.innerWidth, h: W.innerHeight, x: W.screenX, y: W.screenY })); } catch (e) { /* private window */ }
+    }
+    /** ↗️ Chat in its own window - in the click (a pop-up needs the gesture); a blocked one floats the chat here instead */
+    function popWindow() {
+      if (popWin && !popWin.closed) { try { popWin.focus(); } catch (e) { /* gone */ } return; }
+      var url = chatUrl(); if (!url) return;
+      redock();
+      var g = geometry(), w = null;
+      try { w = W.open(url + (playingHere() ? '#listen' : ''), 'patv-chat-' + roomKey(), 'popup,width=' + g.w + ',height=' + g.h + ',left=' + g.x + ',top=' + g.y); } catch (e) { w = null; }
+      if (!w || w.closed) {
+        if (mode === 'pad') { floatChat(); toast(t('pop_blocked', 'Pop-ups are blocked for this site, so the chat floats here instead. Allow pop-ups for publicaccess.tv to keep it in its own window.')); }
+        else toast(t('pop_blocked_home', 'Pop-ups are blocked for this site. Allow pop-ups for publicaccess.tv to open the chat in its own window.'));
+        return;
+      }
+      popWin = w;
+      enterPopped(true);
+      clearTimeout(pendTimer);
+      pendTimer = setTimeout(function () { if (popped && popPending) { leavePopped(null); toast(t('pop_failed', 'The chat window didn’t open.')); } }, PENDING_MS);
+    }
+    function buildPopBar() {
+      var bar = el('div', 'rmd-popbar'); bar.setAttribute('role', 'status');
+      var ic = el('span', 'ds-ic', IC.win); ic.setAttribute('aria-hidden', 'true'); bar.appendChild(ic);
+      bar.appendChild(el('span', 'rmd-popbar-t', t('popped', 'Chat is open in its own window')));
+      bar.appendChild(el('span', 'rmd-ov-gap'));
+      var show = button('', 'popped_show', 'Show it', function () { if (popWin && !popWin.closed) { try { popWin.focus(); } catch (e) { /* gone */ } } }, 'ds-btn quiet sm rmd-popbar-show');
+      bar.appendChild(show);
+      bar.appendChild(button(IC.back, 'redock', 'Bring it back', bringBack, 'ds-btn sm rmd-popbar-back'));
+      return bar;
+    }
+    function paintPopBar() {
+      if (popWin && popWin.closed) popWin = null;
+      var s = popBar && popBar.querySelector('.rmd-popbar-show'); if (s) s.hidden = !popWin;
+    }
+    /** POPPED: a window for this pad and account is open - this chat card is hidden IN PLACE (still fed by this page's own poll, so Bring it
+     *  back is instant), a 44px bar takes its spot, the stage takes the freed height, and this page's room audio pauses (never heard twice) */
+    function enterPopped(pending) {
+      if (gone_ || mode === 'popout' || !chat) return;
+      popPending = !!pending && !popped;
+      if (!popped) {
+        var showing = root.querySelector('[data-rmd-showchat][aria-pressed="true"]'); if (showing) showing.click();
+        if (current && current.kind !== 'full') redock();
+        closeLayer(false);
+        popped = true;
+        root.classList.add('rmd-popped');
+        if (!popBar) popBar = buildPopBar();
+        if (chat.parentNode) chat.parentNode.insertBefore(popBar, chat);
+        each(root.querySelectorAll('[data-rmd-showchat]'), function (b) { b.hidden = true; });
+        if (playingHere()) o.audio.pause();
+        if (o.onPopped) { try { o.onPopped(true); } catch (e) { /* the page's own */ } }
+        changed();
+      }
+      paintPopBar(); watchAlive();
+    }
+    function leavePopped(m) {
+      clearTimeout(pendTimer); clearTimeout(handTimer); clearTimeout(aliveTimer); aliveTimer = null;
+      if (!popped) return;
+      var wasBringing = bringing, resumed = resumedInClick;
+      popped = false; popPending = false; bringing = false; resumedInClick = false;
+      root.classList.remove('rmd-popped'); if (popBar && popBar.parentNode) popBar.remove();
+      each(root.querySelectorAll('[data-rmd-showchat]'), function (b) { b.hidden = false; });
+      if (popWin && popWin.closed) popWin = null;
+      var input = inputNode();
+      if (m && m.draft && input && !input.value) setDraft(input, m.draft);
+      if (o.onPopped) { try { o.onPopped(false); } catch (e) { /* the page's own */ } }
+      changed();
+      // the room audio comes back here when the window was playing it: in the Bring it back click itself (resumedInClick), else for the
+      // tab the hand-over names / the tab that opened the window / a visible tab (a blocked autoplay shows "tap ▶ to resume")
+      var mine = m && (m.to ? m.to === (link && link.id) || (m.to === '*' && !!popWin) : m.t === 'pop-closed' && !D.hidden);
+      if (m && m.audio && !resumed && mine && o.audio && o.audio.resume) { try { o.audio.resume(); } catch (e) { /* blocked */ } }
+      if (wasBringing && input) input.focus();
+      popWin = null;
+    }
+    function watchAlive() {
+      clearTimeout(aliveTimer);
+      aliveTimer = setTimeout(function tick() {
+        aliveTimer = null; if (!popped) return;
+        paintPopBar();
+        // a crashed / killed window: no heartbeat for 15 s (a window still being opened has its own 6 s wait)
+        if (!popPending && Date.now() - lastAlive > DEAD_MS) { leavePopped(null); return; }
+        aliveTimer = setTimeout(tick, ALIVE_MS);
+      }, ALIVE_MS);
+    }
+    /** ↩️ Bring it back: the window hands over its draft and closes; its audio resumes HERE, inside this click (the gesture plays it) */
+    function bringBack() {
+      if (!popped) return;
+      bringing = true; resumedInClick = false;
+      if (lastAudio && o.audio && o.audio.resume) { try { resumedInClick = !!o.audio.resume(); } catch (e) { resumedInClick = false; } }
+      if (!link || !link.ok || popPending) { if (popWin && !popWin.closed) { try { popWin.close(); } catch (e) { /* not ours */ } } leavePopped(null); return; }
+      link.send('pop-close-req');
+      clearTimeout(handTimer); handTimer = setTimeout(function () { leavePopped(null); }, HANDOFF_MS);
+    }
+    /** the pad tab / homepage side of the channel */
+    function tabMsg(m) {
+      if (m.t === 'pop-open' || m.t === 'pop-alive') {
+        lastAlive = Date.now(); lastAudio = m.audio ? 1 : 0;
+        if (popped && popPending) { popPending = false; clearTimeout(pendTimer); }
+        if (!popped) enterPopped(false);
+        if (mode === 'pad') link.send('tab-here');
+        if (m.t === 'pop-open') {
+          // a tab's unsent words go to the new window (it puts them in its empty input); this tab's copy is cleared
+          var input = inputNode();
+          if (input && input.value.trim()) { link.send('draft', { draft: input.value }); setDraft(input, ''); }
+        }
+        paintPopBar();
+      } else if (m.t === 'pop-closed' || m.t === 'handoff') leavePopped(m);
+      else if (m.t === 'audio-on') { if (playingHere()) o.audio.pause(); }
+    }
+    /** the window's side of the channel */
+    var handed = false, beatTimer = null;
+    function popMsg(m) {
+      if (m.t === 'who') link.send('pop-alive', { audio: playingHere() });
+      else if (m.t === 'tab-here') tabSeen = Date.now();
+      else if (m.t === 'pop-close-req') handOff(m.id);
+      else if (m.t === 'draft') { var input = inputNode(); if (input && !input.value && m.draft) setDraft(input, m.draft); }
+      else if (m.t === 'pop-open') {
+        // a newer window for this pad and account: the newest wins (two windows would poll twice and play the room twice)
+        if (playingHere()) o.audio.pause();
+        retire('pop_moved', 'This chat is open in a newer window.');
+      } else if (m.t === 'audio-on') { if (playingHere()) o.audio.pause(); }
+    }
+    function handOff(to) {
+      if (handed || gone_) return; handed = true;
+      var input = inputNode(), draft = input ? input.value : '', audio = playingHere();
+      if (audio) o.audio.pause();
+      if (link) link.send('handoff', { draft: draft, audio: audio, to: to || '*' });
+      saveGeometry();
+      try { W.close(); } catch (e) { /* not a window this site opened */ }
+      setTimeout(function () { if (!W.closed) retire('pop_back_done', 'The chat is back in the pad tab.'); }, 400);
+    }
+    function backToTab() {
+      try { if (W.opener && !W.opener.closed && W.opener.focus) W.opener.focus(); } catch (e) { /* another origin / gone */ }
+      handOff(null);
+    }
+    function beat() {
+      clearTimeout(beatTimer);
+      beatTimer = setTimeout(function () { beatTimer = null; if (gone_ || !link) return; link.send('pop-alive', { audio: playingHere() }); beat(); }, ALIVE_MS);
+    }
+    function recheck() { if (o.recheck) { try { o.recheck(); } catch (e) { /* the page's own */ } } }
+    function openLink() {
+      if (!W.PATVDockLink || o.room == null || o.room === '') return;
+      link = W.PATVDockLink.open({ room: roomKey(), tag: o.vt || '', role: mode === 'popout' ? 'pop' : mode === 'preview' ? 'home' : 'tab',
+        onMsg: mode === 'popout' ? popMsg : tabMsg, onForeign: recheck, onSession: recheck });
+      // one room is never heard twice: whoever starts it tells the others
+      if (o.audio && o.audio.onChange) o.audio.onChange(function (now) { if (now && now === o.slug && link && !gone_) link.send('audio-on'); });
+      if (mode === 'popout') { link.send('pop-open', { audio: playingHere() }); beat(); }
+      else { if (mode === 'pad') link.send('tab-here'); link.send('who'); }
+    }
+    function stopLink() { clearTimeout(beatTimer); clearTimeout(aliveTimer); clearTimeout(pendTimer); clearTimeout(handTimer); if (link) { link.close(); link = null; } }
+    /** the window is done (signed out / another account / a newer window): every Dock layer closes and one card says why */
+    function retire(key, fallback) {
+      if (gone_) return;
+      // (the page stops its poll and audio and wipes what it shows, then asks for the card - roomDock.gone)
+      if (o.onRetire) { try { o.onRetire(key, fallback); } catch (e) { /* the page's own */ } }
+      if (!gone_) goneCard(key, fallback);
+    }
+    function goneCard(key, fallback) {
+      // (the pad tab this window popped comes back at once - no draft, no audio: this window shows nothing any more; not when a newer
+      // window took over - the tab stays popped for that one)
+      if (mode === 'popout' && link && !handed && !gone_ && key !== 'pop_moved') link.send('pop-closed', { audio: false });
+      gone_ = true;
+      closeLayer(false); redock(); stopLink();
+      if (o.mod && o.mod.closeMenu) { try { o.mod.closeMenu(false); } catch (e) { /* none open */ } }
+      var old = root.querySelector('.rmd-gone'); if (old) old.remove();
+      var card = el('section', 'card rmd-gone'); card.setAttribute('role', 'alert');
+      card.appendChild(el('p', null, t(key, fallback)));
+      card.appendChild(button('✕', 'pop_close', 'Close this window', function () { try { W.close(); } catch (e) { /* not ours */ } }, 'ds-btn primary'));
+      if (chat && chat.parentNode) { chat.parentNode.insertBefore(card, chat); chat.hidden = true; } else root.appendChild(card);
+      var b = card.querySelector('button'); if (b) b.focus();
+    }
+    // ── the pad chip as a LINK (the window's chat header, the homepage's stage card): the pad's identity + › ──
+    function padLink(cls) {
+      var a = el('a', 'rmd-chip rmd-chip-link' + (cls ? ' ' + cls : '')); a.setAttribute('href', o.padHref || '/p/' + encodeURIComponent(o.slug || ''));
+      if (template) identity(a); else a.appendChild(el('span', 'rmd-chip-plain', '📡 ' + (o.padName || o.slug || '')));
+      var arrow = el('span', 'rmd-chip-v', IC.open); arrow.setAttribute('aria-hidden', 'true'); (a.querySelector('.rmd-id-content') || a).appendChild(arrow);
+      var nm = a.querySelector('.rm-nm'), name = txt(nm) || o.padName || D.title;
+      a.setAttribute('aria-label', t('open_pad', 'Open the pad: {name}', { name: name })); a.title = a.getAttribute('aria-label');
+      if (mode === 'popout') { a.target = '_blank'; a.rel = 'noopener'; }
+      return a;
+    }
+    /** the homepage: the front pad changed mid-session - the chip becomes a plain '📡 {title} ›' link (the cosmetics were the old pad's) */
+    function retitle(href, title) {
+      each(root.querySelectorAll('.rmd-chip-link'), function (a) {
+        a.textContent = ''; a.setAttribute('href', href);
+        a.appendChild(el('span', 'rmd-chip-plain', '📡 ' + title));
+        var arrow = el('span', 'rmd-chip-v', IC.open); arrow.setAttribute('aria-hidden', 'true'); a.appendChild(arrow);
+        a.setAttribute('aria-label', t('open_pad', 'Open the pad: {name}', { name: title })); a.title = a.getAttribute('aria-label');
+      });
     }
 
     function update(d) {
@@ -1255,9 +1591,12 @@
         videoPipSource = null; if (D.pictureInPictureElement && D.exitPictureInPicture) Promise.resolve(D.exitPictureInPicture()).catch(function () {});
       }
     }
+    // 1.99?? dockpop (owner P1): Live / Feed / About - the 100dvh frame follows the tab; a floating chat and a stage in picture-in-picture
+    // stay exactly as they are (the same nodes, position, scroll, draft, outbox, poll and room audio - the float is a child of <main>,
+    // outside the hidden Live panel); only a fullscreen view goes back
     function tabChanged(tab) {
       var live = tab === 'live'; D.body.classList.toggle('pad-dock-live', live);
-      if (!live) { redock(); closeLayer(false); }
+      if (!live) { closeLayer(false); if (current && current.kind === 'full') redock(); }
     }
     // Feed / About: one slim header row - [pad identity] [● Live · Feed · About] [Follow] [▾ pad menu] (owner point 4)
     function buildHeader() {
@@ -1272,25 +1611,44 @@
       ready = true; stage = node('rmStage'); chat = node('rmChat'); strip = node('rmStrip'); compose = node('rmCompose');
       panel = node('padPanel-live'); template = node('rmdId');
       side = root.querySelector('.rm-live > .side'); if (side) side.classList.add('rmd-side');
-      buildHeader();
-      if (stage) buildStage();
+      // 1.99?? dockpop: the window is the chat card alone (no stage, header, strip or tabs); the homepage has no pad header, strip or tabs
+      if (mode === 'pad') buildHeader();
+      if (stage && mode !== 'popout') buildStage();
       if (chat) buildChatHead();
       decoratePeople();
-      if (strip) {
+      if (strip && mode === 'pad') {
         strip.setAttribute('data-rmd-layout', 'small');
         observe(strip, decorateCams); decorateCams();
       }
       decorateComposer(); attachDoc(D);
       on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
-      on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
-      on(W, 'pagehide', function () { redock(); if (pip) pip.close(); });
-      tabChanged(panel && !panel.hidden ? 'live' : 'feed'); update(data);
+      if (mode === 'pad') on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
+      on(W, 'pagehide', function () {
+        if (mode === 'popout' && link && !handed && !gone_) {
+          var input = inputNode();
+          link.send('pop-closed', { audio: playingHere(), draft: input ? input.value : '' });
+        }
+        saveGeometry();
+        redock(); if (pip) pip.close();
+      });
+      if (mode === 'popout') {
+        var geoTimer = null;
+        on(W, 'resize', function () { clearTimeout(geoTimer); geoTimer = setTimeout(saveGeometry, 400); });
+      }
+      openLink();
+      if (mode === 'pad') tabChanged(panel && !panel.hidden ? 'live' : 'feed');
+      update(data);
     }
     if (D.readyState === 'loading') on(D, 'DOMContentLoaded', start); else start();
     return {
       update: update, mic: mic, personLine: personLine, visible: visible, redock: redock, stageChanged: stageChanged,
       pvp: pvp, pvpFor: pvpFor, peopleDrawn: function () { filterPeople(); paintInfo(); }, participants: participants,
-      destroy: function () { dead = true; redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); }); clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live'); }
+      // 1.99?? dockpop
+      floating: function () { return !!(current && current.kind === 'float'); },
+      popped: function () { return popped; }, popWindow: popWindow, canWindow: canWindow, bringBack: bringBack,
+      gone: function (key, fallback) { goneCard(key || 'pop_gone', fallback || 'You signed out or switched accounts in another tab, so this chat window is closed.'); },
+      retitle: retitle,
+      destroy: function () { dead = true; stopLink(); redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); }); clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat'); }
     };
   }
   W.PATVPadDock = { init: init };

@@ -94,9 +94,10 @@ test("bridge.js: only the pad page's own /live polls (?pad=1) note signed-in vie
   assert.ok(route.indexOf("padaccess\").full(req.user, R.id)") < route.indexOf('require("./padweb").note('), "noted after the members-tier check");
   assert.ok(route.indexOf("bridgeOk(R.id)") < route.indexOf('require("./padweb").note('), "and after the Prime Time Plus bridge check");
   assert.match(route, /const padPage = req\.query\.pad === "1";\s*if \(signed && padPage\) require\("\.\/padweb"\)\.note\(/, "the homepage panel / owner / settings polls are not noted");
-  assert.match(route, /program: true, padPage \}\);/);
+  assert.match(route, /program: !pop, padPage \}\);/);   // (1.99?? dockpop: ?pop=1, the chat window, has no mic-stage program)
   assert.match(src, /if \(opts && opts\.padPage && userId && require\("\.\/paddock"\)\.current\(\)\.cfg\.mode !== "off"\) \{/);
-  assert.match(fs.readFileSync(path.join(repo, "views/room.ejs"), "utf8"), /'&wait=1&pad=1'/, "the pad page asks with pad=1");
+  // (1.99?? dockpop: a re-check asks once without &wait=1 - the long-poll and the re-check both carry pad=1)
+  assert.match(fs.readFileSync(path.join(repo, "views/room.ejs"), "utf8"), /var wait = quick \? '' : '&wait=1'; quick = false;[\s\S]{0,600}'\?after=' \+ cursor \+ wait \+ '&pad=1'/, "the pad page asks with pad=1");
   for (const f of ["views/home.ejs", "public/js/pad-owner-mod.js", "public/js/pad-settings.js"]) assert.doesNotMatch(fs.readFileSync(path.join(repo, f), "utf8"), /pad=1/, f + " never asks to be listed");
   assert.match(fs.readFileSync(path.join(repo, "views/privacy.ejs"), "utf8"), /<% if \(locals\.padweb\) \{[^%]*%>\s*<p id="rooms-web">[\s\S]*?Incognito, or keeping your room activity private on your profile, keeps you off it[\s\S]*?<\/p><% \} %>/, "the privacy page says so while the Room Dock is on");
   assert.match(fs.readFileSync(path.join(repo, "terms.js"), "utf8"), /res\.locals\.padweb = require\("\.\/paddock"\)\.current\(\)\.cfg\.mode !== "off"/);

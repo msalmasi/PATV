@@ -65,6 +65,8 @@ main.rm.rm-dock.pad-acc .rmd-fullscreen,
 main.rm.rm-dock.pad-acc .rmd-layer,
 main.rm.rm-dock.pad-acc .rmd-menu,
 main.rm.rm-dock.pad-acc .rmd-mini,
+main.rm.rm-dock.pad-acc.rmd-home :is(#rmStage, #rmChat:not(.rmd-other)),
+main.rm.rm-dock.pad-acc.rmd-popout #rmChat,
 main.rm.rm-dock.pad-acc[data-rmd-pip] {
   --ds-ac: var(--pad-accent);
   --ds-ac-2: var(--pad-accent);
@@ -433,19 +435,19 @@ main.rm.rm-dock[data-rmd-pip] #rmChat { flex: 1 1 0; }
 main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white-space: nowrap; }
 
 /* ── 1.99ajf dockclean (owner point 35): the person menu (appended to <body>, outside <main>) - one header row: avatar · name · ✕ ── */
-body.pad-dock-live .pm-pop.rmd-pm { inline-size: clamp(260px, calc(100vw - 16px), 320px); padding: var(--ds-sp-1); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-h { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--ds-sp-2); align-items: center; min-inline-size: 0; }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n > .rmd-person { display: contents; }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .av { grid-column: 1; grid-row: 1 / span 2; inline-size: 32px; block-size: 32px; font-size: var(--ds-fs-meta); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .rmd-person-name { grid-column: 2; display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .rmd-person-name :is(.who, .who-web) { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 700; }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n > .pm-login { grid-column: 2; font-size: var(--ds-fs-chip); color: var(--ds-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.pad-dock-live .pm-pop.rmd-pm .pm-x { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; border-color: transparent; background: transparent; }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-l { display: grid; gap: 0; padding-block: var(--ds-sp-1); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-i { display: flex; align-items: center; gap: var(--ds-sp-2); min-block-size: 40px; padding: 0 var(--ds-sp-3); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-sep { margin-block: var(--ds-sp-1); border-block-start: 1px solid var(--ds-line); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-why { margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-chip); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm { inline-size: clamp(260px, calc(100vw - 16px), 320px); padding: var(--ds-sp-1); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-h { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--ds-sp-2); align-items: center; min-inline-size: 0; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n > .rmd-person { display: contents; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .av { grid-column: 1; grid-row: 1 / span 2; inline-size: 32px; block-size: 32px; font-size: var(--ds-fs-meta); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name { grid-column: 2; display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name :is(.who, .who-web) { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 700; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n > .pm-login { grid-column: 2; font-size: var(--ds-fs-chip); color: var(--ds-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; border-color: transparent; background: transparent; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-l { display: grid; gap: 0; padding-block: var(--ds-sp-1); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-i { display: flex; align-items: center; gap: var(--ds-sp-2); min-block-size: 40px; padding: 0 var(--ds-sp-3); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-sep { margin-block: var(--ds-sp-1); border-block-start: 1px solid var(--ds-line); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-why { margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-chip); }
 
 @media (max-width: 1023px) {
   main.rm.rm-dock #rmChat { padding-inline: var(--ds-sp-2); }
@@ -505,7 +507,7 @@ body.pad-dock-live .pm-pop.rmd-pm .pm-pop-why { margin-inline-start: auto; color
   main.rm.rm-dock :is(.rmd-overlay #rmChat, .rmd-viewbar, .rmd-mini, .rmd-menu) { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
   main.rm.rm-dock .rmd-input-row::before { border-color: CanvasText; }
   main.rm.rm-dock .cx-name,
-  body.pad-dock-live .pm-pop.chatlog .cx-name { color: CanvasText !important; -webkit-text-fill-color: CanvasText !important; background: none !important; animation: none !important; forced-color-adjust: auto; }
+  body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.chatlog .cx-name { color: CanvasText !important; -webkit-text-fill-color: CanvasText !important; background: none !important; animation: none !important; forced-color-adjust: auto; }
   main.rm.rm-dock :is(.rmd-chip, .rmd-holder, .rmd-tile-more):focus-visible { outline: 2px solid Highlight; }
 }
 
@@ -536,6 +538,19 @@ main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { z-index: var(--ds-
 }
 @media (max-width: 760px) {
   main.rm.rm-dock #rmStrip .rmd-tile-more { inset-block-start: 2px; inset-inline-end: 2px; inline-size: 24px; min-inline-size: 24px; block-size: 24px; min-block-size: 24px; font-size: var(--ds-fs-xs); }
+  /* 1.99?? dockpop (polish): on an 85px tile the ⋯ is a bare 14px glyph (no disc, a shadow for contrast) in a 32px see-through hit area at
+     the tile's top-end corner - shown only with the stage overlay or keyboard focus, and it takes taps only once the overlay is armed */
+  /* (#rmStage > #rmStrip: above the older hover / coarse rules' :is() specificity) */
+  main.rm.rm-dock #rmStage > #rmStrip .rmd-tile-more { inset-block-start: 0; inset-inline-end: 0; inline-size: 32px; min-inline-size: 32px; block-size: 32px; min-block-size: 32px;
+    padding: 0; display: grid; place-items: start end; padding-block-start: 2px; padding-inline-end: 4px; background: transparent; border: 0; box-shadow: none;
+    font-size: 14px; line-height: 1; text-shadow: 0 0 2px var(--ds-media-bg), 0 1px 3px var(--ds-media-bg); opacity: 0; pointer-events: none; }
+  main.rm.rm-dock #rmStage > #rmStrip .rmd-tile-more > .ds-ic { font-size: 14px; }
+  main.rm.rm-dock #rmStage.rmd-controls-on > #rmStrip .rmd-tile-more,
+  main.rm.rm-dock #rmStage > #rmStrip .cs-tile:focus-within .rmd-tile-more,
+  main.rm.rm-dock #rmStage > #rmStrip .rmd-tile-more[aria-expanded="true"] { opacity: 1; }
+  main.rm.rm-dock #rmStage.rmd-ov-armed > #rmStrip .rmd-tile-more,
+  main.rm.rm-dock #rmStage > #rmStrip .rmd-tile-more:focus-visible,
+  main.rm.rm-dock #rmStage > #rmStrip .rmd-tile-more[aria-expanded="true"] { pointer-events: auto; }
 }
 /* the pad chip: one plate - when the identity brings its own frame / banner the chip adds no second pill around it; ▾ is inside it */
 main.rm.rm-dock .rmd-chip:has(> .rmd-id) { padding: 0; border: 0; background: transparent; }
@@ -567,6 +582,18 @@ main.rm.rm-dock #rmPeople .nm > .ufl { flex: 0 100000 auto; min-inline-size: cal
 main.rm.rm-dock #rmPeople .nm > .who.veil { display: contents; }   /* (its frog name and tag are the row's own items) */
 main.rm.rm-dock #rmPeople .nm > .who.veil > i { flex: 0 1 auto; min-inline-size: 3ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 main.rm.rm-dock #rmPeople .nm > .who.veil > .veil-tag { flex: none; }
+/* 1.99?? dockpop (polish): the frog NAME has priority - the incognito / hidden tag shortens first ("incog…", its full word in its title),
+   in the people column / sheet, the holder chips, the person menu's header and the name autocomplete (a 10000:1 shrink: the name gives
+   way only once the tag is at its 2ch floor - a frog name is never shown without its tag) */
+main.rm.rm-dock #rmPeople .nm > .who.veil > i,
+main.rm.rm-dock .rmd-holders .who.veil > i { flex: 1 1 auto; min-inline-size: min(9ch, 100%); }
+main.rm.rm-dock #rmPeople .nm > .who.veil > .veil-tag,
+main.rm.rm-dock .rmd-holders .who.veil > .veil-tag { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil { display: inline-flex; align-items: center; gap: 3px; min-inline-size: 0; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > i { flex: 1 1 auto; min-inline-size: min(9ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .who.veil > .veil-tag { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rb-ac.rb-ac-names .rb-ac-n { flex: 1 1 auto; min-inline-size: min(9ch, 100%); }
+main.rm.rm-dock .rb-ac.rb-ac-names .rb-ac-t { flex: 0 10000 auto; min-inline-size: 2ch; overflow: hidden; text-overflow: ellipsis; }
 @container (max-width: 320px) {
   main.rm.rm-dock #rmPeople .nm > .ufl > .ufl-n { display: none; }
   main.rm.rm-dock #rmPeople .nm > .ufl { padding-inline: 4px; }
@@ -595,10 +622,10 @@ main.rm.rm-dock #rmScroll .line-head > .ufl { flex-shrink: 100000; }   /* (the n
   main.rm.rm-dock #rmScroll .line-head > .ufl { min-width: 0; padding-inline: 3px; }
 }
 /* the person menu over a Dock sheet (Participants); its header shows the flair, its ✕ is visible */
-body.pad-dock-live .pm-pop { z-index: calc(var(--ds-z-modal) + var(--ds-z-sticky)); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl { flex: 0 1000 auto; min-inline-size: calc(1em + 10px); margin: 0; }
-body.pad-dock-live .pm-pop.rmd-pm .pm-x { color: var(--ds-text-muted); font-size: 18px; line-height: 1; border-radius: var(--ds-r-md); }
-body.pad-dock-live .pm-pop.rmd-pm .pm-x:is(:hover, :focus-visible) { color: var(--ds-text); background: var(--ds-hover); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop { z-index: calc(var(--ds-z-modal) + var(--ds-z-sticky)); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl { flex: 0 1000 auto; min-inline-size: calc(1em + 10px); margin: 0; }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { color: var(--ds-text-muted); font-size: 18px; line-height: 1; border-radius: var(--ds-r-md); }
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x:is(:hover, :focus-visible) { color: var(--ds-text); background: var(--ds-hover); }
 /* the pad menu's header: the pad's name as words + Follow (the chip above it already shows the banner and badges) */
 main.rm.rm-dock .rmd-padmenu-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1) var(--ds-sp-2); padding: var(--ds-sp-1) var(--ds-sp-2h) var(--ds-sp-2); border-block-end: 1px solid var(--ds-line); margin-block-end: var(--ds-sp-1); }
 main.rm.rm-dock .rmd-padmenu-n { flex: 1 1 100%; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); color: var(--ds-text-strong); }
@@ -662,3 +689,52 @@ main.rm.rm-dock .rmd-grip { color: var(--ds-text-faint); font-size: var(--ds-fs-
   main.rm.rm-dock .rmd-ov :is(button:not(.rmd-chip), .rmd-src-one),
   main.rm.rm-dock .rmd-chip > .rmd-id { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 }
+
+/* ══ 1.99?? dockpop (owner P1 / P2): the floating chat across Live / Feed / About, the chat in its own window, the homepage's Dock ══ */
+/* the floating chat's bar: [⠿][💬 Chat + new-lines dot - while minimized][…][➖ / ➕][↩️] */
+main.rm.rm-dock .rmd-float-t { display: none; align-items: center; gap: var(--ds-sp-1h); min-inline-size: 0; font: 700 var(--ds-fs-meta)/1 var(--ds-font); color: var(--ds-text-strong); white-space: nowrap; }
+main.rm.rm-dock .rmd-float-t > .ds-ic { font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-float-dot { flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--ds-ac); box-shadow: 0 0 0 2px var(--ds-surface); }
+main.rm.rm-dock .rmd-float.rmd-min { inset-block-start: auto; inset-inline-start: auto; inset-block-end: var(--ds-sp-4); inset-inline-end: var(--ds-sp-4); inline-size: 240px; block-size: auto; min-block-size: 44px; }
+main.rm.rm-dock .rmd-float.rmd-min > #rmChat { display: none; }
+main.rm.rm-dock .rmd-float.rmd-min > .rmd-viewbar { min-block-size: 42px; padding-block: 0; border-block-end: 0; cursor: default; touch-action: auto; }
+main.rm.rm-dock .rmd-float.rmd-min .rmd-float-t { display: inline-flex; }
+main.rm.rm-dock .rmd-float.rmd-min .rmd-grip { display: none; }
+@media (max-width: 760px) {
+  main.rm.rm-dock .rmd-float.rmd-min { inset-inline: var(--ds-sp-2); inset-block-end: var(--ds-sp-2); inline-size: auto; }
+}
+@media (prefers-reduced-motion: reduce) { main.rm.rm-dock .rmd-float.rmd-min { transition: none; } }
+
+/* POPPED: the chat is in its own window - this card is hidden in place, a 44px bar takes its spot (the stage takes the freed height:
+   rmd-chat-out, as while the chat floats) */
+main.rm.rm-dock.rmd-popped #rmChat { display: none; }
+main.rm.rm-dock .rmd-popbar { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; min-block-size: 44px; min-inline-size: 0; padding: var(--ds-sp-1) var(--ds-sp-2) var(--ds-sp-1) var(--ds-sp-3);
+  border: 1px solid var(--ds-ac-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); color: var(--ds-text); font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-popbar > .ds-ic { flex: none; font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-popbar-t { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-popbar > button { flex: none; }
+main.rm.rm-dock .rmd-popbar-back { border-color: var(--ds-ac-line); }
+
+/* the pad chip as a link (the window's chat heading; the homepage's stage card): the pad's identity + › */
+main.rm.rm-dock a.rmd-chip-link { text-decoration: none; color: var(--ds-text-strong); }
+main.rm.rm-dock a.rmd-chip-link:is(:hover, :focus-visible) > .rmd-id { border-color: var(--ds-ac); }
+main.rm.rm-dock .rmd-chip-plain { min-inline-size: 0; padding-inline: var(--ds-sp-2) 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-meta); font-weight: 700; }
+main.rm.rm-dock a.rmd-chip-link:has(> .rmd-chip-plain) { padding-inline-end: var(--ds-sp-2); border: 1px solid var(--ds-line); background: var(--ds-media-panel); }
+main.rm.rm-dock #chatH > .rmd-chip-chat { flex: 0 0 auto; max-inline-size: 60%; block-size: 28px; font-family: var(--ds-font); letter-spacing: normal; text-transform: none; }
+main.rm.rm-dock #chatH > .rmd-chip-chat .pfx-bs { display: none; }   /* (the window's heading: the pad's name before its badges) */
+main.rm.rm-dock #chatH > .rmd-chip-chat .rm-av { width: 18px; height: 18px; }
+main.rm.rm-dock #chatH > .rmd-room-link { flex: 0 1 auto; min-inline-size: 0; max-inline-size: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 var(--ds-fs-meta)/1 var(--ds-font); letter-spacing: normal; text-transform: none; color: var(--ds-ac-2); }
+
+/* the pad's chat in its own window (/p/<slug>/chat): a 100dvh column - the chat card fills it; phone rules apply in a narrow window */
+body.rmd-pop { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 320px; margin: 0; overflow-x: hidden; background: var(--ds-bg); }
+body.rmd-pop > main.rm.rm-dock.rmd-popout { flex: 1 1 0; min-block-size: 0; display: flex; flex-direction: column; gap: var(--ds-sp-1h); inline-size: 100%; max-inline-size: 100%; margin: 0; padding: var(--ds-sp-1h); }
+main.rm.rm-dock.rmd-popout #padPanel-live { display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; gap: var(--ds-sp-1h); }
+main.rm.rm-dock.rmd-popout .rm-live,
+main.rm.rm-dock.rmd-popout .rm-main { display: contents; }
+main.rm.rm-dock.rmd-popout .rm-live > .side { display: none; }
+main.rm.rm-dock.rmd-popout #rmChat { flex: 1 1 0; min-block-size: 0; }
+main.rm.rm-dock.rmd-popout .rmd-log { min-block-size: 96px; }
+main.rm.rm-dock:is(.rmd-popout, .rmd-home) #chatH .rmd-ppl-btn { display: inline-flex; }
+main.rm.rm-dock .rmd-gone { display: grid; gap: var(--ds-sp-3); justify-items: start; align-content: center; flex: 1 1 auto; margin: 0; padding: var(--ds-sp-5); border-radius: var(--ds-r-lg); font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-gone > p { margin: 0; max-inline-size: 42ch; }

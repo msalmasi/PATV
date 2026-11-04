@@ -477,7 +477,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
   assert.match(room.slice(styleEnd + 8, link), /^\s*<%#[^%]*%>\s*$/, "nothing in between but a comment");
-  assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %><%= dockOn_ \? ' rm-dock' : '' %>"/);
+  assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %><%= dockOn_ \? ' rm-dock' : '' %><%= chatOnly_ \? ' rmd-popout' : '' %>"/);   // (1.99?? dockpop: + the chat window)
   // the moved rules left the page's style block, and their legacy hex values with them (the reduced-motion transition rule
   // still names .line among the controls it calms)
   const block = room.slice(room.indexOf("<style>"), styleEnd).replace(".rm .ptab, .rm .ibtn, .rm .btn, .rm .line { transition: none; }", "");

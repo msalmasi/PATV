@@ -50,6 +50,14 @@ let ready = null, loaded = false;
 const SALT = crypto.randomBytes(16);
 const digest = (s, n = 22) => crypto.createHmac("sha256", SALT).update(String(s)).digest("base64url").slice(0, n);
 const goneKey = (uid) => digest("g|" + String(uid));
+/** 1.99?? dockpop (owner P1): the viewer tag the Room Dock's windows compare (public/js/dock-link.js; the chat window's vt, ?pop=1 answers) -
+ *  this account's key in its own pages and answers only, never the account id. Keyed by the site's secret, not SALT: rpm.w changes on every
+ *  restart (deploys), and a tag that changed would close every open chat window as "you signed out". null signed out. */
+function tag(userId) {
+  if (userId == null || userId === "") return null;
+  const key = process.env.SECRET_KEY ? "dock-tag|" + process.env.SECRET_KEY : SALT;
+  return crypto.createHmac("sha256", key).update("w|" + String(userId)).digest("base64url").slice(0, 16);
+}
 
 // ── the switch ──
 function cleanState(o) {
@@ -274,7 +282,7 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, on, state, setOn, typedJob, noteJob, fromAck, addLocal, since, latest, view, forgetUser, register, cleanText,
+module.exports = { init, on, state, setOn, typedJob, noteJob, fromAck, addLocal, since, latest, view, forgetUser, register, cleanText, tag,
                    KEEP, TTL, TEXT_MAX, RATE, MAX_KEYS, MAX_ROWS,
                    _sweep: sweep, _store: store, _origins: origins,
                    _setClock: (f) => { clock = f || (() => Date.now()); },

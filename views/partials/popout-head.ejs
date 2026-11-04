@@ -1,0 +1,30 @@
+<%# 1.99?? dockpop (owner P1): the head of the pad's chat in its own window (/p/<slug>/chat, room.ejs chatOnly) - the site's own head
+    (layout.ejs: the same icons, fonts, ds.css / styles.css, translations, time zone and __t; test/pad-chat-window.test.js compares
+    them) without the navbar, the footer template, the avatar fetch or the chat sweep: the window is the chat card alone. Never
+    indexed (the route also says so in its headers). Its body is a 100dvh column (pad-dock.css body.rmd-pop). -%>
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<!DOCTYPE html>
+<html lang="<%= t.lang %>"<%- t.dir === 'rtl' ? ' dir="rtl"' : '' %>>
+<head>
+    <meta charset="UTF-8">
+    <% if (typeof shareLinkBase === "function" && shareLinkBase()) { %><meta name="patv-share-base" content="<%= shareLinkBase() %>"><% } %>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
+    <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
+    <title><%- title %></title>
+    <meta name="theme-color" content="#18181b">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Ubuntu:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/public/css/ds.css?v=4">
+    <link rel="stylesheet" href="/public/css/styles.css?v=6">
+    <% if (t.lang !== 'en') { %><script>window.PATV_I18N = <%- locals.i18nClient ? i18nClient(['js.'].concat(locals.i18nJs || [])) : '{"lang":"en","dir":"ltr","s":{}}' %>;</script><% } %>
+    <script>window.PATV_TZ_SAVED = <%- JSON.stringify(locals.tzSaved || null) %>;</script>
+    <script src="/public/js/localtime.js?v=1"></script>
+    <script>window.__t = function (k, d, v) { var I = window.PATV_I18N, s = I && I.s ? I.s[k] : null; if (s == null || s === '') s = d;
+        if (s && typeof s === 'object') { var n = v && v.count != null ? +v.count : NaN, c = 'other'; try { if (!isNaN(n)) c = new Intl.PluralRules(I ? I.lang : 'en').select(n); } catch (e) {} s = s[c] != null ? s[c] : s.other; }
+        return String(s == null ? k : s).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? String(v[n]) : m; }); };</script>
+</head>
+<body class="rmd-pop">

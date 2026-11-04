@@ -153,8 +153,10 @@ test("labels: the pad page header pill and the /p guide use the same room wordin
       description: "Plants and chat", owner: "pb", ownerUser: "pb", camfrogName: "Plant Based Chatting" },
     initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: {}, latest: [] });
   assert.match(html, /id="rmLive" title="Is the pad's chat room active\? \(ON AIR on the stage = a video stream\)"/);
-  assert.match(html, /rmLiveTxt'\)\.textContent = r\.live \? _t\('js\.pad\.room_active', '💬 ROOM ACTIVE'\) : _t\('js\.pad\.room_offline', 'ROOM OFFLINE'\)/);
-  assert.match(html, /live\.classList\.toggle\('chat', !!r\.live\)/);
+  // (1.99?? dockpop: guarded - the pad's chat in its own window has no header pill)
+  assert.match(html, /var live = roomEl\('rmLive'\), liveTxt = roomEl\('rmLiveTxt'\);/);
+  assert.match(html, /if \(liveTxt\) liveTxt\.textContent = r\.live \? _t\('js\.pad\.room_active', '💬 ROOM ACTIVE'\) : _t\('js\.pad\.room_offline', 'ROOM OFFLINE'\)/);
+  assert.match(html, /if \(live\) \{ live\.classList\.toggle\('off', !r\.live\); live\.classList\.toggle\('chat', !!r\.live\); \}/);
   assert.match(html, /<span id="rmStPillTxt">OFF AIR<\/span>/, "the pad's stage pill is unchanged");
   assert.match(html, /stagePillText\.textContent = on \? _t\('js\.pad\.stage\.on_air', 'ON AIR'\) : _t\('js\.pad\.stage\.off_air', 'OFF AIR'\)/);
   const off = (await ejs.renderFile(path.join(repo, "views", "room.ejs"), {

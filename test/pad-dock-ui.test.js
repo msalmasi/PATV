@@ -2,7 +2,7 @@
 // 1.99ajf dockclean: the Room Dock's controller after the clean-up (hand-off 18 follow-up) - one stage card with an auto-hiding overlay,
 // the chat's one header row, the composer's tool row, and every other control in exactly one menu that proxies the original control.
 const test=require('node:test'),assert=require('node:assert/strict');
-const {harness,Event}=require('./fixtures/pad-dock/dom.cjs');
+const {harness,bus,Event}=require('./fixtures/pad-dock/dom.cjs');
 const F=require('./fixtures/pad-dock/room.cjs');
 const flush=async()=>{for(let i=0;i<6;i++)await Promise.resolve();};
 const menuOf=doc=>doc.querySelector('.rmd-menu');
@@ -27,21 +27,24 @@ test('float, fullscreen and redock move the same feed and preserve privacy marku
   h.button('Fullscreen',h.stage).click();await flush();assert.ok(h.root.contains(h.doc.fullscreenElement));h.button('Show chat').click();assert.ok(h.chat.closest('.rmd-overlay'));assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.feed.outerHTML,before);assert.equal(h.chat.contains(story),false);
   h.button('Show chat').click();assert.equal(h.chat.closest('.rmd-overlay'),null);h.controller.redock();assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.doc.querySelectorAll('#rmPtt').length,1);
 });
-test('Document PiP adopts one log, exact pad identity and all stylesheets; close restores it',async()=>{
-  const h=harness({pip:true}),before=h.feed.outerHTML,styles=h.doc.querySelectorAll('link[rel="stylesheet"],style').length;
-  h.menuPick('Chat options','Pop out chat');await flush();const p=h.pipDoc,main=p.querySelector('main');
-  assert.equal(p.getElementById('rmFeed'),h.feed);assert.equal(h.doc.getElementById('rmFeed'),null);assert.equal(h.feed.outerHTML,before);assert.equal(main.className,h.root.className);assert.equal(main.getAttribute('style'),h.root.getAttribute('style'));assert.equal(p.querySelectorAll('link[rel="stylesheet"],style').length,styles);assert.equal(p.querySelector('.rm-story'),null);
-  h.doc.hidden=true;assert.equal(h.controller.visible(),true);p.hidden=true;assert.equal(h.controller.visible(),false);p.hidden=false;
-  h.button('Add to the chat',p).click();assert.ok(menuOf(p));assert.equal(p.querySelectorAll('button').some(b=>b.textContent.includes('Add to your story')),false);
-  h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));p.dispatchEvent(new Event('keydown',{key:'Escape'}));
-  h.button('Pepe says it',p).click();assert.ok(p.querySelector('.rmd-tts'));assert.equal(h.doc.querySelector('.rmd-tts'),null);
-  h.pipWin.close();assert.equal(h.doc.getElementById('rmFeed'),h.feed);assert.equal(h.doc.querySelectorAll('#rmFeed').length,1);assert.equal(h.feed.outerHTML,before);assert.ok(h.calls.adopt.includes(p));assert.equal(h.calls.adopt.at(-1),h.doc);
+// 1.99?? dockpop: 🖼️ Picture-in-picture is the STAGE's - the chat's Document PiP is gone (it closed with its opener; ↗️ Chat in its own
+// window follows the viewer around the site instead)
+test('stage picture-in-picture adopts the stage, the exact pad identity and all stylesheets; close restores it; the chat has no Document PiP',async()=>{
+  const h=harness({pip:true}),stage=h.stage,styles=h.doc.querySelectorAll('link[rel="stylesheet"],style').length,before=h.feed.outerHTML;
+  h.button('Chat options').click();assert.equal(menuOf(h.doc).querySelectorAll('button').some(b=>/Pop out|🗗/.test(b.textContent)),false,'no chat PiP item');h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));
+  h.menuPick('Stage options','Picture-in-picture');await flush();const p=h.pipDoc,main=p.querySelector('main');
+  assert.equal(p.getElementById('rmStage'),stage);assert.equal(h.doc.getElementById('rmStage'),null);assert.equal(main.className,h.root.className);assert.equal(main.getAttribute('style'),h.root.getAttribute('style'));assert.equal(p.querySelectorAll('link[rel="stylesheet"],style').length,styles);
+  assert.equal(h.doc.getElementById('rmFeed'),h.feed,'the chat stays in the pad');assert.equal(h.feed.outerHTML,before);assert.equal(p.querySelector('#rmFeed'),null);
+  h.doc.hidden=true;assert.equal(h.controller.visible(),true);p.hidden=true;assert.equal(h.controller.visible(),false);p.hidden=false;h.doc.hidden=false;
+  h.pipWin.close();assert.equal(h.doc.getElementById('rmStage'),stage);assert.equal(h.doc.querySelectorAll('#rmStage').length,1);assert.equal(stage.closest('#padPanel-live'),h.panel);
 });
 test('topmost foreign dialogs own Escape and focus before the floating Dock',()=>{
   const h=harness();h.menuPick('Chat options','Float chat');const float=h.chat.closest('.rmd-float');
   const modal=h.make('div',null,null,h.doc.body);modal.setAttribute('aria-modal','true');const field=h.make('input',null,null,modal);field.focus();
   h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),float);assert.equal(h.doc.activeElement,field);
-  modal.remove();h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),null);
+  // (1.99?? dockpop: Escape redocks only from inside the float - elsewhere on the page it never pulls the chat back)
+  modal.remove();h.doc.activeElement=h.doc.body;h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),float,'Escape outside the float');
+  h.input.focus();h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),null,'Escape inside the float redocks');
 });
 test('the tool row: Say it and Apps share the relay; tiles fill the composer and never send; ＋ holds no duplicates',()=>{
   const h=harness({data:d=>{d.room.cmds={'!say':100,'!duel':0,'!bj':0,'!spin':5000,'!pictionary':0};}});
@@ -107,7 +110,7 @@ test('the stage ⋯: hide the stage to its slim bar, pop out, pinned cams ▸ la
   const h=harness();
   h.menuPick('Stage options','Hide stage');assert.equal(h.root.classList.contains('rmd-stage-hidden'),true);const mini=h.doc.getElementById('rmdMini');assert.equal(mini.hidden,false);assert.ok(mini.querySelector('.rmd-chip'));
   h.button('Show stage').click();assert.equal(h.root.classList.contains('rmd-stage-hidden'),false);
-  h.menuPick('Stage options','Pop out player');assert.match(h.doc.querySelector('.rmd-toast').textContent,/unavailable/);assert.equal(h.stage.querySelector('video').ownerDocument,h.doc);
+  h.menuPick('Stage options','Picture-in-picture');assert.match(h.doc.querySelector('.rmd-toast').textContent,/unavailable/);assert.equal(h.stage.querySelector('video').ownerDocument,h.doc);
   h.button('Stage options').click();h.button('Pinned cams',menuOf(h.doc)).click();const m=menuOf(h.doc);assert.ok(m,'the submenu replaces the list');h.button('Grid',m).click();assert.equal(h.strip.getAttribute('data-rmd-layout'),'grid');
 });
 test('the overlay\'s Snap and Clip proxy the capture row; Clip asks for the length first and then starts it',()=>{
@@ -125,16 +128,51 @@ test('the source chip is a menu of the stage\'s sources (the original tabs)',()=
   const m=menuOf(h.doc),items=m.querySelectorAll('[role="menuitemradio"]');assert.equal(items.length,2);assert.equal(items[0].getAttribute('aria-checked'),'true');
   items[1].click();assert.deepEqual(h.calls.clicks,['stab:pepe']);
 });
-test('fullscreen body-attached controls leave fullscreen before replay; PiP controls focus pad',async()=>{
+test('fullscreen body-attached controls leave fullscreen before replay; a control in the stage PiP focuses the pad',async()=>{
   const h=harness({pip:true}),line=h.feed.querySelector('.line'),action=h.make('button','la-btn',null,line,'Line actions');let invoked=0;action.addEventListener('click',()=>invoked++);
   h.button('Fullscreen',h.stage).click();h.button('Show chat').click();action.click();await flush();assert.equal(h.doc.fullscreenElement,null);assert.equal(invoked,1);assert.equal(h.doc.getElementById('rmFeed'),h.feed);
-  h.menuPick('Chat options','Pop out chat');await flush();action.click();assert.equal(invoked,1);assert.equal(h.calls.focus,1);assert.match(h.pipDoc.querySelector('.rmd-toast').textContent,/pad tab/);
+  const stx=h.make('button','stx',null,h.doc.getElementById('rmTabs'),'Watch on Twitch');let tw=0;stx.addEventListener('click',()=>tw++);
+  h.menuPick('Stage options','Picture-in-picture');await flush();stx.click();assert.equal(tw,0);assert.equal(h.calls.focus,1);assert.match(h.pipDoc.querySelector('.rmd-toast').textContent,/pad tab/);
 });
 test('a disabled text relay cannot hide a separately enabled mic relay',()=>{
   const h=harness(),form=h.input.closest('form');form.classList.add('hide');assert.equal(h.ptt.closest('.hide'),null);assert.equal(h.ptt.closest('form'),null);assert.equal(h.ptt.getClientRects().length,1);assert.equal(h.doc.querySelectorAll('#rmPtt').length,1);
 });
-test('a late Document PiP result after leaving Live closes without moving chat',async()=>{
-  const h=harness({pip:true,deferPiP:true}),before=h.feed.outerHTML;h.menuPick('Chat options','Pop out chat');h.panel.hidden=true;h.doc.dispatchEvent(new Event('patv:padtab',{detail:{tab:'feed'}}));h.resolvePip();await flush();assert.equal(h.pipWin.closed,true);assert.equal(h.doc.getElementById('rmFeed'),h.feed);assert.equal(h.feed.outerHTML,before);assert.equal(h.doc.body.classList.contains('pad-dock-live'),false);
+// 1.99?? dockpop (owner P1): the floating chat and a stage in picture-in-picture stay as they are across Live / Feed / About - the same
+// nodes, scroll position, draft and audio box; only a fullscreen view goes back. Escape elsewhere does nothing; ↩️ on Feed shows Live.
+const tabTo=(h,tab)=>{h.panel.hidden=tab!=='live';h.doc.dispatchEvent(new Event('patv:padtab',{detail:{tab}}));};
+test('a tab switch keeps the float and a stage PiP (same feed, scroll, draft, audio); fullscreen still redocks; Bring it back on Feed shows Live',async()=>{
+  const h=harness({pip:true}),scroll=h.doc.getElementById('rmScroll'),audio=h.doc.getElementById('rmAudioBox'),before=h.feed.outerHTML;
+  h.menuPick('Chat options','Float chat');const float=h.chat.closest('.rmd-float');scroll.scrollTop=123;h.input.value='half a thought';
+  for(const tab of ['feed','about','feed']){
+    tabTo(h,tab);
+    assert.equal(h.chat.closest('.rmd-float'),float,tab+': still floating');assert.equal(h.doc.getElementById('rmFeed'),h.feed);assert.equal(h.feed.outerHTML,before);
+    assert.equal(scroll.scrollTop,123);assert.equal(h.input.value,'half a thought');assert.equal(h.doc.getElementById('rmAudioBox'),audio);assert.equal(audio.closest('.rmd-float'),float);
+    assert.equal(h.doc.body.classList.contains('rmd-afloat'),true);assert.equal(h.doc.body.classList.contains('pad-dock-live'),false);assert.equal(float.parentNode,h.root,'a child of <main>, outside the hidden panel');
+  }
+  h.doc.activeElement=h.doc.body;h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),float,'Escape on Feed outside the float');
+  h.calls.clicks.length=0;h.button('Bring it back',float).click();
+  assert.equal(h.chat.closest('.rmd-float'),null);assert.deepEqual(h.calls.clicks.filter(x=>x.startsWith('tab:')),['tab:live'],'its docked place is Live');assert.equal(h.doc.body.classList.contains('rmd-afloat'),false);
+  tabTo(h,'live');h.menuPick('Stage options','Picture-in-picture');await flush();tabTo(h,'feed');
+  assert.equal(h.pipWin.closed,false,'the stage PiP survives the tab switch');assert.equal(h.pipDoc.getElementById('rmStage'),h.stage);
+  h.pipWin.close();tabTo(h,'live');h.button('Fullscreen',h.stage).click();await flush();assert.ok(h.doc.querySelector('.rmd-fullscreen'));
+  tabTo(h,'about');assert.equal(h.doc.querySelector('.rmd-fullscreen'),null,'fullscreen goes back');assert.equal(h.stage.closest('#padPanel-live'),h.panel);
+  h.controller.destroy();
+});
+test('a late stage PiP result after leaving Live still opens; a redock before it closes it',async()=>{
+  const h=harness({pip:true,deferPiP:true});h.menuPick('Stage options','Picture-in-picture');tabTo(h,'feed');h.resolvePip();await flush();assert.equal(h.pipWin.closed,false);assert.equal(h.pipDoc.getElementById('rmStage'),h.stage);
+  const g=harness({pip:true,deferPiP:true});g.menuPick('Stage options','Picture-in-picture');g.controller.redock();g.resolvePip();await flush();assert.equal(g.pipWin.closed,true);assert.equal(g.doc.getElementById('rmStage'),g.stage);
+  h.controller.destroy();g.controller.destroy();
+});
+test('the floating chat minimizes to its 44px bar (the chat stays in it, a dot for new lines) and expands back',()=>{
+  const h=harness({mo:true});h.menuPick('Chat options','Float chat');const float=h.chat.closest('.rmd-float');
+  const min=h.button('Minimize',float);assert.equal(min.getAttribute('aria-expanded'),'true');assert.equal(min.querySelector('.ds-ic').textContent,'➖');
+  float.setAttribute('style','inset-inline-start: 40px; inset-block-start: 80px');min.click();
+  assert.equal(float.classList.contains('rmd-min'),true);assert.equal(h.chat.closest('.rmd-float'),float,'the chat stays in the float (display: none)');assert.equal(float.getAttribute('style'),null,'minimized: the bar\'s own corner');
+  assert.equal(min.getAttribute('aria-label'),'Expand');assert.equal(min.getAttribute('aria-expanded'),'false');assert.equal(min.querySelector('.ds-ic').textContent,'➕');
+  const dot=float.querySelector('.rmd-float-dot');assert.equal(dot.hidden,true);assert.match(float.querySelector('.rmd-float-t').textContent,/Chat/);
+  h.feed.appendChild(h.make('div','line'));h.mutate(h.feed);assert.equal(dot.hidden,false,'a new line while minimized');
+  min.click();assert.equal(float.classList.contains('rmd-min'),false);assert.equal(dot.hidden,true);assert.equal(float.getAttribute('style'),'inset-inline-start: 40px; inset-block-start: 80px','its place again');
+  tabTo(h,'feed');assert.equal(h.chat.closest('.rmd-float'),float);h.controller.destroy();
 });
 test('a live veil change closes the named tip picker and invalidates its previously rendered recipient action',()=>{
   const h=harness(),d=F.initial();
@@ -168,7 +206,7 @@ test('a camera watched on the local stage keeps reachable hide, restore and pop-
   h.menuPick('Cam options','Watch on my stage');const local=h.doc.querySelector('.rmd-local-player');
   h.button('Hide stage',local).click();assert.equal(h.root.classList.contains('rmd-stage-hidden'),true);assert.equal(h.doc.getElementById('rmdMini').hidden,false);
   h.button('Show stage').click();assert.equal(h.root.classList.contains('rmd-stage-hidden'),false);assert.equal(local.contains(tile),true);
-  h.button('Pop out player',local).click();await flush();
+  h.button('Picture-in-picture',local).click();await flush();
   assert.equal(h.pipDoc.querySelector('.rmd-local-player')===local,true);assert.equal(h.pipDoc.querySelector('.cs-tile')===tile,true);
   assert.equal(tile.querySelector('video')===video,true);assert.equal(h.doc.querySelectorAll('.cs-tile').length,0);
   h.pipWin.close();assert.equal(h.doc.querySelector('.rmd-local-player')===local,true);assert.equal(local.contains(tile),true);
@@ -177,8 +215,8 @@ test('a camera watched on the local stage keeps reachable hide, restore and pop-
 });
 test('menus support arrows, Home, End and Escape in the pad and PiP documents',async()=>{
   for(const pip of [false,true]){
-    const h=harness({pip});if(pip){h.menuPick('Chat options','Pop out chat');await flush();}
-    const doc=pip?h.pipDoc:h.doc,opener=h.button('Chat options',doc);opener.click();
+    const h=harness({pip});if(pip){h.menuPick('Stage options','Picture-in-picture');await flush();}
+    const doc=pip?h.pipDoc:h.doc,opener=h.button(pip?'Stage options':'Chat options',doc);opener.click();
     const menu=menuOf(doc),items=menu.querySelectorAll('[role="menuitem"]');assert.ok(items.length>=3);
     assert.equal(doc.activeElement===items[0],true,'opening a menu focuses its first action');assert.equal(opener.getAttribute('aria-expanded'),'true');
     const key=(key,index)=>{const e=new Event('keydown',{key});doc.dispatchEvent(e);assert.equal(e.defaultPrevented,true);assert.equal(doc.activeElement===items[index],true,key+' focuses the expected action');};
@@ -190,14 +228,14 @@ test('menus support arrows, Home, End and Escape in the pad and PiP documents',a
 test('Dock notices reuse the body toast stack and remain inside fullscreen and PiP surfaces',async()=>{
   const h=harness({pip:true}),stack=h.make('div','ds-toasts',null,h.doc.body),existing=h.make('div','ds-toast',null,stack,'Existing notice');
   const plain=harness(),plainStack=plain.make('div','ds-toasts',null,plain.doc.body),plainNotice=plain.make('div','ds-toast',null,plainStack,'Existing notice');
-  plain.menuPick('Stage options','Pop out player');const first=plain.doc.querySelector('.rmd-toast');
+  plain.menuPick('Stage options','Picture-in-picture');const first=plain.doc.querySelector('.rmd-toast');
   assert.equal(first.parentNode===plainStack,true);assert.equal(plain.root.contains(first),false);assert.equal(plainNotice.isConnected,true);
-  plain.menuPick('Stage options','Pop out player');assert.equal(first.isConnected,false);assert.equal(plain.doc.querySelectorAll('.ds-toasts').length,1);assert.equal(plain.doc.querySelectorAll('.rmd-toast').length,1);
+  plain.menuPick('Stage options','Picture-in-picture');assert.equal(first.isConnected,false);assert.equal(plain.doc.querySelectorAll('.ds-toasts').length,1);assert.equal(plain.doc.querySelectorAll('.rmd-toast').length,1);
   const action=h.make('button','la-btn',null,h.feed.querySelector('.line'),'Line actions');
   h.button('Fullscreen',h.stage).click();await flush();h.button('Show chat').click();const full=h.doc.fullscreenElement;
   const exit=h.doc.exitFullscreen.bind(h.doc);h.doc.exitFullscreen=()=>Promise.reject(new Error('Fullscreen exit refused'));
   action.click();await flush();assert.equal(h.doc.fullscreenElement===full,true);assert.equal(full.querySelector('.rmd-toast').closest('.ds-toasts').parentNode===full,true);assert.equal(existing.isConnected,true);
-  h.doc.exitFullscreen=exit;await exit();h.controller.redock();h.menuPick('Chat options','Pop out chat');await flush();action.click();
+  h.doc.exitFullscreen=exit;await exit();h.controller.redock();const stx=h.make('button','stx',null,h.doc.getElementById('rmTabs'),'Watch on Twitch');h.menuPick('Stage options','Picture-in-picture');await flush();stx.click();
   const notice=h.pipDoc.querySelector('.rmd-toast');assert.equal(notice.closest('.ds-toasts').parentNode===h.pipDoc.querySelector('main'),true);assert.equal(h.doc.querySelectorAll('.ds-toasts').length,1);
   plain.controller.destroy();h.controller.destroy();
 });
@@ -250,16 +288,19 @@ test('privacy updates dismiss the original person menu without dismissing it on 
   assert.equal(closed,3);assert.equal(menu.isConnected,false);h.controller.destroy();
 });
 test('a pending native video PiP request cannot survive a source change or a redock',async()=>{
+  // (1.99?? dockpop: leaving Live no longer closes it - a PiP survives Live / Feed / About)
   for(const change of ['source','redock','leave-live']){
     let selection={stream:'fixture-own-stream',embed:false},resolve,exits=0;
     const h=harness({opts:{stage:{selection:()=>selection,view:()=>selection.stream}}}),video=h.stage.querySelector('video');
     video.requestPictureInPicture=()=>new Promise(done=>{resolve=()=>{h.doc.pictureInPictureElement=video;done();};});
     h.doc.exitPictureInPicture=()=>{exits++;h.doc.pictureInPictureElement=null;return Promise.resolve();};
-    h.menuPick('Stage options','Pop out player');assert.equal(typeof resolve,'function');
+    h.menuPick('Stage options','Picture-in-picture');assert.equal(typeof resolve,'function');
     if(change==='source'){selection={stream:'mic',embed:false};h.controller.stageChanged(selection);}
     else if(change==='redock')h.controller.redock();
     else{h.panel.hidden=true;h.doc.dispatchEvent(new Event('patv:padtab',{detail:{tab:'feed'}}));}
-    resolve();await flush();assert.equal(exits,1,change+' closes the late native PiP');assert.equal(h.doc.pictureInPictureElement,null);
+    resolve();await flush();
+    if(change==='leave-live'){assert.equal(exits,0,'a tab switch keeps the native PiP');assert.equal(h.doc.pictureInPictureElement,video);}
+    else{assert.equal(exits,1,change+' closes the late native PiP');assert.equal(h.doc.pictureInPictureElement,null);}
     h.controller.destroy();
   }
 });
@@ -268,7 +309,7 @@ test('ordinary player transport buttons stay usable in fullscreen and Document P
   const play=h.make('button','vjs-play-control',null,h.doc.getElementById('rmVideo'),'Play');play.addEventListener('click',()=>plays++);
   h.button('Fullscreen',h.stage).click();await flush();const full=h.doc.fullscreenElement;play.click();await flush();
   assert.equal(h.doc.fullscreenElement===full,true);assert.equal(plays,1);
-  h.controller.redock();h.menuPick('Stage options','Pop out player');await flush();play.click();
+  h.controller.redock();h.menuPick('Stage options','Picture-in-picture');await flush();play.click();
   assert.equal(plays,2);assert.equal(h.pipDoc.querySelector('.rmd-toast'),null);h.controller.destroy();
 });
 test('the pad menu: Feed / About tabs, Share, the Stage group (go live, book, boost sheet), More and Owner items',()=>{
@@ -287,7 +328,7 @@ test('the pad menu: Feed / About tabs, Share, the Stage group (go live, book, bo
 test('stage schedule: a sheet from the stage ⋯ that never leaves the pad document',async()=>{
   const h=harness({pip:true,schedule:true}),schedule=h.doc.getElementById('rmSched'),home=schedule.parentNode;
   h.menuPick('Stage options','Stage schedule…');assert.equal(h.doc.querySelector('.rmd-layer').contains(schedule),true);h.button('Close').click();assert.equal(schedule.parentNode===home,true);
-  h.menuPick('Stage options','Pop out player');await flush();h.button('Stage options',h.pipDoc).click();h.button('Stage schedule…',menuOf(h.pipDoc)).click();
+  h.menuPick('Stage options','Picture-in-picture');await flush();h.button('Stage options',h.pipDoc).click();h.button('Stage schedule…',menuOf(h.pipDoc)).click();
   assert.equal(h.doc.getElementById('rmSched')===schedule,true);assert.equal(schedule.parentNode===home,true);assert.equal(h.pipDoc.querySelector('#rmSched'),null);
   assert.equal(h.calls.focus,1);assert.match(h.pipDoc.querySelector('.rmd-toast').textContent,/pad tab/);h.controller.destroy();
 });
@@ -337,7 +378,7 @@ test('review: the stage overlay - one source chip node; 🖥️ is a toggle (Exi
   const full=h.stage.querySelectorAll('.rmd-ov-bot button').find(b=>b.getAttribute('aria-label')==='Fullscreen');full.click();await flush();
   assert.equal(full.getAttribute('aria-label'),'Exit fullscreen');const fs=h.doc.querySelector('.rmd-fullscreen');assert.equal(fs.querySelector('[data-rmd-back]').hidden,true,'one way out');
   full.click();await flush();assert.equal(h.doc.querySelector('.rmd-fullscreen'),null);assert.equal(full.getAttribute('aria-label'),'Fullscreen');
-  h.menuPick('Stage options','Hide stage');assert.equal(h.doc.activeElement===h.button('Show stage'),true,'focus follows to 📺 Show stage');
+  h.menuPick('Stage options','Hide stage');assert.equal(h.doc.activeElement===h.button('Show stage'),true,'focus follows to 🔼 Show stage');
   h.button('Show stage').click();assert.equal(h.doc.activeElement===h.button('Stage options'),true,'and back to the stage ⋯');
   h.controller.destroy();
 });
@@ -377,4 +418,109 @@ test('Escape closes a Dock sheet first, then redocks the floating chat',()=>{
   h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.doc.querySelector('.rmd-tts'),null,'the sheet closes');assert.ok(h.chat.closest('.rmd-float'),'the chat still floats');
   h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));assert.equal(h.chat.closest('.rmd-float'),null,'Escape redocks');
   assert.equal(h.doc.querySelectorAll('#rmFeed').length,1);
+});
+
+// ══ 1.99?? dockpop (owner P1 / P2): the chat in its own window, the popped tab, the window itself, the homepage's preview mode ══
+const items=(h,label,within)=>{h.button(label,within).click();const m=menuOf((within&&within.ownerDocument)||h.doc)||menuOf(h.doc);const out=m?m.querySelectorAll('[role]').filter(b=>/^menuitem/.test(b.getAttribute('role'))).map(b=>b.getAttribute('aria-label')||(b.querySelector('.rmd-label')||b).textContent):[];h.doc.dispatchEvent(new Event('keydown',{key:'Escape'}));return out;};
+const audioStub=(h)=>{const a={playing:false,paused:0,resumed:0,listeners:[],isPlaying(){return a.playing;},playingSlug(){return a.playing?'night-orchard':null;},pause(){a.paused++;const was=a.playing;a.playing=false;return was;},resume(){a.resumed++;a.playing=true;a.listeners.forEach(f=>f('night-orchard'));return true;},onChange(f){a.listeners.push(f);}};return a;};
+test('chat ⋯ per mode and pointer: Float + ↗️ on a desktop pad, Float only on touch / narrow; no Document PiP item; the window has ↩️, no Float',()=>{
+  const desk=harness({fine:true,open:true}),touch=harness({fine:false,open:true}),narrow=harness({fine:true,width:700,open:true});
+  assert.deepEqual(items(desk,'Chat options').filter(x=>/Float|window|Pop out/.test(x)),['Float chat','Chat in its own window']);
+  assert.deepEqual(items(touch,'Chat options').filter(x=>/Float|window|Pop out/.test(x)),['Float chat'],'touch: a second window can\'t sit beside the page');
+  assert.deepEqual(items(narrow,'Chat options').filter(x=>/Float|window|Pop out/.test(x)),['Float chat'],'760px and narrower');
+  const win=harness({fine:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'t',padHref:'/p/night-orchard'}});
+  const w=items(win,'Chat options');assert.equal(w.some(x=>/Float|own window/.test(x)),false,'no Float or pop-out in the window');
+  assert.ok(w.includes('Download chat log…'),'the window keeps ⬇');
+});
+test('↗️ opens the real window in the click: its name (the ROOM id), URL (#listen while the room plays), geometry; the tab goes popped as pending',()=>{
+  const b=bus(),a=audioStub();
+  const g=harness({bus:b,fine:true,open:true,opts:{room:'Dock.Equipped',vt:'tag-1',audio:a}});a.playing=true;
+  g.menuPick('Chat options','Chat in its own window');
+  const o=g.calls.open[0];assert.equal(o.url,'/p/night-orchard/chat#listen','the window picks the room audio up');assert.equal(o.name,'patv-chat-Dock_Equipped');
+  assert.match(o.features,/^popup,width=420,height=\d+,left=-?\d+,top=-?\d+$/);
+  assert.equal(g.root.classList.contains('rmd-popped'),true,'popped at once (pending)');assert.equal(a.paused,1,'its audio paused: never heard twice, never without controls');
+  assert.equal(g.doc.getElementById('rmFeed'),g.feed);assert.ok(g.chat.closest('#padPanel-live'),'the chat card stays where it is (hidden in place)');
+  const show=g.button('Show it');assert.equal(show.hidden,false);show.click();assert.equal(g.calls.wfocus,1,'Show it focuses the window we hold');
+  // no answer from the window in 6 s: back to normal with a note
+  g.tick();assert.equal(g.root.classList.contains('rmd-popped'),false);assert.match(g.doc.querySelector('.rmd-toast').textContent,/didn’t open/);
+});
+test('a blocked pop-up floats the chat here instead, with a toast; the homepage only says so',()=>{
+  const h=harness({fine:true,open:'blocked',opts:{room:'Dock.Equipped'}});h.menuPick('Chat options','Chat in its own window');
+  assert.ok(h.chat.closest('.rmd-float'),'floats');assert.match(h.doc.querySelector('.rmd-toast').textContent,/Pop-ups are blocked for this site, so the chat floats here instead/);
+  assert.equal(h.root.classList.contains('rmd-popped'),false);
+  const p=harness({fine:true,open:'blocked',opts:{mode:'preview',room:'Dock.Equipped',chatUrl:'/p/night-orchard/chat',preview:{}}});p.menuPick('Chat options','Chat in its own window');
+  assert.equal(p.chat.closest('.rmd-float'),null);assert.match(p.doc.querySelector('.rmd-toast').textContent,/Allow pop-ups for publicaccess\.tv to open the chat/);
+});
+test('Bring it back: pop-close-req to the window, the audio resumes INSIDE the click when the window was playing, then the hand-over restores the tab',()=>{
+  const b=bus(),a=audioStub();
+  const tab=harness({bus:b,fine:true,open:true,opts:{room:'Dock.Equipped',vt:'tag-1',audio:a}});
+  const wa=audioStub();wa.playing=true;
+  const win=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'tag-1',audio:wa}});
+  for(let i=0;i<4;i++)b.flush();win.tick();for(let i=0;i<4;i++)b.flush();   // (a heartbeat: the window plays the room)
+  assert.equal(tab.root.classList.contains('rmd-popped'),true);
+  win.input.value='typed in the window';
+  tab.button('Bring it back').click();
+  assert.equal(a.resumed,1,'resumed in the gesture');assert.ok(b.types().includes('pop-close-req'));
+  for(let i=0;i<4;i++)b.flush();
+  assert.equal(wa.playing,false,'the window stops its audio');assert.equal(win.calls.closed,1,'and closes');
+  assert.equal(tab.root.classList.contains('rmd-popped'),false,'restored on the hand-over');
+  assert.equal(tab.input.value,'typed in the window','the window\'s draft comes back (the input was empty)');
+  assert.equal(tab.doc.activeElement,tab.input,'focus on the input');
+  assert.equal(tab.chat.parentNode.querySelector('.rmd-popbar'),null);
+});
+test('closing the window with its own ✕ restores the tab (pagehide: pop-closed with the draft); audio-on pauses another player of the same room',()=>{
+  const b=bus(),a=audioStub(),tab=harness({bus:b,opts:{room:'Dock.Equipped',vt:'tag-1',audio:a}}),win=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'tag-1'}});
+  for(let i=0;i<4;i++)b.flush();assert.equal(tab.root.classList.contains('rmd-popped'),true);
+  win.input.value='left behind';win.win.dispatchEvent(new Event('pagehide'));for(let i=0;i<4;i++)b.flush();
+  assert.equal(tab.root.classList.contains('rmd-popped'),false);assert.equal(tab.input.value,'left behind');
+  a.playing=true;const other=audioStub(),w2=harness({bus:b,closeWin:true,opts:{mode:'popout',room:'Dock.Equipped',vt:'tag-1',audio:other}});for(let i=0;i<4;i++)b.flush();
+  assert.equal(a.playing,false,'popped: the tab\'s audio pauses');a.playing=false;
+  const third=audioStub();third.playing=true;const tab2=harness({bus:b,opts:{room:'Dock.Equipped',vt:'tag-1',audio:third}});for(let i=0;i<4;i++)b.flush();
+  other.resume();for(let i=0;i<4;i++)b.flush();assert.equal(third.playing,false,'audio-on: one room is never heard twice');
+  w2.controller.destroy();tab2.controller.destroy();
+});
+test('a sign-out page\'s session message and another account\'s tag make every Dock window re-check at once',()=>{
+  const b=bus();let n=0;const tab=harness({bus:b,opts:{room:'Dock.Equipped',vt:'tag-1',recheck:()=>n++}});
+  const S=new tab.win.BroadcastChannel('patv-dock');S.postMessage({v:1,t:'session'});b.flush();assert.equal(n,1,'session');
+  const x=harness({bus:b,opts:{room:'Other.Pad',vt:'tag-2'}});for(let i=0;i<3;i++)b.flush();assert.ok(n>=2,'a foreign tag (any room)');
+  assert.equal(tab.root.classList.contains('rmd-popped'),false);x.controller.destroy();
+});
+test('the window (popout mode): the chat card alone - the pad chip is a link to the pad in a new tab; no stage overlay, header, strip or Float',()=>{
+  const w=harness({opts:{mode:'popout',room:'Dock.Equipped',vt:'t',padHref:'/p/night-orchard'}});
+  const chip=w.chatH.querySelector('a.rmd-chip-link');assert.ok(chip,'the chip replaces CHAT');assert.equal(chip.getAttribute('href'),'/p/night-orchard');assert.equal(chip.target,'_blank');assert.equal(chip.rel,'noopener');
+  assert.equal(chip.getAttribute('aria-label'),'Open the pad: Night Orchard');assert.match(chip.textContent,/Night Orchard.*›/);
+  assert.equal(w.chatH.querySelector('.rmd-chat-t'),null);assert.ok(w.chatH.querySelector('.rmd-ppl-btn'),'👥 opens the Participants sheet');
+  assert.equal(w.stage.querySelector('.rmd-ov'),null,'no stage overlay');assert.equal(w.doc.getElementById('rmdMini'),null);assert.equal(w.tabsNav.classList.contains('rmd-seg'),false,'no header');
+  assert.equal(w.strip.classList.contains('rmd-strip'),false,'no strip');assert.ok(w.doc.querySelector('.rmd-tools'),'the full tool row');
+  assert.equal(w.doc.body.classList.contains('pad-dock-live'),false);
+  w.controller.gone();const card=w.root.querySelector('.rmd-gone');assert.ok(card);assert.match(card.textContent,/signed out or switched accounts/);assert.equal(w.chat.hidden,true);
+});
+test('the homepage (preview mode): the pad chip is a LINK, the stage ⋯ by role, no Hide stage / pins / tabs; a one-row composer; ℹ️ About this chat',()=>{
+  const p=harness({fine:true,open:true,opts:{mode:'preview',room:'Dock.Equipped',chatUrl:'/p/night-orchard/chat',padHref:'/p/night-orchard',preview:{goLive:'/stage?room=night-orchard',about:'Relayed from the pad\'s room.'}}});
+  const chip=p.stage.querySelector('.rmd-ov-top a.rmd-chip-link');assert.ok(chip);assert.equal(chip.getAttribute('href'),'/p/night-orchard');assert.equal(chip.target||'','');assert.match(chip.textContent,/›/);
+  assert.equal(p.stage.querySelector('button.rmd-chip'),null,'no pad menu on the homepage');assert.equal(p.doc.getElementById('rmdMini'),null,'no Hide stage slim bar');
+  const st=items(p,'Stage options');assert.deepEqual(st.filter(x=>!/Low latency/.test(x)),['Picture-in-picture','Go live here']);
+  const staff=harness({opts:{mode:'preview',room:'R',preview:{goLive:'/stage',staff:{front:'/pads/admin#front',pepe:'/admin/pepe#control'}}}});
+  assert.deepEqual(items(staff,'Stage options').filter(x=>/Front page|Pepe control/.test(x)),['Front page settings','Pepe control panel']);
+  assert.equal(staff.root.classList.contains('rmd-staff'),true);
+  assert.deepEqual(items(p,'Chat options'),['Chat in its own window','About this chat']);
+  p.menuPick('Chat options','About this chat');assert.match(p.doc.querySelector('.rmd-menu .rmd-topic-full').textContent,/Relayed from the pad's room/);
+  assert.equal(p.doc.querySelector('.rmd-extras'),null,'no ＋');assert.equal(p.doc.querySelector('.rmd-tools'),null,'no tool row');
+  assert.ok(p.doc.querySelector('.rmd-input-row.rmd-input-slim'));assert.equal(p.tabsNav.classList.contains('rmd-seg'),false,'no pad header');
+  assert.equal(p.doc.body.classList.contains('pad-dock-live'),false,'the homepage scrolls normally');
+  p.controller.retitle('/p/other-pad','Other Pad');assert.equal(chip.getAttribute('href'),'/p/other-pad');assert.match(chip.textContent,/📡 Other Pad/);
+});
+test('one meaning per icon: the Dock\'s menu items and buttons never use one emoji for two different things',()=>{
+  const s=require('fs').readFileSync(require('path').join(__dirname,'..','public','js','pad-dock.js'),'utf8');
+  const IC={};for(const m of /var IC = \{([^}]*)\}/.exec(s)[1].matchAll(/(\w+): '([^']*)'/g))IC[m[1]]=m[2];
+  const SAME=[['close','close_cam','close_all','pop_close'],['redock','return_cam','pop_back'],['cam_menu','stage_menu','chat_menu'],['about','chat_about'],['settings','front_settings'],['clip','clip_secs','clip_stage']];
+  const group=k=>{const g=SAME.find(x=>x.includes(k));return g?g[0]:k;},by={};
+  for(const m of s.matchAll(/\b(?:menuItem|iconBtn|button|tool)\(\s*(?:[a-z]+,\s*)?(IC\.\w+|'[^']*')\s*,\s*'(\w+)'/g)){
+    let ic=m[1].startsWith('IC.')?IC[m[1].slice(3)]:m[1].slice(1,-1);ic=String(ic||'').replace(/️/g,'');if(!ic||ic==='•'||m[2]==='raw')continue;
+    (by[ic]||(by[ic]=new Set())).add(group(m[2]));
+  }
+  for(const [ic,ks] of Object.entries(by))assert.equal(ks.size,1,ic+' means '+[...ks].join(' and '));
+  for(const [k,v] of Object.entries({float:'🪟',win:'↗️',pip:'🖼️',hide:'🔽',show:'🔼',full:'🖥️',open:'›',down:'▾'}))assert.equal(IC[k],v,k);
+  assert.match(s,/what === 'play' \? '▶️' : what === 'cut' \? '✂️'/,'▶️ Play content here, ✂️ Cut');
+  assert.doesNotMatch(s,/'🗗'|Pop out chat|Pop out player/,'no second pop-out icon or word');
 });
