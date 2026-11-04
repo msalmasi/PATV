@@ -1061,7 +1061,8 @@ main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] > :is(.rmd-pin-size, .rmd-pin-m
 main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 { display: flex; align-items: center; justify-content: flex-start; gap: var(--ds-sp-2); line-height: 1; }
 main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 > .ds-ic { flex: none; display: block; margin: 0; font-size: 16px; line-height: 1; position: relative; inset-block-start: 2px; }
 main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 > .rmd-sheet-t { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; position: relative; inset-block-start: 2px; }
-body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { border: 1px solid var(--ds-line-strong); font-size: 0; }
+/* (1.99?? dockpol verify: a flex box, not the grid above - the hidden "×" text is a second grid row there and lifted the ✕ 6px) */
+body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { border: 1px solid var(--ds-line-strong); font-size: 0; display: inline-flex; align-items: center; justify-content: center; gap: 0; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x::before { content: "✕"; font-size: var(--ds-fs-sm); line-height: 1; }
 /* (item 19) IN THE CHAT ROOM - or IN THE ROOM where the column is narrow (never "IN THE CHAT RO…"); the count a stronger pill */
 main.rm.rm-dock #rmPplCard { container: rmd-ppl / inline-size; }
