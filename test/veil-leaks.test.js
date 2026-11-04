@@ -342,7 +342,7 @@ test("B.3: history and downloads keep cursor order (the gap, noted); what they s
   assert.equal(f.status, 200);
   assert.deepEqual(leaks(f.text), []);
   assert.ok(!f.text.includes(H1) && !f.text.includes(H2), "no hold id in a file");
-  // 1.99?? dockclean (owner point 33x): "said HH:MM" only when it isn't the line's own time at its head (this turn was said in the same
+  // 1.99ajf dockclean (owner point 33x): "said HH:MM" only when it isn't the line's own time at its head (this turn was said in the same
   // minute it was posted, give or take a minute boundary) - either way the file carries no other trace of the turn
   const said = /class="said">said (\d\d:\d\d)</.exec(f.text), head = /<time class="when"[^>]*>(\d\d:\d\d)<\/time>[\s\S]{0,400}?hercules is the funniest/.exec(f.text);
   assert.ok(!said || !head || said[1] !== head[1], "a said time that repeats the head's time is left out");

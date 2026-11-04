@@ -489,7 +489,7 @@ function echoJob(jobId, roomId = null) {
            // echo by it; null for an ordinary line
            media: j.media && typeof j.media === "object" ? (j.media.type === "gif" ? { type: "gif", id: String(j.media.id) }
              : { type: "cfsticker", set: Number(j.media.set), id: Number(j.media.id) }) : null,
-           // 1.99?? dockclean: the 🧸 PATV sticker this say job was (sendSayLine) - {pack, id, alt: the words Pepe posts} | null
+           // 1.99ajf dockclean: the 🧸 PATV sticker this say job was (sendSayLine) - {pack, id, alt: the words Pepe posts} | null
            stk: j.stk && typeof j.stk === "object" ? { pack: String(j.stk.pack), id: String(j.stk.id), alt: String(j.stk.alt) } : null };
 }
 
@@ -586,7 +586,7 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       media = { type: "gif", id: token.id, title: gif.title, page: gif.page };
     }
   }
-  // 1.99?? dockclean (owner point 21): a line that is exactly one 🧸 PATV sticker (the Dock's sticker picker) - its job remembers the
+  // 1.99ajf dockclean (owner point 21): a line that is exactly one 🧸 PATV sticker (the Dock's sticker picker) - its job remembers the
   // sticker and the stand-in Pepe will post ("[sticker: Name]"), so bridge.js mediaMark can mark the echo of THIS job (pages draw the
   // picture). Not job media: Pepe never sees it; validate (stickerRefusal) already checked the pack is this account's.
   let stk = null;

@@ -14,7 +14,7 @@
 .chatlog .line .body { min-width: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
 /* A reserved head for name, badges and time: late flair never shifts the words down. The flair gives way first, then the
    name; the clock stays at the inline end, independently of a Latin or Arabic name's own text direction. */
-/* 1.99?? dockclean (owner point 34): one 20px row - the name, its 🌐 / veil tag, the transcript tag, the flair pills and the time all on
+/* 1.99ajf dockclean (owner point 34): one 20px row - the name, its 🌐 / veil tag, the transcript tag, the flair pills and the time all on
    the same centre line, 6px apart (3px name→🌐); the pills are 16px and sized to their text, never taller than the name; the row
    never wraps - the flair gives way first (to its emoji + …), then the name (8ch floor) */
 .chatlog .line .line-head { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; height: 20px; min-height: 20px; line-height: 20px; overflow: hidden; }
@@ -33,7 +33,7 @@
 /* A transcript tag keeps its full accessible text/title, but yields after the name and flair reach their minimums. */
 .chatlog .line-head > .veil-tx { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatlog .line .when { flex: none; margin-inline-start: auto; color: var(--ds-text-faint); font-size: 11px; line-height: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* 1.99?? dockclean: a 🧸 PATV sticker line (chatlog-core mediaKids, the server's mark) - the pack's pixel art at 64px */
+/* 1.99ajf dockclean: a 🧸 PATV sticker line (chatlog-core mediaKids, the server's mark) - the pack's pixel art at 64px */
 .chatlog .line .pstk { width: 64px; height: 64px; image-rendering: pixelated; vertical-align: middle; }
 .chatlog .line .line-text { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
 /* The outbox and mic-clip decorator append to .body, after .line-text. Their controls belong below the words. */

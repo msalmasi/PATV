@@ -99,7 +99,7 @@
     var box = el('div', 'rb-audio hide');
     box.setAttribute('role', 'group'); box.setAttribute('aria-label', _t('js.pad.audio.room_audio', 'Room audio'));
     var play = el('button', 'rb-btn rb-play', '▶'); play.type = 'button'; play.setAttribute('aria-label', _t('js.pad.audio.listen', 'Listen live'));
-    // 1.99?? dockclean: opts.idle = the words while nobody plays it (the Room Dock: "▶ Listen to the room")
+    // 1.99ajf dockclean: opts.idle = the words while nobody plays it (the Room Dock: "▶ Listen to the room")
     var IDLE = opts && opts.idle ? String(opts.idle) : _t('js.pad.audio.room_audio', 'Room audio');
     var state = el('span', 'rb-state', IDLE);
     var modeEl = el('span', 'rb-mode hide');        // 1.99il: "⚡ live" (WebRTC) / "standard" (the MP3 relay)
@@ -560,10 +560,10 @@
     // 1.99ye: the outbox - {cid, text, at, st: queue|posting|wait|sent|failed, id, off, why, code, node, stEl, settled}
     var outbox = [], meU = null, busy = false, backoff = 0, retryTimer = null, noteTimer = null;
     var optimistic = !!feedEl;
-    // 1.99?? dockclean (owner point 30): opts.people() = the names this page knows (room.ejs acPeople: {value, name, login, tag, u}) -
+    // 1.99ajf dockclean (owner point 30): opts.people() = the names this page knows (room.ejs acPeople: {value, name, login, tag, u}) -
     // after "@" or in a "!command " line's second word the list offers them (Tab / Enter / a tap accepts); opts.avatar(u) draws one
     var people = typeof opts.people === 'function' ? opts.people : null, avatarOf = typeof opts.avatar === 'function' ? opts.avatar : null, acName = null;
-    // 1.99?? dockclean review: the commands whose first word is a PERSON (Pepe's help catalogue: "!duel [user]", "!look [user]"…) - only
+    // 1.99ajf dockclean review: the commands whose first word is a PERSON (Pepe's help catalogue: "!duel [user]", "!look [user]"…) - only
     // these open the name list in their second word (a free-text "!say he…" or an amount never does), and there only named Camfrog
     // members complete (their login: what Pepe looks people up by). 🌐 web users and frog names complete after "@" only.
     var NAME_CMDS = ['!time', '!roast', '!seen', '!lastseen', '!relay', '!camok', '!camno', '!whowatching', '!blockviewer', '!unblockviewer', '!micstats',
@@ -614,7 +614,7 @@
         li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });
         list.appendChild(li); acItems.push(li);
       });
-      // (1.99?? dockclean review: the first row is picked from the start - it shows what Tab / Enter will take)
+      // (1.99ajf dockclean review: the first row is picked from the start - it shows what Tab / Enter will take)
       acIdx = 0; list.classList.remove('hide'); inp.setAttribute('aria-expanded', 'true'); paintAc();
     }
     function paintAc() {
@@ -661,7 +661,7 @@
           if (outbox[i].st === 'failed') { e.preventDefault(); inp.value = outbox[i].text; drop(outbox[i]); paintCount(); return; }
         }
       }
-      // 1.99?? dockclean: Tab in a name position with the list closed completes in place (one match, or opens the list)
+      // 1.99ajf dockclean: Tab in a name position with the list closed completes in place (one match, or opens the list)
       if (e.key === 'Tab' && !e.shiftKey && (list.classList.contains('hide') || !acItems.length)) {
         var nc = nameCtx(); if (nc && nc.q) { openNames(nc); if (acItems.length === 1) { e.preventDefault(); acItems[0]._pick(); return; } if (acItems.length) { e.preventDefault(); acIdx = 0; paintAc(); } return; }
       }
@@ -1092,7 +1092,7 @@
     btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); upAt = 1; start(); } });
     return {
       adopt: adopt,
-      listMics: listMics,      // 1.99?? dockclean: Audio settings re-reads the device names after it asked for them
+      listMics: listMics,      // 1.99ajf dockclean: Audio settings re-reads the device names after it asked for them
       onRecording: function (fn) {
         if (typeof fn !== 'function') return function () {};
         recordListeners.push(fn); fn(recording);

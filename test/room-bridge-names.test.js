@@ -1,9 +1,9 @@
 "use strict";
-// 1.99?? dockclean (Room Dock clean-up, owner point 30): the composer's name autocomplete (room-bridge.js relay, opts.people) - after "@"
+// 1.99ajf dockclean (Room Dock clean-up, owner point 30): the composer's name autocomplete (room-bridge.js relay, opts.people) - after "@"
 // or in a "!command " line's second word; Tab / Enter / a tap accepts, ↑ ↓ move, Esc closes; the "!" command list is unchanged. The page's
 // candidate list (room.ejs acPeople) completes a named member to their login, a web user to their PATV name, an incognito person only to
 // their frog name, and never offers a hidden (!bridge hide) person, "someone", Pepe or the viewer.
-// 1.99?? dockclean review: a command's name word opens only for commands that take a person (Pepe's help catalogue) and completes only
+// 1.99ajf dockclean review: a command's name word opens only for commands that take a person (Pepe's help catalogue) and completes only
 // named Camfrog members (their login - what Pepe looks people up by); 🌐 web users and frog names complete after "@" only. Row 0 is
 // picked from the start (Tab / Enter take it).
 //   node --test test/room-bridge-names.test.js

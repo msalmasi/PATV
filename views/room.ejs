@@ -542,9 +542,9 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=4"><script src="/public/js/pad-dock.js?v=4"></script><script src="/public/js/pad-picker.js?v=2"></script><% } %><%# 1.99?? dockclean: v3 / v2 %>
+<% if (dockOn_) { %><link rel="stylesheet" href="/public/css/pad-dock.css?v=4"><script src="/public/js/pad-dock.js?v=4"></script><script src="/public/js/pad-picker.js?v=2"></script><% } %><%# 1.99ajf dockclean: v3 / v2 %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
-  <%# 1.99?? dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
+  <%# 1.99ajf dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
   <% if (!dockOn_) { %><div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div><% } %>
   <%# 1.99tc: the tier intro - 💎 Prime Time Plus gets its own title card, Prime Time the gold sweep (partials/pad-intro.ejs) %>
   <% const introTier_ = typeof premiumPadPerks === 'function' ? (premiumPadPerks(room.id).tier || null) : (primeOn_ ? 'prime_time' : null); %>
@@ -564,7 +564,7 @@
      const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
      const psTitle_ = t('pad.hdr.settings_tip') + (queue_ ? ' · ' + t('pad.hdr.n_waiting_mod', { n: queue_ }) : '') + (pending_ ? ' · ' + t('pad.hdr.n_to_approve', { n: pending_ }) : '');
      const bnSrc_ = (LK_ && LK_.banner) || room.banner || '', bnLook_ = !!(LK_ && LK_.banner); %>
-  <%# 1.99?? dockclean (owner points 1, 2): no phone pad bar or drawer - on Live the pad's identity is the stage card's pad chip
+  <%# 1.99ajf dockclean (owner points 1, 2): no phone pad bar or drawer - on Live the pad's identity is the stage card's pad chip
       (this template, pad-dock.js); the header below shows on Feed and About only, as one slim row %>
   <% if (dockOn_) { %>
   <template id="rmdId"><%- include('partials/pad-dock-id', { room, LK_, PFX_, avHtml_, bnSrc_, bnLook_ }) %></template>
@@ -806,7 +806,7 @@
       <%# CL8: the scroller - scrollback's top end (Load older / the end marker / the signed-out prompt), the OLDER lines (their own
           container ABOVE the live role="log", so prepending never announces lines), the bottom end (a jump's Load newer), then the
           live log (public/js/pad-history.js) %>
-      <%# 1.99?? dockclean review: in the Dock the log and its "New messages ↓" pill share one box from the start (it was made by moving
+      <%# 1.99ajf dockclean review: in the Dock the log and its "New messages ↓" pill share one box from the start (it was made by moving
           the scroller after the first lines were drawn - a moved scroller forgets it was at the newest line) %>
       <% if (dockOn_) { %><div class="rmd-log"><% } %>
       <div class="feed" id="rmScroll" role="region" tabindex="0" aria-label="<%- t('pad.chat.aria') %>">
@@ -845,7 +845,7 @@
         <ul class="people" id="rmPeople"></ul>
         <p class="muted" id="rmListNote" style="margin:8px 0 0"></p>
       </section>
-      <%# 1.99?? dockclean (owner point 27): the Dock shows no Latest posts on Live - the Feed tab is the posts %>
+      <%# 1.99ajf dockclean (owner point 27): the Dock shows no Latest posts on Live - the Feed tab is the posts %>
       <% if ((feed_ || latest_.length) && !dockOn_) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
       <%# 1.99co: the Manage room panel - filled and shown by public/js/room-mod.js only when Pepe says this viewer
           moderates the room. 1.99za: last in the column (was first) %>
@@ -880,7 +880,7 @@
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     if (window.PATVAvSync) window.PATVAvSync.pad(slug);
     var data = JSON.parse(document.getElementById('rmInit').textContent);
-    // 1.99?? dockclean review: the LATEST /live answer (apply() keeps it) - the people list's 🌐 rows, the name autocomplete and the person
+    // 1.99ajf dockclean review: the LATEST /live answer (apply() keeps it) - the people list's 🌐 rows, the name autocomplete and the person
     // menu's roster match read the room as it is now (a veil, an Incognito switch or someone leaving reaches them at once)
     var liveData = data;
     // Keep the original nodes when the Dock adopts chat or stage into Document Picture-in-Picture.
@@ -916,7 +916,7 @@
       n.appendChild(avatar(u)); who.appendChild(name(u));
       n.appendChild(who); return n;
     }
-    // 1.99?? dockclean (owner point 14): a menu opened from a chat LINE gets the line's person, which carries no 💸 tip (only roster
+    // 1.99ajf dockclean (owner point 14): a menu opened from a chat LINE gets the line's person, which carries no 💸 tip (only roster
     // entries get bridge.js tipFor) - it is matched against the latest roster (members, mic, web users) by login, or by PATV name for a
     // web line, and takes that entry's tip / on_cam / patv. No match (they left, a web line): a linked PATV name that isn't this viewer
     // gets the tip page's link (the tip POST and pad-tip.js's review step check everything again). Veiled / anonymous / Pepe: no menu.
@@ -956,7 +956,7 @@
           var title = menu.querySelector('.pm-pop-n');
           if (title) {
             title.textContent = ''; title.appendChild(person(u));
-            // (1.99?? dockclean review: with their pad flair, which gives way first - as in the chat line and the people list)
+            // (1.99ajf dockclean review: with their pad flair, which gives way first - as in the chat line and the people list)
             var fl = CLR && !u.veil && !u.anon ? CLR.flairNode(u, rctx, H) : null, nmBox = title.querySelector('.rmd-person-name');
             if (fl && nmBox) nmBox.appendChild(fl);
             // the login as a second line only when it differs from the name everyone sees (never an account key)
@@ -1013,7 +1013,7 @@
       if (CLR) return CLR.chipSpan(s, rctx);
       return s % 3600 === 0 ? _t('js.pad.chat.chip_h', '{n} h', { n: s / 3600 }) : _t('js.pad.chat.chip_min', '{n} min', { n: Math.max(1, Math.round(s / 60)) });
     }
-    var recentSpeakers = [];      // 1.99?? dockclean: the composer's name autocomplete (acPeople) - the last 30 people who spoke here
+    var recentSpeakers = [];      // 1.99ajf dockclean: the composer's name autocomplete (acPeople) - the last 30 people who spoke here
     function item(it) {
       var n = CLR ? CLR.renderItem(it, rctx, H) : plainItem(it); if (n && typeof roomDock !== 'undefined' && roomDock) roomDock.personLine(n, it && it.u);
       if (it && (it.k === 'msg' || it.k === 'tx') && it.u && !it.u.self && !it.mask) { recentSpeakers.push(it.u); if (recentSpeakers.length > 30) recentSpeakers.shift(); }
@@ -1103,7 +1103,7 @@
         btn.type = 'button';
         btn.disabled = busy;
         btn.addEventListener('click', flip);
-        // (1.99?? dockclean review: the words in their own span, so in the Dock's one-line bar they give way and Hide again stays on screen)
+        // (1.99ajf dockclean review: the words in their own span, so in the Dock's one-line bar they give way and Hide again stays on screen)
         var words = on ? _t('js.pad.veil.st_on', 'Showing who’s behind frog names on this pad - every reveal is logged.') : _t('js.pad.veil.st_off', 'You can see who’s behind frog names here (every reveal is logged).');
         var st = el('span', 'veil-st', words); st.title = words; bar.appendChild(st); bar.appendChild(document.createTextNode(' '));
         bar.appendChild(btn);
@@ -1288,7 +1288,7 @@
       if (padHist) padHist.atBottom();
     });
     <% if (dockOn_) { %>
-    // 1.99?? dockclean review: the Dock's cards settle after the first lines are drawn (the stage's size, pinned cams, a float or a
+    // 1.99ajf dockclean review: the Dock's cards settle after the first lines are drawn (the stage's size, pinned cams, a float or a
     // fullscreen coming back) - a log that was at its newest line stays there when its box changes size
     (function () {
       if (!window.ResizeObserver) return;
@@ -1340,7 +1340,7 @@
     // the people list (1.99ahm: its 🎙 icons and on-mic order as this viewer hears them - see renderRoom); r = the room of the last answer
     function drawPeople(members) {
       var r = micRoom || {};
-      // 1.99?? dockclean (owner point 32): 🌐 web users on the pad's chat (bridge.js liveView web: no login, no account id) after the room
+      // 1.99ajf dockclean (owner point 32): 🌐 web users on the pad's chat (bridge.js liveView web: no login, no account id) after the room
       var web = roomDock && liveData && Array.isArray(liveData.web) ? liveData.web : [];
       var pk = JSON.stringify(members) + JSON.stringify(web) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
       if (pk !== lastPeople) {
@@ -1355,7 +1355,7 @@
           var n = el('span', 'nm'); n.appendChild(name(u));
           if (roomDock && CLR && !u.veil) { var flair = CLR.flairNode(u, rctx, H); if (flair) n.appendChild(flair); }
           if (u.src === 'seen' && !roomDock) n.appendChild(el('small', null, _t('js.pad.people.recently', 'recently')));
-          // 1.99?? dockclean (owner point 26): a recently-seen row is muted with a tooltip instead of the word
+          // 1.99ajf dockclean (owner point 26): a recently-seen row is muted with a tooltip instead of the word
           if (u.src === 'seen' && roomDock) { li.classList.add('rmd-seen'); li.title = _t('js.pad.dock.seen', 'Seen in the last 15 min'); }
           if (roomDock && u.on_mic) li.classList.add('rmd-on-mic');
           li.appendChild(n);
@@ -1475,7 +1475,7 @@
     var padHist = window.PATVPadHistory ? PATVPadHistory.init({
       slug: slug, scroller: scrollEl, older: olderEl, top: document.getElementById('rmHistTop'), bot: document.getElementById('rmHistBot'), log: feedEl,
       render: renderLine, ctx: rctx, hist: function () { return hist; }, jump: jump,
-      dateBtn: document.getElementById('rmHistJump'), dateHost: scrollEl.parentNode, toBottom: toBottom, dateBack: function () { return document.querySelector('#chatH .rmd-chat-more'); },   // (1.99?? dockclean review: the scroller's own box - in the Dock that is the log box, not #rmChat)
+      dateBtn: document.getElementById('rmHistJump'), dateHost: scrollEl.parentNode, toBottom: toBottom, dateBack: function () { return document.querySelector('#chatH .rmd-chat-more'); },   // (1.99ajf dockclean review: the scroller's own box - in the Dock that is the log box, not #rmChat)
       extra: hitCs, onChecked: function (r) { if (padSearch) padSearch.drop(r.gone.concat(r.redo)); } }) : null;   // CL8 fix-up: the 🔍 results too
     // CL9: 🔍 search the pad's chat (pad-search.js -> POST /api/rooms/:slug/search) - while the history block says this viewer may
     // (hist.find); a result opens the history around its line (padHist.around). From's suggestions: the names already on the screen
@@ -1490,7 +1490,7 @@
       tz: dlBtn.getAttribute('data-tz') || '', signin: '/login?next=' + encodeURIComponent('/p/' + slug) }) : null;
     // 1.99ye: your messages show in the chat at once (sending… / ✓ sent / not sent · Retry), built with this page's line style
     // (CL8: sending one while reading back returns to the live chat)
-    // 1.99?? dockclean (owner point 30): names for the composer's autocomplete - mic holders, the Camfrog room, 🌐 web users, then recent
+    // 1.99ajf dockclean (owner point 30): names for the composer's autocomplete - mic holders, the Camfrog room, 🌐 web users, then recent
     // speakers, from this page's own /live data. A named member completes to their LOGIN (what commands need); a web user to the PATV name
     // their web lines show; an incognito person only to their frog name; a hidden (!bridge hide) one, Pepe and "someone" never
     function acPeople() {
@@ -1504,7 +1504,7 @@
         var k = value.toLowerCase(); if (seen[k]) return; seen[k] = 1;
         var shown = label(u);
         // cmd: a named Camfrog member with a real login - the only kind a command's name may complete to (Pepe finds his targets by
-        // Camfrog login: a PATV name or a frog name there would aim at someone else, or split into two words). 1.99?? dockclean review
+        // Camfrog login: a PATV name or a frog name there would aim at someone else, or split into two words). 1.99ajf dockclean review
         var cmd = !veil && !u.web && !u.acct && !!u.login && !/^u:/i.test(String(u.login));
         out.push({ value: value, name: shown, login: !veil && !u.web && u.login && String(u.login).toLowerCase() !== String(shown).toLowerCase() ? String(u.login) : '', tag: veil ? _t('js.pad.veil.incognito', 'incognito') : u.web ? '🌐' : '', u: u, recent: !!recent, cmd: cmd });
       }
@@ -1545,12 +1545,12 @@
     function liveStop() { if (liveCtl) { liveCtl.stop(); liveCtl = null; } }
     function snapClose() {
       liveStop(); clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(clipTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null;
-      // 1.99?? dockclean review: the Dock's camera sheet hands focus back to what opened it (a people row's 📷, a person menu's anchor)
+      // 1.99ajf dockclean review: the Dock's camera sheet hands focus back to what opened it (a people row's 📷, a person menu's anchor)
       var back = snapBack; snapBack = null;
       if (camDock && back && back.isConnected && back.getClientRects && back.getClientRects().length) try { back.focus(); } catch (e) { /* gone */ }
     }
     var snapBack = null;
-    // 1.99?? dockclean (owner point 11): in the Dock the popover is design 159's camera sheet - '{name}'s cam' ✕, the 4:3 preview, its
+    // 1.99ajf dockclean (owner point 11): in the Dock the popover is design 159's camera sheet - '{name}'s cam' ✕, the 4:3 preview, its
     // status line, [▶ Live] [📌 Pin] [↻ Refresh], CAPTURE & CREATE, MORE - the same rows (and their server checks), re-parented
     var camDock = <%= dockOn_ ? 'true' : 'false' %>;
     function snapBox(text) {
@@ -1560,7 +1560,7 @@
         if (!camDock) { snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', _t('js.pad.snap.aria', 'Cam snapshot')); }
         else {
           snapEl.addEventListener('click', function (e) { if (e.target === snapEl) snapClose(); });
-          // (1.99?? dockclean review: an aria-modal sheet keeps Tab inside it)
+          // (1.99ajf dockclean review: an aria-modal sheet keeps Tab inside it)
           snapEl.addEventListener('keydown', function (e) {
             if (e.key !== 'Tab' || !snapEl) return;
             var f = Array.prototype.filter.call(snapEl.querySelectorAll('a[href],button,input,select,textarea,video[controls],[tabindex="0"]'), function (n) { return !n.disabled && n.getClientRects().length; });
@@ -1583,7 +1583,7 @@
       }
       var top = el('div', 'row'); top.appendChild(el('b', null, camDock ? _t('js.pad.snap.alt', '{name}\'s cam', { name: label(snapWho) }) : '📷 ' + label(snapWho)));
       var x = el('button', camDock ? 'ds-btn ghost sm rmd-cam-x' : null, camDock ? null : _t('js.pad.snap.close', 'Close')); x.type = 'button'; x.addEventListener('click', snapClose); top.appendChild(x);
-      // (1.99?? dockclean review: the same "✕ Close" as every other Dock sheet)
+      // (1.99ajf dockclean review: the same "✕ Close" as every other Dock sheet)
       if (camDock) { var xi = el('span', 'ds-ic', '✕'); xi.setAttribute('aria-hidden', 'true'); x.appendChild(xi); x.appendChild(el('span', null, _t('js.pad.snap.close', 'Close'))); }
       host.appendChild(top);
       if (text) host.appendChild(el('div', 'muted', text));
@@ -1622,7 +1622,7 @@
       // (1.99aid privacy controls V-1: a veiled cam too, by its opaque id - onair-cam.js checks it)
       put('more', function () { if (window.PATVOnAirCam && (snapWho.login || (snapWho.veil === 'incognito' && snapWho.id))) PATVOnAirCam.row(box, snapWho); });
       if (camDock) {
-        // 1.99?? dockclean review (design 159): ONE primary row [▶ Live][📌 Pin to my strip][↻ Refresh] - the slots note joins the status
+        // 1.99ajf dockclean review (design 159): ONE primary row [▶ Live][📌 Pin to my strip][↻ Refresh] - the slots note joins the status
         // line, 🎬 Put on stage goes under MORE; CAPTURE & CREATE's buttons are one row with 🎬 Clip and its length kept together; each
         // row's own status line stays under its section
         row.classList.add('rmd-cam-st');
@@ -1992,7 +1992,7 @@
       timer = null;
       if (!roomVisible() || inflight) return;
       inflight = true;
-      // (1.99?? dockclean review: pad=1 - this IS the pad page; only its own polls put a signed-in viewer on the pad's 🌐 people list)
+      // (1.99ajf dockclean review: pad=1 - this IS the pad page; only its own polls put a signed-in viewer on the pad's 🌐 people list)
       var q = '?after=' + cursor + '&wait=1&pad=1' + (lp.v != null ? '&v=' + lp.v : '') + (lp.mv != null ? '&mv=' + lp.mv : '') + (lp.rs != null ? '&rs=' + lp.rs : '') +
         (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '') + (jcTok ? '&jc=' + encodeURIComponent(jcTok) : '') +
         (roomPm ? roomPm.query() : '');                                  // 1.99ajd roompm
@@ -2034,7 +2034,7 @@
       slug: slug, signed: signedIn, linked: <%= linked ? 'true' : 'false' %>, user: <%- JSON.stringify(signedIn && user ? user : null).replace(/</g, '\\u003c') %>,
       nodes: roomNodes, root: document.querySelector('main.rm'), relay: roomRelay, audio: roomAudio, ptt: roomPtt, mod: roomMod,
       person: person, openPerson: openPerson, openTopic: openTopic, canTopic: canTopic, stage: window.PATVPadStage,
-      download: padDl, openCam: function (who) { snapOpen(who); },   // 1.99?? dockclean: the chat ⋯'s ⬇ items, a pinned cam's Cam options
+      download: padDl, openCam: function (who) { snapOpen(who); },   // 1.99ajf dockclean: the chat ⋯'s ⬇ items, a pinned cam's Cam options
       wake: function () { if (!roomVisible()) { behind = true; return; } schedule(); }
     });
     <% } %>
@@ -2045,7 +2045,7 @@
   <%# 1.99za: the story strip (fresh captures) - was between the header and the tabs on every tab; now the end of Live %>
   <% const storyOn_ = !!(feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length) || (dockOn_ && feed_.viewer)));
      const storyHtml_ = storyOn_ ? '<section class="card rm-story" aria-label="' + t('pad.story.aria') + '">' + include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: t('pad.story.fresh'), next: '/p/' + encodeURIComponent(room.slug) }) + '</section>' : ''; %>
-  <%# 1.99?? dockclean (owner point 27): in the Dock the story strip opens the Feed tab ("Around the pad") and the launchpad card ends
+  <%# 1.99ajf dockclean (owner point 27): in the Dock the story strip opens the Feed tab ("Around the pad") and the launchpad card ends
       About - the Live view is the stage and the chat only %>
   <% if (!dockOn_) { %><%- storyHtml_ %><% } %>
   <%# 1.99aae: 🚀 the launchpad card (pad-launch.js fills it; hidden unless this pad is on the launchpad) - the very

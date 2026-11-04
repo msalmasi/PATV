@@ -919,7 +919,7 @@ function mediaMark(it, ev, roomId) {
   if (!it || typeof it !== "object") return it;
   delete it.md; delete it.stk;
   if (it.k !== "msg" || typeof it.text !== "string" || (it.u && it.u.self)) return it;
-  // 1.99?? dockclean (owner point 21): a 🧸 PATV sticker - the line's own say job was that sticker and its words are exactly the stand-in
+  // 1.99ajf dockclean (owner point 21): a 🧸 PATV sticker - the line's own say job was that sticker and its words are exactly the stand-in
   // the job sent ("[sticker: Name]"); typed words that merely look like one stay text
   if (it._job) {
     const J0 = relay.echoJob(it._job, roomId);
@@ -1699,7 +1699,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
   const withTip = (u) => { const x = withPatv(u, L, F); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
-  // 1.99?? dockclean (owner point 32): the 🌐 web users on this pad's live chat (padweb.js) - the pad page's own /live only (opts.padPage:
+  // 1.99ajf dockclean (owner point 32): the 🌐 web users on this pad's live chat (padweb.js) - the pad page's own /live only (opts.padPage:
   // its first render and its ?pad=1 polls - not the homepage panel or the owner / settings pages that poll the same route), while the
   // Room Dock is on; PATV names only (no chat login, no account id); a viewer's own entry says me: true and has no tip
   let web = null;
@@ -2014,9 +2014,9 @@ function register(app, { isBotToken, addUser }) {
     const pm = require("./padmod");
     const login = signed ? await pm.linkedLogin(req.user.userId) : null;
     if (login) pm.noteViewer(R.id, login);
-    // 1.99?? dockclean (owner point 32): a signed-in member with this pad's live chat open is a 🌐 web user on its people list for 90 s
+    // 1.99ajf dockclean (owner point 32): a signed-in member with this pad's live chat open is a 🌐 web user on its people list for 90 s
     // (padweb.js: memory only, never logged; Incognito / !bridge hide / private activity / ghost mode keep them off it). Only the pad
-    // page's own polls (?pad=1) - the homepage panel and the owner / settings pages poll this route too (1.99?? dockclean review)
+    // page's own polls (?pad=1) - the homepage panel and the owner / settings pages poll this route too (1.99ajf dockclean review)
     const padPage = req.query.pad === "1";
     if (signed && padPage) require("./padweb").note(R.id, req.user, login);
     // 1.99ye: ?wait=1 - a long-poll (waitForChange); the answer says lp: true so the page asks again at once

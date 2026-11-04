@@ -117,7 +117,7 @@ test("a relayed pick is media only when its own say job carried that very token"
   assert.equal(webLine("[gif:orchard_A1]")._job, undefined, "(the job id itself stays server-only, as before)");
 });
 
-// 1.99?? dockclean (owner point 21): a 🧸 PATV sticker sent from the Dock. Pepe posts its readable stand-in ("[sticker: Name]" -
+// 1.99ajf dockclean (owner point 21): a 🧸 PATV sticker sent from the Dock. Pepe posts its readable stand-in ("[sticker: Name]" -
 // stickers.fallbackText), and the echo of THAT say job is marked md "sticker" + stk "<pack>/<id>"; the same words typed (or a job for
 // other words) stay text. The renderer draws the site's own art; the reusable text (quotes, ✂️ Clip chat, downloads) is the stand-in.
 test("dockclean: a PATV sticker's echo is marked by its own say job, drawn as the pack's art, and reads as its stand-in everywhere else", async () => {

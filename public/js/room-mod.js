@@ -117,7 +117,7 @@
   //     unless you're a Pepe admin (SELF_LIFT; the server + Pepe refuse it too); "unban" is left out for people IN the room;
   //     disabled while web moderation is off in the room; destructive ones flagged (they get a confirm step)
   //   - "More…" (the full Manage dialog: strikes history, roles) whenever there are moderation actions
-  //   - 1.99?? dockclean: a 🌐 web user from the pad's people list (no login on the page, only their PATV name): View profile and 💸 Tip,
+  //   - 1.99ajf dockclean: a 🌐 web user from the pad's people list (no login on the page, only their PATV name): View profile and 💸 Tip,
   //     nothing else (no cam, no moderation, no duel); ⚔️ Duel… / 🥊 Brawl… (x.pvp: the Dock checked that the viewer has a linked chat
   //     login, Pepe offers the command here and the person is a named Camfrog member who isn't the viewer) - Pepe's escrow decides the rest
   function menuItems(caps, u, x) {
@@ -626,7 +626,7 @@
         b.addEventListener('click', function (e) {
           if (it.kind === 'link' || it.kind === 'off') return;   // a normal link (View profile, 💸 Tip) / a disabled item
           e.preventDefault();
-          // (1.99?? dockclean review: focus back on the menu's anchor first - the camera sheet and the tip dialog return it there when they close)
+          // (1.99ajf dockclean review: focus back on the menu's anchor first - the camera sheet and the tip dialog return it there when they close)
           if (it.kind === 'cam') { closeMenu(true); extra.cam(); return; }
           // 1.99il: 💸 Tip - the modal on this page (pad-tip.js); without it, the tip page in a new tab as before
           if (it.kind === 'tip') {

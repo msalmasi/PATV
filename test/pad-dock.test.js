@@ -36,7 +36,7 @@ test("Dock keeps one shell, every bound live id and the original tab panels", as
   for(const id of ["rmFeed","rmScroll","rmOlder","rmHistTop","rmHistBot","rmJump","rmClip","rmCompose","rmRelay","rmPtt","rmSb","rmAudioBox","rmTopic","rmStatus","rmHist","rmHistJump","rmSearchBtn","rmMoreBtn","rmMic","rmMicCard","rmPeople","rmPplCard","rmPplN","rmListNote","rmMod","rmStage","rmStageH","rmStPill","rmStPillTxt","rmStReconnect","rmStUnmute","rmEmbed","rmOffTxt","rmTabs","rmVideo","rmCap","rmStrip","rmChat","rmGoLive","rmSlotsTxt","rmBoostBtn","rmBoostBox","rmBoostMsg","rmPlexQ","rmLiveStat","rmStDot","rmCount","rmInit","rmHero","rmTitle","rmMore","rmLive","rmLiveTxt","padTabs","padLaunch","padFeedDot","padFeedNew","oacPromptOn","oaCamRoom"])
     assert.equal((html.match(new RegExp('\\bid="'+id+'"','g'))||[]).length,1,id+" exists once");
   for(const panel of ["live","feed","about"]) assert.match(html,new RegExp('id="padPanel-'+panel+'"'));
-  // 1.99?? dockclean (owner points 1, 33): no phone pad bar / drawer and no crumb; the Live panel keeps an sr-only h1 with the pad's name;
+  // 1.99ajf dockclean (owner points 1, 33): no phone pad bar / drawer and no crumb; the Live panel keeps an sr-only h1 with the pad's name;
   // the story strip opens the Feed tab, the launchpad card ends About, the Latest posts card is not on Live
   assert.doesNotMatch(html,/id="rmd(?:Drawer|Bar)"/);assert.doesNotMatch(html,/class="crumb"/);
   assert.match(section(html,"padPanel-live"),/<h1 class="ds-sr-only">Night Orchard<\/h1>/);
@@ -241,7 +241,7 @@ test("dockfu: the chat keeps a readable floor on short windows - the stage gives
   for(const r of rules)if(/--rmd-log-min\)/.test(r.body))assert.ok(r.selector.startsWith(P),r.selector);
 });
 
-// 1.99?? dockclean (owner points 9, 19, 24): the bottom bar is a 3-column grid - [▶ / ❚❚] [the now zone: eq + holders, or the state]
+// 1.99ajf dockclean (owner points 9, 19, 24): the bottom bar is a 3-column grid - [▶ / ❚❚] [the now zone: eq + holders, or the state]
 // [🔊 · volume · 🎚️] - and holds nothing else: the ⚡ live / standard pill, Jump to live, duck and A/V sync are Audio settings. The state
 // text is hidden in normal playback (the eq is the live signal) and while holders show.
 test("dockclean: the bottom bar is play · now · a fixed right cluster; mode, jump, duck and A/V sync live in Audio settings", () => {

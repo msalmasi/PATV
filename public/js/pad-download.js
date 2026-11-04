@@ -140,7 +140,7 @@
       window.addEventListener('resize', p._shut);
       focusAt(0);
     }
-    // 1.99?? dockclean review: back = where focus returns when the dialog closes (the Room Dock's chat ⋯ - this ⋯ is hidden there)
+    // 1.99ajf dockclean review: back = where focus returns when the dialog closes (the Room Dock's chat ⋯ - this ⋯ is hidden there)
     var backTo = null;
     function run(id, back) {
       if (id === 'signin') { location.href = o.signin || ('/login?next=' + encodeURIComponent(location.pathname)); return; }
@@ -297,7 +297,7 @@
       if (!ok) { closeMenu(false); closeDlg(); }
     }
     update();
-    // 1.99?? dockclean: the Room Dock builds these items into its own chat ⋯ (items / run) - no second popover there
+    // 1.99ajf dockclean: the Room Dock builds these items into its own chat ⋯ (items / run) - no second popover there
     return { update: update, open: openDialog, close: function () { closeMenu(false); closeDlg(); }, _items: items, items: items, run: run };
   }
   window.PATVPadDownload = { init: init };

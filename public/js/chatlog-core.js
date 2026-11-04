@@ -76,7 +76,7 @@
   // type it) and never appears in an export.
   function mediaOf(it) {
     if (!it || it.k !== 'msg') return null;
-    // 1.99?? dockclean (owner point 21): a 🧸 PATV sticker sent from the Dock - Pepe posts its readable stand-in "[sticker: Name]" (stickers
+    // 1.99ajf dockclean (owner point 21): a 🧸 PATV sticker sent from the Dock - Pepe posts its readable stand-in "[sticker: Name]" (stickers
     // fallbackText), and the server marks the echo of that very say job: md "sticker" + stk "<pack>/<id>" (bridge.js mediaMark)
     if (it.md === 'sticker') {
       var m = typeof it.stk === 'string' ? /^([a-z0-9]{1,32})\/([a-z0-9]{1,32})$/.exec(it.stk) : null;
@@ -410,7 +410,7 @@
     var _t = tr(ctx), fallback = itemText(it);
     // Downloads never request media, including a cache-warm web GIF. Removed / masked rows never request it either.
     if (ctx.data === false || mask || rm) return [fallback];
-    // 1.99?? dockclean (owner point 21): a 🧸 PATV sticker - the site's own art (/public/stickers/<pack>/<id>.svg), its name as the alt
+    // 1.99ajf dockclean (owner point 21): a 🧸 PATV sticker - the site's own art (/public/stickers/<pack>/<id>.svg), its name as the alt
     if (token.type === 'sticker') {
       return [mediaImage({ 'class': 'pstk', src: '/public/stickers/' + token.pack + '/' + token.id + '.svg', alt: token.alt, title: token.alt,
         width: 64, height: 64, loading: 'lazy', decoding: 'async' }, fallback, h)];
@@ -485,7 +485,7 @@
       if (tx) body.push('\u201d');
     } else body.push(tx ? '\u201c' + text + '\u201d' : text);
     // B.3: when a \ud83c\udf99 line was said, and how long its turn ran ("said 11:53:41")
-    // 1.99?? dockclean (owner point 33x): not when it repeats the line's own time at the head
+    // 1.99ajf dockclean (owner point 33x): not when it repeats the line's own time at the head
     if (tx && Number(it.at) > 0 && fmtTime(Number(it.at), ctx) !== fmtTime(it.ts, ctx)) body.push(h('span', { 'class': 'said' }, [_t('js.pad.veil.said', 'said {time}', { time: fmtTime(Number(it.at), ctx) })]));
     if (mine) body.push(h('span', { 'class': 'veil-self' }, [_t('js.pad.veil.only_you', 'only you can see this')]));
     // E.2: a viewer who may see through frog names here (an admin, the pad's owner in their era) gets a Reveal control - a flag only

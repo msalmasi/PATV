@@ -56,7 +56,7 @@
   }
   @media (prefers-reduced-motion: reduce) { .cam-strip .cs-row { scroll-behavior: auto; } }
 </style>
-<script src="/public/js/pad-camstrip.js?v=4"></script><%# v3 (1.99aid privacy controls, round 3 - F2): frog-name cams pinned by their opaque id; v4 (1.99?? dockclean): the tile keeps its reference for the Dock %>
+<script src="/public/js/pad-camstrip.js?v=4"></script><%# v3 (1.99aid privacy controls, round 3 - F2): frog-name cams pinned by their opaque id; v4 (1.99ajf dockclean): the tile keeps its reference for the Dock %>
 <script>
   window.PATVPadStrip = window.PATVCamStrip ? PATVCamStrip.init(document.getElementById('rmStrip'), <%- JSON.stringify(String(slug)).replace(/</g, '\\u003c') %>,
     { audioHost: function () { return document.getElementById('rmAudioBox'); } }) : null;

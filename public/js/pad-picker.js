@@ -1,5 +1,5 @@
 // Dock-only composer extras. The existing relay owns sends, client ids and retries.
-// 1.99?? dockclean: the tool row opens this sheet on a tab (o.tab: 'patv' | 'stickers' | 'gifs' | 'emoji'). 🧸 PATV = the site's own
+// 1.99ajf dockclean: the tool row opens this sheet on a tab (o.tab: 'patv' | 'stickers' | 'gifs' | 'emoji'). 🧸 PATV = the site's own
 // sticker packs (GET /api/stickers: the packs this account owns or has as a perk, in the viewer's language); a pick sends exactly
 // '[sticker:<pack>/<id>]' through the relay (the server checks the pack and relays '[sticker: Name]' into Camfrog). Emoji insert
 // at the caret and the sheet stays open. voices() = the site's voice catalogue (GET /api/voices) for the Dock's 🗣️ Say it sheet.

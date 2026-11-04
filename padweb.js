@@ -1,4 +1,4 @@
-// padweb.js - 1.99?? dockclean (Room Dock clean-up, owner point 32): who is on a pad's live chat from the WEBSITE right now, for the
+// padweb.js - 1.99ajf dockclean (Room Dock clean-up, owner point 32): who is on a pad's live chat from the WEBSITE right now, for the
 // pad page's people list ("🌐 web users" under the Camfrog room's members).
 //
 // What it is: an in-memory map per room of the signed-in accounts whose pad page asked GET /api/rooms/:slug/live in the last TTL_MS
@@ -18,7 +18,7 @@
 //   * an account blocked either way with the viewer (messages.cardBlocks - their DM blocks);
 //   * an account whose linked login is already in the room's member list (no duplicates - the Camfrog entry shows them);
 //   * a failed check (the database busy): left out.
-// 1.99?? dockclean review: only the pad page's own polls note anyone (bridge.js ?pad=1), not the homepage panel or the owner pages.
+// 1.99ajf dockclean review: only the pad page's own polls note anyone (bridge.js ?pad=1), not the homepage panel or the owner pages.
 // The privacy page (/privacy#rooms) says so: Incognito, or keeping your room activity private, keeps you off the list.
 "use strict";
 const { getQuery } = require("./dbUtils");

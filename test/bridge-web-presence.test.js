@@ -1,8 +1,8 @@
 "use strict";
-// 1.99?? dockclean (Room Dock clean-up, owner point 32): web users on a pad's people list (padweb.js). Memory only, 90 s, at most 100 per
+// 1.99ajf dockclean (Room Dock clean-up, owner point 32): web users on a pad's people list (padweb.js). Memory only, 90 s, at most 100 per
 // room; PATV names only on the wire (no chat login, no account id); Incognito / !bridge hide / a member already in the room / a failed
 // check keep someone off it; while the hidden list is loading nobody is listed.
-// 1.99?? dockclean review (privacy): the site's ONE hidden rule (quotes.isHidden - forget-me / account deletion / staff removal live in
+// 1.99ajf dockclean review (privacy): the site's ONE hidden rule (quotes.isHidden - forget-me / account deletion / staff removal live in
 // the chat archive's sticky set, not hubhidden), private room activity (chatlogview.privateFlags), 👻 ghost mode and DM blocks either
 // way keep people off it too; only the pad page's own polls (?pad=1) note anyone.
 //   node --test test/bridge-web-presence.test.js

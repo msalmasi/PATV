@@ -23,7 +23,7 @@ test("picker requires signed-in text relay; unavailable provider tabs make no re
   assert.equal(h.win.PATVPadPicker.available({room:{relay:false}},{signed:true,relay:{}}),false);
   assert.equal(h.win.PATVPadPicker.open({...h.opts,signed:false}),null);
   const emoji=h.sheet.querySelectorAll(".rmp-grid button");assert.ok(emoji.length>30 && emoji.length<=150);
-  // 1.99?? dockclean (owner point 20): an emoji goes in at the caret and the sheet stays open for more
+  // 1.99ajf dockclean (owner point 20): an emoji goes in at the caret and the sheet stays open for more
   emoji[0].click();emoji[1].click();assert.deepEqual([...h.calls.insert],["😀","😃"]);assert.equal(h.calls.closed,0);assert.equal(h.sheet.isConnected,true);assert.equal(h.calls.send.length,0);
 });
 
@@ -91,7 +91,7 @@ test("a full input does not send or close and all picker keys exist in English",
   assert.doesNotMatch(source,/innerHTML|localStorage|sessionStorage|KLIPY_API_KEY|:shortcode:/);
 });
 
-// 1.99?? dockclean (owner point 21): 🧸 PATV - the site's own packs the viewer owns or has as a perk (GET /api/stickers); a pick sends
+// 1.99ajf dockclean (owner point 21): 🧸 PATV - the site's own packs the viewer owns or has as a perk (GET /api/stickers); a pick sends
 // exactly the [sticker:<pack>/<id>] token through the outbox; no packs yet -> the store link; voices() is the catalogue for Say it
 test("the PATV tab lists only owned packs with the site's own art and sends exactly one sticker token",async()=>{
   const h=setup({},url=>url==="/api/stickers"?Promise.resolve({ok:true,json:()=>Promise.resolve({ok:true,packs:[

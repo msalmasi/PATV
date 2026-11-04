@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? dockclean: the Room Dock's controller after the clean-up (hand-off 18 follow-up) - one stage card with an auto-hiding overlay,
+// 1.99ajf dockclean: the Room Dock's controller after the clean-up (hand-off 18 follow-up) - one stage card with an auto-hiding overlay,
 // the chat's one header row, the composer's tool row, and every other control in exactly one menu that proxies the original control.
 const test=require('node:test'),assert=require('node:assert/strict');
 const {harness,Event}=require('./fixtures/pad-dock/dom.cjs');
