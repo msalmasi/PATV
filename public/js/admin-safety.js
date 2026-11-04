@@ -20,9 +20,9 @@
     nc.textContent = ''; nc.appendChild(el('li', 'adm-help', 'Loading…'));
     api('/api/admin/nameclash').then(function (d) {
       nc.textContent = '';
-      var badge = $('ncCount'); if (badge) badge.textContent = String(d.list.length);
-      if (!d.list.length) { nc.appendChild(el('li', 'adm-help', 'No account is named like a Camfrog user it isn\'t linked to.')); return; }
-      d.list.forEach(function (r) {
+      var list = d.list || []; var badge = $('ncCount'); if (badge) badge.textContent = String(list.length);
+      if (!list.length) { nc.appendChild(el('li', 'adm-help', 'No account is named like a Camfrog user it isn\'t linked to.')); return; }
+      list.forEach(function (r) {
         var li = el('li', 'nc-row');
         var who = el('div', 'nc-who');
         var a = el('a', null, '@' + r.username); a.href = '/u/' + encodeURIComponent(r.username); who.appendChild(a);
@@ -61,8 +61,9 @@
       var sw = $('nbOn'); if (sw) sw.checked = !!d.on;
       $('nbForms').hidden = !d.on;
       nbList.textContent = '';
-      if (!d.bans.length) { nbList.appendChild(el('li', 'adm-help', d.on ? 'No network bans.' : 'Network bans are off - nothing is recorded.')); return; }
-      d.bans.forEach(function (b) {
+      var bans = d.bans || [];
+      if (!bans.length) { nbList.appendChild(el('li', 'adm-help', d.on ? 'No network bans.' : 'Network bans are off - nothing is recorded.')); return; }
+      bans.forEach(function (b) {
         var li = el('li');
         li.appendChild(el('b', null, b.kind === 'range' ? 'Range ' + b.rule : b.kind === 'account' ? 'A network @' + b.from + ' used' : 'One typed IP'));
         li.appendChild(el('span', null, ' · ' + (b.scope === 'pad' ? 'pad ' + (b.room || '?') : 'site-wide') + ' · ' + (b.until ? 'until ' + day(b.until) : 'permanent') + (b.reason ? ' · ' + b.reason : '') + ' · by ' + b.by));

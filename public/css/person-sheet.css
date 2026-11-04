@@ -51,3 +51,8 @@
 .line.is-mention { box-shadow: inset 3px 0 0 #d6b44a; background: rgba(214, 180, 74, .08); }
 .mention { font-weight: 600; border-radius: 4px; padding: 0 2px; background: rgba(140, 170, 255, .12); }
 .mention.mention-me { background: rgba(214, 180, 74, .22); }
+/* the people list: a 🌐 row named like a Camfrog user keeps its "not the Camfrog user" tag in view - it wraps under the name */
+main.rm.rm-dock #rmPeople .nm:has(.clash-tag) { flex-wrap: wrap; white-space: normal; overflow: visible; }
+main.rm.rm-dock #rmPeople .nm > .who-web:has(> .clash-tag) { display: flex; flex-wrap: wrap; align-items: center; column-gap: 2px; row-gap: 1px; white-space: normal; overflow: visible; min-inline-size: 0; }
+main.rm.rm-dock #rmPeople .nm > .who-web > .clash-tag { margin-left: 0; }
+.psh .psh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

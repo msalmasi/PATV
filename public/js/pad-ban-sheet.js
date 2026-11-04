@@ -92,9 +92,10 @@
       if (!cur || cur.d !== S.d) return;
       if (!pv.ok) { S.h.textContent = _t('js.ban.cant', 'Can\'t ban from here'); wait.textContent = pv.error || ''; buttons(S.inner, _t('js.ban.cancel', 'Cancel'), false).go.addEventListener('click', close); return; }
       wait.remove();
-      S.h.textContent = '';
-      S.h.appendChild(el('span', 'psh-kind', (KIND_TXT[pv.who.kind] || KIND_TXT.account)()));
-      S.h.appendChild(D.createTextNode(pv.who.title));
+      // (the title names the identity's kind itself - "PATV account @x", "Camfrog login y", "The person behind 🐸 ...")
+      S.h.textContent = pv.who.title;
+      S.d.setAttribute('aria-describedby', 'pshKind' + seq);
+      var kind = el('span', 'psh-sr', (KIND_TXT[pv.who.kind] || KIND_TXT.account)()); kind.id = 'pshKind' + seq; S.inner.appendChild(kind);
       S.inner.appendChild(el('p', 'psh-sub', pv.who.sub));
       // where
       var fs = el('fieldset', 'psh-opts'); var lg = el('legend', 'psh-k', _t('js.ban.where', 'Where')); fs.appendChild(lg);

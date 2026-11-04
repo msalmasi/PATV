@@ -12627,5 +12627,6 @@
   "sethub.st.blocked_n": {"one": "{count} blocked", "other": "{count} blocked"},
   "siteperm.k.safety.net_bans": "Network bans and who shares an account's networks (keyed codes only, every look logged)",
   "siteperm.k.accounts.name_clash": "Accounts named like a Camfrog user they aren't (rename / mark OK)",
-  "auth.err.username_camfrog": "That name belongs to a Camfrog user. If it's yours, link your Camfrog account first (type !verify in a room with Pepe), then you can take it."
+  "auth.err.username_camfrog": "That name belongs to a Camfrog user. If it's yours, link your Camfrog account first (type !verify in a room with Pepe), then you can take it.",
+  "js.block.where_veil": "Undo it from Settings → Blocked people."
 }

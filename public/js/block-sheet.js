@@ -51,7 +51,7 @@
     var out = el('p', 'psh-out'); out.setAttribute('aria-live', 'polite');
     row.appendChild(go); row.appendChild(no);
     inner.appendChild(h); inner.appendChild(p);
-    if (o.on !== false) inner.appendChild(el('p', 'psh-hint', _t('js.block.where', 'Undo it from the same menu, or from Settings → Blocked people.')));
+    if (o.on !== false) inner.appendChild(el('p', 'psh-hint', o.veil ? _t('js.block.where_veil', 'Undo it from Settings → Blocked people.') : _t('js.block.where', 'Undo it from the same menu, or from Settings → Blocked people.')));
     inner.appendChild(row); inner.appendChild(out);
     d.appendChild(inner);
     d.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
