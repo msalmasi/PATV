@@ -27,6 +27,9 @@
 //   policy_lease     name PK, holder, expires - one scheduler process at a time (a restart / a second process waits it out)
 //   policy_meta      cfg (Pepe's config push), test clock (staging only), catch-up cap
 //   policy_audit     every mode change / cutover / rollback (who, from, to, why)
+//   policy_epoch_audit  PO-4: the weekly staking audit + digest of each settled epoch (policy/digest.js: eid PK, via shadow | site,
+//                    state pending | final, the audit, the notice / digest the site sends (live) or would send (shadow), Pepe's own
+//                    rows and whether they match, when each was sent)
 // PAT moves only through pools.js (keyed legs: the SAME keys Pepe's legs use, so the two can never both move one), the
 // capital share book (capital/vaults.protocol, keyed like Pepe's booking) and the ledger, each run in ONE dbUtils.tx.
 "use strict";
@@ -93,6 +96,10 @@ function init() {
       if (!ps.has("blocking")) await runQuery("ALTER TABLE policy_sims ADD COLUMN blocking TEXT");
       // PO-3: the economy settings Pepe planned the period with ({rev, sha, src: site | local} - his config thin client)
       if (!ps.has("pepe_cfg")) await runQuery("ALTER TABLE policy_sims ADD COLUMN pepe_cfg TEXT");
+      // PO-4 (1.99??): the weekly staking audit + digest of each settled epoch (policy/digest.js) - the shadow audit of Pepe's
+      // record (via "shadow", compared with his own notices) and, once the treasury is live, the site's own (via "site")
+      await runQuery(`CREATE TABLE IF NOT EXISTS policy_epoch_audit (eid TEXT PRIMARY KEY, via TEXT, state TEXT, audit TEXT, notice TEXT, digest TEXT,
+        pepe TEXT, audit_match INTEGER, digest_match INTEGER, audit_sent_at INTEGER, digest_sent_at INTEGER, created INTEGER, updated INTEGER)`);
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;

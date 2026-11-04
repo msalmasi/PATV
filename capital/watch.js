@@ -8,7 +8,8 @@
 //   warn    sent at most once a week per (code, vault) (capital_meta "watch_sent")
 //   info    kept for the admin card only
 // The 15-second tick adds (tick()): I8 no cut-off by epoch_hour + 30 min, a queue item "moving" for over an hour; and, once a
-// week from Monday 05:00 UTC, I6 (weekly()): Pepe's pushed weekly settlement (cfg.waterfall) against the site's stash moves
+// week from Monday 05:00 UTC, I6 (weekly()): Pepe's pushed weekly settlement (cfg.waterfall; PO-4: the site's own policy_runs
+// records once the treasury engine is live - capital/vaults.js wfView) against the site's stash moves
 // (every "wf-<eid>-<vault>-stk-<stash>" leg landed, the PAT adds up per vault) and the payout notices (inbox ref
 // "wf:<eid>:s<stash>", one per paid stash) + I7 (info: the share of the stakers' 20% a cap let through). A settlement that
 // isn't done by Monday 06:00 alerts once (wf_watch_late:<eid>) and is checked again every tick until it is - the cross-check
@@ -26,7 +27,8 @@
 // (no fee, no lock-up; P2.4 isn't built), so the owner sees how often it happens and what it dodged (warn >= 1,000 PAT).
 // D2 (the owner, 2026-10-19: the weekly payout cap goes; "we can track and implement a weekly cap if necessary"): every
 // settled week Pepe reports is kept with what a 25% APR cap would have paid (capTrack -> capital_meta "wf_cap_track", the
-// card's tracker table, a year of weeks; Pepe sends the weekly digest to the admins himself, ref wf-digest:<epoch>).
+// card's tracker table, a year of weeks; Pepe sends the weekly digest to the admins himself, ref wf-digest:<epoch> - PO-4: the
+// site's policy/digest.js sends it instead once the treasury engine runs here, and audits Pepe's in shadow until then).
 // Staging records the findings but never alerts. Nothing here moves PAT.
 //
 // THE OWNER'S CARD (/admin/economy, views/partials/econ-staking.ejs + public/js/admin-staking.js):
@@ -165,7 +167,7 @@ function capTrack(c) {
 }
 /** Keeps the tracker (capital_meta "wf_cap_track", merged by week, the last TRACK_KEEP weeks - Pepe pushes only his last 8)
  *  for the owner's card. The weekly digest itself is Pepe's (pepe_treasury._tr_digest, ref wf-digest:<epoch>, to the
- *  admins), so the site doesn't send a second one. -> the rows kept */
+ *  admins), so the site doesn't send a second one (PO-4: policy/digest.js sends it once the treasury runs here). -> the rows kept */
 async function trackCap(c) {
   const rows = capTrack(c);
   const prev = (await C.meta("wf_cap_track")) || [];
@@ -247,6 +249,9 @@ async function roundTripsWeek(boundary, eid) {
 async function weekly(c) {
   const E = require("../policy/engines");
   const { getQuery } = require("../dbUtils");
+  // PO-4 (1.99??): once the treasury engine is live, the weekly records are the site's own (policy_runs, V.wfView) - the tracker,
+  // the settlement lookup, lastSettled and the stash-move / notice cross-check below run on the site's tids and refs
+  if (c) c = await V.wfView(c);
   if (c && Array.isArray(c.waterfall)) await trackCap(c).catch((e) => console.error("[capital] staking cap tracker:", e.message));
   const now = nowS();
   const hour = Number((c || {}).epoch_hour) || 4;
@@ -376,7 +381,8 @@ async function canEdit(user) {
 }
 /** The card's numbers. */
 async function adminData(me) {
-  const c = await C.cfg();
+  const c0 = await C.cfg();
+  const c = await V.wfView(c0);                                  // PO-4: the weekly records from policy_runs once the treasury is live
   const live = await C.live();
   const d = await V.load();
   const now = nowS();

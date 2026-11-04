@@ -40,6 +40,10 @@
 //   * every cut-off snapshot records the rule it ran with (ceil_apr: the ceiling, 0 = off; ceil_cushion 0 / 1) - Pepe's
 //     pepe_stakingreplay reads them first (his local snapshots carry the same keys);
 //   * audit(): the invariants of fix plan §6 (I1-I5, I8, I10), in the cut-off's notes; capital/watch.js alerts the admins.
+// PO-4 (1.99??): the weekly settlement records the staking readers use (lateMonday at the cut-off, publish's /staking list,
+// lastSettled / patDaysNow, capital/watch.js) come through wfView(c): Pepe's pushed waterfall / wf_settled while the treasury engine
+// isn't live on the site (today's path, the very same object), the treasury's weekly rows of policy_runs once it is
+// (publicRecord: a site-run record in Pepe's _tr_public_records shape; a handed one = the push row the cutover kept).
 "use strict";
 const C = require("./core");
 const X = require("./lmsr");
@@ -1130,7 +1134,7 @@ async function epoch(t) {
     notes.pat_days = accruePatDays(d, p, Number(last.ts), now, Number(c.epoch_hour));
     // a Monday cut-off more than an hour late: Pepe's weekly settlement (it waits at most LATE_MONDAY) may have run without
     // the last day of its week - those PAT-days just went into a bucket it already settled (the audit's I8 late-monday)
-    const lm = lateMonday(Number(last.ts), now, Number(c.epoch_hour), c);
+    const lm = lateMonday(Number(last.ts), now, Number(c.epoch_hour), await wfView(c));   // PO-4: policy_runs once the treasury is live
     if (lm) notes.late_monday = lm;
   }
   const pend = Object.values(d.queue).filter((q) => q.state === "pending").sort((a, b) => Number(a.ts) - Number(b.ts));
@@ -1275,6 +1279,68 @@ function waterfallFrom(c) {
   }
   return out.sort((a, b) => (a.epoch < b.epoch ? -1 : a.epoch > b.epoch ? 1 : 0));
 }
+// ── PO-4 (1.99??): the weekly records from the SITE's policy runs (readers on policy_runs once the treasury engine is live) ──
+const WF_KEEP = ["surplus", "stakers_share", "apr_cap", "staked", "stakers", "stakers_n", "fed", "incentives", "fed_loan_repaid"];
+/**
+ * One settled weekly record in Pepe's push shape (pepe_treasury._tr_public_records): the plan's per-vault totals (never a stash
+ * id) + the D2 track (would_cap25, weighting, cap_pct, fallback) when there is one - {epoch, boundary, ts, days, state, done,
+ * staker_share, staker_cap_pct (the cap in force), ref_cap_pct, vaults, totals}. `track` = engines.trackOf(inputs, plan) for a
+ * site-run record; `doneS` = when it was settled (s, the real clock the capital cut-off compares with).
+ */
+function publicRecord(plan, track, doneS, state = "done") {
+  const p = plan || {};
+  const tr = track || {};
+  const nz = (x) => (x === undefined ? null : x);
+  const vaults = {};
+  for (const [v, x] of Object.entries(p.vaults || {})) {
+    const row = Object.fromEntries(WF_KEEP.map((k) => [k, nz((x || {})[k])]));
+    const t = (tr.vaults || {})[v];
+    if (t && typeof t === "object" && Object.keys(t).length) {
+      row.would_cap25 = nz(t.would25);
+      row.weighting = nz(t.weighting);
+      if (t.cap_pct !== null && t.cap_pct !== undefined) { row.cap_pct = t.cap_pct; row.fallback = !!t.fallback; }
+    }
+    vaults[v] = row;
+  }
+  return { epoch: nz(p.epoch), boundary: nz(p.boundary), ts: nz(p.ts), days: nz(p.days), state, done: nz(doneS), staker_share: nz(p.staker_share),
+           staker_cap_pct: nz(tr.cap_in_force_pct), ref_cap_pct: nz(tr.ref_cap_pct), vaults, totals: Object.assign({}, p.totals || {}) };
+}
+/**
+ * The capital config `c` as the staking readers use it (lateMonday, lastSettled, patDaysNow, waterfallFrom - publish's /staking list
+ * and staking_state, capital/watch weekly / trackCap / adminData). While the treasury engine is NOT live: `c` itself, unchanged
+ * (today's path: Pepe's pushed waterfall / wf_settled). Live (H2a on): a copy whose waterfall / wf_settled are the treasury's
+ * weekly rows of policy_runs (done or handed, by boundary): a site-run row -> publicRecord(plan, trackOf(inputs, plan), done / 1000);
+ * a handed row -> its result.public (the cutover kept Pepe's push row, policy/scheduler.js cutover) or a minimal {epoch, boundary,
+ * state: "done", done: result.done_s}. waterfall = the last 8 plain "W<date>" records (a tagged "W...-r1" is dropped from the list,
+ * as waterfallFrom drops it); wf_settled = settledFrom of every done record, tagged ones included (the last 16). Works with no
+ * capital push at all (c = DEFAULT_CFG + the site-owned settings).
+ */
+async function wfView(c) {
+  const PC = require("../policy/core");
+  if (((await PC.engines()).treasury || {}).mode !== "live") return c;
+  const E = require("../policy/engines");
+  const { getQuery } = require("../dbUtils");
+  const rows = await getQuery("SELECT period, state, boundary, via, inputs, plan, result, done FROM policy_runs WHERE engine = 'treasury' AND period LIKE 'W%' AND state IN ('done', 'handed')");
+  const recs = [];
+  for (const r of rows) {
+    const res = PC.parse(r.result, {}) || {};
+    if (r.state === "done" && r.via === "site") {
+      const plan = PC.parse(r.plan, null);
+      if (!plan) continue;
+      let tr = null;
+      try { tr = E.trackOf(PC.parse(r.inputs, {}) || {}, plan); } catch (e) { tr = null; }
+      recs.push(publicRecord(plan, tr, Number(r.done) > 0 ? Number(r.done) / 1000 : null));
+    } else if (res.public && typeof res.public === "object") {
+      recs.push(Object.assign({}, res.public, { epoch: r.period, state: "done" }, res.public.done == null && res.done_s != null ? { done: res.done_s } : {}));
+    } else {
+      const b = Number(r.boundary !== null && r.boundary !== undefined ? r.boundary : res.boundary);
+      recs.push({ epoch: r.period, boundary: Number.isFinite(b) && b > 0 ? b : null, state: "done", done: res.done_s ?? null });
+    }
+  }
+  recs.sort((a, b) => (Number(a.boundary) || 0) - (Number(b.boundary) || 0));
+  return Object.assign({}, c, { waterfall: recs.filter((r) => /^W\d{4}-\d{2}-\d{2}$/.test(String(r.epoch || ""))).slice(-8),
+                                wf_settled: settledFrom(recs).slice(-16), wf_source: "policy_runs" });
+}
 /** P1.1 / D2: the weekly bonus cap (econ_cfg wf_staker_cap_pct, % APR on the staked value; 0 = NO cap) as a fraction -
  *  what Pepe pushed with his capital config (c.wf_staker_cap_pct), else his policy push's econ_cfg, else the site's
  *  override, else 0 = no cap (PO-0b, D-8: the code default matches prod; it was 25%, the old shared knob's value). */
@@ -1337,7 +1403,8 @@ async function publish() {
   const k = await ctx();
   const p = prices(d, k);
   const S = require("../stashes");
-  const pdNow = patDaysNow(d, C.nowS(), Number(c.epoch_hour), lastSettled(c));
+  const cw = await wfView(c);                                   // PO-4: the weekly records from policy_runs once the treasury is live
+  const pdNow = patDaysNow(d, C.nowS(), Number(c.epoch_hour), lastSettled(cw));
   const snap = {
     prices: p, nav: Object.fromEntries(VAULTS.map((v) => [v, Math.trunc(nav(v, k))])), auto_nav: Math.trunc(Number(d.auto.total) * p[AUTO]),
     staked: Object.fromEntries(VAULTS.map((v) => [v, Math.trunc(stakerValue(d, v, p))])),
@@ -1361,7 +1428,7 @@ async function publish() {
     staker_index: Object.fromEntries(VAULTS.map((v) => { const e = d.epochs[d.epochs.length - 1]; return [v, e && e.staker_index ? Number(e.staker_index[v]) || null : null]; })),
     staker_apr: Object.fromEntries(VAULTS.map((v) => [v, { 7: stakerApr(d, v, 7, c), 30: stakerApr(d, v, 30, c) }])),
     staker_so_far: Object.fromEntries(VAULTS.map((v) => [v, stakerSoFar(d, v)])),
-    waterfall: waterfallFrom(c),
+    waterfall: waterfallFrom(cw),
     cushion: Object.fromEntries(VAULTS.map((v) => { const sh = cushionShares(d.v[v], C.nowS(), cushionCfg(c).days); return [v, { shares: sh, value: Math.trunc(sh * p[v]) }]; })),
     // P2.1: this week's PAT-days per vault (the bucket next Monday settles) - each stash's own in positions[id].pd
     // (from: when the site's PAT-days began; partial: the week isn't wholly time-weighted yet - Pepe's bucket rule, pdPartial)
@@ -1435,4 +1502,4 @@ module.exports = { VAULTS, AUTO, PROTOCOL, CASH, LABEL, SITE_KEYS, load, store, 
                    AUDIT, CUSHION_SLACK, CUSHION_KEEP_DAYS, CUSHION_MAX_DAYS, PD_KEEP, PD_SLACK, LATE_MONDAY, lookThrough, accruePatDays, patDaysNow, pdPartial, pdWhole, pdFirstWeek, lastSettled, settledFrom,
                    lateMonday, settlesAt, autoCapOn, stakerRoom, capAutoLegs, autoCappedLegs,
                    stakerApr, stakerSoFar, waterfallFrom, wfRowD2, WEIGHTINGS, paidByStash, bonusCap, addCost, backfillCost, queueWhole, impliedHoldings, holdingOf, replayCeiling, REPLAY_CEIL,
-                   PAID_VIA, CORR_VIA };
+                   PAID_VIA, CORR_VIA, publicRecord, wfView, WF_KEEP };
