@@ -173,3 +173,21 @@ test("the mark is archived with the line and comes back in scrollback, never as 
   const stored = (await getQuery("SELECT data FROM bridge_feed WHERE c = ?", [it.c]))[0];
   assert.equal(JSON.parse(stored.data).md, "cfsticker", "the live feed keeps it across a restart");
 });
+
+// 1.99?? dockfu: review (privacy) - the mark says what a line's words were (a sticker / a GIF). A purge takes the words (text NULL,
+// d.u blanked, the 🎙 id); the archived row must not keep "this was a GIF" behind either, for a named or a veiled sender alike
+test("a purged media line keeps no media mark in the archive", async () => {
+  await settle(200);
+  const CLM = require(path.join(repo, "chatlogmod"));
+  const named = line((x) => x.text === "[gif:orchard_A1]" && x.md === "gif"), veiled = line((x) => x.text === "[gif:veiled_v1]" && x.md === "gif");
+  assert.ok(named && veiled);
+  const rowOf = async (c) => (await getQuery("SELECT l.*, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE l.c = ?", [c]))[0];
+  for (const it of [named, veiled]) assert.equal(JSON.parse((await rowOf(it.c)).d).md, "gif", "(archived with its mark first)");
+  const out = await CLM.purgeRows([await rowOf(named.c), await rowOf(veiled.c)], "staff:x", "test");
+  assert.equal(out.purged, 2);
+  for (const it of [named, veiled]) {
+    const r = await rowOf(it.c);
+    assert.equal(r.purged, 1); assert.equal(r.text, null);
+    assert.equal(JSON.parse(r.d).md, undefined, "the purged row no longer says it was a GIF");
+  }
+});

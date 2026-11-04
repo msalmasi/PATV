@@ -364,6 +364,7 @@ async function purgeInTx(todo, by, why, t, have, out) {
     try { d = JSON.parse(r.d); } catch (e) { d = {}; }
     if (!d || typeof d !== "object") d = {};
     if (d.u) d.u = {};
+    delete d.md;                          // 1.99?? dockfu: review - the media mark says what the words were (a sticker / GIF): it goes with them
     const nd = JSON.stringify(d);
     const who = r.who && !String(r.who).startsWith("h:") ? "h:" + CL.hash(r.who) : r.who || null;
     // (CL6 fix-up: the 🎙 id goes too - it is a hash of the login and the words, testable against a guess)
