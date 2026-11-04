@@ -161,6 +161,35 @@ test("one transaction: a new video that can't be booked leaves the old one playi
   assert.equal(o2.slot.status, "active", "the pad's owner changing the video on their own stage isn't held to the hourly count");
 });
 
+test("a paid pad: the old video's hold settles and the new one is held in the same step; a hold that can't be paid rolls both back", async () => {
+  await S.setConfig({ price_per_min: 10 }, "test");
+  await rooms.setStage(PLANT, { slot_count: 1, slot_price: 10 }, "test", { maxSlots: 4, maxPrice: 10 });
+  const bal = async () => (await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [holder.userId]))[0].b;
+  const rows = async () => (await getQuery("SELECT COUNT(*) AS n FROM transactions WHERE userId = ?", [holder.userId]))[0].n;
+  try {
+    const b0 = await bal();
+    const a = await video(holder, PLANT, A);                       // 30 min x 10 = 300 held
+    assert.equal(await bal(), b0 - 300);
+    T += 90 * 1000;
+    const b = await video(holder, PLANT, B, { replace: a.slot.id });
+    const old = await S.getSlot(a.slot.id);
+    assert.deepEqual([old.status, old.end_reason, old.charged + old.refunded], ["ended", "replaced", 300], "the old hold is settled in full");
+    assert.equal(await bal(), b0 - old.charged - 300, "the old refund in, the new hold out - once each");
+    // the next replace asks for more than the holder has: nothing moves (the refund is rolled back with the failed hold)
+    await runQuery("UPDATE users SET points_balance = 0 WHERE userId = ?", [holder.userId]);
+    const n0 = await rows();
+    await assert.rejects(video(holder, PLANT, A, { replace: b.slot.id, minutes: 60 }), refused(402));
+    const sb = await S.getSlot(b.slot.id);
+    assert.deepEqual([sb.status, sb.settled, sb.end_reason], ["active", 0, null], "the playing video is untouched");
+    assert.equal(await bal(), 0, "no refund leaked out of the rolled-back replace");
+    assert.equal(await rows(), n0, "no ledger row either");
+  } finally {
+    await runQuery("UPDATE users SET points_balance = 100000 WHERE userId = ?", [holder.userId]);
+    await S.setConfig({ price_per_min: 0 }, "test");
+    await rooms.setStage(PLANT, { slot_count: 1, slot_price: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
+  }
+});
+
 test("the queue's refusal names the slot too (the page then books for now with replace)", async () => {
   const a = await video(holder, PLANT, A);
   let seen = null;
