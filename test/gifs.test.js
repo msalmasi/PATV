@@ -317,3 +317,27 @@ test("1.99?? dockfu: a search body over 4 kB is refused behind index.js's global
     assert.equal(ok.status, 200); assert.equal(calls.length, 1);
   } finally { srv.close(); }
 });
+
+// 1.99?? dockfu: review - Express (4.x, not strict, not case sensitive) also routes POST /api/gifs/search/ and /API/GIFS/SEARCH to the
+// search, but index.js's skip list compares req.path exactly: those spellings went through its global 100 kB parser first and the
+// route's own 4 kB parser then saw an already-read body. The limit holds whichever spelling reached the route.
+test("1.99?? dockfu: review - the 4 kB search limit holds for every path spelling Express routes to the search", async () => {
+  const source = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  const use = source.split(/\r?\n|\r/).find(l => l.startsWith("app.use((req, res, next) => (req.path === \"/api/media\"") && l.includes("express.json()(req, res, next)"));
+  const skip = [...use.matchAll(/req\.path === "([^"]+)"/g)].map(m => m[1]), prefixes = [...use.matchAll(/req\.path\.startsWith\("([^"]+)"\)/g)].map(m => m[1]);
+  const app = express(), addUser = (req, res, next) => { req.user = req.get("x-test-user") ? { userId: req.get("x-test-user") } : null; next(); };
+  app.use((req, res, next) => (skip.includes(req.path) || prefixes.some(p => req.path.startsWith(p)) ? next() : express.json()(req, res, next)));
+  G.register(app, { addUser });
+  const srv = await new Promise(resolve => { const x = app.listen(0, "127.0.0.1", () => resolve(x)); });
+  try {
+    const at = "http://127.0.0.1:" + srv.address().port;
+    const post = (p, body) => realFetch(at + p, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+    for (const p of ["/api/gifs/search/", "/API/GIFS/SEARCH", "/Api/Gifs/Search/"]) {
+      const big = await post(p, { pad: room.slug, q: "wave", pad_note: "x".repeat(5000) });
+      assert.equal(big.status, 413, p + ": a body over 4 kB never reaches the search");
+      assert.equal(calls.length, 0, p + ": no provider request");
+    }
+    const ok = await post("/api/gifs/search/", { pad: room.slug, q: "wave" });
+    assert.equal(ok.status, 200, "a small body still searches on the other spelling"); assert.equal(calls.length, 1);
+  } finally { srv.close(); }
+});

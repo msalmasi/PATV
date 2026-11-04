@@ -144,10 +144,22 @@ function attach(item) {
   else void resolve(token.id); // cache-only render path; one throttled/in-flight lookup per id
   return item;
 }
+// 1.99?? dockfu: review - the search body's 4 kB limit, whichever path spelling reached the route. Express (not strict, not case
+// sensitive) routes /api/gifs/search/ and /API/GIFS/SEARCH here too, but index.js's skip list compares req.path exactly, so its
+// global (100 kB) parser read those first and express.json below saw an already-read body. A body another parser took is kept only
+// with a Content-Length within the limit.
+const SEARCH_BODY_MAX = 4096;
+function searchBodyLimit(req, res, next) {
+  if (!req._body) return next();
+  const n = Number(req.get("content-length"));
+  if (Number.isFinite(n) && n >= 0 && n <= SEARCH_BODY_MAX) return next();
+  res.set("Cache-Control", "no-store");
+  return res.status(413).json({ ok: false, code: "too_large", error: "GIF search unavailable." });
+}
 function register(app, { addUser }) {
   // 1.99aiw dock: review - privacy: POST {q, pad}, never a GET - what people look for (often a name) never sits in a URL, so it stays
   // out of nginx's and Cloudflare's request logs (spec O.1: q is never logged), as the pad chat's own search does (chatlogsearch.js)
-  app.post("/api/gifs/search", addUser, require("express").json({ limit: "4kb" }), async (req, res) => {
+  app.post("/api/gifs/search", addUser, searchBodyLimit, require("express").json({ limit: SEARCH_BODY_MAX }), async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, code: "security", error: "GIF search unavailable." });
     try {
