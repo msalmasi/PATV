@@ -488,7 +488,9 @@ function echoJob(jobId, roomId = null) {
            // 1.99ajc dockfu (D3): the sticker / GIF this say job carried (sendSayLine's validated media) - bridge.js mediaMark marks its
            // echo by it; null for an ordinary line
            media: j.media && typeof j.media === "object" ? (j.media.type === "gif" ? { type: "gif", id: String(j.media.id) }
-             : { type: "cfsticker", set: Number(j.media.set), id: Number(j.media.id) }) : null };
+             : { type: "cfsticker", set: Number(j.media.set), id: Number(j.media.id) }) : null,
+           // 1.99?? dockclean: the 🧸 PATV sticker this say job was (sendSayLine) - {pack, id, alt: the words Pepe posts} | null
+           stk: j.stk && typeof j.stk === "object" ? { pack: String(j.stk.pack), id: String(j.stk.id), alt: String(j.stk.alt) } : null };
 }
 
 /** This user's recent relay jobs in a room (for the composer's status line). 1.99ye: a say carries its client id
@@ -584,6 +586,14 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       media = { type: "gif", id: token.id, title: gif.title, page: gif.page };
     }
   }
+  // 1.99?? dockclean (owner point 21): a line that is exactly one 🧸 PATV sticker (the Dock's sticker picker) - its job remembers the
+  // sticker and the stand-in Pepe will post ("[sticker: Name]"), so bridge.js mediaMark can mark the echo of THIS job (pages draw the
+  // picture). Not job media: Pepe never sees it; validate (stickerRefusal) already checked the pack is this account's.
+  let stk = null;
+  if (!media) {
+    const S = require("./stickers"), tk = S.tokens(text);
+    if (tk.length === 1 && text === `[sticker:${tk[0].pack}/${tk[0].sticker}]` && out !== text) stk = { pack: tk[0].pack, id: tk[0].sticker, alt: out };
+  }
   text = out;
   let open = 0;
   for (const j of jobs.values()) if (j.kind === "say" && j.userId === u.userId && j.roomId === R.id && j.state !== "done") open++;
@@ -608,7 +618,7 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
     if (waiting >= SAY_QUEUE_MAX) return { status: 429, body: { ok: false, code: "queue_full", max: SAY_QUEUE_MAX, error: `You have ${SAY_QUEUE_MAX} messages waiting to go out — give them a second.` } };
   }
   const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
-                     actor: require("./actorcap").actorOf(u, display), cid: cid || null, ...(media ? { media } : {}) });
+                     actor: require("./actorcap").actorOf(u, display), cid: cid || null, ...(media ? { media } : {}), ...(stk ? { stk } : {}) });
   if (key) cids.set(key, j.id);
   console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}${opts.test ? " (staging test)" : ""}`);
   if (!opts.test) require("./streaks").note(u.userId, "relay");     // 1.99xi: 🔥 chatting into a pad's room from the web keeps the daily streak

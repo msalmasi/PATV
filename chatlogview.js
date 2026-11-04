@@ -1047,7 +1047,7 @@ const OUT_COMMON = Object.freeze(["c", "ts", "k"]);
 // wave 2 WP-2: + mask (a hidden line's bar - never its words), hold (B.3: the mic hold a line belongs to), at (when a 🎙 line was
 // said). dress takes them out again where they would link a "someone" line to a person (see dress)
 const OUT_KIND = Object.freeze({
-  msg: Object.freeze(["text", "mask", "md"]), tx: Object.freeze(["text", "id", "mask", "hold", "at"]), topic: Object.freeze(["text"]),
+  msg: Object.freeze(["text", "mask", "md", "stk"]), tx: Object.freeze(["text", "id", "mask", "hold", "at"]), topic: Object.freeze(["text"]),
   join: Object.freeze([]), leave: Object.freeze([]), mic: Object.freeze(["hold"]), unmic: Object.freeze(["ms", "hold"]),
   live: Object.freeze(["who", "pad", "what", "link", "np"]),          // 🎥 bridge.liveNotice
   note: Object.freeze(["w", "s", "o", "sc"]),                         // 📜 bridge.noteItem
@@ -1164,6 +1164,7 @@ function dress(items, ctx) {
     // 1.99ajc dockfu (D3): the server's media mark (bridge.js mediaMark) rides only beside the words it marks - never on a masked bar,
     // a sealed / purged line or anything whose words a viewer doesn't get (a bar must not say "this was a sticker")
     if (o.md !== undefined && !(typeof o.text === "string" && o.k === "msg" && mediaMarked(o))) delete o.md;
+    if (o.stk !== undefined && o.md !== "sticker") delete o.stk;      // 1.99?? dockclean: a 🧸 PATV sticker's key only beside its mark
     out.push(require("./gifs").attach(o));                  // 1.99aiw: cache-only, after the complete privacy/removal projection
   }
   return out;

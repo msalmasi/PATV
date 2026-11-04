@@ -227,6 +227,8 @@ function register(app, { addUser }) {
     Object.assign(res.locals, { incogcam: pcopy.incogcam, camreveal: pcopy.camreveal, camevidence: pcopy.camevidence, pv3: pcopy.pv3,
                                 textreveal: pcopy.textreveal,      // (1.99aid privacy controls S4t)
                                 wcover: pcopy.wcover });           // (1.99aif privacy controls round 5: S3's cover picture, micfollow_cfg withheld_cover)
+    // 1.99?? dockclean (Room Dock clean-up, owner point 32): the web-users-on-a-pad sentence, while the Room Dock (which lists them) is on
+    try { res.locals.padweb = require("./paddock").current().cfg.mode !== "off"; } catch (e) { res.locals.padweb = false; }
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));

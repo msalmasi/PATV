@@ -917,8 +917,14 @@ async function pickerEligible(viewer, R, login) {
  */
 function mediaMark(it, ev, roomId) {
   if (!it || typeof it !== "object") return it;
-  delete it.md;
+  delete it.md; delete it.stk;
   if (it.k !== "msg" || typeof it.text !== "string" || (it.u && it.u.self)) return it;
+  // 1.99?? dockclean (owner point 21): a 🧸 PATV sticker - the line's own say job was that sticker and its words are exactly the stand-in
+  // the job sent ("[sticker: Name]"); typed words that merely look like one stay text
+  if (it._job) {
+    const J0 = relay.echoJob(it._job, roomId);
+    if (J0 && J0.stk && it.text === J0.stk.alt) { it.md = "sticker"; it.stk = J0.stk.pack + "/" + J0.stk.id; return it; }
+  }
   const token = require("./public/js/chatlog-core").mediaToken(it.text);
   if (!token) return it;
   if (it._job) {
@@ -1693,6 +1699,14 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
   const withTip = (u) => { const x = withPatv(u, L, F); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
+  // 1.99?? dockclean (owner point 32): the 🌐 web users on this pad's live chat (padweb.js) - the pad page's own /live only, while the
+  // Room Dock is on; PATV names only (no chat login, no account id); a viewer's own entry says me: true and has no tip
+  let web = null;
+  if (opts && opts.program && userId && require("./paddock").current().cfg.mode !== "off") {
+    const lc = (x) => String(x || "").toLowerCase();
+    const tipOf = (name) => (!me || (me.username && lc(name) === lc(me.username)) || (pepe && lc(name) === pepe) ? null : { to: String(name), href: "/u/" + encodeURIComponent(String(name)) + "/tip" });
+    try { web = await require("./padweb").forRoom(R, me, tipOf); } catch (e) { web = []; }
+  }
   // 1.99aiw: picker visibility shares the say route's full access check; no extra account lookup while the Dock/media are off.
   let cfstickerPicker = false, gifPicker = false;
   if (userId && require("./paddock").current().cfg.mode !== "off") {
@@ -1727,6 +1741,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
     members: members.map(withTip),
+    ...(web ? { web } : {}),
     mic: mic.map((u) => withTip(pageMic(u))),          // micfollow: proven / since never reach pages
     feed, cursor: at.cursor,
     ...(opts && opts.program ? { stage_program: await stageProgram(prog, R, userId, L, F) } : {}),
@@ -1998,6 +2013,9 @@ function register(app, { isBotToken, addUser }) {
     const pm = require("./padmod");
     const login = signed ? await pm.linkedLogin(req.user.userId) : null;
     if (login) pm.noteViewer(R.id, login);
+    // 1.99?? dockclean (owner point 32): a signed-in member with this pad's live chat open is a 🌐 web user on its people list for 90 s
+    // (padweb.js: memory only, never logged; Incognito / !bridge hide keep them off it)
+    if (signed) require("./padweb").note(R.id, req.user, login);
     // 1.99ye: ?wait=1 - a long-poll (waitForChange); the answer says lp: true so the page asks again at once
     const lp = req.query.wait === "1";
     if (lp) {
