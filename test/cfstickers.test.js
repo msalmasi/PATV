@@ -184,3 +184,21 @@ test("1.99?? dock: review - a 240-code-point description with an emoji is accept
   assert.doesNotMatch(CF.get(1642, 421).desc, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/, "no half surrogate pair");
   assert.equal((await sync({ op: "list", items: [{ id: 421, set: 1642, desc: desc + "x" }] })).status, 400);
 });
+
+// 1.99?? dock: review - the picker's GET ran a synchronous fs.existsSync per catalog sticker (up to 10000) on the event loop for
+// every signed-in request, with no rate limit: a few clients could stall the site. The list is built once per catalog change
+test("1.99?? dock: review - the picker's catalog is built once per change, not with a file check per sticker per request", async () => {
+  assert.equal((await sync({ op: "pics", items: [{ id: 421, png: png.toString("base64") }] })).status, 200);
+  const real = fs.existsSync; let stats = 0;
+  fs.existsSync = (...args) => { stats++; return real(...args); };
+  try {
+    const first = await catalog(); assert.equal(first.status, 200); assert.equal(first.data.length, 1);
+    const after = stats;
+    for (let i = 0; i < 5; i++) assert.deepEqual((await catalog()).data, first.data);
+    assert.equal(stats, after, "no file check per request");
+    await CF.syncList([{ id: 421, set: 1642, desc: "Renamed" }]);
+    assert.equal((await catalog()).data[0].desc, "Renamed", "a new list shows at once");
+    await CF.syncList([]);
+    assert.deepEqual((await catalog()).data, [], "a sticker gone from the list is gone from the picker at once");
+  } finally { fs.existsSync = real; }
+});

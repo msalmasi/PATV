@@ -36,7 +36,16 @@ function get(set, id) {
   return { id: row.id, set: row.set_id, desc: row.descr, src: row.file ? "/media/cfsticker/" + row.id + ".webp" : null };
 }
 const valid = (set, id) => !!get(set, id);
-function catalog() { return [...CACHE.values()].filter(r => r.file && fs.existsSync(filePath(r.file) || "")).map(r => get(r.set_id, r.id)); }
+// 1.99?? dock: review - the picker's list is built once per catalog change (GEN) or minute, not with a synchronous fs.existsSync
+// per sticker (up to MAX_CATALOG) on the event loop for every signed-in GET of /api/rooms/:slug/cfstickers (no rate limit)
+const CATALOG_TTL_MS = 60000;
+let GEN = 0, LISTED = null;
+function catalog() {
+  const now = Date.now();
+  if (!LISTED || LISTED.cache !== CACHE || LISTED.gen !== GEN || now - LISTED.at >= CATALOG_TTL_MS)
+    LISTED = { cache: CACHE, gen: GEN, at: now, rows: [...CACHE.values()].filter(r => r.file && fs.existsSync(filePath(r.file) || "")).map(r => get(r.set_id, r.id)) };
+  return LISTED.rows.map(r => ({ ...r }));
+}
 function serial(fn) { const task = writing.then(fn); writing = task.catch(() => {}); return task; }
 async function syncList(items) {
   if (!Array.isArray(items) || items.length > MAX_CATALOG) throw new Refuse(400, "list");
@@ -53,7 +62,7 @@ async function syncList(items) {
       await runQuery("DELETE FROM cf_stickers");
       for (const row of next.values()) await runQuery("INSERT INTO cf_stickers (id,set_id,descr,file,updated) VALUES (?,?,?,?,?)", [row.id, row.set_id, row.descr, row.file, at]);
     });
-    const old = CACHE; CACHE = next;
+    const old = CACHE; CACHE = next; GEN++;
     for (const row of old.values()) if (row.file && (!next.has(row.id) || next.get(row.id).file !== row.file)) remove(row.file);
     // 1.99?? dock: while cfstickers is off the site keeps the list (ids, sets, descriptions - served nowhere) but asks Pepe for no
     // art, so no Camfrog sticker picture reaches the site's disk before the owner switches it on; the first sync after that
@@ -94,6 +103,7 @@ async function syncPics(items) {
       const at = Date.now();
       await tx(async () => { for (const update of updates) await runQuery("UPDATE cf_stickers SET file=?,updated=? WHERE id=?", [update.file, at, update.id]); });
       for (const update of updates) { const old = CACHE.get(update.id); CACHE.set(update.id, { ...old, file: update.file, updated: at }); if (old.file) remove(old.file); }
+      GEN++;
       return { ok: true };
     } catch (e) { made.forEach(remove); throw e; }
   });
@@ -133,4 +143,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 module.exports = { init, enabled, get, valid, catalog, syncList, syncPics, register, MAX_PNG_BYTES, MAX_BODY_BYTES, MAX_PICS,
-  _setDir: d => { DIR = path.resolve(d); fs.mkdirSync(DIR, { recursive: true }); }, _reset: () => { ready = null; CACHE = new Map(); writing = Promise.resolve(); } };
+  _setDir: d => { DIR = path.resolve(d); fs.mkdirSync(DIR, { recursive: true }); LISTED = null; }, _reset: () => { ready = null; CACHE = new Map(); writing = Promise.resolve(); LISTED = null; } };
