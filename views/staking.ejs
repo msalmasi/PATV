@@ -405,18 +405,27 @@
        const rFit = (k) => !RM ? null : k === 'auto' ? RM.auto.fit : (RM.vaults[k] || {}).fit;
        const rFull = (k) => skPaused || (!!RM && (k === 'auto' ? !!RM.auto.full : !!(RM.vaults[k] || {}).full));
        const rOpenAny = !skPaused && (!RM || RM.anyOpen);
-       const rDefault = (!rFull('auto') && 'auto') || ['bank', 'house', 'mm'].find((k) => !rFull(k)) || 'auto';
+       // 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): the picker keeps the default it always had (Auto, as
+       // vaultSelect('auto') did and /wallet's stash form does) - never chosen because a vault is full
+       const rDefault = 'auto';
        const rName = (k) => V[k].icon + ' ' + V[k].name;
        const rCell = (k) => rFull(k) ? t('staking.room.full') : rFit(k) == null ? t('staking.room.open') : t('staking.room.about', { n: fmt(rFit(k)) });
        const rShares = RM ? ['bank', 'house', 'mm'].map((k) => t('staking.room.share', { vault: V[k].name, p: pct(RM.vaults[k].share, 0) })).join(', ') : '';
-       const rAnyFull = !!RM && ['bank', 'house', 'mm'].some((k) => rFull(k)); %>
+       const rAnyFull = !!RM && ['bank', 'house', 'mm'].some((k) => rFull(k));
+       // ...and says when a full vault is likely to open (stakeroom.needOf): the unstakes already queued from it, else about
+       // how much stakers would have to unstake; Auto in one neutral clause, only when it takes stakes
+       const rFullK = RM ? ['bank', 'house', 'mm'].filter((k) => rFull(k)) : [];
+       const rNeeds = rFullK.filter((k) => !RM.vaults[k].soon && Number(RM.vaults[k].need) > 0).map((k) => t('staking.room.need', { vault: V[k].name, n: fmt(RM.vaults[k].need) })).join(', ');
+       const rSoon = rFullK.filter((k) => RM.vaults[k].soon).map((k) => V[k].name).join(', ');
+       const rWhen = (rNeeds ? ' ' + t('staking.room.needs', { needs: rNeeds }) : '') + (rSoon ? ' ' + t('staking.room.soon', { vaults: rSoon }) : '');
+       const rAuto = RM && !rFull('auto') ? ' ' + t('staking.room.auto') : ''; %>
     <% if (RM || skPaused) { %>
       <div class="sk-room<%= rOpenAny ? '' : ' shut' %>" id="stakeRoom">
         <p class="sk-room-row"><b><%- t('staking.room.h') %></b>
           <% KEYS.forEach((k) => { %><span class="rv<%= rFull(k) ? ' full' : '' %>"><%= rName(k) %> <b><%- rCell(k) %></b></span><% }) %></p>
         <% if (skPaused) { %><p class="info"><%- t('staking.room.paused') %></p>
-        <% } else if (!rOpenAny) { %><p class="info"><%- t('staking.room.limit', { p: pct(RM.smax, 0), shares: rShares }) %> <%- t('staking.room.all_full') %></p>
-        <% } else if (rAnyFull) { %><p class="info"><%- t('staking.room.why', { p: pct(RM.smax, 0), shares: rShares }) %><%- RM.auto.fit == null && !rFull('auto') ? ' ' + t('staking.room.auto_open') : '' %></p>
+        <% } else if (!rOpenAny) { %><p class="info"><%- t('staking.room.limit', { p: pct(RM.smax, 0), shares: rShares }) %> <%- t('staking.room.all_full') %><%- rWhen %></p>
+        <% } else if (rAnyFull) { %><p class="info"><%- t('staking.room.why', { p: pct(RM.smax, 0), shares: rShares }) %><%- rWhen %><%- rAuto %></p>
         <% } else { %><p class="info"><%- t('staking.room.why_open', { p: pct(RM.smax, 0), shares: rShares }) %></p><% } %>
       </div>
     <% } %>

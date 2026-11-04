@@ -638,8 +638,10 @@ test("1.99?? quick1: a stake into a vault at its staker limit is refused BEFORE 
     const full = await op("vaults", "stake", ANN, { stash: "1", vault: "bank", amount: 5000 }, "stake-full-001");
     assert.equal(full.body.ok, false);
     assert.equal(full.body.code, "full");
-    assert.match(full.body.error, /^🏦 The 🏦 Bank vault is full right now: stakers may own at most 50% of a vault, and they already own 92% of it\. Nothing moved - your PAT stays in ann\/nest\. 🤖 Auto still takes stakes/);
-    assert.match(full.body.error, /there's no date for that\.$/);
+    // 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): full, no room, when it's likely to open, Auto in one neutral clause
+    assert.match(full.body.error, /^🏦 The 🏦 Bank vault is full right now: stakers may own at most 50% of a vault, and they already own 92% of it, so it has no room for a stake\. Nothing moved - your PAT stays in ann\/nest\. It opens again once stakers unstake about PAT [\d,]+ from it or the protocol adds PAT - there's no date for that\./);
+    assert.doesNotMatch(full.body.error, /still takes stakes|doesn't check/);
+    assert.match(full.body.error, / 🤖 Auto spreads stakes over the three vaults\.$/);
     const capped = await op("vaults", "stake", ANN, { stash: "1", vault: "house", amount: 50000 }, "stake-capd-001");
     assert.equal(capped.body.code, "capped", JSON.stringify(capped.body));
     const fit = SR.fitOf(hNav, V.stakerValue(await V.load(), "house", V.prices(await V.load(), await V.ctx())), 0.5);
@@ -650,6 +652,20 @@ test("1.99?? quick1: a stake into a vault at its staker limit is refused BEFORE 
     assert.equal(Object.keys((await V.load()).queue).length, n0, "nothing queued");
     // the website form says the same (actions.js -> service.stashForm), and so does Pepe (he relays `error`)
     assert.match(await SVC.stashForm("u1", ["stake", "nest", "5000", "bank"]), /^🏦 The 🏦 Bank vault is full right now/);
+    // 1.99?? quick1 rework: unstakes queued from the Bank that cover what it's over: it may open at the next cut-off (roomNow
+    // counts them at today's price) - and the stake is still refused now, nothing queued
+    {
+      const dq = await V.load(), kq = await V.ctx(), pq = V.prices(dq, kq);
+      dq.queue.qtestout = { id: "qtestout", stash: "777", vault: "bank", kind: "withdraw", shares: V.stakerValue(dq, "bank", pq) / pq.bank, state: "pending", ts: 1 };
+      await V.store(dq);
+      const soon = await op("vaults", "stake", ANN, { stash: "1", vault: "bank", amount: 5000 }, "stake-soon-001");
+      assert.equal(soon.body.code, "full", JSON.stringify(soon.body));
+      assert.match(soon.body.error, /so it has no room for a stake\. Nothing moved - your PAT stays in ann\/nest\. Unstakes already queued from it may open room at the next daily cut-off\./);
+      const dq2 = await V.load();
+      delete dq2.queue.qtestout;
+      await V.store(dq2);
+      assert.equal(Object.keys((await V.load()).queue).length, n0, "nothing queued");
+    }
     // what fits still goes in; Auto (vault_auto_staker_cap off) still takes stakes
     const ok1 = await op("vaults", "stake", ANN, { stash: "1", vault: "house", amount: fit }, "stake-fits-001");
     assert.equal(ok1.body.ok, true, JSON.stringify(ok1.body));

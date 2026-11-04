@@ -210,16 +210,18 @@ async function transfer(tid, src, dst, amount, why) {
 /** 1.99?? quick1 (capital/stakeroom.js): the room every vault has for a stake right now - the stakers' value and NAV at
  *  this moment, less the deposits already queued ahead (they run first at the cut-off). -> stakeroom.roomOf */
 function roomNow(d, k, p, c) {
-  const ahead = { bank: 0, house: 0, mm: 0 };
+  const ahead = { bank: 0, house: 0, mm: 0 }, out = { bank: 0, house: 0, mm: 0 };
   const w = autoCapOn(c) ? autoTargets(d, c) : null;
   for (const q of Object.values(d.queue || {})) {
+    // 1.99?? quick1 rework: an unstake queued from a vault (at today's price) says when a full vault may open
+    if (q.kind === "withdraw" && q.state === "pending" && VAULTS.includes(q.vault)) { out[q.vault] += Math.trunc((Number(q.shares) || 0) * p[q.vault]); continue; }
     if (q.kind !== "deposit" || q.state !== "pending" || !q.held) continue;
     if (VAULTS.includes(q.vault)) ahead[q.vault] += Math.trunc(Number(q.amount) || 0);
     else if (q.vault === AUTO && w) for (const v of VAULTS) ahead[v] += Math.trunc((Number(q.amount) || 0) * w[v]);
   }
   return SR.roomOf({ nav: Object.fromEntries(VAULTS.map((v) => [v, nav(v, k)])),
                      staked: Object.fromEntries(VAULTS.map((v) => [v, stakerValue(d, v, p)])),
-                     smax: Number(c.staker_max), autoCap: autoCapOn(c), ahead, minMove: Number(c.min_move) });
+                     smax: Number(c.staker_max), autoCap: autoCapOn(c), ahead, out, minMove: Number(c.min_move) });
 }
 /** Why a deposit of `amt` into `vault` can't go in now (stakeroom.refusal: full / capped, said plainly) or null. For Auto
  *  under the staker limit, what the cut-off's split would place at today's numbers decides (autoCappedLegs). */
