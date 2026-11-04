@@ -1,5 +1,7 @@
 /* Room Dock: the existing pad components, scoped to this opt-in layout. */
-body.pad-dock-live { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 520px; overflow: hidden; }
+/* 1.99?? review: no overflow: hidden here (the body hands it to the viewport) - a window shorter than the floor (a phone held
+   sideways) scrolls to the composer, as /messages' body.dm-page does; only sideways overflow is cut */
+body.pad-dock-live { display: flex; flex-direction: column; block-size: 100vh; block-size: 100dvh; min-block-size: 520px; overflow-x: hidden; }
 body.pad-dock-live > header { flex: none; }
 body.pad-dock-live > main.rm.rm-dock { flex: 1 1 0; min-block-size: 0; max-inline-size: none; }
 body.pad-dock-live .site-foot { display: none; }

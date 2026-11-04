@@ -150,3 +150,17 @@ test("the A/V sync toggle is a compact icon button in the Dock's audio row", () 
   assert.doesNotMatch(btn,/display\s*:\s*none|visibility\s*:\s*hidden/);
   assert.match(icon,/content\s*:\s*"[^"]+"/);assert.match(icon,/font-size\s*:\s*var\(--ds-fs-/);
 });
+
+// 1.99?? dock review: body.pad-dock-live has a floor (min-block-size 520px, 440px on phones) like /messages' body.dm-page, but it
+// also had overflow: hidden, which the body hands to the viewport: in a window shorter than the floor (a phone held sideways,
+// 812x375) the page could not be scrolled and the composer (input, Hold to talk, Send) sat below the fold, out of reach
+test("a window shorter than the Live frame's floor can still scroll to the composer", () => {
+  const css=read("public/css/pad-dock.css").replace(/\/\*[\s\S]*?\*\//g,"");
+  const re=/([^{}]+)\{([^{}]*)\}/g;let m,floor=false;
+  while((m=re.exec(css))){
+    if(!m[1].split(",").map(s=>s.trim()).includes("body.pad-dock-live"))continue;
+    if(/min-block-size\s*:/.test(m[2]))floor=true;
+    assert.doesNotMatch(m[2],/(?:^|;)\s*overflow(?:-y|-block)?\s*:\s*(?:hidden|clip)\b/,"the viewport must stay scrollable");
+  }
+  assert.ok(floor,"the frame keeps its floor");
+});
