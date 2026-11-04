@@ -1053,7 +1053,7 @@
     var recentSpeakers = [];      // 1.99ajf dockclean: the composer's name autocomplete (acPeople) - the last 30 people who spoke here
     function item(it) {
       var n = CLR ? CLR.renderItem(it, rctx, H) : plainItem(it); if (n && typeof roomDock !== 'undefined' && roomDock) roomDock.personLine(n, it && it.u, it);
-      if (n) setTimeout(function () { mnCheck(n); }, 0);   // 1.99?? padppl: the mention sound (once it's on the page)
+      if (n && n.classList && n.classList.contains("is-mention")) setTimeout(function () { mnCheck(n); }, 0);   // 1.99?? padppl: the mention sound (once it is on the page)
       if (it && (it.k === 'msg' || it.k === 'tx') && it.u && !it.u.self && !it.mask) { recentSpeakers.push(it.u); if (recentSpeakers.length > 30) recentSpeakers.shift(); }
       return n;
     }

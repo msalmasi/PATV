@@ -707,7 +707,8 @@ test("round 5: the cover picture in Settings' Live cam card, /privacy's livecam 
   const pnow = fs.readFileSync(pfile, "utf8").replace(/\r\n/g, "\n");
   const L0 = { user: null, title: "Privacy Policy", VERSION: "x", UPDATED: "1 November 2026", enforced: false, chatlog: null, hubErasure: null, micrec: null,
                memory: null, privwire: null, evidence: null, policyDates: {}, ogBase: "http://test" };
-  const prender = (src, v) => ejs.render(src, Object.assign({}, L0, v), { filename: pfile });
+  // (1.99?? padppl: the current page minus its always-current additions - test/fixtures/padppl-privacy.js - for the comparisons with BASE5)
+  const prender = (src, v) => { const html = ejs.render(src, Object.assign({}, L0, v), { filename: pfile }); return src === pnow ? require("./fixtures/padppl-privacy").before(html) : html; };
   const IC1 = { on: true, on_at: null, on_day: null };
   const SENT = "keep your cam off the website: pads' mic stages show your cover picture (or a hooded frog) instead.";
   for (const ic of [null, IC1]) {
@@ -760,7 +761,9 @@ test("round 6: /privacy's captures paragraph, its privacy-wire paragraph and a n
   try { pbase = execFileSync("git", ["-C", repo, "show", `${BASE6}:views/privacy.ejs`], { encoding: "utf8" }).replace(/\r\n/g, "\n"); } catch (e) { pbase = null; }
   const L0 = { user: null, title: "Privacy Policy", VERSION: "x", UPDATED: "1 November 2026", enforced: false, chatlog: null, hubErasure: null, micrec: null,
                memory: null, privwire: null, evidence: null, policyDates: {}, ogBase: "http://test" };
-  const prender = (src, v) => ejs.render(src, Object.assign({}, L0, v), { filename: pfile });
+  // (1.99?? padppl: the current page minus its always-current additions - test/fixtures/padppl-privacy.js - for the comparisons with BASE6)
+  const PPL = require("./fixtures/padppl-privacy").before;
+  const prender = (src, v) => { const html = ejs.render(src, Object.assign({}, L0, v), { filename: pfile }); return src === pnow ? PPL(html) : html; };
   const ON1 = { on: true, on_at: null, on_day: null }, MSK = { "mic-stage-keep": { at: 1, day: "1 November 2026" } };
   const WIRE_AT = "under your frog name. <code>!bridge hide</code> and <code>!livecam off</code> keep your cam off the website";   // (section 3's paragraph, not the Live cams bullet)
   let n = 0;

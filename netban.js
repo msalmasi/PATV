@@ -216,7 +216,7 @@ async function banAccountNets(me, userId, { scope = "site", roomId = null, reaso
     for (const n of nets) {
       const r = await runQuery(`INSERT INTO net_bans (net_hash, scope, room_id, from_user, until, reason, by_id, by_name, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [n.net_hash, scope === "pad" ? "pad" : "site", scope === "pad" ? String(roomId || "") : null, String(userId), until, String(reason || "").slice(0, 120) || null, String(me.userId), me.username, now()]);
-      if (r && r.lastID) ids.push(r.lastID);
+      if (r && r.id) ids.push(r.id);
     }
     for (const id of ids) for (const u of exempt) await runQuery("INSERT OR IGNORE INTO net_ban_exempt (ban_id, user_id) VALUES (?, ?)", [id, String(u)]);
   });
@@ -238,7 +238,7 @@ async function banTyped(me, { ip = null, cidr = null, scope = "site", roomId = n
     [hash, rule, scope === "pad" ? "pad" : "site", scope === "pad" ? String(roomId || "") : null, until, String(reason || "").slice(0, 120) || null, String(me.userId), me.username, now()]);
   await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", null, { op: rule ? "range" : "ip", rule, scope, room: roomId || null, until }, String(reason || "").slice(0, 200) || null);
   await reload();
-  return { ok: true, id: r && r.lastID, until };
+  return { ok: true, id: r && r.id, until };
 }
 async function lift(me, id) {
   needAdmin(me);

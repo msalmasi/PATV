@@ -302,7 +302,7 @@ async function senderOf(it) {
   if (!userId && !login) {
     const l = vz || (u.anon ? null : String(u.login || ""));
     if (l) {
-      const m = /^u:([A-Za-z0-9-]{6,64})$/i.exec(l);
+      const m = /^u:([A-Za-z0-9_-]{1,64})$/i.exec(l);
       if (m) userId = m[1];
       else { login = l.toLowerCase(); const a = await require("./personref").linkedAccount(l).catch(() => null); if (a) userId = String(a.userId); }
     }
@@ -433,7 +433,7 @@ async function drain() {
           if (done.has(String(m.user.userId))) continue;
           // 1.99?? padppl: never from someone blocked either way (blocks.js) - the keyword path too
           if (!S) { try { S = await senderOf(line.it); } catch (e) { S = { userId: null, login: null }; } }
-          try { if (await require("./blocks").towards(S.userId, m.user.userId, { fromLogin: S.login })) continue; } catch (e) { continue; }
+          try { if (await require("./blocks").towards(S.userId, m.user.userId, { fromLogin: S.login })) continue; } catch (e) { console.error("[mentions] block check:", e.message); continue; }
           const n = noticeFor(line, m.word);
           if (await inbox.addSafe(m.user.userId, n)) {
             // 1.99acd: the browser notification (webpush.js) - content-free; late lines and blocked speakers stay inbox-only there

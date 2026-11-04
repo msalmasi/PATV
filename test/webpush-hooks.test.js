@@ -220,7 +220,7 @@ test("room mentions: your name -> a mention push, your word -> an alert-word pus
   assert.ok(!sp.t.includes("Secret") && !sp.b.includes("Secret"), "the text never names an Approved pad (the link still opens it)");
 });
 
-test("room mentions: a late bridge line or a blocked speaker -> the notice, no push; muted -> neither (upstream)", async () => {
+test("room mentions: a late bridge line -> the notice, no push; a blocked speaker (1.99?? padppl: blocks.js) or muted -> neither (upstream)", async () => {
   const notices = async () => (await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = 'u_bob' AND kind = 'mention'"))[0].n;
   M._sent.clear();
   tick(61e3);
@@ -229,20 +229,22 @@ test("room mentions: a late bridge line or a blocked speaker -> the notice, no p
   await idle();
   assert.equal(await notices(), n0 + 1, "the 🔔 notice is filed");
   assert.equal((await rowsOf("bob")).length, r0, "a backlog line: no push");
-  // bob blocked carol's account (DMs): the notice stays, no push
+  // bob blocked carol's account (DMs): 1.99?? padppl - never an alert from someone blocked either way (blocks.js): no notice, no push
   await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES ('u_bob', 'u_carol', 1)");
+  try { require(path.join(repo, "blocks")).changed("u_bob", "u_carol"); } catch (e) { /* no cache yet */ }
   M._sent.clear();
   tick(61e3);
   n0 = await notices();
   M.onLines([line(ROOM, "carolcf", "bob I'm blocked?")]);
   await idle();
-  assert.equal(await notices(), n0 + 1);
+  assert.equal(await notices(), n0, "a speaker bob blocked: no notice");
   assert.equal((await rowsOf("bob")).length, r0, "a speaker bob blocked: no push");
   // a web-relay line by the blocked account (login u:<userId>) too
   M._sent.clear();
   tick(61e3);
   M.onLines([line(ROOM, "u:u_carol", "bob via the web")]);
   await idle();
+  assert.equal(await notices(), n0, "nor from her web-relay line");
   assert.equal((await rowsOf("bob")).length, r0);
   await runQuery("DELETE FROM dm_blocks WHERE blocker_id = 'u_bob'");
   // muted: no notice and no push (mentions.js decides that, unchanged)

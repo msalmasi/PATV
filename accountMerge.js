@@ -479,6 +479,17 @@ const RULES = {
   // 1.99?? padppl (blocks.js): a block on an unlinked Camfrog login (one per blocker + login) and on a frog name (stored by the person)
   "login_blocks.blocker_id": M({ key: ["login"] }), "login_blocks.login": { deny: NAME },
   "veil_blocks.blocker_id": M(), "veil_blocks.blocked_id": M(), "veil_blocks.blocked_login": { deny: NAME },
+  // 1.99?? padppl: the website's bans on a frog name / an unlinked login (padbans.js), pad chat @mention mutes (mentions.js), the
+  // impersonation guard's OK marks (cfnames.js) and network bans (netban.js: the codes follow the person; the audit / view log keep ids)
+  "veil_bans.user_id": M(), "veil_bans.by_id": M(), "veil_bans.by_name": { deny: NAME },
+  "pad_login_bans.by_id": M(), "pad_login_bans.by_name": { deny: NAME },
+  "mention_pad_mutes.user_id": M({ key: ["room_id"] }),
+  "name_clash_ok.user_id": M({ key: ["name"] }), "name_clash_ok.by_id": M(),
+  "net_seen.user_id": M({ key: ["net_hash"], merge: { first_at: "MIN", last_at: "MAX", n: "SUM" } }),
+  "net_bans.from_user": M(), "net_bans.by_id": M(), "net_bans.by_name": { deny: NAME }, "net_bans.lifted_by": { deny: NAME },
+  "net_ban_exempt.user_id": M({ key: ["ban_id"] }),
+  "net_views.admin_id": { keep: "the network view log names who looked (2 years)" }, "net_views.subject_id": { keep: "the network view log names whose data was looked at" },
+  "netban_config.actor": { deny: NAME },
   "dm_prefs.user_id": M({ key: [] }), "dm_prefs.who": { deny: "a setting ('everyone' / 'following' / 'nobody')" },
   "dm_alerts.user_id": M({ key: ["conversation_id"], merge: { pending: "SUM", first_at: "MIN", last_msg_id: "MAX", last_alert_at: "MAX" } }),
   "dm_reports.sender_id": M(), "dm_reports.reporter_id": M({ key: ["message_id"] }), "dm_reports.resolved_by": M(),
