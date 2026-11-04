@@ -341,3 +341,18 @@ test("1.99?? dockfu: review - the 4 kB search limit holds for every path spellin
     assert.equal(ok.status, 200, "a small body still searches on the other spelling"); assert.equal(calls.length, 1);
   } finally { srv.close(); }
 });
+
+// 1.99?? dockfu: review - index.js's global express.urlencoded (100 kB, no skip list) also read a form body for the canonical path,
+// and the search took pad / q from it: a form body over 4 kB is refused too.
+test("1.99?? dockfu: review - a form body over 4 kB behind index.js's global urlencoded parser is refused too", async () => {
+  const app = express(), addUser = (req, res, next) => { req.user = req.get("x-test-user") ? { userId: req.get("x-test-user") } : null; next(); };
+  app.use(express.urlencoded({ extended: true }));            // index.js: after the JSON skip rule, for every path
+  G.register(app, { addUser });
+  const srv = await new Promise(resolve => { const x = app.listen(0, "127.0.0.1", () => resolve(x)); });
+  try {
+    const form = body => realFetch("http://127.0.0.1:" + srv.address().port + "/api/gifs/search", { method: "POST",
+      headers: { ...headers(), "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body).toString() });
+    const big = await form({ pad: room.slug, q: "wave", pad_note: "x".repeat(5000) });
+    assert.equal(big.status, 413, "a form body over 4 kB never reaches the search"); assert.equal(calls.length, 0, "no provider request");
+  } finally { srv.close(); }
+});
