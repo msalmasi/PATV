@@ -626,10 +626,11 @@
         b.addEventListener('click', function (e) {
           if (it.kind === 'link' || it.kind === 'off') return;   // a normal link (View profile, 💸 Tip) / a disabled item
           e.preventDefault();
-          if (it.kind === 'cam') { closeMenu(false); extra.cam(); return; }
+          // (1.99?? dockclean review: focus back on the menu's anchor first - the camera sheet and the tip dialog return it there when they close)
+          if (it.kind === 'cam') { closeMenu(true); extra.cam(); return; }
           // 1.99il: 💸 Tip - the modal on this page (pad-tip.js); without it, the tip page in a new tab as before
           if (it.kind === 'tip') {
-            closeMenu(false);
+            closeMenu(!!P.tipModal);
             if (P.tipModal) P.tipModal({ to: it.to, display: u.display || u.login, slug: slug, me: opts.me || null });
             else window.open(it.href, '_blank', 'noopener');
             return;

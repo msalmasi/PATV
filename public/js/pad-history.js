@@ -498,7 +498,11 @@
       if (!panel) return;
       if (panel.parentNode) panel.parentNode.removeChild(panel);
       panel = null;
-      if (dateBtn) { dateBtn.setAttribute('aria-expanded', 'false'); if (refocus !== false) dateBtn.focus(); }
+      // (1.99?? dockclean review: where 📅 itself is hidden - the Room Dock moves it into the chat ⋯ - focus goes to o.dateBack())
+      if (dateBtn) {
+        dateBtn.setAttribute('aria-expanded', 'false');
+        if (refocus !== false) { var back = dateBtn.getClientRects && !dateBtn.getClientRects().length && typeof o.dateBack === 'function' ? o.dateBack() : null; (back || dateBtn).focus(); }
+      }
     }
     function openDate() {
       if (!can()) return;

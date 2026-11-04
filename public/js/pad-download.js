@@ -140,9 +140,11 @@
       window.addEventListener('resize', p._shut);
       focusAt(0);
     }
-    function run(id) {
+    // 1.99?? dockclean review: back = where focus returns when the dialog closes (the Room Dock's chat ⋯ - this ⋯ is hidden there)
+    var backTo = null;
+    function run(id, back) {
       if (id === 'signin') { location.href = o.signin || ('/login?next=' + encodeURIComponent(location.pathname)); return; }
-      if (id === 'dl') openDialog();
+      if (id === 'dl') { backTo = back && back.focus ? back : null; openDialog(); }
     }
 
     // ── the dialog ──
@@ -151,7 +153,8 @@
       var d = dlg; dlg = null;
       document.removeEventListener('keydown', d._keys, true);
       if (d.scrim.parentNode) d.scrim.parentNode.removeChild(d.scrim);
-      try { if (btn.isConnected && !btn.hidden) btn.focus(); } catch (e) { /* gone */ }
+      var to = backTo && backTo.isConnected ? backTo : btn; backTo = null;
+      try { if (to.isConnected && !to.hidden) to.focus(); } catch (e) { /* gone */ }
     }
     function radios(name, legend, opts, picked) {
       var fs = el('fieldset', 'la-reasons cldl-opts');

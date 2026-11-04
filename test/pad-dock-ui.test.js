@@ -85,6 +85,7 @@ test('the bottom bar: [▶] [now] [🔊 volume 🎚️] - no duck, mode or A/V-s
   const sw=pop.querySelectorAll('input[role="switch"]');assert.equal(sw.length,2,'duck + A/V sync');
   sw[0].checked=true;sw[0].dispatchEvent(new Event('change'));assert.equal(h.controller&&sw[0].getAttribute('aria-checked'),'true');
   sw[1].checked=false;sw[1].dispatchEvent(new Event('change'));assert.deepEqual(h.calls.clicks.filter(x=>x==='avsync'),['avsync']);assert.equal(sw[1].checked,false);
+  assert.ok(h.doc.querySelector('.rmd-audio-pop'),'review: av-sync\'s own button clicked FOR the switch is not a click outside - the panel stays open');
   h.calls.recordFn(true);h.calls.recordFn(false);assert.deepEqual(h.calls.record,[true,false]);
 });
 test('recording-time duck delegates to the shared audio object and survives moves',()=>{
@@ -98,7 +99,8 @@ test('a pinned cam: one ⋯ per tile (watch on my stage, fullscreen, cam options
   assert.equal(local.parentNode===h.stage,true,'the local player is the stage card\'s main area');assert.equal(local.querySelector('.cs-tile')===tile,true);assert.equal(tile.querySelector('video')===video,true);assert.equal(h.strip.querySelector('.cs-tile'),null);
   h.button('Return cam to strip').click();assert.equal(h.strip.querySelector('.cs-tile')===tile,true);
   video.click();assert.equal(h.root.classList.contains('rmd-local-cam'),true);h.button('Return cam to strip').click();
-  h.menuPick('Cam options','Cam options…');assert.deepEqual(h.calls.cam,[{login:'willow_fable',display:'Willow Fable'}]);
+  h.menuPick('Cam options','Cam options…');assert.equal(h.calls.cam.length,1);assert.equal(h.calls.cam[0].login,'willow_fable');assert.ok(h.calls.cam[0].patv,'the person as the room lists them now (review: the strip keeps only a reference)');
+  h.tile._who={login:'gone_fable'};h.button('Cam options').click();assert.equal(menuOf(h.doc).querySelectorAll('button').some(b=>/Cam options…/.test(b.textContent)),false,'no Cam options for someone who left');h.button('Cam options').click();
   h.menuPick('Cam options','Close (frees the slot)');assert.deepEqual(h.calls.clicks.filter(x=>x==='cam-x'),['cam-x']);
 });
 test('the stage ⋯: hide the stage to its slim bar, pop out, pinned cams ▸ layouts',()=>{
@@ -116,7 +118,10 @@ test('the overlay\'s Snap and Clip proxy the capture row; Clip asks for the leng
   const none=harness({capture:false});assert.equal(none.stage.querySelectorAll('.rmd-ov-bot button').filter(b=>/^(Snap|Clip)/.test(b.getAttribute('aria-label'))&&!b.hidden).length,0,'no capture row: no Snap / Clip');
 });
 test('the source chip is a menu of the stage\'s sources (the original tabs)',()=>{
-  const h=harness(),chip=h.stage.querySelector('.rmd-src');assert.match(chip.textContent,/On the mic \(2\)/);chip.click();
+  const h=harness(),chip=h.stage.querySelector('button.rmd-src');assert.match(chip.textContent,/On the mic \(2\)/);
+  // (review: built once and painted in place - an update, a pointer move or the overlay showing again never swaps the node)
+  h.controller.update(F.initial());h.stage.dispatchEvent(new Event('pointermove',{bubbles:true}));assert.equal(h.stage.querySelector('button.rmd-src')===chip,true,'the same node');
+  chip.click();
   const m=menuOf(h.doc),items=m.querySelectorAll('[role="menuitemradio"]');assert.equal(items.length,2);assert.equal(items[0].getAttribute('aria-checked'),'true');
   items[1].click();assert.deepEqual(h.calls.clicks,['stab:pepe']);
 });
@@ -139,7 +144,8 @@ test('a live veil change closes the named tip picker and invalidates its previou
   assert.match(picker.textContent,/Aster Fable/);
   const stale=picker.querySelectorAll('button').find(b=>b.textContent==='Aster Fable');assert.ok(stale);
   d.members[0]={anon:true,veil:'hidden',alias:'Moonlit Froglet',hood:2};h.controller.update(d);
-  assert.equal(!!h.doc.querySelector('.rmd-layer'),false,'privacy updates remove the recipient snapshot at once');
+  // (review: the sheet stays open - a poll no longer closes it under someone using its search - and the named entry leaves at once)
+  assert.ok(h.doc.querySelector('.rmd-layer'),'the sheet stays');assert.doesNotMatch(h.doc.querySelector('.rmd-layer').textContent,/Aster Fable/,'privacy updates remove the named recipient at once');assert.equal(stale.isConnected,false);
   stale.click();assert.equal(h.calls.tip.length,0,'a queued activation cannot use the old named identity');
   open();picker=h.doc.querySelector('.rmd-layer');assert.doesNotMatch(picker.textContent,/Aster Fable/);assert.match(picker.textContent,/No eligible recipients/);
   h.button('Close').click();
@@ -200,11 +206,11 @@ test('the topic is one line in the chat header: editable text for editors (Manag
   assert.equal(topic.parentNode.classList.contains('rmd-topic-line'),true);assert.equal(topic.parentNode.parentNode===h.chatH,true);
   assert.equal(h.chatH.querySelectorAll('button').some(b=>b.getAttribute('aria-label')==='Edit topic'),false,'no ✏️ button');
   assert.equal(topic.getAttribute('role'),'button');assert.match(topic.getAttribute('aria-label'),/^Edit topic: Tonight in the orchard/);
-  topic.click();assert.equal(h.calls.topic,1);assert.ok(h.doc.querySelector('.rmd-layer').contains(h.doc.getElementById('rmMod')),'the Manage room sheet');h.button('Close').click();
-  topic.dispatchEvent(new Event('keydown',{key:'Enter'}));assert.equal(h.calls.topic,2);h.button('Close').click();
+  topic.click();h.tick();assert.equal(h.calls.topic,1,'the topic editor opens once the sheet is up (after its first focus)');assert.ok(h.doc.querySelector('.rmd-layer').contains(h.doc.getElementById('rmMod')),'the Manage room sheet');h.button('Close').click();
+  topic.dispatchEvent(new Event('keydown',{key:'Enter'}));h.tick();assert.equal(h.calls.topic,2);h.button('Close').click();
   allowed=false;h.controller.update(F.initial());assert.match(topic.getAttribute('aria-label'),/^Topic: /);topic.click();assert.equal(h.calls.topic,2,'a stale activation rechecks permission');
 });
-test('Participants holds ONLY the people card and restores roster anchors before person and camera popovers open',()=>{
+test('Participants holds ONLY the people card; a person menu or camera popup opens over it, next to its row, and owns the keys',()=>{
   const h=harness(),card=h.ppl,home=card.parentNode,icons=h.make('span','ic',null,card);
   const pplBtn=()=>h.chatH.querySelector('.rmd-ppl-btn');pplBtn().click();const sheet=h.doc.querySelector('.rmd-layer');assert.ok(sheet.contains(card));assert.equal(sheet.contains(h.side),false,'never the whole side column');assert.match(sheet.querySelector('h2').textContent,/In the room · 6/);
   h.button('Close').click();assert.equal(card.parentNode===home,true);
@@ -216,8 +222,11 @@ test('Participants holds ONLY the people card and restores roster anchors before
       field=h.make('button',null,null,panel,'Existing popover action');field.focus();
     });
     pplBtn().click();trigger.click();
-    assert.equal(restoredAtOpen,true);assert.equal(trigger.isConnected,true);assert.equal(h.doc.querySelector('.rmd-layer'),null);
-    assert.equal(h.doc.activeElement===field,true,'the dismissed Participants trap does not steal popover focus');panel.remove();
+    // (review: putting the card back first left the menu's anchor without a box below 1024px - it opened in the page's corner)
+    assert.equal(restoredAtOpen,false,'the anchor stays in the sheet');assert.equal(trigger.isConnected,true);assert.ok(h.doc.querySelector('.rmd-layer'),'the sheet stays underneath');
+    assert.equal(h.doc.activeElement===field,true,'the Participants trap does not steal popover focus');
+    h.doc.dispatchEvent(new Event('keydown',{key:'Escape',bubbles:true}));assert.ok(h.doc.querySelector('.rmd-layer'),'Escape in the popover is the popover\'s');
+    panel.remove();h.button('Close').click();assert.equal(card.parentNode===home,true);
   }
   h.controller.destroy();
 });
@@ -298,6 +307,39 @@ test('⚔️ Duel from the person menu: a named Camfrog member only; the stake s
   h.controller.pvp(aster,'duel',h.input);const s2=h.doc.querySelector('.rmd-pvp');s2.querySelector('input').value='nope';s2.dispatchEvent(new Event('submit'));assert.equal(h.calls.send.length,1);assert.match(s2.textContent,/Type an amount/);
   s2.querySelector('input').value='5k';s2.dispatchEvent(new Event('submit'));assert.deepEqual(h.calls.send.at(-1),'!duel aster_fable 5000');
   h.controller.pvp(aster,'brawl',h.input);assert.equal(h.doc.querySelector('.rmd-pvp'),null,'no !brawl here: no sheet');
+});
+test('review: the stake sheet says the stake it sends, asks again from a million, and closes only when its person is no longer here',()=>{
+  const h=harness(),d=F.initial(),aster=d.members[0];
+  h.controller.pvp(aster,'duel',h.input);let s=h.doc.querySelector('.rmd-pvp'),inp=s.querySelector('input'),send=s.querySelectorAll('button').find(b=>/Send challenge/.test(b.getAttribute('aria-label')||''));
+  assert.equal(send.getAttribute('aria-label'),'Send challenge · 5,000 PAT');
+  inp.value='5m';inp.dispatchEvent(new Event('input'));assert.equal(send.getAttribute('aria-label'),'Send challenge · 5,000,000 PAT','"5m" is spelled out');
+  s.dispatchEvent(new Event('submit'));assert.equal(h.calls.send.length,0,'a million or more asks again');assert.match(s.textContent,/press again/);assert.equal(send.getAttribute('aria-label'),'Yes, stake 5,000,000 PAT');
+  s.dispatchEvent(new Event('submit'));assert.deepEqual(h.calls.send,['!duel aster_fable 5000000']);
+  h.controller.pvp(aster,'duel',h.input);s=h.doc.querySelector('.rmd-pvp');
+  const flip=F.initial();flip.members[0]={...flip.members[0],on_cam:!flip.members[0].on_cam,on_mic:true};h.controller.update(flip);assert.ok(h.doc.querySelector('.rmd-pvp'),'a cam / mic flip keeps the sheet');
+  const gone=F.initial();gone.members.splice(0,1);h.controller.update(gone);assert.equal(h.doc.querySelector('.rmd-pvp'),null,'they left: the sheet closes');
+  h.controller.destroy();
+});
+test('review: the 💸 Tip sheet keeps its search text across polls and the tool gets focus back when the tip dialog opens',()=>{
+  const h=harness(),d=F.initial();d.members.forEach((m,i)=>{if(!m.anon&&m.patv)m.tip={to:m.patv.username,href:'/u/'+m.patv.username+'/tip'};});
+  d.web=[{web:true,display:'quill-fable',patv:{username:'quill-fable'},tip:{to:'quill-fable',href:'/u/quill-fable/tip'}},{web:true,display:'fern-fable',patv:{username:'fern-fable'},tip:{to:'fern-fable',href:'/u/fern-fable/tip'}}];
+  h.controller.update(d);const tool=h.button('Tip',h.compose.querySelector('.rmd-tools'));tool.click();
+  const sheet=h.doc.querySelector('.rmd-layer'),find=sheet.querySelector('.rmd-find');assert.equal(find.hidden,false,'more than four: a search field');
+  find.value='quill';find.dispatchEvent(new Event('input'));const kids=()=>sheet.querySelector('.rmd-tip-list').children;
+  assert.deepEqual(kids().filter(b=>!b.hidden).map(b=>b._tipTo),['quill-fable']);
+  const same=JSON.parse(JSON.stringify(d));h.controller.update(same);assert.equal(h.doc.querySelector('.rmd-layer'),sheet,'a poll keeps the sheet');assert.equal(find.value,'quill');
+  const quill=kids().find(b=>b._tipTo==='quill-fable');quill.click();assert.equal(h.doc.activeElement===tool,true,'focus on 💸 when the dialog opens (it returns it there)');assert.equal(h.calls.tip.at(-1).to,'quill-fable');
+  h.controller.destroy();
+});
+test('review: the stage overlay - one source chip node; 🖥️ is a toggle (Exit fullscreen inside it, the viewbar\'s ↩ hidden); the chat heading\'s words are one box',async()=>{
+  const h=harness();
+  assert.ok(h.chatH.querySelector(':scope > .rmd-chat-t')||h.chatH.children.find(c=>c.classList.contains('rmd-chat-t')),'CHAT in its own span');
+  const full=h.stage.querySelectorAll('.rmd-ov-bot button').find(b=>b.getAttribute('aria-label')==='Fullscreen');full.click();await flush();
+  assert.equal(full.getAttribute('aria-label'),'Exit fullscreen');const fs=h.doc.querySelector('.rmd-fullscreen');assert.equal(fs.querySelector('[data-rmd-back]').hidden,true,'one way out');
+  full.click();await flush();assert.equal(h.doc.querySelector('.rmd-fullscreen'),null);assert.equal(full.getAttribute('aria-label'),'Fullscreen');
+  h.menuPick('Stage options','Hide stage');assert.equal(h.doc.activeElement===h.button('Show stage'),true,'focus follows to 📺 Show stage');
+  h.button('Show stage').click();assert.equal(h.doc.activeElement===h.button('Stage options'),true,'and back to the stage ⋯');
+  h.controller.destroy();
 });
 test('holder chips are redrawn only when the holders change',()=>{
   const h=harness(),list=F.initial().mic,box=h.doc.querySelector('.rmd-holders'),first=box.children[0],calls=h.calls.avatar;

@@ -43,6 +43,7 @@
     var current = null, layer = null, pip = null, pipPending = false, popGeneration = 0, localCam = null, stageHidden = false;
     var autoTimer = null, toastTimer = null, observers = [], selected = null, stageRevision = 0, videoPipSource = null, overBar = false;
     var toolBtns = {}, peopleInput = null, infoMark = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null;
+    var fullBtn = null, stageMoreBtn = null, showStageBtn = null;
     function node(id) { return nodes[id] || (nodes[id] = D.getElementById(id)); }
     function on(n, type, fn, capture) { if (!n) return; n.addEventListener(type, fn, !!capture); if (n === W || n.nodeType === 9) listeners.push([n, type, fn, !!capture]); }
     function observe(n, fn, opts) { if (!n || !W.MutationObserver) return; var m = new W.MutationObserver(fn); m.observe(n, opts || { childList: true, subtree: true }); observers.push(m); }
@@ -92,6 +93,14 @@
       if (W.PATVAvSync && W.PATVAvSync.surfaceChanged) W.PATVAvSync.surfaceChanged(node('rmFeed'));
       if (o.wake) o.wake();
       if (W.PATVChipFit && W.PATVChipFit.run) W.PATVChipFit.run();
+      paintFull();
+      if (root) root.classList.toggle('rmd-chat-out', !!(current && current.kind === 'float'));
+    }
+    function stageFull() { return !!(current && current.kind === 'full' && stage && current.host.contains(stage)); }
+    function paintFull() {
+      if (!fullBtn) return;
+      var label = stageFull() ? t('exit_fullscreen', 'Exit fullscreen') : t('fullscreen', 'Fullscreen');
+      fullBtn.querySelector('.rmd-label').textContent = label; fullBtn.title = label; fullBtn.setAttribute('aria-label', label);
     }
     function closeLayer(focus) {
       if (!layer) return;
@@ -178,8 +187,8 @@
     var externalSelector = '.la-btn,.pm-mg,.pm-btn,.ic button.cam,.mc-btn,.cc-btn,.pc-btn,.sc-btn,.stx,.mf-rv,.mf-off,[data-rv],[data-rvm],.rv,.rvm,[data-reveal],.veil-reveal,.reveal-btn,#rmMoreBtn,#rmSearchBtn,#rmHistJump,#rmCap button,#rmClip button,.sbd-rep,[data-pad-gift],[data-share-path]';
     function routeExternal(e) {
       var b = e.target.closest && e.target.closest(externalSelector); if (!b || b.__rmdReplay) return;
-      // Roster popovers belong to the pad body. Restore their anchors before the original click opens one.
-      if (layer && layer.kind === 'participants' && layer.host.contains(b) && b.matches('.pm-mg,.ic button.cam')) closeLayer(false);
+      // 1.99?? dockclean review: a person menu / camera popup opened from the Participants sheet opens OVER it, next to its row (the
+      // sheet stays: putting the card back first left the menu's anchor without a box below 1024px - the menu jumped to the corner)
       if (pip && e.currentTarget === pip.document) {
         e.preventDefault(); e.stopImmediatePropagation(); W.focus(); toast(t('in_pad', 'Use this control in the pad tab.')); return;
       }
@@ -187,9 +196,15 @@
       e.preventDefault(); e.stopImmediatePropagation();
       external(function () { b.__rmdReplay = true; b.click(); b.__rmdReplay = false; });
     }
+    // 1.99?? dockclean review: a person menu (room-mod's .pm-pop, on <body>) or the camera popup opened from inside a Dock sheet (the
+    // Participants list) sits over that sheet - it owns the keys and focus while it is open; the sheet stays where it was underneath
+    function overSheet(doc, n) {
+      var a = n || doc.activeElement;
+      return !!(a && a.closest && a.closest('.pm-pop, .snap'));
+    }
     function keydown(e) {
       var doc = e.currentTarget;
-      if (foreignModal(doc)) return;
+      if (foreignModal(doc) || overSheet(doc)) return;
       if (layer && layer.host.ownerDocument === doc) {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeLayer(); return; }
         if (e.key === 'Tab') {
@@ -205,14 +220,17 @@
       } else if (e.key === 'Escape' && current && current.kind === 'float') { e.preventDefault(); redock(); }
     }
     function trap(e) {
-      if (!layer || layer.host.ownerDocument !== e.currentTarget || foreignModal(e.currentTarget) || layer.host.contains(e.target)) return;
+      if (!layer || layer.host.ownerDocument !== e.currentTarget || foreignModal(e.currentTarget) || layer.host.contains(e.target) || overSheet(e.currentTarget, e.target)) return;
       if (layer.host.classList.contains('ds-pop')) return;            // a menu loses focus quietly (the outside click closes it)
       var a = focusable(layer.box); if (a[0]) a[0].focus();
     }
     function attachDoc(doc) {
       on(doc, 'keydown', keydown); on(doc, 'focusin', trap); on(doc, 'click', routeExternal, true);
-      on(doc, 'click', function (e) { if (layer && layer.host.classList.contains('ds-pop') && e.target.isConnected !== false && !layer.host.contains(e.target) && e.target !== layer.opener && !(layer.opener && layer.opener.contains(e.target))) closeLayer(false); });
+      on(doc, 'click', function (e) { if (!proxying && layer && layer.host.classList.contains('ds-pop') && e.target.isConnected !== false && !layer.host.contains(e.target) && e.target !== layer.opener && !(layer.opener && layer.opener.contains(e.target))) closeLayer(false); });
     }
+    // 1.99?? dockclean review: a control clicked FOR a menu (Audio settings' ⏱️ switch clicks av-sync's own button) is not a click outside it
+    var proxying = false;
+    function proxyClick(n) { proxying = true; try { n.click(); } finally { proxying = false; } }
     function movable(n, destination, label) {
       var mark = el('div', 'rmd-placeholder', null, n.ownerDocument);
       mark.appendChild(el('span', null, label));
@@ -242,9 +260,13 @@
       changed();
       if (old.focus && old.focus.isConnected) old.focus.focus();
     }
-    function viewbar(host, close) {
-      var v = el('div', 'rmd-viewbar', null, host.ownerDocument); identity(v);
-      v.appendChild(button(IC.back, 'redock', 'Bring it back', close || redock, 'ds-btn quiet sm', host.ownerDocument)); host.appendChild(v); return v;
+    // (bare: the floating chat's bar - a drag grip and ↩, no second pad identity: 1.99?? dockclean review)
+    function viewbar(host, close, bare) {
+      var v = el('div', 'rmd-viewbar', null, host.ownerDocument);
+      if (bare) { var g = el('span', 'rmd-grip', '⠿', host.ownerDocument); g.setAttribute('aria-hidden', 'true'); v.appendChild(g); v.appendChild(el('span', 'rmd-ov-gap', null, host.ownerDocument)); }
+      else identity(v);
+      var b = button(IC.back, 'redock', 'Bring it back', close || redock, 'ds-btn quiet sm', host.ownerDocument); b.setAttribute('data-rmd-back', '');
+      v.appendChild(b); host.appendChild(v); return v;
     }
     function drag(host, handle) {
       var start = null;
@@ -273,13 +295,16 @@
     function floatChat() {
       if (!chat) return; redock();
       var host = el('section', 'rmd-float'); root.appendChild(host);
-      var head = viewbar(host); current = { kind: 'float', host: host, moves: [], focus: D.activeElement };
-      current.moves.push(movable(chat, host, t('chat_away', 'Chat is in a floating window.'))); current.cleanup = drag(host, head); changed();
+      var head = viewbar(host, null, true); current = { kind: 'float', host: host, moves: [], focus: D.activeElement };
+      var away = movable(chat, host, t('chat_away', 'Chat is in a floating window.')); away.mark.classList.add('rmd-ph-float');
+      var awayBtn = away.mark.querySelector('button'); if (awayBtn) awayBtn.hidden = true;     // (the floating window's own ↩ is the one way back)
+      current.moves.push(away); current.cleanup = drag(host, head); changed();
     }
     function full(n) {
       redock(); if (!n) return;
       var host = el('section', 'rmd-fullscreen'); root.appendChild(host);
       var head = viewbar(host), media = el('div', 'rmd-full-media' + (n.classList.contains('cs-tile') ? ' cam-strip' : ''));
+      if (n === stage) { var bk = head.querySelector('[data-rmd-back]'); if (bk) bk.hidden = true; }    // (the overlay's 🖥️ Exit fullscreen is the way out)
       var overlay = el('div', 'rmd-overlay'); overlay.hidden = true;
       host.appendChild(media); host.appendChild(overlay);
       current = { kind: 'full', host: host, moves: [], focus: D.activeElement };
@@ -343,12 +368,14 @@
         on(win, 'pagehide', redock); on(doc, 'visibilitychange', changed); changed();
       }).catch(function () { pipPending = false; toast(t('pop_unavailable', 'Pop-out is unavailable for this player.')); });
     }
-    function hideStage(onOff) {
+    function hideStage(onOff, focus) {
       if (!stage) return; if (current) redock();
       stageHidden = !!onOff;
       root.classList.toggle('rmd-stage-hidden', stageHidden);
       var mini = node('rmdMini'); if (mini) mini.hidden = !stageHidden;
       changed();
+      // (1.99?? dockclean review: focus follows - onto 📺 Show stage, or back to the stage's ⋯)
+      if (focus) { var f = stageHidden ? showStageBtn : stageMoreBtn; if (f && f.isConnected) f.focus(); }
     }
     function returnCam() {
       if (!localCam) return; if (current) redock();
@@ -361,7 +388,7 @@
       stage.insertBefore(host, player || null);
       var head = viewbar(host, returnCam);
       head.appendChild(iconBtn(IC.full, 'fullscreen', 'Fullscreen', function () { full(host); }));
-      head.appendChild(iconBtn(IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true); }));
+      head.appendChild(iconBtn(IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true, true); }));
       head.appendChild(iconBtn(IC.pop, 'pop_stage', 'Pop out player', function () { pop(host, false); }));
       localCam = { host: host, move: movable(tile, host, t('cam_stage', 'This cam is on your stage.')) };
       // This placeholder returns the local swap rather than redocking an unrelated surface.
@@ -376,11 +403,26 @@
       var box = menu(opener, t('cam_menu', 'Cam options'));
       menuItem(box, '📺', 'watch_cam', 'Watch on my stage', function () { watchCam(tile); });
       menuItem(box, IC.full, 'fullscreen', 'Fullscreen', function () { full(tile); });
-      var who = tile._who;
-      if (who && o.openCam) menuItem(box, '📷', 'cam_options', 'Cam options…', function () { external(function () { o.openCam(who); }); });
+      var who = tileWho(tile);
+      if (who && o.openCam) menuItem(box, '📷', 'cam_options', 'Cam options…', function () { external(function () { if (opener && opener.isConnected) opener.focus(); o.openCam(who); }); });
       var x = tile.querySelector('.cs-x');
       if (x) menuItem(box, '✕', 'close_cam', 'Close (frees the slot)', function () { external(function () { x.click(); }); });
       finishMenu(box, opener);
+    }
+    // 1.99?? dockclean review: the person behind a pinned cam - the strip's own reference (pad-camstrip.js: a login, or a frog-name
+    // cam's opaque id; never more) matched against the room as it is NOW, so the camera popup opens for someone who is still here
+    // and as the roster shows them (a frog name stays a frog name)
+    function tileWho(tile) {
+      var ref = tile && tile._who; if (!ref) return null;
+      var low = ref.login ? String(ref.login).toLowerCase() : null, hit = null;
+      [data && data.mic, data && data.members].forEach(function (list) {
+        (list || []).forEach(function (m) {
+          if (hit || !m) return;
+          if (low && !m.anon && !m.veil && String(m.login || '').toLowerCase() === low) hit = m;
+          else if (!low && ref.id && m.id === ref.id && m.veil === 'incognito') hit = m;
+        });
+      });
+      return hit;
     }
     function decorateCams() {
       if (!strip) return;
@@ -537,23 +579,35 @@
       if (!o.signed || !W.PATVRoom || !W.PATVRoom.tipModal) return;
       var box = sheet(t('tip_who', 'Who would you like to tip?'), opener), doc = box.ownerDocument;
       layer.kind = 'tip';
-      var people = tipPeople(), list = el('div', 'rmd-tip-list', null, doc);
-      if (people.length > 4) {
-        var find = el('input', 'ds-in rmd-find', null, doc); find.type = 'search'; find.placeholder = t('find', '🔍 Find someone…'); find.setAttribute('aria-label', t('find_aria', 'Find someone'));
-        on(find, 'input', function () { var q = find.value.trim().toLowerCase(); each(list.children, function (b) { b.hidden = !!q && String(b._name || '').toLowerCase().indexOf(q) < 0; }); });
-        box.appendChild(find);
+      var list = el('div', 'rmd-tip-list', null, doc), none = el('p', null, t('tip_none', 'No eligible recipients are in the room.'), doc), drawn = null;
+      var find = el('input', 'ds-in rmd-find', null, doc); find.type = 'search'; find.placeholder = t('find', '🔍 Find someone…'); find.setAttribute('aria-label', t('find_aria', 'Find someone'));
+      function filter() { var q = find.value.trim().toLowerCase(); each(list.children, function (b) { b.hidden = !!q && String(b._name || '').toLowerCase().indexOf(q) < 0; }); }
+      on(find, 'input', filter);
+      box.appendChild(find); box.appendChild(list); box.appendChild(none);
+      // 1.99?? dockclean review: the list is redrawn IN PLACE when the room changes (a poll no longer closes the sheet under someone
+      // typing in its search); a person who left or became veiled leaves the list at once, and a button drawn for them before does nothing
+      function draw() {
+        var people = tipPeople(), key = JSON.stringify(people);
+        if (key === drawn) return; drawn = key;
+        var a = doc.activeElement, had = a && a.parentNode === list ? a._tipTo : null, back = null;
+        list.textContent = '';
+        people.forEach(function (u) {
+          var b = el('button', 'ds-btn quiet', null, doc), content = o.person && o.person(u); b.type = 'button'; if (content) b.appendChild(content);
+          b._name = txt(content) || u.display || u.tip.to; b._tipTo = u.tip.to;
+          on(b, 'click', function () {
+            var now = tipPeople().filter(function (p) { return p.tip.to === u.tip.to; })[0];
+            if (!now) { closeLayer(); return; }
+            // (1.99?? dockclean review: the 💸 tool has focus when the tip dialog opens - the dialog gives it back there when it closes)
+          external(function () { if (opener && opener.isConnected && opener.focus) opener.focus(); W.PATVRoom.tipModal({ to: now.tip.to, display: now.display, slug: o.slug, me: o.user }); });
+          }); list.appendChild(b);
+          if (had && had === u.tip.to) back = b;
+        });
+        find.hidden = people.length <= 4 && !find.value;
+        none.hidden = !!people.length;
+        filter();
+        if (had) { var f = back || (!find.hidden ? find : focusable(box)[0]); if (f) f.focus(); }
       }
-      people.forEach(function (u) {
-        var b = el('button', 'ds-btn quiet', null, doc), content = o.person && o.person(u); b.type = 'button'; if (content) b.appendChild(content);
-        b._name = txt(content) || u.display || u.tip.to;
-        on(b, 'click', function () {
-          var now = tipPeople().filter(function (p) { return p.tip.to === u.tip.to; })[0];
-          if (!now) { closeLayer(); return; }
-          external(function () { W.PATVRoom.tipModal({ to: now.tip.to, display: now.display, slug: o.slug, me: o.user }); });
-        }); list.appendChild(b);
-      });
-      box.appendChild(list);
-      if (!people.length) box.appendChild(el('p', null, t('tip_none', 'No eligible recipients are in the room.'), doc));
+      layer.redraw = draw; draw();
     }
     // ── 🧸 / 😀 / 🎞️: the picker sheet (pad-picker.js) on its tab ──
     function picker(tab, opener) {
@@ -566,12 +620,12 @@
       if (!u || !u.login || u.veil || u.anon || u.self || u.bot || !o.relay || !o.relay.sendCmd || !hasCmd('!' + kind)) return;
       var name = u.display || u.login;
       var box = sheet(kind === 'brawl' ? t('brawl_who', 'Brawl {name}', { name: name }) : t('duel_who', 'Duel {name}', { name: name }), opener), doc = box.ownerDocument;
-      layer.kind = 'pvp';
+      layer.kind = 'pvp'; layer.who = u;
       var form = el('form', 'rmd-pvp', null, doc), presets = el('div', 'rmd-presets', null, doc), amt = el('input', 'ds-in', null, doc);
       presets.setAttribute('role', 'group'); presets.setAttribute('aria-label', t('stake', 'Stake'));
       amt.type = 'text'; amt.inputMode = 'numeric'; amt.value = '5,000'; amt.setAttribute('aria-label', t('stake_custom', 'Stake in PAT'));
       [1000, 5000, 25000].forEach(function (n) {
-        var b = el('button', 'ds-btn quiet sm', fmtN(n), doc); b.type = 'button'; on(b, 'click', function () { amt.value = fmtN(n); amt.focus(); }); presets.appendChild(b);
+        var b = el('button', 'ds-btn quiet sm', fmtN(n), doc); b.type = 'button'; on(b, 'click', function () { amt.value = fmtN(n); paintStake(); amt.focus(); }); presets.appendChild(b);
       });
       var lab = el('label', 'ds-label', t('stake_custom', 'Stake in PAT'), doc); lab.appendChild(amt);
       var note = el('p', 'ds-fine', t('stake_note', 'Your stake is held until they accept; refunded if they decline or it expires.'), doc);
@@ -581,10 +635,20 @@
       actions.appendChild(button('', 'cancel', 'Cancel', function () { closeLayer(); }, 'ds-btn quiet', doc));
       var send = button(kind === 'brawl' ? '🥊' : '⚔️', 'send_challenge', 'Send challenge', null, 'ds-btn primary', doc); send.type = 'submit'; actions.appendChild(send);
       form.appendChild(actions); box.appendChild(form);
+      // 1.99?? dockclean review: the button says the stake it will send ("5m" is 5,000,000), and a big one (a million or more) asks once more
+      var sure = null;
+      function paintStake() {
+        var n = parseAmount(amt.value), l = send.querySelector('.rmd-label'); sure = sure === n ? sure : null;
+        l.textContent = n ? (sure ? t('stake_sure', 'Yes, stake {n} PAT', { n: fmtN(n) }) : t('send_challenge_n', 'Send challenge · {n} PAT', { n: fmtN(n) })) : t('send_challenge', 'Send challenge');
+        send.setAttribute('aria-label', l.textContent); send.title = l.textContent;
+      }
+      on(amt, 'input', function () { sure = null; err.textContent = ''; paintStake(); });
+      paintStake();
       on(form, 'submit', function (e) {
         e.preventDefault(); var n = parseAmount(amt.value);
         if (!n) { err.textContent = t('stake_bad', 'Type an amount of PAT, like 5,000 or 5k.'); return; }
-        if (!hasCmd('!' + kind)) { closeLayer(); return; }
+        if (!hasCmd('!' + kind) || !pvpFor(u)) { closeLayer(); return; }
+        if (n >= 1e6 && sure !== n) { sure = n; paintStake(); err.textContent = t('stake_big', 'That is {n} PAT - press again to send it.', { n: fmtN(n) }); return; }
         o.relay.sendCmd('!' + kind + ' ' + u.login + ' ' + n); closeLayer();
       });
     }
@@ -616,7 +680,11 @@
         var box = sheet(t('participants_n', 'In the room · {n}', { n: peopleCount() }), opener);
         layer.kind = 'participants';
         var mark = D.createComment('people dock'); card.parentNode.insertBefore(mark, card); box.appendChild(card); card.classList.add('rmd-side-open');
-        if (infoMark && !infoMark.hidden && layer.head) { var i2 = infoMark.cloneNode(true); i2.classList.add('rmd-info-h'); layer.head.querySelector('h2').appendChild(i2); }
+        // (the freshness note's ℹ️ by the title: its words are the title's description - the sheet opens on ✕, not on the note)
+        if (infoMark && !infoMark.hidden && layer.head) {
+          var i2 = infoMark.cloneNode(true), h2 = layer.head.querySelector('h2'); i2.classList.add('rmd-info-h'); i2.setAttribute('tabindex', '-1'); i2.removeAttribute('role'); i2.setAttribute('aria-hidden', 'true'); h2.appendChild(i2);
+          try { h2.setAttribute('aria-description', infoMark.title || ''); } catch (e) { /* older engines */ }
+        }
         layer.restore = function () { card.classList.remove('rmd-side-open'); if (mark.parentNode) { mark.parentNode.insertBefore(card, mark); mark.remove(); } };
         if (typeof after === 'function') after();
       });
@@ -713,7 +781,7 @@
         switchRow(box, '🦆', 'duck_room', 'Duck the room while I record', o.audio.duck(), function (v) { return o.audio.duck(v); }, { disabled: !!iosNote, note: iosNote });
       }
       var av = row && row.querySelector('.rb-avsync');
-      if (av) switchRow(box, '⏱️', 'avsync', 'Sync cams to the audio', av.getAttribute('aria-pressed') === 'true', function () { av.click(); return av.getAttribute('aria-pressed') === 'true'; });
+      if (av) switchRow(box, '⏱️', 'avsync', 'Sync cams to the audio', av.getAttribute('aria-pressed') === 'true', function () { proxyClick(av); return av.getAttribute('aria-pressed') === 'true'; });
       layer.restore = restoreSel;
       finishMenu(box, opener);
     }
@@ -752,6 +820,10 @@
         input.setAttribute('aria-describedby', 'rmdInputHint');
       } else if (node('rmPtt')) compose.insertBefore(row, node('rmPtt'));
       var ptt = node('rmPtt'); if (ptt) { row.appendChild(ptt); var talk = ptt.querySelector('.rb-talk'); if (talk) talk.classList.add('ds-btn', 'quiet'); }
+      // (1.99?? dockclean review: Tab goes as the row reads - ＋, the input, 🎙 Hold to talk, Send: Send sits after the push-to-talk
+      // box and still submits its form through the form attribute; Enter in the input submits as before)
+      var sendBtn = input && input.closest('form') && input.closest('form').querySelector('.rb-send');
+      if (sendBtn && ptt) { var sf = input.closest('form'); if (!sf.id) sf.id = 'rmdSayForm'; sendBtn.setAttribute('form', sf.id); row.insertBefore(sendBtn, ptt.nextSibling); }
       if (!input && !ptt) return;
       toolRow = el('div', 'rmd-tools'); toolRow.setAttribute('role', 'toolbar'); toolRow.setAttribute('aria-label', t('tools', 'Chat tools'));
       function tool(id, icon, key, label, fn) { var b = iconBtn(icon, key, label, function (x) { fn(x); }, 'ds-btn ghost rmd-tool'); b.setAttribute('data-rmd-tool', id); toolRow.appendChild(b); toolBtns[id] = b; return b; }
@@ -779,7 +851,8 @@
     function padChip(cls, bare) {
       var b = el('button', 'rmd-chip' + (cls ? ' ' + cls : '')); b.type = 'button';
       if (!bare) identity(b);
-      var dn = el('span', 'rmd-chip-v', IC.down); dn.setAttribute('aria-hidden', 'true'); b.appendChild(dn);
+      // (1.99?? dockclean review: ▾ inside the identity's own plate - one pill, not a pill inside a pill)
+      var dn = el('span', 'rmd-chip-v', IC.down); dn.setAttribute('aria-hidden', 'true'); (b.querySelector('.rmd-id-content') || b).appendChild(dn);
       var nm = b.querySelector('.rm-nm') || (node('rmTitle') && node('rmTitle').querySelector('.rm-nm')), name = txt(nm);
       b.setAttribute('aria-label', t('pad_menu', 'Pad menu: {name}', { name: name || D.title }));
       b.setAttribute('aria-haspopup', 'menu'); b.setAttribute('aria-expanded', 'false');
@@ -790,7 +863,10 @@
     function padMenu(opener) {
       var box = menu(opener, t('pad_menu_label', 'Pad menu')), doc = box.ownerDocument;
       box.classList.add('rmd-padmenu');
-      var head = el('div', 'rmd-padmenu-h', null, doc); identity(head); box.appendChild(head);
+      // (1.99?? dockclean review: the chip that opened this menu already shows the pad's banner, look and badges - the header is the
+      // name as words and Follow, not a second identity plate)
+      var head = el('div', 'rmd-padmenu-h', null, doc), hn = node('rmTitle') && node('rmTitle').querySelector('.rm-nm');
+      head.appendChild(el('b', 'rmd-padmenu-n', txt(hn) || D.title, doc)); box.appendChild(head);
       var follow = heroPiece('.hd-follow'), restoreFollow = null, onLive = !panel || !panel.hidden;
       if (follow && onLive && !inPip() && !follow.closest('.rmd-padmenu')) {
         var fm = follow.ownerDocument.createComment('follow'); follow.parentNode.insertBefore(fm, follow); head.appendChild(follow);
@@ -803,7 +879,7 @@
       var live = tabButton('live');
       if (live && !onLive) menuItem(box, '🔴', 'live', 'Live', function () { live.click(); });
       var share = node('rmStageH') && node('rmStageH').querySelector('[data-share-path]');
-      if (share) menuItem(box, '🔗', 'share', 'Share pad', clickOf(share));
+      if (share) menuItem(box, '🔗', 'share', 'Share pad', function (op) { sharePad(share, op); });
       var go = node('rmGoLive');
       if (go) {
         var here = go.querySelector('.stage-acts a.sact.primary'), book = go.querySelector('.stage-acts a.sact[href*="whenSet"]');
@@ -839,6 +915,20 @@
       if (cvOn) menuItem(box, '👁', 'cv_login', 'View a cam by Camfrog login (logged)…', clickOf(cv.querySelector('button')));
       finishMenu(box, opener);
     }
+    // 🔗 Share pad (1.99?? dockclean review): share-link.js's own link (its share base) - the phone's share sheet, else copied, with a
+    // Dock notice either way (the hidden stage-heading button the old proxy clicked had the only "Link copied"); focus back on the chip
+    function sharePad(btn, opener) {
+      var S = W.PATVShare, path = btn.getAttribute('data-share-path');
+      function back() { if (opener && opener.isConnected && opener.focus) opener.focus(); }
+      if (!S || !S.url) { clickOf(btn)(); back(); return; }
+      var link = S.url(path), nav = W.navigator || {};
+      if (nav.share && /Mobi|Android/i.test(nav.userAgent || '')) { S.share(btn, link); back(); return; }
+      function ask() { try { W.prompt(t('copy_link', 'Copy the link:'), link); } catch (e) { /* no prompt */ } back(); }
+      if (nav.clipboard && nav.clipboard.writeText) {
+        Promise.resolve(nav.clipboard.writeText(link)).then(function () { toast(t('link_copied', 'Link copied')); back(); }, ask);
+      } else ask();
+      back();
+    }
     function boostSheet(opener) {
       var form = node('rmBoostBox'), btn = node('rmBoostBtn'); if (!form || !btn) return;
       nodeSheet(t('boost', 'Boost this pad…').replace(/…$/, ''), form, opener, 'boost', function () { if (!form.hidden) btn.click(); });
@@ -850,7 +940,7 @@
       external(function () {
         nodeSheet(t('manage_room', 'Manage room…').replace(/…$/, ''), mod, opener, 'mod');
         var tog = mod.querySelector('.pm-tog'); if (tog && tog.getAttribute('aria-expanded') !== 'true') tog.click();
-        if (typeof then === 'function') then();
+        if (typeof then === 'function') setTimeout(then, 0);     // (1.99?? dockclean review: after the sheet's own first focus - the topic editor wins)
       });
     }
 
@@ -864,14 +954,22 @@
     function paintCapture() {
       if (!snapBtn) return;
       var pr = capPrices();
+      // 1.99?? dockclean review: a disabled one says WHY - the capture row's own reason (its price line holds it: "🚫 …" or the
+      // viewer's why), and a stream that can't be captured at all (the row's note only) shows a greyed 📸 with that note
+      var cap = node('rmCap'), capNote = cap && !cap.classList.contains('hide') ? txt(cap.querySelector('.stcap-note')) : '';
+      var why = pr.off || (pr.text && !/preview first/i.test(pr.text) ? pr.text : '');
       [['snap', snapBtn], ['clip', clipBtn]].forEach(function (x) {
         var orig = capButton(x[0]), b = x[1];
+        var label = x[0] === 'snap' ? t('snap', 'Snap') : t('clip_stage', 'Clip');
+        if (!orig && x[0] === 'snap' && capNote && !capButton('clip')) {
+          b.hidden = false; b.disabled = true; b.setAttribute('aria-disabled', 'true');
+          b.title = label + ' · ' + capNote; b.setAttribute('aria-label', b.title); return;
+        }
         b.hidden = !orig;
         if (!orig) return;
         b.disabled = !!orig.disabled; if (orig.disabled) b.setAttribute('aria-disabled', 'true'); else b.removeAttribute('aria-disabled');
-        var label = x[0] === 'snap' ? t('snap', 'Snap') : t('clip_stage', 'Clip');
         var price = x[0] === 'snap' ? pr.snap : pr.clip;
-        var tip = orig.disabled ? label + ' · ' + (orig.title || pr.off || t('unavailable', 'not available right now'))
+        var tip = orig.disabled ? label + ' · ' + (why || orig.title || t('unavailable', 'not available right now'))
           : label + (price ? ' · ' + t('cap_price', '{n} PAT · preview first, pay only if you save', { n: price }) : '');
         b.title = tip; b.setAttribute('aria-label', tip);
       });
@@ -886,6 +984,8 @@
           var s = node('rmCap') && node('rmCap').querySelector('.stcap-secs'); if (!s) return;
           s.value = n; s.dispatchEvent(new W.CustomEvent('change', { bubbles: true }));
           var b = capButton('clip'); if (b && !b.disabled) external(function () { b.click(); });
+          // (1.99?? dockclean review: focus back on 🎬 unless the capture's own preview took it)
+          if (clipBtn && clipBtn.isConnected && !clipBtn.hidden && !(D.activeElement && D.activeElement !== D.body && D.activeElement.isConnected)) clipBtn.focus();
         }, { role: 'menuitemradio', checked: op.selected || secs.value === n, vars: { n: n } });
       });
       if (pr.clip) box.appendChild(el('p', 'ds-fine rmd-menu-note', t('clip_note', 'Preview first; {n} PAT only if you save', { n: pr.clip }), box.ownerDocument));
@@ -899,27 +999,37 @@
       each(n.querySelectorAll('.adm button'), function (b) { out.push(b); });
       return out;
     }
+    // 1.99?? dockclean review: ONE source chip, built once and painted in place (it was rebuilt on every pointer move and poll - a click
+    // landed on a node that was gone, Tab fell to <body>, an open menu lost its opener). Only its words, dot and labels change.
+    var srcBtn = null, srcOne = null, srcKey = null;
     function paintSource() {
       if (!srcHost) return;
       var list = tabs(), sel = list.filter(function (b) { return b.getAttribute('aria-selected') === 'true'; })[0] || list[0];
-      srcHost.textContent = '';
-      if (!list.length) { srcHost.hidden = true; return; }
-      srcHost.hidden = false;
-      var label = txt(sel).replace(/^★\s*/, '');
-      if (list.length < 2 && !tabExtras().length) { srcHost.appendChild(el('span', 'rmd-src rmd-src-one', label)); return; }
-      var b = el('button', 'rmd-src ds-btn quiet sm'); b.type = 'button';
-      var dot = el('span', 'rmd-dot' + (sel && !sel.classList.contains('off') ? ' rmd-on' : '')); dot.setAttribute('aria-hidden', 'true'); b.appendChild(dot);
-      b.appendChild(el('span', 'rmd-label', label)); var dn = el('span', 'rmd-chip-v', IC.down); dn.setAttribute('aria-hidden', 'true'); b.appendChild(dn);
-      b.setAttribute('aria-label', t('source', 'Stage source: {name}', { name: label })); b.title = b.getAttribute('aria-label');
-      b.setAttribute('aria-haspopup', 'menu'); b.setAttribute('aria-expanded', 'false');
-      on(b, 'click', function () { if (layer && layer.opener === b) { closeLayer(); return; } sourceMenu(b); });
-      srcHost.appendChild(b);
+      var label = sel ? txt(sel).replace(/^★\s*/, '') : '', many = list.length >= 2 || tabExtras().length > 0, live = !!(sel && !sel.classList.contains('off'));
+      var key = list.length + '|' + label + '|' + (many ? 1 : 0) + (live ? 1 : 0);
+      if (key === srcKey) return; srcKey = key;
+      if (!srcBtn) {
+        srcOne = el('span', 'rmd-src rmd-src-one');
+        srcBtn = el('button', 'rmd-src ds-btn quiet sm'); srcBtn.type = 'button';
+        var dot = el('span', 'rmd-dot'); dot.setAttribute('aria-hidden', 'true'); srcBtn.appendChild(dot);
+        srcBtn.appendChild(el('span', 'rmd-label')); var dn = el('span', 'rmd-chip-v', IC.down); dn.setAttribute('aria-hidden', 'true'); srcBtn.appendChild(dn);
+        srcBtn.setAttribute('aria-haspopup', 'menu'); srcBtn.setAttribute('aria-expanded', 'false');
+        on(srcBtn, 'click', function () { if (layer && layer.opener === srcBtn) { closeLayer(); return; } sourceMenu(srcBtn); });
+        srcHost.appendChild(srcOne); srcHost.appendChild(srcBtn);
+      }
+      srcHost.hidden = !list.length;
+      srcOne.hidden = many; srcOne.textContent = label;
+      srcBtn.hidden = !many;
+      srcBtn.querySelector('.rmd-dot').classList.toggle('rmd-on', live);
+      srcBtn.querySelector('.rmd-label').textContent = label;
+      srcBtn.setAttribute('aria-label', t('source', 'Stage source: {name}', { name: label })); srcBtn.title = srcBtn.getAttribute('aria-label');
+      if (!many && layer && layer.opener === srcBtn) closeLayer(false);
     }
     function sourceMenu(opener) {
       var box = menu(opener, t('sources', 'Stage sources'));
       tabs().forEach(function (tb) {
         var label = txt(tb).replace(/^★\s*/, '');
-        var it = menuItem(box, tb.classList.contains('off') ? '⚪' : '🔴', 'raw', label, function () { tb.click(); paintSource(); }, { role: 'menuitemradio', checked: tb.getAttribute('aria-selected') === 'true' });
+        var it = menuItem(box, tb.classList.contains('off') ? '⚪' : '🔴', 'raw', label, function () { tb.click(); paintSource(); if (srcBtn && !srcBtn.hidden) srcBtn.focus(); }, { role: 'menuitemradio', checked: tb.getAttribute('aria-selected') === 'true' });
         it.querySelector('.rmd-label').textContent = label; it.title = label; it.setAttribute('aria-label', label);
       });
       var extras = tabExtras();
@@ -940,7 +1050,7 @@
       var ll = lowlat();
       if (ll) menuItem(box, '⚡', 'lowlat', 'Low latency', function () { ll.click(); }, { role: 'menuitemcheckbox', checked: ll.getAttribute('aria-pressed') === 'true', tip: ll.title });
       menuItem(box, IC.pop, 'pop_stage', 'Pop out player', function () { pop(stageMedia(), false); });
-      menuItem(box, IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true); });
+      menuItem(box, IC.hide, 'hide_stage', 'Hide stage', function () { hideStage(true, true); });
       if (strip && strip.querySelector('.cs-tile')) menuItem(box, '📌', 'pins', 'Pinned cams', function () { pinsMenu(box, opener); }, { keep: true, sub: '▸' });
       var sched = node('rmSched'), upnext = node('rmGoLive') && node('rmGoLive').querySelector('.upnext');
       if (sched || upnext) menuItem(box, '📅', 'schedule', 'Stage schedule…', function () { scheduleSheet(opener); });
@@ -995,13 +1105,21 @@
       try { kb = !!(a && a.matches && a.matches(':focus-visible')); } catch (e) { kb = true; }
       return overBar || (kb && ovTop && (ovTop.contains(a) || ovBot.contains(a))) || !!(layer && layer.overlay);
     }
-    function showTools() {
+    // The overlay shows (rmd-controls-on: opacity) and takes taps (rmd-ov-armed: only its own buttons, never the whole bar - the mic
+    // stage's tile controls under the bars stay usable). 1.99?? dockclean review: a touch that wakes a hidden overlay arms it a moment
+    // LATER, so the tap that revealed the pad chip / ⋯ / 🖥️ under the finger doesn't also press it.
+    var armTimer = null;
+    function offTools() { clearTimeout(armTimer); stage.classList.remove('rmd-controls-on', 'rmd-ov-armed'); }
+    function showTools(armLater) {
       if (!stage) return;
+      var was = stage.classList.contains('rmd-controls-on');
       stage.classList.add('rmd-controls-on'); clearTimeout(autoTimer);
-      paintCapture(); paintSource();
-      autoTimer = setTimeout(function hide() { if (overlayHot()) { autoTimer = setTimeout(hide, HIDE_MS); return; } stage.classList.remove('rmd-controls-on'); }, HIDE_MS);
+      if (armLater === true && !was) { clearTimeout(armTimer); armTimer = setTimeout(function () { if (stage.classList.contains('rmd-controls-on')) stage.classList.add('rmd-ov-armed'); }, 450); }
+      else if (armLater !== true) { clearTimeout(armTimer); stage.classList.add('rmd-ov-armed'); }
+      paintCapture();
+      autoTimer = setTimeout(function hide() { if (overlayHot()) { autoTimer = setTimeout(hide, HIDE_MS); return; } offTools(); }, HIDE_MS);
     }
-    function hideTools() { clearTimeout(autoTimer); if (!overlayHot()) stage.classList.remove('rmd-controls-on'); }
+    function hideTools() { clearTimeout(autoTimer); if (!overlayHot()) offTools(); }
     function buildStage() {
       var ov = el('div', 'rmd-ov');
       ovTop = el('div', 'rmd-ov-top'); ovBot = el('div', 'rmd-ov-bot');
@@ -1012,29 +1130,34 @@
       snapBtn = iconBtn('📸', 'snap', 'Snap', function () { var b = capButton('snap'); if (b && !b.disabled) external(function () { b.click(); }); });
       clipBtn = iconBtn('🎬', 'clip_stage', 'Clip', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } clipMenu(b); });
       clipBtn.setAttribute('aria-haspopup', 'menu'); clipBtn.setAttribute('aria-expanded', 'false');
-      var fullBtn = iconBtn(IC.full, 'fullscreen', 'Fullscreen', function () { full(stageMedia()); });
+      // (1.99?? dockclean review: 🖥️ is a toggle - inside fullscreen it is "Exit fullscreen", the one way out; the viewbar's ↩ is hidden there)
+      fullBtn = iconBtn(IC.full, 'fullscreen', 'Fullscreen', function () { if (stageFull()) redock(); else full(stageMedia()); });
       var more = iconBtn(IC.more, 'stage_menu', 'Stage options', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } stageMenu(b); });
-      more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.classList.add('rmd-stage-more');
+      more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.classList.add('rmd-stage-more'); stageMoreBtn = more;
       [snapBtn, clipBtn, fullBtn, more].forEach(function (b) { ovBot.appendChild(b); });
       ov.appendChild(ovTop); ov.appendChild(ovBot);
       srcBox = node('rmTabs'); if (srcBox) { srcBox.classList.add('rmd-tabs-src'); ov.appendChild(srcBox); }
       stage.insertBefore(ov, stage.firstChild);
       [ovTop, ovBot].forEach(function (bar) { on(bar, 'pointerenter', function () { overBar = true; }); on(bar, 'pointerleave', function () { overBar = false; showTools(); }); });
       // the stage hidden: a slim bar [pad chip ▾] Stage hidden … [📺 Show stage]
+      // (1.99?? dockclean review: no "Stage hidden" words beside 📺 Show stage - they said the same thing and squeezed the pad's name)
       var mini = el('div', 'rmd-mini'); mini.id = 'rmdMini'; mini.hidden = true; mini.appendChild(padChip('rmd-chip-mini'));
-      mini.appendChild(el('span', 'rmd-slim-t', t('stage_hidden', 'Stage hidden')));
-      mini.appendChild(button('📺', 'restore_stage', 'Show stage', function () { hideStage(false); }));
+      mini.appendChild(el('span', 'rmd-ov-gap'));
+      showStageBtn = button('📺', 'restore_stage', 'Show stage', function () { hideStage(false, true); });
+      mini.appendChild(showStageBtn);
       stage.parentNode.insertBefore(mini, stage);
       on(stage, 'pointermove', function (e) { if (e.pointerType !== 'touch') showTools(); });
       on(stage, 'pointerdown', function (e) {
-        if (e.pointerType === 'touch' && !(e.target.closest && e.target.closest('.rmd-ov-top,.rmd-ov-bot,.rmd-strip,button,a,input,select'))) {
-          if (stage.classList.contains('rmd-controls-on')) hideTools(); else showTools();
+        if (e.pointerType === 'touch') {
+          var ctl = e.target.closest && e.target.closest('.rmd-ov-top,.rmd-ov-bot,.rmd-strip,button,a,input,select');
+          if (!ctl && stage.classList.contains('rmd-controls-on')) { hideTools(); return; }
+          showTools(!stage.classList.contains('rmd-ov-armed'));
           return;
         }
         showTools();
       });
-      on(stage, 'pointerleave', function () { clearTimeout(autoTimer); autoTimer = setTimeout(function () { if (!overlayHot()) stage.classList.remove('rmd-controls-on'); }, HIDE_MS); });
-      on(stage, 'focusin', showTools);
+      on(stage, 'pointerleave', function () { clearTimeout(autoTimer); autoTimer = setTimeout(function () { if (!overlayHot()) offTools(); }, HIDE_MS); });
+      on(stage, 'focusin', function () { showTools(); });
       on(stage, 'patv:stagechange', function (e) { stageChanged(e.detail); paintSource(); paintCapture(); });
       // the pinned cams live inside the stage card (owner point 28 / targets 172-173): a column at the inline end, a row on phones
       if (strip) { stage.appendChild(strip); strip.classList.add('rmd-strip'); }
@@ -1049,7 +1172,7 @@
       var jump = node('rmHistJump'); if (jump && !jump.hidden) menuItem(box, '📅', 'jump_date', 'Jump to a date', function () { external(function () { jump.click(); }); });
       var dl = o.download;
       if (dl && dl.items) dl.items().forEach(function (it) {
-        var mi = menuItem(box, '⬇', 'raw', it.label.replace(/^⬇\s*/, ''), function () { dl.run(it.id); });
+        var mi = menuItem(box, '⬇', 'raw', it.label.replace(/^⬇\s*/, ''), function () { dl.run(it.id, chatMore); });
         mi.querySelector('.rmd-label').textContent = it.label.replace(/^⬇\s*/, '');
       });
       menuItem(box, IC.pop, 'float_chat', 'Float chat', floatChat);
@@ -1084,6 +1207,10 @@
     function buildChatHead() {
       var h = node('chatH'); if (!h) return;
       h.classList.add('rmd-chat-h');
+      // (1.99?? dockclean review: the heading's words in their own box that never shrinks - a bare text node broke "CHAT" letter by letter)
+      Array.prototype.slice.call(h.childNodes).forEach(function (n) {
+        if (n.nodeType === 3 && String(n.textContent).trim()) { h.insertBefore(el('span', 'rmd-chat-t', String(n.textContent).trim()), n); n.remove(); }
+      });
       var topic = node('rmTopic');
       if (topic) {
         topicRow = el('span', 'rmd-topic-line'); topicRow.appendChild(topic);
@@ -1112,7 +1239,10 @@
         function namedMember(value) { return !!(login && value && Array.isArray(value.members) && value.members.some(function (u) { return u && !u.veil && !u.anon && String(u.login || '').toLowerCase() === login; })); }
         if ((data.removed && data.removed.length) || (data.redo && data.redo.length) || (namedMember(previous) && !namedMember(data))) o.mod.closeMenu(false);
       }
-      if (layer && (layer.kind === 'tip' || layer.kind === 'tts' && (!hasCmd('!say') || layer.price !== cmds()['!say']) || layer.kind === 'pvp' && previous && JSON.stringify(previous.members) !== JSON.stringify(data.members))) closeLayer();
+      // (1.99?? dockclean review: the 💸 Tip list redraws in place; a ⚔️ / 🥊 stake sheet closes only when its person is no longer a
+      // named member here - not on every cam / mic flip)
+      if (layer && (layer.kind === 'tts' && (!hasCmd('!say') || layer.price !== cmds()['!say']) || layer.kind === 'pvp' && !pvpFor(layer.who))) closeLayer();
+      if (layer && layer.kind === 'tip' && layer.redraw) layer.redraw();
       each(root.querySelectorAll('[data-rmd-tts]'), function (b) { b.hidden = !hasCmd('!say'); });
       paintTools(); paintTopic(); paintInfo(); filterPeople(); paintCapture(); paintSource(); paintNow();
       if (pip) each(pip.document.querySelectorAll('[data-rmd-tts]'), function (b) { b.hidden = !hasCmd('!say'); });

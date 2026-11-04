@@ -12470,7 +12470,7 @@
   "js.pad.picker.patv": "PATV",
   "js.pad.picker.camfrog": "Camfrog",
   "js.pad.dock.seen": "Seen in the last 15 min",
-  "js.pad.dock.listen": "▶ Listen to the room",
+  "js.pad.dock.listen": "Listen to the room",
   "js.pad.dock.placeholder_web": "Message as 🌐 {name} (web)…",
   "js.pad.dock.placeholder": "Message {room}…",
   "js.pad.dock.cam_still": "Still preview",
@@ -12490,5 +12490,11 @@
   "js.pad.dock.app_trivia": "Trivia",
   "js.pad.dock.app_guess": "Guess",
   "js.pad.dock.app_bingo": "Bingo",
-  "js.pad.dock.app_lotto": "Lotto"
+  "js.pad.dock.app_lotto": "Lotto",
+  "js.pad.dock.exit_fullscreen": "Exit fullscreen",
+  "js.pad.dock.copy_link": "Copy the link:",
+  "js.pad.dock.link_copied": "Link copied",
+  "js.pad.dock.stake_sure": "Yes, stake {n} PAT",
+  "js.pad.dock.send_challenge_n": "Send challenge · {n} PAT",
+  "js.pad.dock.stake_big": "That is {n} PAT - press again to send it."
 }

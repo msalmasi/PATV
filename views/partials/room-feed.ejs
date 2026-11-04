@@ -13,7 +13,10 @@
 %>
 <link rel="stylesheet" href="/public/css/feed.css?v=21">
 <section class="card rf" id="feed" aria-labelledby="rfH">
-  <h2 id="rfH"><span><%- t('pad.feed.title', { slug: room.slug }) %></span><small><a href="/feed"><%- t('pad.feed.all_pads') %></a></small></h2>
+  <%# 1.99?? dockclean review (owner point 33): in the Room Dock the pad's name is in the header right above and the navbar goes to every
+      pad - the heading is just "Feed", no "All pads ›" %>
+  <% if (typeof dock !== 'undefined' && dock) { %><h2 id="rfH"><span><%- t('pad.tab.feed') %></span></h2><% } else { %>
+  <h2 id="rfH"><span><%- t('pad.feed.title', { slug: room.slug }) %></span><small><a href="/feed"><%- t('pad.feed.all_pads') %></a></small></h2><% } %>
   <%# 1.99bz: Pepe's fresh captures from this pad's Camfrog room - tap one for the story viewer %>
   <% if (!noStory_) { %><%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer, compose: !!F.viewer }, heading: t('pad.story.fresh'), next: here_ + '#feed' }) %><% } %>
   <%# 1.99dc: the pad's rules (padrules.js) - its own, or Padiquette; owners edit them in the settings hub. Moderation

@@ -96,6 +96,7 @@
       vw.appendChild(v); vw.appendChild(badge); vw.appendChild(big); vw.appendChild(x); vw.appendChild(over);
       li.appendChild(vw); li.appendChild(name);
       t.el = li; t.video = v;
+      li._who = t.ref;          // 1.99?? dockclean: the Room Dock's tile ⋯ › 📷 Cam options finds the person by it (a login, or the frog cam's id)
       function say(text, canRetry) { over.hidden = !text && tap.hidden; msg.textContent = text || ''; retry.hidden = !canRetry; }
       t.ended = function (code, m) {
         t.gen++; clearInterval(t.beat); t.beat = null;

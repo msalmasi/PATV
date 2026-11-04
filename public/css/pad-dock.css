@@ -150,12 +150,16 @@ main.rm.rm-dock #rmCap > :not(.stcap-toast) { display: none; }
 main.rm.rm-dock #rmCap .stcap-toast { pointer-events: auto; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-panel); font-size: var(--ds-fs-xs); }
 
 /* ── the auto-hiding overlay (owner point 6): top = the pad chip; bottom = source … 📸 🎬 🖥️ ⋯ ── */
-main.rm.rm-dock .rmd-ov { grid-area: 1 / 1; z-index: var(--ds-z-raised); display: flex; flex-direction: column; justify-content: space-between; min-block-size: 0; min-inline-size: 0; pointer-events: none; }
+main.rm.rm-dock .rmd-ov { grid-area: 1 / 1; z-index: calc(var(--ds-z-raised) + var(--ds-z-raised)); display: flex; flex-direction: column; justify-content: space-between; min-block-size: 0; min-inline-size: 0; pointer-events: none; }
 main.rm.rm-dock .rmd-ov > .rmd-tabs-src { display: none; }
 main.rm.rm-dock :is(.rmd-ov-top, .rmd-ov-bot) { display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; padding: var(--ds-sp-2); opacity: 0; pointer-events: none; transition: opacity var(--ds-dur-2) var(--ds-ease); }
 main.rm.rm-dock .rmd-ov-bot { min-block-size: 44px; padding-block: var(--ds-sp-1); background: linear-gradient(to top, color-mix(in srgb, var(--ds-media-bg) 60%, transparent), transparent); }
 main.rm.rm-dock #rmStage.rmd-controls-on :is(.rmd-ov-top, .rmd-ov-bot),
-main.rm.rm-dock #rmStage:has(.rmd-ov :focus-visible) :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; pointer-events: auto; }
+main.rm.rm-dock #rmStage:has(.rmd-ov :focus-visible) :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; }
+/* 1.99?? dockclean review: the bars never take a tap themselves - only their own controls do, once armed (pad-dock.js showTools: at
+   once for a mouse, a moment after the tap that woke them on touch) - so the mic stage's ⚑ / ✕ / 📌 under a bar stay usable */
+main.rm.rm-dock #rmStage.rmd-ov-armed .rmd-ov :is(button, a),
+main.rm.rm-dock #rmStage:has(.rmd-ov :focus-visible) .rmd-ov :is(button, a) { pointer-events: auto; }
 main.rm.rm-dock #rmStage.rmd-controls-on,
 main.rm.rm-dock #rmStage:has(.rmd-ov :focus-visible) { z-index: var(--ds-z-sticky); }
 main.rm.rm-dock .rmd-ov-gap { flex: 1 1 auto; }
@@ -174,7 +178,8 @@ main.rm.rm-dock .rmd-slim-t { display: none; flex: 1 1 auto; min-inline-size: 0;
 main.rm.rm-dock #rmStage.is-off:not(:has(> #rmStrip:not([hidden]))) { block-size: auto; min-block-size: 44px; max-block-size: none; grid-template-rows: auto; background: var(--ds-surface); }
 main.rm.rm-dock #rmStage.is-off { grid-template-rows: auto minmax(0, 1fr) var(--rmd-pin-row); }
 main.rm.rm-dock #rmStage.is-off .rmd-ov { flex-direction: row; align-items: center; }
-main.rm.rm-dock #rmStage.is-off :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; pointer-events: auto; background: none; }
+main.rm.rm-dock #rmStage.is-off :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; background: none; }
+main.rm.rm-dock #rmStage.is-off .rmd-ov :is(button, a) { pointer-events: auto; }
 main.rm.rm-dock #rmStage.is-off .rmd-ov-top { flex: 1 1 auto; }
 main.rm.rm-dock #rmStage.is-off .rmd-slim-t { display: block; }
 main.rm.rm-dock #rmStage.is-off .rmd-ov-bot > :not(.rmd-stage-more, .rmd-src-host) { display: none; }
@@ -241,12 +246,14 @@ main.rm.rm-dock #chatH > #rmSearchBtn { min-block-size: 36px; min-inline-size: 3
 main.rm.rm-dock .rmd-ppl-btn { gap: var(--ds-sp-1); min-block-size: 36px; padding-inline: var(--ds-sp-2); font-family: var(--ds-font); letter-spacing: normal; }
 main.rm.rm-dock .rmd-ppl-btn .rmd-count { font: 500 var(--ds-fs-meta)/1 var(--ds-font); color: var(--ds-text); font-variant-numeric: tabular-nums; }
 main.rm.rm-dock .rmd-topic-line { display: flex; align-items: center; flex: 1 1 auto; min-inline-size: 0; font: 400 var(--ds-fs-meta)/var(--ds-lh-sm) var(--ds-font); letter-spacing: normal; text-transform: none; }
-main.rm.rm-dock .rmd-topic-line #rmTopic { display: block; flex: 0 1 auto; min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-line-clamp: none; font-size: var(--ds-fs-meta); color: var(--ds-chat-topic); }
+main.rm.rm-dock .rmd-topic-line #rmTopic { display: block; flex: 0 1 auto; min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-line-clamp: none; font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
 main.rm.rm-dock #rmTopic[role="button"] { cursor: pointer; border-radius: var(--ds-r-xs); }
 main.rm.rm-dock #rmTopic[role="button"]:hover { color: var(--ds-text); }
 main.rm.rm-dock .rmd-topic-full { margin: 0; padding: var(--ds-sp-2); max-inline-size: 320px; font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }
 /* the reveal banner stays (reveals are audited), as one 28px line with Hide again at its end */
 main.rm.rm-dock .veil-banner { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; min-block-size: 28px; margin: 0 0 var(--ds-sp-1); padding: 2px var(--ds-sp-2); font-size: var(--ds-fs-xs); line-height: 1.3; white-space: nowrap; overflow: hidden; }
+/* (1.99?? dockclean review: the words give way - Hide again, the off switch of an audited reveal, never leaves the screen) */
+main.rm.rm-dock .veil-banner > .veil-st { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 main.rm.rm-dock .veil-banner > .veil-reveal { flex: none; margin-inline-start: auto; }
 /* the log, and its "New messages ↓" pill at the bottom centre of the log (owner point 31) */
 main.rm.rm-dock .rmd-log { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; min-inline-size: 0; }
@@ -495,9 +502,163 @@ body.pad-dock-live .pm-pop.rmd-pm .pm-pop-why { margin-inline-start: auto; color
   main.rm.rm-dock :is(.rmd-ov-top, .rmd-ov-bot, .rmd-float) { transition: none; animation: none; }
 }
 @media (forced-colors: active) {
-  main.rm.rm-dock :is(.rmd-overlay #rmChat, .rmd-ov-top, .rmd-ov-bot, .rmd-viewbar, .rmd-mini, .rmd-menu, .rmd-chip) { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
+  main.rm.rm-dock :is(.rmd-overlay #rmChat, .rmd-viewbar, .rmd-mini, .rmd-menu) { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
   main.rm.rm-dock .rmd-input-row::before { border-color: CanvasText; }
   main.rm.rm-dock .cx-name,
   body.pad-dock-live .pm-pop.chatlog .cx-name { color: CanvasText !important; -webkit-text-fill-color: CanvasText !important; background: none !important; animation: none !important; forced-color-adjust: auto; }
   main.rm.rm-dock :is(.rmd-chip, .rmd-holder, .rmd-tile-more):focus-visible { outline: 2px solid Highlight; }
+}
+
+/* ══ 1.99?? dockclean review (the visual / function / privacy reviews of the clean-up build) ══ */
+/* the Live view uses the window's width (target 172): up to 1600px instead of the page column's 1180px */
+body.pad-dock-live main.rm.rm-dock { --ds-w: min(1600px, 100%); max-inline-size: min(1600px, 100%); }
+/* the chat heading's words never shrink (a bare text node broke "CHAT" letter by letter on phones) */
+main.rm.rm-dock #chatH > .rmd-chat-t { flex: none; white-space: nowrap; }
+/* the mic stage's own tile labels / notes step up while the overlay's bottom bar is over them (nothing drawn on top of a name) */
+main.rm.rm-dock #rmStage .player .mf-tile :is(.mf-label, .mf-card .mf-why) { transition: transform var(--ds-dur-2) var(--ds-ease); }
+main.rm.rm-dock #rmStage.rmd-controls-on .player .mf-tile :is(.mf-label, .mf-card .mf-why) { transform: translateY(-40px); }
+main.rm.rm-dock #rmStage.rmd-controls-on .player .mf-stage:has(.mf-bmsg:not(:empty)) .mf-bar { inset-block-end: calc(var(--ds-sp-12) + 40px); }
+/* the tiles' corner tools (⚑ / ✕ / 📌) sit below the top bar's pad chip while it shows */
+main.rm.rm-dock #rmStage.rmd-controls-on .player .mf-tile .mf-x { inset-block-start: 48px; }
+/* staff: 📺 Play content here's own row is not a stray grid cell - its bar is the stage ⋯'s Staff items, its panel a sheet over the
+   Live view (position: fixed inside the Live panel, above the chat while it is open) */
+main.rm.rm-dock #rmStage > .oab-row { display: contents; }
+main.rm.rm-dock #rmStage > .oab-row > .oab { display: none; }
+main.rm.rm-dock #rmStage:has(> .oap) { z-index: var(--ds-z-modal); }
+main.rm.rm-dock #rmStage > .oap { position: fixed; inset-block-start: 66px; inset-inline: var(--ds-sp-2); z-index: var(--ds-z-modal); max-inline-size: 640px; max-block-size: calc(100dvh - 74px);
+  margin: 0 auto; overflow-y: auto; overscroll-behavior: contain; box-shadow: var(--ds-e-4); }
+/* the cam strip's ⋯ is a small corner button; on touch it shows (and takes taps) only with the stage overlay */
+main.rm.rm-dock #rmStage > #rmStrip[data-rmd-layout="grid"] { z-index: var(--ds-z-raised); padding-block-start: 44px; }   /* (the top bar's pad chip never sits on a tile's ⋯) */
+@media (hover: none) {
+  main.rm.rm-dock #rmStrip .rmd-tile-more { opacity: 0; pointer-events: none; }
+  main.rm.rm-dock #rmStage.rmd-controls-on #rmStrip .rmd-tile-more { opacity: 1; }
+  main.rm.rm-dock #rmStage.rmd-ov-armed #rmStrip .rmd-tile-more { pointer-events: auto; }
+}
+@media (max-width: 760px) {
+  main.rm.rm-dock #rmStrip .rmd-tile-more { inset-block-start: 2px; inset-inline-end: 2px; inline-size: 24px; min-inline-size: 24px; block-size: 24px; min-block-size: 24px; font-size: var(--ds-fs-xs); }
+}
+/* the pad chip: one plate - when the identity brings its own frame / banner the chip adds no second pill around it; ▾ is inside it */
+main.rm.rm-dock .rmd-chip:has(> .rmd-id) { padding: 0; border: 0; background: transparent; }
+main.rm.rm-dock .rmd-chip > .rmd-id { background: var(--ds-media-panel); border: 1px solid var(--ds-ac-line); padding: 0 var(--ds-sp-2) 0 var(--ds-sp-1h); }
+main.rm.rm-dock .rmd-chip:is(:hover, :focus-visible, [aria-expanded="true"]) > .rmd-id { border-color: var(--ds-ac); }
+main.rm.rm-dock .rmd-chip .rmd-id-content > .rmd-chip-v { margin-inline-start: var(--ds-sp-1); }
+@media (max-width: 480px) {
+  /* the pad's own name before its badges on a phone (the chip, the slim bars, the Feed / About header) */
+  main.rm.rm-dock :is(.rmd-chip, #rmHero) .pfx-bs { display: none; }
+}
+/* icon buttons are bare (design 158): no border or fill until hover / focus, one radius; Send (and 🎙 Hold to talk) stay filled */
+main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play) {
+  border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--ds-r-md); }
+main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play):is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--ds-hover); }
+main.rm.rm-dock #rmAudioBox .rb-play { color: var(--ds-ac-2); font-size: var(--ds-fs-lead); }
+/* paused: no "live" eq dots */
+main.rm.rm-dock #rmAudioBox .rb-audio:not(.on) .rb-meter { display: none; }
+/* the reveal banner on a phone: two short lines rather than cut words */
+@media (max-width: 600px) {
+  main.rm.rm-dock .veil-banner { white-space: normal; }
+  main.rm.rm-dock .veil-banner > .veil-st { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+}
+/* the people column / sheet: one 36px line, [avatar][name + flair][🎙][📷][⋯] - three fixed slots so the icons line up in columns;
+   the flair gives way first (to its emoji alone in a narrow row), then the name */
+main.rm.rm-dock #rmPeople > li { container-type: inline-size; grid-template-columns: 28px minmax(0, 1fr) auto; column-gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmPeople .nm > :is(.who, .who-web) { flex: 0 1 auto; min-inline-size: 4ch; }
+main.rm.rm-dock #rmPeople .nm > .ufl { flex: 0 100000 auto; min-inline-size: calc(1em + 10px); }   /* (the flair gives way first, down to its emoji, then the name) */
+/* (a frog name keeps its incognito / hidden tag whole - the name gives way, never the tag) */
+main.rm.rm-dock #rmPeople .nm > .who.veil { display: contents; }   /* (its frog name and tag are the row's own items) */
+main.rm.rm-dock #rmPeople .nm > .who.veil > i { flex: 0 1 auto; min-inline-size: 3ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock #rmPeople .nm > .who.veil > .veil-tag { flex: none; }
+@container (max-width: 320px) {
+  main.rm.rm-dock #rmPeople .nm > .ufl > .ufl-n { display: none; }
+  main.rm.rm-dock #rmPeople .nm > .ufl { padding-inline: 4px; }
+}
+main.rm.rm-dock #rmPeople .ic { display: grid; grid-template-columns: repeat(3, 24px); grid-template-rows: 26px; gap: 2px; }
+main.rm.rm-dock #rmPeople .ic > * { grid-row: 1; inline-size: 24px; block-size: 26px; margin: 0; border: 0; border-radius: var(--ds-r-sm); background: transparent; box-shadow: none; }
+main.rm.rm-dock #rmPeople .ic > .rmd-mic { grid-column: 1; background: var(--ds-ac-bg); box-shadow: none; }
+main.rm.rm-dock #rmPeople .ic > :is(.cam, span:not(.rmd-mic)) { grid-column: 2; }
+main.rm.rm-dock #rmPeople .ic > .pm-mg { grid-column: 3; }
+main.rm.rm-dock #rmPeople .ic > button:is(:hover, :focus-visible) { background: var(--ds-hover); }
+@media (hover: hover) and (pointer: fine) {
+  main.rm.rm-dock #rmPeople .ic > .pm-mg { visibility: hidden; }
+  main.rm.rm-dock #rmPeople > li:is(:hover, :focus-within) .ic > .pm-mg,
+  main.rm.rm-dock #rmPeople .ic > .pm-mg[aria-expanded="true"] { visibility: visible; opacity: 1; }
+}
+@media (pointer: coarse) {
+  main.rm.rm-dock #rmPeople .ic { grid-template-columns: repeat(3, 36px); grid-template-rows: 36px; }
+  main.rm.rm-dock #rmPeople .ic > * { inline-size: 36px; block-size: 36px; }
+}
+/* the chat's line heads: a narrow line shows a flair as its emoji alone (never "💎 P…") */
+main.rm.rm-dock #rmScroll .line .body { container-type: inline-size; }
+main.rm.rm-dock #rmScroll .line-head > :is(.who, .who-web) { flex-shrink: 1; }
+main.rm.rm-dock #rmScroll .line-head > .ufl { flex-shrink: 100000; }   /* (the name gives way only after the flair) */
+@container (max-width: 360px) {
+  main.rm.rm-dock #rmScroll .line-head > .ufl > .ufl-n { display: none; }
+  main.rm.rm-dock #rmScroll .line-head > .ufl { min-width: 0; padding-inline: 3px; }
+}
+/* the person menu over a Dock sheet (Participants); its header shows the flair, its ✕ is visible */
+body.pad-dock-live .pm-pop { z-index: calc(var(--ds-z-modal) + var(--ds-z-sticky)); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl { flex: 0 1000 auto; min-inline-size: calc(1em + 10px); margin: 0; }
+body.pad-dock-live .pm-pop.rmd-pm .pm-x { color: var(--ds-text-muted); font-size: 18px; line-height: 1; border-radius: var(--ds-r-md); }
+body.pad-dock-live .pm-pop.rmd-pm .pm-x:is(:hover, :focus-visible) { color: var(--ds-text); background: var(--ds-hover); }
+/* the pad menu's header: the pad's name as words + Follow (the chip above it already shows the banner and badges) */
+main.rm.rm-dock .rmd-padmenu-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1) var(--ds-sp-2); padding: var(--ds-sp-1) var(--ds-sp-2h) var(--ds-sp-2); border-block-end: 1px solid var(--ds-line); margin-block-end: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-padmenu-n { flex: 1 1 100%; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); color: var(--ds-text-strong); }
+main.rm.rm-dock .rmd-menu a.ds-menu-item { color: var(--ds-text); }
+/* the autocomplete list spans the whole composer box (not just the input's column) */
+main.rm.rm-dock .rmd-input-row .rb-say-in { position: static; }
+/* Send sits after 🎙 in the DOM (Tab order): it leaves with its form when the text relay is off */
+main.rm.rm-dock .rmd-input-row:has(.rb-say.hide) > .rb-send { display: none; }
+/* Manage room in its sheet: the sheet's title is the title - not the card's own "Manage room" and its collapse toggle again */
+main.rm.rm-dock .rmd-layer #rmMod > h2 > :is(.pm-ht, .pm-tog) { display: none; }
+main.rm.rm-dock .rmd-layer #rmMod > .pm-sum { display: none; }
+/* the soundboard in its sheet: no second "🔊 Soundboard" toggle; its notes use the sheet's width */
+main.rm.rm-dock .rmd-layer #rmSb .sbd-toggle { display: none; }
+main.rm.rm-dock .rmd-layer #rmSb .sbd-empty { grid-column: 1 / -1; inline-size: 100%; }
+/* the picker's tabs share the sheet's width (nothing cut off at the edge) */
+main.rm.rm-dock .rmd-layer .ds-seg:has(> .ds-tab) { display: flex; inline-size: 100%; overflow: hidden; }
+main.rm.rm-dock .rmd-layer .ds-seg > .ds-tab { flex: 1 1 0; min-inline-size: 0; justify-content: center; padding-inline: var(--ds-sp-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 420px) { main.rm.rm-dock .rmd-layer .ds-seg > .ds-tab { font-size: var(--ds-fs-xs); gap: 3px; } }
+/* Feed / About on a phone: two rows at most - [identity · Follow · ▾] then the segment */
+@media (max-width: 760px) {
+  main.rm.rm-dock #rmHero .hd-id { flex: 1 1 0; min-inline-size: 0; }
+  main.rm.rm-dock #rmHero .hd-acts { order: 2; }
+  main.rm.rm-dock #padTabs.rmd-seg { order: 3; }
+  main.rm.rm-dock #rmHero .hd-follow .fw-btn { padding-inline: var(--ds-sp-2); }
+}
+/* the camera sheet (design 159): one look for every action button, 🎬 Clip and its length together, the live player in the still's place */
+main.rm.rm-dock .rmd-cam-box.lc-on > img { display: none; }
+main.rm.rm-dock .rmd-cam-box > .row.rmd-cam-st { justify-content: flex-start; font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
+main.rm.rm-dock .rmd-cam-box .rmd-cam-sec { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-cam-box :is(.rmd-cam-sec, .rmd-clip-g) > :is(button, a, select) { display: inline-flex; align-items: center; gap: var(--ds-sp-1h); min-block-size: 40px; padding: 0 var(--ds-sp-3);
+  border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-surface); color: var(--ds-text); font: 500 var(--ds-fs-meta)/1 var(--ds-font); text-decoration: none; cursor: pointer; }
+main.rm.rm-dock .rmd-cam-box :is(.rmd-cam-sec, .rmd-clip-g) > :is(button, a, select):is(:hover, :focus-visible) { border-color: var(--ds-ac-line); background: var(--ds-hover); }
+main.rm.rm-dock .rmd-cam-box :is(.rmd-cam-sec, .rmd-clip-g) > button:disabled { opacity: .55; cursor: default; }
+main.rm.rm-dock .rmd-cam-box .rmd-clip-g { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-cam-box .rmd-clip-g > select { padding-inline: var(--ds-sp-2); }
+main.rm.rm-dock .rmd-cam-box .rmd-cam-more :is(button, a) { min-block-size: 40px; border: 0; background: transparent; color: var(--ds-text); font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-cam-box .rmd-cam-more :is(button, a):is(:hover, :focus-visible) { background: var(--ds-hover); }
+main.rm.rm-dock .rmd-cam-box .rmd-cam-x { border-color: transparent; }
+main.rm.rm-dock .rmd-cam-box > .ds-eyebrow { margin: var(--ds-sp-1) 0 0; }
+main.rm.rm-dock .rmd-cam-box > :is(.res, .lc-stage, div:not([class])):empty { display: none; }   /* (an empty status line takes no gap) */
+/* the chat floating: the stage takes the freed height, the chat's place is one slim line - and at 1024px and wider the people column
+   stays, beside the stage, as tall as the Live view */
+main.rm.rm-dock.rmd-chat-out #rmStage { flex: 1 1 0; block-size: auto; max-block-size: none; }
+main.rm.rm-dock.rmd-chat-out .rmd-body { flex: 0 0 auto; }
+@media (min-width: 1024px) {
+  body.pad-dock-live main.rm.rm-dock.rmd-chat-out #padPanel-live { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 20vw, 300px); grid-template-rows: minmax(0, 1fr) auto; }
+  main.rm.rm-dock.rmd-chat-out #padPanel-live > * { grid-column: 1; }
+  main.rm.rm-dock.rmd-chat-out #padPanel-live > :is(#rmStage, #rmdMini) { grid-row: 1; align-self: stretch; }
+  main.rm.rm-dock.rmd-chat-out #padPanel-live > #rmdMini { align-self: start; }
+  main.rm.rm-dock.rmd-chat-out .rmd-body { display: contents; }
+  main.rm.rm-dock.rmd-chat-out .rmd-body > .rm-main { grid-column: 1; grid-row: 2; }
+  main.rm.rm-dock.rmd-chat-out .rmd-body > .side { grid-column: 2; grid-row: 1 / 3; }
+}
+main.rm.rm-dock .rmd-placeholder.rmd-ph-float { padding: var(--ds-sp-2) var(--ds-sp-3); text-align: start; font-size: var(--ds-fs-meta); }
+main.rm.rm-dock .rmd-float .rmd-viewbar { min-block-size: 36px; padding-block: var(--ds-sp-1); border-block-end: 1px solid var(--ds-line); }
+main.rm.rm-dock .rmd-grip { color: var(--ds-text-faint); font-size: var(--ds-fs-lead); letter-spacing: 0; }
+@media (prefers-reduced-motion: reduce) { main.rm.rm-dock #rmStage .player .mf-tile :is(.mf-label, .mf-card .mf-why) { transition: none; } }
+/* forced colors: the overlay's bars stay see-through - only their chips and buttons get a Canvas plate */
+@media (forced-colors: active) {
+  main.rm.rm-dock :is(.rmd-ov-top, .rmd-ov-bot) { background: transparent; border: 0; }
+  main.rm.rm-dock .rmd-ov :is(button:not(.rmd-chip), .rmd-src-one),
+  main.rm.rm-dock .rmd-chip > .rmd-id { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 }
