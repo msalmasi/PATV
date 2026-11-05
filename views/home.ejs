@@ -84,13 +84,13 @@
 %><% if (locals.dockFragment) { %><%- homeDock_ ? include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) : '' %><% if (homeDock_) { %><script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script><% } %><% } else { %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-<script src="/public/js/stage-player.js?v=9"></script>
+<script src="/public/js/stage-player.js?v=10"></script><%# 1.99?? dockmedia: v10 - PATVStage.nativeControls (the Room Dock draws its own bar) %>
 <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
 <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9">
 <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
 <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
 <script src="/public/js/webrtc-client.js?v=6"></script>
-<script src="/public/js/stage-lowlat.js?v=2"></script>
+<script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99?? dockmedia: v3 %>
 <% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=21"></script>
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
@@ -105,8 +105,8 @@
 <link rel="stylesheet" href="/public/css/flair.css?v=4">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-<link rel="stylesheet" href="/public/css/pad-dock.css?v=8"><%# 1.99ajq dockpol: v7; 1.99ajw casino2: v8 (the chat beside a casino table, 📼 Play from Plex) %>
-<link rel="stylesheet" href="/public/css/home-dock.css?v=3">
+<link rel="stylesheet" href="/public/css/pad-dock.css?v=9"><%# 1.99ajq dockpol: v7; 1.99ajw casino2: v8 (the chat beside a casino table, 📼 Play from Plex); 1.99?? dockmedia: v9 (the stage media bar, the embed row) %>
+<link rel="stylesheet" href="/public/css/home-dock.css?v=4"><%# 1.99?? dockmedia: v4 (fullscreen fills the screen) %>
 <%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
 <script src="/public/js/stage-mic.js?v=16"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99ajw padppl rework): the "not the Camfrog user" tag on a tile %>
 <%_ } _%>
@@ -1157,7 +1157,7 @@
 <%_ if (homeDock_) { _%>
 <script src="/public/js/chatlog-core.js?v=13"></script>
 <script src="/public/js/dock-link.js?v=2"></script>
-<script src="/public/js/pad-dock.js?v=8"></script>
+<script src="/public/js/pad-dock.js?v=9"></script><%# 1.99?? dockmedia: v9 %>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
 <script src="/public/js/home-dock.js?v=3"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage %>

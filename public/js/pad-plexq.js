@@ -68,7 +68,8 @@
       : '<div class="pq-bar" role="progressbar" aria-label="' + esc(_t('js.plexq.progress', 'Progress')) + '"><span></span></div>';
     h += '<div class="pq-times"></div>';
     if (can) {
-      h += '<div class="pq-ctl" role="group" aria-label="' + esc(_t('js.plexq.controls', 'Playback controls')) + '">' +
+      // (1.99?? dockmedia: the group says whose playback it is - a Plex ⏸ pauses everyone's stage, the Dock's stage ⏯ only this viewer's)
+      h += '<div class="pq-ctl" role="group" aria-label="' + esc(_t('js.plexq.controls_all', 'Controls for everyone watching')) + '">' +
         (q ? '<button type="button" class="sact" data-q="prev"' + (q.pos > 0 ? '' : ' disabled') + ' aria-label="' + esc(_t('js.plexq.prev_aria', 'Previous title')) + '">⏮</button>' : '') +
         '<button type="button" class="sact" data-skip="-30">−30s</button><button type="button" class="sact" data-skip="-10">−10s</button>' +
         (paused ? '<button type="button" class="sact primary" data-q="resume" aria-label="' + esc(_t('js.plexq.resume', '▶ Resume')) + '">▶</button>'

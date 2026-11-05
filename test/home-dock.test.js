@@ -202,3 +202,14 @@ test("review: the sign-in tease gets no ↗️; the chat's own pad in Top Pads k
   const css = rd("public", "css", "home-dock.css");
   assert.match(css, /main\.hm\.rmd-home \.tp li\.hmd-here :is\(\.v, \.tp-ls, \.np\) \{ display: none; \}/);
 });
+
+// 1.99?? dockmedia (owner item 3): the Dock's 🖥️ on the homepage fills the screen - the card's 16:9 / min(560px, …) cap, the 761-1023px 60svh cap
+// and its border followed the stage into .rmd-fullscreen (the same <main>) and beat pad-dock.css's .rmd-full-media rule by load order
+test("item 3: the homepage stage in fullscreen has no card cap - (1,4,1) beats the card's (1,3,1) rules; the off-air slim bar keeps aspect-ratio auto", () => {
+  const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const fix = /main\.rm\.rm-dock\.rmd-home \.rmd-full-media #rmStage \{ aspect-ratio: auto; max-block-size: none; block-size: auto; border: 0; border-radius: 0; \}/;
+  assert.match(css, fix);
+  assert.ok(css.search(fix) > css.indexOf("main.rm.rm-dock.rmd-home #rmStage.is-off { aspect-ratio: auto; }"), "after the off-air rule");
+  assert.match(css, /main\.rm\.rm-dock\.rmd-home #rmStage \{ block-size: auto; aspect-ratio: 16 \/ 9; max-block-size: min\(560px, calc\(100vh - 140px\)\);/, "the card rule as it was - never rescoped to #hmDock > #rmStage (2,3,1), which would beat the off-air bar");
+  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=4/);
+});

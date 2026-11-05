@@ -2816,7 +2816,8 @@
    "keywords": [],
    "gates": [
     "game_showdown_enabled"
-   ]
+   ],
+   "webchat": true
   },
   {
    "id": "guess",
@@ -8544,5 +8545,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "9bb3c4c995272035"
+ "hash": "50bdca38e0725623"
 }

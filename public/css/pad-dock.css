@@ -19,7 +19,7 @@ body.pad-dock-live main.rm.rm-dock #padPanel-live { display: flex; flex-directio
 /* (owner points 1-7, 23, 25, 27, 33): on Live these are menu entries, not rows */
 body.pad-dock-live main.rm.rm-dock :is(#rmHero, #padTabs, #rmLiveStat, .crumb) { display: none; }
 main.rm.rm-dock #padPanel-live > :is(#rmGoLive, .oab-row, #rdj) { display: none; }
-main.rm.rm-dock .rm-live > .side > :not(#rmPplCard) { display: none; }
+main.rm.rm-dock .rm-live > .side > :not(#rmPplCard, #rmdNp) { display: none; }   /* (1.99?? dockmedia: + the Now playing card) */
 main.rm.rm-dock :is(#rmMicCard, .rm-cvlogin) { display: none; }
 
 /* ── Feed / About: one slim header row - [pad identity] [● Live · Feed · About] [Follow] [▾] (owner point 4) ── */
@@ -1137,3 +1137,96 @@ main.rm.rm-dock .rmd-plex .px-ask p.px-ask-q { color: var(--ds-text); font-size:
 body.rmd-pop.rmd-embed main.rm.rm-dock #chatH > .rmd-chip-chat { display: none; }
 /* (review: a narrow chat window / frame ends its composer's placeholder with an ellipsis - "Message Night Orchar…", not a cut letter) */
 body.rmd-pop main.rm.rm-dock .rmd-input-row input.ds-in { text-overflow: ellipsis; }
+/* ══ 1.99?? dockmedia (the owner's 2026-11-04 media points) ══ */
+/* (item 1) 🎶 Now playing - 1024px and wider a card at the top of the people column while Pepe's DJ or the 📼 Plex player plays here; the
+   people list shortens to make room (it scrolls). The id selector: the class would lose to the column's :not(#rmPplCard, #rmdNp) above */
+main.rm.rm-dock .rm-live > .side > #rmdNp { display: grid; align-content: start; gap: var(--ds-sp-2); flex: 0 0 auto; min-block-size: 0; max-block-size: calc(100% - 160px);
+  overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: var(--ds-sp-2); border-radius: var(--ds-r-lg); }
+main.rm.rm-dock .rm-live > .side:has(> #rmdNp:not([hidden])) { gap: var(--ds-sp-2); }
+main.rm.rm-dock .rm-live > .side:has(> #rmdNp:not([hidden])) > #rmPplCard { flex: 1 1 0; min-block-size: 152px; }   /* (the people give way first; the card past the column less 160px scrolls) */
+main.rm.rm-dock .rmd-np-b { display: grid; gap: var(--ds-sp-1h); min-inline-size: 0; }
+main.rm.rm-dock #rmdNp > .rmd-np-b:not([hidden]) ~ .rmd-np-b { padding-block-start: var(--ds-sp-2); border-block-start: 1px solid var(--ds-line); }
+/* a block's header: [icon][DJ booth · Auto-DJ on | Plex] … › - it opens that block's full sheet (the › is drawn here: no new icon meaning) */
+main.rm.rm-dock .rmd-np-h { display: flex; align-items: center; gap: var(--ds-sp-1h); inline-size: 100%; min-inline-size: 0; min-block-size: 24px; margin: 0; padding: 0 var(--ds-sp-1);
+  border: 0; border-radius: var(--ds-r-sm); background: none; color: var(--ds-text-muted); font: 600 var(--ds-fs-meta)/1.2 var(--ds-font); letter-spacing: normal; text-align: start; cursor: pointer; }
+main.rm.rm-dock .rmd-np-h > .ds-ic { flex: none; margin: 0; font-size: var(--ds-fs-sm); line-height: 1; }
+main.rm.rm-dock .rmd-np-h > :is(.rmd-label, .rmd-np-s) { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-np-h > .rmd-np-s { font-weight: 400; color: var(--ds-text-faint); }
+main.rm.rm-dock .rmd-np-h > .rmd-np-s:not(:empty)::before { content: "· "; }
+main.rm.rm-dock .rmd-np-h::after { content: "›"; flex: none; margin-inline-start: auto; color: var(--ds-text-faint); font-size: var(--ds-fs-sm); line-height: 1; }
+main.rm.rm-dock .rmd-np-h:is(:hover, :focus-visible) { color: var(--ds-text); background: var(--ds-hover); }
+/* the DJ: the booth's compact bar (cover, title, artist · 🙋 who / paused, the thin progress line, ONE row of icon controls - their words
+   stay their names and tooltips); its own heading and the full booth are the DJ sheet's */
+main.rm.rm-dock .rmd-np-b .rdj { display: grid; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+main.rm.rm-dock .rmd-np-b .rdj > h2 { display: none; }
+main.rm.rm-dock .rmd-np-b .rdj .full { display: none !important; }
+main.rm.rm-dock .rmd-np-b .rdj .mini { display: grid !important; grid-template-columns: 44px minmax(0, 1fr); gap: var(--ds-sp-1) var(--ds-sp-2); align-items: center; }
+main.rm.rm-dock .rmd-np-b .rdj .mini .ctrls { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--ds-sp-1); }
+main.rm.rm-dock .rmd-np-b .rdj .mini .ctrls:empty { display: none; }
+main.rm.rm-dock .rmd-np-b .rdj .mini button.b { position: relative; inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; gap: 0; justify-content: center; font-size: var(--ds-fs-sm); }
+main.rm.rm-dock .rmd-np-b .rdj .mini button.b > :is(.w, small) { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* (the DJ sheet is ≈500px: the compact bar's controls get their own row there too - its own fallback is a viewport query) */
+main.rm.rm-dock .rmd-layer .rdj .mini { grid-template-columns: 44px minmax(0, 1fr); }
+main.rm.rm-dock .rmd-layer .rdj .mini .ctrls { grid-column: 1 / -1; flex-wrap: wrap; }
+/* Plex: the player's own card chrome off; in the CARD only the essentials - ±10 / ±30, the queue's ↑ ↓ ✕, Edit the queue and the log are the
+   sheet's (every one of them shows there) */
+main.rm.rm-dock .rmd-np-b #rmPlexQ { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; gap: var(--ds-sp-1h); }
+main.rm.rm-dock .rmd-np-b #rmPlexQ .sact, main.rm.rm-dock .rmd-layer #rmPlexQ .sact { flex: none; }   /* (the page's phone rule makes every .sact half a row - in the Dock they are a compact row) */
+main.rm.rm-dock #rmdNp #rmPlexQ :is(.pq-ctl [data-skip], .pq-log, .pq-q .pq-li, .pq-q > a) { display: none; }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-ctl { gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-ctl .sact { min-inline-size: 36px; min-block-size: 36px; padding: 0 var(--ds-sp-2); }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-now { font-size: var(--ds-fs-meta); }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-times { font-size: var(--ds-fs-xs); }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-scrub { margin: 0; }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-msg:empty { display: none; }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-q ol { max-block-size: 120px; }
+/* the 🎶 Now playing sheet (under 1024px): both blocks, the Plex player whole */
+main.rm.rm-dock .rmd-layer .rmd-np-b:not([hidden]) ~ .rmd-np-b { padding-block-start: var(--ds-sp-3); border-block-start: 1px solid var(--ds-line); }
+main.rm.rm-dock .rmd-layer .rmd-np-b { margin-block-end: var(--ds-sp-2); }
+/* (item 1) under 1024px: a 40px bar right under the stage - [🎶][what plays …][▾] + a 2px progress line; a tap opens the sheet */
+main.rm.rm-dock .rmd-npbar { position: relative; display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; inline-size: 100%; min-inline-size: 0; block-size: 40px;
+  margin: 0 0 var(--ds-sp-2); padding: 0 var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); color: var(--ds-text);
+  font: 500 var(--ds-fs-meta)/1.2 var(--ds-font); letter-spacing: normal; text-align: start; cursor: pointer; overflow: hidden; }
+main.rm.rm-dock .rmd-npbar > .ds-ic { flex: none; margin: 0; font-size: var(--ds-fs-sm); line-height: 1; }
+main.rm.rm-dock .rmd-npbar > .rmd-npbar-t { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main.rm.rm-dock .rmd-npbar > .rmd-npbar-p { position: absolute; inset-inline: 0; inset-block-end: 0; block-size: 2px; background: var(--ds-line-soft); pointer-events: none; }
+main.rm.rm-dock .rmd-npbar > .rmd-npbar-p > i { display: block; block-size: 100%; inline-size: 0; background: var(--ds-ac); }
+main.rm.rm-dock .rmd-npbar:is(:hover, :focus-visible, [aria-expanded="true"]) { border-color: var(--ds-ac-line); }
+@media (min-width: 1024px) { main.rm.rm-dock .rmd-npbar { display: none; } }
+@media (pointer: coarse) { main.rm.rm-dock .rmd-np-h { min-block-size: 40px; } main.rm.rm-dock .rmd-np-b .rdj .mini button.b { inline-size: 44px; min-inline-size: 44px; min-block-size: 44px; } }
+
+/* (item 2) the stage's own media controls - no native player controls in the Dock (the CSS net for any that slip through: video.js's bar and
+   its big ▶); the bottom bar: [⏯][🔉][volume][LIVE][source] … [📸][🎬][🖥️][⋯] */
+main.rm.rm-dock #rmStage :is(.vjs-control-bar, .vjs-big-play-button) { display: none !important; }
+main.rm.rm-dock #rmStage { container: rmd-stage / inline-size; }
+main.rm.rm-dock .rmd-media { display: flex; align-items: center; gap: var(--ds-sp-1); flex: none; min-inline-size: 0; }
+main.rm.rm-dock .rmd-media-vol { flex: none; inline-size: 72px; min-block-size: 32px; margin: 0 var(--ds-sp-1); accent-color: var(--ds-ac); background: transparent; cursor: pointer; pointer-events: none; }
+main.rm.rm-dock #rmStage.rmd-ov-armed .rmd-ov .rmd-media-vol,
+main.rm.rm-dock #rmStage:has(.rmd-ov :focus-visible) .rmd-ov .rmd-media-vol { pointer-events: auto; }
+main.rm.rm-dock .rmd-ov-bot .rmd-media-live { gap: var(--ds-sp-1h); min-block-size: 32px; padding-inline: var(--ds-sp-2h); font: 700 var(--ds-fs-chip)/1 var(--ds-font); letter-spacing: var(--ds-ls-chip); }
+main.rm.rm-dock .rmd-media-live::before { content: ""; flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--ds-live); }
+main.rm.rm-dock .rmd-media-live.rmd-behind::before { background: var(--ds-text-faint); }
+main.rm.rm-dock .rmd-ov-bot .rmd-media-live[aria-disabled="true"] { opacity: 1; filter: none; cursor: default; }   /* (at the live edge it is a status, not a dimmed control) */
+/* a narrow stage (a phone's 374px): ⏯ is a 56px round button in the middle of the picture (the same fade and arming - it is the bar's) and
+   steps aside while the player's own tap-to-unmute layer is up, so the first tap unmutes; no slider; LIVE only when behind */
+@container rmd-stage (max-width: 479px) {
+  main.rm.rm-dock #rmStage .rmd-ov-bot .rmd-media-play { position: absolute; inset-inline: 0; margin-inline: auto; inset-block-start: calc((100% - var(--rmd-pin-row)) / 2 - 28px);
+    inline-size: 56px; min-inline-size: 56px; block-size: 56px; min-block-size: 56px; border-radius: 50%; }
+  main.rm.rm-dock #rmStage .rmd-ov-bot .rmd-media-play > .ds-ic { font-size: 24px; }
+  main.rm.rm-dock #rmStage.rmd-unmute-up .rmd-ov-bot .rmd-media-play { display: none; }
+  main.rm.rm-dock #rmStage .rmd-media-vol,
+  main.rm.rm-dock #rmStage .rmd-media-live:not(.rmd-behind) { display: none; }
+}
+/* (item 2) a YouTube / Twitch embed: nothing ever lies over the iframe - the overlay is ONE solid row under it [☰][pad chip][source] … [🖥️][⋯]
+   (📸 / 🎬 are off for embeds; ⏯ / 🔉 are the iframe's own); the pinned cams' row moves to row 3 */
+main.rm.rm-dock #rmStage.rmd-embed { grid-template-rows: minmax(0, 1fr) auto var(--rmd-pin-row); }
+main.rm.rm-dock #rmStage.rmd-embed .rmd-ov { grid-area: 2 / 1; flex-direction: row; align-items: center; justify-content: flex-start; min-block-size: 44px; background: var(--ds-media-panel); }
+main.rm.rm-dock #rmStage.rmd-embed :is(.rmd-ov-top, .rmd-ov-bot) { opacity: 1; background: none; min-block-size: 0; padding-block: var(--ds-sp-1); }
+main.rm.rm-dock #rmStage.rmd-embed .rmd-ov :is(button, a) { pointer-events: auto; }
+main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-top { flex: 0 1 auto; max-inline-size: 40%; padding-inline-end: 0; }
+main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-top > :is(.rmd-chip, .rmd-front-chip) { max-inline-size: 100%; }
+main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-bot { flex: 1 1 0; min-inline-size: 0; }
+main.rm.rm-dock #rmStage.rmd-embed > #rmStrip { grid-area: 3 / 1; }
+/* (an embed can't be snapped or clipped: the row is [pad chip][source] … [🖥️][⋯] - no greyed 📸 taking the source's room) */
+main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-bot > :is(.rmd-icon[aria-disabled="true"]) { display: none; }
+@media (forced-colors: active) { main.rm.rm-dock :is(.rmd-npbar, #rmdNp) { border: 1px solid CanvasText; } }
