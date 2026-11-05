@@ -27,6 +27,62 @@ site play a movie or an episode from the Plex library on a pad's stage.
 * One stream per stage; at most `MEDIACTL_MAX_STREAMS` at once (default 2, the iGPU's budget next to Plex).
 * The Plex token never leaves the container. The site only ever sees titles, posters, tracks and play status.
 
+## Section policy and catalog (mediactl 1.7.0)
+
+`MEDIACTL_SECTIONS` is the comma-separated allow-list of reviewed Plex section IDs.
+`MEDIACTL_SECTIONS_ADULT` is a comma-separated deny-list; a section in both lists is
+always denied. With either list set, an item without `librarySectionID` is denied.
+The same check applies to search hits, item metadata and nested episodes, posters,
+stream starts and resumes, and the catalog routes. A remembered key is not an
+exception: item reads check the section again. File-root and RTMP guards still apply.
+
+An empty allow-list preserves legacy reads of sections outside the adult deny-list.
+It deliberately **does not enable the catalog**: `/catalog` and `/collections`
+answer `{ok:false,error:"set MEDIACTL_SECTIONS"}` until the allow-list is populated.
+Newly created or unreviewed sections are excluded once an allow-list is set.
+There is no request parameter to bypass the policy or include adult sections.
+
+All three new routes use the existing signed HTTPS authentication:
+
+| Read | Result |
+| --- | --- |
+| `GET /sections` | `allow_list_set`, plus section IDs, type, count and policy (`allowed`, `adult`, `off`). Adult/off names are always `(hidden)`. |
+| `GET /catalog?section=<reviewed-id>&type=1&start=0&size=500` | A page of movie metadata, `total` and `next`; types `2` and `4` read shows and episodes. `size` is capped at 500. |
+| `GET /collections?section=<reviewed-id>` | Allowed collections and up to 2,000 allowed member keys each. |
+
+Catalog rows contain descriptive metadata and public metadata IDs, never media file
+paths or Plex tokens. Summaries are capped at 1,000 characters (500 for episodes);
+directors, cast and countries are capped at 3, 6 and 3. Catalog-related Plex reads
+share a service-wide limit of four requests per second, including concurrent clients.
+`since=<unix-seconds>` uses Plex's `updatedAt` filter; the mocked Plex verifies that
+filter is sent. The main agent must check delta filtering on the installed Plex
+version. The site's nightly full read remains necessary to find deletions and to
+recover if that Plex version does not support the filter.
+
+The main agent fills the policy on the host, after owner approval:
+
+1. Read signed `GET /sections` and map its IDs to Plex libraries locally. Hidden
+   names stay hidden in this response; inspect Plex on the host to review them.
+   Keep the mapping out of commits, delivery evidence and chat.
+2. Put reviewed IDs in `MEDIACTL_SECTIONS`, and every adult library ID in
+   `MEDIACTL_SECTIONS_ADULT` in the existing service environment. Empty lists are
+   compatibility defaults, not a completed policy review.
+3. After the approved install/restart, read `/health` (version `1.7.0`) and signed
+   `/sections`; verify the allow-list is set and each reviewed policy is correct.
+4. Using a known denied key locally, make **read-only** signed `/item/<key>` and
+   `/poster/<key>` requests. Both must refuse without returning metadata. Check
+   search omits that key and nested show/season results omit denied episodes.
+   Do not start a stream for this verification, and do not publish the key or title.
+5. Check one allowed catalog page and a delta against the real server. Record only
+   aggregate counts and pass/fail results in the main agent's evidence.
+
+Installation and host checks belong to the owner/main agent; a patch delivery does
+not install the service or configure a real library. Version 1.7.0 keeps existing
+1.6.0 routes and response shapes, with `section` added to item/search briefs and
+denied metadata omitted. Existing clients need no change. New catalog clients
+treat a 404 from `/sections` on 1.6.0 as unavailable and show
+"needs media-control 1.7.0", keeping ordinary title search available.
+
 ## Sources (mediactl 1.1.0)
 
 Before each play mediactl runs `ffprobe` on the file and picks a filter graph, best first. A way that dies before

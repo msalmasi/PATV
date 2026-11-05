@@ -10,6 +10,9 @@
 //   GET  /item/:key                   one item: duration, parts, audio + subtitle tracks (shows / seasons: their episodes)
 //                                     1.4.0: episodes carry show_key + season_key (the site builds 📼 queues from them)
 //   GET  /poster/:key                 the poster (a small JPEG via Plex's photo transcoder)
+//   GET  /sections                   1.7.0: section ids, policy and reviewed section names (others are hidden)
+//   GET  /catalog?section=&type=      1.7.0: paged catalog metadata from an explicitly allowed section
+//   GET  /collections?section=       1.7.0: collections and up to 2000 allowed member keys each
 //   GET  /streams                     every stream's status
 //   PUT  /streams/:stage              start {rtmp, key, ratingKey, offset, quality, audio, sub, title}
 //   POST /streams/:stage/stop         stop + forget
@@ -51,7 +54,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.6.0";
+const VERSION = "1.7.0";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -66,6 +69,8 @@ function loadConfig(env = process.env) {
     plexToken: String(env.PLEX_TOKEN || ""),
     plexTv: String(env.PLEX_TV_URL || "https://plex.tv").replace(/\/+$/, ""),        // 1.2.0: sharing (tests point it elsewhere)
     plexRevoke: env.MEDIACTL_PLEX_REVOKE !== "0",                                   // 1.2.0: 0 = never remove a share from here
+    sections: list(env.MEDIACTL_SECTIONS, ""),
+    sectionsAdult: list(env.MEDIACTL_SECTIONS_ADULT, ""),
     ffmpeg: env.FFMPEG || "ffmpeg",
     ffprobe: env.FFPROBE || "ffprobe",
     encoder: ["vaapi", "x264"].includes(env.MEDIACTL_ENCODER) ? env.MEDIACTL_ENCODER : "vaapi",
@@ -124,6 +129,17 @@ function ipAllowed(ip, cidrs) {
 const clampInt = (v, lo, hi, d) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
 const STAGE_RE = /^[A-Za-z0-9._-]{1,80}$/;
 const KEY_RE = /^\d{1,12}$/;
+const sectionLists = (cfg) => ({ allowed: cfg.sections || [], adult: cfg.sectionsAdult || [] });
+const hasSectionPolicy = (cfg) => { const p = sectionLists(cfg); return p.allowed.length > 0 || p.adult.length > 0; };
+// The single policy used by metadata reads and remembered streams. Empty lists preserve 1.6.0's routes;
+// catalog routes additionally require an explicit allow-list. Missing section metadata fails closed with either list set.
+function sectionOk(cfg, id) {
+  const p = sectionLists(cfg);
+  if (!p.allowed.length && !p.adult.length) return true;
+  if (id == null || String(id).trim() === "") return false;
+  const s = String(id);
+  return !p.adult.includes(s) && (!p.allowed.length || p.allowed.includes(s));
+}
 const QUALITY = { 1080: { h: 1080, vb: 5000, ab: 160 }, 720: { h: 720, vb: 3000, ab: 128 }, 480: { h: 480, vb: 1500, ab: 128 } };
 const TEXT_SUBS = new Set(["srt", "subrip", "ass", "ssa", "mov_text", "webvtt", "vtt", "text", "tx3g"]);
 const IMAGE_SUBS = new Set(["pgs", "hdmv_pgs_subtitle", "dvd_subtitle", "vobsub", "dvb_subtitle", "dvdsub"]);
@@ -178,6 +194,58 @@ function makePlex(cfg, req = request, now = Date.now) {
     if (r.status >= 400) { const e = new Error(`Plex answered ${r.status}`); e.status = 502; throw e; }
     return raw ? r : (r.json && r.json.MediaContainer) || {};
   }
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  const unavailable = () => fail(404, "Not in the Plex library");
+  // Reserve request starts, not whole HTTP responses: concurrent syncs share the same four-per-second budget.
+  // This clock is deliberately independent of the injectable Plex identity-cache clock.
+  let catalogTurn = Promise.resolve(), catalogStarted = -Infinity;
+  const catalogClock = () => Number(process.hrtime.bigint()) / 1e6;
+  async function catalogGet(p) {
+    const turn = catalogTurn.then(async () => {
+      let wait;
+      while ((wait = 250 - (catalogClock() - catalogStarted)) > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      catalogStarted = catalogClock();
+    });
+    catalogTurn = turn.catch(() => {});
+    await turn;
+    return get(p);
+  }
+  function catalogSection(id) {
+    if (!sectionLists(cfg).allowed.length) throw fail(503, "set MEDIACTL_SECTIONS");
+    const s = String(id == null ? "" : id);
+    if (!KEY_RE.test(s)) throw fail(400, "bad section");
+    if (!sectionOk(cfg, s)) throw unavailable();
+    return s;
+  }
+  const sameSection = (m, section) => sectionOk(cfg, m.librarySectionID) && String(m.librarySectionID) === section;
+  const numberOrNull = (v) => v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
+  const countOf = (v) => Math.max(0, Math.floor(numberOrNull(v) || 0));
+  const tags = (items, limit) => (Array.isArray(items) ? items : []).map((x) => String(x.tag || "")).filter(Boolean).slice(0, limit);
+  function catalogRow(m) {
+    const b = brief(m), ids = { imdb: null, tmdb: null, tvdb: null };
+    for (const guid of [...(Array.isArray(m.Guid) ? m.Guid : []).map((g) => g.id), m.guid]) {
+      const id = /^(?:com\.plexapp\.agents\.)?(imdb|tmdb|tvdb):\/\/([^/?#]+)/.exec(String(guid || ""));
+      if (!id) continue;
+      if (id[1] === "imdb" && /^tt\d{1,12}$/.test(id[2])) ids.imdb = id[2];
+      else if (id[1] !== "imdb" && KEY_RE.test(id[2])) ids[id[1]] = Number(id[2]);
+    }
+    return {
+      key: b.key, type: b.type, title: b.title, year: b.year,
+      aired: /^\d{4}-\d{2}-\d{2}$/.test(String(m.originallyAvailableAt || "")) ? m.originallyAvailableAt : null,
+      added: numberOrNull(m.addedAt), updated: numberOrNull(m.updatedAt), duration: b.duration,
+      summary: String(m.summary || "").slice(0, m.type === "episode" ? 500 : 1000), tagline: String(m.tagline || ""),
+      genres: tags(m.Genre, 80), content_rating: m.contentRating || null, rating: numberOrNull(m.rating),
+      audience_rating: numberOrNull(m.audienceRating), studio: m.studio || null,
+      directors: tags(m.Director, 3), cast: tags(m.Role, 6), countries: tags(m.Country, 3), ...ids,
+      show_key: b.show_key, season_key: b.season_key, show: b.show, season: b.season, episode: b.episode, section: b.section,
+    };
+  }
+  function pageInfo(mc, rows, start, size) {
+    const total = mc.totalSize != null ? countOf(mc.totalSize) : start + rows.length;
+    // A server omitting totalSize can still signal another page with a full response.
+    const more = mc.totalSize != null ? start + rows.length < total : rows.length >= size;
+    return { total, next: rows.length && more ? start + rows.length : null };
+  }
   const brief = (m) => ({
     key: String(m.ratingKey), type: m.type, title: m.title || "", year: m.year || null,
     show: m.grandparentTitle || null, season: m.parentIndex != null ? m.parentIndex : null, episode: m.index != null && m.type === "episode" ? m.index : null,
@@ -187,6 +255,7 @@ function makePlex(cfg, req = request, now = Date.now) {
     show_key: m.type === "episode" && m.grandparentRatingKey != null ? String(m.grandparentRatingKey)
       : m.type === "season" && m.parentRatingKey != null ? String(m.parentRatingKey) : null,
     season_key: m.type === "episode" && m.parentRatingKey != null ? String(m.parentRatingKey) : null,
+    section: m.librarySectionID != null ? String(m.librarySectionID) : null,
   });
   // 1.2.0: the server's machine identifier (local, cached) and plex.tv calls with the owner's token in a header
   // 1.6.0: + the server's real version, both from the local /identity, re-read every IDENT_TTL_MS (a Plex update shows up); a
@@ -262,23 +331,86 @@ function makePlex(cfg, req = request, now = Date.now) {
     return v;
   }
   return {
+    sectionOk: (id) => sectionOk(cfg, id),
+    async sections() {
+      const mc = await catalogGet("/library/sections");
+      const sections = [];
+      for (const d of mc.Directory || []) {
+        const id = String(d.key == null ? "" : d.key);
+        if (!KEY_RE.test(id) || !["movie", "show"].includes(d.type)) continue;
+        const p = sectionLists(cfg);
+        const policy = p.adult.includes(id) ? "adult" : p.allowed.includes(id) && sectionOk(cfg, id) ? "allowed" : "off";
+        let count = countOf(d.totalSize != null ? d.totalSize : d.count);
+        if (policy === "allowed" && d.totalSize == null && d.count == null) {
+          const c = await catalogGet(`/library/sections/${id}/all?type=${d.type === "movie" ? 1 : 2}&X-Plex-Container-Start=0&X-Plex-Container-Size=0`);
+          count = countOf(c.totalSize);
+        }
+        sections.push({ id, title: policy === "allowed" ? String(d.title || "") : "(hidden)", type: d.type, count, policy });
+      }
+      return { allow_list_set: sectionLists(cfg).allowed.length > 0, sections };
+    },
+    async catalog({ section, type = 1, since, start = 0, size = 500 } = {}) {
+      section = catalogSection(section);
+      if (!["1", "2", "4"].includes(String(type))) throw fail(400, "bad type");
+      start = clampInt(start, 0, Number.MAX_SAFE_INTEGER, 0);
+      size = clampInt(size, 1, 500, 500);
+      const q = new URLSearchParams({ type: String(type), "X-Plex-Container-Start": String(start), "X-Plex-Container-Size": String(size), includeGuids: "1" });
+      if (since != null && since !== "") {
+        if (!/^\d{1,12}$/.test(String(since))) throw fail(400, "bad since");
+        q.set("updatedAt>=", String(since));
+      }
+      const mc = await catalogGet(`/library/sections/${section}/all?${q}`);
+      const raw = Array.isArray(mc.Metadata) ? mc.Metadata.slice(0, size) : [];
+      const wantedType = { 1: "movie", 2: "show", 4: "episode" }[String(type)];
+      const rows = raw.filter((m) => sameSection(m, section) && KEY_RE.test(String(m.ratingKey)) && m.type === wantedType).map(catalogRow);
+      return { rows, ...pageInfo(mc, raw, start, size) };
+    },
+    async collections(section) {
+      section = catalogSection(section);
+      const collections = [], seen = new Set();
+      let start = 0;
+      do {
+        const mc = await catalogGet(`/library/sections/${section}/collections?X-Plex-Container-Start=${start}&X-Plex-Container-Size=100`);
+        const raw = Array.isArray(mc.Metadata) ? mc.Metadata.slice(0, 100) : [];
+        for (const m of raw) {
+          const key = String(m.ratingKey == null ? "" : m.ratingKey);
+          if (!KEY_RE.test(key) || seen.has(key) || (m.librarySectionID != null && !sameSection(m, section))) continue;
+          seen.add(key);
+          const members = [], memberKeys = new Set();
+          let at = 0;
+          do {
+            const children = await catalogGet(`/library/collections/${key}/children?X-Plex-Container-Start=${at}&X-Plex-Container-Size=500`);
+            const items = Array.isArray(children.Metadata) ? children.Metadata.slice(0, 500) : [];
+            for (const child of items) {
+              const k = String(child.ratingKey == null ? "" : child.ratingKey);
+              if (sameSection(child, section) && KEY_RE.test(k) && !memberKeys.has(k) && members.length < 2000) { members.push(k); memberKeys.add(k); }
+            }
+            at = pageInfo(children, items, at, 500).next;
+          } while (at != null && members.length < 2000);
+          // The upstream childCount may include denied keys. Only the visible, bounded set leaves this service.
+          collections.push({ key, title: String(m.title || ""), count: members.length, members });
+        }
+        start = pageInfo(mc, raw, start, 100).next;
+      } while (start != null);
+      return { collections };
+    },
     async search(q, limit = 20) {
       const mc = await get(`/hubs/search?query=${encodeURIComponent(q)}&limit=${clampInt(limit, 1, 50, 20)}&includeCollections=0&includeExternalMedia=0`);
       const out = [];
       for (const h of mc.Hub || []) {
         if (!["movie", "show", "episode"].includes(h.type)) continue;
-        for (const m of h.Metadata || []) if (["movie", "show", "episode"].includes(m.type)) out.push(brief(m));
+        for (const m of h.Metadata || []) if (["movie", "show", "episode"].includes(m.type) && sectionOk(cfg, m.librarySectionID)) out.push(brief(m));
       }
       return out;
     },
     async item(key) {
       const mc = await get(`/library/metadata/${key}`);
       const m = (mc.Metadata || [])[0];
-      if (!m) { const e = new Error("Not in the Plex library"); e.status = 404; throw e; }
+      if (!m || !sectionOk(cfg, m.librarySectionID)) throw unavailable();
       const out = { ...brief(m), summary: String(m.summary || "").slice(0, 600) };
       if (m.type === "show" || m.type === "season") {
         const eps = await get(`/library/metadata/${key}/allLeaves`);
-        out.episodes = (eps.Metadata || []).map(brief);
+        out.episodes = (eps.Metadata || []).filter((m) => sectionOk(cfg, m.librarySectionID)).map(brief);
         return out;
       }
       const media = (m.Media || [])[0] || {};
@@ -307,6 +439,7 @@ function makePlex(cfg, req = request, now = Date.now) {
     async poster(key) {
       const mc = await get(`/library/metadata/${key}`);
       const m = (mc.Metadata || [])[0];
+      if (m && !sectionOk(cfg, m.librarySectionID)) throw unavailable();
       const thumb = m && (m.thumb || m.parentThumb || m.grandparentThumb);
       if (!thumb) { const e = new Error("No poster"); e.status = 404; throw e; }
       const r = await get(`/photo/:/transcode?width=240&height=360&minSize=1&upscale=1&format=jpeg&url=${encodeURIComponent(thumb)}`, true);
@@ -505,6 +638,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
   const exiting = new Map();
   const exitWait = cfg.exitWaitMs || EXIT_WAIT_MS, pubRetryMs = cfg.pubRetryMs || PUB_RETRY_MS;   // (the tests shorten them)
   const bump = (s) => (s.gen = (s.gen || 0) + 1);          // a seek / pause / resume / stop: older pending launches are void
+  const streamOk = (s) => sectionOk(cfg, s.info && s.info.section);
   /** 1.6.0: wait until the ffmpeg last killed on this stage is gone. -> the ms waited (0 = nothing was on its way out) */
   async function vacated(stage) {
     const w = exiting.get(stage);
@@ -513,7 +647,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
     await w;
     return Date.now() - t0 || 1;
   }
-  const view = (s) => ({
+  const view = (s) => !streamOk(s) ? null : ({
     stage: s.stage, state: s.state, ratingKey: s.ratingKey, title: s.title, quality: s.quality, audio: s.audio, sub: s.sub,
     offset: Math.round(s.offset), position: Math.round(position(s)), duration: s.duration, started: s.started, error: s.error || null,
     restarts: s.restarts, encoder: cfg.encoder, mode: s.modes ? s.modes[s.modeIdx] : null,
@@ -533,6 +667,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
     } catch (e) { return file; }
   }
   function launch(s) {
+    if (!streamOk(s)) { streams.delete(s.stage); return; }
     const args = ffmpegArgs(cfg, s.info, { offset: s.offset, quality: s.quality, audio: s.audio, sub: s.sub, url: s.url,
                                            srcLink: s.sub != null ? linkFor(s.stage, s.info.file) : null,
                                            probe: s.probe, mode: s.modes[s.modeIdx] });
@@ -571,7 +706,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       if (!s.progressed && PUB_BUSY.test(tailTxt) && (s.pubRetries || 0) < PUB_RETRIES) {
         s.pubRetries = (s.pubRetries || 0) + 1;
         console.warn(`[mediactl] ${s.stage}: the ingest still holds the previous publish - trying again (${s.pubRetries}/${PUB_RETRIES})`);
-        setTimeout(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s); }, pubRetryMs).unref();
+        setTimeout(() => { restart(s, g); }, pubRetryMs).unref();
         return;
       }
       // died before the first frame and not because of the network: the next, more conservative way (GPU -> CPU)
@@ -580,14 +715,14 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
         s.fallbacks.push({ mode: failed, error: (s.tail.slice(-2).join(" | ") || `exit ${code}`).slice(0, 300) });
         s.modeIdx++;
         console.error(`[mediactl] ${s.stage}: ${failed} failed (${s.fallbacks[s.fallbacks.length - 1].error}) - trying ${s.modes[s.modeIdx]}`);
-        setImmediate(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s); });
+        setImmediate(() => { restart(s, g); });
         return;
       }
       // a network blip: start again where it was (a few times, not when it dies straight away)
       const ranFor = clock() - s.launchedAt;
       if (s.restarts < cfg.retries && ranFor > 5000) {
         s.restarts++;
-        setTimeout(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s); }, 2000).unref();
+        setTimeout(() => { restart(s, g); }, 2000).unref();
         return;
       }
       s.state = "error";
@@ -617,8 +752,32 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
     t.unref && t.unref();
   }
   const fail = (status, msg) => { const e = new Error(msg); e.status = status; return e; };
+  async function checkRemembered(s, g) {
+    // A paused/failed stream can outlive a Plex move or a policy edit. Re-read its actual section before replaying it.
+    // Empty lists retain the old metadata-read behavior and timing.
+    if (!hasSectionPolicy(cfg)) return;
+    try {
+      const current = await plex.item(s.ratingKey);
+      if (streams.get(s.stage) !== s || s.gen !== g) return;
+      if (!sectionOk(cfg, current.section)) throw fail(404, "Not in the Plex library");
+      s.info.section = current.section;
+    } catch (e) {
+      if (streams.get(s.stage) !== s || s.gen !== g) return;
+      bump(s);
+      kill(s);
+      if (streams.get(s.stage) === s) streams.delete(s.stage);
+      throw e;
+    }
+  }
+  async function restart(s, g) {
+    if (streams.get(s.stage) !== s || s.state !== "playing" || s.proc || s.gen !== g) return;
+    try {
+      if (hasSectionPolicy(cfg)) await checkRemembered(s, g);
+      if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s);
+    } catch (e) { /* A denied/unreadable remembered item cannot restart. No title is logged. */ }
+  }
   return {
-    list: () => [...streams.values()].map(view),
+    list: () => [...streams.values()].map(view).filter(Boolean),
     get: (stage) => (streams.get(stage) ? view(streams.get(stage)) : null),
     async start(stage, b) {
       if (!STAGE_RE.test(stage)) throw fail(400, "bad stage id");
@@ -634,6 +793,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       const ratingKey = String(b.ratingKey || "");
       if (!KEY_RE.test(ratingKey)) throw fail(400, "bad ratingKey");
       const info = await plex.item(ratingKey);
+      if (!sectionOk(cfg, info.section)) throw fail(404, "Not in the Plex library");
       if (!info.file) throw fail(400, "That item has no playable file (pick a movie or an episode).");
       const real = (() => { try { return fs.realpathSync(info.file); } catch (e) { return null; } })();
       if (!real) throw fail(404, "The media file isn't reachable from this box.");
@@ -684,6 +844,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       const g = bump(s);
       s.state = "playing";
       s.error = null;
+      if (hasSectionPolicy(cfg)) await checkRemembered(s, g);
       await vacated(stage);
       if (streams.get(stage) === s && s.gen === g && !s.proc) launch(s);
       return view(s);
@@ -698,6 +859,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       s.pubRetries = 0;
       s.state = "playing";
       s.error = null;
+      if (hasSectionPolicy(cfg)) await checkRemembered(s, g);
       const waited = await vacated(stage);
       if (streams.get(stage) === s && s.gen === g && !s.proc) {
         console.log(`[mediactl] ${stage}: seek to ${Math.round(s.offset)}s${waited ? ` (after the previous ffmpeg exited, ${waited} ms)` : ""}`);
@@ -738,6 +900,13 @@ function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
     const u = new URL(req.url, "http://x");
     const p = u.pathname;
     let m;
+    if (req.method === "GET" && p === "/sections") return send(res, 200, { ok: true, ...await plex.sections() });
+    if (req.method === "GET" && p === "/catalog") {
+      const q = u.searchParams;
+      return send(res, 200, { ok: true, ...await plex.catalog({ section: q.get("section"), type: q.get("type") || 1,
+        since: q.get("since"), start: q.get("start") || 0, size: q.get("size") || 500 }) });
+    }
+    if (req.method === "GET" && p === "/collections") return send(res, 200, { ok: true, ...await plex.collections(u.searchParams.get("section")) });
     if (req.method === "GET" && p === "/search") {
       const q = String(u.searchParams.get("q") || "").trim().slice(0, 100);
       if (q.length < 2) return send(res, 400, { ok: false, error: "Type at least 2 characters." });

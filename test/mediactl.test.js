@@ -696,3 +696,340 @@ test("1.6.0 (site 1.99acx): plex.tv calls go out AS the server (its machine id, 
   assert.ok(!sent.some((u) => u.startsWith("https://plex.example/")), "plex.tv was never called");
   assert.equal(await Q.machineId(), "abcdef0123456789", "the machine id alone still reads");
 });
+
+// 1.7.0 / handoff 36: invented library data, exercised through the real Plex adapter and signed HTTP routes.
+function clerkPlexFixture() {
+  const movie = (key, section, title) => ({
+    ratingKey: String(key), librarySectionID: section, type: "movie", title, year: 2004,
+    originallyAvailableAt: "2004-03-14", addedAt: 1700000000, updatedAt: 1700001000,
+    duration: 5400000, summary: "An invented story. ".repeat(90), tagline: "A paper moon rises.",
+    Genre: [{ tag: "Mystery" }, { tag: "Comedy" }], contentRating: "PG", rating: 7.4, audienceRating: 8.1,
+    studio: "Imaginary Lantern Studio", Director: [1, 2, 3, 4].map(n => ({ tag: `Director ${n}` })),
+    Role: Array.from({ length: 8 }, (_, n) => ({ tag: `Performer ${n + 1}` })),
+    Country: ["Cedarland", "Willowland", "Birchland", "Oaklandia"].map(tag => ({ tag })),
+    Guid: [{ id: "imdb://tt9000001" }, { id: "tmdb://900001" }, { id: "tvdb://900002" }],
+    thumb: `/library/metadata/${key}/thumb/1`,
+    Media: [{ width: 1280, height: 720, container: "mkv", Part: [{ file: FILE, duration: 5400000,
+      Stream: [{ streamType: 1, index: 0, codec: "h264" }, { streamType: 2, index: 1, codec: "aac" }] }] }],
+  });
+  const items = {
+    "7101": movie("7101", "71", "Paper Moon Picnic"),
+    "7102": movie("7102", "71", "Lantern Post Office"),
+    "7201": movie("7201", "72", "Synthetic Hidden Adult Film"),
+    "7301": movie("7301", "73", "Synthetic Hidden Off Film"),
+    "7401": movie("7401", undefined, "Synthetic Unknown Section Film"),
+    "7110": { ratingKey: "7110", librarySectionID: "71", type: "show", title: "Clockwork Orchard", leafCount: 4 },
+    "7115": { ratingKey: "7115", librarySectionID: "71", type: "season", title: "Season One", parentRatingKey: "7110", leafCount: 4 },
+  };
+  for (const [key, section] of [["7111", "71"], ["7211", "72"], ["7311", "73"], ["7411", undefined]]) {
+    items[key] = { ...movie(key, section, `Invented Episode ${key}`), type: "episode", grandparentTitle: "Clockwork Orchard",
+      grandparentRatingKey: "7110", parentRatingKey: "7115", parentIndex: 1, index: 2, duration: 1800000 };
+  }
+  const state = {
+    items,
+    sections: [
+      { key: "71", title: "Cedar Screen", type: "movie" },
+      { key: "72", title: "Synthetic Adult Section Name", type: "movie" },
+      { key: "73", title: "Synthetic Off Section Name", type: "show" },
+    ],
+    search: ["7101", "7201", "7301", "7401", "7110"],
+    leaves: ["7111", "7211", "7311", "7411"],
+    catalog: ["7101", "7102", "7201", "7301", "7401", "7111"],
+    collections: [
+      { ratingKey: "7150", librarySectionID: "71", type: "collection", title: "Cedar Favourites", childCount: 5 },
+      { ratingKey: "7250", librarySectionID: "72", type: "collection", title: "Synthetic Adult Collection" },
+      { ratingKey: "7350", librarySectionID: "73", type: "collection", title: "Synthetic Off Collection" },
+      { ratingKey: "7450", type: "collection", title: "Cedar Lanterns" },
+    ],
+    members: ["7101", "7201", "7301", "7401", "7102"], seen: [],
+  };
+  const response = value => ({ status: 200, json: { MediaContainer: JSON.parse(JSON.stringify(value)) } });
+  const page = (u, opts, rows) => {
+    const h = opts.headers || {};
+    const start = Number(u.searchParams.get("X-Plex-Container-Start") || h["X-Plex-Container-Start"] || 0);
+    const size = Number(u.searchParams.get("X-Plex-Container-Size") || h["X-Plex-Container-Size"] || rows.length || 1);
+    return response({ Metadata: rows.slice(start, start + size), totalSize: rows.length, offset: start,
+      size: rows.slice(start, start + size).length });
+  };
+  state.request = async (url, opts = {}) => {
+    const u = new URL(url);
+    state.seen.push({ url, path: u.pathname, query: u.searchParams, headers: opts.headers || {}, at: performance.now() });
+    if (u.pathname === "/hubs/search") return response({ Hub: [{ type: "movie", Metadata: state.search.map(k => items[k]) }] });
+    if (u.pathname === "/library/sections") return response({ Directory: state.sections });
+    let match;
+    if ((match = /^\/library\/sections\/(\d+)\/all$/.exec(u.pathname))) {
+      const type = { 1: "movie", 2: "show", 4: "episode" }[u.searchParams.get("type")];
+      const since = Number(u.searchParams.get("updatedAt>=") || 0);
+      const rows = state.catalog.map(k => items[k]).filter(m => (state.ignoreCatalogType || !type || m.type === type) && (!since || m.updatedAt >= since));
+      if (state.ignoreCatalogBounds) return response({ Metadata: rows, totalSize: rows.length, offset: 0, size: rows.length });
+      return page(u, opts, rows);
+    }
+    if (/^\/library\/sections\/\d+\/collections$/.test(u.pathname)) return page(u, opts, state.collections);
+    if (/^\/library\/(?:metadata|collections)\/\d+\/children$/.test(u.pathname)) return page(u, opts, state.members.map(k => items[k]));
+    if ((match = /^\/library\/metadata\/(\d+)\/allLeaves$/.exec(u.pathname))) return response({ Metadata: state.leaves.map(k => items[k]) });
+    if ((match = /^\/library\/metadata\/(\d+)$/.exec(u.pathname))) {
+      const item = items[match[1]] || state.collections.find(c => c.ratingKey === match[1]);
+      return item ? response({ Metadata: [item] }) : { status: 404 };
+    }
+    if (u.pathname === "/photo/:/transcode") return { status: 200, headers: { "content-type": "image/jpeg" }, body: Buffer.from([255, 216, 255]) };
+    return { status: 404 };
+  };
+  return state;
+}
+
+async function clerkHarness(t, env = {}) {
+  const fixture = clerkPlexFixture();
+  const config = M.loadConfig({ MEDIACTL_SECRET: SECRET, MEDIACTL_ALLOW: "127.0.0.1/32,::1", PLEX_TOKEN: "invented-fixture-token",
+    PLEX_URL: "http://plex.invalid", MEDIACTL_MEDIA_ROOTS: media + path.sep,
+    MEDIACTL_RTMP_ALLOW: "rtmp://stream.publicaccess.tv/", MEDIACTL_SECTIONS: "71,72", MEDIACTL_SECTIONS_ADULT: "72", ...env });
+  const plex = M.makePlex(config, fixture.request);
+  const spawned = [];
+  const spawn = (cmd, args) => {
+    const p = new EventEmitter();
+    p.stdout = new PassThrough(); p.stderr = new PassThrough(); p.args = args; p.killed = false;
+    p.kill = sig => { if (p.killed) return; p.killed = true; setImmediate(() => p.emit("exit", null, sig)); };
+    spawned.push(p); return p;
+  };
+  const streamSet = M.makeStreams(config, plex, spawn, Date.now, async () => null);
+  const local = M.makeServer(config, { plex, streams: streamSet }).server;
+  await new Promise(resolve => local.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${local.address().port}`;
+  t.after(async () => { streamSet.stopAll(); local.closeIdleConnections(); await new Promise(resolve => local.close(resolve)); });
+  const request = async (method, route, body, auth = {}) => {
+    const data = body == null ? "" : JSON.stringify(body);
+    const ts = String(auth.ts ?? Date.now()), nonce = auth.nonce || crypto.randomBytes(12).toString("hex");
+    const sig = M.sign(auth.secret || SECRET, { ts, nonce, method, url: route, body: data });
+    const r = await fetch(origin + route, { method, headers: {
+      "x-mc-ts": ts, "x-mc-nonce": nonce, "x-mc-sig": sig,
+      ...(data ? { "Content-Type": "application/json" } : {}),
+    }, body: data || undefined });
+    const buffer = Buffer.from(await r.arrayBuffer());
+    return { status: r.status, json: (r.headers.get("content-type") || "").includes("json") ? JSON.parse(buffer.toString()) : null,
+      body: buffer, headers: r.headers };
+  };
+  return { fixture, plex, request, streamSet, spawned, origin };
+}
+
+function assertClerkNoDeniedMetadata(value) {
+  const json = JSON.stringify(value);
+  for (const marker of ["Synthetic Hidden", "Synthetic Unknown", "Synthetic Adult", "Synthetic Off", "Invented Episode 7211", "Invented Episode 7311", "Invented Episode 7411"])
+    assert.ok(!json.includes(marker), `denied metadata escaped: ${marker}`);
+}
+
+test("1.7.0: search, item, nested episodes and posters share the fail-closed section policy", async t => {
+  const h = await clerkHarness(t);
+  const search = await h.request("GET", "/search?q=paper&include_adult=1");
+  assert.equal(search.status, 200);
+  assert.deepEqual(search.json.results.map(r => r.key), ["7101", "7110"]);
+  assert.ok(search.json.results.every(r => r.section === "71"));
+  assertClerkNoDeniedMetadata(search.json);
+  for (const key of ["7201", "7301", "7401"]) {
+    await assert.rejects(h.plex.item(key), e => e.status === 404, "direct item reads must also enforce policy");
+    const item = await h.request("GET", `/item/${key}?include_adult=1`);
+    const poster = await h.request("GET", `/poster/${key}?include_adult=1`);
+    assert.equal(item.status, 404); assert.equal(poster.status, 404);
+    assertClerkNoDeniedMetadata([item.json, poster.json]);
+  }
+  assert.equal(h.fixture.seen.filter(c => c.path === "/photo/:/transcode").length, 0, "denied posters never fetch image bytes");
+  for (const key of ["7110", "7115"]) {
+    const item = await h.request("GET", `/item/${key}`);
+    assert.equal(item.status, 200);
+    assert.deepEqual(item.json.item.episodes.map(r => r.key), ["7111"]);
+    assert.equal(item.json.item.episodes[0].section, "71");
+    assertClerkNoDeniedMetadata(item.json);
+  }
+  assert.equal((await h.request("GET", "/poster/7101")).status, 200);
+  assert.equal((await h.request("GET", "/item/7101")).json.item.section, "71");
+  h.fixture.items["7101"].librarySectionID = "72";
+  assert.equal((await h.request("GET", "/item/7101")).status, 404, "a remembered key is rechecked after its section changes");
+  assert.equal((await h.request("GET", "/poster/7101")).status, 404);
+});
+
+test("1.7.0: an adult-only policy still fails closed for unknown sections", async t => {
+  const h = await clerkHarness(t, { MEDIACTL_SECTIONS: "", MEDIACTL_SECTIONS_ADULT: "72" });
+  const r = await h.request("GET", "/search?q=paper");
+  assert.deepEqual(r.json.results.map(x => x.key), ["7101", "7301", "7110"]);
+  assert.equal((await h.request("GET", "/item/7401")).status, 404);
+  assert.equal((await h.request("GET", "/item/7201")).status, 404);
+  assert.equal((await h.request("GET", "/item/7301")).status, 200, "an empty allow list preserves other legacy sections");
+});
+
+test("1.7.0: stream start, resume and seek recheck the current section before spawning", async t => {
+  const h = await clerkHarness(t);
+  for (const key of ["7201", "7301", "7401"]) {
+    const r = await h.request("PUT", "/streams/policy-start", { ...START, ratingKey: key, title: "Invented stream" });
+    assert.equal(r.status, 404); assertClerkNoDeniedMetadata(r.json);
+  }
+  assert.equal(h.spawned.length, 0);
+  for (const section of ["72", "73", undefined]) {
+    h.fixture.items["7101"].librarySectionID = "71";
+    assert.equal((await h.request("PUT", "/streams/policy-resume", { ...START, ratingKey: "7101", title: "Invented stream" })).status, 200);
+    assert.equal((await h.request("POST", "/streams/policy-resume/pause")).status, 200);
+    const before = h.spawned.length;
+    const reads = h.fixture.seen.filter(c => c.path === "/library/metadata/7101").length;
+    h.fixture.items["7101"].librarySectionID = section;
+    assert.equal((await h.request("POST", "/streams/policy-resume/resume")).status, 404);
+    assert.equal(h.spawned.length, before, "no cached file may restart after policy denies its current section");
+    assert.ok(h.fixture.seen.filter(c => c.path === "/library/metadata/7101").length > reads);
+    await h.request("DELETE", "/streams/policy-resume");
+  }
+  h.fixture.items["7101"].librarySectionID = "71";
+  assert.equal((await h.request("PUT", "/streams/policy-seek", { ...START, ratingKey: "7101", title: "Invented stream" })).status, 200);
+  const before = h.spawned.length;
+  h.fixture.items["7101"].librarySectionID = "72";
+  assert.equal((await h.request("POST", "/streams/policy-seek/seek", { offset: 60 })).status, 404);
+  assert.equal(h.spawned.length, before);
+});
+
+test("1.7.0: section discovery masks denied titles and adult wins over the allow list", async t => {
+  const h = await clerkHarness(t);
+  const r = await h.request("GET", "/sections");
+  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.allow_list_set, true);
+  assert.deepEqual(r.json.sections.map(s => [s.id, s.title, s.policy]), [
+    ["71", "Cedar Screen", "allowed"], ["72", "(hidden)", "adult"], ["73", "(hidden)", "off"],
+  ]);
+  assert.ok(r.json.sections.every(s => ["movie", "show"].includes(s.type) && Number.isInteger(s.count) && s.count >= 0));
+  assertClerkNoDeniedMetadata(r.json);
+  for (const section of ["72", "73", "999"]) {
+    for (const route of [`/catalog?section=${section}&type=1`, `/collections?section=${section}`]) {
+      const before = h.fixture.seen.length;
+      const denied = await h.request("GET", route + "&include_adult=1");
+      assert.equal(denied.status, 404); assertClerkNoDeniedMetadata(denied.json);
+      assert.equal(h.fixture.seen.length, before, "a denied section is rejected before Plex is queried");
+    }
+  }
+});
+
+test("1.7.0: catalog pages expose bounded metadata, delta filters and no source file paths", async t => {
+  const h = await clerkHarness(t);
+  h.fixture.catalog = ["7101", "7102", "7201", "7301", "7401"];
+  const first = await h.request("GET", "/catalog?section=71&type=1&start=0&size=1&since=1700000000");
+  assert.equal(first.status, 200); assert.equal(first.json.total, 5); assert.equal(first.json.next, 1);
+  assert.equal(first.json.rows.length, 1);
+  const row = first.json.rows[0];
+  assert.deepEqual(Object.keys(row).sort(), ["key", "type", "title", "year", "aired", "added", "updated", "duration", "summary", "tagline",
+    "genres", "content_rating", "rating", "audience_rating", "studio", "directors", "cast", "countries", "imdb", "tmdb", "tvdb",
+    "show_key", "season_key", "show", "season", "episode", "section"].sort());
+  assert.deepEqual([row.key, row.type, row.title, row.year, row.aired, row.added, row.updated, row.duration, row.section],
+    ["7101", "movie", "Paper Moon Picnic", 2004, "2004-03-14", 1700000000, 1700001000, 5400, "71"]);
+  assert.deepEqual([row.imdb, String(row.tmdb), String(row.tvdb)], ["tt9000001", "900001", "900002"]);
+  assert.deepEqual([row.rating, row.audience_rating, row.content_rating, row.studio, row.tagline],
+    [7.4, 8.1, "PG", "Imaginary Lantern Studio", "A paper moon rises."]);
+  assert.deepEqual(row.genres, ["Mystery", "Comedy"]);
+  assert.equal(row.summary.length, 1000); assert.equal(row.directors.length, 3); assert.equal(row.cast.length, 6); assert.equal(row.countries.length, 3);
+  const second = await h.request("GET", "/catalog?section=71&type=1&start=1&size=5000");
+  assert.equal(second.status, 200); assert.deepEqual(second.json.rows.map(r => r.key), ["7102"]); assert.equal(second.json.next, null);
+  assertClerkNoDeniedMetadata(second.json);
+  const sent = h.fixture.seen.filter(c => c.path === "/library/sections/71/all");
+  assert.equal(sent[0].query.get("updatedAt>="), "1700000000");
+  assert.equal(sent[0].query.get("type"), "1");
+  assert.equal(Number(sent[0].query.get("X-Plex-Container-Size") || sent[0].headers["X-Plex-Container-Size"]), 1);
+  assert.equal(Number(sent[1].query.get("X-Plex-Container-Start") || sent[1].headers["X-Plex-Container-Start"]), 1);
+  assert.ok(Number(sent[1].query.get("X-Plex-Container-Size") || sent[1].headers["X-Plex-Container-Size"]) <= 500);
+  for (const answer of [first.json, second.json]) {
+    assert.ok(!JSON.stringify(answer).includes('"file"') && !JSON.stringify(answer).includes(FILE));
+    assert.ok(!JSON.stringify(answer).includes("invented-fixture-token"));
+  }
+  h.fixture.catalog = ["7111"];
+  const ep = await h.request("GET", "/catalog?section=71&type=4&size=10");
+  assert.equal(ep.status, 200); assert.equal(ep.json.rows[0].summary.length, 500);
+  assert.deepEqual([ep.json.rows[0].show_key, ep.json.rows[0].season_key, ep.json.rows[0].show, ep.json.rows[0].season, ep.json.rows[0].episode],
+    ["7110", "7115", "Clockwork Orchard", 1, 2]);
+  h.fixture.catalog = ["7110"];
+  assert.equal((await h.request("GET", "/catalog?section=71&type=2")).json.rows[0].type, "show");
+  h.fixture.catalog = ["7101", "7111", "7102", "7110"];
+  h.fixture.ignoreCatalogType = true;
+  const mixed = await h.request("GET", "/catalog?section=71&type=1&size=500");
+  assert.equal(mixed.status, 200); assert.deepEqual(mixed.json.rows.map(r => r.key), ["7101", "7102"],
+    "a broken upstream type filter cannot return episodes or shows in a movie page");
+  h.fixture.ignoreCatalogBounds = true;
+  const oversized = await h.request("GET", "/catalog?section=71&type=1&size=1");
+  assert.equal(oversized.status, 200); assert.deepEqual(oversized.json.rows.map(r => r.key), ["7101"],
+    "the requested page bound still holds when Plex sends an oversized response");
+  for (const query of ["section=71&type=9", "section=bad&type=1", "type=1"]) {
+    const before = h.fixture.seen.length;
+    const bad = await h.request("GET", "/catalog?" + query);
+    assert.ok(bad.status >= 400 && bad.status < 500); assert.equal(h.fixture.seen.length, before);
+  }
+});
+
+test("1.7.0: collections omit denied shelves and members, and never expose source metadata", async t => {
+  const h = await clerkHarness(t);
+  const r = await h.request("GET", "/collections?section=71");
+  assert.equal(r.status, 200); assert.equal(r.json.collections.length, 2);
+  assert.deepEqual(r.json.collections[0], { key: "7150", title: "Cedar Favourites", count: 2, members: ["7101", "7102"] });
+  assert.deepEqual(r.json.collections[1], { key: "7450", title: "Cedar Lanterns", count: 2, members: ["7101", "7102"] },
+    "a collection header can inherit its reviewed section; its members still need their own section");
+  assertClerkNoDeniedMetadata(r.json);
+  assert.ok(!JSON.stringify(r.json).includes('"file"') && !JSON.stringify(r.json).includes(FILE));
+  assert.ok(!h.fixture.seen.some(c => /\/(7250|7350)\/children$/.test(c.path)), "denied collection member lists are never fetched");
+});
+
+test("1.7.0: collection members are capped at 2000 and cannot cross into another allowed section", async t => {
+  const h = await clerkHarness(t, { MEDIACTL_SECTIONS: "71,72,73" });
+  h.fixture.collections = [h.fixture.collections[0]];
+  h.fixture.members = ["7301", "7401"];
+  for (let n = 0; n < 2003; n++) {
+    const key = String(800000 + n);
+    h.fixture.items[key] = { ratingKey: key, librarySectionID: "71", type: "movie", title: `Invented Catalogue Film ${n}` };
+    h.fixture.members.push(key);
+  }
+  const r = await h.request("GET", "/collections?section=71");
+  assert.equal(r.status, 200);
+  assert.equal(r.json.collections[0].count, 2000); assert.equal(r.json.collections[0].members.length, 2000);
+  assert.ok(!r.json.collections[0].members.includes("7301"), "a different allowed section still cannot contaminate this section's shelf");
+  assert.ok(!r.json.collections[0].members.includes("7401"));
+  assert.deepEqual(r.json.collections[0].members, Array.from({ length: 2000 }, (_, n) => String(800000 + n)));
+});
+
+test("1.7.0: an empty allow list disables catalog and collections but preserves legacy search shape", async t => {
+  const h = await clerkHarness(t, { MEDIACTL_SECTIONS: "", MEDIACTL_SECTIONS_ADULT: "" });
+  for (const route of ["/catalog?section=71&type=1", "/collections?section=71"]) {
+    const r = await h.request("GET", route);
+    assert.equal(r.status, 503); assert.deepEqual(r.json, { ok: false, error: "set MEDIACTL_SECTIONS" });
+  }
+  assert.equal(h.fixture.seen.length, 0, "no catalog data fetched without an explicit allow list");
+  const r = await h.request("GET", "/search?q=paper");
+  assert.equal(r.status, 200);
+  const expected = h.fixture.search.map(key => {
+    const m = h.fixture.items[key];
+    return { key, type: m.type, title: m.title || "", year: m.year || null, show: m.grandparentTitle || null,
+      season: m.parentIndex != null ? m.parentIndex : null, episode: m.index != null && m.type === "episode" ? m.index : null,
+      duration: m.duration ? Math.round(m.duration / 1000) : null, poster: !!(m.thumb || m.grandparentThumb || m.parentThumb),
+      leafs: m.leafCount || null, show_key: null, season_key: null };
+  });
+  const withoutSection = r.json.results.map(({ section, ...legacy }) => legacy);
+  assert.equal(JSON.stringify(withoutSection), JSON.stringify(expected), "the only new search field is section");
+  assert.deepEqual(r.json.results.map(x => x.section), ["71", "72", "73", null, "71"]);
+  assert.equal((await h.request("GET", "/item/7401")).status, 200, "unknown section preserves legacy behavior only with both lists empty");
+  const sections = await h.request("GET", "/sections");
+  assert.equal(sections.json.allow_list_set, false);
+});
+
+test("1.7.0: catalog, sections and collections share one four-per-second Plex request budget", async t => {
+  const h = await clerkHarness(t);
+  const routes = ["/catalog?section=71&type=1&size=1&start=0", "/sections", "/collections?section=71",
+    "/catalog?section=71&type=1&size=1&start=1", "/catalog?section=71&type=1&size=1&start=0",
+    "/catalog?section=71&type=1&size=1&start=1"];
+  const answers = await Promise.all(routes.map(route => h.request("GET", route)));
+  assert.ok(answers.every(r => r.status === 200));
+  const at = h.fixture.seen.filter(c => /^\/library\/(sections|collections)\b/.test(c.path)).map(c => c.at);
+  assert.ok(at.length >= 6, "all catalog, section and collection requests were observed");
+  for (let i = 4; i < at.length; i++) assert.ok(at[i] - at[i - 4] >= 990, `more than four calls within one second: ${at[i] - at[i - 4]}ms`);
+});
+
+test("1.7.0: new routes retain signing and replay protection, and unsupported routes retain the 404 feature signal", async t => {
+  const h = await clerkHarness(t);
+  for (const route of ["/sections", "/catalog?section=71&type=1", "/collections?section=71"]) {
+    assert.equal((await fetch(h.origin + route)).status, 401);
+    assert.equal((await h.request("GET", route, undefined, { secret: "wrong" })).status, 401);
+    assert.equal((await h.request("GET", route, undefined, { ts: Date.now() - 600000 })).status, 401);
+  }
+  assert.equal(h.fixture.seen.length, 0, "unauthenticated requests never reach Plex");
+  const nonce = crypto.randomBytes(12).toString("hex");
+  const first = await h.request("GET", "/search?q=paper", undefined, { nonce });
+  const repeated = await h.request("GET", "/search?q=paper", undefined, { nonce });
+  assert.equal(first.status, 200); assert.equal(repeated.status, 401);
+  const missing = await h.request("GET", "/unsupported-feature");
+  assert.equal(missing.status, 404); assert.deepEqual(missing.json, { ok: false, error: "not found" });
+});
