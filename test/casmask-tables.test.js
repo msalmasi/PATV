@@ -151,3 +151,17 @@ test("the homepage: Pepe's tables list masked, and the viewer's own seat found b
   const src = fs.readFileSync(path.join(repo, "home.js"), "utf8");
   assert.match(src, /const T = await require\("\.\/tables"\)\.view\(\);/, "the homepage reads Pepe's tables through the site's veils");
 });
+
+test("Pepe's own tables: a seat whose key is the login an alias folds into is checked by the login it typed from too", async () => {
+  reset();
+  VK.set("frankalt", "incognito");                                   // incognito on the login he played from (Pepe's key: "frankie")
+  assert.equal(await sync({ tables: [holdem()], closed: [], log: LOG, private: PRIV,
+                            who: { [TID]: { seats: ["alice", "frankie", "hid1", "u:ubob001"], logins: [null, "frankalt", null, null], host: "frankie" } } }), 200);
+  const { d, text } = await get(null);
+  assert.equal(d.tables[0].seats[1].name, "someone 2");
+  assert.ok(!text.includes("frankalt"), "the login never on the wire");
+  reset();
+  assert.equal(await sync({ tables: [holdem()], closed: [], log: LOG, private: PRIV,
+                            who: { [TID]: { seats: ["alice", "frankie", "hid1", "u:ubob001"], logins: [null, "frankalt", null, null], host: "frankie" } } }), 200);
+  assert.equal((await get(null)).d.tables[0].seats[1].name, "Frankie", "named when neither is veiled");
+});

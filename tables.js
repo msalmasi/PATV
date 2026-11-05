@@ -64,7 +64,9 @@ function cleanWho(w, ids) {
   for (const id of ids) {
     const x = w[id];
     if (!x || typeof x !== "object") continue;
-    out.set(id, { seats: Array.isArray(x.seats) ? x.seats.slice(0, 12).map(cleanKey) : [], host: cleanKey(x.host) });
+    // (logins: the login a seat typed from where it differs from its key - an alias Pepe's memory store folds in; both are checked)
+    out.set(id, { seats: Array.isArray(x.seats) ? x.seats.slice(0, 12).map(cleanKey) : [], host: cleanKey(x.host),
+                  logins: Array.isArray(x.logins) ? x.logins.slice(0, 12).map(cleanKey) : [] });
   }
   return out;
 }
@@ -93,7 +95,10 @@ function refreshKinds() {
     const V = require("./casino/veil");
     const ids = new Set([...((STATE && STATE.tables) || []), ...((STATE && STATE.closed) || [])].map((t) => t.id));
     const keys = new Set();
-    for (const id of ids) { const w = WHO.get(id); if (w) { for (const k of w.seats) if (k) keys.add(k); if (w.host) keys.add(w.host); } }
+    for (const id of ids) {
+      const w = WHO.get(id);
+      if (w) { for (const k of w.seats.concat(w.logins || [])) if (k) keys.add(k); if (w.host) keys.add(w.host); }
+    }
     for (const k of keys) {
       const c = KIND.get(k);
       if (c && Date.now() - c.at < KIND_MS) continue;
@@ -114,7 +119,8 @@ function maskTable(t) {
   const isLabel = (n) => PEPE_LABEL.test(String(n == null ? "" : n));
   const seatKey = (i) => (w ? w.seats[i] || null : null);
   // who is masked here: seats by their key (no `who` = no key = masked), the host by its own
-  const masked = seats.map((s, i) => !!(s && s.name && !isLabel(s.name) && veiledKey(seatKey(i))));
+  const alt = (i) => (w && Array.isArray(w.logins) ? w.logins[i] || null : null);
+  const masked = seats.map((s, i) => !!(s && s.name && !isLabel(s.name) && (veiledKey(seatKey(i)) || (alt(i) && veiledKey(alt(i))))));
   const hostMasked = !!(t.host && !isLabel(t.host) && veiledKey(w ? w.host : null));
   // one label per person: a seat's key (else its name, with no `who`), the host the same as their seat
   const idOf = (i) => (w && seatKey(i) ? "k:" + seatKey(i) : "n:" + seats[i].name);
