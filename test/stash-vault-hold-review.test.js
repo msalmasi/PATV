@@ -1,4 +1,4 @@
-// 1.99akz stashhold review fixes (owner 2026-11-05: "Yes fix both checks." - the reviews of 1.99akv/akz's stash vault holds):
+// 1.99akz stashhold review fixes (owner 2026-11-05: "Yes fix both checks." - the reviews of the stash vault holds):
 //   * account deletion: the vault check, the balance withdrawal and the close are ONE transaction (a stake landing in between
 //     can't close a stash with a stake waiting; a refusal moves nothing), the close must close exactly that row, a member added
 //     since blockers() stops it, and the vault check runs BEFORE anything is settled (renewals etc. stay as they were)

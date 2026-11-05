@@ -171,7 +171,7 @@ const HOLD = {
   "shop listing": ["An active shop listing - take it down", "/shop/orders"],
   "cosmetic listing": ["A cosmetic for sale - take the listing down", "/cosmetics"],
   "stash": ["A stash with other members or staked PAT - withdraw your PAT and close it", "/wallet"],
-  // 1.99akv stashhold: vault shares (or a stake / unstake waiting in the vault queue) - never closed with the account
+  // 1.99akz stashhold: vault shares (or a stake / unstake waiting in the vault queue) - never closed with the account
   "stash in vaults": ["A stash with PAT in the vaults (staked, or a stake / unstake waiting for the cut-off) - its owner unstakes it all; it comes back to the stash at the next cut-off, then withdraw it and close the stash", "/staking"],
   "stash vaults unreadable": ["We couldn't check what your stashes have in the vaults just now - try again in a few minutes", "/wallet"],
 };
@@ -182,7 +182,7 @@ async function elevated(user) { return require("./chatsignin").elevated(user); }
 
 /** The sole-owned, unstaked stashes of an account while the site owns stashes (these are auto-settled). 1.99wy: stashes
  *  are held by "u:<userId>" (stashes.js); a row its linked login still holds (not re-keyed yet) counts too.
- *  1.99akv stashhold: "unstaked" means NO VAULT SHARES and nothing waiting in the vault queue (stashes.vaultHoldings - a stake
+ *  1.99akz stashhold: "unstaked" means NO VAULT SHARES and nothing waiting in the vault queue (stashes.vaultHoldings - a stake
  *  is shares since 1.92, the `staked` column is 0 everywhere): such a stash is never auto-closed - it's in `vaults` (each
  *  {id, error}; a vault-book read error counts, fail closed) and blocks the deletion until it's unstaked.
  *  -> {auto:[], block:bool, vaults:[]} */
@@ -215,7 +215,7 @@ async function stashPlan(login, uid = null) {
  * What stops a deletion, and what will be settled automatically. -> {block: [{code, label, href}], settle: [{code, label}]}
  * Blocks: anything owed TO other people or still in flight (loans, escrow, bets, markets, wagers, bounties, lotto, orders,
  * listings, stage bookings, a card subscription, active subscribers, a cloned voice), pads you own, a negative balance.
- * Settled: renewals stop, pending links / welcome bonus go, sole-owned stashes (nothing in the vaults - 1.99akv) are emptied into the routing.
+ * Settled: renewals stop, pending links / welcome bonus go, sole-owned stashes (nothing in the vaults - 1.99akz) are emptied into the routing.
  */
 async function blockers(userId, { now: t = now() } = {}) {
   const uid = String(userId);
@@ -242,7 +242,7 @@ async function blockers(userId, { now: t = now() } = {}) {
     B("hold:" + h, m[0], m[1]);
   }
   if (sp.block) B("hold:stash", HOLD.stash[0], HOLD.stash[1]);
-  // 1.99akv stashhold: a stash of theirs with vault shares / a stake or unstake waiting (or a vault book that can't be read) is
+  // 1.99akz stashhold: a stash of theirs with vault shares / a stake or unstake waiting (or a vault book that can't be read) is
   // never closed with the account - the same codes holdsFor's reasons get above, so it's listed once
   for (const v of sp.vaults) {
     const h = v.error ? "stash vaults unreadable" : "stash in vaults";
@@ -552,7 +552,7 @@ async function settle(uid, login, report) {
   const keys = [...new Set([`u:${uid}`, login ? low(login) : null].filter(Boolean))].map(low);
   const IN = `(${keys.map(() => "?").join(",")})`;
   for (const s of sp.auto) {
-    // 1.99akv stashhold: once more right before it moves / closes - a stake since blockers() keeps the stash (and the account): the
+    // 1.99akz stashhold: once more right before it moves / closes - a stake since blockers() keeps the stash (and the account): the
     // job stops here, and the next tick's blockers() holds the deletion with the reason.
     // 1.99akz review fix: the check, the withdrawal and the close are ONE transaction (a vault stake / unstake request runs on the
     // same chain - capital/service.js - so none lands between them; a throw rolls the withdrawal back), the stash must still be

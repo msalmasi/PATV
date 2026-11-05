@@ -45,7 +45,7 @@ what has a safe existing rule is settled automatically.
 | Your cloned voice on the voice store | Your likeness: revoke it through its own consent flow |
 | Gang membership | Leave the gang (`!gang leave`) |
 | A stash with other members, staked PAT, or stashes still in Pepe | Other people's PAT may be in it |
-| A stash with PAT in the vaults: vault shares, or a stake / unstake waiting for the cut-off (1.99akv; also when the vault book can't be read) | Closing it would strand the shares - the weekly payout skips closed stashes and only an open stash can unstake. Unstake it all; once it's back in the stash it settles like any other |
+| A stash with PAT in the vaults: vault shares, or a stake / unstake waiting for the cut-off (1.99akz; also when the vault book can't be read) | Closing it would strand the shares - the weekly payout skips closed stashes and only an open stash can unstake. Unstake it all; once it's back in the stash it settles like any other |
 | A balance below zero | Owed to the economy |
 
 | Settled automatically | How |

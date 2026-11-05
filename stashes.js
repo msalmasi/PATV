@@ -295,7 +295,7 @@ async function total() {
   return { amount: (r[0] && r[0].t) || 0, count: (r[0] && r[0].n) || 0 };
 }
 
-// ── 1.99akv stashhold: what a stash HOLDS - its balance AND its vault shares ──
+// ── 1.99akz stashhold: what a stash HOLDS - its balance AND its vault shares ──
 // Since 1.92 a stash's stake is VAULT SHARES (holder "s<id>" in the vault book: capital_docs "vaults", capital/vaults.js), not the
 // `staked` column (the 1.90 fee-share lock, 0 everywhere since). A stash with balance 0 can still hold millions in the vaults -
 // and a closed stash's shares are stuck: the weekly payout skips closed stashes and an unstake needs an open one. So every check
@@ -742,7 +742,7 @@ async function rename({ stashId, name }) {
 /**
  * Close: everything unstaked goes to the owner's wallet, then the stash is closed. `stakedForfeit` (Pepe's old
  * fee-share stake, which closing unstakes) - the web refuses while any PAT is staked or in the capital vaults.
- * 1.99akv stashhold: refused - for the website AND Pepe's chat close (/api/stash/bot/act) - while the stash holds vault shares
+ * 1.99akz stashhold: refused - for the website AND Pepe's chat close (/api/stash/bot/act) - while the stash holds vault shares
  * or has a stake / unstake waiting in the vault queue (vaultHoldings; a vault-book read error refuses too): checked before
  * anything moves, and again in the closing transaction (a stake requested in between can't strand its shares under a
  * closed stash).
@@ -1079,7 +1079,7 @@ async function fromForm(userId, words, idem) {
     }
     if (sub === "close" || sub === "delete") {
       const s = await find(me, words[1], { ownerOnly: true });
-      // 1.99akv stashhold: close() itself refuses while the stash holds vault shares / has a stake or unstake waiting (the vault
+      // 1.99akz stashhold: close() itself refuses while the stash holds vault shares / has a stake or unstake waiting (the vault
       // book, vaultHoldings - this form used to read only the staking snapshot)
       try {
         const r = await close({ stashId: s.id, ownerUserId: userId, key: key("close") });
@@ -1205,5 +1205,5 @@ module.exports = { init, register, enabled, live, list, get, find, total, deposi
                    // 1.99wy: account keys
                    actorOf, holderInfo, holderFor, acctKey, uidOfKey, isAcctKey, targetKey, rekeyInTx, rekeyAll, moneyFacts, claimLogin,
                    mergeAccounts,
-                   // 1.99akv stashhold: balance AND vault shares / queued requests (every close / account-removal check)
+                   // 1.99akz stashhold: balance AND vault shares / queued requests (every close / account-removal check)
                    vaultHoldings, stashHoldings, vaultRefusal, VAULT_EPS };

@@ -1,4 +1,4 @@
-// 1.99akv stashhold (owner 2026-11-05: "Yes fix both checks."): the stale-account cleanup and account deletion counted a stash
+// 1.99akz stashhold (owner 2026-11-05: "Yes fix both checks."): the stale-account cleanup and account deletion counted a stash
 // as holding PAT only by its balance (or the dead 1.90 `staked` column) - never its VAULT SHARES. Since 1.92 a stake IS vault
 // shares (holder "s<id>" in capital/vaults.js's book), so a stash with balance 0 and millions in shares (prod: stash 40, ~9.4M PAT
 // in 🤖 Auto) held nobody: deletion closed it, and its shares were stuck (the weekly payout skips closed stashes; an unstake
