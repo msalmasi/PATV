@@ -1,0 +1,231 @@
+/* stage-upnext.css - upnext (owner 2026-11-05: "Yes up next card sounds good. Do it a classic / retro Public Access tv style."):
+   the 📼 "Coming up next" card on a pad's stage while the next Plex title's stream starts (public/js/stage-room.js upnextShow;
+   mainstage.libraryUpNext). A 1980s/90s local public-access character-generator card: SMPTE 75% bars band, the CG blue
+   field, gold pixel "COMING UP NEXT", the title in big white type with a hard drop shadow, a local clock, the PATV bug,
+   static scanlines + vignette + grain; "PLEASE STAND BY" once it takes longer than 30 s.
+   Placement: the card is the first child of the player's .wrap (#rmVideo / #videoWrapper), absolutely filling it.
+   Sizing: everything inside scales from the card's own box (container-type: size) - a 288x162 phone player up to a
+   2560x1440 fullscreen - through one unit, --u = 1% of the height of the largest 16:9 box that fits.
+   Class prefix st-un- (".upnext" is already the schedule list: room.ejs, pad-dock.js). Logical properties (RTL).
+   Motion: the hum bar rolls down ONCE on entry (4.5 s) and the block cursor blinks 5 times (1 blink/s, steps) then stays lit - every
+   animation is over within ~5 s (WCAG 2.2.2, no pause button needed); both are off under prefers-reduced-motion, where "STARTING…"
+   is static. No colour flashes anywhere (never more than 1 change a second). Fonts: only the site's own (Ubuntu, Press Start 2P). */
+
+.st-upnext {
+  /* the CG palette - illustration colours, scoped to the card (the site's tokens for the text accents) */
+  --st-un-blue-top: #0a165e;
+  --st-un-blue: #1532a6;
+  --st-un-blue-low: #0b1c74;
+  --st-un-ink: #fff;                       /* title */
+  --st-un-gold: var(--ds-gold, #ffcf40);   /* kicker - the site's pixel-heading gold */
+  --st-un-sub: #c6dcff;                    /* year / episode line */
+  --st-un-osd: #9ee6a4;                    /* "STARTING" - VCR on-screen-display green (PATV green lifted to 5.6:1 on the brightest blue) */
+  --st-un-shadow: rgba(0, 0, 12, .78);     /* the CG hard drop shadow */
+  position: absolute; inset: 0; z-index: 3; overflow: hidden;
+  container: stun / size;
+  background: #000;
+  color: var(--st-un-ink);
+  font-family: var(--ds-font, Ubuntu, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  animation: stUnIn .45s ease-out backwards;   /* (backwards, not both: a held end state would beat .is-out's fade) */
+}
+.st-upnext.is-out { opacity: 0; transition: opacity .6s ease; pointer-events: none; }   /* the stream is up: fade off it */
+.st-upnext .st-un-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* the screen: the CG field + the layout grid. --u is defined here so every child resolves it against the card */
+.st-un-screen {
+  --u: min(1cqh, .5625cqw);
+  --pad: calc(var(--u) * 5.5);
+  position: absolute; inset: 0;
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+  background:
+    radial-gradient(80% 60% at 50% 42%, rgba(80, 120, 255, .22), transparent 70%),            /* the CG "spot" */
+    linear-gradient(180deg, var(--st-un-blue-top) 0%, var(--st-un-blue) 46%, var(--st-un-blue-low) 100%);
+}
+/* scanlines + vignette over everything (the poster too), static */
+.st-un-screen::before {
+  content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  --sl: 3px; --sl-d: 1px;   /* the line pitch / its dark part, whole pixels only (a fractional pitch moires): 3 px up to a ~700 px tall screen */
+  --sl-a: .2;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, var(--sl-a)) 0 var(--sl-d), transparent var(--sl-d) var(--sl)),
+    radial-gradient(130% 110% at 50% 50%, transparent 58%, rgba(0, 0, 8, .62) 100%);
+}
+/* VHS grain - a static noise tile */
+.st-un-screen::after {
+  content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: .09; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* the SMPTE band: seven 75% bars + the reverse-blue castellations under them (static) */
+.st-un-bars, .st-un-castle { display: grid; grid-template-columns: repeat(7, 1fr); }
+.st-un-bars { block-size: calc(var(--u) * 5.2); }
+.st-un-castle { block-size: calc(var(--u) * 1.3); }
+.st-un-bars i:nth-child(1) { background: #bfbfbf; } .st-un-bars i:nth-child(2) { background: #bfbf00; }
+.st-un-bars i:nth-child(3) { background: #00bfbf; } .st-un-bars i:nth-child(4) { background: #00bf00; }
+.st-un-bars i:nth-child(5) { background: #bf00bf; } .st-un-bars i:nth-child(6) { background: #bf0000; }
+.st-un-bars i:nth-child(7) { background: #0000bf; }
+.st-un-castle i:nth-child(1) { background: #0000bf; } .st-un-castle i:nth-child(2) { background: #131313; }
+.st-un-castle i:nth-child(3) { background: #bf00bf; } .st-un-castle i:nth-child(4) { background: #131313; }
+.st-un-castle i:nth-child(5) { background: #00bfbf; } .st-un-castle i:nth-child(6) { background: #131313; }
+.st-un-castle i:nth-child(7) { background: #bfbfbf; }
+.st-un-band { direction: ltr; box-shadow: 0 calc(var(--u) * .5) 0 rgba(0, 0, 0, .35); position: relative; z-index: 1; }
+
+/* top row: the local clock (start) - CG "time" readout */
+.st-un-top { display: flex; align-items: center; justify-content: space-between; gap: var(--u);
+             padding: calc(var(--u) * 2.6) var(--pad) 0; }
+.st-un-clock, .st-un-bug, .st-un-kick, .st-un-meta, .st-un-start { font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace); font-weight: 400; }
+.st-un-clock { font-size: clamp(8px, calc(var(--u) * 2.9), 26px); line-height: 1; letter-spacing: .04em; color: #fff; opacity: .9;
+               text-shadow: .14em .14em 0 var(--st-un-shadow); font-variant-numeric: tabular-nums; white-space: nowrap; unicode-bidi: plaintext; }
+.st-un-tz { opacity: .7; margin-inline-start: .5em; }
+
+/* body: [poster] + text */
+.st-un-body { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 5.5);
+              min-block-size: 0; padding: calc(var(--u) * 1.5) var(--pad) calc(var(--u) * 2); }
+.st-un-pic { flex: none; position: relative; block-size: min(calc(var(--u) * 58), 100%); aspect-ratio: 2 / 3;
+             border: max(2px, calc(var(--u) * .55)) solid #efe9d8; background: #0a0a0a;
+             box-shadow: calc(var(--u) * 1.3) calc(var(--u) * 1.3) 0 var(--st-un-shadow); }
+.st-un-pic img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
+.st-upnext[data-poster="0"] .st-un-pic { display: none; }
+
+.st-un-txt { min-inline-size: 0; flex: 0 1 auto; max-inline-size: 100%; display: grid; justify-items: start; text-align: start;
+             gap: calc(var(--u) * 2.1); }
+.st-upnext[data-poster="0"] .st-un-txt { justify-items: center; text-align: center; max-inline-size: calc(var(--u) * 150); }
+.st-upnext[data-poster="1"] .st-un-txt { flex: 0 1 auto; max-inline-size: calc(var(--u) * 118); }
+
+.st-un-kick { margin: 0; font-size: clamp(10px, calc(var(--u) * 4.1), 44px); line-height: 1.15; letter-spacing: .06em; text-transform: uppercase;
+              color: var(--st-un-gold);
+              text-shadow: -.045em 0 rgba(255, 40, 90, .45), .045em 0 rgba(0, 220, 255, .4), .16em .16em 0 var(--st-un-shadow), 0 0 .6em rgba(255, 207, 64, .35); }
+.st-un-rule { display: block; inline-size: min(100%, calc(var(--u) * 46)); block-size: max(2px, calc(var(--u) * .75));
+              background: var(--ds-gold-grad, linear-gradient(90deg, #ffcf40, #ff8a3d));
+              box-shadow: calc(var(--u) * .5) calc(var(--u) * .5) 0 var(--st-un-shadow); }
+.st-un-title { margin: 0; font-weight: 700; font-size: clamp(15px, calc(var(--u) * 9.6), 108px); line-height: 1.04; letter-spacing: -.005em;
+               color: var(--st-un-ink); text-shadow: .055em .055em 0 var(--st-un-shadow), 0 0 .35em rgba(0, 0, 40, .5);
+               overflow-wrap: anywhere; unicode-bidi: plaintext; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+               padding-block-end: .08em; padding-inline-end: .06em; }  /* (room for the shadow inside the clamp's clip) */
+.st-upnext[data-len="l"] .st-un-title { font-size: clamp(14px, calc(var(--u) * 7.4), 84px); line-height: 1.06; }
+.st-upnext[data-len="xl"] .st-un-title { font-size: clamp(13px, calc(var(--u) * 6.6), 76px); line-height: 1.08; -webkit-line-clamp: 3; line-clamp: 3; }
+.st-upnext[data-poster="0"][data-len="s"] .st-un-title { font-size: clamp(16px, calc(var(--u) * 10.8), 120px); }
+.st-upnext[data-poster="0"] .st-un-kick { font-size: clamp(10px, calc(var(--u) * 4.5), 48px); }
+.st-upnext[data-poster="1"] .st-un-title { font-size: clamp(14px, calc(var(--u) * 8.4), 96px); }
+.st-upnext[data-poster="1"][data-len="l"] .st-un-title { font-size: clamp(13px, calc(var(--u) * 6.6), 76px); }
+.st-upnext[data-poster="1"][data-len="xl"] .st-un-title { font-size: clamp(12px, calc(var(--u) * 6), 68px); }
+
+.st-un-sub { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em .8em; color: var(--st-un-sub); min-inline-size: 0; max-inline-size: 100%;
+             text-shadow: .12em .12em 0 var(--st-un-shadow); }
+.st-upnext[data-poster="0"] .st-un-sub { justify-content: center; }
+.st-un-meta { unicode-bidi: plaintext; font-size: clamp(9px, calc(var(--u) * 3), 32px); line-height: 1.3; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+.st-un-ep { font-size: clamp(11px, calc(var(--u) * 4.2), 46px); line-height: 1.2; font-weight: 500; min-inline-size: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-inline-size: 100%; }
+
+/* "▶ STARTING ▮" - a VCR on-screen display */
+.st-un-start { display: inline-flex; align-items: center; gap: .55em; margin-block-start: calc(var(--u) * 1.2);
+               font-size: clamp(9px, calc(var(--u) * 2.8), 30px); line-height: 1; letter-spacing: .08em; text-transform: uppercase;
+               color: var(--st-un-osd); text-shadow: .14em .14em 0 var(--st-un-shadow); white-space: nowrap; }
+.st-un-play { inline-size: 0; block-size: 0; border-block: .5em solid transparent; border-left: .8em solid currentColor;   /* (a play glyph never mirrors) */
+              filter: drop-shadow(.14em .14em 0 var(--st-un-shadow)); }
+.st-un-start .st-un-dots { display: none; }
+.st-un-cur { inline-size: .72em; block-size: 1em; background: currentColor; box-shadow: .14em .14em 0 var(--st-un-shadow);
+             animation: stUnBlink 1s steps(1, end) 5; }
+
+/* "PLEASE STAND BY" (30 s in and still starting): the word from stage-room.js, no play glyph / cursor / dots - the static classic */
+.st-upnext[data-state="standby"] :is(.st-un-play, .st-un-cur, .st-un-dots) { display: none; }
+.st-upnext[data-state="standby"] .st-un-start { color: var(--st-un-gold); }
+
+/* bottom row: the PATV bug in the corner, the way a station bug sits */
+.st-un-foot { display: flex; justify-content: flex-end; align-items: flex-end; padding: 0 var(--pad) calc(var(--u) * 3.4); }
+.st-un-bug { font-size: clamp(9px, calc(var(--u) * 3.6), 38px); line-height: 1; letter-spacing: .06em; color: #fff; opacity: .62;
+             text-shadow: .12em .12em 0 var(--st-un-shadow); }
+
+/* the hum bar: one soft band rolling down once, on entry */
+.st-un-roll { position: absolute; inset-inline: 0; inset-block-start: 0; block-size: 22%; z-index: 3; pointer-events: none;
+              background: linear-gradient(180deg, transparent, rgba(0, 0, 20, .10) 30%, rgba(200, 215, 255, .10) 55%, rgba(200, 215, 255, .10) 62%, transparent);
+              transform: translateY(-100%); animation: stUnRoll 4.5s linear .6s 1 both; }
+
+/* the Room Dock's overlay controls are up: the clock and the bug step aside (the controls sit over those corners) */
+#rmStage.rmd-controls-on .st-upnext :is(.st-un-top, .st-un-foot) { opacity: 0; }
+.st-un-top, .st-un-foot { transition: opacity .2s ease; }
+
+/* Press Start 2P has no glyphs for these scripts: the pixel lines fall back to the site's own type, bold capitals */
+.st-upnext:is(:lang(ar), :lang(fa), :lang(he), :lang(ur), :lang(hi), :lang(th), :lang(ja), :lang(ko), :lang(zh-CN), :lang(zh-TW), :lang(vi)) :is(.st-un-kick, .st-un-start, .st-un-meta) {
+  font-family: var(--ds-font, Ubuntu, system-ui, sans-serif); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+}
+
+@keyframes stUnRoll { from { transform: translateY(-100%); } to { transform: translateY(560%); } }
+@keyframes stUnBlink { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes stUnIn { from { opacity: 0; filter: blur(2px) brightness(1.25); } to { opacity: 1; filter: none; } }
+
+/* ---- sizes / shapes ---- */
+/* a phone's 16:9 player (~358x201): a bit more room for the words, the poster a touch smaller */
+@container stun (max-height: 230px) {
+  .st-un-screen { --pad: calc(var(--u) * 4.5); }
+  .st-un-body { gap: calc(var(--u) * 4); padding-block: calc(var(--u) * 1) calc(var(--u) * 1); }
+  .st-un-txt { gap: calc(var(--u) * 2.4); }
+  .st-un-pic { block-size: min(calc(var(--u) * 62), 100%); }
+  .st-un-top { padding-block-start: calc(var(--u) * 2.4); }
+  .st-un-foot { padding-block-end: calc(var(--u) * 2.6); }
+  .st-un-screen::before { --sl-a: .13; }          /* fewer, softer lines on a small screen - the words stay crisp */
+  .st-upnext[data-poster="1"] .st-un-title { font-size: clamp(15px, calc(var(--u) * 9.2), 40px); }
+  .st-upnext[data-poster="1"][data-len="l"] .st-un-title { font-size: clamp(13px, calc(var(--u) * 7.4), 40px); }
+  .st-upnext[data-poster="1"][data-len="xl"] .st-un-title { font-size: clamp(12px, calc(var(--u) * 6.2), 40px); }
+}
+/* fullscreen: a coarser raster, still ~240-270 lines a screen */
+@container stun (min-height: 700px) { .st-un-screen::before { --sl: 4px; --sl-d: 2px; --sl-a: .16; } }
+@container stun (min-height: 1300px) { .st-un-screen::before { --sl: 6px; --sl-d: 2px; --sl-a: .18; } }
+/* a wide banner (the Room Dock's desktop stage is ~5:1): the clock and the bug float in the corners, so the
+   poster and the words can use the height - the box has width to spare */
+@container stun (min-aspect-ratio: 21 / 10) {
+  .st-un-screen { --u: min(1.14cqh, .5cqw); grid-template-rows: auto minmax(0, 1fr); }
+  .st-un-top { position: absolute; inset-inline: 0; inset-block-start: calc(var(--u) * 6.5); z-index: 1; }
+  .st-un-foot { position: absolute; inset-inline: 0; inset-block-end: 0; z-index: 1; }
+  .st-un-body { grid-row: 2; padding-block: calc(var(--u) * 2.5) calc(var(--u) * 3); }
+  .st-un-pic { block-size: min(calc(var(--u) * 66), 100%); }
+  .st-upnext[data-poster="0"] .st-un-txt { max-inline-size: min(88cqw, calc(var(--u) * 210)); }
+  .st-upnext[data-poster="0"] .st-un-kick { font-size: clamp(10px, calc(var(--u) * 5.6), 48px); }
+  .st-upnext[data-poster="0"][data-len="s"] .st-un-title { font-size: clamp(16px, calc(var(--u) * 15), 120px); }
+  .st-upnext[data-poster="0"][data-len="l"] .st-un-title { font-size: clamp(14px, calc(var(--u) * 11), 96px); }
+  .st-upnext[data-poster="0"][data-len="xl"] .st-un-title { font-size: clamp(13px, calc(var(--u) * 8.6), 80px); -webkit-line-clamp: 2; line-clamp: 2; }
+  .st-upnext[data-poster="0"] .st-un-meta { font-size: clamp(9px, calc(var(--u) * 3.6), 32px); }
+  .st-upnext[data-poster="0"] .st-un-start { font-size: clamp(9px, calc(var(--u) * 3.4), 30px); }
+  .st-upnext[data-poster="1"] .st-un-txt { max-inline-size: min(64cqw, calc(var(--u) * 190)); }
+  .st-upnext[data-poster="1"] .st-un-kick { font-size: clamp(10px, calc(var(--u) * 5), 44px); }
+  .st-upnext[data-poster="1"][data-len="s"] .st-un-title { font-size: clamp(14px, calc(var(--u) * 11), 96px); }
+  .st-upnext[data-poster="1"][data-len="l"] .st-un-title { font-size: clamp(13px, calc(var(--u) * 8.6), 76px); }
+  .st-upnext[data-poster="1"][data-len="xl"] .st-un-title { font-size: clamp(12px, calc(var(--u) * 7), 68px); }
+  .st-upnext[data-poster="1"] .st-un-meta { font-size: clamp(9px, calc(var(--u) * 3.4), 32px); }
+  .st-upnext[data-poster="1"] .st-un-start { font-size: clamp(9px, calc(var(--u) * 3.2), 30px); }
+}
+/* tiny (a mini player, a 320 phone in a split): just the kicker and the title */
+@container stun (max-height: 150px) {
+  .st-un-top, .st-un-foot, .st-un-sub, .st-un-rule, .st-un-castle { display: none; }
+  .st-un-screen { grid-template-rows: auto minmax(0, 1fr); }
+  .st-un-body { grid-row: 2; }
+  .st-un-pic { block-size: 78%; }
+  .st-un-title { -webkit-line-clamp: 2; line-clamp: 2; }
+}
+/* a portrait box (a phone in element fullscreen, a tall Dock stage): poster on top, words under it, all centred */
+@container stun (max-aspect-ratio: 4 / 5) {
+  .st-un-screen { --u: min(.62cqh, 1cqw); }
+  .st-un-body { flex-direction: column; gap: calc(var(--u) * 6); }
+  .st-un-pic { block-size: auto; inline-size: min(52cqw, calc(var(--u) * 46)); }
+  .st-upnext[data-poster="1"] .st-un-txt { flex: none; justify-items: center; text-align: center; }
+  .st-upnext[data-poster="1"] .st-un-sub { justify-content: center; }
+  .st-un-title { -webkit-line-clamp: 3; line-clamp: 3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-upnext { animation: none; }
+  .st-upnext.is-out { transition-duration: .2s; }
+  .st-un-top, .st-un-foot { transition: none; }
+  .st-un-roll { display: none; animation: none; }
+  .st-un-cur { display: none; animation: none; }
+  .st-un-start .st-un-dots { display: inline; margin-inline-start: -.55em; }
+}
+@media (forced-colors: active) {
+  .st-un-screen { background: Canvas; }
+  .st-un-bars, .st-un-castle, .st-un-roll, .st-un-screen::before, .st-un-screen::after { display: none; }
+  .st-un-kick, .st-un-title, .st-un-sub, .st-un-start, .st-un-clock, .st-un-bug { color: CanvasText; text-shadow: none; }
+  .st-un-rule, .st-un-cur { background: CanvasText; }
+}

@@ -47,6 +47,14 @@
 // MIC_GRACE_MS with "Nobody is on the mic right now" before the page goes back to its default - a short gap between two mic-ups
 // no longer flips viewers to Pepe's stream and back. A viewer who picked the 🎙 tab gets it back by itself when the mic stage
 // comes back (until they pick another tab).
+// upnext (owner 2026-11-05: "Yes up next card sounds good. Do it a classic / retro Public Access tv style."): a featured 📼 slot whose next
+// title is starting (the server's featured.next - mainstage.libraryUpNext: a fresh ▶ Play, or a queue moving on) shows a "Coming up next"
+// card (public/css/stage-upnext.css) instead of the player's "Reconnecting…": the title, the poster (signed in - o.posters - through the
+// site's /api/medialib/poster proxy; none on error), "STARTING", "PLEASE STAND BY" from 30 s. It IS the pad's featured stage - it beats the
+// mic stage like any featured slot, even on a page that never saw the slot live (the one exception to dock3's C2: a marker WITH next) - and
+// it never moves a viewer who picked a tab. The stream comes up: its player starts behind the card, which fades once it plays (the
+// player's reconnect overlay hides). Not up within next.until (90 s, server time): the card goes and the defaults are back (mic follows /
+// Pepe's stream). While a card is up the page asks every 3 s. No snaps / clips / watch-minutes of a card.
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -85,7 +93,22 @@
   // first render) - {id, live, by, went}; null for none, or one this page may not show (a cam slot on the homepage / past its rule)
   function cleanFeat(x) {
     if (!x || typeof x !== 'object' || x.id == null || !/^[\w-]{1,80}$/.test(String(x.id))) return null;
-    return { id: String(x.id), live: x.live === true, by: typeof x.by === 'string' ? x.by : null, went: x.went === true };
+    return { id: String(x.id), live: x.live === true, by: typeof x.by === 'string' ? x.by : null, went: x.went === true, next: cleanNext(x.next) };
+  }
+  // upnext: the featured 📼 slot's title that is starting (mainstage.upNextView) - only known shapes; text is only ever set as textContent
+  var UPNEXT_MS = 90000, UN_KEY = /^\d{1,12}$/;
+  function unText(v, n) { return typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n) : ''; }
+  function unInt(v, lo, hi) { if (v == null || v === '') return null; var x = Number(v); return isFinite(x) && Math.floor(x) === x && x >= lo && x <= hi ? x : null; }
+  function cleanNext(x) {
+    if (!x || typeof x !== 'object') return null;
+    var ep = x.kind === 'episode', title = unText(x.title, 200), show = ep ? unText(x.show, 200) : '';
+    var at = Number(x.at), until = Number(x.until);
+    if ((!title && !show) || !(at > 0)) return null;
+    if (!(until > at && until - at <= 10 * 60000)) until = at + UPNEXT_MS;
+    var key = UN_KEY.test(String(x.key == null ? '' : x.key)) ? String(x.key) : null, yr = unInt(x.year, 1000, 9999);
+    return { title: title, show: show || null, kind: ep ? 'episode' : 'movie', year: yr, season: ep ? unInt(x.season, 0, 9999) : null,
+             episode: ep ? unInt(x.episode, 0, 9999) : null, poster: x.poster === true && !!key, key: key, at: at, until: until,
+             now: Number(x.now) > 0 ? Number(x.now) : 0 };
   }
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
@@ -94,6 +117,8 @@
     var pepeOn = !!o.pepeOn, pepeHere = o.pepeHere !== false, chosen = false;
     var pepeSrc = cleanSrc(o.pepeSrc), ownPepe = false;   // 1.99fv: ownPepe = this viewer chose his own stream over the embed
     var featHint = cleanFeat(o.featured);                 // dock3 1.99akf: the server's featured slot (see cleanFeat)
+    // server clock - this one (from the poll's `now`; upnext: from the first render's featured.next.now until the first poll)
+    var skew = featHint && featHint.next && featHint.next.now ? featHint.next.now - Date.now() : 0;
     var pepeWhep = typeof o.pepeWhep === 'string' && o.pepeWhep ? o.pepeWhep : null;   // 1.99fd
     var view = 'pepe';
     var player = PATVStage.player({ wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute, src: PEPE_HLS });
@@ -215,10 +240,42 @@
       // dock3 1.99akf: a featured slot (auto too), else Pepe's stream while it is featured (dock3 review: here and on air), else the mic stage
       view = f ? 'slot:' + f.id : featWins() ? 'pepe' : micDefault() ? 'mic' : 'pepe';
     }
+    // ── upnext: 📼 "Coming up next" ──
+    var UPNEXT_STANDBY_MS = 30000, UPNEXT_HANDOFF_MS = 20000, UPNEXT_POLL_MS = 3000;
+    var upCtl = null, upGone = {}, upTimer = null, upTimerFor = '', upPollT = null;
+    function srvNow() { return Date.now() + skew; }
+    function upBig(n) { return n.kind === 'episode' && n.show ? n.show : n.title || n.show || ''; }
+    // "Show – Title" / "Title (1968)" (the tab's title, the ON AIR line)
+    function upFull(n) { return n.kind === 'episode' && n.show ? n.show + (n.title ? ' – ' + n.title : '') : (n.title || '') + (n.year ? ' (' + n.year + ')' : ''); }
+    function upKey(n) { return n.key || [n.kind, n.show, n.title, n.season, n.episode, n.year].join('|'); }
+    function own(x, k) { return Object.prototype.hasOwnProperty.call(x, k); }
+    // the featured slot the server says is starting its next title, as a stage entry: the slot this page held (a 📼 queue between two titles)
+    // tagged pending, or one it never saw (a fresh ▶ Play, a page loaded mid-gap). A listed (live) slot is the stream itself - the card hands
+    // over to it. A pending entry whose up next is over (the server stopped naming it, next.until passed) goes: the defaults again.
+    function withPending(list, h) {
+      var n = h && h.next, id = h ? String(h.id) : '';
+      var ok = !!(n && !h.live && srvNow() < n.until && !(upGone[id] >= n.at));
+      var out = [], have = false;
+      for (var i = 0; i < list.length; i++) {
+        var s = list[i];
+        if (!s || String(s.id) !== id) { if (!(s && s.pending)) out.push(s); continue; }
+        have = true;
+        if (!s.held) { out.push(s); continue; }
+        if (ok) {
+          var c = {}; for (var k in s) if (own(s, k)) c[k] = s[k];
+          c.featured = true; c.pending = true; c.upnext = n; c.title = upFull(n); if (h.by) c.feature_by = h.by;
+          out.push(c);
+        } else if (!s.pending) out.push(s);              // an ordinary hold (a 📼 pause, an OBS reconnect): as before
+      }
+      if (ok && !have) out.unshift({ id: id, featured: true, feature_by: h.by, held: true, pending: true, upnext: n, title: upFull(n),
+                                     display: _t('js.stage.upnext.tab', '📼 Up next'), hls: null, nameCss: '' });
+      return out;
+    }
+    slots = withPending(slots, featHint);
     pickDefault();
     // 1.99ajr golive: `since` (a slot's start, server ms) -> the player starts where the broadcast is (embedUrl's `at`). The iframe
     // is keyed by the video itself, so a poll never rebuilds it; the position only counts when it IS (re)built.
-    var skew = 0;                                   // server clock - this one (from the poll's `now`)
+    // (`skew` - server clock minus this one - is set above: upnext needs it from the first render)
     function setEmbed(e, since) {
       var url = embedUrl(e);
       if (!o.embedHost) return;
@@ -236,12 +293,146 @@
     }
     // 1.99fv: the embed an admin put on Pepe's stage (null = his own stream). Re-checked like a slot's.
     function pepeEmbed() { return !ownPepe && pepeSrc && pepeSrc.mode === 'embed' && embedUrl(pepeSrc.embed) ? pepeSrc.embed : null; }
+    // ── upnext: the card (the micCtl / camCtl pattern) - mounted as the first child of o.wrap, every server text as textContent ──
+    function upOverlays(hide) {                     // the player's own overlays sit over the box: out of the way while the card is up
+      [o.reconnect, o.unmute].forEach(function (x) { if (x && x.style) x.style.visibility = hide ? 'hidden' : ''; });
+    }
+    function upCard(id, n) {
+      var D = document, my = { id: id, key: upKey(n), n: n, leaving: false, timers: [], handing: 0 };
+      function el(tag, cls, txt) { var x = D.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; }
+      function bars(cls) { var b = el('div', cls); for (var i = 0; i < 7; i++) b.appendChild(el('i')); return b; }
+      var card = el('div', 'st-upnext'), big = upBig(n);
+      card.setAttribute('role', 'status'); card.setAttribute('aria-live', 'polite');
+      card.setAttribute('data-len', big.length > 64 ? 'xl' : big.length > 36 ? 'l' : 's');
+      card.setAttribute('data-state', 'starting');
+      // (the live region goes in empty and is filled a moment later - one filled at insert is often not announced)
+      var sr = el('span', 'st-un-sr'); card.appendChild(sr);
+      var scr = el('div', 'st-un-screen'); scr.setAttribute('aria-hidden', 'true');
+      var band = el('div', 'st-un-band'); band.appendChild(bars('st-un-bars')); band.appendChild(bars('st-un-castle')); scr.appendChild(band);
+      var top = el('div', 'st-un-top'), clock = el('span', 'st-un-clock'); top.appendChild(clock); scr.appendChild(top);
+      var body = el('div', 'st-un-body'), pic = null, tx = el('div', 'st-un-txt');
+      tx.appendChild(el('p', 'st-un-kick', _t('js.stage.upnext.kicker', 'Coming up next')));
+      tx.appendChild(el('span', 'st-un-rule'));
+      tx.appendChild(el('p', 'st-un-title', big));
+      var sub = el('p', 'st-un-sub');
+      if (n.kind === 'episode') {
+        if (n.season != null && n.episode != null) sub.appendChild(el('span', 'st-un-meta', _t('js.stage.upnext.episode', 'S{season} · E{episode}', { season: n.season, episode: n.episode })));
+        if (n.show && n.title) sub.appendChild(el('span', 'st-un-ep', n.title));
+      } else sub.appendChild(el('span', 'st-un-meta', (n.year ? n.year + ' · ' : '') + _t('js.stage.upnext.movie', 'Movie')));
+      if (sub.children ? sub.children.length : sub.childNodes.length) tx.appendChild(sub);
+      var st = el('span', 'st-un-start'), word = el('span', 'st-un-word', _t('js.stage.upnext.starting', 'Starting'));
+      st.appendChild(el('i', 'st-un-play')); st.appendChild(word); st.appendChild(el('span', 'st-un-dots', '…')); st.appendChild(el('i', 'st-un-cur'));
+      tx.appendChild(st);
+      body.appendChild(tx); scr.appendChild(body);
+      var foot = el('div', 'st-un-foot'); foot.appendChild(el('span', 'st-un-bug', 'PATV')); scr.appendChild(foot);   // (the station bug: never translated)
+      scr.appendChild(el('div', 'st-un-roll'));
+      card.appendChild(scr);
+      // the poster: the site's own proxy (signed in), never a broken image - one that doesn't load is the plain card
+      function setPic(nn) {
+        var want = !!(nn.poster && nn.key && o.posters);
+        if (want && !pic) {
+          pic = el('div', 'st-un-pic'); var img = el('img');
+          img.alt = ''; img.decoding = 'async';
+          img.onerror = function () { card.setAttribute('data-poster', '0'); };
+          img.src = '/api/medialib/poster/' + encodeURIComponent(nn.key);
+          pic.appendChild(img); body.insertBefore(pic, tx);
+        }
+        card.setAttribute('data-poster', pic && want ? '1' : '0');
+      }
+      setPic(n);
+      var lang = (D.documentElement && D.documentElement.lang) || undefined, fmt = null;
+      try { fmt = new Intl.DateTimeFormat(lang, { hour: 'numeric', minute: '2-digit' }); } catch (e) { fmt = null; }
+      function tick() { var d = new Date(srvNow()); clock.textContent = fmt ? fmt.format(d).toUpperCase() : ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+      tick(); my.clock = setInterval(tick, 15000);
+      function ariaTitle(nn) {
+        if (nn.kind === 'episode' && nn.show) {
+          var e = nn.season != null && nn.episode != null ? _t('js.stage.upnext.episode_aria', 'season {season}, episode {episode}', { season: nn.season, episode: nn.episode }) : '';
+          return nn.show + (e ? ', ' + e : '') + (nn.title ? ', ' + nn.title : '');
+        }
+        return (nn.title || '') + (nn.year ? ' (' + nn.year + ')' : '');
+      }
+      my.timers.push(setTimeout(function () { sr.textContent = _t('js.stage.upnext.aria', 'Up next on the stage: {title} – starting…', { title: ariaTitle(my.n) }); }, 60));
+      // 30 s in and still starting: the classic "PLEASE STAND BY" (static), from the server's moment - a page loaded mid-gap is on time too
+      var standbyT = null;
+      function standby() {
+        clearTimeout(standbyT); standbyT = null;
+        var left = my.n.at + UPNEXT_STANDBY_MS - srvNow();
+        if (left > 0) { standbyT = setTimeout(standby, left + 20); return; }
+        card.setAttribute('data-state', 'standby'); word.textContent = _t('js.stage.upnext.standby', 'Please stand by');
+      }
+      standby();
+      o.wrap.insertBefore(card, o.wrap.firstChild || null);
+      upOverlays(true);
+      my.el = card;
+      /** a newer answer for the same title: its moment, a poster that came (signed in) */
+      my.update = function (nn) { var at0 = my.n.at; my.n = nn; setPic(nn); if (nn.at !== at0 && card.getAttribute('data-state') !== 'standby') standby(); };
+      /** the stream is listed live: its player started behind the card - fade once it plays (the reconnect overlay hides), at most UPNEXT_HANDOFF_MS */
+      my.handoff = function () {
+        if (my.handing || my.leaving) return;
+        my.handing = Date.now();
+        my.watch = setInterval(function () {
+          if (my.leaving) return;
+          if (Date.now() - my.handing > UPNEXT_HANDOFF_MS) { my.out(true); return; }   // never played: the player's own "Reconnecting…" again
+          if (!player.running()) return;
+          if (!o.reconnect || (o.reconnect.classList && o.reconnect.classList.contains('hide'))) my.out(false);
+        }, 250);
+      };
+      my.out = function (fast) {
+        if (my.leaving) return;
+        my.leaving = true;
+        clearInterval(my.clock); clearInterval(my.watch); clearTimeout(standbyT); my.timers.forEach(clearTimeout);
+        if (upCtl === my) upCtl = null;
+        upOverlays(false);
+        card.classList.add('is-out');
+        var gone = function () { if (card.parentNode) card.parentNode.removeChild(card); };
+        var rm = false;
+        try { rm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { rm = false; }
+        if (fast) gone(); else setTimeout(gone, rm ? 250 : 700);
+      };
+      return my;
+    }
+    function upShow(s) {
+      var n = s.upnext, id = String(s.id);
+      if (upCtl && upCtl.id === id && upCtl.key === upKey(n) && !upCtl.leaving && !upCtl.handing) { upCtl.update(n); return; }
+      upHide(true);
+      upCtl = upCard(id, n);
+    }
+    function upHide(fast) { if (upCtl) upCtl.out(fast); }
+    // while a card is up: ask every UPNEXT_POLL_MS, and drop it at next.until (server time) without waiting for a poll
+    function upSync() {
+      var p = null;
+      for (var i = 0; i < slots.length; i++) if (slots[i] && slots[i].pending) { p = slots[i]; break; }
+      if (!p || dead) {
+        if (upTimer) { clearTimeout(upTimer); upTimer = null; }
+        upTimerFor = '';
+        if (upPollT) { clearInterval(upPollT); upPollT = null; }
+        return;
+      }
+      if (!upPollT) upPollT = setInterval(poll, UPNEXT_POLL_MS);
+      var sig = p.id + '@' + p.upnext.at;
+      if (upTimerFor === sig) return;
+      if (upTimer) clearTimeout(upTimer);
+      upTimerFor = sig;
+      var id = String(p.id), at = p.upnext.at;
+      upTimer = setTimeout(function () { upTimer = null; upTimerFor = ''; upExpire(id, at); }, Math.max(0, p.upnext.until - srvNow()) + 50);
+    }
+    function upExpire(id, at) {
+      if (dead) return;
+      upGone[id] = Math.max(upGone[id] || 0, at);
+      var was = cur();
+      slots = slots.filter(function (s) { return !(s && String(s.id) === id && s.pending); });
+      if (was && !cur()) { chosen = false; pickDefault(); }          // (it was on screen: back on the defaults - mic follows / Pepe's stream)
+      else if (!chosen) pickDefault();
+      show();
+    }
     function show() {
       if (dead) return;
       if (view === 'mic' && !micShown()) pickDefault();
       var s = cur();
       if (view !== 'mic') micStop();
       if (!(s && s.cam)) camStop();
+      // upnext: the card stays while its slot is on screen (pending, or its stream just listed - the hand-over); anything else: gone
+      if (upCtl && !(s && String(s.id) === upCtl.id && (s.pending || (!s.cam && !s.embed && s.hls)))) upHide(false);
       if (view === 'mic') {                                     // micfollow: 🎙 On the mic (stage-mic.js)
         player.stop(); setEmbed(null);
         var prog = micOn() ? mic : idleProgram();               // mfix: idle during the grace - "nobody is on the mic right now"
@@ -249,6 +440,9 @@
         else micCtl = PATVStageMic.render(o.wrap, prog, { slug: padSlug, onChange: function () { /* the long-poll brings the new program */ } });
         if (o.unmute) o.unmute.classList.add('hide');
         o.onAir && o.onAir(true, '🎙 ' + (prog.count || '') + (prog.pins_n ? ' 📌' + prog.pins_n : ''));
+      } else if (s && s.pending) {                              // upnext: 📼 "Coming up next" until its stream is up
+        player.stop(); setEmbed(null); upShow(s);
+        o.onAir && o.onAir(true, '📼 ' + upFull(s.upnext), { pending: true });
       } else if (s && s.cam) {
         player.stop(); setEmbed(null); camShow(s);
         o.onAir && o.onAir(true, s.title || null);
@@ -258,6 +452,7 @@
       } else if (s) {
         setEmbed(null);
         player.setSrc(s.hls, s.whep || null); if (loaded) player.start();
+        if (upCtl && upCtl.id === String(s.id) && loaded) upCtl.handoff();   // upnext: the card fades once this plays
         o.onAir && o.onAir(true, s.title || null);
       } else if (pepeOn && pepeHere && pepeEmbed()) {
         // on air because HIS stream is; an admin chose to show it through YouTube / Twitch
@@ -278,12 +473,14 @@
       // 1.99aan: ✂ Cut / 📺 Play content here under the player (site staff; onair-bar.js)
       if (window.PATVOnAirBar && pepeHere) window.PATVOnAirBar.sync(o.wrap.parentNode || o.wrap);
       if (o.onShow) o.onShow(selection());
+      upSync();
     }
     // 1.99cr: what's on screen, for the Snap / Clip bar (stage-capture.js). Pepe's stream is captured from
     // his HLS on the server even while the page shows an admin-chosen embed, so it counts while HLS is on air.
     function selection() {
       if (view === 'mic' && micShown()) return micCtl ? micCtl.selection() : { stream: 'mic', label: '🎙', embed: true, capture: false, nsfw: false };   // micfollow: never captured
       var s = cur();
+      if (s && s.pending) return { stream: s.id, label: '📼', embed: true, capture: false, nsfw: false };   // upnext: a card - no snaps / clips / watch-minutes
       if (s && s.cam) return { stream: s.id, label: s.display, embed: true, capture: false, nsfw: !!s.nsfw };   // 1.99zc: no snaps / clips / watch-minutes of a cam
       if (s) return { stream: s.id, label: s.display, embed: !!s.embed, capture: !s.embed && s.capture !== false, nsfw: !!s.nsfw };
       if (pepeHere && pepeOn) return { stream: 'pepe', label: _t('js.stage.room.pepe_stream', 'Pepe\'s stream'), embed: false, capture: true, nsfw: false };
@@ -335,6 +532,12 @@
       if (!slots.length && !micShown() && !pepeAdm()) { box.innerHTML = pepeExtras(); return; }
       var h = '';
       slots.forEach(function (s) {
+        if (s.pending) {                                    // upnext: 📼 Up next - featured, not live yet (a hollow dot; the Dock's chip reads .n)
+          h += '<button type="button" class="stab feat off pending" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
+               (s.title ? ' title="' + esc(s.title) + '"' : '') + '><span class="dot" aria-hidden="true"></span><span class="star" aria-label="' + esc(_t('js.stage.room.featured', 'featured')) + '">★</span>' +
+               '<span class="n">' + esc(_t('js.stage.upnext.tab', '📼 Up next')) + '</span></button>';
+          return;
+        }
         h += '<button type="button" class="stab' + (s.featured ? ' feat' : '') + '" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
              (s.title ? ' title="' + esc(s.title) + '"' : '') + '>' +
              '<span class="dot" aria-hidden="true"></span>' + (s.featured ? '<span class="star" aria-label="' + esc(s.feature_by === 'auto' ? _t('js.stage.room.featured_auto', 'featured while live') : _t('js.stage.room.featured', 'featured')) + '"' +
@@ -435,6 +638,7 @@
           var hold = {}; for (var k in wasF) if (Object.prototype.hasOwnProperty.call(wasF, k)) hold[k] = wasF[k];
           hold.featured = true; hold.held = true; fresh = [hold].concat(fresh);
         }
+        fresh = withPending(fresh, nh);                                             // upnext: its next title is starting - the card
         featHint = nh; slots = fresh;
         var f = featured();
         if (was && !cur()) { chosen = false; pickDefault(); }                      // that slot ended / was cut (dock3: the viewer's pick ends with it)
@@ -539,6 +743,7 @@
     function destroy() {
       dead = true; clearInterval(pollTimer); if (beats) { clearInterval(beats); beats = null; }
       if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; }
+      upSync(); try { upHide(true); } catch (e) { /* gone */ }      // (upnext: its timers and card)
       try { micStop(); } catch (e) { /* gone */ } try { camStop(); } catch (e) { /* gone */ }
       try { player.stop(); } catch (e) { /* gone */ } try { setEmbed(null); } catch (e) { /* gone */ }
     }

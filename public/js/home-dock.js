@@ -54,6 +54,7 @@
         // with no pad applied a new front pad's stage to this block until the swap - its 🎙 mic stage over the featured stream)
         api: frontSlug ? '/api/stage?room=' + encodeURIComponent(frontSlug) + '&home=1' : '/api/stage',
         slots: S.slots || [], pepeOn: !!S.pepeOn, pepeHere: S.pepeHere !== false, pepeWhep: S.pepeWhep || null, pepeSrc: S.pepeSrc || null, manage: !!S.manage, featured: S.featured || null,   // (dock3 1.99akf: the front pad's featured slot)
+        posters: !!I.signed,                                // (upnext: the "Coming up next" card's poster - the site's proxy is for signed-in viewers)
         onAir: function (on) { box.classList.toggle('is-on', !!on); box.classList.toggle('is-off', !on); }
       });
     }

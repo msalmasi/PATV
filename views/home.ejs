@@ -92,7 +92,8 @@
 <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
 <script src="/public/js/webrtc-client.js?v=6"></script>
 <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 %>
-<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=22"></script>
+<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=23"></script><%# upnext: v23 - the 📼 "Coming up next" card %>
+<link rel="stylesheet" href="/public/css/stage-upnext.css?v=1">
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
@@ -827,6 +828,7 @@
       onPoll: function (g) { if (g && g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); } },
       api: '/api/stage', front: frontSlug, slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
       featured: <%- JSON.stringify(locals.stageFeatured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf
+      posters: <%= typeof me !== 'undefined' && me ? 'true' : 'false' %>,   // upnext: the card's poster (the /api/medialib/poster proxy is for signed-in viewers)
       onAir: function (on, sub) { setPill(on, sub || (on ? _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now'))); }
     });
 <%_ } _%>
@@ -1182,7 +1184,7 @@
 <script src="/public/js/pad-dock.js?v=11"></script><%# 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11 (the holder fit again on play / pause) %>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
-<script src="/public/js/home-dock.js?v=4"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list %>
+<script src="/public/js/home-dock.js?v=5"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list; v5 (upnext): the stage's posters flag %>
 <%_ } _%>
 <% if (tpListen_) { %>
 <script>
