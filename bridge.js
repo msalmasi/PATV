@@ -841,14 +841,15 @@ function audioHub(id) {
 }
 /** 1.99??: a mic-stage capture counts as this viewer's MP3 listener. Only new chunks, with their synchronous metadata.
  * Automatic hub closure calls optional fn.end() once; explicit untap only detaches and keeps the caller's recording. */
-function audioTap(roomId, fn, viewer) {
+// audiogate2: opts.net = the capture's network (netban.reqNet of the request that started it, memory only) - a network ban ends the tap too
+function audioTap(roomId, fn, viewer, { net = null } = {}) {
   const R = rooms.get(roomId);
   if (!R || !R.audio || typeof fn !== "function") return null;
   const a = audioHub(roomId);
   if (a.listeners.size >= AUDIO_MAX_LISTENERS) return null;
   let active = true;
   const untap = () => { active = false; a.listeners.delete(listener); };
-  const listener = { agViewer: viewer || null,
+  const listener = { agViewer: viewer || null, agNet: net && net.hash ? net : null,
     write(buf) { if (active) { try { fn(buf, require("./avsync").audioMeta(roomId)); } catch (e) { listener.end(); throw e; } } },
     end() { if (!active) return; untap(); if (typeof fn.end === "function") fn.end(); } };
   a.listeners.add(listener);
@@ -887,10 +888,27 @@ setInterval(() => {
  *   2. `deep` (changes and the timer; not adultgate's own 15 s tick): each signed-in listener left, by padaccess.hearNow - is
  *      that sign-in still live, the account still there, its class now?
  * only = a room id, a (roomId) -> boolean filter, or null (every room). -> {ended (step 1), pending (a promise of the total)}
+ * audiogate2 (listenban.js - owner 2026-11-05 "Yes"): a pad ban, a whole-bridge (!bridge) block or a network ban stops someone hearing
+ * the pad too. In step 2 every listener of a pad a ban may apply to (listenban.mayApply - from memory; a Public pad included, and a
+ * signed-out listener, by network only) is asked listenban.refusal - by the account it connected with (also once that sign-in is gone)
+ * and its network (the open request's trusted address - netban.reqNet; a capture's tap carries its own). listenban.changed (a ban
+ * made) runs this at once for that pad ("ban"); the 15 s pass catches what had no event. A pad nobody is banned from is still skipped.
  */
 const AUDIO_RECHECK_MS = 15 * 1000;
+/** audiogate2: a listener's network - a mic-stage capture's tap carries its own, an MP3 response reads its open request's (memory). */
+function listenerNet(l) {
+  if (l.agNet !== undefined) return l.agNet;
+  try { return l.req ? require("./netban").reqNet(l.req) : null; } catch (e) { return null; }
+}
+/** audiogate2: is this viewer (req.user-like; null = signed out) banned from hearing pad `roomId` (net = netban.reqNet)? The connect-time
+ *  question of /p/:slug/audio and the ⚡ ticket. A check that fails lets them in (no answer is not a no - the passes ask again). */
+async function listenRefused(roomId, user, net) {
+  try { return !!(await require("./listenban").refusal({ roomId, user: user && user.userId ? user : null, net })); }
+  catch (e) { console.error("[bridge] audiogate2: 1 ban check failed at connect - let in"); return false; }
+}
 function audioRecheck(why = "change", only = null, { deep = true } = {}) {
   const PA = require("./padaccess");
+  const LB = require("./listenban");
   const inScope = typeof only === "function" ? only : only == null ? () => true : (id) => id === String(only);
   let n = 0;
   const cut = (a, l) => {
@@ -904,25 +922,31 @@ function audioRecheck(why = "change", only = null, { deep = true } = {}) {
   for (const [id, a] of audio) {
     if (!a.listeners.size || !inScope(id)) continue;
     const perk = bridgeOk(id);
-    if (perk && PA.full(null, id)) continue;      // open to everyone (a Public pad the 18+ gate doesn't stop): nothing to ask
+    const open = perk && PA.full(null, id);
+    const bans = deep && LB.mayApply(id);         // audiogate2
+    if (open && !bans) continue;                  // open to everyone (a Public pad the 18+ gate doesn't stop), nobody banned: nothing to ask
     for (const l of [...a.listeners]) {
       const v = l.agViewer && l.agViewer.userId ? l.agViewer : null;
       if (!perk || !PA.full(v, id)) { cut(a, l); continue; }
-      if (deep && v) later.push({ id, a, l, uid: String(v.userId), session: l.agSession || null });
+      if (deep && (v || bans)) later.push({ id, a, l, uid: v ? String(v.userId) : null, session: l.agSession || null, open, bans });
     }
   }
   const sync = n;
   if (sync) console.log(`[bridge] audiogate (${why}): ended ${sync} room audio listener(s)`);
   if (!later.length) return { ended: sync, pending: Promise.resolve(sync) };
   const pending = (async () => {
-    let m = 0, failed = 0;
+    let m = 0, b = 0, failed = 0;
     for (const w of later) {
       if (!w.a.listeners.has(w.l)) continue;
-      let ok = true;
-      try { ok = await PA.hearNow(w.uid, w.id, { session: w.session }); } catch (e) { ok = true; failed++; }
-      if (!ok && cut(w.a, w.l)) m++;
+      let ok = true, banned = false;
+      try {
+        if (w.uid && !w.open) ok = await PA.hearNow(w.uid, w.id, { session: w.session });
+        if (ok && w.bans && (await LB.refusal({ roomId: w.id, userId: w.uid, net: () => listenerNet(w.l) }))) { ok = false; banned = true; }
+      } catch (e) { ok = true; failed++; }
+      if (!ok && cut(w.a, w.l)) { m++; if (banned) b++; }
     }
-    if (m) console.log(`[bridge] audiogate (${why}): ended ${m} room audio listener(s) (signed out / account / role)`);
+    if (m - b) console.log(`[bridge] audiogate (${why}): ended ${m - b} room audio listener(s) (signed out / account / role)`);
+    if (b) console.log(`[bridge] audiogate (${why}): ended ${b} room audio listener(s) (banned)`);
     if (failed) console.error(`[bridge] audiogate (${why}): ${failed} listener check(s) failed - kept, asked again next pass`);
     return sync + m;
   })();
@@ -934,6 +958,7 @@ async function audioTick() {
   if (audioTickBusy) return false;
   audioTickBusy = true;
   try {
+    await require("./listenban").refresh();      // audiogate2: which pads have bans (a row written with no event is seen here)
     await audioRecheck("tick").pending;
     await require("./roomrtc").recheck("tick");
   } catch (e) { console.error("[bridge] audiogate tick:", e.message); }
@@ -2017,6 +2042,14 @@ function register(app, { isBotToken, addUser }) {
     audioRecheck("access", roomId);
     return require("./roomrtc").recheck("access", roomId);
   });
+  // audiogate2 (listenban.js): a pad ban, a whole-bridge block or a network ban was made (one pad; null = it may apply to every pad) -
+  // whoever it covers stops hearing the room audio now: the MP3 relay + its levels, a mic-stage capture's tap, the ⚡ sessions
+  const LBm = require("./listenban");
+  LBm.refresh().catch(() => {});
+  LBm.onChange((roomId) => {
+    audioRecheck("ban", roomId);
+    return require("./roomrtc").recheck("ban", roomId);
+  });
   startAudioRecheck();
   const PW = require("./privwire");
   PW.init().catch((e) => console.error("[bridge] privacy wire:", e.message));
@@ -2168,9 +2201,15 @@ function register(app, { isBotToken, addUser }) {
     try { ip = require("./middleware/authGuard").clientIp(req); } catch (e) { ip = (req.socket && req.socket.remoteAddress) || "?"; }
     const wait = rtcHit(signed ? "u:" + req.user.userId : "ip:" + ip);
     if (wait) { res.set("Retry-After", String(wait)); return res.status(429).json({ ok: false, fallback: "rate" }); }
+    // audiogate2 (listenban.js): banned from hearing this pad (a pad ban, a whole-bridge block, a network ban) - the same answer as any
+    // other denial (the page plays the MP3 relay, which refuses too); a check that fails lets them in (no answer is not a no)
+    let net = null;
+    try { net = require("./netban").reqNet(req); } catch (e) { net = null; }
+    if (await listenRefused(R.id, req.user, net)) return res.status(403).json({ ok: false, fallback: "denied" });
     // audiogate: + the sign-in it was asked with (memory only, for the ticket's life): the hook and the re-check ask it's still live
+    // (audiogate2: + its network, the same way - the hook and the re-check ask a network ban with it)
     const ls = req.loginSession && req.user && req.user.userId && req.loginSession.userId === String(req.user.userId) ? req.loginSession.id : null;
-    try { res.json(require("./roomrtc").ticket(req.user, R, undefined, { session: ls })); } catch (e) {
+    try { res.json(require("./roomrtc").ticket(req.user, R, undefined, { session: ls, net })); } catch (e) {
       console.error("[bridge] room rtc ticket:", e.message);
       res.json({ ok: false, fallback: "error" });
     }
@@ -2189,6 +2228,11 @@ function register(app, { isBotToken, addUser }) {
     }
     if (!R && (!req.user || !req.user.userId)) return res.status(401).send("Sign in to listen.");
     if (!R || !R.audio || !isLiveShown(R)) return res.status(404).send("This room's audio isn't on.");
+    // audiogate2 (listenban.js): a pad ban, a whole-bridge block or a network ban - after the access rule (signed out on a Members pad
+    // still hears "Sign in to listen."); one plain answer for the three; a check that fails lets them in (no answer is not a no)
+    let net = null;
+    try { net = require("./netban").reqNet(req); } catch (e) { net = null; }
+    if (await listenRefused(R.id, req.user, net)) return res.status(403).send(require("./listenban").REFUSAL);
     const a = audioHub(R.id);
     if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
     // micvad 1.99akk: ?lv=1 (the page's MSE player where it has no analyser - iPhone) + the `levels` setting on = the same stream as

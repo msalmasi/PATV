@@ -9,6 +9,8 @@
 //          the room (padaccess.full: the same rule as /p/<slug>/audio). Anything that fails -> the page plays MP3.
 //          audiogate: and it keeps answering to that rule while it plays - recheck() kicks a session whose listener no longer
 //          passes (a pad tightened, a member removed, signed out, the bridge perk lost), like the MP3 relay's listeners.
+//          audiogate2: and a listener a pad ban, a whole-bridge (!bridge) block or a network ban covers is refused / kicked too
+//          (listenban.js - the ticket route, the hook and recheck ask it with the ticket's account and network).
 //
 // Who gets it: the stage setting `room_rtc` (/stage/admin): "off" (default) | "prime" (Prime Time pads - pad.primeTime -
 // plus comped admin pads, the house pad included) | "all". It also needs webrtc_enabled (the MediaMTX / TURN servers)
@@ -110,18 +112,28 @@ const READERS = new Map();             // session id -> {uid, roomId, at, ls}
 // for TICKET_MS (a ticket only opens a session): the hook gives it to the session it opens (READERS.ls), so signing out ends
 // that WebRTC session too, and a ticket from before a sign-out opens nothing. A restart forgets them: those sessions answer by
 // account only (as before).
-const TICKET_LS = new Map();           // ticket signature -> {uid, ls, until}
+// audiogate2 (listenban.js): + the network the ticket was asked from (netban.reqNet: the trusted proxy's address), signed out too - the
+// hook asks a network ban with it and gives it to the session it opens (READERS.net), so a network ban made later ends that session.
+// The same memory, the same life; never written or logged.
+const TICKET_LS = new Map();           // ticket signature -> {uid, ls, net, until}
 const TICKET_LS_MAX = 20000;
 const ticketSig = (tok) => { const m = /\.([A-Za-z0-9_-]{32})$/.exec(String(tok || "")); return m ? m[1] : null; };
-function noteTicketSession(tok, uid, ls, t = now()) {
+const netOk = (n) => (n && typeof n.hash === "string" && n.hash ? { ip: String(n.ip || ""), hash: n.hash } : null);
+function noteTicketSession(tok, uid, ls, t = now(), net = null) {
   const sig = ticketSig(tok);
-  if (!sig || !uid || !ls) return;
+  const n = netOk(net);
+  if (!sig || (!(uid && ls) && !n)) return;
   for (const [k, v] of TICKET_LS) { if (v.until > t && TICKET_LS.size < TICKET_LS_MAX) break; TICKET_LS.delete(k); }
-  TICKET_LS.set(sig, { uid: String(uid), ls: String(ls), until: t + TICKET_MS });
+  TICKET_LS.set(sig, { uid: uid ? String(uid) : null, ls: uid && ls ? String(ls) : null, net: n, until: t + TICKET_MS });
 }
 function ticketSession(tok, uid, t = now()) {
   const v = TICKET_LS.get(ticketSig(tok) || "");
-  return v && v.until > t && v.uid === String(uid || "") ? v.ls : null;
+  return v && v.until > t && v.ls && v.uid === String(uid || "") ? v.ls : null;
+}
+/** audiogate2: the network a ticket was asked from (null = not remembered: a restart since, or no trusted address). */
+function ticketNet(tok, t = now()) {
+  const v = TICKET_LS.get(ticketSig(tok) || "");
+  return v && v.until > t ? v.net || null : null;
 }
 // audiogate review (F1/F2): what the site can't vouch for after a restart, and kicks that didn't land.
 //   * MediaMTX keeps WebRTC sessions across a site restart (every deploy); the site forgets who they are. A session it has no
@@ -168,7 +180,7 @@ function active(t = now()) {
  * A viewer asks to listen over WebRTC. The caller has already checked they may hear the room (padaccess.full).
  * -> {ok: true, whep, ready} | {ok: false, fallback: why}   ("off" / "busy" / ...: the page plays MP3)
  */
-function ticket(user, R, t = now(), { session = null } = {}) {
+function ticket(user, R, t = now(), { session = null, net = null } = {}) {
   if (!on()) return { ok: false, fallback: "off" };
   if (!eligible(R, t)) return { ok: false, fallback: R && R.audio ? "not-eligible" : "no-audio" };
   const { cap } = cfg();
@@ -179,7 +191,7 @@ function ticket(user, R, t = now(), { session = null } = {}) {
   const s = st(R.id);
   const uid = user && user.userId ? String(user.userId) : null;
   const tk = readTicket(uid, p, t);
-  if (uid && session) noteTicketSession(tk, uid, session, t);      // audiogate
+  if ((uid && session) || net) noteTicketSession(tk, uid, session, t, net);      // audiogate (+ audiogate2: its network)
   const url = W().whepUrl(p) + "?pt=" + encodeURIComponent(tk);
   // 1.99yd: the player's jitter buffer target comes from the room-audio settings (/admin/pepe/audio)
   let jitter = 200;
@@ -248,6 +260,8 @@ function noteSync(items, t = now()) {
  * hasn't listed yet. A session the hook never saw (a site restart since) is ended on a change (its listener can ask for a new
  * ticket) - and, review F1, on the periodic tick too (see PREBOOT / idsMatch above). A kick that didn't land is tried again
  * (KICKED). Never cut: a pad open to everyone (no lookups), a lookup that fails (kept, asked again).
+ * audiogate2 (listenban.js): + a pad ban / a whole-bridge block / a network ban on the session's ticket account or network, on every pad
+ * a ban may apply to (listenban.mayApply - a Public pad too; one nobody is banned from is still skipped). why "ban" = listenban.changed.
  * only = a room id, a (roomId) -> boolean filter, or null (every room). -> how many were ended (retried kicks not counted)
  */
 async function recheck(why = "change", only = null) {
@@ -264,11 +278,14 @@ async function recheck(why = "change", only = null) {
   // review F1: an unrecorded session on the tick - only once the levels are loaded, and with the hook's ids confirmed (or opened
   // before this start)
   const unvouched = (sid) => !tick || (PA.isReady() && (idsMatch || PREBOOT.has(sid)));
-  let n = 0, again = 0, failed = 0;
+  const LB = require("./listenban");
+  let n = 0, again = 0, failed = 0, banned = 0;
   for (const [roomId, sids] of byRoom) {
     if (!inScope(roomId)) continue;
     const perk = perkOk(roomId);
-    if (perk && PA.full(null, roomId)) continue;     // open to everyone right now: nothing to ask
+    const open = perk && PA.full(null, roomId);
+    const bans = LB.mayApply(roomId);                 // audiogate2
+    if (open && !bans) continue;                      // open to everyone right now, nobody banned: nothing to ask
     for (const sid of sids) {
       const k = KICKED.get(sid);
       if (k) {                                        // review F2: already ended - again only if a newer listing still has it
@@ -276,11 +293,20 @@ async function recheck(why = "change", only = null) {
         continue;
       }
       const r = READERS.get(sid);
-      let stop;
+      let stop, ban = false;
       if (!perk) stop = true;
-      else if (!r || r.roomId !== roomId) stop = unvouched(sid);
-      else { try { stop = !(await PA.hearNow(r.uid, roomId, { session: r.ls || null })); } catch (e) { stop = false; failed++; } }
+      // audiogate2: on an open pad an unrecorded session (from before a restart: nobody knows whose) is ended only when a ban is made
+      // there ("ban" - its listener rejoins with a ticket the hook asks the ban with); never on the tick
+      else if (!r || r.roomId !== roomId) stop = open ? why === "ban" : unvouched(sid);
+      else {
+        try {
+          stop = !open && !(await PA.hearNow(r.uid, roomId, { session: r.ls || null }));
+          // audiogate2: a pad ban / a whole-bridge block / a network ban - by the ticket's account (bu) and network
+          if (!stop && bans && (await LB.refusal({ roomId, userId: r.bu || r.uid || null, net: r.net || null }))) stop = ban = true;
+        } catch (e) { stop = false; failed++; }
+      }
       if (!stop || KICKED.has(sid)) continue;         // (another pass may have ended it while this one waited)
+      if (ban) banned++;
       kick(sid);
       READERS.delete(sid);
       PREBOOT.delete(sid);
@@ -290,13 +316,18 @@ async function recheck(why = "change", only = null) {
     }
   }
   if (tick && sawPaths) preTick = false;
-  if (n) console.log(`[roomrtc] audiogate (${why}): ended ${n} WebRTC room listener(s)`);
+  if (n) console.log(`[roomrtc] audiogate (${why}): ended ${n} WebRTC room listener(s)${banned ? ` (${banned} banned)` : ""}`);
   if (again) console.log(`[roomrtc] audiogate (${why}): kicked ${again} ended session(s) again (MediaMTX still listed them)`);
   if (failed) console.error(`[roomrtc] audiogate (${why}): ${failed} listener check(s) failed - kept, asked again next pass`);
   return n;
 }
 
 const loopbackIp = (a) => /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.test(String(a || ""));
+/** audiogate2: the network of the address MediaMTX passed with a read (b.ip) - null for none / a loopback one. Used only to refuse. */
+function hookNet(ip) {
+  if (!ip || loopbackIp(ip)) return null;
+  try { const h = require("./netban").netHash(ip); return h ? { ip: String(ip), hash: h } : null; } catch (e) { return null; }
+}
 /**
  * The MediaMTX auth hook for one of THIS site's room paths (webrtc.whipAuth forwards the other site's).
  * publish: WHIP with Pepe's bearer for that path. read: WHEP only, with a good ticket from a viewer who may still
@@ -335,10 +366,19 @@ async function auth(b, action, proto) {
     let may;
     try { may = await require("./padaccess").hearNow(uid, R.id, { session: ls }); } catch (e) { may = require("./padaccess").full(null, R.id); }
     if (!may) return 403;
+    // audiogate2 (listenban.js): a pad ban / a whole-bridge block / a network ban - by the account the ticket was signed for (bu: also a
+    // ticket from before this start, which the access rule above takes as signed out) and the network it was asked from; a ticket whose
+    // network isn't remembered (a restart since) is asked with the address MediaMTX saw - only ever to refuse. A check that fails lets it
+    // play (no answer is not a no; the tick asks again).
+    const bu = c.uid || null;
+    const net = ticketNet(tok) || hookNet(b.ip);
+    try { if (await require("./listenban").refusal({ roomId: R.id, userId: bu, net })) return 403; }
+    catch (e) { console.error("[roomrtc] audiogate2: 1 ban check failed at the hook - let in"); }
     want(R.id);
     // adultgate site: who this session is, for recheck() (MediaMTX passes the session id with the read); audiogate: + its sign-in
+    // (audiogate2: + the ticket's account and network)
     if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) {
-      READERS.set(String(b.id), { uid, roomId: R.id, at: now(), ls });
+      READERS.set(String(b.id), { uid, roomId: R.id, at: now(), ls, bu, net });
       if (READERS.size > 20000) READERS.delete(READERS.keys().next().value);
     }
     return 200;
@@ -354,7 +394,7 @@ function hint(R) { return eligible(R); }
 module.exports = {
   PREFIX, PATH_RE, MODES, GRACE_MS, TICKET_MS, PENDING_MS,
   pathFor, roomForPath, pubKey, readTicket, checkTicket, isPrime, eligible, active, ticket, forBot, noteSync, noteCap, auth, hint, want, recheck,
-  _state: ST, _readers: READERS, _ticketSessions: TICKET_LS, ticketSession, _kicked: KICKED, _preboot: PREBOOT,
+  _state: ST, _readers: READERS, _ticketSessions: TICKET_LS, ticketSession, ticketNet, _kicked: KICKED, _preboot: PREBOOT,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setBoot: (t) => { bootAt = Number(t) || now(); },
   // (a test's "site restart": everything in memory is gone)

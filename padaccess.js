@@ -659,6 +659,7 @@ module.exports = {
   camVisible, camSlotsFor,                  // stagefix site
   state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, userInside, fullFor, rememberIp, Refuse, NOTE_MAX, RETRY_MS,
   hearNow,                                  // audiogate
+  accountLite,                              // audiogate2 (listenban.js): a listener's class now, for the network ban's staff pass
   READ_IP_MS, isReady: () => loaded, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => { ready = null; loaded = false; LEVEL = new Map(); MEMBERS = new Map(); ipOk.clear(); classCache.clear(); },
 };
 // gatefix site: what Pepe's DM / Telegram answers leave out (liveRoomsOutside, gateLiveRooms)

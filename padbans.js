@@ -264,6 +264,9 @@ async function ban(me, R, live, { ref, scope, dur, reason, nets = false, exempt 
     if (room) await require("./rooms").event(room, "pad-ban", me.username, `${eventName(p)} - ${scope}${until ? " until " + new Date(until).toISOString() : " (permanent)"}${why ? " - " + why : ""}`);
     await audit(me, "pad_ban", p, { room: room || "*", scope, until, via, login: p.login }, why);
     try { require("./micfollow").recheckLogin && require("./micfollow").recheckLogin(p.login); } catch (e) { /* no mic follows */ }
+    // audiogate2 (listenban.js): an account that links this login later is banned from hearing the room audio too - and one that
+    // already has it (loginOfCached) stops hearing it now
+    try { require("./listenban").changed(room || null); } catch (e) { /* no listening re-check */ }
   } else {
     const target = { userId: p.userId, username: p.username };
     if (scope === "bridge" || scope === "pad") {
@@ -441,6 +444,9 @@ async function linked(userId, login) {
       await runQuery("UPDATE veil_bans SET user_id = ? WHERE login = ? AND user_id IS NULL", [String(userId), l]);
     });
     dropCaches(null); loginCache.clear();
+    // audiogate2 (listenban.js): the bans it brought (feed_bans written above without feedstore.ban) stop the room audio now too
+    const padsOf = new Set(rows.map((r) => String(r.room_id || "")));
+    for (const id of padsOf.has("") ? [null] : padsOf) { try { require("./listenban").changed(id); } catch (e) { /* no listening re-check */ } }
   } catch (e) { console.error("[padbans] link:", e.message); }
 }
 

@@ -213,6 +213,9 @@ async function block({ roomId, target, feature = "all", until = null, reason = "
     return { block: rowOut(row), again: false };
   });
   if (!out.again) bump();
+  // audiogate2 (listenban.js): a whole-bridge block ('all') also stops them HEARING the pad's room audio - at once, not on the next pass
+  // (room '' = every pad). A one-feature block doesn't.
+  if (!out.again && feat === "all") { try { require("./listenban").changed(room || null); } catch (e) { console.error("[bridgeblocks] listen:", e.message); } }
   return out;
 }
 

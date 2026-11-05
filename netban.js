@@ -19,6 +19,8 @@
 //
 // ENFORCED (refusal(req, {scope, roomId, user})): sign-up (every web creator), sign-in (sessions.signIn), pad chat / commands / clips /
 // snapshots from the website, feed posts / comments / stories, DMs; pad-scope bans in that pad only (its chat, posts, stage booking).
+// audiogate2 (owner 2026-11-05): and LISTENING to a pad's room audio (listenban.js - refusalFor / anyFor; the MP3 relay, ⚡, a mic-clip
+// preview, a mic-stage clip), signed out too: refused at connect, cut at once when a ban is made (or the switch goes on). Never noted.
 // Exempt: Staff and above (SP feed.moderate), a ban's exempt list, bot-token routes (never asked), a direct socket. The refusal never
 // mentions an address: "That isn't available from your network right now. If you think this is a mistake, write to support."
 // Sign-in is checked inside sessions.signIn only (review fix: it knows the account, so staff and exempt accounts pass a password form
@@ -127,10 +129,24 @@ async function reload() {
       const s = exempt.get(Number(e.ban_id)) || new Set(); s.add(String(e.user_id)); exempt.set(Number(e.ban_id), s);
     }
   }
-  BANS = { hashes, cidrs, exempt, at: t, pad: rows.some((r) => r.scope === "pad") };
+  // audiogate2 (listenban.js): until when some ban applies everywhere (site) / in each pad - anyFor() answers from memory
+  const any = { site: 0, pads: new Map() };
+  for (const b of [...[...hashes.values()].flat(), ...cidrs]) {
+    const u = b.until == null ? Infinity : b.until;
+    if (b.scope === "site") any.site = Math.max(any.site, u);
+    else if (b.room) any.pads.set(b.room, Math.max(any.pads.get(b.room) || 0, u));
+  }
+  BANS = { hashes, cidrs, exempt, at: t, pad: rows.some((r) => r.scope === "pad"), any };
 }
 /** Is any active ban pad-scope (then the gate looks up which pads a request is for)? From memory. */
 const hasPadBans = () => !!BANS.pad;
+/** audiogate2 (listenban.js): may a network ban stop someone in pad `roomId` right now - the switch on and an active site ban, or a pad
+ *  ban there? From memory (no lookups; who is exempt isn't asked). */
+function anyFor(roomId) {
+  if (!ON || !BANS.any) return false;
+  const t = now();
+  return BANS.any.site > t || (BANS.any.pads.get(String(roomId || "")) || 0) > t;
+}
 async function fresh() { await init(); if (now() - BANS.at > REFRESH_MS) await reload(); }
 
 // ── ranges ──
@@ -162,6 +178,9 @@ function inCidr(ip, c) {
   const v = ip6(s); return v != null && (v & c.mask) === c.net;
 }
 
+/** audiogate2: tell listenban.js a network ban was made (pad `roomId`; null = it may apply to every pad). Never throws. */
+function listenChanged(roomId) { try { require("./listenban").changed(roomId || null, { net: true }); } catch (e) { console.error("[netban] listen:", e.message); } }
+
 /** Is `user` exempt from network bans (Staff and above)? */
 const staffExempt = (u) => { try { return !!(u && SP.can(u, "feed.moderate")); } catch (e) { return false; } };
 
@@ -170,12 +189,17 @@ const staffExempt = (u) => { try { return !!(u && SP.can(u, "feed.moderate")); }
  * pad's bans AND the site's). user = the account acting (null at sign-up) - Staff and a ban's exempt accounts pass.
  */
 async function refusal(req, { roomId = null, roomIds = null, user = null } = {}) {
+  return refusalFor(() => reqNet(req), { roomId, roomIds, user });
+}
+/** audiogate2: refusal() for a network already known - n = reqNet's {ip, hash} (or a function giving it), null = unknown (never refused).
+ *  listenban.js asks it for a listener whose request is long gone (a ⚡ session, a mic-stage capture). */
+async function refusalFor(net, { roomId = null, roomIds = null, user = null } = {}) {
   try {
     await fresh();
     if (!BANS.hashes.size && !BANS.cidrs.length) return null;
     if (user && staffExempt(user)) return null;
-    const n = reqNet(req);
-    if (!n) return null;
+    const n = typeof net === "function" ? net() : net;
+    if (!n || !n.hash) return null;
     const t = now(), uid = user && user.userId ? String(user.userId) : null;
     const pads = new Set([...(roomId ? [String(roomId)] : []), ...(Array.isArray(roomIds) ? roomIds.map(String) : [])]);
     const hit = (b) => (b.until == null || b.until > t) && (b.scope === "site" || (b.room && pads.has(b.room)))
@@ -283,6 +307,8 @@ async function banAccountNets(me, userId, { scope = "site", roomId = null, reaso
   await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", { userId: String(userId), username: null },
     { op: "account_nets", n: ids.length, scope, room: roomId || null, until, via }, String(reason || "").slice(0, 200) || null);
   await reload();
+  // audiogate2: whoever is listening from those networks stops hearing that pad's room audio (every pad's, for a site ban) - now
+  if (ids.length) listenChanged(scope === "pad" ? roomId : null);
   return { ok: true, networks: ids.length, until };
 }
 /** Ban one typed IP (stored only as its code) or a range (stored as the rule). */
@@ -298,6 +324,7 @@ async function banTyped(me, { ip = null, cidr = null, scope = "site", roomId = n
     [hash, rule, scope === "pad" ? "pad" : "site", scope === "pad" ? String(roomId || "") : null, until, String(reason || "").slice(0, 120) || null, String(me.userId), me.username, now()]);
   await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", null, { op: rule ? "range" : "ip", rule, scope, room: roomId || null, until }, String(reason || "").slice(0, 200) || null);
   await reload();
+  listenChanged(scope === "pad" ? roomId : null);           // audiogate2 (as banAccountNets)
   return { ok: true, id: r && r.id, until };
 }
 async function lift(me, id) {
@@ -348,6 +375,9 @@ async function setOn(me, on) {
     [on ? "1" : "0", now(), me.username]);
   ON = !!on;
   await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", null, { op: on ? "switch_on" : "switch_off" }, null);
+  // audiogate2: switched on, the bans in force apply to listening at once (a failed reload is the 60 s refresh's to retry - the switch
+  // itself is saved either way)
+  if (ON) { try { await reload(); } catch (e) { console.error("[netban] reload:", e.message); } listenChanged(null); }
   return { on: ON };
 }
 async function sweep() {
@@ -429,6 +459,6 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, note, refusal, newAccountRefusal, guardWrite, netHash, netOf, reqNet, parseCidr, inCidr, shared, sharedDetail, hitting, exempt, banAccountNets, banTyped, lift, listBans, setOn,
+module.exports = { init, register, note, refusal, refusalFor, anyFor, newAccountRefusal, guardWrite, netHash, netOf, reqNet, parseCidr, inCidr, shared, sharedDetail, hitting, exempt, banAccountNets, banTyped, lift, listBans, setOn,
   isOn, hasData, hasDataNow, hasPadBans, sweep, forget, reload, REFUSAL, KIND,
   _setClock: (f) => { clock = f; }, _setOn: (v) => { ON = !!v; }, _resetKey: () => { KEY = null; } };

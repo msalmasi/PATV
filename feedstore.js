@@ -2170,6 +2170,8 @@ async function ban(user, target, { room = "", reason = "", days = 0, untilMs = u
                   ON CONFLICT(user_id, room_id) DO UPDATE SET username = excluded.username, reason = excluded.reason, by = excluded.by, at = excluded.at,
                     until = excluded.until`,
                  [u.userId, roomId, u.username, cleanLine(reason, 200) || null, user.username, NOW(), until]);
+  // audiogate2 (listenban.js): a pad ban (a site-wide one: every pad) also stops them hearing the room audio - now, if they're listening
+  try { require("./listenban").changed(roomId || null); } catch (e) { console.error("[feed] ban listen:", e.message); }
   if (roomId) await rooms.event(roomId, "feed-ban", user.username, `${u.username}${until ? " until " + new Date(until).toISOString() : ""}`);
   try {
     await require("./adminaudit").record({ userId: user.userId, username: user.username }, "pad_ban", { userId: u.userId, username: u.username },
