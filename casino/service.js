@@ -145,12 +145,23 @@ async function loadSettings(force) {
   if (mn > mx) [mn, mx] = [C.MIN_BET, C.MAX_BET];
   if (hmn > hmx) [hmn, hmx] = [C.HR_MIN_BET, C.HR_MAX_BET];
   Object.assign(S.settings, { bj_min_bet: mn, bj_max_bet: mx, bj_hr_min_bet: hmn, bj_hr_max_bet: hmx });
+  for (const [k, d] of Object.entries(HM_QOL_NUMBERS)) {
+    const n = Number(kv[k]);
+    S.settings[k] = kv[k] !== undefined && Number.isInteger(n) && n >= 0 && n <= 3600 ? n : d;
+  }
+  for (const [k, d] of Object.entries(HM_QOL_LISTS)) S.settings[k] = validPresetList(kv[k]) ? String(kv[k]) : d;
   S.settingsAt = clock();
   return S.settings;
 }
 const LIMIT_KEYS = ["bj_min_bet", "bj_max_bet", "bj_hr_min_bet", "bj_hr_max_bet"];
+const HM_QOL_NUMBERS = { hm_sitout_mins: 10, hm_timebank_secs: 30, hm_timebank_max: 60, hm_timebank_per10: 5 };
+const HM_QOL_LISTS = { hm_presets_pot: "33,50,75,100,150", hm_presets_bb: "2.5,3,4" };
+const validPresetList = (v) => typeof v === "string" && /^\d+(?:\.\d+)?(?:,\d+(?:\.\d+)?){0,7}$/.test(v) && v.split(",").every((n) => Number(n) > 0 && Number(n) <= 1000);
 async function setSetting(key, value, actor) {
-  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].concat(LIMIT_KEYS).includes(key)) throw new Error("unknown setting");
+  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS)).includes(key)) throw new Error("unknown setting");
+  const qolNumber = Object.hasOwn(HM_QOL_NUMBERS, key), qolList = Object.hasOwn(HM_QOL_LISTS, key);
+  if (qolNumber && (!Number.isInteger(Number(value)) || Number(value) < (key === "hm_sitout_mins" ? 1 : 0) || Number(value) > 3600)) throw new Error("invalid Hold'em timer");
+  if (qolList && !validPresetList(value)) throw new Error("use a short comma-separated list of positive numbers");
   if (/_front$/.test(key) && !FRONTS.includes(String(value))) throw new Error("front end must be auto, patv or pepe");
   await ensure();
   if (LIMIT_KEYS.includes(key)) {
@@ -160,7 +171,7 @@ async function setSetting(key, value, actor) {
     const next = Object.assign({}, cur, { [key]: n });
     if (next.bj_min_bet > next.bj_max_bet || next.bj_hr_min_bet > next.bj_hr_max_bet) throw new Error("the minimum must not be above the maximum");
   }
-  const v = /_front$/.test(key) ? String(value)
+  const v = qolNumber || qolList ? String(value) : /_front$/.test(key) ? String(value)
           : LIMIT_KEYS.includes(key) ? String(Math.trunc(Number(String(value).replace(/,/g, ""))))
           : key !== "max_tables" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
                                  : String(Math.max(0, Math.trunc(Number(value)) || 0));

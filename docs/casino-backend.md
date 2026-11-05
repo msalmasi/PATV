@@ -1,5 +1,51 @@
 # Casino backend: blackjack and hold'em on the site
 
+## Hold'em quality of life (handoff 21, phase 1)
+
+The engine, rake, escrow keys and fairness proof are unchanged. The service stores
+`pre[uid] = {kind, amount, hand, street}` and `qol[uid] = {bank, hands, timeouts,
+out, since, back}` in the existing table JSON. Only the player's `me` view includes
+their pre-move. The existing casino veil functions still mask seats, logs and results.
+
+`pre check_fold|check|call|call_any|fold|off` replaces one pre-move. A changed
+call amount cancels `call`; any owed bet cancels `check`. Hand/street changes clear
+all selections. Execution occurs inside the existing locked action step, with the
+normal engine action and a table-only `auto:` annotation. External requests retain
+the existing action rate limit and idempotency keys.
+
+`casino/sizing.js` is pure and is also served at `/api/casino/sizing.js`: the page
+and service run the same parser. `min`, `max`/`all`, `pot`, `half`, percentages,
+`Nbb`, `+Nbb`, `Nx`, and amounts with k/m suffixes resolve to clamped raise-TO
+totals. Percentages use the pot after calling. The page previews the total.
+
+`sitout` keeps the seat and stack, and excludes that player from subsequent deals
+and blinds. `sitin` waits for a natural big-blind position; `sitin post` contributes
+one big blind on the next deal (a small blind already paid counts toward it).
+Only an active seat list is passed to `H.startHand`, then the complete seat ring is
+restored immediately. No sit/stand or PAT operation occurs during this filtering.
+If fewer than two active players can deal, the service waits; a returning waiter
+can choose post now. In particular, two returning waiters need one post-now choice.
+
+Timeouts check when free, otherwise fold, retaining the seat. Two consecutive
+timeouts sit out; a deliberate action resets the streak. An expired sit-out uses
+the existing keyed stand/payout path after the live hand ends. Sitting-out seats
+prevent the five-minute idle close from shortening their ten-minute limit.
+
+The bank is consumed by elapsed time when the normal action clock ends; an action
+deducts only the used seconds. During bank use, restart deducts elapsed time and
+resumes the remaining bank. A normal action clock keeps its existing restart grace.
+Each tenth dealt hand refills the bank, capped at the configured maximum.
+
+Settings (casino admin controls): `hm_sitout_mins=10`, `hm_timebank_secs=30`,
+`hm_timebank_max=60`, `hm_timebank_per10=5`,
+`hm_presets_pot="33,50,75,100,150"`, `hm_presets_bb="2.5,3,4"`.
+Preset lists contain 1–8 positive values at most 1000; timers are bounded whole
+numbers. These are controls for the existing Hold'em engine switch, not new flags.
+
+Keyboard: F fold, C check/call, R or Enter confirm raise; arrows step one BB,
+Shift+arrows five BB; 1–5 choose pot presets; Escape clears a pre-move.
+Typing, modifier shortcuts and form controls retain their normal keys.
+
 Status (2026-10-11): phase 1 (blackjack) and phase 2 (Hold'em) are built and on STAGING; prod gets the code DARK
 (`bj_enabled` / `hm_enabled` off, every room's switch off) when the user promotes it. The user's decisions are in
 section 14. Heists, web heists and heist word challenges are out of scope (pinned).

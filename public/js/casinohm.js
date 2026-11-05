@@ -3,13 +3,15 @@
 // (rotated, so the action still goes round in table order), the dealer button and blinds, bets in front of the seats, the
 // board and the pot (main pot / side pots / uncalled bet spelled out), YOUR hole cards (only ever in your own `me` part,
 // face down for everyone else), the showdown reveal and winner pops, an action bar with a bet slider + presets and a
-// countdown ring on the server's deadline, and the buy-in / top-up sheet. Moves post with an idempotency key.
+// countdown ring on the server's deadline, pre-moves, sizing grammar, sit-out and time-bank controls.
+// Buy-in / top-up and every move post with an idempotency key.
 (function () {
   "use strict";
   const CZ = window.CZ;
   if (!CZ) return;
   const { $, T, esc, fmt } = CZ;
   if (!CZ.tableId) { CZ.startLobby(); return; }
+  if (window.matchMedia && window.matchMedia("(max-width: 600px)").matches) $("cz-raisebox").open = false;
 
   const SLOTS = 9;
   const ref = {};
@@ -78,7 +80,9 @@
         const tags = [s.status === "allin" ? `<span class="tag red">${esc(T("allin", "all-in"))}</span>` : "", s.status === "folded" ? `<span class="tag">${esc(T("folded", "folded"))}</span>` : "",
                       s.status === "waiting" && inHand ? `<span class="tag">${esc(T("next_hand", "next hand"))}</span>` : "",
                       s.via === "room" ? '<span class="tag blue">🐸</span>' : "", s.host ? '<span class="tag gold">👑</span>' : "",
-                      s.leaving ? `<span class="tag red">${esc(T("leaving", "leaving"))}</span>` : ""].join("");
+                      s.leaving ? `<span class="tag red">${esc(T("leaving", "leaving"))}</span>` : "",
+                      s.sitting_out ? `<span class="tag">⏸ ${esc(T("sitting_out", "Sitting out"))}</span>` : s.waiting_bb ? `<span class="tag">${esc(T("waiting_bb", "Waiting for big blind"))}</span>` : "",
+                      `<span class="tag">${esc(T("bank_n", "Bank {n}s", { n: Math.ceil(s.bank_secs || 0) }))}</span>`].join("");
         // (1.99ajw casino2: the avatar + plate open the person menu - CZ.seatWho makes them a button when that seat has one)
         html = CZ.seatWho(s, CZ.avatarHTML(s) + `<span class="plate"><span class="nm">${esc(s.name)}</span><span class="sub">${fmt(s.stack)}</span></span>`) +
                (s.button ? `<span class="dbtn" title="${esc(T("dealer_btn", "Dealer button"))}">D</span>` : "") +
@@ -92,7 +96,7 @@
       if (who.dataset.v !== key) { who.dataset.v = key; who.innerHTML = html; }
       el.setAttribute("aria-label", s ? T("seat_lbl", "{name}, stack {n}", { name: s.name, n: fmt(s.stack) }) + (s.turn ? " · " + T("acting", "acting") : "") : T("open_seat", "Open seat"));
       const av = who.querySelector(".av");
-      if (av) CZ.armClock(av, s && s.turn && t.turn ? t.turn.deadline : null, t.act_secs);
+      if (av) { CZ.armClock(av, s && s.turn && t.turn ? t.turn.deadline : null, t.act_secs); av.classList.toggle("banking", !!(s && s.turn && t.turn && t.turn.banking)); }
       // the bet in front of the seat (with its blind)
       const bhtml = s && s.bet ? (s.blind ? `<span class="bl">${esc(s.blind)}</span>` : "") + CZ.stackHTML(s.bet, "", hrv) : "";
       bet.hidden = !bhtml;
@@ -220,12 +224,13 @@
 
   // ── raise sizing ──
   function raiseBounds(t) { return { min: Math.min(t.turn.min_to, t.turn.max_to), max: t.turn.max_to }; }
-  function preset(p) {
-    const t = last.table, tr = t.turn;
-    const { min, max } = raiseBounds(t);
-    const potAfterCall = t.pot + tr.to_call;
-    let v = p === "min" ? min : p === "all" ? max : tr.current_bet + Math.round(potAfterCall * (p === "half" ? 0.5 : 1));
-    return Math.max(min, Math.min(max, v));
+  function preset(p) { const t = last.table; return CZ.sizing.presetTo(p, t.turn, t.bb, t.pot).to; }
+  function parsedRaise() { const t = last.table; return CZ.sizing.parseSize($("cz-raise").value, t.turn, t.bb, t.pot); }
+  function previewRaise() {
+    const p = parsedRaise(), b = $("cz-playbox").querySelector('[data-v="raise"]');
+    b.disabled = !!p.error;
+    $("cz-raise").setAttribute("aria-invalid", p.error ? "true" : "false");
+    if (!p.error) { $("cz-slider").value = p.to; b.textContent = T("raise_to_n", "Raise to {n}", { n: fmt(p.to) }); }
   }
   function setRaise(v) {
     const t = last.table;
@@ -233,6 +238,7 @@
     v = Math.max(min, Math.min(max, Math.trunc(Number(v) || min)));
     $("cz-slider").value = String(v);
     $("cz-raise").value = String(v);
+    $("cz-playbox").querySelector('[data-v="raise"]').disabled = false;
     const all = v >= max;
     $("cz-playbox").querySelector('[data-v="raise"]').textContent = all ? T("allin_n", "All-in {n}", { n: fmt(v) })
       : t.current_bet ? T("raise_to_n", "Raise to {n}", { n: fmt(v) }) : T("bet_n", "Bet {n}", { n: fmt(v) });
@@ -265,8 +271,18 @@
         const { min, max } = raiseBounds(t);
         const s = $("cz-slider");
         s.min = String(min); s.max = String(max); s.step = String(Math.max(1, Math.min(t.bb, Math.floor((max - min) / 50) || 1)));
-        if (!raiseTouched || Number($("cz-raise").value) < min || Number($("cz-raise").value) > max) setRaise(min);
-        else setRaise($("cz-raise").value);
+        if (!raiseTouched) setRaise(min);
+        previewRaise();
+        const potRow = (t.presets_pot || [33,50,75,100,150]).map((n) => [n + "%", n + "%"]);
+        const bbRow = t.phase === "preflop" ? (t.presets_bb || [2.5,3,4]).map((n) => [n + "bb", n + "× BB"]) : [];
+        let bbFirst = false;
+        try { bbFirst = localStorage.getItem("hm_bb_first") === "1"; } catch (e) {}
+        const rows = bbFirst ? [bbRow, potRow] : [potRow, bbRow];
+        const html = rows.filter((r) => r.length).map((r) => '<span class="hm-preset-row">' + r.map(([p,l]) => `<button type="button" data-p="${esc(p)}">${esc(l)}</button>`).join("") + '</span>').join("") +
+          `<button type="button" data-p="min">${esc(T("p_min", "Min"))}</button><button type="button" data-p="all">${esc(T("p_all", "All-in"))}</button>` +
+          '<button type="button" data-step="1">+1 BB</button><button type="button" data-step="5">+5 BB</button>' +
+          `<button type="button" data-order="1">${esc(T("preset_order", "Swap rows"))}</button>`;
+        if ($("cz-presets").dataset.v !== html) { $("cz-presets").dataset.v = html; $("cz-presets").innerHTML = html; }
         rackFor(t, me);
       }
     }
@@ -285,6 +301,16 @@
     $("cz-deal").hidden = !(me.seat && !inHand && t.seats.filter((s) => s.stack > 0).length >= 2);
     $("cz-topup").hidden = !(me.seat && !inHand && me.stack + t.min_buy <= t.max_buy);
     $("cz-leave").hidden = !me.seat || me.leaving;
+    $("cz-sitout").hidden = !me.seat || me.sitting_out || me.waiting_bb;
+    $("cz-sitin").hidden = !me.seat || !me.sitting_out;
+    $("cz-postnow").hidden = !me.seat || !(me.sitting_out || me.waiting_bb);
+    $("cz-pre").hidden = !(me.in_hand && !me.folded && !myTurn);
+    for (const input of $("cz-pre").querySelectorAll("input[data-pre]")) {
+      input.checked = !!(me.pre && me.pre.kind === input.dataset.pre);
+      input.disabled = input.dataset.pre === "check" && me.to_call > 0;
+      if (input.dataset.pre === "call") input.nextElementSibling.textContent = T("call_n", "Call {n}", { n: fmt(me.to_call || 0) });
+    }
+    for (const id of ["cz-dclock", "cz-fclock"]) $(id).classList.toggle("banking", !!(t.turn && t.turn.banking));
   }
 
   // ── buy-in / top-up sheet ──
@@ -330,13 +356,15 @@
     b.addEventListener("click", () => {
       const v = b.dataset.v;
       if (v !== "raise") return act(v);
-      const t = last.table, amt = Number($("cz-raise").value);
+      const t = last.table, p = parsedRaise();
+      if (p.error) return;
+      const amt = p.to;
       if (amt >= t.turn.max_to) return act("allin");
       return act(t.current_bet ? "raise" : "bet", amt);
     });
   }
   $("cz-slider").addEventListener("input", (e) => { raiseTouched = true; setRaise(e.target.value); });
-  $("cz-raise").addEventListener("change", (e) => { raiseTouched = true; setRaise(e.target.value); });
+  $("cz-raise").addEventListener("input", () => { raiseTouched = true; previewRaise(); });
   $("cz-rack").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-add]");
     if (!b || !last || !last.table.turn) return;
@@ -344,7 +372,17 @@
     raiseTouched = true;
     setRaise(cur + Number(b.dataset.add));
   });
-  $("cz-presets").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (b && last && last.table.turn) { raiseTouched = true; setRaise(preset(b.dataset.p)); } });
+  $("cz-presets").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b || !last || !last.table.turn) return;
+    if (b.dataset.order) { try { localStorage.setItem("hm_bb_first", localStorage.getItem("hm_bb_first") === "1" ? "0" : "1"); } catch (err) {} dock(last.table,last.me,true); return; }
+    raiseTouched = true;
+    setRaise(b.dataset.step ? (parsedRaise().to || last.table.turn.min_to) + Number(b.dataset.step) * last.table.bb : preset(b.dataset.p));
+    previewRaise();
+  });
+  $("cz-pre").addEventListener("change", (e) => { if (e.target.dataset.pre) act("pre", e.target.checked ? e.target.dataset.pre : "off"); });
+  $("cz-sitout").addEventListener("click", () => act("sitout"));
+  $("cz-sitin").addEventListener("click", () => act("sitin"));
+  $("cz-postnow").addEventListener("click", () => act("sitin", "post"));
   $("cz-sit").addEventListener("click", () => openBuy("sit"));
   $("cz-topup").addEventListener("click", () => openBuy("top"));
   $("cz-seats").addEventListener("click", (e) => { if (e.target.closest("[data-sit]")) openBuy("sit"); });
@@ -360,9 +398,15 @@
   // keyboard on your turn: F fold, C check / call, R raise (not while typing)
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || /input|select|textarea/i.test((e.target && e.target.tagName) || "")) return;
-    if (!last || !last.me || !last.me.my_turn) return;
+    if (document.querySelector("dialog[open]") || (e.target && (e.target.isContentEditable || (e.target.closest && e.target.closest('[role="menu"]'))))) return;
+    if (e.key === "Enter" && e.target && e.target.closest && e.target.closest('button, a, summary, [role="button"]')) return;
+    if (!last || !last.me) return;
+    if (e.key === "Escape" && last.me.pre) { e.preventDefault(); act("pre", "off"); return; }
+    if (!last.me.my_turn) return;
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); raiseTouched = true; setRaise((parsedRaise().to || last.table.turn.min_to) + (e.key === "ArrowUp" ? 1 : -1) * last.table.bb * (e.shiftKey ? 5 : 1)); previewRaise(); return; }
+    if (/^[1-5]$/.test(e.key)) { const p = (last.table.presets_pot || [33,50,75,100,150])[Number(e.key)-1]; if (p) { e.preventDefault(); raiseTouched = true; setRaise(preset(p + "%")); previewRaise(); } return; }
     const k = e.key.toLowerCase();
-    const sel = k === "f" ? '[data-v="fold"]' : k === "c" ? '[data-v="check"]:not([hidden]), [data-v="call"]:not([hidden])' : k === "r" ? '[data-v="raise"]' : null;
+    const sel = k === "f" ? '[data-v="fold"]' : k === "c" ? '[data-v="check"]:not([hidden]), [data-v="call"]:not([hidden])' : (k === "r" || k === "enter") ? '[data-v="raise"]' : null;
     const b = sel && document.querySelector("#cz-playbox " + sel.split(", ").join(", #cz-playbox "));
     if (b && !b.hidden && !b.disabled) { e.preventDefault(); b.click(); }
   });

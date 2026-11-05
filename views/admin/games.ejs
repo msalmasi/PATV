@@ -58,6 +58,31 @@
 </section>
 
 <section class="adm-card" id="casino" aria-labelledby="casinoT">
+  <% if (_can('casino.admin') && locals.casino) { %>
+  <h2>Hold'em controls</h2>
+  <form id="hmQolForm" class="adm-form">
+    <% [['hm_sitout_mins','Sit-out limit (minutes)'],['hm_timebank_secs','Initial time bank (seconds)'],['hm_timebank_max','Maximum time bank (seconds)'],['hm_timebank_per10','Bank refill per 10 hands (seconds)'],['hm_presets_pot','Pot presets (%)'],['hm_presets_bb','Preflop presets (BB)']].forEach(([key,label]) => { %>
+    <label><%= label %><input name="<%= key %>" value="<%= locals.casino[key] %>" required></label>
+    <% }) %>
+    <button type="submit">Save Hold'em controls</button><span id="hmQolStatus" role="status"></span>
+  </form>
+  <script>
+  (function () {
+    var form = document.getElementById('hmQolForm');
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var status = document.getElementById('hmQolStatus');
+      try {
+        for (var input of form.querySelectorAll('input[name]')) {
+          var r = await fetch('/api/casino/admin/settings', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-Requested-With':'fetch'}, body:JSON.stringify({key:input.name,value:input.value})});
+          var j = await r.json(); if (!j.ok) throw new Error(j.error || 'Save failed');
+        }
+        status.textContent = 'Saved';
+      } catch (err) { status.textContent = err.message || 'Save failed'; }
+    });
+  })();
+  </script>
+  <% } %>
   <h2 id="casinoT">Casino bans</h2>
   <p class="adm-help">One flag blocks a member from all casino play (the web wheel and blackjack, the chat games, Discord). Pepe sets and lists it from his admin panel / chat; the site only enforces it.</p>
   <div class="adm-actions"><a class="adm-btn ghost" href="/casino">Casino lobby ›</a><a class="adm-btn ghost" href="/lotto">Lotto ›</a></div>

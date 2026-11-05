@@ -142,8 +142,9 @@ test("a hand: buy-ins charged, showdown, the 2% rake to the House, the stack pai
   assert.equal(await bal("u2"), 99000 + 950);
 });
 
-test("time-outs: a check when free, a fold (and sat out) when facing a bet; the next hand deals itself", async () => {
+test("time-outs: a check when free, a fold and retained seat when facing a bet; the next hand deals itself", async () => {
   await fresh();
+  await svc.setSetting("hm_timebank_secs", "0", "test");
   const tid = await table();
   const T = svc.getTable(tid);
   await A(ann, "sit", ["1000"], { table: tid });
@@ -153,14 +154,14 @@ test("time-outs: a check when free, a fold (and sat out) when facing a bet; the 
   await A(ann, "deal", [], { table: tid });
   // 3-handed: button Ann, SB Bob, BB Dan, Ann first to act facing 50
   await later(61);
-  assert.ok(T.eng.folded.includes("u1") && T.eng.leaving.includes("u1"), "folded on time-out and sat out");
+  assert.ok(T.eng.folded.includes("u1") && !T.eng.leaving.includes("u1"), "folded on time-out and kept seat");
   await A(bob, "call", [], { table: tid });
   await later(61);                                        // Dan can check: he checks
   assert.ok(T.log.some((l) => /Dan timed out — checks/.test(l.text)));
   for (let i = 0; i < 3; i++) { await A(bob, "check", [], { table: tid }); await A(dan, "check", [], { table: tid }); }
   assert.equal(T.eng.hand_active, false);
-  assert.ok(!T.eng.seats.includes("u1"), "Ann was cashed out after the hand");
-  assert.equal(await bal("u1"), 99000 + 1000);
+  assert.ok(T.eng.seats.includes("u1"), "seat and chips retained after one timeout");
+  assert.equal(await bal("u1"), 99000);
   assert.ok(T.dl.next);
   await later(16);
   assert.equal(T.eng.hand_active, true, "the next hand dealt itself");

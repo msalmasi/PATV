@@ -242,7 +242,7 @@ test("rate limits: 30 a minute per account (people) / per account or address (pa
 
 test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel are wired, with their scripts and cache-busters", () => {
   const ejs = require(path.join(repo, "node_modules", "ejs"));
-  for (const [f, js] of [["casino-hm.ejs", "casinohm.js?v=7"], ["casino-bj.ejs", "casinobj.js?v=8"]]) {
+  for (const [f, js] of [["casino-hm.ejs", "casinohm.js?v=8"], ["casino-bj.ejs", "casinobj.js?v=8"]]) {
     const src = fs.readFileSync(path.join(repo, "views", f), "utf8");
     // (1.99ajw casino2 rework: room-mod v16 - 1.99ajn padppl's 🚫 Block / ✅ Unblock in the menu - with its sheet + look for signed-in viewers)
     for (const s of ["casino-ui.js?v=8", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=11", "person-sheet.css?v=3",   // (1.99ajy dockmedia: pad-dock.css v9; pausebars: v11 - the pad's current file; flairfix: casino-ui v8)

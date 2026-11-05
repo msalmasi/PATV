@@ -49,7 +49,7 @@
   .dock-row.raise { display: grid; gap: 8px; width: 100%; max-width: 620px; margin-inline: auto; }
   .raise-row { display: flex; align-items: center; gap: 8px; }
   .raise input[type=range] { flex: 1; min-width: 0; height: 36px; accent-color: var(--gold); }
-  .raise input[type=number] { width: 120px; min-height: 44px; margin: 0; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: #06100a; color: #fff;
+  .raise input[type=text] { width: 120px; min-height: 44px; margin: 0; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: #06100a; color: #fff;
                               font: 700 16px var(--ds-font); text-align: center; }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
   .presets button { min-height: 40px; margin: 0; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,.35); color: var(--txt); font: 700 13px var(--ds-font); cursor: pointer; }
@@ -147,7 +147,8 @@
             <button type="button" class="cz-btn gold" data-v="raise"></button>
           </div>
         </div>
-        <div class="dock-row raise" id="cz-raisebox">
+        <details class="dock-row raise" id="cz-raisebox" open>
+          <summary><%- t('casino.sizing') %></summary>
           <div class="presets" id="cz-presets" role="group" aria-label="<%- t('casino.presets') %>">
             <button type="button" data-p="min"><%- t('casino.p_min') %></button>
             <button type="button" data-p="half"><%- t('casino.p_half') %></button>
@@ -157,16 +158,24 @@
           <div class="rack" id="cz-rack" role="group" aria-label="<%- t('casino.chips') %>"></div>
           <div class="raise-row">
             <input type="range" id="cz-slider" aria-label="<%- t('casino.raise_to') %>">
-            <input type="number" id="cz-raise" inputmode="numeric" aria-label="<%- t('casino.raise_to') %>">
+            <input type="text" id="cz-raise" aria-label="<%- t('casino.raise_to') %>" autocomplete="off" spellcheck="false">
           </div>
-        </div>
+        </details>
       </div>
       <p class="dock-note" id="cz-wait" hidden></p>
+      <div class="dock-row presets" id="cz-pre" hidden role="group" aria-label="<%- t('casino.premove') %>">
+        <% [['check_fold','pre_checkfold'],['check','check'],['call','call'],['call_any','pre_callany'],['fold','fold']].forEach(([k,l]) => { %>
+        <label><input type="checkbox" data-pre="<%= k %>"> <span><%- t('casino.' + l) %></span></label>
+        <% }) %>
+      </div>
       <div class="dock-row" id="cz-misc">
         <button type="button" class="cz-btn gold" id="cz-sit" hidden><%- t('casino.sit_down') %></button>
         <button type="button" class="cz-btn green sm" id="cz-deal" hidden><%- t('casino.deal_now') %></button>
         <button type="button" class="cz-btn ghost sm" id="cz-topup" hidden><%- t('casino.top_up') %></button>
         <button type="button" class="cz-btn ghost sm" id="cz-leave" hidden><%- t('casino.stand_up') %></button>
+        <button type="button" class="cz-btn ghost sm" id="cz-sitout" hidden><%- t('casino.sitout_next') %></button>
+        <button type="button" class="cz-btn green sm" id="cz-sitin" hidden><%- t('casino.im_back') %></button>
+        <button type="button" class="cz-btn ghost sm" id="cz-postnow" hidden><%- t('casino.post_now') %></button>
       </div>
     </div>
   </section>
@@ -189,4 +198,5 @@
 </main>
 <% if (tableId) { %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><% } %><% } %><%# 1.99ajw casino2 rework: room-mod v16 (1.99ajn padppl - the menu's 🚫 Block / ✅ Unblock) + its sheet %>
 <script src="/public/js/casino-ui.js?v=8"></script>
-<script src="/public/js/casinohm.js?v=7"></script>
+<script src="/api/casino/sizing.js?v=1"></script>
+<script src="/public/js/casinohm.js?v=8"></script>

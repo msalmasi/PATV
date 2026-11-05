@@ -32,7 +32,7 @@ const svc = require("./service");
 const rewards = require("./rewards");
 
 const WEB_VERBS = new Set(["bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
-                           "sit", "check", "call", "fold", "allin", "raise", "cards"]);
+                           "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin"]);
 const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status",
                            "help", "open", "new", "go", "wager", "auto", "rebet", "close", "stop", "quit", "insure", "stay", "dd",
                            "table", "info", "show", "rules", "how", "fair", "",
@@ -111,6 +111,7 @@ async function history(tableId, limit) {
 }
 
 function register(app, { isBotToken, addUser }) {
+  app.get("/api/casino/sizing.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "sizing.js")));
   const boot = () => svc.boot().catch((e) => console.error("[casino] boot:", e));
   setImmediate(boot);
 

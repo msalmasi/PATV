@@ -4,6 +4,20 @@
     1.99pz polish: on the design-system tokens (docs/design-system.md, "Area notes: games" > Casino): the page is main.ds-page.flow.cz,
     gold / type / radii / focus / breakpoints are ds tokens, action-button fills pass AA with white ink, logical properties. %>
 <style>
+  .cz .clock.banking { color: #ef9d35; border-color: #ef9d35; }
+  .cz .banking .ring .fg { stroke: #ef9d35; }
+  .cz details.raise { display: block; }
+  .cz details.raise summary { cursor: pointer; padding: 6px; }
+  .cz .hm-preset-row { display: flex; gap: 5px; flex-wrap: wrap; }
+  .cz #cz-pre { flex-wrap: wrap; gap: 10px; }
+  .cz #cz-pre label { padding: 8px 5px; cursor: pointer; }
+  @media (max-width: 600px) {
+    .cz .dock-acts { display: flex; flex-wrap: nowrap; width: 100%; gap: 5px; }
+    .cz .dock-acts button { flex: 1; min-width: 0; padding: 12px 7px; }
+    .cz #cz-pre { max-height: 90px; overflow: auto; }
+    .cz #cz-presets { flex-wrap: wrap; }
+    .cz #cz-misc { flex-wrap: wrap; }
+  }
   .cz { --ds-ac: var(--ds-acc-casino); --ds-ac-2: var(--ds-acc-casino); --ds-ac-bg: rgba(126,224,138,.12); --ds-ac-line: #2e6b31; --ds-on-ac: #0b0f0c;
         --felt0: #0a3a1f; --felt1: #12673a; --felt2: #1b8a4d; --rail0: #2a160a; --rail1: #5a3418; --rail2: #8a5a2b;
         --gold: var(--ds-gold); --gold2: #ffc400; --goldt: var(--ds-gold-text); --ink: #0b0f0c; --mut: #a9bfae; --txt: #eef5ef; --bad: #ff8a80; --good: var(--ds-acc-casino);
