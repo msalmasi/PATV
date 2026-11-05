@@ -906,6 +906,15 @@ async function listenRefused(roomId, user, net) {
   try { return !!(await require("./listenban").refusal({ roomId, user: user && user.userId ? user : null, net })); }
   catch (e) { console.error("[bridge] audiogate2: 1 ban check failed at connect - let in"); return false; }
 }
+/** audiogate2 review (access F4): the connect check again for one listener just added to hub `a` - a ban was made while it ran. */
+function listenAgain(roomId, a, l, user, net) {
+  (async () => {
+    if (!(await listenRefused(roomId, user, net)) || !a.listeners.has(l)) return;
+    a.listeners.delete(l);
+    try { l.end(); } catch (e) { /* gone */ }
+    console.log("[bridge] audiogate (ban): ended 1 room audio listener(s) (banned)");
+  })().catch(() => {});
+}
 function audioRecheck(why = "change", only = null, { deep = true } = {}) {
   const PA = require("./padaccess");
   const LB = require("./listenban");
@@ -936,14 +945,21 @@ function audioRecheck(why = "change", only = null, { deep = true } = {}) {
   if (!later.length) return { ended: sync, pending: Promise.resolve(sync) };
   const pending = (async () => {
     let m = 0, b = 0, failed = 0;
+    const asks = [];
     for (const w of later) {
       if (!w.a.listeners.has(w.l)) continue;
-      let ok = true, banned = false;
-      try {
-        if (w.uid && !w.open) ok = await PA.hearNow(w.uid, w.id, { session: w.session });
-        if (ok && w.bans && (await LB.refusal({ roomId: w.id, userId: w.uid, net: () => listenerNet(w.l) }))) { ok = false; banned = true; }
-      } catch (e) { ok = true; failed++; }
-      if (!ok && cut(w.a, w.l)) { m++; if (banned) b++; }
+      if (w.uid && !w.open) {
+        let ok = true;
+        try { ok = await PA.hearNow(w.uid, w.id, { session: w.session }); } catch (e) { failed++; continue; }
+        if (!ok) { if (cut(w.a, w.l)) m++; continue; }
+      }
+      if (w.bans) asks.push(w);
+    }
+    // audiogate2 review (regression F1): the ban question for the whole pass at once - a few lookups, not a few per listener
+    if (asks.length) {
+      let hits = null;
+      try { hits = await LB.refusals(asks.map((w) => ({ roomId: w.id, userId: w.uid, net: () => listenerNet(w.l) }))); } catch (e) { failed += asks.length; }
+      if (hits) asks.forEach((w, k) => { if (hits[k] && cut(w.a, w.l)) { m++; b++; } });
     }
     if (m - b) console.log(`[bridge] audiogate (${why}): ended ${m - b} room audio listener(s) (signed out / account / role)`);
     if (b) console.log(`[bridge] audiogate (${why}): ended ${b} room audio listener(s) (banned)`);
@@ -2232,7 +2248,10 @@ function register(app, { isBotToken, addUser }) {
     // still hears "Sign in to listen."); one plain answer for the three; a check that fails lets them in (no answer is not a no)
     let net = null;
     try { net = require("./netban").reqNet(req); } catch (e) { net = null; }
+    const gen = require("./listenban").gen();       // review fix (access F4): a ban made while this check runs is asked again below
     if (await listenRefused(R.id, req.user, net)) return res.status(403).send(require("./listenban").REFUSAL);
+    // review fix (regression F2): the listener left while the check ran - nothing joins the hub (its close already fired)
+    if (req.destroyed || res.destroyed || res.writableEnded || !req.socket || req.socket.destroyed) return;
     const a = audioHub(R.id);
     if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
     // micvad 1.99akk: ?lv=1 (the page's MSE player where it has no analyser - iPhone) + the `levels` setting on = the same stream as
@@ -2250,6 +2269,9 @@ function register(app, { isBotToken, addUser }) {
     res.agSession = res.agViewer && req.loginSession && req.loginSession.userId === String(res.agViewer.userId) ? req.loginSession.id : null;
     a.listeners.add(res);
     req.on("close", () => { a.listeners.delete(res); });
+    // review fix (access F4): a ban made between the check above and now found nobody to end (they weren't in the hub yet) - asked
+    // once more now that they are; a ban made from here on finds them in the hub
+    if (require("./listenban").gen() !== gen) listenAgain(R.id, a, res, req.user, net);
   });
 
   app.get("/api/rooms/:slug/live", addUser, async (req, res) => {
@@ -2777,7 +2799,7 @@ async function forgetVeiled(logins) {
 }
 
 module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99ajc dockfu (D4)
-  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, audioRecheck, AUDIO_RECHECK_MS, _audioTick: audioTick, _audioRecheckOn: () => !!audioRecheckT, _audioRecheckStart: startAudioRecheck, _audioRecheckStop: stopAudioRecheck, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, audioRecheck, AUDIO_RECHECK_MS, _audioTick: audioTick, _audioListeners: (id) => (audio.get(String(id)) ? audio.get(String(id)).listeners.size : 0), _audioRecheckOn: () => !!audioRecheckT, _audioRecheckStart: startAudioRecheck, _audioRecheckStop: stopAudioRecheck, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)

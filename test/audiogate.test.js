@@ -15,6 +15,9 @@
 //     every pad) and a network ban (its switch on) stop someone hearing the pad too - refused at connect and cut while listening, on
 //     every path (MP3 raw + ?lv=1, ⚡ ticket / hook / sessions, the mic-stage tap + capture gate, the mic-clip preview); a one-feature
 //     block and an incognito ban cut nothing; staff / exempt accounts pass a network ban; lifting lets them straight back in
+//   * audiogate2 review: ⚡ asks both networks (the ticket's + the reader's); a ban made around a restart is replayed at the first
+//     listing; a login moved with no event / an account merged away count; a ban racing a connect check still cuts; one pass = a few
+//     lookups; a listener gone mid-check leaves nothing behind; an unknown Public ⚡ session is ended at most once
 //   TZ=UTC PEPE_BOT_DIR=G:/wt/casino2-bot node --test test/audiogate.test.js
 "use strict";
 const test = require("node:test");
@@ -992,12 +995,13 @@ test("audiogate2: ⚡ after a restart - a ticket whose network the site forgot i
 test("audiogate2: a ban check that fails keeps whoever is listening and lets a new listener in (no answer is not a no), and says so - the log lines carry counts, never who", async () => {
   await bansReady(); await rtcOn();
   const P = PADS.mem;
-  const logs = [], ol = console.log, oe = console.error, orig = LB.refusal;
+  const logs = [], ol = console.log, oe = console.error, orig = LB.refusal, origMany = LB.refusals;
   let s = null, n = null;
   try {
     s = await open("/p/" + P.slug + "/audio", U.eve);
     console.log = (...a) => logs.push(a.join(" ")); console.error = (...a) => logs.push(a.join(" "));
     LB.refusal = async () => { throw new Error("SQLITE_BUSY"); };
+    LB.refusals = async () => { throw new Error("SQLITE_BUSY"); };       // (the passes ask a whole pass at once)
     await padBan(U.frank, P);                                 // (a ban on someone else: the pad may now have bans)
     await bridge.audioRecheck("tick").pending;
     await sleep(40);
@@ -1006,7 +1010,7 @@ test("audiogate2: a ban check that fails keeps whoever is listening and lets a n
     n = await open("/p/" + P.slug + "/audio", U.eve);
     assert.equal(n.status, 200, "connect: let in");
     assert.ok(logs.some((l) => /audiogate2: 1 ban check failed at connect - let in/.test(l)));
-    LB.refusal = orig;
+    LB.refusal = orig; LB.refusals = origMany;
     // a real cut: counts only
     logs.length = 0;
     await padBan(U.eve, P);
@@ -1015,7 +1019,7 @@ test("audiogate2: a ban check that fails keeps whoever is listening and lets a n
     const all = logs.join("\n");
     assert.ok(/ended 2 room audio listener\(s\) \(banned\)/.test(all), all);
     for (const who of [U.eve.userId, U.eve.username, U.frank.userId, U.frank.username]) assert.ok(!all.includes(who), "no " + who + " in: " + all);
-  } finally { LB.refusal = orig; console.log = ol; console.error = oe; close(s, n); await clearBans(); }
+  } finally { LB.refusal = orig; LB.refusals = origMany; console.log = ol; console.error = oe; close(s, n); await clearBans(); }
 });
 
 test("audiogate2: the refusal says the same for all three bans (no reason, no end, no moderator); ⚡ answers exactly as any other denial", async () => {
@@ -1061,6 +1065,219 @@ test("audiogate2: who isn't banned is never cut - several bans on other people i
     assert.deepEqual(kicked, []);
     assert.equal(tap.ends, 0);
   } finally { close(...keep); if (tap && tap.untap) tap.untap(); await clearBans(); }
+});
+
+// ── audiogate2 review fixes (access A-F1..F4, regression R-F1..F4) ──
+/** a hook read of ticket `pt` from address `ip` (MediaMTX's b.ip) as session n -> status */
+const read = (P, pt, n, ip) => hook(P, { query: "pt=" + encodeURIComponent(pt), id: sid(n), ip });
+const ptOf = (r) => new URL(r.d.whep).searchParams.get("pt");
+/** a network ban row written with no event (a ban the passes only see on their own) */
+async function quietNetBan(ip, scope = "site", roomId = null) {
+  await runQuery(`INSERT INTO net_bans (net_hash, cidr, scope, room_id, from_user, until, reason, by_id, by_name, created) VALUES (?, NULL, ?, ?, NULL, ?, 'test', ?, 'agstaff', ?)`,
+    [NB.netHash(ip), scope, scope === "pad" ? roomId : null, Date.now() + 86400e3, U.staff.userId, Date.now()]);
+  await NB.reload();
+}
+const NET_D = "203.0.113.50";
+
+test("audiogate2 review A-F1: ⚡ a network ban is asked with BOTH the network the ticket came from and the address MediaMTX saw - a ticket fetched elsewhere opens nothing on the banned network; a ban made later on the network a session plays from ends it (the event and the 15 s pass); other networks keep playing", async () => {
+  await bansReady(); await rtcOn();
+  const P = PADS.pub;
+  try {
+    await NB.setOn(U.staff, true);
+    await NB.banTyped(U.staff, { ip: NET_A, scope: "site", days: 1 });
+    const r = await ticketAs(P, null, NET_B);                   // fetched over another network (phone data, a VPN, a friend)
+    assert.equal(r.d && r.d.ok, true, JSON.stringify(r.d));
+    assert.equal(await read(P, ptOf(r), 500, NET_A), 403, "played from the banned network: refused");
+    assert.equal(await read(P, ptOf(r), 501, NET_C), 200, "from a network nobody banned: plays");
+    const r2 = await ticketAs(P, U.max, NET_B);
+    assert.equal(await read(P, ptOf(r2), 502, NET_B), 200);
+    listAll({ pub: [sid(501), sid(502)] });
+    await NB.banTyped(U.staff, { ip: NET_C, scope: "pad", roomId: P.id, days: 1 });   // the network session 501 plays from
+    assert.equal(await until(() => kicked.includes(sid(501))), true, "the ban's event ends it");
+    await sleep(40);
+    assert.deepEqual(kicked, [sid(501)], "the one on network B stays");
+    // a ban the passes only see on their own (no event): the 15 s pass asks the address MediaMTX saw too
+    const r3 = await ticketAs(P, null, NET_B);
+    assert.equal(await read(P, ptOf(r3), 503, NET_D), 200);
+    listAll({ pub: [sid(502), sid(503)] });
+    await quietNetBan(NET_D);
+    kicked.length = 0;
+    await bridge._audioTick();
+    assert.deepEqual(kicked, [sid(503)]);
+  } finally { await clearBans(); }
+});
+
+test("audiogate2 review A-F2: ⚡ after a restart - a ban made before MediaMTX's first listing (nothing listed yet) ends the earlier sessions on that Public pad once the listing arrives; a ban made in the 2 minutes before the restart too (its event may have been lost); an older ban never; another open pad's sessions stay", async () => {
+  await bansReady(); await rtcOn();
+  try {
+    await setLevel(PADS.other, "public");
+    await listenNet(PADS.pub, U.eve, 510, NET_A);
+    RR._reset();                                               // the deploy: MediaMTX keeps her session, the site forgets it
+    await padBan(U.eve, PADS.pub);                              // made in the first ~5 s (no listing yet)
+    await sleep(60);
+    assert.deepEqual(kicked, [], "(nothing is listed yet)");
+    listAll({ pub: [sid(510), sid(511)], other: [sid(512)] });  // the first listing
+    assert.equal(await until(() => kicked.length >= 2), true);
+    await sleep(60);
+    assert.deepEqual(kicked.slice().sort(), [sid(510), sid(511)], "that pad's earlier sessions (whose they are isn't known) - not the other pad's");
+    kicked.length = 0;
+    listAll({ pub: [], other: [sid(512)] });
+    await bridge._audioTick();
+    assert.deepEqual(kicked, [], "the replay runs once");
+    // a ban made just before the restart: replayed at the first listing
+    await padBan(U.frank, PADS.other);
+    RR._reset();
+    listAll({ other: [sid(513)] });
+    assert.equal(await until(() => kicked.includes(sid(513))), true);
+    // a ban older than that: never replayed (its event ran before the restart)
+    await clearBans();
+    kicked.length = 0;
+    await runQuery("INSERT INTO feed_bans (user_id, room_id, username, by, at, until) VALUES (?, ?, ?, 'test', ?, NULL)", [U.gina.userId, PADS.other.id, U.gina.username, Date.now() - 10 * 60e3]);
+    await LB.refresh();
+    RR._reset();
+    listAll({ other: [sid(514)] });
+    await sleep(120);
+    await bridge._audioTick();
+    assert.deepEqual(kicked, []);
+  } finally { await setLevel(PADS.other, "members"); await clearBans(); }
+});
+
+test("audiogate2 review A-F3: a Camfrog-login ban and the login moved onto an account with no event (a provider merge) - the next 15 s pass cuts and a reconnect is refused at once (the login is read fresh, never from a cache); a listener connected as an account merged away since answers to the surviving account's bans", async () => {
+  await bansReady();
+  const old = await mkUser("agoldacct", "pleb", "ag2-old-0001"), keep = await mkUser("agkeepacct", "pleb", "ag2-keep-0001");
+  try {
+    PB._reset();
+    const s = await open("/p/" + PADS.mem.slug + "/audio", U.lin);
+    assert.equal(s.status, 200);
+    await PB.ban(U.owner, { id: PADS.mem.id }, null, { ref: { k: "login", v: "lincf" }, scope: "pad", dur: "1d", reason: "x" });
+    await sleep(40);
+    await runQuery("UPDATE users SET camfrogUsername = 'lincf' WHERE userId = ?", [U.lin.userId]);   // providermerge.js: no event
+    assert.equal((await refusedText("/p/" + PADS.mem.slug + "/audio", U.lin)).status, 403, "a reconnect: refused at once");
+    await bridge._audioTick();
+    assert.equal(await until(() => s.ended, 600), true, "the next pass");
+    // merged away while listening (accountMerge: an account_merges row, the old users row gone, its rows moved)
+    const o = await open("/p/" + PADS.pub.slug + "/audio", old);
+    await runQuery("CREATE TABLE IF NOT EXISTS account_merges (old_id TEXT PRIMARY KEY, new_id TEXT NOT NULL, merged_at INTEGER NOT NULL, via TEXT)");
+    await runQuery("INSERT INTO account_merges (old_id, new_id, merged_at, via) VALUES (?, ?, ?, 'test')", [old.userId, keep.userId, Date.now()]);
+    await runQuery("DELETE FROM users WHERE userId = ?", [old.userId]);
+    await padBan(keep, PADS.pub);
+    assert.equal(await until(() => o.ended), true, "the surviving account's ban");
+    close(s, o);
+  } finally {
+    await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [U.lin.userId]);
+    await runQuery("DELETE FROM account_merges").catch(() => {});
+    await clearBans();
+  }
+});
+
+test("audiogate2 review A-F4: a ban made while a listener's connect check is still running ends them at once too - the MP3 relay asks again once they're in, the ⚡ hook records the session and asks again", async () => {
+  await bansReady(); await rtcOn();
+  const P = PADS.pub;
+  const orig = LB.refusal;
+  try {
+    let release, first = true;
+    let gate = new Promise((r) => (release = r));
+    LB.refusal = async (a) => {
+      const me = a && ((a.user && a.user.userId) || a.userId);
+      if (first && me === U.eve.userId) { first = false; const v = await orig(a); await gate; return v; }
+      return orig(a);
+    };
+    const p = open("/p/" + P.slug + "/audio", U.eve);
+    await sleep(80);
+    await padBan(U.eve, P);                                     // while her check waits
+    await sleep(60);
+    release();
+    const s = await p;
+    assert.equal(await until(() => s.status !== 200 || s.ended, 800), true, "MP3: cut at once, not on the next 15 s pass");
+    close(s);
+    // ⚡: the ticket was fine, the hook's check runs as the ban is made
+    await padUnban(U.eve, P);
+    const tk = await ticketAs(P, U.eve);
+    assert.equal(tk.d.ok, true);
+    first = true; gate = new Promise((r) => (release = r));
+    const h = read(P, ptOf(tk), 530, NET_B);
+    await sleep(80);
+    await padBan(U.eve, P);
+    await sleep(60);
+    release();
+    assert.equal(await h, 403, "the hook asked again");
+    assert.equal(RR._readers.has(sid(530)), false);
+  } finally { LB.refusal = orig; await clearBans(); }
+});
+
+test("audiogate2 review R-F1: a pass asks its listeners at once - with a site-wide ban in force the 15 s pass costs the same few lookups for 2 signed-in Public-pad listeners as for 12 + 4 ⚡ (never one per listener); who's banned is still cut", async () => {
+  await bansReady(); await rtcOn();
+  const DBU = require(path.join(repo, "dbUtils"));
+  const realGQ = DBU.getQuery;
+  const ss = [];
+  let n = 0;
+  try {
+    await padBan(U.hank, PADS.mem, "site", U.staff);           // someone else, site-wide: every pad may now have a ban
+    const people = [U.max, U.kim, U.m1, U.m2, U.plain, U.alice, U.carol, U.dave, U.frank, U.gina, U.ivy, U.lin2];
+    const count = async () => {
+      n = 0; DBU.getQuery = (sql, p) => { n++; return realGQ(sql, p); };
+      try { await bridge._audioTick(); } finally { DBU.getQuery = realGQ; }
+      return n;
+    };
+    for (const u of people.slice(0, 2)) ss.push(await open("/p/" + PADS.pub.slug + "/audio", u));
+    const few = await count();
+    for (const u of people.slice(2)) ss.push(await open("/p/" + PADS.pub.slug + "/audio", u));
+    for (let i = 0; i < 4; i++) await listenNet(PADS.pub, people[i], 540 + i, NET_B);
+    listAll({ pub: [540, 541, 542, 543].map(sid) });
+    await sleep(100);                                           // (this start's first listing replays the bans made around it - not the pass)
+    const many = await count();
+    assert.ok(many <= few + 4, `2 listeners: ${few} lookups, 12 MP3 + 4 ⚡: ${many}`);
+    assert.ok(ss.every((s) => !s.ended), "nobody unbanned cut");
+    await padBan(U.frank, PADS.pub);
+    assert.equal(await until(() => ss[people.indexOf(U.frank)].ended), true);
+    assert.equal(ss.filter((s) => s.ended).length, 1);
+  } finally { DBU.getQuery = realGQ; close(...ss); await clearBans(); }
+});
+
+test("audiogate2 review R-F2: a listener that leaves while its ban check runs leaves nothing behind in the room's hub", async () => {
+  await bansReady();
+  const P = PADS.mem;
+  const orig = LB.refusal;
+  const s0 = await open("/p/" + P.slug + "/audio", U.max);     // (the hub exists; one listener)
+  try {
+    assert.equal(bridge._audioListeners(P.id), 1);
+    LB.refusal = async (a) => { await sleep(200); return orig(a); };   // a slow read
+    const req = http.get(base + "/p/" + P.slug + "/audio", { headers: { "x-test-user": U.eve.userId } });
+    req.on("error", () => {});
+    await sleep(40);
+    req.destroy();                                              // gone while the server waits on the check
+    await sleep(400);
+    assert.equal(bridge._audioListeners(P.id), 1, "no dead entry");
+  } finally { LB.refusal = orig; close(s0); await clearBans(); }
+});
+
+test("audiogate2 review R-F3: an unrecorded ⚡ session on a Public pad (from before a restart) is ended by a ban there at most once - its player rejoins recorded and the next ban leaves it; a session the hook never recorded since this start (MediaMTX's ids not matching the hook's) is never ended by a ban", async () => {
+  await bansReady(); await rtcOn();
+  const P = PADS.pub;
+  try {
+    RR._reset();
+    listAll({ pub: [sid(520)] });
+    await bridge._audioTick();                                  // (the first pass: an open pad's earlier session stays)
+    assert.deepEqual(kicked, []);
+    await padBan(U.hank, PADS.mem, "site", U.staff);            // a site-wide ban on someone listening nowhere
+    assert.equal(await until(() => kicked.includes(sid(520))), true, "(whose it is isn't known: ended once, it rejoins with a ticket the hook asks)");
+    kicked.length = 0;
+    await listenNet(P, U.max, 521, NET_B);                      // the rejoin: recorded
+    listAll({ pub: [sid(521)] });
+    await padBan(U.ivy, P); await padBan(U.gina, P, "site", U.staff);
+    await sleep(80);
+    await bridge._audioTick();
+    assert.deepEqual(kicked, [], "recorded and unbanned: never again");
+    // the hook's ids not matching MediaMTX's (none confirmed), listed only after the first pass: never ended by a ban
+    await clearBans();
+    RR._reset();
+    listAll({ pub: [] });
+    await bridge._audioTick();
+    listAll({ pub: [sid(522)] });
+    await padBan(U.eve, P);
+    await sleep(80);
+    assert.deepEqual(kicked, []);
+  } finally { await clearBans(); }
 });
 
 test("audiogate2: a ban that runs out lets them back in - nothing about it is remembered", async () => {

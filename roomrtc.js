@@ -107,7 +107,8 @@ const ST = new Map();                  // room id -> {wantUntil, readers, ready,
 const pending = [];                    // times tickets were handed out (the cap counts them for PENDING_MS)
 // adultgate site: who each WebRTC reader session is (the auth hook's session id -> the account its ticket was for, null =
 // signed out), so recheck() can end the sessions the 18+ gate stops once it applies to their room
-const READERS = new Map();             // session id -> {uid, roomId, at, ls}
+const READERS = new Map();             // session id -> {uid, roomId, at, ls, bu, net} (audiogate2: bu = the ticket's account, net = [its
+                                       // networks: the ticket's + the address MediaMTX saw] | null - memory only)
 // audiogate: the sign-in (sessions.js id) each signed-in ticket was handed out under, by the ticket's signature - memory only,
 // for TICKET_MS (a ticket only opens a session): the hook gives it to the session it opens (READERS.ls), so signing out ends
 // that WebRTC session too, and a ticket from before a sign-out opens nothing. A restart forgets them: those sessions answer by
@@ -154,6 +155,28 @@ let sawPaths = false;                  // a MediaMTX listing had one of this sit
 const PREBOOT = new Set();             // session ids listed (unrecorded) before that first periodic pass
 const KICKED = new Map();              // session id -> {roomId, sync: syncN when kicked}
 const KICKED_MAX = 20000;
+// audiogate2 review fix (access F2): a ban made after this start but before MediaMTX's first listing of this site's room paths finds
+// none of the sessions MediaMTX kept (nothing is listed yet) - its pad is remembered (DEFER: pad ids, '' = every pad) and, when that
+// listing arrives, replayed once as a "ban" pass, with the pads of the bans made in the REPLAY_MS before this start (listenban.madeSince
+// - an event lost with the old process, a check that failed or a kick that hadn't landed when it stopped). Room ids only, memory only.
+const REPLAY_MS = 2 * 60 * 1000;
+let DEFER = new Set();
+function deferBan(roomId) {
+  DEFER.add(roomId == null ? "" : String(roomId));
+  if (DEFER.size > 5000) { DEFER.clear(); DEFER.add(""); }
+}
+function replayBans() {
+  const pads = DEFER;
+  DEFER = new Set();
+  const since = bootAt - REPLAY_MS;
+  return (async () => {
+    try { for (const id of await require("./listenban").madeSince(since)) pads.add(id); }
+    catch (e) { console.error("[roomrtc] audiogate2: the bans made around this start couldn't be read - only the ones seen since are replayed"); }
+    if (!pads.size) return 0;
+    await require("./padaccess").init();             // (which pads are open is known before anything is asked)
+    return recheck("ban", pads.has("") ? null : (id) => pads.has(id));
+  })().catch((e) => { console.error("[roomrtc] audiogate2 replay:", e.message); return 0; });
+}
 function st(id) {
   let s = ST.get(id);
   if (!s) { s = { wantUntil: 0, readers: 0, ready: false, seenAt: 0, readerIds: [] }; ST.set(id, s); }
@@ -215,6 +238,7 @@ function forBot(R, t = now()) {
 /** webrtc.sync hands over MediaMTX's path list every 5 s: readers per room path (a reader keeps it wanted). */
 function noteSync(items, t = now()) {
   const seen = new Set();
+  const firstPaths = !sawPaths;                       // audiogate2 review (access F2): the first listing with this site's room paths
   for (const p of items || []) {
     if (!p || typeof p.name !== "string" || !p.name.startsWith(PREFIX) || !PATH_RE.test(p.name)) continue;
     const R = roomForPath(p.name);
@@ -249,6 +273,7 @@ function noteSync(items, t = now()) {
   syncN++;
   for (const sid of KICKED.keys()) if (!live.has(sid)) KICKED.delete(sid);
   for (const sid of PREBOOT) if (!live.has(sid)) PREBOOT.delete(sid);
+  if (firstPaths && sawPaths) replayBans();          // audiogate2 review (access F2): once, after this start's first listing
 }
 
 /**
@@ -279,7 +304,21 @@ async function recheck(why = "change", only = null) {
   // before this start)
   const unvouched = (sid) => !tick || (PA.isReady() && (idsMatch || PREBOOT.has(sid)));
   const LB = require("./listenban");
+  // review fix (access F2): a ban made before MediaMTX's first listing since this start finds none of the sessions it kept - replayed
+  // when that listing arrives (noteSync -> replayBans)
+  if (why === "ban" && !sawPaths) deferBan(typeof only === "string" ? only : null);
   let n = 0, again = 0, failed = 0, banned = 0;
+  const end = (sid, roomId) => {
+    if (KICKED.has(sid)) return false;                // (another pass may have ended it while this one waited)
+    kick(sid);
+    READERS.delete(sid);
+    PREBOOT.delete(sid);
+    if (KICKED.size >= KICKED_MAX) KICKED.delete(KICKED.keys().next().value);
+    KICKED.set(sid, { roomId, sync: syncN });
+    n++;
+    return true;
+  };
+  const asks = [];                                    // audiogate2: recorded sessions on pads with bans - asked at once, below
   for (const [roomId, sids] of byRoom) {
     if (!inScope(roomId)) continue;
     const perk = perkOk(roomId);
@@ -293,27 +332,26 @@ async function recheck(why = "change", only = null) {
         continue;
       }
       const r = READERS.get(sid);
-      let stop, ban = false;
+      let stop;
       if (!perk) stop = true;
       // audiogate2: on an open pad an unrecorded session (from before a restart: nobody knows whose) is ended only when a ban is made
-      // there ("ban" - its listener rejoins with a ticket the hook asks the ban with); never on the tick
-      else if (!r || r.roomId !== roomId) stop = open ? why === "ban" : unvouched(sid);
+      // there ("ban" - its listener rejoins with a ticket the hook asks the ban with); never on the tick. Review fix (regression F3):
+      // and only one known to be from before this start (the hook's ids confirmed, or listed before the first pass) - so each is ended
+      // at most once (it rejoins recorded), never every ban when MediaMTX's ids aren't the hook's
+      else if (!r || r.roomId !== roomId) stop = open ? why === "ban" && (idsMatch || PREBOOT.has(sid)) : unvouched(sid);
       else {
-        try {
-          stop = !open && !(await PA.hearNow(r.uid, roomId, { session: r.ls || null }));
-          // audiogate2: a pad ban / a whole-bridge block / a network ban - by the ticket's account (bu) and network
-          if (!stop && bans && (await LB.refusal({ roomId, userId: r.bu || r.uid || null, net: r.net || null }))) stop = ban = true;
-        } catch (e) { stop = false; failed++; }
+        try { stop = !open && !(await PA.hearNow(r.uid, roomId, { session: r.ls || null })); } catch (e) { failed++; continue; }
+        // audiogate2: a pad ban / a whole-bridge block / a network ban - by the ticket's account (bu) and both networks
+        if (!stop && bans) { asks.push({ sid, roomId, q: { roomId, userId: r.bu || r.uid || null, net: r.net || null } }); continue; }
       }
-      if (!stop || KICKED.has(sid)) continue;         // (another pass may have ended it while this one waited)
-      if (ban) banned++;
-      kick(sid);
-      READERS.delete(sid);
-      PREBOOT.delete(sid);
-      if (KICKED.size >= KICKED_MAX) KICKED.delete(KICKED.keys().next().value);
-      KICKED.set(sid, { roomId, sync: syncN });
-      n++;
+      if (stop) end(sid, roomId);
     }
+  }
+  // review fix (regression F1): the ban question for every recorded session of the pass at once
+  if (asks.length) {
+    let hits = null;
+    try { hits = await LB.refusals(asks.map((a) => a.q)); } catch (e) { failed += asks.length; }
+    if (hits) asks.forEach((a, k) => { if (hits[k] && end(a.sid, a.roomId)) banned++; });
   }
   if (tick && sawPaths) preTick = false;
   if (n) console.log(`[roomrtc] audiogate (${why}): ended ${n} WebRTC room listener(s)${banned ? ` (${banned} banned)` : ""}`);
@@ -370,17 +408,29 @@ async function auth(b, action, proto) {
     // ticket from before this start, which the access rule above takes as signed out) and the network it was asked from; a ticket whose
     // network isn't remembered (a restart since) is asked with the address MediaMTX saw - only ever to refuse. A check that fails lets it
     // play (no answer is not a no; the tick asks again).
+    // review fix (access F1): BOTH networks - the one the ticket was asked from and the address MediaMTX saw (the reader's own; a ticket
+    // fetched over another network - phone data, a VPN, a friend - plays from the banned one otherwise). Only ever used to refuse.
     const bu = c.uid || null;
-    const net = ticketNet(tok) || hookNet(b.ip);
-    try { if (await require("./listenban").refusal({ roomId: R.id, userId: bu, net })) return 403; }
-    catch (e) { console.error("[roomrtc] audiogate2: 1 ban check failed at the hook - let in"); }
+    const net = [];
+    for (const n of [ticketNet(tok), hookNet(b.ip)]) if (n && !net.some((x) => x.hash === n.hash)) net.push(n);
+    const LB = require("./listenban");
+    const banned = async () => {
+      try { return !!(await LB.refusal({ roomId: R.id, userId: bu, net: net.length ? net : null })); }
+      catch (e) { console.error("[roomrtc] audiogate2: 1 ban check failed at the hook - let in"); return false; }
+    };
+    const gen = LB.gen();
+    if (await banned()) return 403;
     want(R.id);
     // adultgate site: who this session is, for recheck() (MediaMTX passes the session id with the read); audiogate: + its sign-in
-    // (audiogate2: + the ticket's account and network)
-    if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) {
-      READERS.set(String(b.id), { uid, roomId: R.id, at: now(), ls, bu, net });
+    // (audiogate2: + the ticket's account and both networks)
+    const sid = b.id && /^[0-9a-f-]{36}$/i.test(String(b.id)) ? String(b.id) : null;
+    if (sid) {
+      READERS.set(sid, { uid, roomId: R.id, at: now(), ls, bu, net: net.length ? net : null });
       if (READERS.size > 20000) READERS.delete(READERS.keys().next().value);
     }
+    // review fix (access F4): a ban made while the check ran found no record of this session - asked again (it's recorded now, so a
+    // ban made from here on ends it like any other)
+    if (LB.gen() !== gen && (await banned())) { if (sid) READERS.delete(sid); return 403; }
     return 200;
   }
   return 403;
@@ -398,6 +448,7 @@ module.exports = {
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setBoot: (t) => { bootAt = Number(t) || now(); },
   // (a test's "site restart": everything in memory is gone)
-  _reset: () => { ST.clear(); pending.length = 0; READERS.clear(); TICKET_LS.clear(); KICKED.clear(); PREBOOT.clear();
+  _reset: () => { ST.clear(); pending.length = 0; READERS.clear(); TICKET_LS.clear(); KICKED.clear(); PREBOOT.clear(); DEFER = new Set();
     bootAt = now(); syncN = 0; idsMatch = false; preTick = true; sawPaths = false; },
+  REPLAY_MS,
 };
