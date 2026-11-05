@@ -6,7 +6,7 @@
 // (no pad=1 - a homepage visitor is never on a pad's people list; no room PM; no Reveal: rv is dropped from every line), no line menus,
 // clips or person menus, the newest 120 lines. While the pad's chat is open in its own window (/p/<slug>/chat, same pad and account) this
 // card stands down: its poll stops and its audio pauses, and it starts fresh when the window closes. Plain ES5.
-// 1.99?? dockpol (the owner's 2026-11-04 tweaks):
+// 1.99ajq dockpol (the owner's 2026-11-04 tweaks):
 //   H5  the front pad's 🎙 mic-follows stage - ONLY for a signed-in viewer who may see that pad (home.js homeMic -> I.micStage): each /live
 //       answer's stage_program (asked with &home=1: no cover's Reveal / ✕ / View cam) goes through PATVAvSync.gateProgram into the stage's
 //       setMic, as on the pad page; the switcher's own precedence keeps a featured slot / Pepe's featured stream ahead of it
@@ -74,7 +74,7 @@
       return n;
     }
     function label(u) { return CLR ? CLR.label(u, rctx) : plainName(u); }
-    // (1.99?? dockpol (owner item 21): opts.flair - the bottom bar's holder chips show the speaker's flair; never for a veiled person)
+    // (1.99ajq dockpol (owner item 21): opts.flair - the bottom bar's holder chips show the speaker's flair; never for a veiled person)
     function person(u, opts) {
       var n = el('span', 'rmd-person'), who = el('span', 'rmd-person-name'); n.appendChild(avatar(u)); who.appendChild(name(u));
       if (opts && opts.flair && CLR && u && !u.veil && !u.anon) { var fl = CLR.flairNode(u, rctx, H); if (fl) who.appendChild(fl); }
@@ -121,7 +121,7 @@
     // (1.99ajh dockpop review: the viewer tag rides every line - the site refuses one from a page made for another account)
     var relayHost = $('rmRelay'), roomRelay = relayHost ? W.PATVRoom.relay(relayHost, slug, { feed: feed, line: line, scroller: scroll, onBottom: function () { if (jump) jump.style.display = 'none'; },
       people: acPeople, avatar: avatar, placeholder: _t('js.pad.dock.placeholder', 'Message {room}…', { room: C.name }), vt: I.vt || null,
-      onCmd: function (row) { if (dock && dock.cmd) dock.cmd(row); } }) : null;   // 1.99?? dockpol (owner item 22): command toasts
+      onCmd: function (row) { if (dock && dock.cmd) dock.cmd(row); } }) : null;   // 1.99ajq dockpol (owner item 22): command toasts
     var pttHost = $('rmPtt'), roomPtt = pttHost ? W.PATVRoom.ptt(pttHost, slug) : null, compose = $('rmCompose');
     if (jump) jump.addEventListener('click', function () { toBottom(); });
     // (a reader who scrolled up stays where they are; the box changing size while the page settles is never that - only a scroll at the
@@ -182,7 +182,7 @@
     }
     function stageMic(d) {
       if (!I.micStage || !sw || !sw.setMic || !C || !C.onStage) return;
-      // (1.99?? dockpol fix (review): after a swap to a front pad whose mic stage this viewer may see, the page may not have its script yet -
+      // (1.99ajq dockpol fix (review): after a swap to a front pad whose mic stage this viewer may see, the page may not have its script yet -
       // it is loaded once, and the latest answer drawn when it arrives)
       if (!W.PATVStageMic) { if (I.micJs && !micScript) { micScript = D.createElement('script'); micScript.src = I.micJs; micScript.async = true; micScript.onload = function () { try { if (cur && cur.redrawMic) cur.redrawMic(); } catch (e) { /* the next answer draws it */ } }; D.head.appendChild(micScript); } return; }
       var show = function (p) { if (dead) return; sw.setMic(p); if (dock && dock.talking) dock.talking(p); };
@@ -334,7 +334,7 @@
       return {
         front: I.front ? I.front.slug : '', slug: slug, dock: function () { return dock; },
         redrawMic: function () { if (!dead && latest) stageMic(latest); },
-        // (1.99?? dockpol fix (review): focus alone isn't "busy" - the log a viewer clicked, a button, or the composer just after a send (empty
+        // (1.99ajq dockpol fix (review): focus alone isn't "busy" - the log a viewer clicked, a button, or the composer just after a send (empty
         // and not typed in for 15 s) let the swap happen; a draft, a field being typed in, an open sheet / menu or holding to talk don't)
         busy: function () {
           var input = relay && relay.getInput ? relay.getInput() : null, hmd = $('hmDock'), a = D.activeElement;
@@ -349,7 +349,7 @@
           dead = true;
           if (stop) stop();
           try { if (audio && audio.pause) audio.pause(); } catch (e) { /* stopped */ }
-          try { if (audio && audio.destroy) audio.destroy(); } catch (e) { /* gone */ }   // (1.99?? dockpol fix: its timer and its place in the page's player list go too)
+          try { if (audio && audio.destroy) audio.destroy(); } catch (e) { /* gone */ }   // (1.99ajq dockpol fix: its timer and its place in the page's player list go too)
           try { if (relay && relay.destroy) relay.destroy(); } catch (e) { /* gone */ }
           try { if (ptt && ptt.destroy) ptt.destroy(); } catch (e) { /* gone */ }
           try { if (sw && sw.destroy) sw.destroy(); } catch (e) { /* gone */ }
@@ -360,7 +360,7 @@
     }
   }
 
-  // ── 1.99?? dockpol (owner H6): the front pad changed - fetch its block (GET /?dock=1: the same gates as the page; a viewer who may not see the
+  // ── 1.99ajq dockpol (owner H6): the front pad changed - fetch its block (GET /?dock=1: the same gates as the page; a viewer who may not see the
   // new front gets whatever the server renders for them) and swap it in while the viewer is idle; busy, a chip on the stage's top bar offers it ──
   var typedAt = 0, micScript = null;
   D.addEventListener('keydown', function (e) { var a = e.target; if (a && a.closest && a.closest('#hmDock')) typedAt = Date.now(); }, true);

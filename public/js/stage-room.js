@@ -454,7 +454,7 @@
         if (o.onShow) o.onShow(selection());
       }
     }
-    // 1.99?? dockpol (owner H6): the homepage swaps to a new front pad - this switcher stops for good (its polls, beats, player, mic stage, cam)
+    // 1.99ajq dockpol (owner H6): the homepage swaps to a new front pad - this switcher stops for good (its polls, beats, player, mic stage, cam)
     function destroy() {
       dead = true; clearInterval(pollTimer); if (beats) { clearInterval(beats); beats = null; }
       if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; }

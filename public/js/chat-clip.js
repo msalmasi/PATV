@@ -176,7 +176,7 @@
     }
     function preview(cs) {
       var me = q, key = cs.join(',');
-      if (!me) return;                                                   // (1.99?? dockpol fix: the card closed before it asked)
+      if (!me) return;                                                   // (1.99ajq dockpol fix: the card closed before it asked)
       me.failed = null;
       api(api0 + '/quote', { cs: cs, preview: true }).then(function (d) {
         if (q !== me || me.key !== key || me.posting) return;            // a newer pick, Discard or a post won
@@ -474,13 +474,13 @@
         if (!canMic && was) Array.prototype.forEach.call(feed.querySelectorAll('.mc-btn'), function (b) { b.remove(); });
       },
       _tap: tap, _picked: picked,
-      // 1.99?? dockpol (owner item 7): one message from its line menu (chat-lines.js) - the same card as "Clip N lines" with that line as the
+      // 1.99ajq dockpol (owner item 7): one message from its line menu (chat-lines.js) - the same card as "Clip N lines" with that line as the
       // pick (the server's preview, title, profile, price, "someone" rules, the owner's approval and every refusal unchanged); and that 🎙
       // line's audio clip, exactly as its 🔊 pill
       canQuote: function () { return !!room && linked; },
       canMic: function () { return !!(linked && canMic); },
       quoteOne: function (r, opener) {
-        // (1.99?? dockpol fix (review): only a line of the live log - the card reads its picks from there; a scrollback / search line isn't)
+        // (1.99ajq dockpol fix (review): only a line of the live log - the card reads its picks from there; a scrollback / search line isn't)
         if (!r || !r.hasAttribute || !r.hasAttribute('data-c') || r.hasAttribute('data-vc') || !room || !feed.contains(r)) return;
         if (on) setOn(false);
         if (q) closeQuote();

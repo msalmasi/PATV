@@ -149,7 +149,7 @@ test("home-dock.js: the lines as the pad Dock draws them but never with Reveal; 
   assert.equal(P.feed.querySelectorAll(".veil-reveal").length, 0, "no Reveal on the homepage, ever");
   assert.equal(P.feed.querySelectorAll("[data-reveal]").length, 0);
   assert.ok(P.feed.querySelectorAll(".redact").length >= 1, "a hidden line is still its masked bar");
-  // (1.99?? dockpol (owner H6): a stable object that speaks to the booted block's player - a front-pad swap brings a new one)
+  // (1.99ajq dockpol (owner H6): a stable object that speaks to the booted block's player - a front-pad swap brings a new one)
   const ha = P.win.PATVHomeAudio; assert.ok(ha && typeof ha.listen === "function" && typeof ha.onChange === "function", "the Top Pads 🎧 play through the Dock's player");
   assert.equal(ha.isPlaying(), false); ha.pause(); assert.equal(P.calls.paused, 1, "it IS the Dock's player underneath");
   assert.equal(P.calls.dock.mode, "preview"); assert.equal(P.calls.dock.vt, "tag-1"); assert.equal(P.calls.dock.room, "Alpha");
@@ -172,7 +172,7 @@ test("home-dock.js: while the pad's chat is in its own window the card stops pol
   assert.match(P.calls.urls.at(-1), /after=0&wait=1/, "from a fresh view (cursor 0)");
 });
 // ── 1.99ajh dockpop review ──
-// (1.99?? dockpol (owner H1, H3, H4): the slim Stories card first, then ONE grid - #hmDock + #stageSide (the coin-op strip and Top Pads beside
+// (1.99ajq dockpol (owner H1, H3, H4): the slim Stories card first, then ONE grid - #hmDock + #stageSide (the coin-op strip and Top Pads beside
 // the stage and chat) - then Your show, only signed in)
 test("review: the Stories card, then the Dock grid (stage, chat, coin-op, Top Pads), then Your show signed in; Dock off keeps today's order", async () => {
   const story = { rooms: [], caps: [], room: null, signed: true, compose: true };

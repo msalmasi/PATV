@@ -128,7 +128,7 @@ function page() {
   ctx.window = ctx;
   ctx.window.PATVReveal = { setState: (v) => { stage.state = v; }, on: () => {}, onOffer: () => {} };
   ctx.window.PATVPadEvidence = { open: () => {} };
-  ctx.feedEl = feedEl; ctx.scrollEl = scrollEl; ctx.dockMode = false;   // (1.99?? dockpol: the legacy view's banner; the Dock's switch is test/pad-dock-pol.test.js)
+  ctx.feedEl = feedEl; ctx.scrollEl = scrollEl; ctx.dockMode = false;   // (1.99ajq dockpol: the legacy view's banner; the Dock's switch is test/pad-dock-pol.test.js)
   vm.createContext(ctx);
   const prelude = "var _t = function (k, d, v) { return String(d).replace(/\\{!?(\\w+)\\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };\n" +
     "var slug = 'p1';\n" +

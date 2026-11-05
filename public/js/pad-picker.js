@@ -22,7 +22,7 @@
   }
   function open(o) {
     if (!o || !available(o.data, o) || !o.sheet || !o.relay.getInput || !o.relay._send) return null;
-    // (1.99?? dockpol (owner item 27): a title that says what the sheet is - 🎞️ GIFs from the GIF tool, 🧸 Stickers & emoji otherwise)
+    // (1.99ajq dockpol (owner item 27): a title that says what the sheet is - 🎞️ GIFs from the GIF tool, 🧸 Stickers & emoji otherwise)
     var box = o.sheet(o.tab === 'gifs' ? t('title_gifs', '🎞️ GIFs') : t('title_media', '🧸 Stickers & emoji'), o.opener), doc = box.ownerDocument;
     var room = o.data.room, generation = 0, active = null, search = null;
     var tabs = [], tabBar = el('div', 'ds-seg'), body = el('div', 'rmp-body');

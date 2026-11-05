@@ -246,7 +246,7 @@
       try { doc.dispatchEvent(new CustomEvent('patv:padtab', { detail: { tab: t } })); } catch (e) { /* IE */ }
     }
 
-    // 1.99?? dockpol (owner item 11): the Room Dock wraps a switch the viewer makes (root.PATVPadSwitch: the page's top first, a short
+    // 1.99ajq dockpol (owner item 11): the Room Dock wraps a switch the viewer makes (root.PATVPadSwitch: the page's top first, a short
     // cross-fade where the browser has view transitions); everywhere else - and every other caller - it switches as before
     function go(t, opts) {
       var sw = root.PATVPadSwitch;

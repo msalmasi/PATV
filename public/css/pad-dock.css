@@ -129,12 +129,12 @@ main.rm.rm-dock .rmd-chip-head { max-inline-size: none; block-size: 32px; paddin
 
 /* ── the stage card: the video + the pinned cams (owner point 28) in ONE card, sized for the chat below (layout) ── */
 body.pad-dock-live main.rm.rm-dock #padPanel-live { container: rmd-live / size; }
-/* (1.99?? dockpol (owner items 15, 16): the pinned cams are a ROW under the video at every width - never a column beside it; the card is
+/* (1.99ajq dockpol (owner items 15, 16): the pinned cams are a ROW under the video at every width - never a column beside it; the card is
    the video's height + the row's (--rmd-pin-row: S / M / L), --rmd-strip-w stays 0) */
 main.rm.rm-dock #rmStage { --rmd-strip-w: 0px; --rmd-pin-row: 0px; position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) var(--rmd-pin-row);
   flex: 0 1 auto; block-size: calc(clamp(140px, 36cqb, 560px) + var(--rmd-pin-row)); max-block-size: calc(100cqi * 0.5625 + var(--rmd-pin-row)); min-block-size: calc(96px + var(--rmd-pin-row));
   margin: 0; padding: 0; border: 0; border-radius: var(--ds-r-lg); background: var(--ds-media-bg); overflow: hidden; }
-/* (1.99?? dockpol fix (review): the row is capped by the Live panel's height too - at 1280x800 a 216px Large row had left the video 176px,
+/* (1.99ajq dockpol fix (review): the row is capped by the Live panel's height too - at 1280x800 a 216px Large row had left the video 176px,
    smaller than the cams under it; now the video stays the bigger part and the chat keeps its floor) */
 main.rm.rm-dock #rmStage:has(> #rmStrip:not([hidden])) { --rmd-pin-row: min(96px, 12cqb); }
 main.rm.rm-dock #rmStage:has(> #rmStrip[data-rmd-layout="medium"]:not([hidden])) { --rmd-pin-row: min(144px, 16cqb); }
@@ -267,7 +267,7 @@ main.rm.rm-dock .rmd-topic-line #rmTopic { display: block; flex: 0 1 auto; min-i
 main.rm.rm-dock #rmTopic[role="button"] { cursor: pointer; border-radius: var(--ds-r-xs); }
 main.rm.rm-dock #rmTopic[role="button"]:hover { color: var(--ds-text); }
 main.rm.rm-dock .rmd-topic-full { margin: 0; padding: var(--ds-sp-2); max-inline-size: 320px; font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }
-/* (1.99?? dockpol (owner item 2): no reveal banner in the Dock - the chat ⋯'s Show real names and one notice; room.ejs draws none) */
+/* (1.99ajq dockpol (owner item 2): no reveal banner in the Dock - the chat ⋯'s Show real names and one notice; room.ejs draws none) */
 /* the log, and its "New messages ↓" pill at the bottom centre of the log (owner point 31) */
 main.rm.rm-dock .rmd-log { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-block-size: 0; min-inline-size: 0; }
 main.rm.rm-dock #rmScroll { flex: 1 1 0; min-block-size: 0; max-block-size: none; block-size: auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
@@ -787,9 +787,9 @@ main.rm.rm-dock #rmAudioBox { container-type: inline-size; }
 body.rmd-pop main.rm.rm-dock .rmd-tools { overflow-x: auto; scrollbar-width: none; }
 main.rm.rm-dock .rmd-about-h { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); padding: var(--ds-sp-1) var(--ds-sp-1) 0 var(--ds-sp-2); font-size: var(--ds-fs-sm); color: var(--ds-text-strong); }
 
-/* ══ 1.99?? dockpol (the owner's 2026-11-04 tweaks: "much closer to what I want") ══ */
+/* ══ 1.99ajq dockpol (the owner's 2026-11-04 tweaks: "much closer to what I want") ══ */
 /* (item 8) a rule where the chat's lines end and the bottom bar begins - the newest line never sits on it (pad page, window, homepage) */
-/* (1.99?? dockpol fix (review): a rule the eye finds - --ds-line-soft was 1.1:1 on the card; this one is about 1.6:1) */
+/* (1.99ajq dockpol fix (review): a rule the eye finds - --ds-line-soft was 1.1:1 on the card; this one is about 1.6:1) */
 main.rm.rm-dock { --rmd-rule: color-mix(in srgb, var(--ds-text-faint) 30%, var(--ds-surface)); }
 main.rm.rm-dock #rmAudioBox { border-block-start: 1px solid var(--rmd-rule); padding-block-start: var(--ds-sp-1); }
 main.rm.rm-dock #rmScroll { padding-block-end: var(--ds-sp-1); }
@@ -924,7 +924,7 @@ main.rm.rm-dock #rmPeople .nm > .ufl,
 main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl,
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl {
   display: inline-flex; align-items: center; gap: var(--ds-sp-1); block-size: 18px; margin: 0; padding: 0 var(--ds-sp-1h); box-sizing: border-box; border-radius: var(--ds-r-pill); font: 600 11px/18px var(--ds-font); overflow: hidden; vertical-align: middle;
-  max-inline-size: none; }   /* (1.99?? dockpol fix (review): not flair.css's 14em (154px) cap - the room decides, see .rmd-ufl-e) */
+  max-inline-size: none; }   /* (1.99ajq dockpol fix (review): not flair.css's 14em (154px) cap - the room decides, see .rmd-ufl-e) */
 main.rm.rm-dock :is(.rmd-log .line-head, #rmPeople .nm, .rmd-holders .rmd-person-name) > .ufl > .ufl-e,
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name > .ufl > .ufl-e { display: block; flex: none; font-size: 12px; line-height: 1; }
 main.rm.rm-dock :is(.rmd-log .line-head, #rmPeople .nm, .rmd-holders .rmd-person-name) > .ufl > .ufl-n,
@@ -954,7 +954,7 @@ body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { justify-se
   main.rm.rm-dock .rmd-log .line > .la-btn.la-tap { position: absolute; inline-size: 1px; min-inline-size: 0; block-size: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; opacity: 0; }
   main.rm.rm-dock .rmd-log .line > .la-btn.la-tap:focus-visible { inline-size: auto; min-inline-size: 44px; block-size: 32px; clip-path: none; opacity: 1; }
   main.rm.rm-dock .rmd-log .line { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer; }
-  /* (1.99?? dockpol fix (review): #rmScroll - the pill's own rules above carry the id, so these have to as well) */
+  /* (1.99ajq dockpol fix (review): #rmScroll - the pill's own rules above carry the id, so these have to as well) */
   main.rm.rm-dock #rmScroll .line .body > .mc-btn { display: none; }
   main.rm.rm-dock #rmScroll .line .body:has(> .mc-btn) { display: block; }
 }
@@ -973,7 +973,7 @@ body.pad-dock-live.rmd-nav-off > header { box-shadow: none !important; }
    [Live · Feed · About] [Follow]; under 420px the Feed / About tabs are their icons (their words stay their names) */
 main.rm.rm-dock:not(.rmd-home):not(.rmd-popout) { --ds-w: min(1600px, 100%); max-inline-size: min(1600px, 100%); }
 body.rmd-dock-pad .site-foot { display: none; }
-/* (1.99?? dockpol fix (review): the site's body grid sizes its one column to the navbar's min-content - 805px on a 768px tablet - and Feed /
+/* (1.99ajq dockpol fix (review): the site's body grid sizes its one column to the navbar's min-content - 805px on a 768px tablet - and Feed /
    About's frame went past the screen with it (Following cut off); the Dock's frame keeps to the viewport from its start edge, whatever the
    navbar does - centred, as before, wherever the window is wider than the frame) */
 body.rmd-dock-pad > main.rm.rm-dock:not(.rmd-home):not(.rmd-popout) { max-inline-size: min(1600px, 100%, 100vw); margin-inline-start: max(0px, calc((100% - 1600px) / 2)); }
@@ -1006,10 +1006,10 @@ main.rm.rm-dock #rmHero.rmd-slimhead .hd-acts > .hd-follow .hd-fcs { display: no
 main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl { min-inline-size: 22px; }
 @media (max-width: 1023px) { main.rm.rm-dock .rmd-holders > * { max-inline-size: min(calc(100% - 40px), 240px); } }
 /* (one holder in the bar - the narrow cards draw one, the homepage's and the window's: it may take the zone, less a "+N") */
-main.rm.rm-dock .rmd-holders:not(:has(> .rmd-holder ~ .rmd-holder)) > .rmd-holder { max-inline-size: 100%; }   /* (1.99?? dockpol fix: a "+N" is flex: none - the chip gives way to it) */
-/* (1.99?? dockpol fix (review, item 21): a narrow bar keeps the speaker's flair as its emoji disc (the rule above) - no longer hidden outright */
+main.rm.rm-dock .rmd-holders:not(:has(> .rmd-holder ~ .rmd-holder)) > .rmd-holder { max-inline-size: 100%; }   /* (1.99ajq dockpol fix: a "+N" is flex: none - the chip gives way to it) */
+/* (1.99ajq dockpol fix (review, item 21): a narrow bar keeps the speaker's flair as its emoji disc (the rule above) - no longer hidden outright */
 
-/* ══ 1.99?? dockpol fix (the visual / function reviews of the dockpol build) ══ */
+/* ══ 1.99ajq dockpol fix (the visual / function reviews of the dockpol build) ══ */
 /* (items 6 / 7) a line's hover ⋯ sits OVER its time instead of keeping a 36px column - every line's time ends at the same edge again (lines
    without a ⋯ - masked, frog-name, room PM - and lines with one); the time steps aside while the ⋯ shows */
 @media (hover: hover) {
@@ -1061,7 +1061,7 @@ main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] > :is(.rmd-pin-size, .rmd-pin-m
 main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 { display: flex; align-items: center; justify-content: flex-start; gap: var(--ds-sp-2); line-height: 1; }
 main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 > .ds-ic { flex: none; display: block; margin: 0; font-size: 16px; line-height: 1; position: relative; inset-block-start: 2px; }
 main.rm.rm-dock .rmd-layer .rmd-sheet-h > h2 > .rmd-sheet-t { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; position: relative; inset-block-start: 2px; }
-/* (1.99?? dockpol verify: a flex box, not the grid above - the hidden "×" text is a second grid row there and lifted the ✕ 6px) */
+/* (1.99ajq dockpol verify: a flex box, not the grid above - the hidden "×" text is a second grid row there and lifted the ✕ 6px) */
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x { border: 1px solid var(--ds-line-strong); font-size: 0; display: inline-flex; align-items: center; justify-content: center; gap: 0; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop) .pm-pop.rmd-pm .pm-x::before { content: "✕"; font-size: var(--ds-fs-sm); line-height: 1; }
 /* (item 19) IN THE CHAT ROOM - or IN THE ROOM where the column is narrow (never "IN THE CHAT RO…"); the count a stronger pill */

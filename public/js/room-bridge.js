@@ -502,7 +502,7 @@
         start(); return true;
       },
       isPlaying: function () { return playing; },
-      // 1.99?? dockpol fix (review): the homepage swapping to a new front pad lets this player go - stopped, its 500 ms edge timer cleared and
+      // 1.99ajq dockpol fix (review): the homepage swapping to a new front pad lets this player go - stopped, its 500 ms edge timer cleared and
       // out of the page's one-room-at-a-time list (each swap used to leave one behind)
       destroy: function () { if (playing) stop(); clearInterval(edgeTimer); var i = shared.players.indexOf(me); if (i >= 0) shared.players.splice(i, 1); listeners.length = 0; },
       duck: function (on) { if (arguments.length) { duckOn = !!on; applyVolume(); } return duckOn; },
@@ -696,7 +696,7 @@
       else if (e.key === 'Escape') { closeAc(); }
     });
 
-    // 1.99?? dockpol (owner item 22): opts.onCmd(row) - the Room Dock shows each command's state as a toast that goes away by itself
+    // 1.99ajq dockpol (owner item 22): opts.onCmd(row) - the Room Dock shows each command's state as a toast that goes away by itself
     // ({id, text, st, ok, replies}: called when a row appears or changes); the list under the composer is then hidden. The rows a page
     // had before it loaded are noted, never re-announced.
     var onCmd = typeof opts.onCmd === 'function' ? opts.onCmd : null, cmdSeen = null;

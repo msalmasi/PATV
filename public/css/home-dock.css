@@ -2,7 +2,7 @@
    the room card are ONE block, #hmDock: the pad Dock's stage card (the video + its auto-hiding overlay) beside / above its slim chat card,
    styled by pad-dock.css (main.rm.rm-dock) - this file only lays the block out on the homepage and gives the two cards the base rules the
    pad page's own stylesheet gives them there (room.ejs .rm …). The homepage scrolls normally (no body.pad-dock-live).
-   1.99?? dockpol (the owner's 2026-11-04 tweaks): the slim Stories card first (H1), then ONE grid (.hmd-grid) - #hmDock (views/partials/
+   1.99ajq dockpol (the owner's 2026-11-04 tweaks): the slim Stories card first (H1), then ONE grid (.hmd-grid) - #hmDock (views/partials/
    home-dock.ejs: swapped alone when the front pad changes, H6) and #stageSide are display: contents in it - [stage | chat] then [the coin-op
    strip under the stage | Top Pads under the chat] (H4); phones: stage, chat, coin-op, Top Pads. Heights in svh (H7): the mobile URL bar
    collapsing never grows the chat card. */
@@ -18,7 +18,7 @@ main.hm.rmd-home #hmDock > .rmd-popbar { align-self: start; }
 main.hm.rmd-home #hmDock > .rmd-hm-ppl { display: none; }
 main.hm.rmd-home #stageSide > #wheelBox { grid-area: coin; margin: 0; min-inline-size: 0; }
 main.hm.rmd-home #stageSide > .tp { grid-area: tops; margin: 0; min-inline-size: 0; }
-/* (1.99?? dockpol fix (review): the coin-op and Top Pads cards end level - one row, both stretched) */
+/* (1.99ajq dockpol fix (review): the coin-op and Top Pads cards end level - one row, both stretched) */
 main.hm.rmd-home #stageSide > :is(#wheelBox, .tp) { align-self: stretch; }
 main.hm.rmd-home #wheelBox.aw-hm { display: flex; flex-direction: column; }
 main.hm.rmd-home #wheelBox .aw-coinop { flex: 1 1 auto; }
@@ -55,7 +55,7 @@ main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage stage" "chat
 main.hm.rmd-home.rmd-popped #hmDock > #rmStage { align-self: start; }
 
 /* the chat card - the pad page's base card rules (room.ejs .rm .card / .topic / .compose) on the homepage; its header is the pad Dock's one
-   row (pad-dock.css #chatH: the topic and its buttons - no pixel "CHAT" word, 1.99?? dockpol item 14) */
+   row (pad-dock.css #chatH: the topic and its buttons - no pixel "CHAT" word, 1.99ajq dockpol item 14) */
 main.rm.rm-dock.rmd-home #rmChat { background: var(--ds-surface); border: 1px solid var(--ds-line); }
 main.rm.rm-dock.rmd-home #rmChat > h2 { margin: 0 0 var(--ds-sp-1); color: var(--ds-text); font: 400 var(--ds-fs-meta)/1.4 var(--ds-font); letter-spacing: normal; text-transform: none; }
 main.rm.rm-dock.rmd-home #rmChat > h2 small { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; color: var(--ds-text-muted); font-size: 12px; }
@@ -69,7 +69,7 @@ main.hm.rmd-home #hmDock > #rmChat:has(> .rmd-tease) { contain: none; block-size
 main.rm.rm-dock.rmd-home #rmChat .jump { display: none; }
 main.rm.rm-dock.rmd-home #rmAudioBox .rb-vol { inline-size: 72px; }
 /* the one-row composer: [Message …][🎙️ Hold to talk][Send] - no ＋, no tool row; 🎙️ is its icon in this narrow card (its words stay its
-   accessible name), so the input keeps the room; (1.99?? dockpol H2 / item 10: centred - no flex gap around the zero-size words) */
+   accessible name), so the input keeps the room; (1.99ajq dockpol H2 / item 10: centred - no flex gap around the zero-size words) */
 main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim .rb-say-in { padding-inline-start: var(--ds-sp-2); }
 main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim { grid-template-columns: 0 minmax(0, 1fr) auto auto; }
 main.rm.rm-dock.rmd-home .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; gap: 0; justify-content: center; place-items: center; }
@@ -108,7 +108,7 @@ main.hm.rmd-home .rmd-stories .ss-n { max-inline-size: 60px; }
 main.hm.rmd-home #wheelBox.aw.aw-hm { max-inline-size: none; font-size: 16px; }
 main.hm.rmd-home #wheelBox .aw-coinop { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; grid-template-areas: "credit door btn now tools" "credit door btn status tools";
   align-items: center; column-gap: var(--ds-sp-3); row-gap: 0; max-block-size: 96px; padding: var(--ds-sp-2) var(--ds-sp-3); box-sizing: border-box; overflow: visible;
-  /* (1.99?? dockpol fix (review): not arcade-wheel.css's <=1000px "420px, centred items" - a centred nowrap status line was its own 658px
+  /* (1.99ajq dockpol fix (review): not arcade-wheel.css's <=1000px "420px, centred items" - a centred nowrap status line was its own 658px
      wide and scrolled the whole phone page sideways; every piece keeps to its cell) */
   inline-size: 100%; max-inline-size: none; margin: 0; justify-items: stretch; }
 main.hm.rmd-home #wheelBox .aw-coinop > * { min-inline-size: 0; }
@@ -141,7 +141,7 @@ main.hm.rmd-home #stageSide > a.box { display: block; padding: var(--ds-sp-2) va
 main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 var(--ds-sp-2) 0 0; font-size: var(--ds-fs-meta); }
 
 @media (min-width: 761px) and (max-width: 1023px) {
-  /* (1.99?? dockpol fix (review, H4): the coin-op right under the stage here too - watch and spin at once - then the chat, then Top Pads) */
+  /* (1.99ajq dockpol fix (review, H4): the coin-op right under the stage here too - watch and spin at once - then the chat, then Top Pads) */
   main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat"; }
   main.hm.rmd-home .hmd-grid:not(:has(#stageSide > a.box)) { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops"; }
   main.hm.rmd-home .hmd-grid:has(#rmStage.is-off), main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat"; }
@@ -149,7 +149,7 @@ main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 
   main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
   main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: 60vh; max-block-size: 60svh; }
-  /* (1.99?? dockpol fix (review): the plate's door takes the flexible track - a status line spanning only auto tracks grew them to its own
+  /* (1.99ajq dockpol fix (review): the plate's door takes the flexible track - a status line spanning only auto tracks grew them to its own
      705px and pushed INSERT COIN out of the card) */
   main.hm.rmd-home #wheelBox .aw-coinop { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "credit door btn" "status status tools"; max-block-size: none; row-gap: var(--ds-sp-1); }
   main.hm.rmd-home #wheelBox .aw-status { contain: inline-size; }
@@ -173,7 +173,7 @@ main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 
   main.hm.rmd-home #wheelBox .aw-door { justify-content: center; }
   main.hm.rmd-home #wheelBox .aw-tools { flex-direction: row; justify-self: end; }
   main.hm.rmd-home #wheelBox .aw-status { font-size: 14px; }
-  /* (1.99?? dockpol fix (review): a phone's strip fits its card - a smaller credit counter and coin slot, SOUND / MY WHEEL stacked beside
+  /* (1.99ajq dockpol fix (review): a phone's strip fits its card - a smaller credit counter and coin slot, SOUND / MY WHEEL stacked beside
      the status line (side by side they took the coin's column to 184px and squeezed the plate over the credit box) */
   main.hm.rmd-home #wheelBox .aw-credit { padding: 3px 6px; font-size: 14px; }
   main.hm.rmd-home #wheelBox .aw-credit > span:first-child { font-size: 8px; }

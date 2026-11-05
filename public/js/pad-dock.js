@@ -32,13 +32,13 @@
   // 1.99ajf dockclean (owner point 17): the Apps sheet - the room's games and tools, each only when Pepe offers it here (d.room.cmds).
   // A tile puts the command into the composer (a trailing space where it takes a name / amount: the name autocomplete opens) and
   // never sends by itself.
-  // (1.99?? dockpol (owner item 26): 💲 Showdown STARTS the price game - !guess only joins a running one. The tile inserts '!showdown' where
+  // (1.99ajq dockpol (owner item 26): 💲 Showdown STARTS the price game - !guess only joins a running one. The tile inserts '!showdown' where
   // Pepe's web relay offers it, else '!pricegame', the relay's allowed name for the same handler - and shows the one it inserts (appList);
   // !guess stays typeable)
   var APPS = [['!spin', '🎡', 'spin', 'Spin', 0], ['!heist', '💰', 'heist', 'Heist', 1], ['!duel', '⚔️', 'duel', 'Duel', 1], ['!brawl', '🥊', 'brawl', 'Brawl', 1],
     ['!arena', '🏟️', 'arena', 'Arena', 1], ['!bj', '🃏', 'bj', 'Blackjack', 1], ['!holdem', '♠️', 'holdem', 'Hold’em', 1], ['!pictionary', '🎨', 'pictionary', 'Pictionary', 0],
     ['!trivia', '❓', 'trivia', 'Trivia', 0], ['!pricegame', '💲', 'showdown', 'Showdown', 0], ['!bingo', '🎱', 'bingo', 'Bingo', 0], ['!lotto', '🎟️', 'lotto', 'Lotto', 1]];
-  // 1.99?? dockpol (owner item 29): 🎧 DJ - Pepe's music commands as tiles (each only when Pepe offers it here); a tile INSERTS, never sends.
+  // 1.99ajq dockpol (owner item 29): 🎧 DJ - Pepe's music commands as tiles (each only when Pepe offers it here); a tile INSERTS, never sends.
   // [command, icon, key, words, trailing space]; STAFF ones only for Pepe's admins / owners of this room (data.mod - Pepe refuses others anyway)
   var DJ_APPS = [['!find', '🔎', 'dj_find', 'Find a song', 1], ['!play', '➕', 'dj_play', 'Request a song', 1], ['!np', '🎵', 'dj_np', 'Now playing', 0],
     ['!upnext', '📜', 'dj_upnext', 'Up next', 0], ['!skip', '⏭️', 'dj_skip', 'Vote skip', 0], ['!pause', '⏸️', 'dj_pause', 'Vote pause', 0],
@@ -71,7 +71,7 @@
     var autoTimer = null, toastTimer = null, observers = [], selected = null, stageRevision = 0, videoPipSource = null, overBar = false;
     var toolBtns = {}, peopleInput = null, pplBtn = null, chatMore = null, topicRow = null, slimText = null, setTopicBtn = null;
     var fullBtn = null, stageMoreBtn = null, showStageBtn = null, sizeSeg = null, sizeBtn = null, toastHost = null, talkLogins = {};
-    // 1.99?? dockpol (owner item 13): how the last layer was opened - a pointer (mouse / touch) or the keyboard
+    // 1.99ajq dockpol (owner item 13): how the last layer was opened - a pointer (mouse / touch) or the keyboard
     var ptrAt = 0, keyAt = 0;
     function byPointer() { return ptrAt > keyAt && Date.now() - ptrAt < 2000; }
     function node(id) { return nodes[id] || (nodes[id] = D.getElementById(id)); }
@@ -114,13 +114,13 @@
       var n = el('div', 'ds-toast rmd-toast', message, parent.ownerDocument); stack.appendChild(n);
       clearTimeout(toastTimer); toastTimer = setTimeout(function () { n.remove(); }, 4200);
     }
-    // 1.99?? dockpol (owner item 22): the CHAT card's notices - a small stack at the bottom of the log (above the audio bar, under the menus,
+    // 1.99ajq dockpol (owner item 22): the CHAT card's notices - a small stack at the bottom of the log (above the audio bar, under the menus,
     // never over the composer; at most 2; role=status, polite). A command's state updates its own toast in place (waiting -> done after
     // 3 s, a refusal with its reason after 8 s); a sticky one stays until ✕. Hover or focus holds the timer. Memory only: nothing beyond
     // what the command list under the composer showed. The reveal notice (item 2) and Copied (item 6) use it too.
     var toasts = [], toastSr = null, srTimer = null;
     // (the log's "New messages ↓" pill steps up over the stack - never under a notice)
-    // (1.99?? dockpol fix (review): and the log makes room for the stack - its end padding grows by the stack's height, so a log at its
+    // (1.99ajq dockpol fix (review): and the log makes room for the stack - its end padding grows by the stack's height, so a log at its
     // newest line still shows that line above a notice (room.ejs's pin re-pins when the box changes); a reader who scrolled up isn't moved)
     function paintToastH() {
       var j = node('rmJump'), sc = node('rmScroll'); if (!toastHost) return;
@@ -128,7 +128,7 @@
       if (j) j.style.marginBlockEnd = hgt ? hgt + 4 + 'px' : '';
       if (sc && sc.closest && sc.closest('.rmd-log') === toastHost.parentNode) sc.style.paddingBlockEnd = hgt ? hgt + 12 + 'px' : '';
     }
-    // (1.99?? dockpol fix (review): the stack is in the chat card from the start, and what a screen reader hears is a separate polite live
+    // (1.99ajq dockpol fix (review): the stack is in the chat card from the start, and what a screen reader hears is a separate polite live
     // region that only ever holds the notice's words - a region inserted with its first notice often isn't announced, and the ✕'s "Dismiss"
     // was read with every one)
     function toastBox() {
@@ -175,7 +175,7 @@
       rec.words.textContent = String(text || '');
       rec.sticky = !!opts.sticky; rec.ms = opts.ms || 4000;
       rec.node.classList.toggle('rmd-ct-bad', !!opts.bad); rec.node.classList.toggle('rmd-ct-sticky', rec.sticky);
-      // (1.99?? dockpol fix (review): at most two passing notices; a STICKY one - Pepe's private answer while room PM is off - is never pushed
+      // (1.99ajq dockpol fix (review): at most two passing notices; a STICKY one - Pepe's private answer while room PM is off - is never pushed
       // out by newer ones (it is content: it goes only with its ✕); the stack scrolls when they pile up, pad-dock.css)
       var passing = toasts.filter(function (x) { return !x.sticky && x !== rec; });
       while (passing.length > (rec.sticky ? 2 : 1)) dropToast(passing.shift());
@@ -224,7 +224,7 @@
       if (focus !== false && old.opener && old.opener.isConnected) quietFocus(old.opener, old.byPointer);
       if (old.overlay) showTools();
     }
-    // 1.99?? dockpol (owner item 13): a layer a pointer opened gives focus back to its opener WITHOUT the focus ring (data-rmd-quiet: the
+    // 1.99ajq dockpol (owner item 13): a layer a pointer opened gives focus back to its opener WITHOUT the focus ring (data-rmd-quiet: the
     // ring would sit around a tapped tool after its sheet closed - outside the button, over the row's rule); the next key or a blur takes
     // the mark off, so a keyboard user's ring comes back at once. A keyboard-opened layer returns focus with the ring, as before.
     function quietFocus(n, quiet) {
@@ -240,12 +240,12 @@
       var place = activeRoot(), doc = place.ownerDocument, ptr = byPointer();
       var host = el('div', 'rmd-layer ds-scrim sheet', null, doc);
       var box = el('section', menuLike ? 'ds-modal rmd-menu' : 'ds-modal', null, doc);
-      // (1.99?? dockpol (owner item 27): one sheet header everywhere - the title on one line, ✕ an icon-only 36px button, both centred; a
+      // (1.99ajq dockpol (owner item 27): one sheet header everywhere - the title on one line, ✕ an icon-only 36px button, both centred; a
       // title's leading emoji is its icon - aria-hidden, the words are the dialog's name)
       var words = noIcon(title), lead = String(title || '').slice(0, String(title || '').length - words.length).trim();
       box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', words || title); box.tabIndex = -1;
       var head = el('div', 'ds-modal-h rmd-sheet-h', null, doc), h2 = el('h2', null, null, doc);
-      // (1.99?? dockpol fix (review): the words are their own box - centred with the icon and the ✕ by their ink, not the pixel font's line box)
+      // (1.99ajq dockpol fix (review): the words are their own box - centred with the icon and the ✕ by their ink, not the pixel font's line box)
       if (lead) { var hi = el('span', 'ds-ic', lead, doc); hi.setAttribute('aria-hidden', 'true'); h2.appendChild(hi); h2.appendChild(doc.createTextNode(' ')); }
       h2.appendChild(el('span', 'rmd-sheet-t', words || title, doc)); head.appendChild(h2);
       head.appendChild(iconBtn('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm rmd-sheet-x', doc));
@@ -301,7 +301,7 @@
         var ic0 = el('span', 'ds-ic', icon, doc); ic0.setAttribute('aria-hidden', 'true'); b.appendChild(ic0); b.appendChild(el('span', 'rmd-label', t(key, label, opts.vars), doc));
         if (fn) on(b, 'click', function (e) { fn(opener || b, e); });
       } else {
-        // (1.99?? dockpol fix (review): an item that acts in place - Show real names, a cam size, Copy - gives focus back to the menu's opener
+        // (1.99ajq dockpol fix (review): an item that acts in place - Show real names, a cam size, Copy - gives focus back to the menu's opener
         // instead of dropping it on <body>; one that opens a sheet, a dialog or a page keeps whatever it focused)
         b = button(icon, key, label, function (bb, e) {
           var ptr = !!(e && e.detail > 0);
@@ -521,7 +521,7 @@
     // 1.99ajh dockpop: 🖼️ Picture-in-picture is the STAGE's only (Document PiP where the browser has it, else the video's own PiP for the
     // pad's stream or Pepe's - never the 🎙 mic stage). The chat's Document PiP is gone: it closed with its opener, so it couldn't follow
     // the viewer around the site - ↗️ Chat in its own window does (popWindow). A PiP survives Live / Feed / About; it closes on pagehide.
-    // 1.99?? dockpol (owner item 17): a pinned cam pops out too (its tile ⋯) - with Document PiP the SAME tile node (its video, its WHEP
+    // 1.99ajq dockpol (owner item 17): a pinned cam pops out too (its tile ⋯) - with Document PiP the SAME tile node (its video, its WHEP
     // session, its frog-name label) moves to the window, no new ticket or slot; without it, that tile's own <video> goes picture-in-picture
     // and the tile stays in the strip. One at a time (a new pop replaces the old); the cam ending or ✕ closes it.
     function camPipApi(tile) {
@@ -578,7 +578,7 @@
         current.moves.push(movable(n, main, camTile ? t('cam_pip', 'This cam is in picture-in-picture.') : t('stage_pip', 'The player is in picture-in-picture.')));
         on(win, 'pagehide', redock); on(doc, 'visibilitychange', changed); changed();
         // (a popped cam that ends - closed, or the strip let it go - takes its window with it)
-        // (1.99?? dockpol fix (review): ...and so does one whose session ENDED in place - the strip keeps that tile, "off" with ↻ Retry, which
+        // (1.99ajq dockpol fix (review): ...and so does one whose session ENDED in place - the strip keeps that tile, "off" with ↻ Retry, which
         // is the strip's to offer: the window closes and the tile goes back to it)
         if (camTile && W.MutationObserver) {
           var ended = function () { var ov = n.querySelector('.cs-over'), rt = ov && ov.querySelector('button'); return !n.querySelector('.cs-badge.on') && !!ov && !ov.hidden && !!rt && !rt.hidden; };
@@ -643,7 +643,7 @@
       });
       return hit;
     }
-    // 1.99?? dockpol (owner item 15): the cam strip's size is a visible control again - [S][M][L][▦] at the end of the cam row, while cams
+    // 1.99ajq dockpol (owner item 15): the cam strip's size is a visible control again - [S][M][L][▦] at the end of the cam row, while cams
     // are pinned - and the choice is remembered for this viewer (localStorage; default Small). Stage ⋯ › Pinned cams mirrors it.
     var PIN_SIZES = [['small', 'S', 'Small'], ['medium', 'M', 'Medium'], ['large', 'L', 'Large'], ['grid', '▦', 'Grid']], PIN_KEY = 'patv.dock.pins';
     function pinSize(v) {
@@ -679,7 +679,7 @@
         sizeSeg.appendChild(b);
       });
       strip.appendChild(sizeSeg);
-      // (1.99?? dockpol fix (review): a phone's cam row is 64px - four 44px radios don't fit beside it, so there it is ONE button showing
+      // (1.99ajq dockpol fix (review): a phone's cam row is 64px - four 44px radios don't fit beside it, so there it is ONE button showing
       // the size, opening the same four as a menu; pad-dock.css shows one or the other)
       sizeBtn = button('', 'cam_size', 'Cam size', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } sizeMenu(b); }, 'ds-btn quiet sm rmd-pin-menu');
       sizeBtn.setAttribute('aria-haspopup', 'menu'); sizeBtn.setAttribute('aria-expanded', 'false');
@@ -730,7 +730,7 @@
       if (key !== null && key === holderKey) return;
       holderKey = key;
       holderBox.textContent = '';
-      // 1.99?? dockpol (owner items 5, 21): a holder chip is [🎙][avatar][name + flair] at every width (the 🎙 is the "on the mic" sign phones
+      // 1.99ajq dockpol (owner items 5, 21): a holder chip is [🎙][avatar][name + flair] at every width (the 🎙 is the "on the mic" sign phones
       // lost with the On the mic card; the bar's eq meter is off on iOS and while paused); the flair shows whole when there is room, and
       // talking() rings the avatar of the one the mic stage says is talking now. Veiled holders: a static 🎙, no flair, never a ring.
       holders.slice(0, max).forEach(function (u) {
@@ -749,7 +749,7 @@
       if (nowBox) nowBox.classList.toggle('rmd-has-holders', !!holders.length);
       paintNow();
     }
-    // 1.99?? dockpol fix (review, items 20 / 21): a flair shows its words WHOLE where they fit - or, where they would be cut to a letter or two
+    // 1.99ajq dockpol fix (review, items 20 / 21): a flair shows its words WHOLE where they fit - or, where they would be cut to a letter or two
     // ("💚 S", "📼 P" - Plex or Plus?), its emoji alone in a 22px disc (the name in its title and for screen readers). People rows, the
     // holder chips and the line heads; again when their box changes width (one pass per frame, measured before anything is changed).
     var FLAIR_SEL = '#rmPeople .nm > .ufl, .rmd-holders .rmd-person-name > .ufl, .rmd-log .line-head > .ufl', fitQ = null, fitW = [];
@@ -852,7 +852,7 @@
       o.relay.insert(c + (space ? ' ' : ''), { replace: true }); var input = o.relay.getInput(); if (input) { input.focus(); input.dispatchEvent(new W.CustomEvent('input', { bubbles: true })); }
     }
     function dj() { var n = node('rdj'); return n && !n.classList.contains('hide') ? n : null; }
-    // (1.99?? dockpol fix (review, item 26): the 💲 Showdown tile shows the command it puts in the composer - '!showdown' once Pepe's web relay
+    // (1.99ajq dockpol fix (review, item 26): the 💲 Showdown tile shows the command it puts in the composer - '!showdown' once Pepe's web relay
     // offers that name (it lists exactly what it lets through), until then '!pricegame', the same game's allowed alias)
     function appList() {
       return APPS.map(function (a) {
@@ -885,7 +885,7 @@
         list.forEach(function (a) { appTile(grid, a, doc); });
         box.appendChild(grid);
       }
-      // (1.99?? dockpol (owner item 29): ONE 🎧 DJ tile - the booth and Pepe's music commands live in its sheet; one icon, one meaning)
+      // (1.99ajq dockpol (owner item 29): ONE 🎧 DJ tile - the booth and Pepe's music commands live in its sheet; one icon, one meaning)
       if ((musicOn() || dj()) && !inPip()) {
         box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('apps_music', 'Music'), doc));
         var g2 = el('div', 'rmd-apps', null, doc), b2 = el('button', 'ds-btn quiet rmd-app', null, doc); b2.type = 'button';
@@ -929,7 +929,7 @@
     }
     function soundboard(opener) {
       var sb = node('rmSb'); if (!sb) return;
-      // (1.99?? dockpol fix: titled as the rest - its icon, then its words)
+      // (1.99ajq dockpol fix: titled as the rest - its icon, then its words)
       var box = sheet(t('soundboard_title', '🔊 Soundboard'), opener), mark = D.createComment('soundboard dock'); sb.parentNode.insertBefore(mark, sb); box.appendChild(sb);
       layer.restore = function () { if (mark.parentNode) { mark.parentNode.insertBefore(sb, mark); mark.remove(); } };
       var toggle = sb.querySelector('.sbd-toggle'); if (toggle && toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
@@ -1040,7 +1040,7 @@
       var story = root.querySelector('.rm-story button.ss-add[data-pad]');
       if (story && !inPip()) menuItem(box, '📲', 'story', 'Add to your story', function () { external(function () { story.click(); }); });
       if (o.relay && o.relay.getInput && data && data.room && data.room.cmds) menuItem(box, '❔', 'commands', 'Commands', function () { insertCmd('!', false); });
-      // 1.99?? dockpol (owner item 30): CREATE - each only where Pepe offers its command here (hasCmd: linked viewers). Poll / Wager / Bounty
+      // 1.99ajq dockpol (owner item 30): CREATE - each only where Pepe offers its command here (hasCmd: linked viewers). Poll / Wager / Bounty
       // are small forms that send the chat command through the relay after an explicit press (exactly as typing it: Pepe's escrow, fees,
       // minimums and refusals apply); a market opens the site's own create form (its close-time bounds and judge rules live there)
       var canSend = !!(o.relay && o.relay.sendCmd) && !inPip();
@@ -1083,7 +1083,7 @@
       var f = formFoot(form, doc, '📊', 'poll_go', 'Start poll'); box.appendChild(form);
       on(form, 'submit', function (e) {
         e.preventDefault();
-        // (1.99?? dockpol fix (review): Pepe reads the question up to its FIRST "?" and splits the options at commas - so a "?" inside the
+        // (1.99ajq dockpol fix (review): Pepe reads the question up to its FIRST "?" and splits the options at commas - so a "?" inside the
         // question or a comma inside an option is said, not silently changed)
         var question = oneLine(q.value).replace(/\?+$/, ''), list = [], comma = null;
         each(opts.children, function (i) { var v = oneLine(i.value); if (v.indexOf(',') >= 0 && !comma) comma = i; if (v) list.push(v); });
@@ -1124,7 +1124,7 @@
       }
       presets.forEach(function (n) { var b = el('button', 'ds-btn quiet sm', fmtN(n), doc); b.type = 'button'; on(b, 'click', function () { amt.value = fmtN(n); sure = null; paint(); amt.focus(); }); row.appendChild(b); });
       on(amt, 'input', function () { sure = null; paint(); });
-      // (1.99?? dockpol fix (review): the presets under their own field - above it they read as the previous field's)
+      // (1.99ajq dockpol fix (review): the presets under their own field - above it they read as the previous field's)
       form.appendChild(formRow(doc, t('stake_custom', 'Stake in PAT'), amt)); form.appendChild(row); paint();
       /** -> the amount once it may go (null: not yet - the field says why) */
       return function check(err) {
@@ -1141,7 +1141,7 @@
       form.appendChild(formRow(doc, t('wager_who', 'Against'), who));
       var terms = textField(doc, 160, t('wager_terms_ph', 'e.g. the Bills win tonight'));
       var f = { err: null, go: null }, foot = null;
-      // (1.99?? dockpol fix (review): every wager needs a judge - Pepe refuses one without (pepe_wager.py) - so the judge is required and
+      // (1.99ajq dockpol fix (review): every wager needs a judge - Pepe refuses one without (pepe_wager.py) - so the judge is required and
       // Pepe himself, his AI judge, is the first choice; or someone in the room other than the two of you)
       var judge = personSelect(doc, people, t('wager_pick_judge', 'Pick a judge'));
       var pj = el('option', null, t('wager_judge_pepe', '🐸 Pepe (AI judge)'), doc); pj.value = 'pepe';
@@ -1203,7 +1203,7 @@
         var box = sheet(t('participants_n', 'In the room · {n}', { n: peopleCount() }), opener);
         layer.kind = 'participants';
         var mark = D.createComment('people dock'); card.parentNode.insertBefore(mark, card); box.appendChild(card); card.classList.add('rmd-side-open');
-        // (1.99?? dockpol (owner item 19): the freshness note is the title's tooltip and description - no ℹ️ to wrap or tap)
+        // (1.99ajq dockpol (owner item 19): the freshness note is the title's tooltip and description - no ℹ️ to wrap or tap)
         var note = txt(node('rmListNote')), h2 = layer.head && layer.head.querySelector('h2');
         if (h2 && note) { h2.title = note; try { h2.setAttribute('aria-description', note); } catch (e) { /* older engines */ } }
         layer.restore = function () { card.classList.remove('rmd-side-open'); if (mark.parentNode) { mark.parentNode.insertBefore(card, mark); mark.remove(); } };
@@ -1223,9 +1223,9 @@
       var card = node('rmPplCard'); if (!card || card.__rmd) return;
       card.__rmd = true; card.classList.add('rmd-people');
       var note = node('rmListNote'), n0 = node('rmPplN');
-      // (1.99?? dockpol (owner item 19): one line - IN THE CHAT ROOM [n]; the count is a badge, the freshness note the heading's tooltip)
+      // (1.99ajq dockpol (owner item 19): one line - IN THE CHAT ROOM [n]; the count is a badge, the freshness note the heading's tooltip)
       if (n0) n0.classList.add('rmd-count');
-      // (1.99?? dockpol fix (review, item 19): a column too narrow for IN THE CHAT ROOM says IN THE ROOM - never "IN THE CHAT RO…"; pad-dock.css
+      // (1.99ajq dockpol fix (review, item 19): a column too narrow for IN THE CHAT ROOM says IN THE ROOM - never "IN THE CHAT RO…"; pad-dock.css
       // picks one by the card's width, the long words stay the heading's name)
       var ht = node('pplH') && node('pplH').querySelector('.ht');
       if (ht && !(ht.nextElementSibling && ht.nextElementSibling.classList.contains('rmd-ht-s'))) { var hs = el('span', 'ht rmd-ht-s', t('people_short', 'In the room')); hs.setAttribute('aria-hidden', 'true'); ht.parentNode.insertBefore(hs, ht.nextSibling); ht.classList.add('rmd-ht-l'); }
@@ -1364,7 +1364,7 @@
       tool('tip', '💸', 'tip', 'Tip', tip);
       tool('gif', '🎞️', 'gifs', 'GIFs', function (b) { picker('gifs', b); });
       tool('stickers', '🧸', 'stickers', 'Stickers', function (b) { picker('patv', b); });
-      // (1.99?? dockpol (owner item 27): no 😀 - 🧸's sheet has the Emoji tab; a 🎡 Spin with a confirm in its place)
+      // (1.99ajq dockpol (owner item 27): no 😀 - 🧸's sheet has the Emoji tab; a 🎡 Spin with a confirm in its place)
       var spinB = tool('spin', '🎡', 'spin_tool', 'Spin the wheel', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } spinPop(b); });
       spinB.setAttribute('aria-haspopup', 'dialog'); spinB.setAttribute('aria-expanded', 'false');
       tool('apps', '⚡', 'apps', 'Chat apps', apps);
@@ -1399,7 +1399,7 @@
     function padMenu(opener) {
       var box = menu(opener, t('pad_menu_label', 'Pad menu')), doc = box.ownerDocument;
       box.classList.add('rmd-padmenu');
-      // (1.99?? dockpol (owner item 9): while the navbar has stepped aside on a phone, the way back to it is the first item here)
+      // (1.99ajq dockpol (owner item 9): while the navbar has stepped aside on a phone, the way back to it is the first item here)
       if (navOff && navHeader) menuItem(box, '☰', 'site_menu', 'Site menu', function () {
         setNav(false);
         var f = navHeader.querySelector('a[href], button'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } }
@@ -1683,7 +1683,7 @@
       var ov = el('div', 'rmd-ov');
       ovTop = el('div', 'rmd-ov-top'); ovBot = el('div', 'rmd-ov-bot');
       var pv = o.preview || {};
-      // (1.99?? dockpol fix (review, item 9): while a phone's navbar has stepped aside, ☰ before the pad chip is the visible way back -
+      // (1.99ajq dockpol fix (review, item 9): while a phone's navbar has stepped aside, ☰ before the pad chip is the visible way back -
       // pad-dock.css shows it only then; its words stay its name)
       if (mode === 'pad') ovTop.appendChild(iconBtn('☰', 'site_menu', 'Site menu', function () { setNav(false); var f = navHeader && navHeader.querySelector('a[href], button'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } } }, 'ds-btn quiet sm rmd-nav-back'));
       // (1.99ajh dockpop P2: on the homepage the pad chip is a LINK to the pad - its menu is the pad page's)
@@ -1750,7 +1750,7 @@
         finishMenu(box, opener); return;
       }
       var jump = node('rmHistJump'); if (jump && !jump.hidden) menuItem(box, '📅', 'jump_date', 'Jump to a date', function () { external(function () { jump.click(); }); });
-      // 1.99?? dockpol (owner item 2): the pad's ONE "Show real names" switch (room.ejs roomReveal - the same POST /api/chatlog/seethrough,
+      // 1.99ajq dockpol (owner item 2): the pad's ONE "Show real names" switch (room.ejs roomReveal - the same POST /api/chatlog/seethrough,
       // the same audit rows and reason prompt), offered exactly when the old banner was; a notice says it once when it changes
       var rv = o.reveal;
       if (rv && rv.offered && rv.offered()) {
@@ -1804,7 +1804,7 @@
     function paintTopic() {
       var topic = node('rmTopic'); if (!topic || !topicRow) return;
       var s = txt(topic), can = !!(o.canTopic && o.canTopic());
-      // (1.99?? dockpol (owner item 14): no topic - an editor sees a muted ✏️ Set a topic that opens the same editor; everyone else nothing)
+      // (1.99ajq dockpol (owner item 14): no topic - an editor sees a muted ✏️ Set a topic that opens the same editor; everyone else nothing)
       topicRow.hidden = false;          // (an empty row is the spacer that keeps the buttons at the end)
       topic.hidden = !s;
       if (setTopicBtn) setTopicBtn.hidden = !!s || !can;
@@ -1823,7 +1823,7 @@
       var h = node('chatH'); if (!h) return;
       h.classList.add('rmd-chat-h');
       // (1.99ajf dockclean review: the heading's words in their own box that never shrinks - a bare text node broke "CHAT" letter by letter)
-      // (1.99?? dockpol (owner item 14): no visible "CHAT" - the row is the topic and its buttons; the word stays the section's name, sr-only)
+      // (1.99ajq dockpol (owner item 14): no visible "CHAT" - the row is the topic and its buttons; the word stays the section's name, sr-only)
       Array.prototype.slice.call(h.childNodes).forEach(function (n) {
         if (n.nodeType === 3 && String(n.textContent).trim()) { h.insertBefore(el('span', 'rmd-chat-t ds-sr-only', String(n.textContent).trim()), n); n.remove(); }
       });
@@ -2162,10 +2162,10 @@
     function tabChanged(tab) {
       var fa = D.activeElement, heroFocus = !!(fa && fa.closest && fa.closest('#rmHero, #padTabs'));
       var live = tab === 'live'; D.body.classList.toggle('pad-dock-live', live);
-      // (1.99?? dockpol (owner item 11): Feed / About in the same frame as Live - no footer, the same width; body.rmd-dock-pad marks it)
+      // (1.99ajq dockpol (owner item 11): Feed / About in the same frame as Live - no footer, the same width; body.rmd-dock-pad marks it)
       D.body.classList.add('rmd-dock-pad');
       if (!live) { closeLayer(false); if (current && current.kind === 'full') redock(); }
-      // (1.99?? dockpol fix (review): Home / ← to Live on the tab bar - that bar isn't on Live, so focus goes to the stage's pad chip, whose
+      // (1.99ajq dockpol fix (review): Home / ← to Live on the tab bar - that bar isn't on Live, so focus goes to the stage's pad chip, whose
       // menu has Feed and About, instead of falling to <body>)
       else if (heroFocus) setTimeout(function () {
         var a = D.activeElement; if (a && a !== D.body && a.isConnected && a.getClientRects().length) return;
@@ -2173,7 +2173,7 @@
       }, 0);
     }
     // Feed / About: one slim header row - [pad identity] [● Live · Feed · About] [Follow] [▾ pad menu] (owner point 4)
-    // 1.99?? dockpol (owner item 11): ONE slim 44px card - [the pad chip ▾ (the same component and menu as on Live)] … [Live · Feed · About]
+    // 1.99ajq dockpol (owner item 11): ONE slim 44px card - [the pad chip ▾ (the same component and menu as on Live)] … [Live · Feed · About]
     // [Follow]; the header's own identity row is the page's h1 for screen readers only. A tab switch starts at the page's top, inside a
     // short cross-fade where the browser has view transitions (none under reduced motion) - pad-tabs.js asks W.PATVPadSwitch.
     function buildHeader() {
@@ -2191,7 +2191,7 @@
         fn();
       };
     }
-    // ── 1.99?? dockpol (owner item 9): the navbar steps aside on a phone's Live view - the reader scrolling the chat toward newer lines
+    // ── 1.99ajq dockpol (owner item 9): the navbar steps aside on a phone's Live view - the reader scrolling the chat toward newer lines
     // (24px of their own scrolling) or typing hides it; scrolling back 48px, a swipe down on the stage, a tap on the stage with its overlay
     // up, or focus in the navbar brings it back. Never while one of its menus is open, never in fullscreen / picture-in-picture / the
     // floating chat. It stays in the DOM and the tab order (no hidden / inert): always reachable; the pad menu says ☰ Site menu meanwhile. ──
@@ -2209,7 +2209,7 @@
       D.body.classList.toggle('rmd-nav-off', off);
     }
     function navSync() { var okNow = navOk(); D.body.classList.toggle('rmd-nav-auto', okNow); if (!okNow) setNav(false); }
-    // (1.99?? dockpol fix (review): only the READER's scrolling counts - never the log's own jump to its newest line (room.ejs toBottom
+    // (1.99ajq dockpol fix (review): only the READER's scrolling counts - never the log's own jump to its newest line (room.ejs toBottom
     // marks it: scroll.__rmdProg) or a scroll the box's height change caused (the navbar's own 180 ms step, a toast, a sheet), which had the
     // two fighting: the navbar flickered and the log snapped back. And the common case: a reader AT the newest line can't scroll toward newer,
     // so a swipe up there (the finger moving up 32px) hides it too. While it is off, ☰ on the stage's top bar brings it back.)
@@ -2259,7 +2259,7 @@
       decoratePeople();
       if (strip && mode === 'pad') { observe(strip, decorateCams); decorateCams(); }
       decorateComposer(); attachDoc(D);
-      // (1.99?? dockpol fix: the flairs' fit - when the people list, the audio bar or the log change width, and for each new line)
+      // (1.99ajq dockpol fix: the flairs' fit - when the people list, the audio bar or the log change width, and for each new line)
       fitOnResize(node('rmPeople')); fitOnResize(node('rmAudioBox')); fitOnResize(node('rmScroll'));
       [node('rmFeed'), node('rmOlder')].forEach(function (box) { observe(box, function (ms) { ms.forEach(function (m) { each(m.addedNodes, function (x) { if (x.nodeType === 1) fitSoon(x); }); }); }, { childList: true }); });
       on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
@@ -2308,7 +2308,7 @@
       popped: function () { return popped; }, popWindow: popWindow, canWindow: canWindow, bringBack: bringBack,
       gone: function (key, fallback) { goneCard(key || 'pop_gone', fallback || 'You signed out or switched accounts in another tab, so this chat window is closed.'); },
       retitle: retitle,
-      // 1.99?? dockpol: the chat card's notices, a composer command's state (room-bridge.js onCmd), who the mic stage says is talking
+      // 1.99ajq dockpol: the chat card's notices, a composer command's state (room-bridge.js onCmd), who the mic stage says is talking
       toast: function (text, opts) { return chatToast(text, opts); }, cmd: cmdToast, talking: talking,
       destroy: function () { dead = true; stopLink(); redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); }); clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat', 'rmd-dock-pad', 'rmd-nav-auto', 'rmd-nav-off'); if (W.PATVPadSwitch && mode === 'pad') W.PATVPadSwitch = null; }
     };

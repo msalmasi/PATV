@@ -225,7 +225,7 @@ async function nextSlot(roomId, t = Date.now()) {
 
 function register(app, { addUser, xpForNextLevel }) {
   app.get("/", addUser, async (req, res) => {
-    // 1.99?? dockpol (owner H6): GET /?dock=1 - the homepage's Room Dock block alone (#hmDock + its init) for the CURRENT front pad, so an
+    // 1.99ajq dockpol (owner H6): GET /?dock=1 - the homepage's Room Dock block alone (#hmDock + its init) for the CURRENT front pad, so an
     // open homepage can follow a front-page change; the same handler, gates and rules as the page (padaccess, the 18+ gate, the live view),
     // this viewer's alone (private, never stored)
     const frag = req.query.dock === "1";
@@ -311,7 +311,7 @@ function register(app, { addUser, xpForNextLevel }) {
       // 1.99ajh dockpop review: the viewer tag only for the Room Dock, and a page that carries it is this viewer's alone (no shared cache)
       const padDockOn_ = require("./paddock").viewerOn(req.user), vt_ = me && padDockOn_ ? require("./roompm").tag(me.userId) : null;
       if (vt_) res.set("Cache-Control", "private");
-      // 1.99?? dockpol (owner H5): the homepage stage shows the front pad's 🎙 mic-follows stage ONLY to a signed-in viewer who may see that pad
+      // 1.99ajq dockpol (owner H5): the homepage stage shows the front pad's 🎙 mic-follows stage ONLY to a signed-in viewer who may see that pad
       // (its live chat is this card - padaccess.full, past the 18+ gate); everyone else gets Pepe's stream or the pad's permitted slots, never a
       // teaser of a pad they can't see. A featured slot still wins over it, as on the pad page (stage-room.js pickDefault).
       const homeMic_ = !!(me && padDockOn_ && roomOnStage_ && roomLive && roomGate === "ok" && PA.full(viewer, front.id));

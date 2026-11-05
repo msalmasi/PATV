@@ -74,7 +74,7 @@
     // (wave 2, review fix A-tests-ux-03: a MASKED line carries data-vc - kept out of the ✂️ / 🔊 pickers, which read data-c - and still
     // gets its ⋯: Report, its speaker's Remove my line, a moderator's Hide / Delete; the server checks each by the cursor)
     function cOf(n) { return n.getAttribute('data-c') || n.getAttribute('data-rmc') || n.getAttribute('data-vc'); }
-    // 1.99?? dockpol (owner items 6, 7): o.dock - the Room Dock's menu also has 📋 Copy text (everyone: a line's own words, never a masked
+    // 1.99ajq dockpol (owner items 6, 7): o.dock - the Room Dock's menu also has 📋 Copy text (everyone: a line's own words, never a masked
     // bar's) and ✂️ Clip this message / 🔊 Clip the audio (chat-clip.js's own flows: the server preview, the confirm card, its rules), so
     // a line gets a menu even with no history.acts (signed out: Copy only). o.tapOpen - on touch a tap on the line opens it (no ⋯ beside
     // the words; the ⋯ stays for screen readers). Desktop keeps the hover ⋯ with the same items.
@@ -85,7 +85,7 @@
       var out = [];
       if (!dock || own(n) || !n.classList.contains('line')) return out;
       if (n.hasAttribute('data-text') && !n.hasAttribute('data-vc') && String(n.getAttribute('data-text') || '').trim()) out.push({ id: 'copy', label: _t('js.pad.chat.copy', '📋 Copy text') });
-      // (1.99?? dockpol fix (review): a line of the LIVE log only - the clip card follows the live picks; scrollback / search lines aren't in it)
+      // (1.99ajq dockpol fix (review): a line of the LIVE log only - the clip card follows the live picks; scrollback / search lines aren't in it)
       if (n.hasAttribute('data-c') && !n.hasAttribute('data-vc') && feed && feed.contains(n) && clipCan('canQuote')) out.push({ id: 'clip1', label: _t('js.pad.chat.clip_one', '✂️ Clip this message') });
       if (n.classList.contains('tx') && n.getAttribute('data-tx') && clipCan('canMic')) out.push({ id: 'clipmic', label: _t('js.pad.chat.clip_audio', '🔊 Clip the audio') });
       return out;
@@ -153,7 +153,7 @@
       items.forEach(function (it) {
         var mi = el('button', 'ds-menu-item' + (it.danger ? ' danger' : ''), it.label);
         mi.type = 'button'; mi.setAttribute('role', 'menuitem'); mi.tabIndex = -1;
-        // (1.99?? dockpol fix (review): 📋 Copy acts in place - focus goes back to the line's ⋯ when the menu came from it, not to <body>)
+        // (1.99ajq dockpol fix (review): 📋 Copy acts in place - focus goes back to the line's ⋯ when the menu came from it, not to <body>)
         mi.addEventListener('click', function (e) { e.preventDefault(); closeMenu(it.id === 'copy' && !sheet && b !== n); run(it.id, n, b); });
         p.appendChild(mi);
       });
@@ -359,7 +359,7 @@
       if (add.length) decorate(add);
     });
     boxes.forEach(function (b) { mo.observe(b, { childList: true }); });
-    if (dock) decorate(all('.line, [data-rmc]'));            // (1.99?? dockpol: the lines already there - acts may never change from null)
+    if (dock) decorate(all('.line, [data-rmc]'));            // (1.99ajq dockpol: the lines already there - acts may never change from null)
 
     return {
       /** Each live answer: what this viewer may do here (history.acts). */
@@ -372,7 +372,7 @@
         strip();
         if (acts || dock) decorate(all('.line, [data-rmc]'));
       },
-      /** 1.99?? dockpol: what chat-clip.js allows changed (its room arrived) - lines that had no item get their ⋯ now */
+      /** 1.99ajq dockpol: what chat-clip.js allows changed (its room arrived) - lines that had no item get their ⋯ now */
       refresh: function () { if (dock) decorate(all('.line, [data-rmc]')); },
       _items: itemsFor, _run: run,
     };
