@@ -88,16 +88,16 @@ function readTicket(userId, p, t = now()) {
   const body = "ra1." + (t + TICKET_MS) + "." + (userId ? b64(userId) : "-");
   return body + "." + sign(body, p);
 }
-/** -> {uid} (uid null = signed out) when the ticket is good for `p` and not expired; else null. */
+/** -> {uid, exp} (uid null = signed out) when the ticket is good for `p` and not expired; else null. */
 function checkTicket(tok, p, t = now()) {
   const m = /^ra1\.(\d{10,16})\.(-|[A-Za-z0-9_-]{1,120})\.([A-Za-z0-9_-]{32})$/.exec(String(tok || ""));
   if (!m || Number(m[1]) < t) return null;
   const want = sign("ra1." + m[1] + "." + m[2], p);
   const a = Buffer.from(m[3]), b = Buffer.from(want);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  if (m[2] === "-") return { uid: null };
+  if (m[2] === "-") return { uid: null, exp: Number(m[1]) };
   const uid = unb64(m[2]);
-  return uid ? { uid } : null;
+  return uid ? { uid, exp: Number(m[1]) } : null;
 }
 
 // ── per-room state ──
@@ -123,6 +123,25 @@ function ticketSession(tok, uid, t = now()) {
   const v = TICKET_LS.get(ticketSig(tok) || "");
   return v && v.until > t && v.uid === String(uid || "") ? v.ls : null;
 }
+// audiogate review (F1/F2): what the site can't vouch for after a restart, and kicks that didn't land.
+//   * MediaMTX keeps WebRTC sessions across a site restart (every deploy); the site forgets who they are. A session it has no
+//     record of (READERS) on a pad not open to everyone is ended on the periodic pass - the player plays MP3 at once (its connect
+//     check is the rule) and rejoins ⚡ with a new ticket a few seconds later, which the hook records. As a restart does to every
+//     MP3 listener. Guard: that needs the hook's session ids to be MediaMTX's (idsMatch - a session the hook recorded showed up
+//     in a listing); until then (a MediaMTX that didn't send ids would otherwise be kicked every 15 s) only the sessions listed
+//     before the first pass after this start (PREBOOT - opened before it) are ended, once.
+//   * a signed-in ticket handed out before this start has no sign-in on record (TICKET_LS is memory): the hook takes it as
+//     signed out (a Public pad plays; a Members / Approved pad refuses - the player gets a new ticket).
+//   * a kick is fire-and-forget (livecam.kickReader): an ended session is remembered (KICKED) and kicked again on each pass while
+//     a MediaMTX listing newer than the kick still has it; forgotten once a listing doesn't. Never counted twice.
+let bootAt = now();                    // this start
+let syncN = 0;                         // MediaMTX listings seen (noteSync)
+let idsMatch = false;                  // a session the hook recorded was listed by MediaMTX (the hook's ids are the list's)
+let preTick = true;                    // no periodic pass yet since this start's first listing of this site's room paths
+let sawPaths = false;                  // a MediaMTX listing had one of this site's room paths (Pepe's rooms known)
+const PREBOOT = new Set();             // session ids listed (unrecorded) before that first periodic pass
+const KICKED = new Map();              // session id -> {roomId, sync: syncN when kicked}
+const KICKED_MAX = 20000;
 function st(id) {
   let s = ST.get(id);
   if (!s) { s = { wantUntil: 0, readers: 0, ready: false, seenAt: 0, readerIds: [] }; ST.set(id, s); }
@@ -194,8 +213,17 @@ function noteSync(items, t = now()) {
     s.readers = rd.length;
     s.readerIds = rd.map((r) => String(r.id || "")).filter((x) => /^[0-9a-f-]{36}$/i.test(x));     // adultgate site
     s.seenAt = t;
+    // audiogate review (F1): do the hook's ids match the list's? / what this start found already playing
+    for (const sid of s.readerIds) {
+      const r = READERS.get(sid);
+      if (r && r.roomId === R.id) {
+        if (!idsMatch) console.log("[roomrtc] audiogate: the hook's session ids match MediaMTX's list - unrecorded sessions are re-checked on the tick");
+        idsMatch = true;
+      } else if (preTick && !KICKED.has(sid)) PREBOOT.add(sid);
+    }
     if (s.readers > 0) want(R.id, t);
     seen.add(R.id);
+    sawPaths = true;
   }
   for (const [id, s] of ST) {
     if (seen.has(id)) continue;
@@ -205,6 +233,10 @@ function noteSync(items, t = now()) {
   // adultgate site: forget sessions MediaMTX no longer lists
   const live = new Set([...ST.values()].flatMap((s) => s.readerIds || []));
   for (const [sid, r] of READERS) if (!live.has(sid) && t - r.at > 60 * 1000) READERS.delete(sid);
+  // audiogate review: a kicked session this listing doesn't have is gone (the kick landed)
+  syncN++;
+  for (const sid of KICKED.keys()) if (!live.has(sid)) KICKED.delete(sid);
+  for (const sid of PREBOOT) if (!live.has(sid)) PREBOOT.delete(sid);
 }
 
 /**
@@ -213,36 +245,53 @@ function noteSync(items, t = now()) {
  * bridge.js's periodic tick (sign-outs, accounts gone or demoted, the 💎 bridge perk lost). Each session the hook let in is asked
  * again - padaccess.hearNow for its account and the sign-in its ticket came with, the pad's bridge perk - and one that fails is
  * kicked (the player falls back to the MP3 relay, which refuses them too). Every session the hook saw counts, also one MediaMTX
- * hasn't listed yet. A session the hook never saw (a site restart since) is ended on a change, not on the periodic tick - its
- * listener can ask for a new ticket. Never cut: a pad open to everyone (no lookups), a lookup that fails (kept, asked again).
- * only = a room id, a (roomId) -> boolean filter, or null (every room). -> how many were ended
+ * hasn't listed yet. A session the hook never saw (a site restart since) is ended on a change (its listener can ask for a new
+ * ticket) - and, review F1, on the periodic tick too (see PREBOOT / idsMatch above). A kick that didn't land is tried again
+ * (KICKED). Never cut: a pad open to everyone (no lookups), a lookup that fails (kept, asked again).
+ * only = a room id, a (roomId) -> boolean filter, or null (every room). -> how many were ended (retried kicks not counted)
  */
 async function recheck(why = "change", only = null) {
   const PA = require("./padaccess");
+  const tick = why === "tick";
   const inScope = typeof only === "function" ? only : only == null ? () => true : (id) => id === String(only);
   const perkOk = (id) => { try { return require("./bridge").bridgeOk(id); } catch (e) { return true; } };
   const byRoom = new Map();
   const add = (roomId, sid) => { if (!byRoom.has(roomId)) byRoom.set(roomId, new Set()); byRoom.get(roomId).add(sid); };
   for (const [sid, r] of READERS) if (r && r.roomId) add(r.roomId, sid);
   for (const [roomId, s] of ST) for (const sid of s.readerIds || []) add(roomId, sid);
-  let n = 0, failed = 0;
+  const listed = new Set([...ST.values()].flatMap((s) => s.readerIds || []));
+  const kick = (sid) => { try { require("./livecam").kickReader(sid); } catch (e) { /* best effort */ } };
+  // review F1: an unrecorded session on the tick - only once the levels are loaded, and with the hook's ids confirmed (or opened
+  // before this start)
+  const unvouched = (sid) => !tick || (PA.isReady() && (idsMatch || PREBOOT.has(sid)));
+  let n = 0, again = 0, failed = 0;
   for (const [roomId, sids] of byRoom) {
     if (!inScope(roomId)) continue;
     const perk = perkOk(roomId);
     if (perk && PA.full(null, roomId)) continue;     // open to everyone right now: nothing to ask
     for (const sid of sids) {
+      const k = KICKED.get(sid);
+      if (k) {                                        // review F2: already ended - again only if a newer listing still has it
+        if (syncN > k.sync && listed.has(sid)) { kick(sid); k.sync = syncN; again++; }
+        continue;
+      }
       const r = READERS.get(sid);
       let stop;
       if (!perk) stop = true;
-      else if (!r || r.roomId !== roomId) stop = why !== "tick";
+      else if (!r || r.roomId !== roomId) stop = unvouched(sid);
       else { try { stop = !(await PA.hearNow(r.uid, roomId, { session: r.ls || null })); } catch (e) { stop = false; failed++; } }
-      if (!stop) continue;
-      try { require("./livecam").kickReader(sid); } catch (e) { /* best effort */ }
+      if (!stop || KICKED.has(sid)) continue;         // (another pass may have ended it while this one waited)
+      kick(sid);
       READERS.delete(sid);
+      PREBOOT.delete(sid);
+      if (KICKED.size >= KICKED_MAX) KICKED.delete(KICKED.keys().next().value);
+      KICKED.set(sid, { roomId, sync: syncN });
       n++;
     }
   }
+  if (tick && sawPaths) preTick = false;
   if (n) console.log(`[roomrtc] audiogate (${why}): ended ${n} WebRTC room listener(s)`);
+  if (again) console.log(`[roomrtc] audiogate (${why}): kicked ${again} ended session(s) again (MediaMTX still listed them)`);
   if (failed) console.error(`[roomrtc] audiogate (${why}): ${failed} listener check(s) failed - kept, asked again next pass`);
   return n;
 }
@@ -273,16 +322,23 @@ async function auth(b, action, proto) {
     if (!tok && /^ra1\./.test(String(b.token || ""))) tok = String(b.token);
     const c = checkTicket(tok, p);
     if (!c) return loopbackIp(b.ip) ? 403 : 401;
+    // audiogate review (F3): the 💎 bridge perk too - the ticket route asks it (isLiveShown); a cached ticket opens nothing without it
+    let perk = true;
+    try { perk = require("./bridge").bridgeOk(R.id); } catch (e) { perk = true; }
+    if (!perk) return 403;
     // audiogate: + the sign-in the ticket was asked under is still live (hearNow); a lookup that fails answers as before (fullFor:
-    // as if signed out - a Public pad still plays)
-    const ls = c.uid ? ticketSession(tok, c.uid) : null;
+    // as if signed out - a Public pad still plays). Review F1: a signed-in ticket from before this start has no sign-in on record -
+    // it counts as signed out (one handed out since without a sign-in seen - none on the request - answers by account, as before)
+    let uid = c.uid || null;
+    const ls = uid ? ticketSession(tok, uid) : null;
+    if (uid && !ls && c.exp - TICKET_MS < bootAt) uid = null;
     let may;
-    try { may = await require("./padaccess").hearNow(c.uid, R.id, { session: ls }); } catch (e) { may = require("./padaccess").full(null, R.id); }
+    try { may = await require("./padaccess").hearNow(uid, R.id, { session: ls }); } catch (e) { may = require("./padaccess").full(null, R.id); }
     if (!may) return 403;
     want(R.id);
     // adultgate site: who this session is, for recheck() (MediaMTX passes the session id with the read); audiogate: + its sign-in
     if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) {
-      READERS.set(String(b.id), { uid: c.uid || null, roomId: R.id, at: now(), ls });
+      READERS.set(String(b.id), { uid, roomId: R.id, at: now(), ls });
       if (READERS.size > 20000) READERS.delete(READERS.keys().next().value);
     }
     return 200;
@@ -298,7 +354,10 @@ function hint(R) { return eligible(R); }
 module.exports = {
   PREFIX, PATH_RE, MODES, GRACE_MS, TICKET_MS, PENDING_MS,
   pathFor, roomForPath, pubKey, readTicket, checkTicket, isPrime, eligible, active, ticket, forBot, noteSync, noteCap, auth, hint, want, recheck,
-  _state: ST, _readers: READERS, _ticketSessions: TICKET_LS, ticketSession,
+  _state: ST, _readers: READERS, _ticketSessions: TICKET_LS, ticketSession, _kicked: KICKED, _preboot: PREBOOT,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
-  _reset: () => { ST.clear(); pending.length = 0; READERS.clear(); TICKET_LS.clear(); },
+  _setBoot: (t) => { bootAt = Number(t) || now(); },
+  // (a test's "site restart": everything in memory is gone)
+  _reset: () => { ST.clear(); pending.length = 0; READERS.clear(); TICKET_LS.clear(); KICKED.clear(); PREBOOT.clear();
+    bootAt = now(); syncN = 0; idsMatch = false; preTick = true; sawPaths = false; },
 };

@@ -1,11 +1,15 @@
 // audiogate (bridge.js audioRecheck + roomrtc.recheck + padaccess.hearNow): a pad's room audio follows its audience rule for the
 // listeners ALREADY connected, not only at connect time. /p/:slug/audio (raw MP3 and the framed ?lv=1 levels) and the ⚡ WebRTC
 // sessions (roomrtc tickets / the MediaMTX hook) answer to padaccess.full for who the listener is NOW + the pad's 💎 bridge perk:
-//   * a change ends them at once: a Public pad made Members / Approved, a member removed, a level reload (re-key / merge)
+//   * a change that can stop someone ends them at once: a Public pad made Members / Approved, a member removed, a level reload
+//     (re-key / merge) that did either; an approval, a looser level or the same level again touches nobody (review R1)
 //   * the periodic pass (AUDIO_RECHECK_MS) ends them after a sign-out / sign-out everywhere, an account gone or demoted, the
 //     bridge perk lost - the sign-in they connected with (sessions.js) rides with the listener / ticket, in memory only
-//   * never cut: who still passes, a pad open to everyone (no lookups), a lookup that fails (kept, asked again); another pad's
-//     listeners are never touched by this pad's change; a WebRTC session the hook never saw is ended on a change, never on a tick
+//   * never cut: who still passes (a "no" from the class cache is read again - review R2), a pad open to everyone (no lookups),
+//     a lookup that fails (kept, asked again); another pad's listeners are never touched by this pad's change
+//   * a WebRTC session the hook never saw (opened before a site restart) on a pad not open to everyone is ended on a change, and
+//     on the tick once the hook's ids are confirmed (or it was there before the first pass) - review F1; a kick that didn't land
+//     is tried again while MediaMTX lists it (F2); the hook asks the bridge perk too (F3)
 //   * a mic-stage capture's tap ends once with its viewer's access
 //   TZ=UTC PEPE_BOT_DIR=G:/wt/casino2-bot node --test test/audiogate.test.js
 "use strict";
@@ -114,6 +118,10 @@ test.before(async () => {
   U.staff = await mkUser("agstaff", "Admin");
   U.alice = await mkUser("agalice");
   U.gone = await mkUser("aggone");
+  U.promo = await mkUser("agpromo");                  // (review) promoted while listening
+  U.asker = await mkUser("agasker");                  // (review) asks to join the Approved pad
+  U.carol = await mkUser("agcarol");
+  U.dave = await mkUser("agdave");
   await rooms.init(); await PA.init(); await AG.load(); await S.init(); await SE.init();
   for (const P of Object.values(PADS)) {
     await rooms.addRoom(P.id, P.id, "test");
@@ -451,4 +459,217 @@ test("hearNow: open pads answer without lookups; a sign-in that's gone counts as
   SE.isLive = async () => { throw new Error("SQLITE_BUSY"); };
   try { await assert.rejects(PA.hearNow(U.alice.userId, PADS.mem.id, { session: "x" }), /SQLITE_BUSY/); }
   finally { SE.isLive = orig; }
+});
+
+// ── review fixes (access F1-F3, regression R1-R3) ──
+/** what MediaMTX's path list says (webrtc.sync -> noteSync, every 5 s): {pad: [session ids]} - ONE listing for every pad */
+const listAll = (by) => RR.noteSync(Object.entries(by).map(([k, ids]) => ({ name: RR.pathFor(PADS[k].id), ready: true,
+  readers: ids.map((id) => ({ type: "webRTCSession", id })) })));
+/** a ticket + the hook letting session `n` in, as the real flow does (-> the ticket) */
+async function listen(P, who, n) {
+  const r = await post("/api/rooms/" + P.slug + "/audio/rtc", {}, who);
+  assert.equal(r.status, 200, JSON.stringify(r.d)); assert.equal(r.d.ok, true, JSON.stringify(r.d));
+  const pt = new URL(r.d.whep).searchParams.get("pt");
+  assert.equal(await hook(P, { query: "pt=" + encodeURIComponent(pt), id: sid(n) }), 200);
+  return pt;
+}
+
+test("⚡ F1: after a site restart (MediaMTX kept the sessions, the site has no record) the first pass ends the ones on a pad not open to everyone (signed out everywhere / banned stops hearing it), a Public pad's stay; the rejoined sessions are recorded and kept", async () => {
+  await rtcOn();
+  const s = await signIn(U.carol);
+  await listen(PADS.mem, { cookie: s.cookie }, 100);
+  await listen(PADS.mem, U.dave, 101);
+  await listen(PADS.pub, null, 102);
+  listAll({ mem: [sid(100), sid(101)], pub: [sid(102)] });
+  RR._reset();                                                // the deploy: everything the site remembered is gone
+  listAll({ mem: [sid(100), sid(101)], pub: [sid(102)] });    // ...MediaMTX still lists the sessions
+  await SE.revokeAll(U.carol.userId, { why: "ban" });         // a site ban / sign out everywhere
+  assert.equal(await RR.recheck("tick"), 2);
+  assert.deepEqual(kicked.slice().sort(), [sid(100), sid(101)], "both Members-pad sessions: the site can't vouch for them");
+  // the players rejoin with new tickets: the hook records them, the next pass keeps who passes
+  kicked.length = 0;
+  const s2 = await signIn(U.carol);
+  await listen(PADS.mem, { cookie: s2.cookie }, 103);
+  listAll({ mem: [sid(103)], pub: [sid(102)] });
+  assert.equal(await RR.recheck("tick"), 0);
+  assert.deepEqual(kicked, []);
+});
+
+test("⚡ F1: once a recorded session shows up in MediaMTX's list, every unrecorded one on a pad not open to everyone is ended on the tick; before that (MediaMTX might not send ids) only the ones listed before the first pass, once", async () => {
+  await rtcOn();
+  assert.equal(await RR.recheck("tick"), 0, "a pass before MediaMTX's first listing (nothing known yet) ...");
+  // no id match yet: the sessions listed before the first pass (opened before this start) are swept once ...
+  listAll({ mem: [sid(110)] });
+  assert.equal(await RR.recheck("tick"), 1);
+  assert.deepEqual(kicked, [sid(110)]);
+  kicked.length = 0;
+  // ... a later one the hook never recorded is left to a change (a MediaMTX that doesn't send ids would be kicked every 15 s)
+  listAll({ mem: [sid(111)] });
+  assert.equal(await RR.recheck("tick"), 0);
+  assert.deepEqual(kicked, []);
+  // the hook's ids are confirmed (a recorded session listed): unrecorded ones are ended from now on
+  await listen(PADS.mem, U.plain, 112);
+  listAll({ mem: [sid(111), sid(112)] });
+  assert.equal(await RR.recheck("tick"), 1);
+  assert.deepEqual(kicked, [sid(111)], "the recorded, still-passing session stays");
+});
+
+test("⚡ F1: a signed-in ticket handed out before this start counts as signed out at the hook (its sign-in is forgotten): a Members pad refuses it, a Public pad plays", async () => {
+  await rtcOn();
+  const s = await signIn(U.carol);
+  const r = await post("/api/rooms/" + PADS.mem.slug + "/audio/rtc", {}, { cookie: s.cookie });
+  const p = await post("/api/rooms/" + PADS.pub.slug + "/audio/rtc", {}, { cookie: s.cookie });
+  assert.equal(r.d.ok, true); assert.equal(p.d.ok, true);
+  const ptm = new URL(r.d.whep).searchParams.get("pt"), ptp = new URL(p.d.whep).searchParams.get("pt");
+  RR._reset(); RR._setBoot(Date.now() + 1000);                // a restart after the tickets were handed out
+  assert.equal(await hook(PADS.mem, { query: "pt=" + encodeURIComponent(ptm), id: sid(120) }), 403);
+  assert.equal(await hook(PADS.pub, { query: "pt=" + encodeURIComponent(ptp), id: sid(121) }), 200);
+  assert.equal(RR._readers.get(sid(121)).uid, null, "recorded as signed out");
+  // a ticket handed out since (no sign-in seen: a test user) still opens a session
+  RR._setBoot(Date.now() - 1000);
+  const t = await post("/api/rooms/" + PADS.mem.slug + "/audio/rtc", {}, U.plain);
+  assert.equal(await hook(PADS.mem, { query: "pt=" + encodeURIComponent(new URL(t.d.whep).searchParams.get("pt")), id: sid(122) }), 200);
+});
+
+test("⚡ F2: a kick that didn't land is tried again while MediaMTX still lists the session (not counted twice, not before a new listing); forgotten once it's gone", async () => {
+  await rtcOn();
+  const s = await signIn(U.carol);
+  await listen(PADS.mem, { cookie: s.cookie }, 130);
+  listAll({ mem: [sid(130)] });
+  await SE.revoke(U.carol.userId, s.id, "signed out");
+  assert.equal(await RR.recheck("tick"), 1);
+  assert.deepEqual(kicked, [sid(130)]);
+  kicked.length = 0;
+  assert.equal(await RR.recheck("tick"), 0);
+  assert.deepEqual(kicked, [], "no listing since the kick: nothing to retry yet (no double count)");
+  listAll({ mem: [sid(130)] });                               // the next sync: still reading - the kick was lost
+  assert.equal(await RR.recheck("tick"), 0, "a retry is not a new end");
+  assert.deepEqual(kicked, [sid(130)], "kicked again");
+  kicked.length = 0;
+  listAll({ mem: [] });                                       // gone
+  assert.equal(RR._kicked.has(sid(130)), false);
+  assert.equal(await RR.recheck("tick"), 0);
+  assert.deepEqual(kicked, []);
+});
+
+test("⚡ F3: the MediaMTX hook asks the 💎 bridge perk too - a cached ticket opens nothing once it's gone", async () => {
+  await rtcOn();
+  const r = await post("/api/rooms/" + PADS.pub.slug + "/audio/rtc", {}, null);
+  assert.equal(r.d.ok, true, JSON.stringify(r.d));
+  const pt = new URL(r.d.whep).searchParams.get("pt");
+  const orig = premium.bridgeAllowed;
+  premium.bridgeAllowed = (id) => id !== PADS.pub.id;
+  try { assert.equal(await hook(PADS.pub, { query: "pt=" + encodeURIComponent(pt), id: sid(140) }), 403); }
+  finally { premium.bridgeAllowed = orig; }
+  assert.equal(await hook(PADS.pub, { query: "pt=" + encodeURIComponent(pt), id: sid(141) }), 200, "(with the perk it plays)");
+});
+
+test("R1: changes that can't stop anyone (an approval, Approved -> Members, the same level again, a reload that changes nothing) cut no MP3 listener and kick no ⚡ session - a tightening still does", async () => {
+  await rtcOn();
+  listAll({ app: [sid(150)], mem: [sid(151)] });              // sessions the site can't vouch for (from before a restart)
+  const seen = [];
+  PA.onChange((id, info) => seen.push([id, info && info.tighter]));
+  const a = await open("/p/" + PADS.app.slug + "/audio", U.m1), m = await open("/p/" + PADS.mem.slug + "/audio", U.plain);
+  await runQuery("INSERT INTO pad_members (room_id, user_id, status, requested_at) VALUES (?, ?, 'pending', ?) ON CONFLICT(room_id, user_id) DO UPDATE SET status = 'pending'",
+                 [PADS.app.id, U.asker.userId, Date.now()]);
+  await PA.load();
+  try {
+    seen.length = 0;
+    await PA.decide(U.owner, await R(PADS.app), U.asker.userId, true);
+    await setLevel(PADS.mem, "members");
+    await PA.load();
+    await setLevel(PADS.app, "members");
+    await sleep(80);
+    assert.deepEqual(kicked, []);
+    assert.deepEqual([a.ended, m.ended], [false, false]);
+    assert.deepEqual(seen, [[PADS.app.id, false], [PADS.mem.id, false], [PADS.app.id, false]], "a reload that changes nothing says nothing");
+    await setLevel(PADS.mem, "approved");                     // tighter
+    assert.equal(await until(() => m.ended && kicked.includes(sid(151))), true);
+    assert.deepEqual(seen.at(-1), [PADS.mem.id, true]);
+  } finally {
+    close(a, m);
+    await runQuery("DELETE FROM pad_members WHERE room_id = ? AND user_id = ?", [PADS.app.id, U.asker.userId]);
+    await PA.load();
+  }
+});
+
+test("R1: a reload (re-key / merge) that takes a member off an Approved pad ends their stream at once, and says which pad", async () => {
+  const P = PADS.app;
+  const seen = [];
+  PA.onChange((id, info) => seen.push([id, info && info.tighter]));
+  const s1 = await open("/p/" + P.slug + "/audio", U.m1), s2 = await open("/p/" + P.slug + "/audio", U.m2);
+  try {
+    assert.deepEqual([s1.status, s2.status], [200, 200]);
+    seen.length = 0;
+    await runQuery("UPDATE pad_members SET status = 'removed' WHERE room_id = ? AND user_id = ?", [P.id, U.m1.userId]);
+    await PA.load();
+    assert.equal(await until(() => s1.ended), true);
+    await sleep(50);
+    assert.equal(s2.ended, false);
+    assert.deepEqual(seen, [[P.id, true]]);
+  } finally {
+    close(s1, s2);
+    await runQuery("UPDATE pad_members SET status = 'approved' WHERE room_id = ? AND user_id = ?", [P.id, U.m1.userId]);
+    await PA.load();
+  }
+});
+
+test("R2: a listener promoted a moment ago (the class cache still says the old class) who passes at connect is not cut by the next pass - MP3 or ⚡", async () => {
+  await rtcOn();
+  const s = await signIn(U.promo);
+  const mem = await open("/p/" + PADS.mem.slug + "/audio", { cookie: s.cookie });
+  let app = null;
+  try {
+    assert.equal(mem.status, 200);
+    assert.equal(await bridge.audioRecheck("tick").pending, 0);       // the class cache says pleb for a minute
+    await runQuery("UPDATE users SET class = 'Admin' WHERE userId = ?", [U.promo.userId]);
+    app = await open("/p/" + PADS.app.slug + "/audio", { cookie: s.cookie });
+    assert.equal(app.status, 200, "connect passes (the class read fresh)");
+    assert.equal(await bridge.audioRecheck("tick").pending, 0);
+    await sleep(50);
+    assert.equal(app.ended, false);
+    await listen(PADS.app, { cookie: s.cookie }, 160);              // the hook lets the ⚡ session in
+    listAll({ app: [sid(160)] });
+    assert.equal(await RR.recheck("tick"), 0);
+    assert.deepEqual(kicked, []);
+    // a demotion is still caught (the cache expired)
+    await runQuery("UPDATE users SET class = 'pleb' WHERE userId = ?", [U.promo.userId]);
+    PA._setClock(() => Date.now() + 120e3);
+    await bridge.audioRecheck("tick").pending;
+    assert.equal(await until(() => app.ended), true);
+    assert.equal(await RR.recheck("tick"), 1);
+  } finally {
+    PA._setClock(null);
+    close(mem, app);
+    await runQuery("UPDATE users SET class = 'pleb' WHERE userId = ?", [U.promo.userId]);
+  }
+});
+
+test("R3: the periodic pass itself - started by register, every AUDIO_RECHECK_MS, the MP3 pass then the ⚡ pass, one at a time", async () => {
+  const { mock } = require("node:test");
+  assert.equal(bridge._audioRecheckOn(), true, "register started it");
+  await rtcOn();
+  const s = await signIn(U.carol);
+  const st = await open("/p/" + PADS.mem.slug + "/audio", { cookie: s.cookie });
+  await listen(PADS.mem, { cookie: s.cookie }, 170);
+  listAll({ mem: [sid(170)] });
+  bridge._audioRecheckStop();
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    bridge._audioRecheckStart();
+    await SE.revoke(U.carol.userId, s.id, "signed out");
+    mock.timers.tick(bridge.AUDIO_RECHECK_MS - 1);
+    await sleep(60);
+    assert.equal(st.ended, false, "not before the interval");
+    mock.timers.tick(1);
+    assert.equal(await until(() => st.ended && kicked.includes(sid(170))), true, "both passes ran");
+    // one at a time: a pass while one runs does nothing
+    const two = await Promise.all([bridge._audioTick(), bridge._audioTick()]);
+    assert.deepEqual(two, [true, false]);
+  } finally {
+    bridge._audioRecheckStop();
+    mock.timers.reset();
+    bridge._audioRecheckStart();
+    close(st);
+  }
 });

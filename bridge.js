@@ -929,20 +929,24 @@ function audioRecheck(why = "change", only = null, { deep = true } = {}) {
   return { ended: sync, pending };
 }
 let audioRecheckT = null, audioTickBusy = false;
-/** audiogate: the periodic pass (MP3 listeners + roomrtc's WebRTC readers) - one at a time; never keeps the process alive. */
+/** audiogate: one periodic pass - the MP3 listeners, then roomrtc's WebRTC readers; one at a time (-> false when one was running). */
+async function audioTick() {
+  if (audioTickBusy) return false;
+  audioTickBusy = true;
+  try {
+    await audioRecheck("tick").pending;
+    await require("./roomrtc").recheck("tick");
+  } catch (e) { console.error("[bridge] audiogate tick:", e.message); }
+  finally { audioTickBusy = false; }
+  return true;
+}
+/** audiogate: the periodic pass every AUDIO_RECHECK_MS; never keeps the process alive. */
 function startAudioRecheck() {
   if (audioRecheckT) return;
-  audioRecheckT = setInterval(async () => {
-    if (audioTickBusy) return;
-    audioTickBusy = true;
-    try {
-      await audioRecheck("tick").pending;
-      await require("./roomrtc").recheck("tick");
-    } catch (e) { console.error("[bridge] audiogate tick:", e.message); }
-    finally { audioTickBusy = false; }
-  }, AUDIO_RECHECK_MS);
+  audioRecheckT = setInterval(audioTick, AUDIO_RECHECK_MS);
   if (audioRecheckT.unref) audioRecheckT.unref();
 }
+function stopAudioRecheck() { if (audioRecheckT) clearInterval(audioRecheckT); audioRecheckT = null; }
 
 /**
  * 1.99ajc dockfu (D4): the picker's eligibility (bridge-relay.sayEligibility - a users read, the pad-access, 18+ gate and !bridge block
@@ -2006,7 +2010,10 @@ function register(app, { isBotToken, addUser }) {
   });
   // audiogate: a pad's level / members changed (one pad; null = every pad, after a reload): the room audio playing there answers
   // to the new rule now - a Public pad made Members ends its signed-out listeners, a removed member's stream ends, ...
-  require("./padaccess").onChange((roomId) => {
+  // Review (R1): only a change that can stop someone (tighter) - an approval, a looser level or the same one again cuts nobody,
+  // and doesn't end the ⚡ sessions the site can't vouch for either
+  require("./padaccess").onChange((roomId, info) => {
+    if (info && info.tighter === false) return null;
     audioRecheck("access", roomId);
     return require("./roomrtc").recheck("access", roomId);
   });
@@ -2726,7 +2733,7 @@ async function forgetVeiled(logins) {
 }
 
 module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99ajc dockfu (D4)
-  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, audioRecheck, AUDIO_RECHECK_MS, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, audioRecheck, AUDIO_RECHECK_MS, _audioTick: audioTick, _audioRecheckOn: () => !!audioRecheckT, _audioRecheckStart: startAudioRecheck, _audioRecheckStop: stopAudioRecheck, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)

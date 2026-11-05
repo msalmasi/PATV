@@ -45,6 +45,9 @@
 // and its levels; roomrtc.recheck - the ⚡ WebRTC sessions): a pad made Members / Approved or a member removed ends the streams
 // of whoever no longer passes full() at once; a reload (load() after a re-key or a merge) re-checks every pad. hearNow() is the
 // per-listener question the periodic pass asks too (a sign-out, an account gone or demoted).
+// audiogate review (R1): listeners get fn(roomId, {tighter}) - tighter is true only when the change can stop someone (a level made
+// stricter, a member removed, a reload that did either); an approval, a looser level or the same level again says false, so the
+// room audio of people who still pass is never re-checked (and never cut) for it. A reload bumps only the pads it changed.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -54,6 +57,7 @@ const AG = require("./adultgate");   // adultgate site: the 18+ pad gate (off by
 
 const LEVELS = Object.freeze(["public", "members", "approved"]);
 const DEFAULT = "members";
+const RANK = Object.freeze({ public: 0, members: 1, approved: 2 });      // audiogate review: stricter = higher
 const INFO = Object.freeze({
   public: { icon: "🌐", label: "Public", what: "Anyone, signed out too: the page, feed, stories, stage stream, the live Camfrog room chat and analytics. NSFW stays hidden from signed-out visitors." },
   members: { icon: "👥", label: "Members", what: "Anyone signed in to PATV. Signed-out visitors still see the page, posts and stage, but not the live room chat, story pictures or analytics. (The default.)" },
@@ -131,10 +135,26 @@ async function load() {
     M.get(r.room_id).add(String(r.user_id));
   }
   const again = loaded;
+  const was = { L: LEVEL, M: MEMBERS };
   LEVEL = L; MEMBERS = M; loaded = true;
   // audiogate: a reload (a re-key moved a pad's level onto a room, a merge) can tighten any pad - what caches or plays under the
-  // old levels is re-checked (the first load has nothing open yet)
-  if (again) bump(null);
+  // old levels is re-checked (the first load has nothing open yet). Review (R1): only the pads it changed, each saying whether it
+  // got stricter (a stricter level, or an Approved pad that lost a member) - a reload that changes nothing bumps nothing.
+  if (again) for (const [id, tighter] of changedPads(was.L, was.M, L, M)) bump(id, { tighter });
+}
+/** audiogate review: the pads whose level or approved members differ between two loads -> [[roomId, tighter]] */
+function changedPads(oldL, oldM, newL, newM) {
+  const lvIn = (map, id) => (rooms.isProfile(id) ? DEFAULT : map.get(id) || DEFAULT);
+  const none = new Set();
+  const out = [];
+  for (const id of new Set([...oldL.keys(), ...newL.keys(), ...oldM.keys(), ...newM.keys()])) {
+    const a = lvIn(oldL, id), b = lvIn(newL, id);
+    const ma = oldM.get(id) || none, mb = newM.get(id) || none;
+    const lost = [...ma].some((u) => !mb.has(u)), gained = [...mb].some((u) => !ma.has(u));
+    if (a === b && !lost && !gained) continue;
+    out.push([id, RANK[b] > RANK[a] || (lost && b === "approved")]);
+  }
+  return out;
 }
 
 // ── reads (synchronous, off the cache) ──
@@ -312,11 +332,14 @@ async function setLevel(actor, R, level) {
   const lv = cleanLevel(level);
   if (!lv) throw new Refuse(400, "Pick Public, Members or Approved.");
   if (rooms.isProfile(R.id)) throw new Refuse(400, "A profile's visibility is set on the profile itself.");
+  const was = levelOf(R.id);
   await runQuery(`INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES (?, ?, ?, ?)
                   ON CONFLICT(room_id) DO UPDATE SET level = excluded.level, updated = excluded.updated, updated_by = excluded.updated_by`,
                  [R.id, lv, NOW(), actor.username || actor.userId]);
   if (lv === DEFAULT) LEVEL.delete(R.id); else LEVEL.set(R.id, lv);
-  bump(R.id);                              // audiogate: before the audit write - the room audio playing now follows the new level at once
+  // audiogate: before the audit write - the room audio playing now follows the new level at once (review R1: only a stricter one
+  // can stop anyone; Approved -> Members, -> Public or the same level again re-check nothing)
+  bump(R.id, { tighter: RANK[lv] > RANK[was] });
   await rooms.event(R.id, "access", actor.username || "?", `level=${lv}`);
   // CL3: the pad chat's watermarks move now - an Approved pad opening up never shows its Approved-era lines to non-members (aud_m)
   try { await require("./chatlogview").reconcileNow(R.id); require("./bridge").refreshRoom(R.id); } catch (e) { console.error("[padaccess] chat watermarks:", e.message); }
@@ -343,7 +366,7 @@ async function decide(actor, R, userId, approve) {
                         link: "/p/" + encodeURIComponent(slug), ref: `pad-access-ok:${R.id}:${uid}` }).catch(() => {});
   }
   await rooms.event(R.id, "access", actor.username || "?", `${st} ${(await userName(uid)) || uid}`);
-  bump(R.id);
+  bump(R.id, { tighter: false });          // audiogate review (R1): an approval adds someone, a denial was never inside - nobody loses
   return listFor(R.id);
 }
 
@@ -358,20 +381,21 @@ async function remove(actor, R, userId) {
                  [NOW(), actor.username || actor.userId, R.id, uid]);
   const s = MEMBERS.get(R.id);
   if (s) s.delete(uid);
-  bump(R.id);                              // audiogate: (as setLevel) their open room audio ends now, not after the audit write
+  bump(R.id, { tighter: true });          // audiogate: (as setLevel) their open room audio ends now, not after the audit write
   await rooms.event(R.id, "access", actor.username || "?", `removed ${(await userName(uid)) || uid}`);
   return listFor(R.id);
 }
 
 // Anything that caches per-pad results (the stage read cache) listens here.
-// audiogate: fn(roomId) - the pad whose level / members changed, or null when every pad may have (a reload: a re-key, a merge);
-// the room audio already playing (bridge.js MP3 listeners, roomrtc WebRTC readers) is re-checked under the new rule at once.
+// audiogate: fn(roomId, {tighter}) - the pad whose level / members changed (null = any pad may have); the room audio already
+// playing (bridge.js MP3 listeners, roomrtc WebRTC readers) is re-checked under the new rule at once when `tighter` (review R1).
 const listeners = new Set();
 function onChange(fn) { listeners.add(fn); }
-function bump(roomId = null) {
+function bump(roomId = null, { tighter = true } = {}) {
   ipOk.clear();
+  const info = { tighter: !!tighter };
   for (const fn of listeners) {
-    try { const p = fn(roomId == null ? null : String(roomId)); if (p && typeof p.catch === "function") p.catch((e) => console.error("[padaccess] change:", e.message)); }
+    try { const p = fn(roomId == null ? null : String(roomId), info); if (p && typeof p.catch === "function") p.catch((e) => console.error("[padaccess] change:", e.message)); }
     catch (e) { /* a listener's problem */ }
   }
 }
@@ -413,9 +437,10 @@ function tokenizeSlots(slots, viewer, roomId) {
 }
 const ipOk = new Map();         // "<ip>|<stream>" -> until (ms)
 const classCache = new Map();   // user id -> {at, u: {userId, class} | null}
-// audiogate: a failed read is never cached (it used to be remembered as "no such account" for a minute); strict -> it throws
-async function accountLite(userId, { strict = false } = {}) {
-  const c = classCache.get(userId);
+// audiogate: a failed read is never cached (it used to be remembered as "no such account" for a minute); strict -> it throws;
+// fresh -> past the cache (and the cache takes the answer)
+async function accountLite(userId, { strict = false, fresh = false } = {}) {
+  const c = fresh ? null : classCache.get(userId);
   if (c && NOW() - c.at < 60e3) return c.u;
   let rows;
   try { rows = await getQuery("SELECT userId, class FROM users WHERE userId = ?", [userId]); }
@@ -467,8 +492,8 @@ async function fullFor(userId, roomId) {
  * audiogate: may a listener who is ALREADY hearing the pad's live room (the MP3 relay, its levels, a WebRTC session) still hear
  * it? padaccess.full for who they are NOW - the account (null = signed out) and the sign-in it connected with (sessions.js id):
  * a signed-out / revoked / expired sign-in or an account that's gone counts as signed out (a Public pad still lets them hear
- * it), the class from the 60 s cache. Throws when that can't be read (a database error): no answer is not a "no" - the
- * callers keep the listener and ask again on their next pass. Reads only what exists; keeps nothing.
+ * it), the class from the 60 s cache (a "no" is read again past it). Throws when that can't be read (a database error): no
+ * answer is not a "no" - the callers keep the listener and ask again on their next pass. Reads only what exists; keeps nothing.
  */
 async function hearNow(userId, roomId, { session = null } = {}) {
   await init();
@@ -476,7 +501,11 @@ async function hearNow(userId, roomId, { session = null } = {}) {
   if (!userId) return false;
   if (session && !(await require("./sessions").isLive(String(session), String(userId)))) return false;   // full(null) said no
   const u = await accountLite(String(userId), { strict: true });
-  return full(u || null, roomId);
+  if (full(u || null, roomId)) return true;
+  // audiogate review (R2): the class cache can be a minute old (someone just promoted - staff / admin - who passed at connect with
+  // the class read fresh): a "no" is confirmed past the cache before anyone is cut. Costs a read only on would-be cuts.
+  const f = await accountLite(String(userId), { strict: true, fresh: true });
+  return full(f || null, roomId);
 }
 /** adultgate site: the 18+ gate alone for an account id (null = signed out) - class from the same 60 s cache. */
 async function adultGateFor(userId, roomId) {
