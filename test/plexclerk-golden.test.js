@@ -6,7 +6,7 @@ const path = require("node:path");
 const { fixtureRunner, rawLine } = require("../tools/clerk-find");
 const fixture = require("./fixtures/clerk_catalog.json");
 const evaluation = require("./fixtures/clerk_eval.json");
-const PHASES = new Set(["1", "2a"]);
+const PHASES = new Set(["1", "2a", "2b"]);
 
 function check(caseRow, result) {
   const expected = caseRow.expect, rows = result.rows || [];
@@ -20,6 +20,10 @@ function check(caseRow, result) {
   if (expected.newer) assert.ok(result.seerr && result.seerr.year > Math.max(...rows.map(r => r.year || 0)), "newer release note");
   if (caseRow.context.adult || ["pm", "tg"].includes(caseRow.context.via) || caseRow.context.requests === false) assert.equal(result.lookup_count, 0, "no external lookup in restricted context");
   if (expected.max_rows) assert.ok(rows.length <= expected.max_rows);
+  if (caseRow.phase === "2b") {
+    if (caseRow.context.embed_down || expected.recall === "in") assert.equal(result.vector_count, 0, "no vector search on down/verified recall");
+    else assert.equal(result.vector_count, 1, "one filtered vector search");
+  }
   if (expected.code === "none") { assert.equal(rows.length, 0, "no library match"); return; }
   if (expected.code) { assert.equal(result.code, expected.code); return; }
   assert.ok(rows.length > 0, "expected a verified catalog pick");
@@ -27,7 +31,12 @@ function check(caseRow, result) {
   const source = keys.map(key => fixture.rows.find(r => r.key === key));
   assert.ok(source.every(Boolean), "all output keys are in the fixture catalog");
   assert.ok(source.every(r => ["71", "72"].includes(r.section) && r.content_rating !== "X"), "no denied row escapes");
-  if (expected.keys) assert.deepEqual(keys, expected.keys, "verified key/order");
+  if (expected.keys) {
+    if (caseRow.embed) {
+      const top3 = rows.slice(0, 3).flatMap(row => row.keys || [row.key]);
+      assert.ok(expected.keys.every(key => top3.includes(key)), "expected vector candidate in top3 before the bot rerank");
+    } else assert.deepEqual(keys, expected.keys, "verified key/order");
+  }
   if (expected.exclude) assert.ok(keys.every(key => !expected.exclude.includes(key)), "reference excluded");
   if (expected.exact) assert.equal(result.exact, true);
   if (expected.count != null) assert.equal(rows.length, expected.count);
@@ -58,12 +67,12 @@ test("shared clerk fixtures are byte-identical when the bot checkout is supplied
   }
 });
 
-test("phase 1 and 2a golden selections use the real catalog and finder", async t => {
+test("phase 1 through 2b golden selections use the real catalog and finder", async t => {
   const runner = await fixtureRunner(fixture);
   try {
     for (const caseRow of evaluation.cases.filter(c => PHASES.has(c.phase) && !c.expect.not_ours)) {
       await t.test(caseRow.id, async () => {
-        const result = await runner.find({ ask: caseRow.expect_interp, raw: rawLine(caseRow.line), context: caseRow.context });
+        const result = await runner.find({ id: caseRow.id, ask: caseRow.expect_interp, raw: rawLine(caseRow.line), context: caseRow.context });
         check(caseRow, result);
       });
     }
@@ -71,6 +80,33 @@ test("phase 1 and 2a golden selections use the real catalog and finder", async t
 });
 
 module.exports = { check };
+
+test("embedding comparison disables real searches, and fixture documents stay within catalog policy", async () => {
+  const runner = await fixtureRunner(fixture);
+  try {
+    const cases = evaluation.cases.filter(row => row.embed);
+    let enabledHits = 0, disabledHits = 0;
+    for (const row of cases) {
+      const ask = { id: row.id, ask: row.expect_interp, raw: rawLine(row.line), context: row.context };
+      const enabled = await runner.find(ask), disabled = await runner.find({ ...ask, no_embed: true });
+      const hit = result => row.expect.keys.every(key => result.rows.slice(0, 3).some(candidate => (candidate.keys || [candidate.key]).includes(key)));
+      enabledHits += Number(hit(enabled)); disabledHits += Number(hit(disabled));
+      assert.equal(disabled.vector_count, 0);
+      if (row.context.embed_down || row.expect.recall === "in") assert.deepEqual(enabled.rows, disabled.rows);
+    }
+    assert.equal(enabledHits, cases.length);
+    assert.ok(enabledHits > disabledHits, "toy concept vectors demonstrate the intended plumbing difference");
+    const docs = await runner.find({ op: "documents", context: {} });
+    const allowed = new Set(fixture.sections.filter(row => row.policy === "allowed").map(row => row.id));
+    assert.ok(docs.rows.length > 0);
+    for (const row of docs.rows) {
+      const original = fixture.rows.find(candidate => candidate.key === row.key);
+      assert.ok(allowed.has(original.section));
+      assert.ok(!["X", "XXX", "AO", "R18", "R18+"].includes(original.content_rating));
+      assert.ok(row.text.length <= 1200); assert.match(row.hash, /^[a-f0-9]{64}$/);
+    }
+  } finally { await runner.close(); }
+});
 
 test("catalog admin card renders translated labels and treats provider metadata as text", async () => {
   const vm = require("node:vm");
@@ -94,7 +130,7 @@ test("catalog admin card renders translated labels and treats provider metadata 
   }
   for (const id of ["pcOut", "pcSync", "pcDry", "pcRefresh", "pcMsg"]) { const n = element("div"); n.style = {}; nodes.set(id, n); }
   let status = { ok: true, ready: true, allow_list_set: true, version: "1.7.0", count: 496, at: 1793872800000,
-    full_at: 1793872800000, sections: [{ id: "71", title: '<img src=x onerror="unsafe()">', type: "movie", policy: "allowed", count: 126 },
+    full_at: 1793872800000, embed: { enabled: true, ready: true, done: 8, left: 488, model: "fixture-concepts", dim: 8 }, sections: [{ id: "71", title: '<img src=x onerror="unsafe()">', type: "movie", policy: "allowed", count: 126 },
       { id: "73", title: "Synthetic Hidden Name", type: "movie", policy: "adult", count: 1 }] };
   const document = { hidden: false, getElementById: id => nodes.get(id) || null,
     createElement: element, querySelectorAll: () => [], querySelector: () => null, addEventListener() {} };
@@ -116,6 +152,7 @@ test("catalog admin card renders translated labels and treats provider metadata 
   const text = node => [node.textContent, ...node.children.map(text)].join(" ");
   await flush();
   assert.match(text(nodes.get("pcOut")), /496 titles/);
+  assert.match(text(nodes.get("pcOut")), /8 ready.*488 left/);
   assert.match(text(nodes.get("pcOut")), /<img src=x/);
   assert.ok(!text(nodes.get("pcOut")).includes("Synthetic Hidden Name"));
   nodes.get("pcDry").handlers.click(); await flush();

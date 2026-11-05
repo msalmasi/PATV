@@ -1,6 +1,7 @@
 // The clerk selects only catalog keys. Playback, account access and PAT checks stay in plexchat / mediaqueue.
 "use strict";
 const crypto = require("crypto");
+const { performance } = require("node:perf_hooks");
 const KEY = /^\d{1,12}$/;
 const SELECT = new Set(["one", "random", "latest", "oldest", "first_n", "last_n", "pilot", "finale", "season", "series", "in_order"]);
 const norm = (s) => {
@@ -39,10 +40,11 @@ function askOf(value) {
     quality: ["good", "best"].includes(a.quality) ? a.quality : "any", steamy: a.steamy === true,
     about: clean(a.about, 200), like: clean(a.like), guesses: Array.isArray(a.guesses) ? a.guesses.slice(0, 5) : [] };
 }
-function createFinder({ catalog, settings, requests, now = Date.now, rng = crypto.randomInt, deepMax } = {}) {
+function createFinder({ catalog, settings, requests, vectors, now = Date.now, rng = crypto.randomInt, deepMax } = {}) {
   catalog = catalog || require("./plexcatalog");
   settings = settings || (() => require("./mediaconf").get());
   const requestSource = () => requests || require("./mediarequests");
+  const vectorSource = () => vectors || require("./plexvectors");
   const seerrCache = new Map(), SEERR_MS = 2000, CACHE_MS = 24 * 3600 * 1000;
   async function bounded(fn, deadline) {
     const ms = Math.max(0, deadline - Date.now());
@@ -360,6 +362,48 @@ function createFinder({ catalog, settings, requests, now = Date.now, rng = crypt
     if (recalled && selectionList && candidates.length && candidates.every((x) => x.r.type === "movie") && !recallHasVariants(candidates)) {
       makePlan(candidates.map((x) => x.r).sort(movieOrder), "list", null);
       candidates = [];
+    }
+    // A vector is a candidate source only. Resolve one show and apply every ordinary
+    // filter before the vector service sees any keys; never scan episodes globally.
+    const embedOn = [true, "true", "1", 1].includes(s.clerk_embed);
+    if (embedOn && request.qvec && !exact && a.select === "one" && !selectionList && a.episode == null
+        && !seerr && !recall.some((record) => record.status === "in" || record.status === "missing")) {
+      const started = performance.now();
+      let pool = [], kind = "movie", showKey = null;
+      const guessedNames = [...new Set(a.guesses.filter((guess) => guess && guess.kind === "episode" && norm(guess.show)).map((guess) => norm(guess.show)))];
+      const vectorShows = a.kind === "movie" ? [] : (exactShows.length ? exactShows : roots.filter((row) => row.type === "show"
+        && (a.title ? titleMatch(row.title, a.title) : guessedNames.length === 1 && norm(row.title) === guessedNames[0])))
+        .filter((row) => (a.year == null || Number(row.year) === a.year) && (!a.years || Number(row.year) >= a.years[0] && Number(row.year) <= a.years[1]));
+      if (vectorShows.length === 1) {
+        kind = "episode"; showKey = String(vectorShows[0].key);
+        pool = safe(await catalog.rows({ kind, show_key: showKey })).filter((row) => (a.season === 0 || Number(row.season) !== 0)
+          && (a.season == null || Number(row.season) === a.season) && (!reference || similarity(row) > 0)
+          && matches(row, { ...a, year: null, years: null }, seen, parents));
+      } else if (!vectorShows.length && a.kind !== "show" && a.kind !== "episode") {
+        pool = safe(movies).filter((row) => (!reference || similarity(row) > 0) && matches(row, a, seen, parents)
+          && (!a.title || titleMatch(row.title, a.title) || (row.shelves || []).some((name) => titleMatch(name, a.title))));
+      }
+      if (pool.length && pool.length <= (kind === "episode" ? 3000 : 20000)) {
+        const byKey = new Map(pool.map((row) => [String(row.key), row]));
+        try {
+          let wordHits = candidates.filter((candidate) => candidate.why === "fts" && byKey.has(String(candidate.r.key))).map((candidate) => String(candidate.r.key));
+          // Failed recalls deliberately had no phase-2a candidates; recover their
+          // scoped word hits without making an unknown guess a verified title.
+          const query = a.about || raw;
+          if (!wordHits.length && query) wordHits = (await catalog.search(query, { kind, ...(showKey ? { show_key: showKey } : {}), limit: 500,
+            budgetMs: Math.max(1, 400 - (performance.now() - started)) })).map((row) => String(row.key)).filter((key) => byKey.has(key));
+          const budget = 400 - (performance.now() - started);
+          const hits = budget > 0 ? await vectorSource().nearest({ qvec: request.qvec, kind, ...(showKey ? { show_key: showKey } : {}),
+            keys: [...byKey.keys()], limit: Math.max(20, Math.min(50, Number(s.clerk_embed_k) || 30)), budgetMs: budget }) : [];
+          const vectorHits = [...new Set((Array.isArray(hits) ? hits : []).map((hit) => String(hit.key)).filter((key) => byKey.has(key)))];
+          if (vectorHits.length) {
+            const words = new Map([...new Set(wordHits)].map((key, index) => [key, index])), vecs = new Map(vectorHits.map((key, index) => [key, index]));
+            const score = (key) => (words.has(key) && vecs.has(key) ? 2 : 0) + (words.has(key) ? 1 / (words.get(key) + 1) : 0) + (vecs.has(key) ? 1 / (vecs.get(key) + 1) : 0);
+            candidates = [...new Set([...wordHits, ...vectorHits])].sort((left, right) => score(right) - score(left)).slice(0, 20)
+              .map((key) => ({ r: byKey.get(key), why: vecs.has(key) ? "vector" : "fts", exact: false }));
+          }
+        } catch (_) { /* A stale/missing vector cache silently keeps phase 2a's candidates. */ }
+      }
     }
     // The last read is the safety boundary: never trust a search hit or a candidate retained across a sync/settings edit.
     if (a.select === "random") {

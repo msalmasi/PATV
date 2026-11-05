@@ -496,6 +496,11 @@ function createCatalog(options = {}) {
     await Promise.all([closeDb(writer), closeDb(searchDb)]);
     writer = searchDb = null;
   }
+  let adminVectors;
+  function vectorsCache() {
+    if (!adminVectors) adminVectors = options.vectors || require("./plexvectors").createVectors({ catalog: { read, write }, settings, now });
+    return adminVectors;
+  }
   function register(app, { addUser, noTimers } = {}) {
     const SP = options.permissions || require("./siteperms"), guard = options.guard || require("./middleware/authGuard");
     const admin = (req, res, next) => {
@@ -507,7 +512,13 @@ function createCatalog(options = {}) {
       res.set("Cache-Control", "no-store");
       try { res.json(await fn(req)); } catch (_) { res.status(503).json({ ok: false, error: "catalog unavailable" }); }
     }];
-    app.get("/api/media/admin/catalog", ...route(async () => ({ ok: true, ...(await status()) })));
+    app.get("/api/media/admin/catalog", ...route(async () => {
+      let embed = { enabled: false, ready: false, done: 0, left: 0 };
+      try {
+        embed = await vectorsCache().status();
+      } catch (_) { embed = { enabled: !!settings().clerk_embed, ready: false, done: 0, left: 0 }; }
+      return { ok: true, ...(await status()), embed };
+    }));
     app.post("/api/media/admin/catalog/sync", ...route(async () => {
       if (quiet(now())) return { ok: true, started: false, skipped: "maintenance" };
       const started = !syncing;

@@ -18792,5 +18792,108 @@
       }
     }
   },
-  "lists": {}
+  "lists": {},
+  "vectors": [
+    {
+      "key": "1001165",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "fwAAAAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    {
+      "key": "1006152",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAAAAAAAfwA=",
+      "scale": 0.007874015748031496
+    },
+    {
+      "key": "2020",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAAAAAAAAH8=",
+      "scale": 0.007874015748031496
+    },
+    {
+      "key": "2104",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAB/AAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    {
+      "key": "2105",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAAAAAB/AAA=",
+      "scale": 0.007874015748031496
+    },
+    {
+      "key": "2106",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AH8AAAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    {
+      "key": "2107",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAAAfwAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    {
+      "key": "2108",
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAAAAH8AAAA=",
+      "scale": 0.007874015748031496
+    }
+  ],
+  "query_vectors": {
+    "vector-astronaut": {
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "fwAAAAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    "vector-cozy": {
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AH8AAAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    "vector-hamlet": {
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAB/AAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    "vector-festive": {
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAAAfwAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    "vector-engineering": {
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAAAAH8AAAA=",
+      "scale": 0.007874015748031496
+    },
+    "vector-constrained": {
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "AAB/AAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    "vector-down": {
+      "model": "fixture-concepts",
+      "dim": 8,
+      "v": "fwAAAAAAAAA=",
+      "scale": 0.007874015748031496
+    },
+    "vector-recall": null
+  }
 }

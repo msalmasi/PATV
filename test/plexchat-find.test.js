@@ -16,7 +16,7 @@ function harness() {
     library_queue: true, library_queue_max_items: 60, library_queue_max_hours: 12 };
   const users = [{ userId: "u1", username: "member", class: "pleb" }, { userId: "u2", username: "staffer", class: "staff" }];
   const d = { s, users, visible: true, adultGate: "ok", access: { free: false, how: "paid" }, calls: [], ready: true, onair: true, allowLibrary: true,
-    state: { library: { queue: true, can_add: true } }, seenKeys: [], filters: [] };
+    state: { library: { queue: true, can_add: true } }, seenKeys: [], filters: [], vectors: [] };
   const entries = [
     { key: "901", type: "movie", title: "Lantern at Midnight", section: "71", duration: 5400, year: 2001, genres: ["Mystery"], content_rating: "PG", rating: 7.4, shelves: [] },
     { key: "902", type: "movie", title: "Paper Moon Station", section: "71", duration: 1800, year: 2003, genres: ["Mystery"], content_rating: "R", rating: 7.2, shelves: [] },
@@ -27,8 +27,16 @@ function harness() {
     async rows({ kind }) { return structuredClone(entries.filter((r) => r.type === kind)); },
     async getByKeys(keys) { d.calls.push(["catalog_keys", [...keys]]); return structuredClone(entries.filter((r) => keys.includes(r.key))); },
     async shelves() { d.calls.push(["shelves"]); return { ok: true, genres: ["Mystery"], shelves: [], v: 1, catalog: { ready: d.ready, at: 123 } }; },
+    async search(q, filters) { return entries.filter((row) => row.type === filters.kind && (row.title || "").toLowerCase().includes(q.toLowerCase())); },
   };
-  const finder = createFinder({ catalog, settings: () => s, deepMax: { movie: 2, show: 10 }, rng: () => 0 });
+  const vectors = {
+    decodeVector: require("../plexvectors").decodeVector,
+    async nearest(body) { d.calls.push(["nearest", body]); return d.vectors; },
+    async status() { d.calls.push(["embed_status"]); if (d.embedError) throw d.embedError; return { ready: true, model: "fixture-embed", dim: 2, done: 5, left: 2 }; },
+    async todo(body) { d.calls.push(["embed_todo", body]); if (d.embedError) throw d.embedError; return { ok: true, rows: [{ key: "901", text: "Lantern at Midnight", hash: "a".repeat(64) }], model: "fixture-embed", dim: 2, done: 5, left: 2 }; },
+    async put(body) { d.calls.push(["embed_put", body]); if (d.embedError) throw d.embedError; return { ok: true, stored: 1, rejected: 2 }; },
+  };
+  const finder = createFinder({ catalog, settings: () => s, vectors, deepMax: { movie: 2, show: 10 }, rng: () => 0 });
   const ml = {
     async init() {},
     _q: { async roomOf(id) { d.calls.push(["room", id]); return { id: id || "pad", title: "Lantern Pad" }; },
@@ -49,7 +57,7 @@ function harness() {
   const mocks = {
     express: { json(options) { d.parser = options; return () => {}; } },
     "./dbUtils": { async getQuery(sql, args) {
-      if (sql.includes("FROM users")) return users.filter((u) => u.userId === args[0]);
+      if (sql.includes("FROM users")) { d.calls.push(["user", args[0]]); return users.filter((u) => u.userId === args[0]); }
       if (sql.includes("FROM media_plays")) { d.calls.push(["history", sql, args]); return d.seenKeys.map((key) => ({ rating_key: key })); }
       throw new Error("Unexpected SQL in isolated test");
     } },
@@ -60,12 +68,85 @@ function harness() {
     "./padaccess": { async init() {}, adultGate() { d.calls.push(["adult"]); if (d.gateError) throw new Error("fixture gate unavailable"); return d.adultGate; } },
     "./onair": { async init() {}, config: () => ({ enabled: d.onair, allow_library: d.allowLibrary }), WHY: { off: "off", library: "off" },
       async libraryFor(user, key, by, opts) { d.calls.push(["cam", user.userId, key, opts]); return { title: "Lantern at Midnight" }; }, view: () => ({}) },
-    "./plexcatalog": catalog, "./plexfind": finder,
+    "./plexcatalog": catalog, "./plexfind": finder, "./plexvectors": vectors,
   };
   const pc = load(path.join(__dirname, "..", "plexchat.js"), mocks);
   const call = (op, body = {}, user = "u1") => pc.handle({ op, as: { user_id: user }, room: "pad", via: "web", ...body });
   return { ...d, data: d, pc, call, entries };
 }
+
+test("background embed operations use the bot identity only and never resolve a person", async () => {
+  const h = harness(); h.s.clerk_embed = true;
+  const payload = { op: "embed_todo", model: "fixture-embed", dim: 2, limit: 32, after: "900" };
+  for (let i = 0; i < 40; i++) assert.equal((await h.pc.handle(payload)).ok, true, "background batches do not consume the person rate limit");
+  const call = h.data.calls.find((row) => row[0] === "embed_todo");
+  assert.deepEqual(call[1], { model: "fixture-embed", dim: 2, limit: 32, after: "900" });
+  assert.ok(!h.data.calls.some((row) => ["user", "room", "access"].includes(row[0])));
+  assert.equal(h.pc._hits.size, 0);
+  const put = await h.pc.handle({ op: "embed_put", model: "fixture-embed", dim: 2, vecs: [{ key: "901", hash: "a".repeat(64), v: "fwA=", scale: 1 }] });
+  assert.deepEqual(put, { ok: true, stored: 1, rejected: 2, stale: 2 });
+  assert.equal(put.user, undefined);
+  const before = h.data.calls.length;
+  for (const extra of [{ as: { user_id: "u1" } }, { as: null }, { via: "web" }, { via: "room" }, { room: "pad" }, { target: "cam" }]) {
+    assert.equal((await h.pc.handle({ ...payload, ...extra })).code, "bad");
+  }
+  assert.equal(h.data.calls.length, before);
+});
+
+test("embed switches and fixed refusal codes never echo metadata or provider errors", async () => {
+  const h = harness();
+  for (const op of ["embed_todo", "embed_put"]) assert.equal((await h.pc.handle({ op })).code, "embed_off");
+  assert.equal(h.data.calls.length, 0);
+  h.s.clerk_embed = true;
+  for (const [code, expected] of [["bad_vectors", "bad"], ["bad_cursor", "bad"], ["bad_embed_model", "embed_model"], ["embed_model", "embed_model"], ["catalog_down", "catalog_down"], ["SQLITE_BUSY", "catalog_down"], ["embed_off", "embed_off"]]) {
+    h.data.embedError = Object.assign(new Error("Synthetic private filename and provider token"), { code, label: "Do not return this" });
+    const result = await h.pc.handle({ op: "embed_put", model: "fixture-embed", dim: 2, vecs: [] });
+    assert.equal(result.code, expected); assert.doesNotMatch(JSON.stringify(result), /filename|token|return this|SQLITE/);
+  }
+});
+
+test("embed operations retain the original bot-token gate and body limit", async () => {
+  const h = harness(); h.s.clerk_embed = true; let handler;
+  h.pc.register({ post(route, parser, fn) { handler = fn; } }, { isBotToken: (token) => token === "fixture-token" });
+  assert.deepEqual(h.data.parser, { limit: "16kb" });
+  const response = () => ({ statusCode: 200, set() {}, status(value) { this.statusCode = value; return this; }, json(value) { this.body = value; return this; } });
+  let res = response(); await handler({ body: { password: "wrong", op: "embed_todo" } }, res);
+  assert.equal(res.statusCode, 403); assert.equal(h.data.calls.length, 0);
+  res = response(); await handler({ body: { password: "fixture-token", op: "embed_todo", model: "fixture-embed", dim: 2 } }, res);
+  assert.equal(res.body.ok, true); assert.equal(res.body.user, undefined);
+  assert.ok(h.data.calls.every((row) => row[0] === "embed_todo"));
+});
+
+test("find accepts only a valid qvec object after access and falls back on invalid vectors", async () => {
+  const h = harness(); h.s.clerk_embed = true; h.data.vectors = [{ key: "902", score: .9 }];
+  const qvec = { model: "fixture-embed", dim: 2, v: "fwA=", scale: 1 };
+  const ask = { kind: "movie", about: "quiet synthetic mood" };
+  const hit = await h.call("find", { ask, qvec });
+  assert.deepEqual(hit.rows.map((row) => row.key), ["902"]);
+  assert.deepEqual(h.data.calls.find((row) => row[0] === "nearest")[1].qvec, qvec);
+  assert.equal(hit.rows[0].price, 100);
+  const before = h.data.calls.filter((row) => row[0] === "nearest").length;
+  for (const invalid of ["fwA=", { ...qvec, dim: 3 }, { ...qvec, scale: 0 }, { ...qvec, v: "invalid" }, { ...qvec, model: "" }, { ...qvec, text: "private" }]) {
+    const result = await h.call("find", { ask, qvec: invalid }); assert.equal(result.ok, true); assert.deepEqual(result.rows, []);
+  }
+  assert.equal(h.data.calls.filter((row) => row[0] === "nearest").length, before);
+  h.data.visible = false;
+  assert.equal((await h.call("find", { ask, qvec })).code, "pad");
+  assert.equal(h.data.calls.filter((row) => row[0] === "nearest").length, before);
+});
+
+test("shelves exposes vector readiness only after clerk access and fails softly", async () => {
+  const h = harness();
+  assert.equal((await h.call("shelves")).embed, undefined);
+  h.s.clerk_embed = true;
+  assert.deepEqual((await h.call("shelves")).embed, { ready: true, model: "fixture-embed", dim: 2, done: 5, left: 2 });
+  h.data.embedError = new Error("Synthetic private error");
+  const fallback = await h.call("shelves"); assert.equal(fallback.ok, true); assert.equal(fallback.embed.ready, false);
+  assert.doesNotMatch(JSON.stringify(fallback), /private error/);
+  h.data.visible = false; const before = h.data.calls.length;
+  assert.equal((await h.call("shelves")).code, "pad");
+  assert.equal(h.data.calls.slice(before).some((row) => row[0] === "embed_status"), false);
+});
 
 test("find and shelves run visibility, age, cam and access gates before any catalog read; staff rollout stays off for others", async () => {
   for (const op of ["find", "shelves"]) {

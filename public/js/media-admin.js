@@ -40,6 +40,11 @@
       pcText(out, "p", ct("details", "Media-control {version} · Last sync: {at} · Last full sync: {full}", {
         version: j.version || "—", at: pcDate(j.at), full: pcDate(j.full_at)
       }));
+      if (j.embed) pcText(out, "p", !j.embed.enabled ? ct("embed_off", "Summary embeddings are off.") :
+        !j.embed.model ? ct("embed_waiting", "Summary embeddings: waiting for the bot’s model configuration.") :
+        ct("embed_progress", "Summary embeddings: {done} ready · {left} left · {model} ({dim} dimensions).", {
+          done: Number(j.embed.done) || 0, left: Number(j.embed.left) || 0, model: j.embed.model, dim: Number(j.embed.dim) || 0
+        }));
       if (j.syncing) pcText(out, "p", ct("syncing", "Catalog sync is running. You can leave this page."));
       if (j.error) pcText(out, "p", ct("last_error", "Last sync error: {error}", { error: j.error }));
     }

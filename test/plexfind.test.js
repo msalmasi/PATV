@@ -34,10 +34,134 @@ function fixture() {
     async search(user, q) { data.calls.push(["seerr_search", q, user]); if (data.searchDelay) await new Promise((r) => setTimeout(r, data.searchDelay)); if (data.afterSearch) data.afterSearch(); return structuredClone(data.external.search[q.toLowerCase()] || []); },
     async details(kind, tmdb) { data.calls.push(["seerr_details", kind, tmdb]); return structuredClone(data.external.details[`${kind}:${tmdb}`] || null); },
   };
-  data.finder = createFinder({ catalog, settings: () => settings, requests, now: () => data.now, rng: () => 0, deepMax: { movie: 2, show: 10 } });
+  data.vectorHits = []; data.vectorCalls = [];
+  const vectors = { async nearest(request) {
+    data.vectorCalls.push(structuredClone(request));
+    if (data.vectorError) throw new Error("Synthetic vector failure");
+    if (data.beforeVector) data.beforeVector(request);
+    return structuredClone(data.vectorHits);
+  } };
+  data.finder = createFinder({ catalog, settings: () => settings, requests, vectors, now: () => data.now, rng: () => 0, deepMax: { movie: 2, show: 10 } });
   return data;
 }
 const run = (f, ask, extra = {}, context = {}) => f.finder.find({ ask, ...extra }, context);
+const qvec = { model: "fixture-embed", dim: 2, v: "fwA=", scale: 1 };
+
+test("vectors receive only filtered movies and overlap outranks either single source", async () => {
+  const f = fixture(); f.settings.clerk_embed = true;
+  const seed = f.rows.find((row) => row.key === "10");
+  for (let i = 0; i < 25; i++) f.rows.push({ ...seed, key: String(800 + i), title: `Fixture mood ${i}`, summary: i === 1 ? "quiet space" : "different words", year: 1990, duration: 3600 });
+  f.rows.find((row) => row.key === "802").content_rating = "X";
+  f.rows.find((row) => row.key === "803").section = "72";
+  f.rows.find((row) => row.key === "804").year = 2005;
+  f.rows.find((row) => row.key === "805").rating = 3;
+  f.rows.find((row) => row.key === "806").pad_plays = 2;
+  f.rows.find((row) => row.key === "807").genres = ["Comedy"];
+  f.rows.find((row) => row.key === "808").shelves = ["Other shelf"];
+  f.rows.find((row) => row.key === "809").duration = 9000;
+  f.vectorHits = ["800", "801", "802", "803", ...Array.from({ length: 15 }, (_, i) => String(810 + i))].map((key) => ({ key, score: 1 }));
+  const r = await run(f, { kind: "movie", about: "quiet space", genres: ["Horror"], shelves: ["Cult Horror"], years: [1980, 1999], quality: "good", deep_cut: true,
+    unseen: true, max_minutes: 90, studio: "Lantern Studio", people: ["Rowan"] }, { qvec, exclude: ["810"] }, { seenKeys: ["811"] });
+  assert.equal(f.vectorCalls.length, 1);
+  const call = f.vectorCalls[0]; assert.equal(call.kind, "movie"); assert.equal(call.show_key, undefined); assert.deepEqual(call.qvec, qvec);
+  assert.ok(call.budgetMs > 0 && call.budgetMs <= 400); assert.equal(call.limit, 30);
+  for (const key of ["802", "803", "804", "805", "806", "807", "808", "809", "810", "811", "90", "91", "92"]) assert.ok(!call.keys.includes(key), key);
+  assert.equal(r.rows[0].key, "801", "word/vector overlap precedes a higher vector-only rank");
+  assert.equal(r.rows[0].why, "vector"); assert.ok(r.rows.every((row) => call.keys.includes(row.key))); assert.ok(r.rows.length <= 20);
+  assert.equal(new Set(r.rows.map((row) => row.key)).size, r.rows.length);
+});
+
+test("episode vectors stay inside one resolved show and cannot override episode filters", async () => {
+  const f = fixture(); f.settings.clerk_embed = true;
+  f.vectorHits = [{ key: "10023", score: 1 }, { key: "20023", score: 1 }, { key: "10001", score: 1 }];
+  const r = await run(f, { kind: "episode", title: "Clockwork Orchard", about: "astronaut voyage", quality: "good", unseen: true }, { qvec, exclude: ["10011"] }, { seenKeys: ["10012"] });
+  assert.deepEqual(r.rows.map((row) => row.key), ["10023"]);
+  assert.equal(f.vectorCalls[0].kind, "episode"); assert.equal(f.vectorCalls[0].show_key, "100");
+  assert.ok(f.vectorCalls[0].keys.every((key) => key.startsWith("100") && !["10001", "10002", "10003", "10011", "10012"].includes(key)));
+  f.vectorCalls.length = 0;
+  await run(f, { kind: "episode", title: "Clockwork", about: "astronaut voyage" }, { qvec });
+  await run(f, { kind: "episode", about: "astronaut voyage" }, { qvec });
+  assert.equal(f.vectorCalls.length, 0, "ambiguous or unknown shows never trigger an episode scan");
+});
+
+test("exact, deterministic and verified recall paths never consult vectors", async () => {
+  const f = fixture(); f.settings.clerk_embed = true;
+  const asks = [{ title: "Random Hearts" }, { title: "Clockwork Orchard", select: "random" }, { title: "Clockwork Orchard", select: "latest" },
+    { title: "Clockwork Orchard", select: "season", season: 2 }, { title: "Clockwork Orchard", season: 2, episode: 3 },
+    { kind: "movie", select: "in_order" }, { guesses: [episodeGuess()] }, { guesses: [{ kind: "movie", title: "Harbour Signal", year: 1984, confidence: .9 }] }];
+  for (const ask of asks) await run(f, ask, { qvec });
+  await run(f, { about: "some mood", kind: "movie" }, { raw: "play Random Hearts", qvec });
+  assert.equal(f.vectorCalls.length, 0);
+});
+
+test("unknown recalls and good deep cuts may use vectors but failures preserve phase 2a", async () => {
+  const f = fixture(); f.settings.clerk_embed = true;
+  f.vectorHits = [{ key: "10023", score: .8 }];
+  const ask = { kind: "episode", title: "Clockwork Orchard", about: "astronaut voyage", guesses: [episodeGuess({ episode_title: "Not the episode" })] };
+  let r = await run(f, ask, { qvec });
+  assert.deepEqual(r.rows.map((row) => row.key), ["10023"]); assert.equal(r.recall[0].status, "mismatch"); assert.equal(r.rows[0].why, "vector");
+  f.vectorHits = [{ key: "10", score: .8 }];
+  r = await run(f, { kind: "movie", genres: ["Horror"], shelves: ["Cult Horror"], deep_cut: true, quality: "good" }, { qvec });
+  assert.deepEqual(r.rows.map((row) => row.key), ["10"]);
+  const fallback = { kind: "movie", about: "lantern" };
+  const baseline = await run(f, fallback);
+  f.vectorHits = []; assert.deepEqual(await run(f, fallback, { qvec }), baseline);
+  f.vectorError = true; assert.deepEqual(await run(f, fallback, { qvec }), baseline);
+  f.settings.clerk_embed = false; f.vectorCalls.length = 0;
+  assert.deepEqual(await run(f, fallback, { qvec }), baseline); assert.equal(f.vectorCalls.length, 0);
+});
+
+test("vector results are capped and reread after a concurrent policy or metadata change", async () => {
+  const f = fixture(); f.settings.clerk_embed = true;
+  const seed = f.rows.find((row) => row.key === "10");
+  for (let i = 0; i < 35; i++) f.rows.push({ ...seed, key: String(800 + i), title: `Synthetic scene ${i}` });
+  f.vectorHits = Array.from({ length: 35 }, (_, i) => ({ key: String(800 + i), score: 1 - i / 100 }));
+  let r = await run(f, { kind: "movie", about: "unmatched mood" }, { qvec });
+  assert.equal(r.rows.length, 20);
+  f.beforeVector = () => { f.rows.find((row) => row.key === "800").content_rating = "X"; f.rows.find((row) => row.key === "801").title = "Refreshed scene"; };
+  r = await run(f, { kind: "movie", about: "unmatched mood" }, { qvec });
+  assert.ok(!r.rows.some((row) => row.key === "800")); assert.equal(r.rows.find((row) => row.key === "801").title, "Refreshed scene");
+  assert.doesNotMatch(JSON.stringify(r), /Synthetic scene 0/);
+});
+
+test("finder merges real catalog vectors without a provider and falls back on model changes", async (t) => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const { createCatalog } = require(path.join(process.env.PATV_SITE_DIR || path.resolve(__dirname, ".."), "plexcatalog.js"));
+  const { createVectors, quantize } = require("../plexvectors");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-find-vectors-")), clock = Date.UTC(2026, 10, 5, 12);
+  const settings = { clerk_embed: true, clerk_embed_k: 30, clerk_block_ratings: "X,XXX,AO,R18,R18+" };
+  const catalog = createCatalog({ file: path.join(dir, "fixture.db"), settings: () => settings, now: () => clock, log: { log() {}, error() {} } });
+  t.after(async () => { await catalog.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const common = { year: 2020, content_rating: "PG", rating: 8, duration: 1200, genres: ["Science Fiction"] };
+  const rows = [
+    { ...common, key: "1", type: "movie", title: "Orbital Postcards", section: "1", summary: "A NASA mission visits a satellite." },
+    { ...common, key: "2", type: "movie", title: "Quiet Meadow", section: "1", summary: "A peaceful walk beside the river.", genres: ["Comedy"] },
+    { ...common, key: "10", type: "show", title: "Fixture Space Diary", section: "2", content_rating: "TV-14" },
+    { ...common, key: "11", type: "episode", title: "Moon Lunch", section: "2", show_key: "10", show: "Fixture Space Diary", season: 1, episode: 1, summary: "A NASA mission visits a satellite." },
+    { ...common, key: "12", type: "episode", title: "Afternoon Garden", section: "2", show_key: "10", show: "Fixture Space Diary", season: 1, episode: 2, summary: "A peaceful walk beside the river." },
+  ];
+  await catalog.importSnapshot({ v: 1, allow_list_set: true, rows, shelves: [], sections: [
+    { id: "1", title: "Fixture Films", type: "movie", policy: "allowed" }, { id: "2", title: "Fixture Shows", type: "show", policy: "allowed" },
+  ] });
+  const vectors = createVectors({ catalog, settings: () => settings, now: () => clock });
+  const pending = await vectors.todo({ model: "fixture-embed", dim: 2, limit: 64 });
+  assert.equal(pending.ok, true); assert.equal(pending.rows.length, 5);
+  const uploaded = await vectors.put({ model: "fixture-embed", dim: 2, vecs: pending.rows.map((row) => ({ key: row.key, hash: row.hash,
+    ...quantize(["1", "11"].includes(row.key) ? [1, 0] : [0, 1]) })) });
+  assert.equal(uploaded.stored, 5);
+  const finder = createFinder({ catalog, settings: () => settings, vectors, deepMax: { movie: 2, show: 10 } });
+  const ask = { kind: "movie", genres: ["Science Fiction"], about: "astronaut" };
+  const found = await finder.find({ ask, qvec });
+  assert.deepEqual(found.rows.map((row) => [row.key, row.why]), [["1", "vector"]]);
+  const episode = await finder.find({ ask: { kind: "episode", title: "Fixture Space Diary", about: "astronaut" }, qvec });
+  assert.equal(episode.rows[0].key, "11"); assert.ok(episode.rows.every((row) => row.show_key === "10"));
+  const wrongYears = await finder.find({ ask: { kind: "episode", title: "Fixture Space Diary", about: "astronaut", years: [1990, 1999] }, qvec });
+  assert.deepEqual(wrongYears.rows, []);
+  assert.deepEqual((await finder.find({ ask, qvec: { ...qvec, model: "other-fixture-model" } })).rows, []);
+  assert.deepEqual((await finder.find({ ask })).rows, []);
+  settings.clerk_block_ratings += ",PG";
+  assert.deepEqual((await finder.find({ ask, qvec })).rows, []);
+});
 
 test("raw exact titles override selection words, including command forms; ordinary words never gate a title", async () => {
   const f = fixture();

@@ -3397,6 +3397,277 @@
         "newer": true
       },
       "path": "rules"
+    },
+    {
+      "id": "vector-astronaut",
+      "phase": "2b",
+      "owner": false,
+      "line": "play the simpsons where homer becomes an astronaut",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "kind": "episode",
+        "about": "astronaut",
+        "guesses": []
+      },
+      "expect": {
+        "keys": [
+          "1001165"
+        ]
+      },
+      "path": "interp",
+      "embed": true
+    },
+    {
+      "id": "vector-cozy",
+      "phase": "2b",
+      "owner": false,
+      "line": "play a cozy hygge movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "genres": [
+          "Comedy"
+        ],
+        "about": "cozy hygge"
+      },
+      "expect": {
+        "keys": [
+          "2106"
+        ]
+      },
+      "path": "interp",
+      "embed": true
+    },
+    {
+      "id": "vector-hamlet",
+      "phase": "2b",
+      "owner": false,
+      "line": "play a film about a sinister hamlet",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "genres": [
+          "Horror"
+        ],
+        "about": "sinister hamlet"
+      },
+      "expect": {
+        "keys": [
+          "2104"
+        ]
+      },
+      "path": "interp",
+      "embed": true
+    },
+    {
+      "id": "vector-festive",
+      "phase": "2b",
+      "owner": false,
+      "line": "play a family film about a festive adornment",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "genres": [
+          "Family"
+        ],
+        "about": "festive adornment"
+      },
+      "expect": {
+        "keys": [
+          "2107"
+        ]
+      },
+      "path": "interp",
+      "embed": true
+    },
+    {
+      "id": "vector-engineering",
+      "phase": "2b",
+      "owner": false,
+      "line": "play an aerospace sketch documentary",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "genres": [
+          "Documentary"
+        ],
+        "about": "aerospace sketch"
+      },
+      "expect": {
+        "keys": [
+          "2108"
+        ]
+      },
+      "path": "interp",
+      "embed": true
+    },
+    {
+      "id": "vector-constrained",
+      "phase": "2b",
+      "owner": false,
+      "line": "play a good deep-cut cult horror movie about a sinister hamlet",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "genres": [
+          "Horror"
+        ],
+        "shelves": [
+          "Cult Horror"
+        ],
+        "deep_cut": true,
+        "quality": "good",
+        "about": "sinister hamlet"
+      },
+      "expect": {
+        "keys": [
+          "2104"
+        ],
+        "genre": "Horror",
+        "shelf": "Cult Horror",
+        "deep_cut": true,
+        "min_rating": 6.5
+      },
+      "path": "interp",
+      "embed": true
+    },
+    {
+      "id": "vector-down",
+      "phase": "2b",
+      "owner": false,
+      "line": "play the simpsons about a NASA orbital assignment",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "embed_down": true
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "kind": "episode",
+        "about": "NASA orbital assignment"
+      },
+      "expect": {
+        "keys": [
+          "1001165"
+        ]
+      },
+      "path": "interp",
+      "embed": true
+    },
+    {
+      "id": "vector-recall",
+      "phase": "2b",
+      "owner": false,
+      "line": "play the simpsons where homer goes into orbit",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "The Simpsons",
+            "season": 5,
+            "episode": 15,
+            "episode_title": "Deep Space Homer",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1001165"
+        ],
+        "recall": "in",
+        "match": "exact"
+      },
+      "path": "interp",
+      "embed": true
     }
   ]
 }

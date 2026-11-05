@@ -92,6 +92,10 @@
         <select name="clerk_requests"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>" <%= (S.clerk_requests || 'off') === v ? 'selected' : '' %>><%= t('adm.media.catalog.mode_' + v) %></option><% }) %></select>
       </label>
       <p class="muted" style="grid-column:1/-1"><%= t('adm.media.catalog.request_help') %></p>
+      <label><%= t('adm.media.catalog.embed') %>
+        <select name="clerk_embed"><option value="false" <%= !S.clerk_embed ? 'selected' : '' %>><%= t('adm.media.catalog.mode_off') %></option><option value="true" <%= S.clerk_embed ? 'selected' : '' %>><%= t('adm.media.catalog.embed_on') %></option></select>
+      </label>
+      <label><%= t('adm.media.catalog.embed_k') %> <input type="number" name="clerk_embed_k" min="20" max="50" value="<%= S.clerk_embed_k || 30 %>"></label>
       <label><%= t('adm.media.catalog.sync_minutes') %> <input type="number" name="catalog_sync_min" min="10" max="1440" value="<%= S.catalog_sync_min || 60 %>"></label>
       <label><%= t('adm.media.catalog.blocked') %> <input type="text" name="clerk_block_ratings" maxlength="400" value="<%= S.clerk_block_ratings == null ? 'X,XXX,AO,R18,R18+' : S.clerk_block_ratings %>"></label>
       <label><%= t('adm.media.catalog.warned') %> <input type="text" name="clerk_warn_ratings" maxlength="400" value="<%= S.clerk_warn_ratings == null ? 'NR,Not Rated,Unrated' : S.clerk_warn_ratings %>"></label>
@@ -161,5 +165,5 @@
     <ul class="muted"><% invites.recent.forEach((r) => { %><li>#<%= r.order_id %> <%= r.username %> — <%= r.title %> — <%= r.status %><%= r.done_by && r.done_by !== 'system' ? ' by ' + r.done_by : '' %> <small><%= when(r.updated) %></small></li><% }) %></ul>
   </section>
 </main>
-<script src="/public/js/media-admin.js?v=4" defer></script>
+<script src="/public/js/media-admin.js?v=5" defer></script>
 <%- include('partials/admin-close') %>

@@ -22,6 +22,8 @@
 //               Clerk confirms send play {clerk:true}; this forces a fresh catalog/rating check for single keys too.
 //               probe:true checks catalog titles before interpretation without an external Seerr lookup.
 //     browse    find with limit 3; request {kind,tmdb,season?,target} consumes this speaker/pad's verified 10-minute offer.
+//     embed_todo {model?,dim?,limit?,after?}; embed_put {model,dim,vecs} are authenticated bot-only operations with no speaker/room.
+//               find accepts qvec:{model,dim,v,scale}; malformed/mismatched vectors silently retain ordinary word search.
 //     play      {key, scope: title | episode | season | season_rest | series_from, target, price?, estimate?, mode: now | next | replace}
 //               Clerk lists also send keys:[key], scope:list|series. Every key is checked before the existing queue builder runs.
 //               (plexreplace: target stage + mode replace = ▶ "Play this instead" - ONE request: what's on the pad comes off, the new title
@@ -44,13 +46,14 @@ const PA = () => require("./padaccess");
 const CF = () => require("./plexfind");
 const CAT = () => require("./plexcatalog");
 const MR = () => require("./mediarequests");
+const VEC = () => require("./plexvectors");
 
 const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_library", "busy_queue", "slot_taken", "site_full", "encoder_busy",
   "encoder_down", "too_long", "price", "estimate", "pat", "control_denied", "nothing_on", "last_title", "first_title", "queue_full", "not_starter",
   "not_playing", "queue_off", "onair_off", "onair_library_off", "onair_staff", "onair_busy", "irl", "pepe_away", "rate", "link", "account", "bad",
   "not_found", "error", "replace_gone", "replace_changed", "play_changed", "clerk_off", "catalog_down", "unavailable",
-  "request_off", "request_stale", "unlinked", "level", "limit", "requested", "available", "upstream"];
-const OPS = new Set(["search", "find", "browse", "request", "shelves", "play", "control", "np", "continue", "rpm"]);
+  "request_off", "request_stale", "unlinked", "level", "limit", "requested", "available", "upstream", "embed_off", "embed_model"];
+const OPS = new Set(["search", "find", "browse", "request", "shelves", "play", "control", "np", "continue", "rpm", "embed_todo", "embed_put"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
 const CONTINUE_MS = 14 * 24 * 3600 * 1000;
@@ -214,7 +217,37 @@ async function clerkAccess(user, b) {
 }
 async function opShelves(user, b) {
   await clerkAccess(user, b);
-  return CAT().shelves();
+  const out = await CAT().shelves();
+  if ([true, "true", "1", 1].includes(conf().get().clerk_embed)) {
+    try { out.embed = await VEC().status(); }
+    catch (_) { out.embed = { enabled: true, ready: false, model: null, dim: null, done: 0, left: 0 }; }
+  }
+  return out;
+}
+function queryVector(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !["model", "dim", "v", "scale"].includes(key))
+      || typeof value.model !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:/@-]{0,159}$/.test(value.model)
+      || !Number.isInteger(value.dim) || value.dim < 1 || value.dim > 4096) return null;
+  try { return VEC().decodeVector(value, value.dim) ? { model: value.model, dim: value.dim, v: value.v, scale: value.scale } : null; }
+  catch (_) { return null; }
+}
+async function opEmbed(b) {
+  // These operations use the existing bot-token gate, not a person's permissions or rate bucket.
+  const allowed = new Set(b.op === "embed_todo" ? ["password", "op", "model", "dim", "limit", "after"] : ["password", "op", "model", "dim", "vecs"]);
+  if (Object.keys(b).some((key) => !allowed.has(key))) throw new Fail("bad", "Embedding jobs cannot carry a speaker or room.", 400);
+  if (![true, "true", "1", 1].includes(conf().get().clerk_embed)) throw new Fail("embed_off", "Embeddings are switched off.", 403);
+  try {
+    const result = b.op === "embed_todo" ? await VEC().todo({ model: b.model, dim: b.dim, limit: b.limit, after: b.after })
+      : await VEC().put({ model: b.model, dim: b.dim, vecs: b.vecs });
+    if (!result || !result.ok) throw Object.assign(new Error("embed"), { code: result && result.code });
+    return b.op === "embed_put" ? { ok: true, stored: result.stored, rejected: result.rejected, stale: result.rejected } : result;
+  } catch (error) {
+    const code = error && error.code;
+    if (code === "embed_off") throw new Fail("embed_off", "Embeddings are switched off.", 403);
+    if (["embed_model", "bad_embed_model"].includes(code)) throw new Fail("embed_model", "The embedding model needs refreshing.", 409);
+    if (["bad_cursor", "bad_vector", "bad_vectors", "bad_batch", "too_large"].includes(code)) throw new Fail("bad", "Invalid embedding batch.", 400);
+    throw new Fail("catalog_down", "The library shelves are slow right now.", 503);
+  }
 }
 const offers = new Map(), OFFER_MS = 10 * 60000;
 function requestsOn() { return !!(conf().on && typeof conf().on.requests === "function" && conf().on.requests()); }
@@ -261,7 +294,8 @@ async function opFind(user, b) {
   }
   let out;
   const origin = requestsOn() ? await requestRoom(user, b, R) : null;
-  try { out = await CF().find({ ask: b.ask, raw: clean(b.raw, 100), exclude: b.exclude, limit: b.limit, target, browse: b.op === "browse", probe: b.probe === true },
+  try { out = await CF().find({ ask: b.ask, raw: clean(b.raw, 100), exclude: b.exclude, limit: b.limit, target, browse: b.op === "browse", probe: b.probe === true,
+    qvec: [true, "true", "1", 1].includes(conf().get().clerk_embed) ? queryVector(b.qvec) : null },
     { seenKeys, maxSec, user, allowSeerr: !!origin && requestsOn() }); }
   catch (e) {
     if (e && e.refuse) throw e;
@@ -562,6 +596,7 @@ async function handle(b = {}) {
   const op = String(b.op || "");
   try {
     if (!OPS.has(op)) throw new Fail("bad", "Unknown op.", 400);
+    if (op === "embed_todo" || op === "embed_put") return await opEmbed(b);
     const via = b.via === "web" ? "web" : "room";
     if (!rateOk(asKey(b.as))) throw new Fail("rate", "Too many Plex requests - give it a minute.", 429);
     const user = await resolve(b.as);
