@@ -518,9 +518,13 @@ function register(app, { addUser, bySlug = null }) {
         const fb = (await getQuery("SELECT until, reason, by FROM feed_bans WHERE room_id = ? AND user_id = ? AND (until IS NULL OR until > ?)", [room, String(p.userId), t]).catch(() => []))[0];
         const sameEnd = (a, b) => (a.until == null && b.until == null) || (a.until != null && b.until != null && Math.abs(Number(a.until) - Number(b.until)) < 5000);
         const partOfPad = !!(fb && bb && sameEnd(fb, bb));
+        // profmod: + the site-wide ban (feed_bans room '') for a viewer who may ban site-wide (staff - /feed/admin lists it for them already) -
+        // the profile's ↩️ Lift site ban says what it lifts
+        const fs = w.site ? (await getQuery("SELECT until, reason, by FROM feed_bans WHERE room_id = '' AND user_id = ? AND (until IS NULL OR until > ?)", [String(p.userId), t]).catch(() => []))[0] : null;
         out.current = {
           pad: fb && w.pad ? { until: fb.until == null ? null : Number(fb.until), reason: fb.reason || "", by: fb.by || "" } : null,
           bridge: bb && !(partOfPad && w.pad) ? { until: bb.until == null ? null : Number(bb.until), reason: partOfPad ? "" : bb.reason || "", by: bb.blocker_name || "" } : null,
+          site: fs ? { until: fs.until == null ? null : Number(fs.until), reason: fs.reason || "", by: fs.by || "" } : null,
         };
       }
       res.json(out);

@@ -13,7 +13,11 @@
 // the person behind it can't post incognito in this pad (every frog name, now and later), whoever it is; they see only "You can't post
 // incognito on this pad right now." (never the reason or the end), so the reason box says who reads it.
 //
-//   PATVRoom.banItems(out, u, x, ref, veil)       PATVBanSheet.open({ ref, slug, scope?, lift?, wban?, name, veil?, anchor? })
+// profmod: the profile's ⋯ More "Admin" group (profile-mod.js) opens the same sheet on the person's profile pad with only: ['site'] - the
+// "Where" offers only the whole site (a profile has no pad of its own to ban from), its Lift lifts the site-wide ban (the preview's
+// current.site, for viewers who may ban site-wide), and onDone(answer) runs after a ban / lift landed.
+//
+//   PATVRoom.banItems(out, u, x, ref, veil)       PATVBanSheet.open({ ref, slug, scope?, only?, lift?, wban?, name, veil?, anchor?, onDone? })
 (function (W, D) {
   'use strict';
   var _t = typeof W.__t === 'function' ? W.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -59,9 +63,12 @@
       // (review fix: which person, and what exactly is lifted - scope, end, reason, who set it)
       S.body.appendChild(el('p', 'psh-sub', pv.who.title + ' · ' + pv.who.sub));
       var cur = pv.current || {}, wb = o.wban || {}, opts = [];
-      if (cur.pad || wb.p) opts.push(['pad', cur.pad || { until: wb.p > 0 ? wb.p : null }]);
-      if (cur.bridge || wb.b) opts.push(['bridge', cur.bridge || { until: wb.b > 0 ? wb.b : null }]);
-      if (!opts.length) { S.body.appendChild(el('p', 'psh-p', _t('js.ban.lift_none', 'There\'s no website ban on them in this pad any more.'))); SH.buttons(S, null); return; }
+      var only = Array.isArray(o.only) ? o.only : null, want = function (sc) { return !only || only.indexOf(sc) >= 0; };
+      if (want('pad') && (cur.pad || wb.p)) opts.push(['pad', cur.pad || { until: wb.p > 0 ? wb.p : null }]);
+      if (want('bridge') && (cur.bridge || wb.b)) opts.push(['bridge', cur.bridge || { until: wb.b > 0 ? wb.b : null }]);
+      // (profmod: the site-wide ban - only where the page asked for it, and only what the server says is in force now)
+      if (only && want('site') && cur.site) opts.push(['site', cur.site]);
+      if (!opts.length) { S.body.appendChild(el('p', 'psh-p', only && want('site') ? _t('js.ban.lift_none_site', 'There\'s no site-wide ban on them any more.') : _t('js.ban.lift_none', 'There\'s no website ban on them in this pad any more.'))); SH.buttons(S, null); return; }
       var scope = opts[0][0];
       var fs = el('fieldset', 'psh-opts'); fs.appendChild(el('legend', 'psh-k', _t('js.ban.lift_which', 'Which ban')));
       opts.forEach(function (op) {
@@ -75,7 +82,8 @@
       S.body.appendChild(fs);
       var what = el('p', 'psh-p', ''); S.body.appendChild(what);
       function paint() {
-        what.textContent = scope === 'pad' ? _t('js.ban.lift_pad_body', 'They can post, comment, book the stage and chat from the website in this pad again.')
+        what.textContent = scope === 'site' ? _t('js.ban.lift_site_body', 'They can post, comment and take part across the whole site again.')
+          : scope === 'pad' ? _t('js.ban.lift_pad_body', 'They can post, comment, book the stage and chat from the website in this pad again.')
           : _t('js.ban.lift_bridge_body', 'They can chat and use commands in this room from the website again.');
       }
       paint();
@@ -86,6 +94,7 @@
           if (S.done) return;
           if (!a.ok) { B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = a.error || _t('js.ban.failed', 'Not changed.'); return; }
           B.out.className = 'psh-out ok'; B.out.textContent = _t('js.ban.lifted', 'Lifted.'); S.later(900);
+          if (typeof o.onDone === 'function') { try { o.onDone(a); } catch (e) { /* the page's own */ } }
         }).catch(function () { if (S.done) return; B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); });
       });
       B.no.focus();
@@ -110,8 +119,11 @@
       S.body.appendChild(el('p', 'psh-sub', pv.who.sub));
       // where
       var fs = el('fieldset', 'psh-opts'); fs.appendChild(el('legend', 'psh-k', _t('js.ban.where', 'Where')));
-      var scope = pv.scopes.indexOf(o.scope) >= 0 ? o.scope : pv.scopes[0];
-      pv.scopes.forEach(function (sc) {
+      // (profmod: a page that offers only some scopes - the profile: the whole site; none of them allowed = one Close)
+      var scopes = Array.isArray(o.only) ? pv.scopes.filter(function (sc) { return o.only.indexOf(sc) >= 0; }) : pv.scopes;
+      if (!scopes.length) { S.h.textContent = '⛔ ' + _t('js.ban.cant', 'Can\'t ban from here'); S.body.appendChild(el('p', 'psh-p', _t('js.ban.only_none', 'You can\'t make that ban.'))); SH.buttons(S, null); return; }
+      var scope = scopes.indexOf(o.scope) >= 0 ? o.scope : scopes[0];
+      scopes.forEach(function (sc) {
         var lab = el('label', 'psh-opt'); var r = el('input'); r.type = 'radio'; r.name = S.id + 'S'; r.value = sc; r.checked = sc === scope;
         var tx = SCOPE_TXT[pv.veil ? 'v' + sc : sc] ? SCOPE_TXT[pv.veil ? 'v' + sc : sc]() : SCOPE_TXT[sc](), sp = el('span', null, tx[0]); sp.appendChild(el('small', null, tx[1]));
         r.addEventListener('change', function () { if (r.checked) { scope = sc; paint(); } });
@@ -177,8 +189,10 @@
         api(base(o.slug) + '/ban', { ref: o.ref, scope: scope, dur: dur, reason: why.value, nets: !!(netBox && netBox.checked), exempt: netBox && netBox.checked ? exempt : [] }).then(function (a) {
           if (S.done) return;
           if (!a.ok) { B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = a.error || _t('js.ban.failed', 'Not changed.'); return; }
-          B.out.className = 'psh-out ok'; B.out.textContent = _t('js.ban.done', 'Done - it\'s in the pad\'s list of bans.');
+          B.out.className = 'psh-out ok';
+          B.out.textContent = scope === 'site' && !pv.veil ? _t('js.ban.done_site', 'Done - they\'re banned site-wide and signed out.') : _t('js.ban.done', 'Done - it\'s in the pad\'s list of bans.');
           S.later(1100);
+          if (typeof o.onDone === 'function') { try { o.onDone(a); } catch (e) { /* the page's own */ } }
         }).catch(function () { if (S.done) return; B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); });
       });
       var first = fs.querySelector('input:checked'); if (first) first.focus();

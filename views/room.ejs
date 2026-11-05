@@ -889,7 +889,7 @@
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
   <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
   <script src="/public/js/room-mod.js?v=17"></script><%# v15 (1.99ajn padppl): 🚫 Block / ✅ Unblock + the website's bans in the person menu; v16 (review): one Website ban item, group headings, never taller than the window; v17 (dock3 1.99akf): no clash part in the block sheet's who line %>
-  <% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><script src="/public/js/pad-ban-sheet.js?v=3"></script><script src="/public/js/gift-sheet.js?v=2"></script><% } %>
+  <% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><script src="/public/js/pad-ban-sheet.js?v=4"></script><script src="/public/js/gift-sheet.js?v=2"></script><% } %>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
