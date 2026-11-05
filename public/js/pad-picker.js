@@ -67,7 +67,7 @@
       image.style.inlineSize = '100%'; image.style.blockSize = '88px'; image.style.objectFit = 'contain'; image.style.borderRadius = 'var(--ds-r-sm)';
       image.addEventListener('error', function () {
         image.hidden = true;
-        if (again && !HAS.call(retryTile, src)) retryTile[src] = src + '&r=' + new Date().getTime().toString(36);
+        if (again && !HAS.call(retryTile, src)) retryTile[src] = src + (src.indexOf('?') < 0 ? '?' : '&') + 'r=' + new Date().getTime().toString(36);
       }); parent.appendChild(image);
     }
     function mediaButton(label, action) {
@@ -110,13 +110,14 @@
       request('/api/rooms/' + encodeURIComponent(o.slug) + '/cfstickers', g, function (rows) {
         var items = grid();
         rows.forEach(function (r) {
-          // (stkimg 1.99??: only the site's own picture of THIS sticker, in its versioned form - ?v= the picture's 8-hex token)
-          var m = r && typeof r.src === 'string' ? /^\/media\/cfsticker\/(\d{1,10})\.webp\?v=[a-f0-9]{8}$/.exec(r.src) : null;
-          if (!m || !/^\d{1,10}$/.test(String(r.id)) || !/^\d{1,10}$/.test(String(r.set)) || m[1] !== String(r.id)) return;
+          if (!r || !/^\d{1,10}$/.test(String(r.id)) || !/^\d{1,10}$/.test(String(r.set)) || r.src !== '/media/cfsticker/' + r.id + '.webp') return;
+          // (stkimg 1.99??: asked for under ?v= the picture's version - 8 lower-case hex, cfstickers.js - so a new picture is a new URL; a
+          // row without one (a server from before this release) is the plain URL, as before)
+          var src = typeof r.v === 'string' && /^[a-f0-9]{8}$/.test(r.v) ? r.src + '?v=' + r.v : r.src;
           var desc = String(r.desc || t('sticker', 'Sticker')).slice(0, 240);
           var b = mediaButton(desc, function () { send('[cfsticker:' + r.set + '/' + r.id + ']'); });
           b.setAttribute('aria-label', t('send_sticker', 'Send sticker: {name}', { name: desc })); b.title = desc;
-          picture(b, r.src, desc, true); caption(b, desc); items.appendChild(b);
+          picture(b, src, desc, true); caption(b, desc); items.appendChild(b);
         });
         if (!items.children.length) note(t('empty', 'Nothing here yet.'));
       });

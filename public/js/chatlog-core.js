@@ -415,34 +415,38 @@
     return img;
   }
   // stkimg 1.99??: a Camfrog sticker's line can reach the chat before its picture reaches the site - Pepe uploads a picture the site
-  // hasn't seen ~30 s later (pepe_sticker.py STICKER_SYNC_SOON) - so its first request 404s. The line shows its words ("[sticker]") as
-  // before and asks again after ~35 s and ~90 s with a fresh ?r= (a URL this page never asked for: a browser or an edge that kept the
-  // failed one can't answer with it). One timer per image at a time, none once the line has left the page, words for good after the
-  // second miss. The next line that misses a picture this page already got under a retry URL takes that URL at once
-  var STK_RETRY_MS = [35000, 90000], stkGot = {};
-  function stickerImage(attrs, fallback, h) {
+  // hasn't seen ~30 s after he learns it (pepe_sticker.py STICKER_SYNC_SOON; his 10-minute sync if that one was missed) - so its first
+  // request 404s. The line shows its words ("[sticker]") as before and asks again ~35 s, ~90 s and ~11 min after that miss, each time
+  // under a fresh ?r= (a URL this page never asked for: a browser or an edge that kept the failed one can't answer with it). One timer
+  // per image at a time, none once the line has left the page, words for good after the last miss. Only a line under 10 minutes old
+  // (its ts; none = new) waits for a picture - scrollback, search, a 📜 card's older lines whose picture never came ask once, as before.
+  // A line that misses (or whose timer fires for) a picture this page already got under a retry URL takes that URL
+  var STK_RETRY_AT = [35000, 90000, 660000], STK_FRESH_MS = 600000, stkGot = {};
+  function stickerImage(attrs, fallback, h, ts) {
     var img = h('img', attrs, []);
     if (!img || typeof img.addEventListener !== 'function') return img;
-    var base = String(attrs.src), tries = 0, words = null, asked = null, reused = false;
+    var base = String(attrs.src), tries = 0, words = null, asked = null, reused = false, first = 0, fresh = false;
     function onPage(n) {
       var d = n.ownerDocument;
       return typeof n.isConnected === 'boolean' ? n.isConnected : !!(d && typeof d.contains === 'function' && d.contains(n));
     }
+    function got() { return HAS.call(stkGot, base) && stkGot[base] !== asked ? stkGot[base] : null; }
     // (detached, a loading="lazy" image would never load)
     function ask(url) { asked = url; img.removeAttribute('loading'); img.src = url; }
     img.addEventListener('error', function () {
-      var doc = img.ownerDocument, win = doc && doc.defaultView;
+      var doc = img.ownerDocument, win = doc && doc.defaultView, now = new Date().getTime(), url;
       if (!words) {
         if (!img.parentNode || !doc) return;
         words = doc.createTextNode(fallback); img.parentNode.replaceChild(words, img);
+        first = now; fresh = !(Number(ts) > 0) || now - Number(ts) < STK_FRESH_MS;
       }
-      if (!reused && HAS.call(stkGot, base)) { reused = true; ask(stkGot[base]); return; }
-      if (tries >= STK_RETRY_MS.length || !win || typeof win.setTimeout !== 'function') return;
+      if (!reused && (url = got())) { reused = true; ask(url); return; }
+      if (!fresh || tries >= STK_RETRY_AT.length || !win || typeof win.setTimeout !== 'function') return;
       win.setTimeout(function () {
         if (!onPage(words)) return;
-        tries++;
-        ask(base + (base.indexOf('?') < 0 ? '?' : '&') + 'r=' + tries + '.' + Math.floor(new Date().getTime() / 1000).toString(36));
-      }, STK_RETRY_MS[tries]);
+        var u = got(); tries++;
+        ask(u || base + (base.indexOf('?') < 0 ? '?' : '&') + 'r=' + tries + '.' + Math.floor(new Date().getTime() / 1000).toString(36));
+      }, Math.max(1000, first + STK_RETRY_AT[tries] - now));
     });
     img.addEventListener('load', function () {
       if (!words) return;                                   // (drawn the first time)
@@ -464,7 +468,7 @@
     if (token.type === 'cfsticker') {
       var src = typeof ctx.cfsticker === 'function' ? ctx.cfsticker(token.set, token.id) : null;
       return src && safeSrc(src) ? [stickerImage({ 'class': 'cfstk', src: src, alt: _t('js.pad.chat.sticker', 'sticker'),
-        width: 100, height: 100, loading: 'lazy', decoding: 'async' }, fallback, h)] : [fallback];
+        width: 100, height: 100, loading: 'lazy', decoding: 'async' }, fallback, h, it.ts)] : [fallback];
     }
     // Only the server's mark makes a GIF line (mediaOf; a token typed in Camfrog never gets one), and only its cache attachment
     // (gifs.attach) draws remote media. 1.99ajc dockfu (D2, owner answer 6): a veiled sender's (incognito / !bridge hide frog name, or

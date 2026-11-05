@@ -61,7 +61,7 @@ test("list returns missing pictures; PNG is re-encoded to <=128px metadata-free 
   assert.equal(meta.format, "webp"); assert.equal(meta.width, 128); assert.equal(meta.height, 64);
   assert.equal(meta.exif, undefined); assert.equal(meta.icc, undefined); assert.equal(meta.xmp, undefined);
   const result = await catalog(); assert.equal(result.status, 200); assert.equal(result.headers.get("cache-control"), "no-store");
-  assert.deepEqual(result.data, [{ id: 421, set: 1642, desc: "Wave alert(1) & hello", src: "/media/cfsticker/421.webp?v=" + row.file.slice(0, 8) }]);   // (stkimg: versioned by its file)
+  assert.deepEqual(result.data, [{ id: 421, set: 1642, desc: "Wave alert(1) & hello", src: "/media/cfsticker/421.webp", v: row.file.slice(0, 8) }]);   // (stkimg: v = its picture's version)
   assert.deepEqual((await sync({ op: "list", items: [{ id: 421, set: 1642, desc: "Updated" }] })).data.need, []);
 });
 
@@ -222,18 +222,21 @@ test("1.99aiw dock: review - an unchanged catalog list writes nothing", async ()
 
 // stkimg 1.99?? (owner 2026-11-05: stickers in the picker with only their caption until a reload): a sticker's chat line reaches the page
 // ~30 s before Pepe uploads a picture the site hasn't seen; that first request 404s and the browser (or Cloudflare's 3-minute 404 cache
-// on a .webp path) kept the failed URL - the picker's tile was the same URL. The picker's URL now names the picture (?v= its file's first
-// 8 hex), the media route ignores ?v / ?r, and a miss is never kept (no-store)
-test("stkimg: the picker's URL is versioned by the picture and changes with a new one; ?v / ?r are ignored; a miss is no-store", async () => {
-  assert.equal(CF.get(1642, 421).src, null, "no picture yet: no URL");
+// on a .webp path) kept the failed URL - the picker's tile was the same URL. The picker now asks for src + "?v=" + v (v = the picture's
+// file's first 8 hex), the media route ignores ?v / ?r, and a miss is never kept (no-store). src stays the plain URL: a page loaded
+// before this release (pad-picker.js v3 accepts only that) keeps its Camfrog tab
+test("stkimg: the picker's row carries the picture's version (v) beside the plain src; ?v / ?r are ignored; a miss is no-store", async () => {
+  assert.equal(CF.get(1642, 421).src, null, "no picture yet: no URL"); assert.equal(CF.get(1642, 421).v, null, "and no version");
   assert.deepEqual((await catalog()).data, [], "and nothing in the picker");
   const miss = await fetch(base + "/media/cfsticker/421.webp");
   assert.equal(miss.status, 404); assert.equal(miss.headers.get("cache-control"), "no-store", "the early request's 404 is never kept");
   await CF.syncPics([{ id: 421, png: png.toString("base64") }]);
   const file1 = (await db.getQuery("SELECT file FROM cf_stickers WHERE id=421"))[0].file;
-  const src1 = (await catalog()).data[0].src;
-  assert.equal(src1, "/media/cfsticker/421.webp?v=" + file1.slice(0, 8)); assert.match(src1, /^\/media\/cfsticker\/421\.webp\?v=[a-f0-9]{8}$/);
-  assert.equal(CF.get(1642, 421).src, src1);
+  const row1 = (await catalog()).data[0];
+  assert.equal(row1.src, "/media/cfsticker/421.webp", "the plain URL - exactly what a page from before this release accepts (r.src === '/media/cfsticker/' + r.id + '.webp')");
+  assert.equal(row1.v, file1.slice(0, 8)); assert.match(row1.v, /^[a-f0-9]{8}$/);
+  assert.deepEqual(CF.get(1642, 421), row1);
+  const src1 = row1.src + "?v=" + row1.v;                            // what pad-picker.js v4 asks for
   const bytes1 = Buffer.from(await (await fetch(base + src1)).arrayBuffer());
   for (const url of [src1, "/media/cfsticker/421.webp", "/media/cfsticker/421.webp?r=1.mh2k3x", src1 + "&r=lz0abc", "/media/cfsticker/421.webp?v=deadbeef"]) {
     const r = await fetch(base + url);
@@ -242,20 +245,20 @@ test("stkimg: the picker's URL is versioned by the picture and changes with a ne
     assert.deepEqual(Buffer.from(await r.arrayBuffer()), bytes1, url + ": the id alone picks the picture");
   }
   assert.deepEqual((await sync({ op: "list", items: [{ id: 421, set: 1642, desc: "Fixture wave" }] })).data.need, []);
-  assert.equal((await catalog()).data[0].src, src1, "the same picture keeps its URL across Pepe's 10-minute syncs");
+  assert.equal((await catalog()).data[0].v, row1.v, "the same picture keeps its version across Pepe's 10-minute syncs");
   const png2 = await sharp({ create: { width: 64, height: 64, channels: 4, background: "#aa4677" } }).png().toBuffer();
   await CF.syncPics([{ id: 421, png: png2.toString("base64") }]);
-  const file2 = (await db.getQuery("SELECT file FROM cf_stickers WHERE id=421"))[0].file, src2 = (await catalog()).data[0].src;
-  assert.notEqual(file2, file1); assert.equal(src2, "/media/cfsticker/421.webp?v=" + file2.slice(0, 8));
-  assert.notEqual(src2, src1, "a new picture is a new URL");
-  const bytes2 = Buffer.from(await (await fetch(base + src2)).arrayBuffer());
+  const file2 = (await db.getQuery("SELECT file FROM cf_stickers WHERE id=421"))[0].file, row2 = (await catalog()).data[0];
+  assert.notEqual(file2, file1); assert.equal(row2.src, "/media/cfsticker/421.webp"); assert.equal(row2.v, file2.slice(0, 8));
+  assert.notEqual(row2.v, row1.v, "a new picture is a new version - a new URL");
+  const bytes2 = Buffer.from(await (await fetch(base + row2.src + "?v=" + row2.v)).arrayBuffer());
   assert.notDeepEqual(bytes2, bytes1);
   assert.deepEqual(Buffer.from(await (await fetch(base + src1)).arrayBuffer()), bytes2, "an old ?v= gets today's picture");
   for (const id of ["999", "01"]) {
-    const r = await fetch(base + "/media/cfsticker/" + id + ".webp?v=" + file2.slice(0, 8));
+    const r = await fetch(base + "/media/cfsticker/" + id + ".webp?v=" + row2.v);
     assert.equal(r.status, 404); assert.equal(r.headers.get("cache-control"), "no-store");
   }
   await flags({ cfstickers: false });
-  const off = await fetch(base + src2);
+  const off = await fetch(base + row2.src + "?v=" + row2.v);
   assert.equal(off.status, 404); assert.equal(off.headers.get("cache-control"), "no-store", "off: nothing served and nothing kept");
 });

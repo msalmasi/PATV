@@ -30,15 +30,16 @@ function init() {
   return ready;
 }
 const enabled = () => require("./paddock").current().cfg.cfstickers === true;
-// stkimg 1.99??: the picker's URL names the picture it shows - ?v= the first 8 hex of its file (a random name, nothing else in it). A
-// sticker's chat line reaches the page ~30 s before Pepe uploads a picture the site hasn't seen, so that first request 404s; a browser
-// (or an edge) that keeps the failed URL left the picker's tile, the very same URL, a caption until a reload. A new picture = a new URL
-// (an old failure or an old cached picture never sticks); the media route ignores the query
-const srcOf = row => row.file && FILE_RE.test(row.file) ? "/media/cfsticker/" + row.id + ".webp?v=" + row.file.slice(0, 8) : null;
+// stkimg 1.99??: v = the picture's version - the first 8 hex of its file (a random name, nothing else in it). A sticker's chat line
+// reaches the page ~30 s before Pepe uploads a picture the site hasn't seen, so that first request 404s; a browser or an edge that
+// kept the failed URL left the picker's tile, the very same URL, a caption until a reload. The picker asks for src + "?v=" + v: a new
+// picture = a new URL (an old failure or an old cached picture never sticks); the media route ignores the query. src stays the plain
+// URL - a page loaded before this release (pad-picker.js v3) accepts only that, and a rollback's picker gets what it knows
+const verOf = row => row.file && FILE_RE.test(row.file) ? row.file.slice(0, 8) : null;
 function get(set, id) {
   const row = CACHE.get(idOf(id));
   if (!row || row.set_id !== idOf(set)) return null;
-  return { id: row.id, set: row.set_id, desc: row.descr, src: srcOf(row) };
+  return { id: row.id, set: row.set_id, desc: row.descr, src: row.file ? "/media/cfsticker/" + row.id + ".webp" : null, v: verOf(row) };
 }
 const valid = (set, id) => !!get(set, id);
 // 1.99aiw dock: review - the picker's list is built once per catalog change (GEN) or minute, not with a synchronous fs.existsSync
