@@ -2122,7 +2122,12 @@ function mfRecheck(userId) {
 }
 async function ban(username, reason, actor) {
   await init();
-  const u = (await getQuery("SELECT userId, username FROM users WHERE LOWER(username) = LOWER(?)", [String(username || "").trim()]))[0];
+  // profmod review fix: {userId} = that account (the profile's 🎬 - a rename can't retarget it); a typed name is matched case-blind
+  // but its EXACT spelling wins - a legacy pair of usernames that differ only in case (personref.accountByUsername) never swaps
+  const byId = username && typeof username === "object" && username.userId != null && String(username.userId) !== "";
+  const name = byId ? "" : String(username || "").trim();
+  const u = byId ? (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(username.userId)]))[0]
+    : (await getQuery("SELECT userId, username FROM users WHERE LOWER(username) = LOWER(?) ORDER BY (username = ?) DESC LIMIT 1", [name, name]))[0];
   if (!u) throw new Refuse(404, "No such user.");
   await runQuery("INSERT OR REPLACE INTO stage_bans (userId, username, reason, by, at) VALUES (?, ?, ?, ?, ?)",
                  [u.userId, u.username, String(reason || "").slice(0, 200), actor || null, now()]);
@@ -2463,11 +2468,19 @@ function register(app, { addUser, isBotToken, noTimers }) {
       res.json({ ok: true, cut: out.length });
     } catch (e) { fail(res, e); }
   });
-  app.post("/api/stage/admin/ban", addUser, needStaff, async (req, res) => {
-    try { const u = await ban((req.body || {}).username, (req.body || {}).reason, actor(req)); res.json({ ok: true, username: u.username }); }
-    catch (e) { fail(res, e); }
+  // profmod review fix: ban / unban answer a same-site JSON fetch only (/stage/admin's post() and the profile's ⋯ Admin group both are) -
+  // a form post, or one from another origin (a same-site host still carries the Lax cookie), writes nothing
+  const AGw = require("./middleware/authGuard");
+  const staffJson = (req, res, next) => (req.is("application/json") && AGw.sameSite(req) ? next()
+    : res.status(403).json({ ok: false, error: "Security check failed - reload the page." }));
+  app.post("/api/stage/admin/ban", addUser, needStaff, staffJson, async (req, res) => {
+    try {
+      const b = req.body || {};
+      const u = await ban(b.userId != null && String(b.userId) !== "" ? { userId: b.userId } : b.username, b.reason, actor(req));
+      res.json({ ok: true, username: u.username });
+    } catch (e) { fail(res, e); }
   });
-  app.post("/api/stage/admin/unban", addUser, needStaff, async (req, res) => {
+  app.post("/api/stage/admin/unban", addUser, needStaff, staffJson, async (req, res) => {
     try { res.json({ ok: await unban((req.body || {}).userId, actor(req)) }); } catch (e) { fail(res, e); }
   });
   // Pepe ("!stage cut"): cut open slots back to Pepe's stream - every room, or {room} only (1.99bi)

@@ -9,6 +9,10 @@
 //     same rank / yourself); a site ban made from the profile pad is the same feed_bans row '' + audit as /feed/admin's; the ban preview
 //     tells a staff viewer the site ban in force (the Lift sheet)
 //   - the sheets: in-page (PATVSheet), never confirm(), textContent only; the ban sheet offers only the whole site on the profile
+//   - review fixes: the app is built as index.js builds it (roomsweb's routes before padbans', forms parsed); 🎬 by account id + a typed
+//     name's exact spelling first; the stage admin writes only as a same-site JSON request; no group on an archived account or your own
+//     alt; the page is Cache-Control private when it carries the group; the sheets run in a small DOM - the bridge sheet adds only what
+//     was ticked, a site ban in force is named and carried over, "already so" answers refresh, focus never lands on the page body
 //   TZ=UTC node --test test/profmod.test.js
 "use strict";
 const test = require("node:test");
@@ -55,6 +59,13 @@ test.before(async () => {
   await mk("plain", "pln-0001", "plainjoe");
   await mk("target", "tgt-0001", "target", "pleb", "targetcf");
   await mk("pepe", "pepe-bot", "Pepe", "Bot");
+  // review fixes: a legacy pair of usernames that differ only in case (personref.js) - the OLDER row is an Admin; a deleted / merged
+  // (archived) account; the Staff member's own alt (the same Camfrog login, another spelling)
+  await mk("caseyAdmin", "csy-0002", "casey", "Admin");
+  await mk("casey", "csy-0001", "Casey", "pleb");
+  await mk("gone", "gon-0001", "goneuser", "pleb", "gonecf");
+  await runQuery("UPDATE users SET archived_at = ? WHERE userId = 'gon-0001'", [Date.now() - 86400e3]);
+  await mk("alt", "alt-0001", "stafferalt", "pleb", "StaffCF");
   await rooms.init();
   await BB.init(); await PB.init();
   await require(path.join(repo, "feedstore")).init();
@@ -63,8 +74,12 @@ test.before(async () => {
   await require(path.join(repo, "creators")).init();
   await require(path.join(repo, "sessions")).init();
   const app = express();
+  // (as index.js builds it: JSON + form bodies parsed globally, roomsweb.js's routes BEFORE bridge.js's padbans routes - they share
+  // /api/rooms/:slug/ban|unban; review fix: the kit and this app had padbans alone, so a profile ban answered by roomsweb went unseen)
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
   const addUser = (req, res, next) => { const u = req.get("x-test-user"); req.user = u ? U[u] || null : null; next(); };
+  require(path.join(repo, "roomsweb")).register(app, { addUser, isBotToken: () => false });
   PB.register(app, { addUser });
   BB.register(app, { addUser, isBotToken: () => false });
   require(path.join(repo, "mainstage")).register(app, { addUser, isBotToken: () => false, noTimers: true });
@@ -192,7 +207,11 @@ test("the view: an Admin group per role - the items its keys allow, status lines
   assert.match(menu, /class="pf-mod-2" data-pfmod="unstage">↩️ Lift stage ban…<small class="pf-mod-sub">loud<\/small><\/button>/);
   assert.match(menu, /<button type="button" role="menuitem" data-pfmod="bridge">🌐 Web bridge, every room…<\/button>/, "nothing in force: one line");
   assert.match(menu, /data-safety="details" data-user-id="tgt-0001">🔍 Abuse details/);
-  assert.match(menu, /href="\/feed\/admin#users">⚑ Open reports<span class="pf-mod-n">1<\/span>/);
+  // review fixes: a site ban in force -> "Change site ban…" (a new one replaces it - the sheet says so); Open reports goes to THIS
+  // person's reports on /feed/admin (their group's anchor), not the top of the list
+  assert.match(menu, /class="pf-danger" data-pfmod="siteban">⛔ Change site ban…<\/button>/);
+  assert.match(menu, /href="\/feed\/admin#rep-u-tgt-0001">⚑ Open reports<span class="pf-mod-n">1<\/span>/);
+  assert.match(SRC("views/feedAdmin.ejs"), /<div class="fa-rep fa-tgt<%= g\.urgent \? ' urgent' : '' %>" id="rep-u-<%= g\.userId %>" data-uid=/);
   assert.match(menu, /href="\/admin\/accounts\?u=target">🗂️ Open in Admin/);
   assert.equal((menu.match(/\/admin\/comps\?user=target/g) || []).length, 1, "Comp once - inside the group");
   assert.ok(menu.indexOf("/admin/comps") > menu.indexOf("pf-mod-gh"));
@@ -295,14 +314,296 @@ test("the other items' routes refuse a viewer without their capability (and work
   assert.ok((await getQuery("SELECT 1 FROM admin_audit WHERE action = 'sessions.revoke_all'")).length);
 });
 
+// ── review fixes: the server side ──
+test("review fix (stage ban by account): the profile's 🎬 sends the account id; a typed name prefers its exact spelling - a case-only twin is never banned instead", async () => {
+  const rows = async () => (await getQuery("SELECT userId FROM stage_bans ORDER BY userId")).map((r) => r.userId);
+  try {
+    // the profile: /u/Casey (the member) - the older row "casey" is an Admin; by account id the member is the one banned
+    let r = await post("/api/stage/admin/ban", "staff", { userId: U.casey.userId, reason: "loud" });
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.equal(r.d.username, "Casey");
+    assert.deepEqual(await rows(), ["csy-0001"]);
+    await runQuery("DELETE FROM stage_bans");
+    // /stage/admin's typed name: the exact spelling wins over the older case-only twin (it was: the first row - the Admin)
+    r = await post("/api/stage/admin/ban", "staff", { username: "Casey", reason: "loud" });
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.equal(r.d.username, "Casey");
+    assert.deepEqual(await rows(), ["csy-0001"]);
+    // no such account id: the route's own 404, nothing written
+    r = await post("/api/stage/admin/ban", "staff", { userId: "nope-0000", reason: "x" });
+    assert.equal(r.status, 404);
+    assert.deepEqual(await rows(), ["csy-0001"]);
+  } finally { await runQuery("DELETE FROM stage_bans"); }
+});
+
+test("review fix (stage admin writes): ban / unban only as a same-site JSON request - a form post or another origin is refused, nothing written", async () => {
+  const T = U.target;
+  const form = (p, u, body, hdr) => fetch(base + p, { method: "POST", headers: Object.assign({ "content-type": "application/x-www-form-urlencoded", "x-test-user": u }, hdr || {}),
+    body: new URLSearchParams(body).toString() }).then(async (r) => ({ status: r.status, d: await r.json().catch(() => ({})) }));
+  const n = async () => Number((await getQuery("SELECT COUNT(*) AS n FROM stage_bans WHERE userId = ?", [T.userId]))[0].n);
+  try {
+    // a form from a same-site host (staging / another *.publicaccess.tv - the Lax cookie still goes) and from this one
+    assert.equal((await form("/api/stage/admin/ban", "staff", { username: "target", reason: "x" }, { origin: "https://other.publicaccess.tv" })).status, 403);
+    assert.equal((await form("/api/stage/admin/ban", "staff", { username: "target", reason: "x" }, { origin: base })).status, 403);
+    assert.equal(await n(), 0, "nothing written");
+    // JSON from another origin
+    const r = await fetch(base + "/api/stage/admin/ban", { method: "POST", headers: Object.assign(H("staff"), { origin: "https://other.publicaccess.tv", referer: "https://other.publicaccess.tv/" }), body: JSON.stringify({ username: "target", reason: "x" }) });
+    assert.equal(r.status, 403);
+    assert.equal(await n(), 0, "nothing written");
+    // unban the same way
+    await runQuery("INSERT INTO stage_bans (userId, username, reason, by, at) VALUES (?, ?, 'loud', 'staffer', ?)", [T.userId, T.username, Date.now()]);
+    assert.equal((await form("/api/stage/admin/unban", "staff", { userId: T.userId }, { origin: "https://other.publicaccess.tv" })).status, 403);
+    assert.equal(await n(), 1, "still banned");
+    // the page's own fetch (same origin, JSON) still works - /stage/admin's post() and the profile's
+    assert.deepEqual((await post("/api/stage/admin/unban", "staff", { userId: T.userId })).d, { ok: true });
+    assert.match(SRC("public/js/stage-admin.js"), /headers: \{ 'Content-Type': 'application\/json' \}/, "/stage/admin posts JSON (same origin)");
+  } finally { await runQuery("DELETE FROM stage_bans"); }
+});
+
+test("review fix: no Admin group on a deleted / merged (archived) account or on your own alt (the ban route's self rule - the same Camfrog login)", async () => {
+  assert.equal(await PM.forProfile(U.admin, U.gone), null, "archived");
+  assert.equal(await PM.forProfile(U.staff, U.alt), null, "the staffer's own alt (StaffCF = staffcf)");
+  assert.ok(await PM.forProfile(U.admin, U.alt), "someone else's alt - shown");
+  assert.ok(await PM.forProfile(U.staff, U.target), "another login - shown");
+  // a target row whose class the caller passed stale: the users row decides (an Admin twin passed as a member gets nothing from Staff)
+  assert.equal(await PM.forProfile(U.staff, Object.assign({}, U.caseyAdmin, { class: "pleb" })), null);
+  // the profile route: a page that carries staff data is private, never stored by a cache
+  const ix = SRC("index.js");
+  assert.match(ix, /const profileMod = await require\("\.\/profilemod"\)\.forProfile\(req\.user, user, \{ preview \}\)/);
+  assert.match(ix, /if \(profileMod\) res\.set\("Cache-Control", "private, no-store"\);/);
+});
+
+// ── the sheets in a small DOM (block-sheet.js's PATVSheet, pad-ban-sheet.js, profile-mod.js - fetch answered here) ──
+function sheetDom(answer) {
+  const vm = require("vm");
+  const doc = { activeElement: null, _on: [] };
+  const one = (n, part) => {
+    const m = /^([a-z]*)((?:\.[\w-]+)*)((?:\[[^\]]+\])*)(:checked)?$/i.exec(part);
+    if (!m) throw new Error("selector " + part);
+    if (m[1] && n.tagName !== m[1].toUpperCase()) return false;
+    for (const c of m[2].match(/\.[\w-]+/g) || []) if (!String(n.className).split(/\s+/).includes(c.slice(1))) return false;
+    for (const a of m[3].match(/\[[^\]]+\]/g) || []) {
+      const q = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(a);
+      const v = q[1] === "open" ? (n.open ? "" : null) : n.getAttribute(q[1]);
+      if (v == null || (q[2] != null && v !== q[2])) return false;
+    }
+    return !m[4] || !!n.checked;
+  };
+  class El {
+    constructor(tag) { Object.assign(this, { tagName: String(tag).toUpperCase(), children: [], parentNode: null, attrs: {}, className: "", _t: "", on: {}, disabled: false, checked: false,
+      value: "", type: "", id: "", open: false, placeholder: "", style: {} }); }
+    appendChild(c) { if (c.parentNode) c.remove(); c.parentNode = this; this.children.push(c); return c; }
+    remove() { const p = this.parentNode; if (p) { p.children = p.children.filter((x) => x !== this); this.parentNode = null; } }
+    get textContent() { return this._t + this.children.map((c) => c.textContent).join(""); }
+    set textContent(v) { this._t = String(v); for (const c of this.children) c.parentNode = null; this.children = []; }
+    get isConnected() { let n = this; while (n.parentNode) n = n.parentNode; return n === doc.body; }
+    setAttribute(k, v) { this.attrs[k] = String(v); if (k === "id") this.id = String(v); if (k === "open") this.open = true; }
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; }
+    removeAttribute(k) { delete this.attrs[k]; }
+    addEventListener(t, f) { (this.on[t] = this.on[t] || []).push(f); }
+    focus() { doc.activeElement = this; }
+    close() { this.open = false; }
+    *walk() { for (const c of this.children) { yield c; yield* c.walk(); } }
+    matches(sel) {
+      const parts = sel.trim().split(/\s+/);
+      if (!one(this, parts[parts.length - 1])) return false;
+      let n = this.parentNode;
+      for (let i = parts.length - 2; i >= 0; i--) { while (n && !one(n, parts[i])) n = n.parentNode; if (!n) return false; n = n.parentNode; }
+      return true;
+    }
+    querySelectorAll(sel) { return [...this.walk()].filter((n) => n.matches(sel)); }
+    querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+    closest(sel) { for (let n = this; n; n = n.parentNode) if (n.matches(sel)) return n; return null; }
+  }
+  doc.body = new El("body");
+  doc.createElement = (t) => new El(t);
+  doc.querySelector = (s) => doc.body.querySelector(s);
+  doc.querySelectorAll = (s) => doc.body.querySelectorAll(s);
+  doc.addEventListener = (t, f, cap) => doc._on.push({ t, f, cap: !!cap });
+  const calls = [], timers = [];
+  let reloads = 0;
+  const W = { location: { reload: () => { reloads++; } } };
+  const fetchFn = (url, o) => {
+    const body = o && o.body ? JSON.parse(o.body) : null;
+    calls.push({ url, method: (o && o.method) || "GET", body, headers: (o && o.headers) || {} });
+    const a = answer(url, body) || { status: 200, json: { ok: true } };
+    if (a.offline) return Promise.reject(new Error("offline"));
+    return Promise.resolve({ ok: a.status < 400, status: a.status, json: () => Promise.resolve(a.json) });
+  };
+  const ctx = vm.createContext({ window: W, document: doc, fetch: fetchFn, setTimeout: (f, ms) => { timers.push(ms); return 0; }, console });
+  for (const f of ["block-sheet.js", "pad-ban-sheet.js", "profile-mod.js"]) vm.runInContext(SRC("public/js/" + f), ctx, { filename: f });
+  /** a click as the browser runs it: document capture listeners, then the target and its ancestors, then document bubble listeners */
+  const click = (n) => {
+    const ev = { target: n, type: "click", defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    for (const l of doc._on.filter((x) => x.t === "click" && x.cap)) l.f(ev);
+    for (let p = n; p; p = p.parentNode) for (const f of (p.on.click || []).slice()) f(ev);
+    for (const l of doc._on.filter((x) => x.t === "click" && !x.cap)) l.f(ev);
+  };
+  const settle = () => new Promise((r) => setImmediate(r)).then(() => new Promise((r) => setImmediate(r)));
+  const sheet = () => W.PATVSheet.current();
+  const text = (n) => n.textContent;
+  return { W, doc, El, calls, timers, reloads: () => reloads, click, settle, sheet, text };
+}
+const CFG = { u: "target", id: "tgt-0001", ref: { k: "acct", v: "u:tgt-0001" }, slug: "p-target", who: "PATV account @target", siteBan: null, stageBan: null, creator: null, bridge: null };
+
+test("review fix (🌐 web bridge sheet): Save adds only what was newly ticked and lifts what was unticked - the ones already on keep their end and reason", async () => {
+  const had = { global: true, feature: "voice", until: Date.now() + 864e5, reason: "ear-rape clips", by: "adminone" };
+  const run = async (ticks, { reapply = false } = {}) => {
+    const X = sheetDom((url, body) => (url.startsWith("/api/admin/bridge/blocks?") ? { status: 200, json: { ok: true, features: ["all", "chat", "voice"], blocks: [had] } } : { status: 200, json: { ok: true } }));
+    X.W.PATVProfileMod._act.bridge(CFG, null);
+    await X.settle();
+    const S = X.sheet(), boxes = S.body.querySelectorAll("input").filter((i) => i.type === "checkbox" && i.value !== "reapply");
+    for (const b of boxes) if (b.value in ticks) { b.checked = ticks[b.value]; for (const f of b.on.change || []) f({ target: b }); }
+    const re = S.body.querySelectorAll("input").find((i) => i.value === "reapply");
+    if (reapply) { assert.ok(re, "the re-apply box"); re.checked = true; for (const f of re.on.change || []) f({ target: re }); }
+    const go = S.body.querySelector(".psh-row").children[0];
+    return { X, S, go };
+  };
+  // tick chat (voice stays on): one block for chat only - voice keeps its own end and reason
+  let { X, S, go } = await run({ chat: true });
+  assert.equal(go.disabled, false); assert.match(go.className, /danger/);
+  X.click(go); await X.settle();
+  let w = X.calls.filter((c) => c.method === "POST");
+  assert.deepEqual(w.map((c) => [c.body.op, c.body.features]), [["block", ["chat"]]]);
+  assert.match(S.body.textContent, /Saved - restricted in every room\./);
+  // untick voice only: a lift, no block (it was: voice re-sent... no - chat/voice both re-blocked with the sheet's 1 day and empty reason)
+  ({ X, S, go } = await run({ voice: false }));
+  assert.match(go.className, /\bgo\b/, "only lifting: the green button");
+  X.click(go); await X.settle();
+  w = X.calls.filter((c) => c.method === "POST");
+  assert.deepEqual(w.map((c) => [c.body.op, c.body.features]), [["unblock", ["voice"]]]);
+  assert.match(S.body.textContent, /Lifted in every room\./);
+  // nothing changed: nothing to send
+  ({ X, S, go } = await run({}));
+  assert.equal(go.disabled, true);
+  // the re-apply box: the ones already on take this length + reason too (the explicit way to change one)
+  ({ X, S, go } = await run({ chat: true }, { reapply: true }));
+  X.click(go); await X.settle();
+  w = X.calls.filter((c) => c.method === "POST");
+  assert.deepEqual(w.map((c) => [c.body.op, c.body.features.slice().sort()]), [["block", ["chat", "voice"]]]);
+  // no restriction on yet: no re-apply box
+  const Y = sheetDom((url) => (url.startsWith("/api/admin/bridge/blocks?") ? { status: 200, json: { ok: true, features: ["all", "chat"], blocks: [] } } : null));
+  Y.W.PATVProfileMod._act.bridge(CFG, null); await Y.settle();
+  assert.equal(Y.sheet().body.querySelectorAll("input").find((i) => i.value === "reapply"), undefined);
+});
+
+test("review fixes (profile sheets): 🎬 by account id; an answer that's already true is done (reload); a failure keeps focus in the sheet; no fake value in the sign-out box", async () => {
+  // 🎬 ban: the account id, never the name
+  let X = sheetDom(() => ({ status: 200, json: { ok: true, username: "target" } }));
+  X.W.PATVProfileMod._act.stage(CFG, null);
+  let S = X.sheet(), go = S.body.querySelector(".psh-row").children[0];
+  X.click(go); await X.settle();
+  assert.deepEqual(X.calls[0].body, { userId: "tgt-0001", reason: "" });
+  assert.equal(X.calls[0].url, "/api/stage/admin/ban");
+  // a 🎬 answer naming another account (an older server) is said, never "Banned from the stage."
+  X = sheetDom(() => ({ status: 200, json: { ok: true, username: "TARGET" } }));
+  X.W.PATVProfileMod._act.stage(CFG, null);
+  S = X.sheet(); go = S.body.querySelector(".psh-row").children[0];
+  X.click(go); await X.settle();
+  assert.doesNotMatch(S.body.textContent, /Banned from the stage\./);
+  assert.match(S.body.querySelector(".psh-out").className, /bad/);
+  // ↩️ stage ban already lifted elsewhere: said as done, the page reloads (the stale item goes)
+  X = sheetDom(() => ({ status: 200, json: { ok: false } }));
+  X.W.PATVProfileMod._act.unstage(Object.assign({}, CFG, { stageBan: { reason: "loud", by: "staffer", at: Date.now() } }), null);
+  S = X.sheet(); go = S.body.querySelector(".psh-row").children[0];
+  X.click(go); await X.settle();
+  let out = S.body.querySelector(".psh-out");
+  assert.equal(out.textContent, "There's no stage ban on them any more.");
+  assert.doesNotMatch(out.className, /bad/); assert.equal(go.disabled, true); assert.ok(X.timers.includes(900), "reload");
+  // 🖼️ cover already gone (the route's 404 code 'gone'): the same
+  X = sheetDom(() => ({ status: 404, json: { ok: false, error: "That cover is already gone.", code: "gone" } }));
+  X.W.PATVProfileMod._act.cover(CFG, null);
+  S = X.sheet(); go = S.body.querySelector(".psh-row").children[0];
+  X.click(go); await X.settle();
+  out = S.body.querySelector(".psh-out");
+  assert.equal(out.textContent, "That cover is already gone.");
+  assert.doesNotMatch(out.className, /bad/); assert.equal(go.disabled, true); assert.ok(X.timers.includes(900));
+  // a real failure (500 / offline): the error in the sheet, the button back AND focused (it was: focus on the page body)
+  for (const a of [{ status: 500, json: { ok: false, error: "Something went wrong." } }, { offline: true }]) {
+    X = sheetDom(() => a);
+    X.W.PATVProfileMod._act.cover(CFG, null);
+    S = X.sheet(); go = S.body.querySelector(".psh-row").children[0];
+    X.click(go); await X.settle();
+    assert.match(S.body.querySelector(".psh-out").className, /bad/);
+    assert.equal(go.disabled, false); assert.equal(X.doc.activeElement, go, "focus stays in the sheet");
+    assert.ok(!X.timers.includes(900), "no reload");
+  }
+  // 🔐 the typed-username box starts empty-looking (no placeholder that reads as already typed)
+  X = sheetDom(() => null);
+  X.W.PATVProfileMod._act.signout(CFG, null);
+  const typed = X.sheet().body.querySelectorAll("input")[1];
+  assert.equal(typed.placeholder, "");
+});
+
+test("review fix (🔍 abuse details): the menu closes before the panel opens and focus goes to ⋯ More - so it comes back there when the panel closes", () => {
+  const X = sheetDom(() => null);
+  const det = X.doc.createElement("details"); det.open = true; det.className = "pf-more";
+  const sum = X.doc.createElement("summary"); det.appendChild(sum);
+  const menu = X.doc.createElement("div"); menu.className = "pf-menu"; det.appendChild(menu);
+  const b = X.doc.createElement("button"); b.setAttribute("data-safety", "details"); menu.appendChild(b);
+  X.doc.body.appendChild(det);
+  b.focus();
+  // feed-safety.js's own (bubbling) handler opens its modal <dialog>: the browser keeps what had focus then and returns focus to it
+  let focusedAtOpen = null;
+  X.doc.addEventListener("click", () => { focusedAtOpen = X.doc.activeElement; });
+  X.click(b);
+  assert.equal(det.open, false, "the menu closed");
+  assert.equal(focusedAtOpen, sum, "⋯ More had focus when the panel opened (it was: the hidden menu item -> the page body)");
+});
+
+test("review fixes (⛔ ban sheet on a profile): a site ban in force is named and its length + reason carried over (a new ban replaces it); site-wide titles; a gone ban refreshes", async () => {
+  const pv = (cur) => ({ ok: true, who: { kind: "account", title: "PATV account @target", sub: "Camfrog login targetcf" }, scopes: ["bridge", "pad", "site"], veil: false, nets: null, room: false,
+    refusal: { bridge: "x.", pad: "y.", site: "You're banned from PATV until 2026-11-06 14:00 UTC." }, current: { pad: null, bridge: null, site: cur } });
+  const open = async (cur, o = {}) => {
+    const X = sheetDom((url) => (url.endsWith("/ban/preview") ? { status: 200, json: pv(cur) } : { status: 200, json: { ok: true } }));
+    let done = 0;
+    X.W.PATVBanSheet.open(Object.assign({ ref: CFG.ref, slug: CFG.slug, scope: "site", only: ["site"], name: "@target", onDone: () => { done++; } }, o));
+    const title0 = X.sheet().h.textContent;
+    await X.settle();
+    return { X, S: X.sheet(), title0, done: () => done };
+  };
+  const radios = (S, name) => S.body.querySelectorAll("input").filter((i) => i.type === "radio" && i.name === S.id + name);
+  // permanent, with a reason: named, Permanent picked, the reason carried over - Ban sends the same (it was: 1 day, no reason)
+  let { X, S, title0 } = await open({ until: null, reason: "spam links", by: "staffer" });
+  assert.equal(title0, "⛔ Site-wide ban", "the profile's sheet title while it checks (it was: ⛔ Website ban)");
+  assert.match(S.body.textContent, /Already banned site-wide - until lifted · spam links · by staffer\. Banning again replaces it/);
+  assert.equal(radios(S, "U").find((r) => r.checked).value, "perm");
+  assert.equal(S.body.querySelectorAll("input").find((i) => i.type === "text").value, "spam links");
+  X.click(S.body.querySelector(".psh-row").children[0]); await X.settle();
+  const sent = X.calls.find((c) => c.url.endsWith("/ban"));
+  assert.equal(sent.body.dur, "perm"); assert.equal(sent.body.reason, "spam links");
+  // 6 days left: 7 days picked (never shortened to the 1-day default)
+  ({ S } = await open({ until: Date.now() + 6 * 864e5, reason: "", by: "staffer" }));
+  assert.equal(radios(S, "U").find((r) => r.checked).value, "7d");
+  // none in force: as before (1 day, empty, no note)
+  ({ S } = await open(null));
+  assert.equal(radios(S, "U").find((r) => r.checked).value, "1d");
+  assert.doesNotMatch(S.body.textContent, /Already banned/);
+  // the chat's person menu (no `only`): unchanged - no note, 1 day, the Website ban title
+  ({ S, title0 } = await open({ until: null, reason: "spam links", by: "staffer" }, { only: undefined, scope: "bridge" }));
+  assert.equal(title0, "⛔ Website ban");
+  assert.doesNotMatch(S.body.textContent, /Already banned/);
+  assert.equal(radios(S, "U").find((r) => r.checked).value, "1d");
+  // ↩️ Lift on a profile: says the site-wide ban; one already gone -> the page refreshes (onDone), so the stale item goes
+  let r = await open({ until: null, reason: "spam links", by: "staffer" }, { lift: true });
+  assert.equal(r.title0, "↩️ Lift the site-wide ban on @target?");
+  r = await open(null, { lift: true });
+  assert.match(r.S.body.textContent, /There's no site-wide ban on them any more\./);
+  assert.equal(r.done(), 1);
+  // the chat's Lift title as before
+  r = await open(null, { lift: true, only: undefined, wban: { p: -1 } });
+  assert.equal(r.title0, "↩️ Lift a website ban on @target?");
+  assert.equal(r.done(), 0);
+});
+
 // ── the sheets ──
 test("the sheets: in-page PATVSheet confirms with reasons, never confirm(), textContent only; the ban sheet keeps only the site scope", () => {
   const js = SRC("public/js/profile-mod.js");
   assert.doesNotMatch(js, /\bconfirm\(|\balert\(|\bprompt\(|innerHTML|insertAdjacentHTML/);
   assert.match(js, /W\.PATVBanSheet\.open\(\{ ref: c\.ref, slug: c\.slug, scope: 'site', only: \['site'\], lift: !!lift, name: '@' \+ c\.u, anchor: anchor, onDone: reload \}\)/);
   // each item calls its existing route
-  for (const re of [/'\/api\/admin\/bridge\/blocks\?target=' \+ encodeURIComponent\(target\)/, /api\('\/api\/admin\/bridge\/blocks', \{ op: 'block', room: '', target: target, features: d\.want, hours: len\.value\(\), reason: why\.value\(\) \}\)/,
-                    /api\('\/api\/stage\/admin\/ban', \{ username: c\.u, reason: why\.value\(\) \}\)/, /api\('\/api\/stage\/admin\/unban', \{ userId: c\.id \}\)/,
+  for (const re of [/'\/api\/admin\/bridge\/blocks\?target=' \+ encodeURIComponent\(target\)/, /api\('\/api\/admin\/bridge\/blocks', \{ op: 'block', room: '', target: target, features: d\.add, hours: len\.value\(\), reason: why\.value\(\) \}\)/,
+                    /api\('\/api\/stage\/admin\/ban', \{ userId: c\.id, reason: why\.value\(\) \}\)/, /api\('\/api\/stage\/admin\/unban', \{ userId: c\.id \}\)/,
                     /api\('\/api\/admin\/creators\/' \+ encodeURIComponent\(c\.id\) \+ '\/status', \{ action: pick, note: note\.value\(\) \}\)/,
                     /api\('\/api\/admin\/stage-cover\/remove', \{ user_id: c\.id \}\)/,
                     /api\('\/api\/admin\/users\/' \+ encodeURIComponent\(c\.id\) \+ '\/sessions\/revoke', \{ reason: why\.value\(\), confirm: typed\.input\.value\.trim\(\) \}\)/]) assert.match(js, re);
@@ -315,7 +616,8 @@ test("the sheets: in-page PATVSheet confirms with reasons, never confirm(), text
   assert.match(bs, /var scopes = Array\.isArray\(o\.only\) \? pv\.scopes\.filter\(function \(sc\) \{ return o\.only\.indexOf\(sc\) >= 0; \}\) : pv\.scopes;/);
   assert.match(bs, /if \(only && want\('site'\) && cur\.site\) opts\.push\(\['site', cur\.site\]\);/);
   assert.match(bs, /scope === 'site' && !pv\.veil \? _t\('js\.ban\.done_site', 'Done - they\\'re banned site-wide and signed out\.'\)/);
-  assert.equal((bs.match(/if \(typeof o\.onDone === 'function'\)/g) || []).length, 2, "after a ban and after a lift");
+  assert.equal((bs.match(/\bdone\(o, a\);/g) || []).length, 2, "after a ban and after a lift");
+  assert.match(bs, /function done\(o, a\) \{ if \(typeof o\.onDone === 'function'\)/);
   // the chat's person menu is unchanged: no `only`, so every scope as before, and no site ban in its Lift
   assert.doesNotMatch(SRC("public/js/room-mod.js"), /only: \[/);
   assert.match(SRC("views/room.ejs"), /pad-ban-sheet\.js\?v=4/);

@@ -376,7 +376,8 @@
                  const pmUntil_ = (u) => (u ? t('profile.mod.until', { when: pmUtc_(u) }) : t('profile.mod.until_lifted'));
                  const pmSub_ = (txt) => '<small class="pf-mod-sub">' + txt + '</small>';   // (txt: t() output / escaped - HTML-safe) %>
               <div class="pm-pop-gh pf-mod-gh" role="presentation" data-pfmod-cfg="<%= JSON.stringify(pmCfg_) %>"><%- t('profile.mod.heading') %></div>
-              <% if (mm_.siteban) { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="siteban">⛔ <%- t('profile.mod.siteban') %></button><% } %>
+              <%# (review fix: one in force -> "Change site ban…" - a new ban replaces it; the sheet names it and carries its length + reason) %>
+              <% if (mm_.siteban) { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="siteban">⛔ <%- t(pm_.siteBan ? 'profile.mod.siteban_change' : 'profile.mod.siteban') %></button><% } %>
               <% if (mm_.siteban && pm_.siteBan) { %><button type="button" role="menuitem" class="pf-mod-2" data-pfmod="lift">↩️ <%- t('profile.mod.lift_site') %><%- pmSub_(pmUntil_(pm_.siteBan.until) + (pm_.siteBan.reason ? ' · ' + t.esc(pm_.siteBan.reason) : '')) %></button><% } %>
               <% if (mm_.bridge) { const pmWhat_ = pm_.bridge ? pm_.bridge.features.map((f) => t('profile.mod.f_' + (/^(all|chat|commands|soundboard|voice|snapshots|livecams|clips)$/.test(f) ? f : 'all'))).join(', ') : ''; %><button type="button" role="menuitem"<%- pm_.bridge ? ' class="pf-mod-2"' : '' %> data-pfmod="bridge">🌐 <%- t('profile.mod.bridge') %><% if (pm_.bridge) { %><%- pmSub_(t('profile.mod.bridge_now', { what: pmWhat_ }) + ' · ' + pmUntil_(pm_.bridge.until)) %><% } %></button><% } %>
               <% if (mm_.stage) { %><% if (pm_.stageBan) { %><button type="button" role="menuitem" class="pf-mod-2" data-pfmod="unstage">↩️ <%- t('profile.mod.unstage') %><%- pmSub_(pm_.stageBan.reason ? t.esc(pm_.stageBan.reason) : t('profile.mod.until_lifted')) %></button><% } else { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="stage">🎬 <%- t('profile.mod.stage') %></button><% } %><% } %>
@@ -384,7 +385,7 @@
               <% if (mm_.cover) { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="cover">🖼️ <%- t('profile.mod.cover') %></button><% } %>
               <% if (mm_.signout) { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="signout">🔐 <%- t('profile.mod.signout') %></button><% } %>
               <% if (mm_.details) { %><button type="button" role="menuitem" data-safety="details" data-user-id="<%= pm_.userId %>">🔍 <%- t('profile.mod.details') %></button><% } %>
-              <% if (mm_.reports && pm_.reports > 0) { %><a role="menuitem" href="/feed/admin#users">⚑ <%- t('profile.mod.reports') %><span class="pf-mod-n"><%= pm_.reports %></span></a><% } %>
+              <% if (mm_.reports && pm_.reports > 0) { %><a role="menuitem" href="/feed/admin#rep-u-<%= encodeURIComponent(pm_.userId) %>">⚑ <%- t('profile.mod.reports') %><span class="pf-mod-n"><%= pm_.reports %></span></a><% } %>
               <% if (mm_.account) { %><a role="menuitem" href="/admin/accounts?u=<%= enc %>">🗂️ <%- t('profile.mod.account') %></a><% } %>
               <% if (mm_.comp) { %><a role="menuitem" href="/admin/comps?user=<%= enc %>">🎁 <%- t('profile.menu.comp') %></a><% } %>
             <% } %>

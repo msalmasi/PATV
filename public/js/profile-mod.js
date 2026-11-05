@@ -4,7 +4,7 @@
 //
 //   ⛔ siteban / ↩️ lift   PATVBanSheet (pad-ban-sheet.js) on their profile pad, only: ['site'] -> /api/rooms/:slug/ban|unban
 //   🌐 bridge             GET + POST /api/admin/bridge/blocks {target: 'u:<id>'} - the features they can't use in EVERY room, a length, a reason
-//   🎬 stage / unstage    POST /api/stage/admin/ban {username, reason} | /api/stage/admin/unban {userId}
+//   🎬 stage / unstage    POST /api/stage/admin/ban {userId, reason} | /api/stage/admin/unban {userId}
 //   ⭐ creator            POST /api/admin/creators/:userId/status {action, note}
 //   🖼️ cover              POST /api/admin/stage-cover/remove {user_id}
 //   🔐 signout            POST /api/admin/users/:id/sessions/revoke {reason, confirm: their username typed}
@@ -56,14 +56,22 @@
     return { value: function () { return cur; } };
   }
   var chipSeq = 0;
-  /** Send, show the answer in the sheet's status line; done(answer) -> the success text. */
-  function send(B, call, done) {
+  /** Send, show the answer in the sheet's status line; done(answer) -> the success text. gone(answer) -> a text when the answer means
+   *  "already so" (lifted / taken down elsewhere meanwhile): said as done, and the page reloads so the stale item goes (review fix). */
+  function send(B, call, done, gone) {
     B.go.disabled = true; B.out.className = 'psh-out'; B.out.textContent = _t('js.pfmod.sending', 'One moment…');
+    // (review fix: a refusal brings the button back AND focus to it - disabling the focused button had left focus on the page body)
+    function again(cls, txt) { B.out.className = 'psh-out ' + cls; B.out.textContent = txt; B.go.disabled = false; try { B.go.focus(); } catch (e) { /* gone */ } }
     call().then(function (a) {
-      if (!a || !a.ok) { B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = (a && a.error) || FAILED(); return; }
-      B.out.className = 'psh-out ok'; B.out.textContent = done(a);
+      var g = a && !a.ok && gone ? gone(a) : null;
+      if (g) { B.out.className = 'psh-out'; B.out.textContent = g; reload(); return; }
+      if (!a || !a.ok) { again('bad', (a && a.error) || FAILED()); return; }
+      var txt = done(a);
+      // (done, but not as asked - said and left on screen, never "Done", nothing to press again)
+      if (txt && typeof txt === 'object') { B.out.className = 'psh-out bad'; B.out.textContent = txt.bad; return; }
+      B.out.className = 'psh-out ok'; B.out.textContent = txt;
       reload();
-    }).catch(function () { B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = OFFLINE(); });
+    }).catch(function () { again('bad', OFFLINE()); });
   }
 
   // ── ⛔ the site-wide ban + its Lift: the person menu's own ban sheet, on their profile pad, the whole site only ──
@@ -87,7 +95,7 @@
       if (S.done) return;
       wait.remove();
       if (!j.ok) { S.body.appendChild(el('p', 'psh-p', j.error || FAILED())); W.PATVSheet.buttons(S, null); return; }
-      S.body.appendChild(el('p', 'psh-p', _t('js.pfmod.bridge_body', 'What they can\'t do from the website in every room. Tick to restrict, untick to lift.')));
+      S.body.appendChild(el('p', 'psh-p', _t('js.pfmod.bridge_body', 'What they can\'t do from the website in every room. Tick to add, untick to lift - the ones already on keep their end and reason.')));
       var had = {}, rooms = 0;
       (j.blocks || []).forEach(function (b) { if (b.global) had[b.feature || 'all'] = b; else rooms++; });
       var fs = el('fieldset', 'psh-opts'); fs.appendChild(el('legend', 'psh-k', _t('js.pfmod.bridge_what', 'Restricted')));
@@ -102,20 +110,30 @@
       });
       S.body.appendChild(fs);
       if (rooms) S.body.appendChild(el('p', 'psh-hint', _t('js.pfmod.bridge_rooms', 'They also have {n} restriction(s) in single rooms - those stay (pad owners and room mods lift them).', { n: rooms })));
-      var len = chips(S, _t('js.pfmod.how_long', 'How long (for the ones you tick)'), [['1', _t('js.pfmod.dur_1h', '1 hour')], ['24', _t('js.pfmod.dur_1d', '1 day')],
+      var len = chips(S, _t('js.pfmod.how_long', 'How long (for the ones you add)'), [['1', _t('js.pfmod.dur_1h', '1 hour')], ['24', _t('js.pfmod.dur_1d', '1 day')],
         ['168', _t('js.pfmod.dur_7d', '7 days')], ['0', _t('js.pfmod.dur_lifted', 'Until lifted')]], '24');
       var why = field(S, _t('js.pfmod.reason_seen', 'Reason (they see it)'), { max: 200 });
+      // (review fix: Save adds only what was newly ticked and lifts what was unticked - the ones already on keep their own end and reason;
+      // it was: every ticked one re-sent with this sheet's length and reason (1 day, empty). Changing one already on is this box, said)
+      var re = null;
+      if (Object.keys(had).length) {
+        var rl = el('label', 'psh-ck'); re = el('input'); re.type = 'checkbox'; re.value = 'reapply';
+        rl.appendChild(re); rl.appendChild(el('span', null, _t('js.pfmod.reapply', 'Also give the ones already on this length and reason')));
+        re.addEventListener('change', paint);
+        S.body.appendChild(rl);
+      }
       var B = W.PATVSheet.buttons(S, '🌐 ' + _t('js.pfmod.save', 'Save'), 'danger');
       function diff() {
         var want = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
         var lift = Object.keys(had).filter(function (f) { return want.indexOf(f) < 0; });
-        return { want: want, lift: lift };
+        var add = want.filter(function (f) { return !had[f] || (re && re.checked); });
+        return { want: want, lift: lift, add: add };
       }
       function paint() {
-        var d = diff(), adds = d.want.filter(function (f) { return !had[f]; });
-        // (only lifting: a green button; any restriction: red. Nothing changed and nothing ticked: nothing to send)
-        B.go.className = 'psh-btn ' + (d.want.length ? 'danger' : 'go');
-        B.go.disabled = !adds.length && !d.lift.length && !d.want.length;
+        var d = diff();
+        // (only lifting: a green button; any restriction: red. Nothing to add and nothing to lift: nothing to send)
+        B.go.className = 'psh-btn ' + (d.add.length ? 'danger' : 'go');
+        B.go.disabled = !d.add.length && !d.lift.length;
       }
       paint();
       B.go.addEventListener('click', function () {
@@ -123,10 +141,9 @@
         send(B, function () {
           var p = Promise.resolve({ ok: true });
           if (d.lift.length) p = p.then(function () { return api('/api/admin/bridge/blocks', { op: 'unblock', room: '', target: target, features: d.lift }); });
-          // (the ticked ones are (re)applied with this length + reason - the /admin/users card's rule)
-          if (d.want.length) p = p.then(function (a) { if (!a || !a.ok) return a; return api('/api/admin/bridge/blocks', { op: 'block', room: '', target: target, features: d.want, hours: len.value(), reason: why.value() }); });
+          if (d.add.length) p = p.then(function (a) { if (!a || !a.ok) return a; return api('/api/admin/bridge/blocks', { op: 'block', room: '', target: target, features: d.add, hours: len.value(), reason: why.value() }); });
           return p;
-        }, function () { return d.want.length ? _t('js.pfmod.bridge_done', 'Saved - restricted in every room.') : _t('js.pfmod.bridge_lifted', 'Lifted in every room.'); });
+        }, function () { return d.add.length ? _t('js.pfmod.bridge_done', 'Saved - restricted in every room.') : _t('js.pfmod.bridge_lifted', 'Lifted in every room.'); });
       });
       B.no.focus();
     }).catch(function () { if (!S.done) { wait.textContent = OFFLINE(); W.PATVSheet.buttons(S, null); } });
@@ -139,7 +156,11 @@
     var why = field(S, _t('js.pfmod.reason_staff', 'Reason (kept for the staff)'), { max: 200 });
     var B = W.PATVSheet.buttons(S, '🎬 ' + _t('js.pfmod.stage_go', 'Ban from the stage'), 'danger');
     B.go.addEventListener('click', function () {
-      send(B, function () { return api('/api/stage/admin/ban', { username: c.u, reason: why.value() }); }, function () { return _t('js.pfmod.stage_done', 'Banned from the stage.'); });
+      // (review fix: by account id - a name could match a case-only twin, mainstage.ban took the first row; the answer's name is checked)
+      send(B, function () { return api('/api/stage/admin/ban', { userId: c.id, reason: why.value() }); }, function (a) {
+        return a.username && a.username !== c.u ? { bad: _t('js.pfmod.stage_other', 'That banned @{name} from the stage - not this profile\'s account. Check /stage/admin.', { name: a.username }) }
+          : _t('js.pfmod.stage_done', 'Banned from the stage.');
+      });
     });
     why.input.focus();
   }
@@ -150,9 +171,9 @@
     S.body.appendChild(el('p', 'psh-p', _t('js.pfmod.unstage_body', 'They can book the stage again.')));
     var B = W.PATVSheet.buttons(S, '↩️ ' + _t('js.pfmod.lift_go', 'Lift it'), 'go');
     B.go.addEventListener('click', function () {
-      send(B, function () {
-        return api('/api/stage/admin/unban', { userId: c.id }).then(function (a) { return a && a.ok === false && !a.error ? { ok: false, error: _t('js.pfmod.unstage_none', 'There\'s no stage ban on them any more.') } : a; });
-      }, function () { return _t('js.pfmod.lifted', 'Lifted.'); });
+      // (review fix: {ok: false} with no error = lifted elsewhere meanwhile - said, and the page reloads)
+      send(B, function () { return api('/api/stage/admin/unban', { userId: c.id }); }, function () { return _t('js.pfmod.lifted', 'Lifted.'); },
+        function (a) { return a.ok === false && !a.error ? _t('js.pfmod.unstage_none', 'There\'s no stage ban on them any more.') : null; });
     });
     B.no.focus();
   }
@@ -195,7 +216,9 @@
     S.body.appendChild(el('p', 'psh-p', _t('js.pfmod.cover_body', 'The picture they uploaded comes off the mic stage and can\'t be uploaded again. It counts as a strike, and for 30 days their new uploads wait for a check.')));
     var B = W.PATVSheet.buttons(S, '🖼️ ' + _t('js.pfmod.cover_go', 'Take it down'), 'danger');
     B.go.addEventListener('click', function () {
-      send(B, function () { return api('/api/admin/stage-cover/remove', { user_id: c.id }); }, function () { return _t('js.pfmod.cover_done', 'Taken down.'); });
+      // (review fix: the route's code 'gone' - taken down elsewhere meanwhile - is said, and the page reloads)
+      send(B, function () { return api('/api/admin/stage-cover/remove', { user_id: c.id }); }, function () { return _t('js.pfmod.cover_done', 'Taken down.'); },
+        function (a) { return a.code === 'gone' ? (a.error || _t('js.pfmod.cover_gone', 'That cover is already gone.')) : null; });
     });
     B.no.focus();
   }
@@ -205,7 +228,8 @@
     var S = open(c, '🔐 ' + _t('js.pfmod.signout_title', 'Sign @{name} out everywhere?', { name: c.u }), anchor);
     S.body.appendChild(el('p', 'psh-p', _t('js.pfmod.signout_body', 'Every sign-in on every device ends now - they can sign back in. Their account and password don\'t change.')));
     var why = field(S, _t('js.pfmod.reason_log', 'Reason (kept in the admin log)'), { max: 200, id: 'W' });
-    var typed = field(S, _t('js.pfmod.confirm_name', 'Type their username to confirm'), { max: 64, id: 'T', spell: false, placeholder: c.u });
+    // (review fix: no placeholder - their name greyed in the box read as already typed; the hint under it names them)
+    var typed = field(S, _t('js.pfmod.confirm_name', 'Type their username to confirm'), { max: 64, id: 'T', spell: false });
     var B = W.PATVSheet.buttons(S, '🔐 ' + _t('js.pfmod.signout_go', 'Sign them out'), 'danger');
     function paint() {
       var okWhy = why.value().length >= 3, okName = typed.input.value.trim() === c.u;
@@ -239,11 +263,16 @@
     if (det) { det.open = false; anchor = det.querySelector('summary') || b; }
     fn(c, anchor);
   });
-  // 🔍 Abuse details is feed-safety.js's own panel (data-safety="details"): only the menu closes here, so it isn't left open behind it
+  // 🔍 Abuse details is feed-safety.js's own panel (data-safety="details"): only the menu closes here, so it isn't left open behind it.
+  // Review fix: in the CAPTURE phase - before feed-safety.js's handler opens its modal <dialog> - and focus moves to ⋯ More first: the
+  // browser returns focus to what had it when the dialog opened, and the hidden menu item it was left it on the page body.
   D.addEventListener('click', function (e) {
     var b = e.target && e.target.closest ? e.target.closest('.pf-menu [data-safety="details"]') : null;
     var det = b && b.closest('details[open]');
-    if (det) det.open = false;
-  });
+    if (!det) return;
+    det.open = false;
+    var sum = det.querySelector('summary');
+    if (sum) { try { sum.focus(); } catch (err) { /* gone */ } }
+  }, true);
   W.PATVProfileMod = { _act: ACT };
 })(window, document);

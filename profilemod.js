@@ -7,7 +7,7 @@
 //   ⛔ / ↩️ site ban  feed.moderate (Staff)        POST /api/rooms/<their profile pad>/ban|unban {scope: 'site'}  pad-ban-sheet.js (only: site)
 //      (+ the networks box)  safety.net_bans (Admin)  the ban sheet's own box (netban.js, only while that switch is on)
 //   🌐 web bridge, every room  bridge.blocks_global (Admin)  GET / POST /api/admin/bridge/blocks {target: 'u:<id>'}
-//   🎬 / ↩️ main stage  stage.admin (Staff)        POST /api/stage/admin/ban {username, reason} / unban {userId}
+//   🎬 / ↩️ main stage  stage.admin (Staff)        POST /api/stage/admin/ban {userId, reason} / unban {userId}
 //   ⭐ creator status  creators.admin (Staff)      POST /api/admin/creators/:userId/status {action, note}   (only for a creator)
 //   🖼️ stage cover    imagesafety.admin (Admin)   POST /api/admin/stage-cover/remove {user_id}             (only while one is up)
 //   🔐 sign out everywhere  accounts.sessions_revoke (Admin)  POST /api/admin/users/:id/sessions/revoke {reason, confirm}
@@ -17,7 +17,8 @@
 //
 // Who sees the group at all (the existing rules, padbans.rankRefusal's): a signed-in viewer, never on their own profile or a visitor
 // preview, never on Pepe's / a Bot account, and never on PATV staff of the viewer's rank or above (an Assistant / Staff / Admin target
-// needs a viewer of a HIGHER class). The viewer's class is read fresh here. What the menu says about the person (an active site ban, a
+// needs a viewer of a HIGHER class). The viewer's class is read fresh here. (Review fixes: never on a deleted / merged - archived -
+// account, never on your own alt - the same linked Camfrog login, the ban route's "That's you." rule; the target's row is read fresh too.) What the menu says about the person (an active site ban, a
 // stage ban, creator status, a global bridge restriction, an uploaded cover, open reports) is only what the same capability already shows
 // in /admin - and only for the holder of that capability; never a veil (incognito) ban, never who shares their networks (that look is
 // logged - it stays in the ban sheet, as before).
@@ -41,9 +42,16 @@ async function eligible(viewer, target, { preview = false } = {}) {
   if (String(viewer.userId) === String(target.userId)) return null;                         // never on your own profile
   if (String(target.userId) === String(require("./feedstore").PEPE_ID) || target.class === "Bot") return null;   // never Pepe
   if (!core.classRank(viewer)) return null;               // (a member's session - addUser's class is the users row's - no query per view)
-  const me =(await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [String(viewer.userId)]))[0];
+  const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [String(viewer.userId)]))[0];
   if (!me) return null;
-  const mine = core.classRank(me), theirs = core.classRank(target);
+  // review fixes: the target's own row, fresh - a deleted / merged (archived) account gets no group (its actions would land on a dead
+  // account); your own alt (the same linked Camfrog login - the ban route's "That's you." rule) is you
+  const them = (await getQuery("SELECT * FROM users WHERE userId = ?", [String(target.userId)]))[0];
+  if (!them || them.archived_at) return null;
+  const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
+  if (low(me.camfrogUsername) && low(me.camfrogUsername) === low(them.camfrogUsername)) return null;
+  if (them.class === "Bot") return null;
+  const mine = core.classRank(me), theirs = core.classRank(them);
   if (!mine) return null;                                                                   // (no capability reaches a member)
   if (theirs > 0 && theirs >= mine) return null;                                            // staff of your rank or above
   return me;

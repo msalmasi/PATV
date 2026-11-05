@@ -52,9 +52,15 @@
   function base(slug) { return '/api/rooms/' + encodeURIComponent(slug); }
   function utc(ms) { try { return new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'; } catch (e) { return ''; } }
 
+  /** profmod: a page that offers only the whole site (the profile) */
+  function siteOnly(o) { return Array.isArray(o.only) && o.only.length === 1 && o.only[0] === 'site'; }
+  function done(o, a) { if (typeof o.onDone === 'function') { try { o.onDone(a); } catch (e) { /* the page's own */ } } }
+  /** (review fix: after a refusal the button comes back - and focus with it, never left on the page body) */
+  function again(B) { B.go.disabled = false; try { B.go.focus(); } catch (e) { /* gone */ } }
+
   function openLift(o) {
     var SH = S_(); if (!SH) return;
-    var S = SH.open({ title: '↩️ ' + _t('js.ban.lift_title', 'Lift a website ban on {name}?', { name: o.name || '' }), cls: 'psh-ban', anchor: o.anchor });
+    var S = SH.open({ title: '↩️ ' + (siteOnly(o) ? _t('js.ban.lift_title_site', 'Lift the site-wide ban on {name}?', { name: o.name || '' }) : _t('js.ban.lift_title', 'Lift a website ban on {name}?', { name: o.name || '' })), cls: 'psh-ban', anchor: o.anchor });
     var wait = el('p', 'psh-hint', _t('js.ban.loading', 'Checking who this is…')); S.body.appendChild(wait);
     api(base(o.slug) + '/ban/preview', { ref: o.ref }).then(function (pv) {
       if (S.done) return;
@@ -68,7 +74,13 @@
       if (want('bridge') && (cur.bridge || wb.b)) opts.push(['bridge', cur.bridge || { until: wb.b > 0 ? wb.b : null }]);
       // (profmod: the site-wide ban - only where the page asked for it, and only what the server says is in force now)
       if (only && want('site') && cur.site) opts.push(['site', cur.site]);
-      if (!opts.length) { S.body.appendChild(el('p', 'psh-p', only && want('site') ? _t('js.ban.lift_none_site', 'There\'s no site-wide ban on them any more.') : _t('js.ban.lift_none', 'There\'s no website ban on them in this pad any more.'))); SH.buttons(S, null); return; }
+      if (!opts.length) {
+        S.body.appendChild(el('p', 'psh-p', only && want('site') ? _t('js.ban.lift_none_site', 'There\'s no site-wide ban on them any more.') : _t('js.ban.lift_none', 'There\'s no website ban on them in this pad any more.')));
+        SH.buttons(S, null);
+        // (review fix: lifted elsewhere meanwhile - the page that asked refreshes, so its stale ↩️ item goes)
+        if (only) done(o, { ok: true, gone: true });
+        return;
+      }
       var scope = opts[0][0];
       var fs = el('fieldset', 'psh-opts'); fs.appendChild(el('legend', 'psh-k', _t('js.ban.lift_which', 'Which ban')));
       opts.forEach(function (op) {
@@ -92,10 +104,10 @@
         B.go.disabled = true; B.out.className = 'psh-out'; B.out.textContent = _t('js.ban.sending', 'One moment…');
         api(base(o.slug) + '/unban', { ref: o.ref, scope: scope }).then(function (a) {
           if (S.done) return;
-          if (!a.ok) { B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = a.error || _t('js.ban.failed', 'Not changed.'); return; }
+          if (!a.ok) { B.out.className = 'psh-out bad'; B.out.textContent = a.error || _t('js.ban.failed', 'Not changed.'); again(B); return; }
           B.out.className = 'psh-out ok'; B.out.textContent = _t('js.ban.lifted', 'Lifted.'); S.later(900);
-          if (typeof o.onDone === 'function') { try { o.onDone(a); } catch (e) { /* the page's own */ } }
-        }).catch(function () { if (S.done) return; B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); });
+          done(o, a);
+        }).catch(function () { if (S.done) return; B.out.className = 'psh-out bad'; B.out.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); again(B); });
       });
       B.no.focus();
     }).catch(function () { if (!S.done) { wait.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); SH.buttons(S, null); } });
@@ -105,7 +117,7 @@
     o = o || {};
     if (o.lift) return openLift(o);
     var SH = S_(); if (!SH) return;
-    var S = SH.open({ title: '⛔ ' + _t('js.ban.title', 'Website ban'), cls: 'psh-ban', anchor: o.anchor });
+    var S = SH.open({ title: '⛔ ' + (siteOnly(o) ? _t('js.ban.title_site', 'Site-wide ban') : _t('js.ban.title', 'Website ban')), cls: 'psh-ban', anchor: o.anchor });
     var wait = el('p', 'psh-hint', _t('js.ban.loading', 'Checking who this is…')); S.body.appendChild(wait);
     api(base(o.slug) + '/ban/preview', { ref: o.ref, scope: o.scope }).then(function (pv) {
       if (S.done) return;
@@ -123,6 +135,14 @@
       var scopes = Array.isArray(o.only) ? pv.scopes.filter(function (sc) { return o.only.indexOf(sc) >= 0; }) : pv.scopes;
       if (!scopes.length) { S.h.textContent = '⛔ ' + _t('js.ban.cant', 'Can\'t ban from here'); S.body.appendChild(el('p', 'psh-p', _t('js.ban.only_none', 'You can\'t make that ban.'))); SH.buttons(S, null); return; }
       var scope = scopes.indexOf(o.scope) >= 0 ? o.scope : scopes[0];
+      // (profmod review fix: on the profile a site-wide ban already in force is named - a new ban REPLACES it, so its length and reason
+      // are where this sheet starts; it was: 1 day and no reason, silently shortening a permanent ban. The chat's person menu: as before)
+      var inForce = Array.isArray(o.only) && o.only.indexOf('site') >= 0 && !pv.veil && pv.current && pv.current.site ? pv.current.site : null;
+      if (inForce) {
+        S.body.appendChild(el('p', 'psh-refuse', _t('js.ban.site_now', 'Already banned site-wide - {what}. Banning again replaces it with the length and reason below.', {
+          what: (inForce.until ? _t('js.ban.until', 'until {when}', { when: utc(inForce.until) }) : _t('js.ban.until_lifted', 'until lifted'))
+            + (inForce.reason ? ' · ' + inForce.reason : '') + (inForce.by ? ' · ' + _t('js.ban.by', 'by {who}', { who: inForce.by }) : '') })));
+      }
       scopes.forEach(function (sc) {
         var lab = el('label', 'psh-opt'); var r = el('input'); r.type = 'radio'; r.name = S.id + 'S'; r.value = sc; r.checked = sc === scope;
         var tx = SCOPE_TXT[pv.veil ? 'v' + sc : sc] ? SCOPE_TXT[pv.veil ? 'v' + sc : sc]() : SCOPE_TXT[sc](), sp = el('span', null, tx[0]); sp.appendChild(el('small', null, tx[1]));
@@ -134,6 +154,11 @@
       var dl = el('p', 'psh-k', _t('js.ban.how_long', 'How long')); dl.id = S.id + 'D'; S.body.appendChild(dl);
       var chips = el('div', 'psh-chips'); chips.setAttribute('role', 'radiogroup'); chips.setAttribute('aria-labelledby', dl.id);
       var dur = '1d';
+      // (the one in force: permanent stays permanent; otherwise the shortest length that doesn't end it sooner)
+      if (inForce) {
+        var left = inForce.until == null ? Infinity : Number(inForce.until) - Date.now();
+        dur = left <= 3600e3 ? '1h' : left <= 86400e3 ? '1d' : left <= 7 * 86400e3 ? '7d' : 'perm';
+      }
       DURS.forEach(function (dd) {
         var lab = el('label', 'psh-chip'); var r = el('input'); r.type = 'radio'; r.name = S.id + 'U'; r.value = dd[0]; r.checked = dd[0] === dur;
         r.addEventListener('change', function () { if (r.checked) { dur = dd[0]; paint(); } });
@@ -144,6 +169,7 @@
       var fld = el('div', 'psh-fld');
       var rl = el('label', 'psh-k', pv.veil ? _t('js.ban.reason_veil', 'Reason (only this pad\'s mods and PATV staff see it)') : _t('js.ban.reason', 'Reason (they see it)')); rl.htmlFor = S.id + 'W';
       var why = el('input'); why.type = 'text'; why.id = S.id + 'W'; why.maxLength = 120; why.autocomplete = 'off';
+      if (inForce && inForce.reason) why.value = String(inForce.reason).slice(0, 120);
       var need = el('p', 'psh-need', ''); need.id = S.id + 'N'; why.setAttribute('aria-describedby', need.id);
       why.addEventListener('input', paint);
       fld.appendChild(rl); fld.appendChild(why); fld.appendChild(need); S.body.appendChild(fld);
@@ -188,12 +214,12 @@
         B.go.disabled = true; B.out.className = 'psh-out'; B.out.textContent = _t('js.ban.sending', 'One moment…');
         api(base(o.slug) + '/ban', { ref: o.ref, scope: scope, dur: dur, reason: why.value, nets: !!(netBox && netBox.checked), exempt: netBox && netBox.checked ? exempt : [] }).then(function (a) {
           if (S.done) return;
-          if (!a.ok) { B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = a.error || _t('js.ban.failed', 'Not changed.'); return; }
+          if (!a.ok) { B.out.className = 'psh-out bad'; B.out.textContent = a.error || _t('js.ban.failed', 'Not changed.'); again(B); return; }
           B.out.className = 'psh-out ok';
           B.out.textContent = scope === 'site' && !pv.veil ? _t('js.ban.done_site', 'Done - they\'re banned site-wide and signed out.') : _t('js.ban.done', 'Done - it\'s in the pad\'s list of bans.');
           S.later(1100);
-          if (typeof o.onDone === 'function') { try { o.onDone(a); } catch (e) { /* the page's own */ } }
-        }).catch(function () { if (S.done) return; B.go.disabled = false; B.out.className = 'psh-out bad'; B.out.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); });
+          done(o, a);
+        }).catch(function () { if (S.done) return; B.out.className = 'psh-out bad'; B.out.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); again(B); });
       });
       var first = fs.querySelector('input:checked'); if (first) first.focus();
     }).catch(function () { if (!S.done) { wait.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); SH.buttons(S, null); } });
