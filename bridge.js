@@ -2231,6 +2231,10 @@ function register(app, { isBotToken, addUser }) {
       if (rooms.get(R.id) !== R) return res.json({ gone: true, lp: true });
       // adultgate site: the gate again - the switch may have turned on (or the pad been marked 18+) while this one waited
       if (require("./adultgate").refuseJson(req, res, R.id, R.slug)) return;
+      // audiogate: ...and the pad's level and bridge perk - made Members / Approved (or this member removed) while it waited, the
+      // lines that woke it are not this viewer's any more (the same answers as before the wait)
+      if (!require("./padaccess").full(req.user, R.id)) return res.status(signed ? 403 : 401).json({ error: signed ? "This pad is for approved members." : "Sign in to watch the room." });
+      if (!bridgeOk(R.id)) return res.status(403).json({ error: "This pad's live chat room comes with 💎 Prime Time Plus.", locked: "bridge" });
     }
     const aft = after > cursor ? 0 : after;
     // CL3: the viewer (their floors on this pad) and the page's signed join cursor (?jc=; missing or forged = now)

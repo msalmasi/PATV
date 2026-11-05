@@ -318,6 +318,48 @@ test("mic-stage capture tap: ends once when its viewer's access goes; another vi
   }
 });
 
+// ── the live room's long-poll (the page's chat lines, the Dock and its pop-out): a page waiting when the pad tightens ──
+let evSeq = 0;
+const line = (P, text) => ({ op: "event", id: "ag-" + (++evSeq), ts: new Date().toISOString(), type: "message",
+  scope: { platform: "camfrog", room: { id: P.id, name: P.id } }, data: { user: { id: "bobcf", login: "bobcf", display: "Bob" }, text } });
+const getJson = (p, who) => fetch(base + p, { headers: !who ? {} : { "x-test-user": who.userId } })
+  .then(async (r) => { const text = await r.text(); let d = null; try { d = JSON.parse(text); } catch (e) { /* not JSON */ } return { status: r.status, d, text }; });
+
+test("long-poll: a page waiting on a pad made Members answers under the new level - refused, without the line that woke it", async () => {
+  const P = PADS.pub;
+  const first = await getJson("/api/rooms/" + P.slug + "/live", null);
+  assert.equal(first.status, 200);
+  const waiting = getJson(`/api/rooms/${P.slug}/live?wait=1&after=${first.d.cursor}&v=${first.d.ver}`, null);
+  await sleep(50);
+  await setLevel(P, "members");
+  await bridge.ingest({ events: [line(P, "after-the-change-secret")], rooms: [snapOf(P)] });
+  const lp = await waiting;
+  assert.equal(lp.status, 401);
+  assert.ok(!lp.text.includes("after-the-change-secret"));
+});
+
+test("long-poll: a removed member's waiting page gets no new line", async () => {
+  const P = PADS.app;
+  const first = await getJson("/api/rooms/" + P.slug + "/live", U.m1);
+  assert.equal(first.status, 200);
+  const waiting = getJson(`/api/rooms/${P.slug}/live?wait=1&after=${first.d.cursor}&v=${first.d.ver}`, U.m1);
+  await sleep(50);
+  try {
+    await PA.remove(U.owner, await R(P), U.m1.userId);
+    await bridge.ingest({ events: [line(P, "members-only-secret")], rooms: [snapOf(P)] });
+    const lp = await waiting;
+    assert.equal(lp.status, 403);
+    assert.ok(!lp.text.includes("members-only-secret"));
+    // who still passes gets it
+    const ok = await getJson("/api/rooms/" + P.slug + "/live", U.m2);
+    assert.equal(ok.status, 200);
+    assert.ok(ok.text.includes("members-only-secret"));
+  } finally {
+    await runQuery("UPDATE pad_members SET status = 'approved' WHERE room_id = ? AND user_id = ?", [P.id, U.m1.userId]);
+    await PA.load();
+  }
+});
+
 // ── ⚡ WebRTC ──
 const hook = (P, b) => W.whipAuth(Object.assign({ path: RR.pathFor(P.id), ip: "9.9.9.9", action: "read", protocol: "webrtc" }, b));
 async function rtcOn() {
