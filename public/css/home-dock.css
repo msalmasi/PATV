@@ -84,6 +84,15 @@ main.hm.rmd-home .hmd-grid > .hmd-cta { grid-area: cta; align-self: stretch; min
   main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow .row > * { min-block-size: 44px; padding-inline: var(--ds-sp-5); font-size: 15px; }
   /* (signed out, off air: the sign-in tease is as tall as its words here too - the off-air 440px card rule outranked 1.99ajh's) */
   main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) #hmDock > #rmChat:has(> .rmd-tease) { block-size: auto; }
+  /* (homegap2 (owner 2026-11-05 "fix all 3", blank 1): signed out on a members-only front pad, ON AIR, the sign-in tease is beside the
+     stage - it fills the chat column (the stage's row: 420-560px) instead of being as tall as its words over a ~310px blank, and says
+     what a member sees here - the chat card's three parts by name (home-dock.ejs .rmd-tease-miss) in place of the blurb that lists them.
+     Off air the chat is its own full-width row, as tall as its words: unchanged) */
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #hmDock > #rmChat:has(> .rmd-tease) { align-self: stretch; }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease { gap: var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-4); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease > b { color: var(--ds-text-strong); font-size: var(--ds-fs-lead, 16px); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-blurb { display: none; }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss { display: grid; }
 }
 @media (min-width: 1024px) and (max-width: 1279px) {
   /* (homegap fix: the tall card's buttons are under the words at the start here - the red light follows Go live down to them, not the
@@ -142,6 +151,13 @@ main.rm.rm-dock.rmd-home #rmChat .feed { block-size: auto; }
 main.rm.rm-dock.rmd-home #rmChat .compose { display: grid; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; }
 main.rm.rm-dock.rmd-home #rmChat .rmd-tease { display: grid; gap: var(--ds-sp-2); align-content: center; justify-items: start; flex: 1 1 auto; padding: var(--ds-sp-3); }
 main.rm.rm-dock.rmd-home #rmChat .rmd-tease > p { margin: 0; }
+/* (homegap2: "What you're missing" - only where the tease fills the column beside the stage, 1024px and wider on air (above); elsewhere
+   the card is as tall as its words and the blurb says it) */
+main.rm.rm-dock.rmd-home #rmChat .rmd-tease-miss { display: none; gap: var(--ds-sp-2); inline-size: 100%; }
+main.rm.rm-dock.rmd-home #rmChat .rmd-tease-mh { font: 400 10px/1.6 var(--ds-font-pixel); letter-spacing: .1em; text-transform: uppercase; color: var(--ds-gold); }
+main.rm.rm-dock.rmd-home #rmChat .rmd-tease-miss > ul { display: grid; gap: var(--ds-sp-2); margin: 0; padding: 0; list-style: none; }
+main.rm.rm-dock.rmd-home #rmChat .rmd-tease-miss li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: var(--ds-sp-2); align-items: center; color: var(--ds-text); font-size: var(--ds-fs-sm); line-height: 1.35; }
+main.rm.rm-dock.rmd-home #rmChat .rmd-tease-ic { display: grid; place-items: center; inline-size: 30px; block-size: 30px; border-radius: 50%; border: 1px solid var(--ds-line); background: var(--ds-surface-2); font-size: 15px; line-height: 1; }
 /* (1.99ajh dockpop review: the sign-in tease is as tall as its words - no empty card above it) */
 main.hm.rmd-home #hmDock > #rmChat:has(> .rmd-tease) { contain: none; block-size: auto; min-block-size: 0; align-self: start; }
 main.rm.rm-dock.rmd-home #rmChat .jump { display: none; }

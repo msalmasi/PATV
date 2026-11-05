@@ -36,7 +36,18 @@
       <%_ } else { _%>
       <div class="tease rmd-tease">
         <b><%- t('home.room.tease_title') %></b>
-        <p class="muted"><%- t('home.room.n_in_camfrog', { n: room.count }) %><%- room.micCount ? ' · ' + t('home.n_on_mic', { n: room.micCount }) : '' %>. <%- t('home.room.tease_blurb') %></p>
+        <p class="muted"><%- t('home.room.n_in_camfrog', { n: room.count }) %><%- room.micCount ? ' · ' + t('home.n_on_mic', { n: room.micCount }) : '' %>.<span class="rmd-tease-blurb"> <%- t('home.room.tease_blurb') %></span></p>
+        <%# homegap2 (owner 2026-11-05 "fix all 3", blank 1): 1024px and wider, on air, this card fills the chat column beside the stage
+            (home-dock.css) and spells out what a member sees here instead of the blurb - the chat card's three parts by NAME only: never a
+            line, a name, a cam or a count beyond the two above (a signed-out visitor on a members-only pad gets no roomLive at all) %>
+        <div class="rmd-tease-miss" role="group" aria-labelledby="rmdMissH">
+          <span class="rmd-tease-mh" id="rmdMissH"><%- t('home.room.tease_miss') %></span>
+          <ul>
+            <li><span class="rmd-tease-ic" aria-hidden="true">💬</span><span><%- t('home.room.tease_chat') %></span></li>
+            <li><span class="rmd-tease-ic" aria-hidden="true">🎙</span><span><%- t('home.room.tease_mic') %></span></li>
+            <li><span class="rmd-tease-ic" aria-hidden="true">👥</span><span><%- t('home.room.tease_who') %></span></li>
+          </ul>
+        </div>
         <a class="btn primary" href="/login"><%- t('home.sign_in') %></a>
       </div>
       <%_ } _%>

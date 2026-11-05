@@ -212,7 +212,7 @@ test("item 3: the homepage stage in fullscreen has no card cap - (1,4,1) beats t
   assert.match(css, fix);
   assert.ok(css.search(fix) > css.indexOf("main.rm.rm-dock.rmd-home #rmStage.is-off { aspect-ratio: auto; }"), "after the off-air rule");
   assert.match(css, /main\.rm\.rm-dock\.rmd-home #rmStage \{ block-size: auto; aspect-ratio: 16 \/ 9; max-block-size: min\(560px, calc\(100vh - 140px\)\);/, "the card rule as it was - never rescoped to #hmDock > #rmStage (2,3,1), which would beat the off-air bar");
-  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=6/);   // (homegap: v5; dock3 review 1.99akf: v6)
+  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=7/);   // (homegap: v5; dock3 review 1.99akf: v6; homegap2: v7)
 });
 
 // homegap (owner 2026-11-05, "the empty space here looks weird" - a blank under the coin-op strip beside Top Pads + the featured table): the
@@ -305,13 +305,14 @@ test("homegap: home-dock.css - the lower rows from custom properties, set by the
   assert.doesNotMatch(css, /:has\(> \.hmd-cta\)|:has\(> \.tp|:has\(#stageSide > \.tp|\.rooms-mini > li:nth-child|\.rooms-mini > li \+ li/, "no :has() chains on Top Pads or the card");
   assert.equal((css.match(/:has\(/g) || []).length, (css.match(/:has\(([^()]*)\)/g) || []).length, "every :has() is a plain one");
   for (const m of css.matchAll(/:has\(([^()]*)\)/g))
-    assert.ok(/^(#rmStage\.is-off|#rmChat|> \.rmd-tease|#stageSide > a\.box|#wheelBox)$/.test(m[1]), "a :has() for a live state (or the 761-1023px rules as they were, or no strip): " + m[1]);
-  assert.deepEqual(mq.match(/:has\([^)]*\)/g), [":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#rmStage.is-off)", ":has(> .rmd-tease)"], "from 1024px: only no strip and the off-air sign-in tease");
+    assert.ok(/^(#rmStage\.is-off|#rmStage\.is-on|#rmChat|> \.rmd-tease|#stageSide > a\.box|#wheelBox)$/.test(m[1]), "a :has() for a live state (or the 761-1023px rules as they were, or no strip): " + m[1]);
+  assert.deepEqual(mq.match(/:has\([^)]*\)/g), [":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#rmStage.is-off)", ":has(> .rmd-tease)",
+    ":has(#rmStage.is-on)", ":has(> .rmd-tease)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)"], "from 1024px: only no strip and the sign-in tease off / on air (homegap2)");
   assert.doesNotMatch(css, /grid-row-end: span 2/, "the old Top Pads span is the areas' now");
   for (const s of ['"stage stage" "coin coin" "chat chat" "tops feat" "cta cta"', '"stage stage" "coin coin" "chat chat" "tops tops" "cta cta"', '"stage" "coin" "chat" "tops" "feat" "cta"'])
     assert.ok(css.includes(s), "761-1023px / phones: the card is the last row - " + s);
   assert.doesNotMatch(css, /grid-template-areas: "stage stage" "chat chat" "coin tops" "coin feat"/, "off air / popped set only the top half");
-  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=6/);   // (dock3 review 1.99akf: v6 - after homegap's v5)
+  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=7/);   // (dock3 review 1.99akf: v6 - after homegap's v5; homegap2: v7)
 });
 // homegap review fixes: the strip fills the row it shares (Top Pads' two rows, one row and its 🎧 listen bar), never under 96px from 1024px;
 // two rows alone no longer fill; the tall card's red light follows Go live under 1280px; the join pitch's buttons stack there; the featured
@@ -360,4 +361,40 @@ test("homegap fix: the featured table after Top Pads with the Dock on (Tab: stri
   }
   const none = await renderHome({ me: ME(true), username: "viewer", padDockOn: true, tops: HG_TOPS.slice(0, 3) });
   assert.doesNotMatch(none, /<a class="box" href="\/casino/, "no table: none");
+});
+
+// homegap2 (owner 2026-11-05 "Ok fix all 3"): the three pre-existing homepage blanks the lead screenshotted - (1) signed out on a members-only
+// front pad, on air, 1024px+: ~200-310px under the sign-in tease; (2) 761-1023px: 53-229px under the one-line featured table beside Top Pads
+// (a 41px hole beside it with no Top Pads); (3) the navbar wider than the window (test/navbar.test.js)
+test("homegap2 blank 1: the sign-in tease names what a member sees - the chat card's three parts, by name only; the blurb stays for the other layouts", async () => {
+  const PEOPLE = F.PEOPLE.map((p) => p.display || p.alias).filter(Boolean);
+  for (const T of [0, 3, 5]) for (const S of [{}, HG_FEAT]) {
+    const out = await renderHome({ padDockOn: true, roomLive: null, tops: HG_TOPS.slice(0, T), S });
+    const i = out.indexOf('<div class="tease rmd-tease">'), tz = out.slice(i, out.indexOf("</section>", i));
+    assert.ok(i > 0, "the tease");
+    assert.match(tz, /^<div class="tease rmd-tease">\s*<b>Sign in to watch the room live<\/b>\s*<p class="muted">4 in the chat room · 1 on the mic\.<span class="rmd-tease-blurb"> The chat, what's said on the mic, and who's here stream to PATV members as it happens\.<\/span><\/p>/, "the counts the page always showed, then the blurb (its own span: hidden where the list shows)");
+    assert.match(tz, /<div class="rmd-tease-miss" role="group" aria-labelledby="rmdMissH">\s*<span class="rmd-tease-mh" id="rmdMissH">What you're missing<\/span>\s*<ul>/, "a labelled group");
+    const li = [...tz.matchAll(/<li><span class="rmd-tease-ic" aria-hidden="true">([^<]+)<\/span><span>([^<]+)<\/span><\/li>/g)].map((m) => m[1] + " " + m[2]);
+    assert.deepEqual(li, ["💬 The chat, line by line, as it happens", "🎙 What's said on the mic, transcribed live", "👥 Who's here, and who's on the mic"], "three parts, the icons decorative");
+    assert.ok(tz.indexOf("rmd-tease-miss") < tz.indexOf('<a class="btn primary" href="/login">'), "then Sign in");
+    // privacy: a signed-out visitor on a members-only pad gets no roomLive - nothing gated in the tease, nor anywhere on the page
+    assert.doesNotMatch(tz, /<img|data-|href="\/u\/|rmFeed|rmPeople|cam/i, "no picture, person, line or cam in the tease");
+    for (const n of PEOPLE) assert.ok(!out.includes(n), "no name from the room on the page: " + n);
+    assert.doesNotMatch(out, /id="rmFeed"|id="rmPeople"[^>]*>\s*<li|id="rmAudioBox"/);
+  }
+  // only the tease has it: signed in, or a Public pad signed out, the chat card is the chat
+  for (const h of [await renderHome({ me: ME(true), username: "viewer", padDockOn: true }), await renderHome({ padDockOn: true })]) assert.doesNotMatch(h, /rmd-tease/);
+  const en = JSON.parse(rd("locales", "en.json"));
+  for (const k of ["home.room.tease_miss", "home.room.tease_chat", "home.room.tease_mic", "home.room.tease_who"]) assert.match(en[k], /^[^<>{}]+$/, "plain English text: " + k);
+});
+test("homegap2 blank 1: home-dock.css - 1024px and wider, on air, the tease fills the chat column beside the stage and shows the list in place of the blurb", () => {
+  const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /^main\.rm\.rm-dock\.rmd-home #rmChat \.rmd-tease-miss \{ display: none;/m, "hidden by default: as tall as its words, the blurb says it");
+  assert.match(css, /^main\.hm\.rmd-home #hmDock > #rmChat:has\(> \.rmd-tease\) \{ contain: none; block-size: auto; min-block-size: 0; align-self: start; \}/m, "1.99ajh's base rule as it was");
+  const i = css.indexOf("@media (min-width: 1024px) {"), mq = css.slice(i, css.indexOf("\n}\n", i));
+  for (const r of ["main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #hmDock > #rmChat:has(> .rmd-tease) { align-self: stretch; }",
+    "main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-blurb { display: none; }",
+    "main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss { display: grid; }"]) assert.ok(mq.includes(r), "from 1024px, on air: " + r);
+  assert.ok(mq.indexOf("#rmChat:has(> .rmd-tease) { align-self: stretch; }") > mq.indexOf(":has(#rmStage.is-off) #hmDock > #rmChat:has(> .rmd-tease) { block-size: auto; }"), "beside the off-air rule (off air the chat is its own row: as tall as its words)");
+  assert.equal((css.match(/is-on/g) || []).length, (mq.match(/is-on/g) || []).length, "on air only from 1024px - below it the chat is its own full-width row");
 });
