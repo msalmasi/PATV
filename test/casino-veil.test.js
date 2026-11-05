@@ -608,3 +608,18 @@ test("casmask (gap b): a masked seat's Block is a frog-name block by the masked 
   assert.match(vm, /if \(signed && seat && window\.PATVBlockSheet\)/);
   assert.doesNotMatch(vm.replace(/PATVBlockSheet/g, ""), /\/u\/|tip|patv|login/i, "no profile, no tip, nothing that says who");
 });
+
+test("casmask: asking for Pepe's stream while another table holds it names THAT table's host as its own veil shows them (never the name)", async () => {
+  await fresh();
+  VK.set("u:u2", "incognito");
+  const t1 = (await A(bob, "start", [], { room: null })).table;     // Bob (web, incognito) hosts the table on the stream
+  assert.ok((await A(bob, "bet", ["500"], { table: t1 })).ok);
+  await get(`/api/casino/t/${t1}`, "u5");
+  assert.ok((await svc.stream(t1, true, Object.assign({}, bob), false)).ok);
+  assert.equal(svc.S.stream.table, t1);
+  const t2 = (await A(ann, "start", [], { room: null })).table;
+  const r = await svc.stream(t2, true, Object.assign({}, ann), false);
+  assert.ok(r.ok && r.queued === 1, r.reply);
+  assert.ok(!/\bBob\b/.test(r.reply), "never the name: " + r.reply);
+  assert.ok(r.reply.includes(V.label(svc.getTable(t1), "u2") + "'s table"), "the other table's label: " + r.reply);
+});

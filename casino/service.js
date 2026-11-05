@@ -1234,7 +1234,10 @@ async function stream(tableId, on, actor, override) {
     if (!S.stream.queue.includes(T.id)) S.stream.queue.push(T.id);
     await streamSave();
     const pos = S.stream.queue.indexOf(T.id) + 1;
-    return R(true, `Pepe's stream is showing ${cur.host.name}'s table — you're ${pos === 1 ? "next" : "number " + pos} in line.`, { queued: pos });
+    // 1.99?? casmask: the OTHER table's host as that table's own veil shows them (this reply never went through act()'s mask, which
+    // only knows the asker's table): their label to a website asker always, to a Camfrog one when that host plays from the website
+    const curHost = actor && actor.via === "room" ? V.camName(cur, cur.host.uid, cur.host.name) : V.hostName(cur);
+    return R(true, `Pepe's stream is showing ${curHost}'s table — you're ${pos === 1 ? "next" : "number " + pos} in line.`, { queued: pos });
   });
 }
 
