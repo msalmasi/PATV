@@ -83,7 +83,7 @@ test("item 1: the 📼 Plex block follows #rmPlexQ's hidden; Up next folds once 
   P.px.hidden = false; h.mutate(P.px);
   h.button("Stage options").click();
   assert.ok(!labels(h.doc.querySelector(".rmd-menu")).some((l) => /Plex/.test(l)), "no Plex queue & controls in the stage ⋯");
-  assert.doesNotMatch(read("public", "js", "pad-dock.js"), /menuItem\(box, '📼'/);
+  assert.doesNotMatch(read("public", "js", "pad-dock.js"), /menuItem\(box, '📼', 'plex',/);   // (1.99ajw casino2's 📼 Play from Plex… stays - it starts a play)
 });
 
 test("item 1: the booth's 🔎 Request in the card is cancelled and opens the DJ sheet with the booth open, focus in its search", () => {
@@ -113,8 +113,9 @@ test("item 1: under 1024px - the bar joins what plays; its sheet holds both bloc
   assert.equal(bar.hidden, true, "nothing plays");
   B.rdj.classList.remove("hide"); B.rdj.setAttribute("data-np", "paused"); P.px.hidden = false; h.mutate(B.rdj); h.mutate(P.px);
   assert.equal(bar.hidden, false);
-  assert.equal(bar.querySelector(".rmd-npbar-t").textContent, "Lively Up Yourself · Bob Marley & The Wailers · 📼 The Night of the Hunter (1955)");
-  assert.equal(bar.getAttribute("aria-label"), "Now playing: Lively Up Yourself · Bob Marley & The Wailers · 📼 The Night of the Hunter (1955) - open the controls");
+  // (verify: both playing - "song · 📼 film", short enough for a phone to show the film too)
+  assert.equal(bar.querySelector(".rmd-npbar-t").textContent, "Lively Up Yourself · 📼 The Night of the Hunter (1955)");
+  assert.equal(bar.getAttribute("aria-label"), "Now playing: Lively Up Yourself · 📼 The Night of the Hunter (1955) - open the controls");
   assert.equal(bar.querySelector(".ds-ic").textContent, "🎶"); assert.equal(bar.querySelector(".rmd-npbar-p > i").style.width, "40%", "the DJ's progress first");
   bar.click();
   const sheet = h.doc.querySelector(".rmd-layer .ds-modal");
@@ -140,8 +141,8 @@ test("item 1: the homepage / the chat window build no Now playing; nothing new i
   assert.equal(p.doc.getElementById("rmdNp"), null); assert.equal(p.doc.querySelector(".rmd-npbar"), null);
   const css = read("public", "css", "pad-dock.css");
   assert.match(css, /main\.rm\.rm-dock \.rm-live > \.side > :not\(#rmPplCard, #rmdNp\) \{ display: none; \}/);
-  assert.match(css, /main\.rm\.rm-dock \.rm-live > \.side > #rmdNp \{ display: grid;[^}]*max-block-size: calc\(100% - 160px\);[^}]*overflow-y: auto;/);
-  assert.match(css, /\.side:has\(> #rmdNp:not\(\[hidden\]\)\) > #rmPplCard \{ flex: 1 1 0; min-block-size: 152px; \}/, "the people list shortens to make room");
+  assert.match(css, /main\.rm\.rm-dock \.rm-live > \.side > #rmdNp \{ display: grid;[^}]*max-block-size: calc\(100% - 208px\);[^}]*overflow-y: auto;/);
+  assert.match(css, /\.side:has\(> #rmdNp:not\(\[hidden\]\)\) > #rmPplCard \{ flex: 1 1 0; min-block-size: 200px; \}/, "the people list shortens to make room - never under three rows");
   assert.match(css, /@media \(min-width: 1024px\) \{ main\.rm\.rm-dock \.rmd-npbar \{ display: none; \} \}/);
   assert.match(css, /#rmdNp #rmPlexQ :is\(\.pq-ctl \[data-skip\], \.pq-log, \.pq-q \.pq-li, \.pq-q > a\) \{ display: none; \}/, "the card's Plex essentials (the sheet has all)");
   assert.match(css, /main\.rm\.rm-dock \.rmd-layer \.rdj \.mini \{ grid-template-columns: 44px minmax\(0, 1fr\); \}/, "the DJ sheet's compact bar: controls on their own row");
@@ -152,7 +153,7 @@ test("item 1 (room.ejs): the 📼 player's rules are .plexq's own (card, sheets)
   assert.doesNotMatch(room, /\.golive-card \.plexq/, "no rule scoped to the Go live card");
   assert.match(room, /\.plexq \.pq-ctl \.sact \{ min-width: 44px; min-height: 40px; justify-content: center; \}/);
   assert.match(room, /<div class="plexq" id="rmPlexQ" data-room="<%= room\.slug %>" hidden><\/div>/, "no aria-live (its clock redraws every second)");
-  assert.match(room, /pad-plexq\.js\?v=3/);
+  assert.match(room, /pad-plexq\.js\?v=4/);   // (verify: v4 - focus kept across a redraw)
   assert.match(read("public", "js", "pad-plexq.js"), /aria-label="' \+ esc\(_t\('js\.plexq\.controls_all', 'Controls for everyone watching'\)\)/);
   assert.match(read("public", "js", "pad-plexq.js"), /<p class="pq-msg muted" role="status" aria-live="polite">/, "an action's answer is still said");
 });
@@ -239,7 +240,7 @@ test("item 2: one meaning per icon - ⏯ / 🔉 are the stage's, 🎶 Now playin
   const css = read("public", "css", "pad-dock.css");
   assert.match(css, /main\.rm\.rm-dock #rmStage :is\(\.vjs-control-bar, \.vjs-big-play-button\) \{ display: none !important; \}/);
   assert.match(css, /main\.rm\.rm-dock #rmStage \{ container: rmd-stage \/ inline-size; \}/);
-  assert.match(css, /@container rmd-stage \(max-width: 479px\) \{[^@]*\.rmd-media-play \{ position: absolute;[^}]*inline-size: 56px;/, "a phone's ⏯ is a round button in the picture");
+  assert.match(css, /@container rmd-stage \(max-width: 639px\) \{[^@]*\.rmd-media-play \{ position: absolute;[^}]*inline-size: 56px;/, "a phone's ⏯ is a round button in the picture");
   assert.match(css, /#rmStage\.rmd-unmute-up \.rmd-ov-bot \.rmd-media-play \{ display: none; \}/, "the first tap unmutes");
   assert.match(css, /main\.rm\.rm-dock #rmStage\.rmd-embed \{ grid-template-rows: minmax\(0, 1fr\) auto var\(--rmd-pin-row\); \}/);
   assert.match(css, /main\.rm\.rm-dock #rmStage\.rmd-embed \.rmd-ov \{ grid-area: 2 \/ 1;/, "the row under the iframe");
@@ -356,4 +357,115 @@ test("item 4: ＋ › Create › Bounty… - Reward in PAT (never Stake); the wa
   h.button("Add to the chat").click();   // (the sheet's opener: this closes it)
   h.button("Add to the chat").click(); h.button("Wager…", h.doc.querySelector(".rmd-menu")).click();
   assert.match(h.doc.querySelector(".rmd-layer").textContent, /Stake in PAT/);
+});
+
+// ── 1.99?? dockmedia verify: the review fixes ──
+test("verify: the booth's answer line (#rdjSay) sits under its compact controls in the card, goes back into the full booth in the DJ sheet and on destroy()", () => {
+  const log = [];
+  let B, say;
+  const h = harness({ mo: true, setup: (x) => { B = booth(x, log); say = x.make("div", "say", "rdjSay", B.rdj.querySelector("#rdjFull")); say.setAttribute("role", "status"); } });
+  B.rdj.classList.remove("hide"); B.rdj.setAttribute("data-np", "playing"); h.mutate(B.rdj);
+  const mini = h.doc.getElementById("rdjMini");
+  assert.ok(say.parentNode === B.rdj && idx(say) === idx(mini) + 1, "right under the compact controls - its role=status with it");
+  h.doc.getElementById("rmdNp").querySelector(".rmd-np-h").click();
+  assert.ok(say.parentNode === h.doc.getElementById("rdjFull"), "the DJ sheet's full booth has it where the page drew it");
+  h.doc.dispatchEvent(new Event("keydown", { key: "Escape" }));
+  assert.ok(say.parentNode === B.rdj && idx(say) === idx(mini) + 1, "back under the controls in the card");
+  h.controller.destroy();
+  assert.ok(say.parentNode === h.doc.getElementById("rdjFull"), "destroy() puts it back");
+});
+test("verify: the DJ header opens the booth on its top (no song search focus, no phone keyboard); 🔎 Request still focuses it", () => {
+  const log = [];
+  let B;
+  const h = harness({ mo: true, setup: (x) => { B = booth(x, log); } });
+  B.rdj.classList.remove("hide"); B.rdj.setAttribute("data-np", "playing"); h.mutate(B.rdj);
+  h.doc.dispatchEvent(new Event("pointerdown"));   // (a pointer opened it - a sheet would focus its main field)
+  h.doc.getElementById("rmdNp").querySelector(".rmd-np-h").click(); h.tick();
+  assert.notEqual(h.doc.activeElement, B.find, "not the search");
+  assert.equal(h.doc.activeElement, h.doc.querySelector(".rmd-layer .ds-modal"), "the sheet itself");
+  h.doc.dispatchEvent(new Event("keydown", { key: "Escape" }));
+  h.doc.dispatchEvent(new Event("pointerdown")); B.req.click(); h.tick();
+  assert.equal(h.doc.activeElement, B.find, "🔎 Request: the song search");
+});
+test("verify: headers say paused; both playing = the compact card (rmd-np-two); the bar names the film alone when only Plex plays", () => {
+  const log = [];
+  let B, P;
+  const h = harness({ mo: true, setup: (x) => { B = booth(x, log); P = plex(x); } });
+  const card = h.doc.getElementById("rmdNp"), bar = h.doc.querySelector(".rmd-npbar");
+  B.rdj.classList.remove("hide"); B.rdj.setAttribute("data-np", "paused"); h.mutate(B.rdj);
+  assert.equal(card.querySelector('[data-np="dj"] .rmd-np-h').getAttribute("aria-label"), "DJ booth · paused · Auto-DJ on");
+  assert.equal(card.classList.contains("rmd-np-two"), false);
+  assert.equal(bar.querySelector(".rmd-npbar-t").textContent, "Lively Up Yourself · Bob Marley & The Wailers", "the DJ alone: song · artist");
+  const st = h.make("span", "muted pq-st", null, P.px.querySelector(".pq-now"), "· paused");
+  P.px.hidden = false; h.mutate(P.px);
+  assert.equal(card.classList.contains("rmd-np-two"), true, "both: the compact card");
+  assert.equal(card.querySelector('[data-np="plex"] .rmd-np-h').getAttribute("aria-label"), "Plex · paused");
+  B.rdj.setAttribute("data-np", "idle"); h.mutate(B.rdj);
+  assert.equal(card.classList.contains("rmd-np-two"), false);
+  assert.equal(bar.querySelector(".rmd-npbar-t").textContent, "The Night of the Hunter (1955)", "the film alone: the bar's 🎶 says what it is, no second 📼");
+  st.remove(); h.mutate(P.px); assert.equal(card.querySelector('[data-np="plex"] .rmd-np-h').getAttribute("aria-label"), "Plex");
+  const css = read("public", "css", "pad-dock.css");
+  assert.match(css, /#rmdNp\.rmd-np-two #rmPlexQ \.pq-now :is\(\.pq-pos, \.pq-st, \.pq-by\) \{ display: none; \}/);
+  assert.match(css, /#rmdNp\.rmd-np-more::after \{ content: ""; position: sticky;/, "a fade while the card has more below");
+  assert.match(css, /\.rmd-layer #rmPlexQ \.pq-br \{ display: block; flex-basis: 100%; block-size: 0; \}/, "⏮ ⏸ ⏭ ⏹ together in the sheets");
+});
+test("verify: a paused stage keeps its bar and its ⏯ (rmd-paused); playing again, the bar hides on its timer", () => {
+  const { h, vj, btn } = stageRig();
+  btn("Pause").click();
+  assert.equal(h.stage.classList.contains("rmd-paused"), true);
+  for (let i = 0; i < 4; i++) h.tick();
+  assert.equal(h.stage.classList.contains("rmd-controls-on"), true, "still up after the hide timer");
+  btn("Play").click(); assert.equal(h.stage.classList.contains("rmd-paused"), false);
+  h.tick(); assert.equal(h.stage.classList.contains("rmd-controls-on"), false, "the timer hides it again");
+  assert.equal(vj.player.st.paused, false);
+  assert.match(read("public", "css", "pad-dock.css"), /main\.rm\.rm-dock #rmStage\.rmd-paused \.rmd-ov-bot \.rmd-media-play \{ position: absolute;/, "the round ⏯ in the picture at any width");
+});
+test("verify: iPhone (no element fullscreen) - 🖥️ asks the player for its own fullscreen; elsewhere the Dock's", () => {
+  const { h, log, vj } = stageRig();
+  vj.player.requestFullscreen = () => { log.push("vjs.requestFullscreen"); return Promise.resolve(); };
+  const rf = h.doc.documentElement.requestFullscreen; h.doc.documentElement.requestFullscreen = undefined;
+  try {
+    h.button("Fullscreen", h.stage).click();
+    assert.ok(log.includes("vjs.requestFullscreen"), "video.js's own (the <video>'s webkitEnterFullscreen on iOS)");
+    assert.equal(h.doc.querySelector(".rmd-fullscreen"), null, "no Dock fullscreen host");
+  } finally { h.doc.documentElement.requestFullscreen = rf; }
+  h.button("Fullscreen", h.stage).click(); assert.ok(h.doc.querySelector(".rmd-fullscreen"), "with element fullscreen: the Dock's, as before");
+});
+test("verify: the source chip reads 'name · source' (never 'Willow FableYouTube'); a narrow stage's ⋯ carries 📸 / 🎬 when the bar folds them", () => {
+  const h = harness({ mo: true, setup: (x) => {
+    const tabsN = x.doc.getElementById("rmTabs"); tabsN.children.forEach((c) => c.setAttribute("aria-selected", "false"));
+    for (const [n, src, sel] of [["Willow Fable", "YouTube", true]]) {
+      const b = x.make("button", "stab", null, tabsN); b.setAttribute("aria-selected", String(sel)); x.make("span", "n", null, b, n); if (src) x.make("span", "src", null, b, src);
+    }
+  } });
+  const chip = h.stage.querySelector("button.rmd-src");
+  assert.equal(chip.querySelector(".rmd-label").textContent, "Willow Fable · YouTube");
+  assert.equal(chip.getAttribute("aria-label"), "Stage source: Willow Fable · YouTube");
+  const snap = h.stage.querySelector(".rmd-cap-snap"); assert.ok(snap, "📸 carries its own class (pad-dock.css folds it under 480px)");
+  snap.hidden = false; snap.getClientRects = () => [];   // (the container query hid it)
+  h.button("Stage options").click();
+  assert.ok(labels(h.doc.querySelector(".rmd-menu")).some((l) => /Snap/.test(l)), "📸 Snap in the stage ⋯");
+  assert.match(read("public", "css", "pad-dock.css"), /@container rmd-stage \(max-width: 479px\) \{\s*main\.rm\.rm-dock #rmStage \.rmd-ov-bot > :is\(\.rmd-cap-snap, \.rmd-cap-clip\) \{ display: none; \}/);
+});
+test("verify: fullscreen with the chat shown - the chat ends above the stage's bar; one live dot", () => {
+  const css = read("public", "css", "pad-dock.css");
+  assert.match(css, /\.rmd-fullscreen:has\(> \.rmd-full-media > #rmStage\) > \.rmd-overlay \{ inset-block-end: calc\(var\(--ds-sp-2\) \+ 52px\); \}/);
+  assert.match(css, /\.rmd-media:not\(\[hidden\]\):has\(> \.rmd-media-live:not\(\[hidden\]\)\) ~ \.rmd-src-host \.rmd-dot \{ display: none; \}/);
+});
+test("verify: pad-plexq.js / room-dj.js keep keyboard focus across their redraws (busy = aria-disabled, the same markup never rewritten)", async () => {
+  const pq = read("public", "js", "pad-plexq.js");
+  assert.match(pq, /if \(h === lastH && box\.firstChild\) \{ drawTimes\(\); return; \}/, "an unchanged poll writes nothing");
+  assert.match(pq, /fk = focusKey\(\);\n    box\.innerHTML = h;/); assert.match(pq, /back\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(pq, /busy = true; lastH = '';\n    if \(btn\) btn\.setAttribute\('aria-disabled', 'true'\);/, "a pressed control keeps focus while it works");
+  assert.match(pq, /data-q="stop"[^\n]*\n[^\n]*pq-br[^\n]*\n[^\n]*data-skip="-30"/, "⏮ ⏸ ⏭ ⏹, then the jumps");
+  // room-dj.js, run: a focused control gets focus back after Pepe's next sync rebuilds the row (⏸ Pause -> ▶ Resume keeps the place)
+  const r = djRig(); await flush();
+  const row = () => r.doc.getElementById("rdjMiniCtrls");
+  row().children[1].focus(); assert.equal(r.doc.activeElement.getAttribute("data-verb"), "pause");
+  await r.set(djPanel({ playing: false }));
+  assert.equal(r.doc.activeElement.parentNode, row(), "still in the row"); assert.equal(r.doc.activeElement.getAttribute("data-verb"), "resume", "the control in its place");
+  row().children.find((b) => b.getAttribute("data-verb") === "request").focus();
+  await r.set(djPanel());
+  assert.equal(r.doc.activeElement.getAttribute("data-verb"), "request", "the same verb");
+  assert.match(read("public", "js", "room-dj.js"), /if \(busy\) b\.setAttribute\('aria-disabled', 'true'\);/);
 });

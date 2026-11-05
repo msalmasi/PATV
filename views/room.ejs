@@ -726,8 +726,13 @@
       .plexq .pq-li { display: inline-flex; gap: 4px; }
       .plexq .pq-li .sact { min-width: 36px; min-height: 32px; padding: 0 8px; }
       .plexq summary { cursor: pointer; color: #bbb; }
+      /* 1.99?? dockmedia (verify): a working control is aria-disabled (it keeps keyboard focus); "1 of 3" never breaks; the jumps' row break
+         is the Dock sheets' (pad-dock.css) - here the row wraps as it fits */
+      .plexq .sact[aria-disabled="true"] { opacity: .5; cursor: default; }
+      .plexq .pq-pos { white-space: nowrap; }
+      .plexq .pq-br { display: none; }
     </style>
-    <script src="/public/js/pad-plexq.js?v=3" defer></script><%# 1.99?? dockmedia: v3 - the controls group says they are for everyone watching %>
+    <script src="/public/js/pad-plexq.js?v=4" defer></script><%# 1.99?? dockmedia: v3 - the controls group says they are for everyone watching; v4 (verify) - focus kept across a redraw, the same markup never rewritten, ⏮ ⏸ ⏭ ⏹ first, the line's parts in their own spans %>
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="<%- t('pad.golive.coming_up') %>">

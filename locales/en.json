@@ -12591,6 +12591,7 @@
   "js.pad.dock.np_bar": "Now playing: {what}",
   "js.pad.dock.np_open": "open the controls",
   "js.pad.dock.np_sheet": "🎶 Now playing",
+  "js.pad.dock.np_paused": "paused",
   "js.pad.dock.stage_play": "Play",
   "js.pad.dock.stage_pause": "Pause",
   "js.pad.dock.stage_pause_tip": "Pause - just for you; the stage keeps going",

@@ -272,7 +272,7 @@
       // (a pointer-opened sheet starts on its box - or its main field - never on ✕ with a ring; Tab still goes to the first control)
       setTimeout(function () {
         if (!layer || layer.host !== host) return;
-        var a = focusable(box), field = box.querySelector('input[type="search"], input[type="text"], textarea');
+        var a = focusable(box), field = layer.noField ? null : box.querySelector('input[type="search"], input[type="text"], textarea');
         if (ptr) { if (field && !field.hidden && field.getClientRects().length && box.contains(doc.activeElement) === false) field.focus(); else if (!box.contains(doc.activeElement)) { try { box.focus({ preventScroll: true }); } catch (e) { box.focus(); } } }
         else if (a[0] && !box.contains(doc.activeElement)) a[0].focus();
       }, 0);
@@ -508,6 +508,9 @@
       if (floatMin) setMin(true); else changed();
     }
     function full(n) {
+      // (1.99?? dockmedia verify: iPhone Safari has no element fullscreen - the stage's player goes fullscreen itself, as video.js's own ⛶ did
+      // (video.js -> the <video>'s webkitEnterFullscreen; the ⚡ <video> directly); anything else says it can't, as before)
+      if (n && n === stage && !(D.documentElement && D.documentElement.requestFullscreen) && nativeFull()) return;
       redock(); if (!n) return;
       var host = el('section', 'rmd-fullscreen'); root.appendChild(host);
       var head = viewbar(host), media = el('div', 'rmd-full-media' + (n.classList.contains('cs-tile') ? ' cam-strip' : ''));
@@ -516,18 +519,21 @@
       host.appendChild(media); host.appendChild(overlay);
       current = { kind: 'full', host: host, moves: [], focus: D.activeElement };
       current.moves.push(movable(n, media, t('media_away', 'The player is in another view.')));
+      // (1.99?? dockmedia verify: the toggle's NAME follows its words - "Hide chat" read as "Show chat, pressed" was a label-in-name miss; the
+      // state rides on data-rmd-on, the words say it)
       var toggle = button('💬', 'show_chat', 'Show chat', function () {
         if (overlay.hidden) {
           overlay.hidden = false;
           current.chatMove = movable(chat, overlay, t('chat_overlay', 'Chat is over the player.'));
-          current.moves.push(current.chatMove); toggle.setAttribute('aria-pressed', 'true');
+          current.moves.push(current.chatMove); toggle.setAttribute('data-rmd-on', 'true');
         } else {
           restore(current.chatMove); current.moves.splice(current.moves.indexOf(current.chatMove), 1); current.chatMove = null;
-          overlay.hidden = true; toggle.setAttribute('aria-pressed', 'false');
+          overlay.hidden = true; toggle.setAttribute('data-rmd-on', 'false');
         }
-        toggle.querySelector('.rmd-label').textContent = overlay.hidden ? t('show_chat', 'Show chat') : t('hide_chat', 'Hide chat'); changed();
+        var tl = overlay.hidden ? t('show_chat', 'Show chat') : t('hide_chat', 'Hide chat');
+        toggle.querySelector('.rmd-label').textContent = tl; toggle.setAttribute('aria-label', tl); toggle.title = tl; changed();
       });
-      toggle.setAttribute('aria-pressed', 'false'); toggle.setAttribute('data-rmd-showchat', '');
+      toggle.setAttribute('data-rmd-on', 'false'); toggle.setAttribute('data-rmd-showchat', '');
       if (popped || !chat) toggle.hidden = true;     // (1.99ajh dockpop: the chat is in its own window - nothing to show here)
       head.appendChild(toggle); changed();
       if (!host.requestFullscreen) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); return; }
@@ -535,6 +541,15 @@
       catch (e) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); }
     }
     function stageMedia() { return localCam ? localCam.host : stage; }
+    function nativeFull() {
+      var s = mediaSrc(); if (!s || (s.kind !== 'vjs' && s.kind !== 'rtc')) return false;
+      try {
+        if (s.kind === 'vjs' && typeof s.p.requestFullscreen === 'function') { var r = s.p.requestFullscreen(); if (r && r.catch) r.catch(function () {}); return true; }
+        var v = s.kind === 'rtc' ? s.v : s.p.el && s.p.el() && s.p.el().querySelector('video');
+        if (v && typeof v.webkitEnterFullscreen === 'function') { v.webkitEnterFullscreen(); return true; }
+      } catch (e) { /* the player's */ }
+      return false;
+    }
     // 1.99ajh dockpop: 🖼️ Picture-in-picture is the STAGE's only (Document PiP where the browser has it, else the video's own PiP for the
     // pad's stream or Pepe's - never the 🎙 mic stage). The chat's Document PiP is gone: it closed with its opener, so it couldn't follow
     // the viewer around the site - ↗️ Chat in its own window does (popWindow). A PiP survives Live / Feed / About; it closes on pagehide.
@@ -921,6 +936,9 @@
       opts = opts || {};
       var box = sheet(t('dj_title', '🎧 DJ'), opener), doc = box.ownerDocument, booth = dj();
       layer.kind = 'dj';
+      // (1.99?? dockmedia verify: from the Now playing header the sheet starts on its top - the booth's song search is 🔎 Request's, which
+      // focuses it itself; a phone's keyboard never pops up for a look at the booth)
+      if (opts.expand && !opts.request) layer.noField = true;
       if (!opts.expand) {
         var back = button('‹', 'dj_back', 'Back to chat apps', function () { apps(opener); }, 'ds-btn quiet sm rmd-sheet-back', doc);
         back.querySelector('.rmd-label').textContent = t('dj_back_short', 'Chat apps');
@@ -934,7 +952,9 @@
           booth.classList.remove('rmd-in-sheet');
           if (opened && tog && tog.isConnected && !booth.classList.contains('collapsed')) proxyClick(tog);
           if (mark.parentNode) { mark.parentNode.insertBefore(booth, mark); mark.remove(); }
+          placeSay();
         };
+        placeSay();
       } else box.appendChild(el('p', 'ds-fine rmd-dj-idle', t('dj_idle', 'No music in this room right now'), doc));
       var list = DJ_APPS.filter(function (a) { return hasCmd(a[0]); });
       if (list.length) { var grid = el('div', 'rmd-apps', null, doc); list.forEach(function (a) { appTile(grid, a, doc); }); box.appendChild(grid); }
@@ -950,11 +970,24 @@
     // checks stay theirs; nothing new is fetched); destroy() puts them back. Nothing shows while nothing plays - a booth that says "Nothing
     // playing right now." or offline (data-np idle / offline / off) is not playing; a paused track or a Plex queue between titles is. ──
     var np = null;
+    // (1.99?? dockmedia verify: the booth answers every press in #rdjSay - "Sending to Pepe…", the vote count, a refusal - and that line lives in
+    // the full booth. While the booth is compact in the card / the Now playing sheet the line sits right under its controls (the same node,
+    // its role=status with it), and goes back into the full booth when that opens)
+    var sayMark = null;
+    function placeSay() {
+      var b = node('rdj'), say = node('rdjSay'), full = node('rdjFull');
+      if (!np || !b || !say || !full || full.parentNode !== b) return;
+      var compact = !!(np.b.dj && np.b.dj.contains(b));
+      if (compact && say.parentNode !== b) {
+        if (!sayMark) { sayMark = say.ownerDocument.createComment('dock say'); say.parentNode.insertBefore(sayMark, say); }
+        b.insertBefore(say, full);      // (between the compact bar and the full booth: right under the controls)
+      } else if (!compact && sayMark) { if (sayMark.parentNode) { sayMark.parentNode.insertBefore(say, sayMark); sayMark.remove(); } sayMark = null; }
+    }
     function npDj() { var n = node('rdj'), s = n && n.getAttribute('data-np'); return !!(n && !n.classList.contains('hide') && (s === 'playing' || s === 'paused')); }
     function npPlex() { var n = node('rmPlexQ'); return !!(n && !n.hidden); }
     /** a header inside the Now playing sheet opens its full sheet over the bar (the one layer at a time replaces this one): focus comes back to the bar */
     function npOpener(x) { return np && np.bar && layer && layer.kind === 'np' && layer.box.contains(x) ? np.bar : x; }
-    function plexSheet(opener) {
+    function plexQSheet(opener) {
       var px = node('rmPlexQ'); if (!px) return;
       external(function () {
         nodeSheet(t('np_plex_sheet', 'Plex queue & controls'), px, opener, 'plex');
@@ -983,7 +1016,7 @@
         np.moves.push({ node: n, mark: mark }); card.appendChild(b); np.b[kind] = b; np.h[kind] = h;
       }
       block('dj', '🎧', 'np_dj', 'DJ booth', dj0, function (op) { external(function () { djSheet(op, { expand: true }); if (op && op.getAttribute && op.getAttribute('aria-haspopup')) op.setAttribute('aria-expanded', 'true'); }); });
-      block('plex', '📼', 'np_plex', 'Plex', px, plexSheet);
+      block('plex', '📼', 'np_plex', 'Plex', px, plexQSheet);
       if (!np.moves.length) { np = null; return; }
       side.insertBefore(card, side.firstChild);
       // the bar (under 1024px): [🎶][what plays ……][▾] + a 2px progress line
@@ -1004,12 +1037,19 @@
         e.preventDefault();
         var op = layer && layer.kind === 'np' && np.bar ? np.bar : np.h.dj;
         external(function () {
-          djSheet(op, { expand: true });
+          djSheet(op, { expand: true, request: true });
           setTimeout(function () { var f = node('rdjFindQ'); if (f && f.isConnected && f.getClientRects().length) { try { f.focus({ preventScroll: true }); } catch (x) { f.focus(); } } }, 0);
         });
       });
-      [dj0, px].forEach(function (n) { if (n) observe(n, paintNp, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'hidden', 'data-np', 'style', 'value'] }); });
-      paintNp();
+      [dj0, px].forEach(function (n) { if (n) observe(n, paintNp, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'hidden', 'data-np', 'data-state', 'style', 'value'] }); });
+      // (verify: a card taller than the column says so - a fade at its foot while there is more below)
+      on(card, 'scroll', npMore);
+      placeSay(); paintNp();
+    }
+    function npMore() {
+      if (!np) return;
+      var c = np.card, more = !c.hidden && (c.scrollHeight || 0) - (c.scrollTop || 0) - (c.clientHeight || 0) > 2;
+      if (c.classList.contains('rmd-np-more') !== more) c.classList.toggle('rmd-np-more', more);
     }
     function npSheet(opener) {
       if (!np) return;
@@ -1032,18 +1072,29 @@
       if (np.b.dj) np.b.dj.hidden = !d;
       if (np.b.plex) np.b.plex.hidden = !p;
       np.card.hidden = !(d || p);
+      // (verify: both playing - the card's compact layout (pad-dock.css #rmdNp.rmd-np-two), so the people keep three rows at 1024 / 1280)
+      if (np.card.classList.contains('rmd-np-two') !== (d && p)) np.card.classList.toggle('rmd-np-two', d && p);
+      // (verify: a paused track / film says so in its header - the artist line's "⏸ paused" is the first thing an ellipsis takes)
+      var djb = node('rdj'), djPaused = !!(djb && djb.getAttribute('data-np') === 'paused');
       if (np.h.dj) {
-        var pill = txt(node('rdjPill')), lab = t('np_dj', 'DJ booth') + (pill ? ' · ' + pill : '');
-        setText(np.h.dj.querySelector('.rmd-np-s'), pill);
+        var pill = txt(node('rdjPill')), sub = (djPaused ? t('np_paused', 'paused') + (pill ? ' · ' : '') : '') + pill, lab = t('np_dj', 'DJ booth') + (sub ? ' · ' + sub : '');
+        setText(np.h.dj.querySelector('.rmd-np-s'), sub);
         if (np.h.dj.getAttribute('aria-label') !== lab) { np.h.dj.setAttribute('aria-label', lab); np.h.dj.title = lab; }
+      }
+      if (np.h.plex) {
+        var pst = p && px ? txt(px.querySelector('.pq-now .pq-st')).replace(/^·\s*/, '') : '', plab = t('np_plex', 'Plex') + (pst ? ' · ' + pst : '');
+        setText(np.h.plex.querySelector('.rmd-np-s'), pst);
+        if (np.h.plex.getAttribute('aria-label') !== plab) { np.h.plex.setAttribute('aria-label', plab); np.h.plex.title = plab; }
       }
       // (the card folds Plex's "Up next" once each time it comes on - pad-plexq.js keeps whatever the viewer does with it after that)
       if (!p) np.shut = false;
       else if (!np.shut && px && np.card.contains(px)) { var dq = px.querySelector('details.pq-q'); if (dq) { dq.open = false; np.shut = true; } }
       if (np.bar) {
-        var parts = [];
-        if (d) { var tt = txt(node('rdjMiniT')), aa = txt(node('rdjMiniA')); parts.push(tt + (aa ? ' · ' + aa : '')); }
-        if (p) { var pb = px.querySelector('.pq-now b'); parts.push(txt(pb) || t('np_plex', 'Plex')); }
+        // (verify: both - "song · 📼 film", short enough for a phone to show the film too; one - the song · artist · 🙋 who, or the film alone
+        // (the bar's own 🎶 says what it is))
+        var parts = [], film = p ? (txt(px.querySelector('.pq-now b')).replace(/^📼\s*/, '') || t('np_plex', 'Plex')) : '';
+        if (d) { var tt = txt(node('rdjMiniT')), aa = txt(node('rdjMiniA')); parts.push(p ? tt : tt + (aa ? ' · ' + aa : '')); }
+        if (p) parts.push(d ? '📼 ' + film : film);
         var what = parts.join(' · ');
         np.bar.hidden = !(d || p);
         setText(np.barT, what);
@@ -1058,6 +1109,7 @@
         if (np.barF.style.width !== w) np.barF.style.width = w;
       }
       if (!d && !p && layer && layer.kind === 'np') closeLayer();
+      placeSay(); npMore();
     }
 
     // ── 🎡 Spin (owner item 27): the tool row's own spin - one explicit press, through the relay's command path and Pepe's rules ──
@@ -1685,6 +1737,13 @@
       finishMenu(box, opener);
     }
     function tabs() { var n = node('rmTabs'); return n ? Array.prototype.slice.call(n.querySelectorAll('.stab')) : []; }
+    // (1.99?? dockmedia verify: a stage tab is <span class="n">name</span><span class="src">YouTube</span> - read as "name · YouTube"; its text
+    // alone ran them together, and the embed row shows the chip all the time)
+    function tabLabel(tb) {
+      var n = tb && tb.querySelector && tb.querySelector('.n'), sc = tb && tb.querySelector && tb.querySelector('.src');
+      var s = n ? txt(n) + (sc && txt(sc) ? ' · ' + txt(sc) : '') : txt(tb);
+      return String(s || '').replace(/^★\s*/, '');
+    }
     // the tab row's own extras (Pepe's own stream / back to the embed, 🟣 Watch on Twitch, 🙈 Take me off this Stage, a manager's ☆ / ✕)
     function tabExtras() {
       var n = node('rmTabs'), out = []; if (!n) return out;
@@ -1698,7 +1757,7 @@
     function paintSource() {
       if (!srcHost) return;
       var list = tabs(), sel = list.filter(function (b) { return b.getAttribute('aria-selected') === 'true'; })[0] || list[0];
-      var label = sel ? txt(sel).replace(/^★\s*/, '') : '', many = list.length >= 2 || tabExtras().length > 0, live = !!(sel && !sel.classList.contains('off'));
+      var label = sel ? tabLabel(sel) : '', many = list.length >= 2 || tabExtras().length > 0, live = !!(sel && !sel.classList.contains('off'));
       var key = list.length + '|' + label + '|' + (many ? 1 : 0) + (live ? 1 : 0);
       if (key === srcKey) return; srcKey = key;
       if (!srcBtn) {
@@ -1721,7 +1780,7 @@
     function sourceMenu(opener) {
       var box = menu(opener, t('sources', 'Stage sources'));
       tabs().forEach(function (tb) {
-        var label = txt(tb).replace(/^★\s*/, '');
+        var label = tabLabel(tb);
         var it = menuItem(box, tb.classList.contains('off') ? '⚪' : '🔴', 'raw', label, function () { tb.click(); paintSource(); if (srcBtn && !srcBtn.hidden) srcBtn.focus(); }, { role: 'menuitemradio', checked: tb.getAttribute('aria-selected') === 'true' });
         it.querySelector('.rmd-label').textContent = label; it.title = label; it.setAttribute('aria-label', label);
       });
@@ -1741,6 +1800,13 @@
     function stageMenu(opener) {
       var box = menu(opener, t('stage_menu', 'Stage options'));
       var ll = lowlat();
+      // (1.99?? dockmedia verify: a stage under 480px wide has no room for 📸 / 🎬 beside the source chip (pad-dock.css folds them) - they are
+      // here then, the same controls)
+      [[snapBtn, '📸', 'snap', 'Snap'], [clipBtn, '🎬', 'clip_stage', 'Clip']].forEach(function (x) {
+        var b = x[0]; if (!b || b.hidden || b.getClientRects().length || !stage || !stage.getClientRects().length) return;
+        menuItem(box, x[1], x[2], x[3], function (op) { if (x[2] === 'snap') { var c = capButton('snap'); if (c && !c.disabled) external(function () { c.click(); }); } else clipMenu(op); },
+          { disabled: b.disabled, tip: b.title, sub: x[2] === 'snap' ? null : '▸' });
+      });
       if (ll) menuItem(box, '⚡', 'lowlat', 'Low latency', function () { ll.click(); }, { role: 'menuitemcheckbox', checked: ll.getAttribute('aria-pressed') === 'true', tip: ll.title });
       menuItem(box, IC.pip, 'pip_stage', 'Picture-in-picture', function () { pop(stageMedia()); });
       // (1.99?? dockmedia (item 2e): a video.js stream that carries captions / subtitles gets the switch video.js's own bar had - 🔤, since 💬
@@ -1767,7 +1833,7 @@
     // /stage runs (plex-play.js) in a Dock sheet, for THIS pad: search, pick, scope, start point, quality, audio, subtitles, the price and
     // its confirm. The server has the last word (medialib / mediaqueue: Plex members, the override list, staff, the pad's slot rules and
     // limit, the daily caps, the encoder); a refusal shows in the sheet. Book it for later stays on /stage (linked). After a start the stage
-    // picks the slot up and 📼 Plex queue & controls… shows it. o.plexPlay = bridge.js's goLiveInfo answer (null = not offered).
+    // picks the slot up and the 🎶 Now playing card / bar shows it (1.99?? dockmedia). o.plexPlay = bridge.js's goLiveInfo answer (null = not offered).
     function plexSheet(opener) {
       var pp = o.plexPlay; if (!pp || !W.PATVPlexPlay) return;
       external(function () {
@@ -1842,7 +1908,8 @@
       // (keyboard focus keeps it up; a mouse click that left focus on a button doesn't pin it)
       var a = doc.activeElement, kb = false;
       try { kb = !!(a && a.matches && a.matches(':focus-visible')); } catch (e) { kb = true; }
-      return overBar || (kb && ovTop && (ovTop.contains(a) || ovBot.contains(a))) || !!(layer && layer.overlay);
+      // (1.99?? dockmedia verify: + a paused stream - video.js kept its bar up while paused; a frozen frame with nothing on it reads as a stall)
+      return overBar || (kb && ovTop && (ovTop.contains(a) || ovBot.contains(a))) || !!(layer && layer.overlay) || stage.classList.contains('rmd-paused');
     }
     // The overlay shows (rmd-controls-on: opacity) and takes taps (rmd-ov-armed: only its own buttons, never the whole bar - the mic
     // stage's tile controls under the bars stay usable). 1.99ajf dockclean review: a touch that wakes a hidden overlay arms it a moment
@@ -1928,9 +1995,12 @@
       var s = mediaSrc(), emb = !!(s && s.kind === 'embed'), on = !!(s && (s.kind === 'vjs' || s.kind === 'rtc'));
       stage.classList.toggle('rmd-embed', emb); stage.classList.toggle('rmd-media-on', on); stage.classList.toggle('rmd-unmute-up', on && unmuteUp());
       mediaBox.hidden = !on;
+      var paused = on && mPaused(s), wasPaused = stage.classList.contains('rmd-paused');
+      stage.classList.toggle('rmd-paused', paused);
+      if (paused && !wasPaused) showTools(); else if (!paused && wasPaused) showTools();      // (the bar's timer starts again once it plays)
       if (!on) return;
       bindMedia(s);
-      var paused = mPaused(s), muted = mMuted(s), vol = mVol(s), lv = mLive(s);
+      var muted = mMuted(s), vol = mVol(s), lv = mLive(s);
       // (⏯ - ▶️ is "Play content here", ⏸️ the DJ's Vote pause: one meaning per icon. It pauses THIS viewer's picture; the stage goes on)
       mediaLabel(playMB, paused ? t('stage_play', 'Play') : t('stage_pause', 'Pause'), paused ? t('stage_play', 'Play') : t('stage_pause_tip', 'Pause - just for you; the stage keeps going'));
       // (🔉 / 🔇 - 🔊 is the Soundboard)
@@ -1995,8 +2065,8 @@
       ovBot.appendChild(buildMedia());
       srcHost = el('span', 'rmd-src-host'); ovBot.appendChild(srcHost);
       ovBot.appendChild(el('span', 'rmd-ov-gap'));
-      snapBtn = iconBtn('📸', 'snap', 'Snap', function () { var b = capButton('snap'); if (b && !b.disabled) external(function () { b.click(); }); });
-      clipBtn = iconBtn('🎬', 'clip_stage', 'Clip', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } clipMenu(b); });
+      snapBtn = iconBtn('📸', 'snap', 'Snap', function () { var b = capButton('snap'); if (b && !b.disabled) external(function () { b.click(); }); }, 'ds-btn quiet sm rmd-cap-snap');
+      clipBtn = iconBtn('🎬', 'clip_stage', 'Clip', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } clipMenu(b); }, 'ds-btn quiet sm rmd-cap-clip');
       clipBtn.setAttribute('aria-haspopup', 'menu'); clipBtn.setAttribute('aria-expanded', 'false');
       // (1.99ajf dockclean review: 🖥️ is a toggle - inside fullscreen it is "Exit fullscreen", the one way out; the viewbar's ↩ is hidden there)
       fullBtn = iconBtn(IC.full, 'fullscreen', 'Fullscreen', function () { if (stageFull()) redock(); else full(stageMedia()); });
@@ -2259,7 +2329,7 @@
       if (gone_ || mode === 'popout' || !chat) return;
       popPending = !!pending && !popped;
       if (!popped) {
-        var showing = root.querySelector('[data-rmd-showchat][aria-pressed="true"]'); if (showing) showing.click();
+        var showing = root.querySelector('[data-rmd-showchat][data-rmd-on="true"]'); if (showing) showing.click();
         if (current && current.kind !== 'full') redock();
         closeLayer(false);
         popped = true;
@@ -2689,7 +2759,7 @@
       toast: function (text, opts) { return chatToast(text, opts); }, cmd: cmdToast, talking: talking,
       destroy: function () { dead = true; stopLink(); redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); });
         // (1.99?? dockmedia: the booth back before .rm-live, the 📼 player back into #rmGoLive - where the page drew them)
-        if (np) { np.moves.slice().reverse().forEach(restore); np.card.remove(); if (np.bar) np.bar.remove(); np = null; } clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat', 'rmd-dock-pad', 'rmd-nav-auto', 'rmd-nav-off'); if (W.PATVPadSwitch && mode === 'pad') W.PATVPadSwitch = null; }
+        if (np) { if (sayMark && sayMark.parentNode) { sayMark.parentNode.insertBefore(node('rdjSay'), sayMark); sayMark.remove(); } sayMark = null; np.moves.slice().reverse().forEach(restore); np.card.remove(); if (np.bar) np.bar.remove(); np = null; } clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat', 'rmd-dock-pad', 'rmd-nav-auto', 'rmd-nav-off'); if (W.PATVPadSwitch && mode === 'pad') W.PATVPadSwitch = null; }
     };
   }
   W.PATVPadDock = { init: init };

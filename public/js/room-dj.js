@@ -108,7 +108,7 @@
     if (!playing && n) c.appendChild(btn(admin ? '▶️ Resume' : '▶️ Vote resume', null, 'resume', { title: admin ? 'Resume now' : 'Free · ' + s.votes.start + ' votes' }));
     if (!n && (r.play || admin)) c.appendChild(btn(admin ? '▶️ Start' : '▶️ Vote start', null, 'play', { title: admin ? 'Start the music' : 'Free · ' + s.votes.start + ' votes' }));
     if (r.queue || admin) {
-      var q = el('button', 'b go'); q.type = 'button';
+      var q = el('button', 'b go'); q.type = 'button'; q.setAttribute('data-verb', 'request');
       words(q, '🔎 Request');
       q.title = 'Request · Search for a song to queue';
       q.addEventListener('click', function () {
@@ -200,8 +200,12 @@
     var w = words(b, label);
     if (small) { b.appendChild(document.createTextNode(' ')); b.appendChild(el('small', null, small)); }
     b.title = w + (opts && opts.title ? ' · ' + opts.title : '');
-    b.disabled = !linked || busy;
-    b.addEventListener('click', function () { act(verb, '', label); });
+    // (1.99?? dockmedia verify: while Pepe works on a press the controls are aria-disabled, not disabled - a disabled button drops keyboard
+    // focus to <body>; act() refuses while busy either way. data-verb lets render() give focus back to the same control)
+    b.disabled = !linked;
+    if (busy) b.setAttribute('aria-disabled', 'true');
+    b.setAttribute('data-verb', verb);
+    b.addEventListener('click', function () { if (b.getAttribute('aria-disabled') === 'true') return; act(verb, '', label); });
     return b;
   }
   function renderCtrls() {
@@ -291,7 +295,24 @@
     var key = JSON.stringify([P.state, P.room, P.me, P.acts, busy]);
     if (key === lastKey) { tickProgress(); return; }
     lastKey = key;
+    var fk = focusKey();
     renderNow(); renderBooth(); renderQueue(); renderCtrls(); renderTools(); renderMini();
+    refocus(fk);
+  }
+  // 1.99?? dockmedia verify: the controls are rebuilt when what Pepe reports changes (every sync, vote and press) - a control that had keyboard
+  // focus gets it back (the same verb in the same row, else the one in its place: ⏸ Pause -> ▶ Resume), so a Tab to 🛑 survives the next sync
+  function focusKey() {
+    var a = document.activeElement, row = a && a.parentNode;
+    if (!a || !box.contains(a) || !a.hasAttribute || !a.hasAttribute('data-verb') || !row || !row.id) return null;
+    return { row: row.id, verb: a.getAttribute('data-verb'), i: Array.prototype.indexOf.call(row.children, a) };
+  }
+  function refocus(fk) {
+    if (!fk) return;
+    var a = document.activeElement; if (a && a !== document.body && a.isConnected) return;
+    var row = $(fk.row); if (!row) return;
+    var alt = { pause: 'resume', resume: 'pause', play: 'pause' }[fk.verb];      // (one control that changes its words)
+    var b = row.querySelector('[data-verb="' + fk.verb + '"]') || (alt && row.querySelector('[data-verb="' + alt + '"]')) || row.children[Math.min(fk.i, row.children.length - 1)];
+    if (b && b.focus && !b.disabled && b.getClientRects().length) { try { b.focus({ preventScroll: true }); } catch (e) { b.focus(); } }
   }
 
   // ── actions ──

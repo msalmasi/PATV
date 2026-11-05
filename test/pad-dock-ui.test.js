@@ -27,7 +27,8 @@ test('float, fullscreen and redock move the same feed and preserve privacy marku
   assert.ok(h.chat.closest('.rmd-float'));assert.ok(h.root.contains(h.chat));assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.feed.outerHTML,before);assert.equal(story.ownerDocument,h.doc);assert.equal(h.chat.contains(story),false);
   h.controller.redock();assert.equal(h.chat.closest('.rmd-float'),null);assert.equal(h.doc.querySelectorAll('#rmFeed').length,1);
   h.button('Fullscreen',h.stage).click();await flush();assert.ok(h.root.contains(h.doc.fullscreenElement));h.button('Show chat').click();assert.ok(h.chat.closest('.rmd-overlay'));assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.feed.outerHTML,before);assert.equal(h.chat.contains(story),false);
-  h.button('Show chat').click();assert.equal(h.chat.closest('.rmd-overlay'),null);h.controller.redock();assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.doc.querySelectorAll('#rmPtt').length,1);
+  // (1.99?? dockmedia verify: the toggle's name follows its words - Hide chat while the chat is shown)
+  const hideT=h.button('Hide chat');assert.equal(hideT.title,'Hide chat');assert.equal(hideT.hasAttribute('aria-pressed'),false);hideT.click();assert.equal(h.chat.closest('.rmd-overlay'),null);assert.equal(h.button('Show chat').getAttribute('aria-label'),'Show chat');h.controller.redock();assert.equal(h.doc.getElementById('rmFeed'),same);assert.equal(h.doc.querySelectorAll('#rmPtt').length,1);
 });
 // 1.99ajh dockpop: 🖼️ Picture-in-picture is the STAGE's - the chat's Document PiP is gone (it closed with its opener; ↗️ Chat in its own
 // window follows the viewer around the site instead)

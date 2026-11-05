@@ -1140,10 +1140,13 @@ body.rmd-pop main.rm.rm-dock .rmd-input-row input.ds-in { text-overflow: ellipsi
 /* ══ 1.99?? dockmedia (the owner's 2026-11-04 media points) ══ */
 /* (item 1) 🎶 Now playing - 1024px and wider a card at the top of the people column while Pepe's DJ or the 📼 Plex player plays here; the
    people list shortens to make room (it scrolls). The id selector: the class would lose to the column's :not(#rmPplCard, #rmdNp) above */
-main.rm.rm-dock .rm-live > .side > #rmdNp { display: grid; align-content: start; gap: var(--ds-sp-2); flex: 0 0 auto; min-block-size: 0; max-block-size: calc(100% - 160px);
+main.rm.rm-dock .rm-live > .side > #rmdNp { display: grid; align-content: start; gap: var(--ds-sp-2); flex: 0 0 auto; min-block-size: 0; max-block-size: calc(100% - 208px);
   overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: var(--ds-sp-2); border-radius: var(--ds-r-lg); }
 main.rm.rm-dock .rm-live > .side:has(> #rmdNp:not([hidden])) { gap: var(--ds-sp-2); }
-main.rm.rm-dock .rm-live > .side:has(> #rmdNp:not([hidden])) > #rmPplCard { flex: 1 1 0; min-block-size: 152px; }   /* (the people give way first; the card past the column less 160px scrolls) */
+main.rm.rm-dock .rm-live > .side:has(> #rmdNp:not([hidden])) > #rmPplCard { flex: 1 1 0; min-block-size: 200px; }   /* (the people give way first - never under three rows (verify); the card past the column less 208px scrolls) */
+/* (verify: a card taller than its room fades at its foot while there is more below - pad-dock.js npMore) */
+main.rm.rm-dock #rmdNp.rmd-np-more::after { content: ""; position: sticky; inset-block-end: calc(-1 * var(--ds-sp-2)); display: block; block-size: 28px; margin-block-start: -28px;
+  margin-inline: calc(-1 * var(--ds-sp-2)); pointer-events: none; background: linear-gradient(to bottom, transparent, var(--ds-surface)); }
 main.rm.rm-dock .rmd-np-b { display: grid; gap: var(--ds-sp-1h); min-inline-size: 0; }
 main.rm.rm-dock #rmdNp > .rmd-np-b:not([hidden]) ~ .rmd-np-b { padding-block-start: var(--ds-sp-2); border-block-start: 1px solid var(--ds-line); }
 /* a block's header: [icon][DJ booth · Auto-DJ on | Plex] … › - it opens that block's full sheet (the › is drawn here: no new icon meaning) */
@@ -1165,6 +1168,19 @@ main.rm.rm-dock .rmd-np-b .rdj .mini .ctrls { grid-column: 1 / -1; display: flex
 main.rm.rm-dock .rmd-np-b .rdj .mini .ctrls:empty { display: none; }
 main.rm.rm-dock .rmd-np-b .rdj .mini button.b { position: relative; inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; gap: 0; justify-content: center; font-size: var(--ds-fs-sm); }
 main.rm.rm-dock .rmd-np-b .rdj .mini button.b > :is(.w, small) { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* (verify: the booth's answer line - "Pepe is on it…", a vote count, a refusal - sits under its compact controls here, pad-dock.js placeSay) */
+main.rm.rm-dock .rmd-np-b .rdj > .say { margin: 0; padding: var(--ds-sp-1) var(--ds-sp-2); font-size: var(--ds-fs-meta); }
+/* (verify: one look for Now playing's controls (the card and its sheet) - the 📼 player's round gold .sact take the DJ's squares; one progress
+   colour, the pad's; the player's 📼 is the block header's) */
+main.rm.rm-dock :is(.rmd-np-b .rdj .mini button.b, .rmd-np-b #rmPlexQ .pq-ctl .sact) { border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-surface-2);
+  color: var(--ds-text) !important; font-weight: 400; }
+main.rm.rm-dock :is(.rmd-np-b .rdj .mini button.b, .rmd-np-b #rmPlexQ .pq-ctl .sact):is(:hover, :focus-visible):not(:disabled, [aria-disabled="true"]) { border-color: var(--ds-ac-line); background: var(--ds-hover); }
+main.rm.rm-dock .rmd-np-b #rmPlexQ .pq-ctl .sact.primary { border-color: var(--ds-ac-line); }
+main.rm.rm-dock :is(.rmd-np-b .rdj .mini .thin .fill, .rmd-np-b #rmPlexQ .pq-bar span) { background: var(--ds-ac); }
+main.rm.rm-dock .rmd-np-b #rmPlexQ .pq-scrub { accent-color: var(--ds-ac); }
+main.rm.rm-dock .rmd-np-b #rmPlexQ .pq-now .pq-ic { display: none; }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-bar { block-size: 3px; background: var(--ds-line-soft); }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-scrub { min-block-size: 0; block-size: 16px; }
 /* (the DJ sheet is ≈500px: the compact bar's controls get their own row there too - its own fallback is a viewport query) */
 main.rm.rm-dock .rmd-layer .rdj .mini { grid-template-columns: 44px minmax(0, 1fr); }
 main.rm.rm-dock .rmd-layer .rdj .mini .ctrls { grid-column: 1 / -1; flex-wrap: wrap; }
@@ -1173,19 +1189,44 @@ main.rm.rm-dock .rmd-layer .rdj .mini .ctrls { grid-column: 1 / -1; flex-wrap: w
 main.rm.rm-dock .rmd-np-b #rmPlexQ { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; gap: var(--ds-sp-1h); }
 main.rm.rm-dock .rmd-np-b #rmPlexQ .sact, main.rm.rm-dock .rmd-layer #rmPlexQ .sact { flex: none; }   /* (the page's phone rule makes every .sact half a row - in the Dock they are a compact row) */
 main.rm.rm-dock #rmdNp #rmPlexQ :is(.pq-ctl [data-skip], .pq-log, .pq-q .pq-li, .pq-q > a) { display: none; }
-main.rm.rm-dock #rmdNp #rmPlexQ .pq-ctl { gap: var(--ds-sp-1); }
-main.rm.rm-dock #rmdNp #rmPlexQ .pq-ctl .sact { min-inline-size: 36px; min-block-size: 36px; padding: 0 var(--ds-sp-2); }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-ctl { gap: var(--ds-sp-1); flex-wrap: nowrap; }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-ctl .sact { inline-size: 36px; min-inline-size: 36px; min-block-size: 36px; padding: 0; }
 main.rm.rm-dock #rmdNp #rmPlexQ .pq-now { font-size: var(--ds-fs-meta); }
-main.rm.rm-dock #rmdNp #rmPlexQ .pq-times { font-size: var(--ds-fs-xs); }
 main.rm.rm-dock #rmdNp #rmPlexQ .pq-scrub { margin: 0; }
+/* (verify: [⏮][⏸][⏭][⏹] … 30:45 / 1:32:00 on one row - the time left is the sheet's; the header's 📼 Plex says what it is) */
+main.rm.rm-dock #rmdNp #rmPlexQ { grid-template-columns: max-content minmax(0, 1fr); align-items: center; }
+main.rm.rm-dock #rmdNp #rmPlexQ > * { grid-column: 1 / -1; }
+main.rm.rm-dock #rmdNp #rmPlexQ:has(> .pq-ctl) > .pq-ctl { grid-column: 1; grid-row: 3; }
+main.rm.rm-dock #rmdNp #rmPlexQ:has(> .pq-ctl) > .pq-times { grid-column: 2; grid-row: 3; }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-times { flex-wrap: wrap; justify-content: flex-end; gap: 0 var(--ds-sp-1); min-inline-size: 0; font-size: var(--ds-fs-xs); line-height: 1.2; text-align: end; white-space: nowrap; }   /* (a narrow column: now over / length) */
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-times .pq-left { display: none; }
+main.rm.rm-dock #rmdNp #rmPlexQ .pq-times .pq-len::before { content: "/ "; }
+/* (verify: both playing - the compact card: the film's title alone on its line (its state is in the header), 32px controls, 20px headers, the
+   film's scrubber and Up next in its sheet - the people keep three rows at 1024 x 768 and 1280 x 800) */
+main.rm.rm-dock .rm-live > .side > #rmdNp.rmd-np-two { gap: var(--ds-sp-1); padding-block: var(--ds-sp-1h); }
+main.rm.rm-dock #rmdNp.rmd-np-two > .rmd-np-b:not([hidden]) ~ .rmd-np-b { padding-block-start: var(--ds-sp-1); }
+main.rm.rm-dock #rmdNp.rmd-np-two .rdj .mini .mt b { font-size: var(--ds-fs-sm); line-height: 1.25; }
+main.rm.rm-dock #rmdNp.rmd-np-two .rdj .mini .mt span { line-height: 1.25; }
+main.rm.rm-dock #rmdNp.rmd-np-two .rdj .mini .thin { margin-block-start: 3px; }
+main.rm.rm-dock #rmdNp.rmd-np-two .rmd-np-b { gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmdNp.rmd-np-two .rmd-np-h { min-block-size: 20px; }
+main.rm.rm-dock #rmdNp.rmd-np-two #rmPlexQ .pq-now { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; line-height: 1.25; }
+main.rm.rm-dock #rmdNp.rmd-np-two #rmPlexQ .pq-now :is(.pq-pos, .pq-st, .pq-by) { display: none; }
+main.rm.rm-dock #rmdNp.rmd-np-two #rmPlexQ { gap: var(--ds-sp-1); }
+main.rm.rm-dock #rmdNp.rmd-np-two #rmPlexQ > :is(.pq-scrub, .pq-q) { display: none; }   /* (the times say where it is; seeking and Up next are its header's sheet) */
+main.rm.rm-dock #rmdNp.rmd-np-two .rdj .mini { grid-template-columns: 40px minmax(0, 1fr); }
+main.rm.rm-dock #rmdNp.rmd-np-two .rdj .mini .art { inline-size: 40px; block-size: 40px; }
+main.rm.rm-dock #rmdNp.rmd-np-two :is(.rdj .mini button.b, #rmPlexQ .pq-ctl .sact) { inline-size: 32px; min-inline-size: 32px; min-block-size: 32px; block-size: 32px; }
 main.rm.rm-dock #rmdNp #rmPlexQ .pq-msg:empty { display: none; }
 main.rm.rm-dock #rmdNp #rmPlexQ .pq-q ol { max-block-size: 120px; }
 /* the 🎶 Now playing sheet (under 1024px): both blocks, the Plex player whole */
 main.rm.rm-dock .rmd-layer .rmd-np-b:not([hidden]) ~ .rmd-np-b { padding-block-start: var(--ds-sp-3); border-block-start: 1px solid var(--ds-line); }
 main.rm.rm-dock .rmd-layer .rmd-np-b { margin-block-end: var(--ds-sp-2); }
+/* (verify: the sheets' 📼 controls - ⏮ ⏸ ⏭ ⏹ on one row, −30 s … +30 s on the next; ⏹ never alone on a line) */
+main.rm.rm-dock .rmd-layer #rmPlexQ .pq-br { display: block; flex-basis: 100%; block-size: 0; }
 /* (item 1) under 1024px: a 40px bar right under the stage - [🎶][what plays …][▾] + a 2px progress line; a tap opens the sheet */
 main.rm.rm-dock .rmd-npbar { position: relative; display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; inline-size: 100%; min-inline-size: 0; block-size: 40px;
-  margin: 0 0 var(--ds-sp-2); padding: 0 var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); color: var(--ds-text);
+  margin: 0; padding: 0 var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); color: var(--ds-text);
   font: 500 var(--ds-fs-meta)/1.2 var(--ds-font); letter-spacing: normal; text-align: start; cursor: pointer; overflow: hidden; }
 main.rm.rm-dock .rmd-npbar > .ds-ic { flex: none; margin: 0; font-size: var(--ds-fs-sm); line-height: 1; }
 main.rm.rm-dock .rmd-npbar > .rmd-npbar-t { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1193,7 +1234,8 @@ main.rm.rm-dock .rmd-npbar > .rmd-npbar-p { position: absolute; inset-inline: 0;
 main.rm.rm-dock .rmd-npbar > .rmd-npbar-p > i { display: block; block-size: 100%; inline-size: 0; background: var(--ds-ac); }
 main.rm.rm-dock .rmd-npbar:is(:hover, :focus-visible, [aria-expanded="true"]) { border-color: var(--ds-ac-line); }
 @media (min-width: 1024px) { main.rm.rm-dock .rmd-npbar { display: none; } }
-@media (pointer: coarse) { main.rm.rm-dock .rmd-np-h { min-block-size: 40px; } main.rm.rm-dock .rmd-np-b .rdj .mini button.b { inline-size: 44px; min-inline-size: 44px; min-block-size: 44px; } }
+@media (pointer: coarse) { main.rm.rm-dock .rmd-np-h { min-block-size: 40px; }
+  main.rm.rm-dock :is(.rmd-np-b .rdj .mini button.b, #rmdNp #rmPlexQ .pq-ctl .sact, #rmdNp.rmd-np-two .rdj .mini button.b, #rmdNp.rmd-np-two #rmPlexQ .pq-ctl .sact) { inline-size: 44px; min-inline-size: 44px; min-block-size: 44px; block-size: auto; } }
 
 /* (item 2) the stage's own media controls - no native player controls in the Dock (the CSS net for any that slip through: video.js's bar and
    its big ▶); the bottom bar: [⏯][🔉][volume][LIVE][source] … [📸][🎬][🖥️][⋯] */
@@ -1207,15 +1249,29 @@ main.rm.rm-dock .rmd-ov-bot .rmd-media-live { gap: var(--ds-sp-1h); min-block-si
 main.rm.rm-dock .rmd-media-live::before { content: ""; flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--ds-live); }
 main.rm.rm-dock .rmd-media-live.rmd-behind::before { background: var(--ds-text-faint); }
 main.rm.rm-dock .rmd-ov-bot .rmd-media-live[aria-disabled="true"] { opacity: 1; filter: none; cursor: default; }   /* (at the live edge it is a status, not a dimmed control) */
-/* a narrow stage (a phone's 374px): ⏯ is a 56px round button in the middle of the picture (the same fade and arming - it is the bar's) and
-   steps aside while the player's own tap-to-unmute layer is up, so the first tap unmutes; no slider; LIVE only when behind */
-@container rmd-stage (max-width: 479px) {
+/* (verify: one live dot - while the LIVE pill shows, the source chip's own dot steps aside: "● LIVE ● Willow Fable" said it twice) */
+main.rm.rm-dock #rmStage .rmd-ov-bot > .rmd-media:not([hidden]):has(> .rmd-media-live:not([hidden])) ~ .rmd-src-host .rmd-dot { display: none; }
+/* a narrow stage (under 640px - a phone's 374px, a tablet's split view): ⏯ is a 56px round button in the middle of the picture (the same fade
+   and arming - it is the bar's) and steps aside while the player's own tap-to-unmute layer is up, so the first tap unmutes; no slider; LIVE
+   only when behind. (verify: from 640px, not 480 - a 480-640px stage left the source chip "W…") A paused stream shows the same ⏯ at any
+   width, and its bar stays (pad-dock.js overlayHot) */
+main.rm.rm-dock #rmStage.rmd-paused .rmd-ov-bot .rmd-media-play { position: absolute; inset-inline: 0; margin-inline: auto; inset-block-start: calc((100% - var(--rmd-pin-row)) / 2 - 28px);
+  inline-size: 56px; min-inline-size: 56px; block-size: 56px; min-block-size: 56px; border-radius: 50%; }
+main.rm.rm-dock #rmStage.rmd-paused .rmd-ov-bot .rmd-media-play > .ds-ic { font-size: 24px; }
+main.rm.rm-dock #rmStage.rmd-paused.rmd-unmute-up .rmd-ov-bot .rmd-media-play { display: none; }
+@container rmd-stage (max-width: 639px) {
   main.rm.rm-dock #rmStage .rmd-ov-bot .rmd-media-play { position: absolute; inset-inline: 0; margin-inline: auto; inset-block-start: calc((100% - var(--rmd-pin-row)) / 2 - 28px);
     inline-size: 56px; min-inline-size: 56px; block-size: 56px; min-block-size: 56px; border-radius: 50%; }
   main.rm.rm-dock #rmStage .rmd-ov-bot .rmd-media-play > .ds-ic { font-size: 24px; }
   main.rm.rm-dock #rmStage.rmd-unmute-up .rmd-ov-bot .rmd-media-play { display: none; }
   main.rm.rm-dock #rmStage .rmd-media-vol,
   main.rm.rm-dock #rmStage .rmd-media-live:not(.rmd-behind) { display: none; }
+  /* (the LIVE pill hidden at the live edge: the source chip's red dot says it) */
+  main.rm.rm-dock #rmStage .rmd-ov-bot > .rmd-media:not([hidden]):has(> .rmd-media-live:not([hidden]):not(.rmd-behind)) ~ .rmd-src-host .rmd-dot { display: block; }
+}
+/* (verify: under 480px 📸 / 🎬 are in the stage ⋯ (pad-dock.js stageMenu) - the source chip keeps room for its words) */
+@container rmd-stage (max-width: 479px) {
+  main.rm.rm-dock #rmStage .rmd-ov-bot > :is(.rmd-cap-snap, .rmd-cap-clip) { display: none; }
 }
 /* (item 2) a YouTube / Twitch embed: nothing ever lies over the iframe - the overlay is ONE solid row under it [☰][pad chip][source] … [🖥️][⋯]
    (📸 / 🎬 are off for embeds; ⏯ / 🔉 are the iframe's own); the pinned cams' row moves to row 3 */
@@ -1229,4 +1285,6 @@ main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-bot { flex: 1 1 0; min-inline-size: 0
 main.rm.rm-dock #rmStage.rmd-embed > #rmStrip { grid-area: 3 / 1; }
 /* (an embed can't be snapped or clipped: the row is [pad chip][source] … [🖥️][⋯] - no greyed 📸 taking the source's room) */
 main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-bot > :is(.rmd-icon[aria-disabled="true"]) { display: none; }
+/* (verify: the stage in fullscreen with 💬 Show chat - the chat ends above the stage's bar, so ⏯ / 🔉 / 🖥️ Exit fullscreen / ⋯ stay in reach) */
+main.rm.rm-dock .rmd-fullscreen:has(> .rmd-full-media > #rmStage) > .rmd-overlay { inset-block-end: calc(var(--ds-sp-2) + 52px); }
 @media (forced-colors: active) { main.rm.rm-dock :is(.rmd-npbar, #rmdNp) { border: 1px solid CanvasText; } }
