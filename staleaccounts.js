@@ -29,9 +29,14 @@
 //      earned items. KEPT - candidates for the "claim your balance" notice
 //   X  excluded, never touched: admins/staff/role holders, Pepe's own logins, room owners, anyone with
 //      PAT in flight (loans either side, escrow holds, stage slots, open market positions or web
-//      orders, bounties, wagers, lotto tickets, stashes/vault shares, gang membership, open shop
+//      orders, bounties, wagers, lotto tickets, stashes, gang membership, open shop
 //      orders or cosmetic listings, pending Camfrog link), a pending welcome bonus inside its window,
-//      or a negative balance
+//      or a negative balance. A stash holds its owner and members while it has a balance ("stash")
+//      OR - 1.99akv stashhold - vault shares or a stake / unstake waiting in the vault queue ("stash in
+//      vaults"; "stash vaults unreadable" when the vault book can't be read: fail closed). Since 1.92 a
+//      stake IS vault shares (holder "s<id>" in capital/vaults.js's book) - the `staked` column is the
+//      dead 1.90 lock - so until 1.99akv a stash with balance 0 and millions in shares held nobody.
+//      One helper: stashes.vaultHoldings (also accountdelete's stash plan and stashes.close).
 //   active  seen recently
 //
 // Archiving (archive()): one transaction per account. The whole-PAT part of the balance goes back to
@@ -177,7 +182,18 @@ function botFacts(bot) {
   for (const rq of vals((bot.loans || {}).requests)) if (rq && OPEN.test(String(rq.status || "open"))) hold(rq.nick, "loan request");
   for (const h of vals((bot.escrow || {}).holds)) if (h && h.state === "held") hold([h.nick, h.user], "escrow hold");
   for (const p of vals((bot.escrow || {}).payouts)) if (p && p.state !== "paid") hold([p.nick, p.user], "escrow payout");
-  for (const v of vals((bot.pvaults || {}).vaults)) if (v && !v.closed && (Number(v.balance) > 0 || Number(v.staked) > 0)) hold([v.owner].concat(v.members || []), "stash");
+  // a stash with PAT in it: its balance (or the old 1.90 `staked` lock) - and, 1.99akv stashhold, its VAULT SHARES / a stake or
+  // unstake waiting in the vault queue (bot.vaultHold(id), from stashes.vaultHoldings - gather() sets it): "stash in vaults", or
+  // "stash vaults unreadable" when the vault book can't be read (fail closed). Owner and members alike, like the balance.
+  const pv = (bot.pvaults || {}).vaults;
+  const pvEnts = Array.isArray(pv) ? pv.map((v) => [v && v.id, v]) : Object.entries(pv || {}).map(([k, v]) => [v && v.id != null ? v.id : k, v]);
+  for (const [id, v] of pvEnts) {
+    if (!v || v.closed) continue;
+    const who = [v.owner].concat(v.members || []);
+    if (Number(v.balance) > 0 || Number(v.staked) > 0) hold(who, "stash");
+    const vh = typeof bot.vaultHold === "function" && id != null ? bot.vaultHold(String(id)) : null;
+    if (vh) hold(who, vh);
+  }
   for (const l of Object.keys((bot.gangs || {}).members || {})) hold(l, "gang member");
   for (const m of vals((bot.markets || {}).markets)) if (m && OPEN.test(String(m.status || ""))) for (const s of strings(m.bets)) hold(s, "market position");
   for (const m of vals((bot.markets || {}).markets)) if (m && OPEN.test(String(m.status || ""))) hold([m.creator, m.judge], "market creator/judge");
@@ -186,6 +202,28 @@ function botFacts(bot) {
   for (const t of vals((bot.lotto || {}).tickets)) if (t && !/^(paid|settled|lost|refunded|done)$/i.test(String(t.state || ""))) hold(t.who, "lotto ticket");
   for (const [a, c] of Object.entries((bot.shared || {}).alias_map || {})) alias.set(String(a).toLowerCase(), String(c).toLowerCase());
   return { seen, holds, alias };
+}
+
+/**
+ * 1.99akv stashhold: (stash id) -> the hold reason its vault holdings give ("stash in vaults" / "stash vaults unreadable") or null,
+ * for the open stashes of these pvaults lists (the site's, Pepe's files). stashes.vaultHoldings is the one helper; anything that
+ * goes wrong reading it holds every stash (fail closed).
+ */
+async function vaultHoldFn(lists) {
+  const ids = new Set();
+  for (const l of lists) {
+    const pv = l && l.vaults;
+    const ents = Array.isArray(pv) ? pv.map((v) => [v && v.id, v]) : Object.entries(pv || {}).map(([k, v]) => [v && v.id != null ? v.id : k, v]);
+    for (const [id, v] of ents) if (v && !v.closed && id != null) ids.add(String(id));
+  }
+  if (!ids.size) return () => null;
+  let H = null;
+  try { H = await require("./stashes").vaultHoldings([...ids]); } catch (e) { H = null; }
+  return (id) => {
+    const h = H && H.get(String(id));
+    if (!h || h.error) return "stash vaults unreadable";
+    return h.inVaults ? "stash in vaults" : null;
+  };
 }
 
 /** Everything classify() needs, per account. */
@@ -267,12 +305,16 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     const SS = require("./stashes");
     if (await tableExists("stash_meta") && await SS.live()) siteBot.pvaults = { vaults: await SS.list() };
   } catch (e) { /* keep the snapshot */ }
+  // 1.99akv stashhold: what every open stash holds in the vaults (stashes.vaultHoldings: the vault book's "s<id>" shares + the
+  // queue) - a stash with balance 0 can hold millions in shares, and closing it (account deletion) would strand them
+  const vaultHold = await vaultHoldFn([siteBot.pvaults, bot && bot.pvaults]);
+  siteBot.vaultHold = vaultHold;
   for (const [t, k] of [["markets", "markets"], ["bounties", "bounties"], ["wagers", "wagers"]]) {
     if (await tableExists(t)) for (const r of await getQuery(`SELECT data, status FROM ${t}`)) {
       const d = safeJson(r.data, {}); if (d && typeof d === "object") { d.status = d.status || r.status; siteBot[k][k].push(d); }
     }
   }
-  const facts = [botFacts(siteBot), botFacts(bot)];
+  const facts = [botFacts(siteBot), botFacts(bot ? Object.assign({}, bot, { vaultHold }) : bot)];
   if (!only && (await tableExists("camfrog_userstats"))) {
     for (const r of await getQuery("SELECT login, data FROM camfrog_userstats")) {
       const d = safeJson(r.data, {}); const l = String(r.login || "").toLowerCase();

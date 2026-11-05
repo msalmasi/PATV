@@ -45,12 +45,13 @@ what has a safe existing rule is settled automatically.
 | Your cloned voice on the voice store | Your likeness: revoke it through its own consent flow |
 | Gang membership | Leave the gang (`!gang leave`) |
 | A stash with other members, staked PAT, or stashes still in Pepe | Other people's PAT may be in it |
+| A stash with PAT in the vaults: vault shares, or a stake / unstake waiting for the cut-off (1.99akv; also when the vault book can't be read) | Closing it would strand the shares - the weekly payout skips closed stashes and only an open stash can unstake. Unstake it all; once it's back in the stash it settles like any other |
 | A balance below zero | Owed to the economy |
 
 | Settled automatically | How |
 |---|---|
 | Your balance | Routed by the PAT Routing row `account_deleted` (below) |
-| Stashes only you use (site-owned, unstaked) | Withdrawn into the wallet (keyed stash move), closed, then routed with the balance |
+| Stashes only you use (site-owned, nothing in the vaults or the vault queue) | Withdrawn into the wallet (keyed stash move), closed, then routed with the balance |
 | Creator subscriptions you pay for, store subscriptions | Stop renewing (`cancel_at_end`); one in grace ends |
 | Prime Time / Season Pass renewals you pay with PAT | Stop (`renewer_id` cleared) |
 | A pending welcome bonus | Expired (never paid) |

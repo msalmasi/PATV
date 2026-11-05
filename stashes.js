@@ -295,6 +295,163 @@ async function total() {
   return { amount: (r[0] && r[0].t) || 0, count: (r[0] && r[0].n) || 0 };
 }
 
+// ── 1.99akv stashhold: what a stash HOLDS - its balance AND its vault shares ──
+// Since 1.92 a stash's stake is VAULT SHARES (holder "s<id>" in the vault book: capital_docs "vaults", capital/vaults.js), not the
+// `staked` column (the 1.90 fee-share lock, 0 everywhere since). A stash with balance 0 can still hold millions in the vaults -
+// and a closed stash's shares are stuck: the weekly payout skips closed stashes and an unstake needs an open one. So every check
+// that closes a stash or lets its owner's account go (stashes.close, accountdelete, staleaccounts' "stash" hold) asks this ONE
+// helper. Reads only (no init, no writes - safe inside any transaction).
+//   source  "book"      the site's vault book (inited: the site owns the vaults - prod since Phase 3)
+//           "snapshot"  no inited book: the staking snapshot Pepe pushes (staking_state, his book's positions + queue) - plus any
+//                       holder a not-inited book still lists (conservative)
+//           "none"      neither exists (no vaults on this database)
+//   pending  the stash's stake / unstake requests still in the vault queue (any state but done / failed): PAT "going in" (held
+//            in vaultfloat) or "coming out" (paid to the stash at the cut-off)
+//   error    the book (or, with no book, the snapshot) couldn't be read / parsed -> the callers HOLD (fail closed; core.doc()
+//            would have answered "nothing staked" for a corrupt row, so the row is parsed here, strictly)
+// Shares below VAULT_EPS are float dust (none on prod 2026-11-05).
+const VAULT_EPS = 1e-9;
+const VAULT_KEYS = ["bank", "house", "mm", "auto"];
+const openReq = (q) => !!q && !["done", "failed"].includes(String(q.state || ""));
+async function tableThere(t) {
+  return (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length > 0;
+}
+/** The vault book and the staking snapshot, parsed strictly. -> {book, snap, error} (error: null or why) */
+async function vaultViews() {
+  const out = { book: null, snap: null, error: null };
+  let bookErr = null, snapErr = null;
+  try {
+    if (await tableThere("capital_docs")) {
+      const r = (await getQuery("SELECT data FROM capital_docs WHERE key = 'vaults'"))[0];
+      if (r && r.data != null) {
+        const d = JSON.parse(r.data);
+        if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("not an object");
+        out.book = d;
+      }
+    }
+  } catch (e) { bookErr = `the vault book can't be read (${e.message})`; }
+  try {
+    if (await tableThere("staking_state")) {
+      const r = (await getQuery("SELECT data FROM staking_state WHERE id = 1"))[0];
+      if (r && r.data != null) {
+        const s = JSON.parse(r.data);
+        if (!s || typeof s !== "object" || Array.isArray(s)) throw new Error("not an object");
+        out.snap = s;
+      }
+    }
+  } catch (e) { snapErr = `the staking snapshot can't be read (${e.message})`; }
+  // the book decides when it is readable; the snapshot only stands in for it (an error there counts only without a book)
+  out.error = bookErr || (!out.book && snapErr) || null;
+  return out;
+}
+/** One stash's shares per vault in a book doc (holder "s<id>"). Throws on a non-number share count. */
+function bookShares(d, id) {
+  const key = `s${id}`, out = {};
+  const put = (v, x) => {
+    if (x === undefined || x === null) return;
+    const n = Number(x);
+    if (!Number.isFinite(n)) throw new Error(`${v} shares of ${key} aren't a number`);
+    if (n > VAULT_EPS) out[v] = n;
+  };
+  for (const v of ["bank", "house", "mm"]) put(v, ((((d && d.v) || {})[v] || {}).holders || {})[key]);
+  put("auto", (((d && d.auto) || {}).holders || {})[key]);
+  return out;
+}
+function snapShares(s, id) {
+  const p = ((s && s.positions) || {})[String(id)];
+  const out = {};
+  for (const v of VAULT_KEYS) {
+    const h = p && p.hold && p.hold[v];
+    if (!h) continue;
+    const n = Number(h.shares);
+    if (!Number.isFinite(n)) throw new Error(`the snapshot's ${v} shares of stash ${id} aren't a number`);
+    if (n > VAULT_EPS) out[v] = n;
+  }
+  return out;
+}
+const reqShape = (q) => ({ id: q.id == null ? null : String(q.id), vault: q.vault || null, kind: q.kind || null,
+                           amount: q.amount == null ? null : Number(q.amount), shares: q.shares == null ? null : Number(q.shares), state: q.state || null });
+
+/**
+ * What these stashes hold (all stashes with ids = null). -> Map id -> {id, balance, staked, closed, shares: {vault: n},
+ * value (PAT at the snapshot's prices; null when unknown), pending: [{id, vault, kind, amount, shares, state}], inVaults,
+ * held (balance / staked / inVaults / error), source, error}. Never throws: a read error is every stash's `error`.
+ */
+async function vaultHoldings(ids = null) {
+  let rows = [];
+  try {
+    if (await tableThere("stashes")) {
+      rows = ids ? (ids.length ? await getQuery(`SELECT id, balance, staked, closed FROM stashes WHERE id IN (${ids.map(() => "?").join(",")})`, ids.map(String)) : [])
+        : await getQuery("SELECT id, balance, staked, closed FROM stashes");
+    }
+  } catch (e) { rows = []; }
+  const want = ids ? ids.map(String) : rows.map((r) => String(r.id));
+  const byId = new Map(rows.map((r) => [String(r.id), r]));
+  let views;
+  try { views = await vaultViews(); } catch (e) { views = { book: null, snap: null, error: `the vault book can't be read (${e.message})` }; }
+  const inited = !!(views.book && views.book.inited);
+  const source = inited ? "book" : views.snap ? "snapshot" : views.book ? "book" : "none";
+  const prices = (views.snap && views.snap.prices) || null;
+  const out = new Map();
+  for (const id of want) {
+    const r = byId.get(id) || null;
+    const h = { id, balance: r ? Number(r.balance) || 0 : null, staked: r ? Number(r.staked) || 0 : null, closed: r ? r.closed || null : null,
+                shares: {}, value: null, pending: [], inVaults: false, held: false, source, error: views.error };
+    if (!h.error) {
+      try {
+        // the shares: the inited book, else the snapshot (+ whatever a not-inited book lists)
+        if (inited) h.shares = bookShares(views.book, id);
+        else {
+          h.shares = snapShares(views.snap, id);
+          if (views.book) for (const [v, n] of Object.entries(bookShares(views.book, id))) h.shares[v] = Math.max(h.shares[v] || 0, n);
+        }
+        // the queue: the inited book's, else the snapshot's (+ a not-inited book's), one entry per request id
+        const seenQ = new Set();
+        const addQ = (list) => {
+          for (const q of list) {
+            if (!q || String(q.stash) !== id || !openReq(q)) continue;
+            const k = q.id == null ? JSON.stringify(q) : String(q.id);
+            if (seenQ.has(k)) continue;
+            seenQ.add(k);
+            h.pending.push(reqShape(q));
+          }
+        };
+        if (views.book) addQ(Object.values((views.book && views.book.queue) || {}));
+        if (!inited && views.snap) addQ(Array.isArray(views.snap.queue) ? views.snap.queue : []);
+        // the value (informational): at the snapshot's prices, else the snapshot's own values
+        const vs = Object.keys(h.shares);
+        if (!vs.length) h.value = 0;
+        else if (prices && vs.every((v) => Number.isFinite(Number(prices[v])))) h.value = Math.trunc(vs.reduce((t, v) => t + h.shares[v] * Number(prices[v]), 0));
+        else {
+          const p = ((views.snap && views.snap.positions) || {})[id];
+          h.value = p && p.hold && vs.every((v) => p.hold[v] && Number.isFinite(Number(p.hold[v].value)))
+            ? Math.trunc(vs.reduce((t, v) => t + Number(p.hold[v].value), 0)) : null;
+        }
+      } catch (e) { h.error = `the vault book can't be read (${e.message})`; }
+    }
+    h.inVaults = !h.error && (Object.keys(h.shares).length > 0 || h.pending.length > 0);
+    h.held = !!h.error || h.inVaults || (h.balance || 0) > 0 || (h.staked || 0) > 0;
+    out.set(id, h);
+  }
+  return out;
+}
+/** One stash: vaultHoldings([id]).get(id). */
+async function stashHoldings(stashId) {
+  return (await vaultHoldings([String(stashId)])).get(String(stashId));
+}
+/** The plain words for a stash that can't close because of its vault holdings (or null when it can, as far as the vaults go). */
+function vaultRefusal(h, name) {
+  if (!h || h.error) return new Refuse(503, `Couldn't check what '${name}' has in the vaults right now, so it's still open - try again in a few minutes.`, "E_VAULTS_UNREADABLE");
+  if (!h.inVaults) return null;
+  const parts = [];
+  if (Object.keys(h.shares).length) parts.push(h.value != null && h.value > 0 ? `${fmtN(h.value)} PAT staked` : "PAT staked");
+  if (h.pending.some((q) => q.kind === "deposit")) parts.push("a stake waiting for the cut-off");
+  if (h.pending.some((q) => q.kind !== "deposit")) parts.push("an unstake waiting for the cut-off");
+  return new Refuse(409, `'${name}' still has PAT in the vaults (${parts.join(", ")}) - unstake it all first; it comes back to the stash at the next cut-off, then close it.`,
+                    "E_STASH_IN_VAULTS");
+}
+const fmtN = (n) => Number(n || 0).toLocaleString("en-US");
+
 // ── idempotent moves ──
 /** In the open transaction: a key seen before -> its first answer (dup), else null. */
 async function seen(key) {
@@ -544,12 +701,17 @@ async function rename({ stashId, name }) {
 /**
  * Close: everything unstaked goes to the owner's wallet, then the stash is closed. `stakedForfeit` (Pepe's old
  * fee-share stake, which closing unstakes) - the web refuses while any PAT is staked or in the capital vaults.
+ * 1.99akv stashhold: refused - for the website AND Pepe's chat close (/api/stash/bot/act) - while the stash holds vault shares
+ * or has a stake / unstake waiting in the vault queue (vaultHoldings; a vault-book read error refuses too): checked before
+ * anything moves, and again in the closing transaction (a stake requested in between can't strand its shares under a
+ * closed stash).
  */
 async function close({ stashId, ownerUserId, key, via = "web", unstake = false }) {
   await requireLive();
   key = checkKey(key);
   const s0 = await get(stashId);
   if (!s0 || s0.closed) throw new Refuse(404, "That stash doesn't exist (or is closed).");
+  { const no = vaultRefusal(await stashHoldings(s0.id), s0.name); if (no) throw no; }
   if (s0.staked && unstake) await botMove({ stashId: s0.id, stakedDelta: -s0.staked, key: key + ":unstake", kind: "unstake", why: "close" });
   const s = await get(stashId);
   if (s.staked) throw new Refuse(409, `'${s.name}' still has ${s.staked.toLocaleString("en-US")} PAT staked - unstake it first.`);
@@ -561,6 +723,9 @@ async function close({ stashId, ownerUserId, key, via = "web", unstake = false }
   return tx(async () => {
     const dup = await seen(key);
     if (dup) return dup;
+    // stashhold: again, on the chain - a stake that slipped in after the first check (its PAT left the balance) keeps it open
+    const no = vaultRefusal(await stashHoldings(s.id), s.name);
+    if (no) { if (paid) no.message += ` (its ${fmtN(paid)} PAT balance went to your wallet; the stash stays open.)`; throw no; }
     const r = await runQuery("UPDATE stashes SET closed = ?, updated = ? WHERE id = ? AND closed IS NULL AND balance = 0", [now() / 1000, now(), s.id]);
     if (!r || r.changes !== 1) throw new Refuse(409, "Couldn't empty the stash, so it's still open.");
     const out = { ok: true, stash: s.id, name: s.name, paid };
@@ -868,14 +1033,15 @@ async function fromForm(userId, words, idem) {
     }
     if (sub === "close" || sub === "delete") {
       const s = await find(me, words[1], { ownerOnly: true });
-      const sk = await require("./staking").latest().catch(() => null);
-      const p = require("./staking").positionFor(sk, s);
-      const pend = ((sk && sk.queue) || []).some((q) => String(q.stash) === String(s.id) && !["done", "failed"].includes(q.state));
-      if ((p && require("./staking").holdValue(p) > 0) || pend) {
-        return `🔐 '${s.name}' still has PAT staked in the vaults - unstake it all first (it comes back at the next cut-off).`;
+      // 1.99akv stashhold: close() itself refuses while the stash holds vault shares / has a stake or unstake waiting (the vault
+      // book, vaultHoldings - this form used to read only the staking snapshot)
+      try {
+        const r = await close({ stashId: s.id, ownerUserId: userId, key: key("close") });
+        return `🔐 Stash '${r.name}' closed` + (r.paid ? ` - ${fmt(r.paid)} PAT sent to your wallet.` : ".");
+      } catch (e) {
+        if (e instanceof Refuse && ["E_STASH_IN_VAULTS", "E_VAULTS_UNREADABLE"].includes(e.code)) return `🔐 ${e.message}`;
+        throw e;
       }
-      const r = await close({ stashId: s.id, ownerUserId: userId, key: key("close") });
-      return `🔐 Stash '${r.name}' closed` + (r.paid ? ` - ${fmt(r.paid)} PAT sent to your wallet.` : ".");
     }
     const mine = (await list()).filter((s) => canUse(s, me));
     if (!mine.length) return "🔐 No stashes yet - create one below.";
@@ -992,4 +1158,6 @@ module.exports = { init, register, enabled, live, list, get, find, total, deposi
                    rename, close, importFromPepe, fromForm, parseAmount, canUse, isOwner, free, userIdFor, Refuse, MIN_MOVE, MAX_OWNED,
                    // 1.99wy: account keys
                    actorOf, holderInfo, holderFor, acctKey, uidOfKey, isAcctKey, targetKey, rekeyInTx, rekeyAll, moneyFacts, claimLogin,
-                   mergeAccounts };
+                   mergeAccounts,
+                   // 1.99akv stashhold: balance AND vault shares / queued requests (every close / account-removal check)
+                   vaultHoldings, stashHoldings, vaultRefusal, VAULT_EPS };

@@ -171,6 +171,9 @@ const HOLD = {
   "shop listing": ["An active shop listing - take it down", "/shop/orders"],
   "cosmetic listing": ["A cosmetic for sale - take the listing down", "/cosmetics"],
   "stash": ["A stash with other members or staked PAT - withdraw your PAT and close it", "/wallet"],
+  // 1.99akv stashhold: vault shares (or a stake / unstake waiting in the vault queue) - never closed with the account
+  "stash in vaults": ["A stash with PAT in the vaults (staked, or a stake / unstake waiting for the cut-off) - its owner unstakes it all; it comes back to the stash at the next cut-off, then withdraw it and close the stash", "/staking"],
+  "stash vaults unreadable": ["We couldn't check what your stashes have in the vaults just now - try again in a few minutes", "/wallet"],
 };
 const SETTLED_HOLDS = new Set(["pending welcome bonus", "pending Camfrog link"]);
 
@@ -179,9 +182,12 @@ async function elevated(user) { return require("./chatsignin").elevated(user); }
 
 /** The sole-owned, unstaked stashes of an account while the site owns stashes (these are auto-settled). 1.99wy: stashes
  *  are held by "u:<userId>" (stashes.js); a row its linked login still holds (not re-keyed yet) counts too.
- *  -> {auto:[], block:bool} */
+ *  1.99akv stashhold: "unstaked" means NO VAULT SHARES and nothing waiting in the vault queue (stashes.vaultHoldings - a stake
+ *  is shares since 1.92, the `staked` column is 0 everywhere): such a stash is never auto-closed - it's in `vaults` (each
+ *  {id, error}; a vault-book read error counts, fail closed) and blocks the deletion until it's unstaked.
+ *  -> {auto:[], block:bool, vaults:[]} */
 async function stashPlan(login, uid = null) {
-  const out = { auto: [], block: false, live: false };
+  const out = { auto: [], block: false, live: false, vaults: [] };
   const keys = [...new Set([uid ? `u:${uid}` : null, login ? low(login) : null].filter(Boolean))];
   if (!keys.length || !(await tableExists("stashes"))) return out;
   try { out.live = !!(await require("./stashes").live()); } catch (e) { out.live = false; }
@@ -191,9 +197,15 @@ async function stashPlan(login, uid = null) {
                                                                          WHERE lower(m.login) IN ${IN} AND s.closed IS NULL AND lower(s.owner) NOT IN ${IN}`,
                                                                         keys.map(low).concat(keys.map(low))) : [];
   if (member.length) out.block = true;                       // a member of someone else's stash: leave it
+  let vh = null;
+  if (owned.length) { try { vh = await require("./stashes").vaultHoldings(owned.map((s) => String(s.id))); } catch (e) { vh = null; } }
   for (const s of owned) {
+    const h = vh && vh.get(String(s.id));
+    const inVaults = !h || !!h.error || h.inVaults;                                     // stashhold (fail closed)
+    if (inVaults) out.vaults.push({ id: String(s.id), error: !h || !!h.error });
     const others = (await tableExists("stash_members")) ? (await getQuery(`SELECT COUNT(*) AS n FROM stash_members WHERE stash_id = ? AND lower(login) NOT IN ${IN}`, [s.id].concat(keys.map(low))))[0].n : 0;
     if (!out.live || others > 0 || Number(s.staked) > 0) { if (Number(s.balance) > 0 || Number(s.staked) > 0 || others > 0) out.block = true; continue; }
+    if (inVaults) continue;                                                             // never auto-closed with shares in the vaults
     out.auto.push(s);
   }
   return out;
@@ -203,7 +215,7 @@ async function stashPlan(login, uid = null) {
  * What stops a deletion, and what will be settled automatically. -> {block: [{code, label, href}], settle: [{code, label}]}
  * Blocks: anything owed TO other people or still in flight (loans, escrow, bets, markets, wagers, bounties, lotto, orders,
  * listings, stage bookings, a card subscription, active subscribers, a cloned voice), pads you own, a negative balance.
- * Settled: renewals stop, pending links / welcome bonus go, sole-owned stashes are emptied into the routing.
+ * Settled: renewals stop, pending links / welcome bonus go, sole-owned stashes (nothing in the vaults - 1.99akv) are emptied into the routing.
  */
 async function blockers(userId, { now: t = now() } = {}) {
   const uid = String(userId);
@@ -230,6 +242,12 @@ async function blockers(userId, { now: t = now() } = {}) {
     B("hold:" + h, m[0], m[1]);
   }
   if (sp.block) B("hold:stash", HOLD.stash[0], HOLD.stash[1]);
+  // 1.99akv stashhold: a stash of theirs with vault shares / a stake or unstake waiting (or a vault book that can't be read) is
+  // never closed with the account - the same codes holdsFor's reasons get above, so it's listed once
+  for (const v of sp.vaults) {
+    const h = v.error ? "stash vaults unreadable" : "stash in vaults";
+    B("hold:" + h, HOLD[h][0], HOLD[h][1]);
+  }
   if (sp.auto.some((s) => Number(s.balance) > 0)) S("stash", "The PAT in your stashes goes with your balance (to the PAT Routing destination)");
   // site-native things in flight
   // (1.99ajn padppl review fix: never a 🎁 gift-to-a-frog-name hold - it can't be cancelled, and the blocker coming and going would tell the
@@ -526,7 +544,12 @@ async function settle(uid, login, report) {
   bump("creator_plans_closed", await run("creator_plans", ["creator_id", "active"], "UPDATE creator_plans SET active = 0 WHERE creator_id = ?", [uid]));
   // sole-owned stashes (site-owned, unstaked, nobody else in them): into the wallet first, so the routing takes it
   const sp = await stashPlan(login, uid);
+  if (sp.vaults.length) throw new Error(`stash ${sp.vaults.map((v) => v.id).join(", ")} has PAT in the vaults (or the vault book can't be read) - not closed`);
   for (const s of sp.auto) {
+    // 1.99akv stashhold: once more right before it moves / closes - a stake since blockers() keeps the stash (and the account): the
+    // job stops here, and the next tick's blockers() holds the deletion with the reason
+    const h = await require("./stashes").stashHoldings(s.id).catch(() => null);
+    if (!h || h.error || h.inVaults) throw new Error(`stash ${s.id} has PAT in the vaults (or the vault book can't be read) - not closed`);
     if (Number(s.balance) > 0) {
       const S = require("./stashes");
       const r = await S.withdraw({ key: `acctdel-${uid}-stash-${s.id}`, login: login || `u:${uid}`, stashId: s.id, amount: "all", userId: uid, via: "account-deleted" });
