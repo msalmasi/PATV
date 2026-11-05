@@ -765,20 +765,27 @@
     var cap = PATVStage.capture({ host: document.getElementById('rmCap'), room: function () { return padSlug; } });
     // newstream 1.99akv: the Live tab's red dot and the "Live on the stage now" line follow the stage - both were drawn once, at load, so a
     // viewer on Feed / About (a site pad always opens there) never saw a stream start. The dot: the pad's Camfrog room active at load
-    // (bridge.js padTabsFor roomActive) or the stage on air now. The line: only for a stage that went on air while this page watched, never
-    // on Live, gone with ✕ for this visit. The stage's own poll is the only clock - nothing new polls.
+    // (bridge.js padTabsFor roomActive), the stage showing something (onAir) or a STREAM on it (the poll). The line: only for a stream -
+    // a live slot, a 📼 title starting, Pepe's stream on air here; never the 🎙 mic stage alone (mic-ups come and go) - that started while
+    // this page watched, never on Live, gone with ✕ for this visit. The stage's own poll is the only clock - nothing new polls.
     var roomActive = <%= (PT_.roomActive != null ? !!PT_.roomActive : (!!PT_.active && !PT_.stageOn)) ? 'true' : 'false' %>;
     var liveDot = document.querySelector('#padTabs .ptab[data-tab="live"] .pdot'), liveNote = document.getElementById('padLiveNote');
-    var stageWas = null, noteGone = false;
+    var onNow = <%= live ? 'true' : 'false' %>, streams = onNow, noteGone = false;
     function onLiveTab() { var b = document.getElementById('padTab-live'); return !b || b.getAttribute('aria-selected') === 'true'; }
-    function stageOn(on) {
-      on = !!on;
-      if (liveDot) liveDot.hidden = !(roomActive || on);
-      if (liveNote) {
-        if (!on || noteGone || onLiveTab()) liveNote.hidden = true;
-        else if (stageWas === false) liveNote.hidden = false;
-      }
-      stageWas = on;
+    function paintDot() { if (liveDot) liveDot.hidden = !(roomActive || onNow || streams); }
+    function stageOn(on) { onNow = !!on; paintDot(); }
+    // (a held featured slot - a 📼 pause, an OBS reconnect: the server still names it, `went` - is still a stream: the line never flaps)
+    function streamsIn(g) {
+      var f = g.featured && typeof g.featured === 'object' ? g.featured : null;
+      return g.slots.length > 0 || !!(g.active && g.pepe_here !== false) || !!(f && (f.live || f.went || f.next));
+    }
+    function streamsMoved(g) {
+      var now = streamsIn(g), was = streams;
+      streams = now;
+      paintDot();
+      if (!liveNote) return;
+      if (!now || noteGone || onLiveTab()) liveNote.hidden = true;
+      else if (!was) liveNote.hidden = false;
     }
     if (liveNote) {
       var noteX = document.getElementById('padLiveNoteX');
@@ -790,6 +797,7 @@
     var liveIds = <%- JSON.stringify((RS.slots || []).map((s) => String(s.id)).sort().join(',')).replace(/</g, '\\u003c') %>;
     function slotsMoved(g) {
       if (!g || !Array.isArray(g.slots)) return;
+      streamsMoved(g);
       var ids = g.slots.map(function (s) { return s && s.id != null ? String(s.id) : ''; }).filter(Boolean).sort().join(',');
       if (ids === liveIds) return;
       liveIds = ids;

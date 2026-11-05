@@ -52,41 +52,54 @@ async function stageScript(extra) {
            docFire: (k, e) => (docL[k] || []).forEach((f) => f(e || {})) };
 }
 
+const NONE = { slots: [], active: false, pepe_here: true, featured: null };
+const ONE = { slots: [{ id: "s1" }], active: false, pepe_here: true, featured: { id: "s1", live: true, by: "auto", went: true } };
 test("1a: a stream that starts while the viewer is on Feed lights the Live tab's dot and says so under the tabs (they never changed after load)", async () => {
   const p = await stageScript();
   assert.equal(p.dot.hidden, true, "nothing on at load: no dot");
   assert.equal(p.note.hidden, true);
-  p.o.onAir(false);                     // (the first paint at load: off air)
+  p.o.onAir(false); p.o.onPoll(NONE);   // (the first paint at load, the first poll: off air)
   assert.equal(p.dot.hidden, true);
-  p.o.onAir(true);                      // the stage's poll: a stream is live
+  p.o.onPoll(ONE); p.o.onAir(true);     // the stage's poll: a stream is live
   assert.equal(p.dot.hidden, false, "the Live tab's dot");
   assert.equal(p.note.hidden, false, "Live on the stage now · Watch ›");
   assert.match(p.html, /<p class="plive" id="padLiveNote" hidden><a href="\?tab=live" data-pad-tab="live"><span class="pdot" aria-hidden="true"><\/span><span>Live on the stage now · <b>Watch ›<\/b><\/span><\/a><button type="button" id="padLiveNoteX" aria-label="Hide" title="Hide">✕<\/button><\/p>/,
     "a link pad-tabs.js already switches tabs for (data-pad-tab), and a ✕");
-  p.o.onAir(false);                     // it ended
+  p.o.onPoll({ slots: [], active: false, pepe_here: true, featured: { id: "s1", live: false, by: "auto", went: true } });
+  assert.equal(p.note.hidden, false, "a held featured stream (a 📼 pause, an OBS reconnect) is still on - the line never flaps");
+  p.o.onPoll(NONE); p.o.onAir(false);   // it ended
   assert.equal(p.dot.hidden, true, "off air (and the room isn't active): no dot");
   assert.equal(p.note.hidden, true, "nor the line");
+  p.o.onPoll({ slots: [], active: true, pepe_here: true, featured: null });
+  assert.equal(p.note.hidden, false, "Pepe's stream coming on air here counts");
+  p.o.onPoll({ slots: [], active: true, pepe_here: false, featured: null });
+  assert.equal(p.note.hidden, true, "...not while he is in another pad");
 });
 
-test("1b: the line - never for a stage already on at load, never on Live, gone when Live opens or with ✕ (for this visit)", async () => {
-  const atLoad = await stageScript({ padTabs: { tabs: ["live", "feed", "about"], initial: "feed", active: true, roomActive: false, stageOn: true, camfrog: false, posts: [] } });
-  atLoad.o.onAir(true);
+test("1b: the line - never for a stream already on at load, never for the 🎙 mic stage alone, never on Live, gone when Live opens or with ✕", async () => {
+  const atLoad = await stageScript({ roomStage: { slots: [{ id: "s1", display: "A", hls: "/a.m3u8" }], upcoming: [], queue: {} },
+    padTabs: { tabs: ["live", "feed", "about"], initial: "feed", active: true, roomActive: false, stageOn: true, camfrog: false, posts: [] } });
+  atLoad.o.onAir(true); atLoad.o.onPoll(ONE);
   assert.equal(atLoad.dot.hidden, false);
   assert.equal(atLoad.note.hidden, true, "on air at load: the dot says it, as before");
+  const mic = await stageScript();
+  mic.o.onPoll(NONE); mic.o.onAir(true);   // the mic stage is the view (someone on the mic with a cam): ON AIR, no stream
+  assert.equal(mic.dot.hidden, false, "the dot: the stage shows something");
+  assert.equal(mic.note.hidden, true, "no line for a mic-up");
   const p = await stageScript();
-  p.o.onAir(false); p.o.onAir(true);
+  p.o.onPoll(NONE); p.o.onPoll(ONE);
   assert.equal(p.note.hidden, false);
   p.docFire("patv:padtab", { detail: { tab: "live" } });
   assert.equal(p.note.hidden, true, "the viewer opened Live");
   p.liveTab.attrs["aria-selected"] = "true";
-  p.o.onAir(false); p.o.onAir(true);
+  p.o.onPoll(NONE); p.o.onPoll(ONE);
   assert.equal(p.note.hidden, true, "on Live: no line (the stage is right there)");
   p.liveTab.attrs["aria-selected"] = "false";
-  p.o.onAir(false); p.o.onAir(true);
+  p.o.onPoll(NONE); p.o.onPoll(ONE);
   assert.equal(p.note.hidden, false, "back on Feed, the next stream says so again");
   p.x.fire("click");
   assert.equal(p.note.hidden, true, "✕");
-  p.o.onAir(false); p.o.onAir(true);
+  p.o.onPoll(NONE); p.o.onPoll(ONE);
   assert.equal(p.note.hidden, true, "✕ holds for this visit");
   assert.equal(p.dot.hidden, false, "the dot still follows the stage");
 });
