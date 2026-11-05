@@ -1,4 +1,4 @@
-// PO-4 (1.99??): tools/policy-backend.js's H2a gate-5 lines, run as the shell runs them (a child process, --dir, read-only):
+// PO-4 (1.99aju): tools/policy-backend.js's H2a gate-5 lines, run as the shell runs them (a child process, --dir, read-only):
 //   * "derived dual read recorded every day <span>" (FAIL on a missing day; INFO "not running yet" before the first row)
 //   * "derived dual read clean since <day>" (PASS: the latest final row clean, "N days in a row, Mondays: ..."; FAIL: its blocking)
 //   * "shadow audit = Pepe's (<eid>)" (PASS both match, WARN pending, FAIL a mismatch) and the INFO "staking readers" line

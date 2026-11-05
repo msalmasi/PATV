@@ -96,7 +96,7 @@ function init() {
       if (!ps.has("blocking")) await runQuery("ALTER TABLE policy_sims ADD COLUMN blocking TEXT");
       // PO-3: the economy settings Pepe planned the period with ({rev, sha, src: site | local} - his config thin client)
       if (!ps.has("pepe_cfg")) await runQuery("ALTER TABLE policy_sims ADD COLUMN pepe_cfg TEXT");
-      // PO-4 (1.99??): the weekly staking audit + digest of each settled epoch (policy/digest.js) - the shadow audit of Pepe's
+      // PO-4 (1.99aju): the weekly staking audit + digest of each settled epoch (policy/digest.js) - the shadow audit of Pepe's
       // record (via "shadow", compared with his own notices) and, once the treasury is live, the site's own (via "site")
       await runQuery(`CREATE TABLE IF NOT EXISTS policy_epoch_audit (eid TEXT PRIMARY KEY, via TEXT, state TEXT, audit TEXT, notice TEXT, digest TEXT,
         pepe TEXT, audit_match INTEGER, digest_match INTEGER, audit_sent_at INTEGER, digest_sent_at INTEGER, created INTEGER, updated INTEGER)`);

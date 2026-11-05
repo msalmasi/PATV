@@ -11,7 +11,7 @@
 //   info: the bind ratio, the pools before / after (P3.1: House + the pools the legs touch + the stash legs that landed), the
 //   payout's own APR over 100%, D2's reference cap (fallback)
 //
-// TWO USES (1.99??):
+// TWO USES (1.99aju):
 //   SHADOW (now - via "shadow"): digestPass (policy/scheduler.js pass()) audits PEPE's settled record, rebuilt from what the site
 //     already holds - his plan (policy_sims "shadow:treasury:<eid>".pepe_plan / pepe_inputs), the legs that landed (stash_moves /
 //     pool_moves "<tid>:in", bot_credit_log "vl:<tid>:in"), the refused stash legs (a "refused" stash move + its "<tid>:back"),

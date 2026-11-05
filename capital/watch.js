@@ -249,7 +249,7 @@ async function roundTripsWeek(boundary, eid) {
 async function weekly(c) {
   const E = require("../policy/engines");
   const { getQuery } = require("../dbUtils");
-  // PO-4 (1.99??): once the treasury engine is live, the weekly records are the site's own (policy_runs, V.wfView) - the tracker,
+  // PO-4 (1.99aju): once the treasury engine is live, the weekly records are the site's own (policy_runs, V.wfView) - the tracker,
   // the settlement lookup, lastSettled and the stash-move / notice cross-check below run on the site's tids and refs
   if (c) c = await V.wfView(c);
   if (c && Array.isArray(c.waterfall)) await trackCap(c).catch((e) => console.error("[capital] staking cap tracker:", e.message));

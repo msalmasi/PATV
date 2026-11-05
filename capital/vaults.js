@@ -40,7 +40,7 @@
 //   * every cut-off snapshot records the rule it ran with (ceil_apr: the ceiling, 0 = off; ceil_cushion 0 / 1) - Pepe's
 //     pepe_stakingreplay reads them first (his local snapshots carry the same keys);
 //   * audit(): the invariants of fix plan §6 (I1-I5, I8, I10), in the cut-off's notes; capital/watch.js alerts the admins.
-// PO-4 (1.99??): the weekly settlement records the staking readers use (lateMonday at the cut-off, publish's /staking list,
+// PO-4 (1.99aju): the weekly settlement records the staking readers use (lateMonday at the cut-off, publish's /staking list,
 // lastSettled / patDaysNow, capital/watch.js) come through wfView(c): Pepe's pushed waterfall / wf_settled while the treasury engine
 // isn't live on the site (today's path, the very same object), the treasury's weekly rows of policy_runs once it is
 // (publicRecord: a site-run record in Pepe's _tr_public_records shape; a handed one = the push row the cutover kept).
@@ -1279,7 +1279,7 @@ function waterfallFrom(c) {
   }
   return out.sort((a, b) => (a.epoch < b.epoch ? -1 : a.epoch > b.epoch ? 1 : 0));
 }
-// ── PO-4 (1.99??): the weekly records from the SITE's policy runs (readers on policy_runs once the treasury engine is live) ──
+// ── PO-4 (1.99aju): the weekly records from the SITE's policy runs (readers on policy_runs once the treasury engine is live) ──
 const WF_KEEP = ["surplus", "stakers_share", "apr_cap", "staked", "stakers", "stakers_n", "fed", "incentives", "fed_loan_repaid"];
 /**
  * One settled weekly record in Pepe's push shape (pepe_treasury._tr_public_records): the plan's per-vault totals (never a stash

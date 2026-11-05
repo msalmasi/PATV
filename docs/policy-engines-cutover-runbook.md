@@ -552,7 +552,7 @@ What changed in Pepe's half, and what the H1 owner needs to know:
 - **The shared contract fixture** `policycfg-contract.json` is regenerated (its pushes, rollback and export carry the new
   `skip`) and re-pinned in both repos.
 
-### 14.7 PO-4: the derived state, the weekly audit and digest, the readers on `policy_runs` (shadow; 1.99??)
+### 14.7 PO-4: the derived state, the weekly audit and digest, the readers on `policy_runs` (shadow; 1.99aju)
 
 PO-4 moves no PAT and changes no live decision. It derives what Pepe still pushes, compares it with his push once a day, audits
 his settled week the way he does, and gets the staking readers ready to read the site's own records after H2a. Nothing reads a

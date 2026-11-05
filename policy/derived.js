@@ -1,6 +1,6 @@
 // policy/derived.js — PO-4 of the economy policy -> site plan ("Phase 6"): the policy state Pepe still derives and PUSHES with his
 // capital config (camfrog-bot pepe_capitalstore._cap_cfg -> POST /api/capital/bot/config -> capital_meta "cfg"), derived here from
-// the site's own tables instead. 1.99??: SHADOW ONLY - nothing reads these values for a decision until H2a (the loans desk keeps
+// the site's own tables instead. 1.99aju: SHADOW ONLY - nothing reads these values for a decision until H2a (the loans desk keeps
 // reading Pepe's push through capital/reserve.js's cfgAge guard; the cut-off keeps his flows); policy/scheduler.js derivedPass
 // compares them with his push once a day (the derived dual read, policy_sims "shadow:derived:D<date>").
 //

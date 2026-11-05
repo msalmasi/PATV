@@ -191,7 +191,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
     for (const [v, x] of Object.entries(plan.vaults)) {
       if (x.surplus > 0) redeemed[v] = -(await protocolBook(v, -x.surplus, `wf-${eid}-${v}`));
     }
-    // PO-4 (1.99??): the fix-plan P3.1 conservation base (policy/digest.js p31Base: the House + the weekly pools + the stash legs
+    // PO-4 (1.99aju): the fix-plan P3.1 conservation base (policy/digest.js p31Base: the House + the weekly pools + the stash legs
     // that landed) read before and after the legs - a read only, kept on the result for the weekly audit; it moves nothing, and
     // (review of PO-4) a monitoring read never aborts the settlement: an error is logged and that side is null
     const p31Before = await p31Safe(eid, plan, []);
@@ -240,7 +240,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
   });
   // staking fix plan P0.1 (Pepe's _tr_notify_stakers): one notice per paid stash, after the settlement committed
   if (res && res.ok && !res.already && res.plan) await notifyStakers(eid, res.plan, res.track, res.capIn).catch((e) => console.error("[policy] payout notices:", e.message));
-  // PO-4 (1.99??): the week's audit (problems only) + digest to the Pepe owners, once (policy/digest.js; notices only - never PAT)
+  // PO-4 (1.99aju): the week's audit (problems only) + digest to the Pepe owners, once (policy/digest.js; notices only - never PAT)
   if (res && res.ok && !res.already && res.plan) await require("./digest").afterEpoch(eid, res).catch((e) => console.error("[policy] staking audit / digest:", e.message));
   return res;
 }

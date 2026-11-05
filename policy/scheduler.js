@@ -53,7 +53,7 @@
 //                                                                site ran and every effect Pepe hasn't applied (idempotent)
 //   /api/policy/admin/test-clock {at}   STAGING only: the scheduler's clock jumps to `at` (s) - nothing else moves
 //   /api/policy/admin/tick {at, tag, engines}  STAGING only: one pass at `at` with period ids "<id>-<tag>" (the rehearsal)
-// PO-4 (1.99??), SHADOW ONLY - nothing here moves PAT or changes a decision. THE DERIVED DUAL READ (derivedPass): once a day after
+// PO-4 (1.99aju), SHADOW ONLY - nothing here moves PAT or changes a decision. THE DERIVED DUAL READ (derivedPass): once a day after
 // the 04:00 runs (from 04:30 UTC and the day's capital cut-off) the state Pepe derives and pushes with his capital config (the
 // vault targets, the Fed loan room, the credit terms, the flows; capital_meta "cfg") is compared with the site's own derivation
 // (policy/derived.js) at his push's instant - one row a day, policy_sims "shadow:derived:D<date>" (the shadow-report shape; the
@@ -167,7 +167,7 @@ const WHITELIST = [
     when: (ctx) => /^guarantee: site waits for the epoch \/ pepe true$/.test(ctx.d),
     why: "the Monday guarantee needs this week's epoch done: Pepe ran it a moment earlier, the site sees it only when his journal push lands (the site's own gate - the guarantee on, the treasury live, the epoch's day - is checked)",
     test: "test/policy-boundary.test.js: the Monday monetary day: the guarantee decision and the week record are post-move; a mismatched decision blocks" },
-  // PO-4 (1.99??): the derived dual read's one excused field - Pepe's `flows` comes from HIS vault flow ledger (only the moves he
+  // PO-4 (1.99aju): the derived dual read's one excused field - Pepe's `flows` comes from HIS vault flow ledger (only the moves he
   // makes, tagged with flow / caller-frame names, mostly {}), which the site can only rebuild best-effort (policy/derived.js
   // siteLedger); the capital cut-off copies it into the epoch record for /staking and no PAT path reads it
   { on: "plan", engine: "derived", kind: "derived", field: "flows", match: /^flows(\.|$)/, mode: "shadow",
@@ -1097,7 +1097,7 @@ async function cutover(b) {
   if (b.cfg) await C.putCfg(b.cfg);
   const h = b.handover && typeof b.handover === "object" ? b.handover : {};
   const handed = [];
-  // PO-4 (1.99??, additive): a treasury week Pepe ran keeps his /staking record - the row of his current capital push for that epoch
+  // PO-4 (1.99aju, additive): a treasury week Pepe ran keeps his /staking record - the row of his current capital push for that epoch
   // (per-vault totals) and when it was settled - so the readers (capital/vaults.js wfView) keep the weeks before the cutover once
   // PO-10 retires the push. Best effort: no push = today's result; it never fails the cutover
   let pub = { rows: [], settled: [] };

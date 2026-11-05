@@ -30,7 +30,7 @@
 // --since (default: the last 4) to yesterday: the mirror diff CHECKED and empty that day (gate 1), and the dual read RECORDED for
 // every daily reader that day - capital.cutoff (capital live), policy.source (an engine on), funding.monetary (Pepe pushing) - with
 // no difference (gate 2). A difference today fails too. For H1: --since=2026-10-30.
-// PO-4 (1.99??): the derived dual read (policy_sims engine 'derived', one row a day: Pepe's pushed targets / fl_room / credit / flows
+// PO-4 (1.99aju): the derived dual read (policy_sims engine 'derived', one row a day: Pepe's pushed targets / fl_room / credit / flows
 // vs the site's policy/derived.js) and the weekly shadow audit (policy_epoch_audit: the site's audit + digest of Pepe's settled
 // week vs his own notices) - status lines and the H2a gate-5 preflight lines ("derived dual read recorded every day", "derived
 // dual read clean since <day>", "shadow audit = Pepe's"); "last W" and the staking readers' source follow policy_runs once the
