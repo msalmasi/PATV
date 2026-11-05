@@ -665,3 +665,105 @@ unchanged.
 4. At least 2 hours (real) after his done (`record.done` in `policy-inject.result.json`), the next untagged pass finishes the
    pending audit on the real clock (or tick once more: `POST /api/policy/admin/tick {at: <Mon 04:31Z>, tag: "p4a", engines: []}`,
    which runs PO-4 only). Expect `W2026-11-09-p4a` state `final`, audit_match = 1 and digest_match = 1.
+
+## 15. H2a rehearsal (forced legs)
+
+For the owner and main agent, 2026-11-10 through 11-16, before H2a on 11-17 at 14:00 UTC. This kit does not certify a
+handover. Keep the D-15 evidence and every H2a gate in addition to these exercises. Use only disposable staging copies,
+with the staging bot, outside the 03:30-04:30 UTC real-clock window. PAT amounts below are points.
+
+### 15.1 Preparation and commands
+
+Take consistent offline backups of staging's database (including its WAL state) and bot state before starting. Main agent
+prepares the prod copy through the existing approved backup procedure; this tool never connects to a host or copies prod.
+Use a **fresh copy per leg and per shadow/live comparison**. Stop the staging site while changing the copied database, so
+its scheduler cannot race the setup. Start it against that same copy for the bot boundary/report exercise. Do not point the
+tool at the deployed staging directory. Its canonical database path must be `policy-rehearsal-<id>/myapp.db`; symlinks are
+resolved before checking. Production/live/PATV path components are refused. Both environment variables below are mandatory.
+
+From the checked-out site code, with an absolute path to the initialized copy:
+
+```powershell
+$env:PATV_ENV = 'staging'
+$env:STAGING = '1'
+$db = 'G:/rehearsals/policy-rehearsal-floor/myapp.db'
+node tools/policy-rehearse.js setup --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
+node tools/policy-rehearse.js inspect --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
+node tools/policy-rehearse.js undo --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
+```
+
+First prove setup/undo without an engine tick: `result.ok=true`, the selected preview field positive, setup pool move net 0,
+undo `ok=true` and every balance restored to the PAT. Repeating either command with the same leg/tag/time is a no-op.
+A tag is permanently bound to that leg/time and must not be reused after undo. Use a new copy/tag for the next exercise.
+The tool stores its before/after receipt under `policy_meta rehearse:<tag>:<leg>` in the **same transaction** as its keyed
+pool move. An interruption before commit leaves neither; after commit retry answers the same receipt. No wallets, House,
+escrow, pots or policy settings are changed by setup. Insufficient system pools or an unreachable plan refuses the setup.
+
+For an engine exercise omit undo, then run (same options as setup):
+
+```powershell
+node tools/policy-rehearse.js tick --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
+node tools/policy-rehearse.js inspect --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
+```
+
+`tick` uses the real scheduler, an explicit test clock and tagged period IDs; it changes no engine mode, pause or ownership.
+The previous clock is restored in `finally`. After a killed process, inspect/clear the test clock using the existing
+`POST /api/policy/admin/test-clock {at:null}` before restarting the staging site. An empty `ran`, a wait, a failed run,
+missing bot plan or `ok != 1` is **not a pass**. `inspect` prints runs, site/Pepe plans, all diff families, effects, mints
+and keyed pool rows (including hashed burn keys). Save evidence outside the public repository; scrub account identities.
+
+### 15.2 Forced-leg checklist
+
+Use these options with the command pattern above; choose fresh lowercase alphanumeric tags of at most 8 characters.
+Targets come from the effective policy config and real plan, including the scaled guarantee and percentage Fort Knox cap.
+No setting or pre-existing transfer key is changed to make an exercise pass.
+
+| Leg | Time / tag example | Forced state and required evidence | Pass line to record after verifying |
+|---|---|---|---|
+| floor | Tue 11-10 05:10Z / `h2af1` | Reserve one PAT below effective floor; `floor_mint > 0`; live `floor-D2026-11-10-h2af1` mint and matching `fed_records` mint (legacy Fed: `policy_mints`); supply rises by actual mint | `PASS floor: plan matched; mint once; supply reconciled` |
+| guarantee | Mon 11-16 05:10Z / `h2ag1` | incentives 0; settle the **same tagged** Monday epoch first, release next, then monetary; `guarantee_paid > 0`, `mo-D2026-11-16-h2ag1-guarantee` once | `PASS guarantee: epoch/release waited; top-up once; conserved` |
+| ceiling | Tue 11-10 05:10Z / `h2ac1` | Reserve effective ceiling + 1M; `excess > 0`; `mo-D2026-11-10-h2ac1-ceiling` routes by existing `ceiling_action` (to burn reserve if burn, otherwise incentives) | `PASS ceiling: configured destination; excess once; conserved` |
+| burn | Tue 11-10 05:10Z / `h2ab1` | burn reserve +250K; existing accrual mode, inflight respected; tagged `A<slot>-h2ab1` done, `burn:S<seq>-<hash>`, burn effect + `pat_burns`; actual burned PAT leave supply | `PASS burn: actual amount once; supply fell by burned PAT` |
+| overflow | Tue 11-10 05:10Z / `h2ao1` | Fort Knox actual computed cap +1M; `overflow > 0`; daily `tr-D2026-11-10-h2ao1-fkover` (and any configured loan repayment legs), no arbitrary fixed cap | `PASS overflow: current cap; loans respected; conserved` |
+
+The guarantee reads a settled epoch's `incentives_after` when present, not just today's pool. If that journal prevents a
+top-up, setup refuses and rolls back; use a fresh copy and an unsettled test-clock Monday, settle its tagged epoch through
+the existing staging injection, then inspect the actual plan again. Do not edit the journal or waive the cut-off wait.
+If the epoch replenishes incentives above the target, choose another representative copy and record why the first was
+ineligible. Floor caps or organic issuance can likewise make a forced floor unreachable; a refusal is not a passed leg.
+
+For shadow comparisons, run the staging bot's existing `policy-inject.json` actions (§10, §14.7). For example the payload
+`{"action":"run","engine":"monetary","at":1794287400,"tag":"h2af1","guarantee":false}` runs Tue 11-10 05:10 UTC.
+For Monday use `epoch`, then `daily`, then `monetary` with `guarantee:true`, all at the same clock/tag. Verify the timestamp
+locally before running; the ISO timestamp passed to this tool is authoritative. The bot takes the boundary before its legs
+and pushes its own plan. Stop the site scheduler while doing offline setup; restart against the prepared copy before the
+bot injection. Then stop it again to inspect. Require `shadow:<engine>:<period>` `ok=1`, no blocking diff, and expected legs.
+Never synthesize a Pepe report from the JavaScript plan. For live proof restore the identical pre-leg copy, perform the
+normal owner cutover, run the site tick at the same tag/clock, and compare stored plans/actual rows with saved shadow
+evidence. Preserve both outputs before restoring any database. Burn day summaries finalize only on the real pool clock
+after day close +60 seconds; a future test clock cannot prove that gate. Keep the closed-day burn comparison separately.
+
+### 15.3 Pause, rollback and re-cutover (owner/main agent only, staging)
+
+1. In the staging room as the owner: `!econ engines status`, `!econ engines export`, then
+   `!econ engines cutover all confirm`. Expect SITE for every engine, handed rows for every imported period, **zero new
+   transfer rows from the import**, no conflict, no queued/dead reports. Capture before/after rows and supply history.
+2. Stop staging Pepe. On the isolated staging site copy use the existing emergency CLI:
+   `node tools/policy-backend.js --dir=<copy-folder> --actor=owner pause all --note "H2a rehearsal"`.
+   Run a tagged tick; require unchanged balances and no executed engine leg. Paused/missed rows must say paused.
+3. Resume with `node tools/policy-backend.js --dir=<copy-folder> --actor=owner resume all --note "H2a rehearsal"`.
+   At the current tagged period tick again; verify policy's current-period/late rules and no duplicate leg. Repeat the
+   successful tick and require unchanged run/move counts and balances. Do not expect an older missed period to catch up.
+4. Restart Pepe, let effects drain/ack and his docs push; as owner run `!econ engines rollback all confirm`.
+   Expect all three shadow, effects open 0, every site-run period in his journal, no duplicate PAT movement. Run a new-tag
+   shadow period and require clean comparison. Rollback does not undo previously executed mint/burn/transfer legs.
+5. `!econ engines export`, `!econ engines cutover all confirm`, then a fresh tagged live tick. Require handed done keys,
+   once-only live legs, expected supply delta and clean saved-plan comparison. Finally `!econ engines rollback all confirm`
+   to leave staging shadow, clear the test clock, restore staging backups by the approved offline procedure and verify both
+   sides' switches, journals and zero pending effects again. Never use detach as a rehearsal rollback.
+
+**Undo scope:** `undo` reverses only the synthetic setup transfer, through a keyed zero-net rollback move. It checks every
+pool against its stored post-setup snapshot under the write gate, and refuses if any changed. It cannot reverse scheduler
+mint/burn or participant effects. After any executed leg restore the whole disposable database and corresponding bot copy
+offline, never manufacture a compensating mint or erase an existing done key. The owner/main agent records these pass lines
+only after the actual rehearsal; local tests or a successful CLI exit do not substitute for gate 6.
