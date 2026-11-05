@@ -336,7 +336,8 @@ test("review: the pad page prints the viewer tag only for the Room Dock, and suc
   try {
     const off = await get("/p/" + SLUG, U.other);
     assert.doesNotMatch(off.text, /var pageVt = "/, "Dock off: no tag in the page");
-    assert.equal(off.headers.get("cache-control"), null, "Dock off: the pad page's headers as before");
+    // (pubswitch: every pad page is private, no-store now - the Dock or not, signed in or out - test/pubswitch.test.js)
+    assert.equal(off.headers.get("cache-control"), "private, no-store", "Dock off: no tag, and the page is still never kept");
   } finally { await mode("everyone"); }
 });
 test("the homepage's Room Dock follows the same switch: off = today's homepage, 'staff' = staff only, 'everyone' = all", async () => {

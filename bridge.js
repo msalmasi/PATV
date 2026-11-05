@@ -2664,9 +2664,12 @@ function register(app, { isBotToken, addUser }) {
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest,
       lineLive: !!hubChat });
     // 1.99ajh dockpop review: a page that carries the viewer tag (a stable per-account key) is this viewer's alone - never kept by a shared
-    // cache (a stricter header set above stays)
+    // cache (pubswitch: nor by the browser - below)
     const dockOn_ = require("./paddock").viewerOn(req.user), vt_ = signedIn && dockOn_ ? require("./roompm").tag(req.user.userId) : null;
-    if (vt_ && !res.get("Cache-Control")) res.set("Cache-Control", "private");
+    // pubswitch (owner 2026-11-05): EVERY pad page is this viewer's, at this pad's level, now - signed in or out. Without a header (signed
+    // out) or with a bare `private` (the Dock) a browser may still show a kept copy on Back / a restored tab: another account's page, or
+    // the page from before the owner changed who may see the pad (Back from Settings after Members -> Public came out of the bfcache).
+    res.set("Cache-Control", "private, no-store");
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,
       adultNext: "/p/" + encodeURIComponent(slug),
