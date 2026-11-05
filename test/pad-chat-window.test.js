@@ -118,7 +118,7 @@ test("the window: the Dock's chat card alone, the site's head, never cached / in
     assert.equal((h.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, id);
   for (const id of ["rmStage", "padTabs", "rmHero", "rmGoLive", "rmStrip", "padPanel-feed", "padPanel-about", "siteFootTpl", "padLaunch"]) assert.doesNotMatch(h, new RegExp('id="' + id + '"'), id);
   assert.doesNotMatch(h, /class="navbar"|<script src="[^"]*\/(?:pad-tabs|stage-room|stage-player|stage-mic|pad-camstrip|pad-launch)\.js|patv_chat_sweep|\/api\/u\/[^'"]+\/profile/);
-  assert.match(h, /<script src="\/public\/js\/dock-link\.js\?v=2"><\/script><script src="\/public\/js\/pad-dock\.js\?v=11"><\/script>/);   // (1.99ajn padppl: v6 - a veiled line opens the person menu; the chat ⋯ mention items; 1.99ajq dockpol: v7; 1.99ajw casino2: dock-link v2 + pad-dock v8 - the chat beside a casino table; 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11)
+  assert.match(h, /<script src="\/public\/js\/dock-link\.js\?v=2"><\/script><script src="\/public\/js\/pad-dock\.js\?v=12"><\/script>/);   // (1.99ajn padppl: v6 - a veiled line opens the person menu; the chat ⋯ mention items; 1.99ajq dockpol: v7; 1.99ajw casino2: dock-link v2 + pad-dock v8 - the chat beside a casino table; 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11)
   assert.match(h, /var pageVt = "([^"]+)", chatOnly = true;/);
   assert.equal(/var pageVt = "([^"]+)"/.exec(h)[1], RPM.tag(U.viewer.userId), "the window's viewer tag is roompm.tag");
   assert.notEqual(RPM.tag(U.viewer.userId), U.viewer.userId); assert.doesNotMatch(h, new RegExp('pageVt = "' + U.viewer.userId));

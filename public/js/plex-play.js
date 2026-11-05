@@ -12,6 +12,11 @@
 //   PATVPlexPlay.build(host, {rights, note}) - the parts, for a host that has none (the Dock's sheet)
 //   PATVPlexPlay.util - the helpers stage-plex.js shares (api, hms, parseTime, day, label, noticeText, fmt, esc)
 // Every string goes through __t (js.plex.*).
+// plexreplace (owner 2026-11-05: "a one-step 'play this instead'"): while something from the library is on THIS pad and you may change it (its
+// starter, the pad's owner / staff, the library admins - medialib.mine's on_pad.can_replace), a pick's button reads "▶ Play this instead" and its
+// confirm names what comes off; yes = ONE request ({replace: true}): the server swaps the title, the stage's feature and the "Coming up next"
+// card carry straight over. A busy refusal that says you may replace (can_replace - the pad changed under the sheet) turns into that confirm,
+// never a dead end. Someone who may not change it sees what's on and why the pick waits.
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -98,6 +103,9 @@
       if (onairBox && onairBox.checked && j && j.slot && j.slot.id) toPepe(j.slot.id, 0);
       if (pageStarted) pageStarted(j);
     } });
+    // plexreplace: what's on this pad (medialib.mine on_pad: {title, queue, left, by, mine, can_replace}) - from info(), or a busy refusal
+    var onPad = null;
+    var replacing = function () { return !!(onPad && onPad.can_replace && onPad.title) && when() !== 'later'; };
     var FREE = !!opts.free;
     var MEMBER = !!opts.member;
     var PER_HOUR = Number(opts.perHour) || 0;
@@ -155,7 +163,40 @@
         noteQueues(j);
         var ended = (j.queues || []).filter(function (q) { return q.state === 'ended' && q.notice; })[0];
         P.info.textContent = (ended ? noticeText(ended) + ' ' : '') + bits.join(' · ');
+        noteOnPad(j.on_pad || null);
       }).catch(function (e) { P.info.textContent = e.message; });
+    };
+    // plexreplace: the pick says what's on (and whether ▶ swaps it), the button says "instead"
+    var noteOnPad = function (x) {
+      onPad = x && x.title ? { title: String(x.title), queue: !!x.queue, left: Math.max(0, Number(x.left) || 0), by: x.by || null, mine: !!x.mine, can_replace: !!x.can_replace } : null;
+      drawNow();
+      drawPrice();
+    };
+    var drawNow = function () {
+      var el = P.pick.querySelector('[data-now]');
+      if (!el) return;
+      var b0 = P.pick.querySelector('[data-play]');
+      if (!onPad || when() === 'later' || (b0 && b0.hasAttribute('data-done'))) { el.classList.add('hide'); el.textContent = ''; return; }
+      el.classList.remove('hide');
+      el.textContent = onPad.can_replace ? _t('js.plex.now_on', '📼 Now on {pad}: “{now}” - ▶ swaps it for your pick.', { pad: opts.roomTitle(), now: onPad.title })
+        : _t('js.plex.now_on_locked', '📼 Now on {pad}: “{now}” - only whoever started it, the pad’s owner or an admin can change it, so a new pick waits until it ends.', { pad: opts.roomTitle(), now: onPad.title });
+    };
+    // the confirm's lines about what comes off: someone else's play, a queue (its titles after this one don't play)
+    var insteadLines = function () {
+      if (!onPad) return '';
+      var out = '';
+      if (onPad.by && !onPad.mine) out += _t('js.plex.instead_by', '“{now}” was started by {who} - it stops for everyone watching.', { now: onPad.title, who: onPad.by }) + '\n\n';
+      if (onPad.queue) out += (onPad.left === 1 ? _t('js.plex.instead_queue_1', 'It ends the 📼 queue that’s playing too (1 more title after this one).')
+        : onPad.left > 1 ? _t('js.plex.instead_queue_n', 'It ends the 📼 queue that’s playing too ({n} more titles after this one).', { n: onPad.left })
+        : _t('js.plex.instead_queue_last', 'It ends the 📼 queue that’s playing too (it’s on its last title).')) + '\n\n';
+      return out;
+    };
+    // a refusal that says this pad is busy but you may replace what's on: -> true (the caller asks again, as a replace)
+    var busyCanReplace = function (e, body) {
+      var d = e && e.data;
+      if (!d || body.replace || !/^busy_/.test(String(d.code || '')) || !d.can_replace || !d.playing) return false;
+      noteOnPad({ title: d.playing, queue: !!d.playing_queue, left: d.playing_left || 0, by: onPad ? onPad.by : null, mine: onPad ? onPad.mine : false, can_replace: true });
+      return true;
     };
     var card = function (it) {
       var sub = it.type === 'episode' ? (esc(it.show) + ' · S' + it.season + 'E' + it.episode)
@@ -193,7 +234,7 @@
     P.pick.addEventListener('input', function (ev) { if (ev.target.hasAttribute('data-o')) drawPrice(); });
     P.pick.addEventListener('change', function (ev) {
       if (ev.target.hasAttribute('data-when')) { var at = P.pick.querySelector('[data-at]'); if (at) at.classList.toggle('hide', ev.target.value !== 'later'); }
-      if (ev.target.hasAttribute('data-scope') || ev.target.hasAttribute('data-when') || ev.target.hasAttribute('data-at')) drawPrice();
+      if (ev.target.hasAttribute('data-scope') || ev.target.hasAttribute('data-when') || ev.target.hasAttribute('data-at')) { drawNow(); drawPrice(); }
     });
     var scope = function () { var s = P.pick.querySelector('[data-scope]'); return s ? s.value : 'episode'; };
     // 1.99lw: ▶ now, or 📅 book a slot for later (sized to the runtime)
@@ -210,6 +251,11 @@
     };
     var whenTxt = function (ms) { try { return new Date(ms).toLocaleString(LANG === 'en' ? undefined : LANG, { weekday: 'short', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }); } catch (e) { return new Date(ms).toLocaleString(); } };
     var playLabel = function (price, n) {
+      if (replacing()) {                     // plexreplace
+        return n > 1 ? (price ? _t('js.plex.q_play_instead_for', '▶ Play {n} titles instead (about {price} PAT)', { n: n, price: fmt(price) })
+                              : _t('js.plex.q_play_instead', '▶ Play {n} titles instead', { n: n }))
+          : price ? _t('js.plex.play_instead_for', '▶ Play this instead for {price} PAT', { price: fmt(price) }) : _t('js.plex.play_instead', '▶ Play this instead');
+      }
       return n > 1 ? (price ? _t('js.plex.q_play_on_for', '▶ Play {n} titles on {pad} (about {price} PAT)', { n: n, pad: opts.roomTitle(), price: fmt(price) })
                             : _t('js.plex.q_play_on', '▶ Play {n} titles on {pad}', { n: n, pad: opts.roomTitle() }))
         : price ? _t('js.plex.play_on_for', '▶ Play on {pad} for {price} PAT', { pad: opts.roomTitle(), price: fmt(price) })
@@ -312,13 +358,14 @@
             '</div><div class="row">' + whenRow() + '</div>' +
             (sc ? '<p class="muted" style="margin:0">' + esc(_t('js.plex.q_tracks', 'The next episodes keep your quality, audio language and subtitle language.')) + '</p>' : '') +
             (it.hdr ? '<p class="muted" style="margin:0">' + esc(_t('js.plex.hdr', 'HDR: shown in SDR, at up to 720p.')) + '</p>' : '') +
-            '<div class="px-price" data-price></div>' +
+            '<p class="muted px-now hide" data-now></p><div class="px-price" data-price></div>' +
             '<div class="row"><button type="button" class="btn primary" data-play>' + esc(_t('js.plex.play', '▶ Play')) + '</button>' + addBtn(it.key) + '</div>';
         }
         if (onairLbl && onairLbl.parentNode) onairLbl.parentNode.removeChild(onairLbl);   // (kept across picks: its tick stays)
         P.pick.innerHTML = h;
         P.pick.classList.remove('hide');
         placeOnair();
+        drawNow();
         drawPrice();
         say('');
         P.pick.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -332,17 +379,21 @@
     var startQueue = function (btn, body, pv, confirmedEst) {
       var go = function (pv) {
         var n = pv.items.length, est = confirmedEst != null ? confirmedEst : pv.estimate;
-        var msg = _t('js.plex.q_confirm', 'Play {n} titles ({time}) back to back on {pad}’s stage?', { n: n, time: hms(pv.total_sec), pad: opts.roomTitle() }) + '\n\n' +
+        var rep = replacing(), was = rep ? onPad.title : '';          // plexreplace: "instead of" what's on
+        var msg = (rep ? _t('js.plex.q_instead_n', 'Play {n} titles ({time}) back to back on {pad}’s stage instead of “{now}”?', { n: n, time: hms(pv.total_sec), pad: opts.roomTitle(), now: was }) + '\n\n' + insteadLines()
+                       : _t('js.plex.q_confirm', 'Play {n} titles ({time}) back to back on {pad}’s stage?', { n: n, time: hms(pv.total_sec), pad: opts.roomTitle() }) + '\n\n') +
           (est ? _t('js.plex.q_confirm_cost', 'About {price} PAT in all, charged as it plays: {first} PAT now, the rest as each new hour starts (only what actually plays). If you run out, it stops after the title that’s on.', { price: fmt(est), first: fmt(pv.first_charge) }) + '\n\n' : '') +
           _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
-        ask(msg, _t('js.plex.ask_play', 'Yes, play it'), btn, function () {
+        ask(msg, rep ? _t('js.plex.ask_instead', 'Yes, play it instead') : _t('js.plex.ask_play', 'Yes, play it'), btn, function () {
         if (est) body.estimate = est;
+        if (rep) body.replace = true; else delete body.replace;
         btn.disabled = true;
         var ok = false;
         say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
         api('POST', '/api/medialib/queue/start', body).then(function (j) {
           ok = true;
-          say(_t('js.plex.q_started', '▶ {title} is starting on {pad} - {n} titles queued.', { title: j.title, pad: opts.roomTitle(), n: j.items }) +
+          say((j.replaced ? _t('js.plex.q_started_instead', '▶ {title} is starting on {pad} instead of “{now}” - {n} titles queued.', { title: j.title, pad: opts.roomTitle(), n: j.items, now: j.replaced.title || was })
+                          : _t('js.plex.q_started', '▶ {title} is starting on {pad} - {n} titles queued.', { title: j.title, pad: opts.roomTitle(), n: j.items })) +
               (j.price ? ' ' + _t('js.plex.paid', '{price} PAT paid.', { price: fmt(j.price) }) : ''), true);
           if (body.keys) { list = []; saveList(); drawList(); }
           else done(btn);
@@ -354,6 +405,9 @@
             startQueue(btn, body, Object.assign({}, pv, { estimate: e.data.estimate }), e.data.estimate);
             return;
           }
+          // plexreplace: the pad got busy under the sheet and you may replace what's on - ask that, never a dead end
+          if (busyCanReplace(e, body)) { say(''); btn.disabled = false; startQueue(btn, body, pv, confirmedEst); return; }
+          if (e.data && e.data.code === 'replace_gone') info();
           say(e.message);
         }).then(function () { if (!ok || body.keys) btn.disabled = false; });
         });
@@ -396,20 +450,28 @@
       if (scope() !== 'episode') { body.scope = scope(); startQueue(btn, body, qPrev); return; }
       var price = confirmed != null ? confirmed : priceAt(picked.duration, off);
       var what = (picked.type === 'episode' ? picked.show + ' S' + picked.season + 'E' + picked.episode : picked.title);
-      var q = off ? _t('js.plex.q_play_from', 'Play “{what}” on {pad}’s stage from {time}?', { what: what, pad: opts.roomTitle(), time: hms(off) })
+      var rep = replacing(), was = rep ? onPad.title : '';            // plexreplace: "instead of" what's on - ONE request
+      var q = rep ? (off ? _t('js.plex.q_instead_from', 'Play “{what}” on {pad}’s stage from {time} instead of “{now}”?', { what: what, pad: opts.roomTitle(), time: hms(off), now: was })
+                         : _t('js.plex.q_instead', 'Play “{what}” on {pad}’s stage instead of “{now}”?', { what: what, pad: opts.roomTitle(), now: was }))
+        : off ? _t('js.plex.q_play_from', 'Play “{what}” on {pad}’s stage from {time}?', { what: what, pad: opts.roomTitle(), time: hms(off) })
                   : _t('js.plex.q_play', 'Play “{what}” on {pad}’s stage?', { what: what, pad: opts.roomTitle() });
-      var msg = q + '\n\n' + (price ? _t('js.plex.q_cost', 'It costs {price} PAT, taken now. If it never gets on the stage, it all comes back.', { price: fmt(price) }) + '\n\n' : '') +
+      var msg = q + '\n\n' + (rep ? insteadLines() : '') + (price ? _t('js.plex.q_cost', 'It costs {price} PAT, taken now. If it never gets on the stage, it all comes back.', { price: fmt(price) }) + '\n\n' : '') +
                 _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
-      ask(msg, price ? _t('js.plex.ask_pay', 'Yes, play it for {price} PAT', { price: fmt(price) }) : _t('js.plex.ask_play', 'Yes, play it'), btn, function () {
+      var yes = rep ? (price ? _t('js.plex.ask_instead_pay', 'Yes, play it instead for {price} PAT', { price: fmt(price) }) : _t('js.plex.ask_instead', 'Yes, play it instead'))
+        : price ? _t('js.plex.ask_pay', 'Yes, play it for {price} PAT', { price: fmt(price) }) : _t('js.plex.ask_play', 'Yes, play it');
+      ask(msg, yes, btn, function () {
       if (price) body.price = price;
+      if (rep) body.replace = true;
       btn.disabled = true;
       var ok = false;
       say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
       api('POST', '/api/medialib/play', body).then(function (j) {
         ok = true;
-        say(_t('js.plex.started', '▶ {title} is starting on {pad} - it shows on the stage within a few seconds.', { title: j.title, pad: opts.roomTitle() }) +
+        say((j.replaced ? _t('js.plex.started_instead', '▶ {title} is starting on {pad} instead of “{now}” - it shows on the stage within a few seconds.', { title: j.title, pad: opts.roomTitle(), now: j.replaced.title || was })
+                        : _t('js.plex.started', '▶ {title} is starting on {pad} - it shows on the stage within a few seconds.', { title: j.title, pad: opts.roomTitle() })) +
             (j.price ? ' ' + _t('js.plex.paid', '{price} PAT paid.', { price: fmt(j.price) }) : ''), true);
         done(btn);
+        drawNow();
         started(j);
       }).catch(function (e) {
         // the price moved (or wasn't confirmed): show the server's and ask again
@@ -420,6 +482,9 @@
           play(btn, e.data.price);
           return;
         }
+        // plexreplace: the pad got busy under the sheet and you may replace what's on - ask that, never a dead end
+        if (busyCanReplace(e, body)) { say(''); btn.disabled = false; play(btn, confirmed); return; }
+        if (e.data && e.data.code === 'replace_gone') info();
         say(e.message);
       }).then(function () { if (!ok) btn.disabled = false; });
       });

@@ -2008,7 +2008,7 @@
         var flow = W.PATVPlexPlay.mount(wrap, { roomId: function () { return String(o.room == null ? '' : o.room); }, roomTitle: function () { return o.padTitle || o.slug || ''; },
           me: o.user || null, free: !!pp.free, member: !!pp.member, perHour: pp.price_per_hour || 0, quality: pp.quality || 720, queues: !!pp.queue, later: false,
           inlineConfirm: true,      // (review: the price confirm is a row in the sheet, like the Dock's other confirms - never the browser's dialog)
-          onStarted: function () { if (o.wake) o.wake(); } });
+          onStarted: function () { if (o.wake) o.wake(); var st = o.stage || W.PATVPadStage; if (st && typeof st.poll === 'function') st.poll(); } });   // (plexreplace: the stage asks at once - a replace's card shows now, not at the next 10 s poll)
         if (flow) flow.info();
         var q = wrap.querySelector('input[type=search]'); if (q) setTimeout(function () { if (q.isConnected) q.focus(); }, 0);   // (after the sheet's own focus)
       });

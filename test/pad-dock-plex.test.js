@@ -68,7 +68,7 @@ test("the server side: bridge.js offers it by medialib.goLiveInfo (show && ok) f
   assert.match(src, /const g = await require\("\.\/medialib"\)\.goLiveInfo\(req\.user\);\s*if \(g && g\.show && g\.ok\) plexPlay = /);
   assert.match(src, /onair: SP\.can\(req\.user, "onair\.operate"\) && !\(pepeIn\(R\.id\) && stage\(\)\.active\)/);
   const room = read("views", "room.ejs");
-  assert.match(room, /<% if \(locals\.plexPlay && !chatOnly_\) \{ %><script src="\/public\/js\/plex-play\.js\?v=1"><\/script><% \} %>/);
+  assert.match(room, /<% if \(locals\.plexPlay && !chatOnly_\) \{ %><script src="\/public\/js\/plex-play\.js\?v=2"><\/script><% \} %>/);
   assert.match(room, /plexPlay: <%- !chatOnly_ && locals\.plexPlay \? JSON\.stringify\(locals\.plexPlay\)\.replace\(\/<\/g, '\\\\u003c'\) : 'null' %>/, "escaped for a script");
   // the flow: one copy (plex-play.js), the on-air call after a start, and its parts
   const flow = read("public", "js", "plex-play.js");
