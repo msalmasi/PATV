@@ -106,7 +106,7 @@
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
 <link rel="stylesheet" href="/public/css/pad-dock.css?v=9"><%# 1.99ajq dockpol: v7; 1.99ajw casino2: v8 (the chat beside a casino table, 📼 Play from Plex); 1.99ajy dockmedia: v9 (the stage media bar, the embed row) %>
-<link rel="stylesheet" href="/public/css/home-dock.css?v=4"><%# 1.99ajy dockmedia: v4 (fullscreen fills the screen) %>
+<link rel="stylesheet" href="/public/css/home-dock.css?v=5"><%# 1.99ajy dockmedia: v4 (fullscreen fills the screen); homegap: v5 (the call-to-action card fills the stage column) %>
 <%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
 <script src="/public/js/stage-mic.js?v=16"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99ajw padppl rework): the "not the Camfrog user" tag on a tile %>
 <%_ } _%>
@@ -490,7 +490,14 @@
       [the coin-op strip | Top Pads] - #hmDock (views/partials/home-dock.ejs) and #stageSide are display: contents inside it, so the
       front pad's block can be swapped alone (H6) and the wheel keeps its own nodes %>
   <%_ if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { _%><div class="card hm-stories rmd-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.dock.stories'), next: '/' }) %></div><%_ } _%>
-  <div class="hmd-grid" id="hmdGrid">
+  <%# homegap (owner 2026-11-05 "the empty space here looks weird"): the grid's lower rows follow what the side column holds - Top Pads
+      and the featured table are server-rendered only (home-dock.js swaps #hmDock, never #stageSide), so the state is classes here, not
+      :has() chains in home-dock.css: hmd-fill (2+ Top Pads rows: the call-to-action card fills the stage column under the strip),
+      hmd-pairs (one row + the featured table: two level pairs), hmd-tall (5 rows, or 4 + the table: the card says it big), hmd-notops,
+      hmd-feat %>
+  <%_ const hT_ = tops_.length, hF_ = !!feat;
+      const hmdLow_ = [hT_ >= 2 ? 'hmd-fill' : (hT_ === 1 && hF_ ? 'hmd-pairs' : ''), (hT_ >= 5 || (hT_ >= 4 && hF_)) ? 'hmd-tall' : '', hT_ ? '' : 'hmd-notops', hF_ ? 'hmd-feat' : ''].filter(Boolean).join(' '); _%>
+  <div class="hmd-grid<%= hmdLow_ ? ' ' + hmdLow_ : '' %>" id="hmdGrid">
   <%- include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) %>
 <%_ } _%>
   <% if (!homeDock_ && typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
@@ -602,17 +609,25 @@
       <% } %>
 <%_ if (homeDock_) { _%>
   </div>
-  </div>
-  <%# 1.99ajq dockpol (owner H3): "Your show on PATV" only for a signed-in viewer, after the Dock (signed out: the navbar's Go live) %>
+  <%# 1.99ajq dockpol (owner H3): "Your show on PATV" only for a signed-in viewer, after the Dock (signed out: the navbar's Go live)
+      homegap (owner 2026-11-05 "the empty space here looks weird"): the call-to-action card - Your show signed in, the join pitch signed
+      out - is the grid's LAST cell (.hmd-cta): 1024px and wider it fills the stage column under the coin-op strip, beside Top Pads, and
+      stretches so both columns end level (home-dock.css); narrower it is the full-width card after the Dock, where it always was %>
   <%_ if (me) { _%>
-  <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
+  <section class="card golive golive-wide hmd-cta" id="stageShow" aria-labelledby="gsH">
     <div class="gl-txt">
       <h3 id="gsH"><%- t('home.show.title') %></h3>
       <p><%- t('home.show.blurb') %></p>
     </div>
     <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a><a class="btn" href="/p"><%- t('home.pads') %></a></div>
   </section>
+  <%_ } else { _%>
+  <section class="card pitch hmd-cta" id="hmdPitch">
+    <p><%- t('home.pitch.text') %> <a href="/about"><%- t('home.pitch.what') %></a></p>
+    <div class="ds-actions"><a class="btn primary" href="/register"><%- t('home.pitch.join') %></a><a class="btn" href="/login"><%- t('home.sign_in') %></a></div>
+  </section>
   <%_ } _%>
+  </div>
 <%_ } else { _%>
       </div>
     </div>
@@ -645,7 +660,7 @@
       <a class="btn" href="/wallet"><%- t('home.me.wallet') %></a>
     </div>
   </section>
-  <% } else { %>
+  <% } else if (!homeDock_) { %>
   <section class="card pitch">
     <p><%- t('home.pitch.text') %> <a href="/about"><%- t('home.pitch.what') %></a></p>
     <div class="ds-actions"><a class="btn primary" href="/register"><%- t('home.pitch.join') %></a><a class="btn" href="/login"><%- t('home.sign_in') %></a></div>

@@ -7,8 +7,9 @@
    strip under the stage | Top Pads under the chat] (H4); phones: stage, chat, coin-op, Top Pads. Heights in svh (H7): the mobile URL bar
    collapsing never grows the chat card. */
 main.hm.rmd-home { gap: var(--cardgap, var(--ds-sp-4)); }
-main.hm.rmd-home .hmd-grid { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 400px); grid-template-rows: minmax(420px, auto) auto auto;
-  grid-template-areas: "stage chat" "coin tops" "coin feat"; gap: var(--ds-sp-2); align-items: start; min-inline-size: 0; }
+main.hm.rmd-home .hmd-grid { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 30%, 400px);
+  --hmd-top: "stage chat"; --hmd-top-rows: minmax(420px, auto); --hmd-low: "coin tops" "cta cta"; --hmd-low-rows: auto auto;
+  grid-template-rows: var(--hmd-top-rows) var(--hmd-low-rows); grid-template-areas: var(--hmd-top) var(--hmd-low); gap: var(--ds-sp-2); align-items: start; min-inline-size: 0; }
 main.hm.rmd-home .hmd-grid > :is(#hmDock, #stageSide) { display: contents; }
 /* (the stage card stretches to the row - the chat's 420px floor on a 1024px screen - with the picture contained: the two cards end level) */
 main.hm.rmd-home #hmDock > #rmStage { grid-area: stage; align-self: stretch; }
@@ -22,10 +23,66 @@ main.hm.rmd-home #stageSide > .tp { grid-area: tops; margin: 0; min-inline-size:
 main.hm.rmd-home #stageSide > :is(#wheelBox, .tp) { align-self: stretch; }
 main.hm.rmd-home #wheelBox.aw-hm { display: flex; flex-direction: column; }
 main.hm.rmd-home #wheelBox .aw-coinop { flex: 1 1 auto; }
-/* (no featured table: Top Pads takes its row too - the coin-op card spans both, so the two end level) */
-@media (min-width: 1024px) { main.hm.rmd-home .hmd-grid:not(:has(#stageSide > a.box)) #stageSide > .tp { grid-row-end: span 2; } }
 main.hm.rmd-home #stageSide > a.box { grid-area: feat; margin: 0; min-inline-size: 0; }
-main.hm.rmd-home .hmd-grid:not(:has(#rmChat)) { grid-template-areas: "stage stage" "coin tops" "coin feat"; grid-template-rows: auto auto auto; }
+main.hm.rmd-home .hmd-grid:not(:has(#rmChat)) { --hmd-top: "stage stage"; --hmd-top-rows: auto; }
+/* ── homegap (owner 2026-11-05, "the empty space here looks weird"): the stage column never ends in a blank. The call-to-action card
+   (views/home.ejs .hmd-cta: 🎥 Your show signed in, the join pitch signed out) is the grid's last cell. 1024px and wider, while the side
+   column under the chat is taller than the coin-op strip - Top Pads with two rows or more, or Top Pads and the featured table - it moves
+   up under the strip, beside Top Pads, on a 1fr row, so the two columns end level: the card grows when the side column is the taller (its
+   words centred on a stage-light backdrop, a panel like Top Pads beside it), Top Pads' rows spread when the card is (one Top Pads row and
+   the featured table: two level pairs instead). Otherwise (one Top Pads row alone, or none) it stays the full-width card after the Dock,
+   and the strip shares its row level (or takes the width). Below 1024px it is where it always was: the last row, full width, the page's
+   card gap above it. What the side column holds is server-rendered, so it is the grid's classes (home.ejs hmdLow_): hmd-fill (2+ Top Pads
+   rows), hmd-pairs (one row + the table), hmd-tall (5 rows, or 4 + the table), hmd-notops, hmd-feat - :has() only for what the page
+   changes live (off air, the popped chat, no chat, the sign-in tease). ── */
+main.hm.rmd-home .hmd-grid > .hmd-cta { grid-area: cta; align-self: stretch; min-inline-size: 0; margin: var(--hmd-cta-mt, calc(var(--cardgap, var(--ds-sp-4)) - var(--ds-sp-2))) 0 0; }
+@media (min-width: 1024px) {
+  /* the lower rows: no Top Pads - the strip takes the width, or sits beside the featured table (centred to the strip's height) */
+  main.hm.rmd-home .hmd-grid.hmd-notops { --hmd-low: "coin coin" "cta cta"; }
+  main.hm.rmd-home .hmd-grid.hmd-notops.hmd-feat { --hmd-low: "coin feat" "cta cta"; }
+  main.hm.rmd-home #stageSide > a.box { align-self: stretch; align-content: center; }
+  /* the fill: the card spans the 1fr row under the strip (and the featured table's row); Top Pads spans the strip's row and the 1fr row */
+  main.hm.rmd-home .hmd-grid.hmd-fill { --hmd-low: "coin tops" "cta tops"; --hmd-low-rows: auto 1fr; --hmd-cta-mt: 0px; }
+  main.hm.rmd-home .hmd-grid.hmd-fill.hmd-feat { --hmd-low: "coin tops" "cta tops" "cta feat"; --hmd-low-rows: auto 1fr auto; }
+  /* (ONE Top Pads row and the featured table: two level pairs - [strip | Top Pads] then [the card | the featured table, centred]) */
+  main.hm.rmd-home .hmd-grid.hmd-pairs { --hmd-low: "coin tops" "cta feat"; --hmd-low-rows: auto auto; --hmd-cta-mt: 0px; }
+  /* (Top Pads taller than its rows - the card is the taller side: the rows spread down the card under the header) */
+  main.hm.rmd-home #stageSide > .tp { display: flex; flex-direction: column; }
+  main.hm.rmd-home #stageSide > .tp > .rooms-mini { flex: 1 1 auto; align-content: space-evenly; }
+  /* (the featured table stretched to a taller neighbour - the card beside it (pairs) or the strip (no Top Pads): a 3-line card, centred) */
+  main.hm.rmd-home .hmd-grid:is(.hmd-pairs, .hmd-notops) #stageSide > a.box { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: center; gap: 2px .3em; white-space: nowrap; }
+  main.hm.rmd-home .hmd-grid:is(.hmd-pairs, .hmd-notops) #stageSide > a.box > :is(h3, div) { grid-column: 1 / -1; display: block; min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; }
+  main.hm.rmd-home .hmd-grid:is(.hmd-pairs, .hmd-notops) #stageSide > a.box > b { font-size: var(--ds-fs-lead, 16px); }
+  main.hm.rmd-home .hmd-grid:is(.hmd-pairs, .hmd-notops) #stageSide > a.box > .muted { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; align-self: baseline; }
+  /* the card in the stage column: Top Pads' pixel heading (Your show), the words and the buttons centred on two soft stage lights - a
+     gold one from the top, and one on the card's own first button (Go live red, Join green) - so whatever height it takes reads as the
+     panel's (right to left the lights mirror: the buttons are at the card's left there) */
+  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > .hmd-cta { --hmd-cta-glow: rgba(230, 74, 25, .15); --hmd-cta-bx: 86%; --hmd-cta-gx: 10%; align-content: center; padding: var(--ds-sp-3) var(--ds-sp-4);
+    background: radial-gradient(34% 95% at var(--hmd-cta-bx) 55%, var(--hmd-cta-glow), transparent 72%), radial-gradient(45% 140% at var(--hmd-cta-gx) -25%, rgba(255, 207, 64, .085), transparent 72%), var(--ds-surface); }
+  [dir="rtl"] main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > .hmd-cta { --hmd-cta-bx: 14%; --hmd-cta-gx: 90%; }
+  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > #hmdPitch { --hmd-cta-glow: rgba(76, 175, 80, .13); }
+  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > #stageShow h3 { font: var(--ds-fs-pixel-h)/1.6 var(--ds-font-pixel); letter-spacing: var(--ds-ls-pixel-h); text-transform: uppercase; color: var(--ds-gold); }
+  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > #stageShow .gl-txt { gap: var(--ds-sp-2); }
+  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > #stageShow p { font-size: var(--ds-fs-body); }
+  /* (a tall side column - Top Pads' five rows, or four and the featured table: the card is about as tall as the strip's foot of the stage,
+     so it says it big - "Anyone can go live." on its own line, 44px buttons; under 1280px the buttons go under the words) */
+  main.hm.rmd-home .hmd-grid.hmd-tall > .hmd-cta { gap: var(--ds-sp-3); padding: var(--ds-sp-4) var(--ds-sp-6); }
+  main.hm.rmd-home .hmd-grid.hmd-tall > .hmd-cta p { max-inline-size: 62ch; }
+  main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+  main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow .row { justify-content: flex-start; }
+  main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow p > b { display: block; margin-block-end: var(--ds-sp-1); color: var(--ds-text-strong); font-size: var(--ds-fs-h2); line-height: var(--ds-lh-h2); }
+  /* (signed out it is the visitor's landing pitch: the one paragraph at heading size) */
+  main.hm.rmd-home .hmd-grid.hmd-tall > #hmdPitch p { max-inline-size: 48ch; font-size: var(--ds-fs-h2); line-height: 1.5; }
+  main.hm.rmd-home .hmd-grid.hmd-tall > #hmdPitch p > b { color: var(--ds-text-strong); }
+  main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow .row > * { min-block-size: 44px; padding-inline: var(--ds-sp-5); font-size: 15px; }
+  /* (signed out, off air: the sign-in tease is as tall as its words here too - the off-air 440px card rule outranked 1.99ajh's) */
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) #hmDock > #rmChat:has(> .rmd-tease) { block-size: auto; }
+}
+@media (min-width: 1280px) {
+  /* (the stage column is 850px or more: the tall card keeps its two zones - the words, then the buttons at the end) */
+  main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-3) var(--ds-sp-8); padding-inline: var(--ds-sp-6) var(--ds-sp-8); }
+  main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow .row { justify-content: flex-end; }
+}
 
 /* the stage card: 16:9 of its width, at most min(560px, the window less the navbar and a little), the video contained */
 main.rm.rm-dock.rmd-home #rmStage { block-size: auto; aspect-ratio: 16 / 9; max-block-size: min(560px, calc(100vh - 140px)); max-block-size: min(560px, calc(100svh - 140px)); min-block-size: 0; inline-size: 100%;
@@ -45,7 +102,7 @@ main.rm.rm-dock.rmd-home .rmd-full-media #rmStage { aspect-ratio: auto; max-bloc
 main.rm.rm-dock.rmd-home #rmStage.is-off .player { display: none; }
 main.rm.rm-dock.rmd-home #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: none; }
 main.rm.rm-dock.rmd-home.rmd-staff #rmStage.is-off .rmd-ov-bot > .rmd-stage-more { display: inline-flex; }
-main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) { grid-template-areas: "stage stage" "chat chat" "coin tops" "coin feat"; grid-template-rows: auto auto auto auto; }
+main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) { --hmd-top: "stage stage" "chat chat"; --hmd-top-rows: auto auto; }
 main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) #hmDock > #rmStage { align-self: start; }
 main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
 /* (1.99ajh dockpop review: the pad chip keeps its name - the words give way, "Next up" first) */
@@ -56,7 +113,7 @@ main.rm.rm-dock.rmd-home #rmStage .rmd-slim-a { flex: 0 0 auto; }
 main.rm.rm-dock.rmd-home #rmStage .rmd-slim-sep { flex: none; white-space: pre; }
 main.rm.rm-dock.rmd-home #rmStage .rmd-slim-b { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the chat in its own window: the stage takes the width, the 44px bar goes under it */
-main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage stage" "chat chat" "coin tops" "coin feat"; grid-template-rows: auto auto auto auto; }
+main.hm.rmd-home.rmd-popped .hmd-grid { --hmd-top: "stage stage" "chat chat"; --hmd-top-rows: auto auto; }
 main.hm.rmd-home.rmd-popped #hmDock > #rmStage { align-self: start; }
 
 /* the chat card - the pad page's base card rules (room.ejs .rm .card / .topic / .compose) on the homepage; its header is the pad Dock's one
@@ -97,6 +154,13 @@ main.rm.rm-dock.rmd-home #chatH > .rmd-room-link { text-decoration: none; }
 /* Top Pads: the chat's own pad keeps its rank and link - its count, mic line and 🎧 are the chat card's above */
 main.hm.rmd-home .tp li.hmd-here :is(.v, .tp-ls, .np) { display: none; }
 main.hm.rmd-home .tp li.hmd-here .hmd-here-t { flex: none; margin-inline-start: auto; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); white-space: nowrap; }
+/* (homegap: 1024-1279px Top Pads is 320px wide - the pad keeps its name, "↑ In the chat above" gives way first: the name and its badges
+   never shrink (up to the row less the 8px gap), the note takes what is left, end-aligned, cut with an ellipsis. Not flex-shrink weights -
+   any share of the shrink, however small, cut the name with an ellipsis too. After the rule above: the same specificity) */
+@media (min-width: 1024px) {
+  main.hm.rmd-home .tp li.hmd-here .n { flex: 0 0 auto; max-inline-size: calc(100% - 8px); }
+  main.hm.rmd-home .tp li.hmd-here .hmd-here-t { flex: 1 1 0px; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; text-align: end; }
+}
 
 /* (owner H1) the Stories card first: a slim card - the heading an inline gold eyebrow ("STORIES · last 24 h"), one row of 56px circles */
 main.hm.rmd-home .hm-stories.rmd-stories { padding: var(--ds-sp-2) var(--ds-sp-3); }
@@ -147,10 +211,10 @@ main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 
 
 @media (min-width: 761px) and (max-width: 1023px) {
   /* (1.99ajq dockpol fix (review, H4): the coin-op right under the stage here too - watch and spin at once - then the chat, then Top Pads) */
-  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat"; }
-  main.hm.rmd-home .hmd-grid:not(:has(#stageSide > a.box)) { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops"; }
-  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off), main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat"; }
-  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off):not(:has(#stageSide > a.box)), main.hm.rmd-home.rmd-popped .hmd-grid:not(:has(#stageSide > a.box)) { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops"; }
+  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto auto auto; grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat" "cta cta"; }
+  main.hm.rmd-home .hmd-grid:not(:has(#stageSide > a.box)) { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops" "cta cta"; }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off), main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat" "cta cta"; }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off):not(:has(#stageSide > a.box)), main.hm.rmd-home.rmd-popped .hmd-grid:not(:has(#stageSide > a.box)) { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops" "cta cta"; }
   main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
   main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: 60vh; max-block-size: 60svh; }
@@ -162,7 +226,7 @@ main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 
   main.hm.rmd-home #wheelBox .aw-tools { flex-direction: row; justify-self: end; }
 }
 @media (max-width: 760px) {
-  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "stage" "coin" "chat" "tops" "feat"; }
+  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "stage" "coin" "chat" "tops" "feat" "cta"; }
   main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
   main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: clamp(360px, 62vh, 520px); block-size: clamp(360px, 62svh, 520px); min-block-size: 0; }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: none; }
@@ -171,7 +235,7 @@ main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 
   main.rm.rm-dock.rmd-home #rmStage .rmd-slim-sep { display: none; }
   main.rm.rm-dock.rmd-home #rmStage .rmd-slim-a { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   main.rm.rm-dock.rmd-home #rmStage .rmd-slim-b { max-inline-size: 100%; font-size: var(--ds-fs-xs); }
-  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off), main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage" "coin" "chat" "tops" "feat"; }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off), main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage" "coin" "chat" "tops" "feat" "cta"; }
   /* the coin-op strip wraps to two rows at most: [credit][plate + slot][coin] over [status][tools] */
   main.hm.rmd-home #wheelBox .aw-coinop { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "credit door btn" "status status tools"; max-block-size: none; row-gap: var(--ds-sp-1); column-gap: var(--ds-sp-2); }
   main.hm.rmd-home #wheelBox .aw-now { display: none; }
