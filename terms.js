@@ -58,10 +58,13 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // block does (the person menu, profiles, frog names); "chat-mentions" = pad chat @mentions alert you by default, and incognito lines can
 // alert the person they name under the frog name (section 10's promise changes) - both always shown, dated their first serve.
 // "gift-inbox" = section 6's gifts-to-frog-names paragraph (veilgift.js), shown and dated only while those gifts are switched on
-const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions", "gift-inbox"];
+// audiogate2: "net-bans-2" = the network-bans paragraph's "and listening to a pad's room audio" (listenban.js) - shown with that paragraph,
+// dated its first serve that way (the paragraph's own "net-bans" date may be older), counts only while it shows
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions", "gift-inbox", "net-bans-2"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
                          "rooms-web-2": () => require("./paddock").current().cfg.mode !== "off",
                          "net-bans": () => require("./netban").hasDataNow() === true,     // (review fix: while ANY code is stored, switch or not)
+                         "net-bans-2": () => require("./netban").hasDataNow() === true,   // (audiogate2: shown with net-bans)
                          "gift-inbox": () => require("./veilgift").isOn() === true,
                          "tx-bar": () => require("./privwire").txBar() === true,
                          "frog-15": () => require("./privwire").isOn() === true,
@@ -234,7 +237,7 @@ function register(app, { addUser }) {
                              [txbar && txbar.kept && txbar.off_at, txbar && txbar.kept && txbar.off_day],   // (review fix F1: the "kept" note)
                              ...Object.values(pcopy).map((c) => [c && c.on_at, c && c.on_day]),
                              ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).filter(([k]) => k !== "frog-15" || privwire).filter(([k]) => k !== "stage-cover" || pcopy.wcover)
-                               .filter(([k]) => k !== "rooms-web-2" || padwebOn()).filter(([k]) => k !== "net-bans" || netbanOn()).filter(([k]) => k !== "gift-inbox" || giftsOn())   // (1.99ajn padppl)
+                               .filter(([k]) => k !== "rooms-web-2" || padwebOn()).filter(([k]) => (k !== "net-bans" && k !== "net-bans-2") || netbanOn()).filter(([k]) => k !== "gift-inbox" || giftsOn())   // (1.99ajn padppl)
                                .map(([, d]) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }

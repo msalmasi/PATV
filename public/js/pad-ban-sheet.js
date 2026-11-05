@@ -34,8 +34,8 @@
   };
 
   var SCOPE_TXT = {
-    bridge: function () { return [_t('js.ban.scope_bridge', 'Website bridge only'), _t('js.ban.scope_bridge_sub', 'Chat, commands, clips and cams from the website')]; },
-    pad: function () { return [_t('js.ban.scope_pad', 'Whole pad'), _t('js.ban.scope_pad_sub', 'Feed posts, comments, stories, stage and chat')]; },
+    bridge: function () { return [_t('js.ban.scope_bridge', 'Website bridge only'), _t('js.ban.scope_bridge_sub', 'Chat, commands, clips, cams and room audio from the website')]; },
+    pad: function () { return [_t('js.ban.scope_pad', 'Whole pad'), _t('js.ban.scope_pad_sub', 'Feed posts, comments, stories, stage, chat and room audio')]; },
     site: function () { return [_t('js.ban.scope_site', 'Whole site'), _t('js.ban.scope_site_sub', 'PATV staff: everywhere, and they are signed out')]; },
     vbridge: function () { return [_t('js.ban.scope_veil', 'Posting incognito in this pad'), _t('js.ban.scope_veil_sub', 'Every frog name they use here, now and later - chat, commands, clips and cams from the website. What they do under their own name doesn\'t change, and you never learn who it is.')]; },
     vsite: function () { return [_t('js.ban.scope_veil_site', 'Posting incognito in every pad'), _t('js.ban.scope_veil_site_sub', 'PATV staff: every frog name they use, in every pad')]; }
