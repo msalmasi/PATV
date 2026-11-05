@@ -25,9 +25,10 @@ const many = async (sql, params = []) => {
 };
 const parse = (s) => { try { return JSON.parse(s); } catch (e) { return null; } };
 
-function tablesState() {
+// 1.99?? casmask (the 1.99ajw verifier's gap a): Pepe's own tables as /tables shows them - masked by the site's veils too (tables.view)
+async function tablesState() {
   try {
-    const T = require("./tables")._state().STATE;
+    const T = await require("./tables").view();
     return T && Array.isArray(T.tables) ? T.tables : [];
   } catch (e) { return []; }
 }
@@ -75,7 +76,7 @@ async function loadStats() {
     if (w && !(await og.anonHidden(padlinks.resolve({ pad: w.pad, room: w.room }) || null))) wn += 1;
   }
   out.wagers = wn;
-  const tables = tablesState();
+  const tables = await tablesState();
   out.tables = tables.map((t) => ({ id: t.id, game: t.game === "bj" ? "Blackjack" : "Hold'em", featured: !!t.featured, phase: t.phase || "",
     room: t.room_name || t.room || "", seats: (t.seats || []).filter((x) => x && x.name).map((x) => String(x.name)),
     href: "/casino/t/" + encodeURIComponent(t.id) }));
@@ -137,8 +138,19 @@ async function personal(me, S) {
     const p = S.lottoPlayers && S.lottoPlayers[cf];
     out.tickets = p ? Number(p.count) || 0 : 0;
     out.bets = (S.betters && S.betters[cf]) || 0;
-    out.seat = (S.tables || []).find((t) => t.seats.some((n) => n.toLowerCase() === cf)) || null;
   }
+  // 1.99?? casmask: the viewer's own seat - by their own seat list (Pepe's tables: tables.js PRIV, keyed by their PATV name) or their
+  // account at a site table - so a MASKED seat of theirs is still theirs here; a name on the (masked) public list only as the old fallback
+  const mine = new Set();
+  try { for (const x of require("./tables")._state().PRIV.get(String(me.username || "").toLowerCase()) || []) mine.add(String(x.table)); } catch (e) { /* none */ }
+  try {
+    const csvc = require("./casino/service");
+    for (const t of S.tables || []) {
+      const T = csvc.getTable(t.id);
+      if (T && T.eng && Array.isArray(T.eng.seats) && me.userId && T.eng.seats.map(String).includes(String(me.userId))) mine.add(String(t.id));
+    }
+  } catch (e) { /* none */ }
+  out.seat = (S.tables || []).find((t) => mine.has(String(t.id))) || (cf ? (S.tables || []).find((t) => t.seats.some((n) => n.toLowerCase() === cf)) : null) || null;
   const b = await one("SELECT COUNT(*) AS n FROM user_badges WHERE userId = (SELECT userId FROM users WHERE username = ?)", [me.username]);
   out.badges = b ? b.n : 0;
   const a = await one("SELECT COUNT(*) AS n FROM pepe_actions WHERE username = ? AND status IN ('pending','claimed')", [me.username]);
@@ -374,4 +386,4 @@ function register(app, { addUser, xpForNextLevel }) {
   });
 }
 
-module.exports = { register, stats, topPads, nextSlot, nowPlaying };
+module.exports = { register, stats, topPads, nextSlot, nowPlaying, personal };

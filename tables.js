@@ -21,6 +21,8 @@
 // account that paid for the seat. That map is kept in memory only, apart from the public state, and
 // /api/tables/state hands a signed-in user ONLY their own entry. It is never written to the
 // database, never rendered into page HTML, and never included in anything another user can fetch.
+// 1.99?? casmask: the sync's `who` (which login / account key sits in which seat, who hosts) is server only too - WHO, read
+// by the site's own veils (view) and never part of the public state.
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
@@ -39,6 +41,142 @@ const VERBS = {
 let STATE = null;                      // the latest public state
 let PRIV = new Map();                  // PATV username (lowercase) -> [that player's own seats, one per table]
 let RECEIVED = 0;
+
+// ── 1.99?? casmask (the 1.99ajw verifier's gap a): Pepe's own tables masked by the SITE's veils too ──
+// Pepe masks his tables before he syncs them (pepe_tables.py, privacy fix 2: "someone" / "someone N" for everyone private by HIS
+// checks). The site applies its own veils on top, at every read, with the rule casino/veil.js uses (veil.kindOf: padweb.hiddenKey or
+// Pepe's incognito report, for the seat's login, its account's key "u:<id>" and the account's linked login): a seat the site finds
+// veiled - or can't check - reads as "someone" / "someone N" (numbered after Pepe's own labels), and so does its name in the turn,
+// the host, the result, the felt's last round and the public log. Who sits where comes from the sync's SERVER-ONLY `who`
+// ({<table id>: {seats: [<login> | "u:<id>"], host}} - kept in WHO, never in STATE, never on a page); a table without it (an older
+// Pepe) has every seat and its host masked (fail closed). /api/tables/state and the homepage read the tables through view().
+const KEY_LOGIN = /^[\w.\-]{1,40}$/, KEY_ACCT = /^u:([A-Za-z0-9-]{6,64})$/;
+const KIND_MS = 2000, LINK_MS = 60 * 1000;
+const PEPE_LABEL = /^someone(?: (\d{1,3}))?$/;
+let WHO = new Map();                   // table id -> {seats: [key | null], host: key | null}
+const KIND = new Map();                // key -> {k, at}: incognito | out | unknown | null (veil.kindOf)
+const LINKS = new Map();               // key -> {keys, at}
+let kindsP = null;
+const cleanKey = (v) => { const k = String(v == null ? "" : v).trim().toLowerCase(); return KEY_LOGIN.test(k) || KEY_ACCT.test(k) ? k : null; };
+function cleanWho(w, ids) {
+  const out = new Map();
+  if (!w || typeof w !== "object") return out;
+  for (const id of ids) {
+    const x = w[id];
+    if (!x || typeof x !== "object") continue;
+    out.set(id, { seats: Array.isArray(x.seats) ? x.seats.slice(0, 12).map(cleanKey) : [], host: cleanKey(x.host) });
+  }
+  return out;
+}
+/** a seat key's chat keys: the login + its live account's key, or the account key + the account's linked login (cached a minute) */
+async function keysOfKey(key) {
+  const c = LINKS.get(key), now = Date.now();
+  if (c && now - c.at < LINK_MS) return c.keys;
+  const PR = require("./personref");
+  const keys = [key];
+  const m = KEY_ACCT.exec(key);
+  if (m) {
+    const a = await PR.accountById(m[1]);
+    if (a && a.camfrogUsername) keys.push(String(a.camfrogUsername).toLowerCase());
+  } else {
+    const a = await PR.linkedAccount(key);
+    if (a && a.userId) keys.push("u:" + String(a.userId).toLowerCase());
+  }
+  LINKS.set(key, { keys, at: now });
+  if (LINKS.size > 2000) LINKS.delete(LINKS.keys().next().value);
+  return keys;
+}
+/** re-read the kind of every seat key / host the current tables have (at most every KIND_MS each; one read at a time) */
+function refreshKinds() {
+  if (kindsP) return kindsP;
+  kindsP = (async () => {
+    const V = require("./casino/veil");
+    const ids = new Set([...((STATE && STATE.tables) || []), ...((STATE && STATE.closed) || [])].map((t) => t.id));
+    const keys = new Set();
+    for (const id of ids) { const w = WHO.get(id); if (w) { for (const k of w.seats) if (k) keys.add(k); if (w.host) keys.add(w.host); } }
+    for (const k of keys) {
+      const c = KIND.get(k);
+      if (c && Date.now() - c.at < KIND_MS) continue;
+      let kind;
+      try { kind = await V.kindOf(await keysOfKey(k)); } catch (e) { kind = "unknown"; }
+      KIND.set(k, { k: kind == null ? null : kind, at: Date.now() });
+    }
+    if (KIND.size > 2000) for (const k of [...KIND.keys()].slice(0, KIND.size - 2000)) KIND.delete(k);
+  })().catch((e) => { console.error("[tables] veils:", e.message); }).finally(() => { kindsP = null; });
+  return kindsP;
+}
+/** masked now (fails closed: no key, never read, a failed read) */
+const veiledKey = (k) => { if (!k) return true; const c = KIND.get(k); return !c || c.k === "incognito" || c.k === "out" || c.k === "unknown"; };
+/** one table (a copy) with the site's masks: -> [[the name it showed, its label], ...] for the log */
+function maskTable(t) {
+  const w = WHO.get(t.id) || null;
+  const seats = Array.isArray(t.seats) ? t.seats : [];
+  const isLabel = (n) => PEPE_LABEL.test(String(n == null ? "" : n));
+  const seatKey = (i) => (w ? w.seats[i] || null : null);
+  // who is masked here: seats by their key (no `who` = no key = masked), the host by its own
+  const masked = seats.map((s, i) => !!(s && s.name && !isLabel(s.name) && veiledKey(seatKey(i))));
+  const hostMasked = !!(t.host && !isLabel(t.host) && veiledKey(w ? w.host : null));
+  // one label per person: a seat's key (else its name, with no `who`), the host the same as their seat
+  const idOf = (i) => (w && seatKey(i) ? "k:" + seatKey(i) : "n:" + seats[i].name);
+  const hostId = w && w.host ? "k:" + w.host : "n:" + t.host;
+  const order = [];
+  seats.forEach((s, i) => { if (masked[i] && !order.includes(idOf(i))) order.push(idOf(i)); });
+  if (hostMasked && !order.includes(hostId)) order.push(hostId);
+  if (!order.length) return [];
+  // numbered after Pepe's own labels (a bare "someone" of his is 1) - "someone" alone only when it is the table's one masked person
+  let top = 0, any = false;
+  for (const n of seats.map((s) => s && s.name).concat([t.host])) {
+    const m = PEPE_LABEL.exec(String(n == null ? "" : n));
+    if (m) { any = true; top = Math.max(top, m[1] ? Number(m[1]) : 1); }
+  }
+  const lab = new Map();
+  order.forEach((id, j) => lab.set(id, !any && order.length === 1 ? "someone" : "someone " + (top + j + 1)));
+  const pairs = [];
+  const byName = new Map();
+  seats.forEach((s, i) => {
+    if (!masked[i]) return;
+    const l = lab.get(idOf(i));
+    byName.set(s.name, l); pairs.push([s.name, l]);
+    s.name = l;
+  });
+  if (hostMasked) { const l = lab.get(hostId); if (!byName.has(t.host)) { byName.set(t.host, l); pairs.push([t.host, l]); } t.host = l; }
+  const nm = (x) => { if (x && typeof x === "object" && typeof x.name === "string" && byName.has(x.name)) x.name = byName.get(x.name); return x; };
+  if (t.turn) {
+    const i = Number(t.turn.seat);
+    if (Number.isInteger(i) && seats[i]) { if (masked[i]) t.turn.name = seats[i].name; }     // (by its seat: a named seat keeps its name)
+    else nm(t.turn);
+  }
+  for (const part of [t.result, t.last_round]) {
+    if (!part || typeof part !== "object") continue;
+    for (const f of ["winners", "players", "shown"]) if (Array.isArray(part[f])) part[f].forEach(nm);
+  }
+  return pairs;
+}
+/** the public state as a page may see it (a copy): every table masked by the site's veils too, the log with them */
+function maskState(out) {
+  const o = JSON.parse(JSON.stringify(out));
+  const pairs = [];
+  for (const t of (o.tables || []).concat(o.closed || [])) {
+    try { pairs.push(...maskTable(t)); }
+    catch (e) {
+      // (can't be made safe: every name on it "someone")
+      for (const s of t.seats || []) if (s && s.name) { pairs.push([s.name, "someone"]); s.name = "someone"; }
+      if (t.host) { pairs.push([t.host, "someone"]); t.host = "someone"; }
+      t.turn = t.turn ? Object.assign(t.turn, { name: "someone" }) : t.turn;
+      t.result = null; t.last_round = null;
+    }
+  }
+  if (pairs.length && Array.isArray(o.log)) {
+    const V = require("./casino/veil");
+    o.log = o.log.map((l) => (l && typeof l.text === "string" ? Object.assign({}, l, { text: V.maskWith(l.text, pairs) }) : l));
+  }
+  return o;
+}
+/** what /api/tables/state and the homepage read: the public state, the site's veils re-read first (at most every 2 s) */
+async function view() {
+  try { await refreshKinds(); } catch (e) { /* the masks fail closed on what isn't read */ }
+  return maskState(publicState());
+}
 
 // ── cleaning (the bot is trusted, but nothing malformed should reach a page) ──
 const int = (v, lo = 0, hi = 1e12) => {
@@ -206,6 +344,7 @@ function cleanSync(b) {
       },
     },
     priv: cleanPrivate(b.private, new Set(tables.map((t) => t.id))),
+    who: cleanWho(b.who, [...tables, ...closed].map((t) => t.id)),        // 1.99?? casmask: server only (see WHO)
   };
 }
 
@@ -267,9 +406,11 @@ function register(app, { isBotToken, addUser }) {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     try {
-      const { state, priv } = cleanSync(b);
+      const { state, priv, who } = cleanSync(b);
       STATE = state;
       PRIV = priv;           // replaced wholesale: a player who left loses their entry at once
+      WHO = who;             // 1.99?? casmask: who sits where - server only, for the site's own veils (view)
+      refreshKinds();        // (the next read finds them read)
       RECEIVED = Date.now();
       res.json({ ok: true });
     } catch (e) {
@@ -304,7 +445,7 @@ function register(app, { isBotToken, addUser }) {
   // The live table + (for a signed-in player) their own seat and recent requests. Per-user: never cache.
   app.get("/api/tables/state", addUser, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
-    const out = publicState();
+    const out = await view();           // 1.99?? casmask: masked by the site's veils too (see WHO)
     out.me = null;
     if (req.user && req.user.userId) {
       try {
@@ -397,4 +538,5 @@ function register(app, { isBotToken, addUser }) {
   app.get(["/blackjack", "/bj"], addUser, page("bj"));
 }
 
-module.exports = { register, cleanSync, buildArgs, _state: () => ({ STATE, PRIV }) };
+module.exports = { register, cleanSync, buildArgs, view, maskState, _state: () => ({ STATE, PRIV, WHO }),
+  _reset: () => { KIND.clear(); LINKS.clear(); kindsP = null; } };

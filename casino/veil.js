@@ -311,7 +311,14 @@ function pairsOf(T, webOnly, fresh) {
  *  next to a card's suit ("K♠"). */
 function maskText(T, text, o) {
   if (typeof text !== "string" || !text) return text;
-  const pairs = pairsOf(T, !!(o && o.webOnly), !!(o && o.fresh));
+  return maskWith(text, pairsOf(T, !!(o && o.webOnly), !!(o && o.fresh)));
+}
+/** 1.99?? casmask: a text with each [name, label] pair's name masked as maskText does (longest first; a one-character name as written,
+ *  never next to a card's suit) - also what tables.js masks Pepe's own tables' log with */
+function maskWith(text, pairs) {
+  if (typeof text !== "string" || !text || !Array.isArray(pairs) || !pairs.length) return text;
+  pairs = pairs.filter((p) => Array.isArray(p) && typeof p[0] === "string" && p[0].trim()).map(([n, l]) => [n.trim(), String(l || SOMEONE)])
+    .sort((a, b) => b[0].length - a[0].length);
   if (!pairs.length) return text;
   const map = new Map(), one = new Map();
   for (const [n, l] of pairs) {
@@ -444,6 +451,6 @@ async function maskRounds(tableId, rows) {
 }
 
 module.exports = { SOMEONE, NAMED_GAP_MS, LEAVE_GRACE_MS, REFRESH_MS, MAX_PEOPLE, kindOf, kindForActor, keysOf, enter, apply, refresh, state, masked, label, seatOf,
-  nameOf, hostName, camName, maskText, maskLog, maskRound, maskRounds, _hooks: hooks,
+  nameOf, hostName, camName, maskText, maskWith, maskLog, maskRound, maskRounds, _hooks: hooks,
   _setClock: (f) => { clock = f || (() => { try { return require("./service").S.hooks.now(); } catch (e) { return Date.now(); } }); },
   _reset: () => { fresh.clear(); rowCache.clear(); kindCache.clear(); savedCache.clear(); } };

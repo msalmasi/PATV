@@ -16,7 +16,9 @@
 //                                             Camfrog login, the linked login or the account key hidden / incognito; a masked seat session;
 //                                             fails closed while the hidden sets load), keyed by the masked seat's own id - its label
 //                                             (a frog name or "someone") and nothing else: no account, no login, no tip, no avatar
-//   * {display, web: true, patv, tip?}        a web seat - its PATV name only (1.99ajf: a PATV name never maps to a Camfrog login)
+//                                             (1.99?? casmask gap b: + vb: 1 when the viewer frog-blocked that person and the label is
+//                                             a frog name - the menu's ✅ Unblock; its 🚫 Block is {k:'cseat'}, personref.js)
+//   * {display, web: true, patv, tip?}       a web seat - its PATV name only (1.99ajf: a PATV name never maps to a Camfrog login)
 //   * {display, patv, tip?, login?, pad?}     a room seat: its login ONLY when it is a NAMED member of a live bridged pad the table plays in
 //                                             or advertises in (its own room first) THAT THE VIEWER MAY OPEN (padaccess.full + the 18+
 //                                             gate - the roster's own gate: who is in an Approved / 18+ pad's room now is never told to
