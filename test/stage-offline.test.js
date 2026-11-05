@@ -158,7 +158,8 @@ test("labels: the pad page header pill and the /p guide use the same room wordin
   assert.match(html, /if \(liveTxt\) liveTxt\.textContent = r\.live \? _t\('js\.pad\.room_active', '💬 ROOM ACTIVE'\) : _t\('js\.pad\.room_offline', 'ROOM OFFLINE'\)/);
   assert.match(html, /if \(live\) \{ live\.classList\.toggle\('off', !r\.live\); live\.classList\.toggle\('chat', !!r\.live\); \}/);
   assert.match(html, /<span id="rmStPillTxt">OFF AIR<\/span>/, "the pad's stage pill is unchanged");
-  assert.match(html, /stagePillText\.textContent = on \? _t\('js\.pad\.stage\.on_air', 'ON AIR'\) : _t\('js\.pad\.stage\.off_air', 'OFF AIR'\)/);
+  // (upnext2: `air` - the off-air slate opens the stage box but stays OFF AIR)
+  assert.match(html, /stagePillText\.textContent = air \? _t\('js\.pad\.stage\.on_air', 'ON AIR'\) : _t\('js\.pad\.stage\.off_air', 'OFF AIR'\)/);
   const off = (await ejs.renderFile(path.join(repo, "views", "room.ejs"), {
     user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 0, live: false, topic: "", platform: "camfrog" },
     initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: { active: true }, pepeHere: true, latest: [] }));
