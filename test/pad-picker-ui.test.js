@@ -29,17 +29,22 @@ test("picker requires signed-in text relay; unavailable provider tabs make no re
 
 test("stickers use the existing outbox once and preserve the typed draft",async()=>{
   const h=setup({cfstickerPicker:true},()=>response([
-    {id:42,set:1642,desc:"Friendly frog",src:"/media/cfsticker/42.webp"},
+    {id:42,set:1642,desc:"Friendly frog",src:"/media/cfsticker/42.webp?v=0123abcd"},
     {id:43,set:1642,desc:"bad source",src:"https://elsewhere.invalid/p.png"},
-    {id:"42] extra",set:1642,desc:"bad token",src:"/media/cfsticker/42] extra.webp"}
+    {id:"42] extra",set:1642,desc:"bad token",src:"/media/cfsticker/42] extra.webp"},
+    // stkimg 1.99??: only the versioned form of the sticker's own picture (?v= 8 lower-case hex) - never the bare URL, another id or more query
+    {id:44,set:1642,desc:"unversioned",src:"/media/cfsticker/44.webp"},{id:45,set:1642,desc:"other id",src:"/media/cfsticker/46.webp?v=0123abcd"},
+    {id:47,set:1642,desc:"upper hex",src:"/media/cfsticker/47.webp?v=0123ABCD"},{id:48,set:1642,desc:"short token",src:"/media/cfsticker/48.webp?v=0123abc"},
+    {id:49,set:1642,desc:"more query",src:"/media/cfsticker/49.webp?v=0123abcd&x=1"},{id:50,set:1642,desc:"no src"}
   ]));await flush();
   assert.equal(h.calls.requests[0].url,"/api/rooms/night-orchard/cfstickers");assert.equal(h.calls.requests[0].opts.headers["X-Requested-With"],"fetch");
   const buttons=h.sheet.querySelectorAll(".rmp-grid button");assert.equal(buttons.length,1);assert.equal(buttons[0].getAttribute("aria-label"),"Send sticker: Friendly frog");
+  assert.equal(buttons[0].querySelector("img").src,"/media/cfsticker/42.webp?v=0123abcd");
   buttons[0].click();buttons[0].click();assert.deepEqual(h.calls.send,["[cfsticker:1642/42]"]);assert.equal(h.input.value,"My draft");assert.equal(h.calls.insert.length,0);
 });
 
 test("a full outbox keeps the picker and selected item available for retry",async()=>{
-  const h=setup({cfstickerPicker:true},()=>response([{id:42,set:1642,desc:"Frog",src:"/media/cfsticker/42.webp"}]));h.rejectSend();await flush();
+  const h=setup({cfstickerPicker:true},()=>response([{id:42,set:1642,desc:"Frog",src:"/media/cfsticker/42.webp?v=0123abcd"}]));h.rejectSend();await flush();
   h.sheet.querySelector(".rmp-grid button").click();assert.equal(h.calls.closed,0);assert.equal(h.sheet.isConnected,true);assert.match(h.sheet.textContent,/still on their way/);
 });
 
@@ -63,7 +68,7 @@ test("GIF searches are explicit, capped, branded and use only validated thumbnai
 
 test("late provider results cannot populate a different tab or a closed sheet",async()=>{
   const pending=[];const h=setup({cfstickerPicker:true,gifPicker:true},()=>new Promise(resolve=>pending.push(resolve)));
-  h.tab("gifs").click();h.tab("emoji").click();pending[0]({ok:true,json:()=>Promise.resolve([{id:42,set:1642,desc:"Late sticker",src:"/media/cfsticker/42.webp"}])});pending[1]({ok:true,json:()=>Promise.resolve([{id:"late",title:"Late GIF",preview:{src:"https://static.klipy.com/late.gif"}}])});await flush();
+  h.tab("gifs").click();h.tab("emoji").click();pending[0]({ok:true,json:()=>Promise.resolve([{id:42,set:1642,desc:"Late sticker",src:"/media/cfsticker/42.webp?v=0123abcd"}])});pending[1]({ok:true,json:()=>Promise.resolve([{id:"late",title:"Late GIF",preview:{src:"https://static.klipy.com/late.gif"}}])});await flush();
   assert.equal(h.picker.current(),"emoji");assert.equal(h.sheet.querySelectorAll("img").length,0);assert.doesNotMatch(h.sheet.textContent,/Late/);
   h.tab("gifs").click();h.opts.closeLayer(false);pending[2]({ok:true,json:()=>Promise.resolve([{id:"late",title:"Closed GIF",preview:{src:"https://static.klipy.com/late.gif"}}])});await flush();assert.equal(h.sheet.querySelectorAll("img").length,0);
 });
@@ -80,7 +85,7 @@ test("tab keyboard navigation respects RTL and keeps selected state in sync",()=
 test("provider errors stay generic and image failure leaves its text label",async()=>{
   const h=setup({gifPicker:true},()=>Promise.reject(new Error("PRIVATE_API_KEY_FAILURE")));await flush();
   assert.match(h.sheet.textContent,/Could not load/);assert.doesNotMatch(h.sheet.textContent,/PRIVATE_API_KEY/);
-  const s=setup({cfstickerPicker:true},()=>response([{id:42,set:1642,desc:"Frog caption",src:"/media/cfsticker/42.webp"}]));await flush();
+  const s=setup({cfstickerPicker:true},()=>response([{id:42,set:1642,desc:"Frog caption",src:"/media/cfsticker/42.webp?v=0123abcd"}]));await flush();
   const image=s.sheet.querySelector("img");image.dispatchEvent(new Event("error"));assert.equal(image.hidden,true);assert.match(s.sheet.textContent,/Frog caption/);
 });
 

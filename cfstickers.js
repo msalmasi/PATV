@@ -30,10 +30,15 @@ function init() {
   return ready;
 }
 const enabled = () => require("./paddock").current().cfg.cfstickers === true;
+// stkimg 1.99??: the picker's URL names the picture it shows - ?v= the first 8 hex of its file (a random name, nothing else in it). A
+// sticker's chat line reaches the page ~30 s before Pepe uploads a picture the site hasn't seen, so that first request 404s; a browser
+// (or an edge) that keeps the failed URL left the picker's tile, the very same URL, a caption until a reload. A new picture = a new URL
+// (an old failure or an old cached picture never sticks); the media route ignores the query
+const srcOf = row => row.file && FILE_RE.test(row.file) ? "/media/cfsticker/" + row.id + ".webp?v=" + row.file.slice(0, 8) : null;
 function get(set, id) {
   const row = CACHE.get(idOf(id));
   if (!row || row.set_id !== idOf(set)) return null;
-  return { id: row.id, set: row.set_id, desc: row.descr, src: row.file ? "/media/cfsticker/" + row.id + ".webp" : null };
+  return { id: row.id, set: row.set_id, desc: row.descr, src: srcOf(row) };
 }
 const valid = (set, id) => !!get(set, id);
 // 1.99aiw dock: review - the picker's list is built once per catalog change (GEN) or minute, not with a synchronous fs.existsSync
@@ -135,14 +140,18 @@ function register(app, { isBotToken, addUser }) {
       await init(); res.json(catalog());
     } catch (e) { fail(res, e); }
   });
+  // (stkimg 1.99??: ?v= (the picker's version) and ?r= (a chat line's retry) are ignored - the id alone picks the picture. A "not
+  // here" is never kept - no-store: the picture may arrive seconds later, and a browser or Cloudflare (404s on a .webp path, 3 min by
+  // default) must ask again)
   app.get("/media/cfsticker/:id.webp", async (req, res) => {
+    const none = () => res.set("Cache-Control", "no-store").status(404).end();
     try {
-      if (!enabled()) return res.status(404).end();          // 1.99aiw dock: nothing served while cfstickers is off (a line shows "[sticker]")
+      if (!enabled()) return none();                          // 1.99aiw dock: nothing served while cfstickers is off (a line shows "[sticker]")
       await init(); const row = CACHE.get(idOf(req.params.id)), file = row && filePath(row.file);
-      if (!file) return res.status(404).end();
+      if (!file) return none();
       const headers = { "Content-Type": "image/webp", "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox", "Cross-Origin-Resource-Policy": "same-origin" };
-      res.set(headers).sendFile(file, { cacheControl: false, lastModified: false, headers }, err => { if (err && !res.headersSent) res.status(404).end(); });
+      res.set(headers).sendFile(file, { cacheControl: false, lastModified: false, headers }, err => { if (err && !res.headersSent) none(); });   // (a picture replaced mid-send: no-store over the day's cache set above)
     } catch (_) { if (!res.headersSent) res.status(503).end(); }
   });
 }

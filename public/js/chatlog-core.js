@@ -414,6 +414,43 @@
     }, { once: true });
     return img;
   }
+  // stkimg 1.99??: a Camfrog sticker's line can reach the chat before its picture reaches the site - Pepe uploads a picture the site
+  // hasn't seen ~30 s later (pepe_sticker.py STICKER_SYNC_SOON) - so its first request 404s. The line shows its words ("[sticker]") as
+  // before and asks again after ~35 s and ~90 s with a fresh ?r= (a URL this page never asked for: a browser or an edge that kept the
+  // failed one can't answer with it). One timer per image at a time, none once the line has left the page, words for good after the
+  // second miss. The next line that misses a picture this page already got under a retry URL takes that URL at once
+  var STK_RETRY_MS = [35000, 90000], stkGot = {};
+  function stickerImage(attrs, fallback, h) {
+    var img = h('img', attrs, []);
+    if (!img || typeof img.addEventListener !== 'function') return img;
+    var base = String(attrs.src), tries = 0, words = null, asked = null, reused = false;
+    function onPage(n) {
+      var d = n.ownerDocument;
+      return typeof n.isConnected === 'boolean' ? n.isConnected : !!(d && typeof d.contains === 'function' && d.contains(n));
+    }
+    // (detached, a loading="lazy" image would never load)
+    function ask(url) { asked = url; img.removeAttribute('loading'); img.src = url; }
+    img.addEventListener('error', function () {
+      var doc = img.ownerDocument, win = doc && doc.defaultView;
+      if (!words) {
+        if (!img.parentNode || !doc) return;
+        words = doc.createTextNode(fallback); img.parentNode.replaceChild(words, img);
+      }
+      if (!reused && HAS.call(stkGot, base)) { reused = true; ask(stkGot[base]); return; }
+      if (tries >= STK_RETRY_MS.length || !win || typeof win.setTimeout !== 'function') return;
+      win.setTimeout(function () {
+        if (!onPage(words)) return;
+        tries++;
+        ask(base + (base.indexOf('?') < 0 ? '?' : '&') + 'r=' + tries + '.' + Math.floor(new Date().getTime() / 1000).toString(36));
+      }, STK_RETRY_MS[tries]);
+    });
+    img.addEventListener('load', function () {
+      if (!words) return;                                   // (drawn the first time)
+      if (asked) stkGot[base] = asked;
+      if (words.parentNode) words.parentNode.replaceChild(img, words);
+    });
+    return img;
+  }
   function mediaKids(it, ctx, h, token, mask, rm) {
     if (!token) return null;
     var _t = tr(ctx), fallback = itemText(it);
@@ -426,7 +463,7 @@
     }
     if (token.type === 'cfsticker') {
       var src = typeof ctx.cfsticker === 'function' ? ctx.cfsticker(token.set, token.id) : null;
-      return src && safeSrc(src) ? [mediaImage({ 'class': 'cfstk', src: src, alt: _t('js.pad.chat.sticker', 'sticker'),
+      return src && safeSrc(src) ? [stickerImage({ 'class': 'cfstk', src: src, alt: _t('js.pad.chat.sticker', 'sticker'),
         width: 100, height: 100, loading: 'lazy', decoding: 'async' }, fallback, h)] : [fallback];
     }
     // Only the server's mark makes a GIF line (mediaOf; a token typed in Camfrog never gets one), and only its cache attachment

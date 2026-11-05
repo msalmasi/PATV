@@ -11,6 +11,8 @@
   function t(k, d, v) { return tr('js.pad.picker.' + k, d, v); }
   var EMOJI = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '🙂', '🙃', '😉', '😍', '🥰', '😘', '😎', '🤔', '🤨', '😐', '🙄', '😏', '😴', '😢', '😭', '😤', '😡', '🤯', '😱', '🥳', '🤗', '🫡', '🤫', '🤭', '🫠', '🥹', '💀', '👻', '👀', '💚', '❤️', '💜', '💙', '💛', '💔', '✨', '⭐', '🔥', '💯', '🎉', '🎊', '👏', '🙌', '👍', '👎', '🤝', '🙏', '💪', '👋', '✌️', '🤘', '🫶', '🤷', '🤦', '🐸', '🐈', '🐕', '🦊', '🐼', '🦋', '🌻', '🌈', '🌙', '☀️', '🍿', '🍕', '☕', '🎵', '🎶', '🎤', '🎬', '🎮', '🎲', '🎁', '🏆'];
   function available(data, o) { return !!(o && o.signed && o.relay && data && data.room && data.room.relay); }
+  // stkimg 1.99??: a Camfrog tile's picture URL -> the fresh one its next showing asks for, once it failed (this page, every sheet)
+  var HAS = Object.prototype.hasOwnProperty, retryTile = {};
   var voiceList = null;
   function voices() {
     if (voiceList) return voiceList;
@@ -59,10 +61,14 @@
           show(rows);
         }).catch(function () { if (connected(g)) note(t('unavailable', 'Could not load this right now. Try again.')); });
     }
-    function picture(parent, src, label) {
-      var image = el('img'); image.src = src; image.alt = label; image.loading = 'lazy'; image.decoding = 'async';
+    // (stkimg 1.99??: again = a Camfrog tile - one that failed is asked for once more, under a fresh ?r=, the next time the sheet shows it)
+    function picture(parent, src, label, again) {
+      var image = el('img'); image.src = again && HAS.call(retryTile, src) ? retryTile[src] : src; image.alt = label; image.loading = 'lazy'; image.decoding = 'async';
       image.style.inlineSize = '100%'; image.style.blockSize = '88px'; image.style.objectFit = 'contain'; image.style.borderRadius = 'var(--ds-r-sm)';
-      image.addEventListener('error', function () { image.hidden = true; }); parent.appendChild(image);
+      image.addEventListener('error', function () {
+        image.hidden = true;
+        if (again && !HAS.call(retryTile, src)) retryTile[src] = src + '&r=' + new Date().getTime().toString(36);
+      }); parent.appendChild(image);
     }
     function mediaButton(label, action) {
       var b = button('', action); b.style.display = 'flex'; b.style.flexDirection = 'column'; b.style.minInlineSize = '0';
@@ -104,11 +110,13 @@
       request('/api/rooms/' + encodeURIComponent(o.slug) + '/cfstickers', g, function (rows) {
         var items = grid();
         rows.forEach(function (r) {
-          if (!r || !/^\d{1,10}$/.test(String(r.id)) || !/^\d{1,10}$/.test(String(r.set)) || r.src !== '/media/cfsticker/' + r.id + '.webp') return;
+          // (stkimg 1.99??: only the site's own picture of THIS sticker, in its versioned form - ?v= the picture's 8-hex token)
+          var m = r && typeof r.src === 'string' ? /^\/media\/cfsticker\/(\d{1,10})\.webp\?v=[a-f0-9]{8}$/.exec(r.src) : null;
+          if (!m || !/^\d{1,10}$/.test(String(r.id)) || !/^\d{1,10}$/.test(String(r.set)) || m[1] !== String(r.id)) return;
           var desc = String(r.desc || t('sticker', 'Sticker')).slice(0, 240);
           var b = mediaButton(desc, function () { send('[cfsticker:' + r.set + '/' + r.id + ']'); });
           b.setAttribute('aria-label', t('send_sticker', 'Send sticker: {name}', { name: desc })); b.title = desc;
-          picture(b, r.src, desc); caption(b, desc); items.appendChild(b);
+          picture(b, r.src, desc, true); caption(b, desc); items.appendChild(b);
         });
         if (!items.children.length) note(t('empty', 'Nothing here yet.'));
       });
