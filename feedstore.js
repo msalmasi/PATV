@@ -2168,8 +2168,11 @@ async function ban(user, target, { room = "", reason = "", days = 0, untilMs = u
   if (roomId && rooms.isProfile(roomId) && u.userId === roomId.slice(rooms.PROFILE_PREFIX.length)) throw new Refuse(400, "That's you.");   // 1.99df
   // rankrule (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): never yourself / your own alt, never PATV
   // staff of your rank or above (the owner above every Admin) - every scope, every caller (/api/feed/ban, the report actions, the person
-  // menu's pad / site ban); nothing is written
-  await require("./staffrank").assert(user, u.userId);
+  // menu's pad / site ban); nothing is written. Review fix (regression 1): a member's block from commenting on THEIR OWN profile
+  // (Profile feed settings) is their own space, not a staff power - yourself only there (🚫 Block doesn't cover comments; it was
+  // allowed before the rule). Staff managing someone else's profile still get the rank check.
+  const ownProfile = !!roomId && rooms.isProfile(roomId) && String(user.userId) === roomId.slice(rooms.PROFILE_PREFIX.length);
+  await require("./staffrank").assert(user, u.userId, ownProfile ? { rank: false } : {});
   const until = untilMs !== undefined ? (untilMs == null ? null : Math.floor(Number(untilMs))) : Number(days) > 0 ? NOW() + Math.min(3650, Number(days)) * 86400e3 : null;
   // 1.99ajn padppl: an upsert (was INSERT OR REPLACE) - the row's other columns a later build adds are kept on a re-ban
   await runQuery(`INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, ?, ?, ?, ?)

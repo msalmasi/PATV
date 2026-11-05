@@ -79,8 +79,10 @@ async function request(admin, { op, from, to, amount, reason, key } = {}) {
     if (T.id === R.id) throw fail(400, "That's the same pad.");
   }
   // rankrule (staffrank.js): a fine / a transfer out of a pad is a sanction on its owner - never your own pad, never one owned by PATV staff
-  // of your rank or above (the owner above every Admin); a pad without an owner has no rank
-  if (R.owner && R.owner.userId) await require("./staffrank").assert(admin, String(R.owner.userId));
+  // of your rank or above (the owner above every Admin); a pad without an owner has no rank. Review fix (regression 2): PAT out of
+  // YOUR OWN pad is no sanction on anyone - self "allow" (it was "That's you."). (Taking a pad away so it has no owner: roomsweb's
+  // /api/rooms/admin/owner asks the same rule - review fix B2.)
+  if (R.owner && R.owner.userId) await require("./staffrank").assert(admin, String(R.owner.userId), { self: "allow" });
   const a = typeof amount === "number" ? amount : /^\s*\d+\s*$/.test(String(amount || "")) ? parseInt(amount, 10) : NaN;
   if (!Number.isFinite(a) || Math.floor(a) !== a || a < 1 || a > MAX_AMOUNT) throw fail(400, "Enter a whole amount of PAT.");
   const why = clean(reason, 200);

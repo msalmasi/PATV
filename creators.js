@@ -1242,6 +1242,15 @@ async function dispute(user, { ledger, reason, note } = {}) {
   await notifyStaff({ title: "⭐ New creator dispute", body: `Ledger #${r.id}: ${why}.`, ref: `cr-disp:${ins.id}` });
   return { ok: true, id: ins.id };
 }
+/** The staff's Refund on a held ledger row (/admin/creators): -> refundLedger's answer. rankrule review fix: a refund takes the creator's
+ *  earnings - never from PATV staff of your rank or above (your own buyer: yes). */
+async function staffRefund(actor, id, note) {
+  await init();
+  if (!can(actor, "creators.admin")) throw new Refuse(403, "Staff only.");
+  const r = (await getQuery("SELECT creator_id FROM creator_ledger WHERE id = ?", [Number(id) || 0]))[0];
+  if (r) await require("./staffrank").assert(actor, String(r.creator_id), { self: "allow" });
+  return refundLedger(id, note, actor.username);
+}
 /** Staff decision: refund (the whole hold back to the fan) or deny (unfreeze; it releases on schedule). */
 async function resolveDispute(actor, id, { action, note } = {}) {
   await init();
@@ -1249,6 +1258,10 @@ async function resolveDispute(actor, id, { action, note } = {}) {
   const d = (await getQuery("SELECT * FROM creator_disputes WHERE id = ?", [Number(id) || 0]))[0];
   if (!d) throw new Refuse(404, "No such dispute.");
   if (d.status !== "open") throw new Refuse(409, "Already decided.");
+  // rankrule review fix (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): a refund takes the creator's
+  // earnings - never from PATV staff of your rank or above (your own buyer: yes, self "allow"); a deny is in the creator's favour -
+  // never on your own sale (a lift: no rank)
+  if (action === "refund" || action === "deny") await require("./staffrank").assert(actor, String(d.creator_id), action === "deny" ? { lift: true } : { self: "allow" });
   if (action === "refund") {
     await runQuery("UPDATE creator_ledger SET frozen = 0 WHERE id = ?", [d.ledger_id]);
     const ok = await refundLedger(d.ledger_id, cleanLine(note, 200) || "dispute upheld", actor.username);
@@ -1270,6 +1283,8 @@ async function clawback(actor, ledgerId, note) {
   if (!can(actor, "creators.admin")) throw new Refuse(403, "Staff only.");
   const r = (await getQuery("SELECT * FROM creator_ledger WHERE id = ?", [Number(ledgerId) || 0]))[0];
   if (!r) throw new Refuse(404, "No such ledger row.");
+  // rankrule review fix: a clawback / reversal takes the creator's earnings - never from PATV staff of your rank or above (your own: yes)
+  await require("./staffrank").assert(actor, String(r.creator_id), { self: "allow" });
   if (r.state === "held") { await runQuery("UPDATE creator_ledger SET frozen = 0 WHERE id = ?", [r.id]); await refundLedger(r.id, "clawback: " + (cleanLine(note, 120) || "reversed payment"), actor.username); return { ok: true, result: "refunded" }; }
   if (r.state !== "released") throw new Refuse(409, `It's ${r.state}.`);
   const isLinked = r.linked || (await linked(r.fan_id, r.creator_id));
@@ -1531,7 +1546,7 @@ module.exports = {
   init, config, setConfig, cleanConfig, eligibility, apply, savePlans, cleanPlans, setPadFlags, staffSet, creatorRow, plansOf, assertRating,
   prepareLock, lockedMediaCheck, attachLock, makeTeaser, applyLocks, mediaGate, attested, attestAge, liveTiers, isActiveCreator, isCreatorBadge, isR18Room, navFor,
   offer, quote, subscribe, unlock, cancel, resume, setRenew, payNow, changeTier, renewOne, renewDue, releaseOne, releaseDue, routeCutInTx, weekStart,
-  refundLedger, refundPost, onPostRemoved, takedownExplicit, dispute, resolveDispute, clawback, comp, removeSub, broadcast, linked,
+  refundLedger, staffRefund, refundPost, onPostRemoved, takedownExplicit, dispute, resolveDispute, clawback, comp, removeSub, broadcast, linked,
   publicView, fanSubs, dashboard, ledgerCsv, composerInfo, adminView, readiness, setGate, botAct, start, loadCaches, lockSchema, Refuse,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

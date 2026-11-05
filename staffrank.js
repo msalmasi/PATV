@@ -13,8 +13,11 @@
 //   lifts        (decision, documented in the rankrule notes) a LIFT (unban, unblock, reinstate, cancel, put back up) is never
 //                refused for rank: it gives the person back what they had, and a pad owner or staff must still be able to undo a ban
 //                made before this rule. RANK_ON_LIFTS = true applies the same ladder to lifts, in this one place.
-//   not here     Pepe (bot-token routes keep Pepe's own ladder), a frog name's (veil) ban (that answer would say who it is), the
-//                class picker / roles (staffroles.js has its own, stricter ladder), comps and gifts (not sanctions).
+//   frog names   a frog name's (veil) ban is never refused here (that answer would say who it is): it is stored and answered like any
+//                other, and padbans.veilActive lets it bite only while its maker outranks the person behind the frog (review B3).
+//   not here     Pepe (bot-token routes keep Pepe's own ladder), the class picker / roles (staffroles.js has its own, stricter
+//                ladder), comps and gifts (not sanctions).
+//   reads        a users read that fails THROWS (review B5): the route answers 500 and writes nothing - never "no such account, go on".
 "use strict";
 const { getQuery } = require("./dbUtils");
 const core = require("./siteperms-core");
@@ -42,7 +45,8 @@ class StaffRankError extends Error {
 async function rowOf(x) {
   const id = x != null && typeof x === "object" ? x.userId : x;
   if (id == null || id === "") return null;
-  return (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [String(id)]).catch(() => []))[0] || null;
+  // (review fix B5: no .catch - a read error was "no such account" and let the action through; now it throws, nothing is written)
+  return (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [String(id)]))[0] || null;
 }
 
 /** Is this users row the site's owner (the Admin class + a linked login with Pepe's owner role)? A roles read that fails: no. */
@@ -66,12 +70,14 @@ function isSelf(me, them) {
 /**
  * The rule on two users rows (read by the caller): -> null (go on) | "self" | "rank". me null = an actor without an account (rank 0).
  * them null -> null (the route answers its own "no such account"). opts.lift: a lift (no rank check unless RANK_ON_LIFTS);
- * opts.self false: leave the self check to the route (it has its own words for it).
+ * opts.self false: leave the self check to the route (it has its own words for it); opts.self "allow": yourself is fine here (it is
+ * no sanction on anyone - your own pad's PAT, giving your own pad away, your own copy of a blocked picture, your own XP);
+ * opts.rank false: the self check only (a member's own profile - review fix: their own block from commenting there).
  */
-async function decide(me, them, { lift = false, self = true } = {}) {
+async function decide(me, them, { lift = false, self = true, rank = true } = {}) {
   if (!them) return null;
-  if (self && isSelf(me, them)) return "self";
-  if (lift && !RANK_ON_LIFTS) return null;
+  if (self !== false && isSelf(me, them)) return self === "allow" ? null : "self";
+  if (!rank || (lift && !RANK_ON_LIFTS)) return null;
   const theirs = await rankOf(them);
   if (!theirs) return null;
   const mine = me ? await rankOf(me) : 0;

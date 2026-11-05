@@ -365,7 +365,7 @@ test("the per-login chat tool: hide / delete every line never on staff of your r
   assert.ok((await who("staff", "membercf", "hide_all")).ok, "a member's login");
 });
 
-test("pad vault fines / transfers: never out of a pad owned by staff of your rank or above, never your own pad; the owner may", async () => {
+test("pad vault fines / transfers: never out of a pad owned by staff of your rank or above (your own pad: yes); the owner may", async () => {
   const PF = require(path.join(repo, "padfines"));
   await PF.init();
   await rooms.addRoom("Adm2.Room", "Admin Two's", "test"); await rooms.setOwner("Adm2.Room", "admintwo", "test");
@@ -373,8 +373,9 @@ test("pad vault fines / transfers: never out of a pad owned by staff of your ran
   const isRank = (e) => e && e.code === "staff_rank" && e.message === RANK;
   await assert.rejects(PF.request(U.admin, { op: "fine", from: "Adm2.Room", amount: 5, reason: "spam" }), isRank);
   await assert.rejects(PF.request(U.admin, { op: "transfer", from: "Adm2.Room", to: PAD, amount: 5, reason: "spam" }), isRank);
-  await assert.rejects(PF.request(U.admin, { op: "fine", from: "Adm1.Room", amount: 5, reason: "spam" }), (e) => e && e.code === "self");
   assert.equal(await n("SELECT COUNT(*) AS n FROM pad_vault_admin_moves"), 0);
+  // (review fix: PAT out of your OWN pad is no sanction on anyone - it was "That's you.")
+  assert.ok((await PF.request(U.admin, { op: "fine", from: "Adm1.Room", amount: 5, reason: "my own pad" })).key, "an Admin, own pad");
   assert.ok((await PF.request(U.owner, { op: "fine", from: "Adm2.Room", amount: 5, reason: "spam" })).key, "owner -> an Admin's pad");
   assert.ok((await PF.request(U.admin, { op: "fine", from: PAD, amount: 5, reason: "spam" })).key, "a member's pad");
 });

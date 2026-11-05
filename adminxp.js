@@ -40,6 +40,10 @@ function register(app, { addUser }) {
       const apply = b.confirm === true;
       const r = await uc.adminAdjustXp(target.userId, input, {
         apply,
+        // rankrule review fix (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): taking XP away / a
+        // lower level is a sanction - never on PATV staff of your rank or above (the owner above every Admin); your own, or a raise
+        // (like a comp): as before. Checked on the preview too, so the page says it before the confirm.
+        check: async (plan) => { if (plan.xpDelta < 0) await require("./staffrank").assert(admin, target.userId, { self: "allow" }); },
         onApplied: (plan) => audit.record(admin, "xp", target, { mode: input.mode, amount: input.amount, before: plan.before, after: plan.after,
                                                                   xpDelta: plan.xpDelta, rewards: false }, reason || null),
       });
@@ -48,7 +52,8 @@ function register(app, { addUser }) {
     } catch (e) {
       const st = e && e.status && e.status < 500 ? e.status : 500;
       if (st === 500) console.error("[adminxp]", e && e.message);
-      res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message });
+      const SR = require("./staffrank");     // rankrule: a rank refusal in the viewer's language, with its code
+      res.status(st).json(Object.assign({ ok: false, error: st === 500 ? "Something went wrong." : SR.msg(res, e) }, e instanceof SR.StaffRankError ? { code: e.code } : {}));
     }
   });
 

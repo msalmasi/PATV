@@ -947,7 +947,8 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   const fail = (res, e) => {
     const st = e && e.status && e.status < 500 ? e.status : 500;
     if (st === 500) console.error("[imagesafety]", e);
-    res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message });
+    const SR = require("./staffrank");     // rankrule: a rank / self refusal in the viewer's language, with its code
+    res.status(st).json(Object.assign({ ok: false, error: st === 500 ? "Something went wrong." : SR.msg(res, e) }, e instanceof SR.StaffRankError ? { code: e.code } : {}));
   };
   const bot = (req, res, next) => {
     const tok = req.get("x-bot-token") || (req.body && typeof req.body.password === "string" ? req.body.password : "");
@@ -1025,7 +1026,22 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
     try { const C = await setConfig((req.body || {}).settings || {}, req.admin.username); res.json({ ok: true, settings: settingsView(C) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/admin/imagesafety/review/:id", addUser, json, adminApi, async (req, res) => {
-    try { const b = req.body || {}; res.json({ ok: true, row: await review(req.params.id, b.mark, req.admin.username, b.note) }); } catch (e) { fail(res, e); }
+    try {
+      const b = req.body || {};
+      // rankrule review fix B1 (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): a mark on a stage
+      // cover's check takes covers down (+ a strike) or puts a held one up, like the "Stage covers" card - the same rule, before the
+      // mark is written (stagecover.reviewAffects reads what onReview would do)
+      const m = b.mark == null ? "" : String(b.mark);
+      if (m === "fn" || m === "ok" || m === "fp") {
+        await init();
+        const row = (await getQuery("SELECT surface FROM image_safety_log WHERE id = ?", [Number(req.params.id) || 0]))[0];
+        if (row && row.surface === "stage_cover") {
+          const SC = require("./stagecover");
+          await SC.assertAffects(req.admin, await SC.reviewAffects(Number(req.params.id), m));
+        }
+      }
+      res.json({ ok: true, row: await review(req.params.id, b.mark, req.admin.username, b.note) });
+    } catch (e) { fail(res, e); }
   });
   app.get("/api/admin/imagesafety/recent", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");

@@ -28,7 +28,9 @@
 // "🐸 <the frog name it was made on> (identity hidden) - incognito ban". Durations, reasons (seen by the pad's mods and staff, never by
 // the person), audit and Lift as for every website ban.
 // Rank (review fix): a NAMED ban is refused on the pad's owner (unless staff ban) and on PATV staff of the same rank or above; a frog
-// name's ban is never refused for rank (that answer would say who it is) - it only ever stops frog-named website chat.
+// name's ban is never refused for rank (that answer would say who it is) - it only ever stops frog-named website chat. rankrule review
+// fix B3 (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): it is stored and answered like any other, and
+// bites only while its maker outranks the person behind the frog (veilBites); its Lift is never your own (B3b).
 //
 // Who may (the existing rules): bridge = the pad's owner / staff (rooms.canManage) or a room mod by Pepe's kick cap (bridgeblocks'
 // padCtx rule); pad = rooms.canManage; site = SP feed.moderate (Staff); networks (netban.js) = SP safety.net_bans (Admins).
@@ -173,7 +175,8 @@ async function need(me, R, live, scope) {
 }
 
 /** Review fix (rank): why `me` may not ban NAMED account `p` here, or null. The pad's owner only by staff; PATV staff / admins only by
- *  someone of a higher class; a room mod (Pepe's kick cap) not by a fellow room mod (only the owner / staff). Never asked for a veil. */
+ *  someone of a higher class; a room mod (Pepe's kick cap) not by a fellow room mod (only the owner / staff). Never asked for a veil
+ *  (rankrule review fix B3: a frog-name ban is held to the rank rule where it bites - veilActive / veilBites). */
 async function rankRefusal(me, R, live, p) {
   if (!p || !p.userId || p.veil) return null;
   const core = require("./siteperms-core");
@@ -304,6 +307,9 @@ async function unban(me, R, live, { ref = null, entry = null, scope = null, feat
     const row = (await getQuery("SELECT * FROM veil_bans WHERE id = ?", [id]))[0];
     if (!row || (row.room_id && row.room_id !== String(R.id))) throw new Refuse(404, "That ban isn't here any more.");
     await need(me, R, live, row.scope);
+    // rankrule review fix B3b: never your own incognito ban (the account it was made on, or your linked login) - like the named and the
+    // login Lifts; "That's you." only ever tells the person it was made on
+    if ((row.user_id && String(row.user_id) === String(me.userId)) || (row.login && me.camfrogUsername && low(row.login) === low(me.camfrogUsername))) throw new SR.StaffRankError("self");
     await runQuery("DELETE FROM veil_bans WHERE id = ?", [id]);
     const p = { veil: true, label: row.label, userId: row.user_id, login: row.login };
     if (row.room_id) await require("./rooms").event(row.room_id, "pad-unban", me.username, `${eventName(p)} - incognito ban`);
@@ -411,10 +417,27 @@ async function veilActive(roomId, userId, { login = null, scopes = ["bridge", "p
     await init();
     const t = now(), ph = scopes.map(() => "?").join(",");
     const rows = await getQuery(`SELECT * FROM veil_bans WHERE (room_id = ? OR (room_id = '' AND scope = 'site')) AND scope IN (${ph})
-                                 AND (until IS NULL OR until > ?) AND (${userId ? "user_id = ?" : "0"} ${login ? "OR login = ?" : ""}) ORDER BY until IS NULL DESC, until DESC LIMIT 1`,
+                                 AND (until IS NULL OR until > ?) AND (${userId ? "user_id = ?" : "0"} ${login ? "OR login = ?" : ""}) ORDER BY until IS NULL DESC, until DESC LIMIT 20`,
       [String(roomId || ""), ...scopes, t, ...(userId ? [String(userId)] : []), ...(login ? [low(login)] : [])]);
-    return rows[0] || null;
+    for (const r of rows) if (await veilBites(r, userId)) return r;      // (rankrule review fix B3: the first that bites)
+    return null;
   } catch (e) { return null; }
+}
+/** rankrule review fix B3 (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): a frog-name ban bites
+ *  only while the moderator who made it outranks the person behind the frog (staffrank.js - a member: anyone who could make it; PATV
+ *  staff: only someone of a HIGHER rank, the owner above every Admin). ban() never refuses a frog name for rank - "you can't, that's
+ *  staff" would say who it is: the ban is stored, listed and answered exactly like any other, it just never stops PATV staff of the
+ *  maker's rank or above (rank read now, so a ban made before this rule on someone above its maker stops biting too). A read that
+ *  fails: the ban stands (as before). */
+async function veilBites(row, userId) {
+  const who = userId || row.user_id;
+  if (!who) return true;                                    // (a Camfrog login with no account: no rank)
+  try {
+    const them = await SR.rowOf(who);
+    if (!them) return true;
+    const by = row.by_id ? await SR.rowOf(row.by_id) : null;
+    return !(await SR.decide(by, them, { self: "allow" }));
+  } catch (e) { return true; }
 }
 /** A Camfrog-login ban (no account yet) refusing this login here. */
 async function loginActive(roomId, login, scopes = ["bridge", "pad", "site"]) {

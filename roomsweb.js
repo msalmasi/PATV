@@ -386,7 +386,20 @@ function register(app, { addUser, isBotToken }) {
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
   });
   app.post("/api/rooms/admin/owner", addUser, needStaff, jsonOnly, async (req, res) => {
-    try { res.json({ ok: true, room: await rooms.setOwner(String((req.body || {}).room || ""), (req.body || {}).owner, actor(req)) }); } catch (e) { fail(res, e); }
+    try {
+      const room = String((req.body || {}).room || ""), who = (req.body || {}).owner;
+      // rankrule review fix B2 (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): taking a pad away from
+      // its owner (to someone else, the house or nobody) is an action on that owner - never PATV staff of your rank or above (the owner
+      // above every Admin). Giving your own pad away, or naming the same owner again, is no sanction (self "allow"); before anything changes
+      const cur = await rooms.get(room);
+      const curId = cur && cur.owner && cur.owner.userId ? String(cur.owner.userId) : null;
+      if (curId) {
+        const w = String(who == null ? "" : who).trim();
+        const next = w && !/^(none|house|pepe)$/i.test(w) ? await rooms.findUser(w) : null;
+        if (!next || String(next.userId) !== curId) await require("./staffrank").assert(req.user, curId, { self: "allow" });
+      }
+      res.json({ ok: true, room: await rooms.setOwner(room, who, actor(req)) });
+    } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/admin/add", addUser, needStaff, jsonOnly, async (req, res) => {
     try { res.json({ ok: true, room: await rooms.addRoom(String((req.body || {}).room || "").trim(), (req.body || {}).title, actor(req)) }); } catch (e) { fail(res, e); }

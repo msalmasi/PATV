@@ -725,9 +725,7 @@ async function removeUpload(userId, why = "owner", { strike = true, copies = tru
   if (takedown && strike) Object.assign(patch, { hold_until: NOW() + HOLD_MS, strikes: (Number(r.strikes) || 0) + 1 });
   let hash = null;
   if (takedown) {
-    hash = r.upload_hash;
-    // (a row from before review fix 1 has no upload_hash: its file's - 1.99ahq review fix 3 (SEC-4): wherever it is, held/ too)
-    if (!hash) { try { hash = sha256(fs.readFileSync(fileAt(r.upload, r.upload_state))); } catch (e) { hash = null; } }
+    hash = hashOfRow(r);
     if (hash) await blockHash(hash, blockCode(why));
   }
   await upsert(userId, patch);
@@ -753,6 +751,57 @@ async function takeDownCopies(hash, why) {
   const rows = await getQuery("SELECT user_id FROM stage_covers WHERE upload_hash = ? AND upload IS NOT NULL", [String(hash)]);
   for (const x of rows) await removeUpload(x.user_id, why, { strike: false, copies: false });
   return rows.length;
+}
+/** A current upload's picture hash. (a row from before review fix 1 has no upload_hash: its file's - 1.99ahq review fix 3 (SEC-4):
+ *  wherever it is, held/ too) */
+function hashOfRow(r) {
+  if (!r || !r.upload) return null;
+  if (r.upload_hash) return r.upload_hash;
+  try { return sha256(fs.readFileSync(fileAt(r.upload, r.upload_state))); } catch (e) { return null; }
+}
+
+// ── rankrule (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff.") - who a take-down acts on ──
+// review fix B1: the image-safety REVIEW of a cover's check takes covers down (+ a strike) and puts held ones up exactly like the card's
+// Take down / Put up - so it asks the same rule, before the mark is written. Both also take down every other account's copy of the
+// picture (takeDownCopies): those accounts are checked too (your own copy is your business - self "allow").
+/** The other accounts whose current upload is this picture. */
+async function copyHolders(hash, except = null) {
+  if (!hash) return [];
+  return (await getQuery("SELECT user_id FROM stage_covers WHERE upload_hash = ? AND upload IS NOT NULL", [String(hash)]))
+    .map((x) => String(x.user_id)).filter((u) => u !== String(except == null ? "" : except));
+}
+/** An admin take-down of userId's cover (the card / the review): -> {take: [that account], copies: [other accounts' copies]}. */
+async function removeAffects(userId) {
+  const r = await rowOf(userId);
+  if (!r || !r.upload) return { take: [], copies: [], lift: [] };
+  return { take: [String(userId)], copies: await copyHolders(hashOfRow(r), userId), lift: [] };
+}
+/** A review mark on a stage_cover check, read the way onReview acts on it (nothing written): -> {take, copies, lift}. */
+async function reviewAffects(logId, mark) {
+  await init();
+  const id = Number(logId) || 0;
+  const none = { take: [], copies: [], lift: [] };
+  const r = (await getQuery("SELECT * FROM stage_covers WHERE upload_log = ? AND upload IS NOT NULL", [id]))[0];
+  const l = (await getQuery("SELECT flagged, user_id FROM image_safety_log WHERE id = ?", [id]))[0];
+  const take = mark === "fn" || (mark === "ok" && !!(l && Number(l.flagged) === 1));
+  if (r) {
+    if (take) return removeAffects(r.user_id);
+    if (mark === "fp" && r.upload_state === "held") return { ...none, lift: [String(r.user_id)] };
+    return none;
+  }
+  if (!take) return none;
+  const ck = (await getQuery("SELECT hash, taken FROM stage_cover_checks WHERE log_id = ?", [id]))[0];
+  if (!ck || !ck.hash || ck.taken) return none;          // (onReview does nothing then)
+  const owner = l && l.user_id ? String(l.user_id) : null;      // (the hold + the strike)
+  return { take: owner ? [owner] : [], copies: await copyHolders(ck.hash, owner), lift: [] };
+}
+/** The rule on what a take-down / put-up acts on (throws StaffRankError): the account itself - never yours, never PATV staff of your
+ *  rank or above; another account's copy - never PATV staff of your rank or above; a put-up is a lift (never your own). */
+async function assertAffects(actor, aff) {
+  const SR = require("./staffrank");
+  for (const u of aff.take || []) await SR.assert(actor, u);
+  for (const u of aff.copies || []) await SR.assert(actor, u, { self: "allow" });
+  for (const u of aff.lift || []) await SR.assert(actor, u, { lift: true });
 }
 /** An admin puts a HELD picture up (the "Stage covers" card's Put up; a "false positive" review). -> true when it was held. */
 async function releaseUpload(userId) {
@@ -1035,8 +1084,9 @@ function register(app, { addUser, noTimers = false }) {
       if (!a) return res.status(403).json({ ok: false, error: "Admins only." });
       const who = String((req.body || {}).user_id || "");
       // rankrule: never your own, never PATV staff of your rank or above (the owner above every Admin) - before anything changes; the
-      // automatic image checks (imagesafety's hook) still take any cover down
-      if (who) await require("./staffrank").assert(a, who);
+      // automatic image checks (imagesafety's hook) still take any cover down. review fix B1: every other account's copy of the
+      // picture comes down with it - those accounts too
+      if (who) { await require("./staffrank").assert(a, who); await assertAffects(a, await removeAffects(who)); }
       if (!who || !(await removeUpload(who, "admin " + a.username))) throw new Refuse(404, "That cover is already gone.", "gone");
       res.json({ ok: true });
     } catch (e) { fail(res, e); }
@@ -1120,6 +1170,7 @@ function register(app, { addUser, noTimers = false }) {
 
 module.exports = {
   init, register, coverOf, invalidate, localImage, localImageChecked, onReview, removeUpload, releaseUpload, setUpload, uploadRefusal, save, stateFor, choiceOf,
+  reviewAffects, removeAffects, assertAffects,      // rankrule review fix B1
   adminList, sweepFiles, sweepChecks, gtfUrl, parseGtf, forAccount, uploadsOn, openUpload, chunkUpload, finishUpload, filePath, dir, _setDir, Refuse,
   KINDS, PIC_KINDS, SURFACE, MAX_BYTES, CHUNK, COVER_PX, CACHE_MS, FILE_RE, UPLOADS_PER_HOUR, UPLOADS_PER_DAY, HOLD_MS, UPLOAD_MAX_AGE, UPLOAD_CDN_MAX_AGE,
   // 1.99ahq fix 3: captures draw the photo too (the allow-list + the guarded fetch + the proxy); held pictures in held/

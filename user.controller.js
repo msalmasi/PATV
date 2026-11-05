@@ -910,11 +910,12 @@ function _xpPlan(cur, mode, amount) {
  * Preview (apply = false) or apply an admin adjustment. -> {before, after, xpDelta, applied}
  * The caller has checked the admin and the input (checkXpAdjust); onApplied(plan) records the audit event.
  */
-function adminAdjustXp(userId, { mode, amount }, { apply = false, onApplied = null } = {}) {
+function adminAdjustXp(userId, { mode, amount }, { apply = false, onApplied = null, check = null } = {}) {
   const go = async () => {
     const row = (await getQuery("SELECT xp, level FROM users WHERE userId = ?", [userId]))[0];
     if (!row) throw Object.assign(new Error("No such account."), { status: 404 });
     const plan = _xpPlan(row, mode, amount);
+    if (check) await check(plan);        // rankrule review fix: the caller's refusal (throws) on the plan, before anything is written
     if (!apply) return { ...plan, applied: false };
     await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [plan.after.xp, plan.after.level, userId]);
     if (plan.after.level > plan.before.level) {

@@ -22,7 +22,7 @@ let base, server, uc;
 const UID = { boss: "u_boss", mod: "u_mod", ann: "u_ann", ben: "u_ben" };
 test.before(async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT, class TEXT DEFAULT 'pleb', xp REAL DEFAULT 0,
-                  level INTEGER DEFAULT 1, points_balance INTEGER DEFAULT 0, archived_at INTEGER)`);
+                  level INTEGER DEFAULT 1, points_balance INTEGER DEFAULT 0, archived_at INTEGER, camfrogUsername TEXT)`);   // (camfrogUsername: the rank rule reads it - staffrank.js)
   await runQuery(`CREATE TABLE IF NOT EXISTS transactions (transactionId TEXT PRIMARY KEY, userId TEXT, type TEXT, points INTEGER,
                   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, counterparty TEXT)`);
   for (const [n, id] of Object.entries(UID)) {

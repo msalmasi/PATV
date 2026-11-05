@@ -480,7 +480,9 @@ function register(app, { addUser }) {
     // rankrule (staffrank.js): never yourself (Settings signs you out everywhere), never PATV staff of your rank or above (the owner
     // above every Admin)
     const SR = require("./staffrank");
-    const why = await SR.check(req.user, target.userId);
+    let why;
+    try { why = await SR.check(req.user, target.userId); }       // (review fix B5: a read that fails refuses - never a hung request)
+    catch (e) { console.error("[sessions] admin revoke rank:", e.message); return res.status(500).json({ ok: false }); }
     if (why) return SR.send(req, res, why);
     // 1.99wl: a reason and the member's username typed as the confirmation (/admin/accounts); audited before it runs
     const b = req.body || {};

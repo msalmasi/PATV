@@ -128,8 +128,9 @@ function register(app, { addUser, isBotToken }) {
   adminPost("/api/admin/creators/config", async (u, b) => ({ config: await CR.setConfig(b, u.username) }), true);
   adminPost("/api/admin/creators/:userId/status", async (u, b, req) => CR.staffSet(u, req.params.userId, { status: b.action, note: b.note }));
   adminPost("/api/admin/creators/disputes/:id", async (u, b, req) => CR.resolveDispute(u, req.params.id, { action: b.action, note: b.note }));
+  // rankrule review fix: refund / clawback take a creator's earnings - never from PATV staff of your rank or above (creators.js)
   adminPost("/api/admin/creators/ledger/:id", async (u, b, req) => {
-    if (b.action === "refund") { const ok = await CR.refundLedger(req.params.id, b.note || "refunded by the staff", u.username); if (!ok) throw new CR.Refuse(409, "It isn't held any more."); return {}; }
+    if (b.action === "refund") { const ok = await CR.staffRefund(u, req.params.id, b.note || "refunded by the staff"); if (!ok) throw new CR.Refuse(409, "It isn't held any more."); return {}; }
     if (b.action === "clawback") return CR.clawback(u, req.params.id, b.note);
     if (b.action === "release") { const r = await CR.releaseDue(); return { message: `Released ${r.released} payment(s).` }; }
     throw new CR.Refuse(400, "Unknown action.");
