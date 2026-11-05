@@ -1,4 +1,4 @@
-// privact.js — 1.99?? mfproof: PRIVATE-ACTIVITY PRESENCE LINES on pads (owner report 2026-11-04: brocklee258, Camfrog login ritchiecuh,
+// privact.js — 1.99ajs mfproof: PRIVATE-ACTIVITY PRESENCE LINES on pads (owner report 2026-11-04: brocklee258, Camfrog login ritchiecuh,
 // "shows in the room ... mic transcripts show with his username on the site, but shows his mic grabs as 'someone'").
 //
 // Private activity = a linked account whose profile hides its Analytics section or that section's Rooms panel (chatlogview.privateFlags /

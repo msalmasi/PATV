@@ -1,4 +1,4 @@
-// 1.99?? mfproof: PRIVATE-ACTIVITY PRESENCE LINES (privact.js; owner report 2026-11-04 - brocklee258's "mic transcripts show with his
+// 1.99ajs mfproof: PRIVATE-ACTIVITY PRESENCE LINES (privact.js; owner report 2026-11-04 - brocklee258's "mic transcripts show with his
 // username on the site, but shows his mic grabs as 'someone'"). The real facts: the PATV account brocklee258 linked to the Camfrog login
 // ritchiecuh, its profile hiding the list prod's profile_layout row has (Analytics among it = private activity), and a CF auto account
 // whose camfrogUsername is "brocklee258" (never his). On the real bridge feed (/live projection), chatlogview.dress and the downloads:

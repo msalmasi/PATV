@@ -71,7 +71,7 @@ const KICK_ACTIONS = ["kick", "ban"];    // "kick or more" in Pepe's live caps =
 const NAME_MIN = 3, NAMES_PER = 8, NAMES_PEOPLE_MAX = 400, NAMES_REFRESH_MS = 6 * 3600e3;
 const AUD = Object.freeze({ public: "p", members: "m", approved: "a" });
 const PRESENCE = new Set(["join", "leave", "mic", "unmic"]);
-// 1.99?? mfproof: does the CL3 private-activity presence mask apply (privact.js 'privact_presence'; any failure = the mask)?
+// 1.99ajs mfproof: does the CL3 private-activity presence mask apply (privact.js 'privact_presence'; any failure = the mask)?
 const privactMasked = () => { try { return require("./privact").masked() !== false; } catch (e) { return true; } };
 const TIER_RANK = Object.freeze({ standard: 0, prime: 1, unlimited: 2 });
 const SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
@@ -1142,8 +1142,8 @@ function dress(items, ctx) {
     else if (u) {
       const e = u.login ? lookup(u) : undefined;
       if (/^u:/i.test(String(u.login || "")) && e && e.acc === null) o.u = { former: true };
-      // (1.99?? mfproof: unless privact.js's switch names them - mask true by default and until loaded: today's rule)
-      // (1.99?? mfproof verify: a masked line never carries its hold id either - Pepe's v2 hold id is on the person's NAMED 🎙 transcript of
+      // (1.99ajs mfproof: unless privact.js's switch names them - mask true by default and until loaded: today's rule)
+      // (1.99ajs mfproof verify: a masked line never carries its hold id either - Pepe's v2 hold id is on the person's NAMED 🎙 transcript of
       // the same hold, so "someone grabbed the mic" + data-hold paired straight back to the name in history, as the anon branch above says)
       else if (PRESENCE.has(o.k) && e && e.acc && e.priv && privactMasked()) { o.u = { anon: true, display: "someone" }; delete o.hold; }
       else o.u = pick(u, OUT_U);

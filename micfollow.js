@@ -137,7 +137,7 @@
 //                  (pinRule). Incognito + live cam off: the peek hood under the frog name (a cover, or a veiled cam tile's card) - never
 //                  coverOf; !bridge hide: the shadow hood. The one courtesy notice says !livecam off stops the cam (cover picture
 //                  instead). Switch off: today's CUTs exactly.
-// 1.99?? mfproof (owner report 2026-11-04: brocklee258, Camfrog login ritchiecuh - proven by Pepe, named in the chat and transcripts, but
+// 1.99ajs mfproof (owner report 2026-11-04: brocklee258, Camfrog login ritchiecuh - proven by Pepe, named in the chat and transcripts, but
 //   his mic grabs "someone", no cover, "Someone else is speaking": his profile's Analytics section is hidden = private activity, a CUT):
 //   private_cover  cfg (dark, /stage/admin, only with withheld_cover on): private activity withholds the CAM, not the person - eligCore
 //                  notes it like !livecam off, every later rule still runs, the end is "withheld" (the named card + stage cover; the
@@ -478,7 +478,7 @@ function eligCore(P, R, login, t, want, vsess) {
   if (MFOPT.has(login)) { if (!wc) return "mf_opted_out"; withheld = true; }
   const f = FACTS.get(login);
   if (!f || t - f.at > c.private_cache_s * 1000) want.add(login);
-  // 1.99?? mfproof: with cfg private_cover on too (dark), private activity withholds the CAM only, like the cam opt-outs above - noted
+  // 1.99ajs mfproof: with cfg private_cover on too (dark), private activity withholds the CAM only, like the cam opt-outs above - noted
   // here, EVERY later rule still runs (excluded, banned, "Take me off this Stage", blocked_owner, the DM block, mode_closed, ended_by,
   // the facts and the DF-11 notice gate), and only where the end would say ok / off_cam / cam_unknown is it "withheld". Off: the CUT
   if (f && f.priv) { if (!(wc && c.private_cover === true)) return "private"; withheld = true; }
@@ -1002,7 +1002,7 @@ function stepPad(roomId, t = now(), R) {
                   pins: why ? [] : [...(PINS.get(P.roomId) || new Map()).keys()],    // mfix: 📌 the pad's pinned cams
                   covers: why ? [] : covers.map((c) => ({ key: c.key, since: c.since })) };   // wave2 WP-4 (F.4): keys only
   if (!why) { bump("holders_seen", holders.length + unproven, t, P); bump("proven", holders.length, t, P); bump("unproven", unproven, t, P); if (covers.length) bump("covers_seen", covers.length, t, P); }
-  P.unshown = unshownOf(P, why, holders, elig, unproven, others);   // 1.99?? mfproof: /stage/admin pad health (counts only, admins)
+  P.unshown = unshownOf(P, why, holders, elig, unproven, others);   // 1.99ajs mfproof: /stage/admin pad health (counts only, admins)
   const r = core.step(P.state, input, cfg(), t);
   apply(P, R, r.actions, t);
   syncCovers(P, R, covers);                      // wave2 WP-4 (F.4): each cover tile's public id + hood
@@ -1012,7 +1012,7 @@ function stepPad(roomId, t = now(), R) {
   return r;
 }
 
-/** 1.99?? mfproof (owner report 2026-11-04 - a mic holder named in the chat shown as "someone" on the stage): the people holding the mic
+/** 1.99ajs mfproof (owner report 2026-11-04 - a mic holder named in the chat shown as "someone" on the stage): the people holding the mic
  *  in pad P right now whom its stage can't show, by reason - {code: n}: "unproven" (Pepe can't prove the login), "anonymous" (an entry
  *  with no usable login), and each proven holder's CUT ("private", "opted_out", "mode_closed", "excluded", "banned", ...), "pending" (a
  *  fact still being read) or "notice" (the DF-11 lead time). COUNTS ONLY - never a login - and never a frog-name holder's reason (it
@@ -1205,7 +1205,7 @@ function camWithheld(login, t = now()) {
   const l = low(login);
   try { if (LC().optedOut(l)) return true; } catch (e) { /* no live cams */ }
   if (MFOPT.has(l)) return true;
-  // 1.99?? mfproof: private activity is such an opt-out while cfg withheld_cover AND private_cover are on (eligCore) - the _wh text
+  // 1.99ajs mfproof: private activity is such an opt-out while cfg withheld_cover AND private_cover are on (eligCore) - the _wh text
   // ("your cam stays off mic stages: ... your cover picture") under Pepe's own account, never the pad owner's (that would pair the
   // login with a private setting in the owner's action rows)
   const f = FACTS.get(l), c = cfg();
@@ -2789,7 +2789,7 @@ async function adminView(user, t = now()) {
                 kept: S.kept ? S.kept.size : 0,                                                                                       // wave2 WP-4 (F.2)
                 covers: S.tiles.filter((x) => x.cover).length,                                                                        // wave2 WP-4 (F.4)
                 ...health(P, roomOf(P.roomId), t),                                                                                    // 1.99afl (S3)
-                ...(admin ? { unshown: { ...(P.unshown || {}) } } : {}) });                     // 1.99?? mfproof: holders it can't show, by reason (counts)
+                ...(admin ? { unshown: { ...(P.unshown || {}) } } : {}) });                     // 1.99ajs mfproof: holders it can't show, by reason (counts)
   }
   let audit = [];
   try { audit = await require("./adminaudit").recent(AUDIT, 15); } catch (e) { audit = []; }
@@ -3297,7 +3297,7 @@ module.exports = {
   vidLogin, veilCamEnded, veilSessOf, veilOfTile,                                // 1.99aid (privacy controls S5)
   vidVeil, pinByVid,                                                              // 1.99aid (privacy controls V-1)
   withheldCover: () => cfg().withheld_cover === true,                            // 1.99aid (privacy controls S3)
-  // 1.99?? mfproof: private activity is a named cover card (both switches on) rather than kept off the stage
+  // 1.99ajs mfproof: private activity is a named cover card (both switches on) rather than kept off the stage
   privateCover: () => cfg().withheld_cover === true && cfg().private_cover === true,
   dmBlocked,                                                                      // 1.99aih (privacy controls round 6: stagemiccap's consent)
   dmBlockChanged,                                                                 // 1.99aih (privacy controls round 6 review: messages.setBlock)

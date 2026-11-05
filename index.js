@@ -1433,7 +1433,7 @@ require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/ana
 require("./seethrough").register(app, { addUser });              // 1.99afn: the see-through audit log (/api/admin/seethrough) + its 180-day prune
 require("./privwire").register(app, { addUser });                // wave 2: the "Privacy wire v2" switch (/api/admin/privwire; ships OFF)
 require("./incogcams").register(app, { addUser });
-require("./privact").register(app, { addUser });                // 1.99?? mfproof: "Private-activity presence lines" (/api/admin/privact; default = today's mask)
+require("./privact").register(app, { addUser });                // 1.99ajs mfproof: "Private-activity presence lines" (/api/admin/privact; default = today's mask)
 require("./textreveal").register(app, { addUser });             // 1.99aid (privacy controls S4t): the "Text reveal roles" switch (/api/admin/textreveal; ships OFF)               // 1.99aid (privacy controls S5): the "Incognito cams" switch (/api/admin/incogcams; ships OFF)
 // 1.99aid (privacy controls S4): cam reveals - a moderator views a hidden cam, logged (/api/rooms/:slug/livecam/reveal*, the by-login entry,
 // /api/admin/camreveal; ships OFF) + their evidence stills / clips (/api/evidence/cam*)
@@ -2407,7 +2407,7 @@ app.get(
           // S1 V3: the chat text-style picker - the palette's choices and what is saved (none when the read fails); no card
           // while the `looks` switch is off (textstyle.editData)
           const ts = await require("./textstyle").editData(user.userId);
-          // 1.99?? mfproof: the Analytics section's note on what private activity does on pads (privact.js, micfollow private_cover)
+          // 1.99ajs mfproof: the Analytics section's note on what private activity does on pads (privact.js, micfollow private_cover)
           let privact = { mask: true, cover: false };
           try { privact.mask = require("./privact").masked() !== false; } catch (e) { privact.mask = true; }
           try { privact.cover = require("./micfollow").privateCover() === true; } catch (e) { privact.cover = false; }

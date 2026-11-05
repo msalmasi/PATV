@@ -155,7 +155,7 @@
           <span class="lay-ico" aria-hidden="true"><%= s.icon %></span>
           <div class="lay-txt">
             <b><%- lbl_(s) %></b><small><%- desc_(s) %></small>
-            <% if (id === 'analytics' && camfrogName) { /* 1.99?? mfproof (owner report 2026-11-04): what hiding Analytics / its Rooms panel does on pads - privact (privact.js mask, micfollow.privateCover) */ const pa = typeof privact !== 'undefined' && privact ? privact : { mask: true, cover: false }; %>
+            <% if (id === 'analytics' && camfrogName) { /* 1.99ajs mfproof (owner report 2026-11-04): what hiding Analytics / its Rooms panel does on pads - privact (privact.js mask, micfollow.privateCover) */ const pa = typeof privact !== 'undefined' && privact ? privact : { mask: true, cover: false }; %>
             <small class="lay-pa"><%- t('settings.layout.privact') %> <%- t(pa.cover ? 'settings.layout.privact_cover' : 'settings.layout.privact_stage_off') %><% if (pa.mask !== false) { %> <%- t('settings.layout.privact_mask') %><% } %></small>
             <% } %>
             <% if (subs[id] && subs[id].length) { %>

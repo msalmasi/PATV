@@ -1,4 +1,4 @@
-// 1.99?? mfproof: a PROVEN, LINKED mic holder whose profile keeps its room activity private (owner report 2026-11-04: "brocklee258 shows
+// 1.99ajs mfproof: a PROVEN, LINKED mic holder whose profile keeps its room activity private (owner report 2026-11-04: "brocklee258 shows
 // in the room with his camfrog mic transcripts show with his username on the site, but shows his mic grabs as 'someone' and when he
 // grabs the mic, it doesn't show his camera cover, just 'someone else is speaking'"). The real facts, replayed on a temp DB with the real
 // mic-stage engine, livecam, camaccess, stage bans, stageleave, profilelayout and stories.privateLogins (NOT stubbed):

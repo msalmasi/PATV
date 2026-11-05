@@ -421,7 +421,7 @@
 })();
 </script>
 
-<%# 1.99?? mfproof (privact.js; owner report 2026-11-04): "Private-activity presence lines" - the default is today's mask %>
+<%# 1.99ajs mfproof (privact.js; owner report 2026-11-04): "Private-activity presence lines" - the default is today's mask %>
 <section class="adm-card" id="privact" aria-labelledby="paT">
   <h2 id="paT">Private-activity presence lines <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Someone whose PATV profile hides its <b>Analytics</b> section (or that section's <b>Rooms</b> panel) keeps their room activity private. While these lines are <b>masked</b> (the default) a pad's chat shows that person's joins, leaves, mic grabs and drops as "someone" - live, in scrollback and history, in search answers and in downloads - while their chat lines and 🎙 transcripts stay under their name, and the people list and the 🎙 list on the pad name them too. <b>Stop masking</b> and those four kinds of line show their name like their chat lines do. Nothing else changes: chat search still skips their lines, the pad's web-viewer list still leaves them out, and their cam stays off ▶ Live, snaps, clips and (unless <code>private_cover</code> is on at /stage/admin) the mic stage. Incognito, <code>!bridge hide</code> and <code>!transcripts off</code> are never affected. Needs the owner's OK first.</p>
@@ -431,7 +431,7 @@
   <% } %>
 </section>
 <script>
-// 1.99?? mfproof: the Private-activity presence lines card (privact.js: GET / POST /api/admin/privact {mask})
+// 1.99ajs mfproof: the Private-activity presence lines card (privact.js: GET / POST /api/admin/privact {mask})
 (function () {
   'use strict';
   var sum = document.getElementById('paSummary');

@@ -1,4 +1,4 @@
-// 1.99?? mfproof: the words around private activity on pads (owner report 2026-11-04 - brocklee258 hid his profile's Analytics section
+// 1.99ajs mfproof: the words around private activity on pads (owner report 2026-11-04 - brocklee258 hid his profile's Analytics section
 // three weeks before his first bridged line; the editor only said hiding a section hides it "from visitors"):
 //   * Edit profile: the Analytics section says what hiding it (or its Rooms panel) does on pads - only for a linked account, and true in
 //     every switch state (privact mask, micfollow private_cover)
