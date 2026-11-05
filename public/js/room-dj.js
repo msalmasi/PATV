@@ -91,7 +91,8 @@
       im.src = n.art; a.appendChild(im);
     } else a.textContent = '🎵';
     $('rdjMiniT').textContent = !s.connected ? 'Pepe\'s music is offline right now.' : n ? n.title : 'Nothing playing right now.';
-    $('rdjMiniA').textContent = n && s.connected ? n.artist + (n.playing ? '' : ' · ⏸ paused') : (d.on ? 'Auto-DJ is on' : '');
+    // (1.99?? dockmedia: + who asked for it - the Dock's Now playing card shows the compact bar only)
+    $('rdjMiniA').textContent = n && s.connected ? n.artist + (n.by === 'user' ? ' · 🙋 ' + (n.who || 'someone') : '') + (n.playing ? '' : ' · ⏸ paused') : (d.on ? 'Auto-DJ is on' : '');
     m.classList.toggle('paused', !(n && n.playing));
     $('rdjMiniTrack').classList.toggle('hide', !(n && s.connected));
     $('rdjMiniTrack').setAttribute('aria-valuemax', String(Math.round(((n && n.duration_ms) || 0) / 1000)));
@@ -106,17 +107,26 @@
     }
     if (!playing && n) c.appendChild(btn(admin ? '▶️ Resume' : '▶️ Vote resume', null, 'resume', { title: admin ? 'Resume now' : 'Free · ' + s.votes.start + ' votes' }));
     if (!n && (r.play || admin)) c.appendChild(btn(admin ? '▶️ Start' : '▶️ Vote start', null, 'play', { title: admin ? 'Start the music' : 'Free · ' + s.votes.start + ' votes' }));
-    if (me.djAdmin && d.on) c.appendChild(btn('🎧 Next', null, 'dj.next', { title: 'Pepe picks the next song' }));
     if (r.queue || admin) {
-      var q = el('button', 'b go', '🔎 Request'); q.type = 'button';
-      q.title = 'Search for a song to queue';
+      var q = el('button', 'b go'); q.type = 'button';
+      words(q, '🔎 Request');
+      q.title = 'Request · Search for a song to queue';
       q.addEventListener('click', function () {
+        // (1.99?? dockmedia: the Dock's Now playing card asks first - it opens its DJ sheet with the booth open instead; anywhere else the
+        // booth opens here, as before)
+        var go = true;
+        try { go = box.dispatchEvent(new CustomEvent('patv:djrequest', { bubbles: true, cancelable: true })); } catch (e) { go = true; }
+        if (!go) return;
         setOpen(true, true);
         var f = $('rdjFindQ');
         if (f) { f.focus(); try { f.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { /* old browser */ } }
       });
       c.appendChild(q);
     }
+    // (1.99?? dockmedia: Pepe's DJ admins steer him from the compact bar too - 🎲 Pepe picks next, 🤖 / 🛑 Auto-DJ: the Dock's music icons; 🎧 is
+    // the DJ booth itself)
+    if (me.djAdmin && d.on) c.appendChild(btn('🎲 Pepe picks next', null, 'dj.next', { title: 'Pepe picks the next song' }));
+    if (me.djAdmin) c.appendChild(d.on ? btn('🛑 Auto-DJ off', null, 'dj.off') : btn('🤖 Auto-DJ on', null, 'dj.on'));
   }
   function renderBooth() {
     var s = P.state, d = s.dj || {}, b = $('rdjBooth');
@@ -174,11 +184,22 @@
       ol.appendChild(li);
     });
   }
+  // 1.99?? dockmedia: a control's icon and words are their own spans (<span class="ic" aria-hidden> <span class="w">) - it reads exactly as
+  // before, and the Dock's Now playing card can show the icon alone with the words as its name; the tooltip says the words first
+  function words(b, label) {
+    var m = /^(\S+)\s+([\s\S]*)$/.exec(String(label || ''));
+    if (m && /[A-Za-z0-9]/.test(m[1])) m = null;               // (no leading icon: the words alone)
+    var w = m ? m[2] : String(label || '');
+    if (m) { var ic = el('span', 'ic', m[1]); ic.setAttribute('aria-hidden', 'true'); b.appendChild(ic); b.appendChild(document.createTextNode(' ')); }
+    b.appendChild(el('span', 'w', w));
+    return w;
+  }
   function btn(label, small, verb, opts) {
     var b = el('button', 'b' + (opts && opts.go ? ' go' : ''));
-    b.type = 'button'; b.textContent = label;
+    b.type = 'button';
+    var w = words(b, label);
     if (small) { b.appendChild(document.createTextNode(' ')); b.appendChild(el('small', null, small)); }
-    if (opts && opts.title) b.title = opts.title;
+    b.title = w + (opts && opts.title ? ' · ' + opts.title : '');
     b.disabled = !linked || busy;
     b.addEventListener('click', function () { act(verb, '', label); });
     return b;
@@ -263,6 +284,9 @@
   function render() {
     var show = !!(P && P.active);
     box.classList.toggle('hide', !show);
+    // 1.99?? dockmedia: what the booth shows, for the Dock's Now playing card (it shows only while a track is playing or paused - never for
+    // "Nothing playing right now." or Pepe's music offline): off | offline | idle | playing | paused
+    box.setAttribute('data-np', !show ? 'off' : !(P.state && P.state.connected) ? 'offline' : !P.state.now ? 'idle' : P.state.now.playing ? 'playing' : 'paused');
     if (!show) return;
     var key = JSON.stringify([P.state, P.room, P.me, P.acts, busy]);
     if (key === lastKey) { tickProgress(); return; }
