@@ -803,6 +803,28 @@ async function mergeAccounts(fromId, toId) {
 // ── the website's /act stash form (wallet.ejs) ──
 const fmt = (n) => Number(n || 0).toLocaleString("en-US");
 /**
+ * 1.99akt stashstake: the bracket after a stash's balance - what it has STAKED and what staking paid it, as Pepe's !stash says it.
+ * A stake is vault shares (the staking snapshot's positions[id].hold, valued at the day's prices - staking.positionFor /
+ * holdValue, the /wallet card's "In vaults"); the PAT left the stash's balance when it was staked. The `staked` column is the
+ * 1.90 fee-share stake, zeroed when the vaults went live (Pepe's _vaults_migrate_stakes) and never written since - not shown.
+ * "earned" = /staking's paid (all) for the stash (positions[id].paid, from stash_moves).
+ */
+function stakeNote(sk, s) {
+  const ST = require("./staking");
+  const p = ST.positionFor(sk, s);
+  if (!p) return "";
+  const LABEL = require("./capital/vaults").LABEL;
+  const vals = ["bank", "house", "mm", "auto"].filter((k) => p.hold && p.hold[k]).map((k) => [k, Math.trunc(Number(p.hold[k].value) || 0)]);
+  const paid = p.paid && Number(p.paid.all) > 0 ? Math.trunc(Number(p.paid.all)) : 0;
+  const parts = [];
+  if (vals.length) {
+    const where = vals.length === 1 ? LABEL[vals[0][0]] : vals.map(([k, x]) => `${LABEL[k]} ${fmt(x)}`).join(" + ");
+    parts.push(`${fmt(ST.holdValue(p))} staked in ${where}`);
+  } else if (paid) parts.push("nothing staked");
+  if (paid) parts.push(`earned ${fmt(paid)}`);
+  return parts.length ? ` (${parts.join(", ")})` : "";
+}
+/**
  * A wallet-page stash form (args after "stash", as typed in chat). -> the message to show, or null = not the site's
  * to do (vault stake / unstake / yield stay Pepe's - the caller queues those for him as before).
  */
@@ -857,12 +879,26 @@ async function fromForm(userId, words, idem) {
     }
     const mine = (await list()).filter((s) => canUse(s, me));
     if (!mine.length) return "🔐 No stashes yet - create one below.";
-    return mine.slice(0, 6).map((s) => `🔐 ${s.owner_name}/${s.name}: ${fmt(s.balance)} PAT`).join(" · ");
+    const sk = await require("./staking").latest().catch(() => null);      // 1.99akt: what each one has staked (its vault shares)
+    return mine.slice(0, 6).map((s) => `🔐 ${s.owner_name}/${s.name}: ${fmt(s.balance)} PAT${stakeNote(sk, s)}`).join(" · ");
   } catch (e) {
     if (e instanceof Refuse) return e.message;
     console.error("[stashes] form:", e);
     return "Something went wrong - nothing was moved.";
   }
+}
+
+/**
+ * 1.99akt stashstake: bot/state's stashes, each with `paid` = what staking paid it ({d7, all, corr} - capital/vaults.paidByStash
+ * over stash_moves, the same figure /staking shows) so Pepe's !stash says that as "earned" (the `earned` counter misses the
+ * payouts from before staking fix P0.2). A payout is a stash move, so it bumps the rev these answers are keyed by. No `paid`
+ * at all when that read failed - Pepe shows the counter then, never a made-up 0.
+ */
+async function withPaid(rows) {
+  let paid = null;
+  try { paid = await require("./capital/vaults").paidByStash(Date.now()); } catch (e) { paid = null; }
+  if (!paid) return rows;
+  return rows.map((s) => ({ ...s, paid: paid[String(s.id)] || { d7: 0, all: 0, corr: 0 } }));
 }
 
 // ── routes ──
@@ -899,7 +935,7 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/stash/bot/state", bot(async (b) => {
     const rev = (await meta("rev")) || 0;
     if (b.since_rev !== undefined && Number(b.since_rev) === rev) return { ok: true, live: await live(), rev, same: true };
-    return { ok: true, live: await live(), rev, stashes: await list({ all: true }), seq: (await meta("seq")) || 0 };
+    return { ok: true, live: await live(), rev, stashes: await withPaid(await list({ all: true })), seq: (await meta("seq")) || 0 };
   }));
   app.post("/api/stash/bot/act", bot(async (b) => {
     const op = String(b.op || "");
