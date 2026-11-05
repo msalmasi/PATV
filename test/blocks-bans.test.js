@@ -575,8 +575,8 @@ test("banfix: a WEB-ONLY account (@Boogie, no Camfrog link) - banned and lifted 
   const NB = require(path.join(repo, "netban"));
   const MS = require(path.join(repo, "mainstage"));
   const BOOGIE = "0d641146-163f-40bb-b9b9-e66ecf5a7942";
-  // (camfrogUsername '' - prod's row has it empty, not NULL)
-  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, class) VALUES (?, 'Boogie', 'Boogie', 'x', '', 'pleb')", [BOOGIE]);
+  // (camfrogUsername NULL - prod's row (read-only check, 2026-11-05); the loop below runs it again with '' too)
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, class) VALUES (?, 'Boogie', 'Boogie', 'x', NULL, 'pleb')", [BOOGIE]);
   await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, class) VALUES ('adm-0001', 'boss', 'boss', 'x', NULL, 'Admin')");
   U.adm = { userId: "adm-0001", username: "boss", class: "Admin", camfrogUsername: null };
   await NB.init();                                   // (init reads the stored switch - turn it on after)
@@ -593,8 +593,11 @@ test("banfix: a WEB-ONLY account (@Boogie, no Camfrog link) - banned and lifted 
     const want = { site: { site: 1, pad: 0, bridge: 0, stage: 0 }, pad: { site: 0, pad: 1, bridge: 1, stage: 0 }, bridge: { site: 0, pad: 0, bridge: 1, stage: 0 } };
     const none = { site: 0, pad: 0, bridge: 0, stage: 0 };
     const WHO = { kind: "account", title: "PATV account @Boogie", sub: "🌐 web, no Camfrog link" };
-    // the people list's 🌐 row (its PATV username) and a web line's account key - the two refs the page sends for a web poster
-    for (const ref of [{ k: "user", v: "Boogie" }, { k: "acct", v: "u:" + BOOGIE }]) {
+    const audits = async () => (await getQuery("SELECT reason FROM admin_audit WHERE action = 'pad_ban' AND target_id = ? ORDER BY id", [BOOGIE])).map((a) => a.reason);
+    // the people list's 🌐 row (its PATV username) and a web line's account key - the two refs the page sends for a web poster; with no
+    // Camfrog link stored as NULL (prod) and as ''
+    for (const cf of [null, ""]) for (const ref of [{ k: "user", v: "Boogie" }, { k: "acct", v: "u:" + BOOGIE }]) {
+      await runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", [cf, BOOGIE]);
       PB._reset();
       const pv = await post(`/api/rooms/${SLUG}/ban/preview`, "adm", { ref, scope: "bridge" });
       assert.equal(pv.status, 200, JSON.stringify(pv.d));
@@ -604,17 +607,16 @@ test("banfix: a WEB-ONLY account (@Boogie, no Camfrog link) - banned and lifted 
       for (const scope of ["site", "pad", "bridge"]) {
         for (const nets of [true, false]) {
           PB._reset();
-          const t0 = Date.now();
+          const t0 = Date.now(), a0 = (await audits()).length;
           const r = await post(`/api/rooms/${SLUG}/ban`, "adm", { ref, scope, dur: "7d", reason: "You know why", nets, exempt: [] });
-          const tag = `${ref.k} ${scope} nets=${nets}`;
+          const tag = `cf=${JSON.stringify(cf)} ${ref.k} ${scope} nets=${nets}`;
           assert.equal(r.status, 200, tag + ": " + JSON.stringify(r.d));
           assert.equal(r.d.ok, true, tag); assert.equal(r.d.scope, scope, tag);
           assert.deepEqual(r.d.who, WHO, tag);
           assert.ok(r.d.until >= t0 + 7 * 86400e3 - 5000 && r.d.until <= Date.now() + 7 * 86400e3, tag + ": 7 days");
           if (nets) assert.equal(r.d.nets && r.d.nets.networks, 1, tag); else assert.equal(r.d.nets, undefined, tag);
           assert.deepEqual(await state(), want[scope], tag + ": the ban's own stores - never the stage form's");
-          const au = await getQuery("SELECT reason FROM admin_audit WHERE action = 'pad_ban' AND target_id = ? ORDER BY id DESC LIMIT 1", [BOOGIE]);
-          assert.equal(au[0] && au[0].reason, "You know why", tag + ": audited");
+          assert.deepEqual((await audits()).slice(a0), ["You know why"], tag + ": audited once, by this ban");
           // ↩️ Lift - the sheet's {ref, scope}
           const l = await post(`/api/rooms/${SLUG}/unban`, "adm", { ref, scope });
           assert.equal(l.status, 200, tag + " lift: " + JSON.stringify(l.d));
