@@ -230,7 +230,7 @@
    controls (it steps up while they show). And the OFF-AIR SLATE naming a booked 📼 start (the CG field, no bars). */
 .st-l3 {
   --l3-blue: #1532a6; --l3-gold: var(--ds-gold, #ffcf40); --l3-osd: #9ee6a4; --l3-shadow: rgba(0, 0, 12, .78);
-  position: absolute; z-index: 2; inset-inline-start: 3%; inset-block-end: 7%; max-inline-size: 94%;
+  position: absolute; z-index: 4; inset-inline-start: 3%; inset-block-end: 7%; max-inline-size: 94%;   /* (over the player's tap-to-unmute scrim, z 3) */
   display: flex; align-items: stretch; gap: 0; pointer-events: auto;
   font-family: var(--ds-font, Ubuntu, system-ui, sans-serif); color: #fff; line-height: 1.15;
   font-size: clamp(11px, calc(.9vw + 6px), 19px);
@@ -261,9 +261,9 @@
             font-family: var(--ds-font, Ubuntu, system-ui, sans-serif); }
 .st-slate::before { content: ""; position: absolute; inset: 0; pointer-events: none;
                     background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .16) 0 1px, transparent 1px 3px), radial-gradient(130% 110% at 50% 50%, transparent 58%, rgba(0, 0, 8, .6) 100%); }
-.st-slate-kick { margin: 0; position: relative; font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace); font-size: clamp(9px, 4.2cqh, 34px);
+.st-slate-kick { margin: 0; position: relative; font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace); font-size: clamp(10px, min(6.5cqh, 2.6cqw), 34px);
                  letter-spacing: .06em; text-transform: uppercase; color: var(--ds-gold, #ffcf40); text-shadow: .16em .16em 0 rgba(0, 0, 12, .78); }
-.st-slate-title { margin: 0; position: relative; font-weight: 700; font-size: clamp(14px, 9cqh, 84px); line-height: 1.08; max-inline-size: 90cqw;
+.st-slate-title { margin: 0; position: relative; font-weight: 700; font-size: clamp(16px, min(13cqh, 5.4cqw), 84px); line-height: 1.08; max-inline-size: 90cqw;
                   text-shadow: .055em .055em 0 rgba(0, 0, 12, .78); overflow-wrap: anywhere; unicode-bidi: plaintext;
                   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .st-slate-bug { position: absolute; inset-inline-end: 5%; inset-block-end: 6%; font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace);
