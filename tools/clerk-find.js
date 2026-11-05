@@ -8,6 +8,7 @@ const { createCatalog } = require("../plexcatalog");
 const { createFinder, norm } = require("../plexfind");
 
 const { createVectors, documentText, textHash } = require("../plexvectors");
+const { createLists } = require("../plexlists");
 
 const NOW = Date.UTC(2026, 10, 5, 12);
 const SETTINGS = Object.freeze({ clerk_enabled: "everyone", clerk_block_ratings: "X,XXX,AO,R18,R18+",
@@ -27,10 +28,14 @@ async function fixtureRunner(fixture, options = {}) {
   const catalog = createCatalog({ file: path.join(dir, "catalog.db"), settings: () => ({ ...SETTINGS }), now: () => NOW,
     mainRead: async () => [], mediactl: async () => { throw new Error("Offline fixture only"); },
     tautulli: { configured: () => false }, log: { log() {} } });
-  let currentSettings = { ...SETTINGS, clerk_embed: true, clerk_embed_k: 30 };
+  let currentSettings = { ...SETTINGS, clerk_embed: true, clerk_embed_k: 30, clerk_lists: true }, listKey = true, lists;
   try {
     await catalog.init();
     await catalog.importSnapshot(fixture);
+    lists = createLists({ catalog, settings: () => currentSettings, key: () => listKey ? "fixture-only" : "", now: () => NOW,
+      request: async () => { throw new Error("Offline fixture only"); } });
+    const imported = await lists.importSnapshot(fixture.lists || { configured: [] });
+    if (!imported.ok) throw new Error("Fixture lists rejected");
     const vectors = createVectors({ catalog, settings: () => currentSettings, now: () => NOW });
     const seeded = options.vectors === undefined ? fixture.vectors || [] : options.vectors;
     if (!Array.isArray(seeded)) throw new Error("Invalid fixture vectors");
@@ -62,13 +67,14 @@ async function fixtureRunner(fixture, options = {}) {
       async search(user, query) { lookups.push({ op: "search", query: norm(query) }); return (fixture.seerr && fixture.seerr.search[norm(query)]) || []; },
       async details(kind, tmdb) { lookups.push({ op: "details", kind, tmdb }); return (fixture.seerr && fixture.seerr.details[kind + ":" + tmdb]) || null; },
     };
-    const finder = createFinder({ catalog, requests, vectors: trackedVectors, settings: () => currentSettings, now: () => NOW, deepMax: { movie: 2, show: 10 } });
+    const finder = createFinder({ catalog, requests, vectors: trackedVectors, lists, settings: () => currentSettings, now: () => NOW, deepMax: { movie: 2, show: 10 } });
     return {
       catalog,
       async find(request) {
         const ctx = request.context || {};
         const before = lookups.length, beforeVector = vectorCalls;
-        currentSettings = { ...SETTINGS, clerk_embed: ctx.embed === true && !request.no_embed, clerk_embed_k: 30 };
+        currentSettings = { ...SETTINGS, clerk_embed: ctx.embed === true && !request.no_embed, clerk_embed_k: 30, clerk_lists: ctx.lists === true };
+        listKey = ctx.list_key === true;
         if (request.op === "documents") return { rows: (await catalog.rows()).map(row => ({ key: row.key, text: documentText(row), hash: textHash(documentText(row)) })) };
         if (request.op === "shelves") return { ...(await (finder.shelves ? finder.shelves() : catalog.shelves())), find_count: 0, vector_count: 0, lookup_count: 0 };
         const qvec = !request.no_embed && !ctx.embed_down && ctx.embed === true
@@ -88,9 +94,9 @@ async function fixtureRunner(fixture, options = {}) {
         result.vector_count = vectorCalls - beforeVector;
         return result;
       },
-      async close() { await catalog.close(); removeFixtureDir(dir); },
+      async close() { await lists.close(); await catalog.close(); removeFixtureDir(dir); },
     };
-  } catch (e) { await catalog.close().catch(() => {}); removeFixtureDir(dir); throw e; }
+  } catch (e) { if (lists) await lists.close().catch(() => {}); await catalog.close().catch(() => {}); removeFixtureDir(dir); throw e; }
 }
 
 async function main() {

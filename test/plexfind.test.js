@@ -41,10 +41,97 @@ function fixture() {
     if (data.beforeVector) data.beforeVector(request);
     return structuredClone(data.vectorHits);
   } };
+  data.catalog = catalog; data.requests = requests;
   data.finder = createFinder({ catalog, settings: () => settings, requests, vectors, now: () => data.now, rng: () => 0, deepMax: { movie: 2, show: 10 } });
   return data;
 }
 const run = (f, ask, extra = {}, context = {}) => f.finder.find({ ask, ...extra }, context);
+
+function listFixture() {
+  const f = fixture(); f.settings.clerk_lists = true; f.keyPresent = true;
+  for (const row of f.rows.filter((r) => r.type === "movie")) row.shelves.push("IMDB Top 250");
+  f.catalog.shelves = async () => ({ ok: true, genres: ["Horror"], shelves: [
+    { name: "IMDB Top 250", count: 7, source: "kometa", ranked: false },
+    { name: "Cult Horror", count: 7, source: "kometa", ranked: false },
+  ], catalog: { ready: true, at: 123 } });
+  f.listRows = [
+    { key: "11", rank: 37, list_id: "mdblist:8001", name: "IMDb Top 250", source: "mdblist", ranked: true },
+    { key: "12", rank: 101, list_id: "mdblist:8001", name: "IMDb Top 250", source: "mdblist", ranked: true },
+    { key: "100", rank: null, list_id: "mdblist:8002", name: "Orchard Picks", source: "mdblist", ranked: false },
+  ];
+  const lists = {
+    async shelves() { return f.keyPresent ? [
+      { id: "mdblist:8001", name: "IMDb Top 250", count: 2, kind: "movie", source: "mdblist", ranked: true },
+      { id: "mdblist:8002", name: "Orchard Picks", count: 1, kind: "show", source: "mdblist", ranked: false },
+    ] : []; },
+    async members(filters) { f.calls.push(["list_members", filters]); return f.keyPresent ? structuredClone(f.listRows.filter((r) => r.list_id === filters.id && (!filters.rank_max || r.rank > 0 && r.rank <= filters.rank_max))) : []; },
+  };
+  f.finder = createFinder({ catalog: f.catalog, settings: () => f.settings, lists, requests: f.requests, now: () => f.now, rng: () => 0, deepMax: { movie: 2, show: 10 } });
+  return f;
+}
+
+test("phase3 ranks use matched MDBList members ahead of same-name Kometa and never claim completeness", async () => {
+  const f = listFixture();
+  const r = await run(f, { shelves: ["IMDB Top 250"], rank_max: 100, select: "random" });
+  assert.deepEqual(r.rows.map((r) => r.key), ["11"]);
+  assert.deepEqual(r.rows[0].shelf, { id: "mdblist:8001", name: "IMDb Top 250", source: "mdblist", ranked: true, rank: 37 });
+  assert.equal(r.no_rank, undefined); assert.ok(r.rows[0].shelves.includes("IMDb Top 250"));
+  const vocab = await f.finder.shelves(); assert.equal(vocab.shelves.length, 4);
+  assert.equal(f.calls.some((r) => String(r[0]).startsWith("seerr")), false);
+  const award = await run(f, { select: "random", guesses: [{ kind: "movie", title: "Random Hearts", year: 2001, confidence: .95 }] }, { raw: "an Oscar winner" });
+  assert.deepEqual(award.rows, []); assert.equal(award.shelf_missing, true);
+  const invalid = await run(f, { select: "random" }, { raw: "IMDb top 0" }); assert.deepEqual(invalid.rows, []);
+  await assert.rejects(() => run(f, { shelves: ["IMDb Top 250"], rank_max: -1 }), (e) => e.code === "bad");
+});
+
+test("phase3 key/switch off offers only honest unranked Kometa fallback", async () => {
+  for (const off of ["key", "switch"]) {
+    const f = listFixture(); if (off === "key") f.keyPresent = false; else f.settings.clerk_lists = false;
+    const r = await run(f, { shelves: ["IMDB Top 250"], rank_max: 100, select: "random" });
+    assert.ok(r.rows.length > 0); assert.equal(r.no_rank, true);
+    assert.ok(r.rows.every((row) => row.shelf.source === "kometa" && row.shelf.rank === undefined && row.no_rank));
+    assert.ok((await f.finder.shelves()).shelves.every((row) => row.source === "kometa"));
+  }
+});
+
+test("phase3 unknown explicit or model-dropped lists never become unrestricted picks", async () => {
+  const f = listFixture();
+  for (const ask of [{ shelves: ["AFI Top 100"], select: "random" }, { unknown_shelves: ["AFI Top 100"], select: "random" }, { rank_max: 100, select: "random" }]) {
+    const r = await run(f, ask); assert.deepEqual(r.rows, []); assert.equal(r.shelf_missing, true);
+  }
+  const r = await run(f, { select: "random" }, { raw: "play something from the AFI top 100" }, { allowSeerr: true });
+  assert.deepEqual(r.rows, []); assert.equal(r.shelf_missing, true);
+  assert.ok(r.shelf_suggestions.every((s) => ["IMDB Top 250", "IMDb Top 250", "Cult Horror", "Orchard Picks"].includes(s.name)));
+  assert.equal(f.calls.some((r) => String(r[0]).startsWith("seerr")), false);
+});
+
+test("phase3 raw explicit rank constraint survives dropped interpretation and exact raw title still wins", async () => {
+  const f = listFixture();
+  const r = await run(f, { select: "random" }, { raw: "play something from the IMDb top 100" });
+  assert.deepEqual(r.rows.map((r) => r.key), ["11"]); assert.equal(r.rows[0].shelf.rank, 37);
+  const literal = await run(f, { unknown_shelves: ["Missing List"], rank_max: 100, select: "random" }, { raw: "Random Hearts" });
+  assert.deepEqual(literal.rows.map((r) => r.key), ["10"]); assert.equal(literal.rows[0].shelf, undefined);
+});
+
+test("phase3 list membership and current ratings are rechecked after selection", async () => {
+  for (const change of ["remove", "off", "rating"]) {
+    const f = listFixture(); f.beforeRead = () => {
+      if (change === "remove") f.listRows = [];
+      if (change === "off") f.settings.clerk_lists = false;
+      if (change === "rating") f.settings.clerk_block_ratings += ",R";
+    };
+    const r = await run(f, { shelves: ["IMDb Top 250"], rank_max: 100, select: "random" });
+    assert.deepEqual(r.rows, [], change);
+  }
+});
+
+test("phase3 show membership filters its episodes and all explicit filters remain mandatory", async () => {
+  const f = listFixture();
+  let r = await run(f, { shelves: ["Orchard Picks"], kind: "episode", select: "random" });
+  assert.ok(r.rows.length > 0); assert.ok(r.rows.every((r) => r.show_key === "100" && r.shelf.name === "Orchard Picks"));
+  r = await run(f, { shelves: ["IMDb Top 250"], rank_max: 100, genres: ["Comedy"], select: "random" });
+  assert.deepEqual(r.rows, []);
+});
 const qvec = { model: "fixture-embed", dim: 2, v: "fwA=", scale: 1 };
 
 test("vectors receive only filtered movies and overlap outranks either single source", async () => {

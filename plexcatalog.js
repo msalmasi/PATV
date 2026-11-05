@@ -426,9 +426,22 @@ function createCatalog(options = {}) {
       return { ok: false, dry, error, received, dropped };
     }
   }
+  let outsideLists;
+  function listsCache() {
+    if (!outsideLists) outsideLists = options.lists || require("./plexlists").createLists({
+      catalog: { write, read, rows, getByKeys }, settings, now,
+      permissions: options.permissions, guard: options.guard
+    });
+    return outsideLists;
+  }
   function sync(opts = {}) {
     if (syncing) return syncing;
-    syncing = doSync(opts).catch(() => ({ ok: false, dry: !!opts.dry, error: "catalog unavailable" })).finally(() => { syncing = null; });
+    syncing = doSync(opts).then(async (result) => {
+      if (result.ok && !opts.dry) {
+        try { if (listsCache().enabled()) await listsCache().rematch(); } catch (_) { /* lists retain their last complete cache */ }
+      }
+      return result;
+    }).catch(() => ({ ok: false, dry: !!opts.dry, error: "catalog unavailable" })).finally(() => { syncing = null; });
     return syncing;
   }
   async function dryCount() {
@@ -464,6 +477,9 @@ function createCatalog(options = {}) {
       for (const [k, v] of Object.entries({ at: Math.min(stamp, number(snapshot.at, stamp)), full_at: Math.min(stamp, number(snapshot.full_at, stamp)), supported: true, allow_list_set: true, version: "snapshot", v: stamp,
         block_fingerprint: [...block].sort().join(","), blocked, dropped, error: null })) await putState(tx, k, v);
     });
+    // Import replaces the same rows as a full sync. Rebuild local list membership even
+    // on staging without mediactl; no provider call is needed or allowed here.
+    try { if (listsCache().enabled()) await listsCache().rematch(); } catch (_) { /* catalog import remains usable if lists are unavailable */ }
     return { ok: true, kept, dropped, blocked };
   }
   async function exportSnapshot() {
@@ -489,6 +505,7 @@ function createCatalog(options = {}) {
   async function close() {
     closed = true;
     clearTimeout(timer); timer = null;
+    if (outsideLists) await outsideLists.close();
     for (const q of queue.splice(0)) q.reject(coded("unavailable"));
     await tail;
     if (syncing) await syncing.catch(() => {});
@@ -526,6 +543,7 @@ function createCatalog(options = {}) {
       return { ok: true, started, syncing: true };
     }));
     app.post("/api/media/admin/catalog/dry", ...route(() => dryCount()));
+    listsCache().register(app, { addUser, noTimers });
     if (!noTimers) start();
   }
   return { init, sync, dryCount, status, shelves, rows, getByKeys, search, read, write, importSnapshot, exportSnapshot, start, close, register, file };

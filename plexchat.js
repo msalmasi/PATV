@@ -217,7 +217,7 @@ async function clerkAccess(user, b) {
 }
 async function opShelves(user, b) {
   await clerkAccess(user, b);
-  const out = await CAT().shelves();
+  const out = typeof CF().shelves === "function" ? await CF().shelves() : await CAT().shelves();
   if ([true, "true", "1", 1].includes(conf().get().clerk_embed)) {
     try { out.embed = await VEC().status(); }
     catch (_) { out.embed = { enabled: true, ready: false, model: null, dim: null, done: 0, left: 0 }; }

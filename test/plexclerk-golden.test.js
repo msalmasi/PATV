@@ -6,7 +6,28 @@ const path = require("node:path");
 const { fixtureRunner, rawLine } = require("../tools/clerk-find");
 const fixture = require("./fixtures/clerk_catalog.json");
 const evaluation = require("./fixtures/clerk_eval.json");
-const PHASES = new Set(["1", "2a", "2b"]);
+const PHASES = new Set(["1", "2a", "2b", "3"]);
+const folded = value => String(value || "").normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}\p{M}]+/gu, " ").trim().replace(/^(the|a|an) /, "");
+const sections = new Set(fixture.sections.filter(row => row.policy === "allowed").map(row => row.id));
+const blocked = new Set(["X", "XXX", "AO", "R18", "R18+"]);
+const safeRow = row => !!row && sections.has(row.section) && !blocked.has(String(row.content_rating || "").toUpperCase())
+  && (row.type !== "episode" || (() => { const parent = fixture.rows.find(other => other.key === row.show_key); return parent && parent.type === "show" && parent.section === row.section && safeRow(parent); })());
+function listMembers(name, context) {
+  if (!context.lists || !context.list_key) return null;
+  const list = fixture.lists.configured.find(row => folded(row.name) === folded(name));
+  if (!list) return null;
+  const members = new Map();
+  for (const item of list.items) for (const row of fixture.rows.filter(safeRow)) {
+    if (item.type !== row.type || !["movie", "show"].includes(row.type)) continue;
+    const fields = row.type === "show" ? ["imdb", "tmdb", "tvdb"] : ["imdb", "tmdb"];
+    const byId = fields.some(field => item[field] && row[field] && String(item[field]) === String(row[field]));
+    const byName = item.title && item.year && row.year && folded(item.title) === folded(row.title)
+      && Math.abs(item.year - row.year) <= (row.type === "movie" ? 1 : 0)
+      && !fields.some(field => item[field] && row[field] && String(item[field]) !== String(row[field]));
+    if (byId || byName) members.set(row.key, list.ranked && Number.isInteger(item.rank) && item.rank > 0 ? item.rank : null);
+  }
+  return { ...list, members };
+}
 
 function check(caseRow, result) {
   const expected = caseRow.expect, rows = result.rows || [];
@@ -24,13 +45,20 @@ function check(caseRow, result) {
     if (caseRow.context.embed_down || expected.recall === "in") assert.equal(result.vector_count, 0, "no vector search on down/verified recall");
     else assert.equal(result.vector_count, 1, "one filtered vector search");
   }
+  if (expected.browse === "shelves") {
+    assert.equal(result.find_count, 0); assert.equal(result.vector_count, 0); assert.deepEqual(rows, []);
+    assert.ok(result.shelves.length > 0);
+    assert.ok(result.shelves.every(row => row.count > 0 && (fixture.shelves.some(shelf => folded(shelf.name) === folded(row.name)) || listMembers(row.name, caseRow.context))));
+    return;
+  }
+  if (expected.shelf_missing) { assert.equal(result.shelf_missing, true); assert.deepEqual(rows, []); }
   if (expected.code === "none") { assert.equal(rows.length, 0, "no library match"); return; }
   if (expected.code) { assert.equal(result.code, expected.code); return; }
   assert.ok(rows.length > 0, "expected a verified catalog pick");
   const keys = rows.flatMap(r => r.keys || [r.key]);
   const source = keys.map(key => fixture.rows.find(r => r.key === key));
   assert.ok(source.every(Boolean), "all output keys are in the fixture catalog");
-  assert.ok(source.every(r => ["71", "72"].includes(r.section) && r.content_rating !== "X"), "no denied row escapes");
+  assert.ok(source.every(safeRow), "no denied row or denied parent escapes");
   if (expected.keys) {
     if (caseRow.embed) {
       const top3 = rows.slice(0, 3).flatMap(row => row.keys || [row.key]);
@@ -47,6 +75,22 @@ function check(caseRow, result) {
   if (expected.shelf) {
     const members = fixture.shelves.find(s => s.name === expected.shelf).members;
     assert.ok(source.every(r => members.includes(r.key) || members.includes(r.show_key)), "shelf membership");
+  }
+  for (const row of rows) if (row.shelf && row.shelf.source === "mdblist") {
+    const evidence = listMembers(row.shelf.name, caseRow.context);
+    assert.ok(evidence, "configured permitted list evidence");
+    assert.equal(String(row.shelf.id).replace(/^mdblist:/, ""), String(evidence.id));
+    const original = fixture.rows.find(item => item.key === row.key), key = evidence.members.has(row.key) ? row.key : original.show_key;
+    assert.ok(evidence.members.has(key), "list ID/title-year membership independent of returned label");
+    assert.equal(row.shelf.ranked, evidence.ranked);
+    if (evidence.ranked) assert.equal(row.shelf.rank, evidence.members.get(key));
+    else assert.equal(row.shelf.rank, undefined);
+  }
+  if (expected.list) assert.ok(rows.every(row => row.shelf && row.shelf.source === "mdblist" && folded(row.shelf.name) === folded(expected.list)), "list provenance");
+  if (expected.max_rank) assert.ok(rows.every(row => Number.isInteger(row.shelf.rank) && row.shelf.rank > 0 && row.shelf.rank <= expected.max_rank), "rank bound");
+  if (expected.no_rank) {
+    assert.equal(result.no_rank, true);
+    assert.ok(rows.every(row => row.no_rank === true && row.shelf && !row.shelf.ranked && row.shelf.rank == null), "unranked fallback is explicit");
   }
   if (expected.warn) assert.ok(rows.every(r => r.warn === expected.warn), "warning");
   if (expected.not_season != null) assert.ok(source.every(r => r.season !== expected.not_season), "specials excluded");
@@ -67,12 +111,12 @@ test("shared clerk fixtures are byte-identical when the bot checkout is supplied
   }
 });
 
-test("phase 1 through 2b golden selections use the real catalog and finder", async t => {
+test("phase 1 through 3 golden selections use the real catalog and finder", async t => {
   const runner = await fixtureRunner(fixture);
   try {
     for (const caseRow of evaluation.cases.filter(c => PHASES.has(c.phase) && !c.expect.not_ours)) {
       await t.test(caseRow.id, async () => {
-        const result = await runner.find({ id: caseRow.id, ask: caseRow.expect_interp, raw: rawLine(caseRow.line), context: caseRow.context });
+        const result = await runner.find({ id: caseRow.id, op: caseRow.expect.browse === "shelves" ? "shelves" : "find", ask: caseRow.expect_interp, raw: rawLine(caseRow.line), context: caseRow.context });
         check(caseRow, result);
       });
     }

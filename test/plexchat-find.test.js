@@ -36,7 +36,11 @@ function harness() {
     async todo(body) { d.calls.push(["embed_todo", body]); if (d.embedError) throw d.embedError; return { ok: true, rows: [{ key: "901", text: "Lantern at Midnight", hash: "a".repeat(64) }], model: "fixture-embed", dim: 2, done: 5, left: 2 }; },
     async put(body) { d.calls.push(["embed_put", body]); if (d.embedError) throw d.embedError; return { ok: true, stored: 1, rejected: 2 }; },
   };
-  const finder = createFinder({ catalog, settings: () => s, vectors, deepMax: { movie: 2, show: 10 }, rng: () => 0 });
+  const lists = {
+    async shelves() { d.calls.push(["list_shelves"]); return [{ id: "mdblist:8001", name: "Lantern Top 250", count: 1, source: "mdblist", ranked: true }]; },
+    async members() { d.calls.push(["list_members"]); return [{ key: "901", rank: 37, list_id: "mdblist:8001", name: "Lantern Top 250", source: "mdblist", ranked: true }]; },
+  };
+  const finder = createFinder({ catalog, settings: () => s, vectors, lists, deepMax: { movie: 2, show: 10 }, rng: () => 0 });
   const ml = {
     async init() {},
     _q: { async roomOf(id) { d.calls.push(["room", id]); return { id: id || "pad", title: "Lantern Pad" }; },
@@ -74,6 +78,16 @@ function harness() {
   const call = (op, body = {}, user = "u1") => pc.handle({ op, as: { user_id: user }, room: "pad", via: "web", ...body });
   return { ...d, data: d, pc, call, entries };
 }
+
+test("phase3 shelves and find return safe list provenance after existing access gates", async () => {
+  const h = harness(); h.s.clerk_lists = true; h.s.clerk_embed = true;
+  const shelves = await h.call("shelves"); assert.equal(shelves.shelves[0].source, "mdblist"); assert.equal(shelves.embed.model, "fixture-embed");
+  const found = await h.call("find", { ask: { shelves: ["Lantern Top 250"], rank_max: 100, select: "random" } });
+  assert.deepEqual(found.rows.map((r) => [r.key, r.shelf.rank, r.price]), [["901", 37, 200]]);
+  h.data.visible = false; const before = h.data.calls.filter((r) => r[0] === "list_shelves").length;
+  assert.equal((await h.call("shelves")).ok, false);
+  assert.equal(h.data.calls.filter((r) => r[0] === "list_shelves").length, before);
+});
 
 test("background embed operations use the bot identity only and never resolve a person", async () => {
   const h = harness(); h.s.clerk_embed = true;

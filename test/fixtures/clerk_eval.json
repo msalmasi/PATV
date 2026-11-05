@@ -642,7 +642,9 @@
         "spotify": false,
         "plex": false,
         "member": true,
-        "recent": []
+        "recent": [],
+        "lists": true,
+        "list_key": true
       },
       "expect_interp": {
         "shelves": [
@@ -669,7 +671,9 @@
         "spotify": false,
         "plex": false,
         "member": true,
-        "recent": []
+        "recent": [],
+        "lists": true,
+        "list_key": true
       },
       "expect_interp": {
         "shelves": [
@@ -3668,6 +3672,311 @@
       },
       "path": "interp",
       "embed": true
+    },
+    {
+      "id": "outside-letterboxd",
+      "phase": "3",
+      "owner": false,
+      "line": "play something from the letterboxd top 250",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "shelves": [
+          "Letterboxd Top 250"
+        ],
+        "select": "random"
+      },
+      "expect": {
+        "list": "Letterboxd Top 250"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "outside-no-key",
+      "phase": "3",
+      "owner": false,
+      "line": "play something from the imdb top 100",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": false
+      },
+      "expect_interp": {
+        "shelves": [
+          "IMDB Top 250"
+        ],
+        "select": "random",
+        "rank_max": 100
+      },
+      "expect": {
+        "shelf": "IMDB Top 250",
+        "no_rank": true
+      },
+      "path": "fast"
+    },
+    {
+      "id": "outside-off",
+      "phase": "3",
+      "owner": false,
+      "line": "play something from the imdb top 100",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": false,
+        "list_key": true
+      },
+      "expect_interp": {
+        "shelves": [
+          "IMDB Top 250"
+        ],
+        "select": "random",
+        "rank_max": 100
+      },
+      "expect": {
+        "shelf": "IMDB Top 250",
+        "no_rank": true
+      },
+      "path": "fast"
+    },
+    {
+      "id": "outside-unknown",
+      "phase": "3",
+      "owner": false,
+      "line": "play something from the AFI top 100",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "shelves": [],
+        "select": "random",
+        "unknown_shelves": [
+          "AFI Top 100"
+        ]
+      },
+      "expect": {
+        "code": "none",
+        "shelf_missing": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "outside-oscar-alias",
+      "phase": "3",
+      "owner": false,
+      "line": "pepe play an Oscar winner",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "shelves": [
+          "Oscar Winners"
+        ],
+        "kind": "movie",
+        "select": "random"
+      },
+      "expect": {
+        "shelf": "Oscar Winners"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "outside-a24-shelf",
+      "phase": "3",
+      "owner": false,
+      "line": "pepe play an A24 movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "shelves": [
+          "A24"
+        ],
+        "kind": "movie",
+        "select": "random"
+      },
+      "expect": {
+        "shelf": "A24"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "outside-cannes-alias",
+      "phase": "3",
+      "owner": false,
+      "line": "pepe play something from Cannes",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "shelves": [
+          "Cannes"
+        ],
+        "select": "random"
+      },
+      "expect": {
+        "shelf": "Cannes"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "outside-missing-80s",
+      "phase": "3",
+      "owner": false,
+      "line": "pepe play a movie from the Best of the 80s",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "shelves": [],
+        "unknown_shelves": [
+          "Best of the 80s"
+        ],
+        "kind": "movie",
+        "select": "random"
+      },
+      "expect": {
+        "code": "none",
+        "shelf_missing": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "outside-shelves-command",
+      "phase": "3",
+      "owner": false,
+      "line": "!plex shelves",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "action": "browse"
+      },
+      "expect": {
+        "browse": "shelves"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "outside-shelves-question",
+      "phase": "3",
+      "owner": false,
+      "line": "pepe what shelves do you have?",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "embed": true,
+        "lists": true,
+        "list_key": true
+      },
+      "expect_interp": {
+        "action": "browse"
+      },
+      "expect": {
+        "browse": "shelves"
+      },
+      "path": "rules"
     }
   ]
 }

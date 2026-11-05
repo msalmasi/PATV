@@ -18792,7 +18792,70 @@
       }
     }
   },
-  "lists": {},
+  "lists": {
+    "configured": [
+      {
+        "id": "8001",
+        "name": "IMDb Top 250",
+        "ranked": true,
+        "items": [
+          {
+            "rank": 37,
+            "type": "movie",
+            "imdb": "tt9002030"
+          },
+          {
+            "rank": 90,
+            "type": "movie",
+            "tmdb": 902001
+          },
+          {
+            "rank": 140,
+            "type": "movie",
+            "title": "The Matrix",
+            "year": 1999
+          },
+          {
+            "rank": 12,
+            "type": "movie",
+            "imdb": null
+          },
+          {
+            "rank": 45,
+            "type": "movie",
+            "title": "Unmatched Lantern Preview",
+            "year": 2015
+          }
+        ]
+      },
+      {
+        "id": "8002",
+        "name": "Letterboxd Top 250",
+        "ranked": false,
+        "items": [
+          {
+            "type": "movie",
+            "imdb": null
+          },
+          {
+            "type": "movie",
+            "tmdb": null
+          },
+          {
+            "type": "movie",
+            "title": "Rainy Teacups",
+            "year": 2000
+          },
+          {
+            "type": "movie",
+            "title": "Unmatched River Preview",
+            "year": 2017
+          }
+        ]
+      }
+    ],
+    "search": []
+  },
   "vectors": [
     {
       "key": "1001165",

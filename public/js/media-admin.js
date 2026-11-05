@@ -89,6 +89,72 @@
   window.addEventListener("pagehide", function () { clearTimeout(pcTimer); });
   pcLoad();
 
+  // Admin-configured lists. Provider metadata is rendered as text, never markup.
+  var lt = function (key, fallback, values) {
+    return window.__t ? window.__t("js.media.lists." + key, fallback, values) : String(fallback).replace(/\{(\w+)\}/g, function (m, n) {
+      return values && values[n] != null ? String(values[n]) : m;
+    });
+  };
+  function clClear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+  function clText(parent, tag, value) { var node = document.createElement(tag); node.textContent = value; parent.appendChild(node); return node; }
+  function clStatus(value) { var node = document.getElementById("clStatus"); if (node) node.textContent = value; }
+  function clAction(button, route, body) {
+    button.disabled = true; msg("clMsg", lt("working", "Working…"));
+    return api("POST", "/api/media/admin/lists/" + route, body).then(function () {
+      msg("clMsg", lt("updated", "List settings updated."), true); return clLoad();
+    }).catch(function () { msg("clMsg", lt("failed", "The list action could not finish. Refresh the page to check its status.")); })
+      .then(function () { button.disabled = false; });
+  }
+  function clButton(parent, label, route, body) {
+    var button = clText(parent, "button", label); button.type = "button"; button.className = "btn";
+    button.addEventListener("click", function () { clAction(button, route, body); });
+  }
+  function clDraw(result) {
+    var out = document.getElementById("clOut"), controls = document.getElementById("clControls"), searchOut = document.getElementById("clSearchOut");
+    clClear(out); controls.hidden = !result.configured;
+    if (!result.configured) { clClear(searchOut); clStatus(lt("needs_key", "Needs MDBLIST_API_KEY on the server.")); return; }
+    clStatus(result.enabled ? lt("enabled", "Configured lists are available to the clerk.") : lt("off", "Lists are saved here. Enable outside lists in Settings to make them available to the clerk."));
+    var wrap = clText(out, "div", ""); wrap.className = "tblwrap";
+    var table = clText(wrap, "table", ""), head = clText(clText(table, "thead", ""), "tr", "");
+    [lt("name", "List"), lt("kind", "Order"), lt("items", "Items"), lt("matched", "Matched"), lt("unmatched", "Unmatched"), lt("read", "Last read"), lt("error", "Last error"), lt("actions", "Actions")].forEach(function (label) { clText(head, "th", label); });
+    var body = clText(table, "tbody", "");
+    (result.lists || []).forEach(function (list) {
+      var row = clText(body, "tr", "");
+      [list.name, list.ranked ? lt("ranked", "Ranked") : lt("unranked", "Unranked"), Number(list.items) || 0,
+        Number(list.matched) || 0, Number(list.unmatched) || 0, pcDate(list.last_read),
+        list.last_error ? lt("retry", "Could not refresh; try again later.") : "—"].forEach(function (value) { clText(row, "td", value); });
+      var actions = clText(row, "td", "");
+      clButton(actions, lt("refresh", "Refresh"), "refresh", { id: list.id });
+      clButton(actions, lt("remove", "Remove"), "remove", { id: list.id });
+    });
+    if (!(result.lists || []).length) { var empty = clText(clText(body, "tr", ""), "td", lt("empty", "No outside lists configured.")); empty.colSpan = 8; }
+  }
+  function clLoad() {
+    if (!document.getElementById("clerkLists")) return Promise.resolve();
+    return api("GET", "/api/media/admin/lists").then(clDraw).catch(function () { clStatus(lt("load_failed", "Could not read the outside lists. Refresh the page to try again.")); });
+  }
+  var clAdd = document.getElementById("clAdd");
+  if (clAdd) clAdd.addEventListener("click", function () {
+    var input = document.getElementById("clInput").value.trim();
+    if (!input) { msg("clMsg", lt("input_needed", "Enter an MDBList ID or URL.")); return; }
+    clAction(clAdd, "add", { input: input });
+  });
+  var clSearch = document.getElementById("clSearch");
+  if (clSearch) clSearch.addEventListener("click", function () {
+    var query = document.getElementById("clQuery").value.trim(), out = document.getElementById("clSearchOut");
+    if (query.length < 2) { msg("clMsg", lt("query_needed", "Enter at least two characters to find a list.")); return; }
+    clSearch.disabled = true; clClear(out);
+    api("GET", "/api/media/admin/lists/search?q=" + encodeURIComponent(query)).then(function (result) {
+      (result.lists || []).forEach(function (list) {
+        var row = clText(out, "p", list.name + " · " + (Number(list.items) || 0));
+        clButton(row, lt("add", "Add list"), "add", { input: String(list.id) });
+      });
+      if (!(result.lists || []).length) clText(out, "p", lt("no_results", "No matching lists."));
+    }).catch(function () { msg("clMsg", lt("search_failed", "Could not search lists. Try again later.")); })
+      .then(function () { clSearch.disabled = false; });
+  });
+  clLoad();
+
   // connection checks
   api("GET", "/api/media/admin/checks").then(function (j) {
     ["mediactl", "overseerr", "wizarr", "tautulli"].forEach(function (k) {

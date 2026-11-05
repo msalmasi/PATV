@@ -31,18 +31,77 @@ function askOf(value) {
   const a = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   if (a.select != null && !SELECT.has(a.select)) throw new ClerkError("bad", "Bad selection.");
   if (a.kind != null && !["movie", "show", "episode"].includes(a.kind)) throw new ClerkError("bad", "Bad kind.");
+  if (a.rank_max != null && integer(a.rank_max, 1, 1000) == null) throw new ClerkError("bad", "Bad rank limit.");
   const years = Array.isArray(a.years) && a.years.length === 2 && a.years.every((x) => integer(x, 1880, 2200) != null) && a.years[0] <= a.years[1] ? a.years : null;
   return { title: clean(a.title), action: a.action === "browse" ? "browse" : null, kind: a.kind || null, select: a.select || "one", n: integer(a.n, 1, 60),
     season: integer(a.season, 0, 200), episode: integer(a.episode, 0, 2000), year: integer(a.year, 1880, 2200), years,
-    genres: names(a.genres), shelves: names(a.shelves), people: names(a.people), studio: clean(a.studio),
+    genres: names(a.genres), shelves: names(a.shelves), unknown_shelves: names(a.unknown_shelves), rank_max: integer(a.rank_max, 1, 1000), people: names(a.people), studio: clean(a.studio),
     min_minutes: integer(a.min_minutes, 0, 1440), max_minutes: integer(a.max_minutes, 1, 1440),
     deep_cut: a.deep_cut === true, popular: a.popular === true, unseen: a.unseen === true,
     quality: ["good", "best"].includes(a.quality) ? a.quality : "any", steamy: a.steamy === true,
     about: clean(a.about, 200), like: clean(a.like), guesses: Array.isArray(a.guesses) ? a.guesses.slice(0, 5) : [] };
 }
-function createFinder({ catalog, settings, requests, vectors, now = Date.now, rng = crypto.randomInt, deepMax } = {}) {
+function createFinder({ catalog, settings, requests, vectors, lists, now = Date.now, rng = crypto.randomInt, deepMax } = {}) {
   catalog = catalog || require("./plexcatalog");
   settings = settings || (() => require("./mediaconf").get());
+  const listSource = () => lists || require("./plexlists");
+  async function shelves(fallbackRows = []) {
+    const base = typeof catalog.shelves === "function" ? await catalog.shelves() : { ok: true, genres: [], shelves: [...new Set(fallbackRows.flatMap((r) => r.shelves || []))].map((name) => ({ name, source: "kometa", ranked: false })) };
+    const local = (base.shelves || []).filter((r) => r && typeof r.name === "string" && r.source !== "mdblist").map((r) => ({ ...r, source: "kometa", ranked: false }));
+    let outside = [];
+    if (settings().clerk_lists === true) try { outside = await listSource().shelves(); } catch (_) { /* Cached source failure contributes no names or members. */ }
+    if (settings().clerk_lists !== true) outside = [];
+    return { ...base, shelves: [...local, ...outside.filter((r) => r && r.source === "mdblist" && r.count > 0)] };
+  }
+  function shelfName(value) {
+    const n = norm(value).replace(/\s+(?:shelf|list)$/, "");
+    const aliases = { criterion: "criterion collection", "oscar winner": "oscars", "oscar winners": "oscars" };
+    return aliases[n] || n.replace(/^(imdb|letterboxd) top \d+$/, "$1 top 250");
+  }
+  async function shelfFilters(a, raw, roots, literal) {
+    if (literal) return { filters: [], missing: false, suggestions: [] };
+    let explicit = raw.match(/^(?:something|anything|a movie|a film|a show|an episode)\s+from\s+(?:(?:the|our)\s+)?(.+?)(?:\s+(?:shelf|list))?[.!?]*$/i);
+    if (!explicit) explicit = raw.match(/^(?:(?:a|an|some|any|something|anything)\s+)?(?:the\s+)?((?:imdb|letterboxd|afi) top \d+)(?:\s+(?:pick|movie|film|list))?[.!?]*$/i);
+    if (!explicit && /^(?:(?:a|an|some|any)\s+)?(?:oscar|academy award)[ -]winners?(?:\s+(?:movie|film))?[.!?]*$/i.test(raw)) explicit = [raw, "Oscars"];
+    if (explicit) {
+      const named = clean(explicit[1]);
+      // A raw explicit list constraint survives even if interpretation dropped an unknown shelf name.
+      if (!a.shelves.some((name) => shelfName(name) === shelfName(named))) a.shelves.push(named);
+      const ranked = norm(named).match(/^(?:imdb|letterboxd) top (\d+)$/);
+      if (ranked && !a.rank_max) {
+        a.rank_max = integer(Number(ranked[1]), 1, 1000);
+        if (!a.rank_max) return { filters: [], missing: true, suggestions: [] };
+      }
+    }
+    if (!a.shelves.length && !a.unknown_shelves.length && !a.rank_max) return { filters: [], missing: false, suggestions: [] };
+    const available = (await shelves(roots)).shelves, wanted = [...a.shelves, ...a.unknown_shelves];
+    const filters = [], absent = [];
+    for (const name of wanted) {
+      const choices = available.filter((r) => shelfName(r.name) === shelfName(name));
+      const picked = a.rank_max && choices.find((r) => r.source === "mdblist" && r.ranked) || choices.find((r) => r.source === "kometa") || choices[0];
+      if (!picked) { absent.push(name); continue; }
+      const filter = { ...picked, no_rank: !!a.rank_max && !picked.ranked, members: new Map() };
+      if (picked.source === "mdblist") {
+        const members = settings().clerk_lists === true ? await listSource().members({ id: picked.id, ...(a.rank_max && picked.ranked ? { rank_max: a.rank_max } : {}) }) : [];
+        filter.members = new Map(members.map((m) => [String(m.key), m]));
+      }
+      if (!filters.some((f) => f.source === filter.source && f.id === filter.id && sameName(f.name, filter.name))) filters.push(filter);
+    }
+    const score = (candidate) => absent.reduce((best, name) => Math.max(best, norm(name).split(" ").filter((w) => w.length > 2 && norm(candidate.name).split(" ").includes(w)).length), 0);
+    return { filters, missing: !!absent.length || !!a.rank_max && !filters.length,
+      suggestions: available.filter((r) => score(r) > 0).sort((x, y) => score(y) - score(x)).slice(0, 3) };
+  }
+  function shelfMatches(r, filter) {
+    return filter.source === "mdblist" ? filter.members.has(String(r.key)) || r.type === "episode" && filter.members.has(String(r.show_key))
+      : (r.shelves || []).some((name) => sameName(name, filter.name));
+  }
+  function provenance(row, filters) {
+    if (!filters.length) return row;
+    const f = filters[0], member = f.members.get(String(row.key)) || f.members.get(String(row.show_key));
+    const shelf = { ...(f.id ? { id: f.id } : {}), name: f.name, source: f.source, ranked: !!f.ranked,
+      ...(f.ranked && member && member.rank > 0 && (!row.keys || row.keys.length === 1) ? { rank: member.rank } : {}) };
+    return { ...row, shelf, shelves: [...new Set([f.name, ...(row.shelves || [])])].slice(0, 3), ...(filters.some((x) => x.no_rank) ? { no_rank: true } : {}) };
+  }
   const requestSource = () => requests || require("./mediarequests");
   const vectorSource = () => vectors || require("./plexvectors");
   const seerrCache = new Map(), SEERR_MS = 2000, CACHE_MS = 24 * 3600 * 1000;
@@ -121,7 +180,7 @@ function createFinder({ catalog, settings, requests, vectors, now = Date.now, rn
     if (a.year != null && Number(r.year || p && p.year) !== a.year) return false;
     if (a.years && !(Number(r.year || p && p.year) >= a.years[0] && Number(r.year || p && p.year) <= a.years[1])) return false;
     if (!a.genres.every((g) => inherited("genres").some((x) => sameName(x, g)))) return false;
-    if (!a.shelves.every((g) => inherited("shelves").some((x) => sameName(x, g)))) return false;
+    if (a._shelfFilters ? !a._shelfFilters.every((f) => shelfMatches(r, f) || p && shelfMatches(p, f)) : !a.shelves.every((g) => inherited("shelves").some((x) => sameName(x, g)))) return false;
     if (!a.people.every((person) => [...inherited("cast"), ...inherited("directors")].some((x) => titleMatch(x, person)))) return false;
     if (a.studio && !sameName(r.studio || p && p.studio, a.studio)) return false;
     if (a.min_minutes != null && duration(r) < a.min_minutes * 60) return false;
@@ -256,6 +315,10 @@ function createFinder({ catalog, settings, requests, vectors, now = Date.now, rn
       // A literal whole title outranks every inferred selector (including a mistaken kind or a year inside its name).
       Object.assign(a, askOf({ title: exactRows[0].title, kind: kinds.length === 1 ? kinds[0] : null }));
     }
+    const shelfSelection = await shelfFilters(a, raw, roots, literal);
+    if (shelfSelection.missing) return { ...base, shelf_missing: true, shelf_suggestions: shelfSelection.suggestions };
+    a._shelfFilters = shelfSelection.filters;
+    a.shelves = shelfSelection.filters.map((f) => f.name);
     if (!exactRows.length && a.title) exactRows = roots.filter((r) => sameName(r.title, a.title));
     if (!exactRows.length && a.title) exactRows = safe(await catalog.search(a.title, { kind: "episode", limit: 500, budgetMs: 400 })).filter((r) => sameName(r.title, a.title));
     const exact = literal || (exactRows.length > 0 && a.select === "one" && !a.about && !a.like);
@@ -414,9 +477,13 @@ function createFinder({ catalog, settings, requests, vectors, now = Date.now, rn
     alternatives = alternatives.sort((x, y) => (x.season - y.season) || String(x.show.key).localeCompare(String(y.show.key))).slice(0, 5);
     const chosen = await fresh([...candidates.map((x) => String(x.r.key)), ...plans.flatMap((x) => x.keys), ...alternatives.flatMap((x) => x.keys)]);
     if (!chosen.state.ready) return { ...base, catalog: { ready: false, at: chosen.state.at || null } };
-    const by = new Map(chosen.rows.map((r) => [String(r.key), r]));
+    for (const filter of shelfSelection.filters) if (filter.source === "mdblist") {
+      const members = settings().clerk_lists === true ? await listSource().members({ id: filter.id, ...(a.rank_max && filter.ranked ? { rank_max: a.rank_max } : {}) }) : [];
+      filter.members = new Map(members.map((m) => [String(m.key), m]));
+    }
+    const by = new Map(chosen.rows.filter((r) => shelfSelection.filters.every((f) => shelfMatches(r, f) || r.type === "episode" && chosen.parents.has(String(r.show_key)) && shelfMatches(chosen.parents.get(String(r.show_key)), f))).map((r) => [String(r.key), r]));
     // Use only parents whose children survived the final policy read. A denied variant must not affect labels or ambiguity.
-    const parentKeys = new Set(chosen.rows.filter((r) => r.type === "episode").map((r) => String(r.show_key)));
+    const parentKeys = new Set(chosen.rows.filter((r) => by.has(String(r.key)) && r.type === "episode").map((r) => String(r.show_key)));
     const names = new Map();
     for (const key of parentKeys) {
       const name = norm((chosen.parents.get(key) || {}).title);
@@ -437,14 +504,14 @@ function createFinder({ catalog, settings, requests, vectors, now = Date.now, rn
       if (plan.requested > plan.keys.length) { out.cut = { asked: plan.requested, queued: plan.keys.length }; if (!plan.alternative) cut = out.cut; }
       (plan.alternative ? alternativeRows : rows).push(out);
     }
-    let offered = rows.slice(0, limit);
+    let offered = rows.slice(0, limit).map((row) => provenance(row, shelfSelection.filters));
     for (const record of recall) if (record.status === "in" && !verified.candidates.some((x) => x.guess === record.guess && by.has(String(x.r.key)))) {
       record.status = "unknown"; delete record.key; delete record.match;
     }
     // One cached Seerr lookup per request, only after a named title failed or for a proven newer-release note.
-    if (!recalled && !offered.length && a.title && !a.about && !a.like) seerr = await missingTitle({ kind: a.kind === "show" || a.kind === "episode" ? "show" : a.kind, title: a.title, year: a.year }, context, Date.now() + SEERR_MS);
+    if (!recalled && !offered.length && !shelfSelection.filters.length && a.title && !a.about && !a.like) seerr = await missingTitle({ kind: a.kind === "show" || a.kind === "episode" ? "show" : a.kind, title: a.title, year: a.year }, context, Date.now() + SEERR_MS);
     if (seerr && seerr.unavailable) return { ...base, code: "unavailable" };
-    if (!recalled && offered.length && a.select === "latest" && a.title && offered.every((r) => r.kind === "movie") && context.allowSeerr) {
+    if (!recalled && offered.length && !shelfSelection.filters.length && a.select === "latest" && a.title && offered.every((r) => r.kind === "movie") && context.allowSeerr) {
       const entry = await seerrSearch(a.title, context, Date.now() + SEERR_MS), currentYear = new Date(now()).getUTCFullYear();
       // mediarequests exposes release years only. A past year proves release; a current/future year does not.
       const newer = entry && entry.rows.filter((r) => r.kind === "movie" && (sameName(r.title, a.title) || norm(r.title).startsWith(norm(a.title) + " ")) && r.year > Math.max(...offered.map((x) => Number(x.year) || 0)) && r.year < currentYear)
@@ -463,10 +530,11 @@ function createFinder({ catalog, settings, requests, vectors, now = Date.now, rn
     const ambiguous = (!!a.title && wantedShows.length > 1 && new Set(offered.map((r) => r.show_key).filter(Boolean)).size > 1)
       || recallHasVariants(verified.candidates.filter((candidate) => visibleKeys.has(String(candidate.r.key))));
     return { ...base, rows: offered, exact: !!exact && rows.length > 0, recall, ...(seerr ? { seerr } : {}), ...(ambiguous ? { ambiguous: true } : {}), ...(cut ? { cut } : {}),
-      ...(!rows.length && alternativeRows.length ? { alternatives: alternativeRows } : {}), catalog: { ready: true, at: chosen.state.at || null } };
+      ...(shelfSelection.filters.some((f) => f.no_rank) ? { no_rank: true } : {}),
+      ...(!rows.length && alternativeRows.length ? { alternatives: alternativeRows.map((row) => provenance(row, shelfSelection.filters)) } : {}), catalog: { ready: true, at: chosen.state.at || null } };
   }
-  return { find, validateKeys };
+  return { find, validateKeys, shelves };
 }
 let current;
 const singleton = () => current || (current = createFinder());
-module.exports = { createFinder, norm, askOf, ClerkError, episodeOrder, movieOrder, find: (...args) => singleton().find(...args), validateKeys: (...args) => singleton().validateKeys(...args) };
+module.exports = { createFinder, norm, askOf, ClerkError, episodeOrder, movieOrder, find: (...args) => singleton().find(...args), validateKeys: (...args) => singleton().validateKeys(...args), shelves: (...args) => singleton().shelves(...args) };

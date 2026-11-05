@@ -31,6 +31,7 @@ const DEFAULTS = {
   clerk_warn_ratings: "NR,Not Rated,Unrated",
   catalog_sync_min: 60,
   clerk_embed: false,
+  clerk_lists: false,
   clerk_embed_k: 30,
   // 📼 library playback
   library_enabled: false,
@@ -130,6 +131,7 @@ const CLEAN = {
   clerk_block_ratings: (v) => String(v == null ? "" : v).split(",").map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z0-9 +\-]{1,30}$/.test(x)).slice(0, 30).join(","),
   clerk_warn_ratings: (v) => String(v == null ? "" : v).split(",").map((x) => x.trim()).filter((x) => /^[A-Za-z0-9 +\-]{1,30}$/.test(x)).slice(0, 30).join(","),
   catalog_sync_min: (v) => num(v, 10, 1440, 60),
+  clerk_lists: (v) => v === true || v === "true" || v === "1",
   clerk_embed: (v) => v === true || v === "true" || v === "1",
   clerk_embed_k: (v) => num(v, 20, 50, 30),
   library_enabled: bool, requests_enabled: bool, invites_enabled: bool,
