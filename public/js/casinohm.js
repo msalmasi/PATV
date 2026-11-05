@@ -146,12 +146,14 @@
       popHand = lr.hand_no;
       if (!was) {
         const delay = CZ.reduced ? 0 : 700;
+        // (1.99?? casino2 rework: a winner is matched to its seat by seat id - two masked seats can both read "someone" - an older hand by name)
+        const sameSeat = (s, w) => !!s && (w.seat ? s.seat === w.seat : s.name === w.name);
         setTimeout(() => {
           for (const w of lr.winners) {
-            const k = bySlot.findIndex((s) => s && s.name === w.name);
+            const k = bySlot.findIndex((s) => sameSeat(s, w));
             if (k >= 0) CZ.pop(els.seats[k], "+" + fmt(w.amount), "win");
           }
-          const mineW = me && me.seat ? lr.winners.find((w) => { const s = t.seats.find((x) => x.name === w.name); return s && s.seat === me.seat; }) : null;
+          const mineW = me && me.seat ? lr.winners.find((w) => { const s = t.seats.find((x) => sameSeat(x, w)); return s && s.seat === me.seat; }) : null;
           if (mineW) CZ.announce(T("you_won_pot", "You won {n}.", { n: fmt(mineW.amount) }));
         }, delay);
       }

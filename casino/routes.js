@@ -91,16 +91,20 @@ function noteViewer(T, req) {
   return n;
 }
 /** A table's last rounds from casino_rounds: only revealed ones, only what the felt already showed (results =
- *  the round's public summary; never the `players` column, which holds account ids). */
+ *  the round's public summary; never the `players` column, which holds account ids - 1.99?? casino2 rework: read here only so a
+ *  player who is veiled now reads as their label / "someone", casino/veil.js maskRounds; it never leaves the server). */
 async function history(tableId, limit) {
   await svc.ensure();
-  const rows = await getQuery(`SELECT round_no, results, revealed FROM casino_rounds WHERE table_id = ? AND revealed IS NOT NULL
+  const rows = await getQuery(`SELECT round_no, results, players, revealed FROM casino_rounds WHERE table_id = ? AND revealed IS NOT NULL
                                ORDER BY round_no DESC LIMIT ?`, [tableId, Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))]);
-  return rows.map((r) => {
-    let res = null;
+  const parsed = rows.map((r) => {
+    let res = null, players = [];
     try { res = r.results ? JSON.parse(r.results) : null; } catch (e) { res = null; }
-    return { round: r.round_no, revealed: r.revealed, results: res, proof: `/casino/fair/${tableId}/${r.round_no}` };
+    try { players = r.players ? JSON.parse(r.players) : []; } catch (e) { players = []; }
+    return { r, results: res, players: Array.isArray(players) ? players : [] };
   });
+  const masked = await require("./veil").maskRounds(tableId, parsed);
+  return masked.map(({ r, results }) => ({ round: r.round_no, revealed: r.revealed, results, proof: `/casino/fair/${tableId}/${r.round_no}` }));
 }
 
 function register(app, { isBotToken, addUser }) {
@@ -165,6 +169,8 @@ function register(app, { isBotToken, addUser }) {
       const hr = (await getQuery("SELECT 1 FROM user_roles WHERE userId = ? AND LOWER(role) = 'high roller'", [actor.uid]).catch(() => []))[0];
       me = { name: actor.name, admin: actor.admin, balance: Number(u.points_balance) || 0, high_roller: !!hr };
     }
+    // 1.99?? casino2 rework: a veiled host reads as their label (casino/veil.js - each open table's veils re-read first, at most every 2 s)
+    for (const T of Array.from(svc.S.tables.values())) if (T.status === "open") await svc.refreshVeil(T);
     // D10: each row also says its latest proof (a revealed round) and where it stands in the stream queue
     const tables = svc.lobby().map((row) => {
       const T = svc.getTable(row.id);
@@ -183,12 +189,14 @@ function register(app, { isBotToken, addUser }) {
     await svc.boot();
     const T = svc.getTable(req.params.id);
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    await svc.refreshVeil(T);          // 1.99?? casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
     const out = { ok: true, now: Date.now(), table: svc.publicView(T), rooms: svc.freshRooms() };
     out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId) : null;     // only the viewer's own seat / cards
     // D10: each seat's public avatar (both views list seats in T.eng.seats order) and how many web viewers are watching
     const keys = (T.eng && T.eng.seats) || [];
     const seats = out.table.seats || [];
-    for (let i = 0; i < seats.length && i < keys.length; i++) seats[i].avatar = await avatarOf(keys[i]);
+    // (1.99?? casino2 rework: never on a masked seat - its label, no picture)
+    for (let i = 0; i < seats.length && i < keys.length; i++) seats[i].avatar = seats[i].veil ? null : await avatarOf(keys[i]);
     out.watching = noteViewer(T, req);
     res.json(out);
   });
@@ -205,8 +213,10 @@ function register(app, { isBotToken, addUser }) {
     const T = svc.getTable(req.params.id);
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
     try {
+      await svc.refreshVeil(T);        // 1.99?? casino2 rework: the same masks as the table view (casino/veil.js)
       const pads = await people.padsFor(T, req.user);
-      res.json({ ok: true, pepe: await people.pepeInfo(), pads, seats: await people.seatsFor(T, req.user, pads) });
+      const blk = await people.blocksOf(req.user);
+      res.json({ ok: true, pepe: await people.pepeInfo(), pads, seats: await people.seatsFor(T, req.user, pads), ...(blk ? { blk } : {}) });
     } catch (e) {
       console.error("[casino] people:", e);
       res.status(500).json({ ok: false, error: "Couldn't load the table's people." });

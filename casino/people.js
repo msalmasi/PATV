@@ -12,9 +12,10 @@
 // seats = {<seat hash>: person} (the seat hash = the table view's `seat`, never an account id):
 //   * {me: true, display}                     the viewer's own seat (no menu)
 //   * {bot: true, display, patv}              Pepe's account (the casino's own Pepe menu)
-//   * {veil: true}                            hidden on the bridge NOW (the seat's Camfrog login, a web seat's linked login or its
-//                                             account key: the site's one reader rule + the chat's own view, incognito on) - nothing
-//                                             else: no account, no login, no tip (fails closed while the hidden sets load)
+//   * {veil: true, display}                   1.99?? casino2 rework: a MASKED seat (casino/veil.js - veiled on the bridge: the seat's
+//                                             Camfrog login, the linked login or the account key hidden / incognito; a masked seat session;
+//                                             fails closed while the hidden sets load), keyed by the masked seat's own id - its label
+//                                             (a frog name or "someone") and nothing else: no account, no login, no tip, no avatar
 //   * {display, web: true, patv, tip?}        a web seat - its PATV name only (1.99ajf: a PATV name never maps to a Camfrog login)
 //   * {display, patv, tip?, login?, pad?}     a room seat: its login ONLY when it is a NAMED member of a live bridged pad the table plays in
 //                                             or advertises in (its own room first) THAT THE VIEWER MAY OPEN (padaccess.full + the 18+
@@ -23,6 +24,8 @@
 //                                             padmod.viewMod(R, viewer's login) (Pepe's powers for this viewer there - the server and Pepe
 //                                             re-check every action), pvp = {duel, brawl} when the viewer is linked and the room's web
 //                                             commands offer them (the chat's pvpFor re-checks, Pepe's escrow decides)
+// The seat keys are the table view's (veil.seatOf: the account's seat hash, a masked seat's own id). The answer also carries the viewer's
+// own named blocks (blocks.pageList - the person menu's ✅ Unblock, as liveView's `blk` does on a pad).
 // tip = bridge.tipFor's rule: never yourself, never Pepe; {to, href: /u/<name>/tip}. patv = {username, style?, flair?}: their name's
 // cosmetic style (cosmetics.nameStyle) and, on a pad seat, their flair in that pad (padflair) - the Dock's header shows both.
 "use strict";
@@ -42,16 +45,6 @@ function rateOk(key) {
 const lc = (s) => String(s == null ? "" : s).toLowerCase();
 const B = () => require("../bridge");
 const svc = () => require("./service");
-
-/** hidden on the bridge now (padweb's rule: quotes.isHidden + chatlogview.isHiddenLogin + hubhidden; fails closed), or incognito on
- *  (incognito_state is keyed by the lower-case login - padweb.note / incognito.js - so the key is lowered here) */
-async function veiled(key0) {
-  const key = lc(key0);
-  if (!key) return false;
-  const W = require("../padweb");
-  try { if (W.hiddenKey(key)) return true; } catch (e) { return true; }
-  try { return !!(await W.incognitoOn(key)); } catch (e) { return true; }
-}
 
 /** the table's pads (see the top) for `user` (null = signed out) */
 async function padsFor(T, user) {
@@ -81,7 +74,7 @@ function tipOf(name, me, pepe) {
 
 /** the seats of table T as viewer `user` ({userId, username}) gets them (see the top) */
 async function seatsFor(T, user, pads) {
-  const S = svc(), e = T.eng || {}, keys = Array.isArray(e.seats) ? e.seats.slice(0, 12) : [];
+  const e = T.eng || {}, keys = Array.isArray(e.seats) ? e.seats.slice(0, 12) : [];
   const out = {};
   if (!keys.length) return out;
   const PEPE_ID = require("../feedstore").PEPE_ID;
@@ -109,16 +102,16 @@ async function seatsFor(T, user, pads) {
     const F = flairs.get(rid), fl = F && name ? F.get(lc(name)) : null;
     try { return fl ? require("../padflair").plain(fl) : null; } catch (e) { return null; }
   };
+  const V = require("./veil");
   for (const k of keys) {
-    const hash = S.uidHash(k), p = (T.players || {})[k] || {}, row = byId.get(String(k)) || {};
+    const hash = V.seatOf(T, k), p = (T.players || {})[k] || {}, row = byId.get(String(k)) || {};
     const display = String((e.names && e.names[k]) || p.name || row.displayname || row.username || "?").slice(0, 60);
     if (String(k) === PEPE_ID || (pepe && lc(row.username) === pepe)) { out[hash] = { bot: true, display, patv: row.username ? { username: row.username } : null }; continue; }
+    // 1.99?? casino2 rework: a masked seat (the table view's own mask - routes.js re-read it first) is its label and nothing else
+    if (V.masked(T, k)) { out[hash] = me && String(k) === me.userId ? { me: true, display: V.label(T, k) } : { veil: true, display: V.label(T, k) }; continue; }
     if (me && String(k) === me.userId) { out[hash] = { me: true, display }; continue; }
     const room = p.via === "room";
     const login = room && p.camfrog ? String(p.camfrog) : null;
-    let hidden = false;
-    for (const key of [login, row.camfrogUsername, "u:" + k]) if (key && await veiled(key)) { hidden = true; break; }
-    if (hidden) { out[hash] = { veil: true }; continue; }
     const person = { display };
     if (row.username) {
       person.patv = { username: row.username };
@@ -152,6 +145,12 @@ async function seatsFor(T, user, pads) {
   return out;
 }
 
+/** 1.99?? casino2 rework: the viewer's own named blocks (blocks.pageList; null when it can't be read - the menu then offers 🚫 Block) */
+async function blocksOf(user) {
+  if (!user || !user.userId) return null;
+  try { return await require("../blocks").pageList(user.userId); } catch (e) { return null; }
+}
+
 async function pepeInfo() {
   let username = null;
   try { username = await B().pepeUsername(); } catch (e) { username = null; }
@@ -160,4 +159,4 @@ async function pepeInfo() {
   return { username, pad };
 }
 
-module.exports = { padsFor, seatsFor, pepeInfo, rateOk, RATE_N, RATE_MS, _reset: () => hits.clear(), _setClock: (f) => { clock = f || (() => Date.now()); } };
+module.exports = { padsFor, seatsFor, pepeInfo, blocksOf, rateOk, RATE_N, RATE_MS, _reset: () => hits.clear(), _setClock: (f) => { clock = f || (() => Date.now()); } };

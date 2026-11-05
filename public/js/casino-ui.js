@@ -144,6 +144,8 @@
   /** the chip labels: 500, 1K, 25K, 1M, 2.5M */
   const short = (n) => (n >= 1e6 ? +(n / 1e6).toFixed(1) + "M" : n >= 1e3 ? +(n / 1e3).toFixed(1) + "K" : String(n));
   function avatarHTML(s, badge) {
+    // 1.99?? casino2 rework: a masked seat (an incognito / hidden player - casino/veil.js) has no picture: a plain frog
+    if (s.veil) return `<span class="av veil" aria-hidden="true">🐸${badge ? `<span class="badge">${badge}</span>` : ""}</span>`;
     const init = esc((String(s.name || "?").trim()[0] || "?"));
     const img = s.avatar ? `<img src="${esc(s.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
     return `<span class="av" aria-hidden="true">${init}${img ? img : ""}${badge ? `<span class="badge">${badge}</span>` : ""}</span>`;
@@ -493,9 +495,11 @@
   // Pepe gives YOU powers in that pad - the server and Pepe re-check every action). The seats come from GET /api/casino/t/:id/people
   // (signed in; /pads for everyone - the 💬 Chat's list, casino-chat.js): asked when the seats or the rooms change and on a click with
   // an answer older than PEOPLE_CLICK_MS (review F4: someone who just went incognito never gets a menu from a 30-s-old answer; a failed
-  // ask opens nothing from an answer older than PEOPLE_FRESH_MS), never by the 1 s poll. Veiled seats (hidden on the bridge) stay plain
-  // text, as on a pad; your own seat too. Pepe (the dealer, or a seat that is his account) has his own small menu: profile, fairness,
-  // history, his stream.
+  // ask opens nothing from an answer older than PEOPLE_FRESH_MS), never by the 1 s poll. 1.99?? casino2 rework (the owner, 2026-11-04:
+  // "just show them masked at the table if incognito is on"): a veiled player's seat is MASKED by the server (casino/veil.js: a frog name
+  // or "someone", no picture, a seat id of its own) and looks like every other seat - every seat but your own is the same button, and a
+  // masked one opens a small menu that says only that they play incognito (nothing in it unmasks). Pepe (the dealer, or a seat that is
+  // his account) has his own small menu: profile, fairness, history, his stream.
   const PEOPLE_FRESH_MS = 30000;
   const PEOPLE_CLICK_MS = 5000;
   const ppl = { sig: null, at: 0, d: null, busy: null };
@@ -518,10 +522,11 @@
     if (sig !== ppl.sig) { ppl.sig = sig; loadPeople(); }
   }
   const personOf = (seat) => (ppl.d && ppl.d.seats && seat ? ppl.d.seats[seat] || null : null);
-  /** a seat's avatar + plate as a button (the person menu), or as they are (signed out, your own seat, veiled, not known yet) */
+  /** a seat's avatar + plate as a button (the person menu) - every seat alike, a masked one too (rework: a plain seat no longer marks who
+   *  is incognito); as they are only signed out (no seat is a button) and on your own seat */
   function seatWho(s, inner) {
-    const p = s && personOf(s.seat);
-    if (!signed || !p || p.me || p.veil || !(p.bot || (p.patv && p.patv.username))) return inner;
+    const mine = !!(s && lastView && lastView.me && lastView.me.seat && lastView.me.seat === s.seat);
+    if (!signed || !s || !s.seat || mine) return inner;
     return `<button type="button" class="cz-who" data-seat="${esc(s.seat)}" aria-haspopup="menu" aria-label="${esc(T("who_actions", "Actions for {name}", { name: s.name }))}">${inner}</button>`;
   }
   const mods = new Map();          // pad slug ('' = no pad) -> a PATVRoom.mod instance whose Manage panel never shows
@@ -531,7 +536,10 @@
     if (!m) {
       const wrap = document.createElement("div"); wrap.hidden = true; wrap.className = "cz-pm-host";   // (update() toggles the section, never this)
       const host = document.createElement("section"); wrap.appendChild(host); document.body.appendChild(wrap);
-      m = window.PATVRoom.mod(host, slug, { signed: true, me: meName || null, dms: true });
+      // (1.99?? casino2 rework: the viewer's own named blocks from the people answer - someone you blocked shows ✅ Unblock, no 💸 Tip -
+      // and a block / unblock asks again, as the pad's poll does)
+      m = window.PATVRoom.mod(host, slug, { signed: true, me: meName || null, dms: true, blk: () => (ppl.d && ppl.d.blk) || null,
+                                            onBlock: () => { ppl.at = 0; loadPeople(); } });
       mods.set(slug, m);
     }
     return m;
@@ -574,7 +582,8 @@
     if (!ppl.d || Date.now() - ppl.at > PEOPLE_CLICK_MS) await loadPeople();
     if (!ppl.d || Date.now() - ppl.at > PEOPLE_FRESH_MS) { toast(T("who_retry", "Couldn't load that player just now - try again."), true); return; }
     const p = personOf(seat);
-    if (!p || p.me || p.veil) return;
+    if (!p || p.me) return;
+    if (p.veil) { veilMenu(anchor, p); return; }
     if (p.bot) { pepeMenu(anchor); return; }
     const s = lastView && lastView.table ? (lastView.table.seats || []).find((x) => x.seat === seat) : null;
     const pad = p.pad || null, slug = pad ? pad.slug : "";
@@ -587,9 +596,11 @@
     closePepe();
     m.menu(u, anchor, { pvp: pv });
     document.querySelectorAll(".pm-pop").forEach((menu) => { if (menu._anchor === anchor) headerLike(menu, u); });
+    if (m.relayout) m.relayout();      // (1.99?? casino2 rework: room-mod v16 places it again at its decorated size - never taller than the window)
   }
 
-  // Pepe's own menu (the same look): 👤 profile, 🛡️ fairness (the next commitment + the last proof), 📜 history, 📺 his stream
+  // Pepe's own menu (the same look): 👤 profile, 🛡️ fairness (the next commitment + the last proof), 📜 history, 📺 his stream; and
+  // (1.99?? casino2 rework) a masked seat's: its frog avatar + label, "incognito player" and one line - nothing that unmasks
   let pepePop = null;
   function closePepe(refocus) {
     if (!pepePop) return;
@@ -599,36 +610,37 @@
     p.remove();
     if (refocus && p._anchor && p._anchor.isConnected) p._anchor.focus();
   }
-  function pepeMenu(anchor) {
+  /** a small menu at anchor: o = {cls, aria, avatar: {name, avatar?, veil?}, name, role, items: [[label, href, fn, why]], note} */
+  function smallMenu(anchor, o) {
     if (pepePop && pepePop._anchor === anchor) { closePepe(true); return; }
     closePepe(false);
-    const t = (lastView && lastView.table) || {}, pe = (ppl.d && ppl.d.pepe) || {};
     const p = document.createElement("div");
-    p.className = "pm-pop rmd-pm cz-pmp cz-pepe"; p.setAttribute("role", "dialog");
-    p.setAttribute("aria-label", T("pepe_menu", "Pepe"));
+    p.className = "pm-pop rmd-pm cz-pmp " + (o.cls || ""); p.setAttribute("role", "dialog");
+    p.setAttribute("aria-label", o.aria);
     p._anchor = anchor;
     const hd = document.createElement("div"); hd.className = "pm-pop-h";
     const nm = document.createElement("div"); nm.className = "pm-pop-n"; hd.appendChild(nm);
     const x = document.createElement("button"); x.type = "button"; x.className = "pm-btn pm-x"; x.textContent = "×"; x.setAttribute("aria-label", T("close", "Close"));
     x.addEventListener("click", () => closePepe(true)); hd.appendChild(x);
     p.appendChild(hd);
-    const list = document.createElement("div"); list.className = "pm-pop-l"; list.setAttribute("role", "menu"); list.setAttribute("aria-label", T("pepe_menu", "Pepe"));
-    const item = (label, href, fn, why) => {
+    const list = document.createElement("div"); list.className = "pm-pop-l";
+    if ((o.items || []).length) { list.setAttribute("role", "menu"); list.setAttribute("aria-label", o.aria); }    // (a masked seat's has none)
+    for (const [label, href, fn, why] of o.items || []) {
       const b = document.createElement(href ? "a" : "button"); b.className = "pm-pop-i"; b.setAttribute("role", "menuitem"); b.tabIndex = -1;
       b.textContent = label;
       if (href) b.href = href; else { b.type = "button"; b.addEventListener("click", (e) => { e.preventDefault(); closePepe(false); fn(); }); }
       if (why) { const w = document.createElement("small"); w.className = "pm-pop-why"; w.textContent = why; b.appendChild(w); }
       list.appendChild(b);
-    };
-    if (pe.username) item("👤 " + T("pepe_profile", "Pepe's profile"), "/u/" + encodeURIComponent(pe.username));
-    const proof = t.last_revealed || t.last_hand_revealed || null;
-    item("🛡️ " + T("pepe_fair", "Fairness"), proof ? `/casino/fair/${t.id || tableId}/${proof}` : null, proof ? null : () => { const h = $("cz-histbtn"); if (h) h.click(); },
-         t.commitment ? T("pepe_fair_next", "next {c}…", { c: String(t.commitment).slice(0, 10) }) : null);
-    item("📜 " + T("pepe_history", "Hand history"), null, () => { const h = $("cz-histbtn"); if (h) h.click(); });
-    if (t.on_stream && pe.pad) item("📺 " + T("pepe_stream", "On Pepe's stream"), pe.pad);
+    }
+    if (o.note) list.appendChild(Object.assign(document.createElement("p"), { className: "cz-pm-note", textContent: o.note }));
     p.appendChild(list);
-    nm.innerHTML = '<span class="rmd-person">' + avatarHTML({ name: "Pepe", avatar: "/public/img/pepe.png" }) + '<span class="rmd-person-name"><b class="who">Pepe</b></span></span>';
-    nm.appendChild(Object.assign(document.createElement("small"), { className: "pm-login cz-pm-role", textContent: T("pepe_role", "the dealer · provably fair") }));
+    // (textContent only: a label is a name like any other)
+    const row = document.createElement("span"); row.className = "rmd-person";
+    row.innerHTML = avatarHTML(o.avatar);
+    const nb = document.createElement("span"); nb.className = "rmd-person-name";
+    nb.appendChild(Object.assign(document.createElement("b"), { className: "who", textContent: o.name }));
+    row.appendChild(nb); nm.appendChild(row);
+    nm.appendChild(Object.assign(document.createElement("small"), { className: "pm-login cz-pm-role", textContent: o.role }));
     nm.classList.add("two");
     document.body.appendChild(p);
     pepePop = p;
@@ -643,13 +655,33 @@
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePepe(true); return; }
       if (!p.contains(document.activeElement)) return;
       const bs = items(), i = bs.indexOf(document.activeElement);
+      if (!bs.length) return;
       if (e.key === "ArrowDown") { e.preventDefault(); bs[(i + 1) % bs.length].focus(); }
       else if (e.key === "ArrowUp") { e.preventDefault(); bs[(i - 1 + bs.length) % bs.length].focus(); }
     };
     p._outside = (e) => { if (pepePop === p && !p.contains(e.target) && !anchor.contains(e.target)) closePepe(false); };
     document.addEventListener("keydown", p._keys, true);
     document.addEventListener("pointerdown", p._outside, true);
-    const first = items()[0]; if (first) first.focus();
+    const first = items()[0]; if (first) first.focus(); else x.focus();
+  }
+  function pepeMenu(anchor) {
+    const t = (lastView && lastView.table) || {}, pe = (ppl.d && ppl.d.pepe) || {};
+    const items = [];
+    if (pe.username) items.push(["👤 " + T("pepe_profile", "Pepe's profile"), "/u/" + encodeURIComponent(pe.username)]);
+    const proof = t.last_revealed || t.last_hand_revealed || null;
+    items.push(["🛡️ " + T("pepe_fair", "Fairness"), proof ? `/casino/fair/${t.id || tableId}/${proof}` : null, proof ? null : () => { const h = $("cz-histbtn"); if (h) h.click(); },
+                t.commitment ? T("pepe_fair_next", "next {c}…", { c: String(t.commitment).slice(0, 10) }) : null]);
+    items.push(["📜 " + T("pepe_history", "Hand history"), null, () => { const h = $("cz-histbtn"); if (h) h.click(); }]);
+    if (t.on_stream && pe.pad) items.push(["📺 " + T("pepe_stream", "On Pepe's stream"), pe.pad]);
+    smallMenu(anchor, { cls: "cz-pepe", aria: T("pepe_menu", "Pepe"), avatar: { name: "Pepe", avatar: "/public/img/pepe.png" }, name: "Pepe",
+                        role: T("pepe_role", "the dealer · provably fair"), items });
+  }
+  /** a masked seat's menu: its label and that they play incognito - no profile, no tip, nothing that says who */
+  function veilMenu(anchor, p) {
+    const name = String(p.display || "someone");
+    smallMenu(anchor, { cls: "cz-veilm", aria: T("veil_menu", "Incognito player {name}", { name }), avatar: { name, veil: 1 }, name,
+                        role: T("veil_role", "incognito player"), items: [],
+                        note: T("veil_note", "Their name and profile stay hidden while they play incognito.") });
   }
   if (tableId) {
     document.body.classList.add("cz-pm");          // (pad-dock.css: the person menu in the Dock's look on the table pages)

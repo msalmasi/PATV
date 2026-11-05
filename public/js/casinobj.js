@@ -102,14 +102,16 @@
     const els = slots();
     const hrv = !!(t.high_stakes || (me && me.high_roller));      // 1.99ov: 💎 chips for High Rollers and at High Roller tables
     $("cz-felt").classList.toggle("hr", !!t.high_stakes);
-    const lrBy = new Map(((lr && lr.players) || []).map((p) => [p.name, p]));
+    // (1.99?? casino2 rework: a result is matched to its seat by seat id - two masked seats can both read "someone" - an older round by name)
+    const sameSeat = (s, p) => !!s && (p.seat ? s.seat === p.seat : s.name === p.name);
+    const lrOf = (s) => ((lr && lr.players) || []).find((p) => sameSeat(s, p)) || null;
     for (let i = 0; i < SEATS; i++) {
       const el = els[i], s = t.seats[i];
       const mine = !!(s && me && me.seat && s.seat === me.seat);
       el.className = "seat" + (s ? "" : " empty") + (mine ? " me" : "") + (s && s.turn ? " turn" : "");
       let hands = [];
       if (s) {
-        if (resultMode) { const p = lrBy.get(s.name); hands = p ? p.hands.map((h) => ({ cards: h.cards, value: h.value, outcome: h.outcome, is_bj: h.is_bj, doubled: h.doubled })) : []; }
+        if (resultMode) { const p = lrOf(s); hands = p ? p.hands.map((h) => ({ cards: h.cards, value: h.value, outcome: h.outcome, is_bj: h.is_bj, doubled: h.doubled })) : []; }
         else hands = s.hands;
       }
       if (dealing) { delay0 = i * 0.14; step = (seatsN + 1) * 0.14; } else { delay0 = 0; step = 0.14; }
@@ -148,12 +150,12 @@
         setTimeout(() => {
           if (!last || popRound !== roundNo) return;
           lr.players.forEach((p) => {
-            const i = last.table.seats.findIndex((s) => s.name === p.name);
+            const i = last.table.seats.findIndex((s) => sameSeat(s, p));
             if (i < 0) return;
             const bj = p.hands.some((h) => h.is_bj && h.outcome === "blackjack");
             CZ.pop(els[i], p.net > 0 ? (bj ? T("pop_bj", "Blackjack +{n}", { n: fmt(p.net) }) : "+" + fmt(p.net)) : p.net < 0 ? "−" + fmt(-p.net) : OUT("push"), p.net > 0 ? "win" : p.net < 0 ? "lose" : "push");
           });
-          const mine = me && me.seat ? lr.players.find((p) => { const s = last.table.seats.find((x) => x.name === p.name); return s && s.seat === me.seat; }) : null;
+          const mine = me && me.seat ? lr.players.find((p) => { const s = last.table.seats.find((x) => sameSeat(x, p)); return s && s.seat === me.seat; }) : null;
           if (mine) CZ.announce(mine.net > 0 ? T("you_won", "You won {n} PAT.", { n: fmt(mine.net) }) : mine.net < 0 ? T("you_lost", "You lost {n} PAT.", { n: fmt(-mine.net) }) : T("you_push", "Push: your bet comes back."));
         }, Math.max(0, revealAt - Date.now()));
       }

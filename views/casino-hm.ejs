@@ -9,6 +9,7 @@
 <%# 1.99?? casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
 <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
 <link rel="stylesheet" href="/public/css/pad-dock.css?v=8">
+<link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><%# 1.99?? casino2 rework: the 🚫 Block sheet (block-sheet.js) %>
 <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# (the person menu header's pad flair chip) %>
 <style>
   .hm-wrap { position: relative; padding: 64px 64px 104px; }
@@ -186,6 +187,6 @@
   <%- include('partials/casino-chat', { t }) %>
   <% } %>
 </main>
-<% if (tableId) { %><script src="/public/js/room-mod.js?v=14"></script><script src="/public/js/pad-tip.js?v=1"></script><% } %>
+<% if (tableId) { %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><% } %><% } %><%# 1.99?? casino2 rework: room-mod v16 (1.99ajn padppl - the menu's 🚫 Block / ✅ Unblock) + its sheet %>
 <script src="/public/js/casino-ui.js?v=6"></script>
 <script src="/public/js/casinohm.js?v=7"></script>
