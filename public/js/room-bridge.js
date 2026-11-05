@@ -18,6 +18,8 @@
 // The player and push-to-talk share the page's audio session - see "the page's audio session" below
 // for how iOS Safari's play-and-record switch is handled (1.99bk).
 // All are driven by the live view JSON: call .update(d) with each poll result.
+// 1.99apj audiodebug: ?audiodebug=1 adds local diagnostics only after the room-audio admin API
+// confirms pepe.rooms_commands_audio. No playback/session changes, telemetry or person data.
 // Everything user-visible goes in via textContent.
 (function () {
   'use strict';
@@ -232,6 +234,16 @@
     return LV_SHAPE.map(function (s, i) {
       return v ? Math.max(3, Math.round(14 * v / 15 * s * (0.8 + 0.2 * ((((k * 7 + i * 3) % 5) + 5) % 5) / 4))) : 2;
     });
+  }
+
+  // One capability check per page, only on explicit opt-in. Discard the admin response:
+  // settings, audit records and bot state never enter diagnostics or clipboard output.
+  var debugAccess = null;
+  function audioDebugAccess() {
+    if (!window.location || !/(?:^|[?&])audiodebug=1(?:&|$)/.test(window.location.search || '')) return null;
+    if (!debugAccess) debugAccess = fetch('/api/admin/pepe/audio', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.status === 200; }, function () { return false; });
+    return debugAccess;
   }
 
   // ── room audio mini player ──
@@ -754,15 +766,56 @@
       },
     };
     shared.players.push(me);
-    box.rbDebug = function () {                 // for diagnosing "I can't hear it" from the console
-      var lvl = null;
-      if (analyser) { var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d); lvl = Math.max.apply(null, d); }
+    var debugTimer = null, destroyed = false;
+    box.rbDebug = function () {                 // local state only; never creates an audio graph
+      var active = mode === 'rtc' ? rau : au, an = mode === 'rtc' ? rtcAnalyser : analyser;
+      var rms = null, peak = null, lvl = null;
+      if (analyser) { var bins = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(bins); lvl = Math.max.apply(null, bins); }
+      if (an && an.getByteTimeDomainData) {
+        try {
+          var samples = new Uint8Array(an.fftSize), sum = 0, max = 0;
+          an.getByteTimeDomainData(samples);
+          for (var i = 0; i < samples.length; i++) {
+            var v = (samples[i] - 128) / 128;
+            sum += v * v; max = Math.max(max, Math.abs(v));
+          }
+          rms = Math.sqrt(sum / samples.length); peak = max;
+        } catch (e) { /* unavailable on this browser */ }
+      }
       var sess = null; try { sess = navigator.audioSession ? navigator.audioSession.type : null; } catch (e) { sess = null; }
       var L = mse && mse.lv;
-      return { ios: IOS, mse: useMse, mode: mode, rtc: !!rtcSess, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
+      return { ios: IOS, mse: useMse, mode: mode, rtc: !!rtcSess, session: sess, ctx: shared.ctx ? shared.ctx.state : null,
+        meter: !!an, level: lvl, rms: rms, peak: peak, t: active.currentTime,
         lv: { framed: !!L, bad: !!(L && L.bad), recs: L ? L.recs : 0, resyncs: L ? L.resyncs : 0, src: lvSrcNow, stats: !!stPoll, timer: lvTimer !== null },
-        ahead: ahead(), rate: au.playbackRate, paused: au.paused, muted: au.muted, volume: au.volume, userMuted: userMuted, userVol: userVol };
+        ahead: mode === 'rtc' ? null : ahead(), rate: active.playbackRate,
+        paused: active.paused, muted: active.muted, volume: active.volume, userMuted: userMuted, userVol: userVol,
+        duckOn: duckOn, recording: recording, duckActive: duckOn && recording,
+        browser: navigator.userAgent || '', os: navigator.platform || '' };
     };
+    var access = audioDebugAccess();
+    if (access) access.then(function (allowed) {
+      if (!allowed || destroyed) return;
+      var panel = el('section', 'rb-debug'), title = el('strong', '', _t('js.pad.audio.debug_title', 'Audio debug'));
+      var output = el('pre'), copy = el('button', 'rb-btn', _t('js.pad.audio.debug_copy', 'Copy diagnostics'));
+      copy.type = 'button';
+      var frozen = false; // preserve a selection when clipboard access is unavailable
+      function snapshot() {
+        var data = box.rbDebug(); data.at = new Date().toISOString();
+        return JSON.stringify(data, null, 2);
+      }
+      function refresh() { if (!frozen) output.textContent = snapshot(); }
+      copy.addEventListener('click', function () {
+        var text = snapshot(); output.textContent = text;
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          frozen = true; copy.textContent = _t('js.pad.audio.debug_select', 'Select and copy the diagnostics below'); return;
+        }
+        navigator.clipboard.writeText(text).then(function () {
+          frozen = false; copy.textContent = _t('js.pad.audio.debug_copied', 'Copied');
+        }, function () { frozen = true; copy.textContent = _t('js.pad.audio.debug_select', 'Select and copy the diagnostics below'); });
+      });
+      [title, copy, output].forEach(function (x) { panel.appendChild(x); });
+      host.appendChild(panel); refresh(); debugTimer = setInterval(refresh, 500);
+    });
     var painted = false, offWhy = null;
     function offReason(d) {
       if (d && d.room && d.room.live === false) return _t('js.pad.audio.room_offline', 'room offline');
@@ -799,7 +852,7 @@
       isPlaying: function () { return playing; },
       // 1.99ajq dockpol fix (review): the homepage swapping to a new front pad lets this player go - stopped, its 500 ms edge timer cleared and
       // out of the page's one-room-at-a-time list (each swap used to leave one behind)
-      destroy: function () { if (playing) stop(); clearInterval(edgeTimer); var i = shared.players.indexOf(me); if (i >= 0) shared.players.splice(i, 1); listeners.length = 0; },
+      destroy: function () { destroyed = true; clearInterval(debugTimer); if (playing) stop(); clearInterval(edgeTimer); var i = shared.players.indexOf(me); if (i >= 0) shared.players.splice(i, 1); listeners.length = 0; },
       duck: function (on) { if (arguments.length) { duckOn = !!on; applyVolume(); } return duckOn; },
       setRecording: function (on) { recording = !!on; applyVolume(); },
       onChange: function (f) { listeners.push(f); },

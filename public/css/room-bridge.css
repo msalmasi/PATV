@@ -127,3 +127,8 @@
 .rb-st-b:hover, .rb-st-b:focus-visible { background: rgba(230, 102, 102, .15); outline: none; }
 .rb-optline { padding: 3px 0; }
 @media (prefers-reduced-motion: reduce) { .rb-opt-wait, .rb-opt-sent, .rb-opt-failed { transition: none; } }
+
+/* 1.99apj audiodebug: opt-in staff audio diagnostics, local state only. */
+.rb-debug { margin: .5rem 0; padding: .75rem; border: 1px solid currentColor; border-radius: .5rem; font-size: .8rem; }
+.rb-debug strong { margin-right: .75rem; }
+.rb-debug pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; user-select: text; }
