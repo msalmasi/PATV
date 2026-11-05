@@ -1,4 +1,4 @@
-// Offline tests for 1.99?? golive - "Go live" with a second video replaced the first one (owner 2026-11-04: "I played a youtube
+// Offline tests for 1.99ajr golive - "Go live" with a second video replaced the first one (owner 2026-11-04: "I played a youtube
 // video through 'Go Live' on its own stage. When I tried to play a different video, it just replayed the last video").
 // The cause (prod logs): every later booking was refused 409 "You already have a stage slot" (a small line on /stage), the old
 // slot kept the stage, and the viewer's YouTube iframe restarted it from 0 each time the player was rebuilt (the 🎙 mic stage

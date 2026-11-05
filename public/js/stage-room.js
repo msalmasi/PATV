@@ -45,7 +45,7 @@
   var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
   var CAM_REWATCH_MAX = 4, CAM_REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: a cam slot's re-watches after a dropped connection
   var YT_ID = /^[A-Za-z0-9_-]{11}$/, YT_CH = /^UC[A-Za-z0-9_-]{22}$/, TW_LOGIN = /^[A-Za-z0-9_]{3,25}$/, TW_VOD = /^[0-9]{5,12}$/;
-  // 1.99?? golive: `at` (whole seconds into the slot) starts a YouTube video / Twitch VOD there - a stage is a broadcast: a viewer
+  // 1.99ajr golive: `at` (whole seconds into the slot) starts a YouTube video / Twitch VOD there - a stage is a broadcast: a viewer
   // who opens the page late, or whose player is rebuilt (the 🎙 mic stage came and went, a reload), joins where everyone else is
   // instead of the video starting over from 0 (owner 2026-11-04: "it just replayed the last video"). Live streams have no `at`.
   var EMBED_SEEK_MIN_S = 5;
@@ -193,7 +193,7 @@
       else view = f ? 'slot:' + f.id : 'pepe';
     }
     pickDefault();
-    // 1.99?? golive: `since` (a slot's start, server ms) -> the player starts where the broadcast is (embedUrl's `at`). The iframe
+    // 1.99ajr golive: `since` (a slot's start, server ms) -> the player starts where the broadcast is (embedUrl's `at`). The iframe
     // is keyed by the video itself, so a poll never rebuilds it; the position only counts when it IS (re)built.
     var skew = 0;                                   // server clock - this one (from the poll's `now`)
     function setEmbed(e, since) {
@@ -361,7 +361,7 @@
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         if (dead) return;
         var was = cur(), wasF = featured();
-        if (Number(g.now) > 0) skew = Number(g.now) - Date.now();                   // 1.99?? golive: where a video slot is (setEmbed)
+        if (Number(g.now) > 0) skew = Number(g.now) - Date.now();                   // 1.99ajr golive: where a video slot is (setEmbed)
         pepeOn = !!g.active;
         pepeWhep = typeof g.whep === 'string' && g.whep ? g.whep : null;            // 1.99fd: ⚡ for Pepe's WHIP stream
         if (typeof g.pepe_here === 'boolean') pepeHere = g.pepe_here;

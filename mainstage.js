@@ -180,7 +180,7 @@ const now = () => clock();
 
 class Refuse extends Error {
   // 1.99ajk plexchat: an optional stable code (libraryOpen's - Pepe's chat words it in the room's language)
-  // 1.99?? golive: + `have` (the slot that's in the way - book's "You already have a stage slot", so the Go live page can offer
+  // 1.99ajr golive: + `have` (the slot that's in the way - book's "You already have a stage slot", so the Go live page can offer
   // to replace it; only ever the booker's OWN slot)
   constructor(status, message, code, have) { super(message); this.status = status; this.refuse = true; if (code) this.code = code; if (have) this.have = have; }
 }
@@ -591,9 +591,9 @@ async function limitsFor(roomId) {
 
 // ── book ──
 // opts: {room, minutes, mode: stream|embed, embed: url, title, start_at (ms; omitted / now = right now),
-//        replace: slot id (1.99?? golive - see below)}
+//        replace: slot id (1.99ajr golive - see below)}
 // (every booking is an ordinary slot; the owner can feature it for free - featuring is never bought)
-// 1.99?? golive (owner 2026-11-04: "I played a youtube video through Go Live on its own stage. When I tried to play a different
+// 1.99ajr golive (owner 2026-11-04: "I played a youtube video through Go Live on its own stage. When I tried to play a different
 // video, it just replayed the last video"): a second video while your first still plays was refused ("You already have a stage
 // slot", a small line on the page) and the stage kept the old one - which restarts from 0 whenever a viewer's player is rebuilt.
 // Now that refusal carries `have` (the slot in the way; replaceable = a video link playing now on THIS pad, and this booking is a
@@ -635,7 +635,7 @@ async function book(user, opts = {}) {
   let startAt = Number(opts.start_at) || 0;
   const scheduled = startAt > t + 60 * 1000;
   if (library && !scheduled) throw new Refuse(400, "Pick a start time (to play it now, use ▶ Play).");
-  // 1.99?? golive: replace a video (checked again inside the transaction - it may end meanwhile)
+  // 1.99ajr golive: replace a video (checked again inside the transaction - it may end meanwhile)
   let replacing = null;
   if (opts.replace) {
     if (mode !== "embed" || library || scheduled) throw new Refuse(400, "Only a video link for right now can replace a video.", "replace_kind");
@@ -661,7 +661,7 @@ async function book(user, opts = {}) {
   const id = uuidv4();
   const out = await tx(async () => {
     let replaced = null;
-    if (replacing) {                       // 1.99?? golive: the old video's settle is part of THIS transaction
+    if (replacing) {                       // 1.99ajr golive: the old video's settle is part of THIS transaction
       replaced = await endSettle(replacing.id, "replaced", user.username);
       if (!replaced) throw new Refuse(409, "That video already ended - book again.", "replace_gone");
     }
@@ -685,7 +685,7 @@ async function book(user, opts = {}) {
       if (clash.length >= RS.slot_count) throw new Refuse(409, "Every slot in this pad is booked then - pick another time.");
     }
     const recent = await getQuery("SELECT COUNT(*) AS n FROM stage_slots WHERE userId = ? AND created > ?", [user.userId, t - 3600 * 1000]);
-    // (1.99?? golive: the pad's owner / staff changing the video on their own stage aren't held to the hourly booking count)
+    // (1.99ajr golive: the pad's owner / staff changing the video on their own stage aren't held to the hourly booking count)
     if (recent[0].n >= C.bookings_per_hour && !(replaced && staffOrOwner)) throw new Refuse(429, "You've booked the stage a lot this hour - try again later.");
     const u = (await getQuery("SELECT username, displayname FROM users WHERE userId = ?", [user.userId]))[0];
     if (!u) throw new Refuse(404, "Couldn't find your account.");
@@ -705,7 +705,7 @@ async function book(user, opts = {}) {
                     "room_flow", roomId, "slot", 0, null, mode,
                     embed ? JSON.stringify(embed) : null, startAt, title,
                     status === "active" ? t : null, status === "active" ? t : null, library ? "library" : null]);
-    // 1.99?? golive: a feature someone gave the replaced video moves to the new one (never over another featured slot)
+    // 1.99ajr golive: a feature someone gave the replaced video moves to the new one (never over another featured slot)
     const pf = replaced && replaced.prev;
     if (pf && pf.featured && pf.feature_by && pf.feature_by !== "auto") {
       await runQuery(`UPDATE stage_slots SET featured = 1, feature_by = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stage_slots o
@@ -714,7 +714,7 @@ async function book(user, opts = {}) {
     return { id, status, replaced };
   });
   pubCache.clear();
-  if (out.replaced) await endEffects(out.replaced, "replaced", user.username);     // 1.99?? golive: now that it committed
+  if (out.replaced) await endEffects(out.replaced, "replaced", user.username);     // 1.99ajr golive: now that it committed
   await event(out.id, scheduled ? (needsApproval ? "requested" : "scheduled") : "booked", user.username,
               `${minutes} min, held ${hold}${mode === "embed" ? ", " + embeds.label(embed) : ""}${scheduled ? ", starts " + new Date(startAt).toISOString() : ""}` +
               (out.replaced ? `, replaced ${out.replaced.res.id}` : ""), roomId);
@@ -832,7 +832,7 @@ async function end(slotId, reason, actor) {
   await endEffects(done, reason, actor);
   return settledView(done && done.res);
 }
-// 1.99?? golive: end()'s database half (settle, refund, the room's fee) - book's replace runs it INSIDE its own transaction, so a
+// 1.99ajr golive: end()'s database half (settle, refund, the room's fee) - book's replace runs it INSIDE its own transaction, so a
 // new video that can't be booked leaves the old one playing - and its effects (relays, caches, the event, auto-feature), run
 // only once that transaction committed. -> {res, fee, prev: {featured, feature_by}} | null
 async function endSettle(slotId, reason, actor) {
@@ -1059,7 +1059,7 @@ async function joinQueue(user, opts = {}) {
   if (mode === "embed") { try { embed = embeds.parse(opts.embed); } catch (e) { throw new Refuse(400, e.message); } }
   if ((await getQuery("SELECT 1 FROM stage_queue WHERE userId = ? AND status = 'waiting'", [user.userId])).length) throw new Refuse(409, "You're already in a queue.");
   const mineOpen = await getQuery(`SELECT * FROM stage_slots WHERE userId = ? AND status IN ${OPEN} ORDER BY created`, [user.userId]);
-  // 1.99?? golive: + what's in the way, so the page can offer to replace it (a replace books for now - the old slot frees one)
+  // 1.99ajr golive: + what's in the way, so the page can offer to replace it (a replace books for now - the old slot frees one)
   if (mineOpen.length) throw new Refuse(409, "You already have a stage slot.", "have_slot", haveOf(mineOpen[0], roomId, mode === "embed"));
   const n = await getQuery("SELECT COUNT(*) AS n FROM stage_queue WHERE room_id = ? AND status = 'waiting'", [roomId]);
   if (n[0].n >= C.queue_max) throw new Refuse(409, "The queue is full - try again later.");
@@ -2333,7 +2333,7 @@ module.exports = {
   camOpen, camBeat, camCandidates, slotsFor, camNotify,      // mfix: camNotify - a 📌 pin on the mic stage tells the person the same way
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,
-  clockNow: () => now(),       // 1.99?? golive: the stage's clock (the /api/stage answer's `now` - where a video slot is)
+  clockNow: () => now(),       // 1.99ajr golive: the stage's clock (the /api/stage answer's `now` - where a video slot is)
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
   _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache, _tx: tx,

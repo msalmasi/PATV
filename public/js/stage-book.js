@@ -105,7 +105,7 @@
     post(url, body).then(function (j) { booked(j, w, body, mode); })
       .catch(function () { $('bookBtn').disabled = false; $('bookMsg').textContent = _t('js.stage.e_net', 'Could not reach the server.'); });
   });
-  // 1.99?? golive: "You already have a stage slot" names it (j.have) - your video still playing on this pad is REPLACED in one step
+  // 1.99ajr golive: "You already have a stage slot" names it (j.have) - your video still playing on this pad is REPLACED in one step
   // (the server ends it and books the new link; nothing changes if the new one can't be booked); anything else says where it is
   function replaceOffer(j, body, mode) {
     var h = j.have || {};

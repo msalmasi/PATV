@@ -2222,7 +2222,7 @@ function register(app, { isBotToken, addUser }) {
     } catch (e) { slots = []; }
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
     const here = roomId ? pepeIn(roomId) : null;
-    // 1.99?? golive: + the server's clock - the page starts a video slot where the broadcast is (stage-room.js setEmbed)
+    // 1.99ajr golive: + the server's clock - the page starts a video slot where the broadcast is (stage-room.js setEmbed)
     let t = Date.now();
     try { t = require("./mainstage").clockNow(); } catch (e) { t = Date.now(); }
     res.json({ ...stage(), slots, front, pepe_here: here !== false, now: t });
