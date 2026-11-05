@@ -200,3 +200,91 @@ test("My pads: none when you own and follow nothing, and nothing signed out", as
     assert.doesNotMatch(n, /mypads/);
   }
 });
+
+// homegap2 (owner 2026-11-05 "Ok fix all 3", blank 3: "make the navbar wrap or shrink its labels before it overflows"): at 1024px in de / id /
+// tr (and signed in at 501-520 / 761-1040px in every language - the fixture sweep) the bar's pieces were wider than the window and the whole
+// page scrolled sideways. #navFit measures the bar and, while it doesn't fit, takes the next give-way step (nav-f1 .. nav-f6).
+const I18N = require(path.join(repo, "i18n-core.js"));
+const catalog = (c) => JSON.parse(fs.readFileSync(path.join(repo, "locales", c + ".json"), "utf8"));
+const vm = require("vm");
+const fitSrc = (html) => { const m = /<script id="navFit">([\s\S]*?)<\/script>/.exec(html); assert.ok(m, "the fit script"); return m[1]; };
+// a model bar: `need` px of pieces at step 0, each step saving save[i]; the header grows to the pieces (as it does), the window doesn't
+function modelBar(src, { vw, need, save, open = false }) {
+  const cls = new Set(), L = { listeners: {} }, frames = [];
+  const level = () => [1, 2, 3, 4, 5, 6].filter((i) => cls.has("nav-f" + i)).length;
+  const width = () => need - save.slice(0, level()).reduce((a, b) => a + b, 0);
+  const box = () => Math.max(S.vw, width());
+  const S = { vw };
+  const left = { get scrollWidth() { return 400; }, get clientWidth() { return 400; } };
+  const navEl = {
+    classList: { toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)), contains: (c) => cls.has(c) },
+    getBoundingClientRect: () => ({ width: box() }), get scrollWidth() { return Math.ceil(box()); }, get clientWidth() { return Math.round(box()); },
+    parentNode: { get clientWidth() { return box(); } },
+    querySelector: (q) => (q === ".navbar-left" ? left : q === "details[open]" ? (S.open ? {} : null) : null),
+    addEventListener: (t, f) => { (L.listeners["nav:" + t] = L.listeners["nav:" + t] || []).push(f); },
+  };
+  S.open = open;
+  const win = { requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, addEventListener: (t, f) => { (L.listeners[t] = L.listeners[t] || []).push(f); } };
+  const doc = { querySelector: (q) => (q === "header .navbar" ? navEl : null), documentElement: { get clientWidth() { return S.vw; } }, fonts: null };
+  vm.runInNewContext(src, Object.assign(win, { window: win, document: doc, setTimeout }));
+  const flush = () => { while (frames.length) frames.shift()(); };
+  return { level, width, S, win, flush, fire: (t, e) => { (L.listeners[t] || []).forEach((f) => f(e || {})); flush(); }, cls };
+}
+
+test("homegap2: the navbar's fit takes the give-way steps in order only while the bar doesn't fit - from nothing each time, never with a menu open", async () => {
+  const src = fitSrc(await render({ user: "someuser" }));
+  const save = [73, 66, 90, 95, 48, 300];
+  assert.equal(modelBar(src, { vw: 1100, need: 1070, save }).level(), 0, "it fits: every label");
+  assert.equal(modelBar(src, { vw: 1024, need: 1070, save }).level(), 1, "tr at 1024px: Post icon-only (46px short)");
+  assert.equal(modelBar(src, { vw: 1024, need: 1024, save }).level(), 0, "exactly the window: no step");
+  assert.equal(modelBar(src, { vw: 1024, need: 1024.4, save }).level(), 1, "0.4px over is a 1px sideways scroll (WebKit, nl): a step");
+  assert.equal(modelBar(src, { vw: 900, need: 1070, save }).level(), 3, "short by 170: Post, More's label, Go live");
+  assert.equal(modelBar(src, { vw: 320, need: 9999, save }).level(), 6, "never more than the phone bar (nav-f6)");
+  const b = modelBar(src, { vw: 900, need: 1070, save });
+  assert.equal(b.level(), 3);
+  b.S.vw = 1200; b.fire("resize");
+  assert.equal(b.level(), 0, "a wider window gets the labels back");
+  b.S.vw = 960; b.fire("resize");
+  assert.equal(b.level(), 2, "and a narrower one gives way again");
+  b.S.open = true; b.S.vw = 1200; b.fire("resize");
+  assert.equal(b.level(), 2, "not while a menu is open (its pop overflows the bar on purpose)");
+  b.S.open = false; b.fire("nav:toggle", { target: { open: false } });
+  assert.equal(b.level(), 0, "fitted again when it closes");
+  assert.equal(typeof b.win.PATV_navFit, "function", "window.PATV_navFit() for anything that changes the bar");
+  for (const t of ["resize", "load", "nav:toggle", "nav:transitionend", "nav:focusin", "nav:focusout"]) assert.ok(src.includes("addEventListener('" + t.replace("nav:", "") + "'"), "fits again on " + t);
+  assert.match(src, /document\.fonts\.addEventListener\('loadingdone', later\)/, "when the web fonts arrive");
+});
+
+test("homegap2: the navbar's give-way steps - the fit after the bar's styles, labels kept as accessible names, More's ⋯, every language", async () => {
+  const src = fs.readFileSync(layout, "utf8").replace(/\r\n/g, "\n");
+  const html = await render({ user: "someuser" });
+  const fit = html.indexOf('<script id="navFit">');
+  for (const s of [".navbar.nav-f6 .nav-burger { display: block; }", ".nav-search { display: none; position: relative;", "@media (min-width: 1280px) { .nav-search { display: inline-flex; } }"])
+    assert.ok(html.indexOf(s) > 0 && html.indexOf(s) < fit, "the fit runs after the bar's styles: " + s);
+  assert.ok(fit < html.indexOf('<template id="siteFootTpl">') && fit > html.indexOf("</nav>"), "right after them, before the page");
+  // the steps, in order
+  for (const r of [
+    ".navbar.nav-f1 .nav-post .nav-lbl, .navbar.nav-f2 .nav-more-lbl, .navbar.nav-f3 .nav-golive .nav-lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }",
+    "@media (min-width: 501px) { .navbar.nav-f1 a.nav-post, .navbar.nav-f3 a.nav-golive { width: 34px; min-width: 0; padding: 0; } }",
+    ".navbar.nav-f2 .nav-more-ic { display: inline-flex;",
+    ".navbar.nav-f4 .logo-full { display: none; }", ".navbar.nav-f4 .logo-short { display: inline; }",
+    ".navbar.nav-f5 .nav-search, .navbar.nav-f5 a.nav-sbtn { display: none; }",
+    ".navbar.nav-f6 .nav-main, .navbar.nav-f6 .nav-more { display: none; }", ".navbar.nav-f6 .nav-burger { display: block; }",
+  ]) assert.ok(src.includes(r), r);
+  assert.doesNotMatch(src, /\.nav-f\d[^{]*\.nav(-more)?-lbl[^{]*\{[^}]*display: none/, "a collapsed label is visually hidden, never display: none (it is the link's name)");
+  assert.ok(src.indexOf(".navbar.nav-f1 .nav-post .nav-lbl") > src.indexOf("@media (max-width: 420px) {"), "after the phone rules (they keep their 34 / 32px squares)");
+  // More: the ⋯ is decorative, the label its name; Post / Go live keep their titles
+  for (const user of [undefined, "someuser"]) {
+    const n = nav(await render({ user }));
+    assert.match(n, /<summary><span class="nav-more-ic" aria-hidden="true">⋯<\/span><span class="nav-more-lbl">More<\/span> <span aria-hidden="true">▾<\/span><\/summary>/);
+    assert.match(n, /class="nav-post" title="[^"]+"/); assert.match(n, /class="nav-golive" title="[^"]+"/);
+  }
+  // every language: the same bar - its labels capped (i18n.test.js pins the 7.5em), the fit and More's ⋯ there, right to left too
+  const langs = fs.readdirSync(path.join(repo, "locales")).filter((f) => /^[a-z]{2}(-[A-Z]{2})?\.json$/.test(f)).map((f) => f.slice(0, -5));
+  assert.ok(langs.length >= 23);
+  for (const l of langs) {
+    const h = await render({ user: "someuser", i18nT: I18N(catalog(l), catalog("en"), l) });
+    assert.ok(h.includes('<script id="navFit">') && h.includes('class="nav-more-ic" aria-hidden="true">⋯</span><span class="nav-more-lbl">'), l);
+    for (const k of ["nav.post", "nav.golive", "nav.more", "nav.signin"]) assert.ok(String(catalog(l)[k] || catalog("en")[k]).length <= 30, l + " " + k + ": a short label");
+  }
+});
