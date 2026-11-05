@@ -6417,6 +6417,7 @@
   "js.plex.ask_instead_pay": "Yes, play it instead for {price} PAT",
   "js.plex.started_instead": "▶ {title} is starting on {pad} instead of “{now}” - it shows on the stage within a few seconds.",
   "js.plex.q_started_instead": "▶ {title} is starting on {pad} instead of “{now}” - {n} titles queued.",
+  "js.plex.now_changed": "What’s on {pad}’s stage just changed - it’s “{now}” now.",
   "js.plexq.pos": "{n} of {count}",
   "js.plexq.paused": "paused",
   "js.plexq.resume": "▶ Resume",

@@ -138,7 +138,7 @@ function sheet({ onPad = null, play = null, perHour = 0 } = {}) {
   const plays = () => calls.filter((c) => c.url === "/api/medialib/play");
   return { doc, host, flow, calls, plays, pick, P, btn, now, askBox, yes, started, answers };
 }
-const ON = { title: "Charade (1963)", queue: false, left: 0, by: "cedar-fable", mine: false, can_replace: true };
+const ON = { title: "Charade (1963)", queue: false, left: 0, by: "cedar-fable", mine: false, can_replace: true, slot_id: "6f1c2e0a-0b1d-4c55-9a7e-2d3f4a5b6c7d" };
 
 test("something on that you may change: the pick says so, ▶ Play this instead, the sheet's own confirm names what comes off - one tap = ONE request {replace: true}", async () => {
   const s = sheet({ onPad: ON, play: [{ status: 200, j: { ok: true, title: "Night of the Living Dead (1968)", price: 0, replaced: { title: "Charade (1963)", queue: false } } }] });
@@ -160,7 +160,8 @@ test("something on that you may change: the pick says so, ▶ Play this instead,
   s.yes().click();
   await tick();
   assert.equal(s.plays().length, 1, "ONE request - no ⏹ then ▶");
-  assert.deepEqual(s.plays()[0].body, { room: "Night.Orchard", key: "501", quality: 720, offset: 0, audio: null, sub: null, replace: true });
+  assert.deepEqual(s.plays()[0].body, { room: "Night.Orchard", key: "501", quality: 720, offset: 0, audio: null, sub: null, replace: ON.slot_id },
+                   "the replace names the slot the confirm named (review fix: never whatever is on by then)");
   assert.equal(s.calls.filter((c) => /\/stop$/.test(c.url)).length, 0);
   assert.equal(s.P.msg.textContent, "▶ Night of the Living Dead (1968) is starting on Night Orchard instead of “Charade (1963)” - it shows on the stage within a few seconds.");
   assert.equal(s.btn().textContent, "✓ Started");
@@ -172,7 +173,8 @@ test("something on that you may change: the pick says so, ▶ Play this instead,
 
 test("the pad got busy under the sheet: a busy refusal WITH can_replace becomes the 'instead' confirm (never a dead end); yes = the replace", async () => {
   const s = sheet({ onPad: null, play: [
-    { status: 409, j: { ok: false, error: "This pad is already playing from the library - stop it first.", code: "busy_library", can_replace: true, playing: "Charade (1963)", playing_queue: false, playing_left: 0 } },
+    { status: 409, j: { ok: false, error: "This pad is already playing from the library - stop it first.", code: "busy_library", can_replace: true, playing: "Charade (1963)", playing_queue: false, playing_left: 0,
+                        playing_by: "cedar-fable", playing_mine: false, playing_slot: "9a8b7c6d-0000-4000-8000-000000000001" } },
     { status: 200, j: { ok: true, title: "Night of the Living Dead (1968)", price: 0, replaced: { title: "Charade (1963)", queue: false } } }] });
   s.flow.info();
   await tick();
@@ -193,7 +195,7 @@ test("the pad got busy under the sheet: a busy refusal WITH can_replace becomes 
   s.yes().click();
   await tick();
   assert.equal(s.plays().length, 2);
-  assert.equal(s.plays()[1].body.replace, true);
+  assert.equal(s.plays()[1].body.replace, "9a8b7c6d-0000-4000-8000-000000000001", "the slot the busy refusal named");
   assert.match(s.P.msg.textContent, /instead of “Charade \(1963\)”/);
 });
 
@@ -230,15 +232,67 @@ test("a 📼 queue on the pad (yours): the confirm says it ends the queue; a pai
   assert.equal(s.yes().textContent, "Yes, play it instead for 2,000 PAT");
   s.yes().click();
   await tick();
-  assert.deepEqual([s.plays()[0].body.replace, s.plays()[0].body.price], [true, 2000]);
+  assert.deepEqual([s.plays()[0].body.replace, s.plays()[0].body.price], [true, 2000], "an older server (no slot_id in on_pad): replace true");
 });
 
 test("the source: one POST per tap, replace only after the yes, the server's refusals handled, strings from en.json", () => {
   assert.doesNotThrow(() => new vm.Script(SRC));
-  assert.match(SRC, /if \(rep\) body\.replace = true;/);
-  assert.match(SRC, /if \(busyCanReplace\(e, body\)\) \{ say\(''\); btn\.disabled = false; play\(btn, confirmed\); return; \}/);
-  assert.match(SRC, /if \(busyCanReplace\(e, body\)\) \{ say\(''\); btn\.disabled = false; startQueue\(btn, body, pv, confirmedEst\); return; \}/);
-  assert.match(SRC, /!\/\^busy_\/\.test\(String\(d\.code \|\| ''\)\) \|\| !d\.can_replace/, "only a busy refusal that says you may");
+  assert.match(SRC, /if \(rep\) body\.replace = replaceArg\(\);/);
+  assert.match(SRC, /if \(insteadAgain\(e, body\)\) \{ say\(changedLine\(e\)\); btn\.disabled = false; play\(btn, confirmed\); return; \}/);
+  assert.match(SRC, /if \(insteadAgain\(e, body\)\) \{ say\(changedLine\(e\)\); btn\.disabled = false; startQueue\(btn, body, pv, confirmedEst\); return; \}/);
+  assert.match(SRC, /var again = d\.code === 'replace_changed' \|\| \(!body\.replace && \/\^busy_\/\.test\(String\(d\.code \|\| ''\)\)\);/, "only a busy refusal / a changed stage that says you may");
+  assert.match(SRC, /if \(!d\.can_replace \|\| !d\.playing \|\| !again\) return false;/);
   assert.match(SRC, /noteOnPad\(j\.on_pad \|\| null\);/);
   assert.equal((SRC.match(/\/api\/medialib\/stop/g) || []).length, 0, "the sheet never sends a ⏹");
+});
+
+test("what's on changed between the confirm and the yes (replace_changed): asked again, naming what's on NOW - the yes names its slot; never a title nobody agreed to take off", async () => {
+  const s = sheet({ onPad: ON, play: [
+    { status: 409, j: { ok: false, error: "What's on this pad's stage has just changed - it's \"Carnival of Souls (1962)\" now. Confirm again to play yours instead of it.", code: "replace_changed",
+                        can_replace: true, playing: "Carnival of Souls (1962)", playing_queue: false, playing_left: 0, playing_by: "moss-harbor", playing_mine: false,
+                        playing_slot: "11111111-2222-4333-8444-555555555555" } },
+    { status: 200, j: { ok: true, title: "Night of the Living Dead (1968)", price: 0, replaced: { title: "Carnival of Souls (1962)", queue: false } } }] });
+  s.flow.info();
+  await tick();
+  await s.pick();
+  s.btn().click();
+  s.yes().click();
+  await tick();
+  assert.equal(s.plays().length, 1);
+  assert.equal(s.plays()[0].body.replace, ON.slot_id);
+  const box = s.askBox();
+  assert.ok(box, "asked again");
+  const lines = box.querySelectorAll("p").map((p) => p.textContent);
+  assert.equal(lines[0], "Play “Night of the Living Dead” on Night Orchard’s stage instead of “Carnival of Souls (1962)”?");
+  assert.equal(lines[1], "“Carnival of Souls (1962)” was started by moss-harbor - it stops for everyone watching.", "who started what's on NOW");
+  assert.equal(s.now().textContent, "📼 Now on Night Orchard: “Carnival of Souls (1962)” - ▶ swaps it for your pick.");
+  assert.equal(s.P.msg.textContent, "What’s on Night Orchard’s stage just changed - it’s “Carnival of Souls (1962)” now.", "the sheet says why it asks again (en.json)");
+  assert.ok(EN["js.plex.now_changed"]);
+  assert.equal(s.plays().length, 1, "nothing more sent before the new yes");
+  s.yes().click();
+  await tick();
+  assert.equal(s.plays().length, 2);
+  assert.equal(s.plays()[1].body.replace, "11111111-2222-4333-8444-555555555555", "the yes names what's on now");
+  assert.match(s.P.msg.textContent, /instead of “Carnival of Souls \(1962\)”/);
+});
+
+test("a replace that fails any other way (control_denied, the encoder): the sheet asks what's on again - never a stale 'Now on … ▶ Play this instead'", async () => {
+  let state = ON;
+  const s = sheet({ onPad: () => state, play: [{ status: 403, j: { ok: false, error: "Only whoever started it, the pad's owner or an admin can control it.", code: "control_denied" } }] });
+  s.flow.info();
+  await tick();
+  await s.pick();
+  assert.equal(s.btn().textContent, "▶ Play this instead");
+  const mines = () => s.calls.filter((c) => c.url.startsWith("/api/medialib/mine")).length;
+  const before = mines();
+  state = { title: "Carnival of Souls (1962)", queue: false, left: 0, by: "moss-harbor", mine: false, can_replace: false };   // someone else's now
+  s.btn().click();
+  s.yes().click();
+  await tick(12);
+  assert.equal(s.plays().length, 1);
+  assert.equal(mines(), before + 1, "asked /mine again");
+  assert.equal(s.P.msg.textContent, "Only whoever started it, the pad's owner or an admin can control it.");
+  assert.equal(s.now().textContent, "📼 Now on Night Orchard: “Carnival of Souls (1962)” - only whoever started it, the pad’s owner or an admin can change it, so a new pick waits until it ends.");
+  assert.equal(s.btn().textContent, "▶ Play on Night Orchard", "the plain button now");
+  assert.equal(s.askBox(), null);
 });

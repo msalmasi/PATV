@@ -14,9 +14,11 @@
 // Every string goes through __t (js.plex.*).
 // plexreplace (owner 2026-11-05: "a one-step 'play this instead'"): while something from the library is on THIS pad and you may change it (its
 // starter, the pad's owner / staff, the library admins - medialib.mine's on_pad.can_replace), a pick's button reads "▶ Play this instead" and its
-// confirm names what comes off; yes = ONE request ({replace: true}): the server swaps the title, the stage's feature and the "Coming up next"
-// card carry straight over. A busy refusal that says you may replace (can_replace - the pad changed under the sheet) turns into that confirm,
-// never a dead end. Someone who may not change it sees what's on and why the pick waits.
+// confirm names what comes off; yes = ONE request ({replace: <its slot id>}): the server swaps the title, the stage's feature and the "Coming up
+// next" card carry straight over. A busy refusal that says you may replace (can_replace - the pad changed under the sheet) turns into that
+// confirm, never a dead end. Someone who may not change it sees what's on and why the pick waits.
+// Review fix: the replace names the slot the confirm named (on_pad.slot_id / a refusal's playing_slot) - something else on by the yes ->
+// replace_changed and the sheet asks again with what's on NOW; any other failed replace asks /mine again (never a stale "Now on").
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -103,9 +105,11 @@
       if (onairBox && onairBox.checked && j && j.slot && j.slot.id) toPepe(j.slot.id, 0);
       if (pageStarted) pageStarted(j);
     } });
-    // plexreplace: what's on this pad (medialib.mine on_pad: {title, queue, left, by, mine, can_replace}) - from info(), or a busy refusal
+    // plexreplace: what's on this pad (medialib.mine on_pad: {title, queue, left, by, mine, can_replace, slot_id}) - from info(), or a refusal
     var onPad = null;
     var replacing = function () { return !!(onPad && onPad.can_replace && onPad.title) && when() !== 'later'; };
+    // (review fix) what a replace names: the slot the confirm named - an older server without it: whatever is on
+    var replaceArg = function () { return onPad && onPad.slot_id ? String(onPad.slot_id) : true; };
     var FREE = !!opts.free;
     var MEMBER = !!opts.member;
     var PER_HOUR = Number(opts.perHour) || 0;
@@ -168,7 +172,8 @@
     };
     // plexreplace: the pick says what's on (and whether ▶ swaps it), the button says "instead"
     var noteOnPad = function (x) {
-      onPad = x && x.title ? { title: String(x.title), queue: !!x.queue, left: Math.max(0, Number(x.left) || 0), by: x.by || null, mine: !!x.mine, can_replace: !!x.can_replace } : null;
+      onPad = x && x.title ? { title: String(x.title), queue: !!x.queue, left: Math.max(0, Number(x.left) || 0), by: x.by || null, mine: !!x.mine, can_replace: !!x.can_replace,
+                               slot_id: x.slot_id ? String(x.slot_id) : null } : null;
       drawNow();
       drawPrice();
     };
@@ -191,12 +196,25 @@
         : _t('js.plex.instead_queue_last', 'It ends the 📼 queue that’s playing too (it’s on its last title).')) + '\n\n';
       return out;
     };
-    // a refusal that says this pad is busy but you may replace what's on: -> true (the caller asks again, as a replace)
-    var busyCanReplace = function (e, body) {
+    // a refusal that says you may replace what's on: -> true (the caller asks again, as a replace naming what's on NOW) - the pad got busy under
+    // the sheet (busy_*, a plain play), or (review fix) what's on changed between the confirm and the yes (replace_changed)
+    var insteadAgain = function (e, body) {
       var d = e && e.data;
-      if (!d || body.replace || !/^busy_/.test(String(d.code || '')) || !d.can_replace || !d.playing) return false;
-      noteOnPad({ title: d.playing, queue: !!d.playing_queue, left: d.playing_left || 0, by: onPad ? onPad.by : null, mine: onPad ? onPad.mine : false, can_replace: true });
+      if (!d) return false;
+      var again = d.code === 'replace_changed' || (!body.replace && /^busy_/.test(String(d.code || '')));
+      if (!d.can_replace || !d.playing || !again) return false;
+      noteOnPad({ title: d.playing, queue: !!d.playing_queue, left: d.playing_left || 0, by: d.playing_by || null, mine: !!d.playing_mine, can_replace: true,
+                  slot_id: d.playing_slot || null });
       return true;
+    };
+    // the line above the new confirm: why it asks again (what's on changed) - nothing for a pad that got busy (the confirm says it all)
+    var changedLine = function (e) {
+      return e.data.code === 'replace_changed' ? _t('js.plex.now_changed', 'What’s on {pad}’s stage just changed - it’s “{now}” now.', { pad: opts.roomTitle(), now: e.data.playing }) : '';
+    };
+    // (review fix) any other failed replace - or a busy pad - says what's on may have changed: ask /mine again (the "Now on" line, the button)
+    var reread = function (e, body) {
+      var d = (e && e.data) || {};
+      if (body.replace || d.code === 'replace_gone' || /^busy_/.test(String(d.code || ''))) info();
     };
     var card = function (it) {
       var sub = it.type === 'episode' ? (esc(it.show) + ' · S' + it.season + 'E' + it.episode)
@@ -386,7 +404,7 @@
           _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.');
         ask(msg, rep ? _t('js.plex.ask_instead', 'Yes, play it instead') : _t('js.plex.ask_play', 'Yes, play it'), btn, function () {
         if (est) body.estimate = est;
-        if (rep) body.replace = true; else delete body.replace;
+        if (rep) body.replace = replaceArg(); else delete body.replace;
         btn.disabled = true;
         var ok = false;
         say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
@@ -405,9 +423,9 @@
             startQueue(btn, body, Object.assign({}, pv, { estimate: e.data.estimate }), e.data.estimate);
             return;
           }
-          // plexreplace: the pad got busy under the sheet and you may replace what's on - ask that, never a dead end
-          if (busyCanReplace(e, body)) { say(''); btn.disabled = false; startQueue(btn, body, pv, confirmedEst); return; }
-          if (e.data && e.data.code === 'replace_gone') info();
+          // plexreplace: the pad got busy under the sheet (or what's on changed) and you may replace it - ask that, never a dead end
+          if (insteadAgain(e, body)) { say(changedLine(e)); btn.disabled = false; startQueue(btn, body, pv, confirmedEst); return; }
+          reread(e, body);
           say(e.message);
         }).then(function () { if (!ok || body.keys) btn.disabled = false; });
         });
@@ -461,7 +479,7 @@
         : price ? _t('js.plex.ask_pay', 'Yes, play it for {price} PAT', { price: fmt(price) }) : _t('js.plex.ask_play', 'Yes, play it');
       ask(msg, yes, btn, function () {
       if (price) body.price = price;
-      if (rep) body.replace = true;
+      if (rep) body.replace = replaceArg();
       btn.disabled = true;
       var ok = false;
       say(_t('js.plex.starting', 'Starting… (opening a library slot and the encoder)'), true);
@@ -482,9 +500,9 @@
           play(btn, e.data.price);
           return;
         }
-        // plexreplace: the pad got busy under the sheet and you may replace what's on - ask that, never a dead end
-        if (busyCanReplace(e, body)) { say(''); btn.disabled = false; play(btn, confirmed); return; }
-        if (e.data && e.data.code === 'replace_gone') info();
+        // plexreplace: the pad got busy under the sheet (or what's on changed) and you may replace it - ask that, never a dead end
+        if (insteadAgain(e, body)) { say(changedLine(e)); btn.disabled = false; play(btn, confirmed); return; }
+        reread(e, body);
         say(e.message);
       }).then(function () { if (!ok) btn.disabled = false; });
       });
