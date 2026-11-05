@@ -87,15 +87,15 @@
 %><% if (locals.dockFragment) { %><%- homeDock_ ? include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) : '' %><% if (homeDock_) { %><script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script><% } %><% } else { %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-<script src="/public/js/stage-player.js?v=10"></script><%# 1.99ajy dockmedia: v10 - PATVStage.nativeControls (the Room Dock draws its own bar) %>
+<script src="/public/js/stage-player.js?v=11"></script><%# 1.99ajy dockmedia: v10 - PATVStage.nativeControls (the Room Dock draws its own bar); upnext2: v11 - the first retries after 2.5 s %>
 <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
 <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9">
 <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
 <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
 <script src="/public/js/webrtc-client.js?v=6"></script>
 <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 %>
-<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=24"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once) %>
-<link rel="stylesheet" href="/public/css/stage-upnext.css?v=1">
+<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=25"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once); upnext2: v25 - the card's 4 s minimum, the kept player's hand-over, the 📼 lower-third / slate %>
+<link rel="stylesheet" href="/public/css/stage-upnext.css?v=2">
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
@@ -1229,7 +1229,7 @@
 <script src="/public/js/pad-dock.js?v=12"></script><%# 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11 (the holder fit again on play / pause); plexreplace: v12 (the stage asks at once after a 📼 start) %>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
-<script src="/public/js/home-dock.js?v=6"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list; v5 (upnext): the stage's posters flag; v6 (newstream): the off-air bar's Next up follows the stage's poll %>
+<script src="/public/js/home-dock.js?v=7"></script><%# upnext2: v7 - the stage asks at once when the long-poll's stage version moves; v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list; v5 (upnext): the stage's posters flag; v6 (newstream): the off-air bar's Next up follows the stage's poll %>
 <%_ } _%>
 <% if (tpListen_) { %>
 <script>

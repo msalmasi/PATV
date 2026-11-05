@@ -1903,6 +1903,9 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     mine: at.mine,
     // 1.99ye: the long-poll's versions (the page sends them back) + the viewer's own look for their pending lines
     ver: at.ver, mver: at.mver,
+    // upnext2: the pad's stage version (mainstage.stageBump - a 📼 "Coming up next" / its stream coming up): a page that sees it move asks
+    // /api/stage at once
+    stv: (() => { try { return require("./mainstage").stageVer(R.id); } catch (e) { return 0; } })(),
     ...(userId && withMe ? { me: await meFor(userId) } : {}),
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
@@ -2409,7 +2412,7 @@ function register(app, { isBotToken, addUser }) {
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.
   app.get("/api/stage", async (req, res) => {
     res.set("Cache-Control", "no-store");
-    let slots = [], front = null, roomId = null, featured = null, stale = false, next;
+    let slots = [], front = null, roomId = null, featured = null, stale = false, next, coming = null;
     try {
       const reg = require("./rooms");
       const web = require("./roomsweb");
@@ -2463,6 +2466,10 @@ function register(app, { isBotToken, addUser }) {
         // newstream 1.99ala: the homepage's "Next up" (the off-air slate, the Dock's off-air bar) - the shown pad's next booking, public facts
         // only (home.nextSlot), cached per pad; it was drawn once at load
         if (home) next = await require("./home").nextUpCached(R.id).catch(() => null);
+        // upnext2 (D): what's coming on this pad's 📼 stage (the lower-third, "coming up at", the off-air slate) - a poster key only signed in,
+        // the sign-in read only while one is named
+        if (req.user === undefined && (await MS.comingPoster(R.id))) await new Promise((r) => addUser(req, res, r));
+        coming = await MS.comingOf(R.id, req.user || null);
       }
     } catch (e) { slots = []; stale = true; }   // (dock3 1.99akf: an error says so - an empty list read as "nothing is live" on the page)
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
@@ -2470,7 +2477,7 @@ function register(app, { isBotToken, addUser }) {
     // 1.99ajr golive: + the server's clock - the page starts a video slot where the broadcast is (stage-room.js setEmbed)
     let t = Date.now();
     try { t = require("./mainstage").clockNow(); } catch (e) { t = Date.now(); }
-    res.json({ ...stage(roomId), slots, front, featured, pepe_here: here !== false, now: t, ...(next !== undefined ? { next } : {}), ...(stale ? { stale: true } : {}) });
+    res.json({ ...stage(roomId), slots, front, featured, pepe_here: here !== false, now: t, ...(next !== undefined ? { next } : {}), ...(coming ? { coming } : {}), ...(stale ? { stale: true } : {}) });   // (upnext2: + coming)
   });
 
   // newstream 1.99ala: the pads list's live check (padsonair.js) - /p asks it every 30 s and swaps its sections when it moves

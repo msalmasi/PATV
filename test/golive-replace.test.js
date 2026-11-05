@@ -330,7 +330,7 @@ test("stage-room.js: the poll's server clock corrects this one (skew)", async ()
 
 test("/api/stage answers the server's clock (now)", () => {
   const src = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
-  assert.match(src, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(next !== undefined \? \{ next \} : \{\}\), \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);   // (dock3 1.99akf: + featured / stale; stage(roomId))
+  assert.match(src, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(next !== undefined \? \{ next \} : \{\}\), \.\.\.\(coming \? \{ coming \} : \{\}\), \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);   // (dock3 1.99akf: + featured / stale; stage(roomId); upnext2: + coming)
   assert.equal(typeof S.clockNow, "function");
   assert.equal(S.clockNow(), T);
 });

@@ -205,5 +205,5 @@ test("2c: /api/stage carries the shown pad's next booking on the homepage's answ
   const hd = read("public", "js", "home-dock.js");
   assert.match(hd, /if \(Object\.prototype\.hasOwnProperty\.call\(g, 'next'\)\) nextChanged\(g\.next\);/);
   assert.match(hd, /function nextChanged\(n\) \{/);
-  assert.match(read("views", "home.ejs"), /home-dock\.js\?v=6/);
+  assert.match(read("views", "home.ejs"), /home-dock\.js\?v=7/);   // (upnext2: v7 - the stage asks at once on the long-poll's stage version)
 });

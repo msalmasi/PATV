@@ -170,6 +170,56 @@ const UPNEXT_MS = 90 * 1000;
 // publishing) - that stream still beating this long after the marker means nothing is starting: the marker is void (never "Coming up next:
 // <the other title>" over a later pause, never the "didn't start" let-go at its first drop). nginx-rtmp's on_update comes every 10 s.
 const UPNEXT_STALE_MS = 15 * 1000;
+// upnext2 (owner 2026-11-05: "when does the 'next up' card actually show?"): a pad's STAGE VERSION - bumped when a 📼 "Coming up next" marker
+// is set and when a 📼 title's stream comes up - and its pages told AT ONCE: the pad's /live long-poll (bridge.touch) answers with the new
+// `stv` and the page asks /api/stage now (room.ejs / home-dock.js -> the switcher's poll) instead of at its next 10 s poll. Memory only
+// (a restart starts from 0 - pages only compare it with the last one they saw). The bridge is told only when it's loaded (never required here).
+const stageVers = new Map();
+function stageBump(roomId) {
+  const id = String(roomId || "");
+  if (!id) return 0;
+  const v = (stageVers.get(id) || 0) + 1;
+  stageVers.set(id, v);
+  comingCache.delete(id);                                               // (D: what's coming moved with it)
+  if (stageVers.size > 5000) stageVers.delete(stageVers.keys().next().value);
+  try {
+    const b = require.cache[require.resolve("./bridge")];
+    if (b && b.exports && typeof b.exports.touch === "function") b.exports.touch(id);
+  } catch (e) { /* no bridge: pages find it at their next poll */ }
+  return v;
+}
+const stageVer = (roomId) => stageVers.get(String(roomId || "")) || 0;
+// upnext2 (D): what's coming on a pad's 📼 stage for its pages (medialib.comingFor) - cached COMING_CACHE_MS per pad (the stage is polled; a
+// marker / a stream coming up clears it - stageBump), the poster key only for a signed-in viewer (upNextFor) and never past the 18+ gate
+const comingCache = new Map();
+const COMING_CACHE_MS = 2000;
+async function comingRaw(roomId) {
+  const id = String(roomId || "");
+  const c = comingCache.get(id);
+  if (c && Date.now() - c.at < COMING_CACHE_MS) return c.v;
+  let v = null;
+  try { v = await require("./medialib").comingFor(id); } catch (e) { v = null; }
+  if (v && v.next) {
+    const n = upnextClean(v.next, 0);
+    if (n) {
+      let poster = n.poster === true && UN_KEY_RE.test(String(n.key || ""));
+      if (poster) { try { if (require("./adultgate").applies(id)) poster = false; } catch (e) { poster = false; } }
+      v = { ...v, next: { title: n.title, kind: n.kind, year: n.year, show: n.show, season: n.season, episode: n.episode, poster, ...(poster ? { key: n.key } : {}) } };
+    } else v = { ...v, next: null };
+  }
+  if (v && !v.ends_at && !v.next && !v.at) v = null;
+  if (comingCache.size > 2000) comingCache.clear();
+  comingCache.set(id, { at: Date.now(), v });
+  return v;
+}
+/** upnext2 (D): {ends_at, next, at} | null for `viewer`'s page (see medialib.comingFor) */
+async function comingOf(roomId, viewer) {
+  const v = await comingRaw(roomId);
+  if (!v) return null;
+  return v.next ? { ...v, next: upNextFor(v.next, viewer) } : { ...v };
+}
+/** upnext2 (D): does what's coming name a poster (signed-in viewers only - /api/stage reads the sign-in only then) */
+async function comingPoster(roomId) { const v = await comingRaw(roomId); return !!(v && v.next && v.next.poster); }
 // 1.99fv: Pepe's Twitch channel (the "Use Twitch" shortcut on /stage/admin + the viewers' "Watch on Twitch" link)
 const TW_LOGIN_RE = /^[A-Za-z0-9_]{3,25}$/;
 function pepeTwitchChannel() {
@@ -977,6 +1027,7 @@ async function libraryOpen(user, opts = {}) {
     }
   });
   pubCache.clear();
+  if (marker) stageBump(roomId);                                        // upnext2: "Coming up next" - its pages ask now
   if (replaced) await endEffects(replaced, swapWhy, actor);             // plexreplace: now that it committed (its autoFeature keeps the new slot)
   await event(id, "library", user.username, `📼 ${title || "library"} (${minutes} min max)` + (replaced ? `, replaced ${replaced.res.id}` : ""), roomId);
   if (carried) {
@@ -1021,6 +1072,8 @@ async function libraryUpNext(slotId, info) {
   if (!(r && r.changes)) return false;
   pubCache.clear();
   await autoFeature(s.room_id || rooms.HOUSE_ROOM, t).catch((e) => console.error("[stage] auto-feature:", e.message));
+  // upnext2: every page of the pad asks /api/stage now (the card), not at its next 10 s poll - unless it's the same marker asked again
+  if (!(prev && prev.key && prev.key === n.key)) stageBump(s.room_id || rooms.HOUSE_ROOM);
   return true;
 }
 /**
@@ -1626,6 +1679,7 @@ async function goLive(s, t, via) {
     }
   }
   await autoFeature(s.room_id || rooms.HOUSE_ROOM, t).catch((e) => console.error("[stage] auto-feature:", e.message));   // 1.99lm
+  if (s.source === "library") stageBump(s.room_id || rooms.HOUSE_ROOM);   // upnext2: the card hands over - its pages ask now
   return true;
 }
 /** The open slot streaming under this public stream name (WHEP / HLS reads), or null. */
@@ -2080,6 +2134,7 @@ async function publicSlots(roomId) {
       hls: e ? null : hlsOf(s), embed: e, since: s.went_live, room_id: s.room_id,
       featured: !!s.featured, feature_by: s.feature_by || null, title: s.title || null, mode: s.mode || "stream",
       capture: !e && !s.capture_off && (s.via !== "whip" || whipRelayed(s)), nsfw: !!s.nsfw,     // 1.99cr: the stage's Snap / Clip buttons (stagecap.js; 1.99abf: a WHIP slot once slot-relay.sh writes its HLS)
+      ...(s.source === "library" ? { lib: true } : {}),                     // upnext2: a 📼 title (the page's lower-third / its poll)
       ...(whep ? { whep } : {}),                                              // 1.99et: only while webrtc_enabled is on
     };
   }).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.since || 0) - (b.since || 0));
@@ -2178,6 +2233,7 @@ async function roomStage(roomId, viewer) {
     slots: await slotsFor(roomId, viewer, live), open: shown, free: Math.max(0, RS.slot_count - shown),
     featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by, went: !!featured.went_live,
                            ...(upNextView(featured, t) ? { next: upNextFor(upNextView(featured, t), viewer) } : {}) } : null,   // (dock3 1.99akf: + went - the page's first featured marker; upnext: + next)
+    coming: await comingOf(roomId, viewer),                                // upnext2 (D): the page's first render - the lower-third / the slate
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
@@ -2663,6 +2719,8 @@ module.exports = {
   padPepeFeatured, padPepeStored, setPadPepeFeature, featuredCam,
   _setPepeAir: (fn) => { pepeAirImpl = typeof fn === "function" ? fn : null; },   // (dock3 review: tests - Pepe's stream on air or not)
   clockNow: () => now(),       // 1.99ajr golive: the stage's clock (the /api/stage answer's `now` - where a video slot is)
+  stageBump, stageVer,         // upnext2: a pad's stage version (its /live long-poll's `stv`)
+  comingOf, comingPoster,      // upnext2 (D): what's coming on a pad's 📼 stage
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
   _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache, _tx: tx,

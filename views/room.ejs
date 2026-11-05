@@ -659,7 +659,7 @@
      const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-  <script src="/public/js/stage-player.js?v=10"></script><%# 1.99ajy dockmedia: v10 - PATVStage.nativeControls / setNativeControls (the Room Dock draws its own bar) %>
+  <script src="/public/js/stage-player.js?v=11"></script><%# 1.99ajy dockmedia: v10 - PATVStage.nativeControls / setNativeControls (the Room Dock draws its own bar); upnext2: v11 - the first retries after 2.5 s %>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
@@ -668,8 +668,8 @@
   <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 - the ⚡ <video> follows PATVStage.nativeControls %>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
   <script src="/public/js/stage-mic.js?v=17"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99ajw padppl rework) v16: the "not the Camfrog user" tag on a tile; (dock3 1.99akf) v17: no such tag %>
-  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=24"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once) %>
-  <link rel="stylesheet" href="/public/css/stage-upnext.css?v=1">
+  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=25"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once); upnext2: v25 - the card's 4 s minimum, the kept player's hand-over, the 📼 lower-third / slate %>
+  <link rel="stylesheet" href="/public/css/stage-upnext.css?v=2">
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=4"></script><%# upnext: v4 - a 📼 card greys the row %>
   <script src="/public/js/share-link.js?v=1" defer></script>
@@ -813,6 +813,7 @@
       reconnect: document.getElementById('rmStReconnect'), unmute: document.getElementById('rmStUnmute'), embedHost: document.getElementById('rmEmbed'),
       api: '/api/stage?room=' + encodeURIComponent(padSlug), onShow: function (sel) { cap.update(sel); if (box) box.dispatchEvent(new CustomEvent('patv:stagechange', { detail: sel })); },
       slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= manage_ ? 'true' : 'false' %>,
+      coming: <%- JSON.stringify(RS.coming || null).replace(/</g, '\\u003c') %>,   // upnext2 (D): what's coming on the 📼 stage (the lower-third / the slate)
       featured: <%- JSON.stringify(RS.featured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf: the pad's featured slot, live or not (stage-room.js featWins / the hold)
       posters: <%= signedIn_ ? 'true' : 'false' %>,   // upnext: the "Coming up next" card's poster - the /api/medialib/poster proxy is for signed-in viewers
       onPoll: slotsMoved,                             // newstream 1.99ala
@@ -2156,6 +2157,8 @@
         } });
       return items;
     }
+    // upnext2: the pad's stage version the last answer carried (mainstage.stageBump) - a move = the stage asks /api/stage now
+    var stvSeen = null;
     function apply(d, first, late) {
       if (d) liveData = d;
       if (d && d.mnMuted != null) mnMuted = !!d.mnMuted;
@@ -2195,6 +2198,13 @@
         if (window.PATVAvSync) window.PATVAvSync.gateProgram(slug, d.stage_program || null, showMic);
         else showMic(d.stage_program || null);
       });   // micfollow: 🎙 On the mic; privacy and management still apply immediately
+      // upnext2: a 📼 "Coming up next" was set / its stream came up on this pad - the stage asks now (the card on every open page within a
+      // round trip, not at its next 10 s poll); the first answer only notes where it is
+      safe('stagever', function () {
+        if (d.stv == null) return;
+        var was = stvSeen; stvSeen = d.stv;
+        if (was != null && was !== d.stv && window.PATVPadStage && typeof PATVPadStage.poll === 'function') PATVPadStage.poll();
+      });
       safe('feed', function () { addFeed(d.feed, first, late); });      // 1.99ahm: (T3) a backlog's grab / drop lines are not held
       safe('rpm', function () { if (roomPm) roomPm.update(d); });        // 1.99ajd roompm: after the lines (an answer goes below its echo)
       safe('clip', function () {

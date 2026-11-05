@@ -224,7 +224,57 @@
 /* the stage's tab for it (stage-room.js renderTabs .stab.off.pending): a hollow dot - featured, not live yet - beside the filled live / grey off-air ones */
 :is(.rm, .hm) .stab.off.pending .dot { background: transparent; box-shadow: inset 0 0 0 2px currentColor; opacity: .75; animation: none; }
 
+/* ---- upnext2 (D): the classic "coming up" LOWER-THIRD over a 📼 title that plays (stage-room.js l3Sync) - "UP NEXT · <title> · in 0:45" in its
+   last minute, "COMING UP AT 9:04 PM · <title>" for a booked start; a CG strip at the foot of the picture: the gold pixel tag box, the white
+   title with the hard drop shadow, the OSD-green countdown, a small ✕. Slides in once (off under reduced motion). Never covers the Dock's
+   controls (it steps up while they show). And the OFF-AIR SLATE naming a booked 📼 start (the CG field, no bars). */
+.st-l3 {
+  --l3-blue: #1532a6; --l3-gold: var(--ds-gold, #ffcf40); --l3-osd: #9ee6a4; --l3-shadow: rgba(0, 0, 12, .78);
+  position: absolute; z-index: 2; inset-inline-start: 3%; inset-block-end: 7%; max-inline-size: 94%;
+  display: flex; align-items: stretch; gap: 0; pointer-events: auto;
+  font-family: var(--ds-font, Ubuntu, system-ui, sans-serif); color: #fff; line-height: 1.15;
+  font-size: clamp(11px, calc(.9vw + 6px), 19px);
+  box-shadow: .35em .35em 0 var(--l3-shadow);
+  animation: stL3In .5s ease-out both;
+}
+.st-l3-tag { flex: none; display: flex; align-items: center; padding: .45em .7em; background: var(--l3-gold); color: #0b1c74;
+             font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace); font-size: .62em; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.st-l3-title { min-inline-size: 0; display: flex; align-items: center; padding: .4em .8em; font-weight: 700;
+               background: linear-gradient(180deg, #0a165e, var(--l3-blue)); text-shadow: .08em .08em 0 var(--l3-shadow);
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.st-l3-when { flex: none; display: flex; align-items: center; padding-block: .4em; padding-inline: 0 .7em; background: var(--l3-blue); color: var(--l3-osd);
+              font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace); font-size: .58em; letter-spacing: .05em; text-transform: uppercase;
+              font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: .14em .14em 0 var(--l3-shadow); }
+.st-l3-when:empty { display: none; }
+.st-l3-x { flex: none; inline-size: 2.2em; border: 0; margin: 0; padding: 0; cursor: pointer; background: rgba(0, 0, 20, .82); color: #fff; font: inherit; font-size: .8em; opacity: .85; }
+.st-l3-x:hover, .st-l3-x:focus-visible { opacity: 1; }
+.st-l3-x:focus-visible { outline: 2px solid var(--l3-gold); outline-offset: -2px; }
+#rmStage.rmd-controls-on .st-l3 { inset-block-end: calc(7% + 48px); }   /* (the Room Dock's overlay controls are up: step above them) */
+@media (max-width: 480px) { .st-l3 { inset-block-end: 5%; font-size: 11px; } .st-l3-tag { padding-inline: .5em; } .st-l3-title { padding-inline: .55em; } }
+@keyframes stL3In { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+[dir="rtl"] .st-l3 { animation-name: stL3InRtl; }
+@keyframes stL3InRtl { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+
+.st-slate { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: .6em; padding: 6%;
+            text-align: center; color: #fff; overflow: hidden; container: stsl / size;
+            background: radial-gradient(80% 60% at 50% 42%, rgba(80, 120, 255, .22), transparent 70%), linear-gradient(180deg, #0a165e 0%, #1532a6 46%, #0b1c74 100%);
+            font-family: var(--ds-font, Ubuntu, system-ui, sans-serif); }
+.st-slate::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+                    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .16) 0 1px, transparent 1px 3px), radial-gradient(130% 110% at 50% 50%, transparent 58%, rgba(0, 0, 8, .6) 100%); }
+.st-slate-kick { margin: 0; position: relative; font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace); font-size: clamp(9px, 4.2cqh, 34px);
+                 letter-spacing: .06em; text-transform: uppercase; color: var(--ds-gold, #ffcf40); text-shadow: .16em .16em 0 rgba(0, 0, 12, .78); }
+.st-slate-title { margin: 0; position: relative; font-weight: 700; font-size: clamp(14px, 9cqh, 84px); line-height: 1.08; max-inline-size: 90cqw;
+                  text-shadow: .055em .055em 0 rgba(0, 0, 12, .78); overflow-wrap: anywhere; unicode-bidi: plaintext;
+                  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.st-slate-bug { position: absolute; inset-inline-end: 5%; inset-block-end: 6%; font-family: var(--ds-font-pixel, "Press Start 2P", ui-monospace, monospace);
+                font-size: clamp(8px, 3.4cqh, 30px); opacity: .62; text-shadow: .12em .12em 0 rgba(0, 0, 12, .78); }
+.st-slate:is(:lang(ar), :lang(fa), :lang(he), :lang(ur), :lang(hi), :lang(th), :lang(ja), :lang(ko), :lang(zh-CN), :lang(zh-TW), :lang(vi)) .st-slate-kick,
+.st-l3:is(:lang(ar), :lang(fa), :lang(he), :lang(ur), :lang(hi), :lang(th), :lang(ja), :lang(ko), :lang(zh-CN), :lang(zh-TW), :lang(vi)) :is(.st-l3-tag, .st-l3-when) {
+  font-family: var(--ds-font, Ubuntu, system-ui, sans-serif); font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .st-l3 { animation: none; }
   .st-upnext { animation: none; }
   .st-upnext.is-out { transition-duration: .2s; }
   .st-un-top, .st-un-foot { transition: none; }
@@ -233,6 +283,9 @@
   .st-un-start .st-un-dots { display: inline; margin-inline-start: -.55em; }
 }
 @media (forced-colors: active) {
+  .st-l3, .st-l3-tag, .st-l3-title, .st-l3-when, .st-slate { background: Canvas; color: CanvasText; text-shadow: none; box-shadow: none; }
+  .st-l3 { border: 1px solid CanvasText; }
+  .st-slate::before { display: none; }
   .st-un-screen { background: Canvas; }
   .st-un-bars, .st-un-castle, .st-un-roll, .st-un-screen::before, .st-un-screen::after { display: none; }
   .st-un-kick, .st-un-title, .st-un-sub, .st-un-start, .st-un-clock, .st-un-bug { color: CanvasText; text-shadow: none; }

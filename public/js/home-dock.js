@@ -211,9 +211,17 @@
       var prog = micProgram(d && d.stage_program || null);
       if (W.PATVAvSync && W.PATVAvSync.gateProgram) W.PATVAvSync.gateProgram(slug, prog, show); else show(prog);
     }
+    // upnext2: the pad's stage version the last answer carried (mainstage.stageBump) - a move = the stage card asks /api/stage now
+    var stvSeen = null;
     function apply(d, late) {
       if (!d || dead) return;
       latest = d;
+      // upnext2: a 📼 "Coming up next" was set / its stream came up on the pad whose chat this is - when it's also the stage's pad, the stage
+      // asks now (the card within a round trip, not at its next 10 s poll); the first answer only notes where it is
+      if (d.stv != null) {
+        var sv = stvSeen; stvSeen = d.stv;
+        if (sv != null && sv !== d.stv && sw && typeof sw.poll === 'function' && slug && slug === frontSlug) { try { sw.poll(); } catch (e) { /* the 10 s poll */ } }
+      }
       // 1.99ajn padppl review fix: the viewer's own blocks (their named lines fold) and who they are (lines that @mention them are marked) -
       // as on the pad page (chatlog-core.js ctx.blk / ctx.me)
       rctx.blk = d.blk || null;

@@ -230,6 +230,46 @@ async function breakDue(roomId) {
   if (s && s.state === "break") return require("./mediaqueue")._lock(String(roomId), () => fireBreak(String(roomId), s.play_id));
   return require("./mediaqueue").breakDue(roomId);
 }
+// ── upnext2 (D): what's COMING on a pad's 📼 stage - the page's "UP NEXT" lower-third (in the last minute of a title that plays, with a
+// countdown), "COMING UP AT <time>" (a booked 📼 start soon) and the off-air slate. -> {ends_at, next, at} | null - server facts only, never who
+// queued it (mainstage.comingOf caches it and decides the poster key per viewer):
+//   ends_at  when the 📼 title on now ends (its last known position + the time since; null while paused / in a break)
+//   next     the title after it: a queue's next title, else (nothing on) a booked 📼 start's first title
+//   at       that booking's start time (only when nothing from the library is on the pad)
+const COMING_BOOK_MS = 60 * 60 * 1000;
+function comingInfo(it) {
+  if (!it) return null;
+  const key = /^\d{1,12}$/.test(String(it.key == null ? "" : it.key)) ? String(it.key) : null;
+  const ep = it.type === "episode" || it.kind === "episode";
+  return { key, kind: ep ? "episode" : "movie", title: it.title || null, year: it.year || null, show: ep ? it.show || null : null,
+           season: ep && it.season != null ? it.season : null, episode: ep && it.episode != null ? it.episode : null, poster: !!key };
+}
+async function comingFor(roomId) {
+  await init();
+  const id = String(roomId || "");
+  const s = await session(id);
+  const q = await require("./mediaqueue").activeFor(id);
+  const out = { ends_at: null, next: null, at: null };
+  if (s && s.state === "playing" && Number(s.duration) > 0) {
+    out.ends_at = Math.round(Number(s.updated) + Math.max(0, Number(s.duration) - (Number(s.position) || 0)) * 1000);
+  }
+  if (s && q && Number(s.queue_id) === Number(q.id) && q.items[q.pos + 1]) out.next = comingInfo(q.items[q.pos + 1]);
+  if (!s && !q) {
+    const now = Date.now();
+    const bk = (await safeQuery(`SELECT b.start_at, b.req, b.first, sl.title FROM media_bookings b JOIN stage_slots sl ON sl.id = b.slot_id
+                                 WHERE b.room_id = ? AND b.state = 'booked' AND sl.status = 'scheduled' AND sl.settled = 0 AND b.start_at > ? AND b.start_at <= ?
+                                 ORDER BY b.start_at LIMIT 1`, [id, now - 60000, now + COMING_BOOK_MS]))[0];
+    if (bk) {
+      let first = null;
+      try { first = bk.first ? JSON.parse(bk.first) : null; } catch (e) { first = null; }
+      // (a booking from before upnext2 has no `first`: the slot's own title, "📼 <title> +N")
+      out.next = first ? comingInfo(first) : { key: null, kind: "movie", title: String(bk.title || "").replace(/^📼\s*/, "").replace(/\s\+\d+$/, "") || null,
+                                                year: null, show: null, season: null, episode: null, poster: false };
+      out.at = Number(bk.start_at);
+    }
+  }
+  return out.ends_at || (out.next && (out.next.title || out.next.show)) || out.at ? out : null;
+}
 const BREAK_RETRY_MS = 5000, BREAK_GIVEUP_MS = 90 * 1000;
 /** (inside the pad's lock) A single play's break is over: its encoder starts. Only the play this was for, still in its break: a control that
  *  moved the pad on meanwhile (⏹, a replace, a Cut) wins and nothing starts. No free encoder / media-control unreachable: tried again every
@@ -1197,4 +1237,5 @@ module.exports = { init, register, play, playFor, padState, stop, pause, resume,
                          onNow, replaceTarget, retire, wantsReplace, replaceWant,                        // plexreplace
                          breakSec, armBreak, fireBreak },                                                // upnext2
                    stageName, call, signHeaders, fmtTitle, upNextInfo, inviteItemLink, Refuse, _keys: keys,
-                   breakSec, breakDue, armBreak, _brkTimers: (on) => { brkTimersOn = !!on; } };     // upnext2: the station break
+                   breakSec, breakDue, armBreak, _brkTimers: (on) => { brkTimersOn = !!on; },      // upnext2: the station break
+                   comingFor };                                                                    // upnext2 (D)

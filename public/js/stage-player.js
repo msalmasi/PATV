@@ -13,6 +13,9 @@
 //
 // Resilient on purpose: any error or stall shows "reconnecting" and re-points the player at the
 // playlist every 10 s (cache-busted) until a frame plays again. Needs video.js (vjs.zencdn.net 8.x).
+// upnext2: the first FAST_TRIES retries come after FAST_MS - a page told the moment a 📼 title's stream comes up (its /live long-poll)
+// asks for the playlist before nginx has written its first segment (a 404): it used to wait 10 s ("Reconnecting…" up to ~12 s); now
+// ~2.5 s. A stream that stays away settles back to every 10 s. The count starts again once a frame plays.
 //
 // 1.99fd: live latency. video.js's VHS starts a live stream 3 target durations (TD) behind the newest segment -
 // with Pepe's 2 s segments that was ~8 s glass to glass. Now VHS may play inside that window
@@ -175,7 +178,8 @@
   }
   function player(o) {
     var SRC = o.src || 'https://publicaccess.tv/hls/broadcast.m3u8';
-    var p = null, retry = null, sync = null;
+    var p = null, retry = null, sync = null, tries = 0;
+    var FAST_TRIES = 3, FAST_MS = 2500, SLOW_MS = 10000;   // (upnext2)
     notePt(SRC);
     function reconnecting(on) { if (o.reconnect) o.reconnect.classList.toggle('hide', !on); }
     function scheduleRetry() {
@@ -183,9 +187,10 @@
       clearTimeout(retry);
       retry = setTimeout(function () {
         if (!p) return;
+        tries++;
         try { p.src({ src: addQ(SRC, 'r=' + Date.now()), type: 'application/x-mpegURL' }); p.play().catch(function () {}); } catch (e) {}
         scheduleRetry();                                   // cleared again by 'playing'
-      }, 10000);
+      }, tries < FAST_TRIES ? FAST_MS : SLOW_MS);
     }
     function start() {
       if (p || !window.videojs) return;
@@ -208,13 +213,13 @@
       p.src({ src: SRC, type: 'application/x-mpegURL' });
       p.on('error', scheduleRetry);
       p.on('stalled', function () { if (!retry) scheduleRetry(); });
-      p.on('playing', function () { clearTimeout(retry); retry = null; reconnecting(false); });
+      p.on('playing', function () { clearTimeout(retry); retry = null; tries = 0; reconnecting(false); });
       p.play().catch(function () {});
       if (o.unmute) o.unmute.classList.remove('hide');
       reconnecting(true);                                  // until the first frame plays
     }
     function stop() {
-      clearTimeout(retry); retry = null; reconnecting(false);
+      clearTimeout(retry); retry = null; tries = 0; reconnecting(false);
       if (o.unmute) o.unmute.classList.add('hide');
       if (p) { var was = p; running = running.filter(function (x) { return x !== was; }); try { p.dispose(); } catch (e) {} p = null; }
       sync = null;

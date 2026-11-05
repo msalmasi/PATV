@@ -251,6 +251,8 @@ test("the stream comes up: its player starts behind the card, which fades once i
   const r = switcher({ featured: PEND(MOVIE(T0)) }, { reduced: true });
   r.answer(ans([LIB()], { id: "lib1", live: true, by: "auto", went: true })); await r.poll();
   r.player.playing(); await r.adv(600);
+  assert.ok(!r.card().classList.contains("is-out"), "upnext2 (C): a card stays up at least 4 s, even when the stream plays at once");
+  await r.adv(3450);
   assert.ok(r.card().classList.contains("is-out"));
   await r.adv(300);
   assert.equal(r.card(), null, "gone in ~0.25 s");
@@ -290,6 +292,8 @@ test("a 📼 queue between two titles: the slot this page held gets the card (ta
   x.answer(ans([LIB({ title: "📼 The Show — S1E2 Second" })], { id: "lib1", live: true, by: "auto", went: true }));
   await x.poll();
   x.player.playing(); await x.adv(1200);
+  assert.ok(x.card(), "upnext2 (C): up at least 4 s");
+  await x.adv(3600);
   assert.equal(x.card(), null);
   assert.equal(x.sw.view(), "slot:lib1");
 });
@@ -349,13 +353,13 @@ test("cleanFeat keeps only known shapes of next (and the card never takes a key 
 test("views + strings + styles: the css is linked, stage-room.js v23, the posters flag on every surface, en.json, motion rules", () => {
   for (const v of ["room.ejs", "home.ejs"]) {
     const src = read("views", v);
-    assert.match(src, /stage-room\.js\?v=24/, v);
-    assert.match(src, /\/public\/css\/stage-upnext\.css\?v=1/, v);
+    assert.match(src, /stage-room\.js\?v=25/, v);   // (upnext2: 25)
+    assert.match(src, /\/public\/css\/stage-upnext\.css\?v=2/, v);   // (upnext2: v2 - the lower-third / the slate)
   }
   assert.match(read("views", "room.ejs"), /posters: <%= signedIn_ \? 'true' : 'false' %>/);
   assert.match(read("views", "home.ejs"), /posters: <%= typeof me !== 'undefined' && me \? 'true' : 'false' %>/);
   assert.match(read("public", "js", "home-dock.js"), /posters: !!I\.signed/);
-  assert.match(read("views", "home.ejs"), /home-dock\.js\?v=6/);
+  assert.match(read("views", "home.ejs"), /home-dock\.js\?v=7/);   // (upnext2: v7)
   // upnext review V2 / V3: the homepage draws its stage ON while a 📼 title is starting (no 44 px collapsed stage / OFF AIR slate first); the
   // capture bar's pending row (stage-capture.js v4 on both surfaces)
   assert.match(read("views", "home.ejs"), /const live = \(!!st\.active && pepeHere_\) \|\| paid\.length > 0 \|\| !!\(locals\.stageFeatured && locals\.stageFeatured\.next\);/);
@@ -420,7 +424,7 @@ test("review F1: a 📼 queue between two titles keeps ITS player under the card
   assert.equal(x.player.starts, 1, "never restarted");
   assert.ok(x.card() && !x.card().classList.contains("is-out"), "the card until it plays");
   x.player.playing();
-  await x.adv(1300);
+  await x.adv(5000);                                            // (upnext2 (C): up at least 4 s from when it came up, then the 0.7 s fade)
   assert.equal(x.card(), null);
   assert.equal(x.player.muted, false);
   assert.equal(x.player.stops, 0);
@@ -436,7 +440,7 @@ test("review F1: a kept player that sits on a frame with no overlay up isn't 'pl
   await x.adv(3000);
   assert.ok(x.card() && !x.card().classList.contains("is-out"), "a frozen frame is no hand-over");
   x.player.playing();
-  await x.adv(600);
+  await x.adv(1200);                                            // (upnext2 (C): + the card's 4 s minimum - it came up at the first poll)
   assert.ok(x.card().classList.contains("is-out"), "the picture moves: hand over");
 });
 

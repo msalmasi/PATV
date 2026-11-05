@@ -714,6 +714,8 @@ async function bookingsInit() {
     req TEXT NOT NULL, start_at INTEGER NOT NULL, minutes INTEGER, items INTEGER, estimate INTEGER, state TEXT NOT NULL, queue_id INTEGER, error TEXT,
     created INTEGER NOT NULL, updated INTEGER NOT NULL)`);
   await runQuery("CREATE INDEX IF NOT EXISTS media_bookings_state ON media_bookings (state, start_at)");
+  // upnext2 (D): the booking's first title (slim) - "COMING UP AT <time> · <title>" and the off-air slate name it
+  try { await runQuery("ALTER TABLE media_bookings ADD COLUMN first TEXT"); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
 }
 async function book(user, b = {}) {
   await L().init();
@@ -737,9 +739,10 @@ async function book(user, b = {}) {
   const req = { key: b.key || null, scope: b.scope || null, keys: Array.isArray(b.keys) ? b.keys.map(String).filter(validKey).slice(0, 200) : null,
                 offset: built.offset, quality: b.quality, audio: b.audio, sub: b.sub };
   const t = NOW();
-  await runQuery(`INSERT INTO media_bookings (slot_id, room_id, user_id, username, req, start_at, minutes, items, estimate, state, created, updated)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'booked', ?, ?)`,
-                 [r.slot.id, R.id, user.userId, user.username, JSON.stringify(req), r.slot.start_at, minutes, built.items.length, pv.estimate, t, t]);
+  await runQuery(`INSERT INTO media_bookings (slot_id, room_id, user_id, username, req, start_at, minutes, items, estimate, state, created, updated, first)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'booked', ?, ?, ?)`,
+                 [r.slot.id, R.id, user.userId, user.username, JSON.stringify(req), r.slot.start_at, minutes, built.items.length, pv.estimate, t, t,
+                  first ? JSON.stringify(first) : null]);
   console.log(`[mediaqueue] ${user.username} booked 📼 ${built.items.length} title(s), ${minutes} min on ${R.id} for ${new Date(r.slot.start_at).toISOString()} (slot ${r.slot.id})`);
   return { ok: true, slot: r.slot, minutes, items: built.items.length, total_sec: built.total_sec, truncated: built.truncated, estimate: pv.estimate,
            status: r.slot.status, title };

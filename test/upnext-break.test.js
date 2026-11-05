@@ -482,3 +482,62 @@ test("the settings: the pad's stage form has the 📼 station break (its own or 
   assert.match(ma, /<select name="library_break_sec">/);
   assert.match(read("padsettings.js"), /libBreak:/);
 });
+
+test("B (instant): a 📼 marker / its stream coming up bumps the pad's stage version and wakes its /live long-poll (bridge.touch); the same marker asked again doesn't", async () => {
+  const touched = [];
+  const bp = require.resolve(path.join(repo, "bridge"));
+  const had = require.cache[bp];
+  require.cache[bp] = { id: bp, filename: bp, loaded: true, exports: { touch: (id) => { touched.push(id); return true; } } };
+  try {
+    const v0 = S.stageVer(ROOM), o0 = S.stageVer(OTHER);
+    const t0 = T;
+    const r = await L.playFor(admin, { room: ROOM, key: "500" });
+    assert.equal(S.stageVer(ROOM), v0 + 1, "the marker: its pages ask now");
+    assert.deepEqual(touched, [ROOM]);
+    await S.libraryUpNext(r.slot.id, L.upNextInfo({ key: "500", type: "movie", title: "Charade", year: 1963, poster: true }));
+    assert.equal(S.stageVer(ROOM), v0 + 1, "the same title asked again: no second wake");
+    T = t0 + 8000; await L.watch();
+    await pub(keyOf(last()));
+    assert.equal(S.stageVer(ROOM), v0 + 2, "its stream came up: the card hands over now");
+    await L.playFor(admin, { room: ROOM, key: "501", replace: true });
+    assert.equal(S.stageVer(ROOM), v0 + 3, "a replace's marker (the swap) wakes them too");
+    assert.deepEqual(touched, [ROOM, ROOM, ROOM]);
+    assert.equal(S.stageVer(OTHER), o0, "per pad");
+  } finally { if (had) require.cache[bp] = had; else delete require.cache[bp]; }
+});
+
+test("D (coming): what's coming on the pad's 📼 stage - a playing title's end, a queue's next title, a booked start's time + title; the poster key only signed in; never who queued it", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
+  assert.equal(await S.comingOf(ROOM, VIEWER), null, "nothing on, nothing booked");
+  // a queue: its next title, and when the one on now ends
+  const q = await Q.startFor(owner, { room: ROOM, key: "911", scope: "season" }).catch(() => null) || await Q.startFor(admin, { room: ROOM, key: "911", scope: "season" });
+  await pub(keyOf(last()));
+  await runQuery("UPDATE media_sessions SET position = 600, updated = ? WHERE room_id = ?", [Date.now(), ROOM]);
+  await S.stageBump(ROOM);                                       // (the 2 s cache)
+  const c = await S.comingOf(ROOM, VIEWER);
+  assert.ok(Math.abs(c.ends_at - (Date.now() + (DUR - 600) * 1000)) < 5000, "ends when its last 1800 s have played");
+  assert.deepEqual(c.next, { title: "Second", kind: "episode", year: null, show: "The Show", season: 1, episode: 2, poster: true, key: "912" });
+  assert.equal(c.at, null);
+  const out = await S.comingOf(ROOM, null);
+  assert.deepEqual([out.next.poster, "key" in out.next], [false, false], "signed out: no poster key");
+  const blob = JSON.stringify([c, out]);
+  for (const bad of [admin.username, owner.username, PLEX_TOKEN, FILE, "secret-library-path"]) assert.ok(!blob.includes(bad), "no " + bad);
+  await L.stop(admin, ROOM);
+  await settle();
+  // a booked start: its time and its first title (nothing on)
+  const t0 = Date.now();
+  const bk = await Q.bookFor(admin, { room: ROOM, key: "501", start_at: t0 + 20 * 60000 });
+  await S.stageBump(ROOM);
+  const d = await S.comingOf(ROOM, VIEWER);
+  assert.equal(d.at, bk.slot.start_at);
+  assert.deepEqual([d.next.title, d.next.year, d.next.kind, d.ends_at], ["Night of the Living Dead", 1968, "movie", null]);
+  assert.ok(!JSON.stringify(d).includes(admin.username));
+  // more than an hour out: not yet
+  await S.end(bk.slot.id, "test", "test");
+  await Q.bookFor(admin, { room: ROOM, key: "502", start_at: t0 + 3 * 3600000 });
+  await S.stageBump(ROOM);
+  assert.equal(await S.comingOf(ROOM, VIEWER), null);
+  // the pad page's first render and /api/stage carry it
+  assert.match(fs.readFileSync(path.join(repo, "bridge.js"), "utf8"), /coming = await MS\.comingOf\(R\.id, req\.user \|\| null\);/);
+  assert.ok("coming" in (await S.roomStage(ROOM, VIEWER)));
+});

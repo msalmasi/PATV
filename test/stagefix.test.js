@@ -816,7 +816,7 @@ test("fix: client - the owner's list words 'unavailable' and 'limited', /stage w
   assert.match(sb, /function reasonOf\(r\)/);
   assert.match(sb, /why: reasonOf\(last\.end_reason\)/);
   assert.match(fs.readFileSync(path.join(repo, "views", "stageBook.ejs"), "utf8"), /stage-book\.js\?v=14/);   // 1.99ajr golive: 14
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-room\.js\?v=24/, v);   // 1.99ajr golive + 1.99ajq dockpol merged: 21; 1.99ahq stage cover: 19; train2: + micfollow's 12; mfix: 15; mfix review: 16; wave2 WP-4: 18
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-room\.js\?v=25/, v);   // (upnext2: 25) 1.99ajr golive + 1.99ajq dockpol merged: 21; 1.99ahq stage cover: 19; train2: + micfollow's 12; mfix: 15; mfix review: 16; wave2 WP-4: 18
   assert.match(fs.readFileSync(path.join(repo, "views", "stageAdmin.ejs"), "utf8"), /only cams shown to everyone are excused/);
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const k of ["js.stage.r_cam", "js.stage.r_cam_left_cam", "js.stage.r_cam_opted_out", "sl.chat_livecam"]) assert.ok(en[k], k);
