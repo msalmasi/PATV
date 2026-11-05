@@ -280,6 +280,15 @@
   .rm .ptab .pnew.is-fade { opacity: 0; }
   .rm .ptab .pnewdot { width: 8px; height: 8px; border-radius: 50%; background: #ffd54f; box-shadow: 0 0 6px rgba(255,213,79,.7); flex: none; }
   .rm .ptab .pnew[hidden], .rm .ptab .pdot[hidden], .rm .ptab .pnewdot[hidden] { display: none; }
+  /* newstream 1.99akv: "🔴 Live on the stage now · Watch ›" under the tab bar - a stream started while this viewer is on Feed / About */
+  .rm .plive { display: flex; align-items: center; gap: 4px; margin: 0; padding: 4px 4px 4px 12px; border: 1px solid #5a2222; border-radius: 12px; background: #1d0f0f; font-size: 14px; }
+  .rm .plive[hidden] { display: none; }
+  .rm .plive a { flex: 1 1 auto; display: inline-flex; align-items: center; gap: 8px; min-height: 36px; color: #ffd0d0; font-weight: bold; text-decoration: none; min-width: 0; }
+  .rm .plive a:hover b, .rm .plive a:focus-visible b { text-decoration: underline; text-underline-offset: 3px; }
+  .rm .plive .pdot { width: 8px; height: 8px; border-radius: 50%; background: #ff5252; animation: rmPulse 1.6s ease-in-out infinite; flex: none; }
+  .rm .plive b { color: #fff; white-space: nowrap; }
+  .rm .plive button { appearance: none; flex: none; min-width: 36px; min-height: 36px; border: 0; border-radius: 9px; background: none; color: #c9a3a3; font: inherit; cursor: pointer; }
+  .rm .plive button:hover { color: #fff; background: #2a1414; }
   .rm .fp.fp-new { box-shadow: inset 3px 0 0 #ffd54f; }
   .rm .ppanel { display: grid; gap: 14px; min-width: 0; }
   .rm .ppanel[hidden] { display: none !important; }
@@ -415,7 +424,7 @@
     .rm .hero h1 { font-size: 22px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .rm .dot, .rm .eq i, .rm .ptab .pdot { animation: none; }
+    .rm .dot, .rm .eq i, .rm .ptab .pdot, .rm .plive .pdot { animation: none; }
   }
 /* ── 1.99qc polish (docs/design-system.md, "Area notes: feed, pads and social"): ds-page, card/hero radii, pixel section heads, 36/44 controls, gold focus ── */
   .rm.ds-page { max-width: var(--ds-w-wide); padding: var(--ds-sp-4) var(--ds-gutter) var(--ds-sp-14); gap: var(--ds-sp-4); }
@@ -621,6 +630,9 @@
     <%# 1.99ti put an "Owner" tab here too; 1.99wk: gone - the header's 👑 button is THE owner-panel link (old ?tab=owner /
         #owner links go there: bridge.js redirects the query, pad-tabs.js the fragment) %>
   </nav>
+  <%# newstream 1.99akv: the pad's stage went on air AFTER this page loaded while the viewer is on Feed / About - one line under the tabs
+      (the stage script below shows it; Live opens on click; ✕ hides it for this visit). The Live tab's red dot follows the stage too. %>
+  <% if (PT_.tabs.indexOf('live') >= 0) { %><p class="plive" id="padLiveNote" hidden><a href="?tab=live" data-pad-tab="live"><span class="pdot" aria-hidden="true"></span><span><%- t('pad.tab.live_now', { watch: '<b>' + t('pad.tab.live_now_watch') + '</b>' }) %></span></a><button type="button" id="padLiveNoteX" aria-label="<%- t('pad.tab.live_now_hide') %>" title="<%- t('pad.tab.live_now_hide') %>">✕</button></p><% } %>
   <% } %>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <% if (dockOn_) { %><h1 class="ds-sr-only"><%= room.name %></h1><% } %>
@@ -733,7 +745,7 @@
       .plexq .pq-pos { white-space: nowrap; }
       .plexq .pq-br { display: none; }
     </style>
-    <script src="/public/js/pad-plexq.js?v=4" defer></script><%# 1.99ajy dockmedia: v3 - the controls group says they are for everyone watching; v4 (verify) - focus kept across a redraw, the same markup never rewritten, ⏮ ⏸ ⏭ ⏹ first, the line's parts in their own spans %>
+    <script src="/public/js/pad-plexq.js?v=5" defer></script><%# 1.99ajy dockmedia: v3 - the controls group says they are for everyone watching; v4 (verify) - focus kept across a redraw, the same markup never rewritten, ⏮ ⏸ ⏭ ⏹ first, the line's parts in their own spans; newstream: v5 - PATVPlexQ.poll (the stage asks when its live slots change) %>
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="<%- t('pad.golive.coming_up') %>">
@@ -751,6 +763,39 @@
     var padSlug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     // 1.99cr: Snap / Clip the stream that's showing (stage-capture.js; cut on the server, saved to this pad's story)
     var cap = PATVStage.capture({ host: document.getElementById('rmCap'), room: function () { return padSlug; } });
+    // newstream 1.99akv: the Live tab's red dot and the "Live on the stage now" line follow the stage - both were drawn once, at load, so a
+    // viewer on Feed / About (a site pad always opens there) never saw a stream start. The dot: the pad's Camfrog room active at load
+    // (bridge.js padTabsFor roomActive) or the stage on air now. The line: only for a stage that went on air while this page watched, never
+    // on Live, gone with ✕ for this visit. The stage's own poll is the only clock - nothing new polls.
+    var roomActive = <%= (PT_.roomActive != null ? !!PT_.roomActive : (!!PT_.active && !PT_.stageOn)) ? 'true' : 'false' %>;
+    var liveDot = document.querySelector('#padTabs .ptab[data-tab="live"] .pdot'), liveNote = document.getElementById('padLiveNote');
+    var stageWas = null, noteGone = false;
+    function onLiveTab() { var b = document.getElementById('padTab-live'); return !b || b.getAttribute('aria-selected') === 'true'; }
+    function stageOn(on) {
+      on = !!on;
+      if (liveDot) liveDot.hidden = !(roomActive || on);
+      if (liveNote) {
+        if (!on || noteGone || onLiveTab()) liveNote.hidden = true;
+        else if (stageWas === false) liveNote.hidden = false;
+      }
+      stageWas = on;
+    }
+    if (liveNote) {
+      var noteX = document.getElementById('padLiveNoteX');
+      if (noteX) noteX.addEventListener('click', function () { noteGone = true; liveNote.hidden = true; });
+      document.addEventListener('patv:padtab', function (e) { if (e && e.detail && e.detail.tab === 'live') liveNote.hidden = true; });
+    }
+    // newstream 1.99akv: the 📼 player (pad-plexq.js) and the Go live card (room-schedule.js) poll every 30 s on their own - when the stage's
+    // poll sees the set of live slots change (a stream went live or ended, a 📼 play, a booked slot starting) they ask now
+    var liveIds = <%- JSON.stringify((RS.slots || []).map((s) => String(s.id)).sort().join(',')).replace(/</g, '\\u003c') %>;
+    function slotsMoved(g) {
+      if (!g || !Array.isArray(g.slots)) return;
+      var ids = g.slots.map(function (s) { return s && s.id != null ? String(s.id) : ''; }).filter(Boolean).sort().join(',');
+      if (ids === liveIds) return;
+      liveIds = ids;
+      if (window.PATVPlexQ && typeof PATVPlexQ.poll === 'function') PATVPlexQ.poll();
+      if (window.PATVRoomSchedule && typeof PATVRoomSchedule.poll === 'function') PATVRoomSchedule.poll();
+    }
     // micfollow: kept as window.PATVPadStage - the live long-poll below hands it the 🎙 mic stage (setMic)
     window.PATVPadStage = PATVStage.switcher({
       tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'), slug: padSlug,
@@ -759,10 +804,12 @@
       slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= manage_ ? 'true' : 'false' %>,
       featured: <%- JSON.stringify(RS.featured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf: the pad's featured slot, live or not (stage-room.js featWins / the hold)
       posters: <%= signedIn_ ? 'true' : 'false' %>,   // upnext: the "Coming up next" card's poster - the /api/medialib/poster proxy is for signed-in viewers
+      onPoll: slotsMoved,                             // newstream 1.99akv
       onAir: function (on) {
         box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
         stagePill.className = 'live' + (on ? '' : ' off');
         stagePillText.textContent = on ? _t('js.pad.stage.on_air', 'ON AIR') : _t('js.pad.stage.off_air', 'OFF AIR');
+        stageOn(on);                                  // newstream 1.99akv: the Live tab's dot + "Live on the stage now"
       }
     });
   })();

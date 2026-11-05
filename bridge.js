@@ -2730,10 +2730,12 @@ function padTabsFor(o) {
   const people = Array.isArray(o.members) ? o.members.filter((m) => m && !m.self && !m.bot).length
     : Math.max(0, (Number(o.count) || 0) - (o.pepeHere === true ? 1 : 0));
   const stageOn = (o.pepeOn && o.pepeHere !== false) || (Array.isArray(o.slots) && o.slots.length > 0);
-  const active = !!((camfrog && o.live && people > 0) || stageOn);
+  const roomActive = !!(camfrog && o.live && people > 0);
+  const active = roomActive || stageOn;
   const qs = String(o.query || "").includes("?") ? String(o.query).slice(String(o.query).indexOf("?")) : "";
   const requested = T.requestedTab(qs, "") || (o.lineLive && T.lineRequested(qs) ? "live" : null);
-  return { tabs, camfrog, active, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null, lineLive: !!o.lineLive }),
+  // (newstream 1.99akv: roomActive apart - the Live tab's dot is "the room is active OR the stage is on air NOW"; room.ejs follows the stage)
+  return { tabs, camfrog, active, roomActive, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null, lineLive: !!o.lineLive }),
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })), lineLive: !!o.lineLive };
 }
 

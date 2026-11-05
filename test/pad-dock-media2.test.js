@@ -153,7 +153,7 @@ test("item 1 (room.ejs): the 📼 player's rules are .plexq's own (card, sheets)
   assert.doesNotMatch(room, /\.golive-card \.plexq/, "no rule scoped to the Go live card");
   assert.match(room, /\.plexq \.pq-ctl \.sact \{ min-width: 44px; min-height: 40px; justify-content: center; \}/);
   assert.match(room, /<div class="plexq" id="rmPlexQ" data-room="<%= room\.slug %>" hidden><\/div>/, "no aria-live (its clock redraws every second)");
-  assert.match(room, /pad-plexq\.js\?v=4/);   // (verify: v4 - focus kept across a redraw)
+  assert.match(room, /pad-plexq\.js\?v=5/);   // (verify: v4 - focus kept across a redraw)
   assert.match(read("public", "js", "pad-plexq.js"), /aria-label="' \+ esc\(_t\('js\.plexq\.controls_all', 'Controls for everyone watching'\)\)/);
   assert.match(read("public", "js", "pad-plexq.js"), /<p class="pq-msg muted" role="status" aria-live="polite">/, "an action's answer is still said");
 });

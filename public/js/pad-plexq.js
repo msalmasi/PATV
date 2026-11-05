@@ -171,4 +171,7 @@
   ticker = setInterval(function () { if (!document.hidden) drawTimes(); }, 1000);
   poll();
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+  // newstream 1.99akv: the pad's stage (room.ejs - its 10 s poll saw the set of live slots change: a 📼 play started or ended) asks now
+  // instead of waiting out the 30 s idle turn
+  window.PATVPlexQ = { poll: poll };
 })();
