@@ -69,7 +69,7 @@ test("defaults = what shipped; strict validation names each bad field; lenient c
     helper_headroom_ms: 120, helper_window_s: 60, inproc_prebuffer_ms: 140, inproc_splice_ms: 600, mixer_latency_s: 0.7, jitter_ms: 200,
     opus_kbps: 64, mp3_kbps: 64, levels: "on" });
   assert.deepEqual(AC.normalize({}).errors, {});
-  // micvad 1.99??: the mic-bar levels switch - on | off, default on; strict names a bad value, lenient falls back to on
+  // micvad 1.99akk: the mic-bar levels switch - on | off, default on; strict names a bad value, lenient falls back to on
   assert.equal(AC.normalize({ levels: "OFF " }).cfg.levels, "off");
   assert.deepEqual(Object.keys(AC.normalize({ levels: "loud" }).errors), ["levels"]);
   assert.equal(AC.normalize({ levels: 0 }, { lenient: true }).cfg.levels, "on");
@@ -155,7 +155,7 @@ test("Pepe: settings ride on the audio answer when his version is older; the sta
   assert.equal(row.stats, line); assert.equal(row.stats_at, 1700000000000);
   assert.equal(row.rtc.buffer_ms, 640); assert.equal(row.rtc.evil, undefined, "only known fields kept");
   const t3 = await post("/api/rooms/alpha/audio/rtc", {}, "u3");
-  // micvad 1.99??: ...and whether the page may read its own level for the mic bars (the levels setting)
+  // micvad 1.99akk: ...and whether the page may read its own level for the mic bars (the levels setting)
   assert.equal(t3.d.levels, true);
   assert.equal(AC.levelsOn(), true);
   await adminPost({ cfg: { levels: "off" } });

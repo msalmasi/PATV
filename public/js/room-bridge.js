@@ -90,7 +90,7 @@
     try { sessionStorage.setItem('patvRoomRtcFail', String(Date.now())); } catch (e) { /* private mode */ }
   }
 
-  // ── micvad 1.99??: real mic bars where the page can't measure the sound (owner 2026-11-05: "Real bars on iPhone too would be nice") ──
+  // ── micvad 1.99akk: real mic bars where the page can't measure the sound (owner 2026-11-05: "Real bars on iPhone too would be nice") ──
   // iOS plays the room through a plain element (no Web Audio - the session notes above), so it has no analyser. Two other sources:
   //   * the MP3 relay (MSE): the page asks for /p/:slug/audio?...&lv=1; the site (audiolv.js, its `levels` setting on) answers with
   //     framed records - [u8 type][u24 BE length][payload]: 1 = the MP3 bytes, 2 = Pepe's levels for the record before it,
@@ -270,7 +270,7 @@
     // someone holds the mic (iOS, paused, no analyser - pad-dock.css). Toggled only when it changes (this runs every frame).
     var lvlOn = false;
     function lvl(on) { on = !!on; if (on === lvlOn) return; lvlOn = on; meter.classList.toggle('rb-lvl', on); }
-    // micvad 1.99??: where the level comes from right now - 'an' (an analyser), 'lv' (Pepe's levels, MP3), 'st' (⚡ getStats), ''
+    // micvad 1.99akk: where the level comes from right now - 'an' (an analyser), 'lv' (Pepe's levels, MP3), 'st' (⚡ getStats), ''
     var lvSrcNow = '', lvDrawn = null, auWait = false, rauWait = false, auSoundAt = 0, rauSoundAt = 0, stPoll = null, rtcLevels = false;
     function lvSrc(s) { if (s === lvSrcNow) return; lvSrcNow = s; meter.setAttribute('data-lv', s); }
     function lvClear() {
@@ -367,7 +367,7 @@
       try { URL.revokeObjectURL(m.url); } catch (e) { /* revoked */ }
     }
     function mseStart(url, lvReq) {
-      // micvad 1.99??: lvReq = asked for Pepe's levels (&lv=1); m.lv = undefined until the answer says (X-Audio-Frames: 1 -> a
+      // micvad 1.99akk: lvReq = asked for Pepe's levels (&lv=1); m.lv = undefined until the answer says (X-Audio-Frames: 1 -> a
       // session, else null: plain MP3 - an old site, the setting off)
       var m = mse = { ctl: window.AbortController ? new AbortController() : { abort: function () {}, signal: undefined }, q: [], sb: null,
         lvReq: !!lvReq, lv: lvReq ? undefined : null };
@@ -419,7 +419,7 @@
         src.connect(rtcAnalyser);
       } catch (e) { rtcAnalyser = null; }
     }
-    // micvad 1.99??: ⚡ without an analyser (iPhone) - the receiver's own audioLevel every 100 ms while the ticket says levels: true.
+    // micvad 1.99akk: ⚡ without an analyser (iPhone) - the receiver's own audioLevel every 100 ms while the ticket says levels: true.
     // No numeric level (or totalSamplesDuration stuck) 3 polls running: given up for this session (1.99akf's bars).
     function stStop() { var P = stPoll; stPoll = null; if (P) clearInterval(P.timer); }
     function stStart() {
@@ -490,7 +490,7 @@
         .then(function (j) {
           if (gen !== startGen || !playing) throw 'stale';
           if (!j || !j.ok || !j.whep) throw (j && j.fallback) || 'error';
-          rtcLevels = j.levels === true;                // micvad 1.99??: the site's levels setting
+          rtcLevels = j.levels === true;                // micvad 1.99akk: the site's levels setting
           if (!quiet) setState(j.ready ? _t('js.pad.audio.connecting_rtc', 'connecting ⚡…') : _t('js.pad.audio.starting_rtc', 'starting ⚡…'), 'wait');
           var jit = Number(j.jitter_ms);
           return window.PATVRtc.listen(j.whep, rau, { timeout: RTC_TIMEOUT_MS, jitterMs: isFinite(jit) && jit >= 0 && jit <= 4000 ? jit : RTC_JITTER_MS });
@@ -555,7 +555,7 @@
       rtcClose(); setMode('mp3');
       au.preload = 'auto';
       wireMeter();
-      // micvad 1.99??: no analyser here (iPhone; a context Safari won't run) -> ask for Pepe's levels in the stream (MSE only: a plain
+      // micvad 1.99akk: no analyser here (iPhone; a context Safari won't run) -> ask for Pepe's levels in the stream (MSE only: a plain
       // src can't read records; never under reduced motion - the still eq shape stays)
       var lvReq = useMse && !analyser && !reduce;
       var url = '/p/' + encodeURIComponent(cur) + '/audio?t=' + Date.now() + (lvReq ? '&lv=1' : '');
@@ -587,7 +587,7 @@
       playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
       // (dock3 1.99akf: the last frame's inline heights go too - an inline height beats the Dock's animated bars, which run while paused)
       bars.forEach(function (b) { b.style.height = ''; }); lvl(false);
-      lvDrawn = null; lvSrc(''); auWait = false; rauWait = false;     // (micvad 1.99??: the levels go with the fetch / the ⚡ session)
+      lvDrawn = null; lvSrc(''); auWait = false; rauWait = false;     // (micvad 1.99akk: the levels go with the fetch / the ⚡ session)
       mp3Sound = false; rtcSound = false; unstall('mp3'); unstall('rtc'); syncAudio();
       startGen++; rtcClose(); setMode(null);
       mseStop();
@@ -1382,6 +1382,6 @@
   }
 
   window.PATVRoom = { audio: audio, relay: relay, ptt: ptt, clipStatus: clipStatus, _ios: IOS,
-    // micvad 1.99??: the pure pieces of the level path, for the tests (test/micvad-player.test.js, micvad-contract.test.js)
+    // micvad 1.99akk: the pure pieces of the level path, for the tests (test/micvad-player.test.js, micvad-contract.test.js)
     _lv: { header: lvHeader, session: lvSession, walk: lvWalk, feed: lvFeed, digitAt: lvAt, fromPeak: lvFromPeak, heights: lvHeights } };
 })();

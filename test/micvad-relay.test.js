@@ -1,4 +1,4 @@
-// micvad 1.99?? (audiolv.js + bridge.js): Pepe's room loudness rides INSIDE the viewer's own MP3 relay response - framed records
+// micvad 1.99akk (audiolv.js + bridge.js): Pepe's room loudness rides INSIDE the viewer's own MP3 relay response - framed records
 // (?lv=1, the room-audio setting `levels` on) - for the mic bars where the page can't measure the sound (iPhone).
 //   * a raw listener (no ?lv=1) and a mic-stage capture (audioTap) get exactly the bytes they always did
 //   * ?lv=1 + on: X-Audio-Frames: 1, octet-stream; [type 1 = the MP3][type 2 = {h, a, d}] per post, in order; the prime is cut at

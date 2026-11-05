@@ -143,7 +143,7 @@ function ticket(user, R, t = now()) {
   // 1.99yd: the player's jitter buffer target comes from the room-audio settings (/admin/pepe/audio)
   let jitter = 200;
   try { jitter = require("./roomaudiocfg").jitterMs(); } catch (e) { jitter = 200; }
-  // micvad 1.99??: levels = the page may read its own received audio level (getStats) for the mic bars where it has no analyser (iPhone)
+  // micvad 1.99akk: levels = the page may read its own received audio level (getStats) for the mic bars where it has no analyser (iPhone)
   let levels = false;
   try { levels = require("./roomaudiocfg").levelsOn(); } catch (e) { levels = false; }
   return { ok: true, whep: url, ready: !!s.ready && t - s.seenAt <= SYNC_FRESH_MS, expires: t + TICKET_MS, jitter_ms: jitter, levels };

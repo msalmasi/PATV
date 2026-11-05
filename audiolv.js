@@ -1,4 +1,4 @@
-// audiolv.js — micvad 1.99??: the room's loudness for the pad page's mic bars where the page can't measure the sound itself
+// audiolv.js — micvad 1.99akk: the room's loudness for the pad page's mic bars where the page can't measure the sound itself
 // (owner 2026-11-05: "Real bars on iPhone too would be nice" - iOS has no Web Audio for the room player, room-bridge.js 1.99bk).
 //
 // Pepe (camfrog-bot pepe_audiolv.py) sends one coarse level per 100 ms on each room-audio post (/api/bridge/audio), pinned to

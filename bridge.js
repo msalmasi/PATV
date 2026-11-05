@@ -855,7 +855,7 @@ function audioTap(roomId, fn, viewer) {
   return untap;
 }
 /** Keep `buf` (arrived at `now`) as recent audio; drop what is older than AUDIO_PRIME_MS, always keeping the newest.
- *  micvad 1.99??: lv = its levels (audiolv.clean) for a framed listener's prime - in memory with the bytes, nowhere else. */
+ *  micvad 1.99akk: lv = its levels (audiolv.clean) for a framed listener's prime - in memory with the bytes, nowhere else. */
 function audioRemember(a, buf, now, lv) {
   a.at = now;
   a.recent.push({ buf, at: now, lv: lv || null });
@@ -2065,7 +2065,7 @@ function register(app, { isBotToken, addUser }) {
     const a = audioHub(R.id);
     const buf = typeof body.data === "string" && body.data ? Buffer.from(body.data, "base64") : null;
     if (buf && buf.length) {
-      // micvad 1.99??: the post's levels (Pepe's pepe_audiolv: one digit per 100 ms, pinned to its MP3 frames) - only while the
+      // micvad 1.99akk: the post's levels (Pepe's pepe_audiolv: one digit per 100 ms, pinned to its MP3 frames) - only while the
       // room-audio setting `levels` is on, only in their checked shape, only to framed listeners (audiolv.js). A raw listener and a
       // mic-stage capture (audioTap) get exactly the bytes they always did.
       let lv = null;
@@ -2114,7 +2114,7 @@ function register(app, { isBotToken, addUser }) {
     if (!R || !R.audio || !isLiveShown(R)) return res.status(404).send("This room's audio isn't on.");
     const a = audioHub(R.id);
     if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
-    // micvad 1.99??: ?lv=1 (the page's MSE player where it has no analyser - iPhone) + the `levels` setting on = the same stream as
+    // micvad 1.99akk: ?lv=1 (the page's MSE player where it has no analyser - iPhone) + the `levels` setting on = the same stream as
     // framed records with Pepe's levels beside the MP3 (audiolv.js); anything else = exactly the MP3 as before
     let framed = false;
     try { framed = req.query.lv === "1" && require("./roomaudiocfg").levelsOn(); } catch (e) { framed = false; }

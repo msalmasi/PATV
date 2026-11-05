@@ -6,7 +6,7 @@
 // The meter now comes and goes with ▶ / ❚❚, so the holder chips' flair fit runs again then (pad-dock.js decorateAudio).
 // Browser evidence (Chromium, Pixel 7 + iPhone CriOS UA, the dock fixture kit): paused + holder -> display none (and under reduced motion);
 // .on + holder -> shown, 5 running animations (no rb-lvl) / still under reduced motion; .on + nobody -> the real-level meter (Pixel), hidden (iPhone).
-// micvad 1.99??: an iPhone can have a real level now too (Pepe's levels on the MP3 relay, ⚡'s getStats - rb-lvl): playing, it draws the meter like
+// micvad 1.99akk: an iPhone can have a real level now too (Pepe's levels on the MP3 relay, ⚡'s getStats - rb-lvl): playing, it draws the meter like
 // desktop, holders or not; paused, still none (pausebars); without one, 1.99akf's bars as before.
 //   node --test test/dock3-pausebars.test.js
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path");
@@ -172,7 +172,7 @@ test("pausebars: the meter's cascade - paused: NO bars on any device, holders or
           const s = { playing: false, holders, ios, lvl };
           assert.equal(display(rules, where, s, env), "none", "paused: no bars - " + tag(s));
         }
-        // playing + someone on the mic: the bars (a real level - desktop / Android, micvad 1.99??: iOS too -, the animation without one, still
+        // playing + someone on the mic: the bars (a real level - desktop / Android, micvad 1.99akk: iOS too -, the animation without one, still
         // under reduced motion)
         for (const lvl of [false, true]) {
           const s = { playing: true, holders: true, ios, lvl };
@@ -181,7 +181,7 @@ test("pausebars: the meter's cascade - paused: NO bars on any device, holders or
         // playing + nobody: the real level as before (desktop / Android; room-bridge.css hides it under reduced motion), never on iOS (rb-nolvl)
         const s = { playing: true, holders: false, ios, lvl: !ios && !reduce };
         assert.equal(display(rules, where, s, env), ios || reduce ? "none" : "inline-flex", "playing + nobody: as in 1.99akf - " + tag(s));
-        // micvad 1.99??: an iPhone with a real level (never under reduced motion - the page doesn't ask for one then): like desktop
+        // micvad 1.99akk: an iPhone with a real level (never under reduced motion - the page doesn't ask for one then): like desktop
         if (ios && !reduce) {
           const r = { playing: true, holders: false, ios, lvl: true };
           assert.equal(display(rules, where, r, env), "inline-flex", "playing + nobody + iPhone with a real level: the meter - " + tag(r));

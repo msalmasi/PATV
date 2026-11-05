@@ -1,4 +1,4 @@
-// micvad 1.99?? cross-repo contract: Pepe's real MP3 + level posts (camfrog-bot ci/fixtures/micvad/posts.json - real lameenc,
+// micvad 1.99akk cross-repo contract: Pepe's real MP3 + level posts (camfrog-bot ci/fixtures/micvad/posts.json - real lameenc,
 // pepe_audiolv, Pepe's 0.25 s ticks and one retried post) through the site's audiolv.js (clean + the framed prime / broadcast)
 // and the page's own walker + ring (room-bridge.js PATVRoom._lv): every level must land where the listener HEARS that audio -
 // the burst truth + 1105/48000 s (LAME's + the decoder's delay) - within the bot test's budget (median |error| <= 60 ms,

@@ -1,4 +1,4 @@
-// micvad 1.99?? (public/js/room-bridge.js): real mic bars where the page has no analyser (iPhone) - in a small fake DOM.
+// micvad 1.99akk (public/js/room-bridge.js): real mic bars where the page has no analyser (iPhone) - in a small fake DOM.
 //   * MP3 relay: &lv=1 only on an MSE player without an analyser and without reduced motion (never desktop with one, never a
 //     plain src); the framed answer's records parsed across 1-byte reads, the MP3 appended byte-exact; the level read at
 //     <audio>.currentTime (9 -> bars up, rb-lvl; 0 -> flat bars, rb-lvl); stale past 1 s -> 1.99akf; a header that doesn't

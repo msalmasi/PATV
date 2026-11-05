@@ -32,7 +32,7 @@ test("iPhone (any iOS browser - CriOS too): the meter is marked rb-nolvl, never 
   }
 });
 
-test("micvad 1.99??: room-bridge.css hides an iOS meter only while it has no real level (rb-lvl: Pepe's levels / ⚡'s getStats)", () => {
+test("micvad 1.99akk: room-bridge.css hides an iOS meter only while it has no real level (rb-lvl: Pepe's levels / ⚡'s getStats)", () => {
   const css = fs.readFileSync(path.join(repo, "public/css/room-bridge.css"), "utf8");
   assert.match(css, /\n\.rb-meter\.rb-nolvl:not\(\.rb-lvl\) \{ display: none; \}/);
   assert.doesNotMatch(css, /\n\.rb-meter\.rb-nolvl \{/, "the 1.99akf rule is gone");
