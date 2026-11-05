@@ -1,5 +1,5 @@
 "use strict";
-// newstream 1.99akv (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it. Thats
+// newstream 1.99ala (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it. Thats
 // annoying."): the pads list (/p, views/rooms.ejs) had no script at all - a stream going live or ending, a booking, Pepe on air, a pad's room
 // going live never showed until a reload. padsonair.js answers GET /api/pads/onair with a short signature of what the cards show (one shared
 // snapshot every 10 s for the whole site); the page asks every 30 s while visible and swaps its sections only when it moved.
@@ -47,10 +47,11 @@ test("1: the signature moves with what a stage shows - a slot live / ended / fea
 
 test("2: one shared snapshot (10 s) for every viewer - the guide and the bridge are read once per window, then the new stream shows", async () => {
   const PO = require(path.join(repo, "padsonair"));
-  const MS = require(path.join(repo, "mainstage")), B = require(path.join(repo, "bridge")), PA = require(path.join(repo, "padaccess"));
-  const keep = { guide: MS.guide, summary: B.summary, stage: B.stage, pepeIn: B.pepeIn, init: PA.init, canSee: PA.canSee, camVisible: PA.camVisible };
+  const MS = require(path.join(repo, "mainstage")), B = require(path.join(repo, "bridge")), PA = require(path.join(repo, "padaccess")), R = require(path.join(repo, "rooms"));
+  const keep = { guide: MS.guide, summary: B.summary, stage: B.stage, pepeIn: B.pepeIn, init: PA.init, canSee: PA.canSee, camVisible: PA.camVisible, list: R.list, isListed: R.isListed };
   let T = 1e12, guides = 0, now = [];
   PO._setClock(() => T); PO._reset();
+  R.list = async () => [{ id: "Pad.A" }]; R.isListed = () => true;
   MS.guide = async () => { guides++; return new Map([["Pad.A", { now: now.slice(), next: [] }]]); };
   B.summary = async () => [{ id: "Pad.A", live: true }, { id: "Pad.B", live: false }];
   B.stage = () => ({ active: false }); B.pepeIn = () => false;
@@ -73,7 +74,38 @@ test("2: one shared snapshot (10 s) for every viewer - the guide and the bridge 
     assert.ok(b);
   } finally {
     Object.assign(MS, { guide: keep.guide }); Object.assign(B, { summary: keep.summary, stage: keep.stage, pepeIn: keep.pepeIn });
-    Object.assign(PA, { init: keep.init, canSee: keep.canSee, camVisible: keep.camVisible }); PO._setClock(null); PO._reset();
+    Object.assign(PA, { init: keep.init, canSee: keep.canSee, camVisible: keep.camVisible }); Object.assign(R, { list: keep.list, isListed: keep.isListed });
+    PO._setClock(null); PO._reset();
+  }
+});
+
+test("2b: only what /p shows moves the signature - an unlisted pad (a hub staff / canary pad) or a pad the viewer can't see never does (review L1)", async () => {
+  const PO = require(path.join(repo, "padsonair"));
+  const MS = require(path.join(repo, "mainstage")), B = require(path.join(repo, "bridge")), PA = require(path.join(repo, "padaccess")), R = require(path.join(repo, "rooms"));
+  const keep = { guide: MS.guide, summary: B.summary, stage: B.stage, pepeIn: B.pepeIn, init: PA.init, canSee: PA.canSee, camVisible: PA.camVisible, list: R.list, isListed: R.isListed };
+  let T = 2e12;
+  const now = { "Pad.A": [], "Pad.B": [], "Pad.U": [], "Pad.Bridged": [] };
+  PO._setClock(() => T); PO._reset();
+  // the registry's listed pads (Pad.U is unlisted, so rooms.list leaves it out); Pad.Bridged is a bridged room the registry doesn't know (listed)
+  R.list = async () => [{ id: "Pad.A" }, { id: "Pad.B" }];
+  R.isListed = (id) => id !== "Pad.U";
+  MS.guide = async () => new Map(Object.keys(now).map((id) => [id, { now: now[id].slice(), next: [] }]));
+  B.summary = async () => [{ id: "Pad.U", live: true }, { id: "Pad.Bridged", live: true }];
+  B.stage = () => ({ active: false }); B.pepeIn = () => false;
+  PA.init = async () => {}; PA.canSee = (v, id) => id !== "Pad.B"; PA.camVisible = () => true;
+  const step = async (fn) => { fn(); T += PO.SNAP_MS; return PO.sigFor(null); };
+  try {
+    const s0 = await PO.sigFor(null);
+    assert.equal(await step(() => { now["Pad.U"] = [slot("u1")]; }), s0, "a stream on an unlisted pad: /p never shows it - no refetch");
+    assert.equal(await step(() => { B.summary = async () => [{ id: "Pad.U", live: false }, { id: "Pad.Bridged", live: true }]; }), s0, "nor its room");
+    assert.equal(await step(() => { now["Pad.B"] = [slot("b1")]; }), s0, "a pad this viewer can't see");
+    const s1 = await step(() => { now["Pad.Bridged"] = [slot("x1")]; });
+    assert.notEqual(s1, s0, "a listed bridged room counts");
+    assert.notEqual(await step(() => { now["Pad.A"] = [slot("a1")]; }), s1, "a listed pad counts");
+  } finally {
+    Object.assign(MS, { guide: keep.guide }); Object.assign(B, { summary: keep.summary, stage: keep.stage, pepeIn: keep.pepeIn });
+    Object.assign(PA, { init: keep.init, canSee: keep.canSee, camVisible: keep.camVisible }); Object.assign(R, { list: keep.list, isListed: keep.isListed });
+    PO._setClock(null); PO._reset();
   }
 });
 
@@ -134,4 +166,46 @@ test("3b: the script - asks every 30 s and on coming back, never while hidden; s
   assert.equal(ctx.chipfit, 1, "the badges re-fitted");
   timer(); await settle();
   assert.equal(pageFetches, 1, "the new signature is the page's now");
+});
+
+test("3c: a swap keeps the viewer's place - the first link in view stays where it was (whole sections replaced: the browser's own scroll anchoring can't) (review F6)", async () => {
+  const html = await renderPads({ onairSig: "sigONE" });
+  const at = html.indexOf("fetch('/api/pads/onair'");
+  const js = html.slice(html.lastIndexOf("<script>", at) + 8, html.indexOf("</script>", at));
+  const IDS = ["following", "padsPepe", "trending", "padsAll", "padsSched"];
+  // a section: its box and its links ({href, top}) - top/bottom relative to the viewport, as getBoundingClientRect
+  const sec = (id, top, bottom, links) => ({ id, parentNode: null, contains: () => false, getBoundingClientRect: () => ({ top, bottom, height: bottom - top }),
+    querySelectorAll: (q) => (q === "a[href]" ? links.map(([h, t]) => ({ getAttribute: (k) => (k === "href" ? h : null), getBoundingClientRect: () => ({ top: t, bottom: t + 40, height: 40 }) })) : []) });
+  async function run({ scrollY, before, after }) {
+    const page = {}, scrolled = [];
+    const parent = { replaceChild(neu, old) { page[old.id] = neu; neu.parentNode = parent; } };
+    for (const id of IDS) { page[id] = before[id] || sec(id, -2000, -1900, []); page[id].parentNode = parent; }
+    let timer = null;
+    const ctx = { console, innerHeight: 800, scrollY, scrollBy: (x, y) => scrolled.push([x, y]),
+      document: { hidden: false, body: {}, activeElement: null, querySelector: (s) => (s === "main.cg" ? { getAttribute: () => "sigONE" } : null),
+        getElementById: (id) => page[id] || null, importNode: (n) => n, querySelectorAll: () => [], addEventListener() {} },
+      location: { pathname: "/p", search: "" },
+      DOMParser: function () { this.parseFromString = () => ({ querySelector: (s) => (s === "main.cg" ? { getAttribute: () => "sigTWO" } : null),
+        getElementById: (id) => after[id] || sec(id, -2000, -1900, []) }); },
+      setInterval: (f) => { timer = f; return 1; },
+      fetch: (url) => (url === "/api/pads/onair" ? Promise.resolve({ json: () => Promise.resolve({ ok: true, sig: "sigTWO" }) })
+        : Promise.resolve({ ok: true, text: () => Promise.resolve("<html>") })) };
+    ctx.window = ctx;
+    vm.runInNewContext(js, ctx);
+    timer(); await new Promise((r) => setTimeout(r, 5));
+    return scrolled;
+  }
+  // the viewer reads the schedule; a card above it grew (a stream went live: its Now row) - 51 px
+  const before = { padsAll: sec("padsAll", -400, 80, [["/p/a", -300], ["/p/z", 20]]), padsSched: sec("padsSched", 80, 600, [["/stage", 120]]) };
+  const after = { padsAll: sec("padsAll", -400, 131, [["/p/new", -350], ["/p/a", -249], ["/p/z", 71]]), padsSched: sec("padsSched", 131, 651, [["/stage", 171]]) };
+  assert.deepEqual(await run({ scrollY: 900, before, after }), [[0, 51]], "the link that was first in view is back where it was");
+  // the cards re-sort (live pads first): the card the viewer was on stays under them
+  const resort = { padsAll: sec("padsAll", -400, 80, [["/p/z", -300], ["/p/new", -200], ["/p/a", 30]]), padsSched: sec("padsSched", 80, 600, [["/stage", 120]]) };
+  assert.deepEqual(await run({ scrollY: 900, before, after: resort }), [[0, -320]]);
+  // that card is gone: the section it was in holds still instead
+  const gone = { padsAll: sec("padsAll", -460, 20, [["/p/a", -360]]), padsSched: sec("padsSched", 20, 540, [["/stage", 60]]) };
+  assert.deepEqual(await run({ scrollY: 900, before, after: gone }), [[0, -60]]);
+  // at the top of the page nothing is scrolled (the list grows below the fold as before); nothing moved: nothing either
+  assert.deepEqual(await run({ scrollY: 0, before, after }), []);
+  assert.deepEqual(await run({ scrollY: 900, before, after: before }), []);
 });

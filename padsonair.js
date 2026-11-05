@@ -1,10 +1,10 @@
-// padsonair.js - newstream 1.99akv (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to
+// padsonair.js - newstream 1.99ala (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to
 // see it. Thats annoying."): the pads list (/p, views/rooms.ejs) was rendered once - a stream that went live, ended or was booked, Pepe coming
 // on air, a pad's room going live never showed until a reload. The page now asks GET /api/pads/onair every 30 s while it is visible (and at
 // once when it comes back) for a short signature of what its cards show that moves with a stage; only when the signature changes does it
 // fetch itself again and swap its sections (rooms.ejs).
 //
-// The signature covers, per pad this viewer may see: its live slots (id, live, featured, title, mode), its next bookings (the cards list four),
+// The signature covers, per pad /p lists (review L1) that this viewer may see: its live slots (id, live, featured, title, mode), its next bookings (the cards list four),
 // whether its Camfrog room is live and Pepe is in it - plus Pepe on air. Never headcounts (they move all the time; a swap brings them along).
 // One cached snapshot (SNAP_MS) serves every viewer: mainstage.guide() (two reads), bridge.summary(false) and Pepe's state - the same calls
 // the /p page makes, once per SNAP_MS for the whole site instead of once per viewer per poll. The /p page renders its first signature from the
@@ -26,11 +26,14 @@ function sigOf(rows, pepe) {
 }
 
 async function load() {
-  const MS = require("./mainstage"), B = require("./bridge");
-  const [g, sum] = await Promise.all([MS.guide(), B.summary(false)]);
+  const MS = require("./mainstage"), B = require("./bridge"), R = require("./rooms");
+  const [g, sum, reg] = await Promise.all([MS.guide(), B.summary(false), R.list()]);
   const live = new Map();
   for (const r of sum || []) if (r && r.id) live.set(r.id, !!r.live);
-  const ids = new Set([...g.keys(), ...live.keys()]);
+  // (review L1: the pads /p lists - roomsweb.guideRows: the registry's listed pads + a bridged room whose pad is listed; a stream on an
+  // unlisted pad (the hub's staff / canary pads) or a profile never refetches the page)
+  const ids = new Set((reg || []).map((r) => r && r.id).filter(Boolean));
+  for (const id of live.keys()) if (R.isListed(id)) ids.add(id);
   const st = B.stage ? B.stage() : null;
   const rows = [...ids].map((id) => {
     const x = g.get(id) || { now: [], next: [] };

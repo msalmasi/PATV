@@ -254,7 +254,7 @@
 </main>
 <% if (typeof onairSig !== 'undefined' && onairSig) { %>
 <script>
-  // newstream 1.99akv (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it"): this
+  // newstream 1.99ala (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it"): this
   // list follows the stages. Every 30 s while the tab is visible (and at once when it comes back) it asks /api/pads/onair for the list's
   // signature (padsonair.js: live slots, next bookings, rooms live, Pepe on air); only when that moved does it fetch this page again and swap
   // its sections - Following, the Pepe bar, Trending, the pads, the schedule - keeping the focused link. Nothing else polls.
@@ -268,14 +268,41 @@
       for (var i = 0; i < all.length; i++) if (all[i].getAttribute('href') === href) return all[i];
       return null;
     }
+    // (review F6: whole sections are replaced, so the browser's own scroll anchoring can't hold the viewer's place - a card that grew above them
+    // pushed what they read down, and the cards re-sort live first. The first link in view (else the first section that starts in view) is
+    // measured before and after and the page scrolled by the difference; at the top of the page nothing is scrolled)
+    function links(sec) { return sec && sec.querySelectorAll ? sec.querySelectorAll('a[href]') : []; }
+    function place() {
+      var vh = window.innerHeight || 0;
+      for (var i = 0; i < IDS.length; i++) {
+        var sec = document.getElementById(IDS[i]); if (!sec) continue;
+        var r = sec.getBoundingClientRect(); if (r.bottom <= 0) continue; if (r.top >= vh) break;
+        var ls = links(sec), seen = {};
+        for (var j = 0; j < ls.length; j++) {
+          var h = ls[j].getAttribute('href'), n = seen[h] = (seen[h] || 0) + 1, t = ls[j].getBoundingClientRect().top;
+          if (t >= 0 && t < vh) return { id: IDS[i], href: h, n: n, top: t, secTop: r.top };
+        }
+        if (r.top >= 0) return { id: IDS[i], href: null, top: r.top, secTop: r.top };
+      }
+      return null;
+    }
+    function hold(k) {
+      var sec = k && document.getElementById(k.id); if (!sec) return;
+      var now = null;
+      if (k.href) { var ls = links(sec), n = 0; for (var j = 0; j < ls.length && now == null; j++) if (ls[j].getAttribute('href') === k.href && ++n === k.n) now = ls[j].getBoundingClientRect().top - k.top; }
+      if (now == null) now = sec.getBoundingClientRect().top - k.secTop;       // (that card is gone: its section holds still)
+      if (Math.abs(now) >= 1 && window.scrollBy) window.scrollBy(0, now);
+    }
     function swap(doc) {
-      var act = document.activeElement, keep = null;
+      var act = document.activeElement, keep = null, k = null;
+      try { k = (window.scrollY || window.pageYOffset || 0) > 0 ? place() : null; } catch (e) { k = null; }
       IDS.forEach(function (id) {
         var old = document.getElementById(id), neu = doc.getElementById(id);
         if (!old || !neu) return;
         if (act && act !== document.body && old.contains(act) && act.getAttribute) keep = act.getAttribute('href');
         old.parentNode.replaceChild(document.importNode(neu, true), old);
       });
+      try { if (k) hold(k); } catch (e) { /* an old engine: as it lands */ }
       var back = keep ? linkTo(keep) : null;
       if (back) { try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); } }
       if (window.PATVChipFit && typeof window.PATVChipFit.run === 'function') window.PATVChipFit.run();
