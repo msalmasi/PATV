@@ -127,6 +127,8 @@ function init() {
       if (!cols.has("takeover")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN takeover TEXT");
       // 1.99lw: the pad's longest stage slot in minutes (mainstage.maxMinutesFor): NULL = the site's max_minutes
       if (!cols.has("slot_max_min")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN slot_max_min INTEGER");
+      // upnext2: the pad's 📼 station break in seconds (medialib.breakSec): NULL = the site's library_break_sec, else 0 (off) | 5 | 8 | 15
+      if (!cols.has("upnext_break")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN upnext_break INTEGER");
       // S1 Q4 (ADR 0007 D1): 0 = unlisted - every listing path leaves the pad out (list / listCached, Top Pads, the front pick);
       // its address still works (and its own access level still decides who sees it)
       if (!cols.has("listed")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN listed INTEGER NOT NULL DEFAULT 1");
@@ -334,9 +336,13 @@ function view(r) {
     adult: !!r.adult,                                                  // 1.99kz: 18+ pad
     takeover: r.takeover === "off" || r.takeover === "when_idle" ? r.takeover : null,   // 1.99lm: null = the site's takeover_mode
     slot_max_min: Number(r.slot_max_min) > 0 ? Number(r.slot_max_min) : null,           // 1.99lw: null = the site's max_minutes
+    upnext_break: breakOf(r.upnext_break),                             // upnext2: null = the site's 📼 station break, else 0 | 5 | 8 | 15 s
     listed: rowListed(r),                                              // S1 Q4: false = unlisted (reached by its address only)
   };
 }
+/** upnext2: a pad's 📼 station break setting -> 0 | 5 | 8 | 15 (seconds) | null (the site's library_break_sec) */
+const UPNEXT_BREAKS = [0, 5, 8, 15];
+function breakOf(v) { if (v == null || v === "") return null; const n = Number(v); return UPNEXT_BREAKS.includes(n) ? n : null; }
 /** S1 Q4: a registry row is listed unless it says listed = 0 (profile pads are never listed either - they have their own rule). */
 const rowListed = (r) => !!r && Number(r.listed) !== 0 && cleanPlatform(r.platform, r.room_id) !== "profile";
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
@@ -621,9 +627,15 @@ async function setStage(roomId, patch, actor, caps = {}) {
     const v = patch.slot_max_min;
     maxMin = v == null || v === "" || Number(v) <= 0 ? null : int(v, 5, Math.max(5, Number(caps.maxMinutes) || 360), null);
   }
-  await runQuery("UPDATE rooms_registry SET slot_count = ?, approval = ?, slot_price = ?, takeover = ?, slot_max_min = ?, updated = ? WHERE room_id = ?",
-                 [slots, approval ? 1 : 0, price, takeover, maxMin, Date.now(), roomId]);
-  await event(roomId, "stage", actor, `slots=${slots} approval=${approval ? 1 : 0} price=${price} takeover=${takeover || "site"} max=${maxMin || "site"}`);
+  // upnext2: the 📼 station break - "" / "site" = the site's, else 0 (off) | 5 | 8 | 15 seconds (anything else keeps what it was)
+  let brk = r.upnext_break;
+  if (patch.upnext_break !== undefined) {
+    const v = patch.upnext_break;
+    brk = v == null || v === "" || v === "site" ? null : breakOf(v) != null ? breakOf(v) : r.upnext_break;
+  }
+  await runQuery("UPDATE rooms_registry SET slot_count = ?, approval = ?, slot_price = ?, takeover = ?, slot_max_min = ?, upnext_break = ?, updated = ? WHERE room_id = ?",
+                 [slots, approval ? 1 : 0, price, takeover, maxMin, brk, Date.now(), roomId]);
+  await event(roomId, "stage", actor, `slots=${slots} approval=${approval ? 1 : 0} price=${price} takeover=${takeover || "site"} max=${maxMin || "site"} break=${brk == null ? "site" : brk}`);
   await loadCache();
   return get(roomId);
 }

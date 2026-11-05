@@ -64,6 +64,8 @@ async function hubData(R, viewer, app) {
     staff: SP.can(viewer, "pads.manage_any"), admin: SP.can(viewer, "media.library_free"),   // the 📼 Play from library card
     // stage + page + royalties (was /manage)
     st: await stage.ownerState(R.id), C: stage.config(), roy: R.owner ? await royalties.status(R.id, R.owner.userId) : null,
+    // upnext2: the site's 📼 station break (/admin/media) - the stage form's "Site setting (…)" choice says what it is
+    libBreak: (() => { const S = require("./mediaconf").get(); return { on: S.library_break !== false, sec: Number(S.library_break_sec) || 0 }; })(),
     golive: R.profile ? null : await require("./golive").padAnnounce(R.id),      // 1.99kp: 🎥 announce stream starts in the pad
     // micfollow: 🎙 Mic follows (Camfrog pads) - its switch, layout, exclusions and whether it can run (micfollow.js)
     // (wave2 integration review P2 / P3: a veiled exclusion's xid - its lift handle - only for a viewer who may lift it, never Staff)

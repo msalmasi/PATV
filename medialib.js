@@ -153,6 +153,8 @@ function init() {
         by_user TEXT, started INTEGER NOT NULL, updated INTEGER NOT NULL, position INTEGER, duration INTEGER)`);
       // 1.99lr: a queue's session: its queue, whether this title got going (its charge is routed, not refunded), where it started
       for (const def of ["queue_id INTEGER", "live INTEGER NOT NULL DEFAULT 0", "ep_offset INTEGER"]) await addCol("media_sessions", def);
+      // upnext2: a single play in its station break (state 'break' until brk_until: the encoder starts then - medialib.fireBreak)
+      await addCol("media_sessions", "brk_until INTEGER");
       await runQuery(`CREATE TABLE IF NOT EXISTS media_queues (
         id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT NOT NULL, user_id TEXT, username TEXT, access TEXT, state TEXT NOT NULL,
         items TEXT NOT NULL, pos INTEGER NOT NULL DEFAULT 0, prefs TEXT, scope TEXT,
@@ -160,6 +162,8 @@ function init() {
         slot_id TEXT, created INTEGER NOT NULL, updated INTEGER NOT NULL, ended_at INTEGER, end_reason TEXT, notice TEXT,
         last_announce INTEGER, fails INTEGER NOT NULL DEFAULT 0, retry_since INTEGER, restarts INTEGER NOT NULL DEFAULT 0)`);
       await runQuery("CREATE INDEX IF NOT EXISTS media_queues_room ON media_queues (room_id, state)");
+      // upnext2: a queue's title in its station break - {until, pos, offset, tracks} (mediaqueue.beginBreak / breakDue)
+      await addCol("media_queues", "brk TEXT");
       await runQuery("CREATE INDEX IF NOT EXISTS media_queues_user ON media_queues (user_id, created)");
       // 1.99lw: who pressed what on the 📼 controls (pause / seek / next / stop ...), shown in the panel to whoever may control it
       await runQuery(`CREATE TABLE IF NOT EXISTS media_controls (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, room_id TEXT NOT NULL,
@@ -181,6 +185,91 @@ const fmtPat = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 // URL or a token: the poster is a yes / no, fetched by the page through /api/medialib/poster/<key> (signed in) like the 📼 search's
 const upNextInfo = (it) => ({ key: it && it.key != null ? String(it.key) : null, kind: it && it.type === "episode" ? "episode" : "movie", title: it ? it.title : null,
                               year: it ? it.year : null, show: it ? it.show : null, season: it ? it.season : null, episode: it ? it.episode : null, poster: !!(it && it.poster) });
+
+// ── upnext2: the 📼 STATION BREAK (owner 2026-11-05: "when does the 'next up' card actually show? ... maybe items are just loading too fast?") ──
+// The "Coming up next" card lived only from the up-next marker to the new stream's publish (goLive clears it) - 0.3-1.0 s on prod, against
+// a 10 s page poll and a 4-10 s viewer delay: almost nobody ever saw it. Now every title change on a pad's stage - a fresh ▶ Play, ▶ Play this
+// instead, a queue moving on, ⏭ / ⏮, a booked start - sets the marker FIRST and holds the next title's encoder for breakSec() seconds: the
+// card is the pad's featured stage for that long (mainstage autoFeature: pending), then the encoder starts and the card hands over.
+//   * single play: its session is state 'break' until brk_until (the play / its held charge exist from the press - one charge, refunded if
+//     it never gets on, routed once it does - settle()); fireBreak() starts it under the pad's lock;
+//   * a queue: no session in the break (as between two titles before), media_queues.brk = {until, pos, offset, tracks}; the queue's own
+//     startTitle() runs when it's due (mediaqueue.breakDue) - its per-hour charge is taken then, never during the break.
+// Race-safe: everything that changes the pad (⏹, ▶ Play this instead, ⏭ / ⏮, a seek, a Cut) works on the break like on a title that plays
+// and the newest wins - a break that was overtaken finds its session / queue changed and does nothing; the start runs under the pad's lock
+// (mediaqueue's) so it never meets a control half-way; never two encoders (the old one stops when the break begins). A timer fires the
+// start on time; the watcher (every WATCH_MS) starts any break that is due - a server restart during a break still starts the title.
+// Encoders: a single play in its break holds one (busyOf), like a queue between titles. No watch-minutes: the card is never captured.
+const BREAK_SECS = [0, 5, 8, 15];
+const bnow = () => require("./mediaqueue")._now();       // (the queue's clock - tests move it)
+/** The station break on this pad, in seconds (0 = none): the pad's own setting (rooms.upnext_break), else the site's (library_break_sec);
+ *  the site's switch (library_break) off = none anywhere. */
+async function breakSec(roomId) {
+  const S = conf.get();
+  if (S.library_break === false) return 0;
+  let own = null;
+  try { const R = await rooms.get(String(roomId || "")); if (R && R.upnext_break != null) own = Number(R.upnext_break); } catch (e) { own = null; }
+  const n = own != null ? own : Number(S.library_break_sec);
+  return BREAK_SECS.includes(n) ? n : 8;
+}
+const brkTimers = new Map();      // room id -> the timer that starts its break's title on time (memory only; the watcher is the fallback)
+let brkTimersOn = false;
+function armBreak(roomId, until) {
+  if (!brkTimersOn) return;
+  const id = String(roomId);
+  clearTimeout(brkTimers.get(id));
+  const h = setTimeout(() => { if (brkTimers.get(id) === h) brkTimers.delete(id); breakDue(id).catch((e) => console.error("[medialib] break:", conf.errLine(e))); },
+                       Math.max(0, Number(until) - bnow()) + 30);
+  if (h.unref) h.unref();
+  brkTimers.set(id, h);
+}
+/** A break on this pad may be due: its title starts now (a single play's or a queue's). -> started / ended something? */
+async function breakDue(roomId) {
+  await init();
+  const s = await session(roomId);
+  if (s && s.state === "break") return require("./mediaqueue")._lock(String(roomId), () => fireBreak(String(roomId), s.play_id));
+  return require("./mediaqueue").breakDue(roomId);
+}
+const BREAK_RETRY_MS = 5000, BREAK_GIVEUP_MS = 90 * 1000;
+/** (inside the pad's lock) A single play's break is over: its encoder starts. Only the play this was for, still in its break: a control that
+ *  moved the pad on meanwhile (⏹, a replace, a Cut) wins and nothing starts. No free encoder / media-control unreachable: tried again every
+ *  BREAK_RETRY_MS for BREAK_GIVEUP_MS; anything else (or giving up) ends the slot and refunds a held charge (dropSession -> settle). */
+async function fireBreak(roomId, playId) {
+  const s = await session(roomId);
+  if (!s || s.state !== "break" || Number(s.play_id) !== Number(playId)) return false;
+  const t = bnow();
+  if (Number(s.brk_until) > t + 50) { armBreak(roomId, Number(s.brk_until)); return false; }
+  const slot = await stage.getSlot(s.slot_id);
+  if (!slot || slot.settled || !["waiting", "active"].includes(slot.status)) {
+    await dropSession(s, "slot " + ((slot && slot.end_reason) || "ended"), s.position);
+    return true;
+  }
+  const p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [s.play_id]))[0] || {};
+  let key = keys.get(String(roomId));
+  if (!key) { key = await stage.libraryRekey(s.slot_id); if (key) keys.set(String(roomId), key); }   // (the site restarted during the break)
+  try {
+    if (!key) throw new Refuse(409, "The slot has ended.");
+    await must("PUT", `/streams/${encodeURIComponent(stageName(roomId))}`, { rtmp: stage.RTMP_PUBLIC, key, ratingKey: String(s.rating_key),
+      offset: Math.max(0, Number(s.position) || 0), quality: p.quality || conf.get().library_quality,
+      audio: p.audio == null ? null : p.audio, sub: p.sub == null ? null : p.sub, title: s.title });
+  } catch (e) {
+    if (e && [429, 502, 503].includes(e.status) && t - Number(s.started) < BREAK_GIVEUP_MS) {
+      const again = t + BREAK_RETRY_MS;
+      await runQuery("UPDATE media_sessions SET brk_until = ? WHERE room_id = ? AND play_id = ? AND state = 'break'", [again, roomId, s.play_id]);
+      console.warn(`[medialib] ${roomId}: "${s.title}" waits for an encoder after its station break (${conf.errLine(e)})`);
+      armBreak(roomId, again);
+      return false;
+    }
+    console.warn(`[medialib] ${roomId}: "${s.title}" didn't start after its station break: ${conf.errLine(e)}`);
+    await stage.end(s.slot_id, "library_failed", "system").catch(() => {});
+    await dropSession(s, "didn't start", s.position, conf.errLine(e));
+    return true;
+  }
+  await runQuery("UPDATE media_sessions SET state = 'playing', brk_until = NULL, updated = ? WHERE room_id = ? AND play_id = ? AND state = 'break'",
+                 [Date.now(), roomId, s.play_id]);
+  console.log(`[medialib] ${roomId}: "${s.title}" starts after its station break - play #${s.play_id}`);
+  return true;
+}
 
 // ── who may play (1.99jn) ──
 async function safeQuery(sql, args) { try { return await getQuery(sql, args); } catch (e) { return []; } }
@@ -383,6 +472,8 @@ async function poster(user, key) {
 // opts.replace: the feature and the "Coming up next" card carry straight over), THEN its encoder stops and its play / queue closes (retire),
 // then the new title's encoder starts (media-control takes one stream per stage: the old one has to be off first). x.swap = a slot id to take
 // over the same way without anything to retire (restart: a resume on a fresh slot after media-control forgot the stream).
+// upnext2: x.brk = the station break in seconds - the slot opens and the marker is set now, the encoder starts when the break is over
+// (fireBreak; the play's session is 'break' until then) -> + until
 async function startOn(user, R, it, o, x = {}) {
   const left = Math.max(60, (it.duration || 0) - o.offset);
   const title = "📼 " + fmtTitle(it);
@@ -394,6 +485,10 @@ async function startOn(user, R, it, o, x = {}) {
   // encoder probes the file and starts ffmpeg first: 1-6 s, more after a ⏹ of a title still shutting down). (plexreplace: a swap has its
   // marker from the open itself)
   if (!swapId) await stage.libraryUpNext(opened.slot.id, upNextInfo(it)).catch((e) => console.error("[medialib] up next:", e.message));
+  if (x.brk > 0) {                                                       // upnext2: the station break - the encoder starts at `until`
+    keys.set(R.id, opened.key);
+    return { slot: opened.slot, replaced: opened.replaced || null, until: bnow() + x.brk * 1000 };
+  }
   const body = { rtmp: stage.RTMP_PUBLIC, key: opened.key, ratingKey: String(it.key), offset: o.offset, quality: o.quality,
                  audio: o.audio, sub: o.sub, title: fmtTitle(it) };
   try {
@@ -467,8 +562,10 @@ async function retire(user, R, rep) {
   try {
     if (rep.q) { await require("./mediaqueue")._retire(rep.q, user); return; }
     let pos = null;
-    try { const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/stop`, {}); pos = r.stream && r.stream.position; }
-    catch (e) { console.warn("[medialib] replace: media-control stop:", conf.errLine(e)); }
+    if (!(rep.s && rep.s.state === "break")) {                          // (upnext2: one in its station break has no encoder yet)
+      try { const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/stop`, {}); pos = r.stream && r.stream.position; }
+      catch (e) { console.warn("[medialib] replace: media-control stop:", conf.errLine(e)); }
+    }
     await dropSession(rep.s, "replaced by " + user.username, pos != null ? pos : rep.s.position);
   } catch (e) { console.error("[medialib] replace: closing what was on:", conf.errLine(e)); }
 }
@@ -534,9 +631,11 @@ async function play(user, b = {}, how = {}) {
       title: `📼 Play from Plex: ${fmtTitle(it)} on ${R.title || R.id}`,
       note: `${q.hours} h × ${fmtPat(q.per_hour)} PAT - held until it's on the stage, refunded if it never gets there` });
   }
-  let slot, swapped = null;
+  let slot, swapped = null, until = null;
+  // upnext2: the station break - not for a resume on a fresh slot (the same title carrying on: no "coming up next")
+  const brk = carry ? 0 : await breakSec(R.id);
   try {
-    ({ slot, replaced: swapped } = await startOn(user, R, it, o, { replace: rep, swap: how.swap || null, actor: how.actor || null }));
+    ({ slot, replaced: swapped, until = null } = await startOn(user, R, it, o, { replace: rep, swap: how.swap || null, actor: how.actor || null, brk }));
   } catch (e) {
     if (order) {
       const back = await require("./shop").refundService(order.order_id, "📼 it didn't start: " + String(e.message || "error").slice(0, 120), "system").catch(() => false);
@@ -554,16 +653,17 @@ async function play(user, b = {}, how = {}) {
                             o.quality, o.offset, o.audio, o.sub,
                             carry ? (carry.charge === "held" ? carry.price : 0) : q.price, carry ? carry.order_id : order ? order.order_id : null,
                             charge, carry ? carry.id : null, carry ? carry.access : A.how]);
-  await runQuery(`INSERT INTO media_sessions (room_id, slot_id, play_id, rating_key, title, state, by_user, started, updated, position, duration)
-                  VALUES (?, ?, ?, ?, ?, 'playing', ?, ?, ?, ?, ?)`,
-                 [R.id, slot.id, p.id, String(it.key), fmtTitle(it), user.username, t, t, o.offset, it.duration || null]);
+  await runQuery(`INSERT INTO media_sessions (room_id, slot_id, play_id, rating_key, title, state, by_user, started, updated, position, duration, brk_until)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 [R.id, slot.id, p.id, String(it.key), fmtTitle(it), until ? "break" : "playing", user.username, t, t, o.offset, it.duration || null, until]);
+  if (until) armBreak(R.id, until);                                      // upnext2: its encoder starts then
   require("./plexpad").noteItem(it).catch(() => {});                   // 1.99nj: its metadata for the 📼 pad achievements
   if (rep) await logControl(user, R.id, "replace", `${rep.title || "?"} → ${fmtTitle(it)}`, { play_id: p.id, queue_id: rep.q ? rep.q.id : null });
   console.log(`[medialib] ${user.username} (${A.how}) plays "${fmtTitle(it)}" (${it.key}) on ${R.id} at ${o.offset}s, ${o.quality}p - play #${p.id}` +
               (q.price ? `, ${q.price} PAT held (order ${order.order_id})` : carry ? ` (carries play #${carry.id})` : ", free") +
               (rep ? ` - replaced "${rep.title}"${rep.q ? ` (queue #${rep.q.id})` : ""} on slot ${rep.slot_id}` : ""));
   return { ok: true, play_id: p.id, slot: { id: slot.id, stream: slot.stream, hls: slot.hls }, title: fmtTitle(it), price: q.price,
-           order_id: order ? order.order_id : null,
+           order_id: order ? order.order_id : null, ...(until ? { starts_at: until, break_sec: brk } : {}),   // (upnext2: its station break)
            ...(rep ? { replaced: { title: rep.title || null, queue: !!rep.q, slot_id: rep.slot_id, feature: swapped ? swapped.carried || null : null } } : {}) };
 }
 
@@ -608,6 +708,8 @@ async function busyOf(live, exceptRoom = null) {
   const qs = await safeQuery(`SELECT q.room_id, s.state FROM media_queues q LEFT JOIN media_sessions s ON s.room_id = q.room_id
                               WHERE q.state IN ('active','starting')`, []);
   for (const q of qs) if (q.state !== "paused") names.add(stageName(q.room_id));
+  // upnext2: a single play in its station break holds its encoder too (it starts when the break is over)
+  for (const b of await safeQuery("SELECT room_id FROM media_sessions WHERE state = 'break'", [])) names.add(stageName(b.room_id));
   if (exceptRoom) names.delete(stageName(exceptRoom));               // plexreplace: the stream a replace stops first
   return names.size;
 }
@@ -683,8 +785,10 @@ async function stop(user, room, reason = "stopped") {
   const { R, s: s0 } = await needSession(user, room);
   return withPlay(R, s0, async (s) => {
     let pos = null;
-    try { const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/stop`, {}); pos = r.stream && r.stream.position; }
-    catch (e) { console.warn("[medialib] stop: media-control:", conf.errLine(e)); }
+    if (s.state !== "break") {                                           // (upnext2: ⏹ in its station break - nothing started yet, nothing will)
+      try { const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/stop`, {}); pos = r.stream && r.stream.position; }
+      catch (e) { console.warn("[medialib] stop: media-control:", conf.errLine(e)); }
+    }
     await stage.end(s.slot_id, "library_" + reason, user.username).catch(() => {});
     await dropSession(s, reason + " by " + user.username, pos);
     await logControl(user, R.id, "stop", s.title, { play_id: s.play_id });
@@ -710,6 +814,13 @@ async function restart(user, room, offset, how) {
   return withPlay(R, s0, (s) => restart_(user, R, s, p, offset, how));      // (plexreplace review fix: under the pad's lock)
 }
 async function restart_(user, R, s, p, offset, how) {
+  if (s.state === "break") {
+    // upnext2: in its station break - a seek moves where it starts, a resume has nothing to do; the break goes on (fireBreak)
+    const at = offset == null ? (s.position || 0) : Math.max(0, Math.min(Math.floor(Number(offset) || 0), Math.max(0, (s.duration || 0) - 30)));
+    await logControl(user, R.id, offset == null ? "resume" : "seek", (offset == null ? "at " : clock(s.position) + " → ") + clock(at), { play_id: s.play_id });
+    if (offset != null) await runQuery("UPDATE media_sessions SET position = ?, updated = ? WHERE room_id = ? AND play_id = ? AND state = 'break'", [at, Date.now(), R.id, s.play_id]);
+    return { ok: true, position: at, same_slot: true, starts_at: Number(s.brk_until) || null };
+  }
   await logControl(user, R.id, offset == null ? "resume" : "seek", offset == null ? "at " + clock(s.position) : clock(s.position) + " → " + clock(offset),
                    { play_id: s.play_id, queue_id: s.queue_id || null });
   const slot = await stage.getSlot(s.slot_id);
@@ -893,14 +1004,16 @@ async function player(user, room) {
   const p = s ? (await getQuery("SELECT user_id, username FROM media_plays WHERE id = ?", [s.play_id]))[0] || {} : {};
   const starter = q ? q.user_id : p.user_id;
   const can = await mayControl(user, R.id, starter);
-  const out = { ok: true, on: true, room: R.id, title: s ? s.title : null, state: s ? s.state : "waiting", position: s ? s.position || 0 : 0,
+  const out = { ok: true, on: true, room: R.id, title: s ? s.title : null, state: s && s.state !== "break" ? s.state : "waiting", position: s ? s.position || 0 : 0,
                 duration: s ? s.duration || null : null, at: Date.now(), by: q ? q.username : p.username || (s && s.by_user) || null,
                 can_control: can, queue: null, log: [] };
   if (q) {
     const v = await Q.viewOf(q);
     out.queue = { id: v.id, pos: v.pos, count: v.count, now: v.now, next: v.next.slice(0, can ? 60 : 10), left_sec: v.left_sec };
     if (!s && v.now) out.title = fmtTitle(v.now);
+    if (v.starts_at) out.starts_at = v.starts_at;                      // upnext2: in its station break
   }
+  if (s && s.state === "break" && s.brk_until) out.starts_at = Number(s.brk_until);
   if (can) out.log = await getQuery("SELECT ts, username, action, detail FROM media_controls WHERE room_id = ? ORDER BY id DESC LIMIT 8", [R.id]);
   return out;
 }
@@ -998,11 +1111,13 @@ async function watchOne(s0, live) {
   // on the stage: a held charge is routed now
   if (slot && slot.went_live) await settle(s.play_id, true).catch((e) => console.error("[medialib] settle:", conf.errLine(e)));
   if (!slot || slot.settled || slot.status === "ended") {
-    // the stage ended it (Cut, time up, paused too long): stop the encoder
-    try { await call("POST", `/streams/${encodeURIComponent(name)}/stop`, {}); } catch (e) { /* unreachable: it'll fail to publish anyway */ }
+    // the stage ended it (Cut, time up, paused too long): stop the encoder (upnext2: none yet in a station break)
+    if (s.state !== "break") { try { await call("POST", `/streams/${encodeURIComponent(name)}/stop`, {}); } catch (e) { /* unreachable: it'll fail to publish anyway */ } }
     await dropSession(s, "slot " + ((slot && slot.end_reason) || "ended"), m ? m.position : s.position);
     return true;
   }
+  // upnext2: in its station break - nothing to look at on media-control yet; one that is due starts now (its timer was lost: a restart)
+  if (s.state === "break") return Number(s.brk_until) <= bnow() ? fireBreak(s.room_id, s.play_id) : false;
   if (live === null) return false;                                     // can't see the service right now: change nothing
   if (!m) {
     if (s.state === "paused" && Date.now() - s.updated < 60000) return false;
@@ -1031,6 +1146,7 @@ function register(app, { addUser, noTimers } = {}) {
     timer.unref();
   }
   if (!noTimers) recheckOn = true;                                     // 1.99acx: the quick look after a seek / next title
+  if (!noTimers) brkTimersOn = true;                                   // upnext2: a station break's title starts on time
   const fail = (res, e) => {
     if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, ...(e.extra || {}) });
     console.error("[medialib]", conf.errLine(e));
@@ -1078,5 +1194,7 @@ module.exports = { init, register, play, playFor, padState, stop, pause, resume,
                    _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat,
                          mayControl, logControl, clock, CONTROL_DENIED,
                          noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; }, _posters: posterCache,   // 1.99acx; upnext review: _posters
-                         onNow, replaceTarget, retire, wantsReplace, replaceWant },                      // plexreplace
-                   stageName, call, signHeaders, fmtTitle, upNextInfo, inviteItemLink, Refuse, _keys: keys };
+                         onNow, replaceTarget, retire, wantsReplace, replaceWant,                        // plexreplace
+                         breakSec, armBreak, fireBreak },                                                // upnext2
+                   stageName, call, signHeaders, fmtTitle, upNextInfo, inviteItemLink, Refuse, _keys: keys,
+                   breakSec, breakDue, armBreak, _brkTimers: (on) => { brkTimersOn = !!on; } };     // upnext2: the station break

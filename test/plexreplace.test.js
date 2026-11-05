@@ -148,7 +148,8 @@ test.before(async () => {
   await runQuery("UPDATE rooms_registry SET owner_kind = 'user', owner_user_id = ? WHERE room_id = ?", [owner.userId, ROOM]);
   await rooms.loadCache();
   await rooms.setStage(ROOM, { slot_count: 4, slot_price: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
-  await conf.set({ library_enabled: true, library_plex: true, library_price: 0, library_daily_cap: 50, library_free_daily_cap: 50, library_queue_announce_min: 20 }, "test");
+  // upnext2: these tests are about the start itself - the 📼 station break (on by default, 8 s) has its own (test/upnext-break.test.js)
+  await conf.set({ library_enabled: true, library_break: false, library_plex: true, library_price: 0, library_daily_cap: 50, library_free_daily_cap: 50, library_queue_announce_min: 20 }, "test");
   golive.nowPlaying = async () => ({ announced: true });          // counted, not sent
 });
 test.afterEach(clear);

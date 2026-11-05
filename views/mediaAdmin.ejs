@@ -51,7 +51,7 @@
   <section class="sb-card" id="settings" aria-labelledby="stT">
     <h2 id="stT">Settings</h2>
     <form id="mediaSettings" class="book" autocomplete="off">
-      <input type="hidden" name="_bools" value="library_enabled,library_plex,library_queue,requests_enabled,invites_enabled,plex_auto_revoke,plex_selflink,plex_sso,plex_flair,wizarr_timed">
+      <input type="hidden" name="_bools" value="library_enabled,library_plex,library_queue,library_break,requests_enabled,invites_enabled,plex_auto_revoke,plex_selflink,plex_sso,plex_flair,wizarr_timed">
       <h3>📼 Play from library</h3>
       <label class="chk"><input type="checkbox" name="library_enabled" <%= S.library_enabled ? 'checked' : '' %>> On</label>
       <label>Who may use it <select name="library_allow"><option value="admins" <%= S.library_allow === 'admins' ? 'selected' : '' %>>Site admins</option><option value="staff" <%= S.library_allow === 'staff' ? 'selected' : '' %>>Admins + staff</option></select></label>
@@ -66,6 +66,9 @@
       <label>A queue holds at most (hours) <input type="number" name="library_queue_max_hours" min="1" max="24" value="<%= S.library_queue_max_hours %>"></label>
       <label>A queue holds at most (titles) <input type="number" name="library_queue_max_items" min="1" max="200" value="<%= S.library_queue_max_items %>"></label>
       <label>Pepe announces the next title only this many minutes after the last (0 = every title) <input type="number" name="library_queue_announce_min" min="0" max="240" value="<%= S.library_queue_announce_min %>"></label>
+      <%# upnext2: the 📼 station break - the site's switch + the default a pad's own setting (its stage settings) overrides %>
+      <label class="chk"><input type="checkbox" name="library_break" <%= S.library_break !== false ? 'checked' : '' %>> 📼 Station break: "Coming up next" on the stage for a moment before each title starts (a fresh play, Play this instead, the next title of a queue, ⏭ / ⏮, a booked start) - off = titles start at once everywhere</label>
+      <label>Station break length where a pad doesn't set its own <select name="library_break_sec"><% [0, 5, 8, 15].forEach((n) => { %><option value="<%= n %>" <%= Number(S.library_break_sec) === n ? 'selected' : '' %>><%= n ? n + ' seconds' : 'Off' %></option><% }) %></select></label>
       <p class="muted" style="grid-column: 1 / -1; margin: 0">A Plex member = a PATV account linked to a Plex account that's on our server with active access (📼 Plex members below), or the list above. Paid plays: the price is held when they press Play, routed once it's on the stage (flow library_play: 50% Fort Knox / 50% the pad's room vault; 100% Fort Knox on their own pad), refunded if it never gets there. Admins (above) play free. Queues: one play towards the daily caps however many titles; non-members are charged as it plays, per started hour of what's actually been played (each title's hours are taken when it starts, held until it's on, refunded if it never starts); out of PAT = the queue ends after the current title.</p>
 
       <h3>📼 Plex members</h3>

@@ -104,7 +104,8 @@ test.before(async () => {
   require(path.join(repo, "shop"));
   for (let i = 0; i < 100 && !(await getQuery("SELECT 1 FROM sqlite_master WHERE name = 'shop_order_events'")).length; i++) await new Promise((r) => setTimeout(r, 20));
   admin = await mkUser("Admin"); member = await mkUser(); payer = await mkUser("pleb", 1000000);
-  await conf.set({ library_enabled: true, library_plex: true, library_price: 100000, library_daily_cap: 3, library_free_daily_cap: 5,
+  // upnext2: these tests are about the start itself - the 📼 station break (on by default, 8 s) has its own (test/upnext-break.test.js)
+  await conf.set({ library_enabled: true, library_break: false, library_plex: true, library_price: 100000, library_daily_cap: 3, library_free_daily_cap: 5,
                    library_users: member.username, library_queue_announce_min: 20 }, "test");
   realNowPlaying = golive.nowPlaying;
   golive.nowPlaying = async (o) => { announced.push(o); return { announced: true }; };      // counted, not sent

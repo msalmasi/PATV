@@ -122,7 +122,8 @@ test.before(async () => {
   U.cf = await mkUser("CFab12cd34", { login: "cfguy", auto: true });              // Pepe's auto account only
   U.gone = await mkUser("gone_patv", { login: "goner", archived: true });
   U.erin = await mkUser("erin_patv", { balance: 2000000 });                       // web only: no chat login
-  await conf.set({ library_enabled: true, library_plex: true, library_price: 50000, library_daily_cap: 3, library_free_daily_cap: 5,
+  // upnext2: these tests are about the start itself - the 📼 station break (on by default, 8 s) has its own (test/upnext-break.test.js)
+  await conf.set({ library_enabled: true, library_break: false, library_plex: true, library_price: 50000, library_daily_cap: 3, library_free_daily_cap: 5,
                    library_users: U.alice.username, library_queue_announce_min: 20 }, "test");
   for (const [id, t] of [[LOUNGE, "Players Lounge"], [SECOND, "Second"], [THIRD, "Third"], [PRIV, "Private"], [ADULT, "Adult"]]) await rooms.addRoom(id, t, "test");
   await runQuery("UPDATE rooms_registry SET owner_kind = 'user', owner_user_id = ? WHERE room_id = ?", [U.owner.userId, LOUNGE]);

@@ -83,7 +83,8 @@ test.after(() => { mstreams.stopAll(); server.close(); });
 test("off by default: the flag is off, and only admins may use it", async () => {
   assert.equal(conf.on.library(), false);
   await assert.rejects(L.search(admin, "charade"), /switched off/);
-  await conf.set({ library_enabled: true }, "test");
+  // upnext2: these tests are about the start itself - the 📼 station break (on by default, 8 s) has its own (test/upnext-break.test.js)
+  await conf.set({ library_enabled: true, library_break: false }, "test");
   assert.equal(conf.on.library(), true);
   await assert.rejects(L.search(pleb, "charade"), (e) => e.status === 403);
   await assert.rejects(L.search(staff, "charade"), (e) => e.status === 403, "staff only when library_allow = staff");

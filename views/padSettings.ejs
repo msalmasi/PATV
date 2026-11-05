@@ -235,6 +235,12 @@
           <option value="when_idle"<%= room.takeover === 'when_idle' ? ' selected' : '' %>><%- t('pad.settings.takeover.when_idle') %></option>
           <option value="off"<%= room.takeover === 'off' ? ' selected' : '' %>><%- t('pad.settings.takeover.off') %></option>
         </select><small><%- t('pad.settings.takeover.hint') %></small></label>
+        <%# upnext2: the 📼 station break between titles from Plex (medialib.breakSec) - '' = the site's setting (/admin/media) %>
+        <% const lb_ = typeof libBreak !== 'undefined' && libBreak ? libBreak : { on: true, sec: 8 }; const brSite_ = lb_.on && lb_.sec ? t('pad.settings.upnext_break.sec', { n: lb_.sec }) : t('pad.settings.upnext_break.off'); %>
+        <label><%- t('pad.settings.upnext_break.label') %><select name="upnext_break">
+          <option value=""<%= room.upnext_break == null ? ' selected' : '' %>><%- t('pad.settings.upnext_break.site', { value: brSite_ }) %></option>
+          <% [0, 5, 8, 15].forEach((n_) => { %><option value="<%= n_ %>"<%= room.upnext_break === n_ ? ' selected' : '' %>><%- n_ ? t('pad.settings.upnext_break.sec', { n: n_ }) : t('pad.settings.upnext_break.off') %></option><% }) %>
+        </select><small><%- t('pad.settings.upnext_break.hint') %><% if (!lb_.on) { %> <%- t('pad.settings.upnext_break.site_off') %><% } %></small></label>
         <div class="row"><button type="submit" class="btn primary">Save stage settings</button><span class="msg" id="stageMsg" role="status"></span></div>
       </form>
       <p class="muted">Pepe's stream is always on every pad's stage. Slots are free unless you set a price; a slot fee goes half to this pad's vault (held for it until pad vaults open) and half to Fort Knox — your own bookings here go all to Fort Knox. Featuring can't be bought: you feature a slot for free, and the front page picks the liveliest pad (people can 🚀 boost a pad, split the same way). In chat, <code>!stage</code>, <code>!stage feature &lt;name&gt;</code>, <code>!stage cut</code> and <code>!stage slots &lt;n&gt;</code> work for you in this pad's Camfrog room.</p>

@@ -42,6 +42,12 @@ const DEFAULTS = {
   library_queue_max_hours: 12,    // the most a queue may hold (what's left of every title in it)
   library_queue_max_items: 60,    // the most titles in one queue
   library_queue_announce_min: 20, // Pepe says "now playing" for the next title only this long after the last one (titles always update)
+  // upnext2 (owner 2026-11-05: "when does the 'next up' card actually show?"): the 📼 STATION BREAK - a title change on a pad's stage (a
+  // fresh ▶ Play, ▶ Play this instead, a queue moving on, ⏭ / ⏮, a booked start) shows "Coming up next" for this long BEFORE the next
+  // title's encoder starts (medialib.breakSec): every viewer sees the card and nobody misses the title's start. A pad may set its own
+  // (rooms.upnext_break: 0 = off, 5, 8, 15); library_break off = no break anywhere (the old instant start).
+  library_break: true,
+  library_break_sec: 8,           // the break where a pad doesn't set its own: 0 | 5 | 8 | 15 seconds
   // 1.99jp: 📼 Plex members (plexmembers.js) - the server's shares, read through mediactl
   plex_sync_min: 60,              // how often the shares are re-read (minutes); "Sync now" on /admin/media any time
   plex_auto_revoke: false,        // OFF = a sync only LISTS the PATV-sold access that ended; an admin clicks Remove
@@ -123,6 +129,8 @@ const CLEAN = {
   library_queue_max_hours: (v) => num(v, 1, 24, 12),
   library_queue_max_items: (v) => num(v, 1, 200, 60),
   library_queue_announce_min: (v) => num(v, 0, 240, 20),
+  library_break: bool,                                                          // upnext2
+  library_break_sec: (v) => ([0, 5, 8, 15].includes(Number(v)) ? Number(v) : 8),
   plex_sync_min: (v) => num(v, 10, 1440, 60),
   plex_auto_revoke: bool, plex_selflink: bool, plex_sso: bool, plex_flair: bool, wizarr_timed: bool,
   library_users: (v) => String(v == null ? "" : v).split(/[\s,]+/).map((x) => x.trim().toLowerCase())
