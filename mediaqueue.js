@@ -245,6 +245,9 @@ async function startTitle(q, i, { offset = 0, item = null, tracks = null } = {})
   if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw refuse(400, "That title has no playable file.");
   const slot = await stage.getSlot(q.slot_id);
   if (!slot || slot.settled || !["waiting", "active"].includes(slot.status)) throw Object.assign(refuse(409, "The queue's slot has ended."), { slotGone: true });
+  // upnext (owner 2026-11-05): the stage says what's coming up next from the moment the queue moves on, until this title's first frame (the
+  // same title retried - no free encoder yet - keeps its first moment: mainstage.libraryUpNext)
+  await stage.libraryUpNext(q.slot_id, L().upNextInfo(it)).catch((e) => console.error("[mediaqueue] up next:", e.message));
   // a free encoder before any money moves (our own stage doesn't count)
   const name = stageName(q.room_id);
   const live = await I().streamsNow();

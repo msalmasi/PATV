@@ -177,6 +177,10 @@ const fmtTitle = (it) => (it.type === "episode" && it.show
   ? `${it.show} — S${it.season == null ? 0 : it.season}E${it.episode == null ? 0 : it.episode} ${it.title || ""}`.trim()
   : `${it.title}${it.year ? ` (${it.year})` : ""}`).slice(0, 72);
 const fmtPat = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
+// upnext: what the stage's "Coming up next" card may show of a title (mainstage.libraryUpNext cleans it again) - never a file path, a Plex
+// URL or a token: the poster is a yes / no, fetched by the page through /api/medialib/poster/<key> (signed in) like the 📼 search's
+const upNextInfo = (it) => ({ key: it && it.key != null ? String(it.key) : null, kind: it && it.type === "episode" ? "episode" : "movie", title: it ? it.title : null,
+                              year: it ? it.year : null, show: it ? it.show : null, season: it ? it.season : null, episode: it ? it.episode : null, poster: !!(it && it.poster) });
 
 // ── who may play (1.99jn) ──
 async function safeQuery(sql, args) { try { return await getQuery(sql, args); } catch (e) { return []; } }
@@ -359,6 +363,9 @@ async function startOn(user, R, it, o) {
   const left = Math.max(60, (it.duration || 0) - o.offset);
   const title = "📼 " + fmtTitle(it);
   const opened = await stage.libraryOpen(user, { room: R.id, title, minutes: Math.ceil(left / 60) + SLACK_MIN });
+  // upnext (owner 2026-11-05): the new slot is the pad's featured stage from now - a "Coming up next" card until its first frame (the
+  // encoder probes the file and starts ffmpeg first: 1-6 s, more after a ⏹ of a title still shutting down)
+  await stage.libraryUpNext(opened.slot.id, upNextInfo(it)).catch((e) => console.error("[medialib] up next:", e.message));
   const body = { rtmp: stage.RTMP_PUBLIC, key: opened.key, ratingKey: String(it.key), offset: o.offset, quality: o.quality,
                  audio: o.audio, sub: o.sub, title: fmtTitle(it) };
   try {
@@ -896,4 +903,4 @@ module.exports = { init, register, play, playFor, padState, stop, pause, resume,
                    _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat,
                          mayControl, logControl, clock, CONTROL_DENIED,
                          noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; } },   // 1.99acx
-                   stageName, call, signHeaders, fmtTitle, inviteItemLink, Refuse, _keys: keys };
+                   stageName, call, signHeaders, fmtTitle, upNextInfo, inviteItemLink, Refuse, _keys: keys };

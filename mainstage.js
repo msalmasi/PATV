@@ -162,6 +162,10 @@ const DEFAULTS = {
 };
 const TAKEOVER_MODES = ["off", "when_idle"];
 const AUTO_HOLD_MS = 60 * 1000;      // an auto-featured stream that drops keeps the feature this long before another live one gets it
+// upnext (owner 2026-11-05: "Yes up next card sounds good. Do it a classic / retro Public Access tv style."): a 📼 slot whose next title is
+// starting (libraryUpNext) is the pad's featured stage at once - the page shows a "Coming up next" card - for at most this long; a title that
+// hasn't published by then falls back as normal (mic follows, or Pepe's stream)
+const UPNEXT_MS = 90 * 1000;
 // 1.99fv: Pepe's Twitch channel (the "Use Twitch" shortcut on /stage/admin + the viewers' "Watch on Twitch" link)
 const TW_LOGIN_RE = /^[A-Za-z0-9_]{3,25}$/;
 function pepeTwitchChannel() {
@@ -241,6 +245,7 @@ function init() {
       await addColumn("stage_slots", "auto_off", "INTEGER NOT NULL DEFAULT 0");   // 1.99lm: its auto-feature was cancelled by a person
       await addColumn("stage_slots", "cam_login", "TEXT");            // 1.99zc: 🎬 a cam slot's Camfrog login (source 'cam')
       await addColumn("stage_slots", "cam_veil", "TEXT");             // 1.99aid (privacy controls V-1): {sess, alias, hood, id} - a frog-name cam
+      await addColumn("stage_slots", "upnext", "TEXT");               // upnext: 📼 the title starting next - {title, kind, year, show, season, episode, key, poster, at}
       await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
                       start_at = COALESCE(start_at, created) WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_status ON stage_slots (status)");
@@ -635,6 +640,38 @@ const isLive = (s, t = now()) => !!s && (s.status === "waiting" || s.status === 
 const embedOf = (s) => { try { return embeds.clean(JSON.parse(s.embed || "null")); } catch (e) { return null; } };
 const cleanTitle = (v) => String(v || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || null;
 const truthy = (v) => v === true || v === "1" || v === 1 || v === "true" || v === "on";
+// upnext: what a 📼 slot's up-next marker may hold - plain text, a Plex rating key (digits only; the poster goes through the site's
+// /api/medialib/poster proxy, never a Plex URL or token), the moment it was set. -> the marker | null
+const UN_KEY_RE = /^\d{1,12}$/;
+const unText = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n) || null;
+const unInt = (v, lo, hi) => { if (v == null || v === "") return null; const x = Number(v); return Number.isInteger(x) && x >= lo && x <= hi ? x : null; };
+function upnextClean(info, at) {
+  if (!info || typeof info !== "object") return null;
+  const ep = info.kind === "episode";
+  const title = unText(info.title, 120), show = ep ? unText(info.show, 120) : null;
+  if (!title && !show) return null;
+  const key = UN_KEY_RE.test(String(info.key == null ? "" : info.key)) ? String(info.key) : null;
+  return { title, kind: ep ? "episode" : "movie", year: unInt(info.year, 1800, 2200), show, season: ep ? unInt(info.season, 0, 9999) : null,
+           episode: ep ? unInt(info.episode, 0, 9999) : null, key, poster: info.poster === true && !!key, at: Number(at) };
+}
+function upnextOf(s) {
+  if (!s || !s.upnext) return null;
+  try { const u = JSON.parse(s.upnext); return u && typeof u === "object" && Number(u.at) > 0 ? u : null; } catch (e) { return null; }
+}
+const upnextFresh = (s, t = now()) => { const u = upnextOf(s); return !!u && t - u.at < UPNEXT_MS; };
+/** upnext: what a page gets for a featured 📼 slot whose next title is starting -> {title, kind, year, show, season, episode, poster, key?,
+ *  at, until, now} | null (live already, not library, nothing starting, or past UPNEXT_MS). The rating key only when there is a poster to ask
+ *  the site's proxy for (they are public anyway: the 📼 player's queue lists them); none past the 18+ gate on its pad. */
+function upNextView(s, t = now()) {
+  if (!s || s.source !== "library" || isLive(s, t)) return null;
+  const u = upnextOf(s);
+  if (!u || t - u.at >= UPNEXT_MS) return null;
+  let poster = u.poster === true && UN_KEY_RE.test(String(u.key || ""));
+  if (poster) { try { if (require("./adultgate").applies(s.room_id || rooms.HOUSE_ROOM)) poster = false; } catch (e) { poster = false; } }
+  return { title: u.title || null, kind: u.kind === "episode" ? "episode" : "movie", year: u.year == null ? null : u.year, show: u.show || null,
+           season: u.season == null ? null : u.season, episode: u.episode == null ? null : u.episode, poster, ...(poster ? { key: String(u.key) } : {}),
+           at: u.at, until: u.at + UPNEXT_MS, now: t };
+}
 
 // ── queries ──
 async function getSlot(id) {
@@ -894,6 +931,28 @@ async function libraryRetitle(slotId, title) {
   return !!(r && r.changes);
 }
 /**
+ * upnext (owner 2026-11-05): 📼 the title `info` ({key, kind, title, year, show, season, episode, poster}) is starting on this open library slot -
+ * a fresh ▶ Play / a resume on a fresh slot (medialib.startOn) or a queue's next title (mediaqueue.startTitle, the same slot). The marker says
+ * so until the stream publishes (goLive clears it) or UPNEXT_MS pass, and the feature moves NOW (autoFeature): a slot nothing else beats is
+ * the pad's featured stage before its first frame - no 5-11 s tick where mic follows takes the view. The same title asked again (a queue
+ * waiting for a free encoder retries it) keeps its first moment: "about 90 s" never restarts. -> set?
+ */
+async function libraryUpNext(slotId, info) {
+  await init();
+  const s = await getSlot(slotId);
+  if (!s || s.source !== "library" || s.settled || !["waiting", "active"].includes(s.status)) return false;
+  const t = now();
+  const n = upnextClean(info, t);
+  if (!n) return false;
+  const prev = upnextOf(s);
+  if (prev && prev.key && prev.key === n.key) n.at = prev.at;
+  const r = await runQuery("UPDATE stage_slots SET upnext = ? WHERE id = ? AND settled = 0", [JSON.stringify(n), s.id]);
+  if (!(r && r.changes)) return false;
+  pubCache.clear();
+  await autoFeature(s.room_id || rooms.HOUSE_ROOM, t).catch((e) => console.error("[stage] auto-feature:", e.message));
+  return true;
+}
+/**
  * 1.99lw: a BOOKED 📼 Plex slot's start time came (mediaqueue.startScheduled): it opens like libraryOpen does - a key,
  * 'waiting' until the encoder publishes - inside the same limits (one library stream per pad, the site's max_concurrent).
  * -> the raw key, or throws Refuse.
@@ -948,7 +1007,7 @@ async function endSettle(slotId, reason, actor) {
     const charged = chargeFor(s, s.live_ms);
     const refund = s.held - charged;
     const r = await runQuery(`UPDATE stage_slots SET status = 'ended', settled = 1, charged = ?, refunded = ?, ended = ?,
-                              end_reason = ?, ended_by = ?, key_hash = NULL, publishing = 0, featured = 0 WHERE id = ? AND settled = 0`,
+                              end_reason = ?, ended_by = ?, key_hash = NULL, publishing = 0, featured = 0, upnext = NULL WHERE id = ? AND settled = 0`,
                              [charged, refund, now(), String(reason || "ended"), actor || null, s.id]);
     if (!r.changes) return null;
     if (refund > 0) {   // 1.99ga: logged only when it really moved (a merged-away booker's refund follows the merge)
@@ -1029,6 +1088,8 @@ async function unfeature(slotId, actor, why = "unfeatured") {
 //   * an auto-featured slot keeps it while it's live, and through a drop of up to AUTO_HOLD_MS (or longer while
 //     no other stream is live); then it's handed over
 //   * else the live slot that went live FIRST (not one whose auto-feature a person cancelled) is featured
+//   * upnext: else a 📼 slot whose next title is starting (libraryUpNext's marker, under UPNEXT_MS old) - featured before its first frame;
+//     an auto-featured one with a marker is held UPNEXT_MS from the marker, then let go if it never published
 //   * no live user stream -> nothing is featured: the stage is Pepe's stream again
 // It is the ordinary `featured` flag (feature_by 'auto'): everything that follows a featured slot follows it.
 async function takeoverModeFor(roomId) {
@@ -1056,15 +1117,25 @@ async function autoFeature(roomId, t = now()) {
     for (const a of autos) await unfeature(a.id, "system", why);
     return null;
   }
-  const live = open.filter((s) => isLive(s, t) && !s.auto_off && !s.featured && s.source !== "cam")
-    .sort((a, b) => (a.went_live || startOf(a)) - (b.went_live || startOf(b)) || (a.created || 0) - (b.created || 0) || String(a.id).localeCompare(String(b.id)));
+  const order = (a, b) => (a.went_live || startOf(a)) - (b.went_live || startOf(b)) || (a.created || 0) - (b.created || 0) || String(a.id).localeCompare(String(b.id));
+  const cands = open.filter((s) => !s.auto_off && !s.featured && s.source !== "cam");
+  const live = cands.filter((s) => isLive(s, t)).sort(order);
+  // upnext: a 📼 slot whose next title is starting (libraryUpNext) - not live yet; featured while nothing is (a live stream first)
+  const pending = cands.filter((s) => s.source === "library" && !isLive(s, t) && upnextFresh(s, t)).sort(order);
   const cur = autos[0] || null;
   for (const extra of autos.slice(1)) await unfeature(extra.id, "system", "one featured stream per pad");
   if (cur) {
-    if (isLive(cur, t) || !live.length || t - (cur.last_live || cur.went_live || startOf(cur)) < AUTO_HOLD_MS) return cur.id;
-    await unfeature(cur.id, "system", "its stream dropped - handed over");
+    const up = isLive(cur, t) ? null : upnextOf(cur);
+    if (isLive(cur, t)) return cur.id;
+    // upnext: its next title is starting - held UPNEXT_MS from that moment (the card), whatever else went live meanwhile; one that never
+    // published by then is let go even with nothing else live: mic follows / Pepe's stream, as the owner asked (goLive features it again
+    // if it starts after all - a system unfeature is no person's "no")
+    if (up && t - up.at < UPNEXT_MS) return cur.id;
+    if (up) await unfeature(cur.id, "system", "📼 up next didn't start");
+    else if (!live.length || t - (cur.last_live || cur.went_live || startOf(cur)) < AUTO_HOLD_MS) return cur.id;
+    else await unfeature(cur.id, "system", "its stream dropped - handed over");
   }
-  const next = live[0];
+  const next = live[0] || pending[0];
   if (!next) return null;
   // guarded: never a second featured slot in the pad (an owner may have featured one a moment ago)
   const r = await runQuery(`UPDATE stage_slots SET featured = 1, feature_by = 'auto' WHERE id = ? AND settled = 0 AND featured = 0 AND auto_off = 0
@@ -1072,7 +1143,9 @@ async function autoFeature(roomId, t = now()) {
                             AND o.status IN ${OPEN})`, [next.id, roomId]);
   if (!r.changes) return null;
   pubCache.clear();
-  await event(next.id, "featured", "system", cur ? "auto: took over from the stream before it" : "auto: live while nothing else was featured", roomId);
+  const upNow = !isLive(next, t);                                  // (upnext: featured before its first frame)
+  await event(next.id, "featured", "system", upNow ? (cur ? "auto: 📼 up next - took over from the stream before it" : "auto: 📼 up next while nothing else was featured")
+    : cur ? "auto: took over from the stream before it" : "auto: live while nothing else was featured", roomId);
   // (dock3 review 1.99akf C4: an auto-feature never ends a Pepe feature stored for this pad - it only happens while that one doesn't count
   // (he is away / off air past the hold) and it yields to him when he is back: the `why` above)
   await featuredMark(next);                                        // 1.99mt: ⭐ Headliner
@@ -1469,8 +1542,9 @@ async function publishGate(o = {}, t = now()) {
 }
 /** A publisher came on: the slot is active and live from now (billing heartbeat = beat). -> changed? */
 async function goLive(s, t, via) {
+  // (upnext: the title that was starting is on - its marker goes; a later 📼 pause / seek is never read as "up next")
   const r = await runQuery(`UPDATE stage_slots SET publishing = 1, beat = ?, status = 'active', via = ?,
-                            went_live = COALESCE(went_live, ?), last_live = ? WHERE id = ? AND settled = 0`, [t, via || null, t, t, s.id]);
+                            went_live = COALESCE(went_live, ?), last_live = ?, upnext = NULL WHERE id = ? AND settled = 0`, [t, via || null, t, t, s.id]);
   if (!r.changes) return false;
   pubCache.clear();
   if (!s.went_live) {
@@ -1917,7 +1991,8 @@ async function publicSlots(roomId) {
   // dock3 1.99akf: the room's featured open slot, LIVE OR NOT (a 📼 pause / seek, an OBS reconnect, a missed heartbeat drop it from `list`
   // for a moment while it stays featured) - featuredOf() hands it to the page, which holds the view instead of giving it to the mic stage
   const fo = roomId ? featuredPick(open, t) : null;
-  const featured = fo ? { id: fo.id, live: isLive(fo, t), by: fo.feature_by || null, went: !!fo.went_live, cam: fo.source === "cam" } : null;
+  // (upnext: + next - a featured 📼 slot's title that is starting, until it publishes or UPNEXT_MS pass: the page's "Coming up next" card)
+  const featured = fo ? { id: fo.id, live: isLive(fo, t), by: fo.feature_by || null, went: !!fo.went_live, cam: fo.source === "cam", next: upNextView(fo, t) } : null;
   // stagefix fix: each live cam slot's Camfrog login, cached WITH the list but never on it (slotsFor's mine: true reads it here
   // instead of querying every open slot on every poll)
   const camLogins = new Map();
@@ -1966,7 +2041,7 @@ async function featuredOf(roomId, viewer, { front = false } = {}) {
   const c = pubCache.get(String(roomId)), f = c && c.featured;
   if (!f) return null;
   if (f.cam && (front || !camVisible(roomId, viewer))) return null;
-  return { id: f.id, live: f.live, by: f.by, went: f.went };
+  return { id: f.id, live: f.live, by: f.by, went: f.went, ...(f.next ? { next: f.next } : {}) };   // (upnext: + next while its title starts)
 }
 /** stagefix fix: slot id -> Camfrog login of a room's live cam slots, from publicSlots' cache (server side only). */
 async function camLoginsOf(roomId) {
@@ -2030,7 +2105,8 @@ async function roomStage(roomId, viewer) {
     // adultgate site: + a cam slot's name blanked for a viewer the 18+ gate stops (padaccess.adultSlots; off: as is)
     // stagefix: + cam slots only for viewers who may see the live room, and mine: true on the viewer's own cam (slotsFor)
     slots: await slotsFor(roomId, viewer, live), open: shown, free: Math.max(0, RS.slot_count - shown),
-    featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by, went: !!featured.went_live } : null,   // (dock3 1.99akf: + went - the page's first featured marker)
+    featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by, went: !!featured.went_live,
+                           ...(upNextView(featured, t) ? { next: upNextView(featured, t) } : {}) } : null,   // (dock3 1.99akf: + went - the page's first featured marker; upnext: + next)
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
@@ -2501,7 +2577,7 @@ module.exports = {
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
-  libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
+  libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, libraryUpNext, upNextView, UPNEXT_MS, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf, playUrlOf, whipRelayed, RTMP_PLAY, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
   camOpen, camBeat, camCandidates, slotsFor, camNotify,      // mfix: camNotify - a 📌 pin on the mic stage tells the person the same way
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
