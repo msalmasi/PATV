@@ -11,6 +11,9 @@
 //   * Camfrog room lines / replies to a Camfrog player keep a ROOM player's name (the room sees them type); a WEBSITE player is their label
 //     there too; a reply to a website player is masked for everyone
 //   * fail closed: a hidden set loading / a failed read masks everyone for that answer only - nothing is kept
+//   * (1.99?? casino2 verify - the review's probes) a seat session's id is a NEW epoch's (never shown before: not on a blip, not in place
+//     of a named result); what was shown under the name reads "someone" - never the later frog name - and a session's start or end
+//     changes nothing on it; one-character names are masked; a masked room player shows no Camfrog tag
 //   node --test test/casino-veil.test.js      (uses a temp DB)
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -334,4 +337,156 @@ test("veil.js: a masked seat id is the table's own (another table, another id); 
   assert.equal(V.seatOf(T, "u2"), id1);
   // the public view never carries the state itself
   assert.ok(!JSON.stringify(svc.publicView(T)).includes('"veil":{'), "T.veil is server only");
+});
+
+// ── 1.99?? casino2 verify: the review's three probes (each now asserting the safe outcome), and what they led to ──
+const dealRound = async (tid, who) => {
+  svc.S.hooks.shoe = () => ["Ts", "9h", "7d", "9s", "8h", "Kc"].concat(E.makeShoe(6).slice(6));
+  assert.ok((await A(who[0], "deal", [], { table: tid })).ok);
+  svc.S.hooks.shoe = null;
+  await playRound(tid, who);
+};
+const entry = (lr, seat) => ((lr && lr.players) || []).find((p) => p.seat === seat);
+
+test("verify (probe 1): a fail-closed blip's seat ids are old-content ids - steady through the blip, the viewer's own seat matches - never the id of a later masked seat session", async () => {
+  await fresh();
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  let d = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const catPos = d.table.seats.findIndex((s) => s.name === "Cat");
+  VK.set("u:u1", "unknown"); VK.set("u:u3", "unknown"); tick(3);
+  d = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const blipId = d.table.seats[catPos].seat;
+  assert.match(blipId, /^v[0-9a-f]{11}$/);
+  assert.notEqual(blipId, svc.uidHash("u3"));
+  tick(3);
+  const again = (await get(`/api/casino/t/${tid}`, "u3")).d;
+  assert.equal(again.table.seats[catPos].seat, blipId, "steady through the blip (no flicker)");
+  assert.equal(again.me.seat, blipId, "the viewer's own seat matches (the page still knows it's theirs)");
+  VK.clear(); tick(3);
+  d = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  assert.equal(d.table.seats[catPos].seat, svc.uidHash("u3"), "named again after the blip");
+  assert.ok((await A(cat, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  VK.set("u:u3", "incognito");
+  for (let i = 0; i < 10; i++) { tick(120); await get(`/api/casino/t/${tid}`, "u5"); }   // (20 minutes incognito: C.2 allows a frog name)
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  d = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const vs = d.table.seats.find((s) => s.veil);
+  assert.ok(isFrog(vs.name), vs.name);
+  assert.notEqual(vs.seat, blipId, "the masked seat session's id was never shown during the blip next to Cat's seat");
+});
+
+test("verify (probes 2 + 3): what was shown under the name reads 'someone' under an old-content id - never the frog name or the session's id; the session's start and end change nothing on it", async () => {
+  await fresh();
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(cat, "bet", ["700"], { table: tid })).ok);
+  await dealRound(tid, [ann, cat]);
+  let v = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  assert.ok(entry(v.table.last_round, svc.uidHash("u3")), "round 1 played named");
+  const namedTs = v.table.log.filter((l) => /\bCat\b/.test(l.text)).map((l) => l.ts);
+  assert.ok(namedTs.length >= 2);
+  assert.ok((await A(cat, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  VK.set("u:u3", "incognito"); tick(3);
+  v = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const old = v.table.last_round.players.find((p) => p.name === "someone");
+  assert.ok(old, "veiled off the seats: his named result reads 'someone'");
+  assert.match(old.seat, /^v[0-9a-f]{11}$/);
+  assert.notEqual(old.seat, svc.uidHash("u3"));
+  const oldId = old.seat;
+  assert.ok((await get(`/api/casino/t/${tid}/history`)).d.rounds.some((r) => r.results.players.some((p) => p.seat === oldId && p.name === "someone")), "the history too");
+  // 20 minutes incognito (C.2 then allows a frog name), then he sits down
+  for (let i = 0; i < 10; i++) { tick(120); await get(`/api/casino/t/${tid}`, "u5"); }
+  const before = JSON.stringify((await get(`/api/casino/t/${tid}`, "u5")).d.table.last_round.players);
+  const histBefore = JSON.stringify((await get(`/api/casino/t/${tid}/history`)).d.rounds);
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  v = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const vs = v.table.seats.find((s) => s.veil);
+  assert.ok(isFrog(vs.name), "a frog name 20 minutes on: " + vs.name);
+  assert.notEqual(vs.seat, oldId, "probe 2: the frog seat never has the id shown in place of Cat's named result");
+  assert.equal(JSON.stringify(v.table.last_round.players), before, "sitting down changed nothing on the old result");
+  assert.equal(JSON.stringify((await get(`/api/casino/t/${tid}/history`)).d.rounds), histBefore, "nor on the history");
+  const same = v.table.log.filter((l) => namedTs.includes(l.ts));
+  assert.ok(same.length >= 2 && same.every((l) => !l.text.includes(vs.name) && !/\bCat\b/.test(l.text)), "probe 3: a line first shown as Cat's never carries the frog name");
+  assert.ok(same.some((l) => /\bsomeone\b/.test(l.text)), "it reads 'someone'");
+  const h1 = await get(`/api/casino/t/${tid}/history`);
+  assert.ok(!h1.text.includes(vs.name) && !/\bCat\b/.test(h1.text), "probe 3: round 1 (played named) never reads as the frog");
+  // a round as the frog: written under the label + the session's id, for good
+  await dealRound(tid, [ann, cat]);
+  v = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  assert.equal((entry(v.table.last_round, vs.seat) || {}).name, vs.name);
+  // incognito off while seated (the seat stays masked), then he leaves; after the grace he is named again - and NOTHING changes on what
+  // was masked: round 1 is still 'someone' under the same old-content id, round 2 the frog (a session's end unmasks nothing)
+  VK.delete("u:u3"); tick(3);
+  assert.equal((await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.seat === vs.seat).name, vs.name, "sticky for the seat session");
+  assert.ok((await A(cat, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  const histIn = (await get(`/api/casino/t/${tid}/history`)).d.rounds;
+  tick(V.LEAVE_GRACE_MS / 1000 + 5);
+  await get(`/api/casino/t/${tid}`, "u5");
+  const histOut = (await get(`/api/casino/t/${tid}/history`)).d.rounds;
+  assert.deepEqual(histOut, histIn, "the session's end changed nothing in the history");
+  assert.ok(histOut.some((r) => r.results.players.some((p) => p.seat === oldId && p.name === "someone")), "round 1 still 'someone' under the same id");
+  assert.ok(histOut.some((r) => r.results.players.some((p) => p.seat === vs.seat && p.name === vs.name)), "round 2 still the frog");
+  assert.ok(!/\bCat\b/.test(JSON.stringify(histOut)));
+  // named again: his NEW named activity is his (only what was shown masked stays masked)
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  await dealRound(tid, [ann, cat]);
+  v = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  assert.equal(v.table.seats.find((s) => s.seat === svc.uidHash("u3")).name, "Cat", "named seat");
+  assert.equal((entry(v.table.last_round, svc.uidHash("u3")) || {}).name, "Cat", "his named round is his");
+  assert.ok(v.table.log.some((l) => l.text === "💰 Cat bets 500."), "his named line is his");
+  const h3 = (await get(`/api/casino/t/${tid}/history`)).d.rounds;
+  assert.ok(h3.some((r) => r.results.players.some((p) => p.seat === svc.uidHash("u3") && p.name === "Cat")), "the named round in the history");
+  assert.ok(h3.some((r) => r.results.players.some((p) => p.seat === oldId && p.name === "someone")), "round 1 still masked");
+});
+
+test("verify: a one-character name is masked in the lines too (never a card's rank: 'K♠'); a masked room player shows no Camfrog tag; the homepage list re-reads the veils", async () => {
+  const T = { id: "tbl1", veil: { u9: { n: ["K"], k: "incognito", m: 1, lab: "Mellow Glassfrog", ep: 1, w: 1 } }, eng: { seats: ["u9"], names: { u9: "K" } }, players: {} };
+  assert.equal(V.maskText(T, "💰 K bets 500. Pepe draws K♠ → 20. K's turn."), "💰 someone bets 500. Pepe draws K♠ → 20. someone's turn.");
+  assert.equal(V.maskText(T, "💰 K bets 500.", { fresh: true }), "💰 Mellow Glassfrog bets 500.");
+  assert.equal(V.maskText(T, "OK, Kc and k stay"), "OK, Kc and k stay", "only the name as written, as a word of its own");
+  // a Camfrog room player who is masked: no 🐸 Camfrog tag on the seat (it would say where they play from)
+  await fresh();
+  VK.set("dancf", "incognito");
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(dan, "bet", ["500"], { table: tid })).ok);
+  const d = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const s = d.table.seats.find((x) => x.veil);
+  assert.ok(s, "Dan's seat is masked");
+  assert.equal(s.via, "web", "no Camfrog tag");
+  assert.ok(!d.table.seats.some((x) => x.veil && x.via === "room"));
+  // the homepage's table list asks for the same masks as the table view (its veils re-read before the view)
+  const home = fs.readFileSync(path.join(repo, "home.js"), "utf8");
+  assert.match(home, /if \(T\) \{ try \{ await csvc\.refreshVeil\(T\); \} catch \(e\) \{[^}]*\} \}\s*\r?\n\s*const v = T \? csvc\.publicView\(T\) : null;/);
+});
+
+test("verify: a seat masked WITHOUT a session (a check that keeps failing) never shares an id with the result first shown under the name; a new one each time they sit", async () => {
+  await fresh();
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  await dealRound(tid, [ann, cat]);
+  assert.ok((await A(cat, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  VK.set("u:u3", "unknown"); tick(3);                                // (hidden, but no check says which veil: masked, never a session)
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  let d = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const s1 = d.table.seats.find((s) => s.veil);
+  assert.equal(s1.name, "someone");
+  const res = d.table.last_round.players.find((p) => p.name === "someone");
+  assert.ok(res, "his named result reads 'someone'");
+  assert.notEqual(s1.seat, res.seat, "the seat and the result first shown as Cat's don't share an id");
+  assert.equal(V.state(svc.getTable(tid), "u3").m, 0, "no seat session (nothing is kept from a failed check)");
+  assert.ok((await A(cat, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  tick(3);
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  d = (await get(`/api/casino/t/${tid}`, "u5")).d;
+  const s2 = d.table.seats.find((s) => s.veil);
+  assert.notEqual(s2.seat, s1.seat, "a new one each time they sit");
+  assert.equal(d.table.last_round.players.find((p) => p.name === "someone").seat, res.seat, "the old result keeps its id");
 });

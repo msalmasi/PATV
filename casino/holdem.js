@@ -515,7 +515,7 @@ function install(core) {
       const seat = V.seatOf(T, k), name = V.nameOf(T, k, e.names[k]);
       const sd = !e.hand_active ? shown.get(seat) : null;
       const p = T.players[k] || {};
-      return { name, seat, ...(V.masked(T, k) ? { veil: 1 } : {}), via: p.via || "web", stack: e.chips[k] || 0, bet: e.hand_active ? e.street_paid[k] || 0 : 0,
+      return { name, seat, ...(V.masked(T, k) ? { veil: 1 } : {}), via: V.masked(T, k) ? "web" : p.via || "web", stack: e.chips[k] || 0, bet: e.hand_active ? e.street_paid[k] || 0 : 0,
                status, cards_down: inHand.includes(k) && !e.folded.includes(k), button: k === e.button,
                blind: e.hand_active && k === e.sb_key ? "SB" : e.hand_active && k === e.bb_key ? "BB" : null, turn: k === actor,
                leaving: e.leaving.includes(k), host: k === T.host.uid, shown: sd ? sd.cards : null, hand: sd ? sd.hand : null,

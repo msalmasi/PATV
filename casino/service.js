@@ -187,13 +187,13 @@ async function emit(T, kind, text, extra) {
   // 1.99ox: every room the table plays in hears it (an event can name its own rooms: a push / a room leaving)
   const rs = roomsOf(T);
   // 1.99?? casino2 rework (casino/veil.js): Pepe's Camfrog line - a masked player who plays from the website is their label there too
-  const data = Object.assign({ text: text ? V.maskText(T, String(text), { webOnly: true }) : "" }, rs.length > 1 ? { rooms: rs } : {}, extra || {});
+  const data = Object.assign({ text: text ? V.maskText(T, String(text), { webOnly: true, fresh: true }) : "" }, rs.length > 1 ? { rooms: rs } : {}, extra || {});
   const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
                            [T.id, T.room || (Array.isArray(data.rooms) && data.rooms[0]) || null, ts, kind, JSON.stringify(data)]);
   if (r && r.id) S.lastSeq = Math.max(S.lastSeq, r.id);
   if (text) {
     // 1.99?? casino2 rework (casino/veil.js): the table's log (the website's) is written with every label in force
-    T.log.push({ ts, text: V.maskText(T, String(text)).slice(0, 240) });
+    T.log.push({ ts, text: V.maskText(T, String(text), { fresh: true }).slice(0, 240) });   // (verify: fresh - the labels in force)
     if (T.log.length > C.LOG_KEEP) T.log.splice(0, T.log.length - C.LOG_KEEP);
   }
   wake();
@@ -987,7 +987,7 @@ async function act(actor, verb, args, opts, key) {
     // 1.99?? casino2 rework (casino/veil.js): a reply that names others (!bj status, "waiting on X") names a masked player by their
     // label - to a website player always, to a Camfrog player when that player plays from the website
     const VT = tid ? S.tables.get(tid) : null;
-    if (VT && out && typeof out.reply === "string") out.reply = V.maskText(VT, out.reply, { webOnly: actor && actor.via === "room" });
+    if (VT && out && typeof out.reply === "string") out.reply = V.maskText(VT, out.reply, { webOnly: actor && actor.via === "room", fresh: true });
     await runQuery("INSERT OR IGNORE INTO casino_actions (key, table_id, userId, response, created) VALUES (?, ?, ?, ?, ?)",
                    [key, tid, actor.uid || null, JSON.stringify(out), clock()]);
     return out;
@@ -1077,7 +1077,7 @@ function bjView(T) {
     // 1.99?? casino2 rework (casino/veil.js): a veiled player's seat is masked - its label, its own seat id, veil: 1 (no avatar)
     const vl = V.masked(T, k);
     return {
-      name: V.nameOf(T, k, e.names[k] || p.name || "?"), via: p.via || "web", bet: e.bets[k] || 0, pending: T.pending[k] || 0,
+      name: V.nameOf(T, k, e.names[k] || p.name || "?"), via: vl ? "web" : p.via || "web", bet: e.bets[k] || 0, pending: T.pending[k] || 0,
       insured: k in e.insurance, autobet: T.autobet.includes(k), turn: !!cur && cur.key === k, leaving: e.leaving.includes(k),
       host: k === T.host.uid, seat: V.seatOf(T, k), ...(vl ? { veil: 1 } : {}),
       hands: e.hands.filter((h) => h.key === k).map((h) => {
