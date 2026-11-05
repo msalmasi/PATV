@@ -208,7 +208,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   // the navbar
   assert.match(html, new RegExp('<a href="/p/' + s + '/submit" class="nav-post" title="Create a post in p/' + s + '">'));
   assert.ok(html.indexOf('class="nav-post"') < html.indexOf('class="nav-golive"'), "Post sits before Go live");
-  assert.match(html, /feed\.css\?v=21/); assert.match(html, /feed-composer\.js\?v=19/); assert.match(html, /stories\.js\?v=12/);   // storyreact site: v=11; mic keep review: v=12 (composer v19: privacy controls review fixes 2 - Q4-B)
+  assert.match(html, /feed\.css\?v=21/); assert.match(html, /feed-composer\.js\?v=19/); assert.match(html, /stories\.js\?v=13/);   // storyreact site: v=11; mic keep review: v=12 (composer v19: privacy controls review fixes 2 - Q4-B)
 });
 
 test("pad page signed out: a sign-in bar instead of the composer; About's analytics link is a button", async () => {

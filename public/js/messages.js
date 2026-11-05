@@ -331,8 +331,8 @@
     if (window.patvStories) return Promise.resolve();
     if (!viewerP) {
       viewerP = new Promise(function (ok, no) {
-        if (!document.querySelector('link[href^="/public/css/stories.css"]')) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/public/css/stories.css?v=8'; document.head.appendChild(l); }
-        var s = document.createElement('script'); s.src = '/public/js/stories.js?v=11'; s.setAttribute('data-me', me.username || '');
+        if (!document.querySelector('link[href^="/public/css/stories.css"]')) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/public/css/stories.css?v=9'; document.head.appendChild(l); }
+        var s = document.createElement('script'); s.src = '/public/js/stories.js?v=13'; s.setAttribute('data-me', me.username || '');
         s.onload = function () { ok(); }; s.onerror = no; document.head.appendChild(s);
       }).catch(function (e) { viewerP = null; throw e; });
     }

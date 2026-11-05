@@ -117,6 +117,8 @@ Area accents:
 
 The Room Dock maps an equipped pad accent once, on `.rm-dock.pad-acc` and the matching moved-surface shell. The values come from the server's existing `padLook()` CSS variables; the client does not repeat palette, contrast or cosmetic rules:
 
+Story Studio is the second consumer of this mapping, on `.sst.pad-acc`; its focus ring follows the selected pad's guarded accent too.
+
 ```css
 --ds-ac: var(--pad-accent);
 --ds-ac-2: var(--pad-accent);

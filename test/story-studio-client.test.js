@@ -1,0 +1,680 @@
+// Story Studio: the real browser scripts in a VM. The shared fake DOM is copied from
+// story-react-client.test.js; the editor adds recording canvases, local file decoding and the upload wire.
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+const repo = path.resolve(__dirname, "..");
+const SRC = (f) => fs.readFileSync(path.join(repo, "public", "js", f), "utf8");
+
+// ── a small fake DOM ──
+function parseList(sel) {                       // "a, b c" -> [[compound, compound], ...]
+  const out = []; let cur = "", depth = 0, q = null;
+  for (const ch of sel) {
+    if (q) { cur += ch; if (ch === q) q = null; continue; }
+    if (ch === '"' || ch === "'") { q = ch; cur += ch; continue; }
+    if (ch === "[" || ch === "(") depth++;
+    if (ch === "]" || ch === ")") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim()).filter(Boolean).map(splitDesc);
+}
+function splitDesc(s) {
+  const parts = []; let cur = "", depth = 0, q = null;
+  for (const ch of s) {
+    if (q) { cur += ch; if (ch === q) q = null; continue; }
+    if (ch === '"' || ch === "'") { q = ch; cur += ch; continue; }
+    if (ch === "[" || ch === "(") depth++;
+    if (ch === "]" || ch === ")") depth--;
+    if (/\s/.test(ch) && depth === 0) { if (cur) parts.push(cur); cur = ""; } else cur += ch;
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+function matchCompound(el, c) {
+  if (!el || !el.attrs) return false;
+  let rest = c;
+  const tag = /^([a-zA-Z][\w-]*|\*)/.exec(rest);
+  if (tag) { if (tag[1] !== "*" && el.localName !== tag[1].toLowerCase()) return false; rest = rest.slice(tag[0].length); }
+  while (rest) {
+    let m;
+    if ((m = /^#([\w-]+)/.exec(rest))) { if (el.getAttribute("id") !== m[1]) return false; }
+    else if ((m = /^\.([\w-]+)/.exec(rest))) { if (!el.classList.contains(m[1])) return false; }
+    else if ((m = /^\[([\w-]+)(?:([\^$*]?=)(?:"([^"]*)"|'([^']*)'|([^\]]*)))?\]/.exec(rest))) {
+      const v = el.getAttribute(m[1]);
+      if (v === null) return false;
+      const want = m[3] != null ? m[3] : m[4] != null ? m[4] : m[5];
+      if (m[2] === "=" && v !== want) return false;
+      if (m[2] === "^=" && !v.startsWith(want)) return false;
+    } else if ((m = /^:not\(([^)]*)\)/.exec(rest))) { if (matchCompound(el, m[1])) return false; }
+    else throw new Error("unsupported selector part: " + rest);
+    rest = rest.slice(m[0].length);
+  }
+  return true;
+}
+function matches(el, sel) {
+  return parseList(sel).some((parts) => {
+    if (!matchCompound(el, parts[parts.length - 1])) return false;
+    let n = el.parentNode;
+    for (let i = parts.length - 2; i >= 0; i--) { while (n && !matchCompound(n, parts[i])) n = n.parentNode; if (!n) return false; n = n.parentNode; }
+    return true;
+  });
+}
+class Ev {
+  constructor(type, init) { Object.assign(this, init || {}); this.type = type; this.defaultPrevented = false; this._stop = false; }
+  preventDefault() { this.defaultPrevented = true; }
+  stopPropagation() { this._stop = true; }
+}
+class TextNode { constructor(t) { this.data = String(t); this.parentNode = null; } get textContent() { return this.data; } }
+const BOOL = { disabled: "disabled", hidden: "hidden", noValidate: "novalidate" };
+const STR = { id: "id", type: "type", href: "href", src: "src", alt: "alt", title: "title", autocomplete: "autocomplete", rows: "rows", maxLength: "maxlength", tabIndex: "tabindex" };
+class El {
+  constructor(doc, tag) {
+    this.ownerDocument = doc; this.localName = String(tag).toLowerCase(); this.tagName = this.localName.toUpperCase();
+    this.attrs = new Map(); this.childNodes = []; this.parentNode = null; this.listeners = []; this.value = "";
+    const self = this;
+    const st = {}; st.setProperty = (k, v) => { st[k] = v; }; st.removeProperty = (k) => { delete st[k]; }; this.style = st;
+    this.classList = {
+      contains: (c) => self.className.split(/\s+/).includes(c),
+      add: (...cs) => { const s = new Set(self.className.split(/\s+/).filter(Boolean)); cs.forEach((c) => s.add(c)); self.className = [...s].join(" "); },
+      remove: (...cs) => { self.className = self.className.split(/\s+/).filter((x) => x && !cs.includes(x)).join(" "); },
+      toggle: (c, force) => { const on = force === undefined ? !self.classList.contains(c) : !!force; if (on) self.classList.add(c); else self.classList.remove(c); return on; },
+    };
+  }
+  get className() { return this.attrs.get("class") || ""; }
+  set className(v) { this.attrs.set("class", String(v)); }
+  get children() { return this.childNodes.filter((n) => n instanceof El); }
+  get textContent() { return this.childNodes.map((n) => n.textContent).join(""); }
+  set textContent(v) { for (const c of this.childNodes) c.parentNode = null; this.childNodes = []; if (v != null && v !== "") this.appendChild(new TextNode(v)); }
+  set innerHTML(v) {                         // a tiny parser: enough for the viewer's own fixed markup (the sign-in prompt)
+    this.textContent = ""; this._html = v;
+    const stack = [this];
+    const re = /<(\/?)([a-zA-Z][\w-]*)([^>]*)>|([^<]+)/g;
+    let m;
+    while ((m = re.exec(String(v)))) {
+      const top = stack[stack.length - 1];
+      if (m[4]) { top.appendChild(new TextNode(m[4])); continue; }
+      if (m[1]) { if (stack.length > 1) stack.pop(); continue; }
+      const e = new El(this.ownerDocument, m[2]);
+      for (const a of m[3].matchAll(/([\w-]+)="([^"]*)"/g)) e.setAttribute(a[1], a[2]);
+      top.appendChild(e);
+      if (!/\/$/.test(m[3].trim()) && !/^(img|br|input)$/i.test(m[2])) stack.push(e);
+    }
+  }
+  get innerHTML() { return this._html || ""; }
+  get scrollHeight() { return 20; }
+  appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = this; this.childNodes.push(c); return c; }
+  insertBefore(c, ref) { if (!ref) return this.appendChild(c); if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = this; this.childNodes.splice(this.childNodes.indexOf(ref), 0, c); return c; }
+  removeChild(c) { const i = this.childNodes.indexOf(c); if (i >= 0) this.childNodes.splice(i, 1); c.parentNode = null; return c; }
+  replaceChild(n, old) { this.insertBefore(n, old); this.removeChild(old); return old; }
+  remove() { if (this.parentNode) this.parentNode.removeChild(this); }
+  replaceWith(n) { if (this.parentNode) this.parentNode.replaceChild(n, this); }
+  setAttribute(k, v) { this.attrs.set(k, String(v)); }
+  getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; }
+  hasAttribute(k) { return this.attrs.has(k); }
+  removeAttribute(k) { this.attrs.delete(k); }
+  addEventListener(type, fn, opt) { this.listeners.push({ type, fn, capture: opt === true || !!(opt && opt.capture) }); }
+  removeEventListener(type, fn, opt) { const cap = opt === true || !!(opt && opt.capture); this.listeners = this.listeners.filter((l) => !(l.type === type && l.fn === fn && l.capture === cap)); }
+  dispatchEvent(ev) { return dispatch(this, ev); }
+  click() { return dispatch(this, new Ev("click", { bubbles: true, button: 0 })); }
+  focus() { this.ownerDocument.activeElement = this; }
+  blur() { if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body; }
+  contains(n) { while (n) { if (n === this) return true; n = n.parentNode; } return false; }
+  matches(sel) { return matches(this, sel); }
+  closest(sel) { let n = this; while (n && n instanceof El) { if (matches(n, sel)) return n; n = n.parentNode; } return null; }
+  all() { const out = []; const walk = (n) => { for (const c of n.children) { out.push(c); walk(c); } }; walk(this); return out; }
+  querySelectorAll(sel) { return this.all().filter((e) => matches(e, sel)); }
+  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+  get isConnected() { let n = this; while (n.parentNode) n = n.parentNode; return n === this.ownerDocument.documentElement; }
+  get offsetParent() {
+    if (!this.isConnected) return null;
+    for (let n = this; n && n instanceof El; n = n.parentNode) if (n.hasAttribute("hidden") || n.classList.contains("hide")) return null;
+    return this.ownerDocument.body;
+  }
+  getBoundingClientRect() { return { left: 0, top: 0, width: 300, height: 500, right: 300, bottom: 500 }; }
+}
+for (const [p, a] of Object.entries(BOOL)) Object.defineProperty(El.prototype, p, { get() { return this.hasAttribute(a); }, set(v) { if (v) this.setAttribute(a, ""); else this.removeAttribute(a); } });
+for (const [p, a] of Object.entries(STR)) Object.defineProperty(El.prototype, p, { get() { return this.getAttribute(a) || ""; }, set(v) { this.setAttribute(a, v); } });
+function dispatch(target, ev) {
+  ev.target = target;
+  const pathUp = []; for (let n = target; n; n = n.parentNode) pathUp.push(n);
+  const doc = target.ownerDocument;
+  if (target.isConnected) pathUp.push(doc);
+  for (const n of pathUp.slice().reverse()) {                       // capture
+    if (n === target) break;
+    for (const l of (n.listeners || []).filter((x) => x.type === ev.type && x.capture)) { ev.currentTarget = n; l.fn.call(n, ev); if (ev._stop) return !ev.defaultPrevented; }
+  }
+  for (const n of pathUp) {                                         // target + bubble
+    for (const l of (n.listeners || []).filter((x) => x.type === ev.type && (n === target || !x.capture))) { ev.currentTarget = n; l.fn.call(n, ev); }
+    if (ev._stop || (n !== target && ev.bubbles === false)) break;
+  }
+  return !ev.defaultPrevented;
+}
+function makeDoc(me) {
+  const doc = { listeners: [], readyState: "complete", hidden: false };
+  doc.createElement = (t) => new El(doc, t);
+  doc.createElementNS = (ns, t) => new El(doc, t);
+  doc.createTextNode = (t) => new TextNode(t);
+  doc.documentElement = new El(doc, "html");
+  doc.head = doc.documentElement.appendChild(new El(doc, "head"));
+  doc.body = doc.documentElement.appendChild(new El(doc, "body"));
+  // like a browser: a focused element that is removed or disabled drops the focus to <body>
+  let active = doc.body;
+  Object.defineProperty(doc, "activeElement", { configurable: true, get() { return active && active.isConnected && !active.disabled ? active : doc.body; },
+                                                set(v) { active = v; } });
+  doc.querySelectorAll = (s) => [doc.documentElement].concat(doc.documentElement.all()).filter((e) => matches(e, s));
+  doc.querySelector = (s) => doc.querySelectorAll(s)[0] || null;
+  doc.getElementById = (id) => doc.querySelector("#" + id);
+  doc.addEventListener = (type, fn, opt) => doc.listeners.push({ type, fn, capture: opt === true || !!(opt && opt.capture) });
+  doc.removeEventListener = (type, fn, opt) => { const cap = opt === true || !!(opt && opt.capture); doc.listeners = doc.listeners.filter((l) => !(l.type === type && l.fn === fn && l.capture === cap)); };
+  doc.currentScript = null;
+  doc._me = me;
+  return doc;
+}
+const flush = async (n = 4) => { for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r)); };
+
+/** A window running stories.js (+ post-tip.js), with fetch answered by `routes` (method + path -> {status, body}). */
+function page({ routes = {}, me = "bob", withTip = true } = {}) {
+  const doc = makeDoc(me);
+  const calls = [];
+  const resp = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => JSON.parse(JSON.stringify(body)) });
+  const win = {
+    document: doc, console, Promise, JSON, Math, Date, Object, Array, String, Number, Error, encodeURIComponent, isFinite, parseInt,
+    setTimeout: () => 0, clearTimeout: () => {}, requestAnimationFrame: () => 1, cancelAnimationFrame: () => {},
+    performance: { now: () => Date.now() }, innerHeight: 800, location: { pathname: "/feed", search: "", href: "/feed" },
+    localStorage: { _s: {}, getItem(k) { return this._s[k] === undefined ? null : this._s[k]; }, setItem(k, v) { this._s[k] = String(v); } },
+    visualViewport: { height: 500, offsetTop: 0, ls: [], addEventListener(t, f) { this.ls.push(f); }, removeEventListener(t, f) { this.ls = this.ls.filter((x) => x !== f); } },
+    Image: function () { return doc.createElement("img"); },
+    confirm: () => true, crypto: { randomUUID: () => "uuid-" + Math.random().toString(36).slice(2) },
+    addEventListener: () => {},
+    fetch: async (url, opt) => {
+      const method = (opt && opt.method) || "GET";
+      calls.push({ method, url, body: opt && opt.body ? JSON.parse(opt.body) : null });
+      const h = routes[method + " " + String(url).split("?")[0]] || routes[method + " " + url];
+      const r = typeof h === "function" ? h(url, opt) : h;
+      return r ? resp(r.status || 200, r.body) : resp(404, { ok: false, error: "nope" });
+    },
+  };
+  win.window = win;
+  const ctx = vm.createContext(win);
+  if (withTip) { doc.currentScript = { getAttribute: (k) => (k === "data-me" ? me : null) }; vm.runInContext(SRC("post-tip.js"), ctx); }
+  doc.currentScript = { getAttribute: (k) => (k === "data-me" ? me : null) };
+  vm.runInContext(SRC("stories.js"), ctx);
+  doc.currentScript = null;
+  return { win, doc, calls };
+}
+const key = (el, k, extra) => el.dispatchEvent(new Ev("keydown", Object.assign({ key: k, bubbles: true }, extra || {})));
+const keyActive = (P, k, extra) => key(P.doc.activeElement, k, extra);      // where a real key press goes: the focused element
+
+const TARGETS = { ok: true, pads: [
+  { id: 'u/pixelotter', title: 'Your profile', profile: true, label: 'u/pixelotter', look: { avatar: '/profile.webp', accent: null, ink: null } },
+  { id: 'aurora.pad', title: 'Aurora Workshop', href: '/p/aurora-workshop', label: 'p/aurora-workshop', look: { avatar: '/aurora.webp', accent: '#26c6da', ink: '#000000' } },
+  { id: 'plain.pad', title: 'Plain Pond', href: '/p/plain-pond', label: 'p/plain-pond', look: null }
+], caps: { secs: 30, imageMb: 10, videoMb: 60, srcSecs: 180, srcVideoMb: 100, overlayMb: 2, textsMax: 3, textLen: 120, stickersMax: 10, mentionsMax: 5, studio: true }, as: 'Pixel Otter' };
+function studioPage(options = {}) {
+  const doc = makeDoc('pixelotter'), calls = [], draws = [], blobs = new Map(), revoked = [], uploaded = [], events = [];
+  let urlN = 0, uploadN = 0, context;
+  doc.dispatchEvent = (ev) => { for (const l of doc.listeners.filter((x) => x.type === ev.type)) l.fn(ev); events.push(ev); return !ev.defaultPrevented; };
+  doc.fonts = { load: async (...args) => { calls.push({ font: args }); } };
+  const normalCreate = doc.createElement;
+  doc.createElement = (tag) => {
+    const node = normalCreate(tag); node.setPointerCapture = () => {};
+    if (tag === 'canvas') {
+      const stack = [], ctx = { font: '700 72px Ubuntu', fillStyle: '', save() { stack.push({ font: this.font, fillStyle: this.fillStyle }); }, restore() { Object.assign(this, stack.pop()); },
+        clearRect(...a) { draws.push({ canvas: node, op: 'clear', args: a }); }, measureText(t) { return { width: Array.from(t).length * parseFloat(this.font.split(' ')[1]) * .55 }; },
+        fillRect(...a) { draws.push({ canvas: node, op: 'rect', args: a }); }, fillText(...a) { draws.push({ canvas: node, op: 'text', args: a, font: this.font, direction: this.direction }); },
+        strokeText(...a) { draws.push({ canvas: node, op: 'stroke', args: a }); }, drawImage(...a) { draws.push({ canvas: node, op: 'image', args: a }); }
+      }; node.getContext = () => ctx; node.toBlob = (cb, type) => cb(new Blob(['overlay'], { type }));
+    }
+    if (tag === 'img' || tag === 'video') {
+      Object.defineProperty(node, 'src', { configurable: true, get: () => node.getAttribute('src'), set: (v) => {
+        node.setAttribute('src', v); if (!String(v).startsWith('blob:')) return;
+        const blob = blobs.get(v), isSource = node.classList.contains('sst-source');
+        queueMicrotask(() => { if (isSource && options.decode === false) { node.dispatchEvent(new Ev('error')); return; }
+          node.naturalWidth = options.width || 1080; node.naturalHeight = options.height || 1920; node.videoWidth = options.width || 1080; node.videoHeight = options.height || 1920;
+          node.duration = options.duration || 42; node.currentTime = 0; node.paused = true;
+          if (node.onload) node.onload(); node.dispatchEvent(new Ev(tag === 'video' ? 'loadedmetadata' : 'load')); void blob;
+        });
+      } }); node.play = () => { node.paused = false; return Promise.resolve(); }; node.pause = () => { node.paused = true; };
+    }
+    return node;
+  };
+  const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => body });
+  const win = { document: doc, console, Promise, JSON, Math, Date, Object, Array, String, Number, Error, encodeURIComponent, isFinite, parseInt, Intl, Blob,
+    getComputedStyle: () => ({ direction: 'ltr' }), innerHeight: 812,
+    URL: { createObjectURL: (blob) => { const u = 'blob:local-' + ++urlN; blobs.set(u, blob); return u; }, revokeObjectURL: (u) => { revoked.push(u); blobs.delete(u); } },
+    setTimeout: (fn, ms) => ms === 9000 ? 0 : setImmediate(fn), clearTimeout: (id) => clearImmediate(id),
+    requestAnimationFrame: (f) => setImmediate(f), cancelAnimationFrame: (id) => clearImmediate(id),
+    addEventListener: () => {}, removeEventListener: () => {}, confirm: () => true,
+    location: { reload() { throw new Error('must never reload'); }, pathname: '/feed', href: '/feed' },
+    CustomEvent: class extends Ev { constructor(type, options) { super(type, options); } },
+    Image: function () { return doc.createElement('img'); },
+    DOMParser: class { parseFromString() { const root = { nodeName: 'svg', attrs: { viewBox: '0 0 24 24' }, setAttribute(k, v) { this.attrs[k] = v; } }; return { documentElement: root, querySelector: () => null }; } },
+    XMLSerializer: class { serializeToString(xml) { return '<svg viewBox="0 0 24 24" width="' + xml.documentElement.attrs.width + '" height="' + xml.documentElement.attrs.height + '"></svg>'; } },
+    fetch: async (url, opt = {}) => {
+      const method = opt.method || 'GET', body = typeof opt.body === 'string' ? JSON.parse(opt.body) : opt.body;
+      calls.push({ url, method, body, headers: opt.headers });
+      if (options.fetch) { const answer = await options.fetch(url, opt, { calls, uploaded }); if (answer) return answer; }
+      if (url.startsWith('/api/stories/targets')) return response(200, JSON.parse(JSON.stringify(options.targets || TARGETS)));
+      if (url === '/api/stickers') return response(200, { packs: [{ id: 'frogs', name: 'Workshop Frogs', owned: true, stickers: [{ id: 'hello', name: 'Hello Frog', url: '/public/stickers/frogs/hello.svg' }] }, { id: 'locked', name: 'Locked', owned: false, stickers: [] }] });
+      if (url.startsWith('/public/stickers/')) return response(200, '<svg viewBox="0 0 24 24"></svg>');
+      if (url.startsWith('/api/mentions/suggest')) return response(200, { people: [{ username: 'mosswidget', display: 'Moss Widget' }] });
+      if (url === '/api/feed/uploads') { const id = (++uploadN).toString(16).padStart(24, '0'); uploaded.push({ id, body }); return response(200, { ok: true, id, chunk: 4 }); }
+      if (method === 'PUT') return response(200, { ok: true, received: Number(url.split('offset=')[1]) + opt.body.size });
+      if (/\/finish$|\/discard$/.test(url)) return response(200, { ok: true });
+      if (/^\/api\/feed\/uploads\//.test(url)) return response(200, { ok: true, state: 'ready' });
+      if (url === '/api/stories/mine') return response(200, { ok: true, story: options.story || { id: 'new-story', scope: 'aurora.pad', href: '/media/new-story', circle: { id: 'aurora.pad', title: 'Aurora Workshop' }, item: { id: 'new-story', kind: 'photo', src: '/new.webp' } } });
+      return response(404, { ok: false, error: 'missing test route' });
+    }
+  };
+  win.window = win; context = vm.createContext(win); vm.runInContext(SRC('story-studio.js'), context);
+  const opener = doc.body.appendChild(doc.createElement('button')); opener.setAttribute('data-story-compose', ''); opener.setAttribute('data-pad', options.pad || 'aurora.pad'); opener.focus();
+  return { win, doc, calls, draws, blobs, revoked, uploaded, events, opener, context, response };
+}
+async function studioOpen(P) { P.opener.click(); await flush(); assert.ok(P.doc.querySelector('.sst')); return P.doc.querySelector('.sst'); }
+async function studioPick(P, type = 'image/jpeg', size = 8) { const f = new Blob([new Uint8Array(size)], { type }); f.name = type.startsWith('video') ? 'workshop.mp4' : type === 'image/gif' ? 'workshop.gif' : 'workshop.jpg'; const n = P.doc.querySelector('[data-pick="gallery"]'); n.files = [f]; n.dispatchEvent(new Ev('change')); await flush(); return f; }
+async function studioText(P, text = 'Hello, workshop!') { P.doc.querySelector('[data-tool="text"]').click(); const ta = P.doc.querySelector('.sst-text-input'); ta.value = text; ta.dispatchEvent(new Ev('input')); await flush(); return ta; }
+function clickText(P, text) { const found = P.doc.querySelectorAll('button').find((n) => n.textContent === text); assert.ok(found, text); found.click(); return found; }
+
+test('Studio: one listener, pad preselection, nested Escape, draft confirmation and focus return', async () => {
+  const P = studioPage(); vm.runInContext(SRC('story-studio.js'), P.context);
+  assert.equal(P.doc.listeners.filter((l) => l.type === 'click').length, 1);
+  const root = await studioOpen(P); assert.equal(root.getAttribute('aria-modal'), 'true'); assert.ok(root.classList.contains('pad-acc'));
+  assert.equal(root.style['--pad-accent'], '#26c6da'); assert.match(P.doc.querySelector('.sst-destination').textContent, /Aurora Workshop/);
+  await studioPick(P); P.doc.querySelector('[data-tool="crop"]').click();
+  const e = new Ev('keydown', { key: 'Escape', bubbles: true }); P.doc.activeElement.dispatchEvent(e); assert.ok(e.defaultPrevented); assert.ok(P.doc.querySelector('.sst')); assert.equal(P.doc.querySelector('.sst-sheet'), null);
+  let confirms = 0; P.win.confirm = () => { confirms++; return false; }; key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst')); assert.equal(confirms, 1);
+  P.win.confirm = () => true; key(P.doc.activeElement, 'Escape'); assert.equal(P.doc.querySelector('.sst'), null); assert.equal(P.doc.activeElement, P.opener); assert.equal(P.revoked.length, 1);
+});
+
+test('Studio: caps are checked before uploads; long video gets clamped trim and native capture remains local', async () => {
+  const P = studioPage(); await studioOpen(P);
+  const f = { type: 'video/mp4', name: 'large.mp4', size: 101 * 1024 * 1024 };
+  const picker = P.doc.querySelector('[data-pick="gallery"]'); picker.files = [f]; picker.dispatchEvent(new Ev('change')); await flush();
+  assert.match(P.doc.querySelector('.sst-status').textContent, /100 MB/); assert.equal(P.uploaded.length, 0);
+  assert.equal(P.doc.querySelector('[data-pick="camera"]').getAttribute('capture'), 'environment');
+  await studioPick(P, 'video/mp4'); assert.ok(P.doc.querySelector('.sst-trim-bar')); assert.match(P.doc.querySelector('.sst-trim-report').textContent, /0:00.*0:30.*30 s/);
+  const end = P.doc.querySelector('.sst-trim-end'); end.value = 41; end.dispatchEvent(new Ev('input')); assert.equal(+end.value, 30);
+  const start = P.doc.querySelector('.sst-trim-start'); start.value = 30; start.dispatchEvent(new Ev('input')); assert.equal(+start.value, 29);
+  end.value = 28; end.dispatchEvent(new Ev('input')); assert.equal(+end.value, 30); assert.equal(P.uploaded.length, 0);
+  P.doc.querySelector('.sst-post').click(); await flush(16); assert.deepEqual(P.uploaded[0].body.edit.trim, { start: 29, end: 30 });
+});
+
+test('Studio: undecodable files use the explicit legacy path, and GIFs never send edits', async () => {
+  for (const gif of [false, true]) {
+    const P = studioPage({ decode: gif ? true : false }); await studioOpen(P); await studioPick(P, gif ? 'image/gif' : 'image/jpeg');
+    assert.ok(P.doc.querySelector('[data-tool="text"]').disabled);
+    if (!gif) { assert.ok(P.doc.querySelector('.sst-post').disabled); clickText(P, 'Post it as it is'); }
+    P.doc.querySelector('.sst-post').click(); await flush(16); assert.equal(P.uploaded.length, 1); assert.equal(P.uploaded[0].body.edit, undefined);
+  }
+});
+
+test('Studio: the shared 1080×1920 overlay draws text/stickers but never mention chips; upload order and event avatar are authoritative', async () => {
+  const serverCircle = { id: 'aurora.pad', title: 'Aurora Workshop' }, P = studioPage({ story: { scope: 'aurora.pad', circle: serverCircle, item: { id: 'new' }, href: '/media/new' } }); await studioOpen(P); await studioPick(P); await studioText(P, 'مرحبا 👩‍💻');
+  P.doc.querySelector('[data-tool="sticker"]').click(); await flush(); P.doc.querySelector('.sst-sticker').click(); await flush(8);
+  P.doc.querySelector('[data-tool="mention"]').click(); const search = P.doc.querySelector('[role="combobox"]'); search.value = '@mo'; search.dispatchEvent(new Ev('input')); await flush();
+  assert.ok(P.doc.querySelector('.sst .ds-pop')); assert.equal(P.doc.querySelector('.sst-suggestions').parentNode.parentNode.parentNode.closest('.sst') !== null, true);
+  const call = P.calls.find((c) => c.url === '/api/mentions/suggest?q=mo'); assert.equal(call.headers['X-Requested-With'], 'fetch'); key(search, 'ArrowDown'); key(search, 'Enter'); await flush();
+  assert.equal(P.doc.querySelector('.sst-mention').textContent, '@mosswidget');
+  P.doc.querySelector('.sst-post').click(); await flush(24); assert.equal(P.uploaded.length, 2); assert.equal(P.uploaded[0].body.purpose, 'story_ovl'); assert.equal(P.uploaded[1].body.purpose, 'story');
+  const edit = P.uploaded[1].body.edit; assert.equal(edit.overlay, P.uploaded[0].id); assert.deepEqual(edit.text, ['مرحبا 👩‍💻']); assert.deepEqual(edit.stickers, [{ pack: 'frogs', sticker: 'hello' }]); assert.equal(edit.pad, 'aurora.pad'); assert.deepEqual(edit.crop, { x: 0, y: 0, w: 1, h: 1 });
+  const mine = P.calls.find((c) => c.url === '/api/stories/mine'); assert.deepEqual(mine.body.mentions, [{ username: 'mosswidget', x: .5, y: .75 }]);
+  const exports = P.draws.filter((r) => r.canvas.width === 1080 && r.canvas.height === 1920 && !r.canvas.className);
+  assert.ok(exports.some((r) => r.op === 'text' && r.args[0] === 'مرحبا 👩‍💻' && r.direction === 'rtl'));
+  const art = exports.find((r) => r.op === 'image'); assert.ok(art.args[0].src.startsWith('blob:')); assert.equal(art.args[3] % 24, 0); assert.equal(art.args[4] % 24, 0); assert.ok(!exports.some((r) => r.op === 'text' && r.args[0].includes('mosswidget')));
+  const evt = P.events.find((e) => e.type === 'patv:story-posted'); assert.equal(evt.detail.circle.avatar, '/aurora.webp'); assert.equal(serverCircle.avatar, undefined); assert.notEqual(evt.detail.circle, serverCircle);
+  const svgBlob = P.calls.filter((c) => c.url && c.url.startsWith('/public/stickers/')); assert.equal(svgBlob.length, 1); assert.ok(P.calls.some((c) => c.font));
+});
+
+test('Studio: an uncertain chunk is resent, processing failure keeps draft and replaces both uploads on Retry', async () => {
+  let putFailed = false, failProcessing = true;
+  const P = studioPage({ fetch: (url, opt, { uploaded }) => {
+    if (opt.method === 'PUT' && !putFailed) { putFailed = true; throw new Error('network lost'); }
+    if (opt.method !== 'POST' && /^\/api\/feed\/uploads\/[0-9a-f]+$/.test(url) && uploaded.length === 2 && failProcessing) return P.response(200, { ok: true, state: 'failed', error: 'Try that again.' });
+  } }); await studioOpen(P); await studioPick(P); await studioText(P);
+  P.doc.querySelector('.sst-post').click(); await flush(25); assert.equal(P.uploaded.length, 2); assert.equal(P.doc.querySelector('.sst-post').textContent, 'Retry'); assert.ok(P.doc.querySelector('.sst-source'));
+  const puts = P.calls.filter((c) => c.method === 'PUT'); assert.equal(puts[0].url, puts[1].url); assert.ok(P.calls.filter((c) => /\/discard$/.test(c.url || '')).length >= 2);
+  failProcessing = false; P.doc.querySelector('.sst-post').click(); await flush(25); assert.equal(P.uploaded.length, 4); assert.notEqual(P.uploaded[1].body.edit.overlay, P.uploaded[3].body.edit.overlay); assert.equal(P.doc.querySelector('.sst'), null);
+});
+
+test('Studio: a final-post refusal retries the ready attachment, while Cancel discards an overlay and pending source', async () => {
+  let refuse = true;
+  const P = studioPage({ fetch: (url) => url === '/api/stories/mine' && refuse ? P.response(403, { ok: false, error: 'Choose another pad.' }) : null });
+  await studioOpen(P); await studioPick(P); P.doc.querySelector('.sst-post').click(); await flush(18); assert.equal(P.uploaded.length, 1); assert.equal(P.doc.querySelector('.sst-post').textContent, 'Retry');
+  P.doc.querySelector('.sst-destination').click(); clickText(P, 'Plain Pond'); refuse = false; P.doc.querySelector('.sst-post').click(); await flush(18);
+  assert.equal(P.uploaded.length, 1); assert.equal(P.calls.filter((c) => c.url === '/api/stories/mine')[1].body.pad, 'plain.pad');
+  let release;
+  const Q = studioPage({ fetch: (url, opt, { uploaded }) => uploaded.length === 2 && opt.method === 'PUT' ? new Promise((resolve) => { release = () => resolve(Q.response(200, { ok: true, received: 4 })); }) : null });
+  await studioOpen(Q); await studioPick(Q); await studioText(Q); Q.doc.querySelector('.sst-post').click(); await flush(15); assert.equal(Q.uploaded.length, 2);
+  clickText(Q, 'Cancel'); await flush(); release(); await flush(); assert.equal(Q.calls.filter((c) => /\/discard$/.test(c.url || '')).length, 2); assert.equal(Q.calls.filter((c) => c.url === '/api/stories/mine').length, 0); assert.ok(!Q.doc.querySelector('.sst-post').disabled);
+});
+
+test('Studio: destination accent is strict, profile avatar is round and event decoration follows returned scope', async () => {
+  const bad = JSON.parse(JSON.stringify(TARGETS)); bad.pads[2].look = { avatar: '/plain.webp', accent: 'red;background:url(x)', ink: '#000000' };
+  const P = studioPage({ targets: bad, story: { scope: 'plain.pad', circle: { id: 'plain.pad' }, item: { id: 'plain' }, href: '/media/plain' } }); const root = await studioOpen(P);
+  P.doc.querySelector('.sst-destination').click(); clickText(P, 'Plain Pond'); assert.ok(!root.classList.contains('pad-acc')); assert.equal(root.style['--pad-accent'], undefined);
+  P.doc.querySelector('.sst-destination').click(); clickText(P, 'Your profile'); assert.ok(P.doc.querySelector('.sst-avatar').classList.contains('sst-person')); assert.equal(P.doc.querySelector('.sst-rules a'), null);
+  await studioPick(P); P.doc.querySelector('.sst-post').click(); await flush(18); const e = P.events.find((e) => e.type === 'patv:story-posted'); assert.equal(e.detail.circle.avatar, '/plain.webp');
+});
+
+test('Studio: crop keyboard geometry stays inside source and typing does not move it', async () => {
+  const P = studioPage({ width: 1200, height: 1920 }); await studioOpen(P); await studioPick(P); P.doc.querySelector('[data-tool="crop"]').click();
+  const preview = P.doc.querySelector('.sst-preview'); key(preview, '+'); for (let i = 0; i < 120; i++) key(preview, 'ArrowRight', { shiftKey: true });
+  await studioText(P, 'A'.repeat(119) + '🎉more'); assert.equal(Array.from(P.doc.querySelector('.sst-text-input').value).length, 120); key(P.doc.querySelector('.sst-text-input'), 'ArrowLeft');
+  P.doc.querySelector('.sst-post').click(); await flush(24); const c = P.uploaded[1].body.edit.crop; assert.ok(c.x >= 0 && c.x + c.w <= 1); assert.ok(c.y >= 0 && c.y + c.h <= 1); assert.ok(c.w < .9); assert.equal(c.x, 0);
+});
+
+test('Studio: closing after final refusal discards the ready source, and a late allocation is discarded after Cancel', async () => {
+  const P = studioPage({ fetch: (url) => url === '/api/stories/mine' ? P.response(403, { ok: false, error: 'Try another pad.' }) : null });
+  await studioOpen(P); await studioPick(P); P.doc.querySelector('.sst-post').click(); await flush(18);
+  key(P.doc.activeElement, 'Escape'); await flush(); assert.equal(P.doc.querySelector('.sst'), null);
+  assert.ok(P.calls.some((c) => c.url === '/api/feed/uploads/' + P.uploaded[0].id + '/discard'));
+  let release;
+  const Q = studioPage({ fetch: (url) => url === '/api/feed/uploads' ? new Promise((resolve) => { release = () => resolve(Q.response(200, { ok: true, id: 'aaaaaaaaaaaaaaaaaaaaaaaa', chunk: 4 })); }) : null });
+  await studioOpen(Q); await studioPick(Q); Q.doc.querySelector('.sst-post').click(); await flush(); clickText(Q, 'Cancel'); release(); await flush();
+  assert.ok(Q.calls.some((c) => c.url === '/api/feed/uploads/aaaaaaaaaaaaaaaaaaaaaaaa/discard')); assert.equal(Q.calls.filter((c) => c.method === 'PUT').length, 0);
+});
+
+test('Studio: final publication cannot be cancelled mid-commit and its success is always announced', async () => {
+  let publish;
+  const P = studioPage({ fetch: (url) => url === '/api/stories/mine' ? new Promise((resolve) => { publish = () => resolve(P.response(200, { ok: true, story: { scope: 'aurora.pad', circle: { id: 'aurora.pad' }, item: { id: 'posted' }, href: '/media/posted' } })); }) : null });
+  await studioOpen(P); await studioPick(P); P.doc.querySelector('.sst-post').click(); await flush(18);
+  const stop = P.doc.querySelector('.sst-progress button'); assert.ok(stop.disabled); const close = P.doc.querySelector('.sst-head button'); assert.ok(close.disabled);
+  key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst')); assert.equal(P.doc.querySelector('.sst-status').textContent, 'Posting…'); publish(); await flush();
+  assert.equal(P.doc.querySelector('.sst'), null); assert.ok(P.events.some((e) => e.type === 'patv:story-posted')); assert.ok(P.doc.querySelector('.ds-toast'));
+});
+
+test('Studio: pending sticker decoding blocks Post and counts against the pack layer cap', async () => {
+  let decode; const targets = JSON.parse(JSON.stringify(TARGETS)); targets.caps.stickersMax = 1;
+  const P = studioPage({ targets, fetch: (url) => url.startsWith('/public/stickers/') ? new Promise((resolve) => { decode = () => resolve(P.response(200, '<svg viewBox="0 0 24 24"></svg>')); }) : null });
+  await studioOpen(P); await studioPick(P); P.doc.querySelector('[data-tool="sticker"]').click(); await flush(); P.doc.querySelector('.sst-sticker').click(); await flush();
+  assert.ok(P.doc.querySelector('.sst-post').disabled); P.doc.querySelector('[data-tool="sticker"]').click(); await flush(); P.doc.querySelector('.sst-sticker').click(); await flush();
+  assert.equal(P.calls.filter((c) => c.url && c.url.startsWith('/public/stickers/')).length, 1); assert.match(P.doc.querySelector('.sst-status').textContent, /up to 1 stickers/);
+  decode(); await flush(8); assert.ok(!P.doc.querySelector('.sst-post').disabled); P.doc.querySelector('.sst-post').click(); await flush(20); assert.equal(P.uploaded[1].body.edit.stickers.length, 1);
+});
+
+test('Studio: mention Escape closes list before sheet, profile circles retain server avatars and URLs are revoked on replace', async () => {
+  const circle = { id: 'user:7', person: true, avatar: '/authoritative.webp' }, P = studioPage({ story: { circle, scope: 'user:7', item: { id: 'person-story' }, href: '/media/person-story' } });
+  await studioOpen(P); await studioPick(P); await studioPick(P); assert.equal(P.revoked.length, 1);
+  P.doc.querySelector('[data-tool="mention"]').click(); const f = P.doc.querySelector('[role="combobox"]'); f.value = '@mo'; f.dispatchEvent(new Ev('input')); await flush();
+  key(f, 'Escape'); assert.ok(P.doc.querySelector('.sst-suggestions').hidden); assert.ok(P.doc.querySelector('.sst-sheet'));
+  key(f, 'Escape'); assert.equal(P.doc.querySelector('.sst-sheet'), null); P.doc.querySelector('.sst-post').click(); await flush(18);
+  const e = P.events.find((e) => e.type === 'patv:story-posted'); assert.equal(e.detail.circle, circle); assert.equal(e.detail.circle.avatar, '/authoritative.webp');
+});
+
+test('Studio: CSS uses scoped ds tokens, shared accent mapping and the server ink palette', () => {
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8'), js = SRC('story-studio.js');
+  assert.doesNotMatch(css, /#[a-f0-9]{3,8}\b|--ds-green|@import/i); assert.doesNotMatch(css, /(?:^|[;{])\s*(?:left|right|margin-left|margin-right|padding-left|padding-right)\s*:/m);
+  assert.doesNotMatch(css, /z-index:\s*\d/); assert.doesNotMatch(css, /font-weight:\s*(?!400\b|500\b|700\b)\d+/); for (const m of css.matchAll(/border-radius:([^;}]+)/g)) assert.match(m[1].trim(), /^(?:var\(--ds-r-[\w-]+\)|50\s*%)$/);
+  for (const n of css.matchAll(/font-size:\s*([\d.]+)px/g)) assert.ok(+n[1] >= 11);
+  assert.match(css, /pointer:\s*coarse/); assert.match(css, /prefers-reduced-motion/); assert.match(css, /background:\s*var\(--ds-media-bg\)/); assert.match(css, /background:\s*var\(--ds-media-chip\)/);
+  const mapping = css.match(/\.sst\.pad-acc\s*\{([^}]+)\}/g); assert.equal(mapping.length, 1);
+  const props = (s) => Object.fromEntries([...s.matchAll(/(--ds-(?:ac(?:-2|-bg|-line)?|on-ac|focus(?:-ring)?|glow)):\s*([^;]+);/g)].map((m) => [m[1], m[2].replace(/\s+/g, ' ')]));
+  const dock = fs.readFileSync(path.join(repo, 'public/css/pad-dock.css'), 'utf8'); const dockRule = [...dock.matchAll(/\{([^{}]+)\}/g)].find((m) => Object.keys(props(m[1])).length === 8); assert.deepEqual(props(mapping[0]), props(dockRule[1]));
+  assert.doesNotMatch(js, /localStorage|<svg|location\.reload|DESIGN STUDY|PATV STORY|Make a little scene|state=/);
+  const paletteSource = fs.readFileSync(path.join(repo, 'padlook.js'), 'utf8').match(/const PALETTE = Object\.freeze\(\[([\s\S]*?)\]\);/)[1];
+  const expected = paletteSource.match(/#[a-f0-9]{6}/g).concat(['#ffffff', '#000000']).sort();
+  const actual = js.match(/var COLORS = \[([^\]]+)\]/)[1].match(/#[a-f0-9]{6}/g).sort(); assert.deepEqual(actual, expected);
+});
+
+test('Studio: animated WebP processing rejection offers a fresh no-edit post with incompatible layers cleared', async () => {
+  let animated = true;
+  const P = studioPage({ fetch: (url, opt, { uploaded }) => opt.method !== 'POST' && /^\/api\/feed\/uploads\/[0-9a-f]+$/.test(url) && uploaded.length === 2 && animated ? P.response(200, { ok: true, state: 'failed', error: "Animated pictures can't be edited yet - post it as it is." }) : null });
+  await studioOpen(P); await studioPick(P, 'image/webp'); await studioText(P); P.doc.querySelector('.sst-post').click(); await flush(24);
+  assert.ok(P.doc.querySelector('.sst-recovery')); clickText(P, 'Post it as it is'); assert.ok(P.doc.querySelector('[data-tool="text"]').disabled);
+  animated = false; P.doc.querySelector('.sst-post').click(); await flush(20); assert.equal(P.uploaded.length, 3); assert.equal(P.uploaded[2].body.edit, undefined); assert.equal(P.uploaded[2].body.purpose, 'story');
+});
+
+test('Studio: unedited landscape mentions use the contained media rectangle and matching drag fractions', async () => {
+  const P = studioPage({ width: 1920, height: 1080 }); await studioOpen(P); await studioPick(P, 'image/gif'); P.doc.querySelector('[data-tool="mention"]').click();
+  const f = P.doc.querySelector('[role="combobox"]'); f.value = '@mo'; f.dispatchEvent(new Ev('input')); await flush(); key(f, 'ArrowDown'); key(f, 'Enter'); await flush();
+  const handles = P.doc.querySelector('.sst-handles'); assert.equal(handles.style.inlineSize, '100%'); assert.equal(handles.style.blockSize, '31.640625%'); assert.equal(handles.style.insetBlockStart, '34.1796875%');
+  handles.getBoundingClientRect = () => ({ width: 300, height: 168.75 }); const chip = P.doc.querySelector('.sst-mention');
+  chip.dispatchEvent(new Ev('pointerdown', { pointerId: 1, clientX: 150, clientY: 100, button: 0 })); chip.dispatchEvent(new Ev('pointermove', { pointerId: 1, clientX: 180, clientY: 116.875 })); chip.dispatchEvent(new Ev('pointerup', { pointerId: 1 }));
+  P.doc.querySelector('.sst-post').click(); await flush(20); const mine = P.calls.find((c) => c.url === '/api/stories/mine'); assert.equal(mine.body.mentions[0].x, .6); assert.equal(mine.body.mentions[0].y, .85); assert.equal(P.uploaded[0].body.edit, undefined);
+});
+
+test('Studio: extreme panoramas keep Fit and the source duration cap is exact', async () => {
+  const P = studioPage({ width: 4000, height: 200 }); await studioOpen(P); await studioPick(P); P.doc.querySelector('[data-tool="crop"]').click();
+  const fill = P.doc.querySelectorAll('button').find((n) => n.textContent === 'Fill'); assert.ok(fill.disabled); const preview = P.doc.querySelector('.sst-preview'); key(preview, '+');
+  P.doc.querySelector('.sst-post').click(); await flush(20); assert.equal(P.uploaded[0].body.edit.fit, 'fit'); assert.equal(P.uploaded[0].body.edit.crop, undefined);
+  const Q = studioPage({ duration: 180.1 }); await studioOpen(Q); await studioPick(Q, 'video/mp4'); assert.ok(Q.doc.querySelector('.sst-post').disabled); assert.match(Q.doc.querySelector('.sst-status').textContent, /180 seconds/);
+});
+
+test('Studio: starting Post freezes an already-held layer pointer', async () => {
+  let allocate;
+  const P = studioPage({ fetch: (url) => url === '/api/feed/uploads' ? new Promise((resolve) => { allocate = () => resolve(P.response(200, { ok: true, id: 'bbbbbbbbbbbbbbbbbbbbbbbb', chunk: 4 })); }) : null });
+  await studioOpen(P); await studioPick(P); await studioText(P); key(P.doc.activeElement, 'Escape');
+  const layer = P.doc.querySelector('.sst-layer'); layer.dispatchEvent(new Ev('pointerdown', { pointerId: 3, clientX: 150, clientY: 150, button: 0 })); const before = layer.style.insetInlineStart;
+  P.doc.querySelector('.sst-post').click(); await flush(); layer.dispatchEvent(new Ev('pointermove', { pointerId: 3, clientX: 250, clientY: 250 })); assert.equal(layer.style.insetInlineStart, before);
+  clickText(P, 'Cancel'); allocate(); await flush();
+});
+
+
+
+// Story Studio viewer/strip cases: append after the shared VM harness (page, El, Ev, flush, key).
+function svEvent(P, type, detail) {
+  const ev = new Ev(type, { detail, bubbles: false });
+  for (const listener of P.doc.listeners.filter(l => l.type === type)) listener.fn.call(P.doc, ev);
+}
+function svCircle(id, extra = {}) {
+  const item = { id: 'story-' + id, kind: 'photo', src: '/media/' + id + '/raw', page: '/media/' + id, source: 'user',
+    by: 'Willow', created: Date.now(), expires: Date.now() + 86400e3, secs: 0, nsfw: false, ...extra.item };
+  return { id, title: id, href: '/p/' + id, latest: item.created, count: 1, unseen: true, seen: 0,
+    cover: item.src, ...extra, items: extra.items || [item] };
+}
+function svPost(P, circle, item = circle && circle.items[0]) { svEvent(P, 'patv:story-posted', { circle, item, scope: circle && circle.id }); }
+function svStrip(P, { pad = '', scope = '', signed = true, add = true } = {}) {
+  const strip = P.doc.createElement('section'); strip.className = 'ss'; strip.setAttribute('data-signed', signed ? '1' : '0');
+  if (scope) strip.setAttribute('data-scope', scope);
+  const box = P.doc.createElement('div'); box.className = 'ss-scroll'; strip.appendChild(box);
+  const row = P.doc.createElement('div'); row.className = 'ss-row'; box.appendChild(row);
+  if (add) { const plus = P.doc.createElement('button'); plus.className = 'ss-c ss-add'; plus.setAttribute('data-pad', pad); row.appendChild(plus); }
+  P.doc.body.appendChild(strip); return { strip, box, row };
+}
+function svInline(P, circles) { const data = P.doc.createElement('script'); data.className = 'ss-data'; data.textContent = JSON.stringify(circles); P.doc.body.appendChild(data); }
+function svLoadImage(V, w = 1080, h = 1920, box = { width: 375, height: 812 }) {
+  V.stage.getBoundingClientRect = () => ({ left: 0, top: 0, ...box });
+  const img = V.stage.querySelector('.sv-img'); img.naturalWidth = w; img.naturalHeight = h; img.onload(); return img;
+}
+const svClose = V => V.x.click();
+const svGetCount = P => P.calls.filter(c => c.method === 'GET' && c.url.startsWith('/api/stories')).length;
+
+test('Studio viewer: contain geometry, resize and RTL keep account links on the media pixels; links never advance', async () => {
+  const C = svCircle('pond', { item: { alt: 'A small moon', mentions: [{ u: 'moss', d: '<b>Moss</b>', x: 0.2, y: 0.7, mine: true }] } });
+  const P = page({ me: 'moss', withTip: false, routes: { 'GET /api/stories': { body: { ok: true, rooms: [C] } } } });
+  const observers = [];
+  P.win.ResizeObserver = class { constructor(fn) { this.fn = fn; observers.push(this); } observe() {} disconnect() { this.disconnected = true; } };
+  await P.win.patvStories.open(C.id, C.items[0].id, null, C.id);
+  const V = P.win.patvStories._state(); P.doc.documentElement.setAttribute('dir', 'rtl');
+  svLoadImage(V, 1600, 900);
+  let layer = V.stage.querySelector('.sv-mns'), chip = layer.querySelector('.sv-mn');
+  assert.equal(layer.style.width, '375px'); assert.equal(layer.style.height, '210.9375px');
+  assert.equal(layer.style.left, '0px'); assert.equal(layer.style.top, '300.53125px');
+  assert.equal(chip.style.left, '20%'); assert.equal(chip.style.top, '70%');
+  assert.equal(chip.href, '/u/moss'); assert.equal(chip.title, '<b>Moss</b>'); assert.equal(chip.textContent, '@moss');
+  assert.equal(chip.getAttribute('aria-label'), 'Mentioned: @moss'); assert.equal(chip.querySelector('b'), null);
+  assert.equal(V.stage.querySelector('.sv-img').alt, 'Willow’s story: A small moon');
+  assert.match(V.live.textContent, /Willow’s story: A small moon/);
+  const links = V.frame.querySelectorAll('a[href], button:not([disabled])');
+  assert.ok(links.indexOf(chip) > links.indexOf(V.x)); assert.ok(links.indexOf(chip) < links.indexOf(V.foot.querySelector('a')));
+  chip.dispatchEvent(new Ev('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: 250, clientY: 200 }));
+  chip.dispatchEvent(new Ev('pointerup', { bubbles: true, button: 0, pointerId: 1, clientX: 250, clientY: 200 }));
+  const click = new Ev('click', { bubbles: true, button: 0 }); chip.dispatchEvent(click);
+  assert.equal(click.defaultPrevented, false); assert.equal(V.ii, 0); assert.equal(V.held, false);
+  V.stage.getBoundingClientRect = () => ({ width: 900, height: 600 }); observers.at(-1).fn();
+  assert.equal(layer.style.width, '900px'); assert.equal(layer.style.height, '506.25px'); assert.equal(layer.style.top, '46.875px');
+  const old = observers.at(-1); svClose(V); assert.equal(old.disconnected, true);
+  old.fn(); assert.equal(V.stage.querySelector('.sv-mns'), null);
+});
+
+test('Studio viewer: long names at either edge stay inside the letterboxed image in RTL', async () => {
+  const C = svCircle('edges', { item: { mentions: [
+    { u: 'a_very_long_moss_account', x: 0.05, y: 0.05 }, { u: 'a_very_long_fern_account', x: 0.95, y: 0.95 }
+  ] } });
+  const P = page({ withTip: false, routes: { 'GET /api/stories': { body: { ok: true, rooms: [C] } } } });
+  const observers = []; P.win.ResizeObserver = class { constructor(fn) { this.fn = fn; observers.push(this); } observe() {} disconnect() {} };
+  await P.win.patvStories.open(C.id, C.items[0].id, null, C.id); const V = P.win.patvStories._state();
+  P.doc.documentElement.setAttribute('dir', 'rtl'); svLoadImage(V, 1600, 900);
+  const links = V.stage.querySelectorAll('.sv-mn');
+  links.forEach(link => { Object.defineProperty(link, 'offsetWidth', { value: 240, configurable: true }); Object.defineProperty(link, 'offsetHeight', { value: 44, configurable: true }); });
+  observers.at(-1).fn();
+  const width = 375, height = 210.9375;
+  links.forEach((link, index) => {
+    const x = (index ? 0.95 : 0.05) * width + parseFloat(link.style.marginLeft);
+    const y = (index ? 0.95 : 0.05) * height + parseFloat(link.style.marginTop);
+    assert.ok(x - 120 >= -0.001 && x + 120 <= width + 0.001);
+    assert.ok(y - 22 >= -0.001 && y + 22 <= height + 0.001);
+    assert.equal(link.style.left, index ? '95%' : '5%'); assert.equal(link.style.top, index ? '95%' : '5%');
+  });
+});
+
+test('Studio viewer: gate, gone state, portrait geometry, video alt and signed-out items', async () => {
+  const C = svCircle('reeds', { item: { nsfw: true, mentions: [{ u: 'fern', x: 0.5, y: 0.5, mine: true }] } });
+  const P = page({ me: 'fern', withTip: false, routes: { 'GET /api/stories': { body: { ok: true, rooms: [C] } } } });
+  await P.win.patvStories.open(C.id, C.items[0].id, null, C.id);
+  const V = P.win.patvStories._state(), image = svLoadImage(V);
+  assert.equal(V.stage.querySelector('.sv-mns'), null); assert.equal(V.acts.querySelector('.sv-unmention'), null);
+  V.stage.querySelector('.sv-nsfw button').click();
+  const layer = V.stage.querySelector('.sv-mns'); assert.ok(layer); assert.equal(layer.style.width, '375px');
+  assert.ok(Math.abs(parseFloat(layer.style.height) - 666.6666667) < 0.00001);
+  assert.ok(V.acts.querySelector('.sv-unmention'));
+  image.onerror(); assert.equal(V.stage.querySelector('.sv-mns'), null); assert.equal(V.acts.querySelector('.sv-unmention'), null);
+  svClose(V);
+  const A = page({ me: '', withTip: false, routes: { 'GET /api/stories': { body: { ok: true, rooms: [svCircle('anon', { item: { mentions: [{ u: 'fern', x: 0.5, y: 0.5, mine: true }] } })] } } } });
+  await A.win.patvStories.open('anon', 'story-anon', null, 'anon'); const AV = A.win.patvStories._state(); svLoadImage(AV);
+  assert.equal(AV.stage.querySelector('.sv-mns'), null); assert.equal(AV.acts.querySelector('.sv-unmention'), null);
+  if (!El.prototype.play) El.prototype.play = function () { return Promise.resolve(); };
+  if (!El.prototype.pause) El.prototype.pause = function () {};
+  if (!El.prototype.load) El.prototype.load = function () {};
+  const clip = svCircle('video', { item: { kind: 'clip', alt: 'Across the water', mentions: [{ u: 'reed', x: 0.3, y: 0.4 }] } });
+  const Q = page({ withTip: false, routes: { 'GET /api/stories': { body: { ok: true, rooms: [clip] } } } });
+  await Q.win.patvStories.open(clip.id, clip.items[0].id, null, clip.id); const QV = Q.win.patvStories._state();
+  QV.stage.getBoundingClientRect = () => ({ width: 375, height: 812 }); QV.media.videoWidth = 720; QV.media.videoHeight = 1280; QV.media.duration = 12;
+  QV.media.dispatchEvent(new Ev('loadedmetadata', { bubbles: false }));
+  assert.equal(QV.media.getAttribute('aria-label'), 'Willow’s story: Across the water'); assert.ok(QV.stage.querySelector('.sv-mns'));
+  assert.ok(Math.abs(parseFloat(QV.stage.querySelector('.sv-mns').style.height) - 666.6666667) < 0.00001);
+});
+
+test('Studio viewer: own mention removal persists through caches and stale reads, keeps other chips and playback, and retries failures', async () => {
+  const C = svCircle('lilies', { item: { mentions: [{ u: 'moss', x: 0.4, y: 0.6, mine: true }, { u: 'fern', x: 0.7, y: 0.4 }] } });
+  let refused = true;
+  const P = page({ me: 'moss', withTip: false, routes: {
+    'GET /api/stories': { body: { ok: true, rooms: [C] } },
+    'POST /api/stories/story-lilies/unmention': () => refused ? { status: 503, body: { ok: false, error: 'Try again.' } } : { body: { ok: true, removed: false } }
+  } });
+  await P.win.patvStories.open(C.id, C.items[0].id, null, C.id); let V = P.win.patvStories._state(); svLoadImage(V);
+  V.elapsed = 2345; V.paused = true;
+  let button = V.acts.querySelector('.sv-unmention'); button.click(); await flush();
+  assert.equal(button.disabled, false); assert.equal(V.stage.querySelectorAll('.sv-mn').length, 2);
+  refused = false; button.focus(); button.click(); await flush();
+  assert.equal(V.stage.querySelectorAll('.sv-mn').length, 1); assert.equal(V.stage.querySelector('.sv-mn').textContent, '@fern');
+  assert.equal(V.acts.querySelector('.sv-unmention'), null); assert.equal(V.elapsed, 2345); assert.equal(V.paused, true); assert.equal(V.ii, 0);
+  assert.ok(V.root.contains(P.doc.activeElement)); assert.match(V.frame.textContent, /Your mention was removed/);
+  assert.equal(P.calls.filter(c => c.url.endsWith('/unmention')).length, 2);
+  svClose(V);
+  // A newly fetched different scope returns an intentionally stale copy of the same item.
+  await P.win.patvStories.open(C.id, C.items[0].id, null, 'other-scope'); V = P.win.patvStories._state(); svLoadImage(V);
+  assert.equal(V.stage.querySelectorAll('.sv-mn').length, 1); assert.equal(V.acts.querySelector('.sv-unmention'), null);
+});
+
+test('Studio strips: inline hydration, safe new circles, pad-avatar preservation, duplicate updates and no-fetch opening', async () => {
+  const P = page({ me: 'moss', withTip: false });
+  const global = svStrip(P), other = svCircle('other'); svInline(P, [other]);
+  const C = svCircle('pond', { title: '<img onerror=evil()>', avatar: '/media/pad/still.webp', item: { by: '<script>name</script>' } });
+  svPost(P, C);
+  const button = global.row.querySelector('[data-story-room]'); assert.equal(global.row.children[1], button);
+  assert.equal(button.querySelector('.ss-n').textContent, C.title); assert.equal(button.querySelector('script'), null);
+  assert.equal(button.querySelector('.ss-pav').src, C.avatar); assert.equal(button.querySelector('.ss-k').textContent, '1');
+  assert.equal(button.getAttribute('data-story-item'), C.items[0].id);
+  button.click(); await flush(); let V = P.win.patvStories._state(); assert.ok(V.root.isConnected); assert.equal(svGetCount(P), 0);
+  assert.equal(V.stage.querySelector('.sv-img').src, C.items[0].src); svClose(V);
+  await P.win.patvStories.open(other.id, other.items[0].id, null, ''); assert.equal(svGetCount(P), 0); svClose(P.win.patvStories._state());
+  const updated = { ...C, count: 2, latest: C.latest + 1000, items: C.items.concat([{ ...C.items[0], id: 'newer', created: C.latest + 1000 }]) };
+  delete updated.avatar; svPost(P, updated, updated.items[1]);
+  assert.equal(global.row.querySelectorAll('[data-story-room]').length, 1); assert.equal(button.querySelector('.ss-k').textContent, '2');
+  assert.ok(button.classList.contains('unseen')); assert.equal(button.querySelector('.ss-pav').src, C.avatar);
+  svPost(P, { ...updated, avatar: null }, updated.items[1]); assert.equal(button.querySelector('.ss-pav'), null); assert.ok(button.querySelector('.ss-mono'));
+  const before = global.row.textContent; svPost(P, null); assert.equal(global.row.textContent, before);
+});
+
+test('Studio strips: destination restrictions, profile aliases, thumbnails, no-global-cache and scroller refresh', async () => {
+  const P = page({ me: 'moss', withTip: false }), globals = svStrip(P), profile = svStrip(P, { pad: 'profile' });
+  const ownAlias = svStrip(P, { pad: 'u/moss' }), pad = svStrip(P, { pad: 'pond', scope: 'pond' }), other = svStrip(P, { pad: 'reeds', scope: 'reeds' });
+  const signedOut = svStrip(P, { signed: false }), noAdd = svStrip(P, { add: false });
+  const C = svCircle('pond', { item: { kind: 'clip', secs: 12.4, poster: '/media/pond/poster' } });
+  svPost(P, C);
+  assert.equal(profile.row.querySelector('[data-story-room]'), null); assert.equal(ownAlias.row.querySelector('[data-story-room]'), null);
+  assert.equal(other.row.querySelector('[data-story-room]'), null); assert.equal(signedOut.row.querySelector('[data-story-room]'), null);
+  const thumb = pad.row.querySelector('.ss-t'); assert.ok(thumb.classList.contains('has-p')); assert.equal(thumb.querySelector('.dur').textContent, '▶0:12');
+  assert.equal(thumb.href, C.items[0].page); assert.equal(thumb.querySelector('.pst').src, C.items[0].poster); assert.equal(pad.row.children[1], thumb);
+  assert.ok(noAdd.row.children[0].hasAttribute('data-story-room')); assert.equal(globals.row.querySelector('[data-story-room]').getAttribute('data-story-scope'), 'pond');
+  globals.row.querySelector('[data-story-room]').click(); await flush(); assert.equal(svGetCount(P), 0); svClose(P.win.patvStories._state());
+  let refreshed = 0; pad.box.__ssUpdate = () => refreshed++;
+  svPost(P, C); assert.equal(pad.row.querySelectorAll('.ss-t').length, 1); assert.ok(refreshed > 0);
+  pad.row.querySelector('.pst').dispatchEvent(new Ev('load', { bubbles: false })); assert.ok(refreshed > 1);
+  const person = svCircle('user:u_moss', { person: true, user: 'moss', avatar: '/avatar/moss.png' }); svPost(P, person);
+  assert.ok(profile.row.querySelector('.ss-person')); assert.ok(ownAlias.row.querySelector('.ss-person'));
+  assert.equal(profile.row.querySelector('.ss-person img').src, '/avatar/moss.png');
+  const hidden = svCircle('pond', { item: { nsfw: true } }); svPost(P, hidden);
+  assert.equal(pad.row.querySelectorAll('.ss-t').length, 1); assert.equal(pad.row.querySelector('img'), null); assert.equal(pad.row.querySelector('.ic').textContent, '🔞');
+});
+
+test('Studio lists: an older in-flight load keeps new posts, and active playback survives inserted circles', async () => {
+  const P = page({ me: 'moss', withTip: false }); svStrip(P);
+  let release;
+  P.win.fetch = () => new Promise(resolve => { release = resolve; });
+  const other = svCircle('other'), opening = P.win.patvStories.open(other.id, other.items[0].id, null, '');
+  const C = svCircle('pond'); svPost(P, C);
+  release({ ok: true, status: 200, json: async () => ({ ok: true, rooms: [other] }) }); await opening;
+  const V = P.win.patvStories._state(); assert.equal(V.room.textContent, 'other'); svLoadImage(V); V.elapsed = 3210; V.paused = true;
+  const beforeImage = V.stage.querySelector('.sv-img');
+  const next = svCircle('harbor'); svPost(P, next);
+  assert.equal(V.room.textContent, 'other'); assert.equal(V.stage.querySelector('.sv-img'), beforeImage); assert.equal(V.elapsed, 3210); assert.equal(V.paused, true);
+  // Late image events use item identity rather than indices that changed when a circle was prepended.
+  beforeImage.onload(); assert.equal(V.waiting, false);
+  // Avoid an unrelated seen POST in the test's controlled network.
+  P.win.fetch = async () => { throw new Error('unexpected fetch'); };
+  svClose(V);
+  assert.equal(await P.win.patvStories.open(C.id, C.items[0].id, null, ''), true); svClose(P.win.patvStories._state());
+  assert.equal(await P.win.patvStories.open(next.id, next.items[0].id, null, ''), true);
+});
+
+
+// Story Studio loading and all viewer entry points, including the lazy DM loader.
+test("Studio strip loads only the selected composer and every viewer entry uses the current assets", () => {
+  const ejs = require("ejs");
+  const stripFile = path.join(repo, "views/partials/story-strip.ejs");
+  const stripSource = fs.readFileSync(stripFile, "utf8");
+  const locals = { story: { signed: true, compose: true, rooms: [], caps: [], room: "studio-test-pad" }, user: "maplecanvas" };
+  const render = extra => ejs.render(stripSource, Object.assign({}, locals, extra), { filename: stripFile });
+  for (const extra of [{}, { storyStudioOn: () => false }]) {
+    const html = render(extra);
+    assert.match(html, /story-compose\.js\?v=1/);
+    assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
+  }
+  const html = render({ storyStudioOn: () => true });
+  assert.match(html, /story-studio\.js\?v=1/);
+  assert.match(html, /story-studio\.css\?v=1/);
+  assert.doesNotMatch(html, /story-compose\.js/);
+  assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
+  const signedOut = render({ story: { signed: false, compose: true, rooms: [], caps: [] }, storyStudioOn: () => true });
+  assert.doesNotMatch(signedOut, /story-(?:studio|compose)\.(?:js|css)/);
+  const files = [];
+  function walk(dir) { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const file = path.join(dir, e.name); if (e.isDirectory()) walk(file); else if (/\.(?:ejs|js)$/.test(e.name)) files.push(file); } }
+  walk(path.join(repo, "views")); walk(path.join(repo, "public/js"));
+  let jsPins = 0, cssPins = 0;
+  for (const file of files) {
+    const source = fs.readFileSync(file, "utf8");
+    for (const m of source.matchAll(/\/public\/(js|css)\/stories\.(js|css)\?v=(\d+)/g)) {
+      assert.equal(m[3], m[2] === "js" ? "13" : "9", file);
+      if (m[2] === "js") jsPins++; else cssPins++;
+    }
+  }
+  assert.equal(jsPins, 4); assert.equal(cssPins, 5);
+  assert.match(fs.readFileSync(path.join(repo, "views/messages.ejs"), "utf8"), /messages\.js\?v=14/);
+});

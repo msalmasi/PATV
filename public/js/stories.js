@@ -25,6 +25,8 @@
 // (optimistic, settled by the server; your own story can't be ▼'d) and 💸 (the post-tip sheet, opened above the viewer,
 // lazy-loaded when the page doesn't have it). Hidden while an NSFW story is still blurred and on a gone one. The story pauses
 // while a sheet is open; typing never drives the viewer; drafts live in memory only. data-me = the signed-in username.
+// Story Studio: posted circles update the existing strips in place; removable PATV mention links follow the drawn
+// media rectangle. Both use the server's visible items, never a room roster or names drawn into a picture.
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -45,6 +47,7 @@
   // (/api/stories?room=). A pad's capture strip opens its own scope, so the viewer never runs on into other pads or into
   // members' profile (person) stories.
   var cache = {}, loads = {};
+  var listEpoch = 0, postedVersion = 0, postedCircles = Object.create(null), removedMentions = Object.create(null);
   var V = null;                               // the viewer's DOM + state
 
   // ── seen state ──
@@ -88,7 +91,10 @@
   // rings from localStorage too (it covers a seen POST that didn't make it)
   function applyLocal(rooms) {
     var m = lsGet();
-    rooms.forEach(function (r) { if (m[r.id] > (r.seen || 0)) r.seen = Math.min(m[r.id], r.latest); });
+    rooms.forEach(function (r) {
+      if (m[r.id] > (r.seen || 0)) r.seen = Math.min(m[r.id], r.latest);
+      (r.items || []).forEach(function (it) { if (removedMentions[it.id] && Array.isArray(it.mentions)) it.mentions = it.mentions.filter(function (chip) { return !chip.mine; }); });
+    });
     return rooms;
   }
 
@@ -105,12 +111,40 @@
       var d = inline();
       if (d) { cache[''] = applyLocal(d); return Promise.resolve(cache['']); }
     }
-    if (!loads[scope]) loads[scope] = fetch('/api/stories' + (scope ? '?room=' + encodeURIComponent(scope) : ''), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
-      if (r.status === 401) throw Object.assign(new Error('signin'), { signin: true });
-      return r.json();
-    }).then(function (j) { if (!j.ok) throw new Error(j.error || 'failed'); cache[scope] = applyLocal(j.rooms || []); return cache[scope]; })
-      .catch(function (e) { loads[scope] = null; throw e; });
+    if (!loads[scope]) {
+      var epoch = listEpoch, version = postedVersion;
+      var pending = fetch('/api/stories' + (scope ? '?room=' + encodeURIComponent(scope) : ''), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
+        if (r.status === 401) throw Object.assign(new Error('signin'), { signin: true });
+        return r.json();
+      }).then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'failed');
+        if (epoch !== listEpoch) return load(scope);
+        // A request started before a post must not replace its new circle with the older response.
+        if (version !== postedVersion && cache[scope]) return cache[scope];
+        var rooms = applyLocal(j.rooms || []);
+        Object.keys(postedCircles).forEach(function (key) {
+          var update = postedCircles[key];
+          if (update.version > version && (!scope || scope === key)) putCircle(rooms, update.circle);
+        });
+        cache[scope] = rooms; return rooms;
+      }).catch(function (e) { if (loads[scope] === pending) loads[scope] = null; throw e; });
+      loads[scope] = pending;
+    }
     return loads[scope];
+  }
+
+  // Replace by identity; the active item/room retain their objects so in-flight controls and media keep working.
+  function putCircle(list, circle, active, activeItem) {
+    var index = list.findIndex(function (r) { return r.id === circle.id; });
+    var old = index >= 0 ? list[index] : null;
+    if (old === circle) return;
+    if (old && old === active) {
+      var item = activeItem, items = circle.items.map(function (it) { return item && it.id === item.id ? item : it; });
+      // If another removal changed this circle during posting, leave the playing item until normal navigation.
+      if (item && !items.some(function (it) { return it.id === item.id; })) items.push(item);
+      Object.assign(old, circle, { items: items });
+    } else if (index >= 0) list[index] = circle;
+    else list.unshift(circle);
   }
 
   // ── the sign-in prompt (signed-out visitors) ──
@@ -215,8 +249,70 @@
   }
 
   function stopMedia() {
+    clearMentions();
     if (V && V.media) { try { V.media.pause(); V.media.removeAttribute('src'); V.media.load(); } catch (e) { /* none */ } }
-    if (V) V.media = null;
+    if (V) { V.media = null; V.picture = null; }
+  }
+
+  // A contain-fitted image may leave bars on either axis. Mention coordinates belong to its pixels, even in RTL.
+  function clearMentions() {
+    if (!V) return;
+    if (V.mentionObserver) V.mentionObserver.disconnect();
+    if (V.mentionResize && window.removeEventListener) window.removeEventListener('resize', V.mentionResize);
+    if (V.mentionLayer) V.mentionLayer.remove();
+    V.mentionObserver = V.mentionResize = V.mentionLayer = null;
+  }
+  function mentionChips(it) {
+    if (!meName() || !Array.isArray(it.mentions)) return [];
+    return it.mentions.filter(function (chip) {
+      return chip && typeof chip.u === 'string' && chip.u && Number.isFinite(chip.x) && Number.isFinite(chip.y) && !(removedMentions[it.id] && chip.mine);
+    });
+  }
+  function paintMentions(it) {
+    clearMentions();
+    if (!current(it) || V.gated || V.stage.classList.contains('gone') || (it.kind !== 'photo' && it.kind !== 'clip')) return;
+    var chips = mentionChips(it), media = V.picture;
+    if (!chips.length || !media) return;
+    var layer = el('div', 'sv-mns'); layer.hidden = true;
+    chips.forEach(function (chip) {
+      var link = el('a', 'sv-mn', '@' + chip.u);
+      link.href = '/u/' + encodeURIComponent(chip.u); link.title = chip.d || '';
+      link.setAttribute('dir', 'auto');
+      link.setAttribute('aria-label', _t('js.feed.ss.mentioned', 'Mentioned: @{name}', { name: chip.u }));
+      link.style.left = (Math.max(0.05, Math.min(0.95, chip.x)) * 100) + '%';
+      link.style.top = (Math.max(0.05, Math.min(0.95, chip.y)) * 100) + '%';
+      ['pointerdown', 'pointerup', 'pointercancel', 'click'].forEach(function (type) { link.addEventListener(type, function (e) { e.stopPropagation(); }); });
+      layer.appendChild(link);
+    });
+    V.mentionLayer = layer; V.stage.appendChild(layer);
+    var resize = function () {
+      if (!current(it) || V.picture !== media || V.mentionLayer !== layer || V.gated) return;
+      var w = media.naturalWidth || media.videoWidth, h = media.naturalHeight || media.videoHeight;
+      var box = V.stage.getBoundingClientRect();
+      if (!(w > 0 && h > 0 && box.width > 0 && box.height > 0)) { layer.hidden = true; return; }
+      var scale = Math.min(box.width / w, box.height / h), width = w * scale, height = h * scale;
+      layer.style.left = ((box.width - width) / 2) + 'px'; layer.style.top = ((box.height - height) / 2) + 'px';
+      layer.style.width = width + 'px'; layer.style.height = height + 'px'; layer.hidden = false;
+      // Long account names near an edge must remain inside the drawn picture. Keep the stored fractions intact;
+      // only offset the displayed label enough to fit its measured hit area (the axes are physical media pixels).
+      Array.prototype.forEach.call(layer.children, function (link, index) {
+        var chip = chips[index], x = Math.max(0.05, Math.min(0.95, chip.x)) * width, y = Math.max(0.05, Math.min(0.95, chip.y)) * height;
+        var halfW = Math.min(width, link.offsetWidth || 0) / 2, halfH = Math.min(height, link.offsetHeight || 0) / 2;
+        link.style.marginLeft = (Math.max(halfW, Math.min(width - halfW, x)) - x) + 'px';
+        link.style.marginTop = (Math.max(halfH, Math.min(height - halfH, y)) - y) + 'px';
+      });
+    };
+    if (window.ResizeObserver) { V.mentionObserver = new window.ResizeObserver(resize); V.mentionObserver.observe(V.stage); }
+    else { V.mentionResize = resize; window.addEventListener('resize', resize); }
+    resize();
+  }
+
+  function paintBars(R) {
+    V.bars.innerHTML = '';
+    V.fills = R.items.map(function (_, k) {
+      var b = el('div', 'sv-bar'), f = el('i'); b.appendChild(f); V.bars.appendChild(b);
+      f.style.transform = 'scaleX(' + (k < V.ii ? 1 : 0) + ')'; return f;
+    });
   }
 
   function show(ri, ii) {
@@ -230,12 +326,7 @@
     V.ri = ri; V.ii = ii; V.paused = false; V.held = false; V.elapsed = 0; V.dur = PHOTO_MS; V.last = performance.now(); V.waiting = true;
     var it = R.items[ii];
     // progress bars
-    V.bars.innerHTML = '';
-    V.fills = R.items.map(function (_, k) {
-      var b = el('div', 'sv-bar'); var f = el('i'); b.appendChild(f); V.bars.appendChild(b);
-      f.style.transform = 'scaleX(' + (k < ii ? 1 : 0) + ')';
-      return f;
-    });
+    paintBars(R);
     V.room.textContent = R.title; V.room.href = R.href;
     // 1.99cr: stage captures (a stream on the pad's stage, not a Camfrog cam) say so
     var what = it.source === 'stage' ? (it.kind === 'clip' ? _t('js.feed.sv.k_stage_clip', '📺 Stage clip') : _t('js.feed.sv.k_stage_snap', '📺 Stage snap'))
@@ -244,6 +335,7 @@
     var whoName = it.subject || _t('js.feed.sv.someone', 'someone');
     var ofWho = _t('js.feed.sv.of', '{what} of {who}', { what: what, who: whoName });
     var storyOf = it.by ? _t('js.feed.sv.users_story', '{name}’s story', { name: it.by }) : _t('js.feed.sv.someones_story', 'someone’s story');
+    var storyLabel = (it.by ? storyOf : _t('js.feed.sv.someones_story_cap', 'Someone’s story')) + (typeof it.alt === 'string' && it.alt ? ': ' + it.alt : '');
     V.who.textContent = (it.source === 'user' ? '✨ ' + storyOf
       : ofWho + (it.by ? (it.source === 'stage' ? ' ' + _t('js.feed.sv.by', 'by {name}', { name: it.by }) : ' · ' + _t('js.feed.sv.by', 'by {name}', { name: it.by })) : ''))
       + (it.where && it.where.title ? ' · ' + _t('js.feed.sv.in', 'in {pad}', { pad: it.where.title }) : '') + (it.nsfw ? ' · NSFW' : '');
@@ -261,15 +353,15 @@
     page.setAttribute('aria-label', noun === 'story' ? _t('js.feed.sv.page_story', 'Open this story\'s page to share or download') : noun === 'clip' ? _t('js.feed.sv.page_clip', 'Open this clip\'s page to share or download')
       : noun === 'snap' ? _t('js.feed.sv.page_snap', 'Open this snap\'s page to share or download') : _t('js.feed.sv.page_capture', 'Open this capture\'s page to share or download'));
     V.foot.appendChild(page);
-    V.live.textContent = R.title + ': ' + (it.source === 'user' ? storyOf : ofWho) + ', ' + _t('js.feed.sv.n_of', '{i} of {n}', { i: ii + 1, n: R.items.length });
+    V.live.textContent = R.title + ': ' + (it.source === 'user' ? storyLabel : ofWho) + ', ' + _t('js.feed.sv.n_of', '{i} of {n}', { i: ii + 1, n: R.items.length });
     closePanel(true);
-    paintActs(R, it);
     // media
     V.stage.innerHTML = '';
     V.stage.classList.remove('gone');
     // 1.99cr: an NSFW stage capture waits, blurred, until the viewer chooses to see it (once per viewer session)
     V.gated = !!(it.nsfw && !V.nsfwOk);
     V.stage.classList.toggle('nsfw', V.gated);
+    paintActs(R, it);
     paintReact(R, it);                        // storyreact site: hidden while gated (nobody votes on what they haven't chosen to see)
     // storyreact site: a control that had the focus was just rebuilt (the reaction row, the foot, a panel): the same one again,
     // else the viewer - never <body>, where Esc / the arrows / the Tab trap stop working
@@ -283,6 +375,7 @@
         var fs = focusSel();
         V.nsfwOk = true; V.gated = false; V.stage.classList.remove('nsfw'); gate.remove();
         if (!V.media) { V.waiting = !!V.stage.querySelector('.sv-spin'); V.last = performance.now(); } else play();
+        paintMentions(it); paintActs(R, it);
         paintReact(R, it);
         keepFocus(fs);
       });
@@ -290,26 +383,31 @@
       V.stage.appendChild(gate);
     }
     var failed = function () {
-      if (V.ri !== ri || V.ii !== ii) return;
+      if (!current(it) || (img && V.picture !== img) || (m && V.media !== m)) return;
       var fs = focusSel();
+      clearMentions();
       V.stage.classList.add('gone');
       V.stage.innerHTML = '';
       V.stage.appendChild(el('div', 'sv-gone', _t('js.feed.sv.gone', 'This capture is gone.')));
       V.waiting = false; V.dur = 1500; V.elapsed = 0;
+      paintActs(R, it);
       paintReact(R, it);                      // storyreact site: no reactions on a gone story
       keepFocus(fs);
     };
     if (it.kind === 'photo') {
       var img = new Image();
-      img.alt = it.source === 'user' ? (it.by ? storyOf : _t('js.feed.sv.someones_story_cap', 'Someone’s story')) : _t('js.feed.sv.alt', '{what} of {who} in {pad}', { what: what.replace(/^\S+ /, ''), who: whoName, pad: R.title });
+      img.alt = it.source === 'user' ? storyLabel : _t('js.feed.sv.alt', '{what} of {who} in {pad}', { what: what.replace(/^\S+ /, ''), who: whoName, pad: R.title });
       img.className = 'sv-img'; img.decoding = 'async';
-      img.onload = function () { if (V.ri !== ri || V.ii !== ii) return; spin.remove(); V.waiting = !!V.gated; V.last = performance.now(); };
+      img.onload = function () { if (!current(it) || V.picture !== img) return; spin.remove(); V.waiting = !!V.gated; V.last = performance.now(); paintMentions(it); };
       img.onerror = failed;
+      V.picture = img;
       img.src = it.src;
       V.stage.appendChild(img);
+      if (img.complete && img.naturalWidth) paintMentions(it);
     } else {
       var m = document.createElement(it.kind === 'clip' ? 'video' : 'audio');
       m.className = it.kind === 'clip' ? 'sv-vid' : 'sv-aud';
+      if (it.source === 'user') m.setAttribute('aria-label', storyLabel);
       m.preload = 'auto'; m.setAttribute('playsinline', ''); m.playsInline = true; m.muted = V.muted;
       if (it.kind === 'clip' && it.poster) m.poster = it.poster;   // 1.99dq: the poster frame while the clip loads
       if (it.kind === 'audio') {
@@ -319,13 +417,14 @@
         var wave = el('div', 'sv-wave'); for (var w = 0; w < 24; w++) { var s = el('i'); s.style.animationDelay = (w * 53 % 700) + 'ms'; wave.appendChild(s); } card.appendChild(wave);
         V.stage.appendChild(card);
       }
-      m.addEventListener('loadedmetadata', function () { if (isFinite(m.duration) && m.duration > 0) V.dur = m.duration * 1000; });
-      m.addEventListener('playing', function () { if (V.ri !== ri || V.ii !== ii) return; spin.remove(); V.waiting = false; });
+      m.addEventListener('loadedmetadata', function () { if (!current(it) || V.media !== m) return; if (isFinite(m.duration) && m.duration > 0) V.dur = m.duration * 1000; paintMentions(it); });
+      m.addEventListener('playing', function () { if (!current(it) || V.media !== m) return; spin.remove(); V.waiting = false; });
       m.addEventListener('waiting', function () { if (V.media === m) V.waiting = true; });
       m.addEventListener('ended', function () { if (V.media === m) next(); });
       m.addEventListener('error', failed);
       m.src = it.src;
       V.media = m;
+      if (it.kind === 'clip') V.picture = m;
       V.stage.appendChild(m);
       if (it.secs > 0) V.dur = it.secs * 1000;
       if (!V.gated) play();
@@ -414,6 +513,28 @@
           .catch(function (e) { hb.disabled = false; toast(e.message); });
       });
       V.acts.appendChild(hb);
+    }
+    if (!V.gated && !V.stage.classList.contains('gone') && mentionChips(it).some(function (chip) { return chip.mine; })) {
+      var mb = el('button', 'sv-act sv-unmention', _t('js.feed.ss.unmention', '🙈 Remove my mention')); mb.type = 'button';
+      mb.addEventListener('click', function () {
+        var hadFocus = document.activeElement === mb;
+        mb.disabled = true;
+        api('/api/stories/' + encodeURIComponent(it.id) + '/unmention', {}).then(function () {
+          // The same story can appear in the pad and several person/global lists. A successful removal cannot return
+          // from an older cache or a request that was already in flight; keep this tombstone in memory only.
+          removedMentions[it.id] = true;
+          Object.keys(cache).forEach(function (scope) { applyLocal(cache[scope]); });
+          if (data) applyLocal(data);
+          Object.keys(postedCircles).forEach(function (scope) { applyLocal([postedCircles[scope].circle]); });
+          if (Array.isArray(it.mentions)) it.mentions = it.mentions.filter(function (chip) { return !chip.mine; });
+          if (current(it)) {
+            paintMentions(it); paintActs(R, it);
+            if (hadFocus) keepFocus('');
+            toast(_t('js.feed.ss.unmentioned', 'Your mention was removed'));
+          }
+        }).catch(function (e) { mb.disabled = false; if (current(it)) toast(e.message); });
+      });
+      V.acts.appendChild(mb);
     }
     V.acts.classList.toggle('hide', !V.acts.children.length);
   }
@@ -904,6 +1025,118 @@
     window.addEventListener('pagehide', flushSeen);
   }
 
+  // ── Story Studio: insert the server's visible result without reloading the page ──
+  function sameAttribute(root, selector, name, value) {
+    return Array.prototype.slice.call(root.querySelectorAll(selector)).find(function (node) { return node.getAttribute(name) === value; });
+  }
+  function stripTakes(strip, circle, scope) {
+    var scoped = strip.getAttribute('data-scope');
+    if (scoped) return scoped === scope;
+    var add = strip.querySelector('.ss-add[data-pad]'), pad = add ? add.getAttribute('data-pad') || '' : '';
+    if (!pad || pad === scope || pad === circle.id) return true;
+    var me = meName().toLowerCase();
+    return !!(circle.person && me && String(circle.user || '').toLowerCase() === me &&
+      (pad === 'profile' || pad.toLowerCase() === 'u/' + me || pad.toLowerCase() === 'user:' + me));
+  }
+  function stripImage(src, cls, parent, failed) {
+    if (typeof src !== 'string' || !/^(\/(?!\/)|https:\/\/)/.test(src)) return null;
+    var image = el('img', cls); image.alt = ''; image.loading = 'lazy'; image.src = src;
+    image.addEventListener('error', function () { if (failed) failed(); image.remove(); });
+    image.addEventListener('load', function () { var box = parent.closest('.ss-scroll'); if (box && box.__ssUpdate) box.__ssUpdate(); });
+    parent.appendChild(image); return image;
+  }
+  function circleButton(circle, item, old, scope) {
+    var button = old || el('button', 'ss-c'); button.type = 'button'; button.setAttribute('role', 'listitem');
+    var previous = old && old.querySelector('.ss-pav'), previousAvatar = previous && previous.getAttribute('src');
+    var avatar = Object.prototype.hasOwnProperty.call(circle, 'avatar') ? circle.avatar : previousAvatar;
+    var done = (circle.seen || 0) >= circle.latest;
+    button.classList.toggle('seen', done); button.classList.toggle('unseen', !done);
+    button.setAttribute('data-story-room', circle.id); button.setAttribute('data-latest', circle.latest);
+    if (item) button.setAttribute('data-story-item', item.id);
+    // A page without an inline/global list can still open this just-posted story from its authoritative scoped cache.
+    if (!cache['']) button.setAttribute('data-story-scope', scope); else button.removeAttribute('data-story-scope');
+    button.setAttribute('aria-label', _t('js.feed.ss.circle_aria', '{name}: {count} in the last 24 hours', { name: circle.title, count: circle.count }) +
+      (done ? '' : _t('js.feed.ss.new_suffix', ', new')));
+    button.textContent = '';
+    var ring = el('span', 'ss-ring'), av = el('span', 'ss-av' + (circle.person ? ' ss-person' : ''));
+    ring.appendChild(av); button.appendChild(ring);
+    if (circle.person && avatar) stripImage(avatar, '', av);
+    else {
+      if (circle.cover) stripImage(circle.cover, '', av);
+      if (avatar) stripImage(avatar, 'ss-pav', av);
+      else av.appendChild(el('span', 'ss-mono', String(circle.title || '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '📡'));
+    }
+    button.appendChild(el('span', 'ss-n', circle.title));
+    var count = el('span', 'ss-k', circle.count); count.setAttribute('aria-hidden', 'true'); button.appendChild(count);
+    return button;
+  }
+  function storyThumb(circle, item, old) {
+    var link = old || el('a'); link.className = 'ss-t k-' + item.kind;
+    link.setAttribute('role', 'listitem'); link.href = item.page;
+    link.setAttribute('data-story-room', circle.id); link.setAttribute('data-story-item', item.id);
+    var title = item.by ? _t('js.feed.sv.users_story', '{name}’s story', { name: item.by }) : _t('js.feed.sv.someones_story_cap', 'Someone’s story');
+    link.setAttribute('aria-label', title + (item.nsfw ? _t('js.feed.ss.nsfw_suffix', ' · NSFW') : ''));
+    link.textContent = '';
+    var failed = function () { link.classList.add('gone'); };
+    if (!item.nsfw && item.kind === 'photo') stripImage(item.src, '', link, failed);
+    else if (!item.nsfw && item.poster) { link.classList.add('has-p'); stripImage(item.poster, 'pst', link, failed); }
+    // Existing thumbnail CSS hides photo icons when an image is available; a blurred photo intentionally has no image.
+    if (item.nsfw && item.kind === 'photo') link.classList.add('gone');
+    var icon = el('span', 'ic', item.nsfw ? '🔞' : '✨'); icon.setAttribute('aria-hidden', 'true'); link.appendChild(icon);
+    if (item.kind !== 'photo') {
+      var seconds = Math.max(0, Math.round(Number(item.secs) || 0));
+      link.appendChild(el('span', 'dur', '▶' + (seconds ? Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0') : '')));
+    }
+    link.appendChild(el('span', 'who', item.by || _t('js.feed.sv.someone', 'someone')));
+    return link;
+  }
+  function insertAfterAdd(row, node) {
+    var add = row.querySelector('.ss-add'), children = Array.prototype.slice.call(row.children);
+    row.insertBefore(node, add ? children[children.indexOf(add) + 1] || null : children[0] || null);
+  }
+  function storyPosted(event) {
+    var detail = event.detail || {}, circle = detail.circle, scope = detail.scope;
+    if (!circle || typeof circle.id !== 'string' || !Array.isArray(circle.items) || typeof scope !== 'string' || !scope || circle.id !== scope) return;
+    var item = detail.item && circle.items.find(function (it) { return it.id === detail.item.id; });
+    applyLocal([circle]);
+    postedCircles[scope] = { version: ++postedVersion, circle: circle };
+    var active = V && V.root.parentNode && data && data[V.ri], activeItem = active && active.items[V.ii];
+    if (!cache['']) { var initial = inline(); if (initial) cache[''] = applyLocal(initial); }
+    var lists = [];
+    if (cache['']) lists.push(cache['']);
+    if (cache[scope] && lists.indexOf(cache[scope]) < 0) lists.push(cache[scope]);
+    if (data && lists.indexOf(data) < 0 && (data === cache[''] || data.some(function (r) { return r.id === circle.id; }))) lists.push(data);
+    lists.forEach(function (list) { putCircle(list, circle, active, activeItem); });
+    // Preserve the current room object if that is the list being watched; a new scope otherwise needs only its circle.
+    cache[scope] = [active && active.id === circle.id ? active : circle];
+    loads[scope] = null; loads[''] = null;
+    if (active && data) {
+      V.ri = data.indexOf(active); V.ii = active.items.indexOf(activeItem);
+      if (V.ri >= 0 && V.ii >= 0) {
+        paintBars(active);
+        V.prevRoom.disabled = V.ri === 0; V.nextRoom.disabled = V.ri === data.length - 1;
+      }
+    } else if (cache['']) data = cache[''];
+    document.querySelectorAll('.ss').forEach(function (strip) {
+      if (strip.getAttribute('data-signed') !== '1') return;
+      var row = strip.querySelector('.ss-row'); if (!row) return;
+      if (strip.getAttribute('data-scope')) {
+        if (!item || strip.getAttribute('data-scope') !== scope || !stripTakes(strip, circle, scope)) return;
+        var thumb = sameAttribute(row, '.ss-t[data-story-item]', 'data-story-item', item.id);
+        var link = storyThumb(circle, item, thumb);
+        if (!thumb) insertAfterAdd(row, link);
+      } else {
+        var old = sameAttribute(row, '.ss-c[data-story-room]', 'data-story-room', circle.id);
+        if (!old && !stripTakes(strip, circle, scope)) return;
+        var button = circleButton(circle, item, old, scope);
+        if (!old) insertAfterAdd(row, button);
+      }
+      var box = strip.querySelector('.ss-scroll'); if (box && box.__ssUpdate) box.__ssUpdate();
+    });
+    initStrips(); paintRings();
+  }
+  document.addEventListener('patv:story-posted', storyPosted);
+
   // ── strip clicks ──
   document.addEventListener('click', function (ev) {
     var t = ev.target.closest('[data-story-room]');
@@ -913,7 +1146,7 @@
     // 1.99fu: signed out, only a Public pad's circle (data-story-open, its story inlined) opens; the rest ask to sign in
     if (strip.getAttribute('data-signed') !== '1' && !t.hasAttribute('data-story-open')) return signInPrompt(strip.getAttribute('data-next'));
     // 1.99fn: a pad's capture strip (data-scope = its pad id) opens that pad's story only
-    open(t.getAttribute('data-story-room'), t.getAttribute('data-story-item'), t, strip.getAttribute('data-scope') || '');
+    open(t.getAttribute('data-story-room'), t.getAttribute('data-story-item'), t, t.getAttribute('data-story-scope') || strip.getAttribute('data-scope') || '');
   });
   // rings: apply the local seen map to server-rendered circles (and again after /feed swaps the list)
   function initRings() {
@@ -933,12 +1166,14 @@
       var raf = 0;
       function update() {
         raf = 0;
+        box.classList.toggle('thumbs', !!row.querySelector('.ss-t'));
         var max = row.scrollWidth - row.clientWidth;
         box.classList.toggle('ovf', max > 1);
         box.classList.toggle('at-start', row.scrollLeft <= 1);
         box.classList.toggle('at-end', row.scrollLeft >= max - 1);
       }
       function soon() { if (!raf) raf = requestAnimationFrame(update); }
+      box.__ssUpdate = soon;
       var smooth = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       box.querySelectorAll('.ss-arr').forEach(function (b) {
         b.hidden = false;
@@ -955,6 +1190,6 @@
   }
   function initAll() { initRings(); initStrips(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initAll); else initAll();
-  document.addEventListener('patv:feed-swapped', function () { data = null; cache = {}; loads = {}; initRings(); initStrips(); });
+  document.addEventListener('patv:feed-swapped', function () { data = null; cache = {}; loads = {}; postedCircles = Object.create(null); listEpoch++; initRings(); initStrips(); });
   window.patvStories = { open: open, _state: function () { return V; } };
 })();
