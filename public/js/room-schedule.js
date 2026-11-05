@@ -112,9 +112,11 @@
     }
   }
   var timer = null;
+  var askedAt = 0;
   function poll() {
     clearTimeout(timer); timer = null;
     if (document.hidden) return;
+    askedAt = Date.now();
     fetch('/api/rooms/' + encodeURIComponent(slug) + '/stage', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (d) { if (d && d.ok && d.schedule) render(d.schedule); if (d && d.ok) slots(d); })
@@ -125,5 +127,6 @@
   timer = setTimeout(poll, 30000);
   // newstream 1.99akv: the pad's stage (room.ejs - its 10 s poll saw the set of live slots change: a stream went live or ended, a booked
   // slot started) asks now - "On now" / "Coming up" / the slot count no longer wait out the 30 s turn
-  window.PATVRoomSchedule = { poll: poll };
+  // (not twice in a moment: a tab coming back asks here and through the stage at once)
+  window.PATVRoomSchedule = { poll: function () { if (Date.now() - askedAt >= 1500) poll(); } };
 })();

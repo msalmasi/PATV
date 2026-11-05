@@ -127,8 +127,10 @@
     if (back && !back.disabled && back.getClientRects().length) { try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); } }
     drawTimes();
   }
+  var askedAt = 0;
   function poll() {
     if (document.hidden || busy || dragging) return;
+    askedAt = Date.now();
     api('GET', '/api/medialib/player?room=' + encodeURIComponent(room)).then(function (j) {
       draw(j);
       clearInterval(poller);
@@ -173,5 +175,6 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
   // newstream 1.99akv: the pad's stage (room.ejs - its 10 s poll saw the set of live slots change: a 📼 play started or ended) asks now
   // instead of waiting out the 30 s idle turn
-  window.PATVPlexQ = { poll: poll };
+  // (not twice in a moment: a tab coming back asks here and through the stage at once)
+  window.PATVPlexQ = { poll: function () { if (Date.now() - askedAt >= 1500) poll(); } };
 })();
